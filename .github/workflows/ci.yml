@@ -111,7 +111,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-go@v7.0.0
@@ -127,15 +127,17 @@ jobs:
           set -eu
           # The same tests as make race, but internal/auth (PBKDF2 in nearly
           # every test, about half of all race time) runs as two halves next
-          # to the other packages.
+          # to the other packages. Hosted runners of private repositories
+          # have two cores, so the auth halves need more than go test's
+          # default 10 minute timeout.
           others=$(go list ./... | grep -v '/internal/auth$')
           names=$(go test -list '.*' ./internal/auth | grep '^Test')
           h1=$(echo "$names" | awk 'NR%2==1' | paste -sd'|')
           h2=$(echo "$names" | awk 'NR%2==0' | paste -sd'|')
           export CGO_ENABLED=1
-          go test -race -count=1 $others & p1=$!
-          go test -race -count=1 ./internal/auth -run "^($h1)\$" & p2=$!
-          go test -race -count=1 ./internal/auth -run "^($h2)\$" & p3=$!
+          go test -race -count=1 -timeout 30m $others & p1=$!
+          go test -race -count=1 -timeout 30m ./internal/auth -run "^($h1)\$" & p2=$!
+          go test -race -count=1 -timeout 30m ./internal/auth -run "^($h2)\$" & p3=$!
           rc=0
           wait $p1 || rc=1
           wait $p2 || rc=1
@@ -213,6 +215,10 @@ jobs:
       - name: install make (not in the Playwright image)
         run: apt-get update -qq && apt-get install -y -qq --no-install-recommends make >/dev/null
       - uses: actions/checkout@v7.0.1
+      # The job container runs as root on a workspace owned by the runner user;
+      # without this git refuses the repository and go build cannot stamp VCS info.
+      - name: trust the workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - uses: actions/setup-go@v7.0.0
         with:
           go-version-file: go.mod
