@@ -1,0 +1,7 @@
+# format: timestamp|retained-flag-as-delivered|topic|payload  (first 6 samples, one per distinct device where possible)
+2026-10-18T18:17:55+0200|0|stat/kitchen-spotlight/STATUS8|{"StatusSNS":{"Time":"2026-10-18T18:17:54","ENERGY":{"TotalStartTime":"2026-08-19T00:00:00","Total":133.945,"Yesterday":0.449,"Today":0.273,"Power":54,"ApparentPower":54,"ReactivePower":0,"Factor":1.00,"Voltage":232,"Current":0.212}}}
+2026-10-18T18:17:55+0200|0|stat/livingroom-readinglamp/STATUS8|{"StatusSNS":{"Time":"2026-10-18T18:17:55"}}
+2026-10-18T18:18:14+0200|0|stat/mr-bambu-plug/STATUS8|{"StatusSNS":{"Time":"2026-10-18T18:18:13","ENERGY":{"TotalStartTime":"2023-03-10T18:13:24","Total":7.228,"Yesterday":0.001,"Today":0.034,"Power":10,"ApparentPower":23,"ReactivePower":21,"Factor":0.44,"Voltage":234,"Current":0.098}}}
+2026-10-18T18:18:15+0200|0|stat/bedroom-cabinet/STATUS8|{"StatusSNS":{"Time":"2026-10-18T18:18:14"}}
+2026-10-18T18:18:34+0200|0|stat/prusa-plug/STATUS8|{"StatusSNS":{"Time":"2026-10-18T18:18:33","ENERGY":{"TotalStartTime":"2026-08-19T18:24:05","Total":9.384,"Yesterday":0.000,"Today":0.000,"Power":0,"ApparentPower":0,"ReactivePower":0,"Factor":0.00,"Voltage":233,"Current":0.000}}}
+2026-10-18T18:18:34+0200|0|stat/office-monitor-guest/STATUS8|{"StatusSNS":{"Time":"2026-10-18T18:18:33","DS18B20":{"Id":"000000A1B2C3","Temperature":29.0},"ESP32":{"Temperature":41.7},"TempUnit":"C"}}

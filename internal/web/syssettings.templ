@@ -1,0 +1,412 @@
+package web
+
+import (
+	"strconv"
+	"strings"
+
+	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
+	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+)
+
+// sysSettingsPage is System settings (design v2 screen "settings", WP P8): the page header, one
+// tab per part of the prototype, and one form over all tabs, so "Save settings" saves every tab.
+// The fields are the real settings of sysconfig in the prototype's form components (D10).
+templ sysSettingsPage(p sysPage) {
+	@ui.PageHeader("Settings", "Applies to the whole TasmoFleet instance")
+	@ui.Tabs("Settings sections", sysTabLinks(p))
+	if p.Error != "" {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: p.Error, Alert: true})
+	}
+	if len(p.Pending) > 0 {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Title: "Restart required.", Text: "The stored value of " + strings.Join(p.Pending, ", ") + " applies after the next restart of the container."})
+	}
+	if p.CannotStepUp {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Alert: true, Text: "This account cannot confirm its identity. Settings that need a confirmation (" + strings.Join(p.StepUpKeys, ", ") + ") cannot be confirmed from this session and must be set in the container configuration."})
+	}
+	if len(p.Skipped) > 0 {
+		<div class="banner tone-warn" role="status">
+			<span class="banner-dot"></span>
+			<div class="banner-text">
+				<b>Stored values that are ignored.</b>
+				<ul class="sys-skipped">
+					for _, k := range sortedKeys(p.Skipped) {
+						<li><code>{ k }</code>: { p.Skipped[k] }</li>
+					}
+				</ul>
+			</div>
+		</div>
+	}
+	<form id="sysform" class="ucard syscard" data-keep-draft="sysconfig" method="post" action={ templ.SafeURL(p.Base + sysPath + "?tab=" + p.Active) }>
+		<input type="hidden" name="csrf" value={ p.CSRF }/>
+		for _, tab := range p.Tabs {
+			<div class="sys-tab" id={ "sec-" + tab.Slug } hidden?={ tab.Slug != p.Active }>
+				switch tab.Slug {
+					case "discovery":
+						@sysDiscoveryCard(p)
+					case "backups":
+						if p.Storage != nil {
+							@sysStorageBlock(p, *p.Storage)
+						}
+				}
+				for i, sec := range tab.Sections {
+					if len(sec.Rows) > 0 {
+						@sysSectionBlock(p, tab.Slug, i, sec)
+					}
+				}
+				switch tab.Slug {
+					case "mqtt":
+						@sysMQTTFoot(p)
+					case "advanced":
+						@sysContainer(p.ReadOnly)
+						@sysResetBox(p)
+				}
+			</div>
+		}
+		<div class="sys-foot">
+			@ui.Button(ui.Btn{Label: "Discard", Href: p.Base + sysPath + "?tab=" + p.Active})
+			@ui.Button(ui.Btn{Label: "Save settings", Kind: "primary", Type: "submit"})
+		</div>
+	</form>
+	if p.Storage != nil && len(p.Storage.Orphans) > 0 {
+		<form id="bk-orph" method="post" action={ templ.SafeURL(p.Base + sysPath + "?tab=backups") }>
+			<input type="hidden" name="csrf" value={ p.CSRF }/>
+		</form>
+		@backupDeleteDialog(backupsView{CSRF: p.CSRF})
+	}
+	@ui.Dialog(ui.DialogData{ID: "dlg-reset", Title: "Reset all settings?", Body: sysResetText,
+		Action: p.Base + sysPath + "/reset", CSRF: p.CSRF, Verb: "Reset settings", Danger: true})
+	if p.NeedStepUp {
+		@ui.StepUp(p.StepUp)
+	}
+}
+
+// sysStorageBlock is the top of the Backups tab (N9): four totals, the devices with the
+// largest backups, and the backups of deleted devices.
+templ sysStorageBlock(p sysPage, st sysStorage) {
+	<div class="sys-storage">
+		<h2 class="sys-storage-h">Storage</h2>
+		<div class="sys-sums">
+			@sysSum("Backups", strconv.Itoa(st.Runs))
+			@sysSum("Total size", st.Size)
+			@sysSum("Kept (never pruned)", strconv.Itoa(st.Kept))
+			@sysSum("Devices without a backup", strconv.Itoa(st.Without))
+		</div>
+		if len(st.Rows) > 0 {
+			<div class="sys-store" role="table" aria-label="Backup storage per device">
+				<div class="sys-store-row sys-store-head" role="row">
+					<span role="columnheader">Device</span>
+					<span role="columnheader">Backups</span>
+					<span role="columnheader">Size</span>
+					<span role="columnheader">Last backup</span>
+				</div>
+				for _, row := range st.Rows {
+					<a class="sys-store-row" role="row" href={ templ.SafeURL(row.Href) }>
+						<span role="cell" class="sys-store-name" title={ row.Name }>{ row.Name }</span>
+						<span role="cell" class="mono">{ strconv.Itoa(row.Runs) }</span>
+						<span role="cell" class="mono">{ row.Size }</span>
+						<span role="cell" class="sys-store-last"><time datetime={ row.Last.Format("2006-01-02T15:04:05Z07:00") } title={ shortDate(row.Last) }>{ row.When }</time></span>
+					</a>
+				}
+				<div class="sys-store-foot">{ st.Foot() }</div>
+			</div>
+		}
+		if len(st.Orphans) > 0 {
+			@sysOrphans(p, st)
+		}
+	</div>
+}
+
+templ sysSum(label, value string) {
+	<div class="sys-sum">
+		<div class="sys-sum-label">{ label }</div>
+		<div class="sys-sum-value">{ value }</div>
+	</div>
+}
+
+// sysOrphans lists the backups of deleted devices (kept when the device was deleted, N2):
+// Download, Keep and Delete as on a device's Backups tab. The Keep buttons submit the
+// bk-orph form outside the settings form; Delete opens the shared delete dialog.
+templ sysOrphans(p sysPage, st sysStorage) {
+	<div class="sys-head">
+		<h2>Backups of deleted devices</h2>
+		<p>Kept when their device was deleted. Download one to restore it on a device by hand.</p>
+	</div>
+	<div class="sys-orphans">
+		for _, o := range st.Orphans {
+			<div class="sys-orphan">
+				<div class="sys-orphan-main">
+					<div class="sys-orphan-title">
+						<span class="sys-store-name">{ orphanName(o) }</span>
+						if o.Kept {
+							@ui.Badge(ui.ToneAccent, "Kept")
+						}
+					</div>
+					<div class="sys-orphan-detail">
+						if o.MAC != "" {
+							<span class="mono">{ o.MAC }</span>{ " · " }
+						}
+						<time datetime={ o.Taken.Format("2006-01-02T15:04:05Z07:00") }>{ shortDate(o.Taken) }</time>{ " · " + o.Size }
+					</div>
+				</div>
+				<div class="bk-acts">
+					if st.CanKeep {
+						if o.Kept {
+							<button type="submit" form="bk-orph" formaction={ templ.SafeURL(p.Base + "/backups/" + bkStr(o.ID) + "/keep") } name="kept" value="0" class="btn bk-keep is-kept" aria-pressed="true" title="Kept: the retention never prunes it. Click to release it.">
+								<span class="bk-pin" aria-hidden="true"></span>Kept
+							</button>
+						} else {
+							<button type="submit" form="bk-orph" formaction={ templ.SafeURL(p.Base + "/backups/" + bkStr(o.ID) + "/keep") } name="kept" value="1" class="btn bk-keep" aria-pressed="false" title="Keep this backup: the retention never prunes it.">
+								<span class="bk-pin" aria-hidden="true"></span>Keep
+							</button>
+						}
+					}
+					<a class="btn btn-link bk-act" href={ templ.SafeURL(o.Download) }>Download</a>
+					if o.DeleteText != "" {
+						<a
+							class="btn btn-link bk-act bk-del"
+							href={ templ.SafeURL(p.Base + "/backups/" + bkStr(o.ID) + "/delete") }
+							data-dialog="dlg-bkdel"
+							data-dlg-title="Delete this backup?"
+							data-dlg-text={ o.DeleteText }
+							data-dlg-action={ p.Base + "/backups/" + bkStr(o.ID) + "/delete" }
+							data-dlg-verb="Delete backup"
+						>Delete</a>
+					}
+				</div>
+			</div>
+		}
+	</div>
+}
+
+// sysResetBox is "Reset all settings" at the end of the Advanced tab (N9). The button opens
+// the dialog; without JavaScript its link leads to the confirmation page.
+templ sysResetBox(p sysPage) {
+	<div class="sys-danger">
+		<div>
+			<div class="sys-danger-title">Reset all settings</div>
+			<div class="sys-danger-text">Devices, backups and users are kept.</div>
+		</div>
+		<a class="btn btn-danger-solid" href={ templ.SafeURL(p.Base + sysPath + "/reset") } data-dialog="dlg-reset">Reset settings…</a>
+	</div>
+}
+
+// sysSectionBlock is one section of a tab: its heading and line, then the fields in the
+// prototype's grid (auto-fit columns of at least 260 px).
+templ sysSectionBlock(p sysPage, tab string, i int, sec sysSection) {
+	if sec.Heading != "" {
+		<div class="sys-head">
+			<h2>{ sec.Heading }</h2>
+			if sec.Intro != "" {
+				<p>{ sec.Intro }</p>
+			}
+		</div>
+	}
+	<div class="sys-grid">
+		if tab == "devices" && i == 0 {
+			<label class="ufield">
+				<span class="ufield-label">Web user</span>
+				<input class="mono" readonly value="admin"/>
+				<small class="ufield-help">Tasmota’s web user is always admin.</small>
+			</label>
+		}
+		for _, row := range sec.Rows {
+			@sysField(p, row)
+		}
+		if tab == "signin" && i == 1 {
+			@sysTestRow("Test discovery", p.Base+sysPath+"/sso-test?tab=signin", "SSO check", p.SSOResult,
+				"Checks that the issuer answers OIDC discovery. Nothing is saved and no secret is sent.")
+		}
+	</div>
+}
+
+// sysField draws one setting in the component its kind calls for.
+templ sysField(p sysPage, row sysRow) {
+	switch {
+		case row.Locked:
+			@sysLocked(row)
+		case row.Key == "MQTT_URL" && p.MQTT.Legacy == "":
+			@sysBroker(p, row)
+		case row.Key == "LOG_LEVEL":
+			<div class="ufield ufield-wide">
+				<span class="ufield-label">{ row.Label }</span>
+				@ui.Segmented(row.Label, row.InputName(), sysLevelOptions(row.Posted))
+				@sysUnder(row)
+			</div>
+		case row.Key == "AUTH_MODE":
+			<div class="ufield-wide">
+				@ui.RadioCards(row.Label, row.InputName(), sysAuthOptions(row.Posted))
+				@sysUnder(row)
+			</div>
+		case row.Key == "METRICS_ENABLED":
+			<div class="ufield-wide">
+				<input type="hidden" name={ "b." + row.Key } value="1"/>
+				@ui.Toggle(row.InputName(), "Expose Prometheus metrics", row.Help, row.Posted == "true", false)
+				@sysUnder(row)
+			</div>
+		case row.Bool:
+			<div class="ufield-wide">
+				<input type="hidden" name={ "b." + row.Key } value="1"/>
+				<label class="ucheck">
+					<input type="checkbox" name={ row.InputName() } value="true" checked?={ row.Posted == "true" }/>
+					<span>
+						{ row.Label }
+						<small class="ucheck-text">{ row.Help }</small>
+					</span>
+				</label>
+				@sysUnder(row)
+			</div>
+		default:
+			<label class={ "ufield", templ.KV("ufield-wide", row.Multiline || row.Key == "MQTT_FULLTOPIC" || row.Key == "OIDC_ISSUER" || row.Key == "MQTT_URL") }>
+				<span class="ufield-label">{ row.Label }</span>
+				if row.Secret {
+					<input type="password" name={ row.InputName() } class="mono" autocomplete="new-password" maxlength="128" placeholder={ sysSecretHint(row) } { sysInvalid(row)... }/>
+				} else if len(row.Enum) > 0 {
+					<select name={ row.InputName() } { sysInvalid(row)... }>
+						for _, o := range row.Enum {
+							<option value={ o } selected?={ o == row.Posted }>{ o }</option>
+						}
+					</select>
+				} else if row.Multiline {
+					<textarea name={ row.InputName() } class="mono" rows="3" maxlength="2048" placeholder={ sysPlaceholder(row) } { sysInvalid(row)... }>{ row.Posted }</textarea>
+				} else {
+					<input name={ row.InputName() } class="mono" value={ row.Posted } maxlength="512" { sysInvalid(row)... }/>
+				}
+				@sysUnder(row)
+			</label>
+			@sysResets(row)
+	}
+}
+
+// sysUnder is the line under a field: the server's error, or the help with when it applies.
+templ sysUnder(row sysRow) {
+	if row.Err != "" {
+		<small class="ufield-err" id={ "err-" + row.InputName() } role="alert">{ row.Err }</small>
+	} else {
+		if row.Help != "" && !row.Bool {
+			<small class="ufield-help">{ row.Help }</small>
+		}
+		if row.Apply != sysconfig.Live || row.PendingRestart {
+			<small class="ufield-help">
+				Applies after a restart.
+				if row.PendingRestart {
+					@ui.Badge(ui.ToneWarn, "Restart required")
+				}
+			</small>
+		}
+	}
+	if row.NeedsReentry {
+		<small class="ufield-err" role="alert">{ row.Skipped }</small>
+	}
+}
+
+// sysResets are the checkboxes under a stored field: keep the broker password when the broker
+// changes, and go back to the default.
+templ sysResets(row sysRow) {
+	if row.Secret && row.HasValue && row.Key == "MQTT_PASSWORD" {
+		<label class="ucheck sys-reset"><input type="checkbox" name={ "reuse." + row.Key } value="1"/><span>Keep the stored password if the broker changes</span></label>
+	}
+	if row.Source == "stored" {
+		<label class="ucheck sys-reset"><input type="checkbox" name={ "clear." + row.Key } value="1"/><span>Reset { row.Label } to the default on save</span></label>
+	}
+}
+
+// sysLocked is a setting the container configuration fixes: read-only, with the reason.
+templ sysLocked(row sysRow) {
+	<label class="ufield">
+		<span class="ufield-label">{ row.Label }</span>
+		if row.Secret {
+			<input class="mono" readonly value={ sysSetWord(row.HasValue) }/>
+		} else {
+			<input class="mono" readonly value={ row.Value }/>
+		}
+		<small class="ufield-help">Set by environment ({ row.Key }); edit the container configuration to change it.</small>
+	</label>
+}
+
+// sysBroker is MQTT_URL as the prototype's Broker host and Port fields (N18); TLS sits with the
+// test button at the end of the tab.
+templ sysBroker(p sysPage, row sysRow) {
+	<label class="ufield">
+		<span class="ufield-label">Broker host</span>
+		<input name="mqtt.host" class="mono" value={ p.MQTT.Host } maxlength="255" placeholder="empty: MQTT off" { sysInvalid(row)... }/>
+		if row.Err != "" {
+			<span class="ufield-err" id={ "err-" + row.InputName() } role="alert">{ row.Err }</span>
+		}
+	</label>
+	<label class="ufield">
+		<span class="ufield-label">Port</span>
+		<input name="mqtt.port" class="mono" value={ p.MQTT.Port } inputmode="numeric" maxlength="5" placeholder="1883 (TLS 8883)"/>
+	</label>
+}
+
+// sysMQTTFoot is the end of the MQTT tab: Use TLS, and the connection test with its result.
+templ sysMQTTFoot(p sysPage) {
+	<div class="sys-grid">
+		if p.MQTT.Legacy == "" {
+			<label class="ucheck"><input type="checkbox" name="mqtt.tls" value="1" checked?={ p.MQTT.TLS }/><span>Use TLS</span></label>
+		}
+		@sysTestRow("Test connection", p.Base+sysPath+"/mqtt-test?tab=mqtt", "MQTT connection test", p.MQTTResult,
+			"Tries one connection with the values above and saves nothing. A password typed above is the one tested; otherwise the stored one, only for the broker it was entered for.")
+	</div>
+}
+
+// sysTestRow is a test button of the form (it posts the whole form, saves nothing) with its
+// result next to it: a failure in the danger tone as an alert, a success as a status.
+templ sysTestRow(label, action, what, result, help string) {
+	<div class="sys-test">
+		<button type="submit" class="btn" formaction={ templ.SafeURL(action) } formnovalidate>{ label }</button>
+		if result != "" {
+			if testNote(what, result).Failed {
+				<span class="sys-test-res t-danger" role="alert">{ what }: { result }</span>
+			} else {
+				<span class="sys-test-res t-ok" role="status">{ what }: { result }</span>
+			}
+		} else {
+			<span class="sys-test-help">{ help }</span>
+		}
+	</div>
+}
+
+// sysDiscoveryCard is the status of MQTT discovery on top of the Discovery tab.
+templ sysDiscoveryCard(p sysPage) {
+	<div class="sys-status">
+		<span class={ "sys-status-dot", "t-" + p.Discovery.Tone } aria-hidden="true"></span>
+		<div class="sys-status-text">
+			<b>{ p.Discovery.Title }</b>
+			<span>
+				{ p.Discovery.Text }
+				if p.Discovery.Waiting > 0 {
+					{ " · " + plural(p.Discovery.Waiting, "new device") + " waiting" }
+				}
+			</span>
+		</div>
+		if p.Discovery.Link {
+			@ui.Button(ui.Btn{Label: "Open Discovered", Href: p.Base + "/discovery"})
+		}
+	</div>
+}
+
+// sysContainer lists the bootstrap settings, which only the container configuration sets.
+templ sysContainer(rows []sysconfig.Row) {
+	<details class="fold sys-container">
+		<summary>Set by the container ({ strconv.Itoa(len(rows)) } settings)</summary>
+		<p class="ucard-sub">Bootstrap settings (listeners, TLS, keys) come from the container configuration only and are never editable here.</p>
+		<table class="dense">
+			<thead><tr><th>Key</th><th>Value</th></tr></thead>
+			<tbody>
+				for _, kv := range rows {
+					<tr>
+						<td data-label="Key" class="p1"><code>{ kv.Key }</code></td>
+						<td data-label="Value" class="s grow">
+							if kv.Value != "" {
+								<code>{ kv.Value }</code>
+							} else {
+								<span class="muted">empty</span>
+							}
+						</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	</details>
+}

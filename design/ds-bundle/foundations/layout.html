@@ -1,0 +1,50 @@
+<!-- @dsCard group="Foundations" name="Layout" subtitle="12-column modular grid, 4px spacing, 2px section rules, 0 radius" viewport="640x640" -->
+<!doctype html>
+<html lang="en" data-theme-auto>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tasmofleet DS — Layout</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <script src="../theme.js"></script>
+    <style>
+      /* Demo scaffolding only: everything visual comes from ../styles.css. */
+      .demo { max-width: 620px; margin: 0 auto; padding: var(--space-6) var(--space-4) var(--space-8); }
+      .demo-head { font-family: var(--font-body); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+        color: var(--color-text-2); margin: var(--space-6) 0 var(--space-3); }
+      .demo-head:first-child { margin-top: 0; }
+      .row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+      .note { font-size: 12px; color: var(--color-text-2); max-width: 60ch; margin-top: var(--space-3); }
+      .demo-foot { margin-top: var(--space-8); padding-top: var(--space-3); border-top: 1px solid var(--color-divider);
+        display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); }
+      .stage { position: relative; min-height: 220px; padding: var(--space-4); background: var(--color-bg);
+        border: 1px solid var(--color-divider); overflow: hidden; }
+    </style>
+  </head>
+  <body>
+<main class="demo">
+<style>
+  .cols12 { display: grid; grid-template-columns: repeat(12, 1fr); gap: var(--gutter); height: 80px; }
+  .cols12 i { background: color-mix(in srgb, var(--color-accent) 12%, transparent); border-left: 1px solid var(--color-accent); }
+  .sp { display: flex; align-items: flex-end; gap: 10px; }
+  .sp > div > div { background: var(--color-text); }
+  .sp span { display: block; font-size: 10px; color: var(--color-text-2); margin-top: 4px; }
+</style>
+<p class="demo-head">Grid: 12 columns, 16px gutter, max 1440px</p>
+<div class="cols12"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+<p class="demo-head">Spacing (4px base)</p>
+<div class="sp">
+<div><div style="width:4px;height:4px"></div><span>1</span></div><div><div style="width:8px;height:8px"></div><span>2</span></div>
+<div><div style="width:12px;height:12px"></div><span>3</span></div><div><div style="width:16px;height:16px"></div><span>4</span></div>
+<div><div style="width:20px;height:20px"></div><span>5</span></div><div><div style="width:24px;height:24px"></div><span>6</span></div>
+<div><div style="width:32px;height:32px"></div><span>8</span></div><div><div style="width:40px;height:40px"></div><span>10</span></div>
+<div><div style="width:48px;height:48px"></div><span>12</span></div></div>
+<p class="demo-head">Rules and frames</p>
+<section class="card"><h2>Card: 2px ink rule on top, title in the frame</h2><p class="muted">Hairline divider on the other sides. Content starts 24px below the rule, so the title never touches it.</p></section>
+<p class="demo-head">Controls: one height per size</p>
+<div class="row"><button class="sm">28 sm</button><button>34 md</button><button class="lg">40 lg</button><input style="width:9rem" value="34 input"></div>
+<p class="note">Breakpoints: phone up to 640px (tables become row blocks, nav wraps under the brand), two columns from 1100px.</p>
+<div class="demo-foot"><span class="note">tasmofleet DS</span><div class="theme-switch" role="group" aria-label="Theme"><button type="button" class="sm" data-theme-set="system">Auto</button><button type="button" class="sm" data-theme-set="light">Light</button><button type="button" class="sm" data-theme-set="dark">Dark</button></div></div>
+</main>
+  </body>
+</html>

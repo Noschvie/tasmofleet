@@ -1,0 +1,678 @@
+package web
+
+import (
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/nofuturekid/tasmofleet/internal/firmware"
+	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+)
+
+// The firmware page (design v2 screen "firmware", WP P5): the releases as cards with the older
+// ones behind a toggle, the selected release with its notes and the files this fleet needs,
+// the cached files with the drop zone for custom firmware. Selection, the older list, the full
+// notes and the upload form are query parameters, so every state works without JavaScript.
+
+// fwURL is the firmware page with the given query values (empty ones left out).
+func fwURL(base string, kv ...string) string {
+	q := url.Values{}
+	for i := 0; i+1 < len(kv); i += 2 {
+		if kv[i+1] != "" {
+			q.Set(kv[i], kv[i+1])
+		}
+	}
+	if len(q) == 0 {
+		return base + "/firmware"
+	}
+	return base + "/firmware?" + q.Encode()
+}
+
+// one is "1" when b, for a query value.
+func one(b bool) string {
+	if b {
+		return "1"
+	}
+	return ""
+}
+
+// sizeNoWrap is a size that never wraps between number and unit.
+func sizeNoWrap(n int64) string { return strings.ReplaceAll(humanBytes(n), " ", " ") }
+
+// dayText is a release date: "6 Oct 2026".
+func dayText(t time.Time) string { return t.Format("2 Jan 2006") }
+
+// shortDay is the date of a cached file: "6 Oct" this year, "6 Oct 2025" before.
+func shortDay(now, t time.Time) string {
+	if t.Year() == now.Year() {
+		return t.Format("2 Jan")
+	}
+	return t.Format("2 Jan 2006")
+}
+
+// checkedAgo is the age of a check in the status line: "5m ago", "just now".
+func checkedAgo(now, t time.Time) string {
+	if s := agoWords(now, t); s != "now" {
+		return s
+	}
+	return "just now"
+}
+
+// upperFirst starts a sentence with a capital: "the test upstream" -> "The test upstream".
+func upperFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+templ firmwareContent(v view, p firmwarePage) {
+	<div class="page-firmware">
+		@ui.PageHeader("Firmware", sourceLine(p.Source)) {
+			@fwCheckLine(v, p)
+		}
+		if p.checkState() == "failed" {
+			@fwDownBanner(v, p)
+		}
+		if p.Error != "" {
+			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: p.Error, Alert: true})
+		}
+		<div class="fw-grid">
+			<div class="fw-rels">
+				@fwReleaseList(v, p)
+			</div>
+			<div class="fw-main">
+				if sel := p.Selected(); sel != nil {
+					@fwReleaseCard(v, p, *sel)
+				}
+				if p.ShowUpload && v.IsAdmin && p.CanUpload {
+					<section class="ucard fw-upload-card" id="upload" aria-labelledby="fw-up-h">
+						<h2 id="fw-up-h">Upload custom firmware</h2>
+						@fwUploadForm(v, false)
+					</section>
+				}
+				@fwCache(v, p)
+			</div>
+		</div>
+		if sel := p.Selected(); sel != nil {
+			@fwNotesDialog(v, p, *sel)
+		}
+		if v.IsAdmin && p.CanUpload && !p.ShowUpload {
+			<dialog id="dlg-upload" class="udlg fw-upload-dlg" aria-labelledby="dlg-upload-h">
+				<div class="udlg-in">
+					<h2 id="dlg-upload-h">Upload custom firmware</h2>
+					@fwUploadForm(v, true)
+				</div>
+			</dialog>
+		}
+		if v.IsAdmin && p.CanManage {
+			for _, a := range p.Artifacts {
+				if !a.InUse {
+					@fwDeleteDialog(v, p, a)
+				}
+			}
+		}
+	</div>
+}
+
+// sourceLine is the subtitle: where the releases come from.
+func sourceLine(src string) string {
+	if src == "" {
+		return ""
+	}
+	return "Source: " + src
+}
+
+// fwCheckLine is the state of the release index and "Check for new releases now" (admins),
+// then "Upload custom firmware".
+templ fwCheckLine(v view, p firmwarePage) {
+	switch p.checkState() {
+		case "checking":
+			<span class="fw-check t-accent" role="status" data-fw-check-state><span class="fw-check-dot pulse" aria-hidden="true"></span>Checking { p.Feed }…</span>
+		case "failed":
+			<span class="fw-check t-danger" role="status" data-fw-check-state><span class="fw-check-dot" aria-hidden="true"></span>Last check failed&nbsp;<time datetime={ p.Index.LastAttempt.Format(time.RFC3339) } title={ p.Index.LastAttempt.Format("2006-01-02 15:04:05 MST") }>{ checkedAgo(p.Now, p.Index.LastAttempt) }</time></span>
+		case "ok":
+			<span class="fw-check t-ok" role="status" data-fw-check-state><span class="fw-check-dot" aria-hidden="true"></span>Last checked&nbsp;<time datetime={ p.Index.LastSuccess.Format(time.RFC3339) } title={ p.Index.LastSuccess.Format("2006-01-02 15:04:05 MST") }>{ checkedAgo(p.Now, p.Index.LastSuccess) }</time></span>
+	}
+	if v.IsAdmin && p.CanRefresh {
+		<form method="post" action={ templ.SafeURL(v.Base + "/firmware/refresh") } class="fw-check-form" data-fw-check data-checking={ "Checking " + p.Feed + "…" }>
+			<input type="hidden" name="csrf" value={ v.CSRF }/>
+			switch p.checkState() {
+				case "checking":
+					<button type="submit" class="btn" disabled>Checking…</button>
+				case "failed":
+					<button type="submit" class="btn">Try again</button>
+				default:
+					<button type="submit" class="btn">Check for new releases now</button>
+			}
+		</form>
+	}
+	if v.IsAdmin && p.CanUpload {
+		<a class="btn" href={ templ.SafeURL(fwURL(v.Base, "upload", "1") + "#upload") } data-dialog="dlg-upload">Upload custom firmware</a>
+	}
+}
+
+// fwDownBanner says the last check failed and what still works.
+templ fwDownBanner(v view, p firmwarePage) {
+	if downAction(v, p) != nil {
+		<form method="post" action={ templ.SafeURL(v.Base + "/firmware/refresh") } class="fw-down" data-fw-check data-checking={ "Checking " + p.Feed + "…" }>
+			<input type="hidden" name="csrf" value={ v.CSRF }/>
+			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Alert: true, Title: upperFirst(p.Feed) + " not reachable.", Text: downText(p), Action: downAction(v, p)})
+		</form>
+	} else {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Alert: true, Title: upperFirst(p.Feed) + " not reachable.", Text: downText(p)})
+	}
+}
+
+// downText explains a failed check: the error, and that the page and the cache still work.
+func downText(p firmwarePage) string {
+	s := strings.TrimSuffix(p.Index.LastError, ".") + ". "
+	if p.Index.Loaded {
+		return s + "Showing releases from the last successful check (" + agoWords(p.Now, p.Index.LastSuccess) + "); cached firmware files still work for updates."
+	}
+	return s + "No release list yet; cached firmware files still work for updates."
+}
+
+// downAction is the banner's "Try again" for admins.
+func downAction(v view, p firmwarePage) *ui.Btn {
+	if !v.IsAdmin || !p.CanRefresh {
+		return nil
+	}
+	return &ui.Btn{Label: "Try again", Type: "submit"}
+}
+
+// fwReleaseList is the left column: the newest releases as cards, then the older ones.
+templ fwReleaseList(v view, p firmwarePage) {
+	if len(p.Releases) == 0 {
+		<div class="fw-norel">
+			if p.checkState() == "checking" {
+				<p><b>Index loading…</b> The releases appear when the first check of { p.Feed } has answered.</p>
+			} else if p.Index == nil {
+				<p><b>No releases loaded.</b> The index is only fetched on request.</p>
+			} else {
+				<p><b>No releases loaded.</b> Check again when { p.Feed } can be reached.</p>
+			}
+		</div>
+	}
+	for i, r := range p.Newest() {
+		<a
+			class="fw-rel"
+			id={ "release-" + r.Version }
+			href={ templ.SafeURL(fwURL(v.Base, "release", r.Version, "older", one(p.ShowOlder))) }
+			if i == p.selected {
+				aria-current="true"
+			}
+		>
+			<span class="fw-rel-t">
+				<span class="fw-rel-h">
+					<span class="fw-rel-v">{ r.Version }</span>
+					if r.Recommended {
+						@ui.Badge(ui.ToneOK, "Latest")
+					}
+				</span>
+				if !r.Published.IsZero() {
+					<span class="fw-rel-d"><time datetime={ r.Published.Format(time.RFC3339) }>{ dayText(r.Published) }</time></span>
+				}
+			</span>
+			<span class="fw-rel-n">{ strconv.Itoa(len(r.At)) } running</span>
+		</a>
+	}
+	if older := p.Older(); len(older) > 0 {
+		if p.ShowOlder {
+			<a class="fw-older-tg" href={ templ.SafeURL(fwURL(v.Base, "release", selectedIfNewest(p))) }>Hide older releases</a>
+			<div class="fw-older">
+				for i, r := range older {
+					<a
+						class="fw-chip"
+						id={ "release-" + r.Version }
+						href={ templ.SafeURL(fwURL(v.Base, "release", r.Version, "older", "1")) }
+						if i+releasesShown == p.selected {
+							aria-current="true"
+						}
+					>{ r.Version }</a>
+				}
+			</div>
+		} else {
+			<a class="fw-older-tg" href={ templ.SafeURL(fwURL(v.Base, "release", selectedVersion(p), "older", "1")) }>Show { strconv.Itoa(len(older)) } older releases</a>
+		}
+	}
+}
+
+// selectedVersion is the selected release's version, "" for the newest (the default).
+func selectedVersion(p firmwarePage) string {
+	if p.selected == 0 || p.Selected() == nil {
+		return ""
+	}
+	return p.Selected().Version
+}
+
+// selectedIfNewest keeps the selection when the older list closes, unless it is an older one.
+func selectedIfNewest(p firmwarePage) string {
+	if p.selected >= releasesShown {
+		return ""
+	}
+	return selectedVersion(p)
+}
+
+// fwReleaseCard is the selected release: notes, Update, and the files this fleet needs.
+templ fwReleaseCard(v view, p firmwarePage, r releaseView) {
+	<section class="ucard fw-sel" id="release" aria-labelledby="fw-sel-h">
+		<div class="fw-sel-head">
+			<div>
+				<h2 id="fw-sel-h">Tasmota { r.Version }</h2>
+				if !r.Published.IsZero() {
+					<div class="fw-sel-sub">
+						Released <time datetime={ r.Published.Format(time.RFC3339) }>{ dayText(r.Published) }</time>
+						@fwRelLinks(v, p, r)
+					</div>
+				} else {
+					<div class="fw-sel-sub">
+						@fwRelLinks(v, p, r)
+					</div>
+				}
+			</div>
+			<div class="btn-row">
+				<a class="btn" href={ templ.SafeURL(fwURL(v.Base, "release", r.Version, "older", one(p.ShowOlder), "notes", "1") + "#release-notes") } data-dialog="dlg-notes">Release notes</a>
+				if v.Features.Updates {
+					if r.Updatable > 0 {
+						<a class="btn btn-primary" href={ templ.SafeURL(v.Base + "/updates/new?release=" + url.QueryEscape(r.Version)) }>Update { plural(r.Updatable, "device") }…</a>
+					} else {
+						<a class="btn btn-primary" aria-disabled="true" title="No device can be updated to this release" href={ templ.SafeURL(v.Base + "/updates/new?release=" + url.QueryEscape(r.Version)) }>Update 0 devices…</a>
+					}
+				}
+			</div>
+		</div>
+		if p.ShowNotes {
+			<div id="release-notes" class="fw-fullnotes">
+				@fwReleaseDetail(r)
+			</div>
+		} else if ex := excerpt(r.Notes); len(ex) > 0 {
+			<ul class="fw-excerpt">
+				for _, it := range ex {
+					<li>
+						@fwInlines(it)
+					</li>
+				}
+			</ul>
+		}
+		<div class="fw-files-h">
+			<h3>Files this fleet needs</h3>
+			if v.IsAdmin && r.CanPrefetch && r.Cached < r.Needed && len(r.Below) > 0 && p.Run == "" {
+				<form method="post" action={ templ.SafeURL(v.Base + "/firmware/prefetch") }>
+					<input type="hidden" name="csrf" value={ v.CSRF }/>
+					<input type="hidden" name="release" value={ r.Version }/>
+					<button type="submit" class="btn btn-link">Prefetch for my fleet</button>
+				</form>
+			}
+		</div>
+		for _, f := range r.Files {
+			@fwFileRow(v, p, r, f)
+		}
+		if len(r.Files) == 0 {
+			<p class="fw-note">No device in this fleet needs a file from this release.</p>
+		}
+		if p.Unknown > 0 && len(r.Skipped) == 0 {
+			<p class="fw-note">{ plural(p.Unknown, "device") } reported no firmware version yet; they are not counted here.</p>
+		}
+		if len(r.Skipped) > 0 {
+			<p class="fw-note">
+				No file needed for:
+				for i, d := range r.Skipped {
+					if i > 0 {
+						{ "; " }
+					}
+					{ d.Name } ({ humanReason(d.Reason) })
+				}
+			</p>
+		}
+	</section>
+}
+
+// fwRelLinks leads to the release page (N6): its whole notes, and every release between the
+// oldest version in the fleet and this one.
+templ fwRelLinks(v view, p firmwarePage, r releaseView) {
+	<span class="fw-rel-links">
+		· <a href={ templ.SafeURL(relURL(v.Base, r.Version, false)) }>Release page</a>
+		if p.Oldest != "" && compareVersions(p.Oldest, r.Version) < 0 {
+			· <a href={ templ.SafeURL(relURL(v.Base, r.Version, true)) }>Changes since { p.Oldest }</a>
+		}
+	</span>
+}
+
+// fwFileRow is one file of the selected release: name, chip, devices, size and its state.
+templ fwFileRow(v view, p firmwarePage, r releaseView, f fileView) {
+	<div class="fw-file">
+		<span class="fw-file-n">@ui.Soft(f.Name)</span>
+		<span class="fw-file-c">{ f.Chip }</span>
+		<span class="fw-file-d" title={ devNames(f.UsedBy) }>{ plural(len(f.UsedBy), "device") }</span>
+		<span class="fw-file-s">
+			if f.Size > 0 {
+				{ sizeNoWrap(f.Size) }
+			}
+		</span>
+		switch {
+			case f.Missing:
+				@ui.Badge(ui.ToneDanger, "Not offered upstream")
+			case f.Cached:
+				@ui.Badge(ui.ToneOK, "Cached")
+			case p.Fetching[r.Version+"/"+f.Name]:
+				<a class="bdg t-accent fw-fetching" href={ templ.SafeURL(v.Base + "/firmware/prefetch/" + p.Run) }>Fetching…</a>
+			case p.Failed[r.Version+"/"+f.Name] != "":
+				<span class="fw-file-fail">
+					<span class="bdg t-danger" title={ p.Failed[r.Version+"/"+f.Name] }>Download failed</span>
+					if v.IsAdmin {
+						@fwFetchButton(v, r.Version, f.Name, "Retry")
+					}
+				</span>
+			case v.IsAdmin:
+				@fwFetchButton(v, r.Version, f.Name, "Prefetch")
+			default:
+				<span class="fw-file-nc">Not cached</span>
+		}
+	</div>
+}
+
+// devNames lists device names for a title.
+func devNames(ds []deviceRef) string {
+	names := make([]string, 0, len(ds))
+	for _, d := range ds {
+		names = append(names, d.Name)
+	}
+	return strings.Join(names, ", ")
+}
+
+templ fwFetchButton(v view, release, file, label string) {
+	<form method="post" action={ templ.SafeURL(v.Base + "/firmware/fetch") } class="fw-fetch">
+		<input type="hidden" name="csrf" value={ v.CSRF }/>
+		<input type="hidden" name="release" value={ release }/>
+		<input type="hidden" name="filename" value={ file }/>
+		<button type="submit" class="btn btn-sm" aria-label={ label + " " + file }>{ label }</button>
+	</form>
+}
+
+// fwNotesDialog is "Release notes": the whole notes and where the fleet stands.
+templ fwNotesDialog(v view, p firmwarePage, r releaseView) {
+	<dialog id="dlg-notes" class="udlg fw-notes-dlg" aria-labelledby="dlg-notes-h">
+		<div class="udlg-in">
+			<div class="fw-dlg-head">
+				<h2 id="dlg-notes-h">Tasmota { r.Version }</h2>
+				<button type="button" class="btn btn-sm" data-close>Close</button>
+			</div>
+			<div class="fw-dlg-body">
+				@fwReleaseDetail(r)
+			</div>
+		</div>
+	</dialog>
+}
+
+// fwReleaseDetail is the release page link, the fleet against the release and the notes.
+templ fwReleaseDetail(r releaseView) {
+	if r.URL != "" {
+		<p><a class="ext" href={ templ.SafeURL(r.URL) } rel="noopener noreferrer nofollow" target="_blank">Upstream release page<span class="sr-only"> (opens in a new tab)</span></a></p>
+	}
+	<h3>Fleet</h3>
+	<ul class="fw-fleet">
+		<li>
+			{ olderHead(r) }
+			@fwDevs(r.Below)
+		</li>
+		<li>
+			{ "Same version (" + strconv.Itoa(len(r.At)) + "):" }
+			@fwDevs(r.At)
+		</li>
+		<li>
+			{ "Newer than this release (" + strconv.Itoa(len(r.Above)) + "):" }
+			@fwDevs(r.Above)
+		</li>
+		if len(r.Unknown) > 0 {
+			<li>
+				{ "Version unknown (" + strconv.Itoa(len(r.Unknown)) + "):" }
+				@fwDevs(r.Unknown)
+			</li>
+		}
+	</ul>
+	<h3>Release notes</h3>
+	if len(r.Notes) > 0 {
+		<div class="notes">
+			@fwNotes(r.Notes)
+		</div>
+		if r.NotesCut {
+			<p class="fw-note">
+				The release notes were cut at 32 KiB.
+				if r.URL != "" {
+					The release page has the rest.
+				}
+			</p>
+		}
+	} else {
+		<p class="fw-note">No release notes from the configured sources.</p>
+	}
+}
+
+templ fwDevs(ds []deviceRef) {
+	if len(ds) == 0 {
+		<span class="muted"> none</span>
+	}
+	for i, d := range ds {
+		if i > 0 {
+			{ " " }
+		}
+		<span class="dev"><a href={ templ.SafeURL(d.Base + "/devices/" + strconv.FormatInt(int64(d.ID), 10)) } title={ d.Name }>{ d.Name }</a></span>
+	}
+}
+
+// olderHead heads the devices older than a release, with how many of them can take it.
+func olderHead(r releaseView) string {
+	s := "Older than this release (" + strconv.Itoa(len(r.Below))
+	if len(r.Below) != r.Updatable {
+		s += ", " + strconv.Itoa(r.Updatable) + " updatable"
+	}
+	return s + "):"
+}
+
+// fwNotes renders release notes blocks; every value is text (firmware/notes.go contract), links
+// only to the allowed hosts ParseNotesWith checked.
+templ fwNotes(blocks []firmware.NoteBlock) {
+	for _, b := range blocks {
+		switch b.Kind {
+			case "h":
+				<h4>
+					@fwInlines(b.Inlines)
+				</h4>
+			case "p":
+				<p>
+					@fwInlines(b.Inlines)
+				</p>
+			case "quote":
+				<blockquote>
+					@fwInlines(b.Inlines)
+				</blockquote>
+			case "ul":
+				<ul>
+					for _, it := range b.Items {
+						<li>
+							@fwInlines(it)
+						</li>
+					}
+				</ul>
+			case "ol":
+				<ol>
+					for _, it := range b.Items {
+						<li>
+							@fwInlines(it)
+						</li>
+					}
+				</ol>
+			case "pre":
+				<pre><code>{ b.Code }</code></pre>
+		}
+	}
+}
+
+templ fwInlines(ins []firmware.Inline) {
+	for _, in := range ins {
+		if in.Href != "" {
+			<a href={ templ.SafeURL(in.Href) } rel="noopener noreferrer nofollow" target="_blank">{ in.Text }</a>
+		} else if in.Code {
+			<code>{ in.Text }</code>
+		} else if in.Strong {
+			<strong>{ in.Text }</strong>
+		} else {
+			{ in.Text }
+		}
+	}
+}
+
+// fwCache is the list of cached files with the drop zone for custom firmware.
+templ fwCache(v view, p firmwarePage) {
+	<section class="ulist fw-cache" id="cache" aria-labelledby="fw-cache-h">
+		<div class="ulist-head">
+			<h2 id="fw-cache-h">Cached files</h2>
+			<span class="fw-cache-total">
+				if v.IsAdmin && p.CanManage && p.UnusedCount > 0 {
+					<form method="post" action={ templ.SafeURL(v.Base + "/firmware/delete-selected") } class="fw-unused">
+						<input type="hidden" name="csrf" value={ v.CSRF }/>
+						for _, a := range p.Artifacts {
+							if a.Selectable {
+								<input type="hidden" name="id" value={ strconv.FormatInt(int64(a.ID), 10) }/>
+							}
+						}
+						<button type="submit" class="btn btn-link" title={ plural(p.UnusedCount, "file") + " not needed by any transaction (" + humanBytes(p.UnusedSize) + ")" }>Delete { strconv.Itoa(p.UnusedCount) } unused…</button>
+					</form>
+				}
+				<span id="cache-total">{ plural(len(p.Artifacts), "file") } · { sizeNoWrap(p.CacheSize) }</span>
+			</span>
+		</div>
+		for _, a := range p.Artifacts {
+			@fwCacheRow(v, p, a)
+		}
+		if len(p.Artifacts) == 0 {
+			<p class="fw-cache-empty">Nothing cached yet.</p>
+		}
+		if v.IsAdmin && p.CanUpload {
+			<p class="fw-drop" data-fw-drop>Drop a <span class="mono">.bin</span> or <span class="mono">.bin.gz</span> here to add custom firmware, or <a href={ templ.SafeURL(fwURL(v.Base, "upload", "1") + "#upload") } data-dialog="dlg-upload">choose a file</a></p>
+		}
+	</section>
+}
+
+// fwCacheRow is one cached file: name, release and size, checksum, date and Delete.
+templ fwCacheRow(v view, p firmwarePage, a artifactView) {
+	<div class="fw-crow" title={ cacheTitle(a) }>
+		<span class="fw-c-f">
+			if a.Upload != nil {
+				{ a.Upload.Label }
+			} else {
+				@ui.Soft(a.Filename)
+			}
+		</span>
+		<span class="fw-c-v">
+			if a.Upload != nil {
+				custom { a.Release }
+			} else {
+				{ a.Release }
+			}
+			· { sizeNoWrap(a.Size) }
+		</span>
+		<span class="fw-c-h" title={ a.SHA256 } data-visual-mask>sha256 { shortHash(a.SHA256) }</span>
+		<span class="fw-c-a">
+			<time datetime={ a.FetchedAt.Format(time.RFC3339) } title={ a.FetchedAt.Format("2006-01-02 15:04:05 MST") }>{ shortDay(p.Now, a.FetchedAt) }</time>
+			if a.InUse {
+				if len(a.Batches) > 0 {
+					for _, b := range a.Batches {
+						<a class="fw-needed" href={ templ.SafeURL(v.Base + "/transactions/" + strconv.FormatInt(int64(b), 10)) } title={ "Needed by " + a.NeededText() + "; it cannot be deleted until the transaction has ended" }>Needed by #{ strconv.FormatInt(int64(b), 10) }</a>
+					}
+				} else {
+					<span class="fw-needed" title={ "Needed by " + a.NeededText() }>Needed</span>
+				}
+			} else if v.IsAdmin && p.CanManage {
+				<a class="fw-del" href={ templ.SafeURL(v.Base + "/firmware/artifacts/" + strconv.FormatInt(int64(a.ID), 10) + "/delete") } data-dialog={ "dlg-file-" + strconv.FormatInt(int64(a.ID), 10) } aria-label={ "Delete " + a.Release + " " + a.Filename }>Delete</a>
+			}
+		</span>
+	</div>
+}
+
+// cacheTitle says what a cached file is in full: chip and build, source, who runs it.
+func cacheTitle(a artifactView) string {
+	s := chipLabel(a.Family) + " / " + a.Variant + ", from " + a.Source
+	if a.Upload != nil {
+		s += ", uploaded as " + a.Upload.OriginalName
+	}
+	if len(a.Devices) > 0 {
+		s += "; installed on " + devNames(a.Devices)
+	}
+	return s
+}
+
+// fwDeleteDialog confirms deleting one cached file.
+templ fwDeleteDialog(v view, p firmwarePage, a artifactView) {
+	<dialog id={ "dlg-file-" + strconv.FormatInt(int64(a.ID), 10) } class="udlg" aria-labelledby={ "dlg-file-" + strconv.FormatInt(int64(a.ID), 10) + "-h" }>
+		<form method="post" action={ templ.SafeURL(v.Base + "/firmware/artifacts/" + strconv.FormatInt(int64(a.ID), 10) + "/delete") } class="udlg-in">
+			<input type="hidden" name="csrf" value={ v.CSRF }/>
+			<input type="hidden" name="confirm" value="yes"/>
+			if a.Upload != nil {
+				<h2 id={ "dlg-file-" + strconv.FormatInt(int64(a.ID), 10) + "-h" }>Delete { a.Upload.Label } (custom) from the cache?</h2>
+				<p class="udlg-body">This is an image you uploaded. Deleting it removes it for good: it cannot be downloaded again, so keep your own copy if you still need it.</p>
+			} else {
+				<h2 id={ "dlg-file-" + strconv.FormatInt(int64(a.ID), 10) + "-h" }>Delete { a.Filename } ({ a.Release }) from the cache?</h2>
+				<p class="udlg-body">{ waitingText(a) }</p>
+			}
+			<div class="udlg-changes">
+				<div><span>Frees</span><span class="mono">{ sizeNoWrap(a.Size) }</span></div>
+				<div><span>Checksum</span><span class="mono fw-sum"><code title={ a.SHA256 }>{ shortHash(a.SHA256) }</code><button type="button" class="btn btn-sm" data-copy-text={ a.SHA256 } aria-label={ "Copy the SHA-256 of " + a.Filename } hidden>Copy</button></span></div>
+			</div>
+			<div class="udlg-foot">
+				<button type="button" class="btn" data-close>Cancel</button>
+				<button type="submit" class="btn btn-danger-solid">
+					if a.Upload != nil {
+						Delete image
+					} else {
+						Delete file
+					}
+				</button>
+			</div>
+		</form>
+	</dialog>
+}
+
+// waitingText says who still needs a file and that it comes back when needed.
+func waitingText(a artifactView) string {
+	again := "It will be downloaded again (" + humanBytes(a.Size) + ") when an update starts."
+	if a.Waiting == 0 {
+		return "No device needs this file for an update to " + a.Release + ". " + again
+	}
+	verb := " still need"
+	if a.Waiting == 1 {
+		verb = " still needs"
+	}
+	return plural(a.Waiting, "device") + verb + " this file for an update to " + a.Release + ". " + again
+}
+
+// fwUploadForm is the custom firmware upload (htmx, multipart; the answer lands in #custom-result).
+templ fwUploadForm(v view, inDialog bool) {
+	<form class="fw-upload" hx-post={ v.Base + CustomUploadPath } hx-encoding="multipart/form-data" hx-target="#custom-result" hx-swap="innerHTML">
+		<p class="udlg-body">Your own Tasmota build, offered on the update page. It is never preselected and passes the same chip-family guard as upstream files; the chip is read from the image itself.</p>
+		<label class="ufield"><span class="ufield-label">Label</span><input name="label" maxlength="64" required placeholder="my build"/></label>
+		<label class="ufield"><span class="ufield-label">Version</span><input name="version" required pattern="[0-9]+(\.[0-9]+){1,4}" placeholder="16.0.0"/><span class="ufield-help">Dotted numbers, usually the version it was built from (for example 16.0.0).</span></label>
+		<label class="ufield"><span class="ufield-label">Build</span><input name="variant" placeholder="tasmota"/><span class="ufield-help">For example sensors or lite. It must match the variant of the devices you update, or you override the variant on the update page.</span></label>
+		<label class="ucheck"><input type="checkbox" name="single_core" value="1"/> Single-core ESP32 build (tasmota32solo1)</label>
+		<label class="ufield"><span class="ufield-label">Image file</span><input type="file" name="image" required accept=".bin,.gz" data-fw-file/><span class="ufield-help">.bin or .bin.gz. ESP8266 up to 4 MiB, ESP32 up to 8 MiB uncompressed.</span></label>
+		<div id="custom-result" aria-live="polite"></div>
+		<div class="udlg-foot">
+			if inDialog {
+				<button type="button" class="btn" data-close>Cancel</button>
+			}
+			<button type="submit" class="btn btn-primary">Upload</button>
+		</div>
+	</form>
+}
+
+// fwCustomResult is the answer to an upload: why it was refused, or what was stored.
+templ fwCustomResult(d customData) {
+	if d.Error != "" {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: d.Error, Alert: true})
+	}
+	if d.Notice != "" {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneOK, Text: d.Notice})
+	}
+}

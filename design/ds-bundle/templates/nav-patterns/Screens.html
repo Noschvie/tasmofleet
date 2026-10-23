@@ -1,0 +1,935 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tasmofleet DS — Screens (QA v0.9.0)</title>
+    <link rel="stylesheet" href="../../styles.css" />
+    <link rel="stylesheet" href="patterns.css" />
+    <script src="../../theme.js" defer></script>
+    <script src="static/select.js" defer></script>
+    <script src="static/menu.js" defer></script>
+    <script src="static/jump.js" defer></script>
+    <script src="static/dialog.js" defer></script>
+    <style>
+      a {
+        color: var(--color-link);
+      }
+      a:hover {
+        color: var(--color-accent-hover);
+      }
+      .demo-foot {
+        max-width: var(--container);
+        margin: 0 auto;
+        padding: 0 var(--page-pad) var(--space-8);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: var(--space-3);
+        color: var(--color-text-2);
+        font-size: 12px;
+      }
+      .pg {
+        max-width: var(--container);
+        margin: 0 auto;
+        padding: var(--space-6) var(--page-pad) var(--space-12);
+      }
+      .pg > h1 {
+        margin: 0 0 var(--space-2);
+      }
+      .pg-lede {
+        max-width: 70ch;
+        color: var(--color-text-2);
+        margin: 0 0 var(--space-8);
+      }
+      .pg-sec {
+        margin: 0 0 var(--space-12);
+      }
+      .pg-sec > h2 {
+        font-size: var(--fs-lg);
+        margin: 0 0 var(--space-1);
+        padding-top: var(--space-3);
+        border-top: var(--rule-w) solid var(--color-rule);
+      }
+      .pg-rule {
+        max-width: 72ch;
+        color: var(--color-text-2);
+        font-size: var(--fs-sm);
+        margin: 0 0 var(--space-5);
+      }
+      .pg-frame {
+        position: relative;
+        border: 1px solid var(--color-divider);
+        background: var(--color-bg);
+        padding: var(--space-5) var(--space-4);
+      }
+      .pg-frame.menu-room {
+        padding: 0;
+        min-height: 230px;
+      }
+      .pg-frame .page-head {
+        margin-bottom: var(--space-4);
+      }
+      .pg-static .bulkbar {
+        position: static;
+        max-width: none;
+        margin: var(--space-3) 0 0;
+      }
+      .opt-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+        gap: var(--space-4);
+      }
+      @media (max-width: 48rem) {
+        .pg-frame {
+          padding: var(--space-4) var(--space-3);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="top">
+      <a class="brand" href="Dashboard.html"
+        ><img
+          src="../../assets/logo.svg"
+          alt=""
+          width="26"
+          height="26"
+        />tasmofleet</a
+      >
+      <nav aria-label="Main" class="mainnav d-only">
+        <a class="navtop" href="Dashboard.html">Dashboard</a>
+        <details class="navgroup">
+          <summary class="navtop">Devices</summary>
+          <div class="menu">
+            <a href="Devices.html">Devices</a><a href="#">Add devices</a
+            ><a href="#">Policy</a>
+          </div>
+        </details>
+        <details class="navgroup">
+          <summary class="navtop">Updates</summary>
+          <div class="menu">
+            <a href="#">Transactions</a><a href="#">New transaction</a
+            ><a href="Firmware.html">Firmware</a>
+          </div>
+        </details>
+        <details class="navgroup">
+          <summary class="navtop">System</summary>
+          <div class="menu">
+            <a href="#">Settings</a><a href="#">Users</a><a href="#">Audit</a
+            ><a href="#">About</a>
+          </div>
+        </details>
+      </nav>
+      <div class="user d-only">
+        <details class="navgroup">
+          <summary class="who">alice <small>(admin)</small></summary>
+          <div class="menu right">
+            <a href="#">Change password</a>
+            <hr />
+            <form method="post" action="#">
+              <button type="submit">Sign out</button>
+            </form>
+          </div>
+        </details>
+      </div>
+      <details class="navgroup navpanel m-only">
+        <summary>Menu</summary>
+        <div class="navpanel-body">
+          <nav aria-label="Main">
+            <div class="navpanel-sec">
+              <a href="Dashboard.html">Dashboard</a>
+            </div>
+            <div class="navpanel-sec">
+              <p class="navpanel-label">Devices</p>
+              <a href="Devices.html">Devices</a><a href="#">Add devices</a
+              ><a href="#">Policy</a>
+            </div>
+            <div class="navpanel-sec">
+              <p class="navpanel-label">Updates</p>
+              <a href="#">Transactions</a><a href="#">New transaction</a
+              ><a href="Firmware.html">Firmware</a>
+            </div>
+            <div class="navpanel-sec">
+              <p class="navpanel-label">System</p>
+              <a href="#">Settings</a><a href="#">Users</a><a href="#">Audit</a
+              ><a href="#">About</a>
+            </div>
+            <div class="navpanel-sec">
+              <p class="navpanel-label">alice (admin)</p>
+              <a href="#">Change password</a>
+              <form method="post" action="#">
+                <button type="submit">Sign out</button>
+              </form>
+            </div>
+          </nav>
+        </div>
+      </details>
+    </header>
+    <main class="pg">
+      <h1>Screens · QA v0.9.0</h1>
+      <p class="pg-lede">
+        Screen-level fixes from the QA findings, built from the patterns in
+        <a href="Patterns.html">Patterns</a>. Each frame is the content area of
+        one page; the finding numbers are in the headings.
+      </p>
+
+      <section
+        class="pg-sec"
+        data-screen-label="Device never answered"
+        aria-labelledby="a"
+      >
+        <h2 id="a">Device detail · never answered (#50 #51)</h2>
+        <p class="pg-rule">
+          The header says so; actions that need an answer are disabled with the
+          reason next to them, and Console and Settings tabs are disabled.
+          Transactions is always shown. Empty sections use the empty state.
+        </p>
+        <div class="pg-frame">
+          <div class="page-head">
+            <h1>
+              mystery-chip
+              <span class="badge tone-neutral st-unknown">Never answered</span>
+            </h1>
+            <div class="actions">
+              <a class="button ghost" href="#">Replace device</a>
+            </div>
+            <nav class="crumb trail" aria-label="Breadcrumb">
+              <a href="Devices.html">Devices</a
+              ><span aria-current="page">mystery-chip</span>
+            </nav>
+          </div>
+          <div class="jump" hidden>
+            <select data-jump aria-label="Device page">
+              <option value="#" selected>Overview</option>
+              <option value="#" disabled>Settings (needs an answer)</option>
+              <option value="#" disabled>Console (needs an answer)</option>
+              <option value="#">Backups</option>
+            </select>
+          </div>
+          <nav class="tabs" aria-label="Device pages">
+            <a href="#" aria-current="page">Overview</a
+            ><a href="#" aria-disabled="true" title="Needs the device to answer"
+              >Settings</a
+            ><a href="#" aria-disabled="true" title="Needs the device to answer"
+              >Console</a
+            ><a href="#">Backups<span class="count">0</span></a>
+          </nav>
+          <p class="notice plain">
+            Added 2026-10-20 14:02 at 172.31.13.77 and has not answered since.
+            Check that it is powered and that the address is right.
+          </p>
+          <div class="cols">
+            <section class="card" aria-labelledby="a1">
+              <h2 id="a1">Transactions</h2>
+              <div class="empty-state">
+                <strong>No transactions yet</strong
+                ><span>Updates for this device show here.</span>
+              </div>
+            </section>
+            <section class="card" aria-labelledby="a2">
+              <h2 id="a2">Backups</h2>
+              <div class="empty-state">
+                <strong>No backups yet</strong
+                ><span>A backup needs the device to answer.</span
+                ><button type="button" class="primary" disabled>
+                  Back up now
+                </button>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section
+        class="pg-sec"
+        data-screen-label="Device backups"
+        aria-labelledby="b"
+      >
+        <h2 id="b">Device detail · Backups tab (#19 #52 #92)</h2>
+        <p class="pg-rule">
+          One Actions menu per row at the right end (Download · Restore… · ── ·
+          Delete…), at every width. "Newest" is a labelled badge. Explanations
+          are (i) buttons; references are links. Dates are ISO text inputs.
+          Hints sit under their control.
+        </p>
+        <div class="pg-frame">
+          <div class="toolbar">
+            <form method="post" action="#">
+              <button type="submit" class="primary">Back up now</button>
+            </form>
+            <a class="button" href="#">Compare and restore</a>
+          </div>
+          <form class="filters" method="get" action="#">
+            <label
+              >Taken after
+              <input
+                type="text"
+                inputmode="numeric"
+                pattern="\d{4}-\d{2}-\d{2}"
+                placeholder="YYYY-MM-DD" /></label
+            ><label
+              >Kind
+              <select>
+                <option>Any</option>
+                <option>Config file</option>
+                <option>Snapshot</option>
+              </select></label
+            ><button type="submit">Filter</button>
+          </form>
+          <table class="dense">
+            <thead>
+              <tr>
+                <th>Taken</th>
+                <th>Kind</th>
+                <th>Firmware</th>
+                <th>Decoder</th>
+                <th class="end"><span class="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td data-label="Taken" class="p1">
+                  <span
+                    >2026-10-20 06:00 <span class="badge">Newest</span></span
+                  >
+                </td>
+                <td data-label="Kind" class="s">Config file</td>
+                <td data-label="Firmware" class="s">16.0.0</td>
+                <td data-label="Decoder">current</td>
+                <td data-label="Actions" class="rowacts">
+                  <details class="rowmenu">
+                    <summary class="button sm">Actions</summary>
+                    <div class="rowmenu-body">
+                      <a href="#" download>Download</a
+                      ><button type="button">Restore…</button>
+                      <hr />
+                      <button type="button" class="danger">Delete…</button>
+                    </div>
+                  </details>
+                </td>
+              </tr>
+              <tr>
+                <td data-label="Taken" class="p1">2026-10-12 06:00</td>
+                <td data-label="Kind" class="s">Config file</td>
+                <td data-label="Firmware" class="s">15.1.0</td>
+                <td data-label="Decoder">
+                  <span
+                    >outdated
+                    <button
+                      type="button"
+                      class="info"
+                      aria-label="What does outdated mean?"
+                    >
+                      <span>i</span></button
+                    ><span class="hint"
+                      >Decoded with the 15.x layout; see
+                      <a href="#">About</a></span
+                    ></span
+                  >
+                </td>
+                <td data-label="Actions" class="rowacts">
+                  <details class="rowmenu up">
+                    <summary class="button sm">Actions</summary>
+                    <div class="rowmenu-body">
+                      <a href="#" download>Download</a
+                      ><button type="button">Restore…</button>
+                      <hr />
+                      <button type="button" class="danger">Delete…</button>
+                    </div>
+                  </details>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section
+        class="pg-sec"
+        data-screen-label="Replace device"
+        aria-labelledby="c"
+      >
+        <h2 id="c">Replace device (#59)</h2>
+        <p class="pg-rule">
+          The condition comes first, before any input. One card per step, no
+          card inside a card, both at the same width. The field error sits under
+          its field.
+        </p>
+        <div class="pg-frame">
+          <div class="page-head">
+            <h1>Replace Balcony Windowsill</h1>
+            <nav class="crumb trail" aria-label="Breadcrumb">
+              <a href="Devices.html">Devices</a
+              ><a href="Device.html">Balcony Windowsill</a
+              ><span aria-current="page">Replace</span>
+            </nav>
+          </div>
+          <p class="warning">
+            The old device still answers (last seen 8 s ago). Replace only works
+            once it is switched off or removed.
+          </p>
+          <div class="stack">
+            <section class="card" aria-labelledby="c1">
+              <h2 id="c1">1 · New device</h2>
+              <label
+                >Address of the new device
+                <input
+                  type="text"
+                  value="172.31.13.88"
+                  aria-invalid="true"
+                  aria-describedby="c1e"
+                /><span id="c1e" class="field-error"
+                  >Did not answer at 172.31.13.88. Check the address and that it
+                  runs Tasmota.</span
+                ></label
+              >
+              <div class="toolbar" style="margin: var(--space-3) 0 0">
+                <button type="submit">Check address</button>
+              </div>
+            </section>
+            <section class="card" aria-labelledby="c2">
+              <h2 id="c2">2 · Settings to carry over</h2>
+              <label class="inline"
+                ><input type="radio" name="bk" checked /> Newest backup,
+                2026-10-20 06:00</label
+              >
+              <label class="inline"
+                ><input type="radio" name="bk" /> Choose another backup</label
+              >
+            </section>
+          </div>
+          <div class="toolbar" style="margin-top: var(--space-4)">
+            <a class="button ghost" href="Device.html">Cancel</a
+            ><button type="submit" class="primary" disabled>Replace now</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="pg-sec" data-screen-label="Discovery" aria-labelledby="d">
+        <h2 id="d">Add devices · Scan and Discovered (#60)</h2>
+        <p class="pg-rule">
+          Start scan is disabled until a device network exists, with the reason
+          and a link. Cards keep the standard gap. The inventory state is a
+          badge in the row; the actions cell holds only the two buttons,
+          right-aligned.
+        </p>
+        <div class="pg-frame">
+          <div class="jump" hidden>
+            <select data-jump aria-label="Add devices">
+              <option value="#">Add manually</option>
+              <option value="#" selected>Scan</option>
+              <option value="#">Discovered (2)</option>
+            </select>
+          </div>
+          <nav class="tabs" aria-label="Add devices">
+            <a href="#">Add manually</a><a href="#" aria-current="page">Scan</a
+            ><a href="#">Discovered<span class="count accent">2</span></a>
+          </nav>
+          <section class="card" aria-labelledby="d1">
+            <h2 id="d1">HTTP scan</h2>
+            <p class="muted">
+              No device network yet.
+              <a href="#">Add one in Settings › Discovery</a>.
+            </p>
+            <button type="submit" disabled>Start scan</button>
+          </section>
+          <section class="card" aria-labelledby="d2">
+            <h2 id="d2">Proposals</h2>
+            <table class="dense">
+              <thead>
+                <tr>
+                  <th>Device</th>
+                  <th>Address</th>
+                  <th>Inventory</th>
+                  <th class="end"><span class="sr-only">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td data-label="Device" class="p1">
+                    <span
+                      ><strong>tasmota_4F21A0</strong><br /><small class="muted"
+                        >ESP32-C3 · 16.0.0</small
+                      ></span
+                    >
+                  </td>
+                  <td data-label="Address" class="s">172.31.13.58</td>
+                  <td data-label="Inventory" class="s">
+                    <span class="badge tone-info">New device</span>
+                  </td>
+                  <td data-label="Actions" class="rowacts">
+                    <div class="row-actions">
+                      <button type="button" class="sm">Ignore</button
+                      ><button type="submit" class="sm">Add</button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+        </div>
+      </section>
+
+      <section
+        class="pg-sec"
+        data-screen-label="Device settings"
+        aria-labelledby="e"
+      >
+        <h2 id="e">Device settings · Options (#61)</h2>
+        <p class="pg-rule">
+          The (i) follows the label text inline in every card, and columns are
+          wide enough that most option names stay on one line.
+        </p>
+        <div class="pg-frame">
+          <section class="card" aria-labelledby="e1">
+            <h2 id="e1">Options</h2>
+            <div class="opt-grid">
+              <label
+                ><span
+                  >SetOption0 <code>save_state</code>
+                  <button
+                    type="button"
+                    class="info"
+                    aria-label="About SetOption0"
+                  >
+                    <span>i</span>
+                  </button></span
+                ><select>
+                  <option>On</option>
+                  <option>Off</option>
+                </select></label
+              >
+              <label
+                ><span
+                  >SetOption19 <code>discovery</code>
+                  <button
+                    type="button"
+                    class="info"
+                    aria-label="About SetOption19"
+                  >
+                    <span>i</span>
+                  </button></span
+                ><select>
+                  <option>Off</option>
+                  <option>On</option>
+                </select></label
+              >
+              <label
+                ><span
+                  >PowerOnState
+                  <button
+                    type="button"
+                    class="info"
+                    aria-label="About PowerOnState"
+                  >
+                    <span>i</span>
+                  </button></span
+                ><select>
+                  <option>3 · last saved state</option>
+                </select></label
+              >
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section
+        class="pg-sec"
+        data-screen-label="Device console"
+        aria-labelledby="f"
+      >
+        <h2 id="f">Device console (#62)</h2>
+        <div class="pg-frame">
+          <section class="card" aria-labelledby="f1">
+            <h2 id="f1">Command</h2>
+            <form class="toolbar" method="post" action="#" style="margin: 0">
+              <label style="flex: 1 1 16rem"
+                ><span class="sr-only">Command</span
+                ><input
+                  type="text"
+                  placeholder="Status 0"
+                  style="width: 100%" /></label
+              ><button type="submit" class="primary">Send</button>
+            </form>
+          </section>
+          <section class="card" aria-labelledby="f2">
+            <h2 id="f2">History</h2>
+            <pre
+              class="log"
+              tabindex="0"
+              role="log"
+              aria-label="Console history"
+            ><span>21:40:12 › Status 2</span><span>21:40:12 ‹ {"StatusFWR":{"Version":"16.0.0(tasmota)","BuildDateTime":"2026-10-01T10:00:00","Boot":31,"Core":"2_7_8","SDK":"2.2.2-dev(38a443e)"}}</span></pre>
+          </section>
+        </div>
+      </section>
+
+      <section class="pg-sec" data-screen-label="Policy" aria-labelledby="g">
+        <h2 id="g">Policy · device rows (#20 #67)</h2>
+        <p class="pg-rule">
+          Names ellipsize; rows without a checkbox keep the same left edge; the
+          checkbox stays on the first line. The badge counts everything open ("1
+          to fix · 2 unknown"). Make compliant lives in the shared bulk bar at
+          every width.
+        </p>
+        <div class="pg-frame">
+          <div class="page-head">
+            <h1>Policy</h1>
+            <div class="actions">
+              <button type="button" class="ghost">Check now</button
+              ><a class="button primary" href="#">Edit the rules</a>
+            </div>
+          </div>
+          <table class="dense">
+            <thead>
+              <tr>
+                <th class="sel"><span class="sr-only">Select</span></th>
+                <th>Device</th>
+                <th>Findings</th>
+                <th class="end"><span class="sr-only">Actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="is-selected">
+                <td data-label="Select" class="sel">
+                  <label class="hit"
+                    ><input
+                      type="checkbox"
+                      checked
+                      aria-label="Select workshop-ceiling-spot"
+                  /></label>
+                </td>
+                <td data-label="Device" class="p1">
+                  <a href="#">workshop-ceiling-spot-left</a>
+                </td>
+                <td data-label="Findings" class="p2">
+                  <span class="badge tone-warn">1 to fix</span>
+                </td>
+                <td data-label="Actions" class="rowacts"></td>
+              </tr>
+              <tr>
+                <td data-label="Select" class="sel">
+                  <label class="hit"
+                    ><input type="checkbox" aria-label="Select mystery-chip"
+                  /></label>
+                </td>
+                <td data-label="Device" class="p1">
+                  <a href="#">mystery-chip</a>
+                </td>
+                <td data-label="Findings" class="p2">
+                  <span class="badge tone-warn">1 to fix · 2 unknown</span>
+                </td>
+                <td data-label="Actions" class="rowacts"></td>
+              </tr>
+              <tr>
+                <td data-label="Select" class="sel"></td>
+                <td data-label="Device" class="p1">
+                  <a href="#">Mr Bambu External Light Strip</a>
+                </td>
+                <td data-label="Findings" class="p2">
+                  <span class="badge tone-ok">Compliant</span>
+                </td>
+                <td data-label="Actions" class="rowacts"></td>
+              </tr>
+              <tr>
+                <td data-label="Select" class="sel"></td>
+                <td data-label="Device" class="p1">
+                  <a href="#">Garden Pump</a>
+                </td>
+                <td data-label="Findings" class="p2">
+                  <span class="badge tone-neutral st-unknown">Not checked</span>
+                </td>
+                <td data-label="Actions" class="rowacts">
+                  <form method="post" action="#">
+                    <button type="submit" class="sm">Check</button>
+                  </form>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="pg-static">
+            <div class="bulkbar" role="region" aria-label="Selected devices">
+              <span class="bulk-count"><strong>1</strong> selected</span
+              ><button type="button" class="ghost" aria-label="Clear selection">
+                Clear<span class="m-hide"> selection</span>
+              </button>
+              <div class="bulk-actions">
+                <button type="submit">Make compliant</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section
+        class="pg-sec"
+        data-screen-label="Policy rules editor"
+        aria-labelledby="h"
+      >
+        <h2 id="h">Policy rules · editor (#65)</h2>
+        <p class="pg-rule">
+          The chip list shows every chip (no fixed-height box). Inputs
+          ellipsize. A fold titled "Note" holds the field without repeating the
+          label.
+        </p>
+        <div class="pg-frame">
+          <section class="card" aria-labelledby="h1">
+            <h2 id="h1">Rule · Save state on</h2>
+            <div class="stack">
+              <label
+                >Applies to
+                <select>
+                  <option>
+                    Devices with tag "outdoor" or "seasonal", excluding the
+                    workshop
+                  </option>
+                </select></label
+              >
+              <div>
+                <p
+                  class="label"
+                  style="
+                    margin: 0 0 var(--space-1);
+                    font-size: var(--fs-sm);
+                    font-weight: 600;
+                  "
+                >
+                  Devices <span class="muted">(9)</span>
+                </p>
+                <div class="chips scroll">
+                  <label class="chip"
+                    ><input type="checkbox" name="device" checked /> Balcony
+                    Windowsill</label
+                  ><label class="chip"
+                    ><input type="checkbox" name="device" checked /> Fairylights
+                    1</label
+                  ><label class="chip"
+                    ><input type="checkbox" name="device" checked /> Fairylights
+                    2</label
+                  ><label class="chip"
+                    ><input type="checkbox" name="device" checked /> Fairylights
+                    3</label
+                  ><label class="chip"
+                    ><input type="checkbox" name="device" checked /> Fairylights
+                    4</label
+                  ><label class="chip"
+                    ><input type="checkbox" name="device" checked /> Fairylights
+                    5</label
+                  ><label class="chip"
+                    ><input type="checkbox" name="device" checked /> Fairylights
+                    6</label
+                  ><label class="chip"
+                    ><input type="checkbox" name="device" checked /> Fairylights
+                    7</label
+                  ><label class="chip"
+                    ><input type="checkbox" name="device" checked /> Garden
+                    Pump</label
+                  >
+                </div>
+              </div>
+              <details class="fold">
+                <summary>Note</summary>
+                <label
+                  ><span class="sr-only">Note</span
+                  ><textarea rows="2"></textarea>
+                </label>
+              </details>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="pg-sec" data-screen-label="Audit" aria-labelledby="i">
+        <h2 id="i">Audit (#70 #71)</h2>
+        <p class="pg-rule">
+          When never truncates; Summary takes the free width and wraps; pills
+          stay on one line. Details open inline in a log box (no tooltip over
+          other rows). The filter bar keeps its layout when empty and offers
+          Clear the filter; an empty result shows the empty state and no pager.
+          The pager has the same controls at every width.
+        </p>
+        <div class="pg-frame">
+          <form class="filters" method="get" action="#">
+            <label
+              >Action
+              <select>
+                <option>Any</option>
+                <option selected>transaction.cancel</option>
+              </select></label
+            ><label
+              >Actor
+              <select>
+                <option>Any</option>
+              </select></label
+            ><button type="submit">Filter</button
+            ><a class="button ghost" href="#">Clear the filter</a>
+          </form>
+          <table class="dense">
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Actor</th>
+                <th>Action</th>
+                <th>Summary</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td data-label="When" class="nowrap s">2026-10-20 16:32:08</td>
+                <td data-label="Actor" class="s">ada</td>
+                <td data-label="Action" class="p2 nowrap">
+                  <span class="badge tone-warn">Refused</span>
+                </td>
+                <td data-label="Summary" class="p1">
+                  <span
+                    >System settings: change of the MQTT broker refused, broker
+                    did not answer
+                    <details
+                      class="fold"
+                      style="margin: var(--space-1) 0 0; border: 0"
+                    >
+                      <summary>Details</summary>
+                      <pre
+                        class="log"
+                      ><span>{"action": "settings.mqtt",</span><span> "result": "refused",</span><span> "reason": "connect to mqtt://172.31.13.2:1883 timed out after 5 s"}</span></pre>
+                    </details></span
+                  >
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="pager">
+            <button type="button" disabled>Previous</button
+            ><span>Page 1 of 4</span><button type="button">Next</button
+            ><label class="inline"
+              >Per page
+              <select>
+                <option>50</option>
+              </select></label
+            >
+          </div>
+          <div style="height: var(--space-6)"></div>
+          <div class="empty-state">
+            <strong>No events match</strong
+            ><span>Action "transaction.cancel", last 7 days.</span
+            ><a class="button" href="#">Clear the filter</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="pg-sec" data-screen-label="Account" aria-labelledby="j">
+        <h2 id="j">Account (#74)</h2>
+        <p class="pg-rule">
+          Proxy-header accounts cannot sign out here, so the name is plain text:
+          no menu that leads nowhere. The forced password change keeps a way
+          out: Sign out in the bar.
+        </p>
+        <div class="pg-frame menu-room">
+          <header class="top">
+            <a class="brand" href="#"
+              ><img
+                src="../../assets/logo.svg"
+                alt=""
+                width="26"
+                height="26"
+              />tasmofleet</a
+            >
+            <div class="user">
+              <span class="who"
+                >alice <small>(signed in by your proxy)</small></span
+              >
+            </div>
+          </header>
+        </div>
+        <div style="height: var(--space-4)"></div>
+        <div class="pg-frame" style="padding: 0">
+          <header class="top">
+            <a class="brand" href="#"
+              ><img
+                src="../../assets/logo.svg"
+                alt=""
+                width="26"
+                height="26"
+              />tasmofleet</a
+            >
+            <div class="user">
+              <form method="post" action="#">
+                <button type="submit" class="sm">Sign out</button>
+              </form>
+            </div>
+          </header>
+          <div style="padding: var(--space-5) var(--page-pad)">
+            <div class="page-head"><h1>Choose a new password</h1></div>
+            <section class="card stack" aria-labelledby="j1">
+              <h2 id="j1">Password</h2>
+              <p class="muted">
+                Your administrator asked for a new password before you continue.
+              </p>
+              <label
+                >New password
+                <input type="password" autocomplete="new-password" /></label
+              ><label
+                >Repeat <input type="password" autocomplete="new-password"
+              /></label>
+              <div>
+                <button type="submit" class="primary">Save and continue</button>
+              </div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section class="pg-sec" data-screen-label="Setup" aria-labelledby="k">
+        <h2 id="k">Setup (#79)</h2>
+        <p class="pg-rule">
+          Every step says "(optional)". Step 4 describes the prefilled networks
+          instead of asking to save first. Finish the setup sits after the last
+          step at every width (not sticky, not inside step 4).
+        </p>
+        <div class="pg-frame">
+          <div class="stack wide">
+            <details class="fold">
+              <summary>1 · Sign-in <span class="meta">optional</span></summary>
+              <p>…</p>
+            </details>
+            <details class="fold">
+              <summary>2 · MQTT <span class="meta">optional</span></summary>
+              <p>…</p>
+            </details>
+            <details class="fold">
+              <summary>
+                3 · Firmware index <span class="meta">optional</span>
+              </summary>
+              <p>…</p>
+            </details>
+            <details class="fold" open>
+              <summary>
+                4 · Device networks <span class="meta">optional</span>
+              </summary>
+              <p class="muted">
+                Prefilled from the networks tasmofleet sees. Check them; you can
+                change them later in Settings.
+              </p>
+              <label
+                >Networks
+                <input type="text" value="172.31.13.0/24, 172.31.23.0/24"
+              /></label>
+            </details>
+            <div>
+              <button type="submit" class="primary">Finish the setup</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+    <div class="demo-foot">
+      <span>tasmofleet DS proposal, sample data</span>
+      <div class="theme-switch" role="group" aria-label="Theme">
+        <button type="button" class="sm" data-theme-set="system">Auto</button
+        ><button type="button" class="sm" data-theme-set="light">Light</button
+        ><button type="button" class="sm" data-theme-set="dark">Dark</button>
+      </div>
+    </div>
+  </body>
+</html>

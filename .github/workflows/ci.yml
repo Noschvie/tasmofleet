@@ -1,0 +1,272 @@
+# CI for tasmofleet on GitHub-hosted runners. Every gate runs through the
+# Makefile, so the same commands work locally ("make ci").
+#
+# Triggers (Actions minutes are limited, so the heavy jobs run where they matter):
+#   - pull requests: lint, unit tests (race), integration, e2e, and the mutation
+#     gate for the mutation packages changed against the PR base. Docs-only PRs
+#     skip the heavy jobs (the "changes" job decides; docs.yml checks links).
+#   - push to main: lint and unit tests only (the PR already ran the rest).
+#     Docs-only pushes skip this workflow (paths-ignore).
+#   - tags v*: everything, incl. the full mutation run (image.yml publishes
+#     the image in parallel).
+#   - manual dispatch: everything, incl. the full mutation run.
+#   The job "required" is the single status check for branch protection.
+#
+# paths-ignore lists only files no test or build reads. NOT docs-only:
+# docs/security (cmdpolicy test reads command-policy.md), docs/spec
+# (design-system.md is read by a test), assets/branding (branding test compares
+# copies), deploy (metrics/config tests read it), design/v2 (token test),
+# testdata, internal/web/static and templates (embedded).
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths-ignore:
+      - "docs/research/**"
+      - "docs/runbooks/**"
+      - "docs/design/**"
+      - "README.md"
+      - "ROADMAP.md"
+      - "CONTRIBUTING.md"
+      - "SECURITY.md"
+      - "CHANGELOG.md"
+      - "CLAUDE.md"
+      - "NOTICE"
+      - "LICENSE"
+  # No paths-ignore for PRs: the "changes" job decides, and "required" always reports.
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NICE: ""
+
+jobs:
+  changes:
+    name: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+      lane: ${{ steps.classify.outputs.lane }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - id: classify
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          code=true
+          lane=full
+          if [ "$EVENT" = push ] && [ "$REF_TYPE" = branch ]; then lane=main; fi
+          if [ "$EVENT" = pull_request ]; then
+            # Fail closed: without a base or a diff, the gate fails instead of
+            # treating the PR as docs-only.
+            [ -n "$BASE" ] || { echo "no base sha"; exit 1; }
+            files=$(git diff --name-only "$BASE"...HEAD)
+            [ -n "$files" ] || { echo "empty diff"; exit 1; }
+            echo "$files"
+            code=false
+            for f in $files; do
+              case "$f" in
+                docs/research/*|docs/runbooks/*|docs/design/*|README.md|ROADMAP.md|CONTRIBUTING.md|SECURITY.md|CHANGELOG.md|CLAUDE.md|NOTICE|LICENSE) ;;
+                *) code=true ;;
+              esac
+            done
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "lane=$lane" >> "$GITHUB_OUTPUT"
+          echo "code=$code lane=$lane"
+
+  lint:
+    name: templ, fmt, vet, staticcheck, golangci-lint, govulncheck
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+      - run: make templ-check fmt-check vet staticcheck lint vuln
+
+  test:
+    name: unit tests (race detector), build
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+      # The whole unit suite runs once, with the race detector (what make race
+      # does); a second plain run would only repeat it.
+      - name: unit tests (race detector), build
+        run: |
+          set -eu
+          # The same tests as make race, but internal/auth (PBKDF2 in nearly
+          # every test, about half of all race time) runs as two halves next
+          # to the other packages.
+          others=$(go list ./... | grep -v '/internal/auth$')
+          names=$(go test -list '.*' ./internal/auth | grep '^Test')
+          h1=$(echo "$names" | awk 'NR%2==1' | paste -sd'|')
+          h2=$(echo "$names" | awk 'NR%2==0' | paste -sd'|')
+          export CGO_ENABLED=1
+          go test -race -count=1 $others & p1=$!
+          go test -race -count=1 ./internal/auth -run "^($h1)\$" & p2=$!
+          go test -race -count=1 ./internal/auth -run "^($h2)\$" & p3=$!
+          rc=0
+          wait $p1 || rc=1
+          wait $p2 || rc=1
+          wait $p3 || rc=1
+          [ $rc = 0 ] || exit 1
+          make build
+
+  integration:
+    name: integration tests (real decode-config)
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.lane == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+      - name: install decode-config (pinned, verified)
+        env:
+          DECODER_VERSION: v16.0.0
+          DECODER_SHA256: 00f6fde13ddae11b497252e7ddc421b35c009d3bc795cde219e0dd475a410622
+        run: |
+          set -eu
+          curl -fsSL -o "$RUNNER_TEMP/dc.tgz" "https://github.com/tasmota/decode-config/releases/download/$DECODER_VERSION/decode-config-ubuntu-22.04.tar.gz"
+          echo "$DECODER_SHA256  $RUNNER_TEMP/dc.tgz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/decode-config" && tar -xzf "$RUNNER_TEMP/dc.tgz" -C "$RUNNER_TEMP/decode-config" decode-config
+          "$RUNNER_TEMP/decode-config/decode-config" --version
+      - name: integration tests
+        env:
+          REQUIRE_DECODER: "1"
+        run: DECODER_PATH="$RUNNER_TEMP/decode-config/decode-config" make integration
+
+  mutation:
+    name: mutation tests
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.lane == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0 # the changed-package mode diffs against the PR base
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            tools/go.sum
+      - name: mutation gate (changed packages on PRs, all on tags/dispatch)
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -eu
+          if [ "$EVENT" = pull_request ]; then
+            make mutation-changed BASE="$PR_BASE"
+          else
+            make mutation
+          fi
+
+  e2e:
+    name: e2e (Playwright)
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.lane == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container:
+      # Browsers in this image match @playwright/test in e2e/package.json; bump both together.
+      image: mcr.microsoft.com/playwright:v1.64.1-noble
+    steps:
+      - name: install make (not in the Playwright image)
+        run: apt-get update -qq && apt-get install -y -qq --no-install-recommends make >/dev/null
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - uses: actions/cache@v6.1.0
+        with:
+          path: ~/.npm
+          key: npm-${{ hashFiles('e2e/package-lock.json') }}
+      - name: install e2e dependencies
+        run: make e2e-deps
+      - name: e2e tests
+        env:
+          CI: "true"
+        run: |
+          n=$(nproc); [ "$n" -lt 2 ] && n=2
+          E2E_WORKERS=$n make e2e
+      - name: upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 7
+
+  # The one status that branch protection on main requires. It always runs:
+  # it passes when every job that should run passed, or when the PR is
+  # docs-only and the heavy jobs were skipped. On pushes to main only lint and
+  # test run. Any other result fails.
+  required:
+    name: required
+    needs: [changes, lint, test, integration, mutation, e2e]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: all gates passed
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          CODE: ${{ needs.changes.outputs.code }}
+          LANE: ${{ needs.changes.outputs.lane }}
+          RESULTS: ${{ needs.lint.result }} ${{ needs.test.result }}
+          FULL_ONLY: ${{ needs.integration.result }} ${{ needs.mutation.result }} ${{ needs.e2e.result }}
+        run: |
+          echo "changes=$CHANGES code=$CODE lane=$LANE results: $RESULTS (full lane only: $FULL_ONLY)"
+          [ "$CHANGES" = success ] || exit 1
+          for r in $RESULTS; do
+            if [ "$r" = success ]; then continue; fi
+            if [ "$r" = skipped ] && [ "$CODE" = false ]; then continue; fi
+            exit 1
+          done
+          for r in $FULL_ONLY; do
+            if [ "$r" = success ]; then continue; fi
+            if [ "$r" = skipped ] && { [ "$CODE" = false ] || [ "$LANE" = main ]; }; then continue; fi
+            exit 1
+          done

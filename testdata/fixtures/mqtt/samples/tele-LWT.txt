@@ -1,0 +1,7 @@
+# format: timestamp|retained-flag-as-delivered|topic|payload  (first 6 samples, one per distinct device where possible)
+2026-10-18T18:17:28+0200|1|tele/livingroom-couchlamp/LWT|Online
+2026-10-18T18:17:28+0200|1|tele/mr-bambu-external-light/LWT|Online
+2026-10-18T18:17:28+0200|1|tele/livingroom-readinglamp/LWT|Online
+2026-10-18T18:17:28+0200|1|tele/office-monitor-guest/LWT|Online
+2026-10-18T18:17:28+0200|1|tele/bathroom-ceiling/LWT|Online
+2026-10-18T18:17:28+0200|1|tele/kitchen-downlight/LWT|Online

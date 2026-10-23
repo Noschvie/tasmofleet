@@ -1,0 +1,61 @@
+package web
+
+import "github.com/nofuturekid/tasmofleet/internal/web/ui"
+
+// deviceDeletePage is the delete page of a device (design v2 screen "devdelete", N2): the device's
+// backups, the choice to keep or delete them, the one acknowledgement and the Delete button. It
+// posts to POST /devices/{id}/delete; without JavaScript it works the same. A refused post (no
+// acknowledgement, no valid choice) renders it again with the field error.
+templ deviceDeletePage(p devDeleteView) {
+	<div class="dd-page">
+		<div class="dd-head">
+			<h1>Delete { p.Name }?</h1>
+			<p class="dd-sub"><span data-visual-mask>{ p.Address }</span>{ p.Meta }</p>
+		</div>
+		if p.Runs > 0 {
+			@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Title: "This device still has " + plural(p.Runs, "backup"), Text: " (" + p.Summary + "). Choose what happens to them."})
+			<section class="dd-list" aria-label="Backups of this device">
+				for _, b := range p.Rows {
+					<div class="dd-row">
+						<span class="dd-when" data-visual-mask>{ b.When }</span>
+						<span class="dd-what">{ b.Detail }</span>
+					</div>
+				}
+			</section>
+		}
+		<form method="post" action={ templ.SafeURL(p.Action) } class="dd-form">
+			<input type="hidden" name="csrf" value={ p.CSRF }/>
+			if p.Runs > 0 {
+				<fieldset class="dd-choice">
+					<legend class="sr-only">What happens to the backups</legend>
+					<label class="rcard">
+						<input type="radio" name="backups" value="keep" checked?={ p.Choice != "delete" }/>
+						<span class="rcard-body"><b>Keep the backups</b><span>They stay under System → Backups with the device’s name, where you can download them.</span></span>
+					</label>
+					<label class="rcard">
+						<input type="radio" name="backups" value="delete" checked?={ p.Choice == "delete" }/>
+						<span class="rcard-body"><b>Delete the backups too</b><span>All { plural(p.Runs, "backup") } are removed. This can’t be undone.</span></span>
+					</label>
+				</fieldset>
+				if p.ChoiceErr {
+					<p class="ufield-err" role="alert">Choose whether to keep the backups.</p>
+				}
+			} else {
+				<input type="hidden" name="backups" value="delete"/>
+				<p class="dd-note">This device has no backups.</p>
+			}
+			<p class="dd-note">The device itself keeps running on your network and will show up as new in the next scan.</p>
+			<label class={ "ucheck", "dd-ack", templ.KV("is-invalid", p.AckErr) }>
+				<input type="checkbox" name="ack" value="1" if p.AckErr { aria-invalid="true" aria-describedby="dd-ack-err" }/>
+				<span>I understand the device’s history and policy results are removed.</span>
+			</label>
+			if p.AckErr {
+				<p class="ufield-err" id="dd-ack-err" role="alert">{ needConfirm }</p>
+			}
+			<div class="dd-acts">
+				<a class="btn" href={ templ.SafeURL(p.CancelHref) }>Cancel</a>
+				<button type="submit" class="btn btn-danger-solid dd-go">Delete device</button>
+			</div>
+		</form>
+	</div>
+}

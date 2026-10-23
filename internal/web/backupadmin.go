@@ -1,0 +1,204 @@
+package web
+
+import (
+	"cmp"
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"slices"
+	"strconv"
+	"time"
+
+	"github.com/nofuturekid/tasmofleet/internal/backup"
+	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/store"
+)
+
+// BackupAdmin is what deleting backups needs on top of backup.Service
+// (*backup.Manager implements it). Deps.Backups is asserted against it, so
+// the backup.Service contract stays unchanged; without it the delete controls
+// are not shown and the routes answer 404.
+type BackupAdmin interface {
+	PlanDelete(ctx context.Context, id model.BackupID) (backup.Deletion, error)
+	DeleteRun(ctx context.Context, actor string, id model.BackupID) (backup.Deletion, error)
+}
+
+func (h *handler) backupAdmin() (BackupAdmin, bool) {
+	a, ok := h.d.Backups.(BackupAdmin)
+	return a, ok
+}
+
+func (h *handler) registerBackupAdmin(route func(string, func(http.Handler) http.Handler, http.HandlerFunc), adm func(http.Handler) http.Handler) {
+	if _, ok := h.backupAdmin(); !ok {
+		return
+	}
+	route("GET /backups/{id}/delete", adm, h.backupDeleteConfirm)
+	route("POST /backups/{id}/delete", adm, h.backupDelete)
+}
+
+// backupDelete removes the whole run (dump, snapshot, decoded copy) the backup
+// belongs to. The confirmation is the browser dialog on the button, which
+// names the extra risk when the newest backup of the device goes; the audit
+// record says whether it did.
+func (h *handler) backupDelete(w http.ResponseWriter, r *http.Request) {
+	adm, _ := h.backupAdmin()
+	n, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil || n <= 0 {
+		h.notFound(w, r)
+		return
+	}
+	d, err := adm.DeleteRun(r.Context(), actor(r), model.BackupID(n))
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		h.notFound(w, r)
+	case err != nil:
+		h.fail(w, r, err)
+	default:
+		// A backup of a deleted device is listed under Settings -> Backups: back there.
+		redirect(w, r, backupsHome(model.Backup{DeviceID: d.Device})+fmt.Sprintf("ok=deleted&n=%d", d.Runs))
+	}
+}
+
+// BackupStorage is Settings -> Backups (design v2 N9): the storage summary and the backups
+// of deleted devices (*backup.Manager implements it). Deps.Backups is asserted against it;
+// without it the tab shows only its settings.
+type BackupStorage interface {
+	Usage(ctx context.Context) ([]store.BackupUsage, error)
+	Orphans(ctx context.Context) ([]model.Backup, error)
+}
+
+// sysStorageTop is how many devices the storage table lists (largest first).
+const sysStorageTop = 10
+
+// sysStorage is the Storage part of Settings -> Backups.
+type sysStorage struct {
+	Runs, Kept, Without int
+	Size                string
+	Rows                []sysStorageRow
+	More                int // devices with backups beyond the top rows
+	Orphans             []sysOrphan
+	CanKeep             bool // the Keep route exists
+	CanDelete           bool // the Delete route exists
+}
+
+type sysStorageRow struct {
+	Name, Href string
+	Runs       int
+	Size       string
+	Last       time.Time
+	When       string // Last in the 110 px column: storeDate
+	bytes      int64
+}
+
+// sysOrphan is one backup run of a deleted device (N2: deleted with backups=keep).
+type sysOrphan struct {
+	ID         model.BackupID // the run's dump, or its snapshot when it has none
+	Name, MAC  string
+	Taken      time.Time
+	Size       string
+	Kept       bool
+	Download   string
+	DeleteText string // empty: no Delete (no dump, or deleting is not possible)
+}
+
+// sysStorageOf reads the storage summary and the orphans. nil when the backup service
+// cannot give them; an error of the store fails the page (a wrong summary is worse).
+func (h *handler) sysStorageOf(r *http.Request, base string) (*sysStorage, error) {
+	bs, ok := h.d.Backups.(BackupStorage)
+	if !ok {
+		return nil, nil
+	}
+	usage, err := bs.Usage(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	orphans, err := bs.Orphans(r.Context())
+	if err != nil {
+		return nil, err
+	}
+	_, canDelete := h.backupAdmin()
+	_, canKeep := h.d.Backups.(BackupKeeper)
+	st := &sysStorage{CanKeep: canKeep, CanDelete: canDelete}
+	now := time.Now()
+	var total int64
+	for _, u := range usage {
+		st.Runs += u.Runs
+		st.Kept += u.Kept
+		total += u.Bytes
+		if u.Device == 0 {
+			continue // the deleted devices count in the totals; their runs are listed below
+		}
+		if u.Runs == 0 {
+			st.Without++
+			continue
+		}
+		st.Rows = append(st.Rows, sysStorageRow{Name: u.Name, Href: fmt.Sprintf("%s/devices/%d/backups", base, u.Device),
+			Runs: u.Runs, Size: humanBytes(u.Bytes), Last: u.Last, When: storeDate(now, u.Last), bytes: u.Bytes})
+	}
+	st.Size = humanBytes(total)
+	slices.SortStableFunc(st.Rows, func(a, b sysStorageRow) int {
+		return cmp.Or(cmp.Compare(b.bytes, a.bytes), cmp.Compare(a.Name, b.Name))
+	})
+	if len(st.Rows) > sysStorageTop {
+		st.More = len(st.Rows) - sysStorageTop
+		st.Rows = st.Rows[:sysStorageTop]
+	}
+	st.Orphans = orphanRuns(orphans, base, canDelete)
+	return st, nil
+}
+
+// orphanRuns groups the files of the deleted devices into runs: per device (MAC and name)
+// and time, the way a device's Backups tab groups its own (backupRuns), newest first.
+func orphanRuns(list []model.Backup, base string, canDelete bool) []sysOrphan {
+	type owner struct{ mac, name string }
+	var order []owner
+	byOwner := map[owner][]model.Backup{}
+	for _, b := range list {
+		o := owner{b.DeviceMAC, b.DeviceName}
+		if _, seen := byOwner[o]; !seen {
+			order = append(order, o)
+		}
+		byOwner[o] = append(byOwner[o], b)
+	}
+	var out []sysOrphan
+	for _, o := range order {
+		for _, run := range backupRuns(byOwner[o]) {
+			b := run.Backup
+			row := sysOrphan{ID: b.ID, Name: b.DeviceName, MAC: b.DeviceMAC, Taken: b.TakenAt, Size: humanBytes(b.Size),
+				Kept: b.Kept, Download: fmt.Sprintf("%s/backups/%d", base, b.ID)}
+			if canDelete && b.Kind == model.BackupConfigDump {
+				row.DeleteText = backupData{}.DeleteText(b)
+			}
+			out = append(out, row)
+		}
+	}
+	slices.SortStableFunc(out, func(a, b sysOrphan) int { return b.Taken.Compare(a.Taken) })
+	return out
+}
+
+// orphanName is the deleted device's name, or a placeholder for a backup from before names
+// were copied (migration 0022 copied them; a device without a name had none).
+func orphanName(o sysOrphan) string {
+	if o.Name == "" {
+		return "Deleted device"
+	}
+	return o.Name
+}
+
+// Foot is the line under the storage table: its order and the devices it leaves out.
+func (st sysStorage) Foot() string {
+	if st.More == 0 {
+		return "Largest first"
+	}
+	return "Largest first · " + plural(st.More, "more device")
+}
+
+// storeDate is a last backup short enough for the storage table's column: "23 Oct, 05:45"
+// this year, "23 Oct 2025" before (the full time is in the cell's title).
+func storeDate(now, t time.Time) string {
+	if t.Year() == now.Year() {
+		return t.Format("2 Jan, 15:04")
+	}
+	return t.Format("2 Jan 2006")
+}

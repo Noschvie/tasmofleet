@@ -1,0 +1,39 @@
+<!-- @dsCard group="Components" name="Status badges &amp; tags" subtitle="Glyph + word + colour; five roles, CVD safe" viewport="640x460" -->
+<!doctype html>
+<html lang="en" data-theme-auto>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tasmofleet DS — Status badges &amp; tags</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <script src="../theme.js"></script>
+    <style>
+      /* Demo scaffolding only: everything visual comes from ../styles.css. */
+      .demo { max-width: 620px; margin: 0 auto; padding: var(--space-6) var(--space-4) var(--space-8); }
+      .demo-head { font-family: var(--font-body); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+        color: var(--color-text-2); margin: var(--space-6) 0 var(--space-3); }
+      .demo-head:first-child { margin-top: 0; }
+      .row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+      .note { font-size: 12px; color: var(--color-text-2); max-width: 60ch; margin-top: var(--space-3); }
+      .demo-foot { margin-top: var(--space-8); padding-top: var(--space-3); border-top: 1px solid var(--color-divider);
+        display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); }
+      .stage { position: relative; min-height: 220px; padding: var(--space-4); background: var(--color-bg);
+        border: 1px solid var(--color-divider); overflow: hidden; }
+    </style>
+  </head>
+  <body>
+<main class="demo">
+<p class="demo-head">Device health</p>
+<div class="row"><span class="badge tone-ok">Online</span><span class="badge tone-warn">Stale</span><span class="badge tone-bad">Offline</span><span class="badge tone-bad">Auth failed</span><span class="badge tone-neutral st-unknown">Unknown</span></div>
+<p class="demo-head">Transactions and policy</p>
+<div class="row"><span class="badge tone-info">Flashing</span><span class="badge tone-ok">Succeeded</span><span class="badge tone-bad">Failed</span><span class="badge tone-neutral">Queued</span>
+<span class="badge tone-ok">Compliant</span><span class="badge tone-warn">Deviating</span></div>
+<p class="demo-head">Accent badge and tags</p>
+<div class="row"><span class="badge accent">recommended</span><span class="tag">outdoor</span><span class="tag">no OTA</span><span class="tag">seasonal</span></div>
+<p class="demo-head">In a heading</p>
+<div class="page-head"><h1>Fairylights 3 <span class="badge tone-bad">Offline</span></h1></div>
+<p class="note">Glyphs: ✓ success, ! warning, ✕ danger, → info, ? unknown, – neutral. Red appears only for danger. The accent badge is the one non-status badge.</p>
+<div class="demo-foot"><span class="note">tasmofleet DS</span><div class="theme-switch" role="group" aria-label="Theme"><button type="button" class="sm" data-theme-set="system">Auto</button><button type="button" class="sm" data-theme-set="light">Light</button><button type="button" class="sm" data-theme-set="dark">Dark</button></div></div>
+</main>
+  </body>
+</html>

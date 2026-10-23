@@ -1,0 +1,109 @@
+# Container image for tasmofleet, published to ghcr.io/<owner>/tasmofleet.
+#  - tag vX.Y.Z: fail unless CHANGELOG.md has a "## X.Y.Z" section, then build
+#    and push :X.Y.Z and :latest (a pre-release tag vX.Y.Z-suffix pushes only
+#    :X.Y.Z-suffix).
+#  - push to main: build and push :edge.
+#  - pull requests that touch the Dockerfile or the module files: build only,
+#    nothing is pushed (proves the Dockerfile still works).
+# Authentication is the workflow's GITHUB_TOKEN (packages: write); no secrets.
+# Layers are cached in the GitHub Actions cache.
+name: image
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "e2e/**"
+      - "design/**"
+      - "testdata/**"
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "Dockerfile"
+      - ".dockerignore"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    name: build image (push on main and tags)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: version and tags
+        id: v
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          REF: ${{ github.ref }}
+          SHA: ${{ github.sha }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -eu
+          image="ghcr.io/$(echo "$OWNER" | tr 'A-Z' 'a-z')/tasmofleet"
+          push=false
+          if [ "$REF_TYPE" = tag ]; then
+            tag=$REF_NAME
+            echo "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' || {
+              echo "tag '$tag' is not vX.Y.Z" >&2
+              exit 1
+            }
+            # Release guard: CHANGELOG.md must have the section for this tag.
+            make changelog-check TAG="$tag"
+            version=${tag#v}
+            tags="$image:$version"
+            case "$version" in *-*) ;; *) tags="$tags,$image:latest" ;; esac
+            push=true
+          elif [ "$EVENT" != pull_request ] && [ "$REF" = refs/heads/main ]; then
+            version="edge-$(echo "$SHA" | cut -c1-12)"
+            tags="$image:edge"
+            push=true
+          else
+            version="pr-$(echo "$SHA" | cut -c1-12)"
+            tags="$image:pr"
+          fi
+          echo "building $tags (version $version, push $push)"
+          {
+            echo "version=$version"
+            echo "tags=$tags"
+            echo "push=$push"
+          } >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v4.4.1
+      - uses: docker/login-action@v4.7.0
+        if: steps.v.outputs.push == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64
+          push: ${{ steps.v.outputs.push == 'true' }}
+          tags: ${{ steps.v.outputs.tags }}
+          build-args: VERSION=${{ steps.v.outputs.version }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.v.outputs.version }}
+            org.opencontainers.image.licenses=AGPL-3.0-or-later
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

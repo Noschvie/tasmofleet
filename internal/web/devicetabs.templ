@@ -1,0 +1,297 @@
+package web
+
+import (
+	"strconv"
+
+	"github.com/nofuturekid/tasmofleet/internal/settings"
+	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+)
+
+// The device tabs Console, Settings and Drift and the Edit page (design v2, WP P3; prototype
+// screen "device" tabs console / settings / drift and screen "edit").
+
+// consolePage is the console tab. A destructive or lock-out command waits for its confirmation
+// above the console; everything else is sent at once and answered in the console.
+templ consolePage(data consoleData, c ui.ConsoleData, csrf string) {
+	@deviceHeader(data.Tabs)
+	if data.Confirm {
+		<section class="ucard devconfirm" aria-labelledby="confirm-h">
+			<h2 id="confirm-h">Confirm</h2>
+			<p role="status">Confirm sending <code>{ data.Shown }</code> to { data.Device.Name }. { data.Consequence }</p>
+			<form method="post" action={ templ.SafeURL(c.Action) } class="btn-row">
+				<input type="hidden" name="csrf" value={ csrf }/>
+				<input type="hidden" name="token" value={ data.Token }/>
+				@ui.Button(ui.Btn{Label: "Cancel", Href: c.Action})
+				<button type="submit" class="btn btn-danger-solid">Confirm and send</button>
+			</form>
+		</section>
+	}
+	@ui.Console(c)
+}
+
+// settingsTab is the settings tab: the device's settings as a form; each changed setting is
+// sent as its own command, then the device saves everything once.
+templ settingsTab(p settingsPage, base, csrf string) {
+	@deviceHeader(p.Tabs)
+	if p.Error != "" {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: p.Error, Alert: true})
+	}
+	if p.Notice != "" {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Text: p.Notice})
+	}
+	if p.ReadError != "" {
+		<section class="devform devform-msg" aria-labelledby="rd-h" role="alert">
+			<h2 id="rd-h">The settings could not be read.</h2>
+			<p>{ p.ReadError } Nothing is shown to edit, because a form built from a partial read would make every missing value look like a change.</p>
+			<div class="btn-row">
+				@ui.Button(ui.Btn{Label: "Try again", Kind: "primary", Href: base + devPath(p.Device.ID, "/settings")})
+				@ui.Button(ui.Btn{Label: "Back to the overview", Href: base + devPath(p.Device.ID, "")})
+			</div>
+		</section>
+	} else if p.Done {
+		<section class="devform devform-msg" aria-labelledby="res-h">
+			<h2 id="res-h">Result</h2>
+			<table class="dense" data-table="device_settings">
+				<thead><tr><th>Setting</th><th>Command sent</th><th>Result</th></tr></thead>
+				<tbody>
+					for _, x := range p.Results {
+						<tr>
+							<td data-label="Setting" class="p1">{ x.Key }</td>
+							<td data-label="Command" class="s"><code>{ x.Command }</code></td>
+							<td data-label="Result" class="p2">
+								if x.OK() {
+									@ui.Badge(ui.ToneOK, "Done")
+								} else {
+									<span class="devform-err">{ x.Err }</span>
+								}
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+			if p.Saved != "" {
+				<p>{ p.Saved }</p>
+			}
+			<div class="btn-row">
+				@ui.Button(ui.Btn{Label: "Read the settings again", Href: base + devPath(p.Device.ID, "/settings")})
+			</div>
+		</section>
+	} else if len(p.Groups) > 0 {
+		<form class="devform" method="post" action={ templ.SafeURL(base + devPath(p.Device.ID, "/settings")) } data-track-changes>
+			<input type="hidden" name="csrf" value={ csrf }/>
+			for i, g := range p.Groups {
+				if i > 0 {
+					<h2 class="devform-h">{ g.Name }</h2>
+				}
+				for _, row := range g.Rows {
+					@settingField(row, p.PolicyWant[row.Field.Key])
+				}
+			}
+			<div class="devform-foot">
+				<span class="devform-count">Applied immediately and saved to the device once. <span data-changed-count aria-live="polite"></span></span>
+				<button type="reset" class="btn">Reset</button>
+				<button type="submit" class="btn btn-primary">Save to device</button>
+			</div>
+		</form>
+	}
+}
+
+// settingField is one setting: label above the control, the help (or the policy's expected
+// value when the device deviates from it) or the server's error below.
+templ settingField(row settingsRow, want string) {
+	<div class="ufield">
+		<label class="ufield-label" for={ "f-" + row.Field.Key }>{ row.Label }</label>
+		switch row.Field.Kind {
+			case settings.KindSelect:
+				<select id={ "f-" + row.Field.Key } name={ row.Field.Key } aria-invalid?={ row.Err != "" }>
+					if row.NotReporting {
+						<option value="" selected>(unchanged: not reported)</option>
+					}
+					for _, o := range row.Field.Options {
+						<option value={ o.Value } selected?={ o.Value == row.Value }>{ o.Label }</option>
+					}
+				</select>
+			case settings.KindToggle:
+				<select id={ "f-" + row.Field.Key } name={ row.Field.Key } aria-invalid?={ row.Err != "" }>
+					if row.NotReporting {
+						<option value="" selected>(unchanged: not reported)</option>
+					}
+					<option value="0" selected?={ row.Value == "0" }>0 (off)</option>
+					<option value="1" selected?={ row.Value == "1" }>1 (on)</option>
+				</select>
+			case settings.KindPassword:
+				<input id={ "f-" + row.Field.Key } type="password" name={ row.Field.Key } autocomplete="new-password" placeholder="unchanged" maxlength="64" aria-invalid?={ row.Err != "" }/>
+			default:
+				<input
+					id={ "f-" + row.Field.Key }
+					name={ row.Field.Key }
+					value={ row.Value }
+					maxlength="128"
+					class={ templ.KV("mono", row.Field.Kind == settings.KindNumber || row.Field.Key == "Topic" || row.Field.Key == "FullTopic") }
+					if row.NotReporting {
+						placeholder="not reported"
+					}
+					aria-invalid?={ row.Err != "" }
+				/>
+		}
+		if row.Err != "" {
+			<span class="ufield-err" role="alert">{ row.Err }</span>
+		} else if want != "" {
+			<span class="ufield-warn">Policy expects { want }. Saving another value keeps the device flagged.</span>
+		} else if row.Help != "" {
+			<span class="ufield-help">{ row.Help }</span>
+		}
+		if !row.Field.Secret {
+			<input type="hidden" name={ "orig." + row.Field.Key } value={ row.Orig }/>
+		}
+	</div>
+}
+
+// driftPage is the drift tab: the live settings against the newest backup's snapshot. "Show all"
+// is a link (no JavaScript), the restore goes through the restore confirmation.
+templ driftPage(p driftView) {
+	@deviceHeader(p.Tabs)
+	<div class="devdrift">
+		if p.Error != "" {
+			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: p.Error, Alert: true})
+		}
+		if p.Notice != "" {
+			@ui.Banner(ui.BannerData{Tone: ui.ToneNeutral, Text: p.Notice})
+		}
+		if p.Retry {
+			<div class="btn-row">
+				@ui.Button(ui.Btn{Label: "Try again", Kind: "primary", Href: p.Self})
+			</div>
+		}
+		if p.Compared {
+			<p class="devdrift-lead">Live settings read <span data-visual-mask>{ p.ReadAgo }</span>, compared with the last backup (<time datetime={ p.StoredAt.UTC().Format("2006-01-02T15:04:05Z") }>{ sinceText(p.StoredAt) }</time>{ p.storedBy() }).</p>
+			<div class="devdrift-bar">
+				<b>{ p.countText() }</b>
+				<span class="devdrift-sp"></span>
+				<a class="devdrift-all" href={ templ.SafeURL(p.AllHref) } role="checkbox" aria-checked={ ariaBool(p.All) }><span class="devdrift-box" aria-hidden="true"></span>Show all { strconv.Itoa(p.Total) }</a>
+				if p.CanBackup {
+					<form method="post" action={ templ.SafeURL(p.Base + devPath(p.Tabs.ID, "/backup")) }>
+						<input type="hidden" name="csrf" value={ p.CSRF }/>
+						<input type="hidden" name="back" value="/drift"/>
+						<button type="submit" class="btn">Back up live state</button>
+					</form>
+				}
+				if p.RestoreHref != "" {
+					if p.Changed > 0 {
+						@ui.Button(ui.Btn{Label: "Restore backup…", Kind: "primary", Href: p.RestoreHref})
+					} else {
+						@ui.Button(ui.Btn{Label: "Restore backup…", Href: p.RestoreHref}) // nothing changed: not the page's main action
+					}
+				}
+			</div>
+			if p.Hiding {
+				<p class="devnote">Rules are shown to admins only.</p>
+			}
+			if len(p.Rows) > 0 {
+				<section class="devdrift-tbl" aria-label="Settings">
+					<div class="devdrift-scroll">
+						<div class="devdrift-in">
+							<div class="devdrift-row devdrift-head"><span>Setting</span><span>In last backup</span><span>Live on the device</span></div>
+							for _, r := range p.Rows {
+								<div class={ "devdrift-row", templ.KV("is-changed", r.Changed) }>
+									<span class="devdrift-k">{ r.Path }</span>
+									<span class="devdrift-a">{ r.Old }</span>
+									<span class="devdrift-b">{ r.New }</span>
+								</div>
+							}
+						</div>
+					</div>
+				</section>
+			}
+			<p class="devnote">Drift is read from the device when you open this tab. Nothing is changed on the device.</p>
+		}
+	</div>
+}
+
+// editPage is the edit form of a device (prototype screen "edit"): the fields TasmoFleet keeps
+// about the device, never its own settings.
+templ editPage(f deviceForm, base, csrf string) {
+	@ui.PageHeader("Edit device", f.Stored)
+	if f.Error != "" {
+		if f.ErrField != "" {
+			@ui.ErrorSummary("1 field needs attention.")
+		} else {
+			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: f.Error, Alert: true})
+		}
+	}
+	<form class="devform devform-edit" method="post" action={ templ.SafeURL(base + devPath(f.Device.ID, "")) }>
+		<input type="hidden" name="csrf" value={ csrf }/>
+		@editField(f, ui.FieldData{Label: "Name", Name: "name", Value: f.Device.Name, Wide: true, Help: nameHint(f.Device.Name)}, "required", "maxlength", "100")
+		@editField(f, ui.FieldData{Label: "Address", Name: "address", Value: f.Device.Address, Mono: true, Help: addressHelp(f.HasPassword)}, "required", "", "")
+		@editField(f, ui.FieldData{Label: "HTTP port", Name: "port", Type: "number", Value: portValue(f.Device.Port), Mono: true, Placeholder: "80", Help: "Empty means 80."}, "", "", "")
+		@editField(f, ui.FieldData{Label: "Web user", Name: "http_user", Value: f.Device.HTTPUser, Mono: true, Autocomplete: "off"}, "", "", "")
+		@editField(f, ui.FieldData{Label: "Web password", Name: "http_password", Type: "password", Placeholder: passwordPlaceholder(f.HasPassword), Autocomplete: "new-password", Help: passwordHelp(f.HasPassword)}, "", "", "")
+		<label class="ufield ufield-wide">
+			<span class="ufield-label">Notes</span>
+			<textarea name="notes" rows="3" maxlength="4000" aria-invalid?={ f.ErrField == "notes" } autofocus?={ f.ErrField == "notes" }>{ f.Device.Notes }</textarea>
+			if f.ErrField == "notes" {
+				<span class="ufield-err" role="alert">{ f.Error }</span>
+			}
+		</label>
+		@editField(f, ui.FieldData{Label: "Tags", Name: "tags", Value: f.TagsText, Wide: true, Help: "Comma separated."}, "", "", "")
+		<div class="ufield-wide devform-checks">
+			if f.HasPassword {
+				@ui.Check("clear_password", "Remove the stored password", "", false, false)
+			}
+			<label class="ucheck" title="A device with this on is never offered firmware, for example one that must not be touched remotely.">
+				<input type="checkbox" name="ota_excluded" value="1" checked?={ f.Device.OTAExcluded }/>
+				<span>Exclude from OTA updates</span>
+			</label>
+		</div>
+		if u := f.Unverified; u != nil {
+			<div class="ufield-wide">
+				@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Alert: true, Title: "Could not verify that " + u.Target + " is the same device (MAC).", Text: "The stored web password will be sent there, possibly to a different host. Save again to confirm, or type a new web password instead."})
+				<input type="hidden" name="token" value={ u.Token }/>
+			</div>
+		}
+		<div class="devform-foot">
+			@ui.Button(ui.Btn{Label: "Delete device…", Kind: "danger", Href: base + devPath(f.Device.ID, "/delete")})
+			<span class="devform-sp"></span>
+			@ui.Button(ui.Btn{Label: "Cancel", Href: base + devPath(f.Device.ID, "")})
+			<button type="submit" class="btn btn-primary">Save changes</button>
+		</div>
+	</form>
+}
+
+// editField is one input of the edit form with the server's error for it. attr/val is one more
+// attribute (required, maxlength) where the field has one.
+templ editField(f deviceForm, d ui.FieldData, required, attr, val string) {
+	<label class={ "ufield", templ.KV("ufield-wide", d.Wide) }>
+		<span class="ufield-label">{ d.Label }</span>
+		<input
+			name={ d.Name }
+			if d.Type != "" {
+				type={ d.Type }
+			}
+			value={ d.Value }
+			if d.Mono {
+				class="mono"
+			}
+			if d.Placeholder != "" {
+				placeholder={ d.Placeholder }
+			}
+			if d.Autocomplete != "" {
+				autocomplete={ d.Autocomplete }
+			}
+			required?={ required != "" }
+			if attr == "maxlength" {
+				maxlength={ val }
+			}
+			if f.ErrField == d.Name {
+				aria-invalid="true"
+				aria-describedby={ "err-" + d.Name }
+				autofocus
+			}
+		/>
+		if f.ErrField == d.Name {
+			<span class="ufield-err" id={ "err-" + d.Name }>{ f.Error }</span>
+		} else if d.Help != "" {
+			<span class={ templ.KV("ufield-help", d.Name != "name"), templ.KV("ufield-warn", d.Name == "name") }>{ d.Help }</span>
+		}
+	</label>
+}

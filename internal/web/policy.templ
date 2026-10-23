@@ -1,0 +1,727 @@
+package web
+
+import (
+	"strconv"
+
+	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+)
+
+// Design v2 screens "policy", "policyio" and the Make compliant pages (N3, N21). The rules
+// editor is merged into the policy page; every change is a plain form POST that names the
+// version the person saw and comes back here. policy.js adds drag and drop to the rule list.
+
+func vstr(n int64) string { return strconv.FormatInt(n, 10) }
+
+// policyPage is GET /policy.
+templ policyPage(p policyView) {
+	<div class="pol-page">
+		@ui.PageHeader("Policy", p.Sub) {
+			if p.Admin && p.CanRules {
+				<a class="btn" href={ templ.SafeURL(p.Base + policyIOPath + "?tab=import") }>Import…</a>
+			}
+			if p.CanRules {
+				<a class="btn" href={ templ.SafeURL(p.Base + policyIOPath) }>Export</a>
+			}
+			if p.Admin && p.CanRules {
+				<a class="btn" href={ templ.SafeURL(p.Base + policyPath + "?new=1#editor") }>New rule</a>
+			}
+			if p.Fix != nil {
+				<form method="post" action={ templ.SafeURL(p.Base + "/policy/fix") } class="pol-inline">
+					<input type="hidden" name="csrf" value={ p.CSRF }/>
+					<input type="hidden" name="all" value="1"/>
+					<button type="submit" class="btn btn-primary" data-dialog="dlg-fix">Make compliant ({ itoa(p.Fix.Ready) })…</button>
+				</form>
+			}
+		}
+		if p.Banner != "" {
+			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: p.Banner, Alert: true})
+		}
+		if p.Line != nil {
+			@liveStatus(p)
+		}
+		if !p.HasRules {
+			@policyEmpty(p)
+		}
+		if len(p.Conflicts) > 0 {
+			<div class="pol-confs">
+				for _, c := range p.Conflicts {
+					<div class="pol-conf" role="note"><span class="pol-conf-dot" aria-hidden="true"></span><span>{ c }</span></div>
+				}
+			</div>
+		}
+		if p.HasRules || p.Editor != nil {
+			<div class="pol-grid">
+				<div class="pol-cards">
+					if len(p.Cards) > 0 {
+						<div class="pol-list" data-rule-list data-order-form="rule-order" aria-label="Rules, highest first">
+							for _, c := range p.Cards {
+								@ruleCardItem(p, c)
+							}
+						</div>
+						if p.Admin && p.CanRules {
+							<form id="rule-order" method="post" action={ templ.SafeURL(p.Base + rulesPath + "/order") } hidden>
+								<input type="hidden" name="csrf" value={ p.CSRF }/>
+								<input type="hidden" name="version" value={ vstr(p.Version) }/>
+								<input type="hidden" name="order" value=""/>
+							</form>
+						}
+					}
+				</div>
+				if p.Editor != nil {
+					@ruleEditorCard(p, p.Editor)
+				}
+				if p.Selected >= 0 || p.Editor != nil {
+					@livePreview(p)
+				}
+				if len(p.History) > 0 {
+					@versionHistory(p)
+				}
+			</div>
+		}
+		if p.Fix != nil {
+			@ui.Dialog(ui.DialogData{
+				ID: "dlg-fix", Title: "Make " + plural(p.Fix.Ready, "device") + " compliant",
+				Body:    "Only Required rules are included; Advisory rules stay hints. These commands run as one transaction only when you confirm. Values known only from a backup, or not known at all, are left alone.",
+				Changes: p.Fix.Changes, Action: p.Base + "/policy/fix/apply", CSRF: p.CSRF, Fields: p.Fix.Fields,
+				Verb: "Run " + plural(p.Fix.Commands, "change"),
+			})
+		}
+		if p.Admin && p.CanRules {
+			for _, c := range p.Cards {
+				@ui.Dialog(ui.DialogData{
+					ID: "dlg-rule-" + itoa(c.Idx), Title: "Delete rule “" + c.Name + "”?", Body: deleteText(c),
+					Action: p.Base + rulesPath + "/delete", CSRF: p.CSRF,
+					Fields: []ui.KVRow{{Key: "idx", Value: itoa(c.Idx)}, {Key: "version", Value: vstr(p.Version)}},
+					Verb:   "Delete rule", Danger: true,
+				})
+			}
+		}
+		<script src={ p.Base + "/static/" + asset("policy.js") } defer></script>
+	</div>
+}
+
+// liveStatus is the live-check status line: idle (Pause, Run now), paused (Resume) or failed
+// (Details, Retry now).
+templ liveStatus(p policyView) {
+	<div class={ "pol-line", "pol-line-" + p.Line.State } role="status">
+		<span class="pol-line-dot" aria-hidden="true"></span>
+		<span class="pol-line-text">{ p.Line.Text }</span>
+		<span class="pol-line-acts">
+			switch p.Line.State {
+				case "failed":
+					<a class="btn pol-line-btn pol-line-ghost" href={ templ.SafeURL(p.Base + "/audit") }>Details</a>
+					@liveForm(p, "/policy/live", "Retry now")
+				case "paused":
+					if p.Line.CanPause {
+						@liveForm(p, "/policy/live/resume", "Resume")
+					}
+					@liveForm(p, "/policy/live", "Run now")
+				default:
+					if p.Line.CanPause {
+						@liveForm(p, "/policy/live/pause", "Pause")
+					}
+					@liveForm(p, "/policy/live", "Run now")
+			}
+		</span>
+	</div>
+}
+
+templ liveForm(p policyView, action, label string) {
+	<form
+		method="post"
+		action={ templ.SafeURL(p.Base + action) }
+		class="pol-inline"
+		if action == "/policy/live" {
+			id="live-check"
+		}
+	>
+		<input type="hidden" name="csrf" value={ p.CSRF }/>
+		<button type="submit" class={ "btn", "pol-line-btn", templ.KV("pol-line-ghost", label == "Pause") }>{ label }</button>
+	</form>
+}
+
+// policyEmpty is the empty state: the templates (admins), each a form that adds it.
+templ policyEmpty(p policyView) {
+	<section class="pol-empty">
+		<div>
+			<h2>No rules yet</h2>
+			if len(p.Templates) > 0 {
+				<p>Start with a template. You can change every field afterwards.</p>
+			} else {
+				<p>An admin adds the rules the fleet is checked against.</p>
+			}
+		</div>
+		if len(p.Templates) > 0 {
+			<div class="pol-tpls">
+				for _, t := range p.Templates {
+					<form method="post" action={ templ.SafeURL(p.Base + rulesPath + "/template") }>
+						<input type="hidden" name="csrf" value={ p.CSRF }/>
+						<input type="hidden" name="version" value={ vstr(p.Version) }/>
+						<button type="submit" name="template" value={ t.ID } class="pol-tpl">
+							<span class="pol-tpl-name">{ t.Title }</span>
+							<span class="pol-tpl-kv">{ t.Spec.Command + " = " + t.Spec.Want }</span>
+							<span class="pol-tpl-text">{ t.Text }</span>
+							<span class="pol-tpl-use">Use template</span>
+						</button>
+					</form>
+				}
+			</div>
+		}
+	</section>
+}
+
+// ruleCardItem is one rule: drag handle, the card (opens the rule), the rule menu.
+templ ruleCardItem(p policyView, c ruleCard) {
+	<div
+		class={ "pol-card", templ.KV("is-sel", c.Selected), templ.KV("is-off", c.Disabled) }
+		data-rule-idx={ itoa(c.Idx) }
+		if p.Admin && p.CanRules {
+			draggable="true"
+		}
+	>
+		<span class="pol-grip" aria-hidden="true" title="Drag to reorder">⋮⋮</span>
+		<a class="pol-card-main" href={ templ.SafeURL(p.Base + policyPath + "?edit=" + itoa(c.Idx)) } if c.Selected {
+	aria-current="true"
+}>
+			<span class="pol-card-head">
+				<span class="pol-card-name">{ c.Name }</span>
+				if c.Disabled {
+					@ui.Badge(ui.ToneNeutral, "Disabled")
+				}
+				if c.Badge != "" {
+					@ui.Badge(c.BadgeTone, c.Badge)
+				}
+			</span>
+			<span class="pol-card-kv">{ c.KV }</span>
+			<span class="pol-card-meta">
+				<span>Applies to { c.Applies }</span>
+				<span class={ "pol-sev", templ.KV("is-req", c.Required) }>{ c.Severity }</span>
+				if len(c.Except) == 1 {
+					<span>1 exception</span>
+				} else if len(c.Except) > 1 {
+					<span>{ itoa(len(c.Except)) } exceptions</span>
+				}
+			</span>
+			if len(c.Except) > 0 {
+				<span class="pol-chips">
+					for _, x := range c.Except {
+						<span class="pol-chip">{ x }</span>
+					}
+				</span>
+			}
+			if c.Note != "" {
+				<span class="pol-card-note">{ c.Note }</span>
+			}
+		</a>
+		if p.Admin && p.CanRules {
+			@ruleMenu(p, c)
+		}
+	</div>
+}
+
+// ruleMenu is the rule's "⋯" menu: Duplicate, Enable / Disable, the moves (the way to reorder
+// without JavaScript), History and Delete…. No Edit: the card itself opens the editor (maintainer feedback).
+templ ruleMenu(p policyView, c ruleCard) {
+	<details class={ "rowmenu", "umenu", "pol-menu", templ.KV("up", c.Last && !c.First) }>
+		<summary class="btn btn-ghost btn-icon icon" aria-label="Rule actions">⋯</summary>
+		<div class="rowmenu-body menu-panel" role="menu">
+			@ruleOp(p, c, "/duplicate", "", "Duplicate")
+			if c.Disabled {
+				@ruleOp(p, c, "/enable", "", "Enable")
+			} else {
+				@ruleOp(p, c, "/disable", "", "Disable")
+			}
+			if !c.First {
+				@ruleOp(p, c, "/order", "up", "Move up")
+			}
+			if !c.Last {
+				@ruleOp(p, c, "/order", "down", "Move down")
+			}
+			<a class="menu-item" role="menuitem" href={ templ.SafeURL(p.Base + policyPath + "?edit=" + itoa(c.Idx) + "#history") }><span>History</span></a>
+			<hr/>
+			<a class="menu-item danger" role="menuitem" href={ templ.SafeURL(p.Base + rulesPath + "/delete?idx=" + itoa(c.Idx)) } data-dialog={ "dlg-rule-" + itoa(c.Idx) }><span>Delete…</span></a>
+		</div>
+	</details>
+}
+
+templ ruleOp(p policyView, c ruleCard, path, move, label string) {
+	<form method="post" action={ templ.SafeURL(p.Base + rulesPath + path) }>
+		<input type="hidden" name="csrf" value={ p.CSRF }/>
+		<input type="hidden" name="version" value={ vstr(p.Version) }/>
+		<input type="hidden" name="idx" value={ itoa(c.Idx) }/>
+		if move != "" {
+			<input type="hidden" name="move" value={ move }/>
+		}
+		<button type="submit" class="menu-item" role="menuitem">{ label }</button>
+	</form>
+}
+
+// ruleEditorCard is the editor: a saved rule or a new one. The live preview (htmx) counts the
+// draft as it is typed; nothing is stored before "Save rule".
+templ ruleEditorCard(p policyView, e *ruleEditor) {
+	<section class="ucard pol-editor" id="editor" aria-labelledby="editor-h">
+		if e.Err != "" && e.ErrField == "" {
+			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: e.Err, Alert: true})
+		}
+		<form
+			method="post"
+			action={ templ.SafeURL(p.Base + rulesPath + "/save") }
+			hx-post={ p.Base + rulesPath + "/preview" }
+			hx-trigger="change, input changed delay:400ms, htmx:afterSwap from:#want-control delay:50ms"
+			hx-target="#rule-preview"
+			hx-swap="innerHTML"
+			novalidate
+			class="pol-form"
+		>
+			<input type="hidden" name="csrf" value={ p.CSRF }/>
+			<input type="hidden" name="idx" value={ e.Idx }/>
+			<input type="hidden" name="version" value={ vstr(e.Version) }/>
+			<div class="pol-ed-head">
+				<h2 id="editor-h">{ e.Title }</h2>
+				<label class="pol-enabled">
+					<input type="hidden" name="state" value="disabled"/>
+					<input type="checkbox" name="state" value="enabled" checked?={ e.Enabled }/>
+					Enabled
+				</label>
+			</div>
+			<label class="ufield">
+				<span class="ufield-label">Name</span>
+				<input name="name" value={ e.Spec.Name } maxlength="80" placeholder="New rule" autofocus?={ e.Idx == "new" && e.ErrField == "" && e.Err == "" }/>
+			</label>
+			<div class="ufield">
+				<span class="ufield-label">Applies to</span>
+				<details class="pol-scope">
+					<summary>{ appliesText(e.Spec) }</summary>
+					<div class="pol-scope-body">
+						<fieldset>
+							<legend>Chip families <small>(none: every family)</small></legend>
+							<div class="pol-pick">
+								for _, f := range e.Families {
+									<label class="pol-pickc"><input type="checkbox" name="family" value={ f.Value } checked?={ f.On }/> { scopeChipText(f) }</label>
+								}
+							</div>
+						</fieldset>
+						<fieldset>
+							<legend>Tags <small>(a device with any of them)</small></legend>
+							<div class="pol-pick">
+								for _, t := range e.Tags {
+									<label class="pol-pickc"><input type="checkbox" name="tag" value={ t.Value } checked?={ t.On }/> { t.Value }</label>
+								}
+							</div>
+							<label class="ufield"><span class="ufield-label">Other tags</span><input name="tags_extra" placeholder="comma separated"/></label>
+						</fieldset>
+						<fieldset>
+							<legend>Devices <small>(tags and devices together mean either; all empty: every device)</small></legend>
+							<div class="pol-pick pol-pick-scroll">
+								for _, d := range e.Devices {
+									<label class="pol-pickc"><input type="checkbox" name="device" value={ d.Value } checked?={ d.On }/> { d.Value }</label>
+								}
+							</div>
+						</fieldset>
+					</div>
+				</details>
+			</div>
+			<div class="pol-two">
+				<label class="ufield">
+					<span class="ufield-label">Setting</span>
+					<select
+						name="command"
+						class="mono"
+						hx-get={ p.Base + rulesPath + "/value-control" }
+						hx-trigger="change consume"
+						hx-target="#want-control"
+						hx-swap="innerHTML"
+						hx-include="[name='want']"
+						if e.ErrField == "command" {
+							aria-invalid="true"
+							aria-describedby="err-command"
+							autofocus
+						}
+					>
+						<option value="">Choose a setting…</option>
+						for _, g := range e.Groups {
+							<optgroup label={ g.Name }>
+								for _, c := range g.Choices {
+									<option value={ c.Key } selected?={ c.Key == e.Spec.Command }>{ c.Label }</option>
+								}
+							</optgroup>
+						}
+					</select>
+					if e.ErrField == "command" {
+						<span class="ufield-err" id="err-command" role="alert">{ e.Err }</span>
+					}
+				</label>
+				<div class="ufield" id="want-control">
+					@ruleValue(e.Control)
+				</div>
+			</div>
+			if e.ErrField == "want" {
+				<span class="ufield-err" id="err-want" role="alert">{ e.Err }</span>
+			}
+			<label class="ufield">
+				<span class="ufield-label">Exceptions</span>
+				if e.Except == "" {
+					<span class="pol-none">No devices excluded.</span>
+				}
+				<input name="except" value={ e.Except } placeholder="Device names or tags, comma separated"/>
+			</label>
+			<label class="ufield">
+				<span class="ufield-label">Note</span>
+				<textarea name="note" rows="2" maxlength="300" placeholder="Why this rule exists">{ e.Spec.Note }</textarea>
+			</label>
+			<div class="ufield">
+				<span class="ufield-label" id="sev-l">When a device deviates</span>
+				<div class="useg" role="radiogroup" aria-labelledby="sev-l">
+					<label><input type="radio" name="severity" value="info" checked?={ e.Spec.Severity == "info" }/><span>Advisory</span></label>
+					<label><input type="radio" name="severity" value="warn" checked?={ e.Spec.Severity != "info" }/><span>Required</span></label>
+				</div>
+				<span class="ufield-help">Required counts as a deviation and is preselected in Make compliant. Advisory is a hint only. Nothing is ever written to devices automatically.</span>
+			</div>
+			<label class="ufield">
+				<span class="ufield-label">Change note</span>
+				<input
+					name="change_note"
+					maxlength="200"
+					placeholder="Optional, shown in the version history"
+					if e.ErrField == "change_note" {
+						aria-invalid="true"
+						aria-describedby="err-change_note"
+						autofocus
+					}
+				/>
+				if e.ErrField == "change_note" {
+					<span class="ufield-err" id="err-change_note" role="alert">{ e.Err }</span>
+				}
+			</label>
+			<div class="pol-ed-foot">
+				if e.Idx == "new" {
+					<a class="btn" href={ templ.SafeURL(p.Base + policyPath) }>Cancel</a>
+				}
+				<button type="submit" class="btn btn-primary">Save rule</button>
+			</div>
+		</form>
+	</section>
+}
+
+// ruleValue is the expected-value input; its kind follows the setting (htmx swaps it when the
+// setting changes).
+templ ruleValue(vc valueControl) {
+	<label class="ufield-label" for="want">Expected value</label>
+	switch vc.Kind {
+		case "select":
+			<select id="want" name="want" class="mono" required if vc.Invalid {
+	aria-invalid="true"
+	aria-describedby="err-want"
+	autofocus
+}>
+				<option value="">Choose a value…</option>
+				for _, o := range vc.Options {
+					<option value={ o.Value } selected?={ o.Value == vc.Want }>{ o.Label }</option>
+				}
+			</select>
+		case "toggle":
+			<span class="useg" role="radiogroup" aria-label="Expected value">
+				<label><input type="radio" name="want" value="1" checked?={ vc.Want == "1" } required/><span>on (1)</span></label>
+				<label><input type="radio" name="want" value="0" checked?={ vc.Want == "0" } required/><span>off (0)</span></label>
+			</span>
+		case "number":
+			if vc.HasRange {
+				<input id="want" name="want" type="number" step="1" class="mono" required min={ itoa(vc.Min) } max={ itoa(vc.Max) } value={ vc.Want } if vc.Invalid {
+	aria-invalid="true"
+	aria-describedby="err-want"
+	autofocus
+}/>
+			} else {
+				<input id="want" name="want" type="number" step="1" class="mono" required value={ vc.Want } if vc.Invalid {
+	aria-invalid="true"
+	aria-describedby="err-want"
+	autofocus
+}/>
+			}
+		case "none":
+			<input id="want" name="want" type="text" class="mono" disabled placeholder="Choose a setting first"/>
+		default:
+			<input id="want" name="want" type="text" class="mono" maxlength="64" required value={ vc.Want } if vc.Invalid {
+	aria-invalid="true"
+	aria-describedby="err-want"
+	autofocus
+}/>
+	}
+	if vc.Hint != "" {
+		<span class="ufield-help">{ vc.Hint }</span>
+	}
+}
+
+// livePreview is what the open rule flags now: the counts (updated while the draft is typed)
+// and, for a saved rule, the devices.
+templ livePreview(p policyView) {
+	<section class="ucard pol-preview" aria-labelledby="pv-h">
+		<div class="pol-pv-head">
+			<h2 id="pv-h"><span class="pol-pv-dot" aria-hidden="true"></span>Live preview</h2>
+			<div id="rule-preview" class="pol-pv-line" role="status" aria-live="polite">
+				@rulePreviewLine(p.Preview)
+			</div>
+		</div>
+		if p.PvDisabled && p.Editor == nil {
+			<p class="pol-pv-none">This rule is disabled and doesn’t flag devices.</p>
+		} else if p.PvDisabled {
+			<p class="pol-pv-none">This rule is disabled and doesn’t flag devices. The numbers above count it as if enabled.</p>
+		} else if len(p.PvRows) > 0 {
+			<div class="pol-pv-list">
+				for _, r := range p.PvRows {
+					if !r.Unknown {
+						@pvRowItem(p, r)
+					}
+				}
+				if n := unknownRows(p.PvRows); n > 0 {
+					<details class="pol-pv-unk">
+						<summary>{ plural(n, "device") } cannot be judged</summary>
+						for _, r := range p.PvRows {
+							if r.Unknown {
+								@pvRowItem(p, r)
+							}
+						}
+					</details>
+				}
+			</div>
+		} else if p.Selected >= 0 && p.Preview.OK {
+			<p class="pol-pv-none">Every device in scope matches this rule.</p>
+		}
+	</section>
+}
+
+// pvRowItem is one device of the preview: the value it has and the one the rule expects.
+templ pvRowItem(p policyView, r pvRow) {
+	<a class={ "pol-pv-row", templ.KV("is-unk", r.Unknown), templ.KV("is-hint", r.Advisory) } href={ templ.SafeURL(p.Base + "/devices/" + devStr(r.ID)) }>
+		<span class="pol-pv-rdot" aria-hidden="true"></span>
+		<span class="pol-pv-name">
+			{ r.Name }
+			if r.Note != "" {
+				<span class="pol-pv-note">{ r.Note }</span>
+			}
+		</span>
+		if r.Unknown {
+			<span class="pol-pv-val">unknown → <b>{ r.Want }</b></span>
+		} else {
+			<span class="pol-pv-val">{ r.Have } → <b>{ r.Want }</b></span>
+		}
+	</a>
+}
+
+// rulePreviewLine is the preview's summary line (also the htmx answer of /policy/rules/preview).
+templ rulePreviewLine(rp rulePreview) {
+	if rp.OK {
+		<span>Would flag <b>{ itoa(rp.Flagged) }</b> of { plural(rp.Devices, "device") } · { itoa(rp.Unknown) } cannot be judged (no backup or recent reading)</span>
+	} else if rp.Err != "" {
+		<span class="ufield-err">{ rp.Err }</span>
+	} else if rp.Hint != "" {
+		<span>{ rp.Hint }</span>
+	}
+}
+
+// versionHistory lists the saved versions; the picked one is compared with the current rules
+// and can be reverted to.
+templ versionHistory(p policyView) {
+	<section class="pol-hist" id="history" aria-labelledby="hist-h">
+		<div class="pol-hist-head">
+			<h2 id="hist-h">Version history</h2>
+			<span>Every save creates a version. Reverting never touches devices.</span>
+		</div>
+		<div class="pol-hist-body">
+			<div class="pol-hist-list">
+				for _, v := range p.History {
+					<a class={ "pol-hv", templ.KV("is-sel", v.Selected) } href={ templ.SafeURL(p.Base + policyPath + "?v=" + vstr(v.ID) + editParam(p) + "#history") } if v.Selected {
+	aria-current="true"
+}>
+						<span class="pol-hv-v">v{ vstr(v.ID) }</span>
+						<span class="pol-hv-main">
+							<span class="pol-hv-what">
+								if v.Full != "" {
+									<span title={ v.Full }>{ v.What }</span>
+								} else {
+									<span>{ v.What }</span>
+								}
+								if v.Current {
+									@ui.Badge(ui.ToneOK, "Current")
+								}
+							</span>
+							<span class="pol-hv-meta"><time datetime={ v.At.Format("2006-01-02T15:04:05Z07:00") }>{ v.At.Local().Format("2 Jan 2006, 15:04") }</time> · { v.By }</span>
+						</span>
+					</a>
+				}
+			</div>
+			<div class="pol-hist-diff">
+				if p.DiffFrom == p.Version || p.DiffFrom == 0 {
+					<span class="pol-none">This is the current version. Pick an older one to see what changed.</span>
+				} else {
+					<div class="pol-diff-h">v{ vstr(p.DiffFrom) } → current</div>
+					if len(p.Diff) == 0 {
+						<span class="pol-none">No differences.</span>
+					} else {
+						<div class="pol-diff">
+							for _, d := range p.Diff {
+								<div class="pol-diff-row"><span class="pol-diff-l">{ d.Rule }</span><span class="pol-diff-v">{ changeText(d) }</span></div>
+							}
+						</div>
+					}
+					if p.Admin {
+						<form method="post" action={ templ.SafeURL(p.Base + rulesPath + "/revert/" + vstr(p.DiffFrom)) }>
+							<input type="hidden" name="csrf" value={ p.CSRF }/>
+							<button type="submit" class="btn" data-dialog="dlg-revert">Revert to this version…</button>
+						</form>
+						@ui.Dialog(ui.DialogData{
+							ID: "dlg-revert", Title: "Revert the rules to version " + vstr(p.DiffFrom) + "?",
+							Body:    "The rules get the state of " + p.SelAt.Local().Format("2 Jan 2006, 15:04") + ". This is saved as a new version; nothing is written to devices.",
+							Changes: revertRows(p.RevertDiff), Action: p.Base + rulesPath + "/revert/" + vstr(p.DiffFrom), CSRF: p.CSRF,
+							Verb: "Revert to v" + vstr(p.DiffFrom),
+						})
+					}
+				}
+			</div>
+		</div>
+	</section>
+}
+
+// policyIOPage is GET /policy/io: Export (the rules as JSON) and Import (paste, check, save).
+templ policyIOPage(p policyIOView) {
+	<div class="pol-page">
+		@ui.PageHeader("Import / export rules", "JSON, one file for all rules. Importing never changes devices.") {
+			<a class="btn" href={ templ.SafeURL(p.Base + policyPath) }>Back to policy</a>
+		}
+		if p.Admin {
+			@ui.Tabs("Import or export", []ui.Tab{
+				{Label: "Export", Href: p.Base + policyIOPath, Current: !p.Import},
+				{Label: "Import", Href: p.Base + policyIOPath + "?tab=import", Current: p.Import},
+			})
+		} else {
+			@ui.Tabs("Export", []ui.Tab{{Label: "Export", Href: p.Base + policyIOPath, Current: true}})
+		}
+		if !p.Import {
+			<div class="pio-export">
+				<div class="pio-acts">
+					<button type="button" class="btn" data-copy-text={ p.JSON } hidden>Copy</button>
+					<a class="btn btn-primary" href={ templ.SafeURL(p.Base + policyIOPath + "/export") } download="policy-rules.json">Download .json</a>
+				</div>
+				<pre class="pio-json">{ p.JSON }</pre>
+			</div>
+		} else {
+			<div class="pio-import">
+				<form method="post" action={ templ.SafeURL(p.Base + policyIOPath + "/import") } class="pio-form" id="pio-form">
+					<input type="hidden" name="csrf" value={ p.CSRF }/>
+					<label class="ufield">
+						<span class="ufield-label">Paste JSON</span>
+						<textarea name="json" rows="14" maxlength="262144" class="mono" if p.Error != "" {
+	aria-invalid="true"
+	aria-describedby="pio-err"
+}>{ p.Text }</textarea>
+						if p.Error != "" {
+							<span class="ufield-err" id="pio-err" role="alert">{ p.Error }</span>
+						}
+					</label>
+					<div class="pio-check">
+						<button type="submit" class="btn">Check import</button>
+					</div>
+				</form>
+				<section class="pio-preview" aria-labelledby="pio-h">
+					<div class="pio-pv-head">
+						<h2 id="pio-h">Preview</h2>
+						<span class="pio-counts">
+							for _, c := range p.Counts {
+								@ui.Badge(countTone(c.Key), c.Value)
+							}
+						</span>
+					</div>
+					if !p.Checked {
+						<p class="pio-none">Paste the rules and check them: the preview lists what changes before anything is saved.</p>
+					} else if len(p.Rows) == 0 {
+						<p class="pio-none">No difference: the file holds the rules that are saved now.</p>
+					} else {
+						for _, r := range p.Rows {
+							<div class="pio-row">
+								@ui.Badge(r.Tone, r.Kind)
+								<div class="pio-row-t">
+									<span>{ r.Rule }</span>
+									if r.Detail != "" {
+										<span class="pio-row-d">{ r.Detail }</span>
+									}
+								</div>
+							</div>
+						}
+					}
+					if p.Checked {
+						<div class="pio-foot">
+							<span>The file replaces all current rules. The import is saved as a new rule version.</span>
+							<button type="submit" form="pio-form" class="btn btn-primary" name="confirm" value="1">Import { plural(p.Count, "rule") }</button>
+						</div>
+					}
+				</section>
+			</div>
+		}
+	</div>
+}
+
+// fixPreviewPage is the Make compliant plan as a page (no JavaScript, or values that changed).
+templ fixPreviewPage(base, csrf string, p fixPage) {
+	<div class="pol-page">
+		@ui.PageHeader("Make "+plural(p.Ready, "device")+" compliant", "Nothing has been changed on any device yet. These are the exact commands, sent to each device in one batch and saved to the device once, at the end. Only Required rules are included; Advisory rules stay hints.")
+		if p.Stale {
+			@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: "The values changed since you looked. Nothing was sent; review the commands below again.", Alert: true})
+		}
+		if len(p.Rows) == 0 {
+			@ui.Empty("No device selected", "Pick a rule that flags devices on the policy page.") {
+				<a class="btn" href={ templ.SafeURL(base + policyPath) }>Back to policy</a>
+			}
+		} else {
+			<div class="pol-fix-grid">
+				for _, row := range p.Rows {
+					<section class="ucard pol-fix-card">
+						<h2><a href={ templ.SafeURL(base + "/devices/" + devStr(row.Device.ID)) }>{ row.Device.Name }</a></h2>
+						for _, c := range row.Cmds {
+							<div class="pol-fix-cmd">
+								<span class="mono">{ c.Text }</span>
+								<span class="pol-fix-note">{ fixNote(c) }</span>
+							</div>
+						}
+						if row.Blocked != "" {
+							<p class="pol-fix-skip">{ row.Blocked }</p>
+						}
+						for _, s := range row.Skipped {
+							<p class="pol-fix-skip">Not changed: { s.Label }: { s.Reason }</p>
+						}
+					</section>
+				}
+			</div>
+			<form method="post" action={ templ.SafeURL(base + "/policy/fix/apply") } class="pol-fix-foot">
+				<input type="hidden" name="csrf" value={ csrf }/>
+				<input type="hidden" name="digest" value={ p.Digest }/>
+				for _, id := range p.IDs {
+					<input type="hidden" name="device" value={ devStr(id) }/>
+				}
+				<a class="btn" href={ templ.SafeURL(base + policyPath) }>Cancel</a>
+				if len(p.IDs) > 0 {
+					<button type="submit" class="btn btn-primary">Run { plural(p.Commands, "change") }</button>
+				}
+			</form>
+		}
+	</div>
+}
+
+// fixStartedPage answers Make compliant when the server left devices out; otherwise the answer
+// is the transaction page.
+templ fixStartedPage(base string, s fixStarted) {
+	<div class="pol-page">
+		@ui.PageHeader("Make compliant", "Transaction #"+vstr(int64(s.Batch))+" was started.") {
+			<a class="btn btn-primary" href={ templ.SafeURL(base + "/transactions/" + vstr(int64(s.Batch))) }>Open the transaction</a>
+			<a class="btn" href={ templ.SafeURL(base + policyPath) }>Back to policy</a>
+		}
+		if len(s.Skipped) > 0 {
+			@ui.Card("Left out", "These devices were not included.") {
+				<ul class="pol-fix-left">
+					for _, x := range s.Skipped {
+						<li>{ x.Label }: { x.Reason }</li>
+					}
+				</ul>
+			}
+		}
+	</div>
+}

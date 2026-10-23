@@ -1,0 +1,43 @@
+# HELP tasmofleet_device_energy_today_kwh Energy since midnight in kWh.
+# TYPE tasmofleet_device_energy_today_kwh gauge
+tasmofleet_device_energy_today_kwh{channel="",device="kitchen-spotlight",id="1"} 0.274
+# HELP tasmofleet_device_energy_total_kwh Total energy counter of the device meter in kWh.
+# TYPE tasmofleet_device_energy_total_kwh gauge
+tasmofleet_device_energy_total_kwh{channel="",device="kitchen-spotlight",id="1"} 133.945
+# HELP tasmofleet_device_energy_yesterday_kwh Energy of yesterday in kWh.
+# TYPE tasmofleet_device_energy_yesterday_kwh gauge
+tasmofleet_device_energy_yesterday_kwh{channel="",device="kitchen-spotlight",id="1"} 0.449
+# HELP tasmofleet_device_last_seen_timestamp_seconds Unix time of the last successful observation of the device.
+# TYPE tasmofleet_device_last_seen_timestamp_seconds gauge
+tasmofleet_device_last_seen_timestamp_seconds{device="dual-meter",id="2"} 1.79200001e+09
+tasmofleet_device_last_seen_timestamp_seconds{device="gone",id="4"} 1.79199e+09
+tasmofleet_device_last_seen_timestamp_seconds{device="kitchen-spotlight",id="1"} 1.792e+09
+tasmofleet_device_last_seen_timestamp_seconds{device="no-sensor",id="3"} 1.79200002e+09
+# HELP tasmofleet_device_power_watts Active power from the last ENERGY reading of an online device. Empty channel label: single meter.
+# TYPE tasmofleet_device_power_watts gauge
+tasmofleet_device_power_watts{channel="1",device="dual-meter",id="2"} 12
+tasmofleet_device_power_watts{channel="2",device="dual-meter",id="2"} 40.5
+tasmofleet_device_power_watts{channel="",device="kitchen-spotlight",id="1"} 52
+# HELP tasmofleet_device_relay_on 1 if the relay is on, 0 if off. Single-relay devices use relay "1".
+# TYPE tasmofleet_device_relay_on gauge
+tasmofleet_device_relay_on{device="dual-meter",id="2",relay="1"} 0
+tasmofleet_device_relay_on{device="dual-meter",id="2",relay="2"} 1
+tasmofleet_device_relay_on{device="gone",id="4",relay="1"} 1
+tasmofleet_device_relay_on{device="kitchen-spotlight",id="1",relay="1"} 1
+tasmofleet_device_relay_on{device="no-sensor",id="3",relay="1"} 0
+# HELP tasmofleet_device_up 1 if the device is online, 0 if stale, offline or rejecting credentials. Devices never observed since start have no series.
+# TYPE tasmofleet_device_up gauge
+tasmofleet_device_up{device="dual-meter",id="2"} 1
+tasmofleet_device_up{device="gone",id="4"} 0
+tasmofleet_device_up{device="kitchen-spotlight",id="1"} 1
+tasmofleet_device_up{device="no-sensor",id="3"} 1
+# HELP tasmofleet_device_uptime_seconds Device uptime from the last STATE or Status 11.
+# TYPE tasmofleet_device_uptime_seconds gauge
+tasmofleet_device_uptime_seconds{device="dual-meter",id="2"} 99
+tasmofleet_device_uptime_seconds{device="kitchen-spotlight",id="1"} 4210
+# HELP tasmofleet_device_wifi_rssi_percent Wi-Fi signal quality in percent (Wifi.RSSI).
+# TYPE tasmofleet_device_wifi_rssi_percent gauge
+tasmofleet_device_wifi_rssi_percent{device="kitchen-spotlight",id="1"} 64
+# HELP tasmofleet_device_wifi_signal_dbm Wi-Fi signal strength in dBm (Wifi.Signal).
+# TYPE tasmofleet_device_wifi_signal_dbm gauge
+tasmofleet_device_wifi_signal_dbm{device="kitchen-spotlight",id="1"} -68

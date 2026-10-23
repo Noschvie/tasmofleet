@@ -1,0 +1,511 @@
+// Command tasmofleet-devenv starts a self-contained test environment for
+// e2e tests and manual UI work: an embedded MQTT broker, a mock OIDC
+// provider (Authentik semantics) and a fleet of simulated Tasmota devices
+// (one per simulator profile). It prints the environment variables to start
+// tasmofleet against it. Never used in production images.
+package main
+
+import (
+	"bytes"
+	"compress/gzip"
+	"context"
+	"encoding/binary"
+	"encoding/json"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"log/slog"
+	"math/rand/v2"
+	"net"
+	"net/http"
+	"os"
+	"os/signal"
+	"path"
+	"strings"
+	"sync/atomic"
+	"syscall"
+	"time"
+
+	"github.com/nofuturekid/tasmofleet/internal/simulator"
+	"github.com/nofuturekid/tasmofleet/internal/testutil/oidcmock"
+)
+
+// loginUsers are the accounts the mock IdP can log in as, with the Authentik
+// group names of the reference deployment.
+var loginUsers = map[string]oidcmock.User{
+	"operator": {Subject: "u-operator", Username: "olivia", Email: "olivia@example.test", Groups: []string{"Tasmofleet Users"}},
+	"admin":    {Subject: "u-admin", Username: "adam", Email: "adam@example.test", Groups: []string{"Tasmofleet Users", "Tasmofleet Admins"}},
+	"nobody":   {Subject: "u-nobody", Username: "nina", Email: "nina@example.test", Groups: []string{"Unrelated"}},
+}
+
+// multiFlag collects repeated flag values.
+type multiFlag []string
+
+func (m *multiFlag) String() string     { return strings.Join(*m, ",") }
+func (m *multiFlag) Set(v string) error { *m = append(*m, v); return nil }
+
+func main() {
+	if len(os.Args) > 1 && os.Args[1] == fakeDecoderArg {
+		os.Exit(fakeDecoder(os.Args[2:], os.Stdout, os.Stderr))
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := run(ctx, os.Args[1:], os.Stdout, os.Stderr); err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, "tasmofleet-devenv:", err)
+		os.Exit(1)
+	}
+}
+
+// fleetDevices is the mixed fleet: every profile once, MQTT and HTTP-only,
+// one device behind a WebPassword. All start at 16.0.0 so a 16.1.0 upstream
+// offers an update to each of them.
+func fleetDevices() []simulator.DeviceSpec {
+	httpOnly := []simulator.Fault{{Kind: simulator.FaultHTTPOnly}}
+	return []simulator.DeviceSpec{
+		{Name: "lamp-1m", Profile: simulator.ProfileESP8266_1M},
+		{Name: "plug-4m", Profile: simulator.ProfileESP8266_4M},
+		{Name: "plug-4m-http", Profile: simulator.ProfileESP8266_4M, Faults: httpOnly},
+		{Name: "lamp-minimal", Profile: simulator.ProfileESP8266Min},
+		{Name: "esp32-dimmer", Profile: simulator.ProfileESP32},
+		{Name: "esp32c3-sensor", Profile: simulator.ProfileESP32C3},
+		{Name: "esp32s3-http", Profile: simulator.ProfileESP32S3, Faults: httpOnly},
+		{Name: "mystery-chip", Profile: simulator.ProfileUnknownChip},
+		{Name: "locked-plug", Profile: simulator.ProfileESP8266_4M, User: "admin", Password: "devenv-fake-password"},
+	}
+}
+
+// extraProfiles are cycled through by the additional devices of -fleet-size, so
+// a large fleet still mixes ESP8266 and ESP32 variants.
+var extraProfiles = []simulator.Profile{
+	simulator.ProfileESP8266_4M, simulator.ProfileESP32, simulator.ProfileESP8266_1M,
+	simulator.ProfileESP32C3, simulator.ProfileESP32S3, simulator.ProfileESP8266_4M,
+}
+
+// LongDeviceName is the first extra device of a large fleet: a name as long as
+// people really give them, with no break opportunity.
+const LongDeviceName = "workshop-ceiling-spotlight-controller-north-wing"
+
+// fleetOfSize is the base fleet plus sim-NN devices up to n devices in total.
+func fleetOfSize(n int) []simulator.DeviceSpec {
+	specs := fleetDevices()
+	for i := 0; len(specs) < n; i++ {
+		specs = append(specs, simulator.DeviceSpec{Name: fmt.Sprintf("sim-%02d-%s", i+1, extraProfiles[i%len(extraProfiles)]), Profile: extraProfiles[i%len(extraProfiles)]})
+	}
+	if len(specs) > len(fleetDevices()) {
+		// Real homes name devices like this; long unbreakable names are what stretch tables.
+		specs[len(fleetDevices())].Name = LongDeviceName
+	}
+	return specs
+}
+
+func run(ctx context.Context, args []string, out, errOut io.Writer) error {
+	fs := flag.NewFlagSet("tasmofleet-devenv", flag.ContinueOnError)
+	fs.SetOutput(errOut)
+	fixtures := fs.String("fixtures", "testdata/fixtures", "path to the fixtures directory")
+	scale := fs.Float64("time-scale", 0.1, "multiplier for the OTA timeline (1 = real device speed)")
+	tele := fs.Duration("tele-period", 10*time.Second, "TelePeriod of the simulated devices")
+	fwVersion := fs.String("fw-version", "16.1.0", "version of the images the fake upstream serves")
+	bind := fs.String("bind", "127.0.0.1", "address all listeners bind to; anything else exposes the OTA download gadget (opt-in)")
+	fleetSize := fs.Int("fleet-size", 0, "total number of simulated devices; 0 or less than the base fleet keeps the base fleet")
+	releases := fs.Int("releases", 1, "number of releases the fake GitHub releases feed (<upstream>/github) offers")
+	designFile := fs.String("design-fixture", "", "JSON file (testdata/design/v2-fixture.json) with the prototype's 60 devices and releases; replaces the mixed fleet, -fleet-size and the release list, and enables POST /fixture/offline and /fixture/feed/{down,dl-down,slow,up} on the control server")
+	var redirects multiFlag
+	fs.Var(&redirects, "oidc-redirect", "redirect URI registered at the mock IdP (repeatable); enables the mock IdP")
+	fs.Usage = func() {
+		_, _ = fmt.Fprintln(errOut, "Usage: tasmofleet-devenv [flags]\n\nStarts an embedded MQTT broker, a fleet of simulated Tasmota devices and a fake\nfirmware upstream, prints the environment for tasmofleet and runs until SIGINT/SIGTERM.")
+		fs.PrintDefaults()
+	}
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return nil
+		}
+		return err
+	}
+	var design *designFixture
+	if *designFile != "" {
+		var err error
+		if design, err = loadDesignFixture(*designFile); err != nil {
+			return err
+		}
+		set := map[string]bool{}
+		fs.Visit(func(f *flag.Flag) { set[f.Name] = true })
+		if !set["fw-version"] {
+			*fwVersion = design.Latest
+		}
+		if !set["releases"] {
+			*releases = len(design.Releases)
+		}
+	}
+	if *bind != "127.0.0.1" {
+		slog.Warn("devenv: listeners bind to a non-loopback address; simulated devices will download from any URL they are given", "addr", *bind)
+	}
+
+	broker, err := simulator.StartBroker()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = broker.Close() }()
+	fleet, err := simulator.NewFleetWith(simulator.FleetOptions{FixturesDir: *fixtures, MQTTURL: broker.URL(), TelePeriod: *tele},
+		simulator.Extra{TimeScale: *scale, BindAddr: *bind, FlashVersion: *fwVersion})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = fleet.Close() }()
+
+	older := olderReleases
+	if design != nil {
+		older = design.Releases[1:]
+	}
+	feed := &upstreamFeed{design: design}
+	upstream, err := startUpstream(*fixtures, *fwVersion, *bind, *releases, older, feed)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = upstream.Close() }()
+
+	_, _ = fmt.Fprintf(out, "TASMOFLEET_MQTT_URL=%s\n", broker.URL())
+	_, _ = fmt.Fprintf(out, "TASMOFLEET_DEVICE_NETWORKS=127.0.0.0/8\n")
+	shim, cleanup, err := writeDecoderShim()
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	_, _ = fmt.Fprintf(out, "DEVENV_DECODER_PATH=%s\n", shim)
+	_, _ = fmt.Fprintf(out, "DEVENV_UPSTREAM_URL=http://%s\n", upstream.Addr)
+	_, _ = fmt.Fprintf(out, "DEVENV_UPSTREAM_GITHUB_URL=http://%s/github\n", upstream.Addr)
+	_, _ = fmt.Fprintf(out, "DEVENV_FW_VERSION=%s\n", *fwVersion)
+	var idp *oidcmock.Server
+	if len(redirects) > 0 {
+		var err error
+		if idp, err = oidcmock.Start(oidcmock.Options{RedirectURIs: redirects}); err != nil {
+			return err
+		}
+		defer idp.Close()
+		_, _ = fmt.Fprintf(out, "DEVENV_OIDC_ISSUER=%s\n", idp.Issuer())
+		_, _ = fmt.Fprintf(out, "DEVENV_OIDC_CLIENT_ID=tasmofleet\nDEVENV_OIDC_CLIENT_SECRET=mock-secret\n")
+	}
+	var df *designFleet
+	if design != nil {
+		var err error
+		if df, err = startDesignFleet(ctx, fleet, design, func(format string, a ...any) { _, _ = fmt.Fprintf(out, format, a...) }); err != nil {
+			return err
+		}
+	}
+	if idp != nil || df != nil {
+		ctl, err := startControl(idp, df, feed, *bind)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = ctl.Close() }()
+		_, _ = fmt.Fprintf(out, "DEVENV_CONTROL_URL=http://%s\n", ctl.Addr)
+	}
+	specs := fleetOfSize(*fleetSize)
+	if design != nil {
+		specs = nil // the design fixture above is the whole fleet
+	}
+	for _, spec := range specs {
+		d, err := fleet.Add(ctx, spec)
+		if err != nil {
+			return err
+		}
+		mqtt := "mqtt"
+		for _, f := range spec.Faults {
+			if f.Kind == simulator.FaultHTTPOnly {
+				mqtt = "http-only"
+			}
+		}
+		_, _ = fmt.Fprintf(out, "DEVENV_DEVICE name=%s addr=%s topic=%s profile=%s version=%s %s\n",
+			spec.Name, d.Addr(), d.Topic(), spec.Profile, d.Version(), mqtt)
+	}
+	_, _ = fmt.Fprintln(out, "DEVENV_READY=1")
+	<-ctx.Done()
+	return nil
+}
+
+// upstreamFeed is the state of the fake GitHub feed: the design fixture's release notes, and
+// the switch of the control server that makes the feed fail.
+type upstreamFeed struct {
+	design *designFixture
+	down   atomic.Bool  // the release list answers 503
+	dlDown atomic.Bool  // image downloads answer 503
+	slowTo atomic.Int64 // image downloads wait until this time (unix nanoseconds)
+}
+
+// slowDownloads is how long "slow" holds image downloads back: long enough to see a download
+// in progress, short enough that nothing is left hanging.
+const slowDownloads = 20 * time.Second
+
+// startUpstream serves synthetic release images by file name from any path,
+// like ota.tasmota.com, so tasmofleet's upstream source can point at it.
+func startUpstream(fixtures, version, bind string, releases int, older []string, feed *upstreamFeed) (*http.Server, error) {
+	var lc net.ListenConfig
+	l, err := lc.Listen(context.Background(), "tcp", net.JoinHostPort(bind, "0"))
+	if err != nil {
+		return nil, err
+	}
+	srv := &http.Server{
+		Addr: l.Addr().String(), ReadHeaderTimeout: 10 * time.Second,
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/github/releases" {
+				if feed.down.Load() {
+					http.Error(w, "feed switched off by the control server", http.StatusServiceUnavailable)
+					return
+				}
+				serveGitHubReleases(w, r, fixtures, version, releases, older, feed.design)
+				return
+			}
+			if strings.HasSuffix(r.URL.Path, "/release/") {
+				serveListing(w, r, fixtures, version)
+				return
+			}
+			if feed.dlDown.Load() {
+				http.Error(w, "downloads switched off by the control server", http.StatusServiceUnavailable)
+				return
+			}
+			if wait := time.Until(time.Unix(0, feed.slowTo.Load())); wait > 0 {
+				select {
+				case <-time.After(wait):
+				case <-r.Context().Done():
+					return
+				}
+			}
+			imgVersion := version
+			if v, ok := strings.CutPrefix(r.URL.Path, "/github/dl/"); ok {
+				imgVersion = path.Dir(v) // /github/dl/<release>/<file>: the image carries its release
+			}
+			img, err := simulator.NewImage(fixtures, path.Base(r.URL.Path), imgVersion)
+			if err != nil {
+				http.NotFound(w, r)
+				return
+			}
+			if img, err = realisticSize(img, path.Base(r.URL.Path)); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(img) //nolint:gosec // binary firmware stand-in, not HTML
+		}),
+	}
+	go func() { _ = srv.Serve(l) }() // Serve returns on Close; nothing to report
+	return srv, nil
+}
+
+// startControl serves POST /login-as/{operator|admin|nobody}: the next
+// authorization request at the mock IdP logs in as that user. E2E tests call
+// it before clicking "sign in". With a design fleet it also serves
+// POST /fixture/offline, which closes the fixture's offline devices once the
+// app has seen them online. Either part is absent when its dependency is nil.
+func startControl(idp *oidcmock.Server, df *designFleet, feed *upstreamFeed, bind string) (*http.Server, error) {
+	var lc net.ListenConfig
+	l, err := lc.Listen(context.Background(), "tcp", net.JoinHostPort(bind, "0"))
+	if err != nil {
+		return nil, err
+	}
+	mux := http.NewServeMux()
+	if idp != nil {
+		mux.HandleFunc("POST /login-as/{who}", func(w http.ResponseWriter, r *http.Request) {
+			u, ok := loginUsers[r.PathValue("who")]
+			if !ok {
+				http.NotFound(w, r)
+				return
+			}
+			idp.NextLogin(u)
+			w.WriteHeader(http.StatusNoContent)
+		})
+	}
+	if df != nil {
+		mux.HandleFunc("POST /fixture/offline", func(w http.ResponseWriter, _ *http.Request) {
+			df.GoOffline()
+			w.WriteHeader(http.StatusNoContent)
+		})
+		// The firmware page's failure states: the fake GitHub feed's release list answers 503
+		// (down), image downloads answer 503 (dl-down) or are held back for a while (slow);
+		// up ends all of them.
+		mux.HandleFunc("POST /fixture/feed/{state}", func(w http.ResponseWriter, r *http.Request) {
+			switch r.PathValue("state") {
+			case "down":
+				feed.down.Store(true)
+			case "dl-down":
+				feed.dlDown.Store(true)
+			case "slow":
+				feed.slowTo.Store(time.Now().Add(slowDownloads).UnixNano())
+			case "up":
+				feed.down.Store(false)
+				feed.dlDown.Store(false)
+				feed.slowTo.Store(0)
+			default:
+				http.NotFound(w, r)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		})
+	}
+	srv := &http.Server{Addr: l.Addr().String(), Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	go func() { _ = srv.Serve(l) }() // Serve returns on Close; nothing to report
+	return srv, nil
+}
+
+// serveListing answers the directory pages ota.tasmota.com serves
+// (/tasmota/release/, /tasmota32/release/): a heading with the version and
+// one link per image. tasmofleet reaches this server through HTTP_PROXY, so
+// the real source definition (and its host allowlist) is what the e2e tests.
+func serveListing(w http.ResponseWriter, r *http.Request, fixtures, version string) {
+	entries, err := os.ReadDir(path.Join(fixtures, "firmware-headers"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	esp32 := strings.HasPrefix(r.URL.Path, "/tasmota32/")
+	var b strings.Builder
+	fmt.Fprintf(&b, "<html><head><title>Index of %s</title></head><body><h1>Tasmota %s release</h1><pre>\n", r.URL.Path, version)
+	for _, e := range entries {
+		name, ok := strings.CutSuffix(e.Name(), ".hdr")
+		if !ok || strings.HasPrefix(name, "tasmota32") != esp32 {
+			continue
+		}
+		fmt.Fprintf(&b, "<a href=\"%s\">%s</a>\n", name, name)
+	}
+	b.WriteString("</pre></body></html>\n")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte(b.String())) //nolint:gosec // static listing built from file names
+}
+
+// olderReleases are what the fake GitHub feed offers below the newest release.
+var olderReleases = []string{"16.0.0", "15.3.0", "15.2.0", "15.1.0", "15.0.1", "14.6.0", "14.5.0", "14.4.1", "14.3.0"}
+
+// serveGitHubReleases answers GET <repo>/releases like api.github.com: the
+// newest release is the devenv version, older ones follow. Each has long
+// release notes and one asset per image, so the firmware page sees a realistic
+// index. tasmofleet selects this feed when the override URL ends in /github.
+func serveGitHubReleases(w http.ResponseWriter, r *http.Request, fixtures, version string, n int, older []string, design *designFixture) {
+	entries, err := os.ReadDir(path.Join(fixtures, "firmware-headers"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	type asset struct {
+		Name string `json:"name"`
+		URL  string `json:"browser_download_url"`
+	}
+	type release struct {
+		Tag       string  `json:"tag_name"`
+		Body      string  `json:"body"`
+		HTMLURL   string  `json:"html_url"`
+		Published string  `json:"published_at"`
+		Assets    []asset `json:"assets"`
+	}
+	versions := append([]string{version}, older...)
+	var out []release
+	for i, v := range versions {
+		if i >= n {
+			break
+		}
+		rel := release{
+			Tag: "v" + v, HTMLURL: "https://github.com/arendst/Tasmota/releases/tag/v" + v,
+			Published: time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC).AddDate(0, -i, 0).Format(time.RFC3339),
+			Body:      "## Changelog " + v + "\n\nBreaking change: the long flag name `SetOption146` now also covers `ThisIsAnUnusuallyLongCommandNameThatMustWrapOnAPhone` and https://example.test/a/very/long/link/that/has/no/natural/break/points/at/all/in/the/release/notes.\n\n- Added support for another sensor\n- Fixed a crash when the Wi-Fi drops while the rule engine runs\n",
+		}
+		if at, body, ok := design.feedRelease(v); ok {
+			rel.Published, rel.Body = at.Format(time.RFC3339), body
+		}
+		for _, e := range entries {
+			if name, ok := strings.CutSuffix(e.Name(), ".hdr"); ok {
+				rel.Assets = append(rel.Assets, asset{Name: name, URL: fmt.Sprintf("http://%s/github/dl/%s/%s", r.Host, v, name)})
+			}
+		}
+		out = append(out, rel)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(out) // a failed write means the client left
+}
+
+// fullImagePad makes the regular ESP8266 image about as large as a real
+// tasmota.bin.gz (about 650 KB), so it does not fit next to the running
+// firmware on a 1 MB device and the plan becomes "staged" there, while 4 MB
+// devices still take it directly. The filler is incompressible and deterministic.
+const fullImagePad = 640 << 10
+
+func realisticSize(img []byte, name string) ([]byte, error) {
+	if !strings.HasSuffix(name, ".bin.gz") || strings.Contains(name, "minimal") {
+		return img, nil
+	}
+	zr, err := gzip.NewReader(bytes.NewReader(img))
+	if err != nil {
+		return nil, err
+	}
+	raw, err := io.ReadAll(zr)
+	if err != nil {
+		return nil, err
+	}
+	rng := rand.New(rand.NewPCG(1, 2)) //nolint:gosec // deterministic test filler, not security
+	for range fullImagePad / 8 {
+		raw = binary.LittleEndian.AppendUint64(raw, rng.Uint64())
+	}
+	var out bytes.Buffer
+	zw := gzip.NewWriter(&out)
+	if _, err := zw.Write(raw); err != nil {
+		return nil, err
+	}
+	if err := zw.Close(); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
+}
+
+// fakeDecoderArg switches the devenv binary into a stand-in for decode-config
+// (the shim script calls it), so e2e runs can decode simulator dumps without
+// the real binary. Real dumps are not accepted.
+const fakeDecoderArg = "__decode-config"
+
+func fakeDecoder(args []string, out, errOut io.Writer) int {
+	var source string
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--version":
+			_, _ = fmt.Fprintln(out, simulator.FakeDecoderVersion)
+			return 0
+		case "--source", "-s":
+			if i+1 < len(args) {
+				source = args[i+1]
+				i++
+			}
+		}
+	}
+	if source == "" {
+		_, _ = fmt.Fprintln(errOut, "fake decode-config: --source required")
+		return 2
+	}
+	dump, err := os.ReadFile(source) //nolint:gosec // path given by the caller, this is a test tool
+	if err != nil {
+		_, _ = fmt.Fprintln(errOut, "fake decode-config:", err)
+		return 1
+	}
+	doc, err := simulator.DecodeDump(dump)
+	if err != nil {
+		_, _ = fmt.Fprintln(errOut, "fake decode-config:", err)
+		return 1
+	}
+	_, _ = out.Write(doc)
+	return 0
+}
+
+// writeDecoderShim creates an executable "decode-config" script that runs
+// this binary in fake-decoder mode.
+func writeDecoderShim() (path string, cleanup func(), err error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return "", nil, err
+	}
+	dir, err := os.MkdirTemp("", "devenv-decoder-")
+	if err != nil {
+		return "", nil, err
+	}
+	path = dir + "/decode-config"
+	script := "#!/bin/sh\nexec '" + strings.ReplaceAll(exe, "'", `'\''`) + "' " + fakeDecoderArg + ` "$@"` + "\n"
+	if err := os.WriteFile(path, []byte(script), 0o700); err != nil { //nolint:gosec // an executable script is the point
+		_ = os.RemoveAll(dir)
+		return "", nil, err
+	}
+	return path, func() { _ = os.RemoveAll(dir) }, nil
+}

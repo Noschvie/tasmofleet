@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en" data-theme-auto>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tasmofleet DS</title>
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      body { margin: 0; }
+      .thumb { width: 640px; height: 400px; padding: 28px 32px; display: grid; grid-template-rows: auto auto 1fr auto; gap: 14px; background: var(--color-bg); overflow: hidden; }
+      .thumb h1 { font-size: 40px; margin: 0; letter-spacing: -0.03em; border-bottom: 2px solid var(--color-rule); padding-bottom: 10px; }
+      .thumb h1 span { color: var(--color-accent); }
+      .thumb .stats { margin: 0; }
+    </style>
+  </head>
+  <body>
+    <div class="thumb">
+      <h1>tasmofleet<span>.</span>DS</h1>
+      <div class="row" style="display:flex;gap:8px;flex-wrap:wrap"><span class="badge tone-ok">Online</span><span class="badge tone-warn">Stale</span><span class="badge tone-bad">Offline</span><span class="badge tone-info">Flashing</span><span class="badge tone-neutral st-unknown">Unknown</span><span class="badge accent">recommended</span></div>
+      <ul class="stats">
+        <li><span class="stat tone-ok"><span class="num">17</span><span class="what" data-glyph="✓">Online</span></span></li>
+        <li><span class="stat tone-warn"><span class="num">2</span><span class="what" data-glyph="!">Stale</span></span></li>
+        <li><span class="stat tone-bad"><span class="num">7</span><span class="what" data-glyph="✕">Offline</span></span></li>
+      </ul>
+      <div style="display:flex;gap:8px;align-items:center"><button class="primary">Add devices</button><button>Refresh index</button>
+        <button class="relay-btn on">On</button><button class="relay-btn">Off</button><button class="relay-btn unk">Unknown</button></div>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,59 @@
+package web
+
+import "github.com/nofuturekid/tasmofleet/internal/web/ui"
+
+// dashboardPage is the dashboard (design v2 screen "dashboard" and its "empty" state, WP P1).
+// The body below the header reloads itself from the event stream (TestDashboardIsLive): hx-select
+// takes the same #dash out of the whole page the GET answers with.
+templ dashboardPage(d dashView) {
+	<div id="dash" hx-get={ d.Base + "/" } hx-trigger="sse:state throttle:2s, sse:device throttle:2s, sse:job throttle:2s, sse:resync" hx-select="#dash" hx-swap="outerHTML">
+		@ui.PageHeader("Fleet overview", d.Sub) {
+			if d.AddHref != "" {
+				@ui.Button(ui.Btn{Label: "Add devices", Href: d.AddHref})
+			}
+			if d.NewUpdate != "" {
+				@ui.Button(ui.Btn{Label: "New update", Kind: "primary", Href: d.NewUpdate})
+			}
+		}
+		if d.Empty {
+			@ui.Empty("No devices yet", "Add your Tasmota devices to see their health here. Most home setups start with a network scan.") {
+				if d.ScanHref != "" {
+					@ui.Button(ui.Btn{Label: "Scan network", Kind: "primary", Href: d.ScanHref})
+				}
+				if d.ManualHref != "" {
+					@ui.Button(ui.Btn{Label: "Add manually", Href: d.ManualHref})
+				}
+				if d.ImpHref != "" {
+					@ui.Button(ui.Btn{Label: "Import from TasmoAdmin", Href: d.ImpHref})
+				}
+			}
+		} else {
+			<div class="stat-grid">
+				for _, t := range d.Tiles {
+					@ui.StatTile(t)
+				}
+			</div>
+			@ui.HealthBar(d.OK, d.Off, d.Unk)
+			<div class="dash-cols">
+				@ui.ListCard("Needs attention", "All devices", d.Base+"/devices") {
+					@ui.AttentionList(d.Props, d.Items, d.CSRF)
+					if len(d.Props) == 0 && len(d.Items) == 0 {
+						<p class="dash-none">Nothing needs attention: every device answers and follows the policy.</p>
+					}
+				}
+				if d.TxnCard {
+					@ui.ListCard("Update transactions", "History", d.Base+"/transactions") {
+						if d.Card != nil {
+							@ui.TxnCard(*d.Card)
+							for _, r := range d.Rows {
+								@ui.TxnRow(r)
+							}
+						} else {
+							<p class="dash-none">No transactions yet. Updates you start show up here.</p>
+						}
+					}
+				}
+			</div>
+		}
+	</div>
+}

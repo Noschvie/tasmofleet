@@ -1,0 +1,23 @@
+{
+    "ota_server_ip": "192.168.1.10",
+    "ota_server_port": "80",
+    "username": "admin",
+    "password": "$2y$10$abcdefghijklmnopqrstuuJ8r0yVb3U5mW4H3P1nQyF3l2k1j0i9h",
+    "update_automatic_lang": "tasmota-sensors",
+    "update_automatic_lang_esp32": "tasmota32",
+    "update_newer_only": "1",
+    "force_upgrade": "0",
+    "auto_update_channel": "stable",
+    "connect_timeout": "5",
+    "timeout": "5",
+    "request_concurrency": "50",
+    "mqtt_discovery_host": "mqtt.example.internal",
+    "mqtt_discovery_port": "1883",
+    "mqtt_discovery_username": "tasmota",
+    "mqtt_discovery_password": "",
+    "mqtt_discovery_cmnd_prefix": "cmnd",
+    "mqtt_discovery_stat_prefix": "stat",
+    "mqtt_discovery_tele_prefix": "tele",
+    "health_http_poll_interval": "60",
+    "health_offline_grace": "180"
+}

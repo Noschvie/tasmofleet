@@ -1,0 +1,2853 @@
+[
+  {
+    "tag_name": "v16.0.0",
+    "draft": false,
+    "prerelease": false,
+    "published_at": "2026-10-16T07:53:42Z",
+    "assets": [
+      {
+        "name": "tasmota-4M.bin",
+        "size": 744016,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-4M.bin"
+      },
+      {
+        "name": "tasmota-4M.bin.gz",
+        "size": 521817,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-4M.bin.gz"
+      },
+      {
+        "name": "tasmota-4M.map.gz",
+        "size": 306358,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-4M.map.gz"
+      },
+      {
+        "name": "tasmota-AD.bin",
+        "size": 668240,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-AD.bin"
+      },
+      {
+        "name": "tasmota-AD.bin.gz",
+        "size": 469957,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-AD.bin.gz"
+      },
+      {
+        "name": "tasmota-AD.map.gz",
+        "size": 273688,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-AD.map.gz"
+      },
+      {
+        "name": "tasmota-AF.bin",
+        "size": 667760,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-AF.bin"
+      },
+      {
+        "name": "tasmota-AF.bin.gz",
+        "size": 469963,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-AF.bin.gz"
+      },
+      {
+        "name": "tasmota-AF.map.gz",
+        "size": 273559,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-AF.map.gz"
+      },
+      {
+        "name": "tasmota-BG.bin",
+        "size": 673552,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-BG.bin"
+      },
+      {
+        "name": "tasmota-BG.bin.gz",
+        "size": 471259,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-BG.bin.gz"
+      },
+      {
+        "name": "tasmota-BG.map.gz",
+        "size": 273858,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-BG.map.gz"
+      },
+      {
+        "name": "tasmota-BR.bin",
+        "size": 668464,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-BR.bin"
+      },
+      {
+        "name": "tasmota-BR.bin.gz",
+        "size": 469944,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-BR.bin.gz"
+      },
+      {
+        "name": "tasmota-BR.map.gz",
+        "size": 273720,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-BR.map.gz"
+      },
+      {
+        "name": "tasmota-CN.bin",
+        "size": 667040,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-CN.bin"
+      },
+      {
+        "name": "tasmota-CN.bin.gz",
+        "size": 470198,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-CN.bin.gz"
+      },
+      {
+        "name": "tasmota-CN.map.gz",
+        "size": 273668,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-CN.map.gz"
+      },
+      {
+        "name": "tasmota-CZ.bin",
+        "size": 668144,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-CZ.bin"
+      },
+      {
+        "name": "tasmota-CZ.bin.gz",
+        "size": 470088,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-CZ.bin.gz"
+      },
+      {
+        "name": "tasmota-CZ.map.gz",
+        "size": 273711,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-CZ.map.gz"
+      },
+      {
+        "name": "tasmota-DE.bin",
+        "size": 667488,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-DE.bin"
+      },
+      {
+        "name": "tasmota-DE.bin.gz",
+        "size": 469820,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-DE.bin.gz"
+      },
+      {
+        "name": "tasmota-DE.map.gz",
+        "size": 273655,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-DE.map.gz"
+      },
+      {
+        "name": "tasmota-display.bin",
+        "size": 628160,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-display.bin"
+      },
+      {
+        "name": "tasmota-display.bin.gz",
+        "size": 433213,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-display.bin.gz"
+      },
+      {
+        "name": "tasmota-display.map.gz",
+        "size": 272651,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-display.map.gz"
+      },
+      {
+        "name": "tasmota-ES.bin",
+        "size": 668320,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-ES.bin"
+      },
+      {
+        "name": "tasmota-ES.bin.gz",
+        "size": 469807,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-ES.bin.gz"
+      },
+      {
+        "name": "tasmota-ES.map.gz",
+        "size": 273765,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-ES.map.gz"
+      },
+      {
+        "name": "tasmota-FR.bin",
+        "size": 668576,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-FR.bin"
+      },
+      {
+        "name": "tasmota-FR.bin.gz",
+        "size": 470118,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-FR.bin.gz"
+      },
+      {
+        "name": "tasmota-FR.map.gz",
+        "size": 273745,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-FR.map.gz"
+      },
+      {
+        "name": "tasmota-FY.bin",
+        "size": 667904,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-FY.bin"
+      },
+      {
+        "name": "tasmota-FY.bin.gz",
+        "size": 469800,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-FY.bin.gz"
+      },
+      {
+        "name": "tasmota-FY.map.gz",
+        "size": 273665,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-FY.map.gz"
+      },
+      {
+        "name": "tasmota-GR.bin",
+        "size": 671776,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-GR.bin"
+      },
+      {
+        "name": "tasmota-GR.bin.gz",
+        "size": 470928,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-GR.bin.gz"
+      },
+      {
+        "name": "tasmota-GR.map.gz",
+        "size": 273871,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-GR.map.gz"
+      },
+      {
+        "name": "tasmota-HE.bin",
+        "size": 669136,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-HE.bin"
+      },
+      {
+        "name": "tasmota-HE.bin.gz",
+        "size": 470206,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-HE.bin.gz"
+      },
+      {
+        "name": "tasmota-HE.map.gz",
+        "size": 273719,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-HE.map.gz"
+      },
+      {
+        "name": "tasmota-HU.bin",
+        "size": 668512,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-HU.bin"
+      },
+      {
+        "name": "tasmota-HU.bin.gz",
+        "size": 470224,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-HU.bin.gz"
+      },
+      {
+        "name": "tasmota-HU.map.gz",
+        "size": 273614,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-HU.map.gz"
+      },
+      {
+        "name": "tasmota-ir.bin",
+        "size": 682768,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-ir.bin"
+      },
+      {
+        "name": "tasmota-ir.bin.gz",
+        "size": 460483,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-ir.bin.gz"
+      },
+      {
+        "name": "tasmota-ir.map.gz",
+        "size": 324593,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-ir.map.gz"
+      },
+      {
+        "name": "tasmota-IT.bin",
+        "size": 668752,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-IT.bin"
+      },
+      {
+        "name": "tasmota-IT.bin.gz",
+        "size": 469893,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-IT.bin.gz"
+      },
+      {
+        "name": "tasmota-IT.map.gz",
+        "size": 273639,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-IT.map.gz"
+      },
+      {
+        "name": "tasmota-knx.bin",
+        "size": 663472,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-knx.bin"
+      },
+      {
+        "name": "tasmota-knx.bin.gz",
+        "size": 462356,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-knx.bin.gz"
+      },
+      {
+        "name": "tasmota-knx.map.gz",
+        "size": 280366,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-knx.map.gz"
+      },
+      {
+        "name": "tasmota-KO.bin",
+        "size": 668112,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-KO.bin"
+      },
+      {
+        "name": "tasmota-KO.bin.gz",
+        "size": 470329,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-KO.bin.gz"
+      },
+      {
+        "name": "tasmota-KO.map.gz",
+        "size": 273567,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-KO.map.gz"
+      },
+      {
+        "name": "tasmota-lite.bin",
+        "size": 519376,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-lite.bin"
+      },
+      {
+        "name": "tasmota-lite.bin.gz",
+        "size": 365409,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-lite.bin.gz"
+      },
+      {
+        "name": "tasmota-lite.map.gz",
+        "size": 226761,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-lite.map.gz"
+      },
+      {
+        "name": "tasmota-LT.bin",
+        "size": 668640,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-LT.bin"
+      },
+      {
+        "name": "tasmota-LT.bin.gz",
+        "size": 470151,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-LT.bin.gz"
+      },
+      {
+        "name": "tasmota-LT.map.gz",
+        "size": 273620,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-LT.map.gz"
+      },
+      {
+        "name": "tasmota-minimal.bin",
+        "size": 373376,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-minimal.bin"
+      },
+      {
+        "name": "tasmota-minimal.bin.gz",
+        "size": 263670,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-minimal.bin.gz"
+      },
+      {
+        "name": "tasmota-minimal.map.gz",
+        "size": 190663,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-minimal.map.gz"
+      },
+      {
+        "name": "tasmota-NL.bin",
+        "size": 667952,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-NL.bin"
+      },
+      {
+        "name": "tasmota-NL.bin.gz",
+        "size": 469627,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-NL.bin.gz"
+      },
+      {
+        "name": "tasmota-NL.map.gz",
+        "size": 273741,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-NL.map.gz"
+      },
+      {
+        "name": "tasmota-PL.bin",
+        "size": 668640,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-PL.bin"
+      },
+      {
+        "name": "tasmota-PL.bin.gz",
+        "size": 470381,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-PL.bin.gz"
+      },
+      {
+        "name": "tasmota-PL.map.gz",
+        "size": 273706,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-PL.map.gz"
+      },
+      {
+        "name": "tasmota-PT.bin",
+        "size": 668704,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-PT.bin"
+      },
+      {
+        "name": "tasmota-PT.bin.gz",
+        "size": 470189,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-PT.bin.gz"
+      },
+      {
+        "name": "tasmota-PT.map.gz",
+        "size": 273742,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-PT.map.gz"
+      },
+      {
+        "name": "tasmota-RO.bin",
+        "size": 668000,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-RO.bin"
+      },
+      {
+        "name": "tasmota-RO.bin.gz",
+        "size": 469771,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-RO.bin.gz"
+      },
+      {
+        "name": "tasmota-RO.map.gz",
+        "size": 273694,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-RO.map.gz"
+      },
+      {
+        "name": "tasmota-RU.bin",
+        "size": 672448,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-RU.bin"
+      },
+      {
+        "name": "tasmota-RU.bin.gz",
+        "size": 471128,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-RU.bin.gz"
+      },
+      {
+        "name": "tasmota-RU.map.gz",
+        "size": 273803,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-RU.map.gz"
+      },
+      {
+        "name": "tasmota-SE.bin",
+        "size": 668032,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-SE.bin"
+      },
+      {
+        "name": "tasmota-SE.bin.gz",
+        "size": 469832,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-SE.bin.gz"
+      },
+      {
+        "name": "tasmota-SE.map.gz",
+        "size": 273722,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-SE.map.gz"
+      },
+      {
+        "name": "tasmota-sensors.bin",
+        "size": 739088,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-sensors.bin"
+      },
+      {
+        "name": "tasmota-sensors.bin.gz",
+        "size": 512993,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-sensors.bin.gz"
+      },
+      {
+        "name": "tasmota-sensors.map.gz",
+        "size": 309229,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-sensors.map.gz"
+      },
+      {
+        "name": "tasmota-SK.bin",
+        "size": 668176,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-SK.bin"
+      },
+      {
+        "name": "tasmota-SK.bin.gz",
+        "size": 470111,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-SK.bin.gz"
+      },
+      {
+        "name": "tasmota-SK.map.gz",
+        "size": 273711,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-SK.map.gz"
+      },
+      {
+        "name": "tasmota-TR.bin",
+        "size": 668208,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-TR.bin"
+      },
+      {
+        "name": "tasmota-TR.bin.gz",
+        "size": 470098,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-TR.bin.gz"
+      },
+      {
+        "name": "tasmota-TR.map.gz",
+        "size": 273628,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-TR.map.gz"
+      },
+      {
+        "name": "tasmota-TW.bin",
+        "size": 667632,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-TW.bin"
+      },
+      {
+        "name": "tasmota-TW.bin.gz",
+        "size": 470443,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-TW.bin.gz"
+      },
+      {
+        "name": "tasmota-TW.map.gz",
+        "size": 273543,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-TW.map.gz"
+      },
+      {
+        "name": "tasmota-UK.bin",
+        "size": 672704,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-UK.bin"
+      },
+      {
+        "name": "tasmota-UK.bin.gz",
+        "size": 471110,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-UK.bin.gz"
+      },
+      {
+        "name": "tasmota-UK.map.gz",
+        "size": 273880,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-UK.map.gz"
+      },
+      {
+        "name": "tasmota-VN.bin",
+        "size": 669488,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-VN.bin"
+      },
+      {
+        "name": "tasmota-VN.bin.gz",
+        "size": 470184,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-VN.bin.gz"
+      },
+      {
+        "name": "tasmota-VN.map.gz",
+        "size": 273706,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-VN.map.gz"
+      },
+      {
+        "name": "tasmota-zbbridge.bin",
+        "size": 791408,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-zbbridge.bin"
+      },
+      {
+        "name": "tasmota-zbbridge.bin.gz",
+        "size": 546518,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-zbbridge.bin.gz"
+      },
+      {
+        "name": "tasmota-zbbridge.map.gz",
+        "size": 314641,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-zbbridge.map.gz"
+      },
+      {
+        "name": "tasmota-zigbee.bin",
+        "size": 862688,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-zigbee.bin"
+      },
+      {
+        "name": "tasmota-zigbee.bin.gz",
+        "size": 594429,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-zigbee.bin.gz"
+      },
+      {
+        "name": "tasmota-zigbee.map.gz",
+        "size": 342344,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota-zigbee.map.gz"
+      },
+      {
+        "name": "tasmota.bin",
+        "size": 667056,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota.bin"
+      },
+      {
+        "name": "tasmota.bin.gz",
+        "size": 469152,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota.bin.gz"
+      },
+      {
+        "name": "tasmota.map.gz",
+        "size": 273261,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota.map.gz"
+      },
+      {
+        "name": "tasmota32-AD.bin",
+        "size": 2236256,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-AD.bin"
+      },
+      {
+        "name": "tasmota32-AD.factory.bin",
+        "size": 3153760,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-AD.factory.bin"
+      },
+      {
+        "name": "tasmota32-AD.map.gz",
+        "size": 977451,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-AD.map.gz"
+      },
+      {
+        "name": "tasmota32-AF.bin",
+        "size": 2235792,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-AF.bin"
+      },
+      {
+        "name": "tasmota32-AF.factory.bin",
+        "size": 3153296,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-AF.factory.bin"
+      },
+      {
+        "name": "tasmota32-AF.map.gz",
+        "size": 977636,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-AF.map.gz"
+      },
+      {
+        "name": "tasmota32-BG.bin",
+        "size": 2243632,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-BG.bin"
+      },
+      {
+        "name": "tasmota32-BG.factory.bin",
+        "size": 3161136,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-BG.factory.bin"
+      },
+      {
+        "name": "tasmota32-BG.map.gz",
+        "size": 977546,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-BG.map.gz"
+      },
+      {
+        "name": "tasmota32-bluetooth.bin",
+        "size": 1832368,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-bluetooth.bin"
+      },
+      {
+        "name": "tasmota32-bluetooth.factory.bin",
+        "size": 2749872,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-bluetooth.factory.bin"
+      },
+      {
+        "name": "tasmota32-bluetooth.map.gz",
+        "size": 947009,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-bluetooth.map.gz"
+      },
+      {
+        "name": "tasmota32-BR.bin",
+        "size": 2236688,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-BR.bin"
+      },
+      {
+        "name": "tasmota32-BR.factory.bin",
+        "size": 3154192,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-BR.factory.bin"
+      },
+      {
+        "name": "tasmota32-BR.map.gz",
+        "size": 977510,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-BR.map.gz"
+      },
+      {
+        "name": "tasmota32-CN.bin",
+        "size": 2235024,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-CN.bin"
+      },
+      {
+        "name": "tasmota32-CN.factory.bin",
+        "size": 3152528,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-CN.factory.bin"
+      },
+      {
+        "name": "tasmota32-CN.map.gz",
+        "size": 977721,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-CN.map.gz"
+      },
+      {
+        "name": "tasmota32-CZ.bin",
+        "size": 2236320,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-CZ.bin"
+      },
+      {
+        "name": "tasmota32-CZ.factory.bin",
+        "size": 3153824,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-CZ.factory.bin"
+      },
+      {
+        "name": "tasmota32-CZ.map.gz",
+        "size": 977492,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-CZ.map.gz"
+      },
+      {
+        "name": "tasmota32-DE.bin",
+        "size": 2235520,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-DE.bin"
+      },
+      {
+        "name": "tasmota32-DE.factory.bin",
+        "size": 3153024,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-DE.factory.bin"
+      },
+      {
+        "name": "tasmota32-DE.map.gz",
+        "size": 977569,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-DE.map.gz"
+      },
+      {
+        "name": "tasmota32-display.bin",
+        "size": 1480576,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-display.bin"
+      },
+      {
+        "name": "tasmota32-display.factory.bin",
+        "size": 2398080,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-display.factory.bin"
+      },
+      {
+        "name": "tasmota32-display.map.gz",
+        "size": 831932,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-display.map.gz"
+      },
+      {
+        "name": "tasmota32-ES.bin",
+        "size": 2236656,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-ES.bin"
+      },
+      {
+        "name": "tasmota32-ES.factory.bin",
+        "size": 3154160,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-ES.factory.bin"
+      },
+      {
+        "name": "tasmota32-ES.map.gz",
+        "size": 977547,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-ES.map.gz"
+      },
+      {
+        "name": "tasmota32-FR.bin",
+        "size": 2236912,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-FR.bin"
+      },
+      {
+        "name": "tasmota32-FR.factory.bin",
+        "size": 3154416,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-FR.factory.bin"
+      },
+      {
+        "name": "tasmota32-FR.map.gz",
+        "size": 977660,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-FR.map.gz"
+      },
+      {
+        "name": "tasmota32-FY.bin",
+        "size": 2235936,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-FY.bin"
+      },
+      {
+        "name": "tasmota32-FY.factory.bin",
+        "size": 3153440,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-FY.factory.bin"
+      },
+      {
+        "name": "tasmota32-FY.map.gz",
+        "size": 977538,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-FY.map.gz"
+      },
+      {
+        "name": "tasmota32-GR.bin",
+        "size": 2241232,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-GR.bin"
+      },
+      {
+        "name": "tasmota32-GR.factory.bin",
+        "size": 3158736,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-GR.factory.bin"
+      },
+      {
+        "name": "tasmota32-GR.map.gz",
+        "size": 977691,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-GR.map.gz"
+      },
+      {
+        "name": "tasmota32-HE.bin",
+        "size": 2237440,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-HE.bin"
+      },
+      {
+        "name": "tasmota32-HE.factory.bin",
+        "size": 3154944,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-HE.factory.bin"
+      },
+      {
+        "name": "tasmota32-HE.map.gz",
+        "size": 977542,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-HE.map.gz"
+      },
+      {
+        "name": "tasmota32-HU.bin",
+        "size": 2236896,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-HU.bin"
+      },
+      {
+        "name": "tasmota32-HU.factory.bin",
+        "size": 3154400,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-HU.factory.bin"
+      },
+      {
+        "name": "tasmota32-HU.map.gz",
+        "size": 977549,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-HU.map.gz"
+      },
+      {
+        "name": "tasmota32-ir.bin",
+        "size": 1451984,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-ir.bin"
+      },
+      {
+        "name": "tasmota32-ir.factory.bin",
+        "size": 2369488,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-ir.factory.bin"
+      },
+      {
+        "name": "tasmota32-ir.map.gz",
+        "size": 848485,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-ir.map.gz"
+      },
+      {
+        "name": "tasmota32-IT.bin",
+        "size": 2237104,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-IT.bin"
+      },
+      {
+        "name": "tasmota32-IT.factory.bin",
+        "size": 3154608,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-IT.factory.bin"
+      },
+      {
+        "name": "tasmota32-IT.map.gz",
+        "size": 977551,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-IT.map.gz"
+      },
+      {
+        "name": "tasmota32-KO.bin",
+        "size": 2236272,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-KO.bin"
+      },
+      {
+        "name": "tasmota32-KO.factory.bin",
+        "size": 3153776,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-KO.factory.bin"
+      },
+      {
+        "name": "tasmota32-KO.map.gz",
+        "size": 977757,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-KO.map.gz"
+      },
+      {
+        "name": "tasmota32-LT.bin",
+        "size": 2237040,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-LT.bin"
+      },
+      {
+        "name": "tasmota32-LT.factory.bin",
+        "size": 3154544,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-LT.factory.bin"
+      },
+      {
+        "name": "tasmota32-LT.map.gz",
+        "size": 977569,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-LT.map.gz"
+      },
+      {
+        "name": "tasmota32-lvgl.bin",
+        "size": 2722992,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-lvgl.bin"
+      },
+      {
+        "name": "tasmota32-lvgl.factory.bin",
+        "size": 3640496,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-lvgl.factory.bin"
+      },
+      {
+        "name": "tasmota32-lvgl.map.gz",
+        "size": 974874,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-lvgl.map.gz"
+      },
+      {
+        "name": "tasmota32-NL.bin",
+        "size": 2236000,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-NL.bin"
+      },
+      {
+        "name": "tasmota32-NL.factory.bin",
+        "size": 3153504,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-NL.factory.bin"
+      },
+      {
+        "name": "tasmota32-NL.map.gz",
+        "size": 977496,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-NL.map.gz"
+      },
+      {
+        "name": "tasmota32-nspanel.bin",
+        "size": 2235616,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-nspanel.bin"
+      },
+      {
+        "name": "tasmota32-nspanel.factory.bin",
+        "size": 3153120,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-nspanel.factory.bin"
+      },
+      {
+        "name": "tasmota32-nspanel.map.gz",
+        "size": 1031790,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-nspanel.map.gz"
+      },
+      {
+        "name": "tasmota32-PL.bin",
+        "size": 2236880,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-PL.bin"
+      },
+      {
+        "name": "tasmota32-PL.factory.bin",
+        "size": 3154384,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-PL.factory.bin"
+      },
+      {
+        "name": "tasmota32-PL.map.gz",
+        "size": 977430,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-PL.map.gz"
+      },
+      {
+        "name": "tasmota32-PT.bin",
+        "size": 2236992,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-PT.bin"
+      },
+      {
+        "name": "tasmota32-PT.factory.bin",
+        "size": 3154496,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-PT.factory.bin"
+      },
+      {
+        "name": "tasmota32-PT.map.gz",
+        "size": 977538,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-PT.map.gz"
+      },
+      {
+        "name": "tasmota32-RO.bin",
+        "size": 2236176,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-RO.bin"
+      },
+      {
+        "name": "tasmota32-RO.factory.bin",
+        "size": 3153680,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-RO.factory.bin"
+      },
+      {
+        "name": "tasmota32-RO.map.gz",
+        "size": 977581,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-RO.map.gz"
+      },
+      {
+        "name": "tasmota32-RU.bin",
+        "size": 2242128,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-RU.bin"
+      },
+      {
+        "name": "tasmota32-RU.factory.bin",
+        "size": 3159632,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-RU.factory.bin"
+      },
+      {
+        "name": "tasmota32-RU.map.gz",
+        "size": 977579,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-RU.map.gz"
+      },
+      {
+        "name": "tasmota32-safeboot.bin",
+        "size": 807328,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-safeboot.bin"
+      },
+      {
+        "name": "tasmota32-safeboot.map.gz",
+        "size": 607826,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32-SE.bin",
+        "size": 2236032,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-SE.bin"
+      },
+      {
+        "name": "tasmota32-SE.factory.bin",
+        "size": 3153536,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-SE.factory.bin"
+      },
+      {
+        "name": "tasmota32-SE.map.gz",
+        "size": 977512,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-SE.map.gz"
+      },
+      {
+        "name": "tasmota32-SK.bin",
+        "size": 2236336,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-SK.bin"
+      },
+      {
+        "name": "tasmota32-SK.factory.bin",
+        "size": 3153840,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-SK.factory.bin"
+      },
+      {
+        "name": "tasmota32-SK.map.gz",
+        "size": 977657,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-SK.map.gz"
+      },
+      {
+        "name": "tasmota32-TR.bin",
+        "size": 2236144,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-TR.bin"
+      },
+      {
+        "name": "tasmota32-TR.factory.bin",
+        "size": 3153648,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-TR.factory.bin"
+      },
+      {
+        "name": "tasmota32-TR.map.gz",
+        "size": 977557,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-TR.map.gz"
+      },
+      {
+        "name": "tasmota32-TW.bin",
+        "size": 2235632,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-TW.bin"
+      },
+      {
+        "name": "tasmota32-TW.factory.bin",
+        "size": 3153136,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-TW.factory.bin"
+      },
+      {
+        "name": "tasmota32-TW.map.gz",
+        "size": 977567,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-TW.map.gz"
+      },
+      {
+        "name": "tasmota32-UK.bin",
+        "size": 2242416,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-UK.bin"
+      },
+      {
+        "name": "tasmota32-UK.factory.bin",
+        "size": 3159920,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-UK.factory.bin"
+      },
+      {
+        "name": "tasmota32-UK.map.gz",
+        "size": 977471,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-UK.map.gz"
+      },
+      {
+        "name": "tasmota32-VN.bin",
+        "size": 2238128,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-VN.bin"
+      },
+      {
+        "name": "tasmota32-VN.factory.bin",
+        "size": 3155632,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-VN.factory.bin"
+      },
+      {
+        "name": "tasmota32-VN.map.gz",
+        "size": 977666,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-VN.map.gz"
+      },
+      {
+        "name": "tasmota32-webcam.bin",
+        "size": 1391648,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-webcam.bin"
+      },
+      {
+        "name": "tasmota32-webcam.factory.bin",
+        "size": 2309152,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-webcam.factory.bin"
+      },
+      {
+        "name": "tasmota32-webcam.map.gz",
+        "size": 814020,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-webcam.map.gz"
+      },
+      {
+        "name": "tasmota32-zbbrdgpro.bin",
+        "size": 1610880,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-zbbrdgpro.bin"
+      },
+      {
+        "name": "tasmota32-zbbrdgpro.factory.bin",
+        "size": 4194304,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-zbbrdgpro.factory.bin"
+      },
+      {
+        "name": "tasmota32-zbbrdgpro.map.gz",
+        "size": 916059,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32-zbbrdgpro.map.gz"
+      },
+      {
+        "name": "tasmota32.bin",
+        "size": 2234912,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32.bin"
+      },
+      {
+        "name": "tasmota32.factory.bin",
+        "size": 3152416,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32.factory.bin"
+      },
+      {
+        "name": "tasmota32.map.gz",
+        "size": 977196,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32.map.gz"
+      },
+      {
+        "name": "tasmota32c2-safeboot.bin",
+        "size": 632208,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c2-safeboot.bin"
+      },
+      {
+        "name": "tasmota32c2-safeboot.map.gz",
+        "size": 459924,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c2-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32c2.bin",
+        "size": 2126496,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c2.bin"
+      },
+      {
+        "name": "tasmota32c2.factory.bin",
+        "size": 3044000,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c2.factory.bin"
+      },
+      {
+        "name": "tasmota32c2.map.gz",
+        "size": 796231,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c2.map.gz"
+      },
+      {
+        "name": "tasmota32c3-safeboot.bin",
+        "size": 819488,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c3-safeboot.bin"
+      },
+      {
+        "name": "tasmota32c3-safeboot.map.gz",
+        "size": 550586,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c3-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32c3.bin",
+        "size": 2236320,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c3.bin"
+      },
+      {
+        "name": "tasmota32c3.factory.bin",
+        "size": 3153824,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c3.factory.bin"
+      },
+      {
+        "name": "tasmota32c3.map.gz",
+        "size": 865599,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c3.map.gz"
+      },
+      {
+        "name": "tasmota32c3ser-safeboot.bin",
+        "size": 815248,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c3ser-safeboot.bin"
+      },
+      {
+        "name": "tasmota32c3ser-safeboot.map.gz",
+        "size": 549241,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c3ser-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32c5-safeboot.bin",
+        "size": 849136,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c5-safeboot.bin"
+      },
+      {
+        "name": "tasmota32c5-safeboot.map.gz",
+        "size": 578185,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c5-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32c5.bin",
+        "size": 2303696,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c5.bin"
+      },
+      {
+        "name": "tasmota32c5.factory.bin",
+        "size": 3221200,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c5.factory.bin"
+      },
+      {
+        "name": "tasmota32c5.map.gz",
+        "size": 924682,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c5.map.gz"
+      },
+      {
+        "name": "tasmota32c5ser-safeboot.bin",
+        "size": 844752,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c5ser-safeboot.bin"
+      },
+      {
+        "name": "tasmota32c5ser-safeboot.map.gz",
+        "size": 577376,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c5ser-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32c6-safeboot.bin",
+        "size": 848352,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c6-safeboot.bin"
+      },
+      {
+        "name": "tasmota32c6-safeboot.map.gz",
+        "size": 565769,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c6-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32c6.bin",
+        "size": 2313056,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c6.bin"
+      },
+      {
+        "name": "tasmota32c6.factory.bin",
+        "size": 3230560,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c6.factory.bin"
+      },
+      {
+        "name": "tasmota32c6.map.gz",
+        "size": 911662,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c6.map.gz"
+      },
+      {
+        "name": "tasmota32c61-safeboot.bin",
+        "size": 811904,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c61-safeboot.bin"
+      },
+      {
+        "name": "tasmota32c61-safeboot.map.gz",
+        "size": 559612,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c61-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32c61.bin",
+        "size": 2270592,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c61.bin"
+      },
+      {
+        "name": "tasmota32c61.factory.bin",
+        "size": 3188096,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c61.factory.bin"
+      },
+      {
+        "name": "tasmota32c61.map.gz",
+        "size": 903774,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c61.map.gz"
+      },
+      {
+        "name": "tasmota32c61ser-safeboot.bin",
+        "size": 807664,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c61ser-safeboot.bin"
+      },
+      {
+        "name": "tasmota32c61ser-safeboot.map.gz",
+        "size": 558308,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c61ser-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32c6ser-safeboot.bin",
+        "size": 844112,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c6ser-safeboot.bin"
+      },
+      {
+        "name": "tasmota32c6ser-safeboot.map.gz",
+        "size": 564385,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32c6ser-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32p4-safeboot.bin",
+        "size": 814256,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32p4-safeboot.bin"
+      },
+      {
+        "name": "tasmota32p4-safeboot.map.gz",
+        "size": 465356,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32p4-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32p4.bin",
+        "size": 2220768,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32p4.bin"
+      },
+      {
+        "name": "tasmota32p4.factory.bin",
+        "size": 3138272,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32p4.factory.bin"
+      },
+      {
+        "name": "tasmota32p4.map.gz",
+        "size": 751464,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32p4.map.gz"
+      },
+      {
+        "name": "tasmota32p4r3-safeboot.bin",
+        "size": 817440,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32p4r3-safeboot.bin"
+      },
+      {
+        "name": "tasmota32p4r3-safeboot.map.gz",
+        "size": 465193,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32p4r3-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32p4r3.bin",
+        "size": 2224288,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32p4r3.bin"
+      },
+      {
+        "name": "tasmota32p4r3.factory.bin",
+        "size": 3141792,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32p4r3.factory.bin"
+      },
+      {
+        "name": "tasmota32p4r3.map.gz",
+        "size": 750960,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32p4r3.map.gz"
+      },
+      {
+        "name": "tasmota32p4r3ser-safeboot.bin",
+        "size": 813072,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32p4r3ser-safeboot.bin"
+      },
+      {
+        "name": "tasmota32p4r3ser-safeboot.map.gz",
+        "size": 464254,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32p4r3ser-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32p4ser-safeboot.bin",
+        "size": 809888,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32p4ser-safeboot.bin"
+      },
+      {
+        "name": "tasmota32p4ser-safeboot.map.gz",
+        "size": 464576,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32p4ser-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32s2-safeboot.bin",
+        "size": 794848,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32s2-safeboot.bin"
+      },
+      {
+        "name": "tasmota32s2-safeboot.map.gz",
+        "size": 585536,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32s2-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32s2.bin",
+        "size": 2111696,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32s2.bin"
+      },
+      {
+        "name": "tasmota32s2.factory.bin",
+        "size": 3029200,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32s2.factory.bin"
+      },
+      {
+        "name": "tasmota32s2.map.gz",
+        "size": 859269,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32s2.map.gz"
+      },
+      {
+        "name": "tasmota32s2cdc-safeboot.bin",
+        "size": 837984,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32s2cdc-safeboot.bin"
+      },
+      {
+        "name": "tasmota32s2cdc-safeboot.map.gz",
+        "size": 607060,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32s2cdc-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32s2cdc.bin",
+        "size": 2154592,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32s2cdc.bin"
+      },
+      {
+        "name": "tasmota32s2cdc.factory.bin",
+        "size": 3072096,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32s2cdc.factory.bin"
+      },
+      {
+        "name": "tasmota32s2cdc.map.gz",
+        "size": 882355,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32s2cdc.map.gz"
+      },
+      {
+        "name": "tasmota32s3-safeboot.bin",
+        "size": 803920,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32s3-safeboot.bin"
+      },
+      {
+        "name": "tasmota32s3-safeboot.map.gz",
+        "size": 661515,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32s3-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32s3.bin",
+        "size": 2156720,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32s3.bin"
+      },
+      {
+        "name": "tasmota32s3.factory.bin",
+        "size": 3074224,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32s3.factory.bin"
+      },
+      {
+        "name": "tasmota32s3.map.gz",
+        "size": 1003725,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32s3.map.gz"
+      },
+      {
+        "name": "tasmota32s3ser-safeboot.bin",
+        "size": 799392,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32s3ser-safeboot.bin"
+      },
+      {
+        "name": "tasmota32s3ser-safeboot.map.gz",
+        "size": 660747,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32s3ser-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32solo1-safeboot.bin",
+        "size": 807328,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32solo1-safeboot.bin"
+      },
+      {
+        "name": "tasmota32solo1-safeboot.map.gz",
+        "size": 607914,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32solo1-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32solo1.bin",
+        "size": 2174672,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32solo1.bin"
+      },
+      {
+        "name": "tasmota32solo1.factory.bin",
+        "size": 3092176,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32solo1.factory.bin"
+      },
+      {
+        "name": "tasmota32solo1.map.gz",
+        "size": 958913,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v16.0.0/tasmota32solo1.map.gz"
+      }
+    ]
+  },
+  {
+    "tag_name": "v15.6.0",
+    "draft": false,
+    "prerelease": false,
+    "published_at": "2026-08-25T09:19:32Z",
+    "assets": [
+      {
+        "name": "tasmota-4M.bin",
+        "size": 743616,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-4M.bin"
+      },
+      {
+        "name": "tasmota-4M.bin.gz",
+        "size": 521507,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-4M.bin.gz"
+      },
+      {
+        "name": "tasmota-4M.map.gz",
+        "size": 305969,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-4M.map.gz"
+      },
+      {
+        "name": "tasmota-AD.bin",
+        "size": 667872,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-AD.bin"
+      },
+      {
+        "name": "tasmota-AD.bin.gz",
+        "size": 469732,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-AD.bin.gz"
+      },
+      {
+        "name": "tasmota-AD.map.gz",
+        "size": 273457,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-AD.map.gz"
+      },
+      {
+        "name": "tasmota-AF.bin",
+        "size": 667408,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-AF.bin"
+      },
+      {
+        "name": "tasmota-AF.bin.gz",
+        "size": 469848,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-AF.bin.gz"
+      },
+      {
+        "name": "tasmota-AF.map.gz",
+        "size": 273400,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-AF.map.gz"
+      },
+      {
+        "name": "tasmota-BG.bin",
+        "size": 673184,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-BG.bin"
+      },
+      {
+        "name": "tasmota-BG.bin.gz",
+        "size": 470954,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-BG.bin.gz"
+      },
+      {
+        "name": "tasmota-BG.map.gz",
+        "size": 273592,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-BG.map.gz"
+      },
+      {
+        "name": "tasmota-BR.bin",
+        "size": 668080,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-BR.bin"
+      },
+      {
+        "name": "tasmota-BR.bin.gz",
+        "size": 469818,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-BR.bin.gz"
+      },
+      {
+        "name": "tasmota-BR.map.gz",
+        "size": 273432,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-BR.map.gz"
+      },
+      {
+        "name": "tasmota-CN.bin",
+        "size": 666688,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-CN.bin"
+      },
+      {
+        "name": "tasmota-CN.bin.gz",
+        "size": 469851,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-CN.bin.gz"
+      },
+      {
+        "name": "tasmota-CN.map.gz",
+        "size": 273326,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-CN.map.gz"
+      },
+      {
+        "name": "tasmota-CZ.bin",
+        "size": 667776,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-CZ.bin"
+      },
+      {
+        "name": "tasmota-CZ.bin.gz",
+        "size": 469884,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-CZ.bin.gz"
+      },
+      {
+        "name": "tasmota-CZ.map.gz",
+        "size": 273467,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-CZ.map.gz"
+      },
+      {
+        "name": "tasmota-DE.bin",
+        "size": 667120,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-DE.bin"
+      },
+      {
+        "name": "tasmota-DE.bin.gz",
+        "size": 469577,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-DE.bin.gz"
+      },
+      {
+        "name": "tasmota-DE.map.gz",
+        "size": 273365,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-DE.map.gz"
+      },
+      {
+        "name": "tasmota-display.bin",
+        "size": 627632,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-display.bin"
+      },
+      {
+        "name": "tasmota-display.bin.gz",
+        "size": 432832,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-display.bin.gz"
+      },
+      {
+        "name": "tasmota-display.map.gz",
+        "size": 272383,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-display.map.gz"
+      },
+      {
+        "name": "tasmota-ES.bin",
+        "size": 667952,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-ES.bin"
+      },
+      {
+        "name": "tasmota-ES.bin.gz",
+        "size": 469778,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-ES.bin.gz"
+      },
+      {
+        "name": "tasmota-ES.map.gz",
+        "size": 273542,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-ES.map.gz"
+      },
+      {
+        "name": "tasmota-FR.bin",
+        "size": 668208,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-FR.bin"
+      },
+      {
+        "name": "tasmota-FR.bin.gz",
+        "size": 469836,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-FR.bin.gz"
+      },
+      {
+        "name": "tasmota-FR.map.gz",
+        "size": 273446,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-FR.map.gz"
+      },
+      {
+        "name": "tasmota-FY.bin",
+        "size": 667536,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-FY.bin"
+      },
+      {
+        "name": "tasmota-FY.bin.gz",
+        "size": 469734,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-FY.bin.gz"
+      },
+      {
+        "name": "tasmota-FY.map.gz",
+        "size": 273425,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-FY.map.gz"
+      },
+      {
+        "name": "tasmota-GR.bin",
+        "size": 671408,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-GR.bin"
+      },
+      {
+        "name": "tasmota-GR.bin.gz",
+        "size": 470818,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-GR.bin.gz"
+      },
+      {
+        "name": "tasmota-GR.map.gz",
+        "size": 273622,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-GR.map.gz"
+      },
+      {
+        "name": "tasmota-HE.bin",
+        "size": 668784,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-HE.bin"
+      },
+      {
+        "name": "tasmota-HE.bin.gz",
+        "size": 470012,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-HE.bin.gz"
+      },
+      {
+        "name": "tasmota-HE.map.gz",
+        "size": 273427,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-HE.map.gz"
+      },
+      {
+        "name": "tasmota-HU.bin",
+        "size": 668160,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-HU.bin"
+      },
+      {
+        "name": "tasmota-HU.bin.gz",
+        "size": 470069,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-HU.bin.gz"
+      },
+      {
+        "name": "tasmota-HU.map.gz",
+        "size": 273390,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-HU.map.gz"
+      },
+      {
+        "name": "tasmota-ir.bin",
+        "size": 682240,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-ir.bin"
+      },
+      {
+        "name": "tasmota-ir.bin.gz",
+        "size": 460138,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-ir.bin.gz"
+      },
+      {
+        "name": "tasmota-ir.map.gz",
+        "size": 324210,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-ir.map.gz"
+      },
+      {
+        "name": "tasmota-IT.bin",
+        "size": 668400,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-IT.bin"
+      },
+      {
+        "name": "tasmota-IT.bin.gz",
+        "size": 469718,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-IT.bin.gz"
+      },
+      {
+        "name": "tasmota-IT.map.gz",
+        "size": 273383,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-IT.map.gz"
+      },
+      {
+        "name": "tasmota-knx.bin",
+        "size": 663056,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-knx.bin"
+      },
+      {
+        "name": "tasmota-knx.bin.gz",
+        "size": 462059,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-knx.bin.gz"
+      },
+      {
+        "name": "tasmota-knx.map.gz",
+        "size": 280087,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-knx.map.gz"
+      },
+      {
+        "name": "tasmota-KO.bin",
+        "size": 667776,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-KO.bin"
+      },
+      {
+        "name": "tasmota-KO.bin.gz",
+        "size": 470097,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-KO.bin.gz"
+      },
+      {
+        "name": "tasmota-KO.map.gz",
+        "size": 273325,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-KO.map.gz"
+      },
+      {
+        "name": "tasmota-lite.bin",
+        "size": 519088,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-lite.bin"
+      },
+      {
+        "name": "tasmota-lite.bin.gz",
+        "size": 365136,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-lite.bin.gz"
+      },
+      {
+        "name": "tasmota-lite.map.gz",
+        "size": 226605,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-lite.map.gz"
+      },
+      {
+        "name": "tasmota-LT.bin",
+        "size": 668304,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-LT.bin"
+      },
+      {
+        "name": "tasmota-LT.bin.gz",
+        "size": 470189,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-LT.bin.gz"
+      },
+      {
+        "name": "tasmota-LT.map.gz",
+        "size": 273354,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-LT.map.gz"
+      },
+      {
+        "name": "tasmota-minimal.bin",
+        "size": 373072,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-minimal.bin"
+      },
+      {
+        "name": "tasmota-minimal.bin.gz",
+        "size": 263368,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-minimal.bin.gz"
+      },
+      {
+        "name": "tasmota-minimal.map.gz",
+        "size": 190473,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-minimal.map.gz"
+      },
+      {
+        "name": "tasmota-NL.bin",
+        "size": 667568,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-NL.bin"
+      },
+      {
+        "name": "tasmota-NL.bin.gz",
+        "size": 469476,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-NL.bin.gz"
+      },
+      {
+        "name": "tasmota-NL.map.gz",
+        "size": 273500,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-NL.map.gz"
+      },
+      {
+        "name": "tasmota-PL.bin",
+        "size": 668256,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-PL.bin"
+      },
+      {
+        "name": "tasmota-PL.bin.gz",
+        "size": 470164,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-PL.bin.gz"
+      },
+      {
+        "name": "tasmota-PL.map.gz",
+        "size": 273478,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-PL.map.gz"
+      },
+      {
+        "name": "tasmota-PT.bin",
+        "size": 668352,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-PT.bin"
+      },
+      {
+        "name": "tasmota-PT.bin.gz",
+        "size": 470027,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-PT.bin.gz"
+      },
+      {
+        "name": "tasmota-PT.map.gz",
+        "size": 273425,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-PT.map.gz"
+      },
+      {
+        "name": "tasmota-RO.bin",
+        "size": 667648,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-RO.bin"
+      },
+      {
+        "name": "tasmota-RO.bin.gz",
+        "size": 469772,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-RO.bin.gz"
+      },
+      {
+        "name": "tasmota-RO.map.gz",
+        "size": 273381,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-RO.map.gz"
+      },
+      {
+        "name": "tasmota-RU.bin",
+        "size": 672064,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-RU.bin"
+      },
+      {
+        "name": "tasmota-RU.bin.gz",
+        "size": 470894,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-RU.bin.gz"
+      },
+      {
+        "name": "tasmota-RU.map.gz",
+        "size": 273593,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-RU.map.gz"
+      },
+      {
+        "name": "tasmota-SE.bin",
+        "size": 667648,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-SE.bin"
+      },
+      {
+        "name": "tasmota-SE.bin.gz",
+        "size": 469853,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-SE.bin.gz"
+      },
+      {
+        "name": "tasmota-SE.map.gz",
+        "size": 273495,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-SE.map.gz"
+      },
+      {
+        "name": "tasmota-sensors.bin",
+        "size": 738368,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-sensors.bin"
+      },
+      {
+        "name": "tasmota-sensors.bin.gz",
+        "size": 512578,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-sensors.bin.gz"
+      },
+      {
+        "name": "tasmota-sensors.map.gz",
+        "size": 309016,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-sensors.map.gz"
+      },
+      {
+        "name": "tasmota-SK.bin",
+        "size": 667808,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-SK.bin"
+      },
+      {
+        "name": "tasmota-SK.bin.gz",
+        "size": 469940,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-SK.bin.gz"
+      },
+      {
+        "name": "tasmota-SK.map.gz",
+        "size": 273444,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-SK.map.gz"
+      },
+      {
+        "name": "tasmota-TR.bin",
+        "size": 667840,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-TR.bin"
+      },
+      {
+        "name": "tasmota-TR.bin.gz",
+        "size": 469972,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-TR.bin.gz"
+      },
+      {
+        "name": "tasmota-TR.map.gz",
+        "size": 273401,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-TR.map.gz"
+      },
+      {
+        "name": "tasmota-TW.bin",
+        "size": 667280,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-TW.bin"
+      },
+      {
+        "name": "tasmota-TW.bin.gz",
+        "size": 470216,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-TW.bin.gz"
+      },
+      {
+        "name": "tasmota-TW.map.gz",
+        "size": 273318,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-TW.map.gz"
+      },
+      {
+        "name": "tasmota-UK.bin",
+        "size": 672336,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-UK.bin"
+      },
+      {
+        "name": "tasmota-UK.bin.gz",
+        "size": 470872,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-UK.bin.gz"
+      },
+      {
+        "name": "tasmota-UK.map.gz",
+        "size": 273628,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-UK.map.gz"
+      },
+      {
+        "name": "tasmota-VN.bin",
+        "size": 669136,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-VN.bin"
+      },
+      {
+        "name": "tasmota-VN.bin.gz",
+        "size": 470066,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-VN.bin.gz"
+      },
+      {
+        "name": "tasmota-VN.map.gz",
+        "size": 273478,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-VN.map.gz"
+      },
+      {
+        "name": "tasmota-zbbridge.bin",
+        "size": 790816,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-zbbridge.bin"
+      },
+      {
+        "name": "tasmota-zbbridge.bin.gz",
+        "size": 546301,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-zbbridge.bin.gz"
+      },
+      {
+        "name": "tasmota-zbbridge.map.gz",
+        "size": 314228,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-zbbridge.map.gz"
+      },
+      {
+        "name": "tasmota-zigbee.bin",
+        "size": 862096,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-zigbee.bin"
+      },
+      {
+        "name": "tasmota-zigbee.bin.gz",
+        "size": 594378,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-zigbee.bin.gz"
+      },
+      {
+        "name": "tasmota-zigbee.map.gz",
+        "size": 342204,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota-zigbee.map.gz"
+      },
+      {
+        "name": "tasmota.bin",
+        "size": 666720,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota.bin"
+      },
+      {
+        "name": "tasmota.bin.gz",
+        "size": 468864,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota.bin.gz"
+      },
+      {
+        "name": "tasmota.map.gz",
+        "size": 273018,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota.map.gz"
+      },
+      {
+        "name": "tasmota32-AD.bin",
+        "size": 2183440,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-AD.bin"
+      },
+      {
+        "name": "tasmota32-AD.factory.bin",
+        "size": 3100944,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-AD.factory.bin"
+      },
+      {
+        "name": "tasmota32-AD.map.gz",
+        "size": 969784,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-AD.map.gz"
+      },
+      {
+        "name": "tasmota32-AF.bin",
+        "size": 2183008,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-AF.bin"
+      },
+      {
+        "name": "tasmota32-AF.factory.bin",
+        "size": 3100512,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-AF.factory.bin"
+      },
+      {
+        "name": "tasmota32-AF.map.gz",
+        "size": 969966,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-AF.map.gz"
+      },
+      {
+        "name": "tasmota32-BG.bin",
+        "size": 2190848,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-BG.bin"
+      },
+      {
+        "name": "tasmota32-BG.factory.bin",
+        "size": 3108352,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-BG.factory.bin"
+      },
+      {
+        "name": "tasmota32-BG.map.gz",
+        "size": 969730,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-BG.map.gz"
+      },
+      {
+        "name": "tasmota32-bluetooth.bin",
+        "size": 1815328,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-bluetooth.bin"
+      },
+      {
+        "name": "tasmota32-bluetooth.factory.bin",
+        "size": 2732832,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-bluetooth.factory.bin"
+      },
+      {
+        "name": "tasmota32-bluetooth.map.gz",
+        "size": 940636,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-bluetooth.map.gz"
+      },
+      {
+        "name": "tasmota32-BR.bin",
+        "size": 2183872,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-BR.bin"
+      },
+      {
+        "name": "tasmota32-BR.factory.bin",
+        "size": 3101376,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-BR.factory.bin"
+      },
+      {
+        "name": "tasmota32-BR.map.gz",
+        "size": 969836,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-BR.map.gz"
+      },
+      {
+        "name": "tasmota32-CN.bin",
+        "size": 2182224,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-CN.bin"
+      },
+      {
+        "name": "tasmota32-CN.factory.bin",
+        "size": 3099728,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-CN.factory.bin"
+      },
+      {
+        "name": "tasmota32-CN.map.gz",
+        "size": 969816,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-CN.map.gz"
+      },
+      {
+        "name": "tasmota32-CZ.bin",
+        "size": 2183504,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-CZ.bin"
+      },
+      {
+        "name": "tasmota32-CZ.factory.bin",
+        "size": 3101008,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-CZ.factory.bin"
+      },
+      {
+        "name": "tasmota32-CZ.map.gz",
+        "size": 969802,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-CZ.map.gz"
+      },
+      {
+        "name": "tasmota32-DE.bin",
+        "size": 2182720,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-DE.bin"
+      },
+      {
+        "name": "tasmota32-DE.factory.bin",
+        "size": 3100224,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-DE.factory.bin"
+      },
+      {
+        "name": "tasmota32-DE.map.gz",
+        "size": 969750,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-DE.map.gz"
+      },
+      {
+        "name": "tasmota32-display.bin",
+        "size": 1471024,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-display.bin"
+      },
+      {
+        "name": "tasmota32-display.factory.bin",
+        "size": 2388528,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-display.factory.bin"
+      },
+      {
+        "name": "tasmota32-display.map.gz",
+        "size": 826317,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-display.map.gz"
+      },
+      {
+        "name": "tasmota32-ES.bin",
+        "size": 2183840,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-ES.bin"
+      },
+      {
+        "name": "tasmota32-ES.factory.bin",
+        "size": 3101344,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-ES.factory.bin"
+      },
+      {
+        "name": "tasmota32-ES.map.gz",
+        "size": 969763,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-ES.map.gz"
+      },
+      {
+        "name": "tasmota32-FR.bin",
+        "size": 2184096,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-FR.bin"
+      },
+      {
+        "name": "tasmota32-FR.factory.bin",
+        "size": 3101600,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-FR.factory.bin"
+      },
+      {
+        "name": "tasmota32-FR.map.gz",
+        "size": 969767,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-FR.map.gz"
+      },
+      {
+        "name": "tasmota32-FY.bin",
+        "size": 2183152,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-FY.bin"
+      },
+      {
+        "name": "tasmota32-FY.factory.bin",
+        "size": 3100656,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-FY.factory.bin"
+      },
+      {
+        "name": "tasmota32-FY.map.gz",
+        "size": 969843,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-FY.map.gz"
+      },
+      {
+        "name": "tasmota32-GR.bin",
+        "size": 2188416,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-GR.bin"
+      },
+      {
+        "name": "tasmota32-GR.factory.bin",
+        "size": 3105920,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-GR.factory.bin"
+      },
+      {
+        "name": "tasmota32-GR.map.gz",
+        "size": 969713,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-GR.map.gz"
+      },
+      {
+        "name": "tasmota32-HE.bin",
+        "size": 2184640,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-HE.bin"
+      },
+      {
+        "name": "tasmota32-HE.factory.bin",
+        "size": 3102144,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-HE.factory.bin"
+      },
+      {
+        "name": "tasmota32-HE.map.gz",
+        "size": 969839,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-HE.map.gz"
+      },
+      {
+        "name": "tasmota32-HU.bin",
+        "size": 2184112,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-HU.bin"
+      },
+      {
+        "name": "tasmota32-HU.factory.bin",
+        "size": 3101616,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-HU.factory.bin"
+      },
+      {
+        "name": "tasmota32-HU.map.gz",
+        "size": 969719,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-HU.map.gz"
+      },
+      {
+        "name": "tasmota32-ir.bin",
+        "size": 1441472,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-ir.bin"
+      },
+      {
+        "name": "tasmota32-ir.factory.bin",
+        "size": 2358976,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-ir.factory.bin"
+      },
+      {
+        "name": "tasmota32-ir.map.gz",
+        "size": 850779,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-ir.map.gz"
+      },
+      {
+        "name": "tasmota32-IT.bin",
+        "size": 2184304,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-IT.bin"
+      },
+      {
+        "name": "tasmota32-IT.factory.bin",
+        "size": 3101808,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-IT.factory.bin"
+      },
+      {
+        "name": "tasmota32-IT.map.gz",
+        "size": 969713,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-IT.map.gz"
+      },
+      {
+        "name": "tasmota32-KO.bin",
+        "size": 2183472,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-KO.bin"
+      },
+      {
+        "name": "tasmota32-KO.factory.bin",
+        "size": 3100976,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-KO.factory.bin"
+      },
+      {
+        "name": "tasmota32-KO.map.gz",
+        "size": 969734,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-KO.map.gz"
+      },
+      {
+        "name": "tasmota32-LT.bin",
+        "size": 2184240,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-LT.bin"
+      },
+      {
+        "name": "tasmota32-LT.factory.bin",
+        "size": 3101744,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-LT.factory.bin"
+      },
+      {
+        "name": "tasmota32-LT.map.gz",
+        "size": 969865,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-LT.map.gz"
+      },
+      {
+        "name": "tasmota32-lvgl.bin",
+        "size": 2694480,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-lvgl.bin"
+      },
+      {
+        "name": "tasmota32-lvgl.factory.bin",
+        "size": 3611984,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-lvgl.factory.bin"
+      },
+      {
+        "name": "tasmota32-lvgl.map.gz",
+        "size": 979850,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-lvgl.map.gz"
+      },
+      {
+        "name": "tasmota32-NL.bin",
+        "size": 2183200,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-NL.bin"
+      },
+      {
+        "name": "tasmota32-NL.factory.bin",
+        "size": 3100704,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-NL.factory.bin"
+      },
+      {
+        "name": "tasmota32-NL.map.gz",
+        "size": 969781,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-NL.map.gz"
+      },
+      {
+        "name": "tasmota32-nspanel.bin",
+        "size": 2183424,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-nspanel.bin"
+      },
+      {
+        "name": "tasmota32-nspanel.factory.bin",
+        "size": 3100928,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-nspanel.factory.bin"
+      },
+      {
+        "name": "tasmota32-nspanel.map.gz",
+        "size": 1024250,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-nspanel.map.gz"
+      },
+      {
+        "name": "tasmota32-PL.bin",
+        "size": 2184064,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-PL.bin"
+      },
+      {
+        "name": "tasmota32-PL.factory.bin",
+        "size": 3101568,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-PL.factory.bin"
+      },
+      {
+        "name": "tasmota32-PL.map.gz",
+        "size": 969807,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-PL.map.gz"
+      },
+      {
+        "name": "tasmota32-PT.bin",
+        "size": 2184192,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-PT.bin"
+      },
+      {
+        "name": "tasmota32-PT.factory.bin",
+        "size": 3101696,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-PT.factory.bin"
+      },
+      {
+        "name": "tasmota32-PT.map.gz",
+        "size": 969821,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-PT.map.gz"
+      },
+      {
+        "name": "tasmota32-RO.bin",
+        "size": 2183408,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-RO.bin"
+      },
+      {
+        "name": "tasmota32-RO.factory.bin",
+        "size": 3100912,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-RO.factory.bin"
+      },
+      {
+        "name": "tasmota32-RO.map.gz",
+        "size": 969896,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-RO.map.gz"
+      },
+      {
+        "name": "tasmota32-RU.bin",
+        "size": 2189312,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-RU.bin"
+      },
+      {
+        "name": "tasmota32-RU.factory.bin",
+        "size": 3106816,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-RU.factory.bin"
+      },
+      {
+        "name": "tasmota32-RU.map.gz",
+        "size": 969685,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-RU.map.gz"
+      },
+      {
+        "name": "tasmota32-safeboot.bin",
+        "size": 800432,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-safeboot.bin"
+      },
+      {
+        "name": "tasmota32-safeboot.map.gz",
+        "size": 604890,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32-SE.bin",
+        "size": 2183248,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-SE.bin"
+      },
+      {
+        "name": "tasmota32-SE.factory.bin",
+        "size": 3100752,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-SE.factory.bin"
+      },
+      {
+        "name": "tasmota32-SE.map.gz",
+        "size": 969790,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-SE.map.gz"
+      },
+      {
+        "name": "tasmota32-SK.bin",
+        "size": 2183536,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-SK.bin"
+      },
+      {
+        "name": "tasmota32-SK.factory.bin",
+        "size": 3101040,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-SK.factory.bin"
+      },
+      {
+        "name": "tasmota32-SK.map.gz",
+        "size": 969845,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-SK.map.gz"
+      },
+      {
+        "name": "tasmota32-TR.bin",
+        "size": 2183360,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-TR.bin"
+      },
+      {
+        "name": "tasmota32-TR.factory.bin",
+        "size": 3100864,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-TR.factory.bin"
+      },
+      {
+        "name": "tasmota32-TR.map.gz",
+        "size": 969799,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-TR.map.gz"
+      },
+      {
+        "name": "tasmota32-TW.bin",
+        "size": 2182832,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-TW.bin"
+      },
+      {
+        "name": "tasmota32-TW.factory.bin",
+        "size": 3100336,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-TW.factory.bin"
+      },
+      {
+        "name": "tasmota32-TW.map.gz",
+        "size": 969719,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-TW.map.gz"
+      },
+      {
+        "name": "tasmota32-UK.bin",
+        "size": 2189616,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-UK.bin"
+      },
+      {
+        "name": "tasmota32-UK.factory.bin",
+        "size": 3107120,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-UK.factory.bin"
+      },
+      {
+        "name": "tasmota32-UK.map.gz",
+        "size": 969793,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-UK.map.gz"
+      },
+      {
+        "name": "tasmota32-VN.bin",
+        "size": 2185344,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-VN.bin"
+      },
+      {
+        "name": "tasmota32-VN.factory.bin",
+        "size": 3102848,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-VN.factory.bin"
+      },
+      {
+        "name": "tasmota32-VN.map.gz",
+        "size": 969882,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-VN.map.gz"
+      },
+      {
+        "name": "tasmota32-webcam.bin",
+        "size": 1376656,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-webcam.bin"
+      },
+      {
+        "name": "tasmota32-webcam.factory.bin",
+        "size": 2294160,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-webcam.factory.bin"
+      },
+      {
+        "name": "tasmota32-webcam.map.gz",
+        "size": 806367,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-webcam.map.gz"
+      },
+      {
+        "name": "tasmota32-zbbrdgpro.bin",
+        "size": 1601328,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-zbbrdgpro.bin"
+      },
+      {
+        "name": "tasmota32-zbbrdgpro.factory.bin",
+        "size": 4194304,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-zbbrdgpro.factory.bin"
+      },
+      {
+        "name": "tasmota32-zbbrdgpro.map.gz",
+        "size": 910064,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32-zbbrdgpro.map.gz"
+      },
+      {
+        "name": "tasmota32.bin",
+        "size": 2182160,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32.bin"
+      },
+      {
+        "name": "tasmota32.factory.bin",
+        "size": 3099664,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32.factory.bin"
+      },
+      {
+        "name": "tasmota32.map.gz",
+        "size": 969360,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32.map.gz"
+      },
+      {
+        "name": "tasmota32c2-safeboot.bin",
+        "size": 624848,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32c2-safeboot.bin"
+      },
+      {
+        "name": "tasmota32c2-safeboot.map.gz",
+        "size": 457043,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32c2-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32c2.bin",
+        "size": 2071296,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32c2.bin"
+      },
+      {
+        "name": "tasmota32c2.factory.bin",
+        "size": 2988800,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32c2.factory.bin"
+      },
+      {
+        "name": "tasmota32c2.map.gz",
+        "size": 798364,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32c2.map.gz"
+      },
+      {
+        "name": "tasmota32c3-safeboot.bin",
+        "size": 810672,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32c3-safeboot.bin"
+      },
+      {
+        "name": "tasmota32c3-safeboot.map.gz",
+        "size": 547719,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32c3-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32c3.bin",
+        "size": 2180992,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32c3.bin"
+      },
+      {
+        "name": "tasmota32c3.factory.bin",
+        "size": 3098496,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32c3.factory.bin"
+      },
+      {
+        "name": "tasmota32c3.map.gz",
+        "size": 859013,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32c3.map.gz"
+      },
+      {
+        "name": "tasmota32c3ser-safeboot.bin",
+        "size": 806976,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32c3ser-safeboot.bin"
+      },
+      {
+        "name": "tasmota32c3ser-safeboot.map.gz",
+        "size": 546218,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32c3ser-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32c5-safeboot.bin",
+        "size": 835840,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32c5-safeboot.bin"
+      },
+      {
+        "name": "tasmota32c5-safeboot.map.gz",
+        "size": 573087,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32c5-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32c5.bin",
+        "size": 2243072,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32c5.bin"
+      },
+      {
+        "name": "tasmota32c5.factory.bin",
+        "size": 3160576,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32c5.factory.bin"
+      },
+      {
+        "name": "tasmota32c5.map.gz",
+        "size": 915465,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32c5.map.gz"
+      },
+      {
+        "name": "tasmota32c5ser-safeboot.bin",
+        "size": 832144,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32c5ser-safeboot.bin"
+      },
+      {
+        "name": "tasmota32c5ser-safeboot.map.gz",
+        "size": 571666,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32c5ser-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32c6-safeboot.bin",
+        "size": 839360,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32c6-safeboot.bin"
+      },
+      {
+        "name": "tasmota32c6-safeboot.map.gz",
+        "size": 562230,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32c6-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32c6.bin",
+        "size": 2256912,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32c6.bin"
+      },
+      {
+        "name": "tasmota32c6.factory.bin",
+        "size": 3174416,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32c6.factory.bin"
+      },
+      {
+        "name": "tasmota32c6.map.gz",
+        "size": 904938,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32c6.map.gz"
+      },
+      {
+        "name": "tasmota32c6ser-safeboot.bin",
+        "size": 835648,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32c6ser-safeboot.bin"
+      },
+      {
+        "name": "tasmota32c6ser-safeboot.map.gz",
+        "size": 560732,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32c6ser-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32p4-safeboot.bin",
+        "size": 804784,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32p4-safeboot.bin"
+      },
+      {
+        "name": "tasmota32p4-safeboot.map.gz",
+        "size": 463921,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32p4-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32p4.bin",
+        "size": 2164368,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32p4.bin"
+      },
+      {
+        "name": "tasmota32p4.factory.bin",
+        "size": 3081872,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32p4.factory.bin"
+      },
+      {
+        "name": "tasmota32p4.map.gz",
+        "size": 744213,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32p4.map.gz"
+      },
+      {
+        "name": "tasmota32p4r3-safeboot.bin",
+        "size": 807344,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32p4r3-safeboot.bin"
+      },
+      {
+        "name": "tasmota32p4r3-safeboot.map.gz",
+        "size": 463191,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32p4r3-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32p4r3.bin",
+        "size": 2167152,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32p4r3.bin"
+      },
+      {
+        "name": "tasmota32p4r3.factory.bin",
+        "size": 3084656,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32p4r3.factory.bin"
+      },
+      {
+        "name": "tasmota32p4r3.map.gz",
+        "size": 743499,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32p4r3.map.gz"
+      },
+      {
+        "name": "tasmota32p4r3ser-safeboot.bin",
+        "size": 803664,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32p4r3ser-safeboot.bin"
+      },
+      {
+        "name": "tasmota32p4r3ser-safeboot.map.gz",
+        "size": 461777,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32p4r3ser-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32p4ser-safeboot.bin",
+        "size": 801120,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32p4ser-safeboot.bin"
+      },
+      {
+        "name": "tasmota32p4ser-safeboot.map.gz",
+        "size": 462627,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32p4ser-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32s2-safeboot.bin",
+        "size": 788144,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32s2-safeboot.bin"
+      },
+      {
+        "name": "tasmota32s2-safeboot.map.gz",
+        "size": 582707,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32s2-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32s2.bin",
+        "size": 2060592,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32s2.bin"
+      },
+      {
+        "name": "tasmota32s2.factory.bin",
+        "size": 2978096,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32s2.factory.bin"
+      },
+      {
+        "name": "tasmota32s2.map.gz",
+        "size": 851989,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32s2.map.gz"
+      },
+      {
+        "name": "tasmota32s2cdc-safeboot.bin",
+        "size": 843360,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32s2cdc-safeboot.bin"
+      },
+      {
+        "name": "tasmota32s2cdc-safeboot.map.gz",
+        "size": 611459,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32s2cdc-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32s2cdc.bin",
+        "size": 2115504,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32s2cdc.bin"
+      },
+      {
+        "name": "tasmota32s2cdc.factory.bin",
+        "size": 3033008,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32s2cdc.factory.bin"
+      },
+      {
+        "name": "tasmota32s2cdc.map.gz",
+        "size": 880935,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32s2cdc.map.gz"
+      },
+      {
+        "name": "tasmota32s3-safeboot.bin",
+        "size": 794496,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32s3-safeboot.bin"
+      },
+      {
+        "name": "tasmota32s3-safeboot.map.gz",
+        "size": 658341,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32s3-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32s3.bin",
+        "size": 2102624,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32s3.bin"
+      },
+      {
+        "name": "tasmota32s3.factory.bin",
+        "size": 3020128,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32s3.factory.bin"
+      },
+      {
+        "name": "tasmota32s3.map.gz",
+        "size": 995416,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32s3.map.gz"
+      },
+      {
+        "name": "tasmota32s3ser-safeboot.bin",
+        "size": 791040,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32s3ser-safeboot.bin"
+      },
+      {
+        "name": "tasmota32s3ser-safeboot.map.gz",
+        "size": 656791,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32s3ser-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32solo1-safeboot.bin",
+        "size": 800432,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32solo1-safeboot.bin"
+      },
+      {
+        "name": "tasmota32solo1-safeboot.map.gz",
+        "size": 605054,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32solo1-safeboot.map.gz"
+      },
+      {
+        "name": "tasmota32solo1.bin",
+        "size": 2122400,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32solo1.bin"
+      },
+      {
+        "name": "tasmota32solo1.factory.bin",
+        "size": 3039904,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32solo1.factory.bin"
+      },
+      {
+        "name": "tasmota32solo1.map.gz",
+        "size": 951538,
+        "browser_download_url": "https://github.com/arendst/Tasmota/releases/download/v15.6.0/tasmota32solo1.map.gz"
+      }
+    ]
+  }
+]

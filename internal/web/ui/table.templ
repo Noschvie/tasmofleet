@@ -1,0 +1,175 @@
+package ui
+
+import (
+	"strconv"
+)
+
+// TableCol is one column of a data table.
+type TableCol struct {
+	Label string
+	// SrOnly: the header names the column for screen readers only (the row-actions column).
+	SrOnly bool
+	// Class goes on the header cell, Col on the column's <col> (its default width in app.css).
+	Class, Col string
+}
+
+// TableData is a data table (design v2, D19). Key names its entry in the column registry of
+// internal/web (tableDefs): the server writes the user's saved widths, hidden columns, order
+// and pins into the rendered table and adds the Columns chooser; tables.js adds resizing,
+// fitting and the sticky offsets of the pinned columns. The rows are the component's children.
+type TableData struct {
+	Key   string
+	Class string
+	// Select names the leading "select all" checkbox for screen readers; "" means the table
+	// has no selection column. The checkbox is hidden until select.js runs (it needs the script).
+	Select string
+	Cols   []TableCol
+	// SortBase is the URL the sort links extend (filters kept); Sort and Dir the current sort.
+	SortBase, Sort, Dir string
+}
+
+// Table renders the frame of a data table: colgroup, header and the rows given as children.
+templ Table(t TableData) {
+	<table
+		if t.Class != "" {
+			class={ t.Class }
+		}
+		data-table={ t.Key }
+		if t.SortBase != "" {
+			data-sortbase={ t.SortBase }
+			data-sort={ t.Sort }
+			data-dir={ t.Dir }
+		}
+	>
+		<colgroup>
+			if t.Select != "" {
+				<col class="c-sel"/>
+			}
+			for _, c := range t.Cols {
+				if c.Col != "" {
+					<col class={ c.Col }/>
+				} else {
+					<col/>
+				}
+			}
+		</colgroup>
+		<thead>
+			<tr>
+				if t.Select != "" {
+					<th class="sel"><input type="checkbox" data-select-all hidden aria-label={ t.Select }/><span class="sr-only">Select</span></th>
+				}
+				for _, c := range t.Cols {
+					<th
+						if c.Class != "" {
+							class={ c.Class }
+						}
+					>
+						if c.SrOnly {
+							<span class="sr-only">{ c.Label }</span>
+						} else {
+							{ c.Label }
+						}
+					</th>
+				}
+			</tr>
+		</thead>
+		<tbody>
+			{ children... }
+		</tbody>
+	</table>
+}
+
+// DeviceCardData is one device of the phone list (design v2: below 45rem the device list shows
+// cards instead of the table). The live parts are slots, so the same partials that the event
+// stream pushes render them; each slot has the event name it is swapped by.
+type DeviceCardData struct {
+	ID   string // the device id: the value of the selection box, shared with the table row (select.js)
+	Name string
+	Href string
+	// Meta is the second line: address, chip and firmware, joined by " · ".
+	Meta []string
+	// Select: the card has a selection box (the bulk actions exist).
+	Select bool
+	// Outdated adds the "Update available" badge, Deviations the policy badge ("1 deviation").
+	Outdated   bool
+	Deviations int
+	// Status (badges), Uptime and Wifi (last line), Power (the relay buttons) and Menu (row actions).
+	Status, Uptime, Wifi, Power, Menu templ.Component
+}
+
+// DeviceListData is the phone card list: "Select all N" and one card per device.
+type DeviceListData struct {
+	Select bool
+	Cards  []DeviceCardData
+}
+
+// DeviceCards renders the phone list of the device list.
+templ DeviceCards(l DeviceListData) {
+	<div class="dcards">
+		if l.Select {
+			<label class="dcards-all" data-select-all-row hidden><input type="checkbox" data-select-all aria-label="Select all devices"/><span>Select all { strconv.Itoa(len(l.Cards)) }</span></label>
+		}
+		<ul class="dcard-list" role="list">
+			for _, c := range l.Cards {
+				@DeviceCard(c)
+			}
+		</ul>
+	</div>
+}
+
+// DeviceCard is one device on a phone: selection box, name with the status dot, address, chip
+// and firmware, the status badges, uptime and signal, and on the right the power control and
+// the row actions. The name is the link (its accessible name is the device name); CSS
+// stretches its hit area over the card's text block, as the prototype opens the device there.
+templ DeviceCard(c DeviceCardData) {
+	<li class="dcard" data-id={ c.ID }>
+		if c.Select {
+			<label class="dcard-sel"><input type="checkbox" name="id" value={ c.ID } aria-label={ "Select " + c.Name }/></label>
+		}
+		<div class="dcard-main">
+			<span class="dcard-name"><span class="dcard-dot" aria-hidden="true"></span><a class="dcard-title" href={ templ.URL(c.Href) }>{ c.Name }</a></span>
+			<span class="dcard-meta" data-visual-mask>
+				for i, m := range c.Meta {
+					if i > 0 {
+						{ " · " }
+					}
+					<span class="dcard-meta-part">{ m }</span>
+				}
+			</span>
+			<span class="dcard-badges">
+				<span class="dcard-st" sse-swap={ "health-" + c.ID }>
+					@slot(c.Status)
+				</span>
+				if c.Outdated {
+					<span class="bdg t-accent">Update available</span>
+				}
+				if c.Deviations == 1 {
+					<span class="bdg t-warn">1 deviation</span>
+				} else if c.Deviations > 1 {
+					<span class="bdg t-warn">{ strconv.Itoa(c.Deviations) } deviations</span>
+				}
+			</span>
+			// the prototype's last line: "Up 19d 1h · -60 dBm", "Last seen 3h ago" (the uptime part
+			// says seen when the device is down) or "Never responded" (status Unknown); CSS picks.
+			// The separator is an expression: templ drops the leading space of literal text.
+			<span class="dcard-last" data-visual-mask><span class="dl-up">Up </span><span class="dl-last">Last </span><span class="dl-uptime" sse-swap={ "uptime-" + c.ID }>
+				@slot(c.Uptime)
+			</span><span class="dl-sep">{ " · " }</span><span class="dl-wifi" sse-swap={ "wifi-" + c.ID }>
+				@slot(c.Wifi)
+			</span><span class="dl-never">Never responded</span></span>
+		</div>
+		<div class="dcard-side">
+			<div class="pcell" sse-swap={ "power-" + c.ID }>
+				@slot(c.Power)
+			</div>
+			@slot(c.Menu)
+		</div>
+	</li>
+}
+
+// slot renders an optional component.
+templ slot(c templ.Component) {
+	if c != nil {
+		@c
+	}
+}

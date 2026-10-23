@@ -1,0 +1,22 @@
+# Link check for Markdown changes. Not a required status: ci.yml always runs on
+# PRs and its "changes" job decides docs-only PRs.
+name: docs
+
+on:
+  push:
+    branches: [main]
+    paths: ["**/*.md"]
+  pull_request:
+    paths: ["**/*.md"]
+
+permissions:
+  contents: read
+
+jobs:
+  links:
+    name: relative Markdown links
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - run: python3 -I tools/check-doc-links.py .

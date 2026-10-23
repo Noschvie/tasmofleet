@@ -1,0 +1,65 @@
+<!-- @dsCard group="Templates" name="Dashboard" subtitle="Stat tiles and recent transactions, one row per transaction" viewport="640x640" -->
+<!doctype html>
+<html lang="en" data-theme-auto>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tasmofleet DS — Dashboard</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <script src="../theme.js"></script>
+    <style>
+      /* Demo scaffolding only: theme switch under the page. */
+      .demo-foot { max-width: var(--container); margin: 0 auto; padding: 0 var(--page-pad) var(--space-8);
+        display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); color: var(--color-text-2); font-size: 12px; }
+    </style>
+  </head>
+  <body>
+<header class="top">
+<a class="brand" href="dashboard.html"><img src="../assets/logo.svg" alt="" width="26" height="26">tasmofleet</a>
+<nav aria-label="Main" class="mainnav">
+<a class="navtop is-active" href="dashboard.html" aria-current="page">Dashboard</a>
+<details class="navgroup"><summary class="navtop">Devices</summary>
+<div class="menu"><a href="devices.html">Devices</a><a href="#">Add devices</a><a href="#">Policy</a></div></details>
+<details class="navgroup"><summary class="navtop">Updates</summary>
+<div class="menu"><a href="#">New transaction</a><a href="#">Transactions</a><a href="firmware.html">Firmware</a></div></details>
+<details class="navgroup"><summary class="navtop">System</summary>
+<div class="menu right"><a href="#">Settings</a><a href="#">Users</a><a href="#">Audit</a><a href="#">About</a></div></details>
+</nav>
+<div class="user">
+<details class="navgroup"><summary class="who">alice <small>(admin)</small></summary>
+<div class="menu right"><a href="#">Change password</a></div></details>
+<form method="post" action="#"><button type="submit" class="sm">Sign out</button></form>
+</div>
+</header>
+<main>
+<div class="page-head"><h1>Dashboard</h1><div class="actions"><a class="button primary" href="#">New transaction</a></div></div>
+<p class="warning" role="status">7 devices have been offline for more than a day (Fairylights 1–7). <a href="devices.html">Show them</a></p>
+<section class="card" aria-labelledby="fleet-h"><h2 id="fleet-h">Fleet health</h2>
+<ul class="stats"><li><a class="stat tone-ok" href="devices.html"><span class="num">17</span><span class="what" data-glyph="✓">Online</span></a></li><li><a class="stat tone-warn" href="devices.html"><span class="num">2</span><span class="what" data-glyph="!">Stale</span></a></li><li><a class="stat tone-bad" href="devices.html"><span class="num">7</span><span class="what" data-glyph="✕">Offline</span></a></li><li><a class="stat tone-bad zero" href="devices.html"><span class="num">0</span><span class="what" data-glyph="✕">Auth failed</span></a></li><li><a class="stat tone-neutral" href="devices.html"><span class="num">1</span><span class="what" data-glyph="?">Unknown</span></a></li></ul>
+<p class="muted summary">27 devices in total · 20 on 16.0.0 · 6 can be updated.</p></section>
+<section class="card" aria-labelledby="jobs-h"><h2 id="jobs-h">Recent transactions</h2>
+<table class="dense"><thead><tr><th>Transaction</th><th>State</th><th>Target</th><th>Result</th><th>Started by</th><th>Started</th></tr></thead><tbody>
+<tr><td data-label="Transaction" class="p1"><a href="#">#44</a> <small class="muted">7 devices</small></td>
+<td data-label="State" class="p2"><span class="badge tone-bad">Failed</span></td><td data-label="Target" class="s">16.0.0</td>
+<td data-label="Result" class="s">0 of 7 updated · 7 offline</td><td data-label="Started by" class="s">alice</td><td data-label="Started" class="s">12 min ago</td></tr>
+<tr><td data-label="Transaction" class="p1"><a href="#">#43</a> <small class="muted">1 device</small></td>
+<td data-label="State" class="p2"><span class="badge tone-info">Flashing</span></td><td data-label="Target" class="s">16.0.0</td>
+<td data-label="Result" class="s">Server Rack Fan, step 3 of 5</td><td data-label="Started by" class="s">scheduler</td><td data-label="Started" class="s">2 h ago</td></tr>
+<tr><td data-label="Transaction" class="p1"><a href="#">#42</a> <small class="muted">12 devices</small></td>
+<td data-label="State" class="p2"><span class="badge tone-ok">Succeeded</span></td><td data-label="Target" class="s">16.0.0</td>
+<td data-label="Result" class="s">12 of 12 updated</td><td data-label="Started by" class="s">alice</td><td data-label="Started" class="s">2 h ago</td></tr>
+<tr><td data-label="Transaction" class="p1"><a href="#">#41</a> <small class="muted">5 devices</small></td>
+<td data-label="State" class="p2"><span class="badge tone-ok">Succeeded</span></td><td data-label="Target" class="s">16.0.0</td>
+<td data-label="Result" class="s">5 of 5 updated</td><td data-label="Started by" class="s">alice</td><td data-label="Started" class="s">yesterday 21:31</td></tr>
+<tr><td data-label="Transaction" class="p1"><a href="#">#40</a> <small class="muted">3 devices</small></td>
+<td data-label="State" class="p2"><span class="badge tone-warn">Partly done</span></td><td data-label="Target" class="s">MQTT settings</td>
+<td data-label="Result" class="s">2 of 3 compliant · 1 deviating</td><td data-label="Started by" class="s">policy</td><td data-label="Started" class="s">yesterday 18:02</td></tr>
+<tr><td data-label="Transaction" class="p1"><a href="#">#39</a> <small class="muted">1 device</small></td>
+<td data-label="State" class="p2"><span class="badge tone-neutral">Cancelled</span></td><td data-label="Target" class="s">15.1.0</td>
+<td data-label="Result" class="s">cancelled before start</td><td data-label="Started by" class="s">alice</td><td data-label="Started" class="s">2026-10-14</td></tr>
+</tbody></table>
+<p class="summary"><a href="#">All transactions</a></p></section>
+</main>
+<div class="demo-foot"><span>tasmofleet DS template, sample data</span><div class="theme-switch" role="group" aria-label="Theme"><button type="button" class="sm" data-theme-set="system">Auto</button><button type="button" class="sm" data-theme-set="light">Light</button><button type="button" class="sm" data-theme-set="dark">Dark</button></div></div>
+  </body>
+</html>

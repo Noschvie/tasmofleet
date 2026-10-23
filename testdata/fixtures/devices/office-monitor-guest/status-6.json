@@ -1,0 +1,1 @@
+{"StatusMQT":{"MqttHost":"mqtt.example.internal","MqttPort":1883,"MqttClientMask":"office-monitor-guest","MqttClient":"office-monitor-guest","MqttUser":"tasmota","MqttCount":1,"MqttTLS":0,"MAX_PACKET_SIZE":1200,"KEEPALIVE":30,"SOCKET_TIMEOUT":4}}

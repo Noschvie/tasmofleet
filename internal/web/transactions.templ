@@ -1,0 +1,483 @@
+package web
+
+import (
+	"strconv"
+
+	"github.com/nofuturekid/tasmofleet/internal/model"
+
+	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+)
+
+// The Updates pages (design v2, WP P4): the transactions list ("updates"), one transaction
+// ("txn"; a "Make compliant" transaction as the prototype's "compliant" screen) and the new
+// update with its preview ("newupdate", "newupdate-v-preview"). CSS: app.css "page: Updates".
+
+// transactionsPage is /transactions: the running transactions as cards, then the history. The
+// list re-reads itself on job events (the cards' progress and the history's results move).
+templ transactionsPage(p txListView) {
+	@ui.PageHeader("Update transactions", "Every bulk change runs as a transaction with a log per device") {
+		if p.CanStart {
+			@ui.Button(ui.Btn{Label: "New update", Kind: "primary", Href: p.Base + "/updates/new"})
+		}
+	}
+	<div hx-get={ p.Base + "/transactions" } hx-trigger="sse:job throttle:2s" hx-select="#txlist" hx-target="#txlist" hx-swap="outerHTML">
+		@txList(p)
+	</div>
+}
+
+templ txList(p txListView) {
+	<div id="txlist" class="upd">
+		if len(p.History) == 0 {
+			<section class="ucard">
+				@ui.Empty("No transactions yet", "Updates you start show up here.") {
+					if p.CanStart {
+						@ui.Button(ui.Btn{Label: "New update", Kind: "primary", Href: p.Base + "/updates/new"})
+					}
+				}
+			</section>
+		} else {
+			for _, t := range p.Running {
+				<div class="upd-run">
+					@ui.TxnCard(t)
+				</div>
+			}
+			<section class="ulist upd-hist" aria-labelledby="hist-h">
+				<div class="ulist-head"><h2 id="hist-h">History</h2></div>
+				<div class="upd-hhead" aria-hidden="true"><span>ID</span><span>What</span><span>Devices</span><span>Result</span><span>Started by</span></div>
+				for _, h := range p.History {
+					<a class="upd-hrow" href={ templ.SafeURL(h.Href) }>
+						<span class="upd-hid">{ h.ID }</span>
+						<span class="upd-htitle">{ h.Title }</span>
+						<span class="upd-hn">{ h.Devices }</span>
+						<span class="upd-hst">
+							@ui.Badge(h.Tone, h.Result)
+						</span>
+						<span class="upd-hwho">{ h.By } · <time datetime={ h.At }>{ h.When }</time></span>
+					</a>
+				}
+			</section>
+		}
+	</div>
+}
+
+// batchPageView is /transactions/{batch}. The whole body re-reads itself on job events and, while
+// the transaction runs, every 3 s (an event can arrive before its state is committed, and nothing
+// follows the last one), keeping the device whose log is open (?job=).
+templ batchPageView(p txnPage) {
+	<div id="txn" hx-get={ p.LiveURL } hx-trigger="sse:job throttle:1s, sse:resync" hx-swap="innerHTML">
+		@txnBody(p)
+	</div>
+	@txnDialog(p.CSRF)
+}
+
+// txnDialog is the confirmation of "Cancel remaining", filled by dialog.js from the button (the
+// counts change while the transaction runs; the button in the live region carries the current
+// ones). Without JavaScript the button is a link to the confirmation page.
+templ txnDialog(csrf string) {
+	<dialog id="dlg-txn" class="udlg" aria-labelledby="dlg-txn-h">
+		<form method="post" action="" class="udlg-in" data-fill="form">
+			<input type="hidden" name="csrf" value={ csrf }/>
+			<h2 id="dlg-txn-h" data-fill="title"></h2>
+			<p class="udlg-body" data-fill="text"></p>
+			<div class="udlg-foot">
+				<button type="button" class="btn" data-close data-fill="dismiss">Cancel</button>
+				<button type="submit" class="btn btn-primary" data-fill="verb"></button>
+			</div>
+		</form>
+	</dialog>
+}
+
+templ txnBody(p txnPage) {
+	if p.Active {
+		<span hidden hx-get={ p.LiveURL } hx-trigger="every 3s" hx-target="#txn" hx-swap="innerHTML"></span>
+	}
+	<div class="pghead upd-head">
+		<div class="pghead-t">
+			<div class="upd-h1">
+				<h1>{ p.Title }</h1>
+				<span id="txn-state" class={ "bdg", "bdg-lg", "t-" + string(p.StateTone) }>{ p.State }</span>
+			</div>
+			<p class="pghead-sub"><span class="mono" data-visual-mask>{ p.ID }</span> · { p.Sub }</p>
+			if p.RetryOf != 0 || len(p.RetriedBy) > 0 {
+				<p class="pghead-sub upd-links">
+					if p.RetryOf != 0 {
+						Retry of <a href={ templ.SafeURL(p.Base + "/transactions/" + bid(p.RetryOf)) }>{ txID(p.RetryOf) }</a>
+					}
+					if len(p.RetriedBy) > 0 {
+						Retried in
+						for i, b := range p.RetriedBy {
+							if i > 0 {
+								,
+							}
+							<a href={ templ.SafeURL(p.Base + "/transactions/" + bid(b)) }>{ txID(b) }</a>
+						}
+					}
+				</p>
+			}
+		</div>
+		<div class="pghead-acts">
+			if p.RetryN > 0 {
+				if p.Active {
+					<button type="button" class="btn" disabled title="Retry when every device has finished">Retry failed ({ strconv.Itoa(p.RetryN) })</button>
+				} else {
+					<a class="btn" href={ templ.SafeURL(p.Base + "/transactions/" + bid(p.Batch) + "/retry") }>Retry failed ({ strconv.Itoa(p.RetryN) })</a>
+				}
+			}
+			if p.Active {
+				<a
+					class="btn"
+					href={ templ.SafeURL(p.Base + "/transactions/" + bid(p.Batch) + "/cancel") }
+					data-dialog="dlg-txn"
+					data-dlg-title={ "Cancel " + p.ID + "?" }
+					data-dlg-text={ p.CancelText }
+					data-dlg-action={ p.Base + "/transactions/" + bid(p.Batch) + "/cancel" }
+					data-dlg-verb="Cancel remaining"
+					data-dlg-dismiss="Keep running"
+				>Cancel remaining</a>
+			}
+			if p.Policy {
+				@ui.Button(ui.Btn{Label: "Back to policy", Kind: "primary", Href: p.Base + "/policy"})
+			}
+		</div>
+	</div>
+	<section id="batch-summary" class="ucard upd-prog" aria-label="Progress">
+		@ui.SegBar(p.Bar)
+		<div class="upd-counts" role="status">
+			if p.Policy {
+				<span><b>{ strconv.Itoa(p.Done) }</b> applied</span>
+				<span><b class="upd-bad">{ strconv.Itoa(p.Failed) }</b> failed</span>
+				if p.Running > 0 {
+					<span><b>{ strconv.Itoa(p.Running) }</b> in progress</span>
+				}
+				if p.Queued > 0 {
+					<span><b>{ strconv.Itoa(p.Queued) }</b> queued</span>
+				}
+			} else {
+				<span><b>{ strconv.Itoa(p.Done) }</b> done</span>
+				<span><b>{ strconv.Itoa(p.Running) }</b> in progress</span>
+				<span><b>{ strconv.Itoa(p.Queued) }</b> queued</span>
+				<span><b class="upd-bad">{ strconv.Itoa(p.Failed) }</b> failed</span>
+			}
+			if p.Canceled > 0 {
+				<span><b>{ strconv.Itoa(p.Canceled) }</b> cancelled</span>
+			}
+			if p.CancelPending > 0 {
+				<span><b>{ strconv.Itoa(p.CancelPending) }</b> cancel requested</span>
+			}
+			<span class="upd-of">of { strconv.Itoa(p.Total) }</span>
+		</div>
+	</section>
+	if p.Policy {
+		<div class="upd-cards">
+			for _, c := range p.Cards {
+				<section class="upd-dev" aria-label={ c.Name }>
+					<div class="upd-dev-head">
+						<span class={ "upd-dot", "t-" + string(c.Tone) } aria-hidden="true"></span>
+						<a href={ templ.SafeURL(c.Href) }>{ c.Name }</a>
+					</div>
+					for _, ch := range c.Changes {
+						<div class="upd-change">
+							<span class="upd-change-t">{ ch.Text }</span>
+							@ui.Badge(ch.Tone, ch.Label)
+						</div>
+					}
+					if c.Reason != "" {
+						<p class="upd-why">{ c.Reason }</p>
+					}
+				</section>
+			}
+		</div>
+	} else {
+		<div class="upd-cols">
+			<section class="upd-rows" aria-label="Devices">
+				for _, r := range p.Rows {
+					<a class="upd-row" href={ templ.SafeURL(r.Href) } id={ "job-" + strconv.FormatInt(int64(r.JobID), 10) } if r.Selected {
+						aria-current="true"
+					}>
+						<span class="upd-row-name">{ r.Name }</span>
+						if r.From != "" || r.To != "" {
+							<span class="upd-row-ver">{ r.From } → { r.To }</span>
+						}
+						<span class="upd-row-state">
+							@ui.Badge(r.Tone, r.Badge)
+							if r.Bar {
+								@ui.MiniBar(r.Pct)
+							}
+						</span>
+					</a>
+				}
+			</section>
+			if p.Sel != nil {
+				<section class="upd-log" aria-labelledby="log-h">
+					<div class="upd-log-head">
+						<span id="log-h">Log · { p.Sel.Name }</span>
+						<span class="upd-log-acts">
+							if p.Sel.CanCancel {
+								<a
+									href={ templ.SafeURL(p.Base + "/jobs/" + jid(p.Sel.JobID) + "/cancel") }
+									data-dialog="dlg-txn"
+									data-dlg-title={ "Cancel the update of " + p.Sel.Name + "?" }
+									data-dlg-text="A running flash cannot be stopped; a device that has not started keeps its previous state."
+									data-dlg-action={ p.Base + "/jobs/" + jid(p.Sel.JobID) + "/cancel" }
+									data-dlg-verb="Cancel update"
+									data-dlg-dismiss="Keep running"
+								>Cancel</a>
+							}
+							if p.Sel.CanRetry {
+								<a href={ templ.SafeURL(p.Base + "/transactions/" + bid(p.Batch) + "/retry?id=" + strconv.FormatInt(int64(p.Sel.DeviceID), 10)) }>Retry</a>
+							}
+							<button type="button" data-copy="#log-lines">Copy log</button>
+						</span>
+					</div>
+					<div class="upd-log-body" id="log-lines" tabindex="0" data-visual-mask>
+						for _, l := range p.Sel.Log {
+							<span class={ "upd-log-line", templ.KV("upd-log-err", l.Err) }><span class="upd-log-at">{ l.At }</span><span class="upd-log-t">@ui.SoftJSON(l.Text)</span></span>
+						}
+						if len(p.Sel.Log) == 0 {
+							<span class="upd-log-line"><span class="upd-log-t">No events yet.</span></span>
+						}
+					</div>
+				</section>
+			}
+		</div>
+	}
+}
+
+// updateNewPage is /updates/new: 1 · Devices, 2 · Release, 3 · Options and the Plan aside; the
+// form posts to the preview (step 4). Without JavaScript the plan shows the server's selection.
+templ updateNewPage(f updateForm, csrf string) {
+	@ui.PageHeader("New firmware update", "Pick devices and a release, check the plan, then start.")
+	if f.Error != "" {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: f.Error, Alert: true})
+	}
+	<form id="picker" class="upd-split" method="post" action={ templ.SafeURL(f.Base + "/updates/preview") }>
+		<input type="hidden" name="csrf" value={ csrf }/>
+		<div class="upd-main">
+			<section class="ulist upd-pick" aria-labelledby="dev-h">
+				<div class="ulist-head">
+					<h2 id="dev-h">1 · Devices</h2>
+					<span class="upd-head-r">
+						<span class="upd-n" data-select-n>{ strconv.Itoa(f.SelectedN()) } selected</span>
+						if len(f.Options) > 0 {
+							<details class="umenu upd-quick">
+								<summary class="btn btn-link btn-sm">Select</summary>
+								<div class="menu-panel" role="group" aria-label="Quick selection">
+									<button type="submit" class="menu-item" form="pick-form" name="select" value="all" data-pick="all" data-picker="picker">All that can be updated</button>
+									if f.Release != "" {
+										<button type="submit" class="menu-item" form="pick-form" name="select" value="update" data-pick="update" data-picker="picker">All with an update to { f.Release }</button>
+									}
+									for _, fam := range f.Families {
+										<button type="submit" class="menu-item" form="pick-form" name="select" value={ "family:" + fam.Family } data-pick={ "family:" + fam.Family } data-picker="picker">All { chipNameOf(fam.Family) } ({ strconv.Itoa(fam.Count) })</button>
+									}
+									<button type="submit" class="menu-item" form="pick-form" name="select" value="none" data-pick="none" data-picker="picker">None</button>
+								</div>
+							</details>
+						}
+					</span>
+				</div>
+				if len(f.Options) == 0 {
+					<p class="upd-none">No devices.</p>
+				} else {
+					<div class="upd-pick-list">
+						for _, o := range f.Options {
+							<label
+								class="upd-pick-row"
+								data-family={ string(o.Device.Identity.Family) }
+								data-file={ o.File }
+								if o.Update {
+									data-update="1"
+								}
+								if o.Blocked != "" {
+									title={ "Not selectable: " + o.Blocked }
+								}
+							>
+								<input type="checkbox" name="id" value={ strconv.FormatInt(int64(o.Device.ID), 10) } aria-label={ "Select " + o.Device.Name } checked?={ o.Selected } disabled?={ o.Blocked != "" }/>
+								<span class={ "upd-dot", "t-" + string(o.Dot) } aria-hidden="true"></span>
+								<span class="upd-pick-name">{ o.Device.Name }</span>
+								if o.Blocked != "" && o.Blocked != o.Status {
+									<small class="upd-pick-why">{ o.Blocked }</small>
+								}
+								<small class="upd-pick-fw">{ o.ChipVersion() }</small>
+							</label>
+						}
+					</div>
+				}
+			</section>
+			<section class="ucard upd-rel" aria-labelledby="rel-h">
+				<h2 id="rel-h">2 · Release</h2>
+				for _, o := range f.RelOpts {
+					@relOption(o)
+				}
+				if len(f.OlderRels) > 0 {
+					<details class="upd-older">
+						<summary class="btn btn-link btn-sm">Older releases ({ strconv.Itoa(len(f.OlderRels)) })</summary>
+						for _, o := range f.OlderRels {
+							@relOption(o)
+						}
+					</details>
+				}
+				if len(f.RelOpts) == 0 {
+					<p class="upd-none">No release is known yet. Open Firmware to check for releases.</p>
+				}
+			</section>
+			<section class="ucard upd-opts" aria-labelledby="opt-h">
+				<h2 id="opt-h">3 · Options</h2>
+				<input type="hidden" name="backup_shown" value="1"/>
+				<label class="upd-opt"><input type="checkbox" name="backup" value="1" checked?={ !f.SkipBackup }/>Back up each device before flashing</label>
+				<label class="upd-opt">
+					Policy
+					<select name="policy">
+						for _, o := range f.PolicyOpts() {
+							<option value={ o.Value } title={ o.Text } selected?={ o.Checked }>{ o.Label }</option>
+						}
+					</select>
+				</label>
+				<label class="upd-opt">
+					Power after update
+					<select name="power_after">
+						for _, o := range f.PowerOpts() {
+							<option value={ o.Value } selected?={ o.Checked }>{ o.Label }</option>
+						}
+					</select>
+				</label>
+				<label class="upd-opt">
+					Delivery
+					<select name="delivery">
+						for _, o := range f.DeliveryOpts() {
+							<option value={ o.Value } selected?={ o.Checked }>{ o.Label }</option>
+						}
+					</select>
+				</label>
+				<label class="upd-opt">
+					Variant override
+					<input name="variant" value={ f.Variant } placeholder="keep the detected variant"/>
+				</label>
+			</section>
+		</div>
+		<aside class="ucard upd-aside" aria-labelledby="plan-h">
+			<h2 id="plan-h">Plan</h2>
+			<dl class="upd-facts">
+				<dt>Devices</dt><dd data-plan-devices>{ strconv.Itoa(f.SelectedN()) }</dd>
+				<dt>Firmware files</dt><dd data-plan-files>{ strconv.Itoa(f.FileCount()) }</dd>
+				<dt>Estimated time</dt><dd data-plan-est data-parallel={ strconv.Itoa(f.Parallel) } data-per-device={ strconv.Itoa(int(updatePerDevice.Seconds())) }>{ updateEstimate(f.SelectedN(), f.Parallel) }</dd>
+			</dl>
+			<ol class="upd-steps">
+				<li data-plan-backup hidden?={ f.SkipBackup }>Back up each device</li>
+				<li>Upload firmware, { strconv.Itoa(f.Parallel) } at a time</li>
+				<li>Wait for each device to come back and confirm the version</li>
+			</ol>
+			<p class="upd-hint" role="status" data-push-hint hidden></p>
+			<button type="submit" class="btn btn-primary btn-tall">Review update</button>
+		</aside>
+	</form>
+	<form id="pick-form" method="get" action={ templ.SafeURL(f.Base + "/updates/new") }></form>
+}
+
+templ relOption(o ui.Option) {
+	<label class="upd-relopt">
+		<input type="radio" name="release" value={ o.Value } checked?={ o.Checked }/>
+		<span class="upd-relopt-t">{ o.Label }</span>
+		<small class="upd-relopt-d">{ o.Text }</small>
+	</label>
+}
+
+// updatePreviewPage is the answer to "Review update" (step 4): what each device gets and what
+// happens, then Start update. It is a page of its own, so it also works without JavaScript.
+templ updatePreviewPage(p previewPage, csrf string) {
+	@ui.PageHeader("New firmware update", "Pick devices and a release, check the plan, then start.")
+	<div class="upd-split upd-split-prev">
+		<section class="ulist upd-prev" aria-labelledby="prev-h">
+			<div class="ulist-head">
+				<h2 id="prev-h">4 · Preview · { plural(p.Upgrades(), "device") }</h2>
+				<button type="submit" class="btn btn-link btn-sm" form="change">Change</button>
+			</div>
+			<div class="upd-prev-list">
+				for _, r := range p.Rows {
+					<div class="upd-prow">
+						<span class="upd-prow-name">{ r.Device.Name }</span>
+						if r.Go {
+							<span class="upd-prow-ver"><span class="upd-from">{ r.From }</span> → <b>{ r.To }</b></span>
+							<span class="upd-prow-file" title={ r.Item.Filename }>{ r.FileText() }</span>
+						} else {
+							<span class="upd-prow-dec">
+								@ui.Badge(r.Tone(), label(r.Item.Decision))
+							</span>
+							<span class="upd-prow-why" title={ r.Item.Reason }>{ humanReason(r.Item.Reason) }</span>
+						}
+						if r.Go && r.Item.Plan == model.PlanStaged {
+							<span class="upd-prow-note">Staged: minimal firmware first, then the release.</span>
+						}
+						if r.PowerText() != "" {
+							<span class="upd-prow-note">{ r.PowerText() }</span>
+						}
+						if r.Note != "" {
+							<span class="upd-prow-note">{ r.Note }</span>
+						}
+					</div>
+				}
+			</div>
+		</section>
+		<aside class="ucard upd-aside upd-what" aria-labelledby="what-h">
+			<h2 id="what-h">What happens</h2>
+			<dl class="upd-facts upd-facts-wide">
+				<dt>Target</dt><dd><b>{ p.ReleaseText }</b></dd>
+				<dt>Devices</dt><dd><b>{ strconv.Itoa(p.Upgrades()) }</b></dd>
+				if p.Refused() > 0 {
+					<dt>Refused</dt><dd class="upd-bad">{ plural(p.Refused(), "device") }</dd>
+				}
+				if p.Skips() > 0 {
+					<dt>Skipped</dt><dd>{ plural(p.Skips(), "device") }</dd>
+				}
+				<dt>Files</dt><dd>{ strconv.Itoa(len(p.Files)) }</dd>
+				if len(p.Files) > 0 {
+					<dt>Download first</dt><dd>Nothing</dd>
+					<dt>From cache</dt><dd class="mono">{ joinComma(p.Files) }</dd>
+				}
+				if p.Bytes > 0 {
+					<dt>Sent to devices</dt><dd>{ sizeText(p.Bytes) } over the LAN</dd>
+				}
+				<dt>Delivery</dt>
+				<dd data-visual-mask>
+					{{ lead, url, tail := p.Delivery() }}
+					{ lead }
+					if url != "" {
+						<span class="upd-url">@ui.Soft(url)</span>
+					}
+					{ tail }
+				</dd>
+				<dt>Estimated</dt><dd>{ updateEstimate(p.Upgrades(), p.Parallel) }</dd>
+			</dl>
+			<div class="upd-go">
+				<button type="submit" class="btn btn-tall" form="change">Back</button>
+				if len(p.IDs) > 0 {
+					<button type="submit" class="btn btn-primary btn-tall" form="start">Start update</button>
+				}
+			</div>
+			if len(p.IDs) == 0 {
+				<p class="upd-hint">No device can be updated with these settings.</p>
+			}
+		</aside>
+	</div>
+	<form id="start" method="post" action={ templ.SafeURL(p.Base + "/updates") }>
+		@previewFields(p, csrf, p.IDs)
+	</form>
+	<form id="change" method="post" action={ templ.SafeURL(p.Base + "/updates/new") }>
+		@previewFields(p, csrf, p.Picked)
+	</form>
+}
+
+// previewFields carry the choice of the preview to the start or back to the picker.
+templ previewFields(p previewPage, csrf string, ids []string) {
+	<input type="hidden" name="csrf" value={ csrf }/>
+	for _, id := range ids {
+		<input type="hidden" name="id" value={ id }/>
+	}
+	<input type="hidden" name="release" value={ p.Form.Release }/>
+	<input type="hidden" name="policy" value={ p.Form.Policy }/>
+	<input type="hidden" name="variant" value={ p.Form.Variant }/>
+	if p.Form.SkipBackup {
+		<input type="hidden" name="skip_backup" value="1"/>
+	}
+	<input type="hidden" name="power_after" value={ p.Form.PowerAfter }/>
+	<input type="hidden" name="delivery" value={ p.Form.Delivery }/>
+}

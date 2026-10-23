@@ -1,0 +1,1 @@
+{"base": "office-monitor-guest", "description": "ESP32-C3 derived from the ESP32 capture: Hardware string and OtaUrl changed; image tag release-tasmota32c3", "replace": [{"old": "ESP32-D0WDQ6 v1.0", "new": "ESP32-C3 (revision v0.4)"}, {"old": "tasmota32.bin", "new": "tasmota32c3.bin"}, {"old": "release-tasmota32)", "new": "release-tasmota32c3)"}]}

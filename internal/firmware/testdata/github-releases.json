@@ -1,0 +1,260 @@
+[
+  {
+    "tag_name": "v16.1.0-rc1",
+    "draft": false,
+    "prerelease": true,
+    "assets": [
+      {
+        "name": "tasmota.bin.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v16.1.0-rc1/tasmota.bin.gz"
+      },
+      {
+        "name": "tasmota-minimal.bin.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v16.1.0-rc1/tasmota-minimal.bin.gz"
+      },
+      {
+        "name": "tasmota-lite.bin.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v16.1.0-rc1/tasmota-lite.bin.gz"
+      },
+      {
+        "name": "tasmota-sensors.bin.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v16.1.0-rc1/tasmota-sensors.bin.gz"
+      },
+      {
+        "name": "tasmota-DE.bin.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v16.1.0-rc1/tasmota-DE.bin.gz"
+      },
+      {
+        "name": "tasmota-zbbridge.bin.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v16.1.0-rc1/tasmota-zbbridge.bin.gz"
+      },
+      {
+        "name": "tasmota.map.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v16.1.0-rc1/tasmota.map.gz"
+      },
+      {
+        "name": "tasmota32.bin",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v16.1.0-rc1/tasmota32.bin"
+      },
+      {
+        "name": "tasmota32.factory.bin",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v16.1.0-rc1/tasmota32.factory.bin"
+      },
+      {
+        "name": "tasmota32-safeboot.bin",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v16.1.0-rc1/tasmota32-safeboot.bin"
+      },
+      {
+        "name": "tasmota32c3.bin",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v16.1.0-rc1/tasmota32c3.bin"
+      },
+      {
+        "name": "tasmota32solo1.bin",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v16.1.0-rc1/tasmota32solo1.bin"
+      },
+      {
+        "name": "tasmota32-sensors.bin",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v16.1.0-rc1/tasmota32-sensors.bin"
+      }
+    ]
+  },
+  {
+    "tag_name": "v16.0.0",
+    "draft": false,
+    "prerelease": false,
+    "assets": [
+      {
+        "name": "tasmota.bin.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v16.0.0/tasmota.bin.gz"
+      },
+      {
+        "name": "tasmota-minimal.bin.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v16.0.0/tasmota-minimal.bin.gz"
+      },
+      {
+        "name": "tasmota-lite.bin.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v16.0.0/tasmota-lite.bin.gz"
+      },
+      {
+        "name": "tasmota-sensors.bin.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v16.0.0/tasmota-sensors.bin.gz"
+      },
+      {
+        "name": "tasmota-DE.bin.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v16.0.0/tasmota-DE.bin.gz"
+      },
+      {
+        "name": "tasmota-zbbridge.bin.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v16.0.0/tasmota-zbbridge.bin.gz"
+      },
+      {
+        "name": "tasmota.map.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v16.0.0/tasmota.map.gz"
+      },
+      {
+        "name": "tasmota32.bin",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v16.0.0/tasmota32.bin"
+      },
+      {
+        "name": "tasmota32.factory.bin",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v16.0.0/tasmota32.factory.bin"
+      },
+      {
+        "name": "tasmota32-safeboot.bin",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v16.0.0/tasmota32-safeboot.bin"
+      },
+      {
+        "name": "tasmota32c3.bin",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v16.0.0/tasmota32c3.bin"
+      },
+      {
+        "name": "tasmota32solo1.bin",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v16.0.0/tasmota32solo1.bin"
+      },
+      {
+        "name": "tasmota32-sensors.bin",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v16.0.0/tasmota32-sensors.bin"
+      }
+    ]
+  },
+  {
+    "tag_name": "v15.3.0",
+    "draft": false,
+    "prerelease": false,
+    "assets": [
+      {
+        "name": "tasmota.bin.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v15.3.0/tasmota.bin.gz"
+      },
+      {
+        "name": "tasmota-minimal.bin.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v15.3.0/tasmota-minimal.bin.gz"
+      },
+      {
+        "name": "tasmota-lite.bin.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v15.3.0/tasmota-lite.bin.gz"
+      },
+      {
+        "name": "tasmota-sensors.bin.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v15.3.0/tasmota-sensors.bin.gz"
+      },
+      {
+        "name": "tasmota-DE.bin.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v15.3.0/tasmota-DE.bin.gz"
+      },
+      {
+        "name": "tasmota-zbbridge.bin.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v15.3.0/tasmota-zbbridge.bin.gz"
+      },
+      {
+        "name": "tasmota32.bin",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v15.3.0/tasmota32.bin"
+      }
+    ]
+  },
+  {
+    "tag_name": "v99.0.0",
+    "draft": true,
+    "prerelease": false,
+    "assets": [
+      {
+        "name": "tasmota.bin.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v99.0.0/tasmota.bin.gz"
+      },
+      {
+        "name": "tasmota-minimal.bin.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v99.0.0/tasmota-minimal.bin.gz"
+      },
+      {
+        "name": "tasmota-lite.bin.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v99.0.0/tasmota-lite.bin.gz"
+      },
+      {
+        "name": "tasmota-sensors.bin.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v99.0.0/tasmota-sensors.bin.gz"
+      },
+      {
+        "name": "tasmota-DE.bin.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v99.0.0/tasmota-DE.bin.gz"
+      },
+      {
+        "name": "tasmota-zbbridge.bin.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v99.0.0/tasmota-zbbridge.bin.gz"
+      },
+      {
+        "name": "tasmota.map.gz",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v99.0.0/tasmota.map.gz"
+      },
+      {
+        "name": "tasmota32.bin",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v99.0.0/tasmota32.bin"
+      },
+      {
+        "name": "tasmota32.factory.bin",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v99.0.0/tasmota32.factory.bin"
+      },
+      {
+        "name": "tasmota32-safeboot.bin",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v99.0.0/tasmota32-safeboot.bin"
+      },
+      {
+        "name": "tasmota32c3.bin",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v99.0.0/tasmota32c3.bin"
+      },
+      {
+        "name": "tasmota32solo1.bin",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v99.0.0/tasmota32solo1.bin"
+      },
+      {
+        "name": "tasmota32-sensors.bin",
+        "size": 1000,
+        "browser_download_url": "{{BASE}}/dl/v99.0.0/tasmota32-sensors.bin"
+      }
+    ]
+  }
+]

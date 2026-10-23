@@ -1,0 +1,7 @@
+# format: timestamp|retained-flag-as-delivered|topic|payload  (first 6 samples, one per distinct device where possible)
+2026-10-18T18:18:01+0200|0|stat/kitchen-spotlight/POWER|ON
+2026-10-18T18:18:01+0200|0|stat/livingroom-readinglamp/POWER|OFF
+2026-10-18T18:18:20+0200|0|stat/mr-bambu-plug/POWER|ON
+2026-10-18T18:18:21+0200|0|stat/bedroom-cabinet/POWER|ON
+2026-10-18T18:18:40+0200|0|stat/prusa-plug/POWER|OFF
+2026-10-18T18:18:41+0200|0|stat/office-monitor-guest/POWER|ON

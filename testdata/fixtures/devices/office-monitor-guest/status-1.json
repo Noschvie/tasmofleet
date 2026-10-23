@@ -1,0 +1,1 @@
+{"StatusPRM":{"Baudrate":115200,"SerialConfig":"8N1","GroupTopic":"tasmotas","OtaUrl":"http://tasmoadmin.example.internal:80/data/firmwares/tasmota32.bin","RestartReason":"Software reset CPU","Uptime":"0T01:17:47","StartupUTC":"2026-10-18T15:00:43","Sleep":50,"CfgHolder":4617,"BootCount":113,"BCResetTime":"2025-11-30T12:36:00","SaveCount":549}}

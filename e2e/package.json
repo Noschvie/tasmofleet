@@ -1,0 +1,15 @@
+{
+  "name": "tasmofleet-e2e",
+  "private": true,
+  "description": "Playwright end-to-end tests against the real tasmofleet binary and tasmofleet-devenv",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@types/pixelmatch": "5.2.6",
+    "@types/pngjs": "6.0.5",
+    "pixelmatch": "5.3.0",
+    "pngjs": "7.0.0"
+  }
+}

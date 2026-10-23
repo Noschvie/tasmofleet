@@ -1,0 +1,1 @@
+{"StatusPRM":{"Baudrate":115200,"SerialConfig":"8N1","GroupTopic":"tasmotas","OtaUrl":"http://tasmoadmin.example.internal:80/data/firmwares/tasmota-minimal.bin.gz","RestartReason":"Software/System restart","Uptime":"0T01:10:03","StartupUTC":"2026-10-18T15:08:26","Sleep":50,"CfgHolder":4617,"BootCount":226,"BCResetTime":"2023-04-14T11:47:39","SaveCount":900,"SaveAddress":"FA000"}}

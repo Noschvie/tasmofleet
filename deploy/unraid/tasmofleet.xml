@@ -1,0 +1,33 @@
+<?xml version="1.0"?>
+<!--
+  Unraid Docker template for tasmofleet (example values).
+  Install: copy to /boot/config/plugins/dockerMan/templates-user/my-tasmofleet.xml,
+  then Docker -> Add Container -> select "tasmofleet". Adjust the IP, URLs and
+  networks, and enter secrets only in the Unraid UI (never commit them).
+-->
+<Container version="2">
+  <Name>tasmofleet</Name>
+  <Repository>ghcr.io/nofuturekid/tasmofleet:latest</Repository>
+  <Registry>https://github.com/nofuturekid/tasmofleet/pkgs/container/tasmofleet</Registry>
+  <Network>br0</Network>
+  <MyIP>172.31.12.61</MyIP>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/nofuturekid/tasmofleet/issues</Support>
+  <Project>https://github.com/nofuturekid/tasmofleet</Project>
+  <Icon>https://raw.githubusercontent.com/nofuturekid/tasmofleet/main/assets/branding/icon-512.png</Icon>
+  <Overview>Tasmota fleet manager: inventory, health, safe OTA updates and backups for Tasmota devices. Serves firmware to devices on plain HTTP port 80 of its own IP; the UI on port 8080 belongs behind a reverse proxy. Only bootstrap settings are variables here; device networks, MQTT, firmware, backups, discovery, policy and single sign-on are configured on the System settings page after the first sign-in. Emergency access (IdP down): sign in with a local admin on the normal login page; reset its password with `tasmofleet user passwd`.</Overview>
+  <Category>HomeAutomation: Tools:</Category>
+  <WebUI>[PUBLIC_URL]</WebUI>
+  <ExtraParams>--restart=unless-stopped --health-start-period=10s</ExtraParams>
+  <PostArgs/>
+  <Requires/>
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/tasmofleet" Mode="rw" Description="Database, secret.key, firmware cache, backups. Back it up as a whole: without secret.key the stored device passwords cannot be decrypted." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/tasmofleet</Config>
+  <Config Name="Public URL" Target="TASMOFLEET_PUBLIC_URL" Default="" Mode="" Description="External URL of the UI (OIDC redirect and logout target), e.g. https://tasmofleet.example.com. Required for AUTH_MODE=oidc." Type="Variable" Display="always" Required="true" Mask="false">https://tasmofleet.example.com</Config>
+  <Config Name="Firmware listen" Target="TASMOFLEET_FIRMWARE_LISTEN" Default=":80" Mode="" Description="Listener for the device-facing firmware server. Keep :80 (devices get an IP-based firewall rule for TCP 80). The URL the devices use is set on the System settings page." Type="Variable" Display="advanced" Required="false" Mask="false">:80</Config>
+  <Config Name="UI listen" Target="TASMOFLEET_LISTEN" Default=":8080" Mode="" Description="Listener for UI and API (reverse proxy upstream)." Type="Variable" Display="advanced" Required="false" Mask="false">:8080</Config>
+  <Config Name="Trusted proxies" Target="TASMOFLEET_TRUSTED_PROXIES" Default="" Mode="" Description="Comma separated CIDRs of the reverse proxy. Forwarded headers and header-auth are trusted only from these peers." Type="Variable" Display="always" Required="false" Mask="false">172.31.12.20/32</Config>
+  <Config Name="Initial admin password" Target="TASMOFLEET_INITIAL_ADMIN_PASSWORD" Default="" Mode="" Description="Password of the first local admin on a fresh install (must be changed at the first sign-in). Empty: a random one is written to initial-admin-password in the data directory." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="Metrics token" Target="TASMOFLEET_METRICS_TOKEN" Default="" Mode="" Description="Bearer token required on /metrics for remote scrapers. Empty: only local scrapes are answered." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="Log level" Target="TASMOFLEET_LOG_LEVEL" Default="" Mode="" Description="Leave empty to choose debug, info, warn or error on the settings page; a value here locks it. Logs are JSON on stdout." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+</Container>

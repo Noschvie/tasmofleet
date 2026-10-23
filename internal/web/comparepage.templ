@@ -1,0 +1,60 @@
+package web
+
+import "github.com/nofuturekid/tasmofleet/internal/web/ui"
+
+// comparePage is the comparison (design v2 screen "compare"). The controls are one GET form;
+// form.js submits it when a control changes, the Compare button does without JavaScript.
+templ comparePage(p compareView) {
+	@ui.PageHeader("Compare backups", p.Sub)
+	<form class="cmp-controls" method="get" action={ templ.SafeURL(p.Action) } data-autosubmit>
+		<label class="ufield cmp-pick">
+			<span class="ufield-label">Older</span>
+			<select name="a">
+				for _, o := range p.Options {
+					<option value={ bkStr(o.ID) } selected?={ o.ID == p.A }>{ o.Label }</option>
+				}
+			</select>
+		</label>
+		<label class="ufield cmp-pick">
+			<span class="ufield-label">Newer</span>
+			<select name="b">
+				for _, o := range p.Options {
+					<option value={ bkStr(o.ID) } selected?={ o.ID == p.B }>{ o.Label }</option>
+				}
+			</select>
+		</label>
+		@ui.Segmented("Diff layout", "view", []ui.Option{{Value: "side", Label: "Side by side", Checked: !p.Unified}, {Value: "unified", Label: "Unified", Checked: p.Unified}})
+		<label class="cmp-all">
+			<input type="checkbox" name="all" value="1" checked?={ p.All }/>
+			<span>Show all { plural(p.NAll, "setting") }</span>
+		</label>
+		<noscript><button type="submit" class="btn">Compare</button></noscript>
+	</form>
+	if p.Hiding {
+		<p class="cmp-note">Rules and scripts are shown to admins only.</p>
+	}
+	if p.Identical {
+		<section class="ulist diff"><div class="cmp-none">These two backups are identical.</div></section>
+	} else {
+		@ui.Diff(p.Diff)
+	}
+	<div class="cmp-foot">
+		<span>Restoring writes the older backup back to the device.</span>
+		<div class="btn-row">
+			<a class="btn" href={ templ.SafeURL(p.BackHref) }>Back to backups</a>
+			if p.RestoreHref != "" {
+				<a class="btn btn-primary" href={ templ.SafeURL(p.RestoreHref) }>Restore this backup…</a>
+			}
+		</div>
+	</div>
+}
+
+// compareUndecoded is the comparison when there is nothing to compare: the backups exist but
+// are not decoded (no decoder, or one older than the firmware), or there are fewer than two.
+templ compareUndecoded(device, backHref, base string) {
+	@ui.PageHeader("Compare backups", device)
+	@ui.Empty("Nothing to compare yet", "Comparing needs two decoded backups. A backup is decoded when the decoder is installed and not older than the firmware; About shows its version.") {
+		<a class="btn" href={ templ.SafeURL(backHref) }>Back to backups</a>
+		<a class="btn" href={ templ.SafeURL(base + "/about") }>About</a>
+	}
+}

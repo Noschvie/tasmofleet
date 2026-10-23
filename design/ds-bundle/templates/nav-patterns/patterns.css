@@ -1,0 +1,701 @@
+/* tasmofleet DS: navigation and in-page patterns (proposal, port 1:1 into styles.css)
+   Loads after ../../styles.css. Uses only existing tokens; no new colours or fonts.
+
+   NEW CLASSES / TOKENS (everything else below refines existing classes)
+   --bulkbar-h                 token: height of the fixed bulk bar; body gets this as bottom padding
+   details.navpanel            phone navigation: compact "Menu" button + one full-width panel (m-only)
+   .navpanel-body              the panel (overlay surface, full width under the top bar)
+   .navpanel-sec               one group in the panel (Dashboard / Devices / Updates / System / user)
+   .navpanel-label             group heading in the panel; .navpanel-sec.is-active = current group
+   .crumb.trail                breadcrumb with "›" separators, last item = current page (span[aria-current]);
+                               on phones only the parent remains, as a "←" back link
+   .tabs .count, .count.accent count in a tab (Backups 3); accent = needs attention (Discovered)
+   .bulk-actions               the bulk bar's action buttons (inline, ≥ 60rem)
+   details.rowmenu.bulk-more   the same actions as one "Actions" menu (< 60rem)
+   details.rowmenu.up          menu body opens upward (bulk bar, last rows of a table)
+   .devtable col.c-act         width of the devices table's Actions column
+   .confirm                    confirmation page = the dialog layout as a card (head, facts, foot)        #23 #55
+
+   APP CLASSES MISSING IN styles.css (app.css has them; ported here in the DS look, same names)
+   td.rowacts                  row-actions cell (styles.css calls it td.rowact: rename there)
+   details.colmenu > summary.colbtn + .colpanel (.colhint .colrow .collabel .colmoves), .tabletools
+                               the Columns chooser that tableprefs.go writes                              #3
+   .tablewrap                  the wrapper tableprefs.go puts around a prefs-managed table
+   td .cell > .dev             device-name lists (firmware "devref"): names never break inside,
+                               the comma stays with the name, 24px targets on phones                     #34 #84
+   pre.log                     log box (update_batch.html): content height up to 16rem, then a scroll
+                               fade; with one <span> per line the wrapped lines hang                     #40 #71
+   .chips, .chips.scroll       chip lists wrap to their full height (no cut-off scroll box)              #65
+
+   QA v0.9.0 refinements (no new names): one control height per toolbar and pager (#7), optical centring
+   with text-box trim (#8), 40px row/form action links on phones (#13), open menus hide tooltips (#3),
+   error glyph "!" on an octagon and info badge "i" instead of X / arrow (#24), empty cells show "-" (#51),
+   ellipsis instead of hard clipping in phone rows and form controls (#65 #67 #70), all dropdowns
+   left-aligned except the user menu (#75).
+
+   Refined (no new names): header.top/.user (Sign out inside the user menu), .jump (app markup:
+   div.jump[hidden] > select[data-jump], shown by jump.js), td.rowacts, .table-scroll, .bulkbar (fixed to the viewport), details.fold/.m-fold (chevron right of
+   the title), .card (content offset under the framed title, 40px hit area on fold titles). */
+
+:root {
+  --bulkbar-h: 58px;
+}
+
+/* ---- top bar --------------------------------------------------------------- */
+.navtop:focus-visible,
+.navtop.is-focus,
+.user summary:focus-visible,
+.user summary.is-focus {
+  outline-offset: -2px;
+}
+.menu form {
+  margin: 0;
+}
+.user > .who {
+  /* #74 proxy-header account: plain text, no menu */
+  display: flex;
+  align-items: center;
+  height: var(--control-h-sm);
+  padding: 0 var(--space-2);
+  font-weight: 600;
+}
+.menu .menu-note {
+  max-width: 15rem;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--fs-sm);
+}
+
+details.navpanel {
+  /* class="navgroup navpanel": menu.js closes it like the other menus; the panel spans the top bar */
+  position: static;
+  margin-left: auto;
+}
+details.navpanel.m-only {
+  display: none;
+}
+@media (max-width: 48rem) {
+  details.navpanel.m-only {
+    display: block;
+  }
+}
+details.navpanel > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 40px;
+  padding: 0 var(--space-3);
+  border: var(--hair-w) solid var(--color-border);
+  background: var(--color-surface);
+  font-weight: 600;
+  cursor: pointer;
+}
+details.navpanel > summary::-webkit-details-marker {
+  display: none;
+}
+details.navpanel > summary::after {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+}
+details.navpanel[open] > summary {
+  background: var(--color-text);
+  border-color: var(--color-text);
+  color: var(--color-surface);
+}
+details.navpanel[open] > summary::after {
+  transform: translateY(2px) rotate(-135deg);
+}
+.navpanel-body {
+  position: absolute;
+  z-index: var(--z-menu);
+  left: 0;
+  right: 0;
+  top: calc(100% + var(--rule-w));
+  max-height: calc(100dvh - 64px);
+  overflow-y: auto;
+  padding: 0 0 var(--space-3);
+  background: var(--color-overlay);
+  border-bottom: var(--hair-w) solid var(--color-border-overlay);
+  box-shadow: var(--shadow-lg);
+}
+.navpanel-sec {
+  display: grid;
+  padding: var(--space-2) 0;
+}
+.navpanel-sec + .navpanel-sec {
+  border-top: var(--hair-w) solid var(--color-divider);
+}
+.navpanel-label {
+  margin: 0;
+  padding: var(--space-2) var(--space-4) var(--space-1);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-2);
+}
+.navpanel-sec.is-active .navpanel-label {
+  color: var(--color-text);
+}
+.navpanel-sec a,
+.navpanel-sec button {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 44px;
+  padding: 0 var(--space-4);
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: 600 var(--fs-body) / 1.2 var(--font-body);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.navpanel-sec a:hover,
+.navpanel-sec button:hover {
+  background: var(--color-hover);
+}
+.navpanel-sec a:focus-visible,
+.navpanel-sec button:focus-visible {
+  outline-offset: -2px;
+}
+.navpanel-sec a[aria-current="page"] {
+  font-weight: 800;
+  box-shadow: inset 3px 0 0 var(--color-accent);
+  background: var(--color-selected);
+}
+.navpanel-sec form {
+  margin: 0;
+}
+.navpanel-sec .menu-note {
+  margin: 0;
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--fs-sm);
+  color: var(--color-text-2);
+}
+
+/* ---- page header: breadcrumb trail ---------------------------------------- */
+.crumb.trail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 6px;
+}
+.crumb.trail a::before {
+  content: none;
+}
+.crumb.trail > :not(:last-child)::after {
+  content: "\203A";
+  margin-left: 6px;
+  color: var(--color-text-2);
+  display: inline-block;
+  text-decoration: none;
+}
+.crumb.trail > [aria-current] {
+  color: var(--color-text);
+}
+
+/* ---- tabs ------------------------------------------------------------------ */
+.tabs .count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 5px;
+  border: var(--hair-w) solid var(--color-divider);
+  background: var(--color-surface-2);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.tabs .count.accent {
+  border-color: transparent;
+  background: var(--color-accent-soft);
+  color: var(--color-accent-soft-text);
+}
+.jump select {
+  width: 100%;
+}
+.tabs a[aria-disabled="true"] {
+  color: var(--color-text-3);
+  pointer-events: none;
+}
+
+/* ---- row actions ------------------------------------------------------------ */
+td.rowacts {
+  /* app name (styles.css: td.rowact): last cell, right-aligned, shrink-to-fit, vertically centred */
+  width: 1%;
+  text-align: right;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+td.rowacts > .actions {
+  display: inline-flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  margin: 0;
+}
+td.rowacts details.rowmenu {
+  vertical-align: middle;
+}
+.devtable col.c-act {
+  width: 6.5rem;
+}
+.rowmenu-body a[aria-disabled="true"] {
+  color: var(--color-text-3);
+  pointer-events: none;
+}
+.table-scroll:has(details.rowmenu[open]) {
+  overflow: visible;
+}
+details.rowmenu.up > .rowmenu-body {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
+
+/* ---- bulk bar: fixed to the viewport, content padded by its height ---------- */
+.bulkbar {
+  position: fixed;
+  left: var(--page-pad);
+  right: var(--page-pad);
+  bottom: var(--space-3);
+  max-width: calc(var(--container) - 2 * var(--page-pad));
+  min-height: var(--bulkbar-h);
+  margin: 0 auto;
+  flex-wrap: nowrap;
+}
+.bulkbar[hidden] {
+  display: none;
+}
+body:has(.bulkbar:not([hidden])) {
+  padding-bottom: calc(var(--bulkbar-h) + 2 * var(--space-3));
+}
+.bulkbar .bulk-count {
+  margin-right: 0;
+  white-space: nowrap;
+}
+.bulk-actions {
+  display: flex;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+details.rowmenu.bulk-more {
+  display: none;
+  margin-left: auto;
+}
+@media (max-width: 60rem) {
+  .bulkbar:has(.bulk-more) .bulk-actions {
+    display: none;
+  }
+  details.rowmenu.bulk-more {
+    display: inline-block;
+  }
+}
+
+/* ---- collapsible sections ---------------------------------------------------- */
+details.fold > summary::after,
+details.m-fold > summary::after {
+  order: 1;
+  margin: 0 4px 0 var(--space-1);
+}
+details.fold > summary .meta,
+details.m-fold > summary .meta {
+  order: 2;
+}
+details.fold > summary:has(.meta)::after,
+details.m-fold > summary:has(.meta)::after {
+  margin-left: var(--space-1);
+}
+.card {
+  /* content starts below the framed title: title height + 0.75rem */
+  padding-top: calc(var(--fs-md) * 1.2 + 0.75rem);
+}
+.card > details.fold-h:first-child > summary::before {
+  /* 40px hit area around the framed title, without covering the rule */
+  content: "";
+  position: absolute;
+  inset: -10px 0;
+}
+.card:has(> details.fold-h:first-child[open]) > details > summary + * {
+  margin-top: 0;
+}
+
+/* ---- QA v0.9.0 ---------------------------------------------------------------- */
+/* #7 one height per size, one size per toolbar: toolbars and pagers are always sm */
+.toolbar button,
+.toolbar .button,
+.toolbar select,
+.pager button,
+.pager .button,
+.pager select {
+  height: var(--control-h-sm);
+  padding: 0 var(--control-pad-x-sm);
+  font-size: var(--fs-sm);
+}
+.toolbar > *,
+.pager > * {
+  flex: none;
+}
+.toolbar form {
+  margin: 0;
+}
+.toolbar > details.rowmenu:last-child {
+  margin-left: auto;
+}
+/* #8 labels centred in their box: label.button flex-centred, caps trimmed optically */
+label.button {
+  display: inline-flex;
+  align-items: center;
+  width: auto;
+}
+button,
+.button,
+.badge,
+.tag,
+.relay-btn,
+.navtop,
+.tabs a,
+.tabs .count {
+  text-box: trim-both cap alphabetic;
+}
+.relay-btn {
+  display: inline-flex;
+  align-items: center;
+}
+/* #3 an open menu hides every floating tooltip; menus never clip their labels */
+body:has(details[open] > .rowmenu-body, details[open] > .menu)
+  .tooltip:not(.is-static) {
+  display: none;
+}
+/* Columns chooser: tableprefs.go markup; offered from 72rem like in the app (tables.js) */
+.colmenu,
+.tabletools {
+  display: none;
+}
+.tablewrap {
+  position: relative;
+}
+@media (min-width: 72.01rem) {
+  .tabletools {
+    display: flex;
+    justify-content: flex-end;
+    margin: 0 0 var(--space-2);
+  }
+  .colmenu {
+    display: block;
+    position: relative;
+    z-index: var(--z-menu);
+  }
+  .toolbar > .colmenu {
+    margin-left: auto;
+  }
+  .table-scroll:has(details.colmenu[open]),
+  .table-fit:has(details.colmenu[open]) {
+    overflow: visible;
+  }
+  .colbtn {
+    /* a plain sm button with a visible label; no title tooltip (#3) */
+    list-style: none;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: var(--control-h-sm);
+    padding: 0 var(--control-pad-x-sm);
+    border: var(--hair-w) solid var(--color-border);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font: 600 var(--fs-sm) / 1 var(--font-body);
+    cursor: pointer;
+  }
+  .colbtn::-webkit-details-marker {
+    display: none;
+  }
+  .colbtn::after {
+    content: "";
+    width: 5px;
+    height: 5px;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: translateY(-2px) rotate(45deg);
+  }
+  .colbtn:hover {
+    background: var(--color-hover);
+  }
+  .colmenu[open] > .colbtn {
+    background: var(--color-text);
+    border-color: var(--color-text);
+    color: var(--color-surface);
+  }
+  .colpanel {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 4px);
+    display: grid;
+    min-width: 15rem;
+    max-width: min(22rem, calc(100vw - 2 * var(--space-3)));
+    padding: var(--space-1) 0 var(--space-2);
+    background: var(--color-overlay);
+    border: var(--hair-w) solid var(--color-border-overlay);
+    box-shadow: var(--shadow-lg);
+    font-size: var(--fs-sm);
+  }
+  .colpanel .colhint {
+    margin: 0;
+    padding: var(--space-2) var(--space-3);
+    border-bottom: var(--hair-w) solid var(--color-divider);
+    font-size: var(--fs-xs);
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--color-text-2);
+  }
+  .colpanel .colrow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 32px;
+    padding: 0 var(--space-2) 0 var(--space-3);
+  }
+  .colpanel .colrow:hover {
+    background: var(--color-hover);
+  }
+  .colpanel label,
+  .colpanel .collabel {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex: 1;
+    min-width: 0;
+    padding: 4px 0;
+    font-weight: 500;
+    white-space: normal; /* long labels wrap instead of clipping at the edge (#3) */
+    cursor: pointer;
+  }
+  .colpanel .collabel {
+    color: var(--color-text-2);
+    cursor: default;
+  }
+  .colpanel .colmoves {
+    display: flex;
+    flex: none;
+    gap: 2px;
+  }
+  .colpanel .colmoves button {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+  }
+  .colpanel > button[data-cols-reset] {
+    justify-self: start;
+    margin: var(--space-2) var(--space-3) 0;
+  }
+}
+/* #24 error glyph: "!" on an octagon (a dismiss "X" no longer); info badge: "i" */
+.error:not(span):not(small)::before {
+  content: "!";
+  clip-path: polygon(
+    30% 0,
+    70% 0,
+    100% 30%,
+    100% 70%,
+    70% 100%,
+    30% 100%,
+    0 70%,
+    0 30%
+  );
+}
+span.error::before {
+  content: "!\00a0";
+}
+.badge.tone-info::before {
+  content: "i";
+  font-family: Georgia, serif;
+  font-style: italic;
+}
+/* #51 empty cells read "-" in every table */
+td:empty:not(.rowacts):not(.sel)::after {
+  content: "-";
+  color: var(--color-text-3);
+}
+/* #34 #84 device-name lists (firmware devref): a name never breaks inside, the comma stays with it */
+td .cell .dev,
+.dlg-body .dev,
+#detail .dev {
+  white-space: nowrap;
+}
+.dev:not(:last-child)::after {
+  content: ",";
+}
+/* #40 #71 log box (pre.log): height follows the content up to 16rem, then scrolls with a fade */
+pre.log {
+  max-height: 16rem;
+  overflow: auto;
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border: var(--hair-w) solid var(--color-divider);
+  font: 400 var(--fs-xs) / 1.6 var(--font-mono);
+  background:
+    linear-gradient(transparent, var(--color-surface-2) 60%) center bottom /
+      100% 28px no-repeat local,
+    linear-gradient(
+        transparent,
+        color-mix(in srgb, var(--color-text) 16%, transparent)
+      )
+      center bottom / 100% 14px no-repeat scroll,
+    var(--color-surface-2);
+}
+pre.log > span {
+  display: block;
+  padding-left: 3ch;
+  text-indent: -3ch;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+/* #23 #55 confirmation page */
+.confirm {
+  max-width: 40rem;
+}
+.confirm .facts {
+  margin: var(--space-3) 0;
+}
+.confirm .dlg-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  margin: var(--space-4) calc(var(--space-4) * -1) 0;
+  padding: var(--space-3) var(--space-4) 0;
+  border-top: var(--hair-w) solid var(--color-divider);
+}
+label.inline:has(> input[type="checkbox"]) {
+  display: flex;
+  align-items: flex-start;
+}
+label.inline > input[type="checkbox"] {
+  flex: none;
+  margin-top: 2px;
+}
+/* #65 chip lists wrap to full height (no cut-off scroll box); controls ellipsize */
+.chips,
+.chips.scroll {
+  max-height: none;
+  overflow: visible;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+input:not([type="checkbox"]):not([type="radio"]),
+select {
+  text-overflow: ellipsis;
+}
+/* hint under a row control instead of beside it (#52) */
+td .hint {
+  display: block;
+  margin-top: 2px;
+}
+
+/* ---- phones (48rem, same as styles.css and the app) ---------------------- */
+@media (max-width: 48rem) {
+  /* #13 links that act as row or form actions get a 40px hit area */
+  td a:not(.button):not(.cell a),
+  .toolbar a:not(.button),
+  .crumb a,
+  .dlg-foot a:not(.button),
+  .confirm a:not(.button) {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+  }
+  td .cell {
+    /* a list of names is one inline run: 24px targets, 8px apart (WCAG 2.5.8 spacing), normal pitch (#84) */
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 var(--space-2);
+    line-height: 24px;
+  }
+  table.dense td.rowacts {
+    order: 2;
+    flex: none;
+    width: auto;
+    min-width: max-content;
+  }
+  table.dense
+    td.rowacts[data-label]:not(.p1):not(.p2):not(.sel):not(.s)::before {
+    content: none;
+  }
+  td.rowacts > .actions {
+    justify-content: flex-start;
+  }
+  /* #67 #70 phone rows: ellipsis instead of hard clipping; rows align with or without a checkbox */
+  table.dense td.p1 > a,
+  table.dense td.p1 > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  table.dense td.p1 > span > a {
+    display: inline;
+  }
+  table.dense:has(td.sel) tbody tr:not(:has(> td.sel)) {
+    padding-left: 44px;
+  }
+  table.dense td {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  table.dense td > :not(.badge):not(.relay):not(details):not(.row-actions) {
+    min-width: 0;
+  }
+  .top {
+    flex-wrap: nowrap;
+    min-height: 56px;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  .card {
+    padding-top: calc(40px / 2 + 0.75rem);
+  }
+  .crumb.trail > * {
+    display: none;
+  }
+  .crumb.trail > :nth-last-child(2) {
+    display: inline;
+  }
+  .crumb.trail > :nth-last-child(2)::after {
+    content: none;
+  }
+  .crumb.trail > a:nth-last-child(2)::before {
+    content: "\2190\00a0";
+  }
+  .bulkbar {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    max-width: none;
+    border-left: 0;
+    border-right: 0;
+    border-bottom: 0;
+    padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom, 0px));
+  }
+  body:has(.bulkbar:not([hidden])) {
+    padding-bottom: calc(
+      var(--bulkbar-h) + var(--space-3) + env(safe-area-inset-bottom, 0px)
+    );
+  }
+  .bulkbar .bulk-count,
+  .bulkbar button.ghost,
+  .bulkbar button:not(.ghost) {
+    flex: none;
+  }
+}

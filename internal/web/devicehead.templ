@@ -1,0 +1,250 @@
+package web
+
+import (
+	"strconv"
+
+	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+)
+
+// deviceHeader is the header of every device tab (prototype screen "device"): the name with the
+// state, the address / chip / firmware line, the device buttons, the offline banner and the tabs.
+// Buttons are plain forms and links; dialog.js turns Restart into a dialog. Delete leads to the
+// delete page (N2): a dialog could not carry the backup list, the choice and the acknowledgement.
+templ deviceHeader(t deviceTabs) {
+	<div class="devhd">
+		<div class="devhd-t">
+			<div class="devhd-name">
+				<h1>{ t.Name }</h1>
+				<span class={ "devhd-state", "t-" + string(t.stateTone()) }><span class="devhd-dot" aria-hidden="true"></span>{ t.stateLabel() }</span>
+			</div>
+			<div class="devhd-meta">
+				<span data-visual-mask>{ t.Address }</span>
+				if t.Chip != "" {
+					<span>{ t.Chip }</span>
+				}
+				if t.Version != "" {
+					<span>Tasmota { t.Version }</span>
+				}
+				if t.UpdateTo != "" {
+					<form method="post" action={ templ.SafeURL(t.Base + "/updates/new") } class="devhd-upd">
+						<input type="hidden" name="csrf" value={ t.CSRF }/>
+						<input type="hidden" name="id" value={ strconv.FormatInt(int64(t.ID), 10) }/>
+						<button type="submit">Update to { t.UpdateTo }</button>
+					</form>
+				}
+			</div>
+		</div>
+		<div class="devhd-acts">
+			if t.HeadPower {
+				<form method="post" action={ templ.SafeURL(t.Base + devPath(t.ID, "/power/1")) }>
+					<input type="hidden" name="csrf" value={ t.CSRF }/>
+					<input type="hidden" name="action" value={ t.powerAction() }/>
+					<input type="hidden" name="back" value="device"/>
+					<button type="submit" class="btn devhd-pwr" aria-pressed={ ariaBool(t.Power == "ON") } disabled?={ t.offline() || t.Updating }>
+						<span class="devsw" aria-hidden="true"></span><span>Power { label(t.Power) }</span>
+					</button>
+				</form>
+			}
+			if t.CanRestart {
+				@ui.Button(ui.Btn{Label: "Restart", Href: t.Base + devPath(t.ID, "/restart"), Dialog: "dlg-restart"})
+			}
+			<form method="post" action={ templ.SafeURL(t.Base + devPath(t.ID, "/backup")) }>
+				<input type="hidden" name="csrf" value={ t.CSRF }/>
+				<input type="hidden" name="back" value={ t.backPath() }/>
+				<button
+					type="submit"
+					class="btn"
+					disabled?={ t.Reason != "" }
+					if t.Reason != "" {
+						title={ t.Reason }
+					}
+				>Back up</button>
+			</form>
+			if t.IsAdmin {
+				@ui.Button(ui.Btn{Label: "Edit", Href: t.Base + devPath(t.ID, "/edit")})
+				@ui.Button(ui.Btn{Label: "Delete", Kind: "danger", Href: t.Base + devPath(t.ID, "/delete")})
+			}
+		</div>
+	</div>
+	if t.offline() {
+		<div class="devhd-off" role="status">
+			<span class="devhd-offdot" aria-hidden="true"></span>
+			<div>
+				<b>Offline</b>
+				if t.LastSeenAgo != "" {
+					· last seen <span data-visual-mask>{ t.LastSeenAgo }</span>.
+				} else {
+					· the device has not answered since TasmoFleet started.
+				}
+				Values below are the last known state; actions need the device to answer.
+			</div>
+		</div>
+	}
+	@ui.Tabs("Device pages", t.headTabs())
+	if t.CanRestart {
+		@ui.Dialog(ui.DialogData{ID: "dlg-restart", Title: "Restart " + t.Name + "?", Body: "Its relays switch off for a few seconds.", Action: t.Base + devPath(t.ID, "/restart"), CSRF: t.CSRF, Verb: "Restart"})
+	}
+}
+
+// deviceOverviewPage is the overview tab: the prototype's five cards, then the device's state
+// changes and transactions.
+templ deviceOverviewPage(p deviceOverview) {
+	@deviceHeader(p.Tabs)
+	if u := p.Updating; u != nil {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Title: updatingTitle(u.Job), Text: u.StepLabel + ". " + updatingText(u.Job), Action: &ui.Btn{Label: "Follow the transaction", Href: p.Base + "/transactions/" + strconv.FormatInt(int64(u.Job.BatchID), 10)}})
+	}
+	if p.NotYet != "" {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneNeutral, Text: p.NotYet})
+	}
+	<div class="devgrid">
+		@identityCard(p.Ident)
+		<section class="devcard" aria-labelledby="dc-power">
+			<h2 id="dc-power">Power &amp; energy</h2>
+			if e := p.Energy; e != nil {
+				<div class="devpow">
+					<div>
+						<div class="devpow-w" data-visual-mask>{ e.Watts }<span>W</span></div>
+						<div class="devpow-sub">now · last 2 h</div>
+					</div>
+					<div class="devspark" data-visual-mask>
+						if len(e.Spark) > 0 {
+							<svg viewBox={ sparkViewBox } preserveAspectRatio="none" role="img" aria-label="Power over the last 2 hours">
+								for _, b := range e.Spark {
+									<rect class="devspark-bar" x={ b.X } y={ b.Y } width={ sparkBarW } height={ b.H } rx="1"></rect>
+								}
+							</svg>
+						}
+					</div>
+				</div>
+				@ui.KV(e.Rows)
+			} else {
+				<p class="devcard-note">This device reports no energy readings.</p>
+			}
+			if len(p.Relays) > 0 {
+				<h3 class="devcard-h3">Relays</h3>
+				for _, rl := range p.Relays {
+					<form method="post" action={ templ.SafeURL(p.Base + devPath(p.Tabs.ID, "/power/"+strconv.Itoa(rl.N))) } class="devrelay">
+						<input type="hidden" name="csrf" value={ p.CSRF }/>
+						<input type="hidden" name="action" value={ rl.Action }/>
+						<input type="hidden" name="back" value="device"/>
+						<span class="devrelay-n">{ rl.Name } <span class="mono">{ rl.Cmd }</span></span>
+						<span class="devrelay-s">{ rl.State }</span>
+						<button type="submit" class="devrelay-sw" role="switch" aria-checked={ ariaBool(rl.On) } aria-label={ rl.Aria } disabled?={ !p.RelaysOn }><span class="devsw" aria-hidden="true"></span></button>
+					</form>
+				}
+			}
+		</section>
+		<section class="devcard" aria-labelledby="dc-net">
+			<h2 id="dc-net">Network</h2>
+			@ui.KV(p.Network)
+		</section>
+		<section class="devcard" aria-labelledby="dc-wifi">
+			<h2 id="dc-wifi">Wi-Fi</h2>
+			@ui.KV(p.Wifi)
+			<div class="devwifi">
+				<svg class={ "devwifi-bar", templ.KV("is-ok", p.WifiOK) } viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true" data-visual-mask>
+					<rect class="devwifi-track" x="0" y="0" width="100" height="6"></rect>
+					if p.WifiPct > 0 {
+						<rect class="devwifi-fill" x="0" y="0" width={ strconv.Itoa(p.WifiPct) } height="6"></rect>
+					}
+				</svg>
+				<span>signal quality</span>
+			</div>
+		</section>
+		if c := p.Policy; c != nil {
+			<section class="devcard" aria-labelledby="dc-pol">
+				<div class="devcard-head">
+					<h2 id="dc-pol">Policy compliance</h2>
+					<a class="btn btn-link" href={ templ.SafeURL(p.Base + "/policy") }>Rules</a>
+				</div>
+				if len(c.Deviations) == 0 && c.Unknown == 0 {
+					<div class="devpol-ok">@ui.StatusDot(ui.ToneOK, "Matches all "+plural(c.Rules, "rule"))</div>
+				} else if len(c.Deviations) == 0 {
+					<div class="devpol-ok">@ui.StatusDot(ui.ToneNeutral, plural(c.Unknown, "rule")+" could not be checked: the value was not read yet")</div>
+				}
+				for _, d := range c.Deviations {
+					<div class="devdev"><span class="devdev-r">{ d.Rule }</span><span class="mono">{ d.Have } → { d.Want }</span></div>
+				}
+				if c.CanFix {
+					<form method="post" action={ templ.SafeURL(p.Base + "/policy/fix") }>
+						<input type="hidden" name="csrf" value={ p.CSRF }/>
+						<input type="hidden" name="only" value={ strconv.FormatInt(int64(p.Tabs.ID), 10) }/>
+						<button type="submit" class="btn devpol-fix">Make compliant…</button>
+					</form>
+				}
+			</section>
+		}
+	</div>
+	<div class="devgrid devgrid-more">
+		<section class="devcard" aria-labelledby="dc-hist">
+			<h2 id="dc-hist">State changes</h2>
+			if len(p.Events) > 0 {
+				<details class="m-fold">
+					<summary>{ plural(len(p.Events), "state change") }</summary>
+					<table class="dense" data-table="device_history">
+						<thead><tr><th>When</th><th>Change</th><th>Source</th><th>Detail</th></tr></thead>
+						<tbody>
+							for _, e := range p.Events {
+								<tr>
+									<td data-label="When" class="s"><time datetime={ e.At.UTC().Format("2006-01-02T15:04:05Z") }>{ e.At.Format("2006-01-02 15:04:05") }</time></td>
+									<td data-label="Change" class="p1">@ui.Badge(uiTone(e.From), label(e.From)) <span aria-label="to">→</span> @ui.Badge(uiTone(e.To), label(e.To))</td>
+									<td data-label="Source" class="s">{ string(e.Source) }</td>
+									<td data-label="Detail" class="s grow">{ healthDetail(e.Source, e.Detail) }</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</details>
+			} else {
+				<p class="devcard-note">No state changes recorded. Changes appear here once the device goes online or offline.</p>
+			}
+		</section>
+		<section class="devcard" aria-labelledby="dc-tx">
+			<h2 id="dc-tx">Transactions</h2>
+			if len(p.Jobs) > 0 {
+				<details class="m-fold">
+					<summary>{ plural(len(p.Jobs), "transaction") }</summary>
+					<table class="dense" data-table="device_transactions">
+						<thead><tr><th>Transaction</th><th>State</th><th>Target</th><th>When</th><th>Error</th></tr></thead>
+						<tbody>
+							for _, j := range p.Jobs {
+								<tr>
+									<td data-label="Transaction" class="p1"><a href={ templ.SafeURL(p.Base + "/transactions/" + strconv.FormatInt(int64(j.BatchID), 10)) }>#{ strconv.FormatInt(int64(j.BatchID), 10) }</a></td>
+									<td data-label="State" class="p2">@ui.Badge(uiTone(j.State), label(j.State))</td>
+									<td data-label="Target" class="s">{ j.Target() }</td>
+									<td data-label="When" class="s"><time datetime={ j.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z") }>{ j.UpdatedAt.Format("2006-01-02 15:04") }</time></td>
+									<td data-label="Error" class="s grow">
+										if j.LastError != "" {
+											<span class="reason" title={ tip(j.LastError) }>{ humanReason(j.LastError) }</span>
+										}
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</details>
+			} else {
+				<p class="devcard-note">No transactions yet. Updates and commands that run on this device are listed here.</p>
+			}
+		</section>
+	</div>
+}
+
+// identityCard is the Identity card; "Refresh identity" asks the device again and swaps the card.
+templ identityCard(c identCard) {
+	<section id="identity" class="devcard" aria-labelledby="dc-ident">
+		<div class="devcard-head">
+			<h2 id="dc-ident">Identity</h2>
+			if c.CanProbe {
+				<button type="button" class="btn btn-link" hx-post={ c.Base + devPath(c.ID, "/probe") } hx-target="#identity" hx-swap="outerHTML" hx-disabled-elt="this">Refresh identity</button>
+			}
+		</div>
+		@ui.KV(c.Rows)
+		if c.Error != "" {
+			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: c.Error, Alert: true})
+		}
+		if c.Notice != "" {
+			@ui.Banner(ui.BannerData{Tone: ui.ToneOK, Text: c.Notice})
+		}
+	</section>
+}

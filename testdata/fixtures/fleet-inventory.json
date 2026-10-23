@@ -1,0 +1,202 @@
+[
+ {
+  "t": "livingroom-readinglamp",
+  "dn": "Living Room Reading Lamp",
+  "ip": "172.31.13.31",
+  "md": "Sonoff Basic",
+  "sw": "16.0.0",
+  "mac": "02005ED22C14",
+  "hn": "livingroom-readinglamp",
+  "ty": 0
+ },
+ {
+  "t": "livingroom-couchlamp",
+  "dn": "Living Room Couch Lamp",
+  "ip": "172.31.13.29",
+  "md": "Sonoff Basic",
+  "sw": "16.0.0",
+  "mac": "02005EEA7CA3",
+  "hn": "livingroom-couchlamp",
+  "ty": 0
+ },
+ {
+  "t": "office-monitor-guest",
+  "dn": "Office Monitor Guest",
+  "ip": "172.31.13.35",
+  "md": "QuinLED Dig Uno v2r6b",
+  "sw": "16.0.0",
+  "mac": "02005E6CA02D",
+  "hn": "office-monitor-guest",
+  "ty": 0
+ },
+ {
+  "t": "kitchen-spotlight",
+  "dn": "Kitchen Spotlight",
+  "ip": "172.31.13.28",
+  "md": "Gosund SP111",
+  "sw": "16.0.0",
+  "mac": "02005E32D74B",
+  "hn": "kitchen-spotlight",
+  "ty": 0
+ },
+ {
+  "t": "livingroom-floorlamp",
+  "dn": "Living Room Floor Lamp",
+  "ip": "172.31.13.30",
+  "md": "Sonoff Basic",
+  "sw": "16.0.0",
+  "mac": "02005E38371D",
+  "hn": "livingroom-floorlamp",
+  "ty": 0
+ },
+ {
+  "t": "mr-bambu-external-light",
+  "dn": "Mr Bambu External Light",
+  "ip": "172.31.13.32",
+  "md": "Gosund SP111",
+  "sw": "16.0.0",
+  "mac": "02005E3E5AB3",
+  "hn": "mr-bambu-external-light",
+  "ty": 0
+ },
+ {
+  "t": "bedroom-cabinet",
+  "dn": "Bedroom Cabinet",
+  "ip": "172.31.13.23",
+  "md": "MagicHome RGBW IR LC04",
+  "sw": "16.0.0",
+  "mac": "02005E01EC72",
+  "hn": "bedroom-cabinet",
+  "ty": 0
+ },
+ {
+  "t": "bedroom-commode",
+  "dn": "Bedroom Commode",
+  "ip": "172.31.13.24",
+  "md": "Sonoff Basic",
+  "sw": "16.0.0",
+  "mac": "02005E845670",
+  "hn": "bedroom-commode",
+  "ty": 0
+ },
+ {
+  "t": "balcony-windowsill",
+  "dn": "Balcony Windowsill",
+  "ip": "172.31.13.21",
+  "md": "MagicHome RGBW IR LC04",
+  "sw": "16.0.0",
+  "mac": "02005E4E63D5",
+  "hn": "balcony-windowsill",
+  "ty": 0
+ },
+ {
+  "t": "mr-bambu-plug",
+  "dn": "Mr Bambu Plug",
+  "ip": "172.31.13.33",
+  "md": "NOUS A1T",
+  "sw": "16.0.0",
+  "mac": "02005EF75297",
+  "hn": "mr-bambu-plug",
+  "ty": 0
+ },
+ {
+  "t": "kitchen-downlight",
+  "dn": "Kitchen Downlight",
+  "ip": "172.31.13.27",
+  "md": "MagicHome RGBW IR LC04",
+  "sw": "16.0.0",
+  "mac": "02005E6728A8",
+  "hn": "kitchen-downlight",
+  "ty": 0
+ },
+ {
+  "t": "bathroom-ceiling",
+  "dn": "Bathroom Ceiling",
+  "ip": "172.31.13.22",
+  "md": "MagicHome RGBW IR LC04",
+  "sw": "16.0.0",
+  "mac": "02005E145AB8",
+  "hn": "bathroom-ceiling",
+  "ty": 0
+ },
+ {
+  "t": "prusa-plug",
+  "dn": "Prusa Plug",
+  "ip": "172.31.23.10",
+  "md": "NOUS A1T",
+  "sw": "16.0.0",
+  "mac": "02005E4F7A25",
+  "hn": "prusa-plug",
+  "ty": 0
+ },
+ {
+  "t": "office-monitor-owner",
+  "dn": "Office Monitor Owner",
+  "ip": "172.31.13.36",
+  "md": "QuinLED Dig Uno v2r6b",
+  "sw": "16.0.0",
+  "mac": "02005E2D8435",
+  "hn": "office-monitor-owner",
+  "ty": 0
+ },
+ {
+  "t": "dehumidifier-plug",
+  "dn": "Dehumidifier Plug",
+  "ip": "172.31.13.26",
+  "md": "NOUS A1T",
+  "sw": "16.0.0",
+  "mac": "02005E18D0E3",
+  "hn": "dehumidifier-plug",
+  "ty": 0
+ },
+ {
+  "t": "caribou-plug",
+  "dn": "Caribou Plug",
+  "ip": "172.31.23.12",
+  "md": "NOUS A1T",
+  "sw": "16.0.0",
+  "mac": "02005E838500",
+  "hn": "caribou-plug",
+  "ty": 0
+ },
+ {
+  "t": "corridor-commode",
+  "dn": "Corridor Commode",
+  "ip": "172.31.13.25",
+  "md": "Sonoff Basic",
+  "sw": "16.0.0",
+  "mac": "02005EB85685",
+  "hn": "corridor-commode",
+  "ty": 0
+ },
+ {
+  "t": "tablet-charger",
+  "dn": "Tablet Charger",
+  "ip": "172.31.13.37",
+  "md": "Gosund SP111 v1.1",
+  "sw": "16.0.0",
+  "mac": "02005E3DF750",
+  "hn": "tablet-charger",
+  "ty": 0
+ },
+ {
+  "t": "office-desklamp",
+  "dn": "Office Desk Lamp",
+  "ip": "172.31.13.34",
+  "md": "Sonoff Basic",
+  "sw": "16.0.0",
+  "mac": "02005ECF02A4",
+  "hn": "office-desklamp",
+  "ty": 0
+ },
+ {
+  "t": "ender2pro-plug",
+  "dn": "Ender2Pro Plug",
+  "ip": "172.31.23.11",
+  "md": "Gosund SP111",
+  "sw": "16.0.0",
+  "mac": "02005EF00D8F",
+  "hn": "ender2pro-plug",
+  "ty": 0
+ }
+]

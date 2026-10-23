@@ -1,0 +1,1 @@
+{"Time":"2026-10-18T18:17:57","Uptime":"0T01:12:27","UptimeSec":4347,"Heap":22,"SleepMode":"Dynamic","Sleep":50,"LoadAvg":19,"MqttCount":1,"POWER":"ON","Wifi":{"AP":1,"SSId":"IoT","BSSId":"02:00:5E:29:E3:EB","Channel":11,"Mode":"11n","RSSI":60,"Signal":-70,"LinkCount":1,"Downtime":"0T00:00:04"},"Hostname":"kitchen-spotlight","IPAddress":"172.31.13.28"}

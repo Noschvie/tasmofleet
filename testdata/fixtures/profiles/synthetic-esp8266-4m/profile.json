@@ -1,0 +1,1 @@
+{"base":"kitchen-spotlight","description":"ESP8266EX with 4 MB flash (direct OTA), derived from the 1 MB capture with FlashSize, Free and chip id raised","replace":[{"old":"\"FlashSize\":1024","new":"\"FlashSize\":4096"},{"old":"\"Free\":352","new":"\"Free\":740"},{"old":"\"FlashChipId\":\"144068\"","new":"\"FlashChipId\":\"1640C8\""}]}

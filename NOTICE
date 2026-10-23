@@ -1,0 +1,31 @@
+tasmofleet is licensed under the GNU Affero General Public License v3.0 or later
+(SPDX: AGPL-3.0-or-later, see LICENSE).
+
+Third-party components:
+
+- htmx 2.0.11 and htmx-ext-sse 2.2.4 (BSD Zero Clause License), vendored in
+  internal/web/static/ (checksums in internal/web/static/SHA256SUMS, which also lists the font files).
+
+- Geist and Geist Mono (SIL Open Font License 1.1, https://github.com/vercel/geist-font),
+  the four variable woff2 files (latin and latin-ext subsets of each) in
+  internal/web/static/; the license text is internal/web/static/geist-OFL.txt.
+
+- Archivo (SIL Open Font License 1.1), design/ds-bundle/fonts/ (design reference
+  only, not shipped in the binary); the license text is design/ds-bundle/fonts/OFL.txt.
+
+- Go modules compiled into the binary (see go.mod): templ (MIT), go-oidc
+  (Apache-2.0), golang.org/x/oauth2 (BSD-3-Clause), modernc.org/sqlite
+  (BSD-3-Clause), Eclipse Paho MQTT (EPL-2.0 or EDL-1.0; used under EDL-1.0,
+  BSD-3-Clause) and their dependencies.
+
+- decode-config (GNU LGPL-3.0, https://github.com/tasmota/decode-config).
+  The container image ships the unmodified upstream release binary
+  (/usr/local/bin/decode-config). tasmofleet runs it as a separate program
+  and does not link against it. Its source code and license are available
+  at the URL above. Build the image with --build-arg WITH_DECODER=false to
+  omit it.
+
+- Tasmota (GNU GPL-3.0, https://github.com/arendst/Tasmota) is not part of
+  tasmofleet. Firmware files are downloaded from upstream at runtime and
+  passed to devices unmodified. testdata/fixtures/firmware-headers contains
+  the first 32 bytes of release images for header-parsing tests.

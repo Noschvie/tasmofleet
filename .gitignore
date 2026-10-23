@@ -1,0 +1,17 @@
+/bin/
+/data/
+*.db
+*.db-wal
+*.db-shm
+/e2e/node_modules/
+/e2e/test-results/
+/e2e/playwright-report/
+/e2e/.cache/
+/e2e/parity/
+*.out
+*.test
+.env
+*.env
+!deploy/**/*.env.example
+/cmd/tasmofleet/tasmofleet
+/cmd/tasmofleet-devenv/tasmofleet-devenv

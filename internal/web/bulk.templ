@@ -1,0 +1,214 @@
+package web
+
+import (
+	"strconv"
+
+	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+)
+
+// bulkScopePage is the prototype's bulk scope screen: the selected devices on the left (who is
+// skipped, "×" removes one), the options of the action and the run button in the aside.
+templ bulkScopePage(v bulkScopeView) {
+	@ui.PageHeader(v.Title(), v.Sub())
+	if v.Error != "" {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: v.Error, Alert: true})
+	}
+	<form method="post" action={ templ.SafeURL(v.Run) } class="bk-grid">
+		<input type="hidden" name="csrf" value={ v.CSRF }/>
+		<input type="hidden" name="opts" value="1"/>
+		// The form's default button (Enter in a field, e.g. the backup label) is the first submit
+		// button in tree order; without this one it would be the first row's "×".
+		<button type="submit" class="sr-only" tabindex="-1" aria-hidden="true" disabled?={ v.Error != "" }>{ v.Verb() }</button>
+		for _, r := range v.Rows {
+			<input type="hidden" name="id" value={ strconv.FormatInt(int64(r.ID), 10) }/>
+		}
+		<section class="bk-devs" aria-labelledby="bk-devs-h">
+			<div class="bk-devs-head">
+				<h2 id="bk-devs-h">Devices ({ strconv.Itoa(len(v.Rows)) })</h2>
+				<a class="bk-change" href={ templ.SafeURL(v.Base + "/devices") }>Change selection</a>
+			</div>
+			for _, r := range v.Rows {
+				<div class="bk-row">
+					<span class={ "sdot-dot", "t-" + string(r.Tone) } aria-hidden="true"></span>
+					<span class="bk-dev">
+						<span class="bk-name">{ r.Name }</span>
+						<span class="bk-meta"><span data-visual-mask>{ r.Addr }</span> · { r.Status }</span>
+					</span>
+					if r.Skip {
+						@ui.Badge(ui.ToneNeutral, "Will be skipped")
+					}
+					<button type="submit" class="bk-x" name="drop" value={ strconv.FormatInt(int64(r.ID), 10) } formaction={ templ.SafeURL(v.Self) } formnovalidate aria-label={ "Remove " + r.Name + " from selection" }>×</button>
+				</div>
+			}
+			if v.SkipN > 0 {
+				<p class="bk-skipnote">{ v.SkipNote() }</p>
+			}
+		</section>
+		<aside class="bk-aside" aria-label="Options">
+			switch v.Kind {
+				case bulkCmd:
+					<label class="bk-field">
+						Command
+						<textarea name="command" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="255" required
+							if v.CommandError != "" {
+								aria-invalid="true"
+								aria-describedby="bk-cmd-err"
+							}
+						>{ v.Command }</textarea>
+						if v.CommandError != "" {
+							<span class="ufield-err" id="bk-cmd-err">{ v.CommandError }</span>
+						} else {
+							<span class="bk-help">Use Backlog to send several commands in one go.</span>
+						}
+					</label>
+					@bulkCheck("wait", "Wait up to 5 s for each response", "", v.Wait, false)
+					@bulkCheck("serial", "One device at a time", "", v.Serial, false)
+				case bulkBackup:
+					<input type="hidden" name="run" value="1"/>
+					<label class="bk-field">
+						Label (optional)
+						<input name="label" value={ v.Label } maxlength="80" autocomplete="off"/>
+					</label>
+					@bulkCheck("keep", "Keep these backups (never pruned)", "", v.Keep, false)
+				case bulkRestart:
+					if v.Token != "" {
+						<input type="hidden" name="token" value={ v.Token }/>
+					}
+					<div class="bk-warn" role="status"><span class="bk-warn-dot" aria-hidden="true"></span><span>Relays switch off for a few seconds. Connected lights will flicker.</span></div>
+					<label class="bk-field">
+						Devices at a time
+						<select name="parallel">
+							for _, n := range bulkParallels3 {
+								<option value={ strconv.Itoa(n) } selected?={ n == v.Parallel }>{ strconv.Itoa(n) }</option>
+							}
+						</select>
+					</label>
+					@bulkCheck("", "Save settings before restarting", "Restart 1 saves the settings", true, true)
+				default:
+					<input type="hidden" name="action" value={ v.Action }/>
+					<input type="hidden" name="confirm" value="1"/>
+					<label class="bk-field">
+						Relays
+						<select name="relay">
+							<option value="all" selected?={ v.Relay == "all" }>All relays</option>
+							<option value="1" selected?={ v.Relay == "1" }>Relay 1 only (POWER1)</option>
+						</select>
+						<span class="bk-help">Devices that are already in that state are left alone.</span>
+					</label>
+					if v.Kind == bulkOn {
+						@bulkCheck("stagger", "Stagger by 1 s to avoid an inrush spike", "", v.Stagger, false)
+					}
+			}
+			<div class="bk-sum">{ v.Summary() }</div>
+			<button type="submit" class="btn btn-primary btn-tall" disabled?={ v.Error != "" }>{ v.Verb() }</button>
+			<a class="btn" href={ templ.SafeURL(v.Base + "/devices") }>Cancel</a>
+		</aside>
+	</form>
+}
+
+// bulkParallels3 are the "Devices at a time" choices in the prototype's order (3 first).
+var bulkParallels3 = []int{3, 1, 5}
+
+// bulkCheck is a checkbox row of the aside (40 px high); a disabled one explains itself in a
+// second line.
+templ bulkCheck(name, text, help string, checked, disabled bool) {
+	<label class="bk-opt">
+		<input
+			type="checkbox"
+			if name != "" {
+				name={ name }
+				value="1"
+			}
+			checked?={ checked }
+			disabled?={ disabled }
+		/>
+		<span>
+			{ text }
+			if help != "" {
+				<span class="bk-help">{ help }</span>
+			}
+		</span>
+	</label>
+}
+
+// bulkResultPage is the prototype's bulk result: state, Succeeded / Failed / Skipped tiles and a
+// row per device. While the transaction runs, the block reloads itself on job events (and every
+// few seconds as a fallback) until it is finished.
+templ bulkResultPage(v bulkResultView) {
+	if v.Toast != "" {
+		<p class={ "banner", "tone-" + v.ToastTone() } role="status" data-flash><span class="banner-dot"></span><span class="banner-text">{ v.Toast }</span></p>
+	}
+	<div
+		id="bk-result"
+		if v.Self != "" {
+			hx-get={ v.Self }
+			hx-trigger="sse:job throttle:1s, sse:resync, every 3s"
+			hx-select="#bk-result"
+			hx-swap="outerHTML"
+		}
+	>
+		<div class="pghead">
+			<div class="pghead-t">
+				<div class="bk-titlerow">
+					<h1>{ v.Title() }</h1>
+					{{ tone, state := v.State() }}
+					<span class={ "bdg", "bk-state", "t-" + string(tone) }>{ state }</span>
+				</div>
+				<p class="pghead-sub">
+					if v.Running {
+						Started <time datetime={ v.When.Format("2006-01-02T15:04:05Z07:00") }>{ v.When.Format("15:04:05") }</time>
+					} else {
+						Finished <time datetime={ v.When.Format("2006-01-02T15:04:05Z07:00") }>{ v.When.Format("15:04:05") }</time>
+					}
+					if v.Took != "" {
+						if v.Running {
+							· running for <span data-visual-mask>{ v.Took }</span>
+						} else {
+							· took <span data-visual-mask>{ v.Took }</span>
+						}
+					}
+					if v.By != "" {
+						· started by { v.By }
+					}
+				</p>
+			</div>
+			<div class="pghead-acts">
+				if v.CanRetry {
+					<a class="btn" href={ templ.SafeURL(v.Base + "/transactions/" + strconv.FormatInt(int64(v.Batch), 10) + "/retry") }>Retry failed ({ strconv.Itoa(v.Failed) })</a>
+				}
+				<a class="btn" href={ templ.SafeURL(v.Base + "/audit") }>Audit log</a>
+				<a class="btn btn-primary" href={ templ.SafeURL(v.Base + "/devices") }>Back to devices</a>
+			</div>
+		</div>
+		if v.Command != "" {
+			<div class="bk-cmdline">› { v.Command }</div>
+		}
+		<div class="bk-tiles">
+			@bulkTile(ui.ToneOK, "Succeeded", v.OK)
+			@bulkTile(ui.ToneDanger, "Failed", v.Failed)
+			@bulkTile(ui.ToneNeutral, "Skipped", v.Skipped)
+		</div>
+		<section class="bk-res" aria-label="Result per device">
+			for _, r := range v.Rows {
+				<div class="bk-rrow">
+					<span class="bk-rdev">
+						<span class="bk-name">{ r.Name }</span>
+						<span class="bk-meta" data-visual-mask>{ r.Addr }</span>
+					</span>
+					<span class="bk-rbadge">
+						@ui.Badge(r.Tone, r.Label)
+					</span>
+					<span class="bk-detail">@ui.SoftJSON(r.Detail)</span>
+				</div>
+			}
+		</section>
+	</div>
+}
+
+// bulkTile is one counter tile of the result.
+templ bulkTile(tone ui.Tone, label string, n int) {
+	<div class="bk-tile">
+		<div class="bk-tile-l"><span class={ "sdot-dot", "t-" + string(tone) } aria-hidden="true"></span>{ label }</div>
+		<div class="bk-tile-v">{ strconv.Itoa(n) }</div>
+	</div>
+}

@@ -1,0 +1,101 @@
+# golangci-lint v2 configuration. Focused set: correctness, security and
+# architecture boundaries. Style is gofmt's job. Run with `make lint`.
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  default: none
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - unused
+    - ineffassign
+    - bodyclose # unclosed HTTP response bodies (device client, firmware download)
+    - noctx # every outbound request carries a context (timeouts)
+    - errorlint # errors.Is/As instead of == on wrapped errors
+    - nilerr
+    - exhaustive # every switch over JobState/EventKind/ChipFamily handles all values
+    - gosec
+    - sqlclosecheck
+    - rowserrcheck
+    - misspell
+    - unconvert
+    - forbidigo
+    - depguard # package boundaries, see CLAUDE.md "Package boundaries"
+  settings:
+    exhaustive:
+      default-signifies-exhaustive: false
+    forbidigo:
+      forbid:
+        - pattern: ^(fmt\.Print.*|print|println)$
+          msg: use log/slog (CLI output lives in cmd/ only)
+        - pattern: ^http\.(Get|Post|Head|PostForm)$
+          msg: use a client with timeout and context
+        # CSP is default-src 'self' without 'unsafe-inline': these emit inline script or put data into markup unescaped
+        - pattern: ^templ\.(Raw|Unsafe|JSFuncCall|JSExpression|JSUnsafeFuncCall|ComponentScript|JSONScript|ConstantScript)$
+          msg: forbidden templ feature (inline script or unescaped markup), see design/v2/README.md
+    gosec:
+      excludes:
+        - G104 # duplicate of errcheck
+    depguard:
+      rules:
+        model-is-a-leaf:
+          files: ["**/internal/model/*.go"]
+          deny:
+            - pkg: github.com/nofuturekid/tasmofleet/internal
+              desc: model imports only the standard library
+        pure-decision-packages:
+          files: ["**/internal/fwselect/*.go", "**/internal/ota/machine*.go", "**/internal/cmdpolicy/*.go", "!$test"]
+          deny:
+            - pkg: net
+              desc: decision code is pure, no I/O
+            - pkg: os
+              desc: decision code is pure, no I/O
+            - pkg: database/sql
+              desc: decision code is pure, no I/O
+        sql-only-in-store:
+          files: ["$all", "!**/internal/store/**"]
+          deny:
+            - pkg: database/sql
+              desc: only internal/store talks SQL
+            - pkg: modernc.org/sqlite
+              desc: only internal/store talks SQL
+        templ-only-in-web:
+          files: ["$all", "!**/internal/web/**"]
+          deny:
+            - pkg: github.com/a-h/templ
+              desc: templ components live in internal/web and internal/web/ui only
+        no-test-helpers-in-prod:
+          files:
+            [
+              "$all",
+              "!$test",
+              "!**/cmd/tasmofleet-devenv/**",
+              "!**/internal/testutil/**",
+              "!**/internal/simulator/**",
+            ]
+          deny:
+            - pkg: github.com/nofuturekid/tasmofleet/internal/testutil
+              desc: test helpers stay out of production code
+            - pkg: github.com/nofuturekid/tasmofleet/internal/simulator
+              desc: the simulator stays out of production code
+            - pkg: github.com/mochi-mqtt/server/v2
+              desc: the embedded broker is for tests and devenv only
+  exclusions:
+    rules:
+      - path: cmd/
+        linters: [forbidigo]
+      - path: _test\.go
+        linters: [gosec]
+      # httptest.NewRequest never touches the network; demanding a context in
+      # every handler test is noise. Production code stays covered.
+      - path: _test\.go
+        linters: [noctx]
+
+formatters:
+  enable:
+    - gofmt

@@ -1,0 +1,45 @@
+<!-- @dsCard group="Components" name="Navigation" subtitle="Top bar with grouped menus, page header with one primary action, mobile top nav" viewport="640x640" -->
+<!doctype html>
+<html lang="en" data-theme-auto>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tasmofleet DS — Navigation</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <script src="../theme.js"></script>
+    <style>
+      /* Demo scaffolding only: everything visual comes from ../styles.css. */
+      .demo { max-width: 620px; margin: 0 auto; padding: var(--space-6) var(--space-4) var(--space-8); }
+      .demo-head { font-family: var(--font-body); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+        color: var(--color-text-2); margin: var(--space-6) 0 var(--space-3); }
+      .demo-head:first-child { margin-top: 0; }
+      .row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+      .note { font-size: 12px; color: var(--color-text-2); max-width: 60ch; margin-top: var(--space-3); }
+      .demo-foot { margin-top: var(--space-8); padding-top: var(--space-3); border-top: 1px solid var(--color-divider);
+        display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); }
+      .stage { position: relative; min-height: 220px; padding: var(--space-4); background: var(--color-bg);
+        border: 1px solid var(--color-divider); overflow: hidden; }
+    </style>
+  </head>
+  <body>
+<main class="demo">
+<style>.frame { border: 1px solid var(--color-divider); margin-bottom: 8px; } .frame .top { padding: 0 12px; } .tall { min-height: 190px; }</style>
+<p class="demo-head">Top bar (desktop), Devices menu open</p>
+<div class="frame tall">
+<header class="top"><a class="brand" href="#"><img src="../assets/logo.svg" alt="" width="26" height="26">tasmofleet</a>
+<nav aria-label="Main" class="mainnav"><a class="navtop" href="#">Dashboard</a>
+<details class="navgroup" open><summary class="navtop is-active">Devices</summary><div class="menu"><a href="#" aria-current="page">Devices</a><a href="#" class="is-hover">Add devices</a><a href="#">Policy</a></div></details>
+<details class="navgroup"><summary class="navtop">Updates</summary><div class="menu"><a href="#">Firmware</a></div></details></nav>
+<div class="user"><details class="navgroup"><summary class="who">alice <small>(admin)</small></summary><div class="menu right"><a href="#">Change password</a></div></details></div></header></div>
+<p class="demo-head">Page header: title (+ status), crumb, one primary action right</p>
+<div class="page-head"><h1>Balcony Windowsill <span class="badge tone-ok">Online</span></h1>
+<div class="actions"><a class="button" href="#">Console</a><a class="button primary" href="#">Settings</a></div>
+<p class="crumb"><a href="#">Devices</a></p></div>
+<div class="page-head"><h1>Devices</h1><div class="actions"><a class="button primary" href="#"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5 12h14"/><path d="M12 5v14"/></svg>Add devices</a></div></div>
+<p class="demo-head">Pager</p>
+<nav class="pager" aria-label="Pages"><a class="button sm" href="#">Previous</a><a class="button sm" href="#">1</a><span class="button sm is-current" aria-current="page">2</span><a class="button sm" href="#">3</a><a class="button sm" href="#">Next</a><span class="muted">Page 2 of 3, 27 devices</span></nav>
+<p class="note">At ≤ 640px the navigation moves to a second row under brand and user (see the templates at 375px); group menus open full width.</p>
+<div class="demo-foot"><span class="note">tasmofleet DS</span><div class="theme-switch" role="group" aria-label="Theme"><button type="button" class="sm" data-theme-set="system">Auto</button><button type="button" class="sm" data-theme-set="light">Light</button><button type="button" class="sm" data-theme-set="dark">Dark</button></div></div>
+</main>
+  </body>
+</html>

@@ -1,0 +1,84 @@
+package web
+
+import "strconv"
+
+// aboutView is the About page (design v2 screen "about", the templ pilot of WP F3): the version
+// card, the components with their health, and the effective configuration.
+type aboutView struct {
+	Base     string
+	Version  string
+	Platform string // GOOS/GOARCH and Go version: what this binary is
+	Uptime   string
+	Devices  int
+	Comps    []aboutComp
+	Config   []aboutSetting
+}
+
+// aboutComp is one component row: a dot and a badge in the same tone, a name and a status line.
+type aboutComp struct {
+	Name, Detail, State, Tone string
+}
+
+// aboutSetting is one row of the effective configuration, worded for people (cfgText).
+type aboutSetting struct {
+	Key, Value string
+	Secret     bool
+	Link       *deviceLink // the value is a URL that may be opened
+}
+
+const (
+	sourceURL    = "https://github.com/nofuturekid/tasmofleet"
+	licenceURL   = sourceURL + "/blob/main/LICENSE"
+)
+
+templ aboutPage(p aboutView) {
+	<div class="about-head"><h1>About</h1></div>
+	<div class="about-grid">
+		<section class="about-card about-version" aria-label="Version">
+			<div class="about-name" data-visual-mask>TasmoFleet { p.Version }</div>
+			<div class="about-build" data-visual-mask>{ p.Platform }</div>
+			<div class="about-meta" data-visual-mask>Up { p.Uptime } · { strconv.Itoa(p.Devices) } devices</div>
+			<div class="about-actions">
+				<a class="button" href={ templ.SafeURL(p.Base + "/whats-new") } data-visual-mask>What’s new in { p.Version }</a>
+				<a class="button" href={ templ.SafeURL(p.Base + "/styleguide") }>Styleguide</a>
+			</div>
+		</section>
+		<section class="about-card about-comps" aria-labelledby="about-comps">
+			<h2 id="about-comps">Components</h2>
+			<ul class="comp-list">
+				for _, c := range p.Comps {
+					<li class="comp">
+						<span class={ "comp-dot", "t-" + c.Tone }></span>
+						<span class="comp-text"><span class="comp-name">{ c.Name }</span><span class="comp-detail">{ c.Detail }</span></span>
+						<span class={ "comp-state", "t-" + c.Tone }>{ c.State }</span>
+					</li>
+				}
+			</ul>
+		</section>
+	</div>
+	<details class="fold about-config">
+		<summary>Effective configuration ({ strconv.Itoa(len(p.Config)) } settings, secrets masked)</summary>
+		<table class="dense" data-table="keyvalue">
+			<thead><tr><th>Key</th><th>Value</th></tr></thead>
+			<tbody>
+				for _, kv := range p.Config {
+					<tr>
+						<td data-label="Key" class="p1"><code>{ kv.Key }</code></td>
+						<td data-label="Value" class="wrap s grow">
+							if kv.Value == "" {
+								<span class="muted">not set</span>
+							} else if kv.Secret {
+								<span class="muted" title="A secret: set, but never shown">*** set, hidden</span>
+							} else if kv.Link != nil {
+								<a class="ext" href={ templ.SafeURL(kv.Link.Href) } target="_blank" rel="noopener noreferrer">{ kv.Link.Display }<span class="sr-only"> (opens in a new tab)</span></a>
+							} else {
+								{ kv.Value }
+							}
+						</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	</details>
+	<p class="muted about-links">TasmoFleet { p.Version }, AGPL-3.0-or-later. <a href={ templ.SafeURL(sourceURL) } target="_blank" rel="noopener noreferrer">Source</a> · <a href={ templ.SafeURL(p.Base + "/whats-new") }>Changelog</a> · <a href={ templ.SafeURL(licenceURL) } target="_blank" rel="noopener noreferrer">Licence</a></p>
+}

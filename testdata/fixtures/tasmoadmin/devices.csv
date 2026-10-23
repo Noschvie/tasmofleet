@@ -1,0 +1,4 @@
+1,"Kitchen Light",192.168.1.50,admin,,bulb_1,1,1,0,0,1,80,"Kitchen Light",0,kitchen_light,0
+2,"Desk Left|Desk Right",192.168.1.51,admin,enc:v1:QUJDREVGR0hJSktMMTIzNDU2Nzg5MDEyMzQ1Njc4OTBhYmNkZWY=,socket_1,2,1,0,0,1,80,"Desk Left|Desk Right",0,desk_strip,0
+3,socket-1,192.168.1.2,user,password,bulb_1,2,,,,,5000
+4,"Old \"quoted\" plug",192.168.1.53,,,bulb_1,4

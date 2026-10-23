@@ -1,0 +1,1 @@
+{"Time":"2026-10-18T18:18:16","Uptime":"0T01:09:50","UptimeSec":4190,"Heap":22,"SleepMode":"Dynamic","Sleep":50,"LoadAvg":19,"MqttCount":1,"POWER":"ON","Wifi":{"AP":1,"SSId":"IoT","BSSId":"02:00:5E:29:E3:EB","Channel":11,"Mode":"11n","RSSI":84,"Signal":-58,"LinkCount":1,"Downtime":"0T00:00:04"},"Hostname":"mr-bambu-plug","IPAddress":"172.31.13.33"}

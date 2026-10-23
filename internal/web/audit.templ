@@ -1,0 +1,155 @@
+package web
+
+import (
+	"encoding/json"
+	"net/url"
+	"strconv"
+	"strings"
+
+	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+)
+
+// auditView is the Audit log page (design v2 screen "audit", WP P8): the page header, the
+// prototype's filter row (search, actor, action, period; plus the result filter the app had),
+// and the events in a card. The table keeps its sortable columns, the Columns chooser and the
+// inline details; the pager is the one of every paged table.
+templ auditView(base string, p auditPage) {
+	@ui.PageHeader("Audit log", p.Sub)
+	<form class="audit-filters" method="get" action={ templ.SafeURL(base + "/audit") } aria-label="Filter audit log" data-autosubmit>
+		<input type="search" name="q" value={ p.Query } placeholder="Search actor, action or device" aria-label="Search actor, action or device"/>
+		@auditSelect("actor", "Actor", p.ActorOpts)
+		@auditSelect("action", "Action", p.ActionOpts)
+		@auditSelect("since", "Period", p.SinceOpts)
+		@auditSelect("result", "Result", p.ResultOpts)
+		if p.Target != "" {
+			<input type="hidden" name="target" value={ p.Target }/>
+		}
+		<button type="submit" class="btn" data-autosubmit-hide>Filter</button>
+		if len(p.Events) > 0 && p.Filtered() {
+			<a class="btn" href={ templ.SafeURL(base + "/audit") }>Clear the filter</a>
+		}
+	</form>
+	if len(p.Choices) > 0 {
+		<div class="banner tone-warn" role="status">
+			<span class="banner-dot"></span>
+			<div class="banner-text">
+				<b>Several users match “{ p.Actor }”.</b> Choose one:
+				<ul class="audit-choices">
+					for _, c := range p.Choices {
+						<li><a href={ templ.SafeURL(base + "/audit?actor=" + url.QueryEscape(c.Value) + "&since=" + url.QueryEscape(p.Since)) }>{ c.Label }</a></li>
+					}
+				</ul>
+			</div>
+		</div>
+	}
+	if len(p.Events) > 0 {
+		<section class="audit-card" aria-label="Events">
+			<table class="audittable dense" data-table="audit" data-sortbase={ p.SortBase } data-sort={ p.Sort.Key } data-dir={ p.Sort.Dir }>
+				<colgroup><col class="c-time"/><col class="c-actor"/><col class="c-action"/><col class="c-target"/><col/><col class="c-res"/><col class="c-det"/></colgroup>
+				<thead><tr><th>When</th><th>User</th><th>Action</th><th>Target</th><th>Summary</th><th>Result</th><th>Details</th></tr></thead>
+				<tbody>
+					for _, ev := range p.Events {
+						<tr>
+							<td data-label="When" class="nowrap s" title={ ev.At.Format("2006-01-02 15:04:05 MST") }><time datetime={ ev.At.Format("2006-01-02T15:04:05Z07:00") }>{ ev.At.Format("2006-01-02 15:04:05") }</time></td>
+							<td data-label="User" class="nowrap s">@auditWho(ev.Who)</td>
+							<td data-label="Action" class="nowrap p1" title={ tip(ev.Action) }>{ ev.Label }</td>
+							<td data-label="Target" class="nowrap p1x" title={ tip(ev.Target) }>
+								if ev.TargetHref != "" {
+									<a href={ templ.SafeURL(ev.TargetHref) }>{ ev.TargetText }</a>
+								} else {
+									{ ev.TargetText }
+								}
+							</td>
+							<td data-label="Summary" class="nowrap s grow m-hide" title={ tip(ev.SummaryAll) }>{ ev.Summary }</td>
+							<td data-label="Result" class="res p2"><span class={ "badge", "tone-" + resultTone(ev.Result) }>{ ev.Status }</span></td>
+							<td data-label="Details" class="detail s"><details><summary class="button sm">Details</summary></details></td>
+						</tr>
+						<tr class="detail-row">
+							<td colspan="7">
+								<p><strong>Result</strong> { ev.Result }</p>
+								if ev.Detail != "" {
+									<pre class="log">
+										for _, l := range auditDetailLines(ev.Detail) {
+											<span>{ l }</span>
+										}
+									</pre>
+								}
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+			@pagerNav(p.Pager)
+		</section>
+	} else if p.Filtered() {
+		@ui.Empty("No events match.", "Nothing matches the filter.") {
+			@ui.Button(ui.Btn{Label: "Clear the filter", Href: base + "/audit"})
+		}
+	} else {
+		@ui.Empty("No events yet.", "Actions of users and of the system are recorded here.")
+	}
+}
+
+// auditSelect is one select of the filter row; its visible first option names it.
+templ auditSelect(name, label string, opts []ui.Option) {
+	<select name={ name } aria-label={ label }>
+		for _, o := range opts {
+			<option value={ o.Value } selected?={ o.Checked }>{ o.Label }</option>
+		}
+	</select>
+}
+
+// auditWho is the User cell: the name with a chip for its kind, the subject as the tooltip.
+templ auditWho(w whoParts) {
+	if w.System {
+		<span class="who who-system"><span class="tag">{ w.Name }</span></span>
+	} else if w.Tip != "" {
+		<span class="who" title={ w.Tip }>
+			{ w.Name }
+			if w.Badge != "" {
+				<span class="tag">{ w.Badge }</span>
+			}
+		</span>
+	} else {
+		{ w.Name }
+	}
+}
+
+// pagerNav is the one paging control of every paged table (the legacy "pager" partial):
+// Previous, the position, Next and the page sizes, plain links that keep the filters.
+templ pagerNav(p pager) {
+	<nav class="pager" aria-label="Pages">
+		if p.Prev != "" {
+			<a class="button sm" href={ templ.SafeURL(p.Prev) } rel="prev">Previous</a>
+		} else {
+			<span class="button sm is-off" aria-disabled="true">Previous</span>
+		}
+		<span class="pager-of">
+			if p.Total > 0 {
+				Page { strconv.Itoa(p.Page) } of { strconv.Itoa(p.Pages) }, { strconv.Itoa(p.Total) } { p.Noun }
+			} else {
+				No { p.Noun }
+			}
+		</span>
+		if p.Next != "" {
+			<a class="button sm" href={ templ.SafeURL(p.Next) } rel="next">Next</a>
+		} else {
+			<span class="button sm is-off" aria-disabled="true">Next</span>
+		}
+		<span class="pager-size">
+			Per page
+			for _, s := range p.Sizes {
+				if s.Current {
+					<span class="button sm is-current" aria-current="true">{ strconv.Itoa(s.N) }</span>
+				} else {
+					<a class="button sm" href={ templ.SafeURL(s.Href) }>{ strconv.Itoa(s.N) }</a>
+				}
+			}
+		</span>
+	</nav>
+}
+
+// auditDetailLines is the event's JSON detail, indented, one line per span (log box).
+func auditDetailLines(detail string) []string {
+	return strings.Split(prettyJSON(json.RawMessage(detail)), "\n")
+}

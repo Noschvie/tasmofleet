@@ -1,0 +1,270 @@
+package web
+
+import (
+	"net/url"
+	"strconv"
+	"time"
+
+	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+)
+
+// relURL is the release page of version; since adds ?view=since.
+func relURL(base, version string, since bool) string {
+	u := base + "/firmware/releases/" + url.PathEscape(version)
+	if since {
+		u += "?view=since"
+	}
+	return u
+}
+
+// releaseSub is "Released 6 Oct 2026 · from GitHub releases".
+func releaseSub(p releasePage) string {
+	s := ""
+	if p.Rel != nil && !p.Rel.Published.IsZero() {
+		s = "Released " + dayText(p.Rel.Published)
+	}
+	if p.Source != "" {
+		if s != "" {
+			s += " · "
+		}
+		s += "from " + p.Source
+	}
+	return s
+}
+
+// fileMeta is a file row's second line: "ESP8266 · 11 devices · 658 KB".
+func fileMeta(f fileView) string {
+	s := plural(len(f.UsedBy), "device")
+	if f.Chip != "" {
+		s = f.Chip + " · " + s
+	}
+	if f.Size > 0 {
+		s += " · " + humanBytes(f.Size)
+	}
+	return s
+}
+
+func breakingText(n int) string {
+	if n == 1 {
+		return "1 breaking change"
+	}
+	return strconv.Itoa(n) + " breaking changes"
+}
+
+templ releaseContent(v view, p releasePage) {
+	<div class="page-release">
+		<div class="pghead">
+			<div class="pghead-t">
+				<h1 class="rel-title">
+					Tasmota { p.Version }
+					if p.Rel != nil && p.Rel.Recommended {
+						@ui.Badge(ui.ToneOK, "Latest")
+					}
+				</h1>
+				if sub := releaseSub(p); sub != "" {
+					<p class="pghead-sub">{ sub }</p>
+				}
+			</div>
+			if p.Rel != nil {
+				<div class="pghead-acts">
+					if p.Rel.URL != "" {
+						<a class="btn" href={ templ.SafeURL(p.Rel.URL) } rel="noopener noreferrer nofollow" target="_blank">View on GitHub<span class="sr-only"> (opens in a new tab)</span></a>
+					}
+					@relUpdateButton(v, *p.Rel, "Update "+plural(p.Rel.Updatable, "device")+"…")
+				</div>
+			}
+		</div>
+		if p.Error != "" {
+			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: p.Error, Alert: true})
+		}
+		if !p.Loaded {
+			@ui.Empty("Release list not loaded yet", "The release page shows releases from the last check of the release sources. The first check has not answered yet; the page never asks upstream itself.") {
+				@ui.Button(ui.Btn{Label: "Firmware", Href: v.Base + "/firmware"})
+			}
+		} else {
+			@ui.Tabs("Release views", releaseTabs(v, p))
+			if p.Since {
+				@relSince(v, p)
+			} else {
+				<div class="rel-grid">
+					<article class="ucard rel-notes" aria-label="Release notes">
+						@relNotes(p)
+					</article>
+					<div class="rel-aside">
+						@relFiles(v, p)
+						@relOlder(v, p)
+					</div>
+				</div>
+			}
+		}
+	</div>
+}
+
+// releaseTabs: the notes and, when the fleet runs an older version, "Changes since <oldest>".
+func releaseTabs(v view, p releasePage) []ui.Tab {
+	tabs := []ui.Tab{{Label: "Release notes", Href: relURL(v.Base, p.Version, false), Current: !p.Since}}
+	if p.HasOlder() {
+		tabs = append(tabs, ui.Tab{Label: "Changes since " + p.Oldest, Href: relURL(v.Base, p.Version, true), Current: p.Since})
+	} else {
+		tabs = append(tabs, ui.Tab{Label: "Changes since", Href: relURL(v.Base, p.Version, true), Current: p.Since, Reason: "No device runs an older version"})
+	}
+	return tabs
+}
+
+templ relUpdateButton(v view, r releaseView, label string) {
+	if v.Features.Updates {
+		if r.Updatable > 0 {
+			<a class="btn btn-primary" href={ templ.SafeURL(v.Base + "/updates/new?release=" + url.QueryEscape(r.Version)) }>{ label }</a>
+		} else {
+			<a class="btn btn-primary" aria-disabled="true" title="No device can be updated to this release" href={ templ.SafeURL(v.Base + "/updates/new?release=" + url.QueryEscape(r.Version)) }>{ label }</a>
+		}
+	}
+}
+
+// relNotes is the whole notes; a breaking section is drawn as the warning box.
+templ relNotes(p releasePage) {
+	if len(p.Groups) == 0 {
+		<p class="fw-note">No release notes from the configured sources.</p>
+	}
+	for _, g := range p.Groups {
+		if g.Breaking {
+			<section class="unotes-breaking rel-breaking">
+				<h2><span class="sdot-dot t-warn" aria-hidden="true"></span>Breaking changes</h2>
+				@fwNotes(g.Blocks)
+			</section>
+		} else {
+			@fwNotes(g.Blocks)
+		}
+	}
+	if p.Rel.NotesCut {
+		<p class="fw-note">
+			The release notes were cut at 32 KiB.
+			if p.Rel.URL != "" {
+				The release on GitHub has the rest.
+			}
+		</p>
+	}
+}
+
+// relFiles is "Files this fleet needs" with each file's state and Prefetch / Retry.
+templ relFiles(v view, p releasePage) {
+	<section class="ulist rel-files" aria-labelledby="rel-files-h">
+		<div class="ulist-head">
+			<h2 id="rel-files-h">Files this fleet needs</h2>
+			if r := p.Rel; v.IsAdmin && r.CanPrefetch && r.Cached < r.Needed && len(r.Below) > 0 && p.Run == "" {
+				<form method="post" action={ templ.SafeURL(v.Base + "/firmware/prefetch") }>
+					<input type="hidden" name="csrf" value={ v.CSRF }/>
+					<input type="hidden" name="release" value={ r.Version }/>
+					<button type="submit" class="btn btn-link">Prefetch for my fleet</button>
+				</form>
+			}
+		</div>
+		for _, f := range p.Rel.Files {
+			<div class="rel-file">
+				<span class="rel-file-t">
+					<span class="rel-file-n">@ui.Soft(f.Name)</span>
+					<span class="rel-file-m" title={ devNames(f.UsedBy) }>{ fileMeta(f) }</span>
+				</span>
+				switch {
+					case f.Missing:
+						@ui.Badge(ui.ToneDanger, "Not offered upstream")
+					case f.Cached:
+						@ui.Badge(ui.ToneOK, "Cached")
+					case p.Fetching[p.Version+"/"+f.Name]:
+						<a class="bdg t-accent fw-fetching" href={ templ.SafeURL(v.Base + "/firmware/prefetch/" + p.Run) }>Fetching…</a>
+					case p.Failed[p.Version+"/"+f.Name] != "":
+						<span class="fw-file-fail">
+							<span class="bdg t-danger" title={ p.Failed[p.Version+"/"+f.Name] }>Download failed</span>
+							if v.IsAdmin {
+								@relFetchButton(v, p.Version, f.Name, "Retry")
+							}
+						</span>
+					case v.IsAdmin:
+						@relFetchButton(v, p.Version, f.Name, "Prefetch")
+					default:
+						<span class="fw-file-nc">Not cached</span>
+				}
+			</div>
+		}
+		if len(p.Rel.Files) == 0 {
+			<p class="rel-empty">No device in this fleet needs a file from this release.</p>
+		}
+	</section>
+}
+
+templ relFetchButton(v view, release, file, label string) {
+	<form method="post" action={ templ.SafeURL(v.Base + "/firmware/fetch") } class="fw-fetch">
+		<input type="hidden" name="csrf" value={ v.CSRF }/>
+		<input type="hidden" name="release" value={ release }/>
+		<input type="hidden" name="filename" value={ file }/>
+		<input type="hidden" name="from" value="release"/>
+		<button type="submit" class="btn btn-sm" aria-label={ label + " " + file }>{ label }</button>
+	</form>
+}
+
+// relOlder is "Still on older versions" with the way to update them.
+templ relOlder(v view, p releasePage) {
+	<section class="ulist rel-older" aria-labelledby="rel-older-h">
+		<div class="ulist-head">
+			<h2 id="rel-older-h">Still on older versions</h2>
+		</div>
+		for _, o := range p.Older {
+			<div class="rel-orow">
+				<span class="mono">{ o.Version }</span>
+				<span>{ plural(o.Count, "device") }</span>
+			</div>
+		}
+		if len(p.Older) == 0 {
+			<p class="rel-empty">No device runs an older version.</p>
+		}
+		if v.Features.Updates && p.Rel.Updatable > 0 {
+			<div class="rel-start">
+				@relUpdateButton(v, *p.Rel, "Start update with "+p.Version)
+			</div>
+		}
+	</section>
+}
+
+// relSince lists every release between the oldest version in the fleet and this one.
+templ relSince(v view, p releasePage) {
+	if !p.HasOlder() {
+		<p class="rel-since-lead">No device runs a version older than { p.Version }.</p>
+	} else {
+		<p class="rel-since-lead">Every release between <b class="mono">{ p.Oldest }</b> (oldest version in your fleet) and <b class="mono">{ p.Version }</b>, newest first.</p>
+		if len(p.Between) == 0 {
+			<p class="rel-empty">The release list has no release in this range.</p>
+		}
+		<div class="rel-since">
+			for _, b := range p.Between {
+				<section class="ucard rel-srel" aria-labelledby={ "rel-s-" + b.Version }>
+					<div class="rel-shead">
+						<a class="rel-sv" id={ "rel-s-" + b.Version } href={ templ.SafeURL(relURL(v.Base, b.Version, false)) }>{ b.Version }</a>
+						if !b.Published.IsZero() {
+							<time class="rel-sd" datetime={ b.Published.Format(time.RFC3339) }>{ dayText(b.Published) }</time>
+						}
+						if b.Breaking > 0 {
+							@ui.Badge(ui.ToneWarn, breakingText(b.Breaking))
+						}
+					</div>
+					for _, row := range b.Rows {
+						<div class={ "rel-srow", templ.KV("rel-srow-brk", row.Breaking) }>
+							<span class="rel-slbl" title={ row.Label }>
+								if row.Breaking {
+									@ui.Badge(ui.ToneWarn, "Breaking")
+								} else if row.Label != "" {
+									@ui.Badge(ui.ToneNeutral, row.Label)
+								}
+							</span>
+							<span class="rel-stxt">
+								@fwInlines(row.Text)
+							</span>
+						</div>
+					}
+					if len(b.Rows) == 0 {
+						<p class="rel-empty">No release notes from the configured sources.</p>
+					}
+				</section>
+			}
+		</div>
+	}
+}

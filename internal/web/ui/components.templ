@@ -1,0 +1,703 @@
+package ui
+
+// Components of the design system (design v2, WP F4). Every one is on /styleguide; the CSS
+// lives in app.css under "Components (design v2, WP F4)", one block per component.
+
+// PageHeader is the page title with its subtitle line and the page's buttons (children) on the
+// right: h1 22 px, subtitle 13 px.
+templ PageHeader(title, sub string) {
+	<div class="pghead">
+		<div class="pghead-t">
+			<h1>{ title }</h1>
+			if sub != "" {
+				<p class="pghead-sub">{ sub }</p>
+			}
+		</div>
+		<div class="pghead-acts">
+			{ children... }
+		</div>
+	</div>
+}
+
+// Button is a button, or a link styled as one (Btn).
+templ Button(b Btn) {
+	if b.Href != "" {
+		<a
+			class={ b.classes() }
+			href={ templ.SafeURL(b.Href) }
+			if b.Dialog != "" {
+				data-dialog={ b.Dialog }
+			}
+			if b.Aria != "" {
+				aria-label={ b.Aria }
+			}
+			if b.Disabled {
+				aria-disabled="true"
+			}
+		>{ b.Label }</a>
+	} else {
+		<button
+			type={ b.buttonType() }
+			class={ b.classes() }
+			if b.Name != "" {
+				name={ b.Name }
+				value={ b.Value }
+			}
+			if b.Dialog != "" {
+				data-dialog={ b.Dialog }
+			}
+			if b.Aria != "" {
+				aria-label={ b.Aria }
+			}
+			disabled?={ b.Disabled }
+		>{ b.Label }</button>
+	}
+}
+
+// ButtonRow lays buttons out in a wrapping row with the prototype's 8 px gap.
+templ ButtonRow() {
+	<div class="btn-row">
+		{ children... }
+	</div>
+}
+
+// Badge is a small tinted label: state, result, counter.
+templ Badge(tone Tone, label string) {
+	<span class={ "bdg", tone.class() }>{ label }</span>
+}
+
+// StatusDot is a coloured dot with its word (Online, Offline, Unknown): the colour is never the
+// only signal.
+templ StatusDot(tone Tone, label string) {
+	<span class={ "sdot", tone.class() }><span class="sdot-dot" aria-hidden="true"></span>{ label }</span>
+}
+
+// Avatar is the round initials badge; the colour follows the username.
+templ Avatar(name, username string) {
+	<span class={ "uavatar", AvatarTone(username).class() } aria-hidden="true">{ Initials(name) }</span>
+}
+
+// Card is a section: surface, hairline border, 10 px radius, an h2 and an optional line under it.
+templ Card(title, sub string) {
+	<section class="ucard">
+		if title != "" {
+			<h2>{ title }</h2>
+		}
+		if sub != "" {
+			<p class="ucard-sub">{ sub }</p>
+		}
+		{ children... }
+	</section>
+}
+
+// ListCard is a card whose body is a list of rows: a header row with the title and an optional
+// link on the right, then the rows (children) separated by hairlines.
+templ ListCard(title, linkLabel, linkHref string) {
+	<section class="ulist">
+		<div class="ulist-head">
+			<h2>{ title }</h2>
+			if linkLabel != "" {
+				<a class="btn btn-link" href={ templ.SafeURL(linkHref) }>{ linkLabel }</a>
+			}
+		</div>
+		{ children... }
+	</section>
+}
+
+// KV is a list of label/value rows inside a card.
+templ KV(rows []KVRow) {
+	<dl class="ukv">
+		for _, r := range rows {
+			<div class="ukv-row">
+				<dt>{ r.Key }</dt>
+				<dd class={ templ.KV("mono", r.Mono) } data-visual-mask?={ r.Mask }>
+					if r.Soft {
+						@Soft(r.Value)
+					} else {
+						{ r.Value }
+					}
+				</dd>
+			</div>
+		}
+	</dl>
+}
+
+// Tabs is a row of underline tabs; on a phone the row scrolls sideways.
+templ Tabs(label string, tabs []Tab) {
+	<nav class="utabs" aria-label={ label }>
+		for _, t := range tabs {
+			if t.Reason != "" && !t.Current {
+				<span class="utab" aria-disabled="true" title={ t.Reason }>{ t.Label }</span>
+			} else {
+				if t.Badge > 0 {
+					<a class="utab" href={ templ.SafeURL(t.Href) } if t.Current { aria-current="page" }>{ t.Label } <span class="bdg t-accent">{ itoa(t.Badge) }</span></a>
+				} else {
+					<a class="utab" href={ templ.SafeURL(t.Href) } if t.Current { aria-current="page" }>{ t.Label }</a>
+				}
+			}
+		}
+	</nav>
+}
+
+// RowMenu is the "⋯" menu of a row: a <details> (opens without JavaScript; menu.js adds one
+// open at a time, Escape and click outside). Up opens it above its button (last rows).
+templ RowMenu(label string, items []MenuItem, up bool) {
+	@rowMenu(label, items, up, false)
+}
+
+// RowMenuStatic is the menu drawn open in the flow, for the style guide.
+templ RowMenuStatic(label string, items []MenuItem, up bool) {
+	@rowMenu(label, items, up, true)
+}
+
+templ rowMenu(label string, items []MenuItem, up, static bool) {
+	<details class={ "rowmenu", "umenu", templ.KV("up", up) } open?={ static } data-static?={ static }>
+		<summary class="btn btn-ghost btn-icon icon" aria-label={ label }>⋯</summary>
+		<div class="rowmenu-body menu-panel" role="menu">
+			for _, it := range items {
+				if it.Sep {
+					<hr/>
+				}
+				if it.Disabled {
+					<span class="menu-item" role="menuitem" aria-disabled="true">
+						<span>{ it.Label }</span>
+						if it.Why != "" {
+							<span class="menu-why">{ it.Why }</span>
+						}
+					</span>
+				} else {
+					<a
+						class={ "menu-item", templ.KV("danger", it.Danger) }
+						role="menuitem"
+						href={ templ.SafeURL(it.Href) }
+						if it.Dialog != "" {
+							data-dialog={ it.Dialog }
+						}
+					><span>{ it.Label }</span></a>
+				}
+			}
+		</div>
+	</details>
+}
+
+// Banner is an inline banner above the page content: it stays until its cause is gone.
+templ Banner(b BannerData) {
+	<div
+		class={ "banner", "tone-" + string(b.Tone) }
+		if b.Alert {
+			role="alert"
+		} else {
+			role="status"
+		}
+	>
+		<span class="banner-dot"></span>
+		<div class="banner-text">
+			if b.Title != "" {
+				<b>{ b.Title }</b>
+			}
+			{ b.Text }
+		</div>
+		if b.Action != nil {
+			if b.Action.Href != "" {
+				<a class="banner-btn" href={ templ.SafeURL(b.Action.Href) }>{ b.Action.Label }</a>
+			} else {
+				<button type={ b.Action.buttonType() } class="banner-btn">{ b.Action.Label }</button>
+			}
+		}
+	</div>
+}
+
+// ErrorSummary is the form's banner when the server rejected a field: what to fix, and that
+// nothing was saved.
+templ ErrorSummary(lead string) {
+	<div class="banner tone-danger err-summary" role="alert">
+		<span class="banner-dot"></span>
+		<div class="banner-text"><b>{ lead }</b> Nothing was saved yet.</div>
+	</div>
+}
+
+// ToastStatic is a toast drawn in the flow (the style guide); toast.js makes the live ones.
+templ ToastStatic(t ToastData) {
+	<div class={ "toast", "tone-" + string(t.Tone), "has-x" }>
+		<span class="toast-dot"></span>
+		<span class="toast-text">{ t.Text }</span>
+		if t.Action != "" {
+			<button type="button" class="toast-act">{ t.Action }</button>
+		}
+		<button type="button" class="toast-x" aria-label="Dismiss">×</button>
+	</div>
+}
+
+// LivePill is the live indicator in one fixed state, for the style guide.
+templ LivePill(state, label string) {
+	<span class={ "live-pill", "lp-" + state }><span class="live-pill-dot" aria-hidden="true"></span>{ label }</span>
+}
+
+// Field is a label-above input. An error from the server marks the input invalid, points to
+// the message and replaces the help line.
+templ Field(f FieldData) {
+	<label class={ "ufield", templ.KV("ufield-wide", f.Wide) }>
+		<span class="ufield-label">{ f.Label }</span>
+		<input
+			name={ f.Name }
+			if f.Type != "" {
+				type={ f.Type }
+			}
+			value={ f.Value }
+			class={ templ.KV("mono", f.Mono) }
+			if f.Placeholder != "" {
+				placeholder={ f.Placeholder }
+			}
+			if f.Autocomplete != "" {
+				autocomplete={ f.Autocomplete }
+			}
+			if f.Error != "" {
+				aria-invalid="true"
+				aria-describedby={ "err-" + f.Name }
+			}
+			autofocus?={ f.Autofocus }
+		/>
+		if f.Error != "" {
+			<span class="ufield-err" id={ "err-" + f.Name }>{ f.Error }</span>
+		} else if f.Help != "" {
+			<span class="ufield-help">{ f.Help }</span>
+		}
+	</label>
+}
+
+// SelectField is a label-above native select.
+templ SelectField(label, name string, opts []Option) {
+	<label class="ufield">
+		<span class="ufield-label">{ label }</span>
+		<select name={ name }>
+			for _, o := range opts {
+				<option value={ o.Value } selected?={ o.Checked }>{ o.Label }</option>
+			}
+		</select>
+	</label>
+}
+
+// Check is a checkbox with its label (and an optional second line).
+templ Check(name, label, text string, checked, disabled bool) {
+	<label class="ucheck">
+		<input type="checkbox" name={ name } checked?={ checked } disabled?={ disabled }/>
+		<span>
+			{ label }
+			if text != "" {
+				<span class="ucheck-text">{ text }</span>
+			}
+		</span>
+	</label>
+}
+
+// RadioCards are radio buttons drawn as cards with a title and a line (auth method, backup keep
+// or drop): plain label > input, no JavaScript.
+templ RadioCards(legend, name string, opts []Option) {
+	<fieldset class="rcards">
+		<legend>{ legend }</legend>
+		for _, o := range opts {
+			<label class="rcard">
+				<input type="radio" name={ name } value={ o.Value } checked?={ o.Checked } disabled?={ o.Disabled }/>
+				<span class="rcard-body"><b>{ o.Label }</b>
+					if o.Text != "" {
+						<span>{ o.Text }</span>
+					}
+				</span>
+			</label>
+		}
+	</fieldset>
+}
+
+// Segmented is a small set of exclusive choices in one frame (Advisory / Required, Operator /
+// Admin): radio inputs, so it works without JavaScript.
+templ Segmented(label, name string, opts []Option) {
+	<div class="useg" role="radiogroup" aria-label={ label }>
+		for _, o := range opts {
+			<label>
+				<input type="radio" name={ name } value={ o.Value } checked?={ o.Checked }/>
+				<span>{ o.Label }</span>
+			</label>
+		}
+	</div>
+}
+
+// Toggle is a switch (a checkbox with role=switch) with a title and an explaining line. It posts
+// "true" when on (the settings form's on/off contract), nothing when off.
+templ Toggle(name, label, text string, on, disabled bool) {
+	<label class="utoggle">
+		<input type="checkbox" role="switch" name={ name } value="true" checked?={ on } disabled?={ disabled }/>
+		<span class="sw" aria-hidden="true"></span>
+		<span class="utoggle-text">
+			<b>{ label }</b>
+			if text != "" {
+				<span>{ text }</span>
+			}
+		</span>
+	</label>
+}
+
+// PowerSwitch is the relay toggle of a device row (34 x 20 inside a 44 px target); disabled
+// while the device is offline.
+templ PowerSwitch(label string, on, disabled bool) {
+	<button type="button" class="pwr" role="switch" aria-checked={ ariaBool(on) } aria-label={ label } disabled?={ disabled }><span class="sw" aria-hidden="true"></span></button>
+}
+
+// StatTile is a dashboard tile: dot and label, the value, a hint; the whole tile links to the
+// filtered list.
+templ StatTile(s StatTileData) {
+	<a class="stat-tile" href={ templ.SafeURL(s.Href) }>
+		<span class="stat-label"><span class={ "sdot-dot", s.Tone.class() } aria-hidden="true"></span>{ s.Label }</span>
+		<span class="stat-value">{ s.Value }</span>
+		if s.Hint != "" {
+			<span class="stat-hint">{ s.Hint }</span>
+		}
+	</a>
+}
+
+// HealthBar is the fleet health bar: online, offline and unknown as three segments whose widths
+// come from the server (SVG attributes, no inline style).
+templ HealthBar(ok, off, unk int) {
+	<svg class="health-bar" viewBox="0 0 1000 8" preserveAspectRatio="none" role="img" aria-label={ itoa(ok) + " online, " + itoa(off) + " offline, " + itoa(unk) + " unknown" }>
+		for _, s := range healthSegments(ok, off, unk) {
+			<rect class={ "bar-seg", s.Tone.class() } x={ itoa(s.X) } y="0" width={ itoa(s.W) } height="8"></rect>
+		}
+	</svg>
+}
+
+// AttentionList is the "Needs attention" list: proposals with two inline actions first, then
+// devices with their reason.
+templ AttentionList(props []AttProposal, items []AttItem, csrf string) {
+	for _, p := range props {
+		<div class="att-row att-prop">
+			<span class="sdot-dot t-accent" aria-hidden="true"></span>
+			<span class="att-text"><span class="att-name">{ p.Name }</span><span class="att-why">{ p.Text }</span></span>
+			<span class="att-acts">
+				<form method="post" action={ templ.SafeURL(p.SecondaryAction) }>
+					@attHidden(csrf, p.Version)
+					<button type="submit" class="btn btn-sm">{ p.Secondary }</button>
+				</form>
+				<form method="post" action={ templ.SafeURL(p.PrimaryAction) }>
+					@attHidden(csrf, p.Version)
+					<button type="submit" class="btn btn-sm btn-primary">{ p.Primary }</button>
+				</form>
+			</span>
+		</div>
+	}
+	for _, it := range items {
+		<a class="att-row att-item" href={ templ.SafeURL(it.Href) }>
+			<span class={ "sdot-dot", it.Tone.class() } aria-hidden="true"></span>
+			<span class="att-text"><span class="att-name">{ it.Name }</span><span class="att-why">{ it.Text }</span></span>
+			<span class="att-go" aria-hidden="true">›</span>
+		</a>
+	}
+}
+
+// attHidden are a proposal form's hidden fields: the CSRF token and the shown version.
+templ attHidden(csrf, version string) {
+	<input type="hidden" name="csrf" value={ csrf }/>
+	if version != "" {
+		<input type="hidden" name="version" value={ version }/>
+	}
+}
+
+// SegBar is the transaction progress: succeeded, failed, running.
+templ SegBar(t TxnData) {
+	<svg class="seg-bar" viewBox="0 0 1000 6" preserveAspectRatio="none" role="img" aria-label={ itoa(t.OK) + " done, " + itoa(t.Failed) + " failed, " + itoa(t.Active) + " running of " + itoa(t.Total) }>
+		for _, s := range txnSegments(t) {
+			<rect class={ "bar-seg", s.Tone.class() } x={ itoa(s.X) } y="0" width={ itoa(s.W) } height="6"></rect>
+		}
+	</svg>
+}
+
+// MiniBar is a row's progress in percent with the number beside it.
+templ MiniBar(pct int) {
+	<span class="mini-bar">
+		<svg viewBox="0 0 100 4" preserveAspectRatio="none" aria-hidden="true"><rect class="mini-bg" x="0" y="0" width="100" height="4"></rect><rect class="mini-fill" x="0" y="0" width={ itoa(min(max(pct, 0), 100)) } height="4"></rect></svg>
+		<span class="mini-pct">{ itoa(pct) }%</span>
+	</span>
+}
+
+// TxnCard is the current transaction: id, title, state, progress and summary; a link to it.
+templ TxnCard(t TxnData) {
+	<a class="txn-card" href={ templ.SafeURL(t.Href) }>
+		<span class="txn-head"><span class="txn-id">{ t.ID }</span><span class="txn-title">{ t.Title }</span>
+			@Badge(t.StateTone, t.State)
+		</span>
+		@SegBar(t)
+		<span class="txn-sum">{ t.Summary }</span>
+	</a>
+}
+
+// TxnRow is one finished transaction in the history list.
+templ TxnRow(r TxnRowData) {
+	<a class="att-row txn-row" href={ templ.SafeURL(r.Href) }>
+		<span class="txn-id">{ r.ID }</span>
+		<span class="txn-row-title">{ r.Title }</span>
+		@Badge(r.Tone, r.Result)
+		<span class="txn-when">{ r.When }</span>
+	</a>
+}
+
+// Dialog is a confirmation dialog. dialog.js opens it from a [data-dialog] trigger; without
+// JavaScript the trigger's link leads to the confirmation page (ConfirmPage).
+templ Dialog(d DialogData) {
+	<dialog id={ d.ID } class="udlg" aria-labelledby={ d.ID + "-h" } open?={ d.Static } data-static?={ d.Static }>
+		<form method="post" action={ templ.SafeURL(d.Action) } class="udlg-in">
+			<input type="hidden" name="csrf" value={ d.CSRF }/>
+			for _, f := range d.Fields {
+				<input type="hidden" name={ f.Key } value={ f.Value }/>
+			}
+			<h2 id={ d.ID + "-h" }>{ d.Title }</h2>
+			<p class="udlg-body">{ d.Body }</p>
+			if d.Command != "" {
+				<label class="ufield"><span class="ufield-label">Command</span><input name="command" class="mono" value={ d.Command }/></label>
+			}
+			if len(d.Changes) > 0 {
+				<div class="udlg-changes">
+					for _, c := range d.Changes {
+						<div><span>{ c.Key }</span><span class="mono">{ c.Value }</span></div>
+					}
+				</div>
+			}
+			<div class="udlg-foot">
+				<button type="button" class="btn" data-close>Cancel</button>
+				<button type="submit" class={ "btn", templ.KV("btn-danger-solid", d.Danger), templ.KV("btn-primary", !d.Danger) }>{ d.Verb }</button>
+			</div>
+		</form>
+	</dialog>
+}
+
+// StepUp is the "Confirm it's you" dialog: re-authentication with the identity provider, or the
+// local password. It posts to the existing step-up route.
+templ StepUp(s StepUpData) {
+	<dialog id={ s.ID } class="udlg stepup" aria-labelledby={ s.ID + "-h" } open?={ s.Static || s.Open } data-static?={ s.Static } data-autoopen?={ s.Open }>
+		<form method="post" action={ templ.SafeURL(s.Action) } class="udlg-in">
+			<input type="hidden" name="csrf" value={ s.CSRF }/>
+			if s.Next != "" {
+				<input type="hidden" name="next" value={ s.Next }/>
+			}
+			for _, f := range s.Fields {
+				<input type="hidden" name={ f.Key } value={ f.Value }/>
+			}
+			<div class="stepup-who">
+				@Avatar(s.Name, s.Name)
+				<div><h2 id={ s.ID + "-h" }>Confirm it’s you</h2><div class="stepup-sub">{ s.Sub }</div></div>
+			</div>
+			<p class="udlg-body"><b>{ s.What }</b> is an admin action. Sign in again to continue; you won’t be asked again for 5 minutes.</p>
+			if s.IdP != "" && s.IdPHref != "" {
+				<button type="submit" class="btn btn-primary btn-tall" formaction={ templ.SafeURL(s.IdPHref) } formnovalidate>Re-authenticate with { s.IdP }</button>
+			} else if s.IdP != "" {
+				<button type="submit" class="btn btn-primary btn-tall" formnovalidate>Re-authenticate with { s.IdP }</button>
+			}
+			if s.IdP != "" && s.Local {
+				<div class="or-rule">or use your local password</div>
+			}
+			if s.Local {
+				@Field(FieldData{Label: "Password", Name: s.passwordName(), Type: "password", Error: s.Error, Autocomplete: "current-password"})
+			} else if s.Error != "" {
+				<p class="ufield-err" role="alert">{ s.Error }</p>
+			}
+			<div class="udlg-foot">
+				<button type="button" class="btn" data-close>Cancel</button>
+				if s.Local {
+					<button type="submit" class="btn btn-primary">Confirm</button>
+				}
+			</div>
+		</form>
+	</dialog>
+}
+
+// ConfirmPage is a confirmation as a page (no JavaScript): the dialog's look, a form that posts
+// with the CSRF token, Cancel as a link back.
+templ ConfirmPage(c ConfirmData) {
+	@PageHeader(c.Title, "")
+	<section class="ucard confirm-card" aria-labelledby="confirm-h">
+		<h2 id="confirm-h">{ c.Heading }</h2>
+		<p class="udlg-body">{ c.Text }</p>
+		if c.Warning != "" {
+			@Banner(BannerData{Tone: ToneDanger, Text: c.Warning, Alert: true})
+		}
+		if len(c.Facts) > 0 {
+			@KV(c.Facts)
+		}
+		<form method="post" action={ templ.SafeURL(c.Action) } class="udlg-foot">
+			<input type="hidden" name="csrf" value={ c.CSRF }/>
+			for _, f := range c.Fields {
+				<input type="hidden" name={ f.Key } value={ f.Value }/>
+			}
+			<a class="btn" href={ templ.SafeURL(c.CancelHref) }>{ c.CancelLabel }</a>
+			<button type="submit" class={ "btn", templ.KV("btn-danger-solid", c.Danger), templ.KV("btn-primary", !c.Danger) }>{ c.Verb }</button>
+		</form>
+	</section>
+}
+
+// Empty is the empty state of a list: an icon tile, a heading, a line and up to three buttons
+// (children).
+templ Empty(title, text string) {
+	<div class="uempty">
+		<div class="uempty-icon" aria-hidden="true"><span></span></div>
+		<h2>{ title }</h2>
+		<p>{ text }</p>
+		<div class="btn-row">
+			{ children... }
+		</div>
+	</div>
+}
+
+// NoMatch is the row of a filtered list without results, with the way back.
+templ NoMatch(text, clearHref string) {
+	<div class="nomatch">
+		<span>{ text }</span>
+		<a class="btn btn-sm" href={ templ.SafeURL(clearHref) }>Clear filters</a>
+	</div>
+}
+
+// Skeleton is the loading state of a lazily loaded list (D12: never a whole server page).
+templ Skeleton(label string, rows int) {
+	<div class="skel" aria-busy="true">
+		<div class="skel-head">{ label }</div>
+		for i := 0; i < rows; i++ {
+			<div class={ "skel-row", "skel-w" + itoa(i%4) }><span class="skel-box"></span><span class="skel-line"></span><span class="skel-fill"></span><span class="skel-end"></span></div>
+		}
+	</div>
+}
+
+// ErrorPage is a full error page: the status code, a title, the explanation, the path that
+// failed and two ways on.
+templ ErrorPage(code, title, body, path string, primary, secondary Btn) {
+	<div class="errpage">
+		<div class="errpage-in">
+			<span class="errpage-code">{ code }</span>
+			<h1>{ title }</h1>
+			<p>{ body }</p>
+			if path != "" {
+				<div class="errpage-path">{ path }</div>
+			}
+			<div class="btn-row">
+				@Button(primary)
+				@Button(secondary)
+			</div>
+		</div>
+	</div>
+}
+
+// AuthCard is the card of the sign-in, setup and password pages: the brand above, the card
+// (children) and the footer "TasmoFleet x.y.z · host" (D15).
+templ AuthCard(base, version, host string) {
+	<div class="uauth">
+		@Brand(base)
+		<div class="auth-card">
+			{ children... }
+		</div>
+		<div class="auth-foot" data-visual-mask><span>TasmoFleet { version }</span> · <span>{ host }</span></div>
+	</div>
+}
+
+// Console is the device console: a dark panel with timestamped lines and the prompt, the quick
+// commands below it. Quick commands are submit buttons that send their command (no JavaScript).
+templ Console(c ConsoleData) {
+	<div class="console">
+		<div class="console-head">
+			<span class="console-dot" aria-hidden="true"></span><span class="console-title">{ c.Title }</span>
+			if c.ClearHref != "" {
+				<a class="console-clear" href={ templ.SafeURL(c.ClearHref) }>Clear</a>
+			} else {
+				<button type="button" class="console-clear">Clear</button>
+			}
+		</div>
+		<div class="console-lines" role="log" aria-label="Console output" tabindex="0">
+			for _, l := range c.Lines {
+				<div class={ "console-line", templ.KV("is-cmd", l.Kind == "cmd"), templ.KV("is-err", l.Kind == "err" || l.Kind == "alert"), templ.KV("is-dim", l.Kind == "dim"), templ.KV("is-reply", l.Kind == "reply") } if l.Kind == "reply" { data-visual-mask="console-reply" } if l.Kind == "alert" { role="alert" }>
+					if l.Datetime != "" {
+						<time class="console-time" datetime={ l.Datetime }>{ l.Time }</time>
+					} else {
+						<span class="console-time">{ l.Time }</span>
+					}
+					if l.Who != "" {
+						<span class="console-text">@SoftJSON(l.Text) <span class="console-who">{ l.Who }</span></span>
+					} else {
+						<span class="console-text">@SoftJSON(l.Text)</span>
+					}
+				</div>
+			}
+		</div>
+		<form method="post" action={ templ.SafeURL(c.Action) } class="console-form">
+			<input type="hidden" name="csrf" value={ c.CSRF }/>
+			for _, f := range c.Hidden {
+				<input type="hidden" name={ f.Key } value={ f.Value }/>
+			}
+			<span class="console-prompt" aria-hidden="true">›</span>
+			<input name="command" value={ c.Input } placeholder="Type a Tasmota command, e.g. Status 5" aria-label="Command" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="255" required/>
+			<button type="submit" class="console-send">Send</button>
+		</form>
+	</div>
+	if len(c.Quick) > 0 {
+		<form method="post" action={ templ.SafeURL(c.Action) } class="console-quick">
+			<input type="hidden" name="csrf" value={ c.CSRF }/>
+			for _, f := range c.Hidden {
+				<input type="hidden" name={ f.Key } value={ f.Value }/>
+			}
+			<span class="console-quick-l">Quick</span>
+			for _, q := range c.Quick {
+				<button type="submit" class="btn console-chip" name="command" value={ q }>{ q }</button>
+			}
+		</form>
+	}
+}
+
+// Diff compares two backups side by side or unified; changed rows are tinted.
+templ Diff(d DiffData) {
+	<section class="ulist diff">
+		if !d.Unified {
+			<div class="diff-scroll">
+				<div class="diff-grid diff-headrow"><span>Setting</span><span>Older · { d.OldLabel }</span><span>Newer · { d.NewLabel }</span></div>
+				for _, r := range d.Rows {
+					<div class={ "diff-grid", "diff-row", templ.KV("is-changed", r.Changed) }><span class="diff-key">{ r.Key }</span><span>{ r.Old }</span><span>{ r.New }</span></div>
+				}
+			</div>
+		} else {
+			<div class="diff-uni">
+				<div class="diff-uni-head">− { d.OldLabel }<br/>+ { d.NewLabel }</div>
+				for _, r := range d.Rows {
+					if r.Changed {
+						<div class="diff-line is-del"><span>−</span><span><b>{ r.Key }</b> { r.Old }</span></div>
+						<div class="diff-line is-add"><span>+</span><span><b>{ r.Key }</b> { r.New }</span></div>
+					} else {
+						<div class="diff-line"><span></span><span><b>{ r.Key }</b> { r.Old }</span></div>
+					}
+				}
+			</div>
+		}
+	</section>
+}
+
+// Notes renders release notes from text blocks; nothing in them becomes markup.
+templ Notes(blocks []NoteBlock) {
+	<article class="unotes">
+		for _, b := range blocks {
+			switch b.Kind {
+				case "h":
+					<h2>{ b.Text }</h2>
+				case "ul":
+					<ul>
+						for _, it := range b.Items {
+							<li>{ it }</li>
+						}
+					</ul>
+				case "code":
+					<pre><code>{ b.Text }</code></pre>
+				case "breaking":
+					<section class="unotes-breaking">
+						<h2><span class="sdot-dot t-warn" aria-hidden="true"></span>{ b.Text }</h2>
+						<ul>
+							for _, it := range b.Items {
+								<li>{ it }</li>
+							}
+						</ul>
+					</section>
+				default:
+					<p>{ b.Text }</p>
+			}
+		}
+	</article>
+}

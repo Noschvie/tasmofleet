@@ -1,0 +1,132 @@
+package web
+
+import "github.com/nofuturekid/tasmofleet/internal/web/ui"
+
+// replaceTab is the Replace device tab (design v2 screen "device", tab "replace"). The choice
+// of the new device is a GET form to the preview; the preview adds what moves and the one
+// acknowledgement, which posts the replacement.
+templ replaceTab(v replaceView) {
+	@v.Head
+	<section class="rp-card" aria-labelledby="rp-h">
+		<div>
+			<h2 id="rp-h">Move this configuration onto a new device</h2>
+			<p class="rp-lead">Use this when hardware dies. The new device gets this device's name, topic, rules, timers and backups; history stays with the name.</p>
+		</div>
+		if v.Error != "" {
+			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: v.Error, Alert: true})
+		}
+		<form id="rp-pick" class="rp-pick" method="get" action={ templ.SafeURL(v.PreviewHref) }>
+			<div class="rp-grid">
+				<div class="rp-old">
+					<div class="rp-old-k">Old device</div>
+					<div class="rp-old-name">{ v.Device.Name }</div>
+					<div class="rp-old-line" data-visual-mask>{ v.OldLine }</div>
+				</div>
+				if len(v.Targets) > 0 {
+					<div class="rp-new">
+						<label class="ufield">
+							<span class="ufield-label">New device (discovered, not yet added)</span>
+							<select name="target">
+								for _, o := range v.Targets {
+									<option value={ o.Value } selected?={ o.Checked }>{ o.Label }</option>
+								}
+							</select>
+						</label>
+						<details class="rp-other">
+							<summary>Enter an address instead</summary>
+							@replaceAddress(v, false)
+						</details>
+					</div>
+				} else {
+					@replaceAddress(v, true)
+				}
+			</div>
+			<div class="rp-checks" title="The whole configuration dump is restored, so these always come along.">
+				for _, c := range []string{"Copy name, topic and MQTT settings", "Copy rules, timers and PowerOnState", "Copy Wi-Fi credentials (the passwords come along, not shown)", "Keep the entry: its name, tags, notes and history stand for the new device"} {
+					<label class="ucheck"><input type="checkbox" checked disabled/><span>{ c }</span></label>
+				}
+				<span class="sr-only">The whole configuration dump is restored, so these always come along.</span>
+			</div>
+			if !v.Preview {
+				<div class="rp-acts">
+					@replaceBackupChoice(v)
+					<button type="submit" class="btn">Preview what’s copied</button>
+				</div>
+			} else {
+				<div class="rp-acts">
+					@replaceBackupChoice(v)
+					<button type="submit" class="btn btn-sm">Preview again</button>
+				</div>
+			}
+		</form>
+		if v.Preview {
+			<div class="rp-preview">
+				<section class="rp-box">
+					<div class="rp-box-h">Copied to the new device</div>
+					for _, x := range v.Copied {
+						<div class="rp-kv"><span>{ x.Key }</span><span class={ templ.KV("mono", x.Mono) }>@ui.Soft(x.Value)</span></div>
+					}
+				</section>
+				<section class="rp-box">
+					<div class="rp-box-h">Not copied</div>
+					for _, x := range v.NotCopied {
+						<div class="rp-skip"><span>{ x.Key }</span><span>{ x.Value }</span></div>
+					}
+				</section>
+			</div>
+			for _, w := range v.Warnings {
+				@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: w})
+			}
+			<form method="post" action={ templ.SafeURL(v.StartHref) } class="rp-start">
+				<input type="hidden" name="csrf" value={ v.CSRF }/>
+				for _, f := range v.Hidden {
+					<input type="hidden" name={ f.Key } value={ f.Value }/>
+				}
+				<label class={ "ucheck", templ.KV("is-invalid", v.Missing) }>
+					<input type="checkbox" name="confirm" value="1" if v.Missing { aria-invalid="true" aria-describedby="rp-ack-err" }/>
+					<span>{ v.Ack }</span>
+				</label>
+				if v.Missing {
+					<p class="ufield-err" id="rp-ack-err" role="alert">{ needConfirm }</p>
+				}
+				<div class="rp-acts">
+					<a class="btn" href={ templ.SafeURL(v.CancelHref) }>Cancel</a>
+					<button type="submit" class="btn btn-primary">Start replacement…</button>
+				</div>
+			</form>
+		}
+	</section>
+}
+
+// replaceBackupChoice picks an older config dump than the newest (for a new device on older
+// firmware); folded away because the newest is right almost always.
+templ replaceBackupChoice(v replaceView) {
+	if len(v.Backups) > 1 {
+		<details class="rp-backup">
+			<summary>Use another backup</summary>
+			<label class="ufield">
+				<span class="ufield-label">Backup to put on the new device</span>
+				<select name="backup">
+					for _, o := range v.Backups {
+						<option value={ o.Value } selected?={ o.Checked }>{ o.Label }</option>
+					}
+				</select>
+			</label>
+		</details>
+	}
+}
+
+// replaceAddress is the typed address of the new device: the only way when discovery lists
+// none, otherwise folded under the list (a typed address wins over the list).
+templ replaceAddress(v replaceView, required bool) {
+	<div class="rp-addr">
+		<label class="ufield">
+			<span class="ufield-label">Address of the new device</span>
+			<input name="address" value={ v.Address } required?={ required } autocomplete="off"/>
+		</label>
+		<label class="ufield rp-port">
+			<span class="ufield-label">Port</span>
+			<input name="port" value={ v.Port } inputmode="numeric" placeholder="80"/>
+		</label>
+	</div>
+}

@@ -1,0 +1,39 @@
+<!-- @dsCard group="Components" name="Dialog" subtitle="Overlay surface with border and shadow over a dimmed backdrop" viewport="640x520" -->
+<!doctype html>
+<html lang="en" data-theme-auto>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tasmofleet DS — Dialog</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <script src="../theme.js"></script>
+    <style>
+      /* Demo scaffolding only: everything visual comes from ../styles.css. */
+      .demo { max-width: 620px; margin: 0 auto; padding: var(--space-6) var(--space-4) var(--space-8); }
+      .demo-head { font-family: var(--font-body); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+        color: var(--color-text-2); margin: var(--space-6) 0 var(--space-3); }
+      .demo-head:first-child { margin-top: 0; }
+      .row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+      .note { font-size: 12px; color: var(--color-text-2); max-width: 60ch; margin-top: var(--space-3); }
+      .demo-foot { margin-top: var(--space-8); padding-top: var(--space-3); border-top: 1px solid var(--color-divider);
+        display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); }
+      .stage { position: relative; min-height: 220px; padding: var(--space-4); background: var(--color-bg);
+        border: 1px solid var(--color-divider); overflow: hidden; }
+    </style>
+  </head>
+  <body>
+<main class="demo">
+<div class="stage" style="min-height:360px">
+<p>Firmware page content behind the dialog…</p>
+<div class="backdrop"></div>
+<dialog class="dlg" open aria-labelledby="dlg-h" style="position:absolute;inset:24px auto auto 50%;transform:translateX(-50%);margin:0;width:min(520px,90%)">
+<div class="dlg-head"><h2 id="dlg-h">Release 16.0.0 <span class="badge accent">recommended</span></h2><button type="button" data-close>Close</button></div>
+<div class="dlg-body"><h3>Fleet</h3><ul><li>Older than this release (6): Kitchen Counter, TV Backlight, Garden Pump, Dryer, …</li><li>Same version (13)</li></ul>
+<p class="muted">The release notes were cut at 32 KiB.</p></div>
+<div class="dlg-foot"><button type="button" class="ghost">Cancel</button><button type="button" class="primary">Prefetch for my fleet</button></div>
+</dialog></div>
+<p class="note">dialog.dlg with .dlg-head, .dlg-body and .dlg-foot (NEW). The backdrop is ::backdrop in the app; .backdrop only reproduces it in previews. On phones the dialog becomes a bottom sheet.</p>
+<div class="demo-foot"><span class="note">tasmofleet DS</span><div class="theme-switch" role="group" aria-label="Theme"><button type="button" class="sm" data-theme-set="system">Auto</button><button type="button" class="sm" data-theme-set="light">Light</button><button type="button" class="sm" data-theme-set="dark">Dark</button></div></div>
+</main>
+  </body>
+</html>

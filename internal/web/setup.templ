@@ -1,0 +1,175 @@
+package web
+
+import (
+	"strconv"
+
+	"github.com/nofuturekid/tasmofleet/internal/auth"
+	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+)
+
+// setupStep is one step of the indicator: done (a check), current, or still to come.
+type setupStep struct {
+	N, Label string
+	Done     bool
+	Current  bool
+}
+
+// setupStepsAt are the prototype's three steps (Setup token, Admin account, Basic settings) with
+// step current (1-3) highlighted and the ones before it done. Step 1 is the setup link's page
+// without a token, step 2 its password form (N12), step 3 this wizard (/setup).
+func setupStepsAt(current int) []setupStep {
+	steps := []setupStep{{N: "1", Label: "Setup token"}, {N: "2", Label: "Admin account"}, {N: "3", Label: "Basic settings"}}
+	for i := range steps {
+		steps[i].Done, steps[i].Current = i+1 < current, i+1 == current
+	}
+	return steps
+}
+
+// setupLogExample is how the setup link looks in the container log (the line of the created
+// admin account); the token is never shown on a page.
+const setupLogExample = "$ docker logs <container> 2>&1 | grep setup=\n… user=admin setup=https://…/setup/account?token=…"
+
+// setupStepsBar is the step indicator of every setup page.
+templ setupStepsBar(current int) {
+	<ol class="setup-steps" aria-label="Setup steps">
+		for i, s := range setupStepsAt(current) {
+			<li
+				class={ templ.KV("is-done", s.Done), templ.KV("is-current", s.Current) }
+				if s.Current {
+					aria-current="step"
+				}
+			>
+				<span class="setup-mark" aria-hidden="true">
+					if s.Done {
+						✓
+					} else {
+						{ s.N }
+					}
+				</span>
+				<span class="setup-label">{ s.Label }</span>
+				if i < 2 {
+					<span class="setup-bar" aria-hidden="true"></span>
+				}
+			</li>
+		}
+	</ol>
+}
+
+// setupView is the first-run setup (design v2 screen "setup", step 3): the step indicator,
+// the device networks, the broker with its connection test, and Finish setup, which saves,
+// ends the setup and scans the networks when the box is ticked.
+templ setupView(p setupPage) {
+	@ui.AuthCard(p.Base, p.Version, p.Host) {
+		@setupStepsBar(3)
+		<h1>Basic settings</h1>
+		<p class="setup-lead">Enough to start. Everything can be changed later in System → Settings.</p>
+		if p.Error != "" {
+			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: p.Error, Alert: true})
+		}
+		<form class="setup-form" method="post" action={ templ.SafeURL(p.Base + setupPath + "/finish") }>
+			<input type="hidden" name="csrf" value={ p.CSRF }/>
+			<label class="ufield">
+				<span class="ufield-label">Device networks</span>
+				<textarea name="v.DEVICE_NETWORKS" class="mono" rows="2" maxlength="2048" placeholder="172.31.13.0/24" { setupInvalid(p, "DEVICE_NETWORKS")... }>{ p.Networks }</textarea>
+				if e := p.Errors["DEVICE_NETWORKS"]; e != "" {
+					<span class="ufield-err" id="err-v.DEVICE_NETWORKS" role="alert">{ e }</span>
+				} else {
+					<span class="ufield-help">
+						TasmoFleet only talks to devices inside these networks.
+						if p.Suggested != "" {
+							Suggested from this machine’s network interfaces: nothing is configured until you finish.
+						}
+					</span>
+				}
+			</label>
+			<div class="setup-broker">
+				<label class="ufield">
+					<span class="ufield-label">MQTT broker host</span>
+					<input name="mqtt.host" class="mono" value={ p.MQTT.Host } maxlength="255" placeholder="empty: poll over HTTP only" { setupInvalid(p, "MQTT_URL")... }/>
+				</label>
+				<label class="ufield">
+					<span class="ufield-label">Port</span>
+					<input name="mqtt.port" class="mono" value={ p.MQTT.Port } inputmode="numeric" maxlength="5" placeholder="1883"/>
+				</label>
+			</div>
+			if e := p.Errors["MQTT_URL"]; e != "" {
+				<span class="ufield-err" id="err-v.MQTT_URL" role="alert">{ e }</span>
+			}
+			<div class="setup-broker">
+				<label class="ufield">
+					<span class="ufield-label">MQTT user</span>
+					<input name="v.MQTT_USER" class="mono" value={ p.MQTTUser } maxlength="128" autocomplete="off"/>
+				</label>
+				<label class="ufield">
+					<span class="ufield-label">MQTT password</span>
+					<input type="password" name="v.MQTT_PASSWORD" class="mono" maxlength="128" autocomplete="new-password" placeholder={ setupSecretHint(p.MQTTHasPassword) } { setupInvalid(p, "MQTT_PASSWORD")... }/>
+				</label>
+			</div>
+			if e := p.Errors["MQTT_PASSWORD"]; e != "" {
+				<span class="ufield-err" id="err-v.MQTT_PASSWORD" role="alert">{ e }</span>
+			}
+			<label class="ucheck"><input type="checkbox" name="mqtt.tls" value="1" checked?={ p.MQTT.TLS }/><span>Use TLS</span></label>
+			<div class="sys-test">
+				<button type="submit" class="btn" formaction={ templ.SafeURL(p.Base + setupPath + "/mqtt-test") } formnovalidate>Test connection</button>
+				if p.MQTTResult != "" {
+					if testNote("MQTT connection test", p.MQTTResult).Failed {
+						<span class="sys-test-res t-danger" role="alert">MQTT connection test: { p.MQTTResult }</span>
+					} else {
+						<span class="sys-test-res t-ok" role="status">MQTT connection test: { p.MQTTResult }</span>
+					}
+				} else {
+					<span class="sys-test-help">Optional. With a broker devices report at once instead of being polled.</span>
+				}
+			</div>
+			if p.CanScan {
+				<label class="ucheck"><input type="checkbox" name="scan" value="1" checked?={ p.Scan }/><span>Scan these networks for Tasmota devices when I finish<span class="ucheck-text">Ranges up to /22 (1024 addresses) each.</span></span></label>
+			}
+			<button type="submit" class="btn btn-primary btn-tall">Finish setup</button>
+		</form>
+	}
+}
+
+// setupAccountPage is setup step 1 (N12), a standalone card: without a valid token it says where
+// the link is (the container log) and has no form; with the token it is the first admin's
+// password form (step 2 "Admin account"). The token is only in the hidden field, never in text.
+templ setupAccountPage(f authFrame, d auth.SetupAccountData) {
+	@authDoc(f) {
+		if d.NeedToken {
+			@setupStepsBar(1)
+			<h1>Open the setup link</h1>
+			<p class="setup-lead">The server printed a one-time setup link to its log when it started for the first time. It proves you’re the person running the server.</p>
+			<pre class="setup-log mono">{ setupLogExample }</pre>
+			if d.TokenInvalid {
+				@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Title: "That link isn’t valid.", Text: "Every start of the server prints a fresh one; open the newest line of the log. The link stops working once the admin has a password.", Alert: true})
+			} else {
+				<p class="setup-lead">Open that link in this browser to choose the admin password. It works until the admin has one.</p>
+			}
+		} else {
+			@setupStepsBar(2)
+			<h1>Create the first admin account</h1>
+			<p class="setup-lead">This account can change everything, including how people sign in. You can connect SSO later.</p>
+			if d.Error != "" && d.ErrField != "" {
+				<div class="banner tone-danger err-summary" role="alert">
+					<span class="banner-dot"></span>
+					<div class="banner-text"><b>1 field needs attention.</b> The account wasn’t created yet.</div>
+				</div>
+			} else if d.Error != "" {
+				@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: d.Error, Alert: true})
+			}
+			<form class="auth-form" method="post" action={ templ.SafeURL(d.BasePath + "/setup/account") }>
+				<input type="hidden" name="csrf" value={ d.CSRFToken }/>
+				<input type="hidden" name="token" value={ d.Token }/>
+				@ui.Field(ui.FieldData{Label: "Display name", Name: "display_name", Value: d.DisplayName, Autocomplete: "name", Error: fieldErr(d.ErrField, "display_name", d.Error), Autofocus: focus(d.ErrField, "display_name", true)})
+				<label class="ufield">
+					<span class="ufield-label">Username</span>
+					<input class="mono" value={ d.Username } readonly aria-describedby="setup-user-help"/>
+					<span class="ufield-help" id="setup-user-help">The first account is always called { d.Username }.</span>
+				</label>
+				@ui.Field(ui.FieldData{Label: "Email (optional)", Name: "email", Type: "email", Value: d.Email, Autocomplete: "email", Error: fieldErr(d.ErrField, "email", d.Error), Autofocus: focus(d.ErrField, "email", false)})
+				@ui.Field(ui.FieldData{Label: "Password", Name: "password", Type: "password", Autocomplete: "new-password", Help: "Use at least " + strconv.Itoa(auth.PasswordMinLength) + " characters.", Error: fieldErr(d.ErrField, "password", d.Error), Autofocus: focus(d.ErrField, "password", false)})
+				@ui.Field(ui.FieldData{Label: "Repeat password", Name: "confirm", Type: "password", Autocomplete: "new-password", Error: fieldErr(d.ErrField, "confirm", d.Error), Autofocus: focus(d.ErrField, "confirm", false)})
+				<button type="submit" class="btn btn-primary btn-tall">Create account and continue</button>
+			</form>
+		}
+	}
+}

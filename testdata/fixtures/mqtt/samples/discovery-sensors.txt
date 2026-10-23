@@ -1,0 +1,7 @@
+# format: timestamp|retained-flag-as-delivered|topic|payload  (first 6 samples, one per distinct device where possible)
+2026-10-18T18:17:28+0200|1|tasmota/discovery/02005ED22C14/sensors|{"sn":{"Time":"2026-10-18T18:13:08"},"ver":1}
+2026-10-18T18:17:28+0200|1|tasmota/discovery/02005EEA7CA3/sensors|{"sn":{"Time":"2026-10-18T17:05:52"},"ver":1}
+2026-10-18T18:17:28+0200|1|tasmota/discovery/02005E6CA02D/sensors|{"sn":{"Time":"2026-10-18T17:00:57","DS18B20":{"Id":"000000A1B2C3","Temperature":29.0},"ESP32":{"Temperature":43.3},"TempUnit":"C"},"ver":1}
+2026-10-18T18:17:28+0200|1|tasmota/discovery/02005E32D74B/sensors|{"sn":{"Time":"2026-10-18T17:05:44","ENERGY":{"TotalStartTime":"2026-08-19T00:00:00","Total":133.890,"Yesterday":0.449,"Today":0.219,"Power":1,"ApparentPower":28,"ReactivePower":28,"Factor":0.02,"Voltage":233,"Current":0.120}},"ver":1}
+2026-10-18T18:17:28+0200|1|tasmota/discovery/02005E38371D/sensors|{"sn":{"Time":"2026-10-18T17:59:02"},"ver":1}
+2026-10-18T18:17:28+0200|1|tasmota/discovery/02005E3E5AB3/sensors|{"sn":{"Time":"2026-10-18T17:59:02","ENERGY":{"TotalStartTime":"2026-08-19T00:00:00","Total":3.920,"Yesterday":0.000,"Today":0.015,"Power":5,"ApparentPower":9,"ReactivePower":7,"Factor":0.57,"Voltage":234,"Current":0.038}},"ver":1}

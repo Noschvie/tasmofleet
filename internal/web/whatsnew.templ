@@ -1,0 +1,71 @@
+package web
+
+import "github.com/nofuturekid/tasmofleet/internal/web/ui"
+
+// What's new (design v2 screen "whatsnew", N5): this binary's changelog, newest first, with the
+// installed release and the releases new since the user's last visit marked.
+
+templ whatsNewPage(p whatsNewView) {
+	<div class="page-whatsnew">
+		@ui.PageHeader("What’s new in TasmoFleet", whatsNewSub(p))
+		<div class="wn-list">
+			for _, r := range p.Releases {
+				<section class="wn-rel" id={ "v" + r.Version } aria-labelledby={ "wn-h-" + r.Version }>
+					<div class="wn-head">
+						<h2 class="wn-v" id={ "wn-h-" + r.Version }>{ r.Version }</h2>
+						if r.Date != "" {
+							<time class="wn-d" datetime={ r.Date }>{ isoDay(r.Date) }</time>
+						}
+						if r.Installed {
+							@ui.Badge(ui.ToneOK, "Installed")
+						}
+						if r.New {
+							@ui.Badge(ui.ToneAccent, "New since your last visit")
+						}
+					</div>
+					if len(r.Intro) > 0 {
+						<div class="wn-intro">
+							for _, para := range r.Intro {
+								<p>
+									@fwInlines(para)
+								</p>
+							}
+						</div>
+					}
+					for _, s := range r.Sections {
+						<div class="wn-sec">
+							<span class="wn-lbl">
+								@ui.Badge(sectionTone(s.Title), s.Title)
+							</span>
+							<ul>
+								for _, it := range s.Items {
+									<li>
+										@fwInlines(it.Text)
+										if len(it.Sub) > 0 {
+											<ul>
+												for _, sub := range it.Sub {
+													<li>
+														@fwInlines(sub)
+													</li>
+												}
+											</ul>
+										}
+									</li>
+								}
+							</ul>
+						</div>
+					}
+				</section>
+			}
+		</div>
+	</div>
+}
+
+// whatsNewSub is "You’re on 1.4.2 · last visit you saw 1.3.1".
+func whatsNewSub(p whatsNewView) string {
+	s := "You’re on " + p.Installed
+	if p.Seen != "" {
+		s += " · last visit you saw " + p.Seen
+	}
+	return s
+}

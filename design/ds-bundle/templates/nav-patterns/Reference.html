@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="design_doc_mode" content="canvas" />
+    <title>tasmofleet DS — Navigation reference</title>
+    <style>
+      body {
+        margin: 0;
+        font:
+          14px/1.4 system-ui,
+          sans-serif;
+        color: #1d2322;
+      }
+      a {
+        color: #0f766e;
+      }
+      a:hover {
+        color: #115e59;
+      }
+      .rb {
+        position: absolute;
+        left: 0;
+        top: 0;
+        padding: 48px;
+        display: grid;
+        gap: 64px;
+      }
+      .rb > header h1 {
+        margin: 0 0 4px;
+        font-size: 28px;
+      }
+      .rb > header p {
+        margin: 0;
+        color: #4b5654;
+        max-width: 80ch;
+      }
+      .rb-row h2 {
+        margin: 0 0 12px;
+        font-size: 20px;
+      }
+      .rb-frames {
+        display: flex;
+        gap: 32px;
+        align-items: flex-start;
+      }
+      figure {
+        margin: 0;
+      }
+      figcaption {
+        font:
+          600 12px/1 ui-monospace,
+          monospace;
+        color: #4b5654;
+        margin: 0 0 8px;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+      }
+      iframe {
+        display: block;
+        border: 1px solid #c9d1cf;
+        background: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="rb">
+      <header>
+        <h1>tasmofleet · navigation and in-page patterns</h1>
+        <p>
+          Each page at 1280 and 375, light and dark. Template rows use a real
+          viewport height (900 / 812) so the fixed bulk bar and the phone menu
+          show as they would on a device; scroll inside a frame.
+        </p>
+      </header>
+      <section class="rb-row">
+        <h2>Patterns</h2>
+        <div class="rb-frames">
+          <figure>
+            <figcaption>1280 · light</figcaption>
+            <iframe
+              src="Patterns.html#theme=light"
+              width="1280"
+              height="1200"
+              data-autoh
+              title="Patterns 1280 · light"
+              style="width: 1280px; height: 1200px"
+            ></iframe>
+          </figure>
+          <figure>
+            <figcaption>1280 · dark</figcaption>
+            <iframe
+              src="Patterns.html#theme=dark"
+              width="1280"
+              height="1200"
+              data-autoh
+              title="Patterns 1280 · dark"
+              style="width: 1280px; height: 1200px"
+            ></iframe>
+          </figure>
+          <figure>
+            <figcaption>375 · light</figcaption>
+            <iframe
+              src="Patterns.html#theme=light"
+              width="375"
+              height="1200"
+              data-autoh
+              title="Patterns 375 · light"
+              style="width: 375px; height: 1200px"
+            ></iframe>
+          </figure>
+          <figure>
+            <figcaption>375 · dark</figcaption>
+            <iframe
+              src="Patterns.html#theme=dark"
+              width="375"
+              height="1200"
+              data-autoh
+              title="Patterns 375 · dark"
+              style="width: 375px; height: 1200px"
+            ></iframe>
+          </figure>
+        </div>
+      </section>
+      <section class="rb-row">
+        <h2>Screens (QA v0.9.0)</h2>
+        <div class="rb-frames">
+          <figure>
+            <figcaption>1280 · light</figcaption>
+            <iframe
+              src="Screens.html#theme=light"
+              width="1280"
+              height="1200"
+              data-autoh
+              title="Screens 1280 · light"
+              style="width: 1280px; height: 1200px"
+            ></iframe>
+          </figure>
+          <figure>
+            <figcaption>1280 · dark</figcaption>
+            <iframe
+              src="Screens.html#theme=dark"
+              width="1280"
+              height="1200"
+              data-autoh
+              title="Screens 1280 · dark"
+              style="width: 1280px; height: 1200px"
+            ></iframe>
+          </figure>
+          <figure>
+            <figcaption>375 · light</figcaption>
+            <iframe
+              src="Screens.html#theme=light"
+              width="375"
+              height="1200"
+              data-autoh
+              title="Screens 375 · light"
+              style="width: 375px; height: 1200px"
+            ></iframe>
+          </figure>
+          <figure>
+            <figcaption>375 · dark</figcaption>
+            <iframe
+              src="Screens.html#theme=dark"
+              width="375"
+              height="1200"
+              data-autoh
+              title="Screens 375 · dark"
+              style="width: 375px; height: 1200px"
+            ></iframe>
+          </figure>
+        </div>
+      </section>
+      <section class="rb-row">
+        <h2>Devices</h2>
+        <div class="rb-frames">
+          <figure>
+            <figcaption>1280 · light</figcaption>
+            <iframe
+              src="Devices.html#theme=light"
+              width="1280"
+              height="900"
+              title="Devices 1280 · light"
+              style="width: 1280px; height: 900px"
+            ></iframe>
+          </figure>
+          <figure>
+            <figcaption>1280 · dark</figcaption>
+            <iframe
+              src="Devices.html#theme=dark"
+              width="1280"
+              height="900"
+              title="Devices 1280 · dark"
+              style="width: 1280px; height: 900px"
+            ></iframe>
+          </figure>
+          <figure>
+            <figcaption>375 · light</figcaption>
+            <iframe
+              src="Devices.html#theme=light"
+              width="375"
+              height="900"
+              title="Devices 375 · light"
+              style="width: 375px; height: 812px"
+            ></iframe>
+          </figure>
+          <figure>
+            <figcaption>375 · dark</figcaption>
+            <iframe
+              src="Devices.html#theme=dark"
+              width="375"
+              height="900"
+              title="Devices 375 · dark"
+              style="width: 375px; height: 812px"
+            ></iframe>
+          </figure>
+        </div>
+      </section>
+      <section class="rb-row">
+        <h2>Device detail</h2>
+        <div class="rb-frames">
+          <figure>
+            <figcaption>1280 · light</figcaption>
+            <iframe
+              src="Device.html#theme=light"
+              width="1280"
+              height="900"
+              title="Device detail 1280 · light"
+              style="width: 1280px; height: 900px"
+            ></iframe>
+          </figure>
+          <figure>
+            <figcaption>1280 · dark</figcaption>
+            <iframe
+              src="Device.html#theme=dark"
+              width="1280"
+              height="900"
+              title="Device detail 1280 · dark"
+              style="width: 1280px; height: 900px"
+            ></iframe>
+          </figure>
+          <figure>
+            <figcaption>375 · light</figcaption>
+            <iframe
+              src="Device.html#theme=light"
+              width="375"
+              height="900"
+              title="Device detail 375 · light"
+              style="width: 375px; height: 812px"
+            ></iframe>
+          </figure>
+          <figure>
+            <figcaption>375 · dark</figcaption>
+            <iframe
+              src="Device.html#theme=dark"
+              width="375"
+              height="900"
+              title="Device detail 375 · dark"
+              style="width: 375px; height: 812px"
+            ></iframe>
+          </figure>
+        </div>
+      </section>
+      <section class="rb-row">
+        <h2>Firmware</h2>
+        <div class="rb-frames">
+          <figure>
+            <figcaption>1280 · light</figcaption>
+            <iframe
+              src="Firmware.html#theme=light"
+              width="1280"
+              height="900"
+              title="Firmware 1280 · light"
+              style="width: 1280px; height: 900px"
+            ></iframe>
+          </figure>
+          <figure>
+            <figcaption>1280 · dark</figcaption>
+            <iframe
+              src="Firmware.html#theme=dark"
+              width="1280"
+              height="900"
+              title="Firmware 1280 · dark"
+              style="width: 1280px; height: 900px"
+            ></iframe>
+          </figure>
+          <figure>
+            <figcaption>375 · light</figcaption>
+            <iframe
+              src="Firmware.html#theme=light"
+              width="375"
+              height="900"
+              title="Firmware 375 · light"
+              style="width: 375px; height: 812px"
+            ></iframe>
+          </figure>
+          <figure>
+            <figcaption>375 · dark</figcaption>
+            <iframe
+              src="Firmware.html#theme=dark"
+              width="375"
+              height="900"
+              title="Firmware 375 · dark"
+              style="width: 375px; height: 812px"
+            ></iframe>
+          </figure>
+        </div>
+      </section>
+      <section class="rb-row">
+        <h2>Dashboard</h2>
+        <div class="rb-frames">
+          <figure>
+            <figcaption>1280 · light</figcaption>
+            <iframe
+              src="Dashboard.html#theme=light"
+              width="1280"
+              height="900"
+              title="Dashboard 1280 · light"
+              style="width: 1280px; height: 900px"
+            ></iframe>
+          </figure>
+          <figure>
+            <figcaption>1280 · dark</figcaption>
+            <iframe
+              src="Dashboard.html#theme=dark"
+              width="1280"
+              height="900"
+              title="Dashboard 1280 · dark"
+              style="width: 1280px; height: 900px"
+            ></iframe>
+          </figure>
+          <figure>
+            <figcaption>375 · light</figcaption>
+            <iframe
+              src="Dashboard.html#theme=light"
+              width="375"
+              height="900"
+              title="Dashboard 375 · light"
+              style="width: 375px; height: 812px"
+            ></iframe>
+          </figure>
+          <figure>
+            <figcaption>375 · dark</figcaption>
+            <iframe
+              src="Dashboard.html#theme=dark"
+              width="375"
+              height="900"
+              title="Dashboard 375 · dark"
+              style="width: 375px; height: 812px"
+            ></iframe>
+          </figure>
+        </div>
+      </section>
+    </div>
+    <script>
+      document.querySelectorAll("iframe[data-autoh]").forEach((f) =>
+        f.addEventListener("load", () => {
+          const fit = () => {
+            try {
+              f.style.height =
+                f.contentDocument.documentElement.scrollHeight + "px";
+            } catch (e) {}
+          };
+          fit();
+          setTimeout(fit, 400);
+          setTimeout(fit, 1500);
+        }),
+      );
+    </script>
+  </body>
+</html>

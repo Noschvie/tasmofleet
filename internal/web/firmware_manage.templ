@@ -1,0 +1,192 @@
+package web
+
+import (
+	"strconv"
+
+	"github.com/nofuturekid/tasmofleet/internal/firmware"
+	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+)
+
+// The no-JavaScript confirmation pages of the firmware page (delete one file, delete the unused
+// ones) and the prefetch progress page (WP P5), built from the ui components.
+
+templ fwConfirmContent(v view, c fwConfirm) {
+	if c.Selected {
+		@ui.PageHeader("Delete unused files", "")
+		if c.Error != "" {
+			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: c.Error, Alert: true})
+		}
+		<section class="ucard confirm-card" aria-labelledby="confirm-h">
+			if len(c.List) > 0 {
+				<h2 id="confirm-h">Delete { plural(len(c.List), "file") }</h2>
+				<p class="udlg-body">These { plural(len(c.List), "cached file") } ({ sizeNoWrap(c.Size) }) are not needed by any transaction. A later update downloads what it needs again.</p>
+				<div class="udlg-changes">
+					for _, a := range c.List {
+						<div><span>{ a.Release } · { a.Filename }</span><span class="mono">{ sizeNoWrap(a.Size) }</span></div>
+					}
+				</div>
+			} else {
+				<h2 id="confirm-h">Nothing to delete</h2>
+			}
+			if len(c.Left) > 0 {
+				<p class="fw-note">
+					Left out:
+					for i, a := range c.Left {
+						if i > 0 {
+							{ "; " }
+						}
+						{ a.Release }/{ a.Filename } (
+						if a.InUse {
+							needed by { a.NeededText() }
+						} else {
+							uploaded image, delete it on its own
+						}
+						)
+					}
+					.
+				</p>
+			}
+			if len(c.List) > 0 {
+				<form method="post" action={ templ.SafeURL(v.Base + "/firmware/delete-selected") } class="udlg-foot">
+					<input type="hidden" name="csrf" value={ v.CSRF }/>
+					<input type="hidden" name="confirm" value="yes"/>
+					for _, a := range c.List {
+						<input type="hidden" name="id" value={ strconv.FormatInt(int64(a.ID), 10) }/>
+					}
+					<a class="btn" href={ templ.SafeURL(v.Base + "/firmware#cache") }>Cancel</a>
+					<button type="submit" class="btn btn-danger-solid">Delete { plural(len(c.List), "file") }</button>
+				</form>
+			} else {
+				<div class="udlg-foot"><a class="btn" href={ templ.SafeURL(v.Base + "/firmware#cache") }>Back</a></div>
+			}
+		</section>
+	} else {
+		@fwConfirmOne(v, c)
+	}
+}
+
+// fwConfirmOne is the confirmation of one file: the dialog's text as a page; a file in use
+// says which transaction needs it and offers no Delete.
+templ fwConfirmOne(v view, c fwConfirm) {
+	@ui.PageHeader("Delete "+c.Artifact.Release+"/"+c.Artifact.Filename, "")
+	if c.Error != "" {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: c.Error, Alert: true})
+	}
+	<section class="ucard confirm-card" aria-labelledby="confirm-h">
+		switch {
+			case c.Artifact.InUse:
+				<h2 id="confirm-h">File in use</h2>
+			case c.Artifact.Upload != nil || firmware.IsCustomSource(c.Artifact.Source):
+				<h2 id="confirm-h">Delete image</h2>
+				<p class="udlg-body">This is an image you uploaded. Deleting it removes it for good: it cannot be downloaded again, so keep your own copy if you still need it.</p>
+			default:
+				<h2 id="confirm-h">Delete file</h2>
+				<p class="udlg-body">{ waitingText(c.Artifact) }</p>
+		}
+		@ui.KV([]ui.KVRow{
+			{Key: "Chip / variant", Value: chipLabel(c.Artifact.Family) + " / " + c.Artifact.Variant},
+			{Key: "Size", Value: sizeNoWrap(c.Artifact.Size)},
+			{Key: "Source", Value: c.Artifact.Source},
+			{Key: "SHA-256", Value: c.Artifact.SHA256, Mono: true},
+			{Key: "Used by devices", Value: usedByText(c.Artifact)},
+		})
+		if c.Artifact.InUse {
+			<div class="udlg-foot"><a class="btn" href={ templ.SafeURL(v.Base + "/firmware#cache") }>Back</a></div>
+		} else {
+			<form method="post" action={ templ.SafeURL(v.Base + "/firmware/artifacts/" + strconv.FormatInt(int64(c.Artifact.ID), 10) + "/delete") } class="udlg-foot">
+				<input type="hidden" name="csrf" value={ v.CSRF }/>
+				<input type="hidden" name="confirm" value="yes"/>
+				<a class="btn" href={ templ.SafeURL(v.Base + "/firmware#cache") }>Cancel</a>
+				if c.Artifact.Upload != nil || firmware.IsCustomSource(c.Artifact.Source) {
+					<button type="submit" class="btn btn-danger-solid">Delete image</button>
+				} else {
+					<button type="submit" class="btn btn-danger-solid">Delete file</button>
+				}
+			</form>
+		}
+	</section>
+}
+
+// prefetchState is the run's state word.
+func prefetchState(pv prefetchView) string {
+	switch {
+	case pv.Running:
+		return "running"
+	case pv.Failed > 0:
+		return "finished with errors"
+	}
+	return "finished"
+}
+
+// prefetchCounts is "3 of 4 files cached, 1 failed".
+func prefetchCounts(pv prefetchView) string {
+	s := strconv.Itoa(pv.Done) + " of " + strconv.Itoa(pv.Total) + " files cached"
+	if pv.Failed > 0 {
+		s += ", " + strconv.Itoa(pv.Failed) + " failed"
+	}
+	return s
+}
+
+// usedByText names the devices of a file, "none" without any. The devices that need no download
+// (already on the release, or not updatable) are counted apart, so the list agrees with the
+// "N devices still need this file" sentence above it.
+func usedByText(a artifactView) string {
+	if len(a.Devices) == 0 {
+		return "none"
+	}
+	s := devNames(a.Devices)
+	if rest := len(a.Devices) - a.Waiting; a.Waiting > 0 && rest > 0 {
+		s += " (" + plural(a.Waiting, "device") + " still to update, " + strconv.Itoa(rest) + " already up to date or not updatable)"
+	}
+	return s
+}
+
+templ fwPrefetchContent(pv prefetchView, who string) {
+	@ui.PageHeader("Prefetch "+pv.Run.Release, "Started by "+who+". Every file is checked against the upstream sources and its image header before it is cached.")
+	@fwPrefetchStatus(pv)
+}
+
+// fwPrefetchStatus is the run's progress; the event stream replaces it until the run ends (the
+// last one has no stream attributes, so the browser closes the connection).
+templ fwPrefetchStatus(pv prefetchView) {
+	<div
+		id="prefetch"
+		class="ucard fw-prefetch"
+		if pv.Running {
+			hx-ext="sse"
+			sse-connect={ pv.Base + "/firmware/prefetch/" + pv.Run.ID + "/stream" }
+			sse-swap="prefetch"
+			hx-swap="outerHTML"
+		}
+	>
+		<p>State: <strong>{ prefetchState(pv) }</strong>, { prefetchCounts(pv) }.</p>
+		<progress max={ strconv.Itoa(pv.Total) } value={ strconv.Itoa(pv.Done) }></progress>
+		for _, it := range pv.Run.Items {
+			<div class="fw-file">
+				<span class="fw-file-n">@ui.Soft(it.File)</span>
+				<span class="fw-file-s">
+					if it.Size > 0 {
+						{ sizeNoWrap(it.Size) }
+					}
+				</span>
+				switch it.State {
+					case firmware.PrefetchCached:
+						if it.Already {
+							@ui.Badge(ui.ToneOK, "already cached")
+						} else {
+							@ui.Badge(ui.ToneOK, "cached")
+						}
+					case firmware.PrefetchFailed:
+						<span class="bdg t-danger" title={ safeErr(it.Err) }>failed: { safeErr(it.Err) }</span>
+					case firmware.PrefetchFetching:
+						@ui.Badge(ui.ToneAccent, "fetching")
+					default:
+						@ui.Badge(ui.ToneNeutral, it.State)
+				}
+			</div>
+		}
+		if !pv.Running {
+			<div class="btn-row"><a class="btn" href={ templ.SafeURL(fwURL(pv.Base, "release", pv.Run.Release)) }>Back to firmware</a></div>
+		}
+	</div>
+}

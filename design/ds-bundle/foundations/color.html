@@ -1,0 +1,52 @@
+<!-- @dsCard group="Foundations" name="Color" subtitle="Ink on ground; teal accent; five status roles with ramps" viewport="640x640" -->
+<!doctype html>
+<html lang="en" data-theme-auto>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tasmofleet DS — Color</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <script src="../theme.js"></script>
+    <style>
+      /* Demo scaffolding only: everything visual comes from ../styles.css. */
+      .demo { max-width: 620px; margin: 0 auto; padding: var(--space-6) var(--space-4) var(--space-8); }
+      .demo-head { font-family: var(--font-body); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
+        color: var(--color-text-2); margin: var(--space-6) 0 var(--space-3); }
+      .demo-head:first-child { margin-top: 0; }
+      .row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+      .note { font-size: 12px; color: var(--color-text-2); max-width: 60ch; margin-top: var(--space-3); }
+      .demo-foot { margin-top: var(--space-8); padding-top: var(--space-3); border-top: 1px solid var(--color-divider);
+        display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); }
+      .stage { position: relative; min-height: 220px; padding: var(--space-4); background: var(--color-bg);
+        border: 1px solid var(--color-divider); overflow: hidden; }
+    </style>
+  </head>
+  <body>
+<main class="demo">
+<style>
+  .ramp { display: grid; grid-template-columns: 64px repeat(9, 1fr); gap: 2px; align-items: stretch; margin-bottom: 2px; }
+  .rl { font-size: 11px; font-weight: 700; align-self: center; }
+  .sw { background: var(--c); height: 34px; display: flex; align-items: flex-end; padding: 2px 4px; }
+  .sw span { font-size: 10px; color: #000; } .sw.d span { color: #fff; }
+  .surf { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; border: 1px solid var(--color-divider); }
+  .surf div { padding: 10px; min-height: 64px; font-size: 12px; border-right: 1px solid var(--color-divider); }
+  .role { display: flex; gap: 12px; align-items: center; margin-bottom: 6px; }
+  .role .note { margin: 0; }
+</style>
+<p class="demo-head">Surfaces (this theme)</p>
+<div class="surf"><div style="background:var(--color-bg)">bg<br><small class="muted">page ground</small></div>
+<div style="background:var(--color-surface)">surface<br><small class="muted">cards, tables</small></div>
+<div style="background:var(--color-surface-2)">surface-2<br><small class="muted">sunk, empty state</small></div>
+<div style="background:var(--color-overlay);box-shadow:var(--shadow-lg);border:1px solid var(--color-border-overlay)">overlay<br><small class="muted">menus, dialogs</small></div></div>
+<p class="demo-head">Ink and accent</p>
+<div class="row"><button class="primary">Accent action</button><a href="#">A link</a><span class="badge accent">recommended</span>
+<span style="border-bottom:2px solid var(--color-rule);padding-bottom:2px;font-weight:700">2px rule = ink</span></div>
+<p class="demo-head">Status roles</p>
+<div class="role"><span class="badge tone-ok">Online</span><span class="note">success: online, compliant, succeeded</span></div><div class="role"><span class="badge tone-warn">Stale</span><span class="note">warning: stale, deviating, downgrade</span></div><div class="role"><span class="badge tone-bad">Offline</span><span class="note">danger: offline, failed, auth failed — the only red</span></div><div class="role"><span class="badge tone-info">Updating</span><span class="note">info: in progress, new</span></div><div class="role"><span class="badge tone-neutral st-unknown">Unknown</span><span class="note">neutral: unknown, queued, cancelled</span></div>
+<p class="demo-head">Ramps (OKLCH, shared lightness scale)</p>
+<div class="ramp"><span class="rl">accent</span><div class="sw" style="--c: var(--color-accent-100)"><span>100</span></div><div class="sw" style="--c: var(--color-accent-200)"><span>200</span></div><div class="sw" style="--c: var(--color-accent-300)"><span>300</span></div><div class="sw" style="--c: var(--color-accent-400)"><span>400</span></div><div class="sw d" style="--c: var(--color-accent-500)"><span>500</span></div><div class="sw d" style="--c: var(--color-accent-600)"><span>600</span></div><div class="sw d" style="--c: var(--color-accent-700)"><span>700</span></div><div class="sw d" style="--c: var(--color-accent-800)"><span>800</span></div><div class="sw d" style="--c: var(--color-accent-900)"><span>900</span></div></div><div class="ramp"><span class="rl">success</span><div class="sw" style="--c: var(--color-success-100)"><span>100</span></div><div class="sw" style="--c: var(--color-success-200)"><span>200</span></div><div class="sw" style="--c: var(--color-success-300)"><span>300</span></div><div class="sw" style="--c: var(--color-success-400)"><span>400</span></div><div class="sw d" style="--c: var(--color-success-500)"><span>500</span></div><div class="sw d" style="--c: var(--color-success-600)"><span>600</span></div><div class="sw d" style="--c: var(--color-success-700)"><span>700</span></div><div class="sw d" style="--c: var(--color-success-800)"><span>800</span></div><div class="sw d" style="--c: var(--color-success-900)"><span>900</span></div></div><div class="ramp"><span class="rl">warning</span><div class="sw" style="--c: var(--color-warning-100)"><span>100</span></div><div class="sw" style="--c: var(--color-warning-200)"><span>200</span></div><div class="sw" style="--c: var(--color-warning-300)"><span>300</span></div><div class="sw" style="--c: var(--color-warning-400)"><span>400</span></div><div class="sw d" style="--c: var(--color-warning-500)"><span>500</span></div><div class="sw d" style="--c: var(--color-warning-600)"><span>600</span></div><div class="sw d" style="--c: var(--color-warning-700)"><span>700</span></div><div class="sw d" style="--c: var(--color-warning-800)"><span>800</span></div><div class="sw d" style="--c: var(--color-warning-900)"><span>900</span></div></div><div class="ramp"><span class="rl">danger</span><div class="sw" style="--c: var(--color-danger-100)"><span>100</span></div><div class="sw" style="--c: var(--color-danger-200)"><span>200</span></div><div class="sw" style="--c: var(--color-danger-300)"><span>300</span></div><div class="sw" style="--c: var(--color-danger-400)"><span>400</span></div><div class="sw d" style="--c: var(--color-danger-500)"><span>500</span></div><div class="sw d" style="--c: var(--color-danger-600)"><span>600</span></div><div class="sw d" style="--c: var(--color-danger-700)"><span>700</span></div><div class="sw d" style="--c: var(--color-danger-800)"><span>800</span></div><div class="sw d" style="--c: var(--color-danger-900)"><span>900</span></div></div><div class="ramp"><span class="rl">info</span><div class="sw" style="--c: var(--color-info-100)"><span>100</span></div><div class="sw" style="--c: var(--color-info-200)"><span>200</span></div><div class="sw" style="--c: var(--color-info-300)"><span>300</span></div><div class="sw" style="--c: var(--color-info-400)"><span>400</span></div><div class="sw d" style="--c: var(--color-info-500)"><span>500</span></div><div class="sw d" style="--c: var(--color-info-600)"><span>600</span></div><div class="sw d" style="--c: var(--color-info-700)"><span>700</span></div><div class="sw d" style="--c: var(--color-info-800)"><span>800</span></div><div class="sw d" style="--c: var(--color-info-900)"><span>900</span></div></div><div class="ramp"><span class="rl">neutral</span><div class="sw" style="--c: var(--color-neutral-100)"><span>100</span></div><div class="sw" style="--c: var(--color-neutral-200)"><span>200</span></div><div class="sw" style="--c: var(--color-neutral-300)"><span>300</span></div><div class="sw" style="--c: var(--color-neutral-400)"><span>400</span></div><div class="sw d" style="--c: var(--color-neutral-500)"><span>500</span></div><div class="sw d" style="--c: var(--color-neutral-600)"><span>600</span></div><div class="sw d" style="--c: var(--color-neutral-700)"><span>700</span></div><div class="sw d" style="--c: var(--color-neutral-800)"><span>800</span></div><div class="sw d" style="--c: var(--color-neutral-900)"><span>900</span></div></div>
+<p class="note">Light uses accent-700 (#0f766e), dark accent-400 (#2dd4bf). Colour is never the only signal: every status has a glyph and a word.</p>
+<div class="demo-foot"><span class="note">tasmofleet DS</span><div class="theme-switch" role="group" aria-label="Theme"><button type="button" class="sm" data-theme-set="system">Auto</button><button type="button" class="sm" data-theme-set="light">Light</button><button type="button" class="sm" data-theme-set="dark">Dark</button></div></div>
+</main>
+  </body>
+</html>

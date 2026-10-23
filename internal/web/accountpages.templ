@@ -1,0 +1,430 @@
+package web
+
+import (
+	"net/url"
+	"strconv"
+
+	"github.com/nofuturekid/tasmofleet/internal/auth"
+	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+)
+
+// The sign-in, account and user pages of package auth (design v2, WP P9): the standalone pages
+// (sign-in, the forced password change, messages without a session) in the prototype's auth card,
+// the account page, the user list and the add-user page in the app shell, and the error pages.
+
+// authFrame is what every standalone page shows around its card: the document title, the base
+// path, and the footer line "TasmoFleet x.y.z · host".
+type authFrame struct {
+	Title, Base, Version, Host string
+	Asset                      func(string) string
+}
+
+func (f authFrame) static(name string) string {
+	if f.Asset != nil {
+		name = f.Asset(name)
+	}
+	return f.Base + "/static/" + name
+}
+
+// authDoc is the document of a standalone page: no navigation, the card centred. It follows the
+// system theme (no user preference is known before sign-in).
+templ authDoc(f authFrame) {
+	<!DOCTYPE html>
+	<html lang="en" data-theme-auto>
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<title>{ f.Title } - TasmoFleet</title>
+			<link rel="icon" href={ f.Base + "/favicon.ico" } sizes="48x48"/>
+			<link rel="icon" href={ f.static("favicon.svg") } type="image/svg+xml"/>
+			<link rel="preload" href={ f.static("geist-latin.woff2") } as="font" type="font/woff2" crossorigin/>
+			<link rel="preload" href={ f.static("geist-mono-latin.woff2") } as="font" type="font/woff2" crossorigin/>
+			<link rel="stylesheet" href={ f.static("app.css") }/>
+		</head>
+		<body class="page-auth">
+			<main id="main">
+				@ui.AuthCard(f.Base, f.Version, f.Host) {
+					{ children... }
+				}
+			</main>
+		</body>
+	</html>
+}
+
+// loginPage is the sign-in page (screens signin, signin-v-error, signin-v-expired): the session
+// banner, the failed-attempt banner with the attempts left (N11), the local form with "Keep me
+// signed in", and the single sign-on button.
+templ loginPage(f authFrame, d auth.LoginData) {
+	@authDoc(f) {
+		if d.Local {
+			<form class="auth-form" method="post" action={ templ.SafeURL(d.BasePath + "/login/local") }>
+				<input type="hidden" name="csrf" value={ d.CSRFToken }/>
+				<input type="hidden" name="next" value={ d.Next }/>
+				@loginHead(d)
+				@ui.Field(ui.FieldData{Label: "Username", Name: "username", Value: d.Username, Autocomplete: "username", Autofocus: d.SSO == "" && d.Username == ""})
+				@ui.Field(ui.FieldData{Label: "Password", Name: "password", Type: "password", Autocomplete: "current-password", Error: loginFieldError(d), Autofocus: d.Username != ""})
+				@ui.Check("remember", "Keep me signed in on this device", "", d.Error == "" || d.Remember, false)
+				<button type="submit" class="btn btn-primary btn-tall">Sign in</button>
+			</form>
+			if d.SSO != "" {
+				<div class="or-rule">or</div>
+				<a class="btn btn-tall" id="sso" href={ templ.SafeURL(ssoHref(d)) }>{ ssoLabel(d.SSO) }</a>
+			}
+		} else {
+			@loginHead(d)
+			if d.SSO != "" {
+				<a class="btn btn-primary btn-tall" id="sso" href={ templ.SafeURL(ssoHref(d)) }>{ ssoLabel(d.SSO) }</a>
+			} else {
+				<p class="auth-text">Sign-in is disabled.</p>
+			}
+		}
+	}
+}
+
+// ssoHref starts single sign-on and keeps the way back: next is a query value, so it is escaped
+// ("/devices?q=a&tag=b" must arrive whole, not as two parameters).
+func ssoHref(d auth.LoginData) string {
+	return d.BasePath + "/login/sso?next=" + url.QueryEscape(d.Next)
+}
+
+// ssoLabel is the single sign-on button: "Sign in with SSO · Authentik", or just "Sign in with
+// SSO" when the identity provider has no name of its own (the default "Single sign-on").
+func ssoLabel(name string) string {
+	if name == "" || name == "Single sign-on" {
+		return "Sign in with SSO"
+	}
+	return "Sign in with SSO · " + name
+}
+
+// loginHead is the title and the banners of the sign-in card.
+templ loginHead(d auth.LoginData) {
+	<h1>Sign in</h1>
+	if d.Expired {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Title: "Your session expired.", Text: "Sign in again to go back to where you were."})
+	} else if d.Notice != "" {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Text: d.Notice})
+	}
+	if d.Error != "" {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Title: d.Error, Text: attemptsLeftText(d), Alert: true})
+	}
+}
+
+// loginFieldError marks the password field after a failed attempt that may be retried.
+func loginFieldError(d auth.LoginData) string {
+	if d.Error != "" && d.ShowAttemptsLeft && d.AttemptsLeft > 0 {
+		return "Check the password and try again."
+	}
+	return ""
+}
+
+// attemptsLeftText is the count of attempts before sign-in from here is delayed (N11). It never
+// says how long the delay lasts: the limiter's timing is not the visitor's business.
+func attemptsLeftText(d auth.LoginData) string {
+	switch {
+	case !d.ShowAttemptsLeft || d.AttemptsLeft < 0:
+		return ""
+	case d.AttemptsLeft == 0:
+		return "Further attempts are delayed for a while."
+	case d.AttemptsLeft == 1:
+		return "1 attempt left before further attempts are delayed."
+	}
+	return strconv.Itoa(d.AttemptsLeft) + " attempts left before further attempts are delayed."
+}
+
+// forcedPasswordPage is the password change before first use (screen pwchange): nothing else is
+// reachable yet, so it stays a standalone card with Sign out.
+templ forcedPasswordPage(f authFrame, d auth.PasswordPageData) {
+	@authDoc(f) {
+		<div class="pw-who">
+			@ui.Avatar(d.Self, d.Self)
+			<span>Signed in as <b>{ d.Self }</b> with a temporary password</span>
+		</div>
+		<h1>Choose a new password</h1>
+		<p class="auth-text">Your account has a temporary password. Pick your own before you continue.</p>
+		if d.Error != "" && d.ErrField == "" {
+			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: d.Error, Alert: true})
+		}
+		<form class="auth-form" method="post" action={ templ.SafeURL(d.BasePath + "/account/password") }>
+			<input type="hidden" name="csrf" value={ d.CSRFToken }/>
+			@ui.Field(ui.FieldData{Label: "One-time password", Name: "current", Type: "password", Autocomplete: "current-password", Error: fieldErr(d.ErrField, "current", d.Error), Autofocus: focus(d.ErrField, "current", true)})
+			@ui.Field(ui.FieldData{Label: "New password", Name: "new", Type: "password", Autocomplete: "new-password", Error: fieldErr(d.ErrField, "new", d.Error), Autofocus: focus(d.ErrField, "new", false)})
+			@ui.Field(ui.FieldData{Label: "Repeat new password", Name: "confirm", Type: "password", Autocomplete: "new-password", Error: fieldErr(d.ErrField, "confirm", d.Error), Autofocus: focus(d.ErrField, "confirm", false)})
+			<ul class="pw-checks">
+				<li>At least { strconv.Itoa(auth.PasswordMinLength) } characters</li>
+				<li>Different from the temporary password</li>
+				<li>Both entries match</li>
+			</ul>
+			<button type="submit" class="btn btn-primary btn-tall">Save and continue</button>
+		</form>
+		@signOutForm(d.BasePath, d.CSRFToken)
+	}
+}
+
+// signOutForm is Sign out as a quiet link-styled button.
+templ signOutForm(base, csrf string) {
+	<form class="auth-signout" method="post" action={ templ.SafeURL(base + "/logout") }>
+		<input type="hidden" name="csrf" value={ csrf }/>
+		<button type="submit" class="btn btn-link">Sign out</button>
+	</form>
+}
+
+// messagePage is a short standalone message: a failed single sign-on, no role at all, a password
+// change still required.
+templ messagePage(f authFrame, d auth.MessageData) {
+	@authDoc(f) {
+		<h1>{ d.Title }</h1>
+		<p class="auth-text">{ d.Text }</p>
+		if d.LocalLogin {
+			<a class="btn btn-tall" href={ templ.SafeURL(d.BasePath + "/login") }>Back to sign-in</a>
+		}
+		if d.SignOut {
+			@signOutForm(d.BasePath, d.CSRFToken)
+		}
+	}
+}
+
+// focus says whether input name gets the page's first focus: the input the server rejected, or
+// the first input when nothing was rejected.
+func focus(errField, name string, first bool) bool {
+	return errField == name || (errField == "" && first)
+}
+
+// fieldErr is the error text of input name when the server rejected that input.
+func fieldErr(errField, name, msg string) string {
+	if errField == name {
+		return msg
+	}
+	return ""
+}
+
+// accountView is the account page (screen account): the profile of whoever is signed in and,
+// for a local account, the password and profile forms.
+type accountView struct {
+	D        auth.PasswordPageData
+	Name     string // display name, or the username
+	Role     string // "Admin", "Operator"
+	SignIn   string // how this user signs in
+	Username string
+}
+
+templ accountPage(v accountView) {
+	@ui.PageHeader("Your account", "")
+	if v.D.ProfileSaved {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneOK, Text: "Profile saved."})
+	}
+	if v.D.Error != "" && v.D.ErrField == "" {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: v.D.Error, Alert: true})
+	}
+	<div class="acct-grid">
+		@ui.Card("Profile", "") {
+			@ui.KV([]ui.KVRow{{Key: "Name", Value: v.Name}, {Key: "Email", Value: orDash(v.D.Email)}, {Key: "Role", Value: v.Role}, {Key: "Sign-in", Value: v.SignIn}})
+			if v.D.Local {
+				<details class="fold acct-edit" open?={ v.D.ErrField == "display_name" || v.D.ErrField == "email" }>
+					<summary>Edit name and email</summary>
+					<form class="acct-form" method="post" action={ templ.SafeURL(v.D.BasePath + "/account/profile") }>
+						<input type="hidden" name="csrf" value={ v.D.CSRFToken }/>
+						@ui.Field(ui.FieldData{Label: "Name", Name: "display_name", Value: v.D.DisplayName, Autocomplete: "name", Error: fieldErr(v.D.ErrField, "display_name", v.D.Error), Autofocus: focus(v.D.ErrField, "display_name", false)})
+						@ui.Field(ui.FieldData{Label: "Email (optional)", Name: "email", Type: "email", Value: v.D.Email, Autocomplete: "email", Error: fieldErr(v.D.ErrField, "email", v.D.Error), Autofocus: focus(v.D.ErrField, "email", false)})
+						<button type="submit" class="btn">Save profile</button>
+					</form>
+				</details>
+			}
+		}
+		if v.D.Local {
+			<section class="ucard acct-pw" aria-labelledby="acct-pw-h">
+				<h2 id="acct-pw-h">Change password</h2>
+				<form class="acct-form" method="post" action={ templ.SafeURL(v.D.BasePath + "/account/password") }>
+					<input type="hidden" name="csrf" value={ v.D.CSRFToken }/>
+					@ui.Field(ui.FieldData{Label: "Current password", Name: "current", Type: "password", Autocomplete: "current-password", Error: fieldErr(v.D.ErrField, "current", v.D.Error), Autofocus: focus(v.D.ErrField, "current", true)})
+					@ui.Field(ui.FieldData{Label: "New password", Name: "new", Type: "password", Autocomplete: "new-password", Help: "Use at least " + strconv.Itoa(auth.PasswordMinLength) + " characters.", Error: fieldErr(v.D.ErrField, "new", v.D.Error), Autofocus: focus(v.D.ErrField, "new", false)})
+					@ui.Field(ui.FieldData{Label: "Repeat new password", Name: "confirm", Type: "password", Autocomplete: "new-password", Error: fieldErr(v.D.ErrField, "confirm", v.D.Error), Autofocus: focus(v.D.ErrField, "confirm", false)})
+					<button type="submit" class="btn btn-primary acct-submit">Change password</button>
+				</form>
+			</section>
+		}
+	</div>
+}
+
+func orDash(s string) string {
+	if s == "" {
+		return "—"
+	}
+	return s
+}
+
+// usersView is the user list (screens users, users-menu, users-menu-sso, users-v-stepup).
+type usersView struct {
+	D    auth.UsersPageData
+	Rows []userRowView
+	// StepUp is the "Confirm it's you" dialog; nil when the viewer is stepped up or cannot step
+	// up at all (behind a header-authenticating proxy, ViewOnly).
+	StepUp *ui.StepUpData
+}
+
+// userRowView is one row: who, role and state, how they sign in, when last, and the menu.
+type userRowView struct {
+	Name, Sub    string // display name; "username · email"
+	SubTitle     string // tooltip of Sub: the full subject when it is too long to print
+	Avatar       string // the name the initials come from
+	AvatarKey    string // the key the avatar colour comes from
+	Self         bool
+	Role         string // "Admin", "Operator", "" (unknown)
+	Admin        bool
+	Deactivated  bool
+	MustChange   bool
+	Source       string // "Local", "SSO · Authentik", "Proxy header"
+	Last         string // "2h ago", "Never signed in", "Deactivated"
+	LastAt       string // RFC 3339 of the last sign-in for <time>; empty: no time
+	Sessions     string // "No sessions", "1 session", "2 sessions"
+	Menu         []ui.MenuItem
+	Dialogs      []ui.DialogData
+	MenuOpensUp  bool
+	Detail       string // view only: a Details link instead of a menu of disabled actions
+}
+
+templ usersPage(v usersView) {
+	@ui.PageHeader("Users", "Admins change everything. Operators can switch, restart and back up devices.") {
+		if !v.D.ViewOnly {
+			<a class="btn btn-primary" href={ templ.SafeURL(v.D.BasePath + "/users/new") }>Add local user</a>
+		}
+	}
+	@usersBanners(v.D)
+	<section class="ulist users-list" aria-label="Users">
+		for _, u := range v.Rows {
+			<div class={ "urow", templ.KV("urow-off", u.Deactivated) }>
+				<div class="urow-who">
+					@ui.Avatar(u.Avatar, u.AvatarKey)
+					<span class="urow-names">
+						<span class="urow-name"><span>{ u.Name }</span>
+							if u.Self {
+								@ui.Badge(ui.ToneNeutral, "You")
+							}
+						</span>
+						<span class="urow-sub" if u.SubTitle != "" { title={ u.SubTitle } }>{ u.Sub }</span>
+					</span>
+				</div>
+				<span class="urow-badges">
+					if u.Role != "" {
+						@ui.Badge(roleTone(u.Admin), u.Role)
+					} else {
+						<span class="bdg t-neutral" title="Not seen since roles were recorded">Role unknown</span>
+					}
+					if u.Deactivated {
+						@ui.Badge(ui.ToneNeutral, "Deactivated")
+					}
+					if u.MustChange {
+						@ui.Badge(ui.ToneWarn, "Must change password")
+					}
+				</span>
+				<span class="urow-meta">{ u.Source }</span>
+				if u.LastAt != "" {
+					<span class="urow-meta"><time datetime={ u.LastAt }>{ u.Last }</time>{ " · " + u.Sessions }</span>
+				} else {
+					<span class="urow-meta">{ u.Last + " · " + u.Sessions }</span>
+				}
+				if u.Detail != "" {
+					<a class="btn" href={ templ.SafeURL(u.Detail) }>Details</a>
+				} else {
+					@ui.RowMenu("User actions", u.Menu, u.MenuOpensUp)
+				}
+			</div>
+		}
+	</section>
+	<p class="users-note">Admin actions ask you to confirm it’s you once every 5 minutes. Nobody can deactivate, delete or demote themselves or the last active admin.</p>
+	for _, u := range v.Rows {
+		for _, dlg := range u.Dialogs {
+			@ui.Dialog(dlg)
+		}
+	}
+	if v.StepUp != nil {
+		@ui.StepUp(*v.StepUp)
+	}
+}
+
+// usersBanners are the notices of the users pages: the result of the last change, an error that
+// belongs to no input, and why changes are not possible here.
+templ usersBanners(d auth.UsersPageData) {
+	if d.Notice != "" {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneOK, Text: d.Notice})
+	}
+	if d.Error != "" && (d.ErrField == "" || d.ErrField == "current") {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: d.Error, Alert: true})
+	}
+	if d.ViewOnly {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Title: "View only.", Text: "Behind a header-authenticating proxy there is nothing to confirm a change with. Sign in as a local or SSO admin to change users."})
+	}
+}
+
+func roleTone(admin bool) ui.Tone {
+	if admin {
+		return ui.ToneAccent
+	}
+	return ui.ToneNeutral
+}
+
+// userAddView is the add-user page (screens useradd, useradd-v-error).
+type userAddView struct {
+	D      auth.UsersPageData
+	Errors int // inputs the server rejected (the summary counts them)
+	StepUp *ui.StepUpData
+}
+
+templ userAddPage(v userAddView) {
+	@ui.PageHeader("Add local user", "For people without an SSO account. They change the password at first sign-in.")
+	@usersBanners(auth.UsersPageData{Notice: v.D.Notice, ViewOnly: v.D.ViewOnly, Error: v.D.Error, ErrField: v.D.ErrField})
+	if v.Errors > 0 {
+		<div class="banner tone-danger err-summary useradd-sum" role="alert">
+			<span class="banner-dot"></span>
+			<div class="banner-text"><b>{ fieldsNeedAttention(v.Errors) }</b> The user wasn’t added yet.</div>
+		</div>
+	}
+	<form class="ucard useradd" method="post" action={ templ.SafeURL(v.D.BasePath + "/users") }>
+		<input type="hidden" name="csrf" value={ v.D.CSRFToken }/>
+		@ui.Field(ui.FieldData{Label: "Name", Name: "display_name", Value: v.D.DisplayName, Autocomplete: "off", Error: fieldErr(v.D.ErrField, "display_name", v.D.Error), Autofocus: focus(v.D.ErrField, "display_name", false)})
+		@ui.Field(ui.FieldData{Label: "Username", Name: "username", Value: v.D.Username, Mono: true, Autocomplete: "off", Error: fieldErr(v.D.ErrField, "username", v.D.Error), Autofocus: focus(v.D.ErrField, "username", false)})
+		@ui.Field(ui.FieldData{Label: "Email (optional)", Name: "email", Type: "email", Value: v.D.Email, Autocomplete: "off", Error: fieldErr(v.D.ErrField, "email", v.D.Error), Autofocus: focus(v.D.ErrField, "email", false)})
+		<div class="ufield">
+			<span class="ufield-label">Role</span>
+			@ui.Segmented("Role", "role", []ui.Option{{Value: "operator", Label: "Operator", Checked: v.D.Role != "admin"}, {Value: "admin", Label: "Admin", Checked: v.D.Role == "admin"}})
+		</div>
+		<div class="useradd-mode">
+			@ui.RadioCards("Password", "otp", []ui.Option{
+				{Value: "1", Label: "Generate a one-time password", Text: "Shown once after saving. Expires in 24 hours.", Checked: v.D.OTP},
+				{Value: "", Label: "Set an initial password", Text: "You tell them the password yourself.", Checked: !v.D.OTP},
+			})
+		</div>
+		<div class="useradd-pw">
+			@ui.Field(ui.FieldData{Label: "Initial password", Name: "password", Type: "password", Autocomplete: "new-password", Help: "Use at least " + strconv.Itoa(auth.PasswordMinLength) + " characters.", Error: fieldErr(v.D.ErrField, "password", v.D.Error), Autofocus: focus(v.D.ErrField, "password", false)})
+			@ui.Field(ui.FieldData{Label: "Repeat password", Name: "confirm", Type: "password", Autocomplete: "new-password", Error: fieldErr(v.D.ErrField, "confirm", v.D.Error), Autofocus: focus(v.D.ErrField, "confirm", false)})
+		</div>
+		<div class="useradd-foot">
+			<a class="btn" href={ templ.SafeURL(v.D.BasePath + "/users") }>Cancel</a>
+			if v.StepUp != nil {
+				<a class="btn btn-primary" href={ templ.SafeURL(v.D.BasePath + "/users") } data-dialog={ v.StepUp.ID }>Add user</a>
+			} else {
+				<button type="submit" class="btn btn-primary" disabled?={ v.D.ViewOnly }>Add user</button>
+			}
+		</div>
+	</form>
+	if v.StepUp != nil {
+		@ui.StepUp(*v.StepUp)
+	}
+}
+
+func fieldsNeedAttention(n int) string {
+	if n == 1 {
+		return "1 field needs attention."
+	}
+	return strconv.Itoa(n) + " fields need attention."
+}
+
+// errView is an error page in the shell (screens e404, e403, eoff): the code line, the title,
+// the explanation, the path that failed and two ways on.
+type errView struct {
+	Code, Title, Body, Path string
+	Primary, Secondary      ui.Btn
+}
+
+templ errPage(e errView) {
+	@ui.ErrorPage(e.Code, e.Title, e.Body, e.Path, e.Primary, e.Secondary)
+}

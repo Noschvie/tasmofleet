@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+<style>
+.t{fill:#0f766e}.g{fill:#fff}.s{stroke:#fff}.a{fill:#fbbf24}
+@media (prefers-color-scheme: dark){.t{fill:#5eead4}.g{fill:#042f2e}.s{stroke:#042f2e}.a{fill:#b45309}}
+</style>
+<rect class="t" width="128" height="128" rx="28"/>
+<path class="s" d="M64 62 L30 36 M64 62 L98 36 M64 62 L64 102" stroke-width="9" stroke-linecap="round" fill="none"/>
+<circle class="g" cx="30" cy="36" r="13"/><circle class="g" cx="98" cy="36" r="13"/><circle class="g" cx="64" cy="102" r="13"/>
+<circle class="a" cx="64" cy="62" r="19"/>
+</svg>

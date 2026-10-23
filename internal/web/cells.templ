@@ -1,0 +1,212 @@
+package web
+
+import (
+	"strconv"
+
+	"github.com/nofuturekid/tasmofleet/internal/model"
+)
+
+// The live cells of the device list: the table rows, the phone cards' parts and the event
+// stream (encodeEvent) render the same components, so a cell swapped over SSE looks exactly
+// like the one the page was served with. They were html/template partials until Z1.
+
+// statusCell is the health badge of a device, with "MQTT down" when the device answers over
+// HTTP only.
+templ (h *handler) statusCell(hl model.Health) {
+	<span class={ "bdg", "dv-st", uiToneClass(hl.State) } title={ h.hint(hl.State) }><span class="dv-dot" aria-hidden="true"></span>{ label(hl.State) }</span>
+	if h.mqttDown(hl) {
+		<span class="bdg t-warn dv-mdown" title="The device answers over HTTP, but nothing arrives over MQTT">MQTT down</span>
+	}
+}
+
+// reachCell is the MQTT · HTTP column: per channel whether the device was heard from lately.
+templ (h *handler) reachCell(hl model.Health) {
+	<span class="dv-reach">
+		for i, c := range h.channels(hl) {
+			if i > 0 {
+				<span class="dv-reach-sep" aria-hidden="true">{ " · " }</span>
+			}
+			<span class={ "chan", "chan-" + c.Tone } title={ c.Tip }>{ c.Name }<span aria-hidden="true">{ " " + c.Mark }</span><span class="sr-only">{ " " + c.Word }</span></span>
+		}
+	</span>
+}
+
+// uptimeCell is the uptime, or when the device last answered while it is down.
+templ (h *handler) uptimeCell(v vitals) {
+	if v.Down {
+		if v.Seen.IsZero() {
+			<span class="muted">-</span>
+		} else {
+			<span class="dv-seen" title={ "Last seen " + stamp(v.Seen) }>{ seenText(h.ago(v.Seen)) }</span>
+		}
+	} else if v.Uptime != "" {
+		<span
+			if !v.Restart.IsZero() {
+				title={ "Last restart " + stamp(v.Restart) }
+			}
+		>{ v.Uptime }</span>
+	} else {
+		<span class="muted">-</span>
+	}
+}
+
+// wifiCell is the signal bar with the approximate dBm.
+templ wifiCell(v vitals) {
+	if v.RSSI != 0 {
+		<span class="dv-wifi" title={ strconv.Itoa(v.RSSI) + "%, about " + strconv.Itoa(v.DBm) + " dBm" }><svg class="dv-wbar" width="34" height="5" viewBox="0 0 34 5" aria-hidden="true" focusable="false"><rect class="dv-wbg" width="34" height="5" rx="2.5"></rect><rect class={ "dv-wfg", templ.KV("weak", !v.WifiOK) } width={ strconv.Itoa(v.WifiW) } height="5" rx="2.5"></rect></svg><span class="dv-dbm">{ strconv.Itoa(v.DBm) } dBm</span></span>
+	} else {
+		<span class="muted">-</span>
+	}
+}
+
+// restartCell is the estimated time of the last restart.
+templ restartCell(v vitals) {
+	if v.Restart.IsZero() {
+		<span class="muted">-</span>
+	} else {
+		<span title="Estimated from the last report and the uptime">{ v.Restart.Format("2006-01-02 15:04") }</span>
+	}
+}
+
+// powerCell is the relay switches of a device (or their states when switching is off).
+templ powerCellView(p powerCell) {
+	if len(p.Relays) > 0 {
+		for _, rl := range p.Relays {
+			if p.Enabled {
+				<button
+					type="button"
+					class="pwr"
+					aria-pressed={ ariaBool(rl.State == "ON") }
+					title={ relayTitle(p, rl) }
+					hx-post={ p.Base + "/devices/" + strconv.FormatInt(int64(p.ID), 10) + "/power/" + strconv.Itoa(rl.N) }
+					hx-vals={ `{"action":"TOGGLE"}` }
+					hx-target="closest .pcell"
+					hx-swap="innerHTML"
+					hx-disabled-elt="this"
+					aria-label={ "Toggle relay " + strconv.Itoa(rl.N) + ", currently " + rl.State }
+					disabled?={ p.Off }
+				><span class="sw" aria-hidden="true"></span></button>
+			} else {
+				<span class="relay-state">{ label(rl.State) }</span>
+			}
+		}
+	} else if p.Enabled {
+		<button type="button" class="pwr" aria-pressed="false" aria-label="Toggle power" title="The power state is not known yet" disabled><span class="sw" aria-hidden="true"></span></button>
+	} else {
+		<span class="muted">-</span>
+	}
+	if p.Error != "" {
+		{ " " }
+		<small class="error" role="alert">{ p.Error }</small>
+	}
+}
+
+// deviceRows are the rows of the device table.
+templ (h *handler) deviceRows(d rowsData) {
+	for i, row := range d.Rows {
+		<tr data-id={ devID(row.Device.ID) }>
+			if d.Select {
+				<td data-label="Select" class="sel"><label class="hit"><input type="checkbox" name="id" value={ devID(row.Device.ID) } aria-label={ "Select " + row.Device.Name }/></label></td>
+			}
+			<td data-label="Name" class="wrap p1 dv-name" title={ tip(row.Device.Name) }>
+				<a href={ templ.SafeURL(d.Base + "/devices/" + devID(row.Device.ID)) }>{ row.Device.Name }</a>
+				if row.Device.OTAExcluded {
+					{ " " }
+					<span class="tag" title={ h.hint("no-ota") }>no OTA</span>
+				}
+			</td>
+			<td data-label="Status" class="nowrap s"><span class="dv-live" sse-swap={ "health-" + devID(row.Device.ID) }>
+				@h.statusCell(row.Health)
+			</span>
+				if row.Deviations > 0 {
+					{ " " }
+					<span class="bdg t-warn dv-devs" title="Settings of this device that differ from the policy">{ plural(row.Deviations, "deviation") }</span>
+				}
+			</td>
+			<td data-label="MQTT · HTTP" class="nowrap s m-hide" sse-swap={ "reach-" + devID(row.Device.ID) }>
+				@h.reachCell(row.Health)
+			</td>
+			<td data-label="Firmware" class="nowrap s m-hide">
+				if v := row.Device.Identity.Version; v != "" {
+					<span class="dv-mono" title={ firmwareTitle(row.Device.Identity) }>{ v }</span>
+					if row.Outdated {
+						{ " " }
+						<span class="bdg t-accent dv-upd" title="A newer stable release is available">update</span>
+					}
+				} else {
+					<span class="muted">Unknown</span>
+				}
+			</td>
+			<td data-label="Chip" class="nowrap c-fam m-hide" title={ familyHint(string(row.Device.Identity.Family)) }>
+				if row.Device.Identity.Family != "" {
+					{ chipLabel(row.Device.Identity.Family) }
+				} else {
+					<span class="muted">Unknown</span>
+				}
+			</td>
+			<td data-label="Address" class="nowrap m-hide dv-mono" title={ hostPort(row.Device.Address, row.Device.Port) }>
+				if l := deviceWebLink(row.Device.Address, row.Device.Port); l != nil {
+					<a class="ext" href={ templ.SafeURL(l.Href) } target="_blank" rel="noopener noreferrer">{ l.Display }<svg class="ico" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" focusable="false"><path d="M9 2h5v5M14 2 7.5 8.5M12 9v4a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg><span class="sr-only">{ " (opens in a new tab)" }</span></a>
+				} else {
+					{ hostPort(row.Device.Address, row.Device.Port) }
+				}
+			</td>
+			<td data-label="Uptime" class="nowrap s c-up m-hide dv-mono" sse-swap={ "uptime-" + devID(row.Device.ID) }>
+				@h.uptimeCell(row.Vitals)
+			</td>
+			<td data-label="Wi-Fi" class="nowrap s c-wifi m-hide" sse-swap={ "wifi-" + devID(row.Device.ID) }>
+				@wifiCell(row.Vitals)
+			</td>
+			<td data-label="Last restart" class="nowrap c-restart m-hide" sse-swap={ "restart-" + devID(row.Device.ID) }>
+				@restartCell(row.Vitals)
+			</td>
+			<td data-label="Power" class="nowrap p2 pcell" sse-swap={ "power-" + devID(row.Device.ID) }>
+				@powerCellView(row.Power)
+			</td>
+			<td data-label="Actions" class="rowacts">
+				@deviceMenu(d.Menu(i))
+			</td>
+		</tr>
+	}
+}
+
+// deviceMenu is the row actions of a device in the list, in its table row and on its phone card.
+templ deviceMenu(m rowMenu) {
+	<details class={ "rowmenu", "umenu", templ.KV("up", m.Up) }>
+		<summary class="btn btn-ghost btn-icon icon" aria-label="Actions" title={ "Actions for " + m.Device.Name }>⋯</summary>
+		<div class="rowmenu-body menu-panel" role="menu">
+			<a class="menu-item" role="menuitem" href={ templ.SafeURL(m.Base + "/devices/" + devID(m.Device.ID)) }>Open</a>
+			if m.Console {
+				<a class="menu-item" role="menuitem" href={ templ.SafeURL(m.Base + "/devices/" + devID(m.Device.ID) + "/console") }>Open console</a>
+			}
+			<button type="button" class="menu-item" role="menuitem" hx-post={ m.Base + "/devices/" + devID(m.Device.ID) + "/backup" } hx-vals={ `{"from":"list"}` } hx-target="#list-notice" hx-swap="innerHTML">Back up now</button>
+			if m.Admin && m.Console {
+				<a
+					class="menu-item"
+					role="menuitem"
+					href={ templ.SafeURL(m.Base + "/devices/" + devID(m.Device.ID) + "/restart") }
+					data-dialog="dlg-row"
+					data-dlg-kind="restart"
+					data-dlg-title={ "Restart " + m.Device.Name + "?" }
+					data-dlg-text="Its relays switch off for a few seconds."
+					data-dlg-action={ m.Base + "/devices/" + devID(m.Device.ID) + "/restart" }
+					data-dlg-verb="Restart"
+				>Restart…</a>
+			}
+			if m.Admin {
+				<hr/>
+				<a class="menu-item danger" role="menuitem" href={ templ.SafeURL(m.Base + "/devices/" + devID(m.Device.ID) + "/delete") }>Delete…</a>
+			}
+		</div>
+	</details>
+}
+
+// listNotice is the one-line result above a list (the device list's live region).
+templ listNotice(n notice) {
+	if n.Error != "" {
+		<p class="error" role="alert">{ n.Error }</p>
+	}
+	if n.Notice != "" {
+		<p class="notice" role="status">{ n.Notice }</p>
+	}
+}

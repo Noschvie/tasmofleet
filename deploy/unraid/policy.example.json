@@ -1,0 +1,29 @@
+[
+  {
+    "command": "PowerOnState",
+    "want": "0",
+    "note": "Relays stay off after power loss; the state is never written to flash."
+  },
+  {
+    "command": "SetOption0",
+    "want": "0",
+    "families": ["esp8266"],
+    "note": "save_state off: no flash write on every relay change."
+  },
+  {
+    "command": "SetOption0",
+    "want": "1",
+    "families": ["esp32*"],
+    "note": "ESP32 exception (QuinLED office monitors): save_state stays on."
+  },
+  {
+    "command": "SaveData",
+    "want": "0",
+    "note": "Settings are saved only on explicit changes."
+  },
+  {
+    "command": "Timezone",
+    "want": "99",
+    "note": "Time zone comes from the TimeDst/TimeStd rules."
+  }
+]

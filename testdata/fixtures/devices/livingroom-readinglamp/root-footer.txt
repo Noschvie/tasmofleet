@@ -1,0 +1,1 @@
+Tasmota 16.0.0 (release-tasmota) by Theo Arends

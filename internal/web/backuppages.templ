@@ -1,0 +1,201 @@
+package web
+
+import (
+	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+)
+
+// backupsTab is the Backups tab (design v2 screen "device", tab "backups"). The rows sit in a
+// GET form: Compare sends the two ticked ids to the comparison, Delete selected sends the ticked
+// ids to their confirmation page. Keep and Retry are buttons of the two POST forms after the
+// list (form attribute), because forms cannot nest.
+templ backupsTab(p backupsView) {
+	@p.Head
+	<div class="bk-page">
+		if len(p.Rows) == 0 {
+			@ui.Empty("No backups yet", "Take one now to get a restore point. Scheduled backups run every night at 03:00 once the device answers.") {
+				if p.CanBackup {
+					<button type="submit" form="bk-now" class="btn btn-primary" disabled?={ p.Blocked != "" } if p.Blocked != "" { title={ p.Blocked } }>Back up now</button>
+				}
+			}
+		} else {
+			<div class="bk-bar">
+				<div class="bk-retention">
+					{ p.Retention }
+					if p.CanRetention {
+						{ " " }<a class="bk-link" href={ templ.SafeURL(p.Base + "/settings/system?tab=backups") }>Change retention</a>
+					}
+				</div>
+				if p.CanDelete && len(p.Prune) > 0 {
+					<a class="btn" href={ templ.SafeURL(p.Base + "/devices/" + devStr(p.DeviceID) + "/backups/prune") } data-dialog="dlg-prune">Prune now…</a>
+				}
+				<span class="bk-total">{ p.Total }</span>
+				if p.CanBackup {
+					<button type="submit" form="bk-now" class="btn" disabled?={ p.Blocked != "" } if p.Blocked != "" { title={ p.Blocked } }>Back up now</button>
+				}
+			</div>
+			<form id="bk-sel" method="get" action={ templ.SafeURL(p.Base + "/devices/" + devStr(p.DeviceID) + "/backups/diff") }>
+				<div class="bk-selbar" data-bulkbar hidden role="region" aria-label="Selected backups">
+					<span class="bk-selcount"><span data-bar-count>0</span> selected</span>
+					<button type="submit" class="btn btn-primary btn-sm" data-needs-pair>Compare</button>
+					if p.CanDelete {
+						<button type="submit" class="btn btn-sm bk-seldel" formaction={ templ.SafeURL(p.Base + "/devices/" + devStr(p.DeviceID) + "/backups/delete") }>Delete selected</button>
+					}
+				</div>
+				<noscript>
+					<div class="bk-selbar" role="region" aria-label="Selected backups">
+						<span class="bk-selcount">Tick two backups to compare them</span>
+						<button type="submit" class="btn btn-primary btn-sm">Compare</button>
+						if p.CanDelete {
+							<button type="submit" class="btn btn-sm bk-seldel" formaction={ templ.SafeURL(p.Base + "/devices/" + devStr(p.DeviceID) + "/backups/delete") }>Delete selected</button>
+						}
+					</div>
+				</noscript>
+				<section class="bk-list" aria-label="Backups">
+					for _, b := range p.Rows {
+						@backupRowItem(p, b)
+					}
+				</section>
+			</form>
+			<p class="bk-foot">Select two backups to compare them. Kept backups are never pruned.</p>
+			if len(p.Jobs) > 0 {
+				@ui.ListCard("Recent restores", "", "") {
+					for _, j := range p.Jobs {
+						<a class="att-row bk-job" href={ templ.SafeURL(j.Href) }>
+							<time datetime={ j.Started.Format("2006-01-02T15:04:05Z07:00") }>{ shortDate(j.Started) }</time>
+							<span class="bk-job-who">{ j.Actor }</span>
+							@ui.Badge(j.Tone, j.State)
+							<span class="bk-job-detail">{ j.Detail }</span>
+						</a>
+					}
+				}
+			}
+		}
+		<div id="backup-status" class="bk-status" aria-live="polite"></div>
+		if p.CanBackup {
+			<form id="bk-now" method="post" action={ templ.SafeURL(p.Base + "/devices/" + devStr(p.DeviceID) + "/backup") } hx-post={ p.Base + "/devices/" + devStr(p.DeviceID) + "/backup" } hx-target="#backup-status" hx-swap="innerHTML" hx-disabled-elt="button[form=bk-now]">
+				<input type="hidden" name="csrf" value={ p.CSRF }/>
+				<input type="hidden" name="from" value="tab"/>
+			</form>
+		}
+		if p.CanKeep {
+			<form id="bk-keep" method="post" action={ templ.SafeURL(p.Base + "/devices/" + devStr(p.DeviceID) + "/backups") }>
+				<input type="hidden" name="csrf" value={ p.CSRF }/>
+			</form>
+		}
+		if p.CanDelete {
+			@backupDeleteDialog(p)
+			if len(p.Prune) > 0 {
+				@pruneDialog(p)
+			}
+		}
+	</div>
+}
+
+// backupRowItem is one run, or one failed attempt.
+templ backupRowItem(p backupsView, b backupRow) {
+	<div class={ "bk-row", templ.KV("is-failed", b.Failed) }>
+		<label class="bk-check">
+			if !b.Failed {
+				<input type="checkbox" name="id" value={ bkStr(b.ID) } aria-label={ "Select the backup of " + shortDate(b.Taken) }/>
+			}
+		</label>
+		<div class="bk-main">
+			<div class="bk-title">
+				<time datetime={ b.Taken.Format("2006-01-02T15:04:05Z07:00") }>{ shortDate(b.Taken) }</time>
+				if b.Newest {
+					@ui.Badge(ui.ToneOK, "Newest")
+				}
+				if b.Kept {
+					@ui.Badge(ui.ToneAccent, "Kept")
+				}
+				if b.Pruned {
+					@ui.Badge(ui.ToneNeutral, "Pruned at next run")
+				}
+				if b.Failed {
+					@ui.Badge(ui.ToneDanger, "Failed")
+				}
+			</div>
+			<div class="bk-detail">{ b.Detail }</div>
+			if b.Failed {
+				<div class="bk-reason">{ b.Reason }</div>
+			}
+		</div>
+		<div class="bk-acts">
+			if b.Failed {
+				if p.CanBackup {
+					<button type="submit" form="bk-now" class="btn" disabled?={ p.Blocked != "" }>Retry</button>
+				}
+			} else {
+				if p.CanKeep {
+					if b.Kept {
+						<button type="submit" form="bk-keep" formaction={ templ.SafeURL(p.Base + "/backups/" + bkStr(b.ID) + "/keep") } name="kept" value="0" class="btn bk-keep is-kept" aria-pressed="true" title="Kept: the retention never prunes it. Click to release it.">
+							<span class="bk-pin" aria-hidden="true"></span>Kept
+						</button>
+					} else {
+						<button type="submit" form="bk-keep" formaction={ templ.SafeURL(p.Base + "/backups/" + bkStr(b.ID) + "/keep") } name="kept" value="1" class="btn bk-keep" aria-pressed="false" title="Keep this backup: the retention never prunes it.">
+							<span class="bk-pin" aria-hidden="true"></span>Keep
+						</button>
+					}
+				}
+				if b.Download != "" {
+					<a class="btn btn-link bk-act" href={ templ.SafeURL(b.Download) }>Download</a>
+				}
+				if b.Restore != "" {
+					<a class="btn" href={ templ.SafeURL(b.Restore) }>Restore…</a>
+				}
+				if b.DeleteText != "" {
+					<a
+						class="btn btn-link bk-act bk-del"
+						href={ templ.SafeURL(p.Base + "/backups/" + bkStr(b.ID) + "/delete") }
+						data-dialog="dlg-bkdel"
+						data-dlg-title="Delete this backup?"
+						data-dlg-text={ b.DeleteText }
+						data-dlg-action={ p.Base + "/backups/" + bkStr(b.ID) + "/delete" }
+						data-dlg-verb="Delete backup"
+					>Delete</a>
+				}
+			}
+		</div>
+	</div>
+}
+
+// backupDeleteDialog is the one delete dialog of the rows; dialog.js fills it from the Delete
+// link (data-dlg-*). Without JavaScript the link opens the confirmation page.
+templ backupDeleteDialog(p backupsView) {
+	<dialog id="dlg-bkdel" class="udlg" aria-labelledby="dlg-bkdel-h">
+		<form method="post" action="" class="udlg-in" data-fill="form">
+			<input type="hidden" name="csrf" value={ p.CSRF }/>
+			<h2 id="dlg-bkdel-h" data-fill="title">Delete this backup?</h2>
+			<p class="udlg-body" data-fill="text"></p>
+			<div class="udlg-foot">
+				<button type="button" class="btn" data-close>Cancel</button>
+				<button type="submit" class="btn btn-danger-solid" data-fill="verb">Delete backup</button>
+			</div>
+		</form>
+	</dialog>
+}
+
+// pruneDialog is "Prune now": the runs the next pruning removes, deleted now. It posts their
+// ids, so exactly the listed backups go even if the retention changes meanwhile.
+templ pruneDialog(p backupsView) {
+	<dialog id="dlg-prune" class="udlg" aria-labelledby="dlg-prune-h">
+		<form method="post" action={ templ.SafeURL(p.Base + "/devices/" + devStr(p.DeviceID) + "/backups/delete") } class="udlg-in">
+			<input type="hidden" name="csrf" value={ p.CSRF }/>
+			<input type="hidden" name="confirm" value="1"/>
+			for _, b := range p.Prune {
+				<input type="hidden" name="id" value={ bkStr(b.ID) }/>
+			}
+			<h2 id="dlg-prune-h">Prune { plural(len(p.Prune), "backup") } now?</h2>
+			<p class="udlg-body">{ p.PruneText }</p>
+			<div class="udlg-changes">
+				for _, b := range p.Prune {
+					<div><span><time datetime={ b.Taken.Format("2006-01-02T15:04:05Z07:00") }>{ shortDate(b.Taken) }</time></span><span class="mono">{ b.Size }</span></div>
+				}
+			</div>
+			<div class="udlg-foot">
+				<button type="button" class="btn" data-close>Cancel</button>
+				<button type="submit" class="btn btn-danger-solid">Prune { plural(len(p.Prune), "backup") }</button>
+			</div>
+		</form>
+	</dialog>
+}

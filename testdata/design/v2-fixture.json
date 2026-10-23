@@ -1,0 +1,1165 @@
+{
+ "source": "design/v2/template.html (makeDevices, RELEASES, RULES, BACKUPS, U0, SCAN, P0, M0, makeTxn)",
+ "latest": "14.3.0",
+ "releases": [
+  "14.3.0",
+  "14.2.0",
+  "14.1.0",
+  "14.0.0",
+  "13.4.1",
+  "13.4.0",
+  "13.3.0",
+  "13.2.0",
+  "13.1.0",
+  "13.0.0",
+  "12.5.0"
+ ],
+ "releaseNotes": [
+  {
+   "version": "14.3.0",
+   "date": "6 Oct 2026",
+   "notes": [
+    "Wi-Fi reconnects more reliably after an access point restart",
+    "Energy: daily total no longer double-counts at midnight",
+    "Berry scripts start faster and use less heap",
+    "Console keeps its scroll position while output streams"
+   ]
+  },
+  {
+   "version": "14.2.0",
+   "date": "18 Aug 2026",
+   "notes": [
+    "New PowerOnState option for staggered start after power loss",
+    "MQTT: TLS session resumption",
+    "Fixed: dimmer flicker on some PWM drivers"
+   ]
+  },
+  {
+   "version": "14.1.0",
+   "date": "30 Jun 2026",
+   "notes": [
+    "Web UI: device groups",
+    "Reduced flash wear for frequent settings saves"
+   ]
+  }
+ ],
+ "devices": [
+  {
+   "id": "d1",
+   "name": "Kitchen Plug",
+   "kind": "Plug",
+   "chip": "ESP8266",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": false,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d2",
+   "name": "Living Room Ceiling Light",
+   "kind": "Ceiling Light",
+   "chip": "ESP32",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": false,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d3",
+   "name": "Bedroom Lamp",
+   "kind": "Lamp",
+   "chip": "ESP8266",
+   "firmware": "14.2.0",
+   "status": "online",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d4",
+   "name": "Office Lamp",
+   "kind": "Lamp",
+   "chip": "ESP32",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": false,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d5",
+   "name": "Hallway Dimmer",
+   "kind": "Dimmer",
+   "chip": "ESP32",
+   "firmware": "14.3.0",
+   "status": "offline",
+   "power": false,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d6",
+   "name": "Garage Ceiling Light",
+   "kind": "Ceiling Light",
+   "chip": "ESP32",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d7",
+   "name": "AtticHeaterPlugWithAReallyLongDeviceNameThatNeverHasABreakAtAll",
+   "kind": "Heater Plug",
+   "chip": "ESP32-C3",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 60,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d8",
+   "name": "Basement LED Strip",
+   "kind": "LED Strip",
+   "chip": "ESP8266",
+   "firmware": "14.2.0",
+   "status": "online",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 60,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d9",
+   "name": "Bathroom LED Strip",
+   "kind": "LED Strip",
+   "chip": "ESP8266",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": false,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d10",
+   "name": "Garden Switch",
+   "kind": "Switch",
+   "chip": "ESP8266",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": false,
+   "relays": 2,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d11",
+   "name": "Workshop Dimmer",
+   "kind": "Dimmer",
+   "chip": "ESP8266",
+   "firmware": "14.2.0",
+   "status": "online",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d12",
+   "name": "Laundry Ceiling Light",
+   "kind": "Ceiling Light",
+   "chip": "ESP8266",
+   "firmware": "13.4.0",
+   "status": "online",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d13",
+   "name": "Nursery Fan",
+   "kind": "Fan",
+   "chip": "ESP32",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 60,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d14",
+   "name": "Porch Ceiling Light",
+   "kind": "Ceiling Light",
+   "chip": "ESP8266",
+   "firmware": "14.2.0",
+   "status": "online",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d15",
+   "name": "Studio Ceiling Light",
+   "kind": "Ceiling Light",
+   "chip": "ESP8266",
+   "firmware": "14.2.0",
+   "status": "online",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d16",
+   "name": "Kitchen Switch",
+   "kind": "Switch",
+   "chip": "ESP8266",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": true,
+   "relays": 2,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d17",
+   "name": "Living Room Plug",
+   "kind": "Plug",
+   "chip": "ESP32",
+   "firmware": "14.2.0",
+   "status": "online",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d18",
+   "name": "Bedroom LED Strip",
+   "kind": "LED Strip",
+   "chip": "ESP8266",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d19",
+   "name": "Office Heater Plug",
+   "kind": "Heater Plug",
+   "chip": "ESP8266",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": false,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d20",
+   "name": "Hallway LED Strip",
+   "kind": "LED Strip",
+   "chip": "ESP32",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": false,
+   "relays": 1,
+   "telePeriod": 60,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d21",
+   "name": "Garage LED Strip",
+   "kind": "LED Strip",
+   "chip": "ESP32",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d22",
+   "name": "Attic Dimmer",
+   "kind": "Dimmer",
+   "chip": "ESP8266",
+   "firmware": "14.2.0",
+   "status": "online",
+   "power": false,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d23",
+   "name": "Basement Switch",
+   "kind": "Switch",
+   "chip": "ESP32",
+   "firmware": "13.4.0",
+   "status": "online",
+   "power": false,
+   "relays": 2,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d24",
+   "name": "Bathroom Lamp",
+   "kind": "Lamp",
+   "chip": "ESP8266",
+   "firmware": "13.4.0",
+   "status": "offline",
+   "power": false,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d25",
+   "name": "Garden Fan",
+   "kind": "Fan",
+   "chip": "ESP8266",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d26",
+   "name": "Workshop Fan",
+   "kind": "Fan",
+   "chip": "ESP32",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d27",
+   "name": "Laundry LED Strip",
+   "kind": "LED Strip",
+   "chip": "ESP32-C3",
+   "firmware": "14.2.0",
+   "status": "online",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d28",
+   "name": "Nursery Heater Plug",
+   "kind": "Heater Plug",
+   "chip": "ESP32",
+   "firmware": "14.2.0",
+   "status": "online",
+   "power": false,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d29",
+   "name": "Porch Dimmer",
+   "kind": "Dimmer",
+   "chip": "ESP8266",
+   "firmware": "14.2.0",
+   "status": "online",
+   "power": false,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d30",
+   "name": "Studio Switch",
+   "kind": "Switch",
+   "chip": "ESP8266",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": true,
+   "relays": 2,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "192.168.20.5"
+  },
+  {
+   "id": "d31",
+   "name": "Kitchen Ceiling Light",
+   "kind": "Ceiling Light",
+   "chip": "ESP32",
+   "firmware": "14.3.0",
+   "status": "unknown",
+   "power": false,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d32",
+   "name": "Living Room Dimmer",
+   "kind": "Dimmer",
+   "chip": "ESP8266",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d33",
+   "name": "Bedroom Plug",
+   "kind": "Plug",
+   "chip": "ESP32",
+   "firmware": "14.2.0",
+   "status": "online",
+   "power": false,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d34",
+   "name": "Office Heater Plug 2",
+   "kind": "Heater Plug",
+   "chip": "ESP32",
+   "firmware": "13.4.0",
+   "status": "online",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 60,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d35",
+   "name": "Hallway Heater Plug",
+   "kind": "Heater Plug",
+   "chip": "ESP8266",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d36",
+   "name": "Garage Ceiling Light 2",
+   "kind": "Ceiling Light",
+   "chip": "ESP32",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": false,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d37",
+   "name": "Attic Ceiling Light",
+   "kind": "Ceiling Light",
+   "chip": "ESP32-C3",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": false,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d38",
+   "name": "Basement Switch 2",
+   "kind": "Switch",
+   "chip": "ESP32",
+   "firmware": "14.2.0",
+   "status": "offline",
+   "power": true,
+   "relays": 2,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d39",
+   "name": "Bathroom Lamp 2",
+   "kind": "Lamp",
+   "chip": "ESP8266",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d40",
+   "name": "Garden Plug",
+   "kind": "Plug",
+   "chip": "ESP8266",
+   "firmware": "13.4.0",
+   "status": "online",
+   "power": false,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d41",
+   "name": "Workshop Switch",
+   "kind": "Switch",
+   "chip": "ESP32",
+   "firmware": "14.2.0",
+   "status": "online",
+   "power": true,
+   "relays": 2,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d42",
+   "name": "Laundry Lamp",
+   "kind": "Lamp",
+   "chip": "ESP8266",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": false,
+   "relays": 1,
+   "telePeriod": 60,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d43",
+   "name": "Nursery Heater Plug 2",
+   "kind": "Heater Plug",
+   "chip": "ESP32-C3",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": false,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d44",
+   "name": "Porch Ceiling Light 2",
+   "kind": "Ceiling Light",
+   "chip": "ESP8266",
+   "firmware": "13.4.0",
+   "status": "online",
+   "power": false,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d45",
+   "name": "Studio Fan",
+   "kind": "Fan",
+   "chip": "ESP8266",
+   "firmware": "13.4.0",
+   "status": "online",
+   "power": false,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d46",
+   "name": "Kitchen Dimmer",
+   "kind": "Dimmer",
+   "chip": "ESP8266",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": false,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d47",
+   "name": "Living Room Dimmer 2",
+   "kind": "Dimmer",
+   "chip": "ESP8266",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d48",
+   "name": "Bedroom LED Strip 2",
+   "kind": "LED Strip",
+   "chip": "ESP32",
+   "firmware": "14.2.0",
+   "status": "online",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d49",
+   "name": "Office Dimmer",
+   "kind": "Dimmer",
+   "chip": "ESP8266",
+   "firmware": "14.2.0",
+   "status": "offline",
+   "power": false,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d50",
+   "name": "Hallway Heater Plug 2",
+   "kind": "Heater Plug",
+   "chip": "ESP32",
+   "firmware": "14.2.0",
+   "status": "online",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d51",
+   "name": "Garage Ceiling Light 3",
+   "kind": "Ceiling Light",
+   "chip": "ESP8266",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d52",
+   "name": "Attic Fan",
+   "kind": "Fan",
+   "chip": "ESP8266",
+   "firmware": "14.2.0",
+   "status": "online",
+   "power": false,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d53",
+   "name": "Basement Fan",
+   "kind": "Fan",
+   "chip": "ESP32-C3",
+   "firmware": "14.2.0",
+   "status": "unknown",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d54",
+   "name": "Bathroom Dimmer",
+   "kind": "Dimmer",
+   "chip": "ESP8266",
+   "firmware": "13.4.0",
+   "status": "online",
+   "power": false,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d55",
+   "name": "Garden LED Strip",
+   "kind": "LED Strip",
+   "chip": "ESP32",
+   "firmware": "14.2.0",
+   "status": "online",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d56",
+   "name": "Workshop Dimmer 2",
+   "kind": "Dimmer",
+   "chip": "ESP8266",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": false,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d57",
+   "name": "Laundry Switch",
+   "kind": "Switch",
+   "chip": "ESP8266",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": true,
+   "relays": 2,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d58",
+   "name": "Nursery Plug",
+   "kind": "Plug",
+   "chip": "ESP8266",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": false,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d59",
+   "name": "Porch Ceiling Light 3",
+   "kind": "Ceiling Light",
+   "chip": "ESP8266",
+   "firmware": "14.3.0",
+   "status": "online",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  },
+  {
+   "id": "d60",
+   "name": "Studio LED Strip",
+   "kind": "LED Strip",
+   "chip": "ESP32",
+   "firmware": "14.2.0",
+   "status": "online",
+   "power": true,
+   "relays": 1,
+   "telePeriod": 300,
+   "powerOnState": 3,
+   "mqttHost": "mqtt.lab.home"
+  }
+ ],
+ "rules": [
+  {
+   "id": 4,
+   "name": "Sensors report every minute",
+   "key": "TelePeriod",
+   "val": "60",
+   "scope": "Named devices",
+   "named": [
+    "d8",
+    "d13",
+    "d20"
+   ],
+   "exc": [],
+   "sev": "Advisory",
+   "enabled": true,
+   "note": "Climate sensors feed the heating automation."
+  },
+  {
+   "id": 1,
+   "name": "Telemetry every 5 minutes",
+   "key": "TelePeriod",
+   "val": "300",
+   "scope": "All devices",
+   "exc": [
+    "d34"
+   ],
+   "sev": "Required",
+   "enabled": true,
+   "note": "Keeps MQTT traffic low."
+  },
+  {
+   "id": 2,
+   "name": "Plugs restore last power state",
+   "key": "PowerOnState",
+   "val": "3",
+   "scope": "Device group: Plugs",
+   "exc": [],
+   "sev": "Required",
+   "enabled": true,
+   "note": ""
+  },
+  {
+   "id": 3,
+   "name": "Use the lab MQTT broker",
+   "key": "MqttHost",
+   "val": "mqtt.lab.home",
+   "scope": "All devices",
+   "exc": [],
+   "sev": "Advisory",
+   "enabled": true,
+   "note": "Old broker 192.168.20.5 is being retired."
+  },
+  {
+   "id": 5,
+   "name": "ESP32 status LED off",
+   "key": "LedState",
+   "val": "0",
+   "scope": "Chip family: ESP32",
+   "exc": [],
+   "sev": "Advisory",
+   "enabled": false,
+   "note": "Paused while testing the new LED firmware."
+  }
+ ],
+ "backups": [
+  {
+   "id": "b1",
+   "date": "22 Oct 2026, 09:41",
+   "trigger": "Before update",
+   "fw": "14.2.0",
+   "size": "4.1 KB"
+  },
+  {
+   "id": "b2",
+   "date": "15 Oct 2026, 03:00",
+   "trigger": "Scheduled",
+   "fw": "14.2.0",
+   "size": "4.1 KB"
+  },
+  {
+   "id": "b3",
+   "date": "8 Oct 2026, 03:00",
+   "trigger": "Scheduled",
+   "fw": "14.2.0",
+   "size": "4.0 KB"
+  },
+  {
+   "id": "b4",
+   "date": "12 Sep 2026, 18:22",
+   "trigger": "Manual",
+   "fw": "14.1.0",
+   "size": "3.9 KB"
+  }
+ ],
+ "users": [
+  {
+   "id": "u1",
+   "name": "Maren Koch",
+   "user": "maren",
+   "email": "maren@lab.home",
+   "role": "Admin",
+   "src": "sso",
+   "srcL": "SSO · Authentik",
+   "active": true,
+   "last": "Active now",
+   "sess": 2,
+   "created": "12 Jan 2026",
+   "lastIn": "Today, 07:58"
+  },
+  {
+   "id": "u2",
+   "name": "Jonas Weber",
+   "user": "jonas",
+   "email": "jonas@lab.home",
+   "role": "Operator",
+   "src": "sso",
+   "srcL": "SSO · Authentik",
+   "active": true,
+   "last": "2 h ago",
+   "sess": 1,
+   "created": "3 Mar 2026",
+   "lastIn": "Today, 07:12"
+  },
+  {
+   "id": "u3",
+   "name": "Ali Demir",
+   "user": "ali",
+   "email": "ali@lab.home",
+   "role": "Operator",
+   "src": "local",
+   "srcL": "Local",
+   "active": true,
+   "last": "Never signed in",
+   "sess": 0,
+   "pending": true,
+   "created": "20 Oct 2026",
+   "lastIn": "Never"
+  },
+  {
+   "id": "u4",
+   "name": "Hallway tablet",
+   "user": "kiosk-hallway",
+   "email": "—",
+   "role": "Operator",
+   "src": "header",
+   "srcL": "Proxy header · Remote-User",
+   "active": true,
+   "last": "4 min ago",
+   "sess": 1,
+   "created": "14 May 2026",
+   "lastIn": "Today, 09:38"
+  },
+  {
+   "id": "u5",
+   "name": "admin",
+   "user": "admin",
+   "email": "—",
+   "role": "Admin",
+   "src": "local",
+   "srcL": "Local · fallback",
+   "active": false,
+   "last": "Deactivated 3 Oct",
+   "sess": 0,
+   "created": "12 Jan 2026",
+   "lastIn": "28 Sep 2026"
+  }
+ ],
+ "scan": [
+  {
+   "ip": "192.168.20.88",
+   "host": "tasmota-5F3A21-6689",
+   "module": "Sonoff Basic R4",
+   "fw": "14.3.0",
+   "chip": "ESP32-C3"
+  },
+  {
+   "ip": "192.168.20.91",
+   "host": "tasmota-0B77E2-1123",
+   "module": "Gosund SP111",
+   "fw": "13.4.0",
+   "chip": "ESP8266"
+  },
+  {
+   "ip": "192.168.20.94",
+   "host": "tasmota-C2A410-0047",
+   "module": "Shelly Plus 1",
+   "fw": "14.2.0",
+   "chip": "ESP32"
+  },
+  {
+   "ip": "192.168.20.97",
+   "host": "tasmota-9911AF-3310",
+   "module": "Generic",
+   "fw": "12.5.0",
+   "chip": "ESP8266"
+  }
+ ],
+ "proposals": [
+  {
+   "id": "p1",
+   "name": "Shed Light",
+   "host": "tasmota-5F3A21-6689",
+   "ip": "192.168.20.88",
+   "mac": "b8:d6:1a:5f:3a:21",
+   "via": "mqtt",
+   "status": "new"
+  },
+  {
+   "id": "p2",
+   "name": "Guest Room Plug",
+   "host": "tasmota-0B77E2-1123",
+   "ip": "192.168.20.91",
+   "mac": "b8:d6:1a:70:57:28",
+   "via": "scan",
+   "status": "new"
+  },
+  {
+   "id": "p3",
+   "name": "Pool Pump Switch",
+   "host": "tasmota-C2A410-0047",
+   "ip": "192.168.20.94",
+   "mac": "b8:d6:1a:81:74:2f",
+   "via": "mqtt",
+   "status": "new"
+  },
+  {
+   "id": "p4",
+   "name": "Old Sonoff",
+   "host": "tasmota-9911AF-3310",
+   "ip": "192.168.20.97",
+   "mac": "b8:d6:1a:92:91:36",
+   "via": "scan",
+   "status": "ignored"
+  },
+  {
+   "id": "p5",
+   "name": "",
+   "host": "tasmota-77C0DE-2210",
+   "ip": "192.168.20.99",
+   "mac": "b8:d6:1a:a3:ae:3d",
+   "via": "mqtt",
+   "status": "ignored"
+  }
+ ],
+ "moves": [
+  {
+   "id": "m1",
+   "device": "d12",
+   "address": "192.168.20.112",
+   "via": "mqtt"
+  },
+  {
+   "id": "m2",
+   "device": "d7",
+   "address": "192.168.20.127",
+   "via": "scan"
+  }
+ ],
+ "transaction": {
+  "id": "TX-0143",
+  "release": "14.3.0",
+  "selected": "d48",
+  "devices": [
+   {
+    "id": "d22",
+    "name": "Attic Dimmer",
+    "from": "14.2.0",
+    "state": "done"
+   },
+   {
+    "id": "d52",
+    "name": "Attic Fan",
+    "from": "14.2.0",
+    "state": "done"
+   },
+   {
+    "id": "d8",
+    "name": "Basement LED Strip",
+    "from": "14.2.0",
+    "state": "done"
+   },
+   {
+    "id": "d23",
+    "name": "Basement Switch",
+    "from": "13.4.0",
+    "state": "done"
+   },
+   {
+    "id": "d54",
+    "name": "Bathroom Dimmer",
+    "from": "13.4.0",
+    "state": "done"
+   },
+   {
+    "id": "d48",
+    "name": "Bedroom LED Strip 2",
+    "from": "14.2.0",
+    "state": "failed"
+   },
+   {
+    "id": "d3",
+    "name": "Bedroom Lamp",
+    "from": "14.2.0",
+    "state": "flashing"
+   },
+   {
+    "id": "d33",
+    "name": "Bedroom Plug",
+    "from": "14.2.0",
+    "state": "downloading"
+   },
+   {
+    "id": "d55",
+    "name": "Garden LED Strip",
+    "from": "14.2.0",
+    "state": "downloading"
+   },
+   {
+    "id": "d40",
+    "name": "Garden Plug",
+    "from": "13.4.0",
+    "state": "queued"
+   },
+   {
+    "id": "d50",
+    "name": "Hallway Heater Plug 2",
+    "from": "14.2.0",
+    "state": "queued"
+   },
+   {
+    "id": "d12",
+    "name": "Laundry Ceiling Light",
+    "from": "13.4.0",
+    "state": "queued"
+   }
+  ]
+ }
+}

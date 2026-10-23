@@ -1,0 +1,177 @@
+package web
+
+import (
+	"strconv"
+
+	"github.com/nofuturekid/tasmofleet/internal/auth"
+	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+)
+
+// The user detail page and the one-time password page (design v2 screens user-u1..u5 and userotp,
+// N4), in the app shell.
+
+templ userDetailPage(v userDetailView) {
+	<div class="ud-head">
+		@ui.Avatar(v.Avatar, v.D.User.Subject)
+		<div class="ud-who">
+			<h1>
+				<span>{ v.Title }</span>
+				if v.Role != "" {
+					@ui.Badge(roleTone(v.D.User.Role == "admin"), v.Role)
+				}
+				if v.Self {
+					@ui.Badge(ui.ToneNeutral, "You")
+				}
+				if v.D.User.Disabled {
+					@ui.Badge(ui.ToneNeutral, "Deactivated")
+				}
+				if v.D.User.MustChangePassword {
+					@ui.Badge(ui.ToneWarn, "Must change password")
+				}
+			</h1>
+			<p class="ud-sub">{ v.Sub }</p>
+		</div>
+	</div>
+	<div class="btn-row ud-acts" aria-label="User actions" role="group">
+		// Only Delete… (the menu's last item, after its rule) reads red, as in the prototype;
+		// Deactivate is a danger in its dialog only.
+		for _, a := range v.Actions {
+			if a.Disabled {
+				<button type="button" class={ "btn", templ.KV("ud-danger", a.Danger && a.Sep) } disabled title={ a.Why }>{ a.Label }</button>
+			} else {
+				<a class={ "btn", templ.KV("ud-danger", a.Danger && a.Sep) } href={ templ.SafeURL(a.Href) } data-dialog={ a.Dialog }>{ a.Label }</a>
+			}
+		}
+	</div>
+	if v.Why != "" {
+		<p class="ud-why">{ v.Why }</p>
+	}
+	@usersBanners(auth.UsersPageData{Notice: v.D.Notice, Error: v.D.Error, ErrField: v.D.ErrField, ViewOnly: v.D.ViewOnly})
+	if v.D.User.Disabled {
+		<div class="banner tone-neutral ud-off" role="status">
+			<span class="banner-dot"></span>
+			<div class="banner-text"><b>Deactivated.</b> Can’t sign in; all sessions were ended.</div>
+			if v.Reactivate != nil {
+				<a class="banner-btn" href={ templ.SafeURL(v.Reactivate.Href) } data-dialog={ v.Reactivate.Dialog }>Reactivate</a>
+			}
+		</div>
+	}
+	if v.Info != "" {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Text: v.Info})
+	}
+	<div class="ud-grid">
+		<section class="ucard ud-details" aria-labelledby="ud-details-h">
+			<h2 id="ud-details-h">Details</h2>
+			@ui.KV(v.Facts)
+			if v.D.User.Method == auth.MethodLocal && v.D.Guards.Profile.Allowed && !v.D.ViewOnly {
+				<details class="fold ud-edit" open?={ v.ProfileOpen }>
+					<summary>Edit name and email</summary>
+					<form class="acct-form" method="post" action={ templ.SafeURL(v.LocalAction) }>
+						<input type="hidden" name="csrf" value={ v.D.CSRFToken }/>
+						<input type="hidden" name="action" value="profile"/>
+						<input type="hidden" name="from" value="detail"/>
+						@ui.Field(ui.FieldData{Label: "Name", Name: "display_name", Value: v.D.DisplayName, Autocomplete: "off", Error: fieldErr(v.D.ErrField, "display_name", v.D.Error), Autofocus: focus(v.D.ErrField, "display_name", false)})
+						@ui.Field(ui.FieldData{Label: "Email (optional)", Name: "email", Type: "email", Value: v.D.Email, Autocomplete: "off", Error: fieldErr(v.D.ErrField, "email", v.D.Error), Autofocus: focus(v.D.ErrField, "email", false)})
+						@udSubmit(v, "Save profile")
+					</form>
+				</details>
+			}
+			if v.D.User.Method == auth.MethodLocal && v.D.Guards.Reset.Allowed && !v.D.ViewOnly {
+				<details class="fold ud-edit" open?={ v.PasswordOpen }>
+					<summary>Set a password instead</summary>
+					<form class="acct-form" method="post" action={ templ.SafeURL(v.LocalAction) }>
+						<input type="hidden" name="csrf" value={ v.D.CSRFToken }/>
+						<input type="hidden" name="action" value="password"/>
+						<input type="hidden" name="from" value="detail"/>
+						@ui.Field(ui.FieldData{Label: "New password", Name: "password", Type: "password", Autocomplete: "new-password", Help: "At least " + strconv.Itoa(auth.PasswordMinLength) + " characters. You tell them yourself; they change it at the next sign-in.", Error: fieldErr(v.D.ErrField, "password", v.D.Error), Autofocus: focus(v.D.ErrField, "password", false)})
+						@udSubmit(v, "Set password")
+					</form>
+				</details>
+			}
+		</section>
+		<section class="ulist ud-sessions" aria-labelledby="ud-sessions-h">
+			<div class="ulist-head"><h2 id="ud-sessions-h">Active sessions</h2></div>
+			if len(v.Sessions) == 0 {
+				<p class="ud-none">No active sessions.</p>
+			}
+			for _, s := range v.Sessions {
+				<div class="ud-row">
+					<div class="ud-row-t">
+						<span class="ud-row-main">Signed in <time datetime={ s.StartedAt }>{ s.Started }</time></span>
+						<span class="ud-row-sub mono">
+							last active <time datetime={ s.SeenAt }>{ s.Seen }</time>
+							if s.Current {
+								{ " · this session" }
+							}
+						</span>
+					</div>
+					if !s.Current && !v.D.ViewOnly {
+						<form method="post" action={ templ.SafeURL(v.D.BasePath + "/users/sessions") } class="ud-end">
+							<input type="hidden" name="csrf" value={ v.D.CSRFToken }/>
+							<input type="hidden" name="subject" value={ v.D.User.Subject }/>
+							<input type="hidden" name="session" value={ s.ID }/>
+							if v.StepUp != nil {
+								<a class="btn" href={ templ.SafeURL(v.D.BasePath + detailPath(v.D.User)) } data-dialog={ v.StepUp.ID }>End session</a>
+							} else {
+								<button type="submit" class="btn">End session</button>
+							}
+						</form>
+					}
+				</div>
+			}
+		</section>
+		<section class="ulist ud-activity" aria-labelledby="ud-activity-h">
+			<div class="ulist-head">
+				<h2 id="ud-activity-h">Recent activity</h2>
+				<a class="btn btn-link" href={ templ.SafeURL(v.AuditHref) }>Audit log</a>
+			</div>
+			if len(v.Activity) == 0 {
+				<p class="ud-none">Nothing recorded yet.</p>
+			}
+			for _, a := range v.Activity {
+				<div class="ud-act">
+					<time class="ud-act-when mono" datetime={ a.At }>{ a.When }</time>
+					<span class="ud-act-what mono">{ a.Action }</span>
+					<span class="ud-act-sum">{ a.Summary }</span>
+					@ui.Badge(a.Tone, a.Status)
+				</div>
+			}
+		</section>
+	</div>
+	for _, dlg := range v.Dialogs {
+		@ui.Dialog(dlg)
+	}
+	if v.StepUp != nil {
+		@ui.StepUp(*v.StepUp)
+	}
+}
+
+// udSubmit is the submit of a fold's form: while changes need a step-up it opens that dialog.
+templ udSubmit(v userDetailView, label string) {
+	if v.StepUp != nil {
+		<a class="btn" href={ templ.SafeURL(v.D.BasePath + detailPath(v.D.User)) } data-dialog={ v.StepUp.ID }>{ label }</a>
+	} else {
+		<button type="submit" class="btn">{ label }</button>
+	}
+}
+
+// otpPage shows a generated password once: the value with a copy button, the username, when it
+// expires, the warning that it cannot be shown again, and Done (the user's page).
+templ otpPage(o otpView) {
+	if o.D.Created {
+		@ui.PageHeader("Account created for "+o.D.User, "Give them this one-time password. It’s shown only once and expires in 24 hours.")
+	} else {
+		@ui.PageHeader("Password reset for "+o.D.User, "Give them this one-time password. It’s shown only once and expires in 24 hours.")
+	}
+	<section class="ucard otp-card" aria-label="One-time password">
+		<div class="otp-value">
+			<output id="otp-value" class="mono" data-visual-mask>{ o.D.Password }</output>
+			<button type="button" class="btn btn-primary" data-copy-from="#otp-value" hidden>Copy</button>
+		</div>
+		@ui.KV([]ui.KVRow{{Key: "Username", Value: o.D.User, Mono: true}, {Key: "Expires", Value: o.Expires, Mask: true}})
+		@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: "Once you leave this page the password can’t be shown again. Reset it to get a new one."})
+	</section>
+	<div class="otp-foot">
+		<a class="btn btn-primary" href={ templ.SafeURL(o.Detail) }>Done</a>
+	</div>
+}

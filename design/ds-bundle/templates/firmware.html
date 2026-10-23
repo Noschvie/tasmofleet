@@ -1,0 +1,90 @@
+<!-- @dsCard group="Templates" name="Firmware" subtitle="Releases with coverage, cached files with selection and bulk delete" viewport="640x640" -->
+<!doctype html>
+<html lang="en" data-theme-auto>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>tasmofleet DS — Firmware</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <script src="../theme.js"></script>
+    <style>
+      /* Demo scaffolding only: theme switch under the page. */
+      .demo-foot { max-width: var(--container); margin: 0 auto; padding: 0 var(--page-pad) var(--space-8);
+        display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); color: var(--color-text-2); font-size: 12px; }
+    </style>
+  </head>
+  <body>
+<header class="top">
+<a class="brand" href="dashboard.html"><img src="../assets/logo.svg" alt="" width="26" height="26">tasmofleet</a>
+<nav aria-label="Main" class="mainnav">
+<a class="navtop" href="dashboard.html">Dashboard</a>
+<details class="navgroup"><summary class="navtop">Devices</summary>
+<div class="menu"><a href="devices.html">Devices</a><a href="#">Add devices</a><a href="#">Policy</a></div></details>
+<details class="navgroup"><summary class="navtop is-active">Updates</summary>
+<div class="menu"><a href="#">New transaction</a><a href="#">Transactions</a><a href="firmware.html" aria-current="page">Firmware</a></div></details>
+<details class="navgroup"><summary class="navtop">System</summary>
+<div class="menu right"><a href="#">Settings</a><a href="#">Users</a><a href="#">Audit</a><a href="#">About</a></div></details>
+</nav>
+<div class="user">
+<details class="navgroup"><summary class="who">alice <small>(admin)</small></summary>
+<div class="menu right"><a href="#">Change password</a></div></details>
+<form method="post" action="#"><button type="submit" class="sm">Sign out</button></form>
+</div>
+</header>
+<main>
+<div class="page-head"><h1>Firmware</h1><div class="actions"><button class="primary"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>Refresh index</button></div></div>
+<section class="card" aria-labelledby="rel-h"><h2 id="rel-h">Upstream releases</h2>
+<p class="muted">Last refresh: 2 hours ago.</p>
+<p>Recommended release: <strong>16.0.0</strong> (latest stable). 6 of 27 devices run an older version.</p>
+<table class="reltable dense"><thead><tr><th>Release</th><th>Files</th><th>Fleet</th><th>Coverage</th><th class="end"><span class="sr-only">Actions</span></th></tr></thead><tbody>
+<tr><td data-label="Release" class="p1"><a href="#"><strong>16.0.0</strong></a> <span class="badge accent">recommended</span></td><td data-label="Files" class="s m-hide">64</td>
+<td data-label="Fleet" class="s">6 to update</td><td data-label="Coverage" class="m-hide">4 of 5 needed files cached <button type="submit" class="sm">Prefetch for my fleet</button><br><small class="error">not offered upstream: tasmota-ir.bin.gz</small></td>
+<td class="rowact"><details class="rowmenu"><summary class="button sm">Actions</summary><div class="rowmenu-body"><a href="#">Changelog and fleet</a><button type="button">Prefetch for my fleet</button></div></details></td></tr>
+<tr><td data-label="Release" class="p1"><a href="#"><strong>15.1.0</strong></a></td><td data-label="Files" class="s m-hide">61</td>
+<td data-label="Fleet" class="s">2 to update</td><td data-label="Coverage" class="m-hide"><span class="badge tone-ok">All 3 needed files cached</span></td>
+<td class="rowact"><details class="rowmenu"><summary class="button sm">Actions</summary><div class="rowmenu-body"><a href="#">Changelog and fleet</a><button type="button">Prefetch for my fleet</button></div></details></td></tr>
+<tr><td data-label="Release" class="p1"><a href="#"><strong>15.0.1</strong></a></td><td data-label="Files" class="s m-hide">61</td>
+<td data-label="Fleet" class="s">1 to update</td><td data-label="Coverage" class="m-hide"><span class="muted">no device needs a file</span></td>
+<td class="rowact"><details class="rowmenu"><summary class="button sm">Actions</summary><div class="rowmenu-body"><a href="#">Changelog and fleet</a><button type="button">Prefetch for my fleet</button></div></details></td></tr>
+<tr class="rel-old"><td data-label="Release" class="p1"><a href="#"><strong>14.6.0</strong></a></td><td data-label="Files" class="s m-hide">58</td>
+<td data-label="Fleet" class="s"><span class="muted">none to update</span></td><td data-label="Coverage" class="m-hide"><span class="muted">no device needs a file</span></td>
+<td class="rowact"><details class="rowmenu"><summary class="button sm">Actions</summary><div class="rowmenu-body"><a href="#">Changelog and fleet</a><button type="button">Prefetch for my fleet</button></div></details></td></tr>
+</tbody></table></section>
+<section class="card" aria-labelledby="custom-h"><details class="m-fold fold-h"><summary><h2 id="custom-h">Custom images</h2></summary><p>…</p></details></section>
+<section class="card" aria-labelledby="cache-h"><details class="m-fold fold-h" open><summary><h2 id="cache-h">Cached files</h2></summary>
+<p>6 files, 5.8 MiB in total. 4 not needed by any transaction (3.3 MiB).</p>
+<form id="fwsel" method="post" action="#">
+<div class="toolbar" role="group" aria-label="Selection"><button type="button" class="sm">Select unused</button><button type="button" class="sm">Select none</button><span class="muted" aria-live="polite">2 selected</span></div>
+<div class="table-scroll"><table class="dense"><thead><tr><th class="sel"><label class="hit"><input type="checkbox" aria-label="Select all deletable files"></label></th><th>Release</th><th>File</th><th>Chip / variant</th><th>Size</th><th>Cached</th><th>Installed on</th><th>Needed by</th><th>SHA-256</th><th class="end">Action</th></tr></thead><tbody>
+<tr><td data-label="Select" class="sel"><label class="hit"><input type="checkbox" aria-label="Select 16.0.0 tasmota.bin.gz" disabled title="Needed by transaction #42"></label></td>
+<td data-label="Release" class="s">16.0.0</td><td data-label="File" class="p1">tasmota.bin.gz</td><td data-label="Chip / variant" class="s">ESP8266 / tasmota</td>
+<td data-label="Size" class="p2">612 KiB</td><td data-label="Cached" class="s">2 h ago</td><td data-label="Installed on" class="s"><a href="#">Balcony Windowsill, Office Desk Lamp, +9</a></td>
+<td data-label="Needed by" class="s"><a href="#">#42</a></td><td data-label="SHA-256" class="hash m-hide"><code>8f704806dbedeaaeca33</code></td><td data-label="Action" class="end s"><span class="muted">needed</span></td></tr>
+<tr class="is-selected"><td data-label="Select" class="sel"><label class="hit"><input type="checkbox" aria-label="Select 16.0.0 tasmota32.bin" checked></label></td>
+<td data-label="Release" class="s">16.0.0</td><td data-label="File" class="p1">tasmota32.bin</td><td data-label="Chip / variant" class="s">ESP32 / tasmota32</td>
+<td data-label="Size" class="p2">1.9 MiB</td><td data-label="Cached" class="s">2 h ago</td><td data-label="Installed on" class="s"><a href="#">Office Monitor Alice, +7</a></td>
+<td data-label="Needed by" class="s"><span class="muted">none</span></td><td data-label="SHA-256" class="hash m-hide"><code>ff4f17d21930e36d6d93</code></td><td data-label="Action" class="end s"><a class="button sm danger" href="#">Delete…</a></td></tr>
+<tr class="is-selected"><td data-label="Select" class="sel"><label class="hit"><input type="checkbox" aria-label="Select 15.1.0 tasmota.bin.gz" checked></label></td>
+<td data-label="Release" class="s">15.1.0</td><td data-label="File" class="p1">tasmota.bin.gz</td><td data-label="Chip / variant" class="s">ESP8266 / tasmota</td>
+<td data-label="Size" class="p2">598 KiB</td><td data-label="Cached" class="s">48 d ago</td><td data-label="Installed on" class="s"><a href="#">Kitchen Counter, TV Backlight, +9</a></td>
+<td data-label="Needed by" class="s"><span class="muted">none</span></td><td data-label="SHA-256" class="hash m-hide"><code>1c2b9a0f77e3aa01b2c4</code></td><td data-label="Action" class="end s"><a class="button sm danger" href="#">Delete…</a></td></tr>
+<tr><td data-label="Select" class="sel"><label class="hit"><input type="checkbox" aria-label="Select 15.1.0 tasmota-minimal.bin.gz"></label></td>
+<td data-label="Release" class="s">15.1.0</td><td data-label="File" class="p1">tasmota-minimal.bin.gz</td><td data-label="Chip / variant" class="s">ESP8266 / minimal</td>
+<td data-label="Size" class="p2">254 KiB</td><td data-label="Cached" class="s">48 d ago</td><td data-label="Installed on" class="s"><span class="muted">none</span></td>
+<td data-label="Needed by" class="s"><span class="muted">none</span></td><td data-label="SHA-256" class="hash m-hide"><code>5e9d03b1c6f2a8d4e7f0</code></td><td data-label="Action" class="end s"><a class="button sm danger" href="#">Delete…</a></td></tr>
+<tr><td data-label="Select" class="sel"><label class="hit"><input type="checkbox" aria-label="Select 15.0.1 tasmota.bin.gz"></label></td>
+<td data-label="Release" class="s">15.0.1</td><td data-label="File" class="p1">tasmota.bin.gz</td><td data-label="Chip / variant" class="s">ESP8266 / tasmota</td>
+<td data-label="Size" class="p2">596 KiB</td><td data-label="Cached" class="s">71 d ago</td><td data-label="Installed on" class="s"><a href="#">Garden Pump</a></td>
+<td data-label="Needed by" class="s"><span class="muted">none</span></td><td data-label="SHA-256" class="hash m-hide"><code>0a7c4e9b2d1f3a6c8e5b</code></td><td data-label="Action" class="end s"><a class="button sm danger" href="#">Delete…</a></td></tr>
+<tr><td data-label="Select" class="sel"><label class="hit"><input type="checkbox" aria-label="Select 16.0.0 tasmota32c3.bin"></label></td>
+<td data-label="Release" class="s">16.0.0</td><td data-label="File" class="p1">tasmota32c3.bin</td><td data-label="Chip / variant" class="s">ESP32-C3 / tasmota32c3</td>
+<td data-label="Size" class="p2">1.8 MiB</td><td data-label="Cached" class="s">2 h ago</td><td data-label="Installed on" class="s"><a href="#">Server Rack Fan</a></td>
+<td data-label="Needed by" class="s"><span class="muted">none</span></td><td data-label="SHA-256" class="hash m-hide"><code>c3d2e1f0a9b8c7d6e5f4</code></td><td data-label="Action" class="end s"><a class="button sm danger" href="#">Delete…</a></td></tr>
+</tbody></table></div>
+<div class="bulkbar" data-bulkbar role="region" aria-label="Selected files"><span class="bulk-count"><strong data-bar-count>2</strong> selected</span><button type="button" class="ghost">Clear selection</button><button type="submit" class="danger">Delete selected…</button></div>
+</form></details></section>
+<section class="card" aria-labelledby="fetch-h"><details class="m-fold fold-h"><summary><h2 id="fetch-h">Prefetch a file</h2></summary><p>…</p></details></section>
+</main>
+<div class="demo-foot"><span>tasmofleet DS template, sample data</span><div class="theme-switch" role="group" aria-label="Theme"><button type="button" class="sm" data-theme-set="system">Auto</button><button type="button" class="sm" data-theme-set="light">Light</button><button type="button" class="sm" data-theme-set="dark">Dark</button></div></div>
+  </body>
+</html>

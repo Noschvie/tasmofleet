@@ -1,0 +1,108 @@
+package web
+
+import "github.com/nofuturekid/tasmofleet/internal/web/ui"
+
+// noticePage is the result of an action that has no page of its own: a refusal, "nothing
+// to do", a started transaction. Kept without a prototype screen (plan 3.3): the page header,
+// one card with the sentence, the devices left out and the ways on.
+templ noticePage(base, title string, m messageData) {
+	@ui.PageHeader(title, "")
+	<section class="ucard confirm-card">
+		<p>
+			if m.LinkLead {
+				<a href={ templ.SafeURL(base + m.Link) }>{ m.LinkText }</a>{ " " + m.Text }
+			} else {
+				{ m.Text }
+			}
+			if m.Code != "" {
+				{ " Set it as " }<code>{ m.Code }</code>{ " or in the system settings." }
+			}
+		</p>
+		if len(m.Left) > 0 {
+			<ul>
+				for _, l := range m.Left {
+					<li><strong>{ l.Name }</strong>: { l.Reason }</li>
+				}
+			</ul>
+		}
+		@ui.ButtonRow() {
+			if m.LinkLead {
+				@ui.Button(ui.Btn{Label: "Open the transaction", Kind: "primary", Href: base + m.Link})
+				@ui.Button(ui.Btn{Label: "Go to the dashboard", Href: base + "/"})
+			} else if m.LinkPrimary {
+				@ui.Button(ui.Btn{Label: m.LinkText, Kind: "primary", Href: base + m.Link})
+				@ui.Button(ui.Btn{Label: "Go to the dashboard", Href: base + "/"})
+			} else {
+				@ui.Button(ui.Btn{Label: "Go to the dashboard", Kind: "primary", Href: base + "/"})
+				if m.Link != "" {
+					@ui.Button(ui.Btn{Label: m.LinkText, Href: base + m.Link})
+				}
+			}
+		}
+	</section>
+}
+
+// retryRow is a device of the retry page with its last result.
+type retryRow struct {
+	ID                 string
+	Name, Target       string
+	Tone, State, Hint  string
+	Reason, ReasonTip string
+}
+
+// retryView is /transactions/{id}/retry: which devices a new transaction retries, and the
+// confirmation of a destructive command.
+type retryView struct {
+	Base, CSRF  string
+	Title       string // "Retry failed devices", "Retry device"
+	Batch       string
+	Error       string
+	Consequence string
+	Token       string
+	Lead        string // the plural line, "A new transaction retries 2 devices."
+	Info        string // what the retry does, per kind
+	Count       string // "2 devices"
+	Rows        []retryRow
+}
+
+// retryPageView: kept without a prototype screen (plan 3.3), built like the confirmation pages.
+templ retryPageView(p retryView) {
+	@ui.PageHeader(p.Title, "")
+	if p.Error != "" {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: p.Error, Action: &ui.Btn{Label: "Back to the transaction", Href: p.Base + "/transactions/" + p.Batch}})
+	} else {
+		<section class="ucard confirm-card" aria-labelledby="retry-h">
+			<h2 id="retry-h">Retry</h2>
+			<form method="post" action={ templ.SafeURL(p.Base + "/transactions/" + p.Batch + "/retry") } class="stack wide">
+				<input type="hidden" name="csrf" value={ p.CSRF }/>
+				if p.Consequence != "" {
+					<p class="warning" role="status">{ p.Consequence }</p>
+					<input type="hidden" name="token" value={ p.Token }/>
+				}
+				<p class="udlg-body">{ p.Lead } { p.Info }</p>
+				<table class="dense" data-table="transaction_retry">
+					<thead><tr><th>Device</th><th>Target</th><th>Last result</th></tr></thead>
+					<tbody>
+						for _, r := range p.Rows {
+							<tr>
+								<td data-label="Device" class="p1">{ r.Name }<input type="hidden" name="id" value={ r.ID }/></td>
+								<td data-label="Target" class="s">{ r.Target }</td>
+								<td data-label="Last result" class="p2">
+									<span class={ "bdg", r.Tone } title={ r.Hint }>{ r.State }</span>
+									if r.Reason != "" {
+										{ " " }
+										<small class="muted keep"><span class="reason" title={ r.ReasonTip }>{ r.Reason }</span></small>
+									}
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+				<div class="udlg-foot">
+					<a class="btn btn-ghost" href={ templ.SafeURL(p.Base + "/transactions/" + p.Batch) }>Cancel</a>
+					<button type="submit" class="btn btn-primary">Start retry of { p.Count }</button>
+				</div>
+			</form>
+		</section>
+	}
+}
