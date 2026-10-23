@@ -132,6 +132,14 @@ jobs:
           # to the other packages. Hosted runners of private repositories
           # have two cores, so the auth halves need more than go test's
           # default 10 minute timeout.
+          export CGO_ENABLED=1
+          if [ "$(nproc)" -lt 4 ]; then
+            # Two cores (private repositories): three parallel race runs
+            # oversubscribe the runner and make timing-sensitive tests flaky.
+            go test -race -count=1 -timeout 40m ./...
+            make build
+            exit 0
+          fi
           others=$(go list ./... | grep -v '/internal/auth$')
           names=$(go test -list '.*' ./internal/auth | grep '^Test')
           h1=$(echo "$names" | awk 'NR%2==1' | paste -sd'|')
@@ -209,7 +217,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.lane == 'full'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     container:
       # Browsers in this image match @playwright/test in e2e/package.json; bump both together.
       image: mcr.microsoft.com/playwright:v1.64.1-noble
@@ -235,7 +243,10 @@ jobs:
         env:
           CI: "true"
         run: |
-          n=$(nproc); [ "$n" -lt 2 ] && n=2
+          # One worker per two cores: every worker runs its own app, simulator
+          # fleet and browser, and more made layout and timing tests flaky on
+          # two-core runners.
+          n=$(( $(nproc) / 2 )); [ "$n" -lt 1 ] && n=1
           E2E_WORKERS=$n make e2e
       - name: upload Playwright report on failure
         if: failure()
