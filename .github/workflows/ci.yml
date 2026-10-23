@@ -1,5 +1,7 @@
 # CI for tasmofleet on GitHub-hosted runners. Every gate runs through the
 # Makefile, so the same commands work locally ("make ci").
+# Runners are pinned to ubuntu-24.04 in every workflow (no silent image
+# switch when ubuntu-latest moves); bump them together and deliberately.
 #
 # Triggers (Actions minutes are limited, so the heavy jobs run where they matter):
 #   - pull requests: lint, unit tests (race), integration, e2e, and the mutation
@@ -52,7 +54,7 @@ env:
 jobs:
   changes:
     name: changes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       code: ${{ steps.classify.outputs.code }}
@@ -94,7 +96,7 @@ jobs:
     name: templ, fmt, vet, staticcheck, golangci-lint, govulncheck
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7.0.1
@@ -110,7 +112,7 @@ jobs:
     name: unit tests (race detector), build
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7.0.1
@@ -149,7 +151,7 @@ jobs:
     name: integration tests (real decode-config)
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.lane == 'full'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7.0.1
@@ -178,7 +180,7 @@ jobs:
     name: mutation tests
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.lane == 'full'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v7.0.1
@@ -206,7 +208,7 @@ jobs:
     name: e2e (Playwright)
     needs: changes
     if: needs.changes.outputs.code == 'true' && needs.changes.outputs.lane == 'full'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     container:
       # Browsers in this image match @playwright/test in e2e/package.json; bump both together.
@@ -253,7 +255,7 @@ jobs:
     name: required
     needs: [changes, lint, test, integration, mutation, e2e]
     if: always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: all gates passed
