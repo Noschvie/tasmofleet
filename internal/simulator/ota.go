@@ -216,16 +216,19 @@ func (d *simDevice) download(url string, runningMinimal bool) (*flashed, error) 
 }
 
 // restartSoon is Restart 1: respond, then reboot after ~2 s on the same image.
+// The restart is itself a save event (see settings.go), and it commits when it
+// happens, not when it was scheduled: a value set during the ~2 s wait (a
+// Hostname change queues the restart, the next command comes right behind)
+// is flashed with the rest, as on the device, instead of being lost.
 func (d *simDevice) restartSoon() {
 	if !d.sleep(secRestartCmd) {
 		return
 	}
-	d.reboot(false)
+	d.reboot(true)
 }
 
 // reboot takes the device through the offline gap and brings it back with
-// reloaded settings. commit is false for Restart (already committed) and
-// PowerCycle (flash is not written).
+// reloaded settings. commit is false for PowerCycle (flash is not written).
 func (d *simDevice) reboot(commit bool) {
 	d.mu.Lock()
 	if commit {

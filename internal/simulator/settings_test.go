@@ -141,6 +141,20 @@ func TestEditorFieldsAreStateful(t *testing.T) {
 	}
 }
 
+// Why: Hostname, Topic and the MQTT settings queue a restart a moment later. A
+// value set in that window must be flashed by the restart, like the device does;
+// otherwise a caller that changes several settings in a row (the editor, a
+// restore) sees them vanish depending on timing, and a test of it flakes.
+func TestSettingChangedWhileRestartIsPendingSurvivesIt(t *testing.T) {
+	d := newSettingsDevice(t)
+	cm(t, d, "Hostname queued-restart") // queues the restart
+	cm(t, d, "TelePeriod 120")          // arrives before it happens
+	settled(t, d, 1)
+	if got := cm(t, d, "TelePeriod"); got != `{"TelePeriod":120}` {
+		t.Errorf("a value set while the restart was pending was lost: %s", got)
+	}
+}
+
 // Why: SaveData 0 is the fleet policy; its flash semantics decide whether a
 // "backup after change" shows the change and whether a power cut loses it.
 func TestSaveDataSemantics(t *testing.T) {
