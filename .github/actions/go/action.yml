@@ -1,0 +1,60 @@
+# Go toolchain plus a build/module cache per job. The key carries the commit, so
+# every run that succeeds saves a fresh cache, and the next run restores the
+# newest one with the same Go version and go.sum (PRs read their own and
+# main's caches). With the cache, go build and go vet are incremental and
+# go test reports unchanged packages as "(cached)".
+name: go
+description: setup-go with a per-job GOCACHE/GOMODCACHE cache
+inputs:
+  name:
+    description: cache name (one per job kind)
+    required: true
+  paths:
+    description: extra cache paths (e.g. linter caches)
+    default: ""
+  save:
+    description: "false: restore only (jobs whose builds nobody reuses)"
+    default: "true"
+  mtimes:
+    description: "true: set file mtimes from git (go test caches results by them; needs fetch-depth 0)"
+    default: "false"
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v7.0.0
+      with:
+        go-version-file: go.mod
+        cache: false
+    - id: env
+      shell: bash
+      run: |
+        {
+          echo "gocache=$(go env GOCACHE)"
+          echo "gomodcache=$(go env GOMODCACHE)"
+          echo "prefix=go-${{ inputs.name }}-${{ runner.os }}-$(go env GOVERSION)"
+        } >> "$GITHUB_OUTPUT"
+    - if: inputs.save == 'true'
+      uses: actions/cache@v6.1.0
+      with:
+        path: |
+          ${{ steps.env.outputs.gocache }}
+          ${{ steps.env.outputs.gomodcache }}
+          ${{ inputs.paths }}
+        key: ${{ steps.env.outputs.prefix }}-${{ hashFiles('go.sum', 'tools/go.sum') }}-${{ github.sha }}
+        restore-keys: |
+          ${{ steps.env.outputs.prefix }}-${{ hashFiles('go.sum', 'tools/go.sum') }}-
+          ${{ steps.env.outputs.prefix }}-
+    - if: inputs.save != 'true'
+      uses: actions/cache/restore@v6.1.0
+      with:
+        path: |
+          ${{ steps.env.outputs.gocache }}
+          ${{ steps.env.outputs.gomodcache }}
+          ${{ inputs.paths }}
+        key: ${{ steps.env.outputs.prefix }}-${{ hashFiles('go.sum', 'tools/go.sum') }}-${{ github.sha }}
+        restore-keys: |
+          ${{ steps.env.outputs.prefix }}-${{ hashFiles('go.sum', 'tools/go.sum') }}-
+          ${{ steps.env.outputs.prefix }}-
+    - if: inputs.mtimes == 'true'
+      shell: bash
+      run: tools/git-mtimes.sh

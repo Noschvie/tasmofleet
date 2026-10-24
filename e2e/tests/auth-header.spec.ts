@@ -24,7 +24,7 @@ test.afterAll(async () => {
   await app.stop();
 });
 
-test("operator sees the app but not admin pages", async ({ page }) => {
+test("operator sees the app but not admin pages", { tag: "@core" }, async ({ page }) => {
   await page.setExtraHTTPHeaders({ "X-Test-User": "olivia", "X-Test-Groups": "Tasmofleet Users" });
   await page.goto(proxyURL + "/");
   await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
@@ -34,19 +34,19 @@ test("operator sees the app but not admin pages", async ({ page }) => {
   expect(res?.status()).toBe(403);
 });
 
-test("admin sees the audit log", async ({ page }) => {
+test("admin sees the audit log", { tag: "@core" }, async ({ page }) => {
   await page.setExtraHTTPHeaders({ "X-Test-User": "adam", "X-Test-Groups": "Tasmofleet Users|Tasmofleet Admins" });
   await page.goto(proxyURL + "/audit");
   await expect(page.getByRole("heading", { name: "Audit log" })).toBeVisible();
 });
 
-test("a user without a mapped group is denied", async ({ page }) => {
+test("a user without a mapped group is denied", { tag: "@core" }, async ({ page }) => {
   await page.setExtraHTTPHeaders({ "X-Test-User": "nina", "X-Test-Groups": "Unrelated" });
   const res = await page.goto(proxyURL + "/");
   expect(res?.status()).toBe(403);
 });
 
-test("forged identity headers on a direct connection are ignored", async ({ request }) => {
+test("forged identity headers on a direct connection are ignored", { tag: "@core" }, async ({ request }) => {
   const res = await request.get(app.url + "/devices", {
     headers: { "X-authentik-username": "mallory", "X-authentik-groups": "Tasmofleet Admins" },
     maxRedirects: 0,
@@ -55,7 +55,7 @@ test("forged identity headers on a direct connection are ignored", async ({ requ
 });
 
 // Review F1: an anonymous client must not get its (multipart or huge) body parsed.
-test("anonymous multipart and oversized posts are refused early", async ({ request }) => {
+test("anonymous multipart and oversized posts are refused early", { tag: "@core" }, async ({ request }) => {
   const multipart = await request.post(app.url + "/devices/new", {
     multipart: { file: { name: "x.bin", mimeType: "application/octet-stream", buffer: Buffer.alloc(1024) } },
   });

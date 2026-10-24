@@ -32,7 +32,7 @@ test.afterAll(async () => {
 const operator = { "X-authentik-username": "olivia", "X-authentik-groups": "ops" };
 const admin = { "X-authentik-username": "adam", "X-authentik-groups": "adm" };
 
-test("settings form: operators are refused, admins see named SetOptions and apply a change", async ({ page }) => {
+test("settings form: operators are refused, admins see named SetOptions and apply a change", { tag: "@core" }, async ({ page }) => {
   await page.setExtraHTTPHeaders(operator);
   await page.goto(app.url + "/devices");
   await page.getByRole("link", { name: "plug-4m-http", exact: true }).click();

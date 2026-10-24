@@ -93,7 +93,7 @@ test("admin deletes a backup; the newest one is warned about; delete selected co
   await expect(page.getByText("No backups yet")).toBeVisible();
 });
 
-test("operators see no delete or replace controls and are refused", async ({ page, request }) => {
+test("operators see no delete or replace controls and are refused", { tag: "@core" }, async ({ page, request }) => {
   await page.setExtraHTTPHeaders(operator);
   await page.goto(app.url + "/devices");
   await page.getByRole("link", { name: "plug-4m", exact: true }).click();

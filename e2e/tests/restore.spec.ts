@@ -33,7 +33,7 @@ test.afterAll(async () => {
 const operator = { "X-authentik-username": "olivia", "X-authentik-groups": "ops" };
 const admin = { "X-authentik-username": "adam", "X-authentik-groups": "adm" };
 
-test("admin restores a backup; the job ends verified; the token is spent", async ({ page, request }) => {
+test("admin restores a backup; the job ends verified; the token is spent", { tag: "@core" }, async ({ page, request }) => {
   test.setTimeout(120_000);
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/devices");
@@ -66,7 +66,7 @@ test("admin restores a backup; the job ends verified; the token is spent", async
   expect(probe.status()).toBe(404);
 });
 
-test("operators cannot restore or delete backups", async ({ page, request }) => {
+test("operators cannot restore or delete backups", { tag: "@core" }, async ({ page, request }) => {
   await page.setExtraHTTPHeaders(operator);
   await page.goto(app.url + "/devices");
   await page.getByRole("link", { name: "plug-4m", exact: true }).click();

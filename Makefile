@@ -1,6 +1,9 @@
-# Every quality gate has a target. CI runs exactly these targets.
-#   make check   fast gates, run before every commit (fmt, vet, staticcheck, lint, unit tests, vuln, build)
-#   make ci      everything CI runs (check + race + integration + mutation + e2e)
+# Every quality gate has a target. CI runs exactly these targets (tiers: CLAUDE.md "Running the gates").
+#   make check     FAST tier, run before every commit (templ, fmt, vet, staticcheck, lint, unit and
+#                  integration tests from the go test cache, vuln, build)
+#   make e2e-core  FAST tier: the Playwright tests tagged @core
+#   make safety    FAST tier when a safety-critical package changed (race + mutation of the changed ones)
+#   make ci        FULL tier: check + race + mutation + all e2e (nightly, release tags)
 #
 # Tools are pinned in tools/go.mod and run with `go tool -modfile=tools/go.mod`,
 # so no global installs are needed (first run builds them, then they are cached).
@@ -29,11 +32,23 @@ BIN       := bin
 # fails the gate, so add the entry together with the tests.
 MUTATION := ./internal/fwselect:90 ./internal/ota:85 ./internal/policy:85 ./internal/cmdpolicy:90
 
-.PHONY: demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test race integration mutation mutation-changed e2e e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check clean tools
+# Safety-critical packages (CLAUDE.md "Safety rules": guard, OTA engine, device client and
+# credentials, accounts, trusted proxies) plus the mutation packages. A pull request that changes
+# one of them runs their race tests and the mutation gate (make safety BASE=<ref>) in the FAST
+# tier; ci.yml reads this list.
+SAFETY := ./internal/fwselect ./internal/ota ./internal/tasmota ./internal/secretbox ./internal/auth ./internal/httpx ./internal/policy ./internal/cmdpolicy
 
-check: templ-check fmt-check vet staticcheck lint test vuln build
+# go test flags for test and integration. Empty locally and on PRs, so unchanged packages come
+# from the go test cache; the FULL tier passes TESTFLAGS=-count=1.
+TESTFLAGS ?=
+# Extra Playwright arguments, e.g. E2E_ARGS=--shard=1/2 (CI).
+E2E_ARGS  ?=
 
-ci: check race integration mutation e2e
+.PHONY: demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test race integration mutation mutation-changed safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check clean tools
+
+check: templ-check fmt-check vet staticcheck lint test integration vuln build
+
+ci: check race mutation e2e
 
 # templ components (internal/web/ui, internal/web) are committed together with their generated
 # *_templ.go, so go build and the Dockerfile need no generator. `make templ` regenerates them;
@@ -65,15 +80,39 @@ lint:
 
 # Unit tests: no network except loopback listeners started by the test itself.
 test:
-	$(NICE) $(GO) test -count=1 ./...
+	$(NICE) $(GO) test $(TESTFLAGS) ./...
 
+# Every unit test with the race detector (FULL tier); tools/race.sh runs internal/auth in AUTH_PARTS
+# parallel parts (default 2) next to the other packages.
 race:
-	$(NICE) env CGO_ENABLED=1 $(GO) test -race -count=1 ./...
+	$(NICE) tools/race.sh
+
+# Race tests of the SAFETY packages changed since BASE (all of them without a usable BASE).
+# tools/race.sh splits internal/auth (AUTH_PARTS) to keep the wall clock short.
+safety-race:
+	@if [ -n "$(BASE)" ] && git rev-parse -q --verify "$(BASE)^{commit}" >/dev/null; then \
+	  changed=$$(git diff --name-only "$(BASE)" HEAD); pkgs=""; \
+	  for p in $(SAFETY); do d=$${p#./}; if echo "$$changed" | grep -q "^$$d/"; then pkgs="$$pkgs $$p"; fi; done; \
+	else echo "safety-race: no usable BASE ($(BASE)), running all packages"; pkgs="$(SAFETY)"; fi; \
+	if [ -z "$$pkgs" ]; then echo "safety-race: no safety package changed"; exit 0; fi; \
+	echo "== race$$pkgs"; $(NICE) tools/race.sh $$pkgs
+
+safety: safety-race mutation-changed
+
+# Quarantined Go tests (internal/testutil/quarantine) of every package that has one, with up to
+# three attempts. Nightly only; never part of check or ci.
+test-quarantine:
+	@pkgs=$$(grep -rl --include='*_test.go' 'quarantine\.Test(t' cmd internal | xargs -r -n1 dirname | sort -u | sed 's|^|./|'); \
+	if [ -z "$$pkgs" ]; then echo "test-quarantine: no quarantined Go test"; exit 0; fi; \
+	for i in 1 2 3; do \
+	  TASMOFLEET_QUARANTINE=1 $(NICE) env CGO_ENABLED=1 $(GO) test -race -count=1 $$pkgs && exit 0; \
+	  echo "test-quarantine: attempt $$i failed"; \
+	done; exit 1
 
 # Integration tests (build tag "integration"): simulator fleet, embedded MQTT
 # broker, mock OIDC provider, real SQLite files. Still loopback only.
 integration:
-	$(NICE) $(GO) test -count=1 -tags=integration ./...
+	$(NICE) $(GO) test $(TESTFLAGS) -tags=integration ./...
 
 mutation:
 	@for e in $(MUTATION); do \
@@ -81,7 +120,7 @@ mutation:
 	done
 
 # Mutation gate only for the MUTATION packages with changes since BASE (a git
-# ref). CI uses it for pushes and PRs; tags and the nightly run use "mutation".
+# ref). CI runs it for PRs that change a SAFETY package; the FULL tier runs "mutation".
 # Without a usable BASE every package runs.
 mutation-changed:
 	@if [ -z "$(BASE)" ] || ! git rev-parse -q --verify "$(BASE)^{commit}" >/dev/null; then \
@@ -98,8 +137,17 @@ e2e-deps:
 	cd e2e && npm ci
 
 # Playwright against the real binary + tasmofleet-devenv (simulators, broker, mock IdP).
+# e2e is the whole behaviour suite (FULL tier), e2e-core the tests tagged @core (FAST tier, every
+# PR), e2e-quarantine the tests tagged @quarantine with retries (nightly only). Tag a test with
+# test("title", { tag: "@core" }, ...); see CLAUDE.md "Running the gates" for what belongs in core.
 e2e: build
-	cd e2e && npx playwright test --project=chromium
+	cd e2e && npx playwright test --project=chromium --grep-invert @quarantine $(E2E_ARGS)
+
+e2e-core: build
+	cd e2e && npx playwright test --project=chromium --grep @core --grep-invert @quarantine $(E2E_ARGS)
+
+e2e-quarantine: build
+	cd e2e && npx playwright test --project=chromium --grep @quarantine --retries=2 --pass-with-no-tests $(E2E_ARGS)
 
 # Pixel comparison of our pages against the Claude Design prototype (design/v2/README.md). Not part of CI: the references (PROTO_REF_DIR, ~150 MB) live outside the repository and
 # design/v2/ref-manifest.sha256 pins them. Runs the tool's self-test first, then every reference (or the

@@ -45,7 +45,7 @@ test("make compliant without JavaScript: the plan is a page", async ({ browser }
   await ctx.close();
 });
 
-test("make compliant: operators see no action, admins review the plan in the dialog, run it and end compliant", async ({ page }) => {
+test("make compliant: operators see no action, admins review the plan in the dialog, run it and end compliant", { tag: "@core" }, async ({ page }) => {
   await page.setExtraHTTPHeaders(operator);
   await page.goto(app.url + "/policy");
   await page.getByRole("button", { name: "Run now" }).click();

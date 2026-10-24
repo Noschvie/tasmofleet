@@ -34,7 +34,7 @@ async function loginAs(who: string) {
   expect(r.status).toBe(204);
 }
 
-test("admin logs in through the IdP and out again", async ({ page }) => {
+test("admin logs in through the IdP and out again", { tag: "@core" }, async ({ page }) => {
   await loginAs("admin");
   await page.goto(app.url + "/devices");
   await expect(page.getByRole("heading", { name: "Devices", exact: true })).toBeVisible();
@@ -49,7 +49,7 @@ test("admin logs in through the IdP and out again", async ({ page }) => {
   await expect(page.getByRole("link", { name: "Audit" })).toHaveCount(0);
 });
 
-test("a user in no mapped group gets no session", async ({ page }) => {
+test("a user in no mapped group gets no session", { tag: "@core" }, async ({ page }) => {
   await loginAs("nobody");
   const res = await page.goto(app.url + "/");
   expect(res?.status()).toBe(403);

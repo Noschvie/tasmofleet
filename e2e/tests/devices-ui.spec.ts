@@ -305,7 +305,7 @@ test("reorder: dragging a header and the move buttons change the order; it survi
   await headsAre(page, base);
 });
 
-test("device settings: no flash choices, one hint next to Save", async ({ page }) => {
+test("device settings: no flash choices, one hint next to Save", { tag: "@core" }, async ({ page }) => {
   await open(page, 1280);
   const href = (await page.locator("table[data-table=devices] td[data-label=Name] a").first().getAttribute("href"))!;
   for (const width of [375, 1280]) {

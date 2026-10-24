@@ -20,7 +20,7 @@ test.afterAll(async () => {
   await env?.stop();
 });
 
-test("zero configuration: setup link, first admin, setup, live networks, scan, device list", async ({ page }) => {
+test("zero configuration: setup link, first admin, setup, live networks, scan, device list", { tag: "@core" }, async ({ page }) => {
   // Why (N12): only the person who can read the container log may set the first password. Without
   // the link the page says where it is and offers no form; a wrong token is refused.
   await page.goto(app.url + "/setup/account");

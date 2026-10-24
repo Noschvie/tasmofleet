@@ -1,7 +1,9 @@
 # Container image for tasmofleet, published to ghcr.io/<owner>/tasmofleet.
-#  - tag vX.Y.Z: fail unless CHANGELOG.md has a "## X.Y.Z" section, then build
-#    and push :X.Y.Z and :latest (a pre-release tag vX.Y.Z-suffix pushes only
-#    :X.Y.Z-suffix).
+#  - tag vX.Y.Z: called by ci.yml (job "publish") only after the FULL tier
+#    passed on the tag; fails unless CHANGELOG.md has a "## X.Y.Z" section,
+#    then builds and pushes :X.Y.Z and :latest (a pre-release tag
+#    vX.Y.Z-suffix pushes only :X.Y.Z-suffix). Tags do not trigger this
+#    workflow on their own.
 #  - push to main: build and push :edge.
 #  - pull requests that touch the Dockerfile or the module files: build only,
 #    nothing is pushed (proves the Dockerfile still works).
@@ -10,9 +12,9 @@
 name: image
 
 on:
+  workflow_call:
   push:
     branches: [main]
-    tags: ["v*"]
     paths-ignore:
       - "**/*.md"
       - "docs/**"
@@ -61,6 +63,8 @@ jobs:
           image="ghcr.io/$(echo "$OWNER" | tr 'A-Z' 'a-z')/tasmofleet"
           push=false
           if [ "$REF_TYPE" = tag ]; then
+            # Release images come only from ci.yml after the FULL tier passed.
+            [ "$EVENT" = push ] || { echo "tag images are published by ci.yml (job publish), not by $EVENT" >&2; exit 1; }
             tag=$REF_NAME
             echo "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' || {
               echo "tag '$tag' is not vX.Y.Z" >&2

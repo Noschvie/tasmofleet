@@ -25,7 +25,7 @@ for (const tlsMode of ["plain", "self-signed"] as const) {
 
     const newPassword = "e2e-standalone-pass-1";
 
-    test("first run: forced password change, then normal use, then restart", async ({ page }) => {
+    test("first run: forced password change, then normal use, then restart", { tag: "@core" }, async ({ page }) => {
       const file = join(app.dataDir, "initial-admin-password");
       expect(existsSync(file)).toBeTruthy();
       const initial = readFileSync(file, "utf8").trim();
@@ -78,7 +78,7 @@ for (const tlsMode of ["plain", "self-signed"] as const) {
       await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
     });
 
-    test("admin creates an operator; operators cannot manage accounts", async ({ page, browser }) => {
+    test("admin creates an operator; operators cannot manage accounts", { tag: "@core" }, async ({ page, browser }) => {
       await page.goto(app.url + "/login");
       await page.getByLabel("Username").fill("admin");
       await page.getByLabel("Password").fill(newPassword);

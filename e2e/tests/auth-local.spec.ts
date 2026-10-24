@@ -39,7 +39,7 @@ test("the style guide needs a sign-in and is open to an operator from the System
   await signOut(page);
 });
 
-test("local sign-in works and wrong passwords are refused", async ({ page }) => {
+test("local sign-in works and wrong passwords are refused", { tag: "@core" }, async ({ page }) => {
   await page.goto(app.url + "/login");
   await page.getByLabel("Username").fill("breakglass");
   await page.getByLabel("Password").fill("wrong-password-xx");

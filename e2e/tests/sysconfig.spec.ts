@@ -52,7 +52,7 @@ test("a setting changed on the page applies live: the scheduled scan starts with
   await expect(page.locator("table.audittable").getByText("System settings").first()).toBeVisible();
 });
 
-test("a setting from the environment is locked, also against a forged request", async ({ page }) => {
+test("a setting from the environment is locked, also against a forged request", { tag: "@core" }, async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/settings/system?tab=signin"); // the locked fields live on this tab
   await expect(page.locator("input[name='v.OIDC_CLIENT_ID']")).toHaveCount(0);

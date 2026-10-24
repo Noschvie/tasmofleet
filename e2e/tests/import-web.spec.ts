@@ -41,7 +41,7 @@ test("upload devices.csv, review the plan, apply", async ({ page }) => {
   await expect(page.getByRole("link", { name: names[0], exact: true })).toBeVisible();
 });
 
-test("operators cannot reach the import", async ({ page }) => {
+test("operators cannot reach the import", { tag: "@core" }, async ({ page }) => {
   await page.setExtraHTTPHeaders({ "X-authentik-username": "olivia", "X-authentik-groups": "ops" });
   const r = await page.goto(app.url + "/import/tasmoadmin");
   expect(r?.status()).toBe(403);

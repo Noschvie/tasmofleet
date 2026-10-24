@@ -29,7 +29,7 @@ test.afterAll(async () => {
 
 const admin = { "X-authentik-username": "adam", "X-authentik-groups": "adm" };
 
-test("push upload with an ESP8266 selected: the form says the device would be refused", async ({ page }) => {
+test("push upload with an ESP8266 selected: the form says the device would be refused", { tag: "@core" }, async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   await pickForUpdate(page, app.url, []);
   const hint = page.locator("[data-push-hint]");

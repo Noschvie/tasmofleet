@@ -62,7 +62,7 @@ async function upload(page: import("@playwright/test").Page, v: string, name: st
   await page.getByRole("button", { name: "Upload" }).click();
 }
 
-test("operators see no upload form", async ({ page }) => {
+test("operators see no upload form", { tag: "@core" }, async ({ page }) => {
   await page.setExtraHTTPHeaders(operator);
   await page.goto(app.url + "/firmware");
   await expect(page.locator('input[name="image"]')).toHaveCount(0);
@@ -86,7 +86,7 @@ test("a file dropped on the drop zone opens the upload form with it", async ({ p
   expect(await dlg.locator('input[name="image"]').evaluate((i: HTMLInputElement) => i.files?.[0]?.name)).toBe("dropped.bin");
 });
 
-test("wrong images are refused with a reason and nothing is stored", async ({ page }) => {
+test("wrong images are refused with a reason and nothing is stored", { tag: "@core" }, async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   await upload(page, version, "tasmota32-safeboot.bin", image("tasmota32-safeboot.bin", 0));
   await expect(page.locator("#custom-result")).toContainText("never an OTA target");

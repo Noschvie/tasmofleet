@@ -1,18 +1,24 @@
 # CI for tasmofleet on GitHub-hosted runners. Every gate runs through the
-# Makefile, so the same commands work locally ("make ci").
-# Runners are pinned to ubuntu-24.04 in every workflow (no silent image
-# switch when ubuntu-latest moves); bump them together and deliberately.
+# Makefile, so the same commands work locally. Runners are pinned to
+# ubuntu-24.04 in every workflow (no silent image switch when ubuntu-latest
+# moves); bump them together and deliberately.
 #
-# Triggers (Actions minutes are limited, so the heavy jobs run where they matter):
-#   - pull requests: lint, unit tests (race), integration, e2e, and the mutation
-#     gate for the mutation packages changed against the PR base. Docs-only PRs
-#     skip the heavy jobs (the "changes" job decides; docs.yml checks links).
-#   - push to main: lint and unit tests only (the PR already ran the rest).
-#     Docs-only pushes skip this workflow (paths-ignore).
-#   - tags v*: everything, incl. the full mutation run (image.yml publishes
-#     the image in parallel).
-#   - manual dispatch: everything, incl. the full mutation run.
-#   The job "required" is the single status check for branch protection.
+# Two tiers (CLAUDE.md "Running the gates"):
+#   FAST (pull requests, push to main): lint, unit and integration tests from
+#     the go test cache, the @core e2e tests in two shards, and, when a PR
+#     changes a SAFETY package (Makefile), its race tests and the mutation gate
+#     of the changed mutation packages. Target: "required" green in <= 5 min.
+#     Push to main runs the same jobs (the PR already proved them); it keeps
+#     main's caches fresh, which PR runs restore from.
+#   FULL (nightly cron, tags v*, manual dispatch): additionally the whole
+#     e2e suite in three shards, every unit test with the race detector,
+#     uncached test runs (TESTFLAGS=-count=1) and the full mutation run.
+#     A tag publishes the image (image.yml, called below) only after FULL
+#     passed, and fails early when CHANGELOG.md has no section for it.
+#   QUARANTINE (nightly and dispatch only, never blocking): the tests tagged
+#     @quarantine / quarantine.Test, with retries; one "flaky" issue each.
+# Docs-only PRs skip the heavy jobs (the "changes" job decides; docs.yml checks
+# links). The job "required" is the single status check for branch protection.
 #
 # paths-ignore lists only files no test or build reads. NOT docs-only:
 # docs/security (cmdpolicy test reads command-policy.md), docs/spec
@@ -39,13 +45,16 @@ on:
       - "LICENSE"
   # No paths-ignore for PRs: the "changes" job decides, and "required" always reports.
   pull_request:
+  schedule:
+    - cron: "23 2 * * *" # nightly FULL + quarantine on main
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# The event is part of the group: a push to main must not cancel the nightly run.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -58,7 +67,9 @@ jobs:
     timeout-minutes: 5
     outputs:
       code: ${{ steps.classify.outputs.code }}
-      lane: ${{ steps.classify.outputs.lane }}
+      tier: ${{ steps.classify.outputs.tier }}
+      safety: ${{ steps.classify.outputs.safety }}
+      shards: ${{ steps.classify.outputs.shards }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -67,12 +78,19 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
           BASE: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
           code=true
-          lane=full
-          if [ "$EVENT" = push ] && [ "$REF_TYPE" = branch ]; then lane=main; fi
+          safety=false
+          tier=fast
+          case "$EVENT" in schedule|workflow_dispatch) tier=full ;; esac
+          if [ "$REF_TYPE" = tag ]; then
+            tier=full
+            # Release guard, early: the image job checks it again before publishing.
+            make changelog-check TAG="$REF_NAME"
+          fi
           if [ "$EVENT" = pull_request ]; then
             # Fail closed: without a base or a diff, the gate fails instead of
             # treating the PR as docs-only.
@@ -87,88 +105,70 @@ jobs:
                 *) code=true ;;
               esac
             done
+            # The SAFETY list lives in the Makefile (make safety uses it too).
+            dirs=$(sed -n 's/^SAFETY *:= *//p' Makefile | tr ' ' '\n' | sed 's|^\./||; /^$/d')
+            [ -n "$dirs" ] || { echo "no SAFETY list in the Makefile"; exit 1; }
+            for d in $dirs; do
+              if echo "$files" | grep -q "^$d/"; then safety=true; fi
+            done
           fi
-          echo "code=$code" >> "$GITHUB_OUTPUT"
-          echo "lane=$lane" >> "$GITHUB_OUTPUT"
-          echo "code=$code lane=$lane"
+          if [ "$tier" = full ]; then shards='["1/3","2/3","3/3"]'; else shards='["1/2","2/2"]'; fi
+          {
+            echo "code=$code"
+            echo "tier=$tier"
+            echo "safety=$safety"
+            echo "shards=$shards"
+          } >> "$GITHUB_OUTPUT"
+          echo "code=$code tier=$tier safety=$safety shards=$shards"
 
   lint:
     name: templ, fmt, vet, staticcheck, golangci-lint, govulncheck
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-go@v7.0.0
+      - uses: ./.github/actions/go
         with:
-          go-version-file: go.mod
-          cache-dependency-path: |
-            go.sum
-            tools/go.sum
+          name: lint
+          paths: |
+            ~/.cache/golangci-lint
+            ~/.cache/staticcheck
       - run: make templ-check fmt-check vet staticcheck lint vuln
 
   test:
-    name: unit tests (race detector), build
+    name: unit tests, build
     needs: changes
     if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-go@v7.0.0
         with:
-          go-version-file: go.mod
-          cache-dependency-path: |
-            go.sum
-            tools/go.sum
-      # The whole unit suite runs once, with the race detector (what make race
-      # does); a second plain run would only repeat it.
-      - name: unit tests (race detector), build
-        run: |
-          set -eu
-          # The same tests as make race, but internal/auth (PBKDF2 in nearly
-          # every test, about half of all race time) runs as two halves next
-          # to the other packages. Hosted runners of private repositories
-          # have two cores, so the auth halves need more than go test's
-          # default 10 minute timeout.
-          export CGO_ENABLED=1
-          if [ "$(nproc)" -lt 4 ]; then
-            # Two cores (private repositories): three parallel race runs
-            # oversubscribe the runner and make timing-sensitive tests flaky.
-            go test -race -count=1 -timeout 40m ./...
-            make build
-            exit 0
-          fi
-          others=$(go list ./... | grep -v '/internal/auth$')
-          names=$(go test -list '.*' ./internal/auth | grep '^Test')
-          h1=$(echo "$names" | awk 'NR%2==1' | paste -sd'|')
-          h2=$(echo "$names" | awk 'NR%2==0' | paste -sd'|')
-          export CGO_ENABLED=1
-          go test -race -count=1 -timeout 30m $others & p1=$!
-          go test -race -count=1 -timeout 30m ./internal/auth -run "^($h1)\$" & p2=$!
-          go test -race -count=1 -timeout 30m ./internal/auth -run "^($h2)\$" & p3=$!
-          rc=0
-          wait $p1 || rc=1
-          wait $p2 || rc=1
-          wait $p3 || rc=1
-          [ $rc = 0 ] || exit 1
-          make build
+          fetch-depth: 0 # git-mtimes.sh
+      - uses: ./.github/actions/go
+        with:
+          name: test
+          mtimes: "true"
+      - env:
+          TESTFLAGS: ${{ needs.changes.outputs.tier == 'full' && '-count=1' || '' }}
+        run: make test build
 
   integration:
     name: integration tests (real decode-config)
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.lane == 'full'
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-go@v7.0.0
         with:
-          go-version-file: go.mod
-          cache-dependency-path: |
-            go.sum
-            tools/go.sum
+          fetch-depth: 0 # git-mtimes.sh
+      - uses: ./.github/actions/go
+        with:
+          name: integration
+          mtimes: "true"
       - name: install decode-config (pinned, verified)
         env:
           DECODER_VERSION: v16.0.0
@@ -182,44 +182,22 @@ jobs:
       - name: integration tests
         env:
           REQUIRE_DECODER: "1"
+          TESTFLAGS: ${{ needs.changes.outputs.tier == 'full' && '-count=1' || '' }}
         run: DECODER_PATH="$RUNNER_TEMP/decode-config/decode-config" make integration
 
-  mutation:
-    name: mutation tests
-    needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.lane == 'full'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@v7.0.1
-        with:
-          fetch-depth: 0 # the changed-package mode diffs against the PR base
-      - uses: actions/setup-go@v7.0.0
-        with:
-          go-version-file: go.mod
-          cache-dependency-path: |
-            go.sum
-            tools/go.sum
-      - name: mutation gate (changed packages on PRs, all on tags/dispatch)
-        env:
-          EVENT: ${{ github.event_name }}
-          PR_BASE: ${{ github.event.pull_request.base.sha }}
-        run: |
-          set -eu
-          if [ "$EVENT" = pull_request ]; then
-            make mutation-changed BASE="$PR_BASE"
-          else
-            make mutation
-          fi
-
   e2e:
-    name: e2e (Playwright)
+    name: e2e ${{ needs.changes.outputs.tier == 'full' && 'all' || 'core' }} (${{ matrix.shard }})
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.lane == 'full'
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.changes.outputs.shards) }}
     container:
-      # Browsers in this image match @playwright/test in e2e/package.json; bump both together.
+      # The image is the browser cache: its browsers and fonts match
+      # @playwright/test in e2e/package.json; bump both together.
       image: mcr.microsoft.com/playwright:v1.64.1-noble
     steps:
       - name: install make (not in the Playwright image)
@@ -229,10 +207,9 @@ jobs:
       # without this git refuses the repository and go build cannot stamp VCS info.
       - name: trust the workspace
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - uses: actions/setup-go@v7.0.0
+      - uses: ./.github/actions/go
         with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
+          name: e2e
       - uses: actions/cache@v6.1.0
         with:
           path: ~/.npm
@@ -242,29 +219,133 @@ jobs:
       - name: e2e tests
         env:
           CI: "true"
+          TARGET: ${{ needs.changes.outputs.tier == 'full' && 'e2e' || 'e2e-core' }}
+          SHARD: ${{ matrix.shard }}
         run: |
           # One worker per two cores: every worker runs its own app, simulator
-          # fleet and browser, and more made layout and timing tests flaky on
-          # two-core runners.
+          # fleet and browser, and more made layout and timing tests flaky.
           n=$(( $(nproc) / 2 )); [ "$n" -lt 1 ] && n=1
-          E2E_WORKERS=$n make e2e
+          E2E_WORKERS=$n make "$TARGET" E2E_ARGS="--shard=$SHARD"
       - name: upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: playwright-report
+          name: playwright-report-${{ strategy.job-index }}
           path: |
             e2e/playwright-report
             e2e/test-results
           retention-days: 7
 
-  # The one status that branch protection on main requires. It always runs:
-  # it passes when every job that should run passed, or when the PR is
-  # docs-only and the heavy jobs were skipped. On pushes to main only lint and
-  # test run. Any other result fails.
+  # FAST tier, only when a PR changes a SAFETY package: its race tests ...
+  safety-race:
+    name: safety race tests (changed safety packages)
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.safety == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0 # diff against the PR base
+      - uses: ./.github/actions/go
+        with:
+          name: race
+          save: "false"
+      - env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          AUTH_PARTS: "4"
+        run: make safety-race BASE="$BASE"
+
+  # ... and the mutation gate of the changed mutation packages.
+  safety-mutation:
+    name: safety mutation gate (changed packages)
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.safety == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0 # diff against the PR base
+      - uses: ./.github/actions/go
+        with:
+          name: mutation
+          save: "false"
+      - env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          MUTATION_WORKERS: "4"
+        run: make mutation-changed BASE="$BASE"
+
+  race:
+    name: unit tests (race detector)
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.tier == 'full'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: ./.github/actions/go
+        with:
+          name: race
+      - run: make race
+
+  mutation:
+    name: mutation tests (all packages)
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.tier == 'full'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: ./.github/actions/go
+        with:
+          name: mutation
+      - run: make mutation
+
+  # Known-flaky tests, nightly (and dispatch) only, with retries. Never part of
+  # "required": a failure here shows on the run but does not fail it.
+  quarantine:
+    name: quarantined tests (retries, not blocking)
+    needs: changes
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    continue-on-error: true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      image: mcr.microsoft.com/playwright:v1.64.1-noble
+    steps:
+      - name: install make and gcc (race detector)
+        run: apt-get update -qq && apt-get install -y -qq --no-install-recommends make gcc libc6-dev >/dev/null
+      - uses: actions/checkout@v7.0.1
+      - name: trust the workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: ./.github/actions/go
+        with:
+          name: e2e
+          save: "false"
+      - uses: actions/cache/restore@v6.1.0
+        with:
+          path: ~/.npm
+          key: npm-${{ hashFiles('e2e/package-lock.json') }}
+      - run: make e2e-deps
+      - name: quarantined Go tests
+        if: always()
+        run: make test-quarantine
+      - name: quarantined e2e tests
+        if: always()
+        env:
+          CI: "true"
+        run: E2E_WORKERS=2 make e2e-quarantine
+
+  # The one status that branch protection on main requires. It always runs and
+  # passes only when every job that had to run passed. A job may be skipped
+  # only when its tier did not ask for it: everything for a docs-only PR, the
+  # safety jobs when no SAFETY package changed, race and full mutation outside
+  # the FULL tier. Any other result (failure, cancelled, or a skip caused by a
+  # failed dependency) fails it.
   required:
     name: required
-    needs: [changes, lint, test, integration, mutation, e2e]
+    needs: [changes, lint, test, integration, e2e, safety-race, safety-mutation, race, mutation]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -273,19 +354,36 @@ jobs:
         env:
           CHANGES: ${{ needs.changes.result }}
           CODE: ${{ needs.changes.outputs.code }}
-          LANE: ${{ needs.changes.outputs.lane }}
-          RESULTS: ${{ needs.lint.result }} ${{ needs.test.result }}
-          FULL_ONLY: ${{ needs.integration.result }} ${{ needs.mutation.result }} ${{ needs.e2e.result }}
+          TIER: ${{ needs.changes.outputs.tier }}
+          SAFETY: ${{ needs.changes.outputs.safety }}
+          ALWAYS: ${{ needs.lint.result }} ${{ needs.test.result }} ${{ needs.integration.result }} ${{ needs.e2e.result }}
+          SAFETY_JOBS: ${{ needs.safety-race.result }} ${{ needs.safety-mutation.result }}
+          FULL_ONLY: ${{ needs.race.result }} ${{ needs.mutation.result }}
         run: |
-          echo "changes=$CHANGES code=$CODE lane=$LANE results: $RESULTS (full lane only: $FULL_ONLY)"
+          echo "changes=$CHANGES code=$CODE tier=$TIER safety=$SAFETY"
+          echo "always: $ALWAYS | safety: $SAFETY_JOBS | full only: $FULL_ONLY"
           [ "$CHANGES" = success ] || exit 1
-          for r in $RESULTS; do
-            if [ "$r" = success ]; then continue; fi
-            if [ "$r" = skipped ] && [ "$CODE" = false ]; then continue; fi
-            exit 1
-          done
-          for r in $FULL_ONLY; do
-            if [ "$r" = success ]; then continue; fi
-            if [ "$r" = skipped ] && { [ "$CODE" = false ] || [ "$LANE" = main ]; }; then continue; fi
-            exit 1
-          done
+          docs=false; [ "$CODE" = false ] && docs=true
+          check() { # check <skip allowed> <result...>
+            allowed=$1; shift
+            for r in "$@"; do
+              [ "$r" = success ] && continue
+              [ "$r" = skipped ] && [ "$allowed" = true ] && continue
+              echo "unexpected result: $r"; exit 1
+            done
+          }
+          check "$docs" $ALWAYS
+          s=$docs; [ "$SAFETY" = true ] || s=true
+          check "$s" $SAFETY_JOBS
+          f=$docs; [ "$TIER" = full ] || f=true
+          check "$f" $FULL_ONLY
+
+  # Release: a tag publishes the image only when the FULL tier passed.
+  publish:
+    name: publish image (tags)
+    needs: required
+    if: github.ref_type == 'tag'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/image.yml

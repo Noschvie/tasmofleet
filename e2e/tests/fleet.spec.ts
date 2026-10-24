@@ -35,7 +35,7 @@ test.afterAll(async () => {
 const operator = { "X-authentik-username": "olivia", "X-authentik-groups": "ops" };
 const admin = { "X-authentik-username": "adam", "X-authentik-groups": "adm" };
 
-test("mixed fleet view shows MQTT and HTTP-only devices online", async ({ page }) => {
+test("mixed fleet view shows MQTT and HTTP-only devices online", { tag: "@core" }, async ({ page }) => {
   await page.setExtraHTTPHeaders(operator);
   await page.goto(app.url + "/devices");
   for (const name of ["lamp-1m", "esp32-dimmer", "plug-4m-http", "esp32s3-http", "mystery-chip"]) {
@@ -103,7 +103,7 @@ test("update picker without JavaScript: the quick selection works on the server"
   await ctx.close();
 });
 
-test("a device that is excluded from OTA is not selectable and says why", async ({ page }) => {
+test("a device that is excluded from OTA is not selectable and says why", { tag: "@core" }, async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/devices");
   await page.getByRole("link", { name: "esp32-dimmer", exact: true }).click();
@@ -198,7 +198,7 @@ test("a cancelled transaction can be retried; both transactions link to each oth
   await expect(txnState(page)).toHaveText("Completed", { timeout: 200_000 });
 });
 
-test("address links open the device page without credentials", async ({ page }) => {
+test("address links open the device page without credentials", { tag: "@core" }, async ({ page }) => {
   await page.setExtraHTTPHeaders(operator);
   await page.goto(app.url + "/devices");
   const row = page.getByRole("row").filter({ hasText: "lamp-1m" });
@@ -210,7 +210,7 @@ test("address links open the device page without credentials", async ({ page }) 
   expect(await link.getAttribute("href")).not.toContain("@");
 });
 
-test("update batch: preview, staged ESP8266 and direct ESP32 succeed, unknown chip is refused", async ({ page, request }) => {
+test("update batch: preview, staged ESP8266 and direct ESP32 succeed, unknown chip is refused", { tag: "@core" }, async ({ page, request }) => {
   test.setTimeout(240_000);
   const addr = env.devices["lamp-1m"].addr;
   const otaBefore = (await (await request.get(`http://${addr}/cm?cmnd=OtaUrl`)).json()).OtaUrl;
@@ -267,7 +267,7 @@ test("update batch: preview, staged ESP8266 and direct ESP32 succeed, unknown ch
 
 // Push delivery (F-9): an ESP32 gets the image by upload, an ESP8266 is refused
 // in the preview with the reason. The device's OtaUrl is never touched.
-test("push upload: ESP32 is updated by upload, ESP8266 is refused with the reason", async ({ page, request }) => {
+test("push upload: ESP32 is updated by upload, ESP8266 is refused with the reason", { tag: "@core" }, async ({ page, request }) => {
   test.setTimeout(240_000);
   const addr = env.devices["esp32s3-http"].addr;
   const otaBefore = (await (await request.get(`http://${addr}/cm?cmnd=OtaUrl`)).json()).OtaUrl;

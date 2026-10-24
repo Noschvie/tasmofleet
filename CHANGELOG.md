@@ -14,6 +14,16 @@ always upgrade automatically.
   The `pages` workflow builds and publishes it on release tags and by hand. `make demo-media` renews the README's
   screenshots and update animation in `docs/media`.
 
+### Changed
+
+- CI runs in tiers. Pull requests run the FAST tier (lint, unit and integration tests from the go test cache,
+  the `@core` e2e tests in two shards, and the race tests and mutation gate when a safety-critical package
+  changed); the nightly run, release tags and manual runs run the FULL tier (every e2e test, the race detector,
+  uncached tests, the full mutation run). A release tag publishes its image only after FULL passed.
+  Known-flaky tests are quarantined (one `flaky` issue each) and run only in the nightly job, with retries.
+  `make check` now includes the integration tests; new targets `make e2e-core`, `make safety`,
+  `make test-quarantine` and `make e2e-quarantine`.
+
 ### Fixed
 
 - README quick start: the first sign-in used `docker exec tasmofleet cat /data/initial-admin-password`, which fails

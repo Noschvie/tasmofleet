@@ -62,7 +62,7 @@ test("switch a relay of an MQTT device", async ({ page }) => {
   await expect(row.getByRole("button", { name: /Toggle relay 1/ })).not.toHaveAttribute("aria-pressed", before);
 });
 
-test("console: operator reads Status 2, admin commands need the admin role", async ({ page }) => {
+test("console: operator reads Status 2, admin commands need the admin role", { tag: "@core" }, async ({ page }) => {
   await page.setExtraHTTPHeaders(operator);
   await page.goto(app.url + "/devices");
   await page.getByRole("link", { name: "plug-4m-http", exact: true }).click();
