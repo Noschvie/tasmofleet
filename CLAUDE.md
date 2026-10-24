@@ -204,13 +204,20 @@ use the full `make mutation`). Docs-only changes skip CI and run the link check
 
 ## Pull requests and the protected main
 
-`main` is protected on GitHub: no force pushes, no deletion. Every change, docs-only
-ones included, goes through a pull request: branch, push, open a PR against `main`, wait
-until CI is green on the PR, then the maintainer merges it with `gh pr merge --squash`
-(the only merge method enabled: GitHub signs squash commits, while its rebase merges would drop
-the signatures that `main` requires). History stays linear; the branch must be up to date with
-`main` before merging. Requirements: the status check `required` from `ci.yml`, linear
-history, signed commits; admins are not exempt.
+`main` is protected on GitHub by the ruleset `main`: no force pushes, no deletion, linear
+history, signed commits, PR and the status check `required` from `ci.yml`. Every change,
+docs-only ones included, goes through a pull request: branch, push, open a PR against `main`,
+wait until CI is green on the PR, then the maintainer merges it **fast-forward only** by
+pushing the PR head to `main`, so the commits keep their own signatures:
+
+```sh
+git fetch origin && git rebase origin/main   # if main moved: rebase, re-sign, push, wait for CI again
+git push origin <branch>:main                # ff push of the green PR head; GitHub marks the PR merged
+```
+
+Only repository admins may push to `main` (ruleset bypass), and only a PR head whose `required`
+check is green. Never merge through the GitHub button (squash is enabled there only as a
+fallback) and never push anything that has not been green as a PR.
 `ci.yml` runs on every PR: a `changes` job detects docs-only PRs and skips the heavy jobs
 for them, and the final `required` job passes only when every heavy job passed (or was
 skipped for a docs-only PR). `docs.yml` (link check) reports its own, non-required
