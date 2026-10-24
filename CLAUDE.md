@@ -216,8 +216,10 @@ git push origin <branch>:main                # ff push of the green PR head; Git
 ```
 
 Only repository admins may push to `main` (ruleset bypass), and only a PR head whose `required`
-check is green. Never merge through the GitHub button (squash is enabled there only as a
-fallback) and never push anything that has not been green as a PR.
+check is green. If `main` moved, the branch is rebased (and re-signed), pushed and must be green
+again before the fast-forward push; there is no other merge path. Never merge through the GitHub
+button: the only method enabled there is rebase, and GitHub's rebase commits are unsigned, so
+the ruleset rejects them.
 `ci.yml` runs on every PR: a `changes` job detects docs-only PRs and skips the heavy jobs
 for them, and the final `required` job passes only when every heavy job passed (or was
 skipped for a docs-only PR). `docs.yml` (link check) reports its own, non-required
