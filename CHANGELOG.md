@@ -26,6 +26,10 @@ always upgrade automatically.
 
 ### Fixed
 
+- Device list at the default layout: a device with two relays had two Power switches in a column narrower than
+  both, so the second was cut off and an ellipsis showed between them. Pinned columns now always get the width of
+  their content, also without a saved layout (the 0.10.1 guarantee), and the offsets are measured again once the
+  fonts are loaded. An e2e check keeps pinned columns from clipping or covering content.
 - README quick start: the first sign-in used `docker exec tasmofleet cat /data/initial-admin-password`, which fails
   (the image has no shell tools); it now uses the setup link from the container log.
 

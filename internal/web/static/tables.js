@@ -217,8 +217,12 @@
   // below it the table scrolls sideways inside its wrapper and the pinned columns stick.
   function fitPinned(table) {
     var cg = table.querySelector(":scope > colgroup");
-    if (!cg || !table.classList.contains("tfix")) {
+    if (!cg) {
       table.style.minWidth = "";
+      return;
+    }
+    if (!table.classList.contains("tfix")) {
+      fitPinnedPx(table, cg);
       return;
     }
     var c = cols(table),
@@ -297,6 +301,50 @@
     });
     need = Math.max(need, Number(table.getAttribute("data-basew")) || 0);
     table.style.minWidth = need + "px";
+  }
+
+  // The default layout of a table with pixel column widths (no saved layout, so no tfix): a pinned
+  // column still shows all of its content. A column whose CSS width is narrower than its content (a
+  // device with two relays has two switches in Power) gets the content's width in pixels; the table,
+  // fixed layout with a definite width, grows by that much and scrolls inside its frame. A column
+  // already wide enough keeps its CSS width (the prototype's), so nothing else changes.
+  function fitPinnedPx(table, cg) {
+    var c = cols(table),
+      col = cg.children,
+      th = headers(table);
+    for (var i = 0; i < col.length; i++) {
+      col[i].style.width = "";
+    }
+    if (!desktop.matches) {
+      return;
+    }
+    var rows = Array.prototype.filter.call(
+      table.querySelectorAll(":scope > tbody > tr"),
+      function (r) {
+        return r.cells.length === c.length;
+      },
+    );
+    var cells = [],
+      at = [];
+    c.forEach(function (cd, i) {
+      if (!cd.side || !col[i] || !th[i]) {
+        return;
+      }
+      rows.forEach(function (r) {
+        cells.push(r.cells[i]);
+        at.push(i);
+      });
+    });
+    var widths = minContents(cells),
+      need = {};
+    widths.forEach(function (w, k) {
+      need[at[k]] = Math.max(need[at[k]] || 0, w);
+    });
+    Object.keys(need).forEach(function (i) {
+      if (need[i] > th[i].getBoundingClientRect().width) {
+        col[i].style.width = Math.ceil(need[i]) + "px";
+      }
+    });
   }
 
   // widths of cells' content at its narrowest (min-content), in each cell's own font and
@@ -1379,6 +1427,10 @@
   }
   document.addEventListener("DOMContentLoaded", enhance);
   document.body && enhance();
+  // widths measured before the fonts are in are wrong (offsets of the pinned columns included)
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(enhance);
+  }
   document.addEventListener("htmx:afterSettle", enhance);
   if (desktop.addEventListener) {
     desktop.addEventListener("change", enhance);
