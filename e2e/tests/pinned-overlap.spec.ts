@@ -87,7 +87,31 @@ async function overlaps(page: Page): Promise<string[]> {
         });
       }
     }
+    // What the user sees first (scroll 0): the right pins lie over the columns that have not scrolled in
+    // yet. A column may be wholly under them (the table scrolls, the rest is reachable) but never cut
+    // in half: "seen 1" and a toggle beside half an Uptime value read as an overlap.
     scroller.scrollLeft = 0;
+    const frame = scroller.getBoundingClientRect();
+    const scrolls = scroller.scrollWidth > scroller.clientWidth + 1;
+    for (const row of t.querySelectorAll<HTMLTableRowElement>("thead tr, tbody tr")) {
+      const cells = [...row.cells] as HTMLElement[];
+      if (cells.length < side.size) continue;
+      // the pinned-right group begins at its leftmost cell and reaches the frame's edge
+      const pins = cells.filter((_, j) => side.get(j) === "r");
+      if (!pins.length) continue;
+      const from = Math.min(...pins.map((p) => p.getBoundingClientRect().left));
+      cells.forEach((c, i) => {
+        if (side.has(i) || hidden(c)) return;
+        const own = c.getBoundingClientRect();
+        // only what lies inside the frame is seen at all
+        const seen = Math.min(own.right, frame.right) - Math.max(own.left, frame.left);
+        const under = Math.min(own.right, frame.right) - Math.max(own.left, from);
+        if (seen <= 0.5 || under <= 0.5) return;
+        const what = `${row.parentElement!.tagName.toLowerCase()} ${c.dataset.label ?? i} (${Math.round(own.left)}-${Math.round(own.right)}) under the pinned columns from ${Math.round(from)}`;
+        if (!scrolls) out.push(`${what}, although the table does not scroll`);
+        else if (under < seen - 0.5) out.push(`${what}: cut in half`);
+      });
+    }
     return [...new Set(out)];
   });
 }

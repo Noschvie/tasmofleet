@@ -345,6 +345,110 @@
         col[i].style.width = Math.ceil(need[i]) + "px";
       }
     });
+    cutAtPins(table, c, col, th);
+  }
+
+  // At scroll 0 the columns pinned right lie over the columns that have not scrolled in yet. One
+  // column usually straddles their edge, half visible ("seen 1", an Uptime value touching the
+  // switches). It is made whole instead: the wide columns before it give up the width it lacks (down
+  // to a floor), so it ends where the pinned columns begin and the next one is wholly behind them.
+  // When they have too little to give, the straddler is cut at the edge inside its own cell.
+  function cutAtPins(table, c, col, th) {
+    var frame = table.parentElement;
+    if (
+      !frame ||
+      table.getBoundingClientRect().width <= frame.clientWidth + 1
+    ) {
+      return; // everything fits: nothing lies under a pinned column
+    }
+    var pinW = 0,
+      first = -1;
+    c.forEach(function (cd, i) {
+      if (cd.side === "r" && th[i]) {
+        pinW += th[i].getBoundingClientRect().width;
+        if (first < 0) {
+          first = i;
+        }
+      }
+    });
+    if (first < 0) {
+      return;
+    }
+    var edge = frame.clientWidth - pinW,
+      x0 = table.getBoundingClientRect().left,
+      s = -1;
+    for (var i = 0; i < first; i++) {
+      var r = th[i].getBoundingClientRect();
+      if (
+        c[i].side !== "l" &&
+        r.left - x0 < edge - 0.5 &&
+        r.right - x0 > edge + 0.5
+      ) {
+        s = i;
+        break;
+      }
+    }
+    if (s < 0) {
+      return;
+    }
+    var deficit = th[s].getBoundingClientRect().right - x0 - edge,
+      give = [],
+      cells = [],
+      at = [];
+    var rows = Array.prototype.filter.call(
+      table.querySelectorAll(":scope > tbody > tr"),
+      function (r) {
+        return r.cells.length === c.length;
+      },
+    );
+    // what a column can give: its width down to its content at its narrowest (the device name down to
+    // the prototype's minimum, it wraps), never its pinned-for-good neighbours' or the checkbox column
+    for (var j = 0; j < s; j++) {
+      if (c[j].id === "" || (c[j].side && !(c[j].fix && c[j].side === "l"))) {
+        continue;
+      }
+      at.push(j);
+      rows.forEach(function (r) {
+        cells.push(r.cells[j]);
+      });
+    }
+    var mins = minContents(
+      cells.concat(
+        at.map(function (j) {
+          return th[j];
+        }),
+      ),
+    );
+    at.forEach(function (j) {
+      var floor = c[j].fix ? NAME_MIN_PX : 0;
+      cells.forEach(function (cell, k) {
+        if (cell && cell.cellIndex === j) {
+          floor = Math.max(floor, mins[k]);
+        }
+      });
+      floor = Math.max(floor, mins[cells.length + at.indexOf(j)]);
+      var w = th[j].getBoundingClientRect().width;
+      give.push([j, w, Math.max(0, w - Math.ceil(floor))]);
+    });
+    var slack = give.reduce(function (a, g) {
+      return a + g[2];
+    }, 0);
+    if (slack >= deficit) {
+      // the widest columns give first, so the narrow ones keep their size
+      give.sort(function (a, b) {
+        return b[1] - a[1];
+      });
+      give.forEach(function (g) {
+        var take = Math.min(g[2], deficit);
+        deficit -= take;
+        if (take > 0) {
+          col[g[0]].style.width = Math.floor(g[1] - take) + "px";
+        }
+      });
+    } else {
+      var w2 = th[s].getBoundingClientRect().width;
+      col[s].style.width = Math.max(40, Math.floor(w2 - deficit)) + "px";
+    }
   }
 
   // widths of cells' content at its narrowest (min-content), in each cell's own font and
