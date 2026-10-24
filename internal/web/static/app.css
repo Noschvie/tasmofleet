@@ -8026,7 +8026,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
     width: 132px;
   }
   table.devtable col.c-up {
-    width: 110px;
+    width: 120px; /* "seen 30s ago" is 12 characters of 13px mono plus padding */
   }
   table.devtable col.c-wifi {
     width: 124px;
