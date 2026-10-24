@@ -211,12 +211,13 @@ test("address links open the device page without credentials", { tag: "@core" },
 });
 
 // Quarantined: https://github.com/nofuturekid/tasmofleet/issues/20
-test("update batch: preview, staged ESP8266 and direct ESP32 succeed, unknown chip is refused", { tag: "@quarantine" }, async ({ page, request }) => {
+test("update batch: preview, staged ESP8266 and direct ESP32 succeed, unknown chip is refused", { tag: "@core" }, async ({ page, request }) => {
   test.setTimeout(240_000);
   const addr = env.devices["lamp-1m"].addr;
   const otaBefore = (await (await request.get(`http://${addr}/cm?cmnd=OtaUrl`)).json()).OtaUrl;
   await page.setExtraHTTPHeaders(operator);
   await pickForUpdate(page, app.url, ["lamp-1m", "esp32-dimmer", "mystery-chip"]);
+  const lampId = await page.getByLabel("Select lamp-1m", { exact: true }).getAttribute("value");
   await page.locator("label.upd-relopt", { hasText: "Tasmota 16.1.0" }).click();
   await page.getByRole("button", { name: "Review update" }).click();
 
@@ -232,10 +233,12 @@ test("update batch: preview, staged ESP8266 and direct ESP32 succeed, unknown ch
   // nothing below it jumps (one line per row, the state in a box of fixed width).
   const layout = () => page.locator(".upd-row").evaluateAll((els) => els.map((e) => `${Math.round(e.getBoundingClientRect().top)}/${Math.round(e.getBoundingClientRect().height)}`));
   // The device behind the job is silent while it flashes: its page says "Updating", not a red failure.
+  // The hold lasts as long as the job, about 15 s for the staged flow at the devenv's time scale (#20):
+  // the device page is opened directly, not through the device list, whose click took 46 s on a
+  // loaded CI runner, after the job had already succeeded.
   const second = await page.context().newPage();
   await second.setExtraHTTPHeaders(operator);
-  await second.goto(app.url + "/devices");
-  await second.getByRole("link", { name: "lamp-1m", exact: true }).click();
+  await second.goto(`${app.url}/devices/${lampId}`);
   await expect(second.locator(".devhd-state")).toHaveText("Updating");
   const consoleTab = second.locator("nav.utabs [aria-disabled=true]", { hasText: "Console" });
   await expect(consoleTab, "the tab stays, disabled, with the reason as its title").toHaveAttribute("title", /Unavailable while/);
