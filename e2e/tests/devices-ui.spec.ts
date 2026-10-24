@@ -358,12 +358,18 @@ test("a list update held back by an open row menu is applied when it closes", as
   await rows.first().locator("details > summary").last().click();
   await expect(rows.first().locator("details[open]")).toHaveCount(1);
 
-  const refetched = page.waitForResponse((r) => r.url().includes("/devices/table"));
+  // Only a reload that already carries the rename counts: any other device event (a poll, a
+  // state change) also refetches the list, and waiting for that one would let the test go on
+  // before the rename exists.
+  const refetched = page.waitForResponse(async (r) => r.url().includes("/devices/table") && (await r.text().catch(() => "")).includes(newName));
   const other = await page.context().newPage();
   await other.setExtraHTTPHeaders(adam);
   await other.goto(app.url + href + "/edit");
   await other.locator("input[name=name]").fill(newName);
+  // Closing the page right after the click can abort the save in flight: wait for it to finish.
+  const savedRename = other.waitForResponse((r) => r.request().method() === "POST" && r.url().includes(href));
   await other.getByRole("button", { name: /Save changes/ }).click();
+  expect((await savedRename).status()).toBeLessThan(400);
   await other.close();
 
   await refetched;
@@ -372,5 +378,5 @@ test("a list update held back by an open row menu is applied when it closes", as
   await expect(rows.first().locator("details[open]")).toHaveCount(1);
 
   await rows.first().locator("details > summary").last().click(); // close the menu
-  await expect(page.locator(`table[data-table=devices] a:text-is("${newName}")`)).toBeVisible({ timeout: 1_500 });
+  await expect(page.locator(`table[data-table=devices] a:text-is("${newName}")`)).toBeVisible({ timeout: 5_000 });
 });

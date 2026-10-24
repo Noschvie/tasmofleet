@@ -54,12 +54,27 @@ test.afterAll(async () => {
 });
 
 const headCell = (page: Page, table: string, name: string) => page.locator(`table[data-table="${table}"] thead th`, { hasText: new RegExp(`^\\s*${name}\\s*$`) });
-// A device event reloads the list and replaces the table: a header measured in that moment has no
-// box yet, so wait for one instead of reading null.
+// A device event reloads the list and replaces the table. Locator.boundingBox() resolves the
+// header and measures it in two steps, and on a slow machine the swap lands between them, again
+// and again: the call then never settles within the poll's timeout although a header is on the
+// page the whole time (reproduced with CPU throttling). So find and measure in one page-side step,
+// which cannot see a half-replaced table, and give a slow runner time.
 const width = async (page: Page, table: string, name: string) => {
-  let box: { width: number } | null = null;
-  await expect.poll(async () => (box = await headCell(page, table, name).boundingBox()) !== null).toBe(true);
-  return box!.width;
+  let w = 0;
+  await expect
+    .poll(
+      async () =>
+        (w = await page.evaluate(
+          ([t, n]) => {
+            const th = [...document.querySelectorAll(`table[data-table="${t}"] thead th`)].find((h) => h.textContent?.trim() === n);
+            return th ? th.getBoundingClientRect().width : 0;
+          },
+          [table, name],
+        )),
+      { timeout: 15_000 },
+    )
+    .toBeGreaterThan(0);
+  return w;
 };
 const saved = (page: Page, key: string) => page.waitForResponse((r) => r.url().endsWith(`/prefs/${key}`) && r.request().method() === "POST" && r.status() === 204);
 
