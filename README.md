@@ -50,7 +50,7 @@ on a home fleet of a few dozen devices. What it does differently:
 - **Bulk actions as transactions with logs**: updates, commands, backups and policy fixes on
   many devices run as one transaction, with a log per device, cancel and retry of the failed ones.
 - **Sign-in** with OIDC single sign-on, trusted forward-auth headers, or local accounts; roles
-  (admin, operator, viewer) and an audit log of every change.
+  (admin, operator) and an audit log of every change.
 - **Import from TasmoAdmin**: `devices.csv` and `MyConfig.json`, in the UI or with
   `tasmofleet import tasmoadmin`.
 
@@ -69,11 +69,25 @@ on a home fleet of a few dozen devices. What it does differently:
 - Automation stays in Home Assistant (or wherever you run it): TasmoFleet manages devices, it
   does not switch them on schedules.
 
-| Dashboard | Device list |
-| --- | --- |
+### What TasmoFleet changes on your devices
+
+Nothing on its own. Everything TasmoFleet does in the background only reads: status polling
+(single `Status N` queries, never `Status 0`), the policy live check, scheduled backups (config
+download and status snapshot), and discovery (MQTT announcements, HTTP scan).
+
+A device is only changed when someone starts an action in the UI: a firmware update, "make
+compliant" for the policy, a console or bulk command, a power toggle, a restart, a restore or a
+settings edit. Each of these is recorded in the audit log.
+
+There is no read-only mode or view-only role yet: both roles can change devices. Admins can do
+everything; operators can run updates, backups, power toggles and the allowlisted commands, but
+cannot edit the inventory, settings or users.
+
+| Dashboard                                                                                | Device list                                                                   |
+| ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | ![Dashboard with fleet state, attention list and transactions](docs/media/dashboard.png) | ![Device list with status, firmware and chip columns](docs/media/devices.png) |
-| **Running update transaction** | **Device page (dark theme)** |
-| ![A transaction with per-device progress](docs/media/transaction.png) | ![Device overview in the dark theme](docs/media/device-dark.png) |
+| **Running update transaction**                                                           | **Device page (dark theme)**                                                  |
+| ![A transaction with per-device progress](docs/media/transaction.png)                    | ![Device overview in the dark theme](docs/media/device-dark.png)              |
 
 All screenshots show simulated devices.
 
