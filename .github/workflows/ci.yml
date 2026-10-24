@@ -406,7 +406,9 @@ jobs:
   publish:
     name: publish image (tags)
     needs: required
-    if: github.ref_type == 'tag'
+    # An explicit status check: the implicit success() also looks at the skipped
+    # ancestors of "required" (safety-race, quarantine) and would skip this job.
+    if: ${{ !cancelled() && needs.required.result == 'success' && github.ref_type == 'tag' }}
     permissions:
       contents: read
       packages: write

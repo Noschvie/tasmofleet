@@ -6,6 +6,11 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Fixed
+
+- A release tag now publishes its image: the publish job in `ci.yml` was skipped because the implicit success check
+  counted the skipped jobs before `required` (v0.11.4 shipped no image from its first tag run).
+
 ## 0.11.4 (2026-10-24)
 
 ### Added
