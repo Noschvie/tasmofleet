@@ -26,6 +26,9 @@ always upgrade automatically.
 
 ### Fixed
 
+- The top bar's user menu was drawn below the device list's Columns button, which showed through it.
+  The z-index layers are now one documented scale (sticky parts, menus, top bar, top-bar menus, dialogs,
+  toasts) in `app.css`, and an e2e check asks the browser what is on top at every point of each open top-bar menu.
 - Device list at the default layout: a device with two relays had two Power switches in a column narrower than
   both, so the second was cut off and an ellipsis showed between them. Pinned columns now always get the width of
   their content, also without a saved layout (the 0.10.1 guarantee), and the offsets are measured again once the

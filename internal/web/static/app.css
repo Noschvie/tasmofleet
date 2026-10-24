@@ -126,11 +126,17 @@
   --container: 1640px;
   --page-pad: clamp(12px, 2.4cqw, 32px);
 
-  /* layers: the only z-index values */
-  --z-sticky: 10; /* @kind other */
-  --z-header: 30; /* @kind other */
-  --z-menu: 40; /* @kind other */
-  --z-dialog: 1000; /* @kind other */
+  /* layers, lowest to highest: the only z-index scale. Page content has none (auto). Values of 1 to 4
+     inside one component (pinned cells, column handles) stay local and lie below --z-sticky.
+     header.top is a stacking context of its own, so everything that must lie over the page content
+     below the header (menus of the toolbar, rows and tables) has to rank under --z-header, and
+     the header's own menus (--z-header-menu) only compete inside it. */
+  --z-sticky: 10; /* @kind other: sticky table parts, bulk bar, save bar */
+  --z-menu: 20; /* @kind other: toolbar and row menus, tooltips */
+  --z-header: 30; /* @kind other: the top bar and the phone action bar */
+  --z-header-menu: 40; /* @kind other: the top bar's menus (user menu) */
+  --z-dialog: 1000; /* @kind other: dialogs and drawers (their own top layer, kept for fallbacks) */
+  --z-toast: 1001; /* @kind other: toasts */
 
   /* values the prototype writes inline, the same in both themes */
   --backdrop: rgba(10, 14, 18, 0.5);
@@ -3032,7 +3038,7 @@ details.job-log > summary {
 .audittable .tip {
   display: none;
   position: absolute;
-  z-index: 9;
+  z-index: var(--z-menu);
   right: 0;
   top: calc(100% - 0.2rem);
   width: min(34rem, 80vw);
@@ -3129,7 +3135,7 @@ details.job-log > summary {
 .savebar {
   position: sticky;
   bottom: 0;
-  z-index: 4;
+  z-index: var(--z-sticky);
   margin: 1rem 0 0;
   padding: 0.7rem 0;
   background: var(--color-bg);
@@ -3231,7 +3237,7 @@ label.chip:has(input:focus-visible) {
   }
   .actionbar {
     position: fixed;
-    z-index: 30;
+    z-index: var(--z-header);
     left: 0;
     right: 0;
     bottom: 0;
@@ -4827,7 +4833,7 @@ summary.um-btn::-webkit-details-marker {
   border-radius: var(--r-card);
   box-shadow: var(--shadow-lg);
   padding: var(--sp-6);
-  z-index: var(--z-menu);
+  z-index: var(--z-header-menu);
 }
 .um-who {
   padding: var(--sp-8) var(--sp-10) var(--sp-10);
@@ -5229,7 +5235,7 @@ html[data-live="offline"] .conn-banner.conn-off {
   position: fixed;
   right: 16px;
   bottom: 16px;
-  z-index: calc(var(--z-dialog) + 1);
+  z-index: var(--z-toast);
   display: flex;
   flex-direction: column;
   gap: var(--sp-8);

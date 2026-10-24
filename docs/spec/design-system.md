@@ -92,7 +92,7 @@ Theme-independent tokens (all on `:root`):
 | Controls | `--ctl` 34px (40px on phones), `--ctl-sm` 28px, `--ctl-lg` 40px, `--ctl-pad` 14px, `--ctl-pad-sm` 10px |
 | Layout | `--container` 1640px, `--page-pad: clamp(12px, 2.4cqw, 32px)`, `--gutter` 16px, `--hair-w` 1px |
 | Inline values made tokens | `--backdrop`, `--shadow-knob`, `--shadow-bar`, `--color-console-rule` (theme independent), `--color-grip-hover` (per theme: it mixes the accent) |
-| Layers | `--z-sticky` 10, `--z-menu` 40, `--z-dialog` 1000 |
+| Layers | `--z-sticky` 10, `--z-menu` 20, `--z-header` 30, `--z-header-menu` 40, `--z-dialog` 1000, `--z-toast` 1001 |
 
 No element is a size container (F3 as built): `cqw` in `--page-pad` resolves against the viewport
 width including the scrollbar, which is what the prototype's root measures, and fixed elements
