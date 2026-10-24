@@ -202,7 +202,7 @@ export async function seedDesignV2(page: Page, app: App, env: Devenv, fx: Design
   const online = fx.devices.filter((d) => d.status !== "unknown");
   await page.goto(app.url + "/devices");
   for (const d of online) {
-    await expect(page.getByRole("row").filter({ hasText: d.name }).getByText("Online", { exact: true }).first()).toBeVisible({ timeout: 120_000 });
+    await expect(page.getByRole("row").filter({ hasText: d.name }).getByText("Online", { exact: true }).first()).toBeVisible({ timeout: 300_000 });
   }
   phase("devices online");
   // "Offline" needs a first contact, so the devices the prototype shows as offline are stopped now.

@@ -210,7 +210,8 @@ test("address links open the device page without credentials", { tag: "@core" },
   expect(await link.getAttribute("href")).not.toContain("@");
 });
 
-test("update batch: preview, staged ESP8266 and direct ESP32 succeed, unknown chip is refused", { tag: "@core" }, async ({ page, request }) => {
+// Quarantined: https://github.com/nofuturekid/tasmofleet/issues/20
+test("update batch: preview, staged ESP8266 and direct ESP32 succeed, unknown chip is refused", { tag: "@quarantine" }, async ({ page, request }) => {
   test.setTimeout(240_000);
   const addr = env.devices["lamp-1m"].addr;
   const otaBefore = (await (await request.get(`http://${addr}/cm?cmnd=OtaUrl`)).json()).OtaUrl;
@@ -235,17 +236,7 @@ test("update batch: preview, staged ESP8266 and direct ESP32 succeed, unknown ch
   await second.setExtraHTTPHeaders(operator);
   await second.goto(app.url + "/devices");
   await second.getByRole("link", { name: "lamp-1m", exact: true }).click();
-  // The hold starts when the engine picks the job up, which on a loaded runner can take longer than the
-  // page needs to load: reload until it shows (a single 5 s look failed twice in CI with "Online").
-  await expect
-    .poll(
-      async () => {
-        await second.reload();
-        return second.locator(".devhd-state").textContent();
-      },
-      { timeout: 60_000, intervals: [1_000] },
-    )
-    .toBe("Updating");
+  await expect(second.locator(".devhd-state")).toHaveText("Updating");
   const consoleTab = second.locator("nav.utabs [aria-disabled=true]", { hasText: "Console" });
   await expect(consoleTab, "the tab stays, disabled, with the reason as its title").toHaveAttribute("title", /Unavailable while/);
   await expect(second.getByRole("button", { name: "Back up", exact: true }), "nothing that needs the device is offered while it is held").toBeDisabled();

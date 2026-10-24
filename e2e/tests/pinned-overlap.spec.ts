@@ -74,9 +74,13 @@ async function overlaps(page: Page): Promise<string[]> {
           if (hidden(c)) return;
           const k = content(c);
           if (side.has(i)) {
-            const own = c.getBoundingClientRect();
-            if (end === "l" && k.width > 0 && (k.left < own.left - 0.5 || k.right > own.right + 0.5))
-              out.push(`pinned ${c.dataset.label ?? i} shows ${Math.round(k.left)}-${Math.round(k.right)} in a cell of ${Math.round(own.left)}-${Math.round(own.right)}`);
+            // inside the cell's padding box: a switch flush on the border looks like it spills over
+            const own = c.getBoundingClientRect(),
+              cs = getComputedStyle(c),
+              inL = own.left + parseFloat(cs.paddingLeft),
+              inR = own.right - parseFloat(cs.paddingRight);
+            if (end === "l" && k.width > 0 && (k.left < inL - 0.5 || k.right > inR + 0.5))
+              out.push(`pinned ${c.dataset.label ?? i} shows ${Math.round(k.left)}-${Math.round(k.right)} in a cell of ${Math.round(own.left)}-${Math.round(own.right)} with padding ${cs.paddingLeft}/${cs.paddingRight}`);
             return;
           }
           cells.forEach((p, j) => {
@@ -111,6 +115,29 @@ async function overlaps(page: Page): Promise<string[]> {
         if (!scrolls) out.push(`${what}, although the table does not scroll`);
         else if (under < seen - 0.5) out.push(`${what}: cut in half`);
       });
+    }
+    // every row of a pinned column has the same inner padding (a two-relay row's switches sat flush on the border)
+    for (const [idx] of side) {
+      const pads = new Set([...t.tBodies[0].rows].filter((r) => r.cells.length > idx && !(r.cells[idx] as HTMLElement).hidden).map((r) => { const cs = getComputedStyle(r.cells[idx]); return `${cs.paddingLeft}/${cs.paddingRight}`; }));
+      if (pads.size > 1) out.push(`pinned column ${idx} has different paddings in its rows: ${[...pads].join(" vs ")}`);
+    }
+    // a column scrolled under the pinned ones must not show anything through them: the point at the
+    // middle of each pinned header lies on that header, not on a resize handle of another column
+    for (const [idx] of side) {
+      const th = t.tHead!.rows[0].cells[idx];
+      if (!th || hidden(th)) continue;
+      const b = th.getBoundingClientRect();
+      for (const y of [b.top + b.height * 0.3, b.top + b.height * 0.7]) {
+        for (const x of [b.left + b.width - 4, b.left + 4]) {
+          const at = document.elementFromPoint(x, y);
+          if (at && !th.contains(at)) out.push(`over the pinned header ${idx} at ${Math.round(x)},${Math.round(y)} lies ${at.tagName.toLowerCase()}.${String(at.className)}`);
+        }
+      }
+    }
+    // columns pinned for good have no resize handle (a stray divider inside the last cell of the header)
+    for (const h of t.querySelectorAll<HTMLElement>("thead th > .colhandle")) {
+      const idx = (h.parentElement as HTMLTableCellElement).cellIndex;
+      if (side.get(idx) === "r") out.push(`resize handle in the header of pinned column ${idx}`);
     }
     return [...new Set(out)];
   });
