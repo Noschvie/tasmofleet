@@ -6,6 +6,19 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Added
+
+- Static demo on GitHub Pages (<https://nofuturekid.github.io/tasmofleet/>): `make demo` renders the design fixture
+  fleet (60 simulated devices) with the real binaries and saves every page an admin reaches by plain links as static
+  HTML in `dist/demo` (forms, htmx requests and the live stream are disabled; addresses are documentation ranges).
+  The `pages` workflow builds and publishes it on release tags and by hand. `make demo-media` renews the README's
+  screenshots and update animation in `docs/media`.
+
+### Fixed
+
+- README quick start: the first sign-in used `docker exec tasmofleet cat /data/initial-admin-password`, which fails
+  (the image has no shell tools); it now uses the setup link from the container log.
+
 ## 0.11.3 (2026-10-24)
 
 ### Added

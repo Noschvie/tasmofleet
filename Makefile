@@ -29,7 +29,7 @@ BIN       := bin
 # fails the gate, so add the entry together with the tests.
 MUTATION := ./internal/fwselect:90 ./internal/ota:85 ./internal/policy:85 ./internal/cmdpolicy:90
 
-.PHONY: check ci templ templ-check fmt fmt-check vet staticcheck lint test race integration mutation mutation-changed e2e e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check clean tools
+.PHONY: demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test race integration mutation mutation-changed e2e e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check clean tools
 
 check: templ-check fmt-check vet staticcheck lint test vuln build
 
@@ -150,6 +150,20 @@ visual-parity:
 	git worktree remove --force "$(PARITY_TMP)"; \
 	[ $$rc = 0 ] || exit $$rc; \
 	node visual-parity.mjs "$(parity_out)/base" "$(parity_out)/base2" "$(parity_out)/head" "$(parity_out)/diff"
+
+# The static demo for GitHub Pages (e2e/tests/demo-site.spec.ts): the design fixture fleet (60 simulated
+# devices) rendered by the real binaries, every page an admin reaches by plain links saved as
+# static HTML into dist/demo (not committed; the pages workflow builds and publishes it).
+demo: build
+	cd e2e && nice -n 10 npx playwright test --project=demo --workers=1 -g "static demo site"
+
+# The README media in docs/media: screenshots of the same fleet and the update animation
+# (demo.webp, recorded with Playwright, converted with ffmpeg). Run after a visible UI change and commit the files.
+demo-media: build
+	cd e2e && DEMO_MEDIA=1 nice -n 10 npx playwright test --project=demo --workers=2
+	nice -n 10 ffmpeg -loglevel error -y -i e2e/test-results/demo.webm \
+	  -vf "fps=8,scale=960:-1:flags=lanczos" -c:v libwebp_anim -lossless 0 -q:v 60 -compression_level 6 -loop 0 docs/media/demo.webp
+	@ls -l docs/media
 
 vuln:
 	$(NICE) $(TOOL) govulncheck ./...

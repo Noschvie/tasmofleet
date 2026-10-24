@@ -1,0 +1,67 @@
+# The static demo on GitHub Pages (https://nofuturekid.github.io/tasmofleet/): `make demo` runs
+# the real binaries against tasmofleet-devenv with the design fixture fleet (60 simulated
+# devices, documentation addresses only) and saves the pages an admin reaches as static HTML
+# (e2e/tests/demo-site.spec.ts). Built on release tags and by hand; the output is never committed.
+name: pages
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  NICE: ""
+
+jobs:
+  build:
+    name: build the static demo
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      # Browsers in this image match @playwright/test in e2e/package.json; bump both together (as in ci.yml).
+      image: mcr.microsoft.com/playwright:v1.64.1-noble
+    steps:
+      - name: install make (not in the Playwright image)
+        run: apt-get update -qq && apt-get install -y -qq --no-install-recommends make >/dev/null
+      - uses: actions/checkout@v7.0.1
+      - name: trust the workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: actions/setup-go@v7.0.0
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - uses: actions/cache@v6.1.0
+        with:
+          path: ~/.npm
+          key: npm-${{ hashFiles('e2e/package-lock.json') }}
+      - name: install e2e dependencies
+        run: make e2e-deps
+      - name: build the demo
+        env:
+          CI: "true"
+        run: make demo
+      - uses: actions/upload-pages-artifact@v5.0.0
+        with:
+          path: dist/demo
+
+  deploy:
+    name: deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5.0.1

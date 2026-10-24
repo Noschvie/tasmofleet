@@ -1,0 +1,15 @@
+/* The banner of the static demo (make demo), above the page shell. */
+.demo-banner {
+  position: relative;
+  z-index: 100;
+  padding: 6px 16px;
+  font: 500 13px/1.4 system-ui, sans-serif;
+  text-align: center;
+  background: var(--color-warn-bg, #fff4d6);
+  color: var(--color-warn-fg, #5c4300);
+  border-bottom: 1px solid var(--color-border, #e3e3e3);
+}
+.demo-banner a {
+  color: inherit;
+  text-decoration: underline;
+}

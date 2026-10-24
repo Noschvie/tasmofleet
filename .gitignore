@@ -15,3 +15,4 @@
 !deploy/**/*.env.example
 /cmd/tasmofleet/tasmofleet
 /cmd/tasmofleet-devenv/tasmofleet-devenv
+/dist/
