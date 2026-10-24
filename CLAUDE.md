@@ -171,8 +171,10 @@ with e.g. `make check JOBS=4`. `make test` and `make integration` use the go tes
   lint, unit and integration tests from the go test cache, build, and the `@core` e2e tests in two shards.
   When a PR changes a package listed in `SAFETY` (Makefile: fwselect, ota, tasmota, secretbox, auth, httpx,
   policy, cmdpolicy), the race tests of the changed ones and `make mutation-changed` run too, and are then
-  required. CI restores the Go build/test cache (`.github/actions/go`, keyed on Go version and `go.sum`)
-  and sets file mtimes from git (`tools/git-mtimes.sh`), so unchanged packages are not retested.
+  required. CI runs mutation in three shards (`MUTATION_SHARD`) and gates on their sum
+  (`make mutation-sum`). CI restores the Go build/test cache (`.github/actions/go`, keyed on Go
+  version and `go.sum`) and sets file mtimes from git (`tools/git-mtimes.sh`), so unchanged packages
+  are not retested.
 - **FULL** (nightly cron on `main`, tags `vX.Y.Z`, manual dispatch): additionally every e2e test in three
   shards, every unit test with the race detector, uncached test runs and the full mutation run. A tag's
   image is published (ci.yml job `publish` calling `image.yml`) only after FULL passed, and a tag without
