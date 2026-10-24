@@ -183,24 +183,35 @@ for (const saved of [false, true]) {
       .waitFor({ state: "attached", timeout: 20_000 });
     const scroller = page.locator(".tablewrap[data-key=devices] .tablescroll");
     // A device event can reload the list (and reset the scroll) at any time, so every
-    // measurement scrolls first, in the same task.
-    const geo = (toEnd = false) =>
-      scroller.evaluate((s, toEnd) => {
-        if (toEnd) s.scrollLeft = s.scrollWidth;
-        const box = (sel: string) =>
-          [...s.querySelectorAll("thead th")]
-            .find((t) => t.textContent!.trim().startsWith(sel))!
-            .getBoundingClientRect();
-        const w = s.getBoundingClientRect();
-        return {
-          left: w.left,
-          right: w.right,
-          name: box("Name").left,
-          powerRight: box("Power").right,
-          scroll: s.scrollLeft,
-          max: s.scrollWidth - s.clientWidth,
-        };
-      }, toEnd);
+    // measurement scrolls first, in the same task. A reloaded table comes from the server
+    // without the width the script gives it (min-width, set in htmx:afterSettle, where the
+    // script also adds .is-js to the frame): measured before that it does not scroll yet.
+    // So measure only a frame that has been enhanced, and look and measure in one step.
+    const geo = async (toEnd = false) => {
+      const read = () =>
+        scroller.evaluate((s, toEnd) => {
+          if (!s.classList.contains("is-js")) return null;
+          if (toEnd) s.scrollLeft = s.scrollWidth;
+          const box = (sel: string) =>
+            [...s.querySelectorAll("thead th")]
+              .find((t) => t.textContent!.trim().startsWith(sel))!
+              .getBoundingClientRect();
+          const w = s.getBoundingClientRect();
+          return {
+            left: w.left,
+            right: w.right,
+            name: box("Name").left,
+            powerRight: box("Power").right,
+            scroll: s.scrollLeft,
+            max: s.scrollWidth - s.clientWidth,
+          };
+        }, toEnd);
+      let g: Awaited<ReturnType<typeof read>> = null;
+      await expect
+        .poll(async () => (g = await read()) !== null, { timeout: 15_000 })
+        .toBe(true);
+      return g!;
+    };
     const start = await geo();
     expect(
       start.max,
