@@ -485,6 +485,9 @@ type fakeSel struct {
 	mu      sync.Mutex
 	refuse  bool
 	choices []fwselect.Choice // every Decide call
+	// esp32Direct plans every ESP32 direct, like fwselect does (by default
+	// the fake plans by free flash for every chip).
+	esp32Direct bool
 }
 
 func (s *fakeSel) Decide(id model.Identity, c fwselect.Choice) (fwselect.Decision, error) {
@@ -502,6 +505,9 @@ func (s *fakeSel) Select(model.Identity, fwselect.Choice) (fwselect.Selection, e
 }
 
 func (s *fakeSel) Plan(id model.Identity, size int64) (model.Plan, error) {
+	if s.esp32Direct && id.Family.IsESP32() {
+		return model.PlanDirect, nil
+	}
 	if size > int64(id.FreeKB)*1024-16*1024 {
 		return model.PlanStaged, nil
 	}

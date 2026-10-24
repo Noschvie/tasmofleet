@@ -12,6 +12,12 @@ const (
 	FaultUploadCut       = "upload_cut"        // connection closed halfway through the body; nothing is flashed
 	FaultUploadLostReply = "upload_lost_reply" // image flashed and restart scheduled, the reply never arrives
 	FaultSlowWrite       = "slow_write"        // the device consumes the body Duration late (slow flash writes)
+	// FaultUploadNoSpace: an ESP32 with the safeboot partition layout (one
+	// app partition). The running firmware has nowhere to write a full image:
+	// Update.begin fails and HandleUploadDone answers "Not enough space";
+	// nothing is flashed and the device keeps running. The download path
+	// (OtaUrl + Upgrade, through safeboot) is not affected.
+	FaultUploadNoSpace = "upload_no_space"
 )
 
 // uploadPage is a Tasmota result page of the upload (HandleUploadDone).
@@ -41,6 +47,7 @@ func (d *simDevice) serveU2(w http.ResponseWriter, r *http.Request) {
 	lost := len(d.faultsForLocked("u2", FaultUploadLostReply)) > 0
 	slow := d.faultsForLocked("u2", FaultSlowWrite)
 	wrong := len(d.faultsForLocked("u2", FaultWrongFamily)) > 0
+	noSpace := len(d.faultsForLocked("u2", FaultUploadNoSpace)) > 0
 	d.mu.Unlock()
 	reply := func(ok bool, msg string) {
 		d.setHeaders(w, "", "text/html")
@@ -92,6 +99,9 @@ func (d *simDevice) serveU2(w http.ResponseWriter, r *http.Request) {
 		return
 	case len(body) == 0 || (body[0] != 0xE9 && body[0] != 0x1F): // 0x1F is gzipped 0xE9
 		fail("Invalid file signature")
+		return
+	case noSpace:
+		fail("Not enough space")
 		return
 	}
 	raw, err := unpack(body)

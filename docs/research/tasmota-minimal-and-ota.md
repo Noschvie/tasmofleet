@@ -230,3 +230,40 @@ What this means for the OTA power restore:
   (the download blocks its main loop), so the remaining window is short: after
   the second reading until the download starts, and between the post-boot
   reading and the switch.
+
+## File upload on an ESP32 with the safeboot layout (SRC v16.0.0, OBS 2026-10-24)
+
+OBS: office-monitor-thomas (ESP32-D0WDQ6, 4 MB, 16.0.0 release-tasmota32; Status 4 ProgramSize 2182,
+Free 697, ProgramFlashSize 4096) answered a push of `tasmota32.bin` (2234912 bytes) with "Upload Failed
+... Not enough space". Nothing was flashed, the device did not restart.
+
+SRC (`tasmota/tasmota_xdrv_driver/xdrv_01_9_webserver.ino` unless noted):
+
+* Layout: `EspSingleOtaPartition()` = one app partition (`support_esp32.ino:253`), i.e. `safeboot`
+  (factory) + `app0`. Status 4 `Free` is `ESP_getFreeSketchSpace()/1024` (`support_command.ino:1034-1035`);
+  on this layout it is the rest of the running partition (`support_esp32.ino:478-486`: partition size minus
+  sketch size), so it is always smaller than a full image.
+* `HandleUploadLoop`: an `0xE9` image is refused with error 4 when `fsz` > `ESP.getFreeSketchSpace()`
+  (3676), then `Update.begin((ESP.getFreeSketchSpace() - 0x1000) & 0xFFFFF000)` fails with error 2
+  "Not enough space" (3681-3683), as does a short `Update.write` (3716). The image must therefore fit
+  `Free * 1024 - 4096`; tasmofleet's push preflight uses exactly that bound (`ota.pushSpaceRefusal`).
+* The web UI on this layout: `HandleUpgradeFirmware` sends `HTTP_FORM_RST_UPG_FCT` instead of
+  `HTTP_FORM_RST_UPG` when `EspSingleOtaPartition() && !EspRunningFactoryPartition()` (3420-3421). The
+  form has the same `action='u2?fsz='` and file field (382-396), so the `/up` form check does not tell
+  the layouts apart; its button calls `upl(this)`.
+* `upl()` (`html_uncompressed/HTTP_HEAD_LAST_SCRIPT32.h:28-47`) reads the file's first byte: `0xE9`
+  (a full, uncompressed image) goes through `fct()`, anything else is posted directly. `fct()` (48-65)
+  polls `GET /u4?u4=fct&api=`: `false` = a restart into safeboot was triggered, poll again in 6 s (2 s
+  after a network error); `true` = running safeboot now, post the form to `/u2` there.
+* `/u4` = `HandleSwitchBootPartition` (route 604, handler 3845-3895): with `u4=fct` on the single-OTA
+  layout and not in safeboot it saves the settings, erases `otadata` (`EspPrepRestartToSafeBoot`,
+  `support_esp32.ino:266`), answers `false` (3880) and restarts. In safeboot (or on a dual-OTA layout) it
+  answers `true` (`none` without a factory partition, 3889). Safeboot's own upload writes `app0` and
+  reboots into it.
+* The download path (`OtaUrl` + `Upgrade 1`) on this layout already restarts into safeboot, which
+  downloads and flashes `app0`; it needs no extra step from tasmofleet.
+
+Consequence: a push to this layout needs a restart into safeboot first (a new, separate device action
+with its own failure mode: a device left in safeboot), so tasmofleet does not do it. "Push where possible"
+uses the download for any device whose Status 4 `Free` is too small for the image, and a refusal by the
+device ends the job at once. The safeboot push is a follow-up: <https://github.com/nofuturekid/tasmofleet/issues/30>.

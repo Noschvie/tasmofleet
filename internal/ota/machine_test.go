@@ -311,6 +311,22 @@ func TestStepUpgradeIssued(t *testing.T) {
 			},
 		},
 		{
+			// The device answered "Upload Failed" (office-monitor-thomas,
+			// 2026-10-24: "Not enough space"): nothing was flashed and the
+			// device keeps running, so waiting for a reboot that cannot come
+			// only blocks the slot. The relays were never touched, so the
+			// failure carries no "not restored" note.
+			name: "upgrade_issued/command_failed/upload refused", in: withPower(ui, 1), ev: Event{Kind: EvCommandFailed, Err: "upload: tasmota: device refused the upload: Not enough space", NotFlashed: true},
+			state: model.JobFailed, actions: []ActionKind{ActNotify},
+			check: func(t *testing.T, j model.Job, _ []Action) {
+				wantErrContains(t, j, "nothing was flashed")
+				wantErrContains(t, j, "Not enough space")
+				if strings.Contains(j.LastError, "not restored") {
+					t.Fatalf("refusal claims relays were left off: %q", j.LastError)
+				}
+			},
+		},
+		{
 			name: "upgrade_issued/probe_offline", in: ui, ev: Event{Kind: EvProbeOffline},
 			state: model.JobAwaitReboot, actions: []ActionKind{ActProbe},
 			check: func(t *testing.T, j model.Job, as []Action) {

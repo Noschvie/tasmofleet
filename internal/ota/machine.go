@@ -75,6 +75,9 @@ type Event struct {
 	OtaURL       string // EvIdentity: current OtaUrl of the device; EvPlanned: URL to set
 	Uptime       int64
 	Err          string
+	// NotFlashed (EvCommandFailed in upgrade_issued): the device certainly
+	// flashed nothing, it refused the upload. The job ends at once.
+	NotFlashed bool
 
 	// EvPlanned only: the outcome of the plan action. Skip is true when the
 	// update policy decided there is nothing to do.
@@ -416,6 +419,13 @@ func stepUpgradeIssued(j model.Job, ev Event, now time.Time, cfg Config) (model.
 		}
 		return pushUploaded(j, now, cfg), probeLater(cfg)
 	case EvCommandFailed:
+		if ev.NotFlashed {
+			// The device refused the image and keeps running: no reboot
+			// will come, and the relays were never touched.
+			j = to(j, model.JobFailed, now)
+			j.LastError = withErr("upload refused, nothing was flashed", ev.Err)
+			return j, notify()
+		}
 		// Unknown whether the upgrade started: probe, never resend.
 		return pushUploaded(j, now, cfg), probeLater(cfg)
 	case EvProbeOffline:

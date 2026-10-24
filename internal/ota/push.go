@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/tasmota"
 )
 
 // Push delivery (backlog F-9): instead of OtaUrl and Upgrade 1 the engine
@@ -22,8 +23,9 @@ import (
 type FirmwareUploader interface {
 	// UploadFirmware sends size bytes of body as the file filename. A nil error
 	// means the device accepted the image. Every other error leaves it open
-	// whether the device flashes, except a refusal by the device (nothing
-	// flashed); the caller treats all of them as "probe first".
+	// whether the device flashes (the caller probes first), except
+	// tasmota.ErrUploadRefused and tasmota.ErrUploadUnsupported: nothing was
+	// flashed and the job fails at once.
 	UploadFirmware(ctx context.Context, d model.Device, filename string, size int64, body io.Reader) error
 }
 
@@ -58,6 +60,25 @@ func pushDeviceRefusal(id model.Identity) error {
 		return errors.New(errPushChip)
 	case isIntermediate(id.Variant):
 		return errors.New(errPushSafeboot)
+	}
+	return nil
+}
+
+// uploadMarginBytes: Tasmota's upload handler starts Update with the free
+// sketch space less one flash sector (HandleUploadLoop in
+// xdrv_01_9_webserver.ino) and refuses a larger image with "Not enough space".
+const uploadMarginBytes = 4096
+
+// pushSpaceRefusal says why the image does not fit the device's free flash
+// for an upload, or nil. FreeKB is Status 4 "Free", read with the identity.
+// A safeboot-layout ESP32 (one app partition) reports only what is left of
+// its running partition and takes a full image only through the download.
+func pushSpaceRefusal(id model.Identity, size int64) error {
+	if id.FreeKB <= 0 {
+		return errors.New("the device's free flash is unknown (Status 4)")
+	}
+	if size > int64(id.FreeKB)*1024-uploadMarginBytes {
+		return fmt.Errorf("not enough free flash for an upload (image %d KB, %d KB free)", (size+1023)/1024, id.FreeKB)
 	}
 	return nil
 }
@@ -104,7 +125,9 @@ func (e *Engine) push(ctx context.Context, d model.Device, a model.Artifact) Eve
 	}
 	defer rc.Close() //nolint:errcheck // read-only file
 	if err := e.api.(FirmwareUploader).UploadFirmware(ctx, d, a.Filename, a.Size, rc); err != nil {
-		return Event{Kind: EvCommandFailed, Err: err.Error()}
+		// A refusal and a missing upload form are certain: nothing was flashed.
+		certain := errors.Is(err, tasmota.ErrUploadRefused) || errors.Is(err, tasmota.ErrUploadUnsupported)
+		return Event{Kind: EvCommandFailed, Err: err.Error(), NotFlashed: certain}
 	}
 	return Event{Kind: EvCommandOK}
 }

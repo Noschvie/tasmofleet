@@ -188,3 +188,22 @@ func TestU2WrongFamilyFaultAppliesToAnyImage(t *testing.T) {
 		t.Fatalf("%v %s", err, page)
 	}
 }
+
+// Why: an ESP32 with the safeboot partition layout (one app partition, as
+// office-monitor-thomas, 2026-10-24) cannot write a full image while it runs:
+// Tasmota answers "Not enough space" and flashes nothing. The device keeps
+// running, and the download path (through safeboot) still works.
+func TestU2NoSpaceFaultRefusesAndKeepsRunning(t *testing.T) {
+	f := newTestFleet(t, "", Extra{})
+	d := add(t, f, DeviceSpec{Name: "monitor", Profile: ProfileESP32, Version: "16.0.0", Faults: []Fault{{Kind: FaultUploadNoSpace}}})
+	getUp(t, d)
+	page, err := postU2(d, "tasmota32.bin", esp32Image(t, "tasmota32.bin", "16.1.0"))
+	if err != nil || !strings.Contains(page, "Failed</font></b><br><br>Not enough space") {
+		t.Fatalf("%v %s", err, page)
+	}
+	settled(t, d, 0)
+	eq(t, "version", d.Version(), "16.0.0")
+	if d.Boots() != 0 {
+		t.Fatalf("device rebooted %d times after a refusal", d.Boots())
+	}
+}

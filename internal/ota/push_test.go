@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"slices"
 	"strings"
@@ -72,7 +73,78 @@ func TestPushPlanRefusal(t *testing.T) {
 	}
 }
 
+// Why: Tasmota's upload handler starts Update with the free sketch space less
+// one 4 KiB sector (xdrv_01_9_webserver.ino, HandleUploadLoop) and answers
+// "Not enough space" for anything larger. Status 4 "Free" is that space in KB
+// (rounded down), so an image that does not fit must take the download, which
+// a safeboot-layout ESP32 (Free 697 KB, image 2183 KB) handles through its
+// safeboot partition. An unknown Free (0) cannot be trusted to fit either.
+func TestPushSpaceRefusal(t *testing.T) {
+	const kb = 1024
+	for _, tc := range []struct {
+		name string
+		free int
+		size int64
+		want string // substring of the refusal; empty = allowed
+	}{
+		{"fits", 1800, 469152, ""},
+		{"exactly at the margin", 697, 697*kb - 4096, ""},
+		{"one byte over the margin", 697, 697*kb - 4096 + 1, "not enough free flash"},
+		{"safeboot layout", 697, 2234912, "image 2183 KB, 697 KB free"},
+		{"free unknown", 0, 469152, "free flash is unknown"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := pushSpaceRefusal(model.Identity{Family: model.ChipESP32, Variant: "tasmota", FreeKB: tc.free}, tc.size)
+			if tc.want == "" {
+				if err != nil {
+					t.Fatalf("refused: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("got %v, want a refusal mentioning %q", err, tc.want)
+			}
+		})
+	}
+}
+
 // ---- engine level, with fakes ----
+
+// Why: "push where possible" must not send an image the device cannot take.
+// The preview reads Status 4 (inside ProbeIdentity, never Status 0); a device
+// whose free flash is smaller than the image gets the download, with the
+// reason, and its job never uploads.
+func TestEnginePushWherePossibleFallsBackWhenTheImageDoesNotFit(t *testing.T) {
+	small := esp32Device()
+	small.ident.FreeKB = 400 // the test image is 469152 bytes
+	h, pa, _ := pushHarness(t, small)
+	h.sel.esp32Direct = true
+	reqs := []Request{{DeviceID: 1, Release: "16.0.0", Delivery: model.DeliveryPush}}
+	items, err := h.e.Preview(context.Background(), reqs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].Decision == decisionRefuse || items[0].Delivery != model.DeliveryPull ||
+		!strings.Contains(items[0].DeliveryNote, "not enough free flash for an upload") {
+		t.Fatalf("preview %+v", items)
+	}
+	if h.rec.count("status 0") != 0 {
+		t.Fatalf("Status 0 sent: %v", h.rec.entries())
+	}
+	if _, err := h.e.Submit(context.Background(), "alice", reqs); err != nil {
+		t.Fatal(err)
+	}
+	h.run(t, h.e)
+	// Only the delivery is checked: the fake's download flashes an ESP8266
+	// identity, so how the job ends says nothing here.
+	jobs, _ := h.st.ListJobs(context.Background(), storeFilter(1))
+	if len(jobs) != 1 || jobs[0].Delivery != model.DeliveryPull {
+		t.Fatalf("jobs %+v", jobs)
+	}
+	if len(pa.uploads) != 0 || h.rec.count("upgrade 1") == 0 {
+		t.Fatalf("uploads %v, want the download: %v", pa.uploads, h.rec.entries())
+	}
+}
 
 func esp32Ident(version string) model.Identity {
 	return model.Identity{Family: model.ChipESP32, Hardware: "ESP32-D0WD-V3", Version: version, Image: "tasmota32", Variant: "tasmota", FlashSizeKB: 4096, FreeKB: 1800}
@@ -371,20 +443,60 @@ func TestEnginePushCancelDuringUploadEndsCancelledWithoutResend(t *testing.T) {
 	}
 }
 
-// Why: a refusal by the device means nothing was flashed; the job may try
-// again, but only after probing and at most MaxAttempts times, and ends failed
-// with the device's reason.
-func TestEnginePushRefusedByDeviceEndsFailed(t *testing.T) {
+// Why: a refusal by the device ("Upload Failed") is certain: nothing was
+// flashed and the device keeps running. The first real push to a
+// safeboot-layout ESP32 (2026-10-24, "Not enough space") then waited for the
+// whole upgrade window for a reboot that could not come. The job must end
+// failed at once with the device's reason, after exactly one upload and
+// without a single probe.
+func TestEnginePushRefusedByDeviceEndsFailedAtOnce(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"refused", fmt.Errorf("upload: %w: Not enough space", tasmota.ErrUploadRefused), "Not enough space"},
+		{"no upload form", fmt.Errorf("upload: %w: the upgrade page has no file upload form", tasmota.ErrUploadUnsupported), "no file upload form"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h, pa, _ := pushHarness(t, esp32Device())
+			pa.refuse = tc.err
+			id := submitOne(t, h, Request{DeviceID: 1, Release: "16.0.0", Delivery: model.DeliveryPush})
+			start := h.clk.Now()
+			h.run(t, h.e)
+			j := h.job(t, id)
+			if j.State != model.JobFailed || !strings.Contains(j.LastError, tc.want) || !strings.Contains(j.LastError, "nothing was flashed") {
+				t.Fatalf("job %s %q", j.State, j.LastError)
+			}
+			if n := len(pa.uploads); n != 1 {
+				t.Fatalf("%d uploads, want exactly 1", n)
+			}
+			if n := h.rec.count("probe 1"); n != 0 {
+				t.Fatalf("%d probes after a certain refusal: %v", n, h.rec.entries())
+			}
+			if waited := j.UpdatedAt.Sub(start); waited >= testCfg().UpgradeAccept {
+				t.Fatalf("job ended %s after the start, it waited for the upgrade window", waited)
+			}
+		})
+	}
+}
+
+// Why: an error that leaves the outcome open (here a plain transport error)
+// must still be probed, never treated as a certain refusal.
+func TestEnginePushUncertainErrorIsProbed(t *testing.T) {
 	h, pa, _ := pushHarness(t, esp32Device())
-	pa.refuse = errors.New("upload: tasmota: device refused the upload: Invalid file signature")
+	pa.refuse = errors.New("upload: tasmota: bad response: upload reply is neither Successful nor Failed")
 	id := submitOne(t, h, Request{DeviceID: 1, Release: "16.0.0", Delivery: model.DeliveryPush})
 	h.run(t, h.e)
 	j := h.job(t, id)
-	if j.State != model.JobFailed || !strings.Contains(j.LastError, "Invalid file signature") && !strings.Contains(j.LastError, "did not start") {
+	if j.State != model.JobFailed || strings.Contains(j.LastError, "nothing was flashed") {
 		t.Fatalf("job %s %q", j.State, j.LastError)
 	}
-	if n := len(pa.uploads); n > testCfg().MaxAttempts {
-		t.Fatalf("%d uploads, at most %d attempts", n, testCfg().MaxAttempts)
+	if h.rec.count("probe 1") == 0 {
+		t.Fatalf("no probe after an uncertain upload error: %v", h.rec.entries())
+	}
+	if len(pa.uploads) != 1 {
+		t.Fatalf("%d uploads, want 1", len(pa.uploads))
 	}
 }
 

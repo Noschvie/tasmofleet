@@ -4,6 +4,21 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## Unreleased
+
+### Changed
+
+- Push where possible: a device whose free flash (Status 4 `Free`, read with the preview's identity) is too small
+  for the image, or unknown, gets the download instead, and the preview says so ("not enough free flash for an
+  upload (image 2183 KB, 697 KB free)"). This covers ESP32s with the safeboot partition layout, which can only take
+  a full image through the download.
+
+### Fixed
+
+- Push upload: when the device refuses the upload ("Upload Failed", e.g. "Not enough space" on an ESP32 with the
+  safeboot layout) or offers no upload form, the job now fails at once ("upload refused, nothing was flashed: ...")
+  instead of waiting for the end of the upgrade window. Nothing was flashed and the device kept running.
+
 ## 0.11.5 (2026-10-24)
 
 ### Changed

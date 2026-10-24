@@ -417,7 +417,11 @@ func (e *Engine) planFor(ctx context.Context, id model.Identity, c fwselect.Choi
 		return p, refused(fmt.Errorf("plan: %w", err))
 	}
 	if p.delivery == model.DeliveryPush {
-		if err := pushPlanRefusal(p.plan); err != nil {
+		err := pushPlanRefusal(p.plan)
+		if err == nil {
+			err = pushSpaceRefusal(id, p.target.Size)
+		}
+		if err != nil {
 			p.delivery, p.fallback = model.DeliveryPull, err.Error()
 		}
 	}

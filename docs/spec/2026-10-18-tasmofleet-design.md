@@ -281,15 +281,20 @@ data directory (TasmoAdmin lesson A4).
   (field `u2`, non-empty file name, first byte `0xE9` or `0x1F` for gzip, exact
   `Content-Length`, no chunking). The upload type is set by the `GET /up`, not by the
   POST: a POST without it answers "Upload Successful" and restarts the device without
-  flashing. `Client` therefore fetches `/up` first, requires the plain form
-  (`action='u2?fsz='`, an ESP32 on a single OTA partition shows another one) and holds the
-  device slot for both requests (`tasmota.Uploader`). The reply page says `Successful` or
-  `Failed` plus a reason; a refusal is certain (nothing flashed), any other error after the
-  body started is not. The state machine is unchanged: `set_ota_url` only runs Guard,
+  flashing. `Client` therefore fetches `/up` first, requires the upload form
+  (`action='u2?fsz='`) and holds the device slot for both requests (`tasmota.Uploader`).
+  The reply page says `Successful` or `Failed` plus a reason; a refusal (or a missing
+  form) is certain, nothing was flashed, and the job fails at once instead of waiting for a
+  reboot. Any other error after the body started is not certain and is probed. The image
+  must fit Status 4 `Free` less one 4 KiB sector (Tasmota's `Update.begin` bound); an
+  ESP32 with the safeboot layout (one app partition) reports only the rest of its running
+  partition there and cannot take a full image while running (research:
+  `tasmota-minimal-and-ota.md`, "File upload on an ESP32 with the safeboot layout"). The state machine is unchanged: `set_ota_url` only runs Guard,
   `upgrade_issued` uploads, a lost reply is probed and never resent, `OtaUrl` is never
   touched. The choice is "push where possible": the download stays the default for every
   device, and with push chosen each device that cannot take an upload (ESP8266, unknown
-  chips, safeboot/minimal, staged plans) gets the download instead. The preview says per
+  chips, safeboot/minimal, staged plans, an image larger than the free flash or an
+  unknown free flash) gets the download instead. The preview says per
   device which delivery it gets and why, the job stores the delivery it really uses
   (shown on the transaction page), and a job submitted as a push whose plan no longer
   allows one fails before touching the device instead of switching unseen. A push job

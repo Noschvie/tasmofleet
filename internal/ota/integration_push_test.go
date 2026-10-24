@@ -167,3 +167,29 @@ func TestITPushRefusedByDevice(t *testing.T) {
 	}
 	e.assertNoViolations()
 }
+
+// A safeboot-layout ESP32 answers "Not enough space" (office-monitor-thomas,
+// 2026-10-24): the job fails at once with the reason, after one upload,
+// instead of waiting out the upgrade window; the device keeps its version and
+// never reboots.
+func TestITPushNoSpaceFailsAtOnce(t *testing.T) {
+	e := newItEnv(t)
+	dev := e.addDevice(simulator.DeviceSpec{Profile: simulator.ProfileESP32, Faults: []simulator.Fault{{Kind: simulator.FaultUploadNoSpace}}})
+	eng := e.start(2)
+	e.submit(eng, Request{DeviceID: dev, Delivery: model.DeliveryPush})
+	j := e.waitTerminal(dev)
+	if j.State != model.JobFailed || !strings.Contains(j.LastError, "Not enough space") || !strings.Contains(j.LastError, "nothing was flashed") {
+		t.Fatalf("job %s %q", j.State, j.LastError)
+	}
+	if waited := j.UpdatedAt.Sub(j.CreatedAt); waited >= e.machine.UpgradeAccept {
+		t.Fatalf("job took %s, it waited for the upgrade window (%s)", waited, e.machine.UpgradeAccept)
+	}
+	if n := e.uploadsOf(dev); n != 1 {
+		t.Fatalf("%d uploads, want 1", n)
+	}
+	e.settle(dev)
+	if c := e.ctrl[dev]; c.Version() != "15.6.0" || c.Boots() != 0 {
+		t.Fatalf("device runs %s after %d boots", c.Version(), c.Boots())
+	}
+	e.assertNoViolations()
+}
