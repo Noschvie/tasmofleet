@@ -6,6 +6,8 @@ always upgrade automatically.
 
 ## Unreleased
 
+## 0.11.4 (2026-10-24)
+
 ### Added
 
 - Static demo on GitHub Pages (<https://nofuturekid.github.io/tasmofleet/>): `make demo` renders the design fixture
