@@ -55,7 +55,12 @@ var allKinds = []Kind{KindLWT, KindState, KindSensor, KindResult, KindStatus, Ki
 func connect(t *testing.T, b *testBroker, o Options) Bus {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
+	// Cleanups run last-in first-out: this runs before the broker is stopped.
+	// Canceling makes Connect's goroutine disconnect asynchronously; wait for it.
+	t.Cleanup(func() {
+		cancel()
+		b.waitNoClients(t)
+	})
 	o.BrokerURL = b.url()
 	bus, err := Connect(ctx, o)
 	if err != nil {

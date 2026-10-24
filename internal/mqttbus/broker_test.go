@@ -2,7 +2,10 @@ package mqttbus
 
 import (
 	"context"
+	"fmt"
 	"net"
+	"os"
+	"runtime"
 	"testing"
 	"time"
 
@@ -38,6 +41,9 @@ func (h *delayHook) OnSubscribe(_ *mqtt.Client, pk packets.Packet) packets.Packe
 	return pk
 }
 
+// testBudget is far above any test here (the slowest takes about a second).
+const testBudget = time.Minute
+
 func newTestBroker(t *testing.T) *testBroker { return newTestBrokerDelayed(t, 0) }
 
 func newTestBrokerDelayed(t *testing.T, subscribeDelay time.Duration) *testBroker {
@@ -51,6 +57,16 @@ func newTestBrokerDelayed(t *testing.T, subscribeDelay time.Duration) *testBroke
 		t.Fatal(err)
 	}
 	b := &testBroker{t: t, addr: addr, subscribeDelay: subscribeDelay}
+	// Registered first, so it is stopped last: a hang anywhere in the test or in
+	// the broker's shutdown must fail within a minute with all goroutine stacks,
+	// not run into the 30 minute CI timeout.
+	watchdog := time.AfterFunc(testBudget, func() {
+		buf := make([]byte, 4<<20)
+		buf = buf[:runtime.Stack(buf, true)]
+		fmt.Fprintf(os.Stderr, "%s hung for %s (broker shutdown deadlock?)\n%s\n", t.Name(), testBudget, buf)
+		os.Exit(2)
+	})
+	t.Cleanup(func() { watchdog.Stop() })
 	b.start()
 	t.Cleanup(b.stop)
 	return b
@@ -76,6 +92,11 @@ func (b *testBroker) start() {
 	b.srv = srv
 }
 
+// stop closes the broker. mochi's Server.Close waits for every client
+// goroutine but only disconnects clients that finished their CONNECT handshake
+// before it listed them; a client that connects (or reconnects after being
+// kicked) while Close runs is never disconnected, and Close waits for it
+// forever. Tests therefore disconnect their bus first (see waitNoClients).
 func (b *testBroker) stop() {
 	if b.srv != nil {
 		_ = b.srv.Close() // test teardown; nothing useful to do with the error
@@ -95,6 +116,25 @@ func (b *testBroker) waitSubscribed(t *testing.T, n int) {
 			}
 		}
 		return false
+	})
+}
+
+// waitNoClients blocks until every client has disconnected from the broker.
+// Closing the broker earlier lets paho reconnect into the shutdown (see stop).
+func (b *testBroker) waitNoClients(t *testing.T) {
+	t.Helper()
+	if b.srv == nil {
+		return
+	}
+	// The broker keeps finished sessions (and its own inline client) in Clients,
+	// so look at the connections.
+	waitFor(t, "bus to disconnect from the broker", func() bool {
+		for _, cl := range b.srv.Clients.GetAll() {
+			if !cl.Net.Inline && !cl.Closed() {
+				return false
+			}
+		}
+		return true
 	})
 }
 
