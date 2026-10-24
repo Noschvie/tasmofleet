@@ -453,9 +453,20 @@
 
   // widths of cells' content at its narrowest (min-content), in each cell's own font and
   // white-space, plus the cell's padding. The probes are all added before the first is read.
+  // A cell whose markup has not changed since it was measured keeps its width (minWidths): the
+  // live cells are swapped one by one, and probing every row again for each swap was most of the
+  // device list's main-thread time. The cache is dropped when the fonts arrive (other widths).
+  var minWidths = new WeakMap();
   function minContents(cells) {
-    var probes = cells.map(function (cell) {
+    var keys = cells.map(function (cell) {
+      return cell ? cell.className + "|" + cell.innerHTML : "";
+    });
+    var probes = cells.map(function (cell, k) {
       if (!cell) {
+        return null;
+      }
+      var known = minWidths.get(cell);
+      if (known && known.html === keys[k]) {
         return null;
       }
       var probe = document.createElement("div");
@@ -475,15 +486,17 @@
     });
     var out = probes.map(function (probe, k) {
       if (!probe) {
-        return 0;
+        var known = cells[k] && minWidths.get(cells[k]);
+        return known ? known.w : 0;
       }
       var cs = getComputedStyle(cells[k]);
-      return (
+      var w =
         probe.getBoundingClientRect().width +
         parseFloat(cs.paddingLeft) +
         parseFloat(cs.paddingRight) +
-        1
-      );
+        1;
+      minWidths.set(cells[k], { html: keys[k], w: w });
+      return w;
     });
     probes.forEach(function (probe) {
       if (probe) {
@@ -1533,9 +1546,36 @@
   document.body && enhance();
   // widths measured before the fonts are in are wrong (offsets of the pinned columns included)
   if (document.fonts && document.fonts.ready) {
-    document.fonts.ready.then(enhance);
+    document.fonts.ready.then(function () {
+      minWidths = new WeakMap();
+      enhance();
+    });
   }
-  document.addEventListener("htmx:afterSettle", enhance);
+  // A swap of a whole table is enhanced at once. The live cells (sse-swap: status, uptime, power,
+  // ... of every device) settle one by one, several per device and second while a fleet comes
+  // online, and each enhance measures every row: run per cell, that kept the device list's main
+  // thread busy for minutes with 60 devices on a slow machine. Their swaps are coalesced into one
+  // enhance at most every CELL_REFIT_MS (a throttle, not a debounce, so a steady stream of
+  // updates cannot postpone it forever).
+  var CELL_REFIT_MS = 250,
+    refit = 0;
+  document.addEventListener("htmx:afterSettle", function (e) {
+    var t = e.target;
+    if (
+      t instanceof Element &&
+      !t.querySelector("table[data-table]") &&
+      t.closest("table[data-table]")
+    ) {
+      if (!refit) {
+        refit = window.setTimeout(function () {
+          refit = 0;
+          enhance();
+        }, CELL_REFIT_MS);
+      }
+      return;
+    }
+    enhance();
+  });
   if (desktop.addEventListener) {
     desktop.addEventListener("change", enhance);
   }

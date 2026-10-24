@@ -26,6 +26,12 @@ always upgrade automatically.
 
 ### Fixed
 
+- The device list kept the browser busy while device states streamed in: every live cell update (status,
+  uptime, power, ... of each device) re-ran the table layout script, which since the pinned-column fitting
+  below measures the content of every row. With the 60-device design fleet the list needed over two minutes
+  to show every device online (5 s before, 5 s again now); on a slow machine clicks waited tens of seconds.
+  Cell updates now refit the table at most every 250 ms, and a cell whose content did not change is not
+  measured again.
 - The top bar's user menu was drawn below the device list's Columns button, which showed through it.
   The z-index layers are now one documented scale (sticky parts, menus, top bar, top-bar menus, dialogs,
   toasts) in `app.css`, and an e2e check asks the browser what is on top at every point of each open top-bar menu.

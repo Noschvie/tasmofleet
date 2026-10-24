@@ -201,8 +201,10 @@ export async function seedDesignV2(page: Page, app: App, env: Devenv, fx: Design
   const phase = (what: string) => console.log(`seedDesignV2: ${what} (${Math.round((Date.now() - t0) / 1000)} s)`);
   const online = fx.devices.filter((d) => d.status !== "unknown");
   await page.goto(app.url + "/devices");
+  // About 30 s for the whole fleet. A slow device list shows here first: re-measuring every row for
+  // each live cell swap made it 140 s, so the limit stays tight instead of growing again.
   for (const d of online) {
-    await expect(page.getByRole("row").filter({ hasText: d.name }).getByText("Online", { exact: true }).first()).toBeVisible({ timeout: 300_000 });
+    await expect(page.getByRole("row").filter({ hasText: d.name }).getByText("Online", { exact: true }).first()).toBeVisible({ timeout: 60_000 });
   }
   phase("devices online");
   // "Offline" needs a first contact, so the devices the prototype shows as offline are stopped now.
