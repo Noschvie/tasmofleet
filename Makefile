@@ -44,7 +44,7 @@ TESTFLAGS ?=
 # Extra Playwright arguments, e.g. E2E_ARGS=--shard=1/2 (CI).
 E2E_ARGS  ?=
 
-.PHONY: demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test race integration mutation mutation-changed safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check clean tools
+.PHONY: demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test race integration mutation mutation-changed mutation-sum safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check clean tools
 
 check: templ-check fmt-check vet staticcheck lint test integration vuln build
 
@@ -114,9 +114,18 @@ test-quarantine:
 integration:
 	$(NICE) $(GO) test $(TESTFLAGS) -tags=integration ./...
 
+# Sharding (CI): with MUTATION_SHARD=i/n and MUTATION_COUNTS=<dir>, mutation and mutation-changed
+# mutate only shard i of every package's files and write the counts to <dir>/<package name>;
+# "make mutation-sum MUTATION_COUNTS=<dir> MUTATION_SHARDS=n" then gates each package on the sum
+# of its n shards (tools/mutation-gate.sh --sum), exactly as an unsharded run would.
+MUTATION_SHARD  ?=
+MUTATION_SHARDS ?=
+MUTATION_COUNTS ?=
+mutation_gate = TOOL="$(NICE) $(TOOL)" $(if $(MUTATION_SHARD),MUTATION_SHARD=$(MUTATION_SHARD) MUTATION_COUNTS_OUT="$(MUTATION_COUNTS)/$$(basename $$p)") tools/mutation-gate.sh
+
 mutation:
-	@for e in $(MUTATION); do \
-	  TOOL="$(NICE) $(TOOL)" tools/mutation-gate.sh "$${e%%:*}" "$${e##*:}" || exit 1; \
+	@$(if $(MUTATION_SHARD),mkdir -p "$(MUTATION_COUNTS)";) for e in $(MUTATION); do \
+	  p=$${e%%:*}; $(mutation_gate) "$$p" "$${e##*:}" || exit 1; \
 	done
 
 # Mutation gate only for the MUTATION packages with changes since BASE (a git
@@ -126,12 +135,25 @@ mutation-changed:
 	@if [ -z "$(BASE)" ] || ! git rev-parse -q --verify "$(BASE)^{commit}" >/dev/null; then \
 	  echo "mutation-changed: no usable BASE ($(BASE)), running all packages"; $(MAKE) --no-print-directory mutation; exit $$?; \
 	fi; \
+	$(if $(MUTATION_SHARD),mkdir -p "$(MUTATION_COUNTS)";) \
 	changed=$$(git diff --name-only "$(BASE)" HEAD); ran=0; \
 	for e in $(MUTATION); do \
 	  p=$${e%%:*}; d=$${p#./}; \
-	  if echo "$$changed" | grep -q "^$$d/"; then ran=1; TOOL="$(NICE) $(TOOL)" tools/mutation-gate.sh "$$p" "$${e##*:}" || exit 1; \
+	  if echo "$$changed" | grep -q "^$$d/"; then ran=1; $(mutation_gate) "$$p" "$${e##*:}" || exit 1; \
 	  else echo "== mutation $$p: unchanged since $(BASE), skipped"; fi; \
 	done; [ $$ran = 1 ] || echo "mutation-changed: no mutation package changed"
+
+# Gate of a sharded run: MUTATION_COUNTS holds one directory per shard (CI artifacts). A package
+# without counts was not run (unchanged); with MUTATION_ALL=1 (the FULL tier) every package must
+# have them. A package with counts from fewer than MUTATION_SHARDS shards fails.
+mutation-sum:
+	@test -n "$(MUTATION_COUNTS)" && test -n "$(MUTATION_SHARDS)" || { echo "usage: make mutation-sum MUTATION_COUNTS=<dir> MUTATION_SHARDS=n" >&2; exit 2; }; \
+	for e in $(MUTATION); do \
+	  p=$${e%%:*}; files=$$(ls "$(MUTATION_COUNTS)"/*/"$$(basename $$p)" 2>/dev/null || true); n=$$(echo "$$files" | grep -c . || true); \
+	  if [ "$$n" = 0 ] && [ "$(MUTATION_ALL)" != 1 ]; then echo "== mutation $$p: not run (unchanged)"; continue; fi; \
+	  [ "$$n" = "$(MUTATION_SHARDS)" ] || { echo "mutation-sum: $$p has counts from $$n of $(MUTATION_SHARDS) shards" >&2; exit 1; }; \
+	  tools/mutation-gate.sh --sum "$$p" "$${e##*:}" $$files || exit 1; \
+	done
 
 e2e-deps:
 	cd e2e && npm ci

@@ -256,26 +256,7 @@ jobs:
           AUTH_PARTS: "4"
         run: make safety-race BASE="$BASE"
 
-  # ... and the mutation gate of the changed mutation packages.
-  safety-mutation:
-    name: safety mutation gate (changed packages)
-    needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.safety == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7.0.1
-        with:
-          fetch-depth: 0 # diff against the PR base
-      - uses: ./.github/actions/go
-        with:
-          name: mutation
-          save: "false"
-      - env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-          MUTATION_WORKERS: "4"
-        run: make mutation-changed BASE="$BASE"
-
+  # ... and the mutation gate of the changed mutation packages (see "mutation").
   race:
     name: unit tests (race detector)
     needs: changes
@@ -289,18 +270,58 @@ jobs:
           name: race
       - run: make race
 
+  # Mutation testing in three shards (one ota run alone takes 11 minutes on
+  # one runner): each shard mutates its share of every package's files and
+  # uploads the counts; mutation-gate adds them up and applies the thresholds.
+  # FULL tier: every MUTATION package. FAST tier: only for PRs that change a
+  # SAFETY package, and only the changed mutation packages (mutation-changed).
   mutation:
-    name: mutation tests (all packages)
+    name: mutation tests (${{ needs.changes.outputs.tier == 'full' && 'all' || 'changed' }}, ${{ matrix.shard }})
     needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.tier == 'full'
+    if: needs.changes.outputs.code == 'true' && (needs.changes.outputs.tier == 'full' || needs.changes.outputs.safety == 'true')
     runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["1/3", "2/3", "3/3"]
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0 # mutation-changed diffs against the PR base
       - uses: ./.github/actions/go
         with:
           name: mutation
-      - run: make mutation
+          save: ${{ needs.changes.outputs.tier == 'full' }}
+      - env:
+          TARGET: ${{ needs.changes.outputs.tier == 'full' && 'mutation' || 'mutation-changed' }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          # The marker keeps the artifact non-empty when no mutation package changed.
+          mkdir -p "$RUNNER_TEMP/counts" && echo "$SHARD" > "$RUNNER_TEMP/counts/shard"
+          make "$TARGET" BASE="$BASE" MUTATION_SHARD="$SHARD" MUTATION_COUNTS="$RUNNER_TEMP/counts"
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: mutation-counts-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/counts
+          if-no-files-found: error
+          retention-days: 3
+
+  mutation-gate:
+    name: mutation gate
+    needs: [changes, mutation]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/download-artifact@v7.0.0
+        with:
+          pattern: mutation-counts-*
+          path: ${{ runner.temp }}/counts
+      - env:
+          ALL: ${{ needs.changes.outputs.tier == 'full' && '1' || '' }}
+        run: make mutation-sum MUTATION_COUNTS="$RUNNER_TEMP/counts" MUTATION_SHARDS=3 MUTATION_ALL="$ALL"
 
   # Known-flaky tests, nightly (and dispatch) only, with retries. Never part of
   # "required": a failure here shows on the run but does not fail it.
@@ -342,10 +363,10 @@ jobs:
   # only when its tier did not ask for it: everything for a docs-only PR, the
   # safety jobs when no SAFETY package changed, race and full mutation outside
   # the FULL tier. Any other result (failure, cancelled, or a skip caused by a
-  # failed dependency) fails it.
+  # failed dependency) fails it. Mutation runs in FULL and for safety PRs.
   required:
     name: required
-    needs: [changes, lint, test, integration, e2e, safety-race, safety-mutation, race, mutation]
+    needs: [changes, lint, test, integration, e2e, safety-race, mutation, mutation-gate, race]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -357,11 +378,12 @@ jobs:
           TIER: ${{ needs.changes.outputs.tier }}
           SAFETY: ${{ needs.changes.outputs.safety }}
           ALWAYS: ${{ needs.lint.result }} ${{ needs.test.result }} ${{ needs.integration.result }} ${{ needs.e2e.result }}
-          SAFETY_JOBS: ${{ needs.safety-race.result }} ${{ needs.safety-mutation.result }}
-          FULL_ONLY: ${{ needs.race.result }} ${{ needs.mutation.result }}
+          SAFETY_JOBS: ${{ needs.safety-race.result }}
+          MUTATION: ${{ needs.mutation.result }} ${{ needs.mutation-gate.result }}
+          FULL_ONLY: ${{ needs.race.result }}
         run: |
           echo "changes=$CHANGES code=$CODE tier=$TIER safety=$SAFETY"
-          echo "always: $ALWAYS | safety: $SAFETY_JOBS | full only: $FULL_ONLY"
+          echo "always: $ALWAYS | safety: $SAFETY_JOBS | mutation: $MUTATION | full only: $FULL_ONLY"
           [ "$CHANGES" = success ] || exit 1
           docs=false; [ "$CODE" = false ] && docs=true
           check() { # check <skip allowed> <result...>
@@ -377,6 +399,8 @@ jobs:
           check "$s" $SAFETY_JOBS
           f=$docs; [ "$TIER" = full ] || f=true
           check "$f" $FULL_ONLY
+          m=$docs; [ "$TIER" = full ] || [ "$SAFETY" = true ] || m=true
+          check "$m" $MUTATION
 
   # Release: a tag publishes the image only when the FULL tier passed.
   publish:

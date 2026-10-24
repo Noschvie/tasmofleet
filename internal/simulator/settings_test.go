@@ -8,8 +8,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/nofuturekid/tasmofleet/internal/testutil/quarantine"
 )
 
 func dumpOf(t *testing.T, d Device) map[string]any {
@@ -107,7 +105,6 @@ func cmUp(t *testing.T, d Controller, cmnd string) string {
 // (The map order is random, so restart-causing settings land anywhere in the
 // loop; every command goes through cmUp.)
 func TestEditorFieldsAreStateful(t *testing.T) {
-	quarantine.Test(t, "https://github.com/nofuturekid/tasmofleet/issues/14")
 	d := newSettingsDevice(t)
 	set := map[string]string{
 		"FriendlyName1 Desk": `{"FriendlyName1":"Desk"}`, "Hostname desk-plug": `{"Hostname":"desk-plug"}`,
