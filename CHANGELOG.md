@@ -16,6 +16,11 @@ always upgrade automatically.
 
 ### Changed
 
+- The network facts (hostname, IP, gateway, SSID, BSSID, channel from Status 5 and Status 11) are read in the
+  background and never hold anything up: first contact after an import or add and "Refresh identity" no longer
+  wait for them (Status 11 is not sent there at all; Status 5 is still read for the MAC). The server reads them,
+  one device and one command at a time, once a device without facts is online and after each identity refresh,
+  and the Network card fills in when they arrive.
 - CI runs in tiers. Pull requests run the FAST tier (lint, unit and integration tests from the go test cache,
   the `@core` e2e tests in two shards, and the race tests and mutation gate when a safety-critical package
   changed); the nightly run, release tags and manual runs run the FULL tier (every e2e test, the race detector,

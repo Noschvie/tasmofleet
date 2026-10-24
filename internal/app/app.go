@@ -142,6 +142,12 @@ func (a *runtime) run(ctx context.Context) error {
 		StaleAfter: staleAfter(cfg.TelePeriod), PollInterval: cfg.PollInterval,
 	})
 	a.goBG("health", func() error { return a.tracker.Run(bg) })
+	// Network facts are read in the background, never as part of first contact or a refresh.
+	nf := newNetFactsReader(a.svc.Inventory.List,
+		func(id model.DeviceID) bool { return a.tracker.Get(id).State == model.HealthOnline },
+		a.svc.Prober.ReadNet, a.log)
+	a.svc.Prober.ReadNetLater = nf.later
+	a.goBG("netfacts", func() error { nf.run(bg); return nil })
 
 	if err := a.setupBackups(bg); err != nil {
 		return err

@@ -132,39 +132,96 @@ func (r recorder) Command(ctx context.Context, t tasmota.Target, c string) (json
 	return r.override.Command(ctx, t, c)
 }
 
+// stalling never answers the commands in stall (it waits for the caller to give up), so a
+// test sees whether anything waits for them.
+type stalling struct {
+	tasmota.Client
+	stall map[string]bool
+	sent  *[]string
+}
+
+func (s stalling) Command(ctx context.Context, t tasmota.Target, c string) (json.RawMessage, error) {
+	*s.sent = append(*s.sent, c)
+	if s.stall[c] {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	return s.Client.Command(ctx, t, c)
+}
+
+// Why (maintainer decision 2026-10-24): the network facts (IP, gateway, Wi-Fi from Status 5 and
+// Status 11) are details for the device page. Reading them must never hold up first contact
+// (import, add) or "Refresh identity": a device whose Status 11 never answers is identified,
+// listed and its refresh returns at once; the facts are read later in the background.
+func TestFirstContactAndRefreshDoNotWaitForNetworkFacts(t *testing.T) {
+	p, st, id, d, _ := raceSetup(t)
+	var sent []string
+	p.Client = stalling{Client: p.Client, stall: map[string]bool{"Status 11": true}, sent: &sent}
+	var kicked []model.DeviceID
+	p.ReadNetLater = func(id model.DeviceID) { kicked = append(kicked, id) }
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	got, err := p.Describe(ctx, model.Device{Address: d.Address, Port: d.Port})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Identity.Family == "" || got.MAC == "" {
+		t.Fatalf("first contact must still identify the device: %+v", got)
+	}
+	if err := p.Refresh(ctx, id); err != nil {
+		t.Fatal(err)
+	}
+	if ctx.Err() != nil {
+		t.Fatal("first contact or refresh waited for Status 11")
+	}
+	for _, c := range sent {
+		if c == "Status 11" {
+			t.Fatalf("Status 11 sent during first contact or refresh: %v", sent)
+		}
+	}
+	if len(kicked) != 1 || kicked[0] != id {
+		t.Fatalf("refresh must queue the background read of its device, queued %v", kicked)
+	}
+	if dv, _ := st.GetDevice(context.Background(), id); !dv.Net.ReadAt.IsZero() {
+		t.Fatalf("no facts were read yet, but some were stored: %+v", dv.Net)
+	}
+}
+
 // Why: the device page shows hostname, IP, gateway and Wi-Fi; they only exist on the device.
-// A probe (first contact after import, "Refresh identity") reads Status 5 and Status 11, one
-// command at a time and never Status 0, and hands the facts to the caller.
-func TestDescribeReadsNetworkFactsWithoutStatus0(t *testing.T) {
-	p, d := probeFixture(t, simulator.DeviceSpec{Name: "plug", Profile: simulator.ProfileESP8266_1M})
+// The background read asks Status 5 and Status 11, one command at a time and never Status 0,
+// and stores them on the device.
+func TestReadNetStoresNetworkFactsWithoutStatus0(t *testing.T) {
+	p, st, id, _, _ := raceSetup(t)
 	var sent []string
 	p.Client = recorder{override{Client: p.Client, reply: map[string]string{"Status 5": status5Net, "Status 11": status11Net}}, &sent}
 	p.Now = func() time.Time { return time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC) }
-	got, err := p.Describe(context.Background(), d)
+	if err := p.ReadNet(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	d, err := st.GetDevice(context.Background(), id)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := model.NetFacts{Hostname: "plug-1", IP: "192.0.2.10", Gateway: "192.0.2.1", SSID: "IoT", BSSID: "02:00:5E:00:00:01", Channel: 11, ReadAt: p.Now()}
-	if got.Net != want {
-		t.Fatalf("Net = %+v, want %+v", got.Net, want)
+	if d.Net != want {
+		t.Fatalf("Net = %+v, want %+v", d.Net, want)
 	}
-	for _, c := range sent {
-		if c == "Status 0" || c == "Status" {
-			t.Fatalf("Status 0 was sent: %v", sent)
-		}
+	if strings.Join(sent, ",") != "Status 5,Status 11" {
+		t.Fatalf("sent %v, want Status 5 then Status 11", sent)
 	}
 }
 
-// Why: Status 11 is a nice-to-have. When it fails the probe must still succeed, and the Wi-Fi
-// facts read earlier stay (a wired board or a flaky reply must not blank them).
-func TestRefreshKeepsEarlierWifiFactsWhenStatus11Fails(t *testing.T) {
+// Why: Status 11 is a nice-to-have. When it fails the read still stores Status 5's facts, and
+// the Wi-Fi facts read earlier stay (a wired board or a flaky reply must not blank them).
+func TestReadNetKeepsEarlierWifiFactsWhenStatus11Fails(t *testing.T) {
 	p, st, id, _, _ := raceSetup(t)
-	p.Client = override{Client: p.Client, reply: map[string]string{"Status 5": status5Net, "Status 11": status11Net}}
-	if err := p.Refresh(context.Background(), id); err != nil {
+	base := p.Client
+	p.Client = override{Client: base, reply: map[string]string{"Status 5": status5Net, "Status 11": status11Net}}
+	if err := p.ReadNet(context.Background(), id); err != nil {
 		t.Fatal(err)
 	}
-	p.Client = override{Client: p.Client.(override).Client, reply: map[string]string{"Status 5": status5Net, "Status 11": `{"Command":"Error"}`}}
-	if err := p.Refresh(context.Background(), id); err != nil {
+	p.Client = override{Client: base, reply: map[string]string{"Status 5": status5Net, "Status 11": `{"Command":"Error"}`}}
+	if err := p.ReadNet(context.Background(), id); err != nil {
 		t.Fatal(err)
 	}
 	d, err := st.GetDevice(context.Background(), id)

@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -59,5 +60,31 @@ func TestUpdateProbeOwnsNetworkFactsAndEditsKeepThem(t *testing.T) {
 	}
 	if d, _ = s.GetDevice(ctx, id); d.Net.SSID != "IoT" {
 		t.Fatalf("a probe without facts wiped them: %+v", d.Net)
+	}
+}
+
+// Why: the network facts are read in the background, long after the device was loaded. The
+// write must store only the facts, and nothing at all when the device was moved or rebound
+// meanwhile (the reply came from another device).
+func TestUpdateNetStoresOnlyTheFactsOfTheSameDevice(t *testing.T) {
+	s, _, _ := newStore(t)
+	id, err := s.CreateDevice(ctx, model.Device{Name: "plug", Address: "192.0.2.10", MAC: "aa:bb:cc:00:00:01", Notes: "kept"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	guard := ProbeGuard{Address: "192.0.2.10", MAC: "aa:bb:cc:00:00:01"}
+	if err := s.UpdateNet(ctx, id, guard, netFacts("IoT")); err != nil {
+		t.Fatal(err)
+	}
+	d, _ := s.GetDevice(ctx, id)
+	if d.Net != netFacts("IoT") || d.Notes != "kept" || d.Name != "plug" {
+		t.Fatalf("after UpdateNet: %+v", d)
+	}
+	moved := ProbeGuard{Address: "192.0.2.99", MAC: "aa:bb:cc:00:00:01"}
+	if err := s.UpdateNet(ctx, id, moved, netFacts("Other")); !errors.Is(err, ErrConflict) {
+		t.Fatalf("UpdateNet on a moved device: err = %v, want ErrConflict", err)
+	}
+	if d, _ = s.GetDevice(ctx, id); d.Net.SSID != "IoT" {
+		t.Fatalf("a stale read overwrote the facts: %+v", d.Net)
 	}
 }

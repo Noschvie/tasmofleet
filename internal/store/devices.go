@@ -330,6 +330,24 @@ func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuar
 	return nil
 }
 
+// UpdateNet stores the network facts of a background read (app.Prober.ReadNet) and nothing
+// else, under the same guard as UpdateProbe: a device deleted, moved or rebound since the read
+// began is left alone (ErrConflict).
+func (s *SQLite) UpdateNet(ctx context.Context, id model.DeviceID, g ProbeGuard, n model.NetFacts) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE devices SET net_hostname=?, net_ip=?, net_gateway=?, net_ssid=?, net_bssid=?,
+		net_channel=?, net_at=? WHERE id=? AND address=? AND port=? AND mac=?`,
+		n.Hostname, n.IP, n.Gateway, n.SSID, n.BSSID, n.Channel, toMS(n.ReadAt), id, g.Address, g.Port, strings.ToLower(g.MAC))
+	if err != nil {
+		return mapErr(err)
+	}
+	if k, err := res.RowsAffected(); err != nil {
+		return err
+	} else if k == 0 {
+		return fmt.Errorf("%w: device %d changed or was deleted during the read", ErrConflict, id)
+	}
+	return nil
+}
+
 func (s *SQLite) DeleteDevice(ctx context.Context, id model.DeviceID) error {
 	return affected(s.db.ExecContext(ctx, "DELETE FROM devices WHERE id=?", id))
 }
