@@ -7,9 +7,11 @@ import { startVisualStack, type VisualStack } from "../support/visual-stack";
 // column that scrolls. docs/media/devices.png showed Power's toggles lying over the Uptime text
 // (and a two-relay device's second toggle pushed out of its cell). The fleet is the 60-device
 // design fixture, the same the README screenshot is taken from, so multi-relay devices are in it.
+// One fleet for all four checks (one worker): seeding it takes a minute or more on a loaded runner.
+test.describe.configure({ mode: "serial" });
 let stack: VisualStack;
 test.beforeAll(async ({ browser }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(600_000);
   stack = await startVisualStack("fleet", browser);
 });
 test.afterAll(async () => {
