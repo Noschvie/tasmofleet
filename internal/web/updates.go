@@ -69,8 +69,9 @@ type updateForm struct {
 	// powerLightsRelays or powerLeave. One value instead of two flags, so the
 	// combination "restore relays but skip the restore" cannot be posted.
 	PowerAfter string
-	// Delivery is the "Delivery" choice: empty (the device downloads the
-	// image, default) or "push" (tasmofleet uploads it, ESP32 only).
+	// Delivery is the "Delivery" choice: empty (every device downloads the
+	// image, default) or "push" (push where possible: tasmofleet uploads it
+	// to each ESP32 that can take it, the others download).
 	Delivery string
 	Error    string
 	Notice   string
@@ -123,8 +124,8 @@ func (f updateForm) PowerOpts() []ui.Option {
 
 func (f updateForm) DeliveryOpts() []ui.Option {
 	return checked(f.Delivery, "", []ui.Option{
-		{Value: "", Label: "Pull (device downloads)"},
-		{Value: string(model.DeliveryPush), Label: "Push upload (ESP32)"},
+		{Value: "", Label: "Download (all devices)"},
+		{Value: string(model.DeliveryPush), Label: "Push where possible (ESP32; others download)"},
 	})
 }
 
@@ -435,6 +436,21 @@ type previewRow struct {
 	From, To string // the version now and after the update
 	Size     int64  // the file's size, 0 unknown
 	SkipPwr  bool   // the restore is turned off for this update
+	Push     bool   // "push where possible" was chosen: the row says its delivery
+}
+
+// DeliveryText says how a device that is updated gets its file when push
+// where possible was chosen; "" for the download delivery.
+func (r previewRow) DeliveryText() string {
+	switch {
+	case !r.Go || !r.Push:
+		return ""
+	case r.Item.Delivery == model.DeliveryPush:
+		return "Push upload."
+	case r.Item.DeliveryNote != "":
+		return "Downloads instead: " + r.Item.DeliveryNote + "."
+	}
+	return "Downloads instead."
 }
 
 // FileText is the file a device gets and its size: "tasmota32.bin · 1.9 MB".
@@ -518,9 +534,23 @@ type previewPage struct {
 // Delivery says how the files reach the devices: the text before the address the devices fetch
 // from, that address ("" for a push upload or when it is unknown), and the text after it.
 func (p previewPage) Delivery() (lead, url, tail string) {
+	pushed, pulled := 0, 0
+	for _, r := range p.Rows {
+		switch {
+		case !r.Go:
+		case r.Item.Delivery == model.DeliveryPush:
+			pushed++
+		default:
+			pulled++
+		}
+	}
 	switch {
-	case p.Form.Delivery == string(model.DeliveryPush):
+	case pushed > 0 && pulled == 0:
 		lead = "TasmoFleet uploads each file to its device"
+	case pushed > 0 && p.FwDir != "":
+		lead, url = "TasmoFleet uploads the file to "+plural(pushed, "device")+"; the others fetch theirs from ", p.FwDir
+	case pushed > 0:
+		lead = "TasmoFleet uploads the file to " + plural(pushed, "device") + "; the others fetch theirs from TasmoFleet"
 	case p.FwDir != "":
 		lead, url = "Each device fetches its file from ", p.FwDir
 	default:
@@ -589,7 +619,7 @@ func (h *handler) updatePreview(w http.ResponseWriter, r *http.Request) {
 		d, _ := h.d.Inventory.Get(r.Context(), it.DeviceID) // a vanished device shows as an empty name
 		q := byID[it.DeviceID]
 		row := previewRow{Device: d, Item: it, Go: it.Decision != "refuse" && it.Decision != "skip",
-			From: d.Identity.Version, To: q.Release, SkipPwr: q.SkipPowerRestore}
+			From: d.Identity.Version, To: q.Release, SkipPwr: q.SkipPowerRestore, Push: q.Delivery == model.DeliveryPush}
 		if q.AllowVariantChange && r.PostFormValue("variant") == "" {
 			row.Note = "Runs " + d.Identity.Variant + ": installs the default tasmota build."
 		}
@@ -599,7 +629,9 @@ func (h *handler) updatePreview(w http.ResponseWriter, r *http.Request) {
 				// The preview has just put the file into the cache, so this is a lookup.
 				if a, err := h.d.Firmware.Ensure(r.Context(), q.Release, it.Filename); err == nil {
 					row.Size = a.Size
-					p.FwDir = strings.TrimSuffix(h.d.Firmware.URLFor(a), a.Filename)
+					if it.Delivery != model.DeliveryPush {
+						p.FwDir = strings.TrimSuffix(h.d.Firmware.URLFor(a), a.Filename)
+					}
 				}
 			}
 			p.Bytes += row.Size
@@ -866,6 +898,7 @@ func (h *handler) txnPageData(w http.ResponseWriter, r *http.Request) (txnPage, 
 		row := txnRow{JobID: j.Job.ID, Name: j.Device, Href: b.Base + "/transactions/" + bid(b.Batch) + "?job=" + jid(j.Job.ID), Selected: sel != nil && sel.Job.ID == j.Job.ID}
 		row.Badge, row.Tone = jobBadge(j.Job)
 		if j.Job.IsUpdate() {
+			row.Upload = j.Job.Delivery == model.DeliveryPush
 			row.From, row.To = j.Job.IdentityBefore.Version, j.Job.TargetRelease
 			if row.From == "" {
 				row.From = j.FromVersion

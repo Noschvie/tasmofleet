@@ -274,7 +274,10 @@ type Request struct {
 	// Artifact.Custom); Release is then that image's version. Empty = the
 	// upstream release.
 	Custom string
-	// Delivery is how the image reaches the device; empty is the default pull.
+	// Delivery is how the image reaches the device; empty is the default
+	// pull. DeliveryPush means "push where possible": a device or plan that
+	// cannot take an upload gets the download instead (PreviewItem says
+	// which and why), and the job stores the delivery it really uses.
 	Delivery           model.Delivery
 	Variant            string // empty = keep detected
 	AllowVariantChange bool
@@ -299,6 +302,11 @@ type PreviewItem struct {
 	Plan     model.Plan
 	Filename string
 	Reason   string // for skip/refuse: the guard or policy error text
+	// Delivery is what the job would use: a push request falls back to the
+	// download for a device that cannot take an upload, and DeliveryNote
+	// says why ("" when the request is kept).
+	Delivery     model.Delivery
+	DeliveryNote string
 	// PowerRestore lists the relays that are ON now and would be switched
 	// back on after the update, e.g. "1, 3"; empty when nothing would be
 	// switched (all OFF, restore turned off, or the state is unreadable).
@@ -374,6 +382,10 @@ type planResult struct {
 	plan     model.Plan
 	target   model.Artifact
 	minimal  model.Artifact
+	// delivery is what the job uses: a push request becomes the download
+	// for a device or plan that cannot take an upload; fallback says why.
+	delivery model.Delivery
+	fallback string
 }
 
 // planFor runs Decide, Select, firmware.Ensure, Plan and Guard for every
@@ -389,9 +401,10 @@ func (e *Engine) planFor(ctx context.Context, id model.Identity, c fwselect.Choi
 	if dec == fwselect.DecideSkip {
 		return p, nil
 	}
+	p.delivery = delivery
 	if delivery == model.DeliveryPush {
 		if err := pushDeviceRefusal(id); err != nil {
-			return p, refused(err)
+			p.delivery, p.fallback = model.DeliveryPull, err.Error()
 		}
 	}
 	if p.sel, err = e.sel.Select(id, c); err != nil {
@@ -403,9 +416,9 @@ func (e *Engine) planFor(ctx context.Context, id model.Identity, c fwselect.Choi
 	if p.plan, err = e.sel.Plan(id, p.target.Size); err != nil {
 		return p, refused(fmt.Errorf("plan: %w", err))
 	}
-	if delivery == model.DeliveryPush {
+	if p.delivery == model.DeliveryPush {
 		if err := pushPlanRefusal(p.plan); err != nil {
-			return p, refused(err)
+			p.delivery, p.fallback = model.DeliveryPull, err.Error()
 		}
 	}
 	if err := e.sel.Guard(id, p.target, e.fw.URLFor(p.target), c); err != nil {
@@ -526,6 +539,7 @@ func (e *Engine) previewDevice(ctx context.Context, d model.Device, r Request) P
 	}
 	it.Plan = p.plan
 	it.Filename = p.sel.Filename
+	it.Delivery, it.DeliveryNote = p.delivery, p.fallback
 	if !r.SkipPowerRestore && !isIntermediate(ident.Variant) {
 		e.previewPower(ctx, d, r.RestoreRelays, &it)
 	}
@@ -654,12 +668,17 @@ func (e *Engine) submit(ctx context.Context, actor string, reqs []Request, retry
 	if len(rest) == 0 {
 		return 0, skipped, ErrNothingToRetry
 	}
+	// Each job stores the delivery its preview decided (push where possible).
+	delivery := map[model.DeviceID]model.Delivery{}
+	for _, it := range items {
+		delivery[it.DeviceID] = it.Delivery
+	}
 	now := e.clk.Now()
 	jobs := make([]model.Job, 0, len(rest))
 	for _, r := range rest {
 		c := choiceFor(r)
 		j := model.Job{DeviceID: r.DeviceID, State: model.JobQueued, Policy: c.Policy, SkipBackup: r.SkipBackup, SkipPowerRestore: r.SkipPowerRestore, RestoreRelays: r.RestoreRelays,
-			TargetRelease: r.Release, TargetCustom: r.Custom, Delivery: r.Delivery, OriginalOtaURL: r.OriginalOtaURL, CreatedBy: actor, CreatedAt: now, UpdatedAt: now}
+			TargetRelease: r.Release, TargetCustom: r.Custom, Delivery: delivery[r.DeviceID], OriginalOtaURL: r.OriginalOtaURL, CreatedBy: actor, CreatedAt: now, UpdatedAt: now}
 		if r.AllowVariantChange {
 			j.TargetVariant = r.Variant
 		}
@@ -1070,6 +1089,11 @@ func (e *Engine) exec(ctx context.Context, j model.Job, a Action) Event {
 		}
 		if p.decision == fwselect.DecideSkip {
 			return Event{Kind: EvPlanned, Skip: true}
+		}
+		if p.delivery != j.Delivery {
+			// Submitted as a push, but the device or plan no longer allows
+			// it: never switch to the download unseen.
+			return failEvent(refused(errors.New(p.fallback + "; the update was planned as a push upload, start a new one")))
 		}
 		ev := Event{Kind: EvPlanned, Plan: p.plan, TargetVariant: p.sel.Variant, TargetArtifact: p.target.ID}
 		// Recorded for direct plans too: Tasmota's own fallback may fetch the

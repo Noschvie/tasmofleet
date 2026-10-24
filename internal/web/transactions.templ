@@ -210,7 +210,12 @@ templ txnBody(p txnPage) {
 					}>
 						<span class="upd-row-name">{ r.Name }</span>
 						if r.From != "" || r.To != "" {
-							<span class="upd-row-ver">{ r.From } → { r.To }</span>
+							<span class="upd-row-ver">
+								{ r.From } → { r.To }
+								if r.Upload {
+									· upload
+								}
+							</span>
 						}
 						<span class="upd-row-state">
 							@ui.Badge(r.Tone, r.Badge)
@@ -420,6 +425,9 @@ templ updatePreviewPage(p previewPage, csrf string) {
 						}
 						if r.Go && r.Item.Plan == model.PlanStaged {
 							<span class="upd-prow-note">Staged: minimal firmware first, then the release.</span>
+						}
+						if r.DeliveryText() != "" {
+							<span class="upd-prow-note">{ r.DeliveryText() }</span>
 						}
 						if r.PowerText() != "" {
 							<span class="upd-prow-note">{ r.PowerText() }</span>

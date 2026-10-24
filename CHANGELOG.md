@@ -6,6 +6,14 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Changed
+
+- The Delivery choice of an update is "Download (all devices)" (the default, as before) or "Push where possible
+  (ESP32; others download)". Push no longer refuses devices that cannot take an upload: an ESP8266, an unknown chip,
+  a device on safeboot or minimal, or a two-step plan gets the normal download instead. The preview says per device
+  which delivery it gets and why, the job stores the delivery it really uses, and the transaction page marks the
+  devices updated by upload. The strict push mode (refuse such devices) is gone.
+
 ### Fixed
 
 - A release tag now publishes its image: the publish job in `ci.yml` was skipped because the implicit success check

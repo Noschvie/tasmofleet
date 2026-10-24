@@ -4,7 +4,6 @@ package ota
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 
@@ -89,19 +88,29 @@ func TestITPushPasswordProtectedDevice(t *testing.T) {
 	e.expectSuccess(dev, orig, 0, model.PlanDirect)
 }
 
-// ESP8266 is refused at Submit with the reason, and the device is only read.
-func TestITPushRefusedOnESP8266(t *testing.T) {
+// Push where possible: in a mixed batch the ESP32 is updated by upload and
+// the ESP8266 by its normal download; nothing is refused.
+func TestITPushWherePossibleMixedBatch(t *testing.T) {
 	e := newItEnv(t)
-	dev := e.addDevice(simulator.DeviceSpec{Profile: simulator.ProfileESP8266_4M})
+	esp32 := e.addDevice(simulator.DeviceSpec{Profile: simulator.ProfileESP32})
+	plug := e.addDevice(simulator.DeviceSpec{Profile: simulator.ProfileESP8266_4M})
+	orig32, origPlug := e.ctrl[esp32].OtaURL(), e.ctrl[plug].OtaURL()
 	eng := e.start(2)
-	_, err := eng.Submit(context.Background(), "it", []Request{{DeviceID: dev, Release: itRelease, SkipBackup: true, Delivery: model.DeliveryPush}})
-	var re *RefusedError
-	if !errors.As(err, &re) || !strings.Contains(re.Refused[0].Reason, "ESP8266") {
+	if _, err := eng.Submit(context.Background(), "it", []Request{
+		{DeviceID: esp32, Release: itRelease, SkipBackup: true, Delivery: model.DeliveryPush},
+		{DeviceID: plug, Release: itRelease, SkipBackup: true, Delivery: model.DeliveryPush},
+	}); err != nil {
 		t.Fatalf("Submit: %v", err)
 	}
-	e.assertNoPullCommands(dev)
-	if n := e.uploadsOf(dev); n != 0 {
-		t.Fatalf("%d uploads to a refused device", n)
+	if j := e.expectSuccess(esp32, orig32, 0, model.PlanDirect); j.Delivery != model.DeliveryPush {
+		t.Fatalf("ESP32 job delivery %q", j.Delivery)
+	}
+	e.assertNoPullCommands(esp32)
+	if j := e.expectSuccess(plug, origPlug, 1, model.PlanDirect); j.Delivery != model.DeliveryPull {
+		t.Fatalf("ESP8266 job delivery %q", j.Delivery)
+	}
+	if n := e.uploadsOf(plug); n != 0 {
+		t.Fatalf("%d uploads to an ESP8266", n)
 	}
 }
 

@@ -97,7 +97,7 @@
       var box = form.querySelector('input[name="backup"]');
       el.hidden = !!box && !box.checked;
     });
-    // push upload is for ESP32 only: say so before the preview refuses the devices that cannot take it
+    // push where possible uploads to ESP32 only: say which selected devices download instead
     form.querySelectorAll("[data-push-hint]").forEach(function (el) {
       var sel = form.querySelector('select[name="delivery"]');
       var bad = 0;
@@ -116,11 +116,8 @@
           ? ""
           : "Push upload is for ESP32 devices only. " +
             (bad === 1
-              ? "1 selected device is an ESP8266 or of unknown type and"
-              : bad + " selected devices are ESP8266 or of unknown type and") +
-            " would be refused. Choose Pull (device downloads) as the delivery, or deselect " +
-            (bad === 1 ? "it" : "them") +
-            ".";
+              ? "1 selected device is an ESP8266 or of unknown type and downloads its file instead."
+              : bad + " selected devices are ESP8266 or of unknown type and download their files instead.");
     });
     // buttons that act on the selection stay off until something is selected
     form.querySelectorAll("[data-needs-selection]").forEach(function (b) {

@@ -287,8 +287,14 @@ data directory (TasmoAdmin lesson A4).
   `Failed` plus a reason; a refusal is certain (nothing flashed), any other error after the
   body started is not. The state machine is unchanged: `set_ota_url` only runs Guard,
   `upgrade_issued` uploads, a lost reply is probed and never resent, `OtaUrl` is never
-  touched. ESP8266, unknown chips, safeboot/minimal and staged plans are refused at Submit
-  with a reason; ESP8266 stays refused until a real-hardware test.
+  touched. The choice is "push where possible": the download stays the default for every
+  device, and with push chosen each device that cannot take an upload (ESP8266, unknown
+  chips, safeboot/minimal, staged plans) gets the download instead. The preview says per
+  device which delivery it gets and why, the job stores the delivery it really uses
+  (shown on the transaction page), and a job submitted as a push whose plan no longer
+  allows one fails before touching the device instead of switching unseen. A push job
+  sends its image once (no second attempt after a stalled or lost upload). ESP8266 stays
+  on the download until a real-hardware test.
 - Device output is untrusted text. It is size-limited and parsed with tolerant JSON
   (control characters stripped), and HTML-escaped by templ on output.
 

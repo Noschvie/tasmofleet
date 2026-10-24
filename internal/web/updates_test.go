@@ -457,7 +457,7 @@ func TestGroupTransactionsKeepsOrderAndCounts(t *testing.T) {
 // and a made-up value must be refused instead of silently falling back.
 func TestDeliveryChoiceReachesTheEngineAndSurvivesPreview(t *testing.T) {
 	e, o, _, _ := setupOTA(t)
-	o.items[1] = ota.PreviewItem{DeviceID: 1, Decision: "upgrade", Plan: model.PlanDirect, Filename: "tasmota32.bin"}
+	o.items[1] = ota.PreviewItem{DeviceID: 1, Decision: "upgrade", Plan: model.PlanDirect, Filename: "tasmota32.bin", Delivery: model.DeliveryPush}
 	form := url.Values{"id": {"1"}, "release": {"16.1.0"}, "policy": {"only-newer"}}
 	_, body := e.do(t, "POST", "/updates/preview", "operator", form)
 	if o.previewReqs[0].Delivery != model.DeliveryPull || !strings.Contains(body, `name="delivery" value=""`) {
@@ -480,7 +480,45 @@ func TestDeliveryChoiceReachesTheEngineAndSurvivesPreview(t *testing.T) {
 func TestUpdateFormOffersTheDeliveryChoice(t *testing.T) {
 	e, _, _, _ := setupOTA(t)
 	_, body := e.do(t, "GET", "/updates/new", "operator", nil)
-	if !strings.Contains(body, `name="delivery"`) || !strings.Contains(body, `<option value="" selected>Pull`) || !strings.Contains(body, `value="push"`) {
+	if !strings.Contains(body, `name="delivery"`) || !strings.Contains(body, `<option value="" selected>Download (all devices)`) ||
+		!strings.Contains(body, `<option value="push">Push where possible (ESP32; others download)`) {
 		t.Fatalf("no delivery select: %s", body)
+	}
+}
+
+// Why: "push where possible" decides per device. The preview must say which
+// devices get the upload and why the others download, before anything starts.
+func TestPreviewShowsTheDeliveryPerDevice(t *testing.T) {
+	e, o, _, _ := setupOTA(t)
+	o.items[1] = ota.PreviewItem{DeviceID: 1, Decision: "upgrade", Plan: model.PlanDirect, Filename: "tasmota.bin.gz",
+		Delivery: model.DeliveryPull, DeliveryNote: "push upload is not available for ESP8266 yet"}
+	o.items[2] = ota.PreviewItem{DeviceID: 2, Decision: "upgrade", Plan: model.PlanDirect, Filename: "tasmota32.bin", Delivery: model.DeliveryPush}
+	form := url.Values{"id": {"1", "2"}, "release": {"16.1.0"}, "policy": {"only-newer"}, "delivery": {"push"}}
+	_, body := e.do(t, "POST", "/updates/preview", "operator", form)
+	for _, want := range []string{"Push upload.", "Downloads instead: push upload is not available for ESP8266 yet.", "uploads the file to 1 device; the others fetch"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("preview lacks %q:\n%s", want, body)
+		}
+	}
+	// The download delivery needs no per-device line.
+	form.Set("delivery", "")
+	_, body = e.do(t, "POST", "/updates/preview", "operator", form)
+	if strings.Contains(body, "Push upload.") || strings.Contains(body, "Downloads instead") {
+		t.Fatalf("download preview shows delivery notes:\n%s", body)
+	}
+}
+
+// Why: the transaction page shows which devices were updated by upload, so a
+// mixed "push where possible" batch can be read afterwards.
+func TestTransactionMarksUploadedDevices(t *testing.T) {
+	e, _, j, _ := setupOTA(t)
+	j.jobs[0].Delivery = model.DeliveryPush
+	_, body := e.do(t, "GET", "/transactions/7", "operator", nil)
+	if !strings.Contains(body, "· upload") {
+		t.Fatalf("push job not marked:\n%s", body)
+	}
+	j.jobs[0].Delivery = model.DeliveryPull
+	if _, body = e.do(t, "GET", "/transactions/7", "operator", nil); strings.Contains(body, "· upload") {
+		t.Fatal("a download job is marked as upload")
 	}
 }

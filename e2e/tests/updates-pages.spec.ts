@@ -29,7 +29,7 @@ test.afterAll(async () => {
 
 const admin = { "X-authentik-username": "adam", "X-authentik-groups": "adm" };
 
-test("push upload with an ESP8266 selected: the form says the device would be refused", { tag: "@core" }, async ({ page }) => {
+test("push where possible with an ESP8266 selected: the form says it downloads instead", { tag: "@core" }, async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   await pickForUpdate(page, app.url, []);
   const hint = page.locator("[data-push-hint]");
@@ -41,6 +41,7 @@ test("push upload with an ESP8266 selected: the form says the device would be re
   await expect(hint).toBeVisible();
   await expect(hint).toContainText("ESP32 devices only");
   await expect(hint).toContainText("1 selected device is an ESP8266");
+  await expect(hint).toContainText("downloads its file instead");
   await delivery.selectOption("");
   await expect(hint).toBeHidden();
   // an ESP32 alone is fine for a push

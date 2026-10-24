@@ -313,6 +313,7 @@ type txnPage struct {
 type txnRow struct {
 	JobID          model.JobID
 	Name, From, To string
+	Upload         bool // the image is pushed to the device (push where possible)
 	Badge          string
 	Tone           ui.Tone
 	Bar            bool // a running device shows its progress

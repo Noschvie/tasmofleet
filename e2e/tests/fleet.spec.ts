@@ -269,9 +269,10 @@ test("update batch: preview, staged ESP8266 and direct ESP32 succeed, unknown ch
   expect(ota.OtaUrl).toBe(otaBefore);
 });
 
-// Push delivery (F-9): an ESP32 gets the image by upload, an ESP8266 is refused
-// in the preview with the reason. The device's OtaUrl is never touched.
-test("push upload: ESP32 is updated by upload, ESP8266 is refused with the reason", { tag: "@core" }, async ({ page, request }) => {
+// Push where possible (F-9): an ESP32 gets the image by upload, an ESP8266 in the same
+// transaction downloads it as usual; the preview says which and why, nothing is refused.
+// The ESP32's OtaUrl is never touched.
+test("push where possible: ESP32 is updated by upload, ESP8266 downloads, nothing refused", { tag: "@core" }, async ({ page, request }) => {
   test.setTimeout(240_000);
   const addr = env.devices["esp32s3-http"].addr;
   const otaBefore = (await (await request.get(`http://${addr}/cm?cmnd=OtaUrl`)).json()).OtaUrl;
@@ -281,14 +282,20 @@ test("push upload: ESP32 is updated by upload, ESP8266 is refused with the reaso
   await page.locator("select[name=delivery]").selectOption("push");
   await page.getByRole("button", { name: "Review update" }).click();
 
-  await expect(page.getByText(/uploads each file to its device/)).toBeVisible();
+  await expect(page.getByText(/uploads the file to 1 device; the others fetch/)).toBeVisible();
   const preview = (name: string) => page.locator(".upd-prow").filter({ hasText: name });
   await expect(preview("esp32s3-http")).toContainText("→ 16.1.0");
-  await expect(preview("plug-4m")).toContainText(/refuse[\s\S]*ESP8266/i);
+  await expect(preview("esp32s3-http")).toContainText("Push upload.");
+  await expect(preview("plug-4m")).toContainText("→ 16.1.0");
+  await expect(preview("plug-4m")).toContainText(/Downloads instead: .*ESP8266/);
 
   await page.getByRole("button", { name: "Start update", exact: true }).click();
   await expect(page).toHaveURL(/\/transactions\/\d+$/);
-  await expect(page.locator(".upd-row").filter({ hasText: "esp32s3-http" }).getByText("Done", { exact: true })).toBeVisible({ timeout: 200_000 });
+  await expect(page.locator(".upd-row").filter({ hasText: "esp32s3-http" })).toContainText("· upload");
+  await expect(page.locator(".upd-row").filter({ hasText: "plug-4m" })).not.toContainText("· upload");
+  for (const name of ["esp32s3-http", "plug-4m"]) {
+    await expect(page.locator(".upd-row").filter({ hasText: name }).getByText("Done", { exact: true })).toBeVisible({ timeout: 200_000 });
+  }
   const ota = await (await request.get(`http://${addr}/cm?cmnd=OtaUrl`)).json();
   expect(ota.OtaUrl, "a push update must not touch OtaUrl").toBe(otaBefore);
   const status = await (await request.get(`http://${addr}/cm?cmnd=Status%202`)).json();

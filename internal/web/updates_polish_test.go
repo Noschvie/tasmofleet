@@ -61,7 +61,7 @@ func TestPreviewRowsShowWhatHappensAndNothingElse(t *testing.T) {
 }
 
 // Why: Push upload is ESP32 only. The picker knows each row's chip family, so it can say before
-// the preview that selected ESP8266 devices would be refused; the element is the script's anchor.
+// the preview that selected ESP8266 devices download instead; the element is the script's anchor.
 func TestUpdateFormHasThePushHint(t *testing.T) {
 	e, _, _, _ := setupOTA(t)
 	_, body := e.do(t, "GET", "/updates/new", "operator", nil)

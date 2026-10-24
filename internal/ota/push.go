@@ -38,13 +38,14 @@ type FirmwareFiles interface {
 // upgrade_issued deadline, so the wait for the reboot starts after the upload.
 const uploadTimeoutFactor = 4
 
-// Reasons for a refused push. ESP8266 stays refused until the upload was
-// tested on real hardware (backlog F-9).
+// Reasons why a device downloads instead of taking a push upload ("push where
+// possible" falls back per device). ESP8266 stays on the download until the
+// upload was tested on real hardware (backlog F-9).
 const (
-	errPushESP8266  = "push upload is not available for ESP8266 yet; use the download delivery"
-	errPushChip     = "push upload needs a device with a known ESP32 chip; use the download delivery"
-	errPushSafeboot = "push upload needs a device running a normal firmware, not safeboot or minimal; use the download delivery"
-	errPushStaged   = "push upload cannot do a two-step update; use the download delivery"
+	errPushESP8266  = "push upload is not available for ESP8266 yet"
+	errPushChip     = "push upload needs a device with a known ESP32 chip"
+	errPushSafeboot = "push upload needs a device running a normal firmware, not safeboot or minimal"
+	errPushStaged   = "push upload cannot do a two-step update"
 )
 
 // pushDeviceRefusal says why a device cannot take a push upload, or nil. It

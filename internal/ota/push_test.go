@@ -48,11 +48,12 @@ func TestPushDeviceRefusal(t *testing.T) {
 	}
 }
 
-// Why: the refusal is shown to the user as it is; a backlog id ("F-9") means nothing to them,
-// so it must stay in the code comments only, and the way out (the download delivery) must be named.
+// Why: the reason is shown to the user as it is (why a device downloads
+// instead); a backlog id ("F-9") means nothing to them, so it must stay in the
+// code comments only.
 func TestPushESP8266RefusalIsPlainLanguage(t *testing.T) {
 	err := pushDeviceRefusal(model.Identity{Family: model.ChipESP8266})
-	if err == nil || strings.Contains(err.Error(), "F-9") || strings.Contains(err.Error(), "backlog") || !strings.Contains(err.Error(), "download delivery") {
+	if err == nil || strings.Contains(err.Error(), "F-9") || strings.Contains(err.Error(), "backlog") || !strings.Contains(err.Error(), "ESP8266") {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -131,9 +132,9 @@ func (f pushFW) Open(_ context.Context, a model.Artifact) (io.ReadCloser, error)
 	return io.NopCloser(bytes.NewReader(make([]byte, a.Size))), nil
 }
 
-func pushHarness(t *testing.T, fd *fakeDevice) (*harness, *pushAPI, pushFW) {
+func pushHarness(t *testing.T, fds ...*fakeDevice) (*harness, *pushAPI, pushFW) {
 	t.Helper()
-	h := newHarness(t, 2, fd)
+	h := newHarness(t, 2, fds...)
 	pa := &pushAPI{fakeAPI: h.api}
 	pf := pushFW{fakeFW: h.fw, rec: h.rec}
 	e := NewEngine(Options{Machine: testCfg(), MaxParallel: 2, Power: h.power}, h.st, h.st, pa, pf, h.backups, h.clk, nil)
@@ -205,17 +206,70 @@ func TestEnginePushGuardRefusalSendsNothing(t *testing.T) {
 	}
 }
 
-// Why: ESP8266 stays on the download delivery until F-9 is done; the refusal
-// happens at Submit, before any job exists and before any image is fetched.
-func TestEnginePushRefusesESP8266AtSubmit(t *testing.T) {
-	h, pa, _ := pushHarness(t, plugDevice())
-	_, err := h.e.Submit(context.Background(), "alice", []Request{{DeviceID: 1, Release: "16.0.0", Delivery: model.DeliveryPush}})
-	var re *RefusedError
-	if !errors.As(err, &re) || len(re.Refused) != 1 || !strings.Contains(re.Refused[0].Reason, "ESP8266") {
-		t.Fatalf("got %v", err)
+// Why: "push where possible" must never block an update: in a mixed batch the
+// ESP32 gets the upload and the ESP8266 falls back to the download, nothing is
+// refused, and each job stores the delivery it really uses, so the
+// transaction shows it and a resumed job does what was previewed.
+func TestEnginePushWherePossibleFallsBackPerDevice(t *testing.T) {
+	h, pa, _ := pushHarness(t, esp32Device(), plugDevice())
+	reqs := []Request{
+		{DeviceID: 1, Release: "16.0.0", Delivery: model.DeliveryPush},
+		{DeviceID: 2, Release: "16.0.0", Delivery: model.DeliveryPush},
 	}
-	if len(pa.uploads) != 0 || h.rec.count("set_ota_url") != 0 {
-		t.Fatalf("device was touched: %v", h.rec.entries())
+	items, err := h.e.Preview(context.Background(), reqs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		switch it.DeviceID {
+		case 1:
+			if it.Decision == decisionRefuse || it.Delivery != model.DeliveryPush || it.DeliveryNote != "" {
+				t.Errorf("ESP32 preview %+v", it)
+			}
+		case 2:
+			if it.Decision == decisionRefuse || it.Delivery != model.DeliveryPull || !strings.Contains(it.DeliveryNote, "ESP8266") {
+				t.Errorf("ESP8266 preview %+v", it)
+			}
+		}
+	}
+	if _, err := h.e.Submit(context.Background(), "alice", reqs); err != nil {
+		t.Fatalf("Submit refused a mixed push batch: %v", err)
+	}
+	h.run(t, h.e)
+	jobs, _ := h.st.ListJobs(context.Background(), store.JobFilter{})
+	for _, j := range jobs {
+		want := model.DeliveryPush
+		if j.DeviceID == 2 {
+			want = model.DeliveryPull
+		}
+		if j.State != model.JobSucceeded || j.Delivery != want {
+			t.Errorf("device %d: %s delivery %q, want succeeded %q (%s)", j.DeviceID, j.State, j.Delivery, want, j.LastError)
+		}
+	}
+	if len(pa.uploads) != 1 {
+		t.Errorf("%d uploads, want 1 (the ESP32)", len(pa.uploads))
+	}
+	if h.rec.count("upgrade 2") == 0 || h.rec.count("upgrade 1") != 0 {
+		t.Errorf("Upgrade 1 must go to the ESP8266 only: %v", h.rec.entries())
+	}
+}
+
+// Why: the job keeps the delivery it was submitted with. If the plan no longer
+// allows a push when the job runs (the device changed), the job stops before
+// touching the device instead of switching to another path unseen.
+func TestEnginePushJobRefusesAFallbackAtPlanTime(t *testing.T) {
+	h, pa, _ := pushHarness(t, esp32Device())
+	id := submitOne(t, h, Request{DeviceID: 1, Release: "16.0.0", Delivery: model.DeliveryPush})
+	h.api.mu.Lock()
+	h.api.devs[1].ident = plug1M() // the device answers as an ESP8266 now
+	h.api.mu.Unlock()
+	h.run(t, h.e)
+	j := h.job(t, id)
+	if j.State != model.JobFailed || !strings.Contains(j.LastError, "push") {
+		t.Fatalf("job %s %q", j.State, j.LastError)
+	}
+	if len(pa.uploads) != 0 || h.rec.count("upgrade") != 0 {
+		t.Fatalf("device was flashed: %v", h.rec.entries())
 	}
 }
 
