@@ -97,6 +97,13 @@ if ! $tool gremlins unleash --workers "$workers" --timeout-coefficient "$coeff" 
 	exit 1
 fi
 grep -E '^ *(LIVED|TIMED OUT)' "$out" || true
+# A shard whose files hold no mutant (e.g. only doc.go) has nothing to report;
+# its share is zero. Unsharded, "no results" falls through and fails below.
+if [ -n "$shard" ] && grep -q '^No results to report' "$out" && ! grep -q 'Killed:' "$out"; then
+	echo "no mutants in this shard"
+	echo "0 0 0" >>"$MUTATION_COUNTS_OUT"
+	exit 0
+fi
 summary=$(grep -E 'Killed: [0-9]+, Lived: [0-9]+|Timed out: [0-9]+' "$out" | tr '\n' ' ')
 echo "$summary"
 killed=$(echo "$summary" | sed -n 's/.*Killed: \([0-9]*\).*/\1/p')
