@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -268,5 +269,38 @@ func TestUploadFirmwareShortBodyNeverSendsTheClosingBoundary(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("the server never saw the upload")
+	}
+}
+
+// Why: the first real ESP32 push (2026-10-24) hung for minutes without any
+// trace of where. A stalled upload must say how much of the request the
+// device took, so the next attempt's history shows whether the body never
+// went out or stopped part-way. It stays an uncertain timeout (probe, never
+// resend), not a refusal.
+func TestUploadFirmwareStallReportsProgress(t *testing.T) {
+	stop := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			_, _ = w.Write([]byte("<form method='post' action='u2?fsz=' enctype='multipart/form-data'><input type='file' name='u2'></form>"))
+			return
+		}
+		_, _ = io.CopyN(io.Discard, r.Body, 1000)
+		<-stop // stop reading, like a device that stalls
+	}))
+	defer srv.Close()
+	defer close(stop) // runs before srv.Close
+	img := bytes.Repeat([]byte{0xE9}, 8<<20)
+	err := upload(uploader(t, Options{Timeout: 300 * time.Millisecond}), target(t, srv, 1, "", ""), img)
+	if !errors.Is(err, ErrTimeout) || errors.Is(err, ErrUploadRefused) {
+		t.Fatalf("got %v, want an uncertain ErrTimeout", err)
+	}
+	m := regexp.MustCompile(`after (\d+) of (\d+) bytes`).FindStringSubmatch(err.Error())
+	if m == nil {
+		t.Fatalf("no progress in %q", err)
+	}
+	sent, _ := strconv.Atoi(m[1])
+	total, _ := strconv.Atoi(m[2])
+	if sent <= 0 || sent >= total || total <= len(img) {
+		t.Fatalf("progress %d of %d for a %d byte image", sent, total, len(img))
 	}
 }

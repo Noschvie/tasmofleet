@@ -5,9 +5,11 @@ import (
 	"context"
 	"errors"
 	"io"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/store"
@@ -85,6 +87,10 @@ type pushAPI struct {
 	refuse    error // returned without flashing
 	size      int64
 	readBytes int64
+	// stall makes the upload take this long (virtual time) and end without
+	// flashing, like a POST whose body never reaches the device's handler.
+	stall  time.Duration
+	during func() // called while the upload runs
 }
 
 func (p *pushAPI) UploadFirmware(_ context.Context, d model.Device, name string, size int64, body io.Reader) error {
@@ -94,6 +100,13 @@ func (p *pushAPI) UploadFirmware(_ context.Context, d model.Device, name string,
 	p.uploads = append(p.uploads, name)
 	p.size, p.readBytes = size, n
 	p.mu2.Unlock()
+	if p.during != nil {
+		p.during()
+	}
+	if p.stall > 0 {
+		<-p.clk.After(p.stall)
+		return errors.New("upload: tasmota: timeout: no answer from 192.0.2.1")
+	}
 	if p.refuse != nil {
 		return p.refuse
 	}
@@ -247,6 +260,60 @@ func TestEnginePushLostReplyIsNotResent(t *testing.T) {
 	}
 	if len(pa.uploads) != 1 {
 		t.Fatalf("image sent %d times after a lost reply: %v", len(pa.uploads), h.rec.entries())
+	}
+}
+
+// Why: the first real ESP32 push (2026-10-24) stalled for the whole
+// upgrade_issued window; the job then timed out without a single probe and
+// uploaded the image a second time. After an upload whose outcome is unknown
+// the engine must probe (the device may still be flashing) and never send the
+// image again (safety rule 3); without a reboot the job ends failed.
+func TestEnginePushStalledUploadIsProbedAndNotResent(t *testing.T) {
+	h, pa, _ := pushHarness(t, esp32Device())
+	pa.stall = testCfg().UpgradeAccept
+	id := submitOne(t, h, Request{DeviceID: 1, Release: "16.0.0", Delivery: model.DeliveryPush})
+	h.run(t, h.e)
+	j := h.job(t, id)
+	if j.State != model.JobFailed || !strings.Contains(j.LastError, ErrTextNoUpgradeStart) {
+		t.Fatalf("job %s %q", j.State, j.LastError)
+	}
+	if n := len(pa.uploads); n != 1 {
+		t.Fatalf("image sent %d times after a stalled upload: %v", n, h.rec.entries())
+	}
+	log := h.rec.entries()
+	up := slices.IndexFunc(log, func(s string) bool { return strings.HasPrefix(s, "upload ") })
+	if probes := slices.IndexFunc(log[up+1:], func(s string) bool { return strings.HasPrefix(s, "probe ") }); probes < 0 {
+		t.Fatalf("no probe after the stalled upload: %v", log)
+	}
+	// The upload's own error is in the job history, not swallowed.
+	h.st.mu.Lock()
+	defer h.st.mu.Unlock()
+	if !slices.ContainsFunc(h.st.events, func(ev model.JobEvent) bool { return strings.Contains(ev.Detail, "no answer") }) {
+		t.Fatalf("upload error not recorded: %+v", h.st.events)
+	}
+}
+
+// Why: a cancel that arrives while the upload runs must end the transaction
+// (live 2026-10-24 it stayed in upgrade_issued and the image went out again).
+// The stage is finished first, so the device is probed, but nothing is sent
+// again and the job ends cancelled.
+func TestEnginePushCancelDuringUploadEndsCancelledWithoutResend(t *testing.T) {
+	h, pa, _ := pushHarness(t, esp32Device())
+	pa.stall = testCfg().UpgradeAccept
+	var id model.JobID
+	pa.during = func() {
+		if err := h.e.Cancel(context.Background(), "bob", id); err != nil {
+			t.Errorf("Cancel: %v", err)
+		}
+	}
+	id = submitOne(t, h, Request{DeviceID: 1, Release: "16.0.0", Delivery: model.DeliveryPush})
+	h.run(t, h.e)
+	j := h.job(t, id)
+	if j.State != model.JobCancelled {
+		t.Fatalf("job %s %q\n%v", j.State, j.LastError, h.rec.entries())
+	}
+	if n := len(pa.uploads); n != 1 {
+		t.Fatalf("image sent %d times after a cancel: %v", n, h.rec.entries())
 	}
 }
 

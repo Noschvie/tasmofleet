@@ -976,3 +976,65 @@ func TestDefaultConfigMatchesSpec(t *testing.T) {
 		t.Fatalf("DefaultConfig() = %+v, want %+v", got, testCfg())
 	}
 }
+
+// Why: a push upload runs inside upgrade_issued and can use up its whole
+// window (live 2026-10-24: three minutes). The window for the device to drop
+// off or reboot must start when the upload has ended, or the job times out
+// without a single probe. After the window a push job fails instead of
+// uploading again: whether the image is still being written is unknown, and
+// an image is never sent twice (safety rule 3).
+func TestStepUpgradeIssuedPush(t *testing.T) {
+	push := job(model.JobUpgradeIssued, model.StageFinal)
+	push.Delivery = model.DeliveryPush
+	push.DeadlineAt = t0.Add(-time.Second) // the upload took the whole window
+	pushCancel := push
+	pushCancel.CancelRequested = true
+	pull := job(model.JobUpgradeIssued, model.StageFinal)
+	pullCancel := pull
+	pullCancel.CancelRequested = true
+
+	runRows(t, []row{
+		{
+			name: "push/command_failed restarts the window and keeps the reason", in: push, ev: Event{Kind: EvCommandFailed, Err: "upload: timeout"},
+			state: model.JobUpgradeIssued, actions: []ActionKind{ActProbe},
+			check: func(t *testing.T, j model.Job, as []Action) {
+				wantDeadline(t, j, 3*time.Minute)
+				wantDelay(t, as, 5*time.Second)
+				if j.Attempt != push.Attempt {
+					t.Fatalf("Attempt changed to %d", j.Attempt)
+				}
+			},
+		},
+		{
+			name: "push/command_ok restarts the window", in: push, ev: Event{Kind: EvCommandOK},
+			state: model.JobUpgradeIssued, actions: []ActionKind{ActProbe},
+			check: func(t *testing.T, j model.Job, _ []Action) { wantDeadline(t, j, 3*time.Minute) },
+		},
+		{
+			name: "push/timeout fails, no second upload", in: push, ev: Event{Kind: EvTimeout},
+			state: model.JobFailed, actions: []ActionKind{ActNotify},
+			check: func(t *testing.T, j model.Job, _ []Action) { wantErrContains(t, j, ErrTextNoUpgradeStart) },
+		},
+		{
+			name: "push/timeout after cancel ends cancelled", in: pushCancel, ev: Event{Kind: EvTimeout},
+			state: model.JobCancelled, actions: []ActionKind{ActNotify},
+			check: func(t *testing.T, j model.Job, _ []Action) { wantErrContains(t, j, ErrTextNoUpgradeStart) },
+		},
+		{
+			// A cancelled job must not start the stage again: that would
+			// send OtaUrl and Upgrade 1 after the user said stop.
+			name: "pull/timeout after cancel ends cancelled, no retry", in: pullCancel, ev: Event{Kind: EvTimeout},
+			state: model.JobCancelled, actions: []ActionKind{ActNotify},
+			check: func(t *testing.T, j model.Job, _ []Action) { wantErrContains(t, j, ErrTextNoUpgradeStart) },
+		},
+		{
+			name: "pull/command_failed keeps the window", in: pull, ev: Event{Kind: EvCommandFailed, Err: "timeout"},
+			state: model.JobUpgradeIssued, actions: []ActionKind{ActProbe},
+			check: func(t *testing.T, j model.Job, _ []Action) {
+				if !j.DeadlineAt.Equal(pull.DeadlineAt) {
+					t.Fatalf("DeadlineAt moved to %v", j.DeadlineAt)
+				}
+			},
+		},
+	})
+}

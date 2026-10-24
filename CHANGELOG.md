@@ -10,6 +10,13 @@ always upgrade automatically.
 
 - A release tag now publishes its image: the publish job in `ci.yml` was skipped because the implicit success check
   counted the skipped jobs before `required` (v0.11.4 shipped no image from its first tag run).
+- Push upload: a stalled upload no longer leads to a second upload. The first real ESP32 push hung for the whole
+  upgrade window, after which the job timed out without probing once and sent the image again. The window for the
+  device to drop off or reboot now starts when the upload has ended, the upload's own error is kept in the job
+  history (with how many bytes went out), and a push job sends its image once: at the end of the window it fails
+  instead of starting the stage again. The upgrade page (`/up`) has its own short timeout.
+- A cancel requested while a device was in its upgrade stage could be followed by a new attempt (OtaUrl and
+  `Upgrade 1`, or another upload) when the stage timed out; the job now ends cancelled there.
 
 ## 0.11.4 (2026-10-24)
 

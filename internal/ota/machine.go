@@ -220,6 +220,16 @@ func fail(j model.Job, now time.Time, reason string) (model.Job, []Action) {
 	return j, notify()
 }
 
+// cancelled ends a job whose cancel request waited for the stage to finish.
+func cancelled(j model.Job, now time.Time, reason string) (model.Job, []Action) {
+	if j.Attempt > 0 && powerToRestore(j) {
+		reason = joinNotes(reason, "relays "+j.PowerOn.String()+" were ON before the update and are not restored")
+	}
+	j = to(j, model.JobCancelled, now)
+	j.LastError = reason
+	return j, notify()
+}
+
 func withErr(reason, detail string) string {
 	if detail == "" {
 		return reason
@@ -236,8 +246,16 @@ func toSetOtaURL(j model.Job, now time.Time, cfg Config) (model.Job, []Action) {
 }
 
 // retry starts the stage again if attempts are left, else fails with reason.
+// A cancel request stops it instead: starting the stage again would send
+// OtaUrl and Upgrade (or the image) after the user said stop. A push job
+// never starts it again: the image is sent once per transaction, because
+// after a stalled or lost upload nobody knows whether the device is still
+// writing it (safety rule 3).
 func retry(j model.Job, now time.Time, cfg Config, reason string) (model.Job, []Action) {
-	if j.Attempt < cfg.MaxAttempts {
+	if j.CancelRequested {
+		return cancelled(j, now, reason)
+	}
+	if j.Attempt < cfg.MaxAttempts && j.Delivery != model.DeliveryPush {
 		j.LastError = reason
 		return toSetOtaURL(j, now, cfg)
 	}
@@ -396,10 +414,10 @@ func stepUpgradeIssued(j model.Job, ev Event, now time.Time, cfg Config) (model.
 		if ev.Err != "" {
 			return fail(j, now, withErr(ErrTextOtaURLChanged, ev.Err))
 		}
-		return j, probeLater(cfg)
+		return pushUploaded(j, now, cfg), probeLater(cfg)
 	case EvCommandFailed:
 		// Unknown whether the upgrade started: probe, never resend.
-		return j, probeLater(cfg)
+		return pushUploaded(j, now, cfg), probeLater(cfg)
 	case EvProbeOffline:
 		j = to(j, model.JobAwaitReboot, now)
 		j.SeenOffline = true
@@ -429,6 +447,19 @@ func stepUpgradeIssued(j model.Job, ev Event, now time.Time, cfg Config) (model.
 		// not in the transition table: the job stays unchanged
 	}
 	return j, nil
+}
+
+// pushUploaded restarts the upgrade_issued window when a push upload has
+// ended: the upload ran inside the window and may have used all of it, and
+// the device needs the full window to drop off or reboot after it. A pull
+// job's window started with its short Upgrade command and stays.
+func pushUploaded(j model.Job, now time.Time, cfg Config) model.Job {
+	if j.Delivery != model.DeliveryPush {
+		return j
+	}
+	j.UpdatedAt = now
+	j.DeadlineAt = now.Add(cfg.UpgradeAccept)
+	return j
 }
 
 // rebooted reports whether a probe answer proves the device restarted or

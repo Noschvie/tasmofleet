@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -66,7 +67,11 @@ func (c *httpClient) UploadFirmware(ctx context.Context, t Target, filename stri
 	rctx, cancel := context.WithTimeout(ctx, c.timeout(uploadTimeout))
 	defer cancel()
 
-	page, err := c.fetch(rctx, ctx, t, http.MethodGet, "/up", "", nil, "", 0)
+	// The page is small: a device that does not serve it promptly fails
+	// here, before anything was sent, instead of using up the upload budget.
+	pctx, pcancel := context.WithTimeout(rctx, c.timeout(rootTimeout))
+	page, err := c.fetch(pctx, ctx, t, http.MethodGet, "/up", "", nil, "", 0)
+	pcancel()
 	if err != nil {
 		return err
 	}
@@ -87,10 +92,17 @@ func (c *httpClient) UploadFirmware(ctx context.Context, t Target, filename stri
 	headR := bytes.NewReader(head.Bytes()[:headLen])
 	// Tasmota's web server cannot read chunked bodies: the length is exact.
 	total := int64(headLen) + size + int64(tail.Len())
-	reader := io.MultiReader(headR, &exactReader{r: body, left: size}, tail)
+	sent := &countingReader{r: io.MultiReader(headR, &exactReader{r: body, left: size}, tail)}
 	reply, err := c.fetch(rctx, ctx, t, http.MethodPost, "/u2", "fsz="+url.QueryEscape(strconv.FormatInt(size, 10)),
-		reader, mw.FormDataContentType(), total)
+		sent, mw.FormDataContentType(), total)
 	if err != nil {
+		// How far the body got tells a device that never read it from one
+		// that stopped part-way. The bytes were handed to the connection;
+		// the device may have received fewer.
+		var de *deviceError
+		if errors.As(err, &de) {
+			return &deviceError{de.kind, de.msg + " (stalled after " + strconv.FormatInt(sent.n.Load(), 10) + " of " + strconv.FormatInt(total, 10) + " bytes)"}
+		}
 		return err
 	}
 	text := string(reply)
@@ -127,6 +139,19 @@ func (e *exactReader) Read(p []byte) (int, error) {
 		}
 		err = nil
 	}
+	return n, err
+}
+
+// countingReader counts the bytes read from r. The transport reads the body
+// on its own goroutine, so the count is atomic.
+type countingReader struct {
+	r io.Reader
+	n atomic.Int64
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.n.Add(int64(n))
 	return n, err
 }
 
