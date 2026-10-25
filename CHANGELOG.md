@@ -17,7 +17,8 @@ always upgrade automatically.
   hex digits of the Wi-Fi MAC), so existing devices show their MQTT state without a manual refresh. Other
   placeholders are repaired by the next identity refresh. A topic or DeviceName read from a device is
   validated (no wildcards, `/`, `%`, control characters) before it is stored (#52).
-- Devices: self-compiled builds that report `16.0.0(tasmota32)` show their build instead of "unknown" (#52).
+- Devices: self-compiled builds that report `16.0.0(tasmota32)` show "tasmota32 (self-compiled)" as Build instead
+  of "unknown". The variant stays unknown, so OTA still needs an explicit variant choice (#52).
 - Devices: Ethernet boards show their Ethernet IP, gateway and MAC; the Wi-Fi card becomes an Ethernet card
   (#52).
 - Devices: the Network card no longer repeats the address as "IP address" (#52).

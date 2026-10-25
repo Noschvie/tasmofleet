@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/health"
@@ -273,7 +274,9 @@ func (h *handler) identity(v view, d model.Device, updating bool, f snapFacts) i
 		fw = "Tasmota " + d.Identity.Version
 	}
 	build := d.Identity.Variant
-	if build != "" && d.Identity.Language != "" {
+	if build == "unknown" && d.Identity.Image != "" && !strings.Contains(d.Identity.Image, "-") {
+		build = d.Identity.Image + " (self-compiled)" // a bare tag: the name the device reports
+	} else if build != "" && d.Identity.Language != "" {
 		build += " " + d.Identity.Language
 	}
 	rows := []ui.KVRow{

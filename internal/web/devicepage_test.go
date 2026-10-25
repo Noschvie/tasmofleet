@@ -530,3 +530,16 @@ func TestIdentityCardCallsTheStoredNameDeviceName(t *testing.T) {
 		t.Errorf("identity card labels wrong")
 	}
 }
+
+// Why (issue #52): a self-compiled build reports a bare tag. The Build row shows that name, while
+// the variant stays unknown so OTA never overwrites a custom build without an explicit choice.
+func TestBuildRowNamesASelfCompiledBuild(t *testing.T) {
+	e := setup(t)
+	d := e.inv.devs[1]
+	d.Identity.Variant, d.Identity.Image = "unknown", "tasmota32"
+	e.inv.devs[1] = d
+	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
+	if !strings.Contains(body, "tasmota32 (self-compiled)") {
+		t.Error("Build row does not name the self-compiled build")
+	}
+}

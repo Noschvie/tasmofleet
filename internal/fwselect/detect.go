@@ -153,12 +153,8 @@ func isNumericVersion(v string) bool {
 func variantFromTag(tag string, fam model.ChipFamily, single bool) (string, bool) {
 	_, image, found := strings.Cut(tag, "-")
 	if !found {
-		// A self-compiled build reports just its environment name, "16.0.0(tasmota32)", without
-		// a release or sha prefix. Read the name as the image; if it does not fit the hardware the
-		// variant stays unknown (a custom build is no reason to refuse the device).
-		if v, ok := variantFromTag("local-"+tag, fam, single); ok {
-			return v, true
-		}
+		// A self-compiled build reports a bare tag ("16.0.0(tasmota32)"). It stays unknown on
+		// purpose: we never overwrite a custom build without an explicit variant choice.
 		return variantUnknown, true
 	}
 	known := fam != model.ChipUnknown

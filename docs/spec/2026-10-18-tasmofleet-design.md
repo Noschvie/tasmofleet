@@ -337,8 +337,8 @@ and one per captured fixture. Unknown is final: no fallbacks, no substring guess
 `Version` = `<semver>(<sha-or-release>-<image>)`, e.g. `16.0.0(release-tasmota)`,
 `16.0.0(release-tasmota32)`, `16.0.0(release-minimal)`, dev builds `16.0.0(85cff52-tasmota)`.
 `Identity.Image` keeps the raw tag. A self-compiled build reports the bare environment name
-(`16.0.0(tasmota32)`, no prefix): it is read as the image `tasmota32`; a name that does not fit the
-hardware gives variant `unknown`. The variant is normalised:
+(`16.0.0(tasmota32)`, no prefix): the variant stays `unknown`, so OTA never replaces a custom build
+without an explicit choice; the UI shows the reported name as "tasmota32 (self-compiled)". The variant is normalised:
 
 | image tag                                                                                | family constraint              | Variant                                                                 |
 | ---------------------------------------------------------------------------------------- | ------------------------------ | ----------------------------------------------------------------------- |
