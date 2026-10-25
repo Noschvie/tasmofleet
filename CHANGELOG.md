@@ -6,6 +6,13 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Fixed
+
+- Start: a data directory the container user (UID 65532) cannot write to, typically a bind mount that Docker
+  created as root, now stops with `data dir /data is not writable by uid 65532: see README (bind mounts)`
+  instead of an opaque secretbox error. The README explains `chown -R 65532:65532` / `user:` for bind
+  mounts and shows `TZ` in the Compose example (#33).
+
 ### Changed
 
 - Devices: the tooltip of "HTTP –" in the MQTT · HTTP column says the channel is on standby while MQTT delivers

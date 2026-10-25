@@ -124,11 +124,23 @@ services:
     environment:
       TASMOFLEET_LISTEN: ":8443"
       TASMOFLEET_TLS_SELF_SIGNED: "true"
+      # TZ: "Europe/Berlin" # local time instead of UTC (logs, times the app formats)
     volumes:
       - tasmofleet-data:/data
 volumes:
   tasmofleet-data:
 ```
+
+The container runs as UID 65532. A named volume (as above) works out of the box. For a bind
+mount (`-v /srv/tasmofleet:/data`) make the directory writable for that user first, otherwise
+Docker creates it as root and TasmoFleet refuses to start with `data dir /data is not writable`:
+
+```sh
+mkdir -p /srv/tasmofleet && chown -R 65532:65532 /srv/tasmofleet
+```
+
+Alternatively set an explicit `user: "<uid>:<gid>"` in Compose (or `--user`) that owns the
+directory. Set `TZ` (e.g. `Europe/Berlin`) to get local time instead of UTC.
 
 With Compose, the setup link is in `docker compose logs tasmofleet`.
 

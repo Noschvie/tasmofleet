@@ -77,6 +77,22 @@ func FollowLogLevel(sys *sysconfig.Service, level *slog.LevelVar, log *slog.Logg
 	})
 }
 
+// checkDataDirWritable fails with an actionable message when the process cannot
+// write to dir. Docker creates a missing bind-mount source as root, so the
+// non-root image user hits this on first start; without the check the first
+// write (the secretbox key) fails with an opaque error (#33).
+func checkDataDirWritable(dir string) error {
+	f, err := os.CreateTemp(dir, ".writecheck-*")
+	if err != nil {
+		return fmt.Errorf("data dir %s is not writable by uid %d: see README (bind mounts): %w", dir, os.Getuid(), err)
+	}
+	name := f.Name()
+	// Best-effort cleanup of a probe file that only proves writability.
+	_ = f.Close()
+	_ = os.Remove(name)
+	return nil
+}
+
 // OpenServices opens the database and builds the services that do not need
 // network listeners. The caller must Close it. It never imports legacy
 // environment settings: that happens once, in Run, so a CLI command cannot
@@ -88,6 +104,9 @@ func OpenServices(cfg config.Config, log *slog.Logger, version string) (*Service
 func openServices(cfg config.Config, log *slog.Logger, version string, importLegacy bool) (*Services, error) {
 	if err := os.MkdirAll(cfg.DataDir, 0o700); err != nil {
 		return nil, fmt.Errorf("data dir: %w", err)
+	}
+	if err := checkDataDirWritable(cfg.DataDir); err != nil {
+		return nil, err
 	}
 	box, err := secretbox.LoadOrCreate(cfg.DataDir)
 	if err != nil {
