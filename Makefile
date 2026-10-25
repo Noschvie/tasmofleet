@@ -44,7 +44,7 @@ TESTFLAGS ?=
 # Extra Playwright arguments, e.g. E2E_ARGS=--shard=1/2 (CI).
 E2E_ARGS  ?=
 
-.PHONY: demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test race integration mutation mutation-changed mutation-sum safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check clean tools
+.PHONY: demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test race integration mutation mutation-changed mutation-sum safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check changelog-notes clean tools
 
 check: templ-check fmt-check vet staticcheck lint test integration vuln build
 
@@ -252,6 +252,12 @@ changelog-check:
 	@v='$(TAG)'; v=$${v#v}; \
 	grep -Eq "^## $$(printf '%s' "$$v" | sed 's/[.]/[.]/g')( \(.*\))?$$" CHANGELOG.md || { \
 		echo "CHANGELOG.md has no section '## $$v' for tag $(TAG): move \"Unreleased\" into it before tagging" >&2; exit 1; }
+
+# Prints the body of the CHANGELOG.md section for TAG (the GitHub release notes).
+changelog-notes: changelog-check
+	@v='$(TAG)'; v=$${v#v}; \
+	awk -v v="$$v" '$$0 == "## " v || index($$0, "## " v " (") == 1 { on = 1; next } \
+		on && /^## / { exit } on' CHANGELOG.md
 
 tools:
 	$(TOOL) -n staticcheck >/dev/null

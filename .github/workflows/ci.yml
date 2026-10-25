@@ -14,7 +14,8 @@
 #     e2e suite in three shards, every unit test with the race detector,
 #     uncached test runs (TESTFLAGS=-count=1) and the full mutation run.
 #     A tag publishes the image (image.yml, called below) only after FULL
-#     passed, and fails early when CHANGELOG.md has no section for it.
+#     passed, and fails early when CHANGELOG.md has no section for it; then
+#     the job "release" makes the GitHub release from that section.
 #   QUARANTINE (nightly and dispatch only, never blocking): the tests tagged
 #     @quarantine / quarantine.Test, with retries; one "flaky" issue each.
 # Docs-only PRs skip the heavy jobs (the "changes" job decides; docs.yml checks
@@ -413,3 +414,23 @@ jobs:
       contents: read
       packages: write
     uses: ./.github/workflows/image.yml
+
+  # A GitHub release per tag, its notes the CHANGELOG.md section, once the image is out.
+  release:
+    name: GitHub release (tags)
+    needs: publish
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          make -s changelog-notes TAG="$TAG" > notes.md
+          pre=; case "$TAG" in *-*) pre=--prerelease ;; esac
+          gh release create "$TAG" --verify-tag --title "${TAG#v}" --notes-file notes.md $pre
