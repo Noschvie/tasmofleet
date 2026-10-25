@@ -3,6 +3,8 @@
 Thanks for your interest. TasmoFleet is pre-1.0 and maintained by one person, so
 please open an issue before larger changes to agree on the approach.
 
+- **Questions and ideas:** use [Discussions](https://github.com/nofuturekid/tasmofleet/discussions)
+  (Q&A, Ideas). An idea that is agreed on becomes an issue.
 - **Bugs:** open an issue with the version, what you did, what you expected and
   what happened. Logs help; remove passwords and addresses you do not want to share.
 - **Pull requests:** one topic per PR, against `main`. CI (`.github/workflows/ci.yml`)

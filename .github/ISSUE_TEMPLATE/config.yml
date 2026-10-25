@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question or help with your setup
+    url: https://github.com/nofuturekid/tasmofleet/discussions/categories/q-a
+    about: Ask in Discussions (Q&A); issues are for bugs and agreed work.
+  - name: Feature idea
+    url: https://github.com/nofuturekid/tasmofleet/discussions/categories/ideas
+    about: Suggest and discuss ideas in Discussions first.
