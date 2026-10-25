@@ -728,8 +728,18 @@ func channelsOf(now time.Time, window time.Duration, h model.Health) []channelIn
 		return channelInfo{name, "\u2013", "not used", "off", tip}
 	}
 	mqttFresh := fresh(h.SeenMQTT)
+	httpc := mk("HTTP", fresh(h.SeenHTTP), !h.SeenHTTP.IsZero() && !mqttFresh, tip("HTTP", h.SeenHTTP, "not polled"))
+	if httpc.Tone == "off" && mqttFresh {
+		// A bare "–" next to a green MQTT read as "HTTP is down": the tooltip (and the
+		// screen-reader word) says it is the idle fallback; the mark stays a quiet "–".
+		httpc.Word = "standby"
+		httpc.Tip = "HTTP: standby, only polled when MQTT goes quiet"
+		if !h.SeenHTTP.IsZero() {
+			httpc.Tip += "; " + strings.TrimPrefix(tip("HTTP", h.SeenHTTP, ""), "HTTP: ")
+		}
+	}
 	return []channelInfo{
 		mk("MQTT", mqttFresh, h.LWT != "" || !h.SeenMQTT.IsZero(), tip("MQTT", h.SeenMQTT, "no messages from this device")),
-		mk("HTTP", fresh(h.SeenHTTP), !h.SeenHTTP.IsZero() && !mqttFresh, tip("HTTP", h.SeenHTTP, "not polled")),
+		httpc,
 	}
 }

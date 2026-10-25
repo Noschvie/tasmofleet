@@ -4,6 +4,14 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## Unreleased
+
+### Changed
+
+- Devices: the tooltip of "HTTP –" in the MQTT · HTTP column says the channel is on standby while MQTT delivers
+  ("only polled when MQTT goes quiet"), so the dash no longer reads as "HTTP is down"; screen readers hear
+  "standby". The column itself looks the same.
+
 ## 0.12.1 (2026-10-25)
 
 ### Fixed

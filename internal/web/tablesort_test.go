@@ -1,6 +1,7 @@
 package web
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -98,6 +99,12 @@ func TestChannels(t *testing.T) {
 	}
 	if got := get(model.Health{SeenMQTT: now.Add(-time.Minute), SeenHTTP: now.Add(-time.Hour), LWT: "Online"}); got != "MQTT✓ HTTP– " {
 		t.Errorf("mqtt device: %q", got)
+	}
+	// Why: while MQTT delivers, HTTP is the idle fallback. A bare "–" next to a green MQTT
+	// read as "HTTP is down" (maintainer, 2026-10-25): the mark stays quiet, but the tooltip
+	// and the screen-reader word say "standby" and why.
+	if c := channelsOf(now, win, model.Health{SeenMQTT: now.Add(-time.Minute)})[1]; c.Word != "standby" || !strings.Contains(c.Tip, "only polled when MQTT goes quiet") {
+		t.Errorf("idle http = %q / %q, want standby with the reason", c.Word, c.Tip)
 	}
 	if got := get(model.Health{SeenMQTT: now.Add(-time.Hour), LWT: "Online"}); got != "MQTT✕ HTTP– " {
 		t.Errorf("silent mqtt: %q", got)
