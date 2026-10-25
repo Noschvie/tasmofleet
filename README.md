@@ -117,6 +117,7 @@ The same with Docker Compose:
 services:
   tasmofleet:
     image: ghcr.io/nofuturekid/tasmofleet:latest
+    container_name: tasmofleet
     restart: unless-stopped
     ports:
       - "8443:8443" # UI (HTTPS, self-signed)
