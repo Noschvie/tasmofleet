@@ -6,7 +6,9 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/nofuturekid/tasmofleet/internal/events"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/secretbox"
 	"github.com/nofuturekid/tasmofleet/internal/simulator"
@@ -136,4 +138,35 @@ func TestRefreshKeepsOursWhenProbeSaysOther(t *testing.T) {
 	if got, _ := st.GetDevice(context.Background(), id); got.MQTT != model.MQTTOurs || got.MQTTHost == "" {
 		t.Fatalf("%+v", got)
 	}
+}
+
+// Why: a refresh and the background network read store identity and network facts without
+// touching the inventory, so open pages (device table: firmware, IP, module) never hear of it.
+// An operator watching the fleet page must see a new device's properties without reloading,
+// so both writes announce the device on the hub (the table reloads on "device") (#46).
+func TestRefreshAndReadNetAnnounceTheDevice(t *testing.T) {
+	p, _, id, _, _ := raceSetup(t)
+	hub := events.NewHub(8)
+	p.Hub = hub
+	ch, cancel := hub.Subscribe(events.TopicDevice)
+	defer cancel()
+	announced := func(step string) {
+		t.Helper()
+		select {
+		case ev := <-ch:
+			if d, ok := ev.Payload.(model.Device); !ok || d.ID != id || d.HTTPPassword != "" {
+				t.Fatalf("%s: payload %+v", step, ev.Payload)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("%s: no device event, open pages keep the old row until a reload", step)
+		}
+	}
+	if err := p.Refresh(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	announced("refresh")
+	if err := p.ReadNet(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	announced("read net")
 }

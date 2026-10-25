@@ -15,6 +15,9 @@ always upgrade automatically.
 - Settings: the MQTT connection test no longer reloads the page and blanks the password field. A password
   typed there passed the test, but the Save that followed saw an empty field and kept the old password, so
   the bus could not connect (#44). The test button now updates only its result line.
+- Devices: a device accepted from Discovery is probed right away, and every stored probe result (identity
+  refresh, background network read) tells open pages to reload the table. Firmware, module and IP of a new
+  device now show up on the open fleet page without a manual refresh (#46).
 
 ### Changed
 

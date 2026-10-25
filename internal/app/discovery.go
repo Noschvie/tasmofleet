@@ -1,9 +1,11 @@
 package app
 
 import (
+	"context"
 	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/discovery"
+	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/tasmota"
 )
 
@@ -24,7 +26,8 @@ func (a *runtime) setupDiscovery() error {
 		Inventory: a.svc.Inventory, Store: a.svc.Store, Audit: a.svc.Audit, Client: scanClient,
 		Verifier: macVerifier{client: a.svc.Client}, NetworkSet: a.svc.Networks,
 		Concurrency: scanConcurrency, ProbeTimeout: scanTimeout, Logger: a.log,
-		OnDropped: func(kind string) { a.svc.Std.DiscoveryDropped.With(kind).Inc() },
+		OnDropped:  func(kind string) { a.svc.Std.DiscoveryDropped.With(kind).Inc() },
+		OnAccepted: a.identifyLater,
 	})
 	if err != nil {
 		return err
@@ -33,4 +36,21 @@ func (a *runtime) setupDiscovery() error {
 	a.discoveryFollowsSetting()
 	a.goBG("discovery", func() error { return m.Run(a.bgContext) })
 	return nil
+}
+
+// identifyTimeout bounds the first probe of an accepted device.
+const identifyTimeout = 30 * time.Second
+
+// identifyLater probes a device created from a proposal, which carries no identity yet, and
+// stores firmware, module and MQTT facts. It returns at once; the prober announces the result
+// to open pages. A failure is not fatal: the device keeps an empty identity until a manual
+// "Refresh identity".
+func (a *runtime) identifyLater(id model.DeviceID) {
+	a.bgWG.Go(func() {
+		ctx, cancel := context.WithTimeout(a.bgContext, identifyTimeout)
+		defer cancel()
+		if err := a.svc.Prober.Refresh(ctx, id); err != nil && a.bgContext.Err() == nil {
+			a.log.Warn("discovery: first probe of the accepted device failed", "device", id, "err", err)
+		}
+	})
 }

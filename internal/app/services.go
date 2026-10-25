@@ -162,7 +162,7 @@ func openServices(cfg config.Config, log *slog.Logger, version string, importLeg
 	})
 	return &Services{
 		Broker: broker, Cfg: cfg, Sys: sys, Networks: nets, Log: log, Store: st, Audit: rec, Hub: hub, Metrics: reg, Std: std, Client: client, Inventory: inv,
-		Prober: &Prober{Client: client, Devices: st, Broker: broker},
+		Prober: &Prober{Client: client, Devices: st, Broker: broker, Hub: hub},
 	}, nil
 }
 

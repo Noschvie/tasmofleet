@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nofuturekid/tasmofleet/internal/events"
 	"github.com/nofuturekid/tasmofleet/internal/fwselect"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/store"
@@ -40,6 +41,16 @@ type Prober struct {
 	// ReadNetLater queues the background read of a device's network facts (ReadNet) after a
 	// refresh; nil in processes without one (the CLI): the server's reader catches up.
 	ReadNetLater func(model.DeviceID)
+	// Hub, if set, hears of every stored probe result (Refresh, ReadNet) as a device event, so open
+	// device tables reload and show the new firmware, module and network facts. Nil in the CLI.
+	Hub *events.Hub
+}
+
+// announce tells open pages that the stored facts of a device changed.
+func (p *Prober) announce(id model.DeviceID) {
+	if p.Hub != nil {
+		p.Hub.Publish(events.Event{Topic: events.TopicDevice, At: p.now(), Payload: model.Device{ID: id}})
+	}
 }
 
 const unknownReply = `{"Command":"Unknown"}`
@@ -244,7 +255,11 @@ func (p *Prober) ReadNet(ctx context.Context, id model.DeviceID) error {
 	net.SSID, net.BSSID, net.Channel = d.Net.SSID, d.Net.BSSID, d.Net.Channel // kept when Status 11 gives none
 	p.status11(ctx, t, &net)
 	net.ReadAt = p.now()
-	return p.Devices.UpdateNet(ctx, id, store.ProbeGuard{Address: d.Address, Port: d.Port, MAC: d.MAC}, net)
+	if err := p.Devices.UpdateNet(ctx, id, store.ProbeGuard{Address: d.Address, Port: d.Port, MAC: d.MAC}, net); err != nil {
+		return err
+	}
+	p.announce(id)
+	return nil
 }
 
 func (p *Prober) now() time.Time {
@@ -304,6 +319,7 @@ func (p *Prober) Refresh(ctx context.Context, id model.DeviceID) error {
 		store.ProbeResult{Identity: ident, SetMQTT: !pr.minimal, MQTT: pr.mqtt, MQTTHost: pr.mqttHost, MQTTPort: pr.mqttPort}); err != nil {
 		return err
 	}
+	p.announce(id)
 	if p.ReadNetLater != nil && !pr.minimal {
 		p.ReadNetLater(id) // the network facts fill in when they arrive
 	}

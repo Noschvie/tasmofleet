@@ -824,3 +824,22 @@ func TestProposalKeepsItsFirstSighting(t *testing.T) {
 		t.Fatalf("re-sighting changed the first sighting or not the last one: before %+v, after %+v", first[0], again[0])
 	}
 }
+
+// Why: an accepted device is created without identity (the proposal only knows MAC, IP and
+// topic). The first probe has to start right away, not at the next manual "Refresh identity",
+// or the operator sees a new device with empty firmware, module and IP (#46).
+func TestAcceptNewAnnouncesTheCreatedDevice(t *testing.T) {
+	var got []model.DeviceID
+	e := newEnv(t, "172.31.0.0/16", func(o *Options) {
+		o.OnAccepted = func(id model.DeviceID) { got = append(got, id) }
+	})
+	e.ver.macs["172.31.13.31"] = "02:00:5e:d2:2c:14"
+	e.mgr.handleMessage(bg, discoveryMsg("02005ED22C14", "172.31.13.31", "lamp"))
+	id, err := e.mgr.Accept(bg, "admin", mustProposals(t, e)[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0] != id {
+		t.Fatalf("OnAccepted calls = %v, want [%d]", got, id)
+	}
+}

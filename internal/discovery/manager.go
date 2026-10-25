@@ -89,6 +89,9 @@ type Options struct {
 	// OnDropped, if set, is called when a proposal is not stored because the
 	// per-kind limit is reached (metric tasmofleet_discovery_proposals_dropped_total).
 	OnDropped func(kind string)
+	// OnAccepted, if set, is called with the ID of every device created by an accept. The
+	// proposal carries no identity, so the caller starts the first probe here. It must not block.
+	OnAccepted func(id model.DeviceID)
 }
 
 // Manager implements Service and consumes MQTT discovery messages.
@@ -642,7 +645,11 @@ func (m *Manager) acceptNew(ctx context.Context, actor string, row store.Proposa
 		}
 		d.HTTPPassword = pw // the fleet default (N20); the user stays empty: Tasmota's admin
 	}
-	return m.o.Inventory.Create(ctx, actor, d)
+	id, err := m.o.Inventory.Create(ctx, actor, d)
+	if err == nil && m.o.OnAccepted != nil {
+		m.o.OnAccepted(id)
+	}
+	return id, err
 }
 
 // acceptMove applies a confirmed address change (always an admin action; the
