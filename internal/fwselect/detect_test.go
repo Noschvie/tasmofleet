@@ -138,7 +138,13 @@ func TestDetectImageTags(t *testing.T) {
 		{"unknown tag", "16.0.0(release-foobar)", "ESP8266EX", "", "unknown", "", model.ChipESP8266, false, "16.0.0", nil},
 		{"unknown esp32 variant", "16.0.0(release-tasmota32-foobar)", "ESP32-D0WD", "", "unknown", "", model.ChipESP32, false, "16.0.0", nil},
 		{"unknown chip suffix", "16.0.0(release-tasmota32h2)", "ESP32-D0WD", "", "unknown", "", model.ChipESP32, false, "16.0.0", nil},
-		{"tag without sha", "16.0.0(tasmota)", "ESP8266EX", "", "unknown", "", model.ChipESP8266, false, "16.0.0", nil},
+		// Self-compiled builds report the bare environment name (issue #52: "16.0.0(tasmota32)").
+		{"self-compiled esp8266", "16.0.0(tasmota)", "ESP8266EX", "", "tasmota", "", model.ChipESP8266, false, "16.0.0", nil},
+		{"self-compiled esp32", "16.0.0(tasmota32)", "ESP32-D0WD-V3", "", "tasmota", "", model.ChipESP32, false, "16.0.0", nil},
+		{"self-compiled s3", "16.0.0(tasmota32s3)", "ESP32-S3", "", "tasmota", "", model.ChipESP32S3, false, "16.0.0", nil},
+		{"self-compiled plain image on c3 stays unknown", "16.0.0(tasmota32)", "ESP32-C3", "", "unknown", "", model.ChipESP32C3, false, "16.0.0", nil},
+		{"self-compiled custom name", "16.0.0(my-build)", "ESP32-D0WD", "", "unknown", "", model.ChipESP32, false, "16.0.0", nil},
+		{"self-compiled custom bare name", "16.0.0(mybuild)", "ESP32-D0WD", "", "unknown", "", model.ChipESP32, false, "16.0.0", nil},
 		// Unknown hardware is not an error but never Known().
 		{"unknown hardware", "16.0.0(release-tasmota32)", "ESP32-H2", "", "tasmota", "", model.ChipUnknown, false, "16.0.0", nil},
 		// Family mismatches between image tag and hardware must stop.

@@ -843,3 +843,31 @@ func TestAcceptNewAnnouncesTheCreatedDevice(t *testing.T) {
 		t.Fatalf("OnAccepted calls = %v, want [%d]", got, id)
 	}
 }
+
+// Why: a scan proposed the hostname ("tasmota-2BE970-2416") as the device name, while MQTT
+// discovery proposes Tasmota's DeviceName. Both ways must name the same device the same.
+func TestScanProposesTheDeviceNameNotTheHostname(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Query().Get("cmnd") {
+		case "Status 2":
+			_, _ = w.Write([]byte(`{"StatusFWR":{"Version":"16.0.0(tasmota32)","Hardware":"ESP32-S3"}}`))
+		case "Status 5":
+			_, _ = w.Write([]byte(`{"StatusNET":{"Hostname":"tasmota-2BE970-2416","IPAddress":"0.0.0.0","Mac":"02:00:5E:3A:CE:56","Ethernet":{"IPAddress":"127.0.0.1","Mac":"02:00:5E:3A:CE:57"}}}`))
+		case "Status":
+			_, _ = w.Write([]byte(`{"Status":{"DeviceName":"Tasmota TV Wand","Topic":"tasmota_2BE970"}}`))
+		default:
+			_, _ = w.Write([]byte(`{"Command":"Unknown"}`))
+		}
+	}))
+	defer srv.Close()
+	e := scanEnv(t, srv, "127.0.0.0/8")
+	e.run(t)
+	id, err := e.mgr.StartScan(bg, "admin", []netip.Prefix{netip.MustParsePrefix("127.0.0.1/32")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool { st, _ := e.mgr.Scan(id); return st.State == ScanDone })
+	if p := mustProposals(t, e); len(p) != 1 || p[0].Device.Name != "Tasmota TV Wand" {
+		t.Fatalf("proposals = %+v", p)
+	}
+}

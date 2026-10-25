@@ -232,3 +232,96 @@ func TestReadNetKeepsEarlierWifiFactsWhenStatus11Fails(t *testing.T) {
 		t.Fatalf("facts after a Status 11 failure: %+v", d.Net)
 	}
 }
+
+// Real Tasmota 16.0.0 answers (self-compiled ESP32-S3 on Ethernet, issue #52). Plain "Status"
+// resolves the topic; the "Topic" command would return the setting "tasmota_%06X".
+const (
+	status16 = `{"Status":{"Module":0,"DeviceName":"Tasmota TV Wand","FriendlyName":["Tasmota"],"Topic":"tasmota_2BE970","ButtonTopic":"0","Power":"0","PowerLock":"00","PowerOnState":3,"LedState":1,"LedMask":"FFFF","SaveData":1,"SaveState":1,"SwitchTopic":"0","SwitchMode":[0,0,0,0,0,0,0,0],"ButtonRetain":0,"SwitchRetain":0,"SensorRetain":0,"PowerRetain":0,"InfoRetain":0,"StateRetain":0,"StatusRetain":0}}`
+	// Wi-Fi station idle, Ethernet up: the top level carries the Wi-Fi values, "Ethernet" the real ones.
+	status5Eth = `{"StatusNET":{"Hostname":"tasmota-2BE970-2416","IPAddress":"0.0.0.0","Gateway":"0.0.0.0","Subnetmask":"0.0.0.0","DNSServer1":"0.0.0.0","DNSServer2":"0.0.0.0","Mac":"08:D1:F9:2B:E9:70",` +
+		`"Ethernet":{"Hostname":"tasmota-2BE970-eth","IPAddress":"192.168.7.139","Gateway":"192.168.7.1","Subnetmask":"255.255.255.0","DNSServer1":"192.168.7.1","DNSServer2":"0.0.0.0","Mac":"08:D1:F9:2B:E9:71"},` +
+		`"Webserver":2,"HTTP_API":1,"WifiConfig":4,"WifiPower":17.0}}`
+)
+
+// Why: the device list and the Identity card showed the hostname ("tasmota-2BE970-2416") where
+// the user set a DeviceName ("Tasmota TV Wand") on the device. DeviceName is what Tasmota shows
+// as the device's name, so it is the default name; the topic must be the resolved one, since
+// the health tracker matches MQTT messages by topic and "tasmota_%06X" never matches any.
+func TestDescribeNamesTheDeviceAfterItsDeviceNameAndResolvesTheTopic(t *testing.T) {
+	p, d := probeFixture(t, simulator.DeviceSpec{Name: "plug", Profile: simulator.ProfileESP8266_1M})
+	p.Client = override{Client: p.Client, reply: map[string]string{"Status": status16, "Topic": `{"Topic":"tasmota_%06X"}`, "Status 5": status5Eth}}
+	got, err := p.Describe(context.Background(), d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Name != "Tasmota TV Wand" {
+		t.Errorf("Name = %q, want the DeviceName", got.Name)
+	}
+	if got.Topic != "tasmota_2BE970" {
+		t.Errorf("Topic = %q, want the resolved topic", got.Topic)
+	}
+	// A device without DeviceName falls back to the hostname.
+	p.Client = override{Client: p.Client, reply: map[string]string{"Status": `{"Status":{"DeviceName":"  ","Topic":"t1"}}`}}
+	if got, err = p.Describe(context.Background(), d); err != nil || got.Name != "tasmota-2BE970-2416" {
+		t.Errorf("fallback name = %q, %v", got.Name, err)
+	}
+}
+
+// Why: an Ethernet board has no Wi-Fi address; the page showed "IP address 0.0.0.0" and an empty
+// Wi-Fi card. The Ethernet object has the real address, and the device is marked wired so the
+// page can show an Ethernet card instead.
+func TestReadNetTakesTheEthernetAddressWhenWifiHasNone(t *testing.T) {
+	p, st, id, _, _ := raceSetup(t)
+	p.Client = override{Client: p.Client, reply: map[string]string{"Status 5": status5Eth, "Status 11": status11Net}}
+	p.Now = func() time.Time { return time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC) }
+	if err := p.ReadNet(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	d, err := st.GetDevice(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := model.NetFacts{Hostname: "tasmota-2BE970-eth", IP: "192.168.7.139", Gateway: "192.168.7.1", Wired: true, ReadAt: p.Now()}
+	if d.Net != want {
+		t.Fatalf("Net = %+v, want %+v (no SSID: Status 11's Wi-Fi block is not this device's link)", d.Net, want)
+	}
+}
+
+// Why: with both interfaces up, or Wi-Fi only, the Wi-Fi values stay the device's address.
+func TestReadNetKeepsWifiWhenItHasAnAddress(t *testing.T) {
+	p, st, id, _, _ := raceSetup(t)
+	both := strings.Replace(status5Net, `"Mac":"AA:BB:CC:00:00:01"`, `"Mac":"AA:BB:CC:00:00:01","Ethernet":{"IPAddress":"192.0.2.99","Mac":"AA:BB:CC:00:00:02"}`, 1)
+	p.Client = override{Client: p.Client, reply: map[string]string{"Status 5": both, "Status 11": status11Net}}
+	if err := p.ReadNet(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	if d, _ := st.GetDevice(context.Background(), id); d.Net.Wired || d.Net.IP != "192.0.2.10" || d.Net.SSID != "IoT" {
+		t.Fatalf("Net = %+v", d.Net)
+	}
+}
+
+// Why: devices added before the topic was resolved hold "tasmota_%06X". They never matched a
+// message ("MQTT: Not connected" while online), so a refresh replaces such a topic with the
+// real one. A topic the user chose is never touched.
+func TestRefreshRepairsAnUnresolvedTopicOnly(t *testing.T) {
+	for _, tc := range []struct{ stored, want string }{
+		{"tasmota_%06X", "tasmota_2BE970"},
+		{"%prefix%-%06X", "tasmota_2BE970"},
+		{"my-own-topic", "my-own-topic"},
+	} {
+		t.Run(tc.stored, func(t *testing.T) {
+			p, st, id, d, _ := raceSetup(t)
+			d.Topic = tc.stored
+			if err := st.UpdateDevice(context.Background(), d); err != nil {
+				t.Fatal(err)
+			}
+			p.Client = override{Client: p.Client, reply: map[string]string{"Status": status16}}
+			if err := p.Refresh(context.Background(), id); err != nil {
+				t.Fatal(err)
+			}
+			if got, _ := st.GetDevice(context.Background(), id); got.Topic != tc.want {
+				t.Fatalf("Topic = %q, want %q", got.Topic, tc.want)
+			}
+		})
+	}
+}

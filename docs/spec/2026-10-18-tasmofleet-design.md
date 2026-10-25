@@ -258,8 +258,8 @@ data directory (TasmoAdmin lesson A4).
   Redirects are not followed.
 - **`Status 0` is never sent by automated code.** It returns 12 sections at once; on ESP8266
   with <20 kB heap this produced spliced, undecodable payloads in this fleet. Identity
-  probing uses `Status 2`, `Status 4`, `Status 5`, `Status 6`, `Status 11`, one at a time,
-  ≥200 ms apart.
+  probing uses `Status 2`, `Status 4`, `Status 5`, `Status 6`, `Status 11` and plain `Status` (the
+  Status object only: DeviceName and the resolved Topic), one at a time, ≥200 ms apart.
 - Minimal firmware (SRC): only `Upgrade`, `Upload`, `OtaUrl`, `SerialLog`, `Restart`
   exist; everything else is Unknown. The running version comes from bare `Upgrade`
   (`{"Upgrade":"1 or >16.0.0 to upgrade"}`). The image name and the language build come from
@@ -336,7 +336,9 @@ and one per captured fixture. Unknown is final: no fallbacks, no substring guess
 
 `Version` = `<semver>(<sha-or-release>-<image>)`, e.g. `16.0.0(release-tasmota)`,
 `16.0.0(release-tasmota32)`, `16.0.0(release-minimal)`, dev builds `16.0.0(85cff52-tasmota)`.
-`Identity.Image` keeps the raw tag. The variant is normalised:
+`Identity.Image` keeps the raw tag. A self-compiled build reports the bare environment name
+(`16.0.0(tasmota32)`, no prefix): it is read as the image `tasmota32`; a name that does not fit the
+hardware gives variant `unknown`. The variant is normalised:
 
 | image tag                                                                                | family constraint              | Variant                                                                 |
 | ---------------------------------------------------------------------------------------- | ------------------------------ | ----------------------------------------------------------------------- |

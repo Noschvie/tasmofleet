@@ -13,19 +13,19 @@ import (
 const deviceCols = `id, name, address, port, mac, topic, full_topic, tags, notes, http_user, http_password,
 	ota_excluded, mqtt_capability, chip_family, hardware, single_core, fw_version, fw_image, fw_variant,
 	fw_language, flash_size_kb, program_flash_kb, free_kb, identity_at, created_at, updated_at, mqtt_host, mqtt_port,
-	net_hostname, net_ip, net_gateway, net_ssid, net_bssid, net_channel, net_at`
+	net_hostname, net_ip, net_gateway, net_ssid, net_bssid, net_channel, net_wired, net_at`
 
 type scanner interface{ Scan(dest ...any) error }
 
 func (s *SQLite) scanDevice(r scanner) (model.Device, error) {
 	var d model.Device
 	var tags, sealed, mqtt, family string
-	var excluded, single int
+	var excluded, single, wired int
 	var identAt, created, updated, netAt int64
 	err := r.Scan(&d.ID, &d.Name, &d.Address, &d.Port, &d.MAC, &d.Topic, &d.FullTopic, &tags, &d.Notes, &d.HTTPUser, &sealed,
 		&excluded, &mqtt, &family, &d.Identity.Hardware, &single, &d.Identity.Version, &d.Identity.Image, &d.Identity.Variant,
 		&d.Identity.Language, &d.Identity.FlashSizeKB, &d.Identity.ProgramFlashSizeKB, &d.Identity.FreeKB, &identAt, &created, &updated, &d.MQTTHost, &d.MQTTPort,
-		&d.Net.Hostname, &d.Net.IP, &d.Net.Gateway, &d.Net.SSID, &d.Net.BSSID, &d.Net.Channel, &netAt)
+		&d.Net.Hostname, &d.Net.IP, &d.Net.Gateway, &d.Net.SSID, &d.Net.BSSID, &d.Net.Channel, &wired, &netAt)
 	if err != nil {
 		return model.Device{}, err
 	}
@@ -54,7 +54,7 @@ func (s *SQLite) scanDevice(r scanner) (model.Device, error) {
 	d.Identity.SingleCore = single != 0
 	d.Identity.DetectedAt = fromMS(identAt)
 	d.CreatedAt, d.UpdatedAt = fromMS(created), fromMS(updated)
-	d.Net.ReadAt = fromMS(netAt)
+	d.Net.Wired, d.Net.ReadAt = wired != 0, fromMS(netAt)
 	return d, nil
 }
 
@@ -186,7 +186,7 @@ func (s *SQLite) CreateDevice(ctx context.Context, d model.Device) (model.Device
 		string(d.Identity.Family), d.Identity.Hardware, b2i(d.Identity.SingleCore), d.Identity.Version, d.Identity.Image,
 		d.Identity.Variant, d.Identity.Language, d.Identity.FlashSizeKB, d.Identity.ProgramFlashSizeKB, d.Identity.FreeKB,
 		toMS(d.Identity.DetectedAt), created, toMS(now), d.MQTTHost, d.MQTTPort,
-		d.Net.Hostname, d.Net.IP, d.Net.Gateway, d.Net.SSID, d.Net.BSSID, d.Net.Channel, toMS(d.Net.ReadAt))
+		d.Net.Hostname, d.Net.IP, d.Net.Gateway, d.Net.SSID, d.Net.BSSID, d.Net.Channel, b2i(d.Net.Wired), toMS(d.Net.ReadAt))
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
@@ -195,8 +195,8 @@ func (s *SQLite) CreateDevice(ctx context.Context, d model.Device) (model.Device
 	res, err := tx.ExecContext(ctx, `INSERT INTO devices (name, address, port, mac, topic, full_topic, tags, notes,
 		http_user, http_password, ota_excluded, mqtt_capability, chip_family, hardware, single_core, fw_version, fw_image,
 		fw_variant, fw_language, flash_size_kb, program_flash_kb, free_kb, identity_at, created_at, updated_at, mqtt_host, mqtt_port,
-		net_hostname, net_ip, net_gateway, net_ssid, net_bssid, net_channel, net_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, args...)
+		net_hostname, net_ip, net_gateway, net_ssid, net_bssid, net_channel, net_wired, net_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, args...)
 	if err != nil {
 		return 0, mapErr(err)
 	}
@@ -286,6 +286,9 @@ type ProbeResult struct {
 	// SetNet is false when the probe read no network facts: the stored ones are kept.
 	SetNet bool
 	Net    model.NetFacts
+	// Topic replaces the stored MQTT topic when not empty. The prober sets it only to repair a
+	// topic that was stored with an unresolved placeholder (tasmota_%06X).
+	Topic string
 }
 
 // UpdateProbe stores the outcome of a probe without touching any inventory
@@ -308,14 +311,17 @@ func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuar
 		net_ssid = CASE WHEN ?=0 THEN net_ssid ELSE ? END,
 		net_bssid = CASE WHEN ?=0 THEN net_bssid ELSE ? END,
 		net_channel = CASE WHEN ?=0 THEN net_channel ELSE ? END,
+		net_wired = CASE WHEN ?=0 THEN net_wired ELSE ? END,
 		net_at = CASE WHEN ?=0 THEN net_at ELSE ? END,
+		topic = CASE WHEN ?='' THEN topic ELSE ? END,
 		updated_at=? WHERE id=? AND address=? AND port=? AND mac=?`,
 		string(i.Family), i.Hardware, b2i(i.SingleCore), i.Version, i.Image, i.Variant, i.Language,
 		i.FlashSizeKB, i.ProgramFlashSizeKB, i.FreeKB, toMS(i.DetectedAt),
 		b2i(r.SetMQTT), string(r.MQTT), string(r.MQTT),
 		b2i(r.SetMQTT), r.MQTTHost, b2i(r.SetMQTT), r.MQTTPort,
 		b2i(r.SetNet), r.Net.Hostname, b2i(r.SetNet), r.Net.IP, b2i(r.SetNet), r.Net.Gateway, b2i(r.SetNet), r.Net.SSID,
-		b2i(r.SetNet), r.Net.BSSID, b2i(r.SetNet), r.Net.Channel, b2i(r.SetNet), toMS(r.Net.ReadAt),
+		b2i(r.SetNet), r.Net.BSSID, b2i(r.SetNet), r.Net.Channel, b2i(r.SetNet), b2i(r.Net.Wired), b2i(r.SetNet), toMS(r.Net.ReadAt),
+		r.Topic, r.Topic,
 		toMS(s.now()), id, g.Address, g.Port, strings.ToLower(g.MAC))
 	if err != nil {
 		return mapErr(err)
@@ -335,8 +341,8 @@ func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuar
 // began is left alone (ErrConflict).
 func (s *SQLite) UpdateNet(ctx context.Context, id model.DeviceID, g ProbeGuard, n model.NetFacts) error {
 	res, err := s.db.ExecContext(ctx, `UPDATE devices SET net_hostname=?, net_ip=?, net_gateway=?, net_ssid=?, net_bssid=?,
-		net_channel=?, net_at=? WHERE id=? AND address=? AND port=? AND mac=?`,
-		n.Hostname, n.IP, n.Gateway, n.SSID, n.BSSID, n.Channel, toMS(n.ReadAt), id, g.Address, g.Port, strings.ToLower(g.MAC))
+		net_channel=?, net_wired=?, net_at=? WHERE id=? AND address=? AND port=? AND mac=?`,
+		n.Hostname, n.IP, n.Gateway, n.SSID, n.BSSID, n.Channel, b2i(n.Wired), toMS(n.ReadAt), id, g.Address, g.Port, strings.ToLower(g.MAC))
 	if err != nil {
 		return mapErr(err)
 	}

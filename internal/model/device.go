@@ -145,5 +145,8 @@ type NetFacts struct {
 	Hostname, IP, Gateway string
 	SSID, BSSID           string
 	Channel               int
-	ReadAt                time.Time // zero: never read
+	// Wired is true when the device is on Ethernet: its Wi-Fi station has no address and Status 5
+	// reports an Ethernet object with one. Hostname, IP and Gateway are then the Ethernet ones.
+	Wired  bool
+	ReadAt time.Time // zero: never read
 }

@@ -59,8 +59,9 @@ type probed struct {
 	identity model.Identity
 	mac      string
 	ethMAC   string // Ethernet MAC of boards that have one, else ""
-	topic    string
+	topic    string // resolved: what the device publishes under, never a %06X placeholder
 	hostname string
+	devName  string // Tasmota DeviceName
 	mqtt     model.MQTTCapability
 	mqttHost string
 	mqttPort int
@@ -168,10 +169,15 @@ func (p *Prober) probe(ctx context.Context, d model.Device) (probed, error) {
 	if out.mqtt != model.MQTTNone && p.mqttSwitchedOff(ctx, t) {
 		out.mqtt = model.MQTTNone
 	}
-	if raw, err := p.cmd(ctx, t, "Topic"); err == nil {
-		var s struct{ Topic string }
+	// Plain "Status" (not "Status 0") is the Status object only: DeviceName and the topic the
+	// device actually uses. The "Topic" command would return the setting with its placeholders
+	// ("tasmota_%06X") unresolved, and nothing on the bus ever matches that.
+	if raw, err := p.cmd(ctx, t, "Status"); err == nil {
+		var s struct {
+			Status struct{ DeviceName, Topic string }
+		}
 		if json.Unmarshal(raw, &s) == nil {
-			out.topic = s.Topic
+			out.topic, out.devName = s.Status.Topic, strings.TrimSpace(s.Status.DeviceName)
 		}
 	}
 	return out, nil
@@ -199,7 +205,7 @@ func (p *Prober) status5(ctx context.Context, t tasmota.Target, out *probed) (mo
 			IPAddress string
 			Gateway   string
 			Mac       string
-			Ethernet  struct{ Mac string }
+			Ethernet  struct{ Hostname, IPAddress, Gateway, Mac string }
 		}
 	}
 	if err := json.Unmarshal(raw, &s); err != nil {
@@ -210,8 +216,20 @@ func (p *Prober) status5(ctx context.Context, t tasmota.Target, out *probed) (mo
 		out.ethMAC = eth
 	}
 	out.hostname = s.StatusNET.Hostname
-	return model.NetFacts{Hostname: s.StatusNET.Hostname, IP: s.StatusNET.IPAddress, Gateway: s.StatusNET.Gateway}, nil
+	n := model.NetFacts{Hostname: s.StatusNET.Hostname, IP: s.StatusNET.IPAddress, Gateway: s.StatusNET.Gateway}
+	// An Ethernet build whose Wi-Fi station has no address (0.0.0.0) is wired: the top-level
+	// values are the idle Wi-Fi ones, the Ethernet object has the real ones.
+	if eth := s.StatusNET.Ethernet; unsetIP(n.IP) && !unsetIP(eth.IPAddress) {
+		n.Wired, n.IP, n.Gateway = true, eth.IPAddress, eth.Gateway
+		if eth.Hostname != "" {
+			n.Hostname = eth.Hostname
+		}
+	}
+	return n, nil
 }
+
+// unsetIP is an address Tasmota reports for an interface that has none.
+func unsetIP(ip string) bool { return ip == "" || ip == "0.0.0.0" }
 
 // status11 reads the access point the device is connected to. It is best effort: a failed or
 // empty reply (a wired board, a flaky answer) keeps the Wi-Fi facts already in net.
@@ -253,7 +271,11 @@ func (p *Prober) ReadNet(ctx context.Context, id model.DeviceID) error {
 		return err
 	}
 	net.SSID, net.BSSID, net.Channel = d.Net.SSID, d.Net.BSSID, d.Net.Channel // kept when Status 11 gives none
-	p.status11(ctx, t, &net)
+	if net.Wired {
+		net.SSID, net.BSSID, net.Channel = "", "", 0 // a wired board is on no access point
+	} else {
+		p.status11(ctx, t, &net)
+	}
 	net.ReadAt = p.now()
 	if err := p.Devices.UpdateNet(ctx, id, store.ProbeGuard{Address: d.Address, Port: d.Port, MAC: d.MAC}, net); err != nil {
 		return err
@@ -291,7 +313,7 @@ func (p *Prober) Describe(ctx context.Context, d model.Device) (model.Device, er
 	}
 	d.MQTTHost, d.MQTTPort = pr.mqttHost, pr.mqttPort
 	if d.Name == "" {
-		d.Name = firstNonEmpty(pr.hostname, pr.topic, d.Address)
+		d.Name = firstNonEmpty(pr.devName, pr.hostname, pr.topic, d.Address)
 	}
 	return d, nil
 }
@@ -316,7 +338,8 @@ func (p *Prober) Refresh(ctx context.Context, id model.DeviceID) error {
 	// land on a device that was moved, rebound or deleted meanwhile).
 	if err := p.Devices.UpdateProbe(ctx, id,
 		store.ProbeGuard{Address: d.Address, Port: d.Port, MAC: d.MAC},
-		store.ProbeResult{Identity: ident, SetMQTT: !pr.minimal, MQTT: pr.mqtt, MQTTHost: pr.mqttHost, MQTTPort: pr.mqttPort}); err != nil {
+		store.ProbeResult{Identity: ident, SetMQTT: !pr.minimal, MQTT: pr.mqtt, MQTTHost: pr.mqttHost, MQTTPort: pr.mqttPort,
+			Topic: repairedTopic(d.Topic, pr.topic)}); err != nil {
 		return err
 	}
 	p.announce(id)
@@ -324,6 +347,16 @@ func (p *Prober) Refresh(ctx context.Context, id model.DeviceID) error {
 		p.ReadNetLater(id) // the network facts fill in when they arrive
 	}
 	return nil
+}
+
+// repairedTopic is the topic to store over an unresolved one. Earlier versions stored the raw
+// Topic setting ("tasmota_%06X"), which the health tracker could never match to a message: the
+// device showed "MQTT: Not connected" while it was online. A topic the user typed is left alone.
+func repairedTopic(stored, probed string) string {
+	if strings.Contains(stored, "%") && probed != "" && !strings.Contains(probed, "%") {
+		return probed
+	}
+	return ""
 }
 
 func firstNonEmpty(ss ...string) string {

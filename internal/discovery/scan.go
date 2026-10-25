@@ -274,7 +274,16 @@ func (m *Manager) probe(ctx context.Context, t probeTarget) (Hit, bool) {
 		hit.Outcome = outIgnored
 		return hit, true
 	}
-	c := candidate{via: ViaScan, mac: mac, ip: t.ip, port: t.port, name: cleanName(s5.StatusNET.Hostname, mac)}
+	// The name is Tasmota's DeviceName, as MQTT discovery does; the hostname only when the device
+	// has none or does not answer plain "Status" (the Status object, not the heavy "Status 0").
+	devName := ""
+	if raw, err := m.command(ctx, target, "Status"); err == nil {
+		var s struct{ Status struct{ DeviceName string } }
+		if json.Unmarshal(raw, &s) == nil {
+			devName = s.Status.DeviceName
+		}
+	}
+	c := candidate{via: ViaScan, mac: mac, ip: t.ip, port: t.port, name: cleanName(firstNonEmpty(devName, s5.StatusNET.Hostname), mac)}
 	if ethMAC != "" && ethMAC != mac && ethMAC != "00:00:00:00:00:00" {
 		c.macs = []string{ethMAC}
 	}

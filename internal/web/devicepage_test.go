@@ -486,3 +486,47 @@ func TestDeviceOverviewFallsBackToTheSnapshotWhenNothingWasProbed(t *testing.T) 
 		t.Errorf("snapshot facts missing:\n%s", body)
 	}
 }
+
+// Why (issue #52): an Ethernet board showed "IP address 0.0.0.0", a Wi-Fi card full of
+// "Unknown" and the Wi-Fi MAC. A wired device gets an Ethernet card without SSID or signal rows,
+// its own (Ethernet) MAC, and the card says how it is connected.
+func TestWiredDeviceShowsAnEthernetCardAndItsEthernetMAC(t *testing.T) {
+	e := setup(t)
+	d := e.inv.devs[1]
+	d.MAC, d.MACs = "08:d1:f9:2b:e9:70", []string{"08:d1:f9:2b:e9:70", "08:d1:f9:2b:e9:71"}
+	d.Net = model.NetFacts{Hostname: "tasmota-2BE970-eth", IP: "192.168.7.139", Gateway: "192.168.7.1", Wired: true, ReadAt: time.Now()}
+	e.inv.devs[1] = d
+	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
+	for _, want := range []string{`<h2 id="dc-wifi">Ethernet</h2>`, `<dt>Connection</dt><dd class="mono">Ethernet</dd>`, `>08:d1:f9:2b:e9:71</dd>`, `>192.168.7.1</dd>`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("overview lacks %q", want)
+		}
+	}
+	for _, bad := range []string{"<dt>SSID</dt>", "<dt>Signal</dt>", "devwifi-bar", "0.0.0.0", `<h2 id="dc-wifi">Wi-Fi</h2>`} {
+		if strings.Contains(body, bad) {
+			t.Errorf("wired device page still has %q", bad)
+		}
+	}
+}
+
+// Why (issue #52): "Address" and "IP address" showed the same value. The IP row appears only
+// when the device reports something the Address row does not already say.
+func TestNetworkCardDropsTheIPRowThatRepeatsTheAddress(t *testing.T) {
+	e := setup(t)
+	d := e.inv.devs[1]
+	d.Address, d.Net = "10.0.0.77", probedNet // probedNet.IP is 10.0.0.77
+	e.inv.devs[1] = d
+	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
+	if strings.Contains(body, "<dt>IP address</dt>") || !strings.Contains(body, "<dt>Address</dt>") {
+		t.Errorf("duplicate IP row:\n%s", body)
+	}
+}
+
+// Why (issue #52): Tasmota calls it the device name, and that is what the user set on the device.
+func TestIdentityCardCallsTheStoredNameDeviceName(t *testing.T) {
+	e := setup(t)
+	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
+	if !strings.Contains(body, "<dt>Device name</dt>") || strings.Contains(body, "<dt>Friendly name</dt>") {
+		t.Errorf("identity card labels wrong")
+	}
+}

@@ -4,6 +4,20 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## Unreleased
+
+### Fixed
+
+- Devices: a device's name defaults to Tasmota's DeviceName (labelled "Device name") instead of the
+  hostname, in a scan, Discovery and the add flow. Names already stored are kept (#52).
+- Devices: the MQTT topic is the resolved one (`tasmota_2BE970`), not the setting `tasmota_%06X`. The
+  unresolved topic never matched a message, so such a device showed "MQTT: Not connected" while it was
+  online. A refresh repairs stored topics that still hold a placeholder (#52).
+- Devices: self-compiled builds that report `16.0.0(tasmota32)` show their build instead of "unknown" (#52).
+- Devices: Ethernet boards show their Ethernet IP, gateway and MAC; the Wi-Fi card becomes an Ethernet card
+  (#52).
+- Devices: the Network card no longer repeats the address as "IP address" (#52).
+
 ## 0.12.2 (2026-10-25)
 
 ### Fixed

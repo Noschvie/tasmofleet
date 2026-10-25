@@ -148,17 +148,23 @@ templ deviceOverviewPage(p deviceOverview) {
 			@ui.KV(p.Network)
 		</section>
 		<section class="devcard" aria-labelledby="dc-wifi">
-			<h2 id="dc-wifi">Wi-Fi</h2>
+			if p.Wired {
+				<h2 id="dc-wifi">Ethernet</h2>
+			} else {
+				<h2 id="dc-wifi">Wi-Fi</h2>
+			}
 			@ui.KV(p.Wifi)
-			<div class="devwifi">
-				<svg class={ "devwifi-bar", templ.KV("is-ok", p.WifiOK) } viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true" data-visual-mask>
-					<rect class="devwifi-track" x="0" y="0" width="100" height="6"></rect>
-					if p.WifiPct > 0 {
-						<rect class="devwifi-fill" x="0" y="0" width={ strconv.Itoa(p.WifiPct) } height="6"></rect>
-					}
-				</svg>
-				<span>signal quality</span>
-			</div>
+			if !p.Wired {
+				<div class="devwifi">
+					<svg class={ "devwifi-bar", templ.KV("is-ok", p.WifiOK) } viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true" data-visual-mask>
+						<rect class="devwifi-track" x="0" y="0" width="100" height="6"></rect>
+						if p.WifiPct > 0 {
+							<rect class="devwifi-fill" x="0" y="0" width={ strconv.Itoa(p.WifiPct) } height="6"></rect>
+						}
+					</svg>
+					<span>signal quality</span>
+				</div>
+			}
 		</section>
 		if c := p.Policy; c != nil {
 			<section class="devcard" aria-labelledby="dc-pol">

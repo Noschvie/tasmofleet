@@ -37,6 +37,7 @@ type deviceOverview struct {
 	Wifi     []ui.KVRow
 	WifiPct  int // signal quality bar, 0..100; 0 hides the bar's fill
 	WifiOK   bool
+	Wired    bool // the link card is the Ethernet card: no signal bar
 	Policy   *policyCard
 	Events   []store.HealthEvent
 	Jobs     []model.Job
@@ -180,6 +181,7 @@ type snapFacts struct {
 	Hostname, IP, Gateway string
 	SSID, BSSID           string
 	Channel               int
+	Wired                 bool // on Ethernet: Hostname, IP and Gateway are the Ethernet ones
 }
 
 // parseSnapFacts reads the facts from a snapshot document (Status1..Status11 replies by key).
@@ -225,7 +227,7 @@ func (h *handler) snapFactsOf(ctx context.Context, list []model.Backup) snapFact
 // factsOf are the device's network facts: what a probe stored on it, field by field; the newest
 // backup snapshot only fills in a device that was never probed.
 func (h *handler) factsOf(ctx context.Context, d model.Device) snapFacts {
-	f := snapFacts{Hostname: d.Net.Hostname, IP: d.Net.IP, Gateway: d.Net.Gateway, SSID: d.Net.SSID, BSSID: d.Net.BSSID, Channel: d.Net.Channel}
+	f := snapFacts{Hostname: d.Net.Hostname, IP: d.Net.IP, Gateway: d.Net.Gateway, SSID: d.Net.SSID, BSSID: d.Net.BSSID, Channel: d.Net.Channel, Wired: d.Net.Wired}
 	if !d.Net.ReadAt.IsZero() {
 		return f
 	}
@@ -235,6 +237,20 @@ func (h *handler) factsOf(ctx context.Context, d model.Device) snapFacts {
 		return f
 	}
 	return h.snapFactsOf(ctx, list)
+}
+
+// macShown is the MAC of the interface the device is on: the Ethernet one for a wired board,
+// else the primary (Wi-Fi) one that identifies the device. A wired board's Ethernet MAC is the
+// other entry of its MAC set.
+func macShown(d model.Device, wired bool) string {
+	if wired {
+		for _, m := range d.MACs {
+			if m != d.MAC {
+				return m
+			}
+		}
+	}
+	return d.MAC
 }
 
 // orUnknown is the value of a row, "Unknown" when there is none.
@@ -261,13 +277,13 @@ func (h *handler) identity(v view, d model.Device, updating bool, f snapFacts) i
 		build += " " + d.Identity.Language
 	}
 	rows := []ui.KVRow{
-		{Key: "Friendly name", Value: d.Name, Mono: true},
+		{Key: "Device name", Value: d.Name, Mono: true},
 		{Key: "Hardware", Value: orUnknown(d.Identity.Hardware), Mono: true},
 		{Key: "Build", Value: orUnknown(build), Mono: true},
 		{Key: "Chip", Value: orUnknown(chip), Mono: true},
 		{Key: "Firmware", Value: orUnknown(fw), Mono: true},
 		{Key: "Hostname", Value: orUnknown(f.Hostname), Mono: true, Mask: true},
-		{Key: "MAC", Value: orUnknown(d.MAC), Mono: true, Mask: true},
+		{Key: "MAC", Value: orUnknown(macShown(d, f.Wired)), Mono: true, Mask: true},
 		{Key: "MQTT topic", Value: orUnknown(d.Topic), Mono: true},
 	}
 	if d.HTTPUser != "" || d.HTTPPassword != "" {
@@ -377,15 +393,19 @@ func (h *handler) networkRows(d model.Device, hl model.Health, f snapFacts) []ui
 	if t := restartAt(hl); !t.IsZero() {
 		restart = sinceText(t)
 	}
-	return []ui.KVRow{
-		{Key: "Address", Value: addr, Mono: true, Mask: true},
-		{Key: "IP address", Value: orUnknown(f.IP), Mono: true, Mask: true},
-		{Key: "Gateway", Value: orUnknown(f.Gateway), Mono: true, Mask: true},
-		{Key: "MQTT broker", Value: orUnknown(broker), Mono: true, Soft: true},
-		{Key: "MQTT", Value: mqtt, Mono: true},
-		{Key: "HTTP", Value: httpState, Mono: true},
-		{Key: "Last restart", Value: orUnknown(restart), Mono: true, Mask: true},
+	// "Address" is where TasmoFleet reaches the device. The IP the device reports is a second row
+	// only when it says something else (the address is a DNS name, or the device moved).
+	rows := []ui.KVRow{{Key: "Address", Value: addr, Mono: true, Mask: true}}
+	if f.IP != "" && f.IP != d.Address {
+		rows = append(rows, ui.KVRow{Key: "IP address", Value: f.IP, Mono: true, Mask: true})
 	}
+	return append(rows,
+		ui.KVRow{Key: "Gateway", Value: orUnknown(f.Gateway), Mono: true, Mask: true},
+		ui.KVRow{Key: "MQTT broker", Value: orUnknown(broker), Mono: true, Soft: true},
+		ui.KVRow{Key: "MQTT", Value: mqtt, Mono: true},
+		ui.KVRow{Key: "HTTP", Value: httpState, Mono: true},
+		ui.KVRow{Key: "Last restart", Value: orUnknown(restart), Mono: true, Mask: true},
+	)
 }
 
 // wifiRows is the Wi-Fi card and its quality bar (the prototype's scale: -92 dBm is empty,
@@ -418,6 +438,13 @@ func wifiRows(hl model.Health, t health.Telemetry, f snapFacts, now time.Time) (
 		uptime = "seen " + agoWords(now, hl.LastSeen)
 	case hl.UptimeSec > 0:
 		uptime = humanDuration(time.Duration(hl.UptimeSec) * time.Second)
+	}
+	if f.Wired {
+		// No access point, signal or channel on a cable: the card says how it is connected.
+		return []ui.KVRow{
+			{Key: "Connection", Value: "Ethernet", Mono: true},
+			{Key: "Uptime", Value: uptime, Mono: true, Mask: true},
+		}, 0, false
 	}
 	return []ui.KVRow{
 		{Key: "SSID", Value: orUnknown(f.SSID), Mono: true, Mask: true},
@@ -542,6 +569,7 @@ func (h *handler) deviceDetail(w http.ResponseWriter, r *http.Request) {
 	p.Relays = relaysOf(hl)
 	p.RelaysOn = p.RelaysOn && hl.State != model.HealthOffline && p.Updating == nil
 	p.Network = h.networkRows(d, hl, facts)
+	p.Wired = facts.Wired
 	p.Wifi, p.WifiPct, p.WifiOK = wifiRows(hl, tele, facts, h.d.Clock.Now())
 	p.Policy = h.policyOf(r, v, d.ID)
 	v.Live = true
