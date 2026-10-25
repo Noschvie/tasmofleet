@@ -102,7 +102,8 @@ test("desktop: the rule editor's Note has a visible label", async ({ page }) => 
 });
 
 // Why: "60 → 300" in the live preview is one value; it must not break between its parts while a
-// long device name has room to wrap.
+// long device name has room to wrap. (A value too long for the card wraps instead, see
+// policy-long-value.spec.ts, so this checks the rendered height, not white-space: nowrap.)
 test("desktop: a preview value stays on one line", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(app.url + "/policy");
@@ -110,7 +111,8 @@ test("desktop: a preview value stays on one line", async ({ page }) => {
   await page.goto(app.url + "/policy?edit=" + (await lastRuleIndex(page)));
   const val = page.locator(".pol-pv-val").first();
   await expect(val).toBeVisible({ timeout: 60_000 });
-  expect(await val.evaluate((el) => getComputedStyle(el).whiteSpace)).toBe("nowrap");
+  const { height, font } = await val.evaluate((el) => ({ height: el.getBoundingClientRect().height, font: parseFloat(getComputedStyle(el).fontSize) }));
+  expect(height, "a short value is one line (a second line would double the height)").toBeLessThan(font * 2);
 });
 
 // Why: the Make compliant plan (the page without JavaScript) keeps every card and its footer
