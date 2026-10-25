@@ -4,7 +4,7 @@ Rough order, no dates. Details and bug reports live in GitHub issues.
 
 1. **First public 0.x releases**: feedback from other fleets, docs with screenshots,
    small fixes from the open bug list.
-2. **Home Assistant add-on** (stable and beta channels), using the normal `OtaUrl`
+2. **Home Assistant App (Add-on)** (stable and beta channels), using the normal `OtaUrl`
    download with a published firmware port.
 3. **Security review** of the authentication, restore and command paths before 1.0.
 4. **Firmware development channel** (track a pre-release or custom build per device group).
