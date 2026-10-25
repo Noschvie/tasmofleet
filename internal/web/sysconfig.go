@@ -521,6 +521,30 @@ func (h *handler) sysOutcome(w http.ResponseWriter, r *http.Request, posted map[
 	}
 }
 
+const mqttTestHelp = "Tries one connection with the values above and saves nothing. A password typed above is the one tested; otherwise the stored one, only for the broker it was entered for."
+
+// sysTestFragment answers the script-driven test button (HX-Request) with only the test row. The
+// page stays as it is, so a password typed into the form survives the test and reaches the save
+// that follows; a full reload would blank it, because a secret is never rendered back.
+func (h *handler) sysTestFragment(w http.ResponseWriter, r *http.Request, msg string, err error) {
+	var ve *sysconfig.ValidationError
+	switch {
+	case err == nil:
+	case errors.As(err, &ve):
+		var why []string
+		for _, k := range sortedKeys(ve.Fields) {
+			why = append(why, ve.Fields[k])
+		}
+		msg = "failed: " + strings.Join(why, "; ")
+	case errors.Is(err, sysconfig.ErrTooSoon):
+		msg = "failed: wait a few seconds between connection tests"
+	default:
+		h.fail(w, r, err)
+		return
+	}
+	h.component(w, r, http.StatusOK, sysTestRow("Test connection", httpBase(r)+sysPath+"/mqtt-test?tab=mqtt", "MQTT connection test", msg, mqttTestHelp))
+}
+
 // sysMQTTTest checks the broker. The "Test MQTT" button sits in the MQTT tab of the settings
 // form, so the whole form arrives (every key is still validated by sysForm); only the broker
 // fields count, and nothing is saved. A password typed into the form is the one tested,
@@ -530,7 +554,12 @@ func (h *handler) sysMQTTTest(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	htmx := r.Header.Get("HX-Request") != ""
 	if err := composeMQTTURL(all, extra, h.storedMQTTURL()); err != nil {
+		if htmx {
+			h.sysTestFragment(w, r, "", err)
+			return
+		}
 		h.sysOutcome(w, r, all, err, nil)
 		return
 	}
@@ -547,6 +576,10 @@ func (h *handler) sysMQTTTest(w http.ResponseWriter, r *http.Request) {
 	msg, err := h.d.SysConfig.TestMQTT(r.Context(), sysconfig.TestRequest{Actor: actor(r), Values: values, Password: password, StepUp: h.sysStepUp(r), Audit: h.d.Recorder})
 	if errors.Is(err, sysconfig.ErrNoTester) {
 		http.NotFound(w, r)
+		return
+	}
+	if htmx {
+		h.sysTestFragment(w, r, msg, err)
 		return
 	}
 	h.sysOutcome(w, r, values, err, func() {

@@ -12,6 +12,9 @@ always upgrade automatically.
   created as root, now stops with `data dir /data is not writable by uid 65532: see README (bind mounts)`
   instead of an opaque secretbox error. The README explains `chown -R 65532:65532` / `user:` for bind
   mounts and shows `TZ` in the Compose example (#33).
+- Settings: the MQTT connection test no longer reloads the page and blanks the password field. A password
+  typed there passed the test, but the Save that followed saw an empty field and kept the old password, so
+  the bus could not connect (#44). The test button now updates only its result line.
 
 ### Changed
 

@@ -345,16 +345,17 @@ templ sysMQTTFoot(p sysPage) {
 		if p.MQTT.Legacy == "" {
 			<label class="ucheck"><input type="checkbox" name="mqtt.tls" value="1" checked?={ p.MQTT.TLS }/><span>Use TLS</span></label>
 		}
-		@sysTestRow("Test connection", p.Base+sysPath+"/mqtt-test?tab=mqtt", "MQTT connection test", p.MQTTResult,
-			"Tries one connection with the values above and saves nothing. A password typed above is the one tested; otherwise the stored one, only for the broker it was entered for.")
+		@sysTestRow("Test connection", p.Base+sysPath+"/mqtt-test?tab=mqtt", "MQTT connection test", p.MQTTResult, mqttTestHelp)
 	</div>
 }
 
 // sysTestRow is a test button of the form (it posts the whole form, saves nothing) with its
-// result next to it: a failure in the danger tone as an alert, a success as a status.
+// result next to it. With scripts it swaps only this row, so a password typed into the form is
+// still there for the save that follows (a secret is never rendered back); without scripts it
+// posts the form and the page reloads. A failure in the danger tone as an alert, a success as a status.
 templ sysTestRow(label, action, what, result, help string) {
 	<div class="sys-test">
-		<button type="submit" class="btn" formaction={ templ.SafeURL(action) } formnovalidate>{ label }</button>
+		<button type="submit" class="btn" formaction={ templ.SafeURL(action) } formnovalidate hx-post={ action } hx-include="#sysform" hx-target="closest .sys-test" hx-swap="outerHTML">{ label }</button>
 		if result != "" {
 			if testNote(what, result).Failed {
 				<span class="sys-test-res t-danger" role="alert">{ what }: { result }</span>

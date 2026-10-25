@@ -418,3 +418,23 @@ func TestSystemSettingsUnchangedMQTTPartsKeepTheStoredURL(t *testing.T) {
 		t.Errorf("changed port: status %d, MQTT_URL %q", r.StatusCode, svc.Snapshot().MQTTURL)
 	}
 }
+
+// Why (#44): the connection test used to post the whole form and reload the page. A secret is
+// never rendered back, so the password the admin had typed was blank afterwards; the Save that
+// followed read that as "keep the stored one" and the bus kept connecting with the old password
+// although the typed one had just passed the test. The test button must therefore swap only its
+// own row, leaving the form (and the typed password) untouched.
+func TestSystemSettingsMQTTTestKeepsTheTypedPasswordInThePage(t *testing.T) {
+	e, _, _, _ := sysEnvTesters(t, true, func(context.Context, sysconfig.MQTTParams) error { return nil }, nil, nil)
+	_, page := e.do(t, "GET", "/settings/system?tab=mqtt", "admin", nil)
+	if !strings.Contains(page, `hx-post="/tf/settings/system/mqtt-test?tab=mqtt"`) || !strings.Contains(page, `hx-include="#sysform"`) {
+		t.Fatal("the test button must post the form with htmx and swap only its row")
+	}
+	r, body := e.do(t, "POST", "/settings/system/mqtt-test", "admin", url.Values{"csrf": {"tok"}, "mqtt.host": {"broker.lan"}, "v.MQTT_PASSWORD": {"typed-pw"}}, "HX-Request", "true")
+	if r.StatusCode != 200 || !strings.Contains(body, "connected") {
+		t.Fatalf("status %d %s", r.StatusCode, body)
+	}
+	if strings.Contains(body, "<form") || strings.Contains(body, "<html") || strings.Contains(body, "typed-pw") {
+		t.Fatalf("an htmx test must answer with the test row only: %s", body)
+	}
+}
