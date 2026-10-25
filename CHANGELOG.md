@@ -13,6 +13,10 @@ always upgrade automatically.
 - Devices: the MQTT topic is the resolved one (`tasmota_2BE970`), not the setting `tasmota_%06X`. The
   unresolved topic never matched a message, so such a device showed "MQTT: Not connected" while it was
   online. A refresh repairs stored topics that still hold a placeholder (#52).
+- Devices: the upgrade resolves a stored `tasmota_%06X` topic from the device's MAC (Tasmota uses the last 6
+  hex digits of the Wi-Fi MAC), so existing devices show their MQTT state without a manual refresh. Other
+  placeholders are repaired by the next identity refresh. A topic or DeviceName read from a device is
+  validated (no wildcards, `/`, `%`, control characters) before it is stored (#52).
 - Devices: self-compiled builds that report `16.0.0(tasmota32)` show their build instead of "unknown" (#52).
 - Devices: Ethernet boards show their Ethernet IP, gateway and MAC; the Wi-Fi card becomes an Ethernet card
   (#52).

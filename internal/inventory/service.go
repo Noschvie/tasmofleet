@@ -167,6 +167,29 @@ var (
 	macHex    = regexp.MustCompile(`^[0-9a-f]{12}$`)
 )
 
+// ValidTopic reports whether t is a topic that may be taken from a device's own reply and
+// stored: non-empty, at most 100 bytes, no whitespace, control or invisible characters, no MQTT
+// wildcard or level separator, and no "%" (a placeholder Tasmota has not resolved).
+func ValidTopic(t string) bool {
+	return t != "" && len(t) <= 100 && !strings.ContainsAny(t, "#+/%") &&
+		strings.IndexFunc(t, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) || unicode.Is(unicode.Cf, r) }) < 0
+}
+
+// CleanName makes a device-supplied name storable: control and invisible characters (bidi
+// overrides, zero-width) are dropped, the rest trimmed and cut to the name limit. It may be empty.
+func CleanName(s string) string {
+	s = strings.TrimSpace(strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
+			return -1
+		}
+		return r
+	}, s))
+	if r := []rune(s); len(r) > maxNameLen {
+		s = strings.TrimSpace(string(r[:maxNameLen]))
+	}
+	return s
+}
+
 // NormaliseMAC returns the MAC in lower case, colon separated form. It accepts
 // aa:bb:..., AA-BB-..., aabb.ccdd.eeff and bare hex. An empty string is valid
 // (MAC unknown).

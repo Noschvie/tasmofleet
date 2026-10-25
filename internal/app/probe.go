@@ -10,6 +10,7 @@ import (
 
 	"github.com/nofuturekid/tasmofleet/internal/events"
 	"github.com/nofuturekid/tasmofleet/internal/fwselect"
+	"github.com/nofuturekid/tasmofleet/internal/inventory"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/store"
 	"github.com/nofuturekid/tasmofleet/internal/tasmota"
@@ -177,7 +178,11 @@ func (p *Prober) probe(ctx context.Context, d model.Device) (probed, error) {
 			Status struct{ DeviceName, Topic string }
 		}
 		if json.Unmarshal(raw, &s) == nil {
-			out.topic, out.devName = s.Status.Topic, strings.TrimSpace(s.Status.DeviceName)
+			// Both come from the device: only a usable topic is taken, a name is cleaned.
+			if inventory.ValidTopic(s.Status.Topic) {
+				out.topic = s.Status.Topic
+			}
+			out.devName = inventory.CleanName(s.Status.DeviceName)
 		}
 	}
 	return out, nil
@@ -313,7 +318,7 @@ func (p *Prober) Describe(ctx context.Context, d model.Device) (model.Device, er
 	}
 	d.MQTTHost, d.MQTTPort = pr.mqttHost, pr.mqttPort
 	if d.Name == "" {
-		d.Name = firstNonEmpty(pr.devName, pr.hostname, pr.topic, d.Address)
+		d.Name = inventory.CleanName(firstNonEmpty(pr.devName, pr.hostname, pr.topic, d.Address))
 	}
 	return d, nil
 }
