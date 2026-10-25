@@ -124,7 +124,7 @@ func TestCancelLogLineReadsAsOneSentence(t *testing.T) {
 		{model.JobCancelled, "Cancelled by adam"},
 		{model.JobUpgradeIssued, "Cancel requested by adam"},
 	} {
-		got := eventText(model.JobEvent{Event: "cancel", To: tc.to, Detail: "cancelled by adam"})
+		got := eventText(model.JobEvent{Event: "cancel", To: tc.to, Detail: "cancelled by adam"}, model.Job{}, newPrincipalDir(nil), false)
 		if got != tc.want {
 			t.Errorf("to %s: %q, want %q", tc.to, got, tc.want)
 		}

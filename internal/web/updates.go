@@ -746,8 +746,8 @@ func (h *handler) jobViews(r *http.Request, f store.JobFilter) ([]jobView, bool,
 			v.StepLabel += ", cancel requested" // a flash cannot be stopped: the job ends after this step
 		}
 		if evs, err := h.d.Jobs.JobEvents(r.Context(), j.ID); err == nil {
-			for _, e := range evs {
-				v.Log = append(v.Log, logLine{At: e.At.Format("15:04:05"), Text: eventText(e), Err: errEvents[e.Event] || e.To == model.JobFailed})
+			for i, e := range evs {
+				v.Log = append(v.Log, logLine{At: e.At.Format("15:04:05"), Text: eventText(e, j, h.pr, eventStageMinimal(evs, i, j)), Err: errEvents[e.Event] || e.To == model.JobFailed})
 			}
 		}
 		any = any || v.Active

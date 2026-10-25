@@ -176,12 +176,26 @@ func commandStep(state model.JobState) (int, string) {
 // eventText words a persisted job event for the log. While an update runs the
 // device is silent on purpose (it downloads the image, then reboots), so a
 // missed probe in those phases is progress, not a timeout to show in red;
-// the detail of such a probe is dropped. Real failures keep the engine's text.
-func eventText(e model.JobEvent) string {
-	if t, ok := silentPhase[e.Event][e.To]; ok {
+// the detail of such a probe is dropped. The same holds for a command that
+// timed out while the engine kept waiting (to await_reboot): the device is
+// busy flashing. Real failures keep the engine's text. The job gives the
+// outcome and the target version their words, pr turns the subject of a
+// cancel into a name, and minimal says the event belongs to the first stage
+// of a staged update (see eventStageMinimal).
+func eventText(e model.JobEvent, j model.Job, pr *principalDir, minimal bool) string {
+	if t, ok := silentText(e, j, minimal); ok {
 		return t
 	}
+	switch {
+	case e.Event == "command_failed" && e.To == model.JobAwaitReboot:
+		return "Device busy, still flashing..."
+	case e.Event == "identity" && e.From == model.JobVerify, e.Event == "command_ok" && e.To == model.JobSucceeded && e.From != model.JobApplying:
+		if t, ok := outcomeText(e, j); ok {
+			return t
+		}
+	}
 	if who, ok := strings.CutPrefix(e.Detail, "cancelled by "); ok && e.Event == "cancel" {
+		who = pr.Text(who) // a person's name, never the id
 		// not "Cancel cancelled by adam": the event and its detail said the same thing
 		if e.To == model.JobCancelled {
 			return "Cancelled by " + who
@@ -191,18 +205,94 @@ func eventText(e model.JobEvent) string {
 	return strings.TrimSpace(label(e.Event) + " " + e.Detail)
 }
 
-// silentPhase maps (probe event, state entered) to the words for a device
-// that is expectedly quiet or answering again.
-var silentPhase = map[string]map[model.JobState]string{
-	"probe_offline": {
-		model.JobSetOtaURL: "Downloading firmware...", model.JobUpgradeIssued: "Downloading firmware...",
-		model.JobAwaitReboot: "Rebooting...",
-		model.JobVerify:      "Waiting for the device to come back...", model.JobRestoreOtaURL: "Waiting for the device to come back...",
-	},
-	"probe_online": {
-		model.JobUpgradeIssued: "Device answers again", model.JobAwaitReboot: "Device answers again",
-		model.JobVerify: "Waiting for the new version...",
-	},
+// eventStageMinimal reports whether evs[i] happened during the minimal stage of
+// a staged update. The events carry no stage, but the engine switches stages in
+// exactly one place (the verify of the minimal image ends in set_ota_url), so
+// replaying the log tells. A job that was already on minimal firmware and
+// skipped stage 1 cannot be told from the log and reads as final.
+func eventStageMinimal(evs []model.JobEvent, i int, j model.Job) bool {
+	if j.Plan != model.PlanStaged {
+		return false
+	}
+	for _, p := range evs[:i] {
+		if p.Event == "identity" && p.From == model.JobVerify && p.To == model.JobSetOtaURL {
+			return false
+		}
+	}
+	return true
+}
+
+// silentText words the quiet phases of an update, naming the firmware the log
+// is waiting for: the minimal image, or the target version (direct updates
+// name only the version).
+func silentText(e model.JobEvent, j model.Job, minimal bool) (string, bool) {
+	v := j.TargetRelease
+	switch e.Event {
+	case "probe_offline":
+		switch e.To { //nolint:exhaustive // only the quiet phases are worded
+		case model.JobSetOtaURL, model.JobUpgradeIssued:
+			switch {
+			case minimal:
+				return "Downloading the minimal firmware...", true
+			case v != "" && j.Plan == model.PlanStaged:
+				return "Downloading the final firmware (" + v + ")...", true
+			case v != "":
+				return "Downloading firmware " + v + "...", true
+			}
+			return "Downloading firmware...", true
+		case model.JobAwaitReboot:
+			switch {
+			case minimal:
+				return "Rebooting into the minimal firmware...", true
+			case v != "":
+				return "Rebooting into " + v + "...", true
+			}
+			return "Rebooting...", true
+		case model.JobVerify, model.JobRestoreOtaURL:
+			return "Waiting for the device to come back...", true
+		}
+	case "probe_online":
+		switch e.To { //nolint:exhaustive // only the quiet phases are worded
+		case model.JobUpgradeIssued, model.JobAwaitReboot:
+			return "Device answers again", true
+		case model.JobVerify:
+			switch {
+			case minimal:
+				return "Waiting for the minimal firmware to answer...", true
+			case v != "":
+				return "Waiting for " + v + " to answer...", true
+			}
+			return "Waiting for the new version...", true
+		}
+	}
+	return "", false
+}
+
+// outcomeText words the identity read of the verify step, and the last step of
+// an update, by what they decided.
+func outcomeText(e model.JobEvent, j model.Job) (string, bool) {
+	target := "the update"
+	if j.TargetRelease != "" {
+		target = j.TargetRelease
+	}
+	switch e.To { //nolint:exhaustive // only the outcomes of a verify read are worded; the rest keeps the generic text
+	case model.JobSetOtaURL:
+		return "Minimal firmware installed, installing " + target, true
+	case model.JobRestoreOtaURL:
+		return "New version verified, restoring the device's OtaUrl", true
+	case model.JobAwaitReboot:
+		return "Not on the new version yet", true
+	case model.JobSucceeded:
+		t := "Update verified"
+		if j.TargetRelease != "" {
+			t = "Updated to " + j.TargetRelease
+		}
+		if j.CancelRequested {
+			t += ". Cancel came too late: the update had already been written"
+		}
+		return t, true
+	}
+	return "", false
 }
 
 // humanReason turns an internal error or refusal text ("no build can be

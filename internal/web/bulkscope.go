@@ -336,8 +336,8 @@ func (h *handler) jobResultRow(r *http.Request, j jobView, rv *bulkResultView) b
 	row := bulkResultRow{Name: j.Device}
 	if evs, err := h.d.Jobs.JobEvents(r.Context(), j.Job.ID); err == nil && len(evs) > 0 {
 		last := evs[len(evs)-1]
-		row.Detail = eventText(last)
-		if last.Detail != "" {
+		row.Detail = eventText(last, j.Job, h.pr, eventStageMinimal(evs, len(evs)-1, j.Job))
+		if last.Detail != "" && last.Event != "cancel" { // a cancel's detail is a subject id; eventText names the person
 			row.Detail = last.Detail // the device's reply or the reason, without the step's name
 		}
 	}

@@ -78,15 +78,15 @@ func TestJobStepNeverGoesBackwards(t *testing.T) {
 // so in words, not show "timeout: no answer" as if something broke.
 func TestEventTextDoesNotShowExpectedSilenceAsError(t *testing.T) {
 	e := model.JobEvent{Event: "probe_offline", Detail: "status 2: tasmota: timeout: no answer from 10.0.0.5", To: model.JobUpgradeIssued}
-	if got := eventText(e); got != "Downloading firmware..." {
+	if got := eventText(e, model.Job{}, newPrincipalDir(nil), false); got != "Downloading firmware..." {
 		t.Fatalf("got %q", got)
 	}
 	e.To = model.JobAwaitReboot
-	if got := eventText(e); got != "Rebooting..." {
+	if got := eventText(e, model.Job{}, newPrincipalDir(nil), false); got != "Rebooting..." {
 		t.Fatalf("got %q", got)
 	}
 	f := model.JobEvent{Event: "failed", Detail: "wrong chip family"}
-	if got := eventText(f); got != "Failed wrong chip family" {
+	if got := eventText(f, model.Job{}, newPrincipalDir(nil), false); got != "Failed wrong chip family" {
 		t.Fatalf("real failures keep their detail: %q", got)
 	}
 }

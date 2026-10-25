@@ -4,6 +4,17 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## Unreleased
+
+### Fixed
+
+- The job log reads as the update went: a command that timed out while the device was flashing (ESP32 with the
+  safeboot layout) shows "Device busy, still flashing..." instead of "Command failed", a cancel names the person
+  instead of the 64-character id, and the verify step says "Updated to <version>" (or "Not on the new version
+  yet") instead of "Identity"; a cancel that came too late is said so. The quiet lines of an update name the
+  firmware they wait for ("Rebooting into the minimal firmware...", "Waiting for 16.0.0 to answer..."), and a
+  staged update says when the minimal image is installed and the final one follows.
+
 ## 0.11.6 (2026-10-24)
 
 ### Changed
