@@ -73,4 +73,7 @@ func TestMigration0028ResolvesTheTopicPlaceholderFromTheMAC(t *testing.T) {
 			t.Errorf("%s: topic %q, want %q", name, topic, want[name])
 		}
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
 }

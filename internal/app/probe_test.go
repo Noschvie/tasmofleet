@@ -330,7 +330,7 @@ func TestRefreshRepairsAnUnresolvedTopicOnly(t *testing.T) {
 // A topic that is a wildcard, a path, an unresolved placeholder or contains control characters
 // must never be stored; a name has its control and invisible characters removed.
 func TestDescribeRejectsUnsafeTopicsAndCleansTheName(t *testing.T) {
-	for _, topic := range []string{"#", "a/b", "a+b", "tasmota_%06X", "a\x00b", "a\nb", "a b", "a‮b", strings.Repeat("x", 101), ""} {
+	for _, topic := range []string{"#", "a/b", "a+b", "tasmota_%06X", "a\x00b", "a\nb", "a b", "a" + string(rune(0x202e)) + "b", strings.Repeat("x", 101), ""} {
 		t.Run(topic, func(t *testing.T) {
 			p, d := probeFixture(t, simulator.DeviceSpec{Name: "plug", Profile: simulator.ProfileESP8266_1M})
 			reply, _ := json.Marshal(map[string]any{"Status": map[string]string{"DeviceName": "x", "Topic": topic}})
@@ -345,7 +345,7 @@ func TestDescribeRejectsUnsafeTopicsAndCleansTheName(t *testing.T) {
 		})
 	}
 	p, d := probeFixture(t, simulator.DeviceSpec{Name: "plug", Profile: simulator.ProfileESP8266_1M})
-	p.Client = override{Client: p.Client, reply: map[string]string{"Status": `{"Status":{"DeviceName":"  Wand‮\u0007 TV ","Topic":"t1"}}`}}
+	p.Client = override{Client: p.Client, reply: map[string]string{"Status": "{\"Status\":{\"DeviceName\":\"  Wand\u202e\\u0007 TV \",\"Topic\":\"t1\"}}"}}
 	if got, err := p.Describe(context.Background(), d); err != nil || got.Name != "Wand TV" || got.Topic != "t1" {
 		t.Fatalf("name %q topic %q err %v", got.Name, got.Topic, err)
 	}
