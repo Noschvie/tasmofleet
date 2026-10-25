@@ -1,0 +1,45 @@
+# Prunes ghcr.io/<owner>/tasmofleet. Every push to main replaces :edge and
+# leaves the previous edge build behind untagged; this deletes those
+# untagged images (with their attestation manifests) plus ghost, partial and
+# orphaned ones. Tagged images (:X.Y.Z, :latest, :edge) and the manifests
+# they reference are never touched, so every release stays pullable.
+# Runs daily and after each image build; dispatch with dry-run to preview.
+name: ghcr-cleanup
+
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_run:
+    workflows: [image]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "only log what would be deleted"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ghcr-cleanup
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: delete untagged images
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      packages: write
+    steps:
+      - uses: dataaxiom/ghcr-cleanup-action@v1.2.2
+        with:
+          package: tasmofleet
+          delete-untagged: true
+          delete-ghost-images: true
+          delete-partial-images: true
+          delete-orphaned-images: true
+          dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}
