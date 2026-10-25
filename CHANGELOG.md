@@ -4,7 +4,7 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
-## Unreleased
+## 0.12.2 (2026-10-25)
 
 ### Fixed
 
