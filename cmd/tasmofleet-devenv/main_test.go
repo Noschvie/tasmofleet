@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/nofuturekid/tasmofleet/internal/backup"
 	"io"
 	"net"
@@ -336,5 +337,32 @@ func TestDevenvDesignFixture(t *testing.T) {
 	if c, err := net.DialTimeout("tcp", off, time.Second); err == nil {
 		_ = c.Close()
 		t.Error("Hallway Dimmer still answers after /fixture/offline")
+	}
+}
+
+// Why: an "unknown" device must never answer. A port taken from the ephemeral
+// range and released again can be handed to one of the simulators started right
+// after it (issue #39), so the address has to come from the privileged range,
+// which no unprivileged process (the simulators included) can bind, and each
+// unknown device needs its own.
+func TestClosedLoopbackAddrIsPrivilegedAndDistinct(t *testing.T) {
+	seen := map[string]bool{}
+	for i := 0; i < 4; i++ {
+		addr := closedLoopbackAddr(i)
+		host, port, err := net.SplitHostPort(addr)
+		if err != nil {
+			t.Fatalf("closedLoopbackAddr(%d) = %q: %v", i, addr, err)
+		}
+		if host != "127.0.0.1" {
+			t.Errorf("closedLoopbackAddr(%d) = %q, want a loopback address", i, addr)
+		}
+		var p int
+		if _, err := fmt.Sscan(port, &p); err != nil || p < 1 || p >= 1024 {
+			t.Errorf("closedLoopbackAddr(%d) = %q, want a privileged port (1-1023)", i, addr)
+		}
+		if seen[addr] {
+			t.Errorf("closedLoopbackAddr(%d) = %q repeats an earlier address", i, addr)
+		}
+		seen[addr] = true
 	}
 }

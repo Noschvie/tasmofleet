@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -118,16 +119,15 @@ func (f *designFleet) GoOffline() {
 // each. Names contain spaces, so the name is URL-escaped.
 func startDesignFleet(ctx context.Context, fleet simulator.Fleet, fx *designFixture, out func(format string, a ...any)) (*designFleet, error) {
 	df := &designFleet{}
+	unknown := 0 // devices that never answer, each on its own closed port
 	for _, d := range fx.Devices {
 		profile, ok := designProfiles[d.Chip]
 		if !ok {
 			return nil, fmt.Errorf("design fixture: device %q has unknown chip %q", d.Name, d.Chip)
 		}
 		if d.Status == "unknown" {
-			addr, err := closedLoopbackAddr()
-			if err != nil {
-				return nil, err
-			}
+			addr := closedLoopbackAddr(unknown)
+			unknown++
 			// Nothing listens there: the device never answers, which the app shows as
 			// "Unknown" (never answered), also after its first polls have failed (P1).
 			out("DEVENV_DEVICE name=%s addr=%s topic=%s profile=%s version=%s unreachable\n", url.PathEscape(d.Name), addr, topicOf(d.Name), profile, d.Firmware)
@@ -164,13 +164,10 @@ func topicOf(name string) string {
 	return strings.Trim(notTopicChars.ReplaceAllString(strings.ToLower(strings.TrimSpace(name)), "-"), "-")
 }
 
-// closedLoopbackAddr returns a loopback address nothing listens on.
-func closedLoopbackAddr() (string, error) {
-	var lc net.ListenConfig
-	l, err := lc.Listen(context.Background(), "tcp", "127.0.0.1:0")
-	if err != nil {
-		return "", err
-	}
-	addr := l.Addr().String()
-	return addr, l.Close()
+// closedLoopbackAddr returns the address of the i-th device that never
+// answers: a privileged loopback port (1, 2, ...). No unprivileged process can
+// bind it, so neither a simulator started later nor anything else can take it
+// over; a released ephemeral port could be handed out again (issue #39).
+func closedLoopbackAddr(i int) string {
+	return net.JoinHostPort("127.0.0.1", strconv.Itoa(i+1))
 }

@@ -4,6 +4,14 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## Unreleased
+
+### Fixed
+
+- CI: `TestDevenvDesignFixture` no longer flakes ("Kitchen Ceiling Light (unknown) answers on 127.0.0.1:…"):
+  devenv puts devices that never answer on a privileged loopback port (`127.0.0.1:1`, `:2`, …) instead of a
+  released ephemeral port that a simulator started right after it could get again (#39).
+
 ## 0.12.0 (2026-10-25)
 
 ### Added
