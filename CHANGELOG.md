@@ -8,6 +8,11 @@ always upgrade automatically.
 
 ### Fixed
 
+- Policy page: a long value (an `OtaUrl`) no longer squeezes the device name to one letter per line or pushes
+  the value out of the card, in the live preview and in the "Make compliant" dialog. The name keeps a readable
+  width and the value wraps below it, breaking inside the URL.
+- Policy page: two chip-family-limited rules for the same setting (e.g. `OtaUrl` for ESP8266 and for ESP32) no
+  longer claim to overlap on devices of unknown chip family, which neither rule can judge.
 - CI: `TestDevenvDesignFixture` no longer flakes ("Kitchen Ceiling Light (unknown) answers on 127.0.0.1:…"):
   devenv puts devices that never answer on a privileged loopback port (`127.0.0.1:1`, `:2`, …) instead of a
   released ephemeral port that a simulator started right after it could get again (#39).

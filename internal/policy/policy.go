@@ -116,7 +116,8 @@ type Conflict struct {
 }
 
 // Conflicts lists every pair of enabled rules that apply to the same command
-// on at least one common device, ordered by Higher then Lower. Pure: the page
+// on at least one common device that both could judge (a device of unknown
+// family is shared only when one of the rules is not family-limited), ordered by Higher then Lower. Pure: the page
 // shows them so precedence is never silent.
 func Conflicts(rules []Rule, devices []model.Device) []Conflict {
 	var out []Conflict
@@ -131,9 +132,15 @@ func Conflicts(rules []Rule, devices []model.Device) []Conflict {
 			}
 			n := 0
 			for _, d := range devices {
-				if applies(a, d) && applies(b, d) {
-					n++
+				if !applies(a, d) || !applies(b, d) {
+					continue
 				}
+				// Two family-limited rules both report a device of unknown family as unknown:
+				// neither can judge it, so the higher one "winning" there changes nothing.
+				if d.Identity.Family == model.ChipUnknown && len(a.Families) > 0 && len(b.Families) > 0 {
+					continue
+				}
+				n++
 			}
 			if n > 0 {
 				out = append(out, Conflict{Higher: i, Lower: j, Command: a.Command, Devices: n, SameWant: equal(a.Want, b.Want)})

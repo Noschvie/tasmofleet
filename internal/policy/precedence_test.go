@@ -110,6 +110,41 @@ func TestConflictsIncludeUnknownFamily(t *testing.T) {
 	}
 }
 
+// Why: the page says "A wins for N devices they share". A device of unknown chip family is
+// reported unknown by every family-limited rule and judged by none, so for two limited rules
+// with disjoint families it is no real overlap (the ESP8266 and ESP32 OtaUrl rules told
+// "wins for 7 devices" that neither rule ever touches). Check's precedence stays as it is.
+func TestConflictsIgnoreUnknownFamilyBetweenFamilyLimitedRules(t *testing.T) {
+	esp8266 := Rule{Command: "OtaUrl", Want: "http://a/x.bin", Families: []model.ChipFamily{model.ChipESP8266}}
+	esp32 := Rule{Command: "OtaUrl", Want: "http://b/x.bin", Families: []model.ChipFamily{model.ChipESP32}}
+	general := Rule{Command: "OtaUrl", Want: "http://c/x.bin"}
+	devs := []model.Device{dev(1, "new", model.ChipUnknown), dev(2, "plug", model.ChipESP8266), dev(3, "board", model.ChipESP32)}
+	for name, c := range map[string]struct {
+		rules []Rule
+		want  int // devices shared by rules[0] and rules[1]; -1: no conflict
+	}{
+		"disjoint limited rules share nothing":                 {[]Rule{esp8266, esp32}, -1},
+		"overlapping limited rules share only judged devices":  {[]Rule{esp8266, {Command: "OtaUrl", Want: "x", Families: []model.ChipFamily{model.ChipESP8266, model.ChipESP32}}}, 1},
+		"a general rule below still shares the unknown device": {[]Rule{esp8266, general}, 2},
+		"a general rule above shares it too":                   {[]Rule{general, esp32}, 2},
+	} {
+		got := Conflicts(c.rules, devs)
+		switch {
+		case c.want < 0 && got != nil:
+			t.Errorf("%s: %+v", name, got)
+		case c.want >= 0 && (len(got) != 1 || got[0].Devices != c.want):
+			t.Errorf("%s: want %d shared devices, got %+v", name, c.want, got)
+		}
+	}
+	// precedence itself is untouched: the unknown device is still claimed (and reported unknown) by the higher rule only
+	fs := Check([]Rule{esp8266, esp32}, devs, nil)
+	for _, f := range fs {
+		if f.DeviceID == 1 && (f.RuleIndex != 0 || !f.Unknown) {
+			t.Errorf("unknown device must be reported unknown by the first rule only: %+v", f)
+		}
+	}
+}
+
 // Why: the wording table maps warn to "Required" and info to "Advisory";
 // an unset severity is the stricter one, like severityOf.
 func TestSeverityLabel(t *testing.T) {
