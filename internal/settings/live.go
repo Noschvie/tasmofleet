@@ -67,7 +67,7 @@ func ParseReply(payload []byte) map[string]string {
 			break
 		}
 		if v, ok := scalar(raw); ok {
-			out[cmd] = replyNumber(cmd, v)
+			out[cmd] = safeValue(cmd, replyNumber(cmd, v))
 		}
 	}
 	if len(out) == 0 {

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+
+	"github.com/nofuturekid/tasmofleet/internal/settings"
 )
 
 // decodedKeys maps a policy command to its place in the JSON that
@@ -20,6 +22,7 @@ var decodedKeys = map[string][]string{
 	"MqttHost":     {"mqtt_host"},
 	"MqttPort":     {"mqtt_port"},
 	"MqttUser":     {"mqtt_user"},
+	"OtaUrl":       {"ota_url"}, // decode-config v16; read with RedactURLCredentials
 	"SetOption0":   {"flag", "save_state"},
 	"SetOption3":   {"flag", "mqtt_enabled"},
 	"SetOption4":   {"flag", "mqtt_response"},
@@ -50,6 +53,9 @@ func ValuesFromDecoded(raw []byte) map[string]string {
 			}
 		}
 		if v, ok := scalar(cur); ok {
+			if cmd == "OtaUrl" {
+				v = settings.RedactURLCredentials(v)
+			}
 			out[cmd] = v
 		}
 	}

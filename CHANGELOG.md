@@ -6,6 +6,15 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Added
+
+- Fleet policy: `OtaUrl` is a supported setting (policy editor, group "Firmware"). A rule can require a device's
+  firmware URL, e.g. `http://ota.tasmota.com/tasmota/release/tasmota.bin.gz` for `esp8266` and
+  `http://ota.tasmota.com/tasmota32/release/tasmota32.bin` for `esp32`, so devices imported from TasmoAdmin stop
+  pointing at a dead host; "Make compliant" sends `OtaUrl <value>`. The value is read live and from backups
+  (`ota_url`); credentials in a URL are never shown. The setting is policy-only: the per-device settings form
+  neither reads nor writes it.
+
 ### Fixed
 
 - The job log reads as the update went: a command that timed out while the device was flashing (ESP32 with the

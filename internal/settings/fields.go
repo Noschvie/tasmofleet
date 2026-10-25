@@ -47,6 +47,9 @@ type Field struct {
 	HasRange bool
 	// Group orders the form sections.
 	Group string
+	// PolicyOnly marks a setting that only the fleet policy reads and sets
+	// ("Make compliant"): the device form neither reads nor writes it.
+	PolicyOnly bool
 }
 
 // MaxValueLen caps every value, whatever its validator says.
@@ -222,6 +225,29 @@ func timezoneV(v string) error {
 	return nil
 }
 
+var otaUrlRe = regexp.MustCompile(`^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?(/[A-Za-z0-9._~%+/-]*)?$`)
+
+// otaUrlV accepts a plain http(s) URL: no credentials (they would be stored,
+// shown and logged), no query, no blanks; Tasmota's shortcut "1" (reset the
+// URL) and "0" do not match. It decides where a device fetches firmware from,
+// so the policy value is checked as strictly as a command argument.
+func otaUrlV(v string) error {
+	if err := checkText(v, 100); err != nil {
+		return err
+	}
+	if !otaUrlRe.MatchString(v) {
+		return invalid("an http:// or https:// URL without credentials, blanks or query (at most 100 characters)")
+	}
+	return nil
+}
+
+var urlUserinfoRe = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9+.-]*://)[^/@]*@`)
+
+// RedactURLCredentials hides "user:password@" in a URL read from a device, so
+// a URL with credentials is shown as a different value ("***@") and never in
+// clear text.
+func RedactURLCredentials(v string) string { return urlUserinfoRe.ReplaceAllString(v, "${1}***@") }
+
 // ruleV validates "Hemisphere,Week,Month,Day,Hour,Offset" of TimeDst/TimeStd.
 func ruleV(v string) error {
 	parts := strings.Split(v, ",")
@@ -268,6 +294,8 @@ const (
 	GroupOptions = "Options"
 	GroupMQTT    = "MQTT"
 	GroupTime    = "Time"
+	// GroupFirmware holds policy-only settings; it has no section in the device form.
+	GroupFirmware = "Firmware"
 )
 
 // Fields is the curated list (spec §13). The order is the order of the form.
@@ -315,6 +343,11 @@ func buildFields() []Field {
 		textField("Timezone", "Timezone", "99 uses the TimeDst/TimeStd rules; otherwise -13 to 13 or +HH:MM.", GroupTime, timezoneV),
 		textField("TimeDst", "Daylight saving rule", "Hemisphere, Week, Month, Day, Hour, Offset (minutes), separated by commas, e.g. 0,0,3,1,2,120.", GroupTime, ruleV),
 		textField("TimeStd", "Standard time rule", "Hemisphere, Week, Month, Day, Hour, Offset (minutes), separated by commas, e.g. 0,0,10,1,3,60.", GroupTime, ruleV),
+		{
+			Key: "OtaUrl", Label: "OTA URL", Kind: KindText, Group: GroupFirmware, PolicyOnly: true,
+			Help:     "Where the device fetches firmware from, e.g. after importing devices from a decommissioned update host. Only a fleet policy sets it; tasmofleet's own updates set and restore it themselves.",
+			Validate: otaUrlV, Command: plain("OtaUrl"),
+		},
 	}
 	return fs
 }

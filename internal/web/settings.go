@@ -172,7 +172,7 @@ func (h *handler) settingsApply(w http.ResponseWriter, r *http.Request) {
 		if k == "csrf" {
 			continue
 		}
-		if _, ok := settings.Lookup(strings.TrimPrefix(k, origPrefix)); !ok {
+		if f, ok := settings.Lookup(strings.TrimPrefix(k, origPrefix)); !ok || f.PolicyOnly {
 			http.Error(w, "unknown field", http.StatusBadRequest)
 			return
 		}

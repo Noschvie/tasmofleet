@@ -85,6 +85,7 @@ func TestFieldValidators(t *testing.T) {
 		{"Timezone", []string{"99", "0", "1", "-5", "+13", "14", "+14:00", "+01:00", "-05:30", "-00:00", "+00:30"}, []string{"", "15", "-14", "-14:00", "-00:30", "+15:00", "1:00", "+01:60", "100", "x"}},
 		{"TimeDst", []string{"0,0,3,1,2,120", "1,4,10,7,23,-900"}, []string{"", "0,0,3,1,2", "0,0,3,1,2,120,5", "2,0,3,1,2,120", "0,5,3,1,2,120", "0,0,13,1,2,120", "0,0,3,0,2,120", "0,0,3,1,24,120", "0,0,3,1,2,901", "a,b,c,d,e,f"}},
 		{"TimeStd", []string{"0,0,10,1,3,60"}, []string{"0,0,10,1,3"}},
+		{"OtaUrl", []string{"http://ota.tasmota.com/tasmota/release/tasmota.bin.gz"}, []string{"", "1", "http://u:p@h/a.bin"}}, // more in TestOtaUrlValidator
 	}
 	covered := map[string]bool{}
 	for _, c := range cases {
@@ -178,7 +179,7 @@ func TestApplySendsOneCommandPerField(t *testing.T) {
 // Why: a crafted POST must not reach the device with a key outside the
 // curated list (it could be Reset or Backlog).
 func TestApplyUnknownKeySendsNothing(t *testing.T) {
-	for _, k := range []string{"Reset", "Backlog", "Upgrade", "SetOption1", "friendlyname1", "OtaUrl"} {
+	for _, k := range []string{"Reset", "Backlog", "Upgrade", "SetOption1", "friendlyname1"} {
 		c := &fakeClient{}
 		svc, aud := newSvc(c)
 		_, err := svc.Apply(t.Context(), "alice", 1, map[string]string{"TelePeriod": "60", k: "1"})
@@ -509,5 +510,84 @@ func TestParseReply(t *testing.T) {
 				t.Errorf("%s: %s = %q, want %q", c.in, k, got[k], v)
 			}
 		}
+	}
+}
+
+// Why: OtaUrl ends up in a device command line and decides where the device
+// fetches its firmware from. Only a plain http(s) URL may pass: no credentials
+// in the URL (they would be stored, shown and logged), no Backlog separator, no
+// blanks, and not Tasmota's "1" shortcut that resets the URL.
+func TestOtaUrlValidator(t *testing.T) {
+	f, ok := Lookup("OtaUrl")
+	if !ok {
+		t.Fatal("OtaUrl is not in the catalog")
+	}
+	for _, v := range []string{
+		"http://ota.tasmota.com/tasmota/release/tasmota.bin.gz",
+		"http://ota.tasmota.com/tasmota32/release/tasmota32.bin",
+		"https://fw.example.invalid:8443/a/b.bin",
+	} {
+		if err := f.Validate(v); err != nil {
+			t.Errorf("%q refused: %v", v, err)
+		}
+	}
+	for _, v := range []string{
+		"", "1", "0", "ota.tasmota.com/tasmota.bin", "ftp://h/a.bin", "http://u:p@h/a.bin", "http://h/a.bin;Restart 1",
+		"http://h/a b.bin", "http://h/a.bin?x=1", "http:///a.bin", "http://h/" + strings.Repeat("a", 100),
+	} {
+		if err := f.Validate(v); err == nil {
+			t.Errorf("%q must be refused", v)
+		}
+	}
+}
+
+// Why: OtaUrl belongs to the fleet policy only. The device form must neither
+// read it on every page load nor let a crafted POST rewrite where a device
+// updates from; that change goes through "Make compliant" or the confirmed console.
+func TestOtaUrlIsPolicyOnly(t *testing.T) {
+	c := &fakeClient{replies: map[string]string{"OtaUrl": `{"OtaUrl":"http://h/a.bin"}`}}
+	svc, _ := newSvc(c)
+	got, err := svc.Read(t.Context(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got["OtaUrl"]; ok {
+		t.Error("Read must not return OtaUrl")
+	}
+	for _, s := range c.sent {
+		if s == "OtaUrl" {
+			t.Error("Read queried OtaUrl")
+		}
+	}
+	c.sent = nil
+	_, err = svc.Apply(t.Context(), "alice", 1, map[string]string{"OtaUrl": "http://h/a.bin"})
+	var ve *ValidationError
+	if !errors.As(err, &ve) || len(c.sent) != 0 {
+		t.Fatalf("Apply must refuse OtaUrl and send nothing: err %v, sent %v", err, c.sent)
+	}
+}
+
+// Why: the policy needs the live OtaUrl to flag a device that still points at
+// the old TasmoAdmin host. A bare "OtaUrl" only reports (cmdpolicy), and a URL
+// with credentials must never reach the report in clear text.
+func TestOtaUrlIsReadLiveWithoutCredentials(t *testing.T) {
+	if !Queryable("OtaUrl") || !LiveReadable("OtaUrl") {
+		t.Fatal("OtaUrl must be queryable and live readable")
+	}
+	c := &fakeClient{replies: map[string]string{"OtaUrl": `{"OtaUrl":"http://old-host.example.invalid:8080/tasmota.bin.gz"}`}}
+	svc, _ := newSvc(c)
+	got, err := svc.ReadKeys(t.Context(), 1, []string{"OtaUrl"})
+	if err != nil || got["OtaUrl"] != "http://old-host.example.invalid:8080/tasmota.bin.gz" {
+		t.Fatalf("got %v, %v", got, err)
+	}
+	c = &fakeClient{replies: map[string]string{"OtaUrl": `{"OtaUrl":"http://user:fake-pw@h/a.bin"}`}}
+	svc, _ = newSvc(c)
+	got, _ = svc.ReadKeys(t.Context(), 1, []string{"OtaUrl"})
+	if v := got["OtaUrl"]; strings.Contains(v, "fake-pw") || strings.Contains(v, "user") || v == "" {
+		t.Errorf("credentials leaked or value dropped: %q", v)
+	}
+	mq := ParseReply([]byte(`{"OtaUrl":"http://user:fake-pw@h/a.bin"}`))
+	if v := mq["OtaUrl"]; strings.Contains(v, "fake-pw") || v == "" {
+		t.Errorf("MQTT reply leaked credentials or dropped the value: %q", v)
 	}
 }

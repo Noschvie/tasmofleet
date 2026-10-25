@@ -2,6 +2,7 @@ package policy
 
 import (
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -200,6 +201,7 @@ func TestValuesFromDecodedRealOutput(t *testing.T) {
 		"PowerOnState": "3", "SaveData": "0", "Timezone": "+00:00", "TelePeriod": "300", "Hostname": "synthetic-plug",
 		"Topic": "synthetic_plug", "FullTopic": "", "MqttHost": "mqtt.example.invalid", "MqttPort": "1883", "MqttUser": "synthetic-user",
 		"SetOption0": "0", "SetOption3": "0", "SetOption4": "0", "SetOption19": "0",
+		"OtaUrl": "http://fw.example.invalid/tasmota.bin.gz", // decode-config's "ota_url", sanitised in the fixture
 	}
 	for k, v := range want {
 		if g, ok := got[k]; !ok || g != v {
@@ -263,5 +265,76 @@ func TestParseRulesESP32Wildcard(t *testing.T) {
 		if f.IsESP32() != hasFamily(rs[0].Families, f) {
 			t.Errorf("%s: wildcard coverage wrong", f)
 		}
+	}
+}
+
+// otaRules are the maintainer's rules for devices imported from TasmoAdmin:
+// the old host is gone, so every device must point at the upstream release.
+var otaRules = []Rule{
+	{Command: "OtaUrl", Want: "http://ota.tasmota.com/tasmota/release/tasmota.bin.gz", Families: []model.ChipFamily{model.ChipESP8266}},
+	{Command: "OtaUrl", Want: "http://ota.tasmota.com/tasmota32/release/tasmota32.bin", Families: []model.ChipFamily{model.ChipESP32}},
+}
+
+// Why: a TasmoAdmin-era OtaUrl points at a dead host and breaks the next
+// update; it must be flagged per chip family, while the right URL is compliant.
+func TestOtaUrlFromTasmoAdminIsFlagged(t *testing.T) {
+	devs := []model.Device{dev(1, "plug", model.ChipESP8266), dev(2, "quin", model.ChipESP32), dev(3, "ok", model.ChipESP8266)}
+	vals := map[model.DeviceID]map[string]string{
+		1: {"OtaUrl": "http://192.0.2.10/tasmoadmin/firmware/tasmota.bin.gz"},
+		2: {"OtaUrl": "http://ota.tasmota.com/tasmota/release/tasmota.bin.gz"}, // the ESP8266 URL on an ESP32
+		3: {"OtaUrl": "http://ota.tasmota.com/tasmota/release/tasmota.bin.gz"},
+	}
+	fs := Check(otaRules, devs, vals)
+	if len(fs) != 2 {
+		t.Fatalf("findings %+v", fs)
+	}
+	for _, id := range []model.DeviceID{1, 2} {
+		if f, ok := find(fs, id, "OtaUrl"); !ok || f.Unknown {
+			t.Errorf("device %d must deviate, got %+v", id, f)
+		}
+	}
+	if _, ok := find(fs, 3, "OtaUrl"); ok {
+		t.Error("the correct URL must be compliant")
+	}
+}
+
+// Why: an OtaUrl that was not read must never look compliant. The decoded
+// backup of a device without the key stays "unknown".
+func TestOtaUrlUnknownWhenBackupLacksTheKey(t *testing.T) {
+	got := ValuesFromDecoded([]byte(`{"hostname":"x"}`))
+	if _, ok := got["OtaUrl"]; ok {
+		t.Fatalf("invented a value: %v", got)
+	}
+	fs := Check(otaRules, []model.Device{dev(1, "plug", model.ChipESP8266)}, map[model.DeviceID]map[string]string{1: got})
+	if f, ok := find(fs, 1, "OtaUrl"); !ok || !f.Unknown {
+		t.Fatalf("want unknown, got %+v", fs)
+	}
+}
+
+// Why: decode-config writes OtaUrl as "ota_url". A wrong key would make every
+// backup-based check "unknown". A URL with credentials must not be shown.
+func TestValuesFromDecodedOtaUrl(t *testing.T) {
+	got := ValuesFromDecoded([]byte(`{"ota_url":"http://fw.example.invalid/tasmota.bin.gz"}`))
+	if got["OtaUrl"] != "http://fw.example.invalid/tasmota.bin.gz" {
+		t.Fatalf("got %v", got)
+	}
+	got = ValuesFromDecoded([]byte(`{"ota_url":"http://user:fake-pw@fw.example.invalid/a.bin"}`))
+	if v := got["OtaUrl"]; v == "" || strings.Contains(v, "fake-pw") || strings.Contains(v, "user") {
+		t.Fatalf("credentials leaked or value dropped: %q", v)
+	}
+}
+
+// Why: "Make compliant" must fix the dead URL with the URL of the device's own
+// family, sent as a plain OtaUrl command.
+func TestPlanFixSendsTheFamilysOtaUrl(t *testing.T) {
+	devs := []model.Device{dev(1, "plug", model.ChipESP8266), dev(2, "quin", model.ChipESP32)}
+	old := "http://192.0.2.10/tasmoadmin/firmware/tasmota.bin.gz"
+	vals := map[model.DeviceID]map[string]string{1: {"OtaUrl": old}, 2: {"OtaUrl": old}}
+	ps := PlanFix(Check(otaRules, devs, vals), always)
+	if got := lines(t, ps, 1); !reflect.DeepEqual(got, []string{"OtaUrl http://ota.tasmota.com/tasmota/release/tasmota.bin.gz"}) {
+		t.Errorf("esp8266: %v", got)
+	}
+	if got := lines(t, ps, 2); !reflect.DeepEqual(got, []string{"OtaUrl http://ota.tasmota.com/tasmota32/release/tasmota32.bin"}) {
+		t.Errorf("esp32: %v", got)
 	}
 }

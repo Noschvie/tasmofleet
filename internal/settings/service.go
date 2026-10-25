@@ -99,7 +99,7 @@ func New(o Options) *Manager {
 func (m *Manager) Read(ctx context.Context, id model.DeviceID) (map[string]string, error) {
 	var keys []string
 	for _, f := range Fields {
-		if !f.Secret {
+		if !f.Secret && !f.PolicyOnly {
 			keys = append(keys, f.Key)
 		}
 	}
@@ -161,9 +161,17 @@ func (m *Manager) readKeys(ctx context.Context, id model.DeviceID, keys []string
 		if !ok {
 			continue // an unparsable reply is "unknown", never a guess
 		}
-		out[k] = v
+		out[k] = safeValue(k, v)
 	}
 	return out, nil
+}
+
+// safeValue keeps URL credentials out of what is read from a device.
+func safeValue(key, v string) string {
+	if key == "OtaUrl" {
+		return RedactURLCredentials(v)
+	}
+	return v
 }
 
 func statusValue(sections map[string]json.RawMessage, section, field string) (string, bool) {
@@ -247,6 +255,10 @@ func (m *Manager) Apply(ctx context.Context, actor string, id model.DeviceID, ch
 	for _, f := range Fields {
 		v, ok := changes[f.Key]
 		if !ok {
+			continue
+		}
+		if f.PolicyOnly {
+			bad[f.Key] = "can only be set by the fleet policy"
 			continue
 		}
 		if err := checkText(v, MaxValueLen); err != nil {
