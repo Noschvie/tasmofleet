@@ -4,10 +4,13 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
-## Unreleased
+## 0.12.3 (2026-10-25)
 
 ### Fixed
 
+- Backup: the downloaded backup file is named after the device instead of a generic name (#55).
+- Backup: a Status 9 "Command Error" from a device without energy monitoring no longer marks a snapshot
+  incomplete (#55).
 - Devices: a device's name defaults to Tasmota's DeviceName (labelled "Device name") instead of the
   hostname, in a scan, Discovery and the add flow. Names already stored are kept (#52).
 - Devices: the MQTT topic is the resolved one (`tasmota_2BE970`), not the setting `tasmota_%06X`. The
