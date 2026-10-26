@@ -368,11 +368,25 @@ The image tag is the build's `CODE_IMAGE_STR` (SRC, arendst/Tasmota `63c3861`; e
 | `tasmota32` (every `FIRMWARE_TASMOTA32` build but solo1, one per chip)         | esp32 dual core            | `tasmota` -> `tasmota32.bin`                                            |
 |                                                                                | s3, c2, c3, c5, c6, c61    | `tasmota` -> `tasmota32<chip>.bin`                                      |
 |                                                                                | s2, p4                     | `unknown`: two builds each (s2/s2cdc, p4/p4r3), the tag cannot tell     |
-|                                                                                | esp32 single core          | `unknown`: up to v12.0 solo1 also reported `tasmota32`                  |
+|                                                                                | esp32 single core          | `unknown`: no official build reports this; not provable                 |
 |                                                                                | esp8266                    | `ErrFamilyMismatch`                                                     |
 | `solo1` (with suffix `single-core`)                                            | esp32 single core          | `tasmota` + `SingleCore` -> `tasmota32solo1.bin`                        |
 | `safeboot`                                                                     | any esp32 chip             | `safeboot` (device sits in safeboot; treated like minimal)              |
 | anything else, file names (`tasmota32c3`, `tasmota32-webcam`), bare tags (#52) |                            | `unknown` -> refuse updates until the user chooses a variant explicitly |
+
+History and limits (SRC):
+
+- The `tasmota32` tag exists since v12.5 (`tasmota_configurations_ESP32.h`). ESP32 builds up to v12.4 report
+  `release-tasmota`, which `Detect` refuses as `ErrFamilyMismatch` on ESP32 hardware (known limitation, fails
+  safe).
+- Until v14.0.0 the USB-CDC builds of C3, C6 and S3 were separate OTA files (`tasmota32c3cdc.bin`, ...); since
+  v14.0.0 one build per chip has USB HWCDC with serial fallback (Tasmota CHANGELOG, #21212). The cdc files are
+  not in §7.1 and never selected.
+- S2 and P4 identify with variant `unknown`. After an explicit variant choice, Select still has to prove the
+  build (§7.2): P4 by the chip revision Status 2 reports in `Hardware` (`ESP32-P4 v<major>.<minor>`): `p4`
+  (board `esp32p4`, chip_variant `esp32p4_es`, built for revisions 0.1-1.99) or `p4r3` (ESP-IDF default
+  3.1-3.99, `Kconfig.hw_support`); any other revision is refused. S2 is always refused (`ErrUnknownHardware`):
+  nothing the device reports tells `s2` from `s2cdc`. An explicit build choice is a follow-up issue.
 
 With unknown hardware the tag is not checked (the identity is never `Known()`). If the
 tag's chips do not include the Hardware family (e.g. `webcam` on an ESP32-C3), `Detect`
@@ -419,6 +433,9 @@ and chip build unless the user explicitly chose otherwise (`Choice.AllowVariantC
 set only from a UI confirmation or a CLI flag). For esp8266 it always also names
 `tasmota-minimal.bin.gz` of the same release. Language and variant cannot be combined
 upstream (there is no `tasmota-sensors-DE`). Asking for that returns `ErrNoSuchVariant`.
+The chip build of the newer chips comes from `Hardware` alone: the one build of S3, C2, C3, C5, C6 and C61; for
+P4 the build whose revision range contains the chip revision (§6.2); ESP32-S2 and every other case return
+`ErrUnknownHardware`. This also covers the minimal/safeboot auto-default ("tasmota" chosen for the device).
 
 ### 7.3 Decide (update policy)
 

@@ -226,8 +226,9 @@ func variantFromTag(tag string, fam model.ChipFamily, single bool) (string, bool
 		case fam == model.ChipESP8266:
 			return "", false
 		case single || ambiguousChips[fam]:
-			// Up to v12.0 solo1 reported "tasmota32" too; S2 and P4 have two
-			// builds each. Which one runs is not provable: never guess.
+			// No official single-core build reports "tasmota32" (solo1 reports
+			// "solo1" since the tag exists, v12.5); S2 and P4 have two builds
+			// each. Which one runs is not provable: never guess.
 			return variantUnknown, true
 		default:
 			return variantTasmota, true

@@ -22,15 +22,14 @@ var (
 	idSolo1     = model.Identity{Family: model.ChipESP32, Hardware: "ESP32-S0WD", SingleCore: true, Version: "15.0.0", Image: "release-tasmota32solo1", Variant: "tasmota"}
 	idSafeboot  = ident(model.ChipESP32, "ESP32-D0WD-V3", "release-safeboot", "safeboot", "")
 	idC3        = ident(model.ChipESP32C3, "ESP32-C3", "release-tasmota32c3", "tasmota", "")
-	idS2        = ident(model.ChipESP32S2, "ESP32-S2", "release-tasmota32s2", "tasmota", "")
-	idS2CDC     = ident(model.ChipESP32S2, "ESP32-S2", "release-tasmota32s2cdc", "tasmota", "")
+	idS2        = ident(model.ChipESP32S2, "ESP32-S2 v0.0", "release-tasmota32", "tasmota", "")
 	idS3        = ident(model.ChipESP32S3, "ESP32-S3", "release-tasmota32s3", "tasmota", "")
 	idC2        = ident(model.ChipESP32C2, "ESP32-C2", "release-tasmota32c2", "tasmota", "")
 	idC5        = ident(model.ChipESP32C5, "ESP32-C5", "release-tasmota32c5", "tasmota", "")
 	idC6        = ident(model.ChipESP32C6, "ESP32-C6", "release-tasmota32c6", "tasmota", "")
 	idC61       = ident(model.ChipESP32C61, "ESP32-C61", "release-tasmota32c61", "tasmota", "")
-	idP4        = ident(model.ChipESP32P4, "ESP32-P4", "release-tasmota32p4", "tasmota", "")
-	idP4R3      = ident(model.ChipESP32P4, "ESP32-P4", "release-tasmota32p4r3", "tasmota", "")
+	idP4        = ident(model.ChipESP32P4, "ESP32-P4 v1.0", "release-tasmota32", "tasmota", "")
+	idP4R3      = ident(model.ChipESP32P4, "ESP32-P4 v3.1", "release-tasmota32", "tasmota", "")
 	idUnknownHW = ident(model.ChipUnknown, "ESP32-H2", "release-tasmota32", "tasmota", "")
 )
 
@@ -87,16 +86,14 @@ func TestSelect(t *testing.T) {
 		{name: "esp32 to zbbrdgpro", id: idESP32, c: change("zbbrdgpro", ""), file: "tasmota32-zbbrdgpro.bin", variant: "zbbrdgpro"},
 		{name: "solo1 keep", id: idSolo1, c: keep, file: "tasmota32solo1.bin", variant: "tasmota"},
 		{name: "c3", id: idC3, c: keep, file: "tasmota32c3.bin", variant: "tasmota"},
-		{name: "s2", id: idS2, c: keep, file: "tasmota32s2.bin", variant: "tasmota"},
-		{name: "s2cdc keeps cdc build", id: idS2CDC, c: keep, file: "tasmota32s2cdc.bin", variant: "tasmota"},
 		{name: "s3", id: idS3, c: keep, file: "tasmota32s3.bin", variant: "tasmota"},
 		{name: "c2", id: idC2, c: keep, file: "tasmota32c2.bin", variant: "tasmota"},
 		{name: "c5", id: idC5, c: keep, file: "tasmota32c5.bin", variant: "tasmota"},
 		{name: "c6", id: idC6, c: keep, file: "tasmota32c6.bin", variant: "tasmota"},
 		{name: "c61", id: idC61, c: keep, file: "tasmota32c61.bin", variant: "tasmota"},
-		{name: "p4", id: idP4, c: keep, file: "tasmota32p4.bin", variant: "tasmota"},
-		{name: "p4r3 keeps r3 build", id: idP4R3, c: keep, file: "tasmota32p4r3.bin", variant: "tasmota"},
-		{name: "c3 with dev image tag", id: ident(model.ChipESP32C3, "ESP32-C3", "85cff52-tasmota32c3", "tasmota", ""), c: keep, file: "tasmota32c3.bin", variant: "tasmota"},
+		{name: "p4 below revision 3", id: idP4, c: keep, file: "tasmota32p4.bin", variant: "tasmota"},
+		{name: "p4 revision 3", id: idP4R3, c: keep, file: "tasmota32p4r3.bin", variant: "tasmota"},
+		{name: "c3 with dev image tag", id: ident(model.ChipESP32C3, "ESP32-C3", "85cff52-tasmota32", "tasmota", ""), c: keep, file: "tasmota32c3.bin", variant: "tasmota"},
 
 		// Refusals.
 		{name: "unknown hardware", id: idUnknownHW, c: keep, wantErr: ErrUnknownHardware},
@@ -199,30 +196,72 @@ func TestParseFilename(t *testing.T) {
 	}
 }
 
-// TestChipBuildDefault: without a recognisable chip build in the image tag
-// (unknown image, chosen variant) the chip's standard build is selected,
-// never another chip's build.
+// TestChipBuildDefault: a chip with one upstream build gets exactly that build after an explicit
+// variant choice, never another chip's build.
 func TestChipBuildDefault(t *testing.T) {
-	tests := []struct {
-		image string
-		fam   model.ChipFamily
-		want  string
-	}{
-		{"release-foobar", model.ChipESP32C3, "c3"},
-		{"", model.ChipESP32S2, "s2"},
-		{"release-tasmota32", model.ChipESP32P4, "p4"},
-		{"release-tasmota32s2cdc", model.ChipESP32C3, "c3"}, // other chip's build is ignored
-		{"release-tasmota32p4r3", model.ChipESP32P4, "p4r3"},
-	}
-	for _, tt := range tests {
-		if got := chipBuild(model.Identity{Family: tt.fam, Image: tt.image}); got != tt.want {
-			t.Errorf("chipBuild(%q, %s) = %q, want %q", tt.image, tt.fam, got, tt.want)
-		}
-	}
 	id := ident(model.ChipESP32C3, "ESP32-C3", "release-foobar", "unknown", "")
 	sel, err := Select(id, Choice{Variant: "tasmota", AllowVariantChange: true})
 	wantErr(t, err, nil)
 	if sel.Filename != "tasmota32c3.bin" {
 		t.Errorf("Select = %q, want tasmota32c3.bin", sel.Filename)
+	}
+}
+
+// TestSelectTwoBuildChips (#85 review H1): ESP32-S2 (s2, s2cdc) and ESP32-P4 (p4, p4r3) have two
+// upstream builds that report the same image tag, so neither the tag nor an explicit variant
+// choice says which build the device needs. P4 is decided by the chip revision Status 2
+// reports, inside the revision ranges each build boots on (ESP-IDF Kconfig.hw_support; Tasmota's
+// board esp32p4 = chip_variant esp32p4_es = revisions 0.1..1.99, esp32p4r3 = ESP-IDF default
+// 3.1..3.99). Anything else, and every S2, is refused: a wrong-silicon build does not boot.
+func TestSelectTwoBuildChips(t *testing.T) {
+	keepTasmota := Choice{Variant: "tasmota", AllowVariantChange: true}
+	p4 := func(hw, variant string) model.Identity {
+		return ident(model.ChipESP32P4, hw, "release-tasmota32", variant, "")
+	}
+	tests := []struct {
+		name    string
+		id      model.Identity
+		c       Choice
+		file    string
+		wantErr error
+	}{
+		{"s2 explicit variant", ident(model.ChipESP32S2, "ESP32-S2 v0.0", "release-tasmota32", "unknown", ""), keepTasmota, "", ErrUnknownHardware},
+		{"s2 kept variant", idS2, Choice{}, "", ErrUnknownHardware},
+		// The safeboot and minimal auto-default (web updates, firmware fleet needs) picks
+		// "tasmota" explicitly; it must not fall back to a default build either.
+		{"s2 safeboot auto-default", ident(model.ChipESP32S2, "ESP32-S2 v0.0", "release-safeboot", "safeboot", ""), keepTasmota, "", ErrUnknownHardware},
+		{"p4 safeboot auto-default rev 3", p4("ESP32-P4 v3.1", "safeboot"), keepTasmota, "tasmota32p4r3.bin", nil},
+		{"p4 safeboot auto-default rev 1", p4("ESP32-P4 v1.0", "safeboot"), keepTasmota, "tasmota32p4.bin", nil},
+		{"p4 explicit variant rev 3", p4("ESP32-P4 v3.1", "unknown"), keepTasmota, "tasmota32p4r3.bin", nil},
+		{"p4 explicit variant rev 1", p4("ESP32-P4 v1.0", "unknown"), keepTasmota, "tasmota32p4.bin", nil},
+		{"p4 rev 0.1 lowest es", p4("ESP32-P4 v0.1", "tasmota"), Choice{}, "tasmota32p4.bin", nil},
+		{"p4 rev 1.99 highest es", p4("ESP32-P4 v1.99", "tasmota"), Choice{}, "tasmota32p4.bin", nil},
+		{"p4 rev 3.99 highest r3", p4("ESP32-P4 v3.99", "tasmota"), Choice{}, "tasmota32p4r3.bin", nil},
+		{"p4 rev 3.10", p4("ESP32-P4 v3.10", "tasmota"), Choice{}, "tasmota32p4r3.bin", nil},
+		{"p4 rev 0.0 below es minimum", p4("ESP32-P4 v0.0", "tasmota"), Choice{}, "", ErrUnknownHardware},
+		{"p4 rev 2.0 in no range", p4("ESP32-P4 v2.0", "tasmota"), Choice{}, "", ErrUnknownHardware},
+		{"p4 rev 3.0 below r3 minimum", p4("ESP32-P4 v3.0", "tasmota"), Choice{}, "", ErrUnknownHardware},
+		{"p4 rev 4.0 above r3 maximum", p4("ESP32-P4 v4.0", "tasmota"), Choice{}, "", ErrUnknownHardware},
+		{"p4 without revision", p4("ESP32-P4", "tasmota"), Choice{}, "", ErrUnknownHardware},
+		{"p4 minor out of range", p4("ESP32-P4 v1.100", "tasmota"), Choice{}, "", ErrUnknownHardware},
+		{"p4 malformed revision", p4("ESP32-P4 v3.x", "tasmota"), Choice{}, "", ErrUnknownHardware},
+		{"p4 trailing text", p4("ESP32-P4 v3.1 eco", "tasmota"), Choice{}, "", ErrUnknownHardware},
+		{"p4 no minor", p4("ESP32-P4 v3", "tasmota"), Choice{}, "", ErrUnknownHardware},
+		{"p4 empty major", p4("ESP32-P4 v.1", "tasmota"), Choice{}, "", ErrUnknownHardware},
+		{"p4 signed minor", p4("ESP32-P4 v3.+1", "tasmota"), Choice{}, "", ErrUnknownHardware},
+		{"p4 three digit major", p4("ESP32-P4 v100.1", "tasmota"), Choice{}, "", ErrUnknownHardware},
+		{"p4 two digit major", p4("ESP32-P4 v13.1", "tasmota"), Choice{}, "", ErrUnknownHardware},
+		{"p4 huge major", p4("ESP32-P4 v99999999999999999999.1", "tasmota"), Choice{}, "", ErrUnknownHardware},
+		// A chip family without a known build must never fall back to the classic "tasmota32.bin".
+		{"family without a build", ident(model.ChipFamily("esp32x9"), "", "release-tasmota32", "tasmota", ""), Choice{}, "", ErrUnknownHardware},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sel, err := Select(tt.id, tt.c)
+			wantErr(t, err, tt.wantErr)
+			if sel.Filename != tt.file {
+				t.Errorf("file = %q, want %q", sel.Filename, tt.file)
+			}
+		})
 	}
 }

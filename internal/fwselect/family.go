@@ -86,16 +86,15 @@ var chipBuilds = map[string]model.ChipFamily{
 	"p4r3":  model.ChipESP32P4,
 }
 
-// defaultBuild is the standard tasmota32<suffix> build of each newer chip.
+// defaultBuild is the only tasmota32<suffix> build of each newer chip with
+// one build. S2 and P4 have two each and are resolved in chipBuild.
 var defaultBuild = map[model.ChipFamily]string{
-	model.ChipESP32S2:  "s2",
 	model.ChipESP32S3:  "s3",
 	model.ChipESP32C2:  "c2",
 	model.ChipESP32C3:  "c3",
 	model.ChipESP32C5:  "c5",
 	model.ChipESP32C6:  "c6",
 	model.ChipESP32C61: "c61",
-	model.ChipESP32P4:  "p4",
 }
 
 // Variants built upstream (§7.1). "tasmota" is the plain build.

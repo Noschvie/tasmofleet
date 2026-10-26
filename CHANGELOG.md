@@ -12,8 +12,9 @@ always upgrade automatically.
   C2, C3, C5, C6 and C61 devices (all report `tasmota32`) and ESP32 `display`/`ir` builds were refused as a
   chip-family mismatch and missing from the fleet; they are now identified and keep their build. ESP32
   `webcam`, `bluetooth`, `lvgl`, `nspanel`, `zbbrdgpro` and ESP8266 `tasmota-4M` are recognised instead of
-  `unknown`. ESP32-S2 and P4 (two builds each with the same tag) and single-core ESP32 reporting `tasmota32`
-  stay `unknown`, so OTA waits for an explicit variant choice instead of guessing.
+  `unknown`. ESP32-S2 and P4 (two builds each with the same tag) stay `unknown`; after an explicit variant
+  choice the P4 build follows the chip revision (p4 for v0.1-1.99, p4r3 for v3.1-3.99, others refused) and
+  ESP32-S2 updates are refused until the build can be chosen, instead of guessing (#85, #45, thanks @Noschvie).
 - Identity: a firmware version with the core suffix that single-core ESP32 builds append
   (`16.0.0(solo1)single-core`, also the official `16.0.0(release-solo1)single-core`) no longer aborts the
   identity probe and hides the device. The official solo1 build is recognised as `tasmota` on single-core

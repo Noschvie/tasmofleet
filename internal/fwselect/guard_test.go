@@ -25,6 +25,7 @@ var (
 	artSolo1    = art("tasmota32solo1.bin", model.ChipESP32, "tasmota", "")
 	artC3       = art("tasmota32c3.bin", model.ChipESP32C3, "tasmota", "")
 	artS2CDC    = art("tasmota32s2cdc.bin", model.ChipESP32S2, "tasmota", "")
+	artP4       = art("tasmota32p4.bin", model.ChipESP32P4, "tasmota", "")
 	artP4R3     = art("tasmota32p4r3.bin", model.ChipESP32P4, "tasmota", "")
 	keepChoice  = Choice{Release: rel}
 	changeTo    = func(v string) Choice { return Choice{Release: rel, Variant: v, AllowVariantChange: true} }
@@ -73,7 +74,7 @@ func TestGuardPasses(t *testing.T) {
 		{name: "esp32 german", id: idESP32DE, a: artESP32DE, c: keepChoice},
 		{name: "solo1", id: idSolo1, a: artSolo1, c: keepChoice},
 		{name: "c3", id: idC3, a: artC3, c: keepChoice},
-		{name: "s2cdc", id: idS2CDC, a: artS2CDC, c: keepChoice},
+		{name: "p4 below revision 3", id: idP4, a: artP4, c: keepChoice},
 		{name: "p4r3", id: idP4R3, a: artP4R3, c: keepChoice},
 		{name: "choice without release", id: idESP8266, a: artTasmota, c: Choice{}},
 		{name: "url with port and base path", id: idESP8266, a: artTasmota, c: keepChoice, url: "http://fw.lan:8080/tasmofleet/fw/16.0.0/tasmota.bin.gz"},
@@ -214,9 +215,11 @@ func TestGuardRule7Variant(t *testing.T) {
 		{name: "flag set but artifact is not the chosen variant", id: idESP8266, a: art("tasmota-lite.bin.gz", model.ChipESP8266, "lite", ""), c: changeTo("sensors"), want: ErrVariantChange},
 		{name: "flag set without a chosen variant", id: idESP8266, a: artSensors, c: Choice{Release: rel, AllowVariantChange: true}, want: ErrVariantChange},
 		{name: "esp32 variant change without flag", id: idESP32, a: art("tasmota32-lvgl.bin", model.ChipESP32, "lvgl", ""), c: keepChoice, want: ErrVariantChange},
-		{name: "s2cdc device gets plain s2", id: idS2CDC, a: art("tasmota32s2.bin", model.ChipESP32S2, "tasmota", ""), c: keepChoice, want: ErrVariantChange},
-		{name: "s2 device gets s2cdc", id: idS2, a: artS2CDC, c: keepChoice, want: ErrVariantChange},
-		{name: "p4r3 device gets plain p4", id: idP4R3, a: art("tasmota32p4.bin", model.ChipESP32P4, "tasmota", ""), c: keepChoice, want: ErrVariantChange},
+		// #85 review H1: an S2 build is never provable, whatever the choice.
+		{name: "s2 device gets s2", id: idS2, a: art("tasmota32s2.bin", model.ChipESP32S2, "tasmota", ""), c: changeTo("tasmota"), want: ErrUnknownHardware},
+		{name: "s2 device gets s2cdc", id: idS2, a: artS2CDC, c: changeTo("tasmota"), want: ErrUnknownHardware},
+		{name: "p4r3 device gets plain p4", id: idP4R3, a: artP4, c: changeTo("tasmota"), want: ErrVariantChange},
+		{name: "p4 device gets p4r3", id: idP4, a: artP4R3, c: changeTo("tasmota"), want: ErrVariantChange},
 		{name: "minimal device without choice", id: idMinimal, a: artTasmota, c: keepChoice, want: ErrVariantChange},
 		{name: "unknown variant device", id: idUnknownV, a: artTasmota, c: keepChoice, want: ErrVariantChange},
 		{name: "minimal stage when target is refused", id: idUnknownV, a: artMinimal, c: keepChoice, want: ErrVariantChange},

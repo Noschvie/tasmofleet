@@ -75,6 +75,27 @@ func TestFleetNeedsMixedFleet(t *testing.T) {
 	}
 }
 
+// Why (#85 review H1): a device in safeboot is sent "tasmota" by default. On ESP32-S2 that default
+// cannot be resolved to a build (s2 and s2cdc report the same name), so the device is skipped
+// instead of prefetching a build that may not be its own; ESP32-P4 gets the build of its chip
+// revision.
+func TestFleetNeedsSafebootTwoBuildChips(t *testing.T) {
+	rel := Release{Version: "16.1.0", Files: []string{"tasmota32s2.bin", "tasmota32s2cdc.bin", "tasmota32p4.bin", "tasmota32p4r3.bin"}}
+	devs := []model.Device{
+		dev(1, "s2-safeboot", model.Identity{Family: model.ChipESP32S2, Hardware: "ESP32-S2 v0.0", Version: "16.0.0", Image: "release-safeboot", Variant: "safeboot"}),
+		dev(2, "p4-safeboot", model.Identity{Family: model.ChipESP32P4, Hardware: "ESP32-P4 v3.1", Version: "16.0.0", Image: "release-safeboot", Variant: "safeboot"}),
+	}
+	n := FleetNeeds(rel, devs)
+	if !slices.Equal(n.Files, []string{"tasmota32p4r3.bin"}) {
+		t.Fatalf("files = %v, want only the P4 r3 build", n.Files)
+	}
+	for _, d := range n.Devices {
+		if d.Name == "s2-safeboot" && (len(d.Files) != 0 || d.Skip == "") {
+			t.Errorf("S2 in safeboot must be skipped with a reason: %+v", d)
+		}
+	}
+}
+
 // Why: a release that does not offer a file the fleet needs must be visible,
 // not silently counted as "covered".
 func TestFleetNeedsReportsFilesTheReleaseLacks(t *testing.T) {

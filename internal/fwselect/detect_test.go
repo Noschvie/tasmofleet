@@ -129,8 +129,9 @@ func TestDetectImageTags(t *testing.T) {
 		// cannot say which one runs, so the variant stays unknown until the user picks a build.
 		{"s2 build not provable", "16.0.0(release-tasmota32)", "ESP32-S2", "", "unknown", "", model.ChipESP32S2, false, "16.0.0", nil},
 		{"p4 build not provable", "16.0.0(release-tasmota32)", "ESP32-P4", "", "unknown", "", model.ChipESP32P4, false, "16.0.0", nil},
-		// Up to v12.0 the solo1 build reported "tasmota32" as well; on single-core hardware the
-		// build is not provable from the tag, so unknown instead of a mismatch or a guess.
+		// No official build reports "tasmota32" on single-core hardware (solo1 reports "solo1" since
+		// v12.5, when the tag was introduced): the build is not provable, so unknown instead of a
+		// mismatch or a guess.
 		{"tasmota32 on single core", "16.0.0(release-tasmota32)", "ESP32-S0WD", "", "unknown", "", model.ChipESP32, true, "16.0.0", nil},
 		// ESP32 variant builds report their own CODE_IMAGE_STR, not the file name.
 		{"esp32 webcam", "16.0.0(release-webcam)", "ESP32-D0WD", "", "webcam", "", model.ChipESP32, false, "16.0.0", nil},
