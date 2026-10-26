@@ -10,6 +10,12 @@ import (
 	paho "github.com/eclipse/paho.mqtt.golang"
 )
 
+// Why (2): the first fix closed the listener beside mochi's own Serve and
+// Close; with connections still being accepted, mochi's ClientsWg.Add (in
+// attachClient) ran concurrently with its ClientsWg.Wait (race detector, FULL
+// run on 90b2edc). Close must first end every accepted connection and wait
+// for them, so nothing can register while mochi waits. Run with -race.
+//
 // Why: the v0.13.0 tag run hung for 10 minutes in a test cleanup inside
 // Broker.Close. mochi v2.7.9 closes a listener's clients through
 // Clients.GetByListener, which takes the clients' RLock and then RLocks again
@@ -44,6 +50,12 @@ func TestBrokerCloseWhileClientsDisconnect(t *testing.T) {
 				}
 			})
 		}
+		// A connection that never sends CONNECT is not a client yet; Close must end it too.
+		silent, err := net.Dial("tcp", b.addr)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer silent.Close() //nolint:errcheck // closed by the broker; test teardown
 		// What a disconnecting client does to the clients map (attachClient ->
 		// Clients.Delete), as often as the window needs to be hit.
 		stop := make(chan struct{})

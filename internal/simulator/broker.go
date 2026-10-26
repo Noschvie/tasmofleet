@@ -1,9 +1,12 @@
 package simulator
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
+	"sync"
 	"sync/atomic"
 
 	mqtt "github.com/mochi-mqtt/server/v2"
@@ -18,6 +21,7 @@ import (
 type Broker struct {
 	srv  *mqtt.Server
 	addr string
+	lst  *simListener
 	subs atomic.Int64
 }
 
@@ -30,14 +34,14 @@ func StartBroker() (*Broker, error) {
 	if err := srv.AddHook(new(auth.AllowHook), nil); err != nil {
 		return nil, fmt.Errorf("simulator: broker hook: %w", err)
 	}
-	l := listeners.NewTCP(listeners.Config{ID: "sim", Address: "127.0.0.1:0"})
+	l := &simListener{srv: srv, conns: map[net.Conn]struct{}{}}
 	if err := srv.AddListener(l); err != nil {
 		return nil, fmt.Errorf("simulator: broker listener: %w", err)
 	}
 	if err := srv.Serve(); err != nil {
 		return nil, fmt.Errorf("simulator: broker serve: %w", err)
 	}
-	return &Broker{srv: srv, addr: l.Address()}, nil
+	return &Broker{srv: srv, addr: l.Address(), lst: l}, nil
 }
 
 // URL is the broker address for paho, e.g. tcp://127.0.0.1:41234.
@@ -59,16 +63,95 @@ func (b *Broker) Subscribe(filter string, fn func(topic string, payload []byte, 
 
 // Close stops the broker and disconnects all clients.
 //
-// The listeners are closed here first, with closeClientsOf, and only then
-// mochi's Server.Close runs (it closes each listener only once, so its own
-// client closer is skipped). mochi v2.7.9 closes a listener's clients through
-// Clients.GetByListener, which RLocks the clients map and RLocks it again in
-// Len; a client disconnecting at that moment queues Delete (Lock) between the
-// two and the second RLock waits for it forever. That hung the v0.13.0 tag
-// run in a test cleanup (TestBrokerCloseWhileClientsDisconnect).
+// The listener is shut down first (simListener.shutdown): no new connection,
+// every accepted one ended and waited for. Only then mochi's Server.Close runs;
+// its listener close is a no-op by then and its ClientsWg.Wait has nothing left
+// to race with. Two mochi v2.7.9 problems are avoided this way: its own client
+// closer (Clients.GetByListener) RLocks the clients map recursively and
+// deadlocks against a disconnecting client's Delete (hung the v0.13.0 tag run),
+// and its TCP listener lets attachClient call ClientsWg.Add while Close is in
+// ClientsWg.Wait (race detector, FULL run on 90b2edc).
 func (b *Broker) Close() error {
-	b.srv.Listeners.CloseAll(func(listener string) { closeClientsOf(b.srv, listener) })
+	b.lst.shutdown()
 	return b.srv.Close()
+}
+
+// simListener is a mochi listener on 127.0.0.1:0 that, unlike listeners.TCP,
+// keeps track of every accepted connection until its establish call returned.
+type simListener struct {
+	srv    *mqtt.Server
+	listen net.Listener
+	log    *slog.Logger
+
+	mu    sync.Mutex
+	ended bool
+	conns map[net.Conn]struct{}
+	wg    sync.WaitGroup // accepted connections whose establish call has not returned
+}
+
+func (l *simListener) ID() string       { return "sim" }
+func (l *simListener) Protocol() string { return "tcp" }
+func (l *simListener) Address() string  { return l.listen.Addr().String() }
+
+func (l *simListener) Init(log *slog.Logger) error {
+	l.log = log
+	var err error
+	l.listen, err = (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0") // mochi gives Init no context
+	return err
+}
+
+// Serve accepts until shutdown. A connection is registered (wg.Add) before its
+// goroutine starts, under the same lock shutdown takes, so shutdown either sees
+// it or it is refused.
+func (l *simListener) Serve(establish listeners.EstablishFn) {
+	for {
+		conn, err := l.listen.Accept()
+		if err != nil {
+			return // closed by shutdown
+		}
+		l.mu.Lock()
+		if l.ended {
+			l.mu.Unlock()
+			_ = conn.Close() // shutting down: refused
+			continue
+		}
+		l.conns[conn] = struct{}{}
+		l.wg.Add(1)
+		l.mu.Unlock()
+		go func() {
+			defer l.wg.Done()
+			if err := establish(l.ID(), conn); err != nil {
+				l.log.Debug("simulator broker: connection ended", "err", err)
+			}
+			l.mu.Lock()
+			delete(l.conns, conn)
+			l.mu.Unlock()
+		}()
+	}
+}
+
+// Close is what mochi's Server.Close calls; Broker.Close has shut the
+// listener down before, so mochi's closer (closeClients) is never used.
+func (l *simListener) Close(_ listeners.CloseFn) { l.shutdown() }
+
+// shutdown stops accepting, disconnects the registered clients (closeClientsOf),
+// closes every accepted connection (also those that never sent CONNECT) and
+// waits until all establish calls returned. It is idempotent.
+func (l *simListener) shutdown() {
+	l.mu.Lock()
+	first := !l.ended
+	l.ended = true
+	l.mu.Unlock()
+	if first {
+		_ = l.listen.Close() // stops Accept; an error means it is closed already
+		closeClientsOf(l.srv, l.ID())
+		l.mu.Lock()
+		for c := range l.conns {
+			_ = c.Close() // ends attachClient's read; already closed is fine
+		}
+		l.mu.Unlock()
+	}
+	l.wg.Wait()
 }
 
 // closeClientsOf disconnects the clients of one listener, reading the clients
