@@ -31,6 +31,8 @@ type Discovery interface {
 	Undismiss(ctx context.Context, actor string, id int64) error
 	Scan(id discovery.ScanID) (discovery.ScanStatus, bool)
 	Scans() []discovery.ScanStatus
+	// Unidentified lists the topics seen on MQTT that are not a proposal (spec 11.3a).
+	Unidentified() []discovery.Unidentified
 }
 
 func (h *handler) registerDiscovery(route func(string, func(http.Handler) http.Handler, http.HandlerFunc), op, adm func(http.Handler) http.Handler) {
@@ -73,6 +75,8 @@ type discView struct {
 	// Unverified is the stronger confirmation for "Apply" when the new address could not
 	// prove the device's MAC.
 	Unverified *unverifiedMove
+	// Unident are the topics MQTT saw that are no proposal yet, with the reason.
+	Unident []moveRow
 }
 
 // propRow is one discovered device of the New devices table.
@@ -89,6 +93,7 @@ type propRow struct {
 	LastText        string
 	Ignored         bool
 	AddHref         string
+	Offline         bool // its MQTT LWT says Offline: it is added as seen, without a probe
 }
 
 // moveRow is a known device that announced itself at a new address (or a conflict).
@@ -181,6 +186,19 @@ func (h *handler) discoveryData(r *http.Request) discView {
 			v.Rows = append(v.Rows, h.propRow(base, now, p, true))
 		}
 	}
+	for _, u := range h.d.Discovery.Unidentified() {
+		state := "online"
+		if !u.Online {
+			state = "offline"
+		}
+		addr := u.IP
+		if u.Hostname != "" && addr != "" {
+			addr = u.Hostname + " · " + addr
+		} else if addr == "" {
+			addr = u.Hostname
+		}
+		v.Unident = append(v.Unident, moveRow{Name: u.Topic, Seen: u.SeenAt, SeenText: agoWords(now, u.SeenAt) + " · " + state, New: addr, Why: capitalize(u.Reason) + "."})
+	}
 	// the order they were discovered in, ignored ones after the new ones
 	sort.SliceStable(v.Rows, func(i, j int) bool {
 		if v.Rows[i].Ignored != v.Rows[j].Ignored {
@@ -196,7 +214,7 @@ func (h *handler) propRow(base string, now time.Time, p discovery.Proposal, igno
 		Address: netaddr.Display(p.Device.Address, p.Device.Port, "http"), MAC: strings.ToUpper(p.Device.MAC),
 		Source: viaText(p.Via), MQTT: p.Via == discovery.ViaMQTT, First: p.FirstSeen, Last: p.SeenAt,
 		FirstText: dayStamp(now, p.FirstSeen), LastText: agoWords(now, p.SeenAt), Ignored: ignored,
-		AddHref: base + "/devices/new?proposal=" + strconv.FormatInt(p.ID, 10)}
+		AddHref: base + "/devices/new?proposal=" + strconv.FormatInt(p.ID, 10), Offline: p.LWT == "Offline"}
 	row.Source = strings.ToUpper(row.Source[:1]) + row.Source[1:]
 	if row.Label == "" {
 		row.Label, row.Sub = p.Device.Topic, "No friendly name reported"

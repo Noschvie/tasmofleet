@@ -221,6 +221,9 @@ templ discoveredPage(p discView) {
 										if r.Ignored {
 											@ui.Badge(ui.ToneNeutral, "Ignored")
 										}
+										if r.Offline {
+											@ui.Badge(ui.ToneWarn, "Offline")
+										}
 									</span>
 									<span class="add-sub">{ r.Sub }</span>
 								</td>
@@ -242,7 +245,8 @@ templ discoveredPage(p discView) {
 										<button type="submit" class="btn btn-sm" formaction={ templ.SafeURL(p.Base + "/discovery/proposals/" + strconv.FormatInt(r.ID, 10) + "/undismiss") }>Restore</button>
 									} else {
 										<button type="submit" class="btn btn-ghost add-ign" formaction={ templ.SafeURL(p.Base + "/discovery/proposals/" + strconv.FormatInt(r.ID, 10) + "/dismiss") }>Ignore</button>
-										<a class="btn btn-primary btn-sm" href={ templ.SafeURL(r.AddHref) }>Add…</a>
+										<a class="btn btn-sm" href={ templ.SafeURL(r.AddHref) } title="Add with a web password">Add…</a>
+										<button type="submit" class="btn btn-primary btn-sm" formaction={ templ.SafeURL(p.Base + "/discovery/proposals/" + strconv.FormatInt(r.ID, 10) + "/accept") } name="version" value={ r.Version }>Add</button>
 									}
 								</td>
 							</tr>
@@ -264,6 +268,9 @@ templ discoveredPage(p discView) {
 								if r.Ignored {
 									@ui.Badge(ui.ToneNeutral, "Ignored")
 								}
+								if r.Offline {
+									@ui.Badge(ui.ToneWarn, "Offline")
+								}
 							</span>
 							<span class="add-card-meta"><span data-visual-mask>{ r.Address }</span>{ metaTail(r.Model, r.Firmware) }</span>
 							<span class="add-card-src">{ r.Source } · last seen <time datetime={ r.Last.UTC().Format("2006-01-02T15:04:05Z") }>{ r.LastText }</time></span>
@@ -272,7 +279,8 @@ templ discoveredPage(p discView) {
 							} else {
 								<div class="add-card-acts">
 									<button type="submit" class="btn" formaction={ templ.SafeURL(p.Base + "/discovery/proposals/" + strconv.FormatInt(r.ID, 10) + "/dismiss") }>Ignore</button>
-									<a class="btn btn-primary" href={ templ.SafeURL(r.AddHref) }>Add…</a>
+									<a class="btn" href={ templ.SafeURL(r.AddHref) }>Add…</a>
+									<button type="submit" class="btn btn-primary" formaction={ templ.SafeURL(p.Base + "/discovery/proposals/" + strconv.FormatInt(r.ID, 10) + "/accept") } name="version" value={ r.Version }>Add</button>
 								</div>
 							}
 						</div>
@@ -281,6 +289,30 @@ templ discoveredPage(p discView) {
 			</div>
 		}
 	</form>
+	if len(p.Unident) > 0 {
+		@unidentSection(p.Unident)
+	}
+}
+
+// unidentSection lists the topics MQTT saw that are no proposal yet (spec 11.3a): offline
+// devices without a discovery config, unanswered Status 5, addresses outside the networks.
+templ unidentSection(rows []moveRow) {
+	<section class="add-moves" aria-label="Seen on MQTT, not identified yet">
+		<div class="add-moves-head">
+			<h2>Seen on MQTT, not identified yet ({ strconv.Itoa(len(rows)) })</h2>
+			<div class="add-moves-sub">These topics are on the broker, but TasmoFleet does not know their MAC yet, so they cannot be added. They appear under New devices once identified.</div>
+		</div>
+		for _, m := range rows {
+			<div class="add-move">
+				<span class="add-move-name">
+					<span class="mono">{ m.Name }</span>
+					<span class="add-move-seen"><time datetime={ m.Seen.UTC().Format("2006-01-02T15:04:05Z") }>{ m.SeenText }</time></span>
+				</span>
+				<span class="add-move-addr mono" data-visual-mask>{ dash(m.New) }</span>
+				<span class="add-move-why">{ m.Why }</span>
+			</div>
+		}
+	</section>
 }
 
 // moveSection lists known devices that reported a new address (or a conflict): Dismiss, and

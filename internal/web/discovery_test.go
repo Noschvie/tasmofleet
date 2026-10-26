@@ -28,7 +28,10 @@ type fakeDiscovery struct {
 	unproven  bool // AcceptVersion demands the unverified-move confirmation
 	confirmed []string
 	passwords []string // discovery.DevicePassword of each AcceptVersion
+	unident   []discovery.Unidentified
 }
+
+func (f *fakeDiscovery) Unidentified() []discovery.Unidentified { return f.unident }
 
 func (f *fakeDiscovery) Ignored(context.Context) ([]discovery.Proposal, error) { return f.ignored, nil }
 func (f *fakeDiscovery) Undismiss(_ context.Context, _ string, id int64) error {
@@ -378,5 +381,41 @@ func TestDiscoveryAcceptUsesTheDefaultPasswordOnlyWhenAsked(t *testing.T) {
 	_, body := e.do(t, "GET", "/discovery", "admin", nil)
 	if strings.Contains(body, "fleet-fake-pw") {
 		t.Fatal("the default password must never reach the browser")
+	}
+}
+
+// Why: #45, a device seen on MQTT must be addable as seen (MAC and topic kept)
+// without an HTTP probe; the row's "Add" accepts the shown version directly,
+// and an offline device says so.
+func TestDiscoveredRowAddsDirectlyAndShowsOffline(t *testing.T) {
+	e, fd := setupDiscovery(t)
+	fd.props[0].Device.Name, fd.props[0].Device.Topic, fd.props[0].LWT = "Attic fan", "attic-fan", "Offline"
+	_, body := e.do(t, "GET", "/discovery", "admin", nil)
+	for _, want := range []string{`formaction="/tf/discovery/proposals/1/accept"`, `name="version" value="v1"`, ">Offline<"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("Discovered tab lacks %q", want)
+		}
+	}
+	r, _ := e.do(t, "POST", "/discovery/proposals/1/accept", "admin", url.Values{"version": {"v1"}, "id": {"1:v1", "7:v7"}})
+	if r.StatusCode != 303 || len(fd.accepted) != 1 || fd.accepted[0] != 1 || fd.versions[0] != "v1" {
+		t.Fatalf("direct add: status %d, accepted %v %v", r.StatusCode, fd.accepted, fd.versions)
+	}
+}
+
+// Why: "40 on the broker, 24 in TasmoFleet" must be explainable on the page:
+// topics MQTT saw but discovery could not turn into a proposal are listed
+// with the reason.
+func TestDiscoveredTabListsUnidentifiedTopics(t *testing.T) {
+	e, fd := setupDiscovery(t)
+	fd.unident = []discovery.Unidentified{{Topic: "attic-fan", LWT: "Offline", SeenAt: time.Now(), Reason: "offline: it cannot be asked for its MAC until it comes online"}}
+	_, body := e.do(t, "GET", "/discovery", "admin", nil)
+	for _, want := range []string{"Seen on MQTT, not identified yet (1)", "attic-fan", "Offline: it cannot be asked for its MAC until it comes online."} {
+		if !strings.Contains(body, want) {
+			t.Errorf("Discovered tab lacks %q", want)
+		}
+	}
+	fd.unident = nil
+	if _, body := e.do(t, "GET", "/discovery", "admin", nil); strings.Contains(body, "not identified yet") {
+		t.Error("the section must be left out when every topic is identified")
 	}
 }
