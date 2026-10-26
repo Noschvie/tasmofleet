@@ -14,6 +14,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/mqttbus"
 	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/nofuturekid/tasmofleet/internal/tasmota"
 )
 
 // MQTT-first discovery (spec 11.3a, issue #47): devices that publish no
@@ -695,4 +696,145 @@ func TestReprobeOfDeviceWithoutMACIsAuditedWithTheAnsweringMAC(t *testing.T) {
 	if probed != 1 || len(det) != 1 || !strings.Contains(det[0], `"answered_mac":"02:00:5e:d2:2c:14"`) || !strings.Contains(det[0], `"mac_bound":false`) {
 		t.Fatalf("probes = %d, reprobe audits = %q", probed, det)
 	}
+}
+
+// ---- #45: claims outside the device networks, re-evaluated when they grow ----
+
+const farMAC = "02:00:5e:99:99:99"
+
+// newGrowEnv is an MQTT env whose device networks (172.31.0.0/16) can grow
+// by 10.9.0.0/16 at runtime, as the settings page does.
+func newGrowEnv(t *testing.T) (*mqttEnv, func()) {
+	t.Helper()
+	nets := tasmota.NewNetworkSet([]netip.Prefix{netip.MustParsePrefix("172.31.0.0/16")})
+	e := newMQTTEnv(t, func(o *Options) { o.NetworkSet = nets })
+	e.mgr.recheckNetworks(bg) // what Run does at its start
+	grow := func() {
+		nets.Set([]netip.Prefix{netip.MustParsePrefix("172.31.0.0/16"), netip.MustParsePrefix("10.9.0.0/16")})
+		e.mgr.recheckNetworks(bg)
+	}
+	return e, grow
+}
+
+func farConfig() mqttbus.Message { return discoveryMsg("02005E999999", "10.9.9.9", "far") }
+
+// Why (review of #45, M1): a reconnect replays the same discovery config
+// within the 15 s MAC gap. The rate-limited repeat must not wipe the kept
+// claim, or the device is invisible again and adding its network does nothing.
+func TestRepeatedOutsideConfigKeepsItsClaim(t *testing.T) {
+	e, grow := newGrowEnv(t)
+	e.feed(farConfig(), farConfig())
+	if u := e.mgr.Unidentified(); len(u) != 1 || !strings.Contains(u[0].Reason, "outside the device networks") {
+		t.Fatalf("unidentified = %+v, want far listed as outside", u)
+	}
+	grow()
+	if p := onlyNew(t, e.env); p.Device.MAC != farMAC || p.Device.Address != "10.9.9.9" {
+		t.Fatalf("proposal = %+v", p)
+	}
+	if u := e.mgr.Unidentified(); len(u) != 0 {
+		t.Fatalf("a proposed device is still listed: %+v", u)
+	}
+}
+
+// Why (review of #45, M2): a kept claim ages. An old address must not become
+// a proposal (it could be accepted unverified at the wrong host); the topic is
+// asked again with one Status 5 instead, and the fresh answer decides.
+func TestStaleOutsideClaimIsAskedAgainNotProposed(t *testing.T) {
+	e, grow := newGrowEnv(t)
+	answer := `{"StatusNET":{"Hostname":"far","IPAddress":"10.9.9.9","Mac":"02:00:5E:99:99:99"}}`
+	askAndAnswer(e, "far", answer, 0)
+	e.clk.add(claimMaxAge + time.Minute)
+	grow()
+	if p := mustProposals(t, e.env); len(p) != 0 {
+		t.Fatalf("a claim older than %v became %+v", claimMaxAge, p)
+	}
+	e.mgr.askDue(bg)
+	if got := e.bus.sent(); len(got) != 2 || got[1] != "far STATUS 5" {
+		t.Fatalf("commands = %q, want a second Status 5 to far", got)
+	}
+	e.feed(mqttbus.Message{Kind: mqttbus.KindStatus, Topic: "far", Suffix: "STATUS5", Payload: []byte(answer)})
+	if p := onlyNew(t, e.env); p.Device.Address != "10.9.9.9" {
+		t.Fatalf("proposal = %+v", p)
+	}
+}
+
+// Why (review of #45, M2): a newer sighting of the same MAC (a scan, say)
+// knows better where the device is; the older kept claim must not overwrite
+// that proposal when the networks grow.
+func TestKeptClaimDoesNotOverwriteNewerSighting(t *testing.T) {
+	e, grow := newGrowEnv(t)
+	e.feed(farConfig())
+	e.clk.add(time.Minute)
+	if _, err := e.mgr.consider(bg, candidate{via: ViaScan, mac: farMAC, ip: mustAddr("172.31.13.77"), port: 80, name: "far"}); err != nil {
+		t.Fatal(err)
+	}
+	grow()
+	if p := onlyNew(t, e.env); p.Device.Address != "172.31.13.77" {
+		t.Fatalf("proposal = %+v, the newer scan sighting must win", p)
+	}
+}
+
+// Why (review of #45, M2): once the topic belongs to an inventory device, a
+// claim kept from before must not be applied to that device later.
+func TestKeptClaimIsDroppedWhenTopicBecomesKnown(t *testing.T) {
+	e, grow := newGrowEnv(t)
+	e.feed(farConfig())
+	id, err := e.inv.Create(bg, "t", model.Device{Name: "far", Address: "172.31.13.9", Topic: "far"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.feed(mqttbus.Message{Kind: mqttbus.KindLWT, Topic: "far", Payload: []byte("Online"), Retained: true})
+	grow()
+	if p := mustProposals(t, e.env); len(p) != 0 {
+		t.Fatalf("proposals = %+v", p)
+	}
+	if d, _ := e.inv.Get(bg, id); d.Address != "172.31.13.9" || d.MAC != "" {
+		t.Fatalf("the stored device was changed by an old claim: %+v", d)
+	}
+}
+
+// Why (review of #45): a kept claim of a stored device's MAC goes through the
+// normal rules when the networks grow: for a device with a password it is an
+// address-change proposal, never a move (D8).
+func TestKeptClaimOfCredentialedDeviceIsAddressChange(t *testing.T) {
+	e, grow := newGrowEnv(t)
+	id, err := e.inv.Create(bg, "t", model.Device{Name: "lamp", Address: "172.31.13.31", MAC: farMAC, HTTPPassword: "fake-test-password"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.feed(farConfig())
+	grow()
+	if d, _ := e.inv.Get(bg, id); d.Address != "172.31.13.31" {
+		t.Fatalf("a credentialed device was moved to %s", d.Address)
+	}
+	if p := mustProposals(t, e.env); len(p) != 1 || p[0].Kind != KindAddressChange || p[0].ExistingID != id {
+		t.Fatalf("proposals = %+v, want one address change", p)
+	}
+}
+
+// Why: kept claims live in the topic table; detaching MQTT discovery or
+// evicting the topic drops them, so nothing comes back from a dropped table.
+func TestDetachAndEvictionDropKeptClaims(t *testing.T) {
+	t.Run("detach", func(t *testing.T) {
+		e, grow := newGrowEnv(t)
+		e.feed(farConfig())
+		e.unsub()
+		e.unsub = e.mgr.Attach(e.bus)
+		grow()
+		if p := mustProposals(t, e.env); len(p) != 0 {
+			t.Fatalf("proposals = %+v", p)
+		}
+	})
+	t.Run("eviction", func(t *testing.T) {
+		e, grow := newGrowEnv(t)
+		e.feed(farConfig())
+		for i := 0; i < maxTopics; i++ {
+			e.clk.add(time.Millisecond)
+			e.feed(mqttbus.Message{Kind: mqttbus.KindLWT, Topic: "t" + itoa(i), Payload: []byte("Offline"), Retained: true})
+		}
+		grow()
+		if p := mustProposals(t, e.env); len(p) != 0 {
+			t.Fatalf("proposals = %+v", p)
+		}
+	})
 }

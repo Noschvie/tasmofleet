@@ -20,7 +20,7 @@ A **version** is a SHA-256 digest (full length) over everything an admin sees an
 | D1  | Discovery never creates a device. Only `Accept` (admin) does, through `inventory.Create`.                                                                                                                                                                 |
 | D2  | An existing device changes only through `inventory.Upsert` (its identity rules decide) or through `Accept`. Candidate topic, full topic and name are never merged into a record matched by MAC.                                                           |
 | D3  | What `Upsert` refuses becomes a proposal: `ErrNeedsVerification` is `address-change`, `ErrIdentityMismatch` is `conflict`. A conflict cannot be accepted.                                                                                                |
-| D4  | Fields are sanitised before storing (control characters, length, topic charset, MAC format, topic MAC equals payload MAC, payload at most 16 KiB). Addresses outside `DEVICE_NETWORKS` (per the dialer rule) are dropped.                                   |
+| D4  | Fields are sanitised before storing (control characters, length, topic charset, MAC format, topic MAC equals payload MAC, payload at most 16 KiB). Addresses outside `DEVICE_NETWORKS` (per the dialer rule) never become proposals; such a claim is kept in the in-memory topic table (bounded, D12) and evaluated again when `DEVICE_NETWORKS` changes, only if it is at most 1 h old and no newer sighting of its MAC is stored (#45).                                   |
 | D5  | A scan checks every CIDR against `DEVICE_NETWORKS` and the 1024 address cap before any packet. Loopback and link-local are skipped unless a device network names them explicitly. Probes carry no credentials, 16 in flight, 2 s, one retry on timeout.  |
 | D6  | MQTT work is bounded: payloads over 16 KiB are dropped before queueing, messages are coalesced per MAC, at most 4096 messages and 8 MiB queued, one evaluation per MAC per 15 s (the rate table never resets: entries expire, a full table refuses new MACs), one worker. Proposals are capped at 500 visible **per class** (unknown devices versus address-change and conflict, so fake MACs cannot hide the spoofing signal) and expire after 30 days without a sighting. |
 | D7  | `Accept` of a proposal applies only the version the admin saw (`AcceptVersion`). A newer sighting with other content has another version and the old confirmation fails with `ErrStale`. Accept and the evaluation of sightings share one lock, so the proposal cannot change between the check and the write. The web form always sends the shown version and refuses a POST without it. |
@@ -54,6 +54,15 @@ A **version** is a SHA-256 digest (full length) over everything an admin sees an
   up; the bus-wide limit of one query per second still holds. A spoofed discovery config
   that names a real topic marks it as resolved, so that topic is not asked (its own
   discovery config or a scan still finds it). Low.
+- **Kept outside-networks claims (review of #82, #45).** A claim refused only for its
+  address is re-evaluated when the device networks grow. Its address can be stale: the
+  claim is used only up to 1 h after it was seen (older: the topic is asked again with
+  Status 5), a newer stored sighting of the MAC wins, and the claim is dropped when the
+  topic becomes an inventory device. Within that hour a device that moved without a new
+  message can still be proposed at its old address; Accept checks the MAC there (D8,
+  D15 for offline topics). The re-evaluation sends no MQTT command, but the inventory
+  rules may probe the claimed address without credentials for a known MAC, as for any
+  sighting. Low.
 - **Synchronous MAC check (L4, review of #66).** The credential-less Status 5 before a
   reprobe runs on the discovery loop; at Attach, many devices without identity coming
   online at once delay the processing of queued messages by up to one HTTP timeout each

@@ -35,6 +35,10 @@ const (
 	askGrace = 30 * time.Second
 	// askReplyWindow is how long after the question a STATUS5 reply is taken (D13).
 	askReplyWindow = 30 * time.Second
+	// claimMaxAge bounds how old a kept outside-networks claim may be when the
+	// device networks grow (#45). An older one is not proposed (its address may
+	// be stale); the topic is asked again with Status 5 instead.
+	claimMaxAge = time.Hour
 )
 
 // topicState is what MQTT told about one %topic%.
@@ -53,7 +57,8 @@ type topicState struct {
 	// its address lies outside the device networks. It is evaluated again
 	// when DEVICE_NETWORKS changes (#45): Tasmota repeats neither its
 	// discovery config nor a Status 5 answer on its own.
-	claim *candidate
+	claim   *candidate
+	claimAt time.Time // when claim was seen
 }
 
 func (s *topicState) online() bool { return s.live || s.lwt == "Online" }
@@ -130,7 +135,20 @@ func (m *Manager) noteDiscoveryTopic(c candidate) {
 		return
 	}
 	s := m.stateFor(c.topic, m.clk.Now())
-	s.mac, s.ip, s.reason, s.claim = c.mac, c.ip.String(), "", nil
+	s.mac, s.ip = c.mac, c.ip.String()
+}
+
+// dropClaim forgets the kept claim and reason of topic: a newer claim of the
+// topic is being evaluated.
+func (m *Manager) dropClaim(topic string) {
+	if topic == "" {
+		return
+	}
+	m.tmu.Lock()
+	defer m.tmu.Unlock()
+	if s := m.topics[topic]; s != nil {
+		s.reason, s.claim = "", nil
+	}
 }
 
 // setReason records why a resolved topic did not become a proposal.
@@ -147,44 +165,72 @@ func (m *Manager) setReason(topic, reason string) {
 
 // keepOutsideClaim records that the claim c of topic was refused because its
 // address lies outside the device networks, and keeps it for recheckNetworks.
-func (m *Manager) keepOutsideClaim(topic, reason string, c candidate) {
+func (m *Manager) keepOutsideClaim(topic, reason string, c candidate, at time.Time) {
 	if topic == "" {
 		return
 	}
 	m.tmu.Lock()
 	defer m.tmu.Unlock()
 	if s := m.topics[topic]; s != nil {
-		s.reason, s.claim = reason, &c
+		s.reason, s.claim, s.claimAt = reason, &c, at
 	}
+}
+
+// keptClaim is a claim taken out of the topic table for re-evaluation.
+type keptClaim struct {
+	c      candidate
+	at     time.Time
+	reason string
 }
 
 // recheckNetworks evaluates the kept outside-networks claims again when the
 // device networks changed since the last call (the settings page changes them
-// live). It sends nothing to any device: a claim now inside the networks is
-// treated like a new sighting of it (a proposal, or the inventory rules for a
-// known MAC), exactly as if the message had arrived now.
+// live). It sends no MQTT command: a claim now inside the networks is treated
+// like a new sighting of it (a proposal, or the inventory rules for a known
+// MAC), exactly as if the message had arrived now. A claim older than
+// claimMaxAge is not used; its topic is asked again with Status 5 (askDue,
+// with its rate limits). A newer stored sighting of the same MAC wins over a
+// kept claim.
 func (m *Manager) recheckNetworks(ctx context.Context) {
 	nets := m.networks()
 	if slices.Equal(nets, m.seenNets) {
 		return
 	}
 	m.seenNets = nets
-	var claims []candidate
+	now := m.clk.Now()
+	var claims []keptClaim
 	m.tmu.Lock()
 	for _, s := range m.topics {
-		if s.claim != nil && tasmota.IPAllowed(s.claim.ip, nets) {
-			claims = append(claims, *s.claim)
-			s.claim, s.reason = nil, ""
+		if s.claim == nil || !tasmota.IPAllowed(s.claim.ip, nets) {
+			continue
 		}
+		if now.Sub(s.claimAt) > claimMaxAge {
+			s.claim, s.mac, s.asked = nil, "", time.Time{}
+			s.reason = "its address was outside the device networks too long ago; asking it again (Status 5)"
+			continue
+		}
+		claims = append(claims, keptClaim{c: *s.claim, at: s.claimAt, reason: s.reason})
+		s.claim, s.reason = nil, ""
 	}
 	m.tmu.Unlock()
 	if len(claims) == 0 {
 		return
 	}
 	m.log.Info("discovery: device networks changed, evaluating devices seen outside them again", "devices", len(claims))
-	for _, c := range claims {
-		if _, err := m.consider(ctx, c); err != nil && ctx.Err() == nil {
-			m.log.Warn("discovery: could not evaluate device", "mac", c.mac, "err", err)
+	for _, k := range claims {
+		prev, ok, err := m.storedRow(ctx, k.c.mac)
+		if err == nil && ok && prev.SeenAt.After(k.at) {
+			continue // a newer sighting of this MAC knows better
+		}
+		out := ""
+		if err == nil {
+			out, err = m.consider(ctx, k.c)
+		}
+		if err != nil && ctx.Err() == nil {
+			m.log.Warn("discovery: could not evaluate device", "mac", k.c.mac, "err", err)
+		}
+		if err != nil || (out == outIgnored && !tasmota.IPAllowed(k.c.ip, m.networks())) {
+			m.keepOutsideClaim(k.c.topic, k.reason, k.c, k.at) // evaluated again at the next change
 		}
 	}
 }
@@ -247,7 +293,7 @@ func (m *Manager) handleTopic(ctx context.Context, msg mqttbus.Message) {
 	for _, d := range devs {
 		if d.Topic == msg.Topic {
 			m.tmu.Lock()
-			s.known = true
+			s.known, s.claim = true, nil // a kept claim never applies to a stored device later
 			m.tmu.Unlock()
 			if online {
 				m.reprobe(ctx, d, now)
@@ -289,8 +335,8 @@ func (m *Manager) handleStatus5(ctx context.Context, topic string, payload []byt
 	switch {
 	case err != nil && ctx.Err() == nil:
 		m.log.Warn("discovery: could not evaluate device", "mac", c.mac, "err", err)
-	case out == outIgnored:
-		m.keepOutsideClaim(topic, fmt.Sprintf("its address %s is outside the device networks", c.ip), c)
+	case out == outIgnored && !tasmota.IPAllowed(c.ip, m.networks()):
+		m.keepOutsideClaim(topic, fmt.Sprintf("its address %s is outside the device networks", c.ip), c, m.clk.Now())
 	}
 }
 

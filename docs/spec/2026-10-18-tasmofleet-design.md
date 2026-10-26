@@ -845,8 +845,12 @@ broker but not in the list" is visible instead of silent. They cannot be added: 
 MAC to bind. A claim refused only because its address lies outside `DEVICE_NETWORKS`
 (discovery config or Status 5 answer) is kept with its topic and evaluated again as soon as
 the device networks change (settings page, live): Tasmota repeats neither on its own, so
-without this the device would stay listed until a restart (#45). The re-evaluation contacts
-no device and sends no new Status 5.
+without this the device would stay listed until a restart (#45). The re-evaluation sends no
+MQTT command. A kept claim older than 1 hour is not used (its address may be stale); the
+topic is asked again with Status 5 instead. A newer stored sighting of the same MAC wins
+over a kept claim, and a topic that becomes an inventory device drops its claim. After the
+device networks shrink, proposals outside them stay listed until they expire (30 days) but
+cannot be accepted.
 
 **One device, two sources.** Both sources resolve to one proposal by MAC (the proposal row
 is unique per MAC). For a device seen on MQTT the topic, full topic and online state come

@@ -301,15 +301,16 @@ func (m *Manager) handleMessage(ctx context.Context, msg mqttbus.Message) {
 	}
 	m.noteDiscoveryTopic(c)
 	if !m.allowMAC(c.mac) {
-		return
+		return // a kept claim of the topic stays (a reconnect replays the same config)
 	}
+	m.dropClaim(c.topic)
 	out, err := m.consider(ctx, c)
 	switch {
 	case err != nil && ctx.Err() == nil:
 		m.log.Warn("discovery: could not evaluate device", "mac", c.mac, "err", err)
 	case out == outIgnored && !tasmota.IPAllowed(c.ip, m.networks()):
 		m.log.Info("discovery: announced address outside the device networks", "mac", c.mac, "topic", c.topic, "ip", c.ip.String())
-		m.keepOutsideClaim(c.topic, fmt.Sprintf("its announced address %s is outside the device networks", c.ip), c)
+		m.keepOutsideClaim(c.topic, fmt.Sprintf("its announced address %s is outside the device networks", c.ip), c, m.clk.Now())
 	}
 }
 
