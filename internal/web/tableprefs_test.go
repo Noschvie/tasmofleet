@@ -331,9 +331,13 @@ func TestSavePrefNeedsCSRFToken(t *testing.T) {
 // Why: the page size is a user setting: a saved size applies without a URL
 // parameter, an explicit one still wins, and links to the saved size stay short.
 func TestAuditUsesSavedPageSize(t *testing.T) {
-	e, fp := prefsEnv(t)
+	// The events are placed relative to the clock the handler uses: the audit page only
+	// lists the last 7 days, so a fixed calendar date would fall out of the window.
+	now := time.Date(2030, 1, 15, 12, 0, 0, 0, time.UTC)
+	fp := newFakePrefs()
+	e := setupWith(t, func(d *Deps) { d.Prefs = fp; d.Clock = noonClock{now} })
 	for i := 0; i < 60; i++ {
-		e.aud.Record(t.Context(), model.AuditEvent{ID: int64(i), At: time.Date(2026, 10, 19, 10, 0, i%60, 0, time.UTC), Actor: "alice", Action: "device.update", Target: "device:1", Result: "ok"})
+		e.aud.Record(t.Context(), model.AuditEvent{ID: int64(i), At: now.Add(-time.Hour).Add(time.Duration(i) * time.Second), Actor: "alice", Action: "device.update", Target: "device:1", Result: "ok"})
 	}
 	_, body := e.do(t, "GET", "/audit", "admin", nil)
 	if n := strings.Count(body, "detail-row"); n < 25 || n > 26 { // 25 rows, plus the CSS-free class mentions
