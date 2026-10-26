@@ -149,10 +149,10 @@ func (s stalling) Command(ctx context.Context, t tasmota.Target, c string) (json
 	return s.Client.Command(ctx, t, c)
 }
 
-// Why (maintainer decision 2026-10-24): the network facts (IP, gateway, Wi-Fi from Status 5 and
-// Status 11) are details for the device page. Reading them must never hold up first contact
-// (import, add) or "Refresh identity": a device whose Status 11 never answers is identified,
-// listed and its refresh returns at once; the facts are read later in the background.
+// Why (maintainer decision 2026-10-24): the Wi-Fi facts (Status 11) are details for the device
+// page. Reading them must never hold up first contact (import, add) or "Refresh identity": a
+// device whose Status 11 never answers is identified, listed and its refresh returns at once;
+// they are read later in the background.
 func TestFirstContactAndRefreshDoNotWaitForNetworkFacts(t *testing.T) {
 	p, st, id, d, _ := raceSetup(t)
 	var sent []string
@@ -168,7 +168,7 @@ func TestFirstContactAndRefreshDoNotWaitForNetworkFacts(t *testing.T) {
 	if got.Identity.Family == "" || got.MAC == "" {
 		t.Fatalf("first contact must still identify the device: %+v", got)
 	}
-	if err := p.Refresh(ctx, id); err != nil {
+	if err := p.Refresh(ctx, id, ""); err != nil {
 		t.Fatal(err)
 	}
 	if ctx.Err() != nil {
@@ -182,8 +182,10 @@ func TestFirstContactAndRefreshDoNotWaitForNetworkFacts(t *testing.T) {
 	if len(kicked) != 1 || kicked[0] != id {
 		t.Fatalf("refresh must queue the background read of its device, queued %v", kicked)
 	}
-	if dv, _ := st.GetDevice(context.Background(), id); !dv.Net.ReadAt.IsZero() {
-		t.Fatalf("no facts were read yet, but some were stored: %+v", dv.Net)
+	// The refresh stores what its own Status 5 said (hostname, IP: #91); the Wi-Fi facts of
+	// Status 11 come with the background read.
+	if dv, _ := st.GetDevice(context.Background(), id); dv.Net.Hostname == "" || dv.Net.SSID != "" {
+		t.Fatalf("after the refresh: %+v", dv.Net)
 	}
 }
 
@@ -316,7 +318,7 @@ func TestRefreshRepairsAnUnresolvedTopicOnly(t *testing.T) {
 				t.Fatal(err)
 			}
 			p.Client = override{Client: p.Client, reply: map[string]string{"Status": status16}}
-			if err := p.Refresh(context.Background(), id); err != nil {
+			if err := p.Refresh(context.Background(), id, ""); err != nil {
 				t.Fatal(err)
 			}
 			if got, _ := st.GetDevice(context.Background(), id); got.Topic != tc.want {
@@ -348,20 +350,5 @@ func TestDescribeRejectsUnsafeTopicsAndCleansTheName(t *testing.T) {
 	p.Client = override{Client: p.Client, reply: map[string]string{"Status": "{\"Status\":{\"DeviceName\":\"  Wand\u202e\\u0007 TV \",\"Topic\":\"t1\"}}"}}
 	if got, err := p.Describe(context.Background(), d); err != nil || got.Name != "Wand TV" || got.Topic != "t1" {
 		t.Fatalf("name %q topic %q err %v", got.Name, got.Topic, err)
-	}
-}
-
-// Why: a reprobe can be triggered by an MQTT message anyone can publish. The
-// probe owns identity and MQTT facts only: whatever MAC the address answers,
-// a refresh never writes the device's MAC (binding is an admin action, spec
-// 11.1; the general MAC comparison of a refresh is #65).
-func TestRefreshNeverWritesTheMAC(t *testing.T) {
-	p, st, id, d, _ := raceSetup(t) // stored MAC differs from the simulated device's
-	if err := p.Refresh(context.Background(), id); err != nil {
-		t.Fatal(err)
-	}
-	got, err := st.GetDevice(context.Background(), id)
-	if err != nil || got.MAC != d.MAC || len(got.MACs) > 1 {
-		t.Fatalf("MAC after refresh = %q %v (%v), want %q", got.MAC, got.MACs, err, d.MAC)
 	}
 }

@@ -141,6 +141,7 @@ type fakeProber struct {
 	describe model.Device
 	err      error
 	refreshs []model.DeviceID
+	actors   []string
 }
 
 func (f *fakeProber) Describe(_ context.Context, d model.Device) (model.Device, error) {
@@ -150,8 +151,9 @@ func (f *fakeProber) Describe(_ context.Context, d model.Device) (model.Device, 
 	d.MAC, d.Name = f.describe.MAC, f.describe.Name
 	return d, nil
 }
-func (f *fakeProber) Refresh(_ context.Context, id model.DeviceID) error {
+func (f *fakeProber) Refresh(_ context.Context, id model.DeviceID, actor string) error {
 	f.refreshs = append(f.refreshs, id)
+	f.actors = append(f.actors, actor)
 	return f.err
 }
 

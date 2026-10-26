@@ -49,7 +49,8 @@ func (a *runtime) identifyLater(id model.DeviceID) {
 	a.bgWG.Go(func() {
 		ctx, cancel := context.WithTimeout(a.bgContext, identifyTimeout)
 		defer cancel()
-		if err := a.svc.Prober.Refresh(ctx, id); err != nil && a.bgContext.Err() == nil {
+		// Automatic (actor ""): it binds no MAC (discovery D8).
+		if err := a.svc.Prober.Refresh(ctx, id, ""); err != nil && a.bgContext.Err() == nil {
 			a.log.Warn("discovery: first probe of the accepted device failed", "device", id, "err", err)
 		}
 	})

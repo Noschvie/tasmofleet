@@ -472,6 +472,11 @@ func (h *handler) mqttLine(d model.Device) string {
 
 // refreshProblem is the sentence under a failed "Refresh identity".
 func (h *handler) refreshProblem(r *http.Request, err error) string {
+	// Another device answered at the stored address (#65): the prober says what and why.
+	var refused interface{ Refusal() string }
+	if errors.As(err, &refused) {
+		return "Identity not refreshed. " + refused.Refusal()
+	}
 	if msg, ok := deviceProblem(err); ok {
 		return "Identity not refreshed. " + msg
 	}

@@ -5,9 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/nofuturekid/tasmofleet/internal/audit"
 	"github.com/nofuturekid/tasmofleet/internal/events"
 	"github.com/nofuturekid/tasmofleet/internal/fwselect"
 	"github.com/nofuturekid/tasmofleet/internal/inventory"
@@ -21,6 +24,13 @@ type identityStore interface {
 	GetDevice(ctx context.Context, id model.DeviceID) (model.Device, error)
 	UpdateProbe(ctx context.Context, id model.DeviceID, g store.ProbeGuard, r store.ProbeResult) error
 	UpdateNet(ctx context.Context, id model.DeviceID, g store.ProbeGuard, n model.NetFacts) error
+	UpdateIdentityFromMQTT(ctx context.Context, id model.DeviceID, g store.ProbeGuard, topic string, i model.Identity) error
+}
+
+// mqttAsker asks a device on our broker one Status N over MQTT and returns its answer
+// (mqttIdentity.askStatus). errMQTTUnavailable: no connection, or the device is not on our broker.
+type mqttAsker interface {
+	askStatus(ctx context.Context, d model.Device, n int, actor string) (json.RawMessage, error)
 }
 
 // brokerMatcher tells whether a device's MQTT settings point at the broker
@@ -45,6 +55,10 @@ type Prober struct {
 	// Hub, if set, hears of every stored probe result (Refresh, ReadNet) as a device event, so open
 	// device tables reload and show the new firmware, module and network facts. Nil in the CLI.
 	Hub *events.Hub
+	// MQTT, if set, refreshes a device on our broker that HTTP cannot reach (#91). Nil in the CLI.
+	MQTT mqttAsker
+	// Audit records refused refreshes, MAC bindings and MQTT questions. Nil: not recorded (tests).
+	Audit audit.Recorder
 }
 
 // announce tells open pages that the stored facts of a device changed.
@@ -67,6 +81,7 @@ type probed struct {
 	mqttHost string
 	mqttPort int
 	minimal  bool
+	net      model.NetFacts // what Status 5 reported (Wi-Fi facts not included)
 }
 
 func (p *Prober) pause(ctx context.Context) error {
@@ -91,19 +106,52 @@ func (p *Prober) cmd(ctx context.Context, t tasmota.Target, c string) (json.RawM
 
 // probe queries the device. A device on minimal firmware only answers a few
 // commands, so MAC, topic and MQTT capability stay empty there.
-func (p *Prober) probe(ctx context.Context, d model.Device) (probed, error) {
+//
+// Status 5 goes first: it carries the MAC, and verify (if set) checks it before any other
+// command, so a refused device receives the stored credentials once at most (#65). Minimal
+// firmware knows neither Status 5 nor Status 2; Status 2 still decides minimal (spec 5), and
+// verify then runs after it.
+func (p *Prober) probe(ctx context.Context, d model.Device, verify func(probed) error) (probed, error) {
 	t := tasmota.TargetFor(d)
 	var out probed
 	in := fwselect.Inputs{}
 
-	raw2, err := p.Client.Command(ctx, t, "Status 2")
+	no5 := false
+	raw5, err := p.Client.Command(ctx, t, "Status 5")
+	switch {
+	case err == nil:
+		if out.net, err = parseStatus5(raw5, &out); err != nil {
+			return out, err
+		}
+	case errors.Is(err, tasmota.ErrUnknownCommand):
+		no5 = true
+	default:
+		return out, err
+	}
+	check := func() error {
+		if verify == nil {
+			return nil
+		}
+		return verify(out)
+	}
+	if !no5 {
+		if err := check(); err != nil {
+			return out, err
+		}
+	}
+	raw2, err := p.cmd(ctx, t, "Status 2")
 	switch {
 	case err == nil:
 		in.Status2 = raw2
 	case errors.Is(err, tasmota.ErrUnknownCommand):
 		in.Status2, out.minimal = []byte(unknownReply), true
 	default:
-		return out, err
+		return out, fmt.Errorf("status 2: %w", err)
+	}
+	if no5 {
+		if err := check(); err != nil {
+			return out, err
+		}
 	}
 	if !out.minimal {
 		raw4, err := p.cmd(ctx, t, "Status 4")
@@ -140,11 +188,6 @@ func (p *Prober) probe(ctx context.Context, d model.Device) (probed, error) {
 		return out, nil
 	}
 
-	// Status 5 gives the MAC the device is bound to. Its network facts and Status 11 are read
-	// later, in the background (ReadNet): they must never hold up first contact or a refresh.
-	if _, err := p.status5(ctx, t, &out); err != nil {
-		return out, err
-	}
 	// Status 6: no MqttHost, or SetOption3 off, means the device does not
 	// talk MQTT at all. Otherwise it is "ours" when it is configured for the
 	// tasmofleet broker and "other" for any other target (or when tasmofleet
@@ -204,6 +247,11 @@ func (p *Prober) status5(ctx context.Context, t tasmota.Target, out *probed) (mo
 	if err != nil {
 		return model.NetFacts{}, fmt.Errorf("status 5: %w", err)
 	}
+	return parseStatus5(raw, out)
+}
+
+// parseStatus5 reads MAC, Ethernet MAC and hostname into out and returns the network facts.
+func parseStatus5(raw json.RawMessage, out *probed) (model.NetFacts, error) {
 	var s struct {
 		StatusNET struct {
 			Hostname  string
@@ -231,6 +279,16 @@ func (p *Prober) status5(ctx context.Context, t tasmota.Target, out *probed) (mo
 		}
 	}
 	return n, nil
+}
+
+// withStoredWifi completes the facts of a Status 5 read with the Wi-Fi facts stored earlier
+// (Status 11 is read only in the background); a wired board is on no access point.
+func (p *Prober) withStoredWifi(stored, n model.NetFacts) model.NetFacts {
+	if !n.Wired {
+		n.SSID, n.BSSID, n.Channel = stored.SSID, stored.BSSID, stored.Channel
+	}
+	n.ReadAt = p.now()
+	return n
 }
 
 // unsetIP is an address Tasmota reports for an interface that has none.
@@ -275,13 +333,10 @@ func (p *Prober) ReadNet(ctx context.Context, id model.DeviceID) error {
 	if err != nil {
 		return err
 	}
-	net.SSID, net.BSSID, net.Channel = d.Net.SSID, d.Net.BSSID, d.Net.Channel // kept when Status 11 gives none
-	if net.Wired {
-		net.SSID, net.BSSID, net.Channel = "", "", 0 // a wired board is on no access point
-	} else {
+	net = p.withStoredWifi(d.Net, net) // kept when Status 11 gives none
+	if !net.Wired {
 		p.status11(ctx, t, &net)
 	}
-	net.ReadAt = p.now()
 	if err := p.Devices.UpdateNet(ctx, id, store.ProbeGuard{Address: d.Address, Port: d.Port, MAC: d.MAC}, net); err != nil {
 		return err
 	}
@@ -299,7 +354,7 @@ func (p *Prober) now() time.Time {
 // Describe fills MAC, topic, name, MQTT capability and identity of d from the
 // device. Nothing is stored. Fields the user typed are kept.
 func (p *Prober) Describe(ctx context.Context, d model.Device) (model.Device, error) {
-	pr, err := p.probe(ctx, d)
+	pr, err := p.probe(ctx, d, nil)
 	if err != nil {
 		return d, err
 	}
@@ -323,45 +378,206 @@ func (p *Prober) Describe(ctx context.Context, d model.Device) (model.Device, er
 	return d, nil
 }
 
-// Refresh re-probes a stored device and stores identity and MQTT facts. On minimal
-// firmware the stored flash values are kept (Status 4 is not available).
-func (p *Prober) Refresh(ctx context.Context, id model.DeviceID) error {
+// Refresh re-probes a stored device and stores what it reports (#91): identity, MQTT facts, the
+// network facts of Status 5, the DeviceName and the topic (the stored name and topic follow them
+// unless the user chose their own, store.ProbeResult). The device must answer with a MAC of the
+// stored set, else the refresh is refused (RefreshRefusedError, audited) before anything else
+// is sent and nothing is written (#65). A device without a MAC gets the one it reported bound
+// when an admin refreshes it (actor not empty); an automatic refresh (actor "", discovery) never
+// binds (discovery D8). A device on our broker that HTTP cannot reach is refreshed over MQTT
+// (refreshMQTT). On minimal firmware the stored flash values are kept and no MAC can be read.
+func (p *Prober) Refresh(ctx context.Context, id model.DeviceID, actor string) error {
 	d, err := p.Devices.GetDevice(ctx, id)
 	if err != nil {
 		return err
 	}
-	pr, err := p.probe(ctx, d)
+	pr, err := p.probe(ctx, d, func(pr probed) error { return p.checkMAC(ctx, d, pr, actor, "http") })
 	if err != nil {
-		return err
+		if !p.overMQTT(d, err) {
+			return err
+		}
+		merr := p.refreshMQTT(ctx, d, actor)
+		var refused *RefreshRefusedError
+		switch {
+		case merr == nil:
+			return nil
+		case errors.As(merr, &refused):
+			return merr
+		}
+		// The HTTP error is the one the page explains; the MQTT one goes along for the log.
+		return fmt.Errorf("%w (over MQTT: %s)", err, merr.Error())
 	}
-	ident := pr.identity
+	res := store.ProbeResult{Identity: pr.identity, SetMQTT: !pr.minimal, MQTT: pr.mqtt, MQTTHost: pr.mqttHost, MQTTPort: pr.mqttPort}
 	if pr.minimal {
-		ident.FlashSizeKB, ident.ProgramFlashSizeKB, ident.FreeKB = d.Identity.FlashSizeKB, d.Identity.ProgramFlashSizeKB, d.Identity.FreeKB
+		res.Identity.FlashSizeKB, res.Identity.ProgramFlashSizeKB, res.Identity.FreeKB = d.Identity.FlashSizeKB, d.Identity.ProgramFlashSizeKB, d.Identity.FreeKB
+	} else {
+		res.DeviceName, res.DeviceTopic, res.NameFrom = pr.devName, pr.topic, fallbackName(d, pr)
+		res.SetNet, res.Net = true, p.withStoredWifi(d.Net, pr.net)
+		if d.MAC == "" && actor != "" && pr.mac != "" {
+			res.BindMACs = []string{pr.mac, pr.ethMAC}
+		}
 	}
 	// Only probe-owned fields are written, and only if the device is still
 	// the one that was probed (a slow probe must not undo an admin edit or
 	// land on a device that was moved, rebound or deleted meanwhile).
-	if err := p.Devices.UpdateProbe(ctx, id,
-		store.ProbeGuard{Address: d.Address, Port: d.Port, MAC: d.MAC},
-		store.ProbeResult{Identity: ident, SetMQTT: !pr.minimal, MQTT: pr.mqtt, MQTTHost: pr.mqttHost, MQTTPort: pr.mqttPort,
-			Topic: repairedTopic(d.Topic, pr.topic)}); err != nil {
+	err = p.Devices.UpdateProbe(ctx, id, store.ProbeGuard{Address: d.Address, Port: d.Port, MAC: d.MAC}, res)
+	switch {
+	case errors.Is(err, store.ErrMACInUse):
+		return p.refuse(ctx, d, actor, "http", pr.mac, refusedTaken)
+	case err != nil:
 		return err
+	}
+	if len(res.BindMACs) > 0 {
+		p.record(ctx, actor, "device.mac_bound", d.ID, "ok", map[string]any{"mac": pr.mac, "ethernet_mac": pr.ethMAC, "address": d.Address, "via": "http"})
 	}
 	p.announce(id)
 	if p.ReadNetLater != nil && !pr.minimal {
-		p.ReadNetLater(id) // the network facts fill in when they arrive
+		p.ReadNetLater(id) // the Wi-Fi facts of Status 11 fill in when they arrive
 	}
 	return nil
 }
 
-// repairedTopic is the topic to store over an unresolved one. Earlier versions stored the raw
-// Topic setting ("tasmota_%06X"), which the health tracker could never match to a message: the
-// device showed "MQTT: Not connected" while it was online. A topic the user typed is left alone.
-func repairedTopic(stored, probed string) string {
-	if strings.Contains(stored, "%") && probed != "" && !strings.Contains(probed, "%") {
-		return probed
+// tasmotaDefaultName is the DeviceName of a Tasmota whose name was never set (its FriendlyName1).
+const tasmotaDefaultName = "Tasmota"
+
+// fallbackName returns the stored name when it is one tasmofleet filled in itself before it
+// recorded the DeviceName: the hostname (how devices were named before 0.12.3), the topic or the
+// address (Describe's fallbacks). Such a name follows the DeviceName (#91, refining #52), unless
+// the DeviceName is Tasmota's default, which would give many devices the same name.
+func fallbackName(d model.Device, pr probed) string {
+	if pr.devName == "" || pr.devName == tasmotaDefaultName || d.Name == "" {
+		return ""
+	}
+	for _, s := range []string{pr.hostname, d.Net.Hostname, pr.topic, d.Topic, d.Address} {
+		if s != "" && d.Name == inventory.CleanName(s) {
+			return d.Name
+		}
 	}
 	return ""
+}
+
+// Reasons of a refused refresh.
+const (
+	refusedOther = "another MAC"
+	refusedTaken = "the MAC of another device"
+)
+
+// RefreshRefusedError says that the device that answered is not the stored one (#65). Nothing was
+// written. The web layer shows Refusal() on the device page.
+type RefreshRefusedError struct {
+	Reported string // the MAC the device reported, lower case ("" when it reported none)
+	Reason   string // refusedOther or refusedTaken
+}
+
+func (e *RefreshRefusedError) Error() string {
+	return "identity refresh refused: the device reports " + e.Reason + " (" + e.Reported + ")"
+}
+
+// Refusal is the sentence for the device page.
+func (e *RefreshRefusedError) Refusal() string {
+	mac := "MAC " + e.Reported
+	if e.Reported == "" {
+		mac = "no MAC"
+	}
+	if e.Reason == refusedTaken {
+		return "The device at this address reports " + mac + ", which belongs to another device in the inventory. Nothing was changed."
+	}
+	return "The device at this address reports " + mac + ", not the MAC stored for this device, so it is another device. " +
+		"Nothing was changed and nothing more was sent to it. If the device was replaced, use Replace device; " +
+		"if the address now belongs to another device, correct it on the Edit page."
+}
+
+// checkMAC refuses a device that reports none of the stored MACs. Nothing to compare: a device
+// stored without a MAC, or minimal firmware (no Status 5).
+func (p *Prober) checkMAC(ctx context.Context, d model.Device, pr probed, actor, via string) error {
+	if d.MAC == "" || pr.minimal || d.HasMAC(pr.mac) || d.HasMAC(pr.ethMAC) {
+		return nil
+	}
+	return p.refuse(ctx, d, actor, via, pr.mac, refusedOther)
+}
+
+// refuse audits a refused refresh and returns its error.
+func (p *Prober) refuse(ctx context.Context, d model.Device, actor, via, reported, reason string) error {
+	slog.WarnContext(ctx, "identity refresh refused", "device", d.ID, "address", d.Address, "reason", reason, "via", via)
+	p.record(ctx, actor, "device.refresh_refused", d.ID, "refused", map[string]any{
+		"address": d.Address, "stored_mac": d.MAC, "reported_mac": reported, "reason": reason, "via": via,
+	})
+	return &RefreshRefusedError{Reported: reported, Reason: reason}
+}
+
+// record writes one audit row. Details are addresses, MACs and reasons, never credentials.
+func (p *Prober) record(ctx context.Context, actor, action string, id model.DeviceID, result string, detail map[string]any) {
+	if p.Audit == nil {
+		return
+	}
+	if actor == "" {
+		actor = "system"
+	}
+	b, err := json.Marshal(detail)
+	if err != nil {
+		b = []byte("{}") // strings only; cannot happen
+	}
+	p.Audit.Record(ctx, model.AuditEvent{Actor: actor, Action: action, Target: "device:" + strconv.FormatInt(int64(id), 10), Detail: string(b), Result: result})
+}
+
+// overMQTT reports whether a refresh whose HTTP probe failed with err can go over MQTT: the
+// device is on our broker and HTTP could not be used at all (not a refusal or a bad answer).
+func (p *Prober) overMQTT(d model.Device, err error) bool {
+	if p.MQTT == nil || d.MQTT != model.MQTTOurs || d.Topic == "" {
+		return false
+	}
+	for _, e := range []error{tasmota.ErrUnreachable, tasmota.ErrTimeout, tasmota.ErrHTTPAPIRefused, tasmota.ErrForbiddenAddr} {
+		if errors.Is(err, e) {
+			return true
+		}
+	}
+	return false
+}
+
+// refreshMQTT refreshes a device on our broker that HTTP cannot reach (#91, #79): Status 5 for
+// MAC, hostname and IP, then Status 2 for firmware and hardware, one at a time (askStatus keeps
+// the bus limits and audits each question). The MAC rule is the same as over HTTP. MQTT is the
+// weaker source (anyone with broker access can answer), so (#87): the identity is written only
+// for a device no HTTP probe identified (store.UpdateIdentityFromMQTT), never with DetectedAt,
+// never as minimal or safeboot; no MAC is bound; name and topic are left alone.
+func (p *Prober) refreshMQTT(ctx context.Context, d model.Device, actor string) error {
+	raw5, err := p.MQTT.askStatus(ctx, d, 5, actor)
+	if err != nil {
+		return err
+	}
+	var pr probed
+	n, err := parseStatus5(raw5, &pr)
+	if err != nil {
+		return err
+	}
+	if err := p.checkMAC(ctx, d, pr, actor, "mqtt"); err != nil {
+		return err
+	}
+	raw2, err := p.MQTT.askStatus(ctx, d, 2, actor)
+	if err != nil {
+		return err
+	}
+	ident, err := fwselect.Detect(fwselect.Inputs{Status2: raw2})
+	if err != nil {
+		return fmt.Errorf("identify over MQTT: %w", err)
+	}
+	if ident.Variant == "minimal" || ident.Variant == "safeboot" {
+		return fmt.Errorf("identify over MQTT: the answer claims a %s image, which cannot answer Status 2: %w", ident.Variant, tasmota.ErrBadResponse)
+	}
+	ident.Language, ident.DetectedAt = d.Identity.Language, time.Time{}
+	g := store.ProbeGuard{Address: d.Address, Port: d.Port, MAC: d.MAC}
+	if d.Identity.DetectedAt.IsZero() {
+		// ErrConflict: an HTTP probe identified it meanwhile, and that identity wins.
+		if err := p.Devices.UpdateIdentityFromMQTT(ctx, d.ID, g, d.Topic, ident); err != nil && !errors.Is(err, store.ErrConflict) {
+			return err
+		}
+	}
+	if err := p.Devices.UpdateNet(ctx, d.ID, g, p.withStoredWifi(d.Net, n)); err != nil {
+		return err
+	}
+	slog.InfoContext(ctx, "identity refreshed over MQTT", "device", d.ID, "topic", d.Topic, "http_identity_kept", !d.Identity.DetectedAt.IsZero())
+	p.announce(d.ID)
+	return nil
 }
 
 func firstNonEmpty(ss ...string) string {

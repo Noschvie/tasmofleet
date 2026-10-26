@@ -152,6 +152,7 @@ func (a *runtime) run(ctx context.Context) error {
 	mid := newMQTTIdentity(a.bus, a.svc.Inventory.List, a.svc.Store, a.svc.Audit,
 		func(id model.DeviceID) { a.svc.Prober.announce(id) }, a.log)
 	mid.known = a.mqttKnown.Known
+	a.svc.Prober.MQTT = mid // "Refresh identity" over MQTT for devices HTTP cannot reach (#91)
 	a.goBG("mqtt-identity", func() error { mid.run(bg); return nil })
 
 	if err := a.setupBackups(bg); err != nil {

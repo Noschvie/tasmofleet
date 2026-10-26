@@ -297,6 +297,34 @@ data directory (TasmoAdmin lesson A4).
   a probe that finishes meanwhile always wins. OTA is unchanged: the engine probes over HTTP
   before it plans and `Guard` runs on that identity. A retained INFO1 may describe the last
   boot only; a device on a stale one is corrected by its next boot or its HTTP probe.
+- **Refresh identity (#91, #65).** `Prober.Refresh(ctx, id, actor)` re-reads and stores every
+  identity field: firmware, build, chip, hardware and flash (Status 2/4, `GET /`), the network
+  facts of Status 5 (hostname, IP, gateway; Wi-Fi from Status 11 follows in the background),
+  MQTT broker (Status 6, SetOption3), and DeviceName and resolved topic (plain `Status`).
+  *MAC first:* the probe sends `Status 5` first and compares the MAC (Wi-Fi or Ethernet) with
+  the stored set before any other command; another MAC refuses the refresh
+  (`app.RefreshRefusedError`, audit `device.refresh_refused`, shown on the device page; nothing
+  written, nothing more sent). A device stored without a MAC gets the reported one bound
+  (audit `device.mac_bound`) when a person refreshes it (`actor` set); automatic refreshes
+  (discovery accept/reprobe, `actor` "") never bind (discovery D8). A MAC another device holds
+  is refused the same way (`store.ErrMACInUse`). Minimal firmware has no Status 5: nothing to
+  compare. *Name and topic:* the store records the DeviceName and topic of every probe
+  (`device_name`, `device_topic`, migration 0029). The stored name follows the DeviceName while
+  it is still the recorded one, or, for devices probed before 0029, while it is the hostname,
+  topic or address tasmofleet filled in itself (not when the DeviceName is Tasmota's default
+  `Tasmota`); the topic follows when it is empty, unresolved (`%06X`) or still the recorded one,
+  and no other device has it. A name or topic the user chose differs from these and is kept
+  (#52). *Transport:* for a device recorded as `ours` whose HTTP probe could not be used
+  (unreachable, timeout, HTTP API refused, address outside the device networks) the refresh
+  goes over MQTT: `Status 5`, MAC rule as above, then `Status 2`, one question at a time per
+  device and one per second on the bus (shared with the #87 reader), audited
+  (`identity.mqtt_ask`), a live answer on the device's own topic within 10 s. MQTT data stays
+  the weaker source: it writes the identity only while `identity_at` is unset
+  (`UpdateIdentityFromMQTT`), never sets `identity_at`, refuses minimal/safeboot answers, binds
+  no MAC and does not touch name or topic; the network facts are stored (`UpdateNet`).
+  Contract change in this step: `web.Prober.Refresh` takes the actor; `store.ProbeResult` gained
+  `DeviceName`, `NameFrom`, `DeviceTopic`, `BindMACs` and lost `Topic` (the old repair rule is
+  part of the topic rule above).
 - Minimal firmware never persists settings (SRC: `SettingsSave` is compiled out). An
   `OtaUrl` set while minimal runs lives in RAM only.
 - Command output over HTTP depends on `WebLog >= 2`. If a reply is a `WARNING` about the
@@ -830,7 +858,9 @@ address must be inside `DEVICE_NETWORKS`.
 Matching in discovery, MQTT announcements, import and probes is by MAC first; address,
 hostname and topic are mutable attributes. A device stores a set of MACs (Wi-Fi station
 plus Ethernet where present: ESP32 boards with Ethernet report one MAC per interface).
-The MAC set changes only through an explicit action ("Replace device"). A MAC is not a
+The MAC set changes only through an explicit action ("Replace device"), with one exception:
+a device stored without any MAC gets the MAC it reports bound by a person's "Refresh identity"
+(5, Refresh identity; #65). A MAC is not a
 secret: it identifies a device, it does not authenticate it. Consequences: a discovered
 device whose MAC is in the inventory is the same device, never a new one; a stored
 hostname is never replaced by an IP automatically (a hostname that resolves to the

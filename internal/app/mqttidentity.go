@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strconv"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/mqttbus"
 	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/nofuturekid/tasmofleet/internal/tasmota"
 )
 
 // Identity over MQTT (#87, first step of #79): a device on our broker whose firmware version
@@ -78,13 +80,23 @@ type mqttIdentity struct {
 	pending  map[model.DeviceID]mqttIDPending
 	answered map[model.DeviceID]bool // a Status 2 reply was stored; not asked again until restart
 	info1    map[string][]byte       // INFO1 of a topic whose device was not yet recorded as ours
+	waiters  map[string]*mqttWaiter  // topic -> a refresh waiting for its Status N answer (askStatus)
+
+	replyWait time.Duration // how long askStatus waits for an answer
+}
+
+// mqttWaiter is a refresh waiting for the answer to its Status N question.
+type mqttWaiter struct {
+	suffix string // "STATUS5"
+	ch     chan []byte
 }
 
 func newMQTTIdentity(bus mqttbus.Bus, list func(context.Context) ([]model.Device, error), st identityMQTTStore,
 	rec audit.Recorder, announce func(model.DeviceID), log *slog.Logger) *mqttIdentity {
 	return &mqttIdentity{bus: bus, list: list, store: st, audit: rec, announce: announce, now: time.Now, log: log, grace: mqttIDGrace,
 		msgs: make(chan mqttbus.Message, mqttIDQueue), topics: map[string]*mqttIDTopic{},
-		asked: map[model.DeviceID]time.Time{}, pending: map[model.DeviceID]mqttIDPending{}, answered: map[model.DeviceID]bool{}, info1: map[string][]byte{}}
+		asked: map[model.DeviceID]time.Time{}, pending: map[model.DeviceID]mqttIDPending{}, answered: map[model.DeviceID]bool{}, info1: map[string][]byte{},
+		waiters: map[string]*mqttWaiter{}, replyWait: mqttIDTimeout}
 }
 
 // run reads the bus until ctx ends.
@@ -133,6 +145,12 @@ func (m *mqttIdentity) onMessage(msg mqttbus.Message) {
 	case mqttbus.KindState, mqttbus.KindInfo, mqttbus.KindStatus:
 		if !msg.Retained {
 			t.live = true // a retained telemetry message says nothing about now
+		}
+		if w := m.waiters[msg.Topic]; w != nil && msg.Kind == mqttbus.KindStatus && !msg.Retained && msg.Suffix == w.suffix {
+			select {
+			case w.ch <- append([]byte(nil), msg.Payload...):
+			default: // the first answer counts
+			}
 		}
 	case mqttbus.KindSensor, mqttbus.KindResult, mqttbus.KindPower, mqttbus.KindDiscovery, mqttbus.KindUpgrade:
 		// not subscribed
@@ -344,7 +362,7 @@ func (m *mqttIdentity) askDue(ctx context.Context) {
 		if !wantsStatus2(*d) || m.answered[d.ID] || t == nil || t.up.IsZero() || now.Sub(t.up) < m.grace {
 			continue
 		}
-		if p, ok := m.pending[d.ID]; ok && now.Sub(p.at) <= mqttIDWindow {
+		if p, ok := m.pending[d.ID]; (ok && now.Sub(p.at) <= mqttIDWindow) || m.waiters[d.Topic] != nil {
 			continue // one command at a time per device
 		}
 		last, was := m.asked[d.ID]
@@ -376,4 +394,67 @@ func (m *mqttIdentity) askDue(ctx context.Context) {
 	detail, _ := json.Marshal(map[string]any{"command": "Status 2", "via": "mqtt", "reason": why}) // a map of strings cannot fail
 	m.audit.Record(ctx, model.AuditEvent{Actor: "system", Action: "identity.mqtt_ask", Target: "device:" + strconv.FormatInt(int64(pick.ID), 10),
 		Detail: string(detail), Result: "ok"})
+}
+
+var (
+	errMQTTUnavailable = errors.New("mqtt: not connected, or the device is not on our broker")
+	errMQTTBusy        = errors.New("mqtt: a question to this device is still waiting for its answer")
+)
+
+// askStatus asks d one Status n over MQTT for a refresh (#91) and returns the answer. It keeps
+// the limits of the background reader: never Status 0, one question at a time per device,
+// mqttIDGap between two questions on the whole bus (it waits for its turn), only a live answer
+// on the device's own topic within replyWait, and every question audited.
+func (m *mqttIdentity) askStatus(ctx context.Context, d model.Device, n int, actor string) (json.RawMessage, error) {
+	if n <= 0 {
+		return nil, errors.New("mqtt: Status 0 is never sent")
+	}
+	if d.Topic == "" || d.MQTT != model.MQTTOurs || !m.bus.Connected() {
+		return nil, errMQTTUnavailable
+	}
+	now := m.now()
+	w := &mqttWaiter{suffix: "STATUS" + strconv.Itoa(n), ch: make(chan []byte, 1)}
+	m.mu.Lock()
+	if p, ok := m.pending[d.ID]; (ok && now.Sub(p.at) <= mqttIDWindow) || m.waiters[d.Topic] != nil {
+		m.mu.Unlock()
+		return nil, errMQTTBusy
+	}
+	turn := now
+	if next := m.lastAsk.Add(mqttIDGap); !m.lastAsk.IsZero() && next.After(turn) {
+		turn = next
+	}
+	m.lastAsk = turn
+	m.waiters[d.Topic] = w
+	m.mu.Unlock()
+	defer func() {
+		m.mu.Lock()
+		delete(m.waiters, d.Topic)
+		m.mu.Unlock()
+	}()
+	if wait := turn.Sub(now); wait > 0 {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(wait):
+		}
+	}
+	if err := m.bus.Command(ctx, d.Topic, "STATUS", strconv.Itoa(n)); err != nil {
+		return nil, fmt.Errorf("mqtt: Status %d not sent: %w", n, err)
+	}
+	if actor == "" {
+		actor = "system"
+	}
+	why := "refresh identity: HTTP cannot reach the device"
+	m.log.Info("mqtt identity: asked a device over MQTT", "device", d.ID, "topic", d.Topic, "command", "Status "+strconv.Itoa(n), "reason", why)
+	detail, _ := json.Marshal(map[string]any{"command": "Status " + strconv.Itoa(n), "via": "mqtt", "reason": why}) // a map of strings cannot fail
+	m.audit.Record(ctx, model.AuditEvent{Actor: actor, Action: "identity.mqtt_ask", Target: "device:" + strconv.FormatInt(int64(d.ID), 10),
+		Detail: string(detail), Result: "ok"})
+	select {
+	case b := <-w.ch:
+		return b, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-time.After(m.replyWait):
+		return nil, fmt.Errorf("mqtt: no answer to Status %d: %w", n, tasmota.ErrTimeout)
+	}
 }

@@ -4,6 +4,24 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## Unreleased
+
+### Fixed
+
+- "Refresh identity" now updates every identity field: device name, hardware, build, chip, firmware,
+  hostname, MAC and MQTT topic. The hostname and IP are stored with the refresh (they showed Unknown until a
+  later background read), and name and topic follow the device while they are still what the device
+  reported before (or, for older devices, the hostname tasmofleet named them after). A name or topic you
+  chose is kept. A device on our broker that HTTP cannot reach is refreshed over MQTT (`Status 5`, then
+  `Status 2`, one at a time, audited); MQTT never replaces an identity read over HTTP (#91, thanks @Noschvie).
+
+### Security
+
+- "Refresh identity" checks the device's MAC first and refuses, audited and explained on the device page,
+  when the stored address answers with another device's MAC: nothing is overwritten and nothing more is
+  sent to it. A device stored without a MAC gets the reported MAC bound when a person refreshes it
+  (audited); automatic refreshes never bind one (#65).
+
 ## 0.14.1 (2026-10-26)
 
 ### Fixed

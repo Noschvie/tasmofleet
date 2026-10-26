@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"net/url"
 	"os"
 	"strings"
@@ -160,6 +161,32 @@ func TestProbeAnswersWithTheWholeIdentityCard(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("refreshed card lacks %q:\n%s", want, body)
 		}
+	}
+}
+
+// refusedRefresh stands for app.RefreshRefusedError: the web layer knows it only by its method.
+type refusedRefresh struct{}
+
+func (refusedRefresh) Error() string { return "identity refresh refused: internal detail" }
+func (refusedRefresh) Refusal() string {
+	return "The device at this address reports MAC de:ad:be:ef:00:01, not the MAC stored."
+}
+
+// Why (#65): when another device answers at the stored address, the device page must say so in
+// plain words (not "an answer that did not fit"), so the admin fixes the address or replaces the
+// device. The refresh carries who asked: only a person's refresh may bind a MAC.
+func TestProbeShowsARefusedRefreshAndPassesTheActor(t *testing.T) {
+	e := setup(t)
+	e.pr.err = fmt.Errorf("wrapped: %w", refusedRefresh{})
+	_, body := e.do(t, "POST", "/devices/1/probe", "admin", url.Values{"csrf": {"tok"}}, "HX-Request", "true")
+	if want := "Identity not refreshed. The device at this address reports MAC de:ad:be:ef:00:01, not the MAC stored."; !strings.Contains(body, want) {
+		t.Errorf("refused refresh lacks %q:\n%s", want, body)
+	}
+	if strings.Contains(body, "internal detail") {
+		t.Error("the Go error reached the page")
+	}
+	if len(e.pr.actors) != 1 || e.pr.actors[0] == "" {
+		t.Fatalf("actors %q: the refresh must name who asked", e.pr.actors)
 	}
 }
 

@@ -51,7 +51,8 @@ func raceSetup(t *testing.T) (*Prober, *store.SQLite, model.DeviceID, model.Devi
 		t.Fatal(err)
 	}
 	d.ID = id
-	e := &edits{Client: p.Client}
+	// The device answers Status 5 with the stored MAC: it is the stored device (#65).
+	e := &edits{Client: override{Client: p.Client, reply: map[string]string{"Status 5": status5Net}}}
 	p.Client, p.Devices = e, st
 	return p, st, id, d, e
 }
@@ -68,7 +69,7 @@ func TestRefreshKeepsConcurrentAdminEdits(t *testing.T) {
 			t.Error(err)
 		}
 	}
-	if err := p.Refresh(context.Background(), id); err != nil {
+	if err := p.Refresh(context.Background(), id, ""); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := st.GetDevice(context.Background(), id)
@@ -91,7 +92,7 @@ func TestRefreshDiscardsResultWhenAddressChanged(t *testing.T) {
 			t.Error(err)
 		}
 	}
-	err := p.Refresh(context.Background(), id)
+	err := p.Refresh(context.Background(), id, "")
 	if !errors.Is(err, store.ErrConflict) {
 		t.Fatalf("err = %v, want ErrConflict", err)
 	}
@@ -113,7 +114,7 @@ func TestRefreshDiscardsResultWhenMACReboundOrDeleted(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			p, st, id, _, e := raceSetup(t)
 			e.do = func() { mutate(st, id) }
-			if err := p.Refresh(context.Background(), id); err == nil {
+			if err := p.Refresh(context.Background(), id, ""); err == nil {
 				t.Fatal("stale probe result accepted")
 			}
 			if got, err := st.GetDevice(context.Background(), id); err == nil && got.Identity.Version != "" {
@@ -132,7 +133,7 @@ func TestRefreshKeepsOursWhenProbeSaysOther(t *testing.T) {
 		t.Fatal(err)
 	}
 	p.Broker = fixedBroker{"other.lan"}
-	if err := p.Refresh(context.Background(), id); err != nil {
+	if err := p.Refresh(context.Background(), id, ""); err != nil {
 		t.Fatal(err)
 	}
 	if got, _ := st.GetDevice(context.Background(), id); got.MQTT != model.MQTTOurs || got.MQTTHost == "" {
@@ -161,7 +162,7 @@ func TestRefreshAndReadNetAnnounceTheDevice(t *testing.T) {
 			t.Fatalf("%s: no device event, open pages keep the old row until a reload", step)
 		}
 	}
-	if err := p.Refresh(context.Background(), id); err != nil {
+	if err := p.Refresh(context.Background(), id, ""); err != nil {
 		t.Fatal(err)
 	}
 	announced("refresh")

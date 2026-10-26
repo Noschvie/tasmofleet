@@ -92,6 +92,14 @@ claim below or shows a residual risk worse than stated.
   30 s after our question. Nothing flashed depends on it: the OTA engine probes the device
   over HTTP before it plans, and `Guard` checks that identity. The first HTTP probe replaces
   whatever MQTT said. Broker ACLs (below) close it at the source.
+- **R6, spoofed refresh answers (#91).** "Refresh identity" of a device on our broker that HTTP
+  cannot reach asks `Status 5` and `Status 2` over MQTT. M2 can answer first. Effect: false
+  hostname/IP on the device page, and (as in R5) a false version or hardware for a device no
+  HTTP probe identified; a false MAC in the `Status 5` answer can only make the refresh refuse.
+  Bounds: only an answer on the device's own `stat/<topic>/STATUSn` within 10 s of our question
+  counts (retained ones never); MQTT binds no MAC, changes neither name nor topic, never replaces
+  an HTTP identity, never sets `identity_at`, and minimal/safeboot answers are refused. Nothing
+  flashed depends on it (the OTA engine probes over HTTP and `Guard` checks that). Low.
 
 ## Recommendation (operations)
 

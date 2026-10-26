@@ -590,7 +590,7 @@ func (h *handler) deviceProbe(w http.ResponseWriter, r *http.Request) {
 	v := h.view(r, "", "", nil)
 	_, running := h.deviceState(r, d)
 	var notice, failure string
-	if err := h.d.Prober.Refresh(r.Context(), d.ID); err != nil {
+	if err := h.d.Prober.Refresh(r.Context(), d.ID, actor(r)); err != nil {
 		failure = h.refreshProblem(r, err)
 	} else {
 		notice = "Identity refreshed."

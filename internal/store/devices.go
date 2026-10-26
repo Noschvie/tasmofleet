@@ -2,7 +2,9 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -286,21 +288,42 @@ type ProbeResult struct {
 	// SetNet is false when the probe read no network facts: the stored ones are kept.
 	SetNet bool
 	Net    model.NetFacts
-	// Topic replaces the stored MQTT topic when not empty. The prober sets it only to repair a
-	// topic that was stored with an unresolved placeholder (tasmota_%06X).
-	Topic string
+	// DeviceName is the device's Tasmota DeviceName, "" when the probe did not read it. It is
+	// recorded, and the stored name follows it while the name is still the DeviceName recorded at
+	// the previous probe, or NameFrom (#91). Any other name was chosen by the user and is kept.
+	DeviceName string
+	// NameFrom, when not empty, is a stored name the prober recognised as one tasmofleet filled in
+	// itself (hostname, topic or address) before the DeviceName was recorded. It is replaced by
+	// DeviceName only if the stored name is still exactly this.
+	NameFrom string
+	// DeviceTopic is the resolved topic the device reported, "" when not read. It is recorded, and
+	// the stored topic follows it when the stored one is empty, unresolved ("tasmota_%06X") or
+	// still the topic recorded at the previous probe, and no other device has it. A topic the user
+	// typed is kept.
+	DeviceTopic string
+	// BindMACs binds these MACs (primary first) to a device that has none (guard MAC ""), as an
+	// admin's refresh does (#65). A MAC another device holds: ErrMACInUse, nothing written.
+	BindMACs []string
 }
 
+// ErrMACInUse is returned when a probe would bind a MAC that belongs to another device.
+var ErrMACInUse = fmt.Errorf("%w: the MAC belongs to another device", ErrConflict)
+
 // UpdateProbe stores the outcome of a probe without touching any inventory
-// field (name, address, credentials, OTA exclusion, ...), in one statement,
-// so an edit made during the slow probe is never overwritten. If the device
-// was deleted, moved to another address/port or rebound to another MAC since
-// the probe began, nothing is written and ErrConflict is returned. A device
-// that already reports to our broker keeps "ours" when the probe only finds
-// "other" (messages seen beat name matching).
+// field the user owns (address, credentials, OTA exclusion, notes, a name or
+// topic the user chose, ...), so an edit made during the slow probe is never
+// overwritten. If the device was deleted, moved to another address/port or
+// rebound to another MAC since the probe began, nothing is written and
+// ErrConflict is returned. A device that already reports to our broker keeps
+// "ours" when the probe only finds "other" (messages seen beat name matching).
 func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuard, r ProbeResult) error {
 	i := r.Identity
-	res, err := s.db.ExecContext(ctx, `UPDATE devices SET chip_family=?, hardware=?, single_core=?, fw_version=?, fw_image=?,
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op after commit; on failure the original error is returned
+	res, err := tx.ExecContext(ctx, `UPDATE devices SET chip_family=?, hardware=?, single_core=?, fw_version=?, fw_image=?,
 		fw_variant=?, fw_language=?, flash_size_kb=?, program_flash_kb=?, free_kb=?, identity_at=?,
 		mqtt_capability = CASE WHEN ?=0 THEN mqtt_capability WHEN mqtt_capability='ours' AND ?='other' THEN 'ours' ELSE ? END,
 		mqtt_host = CASE WHEN ?=0 THEN mqtt_host ELSE ? END,
@@ -313,7 +336,14 @@ func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuar
 		net_channel = CASE WHEN ?=0 THEN net_channel ELSE ? END,
 		net_wired = CASE WHEN ?=0 THEN net_wired ELSE ? END,
 		net_at = CASE WHEN ?=0 THEN net_at ELSE ? END,
-		topic = CASE WHEN ?='' THEN topic ELSE ? END,
+		name = CASE WHEN ?='' OR name=? THEN name
+			WHEN (device_name<>'' AND name=device_name) OR (?<>'' AND name=?) THEN ? ELSE name END,
+		device_name = CASE WHEN ?='' THEN device_name ELSE ? END,
+		topic = CASE WHEN ?='' OR topic=? THEN topic
+			WHEN (topic='' OR instr(topic, '%')>0 OR (device_topic<>'' AND topic=device_topic))
+				AND NOT EXISTS (SELECT 1 FROM devices o WHERE o.topic=? AND o.id<>devices.id) THEN ?
+			ELSE topic END,
+		device_topic = CASE WHEN ?='' THEN device_topic ELSE ? END,
 		updated_at=? WHERE id=? AND address=? AND port=? AND mac=?`,
 		string(i.Family), i.Hardware, b2i(i.SingleCore), i.Version, i.Image, i.Variant, i.Language,
 		i.FlashSizeKB, i.ProgramFlashSizeKB, i.FreeKB, toMS(i.DetectedAt),
@@ -321,7 +351,8 @@ func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuar
 		b2i(r.SetMQTT), r.MQTTHost, b2i(r.SetMQTT), r.MQTTPort,
 		b2i(r.SetNet), r.Net.Hostname, b2i(r.SetNet), r.Net.IP, b2i(r.SetNet), r.Net.Gateway, b2i(r.SetNet), r.Net.SSID,
 		b2i(r.SetNet), r.Net.BSSID, b2i(r.SetNet), r.Net.Channel, b2i(r.SetNet), b2i(r.Net.Wired), b2i(r.SetNet), toMS(r.Net.ReadAt),
-		r.Topic, r.Topic,
+		r.DeviceName, r.DeviceName, r.NameFrom, r.NameFrom, r.DeviceName, r.DeviceName, r.DeviceName,
+		r.DeviceTopic, r.DeviceTopic, r.DeviceTopic, r.DeviceTopic, r.DeviceTopic, r.DeviceTopic,
 		toMS(s.now()), id, g.Address, g.Port, strings.ToLower(g.MAC))
 	if err != nil {
 		return mapErr(err)
@@ -333,7 +364,27 @@ func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuar
 	if n == 0 {
 		return fmt.Errorf("%w: device %d changed or was deleted during the probe", ErrConflict, id)
 	}
-	return nil
+	if macs := macSet("", r.BindMACs); len(macs) > 0 {
+		if g.MAC != "" {
+			return fmt.Errorf("%w: device %d already has a MAC, a probe does not rebind it", ErrConflict, id)
+		}
+		for _, m := range macs {
+			var owner model.DeviceID
+			switch err := tx.QueryRowContext(ctx, "SELECT device_id FROM device_macs WHERE mac=?", m).Scan(&owner); {
+			case err == nil && owner != id:
+				return fmt.Errorf("%w: %s, device %d", ErrMACInUse, m, owner)
+			case err != nil && !errors.Is(err, sql.ErrNoRows):
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, "INSERT OR IGNORE INTO device_macs (mac, device_id) VALUES (?,?)", m, id); err != nil {
+				return mapErr(err)
+			}
+		}
+		if _, err := tx.ExecContext(ctx, "UPDATE devices SET mac=? WHERE id=? AND mac=''", macs[0], id); err != nil {
+			return mapErr(err)
+		}
+	}
+	return tx.Commit()
 }
 
 // UpdateIdentityFromMQTT stores the identity fields a device announced over MQTT (INFO1, or the

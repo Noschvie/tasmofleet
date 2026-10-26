@@ -459,8 +459,8 @@ func (m *Manager) markProbed(id model.DeviceID) {
 //     a stored password nothing secret goes out, so the probe runs;
 //   - no stored MAC: nothing to compare. The probe goes to the address the
 //     admin bound together with its password (add form, import, edit; the
-//     health poller sends them there too). It binds no MAC (Prober.Refresh
-//     never writes one, binding is an admin action, D8); the audit
+//     health poller sends them there too). It binds no MAC (an automatic
+//     Prober.Refresh never binds one, only a person's refresh does, D8); the audit
 //     discovery.reprobe records the MAC that answered.
 func (m *Manager) reprobe(ctx context.Context, d model.Device, now time.Time) {
 	if m.o.OnAccepted == nil || !d.Identity.DetectedAt.IsZero() {

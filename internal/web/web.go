@@ -67,8 +67,11 @@ type Prober interface {
 	// Describe probes d (address, port, credentials) and returns it with MAC,
 	// topic, default name, MQTT capability and identity filled in. Nothing is stored.
 	Describe(ctx context.Context, d model.Device) (model.Device, error)
-	// Refresh probes the stored device and stores the new identity.
-	Refresh(ctx context.Context, id model.DeviceID) error
+	// Refresh probes the stored device and stores what it reports. actor is the admin who asked
+	// ("" for automatic refreshes); only an admin's refresh binds the MAC of a device stored
+	// without one. A device that reports another MAC is refused with an error that has a
+	// Refusal() string method (app.RefreshRefusedError).
+	Refresh(ctx context.Context, id model.DeviceID, actor string) error
 }
 
 // HealthHistory lists stored health transitions (store.HealthStore).
