@@ -525,6 +525,9 @@ test("a list update is applied while rows are selected and keeps the selection",
   await other.goto(app.url + href + "/edit");
   await other.locator("input[name=name]").fill(newName);
   await other.getByRole("button", { name: /Save changes/ }).click();
+  // Close only once the redirect after the save has loaded: a close racing that navigation's
+  // commit is lost in Chromium and page.close() never returns (microsoft/playwright#42068, #72).
+  await other.waitForURL(/\?ok=saved/, { waitUntil: "load" });
   await other.close();
 
   await expect(
@@ -570,6 +573,8 @@ test("a list update held back by an open row menu is applied when it closes", as
   );
   await other.getByRole("button", { name: /Save changes/ }).click();
   expect((await savedRename).status()).toBeLessThan(400);
+  // The same close race as above (microsoft/playwright#42068): let the redirect load first.
+  await other.waitForURL(/\?ok=saved/, { waitUntil: "load" });
   await other.close();
 
   await refetched;
