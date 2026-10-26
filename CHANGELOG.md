@@ -9,7 +9,7 @@ always upgrade automatically.
 ### Security
 
 - Dependencies: `golang.org/x/net` v0.59.0 -> v0.60.0 (indirect). Fixes five HTTP/2 findings in
-  the Go binary (one HIGH, four MEDIUM: CVE-2026-78669, -78659, -78660, -78663, -97032).
+  the Go binary (one HIGH, four MEDIUM: CVE-2026-78669, -78659, -78660, -78663, -97032) (#76, thanks @Noschvie).
 
 ## 0.13.0 (2026-10-26)
 
@@ -20,26 +20,26 @@ always upgrade automatically.
   their own topics (LWT, STATE, INFO1..3, using the configured FullTopic): an online topic that is
   neither in the inventory nor announced gets one `Status 5` over MQTT for its MAC (never `Status 0`; once
   per topic per 10 minutes, at most one per second, never to offline topics, logged and audited as
-  `discovery.identify`). Switching MQTT discovery off stops it. HTTP scans stay (#47).
+  `discovery.identify`). Switching MQTT discovery off stops it. HTTP scans stay (#47, thanks @Noschvie).
 - Discovery: "Seen on MQTT, not identified yet" on the Discovered tab lists the topics that could not
-  become a proposal (offline, no answer, address outside the device networks) with the reason (#47).
+  become a proposal (offline, no answer, address outside the device networks) with the reason (#47, thanks @Noschvie).
 - Discovery: each discovered device has a direct "Add" that stores it as seen (MAC, topic, address)
   without an HTTP probe, also while it is offline; rows show "Offline" from the MQTT LWT. A device added
   this way gets its first identity probe when it comes online, after its address answered with its
-  MAC (#45).
+  MAC (#45, thanks @Noschvie).
 
 ### Fixed
 
 - Devices: requests to a device carry a `Referer` naming its address, so devices with Tasmota's default
-  `SetOption128 0` accept commands and firmware uploads instead of silently closing the connection (#63, #45).
+  `SetOption128 0` accept commands and firmware uploads instead of silently closing the connection (#63, #45, thanks @Noschvie).
 - Devices: when a device still refuses HTTP API commands (it answers its main page but not `/cm`, e.g. when
   added by a DNS name other than its hostname), the add flow and the logs say to set `SetOption128 1`
-  instead of "No device answered" (#63).
+  instead of "No device answered" (#63, thanks @Noschvie).
 - Discovery: a network scan of a device that MQTT had already proposed overwrote the proposal's topic, so
   the accepted device had no MQTT topic. Both sources now resolve to one proposal by MAC: MQTT keeps topic
-  and source, the scan contributes the HTTP port (#47).
+  and source, the scan contributes the HTTP port (#47, thanks @Noschvie).
 - Discovery: an announced address outside the device networks is logged and listed instead of being
-  dropped silently (#47).
+  dropped silently (#47, thanks @Noschvie).
 
 - Tests: the embedded test broker no longer deadlocks when clients disconnect while it closes (mochi v2.7.9
   locks its client map recursively in `Server.Close`); this hung the first v0.13.0 tag run. It uses its own
@@ -52,32 +52,32 @@ always upgrade automatically.
 - Discovery: the identity probe that a device without identity gets when it comes online (an MQTT
   trigger) no longer sends a stored web password to an address that cannot prove the device's MAC; it is
   audited as `discovery.identify_unverified` and retried every 10 minutes. The probe of a device without a
-  stored MAC is audited with the MAC that answered (`discovery.reprobe`) and binds none (#47).
+  stored MAC is audited with the MAC that answered (`discovery.reprobe`) and binds none (#47, thanks @Noschvie).
 - Discovery: accepting a device without MAC proof is audited with `mac_unverified`; for an offline device
   the fleet default password is withheld (`default_password_withheld`). A `STATUS5` reply counts only for
-  the topic discovery asked and only within 30 s (#47).
+  the topic discovery asked and only within 30 s (#47, thanks @Noschvie).
 
 ## 0.12.3 (2026-10-25)
 
 ### Fixed
 
-- Backup: the downloaded backup file is named after the device instead of a generic name (#55).
+- Backup: the downloaded backup file is named after the device instead of a generic name (#55, thanks @Noschvie).
 - Backup: a Status 9 "Command Error" from a device without energy monitoring no longer marks a snapshot
-  incomplete (#55).
+  incomplete (#55, thanks @Noschvie).
 - Devices: a device's name defaults to Tasmota's DeviceName (labelled "Device name") instead of the
-  hostname, in a scan, Discovery and the add flow. Names already stored are kept (#52).
+  hostname, in a scan, Discovery and the add flow. Names already stored are kept (#52, thanks @Noschvie).
 - Devices: the MQTT topic is the resolved one (`tasmota_2BE970`), not the setting `tasmota_%06X`. The
   unresolved topic never matched a message, so such a device showed "MQTT: Not connected" while it was
-  online. A refresh repairs stored topics that still hold a placeholder (#52).
+  online. A refresh repairs stored topics that still hold a placeholder (#52, thanks @Noschvie).
 - Devices: the upgrade resolves a stored `tasmota_%06X` topic from the device's MAC (Tasmota uses the last 6
   hex digits of the Wi-Fi MAC), so existing devices show their MQTT state without a manual refresh. Other
   placeholders are repaired by the next identity refresh. A topic or DeviceName read from a device is
-  validated (no wildcards, `/`, `%`, control characters) before it is stored (#52).
+  validated (no wildcards, `/`, `%`, control characters) before it is stored (#52, thanks @Noschvie).
 - Devices: self-compiled builds that report `16.0.0(tasmota32)` show "tasmota32 (self-compiled)" as Build instead
-  of "unknown". The variant stays unknown, so OTA still needs an explicit variant choice (#52).
+  of "unknown". The variant stays unknown, so OTA still needs an explicit variant choice (#52, thanks @Noschvie).
 - Devices: Ethernet boards show their Ethernet IP, gateway and MAC; the Wi-Fi card becomes an Ethernet card
-  (#52).
-- Devices: the Network card no longer repeats the address as "IP address" (#52).
+  (#52, thanks @Noschvie).
+- Devices: the Network card no longer repeats the address as "IP address" (#52, thanks @Noschvie).
 
 ## 0.12.2 (2026-10-25)
 
@@ -86,7 +86,7 @@ always upgrade automatically.
 - Start: a data directory the container user (UID 65532) cannot write to, typically a bind mount that Docker
   created as root, now stops with `data dir /data is not writable by uid 65532: see README (bind mounts)`
   instead of an opaque secretbox error. The README explains `chown -R 65532:65532` / `user:` for bind
-  mounts and shows `TZ` in the Compose example (#33).
+  mounts and shows `TZ` in the Compose example (#33, thanks @Noschvie).
 - Settings: the MQTT connection test no longer reloads the page and blanks the password field. A password
   typed there passed the test, but the Save that followed saw an empty field and kept the old password, so
   the bus could not connect (#44). The test button now updates only its result line.

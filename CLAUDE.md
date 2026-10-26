@@ -230,6 +230,9 @@ in `.github/workflows/ci.yml`.
   "Unreleased". The release PR moves them into a new "## X.Y.Z (date)" section BEFORE
   the tag is set; the tag build fails when that section is missing
   (`make changelog-check TAG=vX.Y.Z`).
+- **Credit outside contributors**: every merged PR by someone else, and every issue or
+  report by someone else that led to a change, is credited at the end of that change's
+  CHANGELOG line as `(#N, thanks @handle)`. Do not credit the maintainer's own work.
 - Tags are signed (`git tag -s vX.Y.Z`) and only set on a green commit of `main`. The tag
   runs the FULL tier, and the image is published only when it passed. Before tagging, a
   FULL run of that commit (nightly or manual dispatch) should already be green.
