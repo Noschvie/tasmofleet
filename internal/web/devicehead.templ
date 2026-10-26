@@ -34,9 +34,6 @@ templ deviceHeader(t deviceTabs) {
 						<button
 							type="submit"
 							disabled?={ t.Health == model.HealthOffline }
-							if t.Health == model.HealthOffline {
-								title={ t.offlineWhy() }
-							}
 						>Update to { t.UpdateTo }</button>
 					</form>
 				}
@@ -55,7 +52,7 @@ templ deviceHeader(t deviceTabs) {
 			}
 			if t.CanRestart {
 				if t.Health == model.HealthOffline {
-					<button type="button" class="btn" disabled title={ t.offlineWhy() }>Restart</button>
+					<button type="button" class="btn" disabled>Restart</button>
 				} else {
 					@ui.Button(ui.Btn{Label: "Restart", Href: t.Base + devPath(t.ID, "/restart"), Dialog: "dlg-restart"})
 				}

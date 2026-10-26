@@ -63,11 +63,15 @@ func TestOfflineDeviceHeaderDisablesRestartAndUpdate(t *testing.T) {
 		d.DeviceCmd = &fakeCmd{}
 	})
 	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
-	if !strings.Contains(body, `<button type="button" class="btn" disabled title="The device is offline.">Restart</button>`) {
+	if !strings.Contains(body, `<button type="button" class="btn" disabled>Restart</button>`) {
 		t.Errorf("Restart is not disabled on an offline device")
 	}
-	if !strings.Contains(body, `title="The device is offline."`) || strings.Contains(body, `data-dialog="dlg-restart"`) {
+	if strings.Contains(body, `data-dialog="dlg-restart"`) {
 		t.Errorf("the restart dialog can still be opened")
+	}
+	// the offline banner is the visible reason; a self-explanatory button takes no tooltip
+	if !strings.Contains(body, "actions need the device to answer") {
+		t.Errorf("no visible reason on the page")
 	}
 }
 

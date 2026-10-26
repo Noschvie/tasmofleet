@@ -96,14 +96,6 @@ func (t deviceTabs) stateTone() ui.Tone {
 	return uiTone(t.Health)
 }
 
-// offlineWhy is the title of a header button that needs the device while it is offline; "" otherwise.
-func (t deviceTabs) offlineWhy() string {
-	if t.Health == model.HealthOffline {
-		return "The device is offline."
-	}
-	return ""
-}
-
 // offline says whether the header shows the offline banner.
 func (t deviceTabs) offline() bool { return !t.Updating && t.Health == model.HealthOffline }
 

@@ -147,7 +147,13 @@
     form.querySelectorAll("[data-bulkbar] [data-needs-device]").forEach(function (b) {
       var none = n > 0 && down === n;
       b.disabled = none;
-      b.title = none ? "None of the selected devices is online" : "";
+      // the reason is the visible note of the bar, not a tooltip (a button like "Send command"
+      // is self-explanatory and takes none)
+      if (none) {
+        b.setAttribute("aria-describedby", "bulk-note");
+      } else {
+        b.removeAttribute("aria-describedby");
+      }
     });
     // an action on exactly two rows (compare two backups) shows only then
     form.querySelectorAll("[data-needs-pair]").forEach(function (b) {
@@ -170,12 +176,11 @@
         if (off) {
           el.setAttribute("aria-disabled", "true");
           el.setAttribute("tabindex", "-1");
-          el.title = "The device is not online";
         } else {
           el.removeAttribute("aria-disabled");
           el.removeAttribute("tabindex");
-          el.removeAttribute("title");
         }
+        // the reason is the row's own status badge beside the menu, not a tooltip
       }
     });
   }

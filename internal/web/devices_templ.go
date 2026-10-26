@@ -778,7 +778,7 @@ func bulkBar(v view) templ.Component {
 			templ_7745c5c3_Var33 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 63, "<div class=\"bulkbar\" data-bulkbar hidden role=\"region\" aria-label=\"Selected devices\"><span class=\"bulk-count\"><span data-bar-label>0 devices selected</span><span class=\"bulk-note\" data-bar-note hidden></span></span><div class=\"bulk-acts\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 63, "<div class=\"bulkbar\" data-bulkbar hidden role=\"region\" aria-label=\"Selected devices\"><span class=\"bulk-count\"><span data-bar-label>0 devices selected</span><span class=\"bulk-note\" id=\"bulk-note\" data-bar-note hidden></span></span><div class=\"bulk-acts\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

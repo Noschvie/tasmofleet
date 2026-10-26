@@ -193,7 +193,7 @@ templ devicesTableBody(v view, p devicesPage) {
 // bulkBar is the bar of the selected devices (F5 markup; P2 adds nothing but its place).
 templ bulkBar(v view) {
 	<div class="bulkbar" data-bulkbar hidden role="region" aria-label="Selected devices">
-		<span class="bulk-count"><span data-bar-label>0 devices selected</span><span class="bulk-note" data-bar-note hidden></span></span>
+		<span class="bulk-count"><span data-bar-label>0 devices selected</span><span class="bulk-note" id="bulk-note" data-bar-note hidden></span></span>
 		<div class="bulk-acts">
 			if v.Features.Updates {
 				<button type="submit" data-needs-device class="primary" formaction={ templ.SafeURL(v.Base + "/updates/new") }><span class="bulk-lg">Update firmware</span><span class="bulk-sm">Update</span></button>

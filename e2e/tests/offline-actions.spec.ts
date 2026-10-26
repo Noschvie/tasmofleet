@@ -66,7 +66,12 @@ for (const width of [375, 1280]) {
       // only the dead device: nothing can run, so nothing can be clicked
       await deviceBox(page, dead).check();
       await expect(bar.locator("[data-bar-note]")).toHaveText(/it is not online$/);
-      for (const b of await acts.all()) await expect(b).toBeDisabled();
+      for (const b of await acts.all()) {
+        await expect(b).toBeDisabled();
+        // the reason is the visible note, read out through aria-describedby; self-explanatory buttons take no tooltip
+        await expect(b).toHaveAttribute("aria-describedby", "bulk-note");
+        await expect(b).not.toHaveAttribute("title", /.+/);
+      }
       await expectNoOverflow(page, "bar, none online");
       await shot(page, `offline-bar-none-${width}-${scheme}`);
 
