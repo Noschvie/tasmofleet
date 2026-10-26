@@ -4,7 +4,7 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
-## Unreleased
+## 0.14.0 (2026-10-26)
 
 ### Added
 
@@ -14,8 +14,6 @@ always upgrade automatically.
   once over MQTT (never `Status 0`; only online devices, once per device per 10 minutes, at most one per
   second on the bus; audited) and gets the full identity. The HTTP probe stays the primary source and always
   replaces what MQTT said; update safety checks are unchanged (#87, thanks @Noschvie).
-
-## 0.13.2 (2026-10-26)
 
 ### Fixed
 
