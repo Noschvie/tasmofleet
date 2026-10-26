@@ -46,7 +46,8 @@ A **version** is a SHA-256 digest (full length) over everything an admin sees an
   without proof (`mac_unverified`); nothing secret is sent, and the first probe checks
   the MAC first. A host that answers no Status 5 without credentials (a
   password-protected impostor) is probed with the stored password only if the admin set
-  one for it. Low.
+  one for it. Low. In general `Prober.Refresh` does not yet compare the probed MAC with the stored one; that
+  is tracked in #65.
 
 ## Deployment
 
