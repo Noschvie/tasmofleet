@@ -586,6 +586,32 @@ func TestRetainedLWTOfflineAtStartup(t *testing.T) {
 	h.want(1, model.HealthOffline)
 }
 
+// The LWT "Offline" is the broker speaking for a device that is gone, not a message from the
+// device. Counting it as contact made every offline device read "last seen 2m ago" (#92).
+func TestLWTOfflineIsNotContact(t *testing.T) {
+	h := newHarness(t, true, Options{}, mqttDev(1, "a"))
+	h.listen()
+	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Offline", true)
+	h.want(1, model.HealthOffline)
+	g := h.svc.Get(1)
+	if !g.LastSeen.IsZero() || !g.SeenMQTT.IsZero() {
+		t.Fatalf("a replayed LWT Offline counted as contact: last seen %v, mqtt %v", g.LastSeen, g.SeenMQTT)
+	}
+}
+
+func TestLWTOfflineKeepsTheTimeOfTheLastRealMessage(t *testing.T) {
+	h := newHarness(t, true, Options{}, mqttDev(1, "a"))
+	h.listen()
+	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Online", false)
+	seen := h.clk.Now()
+	h.advance(10 * time.Minute)
+	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Offline", false)
+	h.want(1, model.HealthOffline)
+	if got := h.svc.Get(1).LastSeen; !got.Equal(seen) {
+		t.Fatalf("last seen %v after LWT Offline, want the last real message at %v", got, seen)
+	}
+}
+
 func TestRetainedTelemetryDoesNotCountAsFresh(t *testing.T) {
 	h := newHarness(t, true, Options{}, mqttDev(1, "a"))
 	h.listen()

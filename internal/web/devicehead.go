@@ -54,8 +54,8 @@ func (h *handler) headOf(v view, d model.Device, hl model.Health, running *model
 			t.UpdateTo = latest
 		}
 	}
-	if !hl.LastSeen.IsZero() {
-		t.LastSeenAgo = agoWords(h.d.Clock.Now(), hl.LastSeen)
+	if seen := lastContact(d, hl); !seen.IsZero() {
+		t.LastSeenAgo = agoWords(h.d.Clock.Now(), seen)
 	}
 	return t
 }

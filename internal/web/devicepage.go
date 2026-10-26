@@ -500,6 +500,9 @@ func (h *handler) deviceDetail(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	v := h.view(r, d.Name, "devices", nil)
 	hl := h.d.Health.Get(d.ID)
+	if hl.State == model.HealthOffline {
+		hl.LastSeen = lastContact(d, hl) // the "seen ..." in the cards, as on the list
+	}
 	if hl.State == "" {
 		hl.State = model.HealthUnknown
 	}

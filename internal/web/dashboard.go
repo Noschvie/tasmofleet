@@ -227,7 +227,7 @@ func dashAttention(base string, now time.Time, rows []deviceRow, f fleetFacts, w
 		switch shownState(r) {
 		case model.HealthOffline:
 			rank, it.Tone, it.Text = 0, ui.ToneDanger, "Offline"
-			if seen := lastSeen(r); !seen.IsZero() {
+			if seen := lastContact(r.Device, r.Health); !seen.IsZero() {
 				it.Text += " · last seen " + agoWords(now, seen)
 			}
 		case model.HealthUnknown:
@@ -264,12 +264,13 @@ func dashAttention(base string, now time.Time, rows []deviceRow, f fleetFacts, w
 	return out
 }
 
-// lastSeen is when the device last answered: in this run, else when its identity was detected.
-func lastSeen(r deviceRow) time.Time {
-	if !r.Health.LastSeen.IsZero() {
-		return r.Health.LastSeen
+// lastContact is when the device last answered: in this run, else when its identity was last
+// read (stored, so it survives a restart). Zero when it never answered.
+func lastContact(d model.Device, hl model.Health) time.Time {
+	if !hl.LastSeen.IsZero() {
+		return hl.LastSeen
 	}
-	return r.Device.Identity.DetectedAt
+	return d.Identity.DetectedAt
 }
 
 // deviationText words a device's deviations like the prototype ("TelePeriod 60 → 300"), or

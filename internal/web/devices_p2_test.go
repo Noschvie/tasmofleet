@@ -37,6 +37,24 @@ func TestShownHealthKeepsNeverAnsweredDevicesUnknown(t *testing.T) {
 	}
 }
 
+// Why (#92): after a restart the tracker has no contact time for an offline device, but its
+// identity carries the time of the last successful read. Every page must show that, not "-" on
+// one page and a different time on the next.
+func TestOfflineDeviceShowsItsLastSuccessfulContactEverywhere(t *testing.T) {
+	detected := time.Date(2026, 10, 20, 8, 0, 0, 0, time.UTC)
+	d := model.Device{Identity: model.Identity{Version: "14.3.0", DetectedAt: detected}}
+	if got := shownHealth(d, model.Health{State: model.HealthOffline}).LastSeen; !got.Equal(detected) {
+		t.Errorf("list: last seen %v, want %v", got, detected)
+	}
+	live := detected.Add(time.Hour)
+	if got := shownHealth(d, model.Health{State: model.HealthOffline, LastSeen: live}).LastSeen; !got.Equal(live) {
+		t.Errorf("a contact seen in this run wins: %v, want %v", got, live)
+	}
+	if got := lastContact(model.Device{}, model.Health{State: model.HealthOffline}); !got.IsZero() {
+		t.Errorf("never answered: %v, want zero", got)
+	}
+}
+
 // Why: a device that never answered is no longer called Offline, but it still cannot be updated:
 // the update picker must keep refusing it with a reason (its hardware is not known either).
 func TestNeverAnsweredDeviceIsBlockedInTheUpdatePicker(t *testing.T) {

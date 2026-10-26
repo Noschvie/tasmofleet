@@ -118,6 +118,9 @@ func shownHealth(d model.Device, hl model.Health) model.Health {
 	if hl.State == model.HealthOffline && hl.LastSeen.IsZero() && d.Identity.Version == "" {
 		hl.State = model.HealthUnknown
 	}
+	if hl.State == model.HealthOffline {
+		hl.LastSeen = lastContact(d, hl)
+	}
 	return hl
 }
 

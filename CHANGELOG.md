@@ -4,6 +4,16 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## Unreleased
+
+### Fixed
+
+- Last seen: an offline device no longer shows a recent "last seen" time (for example "2m ago" in Needs
+  attention). The broker's retained or last-will `Offline` message was counted as contact from the device;
+  it no longer is, so the time is that of the last real message or poll. After a restart the device list,
+  the dashboard and the device page all fall back to the same stored time of the last successful identity
+  read (#92, thanks @Noschvie).
+
 ## 0.14.0 (2026-10-26)
 
 ### Added
@@ -14,6 +24,8 @@ always upgrade automatically.
   once over MQTT (never `Status 0`; only online devices, once per device per 10 minutes, at most one per
   second on the bus; audited) and gets the full identity. The HTTP probe stays the primary source and always
   replaces what MQTT said; update safety checks are unchanged (#87, thanks @Noschvie).
+
+## 0.13.2 (2026-10-26)
 
 ### Fixed
 

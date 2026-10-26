@@ -495,9 +495,14 @@ func (s *Service) onMessage(m mqttbus.Message) {
 	}
 	firstSeen := !ds.mqttSeen
 	ds.mqttSeen = true
-	ds.lastMQTT = now
-	ds.fails = 0 // the device is demonstrably alive
-	ds.authFailed = false
+	// An LWT "Offline" comes from the broker (the device's will, or its replay after our
+	// restart), not from the device: it is no contact, so it must not move "last seen" or
+	// clear the failures.
+	if m.Kind != mqttbus.KindLWT || !strings.EqualFold(strings.TrimSpace(string(m.Payload)), "offline") {
+		ds.lastMQTT = now
+		ds.fails = 0 // the device is demonstrably alive
+		ds.authFailed = false
+	}
 
 	switch m.Kind {
 	case mqttbus.KindLWT:
