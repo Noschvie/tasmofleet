@@ -1412,7 +1412,7 @@ component, device, job, batch, request_id, remote, user`. No secrets (redactor),
 ## 20. Packaging and deployment
 
 - **Image**: multi-stage `Dockerfile`; Go build with `CGO_ENABLED=0`; final
-  `gcr.io/distroless/cc-debian12:nonroot` (glibc for the decoder), user 65532. Includes the
+  `gcr.io/distroless/cc-debian13:nonroot` (glibc for the decoder), user 65532. Includes the
   decoder (§12.2). Size about 100 MB with decoder, about 35 MB without. `HEALTHCHECK` uses
   `tasmofleet healthcheck` (no curl in distroless). `VOLUME /data`; ports 8080 (UI) and 80
   (firmware). Binding port 80 as non-root relies on Docker's default

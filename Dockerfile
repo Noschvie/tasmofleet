@@ -11,7 +11,7 @@ ARG GO_VERSION=1.27
 ARG DECODER_VERSION=v16.0.0
 ARG DECODER_SHA256=00f6fde13ddae11b497252e7ddc421b35c009d3bc795cde219e0dd475a410622
 
-FROM docker.io/library/golang:${GO_VERSION}-bookworm AS build
+FROM docker.io/library/golang:${GO_VERSION}-trixie AS build
 WORKDIR /src
 COPY go.mod go.sum* ./
 RUN go mod download
@@ -22,7 +22,7 @@ ARG VERSION=dev
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/tasmofleet ./cmd/tasmofleet \
  && mkdir -p /out/data/tmp
 
-FROM docker.io/library/debian:bookworm-slim AS decoder
+FROM docker.io/library/debian:trixie-slim AS decoder
 ARG DECODER_VERSION
 ARG DECODER_SHA256
 ARG WITH_DECODER=true
@@ -35,7 +35,7 @@ RUN mkdir -p /out/bin /out/lib && if [ "$WITH_DECODER" = "true" ]; then \
       && cp -L /lib/x86_64-linux-gnu/libz.so.1 /out/lib/; \
     fi
 
-FROM gcr.io/distroless/cc-debian12:nonroot
+FROM gcr.io/distroless/cc-debian13:nonroot
 COPY --from=build /out/tasmofleet /usr/local/bin/tasmofleet
 COPY --from=decoder /out/bin/ /usr/local/bin/
 COPY --from=decoder /out/lib/ /usr/lib/x86_64-linux-gnu/

@@ -22,6 +22,12 @@ always upgrade automatically.
   version that still does not parse no longer aborts the probe either: the device keeps its chip and
   hardware, the version stays empty and the safety guard refuses every update (#45, thanks @Noschvie).
 
+### Security
+
+- Container image: build, decoder and runtime stages move from Debian 12 to Debian 13
+  (`gcr.io/distroless/cc-debian13:nonroot`); clears 15 fixable OS findings; the image
+  grows by about 4 MB (#77, #78, thanks @Noschvie).
+
 ## 0.13.1 (2026-10-26)
 
 ### Fixed
