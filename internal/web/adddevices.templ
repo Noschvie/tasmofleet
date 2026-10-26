@@ -246,7 +246,7 @@ templ discoveredPage(p discView) {
 									} else {
 										<button type="submit" class="btn btn-ghost add-ign" formaction={ templ.SafeURL(p.Base + "/discovery/proposals/" + strconv.FormatInt(r.ID, 10) + "/dismiss") }>Ignore</button>
 										<a class="btn btn-sm" href={ templ.SafeURL(r.AddHref) } title="Add with a web password">Add…</a>
-										<button type="submit" class="btn btn-primary btn-sm" formaction={ templ.SafeURL(p.Base + "/discovery/proposals/" + strconv.FormatInt(r.ID, 10) + "/accept") } name="version" value={ r.Version }>Add</button>
+										<button type="submit" class="btn btn-primary" formaction={ templ.SafeURL(p.Base + "/discovery/proposals/" + strconv.FormatInt(r.ID, 10) + "/accept") } name="version" value={ r.Version }>Add</button>
 									}
 								</td>
 							</tr>

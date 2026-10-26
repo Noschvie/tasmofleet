@@ -1063,14 +1063,14 @@ func discoveredPage(p discView) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 100, "\" title=\"Add with a web password\">Add…</a> <button type=\"submit\" class=\"btn btn-primary btn-sm\" formaction=\"")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 100, "\" title=\"Add with a web password\">Add…</a> <button type=\"submit\" class=\"btn btn-primary\" formaction=\"")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 					var templ_7745c5c3_Var54 string
 					templ_7745c5c3_Var54, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.SafeURL(p.Base + "/discovery/proposals/" + strconv.FormatInt(r.ID, 10) + "/accept"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/adddevices.templ`, Line: 249, Col: 165}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/adddevices.templ`, Line: 249, Col: 158}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var54)
 					if templ_7745c5c3_Err != nil {
@@ -1083,7 +1083,7 @@ func discoveredPage(p discView) templ.Component {
 					var templ_7745c5c3_Var55 string
 					templ_7745c5c3_Var55, templ_7745c5c3_Err = templ.ResolveAttributeValue(r.Version)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/adddevices.templ`, Line: 249, Col: 200}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/adddevices.templ`, Line: 249, Col: 193}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var55)
 					if templ_7745c5c3_Err != nil {
