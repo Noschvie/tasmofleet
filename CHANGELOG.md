@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Fixed
+
+- Tests: an audit page test with fixed event dates started failing once they fell out of the default 7-day window; it now uses a fixed test clock (#74, thanks @Noschvie).
+
 ### Security
 
 - Dependencies: `golang.org/x/net` v0.59.0 -> v0.60.0 (indirect). Fixes five HTTP/2 findings in
@@ -27,6 +31,10 @@ always upgrade automatically.
   without an HTTP probe, also while it is offline; rows show "Offline" from the MQTT LWT. A device added
   this way gets its first identity probe when it comes online, after its address answered with its
   MAC (#45, thanks @Noschvie).
+
+### Changed
+
+- README: the Docker Compose example sets `container_name: tasmofleet` (#62, thanks @Noschvie).
 
 ### Fixed
 
