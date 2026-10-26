@@ -88,3 +88,41 @@ func TestUpdateNetStoresOnlyTheFactsOfTheSameDevice(t *testing.T) {
 		t.Fatalf("a stale read overwrote the facts: %+v", d.Net)
 	}
 }
+
+// Why (#87): an identity announced over MQTT may only fill a device that no HTTP probe has
+// identified, and must never change anything else about it. A probe that finished meanwhile
+// (identity_at set) always wins, and so does an edit that moved the device.
+func TestUpdateIdentityFromMQTTNeverOverwritesAnHTTPIdentity(t *testing.T) {
+	s, _, _ := newStore(t)
+	id, err := s.CreateDevice(ctx, model.Device{Name: "plug", Address: "192.0.2.10", MAC: "aa:bb:cc:00:00:01", Topic: "plug", Notes: "kept"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	guard := ProbeGuard{Address: "192.0.2.10", MAC: "aa:bb:cc:00:00:01"}
+	mq := model.Identity{Family: model.ChipESP8266, Hardware: "ESP8266EX", Version: "16.0.0", Image: "release-tasmota", Variant: "tasmota"}
+
+	if err := s.UpdateIdentityFromMQTT(ctx, id, guard, "other-topic", mq); !errors.Is(err, ErrConflict) {
+		t.Fatalf("another topic: err = %v, want ErrConflict", err)
+	}
+	if err := s.UpdateIdentityFromMQTT(ctx, id, guard, "plug", mq); err != nil {
+		t.Fatal(err)
+	}
+	d, _ := s.GetDevice(ctx, id)
+	if d.Identity.Version != "16.0.0" || d.Identity.Family != model.ChipESP8266 || d.Notes != "kept" {
+		t.Fatalf("not stored: %+v", d)
+	}
+	if !d.Identity.DetectedAt.IsZero() {
+		t.Errorf("MQTT set DetectedAt %v: the HTTP probe would never run", d.Identity.DetectedAt)
+	}
+
+	httpID := model.Identity{Family: model.ChipESP32, Hardware: "ESP32-D0WD-V3", Version: "15.0.0", Image: "release-tasmota32", Variant: "tasmota", DetectedAt: time.Unix(1700000000, 0)}
+	if err := s.UpdateProbe(ctx, id, guard, ProbeResult{Identity: httpID}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.UpdateIdentityFromMQTT(ctx, id, guard, "plug", mq); !errors.Is(err, ErrConflict) {
+		t.Fatalf("after an HTTP probe: err = %v, want ErrConflict", err)
+	}
+	if d, _ = s.GetDevice(ctx, id); d.Identity.Version != "15.0.0" || d.Identity.Family != model.ChipESP32 {
+		t.Fatalf("the HTTP identity was overwritten: %+v", d.Identity)
+	}
+}

@@ -55,16 +55,9 @@ func detect(in Inputs) (model.Identity, error) {
 	// An unparseable Version does not cost the device its identity (#45): the version stays
 	// empty and the variant unknown, so the identity is never Known() and Guard refuses
 	// every OTA, exactly as for unknown hardware. Nothing is guessed from the string.
-	if fv, ok := parseVersion(s2.StatusFWR.Version); ok {
-		variant, ok := variantFromTag(fv.tag, fam, single)
-		// CORE32SOLO1 builds exist only for the classic ESP32.
-		if fv.cores == coresSingle && fam != model.ChipUnknown && fam != model.ChipESP32 {
-			ok = false
-		}
-		if !ok {
-			return model.Identity{}, fmt.Errorf("fwselect: image %q (%q) does not run on hardware %q: %w", fv.tag, fv.cores, hw, ErrFamilyMismatch)
-		}
-		id.Version, id.Image, id.Variant = fv.semver, fv.tag, variant
+	id, err := applyVersion(id, s2.StatusFWR.Version)
+	if err != nil {
+		return model.Identity{}, err
 	}
 	if len(in.Status4) > 0 {
 		var s4 status4Reply
@@ -78,6 +71,51 @@ func detect(in Inputs) (model.Identity, error) {
 		id.FlashSizeKB, id.ProgramFlashSizeKB, id.FreeKB = m.FlashSize, m.ProgramFlashSize, m.Free
 	}
 	return id, nil
+}
+
+// applyVersion sets Version, Image and Variant of id from a firmware version string, checking the
+// image against the hardware id already carries (unknown hardware: nothing to check against). A
+// string outside the grammar leaves them empty/unknown without an error (#45); an image that
+// cannot run on the hardware is ErrFamilyMismatch.
+func applyVersion(id model.Identity, version string) (model.Identity, error) {
+	fv, ok := parseVersion(version)
+	if !ok {
+		return id, nil
+	}
+	variant, ok := variantFromTag(fv.tag, id.Family, id.SingleCore)
+	// CORE32SOLO1 builds exist only for the classic ESP32.
+	if fv.cores == coresSingle && id.Family != model.ChipUnknown && id.Family != model.ChipESP32 {
+		ok = false
+	}
+	if !ok {
+		return model.Identity{}, fmt.Errorf("fwselect: image %q (%q) does not run on hardware %q: %w", fv.tag, fv.cores, id.Hardware, ErrFamilyMismatch)
+	}
+	id.Version, id.Image, id.Variant = fv.semver, fv.tag, variant
+	return id, nil
+}
+
+// DetectInfo1 reads the firmware version from a tele/<topic>/INFO1 message, which every device
+// publishes at boot ({"Info1":{"Module":..,"Version":"16.0.0(release-tasmota)",..}}), and applies
+// it to base, the identity already known (zero: none). Only Version, Image and Variant change.
+// INFO1 carries no hardware, so without a family in base the result is never Known() and Guard
+// refuses every update on it; the variant is checked against base's hardware when there is one.
+// A version outside the grammar is an error (nothing to take over), unlike Detect, which keeps
+// the hardware of such a device.
+func DetectInfo1(payload []byte, base model.Identity) (model.Identity, error) {
+	var m struct {
+		Info1 *struct{ Version string }
+	}
+	if err := json.Unmarshal(payload, &m); err != nil {
+		return model.Identity{}, fmt.Errorf("fwselect: parse INFO1: %w", err)
+	}
+	if m.Info1 == nil {
+		return model.Identity{}, errors.New("fwselect: INFO1 message has no Info1 object")
+	}
+	if _, ok := parseVersion(m.Info1.Version); !ok {
+		return model.Identity{}, fmt.Errorf("%w: %q", errBadVersion, m.Info1.Version)
+	}
+	base.Version, base.Image, base.Variant = "", "", variantUnknown
+	return applyVersion(base, m.Info1.Version)
 }
 
 // detectMinimal handles firmware that answers Status 2 with Unknown:

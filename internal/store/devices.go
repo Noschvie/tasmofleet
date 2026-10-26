@@ -336,6 +336,30 @@ func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuar
 	return nil
 }
 
+// UpdateIdentityFromMQTT stores the identity fields a device announced over MQTT (INFO1, or the
+// Status 2 reply asked for over MQTT): chip family, hardware, firmware version, image and
+// variant, and nothing else. It writes only while no probe over HTTP has ever identified the
+// device (identity_at = 0) and only for the device that was read (address, port, MAC and MQTT
+// topic unchanged). A probe that stored an identity meanwhile therefore always wins:
+// ErrConflict, nothing written. It never sets identity_at, so the first HTTP probe still runs.
+func (s *SQLite) UpdateIdentityFromMQTT(ctx context.Context, id model.DeviceID, g ProbeGuard, topic string, i model.Identity) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE devices SET chip_family=?, hardware=?, single_core=?, fw_version=?, fw_image=?,
+		fw_variant=?, updated_at=? WHERE id=? AND address=? AND port=? AND mac=? AND topic=? AND identity_at=0`,
+		string(i.Family), i.Hardware, b2i(i.SingleCore), i.Version, i.Image, i.Variant,
+		toMS(s.now()), id, g.Address, g.Port, strings.ToLower(g.MAC), topic)
+	if err != nil {
+		return mapErr(err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("%w: device %d changed, was deleted or was identified over HTTP", ErrConflict, id)
+	}
+	return nil
+}
+
 // UpdateNet stores the network facts of a background read (app.Prober.ReadNet) and nothing
 // else, under the same guard as UpdateProbe: a device deleted, moved or rebound since the read
 // began is left alone (ErrConflict).

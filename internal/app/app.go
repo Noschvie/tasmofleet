@@ -148,6 +148,10 @@ func (a *runtime) run(ctx context.Context) error {
 		a.svc.Prober.ReadNet, a.log)
 	a.svc.Prober.ReadNetLater = nf.later
 	a.goBG("netfacts", func() error { nf.run(bg); return nil })
+	// Firmware version over MQTT for devices on our broker that HTTP did not identify (#87).
+	mid := newMQTTIdentity(a.bus, a.svc.Inventory.List, a.svc.Store, a.svc.Audit,
+		func(id model.DeviceID) { a.svc.Prober.announce(id) }, a.log)
+	a.goBG("mqtt-identity", func() error { mid.run(bg); return nil })
 
 	if err := a.setupBackups(bg); err != nil {
 		return err

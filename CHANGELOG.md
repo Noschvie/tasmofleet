@@ -4,6 +4,17 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## Unreleased
+
+### Added
+
+- Identity over MQTT: a device on our broker that HTTP cannot identify (unreachable, refused, not yet
+  probed) now shows its firmware version, taken from the `INFO1` message it publishes at every boot, read
+  with the same version grammar as `Status 2`. When it still lacks its hardware, tasmofleet asks `Status 2`
+  once over MQTT (never `Status 0`; only online devices, once per device per 10 minutes, at most one per
+  second on the bus; audited) and gets the full identity. The HTTP probe stays the primary source and always
+  replaces what MQTT said; update safety checks are unchanged (#87, thanks @Noschvie).
+
 ## 0.13.2 (2026-10-26)
 
 ### Fixed
