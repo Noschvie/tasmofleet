@@ -4,6 +4,13 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## Unreleased
+
+### Security
+
+- Dependencies: `golang.org/x/net` v0.59.0 -> v0.60.0 (indirect). Fixes five HTTP/2 findings in
+  the Go binary (one HIGH, four MEDIUM: CVE-2026-78669, -78659, -78660, -78663, -97032).
+
 ## 0.13.0 (2026-10-26)
 
 ### Added
