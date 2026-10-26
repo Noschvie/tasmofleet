@@ -6,7 +6,8 @@ Review findings are judged against this document. Every claim has a test.
 ## Model
 
 A **candidate** is a claim from the network: an MQTT message on
-`tasmota/discovery/<MAC>/config` or the answer to a scan probe. Any host in the
+`tasmota/discovery/<MAC>/config`, a `stat/<topic>/STATUS5` reply to discovery's own
+query (spec 11.3a), or the answer to a scan probe. Any host in the
 device networks (and any MQTT publisher) can claim any MAC, name, topic or IP.
 A **proposal** is a stored candidate. It never carries credentials.
 A **version** is a SHA-256 digest (full length) over everything an admin sees and `Accept` applies
@@ -28,6 +29,10 @@ A **version** is a SHA-256 digest (full length) over everything an admin sees an
 | D9  | The write is a compare-and-set (`inventory.UpdateIf`): if the device changed after Accept read it (rebound, edited, deleted), nothing is written (`ErrStale`). `inventory.UpsertExisting` never creates, so a device deleted between lookup and write is not resurrected (D1). |
 | D10 | Admin only. Scan start/cancel/end, accept and dismiss are audited; refused ranges too.                                                                                                                                                                  |
 | D11 | A dismissed proposal stays hidden while its content is unchanged (retained messages replay at every reconnect) and reappears when it changes.                                                                                                            |
+| D12 | MQTT-only sightings (LWT, STATE, INFO) never become a proposal: they carry no MAC. Discovery asks such a topic for its MAC with one `Status 5` over MQTT (never `Status 0`, safety rule 2) only while the topic is unresolved and online, at most once per topic per 10 min, one command at a time and at least 1 s apart for the bus, after 30 s online. Each query is audited (`discovery.identify`) and `DISCOVERY_MQTT` off stops them. At most 1024 unresolved topics are kept (oldest dropped). A fake LWT flood therefore costs at most one small command per second. |
+| D13 | A `STATUS5` reply is used only for a topic discovery asked and that is still unresolved; it is a claim like a discovery config (D4 sanitising, D2/D3 identity rules). Replies to tasmofleet's own HTTP probes of inventory devices (Tasmota mirrors them on MQTT) are ignored. |
+| D14 | A scan sighting never overwrites the topic or full topic a MQTT sighting stored for the same MAC (topic and online state of a device seen on MQTT come from MQTT); a MQTT sighting keeps the port a scan found. |
+| D15 | Accepting a proposal whose topic's last LWT is `Offline` skips the MAC check (nothing is sent anywhere). With the fleet default password the MAC proof is still required (fail closed). Re-probing a stored device that comes online without identity uses the stored record, at most once per device per 10 min, and never changes its topic or MAC. |
 
 ## Deployment
 
