@@ -301,14 +301,19 @@ data directory (TasmoAdmin lesson A4).
   identity field: firmware, build, chip, hardware and flash (Status 2/4, `GET /`), the network
   facts of Status 5 (hostname, IP, gateway; Wi-Fi from Status 11 follows in the background),
   MQTT broker (Status 6, SetOption3), and DeviceName and resolved topic (plain `Status`).
-  *MAC first:* the probe sends `Status 5` first and compares the MAC (Wi-Fi or Ethernet) with
-  the stored set before any other command; another MAC refuses the refresh
+  *MAC first:* the probe sends `Status 5` first, without credentials, and compares the MAC
+  (Wi-Fi or Ethernet) with the stored set before any other command. A device that answers it
+  without credentials has no web password, and the whole probe runs without them; only a 401
+  repeats `Status 5` with the stored credentials. Another MAC refuses the refresh
   (`app.RefreshRefusedError`, audit `device.refresh_refused`, shown on the device page; nothing
   written, nothing more sent). A device stored without a MAC gets the reported one bound
-  (audit `device.mac_bound`) when a person refreshes it (`actor` set); automatic refreshes
-  (discovery accept/reprobe, `actor` "") never bind (discovery D8). A MAC another device holds
-  is refused the same way (`store.ErrMACInUse`). Minimal firmware has no Status 5: nothing to
-  compare. *Name and topic:* the store records the DeviceName and topic of every probe
+  (audit `device.mac_bound`) when a person refreshes it (`actor` set; operators may refresh, so
+  an operator's refresh binds a missing MAC too, accepted 2026-10-26); automatic refreshes
+  (discovery accept/reprobe, `actor` "") never bind (discovery D8). Only a valid, non-zero MAC
+  (`inventory.NormaliseMAC`) is bound. A MAC another device holds is refused the same way
+  (`store.ErrMACInUse`). Minimal firmware has no Status 5: a device with a stored MAC is then
+  refused (`refusedUnverified`, the stored identity and `identity_at` stay); one without a MAC
+  is refreshed. *Name and topic:* the store records the DeviceName and topic of every probe
   (`device_name`, `device_topic`, migration 0029). The stored name follows the DeviceName while
   it is still the recorded one, or, for devices probed before 0029, while it is the hostname,
   topic or address tasmofleet filled in itself (not when the DeviceName is Tasmota's default
@@ -317,7 +322,8 @@ data directory (TasmoAdmin lesson A4).
   (#52). *Transport:* for a device recorded as `ours` whose HTTP probe could not be used
   (unreachable, timeout, HTTP API refused, address outside the device networks) the refresh
   goes over MQTT: `Status 5`, MAC rule as above, then `Status 2`, one question at a time per
-  device and one per second on the bus (shared with the #87 reader), audited
+  device and one per second on the bus (shared with the #87 reader; if the reader asked the
+  device between the two, the refresh waits 2 s and asks once more), audited
   (`identity.mqtt_ask`), a live answer on the device's own topic within 10 s. MQTT data stays
   the weaker source: it writes the identity only while `identity_at` is unset
   (`UpdateIdentityFromMQTT`), never sets `identity_at`, refuses minimal/safeboot answers, binds

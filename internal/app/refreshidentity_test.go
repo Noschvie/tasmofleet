@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/mqttbus"
+	"github.com/nofuturekid/tasmofleet/internal/secretbox"
 	"github.com/nofuturekid/tasmofleet/internal/simulator"
 	"github.com/nofuturekid/tasmofleet/internal/store"
 	"github.com/nofuturekid/tasmofleet/internal/tasmota"
@@ -250,6 +252,7 @@ type fakeAsker struct {
 	replies map[int]string
 	asked   []int
 	err     error
+	busy    map[int]int // answer errMQTTBusy this many times for Status N
 }
 
 func (f *fakeAsker) askStatus(_ context.Context, _ model.Device, n int, _ string) (json.RawMessage, error) {
@@ -258,6 +261,10 @@ func (f *fakeAsker) askStatus(_ context.Context, _ model.Device, n int, _ string
 	f.asked = append(f.asked, n)
 	if f.err != nil {
 		return nil, f.err
+	}
+	if f.busy[n] > 0 {
+		f.busy[n]--
+		return nil, errMQTTBusy
 	}
 	r, ok := f.replies[n]
 	if !ok {
@@ -465,4 +472,206 @@ func TestMQTTAskStatusWaitsForNoOtherQuestion(t *testing.T) {
 	if len(e.bus.sent()) != 0 {
 		t.Fatalf("sent %v", e.bus.sent())
 	}
+}
+
+// credLog records every command and whether its Target carried the stored credentials.
+type credLog struct {
+	tasmota.Client
+	mu    sync.Mutex
+	sent  []string // "Status 5" or "Status 5 +cred"
+	auth  bool     // the device has a web password: commands without credentials get ErrAuth
+	reply map[string]string
+}
+
+func (c *credLog) Command(ctx context.Context, t tasmota.Target, cmd string) (json.RawMessage, error) {
+	c.mu.Lock()
+	entry := cmd
+	if t.HasCredentials() {
+		entry += " +cred"
+	}
+	c.sent = append(c.sent, entry)
+	c.mu.Unlock()
+	if c.auth && !t.HasCredentials() {
+		return nil, tasmota.ErrAuth
+	}
+	if r, ok := c.reply[cmd]; ok {
+		return json.RawMessage(r), nil
+	}
+	return c.Client.Command(ctx, t, cmd)
+}
+
+func (c *credLog) RootPage(ctx context.Context, t tasmota.Target) (tasmota.RootInfo, error) {
+	if c.auth && !t.HasCredentials() {
+		return tasmota.RootInfo{}, tasmota.ErrAuth
+	}
+	return c.Client.RootPage(ctx, t)
+}
+
+func (c *credLog) withCredentials() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var out []string
+	for _, s := range c.sent {
+		if strings.HasSuffix(s, " +cred") {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// Why (#96 review): the MAC is checked before the stored password goes anywhere. Status 5 is
+// asked without credentials first; a device without a web password answers it, and then the
+// whole probe needs no credentials, so a device with another MAC never sees the password.
+// Only a device that asks for a password (401) gets Status 5 again with the credentials.
+func TestRefreshAsksTheMACWithoutCredentialsFirst(t *testing.T) {
+	const otherMAC = `{"StatusNET":{"Hostname":"x","IPAddress":"192.0.2.10","Mac":"DE:AD:BE:EF:00:01"}}`
+	setup := func(t *testing.T) (*Prober, *store.SQLite, model.DeviceID) {
+		p, st, id, _, _ := raceSetup(t)
+		cur, _ := st.GetDevice(context.Background(), id)
+		cur.HTTPUser, cur.HTTPPassword = "admin", "stored-pw"
+		if err := st.UpdateDevice(context.Background(), cur); err != nil {
+			t.Fatal(err)
+		}
+		return p, st, id
+	}
+	t.Run("no web password, another MAC", func(t *testing.T) {
+		p, _, id := setup(t)
+		c := &credLog{Client: p.Client, reply: map[string]string{"Status 5": otherMAC}}
+		p.Client = c
+		if err := p.Refresh(context.Background(), id, "admin"); !isRefusal(err) {
+			t.Fatalf("err = %v, want a refusal", err)
+		}
+		if got := c.withCredentials(); len(got) != 0 {
+			t.Fatalf("credentials went to another device: %v", got)
+		}
+	})
+	t.Run("no web password, the stored device", func(t *testing.T) {
+		p, _, id := setup(t)
+		c := &credLog{Client: p.Client}
+		p.Client = c
+		if err := p.Refresh(context.Background(), id, "admin"); err != nil {
+			t.Fatal(err)
+		}
+		if got := c.withCredentials(); len(got) != 0 {
+			t.Fatalf("a device without a web password got the credentials: %v", got)
+		}
+	})
+	t.Run("web password, another MAC", func(t *testing.T) {
+		p, _, id := setup(t)
+		c := &credLog{Client: p.Client, auth: true, reply: map[string]string{"Status 5": otherMAC}}
+		p.Client = c
+		if err := p.Refresh(context.Background(), id, "admin"); !isRefusal(err) {
+			t.Fatalf("err = %v, want a refusal", err)
+		}
+		if strings.Join(c.sent, ",") != "Status 5,Status 5 +cred" {
+			t.Fatalf("sent %v, want Status 5 without, then with credentials, then nothing", c.sent)
+		}
+	})
+}
+
+// storedMinimal stores a simulated device that runs minimal firmware, with mac and an identity
+// an earlier HTTP probe stored.
+func storedMinimal(t *testing.T, mac string) (*Prober, *store.SQLite, model.DeviceID, model.Identity) {
+	t.Helper()
+	p, d := probeFixture(t, simulator.DeviceSpec{Name: "minimal-plug", Profile: simulator.ProfileESP8266Min})
+	st := newTestStore(t)
+	d.Name, d.MAC = "plug", mac
+	id, err := st.CreateDevice(context.Background(), d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before := model.Identity{Family: model.ChipESP8266, Hardware: "ESP8285N08", Version: "15.0.0", Image: "tasmota", Variant: "tasmota",
+		DetectedAt: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)}
+	if err := st.UpdateIdentity(context.Background(), id, before); err != nil {
+		t.Fatal(err)
+	}
+	p.Devices = st
+	return p, st, id, before
+}
+
+// Why (#96 review L2): minimal firmware answers no Status 5, so the MAC of a device that has
+// one stored cannot be checked. The refresh must not then take the answers as the stored
+// device's: the stored identity and its time stay, and the page says why.
+func TestRefreshOfMinimalFirmwareWithAStoredMACKeepsTheIdentity(t *testing.T) {
+	p, st, id, before := storedMinimal(t, "aa:bb:cc:00:00:01")
+	var sent []string
+	p.Client = recorder{override{Client: p.Client}, &sent}
+	err := p.Refresh(context.Background(), id, "admin")
+	if !isRefusal(err) {
+		t.Fatalf("err = %v, want a refusal that explains the unchecked MAC", err)
+	}
+	if strings.Join(sent, ",") != "Status 5,Status 2" {
+		t.Fatalf("sent %v, want nothing after Status 2 decided minimal", sent)
+	}
+	got, _ := st.GetDevice(context.Background(), id)
+	if got.Identity.Version != before.Version || got.Identity.Variant != before.Variant || !got.Identity.DetectedAt.Equal(before.DetectedAt) {
+		t.Fatalf("identity %+v, want the stored %+v", got.Identity, before)
+	}
+	// Without a stored MAC there is nothing to check: the minimal identity is stored.
+	p2, st2, id2, _ := storedMinimal(t, "")
+	if err := p2.Refresh(context.Background(), id2, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := st2.GetDevice(context.Background(), id2); got.Identity.Variant != "minimal" {
+		t.Fatalf("variant %q, want minimal", got.Identity.Variant)
+	}
+}
+
+// Why (#96 review L4): only a real MAC is bound. An all-zero or malformed MAC in the answer would
+// bind a value every broken device shares, and the next refresh would compare with it.
+func TestRefreshBindsOnlyAValidMAC(t *testing.T) {
+	for _, mac := range []string{"00:00:00:00:00:00", "not-a-mac", ""} {
+		t.Run(mac, func(t *testing.T) {
+			p, st, id, _, _ := raceSetup(t)
+			audit := &idAudit{}
+			p.Audit = audit
+			cur, _ := st.GetDevice(context.Background(), id)
+			cur.MAC = ""
+			if err := st.UpdateDevice(context.Background(), cur); err != nil {
+				t.Fatal(err)
+			}
+			p.Client = override{Client: p.Client, reply: map[string]string{"Status 5": `{"StatusNET":{"Hostname":"h","IPAddress":"192.0.2.10","Mac":"` + mac + `"}}`}}
+			if err := p.Refresh(context.Background(), id, "admin"); err != nil {
+				t.Fatal(err)
+			}
+			if got, _ := st.GetDevice(context.Background(), id); got.MAC != "" {
+				t.Fatalf("bound %q", got.MAC)
+			}
+			if _, ok := audit.find("device.mac_bound"); ok {
+				t.Fatal("a binding was audited")
+			}
+		})
+	}
+}
+
+// Why (#96 review L6): between the refresh's Status 5 and Status 2 the background reader may put
+// its own Status 2 question to the device. The refresh waits for its turn once instead of failing.
+func TestRefreshOverMQTTWaitsOnceWhenTheDeviceIsBusy(t *testing.T) {
+	p, st, id, f := mqttOnlySetup(t, model.MQTTOurs)
+	p.busyWait = time.Millisecond
+	f.busy = map[int]int{2: 1}
+	if err := p.Refresh(context.Background(), id, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.asked) != 3 || f.asked[2] != 2 {
+		t.Fatalf("asked %v, want 5, 2, 2", f.asked)
+	}
+	if got, _ := st.GetDevice(context.Background(), id); got.Identity.Version != "16.0.0" {
+		t.Fatalf("version %q", got.Identity.Version)
+	}
+}
+
+func newTestStore(t *testing.T) *store.SQLite {
+	t.Helper()
+	dir := t.TempDir()
+	box, err := secretbox.LoadOrCreate(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := store.Open(filepath.Join(dir, "t.db"), box)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() }) // temp DB
+	return st
 }

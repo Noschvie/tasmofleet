@@ -59,6 +59,8 @@ type Prober struct {
 	MQTT mqttAsker
 	// Audit records refused refreshes, MAC bindings and MQTT questions. Nil: not recorded (tests).
 	Audit audit.Recorder
+	// busyWait is how long an MQTT refresh waits before asking a busy device again (default 2 s).
+	busyWait time.Duration
 }
 
 // announce tells open pages that the stored facts of a device changed.
@@ -107,17 +109,28 @@ func (p *Prober) cmd(ctx context.Context, t tasmota.Target, c string) (json.RawM
 // probe queries the device. A device on minimal firmware only answers a few
 // commands, so MAC, topic and MQTT capability stay empty there.
 //
-// Status 5 goes first: it carries the MAC, and verify (if set) checks it before any other
-// command, so a refused device receives the stored credentials once at most (#65). Minimal
-// firmware knows neither Status 5 nor Status 2; Status 2 still decides minimal (spec 5), and
-// verify then runs after it.
+// Status 5 goes first, without credentials: it carries the MAC, and verify (if set) checks it
+// before the stored credentials go anywhere (#65). A device that answers it without them has no
+// web password, and the whole probe then runs without credentials. Only a device that asks for
+// a password (401) gets Status 5 again with them, so a refused device receives them in that
+// one command at most. Minimal firmware knows neither Status 5 nor Status 2: Status 2 still
+// decides minimal (spec 5) and goes out (with the credentials if the device asked for them)
+// before verify runs, which then sees a minimal device without a MAC; nothing follows a
+// refusal.
 func (p *Prober) probe(ctx context.Context, d model.Device, verify func(probed) error) (probed, error) {
 	t := tasmota.TargetFor(d)
 	var out probed
 	in := fwselect.Inputs{}
 
 	no5 := false
-	raw5, err := p.Client.Command(ctx, t, "Status 5")
+	raw5, err := p.Client.Command(ctx, tasmota.TargetFor(model.Device{ID: d.ID, Address: d.Address, Port: d.Port}), "Status 5")
+	switch {
+	case errors.Is(err, tasmota.ErrAuth) && t.HasCredentials():
+		raw5, err = p.cmd(ctx, t, "Status 5")
+	case err == nil || errors.Is(err, tasmota.ErrUnknownCommand):
+		// Answered without a password: the device needs none, so none is sent.
+		t = tasmota.TargetFor(model.Device{ID: d.ID, Address: d.Address, Port: d.Port})
+	}
 	switch {
 	case err == nil:
 		if out.net, err = parseStatus5(raw5, &out); err != nil {
@@ -413,8 +426,11 @@ func (p *Prober) Refresh(ctx context.Context, id model.DeviceID, actor string) e
 	} else {
 		res.DeviceName, res.DeviceTopic, res.NameFrom = pr.devName, pr.topic, fallbackName(d, pr)
 		res.SetNet, res.Net = true, p.withStoredWifi(d.Net, pr.net)
-		if d.MAC == "" && actor != "" && pr.mac != "" {
-			res.BindMACs = []string{pr.mac, pr.ethMAC}
+		if d.MAC == "" && actor != "" && bindable(pr.mac) {
+			res.BindMACs = []string{pr.mac}
+			if bindable(pr.ethMAC) {
+				res.BindMACs = append(res.BindMACs, pr.ethMAC)
+			}
 		}
 	}
 	// Only probe-owned fields are written, and only if the device is still
@@ -435,6 +451,12 @@ func (p *Prober) Refresh(ctx context.Context, id model.DeviceID, actor string) e
 		p.ReadNetLater(id) // the Wi-Fi facts of Status 11 fill in when they arrive
 	}
 	return nil
+}
+
+// bindable reports whether mac is a real MAC (normal form, not all zero) that may be bound.
+func bindable(mac string) bool {
+	n, err := inventory.NormaliseMAC(mac)
+	return err == nil && n != "" && n == mac && n != "00:00:00:00:00:00"
 }
 
 // tasmotaDefaultName is the DeviceName of a Tasmota whose name was never set (its FriendlyName1).
@@ -460,6 +482,8 @@ func fallbackName(d model.Device, pr probed) string {
 const (
 	refusedOther = "another MAC"
 	refusedTaken = "the MAC of another device"
+	// refusedUnverified: minimal firmware reports no MAC, and the device has one stored.
+	refusedUnverified = "no MAC (minimal firmware)"
 )
 
 // RefreshRefusedError says that the device that answered is not the stored one (#65). Nothing was
@@ -479,6 +503,10 @@ func (e *RefreshRefusedError) Refusal() string {
 	if e.Reported == "" {
 		mac = "no MAC"
 	}
+	if e.Reason == refusedUnverified {
+		return "The device runs minimal firmware, which does not report its MAC, so TasmoFleet cannot check that it is this device. " +
+			"The stored identity was kept. Refresh again once the update has finished."
+	}
 	if e.Reason == refusedTaken {
 		return "The device at this address reports " + mac + ", which belongs to another device in the inventory. Nothing was changed."
 	}
@@ -488,10 +516,14 @@ func (e *RefreshRefusedError) Refusal() string {
 }
 
 // checkMAC refuses a device that reports none of the stored MACs. Nothing to compare: a device
-// stored without a MAC, or minimal firmware (no Status 5).
+// stored without a MAC. Minimal firmware (no Status 5) cannot prove a stored MAC, so its answers
+// are not taken as the stored device's either: refused, the stored identity stays (#96 review).
 func (p *Prober) checkMAC(ctx context.Context, d model.Device, pr probed, actor, via string) error {
-	if d.MAC == "" || pr.minimal || d.HasMAC(pr.mac) || d.HasMAC(pr.ethMAC) {
+	switch {
+	case d.MAC == "" || d.HasMAC(pr.mac) || d.HasMAC(pr.ethMAC):
 		return nil
+	case pr.minimal:
+		return p.refuse(ctx, d, actor, via, "", refusedUnverified)
 	}
 	return p.refuse(ctx, d, actor, via, pr.mac, refusedOther)
 }
@@ -554,6 +586,19 @@ func (p *Prober) refreshMQTT(ctx context.Context, d model.Device, actor string) 
 		return err
 	}
 	raw2, err := p.MQTT.askStatus(ctx, d, 2, actor)
+	if errors.Is(err, errMQTTBusy) {
+		// The background reader asked the device meanwhile: wait for its turn once (#96 review).
+		wait := p.busyWait
+		if wait == 0 {
+			wait = 2 * mqttIDGap
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(wait):
+		}
+		raw2, err = p.MQTT.askStatus(ctx, d, 2, actor)
+	}
 	if err != nil {
 		return err
 	}

@@ -47,12 +47,14 @@ A **version** is a SHA-256 digest (full length) over everything an admin sees an
   the MAC first. A host that answers no Status 5 without credentials (a
   password-protected impostor) is probed with the stored password only if the admin set
   one for it. Low. Since #65 every `Prober.Refresh` (manual, accept, reprobe) sends `Status 5`
-  first and refuses a device with another MAC before any further command; the stored password
-  goes out with that one command (as with the health poller, which also sends it to the stored
-  address). A device stored without a MAC (import) has nothing to compare and is probed at the
+  first, without credentials, and refuses a device with another MAC before any further command.
+  Only a device that asks for a password (401) gets that one `Status 5` again with the stored
+  password before its MAC is known (as with the health poller, which also sends it to the
+  stored address). A device stored without a MAC (import) has nothing to compare and is probed at the
   address the admin set; a person's refresh then binds the reported MAC, an automatic one
-  (reprobe) does not (D8). Minimal firmware answers no Status 5, so a refresh of a device that
-  runs it cannot check the MAC. Low.
+  (reprobe) does not (D8). Minimal firmware answers no Status 5: a refresh of a device with a
+  stored MAC that runs it is refused and keeps the stored identity, right after its `Status 2` (which goes
+  out with the password if the device asked for one). Low.
 - **Topic table eviction (L2, review of #66).** Past 1024 tracked topics the oldest is
   dropped, and a dropped topic that reappears can be asked again before its 10 minutes are
   up; the bus-wide limit of one query per second still holds. A spoofed discovery config
