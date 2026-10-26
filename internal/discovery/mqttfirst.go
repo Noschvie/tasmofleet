@@ -3,6 +3,7 @@ package discovery
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/netip"
 	"sort"
@@ -348,11 +349,22 @@ func (m *Manager) markProbed(id model.DeviceID) {
 // online without a detected identity (added while offline), at most once per
 // reprobeEvery per device (spec 11.3a "Filled in later").
 //
-// The device was added without MAC proof, so its stored address must first
-// answer with its MAC (credential-less Status 5 through the Verifier): another
-// MAC there means another device, whose identity must not be stored under this
-// one. The refusal is audited; no answer (a password-protected device) lets the
-// probe run, it goes to the address the admin accepted.
+// The trigger is an MQTT message anyone can publish, and the probe sends the
+// stored credentials. So the stored address is first asked without
+// credentials (Verifier, Status 5):
+//
+//   - another MAC than the stored one: another device; refused and audited
+//     (discovery.identify_refused);
+//   - no proof (error: a password-protected device refuses the probe, a timeout,
+//     an impostor) for a device with a stored password: the password is not
+//     sent on this trigger (acceptMove rule, audit row 14); audited as
+//     discovery.identify_unverified and retried on the normal cadence. Without
+//     a stored password nothing secret goes out, so the probe runs;
+//   - no stored MAC: nothing to compare. The probe goes to the address the
+//     admin bound together with its password (add form, import, edit; the
+//     health poller sends them there too). It binds no MAC (Prober.Refresh
+//     never writes one, binding is an admin action, D8); the audit
+//     discovery.reprobe records the MAC that answered.
 func (m *Manager) reprobe(ctx context.Context, d model.Device, now time.Time) {
 	if m.o.OnAccepted == nil || !d.Identity.DetectedAt.IsZero() {
 		return
@@ -371,16 +383,31 @@ func (m *Manager) reprobe(ctx context.Context, d model.Device, now time.Time) {
 	}
 	m.reprobed[d.ID] = now
 	m.tmu.Unlock()
-	if m.o.Verifier != nil && d.MAC != "" { // no stored MAC: nothing to compare, the admin set the address
-		if mac, err := m.o.Verifier.VerifyMAC(ctx, d.Address, portOf(d)); err == nil {
-			if got, nerr := inventory.NormaliseMAC(mac); nerr != nil || !d.HasMAC(got) {
-				m.log.Warn("discovery: stored address answers with another MAC, identity probe not started", "device", d.ID, "address", d.Address)
-				m.audit(ctx, "discovery", "discovery.identify_refused", fmt.Sprintf("device:%d", d.ID),
-					map[string]any{"address": d.Address, "reason": "the stored address answers with another MAC"}, nil)
-				return
+	target := fmt.Sprintf("device:%d", d.ID)
+	answered, verr := "", errors.New("no verifier configured")
+	if m.o.Verifier != nil {
+		var mac string
+		if mac, verr = m.o.Verifier.VerifyMAC(ctx, d.Address, portOf(d)); verr == nil {
+			var nerr error
+			if answered, nerr = inventory.NormaliseMAC(mac); nerr != nil || answered == "" {
+				answered, verr = "", errors.New("unusable MAC in the answer")
 			}
 		}
 	}
+	switch {
+	case d.MAC != "" && verr == nil && !d.HasMAC(answered):
+		m.log.Warn("discovery: stored address answers with another MAC, identity probe not started", "device", d.ID, "address", d.Address)
+		m.audit(ctx, "discovery", "discovery.identify_refused", target,
+			map[string]any{"address": d.Address, "reason": "the stored address answers with another MAC"}, nil)
+		return
+	case d.MAC != "" && verr != nil && d.HasCredentials():
+		m.log.Info("discovery: MAC of the stored address could not be verified, credentials withheld", "device", d.ID, "address", d.Address)
+		m.audit(ctx, "discovery", "discovery.identify_unverified", target,
+			map[string]any{"address": d.Address, "reason": "MAC could not be verified, credentials withheld; retried in 10 min"}, nil)
+		return
+	}
+	det := map[string]any{"address": d.Address, "answered_mac": answered, "mac_bound": false, "stored_mac": d.MAC, "credentials": d.HasCredentials()}
+	m.audit(ctx, "discovery", "discovery.reprobe", target, det, nil)
 	m.log.Info("discovery: device came online without identity, probing it", "device", d.ID, "topic", d.Topic)
 	m.o.OnAccepted(d.ID)
 }

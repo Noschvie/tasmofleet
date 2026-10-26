@@ -618,3 +618,81 @@ func TestDefaultPasswordRefusalPointsToAddForm(t *testing.T) {
 		t.Fatalf("err = %v, want a pointer to Add…", err)
 	}
 }
+
+// ---- push security review before 0.13.0: credentials and identity binding ----
+
+func auditDetails(e *env, action string) []string {
+	e.audit.mu.Lock()
+	defer e.audit.mu.Unlock()
+	var out []string
+	for _, ev := range e.audit.ev {
+		if ev.Action == action {
+			out = append(out, ev.Detail)
+		}
+	}
+	return out
+}
+
+// Why: a reprobe is triggered by an MQTT message anyone can publish. For a
+// device with a stored password, an address that cannot prove the stored MAC
+// (a genuine password-protected Tasmota refuses the credential-less probe, but
+// so does an impostor) must not receive the password on that trigger
+// (acceptMove rule, audit row 14). It is retried on the normal cadence, and
+// probed as soon as the MAC is proven.
+func TestReprobeWithholdsStoredPasswordWhenMACIsUnverified(t *testing.T) {
+	var probed int
+	e := newMQTTEnv(t, func(o *Options) { o.OnAccepted = func(model.DeviceID) { probed++ } })
+	if _, err := e.inv.Create(bg, "t", model.Device{Name: "lamp", Address: "172.31.13.31", MAC: "02:00:5e:d2:2c:14", Topic: "lamp", HTTPPassword: "fake-stored-pw"}); err != nil {
+		t.Fatal(err)
+	}
+	e.feed(mqttbus.Message{Kind: mqttbus.KindLWT, Topic: "lamp", Payload: []byte("Online")})
+	if probed != 0 || len(auditDetails(e.env, "discovery.identify_unverified")) != 1 {
+		t.Fatalf("probes = %d, identify_unverified audits = %d; want 0 and 1", probed, len(auditDetails(e.env, "discovery.identify_unverified")))
+	}
+	for _, d := range auditDetails(e.env, "discovery.identify_unverified") {
+		if strings.Contains(d, "fake-stored-pw") {
+			t.Fatal("the password reached the audit detail")
+		}
+	}
+	e.feed(mqttbus.Message{Kind: mqttbus.KindState, Topic: "lamp", Payload: []byte(`{}`)})
+	if n := len(auditDetails(e.env, "discovery.identify_unverified")); n != 1 || probed != 0 {
+		t.Fatalf("retried within %v: audits %d, probes %d", reprobeEvery, n, probed)
+	}
+	e.ver.macs["172.31.13.31"] = "02:00:5e:d2:2c:14"
+	e.clk.add(reprobeEvery)
+	e.feed(mqttbus.Message{Kind: mqttbus.KindState, Topic: "lamp", Payload: []byte(`{}`)})
+	if probed != 1 {
+		t.Fatalf("probes after the MAC was proven = %d, want 1", probed)
+	}
+}
+
+// Why: without a stored password nothing secret goes out, so an unverified
+// MAC does not block the probe of a device with a stored MAC.
+func TestReprobeWithoutPasswordProbesWhenMACIsUnverified(t *testing.T) {
+	var probed int
+	e := newMQTTEnv(t, func(o *Options) { o.OnAccepted = func(model.DeviceID) { probed++ } })
+	if _, err := e.inv.Create(bg, "t", model.Device{Name: "lamp", Address: "172.31.13.31", MAC: "02:00:5e:d2:2c:14", Topic: "lamp"}); err != nil {
+		t.Fatal(err)
+	}
+	e.feed(mqttbus.Message{Kind: mqttbus.KindLWT, Topic: "lamp", Payload: []byte("Online")})
+	if probed != 1 || len(auditDetails(e.env, "discovery.identify_unverified")) != 0 {
+		t.Fatalf("probes = %d, want 1 without an unverified audit", probed)
+	}
+}
+
+// Why: a device without a stored MAC has nothing to verify; its first probe
+// is audited with the MAC its address answered and with the fact that the
+// probe binds none (binding a MAC is an admin action, D8).
+func TestReprobeOfDeviceWithoutMACIsAuditedWithTheAnsweringMAC(t *testing.T) {
+	var probed int
+	e := newMQTTEnv(t, func(o *Options) { o.OnAccepted = func(model.DeviceID) { probed++ } })
+	if _, err := e.inv.Create(bg, "import", model.Device{Name: "imported", Address: "172.31.13.31", Topic: "imported"}); err != nil {
+		t.Fatal(err)
+	}
+	e.ver.macs["172.31.13.31"] = "02:00:5e:d2:2c:14"
+	e.feed(mqttbus.Message{Kind: mqttbus.KindLWT, Topic: "imported", Payload: []byte("Online")})
+	det := auditDetails(e.env, "discovery.reprobe")
+	if probed != 1 || len(det) != 1 || !strings.Contains(det[0], `"answered_mac":"02:00:5e:d2:2c:14"`) || !strings.Contains(det[0], `"mac_bound":false`) {
+		t.Fatalf("probes = %d, reprobe audits = %q", probed, det)
+	}
+}

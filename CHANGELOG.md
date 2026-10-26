@@ -36,6 +36,10 @@ always upgrade automatically.
 
 ### Security
 
+- Discovery: the identity probe that a device without identity gets when it comes online (an MQTT
+  trigger) no longer sends a stored web password to an address that cannot prove the device's MAC; it is
+  audited as `discovery.identify_unverified` and retried every 10 minutes. The probe of a device without a
+  stored MAC is audited with the MAC that answered (`discovery.reprobe`) and binds none (#47).
 - Discovery: accepting a device without MAC proof is audited with `mac_unverified`; for an offline device
   the fleet default password is withheld (`default_password_withheld`). A `STATUS5` reply counts only for
   the topic discovery asked and only within 30 s (#47).

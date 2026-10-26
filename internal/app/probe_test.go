@@ -350,3 +350,18 @@ func TestDescribeRejectsUnsafeTopicsAndCleansTheName(t *testing.T) {
 		t.Fatalf("name %q topic %q err %v", got.Name, got.Topic, err)
 	}
 }
+
+// Why: a reprobe can be triggered by an MQTT message anyone can publish. The
+// probe owns identity and MQTT facts only: whatever MAC the address answers,
+// a refresh never writes the device's MAC (binding is an admin action, spec
+// 11.1; the general MAC comparison of a refresh is #65).
+func TestRefreshNeverWritesTheMAC(t *testing.T) {
+	p, st, id, d, _ := raceSetup(t) // stored MAC differs from the simulated device's
+	if err := p.Refresh(context.Background(), id); err != nil {
+		t.Fatal(err)
+	}
+	got, err := st.GetDevice(context.Background(), id)
+	if err != nil || got.MAC != d.MAC || len(got.MACs) > 1 {
+		t.Fatalf("MAC after refresh = %q %v (%v), want %q", got.MAC, got.MACs, err, d.MAC)
+	}
+}

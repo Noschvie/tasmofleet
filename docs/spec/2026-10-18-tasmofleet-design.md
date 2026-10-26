@@ -861,10 +861,14 @@ started while it is offline. "Add…" (the prefilled form) stays for typing a pa
 **Filled in later.** A device added this way has no identity yet. When the topic of any
 inventory device without a detected identity comes online (LWT `Online`, or a live STATE),
 discovery starts the first probe again (the same hook as after an accept), at most once per
-device per 10 minutes and not again right after an accept already started it. A device
-with a stored MAC is probed only if its address does not answer the credential-less
-Status 5 with another MAC (D15); a device without a stored MAC (for example a TasmoAdmin
-import whose first probe failed) is probed at the address the admin set. Queries and probes
+device per 10 minutes and not again right after an accept already started it. The trigger
+is an MQTT message anyone can publish and the probe carries the stored credentials, so
+the stored address is first asked without credentials (D15): another MAC refuses the
+probe; for a device with a stored MAC and a stored password, an address that cannot prove
+the MAC does not get the password on this trigger (retried every 10 minutes); without a
+password the probe runs. A device without a stored MAC (for example a TasmoAdmin import
+whose first probe failed) is probed at the address the admin bound with its password; the
+probe never binds a MAC, the audit records the MAC that answered. Queries and probes
 pause while the broker is unreachable. Topic and MAC of a stored device are never changed
 from MQTT (D2).
 
