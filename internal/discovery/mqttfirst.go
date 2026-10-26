@@ -293,7 +293,14 @@ func (m *Manager) askDue(ctx context.Context) {
 	now := m.clk.Now()
 	m.tmu.Lock()
 	bus := m.bus
-	if bus == nil || !m.attached || (!m.lastAsk.IsZero() && now.Sub(m.lastAsk) < askGap) {
+	m.tmu.Unlock()
+	// Connected is asked outside tmu (a bus may take its own lock), and while the
+	// broker is away nothing is picked: a query could not be sent anyway.
+	if bus == nil || !bus.Connected() {
+		return
+	}
+	m.tmu.Lock()
+	if m.bus != bus || !m.attached || (!m.lastAsk.IsZero() && now.Sub(m.lastAsk) < askGap) {
 		m.tmu.Unlock()
 		return
 	}
@@ -329,6 +336,14 @@ func (m *Manager) askDue(ctx context.Context) {
 	m.audit(ctx, "discovery", "discovery.identify", "mqtt:"+topic, map[string]any{"command": "Status 5", "reason": why}, nil)
 }
 
+// markProbed records that the first probe of id was just started (accept),
+// so a message before it stored the identity does not start a second one.
+func (m *Manager) markProbed(id model.DeviceID) {
+	m.tmu.Lock()
+	m.reprobed[id] = m.clk.Now()
+	m.tmu.Unlock()
+}
+
 // reprobe starts the first probe again for an inventory device that came
 // online without a detected identity (added while offline), at most once per
 // reprobeEvery per device (spec 11.3a "Filled in later").
@@ -356,7 +371,7 @@ func (m *Manager) reprobe(ctx context.Context, d model.Device, now time.Time) {
 	}
 	m.reprobed[d.ID] = now
 	m.tmu.Unlock()
-	if m.o.Verifier != nil {
+	if m.o.Verifier != nil && d.MAC != "" { // no stored MAC: nothing to compare, the admin set the address
 		if mac, err := m.o.Verifier.VerifyMAC(ctx, d.Address, portOf(d)); err == nil {
 			if got, nerr := inventory.NormaliseMAC(mac); nerr != nil || !d.HasMAC(got) {
 				m.log.Warn("discovery: stored address answers with another MAC, identity probe not started", "device", d.ID, "address", d.Address)

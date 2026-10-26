@@ -858,10 +858,15 @@ default password the MAC must still be proven (security review 2026-10-22), so a
 device is then added without it (audited as `default_password_withheld`); no first probe is
 started while it is offline. "Add…" (the prefilled form) stays for typing a password.
 
-**Filled in later.** A device added this way has no identity yet. When its topic comes
-online (LWT `Online`, or a live STATE) and its identity was never detected, discovery
-starts the first probe again (the same hook as after an accept), at most once per device
-per 10 minutes. Topic and MAC of a stored device are never changed from MQTT (D2).
+**Filled in later.** A device added this way has no identity yet. When the topic of any
+inventory device without a detected identity comes online (LWT `Online`, or a live STATE),
+discovery starts the first probe again (the same hook as after an accept), at most once per
+device per 10 minutes and not again right after an accept already started it. A device
+with a stored MAC is probed only if its address does not answer the credential-less
+Status 5 with another MAC (D15); a device without a stored MAC (for example a TasmoAdmin
+import whose first probe failed) is probed at the address the admin set. Queries and probes
+pause while the broker is unreachable. Topic and MAC of a stored device are never changed
+from MQTT (D2).
 
 No migration, no store contract change and no new dependency.
 

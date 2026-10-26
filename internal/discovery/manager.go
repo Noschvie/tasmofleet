@@ -744,13 +744,14 @@ func (m *Manager) acceptNew(ctx context.Context, actor string, row store.Proposa
 	}
 	if pw != "" {
 		if err != nil {
-			return 0, fmt.Errorf("%w: %s did not prove its MAC, so the default password is not sent there; accept without it and set the password in the device edit form: %w",
+			return 0, fmt.Errorf("%w: %s did not prove its MAC, so the default password is not sent there; use \"Add…\" and type the device's password (or none), or set it later in the device edit form: %w",
 				ErrNotAcceptable, d.Address, err)
 		}
 		d.HTTPPassword = pw // the fleet default (N20); the user stays empty: Tasmota's admin
 	}
 	id, err := m.o.Inventory.Create(ctx, actor, d)
 	if err == nil && m.o.OnAccepted != nil && !offline {
+		m.markProbed(id)
 		m.o.OnAccepted(id)
 	}
 	return id, err

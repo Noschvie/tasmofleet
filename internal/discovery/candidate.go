@@ -16,7 +16,7 @@ import (
 type candidate struct {
 	via       string
 	mac       string
-	macs      []string // further MACs of the same device (Ethernet), from a scan; empty from MQTT
+	macs      []string // further MACs of the same device (Ethernet), from a scan or a Status 5 reply
 	ip        netip.Addr
 	port      int // 0: unknown (MQTT), the stored port is kept
 	name      string

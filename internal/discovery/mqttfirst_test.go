@@ -26,6 +26,7 @@ type fakeBus struct {
 	subs map[int]func(mqttbus.Message)
 	next int
 	err  error
+	down bool // Connected() reports false
 }
 
 func (b *fakeBus) Subscribe(_ []mqttbus.Kind, h func(mqttbus.Message)) func() {
@@ -54,7 +55,11 @@ func (b *fakeBus) Command(_ context.Context, topic, command, payload string) err
 	return nil
 }
 
-func (b *fakeBus) Connected() bool { return true }
+func (b *fakeBus) Connected() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return !b.down
+}
 
 func (b *fakeBus) sent() []string {
 	b.mu.Lock()
@@ -539,5 +544,77 @@ func TestReprobeRefusedWhenTheAddressAnswersWithAnotherMAC(t *testing.T) {
 	e.feed(mqttbus.Message{Kind: mqttbus.KindState, Topic: "lamp", Payload: []byte(`{}`)})
 	if probed != 1 {
 		t.Fatalf("probes after the MAC matched = %d, want 1", probed)
+	}
+}
+
+// ---- Opus review of #66 ----
+
+// Why (M1): a device imported with a topic but no MAC (TasmoAdmin import
+// whose first probe failed) has nothing to compare; any answer is not
+// "another MAC". It must be probed at the address the admin set, not
+// refused every 10 minutes forever.
+func TestDeviceWithoutMACIsProbedWhenItComesOnline(t *testing.T) {
+	var probed int
+	e := newMQTTEnv(t, func(o *Options) { o.OnAccepted = func(model.DeviceID) { probed++ } })
+	if _, err := e.inv.Create(bg, "import", model.Device{Name: "imported", Address: "172.31.13.31", Topic: "imported"}); err != nil {
+		t.Fatal(err)
+	}
+	e.ver.macs["172.31.13.31"] = "02:00:5e:d2:2c:14"
+	e.feed(mqttbus.Message{Kind: mqttbus.KindLWT, Topic: "imported", Payload: []byte("Online")})
+	if probed != 1 || e.audit.has("discovery.identify_refused") {
+		t.Fatalf("probes = %d, refused = %v; want one probe, no refusal", probed, e.audit.has("discovery.identify_refused"))
+	}
+}
+
+// Why (L1): during a broker outage nothing can be sent; discovery must not
+// pick a topic every second and warn, and must ask once the bus is back.
+func TestNoQueriesWhileTheBusIsDown(t *testing.T) {
+	e := newMQTTEnv(t, nil)
+	e.feed(mqttbus.Message{Kind: mqttbus.KindLWT, Topic: "a", Payload: []byte("Online"), Retained: true})
+	e.clk.add(askGrace)
+	e.bus.mu.Lock()
+	e.bus.down, e.bus.err = true, mqttbus.ErrNotConnected
+	e.bus.mu.Unlock()
+	e.mgr.askDue(bg)
+	e.mgr.tmu.Lock()
+	asked := !e.mgr.topics["a"].asked.IsZero() || !e.mgr.lastAsk.IsZero()
+	e.mgr.tmu.Unlock()
+	if asked {
+		t.Fatal("a query was attempted while the bus is down")
+	}
+	e.bus.mu.Lock()
+	e.bus.down, e.bus.err = false, nil
+	e.bus.mu.Unlock()
+	e.mgr.askDue(bg)
+	if got := e.bus.sent(); len(got) != 1 {
+		t.Fatalf("commands after the bus came back = %q, want one", got)
+	}
+}
+
+// Why (L3): accepting an online device already starts its first probe; a
+// STATE arriving before that probe stored the identity must not start a second.
+func TestOnlineAcceptIsNotProbedTwice(t *testing.T) {
+	var probed int
+	e := newMQTTEnv(t, func(o *Options) { o.OnAccepted = func(model.DeviceID) { probed++ } })
+	e.ver.macs["172.31.13.31"] = "02:00:5e:d2:2c:14"
+	e.feed(discoveryMsg("02005ED22C14", "172.31.13.31", "lamp"))
+	e.feed(mqttbus.Message{Kind: mqttbus.KindLWT, Topic: "lamp", Payload: []byte("Online")})
+	if _, err := e.mgr.Accept(bg, "admin", onlyNew(t, e.env).ID); err != nil {
+		t.Fatal(err)
+	}
+	e.feed(mqttbus.Message{Kind: mqttbus.KindState, Topic: "lamp", Payload: []byte(`{}`)})
+	if probed != 1 {
+		t.Fatalf("first probes = %d, want 1", probed)
+	}
+}
+
+// Why (L5): the Discovered tab always sends the default password; when it is
+// refused, the message must point to the way that works ("Add…").
+func TestDefaultPasswordRefusalPointsToAddForm(t *testing.T) {
+	e := newMQTTEnv(t, nil)
+	e.feed(discoveryMsg("02005ED22C14", "172.31.13.31", "lamp"))
+	_, err := e.mgr.Accept(WithDevicePassword(bg, "fake-default"), "admin", onlyNew(t, e.env).ID)
+	if err == nil || !strings.Contains(err.Error(), "Add…") {
+		t.Fatalf("err = %v, want a pointer to Add…", err)
 	}
 }

@@ -47,7 +47,17 @@ A **version** is a SHA-256 digest (full length) over everything an admin sees an
   the MAC first. A host that answers no Status 5 without credentials (a
   password-protected impostor) is probed with the stored password only if the admin set
   one for it. Low. In general `Prober.Refresh` does not yet compare the probed MAC with the stored one; that
-  is tracked in #65.
+  is tracked in #65. A device stored without a MAC (import) has nothing to compare and is
+  probed at the address the admin set.
+- **Topic table eviction (L2, review of #66).** Past 1024 tracked topics the oldest is
+  dropped, and a dropped topic that reappears can be asked again before its 10 minutes are
+  up; the bus-wide limit of one query per second still holds. A spoofed discovery config
+  that names a real topic marks it as resolved, so that topic is not asked (its own
+  discovery config or a scan still finds it). Low.
+- **Synchronous MAC check (L4, review of #66).** The credential-less Status 5 before a
+  reprobe runs on the discovery loop; at Attach, many devices without identity coming
+  online at once delay the processing of queued messages by up to one HTTP timeout each
+  (bounded by once per device per 10 minutes). Nothing is lost, the queue is bounded. Low.
 
 ## Deployment
 
