@@ -24,6 +24,7 @@ checked (offline), only 20-21 retained discovery messages exist (`mqtt/discovery
 README.md                    this file
 MINIMAL-AND-OTA.md           minimal firmware / OTA flow / version strings / TasmoAdmin (source-derived)
 fleet-inventory.json         inventory of all discovered devices (sanitized MACs)
+firmware-versions.json       StatusFWR.Version shapes with their source (capture, Tasmota source line, field report) and the expected identity
 <topic>/                     one dir per captured device
    status-0.json ... status-11.json   `Status 0` and `Status N` individually (Status 12 skipped)
    upgrade.json   `Upgrade` without param          otaurl.json   `OtaUrl` without param

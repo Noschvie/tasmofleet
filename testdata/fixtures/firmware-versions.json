@@ -1,0 +1,56 @@
+[
+  {
+    "Version": "16.0.0(release-tasmota)",
+    "Hardware": "ESP8266EX",
+    "Source": "OBS: devices/kitchen-spotlight/status-2.json",
+    "Semver": "16.0.0",
+    "Image": "release-tasmota",
+    "Variant": "tasmota",
+    "SingleCore": false
+  },
+  {
+    "Version": "16.0.0(release-tasmota32)",
+    "Hardware": "ESP32-D0WDQ6 v1.0",
+    "Source": "OBS: devices/office-monitor-guest/status-2.json",
+    "Semver": "16.0.0",
+    "Image": "release-tasmota32",
+    "Variant": "tasmota",
+    "SingleCore": false
+  },
+  {
+    "Version": "16.0.0.3(85cff52-tasmota)",
+    "Hardware": "ESP8266EX",
+    "Source": "SRC: tasmota.ino:693-695 (fourth field when TASMOTA_VERSION & 0xff), Tasmota_build_devel.yml:65 (<sha>- prefix)",
+    "Semver": "16.0.0.3",
+    "Image": "85cff52-tasmota",
+    "Variant": "tasmota",
+    "SingleCore": false
+  },
+  {
+    "Version": "16.0.0(release-solo1)single-core",
+    "Hardware": "ESP32-S0WD",
+    "Source": "SRC: platformio_tasmota_env32.ini:382 (env tasmota32solo1: CODE_IMAGE_STR \"solo1\"), support_esp32.ino:994 (GetCodeCores: \"single-core\" with CORE32SOLO1), Tasmota_build_master.yml:63 (release- prefix)",
+    "Semver": "16.0.0",
+    "Image": "release-solo1",
+    "Variant": "tasmota",
+    "SingleCore": true
+  },
+  {
+    "Version": "16.0.0(tasmota32)",
+    "Hardware": "ESP32-D0WD-V3",
+    "Source": "FIELD: issue #52, self-compiled build (no release-/sha prefix)",
+    "Semver": "16.0.0",
+    "Image": "tasmota32",
+    "Variant": "unknown",
+    "SingleCore": false
+  },
+  {
+    "Version": "16.0.0(solo1)single-core",
+    "Hardware": "ESP32-S0WD",
+    "Source": "FIELD: issue #45 comment 6420538031, self-compiled solo1 build (hardware not reported, ESP32-S0WD assumed)",
+    "Semver": "16.0.0",
+    "Image": "solo1",
+    "Variant": "unknown",
+    "SingleCore": true
+  }
+]

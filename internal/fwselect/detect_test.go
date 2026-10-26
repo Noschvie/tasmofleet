@@ -1,9 +1,11 @@
 package fwselect
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
@@ -162,14 +164,22 @@ func TestDetectImageTags(t *testing.T) {
 		{"esp32 variant on solo1", "16.0.0(release-tasmota32-bluetooth)", "ESP32-SOLO", "", "", "", "", false, "", ErrFamilyMismatch},
 		{"esp32 variant on c3", "16.0.0(release-tasmota32-bluetooth)", "ESP32-C3", "", "", "", "", false, "", ErrFamilyMismatch},
 		{"safeboot on esp8266", "16.0.0(release-safeboot)", "ESP8266EX", "", "", "", "", false, "", ErrFamilyMismatch},
-		// Malformed versions are refused instead of guessed.
-		{"no tag", "16.0.0", "ESP8266EX", "", "", "", "", false, "", errBadVersion},
-		{"empty version", "", "ESP8266EX", "", "", "", "", false, "", errBadVersion},
-		{"letters in semver", "16.0.x(release-tasmota)", "ESP8266EX", "", "", "", "", false, "", errBadVersion},
-		{"empty field", "16..0(release-tasmota)", "ESP8266EX", "", "", "", "", false, "", errBadVersion},
-		{"leading dot", ".16.0(release-tasmota)", "ESP8266EX", "", "", "", "", false, "", errBadVersion},
-		{"trailing garbage", "16.0.0(release-tasmota)x", "ESP8266EX", "", "", "", "", false, "", errBadVersion},
-		{"empty tag", "16.0.0()", "ESP8266EX", "", "", "", "", false, "", errBadVersion},
+		// Upstream env tasmota32solo1 sets CODE_IMAGE_STR "solo1" and CORE32SOLO1, so the official
+		// build reports "(release-solo1)single-core" (platformio_tasmota_env32.ini, support_esp32.ino
+		// GetCodeCores). Refusing it would hide every official solo1 device (issue #45).
+		{"esp32 solo1 release", "16.0.0(release-solo1)single-core", "ESP32-S0WD", "", "tasmota", "", model.ChipESP32, true, "16.0.0", nil},
+		{"esp32 solo1 dev build", "16.0.0.3(85cff52-solo1)single-core", "ESP32-SOLO", "", "tasmota", "", model.ChipESP32, true, "16.0.0.3", nil},
+		// The reporter's self-compiled solo1 build (#45): a bare tag stays unknown like every other
+		// self-compiled build (#52), whatever chip it runs on.
+		{"self-compiled solo1", "16.0.0(solo1)single-core", "ESP32-S0WD", "", "unknown", "", model.ChipESP32, true, "16.0.0", nil},
+		{"self-compiled solo1 on dual core", "16.0.0(solo1)single-core", "ESP32-D0WD-V3", "", "unknown", "", model.ChipESP32, false, "16.0.0", nil},
+		{"solo1 release on dual core", "16.0.0(release-solo1)single-core", "ESP32-D0WD", "", "", "", "", false, "", ErrFamilyMismatch},
+		{"solo1 release on c3", "16.0.0(release-solo1)single-core", "ESP32-C3", "", "", "", "", false, "", ErrFamilyMismatch},
+		// CORE32SOLO1 exists only for the classic ESP32: a single-core build on another chip is a
+		// family mismatch even when the tag itself says nothing about the chip.
+		{"single-core build on esp8266", "16.0.0(tasmota)single-core", "ESP8266EX", "", "", "", "", false, "", ErrFamilyMismatch},
+		{"single-core build on c3", "16.0.0(release-foobar)single-core", "ESP32-C3", "", "", "", "", false, "", ErrFamilyMismatch},
+		{"single-core build on unknown hardware", "16.0.0(solo1)single-core", "ESP32-H2", "", "unknown", "", model.ChipUnknown, false, "16.0.0", nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -187,9 +197,94 @@ func TestDetectImageTags(t *testing.T) {
 			if id.Variant != tt.wantVariant || id.Language != tt.wantLang || id.Version != tt.wantSemver {
 				t.Errorf("variant/lang/version = %q/%q/%q, want %q/%q/%q", id.Variant, id.Language, id.Version, tt.wantVariant, tt.wantLang, tt.wantSemver)
 			}
-			wantImage := tt.version[len(tt.wantSemver)+1 : len(tt.version)-1]
+			_, rest, _ := strings.Cut(tt.version, "(")
+			wantImage, _, _ := strings.Cut(rest, ")")
 			if id.Image != wantImage {
 				t.Errorf("image = %q, want raw tag %q", id.Image, wantImage)
+			}
+		})
+	}
+}
+
+// TestDetectUnparseableVersion: a StatusFWR.Version that does not follow Tasmota's grammar
+// (support_command.ino: "<n>.<n>.<n>[.<n>]" "(" image ")" ["single-core"]) must not cost the
+// device its identity (#45: the device vanished from the fleet), and must not be guessed
+// around either. The identity keeps hardware and family, the version stays empty and the
+// variant unknown, so it is never Known() and Guard refuses every OTA (rule 1).
+func TestDetectUnparseableVersion(t *testing.T) {
+	versions := []string{
+		"16.0.0",                              // no image tag
+		"",                                    // empty
+		"16.0.x(release-tasmota)",             // letters in the version
+		"16..0(release-tasmota)",              // empty field
+		".16.0(release-tasmota)",              // leading dot
+		"16.0(release-tasmota)",               // Tasmota always prints three fields
+		"16(release-tasmota)",                 // one field
+		"16.0.0.1.2(release-tasmota)",         // more than the four fields Tasmota prints
+		"16.0.0-dev(release-tasmota)",         // Tasmota never prints a pre-release suffix
+		"16.0.0(release-tasmota)x",            // trailing garbage
+		"16.0.0(release-tasmota)dual-core",    // GetCodeCores only ever says "single-core"
+		"16.0.0(release-tasmota)single-core ", // trailing space
+		"16.0.0(release-tasmota",              // unterminated tag
+		"16.0.0()",                            // empty tag
+		"16.0.0()single-core",                 // empty tag with core suffix
+		"16.0.0(release(-tasmota)",            // nested parenthesis
+		"16.0.0(release-tasmota)(release-ir)", // two tags
+	}
+	for _, v := range versions {
+		t.Run(v, func(t *testing.T) {
+			id, err := Detect(Inputs{
+				Status2: status2(v, "ESP32-D0WD-V3"),
+				Status4: []byte(`{"StatusMEM":{"FlashSize":4096,"ProgramFlashSize":4096,"Free":1408}}`),
+				Root:    &RootInfo{Lang: "de"},
+			})
+			if err != nil {
+				t.Fatalf("an unparseable version must not abort the identity probe: %v", err)
+			}
+			want := model.Identity{
+				Family: model.ChipESP32, Hardware: "ESP32-D0WD-V3", Variant: variantUnknown, Language: "DE",
+				FlashSizeKB: 4096, ProgramFlashSizeKB: 4096, FreeKB: 1408,
+			}
+			if id != want {
+				t.Errorf("identity = %+v, want %+v", id, want)
+			}
+			if id.Known() {
+				t.Fatal("an identity without a version must never be Known()")
+			}
+			a := model.Artifact{Family: model.ChipESP32, Release: "16.0.0", Filename: "tasmota32.bin", Variant: variantTasmota}
+			err = Guard(id, a, "http://fleet.example:8080/fw/16.0.0/tasmota32.bin", Choice{Release: "16.0.0", Variant: variantTasmota, AllowVariantChange: true})
+			wantErr(t, err, ErrUnknownHardware)
+		})
+	}
+}
+
+// TestDetectVersionForms runs every StatusFWR.Version shape Tasmota's source can emit (and the
+// ones reported from the field) from testdata/fixtures/firmware-versions.json, so that a new
+// shape is added there with its source reference instead of being guessed in code.
+func TestDetectVersionForms(t *testing.T) {
+	var forms []struct {
+		Version, Hardware, Source string
+		Semver, Image, Variant    string
+		SingleCore                bool
+	}
+	if err := json.Unmarshal(readFixture(t, "firmware-versions.json"), &forms); err != nil {
+		t.Fatal(err)
+	}
+	if len(forms) == 0 {
+		t.Fatal("firmware-versions.json has no rows")
+	}
+	for _, f := range forms {
+		t.Run(f.Version+" on "+f.Hardware, func(t *testing.T) {
+			if f.Source == "" {
+				t.Fatal("every row needs a source (Tasmota file or field report)")
+			}
+			id, err := Detect(Inputs{Status2: status2(f.Version, f.Hardware)})
+			if err != nil {
+				t.Fatalf("Detect: %v", err)
+			}
+			if id.Version != f.Semver || id.Image != f.Image || id.Variant != f.Variant || id.SingleCore != f.SingleCore {
+				t.Errorf("version/image/variant/single = %q/%q/%q/%v, want %q/%q/%q/%v",
+					id.Version, id.Image, id.Variant, id.SingleCore, f.Semver, f.Image, f.Variant, f.SingleCore)
 			}
 		})
 	}

@@ -4,6 +4,17 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## Unreleased
+
+### Fixed
+
+- Identity: a firmware version with the core suffix that single-core ESP32 builds append
+  (`16.0.0(solo1)single-core`, also the official `16.0.0(release-solo1)single-core`) no longer aborts the
+  identity probe and hides the device. The official solo1 build is recognised as `tasmota` on single-core
+  ESP32; a self-compiled one keeps variant `unknown`, so OTA stays refused until a variant is chosen. A
+  version that still does not parse no longer aborts the probe either: the device keeps its chip and
+  hardware, the version stays empty and the safety guard refuses every update (#45, thanks @Noschvie).
+
 ## 0.13.1 (2026-10-26)
 
 ### Fixed

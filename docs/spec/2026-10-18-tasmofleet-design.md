@@ -334,8 +334,20 @@ and one per captured fixture. Unknown is final: no fallbacks, no substring guess
 
 ### 6.2 Image, variant and language from `StatusFWR.Version`
 
-`Version` = `<semver>(<sha-or-release>-<image>)`, e.g. `16.0.0(release-tasmota)`,
-`16.0.0(release-tasmota32)`, `16.0.0(release-minimal)`, dev builds `16.0.0(85cff52-tasmota)`.
+`Version` = `<version>(<sha-or-release>-<image>)<cores>` (SRC: `support_command.ino` Status 2 prints
+version, image name and `GetCodeCores()`), e.g. `16.0.0(release-tasmota)`, `16.0.0(release-tasmota32)`,
+`16.0.0(release-minimal)`, dev builds `16.0.0.3(85cff52-tasmota)`, solo1 `16.0.0(release-solo1)single-core`:
+
+- `<version>` is `<n>.<n>.<n>`, plus `.<n>` for development and patch builds (`tasmota.ino`). Nothing else
+  (no `-dev`, no two- or five-field versions).
+- `<cores>` is empty or `single-core` (only builds with `CORE32SOLO1`, `support_esp32.ino`; Tasmota never
+  prints `dual-core`). `single-core` on hardware that is known and not the classic ESP32 is `ErrFamilyMismatch`.
+- A `Version` that does not follow this grammar does not abort `Detect` (#45): the identity keeps family,
+  hardware, language and flash, `Version` stays empty and the variant `unknown`. It is never `Known()`, so
+  Guard refuses every OTA (rule 1), the same contract as unknown hardware. Nothing is guessed from the string.
+  The minimal-firmware path (Upgrade probe and main page) stays strict.
+
+`testdata/fixtures/firmware-versions.json` lists every shape with its source.
 `Identity.Image` keeps the raw tag. A self-compiled build reports the bare environment name
 (`16.0.0(tasmota32)`, no prefix): the variant stays `unknown`, so OTA never replaces a custom build
 without an explicit choice; the UI shows the reported name as "tasmota32 (self-compiled)". The variant is normalised:
@@ -347,6 +359,7 @@ without an explicit choice; the UI shows the reported name as "tasmota32 (self-c
 | `lite`, `sensors`, `knx`, `display`, `ir`, `zbbridge`, `zigbee`, `4M`                    | esp8266                        | same                                                                    |
 | `tasmota32`                                                                              | esp32 (dual core)              | `tasmota`                                                               |
 | `tasmota32solo1`                                                                         | esp32 single core              | `tasmota` + `SingleCore`                                                |
+| `solo1` (upstream env `tasmota32solo1` sets `CODE_IMAGE_STR "solo1"`)                    | esp32 single core              | `tasmota` + `SingleCore`                                                |
 | `tasmota32<chip>` (s2, s2cdc, s3, c2, c3, c5, c6, c61, p4, p4r3)                         | must equal the Hardware family | `tasmota`                                                               |
 | `tasmota32-<v>` (`bluetooth`, `display`, `ir`, `lvgl`, `nspanel`, `webcam`, `zbbrdgpro`) | esp32                          | `<v>`                                                                   |
 | `safeboot`                                                                               | esp32                          | `safeboot` (device sits in safeboot; treated like minimal)              |

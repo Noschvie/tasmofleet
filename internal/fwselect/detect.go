@@ -43,24 +43,28 @@ func detect(in Inputs) (model.Identity, error) {
 		return model.Identity{}, fmt.Errorf("fwselect: Status 2 reply has no StatusFWR: %w", ErrUnknownHardware)
 	}
 
-	semver, tag, err := splitVersion(s2.StatusFWR.Version)
-	if err != nil {
-		return model.Identity{}, err
-	}
 	hw := s2.StatusFWR.Hardware
 	fam, single := hardwareInfo(hw)
-	variant, ok := variantFromTag(tag, fam, single)
-	if !ok {
-		return model.Identity{}, fmt.Errorf("fwselect: image %q does not run on hardware %q: %w", tag, hw, ErrFamilyMismatch)
-	}
 	id := model.Identity{
 		Family:     fam,
 		Hardware:   hw,
 		SingleCore: single,
-		Version:    semver,
-		Image:      tag,
-		Variant:    variant,
+		Variant:    variantUnknown,
 		Language:   languageFromRoot(in.Root),
+	}
+	// An unparseable Version does not cost the device its identity (#45): the version stays
+	// empty and the variant unknown, so the identity is never Known() and Guard refuses
+	// every OTA, exactly as for unknown hardware. Nothing is guessed from the string.
+	if fv, ok := parseVersion(s2.StatusFWR.Version); ok {
+		variant, ok := variantFromTag(fv.tag, fam, single)
+		// CORE32SOLO1 builds exist only for the classic ESP32.
+		if fv.cores == coresSingle && fam != model.ChipUnknown && fam != model.ChipESP32 {
+			ok = false
+		}
+		if !ok {
+			return model.Identity{}, fmt.Errorf("fwselect: image %q (%q) does not run on hardware %q: %w", fv.tag, fv.cores, hw, ErrFamilyMismatch)
+		}
+		id.Version, id.Image, id.Variant = fv.semver, fv.tag, variant
 	}
 	if len(in.Status4) > 0 {
 		var s4 status4Reply
@@ -115,18 +119,37 @@ func detectMinimal(in Inputs) (model.Identity, error) {
 	}, nil
 }
 
-// splitVersion splits "16.0.0(release-tasmota)" into "16.0.0" and
-// "release-tasmota".
-func splitVersion(v string) (string, string, error) {
+// coresSingle is what GetCodeCores() appends for CORE32SOLO1 builds
+// (support_esp32.ino); every other build appends nothing.
+const coresSingle = "single-core"
+
+// fwVersion is StatusFWR.Version split the way Tasmota builds it
+// (support_command.ino, Status 2: version, image_name, GetCodeCores()).
+type fwVersion struct {
+	semver string // "16.0.0", or "16.0.0.3" for development and patch builds
+	tag    string // the image name inside the parentheses, e.g. "release-tasmota", "solo1"
+	cores  string // "" or coresSingle
+}
+
+// parseVersion splits "16.0.0(release-solo1)single-core" into its parts.
+// Anything that does not follow the grammar reports ok=false.
+func parseVersion(v string) (fwVersion, bool) {
 	semver, rest, ok := strings.Cut(v, "(")
-	if !ok || !strings.HasSuffix(rest, ")") || !isNumericVersion(semver) {
-		return "", "", fmt.Errorf("%w: %q", errBadVersion, v)
+	if !ok || !isTasmotaVersion(semver) {
+		return fwVersion{}, false
 	}
-	tag := strings.TrimSuffix(rest, ")")
-	if tag == "" {
-		return "", "", fmt.Errorf("%w: %q", errBadVersion, v)
+	tag, cores, ok := strings.Cut(rest, ")")
+	if !ok || tag == "" || strings.Contains(tag, "(") || (cores != "" && cores != coresSingle) {
+		return fwVersion{}, false
 	}
-	return semver, tag, nil
+	return fwVersion{semver: semver, tag: tag, cores: cores}, true
+}
+
+// isTasmotaVersion: Tasmota prints "%d.%d.%d" and appends ".%d" only for
+// development and patch builds (tasmota.ino), so three or four fields.
+func isTasmotaVersion(v string) bool {
+	n := strings.Count(v, ".")
+	return (n == 2 || n == 3) && isNumericVersion(v)
 }
 
 func isNumericVersion(v string) bool {
@@ -161,6 +184,10 @@ func variantFromTag(tag string, fam model.ChipFamily, single bool) (string, bool
 	switch {
 	case esp8266Variants[image] || image == variantMinimal:
 		return image, !known || fam == model.ChipESP8266
+	case image == "solo1":
+		// The upstream env tasmota32solo1 sets CODE_IMAGE_STR "solo1"
+		// (platformio_tasmota_env32.ini): the official single-core build.
+		return variantTasmota, !known || (fam == model.ChipESP32 && single)
 	case image == variantSafeboot:
 		return variantSafeboot, !known || fam.IsESP32()
 	case strings.HasPrefix(image, "tasmota32-"):
