@@ -40,7 +40,8 @@ func (m *mqttLink) setMuted(v bool) {
 }
 
 // connect (re)connects and publishes what a booting device publishes:
-// retained LWT Online, retained discovery (normal firmware only) and INFO1-3.
+// retained LWT Online, retained discovery (normal firmware without
+// DeviceSpec.NoDiscovery only) and INFO1-3.
 func (m *mqttLink) connect() {
 	if m == nil {
 		return
@@ -83,7 +84,7 @@ func (m *mqttLink) connect() {
 	v := d.viewLocked()
 	image, version := d.image, d.version
 	d.mu.Unlock()
-	if !minimal {
+	if !minimal && !d.spec.NoDiscovery {
 		if cfg, sensors := discoveryFor(d.f.o.FixturesDir, d.cap); cfg != nil {
 			mac := strings.ReplaceAll(d.mac, ":", "")
 			m.raw("tasmota/discovery/"+mac+"/config", d.substitute(string(cfg), version), true)

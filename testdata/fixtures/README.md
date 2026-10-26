@@ -37,6 +37,7 @@ fleet-inventory.json         inventory of all discovered devices (sanitized MACs
 mqtt/capture.txt             ~6.7 min of `tele/#`, `stat/#`, `tasmota/discovery/#`; format  time|retained|topic|payload
 mqtt/discovery-retained.jsonl  retained discovery configs seen at connect
 mqtt/samples/<type>.txt      first sample per topic per message type
+mqtt/synthetic-no-discovery.txt  SYNTHETIC (fake values): devices without tasmota/discovery (LWT, INFO1..3, STATE, STATUS5 incl. Ethernet)
 ```
 Raw files contain exactly what the device sent (JSON on one line, no trailing newline), after sanitising (section 7).
 

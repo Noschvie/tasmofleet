@@ -59,6 +59,10 @@ type DeviceSpec struct {
 	Password  string
 	Faults    []Fault
 	RebootGap time.Duration // offline time after Upgrade/Restart, default 3s in tests
+	// NoDiscovery leaves out the retained tasmota/discovery messages, like a
+	// build without USE_TASMOTA_DISCOVERY or a device with SetOption19 1: the
+	// device is on the broker (LWT, STATE, INFO) but announces no MAC.
+	NoDiscovery bool
 	// Relays is the number of relays (POWER1..n); 0 or 1 is a single relay
 	// reported as POWER. Relay 1 starts as captured, the others OFF.
 	Relays int

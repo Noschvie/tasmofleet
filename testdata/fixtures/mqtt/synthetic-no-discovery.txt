@@ -1,0 +1,13 @@
+# SYNTHETIC, not captured (spec 11.3a, issue #47). Devices that publish no tasmota/discovery config
+# (SetOption19 1, or a build without USE_TASMOTA_DISCOVERY). Payload shapes follow the captured
+# stat-STATUS5 samples and Tasmota's INFO1..3 source; every value is fake (02:00:5E MACs, 172.31.x IPs).
+# format: timestamp|retained-flag-as-delivered|topic|payload
+2026-10-26T10:00:00+0100|1|tele/garage-door/LWT|Online
+2026-10-26T10:00:00+0100|0|tele/garage-door/INFO1|{"Info1":{"Module":"Generic","Version":"15.1.0(release-tasmota)","FallbackTopic":"cmnd/DVES_A1B2C3_fb/","GroupTopic":"cmnd/tasmotas/"}}
+2026-10-26T10:00:00+0100|0|tele/garage-door/INFO2|{"Info2":{"WebServerMode":"Admin","Hostname":"garage-door","IPAddress":"172.31.13.41"}}
+2026-10-26T10:00:00+0100|0|tele/garage-door/INFO3|{"Info3":{"RestartReason":"Software/System restart","BootCount":12}}
+2026-10-26T10:00:01+0100|0|stat/garage-door/STATUS5|{"StatusNET":{"Hostname":"garage-door","IPAddress":"172.31.13.41","Gateway":"172.31.13.1","Subnetmask":"255.255.255.0","DNSServer1":"172.31.13.1","DNSServer2":"0.0.0.0","Mac":"02:00:5E:A1:B2:C3","Webserver":2,"HTTP_API":1,"WifiConfig":2,"WifiPower":17.0}}
+2026-10-26T10:00:00+0100|1|tele/workshop-eth/LWT|Online
+2026-10-26T10:00:02+0100|0|tele/workshop-eth/STATE|{"Time":"2026-10-26T10:00:02","Uptime":"0T01:00:00","UptimeSec":3600,"Heap":120,"LoadAvg":19,"POWER":"OFF"}
+2026-10-26T10:00:03+0100|0|stat/workshop-eth/STATUS5|{"StatusNET":{"Hostname":"workshop-eth","IPAddress":"0.0.0.0","Gateway":"0.0.0.0","Subnetmask":"0.0.0.0","DNSServer1":"172.31.23.1","DNSServer2":"0.0.0.0","Mac":"02:00:5E:E7:40:00","IP6Global":"","IP6Local":"","Ethernet":{"Hostname":"workshop-eth","IPAddress":"172.31.23.40","Gateway":"172.31.23.1","Subnetmask":"255.255.255.0","DNSServer1":"172.31.23.1","DNSServer2":"0.0.0.0","Mac":"02:00:5E:E7:40:01","IP6Global":"","IP6Local":""},"Webserver":2,"HTTP_API":1,"WifiConfig":2,"WifiPower":0.0}}
+2026-10-26T10:00:00+0100|1|tele/attic-fan/LWT|Offline
