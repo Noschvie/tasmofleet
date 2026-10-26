@@ -86,6 +86,14 @@ type DeviceSpec struct {
 	// "poweronstate", "mqtthost", ...), as if saved to flash before boot. They
 	// do not restart the device.
 	Settings map[string]string
+	// RefererCheck models SetOption128 0, Tasmota's default: /cm, /dl, /up,
+	// /u1 and /u2 answer only requests whose Referer starts, right after
+	// "http://", with the device's hostname or its IP. Any other request is
+	// refused the way the real web server does it: the handler sends nothing
+	// and the connection closes without a single byte (the device log reads
+	// "HTTP: Referer '' denied. Use 'SO128 1' ..."). The zero value is
+	// SetOption128 1, which is what the existing tests assume.
+	RefererCheck bool
 }
 
 // Device is a running simulated device.

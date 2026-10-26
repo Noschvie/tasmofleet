@@ -36,6 +36,14 @@ var (
 	// response for every caller that needs the data, hence the wrap.
 	ErrCommandError   = fmt.Errorf("%w: device answered Command Error", ErrBadResponse)
 	ErrNotImplemented = errors.New("tasmota: not implemented")
+	// ErrHTTPAPIRefused: a /cm command got no reply (the connection closed
+	// without a byte) while the device still serves its main page. That is how
+	// a device with SetOption128 0 (the default) answers a request whose
+	// Referer does not name its hostname or IP: the handler sends nothing, but
+	// the main page is not Referer-guarded. It is an ErrUnreachable for every
+	// caller that handles unreachable devices. Never returned for OtaUrl,
+	// Upgrade or uploads (the OTA engine probes after those itself).
+	ErrHTTPAPIRefused = fmt.Errorf("%w: the device refuses HTTP API commands (SetOption128 0)", ErrUnreachable)
 )
 
 // Target is an opaque, inventory-derived HTTP endpoint of one device.

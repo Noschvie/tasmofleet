@@ -189,6 +189,7 @@ func (c *httpClient) fetch(rctx, parent context.Context, t Target, method, p, ra
 		}
 		req.SetBasicAuth(user, t.pass)
 	}
+	setReferer(req, t)
 	resp, err := c.hc.Do(req)
 	if err != nil {
 		return nil, c.mapErr(parent, t, err)

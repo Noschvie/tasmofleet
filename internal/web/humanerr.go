@@ -15,6 +15,8 @@ func deviceProblem(err error) (msg string, ok bool) {
 	switch {
 	case errors.Is(err, tasmota.ErrAuth):
 		return "The device asked for a web password. Check the web user and password on the Edit page.", true
+	case errors.Is(err, tasmota.ErrHTTPAPIRefused):
+		return "The device refuses HTTP API commands from this address. Set SetOption128 1 on the device, or use its own IP address or hostname.", true
 	case errors.Is(err, tasmota.ErrUnreachable):
 		return "The device did not answer. Check that it is on and on the network.", true
 	case errors.Is(err, tasmota.ErrTimeout):

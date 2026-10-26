@@ -145,6 +145,10 @@ func (d *simDevice) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		drop(w)
 		return
 	}
+	if d.spec.RefererCheck && refererGuarded(r.URL.Path) && !d.refererOK(r) {
+		drop(w) // nothing is executed and nothing is recorded
+		return
+	}
 	cmd := ""
 	if r.URL.Path == "/cm" {
 		cmd = strings.TrimSpace(r.URL.Query().Get("cmnd"))
@@ -183,6 +187,27 @@ func (d *simDevice) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		d.writeBody(w, http.StatusNotFound, []byte(fmt.Sprintf("File Not Found\n\nURI: %s\nMethod: %s\nArguments: %d\n",
 			r.URL.Path, r.Method, len(r.URL.Query()))))
 	}
+}
+
+// refererGuarded: the handlers that start with HttpCheckPriviledgedAccess. The
+// main page does not (it only asks for the web password), and an unknown path
+// gets the 404 page.
+func refererGuarded(path string) bool {
+	switch path {
+	case "/cm", "/dl", "/up", "/u1", "/u2":
+		return true
+	}
+	return false
+}
+
+// refererOK is HttpCheckPriviledgedAccess's rule: the upper-cased Referer has
+// the hostname or the IP of the device at index 7, right after "http://".
+func (d *simDevice) refererOK(r *http.Request) bool {
+	ref := strings.ToUpper(r.Header.Get("Referer"))
+	if ref == "" {
+		return false
+	}
+	return strings.Index(ref, strings.ToUpper(d.topic)) == 7 || strings.Index(ref, strings.ToUpper(d.host)) == 7
 }
 
 func (d *simDevice) record(cmd string) {

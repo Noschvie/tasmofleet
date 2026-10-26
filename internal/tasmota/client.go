@@ -28,6 +28,7 @@ const (
 	upgradeTimeout  = 15 * time.Second
 	downloadTimeout = 20 * time.Second
 	rootTimeout     = 10 * time.Second
+	followUpTimeout = 3 * time.Second
 
 	defaultMaxResponse   = 1 << 20
 	defaultMaxConcurrent = 8
@@ -250,8 +251,12 @@ func (c *httpClient) get(ctx context.Context, t Target, path, rawQuery string, c
 		}
 		req.SetBasicAuth(user, t.pass)
 	}
+	setReferer(req, t)
 	resp, err := c.hc.Do(req)
 	if err != nil {
+		if path == "/cm" {
+			return nil, c.mapCommandNoReply(ctx, t, class, err)
+		}
 		return nil, c.mapErr(ctx, t, err)
 	}
 	defer resp.Body.Close() //nolint:errcheck // read-only body, nothing to recover
@@ -269,6 +274,54 @@ func (c *httpClient) get(ctx context.Context, t Target, path, rawQuery string, c
 		return nil, &deviceError{ErrBadResponse, "response larger than limit"}
 	}
 	return body, nil
+}
+
+// setReferer sends the Referer that Tasmota's default (SetOption128 0) demands
+// of every /cm, /dl, /up and /u2 request: the device's hostname or IP right
+// after "http://". The target address is the one the request goes to, so it
+// matches whenever the device is addressed by its IP or its own hostname. It
+// is a CSRF guard for browsers; a non-browser client may set it.
+func setReferer(req *http.Request, t Target) {
+	req.Header.Set("Referer", "http://"+t.display()+"/")
+}
+
+// mapCommandNoReply is mapErr for a /cm command that got no answer. EOF before
+// any response byte could be a dropped link or a device that refuses HTTP API
+// commands (SetOption128 0, no Referer match). One follow-up GET of the main
+// page, which Tasmota does not Referer-guard, tells them apart: if it answers,
+// the device is up and refuses. OtaUrl and Upgrade never get the follow-up, so
+// it cannot interfere with the OTA engine's own probe-after-loss logic.
+func (c *httpClient) mapCommandNoReply(parent context.Context, t Target, class time.Duration, err error) error {
+	if errors.Is(err, io.EOF) && parent.Err() == nil && class == statusTimeout && c.rootAnswers(parent, t) {
+		return &deviceError{ErrHTTPAPIRefused, t.redact("set SetOption128 1 on " + t.display() +
+			" (console, or Configure Other > HTTP API), or add it by its own IP or hostname")}
+	}
+	return c.mapErr(parent, t, err)
+}
+
+// rootAnswers reports whether GET / gets any HTTP answer within a short time.
+// The caller holds the device slot.
+func (c *httpClient) rootAnswers(parent context.Context, t Target) bool {
+	ctx, cancel := context.WithTimeout(parent, c.timeout(followUpTimeout))
+	defer cancel()
+	u := url.URL{Scheme: "http", Host: t.hostPort(), Path: "/"}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return false
+	}
+	if t.user != "" || t.pass != "" {
+		user := t.user
+		if user == "" {
+			user = "admin"
+		}
+		req.SetBasicAuth(user, t.pass)
+	}
+	resp, err := c.hc.Do(req)
+	if err != nil {
+		return false
+	}
+	_ = resp.Body.Close() // only the fact of an answer matters
+	return true
 }
 
 // mapErr turns a transport error into a sentinel-carrying, redacted error.

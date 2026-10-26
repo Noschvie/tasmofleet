@@ -413,6 +413,8 @@ func probeProblem(err error) string {
 	switch {
 	case errors.Is(err, tasmota.ErrForbiddenAddr):
 		return "the address is outside the configured device networks."
+	case errors.Is(err, tasmota.ErrHTTPAPIRefused):
+		return "the device refuses HTTP API commands (set SetOption128 1)."
 	case errors.Is(err, tasmota.ErrUnreachable):
 		return "no device answered at this address."
 	case errors.Is(err, tasmota.ErrTimeout):

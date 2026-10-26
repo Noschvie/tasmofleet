@@ -4,6 +4,16 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## Unreleased
+
+### Fixed
+
+- Devices: requests to a device carry a `Referer` naming its address, so devices with Tasmota's default
+  `SetOption128 0` accept commands and firmware uploads instead of silently closing the connection (#63, #45).
+- Devices: when a device still refuses HTTP API commands (it answers its main page but not `/cm`, e.g. when
+  added by a DNS name other than its hostname), the add flow and the logs say to set `SetOption128 1`
+  instead of "No device answered" (#63).
+
 ## 0.12.3 (2026-10-25)
 
 ### Fixed

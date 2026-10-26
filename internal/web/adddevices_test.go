@@ -634,3 +634,18 @@ func TestDayStamp(t *testing.T) {
 		}
 	}
 }
+
+// Why: a device with SetOption128 0 that is reached by an address that is not
+// its hostname or IP answers nothing to /cm. "No device answered" would send
+// the person to the network; the page must name the setting (issue #63).
+func TestManualAddRefusedHTTPAPINamesSetOption128(t *testing.T) {
+	e := setup(t)
+	e.pr.err = fmt.Errorf("probe: %w", tasmota.ErrHTTPAPIRefused)
+	_, body := e.do(t, "POST", "/devices/new", "admin", url.Values{"address": {"10.0.0.9"}})
+	if !strings.Contains(body, `id="err-address"`) || !strings.Contains(body, "SetOption128 1") {
+		t.Errorf("no SetOption128 hint under the Address field: %s", body)
+	}
+	if strings.Contains(body, "No device answered") {
+		t.Error("the generic unreachable sentence hides the cause")
+	}
+}

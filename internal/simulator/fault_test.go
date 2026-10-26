@@ -2,6 +2,9 @@ package simulator
 
 import (
 	"context"
+	"errors"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os/exec"
@@ -318,4 +321,58 @@ func TestWebPasswordBasicAuth(t *testing.T) {
 	// wrong Basic must not be rescued by nothing, but valid query still works
 	_, code, _ := cmWith(d, "State", time.Second, map[string][]string{"user": {"admin"}, "password": {"fake-pass"}})
 	eq(t, "query form", code, 200)
+}
+
+// Why: Tasmota's default SetOption128 0 refuses every /cm, /dl, /up, /u1 and /u2
+// request whose Referer does not start with the device's hostname or IP right
+// after "http://" (issue #45, #63). The refusal is silent: no status line, the
+// connection just closes. The simulator must reproduce exactly that, or the
+// client's Referer fix and its refusal detection cannot be tested.
+func TestRefererCheckRefusesSilentlyUnlessRefererNamesTheDevice(t *testing.T) {
+	f := newTestFleet(t, "", Extra{})
+	c := add(t, f, DeviceSpec{Name: "plug", Profile: ProfileESP8266_1M, Version: "15.6.0", RefererCheck: true})
+	d := c
+	get := func(path, referer string) (int, error) {
+		req, _ := http.NewRequest(http.MethodGet, "http://"+d.Addr()+path, nil)
+		if referer != "" {
+			req.Header.Set("Referer", referer)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return 0, err
+		}
+		defer resp.Body.Close() //nolint:errcheck // test, body unused
+		return resp.StatusCode, nil
+	}
+	host, _, _ := net.SplitHostPort(d.Addr())
+	for _, tc := range []struct {
+		name, ref string
+		ok        bool
+	}{
+		{"no referer", "", false},
+		{"IP form", "http://" + d.Addr() + "/", true},
+		{"hostname form, upper case", "HTTP://PLUG/", true},
+		{"foreign name", "http://other.example/", false},
+		{"IP not right after the scheme", "http://x." + host + "/", false},
+	} {
+		code, err := get("/cm?cmnd=Status%202", tc.ref)
+		if tc.ok && (err != nil || code != 200) {
+			t.Errorf("%s: want 200, got %d %v", tc.name, code, err)
+		}
+		if !tc.ok && !errors.Is(err, io.EOF) {
+			t.Errorf("%s: want a connection closed without a reply (EOF), got %d %v", tc.name, code, err)
+		}
+	}
+	if got := d.Commands(); len(got) != 2 {
+		t.Errorf("a refused request must not execute or be recorded; commands = %v", got)
+	}
+	// The main page asks only for the web password, not for a Referer.
+	if code, err := get("/", ""); err != nil || code != 200 {
+		t.Errorf("GET /: %d %v", code, err)
+	}
+	for _, p := range []string{"/dl", "/up", "/u1"} {
+		if _, err := get(p, ""); !errors.Is(err, io.EOF) {
+			t.Errorf("%s without Referer: want EOF, got %v", p, err)
+		}
+	}
 }
