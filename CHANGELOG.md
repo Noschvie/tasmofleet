@@ -6,6 +6,21 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Added
+
+- Discovery: with a broker, MQTT is the primary discovery source. Devices that publish no
+  `tasmota/discovery` config (SetOption19 1, or a build without `USE_TASMOTA_DISCOVERY`) are found from
+  their own topics (LWT, STATE, INFO1..3, using the configured FullTopic): an online topic that is
+  neither in the inventory nor announced gets one `Status 5` over MQTT for its MAC (never `Status 0`; once
+  per topic per 10 minutes, at most one per second, never to offline topics, logged and audited as
+  `discovery.identify`). Switching MQTT discovery off stops it. HTTP scans stay (#47).
+- Discovery: "Seen on MQTT, not identified yet" on the Discovered tab lists the topics that could not
+  become a proposal (offline, no answer, address outside the device networks) with the reason (#47).
+- Discovery: each discovered device has a direct "Add" that stores it as seen (MAC, topic, address)
+  without an HTTP probe, also while it is offline; rows show "Offline" from the MQTT LWT. A device added
+  this way gets its first identity probe when it comes online, after its address answered with its
+  MAC (#45).
+
 ### Fixed
 
 - Devices: requests to a device carry a `Referer` naming its address, so devices with Tasmota's default
@@ -13,6 +28,17 @@ always upgrade automatically.
 - Devices: when a device still refuses HTTP API commands (it answers its main page but not `/cm`, e.g. when
   added by a DNS name other than its hostname), the add flow and the logs say to set `SetOption128 1`
   instead of "No device answered" (#63).
+- Discovery: a network scan of a device that MQTT had already proposed overwrote the proposal's topic, so
+  the accepted device had no MQTT topic. Both sources now resolve to one proposal by MAC: MQTT keeps topic
+  and source, the scan contributes the HTTP port (#47).
+- Discovery: an announced address outside the device networks is logged and listed instead of being
+  dropped silently (#47).
+
+### Security
+
+- Discovery: accepting a device without MAC proof is audited with `mac_unverified`; for an offline device
+  the fleet default password is withheld (`default_password_withheld`). A `STATUS5` reply counts only for
+  the topic discovery asked and only within 30 s (#47).
 
 ## 0.12.3 (2026-10-25)
 
