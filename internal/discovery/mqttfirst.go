@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/inventory"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/mqttbus"
+	"github.com/nofuturekid/tasmofleet/internal/tasmota"
 )
 
 // MQTT-first discovery (spec 11.3a): devices that publish no
@@ -47,6 +49,11 @@ type topicState struct {
 	host   string // INFO2 / Status 5 hints, for the list only
 	ip     string
 	reason string // why it is not a proposal, for the list
+	// claim is the device claim of this topic that was refused only because
+	// its address lies outside the device networks. It is evaluated again
+	// when DEVICE_NETWORKS changes (#45): Tasmota repeats neither its
+	// discovery config nor a Status 5 answer on its own.
+	claim *candidate
 }
 
 func (s *topicState) online() bool { return s.live || s.lwt == "Online" }
@@ -123,7 +130,7 @@ func (m *Manager) noteDiscoveryTopic(c candidate) {
 		return
 	}
 	s := m.stateFor(c.topic, m.clk.Now())
-	s.mac, s.ip = c.mac, c.ip.String()
+	s.mac, s.ip, s.reason, s.claim = c.mac, c.ip.String(), "", nil
 }
 
 // setReason records why a resolved topic did not become a proposal.
@@ -135,6 +142,50 @@ func (m *Manager) setReason(topic, reason string) {
 	defer m.tmu.Unlock()
 	if s := m.topics[topic]; s != nil {
 		s.reason = reason
+	}
+}
+
+// keepOutsideClaim records that the claim c of topic was refused because its
+// address lies outside the device networks, and keeps it for recheckNetworks.
+func (m *Manager) keepOutsideClaim(topic, reason string, c candidate) {
+	if topic == "" {
+		return
+	}
+	m.tmu.Lock()
+	defer m.tmu.Unlock()
+	if s := m.topics[topic]; s != nil {
+		s.reason, s.claim = reason, &c
+	}
+}
+
+// recheckNetworks evaluates the kept outside-networks claims again when the
+// device networks changed since the last call (the settings page changes them
+// live). It sends nothing to any device: a claim now inside the networks is
+// treated like a new sighting of it (a proposal, or the inventory rules for a
+// known MAC), exactly as if the message had arrived now.
+func (m *Manager) recheckNetworks(ctx context.Context) {
+	nets := m.networks()
+	if slices.Equal(nets, m.seenNets) {
+		return
+	}
+	m.seenNets = nets
+	var claims []candidate
+	m.tmu.Lock()
+	for _, s := range m.topics {
+		if s.claim != nil && tasmota.IPAllowed(s.claim.ip, nets) {
+			claims = append(claims, *s.claim)
+			s.claim, s.reason = nil, ""
+		}
+	}
+	m.tmu.Unlock()
+	if len(claims) == 0 {
+		return
+	}
+	m.log.Info("discovery: device networks changed, evaluating devices seen outside them again", "devices", len(claims))
+	for _, c := range claims {
+		if _, err := m.consider(ctx, c); err != nil && ctx.Err() == nil {
+			m.log.Warn("discovery: could not evaluate device", "mac", c.mac, "err", err)
+		}
 	}
 }
 
@@ -231,7 +282,7 @@ func (m *Manager) handleStatus5(ctx context.Context, topic string, payload []byt
 	}
 	m.tmu.Lock()
 	if s := m.topics[topic]; s != nil {
-		s.mac, s.ip, s.host, s.reason = c.mac, c.ip.String(), c.name, ""
+		s.mac, s.ip, s.host, s.reason, s.claim = c.mac, c.ip.String(), c.name, "", nil
 	}
 	m.tmu.Unlock()
 	out, err := m.consider(ctx, c)
@@ -239,7 +290,7 @@ func (m *Manager) handleStatus5(ctx context.Context, topic string, payload []byt
 	case err != nil && ctx.Err() == nil:
 		m.log.Warn("discovery: could not evaluate device", "mac", c.mac, "err", err)
 	case out == outIgnored:
-		m.setReason(topic, fmt.Sprintf("its address %s is outside the device networks", c.ip))
+		m.keepOutsideClaim(topic, fmt.Sprintf("its address %s is outside the device networks", c.ip), c)
 	}
 }
 

@@ -127,6 +127,8 @@ type Manager struct {
 	lastAsk  time.Time
 	askGrace time.Duration // askGrace; tests shorten it
 	reprobed map[model.DeviceID]time.Time
+	// seenNets are the device networks recheckNetworks last saw (Run goroutine only).
+	seenNets []netip.Prefix
 }
 
 var _ Service = (*Manager)(nil)
@@ -177,6 +179,7 @@ func (m *Manager) Run(ctx context.Context) error {
 	m.base = ctx
 	m.smu.Unlock()
 	m.prune(ctx)
+	m.seenNets = m.networks()
 	tick := time.NewTicker(pruneEvery)
 	defer tick.Stop()
 	ask := time.NewTicker(askGap)
@@ -192,6 +195,7 @@ func (m *Manager) Run(ctx context.Context) error {
 				return ctx.Err()
 			}
 		}
+		m.recheckNetworks(ctx)
 		m.askDue(ctx)
 		select {
 		case <-ctx.Done():
@@ -305,7 +309,7 @@ func (m *Manager) handleMessage(ctx context.Context, msg mqttbus.Message) {
 		m.log.Warn("discovery: could not evaluate device", "mac", c.mac, "err", err)
 	case out == outIgnored && !tasmota.IPAllowed(c.ip, m.networks()):
 		m.log.Info("discovery: announced address outside the device networks", "mac", c.mac, "topic", c.topic, "ip", c.ip.String())
-		m.setReason(c.topic, fmt.Sprintf("its announced address %s is outside the device networks", c.ip))
+		m.keepOutsideClaim(c.topic, fmt.Sprintf("its announced address %s is outside the device networks", c.ip), c)
 	}
 }
 

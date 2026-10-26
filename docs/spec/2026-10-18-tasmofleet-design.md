@@ -842,7 +842,11 @@ the identity (11.1); a device answers it as cheaply as a STATE.
 `DEVICE_NETWORKS`) are kept in memory (at most 1024, oldest dropped) and listed on the
 Discovered tab under "Seen on MQTT, not identified yet" with the reason, so "on the
 broker but not in the list" is visible instead of silent. They cannot be added: there is no
-MAC to bind.
+MAC to bind. A claim refused only because its address lies outside `DEVICE_NETWORKS`
+(discovery config or Status 5 answer) is kept with its topic and evaluated again as soon as
+the device networks change (settings page, live): Tasmota repeats neither on its own, so
+without this the device would stay listed until a restart (#45). The re-evaluation contacts
+no device and sends no new Status 5.
 
 **One device, two sources.** Both sources resolve to one proposal by MAC (the proposal row
 is unique per MAC). For a device seen on MQTT the topic, full topic and online state come

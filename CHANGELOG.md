@@ -8,6 +8,10 @@ always upgrade automatically.
 
 ### Fixed
 
+- Discovery: devices seen on MQTT with an address outside the device networks (another LAN, e.g. behind a
+  VPN) now become proposals as soon as that network is added to Device networks; before, they stayed under
+  "Seen on MQTT, not identified yet" until a restart. A device later announced inside the networks no longer
+  keeps its old reason in that list (#45, thanks @Noschvie).
 - Tests: an audit page test with fixed event dates started failing once they fell out of the default 7-day window; it now uses a fixed test clock (#74, thanks @Noschvie).
 
 ### Security
