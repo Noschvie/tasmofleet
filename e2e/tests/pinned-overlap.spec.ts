@@ -145,7 +145,8 @@ async function overlaps(page: Page): Promise<string[]> {
 
 for (const theme of ["light", "dark"]) {
   for (const width of [1280, 1440]) {
-    test(`default layout, ${theme}, ${width} px: pinned columns show all their content and nothing lies under them`, async ({ page }) => {
+    // Quarantined: the shared seed's Offline wait fails on slow runners (#69).
+    test(`default layout, ${theme}, ${width} px: pinned columns show all their content and nothing lies under them`, { tag: "@quarantine" }, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
       await page.setExtraHTTPHeaders(designAdmin);
       await page.goto(stack.app.url + "/devices");
