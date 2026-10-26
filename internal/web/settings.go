@@ -125,6 +125,8 @@ func readErrorText(err error) string {
 	switch {
 	case errors.Is(err, tasmota.ErrAuth):
 		return "The device refused the stored credentials."
+	case errors.Is(err, tasmota.ErrHTTPAPIRefused):
+		return "The device likely refuses HTTP API commands from this address. Set SetOption128 1 on it."
 	case errors.Is(err, tasmota.ErrUnreachable):
 		return "The device is unreachable."
 	case errors.Is(err, tasmota.ErrTimeout):

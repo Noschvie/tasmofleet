@@ -207,7 +207,10 @@ func (d *simDevice) refererOK(r *http.Request) bool {
 	if ref == "" {
 		return false
 	}
-	return strings.Index(ref, strings.ToUpper(d.topic)) == 7 || strings.Index(ref, strings.ToUpper(d.host)) == 7
+	d.mu.Lock()
+	hostname := d.get("hostname") // the current one: the Hostname command changes it
+	d.mu.Unlock()
+	return strings.Index(ref, strings.ToUpper(hostname)) == 7 || strings.Index(ref, strings.ToUpper(d.host)) == 7
 }
 
 func (d *simDevice) record(cmd string) {

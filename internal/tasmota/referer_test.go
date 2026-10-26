@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -113,5 +116,39 @@ func TestLostUploadReplyIsNotReportedAsRefererRefusal(t *testing.T) {
 	err := upload(uploader(t, Options{}), tg, simImage(t, "tasmota32.bin", "16.1.0"))
 	if err == nil || errors.Is(err, ErrHTTPAPIRefused) {
 		t.Errorf("want a non-refusal error, got %v", err)
+	}
+}
+
+// Why: safety rule 3. After OtaUrl or Upgrade the client must not send any
+// request of its own; the OTA engine probes. The follow-up GET / exists only
+// for status-class commands, so this pins the exclusion (reordering the
+// condition would leave every other test green).
+func TestOnlyStatusCommandsGetTheMainPageFollowUp(t *testing.T) {
+	var root atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			root.Add(1)
+			_, _ = w.Write([]byte("ok"))
+			return
+		}
+		conn, _, err := w.(http.Hijacker).Hijack()
+		if err == nil {
+			_ = conn.Close() // deliberate: a /cm that answers nothing
+		}
+	}))
+	defer srv.Close()
+	tg := target(t, srv, 9, "", "")
+	c := newClient(Options{})
+	for _, cmnd := range []string{"Upgrade 1", "OtaUrl http://x/y.bin", "otaurl", "upgrade"} {
+		_, err := c.Command(context.Background(), tg, cmnd)
+		if errors.Is(err, ErrHTTPAPIRefused) || !errors.Is(err, ErrUnreachable) {
+			t.Errorf("%s: want plain ErrUnreachable, got %v", cmnd, err)
+		}
+	}
+	if n := root.Load(); n != 0 {
+		t.Fatalf("%d requests to / after OTA commands, want none", n)
+	}
+	if _, err := c.Command(context.Background(), tg, "Status 2"); !errors.Is(err, ErrHTTPAPIRefused) || root.Load() != 1 {
+		t.Errorf("Status 2: want a refusal after exactly one GET /, got %v after %d", err, root.Load())
 	}
 }

@@ -38,11 +38,17 @@ const (
 // commandTimeout picks the class by command: flash and OTA commands get the
 // longer timeout, everything else the Status class.
 func commandTimeout(cmnd string) time.Duration {
-	l := strings.ToLower(cmnd)
-	if strings.Contains(l, "otaurl") || strings.Contains(l, "upgrade") {
+	if isOTACommand(cmnd) {
 		return upgradeTimeout
 	}
 	return statusTimeout
+}
+
+// isOTACommand: OtaUrl and Upgrade, whose lost replies the OTA engine probes
+// itself (safety rule 3).
+func isOTACommand(cmnd string) bool {
+	l := strings.ToLower(cmnd)
+	return strings.Contains(l, "otaurl") || strings.Contains(l, "upgrade")
 }
 
 // deviceError carries a sentinel for errors.Is and a message that has been
@@ -255,7 +261,7 @@ func (c *httpClient) get(ctx context.Context, t Target, path, rawQuery string, c
 	resp, err := c.hc.Do(req)
 	if err != nil {
 		if path == "/cm" {
-			return nil, c.mapCommandNoReply(ctx, t, class, err)
+			return nil, c.mapCommandNoReply(ctx, t, cmndOf(rawQuery), err)
 		}
 		return nil, c.mapErr(ctx, t, err)
 	}
@@ -276,6 +282,16 @@ func (c *httpClient) get(ctx context.Context, t Target, path, rawQuery string, c
 	return body, nil
 }
 
+// cmndOf extracts the command from the /cm query. An unparsable query yields
+// "", which is not an OTA command; the request itself would have failed first.
+func cmndOf(rawQuery string) string {
+	v, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return ""
+	}
+	return v.Get("cmnd")
+}
+
 // setReferer sends the Referer that Tasmota's default (SetOption128 0) demands
 // of every /cm, /dl, /up and /u2 request: the device's hostname or IP right
 // after "http://". The target address is the one the request goes to, so it
@@ -291,8 +307,8 @@ func setReferer(req *http.Request, t Target) {
 // page, which Tasmota does not Referer-guard, tells them apart: if it answers,
 // the device is up and refuses. OtaUrl and Upgrade never get the follow-up, so
 // it cannot interfere with the OTA engine's own probe-after-loss logic.
-func (c *httpClient) mapCommandNoReply(parent context.Context, t Target, class time.Duration, err error) error {
-	if errors.Is(err, io.EOF) && parent.Err() == nil && class == statusTimeout && c.rootAnswers(parent, t) {
+func (c *httpClient) mapCommandNoReply(parent context.Context, t Target, cmnd string, err error) error {
+	if errors.Is(err, io.EOF) && parent.Err() == nil && !isOTACommand(cmnd) && c.rootAnswers(parent, t) {
 		return &deviceError{ErrHTTPAPIRefused, t.redact("set SetOption128 1 on " + t.display() +
 			" (console, or Configure Other > HTTP API), or add it by its own IP or hostname")}
 	}

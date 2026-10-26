@@ -43,7 +43,7 @@ var (
 	// the main page is not Referer-guarded. It is an ErrUnreachable for every
 	// caller that handles unreachable devices. Never returned for OtaUrl,
 	// Upgrade or uploads (the OTA engine probes after those itself).
-	ErrHTTPAPIRefused = fmt.Errorf("%w: the device refuses HTTP API commands (SetOption128 0)", ErrUnreachable)
+	ErrHTTPAPIRefused = fmt.Errorf("%w: the device likely refuses HTTP API commands (SetOption128 0)", ErrUnreachable)
 )
 
 // Target is an opaque, inventory-derived HTTP endpoint of one device.

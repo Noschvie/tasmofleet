@@ -111,6 +111,8 @@ func deviceErrorText(err error) (int, string) {
 		return http.StatusConflict, "Another operation on this device is running (" + busyHolder(err) + "). Try again when it has finished."
 	case errors.Is(err, store.ErrNotFound):
 		return http.StatusNotFound, "The device does not exist."
+	case errors.Is(err, tasmota.ErrHTTPAPIRefused):
+		return http.StatusBadGateway, "The device likely refuses HTTP API commands from this address. Set SetOption128 1 on it."
 	case errors.Is(err, tasmota.ErrUnreachable):
 		return http.StatusBadGateway, "The device is unreachable."
 	case errors.Is(err, tasmota.ErrTimeout), errors.Is(err, context.DeadlineExceeded):
