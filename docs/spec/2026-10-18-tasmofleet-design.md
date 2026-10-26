@@ -277,17 +277,22 @@ data directory (TasmoAdmin lesson A4).
   unreachable, refused, or not yet tried) MQTT is a second source, one that never replaces the
   first: (1) `tele/<topic>/INFO1`, published at every boot, carries `Version`; it is read with
   the `StatusFWR.Version` grammar (`fwselect.DetectInfo1`). INFO1 has no hardware, so on its own
-  it fills version, image and variant but the identity is not `Known()`. (2) Once a device has
+  it fills the version only (never image or variant, and nothing once the hardware is known) and
+  the identity is not `Known()`. (2) Once a device has
   been online for 30 s (HTTP gets the first go) and still lacks its hardware, tasmofleet asks
   `Status 2` over MQTT (`cmnd/<topic>/STATUS` with payload `2`, through the configured
   FullTopic) and reads `stat/<topic>/STATUS2` through `fwselect.Detect`, so family, hardware
   and the `Known()` rule are the same as over HTTP. The question follows discovery's Status 5
   limits: only online devices, once per device per 10 minutes, at most one per second on the
   bus, one at a time per device, never `Status 0`, logged and audited (`identity.mqtt_ask`);
-  minimal and safeboot firmware (no Status 2) are not asked. Only a reply within 30 s of the
+  minimal and safeboot firmware (no Status 2) are not asked, and an answer claiming such an
+  image is refused. Only devices recorded as `ours` are read (an INFO1 seen earlier is kept
+  until then); the online state is dropped when the broker connection is lost, so the grace
+  starts anew after a reconnect. Only a reply within 30 s of the
   question is taken: anyone on the broker can publish a STATUS2. MQTT writes only the six
   identity fields (family, hardware, single core, version, image, variant) and only while
-  `identity_at` is unset (`store.UpdateIdentityFromMQTT`, compare-and-set); it never sets
+  `identity_at` is unset (`store.UpdateIdentityFromMQTT`, compare-and-set; the OTA preflight is an
+  HTTP probe and sets it too); MQTT never sets
   `identity_at`, so the first HTTP probe still runs and its identity replaces the MQTT one, and
   a probe that finishes meanwhile always wins. OTA is unchanged: the engine probes over HTTP
   before it plans and `Guard` runs on that identity. A retained INFO1 may describe the last

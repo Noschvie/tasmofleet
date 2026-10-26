@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -41,8 +42,11 @@ func (b *idFakeBus) sent() []string {
 // idFakeInventory is the inventory plus the store: UpdateIdentityFromMQTT has the same
 // compare-and-set rule as the real one (only while DetectedAt is zero).
 type idFakeInventory struct {
-	mu   sync.Mutex
-	devs map[model.DeviceID]model.Device
+	mu     sync.Mutex
+	devs   map[model.DeviceID]model.Device
+	naive  bool  // skip the compare-and-set: pins the checks the reader itself makes
+	fail   error // returned instead of storing
+	writes int
 }
 
 func (f *idFakeInventory) list(context.Context) ([]model.Device, error) {
@@ -64,10 +68,14 @@ func (f *idFakeInventory) get(id model.DeviceID) model.Device {
 func (f *idFakeInventory) UpdateIdentityFromMQTT(_ context.Context, id model.DeviceID, _ store.ProbeGuard, topic string, i model.Identity) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.fail != nil {
+		return f.fail
+	}
 	d := f.devs[id]
-	if d.Topic != topic || !d.Identity.DetectedAt.IsZero() {
+	if !f.naive && (d.Topic != topic || !d.Identity.DetectedAt.IsZero()) {
 		return store.ErrConflict
 	}
+	f.writes++
 	d.Identity.Family, d.Identity.Hardware, d.Identity.SingleCore = i.Family, i.Hardware, i.SingleCore
 	d.Identity.Version, d.Identity.Image, d.Identity.Variant = i.Version, i.Image, i.Variant
 	f.devs[id] = d
@@ -126,6 +134,12 @@ const (
 	status2Payload = `{"StatusFWR":{"Version":"16.0.0(release-tasmota)","Hardware":"ESP8266EX"}}`
 )
 
+func (e *idEnv) writes() int {
+	e.inv.mu.Lock()
+	defer e.inv.mu.Unlock()
+	return e.inv.writes
+}
+
 func (e *idEnv) drain(ctx context.Context) {
 	for {
 		select {
@@ -144,8 +158,8 @@ func TestMQTTIdentityTakesTheVersionFromInfo1(t *testing.T) {
 	e.emit(mqttbus.KindInfo, "plug", "INFO1", info1Payload, false)
 	e.drain(t.Context())
 	got := e.inv.get(1).Identity
-	if got.Version != "16.0.0" || got.Variant != "tasmota" || got.Image != "release-tasmota" {
-		t.Fatalf("identity = %+v", got)
+	if got.Version != "16.0.0" || got.Variant != "" || got.Image != "" {
+		t.Fatalf("identity = %+v, want the version only (an INFO1 must not choose the variant)", got)
 	}
 	if got.Known() || !got.DetectedAt.IsZero() {
 		t.Errorf("INFO1 alone made the identity usable for updates or stopped the HTTP probe: %+v", got)
@@ -367,5 +381,130 @@ func TestMQTTIdentityWithSimulatedDevice(t *testing.T) {
 	}
 	if status2 != 1 {
 		t.Errorf("Status 2 sent %d times, want 1: %q", status2, dev.Commands())
+	}
+}
+
+// Why (#87 review M1): after an OTA preflight the stored identity is HTTP-detected. A forged
+// retained INFO1 "(minimal)" must not touch it: it would make the device look like minimal
+// firmware, and the update form then picks the tasmota variant and allows the variant change.
+// The store is naive here so the check is pinned in the reader itself, not in the store.
+func TestMQTTIdentityLeavesAPreflightIdentityAlone(t *testing.T) {
+	d := oursDevice(1, "plug")
+	d.Identity = model.Identity{Family: model.ChipESP8266, Hardware: "ESP8285N08", Version: "16.0.0", Image: "release-zbbridge", Variant: "zbbridge", DetectedAt: time.Unix(1700000000, 0)}
+	e := newIDEnv(d)
+	e.inv.naive = true
+	e.emit(mqttbus.KindInfo, "plug", "INFO1", `{"Info1":{"Version":"16.0.0(release-minimal)"}}`, true)
+	e.drain(t.Context())
+	if got := e.inv.get(1).Identity; got != d.Identity || e.writes() != 0 {
+		t.Fatalf("identity = %+v, writes %d", got, e.writes())
+	}
+}
+
+// Why: an INFO1 never decides the variant, and nothing from MQTT may make a device look like
+// minimal or safeboot firmware (update.go then switches the variant to tasmota on its own).
+func TestMQTTIdentityNeverSetsAMinimalVariant(t *testing.T) {
+	e := newIDEnv(oursDevice(1, "plug"))
+	e.emit(mqttbus.KindInfo, "plug", "INFO1", `{"Info1":{"Version":"16.0.0(release-minimal)"}}`, true)
+	e.drain(t.Context())
+	if got := e.inv.get(1).Identity; got.Variant != "" || got.Version != "16.0.0" {
+		t.Fatalf("identity = %+v", got)
+	}
+	e.online("plug")
+	e.m.askDue(t.Context())
+	e.emit(mqttbus.KindStatus, "plug", "STATUS2", `{"StatusFWR":{"Version":"16.0.0(release-minimal)","Hardware":"ESP8266EX"}}`, false)
+	e.drain(t.Context())
+	if got := e.inv.get(1).Identity; got.Variant != "" || got.Hardware != "" {
+		t.Fatalf("a minimal image from MQTT was stored: %+v", got)
+	}
+}
+
+// Why: once the hardware is known (Status 2 over MQTT) INFO1 has nothing left to add, and a
+// forged one must not change what was proven.
+func TestMQTTIdentityIgnoresInfo1WhenTheHardwareIsKnown(t *testing.T) {
+	d := oursDevice(1, "plug")
+	d.Identity = model.Identity{Family: model.ChipESP8266, Hardware: "ESP8266EX", Version: "15.0.0", Image: "release-tasmota", Variant: "tasmota"}
+	e := newIDEnv(d)
+	e.emit(mqttbus.KindInfo, "plug", "INFO1", info1Payload, true)
+	e.drain(t.Context())
+	if e.writes() != 0 {
+		t.Fatalf("INFO1 changed an identity that has hardware: %+v", e.inv.get(1).Identity)
+	}
+}
+
+// Why: only devices recorded as reporting to our broker are read; a device on another broker
+// has no business with our INFO1. An INFO1 that arrives before health recorded the device as
+// ours (it is published once per boot) is kept and applied as soon as it is.
+func TestMQTTIdentityReadsOnlyDevicesOnOurBroker(t *testing.T) {
+	d := oursDevice(1, "plug")
+	d.MQTT = model.MQTTOtherBroker
+	e := newIDEnv(d)
+	e.emit(mqttbus.KindInfo, "plug", "INFO1", info1Payload, false)
+	e.drain(t.Context())
+	e.emit(mqttbus.KindStatus, "plug", "STATUS2", status2Payload, false)
+	e.drain(t.Context())
+	if e.writes() != 0 {
+		t.Fatalf("a device on another broker was read: %+v", e.inv.get(1).Identity)
+	}
+	e.inv.mu.Lock()
+	dd := e.inv.devs[1]
+	dd.MQTT = model.MQTTOurs
+	e.inv.devs[1] = dd
+	e.inv.mu.Unlock()
+	e.advance(time.Second)
+	e.m.askDue(t.Context())
+	e.drain(t.Context())
+	if got := e.inv.get(1).Identity.Version; got != "16.0.0" {
+		t.Fatalf("the INFO1 seen before the device became ours was lost: %q", got)
+	}
+}
+
+// Why: a reply that could not be stored (the device changed meanwhile) is no answer; the device
+// must be asked again after the usual 10 minutes, not left without identity until a restart.
+func TestMQTTIdentityCountsOnlyAStoredAnswer(t *testing.T) {
+	e := newIDEnv(oursDevice(1, "plug"))
+	e.online("plug")
+	e.m.askDue(t.Context())
+	e.inv.fail = store.ErrConflict
+	e.emit(mqttbus.KindStatus, "plug", "STATUS2", status2Payload, false)
+	e.drain(t.Context())
+	e.inv.fail = nil
+	e.advance(11 * time.Minute)
+	e.m.askDue(t.Context())
+	if n := len(e.bus.sent()); n != 2 {
+		t.Fatalf("%d questions, want 2 (the first answer was not stored)", n)
+	}
+}
+
+// Why: the topic table must not fill up with topics nobody configured (a flood on the broker),
+// or real devices would stop being tracked.
+func TestMQTTIdentityTracksOnlyInventoryTopics(t *testing.T) {
+	e := newIDEnv(oursDevice(1, "plug"))
+	e.m.known = func(m mqttbus.Message) bool { return m.Topic == "plug" }
+	for i := range 2000 {
+		e.emit(mqttbus.KindLWT, "junk"+strconv.Itoa(i), "LWT", "Online", false)
+	}
+	e.emit(mqttbus.KindLWT, "plug", "LWT", "Online", true)
+	if n := len(e.m.topics); n != 1 {
+		t.Fatalf("%d topics tracked, want 1", n)
+	}
+}
+
+// Why: after the broker connection was lost, what was known about "online" is stale. The HTTP
+// grace period must apply again after the reconnect, or a whole fleet is asked at once.
+func TestMQTTIdentityAppliesTheGraceAgainAfterAReconnect(t *testing.T) {
+	e := newIDEnv(oursDevice(1, "plug"))
+	e.online("plug")
+	e.bus.down = true
+	e.m.askDue(t.Context())
+	e.bus.down = false
+	e.emit(mqttbus.KindLWT, "plug", "LWT", "Online", true) // the retained LWT, replayed
+	e.m.askDue(t.Context())
+	if got := e.bus.sent(); len(got) != 0 {
+		t.Fatalf("asked right after the reconnect: %q", got)
+	}
+	e.advance(mqttIDGrace + time.Second)
+	e.m.askDue(t.Context())
+	if got := e.bus.sent(); len(got) != 1 {
+		t.Fatalf("commands = %q after the grace, want 1", got)
 	}
 }

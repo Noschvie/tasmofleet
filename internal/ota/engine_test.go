@@ -1245,3 +1245,22 @@ func (s *fakeStore) BatchRetries(_ context.Context, id model.BatchID) ([]model.B
 }
 
 var _ store.BatchStore = (*fakeStore)(nil)
+
+// Why (#87): the preflight probes the device over HTTP and stores what it found. That identity
+// must carry DetectedAt, because MQTT (INFO1, Status 2 over MQTT) only ever fills a device
+// whose DetectedAt is unset. Without it, a forged retained INFO1 could rewrite the identity of
+// a device the OTA engine just probed, and with it the variant Guard checks against.
+func TestEngineStoresThePreflightIdentityAsHTTPDetected(t *testing.T) {
+	h := newHarness(t, 2, plugDevice())
+	submitOne(t, h, Request{DeviceID: 1, Release: "16.0.0"})
+	h.run(t, h.e)
+	h.st.mu.Lock()
+	got := h.st.devices[1].Identity
+	h.st.mu.Unlock()
+	if got.DetectedAt.IsZero() {
+		t.Fatalf("stored identity has no DetectedAt: %+v", got)
+	}
+	if got.DetectedAt.Before(t0) {
+		t.Errorf("DetectedAt %v is before the job started (%v)", got.DetectedAt, t0)
+	}
+}

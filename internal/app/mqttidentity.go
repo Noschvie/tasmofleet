@@ -66,21 +66,25 @@ type mqttIdentity struct {
 	log      *slog.Logger
 	grace    time.Duration
 
-	msgs chan mqttbus.Message
+	// known, if set, limits the topic table to inventory devices (mqttKnown.Known): a flood of
+	// topics on the broker must not fill it.
+	known func(mqttbus.Message) bool
+	msgs  chan mqttbus.Message
 
 	mu       sync.Mutex
 	topics   map[string]*mqttIDTopic
 	lastAsk  time.Time
 	asked    map[model.DeviceID]time.Time
 	pending  map[model.DeviceID]mqttIDPending
-	answered map[model.DeviceID]bool // a Status 2 reply was read; not asked again until restart
+	answered map[model.DeviceID]bool // a Status 2 reply was stored; not asked again until restart
+	info1    map[string][]byte       // INFO1 of a topic whose device was not yet recorded as ours
 }
 
 func newMQTTIdentity(bus mqttbus.Bus, list func(context.Context) ([]model.Device, error), st identityMQTTStore,
 	rec audit.Recorder, announce func(model.DeviceID), log *slog.Logger) *mqttIdentity {
 	return &mqttIdentity{bus: bus, list: list, store: st, audit: rec, announce: announce, now: time.Now, log: log, grace: mqttIDGrace,
 		msgs: make(chan mqttbus.Message, mqttIDQueue), topics: map[string]*mqttIDTopic{},
-		asked: map[model.DeviceID]time.Time{}, pending: map[model.DeviceID]mqttIDPending{}, answered: map[model.DeviceID]bool{}}
+		asked: map[model.DeviceID]time.Time{}, pending: map[model.DeviceID]mqttIDPending{}, answered: map[model.DeviceID]bool{}, info1: map[string][]byte{}}
 }
 
 // run reads the bus until ctx ends.
@@ -104,6 +108,9 @@ func (m *mqttIdentity) run(ctx context.Context) {
 // onMessage runs on the bus goroutine: it only keeps the online state and queues the two
 // message types worth reading.
 func (m *mqttIdentity) onMessage(msg mqttbus.Message) {
+	if m.known != nil && !m.known(msg) {
+		return
+	}
 	now := m.now()
 	m.mu.Lock()
 	t := m.topics[msg.Topic]
@@ -167,11 +174,19 @@ func (m *mqttIdentity) handle(ctx context.Context, msg mqttbus.Message) {
 	if !ok || !d.Identity.DetectedAt.IsZero() {
 		return // not ours, or HTTP has identified it: that identity is the one we keep
 	}
-	var next model.Identity
-	var err error
-	via := "INFO1"
+	if d.MQTT != model.MQTTOurs {
+		if msg.Suffix == "INFO1" {
+			// Published once per boot, possibly before health recorded the device as ours:
+			// keep the last one and read it when the device is ours (applyStashed).
+			m.mu.Lock()
+			if len(m.info1) < mqttIDQueue {
+				m.info1[msg.Topic] = msg.Payload
+			}
+			m.mu.Unlock()
+		}
+		return
+	}
 	if msg.Suffix == "STATUS2" {
-		via = "Status 2"
 		m.mu.Lock()
 		p, asked := m.pending[d.ID]
 		if asked && p.topic == msg.Topic {
@@ -181,27 +196,60 @@ func (m *mqttIdentity) handle(ctx context.Context, msg mqttbus.Message) {
 		if !asked || p.topic != msg.Topic || m.now().Sub(p.at) > mqttIDWindow {
 			return // only a timely reply to our own question (a reply anyone can publish is no source)
 		}
-		if next, err = fwselect.Detect(fwselect.Inputs{Status2: msg.Payload}); err == nil {
-			next.Language = d.Identity.Language
-			m.mu.Lock()
-			m.answered[d.ID] = true
-			m.mu.Unlock()
-		}
-	} else {
-		next, err = fwselect.DetectInfo1(msg.Payload, d.Identity)
-	}
-	if err != nil {
-		m.log.Debug("mqtt identity: message not usable", "device", d.ID, "via", via, "err", err)
+		m.applyStatus2(ctx, d, msg.Payload)
 		return
 	}
+	m.applyInfo1(ctx, d, msg.Payload)
+}
+
+// applyInfo1 takes the version of an INFO1 and nothing else: it carries no hardware, so it must
+// not choose image or variant (a forged "(release-minimal)" would turn the device into minimal
+// firmware for the update form). A device whose hardware is known has nothing to learn from it.
+func (m *mqttIdentity) applyInfo1(ctx context.Context, d model.Device, payload []byte) {
+	if d.Identity.Hardware != "" {
+		return
+	}
+	parsed, err := fwselect.DetectInfo1(payload, d.Identity)
+	if err != nil {
+		m.log.Debug("mqtt identity: INFO1 not usable", "device", d.ID, "err", err)
+		return
+	}
+	next := d.Identity
+	next.Version = parsed.Version
+	m.store1(ctx, d, next, "INFO1")
+}
+
+// applyStatus2 takes the identity of a Status 2 reply. Minimal and safeboot images are refused:
+// they do not answer Status 2, so such a reply is not from a device that runs them.
+func (m *mqttIdentity) applyStatus2(ctx context.Context, d model.Device, payload []byte) {
+	next, err := fwselect.Detect(fwselect.Inputs{Status2: payload})
+	if err != nil {
+		m.log.Debug("mqtt identity: Status 2 reply not usable", "device", d.ID, "err", err)
+		return
+	}
+	if next.Variant == "minimal" || next.Variant == "safeboot" {
+		m.log.Warn("mqtt identity: Status 2 reply claims an image that cannot answer it, ignored", "device", d.ID, "image", next.Image)
+		return
+	}
+	next.Language = d.Identity.Language
+	if m.store1(ctx, d, next, "Status 2") {
+		m.mu.Lock()
+		m.answered[d.ID] = true
+		m.mu.Unlock()
+	}
+}
+
+// store1 writes next if it differs from what is stored. It reports whether the stored identity
+// now equals next (written, or already so).
+func (m *mqttIdentity) store1(ctx context.Context, d model.Device, next model.Identity, via string) bool {
 	cur := d.Identity
 	if next.Family == cur.Family && next.Hardware == cur.Hardware && next.SingleCore == cur.SingleCore &&
 		next.Version == cur.Version && next.Image == cur.Image && next.Variant == cur.Variant {
-		return
+		return true
 	}
 	sctx, cancel := context.WithTimeout(ctx, mqttIDTimeout)
 	defer cancel()
-	err = m.store.UpdateIdentityFromMQTT(sctx, d.ID, store.ProbeGuard{Address: d.Address, Port: d.Port, MAC: d.MAC}, d.Topic, next)
+	err := m.store.UpdateIdentityFromMQTT(sctx, d.ID, store.ProbeGuard{Address: d.Address, Port: d.Port, MAC: d.MAC}, d.Topic, next)
 	switch {
 	case errors.Is(err, store.ErrConflict):
 		m.log.Debug("mqtt identity: device changed or was identified over HTTP meanwhile", "device", d.ID)
@@ -211,6 +259,37 @@ func (m *mqttIdentity) handle(ctx context.Context, msg mqttbus.Message) {
 		m.log.Info("mqtt identity: firmware read over MQTT", "device", d.ID, "topic", d.Topic, "via", via, "version", next.Version, "variant", next.Variant)
 		if m.announce != nil {
 			m.announce(d.ID)
+		}
+		return true
+	}
+	return false
+}
+
+// applyStashed reads the INFO1 kept for devices that were not yet recorded as ours.
+func (m *mqttIdentity) applyStashed(ctx context.Context) {
+	m.mu.Lock()
+	n := len(m.info1)
+	m.mu.Unlock()
+	if n == 0 {
+		return
+	}
+	devs, err := m.list(ctx)
+	if err != nil {
+		m.log.Warn("mqtt identity: list devices", "err", err)
+		return
+	}
+	for _, d := range devs {
+		m.mu.Lock()
+		payload, ok := m.info1[d.Topic]
+		m.mu.Unlock()
+		if !ok || (d.MQTT != model.MQTTOurs && d.Identity.DetectedAt.IsZero()) {
+			continue // not yet ours: keep it
+		}
+		m.mu.Lock()
+		delete(m.info1, d.Topic)
+		m.mu.Unlock()
+		if d.MQTT == model.MQTTOurs && d.Identity.DetectedAt.IsZero() {
+			m.applyInfo1(ctx, d, payload)
 		}
 	}
 }
@@ -228,8 +307,14 @@ func wantsStatus2(d model.Device) bool {
 func (m *mqttIdentity) askDue(ctx context.Context) {
 	now := m.now()
 	if !m.bus.Connected() {
+		// What was known about "online" is stale once the connection is lost: after the reconnect
+		// the retained LWTs say it again, and the grace period for HTTP starts anew.
+		m.mu.Lock()
+		m.topics, m.pending = map[string]*mqttIDTopic{}, map[model.DeviceID]mqttIDPending{}
+		m.mu.Unlock()
 		return
 	}
+	m.applyStashed(ctx)
 	m.mu.Lock()
 	if !m.lastAsk.IsZero() && now.Sub(m.lastAsk) < mqttIDGap {
 		m.mu.Unlock()

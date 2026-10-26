@@ -151,6 +151,7 @@ func (a *runtime) run(ctx context.Context) error {
 	// Firmware version over MQTT for devices on our broker that HTTP did not identify (#87).
 	mid := newMQTTIdentity(a.bus, a.svc.Inventory.List, a.svc.Store, a.svc.Audit,
 		func(id model.DeviceID) { a.svc.Prober.announce(id) }, a.log)
+	mid.known = a.mqttKnown.Known
 	a.goBG("mqtt-identity", func() error { mid.run(bg); return nil })
 
 	if err := a.setupBackups(bg); err != nil {

@@ -1055,7 +1055,13 @@ func (e *Engine) exec(ctx context.Context, j model.Job, a Action) Event {
 		if err != nil {
 			return Event{Kind: EvCommandFailed, Err: err.Error()}
 		}
-		if err := e.devices.UpdateIdentity(cctx, d.ID, ident); err != nil {
+		// A preflight is an HTTP probe: the stored identity says so (DetectedAt), which is what
+		// keeps MQTT-announced identities (#87) away from it. The event keeps the identity as probed.
+		stored := ident
+		if stored.DetectedAt.IsZero() {
+			stored.DetectedAt = e.clk.Now()
+		}
+		if err := e.devices.UpdateIdentity(cctx, d.ID, stored); err != nil {
 			e.log.Warn("ota: could not store device identity", "device", d.ID, "err", err)
 		}
 		ev := Event{Kind: EvIdentity, Identity: ident, OtaURL: otaURL, Uptime: up}

@@ -82,6 +82,16 @@ claim below or shows a residual risk worse than stated.
 - **R4, message rate.** There is no rate limit per publisher (the broker does not tell
   tasmofleet who published). CPU per message is bounded (payload cap, cheap index lookup
   without database access).
+- **R5, spoofed firmware version (#87).** M2 can publish a false `tele/<topic>/INFO1` (also
+  retained) or answer tasmofleet's `Status 2` question over MQTT before the device does.
+  Effect: the version, and for a Status 2 answer the hardware, shown for a device that no
+  HTTP probe has identified. Bounds: MQTT only writes a device with `identity_at` unset (the
+  store refuses otherwise; an OTA preflight and every HTTP probe set it), takes only the
+  version from an INFO1 and only when the hardware is unknown, never an image or variant, and
+  refuses minimal/safeboot images in a Status 2 answer. A Status 2 answer counts only within
+  30 s after our question. Nothing flashed depends on it: the OTA engine probes the device
+  over HTTP before it plans, and `Guard` checks that identity. The first HTTP probe replaces
+  whatever MQTT said. Broker ACLs (below) close it at the source.
 
 ## Recommendation (operations)
 
