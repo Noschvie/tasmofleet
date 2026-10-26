@@ -34,6 +34,10 @@ always upgrade automatically.
 - Discovery: an announced address outside the device networks is logged and listed instead of being
   dropped silently (#47).
 
+- Tests: the embedded test broker no longer deadlocks when clients disconnect while it closes (mochi v2.7.9
+  locks its client map recursively in `Server.Close`); this hung the first v0.13.0 tag run. A seed-timing flake
+  of the pinned-columns e2e check is quarantined (#69).
+
 ### Security
 
 - Discovery: the identity probe that a device without identity gets when it comes online (an MQTT

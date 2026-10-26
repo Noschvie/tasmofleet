@@ -58,4 +58,25 @@ func (b *Broker) Subscribe(filter string, fn func(topic string, payload []byte, 
 }
 
 // Close stops the broker and disconnects all clients.
-func (b *Broker) Close() error { return b.srv.Close() }
+//
+// The listeners are closed here first, with closeClientsOf, and only then
+// mochi's Server.Close runs (it closes each listener only once, so its own
+// client closer is skipped). mochi v2.7.9 closes a listener's clients through
+// Clients.GetByListener, which RLocks the clients map and RLocks it again in
+// Len; a client disconnecting at that moment queues Delete (Lock) between the
+// two and the second RLock waits for it forever. That hung the v0.13.0 tag
+// run in a test cleanup (TestBrokerCloseWhileClientsDisconnect).
+func (b *Broker) Close() error {
+	b.srv.Listeners.CloseAll(func(listener string) { closeClientsOf(b.srv, listener) })
+	return b.srv.Close()
+}
+
+// closeClientsOf disconnects the clients of one listener, reading the clients
+// map under a single RLock (Clients.GetAll), never recursively.
+func closeClientsOf(srv *mqtt.Server, listener string) {
+	for _, cl := range srv.Clients.GetAll() {
+		if cl.Net.Listener == listener && !cl.Closed() {
+			_ = srv.DisconnectClient(cl, packets.ErrServerShuttingDown) // shutting down: a failed DISCONNECT changes nothing
+		}
+	}
+}
