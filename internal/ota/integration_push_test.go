@@ -22,6 +22,22 @@ func (e *itEnv) uploadsOf(dev model.DeviceID) int {
 	return n
 }
 
+// assertFlashed fails unless the device received the command that carries the expected file,
+// and ends on the image tag every ESP32 chip build reports.
+func (e *itEnv) assertFlashed(dev model.DeviceID, want string) {
+	e.t.Helper()
+	found := false
+	for _, c := range e.ctrl[dev].Commands() {
+		found = found || strings.HasPrefix(c, want) || strings.HasSuffix(c, want)
+	}
+	if !found {
+		e.t.Fatalf("no command %q: %v", want, e.ctrl[dev].Commands())
+	}
+	if got := e.ctrl[dev].Image(); got != "tasmota32" {
+		e.t.Fatalf("device runs image %q, want tasmota32", got)
+	}
+}
+
 func (e *itEnv) assertNoPullCommands(dev model.DeviceID) {
 	e.t.Helper()
 	for _, c := range e.ctrl[dev].Commands() {
@@ -53,15 +69,16 @@ func TestITPushESP32(t *testing.T) {
 	}
 }
 
-// Every ESP32 chip gets the image of its own family by upload.
+// Every ESP32 chip gets the image of its own family by upload. All chip builds report the image
+// tag "tasmota32" (#85), so the uploaded file name proves the build.
 func TestITPushPerChip(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		profile simulator.Profile
-		image   string
+		file    string
 	}{
-		{"esp32c3", simulator.ProfileESP32C3, "tasmota32c3"},
-		{"esp32s3", simulator.ProfileESP32S3, "tasmota32s3"},
+		{"esp32c3", simulator.ProfileESP32C3, "tasmota32c3.bin"},
+		{"esp32s3", simulator.ProfileESP32S3, "tasmota32s3.bin"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newItEnv(t)
@@ -70,9 +87,7 @@ func TestITPushPerChip(t *testing.T) {
 			eng := e.start(2)
 			e.submit(eng, Request{DeviceID: dev, Delivery: model.DeliveryPush})
 			e.expectSuccess(dev, orig, 0, model.PlanDirect)
-			if got := e.ctrl[dev].Image(); got != tc.image {
-				t.Fatalf("device runs image %q, want %q", got, tc.image)
-			}
+			e.assertFlashed(dev, "POST /u2 "+tc.file+" ")
 		})
 	}
 }

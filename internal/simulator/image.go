@@ -108,12 +108,15 @@ func findVersion(img []byte) (string, bool) {
 
 var minimalRewrite = regexp.MustCompile(`^tasmota(-[a-z0-9]+)?(\.bin(\.gz)?)?$`)
 
-// imageKind derives the image name a flash from this URL produces, purely
-// from the file name like the real flow: "minimal", "safeboot", the ESP32
-// build name ("tasmota32", "tasmota32c3", ...), "tasmota" or an ESP8266
-// variant such as "lite".
+// imageKind derives the image tag a flash from this URL produces, purely
+// from the file name like the real flow: the CODE_IMAGE_STR the upstream
+// build reports, not its file name (fwselect §6.2, #85). All ESP32 chip
+// builds report "tasmota32", solo1 "solo1", tasmota32-lvgl "lvgl-haspmota",
+// other variants their own name; language builds keep "tasmota"/"tasmota32";
+// tasmota-4M reports "tasmota-4M".
 func imageKind(urlPath string, esp32 bool) string {
-	base := strings.ToLower(path.Base(urlPath))
+	name := path.Base(urlPath)
+	base := strings.ToLower(name)
 	switch {
 	case strings.Contains(base, "safeboot"):
 		return "safeboot"
@@ -123,17 +126,33 @@ func imageKind(urlPath string, esp32 bool) string {
 		}
 		return "minimal"
 	case esp32:
-		// The ESP32 image tag is the build name: tasmota32, tasmota32c3,
-		// tasmota32solo1, tasmota32-ir, ...
-		if b := strings.TrimSuffix(base, ".bin"); strings.HasPrefix(b, "tasmota32") {
-			return b
+		build, variant, _ := strings.Cut(strings.TrimSuffix(name, ".bin"), "-")
+		switch {
+		case !strings.HasPrefix(build, "tasmota32"):
+			// not an upstream name (a custom upload): the plain build's tag
+		case build == "tasmota32solo1":
+			return "solo1"
+		case variant == "lvgl":
+			return "lvgl-haspmota"
+		case variant != "" && !isLang(variant):
+			return variant
 		}
 		return "tasmota32"
 	}
-	if m := regexp.MustCompile(`^tasmota-([a-z0-9]+)`).FindStringSubmatch(base); m != nil {
-		return m[1]
+	build, variant, _ := strings.Cut(strings.TrimSuffix(name, ".bin.gz"), "-")
+	switch {
+	case build != "tasmota":
+	case variant == "4M":
+		return "tasmota-4M"
+	case variant != "" && !isLang(variant):
+		return variant
 	}
 	return "tasmota"
+}
+
+// isLang reports an upstream language suffix ("DE"): two upper case letters.
+func isLang(s string) bool {
+	return len(s) == 2 && s[0] >= 'A' && s[0] <= 'Z' && s[1] >= 'A' && s[1] <= 'Z'
 }
 
 // minimalURL is Tasmota's automatic fallback rewrite: tasmota[-xx][.bin[.gz]]

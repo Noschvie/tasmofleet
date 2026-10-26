@@ -109,60 +109,73 @@ func TestDetectImageTags(t *testing.T) {
 		{"esp8266 ir", "16.0.0(release-ir)", "ESP8266EX", "", "ir", "", model.ChipESP8266, false, "16.0.0", nil},
 		{"esp8266 zbbridge", "16.0.0(release-zbbridge)", "ESP8266EX", "", "zbbridge", "", model.ChipESP8266, false, "16.0.0", nil},
 		{"esp8266 zigbee", "16.0.0(release-zigbee)", "ESP8266EX", "", "zigbee", "", model.ChipESP8266, false, "16.0.0", nil},
-		{"esp8266 4M", "16.0.0(release-4M)", "ESP8266EX", "", "4M", "", model.ChipESP8266, false, "16.0.0", nil},
 		{"esp8266 german", "16.0.0(release-tasmota)", "ESP8266EX", "de", "tasmota", "DE", model.ChipESP8266, false, "16.0.0", nil},
 		{"esp8266 lang upper", "16.0.0(release-tasmota)", "ESP8266EX", "FR", "tasmota", "FR", model.ChipESP8266, false, "16.0.0", nil},
 		{"esp8266 lang EN upper", "16.0.0(release-tasmota)", "ESP8266EX", "EN", "tasmota", "", model.ChipESP8266, false, "16.0.0", nil},
+		{"esp8266 4M", "16.0.0(release-tasmota-4M)", "ESP8266EX", "", "4M", "", model.ChipESP8266, false, "16.0.0", nil},
+		// ESP32: every FIRMWARE_TASMOTA32 build except solo1 reports "tasmota32"
+		// (tasmota_configurations_ESP32.h:576; the chip envs set no CODE_IMAGE_STR), so the chip
+		// comes from Hardware (#85). Before, every official S2/S3/C* /P4 device was refused as a
+		// family mismatch and vanished from the fleet.
 		{"esp32 tasmota32", "16.0.0(release-tasmota32)", "ESP32-D0WD-V3", "", "tasmota", "", model.ChipESP32, false, "16.0.0", nil},
 		{"esp32 german", "16.0.0(release-tasmota32)", "ESP32-D0WD-V3", "de", "tasmota", "DE", model.ChipESP32, false, "16.0.0", nil},
-		{"esp32 solo1", "16.0.0(release-tasmota32solo1)", "ESP32-S0WD", "", "tasmota", "", model.ChipESP32, true, "16.0.0", nil},
-		{"esp32 bluetooth", "16.0.0(release-tasmota32-bluetooth)", "ESP32-D0WD", "", "bluetooth", "", model.ChipESP32, false, "16.0.0", nil},
-		{"esp32 display", "16.0.0(release-tasmota32-display)", "ESP32-D0WD", "", "display", "", model.ChipESP32, false, "16.0.0", nil},
-		{"esp32 ir", "16.0.0(release-tasmota32-ir)", "ESP32-D0WD", "", "ir", "", model.ChipESP32, false, "16.0.0", nil},
-		{"esp32 lvgl", "16.0.0(release-tasmota32-lvgl)", "ESP32-D0WD", "", "lvgl", "", model.ChipESP32, false, "16.0.0", nil},
-		{"esp32 nspanel", "16.0.0(release-tasmota32-nspanel)", "ESP32-D0WD", "", "nspanel", "", model.ChipESP32, false, "16.0.0", nil},
-		{"esp32 webcam", "16.0.0(release-tasmota32-webcam)", "ESP32-D0WD", "", "webcam", "", model.ChipESP32, false, "16.0.0", nil},
-		{"esp32 zbbrdgpro", "16.0.0(release-tasmota32-zbbrdgpro)", "ESP32-D0WD", "", "zbbrdgpro", "", model.ChipESP32, false, "16.0.0", nil},
-		{"s2", "16.0.0(release-tasmota32s2)", "ESP32-S2", "", "tasmota", "", model.ChipESP32S2, false, "16.0.0", nil},
-		{"s2cdc", "16.0.0(release-tasmota32s2cdc)", "ESP32-S2", "", "tasmota", "", model.ChipESP32S2, false, "16.0.0", nil},
-		{"s3", "16.0.0(release-tasmota32s3)", "ESP32-S3", "", "tasmota", "", model.ChipESP32S3, false, "16.0.0", nil},
-		{"c2", "16.0.0(release-tasmota32c2)", "ESP32-C2", "", "tasmota", "", model.ChipESP32C2, false, "16.0.0", nil},
-		{"c3", "16.0.0(release-tasmota32c3)", "ESP32-C3", "", "tasmota", "", model.ChipESP32C3, false, "16.0.0", nil},
-		{"c5", "16.0.0(release-tasmota32c5)", "ESP32-C5", "", "tasmota", "", model.ChipESP32C5, false, "16.0.0", nil},
-		{"c6", "16.0.0(release-tasmota32c6)", "ESP32-C6", "", "tasmota", "", model.ChipESP32C6, false, "16.0.0", nil},
-		{"c61", "16.0.0(release-tasmota32c61)", "ESP32-C61", "", "tasmota", "", model.ChipESP32C61, false, "16.0.0", nil},
-		{"p4", "16.0.0(release-tasmota32p4)", "ESP32-P4", "", "tasmota", "", model.ChipESP32P4, false, "16.0.0", nil},
-		{"p4r3", "16.0.0(release-tasmota32p4r3)", "ESP32-P4", "", "tasmota", "", model.ChipESP32P4, false, "16.0.0", nil},
+		{"s3", "16.0.0(release-tasmota32)", "ESP32-S3", "", "tasmota", "", model.ChipESP32S3, false, "16.0.0", nil},
+		{"c2", "16.0.0(release-tasmota32)", "ESP32-C2", "", "tasmota", "", model.ChipESP32C2, false, "16.0.0", nil},
+		{"c3", "16.0.0(release-tasmota32)", "ESP32-C3", "", "tasmota", "", model.ChipESP32C3, false, "16.0.0", nil},
+		{"c5", "16.0.0(release-tasmota32)", "ESP32-C5", "", "tasmota", "", model.ChipESP32C5, false, "16.0.0", nil},
+		{"c6", "16.0.0(release-tasmota32)", "ESP32-C6", "", "tasmota", "", model.ChipESP32C6, false, "16.0.0", nil},
+		{"c61", "16.0.0(release-tasmota32)", "ESP32-C61", "", "tasmota", "", model.ChipESP32C61, false, "16.0.0", nil},
+		// S2 (s2, s2cdc) and P4 (p4, p4r3) have two builds that both report "tasmota32": the tag
+		// cannot say which one runs, so the variant stays unknown until the user picks a build.
+		{"s2 build not provable", "16.0.0(release-tasmota32)", "ESP32-S2", "", "unknown", "", model.ChipESP32S2, false, "16.0.0", nil},
+		{"p4 build not provable", "16.0.0(release-tasmota32)", "ESP32-P4", "", "unknown", "", model.ChipESP32P4, false, "16.0.0", nil},
+		// Up to v12.0 the solo1 build reported "tasmota32" as well; on single-core hardware the
+		// build is not provable from the tag, so unknown instead of a mismatch or a guess.
+		{"tasmota32 on single core", "16.0.0(release-tasmota32)", "ESP32-S0WD", "", "unknown", "", model.ChipESP32, true, "16.0.0", nil},
+		// ESP32 variant builds report their own CODE_IMAGE_STR, not the file name.
+		{"esp32 webcam", "16.0.0(release-webcam)", "ESP32-D0WD", "", "webcam", "", model.ChipESP32, false, "16.0.0", nil},
+		{"esp32 bluetooth", "16.0.0(release-bluetooth)", "ESP32-D0WD", "", "bluetooth", "", model.ChipESP32, false, "16.0.0", nil},
+		{"esp32 lvgl", "16.0.0(release-lvgl-haspmota)", "ESP32-D0WD", "", "lvgl", "", model.ChipESP32, false, "16.0.0", nil},
+		{"esp32 lvgl up to v11", "11.0.0(release-lvgl)", "ESP32-D0WD", "", "lvgl", "", model.ChipESP32, false, "11.0.0", nil},
+		{"esp32 nspanel", "16.0.0(release-nspanel)", "ESP32-D0WD", "", "nspanel", "", model.ChipESP32, false, "16.0.0", nil},
+		{"esp32 zbbrdgpro", "16.0.0(release-zbbrdgpro)", "ESP32-D0WD", "", "zbbrdgpro", "", model.ChipESP32, false, "16.0.0", nil},
+		// display and ir share their CODE_IMAGE_STR between ESP8266 and ESP32
+		// (tasmota_configurations.h:308,400); the hardware decides the file.
+		{"esp32 display", "16.0.0(release-display)", "ESP32-D0WD", "", "display", "", model.ChipESP32, false, "16.0.0", nil},
+		{"esp32 ir", "16.0.0(release-ir)", "ESP32-D0WD-V3", "", "ir", "", model.ChipESP32, false, "16.0.0", nil},
 		{"esp32 safeboot", "16.0.0(release-safeboot)", "ESP32-D0WD", "", "safeboot", "", model.ChipESP32, false, "16.0.0", nil},
 		{"c3 safeboot", "16.0.0(release-safeboot)", "ESP32-C3", "", "safeboot", "", model.ChipESP32C3, false, "16.0.0", nil},
 		// Unknown image tags: identity stays usable for display but the
 		// variant is "unknown", which Select/Guard refuse without a choice.
 		{"unknown tag", "16.0.0(release-foobar)", "ESP8266EX", "", "unknown", "", model.ChipESP8266, false, "16.0.0", nil},
-		{"unknown esp32 variant", "16.0.0(release-tasmota32-foobar)", "ESP32-D0WD", "", "unknown", "", model.ChipESP32, false, "16.0.0", nil},
-		{"unknown chip suffix", "16.0.0(release-tasmota32h2)", "ESP32-D0WD", "", "unknown", "", model.ChipESP32, false, "16.0.0", nil},
+		{"unknown esp32 tag", "16.0.0(release-core2)", "ESP32-D0WD", "", "unknown", "", model.ChipESP32, false, "16.0.0", nil},
+		// File names are not image tags: no upstream build reports them, so they are not mapped.
+		{"file name as tag c3", "16.0.0(release-tasmota32c3)", "ESP32-C3", "", "unknown", "", model.ChipESP32C3, false, "16.0.0", nil},
+		{"file name as tag variant", "16.0.0(release-tasmota32-bluetooth)", "ESP32-D0WD", "", "unknown", "", model.ChipESP32, false, "16.0.0", nil},
+		{"file name as tag solo1", "16.0.0(release-tasmota32solo1)", "ESP32-S0WD", "", "unknown", "", model.ChipESP32, true, "16.0.0", nil},
+		{"4M without prefix", "16.0.0(release-4M)", "ESP8266EX", "", "unknown", "", model.ChipESP8266, false, "16.0.0", nil},
 		// A self-compiled build reports a bare tag (issue #52: "16.0.0(tasmota32)"). It must never be
 		// matched to an official variant: its own drivers and Berry modules would be silently replaced
 		// by the official image on OTA. We never overwrite a custom build without an explicit choice,
 		// so the variant stays unknown (the image keeps the name for display).
 		{"tag without sha", "16.0.0(tasmota)", "ESP8266EX", "", "unknown", "", model.ChipESP8266, false, "16.0.0", nil},
 		{"self-compiled esp32", "16.0.0(tasmota32)", "ESP32-D0WD-V3", "", "unknown", "", model.ChipESP32, false, "16.0.0", nil},
-		{"self-compiled s3", "16.0.0(tasmota32s3)", "ESP32-S3", "", "unknown", "", model.ChipESP32S3, false, "16.0.0", nil},
+		{"self-compiled s3", "16.0.0(tasmota32)", "ESP32-S3", "", "unknown", "", model.ChipESP32S3, false, "16.0.0", nil},
 		// Unknown hardware is not an error but never Known().
 		{"unknown hardware", "16.0.0(release-tasmota32)", "ESP32-H2", "", "tasmota", "", model.ChipUnknown, false, "16.0.0", nil},
+		{"unknown hardware esp8266 tag", "16.0.0(release-sensors)", "ESP32-H2", "", "sensors", "", model.ChipUnknown, false, "16.0.0", nil},
+		{"unknown hardware esp32 tag", "16.0.0(release-webcam)", "ESP32-H2", "", "webcam", "", model.ChipUnknown, false, "16.0.0", nil},
 		// Family mismatches between image tag and hardware must stop.
 		{"esp32 image on esp8266", "16.0.0(release-tasmota32)", "ESP8266EX", "", "", "", "", false, "", ErrFamilyMismatch},
 		{"esp8266 image on esp32", "16.0.0(release-tasmota)", "ESP32-D0WD", "", "", "", "", false, "", ErrFamilyMismatch},
 		{"esp8266 variant on esp32", "16.0.0(release-sensors)", "ESP32-D0WD", "", "", "", "", false, "", ErrFamilyMismatch},
+		{"4M on esp32", "16.0.0(release-tasmota-4M)", "ESP32-D0WD", "", "", "", "", false, "", ErrFamilyMismatch},
 		{"minimal on esp32", "16.0.0(release-minimal)", "ESP32-C3", "", "", "", "", false, "", ErrFamilyMismatch},
-		{"c3 image on esp32", "16.0.0(release-tasmota32c3)", "ESP32-D0WD", "", "", "", "", false, "", ErrFamilyMismatch},
-		{"esp32 image on c3", "16.0.0(release-tasmota32)", "ESP32-C3", "", "", "", "", false, "", ErrFamilyMismatch},
-		{"s2cdc image on s3", "16.0.0(release-tasmota32s2cdc)", "ESP32-S3", "", "", "", "", false, "", ErrFamilyMismatch},
-		{"p4r3 image on c6", "16.0.0(release-tasmota32p4r3)", "ESP32-C6", "", "", "", "", false, "", ErrFamilyMismatch},
-		{"c6 image on c61", "16.0.0(release-tasmota32c6)", "ESP32-C61", "", "", "", "", false, "", ErrFamilyMismatch},
-		{"solo1 image on dual core", "16.0.0(release-tasmota32solo1)", "ESP32-D0WD", "", "", "", "", false, "", ErrFamilyMismatch},
-		{"dual core image on solo1", "16.0.0(release-tasmota32)", "ESP32-S0WD", "", "", "", "", false, "", ErrFamilyMismatch},
-		{"esp32 variant on solo1", "16.0.0(release-tasmota32-bluetooth)", "ESP32-SOLO", "", "", "", "", false, "", ErrFamilyMismatch},
-		{"esp32 variant on c3", "16.0.0(release-tasmota32-bluetooth)", "ESP32-C3", "", "", "", "", false, "", ErrFamilyMismatch},
+		{"esp32 variant on esp8266", "16.0.0(release-webcam)", "ESP8266EX", "", "", "", "", false, "", ErrFamilyMismatch},
+		{"esp32 variant on solo1", "16.0.0(release-bluetooth)", "ESP32-SOLO", "", "", "", "", false, "", ErrFamilyMismatch},
+		{"esp32 variant on c3", "16.0.0(release-bluetooth)", "ESP32-C3", "", "", "", "", false, "", ErrFamilyMismatch},
+		{"display on c3", "16.0.0(release-display)", "ESP32-C3", "", "", "", "", false, "", ErrFamilyMismatch},
+		{"ir on solo1", "16.0.0(release-ir)", "ESP32-S0WD", "", "", "", "", false, "", ErrFamilyMismatch},
 		{"safeboot on esp8266", "16.0.0(release-safeboot)", "ESP8266EX", "", "", "", "", false, "", ErrFamilyMismatch},
 		// Upstream env tasmota32solo1 sets CODE_IMAGE_STR "solo1" and CORE32SOLO1, so the official
 		// build reports "(release-solo1)single-core" (platformio_tasmota_env32.ini, support_esp32.ino
@@ -460,5 +473,49 @@ func TestDetectStatus4Zero(t *testing.T) {
 	wantErr(t, err, nil)
 	if id.FreeKB != 0 || id.FlashSizeKB != 0 || !id.Known() {
 		t.Errorf("got %+v", id)
+	}
+}
+
+// TestDetectThenSelect: the tag a build reports must lead back to the same upstream file, or an
+// update silently switches the build (#85). Where the tag cannot prove the build (S2, P4,
+// single-core "tasmota32"), Select refuses until the user picks one.
+func TestDetectThenSelect(t *testing.T) {
+	tests := []struct {
+		version, hw string
+		want        string
+		wantErr     error
+	}{
+		{"16.0.0(release-tasmota)", "ESP8266EX", "tasmota.bin.gz", nil},
+		{"16.0.0(release-tasmota-4M)", "ESP8266EX", "tasmota-4M.bin.gz", nil},
+		{"16.0.0(release-zigbee)", "ESP8266EX", "tasmota-zigbee.bin.gz", nil},
+		{"16.0.0(release-display)", "ESP8266EX", "tasmota-display.bin.gz", nil},
+		{"16.0.0(release-tasmota32)", "ESP32-D0WD-V3", "tasmota32.bin", nil},
+		{"16.0.0(release-solo1)single-core", "ESP32-S0WD", "tasmota32solo1.bin", nil},
+		{"16.0.0(release-display)", "ESP32-D0WD", "tasmota32-display.bin", nil},
+		{"16.0.0(release-ir)", "ESP32-D0WD", "tasmota32-ir.bin", nil},
+		{"16.0.0(release-lvgl-haspmota)", "ESP32-D0WD", "tasmota32-lvgl.bin", nil},
+		{"16.0.0(release-webcam)", "ESP32-D0WD", "tasmota32-webcam.bin", nil},
+		{"16.0.0(release-tasmota32)", "ESP32-S3", "tasmota32s3.bin", nil},
+		{"16.0.0(release-tasmota32)", "ESP32-C2", "tasmota32c2.bin", nil},
+		{"16.0.0(release-tasmota32)", "ESP32-C3", "tasmota32c3.bin", nil},
+		{"16.0.0(release-tasmota32)", "ESP32-C5", "tasmota32c5.bin", nil},
+		{"16.0.0(release-tasmota32)", "ESP32-C6", "tasmota32c6.bin", nil},
+		{"16.0.0(release-tasmota32)", "ESP32-C61", "tasmota32c61.bin", nil},
+		{"16.0.0(release-tasmota32)", "ESP32-S2", "", ErrVariantChange},
+		{"16.0.0(release-tasmota32)", "ESP32-P4", "", ErrVariantChange},
+		{"16.0.0(release-tasmota32)", "ESP32-S0WD", "", ErrVariantChange},
+	}
+	for _, tt := range tests {
+		t.Run(tt.version+" on "+tt.hw, func(t *testing.T) {
+			id, err := Detect(Inputs{Status2: status2(tt.version, tt.hw)})
+			if err != nil {
+				t.Fatalf("Detect: %v", err)
+			}
+			sel, err := Select(id, Choice{Release: "16.0.0"})
+			wantErr(t, err, tt.wantErr)
+			if sel.Filename != tt.want {
+				t.Errorf("file = %q, want %q", sel.Filename, tt.want)
+			}
+		})
 	}
 }

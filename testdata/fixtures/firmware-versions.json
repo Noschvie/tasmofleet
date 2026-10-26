@@ -52,5 +52,158 @@
     "Image": "solo1",
     "Variant": "unknown",
     "SingleCore": true
+  },
+  {
+    "Version": "16.0.0(release-tasmota32)",
+    "Hardware": "ESP32-C3 (revision v0.4)",
+    "Source": "arendst/Tasmota@63c3861 SRC: platformio_tasmota_env32.ini:421 (env tasmota32c3 sets no CODE_IMAGE_STR), tasmota/include/tasmota_configurations_ESP32.h:576",
+    "Semver": "16.0.0",
+    "Image": "release-tasmota32",
+    "Variant": "tasmota",
+    "SingleCore": false
+  },
+  {
+    "Version": "16.0.0(release-tasmota32)",
+    "Hardware": "ESP32-S3",
+    "Source": "arendst/Tasmota@63c3861 SRC: platformio_tasmota_env32.ini:475, tasmota/include/tasmota_configurations_ESP32.h:576",
+    "Semver": "16.0.0",
+    "Image": "release-tasmota32",
+    "Variant": "tasmota",
+    "SingleCore": false
+  },
+  {
+    "Version": "16.0.0(release-tasmota32)",
+    "Hardware": "ESP32-C6",
+    "Source": "arendst/Tasmota@63c3861 SRC: platformio_tasmota_env32.ini:437, tasmota/include/tasmota_configurations_ESP32.h:576",
+    "Semver": "16.0.0",
+    "Image": "release-tasmota32",
+    "Variant": "tasmota",
+    "SingleCore": false
+  },
+  {
+    "Version": "16.0.0(release-tasmota32)",
+    "Hardware": "ESP32-S2",
+    "Source": "arendst/Tasmota@63c3861 SRC: platformio_tasmota_env32.ini:388,399 (s2 and s2cdc both report tasmota32: build not provable)",
+    "Semver": "16.0.0",
+    "Image": "release-tasmota32",
+    "Variant": "unknown",
+    "SingleCore": false
+  },
+  {
+    "Version": "16.0.0(release-tasmota32)",
+    "Hardware": "ESP32-P4",
+    "Source": "arendst/Tasmota@63c3861 SRC: platformio_tasmota_env32.ini:457,466 (p4 and p4r3 both report tasmota32: build not provable)",
+    "Semver": "16.0.0",
+    "Image": "release-tasmota32",
+    "Variant": "unknown",
+    "SingleCore": false
+  },
+  {
+    "Version": "12.0.0(release-tasmota32)",
+    "Hardware": "ESP32-S0WD",
+    "Source": "arendst/Tasmota@63c3861 SRC: arendst/Tasmota@v12.0.0 platformio_tasmota_env32.ini:104 (solo1 env without CODE_IMAGE_STR; build not provable from the tag)",
+    "Semver": "12.0.0",
+    "Image": "release-tasmota32",
+    "Variant": "unknown",
+    "SingleCore": true
+  },
+  {
+    "Version": "16.0.0(release-webcam)",
+    "Hardware": "ESP32-D0WD",
+    "Source": "arendst/Tasmota@63c3861 SRC: tasmota/include/tasmota_configurations_ESP32.h:209",
+    "Semver": "16.0.0",
+    "Image": "release-webcam",
+    "Variant": "webcam",
+    "SingleCore": false
+  },
+  {
+    "Version": "16.0.0(release-bluetooth)",
+    "Hardware": "ESP32-D0WD",
+    "Source": "arendst/Tasmota@63c3861 SRC: tasmota/include/tasmota_configurations_ESP32.h:256",
+    "Semver": "16.0.0",
+    "Image": "release-bluetooth",
+    "Variant": "bluetooth",
+    "SingleCore": false
+  },
+  {
+    "Version": "16.0.0(release-lvgl-haspmota)",
+    "Hardware": "ESP32-D0WD",
+    "Source": "arendst/Tasmota@63c3861 SRC: tasmota/include/tasmota_configurations_ESP32.h:295",
+    "Semver": "16.0.0",
+    "Image": "release-lvgl-haspmota",
+    "Variant": "lvgl",
+    "SingleCore": false
+  },
+  {
+    "Version": "16.0.0(release-zbbrdgpro)",
+    "Hardware": "ESP32-D0WD",
+    "Source": "arendst/Tasmota@63c3861 SRC: tasmota/include/tasmota_configurations_ESP32.h:504",
+    "Semver": "16.0.0",
+    "Image": "release-zbbrdgpro",
+    "Variant": "zbbrdgpro",
+    "SingleCore": false
+  },
+  {
+    "Version": "16.0.0(release-nspanel)",
+    "Hardware": "ESP32-D0WD",
+    "Source": "arendst/Tasmota@63c3861 SRC: tasmota/include/tasmota_configurations_ESP32.h:556",
+    "Semver": "16.0.0",
+    "Image": "release-nspanel",
+    "Variant": "nspanel",
+    "SingleCore": false
+  },
+  {
+    "Version": "16.0.0(release-display)",
+    "Hardware": "ESP32-D0WD",
+    "Source": "arendst/Tasmota@63c3861 SRC: tasmota/include/tasmota_configurations.h:305-308 (shared with ESP8266)",
+    "Semver": "16.0.0",
+    "Image": "release-display",
+    "Variant": "display",
+    "SingleCore": false
+  },
+  {
+    "Version": "16.0.0(release-ir)",
+    "Hardware": "ESP32-D0WD",
+    "Source": "arendst/Tasmota@63c3861 SRC: tasmota/include/tasmota_configurations.h:397-400 (shared with ESP8266)",
+    "Semver": "16.0.0",
+    "Image": "release-ir",
+    "Variant": "ir",
+    "SingleCore": false
+  },
+  {
+    "Version": "16.0.0(release-safeboot)",
+    "Hardware": "ESP32-C3",
+    "Source": "arendst/Tasmota@63c3861 SRC: tasmota/include/tasmota_configurations_ESP32.h:36",
+    "Semver": "16.0.0",
+    "Image": "release-safeboot",
+    "Variant": "safeboot",
+    "SingleCore": false
+  },
+  {
+    "Version": "16.0.0(release-tasmota-4M)",
+    "Hardware": "ESP8266EX",
+    "Source": "arendst/Tasmota@63c3861 SRC: platformio_tasmota_env.ini:26",
+    "Semver": "16.0.0",
+    "Image": "release-tasmota-4M",
+    "Variant": "4M",
+    "SingleCore": false
+  },
+  {
+    "Version": "16.0.0(release-zigbee)",
+    "Hardware": "ESP8266EX",
+    "Source": "arendst/Tasmota@63c3861 SRC: platformio_tasmota_env.ini:63",
+    "Semver": "16.0.0",
+    "Image": "release-zigbee",
+    "Variant": "zigbee",
+    "SingleCore": false
+  },
+  {
+    "Version": "16.0.0(release-sensors)",
+    "Hardware": "ESP8266EX",
+    "Source": "arendst/Tasmota@63c3861 SRC: tasmota/include/tasmota_configurations.h:31",
+    "Semver": "16.0.0",
+    "Image": "release-sensors",
+    "Variant": "sensors",
+    "SingleCore": false
   }
 ]

@@ -97,16 +97,17 @@ func TestITDirectESP8266(t *testing.T) {
 	e.expectSuccess(dev, orig, 1, model.PlanDirect)
 }
 
-// Every ESP32 chip gets the image of its own family and one direct Upgrade.
+// Every ESP32 chip gets the image of its own family and one direct Upgrade. All chip builds
+// report the image tag "tasmota32" (#85), so the OtaUrl file name proves the build.
 func TestITDirectESP32PerChip(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		profile simulator.Profile
-		image   string
+		file    string
 	}{
-		{"esp32", simulator.ProfileESP32, "tasmota32"},
-		{"esp32c3", simulator.ProfileESP32C3, "tasmota32c3"},
-		{"esp32s3", simulator.ProfileESP32S3, "tasmota32s3"},
+		{"esp32", simulator.ProfileESP32, "tasmota32.bin"},
+		{"esp32c3", simulator.ProfileESP32C3, "tasmota32c3.bin"},
+		{"esp32s3", simulator.ProfileESP32S3, "tasmota32s3.bin"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newItEnv(t)
@@ -115,9 +116,7 @@ func TestITDirectESP32PerChip(t *testing.T) {
 			eng := e.start(2)
 			e.submit(eng, Request{DeviceID: dev})
 			e.expectSuccess(dev, orig, 1, model.PlanDirect)
-			if got := e.ctrl[dev].Image(); got != tc.image {
-				t.Fatalf("device runs image %q, want %q", got, tc.image)
-			}
+			e.assertFlashed(dev, "/fw/"+itRelease+"/"+tc.file)
 		})
 	}
 }

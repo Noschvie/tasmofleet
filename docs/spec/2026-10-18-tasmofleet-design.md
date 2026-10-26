@@ -352,21 +352,31 @@ version, image name and `GetCodeCores()`), e.g. `16.0.0(release-tasmota)`, `16.0
 (`16.0.0(tasmota32)`, no prefix): the variant stays `unknown`, so OTA never replaces a custom build
 without an explicit choice; the UI shows the reported name as "tasmota32 (self-compiled)". The variant is normalised:
 
-| image tag                                                                                | family constraint              | Variant                                                                 |
-| ---------------------------------------------------------------------------------------- | ------------------------------ | ----------------------------------------------------------------------- |
-| `tasmota`                                                                                | esp8266                        | `tasmota`                                                               |
-| `minimal`                                                                                | esp8266                        | `minimal`                                                               |
-| `lite`, `sensors`, `knx`, `display`, `ir`, `zbbridge`, `zigbee`, `4M`                    | esp8266                        | same                                                                    |
-| `tasmota32`                                                                              | esp32 (dual core)              | `tasmota`                                                               |
-| `tasmota32solo1`                                                                         | esp32 single core              | `tasmota` + `SingleCore`                                                |
-| `solo1` (upstream env `tasmota32solo1` sets `CODE_IMAGE_STR "solo1"`)                    | esp32 single core              | `tasmota` + `SingleCore`                                                |
-| `tasmota32<chip>` (s2, s2cdc, s3, c2, c3, c5, c6, c61, p4, p4r3)                         | must equal the Hardware family | `tasmota`                                                               |
-| `tasmota32-<v>` (`bluetooth`, `display`, `ir`, `lvgl`, `nspanel`, `webcam`, `zbbrdgpro`) | esp32                          | `<v>`                                                                   |
-| `safeboot`                                                                               | esp32                          | `safeboot` (device sits in safeboot; treated like minimal)              |
-| anything else                                                                            |                                | `unknown` -> refuse updates until the user chooses a variant explicitly |
+The image tag is the build's `CODE_IMAGE_STR` (SRC, arendst/Tasmota `63c3861`; every row with its source line is in
+`testdata/fixtures/firmware-versions.json`), not the upstream file name (#85). The chip always comes from
+`Hardware` (§6.1):
 
-If the image tag's family (e.g. `tasmota32c3`) disagrees with the Hardware family,
-`Detect` returns `ErrFamilyMismatch`. This must never happen, so if it does, stop.
+| image tag (after the `<sha-or-release>-` prefix)                               | runs on (Hardware)         | Variant -> file (§7.1)                                                  |
+| ------------------------------------------------------------------------------ | -------------------------- | ----------------------------------------------------------------------- |
+| `tasmota`                                                                      | esp8266                    | `tasmota` -> `tasmota.bin.gz`                                           |
+| `minimal`                                                                      | esp8266                    | `minimal`                                                               |
+| `lite`, `sensors`, `knx`, `zbbridge`, `zigbee`                                 | esp8266                    | same -> `tasmota-<v>.bin.gz`                                            |
+| `tasmota-4M`                                                                   | esp8266                    | `4M` -> `tasmota-4M.bin.gz`                                             |
+| `display`, `ir` (one `CODE_IMAGE_STR` for both families)                       | esp8266 or esp32 dual core | same -> `tasmota-<v>.bin.gz` / `tasmota32-<v>.bin`                      |
+| `webcam`, `bluetooth`, `nspanel`, `zbbrdgpro`                                  | esp32 dual core            | same -> `tasmota32-<v>.bin`                                             |
+| `lvgl-haspmota` (`lvgl` up to v11)                                             | esp32 dual core            | `lvgl` -> `tasmota32-lvgl.bin`                                          |
+| `tasmota32` (every `FIRMWARE_TASMOTA32` build but solo1, one per chip)         | esp32 dual core            | `tasmota` -> `tasmota32.bin`                                            |
+|                                                                                | s3, c2, c3, c5, c6, c61    | `tasmota` -> `tasmota32<chip>.bin`                                      |
+|                                                                                | s2, p4                     | `unknown`: two builds each (s2/s2cdc, p4/p4r3), the tag cannot tell     |
+|                                                                                | esp32 single core          | `unknown`: up to v12.0 solo1 also reported `tasmota32`                  |
+|                                                                                | esp8266                    | `ErrFamilyMismatch`                                                     |
+| `solo1` (with suffix `single-core`)                                            | esp32 single core          | `tasmota` + `SingleCore` -> `tasmota32solo1.bin`                        |
+| `safeboot`                                                                     | any esp32 chip             | `safeboot` (device sits in safeboot; treated like minimal)              |
+| anything else, file names (`tasmota32c3`, `tasmota32-webcam`), bare tags (#52) |                            | `unknown` -> refuse updates until the user chooses a variant explicitly |
+
+With unknown hardware the tag is not checked (the identity is never `Known()`). If the
+tag's chips do not include the Hardware family (e.g. `webcam` on an ESP32-C3), `Detect`
+returns `ErrFamilyMismatch`. This must never happen, so if it does, stop.
 
 Language builds (`tasmota-DE.bin.gz`, `tasmota32-DE.bin`) keep the image tag `tasmota` /
 `tasmota32`. The language is read from `<html lang>` on `GET /` (`de` -> `DE`, `en` ->

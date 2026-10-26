@@ -169,6 +169,43 @@ func isNumericVersion(v string) bool {
 	return true
 }
 
+// imageTag is one row of the §6.2 table: what an upstream build reports as
+// CODE_IMAGE_STR (Tasmota source; testdata/fixtures/firmware-versions.json
+// names the lines) and where that build runs.
+type imageTag struct {
+	variant string
+	esp8266 bool // built for the ESP8266
+	esp32   bool // built for the classic dual-core ESP32
+}
+
+// imageTags covers every tag except "tasmota32", "solo1" and "safeboot",
+// whose chip rules are in variantFromTag. A tag not listed here is unknown.
+var imageTags = map[string]imageTag{
+	"tasmota":       {variantTasmota, true, false},
+	"minimal":       {variantMinimal, true, false},
+	"lite":          {"lite", true, false},
+	"sensors":       {"sensors", true, false},
+	"knx":           {"knx", true, false},
+	"zbbridge":      {"zbbridge", true, false},
+	"zigbee":        {"zigbee", true, false},
+	"tasmota-4M":    {"4M", true, false},
+	"display":       {"display", true, true}, // one CODE_IMAGE_STR for both families
+	"ir":            {"ir", true, true},
+	"webcam":        {"webcam", false, true},
+	"bluetooth":     {"bluetooth", false, true},
+	"lvgl-haspmota": {"lvgl", false, true},
+	"lvgl":          {"lvgl", false, true}, // up to v11
+	"nspanel":       {"nspanel", false, true},
+	"zbbrdgpro":     {"zbbrdgpro", false, true},
+}
+
+// ambiguousChips have two upstream builds that both report "tasmota32"
+// (s2/s2cdc, p4/p4r3): the tag cannot tell which one runs.
+var ambiguousChips = map[model.ChipFamily]bool{
+	model.ChipESP32S2: true,
+	model.ChipESP32P4: true,
+}
+
 // variantFromTag applies the §6.2 table to a raw image tag
 // ("<sha-or-release>-<image>"). ok is false when the image cannot run on
 // the detected hardware. With unknown hardware there is nothing to check
@@ -181,31 +218,32 @@ func variantFromTag(tag string, fam model.ChipFamily, single bool) (string, bool
 		return variantUnknown, true
 	}
 	known := fam != model.ChipUnknown
-	switch {
-	case esp8266Variants[image] || image == variantMinimal:
-		return image, !known || fam == model.ChipESP8266
-	case image == "solo1":
+	switch image {
+	case "tasmota32":
+		// Every FIRMWARE_TASMOTA32 build but solo1 reports "tasmota32", one
+		// build per chip, so the chip comes from Hardware.
+		switch {
+		case fam == model.ChipESP8266:
+			return "", false
+		case single || ambiguousChips[fam]:
+			// Up to v12.0 solo1 reported "tasmota32" too; S2 and P4 have two
+			// builds each. Which one runs is not provable: never guess.
+			return variantUnknown, true
+		default:
+			return variantTasmota, true
+		}
+	case "solo1":
 		// The upstream env tasmota32solo1 sets CODE_IMAGE_STR "solo1"
 		// (platformio_tasmota_env32.ini): the official single-core build.
 		return variantTasmota, !known || (fam == model.ChipESP32 && single)
-	case image == variantSafeboot:
+	case variantSafeboot:
 		return variantSafeboot, !known || fam.IsESP32()
-	case strings.HasPrefix(image, "tasmota32-"):
-		v := strings.TrimPrefix(image, "tasmota32-")
-		if !esp32Variants[v] || v == variantTasmota {
-			return variantUnknown, true
-		}
-		return v, !known || (fam == model.ChipESP32 && !single)
-	case strings.HasPrefix(image, "tasmota32"):
-		suffix := strings.TrimPrefix(image, "tasmota32")
-		buildFam, ok := chipBuilds[suffix]
-		if !ok {
-			return variantUnknown, true
-		}
-		return variantTasmota, !known || (buildFam == fam && (suffix == "solo1") == single)
-	default:
+	}
+	t, ok := imageTags[image]
+	if !ok {
 		return variantUnknown, true
 	}
+	return t.variant, !known || (t.esp8266 && fam == model.ChipESP8266) || (t.esp32 && fam == model.ChipESP32 && !single)
 }
 
 // languageFromRoot maps <html lang> to the upstream language suffix:

@@ -8,6 +8,12 @@ always upgrade automatically.
 
 ### Fixed
 
+- Identity: image tags are now read the way upstream Tasmota builds report them (#85). Official ESP32-S3,
+  C2, C3, C5, C6 and C61 devices (all report `tasmota32`) and ESP32 `display`/`ir` builds were refused as a
+  chip-family mismatch and missing from the fleet; they are now identified and keep their build. ESP32
+  `webcam`, `bluetooth`, `lvgl`, `nspanel`, `zbbrdgpro` and ESP8266 `tasmota-4M` are recognised instead of
+  `unknown`. ESP32-S2 and P4 (two builds each with the same tag) and single-core ESP32 reporting `tasmota32`
+  stay `unknown`, so OTA waits for an explicit variant choice instead of guessing.
 - Identity: a firmware version with the core suffix that single-core ESP32 builds append
   (`16.0.0(solo1)single-core`, also the official `16.0.0(release-solo1)single-core`) no longer aborts the
   identity probe and hides the device. The official solo1 build is recognised as `tasmota` on single-core
