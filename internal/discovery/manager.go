@@ -674,7 +674,7 @@ func (m *Manager) AcceptVersion(ctx context.Context, actor string, id int64, ver
 	case version != "" && version != versionOf(row):
 		err = fmt.Errorf("%w: the proposal changed after it was shown", ErrStale)
 	case row.Kind == store.ProposalNew:
-		devID, err = m.acceptNew(ctx, actor, row)
+		devID, err = m.acceptNew(ctx, actor, row, det)
 	case row.Kind == store.ProposalAddressChange:
 		devID, err = m.acceptMove(ctx, actor, row, det)
 	default:
@@ -713,18 +713,24 @@ func DevicePassword(ctx context.Context) string {
 // review 2026-10-22). A device that already asks for a password cannot
 // answer the unauthenticated probe; the admin accepts it without the default
 // and types the password in the device edit form.
-func (m *Manager) acceptNew(ctx context.Context, actor string, row store.ProposalRow) (model.DeviceID, error) {
+func (m *Manager) acceptNew(ctx context.Context, actor string, row store.ProposalRow, det map[string]any) (model.DeviceID, error) {
 	d := row.Device
 	d.ID = 0
 	pw := DevicePassword(ctx)
 	err := errors.New("no verifier configured")
 	offline := m.topicLWT(d.Topic) == "Offline"
 	switch {
-	case offline && pw == "":
-		// Seen on MQTT and offline (D15): the check could only time out, and
-		// nothing secret goes anywhere. Its identity is read when it comes online.
 	case offline:
-		err = errors.New("the device is offline (MQTT)")
+		// Seen on MQTT and offline (D15): the check could only time out. Nothing
+		// secret goes anywhere: the fleet default password, which needs a proven
+		// MAC, is withheld; the admin sets it in the device edit form if needed.
+		// Its identity is read when it comes online (reprobe).
+		err = nil
+		det["mac_unverified"] = true
+		if pw != "" {
+			pw = ""
+			det["default_password_withheld"] = "offline"
+		}
 	case m.o.Verifier != nil:
 		var mac string
 		if mac, err = m.o.Verifier.VerifyMAC(ctx, d.Address, portOf(d)); err == nil {
@@ -732,6 +738,9 @@ func (m *Manager) acceptNew(ctx context.Context, actor string, row store.Proposa
 				return 0, fmt.Errorf("%w: %s now answers with a different MAC", ErrStale, d.Address)
 			}
 		}
+	}
+	if err != nil && pw == "" {
+		det["mac_unverified"] = true // accepted as before; the audit says that nothing was proven
 	}
 	if pw != "" {
 		if err != nil {
@@ -741,7 +750,7 @@ func (m *Manager) acceptNew(ctx context.Context, actor string, row store.Proposa
 		d.HTTPPassword = pw // the fleet default (N20); the user stays empty: Tasmota's admin
 	}
 	id, err := m.o.Inventory.Create(ctx, actor, d)
-	if err == nil && m.o.OnAccepted != nil {
+	if err == nil && m.o.OnAccepted != nil && !offline {
 		m.o.OnAccepted(id)
 	}
 	return id, err

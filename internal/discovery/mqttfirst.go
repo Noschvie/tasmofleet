@@ -30,6 +30,8 @@ const (
 	// publishes its discovery config a few seconds after the LWT, and a device
 	// that announces itself needs no question.
 	askGrace = 30 * time.Second
+	// askReplyWindow is how long after the question a STATUS5 reply is taken (D13).
+	askReplyWindow = 30 * time.Second
 )
 
 // topicState is what MQTT told about one %topic%.
@@ -167,8 +169,8 @@ func (m *Manager) handleTopic(ctx context.Context, msg mqttbus.Message) {
 			}
 		}
 	case mqttbus.KindStatus:
-		if !s.asked.IsZero() && s.mac == "" && !s.known {
-			answer = msg.Payload // only a reply to discovery's own question (D13)
+		if !s.asked.IsZero() && now.Sub(s.asked) <= askReplyWindow && s.mac == "" && !s.known {
+			answer = msg.Payload // only a timely reply to discovery's own question (D13)
 		}
 		if !msg.Retained {
 			s.live = true
@@ -196,7 +198,7 @@ func (m *Manager) handleTopic(ctx context.Context, msg mqttbus.Message) {
 			s.known = true
 			m.tmu.Unlock()
 			if online {
-				m.reprobe(d, now)
+				m.reprobe(ctx, d, now)
 			}
 			return
 		}
@@ -330,7 +332,13 @@ func (m *Manager) askDue(ctx context.Context) {
 // reprobe starts the first probe again for an inventory device that came
 // online without a detected identity (added while offline), at most once per
 // reprobeEvery per device (spec 11.3a "Filled in later").
-func (m *Manager) reprobe(d model.Device, now time.Time) {
+//
+// The device was added without MAC proof, so its stored address must first
+// answer with its MAC (credential-less Status 5 through the Verifier): another
+// MAC there means another device, whose identity must not be stored under this
+// one. The refusal is audited; no answer (a password-protected device) lets the
+// probe run, it goes to the address the admin accepted.
+func (m *Manager) reprobe(ctx context.Context, d model.Device, now time.Time) {
 	if m.o.OnAccepted == nil || !d.Identity.DetectedAt.IsZero() {
 		return
 	}
@@ -348,6 +356,16 @@ func (m *Manager) reprobe(d model.Device, now time.Time) {
 	}
 	m.reprobed[d.ID] = now
 	m.tmu.Unlock()
+	if m.o.Verifier != nil {
+		if mac, err := m.o.Verifier.VerifyMAC(ctx, d.Address, portOf(d)); err == nil {
+			if got, nerr := inventory.NormaliseMAC(mac); nerr != nil || !d.HasMAC(got) {
+				m.log.Warn("discovery: stored address answers with another MAC, identity probe not started", "device", d.ID, "address", d.Address)
+				m.audit(ctx, "discovery", "discovery.identify_refused", fmt.Sprintf("device:%d", d.ID),
+					map[string]any{"address": d.Address, "reason": "the stored address answers with another MAC"}, nil)
+				return
+			}
+		}
+	}
 	m.log.Info("discovery: device came online without identity, probing it", "device", d.ID, "topic", d.Topic)
 	m.o.OnAccepted(d.ID)
 }

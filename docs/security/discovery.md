@@ -30,9 +30,23 @@ A **version** is a SHA-256 digest (full length) over everything an admin sees an
 | D10 | Admin only. Scan start/cancel/end, accept and dismiss are audited; refused ranges too.                                                                                                                                                                  |
 | D11 | A dismissed proposal stays hidden while its content is unchanged (retained messages replay at every reconnect) and reappears when it changes.                                                                                                            |
 | D12 | MQTT-only sightings (LWT, STATE, INFO) never become a proposal: they carry no MAC. Discovery asks such a topic for its MAC with one `Status 5` over MQTT (never `Status 0`, safety rule 2) only while the topic is unresolved and online, at most once per topic per 10 min, one command at a time and at least 1 s apart for the bus, after 30 s online. Each query is audited (`discovery.identify`) and `DISCOVERY_MQTT` off stops them. At most 1024 unresolved topics are kept (oldest dropped). A fake LWT flood therefore costs at most one small command per second. |
-| D13 | A `STATUS5` reply is used only for a topic discovery asked and that is still unresolved; it is a claim like a discovery config (D4 sanitising, D2/D3 identity rules). Replies to tasmofleet's own HTTP probes of inventory devices (Tasmota mirrors them on MQTT) are ignored. |
+| D13 | A `STATUS5` reply is used only for the exact topic discovery asked, within 30 s of the question, while it is still unresolved; it is a claim like a discovery config (D4 sanitising, D2/D3 identity rules). Replies to tasmofleet's own HTTP probes of inventory devices (Tasmota mirrors them on MQTT) are ignored. |
 | D14 | A scan sighting never overwrites the topic or full topic a MQTT sighting stored for the same MAC (topic and online state of a device seen on MQTT come from MQTT); a MQTT sighting keeps the port a scan found. |
-| D15 | Accepting a proposal whose topic's last LWT is `Offline` skips the MAC check (nothing is sent anywhere). With the fleet default password the MAC proof is still required (fail closed). Re-probing a stored device that comes online without identity uses the stored record, at most once per device per 10 min, and never changes its topic or MAC. |
+| D15 | Accepting a proposal whose topic's last LWT is `Offline` skips the MAC check (nothing is sent anywhere). The fleet default password still needs a proven MAC, so for such an accept it is withheld: the device is stored without it and the audit row carries `default_password_withheld`. Every accept without MAC proof carries `mac_unverified` in its audit row. Before the first probe of such a device (when it comes online) its stored address must not answer the credential-less Status 5 with another MAC; if it does, the probe is not started and `discovery.identify_refused` is audited. Re-probing a stored device that comes online without identity uses the stored record, at most once per device per 10 min, and never changes its topic or MAC. |
+
+## Residual risks (MQTT-first, review 2026-10-26)
+
+- **Topic claims.** Any broker publisher can claim a topic for a MAC (as with
+  `tasmota/discovery` before). Since D14 the MQTT topic of a proposal wins over a
+  scan sighting, so a spoofed claim for a MAC that a scan found can put a wrong topic
+  into the proposal, and an accept stores it; MQTT health would then follow the wrong
+  topic until an admin fixes it. Accept shows the topic before it is applied, and a
+  broker ACL (below) removes the risk. Low.
+- **Unverified accept.** A device accepted while offline is bound to the claimed MAC
+  without proof (`mac_unverified`); nothing secret is sent, and the first probe checks
+  the MAC first. A host that answers no Status 5 without credentials (a
+  password-protected impostor) is probed with the stored password only if the admin set
+  one for it. Low.
 
 ## Deployment
 

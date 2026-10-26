@@ -855,7 +855,8 @@ proposal as seen (MAC, topic, full topic, address, port; `discovery.Accept`). It
 depend on an HTTP probe: for a proposal whose LWT is `Offline` the MAC check is skipped (it
 could only time out); otherwise an unanswered check is fine as before. With the fleet
 default password the MAC must still be proven (security review 2026-10-22), so an offline
-device is then added without it. "Add…" (the prefilled form) stays for typing a password.
+device is then added without it (audited as `default_password_withheld`); no first probe is
+started while it is offline. "Add…" (the prefilled form) stays for typing a password.
 
 **Filled in later.** A device added this way has no identity yet. When its topic comes
 online (LWT `Online`, or a live STATE) and its identity was never detected, discovery

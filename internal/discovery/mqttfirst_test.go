@@ -3,7 +3,6 @@ package discovery
 import (
 	"bufio"
 	"context"
-	"errors"
 	"net/netip"
 	"os"
 	"strconv"
@@ -353,14 +352,30 @@ func TestOfflineMQTTDeviceIsAcceptedWithoutProbe(t *testing.T) {
 }
 
 // Why: the fleet default password goes only to an address that proved the
-// MAC (security review 2026-10-22); an offline device cannot, so it fails closed.
-func TestOfflineAcceptWithDefaultPasswordStillNeedsProof(t *testing.T) {
+// MAC (security review 2026-10-22). An offline device cannot prove it, so it
+// is added without the password (nothing secret goes anywhere) instead of
+// not at all, and the audit row says so.
+func TestOfflineAcceptWithholdsTheDefaultPassword(t *testing.T) {
 	e := newMQTTEnv(t, nil)
 	e.feed(discoveryMsg("02005ED22C14", "172.31.13.31", "lamp"))
 	e.feed(mqttbus.Message{Kind: mqttbus.KindLWT, Topic: "lamp", Payload: []byte("Offline"), Retained: true})
-	_, err := e.mgr.Accept(WithDevicePassword(bg, "fake-default"), "admin", onlyNew(t, e.env).ID)
-	if !errors.Is(err, ErrNotAcceptable) {
-		t.Fatalf("err = %v, want ErrNotAcceptable", err)
+	id, err := e.mgr.Accept(WithDevicePassword(bg, "fake-default"), "admin", onlyNew(t, e.env).ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d, _ := e.inv.Get(bg, id); d.HTTPPassword != "" {
+		t.Fatal("the default password was stored for an address that proved nothing")
+	}
+	e.audit.mu.Lock()
+	defer e.audit.mu.Unlock()
+	found := false
+	for _, ev := range e.audit.ev {
+		if ev.Action == "discovery.accept" && strings.Contains(ev.Detail, "default_password_withheld") {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("the accept audit must say that the default password was withheld")
 	}
 }
 
@@ -445,3 +460,84 @@ var _ store.DiscoveryStore = (*store.SQLite)(nil)
 func mustAddr(s string) netip.Addr { return netip.MustParseAddr(s) }
 
 func itoa(i int) string { return strconv.Itoa(i) }
+
+// ---- security review 2026-10-26 (trust boundary, verification) ----
+
+func askAndAnswer(e *mqttEnv, topic, payload string, wait time.Duration) {
+	e.feed(mqttbus.Message{Kind: mqttbus.KindLWT, Topic: topic, Payload: []byte("Online"), Retained: true})
+	e.clk.add(askGrace)
+	e.mgr.askDue(bg)
+	e.clk.add(wait)
+	e.feed(mqttbus.Message{Kind: mqttbus.KindStatus, Topic: topic, Suffix: "STATUS5", Payload: []byte(payload)})
+}
+
+// Why: a STATUS5 reply is a claim from anyone who can publish. It is taken
+// only for the exact topic asked and only shortly after the question, so a
+// publisher cannot keep a standing claim open.
+func TestLateStatus5IsIgnored(t *testing.T) {
+	e := newMQTTEnv(t, nil)
+	askAndAnswer(e, "late", `{"StatusNET":{"Hostname":"late","IPAddress":"172.31.13.60","Mac":"02:00:5E:60:60:60"}}`, askReplyWindow+time.Second)
+	if p := mustProposals(t, e.env); len(p) != 0 {
+		t.Fatalf("a reply after %v became %+v", askReplyWindow, p)
+	}
+}
+
+// Why: an MQTT claim of a stored device's MAC at another address never moves
+// it without the HTTP MAC proof at the new address (inventory rules, audit
+// row 14); unproven, it is an address-change proposal for the admin.
+func TestStatus5ClaimOfKnownMACDoesNotMoveWithoutProof(t *testing.T) {
+	e := newMQTTEnv(t, nil)
+	id, err := e.inv.Create(bg, "t", model.Device{Name: "lamp", Address: "172.31.13.31", MAC: "02:00:5e:d2:2c:14", Topic: "lamp"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	askAndAnswer(e, "evil", `{"StatusNET":{"Hostname":"evil","IPAddress":"172.31.13.66","Mac":"02:00:5E:D2:2C:14"}}`, 0)
+	if d, _ := e.inv.Get(bg, id); d.Address != "172.31.13.31" {
+		t.Fatalf("an unproven MQTT claim moved the device to %s", d.Address)
+	}
+	if p := mustProposals(t, e.env); len(p) != 1 || p[0].Kind != KindAddressChange {
+		t.Fatalf("proposals = %+v, want one address change", p)
+	}
+}
+
+// Why: an accept without MAC proof (offline device) must be visible as such
+// in the audit.
+func TestOfflineAcceptIsAuditedAsMACUnverified(t *testing.T) {
+	e := newMQTTEnv(t, nil)
+	e.feed(discoveryMsg("02005ED22C14", "172.31.13.31", "lamp"))
+	e.feed(mqttbus.Message{Kind: mqttbus.KindLWT, Topic: "lamp", Payload: []byte("Offline"), Retained: true})
+	if _, err := e.mgr.Accept(bg, "admin", onlyNew(t, e.env).ID); err != nil {
+		t.Fatal(err)
+	}
+	e.audit.mu.Lock()
+	defer e.audit.mu.Unlock()
+	for _, ev := range e.audit.ev {
+		if ev.Action == "discovery.accept" && strings.Contains(ev.Detail, `"mac_unverified":true`) {
+			return
+		}
+	}
+	t.Error("the accept audit lacks mac_unverified")
+}
+
+// Why: a device added unverified gets its identity from the first probe when
+// it comes online. If its stored address now answers with another MAC, the
+// probe would store a foreign identity (and firmware selection follows the
+// identity), so it is not started and the refusal is audited.
+func TestReprobeRefusedWhenTheAddressAnswersWithAnotherMAC(t *testing.T) {
+	var probed int
+	e := newMQTTEnv(t, func(o *Options) { o.OnAccepted = func(model.DeviceID) { probed++ } })
+	if _, err := e.inv.Create(bg, "t", model.Device{Name: "lamp", Address: "172.31.13.31", MAC: "02:00:5e:d2:2c:14", Topic: "lamp"}); err != nil {
+		t.Fatal(err)
+	}
+	e.ver.macs["172.31.13.31"] = "02:00:5e:99:99:99"
+	e.feed(mqttbus.Message{Kind: mqttbus.KindLWT, Topic: "lamp", Payload: []byte("Online")})
+	if probed != 0 || !e.audit.has("discovery.identify_refused") {
+		t.Fatalf("probes = %d, refusal audited = %v", probed, e.audit.has("discovery.identify_refused"))
+	}
+	e.ver.macs["172.31.13.31"] = "02:00:5e:d2:2c:14"
+	e.clk.add(reprobeEvery)
+	e.feed(mqttbus.Message{Kind: mqttbus.KindState, Topic: "lamp", Payload: []byte(`{}`)})
+	if probed != 1 {
+		t.Fatalf("probes after the MAC matched = %d, want 1", probed)
+	}
+}
