@@ -778,19 +778,19 @@ func bulkBar(v view) templ.Component {
 			templ_7745c5c3_Var33 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 63, "<div class=\"bulkbar\" data-bulkbar hidden role=\"region\" aria-label=\"Selected devices\"><span class=\"bulk-count\" data-bar-label>0 devices selected</span><div class=\"bulk-acts\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 63, "<div class=\"bulkbar\" data-bulkbar hidden role=\"region\" aria-label=\"Selected devices\"><span class=\"bulk-count\"><span data-bar-label>0 devices selected</span><span class=\"bulk-note\" data-bar-note hidden></span></span><div class=\"bulk-acts\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if v.Features.Updates {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 64, "<button type=\"submit\" class=\"primary\" formaction=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 64, "<button type=\"submit\" data-needs-device class=\"primary\" formaction=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var34 string
 			templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.SafeURL(v.Base + "/updates/new"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 199, Col: 93}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 199, Col: 111}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var34)
 			if templ_7745c5c3_Err != nil {
@@ -802,14 +802,14 @@ func bulkBar(v view) templ.Component {
 			}
 		}
 		if v.Features.BulkCommand && v.IsAdmin {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 66, "<button type=\"submit\" formaction=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 66, "<button type=\"submit\" data-needs-device formaction=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var35 string
 			templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.SafeURL(v.Base + "/devices/bulk/command"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 202, Col: 86}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 202, Col: 104}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var35)
 			if templ_7745c5c3_Err != nil {
@@ -821,14 +821,14 @@ func bulkBar(v view) templ.Component {
 			}
 		}
 		if v.Features.BulkBackup && v.IsAdmin {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 68, "<button type=\"submit\" formaction=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 68, "<button type=\"submit\" data-needs-device formaction=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var36 string
 			templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.SafeURL(v.Base + "/devices/bulk/backup"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 205, Col: 85}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 205, Col: 103}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var36)
 			if templ_7745c5c3_Err != nil {
@@ -840,14 +840,14 @@ func bulkBar(v view) templ.Component {
 			}
 		}
 		if v.Features.BulkRestart && v.IsAdmin {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 70, "<button type=\"submit\" formaction=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 70, "<button type=\"submit\" data-needs-device formaction=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var37 string
 			templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.SafeURL(v.Base + "/devices/bulk/restart"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 208, Col: 86}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/devices.templ`, Line: 208, Col: 104}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var37)
 			if templ_7745c5c3_Err != nil {
@@ -858,7 +858,7 @@ func bulkBar(v view) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 72, "<button type=\"submit\" name=\"action\" value=\"ON\">Power on</button> <button type=\"submit\" name=\"action\" value=\"OFF\">Power off</button></div><span class=\"bulk-sep\" aria-hidden=\"true\"></span> <button type=\"button\" class=\"bulk-clear\" data-pick=\"none\" data-picker=\"picker\">Clear</button></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 72, "<button type=\"submit\" data-needs-device name=\"action\" value=\"ON\">Power on</button> <button type=\"submit\" data-needs-device name=\"action\" value=\"OFF\">Power off</button></div><span class=\"bulk-sep\" aria-hidden=\"true\"></span> <button type=\"button\" class=\"bulk-clear\" data-pick=\"none\" data-picker=\"picker\">Clear</button></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

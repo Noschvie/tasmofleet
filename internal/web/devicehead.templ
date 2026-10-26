@@ -3,6 +3,7 @@ package web
 import (
 	"strconv"
 
+	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/store"
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
@@ -30,7 +31,13 @@ templ deviceHeader(t deviceTabs) {
 					<form method="post" action={ templ.SafeURL(t.Base + "/updates/new") } class="devhd-upd">
 						<input type="hidden" name="csrf" value={ t.CSRF }/>
 						<input type="hidden" name="id" value={ strconv.FormatInt(int64(t.ID), 10) }/>
-						<button type="submit">Update to { t.UpdateTo }</button>
+						<button
+							type="submit"
+							disabled?={ t.Health == model.HealthOffline }
+							if t.Health == model.HealthOffline {
+								title={ t.offlineWhy() }
+							}
+						>Update to { t.UpdateTo }</button>
 					</form>
 				}
 			</div>
@@ -47,7 +54,11 @@ templ deviceHeader(t deviceTabs) {
 				</form>
 			}
 			if t.CanRestart {
-				@ui.Button(ui.Btn{Label: "Restart", Href: t.Base + devPath(t.ID, "/restart"), Dialog: "dlg-restart"})
+				if t.Health == model.HealthOffline {
+					<button type="button" class="btn" disabled title={ t.offlineWhy() }>Restart</button>
+				} else {
+					@ui.Button(ui.Btn{Label: "Restart", Href: t.Base + devPath(t.ID, "/restart"), Dialog: "dlg-restart"})
+				}
 			}
 			<form method="post" action={ templ.SafeURL(t.Base + devPath(t.ID, "/backup")) }>
 				<input type="hidden" name="csrf" value={ t.CSRF }/>

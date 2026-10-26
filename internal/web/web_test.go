@@ -357,7 +357,7 @@ func TestDeviceListShowsHealthAndBasePathLinks(t *testing.T) {
 func TestHealthBadgeHasText(t *testing.T) {
 	e := setup(t)
 	_, body := e.do(t, "GET", "/devices/table", "operator", nil)
-	if !strings.Contains(body, `class="bdg dv-st t-ok" title="Online: `) || !strings.Contains(body, `</span>Online</span>`) {
+	if !strings.Contains(body, `class="bdg dv-st t-ok" data-state="online" title="Online: `) || !strings.Contains(body, `</span>Online</span>`) {
 		t.Fatalf("badge without text: %s", body)
 	}
 }

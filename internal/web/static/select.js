@@ -128,12 +128,70 @@
     form.querySelectorAll("[data-bulkbar]").forEach(function (b) {
       b.hidden = n === 0;
     });
+    // Actions that need a live device: the server skips selected devices that do not answer (the
+    // scope page lists them). Say how many here, and switch the actions off when none answers.
+    var down = list.filter(function (b) {
+      return b.checked && !answers(rowOf(b));
+    }).length;
+    form.querySelectorAll("[data-bar-note]").forEach(function (c) {
+      c.hidden = down === 0;
+      c.textContent =
+        down === 0
+          ? ""
+          : down === n
+            ? n === 1
+              ? "it is not online"
+              : "none of them is online"
+            : down + " not online, will be skipped";
+    });
+    form.querySelectorAll("[data-bulkbar] [data-needs-device]").forEach(function (b) {
+      var none = n > 0 && down === n;
+      b.disabled = none;
+      b.title = none ? "None of the selected devices is online" : "";
+    });
     // an action on exactly two rows (compare two backups) shows only then
     form.querySelectorAll("[data-needs-pair]").forEach(function (b) {
       b.hidden = n !== 2;
     });
   }
+  // answers says whether the device of a row answers now (the health badge carries its state);
+  // a row without a badge is assumed to.
+  function answers(row) {
+    var s = row && row.querySelector("[data-state]");
+    var st = s ? s.getAttribute("data-state") : "online";
+    return st === "online" || st === "stale";
+  }
+  // The row menus of the device list: Back up and Restart need a live device.
+  function markDown() {
+    document.querySelectorAll("[data-needs-device]").forEach(function (el) {
+      if (!el.closest("[data-bulkbar]")) {
+        var row = el.closest("tr, li.dcard");
+        var off = !!row && !answers(row);
+        if (off) {
+          el.setAttribute("aria-disabled", "true");
+          el.setAttribute("tabindex", "-1");
+          el.title = "The device is not online";
+        } else {
+          el.removeAttribute("aria-disabled");
+          el.removeAttribute("tabindex");
+          el.removeAttribute("title");
+        }
+      }
+    });
+  }
+  document.addEventListener(
+    "click",
+    function (e) {
+      var t = e.target instanceof Element ? e.target : null;
+      if (t && t.closest('[data-needs-device][aria-disabled="true"]')) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    },
+    true,
+  );
   function syncAll() {
+    markDown();
     document.querySelectorAll("[data-plan-devices]").forEach(function (p) {
       var f = picker(p);
       if (f) {

@@ -347,6 +347,8 @@ func blockReason(d model.Device, hl model.Health, running *model.Job) string {
 		return "Unavailable while " + runningPhrase(*running) + "."
 	case hl.LastSeen.IsZero() && d.Identity.DetectedAt.IsZero():
 		return "The device has not answered yet."
+	case hl.State == model.HealthOffline:
+		return "The device is offline."
 	}
 	return ""
 }

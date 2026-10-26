@@ -193,22 +193,22 @@ templ devicesTableBody(v view, p devicesPage) {
 // bulkBar is the bar of the selected devices (F5 markup; P2 adds nothing but its place).
 templ bulkBar(v view) {
 	<div class="bulkbar" data-bulkbar hidden role="region" aria-label="Selected devices">
-		<span class="bulk-count" data-bar-label>0 devices selected</span>
+		<span class="bulk-count"><span data-bar-label>0 devices selected</span><span class="bulk-note" data-bar-note hidden></span></span>
 		<div class="bulk-acts">
 			if v.Features.Updates {
-				<button type="submit" class="primary" formaction={ templ.SafeURL(v.Base + "/updates/new") }><span class="bulk-lg">Update firmware</span><span class="bulk-sm">Update</span></button>
+				<button type="submit" data-needs-device class="primary" formaction={ templ.SafeURL(v.Base + "/updates/new") }><span class="bulk-lg">Update firmware</span><span class="bulk-sm">Update</span></button>
 			}
 			if v.Features.BulkCommand && v.IsAdmin {
-				<button type="submit" formaction={ templ.SafeURL(v.Base + "/devices/bulk/command") }><span class="bulk-lg">Send command</span><span class="bulk-sm">Command</span></button>
+				<button type="submit" data-needs-device formaction={ templ.SafeURL(v.Base + "/devices/bulk/command") }><span class="bulk-lg">Send command</span><span class="bulk-sm">Command</span></button>
 			}
 			if v.Features.BulkBackup && v.IsAdmin {
-				<button type="submit" formaction={ templ.SafeURL(v.Base + "/devices/bulk/backup") }>Back up</button>
+				<button type="submit" data-needs-device formaction={ templ.SafeURL(v.Base + "/devices/bulk/backup") }>Back up</button>
 			}
 			if v.Features.BulkRestart && v.IsAdmin {
-				<button type="submit" formaction={ templ.SafeURL(v.Base + "/devices/bulk/restart") }>Restart</button>
+				<button type="submit" data-needs-device formaction={ templ.SafeURL(v.Base + "/devices/bulk/restart") }>Restart</button>
 			}
-			<button type="submit" name="action" value="ON">Power on</button>
-			<button type="submit" name="action" value="OFF">Power off</button>
+			<button type="submit" data-needs-device name="action" value="ON">Power on</button>
+			<button type="submit" data-needs-device name="action" value="OFF">Power off</button>
 		</div>
 		<span class="bulk-sep" aria-hidden="true"></span>
 		<button type="button" class="bulk-clear" data-pick="none" data-picker="picker">Clear</button>

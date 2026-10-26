@@ -23,6 +23,14 @@ func (h *handler) channels(hl model.Health) []channelInfo {
 	return channelsOf(h.d.Clock.Now(), h.staleWindow(), hl)
 }
 
+// reachableNow says whether the health tracker counts the device as answering on some transport
+// (HTTP or MQTT): online, or stale (silent for a moment, still being polled). Everything that
+// needs a live device asks this, so an MQTT-only device that is online stays usable. Offline,
+// unknown (never answered) and a refused login are not.
+func reachableNow(st model.HealthState) bool {
+	return st == model.HealthOnline || st == model.HealthStale
+}
+
 // mqttDown: the device answers, but not over MQTT (the "MQTT down" badge).
 func (h *handler) mqttDown(hl model.Health) bool {
 	return hl.State == model.HealthOnline && h.channels(hl)[0].Tone == "bad"

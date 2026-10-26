@@ -13,6 +13,13 @@ always upgrade automatically.
   it no longer is, so the time is that of the last real message or poll. After a restart the device list,
   the dashboard and the device page all fall back to the same stored time of the last successful identity
   read (#92, thanks @Noschvie).
+- Offline devices and actions: the bulk bar of the device list now says how many selected devices are not
+  online and will be skipped, and switches every action off when none of them is online; Back up now and
+  Restart in a row's menu, and Restart and Update in the device header, are off for a device that does not
+  answer, as are Settings and Console (with the reason as their title). "Online" is the health tracker's
+  answer over every transport, so a device that is reachable over MQTT only stays usable. A device that
+  is stale (silent for a moment, still being polled) now takes bulk actions like it already took the power
+  switch (#93, thanks @Noschvie).
 
 ## 0.14.0 (2026-10-26)
 

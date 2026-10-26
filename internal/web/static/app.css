@@ -7755,6 +7755,31 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
 body:has(.bulkbar:not([hidden]) > .bulk-acts) {
   padding-bottom: 80px;
 }
+/* how many selected devices are not online and will be skipped (select.js) */
+.bulkbar .bulk-note {
+  margin-left: 8px;
+  font-weight: 500;
+  opacity: 0.75;
+}
+.bulkbar .bulk-note::before {
+  content: "\00b7  ";
+}
+.bulkbar .bulk-note[hidden] {
+  display: none;
+}
+@media (max-width: 44.99rem) {
+  .bulkbar .bulk-note::before {
+    content: none;
+  }
+  .bulkbar .bulk-note {
+    display: block;
+    margin-left: 0;
+    white-space: normal;
+  }
+  .bulkbar .bulk-note[hidden] {
+    display: none;
+  }
+}
 @media (max-width: 44.99rem) {
   .bulkbar:has(> .bulk-acts) {
     bottom: 0;

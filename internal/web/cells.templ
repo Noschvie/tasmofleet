@@ -13,7 +13,7 @@ import (
 // statusCell is the health badge of a device, with "MQTT down" when the device answers over
 // HTTP only.
 templ (h *handler) statusCell(hl model.Health) {
-	<span class={ "bdg", "dv-st", uiToneClass(hl.State) } title={ h.hint(hl.State) }><span class="dv-dot" aria-hidden="true"></span>{ label(hl.State) }</span>
+	<span class={ "bdg", "dv-st", uiToneClass(hl.State) } data-state={ string(hl.State) } title={ h.hint(hl.State) }><span class="dv-dot" aria-hidden="true"></span>{ label(hl.State) }</span>
 	if h.mqttDown(hl) {
 		<span class="bdg t-warn dv-mdown" title="The device answers over HTTP, but nothing arrives over MQTT">MQTT down</span>
 	}
@@ -179,11 +179,12 @@ templ deviceMenu(m rowMenu) {
 			if m.Console {
 				<a class="menu-item" role="menuitem" href={ templ.SafeURL(m.Base + "/devices/" + devID(m.Device.ID) + "/console") }>Open console</a>
 			}
-			<button type="button" class="menu-item" role="menuitem" hx-post={ m.Base + "/devices/" + devID(m.Device.ID) + "/backup" } hx-vals={ `{"from":"list"}` } hx-target="#list-notice" hx-swap="innerHTML">Back up now</button>
+			<button type="button" class="menu-item" role="menuitem" data-needs-device hx-post={ m.Base + "/devices/" + devID(m.Device.ID) + "/backup" } hx-vals={ `{"from":"list"}` } hx-target="#list-notice" hx-swap="innerHTML">Back up now</button>
 			if m.Admin && m.Console {
 				<a
 					class="menu-item"
 					role="menuitem"
+					data-needs-device
 					href={ templ.SafeURL(m.Base + "/devices/" + devID(m.Device.ID) + "/restart") }
 					data-dialog="dlg-row"
 					data-dlg-kind="restart"

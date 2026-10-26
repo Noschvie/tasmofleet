@@ -128,7 +128,7 @@ func (h *handler) bulkScope(r *http.Request, kind bulkKind, self, run string) (b
 		if d.Port != 0 {
 			row.Addr += ":" + strconv.Itoa(d.Port)
 		}
-		if st == model.HealthOnline {
+		if reachableNow(st) {
 			ready = append(ready, id)
 		} else {
 			row.Skip = true

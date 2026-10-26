@@ -60,7 +60,7 @@ const maxRelays = 8
 // powerCellOf builds the cell from the latest health. "POWER" is relay 1 of a
 // single-relay device, "POWERn" relay n.
 func (h *handler) powerCellOf(base string, id model.DeviceID, hl model.Health) powerCell {
-	return powerCell{Base: base, ID: id, Enabled: h.d.DeviceCmd != nil, Off: hl.State != model.HealthOnline && hl.State != model.HealthStale, Relays: relayStates(hl)}
+	return powerCell{Base: base, ID: id, Enabled: h.d.DeviceCmd != nil, Off: !reachableNow(hl.State), Relays: relayStates(hl)}
 }
 
 // relayStates reads the relays from the latest health, in relay order.
