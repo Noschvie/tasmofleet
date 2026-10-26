@@ -118,6 +118,15 @@ type Manager struct {
 	base     context.Context
 	scans    map[ScanID]*scan
 	scanList []ScanID
+
+	// tmu guards the topic side of MQTT discovery (mqttfirst.go).
+	tmu      sync.Mutex
+	bus      mqttbus.Bus
+	attached bool
+	topics   map[string]*topicState
+	lastAsk  time.Time
+	askGrace time.Duration // askGrace; tests shorten it
+	reprobed map[model.DeviceID]time.Time
 }
 
 var _ Service = (*Manager)(nil)
@@ -157,6 +166,7 @@ func New(o Options) (*Manager, error) {
 		o: o, clk: o.Clock, log: o.Logger,
 		pending: map[string]mqttbus.Message{}, wake: make(chan struct{}, 1),
 		last: map[string]time.Time{}, scans: map[ScanID]*scan{},
+		topics: map[string]*topicState{}, reprobed: map[model.DeviceID]time.Time{}, askGrace: askGrace,
 	}, nil
 }
 
@@ -169,6 +179,8 @@ func (m *Manager) Run(ctx context.Context) error {
 	m.prune(ctx)
 	tick := time.NewTicker(pruneEvery)
 	defer tick.Stop()
+	ask := time.NewTicker(askGap)
+	defer ask.Stop()
 	for {
 		for {
 			msg, ok := m.pop()
@@ -180,10 +192,12 @@ func (m *Manager) Run(ctx context.Context) error {
 				return ctx.Err()
 			}
 		}
+		m.askDue(ctx)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-m.wake:
+		case <-ask.C:
 		case <-tick.C:
 			m.prune(ctx)
 		}
@@ -198,21 +212,46 @@ func (m *Manager) prune(ctx context.Context) {
 	}
 }
 
-// Attach subscribes to the discovery messages of bus. Retained messages are
-// replayed by the bus before Attach returns; they are queued, not processed
-// inline. The returned func unsubscribes.
+// Attach subscribes to the discovery messages and the device topics (LWT,
+// STATE, INFO, STATUS5; spec 11.3a) of bus, and lets discovery send its
+// Status 5 queries there. Retained messages are replayed by the bus before
+// Attach returns; they are queued, not processed inline. The returned func
+// unsubscribes and stops the queries (the MQTT discovery setting).
 func (m *Manager) Attach(bus mqttbus.Bus) (unsubscribe func()) {
-	return bus.Subscribe([]mqttbus.Kind{mqttbus.KindDiscovery}, m.HandleMQTT)
+	m.tmu.Lock()
+	m.bus, m.attached = bus, true
+	m.tmu.Unlock()
+	unsub := bus.Subscribe([]mqttbus.Kind{mqttbus.KindDiscovery, mqttbus.KindLWT, mqttbus.KindState, mqttbus.KindInfo, mqttbus.KindStatus}, m.HandleMQTT)
+	return func() {
+		unsub()
+		m.tmu.Lock()
+		m.bus, m.attached = nil, false
+		m.topics = map[string]*topicState{}
+		m.tmu.Unlock()
+	}
 }
 
-// HandleMQTT queues a discovery message. It never blocks (it runs on the bus
-// goroutine). Messages are coalesced per MAC, so a flood of one MAC costs one
-// slot; new MACs beyond the queue limit are dropped.
+// HandleMQTT queues a discovery or device-topic message. It never blocks (it
+// runs on the bus goroutine). Messages are coalesced per MAC (discovery) or
+// per topic and kind, so a flood of one key costs one slot; new keys beyond
+// the queue limit are dropped.
 func (m *Manager) HandleMQTT(msg mqttbus.Message) {
-	if msg.Kind != mqttbus.KindDiscovery || len(msg.Payload) > maxDiscoveryPayload {
+	if len(msg.Payload) > maxDiscoveryPayload {
 		return // real messages are ~1.5 KiB; never hold a big one in memory
 	}
-	key := strings.ToLower(msg.Topic)
+	switch msg.Kind {
+	case mqttbus.KindDiscovery, mqttbus.KindLWT, mqttbus.KindState, mqttbus.KindInfo:
+	case mqttbus.KindStatus:
+		if msg.Suffix != "STATUS5" {
+			return
+		}
+	case mqttbus.KindSensor, mqttbus.KindResult, mqttbus.KindPower, mqttbus.KindUpgrade:
+		return // nothing discovery needs
+	}
+	key := string(msg.Kind) + "/" + msg.Suffix + "/" + msg.Topic
+	if msg.Kind == mqttbus.KindDiscovery {
+		key = strings.ToLower(key)
+	}
 	m.qmu.Lock()
 	old, queued := m.pending[key]
 	if !queued && len(m.pending) >= maxQueuedMessages || m.qbytes-len(old.Payload)+len(msg.Payload) > maxQueuedBytes {
@@ -245,18 +284,28 @@ func (m *Manager) pop() (mqttbus.Message, bool) {
 	return msg, true
 }
 
-// handleMessage evaluates one discovery message.
+// handleMessage evaluates one queued message.
 func (m *Manager) handleMessage(ctx context.Context, msg mqttbus.Message) {
+	if msg.Kind != mqttbus.KindDiscovery {
+		m.handleTopic(ctx, msg)
+		return
+	}
 	c, err := parseDiscovery(msg.Topic, msg.Payload)
 	if err != nil {
 		m.log.Debug("discovery: message ignored", "err", err)
 		return
 	}
+	m.noteDiscoveryTopic(c)
 	if !m.allowMAC(c.mac) {
 		return
 	}
-	if _, err := m.consider(ctx, c); err != nil && ctx.Err() == nil {
+	out, err := m.consider(ctx, c)
+	switch {
+	case err != nil && ctx.Err() == nil:
 		m.log.Warn("discovery: could not evaluate device", "mac", c.mac, "err", err)
+	case out == outIgnored && !tasmota.IPAllowed(c.ip, m.networks()):
+		m.log.Info("discovery: announced address outside the device networks", "mac", c.mac, "topic", c.topic, "ip", c.ip.String())
+		m.setReason(c.topic, fmt.Sprintf("its announced address %s is outside the device networks", c.ip))
 	}
 }
 
@@ -443,10 +492,14 @@ func (m *Manager) propose(ctx context.Context, c candidate, kind string, existin
 	if kind == store.ProposalNew {
 		limit = maxNewProposals
 	}
-	_, err := m.o.Store.UpsertProposal(ctx, store.ProposalRow{
+	row := store.ProposalRow{
 		Kind: kind, Via: c.via, Reason: reason, ExistingID: existing, SeenAt: m.clk.Now(),
 		Device: model.Device{Name: c.name, Address: c.ip.String(), Port: c.port, MAC: c.mac, Topic: c.topic, FullTopic: c.fullTopic},
-	}, limit)
+	}
+	if err := m.mergeSighting(ctx, &row); err != nil {
+		return err
+	}
+	_, err := m.o.Store.UpsertProposal(ctx, row, limit)
 	if errors.Is(err, store.ErrProposalLimit) {
 		m.log.Warn("discovery: proposal limit reached, a device is not shown", "kind", kind, "limit", limit)
 		if m.o.OnDropped != nil {
@@ -454,6 +507,40 @@ func (m *Manager) propose(ctx context.Context, c candidate, kind string, existin
 		}
 	}
 	return err
+}
+
+// mergeSighting folds the stored row of the same MAC into row, so the two
+// sources describe one device without overwriting each other (D14): MQTT
+// owns topic, full topic, name and source, a scan contributes the port.
+func (m *Manager) mergeSighting(ctx context.Context, row *store.ProposalRow) error {
+	prev, ok, err := m.storedRow(ctx, row.Device.MAC)
+	if err != nil || !ok {
+		return err
+	}
+	if row.Via == ViaScan && prev.Via == ViaMQTT {
+		row.Via = ViaMQTT
+		row.Device.Name, row.Device.Topic, row.Device.FullTopic = prev.Device.Name, prev.Device.Topic, prev.Device.FullTopic
+	}
+	if row.Via == ViaMQTT && row.Device.Port == 0 {
+		row.Device.Port = prev.Device.Port
+	}
+	return nil
+}
+
+// storedRow finds the visible or dismissed proposal of mac.
+func (m *Manager) storedRow(ctx context.Context, mac string) (store.ProposalRow, bool, error) {
+	for _, list := range []func(context.Context) ([]store.ProposalRow, error){m.o.Store.ListProposals, m.o.Store.ListDismissedProposals} {
+		rows, err := list(ctx)
+		if err != nil {
+			return store.ProposalRow{}, false, err
+		}
+		for _, r := range rows {
+			if r.Device.MAC == mac {
+				return r, true, nil
+			}
+		}
+	}
+	return store.ProposalRow{}, false, nil
 }
 
 // Proposals lists the open proposals, newest first. Rows the inventory has
@@ -499,7 +586,8 @@ func (m *Manager) visible(ctx context.Context, rows []store.ProposalRow) ([]Prop
 			}
 			continue
 		}
-		out = append(out, Proposal{ID: r.ID, Device: r.Device, Via: r.Via, Kind: r.Kind, Reason: r.Reason, SeenAt: r.SeenAt, FirstSeen: r.FirstSeen, ExistingID: r.ExistingID, Version: versionOf(r)})
+		out = append(out, Proposal{ID: r.ID, Device: r.Device, Via: r.Via, Kind: r.Kind, Reason: r.Reason, SeenAt: r.SeenAt, FirstSeen: r.FirstSeen, ExistingID: r.ExistingID, Version: versionOf(r),
+			LWT: m.topicLWT(r.Device.Topic)})
 	}
 	return out, nil
 }
@@ -630,7 +718,14 @@ func (m *Manager) acceptNew(ctx context.Context, actor string, row store.Proposa
 	d.ID = 0
 	pw := DevicePassword(ctx)
 	err := errors.New("no verifier configured")
-	if m.o.Verifier != nil {
+	offline := m.topicLWT(d.Topic) == "Offline"
+	switch {
+	case offline && pw == "":
+		// Seen on MQTT and offline (D15): the check could only time out, and
+		// nothing secret goes anywhere. Its identity is read when it comes online.
+	case offline:
+		err = errors.New("the device is offline (MQTT)")
+	case m.o.Verifier != nil:
 		var mac string
 		if mac, err = m.o.Verifier.VerifyMAC(ctx, d.Address, portOf(d)); err == nil {
 			if got, nerr := inventory.NormaliseMAC(mac); nerr != nil || got != d.MAC {

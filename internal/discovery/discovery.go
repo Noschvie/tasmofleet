@@ -1,5 +1,7 @@
 // Package discovery finds devices that are not in the inventory yet (M2):
-// Tasmota MQTT discovery messages (retained tasmota/discovery/<MAC>/config)
+// Tasmota MQTT discovery messages (retained tasmota/discovery/<MAC>/config),
+// the device topics themselves (LWT, STATE, INFO, an on-demand Status 5;
+// spec 11.3a, mqttfirst.go)
 // and an opt-in HTTP scan of configured device networks (bounded concurrency,
 // only addresses inside DEVICE_NETWORKS, probe "Status 2" then "Status 5").
 //
@@ -60,6 +62,9 @@ type Proposal struct {
 	// Version identifies the content shown; AcceptVersion applies only that
 	// content. Additive to the M2 contract.
 	Version string
+	// LWT is the last MQTT LWT of the proposal's topic ("Online", "Offline"
+	// or "" when none was seen). Additive (spec 11.3a).
+	LWT string
 }
 
 // ScanID names one scan run.
