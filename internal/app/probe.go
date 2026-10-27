@@ -465,10 +465,14 @@ const tasmotaDefaultName = "Tasmota"
 // fallbackName returns the stored name when it is one tasmofleet filled in itself before it
 // recorded the DeviceName: the hostname (how devices were named before 0.12.3), the topic or the
 // address (Describe's fallbacks). Such a name follows the DeviceName (#91, refining #52), unless
-// the DeviceName is Tasmota's default, which would give many devices the same name.
+// the DeviceName is Tasmota's default, which would give many devices the same name. The default
+// itself as a stored name is one tasmofleet filled in (Describe, #104) and follows too.
 func fallbackName(d model.Device, pr probed) string {
 	if pr.devName == "" || pr.devName == tasmotaDefaultName || d.Name == "" {
 		return ""
+	}
+	if d.Name == tasmotaDefaultName {
+		return d.Name // Describe named a device after its default DeviceName (#104)
 	}
 	for _, s := range []string{pr.hostname, d.Net.Hostname, pr.topic, d.Topic, d.Address} {
 		if s != "" && d.Name == inventory.CleanName(s) {

@@ -164,6 +164,25 @@ func TestProbeAnswersWithTheWholeIdentityCard(t *testing.T) {
 	}
 }
 
+// Why (#104): "Refresh identity" swaps only the identity card, so the header (name, address, chip,
+// firmware) and the breadcrumb kept the old name until a reload. A good refresh now carries them
+// out of band, from the same stored device the card shows; a failed one changes nothing.
+func TestProbeUpdatesTheHeaderAndBreadcrumbWithTheCard(t *testing.T) {
+	e := setup(t)
+	e.inv.devs[1] = model.Device{ID: 1, Name: "Irrigation Led Ring", Address: "10.0.0.1", MAC: "aa:bb:cc:dd:ee:ff", Identity: model.Identity{Family: model.ChipESP32, Version: "16.1.0", Variant: "tasmota32"}}
+	_, body := e.do(t, "POST", "/devices/1/probe", "admin", url.Values{"csrf": {"tok"}}, "HX-Request", "true")
+	for _, want := range []string{`id="devhd" hx-swap-oob="true"`, `<h1>Irrigation Led Ring</h1>`, `<nav class="crumbs" id="crumbs" aria-label="Breadcrumb" hx-swap-oob="true">`, `<span class="crumb-here" aria-current="page">Irrigation Led Ring</span>`, `<span class="ph-title" id="ph-title" hx-swap-oob="true">Irrigation Led Ring</span>`, `<title>Irrigation Led Ring - TasmoFleet</title>`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("refreshed response lacks %q:\n%s", want, body)
+		}
+	}
+	e.pr.err = tasmota.ErrTimeout
+	_, body = e.do(t, "POST", "/devices/1/probe", "admin", url.Values{"csrf": {"tok"}}, "HX-Request", "true")
+	if strings.Contains(body, "hx-swap-oob") {
+		t.Errorf("a failed refresh must swap only the card:\n%s", body)
+	}
+}
+
 // refusedRefresh stands for app.RefreshRefusedError: the web layer knows it only by its method.
 type refusedRefresh struct{}
 

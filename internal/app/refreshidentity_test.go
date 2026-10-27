@@ -675,3 +675,23 @@ func newTestStore(t *testing.T) *store.SQLite {
 	t.Cleanup(func() { _ = st.Close() }) // temp DB
 	return st
 }
+
+// Why (#104): a device added while it still had Tasmota's default DeviceName is stored under
+// the name "Tasmota", which tasmofleet filled in itself. If it is then renamed on the device and
+// refreshed before any probe recorded the DeviceName, the stored name must follow it, else the
+// header and the list keep the stale "Tasmota". A name the user typed is still kept.
+func TestRefreshReplacesTheDefaultNameTasmofleetFilledIn(t *testing.T) {
+	p, st, id, d, _ := raceSetup(t)
+	d.Name = "Tasmota"
+	if err := st.UpdateDevice(context.Background(), d); err != nil {
+		t.Fatal(err)
+	}
+	status := `{"Status":{"DeviceName":"Irrigation Led Ring","Topic":"plug_a"}}`
+	p.Client = override{Client: p.Client, reply: map[string]string{"Status 5": status5Net, "Status": status}}
+	if err := p.Refresh(context.Background(), id, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := st.GetDevice(context.Background(), id); got.Name != "Irrigation Led Ring" {
+		t.Fatalf("Name = %q, want the DeviceName the device reports now", got.Name)
+	}
+}

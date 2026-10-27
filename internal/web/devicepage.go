@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/a-h/templ"
+
 	"github.com/nofuturekid/tasmofleet/internal/health"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/policy"
@@ -588,7 +590,6 @@ func (h *handler) deviceProbe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v := h.view(r, "", "", nil)
-	_, running := h.deviceState(r, d)
 	var notice, failure string
 	if err := h.d.Prober.Refresh(r.Context(), d.ID, actor(r)); err != nil {
 		failure = h.refreshProblem(r, err)
@@ -600,11 +601,17 @@ func (h *handler) deviceProbe(w http.ResponseWriter, r *http.Request) {
 			h.log.WarnContext(r.Context(), "probe: reload device", "err", gerr)
 		}
 	}
+	hl, running := h.deviceState(r, d)
 	c := h.identity(v, d, running != nil, h.factsOf(r.Context(), d))
 	c.Notice, c.Error = notice, failure
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	if err := identityCard(c).Render(r.Context(), w); err != nil {
+	parts := []templ.Component{identityCard(c)}
+	if failure == "" {
+		// The header, breadcrumb and title show the same stored device as the card (#104).
+		parts = append(parts, deviceHeadSwap(h.headOf(v, d, hl, running, "overview"), deviceCrumbs(d)))
+	}
+	if err := templ.Join(parts...).Render(r.Context(), w); err != nil {
 		h.log.WarnContext(r.Context(), "probe: render", "err", err)
 	}
 }

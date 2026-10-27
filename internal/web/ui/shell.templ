@@ -271,7 +271,7 @@ func ariaBool(b bool) string {
 templ phoneHeader(d ShellData) {
 	<div class="ph">
 		<a class="ph-btn ph-menu" href={ templ.SafeURL(d.Base + "/nav") } data-dialog="nav-drawer" aria-label="Open navigation"><span class="burger" aria-hidden="true"><span></span><span></span><span></span></span></a>
-		<span class="ph-title">{ d.Title }</span>
+		<span class="ph-title" id="ph-title">{ d.Title }</span>
 		if d.Live {
 			@liveIndicator()
 		}
@@ -335,8 +335,23 @@ templ NavList(d ShellData) {
 
 // Crumbs is the breadcrumb trail above the page title; the last step is the page itself.
 templ Crumbs(trail []Crumb, base string) {
+	@crumbsNav(trail, base, nil)
+}
+
+// CrumbsOOB is Crumbs as an htmx out-of-band swap of the page's own trail, for a response that
+// changes the name of the page it belongs to.
+templ CrumbsOOB(trail []Crumb, base string) {
+	@crumbsNav(trail, base, templ.Attributes{"hx-swap-oob": "true"})
+}
+
+// PhoneTitleOOB is the phone top bar's title as an out-of-band swap, next to CrumbsOOB.
+templ PhoneTitleOOB(title string) {
+	<span class="ph-title" id="ph-title" hx-swap-oob="true">{ title }</span>
+}
+
+templ crumbsNav(trail []Crumb, base string, attrs templ.Attributes) {
 	if len(trail) > 0 {
-		<nav class="crumbs" aria-label="Breadcrumb">
+		<nav class="crumbs" id="crumbs" aria-label="Breadcrumb" { attrs... }>
 			for i, c := range trail {
 				if i > 0 {
 					<span class="crumb-sep" aria-hidden="true">/</span>

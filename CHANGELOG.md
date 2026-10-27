@@ -15,6 +15,11 @@ always upgrade automatically.
 - The Devices list shows the "Online" filter pill at all times, next to Offline / unknown, Outdated and Not
   compliant; it used to exist only while the Online filter was active, so it could not be picked again after
   switching to All (#102, thanks @Noschvie).
+- After "Refresh identity" the device page header, breadcrumb and page title show the refreshed name,
+  address, chip and firmware at once, not only the Identity card (#104, thanks @Noschvie).
+- A device stored under Tasmota's default name ("Tasmota", filled in when it was added) takes the name the
+  device reports at the next "Refresh identity", so the header and the list no longer keep "Tasmota"
+  (#104, thanks @Noschvie).
 
 ## 0.15.0 (2026-10-26)
 

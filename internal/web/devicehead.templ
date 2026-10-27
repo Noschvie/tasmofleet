@@ -13,7 +13,23 @@ import (
 // Buttons are plain forms and links; dialog.js turns Restart into a dialog. Delete leads to the
 // delete page (N2): a dialog could not carry the backup list, the choice and the acknowledgement.
 templ deviceHeader(t deviceTabs) {
-	<div class="devhd">
+	@deviceHead(t, nil)
+	@deviceHeadRest(t)
+}
+
+// deviceHeadSwap is what a successful "Refresh identity" sends besides the identity card: the
+// header, the breadcrumb, phone title and page title, out of band, so they show the refreshed name,
+// address, chip and firmware without a reload (#104).
+templ deviceHeadSwap(t deviceTabs, crumbs []ui.Crumb) {
+	@deviceHead(t, templ.Attributes{"hx-swap-oob": "true"})
+	@ui.CrumbsOOB(crumbs, t.Base)
+	@ui.PhoneTitleOOB(t.Name)
+	<title>{ t.Name } - TasmoFleet</title>
+}
+
+// deviceHead is the name, state, meta line and buttons of the header.
+templ deviceHead(t deviceTabs, attrs templ.Attributes) {
+	<div class="devhd" id="devhd" { attrs... }>
 		<div class="devhd-t">
 			<div class="devhd-name">
 				<h1>{ t.Name }</h1>
@@ -75,6 +91,10 @@ templ deviceHeader(t deviceTabs) {
 			}
 		</div>
 	</div>
+}
+
+// deviceHeadRest is what follows the header block: the offline banner, the tabs and the restart dialog.
+templ deviceHeadRest(t deviceTabs) {
 	if t.offline() {
 		<div class="devhd-off" role="status">
 			<span class="devhd-offdot" aria-hidden="true"></span>
