@@ -67,8 +67,6 @@ always upgrade automatically.
   second on the bus; audited) and gets the full identity. The HTTP probe stays the primary source and always
   replaces what MQTT said; update safety checks are unchanged (#87, thanks @Noschvie).
 
-## 0.13.2 (2026-10-26)
-
 ### Fixed
 
 - Identity: image tags are now read the way upstream Tasmota builds report them (#85). Official ESP32-S3,
