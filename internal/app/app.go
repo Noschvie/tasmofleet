@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"slices"
 	"strconv"
 	"sync"
@@ -115,6 +116,7 @@ type runtime struct {
 	restore    *restore.Manager
 	devLocks   *devlock.Locks
 	decoder    string // decode-config version, "" if unavailable
+	dec        backup.Decoder
 	authSvc    *auth.Service
 	pages      *web.Pages // sign-in and account pages; Handler attaches the app shell
 	fwUp       atomic.Bool
@@ -129,6 +131,10 @@ func (a *runtime) run(ctx context.Context) error {
 	bg, cancelBG := context.WithCancel(ctx)
 	defer cancelBG()
 	a.bgContext = bg
+	if err := a.setupDecoder(bg); err != nil {
+		return err
+	}
+	a.logStarting()
 	for _, w := range cfg.Warnings {
 		a.log.Warn(w)
 	}
@@ -320,25 +326,41 @@ func (a *runtime) onMQTTSeen(id model.DeviceID, topic string) {
 	}
 }
 
+// setupDecoder finds out whether decode-config is usable and which version it is.
+func (a *runtime) setupDecoder(ctx context.Context) error {
+	cfg := a.cfg
+	if cfg.DecoderPath == "" {
+		return nil
+	}
+	if _, err := os.Stat(cfg.DecoderPath); err != nil {
+		a.log.Info("decode-config not found; backups keep the raw dump only", "path", cfg.DecoderPath)
+		return nil //nolint:nilerr // a missing decoder is optional, not an error
+	}
+	tmp := filepath.Join(cfg.DataDir, "tmp")
+	if err := os.MkdirAll(tmp, 0o700); err != nil {
+		return fmt.Errorf("decoder temp dir: %w", err)
+	}
+	d := backup.NewExecDecoder(cfg.DecoderPath, tmp)
+	if v, err := d.Version(ctx); err == nil {
+		a.decoder, a.dec = v, d
+	} else {
+		a.log.Warn("decode-config is not usable; backups keep the raw dump only", "path", cfg.DecoderPath, "err", err)
+	}
+	return nil
+}
+
+// logStarting is the first info line: the running version, readable without the image tag (#73).
+func (a *runtime) logStarting() {
+	dec := a.decoder
+	if dec == "" {
+		dec = "none"
+	}
+	a.log.Info("tasmofleet starting", "version", Version, "go", goruntime.Version(), "decoder", dec)
+}
+
 func (a *runtime) setupBackups(ctx context.Context) error {
 	cfg := a.cfg
-	var dec backup.Decoder
-	if cfg.DecoderPath != "" {
-		if _, err := os.Stat(cfg.DecoderPath); err == nil {
-			tmp := filepath.Join(cfg.DataDir, "tmp")
-			if err := os.MkdirAll(tmp, 0o700); err != nil {
-				return fmt.Errorf("decoder temp dir: %w", err)
-			}
-			d := backup.NewExecDecoder(cfg.DecoderPath, tmp)
-			if v, err := d.Version(ctx); err == nil {
-				a.decoder, dec = v, d
-			} else {
-				a.log.Warn("decode-config is not usable; backups keep the raw dump only", "path", cfg.DecoderPath, "err", err)
-			}
-		} else {
-			a.log.Info("decode-config not found; backups keep the raw dump only", "path", cfg.DecoderPath)
-		}
-	}
+	dec := a.dec
 	m, err := backup.New(backup.Options{
 		DataDir: cfg.DataDir, Devices: a.svc.Store, Store: a.svc.Store, Client: a.svc.Client, Decoder: dec,
 		Keep: cfg.BackupKeep, MaxAge: cfg.BackupMaxAge, Audit: a.svc.Audit, Events: a.svc.Hub, Log: a.log,

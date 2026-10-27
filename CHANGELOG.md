@@ -8,6 +8,8 @@ always upgrade automatically.
 
 ### Changed
 
+- The first log line at startup is now `tasmofleet starting version=... go=... decoder=...`, so the running
+  version can be read from the log (#73).
 - The Devices list puts the "Online" filter pill right after "All", before Offline / unknown, Outdated and
   Not compliant.
 
