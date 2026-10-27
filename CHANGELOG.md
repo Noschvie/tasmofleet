@@ -23,6 +23,9 @@ always upgrade automatically.
 - Devices list on a narrow screen: choosing a filter from the scrolling pill row (for example the Chip
   dropdown at its far end) no longer sends the row back to its start, so the pills stay where they were
   (#116).
+- After a topic change picked up by "Refresh identity", a device already heard on its old topic showed
+  MQTT "Not connected" until its next telemetry: it kept the Offline that Tasmota sends on the old topic.
+  Health now drops what it learned on the old topic and takes the new topic's retained LWT at once (#119).
 
 ## 0.15.1 (2026-10-27)
 

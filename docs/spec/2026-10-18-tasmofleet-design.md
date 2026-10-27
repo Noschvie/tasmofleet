@@ -323,7 +323,8 @@ data directory (TasmoAdmin lesson A4).
   `device.topic_changed` with old and new. If another device already has that topic, the
   stored one is kept, `device.topic_kept` is audited and the device page says so after the
   refresh (`TopicKeptError`). The retained LWT of the new topic is applied at once by the
-  health reload (#105). *Transport:* for a device recorded as `ours` whose HTTP probe could not be used
+  health reload (#105); what health learned on the old topic (its LWT, often the Offline Tasmota
+  sends there on a topic change) is dropped first (#119). *Transport:* for a device recorded as `ours` whose HTTP probe could not be used
   (unreachable, timeout, HTTP API refused, address outside the device networks) the refresh
   goes over MQTT: `Status 5`, MAC rule as above, then `Status 2`, one question at a time per
   device and one per second on the bus (shared with the #87 reader; if the reader asked the

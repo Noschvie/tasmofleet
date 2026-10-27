@@ -1049,3 +1049,29 @@ func TestDeviceWhoseTopicChangesTakesTheNewTopicsLWT(t *testing.T) {
 	}
 	h.want(1, model.HealthOnline)
 }
+
+// A device already heard on its old topic, whose last LWT there is the Offline Tasmota publishes on
+// a topic change, must still take the new topic's retained Online when its stored topic follows:
+// MQTT state learned on the old topic says nothing about the new one (#119).
+func TestHeardDeviceWhoseTopicChangesDropsTheOldTopicsLWT(t *testing.T) {
+	h := newHarness(t, true, Options{}, mqttDev(1, "tablet-charger"))
+	h.listen()
+	h.bus.emit(mqttbus.KindLWT, "tablet-charger", "LWT", "Online", true)
+	h.bus.emit(mqttbus.KindLWT, "tablet-charger", "LWT", "Offline", true)
+	h.bus.emit(mqttbus.KindLWT, "tablet-charger-qa", "LWT", "Online", true)
+	h.want(1, model.HealthOffline)
+	h.st.foreignCommit(mqttDev(1, "tablet-charger-qa"))
+	h.svc.reload(h.ctx, h.clk.Now())
+	if got := h.svc.Get(1).LWT; got != "Online" {
+		t.Fatalf("LWT %q, want Online from the retained message of the new topic", got)
+	}
+	h.want(1, model.HealthOnline)
+	// Back to the first topic, whose latest LWT is Online again by now.
+	h.bus.emit(mqttbus.KindLWT, "tablet-charger-qa", "LWT", "Offline", true)
+	h.bus.emit(mqttbus.KindLWT, "tablet-charger", "LWT", "Online", true)
+	h.st.foreignCommit(mqttDev(1, "tablet-charger"))
+	h.svc.reload(h.ctx, h.clk.Now())
+	if got := h.svc.Get(1).LWT; got != "Online" {
+		t.Fatalf("LWT %q after switching back, want Online", got)
+	}
+}

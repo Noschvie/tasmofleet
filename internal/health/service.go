@@ -328,6 +328,12 @@ func (s *Service) reload(ctx context.Context, now time.Time) {
 			ds = &devState{id: dev.ID, h: model.Health{DeviceID: dev.ID, State: model.HealthUnknown, Since: now}}
 			s.devs[dev.ID] = ds
 		}
+		if ds.topic != dev.Topic {
+			// What was heard on the old topic (its LWT, often the Offline Tasmota sends there on
+			// a topic change) says nothing about the new one: start over and take the new
+			// topic's latest LWT below (#119).
+			ds.mqttSeen, ds.lwt = false, ""
+		}
 		ds.topic, ds.cap = dev.Topic, dev.MQTT
 		if dev.Topic != "" {
 			s.byTopic[dev.Topic] = dev.ID
