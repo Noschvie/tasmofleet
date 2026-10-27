@@ -6,6 +6,11 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Changed
+
+- The Devices list puts the "Online" filter pill right after "All", before Offline / unknown, Outdated and
+  Not compliant.
+
 ### Fixed
 
 - "Refresh identity" now always makes the stored MQTT topic follow the topic the device reports, also for
@@ -15,6 +20,9 @@ always upgrade automatically.
 - After "Refresh identity" the Restart confirmation dialog and the offline banner on the device page are
   swapped together with the header, so the dialog asks about the new name without a reload (#110, #104,
   thanks @Noschvie).
+- Devices list on a narrow screen: choosing a filter from the scrolling pill row (for example the Chip
+  dropdown at its far end) no longer sends the row back to its start, so the pills stay where they were
+  (#116).
 
 ## 0.15.1 (2026-10-27)
 

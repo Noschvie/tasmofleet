@@ -292,3 +292,19 @@ func TestDeviceListOnlineChipIsAlwaysRendered(t *testing.T) {
 		t.Errorf("health=online: want exactly one marked chip and one Online chip: %s", chips)
 	}
 }
+
+// Why: Online is the healthy state and reads together with All; the problem chips (Offline /
+// unknown, Outdated, Not compliant) follow it (maintainer's request with #116).
+func TestDeviceListOnlineChipSitsRightAfterAll(t *testing.T) {
+	e := setup(t)
+	_, body := e.do(t, "GET", "/devices", "operator", nil)
+	chips := between(body, `class="dv-chips"`, `class="dv-vsep"`)
+	pos := func(label string) int { return strings.Index(chips, ">"+label+"<span") }
+	all, online, down := pos("All"), pos("Online"), pos("Offline / unknown")
+	if all < 0 || online < 0 || down < 0 || all >= online || online >= down {
+		t.Errorf("want the order All, Online, Offline / unknown (positions %d, %d, %d): %s", all, online, down, chips)
+	}
+	if o, out, nc := online, pos("Outdated"), pos("Not compliant"); o >= out || out >= nc {
+		t.Errorf("want Online before Outdated before Not compliant: %s", chips)
+	}
+}

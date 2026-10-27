@@ -124,6 +124,40 @@
       /* storage unavailable: no restore */
     }
   });
+  // The device list's pill row scrolls sideways on a narrow screen, and every filter choice loads the
+  // page again, which would put the row back to its start and move every pill (#116). The scroll
+  // position is kept across that one reload: saved when a pill or a select in the row is used, restored
+  // (once) on the next page.
+  var chipsKey = "tf-chips-scroll";
+  function saveChipsScroll(e) {
+    var row = e.target instanceof Element && e.target.closest(".dv-chips");
+    if (row) {
+      try {
+        sessionStorage.setItem(chipsKey, String(row.scrollLeft));
+      } catch (err) {
+        /* storage unavailable: the row starts at its beginning */
+      }
+    }
+  }
+  document.addEventListener("click", saveChipsScroll);
+  document.addEventListener("change", saveChipsScroll);
+  function restoreChipsScroll() {
+    var row = document.querySelector(".dv-chips");
+    try {
+      var x = sessionStorage.getItem(chipsKey);
+      sessionStorage.removeItem(chipsKey);
+      if (row && x) {
+        row.scrollLeft = Number(x);
+      }
+    } catch (err) {
+      /* storage unavailable */
+    }
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", restoreChipsScroll);
+  } else {
+    restoreChipsScroll();
+  }
   // A select with data-autosubmit applies its filter at once (the device list's Chip, Tag and
   // Sort); without this file the form's Filter button (noscript) submits it.
   document.addEventListener("change", function (e) {

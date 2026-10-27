@@ -113,9 +113,11 @@ templ devicesContent(v view, p devicesPage) {
 				<div class="dv-chips">
 					for _, c := range p.Summary.Chips {
 						<a class="dv-chip" href={ templ.SafeURL(p.chipHref(v.Base, c.Key)) } if c.Key == p.Filter.Chip && (c.Key != "" || p.Filter.Health == "") { aria-current="true" }if c.Title() != "" { title={ c.Title() } }>{ c.Label }<span class="dv-n">{ c.Text() }</span></a>
+						if c.Key == "" {
+							{{ onlineHref, onlineOn := p.onlineChip(v.Base) }}
+							<a class="dv-chip" href={ templ.SafeURL(onlineHref) } if onlineOn { aria-current="true" title="Show all states again" }>Online<span class="dv-n">{ strconv.Itoa(p.Summary.Online) }</span></a>
+						}
 					}
-					{{ onlineHref, onlineOn := p.onlineChip(v.Base) }}
-					<a class="dv-chip" href={ templ.SafeURL(onlineHref) } if onlineOn { aria-current="true" title="Show all states again" }>Online<span class="dv-n">{ strconv.Itoa(p.Summary.Online) }</span></a>
 					if label, href, n, ok := p.healthChip(v.Base); ok {
 						<a class="dv-chip" href={ templ.SafeURL(href) } aria-current="true" title="Show all states again">{ label }<span class="dv-n">{ strconv.Itoa(n) }</span></a>
 					}
