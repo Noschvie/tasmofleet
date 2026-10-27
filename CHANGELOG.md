@@ -8,9 +8,9 @@ always upgrade automatically.
 
 ### Fixed
 
-- Device page, Network card: a device added (or given its MQTT topic) while TasmoFleet runs no longer
-  shows MQTT "Not connected" or "other broker" until its next telemetry. TasmoFleet now keeps the retained
-  LWT of topics it has no device for yet and applies it as soon as a device takes that topic (#105, thanks
+- Device page, Network card: a device added (or deleted and added again, or given its MQTT topic) while
+  TasmoFleet runs no longer shows MQTT "Not connected" or "other broker" until it next speaks. TasmoFleet
+  keeps the latest LWT per topic and applies it as soon as a device takes that topic (#105, thanks
   @Noschvie).
 
 ## 0.15.0 (2026-10-26)

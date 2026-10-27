@@ -1007,7 +1007,7 @@ func TestRetainedLWTOfDeviceAddedLaterIsApplied(t *testing.T) {
 }
 
 // The remembered LWT is the latest one: an Offline after the Online wins.
-func TestLatestUnmatchedLWTWins(t *testing.T) {
+func TestLatestLWTOfATopicWins(t *testing.T) {
 	h := newHarness(t, true, Options{})
 	h.listen()
 	h.bus.emit(mqttbus.KindLWT, "b", "LWT", "Online", true)
@@ -1016,5 +1016,21 @@ func TestLatestUnmatchedLWTWins(t *testing.T) {
 	h.svc.reload(h.ctx, h.clk.Now())
 	if got := h.svc.Get(1).LWT; got != "Offline" {
 		t.Fatalf("LWT %q, want Offline", got)
+	}
+}
+
+// A device deleted and added again gets a new ID and fresh health state. The broker's retained
+// LWT for its topic is still the current one, so the new entry takes it at once instead of
+// reading "Not connected" until the device speaks again (#105).
+func TestReaddedDeviceTakesTheTopicsCurrentLWT(t *testing.T) {
+	h := newHarness(t, true, Options{}, mqttDev(1, "plug"))
+	h.listen()
+	h.bus.emit(mqttbus.KindLWT, "plug", "LWT", "Online", true)
+	h.st.remove(1)
+	h.svc.reload(h.ctx, h.clk.Now())
+	h.st.foreignCommit(mqttDev(2, "plug"))
+	h.svc.reload(h.ctx, h.clk.Now())
+	if got := h.svc.Get(2).LWT; got != "Online" {
+		t.Fatalf("LWT %q, want Online", got)
 	}
 }

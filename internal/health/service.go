@@ -75,12 +75,12 @@ type Service struct {
 	mu      sync.Mutex
 	devs    map[model.DeviceID]*devState
 	byTopic map[string]model.DeviceID
-	// unmatchedLWT is the latest LWT of each topic no device has yet. The bus replays
-	// retained LWTs only once, at Subscribe; a device added (or given its topic) later
-	// takes its LWT from here on the next reload (#105).
-	unmatchedLWT map[string]mqttbus.Message
-	lastReload   time.Time
-	lastVer      int64 // DataVersion seen by the last reload
+	// lastLWT is the latest LWT seen per topic, matched to a device or not. The bus
+	// replays retained LWTs only once, at Subscribe; a device added (again) or given
+	// its topic later takes the topic's current LWT from here on the next reload (#105).
+	lastLWT    map[string]mqttbus.Message
+	lastReload time.Time
+	lastVer    int64 // DataVersion seen by the last reload
 
 	sem  chan struct{}
 	work chan func()
@@ -331,8 +331,7 @@ func (s *Service) reload(ctx context.Context, now time.Time) {
 		ds.topic, ds.cap = dev.Topic, dev.MQTT
 		if dev.Topic != "" {
 			s.byTopic[dev.Topic] = dev.ID
-			if m, ok := s.unmatchedLWT[dev.Topic]; ok {
-				delete(s.unmatchedLWT, dev.Topic)
+			if m, ok := s.lastLWT[dev.Topic]; ok && !ds.mqttSeen {
 				replay = append(replay, m)
 			}
 		}
@@ -501,12 +500,12 @@ func (s *Service) onMessage(m mqttbus.Message) {
 	}
 	now := s.d.Clock.Now()
 	s.mu.Lock()
+	if m.Kind == mqttbus.KindLWT {
+		s.rememberLWT(m)
+	}
 	id, ok := s.byTopic[m.Topic]
 	ds := s.devs[id]
 	if !ok || ds == nil {
-		if m.Kind == mqttbus.KindLWT {
-			s.rememberLWT(m)
-		}
 		s.mu.Unlock()
 		return
 	}
@@ -565,24 +564,24 @@ func (s *Service) onMessage(m mqttbus.Message) {
 	}
 }
 
-// maxUnmatchedLWT bounds the LWTs kept for topics without a device; a broker with more
-// foreign Tasmotas than that leaves the rest to their next message.
-const maxUnmatchedLWT = 1024
+// maxLastLWT bounds the topics whose LWT is kept; on a broker with more Tasmotas than that,
+// the rest wait for their next message.
+const maxLastLWT = 1024
 
-// rememberLWT keeps the latest LWT of a topic no device has (caller holds s.mu). An empty
-// payload clears a retained LWT and is forgotten too.
+// rememberLWT keeps the latest LWT of a topic (caller holds s.mu). An empty payload clears a
+// retained LWT and is forgotten too.
 func (s *Service) rememberLWT(m mqttbus.Message) {
 	if len(m.Payload) == 0 {
-		delete(s.unmatchedLWT, m.Topic)
+		delete(s.lastLWT, m.Topic)
 		return
 	}
-	if s.unmatchedLWT == nil {
-		s.unmatchedLWT = make(map[string]mqttbus.Message)
+	if s.lastLWT == nil {
+		s.lastLWT = make(map[string]mqttbus.Message)
 	}
-	if _, ok := s.unmatchedLWT[m.Topic]; !ok && len(s.unmatchedLWT) >= maxUnmatchedLWT {
+	if _, ok := s.lastLWT[m.Topic]; !ok && len(s.lastLWT) >= maxLastLWT {
 		return
 	}
-	s.unmatchedLWT[m.Topic] = m
+	s.lastLWT[m.Topic] = m
 }
 
 func (s *Service) enqueue(f func()) {
