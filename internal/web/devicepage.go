@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -591,10 +592,18 @@ func (h *handler) deviceProbe(w http.ResponseWriter, r *http.Request) {
 	}
 	v := h.view(r, "", "", nil)
 	var notice, failure string
-	if err := h.d.Prober.Refresh(r.Context(), d.ID, actor(r)); err != nil {
+	err := h.d.Prober.Refresh(r.Context(), d.ID, actor(r))
+	var attention interface{ Notice() string }
+	if errors.As(err, &attention) {
+		err = nil // refreshed, with one thing to tell the admin (#111)
+	}
+	if err != nil {
 		failure = h.refreshProblem(r, err)
 	} else {
 		notice = "Identity refreshed."
+		if attention != nil {
+			notice += " " + attention.Notice()
+		}
 		if fresh, gerr := h.d.Inventory.Get(r.Context(), d.ID); gerr == nil {
 			d = fresh
 		} else {

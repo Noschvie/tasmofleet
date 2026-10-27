@@ -317,9 +317,13 @@ data directory (TasmoAdmin lesson A4).
   (`device_name`, `device_topic`, migration 0029). The stored name follows the DeviceName while
   it is still the recorded one, or, for devices probed before 0029, while it is the hostname,
   topic or address tasmofleet filled in itself (not when the DeviceName is Tasmota's default
-  `Tasmota`); the topic follows when it is empty, unresolved (`%06X`) or still the recorded one,
-  and no other device has it. A name or topic the user chose differs from these and is kept
-  (#52). *Transport:* for a device recorded as `ours` whose HTTP probe could not be used
+  `Tasmota`). A name the user chose differs from these and is kept (#52). The stored topic is
+  only a mirror used to match MQTT messages, so it always follows the topic the device reports
+  (#111; also for rows from before migration 0029, whose `device_topic` is empty), audited as
+  `device.topic_changed` with old and new. If another device already has that topic, the
+  stored one is kept, `device.topic_kept` is audited and the device page says so after the
+  refresh (`TopicKeptError`). The retained LWT of the new topic is applied at once by the
+  health reload (#105). *Transport:* for a device recorded as `ours` whose HTTP probe could not be used
   (unreachable, timeout, HTTP API refused, address outside the device networks) the refresh
   goes over MQTT: `Status 5`, MAC rule as above, then `Status 2`, one question at a time per
   device and one per second on the bus (shared with the #87 reader; if the reader asked the

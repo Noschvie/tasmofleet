@@ -4,6 +4,15 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## Unreleased
+
+### Fixed
+
+- "Refresh identity" now always makes the stored MQTT topic follow the topic the device reports, also for
+  devices added before 0.15.0 (a topic changed on the device used to stay unmatched, MQTT "Not connected").
+  A topic another device already has is not taken; the device page and the audit log say so. The change is
+  audited as `device.topic_changed` (#111).
+
 ## 0.15.1 (2026-10-27)
 
 ### Fixed

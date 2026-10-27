@@ -437,6 +437,10 @@ func (p *Prober) Refresh(ctx context.Context, id model.DeviceID, actor string) e
 	// the one that was probed (a slow probe must not undo an admin edit or
 	// land on a device that was moved, rebound or deleted meanwhile).
 	err = p.Devices.UpdateProbe(ctx, id, store.ProbeGuard{Address: d.Address, Port: d.Port, MAC: d.MAC}, res)
+	var topicKept error
+	if err == nil && res.DeviceTopic != "" {
+		topicKept = p.auditTopic(ctx, d, res.DeviceTopic, actor)
+	}
 	switch {
 	case errors.Is(err, store.ErrMACInUse):
 		return p.refuse(ctx, d, actor, "http", pr.mac, refusedTaken)
@@ -449,6 +453,43 @@ func (p *Prober) Refresh(ctx context.Context, id model.DeviceID, actor string) e
 	p.announce(id)
 	if p.ReadNetLater != nil && !pr.minimal {
 		p.ReadNetLater(id) // the Wi-Fi facts of Status 11 fill in when they arrive
+	}
+	return topicKept
+}
+
+// TopicKeptError is returned by a refresh that succeeded except for one thing: the device reports
+// a topic another device in the inventory already has, so the stored topic stays and MQTT
+// messages of this device cannot be matched (#111). Callers that only care about success ignore it.
+type TopicKeptError struct {
+	Reported string // the topic the device reports
+	Stored   string // the topic that stays
+}
+
+func (e *TopicKeptError) Error() string {
+	return "topic not changed: the device reports " + e.Reported + ", which another device already has"
+}
+
+// Notice is the sentence for the device page.
+func (e *TopicKeptError) Notice() string {
+	return "The device reports the MQTT topic " + e.Reported + ", which another device in the inventory already has, " +
+		"so the stored topic " + e.Stored + " was kept and MQTT will not match this device until the topics differ."
+}
+
+// auditTopic compares the topic stored by UpdateProbe with the one before the refresh and audits
+// a change (device.topic_changed) or a topic that could not follow (device.topic_kept, returned
+// as TopicKeptError). A failed read of the device only skips the audit.
+func (p *Prober) auditTopic(ctx context.Context, before model.Device, reported, actor string) error {
+	after, err := p.Devices.GetDevice(ctx, before.ID)
+	if err != nil {
+		slog.WarnContext(ctx, "refresh: reload device for the topic audit", "device", before.ID, "err", err)
+		return nil
+	}
+	switch {
+	case after.Topic != reported:
+		p.record(ctx, actor, "device.topic_kept", before.ID, "refused", map[string]any{"stored": after.Topic, "reported": reported})
+		return &TopicKeptError{Reported: reported, Stored: after.Topic}
+	case before.Topic != after.Topic:
+		p.record(ctx, actor, "device.topic_changed", before.ID, "ok", map[string]any{"old": before.Topic, "new": after.Topic, "via": "http"})
 	}
 	return nil
 }

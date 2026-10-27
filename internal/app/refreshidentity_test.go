@@ -92,9 +92,9 @@ func TestRefreshUpdatesEveryIdentityField(t *testing.T) {
 	}
 }
 
-// Why (#52 decision, kept by #91): a name or topic the user chose in tasmofleet is never
-// overwritten by a refresh, even when the device reports something else.
-func TestRefreshKeepsAUserChosenNameAndTopic(t *testing.T) {
+// Why (#52 decision, kept by #91): a name the user chose in tasmofleet is never overwritten by a
+// refresh. The topic is not a user choice but a mirror of the device's (#111): it follows.
+func TestRefreshKeepsAUserChosenNameButTopicFollows(t *testing.T) {
 	p, st, id, d, _ := raceSetup(t)
 	d.Name, d.Topic = "Kitchen lamp", "my-topic"
 	if err := st.UpdateDevice(context.Background(), d); err != nil {
@@ -106,8 +106,8 @@ func TestRefreshKeepsAUserChosenNameAndTopic(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if got, _ := st.GetDevice(context.Background(), id); got.Name != "Kitchen lamp" || got.Topic != "my-topic" {
-		t.Fatalf("name %q topic %q, want the user's", got.Name, got.Topic)
+	if got, _ := st.GetDevice(context.Background(), id); got.Name != "Kitchen lamp" || got.Topic != "tasmota_2BE970" {
+		t.Fatalf("name %q topic %q, want the user's name and the device's topic", got.Name, got.Topic)
 	}
 }
 

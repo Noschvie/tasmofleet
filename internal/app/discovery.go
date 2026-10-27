@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/discovery"
@@ -50,7 +51,7 @@ func (a *runtime) identifyLater(id model.DeviceID) {
 		ctx, cancel := context.WithTimeout(a.bgContext, identifyTimeout)
 		defer cancel()
 		// Automatic (actor ""): it binds no MAC (discovery D8).
-		if err := a.svc.Prober.Refresh(ctx, id, ""); err != nil && a.bgContext.Err() == nil {
+		if err := a.svc.Prober.Refresh(ctx, id, ""); err != nil && a.bgContext.Err() == nil && !errors.As(err, new(*TopicKeptError)) {
 			a.log.Warn("discovery: first probe of the accepted device failed", "device", id, "err", err)
 		}
 	})

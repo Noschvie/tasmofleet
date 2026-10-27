@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -302,29 +303,75 @@ func TestReadNetKeepsWifiWhenItHasAnAddress(t *testing.T) {
 	}
 }
 
-// Why: devices added before the topic was resolved hold "tasmota_%06X". They never matched a
-// message ("MQTT: Not connected" while online), so a refresh replaces such a topic with the
-// real one. A topic the user chose is never touched.
-func TestRefreshRepairsAnUnresolvedTopicOnly(t *testing.T) {
-	for _, tc := range []struct{ stored, want string }{
-		{"tasmota_%06X", "tasmota_2BE970"},
-		{"%prefix%-%06X", "tasmota_2BE970"},
-		{"my-own-topic", "my-own-topic"},
+// Why: the stored topic is only a mirror used to match MQTT messages; one that differs from the
+// device's real topic breaks matching ("MQTT: Not connected" while online, #111). So a refresh
+// always makes it follow the device, whatever the stored value is: unresolved ("tasmota_%06X"),
+// typed by a user, or a pre-0.15.0 row whose recorded device_topic is empty.
+func TestRefreshMakesTheStoredTopicFollowTheDevice(t *testing.T) {
+	for _, tc := range []struct{ name, stored string }{
+		{"unresolved", "tasmota_%06X"},
+		{"placeholder mix", "%prefix%-%06X"},
+		{"pre-0.15.0 row, device changed its topic", "tablet-charger"},
 	} {
-		t.Run(tc.stored, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			p, st, id, d, _ := raceSetup(t)
+			au := &auditSink{}
+			p.Audit = au
 			d.Topic = tc.stored
 			if err := st.UpdateDevice(context.Background(), d); err != nil {
 				t.Fatal(err)
 			}
 			p.Client = override{Client: p.Client, reply: map[string]string{"Status": status16}}
-			if err := p.Refresh(context.Background(), id, ""); err != nil {
+			if err := p.Refresh(context.Background(), id, "admin"); err != nil {
 				t.Fatal(err)
 			}
-			if got, _ := st.GetDevice(context.Background(), id); got.Topic != tc.want {
-				t.Fatalf("Topic = %q, want %q", got.Topic, tc.want)
+			if got, _ := st.GetDevice(context.Background(), id); got.Topic != "tasmota_2BE970" {
+				t.Fatalf("Topic = %q, want the device's topic", got.Topic)
+			}
+			var ev *model.AuditEvent
+			for i := range au.events {
+				if au.events[i].Action == "device.topic_changed" {
+					ev = &au.events[i]
+				}
+			}
+			if ev == nil || !strings.Contains(ev.Detail, tc.stored) || !strings.Contains(ev.Detail, "tasmota_2BE970") {
+				t.Fatalf("topic change not audited with old and new topic: %+v", au.events)
 			}
 		})
+	}
+}
+
+// Why: topic is unique across the inventory. A topic another device holds must not be taken (that
+// would break the other device's matching too), but the admin has to be told why MQTT stays
+// disconnected, and the audit trail records it.
+func TestRefreshKeepsTheTopicAnotherDeviceHoldsAndSaysSo(t *testing.T) {
+	p, st, id, d, _ := raceSetup(t)
+	au := &auditSink{}
+	p.Audit = au
+	d.Topic = "old-topic"
+	if err := st.UpdateDevice(context.Background(), d); err != nil {
+		t.Fatal(err)
+	}
+	other := d
+	other.ID, other.Name, other.MAC, other.Port, other.Topic = 0, "other", "aa:bb:cc:00:00:02", d.Port+1, "tasmota_2BE970"
+	if _, err := st.CreateDevice(context.Background(), other); err != nil {
+		t.Fatal(err)
+	}
+	p.Client = override{Client: p.Client, reply: map[string]string{"Status": status16}}
+	err := p.Refresh(context.Background(), id, "admin")
+	var kept *TopicKeptError
+	if !errors.As(err, &kept) || !strings.Contains(kept.Notice(), "tasmota_2BE970") {
+		t.Fatalf("err = %v, want a TopicKeptError naming the topic", err)
+	}
+	if got, _ := st.GetDevice(context.Background(), id); got.Topic != "old-topic" {
+		t.Fatalf("Topic = %q, want it kept", got.Topic)
+	}
+	found := false
+	for _, e := range au.events {
+		found = found || e.Action == "device.topic_kept"
+	}
+	if !found {
+		t.Fatalf("collision not audited: %+v", au.events)
 	}
 }
 

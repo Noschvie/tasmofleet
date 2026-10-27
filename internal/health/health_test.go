@@ -1034,3 +1034,18 @@ func TestReaddedDeviceTakesTheTopicsCurrentLWT(t *testing.T) {
 		t.Fatalf("LWT %q, want Online", got)
 	}
 }
+
+// A device whose stored topic changes (Refresh identity makes it follow the device, #111) must
+// show MQTT Connected at once: the retained LWT of the new topic was dropped while the topic was
+// unknown, so the reload has to apply the remembered one instead of waiting for telemetry.
+func TestDeviceWhoseTopicChangesTakesTheNewTopicsLWT(t *testing.T) {
+	h := newHarness(t, true, Options{}, mqttDev(1, "tablet-charger"))
+	h.listen()
+	h.bus.emit(mqttbus.KindLWT, "tablet-charger-qa", "LWT", "Online", true)
+	h.st.foreignCommit(mqttDev(1, "tablet-charger-qa"))
+	h.svc.reload(h.ctx, h.clk.Now())
+	if got := h.svc.Get(1).LWT; got != "Online" {
+		t.Fatalf("LWT %q, want Online from the retained message of the new topic", got)
+	}
+	h.want(1, model.HealthOnline)
+}

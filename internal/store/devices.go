@@ -297,9 +297,8 @@ type ProbeResult struct {
 	// DeviceName only if the stored name is still exactly this.
 	NameFrom string
 	// DeviceTopic is the resolved topic the device reported, "" when not read. It is recorded, and
-	// the stored topic follows it when the stored one is empty, unresolved ("tasmota_%06X") or
-	// still the topic recorded at the previous probe, and no other device has it. A topic the user
-	// typed is kept.
+	// the stored topic always follows it (the stored topic is only a mirror for matching MQTT
+	// messages, #111), unless another device already has that topic: then the stored one is kept.
 	DeviceTopic string
 	// BindMACs binds these MACs (primary first) to a device that has none (guard MAC ""), as an
 	// admin's refresh does (#65). A MAC another device holds: ErrMACInUse, nothing written.
@@ -340,8 +339,7 @@ func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuar
 			WHEN (device_name<>'' AND name=device_name) OR (?<>'' AND name=?) THEN ? ELSE name END,
 		device_name = CASE WHEN ?='' THEN device_name ELSE ? END,
 		topic = CASE WHEN ?='' OR topic=? THEN topic
-			WHEN (topic='' OR instr(topic, '%')>0 OR (device_topic<>'' AND topic=device_topic))
-				AND NOT EXISTS (SELECT 1 FROM devices o WHERE o.topic=? AND o.id<>devices.id) THEN ?
+			WHEN NOT EXISTS (SELECT 1 FROM devices o WHERE o.topic=? AND o.id<>devices.id) THEN ?
 			ELSE topic END,
 		device_topic = CASE WHEN ?='' THEN device_topic ELSE ? END,
 		updated_at=? WHERE id=? AND address=? AND port=? AND mac=?`,

@@ -70,7 +70,8 @@ type Prober interface {
 	// Refresh probes the stored device and stores what it reports. actor is the admin who asked
 	// ("" for automatic refreshes); only an admin's refresh binds the MAC of a device stored
 	// without one. A device that reports another MAC is refused with an error that has a
-	// Refusal() string method (app.RefreshRefusedError).
+	// Refusal() string method (app.RefreshRefusedError). An error with a Notice() string method
+	// (app.TopicKeptError) means the refresh succeeded but one thing needs the admin's attention.
 	Refresh(ctx context.Context, id model.DeviceID, actor string) error
 }
 

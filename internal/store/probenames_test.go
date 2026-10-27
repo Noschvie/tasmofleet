@@ -78,11 +78,10 @@ func TestUpdateProbeReplacesARecognisedFallbackNameOnlyIfUnchanged(t *testing.T)
 	}
 }
 
-// Why (#91, #52): the MQTT topic must follow the device (else health never matches its messages
-// and the device shows "MQTT: Not connected"), but a topic the user typed stays. The topic
-// follows when it is unresolved (tasmota_%06X), empty, or still the topic recorded at the
-// previous probe; a topic another device holds is never taken (it is unique).
-func TestUpdateProbeTopicFollowsTheDeviceUnlessTheUserChoseIt(t *testing.T) {
+// Why (#91, #111): the MQTT topic is a mirror used to match messages and must always follow the
+// device (else health never matches and the device shows "MQTT: Not connected"), also when it was
+// typed or the row predates device_topic. A topic another device holds is never taken (unique).
+func TestUpdateProbeTopicAlwaysFollowsTheDevice(t *testing.T) {
 	s, _, _ := newStore(t)
 	if _, err := s.CreateDevice(ctx, model.Device{Name: "holder", Address: "192.0.2.99", Topic: "taken"}); err != nil {
 		t.Fatal(err)
@@ -93,7 +92,7 @@ func TestUpdateProbeTopicFollowsTheDeviceUnlessTheUserChoseIt(t *testing.T) {
 		{"unresolved placeholder", "tasmota_%06X", "", "tasmota_2BE970", "tasmota_2BE970"},
 		{"empty", "", "", "tasmota_2BE972", "tasmota_2BE972"},
 		{"device changed its topic", "kitchen", "kitchen", "kitchen-lamp", "kitchen-lamp"},
-		{"user typed a topic", "my-own", "", "tasmota_2BE971", "my-own"},
+		{"user typed a topic", "my-own", "", "tasmota_2BE971", "tasmota_2BE971"},
 		{"not read", "kitchen2", "kitchen2", "", "kitchen2"},
 		{"held by another device", "", "", "taken", ""},
 	} {

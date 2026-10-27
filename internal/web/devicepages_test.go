@@ -209,6 +209,29 @@ func TestProbeShowsARefusedRefreshAndPassesTheActor(t *testing.T) {
 	}
 }
 
+// keptTopic stands for app.TopicKeptError: the web layer knows it only by its Notice method.
+type keptTopic struct{}
+
+func (keptTopic) Error() string { return "topic not changed: internal detail" }
+func (keptTopic) Notice() string {
+	return "The device reports the MQTT topic taken-topic, which another device already has."
+}
+
+// Why (#111): a refresh that could not make the topic follow the device (another device has it)
+// is still a refresh, but the admin must see why MQTT stays disconnected, on the page.
+func TestProbeShowsATopicThatCouldNotFollowTheDevice(t *testing.T) {
+	e := setup(t)
+	e.inv.devs[1] = model.Device{ID: 1, Name: "kitchen", Address: "10.0.0.1", MAC: "aa:bb:cc:dd:ee:ff"}
+	e.pr.err = fmt.Errorf("wrapped: %w", keptTopic{})
+	_, body := e.do(t, "POST", "/devices/1/probe", "admin", url.Values{"csrf": {"tok"}}, "HX-Request", "true")
+	if want := "Identity refreshed. The device reports the MQTT topic taken-topic, which another device already has."; !strings.Contains(body, want) {
+		t.Errorf("lacks %q:\n%s", want, body)
+	}
+	if strings.Contains(body, "internal detail") || strings.Contains(body, "Identity not refreshed") {
+		t.Error("a kept topic was shown as a failed refresh")
+	}
+}
+
 // Why: with no backup the compare and "changes since" controls have nothing to
 // work on, and the empty state must carry the action that fills it.
 func TestEmptyBackupsTabOffersTheActionNotTheControls(t *testing.T) {
