@@ -12,6 +12,9 @@ always upgrade automatically.
   TasmoFleet runs no longer shows MQTT "Not connected" or "other broker" until it next speaks. TasmoFleet
   keeps the latest LWT per topic and applies it as soon as a device takes that topic (#105, thanks
   @Noschvie).
+- The Devices list shows the "Online" filter pill at all times, next to Offline / unknown, Outdated and Not
+  compliant; it used to exist only while the Online filter was active, so it could not be picked again after
+  switching to All (#102, thanks @Noschvie).
 
 ## 0.15.0 (2026-10-26)
 

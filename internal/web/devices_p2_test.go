@@ -253,12 +253,42 @@ func TestDeviceListAllChipClearsEveryStatusFilter(t *testing.T) {
 					t.Errorf("%s: All links to %q and drops the tag select", q, href)
 				}
 			}
-			if strings.Contains(href, "health=") {
+			// The Online chip is itself the health filter (health=online), so it is the one chip
+			// that may carry it; every other chip must drop it.
+			if strings.Contains(href, "health=") && h[2] != "Online" {
 				t.Errorf("%s: chip %q links to %q, which keeps the health filter", q, h[2], href)
 			}
 		}
 		if !sawAll {
 			t.Errorf("%s: no All chip in %s", q, chips)
 		}
+	}
+}
+
+// Why: Online used to exist only while ?health=online was active (#102), so after switching to
+// All the filter could not be picked again, unlike Offline / unknown, Outdated and Not compliant.
+// It is a fixed chip: always there with its count, marked only while it filters, and clicking it
+// while active drops the filter again.
+func TestDeviceListOnlineChipIsAlwaysRendered(t *testing.T) {
+	e := setup(t)
+	online := regexp.MustCompile(`<a class="dv-chip" href="([^"]*)"([^>]*)>Online<span class="dv-n">(\d+)</span></a>`)
+	for _, q := range []string{"", "?chip=down", "?chip=outdated", "?health=offline"} {
+		_, body := e.do(t, "GET", "/devices"+q, "operator", nil)
+		m := online.FindStringSubmatch(between(body, `class="dv-chips"`, `class="dv-vsep"`))
+		if m == nil {
+			t.Fatalf("%q: no Online chip among the chips: %s", q, between(body, `class="dv-chips"`, `class="dv-vsep"`))
+		}
+		if !strings.Contains(m[1], "health=online") || strings.Contains(m[1], "chip=") || strings.Contains(m[2], "aria-current") {
+			t.Errorf("%q: inactive Online chip links to %q (%s): want the health=online filter, no other status filter, not marked", q, m[1], m[2])
+		}
+	}
+	_, body := e.do(t, "GET", "/devices?health=online", "operator", nil)
+	chips := between(body, `class="dv-chips"`, `class="dv-vsep"`)
+	m := online.FindStringSubmatch(chips)
+	if m == nil || !strings.Contains(m[2], `aria-current="true"`) || strings.Contains(m[1], "health=") {
+		t.Errorf("health=online: want the Online chip marked and linking back to the unfiltered list: %s", chips)
+	}
+	if n := strings.Count(chips, `aria-current="true"`); n != 1 || strings.Count(chips, ">Online<") != 1 {
+		t.Errorf("health=online: want exactly one marked chip and one Online chip: %s", chips)
 	}
 }
