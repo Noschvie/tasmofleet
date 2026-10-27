@@ -4,6 +4,15 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## Unreleased
+
+### Fixed
+
+- Device page, Network card: a device added (or given its MQTT topic) while TasmoFleet runs no longer
+  shows MQTT "Not connected" or "other broker" until its next telemetry. TasmoFleet now keeps the retained
+  LWT of topics it has no device for yet and applies it as soon as a device takes that topic (#105, thanks
+  @Noschvie).
+
 ## 0.15.0 (2026-10-26)
 
 ### Fixed

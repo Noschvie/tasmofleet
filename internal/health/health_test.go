@@ -989,3 +989,32 @@ func TestNoInventoryReloadWithoutAChange(t *testing.T) {
 		t.Fatalf("the backstop reload did not happen once, got %d", h.st.lists-base)
 	}
 }
+
+// A device added (or given its topic) while TasmoFleet runs never saw the retained LWT: the bus
+// replays retained messages only once, at Subscribe, and an unknown topic was dropped. The
+// Network card then read "Not connected" for a device that is on the broker until its next
+// telemetry, up to a TelePeriod later (#105).
+func TestRetainedLWTOfDeviceAddedLaterIsApplied(t *testing.T) {
+	h := newHarness(t, true, Options{})
+	h.listen()
+	h.bus.emit(mqttbus.KindLWT, "tasmota_3E6F08", "LWT", "Online", true)
+	h.st.foreignCommit(mqttDev(1, "tasmota_3E6F08"))
+	h.svc.reload(h.ctx, h.clk.Now())
+	if got := h.svc.Get(1).LWT; got != "Online" {
+		t.Fatalf("LWT %q, want Online from the retained message seen before the device was added", got)
+	}
+	h.want(1, model.HealthOnline)
+}
+
+// The remembered LWT is the latest one: an Offline after the Online wins.
+func TestLatestUnmatchedLWTWins(t *testing.T) {
+	h := newHarness(t, true, Options{})
+	h.listen()
+	h.bus.emit(mqttbus.KindLWT, "b", "LWT", "Online", true)
+	h.bus.emit(mqttbus.KindLWT, "b", "LWT", "Offline", false)
+	h.st.foreignCommit(mqttDev(1, "b"))
+	h.svc.reload(h.ctx, h.clk.Now())
+	if got := h.svc.Get(1).LWT; got != "Offline" {
+		t.Fatalf("LWT %q, want Offline", got)
+	}
+}
