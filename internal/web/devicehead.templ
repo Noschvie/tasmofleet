@@ -22,6 +22,12 @@ templ deviceHeader(t deviceTabs) {
 // address, chip and firmware without a reload (#104).
 templ deviceHeadSwap(t deviceTabs, crumbs []ui.Crumb) {
 	@deviceHead(t, templ.Attributes{"hx-swap-oob": "true"})
+	if t.offline() {
+		@deviceOffBanner(t, templ.Attributes{"hx-swap-oob": "true"})
+	}
+	if t.CanRestart {
+		@restartDialog(t, true)
+	}
 	@ui.CrumbsOOB(crumbs, t.Base)
 	@ui.PhoneTitleOOB(t.Name)
 	<title>{ t.Name } - TasmoFleet</title>
@@ -96,23 +102,34 @@ templ deviceHead(t deviceTabs, attrs templ.Attributes) {
 // deviceHeadRest is what follows the header block: the offline banner, the tabs and the restart dialog.
 templ deviceHeadRest(t deviceTabs) {
 	if t.offline() {
-		<div class="devhd-off" role="status">
-			<span class="devhd-offdot" aria-hidden="true"></span>
-			<div>
-				<b>Offline</b>
-				if t.LastSeenAgo != "" {
-					· last seen <span data-visual-mask>{ t.LastSeenAgo }</span>.
-				} else {
-					· the device has not answered since TasmoFleet started.
-				}
-				Values below are the last known state; actions need the device to answer.
-			</div>
-		</div>
+		@deviceOffBanner(t, nil)
 	}
 	@ui.Tabs("Device pages", t.headTabs())
 	if t.CanRestart {
-		@ui.Dialog(ui.DialogData{ID: "dlg-restart", Title: "Restart " + t.Name + "?", Body: "Its relays switch off for a few seconds.", Action: t.Base + devPath(t.ID, "/restart"), CSRF: t.CSRF, Verb: "Restart"})
+		@restartDialog(t, false)
 	}
+}
+
+// deviceOffBanner says the device is offline and since when; its id lets a refresh swap it (#110).
+templ deviceOffBanner(t deviceTabs, attrs templ.Attributes) {
+	<div class="devhd-off" id="devhd-off" role="status" { attrs... }>
+		<span class="devhd-offdot" aria-hidden="true"></span>
+		<div>
+			<b>Offline</b>
+			if t.LastSeenAgo != "" {
+				· last seen <span data-visual-mask>{ t.LastSeenAgo }</span>.
+			} else {
+				· the device has not answered since TasmoFleet started.
+			}
+			Values below are the last known state; actions need the device to answer.
+		</div>
+	</div>
+}
+
+// restartDialog is the Restart confirmation, named after the device. oob: sent by a refresh that
+// may have renamed the device, over the dialog already on the page (#110).
+templ restartDialog(t deviceTabs, oob bool) {
+	@ui.Dialog(ui.DialogData{ID: "dlg-restart", Title: "Restart " + t.Name + "?", Body: "Its relays switch off for a few seconds.", Action: t.Base + devPath(t.ID, "/restart"), CSRF: t.CSRF, Verb: "Restart", OOB: oob})
 }
 
 // deviceOverviewPage is the overview tab: the prototype's five cards, then the device's state

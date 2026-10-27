@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -180,6 +181,39 @@ func TestProbeUpdatesTheHeaderAndBreadcrumbWithTheCard(t *testing.T) {
 	_, body = e.do(t, "POST", "/devices/1/probe", "admin", url.Values{"csrf": {"tok"}}, "HX-Request", "true")
 	if strings.Contains(body, "hx-swap-oob") {
 		t.Errorf("a failed refresh must swap only the card:\n%s", body)
+	}
+}
+
+// Why (#110): the Restart confirmation names the device ("Restart <name>?") and the offline
+// banner is part of the same header; after a refresh that renamed the device both kept the old
+// text until a reload, so the dialog asked about a device that no longer had that name.
+func TestProbeUpdatesTheRestartDialogAndOfflineBannerToo(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		health model.Health
+		banner bool
+	}{
+		{"online", model.Health{DeviceID: 1, State: model.HealthOnline, LastSeen: time.Now()}, false},
+		{"offline", model.Health{DeviceID: 1, State: model.HealthOffline, LastSeen: time.Now()}, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := setupWith(t, func(d *Deps) {
+				d.Health.(fakeHealth)[1] = tc.health
+				d.DeviceCmd = &fakeCmd{}
+			})
+			e.inv.devs[1] = model.Device{ID: 1, Name: "Irrigation Led Ring", Address: "10.0.0.1", MAC: "aa:bb:cc:dd:ee:ff", Identity: model.Identity{Family: model.ChipESP32, Version: "16.1.0", Variant: "tasmota32"}}
+			_, body := e.do(t, "POST", "/devices/1/probe", "admin", url.Values{"csrf": {"tok"}}, "HX-Request", "true")
+			// htmx reads a bare hx-swap-oob attribute as an innerHTML swap: it needs the value "true"
+			if !regexp.MustCompile(`<dialog id="dlg-restart"[^>]*hx-swap-oob="true"`).MatchString(body) {
+				t.Fatalf("no out-of-band restart dialog:\n%s", body)
+			}
+			if want := `<h2 id="dlg-restart-h">Restart Irrigation Led Ring?</h2>`; !strings.Contains(body, want) {
+				t.Errorf("lacks %q:\n%s", want, body)
+			}
+			if got := strings.Contains(body, `id="devhd-off"`); got != tc.banner {
+				t.Errorf("offline banner swapped = %v, want %v", got, tc.banner)
+			}
+		})
 	}
 }
 

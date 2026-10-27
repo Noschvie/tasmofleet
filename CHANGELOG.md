@@ -12,6 +12,9 @@ always upgrade automatically.
   devices added before 0.15.0 (a topic changed on the device used to stay unmatched, MQTT "Not connected").
   A topic another device already has is not taken; the device page and the audit log say so. The change is
   audited as `device.topic_changed` (#111).
+- After "Refresh identity" the Restart confirmation dialog and the offline banner on the device page are
+  swapped together with the header, so the dialog asks about the new name without a reload (#110, #104,
+  thanks @Noschvie).
 
 ## 0.15.1 (2026-10-27)
 

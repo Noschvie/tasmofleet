@@ -98,7 +98,7 @@ func TestOfflineDeviceShowsTheBannerAndDisablesTheSwitches(t *testing.T) {
 		d.DeviceCmd = &fakeCmd{}
 	})
 	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
-	for _, want := range []string{`<div class="devhd-off" role="status">`, `last seen <span data-visual-mask>5h ago</span>`, `<span class="devhd-state t-danger">`, `aria-pressed="false" disabled>`, `role="switch" aria-checked="false" aria-label="Relay 1 is Off: switch it On" disabled>`} {
+	for _, want := range []string{`<div class="devhd-off" id="devhd-off" role="status">`, `last seen <span data-visual-mask>5h ago</span>`, `<span class="devhd-state t-danger">`, `aria-pressed="false" disabled>`, `role="switch" aria-checked="false" aria-label="Relay 1 is Off: switch it On" disabled>`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("offline overview lacks %q", want)
 		}

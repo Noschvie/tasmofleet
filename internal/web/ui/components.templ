@@ -441,7 +441,11 @@ templ TxnRow(r TxnRowData) {
 // Dialog is a confirmation dialog. dialog.js opens it from a [data-dialog] trigger; without
 // JavaScript the trigger's link leads to the confirmation page (ConfirmPage).
 templ Dialog(d DialogData) {
-	<dialog id={ d.ID } class="udlg" aria-labelledby={ d.ID + "-h" } open?={ d.Static } data-static?={ d.Static }>
+	<dialog id={ d.ID } class="udlg" aria-labelledby={ d.ID + "-h" } open?={ d.Static } data-static?={ d.Static }
+		if d.OOB {
+			hx-swap-oob="true"
+		}
+	>
 		<form method="post" action={ templ.SafeURL(d.Action) } class="udlg-in">
 			<input type="hidden" name="csrf" value={ d.CSRF }/>
 			for _, f := range d.Fields {

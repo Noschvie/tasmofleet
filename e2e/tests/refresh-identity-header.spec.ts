@@ -40,6 +40,8 @@ test("a refreshed name shows in the header, breadcrumb, title and list without a
   await expect(page.locator("#ph-title")).toHaveText(NEW); // the phone top bar (hidden on desktop)
   await expect(page).toHaveTitle(NEW + " - TasmoFleet");
   await expect(page.locator(".devhd")).toHaveCount(1);
+  // #110: the Restart confirmation names the device too
+  await expect(page.locator("#dlg-restart-h")).toHaveText("Restart " + NEW + "?");
 
   await page.goto(app.url + "/devices");
   await expect(page.getByRole("link", { name: NEW, exact: true })).toBeVisible();

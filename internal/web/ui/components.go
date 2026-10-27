@@ -186,6 +186,7 @@ type DialogData struct {
 	Verb            string
 	Danger          bool
 	Static          bool // drawn open in the flow (style guide), left alone by the scripts
+	OOB             bool // sent as an htmx out-of-band swap of the dialog already on the page
 }
 
 // StepUpData is the "Confirm it's you" dialog of local account and SSO changes.
