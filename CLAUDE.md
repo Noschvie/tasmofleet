@@ -236,6 +236,13 @@ in `.github/workflows/ci.yml`.
 - Tags are signed (`git tag -s vX.Y.Z`) and only set on a green commit of `main`. The tag
   runs the FULL tier, and the image is published only when it passed. Before tagging, a
   FULL run of that commit (nightly or manual dispatch) should already be green.
+- **Announce every release.** After the tag run has published the image and the GitHub release,
+  post an Announcements discussion "TasmoFleet X.Y.Z" (`gh api graphql` `createDiscussion`, category
+  Announcements). Style of the earlier ones (e.g. #54): the image tag
+  `ghcr.io/nofuturekid/tasmofleet:X.Y.Z`, a short bullet list summarising the CHANGELOG section with
+  issue refs and the same `thanks @handle` credits, a migration note ("No database migration" or the
+  migration numbers), a link to `CHANGELOG.md`, and the closing line about Q&A discussions and issues.
+  English, no fluff.
 
 ## Pull requests and the protected main
 
