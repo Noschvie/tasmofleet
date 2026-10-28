@@ -3,11 +3,14 @@ package app
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
 )
@@ -91,5 +94,22 @@ func TestStoredLogLevelAppliesAtStart(t *testing.T) {
 	SetLogLevel(level, "nonsense")
 	if level.Level() != slog.LevelInfo {
 		t.Fatal("an unknown level must fall back to info")
+	}
+}
+
+// Why: nanosecond timestamps (.15597172) are hard to read; the log carries milliseconds in a fixed format.
+func TestLogTimestampHasMilliseconds(t *testing.T) {
+	var buf bytes.Buffer
+	l := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{ReplaceAttr: logTimeMillis}))
+	l.Info("x", slog.Time("other", time.Date(2026, 1, 2, 3, 4, 5, 123456789, time.UTC)))
+	var rec map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &rec); err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}(Z|[+-]\d\d:\d\d)$`).MatchString(rec["time"].(string)) {
+		t.Fatalf("time = %v", rec["time"])
+	}
+	if rec["other"] != "2026-01-02T03:04:05.123456789Z" {
+		t.Fatalf("only the record time may be shortened, got %v", rec["other"])
 	}
 }

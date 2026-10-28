@@ -307,6 +307,9 @@ func (c *CSRF) Middleware(next http.Handler) http.Handler {
 
 // AccessLog logs one line per request with a request ID (also returned in
 // X-Request-ID). It never logs query strings, which may carry OIDC codes.
+// Successful /healthz requests (the container health check, every 30 s) are
+// logged at debug so they do not drown out real requests; a failing one stays
+// at info. duration_ms is milliseconds as a float, so the unit is in the key.
 func AccessLog(l *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		id := rand.Text()[:12]
@@ -314,9 +317,13 @@ func AccessLog(l *slog.Logger, next http.Handler) http.Handler {
 		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		start := time.Now()
 		next.ServeHTTP(rec, r)
-		l.LogAttrs(r.Context(), slog.LevelInfo, "http request",
+		level := slog.LevelInfo
+		if r.URL.Path == "/healthz" && rec.status == http.StatusOK {
+			level = slog.LevelDebug
+		}
+		l.LogAttrs(r.Context(), level, "http request",
 			slog.String("id", id), slog.String("method", r.Method), slog.String("path", r.URL.Path),
-			slog.Int("status", rec.status), slog.Duration("duration", time.Since(start)),
+			slog.Int("status", rec.status), slog.Float64("duration_ms", float64(time.Since(start))/float64(time.Millisecond)),
 			slog.String("client", ClientIP(r.Context()).String()), slog.String("scheme", Scheme(r.Context())))
 	})
 }

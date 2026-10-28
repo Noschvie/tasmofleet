@@ -49,11 +49,23 @@ type Services struct {
 func NewLogger(cfg config.Config) (*slog.Logger, *slog.LevelVar) {
 	level := new(slog.LevelVar)
 	SetLogLevel(level, cfg.LogLevel)
-	opts := &slog.HandlerOptions{Level: level}
+	opts := &slog.HandlerOptions{Level: level, ReplaceAttr: logTimeMillis}
 	if cfg.LogFormat == "text" {
 		return slog.New(slog.NewTextHandler(os.Stderr, opts)), level
 	}
 	return slog.New(slog.NewJSONHandler(os.Stdout, opts)), level
+}
+
+// logTimeFormat is the log timestamp: milliseconds are enough to read a log,
+// slog's default has nanoseconds.
+const logTimeFormat = "2006-01-02T15:04:05.000Z07:00"
+
+// logTimeMillis is the slog ReplaceAttr that shortens the top-level time attribute.
+func logTimeMillis(groups []string, a slog.Attr) slog.Attr {
+	if len(groups) == 0 && a.Key == slog.TimeKey && a.Value.Kind() == slog.KindTime {
+		a.Value = slog.StringValue(a.Value.Time().Format(logTimeFormat))
+	}
+	return a
 }
 
 // SetLogLevel applies a LOG_LEVEL value; an unknown one means info.

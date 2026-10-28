@@ -4,6 +4,14 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## Unreleased
+
+### Changed
+
+- Log: successful `/healthz` requests (the container health check) are logged at debug instead of info, log
+  timestamps have millisecond precision (`2006-01-02T15:04:05.000Z07:00`), and the access log's `duration` is
+  now `duration_ms`, a float in milliseconds (#132, thanks @Noschvie).
+
 ## 0.15.2 (2026-10-27)
 
 ### Changed

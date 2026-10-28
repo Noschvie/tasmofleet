@@ -1,7 +1,10 @@
 package httpx
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -235,5 +238,47 @@ func TestDetachKeepsOnlyRequestInfo(t *testing.T) {
 	}
 	if d.Err() != nil {
 		t.Fatal("cancellation must not survive")
+	}
+}
+
+func accessLogLines(t *testing.T, level slog.Level, path string, status int) string {
+	t.Helper()
+	var buf bytes.Buffer
+	l := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: level}))
+	h := AccessLog(l, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(status) }))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest("GET", path, nil))
+	return buf.String()
+}
+
+// Why: the container health check hits /healthz every 30 s; at info it drowns out the
+// real requests. A failing health check is news and must stay visible.
+func TestAccessLogHealthzOnlyAtDebugWhenOK(t *testing.T) {
+	if out := accessLogLines(t, slog.LevelInfo, "/healthz", 200); out != "" {
+		t.Fatalf("successful /healthz logged at info: %s", out)
+	}
+	if out := accessLogLines(t, slog.LevelDebug, "/healthz", 200); !strings.Contains(out, `"level":"DEBUG"`) {
+		t.Fatalf("successful /healthz not logged at debug: %s", out)
+	}
+	if out := accessLogLines(t, slog.LevelInfo, "/healthz", 503); !strings.Contains(out, `"level":"INFO"`) {
+		t.Fatalf("failing /healthz must stay at info: %s", out)
+	}
+	if out := accessLogLines(t, slog.LevelInfo, "/devices", 200); !strings.Contains(out, `"level":"INFO"`) {
+		t.Fatalf("other paths must log at info: %s", out)
+	}
+}
+
+// Why: slog encodes time.Duration as bare nanoseconds, which nobody reads as 12 µs.
+// The unit belongs in the key, and the value is a float so sub-millisecond requests keep their size.
+func TestAccessLogDurationHasUnitInKey(t *testing.T) {
+	out := accessLogLines(t, slog.LevelInfo, "/devices", 200)
+	var rec map[string]any
+	if err := json.Unmarshal([]byte(out), &rec); err != nil {
+		t.Fatal(err)
+	}
+	if _, old := rec["duration"]; old {
+		t.Fatal("unitless duration key still present")
+	}
+	if v, ok := rec["duration_ms"].(float64); !ok || v < 0 || v > 1000 {
+		t.Fatalf("duration_ms = %v", rec["duration_ms"])
 	}
 }
