@@ -1,8 +1,8 @@
 # Design system source and prototype history
 
 This folder holds the source of the tasmofleet design system and the Claude Design
-prototype it came from. It was moved here from the local-only repo `tasmofleet-design`
-(history not kept).
+prototype it came from. It was moved here from the former repository `tasmofleet-design`
+(history not kept; that repository and its GitHub Pages site are gone).
 
 **What binds the app:** the admin page `/styleguide` in the running app (built from the real
 partials) and `docs/spec/design-system.md`. `design/` is the design-system source and the

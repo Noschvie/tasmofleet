@@ -19,9 +19,7 @@ embedded SQLite database.
 ![A firmware update of four devices: pick them, review, start, watch each device's progress](docs/media/demo.webp)
 
 **[Try the demo](https://nofuturekid.github.io/tasmofleet/)**: the real UI with a simulated fleet
-of 60 devices, saved as static pages (actions are disabled). The
-[design prototype](https://nofuturekid.github.io/tasmofleet-design/) the UI was built from is
-public too.
+of 60 devices, saved as static pages (actions are disabled).
 
 TasmoFleet is an independent project and is not affiliated with, endorsed by or sponsored
 by Tasmota or its maintainers. "Tasmota" is the name of the firmware this tool manages; the
