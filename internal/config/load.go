@@ -30,7 +30,9 @@ func Load(environ []string) (Config, error) {
 	env := map[string]string{}
 	for _, kv := range environ {
 		k, v, ok := strings.Cut(kv, "=")
-		if ok && strings.HasPrefix(k, Prefix) {
+		// An empty value counts as not set: Unraid passes unfilled template
+		// fields as "KEY=", and that must mean "use the default, lock nothing".
+		if ok && strings.HasPrefix(k, Prefix) && strings.TrimSpace(v) != "" {
 			env[strings.TrimPrefix(k, Prefix)] = v
 		}
 	}
@@ -47,7 +49,7 @@ func Load(environ []string) (Config, error) {
 	switch {
 	case err == nil:
 		for k, v := range fileVals {
-			if _, set := env[k]; !set {
+			if _, set := env[k]; !set && v != "" {
 				env[k] = v
 			}
 		}

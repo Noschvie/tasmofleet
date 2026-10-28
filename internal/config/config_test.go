@@ -3,6 +3,8 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -98,7 +100,16 @@ func TestValidation(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := Load(base(t.TempDir(), tc.env...))
+			// An empty value means "not set", so a case that removes a base
+			// setting ("KEY=") drops it from the base environment.
+			var env []string
+			for _, kv := range base(t.TempDir()) {
+				k, _, _ := strings.Cut(kv, "=")
+				if !slices.Contains(tc.env, k+"=") {
+					env = append(env, kv)
+				}
+			}
+			_, err := Load(append(env, tc.env...))
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Fatalf("want error naming %s, got %v", tc.want, err)
 			}
@@ -281,5 +292,64 @@ func TestMetricsEnabledAndDefaultPasswordDefaults(t *testing.T) {
 	}
 	if !c.MetricsEnabled || c.DeviceDefaultPassword != "" {
 		t.Fatalf("metrics %v, default password set %v", c.MetricsEnabled, c.DeviceDefaultPassword != "")
+	}
+}
+
+// Unraid passes unfilled template fields as "KEY=" (issue #148). An empty or
+// blank value must behave exactly like an unset one for every key: the default
+// applies, nothing is locked and nothing is imported as legacy. Otherwise a
+// default CA install crash-loops on LOG_LEVEL, and an empty sign-in field would
+// lock the page's field to nothing.
+func TestEmptyEnvironmentValueCountsAsNotSet(t *testing.T) {
+	dir := t.TempDir()
+	want, err := Load([]string{"TASMOFLEET_DATA_DIR=" + dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rt := reflect.TypeOf(Config{})
+	checked := 0
+	for i := range rt.NumField() {
+		f := rt.Field(i)
+		key := f.Tag.Get("env")
+		if key == "" {
+			continue
+		}
+		names := []string{key}
+		if f.Tag.Get("secret") == "true" {
+			names = append(names, key+"_FILE") // an empty file path is not set either
+		}
+		for _, name := range names {
+			for _, blank := range []string{"", "   "} {
+				t.Run(name+"="+strings.ReplaceAll(blank, " ", "_"), func(t *testing.T) {
+					got, err := Load([]string{"TASMOFLEET_DATA_DIR=" + dir, "TASMOFLEET_" + name + "=" + blank})
+					if err != nil {
+						t.Fatalf("a blank value must not fail the start: %v", err)
+					}
+					if !reflect.DeepEqual(got, want) {
+						t.Fatalf("blank value changed the config (default, Locked or Legacy):\n got %+v\nwant %+v", got, want)
+					}
+				})
+			}
+		}
+		checked++
+	}
+	if checked < 30 {
+		t.Fatalf("only %d keys found: the struct walk is broken", checked)
+	}
+}
+
+// A blank environment value must not shadow a real value from the env file
+// either: "not set" means the next source decides.
+func TestEmptyEnvironmentValueDoesNotShadowFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "tasmofleet.env"), []byte("TASMOFLEET_LOG_LEVEL=debug\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load([]string{"TASMOFLEET_DATA_DIR=" + dir, "TASMOFLEET_LOG_LEVEL="})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.LogLevel != "debug" || !c.Locked["LOG_LEVEL"] {
+		t.Fatalf("file value must apply: level %q, locked %v", c.LogLevel, c.Locked["LOG_LEVEL"])
 	}
 }

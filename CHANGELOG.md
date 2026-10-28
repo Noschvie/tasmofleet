@@ -4,6 +4,15 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## Unreleased
+
+### Fixed
+
+- An environment variable that is set but empty (`TASMOFLEET_LOG_LEVEL=`, as the Unraid Community Applications
+  template passes unfilled fields) now counts as not set: the default applies, the sign-in field is not locked
+  and nothing is imported as a legacy setting. Before, an empty `LOG_LEVEL` stopped the container in a restart
+  loop. The same holds for blank values and empty `*_FILE` paths (#148).
+
 ## 0.16.0 (2026-10-28)
 
 ### Added
