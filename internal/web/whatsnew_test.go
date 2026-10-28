@@ -159,3 +159,14 @@ func TestWhatsNewInstalledWithTagPrefix(t *testing.T) {
 		}
 	}
 }
+
+// Why (#124): the header must show the same string as the About page, from the one Deps.Version.
+func TestHeaderVersionIsTheAboutVersion(t *testing.T) {
+	e := setupWith(t, func(d *Deps) { d.Version = "9.9.9+edge (abcdef012345)" })
+	for _, path := range []string{"/", "/about"} {
+		_, body := e.do(t, "GET", path, "admin", nil)
+		if !strings.Contains(body, `class="ver" href="/tf/whats-new"`) || !strings.Contains(body, ">9.9.9+edge (abcdef012345)</a>") {
+			t.Errorf("%s: header lacks the version link", path)
+		}
+	}
+}

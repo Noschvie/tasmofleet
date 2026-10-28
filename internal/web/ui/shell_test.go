@@ -360,3 +360,22 @@ func TestNewsDotOnlyWithNews(t *testing.T) {
 		t.Error("News 2: user menu or drawer does not say how many releases are new")
 	}
 }
+
+// Why (#124): a bug report needs the running version at a glance, on every page and on a phone
+// too (where the top bar is hidden and only the drawer shows the brand). It opens What's new, the
+// changelog of this binary, in the same tab; a shell without a version draws no empty link.
+func TestShellShowsTheVersionAsChangelogLink(t *testing.T) {
+	d := admin()
+	d.Base, d.Version = "/tf", "0.15.2+edge (0123456789ab)"
+	got := render(t, d)
+	if n := strings.Count(got, `<a class="ver" href="/tf/whats-new"`); n != 2 {
+		t.Fatalf("version links (top bar + drawer) = %d, want 2", n)
+	}
+	if !strings.Contains(got, ">0.15.2+edge (0123456789ab)</a>") || strings.Contains(got, `class="ver" href="/tf/whats-new" target`) {
+		t.Error("the link must carry the version and stay in the same tab")
+	}
+	d.Version = ""
+	if strings.Contains(render(t, d), `class="ver"`) {
+		t.Error("no version, no link")
+	}
+}

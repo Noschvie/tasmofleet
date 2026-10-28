@@ -172,3 +172,28 @@ func TestNewSince(t *testing.T) {
 		t.Error("Known")
 	}
 }
+
+// Why: a build that is not a release tag must still say which release it is based on, so a bug
+// report with "edge" or "dev" can be placed. The base is the newest released heading of the
+// embedded changelog (Unreleased never counts); builds that already carry a base stay as they are.
+func TestDisplayVersion(t *testing.T) {
+	rels := Parse(sample) // newest release heading: 0.10.1, plus Unreleased
+	cases := []struct{ name, raw, want string }{
+		{"release tag build, nothing to add", "v0.15.2", "v0.15.2"},
+		{"image stamped from a tag has no v", "0.10.1", "0.10.1"},
+		{"CI edge image: base plus the commit", "edge-0123456789ab", "0.10.1+edge (0123456789ab)"},
+		{"CI pull request image", "pr-0123456789ab", "0.10.1+pr (0123456789ab)"},
+		{"git describe between releases already has base and hash", "v0.10.1-3-gabc1234", "v0.10.1-3-gabc1234"},
+		{"git describe of a dirty tree", "v0.10.1-3-gabc1234-dirty", "v0.10.1-3-gabc1234-dirty"},
+		{"plain docker build has no git history", "dev", "0.10.1+dev"},
+		{"unknown stamps are shown as given, not guessed at", "parity", "parity"},
+	}
+	for _, c := range cases {
+		if got := DisplayVersion(c.raw, rels); got != c.want {
+			t.Errorf("%s: DisplayVersion(%q) = %q, want %q", c.name, c.raw, got, c.want)
+		}
+	}
+	if got := DisplayVersion("dev", Parse("## Unreleased\n\n- x\n")); got != "dev" {
+		t.Errorf("without a released heading there is no base: %q", got)
+	}
+}

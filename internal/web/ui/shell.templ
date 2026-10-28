@@ -130,12 +130,23 @@ templ Brand(base string) {
 	</a>
 }
 
+// versionLink is the running version, small and muted next to the brand; it opens What's new
+// (the changelog of this binary). data-visual-mask: it changes with every build.
+templ versionLink(d ShellData) {
+	if d.Version != "" {
+		<a class="ver" href={ templ.SafeURL(d.Base + "/whats-new") } title="What’s new in this version" data-visual-mask>{ d.Version }</a>
+	}
+}
+
 // topBar is the desktop row: brand, the four groups, the live indicator and the user menu. The
 // groups are links to their first page; the sub-navigation lists the group's pages.
 templ topBar(d ShellData) {
 	<div class="tb">
 		<div class="shell-in tb-in">
-			@Brand(d.Base)
+			<span class="tb-brand">
+				@Brand(d.Base)
+				@versionLink(d)
+			</span>
 			<nav class="tb-groups" aria-label="Main">
 				for _, g := range d.Groups() {
 					<a
@@ -296,6 +307,7 @@ templ NavList(d ShellData) {
 		<div class="dr-brand">
 			@BrandMark("22")
 			TasmoFleet
+			@versionLink(d)
 		</div>
 		<nav aria-label="Main">
 			for _, g := range d.Groups() {

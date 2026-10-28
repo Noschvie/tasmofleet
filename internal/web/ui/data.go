@@ -22,6 +22,9 @@ type ShellData struct {
 	// News is how many releases are new since the user last opened What's new (N5): the avatar's
 	// dot and "N new since last visit" in the user menu; 0 draws neither.
 	News int
+	// Version is the running version as the About page prints it; the header shows it as a small
+	// link to What's new. "" draws nothing.
+	Version string
 
 	UserName   string
 	UserMethod string // how the user signed in: "header", "local" or an identity provider

@@ -6,6 +6,13 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Added
+
+- The running version is shown in the page header, small and muted next to the brand (in the navigation
+  drawer on a phone), and links to What's new. Builds without a release tag name the release they are
+  based on: the CI images read `0.15.2+edge (<commit>)` and `0.15.2+pr (<commit>)`, a plain `docker build`
+  `0.15.2+dev`. The same text is on the About page and in the startup log line (#124, thanks @Noschvie).
+
 ### Changed
 
 - Log: successful `/healthz` requests (the container health check) are logged at debug instead of info, log

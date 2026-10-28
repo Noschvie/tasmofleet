@@ -21,7 +21,7 @@ func shellData(v view) ui.ShellData {
 	return ui.ShellData{
 		Title: v.Title, Nav: v.Nav, Path: v.Path, Base: v.Base, CSRF: v.CSRF,
 		UserName: v.User.Name, UserMethod: v.User.Method, RoleName: v.RoleName, IsAdmin: v.IsAdmin,
-		Flash: v.Flash, Banner: v.Banner, Live: v.Live, Theme: v.Theme, NewDevices: v.NewDevices, News: v.News,
+		Flash: v.Flash, Banner: v.Banner, Live: v.Live, Theme: v.Theme, NewDevices: v.NewDevices, News: v.News, Version: v.Version,
 		Updates: v.Features.Updates, Firmware: v.Features.Firmware, Policy: v.Features.Policy,
 		Discovery: v.Features.Discovery, SysConfig: v.Features.SysConfig,
 		Crumbs: v.Crumbs,
@@ -59,6 +59,7 @@ func validateTheme(raw []byte) (string, error) {
 func (h *handler) page(r *http.Request, v view, prefs map[string]string, content templ.Component) ([]byte, error) {
 	v.Theme = themeOf(prefs)
 	v.News = newsCount(prefs)
+	v.Version = h.d.Version
 	if v.IsAdmin && h.d.Discovery != nil { // full pages only: fragments and POST results draw no navigation
 		v.NewDevices = h.newDeviceCount(r)
 	}

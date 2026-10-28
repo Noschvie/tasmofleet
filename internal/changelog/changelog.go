@@ -195,3 +195,24 @@ func Known(rels []Release, version string) bool {
 	}
 	return false
 }
+
+var ciBuild = regexp.MustCompile(`^(edge|pr)-([0-9a-f]{7,40})$`)
+
+// DisplayVersion is the version as the UI and the log show it. A release build (v0.15.2, 0.15.2)
+// and a git describe string (v0.15.2-3-gabc1234) already name their release and stay as they
+// are. Builds without one get the newest released heading of rels as base: the CI images
+// edge-<sha> and pr-<sha> become "0.15.2+edge (<sha>)", and "dev" (a plain docker build without
+// git history) "0.15.2+dev". Anything else, and a changelog without a release, is shown as given.
+func DisplayVersion(raw string, rels []Release) string {
+	base := Latest(rels)
+	if base == "" {
+		return raw
+	}
+	if m := ciBuild.FindStringSubmatch(raw); m != nil {
+		return base + "+" + m[1] + " (" + m[2] + ")"
+	}
+	if raw == "dev" {
+		return base + "+dev"
+	}
+	return raw
+}

@@ -336,7 +336,8 @@ type view struct {
 	Crumbs []ui.Crumb
 	// NewDevices counts discovered devices waiting to be added (admins with discovery)
 	NewDevices int
-	News       int // releases new since the user last opened What's new (N5, avatar dot)
+	Version    string // the running version, as About prints it (shell header)
+	News       int    // releases new since the user last opened What's new (N5, avatar dot)
 	Features   struct{ Updates, Firmware, Policy, Settings, Import, Discovery, DeviceCmd, SysConfig, BulkCommand, BulkBackup, BulkRestart bool }
 	Banner     string // a standing notice for admins, e.g. no device networks yet
 	Static     bool   // style guide only: partials render their open variant (data-static)
