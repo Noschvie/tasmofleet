@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -280,5 +281,17 @@ func TestAccessLogDurationHasUnitInKey(t *testing.T) {
 	}
 	if v, ok := rec["duration_ms"].(float64); !ok || v < 0 || v > 1000 {
 		t.Fatalf("duration_ms = %v", rec["duration_ms"])
+	}
+}
+
+// Why: duration_ms is for reading; nanosecond noise (0.012081733) adds nothing below a microsecond.
+func TestAccessLogDurationRoundedToMicroseconds(t *testing.T) {
+	var rec map[string]any
+	if err := json.Unmarshal([]byte(accessLogLines(t, slog.LevelInfo, "/devices", 200)), &rec); err != nil {
+		t.Fatal(err)
+	}
+	v := rec["duration_ms"].(float64)
+	if r := math.Round(v*1000) / 1000; r != v {
+		t.Fatalf("duration_ms %v has more than 3 decimals", v)
 	}
 }

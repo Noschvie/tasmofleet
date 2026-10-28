@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net"
 	"net/http"
 	"net/netip"
@@ -323,7 +324,7 @@ func AccessLog(l *slog.Logger, next http.Handler) http.Handler {
 		}
 		l.LogAttrs(r.Context(), level, "http request",
 			slog.String("id", id), slog.String("method", r.Method), slog.String("path", r.URL.Path),
-			slog.Int("status", rec.status), slog.Float64("duration_ms", float64(time.Since(start))/float64(time.Millisecond)),
+			slog.Int("status", rec.status), slog.Float64("duration_ms", math.Round(float64(time.Since(start))/float64(time.Microsecond))/1000),
 			slog.String("client", ClientIP(r.Context()).String()), slog.String("scheme", Scheme(r.Context())))
 	})
 }

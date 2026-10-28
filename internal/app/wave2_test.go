@@ -4,14 +4,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/nofuturekid/tasmofleet/internal/config"
 	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
 )
 
@@ -97,13 +100,25 @@ func TestStoredLogLevelAppliesAtStart(t *testing.T) {
 	}
 }
 
-// Why: nanosecond timestamps (.15597172) are hard to read; the log carries milliseconds in a fixed format.
+// Why: nanosecond timestamps (.15597172) are hard to read; the log carries milliseconds in a fixed
+// format. It goes through NewLogger, so a logger built without the ReplaceAttr fails here.
 func TestLogTimestampHasMilliseconds(t *testing.T) {
-	var buf bytes.Buffer
-	l := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{ReplaceAttr: logTimeMillis}))
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := os.Stdout
+	os.Stdout = w // the JSON logger writes to stdout
+	l, _ := NewLogger(config.Config{LogLevel: "info", LogFormat: "json"})
+	os.Stdout = old
 	l.Info("x", slog.Time("other", time.Date(2026, 1, 2, 3, 4, 5, 123456789, time.UTC)))
+	_ = w.Close() // end of the pipe: nothing more to read
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var rec map[string]any
-	if err := json.Unmarshal(buf.Bytes(), &rec); err != nil {
+	if err := json.Unmarshal(out, &rec); err != nil {
 		t.Fatal(err)
 	}
 	if !regexp.MustCompile(`^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}(Z|[+-]\d\d:\d\d)$`).MatchString(rec["time"].(string)) {
