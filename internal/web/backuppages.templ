@@ -61,7 +61,7 @@ templ backupsTab(p backupsView) {
 				@ui.ListCard("Recent restores", "", "") {
 					for _, j := range p.Jobs {
 						<a class="att-row bk-job" href={ templ.SafeURL(j.Href) }>
-							<time datetime={ j.Started.Format("2006-01-02T15:04:05Z07:00") }>{ shortDate(j.Started) }</time>
+							<time { ui.StampAttrs(j.Started, ui.StampShort)... }>{ ui.StampText(j.Started, ui.StampShort) }</time>
 							<span class="bk-job-who">{ j.Actor }</span>
 							@ui.Badge(j.Tone, j.State)
 							<span class="bk-job-detail">{ j.Detail }</span>
@@ -101,7 +101,7 @@ templ backupRowItem(p backupsView, b backupRow) {
 		</label>
 		<div class="bk-main">
 			<div class="bk-title">
-				<time datetime={ b.Taken.Format("2006-01-02T15:04:05Z07:00") }>{ shortDate(b.Taken) }</time>
+				<time { ui.StampAttrs(b.Taken, ui.StampShort)... }>{ ui.StampText(b.Taken, ui.StampShort) }</time>
 				if b.Newest {
 					@ui.Badge(ui.ToneOK, "Newest")
 				}
@@ -189,7 +189,7 @@ templ pruneDialog(p backupsView) {
 			<p class="udlg-body">{ p.PruneText }</p>
 			<div class="udlg-changes">
 				for _, b := range p.Prune {
-					<div><span><time datetime={ b.Taken.Format("2006-01-02T15:04:05Z07:00") }>{ shortDate(b.Taken) }</time></span><span class="mono">{ b.Size }</span></div>
+					<div><span><time { ui.StampAttrs(b.Taken, ui.StampShort)... }>{ ui.StampText(b.Taken, ui.StampShort) }</time></span><span class="mono">{ b.Size }</span></div>
 				}
 			</div>
 			<div class="udlg-foot">

@@ -274,7 +274,7 @@ templ deviceOverviewPage(p deviceOverview) {
 									<td data-label="Transaction" class="p1"><a href={ templ.SafeURL(p.Base + "/transactions/" + strconv.FormatInt(int64(j.BatchID), 10)) }>#{ strconv.FormatInt(int64(j.BatchID), 10) }</a></td>
 									<td data-label="State" class="p2">@ui.Badge(uiTone(j.State), label(j.State))</td>
 									<td data-label="Target" class="s">{ j.Target() }</td>
-									<td data-label="When" class="s"><time datetime={ j.UpdatedAt.UTC().Format("2006-01-02T15:04:05Z") }>{ j.UpdatedAt.Format("2006-01-02 15:04") }</time></td>
+									<td data-label="When" class="s"><time { ui.StampAttrs(j.UpdatedAt, ui.StampDateTime)... }>{ ui.StampText(j.UpdatedAt, ui.StampDateTime) }</time></td>
 									<td data-label="Error" class="s grow">
 										if j.LastError != "" {
 											<span class="reason" title={ tip(j.LastError) }>{ humanReason(j.LastError) }</span>
@@ -299,7 +299,7 @@ templ stateTable(events []store.HealthEvent) {
 		<tbody>
 			for _, e := range events {
 				<tr>
-					<td data-label="When" class="s"><time datetime={ e.At.UTC().Format("2006-01-02T15:04:05Z") }>{ e.At.Format("2006-01-02 15:04:05") }</time></td>
+					<td data-label="When" class="s"><time { ui.StampAttrs(e.At, ui.StampDateTimeSec)... }>{ ui.StampText(e.At, ui.StampDateTimeSec) }</time></td>
 					<td data-label="Change" class="p1">@ui.Badge(uiTone(e.From), label(e.From)) <span aria-label="to">→</span> @ui.Badge(uiTone(e.To), label(e.To))</td>
 					<td data-label="Source" class="s">{ string(e.Source) }</td>
 					<td data-label="Detail" class="s grow">{ healthDetail(e.Source, e.Detail) }</td>

@@ -401,7 +401,7 @@ func TestDeviceStateHistoryPagesThroughEveryChange(t *testing.T) {
 	e := setupWith(t, func(d *Deps) { d.History = fakeHistory{stateChanges(60)} })
 	_, p1 := e.do(t, "GET", "/devices/1/history", "operator", nil)
 	_, p3 := e.do(t, "GET", "/devices/1/history?page=3", "operator", nil)
-	if a, b := strings.Count(p1, "<time datetime"), strings.Count(p3, "<time datetime"); a != 25 || b != 10 {
+	if a, b := strings.Count(p1, "<time data-ts="), strings.Count(p3, "<time data-ts="); a != 25 || b != 10 {
 		t.Fatalf("page 1 has %d rows, page 3 has %d; want 25 and 10", a, b)
 	}
 	if !strings.Contains(p1, "change 0") || strings.Contains(p1, "change 25<") || !strings.Contains(p3, "change 59") {
@@ -541,5 +541,25 @@ func TestBuildRowNamesASelfCompiledBuild(t *testing.T) {
 	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
 	if !strings.Contains(body, "tasmota32 (self-compiled)") {
 		t.Error("Build row does not name the self-compiled build")
+	}
+}
+
+// Why (#126): "State changes" showed the stored UTC time while "Last restart" showed the server's
+// zone, so the two columns of one page disagreed. Without JavaScript the fallback text must be
+// in the server's zone, and the <time> element must carry the instant and the format key that
+// time.js turns into the browser's own zone.
+func TestStateChangesTimeIsServerZoneWithBrowserHook(t *testing.T) {
+	old := time.Local
+	time.Local = time.FixedZone("UTC+2", 2*60*60)
+	t.Cleanup(func() { time.Local = old })
+	at := time.Date(2026, 10, 22, 9, 41, 7, 0, time.UTC)
+	e := setupWith(t, func(d *Deps) {
+		d.History = fakeHistory{[]store.HealthEvent{{At: at, From: model.HealthOnline, To: model.HealthOffline, Source: model.SourceHTTP}}}
+	})
+	_, body := e.do(t, "GET", "/devices/1/history", "operator", nil)
+	for _, want := range []string{`datetime="2026-10-22T09:41:07Z"`, `data-ts="datetime-s"`, `>2026-10-22 11:41:07</time>`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("history page lacks %s", want)
+		}
 	}
 }

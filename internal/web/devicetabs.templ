@@ -164,7 +164,7 @@ templ driftPage(p driftView) {
 			</div>
 		}
 		if p.Compared {
-			<p class="devdrift-lead">Live settings read <span data-visual-mask>{ p.ReadAgo }</span>, compared with the last backup (<time datetime={ p.StoredAt.UTC().Format("2006-01-02T15:04:05Z") }>{ sinceText(p.StoredAt) }</time>{ p.storedBy() }).</p>
+			<p class="devdrift-lead">Live settings read <span data-visual-mask>{ p.ReadAgo }</span>, compared with the last backup (<time { ui.StampAttrs(p.StoredAt, ui.StampShort)... }>{ ui.StampText(p.StoredAt, ui.StampShort) }</time>{ p.storedBy() }).</p>
 			<div class="devdrift-bar">
 				<b>{ p.countText() }</b>
 				<span class="devdrift-sp"></span>

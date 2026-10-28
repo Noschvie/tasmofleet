@@ -123,7 +123,7 @@ func chipText(f model.ChipFamily) string {
 }
 
 // sinceText is a timestamp for running text, "22 Oct 2026, 09:41" (the prototype's format).
-func sinceText(t time.Time) string { return t.Format("2 Jan 2006, 15:04") }
+func sinceText(t time.Time) string { return t.Local().Format("2 Jan 2006, 15:04") }
 
 // ariaBool is "true" or "false" for aria-pressed and aria-checked.
 func ariaBool(b bool) string {

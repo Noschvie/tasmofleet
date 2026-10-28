@@ -156,9 +156,9 @@ templ bulkResultPage(v bulkResultView) {
 				</div>
 				<p class="pghead-sub">
 					if v.Running {
-						Started <time datetime={ v.When.Format("2006-01-02T15:04:05Z07:00") }>{ v.When.Format("15:04:05") }</time>
+						Started <time { ui.StampAttrs(v.When, ui.StampClockSec)... }>{ ui.StampText(v.When, ui.StampClockSec) }</time>
 					} else {
-						Finished <time datetime={ v.When.Format("2006-01-02T15:04:05Z07:00") }>{ v.When.Format("15:04:05") }</time>
+						Finished <time { ui.StampAttrs(v.When, ui.StampClockSec)... }>{ ui.StampText(v.When, ui.StampClockSec) }</time>
 					}
 					if v.Took != "" {
 						if v.Running {

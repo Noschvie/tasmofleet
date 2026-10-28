@@ -1,0 +1,47 @@
+// Timestamps in the browser's locale and time zone. The server renders
+// <time datetime="RFC 3339" data-ts="KEY">fallback text</time>; the fallback is in the server's
+// zone and is what shows without JavaScript. Here the same instant is formatted with
+// Intl.DateTimeFormat. KEY picks the fields (same as the fallback's, see ui/stamp.go). An
+// element that carries a title gets the full date, time and zone name as its title.
+// No inline script: CSP forbids it.
+(function () {
+  "use strict";
+  var D = { year: "numeric", month: "2-digit", day: "2-digit" };
+  var HM = { hour: "2-digit", minute: "2-digit" };
+  var HMS = { hour: "2-digit", minute: "2-digit", second: "2-digit" };
+  var SPECS = {
+    "datetime-s": Object.assign({}, D, HMS),
+    datetime: Object.assign({}, D, HM),
+    "time-s": HMS,
+    time: HM,
+    // a log column: 24-hour like the device's own console, and no AM/PM to widen the fixed column
+    "clock-24": Object.assign({ hourCycle: "h23" }, HMS),
+    short: Object.assign({ year: "numeric", month: "short", day: "numeric" }, HM),
+  };
+  var FULL = Object.assign({}, D, HMS, { timeZoneName: "short" });
+  var cache = {};
+  function fmt(key, spec) {
+    if (!cache[key]) cache[key] = new Intl.DateTimeFormat(undefined, spec);
+    return cache[key];
+  }
+  function paint(root) {
+    (root || document).querySelectorAll("time[data-ts]").forEach(function (el) {
+      var spec = SPECS[el.getAttribute("data-ts")];
+      var d = new Date(el.getAttribute("datetime"));
+      if (!spec || isNaN(d.getTime())) return; // keep the server's text
+      try {
+        el.textContent = fmt(el.getAttribute("data-ts"), spec).format(d);
+        if (el.hasAttribute("title")) el.title = fmt("full", FULL).format(d);
+      } catch (err) {
+        // an unsupported locale or zone: the server's text stays
+      }
+    });
+  }
+  window.tasmofleetPaintTimes = paint;
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", function () { paint(); });
+  } else {
+    paint();
+  }
+  document.body.addEventListener("htmx:afterSettle", function () { paint(); });
+})();

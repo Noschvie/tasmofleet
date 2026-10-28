@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
 
 // The live cells of the device list: the table rows, the phone cards' parts and the event
@@ -64,7 +65,7 @@ templ restartCell(v vitals) {
 	if v.Restart.IsZero() {
 		<span class="muted">-</span>
 	} else {
-		<span title="Estimated from the last report and the uptime">{ v.Restart.Format("2006-01-02 15:04") }</span>
+		<span title="Estimated from the last report and the uptime"><time { ui.StampAttrs(v.Restart, ui.StampDateTime)... }>{ ui.StampText(v.Restart, ui.StampDateTime) }</time></span>
 	}
 }
 

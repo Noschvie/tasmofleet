@@ -747,7 +747,7 @@ func (h *handler) jobViews(r *http.Request, f store.JobFilter) ([]jobView, bool,
 		}
 		if evs, err := h.d.Jobs.JobEvents(r.Context(), j.ID); err == nil {
 			for i, e := range evs {
-				v.Log = append(v.Log, logLine{At: e.At.Format("15:04:05"), Text: eventText(e, j, h.pr, eventStageMinimal(evs, i, j)), Err: errEvents[e.Event] || e.To == model.JobFailed})
+				v.Log = append(v.Log, logLine{At: e.At.Local().Format("15:04:05"), Text: eventText(e, j, h.pr, eventStageMinimal(evs, i, j)), Err: errEvents[e.Event] || e.To == model.JobFailed})
 			}
 		}
 		any = any || v.Active
@@ -916,7 +916,7 @@ func (h *handler) txnPageData(w http.ResponseWriter, r *http.Request) (txnPage, 
 			CanCancel: sel.Active && !sel.Job.CancelRequested, CanRetry: sel.CanRetry && !b.Active}
 		s.Log = append(s.Log, sel.Log...)
 		if sel.Job.LastError != "" {
-			s.Log = append(s.Log, logLine{At: sel.Job.UpdatedAt.Format("15:04:05"), Text: "Error: " + sel.Job.LastError, Err: true})
+			s.Log = append(s.Log, logLine{At: sel.Job.UpdatedAt.Local().Format("15:04:05"), Text: "Error: " + sel.Job.LastError, Err: true})
 		}
 		p.Sel = s
 	}

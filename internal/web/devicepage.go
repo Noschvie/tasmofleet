@@ -395,9 +395,9 @@ func (h *handler) networkRows(d model.Device, hl model.Health, f snapFacts) []ui
 	case !hl.SeenHTTP.IsZero():
 		httpState = "Reachable"
 	}
-	restart := ""
-	if t := restartAt(hl); !t.IsZero() {
-		restart = sinceText(t)
+	restart, restartTime := "", restartAt(hl)
+	if !restartTime.IsZero() {
+		restart = sinceText(restartTime)
 	}
 	// "Address" is where TasmoFleet reaches the device. The IP the device reports is a second row
 	// only when it says something else (the address is a DNS name, or the device moved).
@@ -410,7 +410,7 @@ func (h *handler) networkRows(d model.Device, hl model.Health, f snapFacts) []ui
 		ui.KVRow{Key: "MQTT broker", Value: orUnknown(broker), Mono: true, Soft: true},
 		ui.KVRow{Key: "MQTT", Value: mqtt, Mono: true},
 		ui.KVRow{Key: "HTTP", Value: httpState, Mono: true},
-		ui.KVRow{Key: "Last restart", Value: orUnknown(restart), Mono: true, Mask: true},
+		ui.KVRow{Key: "Last restart", Value: orUnknown(restart), Mono: true, Mask: true, At: restartTime},
 	)
 }
 

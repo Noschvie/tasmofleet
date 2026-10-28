@@ -111,7 +111,9 @@ templ KV(rows []KVRow) {
 			<div class="ukv-row">
 				<dt>{ r.Key }</dt>
 				<dd class={ templ.KV("mono", r.Mono) } data-visual-mask?={ r.Mask }>
-					if r.Soft {
+					if !r.At.IsZero() {
+						<time { StampAttrs(r.At, StampShort)... }>{ r.Value }</time>
+					} else if r.Soft {
 						@Soft(r.Value)
 					} else {
 						{ r.Value }
@@ -613,7 +615,7 @@ templ Console(c ConsoleData) {
 			for _, l := range c.Lines {
 				<div class={ "console-line", templ.KV("is-cmd", l.Kind == "cmd"), templ.KV("is-err", l.Kind == "err" || l.Kind == "alert"), templ.KV("is-dim", l.Kind == "dim"), templ.KV("is-reply", l.Kind == "reply") } if l.Kind == "reply" { data-visual-mask="console-reply" } if l.Kind == "alert" { role="alert" }>
 					if l.Datetime != "" {
-						<time class="console-time" datetime={ l.Datetime }>{ l.Time }</time>
+						<time class="console-time" datetime={ l.Datetime } data-ts="clock-24">{ l.Time }</time>
 					} else {
 						<span class="console-time">{ l.Time }</span>
 					}

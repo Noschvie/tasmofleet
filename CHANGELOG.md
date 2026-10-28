@@ -18,6 +18,15 @@ always upgrade automatically.
 - Log: successful `/healthz` requests (the container health check) are logged at debug instead of info, log
   timestamps have millisecond precision (`2006-01-02T15:04:05.000Z07:00`), and the access log's `duration` is
   now `duration_ms`, a float in milliseconds (#132, thanks @Noschvie).
+- Timestamps in the web UI (audit log, state changes, device history, backups, restore jobs, bulk runs,
+  console, "Last restart") are shown in the browser's own locale and time zone. The server renders
+  `<time datetime>` with a fallback text in its own zone; `time.js` replaces it. Relative texts ("5 min
+  ago", "Today 09:41") are unchanged (#128, thanks @Noschvie).
+
+### Fixed
+
+- "State changes" showed the stored UTC time while "Last restart" showed the server's zone; both now agree
+  (#126, thanks @Noschvie). The wish for an automatic refresh of the list is not part of this change.
 
 ## 0.15.2 (2026-10-27)
 

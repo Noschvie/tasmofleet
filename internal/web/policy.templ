@@ -545,7 +545,7 @@ templ versionHistory(p policyView) {
 									@ui.Badge(ui.ToneOK, "Current")
 								}
 							</span>
-							<span class="pol-hv-meta"><time datetime={ v.At.Format("2006-01-02T15:04:05Z07:00") }>{ v.At.Local().Format("2 Jan 2006, 15:04") }</time> · { v.By }</span>
+							<span class="pol-hv-meta"><time { ui.StampAttrs(v.At, ui.StampShort)... }>{ ui.StampText(v.At, ui.StampShort) }</time> · { v.By }</span>
 						</span>
 					</a>
 				}

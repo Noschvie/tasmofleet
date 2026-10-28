@@ -78,7 +78,7 @@ func pruneText(ret backupRetentionView) string {
 }
 
 // shortDate is the prototype's date: "22 Oct 2026, 09:41".
-func shortDate(t time.Time) string { return t.Format("2 Jan 2006, 15:04") }
+func shortDate(t time.Time) string { return t.Local().Format("2 Jan 2006, 15:04") }
 
 // backupRun is one backup run as the tab lists it: the dump (or the snapshot of a run without
 // a dump) and the missing parts of the run's snapshot, if it is incomplete.

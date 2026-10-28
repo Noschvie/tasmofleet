@@ -170,7 +170,7 @@ templ discoveredPage(p discView) {
 					<p>
 						Discovery is listening on MQTT. New Tasmota devices show up here a few seconds after they join the network.
 						if !p.LastAnnounce.IsZero() {
-							Last announcement <time datetime={ p.LastAnnounce.UTC().Format("2006-01-02T15:04:05Z") }>{ p.LastAnnounce.Format("15:04") }</time>.
+							Last announcement <time { ui.StampAttrs(p.LastAnnounce, ui.StampClock)... }>{ ui.StampText(p.LastAnnounce, ui.StampClock) }</time>.
 						}
 					</p>
 				}

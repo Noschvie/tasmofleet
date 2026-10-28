@@ -7,6 +7,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/a-h/templ"
 )
@@ -154,8 +155,9 @@ type StatTileData struct {
 type KVRow struct {
 	Key, Value string
 	Mono       bool
-	Mask       bool // a value the pixel comparison cannot reproduce (address, MAC, readings): data-visual-mask
-	Soft       bool // a host:port, URL or file name: break opportunities at its natural points (Soft)
+	Mask       bool      // a value the pixel comparison cannot reproduce (address, MAC, readings): data-visual-mask
+	Soft       bool      // a host:port, URL or file name: break opportunities at its natural points (Soft)
+	At         time.Time // when set, Value is the fallback text of that instant (StampShort) and time.js shows it in the browser's zone
 }
 
 // Tab is one tab of a tab row. Tabs are links (each tab its own route). A disabled tab says why.
