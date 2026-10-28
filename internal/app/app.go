@@ -71,9 +71,9 @@ func (a *runtime) tlsConfig(ctx context.Context) (*tls.Config, error) {
 // Version is set by the binary (main.version).
 var Version = "dev"
 
-// displayVersion is Version as the UI (header, About) and the startup log show it: a build
+// DisplayVersion is Version as the UI (header, About) and the startup log show it: a build
 // without a release tag gets the release it is based on (changelog.DisplayVersion).
-func displayVersion() string { return changelog.DisplayVersion(Version, changelog.Embedded()) }
+func DisplayVersion() string { return changelog.DisplayVersion(Version, changelog.Embedded()) }
 
 // shutdownGrace bounds the wait for in-flight requests.
 const shutdownGrace = 10 * time.Second
@@ -360,7 +360,7 @@ func (a *runtime) logStarting() {
 	if dec == "" {
 		dec = "none"
 	}
-	a.log.Info("tasmofleet starting", "version", displayVersion(), "go", goruntime.Version(), "decoder", dec)
+	a.log.Info("tasmofleet starting", "version", DisplayVersion(), "go", goruntime.Version(), "decoder", dec)
 }
 
 func (a *runtime) setupBackups(ctx context.Context) error {
@@ -604,7 +604,7 @@ func (a *runtime) webDeps(guard web.Guard, rows []web.KV) web.Deps {
 	deps := web.Deps{
 		Guard: guard, Inventory: a.svc.Inventory, Health: a.tracker, Backups: a.backups,
 		Prober: a.svc.Prober, History: a.svc.Store, Audit: a.svc.Store, Recorder: a.svc.Audit,
-		Jobs: a.svc.Store, Batches: a.svc.Store, Artifacts: a.svc.Store, Prefs: a.svc.Store, Principals: a.svc.Store, Database: a.svc.Store, Hub: a.svc.Hub, Version: displayVersion(), DecoderVersion: a.decoder, MQTT: mqttState,
+		Jobs: a.svc.Store, Batches: a.svc.Store, Artifacts: a.svc.Store, Prefs: a.svc.Store, Principals: a.svc.Store, Database: a.svc.Store, Hub: a.svc.Hub, Version: DisplayVersion(), DecoderVersion: a.decoder, MQTT: mqttState,
 		Config: rows, Pages: a.pages, FirmwareSource: a.fwSource, FirmwareFeed: a.fwFeed,
 	}
 	deps.MQTTBroker = a.svc.Broker

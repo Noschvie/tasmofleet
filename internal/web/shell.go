@@ -112,6 +112,7 @@ func (h *handler) navPage(w http.ResponseWriter, r *http.Request) {
 	v := h.view(r, "Menu", "", nil)
 	prefs := h.userPrefs(r)
 	v.Theme = themeOf(prefs)
+	v.Version = h.d.Version // page sets it too, but the drawer content is built from v before that
 	if v.IsAdmin && h.d.Discovery != nil {
 		v.NewDevices = h.newDeviceCount(r)
 	}

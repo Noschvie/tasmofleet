@@ -50,7 +50,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout io.Writer) 
 	app.Version = version
 	switch cmd {
 	case "version":
-		_, _ = fmt.Fprintln(stdout, version)
+		_, _ = fmt.Fprintln(stdout, app.DisplayVersion())
 		return nil
 	case "serve":
 		cfg, err := config.Load(os.Environ())

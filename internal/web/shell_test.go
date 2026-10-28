@@ -156,3 +156,14 @@ func TestUITextSaysTasmoFleet(t *testing.T) {
 		t.Fatal("the check itself is wrong")
 	}
 }
+
+// Why (#124): without JavaScript the phone's menu is /nav; its content is built before the page
+// shell is, so it needs the version of its own.
+func TestNavPageShowsTheVersion(t *testing.T) {
+	e := setupWith(t, func(d *Deps) { d.Version = "9.9.9+dev" })
+	_, body := e.do(t, "GET", "/nav", "operator", nil)
+	main := body[strings.Index(body, `<main id="main">`):]
+	if !strings.Contains(main, `class="ver"`) || !strings.Contains(main, ">9.9.9+dev</a>") {
+		t.Error("the no-JS menu page has no version")
+	}
+}
