@@ -247,7 +247,7 @@ func releaseOptions(rels []firmware.Release, uploads []firmware.CustomImage, cho
 }
 
 // dateText is a date as the release cards show it: "6 Oct 2026".
-func dateText(t time.Time) string { return t.Format("2 Jan 2006") }
+func dateText(t time.Time) string { return t.Local().Format("2 Jan 2006") }
 
 // otaParallel is how many devices update at a time: the system setting OTA_PARALLEL, else the
 // engine's default of 2.

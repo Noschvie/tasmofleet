@@ -104,7 +104,7 @@ templ sysStorageBlock(p sysPage, st sysStorage) {
 						<span role="cell" class="sys-store-name" title={ row.Name }>{ row.Name }</span>
 						<span role="cell" class="mono">{ strconv.Itoa(row.Runs) }</span>
 						<span role="cell" class="mono">{ row.Size }</span>
-						<span role="cell" class="sys-store-last"><time datetime={ row.Last.Format("2006-01-02T15:04:05Z07:00") } title={ shortDate(row.Last) }>{ row.When }</time></span>
+						<span role="cell" class="sys-store-last"><time title={ shortDate(row.Last) } { ui.StampAttrs(row.Last, ui.StampStore)... }>{ row.When }</time></span>
 					</a>
 				}
 				<div class="sys-store-foot">{ st.Foot() }</div>
@@ -167,7 +167,7 @@ templ sysOrphans(p sysPage, st sysStorage) {
 							href={ templ.SafeURL(p.Base + "/backups/" + bkStr(o.ID) + "/delete") }
 							data-dialog="dlg-bkdel"
 							data-dlg-title="Delete this backup?"
-							data-dlg-text={ o.DeleteText }
+							data-dlg-text={ o.DeleteText } data-dlg-at={ ui.StampISO(o.Taken) } data-dlg-ts={ ui.StampDateTimeSec.Key } data-dlg-shown={ ui.StampText(o.Taken, ui.StampDateTimeSec) }
 							data-dlg-action={ p.Base + "/backups/" + bkStr(o.ID) + "/delete" }
 							data-dlg-verb="Delete backup"
 						>Delete</a>

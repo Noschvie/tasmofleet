@@ -218,10 +218,10 @@ func restoreJobOf(base string, p jobPage, target, pre model.Backup) restoreJobVi
 		// Only a failure after the upload may have changed the device; before it, the
 		// failure text says nothing was changed and there is nothing to roll back.
 		v.Lead = what + " failed."
-		v.Banner = "The state before was backed up at " + pre.TakenAt.Format("15:04") + " before anything changed, so you can roll back."
+		v.Banner = "The state before was backed up at " + ui.StampText(pre.TakenAt, ui.StampClock) + " before anything changed, so you can roll back."
 		if !replace {
 			v.RollbackHref = fmt.Sprintf("%s/backups/%d/restore", base, pre.ID)
-			v.RollbackText = "Restore the " + pre.TakenAt.Format("15:04") + " backup"
+			v.RollbackText = "Restore the " + ui.StampText(pre.TakenAt, ui.StampClock) + " backup"
 		}
 	case v.Failed:
 		v.Lead = what + " failed."

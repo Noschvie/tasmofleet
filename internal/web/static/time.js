@@ -24,19 +24,45 @@
     if (!cache[key]) cache[key] = new Intl.DateTimeFormat(undefined, spec);
     return cache[key];
   }
+  // store: a storage table's "last backup" cell: this year without the year, older with only the day
+  function storeText(d) {
+    var thisYear = d.getFullYear() === new Date().getFullYear();
+    return fmt(thisYear ? "store-now" : "store-old", thisYear
+      ? Object.assign({ day: "numeric", month: "short" }, HM)
+      : { day: "numeric", month: "short", year: "numeric" }).format(d);
+  }
+  // textOf is the text for a format key and an instant ("" when the key is unknown). "title"
+  // leaves the text alone, so it is "" here and handled by the caller.
+  function textOf(key, d) {
+    if (key === "store") return storeText(d);
+    return SPECS[key] ? fmt(key, SPECS[key]).format(d) : "";
+  }
   function paint(root) {
     (root || document).querySelectorAll("time[data-ts]").forEach(function (el) {
-      var spec = SPECS[el.getAttribute("data-ts")];
+      var key = el.getAttribute("data-ts");
       var d = new Date(el.getAttribute("datetime"));
-      if (!spec || isNaN(d.getTime())) return; // keep the server's text
+      if (isNaN(d.getTime())) return; // keep the server's text
       try {
-        el.textContent = fmt(el.getAttribute("data-ts"), spec).format(d);
+        if (key !== "title") {
+          var text = textOf(key, d);
+          if (!text) return;
+          el.textContent = text;
+        }
         if (el.hasAttribute("title")) el.title = fmt("full", FULL).format(d);
       } catch (err) {
         // an unsupported locale or zone: the server's text stays
       }
     });
   }
+  // formatFor is the same text for code that builds a sentence (dialog.js); "" when unknown.
+  window.tasmofleetFormatTime = function (iso, key) {
+    var d = new Date(iso);
+    try {
+      return isNaN(d.getTime()) ? "" : textOf(key, d);
+    } catch (err) {
+      return "";
+    }
+  };
   window.tasmofleetPaintTimes = paint;
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", function () { paint(); });

@@ -563,3 +563,19 @@ func TestStateChangesTimeIsServerZoneWithBrowserHook(t *testing.T) {
 		}
 	}
 }
+
+// Why: one page must not name one backup at two different clock times. The delete text, the
+// confirmation page's "Taken" fact and the storage table's cell all start from the stored UTC
+// time and must all be in the server's zone (and say so to time.js).
+func TestBackupTimesAreInOneZone(t *testing.T) {
+	old := time.Local
+	time.Local = time.FixedZone("UTC+2", 2*60*60)
+	t.Cleanup(func() { time.Local = old })
+	at := time.Date(2026, 10, 22, 22, 41, 7, 0, time.UTC) // 00:41 next day in UTC+2
+	if got := (backupData{}).DeleteText(model.Backup{TakenAt: at}); !strings.Contains(got, "2026-10-23 00:41:07") {
+		t.Errorf("delete text not in the server zone: %s", got)
+	}
+	if got := storeDate(at.AddDate(0, 0, 1), at); got != "23 Oct, 00:41" {
+		t.Errorf("storage cell not in the server zone: %s", got)
+	}
+}

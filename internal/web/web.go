@@ -721,7 +721,7 @@ func channelsOf(now time.Time, window time.Duration, h model.Health) []channelIn
 		if t.IsZero() {
 			return name + ": " + none
 		}
-		return name + ": last contact " + t.Format("2006-01-02 15:04:05 MST") + " (" + ago(now, t) + ")"
+		return name + ": last contact " + t.Local().Format("2006-01-02 15:04:05 MST") + " (" + ago(now, t) + ")"
 	}
 	mk := func(name string, ok, bad bool, tip string) channelInfo {
 		switch {

@@ -131,9 +131,9 @@ templ fwCheckLine(v view, p firmwarePage) {
 		case "checking":
 			<span class="fw-check t-accent" role="status" data-fw-check-state><span class="fw-check-dot pulse" aria-hidden="true"></span>Checking { p.Feed }…</span>
 		case "failed":
-			<span class="fw-check t-danger" role="status" data-fw-check-state><span class="fw-check-dot" aria-hidden="true"></span>Last check failed&nbsp;<time datetime={ p.Index.LastAttempt.Format(time.RFC3339) } title={ p.Index.LastAttempt.Format("2006-01-02 15:04:05 MST") }>{ checkedAgo(p.Now, p.Index.LastAttempt) }</time></span>
+			<span class="fw-check t-danger" role="status" data-fw-check-state><span class="fw-check-dot" aria-hidden="true"></span>Last check failed&nbsp;<time title={ stamp(p.Index.LastAttempt) } { ui.StampAttrs(p.Index.LastAttempt, ui.StampTitle)... }>{ checkedAgo(p.Now, p.Index.LastAttempt) }</time></span>
 		case "ok":
-			<span class="fw-check t-ok" role="status" data-fw-check-state><span class="fw-check-dot" aria-hidden="true"></span>Last checked&nbsp;<time datetime={ p.Index.LastSuccess.Format(time.RFC3339) } title={ p.Index.LastSuccess.Format("2006-01-02 15:04:05 MST") }>{ checkedAgo(p.Now, p.Index.LastSuccess) }</time></span>
+			<span class="fw-check t-ok" role="status" data-fw-check-state><span class="fw-check-dot" aria-hidden="true"></span>Last checked&nbsp;<time title={ stamp(p.Index.LastSuccess) } { ui.StampAttrs(p.Index.LastSuccess, ui.StampTitle)... }>{ checkedAgo(p.Now, p.Index.LastSuccess) }</time></span>
 	}
 	if v.IsAdmin && p.CanRefresh {
 		<form method="post" action={ templ.SafeURL(v.Base + "/firmware/refresh") } class="fw-check-form" data-fw-check data-checking={ "Checking " + p.Feed + "…" }>
@@ -576,7 +576,7 @@ templ fwCacheRow(v view, p firmwarePage, a artifactView) {
 		</span>
 		<span class="fw-c-h" title={ a.SHA256 } data-visual-mask>sha256 { shortHash(a.SHA256) }</span>
 		<span class="fw-c-a">
-			<time datetime={ a.FetchedAt.Format(time.RFC3339) } title={ a.FetchedAt.Format("2006-01-02 15:04:05 MST") }>{ shortDay(p.Now, a.FetchedAt) }</time>
+			<time title={ stamp(a.FetchedAt) } { ui.StampAttrs(a.FetchedAt, ui.StampTitle)... }>{ shortDay(p.Now, a.FetchedAt) }</time>
 			if a.InUse {
 				if len(a.Batches) > 0 {
 					for _, b := range a.Batches {

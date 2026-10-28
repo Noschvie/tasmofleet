@@ -644,7 +644,7 @@ func lastLiveRead(rep PolicyReport) time.Time {
 // "from backup of 2026-10-01".
 func sourceNote(s ValueSource, now time.Time) string {
 	if s.Kind == "backup" {
-		return "from backup of " + s.At.Format("2006-01-02")
+		return "from backup of " + s.At.Local().Format("2006-01-02")
 	}
 	return "checked " + agoWords(now, s.At) + " (live)"
 }

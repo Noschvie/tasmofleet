@@ -50,7 +50,7 @@ templ auditView(base string, p auditPage) {
 				<tbody>
 					for _, ev := range p.Events {
 						<tr>
-							<td data-label="When" class="nowrap s" title={ stamp(ev.At) }><time { ui.StampAttrs(ev.At, ui.StampDateTimeSec)... }>{ ui.StampText(ev.At, ui.StampDateTimeSec) }</time></td>
+							<td data-label="When" class="nowrap s"><time title={ stamp(ev.At) } { ui.StampAttrs(ev.At, ui.StampDateTimeSec)... }>{ ui.StampText(ev.At, ui.StampDateTimeSec) }</time></td>
 							<td data-label="User" class="nowrap s">@auditWho(ev.Who)</td>
 							<td data-label="Action" class="nowrap p1" title={ tip(ev.Action) }>{ ev.Label }</td>
 							<td data-label="Target" class="nowrap p1x" title={ tip(ev.Target) }>

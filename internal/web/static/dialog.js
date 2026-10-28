@@ -18,7 +18,16 @@
       el.textContent = opener.getAttribute("data-dlg-title");
     });
     set("text", function (el) {
-      el.textContent = opener.getAttribute("data-dlg-text") || "";
+      var text = opener.getAttribute("data-dlg-text") || "";
+      // data-dlg-at (RFC 3339) and data-dlg-ts (format key) name a time written into the text
+      // in the server's zone; time.js says the same instant in the browser's zone
+      var at = opener.getAttribute("data-dlg-at");
+      var shown = opener.getAttribute("data-dlg-shown");
+      if (at && shown && window.tasmofleetFormatTime) {
+        var local = window.tasmofleetFormatTime(at, opener.getAttribute("data-dlg-ts"));
+        if (local) text = text.split(shown).join(local);
+      }
+      el.textContent = text;
     });
     set("form", function (el) {
       el.setAttribute("action", opener.getAttribute("data-dlg-action") || "");

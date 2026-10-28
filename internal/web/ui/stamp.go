@@ -17,6 +17,12 @@ var (
 	StampClockSec    = StampFmt{"time-s", "15:04:05"}
 	StampClock       = StampFmt{"time", "15:04"}
 	StampShort       = StampFmt{"short", "2 Jan 2006, 15:04"}
+	// StampStore is the storage table's cell: time.js picks "23 Oct, 05:45" or "23 Oct 2025" itself
+	// (the server's text, storeDate, is the fallback and has no fixed layout).
+	StampStore = StampFmt{"store", ""}
+	// StampTitle changes only the title of the element (full date, time and zone), not its text:
+	// for a <time> whose text is relative ("5 min ago") or already worded.
+	StampTitle = StampFmt{"title", "2006-01-02 15:04:05 MST"}
 )
 
 // StampText is the fallback text of a timestamp: what the page shows without JavaScript. It is
@@ -29,3 +35,6 @@ func StampText(t time.Time, f StampFmt) string { return t.Local().Format(f.Layou
 func StampAttrs(t time.Time, f StampFmt) templ.Attributes {
 	return templ.Attributes{"datetime": t.UTC().Format(time.RFC3339), "data-ts": f.Key}
 }
+
+// StampISO is the instant as RFC 3339 in UTC, for data attributes that time.js reads.
+func StampISO(t time.Time) string { return t.UTC().Format(time.RFC3339) }

@@ -197,6 +197,7 @@ func (st sysStorage) Foot() string {
 // storeDate is a last backup short enough for the storage table's column: "23 Oct, 05:45"
 // this year, "23 Oct 2025" before (the full time is in the cell's title).
 func storeDate(now, t time.Time) string {
+	t = t.Local()
 	if t.Year() == now.Year() {
 		return t.Format("2 Jan, 15:04")
 	}

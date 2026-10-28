@@ -21,6 +21,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/restore"
 	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
 
 // healthStates is the display order of the health states.
@@ -282,7 +283,7 @@ func (b backupData) IsNewest(t time.Time) bool { return t.Equal(backup.NewestRun
 // DeleteText is the text of the confirmation dialog of the delete button. The
 // newest backup of the device gets an extra callout in the dialog (IsNewest).
 func (b backupData) DeleteText(x model.Backup) string {
-	return "Delete the backup of " + x.TakenAt.Format("2006-01-02 15:04:05") + "? Its dump, snapshot and decoded copy are removed. This cannot be undone."
+	return "Delete the backup of " + ui.StampText(x.TakenAt, ui.StampDateTimeSec) + "? Its dump, snapshot and decoded copy are removed. This cannot be undone."
 }
 
 // deviceTabs is the device header and its tabs (devicehead.templ): the pages of one device.
