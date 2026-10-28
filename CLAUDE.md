@@ -211,7 +211,8 @@ in `.github/workflows/ci.yml`.
   EOF
   ```
 
-- Trailer `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` on AI-authored commits.
+- Trailer `Co-Authored-By: Claude <Model> <noreply@anthropic.com>` on AI-authored commits, naming the
+  model that actually wrote the change (e.g. `Claude Sonnet 5.5` for a Sonnet subagent).
   No session links or other URLs to chat sessions.
 - Commit only your own files. `make check` must pass before each commit.
 - Repository: `https://github.com/nofuturekid/tasmofleet` (HTTPS remotes).
