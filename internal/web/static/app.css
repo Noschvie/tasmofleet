@@ -4738,6 +4738,9 @@ header.top {
 }
 .dr-brand .ver {
   margin-left: var(--sp-4);
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px; /* a touch target in the phone drawer */
 }
 .brand:hover {
   color: var(--color-text);

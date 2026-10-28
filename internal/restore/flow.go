@@ -76,6 +76,7 @@ func (m *Manager) run(ctx context.Context, j Job, dev model.Device, dmp []byte, 
 		// unknown command, unreachable) with no download is a real failure.
 		unknown := m.consumed(tok) || errors.Is(err, tasmota.ErrTimeout) || errors.Is(err, tasmota.ErrBadResponse)
 		if !unknown {
+			m.revoke(tok) // before the job reads failed: whoever sees "failed" must find the token dead
 			m.fail(ctx, &j, failWebGetConfig+redactToken(err.Error(), tok))
 			return
 		}
@@ -84,6 +85,7 @@ func (m *Manager) run(ctx context.Context, j Job, dev model.Device, dmp []byte, 
 
 	m.step(ctx, &j, store.RestoreWaiting, "waiting for the download and the reboot")
 	if err := m.waitReboot(ctx, target, tok, before); err != nil {
+		m.revoke(tok) // as above: revoke first, then report the failure
 		m.fail(ctx, &j, err.Error())
 		return
 	}
