@@ -452,7 +452,7 @@ func stepUpgradeIssued(j model.Job, ev Event, now time.Time, cfg Config) (model.
 	case EvCommandFailed:
 		if ev.NotFlashed && j.ViaSafeboot {
 			// Nothing was flashed, but the device sits in safeboot: bring it back.
-			return toSafebootRecover(j, now, cfg, withErr("upload refused, nothing was flashed", ev.Err))
+			return toSafebootRecover(j, now, cfg, withErr("upload refused, nothing was flashed", ev.Err), ev.Addr)
 		}
 		if ev.NotFlashed {
 			// The device refused the image and keeps running: no reboot
@@ -486,13 +486,13 @@ func stepUpgradeIssued(j model.Job, ev Event, now time.Time, cfg Config) (model.
 	case EvTimeout:
 		if j.ViaSafeboot {
 			// Answering the whole window without ever restarting: still in safeboot.
-			return toSafebootRecover(j, now, cfg, "the device did not restart after the upload")
+			return toSafebootRecover(j, now, cfg, "the device did not restart after the upload", ev.Addr)
 		}
 		return retry(j, now, cfg, ErrTextNoUpgradeStart)
 	case EvGuardRefused:
 		if j.ViaSafeboot {
 			// The upload was not sent and the device waits in safeboot.
-			return toSafebootRecover(j, now, cfg, withErr("guard refused", ev.Err))
+			return toSafebootRecover(j, now, cfg, withErr("guard refused", ev.Err), ev.Addr)
 		}
 		// Upgrade was not sent.
 		return fail(j, now, withErr("guard refused", ev.Err))
@@ -565,7 +565,7 @@ func stepAwaitReboot(j model.Job, ev Event, now time.Time, cfg Config) (model.Jo
 	case EvTimeout:
 		if !j.SeenOffline {
 			if j.ViaSafeboot {
-				return toSafebootRecover(j, now, cfg, "the device did not restart after the upload")
+				return toSafebootRecover(j, now, cfg, "the device did not restart after the upload", ev.Addr)
 			}
 			// Online on the old image for the whole window: the
 			// download is over and failed; the device is idle.
@@ -624,7 +624,7 @@ func stepVerify(j model.Job, ev Event, now time.Time, cfg Config) (model.Job, []
 	}
 	if isIntermediate(id.Variant) {
 		if j.ViaSafeboot {
-			return toSafebootRecover(j, now, cfg, "the device is back in safeboot after the upload")
+			return toSafebootRecover(j, now, cfg, "the device is back in safeboot after the upload", ev.Addr)
 		}
 		if runsIntermediate(j) || j.AutoContinueSeen {
 			return notTaken(j, ev, now, cfg)

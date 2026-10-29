@@ -187,6 +187,11 @@ type Job struct {
 	// (single-OTA layout): the device is restarted into safeboot and the image is uploaded
 	// there (#30). Only with DeliveryPush; fixed at creation.
 	ViaSafeboot bool
+	// RecoveryStep is how far the one recovery of a push into safeboot got: 0 none, 1 entered
+	// (probing, nothing sent), 2 the switch back (/u4?u4=ota) was sent. Persisted before the
+	// request goes out, so a second recovery or a second switch back is impossible, also after a
+	// restart of tasmofleet.
+	RecoveryStep int
 
 	// BatchParallel caps how many jobs of this job's transaction run at the
 	// same time (bulk "One device at a time", "Devices at a time"); 0 leaves

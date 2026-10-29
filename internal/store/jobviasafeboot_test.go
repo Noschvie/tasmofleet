@@ -27,11 +27,11 @@ func TestJobViaSafebootRoundTrip(t *testing.T) {
 	// Every transition rewrites the row; the mode is fixed at creation and the new states must store.
 	for _, st := range []model.JobState{model.JobSafebootSwitch, model.JobUpgradeIssued, model.JobSafebootRecover} {
 		prev := got.State
-		got.State = st
+		got.State, got.RecoveryStep = st, 2
 		if err := s.SaveTransition(ctx, got, model.JobEvent{JobID: got.ID, From: prev, To: st, Event: "x"}); err != nil {
 			t.Fatal(err)
 		}
-		if got, err = s.GetJob(ctx, ids[0]); err != nil || !got.ViaSafeboot || got.State != st {
+		if got, err = s.GetJob(ctx, ids[0]); err != nil || !got.ViaSafeboot || got.State != st || got.RecoveryStep != 2 {
 			t.Fatalf("after %s: ViaSafeboot=%v state=%s err=%v", st, got.ViaSafeboot, got.State, err)
 		}
 	}

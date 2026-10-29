@@ -174,3 +174,24 @@ func (f firstByteFW) Open(_ context.Context, a model.Artifact) (io.ReadCloser, e
 	b[0] = f.first
 	return io.NopCloser(bytes.NewReader(b)), nil
 }
+
+// Why: an image that cannot be opened at upload time was never sent. That is certain, so a push
+// into safeboot goes straight to its recovery instead of probing a device that never got a byte
+// for the whole upgrade window.
+func TestPushOpenFailureIsCertainNothingWasSent(t *testing.T) {
+	h, pa, pf := pushHarness(t, esp32Device())
+	pf.openErr = errors.New("cache file gone")
+	h.e.fw = pf
+	ev := h.e.push(context.Background(), model.Device{ID: 1}, model.Artifact{Filename: "tasmota32.bin", Size: 10})
+	if ev.Kind != EvCommandFailed || !ev.NotFlashed || !strings.Contains(ev.Err, "cache file gone") {
+		t.Fatalf("event %+v", ev)
+	}
+	if len(pa.uploads) != 0 {
+		t.Fatalf("uploaded: %v", pa.uploads)
+	}
+	// and the machine recovers a safeboot job on it, at once
+	j := sbJob(model.JobUpgradeIssued)
+	if out, _ := Step(j, ev, t0, testCfg()); out.State != model.JobSafebootRecover {
+		t.Fatalf("state %s", out.State)
+	}
+}

@@ -89,8 +89,8 @@ func TestSafebootSwitchRows(t *testing.T) {
 			}},
 		// Cancel is honoured by the recovery, not by an upload.
 		{name: "safeboot_switch/probe_online/safeboot and cancelled", in: cancelled, ev: Event{Kind: EvProbeOnline, Identity: safebootIdent()}, state: model.JobSafebootRecover,
-			actions: []ActionKind{ActSafebootBack}},
-		{name: "safeboot_switch/timeout", in: sw, ev: Event{Kind: EvTimeout}, state: model.JobSafebootRecover, actions: []ActionKind{ActSafebootBack}, check: func(t *testing.T, j model.Job, _ []Action) {
+			actions: probe},
+		{name: "safeboot_switch/timeout", in: sw, ev: Event{Kind: EvTimeout}, state: model.JobSafebootRecover, actions: probe, check: func(t *testing.T, j model.Job, _ []Action) {
 			wantDeadline(t, j, 2*time.Minute)
 			if j.Attempt != 1 {
 				t.Errorf("Attempt %d: the device was restarted, the failure note must apply", j.Attempt)
@@ -119,7 +119,7 @@ func TestSafebootUploadRows(t *testing.T) {
 	verify := up
 	verify.State = model.JobVerify
 	probe := []ActionKind{ActProbe}
-	recover := []ActionKind{ActSafebootBack}
+	recover := probe
 	runRows(t, []row{
 		// Safeboot answers until the upload starts to be written: that is not a reboot.
 		{name: "upgrade_issued/probe_online/safeboot", in: up, ev: Event{Kind: EvProbeOnline, Identity: safebootIdent(), Uptime: 2}, state: model.JobUpgradeIssued, actions: probe},
@@ -161,18 +161,51 @@ func TestSafebootRecoverRows(t *testing.T) {
 	rec := sbJob(model.JobSafebootRecover)
 	rec.Attempt, rec.LastError = 1, "upload refused, nothing was flashed: Not enough space"
 	rec.PowerOn = 1
+	rec.RecoveryStep = 2 // the switch back was sent
+	probing := rec
+	probing.RecoveryStep = 1 // entered, nothing sent yet
 	rec.PowerReadAt = t0
 	cancelled := rec
 	cancelled.CancelRequested = true
 	probe := []ActionKind{ActProbe}
 	end := []ActionKind{ActNotify}
 	runRows(t, []row{
+		// Low-2: the recovery probes first. A device that is offline (slow safeboot Wi-Fi) would swallow
+		// the request, an app needs none: /u4?u4=ota goes out only on an answer from safeboot, once.
+		{name: "safeboot_recover/probe_online/first safeboot answer sends the switch back", in: probing, ev: Event{Kind: EvProbeOnline, Identity: safebootIdent()},
+			state: model.JobSafebootRecover, actions: []ActionKind{ActSafebootBack}, check: func(t *testing.T, j model.Job, _ []Action) {
+				if j.RecoveryStep != 2 {
+					t.Errorf("RecoveryStep %d: must be stored before the request goes out", j.RecoveryStep)
+				}
+				wantDeadline(t, j, 2*time.Minute)
+			}},
+		{name: "safeboot_recover/probe_online/second safeboot answer sends nothing", in: rec, ev: Event{Kind: EvProbeOnline, Identity: safebootIdent()}, state: model.JobSafebootRecover, actions: probe},
+		{name: "safeboot_recover/probe_offline/nothing sent while offline", in: probing, ev: Event{Kind: EvProbeOffline}, state: model.JobSafebootRecover, actions: probe},
+		{name: "safeboot_recover/probe_online/app answers, nothing sent", in: probing, ev: Event{Kind: EvProbeOnline, Identity: sbESP32("15.6.0", "tasmota32")}, state: model.JobFailed, actions: end,
+			check: func(t *testing.T, j model.Job, _ []Action) { wantErrContains(t, j, "switched back to 15.6.0") }},
+		{name: "safeboot_recover/timeout/never answered: state unknown", in: probing, ev: Event{Kind: EvTimeout, Addr: "172.31.13.35"}, state: model.JobFailed, actions: end,
+			check: func(t *testing.T, j model.Job, _ []Action) {
+				wantErrContains(t, j, "its state is unknown")
+				wantErrContains(t, j, "172.31.13.35")
+				if strings.Contains(j.LastError, "still in safeboot") {
+					t.Errorf("claims safeboot without knowing: %q", j.LastError)
+				}
+			}},
+		// Low-1: a recovery that ended in verify must not start a second one.
+		{name: "upgrade_issued/timeout/after a recovery", in: func() model.Job { j := sbJob(model.JobAwaitReboot); j.Attempt, j.RecoveryStep = 1, 2; return j }(),
+			ev: Event{Kind: EvTimeout, Addr: "172.31.13.35"}, state: model.JobFailed, actions: end, check: func(t *testing.T, j model.Job, _ []Action) {
+				wantErrContains(t, j, "already ran")
+				wantErrContains(t, j, "172.31.13.35")
+			}},
+		{name: "verify/identity/safeboot after a recovery", in: func() model.Job { j := sbJob(model.JobVerify); j.Attempt, j.RecoveryStep = 1, 2; return j }(),
+			ev: Event{Kind: EvIdentity, Identity: safebootIdent()}, state: model.JobFailed, actions: end},
 		{name: "safeboot_recover/command_ok", in: rec, ev: Event{Kind: EvCommandOK}, state: model.JobSafebootRecover, actions: probe},
 		// At most one recovery attempt: a lost reply is probed, never answered with a second /u4.
 		{name: "safeboot_recover/command_failed/lost reply", in: rec, ev: Event{Kind: EvCommandFailed, Err: "timeout"}, state: model.JobSafebootRecover, actions: probe},
 		{name: "safeboot_recover/command_failed/certain", in: rec, ev: Event{Kind: EvCommandFailed, NotFlashed: true, Err: "HTTP 404", Addr: "172.31.13.35"}, state: model.JobFailed, actions: end,
 			check: func(t *testing.T, j model.Job, _ []Action) {
-				wantErrContains(t, j, "Device is still in safeboot")
+				wantErrContains(t, j, "its state is unknown") // the request was refused: not known where the device is
+				wantErrContains(t, j, "HTTP 404")
 				wantErrContains(t, j, "Not enough space")
 			}},
 		{name: "safeboot_recover/probe_offline", in: rec, ev: Event{Kind: EvProbeOffline}, state: model.JobSafebootRecover, actions: probe},
@@ -236,27 +269,36 @@ func TestSafebootDeviceActionsHaveOneDoor(t *testing.T) {
 	}
 	states := []model.JobState{model.JobSetOtaURL, model.JobSafebootSwitch, model.JobUpgradeIssued, model.JobAwaitReboot, model.JobVerify, model.JobSafebootRecover}
 	for _, st := range states {
-		for _, cancel := range []bool{false, true} {
-			for _, ev := range events {
-				in := sbJob(st)
-				in.Attempt, in.CancelRequested = 1, cancel
-				out, as := Step(in, ev, t0, testCfg())
-				for _, a := range as {
-					switch a.Kind {
-					case ActSafebootSwitch:
-						if in.State != model.JobSetOtaURL || out.State != model.JobSafebootSwitch {
-							t.Errorf("%s/%s: restart into safeboot sent on %s -> %s", st, ev.Kind, in.State, out.State)
+		for _, step := range []int{0, 1, 2} {
+			for _, cancel := range []bool{false, true} {
+				for _, ev := range events {
+					in := sbJob(st)
+					in.Attempt, in.CancelRequested, in.RecoveryStep = 1, cancel, step
+					out, as := Step(in, ev, t0, testCfg())
+					for _, a := range as {
+						switch a.Kind {
+						case ActSafebootSwitch:
+							if in.State != model.JobSetOtaURL || out.State != model.JobSafebootSwitch {
+								t.Errorf("%s/%s: restart into safeboot sent on %s -> %s", st, ev.Kind, in.State, out.State)
+							}
+						case ActSafebootBack:
+							// Only the first answer from safeboot during a recovery that has not sent it yet,
+							// and the step is stored by the same transition.
+							first := in.State == model.JobSafebootRecover && in.RecoveryStep == 1 && ev.Kind == EvProbeOnline &&
+								ev.Identity.Variant == variantSafeboot && out.RecoveryStep == 2
+							if !first {
+								t.Errorf("%s/%s (step %d): recovery request sent on %s -> %s", st, ev.Kind, step, in.State, out.State)
+							}
+						case ActProbeIdentity, ActPlan, ActBackup, ActSetOtaURL, ActProbe, ActRestoreOtaURL, ActRestorePower, ActNotify:
+							// not device actions of the push into safeboot
+						case ActUpgrade:
+							if in.State != model.JobSafebootSwitch || ev.Kind != EvProbeOnline || ev.Identity.Variant != variantSafeboot {
+								t.Errorf("%s/%s: upload sent on %s -> %s", st, ev.Kind, in.State, out.State)
+							}
 						}
-					case ActSafebootBack:
-						if out.State != model.JobSafebootRecover || in.State == model.JobSafebootRecover {
-							t.Errorf("%s/%s: recovery sent on %s -> %s", st, ev.Kind, in.State, out.State)
-						}
-					case ActProbeIdentity, ActPlan, ActBackup, ActSetOtaURL, ActProbe, ActRestoreOtaURL, ActRestorePower, ActNotify:
-						// not device actions of the push into safeboot
-					case ActUpgrade:
-						if in.State != model.JobSafebootSwitch || ev.Kind != EvProbeOnline || ev.Identity.Variant != variantSafeboot {
-							t.Errorf("%s/%s: upload sent on %s -> %s", st, ev.Kind, in.State, out.State)
-						}
+					}
+					if in.State == model.JobSafebootRecover && step == 2 && out.RecoveryStep != 2 {
+						t.Errorf("%s/%s: the stored recovery step went back", st, ev.Kind)
 					}
 				}
 			}

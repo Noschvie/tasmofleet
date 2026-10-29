@@ -276,9 +276,9 @@ func TestITSafebootSwitchWithoutAnswerIsNotRepeated(t *testing.T) {
 	if n := e.uploadsOf(dev); n != 0 {
 		t.Errorf("%d uploads to a device that never ran safeboot", n)
 	}
-	// The fault drops every /u4: the one switch and the one recovery, nothing more.
-	if e.count(dev, "GET /u4 fct") != 1 || e.count(dev, "GET /u4 ota") != 1 {
-		t.Errorf("fct %d, ota %d, want 1 each: %v", e.count(dev, "GET /u4 fct"), e.count(dev, "GET /u4 ota"), e.ctrl[dev].Commands())
+	// The fault drops every /u4. The app answered the whole time, so the recovery sends nothing.
+	if e.count(dev, "GET /u4 fct") != 1 || e.count(dev, "GET /u4 ota") != 0 {
+		t.Errorf("fct %d, ota %d, want 1 and 0: %v", e.count(dev, "GET /u4 fct"), e.count(dev, "GET /u4 ota"), e.ctrl[dev].Commands())
 	}
 }
 
@@ -355,5 +355,28 @@ func TestITSafebootResumeAfterRestartDoesNotSwitchAgain(t *testing.T) {
 	}
 	if n := e.uploadsOf(dev); n != 1 {
 		t.Fatalf("%d uploads, want 1", n)
+	}
+}
+
+// Why: a safeboot whose Wi-Fi join is slower than the switch window keeps the device offline the
+// whole time. The switch back must not be sent into that silence (it would be lost and the job
+// would report a device "still in safeboot" that is merely late): the recovery probes first and
+// sends it on the first answer from safeboot.
+func TestITSafebootSlowSafebootIsRecoveredOnItsFirstAnswer(t *testing.T) {
+	e := newItEnv(t)
+	// The reboot gap (real time) is longer than the switch window (2 nominal minutes at timeScale).
+	dev := e.addDevice(simulator.DeviceSpec{Profile: simulator.ProfileESP32, RebootGap: 6 * time.Second})
+	e.startSafeboot(dev)
+	j := e.failedJob(dev)
+	// The gap applies to the way back as well, so the device may be late again: what matters is that the
+	// switch back was sent exactly once, after the first answer from safeboot, and no image was.
+	if !strings.Contains(j.LastError, "did not answer as safeboot in time") {
+		t.Fatalf("LastError %q", j.LastError)
+	}
+	if e.count(dev, "GET /u4 fct") != 1 || e.count(dev, "GET /u4 ota") != 1 || e.uploadsOf(dev) != 0 {
+		t.Fatalf("fct %d, ota %d, uploads %d: want 1, 1, 0\n%v", e.count(dev, "GET /u4 fct"), e.count(dev, "GET /u4 ota"), e.uploadsOf(dev), e.ctrl[dev].Commands())
+	}
+	if c := e.ctrl[dev]; c.Image() != "tasmota32" || c.Version() != "15.6.0" {
+		t.Errorf("device runs %s %s", c.Image(), c.Version())
 	}
 }

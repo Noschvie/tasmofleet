@@ -1020,7 +1020,11 @@ func (e *Engine) next(ctx context.Context, j model.Job, pending []Action, inbox 
 	if ctx.Err() != nil {
 		return Event{}, false, false
 	}
-	return e.exec(ctx, j, *act), true, true
+	ev := e.exec(ctx, j, *act)
+	if ev.Addr == "" {
+		ev.Addr = e.safebootAddr(ctx, j) // "" for every job that is not a push into safeboot
+	}
+	return ev, true, true
 }
 
 // apply runs Step and persists the result before anything else happens

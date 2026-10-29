@@ -181,7 +181,8 @@ func (e *Engine) openImage(ctx context.Context, a model.Artifact) (io.ReadCloser
 func (e *Engine) push(ctx context.Context, d model.Device, a model.Artifact) Event {
 	rc, err := e.openImage(ctx, a)
 	if err != nil {
-		return failEvent(err)
+		// Nothing was sent: certain, so a push into safeboot goes straight to its recovery.
+		return Event{Kind: EvCommandFailed, Err: err.Error(), NotFlashed: true}
 	}
 	defer rc.Close() //nolint:errcheck // read-only file
 	if err := e.api.(FirmwareUploader).UploadFirmware(ctx, d, a.Filename, a.Size, rc); err != nil {

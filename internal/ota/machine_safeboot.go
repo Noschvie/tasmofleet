@@ -17,19 +17,26 @@ import (
 //     it again.
 //   - The upload is sent once, to a device that just answered as safeboot, after Guard ran again.
 //   - A job that ends with the device in (or possibly in) safeboot goes through safeboot_recover:
-//     one GET /u4?u4=ota, then probing. That is the only recovery; if it does not bring the old
-//     firmware back, the job fails and tells the user where to finish by hand.
+//     which probes first and sends one GET /u4?u4=ota only when a probe answers from safeboot (an
+//     app that answers needs nothing, a device still offline would swallow the request). That is
+//     the only recovery (Job.RecoveryStep, persisted before the request goes out); if it does
+//     not bring the old firmware back, the job fails and tells the user where to finish by hand.
 
 // toSafebootRecover enters the one recovery attempt. reason is why the push failed and ends in
 // LastError. The device was restarted on purpose by now, so the relay note of fail() applies.
-func toSafebootRecover(j model.Job, now time.Time, cfg Config, reason string) (model.Job, []Action) {
+func toSafebootRecover(j model.Job, now time.Time, cfg Config, reason, addr string) (model.Job, []Action) {
 	if j.Attempt == 0 {
 		j.Attempt = 1
 	}
+	if j.RecoveryStep != 0 {
+		// A recovery ran already (it ended in verify and that failed again): no second switch back.
+		return fail(j, now, unknownSafeboot(joinNotes(reason, j.LastError), addr, "a recovery already ran"))
+	}
 	j = to(j, model.JobSafebootRecover, now)
+	j.RecoveryStep = 1
 	j.LastError = reason
 	j.DeadlineAt = now.Add(cfg.SafebootWindow)
-	return j, []Action{{Kind: ActSafebootBack}}
+	return j, []Action{{Kind: ActProbe}}
 }
 
 // afterSwitchSent notes that the device may be restarting by now: MQTT "switched off" reports
@@ -68,7 +75,7 @@ func stepSafebootSwitch(j model.Job, ev Event, now time.Time, cfg Config) (model
 			return j, probeLater(cfg) // still the app, or an answer that says nothing
 		}
 		if j.CancelRequested {
-			return toSafebootRecover(j, now, cfg, "cancelled while the device switched into safeboot")
+			return toSafebootRecover(j, now, cfg, "cancelled while the device switched into safeboot", ev.Addr)
 		}
 		// The device answers as safeboot: upload now (the engine runs Guard again first).
 		j = to(j, model.JobUpgradeIssued, now)
@@ -80,7 +87,7 @@ func stepSafebootSwitch(j model.Job, ev Event, now time.Time, cfg Config) (model
 	case EvTimeout:
 		// Never seen as safeboot: it may still be switching, or never did. The switch back is
 		// harmless on a device that runs the app.
-		return toSafebootRecover(j, now, cfg, "the device did not answer as safeboot in time")
+		return toSafebootRecover(j, now, cfg, "the device did not answer as safeboot in time", ev.Addr)
 	case EvStart, EvResume, EvIdentity, EvPlanned, EvBackupDone, EvBackupFailed, EvUpgradeReport, EvPowerReport, EvCancel:
 		// not in the transition table: the job stays unchanged
 	}
@@ -95,9 +102,17 @@ func atAddr(addr string) string {
 	return " at " + addr
 }
 
-// manualSafeboot is the failure text of a device that could not be brought back.
+// manualSafeboot is the failure text of a device that was in safeboot, was sent back once and did
+// not come back as the app.
 func manualSafeboot(reason, addr string) string {
 	return joinNotes("Device is still in safeboot"+atAddr(addr)+": open its web page and upload the firmware, or use Upgrade by download", reason)
+}
+
+// unknownSafeboot is the text when it is not known where the device is: it never answered during
+// the recovery, or the request to switch it back was refused or never reached it.
+func unknownSafeboot(reason, addr, why string) string {
+	return joinNotes("Could not bring the device back from safeboot ("+why+"), its state is unknown. Check it"+atAddr(addr)+
+		": if it is in safeboot, open its web page and upload the firmware, or use Upgrade by download", reason)
 }
 
 func stepSafebootRecover(j model.Job, ev Event, now time.Time, cfg Config) (model.Job, []Action) {
@@ -106,20 +121,30 @@ func stepSafebootRecover(j model.Job, ev Event, now time.Time, cfg Config) (mode
 		return afterSwitchSent(j, now), probeLater(cfg)
 	case EvCommandFailed:
 		if ev.NotFlashed {
-			// Certain that the switch back was not done: waiting will not help.
-			return endRecovery(fail(j, now, manualSafeboot(j.LastError, ev.Addr)))
+			// Certain that the switch back was not done: waiting will not help, and the device
+			// is wherever it was.
+			return endRecovery(fail(j, now, unknownSafeboot(j.LastError, ev.Addr, ev.Err)))
 		}
 		return afterSwitchSent(j, now), probeLater(cfg) // lost reply: probe, no second attempt
 	case EvProbeOffline:
 		return j, probeLater(cfg)
 	case EvProbeOnline:
 		id := ev.Identity
-		if id.Variant == "" || isIntermediate(id.Variant) {
-			return j, probeLater(cfg) // still in safeboot, or an answer that says nothing
+		if id.Variant == "" {
+			return j, probeLater(cfg) // an answer that says nothing
 		}
-		// An app answers. No reboot proof is asked for: the recovery starts long after the switch
-		// into safeboot was sent (the switch window, or the upload), so a device that answers as
-		// the app is the one that came back.
+		if isIntermediate(id.Variant) {
+			if j.RecoveryStep != 1 {
+				return j, probeLater(cfg) // the switch back was sent: wait for the restart
+			}
+			// The first answer from safeboot: now the one switch back. The step is stored before
+			// the request goes out; a restart of tasmofleet never sends it again.
+			j.RecoveryStep = 2
+			j.UpdatedAt = now
+			j.DeadlineAt = now.Add(cfg.SafebootWindow)
+			return j, []Action{{Kind: ActSafebootBack}}
+		}
+		// An app answers: nothing to send (a device that is on the app needs no switch back).
 		if id.Version != j.IdentityBefore.Version {
 			// The upload was accepted after all and the device runs another firmware: the
 			// normal verification decides what it is.
@@ -135,7 +160,10 @@ func stepSafebootRecover(j model.Job, ev Event, now time.Time, cfg Config) (mode
 		}
 		return endRecovery(failKeep(j, now))
 	case EvTimeout:
-		return endRecovery(fail(j, now, manualSafeboot(j.LastError, ev.Addr)))
+		if j.RecoveryStep == 2 {
+			return endRecovery(fail(j, now, manualSafeboot(j.LastError, ev.Addr)))
+		}
+		return endRecovery(fail(j, now, unknownSafeboot(j.LastError, ev.Addr, "the device did not answer")))
 	case EvStart, EvResume, EvIdentity, EvPlanned, EvGuardRefused, EvBackupDone, EvBackupFailed, EvUpgradeReport, EvPowerReport, EvCancel:
 		// not in the transition table: the job stays unchanged
 	}
