@@ -186,6 +186,9 @@ func redactURL(raw string) string {
 type sub struct {
 	kinds map[Kind]struct{}
 	h     func(Message)
+	// mu serialises the handler: Subscribe holds it while replaying, and dispatch
+	// takes it per call, so a live message never overtakes the replay (#161).
+	mu sync.Mutex
 }
 
 type bus struct {
@@ -214,6 +217,7 @@ func (b *bus) Subscribe(kinds []Kind, h func(Message)) func() {
 	id := b.nextID
 	b.nextID++
 	b.subs[id] = s
+	s.mu.Lock() // held until the replay is done; a concurrent dispatch waits here
 	var replay []Message
 	for _, m := range b.retained.messages() {
 		if _, ok := s.kinds[m.Kind]; ok {
@@ -224,6 +228,7 @@ func (b *bus) Subscribe(kinds []Kind, h func(Message)) func() {
 	for _, m := range replay {
 		b.call(h, m)
 	}
+	s.mu.Unlock()
 	return func() {
 		b.mu.Lock()
 		delete(b.subs, id)
@@ -242,27 +247,35 @@ func (b *bus) dispatch(_ paho.Client, m paho.Message) {
 		return
 	}
 	msg := Message{Kind: kind, Topic: topic, Suffix: suffix, Payload: append([]byte(nil), m.Payload()...), Retained: m.Retained(), At: time.Now()}
+	// Tasmota publishes its LWT retained, but the broker clears the flag for
+	// subscribers that were connected when it arrived. A late consumer must still
+	// replay the latest LWT, so every LWT is cached, whatever the flag says (#161).
+	cacheIt := msg.Retained || kind == KindLWT
 	known := false
-	if msg.Retained && len(msg.Payload) > 0 && b.known != nil {
+	if cacheIt && len(msg.Payload) > 0 && b.known != nil {
 		known = b.known(msg) // outside the lock: may consult the inventory index
 	}
 	b.mu.Lock()
 	var drops []string
-	if msg.Retained {
-		drops = b.retained.put(m.Topic(), msg, known)
+	if cacheIt {
+		cm := msg
+		cm.Retained = true // replayed as retained, as the broker would have delivered it
+		drops = b.retained.put(m.Topic(), cm, known)
 	}
-	handlers := make([]func(Message), 0, len(b.subs))
+	subs := make([]*sub, 0, len(b.subs))
 	for _, s := range b.subs {
 		if _, ok := s.kinds[kind]; ok {
-			handlers = append(handlers, s.h)
+			subs = append(subs, s)
 		}
 	}
 	b.mu.Unlock()
 	for _, r := range drops {
 		b.dropped(r)
 	}
-	for _, h := range handlers {
-		b.call(h, msg)
+	for _, s := range subs {
+		s.mu.Lock() // waits for a replay still running for this subscriber
+		b.call(s.h, msg)
+		s.mu.Unlock()
 	}
 }
 

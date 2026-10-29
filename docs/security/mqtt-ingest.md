@@ -26,7 +26,13 @@ claim below or shows a residual risk worse than stated.
    config). Everything else is ignored, so one prefix cannot mint unlimited distinct
    decodable topics.
 3. **Retained replay cache** (the cache only serves consumers that subscribe after the
-   retained burst; live dispatch to handlers never depends on it):
+   retained burst; live dispatch to handlers never depends on it). Tasmota publishes its
+   LWT retained, but the broker clears the flag when it delivers the message live to a
+   connected subscriber, so **every LWT is cached, retained flag or not** (an empty
+   payload clears it; no other kind is cached live) and replayed as retained. Live LWTs
+   use the same budgets and reservations as retained ones. A subscriber's replay runs
+   under its own mutex, so a live message is never delivered before the replay finishes
+   (#161). Handlers must not block:
    - sizes count **topic + payload** bytes; every path (new, overwrite, clear,
      reclassify) goes through one remove+add routine;
    - **one canonical key**: classification and storage both use `mqttbus.DeviceKey`
@@ -65,6 +71,8 @@ claim below or shows a residual risk worse than stated.
 | Q10 | discovery messages are attributed by MAC, others by topic | `TestKnownIndex` |
 | Q11 | one key function: classification (Options.Known via `TopicKey`/`MACKey`) and storage (`DeviceKey`) use the same canonical key; every decoded topic re-encodes to exactly the raw topic under all FullTopic patterns | `FuzzDecodeIsCanonical` |
 | Q12 | non-canonical spellings (lower-case MAC in discovery, empty/extra levels, case-changed suffix) do not decode, so one logical device cannot hold several reservations | `TestDiscoveryMACMustBeCanonical`, `FuzzDecodeIsCanonical` |
+| Q13 | a live (non-retained) LWT is replayed to a later subscriber; an empty one clears; other live kinds are not cached; budgets unchanged | `TestLiveLWTIsReplayedToLateSubscriber`, `TestEmptyLiveLWTClearsTheCache`, `TestLiveNonLWTIsNotCached`, `TestLiveLWTsKeepTheSpoofingBudgets` |
+| Q14 | the replay precedes concurrent live messages | `TestReplayPrecedesConcurrentLiveMessages` |
 
 ## Accepted residual risks
 

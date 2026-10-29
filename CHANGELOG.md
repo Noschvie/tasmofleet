@@ -27,6 +27,10 @@ always upgrade automatically.
 - An OtaUrl whose password contains `/`, `#` or `?` could be shown or compared in part. The
   URL credential redaction now parses the URL, and a value that cannot be cleaned safely is
   shown as `***` (#168).
+- A device that went offline while tasmofleet was starting could stay without its Offline state:
+  the broker clears the retained flag on an LWT it delivers live, so the replay for later
+  subscribers missed it. Every LWT is now kept for replay, and a replay can no longer be
+  overtaken by a live message (#161).
 
 ### Security
 

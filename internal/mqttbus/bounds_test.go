@@ -2,8 +2,11 @@ package mqttbus
 
 import (
 	"fmt"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 type fakeMsg struct {
@@ -227,5 +230,102 @@ func TestSuffixDigitsAreBounded(t *testing.T) {
 		if _, _, _, ok := codec.Decode(topic); !ok {
 			t.Errorf("%s not decoded", topic)
 		}
+	}
+}
+
+func liveMsg(topic, payload string) fakeMsg { return fakeMsg{topic: topic, payload: []byte(payload)} }
+
+func subscribeAll(b *bus, kinds ...Kind) (*capture, func()) {
+	c := &capture{}
+	return c, b.Subscribe(kinds, c.add)
+}
+
+// #161: at startup the device's Offline LWT can arrive while the broker
+// connection is up but before health subscribes, with the retained flag
+// already cleared by the broker. The late subscriber must still learn Offline.
+func TestLiveLWTIsReplayedToLateSubscriber(t *testing.T) {
+	b, _ := newBoundsBus(t, nil)
+	b.dispatch(nil, liveMsg("tele/a/LWT", "Offline"))
+	c, _ := subscribeAll(b, KindLWT)
+	got := c.snapshot()
+	if len(got) != 1 || string(got[0].Payload) != "Offline" || !got[0].Retained {
+		t.Fatalf("replay %+v, want one retained Offline", got)
+	}
+}
+
+// An empty LWT payload clears a retained LWT; the live variant must too, or a
+// cleared device would replay a stale state.
+func TestEmptyLiveLWTClearsTheCache(t *testing.T) {
+	b, _ := newBoundsBus(t, nil)
+	b.dispatch(nil, lwt("a", "Online"))
+	b.dispatch(nil, liveMsg("tele/a/LWT", ""))
+	if _, ok := cached(b, "tele/a/LWT"); ok {
+		t.Fatal("empty live LWT left the entry in the cache")
+	}
+	checkAccounting(t, b.retained)
+}
+
+// Only the LWT is cached when live: STATE/RESULT say something about now, a
+// replay would present old telemetry as fresh.
+func TestLiveNonLWTIsNotCached(t *testing.T) {
+	b, _ := newBoundsBus(t, nil)
+	b.dispatch(nil, liveMsg("tele/a/STATE", `{"POWER":"ON"}`))
+	b.dispatch(nil, liveMsg("stat/a/POWER", "ON"))
+	if n := b.retained.len(); n != 0 {
+		t.Fatalf("%d live non-LWT messages cached", n)
+	}
+}
+
+// Live LWTs go through the same budgets: junk cannot evict a known device's
+// LWT, and a spoofer is limited to the victim's reservation.
+func TestLiveLWTsKeepTheSpoofingBudgets(t *testing.T) {
+	b, drops := newBoundsBus(t, knownSet{"victim": true}.fn)
+	b.dispatch(nil, liveMsg("tele/victim/LWT", "Offline"))
+	for i := range 5000 {
+		b.dispatch(nil, liveMsg(fmt.Sprintf("tele/junk%d/LWT", i), "Online"))
+	}
+	e, ok := cached(b, "tele/victim/LWT")
+	if !ok || e.key == "" {
+		t.Fatal("junk live LWTs evicted the known device's LWT")
+	}
+	if drops[dropUnknownEvict] == 0 {
+		t.Fatal("expected the unknown pool to evict")
+	}
+	checkAccounting(t, b.retained)
+}
+
+// The replay must not be overtaken by a live message: a replayed stale Offline
+// arriving after a live Online would leave the device wrongly offline.
+// Run with -race -count=50.
+func TestReplayPrecedesConcurrentLiveMessages(t *testing.T) {
+	b, _ := newBoundsBus(t, nil)
+	b.dispatch(nil, lwt("a", "Offline"))
+	inReplay := make(chan struct{})
+	release := make(chan struct{})
+	var mu sync.Mutex
+	var order []string
+	h := func(m Message) {
+		if m.Retained {
+			close(inReplay)
+			<-release // hold the replay open while the live message arrives
+		}
+		mu.Lock()
+		order = append(order, string(m.Payload))
+		mu.Unlock()
+	}
+	subDone := make(chan struct{})
+	go func() { b.Subscribe([]Kind{KindLWT}, h); close(subDone) }()
+	<-inReplay
+	liveDone := make(chan struct{})
+	go func() { b.dispatch(nil, liveMsg("tele/a/LWT", "Online")); close(liveDone) }()
+	runtime.Gosched()
+	time.Sleep(time.Millisecond) // give the live dispatch the chance to overtake
+	close(release)
+	<-subDone
+	<-liveDone
+	mu.Lock()
+	defer mu.Unlock()
+	if len(order) != 2 || order[0] != "Offline" || order[1] != "Online" {
+		t.Fatalf("handler saw %v, want [Offline Online]", order)
 	}
 }

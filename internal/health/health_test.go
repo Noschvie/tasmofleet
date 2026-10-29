@@ -1075,3 +1075,17 @@ func TestHeardDeviceWhoseTopicChangesDropsTheOldTopicsLWT(t *testing.T) {
 		t.Fatalf("LWT %q after switching back, want Online", got)
 	}
 }
+
+// #161: the bus now replays an Offline LWT that arrived live before health
+// subscribed. A later live Online must still win, so the replay is not sticky.
+func TestReplayedOfflineIsSupersededByLiveOnline(t *testing.T) {
+	h := newHarness(t, true, Options{}, mqttDev(1, "a"))
+	h.listen()
+	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Offline", true)
+	h.want(1, model.HealthOffline)
+	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Online", false)
+	h.bus.emit(mqttbus.KindState, "a", "STATE", `{"Wifi":{"RSSI":50}}`, false)
+	if got := h.state(1); got == model.HealthOffline {
+		t.Fatalf("state %s after a live Online LWT", got)
+	}
+}
