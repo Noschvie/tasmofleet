@@ -19,6 +19,9 @@ always upgrade automatically.
 
 ### Fixed
 
+- Deleting backups releases the manual-backup cooldown of the device, so "Back up now" on the emptied Backups tab no longer answers "Try again in ..." (#208, thanks @Noschvie)
+- Downloaded backups keep umlauts and other letters of the device name (`Küche-....dmp`): the header carries an ASCII fallback and the RFC 5987 `filename*`, and a hostile name cannot inject headers (#208, thanks @Noschvie)
+- The Download and Delete buttons of a backup row have their borders again, like the other buttons (#208, thanks @Noschvie)
 - The backup layout migration also moves the kept backups of deleted devices; backups whose files were deleted by hand are shown as missing and can be removed (#205, thanks @Noschvie)
 - Make compliant now knows which SetOptions restart the device (3, 15, 37, 55 when set to 0, 68, 69, 75, 85, 88, 97, 102 to 104, 106, 107, 115 when set to 0, 132, 151 to 153): they run last and the restart is not reported as an error (#196)
 

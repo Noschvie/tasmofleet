@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/nofuturekid/tasmofleet/internal/backup"
 	"github.com/nofuturekid/tasmofleet/internal/model"
@@ -45,7 +46,7 @@ func (h *handler) backupDownload(w http.ResponseWriter, r *http.Request) {
 	h.d.Recorder.Record(r.Context(), model.AuditEvent{Actor: actor(r), Action: "backup.download",
 		Target: fmt.Sprintf("backup:%d", b.ID), Detail: fmt.Sprintf(`{"device":%d,"kind":%q}`, b.DeviceID, b.Kind)})
 	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", safeName(b)))
+	w.Header().Set("Content-Disposition", attachmentHeader(safeName(b)))
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
 	_, _ = w.Write(data) //nolint:gosec // G705: attachment served as octet-stream with nosniff, not rendered
@@ -68,13 +69,43 @@ func safeName(b model.Backup) string {
 	return name + sanitizeName(ext, ".bin")
 }
 
-// sanitizeName keeps letters, digits, dot, dash and underscore; everything else
-// becomes "_". An empty result yields fallback.
+// attachmentHeader is the Content-Disposition of a download: an ASCII fallback
+// filename="..." (anything outside letters, digits, dot, dash and underscore becomes "_",
+// so no quote, backslash or line break can end up in the header) and the RFC 5987
+// filename*=UTF-8”... with the real name, percent-encoded byte by byte.
+func attachmentHeader(name string) string {
+	var fb, star strings.Builder
+	for _, r := range name {
+		if r < 0x80 && isNameChar(r) {
+			fb.WriteRune(r)
+			star.WriteRune(r)
+			continue
+		}
+		fb.WriteByte('_')
+		if isNameChar(r) { // a letter or digit beyond ASCII (umlauts)
+			for _, c := range []byte(string(r)) {
+				fmt.Fprintf(&star, "%%%02X", c)
+			}
+		} else {
+			star.WriteByte('_')
+		}
+	}
+	return `attachment; filename="` + fb.String() + `"; filename*=UTF-8''` + star.String()
+}
+
+// isNameChar is what a download name keeps: letters and digits of any script, dot, dash
+// and underscore.
+func isNameChar(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '.' || r == '-' || r == '_'
+}
+
+// sanitizeName keeps letters and digits (any script), dot, dash and underscore; everything
+// else becomes "_". An empty result yields fallback.
 func sanitizeName(s, fallback string) string {
 	var sb strings.Builder
 	for _, r := range s {
 		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '.', r == '-', r == '_':
+		case isNameChar(r):
 			sb.WriteRune(r)
 		default:
 			sb.WriteByte('_')

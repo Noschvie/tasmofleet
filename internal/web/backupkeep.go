@@ -142,6 +142,7 @@ func (h *handler) backupDeleteSelected(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		h.fail(w, r, err)
 	default:
+		h.releaseBackupWait(id)
 		redirect(w, r, fmt.Sprintf("/devices/%d/backups?ok=deleted&n=%d", id, d.Runs))
 	}
 }

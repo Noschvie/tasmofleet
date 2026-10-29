@@ -164,11 +164,11 @@ templ sysOrphans(p sysPage, st sysStorage) {
 						}
 					}
 					if o.Download != "" {
-						<a class="btn btn-link bk-act" href={ templ.SafeURL(o.Download) }>Download</a>
+						<a class="btn" href={ templ.SafeURL(o.Download) }>Download</a>
 					}
 					if o.DeleteText != "" {
 						<a
-							class="btn btn-link bk-act bk-del"
+							class="btn btn-danger bk-del"
 							href={ templ.SafeURL(p.Base + "/backups/" + bkStr(o.ID) + "/delete") }
 							data-dialog="dlg-bkdel"
 							data-dlg-title="Delete this backup?"

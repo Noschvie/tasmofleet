@@ -61,6 +61,12 @@ func (r *replRestore) StartReplace(_ context.Context, _ string, req restore.Repl
 // and retention (N1), and the restore service with replace.
 func newAdminEnv(t *testing.T) (*env, *keepBackups, *replRestore) {
 	t.Helper()
+	return newAdminEnvWith(t, nil)
+}
+
+// newAdminEnvWith is newAdminEnv with a last change to the dependencies.
+func newAdminEnvWith(t *testing.T, mutate func(*Deps)) (*env, *keepBackups, *replRestore) {
+	t.Helper()
 	ab := &adminBackups{}
 	k := &keepBackups{adminBackups: ab, deviceOf: 1}
 	t0 := time.Date(2026, 10, 18, 10, 0, 0, 0, time.UTC)
@@ -78,6 +84,9 @@ func newAdminEnv(t *testing.T) (*env, *keepBackups, *replRestore) {
 	e := setupWith(t, func(d *Deps) {
 		d.Backups = k
 		d.Restore = rr
+		if mutate != nil {
+			mutate(d)
+		}
 	})
 	return e, k, rr
 }
@@ -261,5 +270,38 @@ func TestBackupsTabCountMatchesTheListedRows(t *testing.T) {
 	}
 	if !strings.Contains(body, "incomplete snapshot, missing Status 2") || !strings.Contains(body, `href="/tf/backups/8"`) {
 		t.Errorf("the run's incomplete snapshot is not named, or the snapshot-only run has no download:\n%s", body)
+	}
+}
+
+// Why (#208): the manual-backup cooldown protects the restore points from being evicted by
+// repeated clicks. A backup that was deleted is no restore point any more, so deleting it
+// (one or several) must leave the device free to back up again; otherwise the empty tab says
+// "Try again in 20s" right after the delete. Other devices and the cooldown itself are untouched.
+func TestDeletingBackupsReleasesTheManualBackupCooldown(t *testing.T) {
+	for _, tc := range []struct {
+		name, path string
+		form       url.Values
+	}{
+		{"one backup", "/backups/4/delete", url.Values{}},
+		{"selected backups", "/devices/1/backups/delete", url.Values{"id": {"4"}, "confirm": {"1"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e, _, _ := newAdminEnvWith(t, func(d *Deps) { d.BackupCooldown = time.Hour })
+			if resp, _ := e.do(t, "POST", "/devices/1/backup", "admin", url.Values{}); resp.StatusCode != 303 {
+				t.Fatalf("first backup: %d", resp.StatusCode)
+			}
+			if resp, _ := e.do(t, "POST", "/devices/1/backup", "admin", url.Values{}); resp.StatusCode != 429 {
+				t.Fatalf("cooldown not active before the delete: %d", resp.StatusCode)
+			}
+			if resp, _ := e.do(t, "POST", tc.path, "admin", tc.form); resp.StatusCode != 303 {
+				t.Fatalf("delete: %d", resp.StatusCode)
+			}
+			if resp, body := e.do(t, "POST", "/devices/1/backup", "admin", url.Values{}); resp.StatusCode != 303 {
+				t.Fatalf("backup after delete is blocked: %d %s", resp.StatusCode, body)
+			}
+			if resp, _ := e.do(t, "POST", "/devices/1/backup", "admin", url.Values{}); resp.StatusCode != 429 {
+				t.Fatalf("the new backup must start the cooldown again: %d", resp.StatusCode)
+			}
+		})
 	}
 }

@@ -144,14 +144,14 @@ templ backupRowItem(p backupsView, b backupRow) {
 					}
 				}
 				if b.Download != "" {
-					<a class="btn btn-link bk-act" href={ templ.SafeURL(b.Download) }>Download</a>
+					<a class="btn" href={ templ.SafeURL(b.Download) }>Download</a>
 				}
 				if b.Restore != "" {
 					<a class="btn" href={ templ.SafeURL(b.Restore) }>Restore…</a>
 				}
 				if b.DeleteText != "" {
 					<a
-						class="btn btn-link bk-act bk-del"
+						class="btn btn-danger bk-del"
 						href={ templ.SafeURL(p.Base + "/backups/" + bkStr(b.ID) + "/delete") }
 						data-dialog="dlg-bkdel"
 						data-dlg-title="Delete this backup?"

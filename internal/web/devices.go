@@ -525,6 +525,14 @@ func (h *handler) backupWait(id model.DeviceID) time.Duration {
 	return 0
 }
 
+// releaseBackupWait ends the cooldown of the device: its backups were deleted, so there is no
+// restore point left to protect from a second click (#208).
+func (h *handler) releaseBackupWait(id model.DeviceID) {
+	h.backupMu.Lock()
+	defer h.backupMu.Unlock()
+	delete(h.lastBackup, id)
+}
+
 // deviceBackupFromTab answers the "Back up now" of the empty Backups tab: on
 // success the page reloads (the tab lists the new backup), otherwise the sentence
 // goes into the status line under the button.

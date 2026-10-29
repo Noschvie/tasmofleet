@@ -558,7 +558,7 @@ func TestBackupDownloadIsAuditedAttachment(t *testing.T) {
 		t.Fatalf("got %d %q", resp.StatusCode, body)
 	}
 	cd := resp.Header.Get("Content-Disposition")
-	if !strings.HasPrefix(cd, "attachment;") || strings.ContainsAny(strings.TrimPrefix(cd, "attachment; filename="), " ") {
+	if !strings.HasPrefix(cd, "attachment;") || strings.ContainsAny(cd, "\r\n\\") || strings.Count(cd, `"`) != 2 {
 		t.Fatalf("unsafe Content-Disposition %q", cd)
 	}
 	if resp.Header.Get("Content-Type") != "application/octet-stream" {
@@ -585,9 +585,9 @@ func TestBackupDownloadNameCarriesDeviceNotKindTwice(t *testing.T) {
 		{ID: 9, DeviceID: 4, DeviceName: "", Kind: model.BackupConfigDump, TakenAt: at, Path: "backups/4/20261025T161535Z-dmp.dmp"},
 	}
 	for id, want := range map[int]string{
-		7: `attachment; filename="K_che__Spot__1-20261025T161535Z.dmp"`,
-		8: `attachment; filename="K_che__Spot__1-20261025T161535Z-snapshot.json"`,
-		9: `attachment; filename="device-4-20261025T161535Z.dmp"`,
+		7: `attachment; filename="K_che__Spot__1-20261025T161535Z.dmp"; filename*=UTF-8''K%C3%BCche__Spot__1-20261025T161535Z.dmp`,
+		8: `attachment; filename="K_che__Spot__1-20261025T161535Z-snapshot.json"; filename*=UTF-8''K%C3%BCche__Spot__1-20261025T161535Z-snapshot.json`,
+		9: `attachment; filename="device-4-20261025T161535Z.dmp"; filename*=UTF-8''device-4-20261025T161535Z.dmp`,
 	} {
 		resp, _ := e.do(t, "GET", fmt.Sprintf("/backups/%d", id), "admin", nil)
 		if got := resp.Header.Get("Content-Disposition"); got != want {
@@ -770,6 +770,33 @@ func TestLongDurationIsInWords(t *testing.T) {
 	} {
 		if got := longDuration(d); got != want {
 			t.Errorf("%v: %q, want %q", d, got, want)
+		}
+	}
+}
+
+// Why (#208): a device called "Küche" must download as "Küche-<stamp>.dmp", not "K_che-...".
+// The header carries an ASCII fallback for old clients and the RFC 5987 form for the real
+// name. A device name is user input: quotes, backslashes, CR/LF must never reach the header
+// as such (header injection), whatever the name holds.
+func TestBackupDownloadNameKeepsUmlautsAndNeverInjects(t *testing.T) {
+	taken := time.Date(2026, 10, 18, 10, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		device, fallback, star string
+	}{
+		{"Küche", `K_che-20261018T100000Z.dmp`, `K%C3%BCche-20261018T100000Z.dmp`},
+		{"Lüftung Test", `L_ftung_Test-20261018T100000Z.dmp`, `L%C3%BCftung_Test-20261018T100000Z.dmp`},
+		{"a\"b\\c\r\nSet-Cookie: x=1", `a_b_c__Set-Cookie__x_1-20261018T100000Z.dmp`, `a_b_c__Set-Cookie__x_1-20261018T100000Z.dmp`},
+	} {
+		e := setup(t)
+		e.bk.list = []model.Backup{{ID: 7, DeviceID: 1, DeviceName: tc.device, Kind: model.BackupConfigDump, TakenAt: taken, Path: "backups/1/x.dmp"}}
+		resp, _ := e.do(t, "GET", "/backups/7", "admin", nil)
+		cd := resp.Header.Get("Content-Disposition")
+		want := `attachment; filename="` + tc.fallback + `"; filename*=UTF-8''` + tc.star
+		if cd != want {
+			t.Errorf("device %q: Content-Disposition\n got %q\nwant %q", tc.device, cd, want)
+		}
+		if resp.Header.Get("Set-Cookie") != "" || strings.ContainsAny(cd, "\r\n") {
+			t.Errorf("device %q: header injection: %q", tc.device, cd)
 		}
 	}
 }

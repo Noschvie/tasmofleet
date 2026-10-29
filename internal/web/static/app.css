@@ -11907,14 +11907,6 @@ main.bare {
   border-radius: 1px;
   transform: rotate(45deg);
 }
-.btn.btn-link.bk-act {
-  height: var(--ctl);
-  padding: 0 var(--sp-10);
-}
-.btn.btn-link.bk-del,
-.btn.btn-link.bk-del:hover {
-  color: var(--color-danger-fg);
-}
 .bk-foot {
   margin: var(--sp-10) 0 0;
   font-size: 12.5px;
