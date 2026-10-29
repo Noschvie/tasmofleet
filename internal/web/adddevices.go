@@ -204,8 +204,8 @@ func dash(s string) string {
 	return s
 }
 
-// metaTail is " · model · firmware" without the parts the device did not report: a phone card
-// reads "127.0.0.1" rather than "127.0.0.1 · — · —" (the table keeps its dash per column).
+// metaTail is " · a · b" without the parts that are empty: a phone card reads "127.0.0.1"
+// rather than "127.0.0.1 · —" (the table keeps its dash per column).
 func metaTail(parts ...string) string {
 	var b strings.Builder
 	for _, p := range parts {
@@ -216,12 +216,23 @@ func metaTail(parts ...string) string {
 	return b.String()
 }
 
+// sortHeader is the link of a sortable header of the New devices table: the current column
+// flips its direction, any other starts ascending; filter and ignored switch are kept.
+func sortHeader(p discView, key string) (href, class, aria string) {
+	dir, class, aria := "asc", "sortlink", "none"
+	if key == p.Sort {
+		class += " is-" + p.Dir
+		aria = map[string]string{"asc": "ascending", "desc": "descending"}[p.Dir]
+		if p.Dir == "asc" {
+			dir = "desc"
+		}
+	}
+	return discHref(p.Base, p.State, key, dir, p.ShowIgn), class, aria
+}
+
 // showIgnoredHref is the "Show ignored" switch: a link to the other state.
 func showIgnoredHref(p discView) string {
-	if p.ShowIgn {
-		return p.Base + "/discovery"
-	}
-	return p.Base + "/discovery?ignored=1"
+	return discHref(p.Base, p.State, p.Sort, p.Dir, !p.ShowIgn)
 }
 
 // listSep is the separator before item i of n in running text: ", " or " and ".
@@ -230,4 +241,12 @@ func listSep(i, n int) string {
 		return " and "
 	}
 	return ", "
+}
+
+// cardHost is the hostname line of a phone card; it is left out when it only repeats the name.
+func cardHost(r propRow) string {
+	if r.Name == "" || r.Hostname == r.Name {
+		return ""
+	}
+	return r.Hostname
 }

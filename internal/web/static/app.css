@@ -10696,11 +10696,8 @@ dialog.fw-notes-dlg .fw-dlg-body {
 .add-disc-table col.c-mac {
   width: 164px;
 }
-.add-disc-table col.c-model {
-  width: 96px;
-}
-.add-disc-table col.c-fw {
-  width: 84px;
+.add-disc-table col.c-host {
+  width: 17%;
 }
 .add-disc-table col.c-src {
   width: 124px;

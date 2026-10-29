@@ -160,7 +160,24 @@ templ discoveredPage(p discView) {
 				</div>
 			}
 		</div>
-		if len(p.Rows) == 0 {
+		if len(p.Chips) > 0 && (len(p.Rows) > 0 || p.Filtered) {
+			<div class="add-chips" role="group" aria-label="Filter by state">
+				for _, c := range p.Chips {
+					<a class={ "add-chip", templ.KV("is-on", c.Current) } href={ templ.SafeURL(c.Href) }
+						if c.Current {
+							aria-current="true"
+						}
+					>{ c.Label }<span class="add-chip-n">{ strconv.Itoa(c.N) }</span></a>
+				}
+			</div>
+		}
+		if p.Filtered {
+			<div class="uempty add-empty">
+				<div class="uempty-icon" aria-hidden="true"><span></span></div>
+				<h2>No { p.State } devices</h2>
+				<p>No device in this list is { p.State } right now.</p>
+			</div>
+		} else if len(p.Rows) == 0 {
 			<div class="uempty add-empty">
 				<div class="uempty-icon" aria-hidden="true"><span></span></div>
 				<h2>No new devices found</h2>
@@ -184,10 +201,9 @@ templ discoveredPage(p discView) {
 					<colgroup>
 						<col class="c-sel"/>
 						<col class="c-name"/>
+						<col class="c-host"/>
 						<col class="c-ip"/>
 						<col class="c-mac"/>
-						<col class="c-model"/>
-						<col class="c-fw"/>
 						<col class="c-src"/>
 						<col class="c-first"/>
 						<col class="c-last"/>
@@ -196,14 +212,13 @@ templ discoveredPage(p discView) {
 					<thead>
 						<tr>
 							<th class="sel"><input type="checkbox" data-select-all hidden aria-label="Select all"/></th>
-							<th>Name / hostname</th>
-							<th>IP</th>
-							<th>MAC</th>
-							<th>Model</th>
-							<th>Firmware</th>
-							<th>Source</th>
-							<th>First seen</th>
-							<th>Last seen</th>
+							@sortTh(p, "name", "Device name")
+							@sortTh(p, "hostname", "Hostname")
+							@sortTh(p, "ip", "IP")
+							@sortTh(p, "mac", "MAC")
+							@sortTh(p, "source", "Source")
+							@sortTh(p, "first", "First seen")
+							@sortTh(p, "last", "Last seen")
 							<th class="act"><span class="sr-only">Actions</span></th>
 						</tr>
 					</thead>
@@ -212,12 +227,12 @@ templ discoveredPage(p discView) {
 							<tr class={ templ.KV("is-ign", r.Ignored) }>
 								<td class="sel">
 									if !r.Ignored {
-										<input type="checkbox" name="id" value={ strconv.FormatInt(r.ID, 10) + ":" + r.Version } aria-label={ "Select " + r.Label }/>
+										<input type="checkbox" name="id" value={ strconv.FormatInt(r.ID, 10) + ":" + r.Version } aria-label={ "Select " + r.Label() }/>
 									}
 								</td>
-								<td class="name" title={ r.Label + " · " + r.Sub }>
+								<td class="name" title={ dash(r.Name) }>
 									<span class="add-label">
-										{ r.Label }
+										{ dash(r.Name) }
 										if r.Ignored {
 											@ui.Badge(ui.ToneNeutral, "Ignored")
 										}
@@ -225,12 +240,10 @@ templ discoveredPage(p discView) {
 											@ui.Badge(ui.ToneWarn, "Offline")
 										}
 									</span>
-									<span class="add-sub">{ r.Sub }</span>
 								</td>
+								<td class="mono" title={ r.Hostname }>{ dash(r.Hostname) }</td>
 								<td class="mono" title={ r.Address }>{ r.Address }</td>
 								<td class="mono add-t2" title={ r.MAC }>{ r.MAC }</td>
-								<td title={ r.Model }>{ dash(r.Model) }</td>
-								<td class="mono">{ dash(r.Firmware) }</td>
 								<td>
 									if r.MQTT {
 										@ui.Badge(ui.ToneAccent, r.Source)
@@ -265,12 +278,12 @@ templ discoveredPage(p discView) {
 					<div class={ "add-card", templ.KV("is-ign", r.Ignored) }>
 						<label class="add-card-sel">
 							if !r.Ignored {
-								<input type="checkbox" name="id" value={ strconv.FormatInt(r.ID, 10) + ":" + r.Version } aria-label={ "Select " + r.Label }/>
+								<input type="checkbox" name="id" value={ strconv.FormatInt(r.ID, 10) + ":" + r.Version } aria-label={ "Select " + r.Label() }/>
 							}
 						</label>
 						<div class="add-card-body">
 							<span class="add-card-title">
-								<span class="add-card-name">{ r.Label }</span>
+								<span class="add-card-name">{ r.Label() }</span>
 								if r.Ignored {
 									@ui.Badge(ui.ToneNeutral, "Ignored")
 								}
@@ -278,7 +291,7 @@ templ discoveredPage(p discView) {
 									@ui.Badge(ui.ToneWarn, "Offline")
 								}
 							</span>
-							<span class="add-card-meta"><span data-visual-mask>{ r.Address }</span>{ metaTail(r.Model, r.Firmware) }</span>
+							<span class="add-card-meta"><span data-visual-mask>{ r.Address }</span>{ metaTail(cardHost(r)) }</span>
 							<span class="add-card-src">{ r.Source } · last seen <time datetime={ r.Last.UTC().Format("2006-01-02T15:04:05Z") }>{ r.LastText }</time></span>
 							if r.Ignored {
 								<button type="submit" class="btn add-card-btn" formaction={ templ.SafeURL(p.Base + "/discovery/proposals/" + strconv.FormatInt(r.ID, 10) + "/undismiss") }>Restore</button>
@@ -450,6 +463,13 @@ templ scanProgress(b scanBodyView) {
 			<span class="add-note-text"><b>Scan finished.</b> { b.Summary }</span>
 		</div>
 	}
+}
+
+// sortTh is a sortable header of the New devices table: a plain link (no script), the current
+// column marked and announced.
+templ sortTh(p discView, key, label string) {
+	{{ href, class, aria := sortHeader(p, key) }}
+	<th aria-sort={ aria }><a class={ class } href={ templ.SafeURL(href) }>{ label }<span class="sortmark" aria-hidden="true"></span></a></th>
 }
 
 // scanLive is filter chips, bulk bar and the table. The stream swaps it only when a device was found,

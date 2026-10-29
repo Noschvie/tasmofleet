@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Added
+
+- Add devices, Discovered: filter the list by state (All, Online, Offline; Offline is the device's MQTT last will) and sort it by clicking the column headers (#130, thanks @Noschvie)
+
 ### Changed
 
 - **Backups are named after the device (#129, thanks @Noschvie), breaking for scripts that read the data directory.**
@@ -15,6 +19,8 @@ always upgrade automatically.
   matches the index, and nothing is deleted; there is nothing to do. A downgrade to 0.17 still
   reads them (the index stores the path). Scripts that read `backups/<id>/` must follow the new
   names. See [Upgrading to 0.18](docs/upgrading.md#upgrading-to-018-backup-file-layout).
+
+- Add devices, Discovered: the never-filled Model and Firmware columns are gone and "Name / hostname" is split into "Device name" and "Hostname". The default order is now last seen, newest first (#130, thanks @Noschvie)
 
 ### Fixed
 

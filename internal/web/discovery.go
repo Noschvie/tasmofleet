@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"slices"
 	"sort"
 	"strconv"
@@ -69,6 +70,11 @@ type discView struct {
 	NewCount  int
 	Ignored   int
 	ShowIgn   bool
+	// State is the shown filter (all, online, offline), Sort and Dir the table's order (#130).
+	State, Sort, Dir string
+	Chips            []addChip
+	// Empty: there are devices, but the filter hides all of them.
+	Filtered bool
 	// HasDefault: accepting uses the fleet default device password (N20, MAC proof required).
 	HasDefault bool
 	// LastAnnounce is the newest MQTT announcement (the empty state's "Last announcement").
@@ -83,19 +89,18 @@ type discView struct {
 
 // propRow is one discovered device of the New devices table.
 type propRow struct {
-	ID              int64
-	Version         string
-	Label, Sub      string // the friendly name (or the host) and the host line
-	Address, MAC    string
-	Model, Firmware string // not stored with a proposal yet: "" shows a dash
-	Source          string
-	MQTT            bool
-	First, Last     time.Time
-	FirstText       string
-	LastText        string
-	Ignored         bool
-	AddHref         string
-	Offline         bool // its MQTT LWT says Offline: it is added as seen, without a probe
+	ID             int64
+	Version        string
+	Name, Hostname string // the friendly name ("" shows a dash) and the host (MQTT topic)
+	Address, MAC   string
+	Source         string
+	MQTT           bool
+	First, Last    time.Time
+	FirstText      string
+	LastText       string
+	Ignored        bool
+	AddHref        string
+	Offline        bool // its MQTT LWT says Offline: it is added as seen, without a probe
 }
 
 // firstSeenText is the fallback of a proposal's "First seen": a relative day, or "unknown".
@@ -209,27 +214,163 @@ func (h *handler) discoveryData(r *http.Request) discView {
 		}
 		v.Unident = append(v.Unident, moveRow{Name: u.Topic, Seen: u.SeenAt, SeenText: agoWords(now, u.SeenAt) + " · " + state, New: addr, Why: capitalize(u.Reason) + "."})
 	}
-	// the order they were discovered in, ignored ones after the new ones
-	sort.SliceStable(v.Rows, func(i, j int) bool {
-		if v.Rows[i].Ignored != v.Rows[j].Ignored {
-			return !v.Rows[i].Ignored
+	q := r.URL.Query()
+	v.State = discState(q)
+	v.Sort, v.Dir = discSort(q)
+	// the chips count what the ignored switch shows; the filter then narrows the rows
+	counts := map[string]int{stateAll: len(v.Rows)}
+	for _, row := range v.Rows {
+		if row.Offline {
+			counts[stateOffline]++
+		} else {
+			counts[stateOnline]++
 		}
-		return v.Rows[i].ID < v.Rows[j].ID
-	})
+	}
+	for _, c := range []struct{ key, label string }{{stateAll, "All"}, {stateOnline, "Online"}, {stateOffline, "Offline"}} {
+		v.Chips = append(v.Chips, addChip{Label: c.label, N: counts[c.key], Current: v.State == c.key,
+			Href: discHref(base, c.key, v.Sort, v.Dir, v.ShowIgn)})
+	}
+	if v.State != stateAll {
+		kept := v.Rows[:0:0]
+		for _, row := range v.Rows {
+			if row.Offline == (v.State == stateOffline) {
+				kept = append(kept, row)
+			}
+		}
+		v.Filtered = len(v.Rows) > 0 && len(kept) == 0
+		v.Rows = kept
+	}
+	sortRows(v.Rows, v.Sort, v.Dir)
 	return v
 }
 
 func (h *handler) propRow(base string, now time.Time, p discovery.Proposal, ignored bool) propRow {
-	row := propRow{ID: p.ID, Version: p.Version, Label: p.Device.Name, Sub: p.Device.Topic,
+	row := propRow{ID: p.ID, Version: p.Version, Name: p.Device.Name, Hostname: p.Device.Topic,
 		Address: netaddr.Display(p.Device.Address, p.Device.Port, "http"), MAC: strings.ToUpper(p.Device.MAC),
 		Source: viaText(p.Via), MQTT: p.Via == discovery.ViaMQTT, First: p.FirstSeen, Last: p.SeenAt,
 		FirstText: firstSeenText(now, p.FirstSeen), LastText: agoWords(now, p.SeenAt), Ignored: ignored,
 		AddHref: base + "/devices/new?proposal=" + strconv.FormatInt(p.ID, 10), Offline: p.LWT == "Offline"}
 	row.Source = strings.ToUpper(row.Source[:1]) + row.Source[1:]
-	if row.Label == "" {
-		row.Label, row.Sub = p.Device.Topic, "No friendly name reported"
-	}
 	return row
+}
+
+// Label names the row where a single name is needed (a checkbox's label): the friendly name, else the host.
+func (r propRow) Label() string {
+	if r.Name != "" {
+		return r.Name
+	}
+	return r.Hostname
+}
+
+// addChip is one state filter of the New devices list.
+type addChip struct {
+	Label   string
+	N       int
+	Href    string
+	Current bool
+}
+
+// The states of the filter and the sort keys of the New devices table (#130).
+const (
+	stateAll     = "all"
+	stateOnline  = "online"
+	stateOffline = "offline"
+)
+
+var discSortKeys = map[string]bool{"name": true, "hostname": true, "ip": true, "mac": true, "source": true, "first": true, "last": true}
+
+// discSort reads ?sort= and ?dir=: an unknown key falls back to the default, the newest
+// announcement first.
+func discSort(q url.Values) (key, dir string) {
+	key, dir = q.Get("sort"), q.Get("dir")
+	if !discSortKeys[key] {
+		return "last", "desc"
+	}
+	if dir != "asc" && dir != "desc" {
+		dir = "asc"
+	}
+	return key, dir
+}
+
+func discState(q url.Values) string {
+	switch s := q.Get("state"); s {
+	case stateOnline, stateOffline:
+		return s
+	}
+	return stateAll
+}
+
+// discHref is the Discovered tab's URL with the given filter, sort and ignored switch.
+func discHref(base, state, sortKey, dir string, ignored bool) string {
+	q := url.Values{}
+	if state != stateAll {
+		q.Set("state", state)
+	}
+	if sortKey != "last" || dir != "desc" {
+		q.Set("sort", sortKey)
+		q.Set("dir", dir)
+	}
+	if ignored {
+		q.Set("ignored", "1")
+	}
+	if len(q) == 0 {
+		return base + "/discovery"
+	}
+	return base + "/discovery?" + q.Encode()
+}
+
+// sortRows orders the rows by key: the ignored ones stay after the new ones, equal values keep
+// the order they were discovered in (the ID), whatever the direction.
+func sortRows(rows []propRow, key, dir string) {
+	less := func(a, b propRow) int {
+		switch key {
+		case "name":
+			return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
+		case "hostname":
+			return strings.Compare(strings.ToLower(a.Hostname), strings.ToLower(b.Hostname))
+		case "ip":
+			return compareAddr(a.Address, b.Address)
+		case "mac":
+			return strings.Compare(a.MAC, b.MAC)
+		case "source":
+			return strings.Compare(a.Source, b.Source)
+		case "first":
+			return a.First.Compare(b.First)
+		}
+		return a.Last.Compare(b.Last)
+	}
+	sort.SliceStable(rows, func(i, j int) bool {
+		a, b := rows[i], rows[j]
+		if a.Ignored != b.Ignored {
+			return !a.Ignored
+		}
+		c := less(a, b)
+		if dir == "desc" {
+			c = -c
+		}
+		if c != 0 {
+			return c < 0
+		}
+		return a.ID < b.ID
+	})
+}
+
+// compareAddr orders addresses numerically (10.0.0.9 before 10.0.0.10); what is no IP sorts by text.
+func compareAddr(a, b string) int {
+	pa, ea := netip.ParseAddrPort(a)
+	pb, eb := netip.ParseAddrPort(b)
+	if ea == nil && eb == nil {
+		if c := pa.Addr().Compare(pb.Addr()); c != 0 {
+			return c
+		}
+		return int(pa.Port()) - int(pb.Port())
+	}
+	if aa, err := netip.ParseAddr(a); err == nil {
+		if bb, err := netip.ParseAddr(b); err == nil {
+			return aa.Compare(bb)
+		}
+	}
+	return strings.Compare(a, b)
 }
 
 // moveWhy says in a sentence why discovery left an address change to an admin.
