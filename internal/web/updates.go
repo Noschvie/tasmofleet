@@ -698,7 +698,7 @@ type jobView struct {
 
 // logLine is one line of the per-device update log (a persisted job event).
 type logLine struct {
-	At   string
+	At   time.Time
 	Text string
 	Err  bool // the event reports a failure
 }
@@ -747,7 +747,7 @@ func (h *handler) jobViews(r *http.Request, f store.JobFilter) ([]jobView, bool,
 		}
 		if evs, err := h.d.Jobs.JobEvents(r.Context(), j.ID); err == nil {
 			for i, e := range evs {
-				v.Log = append(v.Log, logLine{At: e.At.Local().Format("15:04:05"), Text: eventText(e, j, h.pr, eventStageMinimal(evs, i, j)), Err: errEvents[e.Event] || e.To == model.JobFailed})
+				v.Log = append(v.Log, logLine{At: e.At, Text: eventText(e, j, h.pr, eventStageMinimal(evs, i, j)), Err: errEvents[e.Event] || e.To == model.JobFailed})
 			}
 		}
 		any = any || v.Active
@@ -916,7 +916,7 @@ func (h *handler) txnPageData(w http.ResponseWriter, r *http.Request) (txnPage, 
 			CanCancel: sel.Active && !sel.Job.CancelRequested, CanRetry: sel.CanRetry && !b.Active}
 		s.Log = append(s.Log, sel.Log...)
 		if sel.Job.LastError != "" {
-			s.Log = append(s.Log, logLine{At: sel.Job.UpdatedAt.Local().Format("15:04:05"), Text: "Error: " + sel.Job.LastError, Err: true})
+			s.Log = append(s.Log, logLine{At: sel.Job.UpdatedAt, Text: "Error: " + sel.Job.LastError, Err: true})
 		}
 		p.Sel = s
 	}
@@ -1163,7 +1163,7 @@ func (h *handler) transactionsPage(w http.ResponseWriter, r *http.Request) {
 				Href: href, OK: t.Done, Failed: t.Failed, Active: t.Running, Total: t.Total})
 		}
 		p.History = append(p.History, txHistRow{ID: txID(t.ID), Title: t.Title, Devices: plural(t.Total, "device"), Result: res, Tone: tone,
-			By: h.pr.Text(t.By), When: whenText(t.Started, now), At: t.Started.Format(time.RFC3339), Href: href})
+			By: h.pr.Text(t.By), When: ui.StampDayText(now, t.Started), At: t.Started.Format(time.RFC3339), Href: href})
 	}
 	v := h.view(r, "Updates", "transactions", nil) // the phone header names the group, as the prototype does
 	v.Live = true

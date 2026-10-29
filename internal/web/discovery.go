@@ -20,6 +20,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/netaddr"
 	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
 
 // Discovery is what the discovery pages need (*discovery.Manager).
@@ -95,6 +96,14 @@ type propRow struct {
 	Ignored         bool
 	AddHref         string
 	Offline         bool // its MQTT LWT says Offline: it is added as seen, without a probe
+}
+
+// firstSeenText is the fallback of a proposal's "First seen": a relative day, or "unknown".
+func firstSeenText(now, t time.Time) string {
+	if t.IsZero() {
+		return "unknown"
+	}
+	return ui.StampDayText(now, t)
 }
 
 // moveRow is a known device that announced itself at a new address (or a conflict).
@@ -214,7 +223,7 @@ func (h *handler) propRow(base string, now time.Time, p discovery.Proposal, igno
 	row := propRow{ID: p.ID, Version: p.Version, Label: p.Device.Name, Sub: p.Device.Topic,
 		Address: netaddr.Display(p.Device.Address, p.Device.Port, "http"), MAC: strings.ToUpper(p.Device.MAC),
 		Source: viaText(p.Via), MQTT: p.Via == discovery.ViaMQTT, First: p.FirstSeen, Last: p.SeenAt,
-		FirstText: dayStamp(now, p.FirstSeen), LastText: agoWords(now, p.SeenAt), Ignored: ignored,
+		FirstText: firstSeenText(now, p.FirstSeen), LastText: agoWords(now, p.SeenAt), Ignored: ignored,
 		AddHref: base + "/devices/new?proposal=" + strconv.FormatInt(p.ID, 10), Offline: p.LWT == "Offline"}
 	row.Source = strings.ToUpper(row.Source[:1]) + row.Source[1:]
 	if row.Label == "" {

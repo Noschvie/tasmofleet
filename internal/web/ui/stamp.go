@@ -20,6 +20,12 @@ var (
 	// StampStore is the storage table's cell: time.js picks "23 Oct, 05:45" or "23 Oct 2025" itself
 	// (the server's text, storeDate, is the fallback and has no fixed layout).
 	StampStore = StampFmt{"store", ""}
+	// StampDay is a relative day: "Today 09:41", "Yesterday 21:10", else "19 Aug, 20:02" (with the
+	// year when it is not this year). time.js decides today and yesterday in the browser's zone and
+	// repaints across midnight; the fallback text comes from StampDayText, not from a Layout.
+	StampDay = StampFmt{"day", ""}
+	// StampLog is a log column: 24-hour with seconds in any locale (time.js "clock-24").
+	StampLog = StampFmt{"clock-24", "15:04:05"}
 	// StampTitle changes only the title of the element (full date, time and zone), not its text:
 	// for a <time> whose text is relative ("5 min ago") or already worded.
 	StampTitle = StampFmt{"title", "2006-01-02 15:04:05 MST"}
@@ -38,3 +44,21 @@ func StampAttrs(t time.Time, f StampFmt) templ.Attributes {
 
 // StampISO is the instant as RFC 3339 in UTC, for data attributes that time.js reads.
 func StampISO(t time.Time) string { return t.UTC().Format(time.RFC3339) }
+
+// StampDayText is the fallback text of a StampDay: t as a calendar day relative to now, in now's
+// zone. Today and Yesterday carry the time; other days are a date (and time), with the year only
+// when it is not now's. A later day (an expiry) is a date, never "Today".
+func StampDayText(now, t time.Time) string {
+	t = t.In(now.Location())
+	const day = "2006-01-02"
+	switch t.Format(day) {
+	case now.Format(day):
+		return "Today " + t.Format("15:04")
+	case now.AddDate(0, 0, -1).Format(day):
+		return "Yesterday " + t.Format("15:04")
+	}
+	if t.Year() == now.Year() {
+		return t.Format("2 Jan, 15:04")
+	}
+	return t.Format("2 Jan 2006, 15:04")
+}

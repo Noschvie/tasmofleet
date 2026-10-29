@@ -105,7 +105,16 @@ templ policyPage(p policyView) {
 templ liveStatus(p policyView) {
 	<div class={ "pol-line", "pol-line-" + p.Line.State } role="status">
 		<span class="pol-line-dot" aria-hidden="true"></span>
-		<span class="pol-line-text">{ p.Line.Text }</span>
+		<span class="pol-line-text">
+			if p.Line.State == "paused" {
+				Live check paused by { p.Line.PausedBy } at <time { ui.StampAttrs(p.Line.PausedAt, ui.StampClock)... }>{ ui.StampText(p.Line.PausedAt, ui.StampClock) }</time>
+				if !p.Line.Shown.IsZero() {
+					{ " · deviations shown are from " }<time { ui.StampAttrs(p.Line.Shown, ui.StampClock)... }>{ ui.StampText(p.Line.Shown, ui.StampClock) }</time>
+				}
+			} else {
+				{ p.Line.Text }
+			}
+		</span>
 		<span class="pol-line-acts">
 			switch p.Line.State {
 				case "failed":

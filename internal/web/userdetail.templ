@@ -97,7 +97,7 @@ templ userDetailPage(v userDetailView) {
 			for _, s := range v.Sessions {
 				<div class="ud-row">
 					<div class="ud-row-t">
-						<span class="ud-row-main">Signed in <time datetime={ s.StartedAt }>{ s.Started }</time></span>
+						<span class="ud-row-main">Signed in <time datetime={ s.StartedAt } data-ts={ ui.StampDay.Key }>{ s.Started }</time></span>
 						<span class="ud-row-sub mono">
 							last active <time datetime={ s.SeenAt }>{ s.Seen }</time>
 							if s.Current {
@@ -130,7 +130,7 @@ templ userDetailPage(v userDetailView) {
 			}
 			for _, a := range v.Activity {
 				<div class="ud-act">
-					<time class="ud-act-when mono" datetime={ a.At }>{ a.When }</time>
+					<time class="ud-act-when mono" datetime={ a.At } data-ts={ ui.StampDay.Key }>{ a.When }</time>
 					<span class="ud-act-what mono">{ a.Action }</span>
 					<span class="ud-act-sum">{ a.Summary }</span>
 					@ui.Badge(a.Tone, a.Status)

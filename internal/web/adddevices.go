@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/auth"
 	"github.com/nofuturekid/tasmofleet/internal/discovery"
@@ -168,23 +167,6 @@ func (h *handler) proposalByID(r *http.Request, id int64) (discovery.Proposal, b
 		}
 	}
 	return discovery.Proposal{}, false
-}
-
-// dayStamp is the "First seen" of a proposal: "Today 08:12", "Yesterday 18:30" or "12 Sep 2026".
-func dayStamp(now, t time.Time) string {
-	if t.IsZero() {
-		return "unknown"
-	}
-	t = t.In(now.Location())
-	y, m, d := now.Date()
-	today := time.Date(y, m, d, 0, 0, 0, 0, now.Location())
-	switch {
-	case !t.Before(today):
-		return "Today " + t.Format("15:04")
-	case !t.Before(today.AddDate(0, 0, -1)):
-		return "Yesterday " + t.Format("15:04")
-	}
-	return t.Format("2 Jan 2006")
 }
 
 // testedText is what "Test connection" found: the name and what it runs.

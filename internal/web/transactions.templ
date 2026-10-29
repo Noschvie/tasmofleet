@@ -66,7 +66,7 @@ templ txList(p txListView) {
 						<span class="upd-hst">
 							@ui.Badge(h.Tone, h.Result)
 						</span>
-						<span class="upd-hwho">{ h.By } · <time datetime={ h.At }>{ h.When }</time></span>
+						<span class="upd-hwho">{ h.By } · <time datetime={ h.At } data-ts={ ui.StampDay.Key }>{ h.When }</time></span>
 					</a>
 				}
 			</section>
@@ -250,7 +250,7 @@ templ txnBody(p txnPage) {
 					</div>
 					<div class="upd-log-body" id="log-lines" tabindex="0" data-visual-mask>
 						for _, l := range p.Sel.Log {
-							<span class={ "upd-log-line", templ.KV("upd-log-err", l.Err) }><span class="upd-log-at">{ l.At }</span><span class="upd-log-t">@ui.SoftJSON(l.Text)</span></span>
+							<span class={ "upd-log-line", templ.KV("upd-log-err", l.Err) }><span class="upd-log-at"><time { ui.StampAttrs(l.At, ui.StampLog)... }>{ ui.StampText(l.At, ui.StampLog) }</time></span><span class="upd-log-t">@ui.SoftJSON(l.Text)</span></span>
 						}
 						if len(p.Sel.Log) == 0 {
 							<span class="upd-log-line"><span class="upd-log-t">No events yet.</span></span>

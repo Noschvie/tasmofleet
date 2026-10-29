@@ -619,19 +619,16 @@ func TestDiscoveredSaysWhenMQTTDiscoveryIsOff(t *testing.T) {
 	}
 }
 
-// Why: "First seen" is a day and a time an admin can place ("Today 08:12"),
-// not a raw timestamp; older days show the date.
-func TestDayStamp(t *testing.T) {
+// Why: "First seen" is a day and a time an admin can place ("Today 08:12") in the browser's
+// zone (time.js, data-ts="day"); the server text is only the fallback. A proposal without a
+// first sighting says "unknown" and must not become a <time> with a zero instant.
+func TestFirstSeenText(t *testing.T) {
 	now := time.Date(2026, 10, 22, 9, 47, 0, 0, time.UTC)
-	for in, want := range map[time.Time]string{
-		time.Date(2026, 10, 22, 8, 12, 0, 0, time.UTC):  "Today 08:12",
-		time.Date(2026, 10, 21, 18, 30, 0, 0, time.UTC): "Yesterday 18:30",
-		time.Date(2026, 9, 12, 7, 0, 0, 0, time.UTC):    "12 Sep 2026",
-		{}: "unknown",
-	} {
-		if got := dayStamp(now, in); got != want {
-			t.Errorf("%v: %q, want %q", in, got, want)
-		}
+	if got := firstSeenText(now, time.Date(2026, 10, 22, 8, 12, 0, 0, time.UTC)); got != "Today 08:12" {
+		t.Errorf("today: %q", got)
+	}
+	if got := firstSeenText(now, time.Time{}); got != "unknown" {
+		t.Errorf("zero: %q", got)
 	}
 }
 

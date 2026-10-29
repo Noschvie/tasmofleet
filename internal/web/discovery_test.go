@@ -83,7 +83,7 @@ func setupDiscovery(t *testing.T) (*env, *fakeDiscovery) {
 	t.Helper()
 	fd := &fakeDiscovery{
 		props: []discovery.Proposal{
-			{ID: 1, Version: "v1", Kind: discovery.KindNew, Via: "mqtt", SeenAt: time.Now(), Device: model.Device{Name: `<script>alert(1)</script>`, Address: "10.0.0.50", MAC: "aa:bb:cc:dd:ee:01"}},
+			{ID: 1, Version: "v1", Kind: discovery.KindNew, Via: "mqtt", SeenAt: time.Now(), FirstSeen: time.Now(), Device: model.Device{Name: `<script>alert(1)</script>`, Address: "10.0.0.50", MAC: "aa:bb:cc:dd:ee:01"}},
 			{ID: 2, Version: "v2", Kind: discovery.KindAddressChange, Via: "scan", ExistingID: 2, SeenAt: time.Now(), Device: model.Device{Name: "kitchen", Address: "10.0.0.51", MAC: "aa:bb:cc:dd:ee:02"}},
 			{ID: 3, Kind: discovery.KindConflict, Via: "mqtt", ExistingID: 2, SeenAt: time.Now(), Device: model.Device{Name: "x", Address: "10.0.0.52", MAC: "aa:bb:cc:dd:ee:03"}},
 		},
@@ -343,6 +343,10 @@ func TestDiscoveryProposalFactsStayVisibleOnPhones(t *testing.T) {
 		if !strings.Contains(card, want) {
 			t.Errorf("phone card lacks %q", want)
 		}
+	}
+	// the table's "First seen" is a day stamp time.js shows in the browser's zone (#137)
+	if !strings.Contains(body, `data-ts="day"`) {
+		t.Error("First seen is not a day stamp")
 	}
 }
 

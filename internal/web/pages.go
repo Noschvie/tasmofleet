@@ -518,7 +518,7 @@ func userDetailViewOf(d auth.UserDetailData, now time.Time, nameOf func(subject 
 	}
 	v.Facts = append(v.Facts, ui.KVRow{Key: "Last sign-in", Value: last, Mask: !u.LastLogin.IsZero()})
 	if !d.OTPExpiresAt.IsZero() {
-		otp := "Valid until " + dayTime(now, d.OTPExpiresAt)
+		otp := "Valid until " + ui.StampDayText(now, d.OTPExpiresAt)
 		if d.OTPExpired {
 			otp = "Expired: reset the password again"
 		}
@@ -526,11 +526,11 @@ func userDetailViewOf(d auth.UserDetailData, now time.Time, nameOf func(subject 
 	}
 	for _, s := range d.Sessions {
 		v.Sessions = append(v.Sessions, sessionView{ID: s.ID, Current: s.Current,
-			Started: dayTime(now, s.CreatedAt), StartedAt: s.CreatedAt.UTC().Format(time.RFC3339),
+			Started: ui.StampDayText(now, s.CreatedAt), StartedAt: s.CreatedAt.UTC().Format(time.RFC3339),
 			Seen: agoWords(now, s.LastSeen), SeenAt: s.LastSeen.UTC().Format(time.RFC3339)})
 	}
 	for _, e := range d.Audit {
-		a := activityView{When: dayTime(now, e.At), At: e.At.UTC().Format(time.RFC3339), Action: e.Action, Summary: auditShort(e)}
+		a := activityView{When: ui.StampDayText(now, e.At), At: e.At.UTC().Format(time.RFC3339), Action: e.Action, Summary: auditShort(e)}
 		switch auditStatus(e) {
 		case auditOK:
 			a.Status, a.Tone = "OK", ui.ToneOK
@@ -599,7 +599,7 @@ func createdBy(by string, nameOf func(string) string) string {
 // dayDate is a day as the prototype's details write it: "Today, 07:58", "Yesterday, 22:04", else
 // "28 Sep 2026".
 func dayDate(now, t time.Time) string {
-	s := dayTime(now, t)
+	s := ui.StampDayText(now, t)
 	if rest, ok := strings.CutPrefix(s, "Today "); ok {
 		return "Today, " + rest
 	}

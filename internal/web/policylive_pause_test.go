@@ -129,7 +129,7 @@ func TestPolicyLiveLineShowsThePause(t *testing.T) {
 	}
 	r, _ := e.do(t, "POST", "/policy/live/pause", "admin", url.Values{"csrf": {"tok"}})
 	_, body = e.do(t, "GET", r.Header.Get("Location")[len("/tf"):], "admin", nil)
-	for _, want := range []string{"pol-line-paused", "Live check paused by test:admin at ", `action="/tf/policy/live/resume"`, ">Resume<", "Live check paused</span>", ">Run now<"} {
+	for _, want := range []string{"pol-line-paused", "Live check paused by test:admin at <time", `data-ts="time"`, `action="/tf/policy/live/resume"`, ">Resume<", "Live check paused</span>", ">Run now<"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("paused page lacks %q", want)
 		}

@@ -34,6 +34,10 @@ always upgrade automatically.
 
 ### Fixed
 
+- "Today" and "Yesterday" (dashboard transactions, transaction history, Add devices "First seen", the users
+  pages), the transaction log's clock times and the policy page's "paused at" now follow the browser's time
+  zone like every other timestamp; before, the server's zone decided and one page could show two zones.
+  Today/Yesterday also turn over at the browser's midnight without a reload (#137, thanks @Noschvie).
 - "Refresh identity" over MQTT (devices HTTP cannot reach) now reads the DeviceName too, with the plain
   `Status` (never `Status 0`); before it left the name untouched (#125, thanks @Noschvie).
 - The Chip of an ESP32 with the package `ESP32-U4WDH` (single-core: `ESP32-U4WDH-S`, e.g. `ESP32-U4WDH-S v3.0`

@@ -119,9 +119,13 @@ func editOpts(r *http.Request) (policyOpts, bool) {
 
 // liveLine is the live-check status line: idle, paused or failed.
 type liveLine struct {
-	State    string // "idle", "paused", "failed"
-	Text     string
-	CanPause bool // Pause / Resume are shown (admin, and the pause service exists)
+	State string // "idle", "paused", "failed"
+	Text  string // the whole line, except while paused (then PausedBy, PausedAt and Shown make it)
+	// Paused line: "Live check paused by <PausedBy> at <PausedAt>[ · deviations shown are from <Shown>]".
+	// The times are components so that time.js shows them in the browser's zone.
+	PausedBy        string
+	PausedAt, Shown time.Time
+	CanPause        bool // Pause / Resume are shown (admin, and the pause service exists)
 }
 
 // ruleCard is one rule in the list, in stored order (the order is the precedence).
@@ -566,10 +570,7 @@ func (h *handler) liveLine(rep PolicyReport, repErr error, dev int, admin bool) 
 	if h.d.PolicyLivePause != nil {
 		if s := h.d.PolicyLivePause.State(); s.Paused {
 			l.State = "paused"
-			l.Text = "Live check paused by " + h.pr.Text(s.By) + " at " + s.At.Local().Format("15:04")
-			if !last.IsZero() {
-				l.Text += " · deviations shown are from " + last.Local().Format("15:04")
-			}
+			l.PausedBy, l.PausedAt, l.Shown = h.pr.Text(s.By), s.At, last
 			return l
 		}
 	}

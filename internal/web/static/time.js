@@ -31,10 +31,25 @@
       ? Object.assign({ day: "numeric", month: "short" }, HM)
       : { day: "numeric", month: "short", year: "numeric" }).format(d);
   }
+  // day: "Today 09:41", "Yesterday 21:10", else "19 Aug, 20:02" ("19 Aug 2025, 20:02" in another
+  // year). Today and Yesterday are the calendar days of the browser's zone, now; the same rule as
+  // ui.StampDayText, which is the server's fallback.
+  function dayText(d) {
+    var now = new Date();
+    var days = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) -
+      new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+    if (days === 0) return "Today " + fmt("time", HM).format(d);
+    if (days === 1) return "Yesterday " + fmt("time", HM).format(d);
+    var sameYear = d.getFullYear() === now.getFullYear();
+    return fmt(sameYear ? "day-year" : "day-old", sameYear
+      ? Object.assign({ day: "numeric", month: "short" }, HM)
+      : Object.assign({ day: "numeric", month: "short", year: "numeric" }, HM)).format(d);
+  }
   // textOf is the text for a format key and an instant ("" when the key is unknown). "title"
   // leaves the text alone, so it is "" here and handled by the caller.
   function textOf(key, d) {
     if (key === "store") return storeText(d);
+    if (key === "day") return dayText(d);
     return SPECS[key] ? fmt(key, SPECS[key]).format(d) : "";
   }
   function paint(root) {
@@ -70,4 +85,15 @@
     paint();
   }
   document.body.addEventListener("htmx:afterSettle", function () { paint(); });
+  // "Today" turns into "Yesterday" at the browser's midnight, and a hidden tab's timers sleep:
+  // repaint at the next midnight and when the tab comes back.
+  function untilMidnight() {
+    var n = new Date();
+    return new Date(n.getFullYear(), n.getMonth(), n.getDate() + 1, 0, 0, 1) - n;
+  }
+  function paintAtMidnight() {
+    setTimeout(function () { paint(); paintAtMidnight(); }, Math.max(untilMidnight(), 1000));
+  }
+  paintAtMidnight();
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) paint(); });
 })();

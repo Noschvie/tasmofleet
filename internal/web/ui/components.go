@@ -268,6 +268,7 @@ type TxnData struct {
 type TxnRowData struct {
 	ID, Title, Result, When, Href string
 	Tone                          Tone
+	WhenAt                        time.Time // when set, When is the fallback text of that instant (StampDay) and time.js shows it in the browser's zone
 }
 
 // ConsoleLine is one line of the console: time, text, kind ("cmd", "err", "reply" for the

@@ -202,17 +202,6 @@ func TestTxnWording(t *testing.T) {
 			t.Errorf("txResult%v = %q %s, want %q %s", c, got, tone, c.want, c.tone)
 		}
 	}
-	now := time.Date(2026, 10, 22, 9, 41, 0, 0, time.UTC)
-	for in, want := range map[time.Time]string{
-		now.Add(-time.Minute):                           "Today 09:40",
-		time.Date(2026, 10, 21, 21, 10, 0, 0, time.UTC): "Yesterday 21:10",
-		time.Date(2026, 8, 19, 20, 2, 0, 0, time.UTC):   "19 Aug, 20:02",
-		time.Date(2025, 8, 19, 20, 2, 0, 0, time.UTC):   "19 Aug 2025, 20:02",
-	} {
-		if got := whenText(in, now); got != want {
-			t.Errorf("whenText(%s) = %q, want %q", in, got, want)
-		}
-	}
 	for f, want := range map[model.ChipFamily]string{model.ChipESP8266: "ESP8266", model.ChipESP32: "ESP32", model.ChipESP32C3: "ESP32-C3"} {
 		if got := chipName(f); got != want {
 			t.Errorf("chipName(%s) = %q", f, got)

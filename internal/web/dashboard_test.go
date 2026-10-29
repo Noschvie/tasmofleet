@@ -191,6 +191,10 @@ func TestDashboardTransactionsCard(t *testing.T) {
 			t.Errorf("transactions card: missing %q in %s", want, card)
 		}
 	}
+	// Why: "Today"/"Yesterday" is the browser's call (#137), so the when of a row is a <time> time.js repaints
+	if !strings.Contains(card, `data-ts="day"`) {
+		t.Errorf("history rows are not day stamps for time.js: %s", card)
+	}
 	if strings.Contains(card, `/tf/transactions/1"`) {
 		t.Error("more than three history rows")
 	}

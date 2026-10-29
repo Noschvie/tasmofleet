@@ -353,23 +353,6 @@ func dashResult(t txView) (string, ui.Tone) {
 
 func dashTxnRow(base string, now time.Time, t txView) ui.TxnRowData {
 	res, tone := dashResult(t)
-	return ui.TxnRowData{ID: txID(t.ID), Title: dashTxnTitle(t), Result: res, Tone: tone, When: dayTime(now, t.Started),
+	return ui.TxnRowData{ID: txID(t.ID), Title: dashTxnTitle(t), Result: res, Tone: tone, When: ui.StampDayText(now, t.Started), WhenAt: t.Started,
 		Href: fmt.Sprintf("%s/transactions/%d", base, t.ID)}
-}
-
-// dayTime is a time of the last days as the prototype writes it: "Today 09:41",
-// "Yesterday 21:10", else "19 Aug, 20:02" (with the year when it is not this year).
-func dayTime(now, t time.Time) string {
-	t = t.In(now.Location())
-	y, m, d := now.Date()
-	today := time.Date(y, m, d, 0, 0, 0, 0, now.Location())
-	switch {
-	case !t.Before(today):
-		return "Today " + t.Format("15:04")
-	case !t.Before(today.AddDate(0, 0, -1)):
-		return "Yesterday " + t.Format("15:04")
-	case t.Year() == now.Year():
-		return t.Format("2 Jan, 15:04")
-	}
-	return t.Format("2 Jan 2006, 15:04")
 }

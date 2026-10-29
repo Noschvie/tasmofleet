@@ -4,9 +4,23 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/a-h/templ"
 )
+
+// Why (#137): a transaction row's "when" is Today/Yesterday in the browser's zone, so with an
+// instant it is a <time data-ts="day">; without one (the styleguide's sample words) plain text.
+func TestTxnRowWhenIsADayStampWhenItHasAnInstant(t *testing.T) {
+	at := time.Date(2026, 10, 22, 9, 41, 0, 0, time.UTC)
+	got := comp(t, TxnRow(TxnRowData{ID: "TX-1", When: "Today 09:41", WhenAt: at, Href: "/x"}))
+	if !strings.Contains(got, `<time data-ts="day" datetime="2026-10-22T09:41:00Z">Today 09:41</time>`) {
+		t.Errorf("no day stamp: %s", got)
+	}
+	if got := comp(t, TxnRow(TxnRowData{ID: "TX-1", When: "2 days ago", Href: "/x"})); strings.Contains(got, "<time") {
+		t.Errorf("sample text became a <time>: %s", got)
+	}
+}
 
 func comp(t *testing.T, c templ.Component) string {
 	t.Helper()

@@ -436,7 +436,11 @@ templ TxnRow(r TxnRowData) {
 		<span class="txn-id">{ r.ID }</span>
 		<span class="txn-row-title">{ r.Title }</span>
 		@Badge(r.Tone, r.Result)
-		<span class="txn-when">{ r.When }</span>
+		if r.WhenAt.IsZero() {
+			<span class="txn-when">{ r.When }</span>
+		} else {
+			<span class="txn-when"><time { StampAttrs(r.WhenAt, StampDay)... }>{ r.When }</time></span>
+		}
 	</a>
 }
 

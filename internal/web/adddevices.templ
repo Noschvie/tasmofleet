@@ -238,7 +238,13 @@ templ discoveredPage(p discView) {
 										@ui.Badge(ui.ToneNeutral, r.Source)
 									}
 								</td>
-								<td class="add-t2"><time datetime={ r.First.UTC().Format("2006-01-02T15:04:05Z") }>{ r.FirstText }</time></td>
+								<td class="add-t2">
+									if r.First.IsZero() {
+										{ r.FirstText }
+									} else {
+										<time { ui.StampAttrs(r.First, ui.StampDay)... }>{ r.FirstText }</time>
+									}
+								</td>
 								<td class="add-t2"><time datetime={ r.Last.UTC().Format("2006-01-02T15:04:05Z") }>{ r.LastText }</time></td>
 								<td class="act">
 									if r.Ignored {

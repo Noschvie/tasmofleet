@@ -134,23 +134,6 @@ func changeBadge(s model.JobState) (string, ui.Tone) {
 	return "Applying", ui.ToneAccent
 }
 
-// whenText is the "when" of a history row: "Today 09:41", "Yesterday 21:10", "19 Aug, 20:02",
-// with the year only when it is not this year's.
-func whenText(t, now time.Time) string {
-	t = t.In(now.Location())
-	const day = "2006-01-02"
-	switch t.Format(day) {
-	case now.Format(day):
-		return "Today " + t.Format("15:04")
-	case now.AddDate(0, 0, -1).Format(day):
-		return "Yesterday " + t.Format("15:04")
-	}
-	if t.Year() == now.Year() {
-		return t.Format("2 Jan, 15:04")
-	}
-	return t.Format("2 Jan 2006, 15:04")
-}
-
 // chipName is a chip family as the datasheets write it: "ESP8266", "ESP32", "ESP32-C3".
 func chipName(f model.ChipFamily) string {
 	s := strings.ToUpper(string(f))
