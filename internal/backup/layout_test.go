@@ -817,27 +817,41 @@ func TestMigrateLayoutCountsMissingFilesInNewLayout(t *testing.T) {
 	}
 }
 
-// Why (review of #205): a crash after the rename leaves the file under the name the first
-// run chose. If the orphan's rows carry different stored names (the device was renamed), a
-// later run must not pick another directory and call the row missing: the row is repaired,
-// by a stable choice of name and, as a net, by finding the file by checksum.
+// failNth fails the n-th UpdateBackupPath call like a crash right after a rename.
+type failNth struct {
+	*memBackups
+	n, calls int
+}
+
+func (f *failNth) UpdateBackupPath(ctx context.Context, id model.BackupID, o, n string) (bool, error) {
+	f.calls++
+	if f.calls == f.n {
+		return false, errors.New("simulated crash")
+	}
+	return f.memBackups.UpdateBackupPath(ctx, id, o, n)
+}
+
+// Why (review of #205): the crash hits the SECOND row of a renamed orphan. Row 1 ("alpha")
+// moved into alpha/, row 2 ("beta") was renamed into alpha/ too, then the process died before
+// its row changed. The next run sees row 2 alone, would choose beta/ from its own name, and
+// without the checksum search would call the row missing although its file is in alpha/.
 func TestMigrateLayoutOrphanWithRenamedDeviceRepairsAfterCrash(t *testing.T) {
 	e, _ := fleetEnv(t)
-	fo := &failOnce{memBackups: e.st}
-	e.m.o.Store = fo
+	e.m.o.Store = &failNth{memBackups: e.st, n: 2}
 	rows := legacy(t, e,
-		legacyFile{dev: 4, stamp: "20261001T080000Z", kind: model.BackupConfigDump, content: "a", orphan: true, name: "Old name"},
-		legacyFile{dev: 4, stamp: "20261002T080000Z", kind: model.BackupConfigDump, content: "b", orphan: true, name: "New name"},
+		legacyFile{dev: 4, stamp: "20261001T080000Z", kind: model.BackupConfigDump, content: "a", orphan: true, name: "alpha"},
+		legacyFile{dev: 4, stamp: "20261002T080000Z", kind: model.BackupConfigDump, content: "b", orphan: true, name: "beta"},
 	)
-	// the crash hits the first row's update (file renamed, row not changed)
-	e.m.MigrateLayout(t.Context()) //nolint:errcheck // the result is asserted through the second run
+	if res, _ := e.m.MigrateLayout(t.Context()); res.Moved != 1 || res.Left != 1 {
+		t.Fatalf("crash run %+v", res)
+	}
 	res, err := e.m.MigrateLayout(t.Context())
-	if err != nil || res.Missing != 0 || res.Left != 0 {
+	if err != nil || res.Repaired != 1 || res.Missing != 0 || res.Left != 0 {
 		t.Fatalf("restart run %+v %v", res, err)
 	}
-	for _, r := range rows {
+	for i, r := range rows {
 		if data, _, err := e.m.Open(t.Context(), r.ID); err != nil || len(data) != 1 {
-			t.Errorf("row %d unreadable after repair: %v", r.ID, err)
+			t.Errorf("row %d unreadable after repair: %v", i, err)
 		}
 	}
 }

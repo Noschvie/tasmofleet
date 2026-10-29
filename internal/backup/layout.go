@@ -209,7 +209,7 @@ func (m *Manager) MigrateLayout(ctx context.Context) (MigrationResult, error) {
 					continue
 				}
 			} else {
-				dir, base = orphanDir(rows, stableOrphanRow(rows, b, former), former)
+				dir, base = orphanDir(rows, b, former)
 			}
 			if c, ok := claimed[strings.ToLower(dir)]; ok && c != key {
 				// Another owner got this directory earlier in this run, even if
@@ -306,21 +306,6 @@ func (m *Manager) FileMissing(b model.Backup) bool {
 	}
 	_, err := os.Stat(full)
 	return errors.Is(err, os.ErrNotExist)
-}
-
-// stableOrphanRow is the row whose name decides an orphan's directory: the
-// lowest-id row of the same former device that is still at its 0.17 path, so
-// rows with different stored names (the device was renamed) get the same
-// target on every run.
-func stableOrphanRow(rows []model.Backup, b model.Backup, former string) model.Backup {
-	for _, o := range rows {
-		if o.DeviceID == 0 {
-			if mt := legacyPath.FindStringSubmatch(o.Path); mt != nil && mt[1] == former {
-				return o
-			}
-		}
-	}
-	return b
 }
 
 // strandedFile looks for b's file below backups/*/ under the name a migration
