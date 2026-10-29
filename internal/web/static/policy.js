@@ -4,6 +4,14 @@
 // this file the rule menu's "Move up" / "Move down" do the same, one place at a time.
 (function () {
   "use strict";
+  // The editor's command field: a refused save marks it invalid; typing another command ends that
+  // (the server clears the reason text when the change reaches it).
+  var cmd = document.getElementById("rule-command");
+  if (cmd) {
+    cmd.addEventListener("input", function () {
+      cmd.removeAttribute("aria-invalid");
+    });
+  }
   var list = document.querySelector("[data-rule-list]");
   if (!list) {
     return;

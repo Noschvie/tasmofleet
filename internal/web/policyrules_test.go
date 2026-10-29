@@ -514,19 +514,17 @@ func TestPolicyRuleFreeCommandField(t *testing.T) {
 }
 
 // Why: the reason of a refused save describes the command that was saved. When the person types
-// another command, the field must lose the error and aria-invalid at once; otherwise it keeps
-// accusing a command that is gone. The change handler therefore sends the field again, out of band.
-func TestPolicyRuleValueControlResendsTheCommandFieldWithoutTheError(t *testing.T) {
+// another command, the reason must go at once (policy.js drops aria-invalid); otherwise it keeps
+// accusing a command that is gone. The change handler therefore replaces the reason out of band.
+func TestPolicyRuleValueControlClearsTheCommandError(t *testing.T) {
 	e, _, _ := rulesEnv(t, "")
 	_, body := e.do(t, "GET", "/policy/rules/value-control?command=LedState&want=3", "admin", nil)
-	for _, want := range []string{`id="command-field"`, `hx-swap-oob="true"`, `value="LedState"`} {
+	for _, want := range []string{`id="err-command"`, `hx-swap-oob="true"`, ` hidden`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q in %s", want, body)
 		}
 	}
-	for _, bad := range []string{"aria-invalid", `id="err-command"`} {
-		if strings.Contains(body, bad) {
-			t.Errorf("stale %q in the swapped field", bad)
-		}
+	if strings.Contains(body, "cannot be") || strings.Contains(body, "never sent") {
+		t.Errorf("a reason survives in the swap: %s", body)
 	}
 }

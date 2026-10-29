@@ -55,7 +55,7 @@ test("a free command rule: refusals with the reason, then live read, preview and
   for (const [bad, why] of [
     ["Status0", "Status commands are never sent automatically."],
     ["MqttPassword", "Secret settings cannot be checked."],
-    ["Module", "This command needs a confirmation in the console and cannot be a policy rule."],
+    ["Template", "This command needs a confirmation in the console and cannot be a policy rule."],
   ] as const) {
     await command.fill(bad);
     await command.blur();
@@ -73,7 +73,7 @@ test("a free command rule: refusals with the reason, then live read, preview and
   await command.fill("LedState");
   await command.blur();
   // the earlier refusal described another command: it is gone, with aria-invalid
-  await expect(page.locator("#err-command")).toHaveCount(0);
+  await expect(page.locator("#err-command")).toBeEmpty();
   await expect(page.locator("input[name='command']")).not.toHaveAttribute("aria-invalid", "true");
   await expect(page.locator("#want-control .ufield-help")).toContainText("Compared with exactly what the device reports for LedState");
   await page.locator("input[name='want']").fill("3");

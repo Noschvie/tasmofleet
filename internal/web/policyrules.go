@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/nofuturekid/tasmofleet/internal/audit"
-	"github.com/nofuturekid/tasmofleet/internal/httpx"
 	"github.com/nofuturekid/tasmofleet/internal/policy"
 	"github.com/nofuturekid/tasmofleet/internal/settings"
 	"github.com/nofuturekid/tasmofleet/internal/store"
@@ -457,7 +456,7 @@ func (h *handler) rulesValueControl(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	command := strings.TrimSpace(q.Get("command"))
-	h.component(w, r, http.StatusOK, ruleValueSwap(controlFor(command, strings.TrimSpace(q.Get("want")), false), httpx.BasePath(r.Context()), settingGroups(), command))
+	h.component(w, r, http.StatusOK, ruleValueSwap(controlFor(command, strings.TrimSpace(q.Get("want")), false)))
 }
 
 // staleText is the banner of a change made on an outdated version of the rules.
