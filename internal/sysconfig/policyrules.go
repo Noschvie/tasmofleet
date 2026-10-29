@@ -748,15 +748,17 @@ func orWarn(s string) string {
 
 // VersionDiff compares two stored versions.
 func (r *Rules) VersionDiff(ctx context.Context, from, to int64) ([]RuleChange, error) {
-	a, err := r.o.Store.GetPolicyRuleVersion(ctx, from)
-	if err != nil {
-		return nil, err
+	var sa []RuleSpec // from 0: an empty base, so the first version reads as all added
+	if from != 0 {
+		a, err := r.o.Store.GetPolicyRuleVersion(ctx, from)
+		if err != nil {
+			return nil, err
+		}
+		if sa, err = decodeSpecs([]byte(a.Rules)); err != nil {
+			return nil, err
+		}
 	}
 	b, err := r.o.Store.GetPolicyRuleVersion(ctx, to)
-	if err != nil {
-		return nil, err
-	}
-	sa, err := decodeSpecs([]byte(a.Rules))
 	if err != nil {
 		return nil, err
 	}

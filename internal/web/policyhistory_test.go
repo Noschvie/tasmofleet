@@ -158,3 +158,46 @@ func TestRulePageHistoryListsOnlyItsOwnVersions(t *testing.T) {
 		t.Error("no link to the whole history")
 	}
 }
+
+// Why: picking a version inside a fold must show that version's own change, not the fold's net
+// effect; the first version of the history diffs against an empty base.
+func TestPolicyHistoryPickInsideAFoldShowsOnlyThatVersion(t *testing.T) {
+	e, _ := historyEnv(t)
+	_, v2 := e.do(t, "GET", "/policy/history?v=2", "admin", nil)
+	card := html.UnescapeString(v2[strings.Index(v2, `id="diff"`):])
+	if !strings.Contains(card, "v1 → v2") || !strings.Contains(card, "Changed: ") || strings.Contains(card, "Added: ") {
+		t.Errorf("v2 changed the rule, it did not add it:\n%s", card)
+	}
+	_, v1 := e.do(t, "GET", "/policy/history?v=1", "admin", nil)
+	card = html.UnescapeString(v1[strings.Index(v1, `id="diff"`):])
+	if !strings.Contains(card, "Added: ") || !strings.Contains(card, "first version") {
+		t.Errorf("v1 added the rule:\n%s", card)
+	}
+}
+
+// Why: reverting to what is current changes nothing; the answer belongs on the History tab, with its own words.
+func TestPolicyRevertToTheCurrentVersionSaysNothingChanged(t *testing.T) {
+	e, mem := historyEnv(t)
+	r, _ := e.do(t, "POST", "/policy/rules/revert/4", "admin", url.Values{"csrf": {"tok"}})
+	if r.StatusCode != 303 || !strings.HasSuffix(r.Header.Get("Location"), "/policy/history?ok=nochange") || len(mem.vs) != 4 {
+		t.Fatalf("revert to current: %d %q versions=%d", r.StatusCode, r.Header.Get("Location"), len(mem.vs))
+	}
+	if _, body := e.do(t, "GET", "/policy/history?ok=nochange", "admin", nil); !strings.Contains(body, "Nothing changed") {
+		t.Error("no flash")
+	}
+}
+
+// Why: a fold inside one minute reads "10:00", not "10:00–10:00".
+func TestPolicyHistoryFoldWithinOneMinuteShowsOneTime(t *testing.T) {
+	e, mem := historyEnv(t)
+	base := time.Date(2026, 10, 1, 10, 0, 5, 0, time.Local)
+	for i := range mem.vs[:3] {
+		mem.vs[i].At = base.Add(time.Duration(i*10) * time.Second)
+	}
+	_, body := e.do(t, "GET", "/policy/history", "admin", nil)
+	i := strings.Index(body, `<details class="pol-hfold`)
+	sum := body[i : i+strings.Index(body[i:], "</summary>")]
+	if strings.Contains(sum, "–<time") {
+		t.Errorf("one minute, one time:\n%s", sum)
+	}
+}

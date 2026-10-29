@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -40,6 +41,7 @@ type histEntry struct {
 	Href     string
 	By       string
 	At, To   time.Time // To: the oldest save of a fold (At is the newest)
+	SameTime bool      // a fold within one minute: one time, not a range
 	Versions []histVer
 }
 
@@ -53,6 +55,8 @@ type histDetail struct {
 	Title   string // "v17 → v18"
 	Heading string // "Changes in v18"
 	Changes []sysconfig.RuleChange
+	// Reordered: the rules only changed their order (the list says "Reordered rules" too).
+	Reordered bool
 	// Revert is the version before the picked one; 0: none (the first version), no button.
 	Revert     int64
 	RevertAt   time.Time
@@ -125,7 +129,12 @@ func (h *handler) historyRender(w http.ResponseWriter, r *http.Request, live boo
 		return
 	}
 	if pick != 0 && !pageHolds(pg, pick) {
-		// The link came without its page cursor (the rule page's history): walk down to it.
+		// The link came without its page cursor (the rule page's history): walk down to it. A version
+		// that does not exist is refused first, so a bad link never walks the whole history.
+		if _, err := h.d.PolicyRules.VersionDiff(ctx, 0, pick); errors.Is(err, store.ErrNotFound) {
+			h.notFound(w, r)
+			return
+		}
 		found := false
 		pg, before, found, err = h.pageOf(ctx, pick)
 		if err != nil {
@@ -140,8 +149,11 @@ func (h *handler) historyRender(w http.ResponseWriter, r *http.Request, live boo
 
 	v := h.view(r, "Policy history", "policy", nil)
 	v.Crumbs = []ui.Crumb{{Label: "Devices", Path: "/devices"}, {Label: "Policy", Path: policyPath}, {Label: "History"}}
-	if q.Get("ok") == "reverted" {
+	switch q.Get("ok") {
+	case "reverted":
 		v.Flash = policyFlashes["reverted"]
+	case "nochange":
+		v.Flash = "Nothing changed: the rules already match that version"
 	}
 	st, err := h.d.PolicyRules.State(ctx)
 	if err != nil {
@@ -255,6 +267,7 @@ func (h *handler) histDays(pg sysconfig.HistoryPage, pick, current int64, cursor
 			he.Label = "v" + vstr(last.ID) + "–" + vstr(first.ID)
 			he.Summary = strconv.Itoa(len(e.Versions)) + " quick saves · " + e.Summary
 			he.To = last.At
+			he.SameTime = first.At.Format("15:04") == last.At.Format("15:04")
 		} else {
 			he.Note, he.NoteFull = shorten(first.Note)
 		}
@@ -315,15 +328,19 @@ func (h *handler) histDetail(ctx context.Context, pg sysconfig.HistoryPage, pick
 		}
 	}
 	e := seq[at].e
-	switch {
-	case !e.Folded || prev == nil:
-		d.Changes = e.Changes
-	default:
-		ch, err := h.d.PolicyRules.VersionDiff(ctx, prev.ID, pick)
+	if e.Folded {
+		// The picked version alone, against the one before it (none: an empty base, 0).
+		var from int64
+		if prev != nil {
+			from = prev.ID
+		}
+		ch, err := h.d.PolicyRules.VersionDiff(ctx, from, pick)
 		if err != nil {
 			h.log.WarnContext(ctx, "policy version diff", "err", err)
 		}
 		d.Changes = ch
+	} else {
+		d.Changes, d.Reordered = e.Changes, e.Reordered
 	}
 	if prev == nil {
 		d.Title = "v" + vstr(pick) + " (first version)"

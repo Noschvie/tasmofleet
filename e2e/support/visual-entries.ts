@@ -212,7 +212,7 @@ export const entries: Entry[] = [
   { id: "device-backups-prune-dialog", owner: "P10", route: "/devices/{d2}/backups", mode: "overlay", steps: [{custom: "prune-dialog"}] },
   { id: "firmware-delete-dialog", owner: "P5", route: "/firmware", mode: "overlay", steps: [{custom: "delete-cached-file"}] },
   { id: "device-drift-all", owner: "P3", route: "/devices/{d2}/drift", steps: [{click: "Show all"}] },
-  { id: "policy-rule-revert-dialog", owner: "N3", route: "/policy/history", mode: "overlay", steps: [{click: "Revert to v"}] },
+  { id: "policy-rule-revert-dialog", owner: "N3", route: "/policy/history", mode: "overlay", steps: [{clickSel: "button[data-dialog=dlg-revert]"}] },
   { id: "settings-mqtt-test", owner: "P8", route: "/settings/system?tab=mqtt", tier: "structural", steps: [{click: "Test connection"}, {wait: 1500}], masks: [".sys-tab:not([hidden])"] },
   { id: "policy-makecompliant-dialog", owner: "N3", route: "/policy", mode: "overlay", steps: [{click: "Make compliant…"}] },
   { id: "policy-makecompliant-result", owner: "N3", route: "/policy", mode: "overlay", steps: [{custom: "live-check-running"}, {click: "Make compliant…"}, {clickSel: "button:has-text(\"changes\")"}, {wait: 2500}], mutates: true },

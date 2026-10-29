@@ -634,6 +634,12 @@ func (h *handler) rulesRevert(w http.ResponseWriter, r *http.Request) {
 		h.notFound(w, r)
 		return
 	}
+	// A revert is always saved as a version (it never answers ErrNoChange), so the current version
+	// is refused here: it would store a copy of itself.
+	if st, err := h.d.PolicyRules.State(r.Context()); err == nil && st.VersionID == id {
+		redirect(w, r, policyHistoryPath+"?ok=nochange")
+		return
+	}
 	if _, err := h.d.PolicyRules.Revert(r.Context(), actor(r), id, h.d.Recorder); err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			h.notFound(w, r)

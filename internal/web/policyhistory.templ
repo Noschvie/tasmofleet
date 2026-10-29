@@ -58,7 +58,9 @@ templ histEntryRow(e histEntry) {
 				<span class="pol-hv-v">{ e.Label }</span>
 				<span class="pol-hv-main">
 					<span class="pol-hv-what"><span>{ e.Summary }</span></span>
-					<span class="pol-hv-meta"><time { ui.StampAttrs(e.To, ui.StampClock)... }>{ ui.StampText(e.To, ui.StampClock) }</time>–<time { ui.StampAttrs(e.At, ui.StampClock)... }>{ ui.StampText(e.At, ui.StampClock) }</time> · { e.By }</span>
+					<span class="pol-hv-meta">if !e.SameTime {
+						<time { ui.StampAttrs(e.To, ui.StampClock)... }>{ ui.StampText(e.To, ui.StampClock) }</time>{ "–" }
+					}<time { ui.StampAttrs(e.At, ui.StampClock)... }>{ ui.StampText(e.At, ui.StampClock) }</time> · { e.By }</span>
 				</span>
 			</summary>
 			for _, v := range e.Versions {
@@ -108,7 +110,11 @@ templ histDetailCard(p policyHistoryView) {
 			</div>
 			<div class="pol-none">{ p.Detail.Title }</div>
 			if len(p.Detail.Changes) == 0 {
-				<span class="pol-none">No rule changes.</span>
+				if p.Detail.Reordered {
+					<span class="pol-none">Reordered rules.</span>
+				} else {
+					<span class="pol-none">No rule changes.</span>
+				}
 			} else {
 				<div class="pol-diff">
 					for _, d := range p.Detail.Changes {
