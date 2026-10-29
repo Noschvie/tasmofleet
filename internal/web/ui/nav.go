@@ -21,8 +21,12 @@ type NavGroupData struct {
 	Items            []NavItem
 }
 
-// Crumb is one step of the breadcrumb trail; a crumb without Path is plain text.
-type Crumb struct{ Label, Path string }
+// Crumb is one step of the breadcrumb trail; a crumb without Path is plain text. KeepQuery marks
+// a link to a list whose filter and sort listback.js restores from the browser tab (#127).
+type Crumb struct {
+	Label, Path string
+	KeepQuery   bool
+}
 
 // NavGroup names the group a page belongs to ("dashboard", "devices", "updates", "system"). Pages
 // outside the menu (messages, not found, the setup) belong to Dashboard, as the prototype's error

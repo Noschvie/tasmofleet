@@ -40,7 +40,7 @@ func devPath(id model.DeviceID, rest string) string {
 
 // deviceCrumbs is the trail of a device tab: Devices / the device (every tab, as the prototype).
 func deviceCrumbs(d model.Device) []ui.Crumb {
-	return []ui.Crumb{{Label: "Devices", Path: "/devices"}, {Label: d.Name}}
+	return []ui.Crumb{{Label: "Devices", Path: "/devices", KeepQuery: true}, {Label: d.Name}}
 }
 
 // headOf builds the device header and tabs for the viewer: tabsFor plus what needs the

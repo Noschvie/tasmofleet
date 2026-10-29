@@ -47,6 +47,7 @@ run`, Compose, or an Unraid container whose UI listen field is empty or was remo
 
 ### Changed
 
+- The "Devices" crumb on a device page returns to the list as you left it, with its filter, search and sort, per browser tab; the navigation's "Devices" link still opens the unfiltered list (#127, thanks @Noschvie).
 - Device page, Overview reworked (#145): a row of live tiles (Power and Energy today for devices with an
   energy meter, Wi-Fi signal with a quality bar or Link for Ethernet, Uptime, Reachability, Policy), a
   relay box that is the same for one relay and four (per-channel watts when the device meters each
