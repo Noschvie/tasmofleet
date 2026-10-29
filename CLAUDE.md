@@ -140,23 +140,23 @@ fixture or a fault instead of mocking HTTP by hand.
 
 ## Running the gates
 
-| Gate                                                       | Command                                                                            |
-| ---------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| FAST tier, everything but e2e (run before every commit)    | `make check`                                                                       |
-| FAST tier, the `@core` e2e tests                           | `make e2e-core`                                                                    |
-| FAST tier, a safety package changed (race + mutation)      | `make safety BASE=origin/main`                                                     |
-| FULL tier, everything CI runs nightly and on release tags  | `make ci TESTFLAGS=-count=1`                                                       |
-| format                                                     | `make fmt` / `make fmt-check`                                                      |
-| go vet                                                     | `make vet`                                                                         |
-| staticcheck                                                | `make staticcheck`                                                                 |
-| golangci-lint (incl. depguard boundaries)                  | `make lint`                                                                        |
-| unit tests                                                 | `make test`                                                                        |
-| integration tests                                          | `make integration`                                                                 |
-| race detector                                              | `make race`                                                                        |
-| mutation tests (MUTATION in the Makefile)                  | `make mutation` / `make mutation-changed BASE=<ref>`                               |
-| e2e (Playwright), all but quarantined                      | `make e2e-deps` once, `npx playwright install chromium` once, then `make e2e`      |
-| quarantined tests (nightly only)                           | `make test-quarantine` / `make e2e-quarantine`                                     |
-| vulnerabilities                                            | `make vuln`                                                                        |
+| Gate                                                      | Command                                                                       |
+| --------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| FAST tier, everything but e2e (run before every commit)   | `make check`                                                                  |
+| FAST tier, the `@core` e2e tests                          | `make e2e-core`                                                               |
+| FAST tier, a safety package changed (race + mutation)     | `make safety BASE=origin/main`                                                |
+| FULL tier, everything CI runs nightly and on release tags | `make ci TESTFLAGS=-count=1`                                                  |
+| format                                                    | `make fmt` / `make fmt-check`                                                 |
+| go vet                                                    | `make vet`                                                                    |
+| staticcheck                                               | `make staticcheck`                                                            |
+| golangci-lint (incl. depguard boundaries)                 | `make lint`                                                                   |
+| unit tests                                                | `make test`                                                                   |
+| integration tests                                         | `make integration`                                                            |
+| race detector                                             | `make race`                                                                   |
+| mutation tests (MUTATION in the Makefile)                 | `make mutation` / `make mutation-changed BASE=<ref>`                          |
+| e2e (Playwright), all but quarantined                     | `make e2e-deps` once, `npx playwright install chromium` once, then `make e2e` |
+| quarantined tests (nightly only)                          | `make test-quarantine` / `make e2e-quarantine`                                |
+| vulnerabilities                                           | `make vuln`                                                                   |
 
 Tools are pinned in `tools/go.mod` and run via `go tool -modfile=tools/go.mod <tool>`.
 Run a single package's tests with `go test ./internal/fwselect/ -run TestGuard -v`.
@@ -244,6 +244,17 @@ in `.github/workflows/ci.yml`.
   issue refs and the same `thanks @handle` credits, a migration note ("No database migration" or the
   migration numbers), a link to `CHANGELOG.md`, and the closing line about Q&A discussions and issues.
   English, no fluff.
+- **Unraid users run `:latest` from the Community Applications template**
+  ([nofuturekid/unraid-templates](https://github.com/nofuturekid/unraid-templates), `templates/tasmofleet.xml`).
+  With every release:
+  - add the release to the template's `<Changes>` block;
+  - edit the first post of the [Unraid support thread](https://forums.unraid.net/topic/201022-support-nofuturekid-tasmofleet/)
+    (current release line, links, setup notes that are still true). A minor release, or anything users
+    have to act on, also gets a reply post in the thread, upgrade notes first;
+  - a release that changes ports, variables or anything else in the template ships the template change
+    in the same moment the image becomes `:latest`. An existing install keeps its saved template, so such a
+    release must also keep existing installs working without edits, or say exactly what to change, at the
+    top of the CHANGELOG section, the announcement, the template `<Changes>` and the forum post.
 
 ## Pull requests and the protected main
 
