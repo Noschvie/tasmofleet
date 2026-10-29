@@ -75,6 +75,8 @@ func fleetDevices() []simulator.DeviceSpec {
 		{Name: "esp32s2-board", Profile: simulator.ProfileESP32S2},
 		// An ESP32 with the safeboot layout: its running partition has no room for a full image (#30).
 		{Name: "esp32-safeboot-layout", Profile: simulator.ProfileESP32, FreeKB: 1},
+		// An ESP32 with two app partitions: the only layout that takes the plain push into the running app (#191).
+		{Name: "esp32-dual-ota", Profile: simulator.ProfileESP32Dual},
 		{Name: "mystery-chip", Profile: simulator.ProfileUnknownChip},
 		{Name: "locked-plug", Profile: simulator.ProfileESP8266_4M, User: "admin", Password: "devenv-fake-password"},
 	}

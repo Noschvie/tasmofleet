@@ -315,26 +315,26 @@ test("update batch: preview, staged ESP8266 and direct ESP32 succeed, unknown ch
 // The ESP32's OtaUrl is never touched.
 test("push where possible: ESP32 is updated by upload, ESP8266 downloads, nothing refused", { tag: "@core" }, async ({ page, request }) => {
   test.setTimeout(240_000);
-  const addr = env.devices["esp32s3-http"].addr;
+  const addr = env.devices["esp32-dual-ota"].addr;
   const otaBefore = (await (await request.get(`http://${addr}/cm?cmnd=OtaUrl`)).json()).OtaUrl;
   await page.setExtraHTTPHeaders(operator);
-  await pickForUpdate(page, app.url, ["esp32s3-http", "plug-4m"]);
+  await pickForUpdate(page, app.url, ["esp32-dual-ota", "plug-4m"]);
   await page.locator("label.upd-relopt", { hasText: "Tasmota 16.1.0" }).click();
   await page.locator("select[name=delivery]").selectOption("push");
   await page.getByRole("button", { name: "Review update" }).click();
 
   await expect(page.getByText(/uploads the file to 1 device; the others fetch/)).toBeVisible();
   const preview = (name: string) => page.locator(".upd-prow").filter({ hasText: name });
-  await expect(preview("esp32s3-http")).toContainText("→ 16.1.0");
-  await expect(preview("esp32s3-http")).toContainText("Push upload.");
+  await expect(preview("esp32-dual-ota")).toContainText("→ 16.1.0");
+  await expect(preview("esp32-dual-ota")).toContainText("Push upload.");
   await expect(preview("plug-4m")).toContainText("→ 16.1.0");
   await expect(preview("plug-4m")).toContainText(/Downloads instead: .*ESP8266/);
 
   await page.getByRole("button", { name: "Start update", exact: true }).click();
   await expect(page).toHaveURL(/\/transactions\/\d+$/);
-  await expect(page.locator(".upd-row").filter({ hasText: "esp32s3-http" })).toContainText("· upload");
+  await expect(page.locator(".upd-row").filter({ hasText: "esp32-dual-ota" })).toContainText("· upload");
   await expect(page.locator(".upd-row").filter({ hasText: "plug-4m" })).not.toContainText("· upload");
-  for (const name of ["esp32s3-http", "plug-4m"]) {
+  for (const name of ["esp32-dual-ota", "plug-4m"]) {
     await expect(page.locator(".upd-row").filter({ hasText: name }).getByText("Done", { exact: true })).toBeVisible({ timeout: 200_000 });
   }
   const ota = await (await request.get(`http://${addr}/cm?cmnd=OtaUrl`)).json();
