@@ -4,13 +4,6 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
-## Unreleased
-
-### Fixed
-
-- Device list: the live cells of the phone cards no longer each trigger a full refit of the table, which kept the page busy for tens of seconds to minutes while a large fleet came online
-- Add devices, Discovered: the Source column is wide enough for "MQTT discovery" in every font
-
 ## 0.18.0 (2026-10-29)
 
 ### Upgrade notes
@@ -61,6 +54,8 @@ always upgrade automatically.
 
 ### Fixed
 
+- Device list: the live cells of the phone cards no longer each trigger a full refit of the table, which kept the page busy for tens of seconds to minutes while a large fleet came online
+- Add devices, Discovered: the Source column is wide enough for "MQTT discovery" in every font
 - An ESP32 with the single-app (safeboot) layout never gets the plain upload into its running app, even when Status 4 Free is larger than the image or its upload page could not be read when planning: a push goes through safeboot (or downloads while that is off), and the upload itself refuses such a page (#191)
 - An OtaUrl whose password contains `/`, `#` or `?` could be shown or compared in part. The
   URL credential redaction now parses the URL, and a value that cannot be cleaned safely is
