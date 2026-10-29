@@ -39,6 +39,19 @@ test.beforeAll(async ({ browser }) => {
     },
   });
   app.cli(["import", "tasmoadmin", writeTasmoAdminDir(env.devices)]);
+  // The width of a column follows its content (chip, firmware and status texts fill in as a device
+  // comes online), so a test that drags a width and reloads needs a fleet that has settled: wait
+  // until every simulated device is online before the first test.
+  const total = String(Object.keys(env.devices).length);
+  await expect
+    .poll(
+      async () => {
+        const html = await (await fetch(app.url + "/devices", { headers: adam })).text();
+        return /Online<span class="dv-n">(\d+)<\/span>/.exec(html)?.[1];
+      },
+      { timeout: 120_000, intervals: [1000] },
+    )
+    .toBe(total);
   if (seeded) {
     const seedPage = await browser.newPage({ extraHTTPHeaders: adam });
     try {

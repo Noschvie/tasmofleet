@@ -72,6 +72,23 @@ for (const scheme of ["light", "dark"] as const) {
       await expect(
         page.locator(".dv-chips .dv-chip", { hasText: "Online" }),
       ).toBeVisible();
+      // The fleet comes online while the page is open, and the Online count (a digit more or less
+      // changes the pill's width) is the fleet's, not the filter's. The toolbar is not live, so
+      // reload until it shows the settled fleet: otherwise the pill moves because a device came
+      // online between the two page loads, not because a chip was selected.
+      await expect
+        .poll(
+          async () => {
+            const n = await page
+              .locator(".dv-chips .dv-chip", { hasText: "Online" })
+              .locator(".dv-n")
+              .textContent();
+            if (n !== String(Object.keys(env.devices).length)) await page.reload();
+            return n;
+          },
+          { timeout: 60_000, intervals: [1000] },
+        )
+        .toBe(String(Object.keys(env.devices).length));
       const family = page.locator("select[name=family]");
       const options = await family.locator("option").evaluateAll((os) =>
         (os as HTMLOptionElement[]).map((o) => o.value).filter((v) => v),

@@ -55,6 +55,7 @@ always upgrade automatically.
 ### Fixed
 
 - Device list: the live cells of the phone cards no longer each trigger a full refit of the table, which kept the page busy for tens of seconds to minutes while a large fleet came online
+- Device list: dragging a column edge while live cells update no longer saves a layout that differs from what was dragged: the coalesced table refit is run first, and not postponed at all during a drag
 - Add devices, Discovered: the Source column is wide enough for "MQTT discovery" in every font
 - An ESP32 with the single-app (safeboot) layout never gets the plain upload into its running app, even when Status 4 Free is larger than the image or its upload page could not be read when planning: a push goes through safeboot (or downloads while that is off), and the upload itself refuses such a page (#191)
 - An OtaUrl whose password contains `/`, `#` or `?` could be shown or compared in part. The
