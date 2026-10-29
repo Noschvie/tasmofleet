@@ -13,18 +13,19 @@ mode), and `TASMOFLEET_TLS_SELF_SIGNED` no longer exists. Full steps for Unraid,
 Compose, and what happens if you do nothing: [Upgrading to 0.17](docs/upgrading.md).
 
 - **Unraid (Community Applications) and installs with an explicit `TASMOFLEET_LISTEN`
-  (`:8443` or `:8080`) keep working without any change** (unless UI listen was emptied, see the next
-  point). A saved `:8443` is still honoured, and the scheme of the shipped default template
+  (`:8443` or `:8080`) keep working without any change** (unless the UI listen row was deleted, see the
+  next point). A saved `:8443` is still honoured, and the scheme of the shipped default template
   (self-signed TLS) and of the proxy variant (plain HTTP) is unchanged. On `br0` or a custom IP
   there is no port mapping: the container listens on the saved UI listen port (8443 with the
   template defaults, 8080 in the proxy setup). If you delete UI listen, it listens on 8080 (UI) and
   80 (firmware) of its IP, so update bookmarks and the reverse proxy upstream. The start log warns
   if `TASMOFLEET_TLS_SELF_SIGNED` is still set; delete it.
 - **Any container with an `8443:8443` mapping and no (or an empty) `TASMOFLEET_LISTEN` -- `docker
-run`, Compose, or an Unraid container whose UI listen field is empty or was removed: the UI is
+run`, Compose, or an Unraid container whose UI listen row was deleted from its template: the UI is
   unreachable on the old port.** An empty value counts as unset (since 0.16.1), which gave `:8443`
   before and gives `:8080` now. Change the container port to 8080 (`-p 8443:8080`, Compose
-  `"8443:8080"`).
+  `"8443:8080"`). An Unraid container whose UI listen field is merely emptied keeps working: Unraid
+  falls back to the template default `:8443`.
 - **`TASMOFLEET_TLS_SELF_SIGNED=true` together with `TASMOFLEET_TRUSTED_PROXIES` (or
   `ALLOW_INSECURE_HTTP=true`)** now serves plain HTTP (before: TLS). Point the proxy at `http://`.
 - Outside a container the zero-configuration TLS listener moves from `:8443` to `:8080`; set
