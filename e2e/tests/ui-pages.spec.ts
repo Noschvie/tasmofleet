@@ -165,7 +165,7 @@ for (const m of modes) {
     // A backup gives the overview its snapshot facts (hostname, gateway, Wi-Fi); a second one
     // within the cooldown is refused with a sentence, which is fine here.
     await page.getByRole("button", { name: "Back up", exact: true }).click();
-    await expect(page.getByText(/Backup taken|started a moment ago/).first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText(/Backup taken|Last backup .* ago/).first()).toBeVisible({ timeout: 30_000 });
     await page.goto(deviceURL);
     await look("device");
     await page.goto(deviceURL + "/edit");

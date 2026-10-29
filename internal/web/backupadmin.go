@@ -81,7 +81,6 @@ func (h *handler) backupDelete(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		h.fail(w, r, err)
 	default:
-		h.releaseBackupWait(d.Device)
 		// A backup of a deleted device is listed under Settings -> Backups: back there.
 		redirect(w, r, backupsHome(model.Backup{DeviceID: d.Device})+fmt.Sprintf("ok=deleted&n=%d", d.Runs))
 	}

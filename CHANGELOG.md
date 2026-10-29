@@ -19,7 +19,7 @@ always upgrade automatically.
 
 ### Fixed
 
-- Deleting backups releases the manual-backup cooldown of the device, so "Back up now" on the emptied Backups tab no longer answers "Try again in ..." (#208, thanks @Noschvie)
+- Backups: when "Back up now" is refused by the 5-minute cooldown, the message says when the last backup was taken ("Last backup 4 min 40 s ago; a new one is possible in 20 s"), also after that backup was deleted (#208, thanks @Noschvie)
 - Downloaded backups keep umlauts and other letters of the device name (`Küche-....dmp`): the header carries an ASCII fallback and the RFC 5987 `filename*`, and a hostile name cannot inject headers (#208, thanks @Noschvie)
 - The Download and Delete buttons of a backup row have their borders again, like the other buttons (#208, thanks @Noschvie)
 - The backup layout migration also moves the kept backups of deleted devices; backups whose files were deleted by hand are shown as missing and can be removed (#205, thanks @Noschvie)

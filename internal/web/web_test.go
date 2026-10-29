@@ -669,7 +669,7 @@ func TestManualBackupIsRateLimitedPerDevice(t *testing.T) {
 		t.Fatalf("first: %d", resp.StatusCode)
 	}
 	resp, body := e.do(t, "POST", "/devices/1/backup", "operator", url.Values{})
-	if resp.StatusCode != http.StatusTooManyRequests || e.bk.taken != 1 || !strings.Contains(body, "Try again in") {
+	if resp.StatusCode != http.StatusTooManyRequests || e.bk.taken != 1 || !strings.Contains(body, "Last backup 0 s ago; a new one is possible in") {
 		t.Fatalf("second: %d taken=%d %s", resp.StatusCode, e.bk.taken, body)
 	}
 	if resp, _ := e.do(t, "POST", "/devices/2/backup", "operator", url.Values{}); resp.StatusCode != 303 {
@@ -798,5 +798,27 @@ func TestBackupDownloadNameKeepsUmlautsAndNeverInjects(t *testing.T) {
 		if resp.Header.Get("Set-Cookie") != "" || strings.ContainsAny(cd, "\r\n") {
 			t.Errorf("device %q: header injection: %q", tc.device, cd)
 		}
+	}
+}
+
+// Why (#208): the cooldown protects the device's web server, not the backup list, so deleting
+// the backup does not lift it. The refusal says when the last backup was taken, so the user
+// who deleted it and finds "Back up now" refused understands why and how long to wait.
+func TestCooldownRefusalNamesTheLastBackupEvenAfterDelete(t *testing.T) {
+	e := setupWith(t, func(d *Deps) { d.BackupCooldown = time.Hour })
+	e.do(t, "POST", "/devices/1/backup", "operator", url.Values{})
+	e.bk.list = nil // the backup is deleted
+	resp, body := e.do(t, "POST", "/devices/1/backup", "operator", url.Values{})
+	if resp.StatusCode != http.StatusTooManyRequests || e.bk.taken != 1 || !strings.Contains(body, "Last backup 0 s ago; a new one is possible in 60 min") {
+		t.Fatalf("got %d taken=%d %s", resp.StatusCode, e.bk.taken, body)
+	}
+}
+
+func TestCooldownTextNamesAgoAndRemainder(t *testing.T) {
+	if got, want := cooldownText(280*time.Second, 20*time.Second), "Last backup 4 min 40 s ago; a new one is possible in 20 s"; got != want {
+		t.Errorf("got %q want %q", got, want)
+	}
+	if got, want := cooldownText(time.Minute, 4*time.Minute), "Last backup 1 min ago; a new one is possible in 4 min"; got != want {
+		t.Errorf("got %q want %q", got, want)
 	}
 }

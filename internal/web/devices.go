@@ -491,8 +491,8 @@ func (h *handler) deviceBackup(w http.ResponseWriter, r *http.Request) {
 	refuse := func(status int, msg string) {
 		h.message(w, r, status, h.view(r, "Backup not taken", "devices", messageData{Text: msg, LinkText: "Back to " + d.Name, Link: back}))
 	}
-	if wait := h.backupWait(d.ID); wait > 0 {
-		refuse(http.StatusTooManyRequests, fmt.Sprintf("A backup of this device was started a moment ago. Try again in %s.", humanDuration(wait.Round(time.Second))))
+	if wait := h.backupWait(d.ID); wait != "" {
+		refuse(http.StatusTooManyRequests, wait+".")
 		return
 	}
 	if _, err := h.d.Backups.Backup(r.Context(), actor(r), d.ID); err != nil {
@@ -512,25 +512,37 @@ func headBack(tab string) string {
 	return ""
 }
 
-// backupWait reserves a manual backup slot for the device and returns how
-// long the caller must wait instead when the last one is too recent.
-func (h *handler) backupWait(id model.DeviceID) time.Duration {
+// backupWait reserves a manual backup slot for the device and returns the refusal sentence
+// ("" when the slot is granted) when the last one is too recent. The cooldown protects the
+// device's single-threaded web server, so it counts from the last backup run even when that
+// backup was deleted since; the sentence names that time so the refusal explains itself (#208).
+func (h *handler) backupWait(id model.DeviceID) string {
 	h.backupMu.Lock()
 	defer h.backupMu.Unlock()
 	now := h.d.Clock.Now()
 	if last, ok := h.lastBackup[id]; ok && now.Sub(last) < h.d.BackupCooldown {
-		return h.d.BackupCooldown - now.Sub(last)
+		return cooldownText(now.Sub(last), h.d.BackupCooldown-now.Sub(last))
 	}
 	h.lastBackup[id] = now
-	return 0
+	return ""
 }
 
-// releaseBackupWait ends the cooldown of the device: its backups were deleted, so there is no
-// restore point left to protect from a second click (#208).
-func (h *handler) releaseBackupWait(id model.DeviceID) {
-	h.backupMu.Lock()
-	defer h.backupMu.Unlock()
-	delete(h.lastBackup, id)
+// cooldownText is "Last backup 4 min 40 s ago; a new one is possible in 20 s".
+func cooldownText(ago, wait time.Duration) string {
+	return fmt.Sprintf("Last backup %s ago; a new one is possible in %s", minSec(ago), minSec(wait.Round(time.Second)))
+}
+
+// minSec renders a short span as "4 min 40 s", "5 min", "20 s".
+func minSec(d time.Duration) string {
+	sec := int(d.Round(time.Second) / time.Second)
+	switch m, s := sec/60, sec%60; {
+	case m == 0:
+		return fmt.Sprintf("%d s", s)
+	case s == 0:
+		return fmt.Sprintf("%d min", m)
+	default:
+		return fmt.Sprintf("%d min %d s", m, s)
+	}
 }
 
 // deviceBackupFromTab answers the "Back up now" of the empty Backups tab: on
@@ -539,8 +551,8 @@ func (h *handler) releaseBackupWait(id model.DeviceID) {
 func (h *handler) deviceBackupFromTab(w http.ResponseWriter, r *http.Request, d model.Device) {
 	data := notice{}
 	status := http.StatusOK
-	if wait := h.backupWait(d.ID); wait > 0 {
-		data.Error = fmt.Sprintf("A backup of this device was started a moment ago. Try again in %s.", humanDuration(wait.Round(time.Second)))
+	if wait := h.backupWait(d.ID); wait != "" {
+		data.Error = wait + "."
 		status = http.StatusTooManyRequests
 	} else if _, err := h.d.Backups.Backup(r.Context(), actor(r), d.ID); err != nil {
 		data.Error = h.backupProblem(err)
@@ -557,8 +569,8 @@ func (h *handler) deviceBackupFromTab(w http.ResponseWriter, r *http.Request, d 
 func (h *handler) deviceBackupFromList(w http.ResponseWriter, r *http.Request, d model.Device) {
 	data := struct{ Notice, Error string }{}
 	status := http.StatusOK
-	if wait := h.backupWait(d.ID); wait > 0 {
-		data.Error = fmt.Sprintf("%s: a backup was started a moment ago. Try again in %s.", d.Name, humanDuration(wait.Round(time.Second)))
+	if wait := h.backupWait(d.ID); wait != "" {
+		data.Error = d.Name + ": " + strings.ToLower(wait[:1]) + wait[1:] + "."
 		status = http.StatusTooManyRequests
 	} else if _, err := h.d.Backups.Backup(r.Context(), actor(r), d.ID); err != nil {
 		msg := h.backupProblem(err)
