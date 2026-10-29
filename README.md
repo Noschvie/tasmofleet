@@ -7,9 +7,9 @@
 
 # TasmoFleet
 
-A self-hosted fleet manager for [Tasmota](https://tasmota.github.io/) devices: inventory, live
-state, firmware updates, configuration backups and fleet-wide commands in one Go binary with an
-embedded SQLite database.
+A self-hosted fleet manager for [Tasmota](https://tasmota.github.io/) devices: configuration
+backups with restore, a settings policy with compliance view, safe bulk firmware updates, live state
+and fleet-wide commands in one Go binary with an embedded SQLite database.
 
 [![CI](https://github.com/nofuturekid/tasmofleet/actions/workflows/ci.yml/badge.svg)](https://github.com/nofuturekid/tasmofleet/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/nofuturekid/tasmofleet?sort=semver)](https://github.com/nofuturekid/tasmofleet/releases)
@@ -27,9 +27,14 @@ TasmoFleet logo is original and unrelated to the Tasmota logo.
 
 ## Why
 
-TasmoFleet started as a replacement for [TasmoAdmin](https://github.com/TasmoAdmin/TasmoAdmin)
-on a home fleet of a few dozen devices. What it does differently:
+TasmoFleet is an alternative to [TasmoAdmin](https://github.com/TasmoAdmin/TasmoAdmin),
+built on a home fleet of a few dozen devices. What it does differently:
 
+- **Backups with diff and restore**: the raw `.dmp` plus decoded JSON (with
+  [decode-config](https://github.com/tasmota/decode-config), bundled in the image), scheduled
+  and before every update, compared side by side, restored onto the same or a replacement device.
+- **Policy and compliance**: rules such as `PowerOnState 0` or `TelePeriod 300` per chip family,
+  tag or device, a drift view per device, and "make compliant" as a transaction.
 - **Updates run on the server**, as a persisted job per device (backup, OTA URL, upgrade,
   wait for the reboot, verify), with bounded parallelism. Closing the browser does not stop an
   update, and an update interrupted by a restart resumes. TasmoAdmin drives updates from the
@@ -40,11 +45,6 @@ on a home fleet of a few dozen devices. What it does differently:
   devices go through `tasmota-minimal` first.
 - **Live state over MQTT** (optional): online state, power and telemetry arrive as they happen
   and the pages update without reloading. Without MQTT every feature works over HTTP polling.
-- **Policy and compliance**: rules such as `PowerOnState 0` or `TelePeriod 300` per chip family,
-  tag or device, a drift view per device, and "make compliant" as a transaction.
-- **Backups with diff and restore**: the raw `.dmp` plus decoded JSON (with
-  [decode-config](https://github.com/tasmota/decode-config), bundled in the image), scheduled
-  and before every update, compared side by side, restored onto the same or a replacement device.
 - **Bulk actions as transactions with logs**: updates, commands, backups and policy fixes on
   many devices run as one transaction, with a log per device, cancel and retry of the failed ones.
 - **Sign-in** with OIDC single sign-on, trusted forward-auth headers, or local accounts; roles
