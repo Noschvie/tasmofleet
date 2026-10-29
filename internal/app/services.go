@@ -147,14 +147,6 @@ func openServices(cfg config.Config, log *slog.Logger, version string, importLeg
 		return nil, err
 	}
 	cfg = sys.Snapshot()
-	// The scrape token lives on the settings page (or is locked by the
-	// environment); a change applies to the next scrape.
-	reg.SetBearerToken(cfg.MetricsToken)
-	sys.Subscribe(func(e sysconfig.Event) {
-		if slices.Contains(e.Keys, "METRICS_TOKEN") {
-			reg.SetBearerToken(e.New.MetricsToken)
-		}
-	})
 	hub := events.NewHub(64)
 	nets := tasmota.NewNetworkSet(cfg.DeviceNetworks)
 	sys.Subscribe(func(e sysconfig.Event) {

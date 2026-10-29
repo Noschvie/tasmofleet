@@ -1,7 +1,7 @@
 // Package metrics exposes Prometheus metrics in the text exposition format
 // without depending on client_golang (counters and gauges with labels are
 // all tasmofleet needs; this keeps ~15 transitive modules out). Served on
-// /metrics, optionally protected by a bearer token (TASMOFLEET_METRICS_TOKEN).
+// /metrics, served without authentication of its own: the caller (internal/app metricsGate) decides who may scrape.
 //
 // Metric names (contract with deploy/grafana):
 //
@@ -35,8 +35,6 @@
 package metrics
 
 import (
-	"crypto/sha256"
-	"crypto/subtle"
 	"fmt"
 	"io"
 	"net/http"
@@ -78,8 +76,6 @@ var ContractMetrics = map[string]string{
 type Registry struct {
 	mu       sync.Mutex
 	families map[string]*family
-	token    [sha256.Size]byte
-	hasToken bool
 }
 
 type family struct {
@@ -164,16 +160,6 @@ func (s *Value) Add(x float64) {
 	s.reg.mu.Unlock()
 }
 
-// SetBearerToken requires "Authorization: Bearer <token>" on the handler.
-// An empty token leaves /metrics open. Safe to call while serving: the next
-// request sees the new token.
-func (r *Registry) SetBearerToken(token string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.hasToken = token != ""
-	r.token = sha256.Sum256([]byte(token))
-}
-
 // Handler serves the exposition format.
 func (r *Registry) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
@@ -182,29 +168,9 @@ func (r *Registry) Handler() http.Handler {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if !r.authorised(req) {
-			w.Header().Set("WWW-Authenticate", `Bearer realm="metrics"`)
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-			return
-		}
 		w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 		r.write(w)
 	})
-}
-
-func (r *Registry) authorised(req *http.Request) bool {
-	r.mu.Lock()
-	has, want := r.hasToken, r.token
-	r.mu.Unlock()
-	if !has {
-		return true
-	}
-	scheme, tok, ok := strings.Cut(req.Header.Get("Authorization"), " ")
-	if !ok || !strings.EqualFold(scheme, "Bearer") {
-		return false
-	}
-	got := sha256.Sum256([]byte(tok))
-	return subtle.ConstantTimeCompare(got[:], want[:]) == 1
 }
 
 var labelEscaper = strings.NewReplacer(`\`, `\\`, `"`, `\"`, "\n", `\n`)

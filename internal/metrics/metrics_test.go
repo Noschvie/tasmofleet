@@ -141,39 +141,6 @@ func TestResetRemovesStaleSeries(t *testing.T) {
 	}
 }
 
-// /metrics exposes device names and fleet state, so with a token configured
-// anything without the exact token is refused (constant-time compare).
-func TestBearerToken(t *testing.T) {
-	r := NewRegistry()
-	r.Gauge("g", "G.").With().Set(1)
-	open := r.Handler()
-	if code, _ := scrape(t, open, ""); code != 200 {
-		t.Fatalf("no token configured must be open, got %d", code)
-	}
-	r.SetBearerToken("s3cret")
-	h := r.Handler()
-	cases := []struct {
-		auth string
-		want int
-	}{
-		{"", 401}, {"Bearer wrong", 401}, {"Bearer s3cret ", 401}, {"Basic s3cret", 401},
-		{"bearer s3cret", 200}, {"Bearer s3cret", 200},
-	}
-	for _, c := range cases {
-		if code, body := scrape(t, h, c.auth); code != c.want {
-			t.Errorf("auth %q: got %d want %d", c.auth, code, c.want)
-		} else if code == 401 && strings.Contains(body, "tasmofleet") {
-			t.Errorf("401 body leaks metrics")
-		}
-	}
-	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-	if rec.Header().Get("WWW-Authenticate") == "" {
-		t.Error("401 should carry WWW-Authenticate")
-	}
-}
-
 func TestContentTypeAndMethod(t *testing.T) {
 	r := NewRegistry()
 	h := r.Handler()

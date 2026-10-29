@@ -79,20 +79,23 @@ func TestGuardBodiesCapsBody(t *testing.T) {
 }
 
 // Why (review F8): /metrics lists device names and backup cadence; without a
-// token only a direct loopback scraper may read it.
+// token only a direct loopback scraper may read it, with one only the exact
+// bearer token (constant-time) is accepted, from any peer.
 func TestMetricsGate(t *testing.T) {
 	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(200) })
 	cases := []struct {
-		name     string
-		tokenSet bool
-		remote   string
-		hdr      string
-		want     int
+		name, token, remote, hdr, auth string
+		want                           int
 	}{
-		{"loopback without token", false, "127.0.0.1:1234", "", 200},
-		{"remote without token", false, "172.31.12.5:1234", "", 401},
-		{"via proxy on loopback", false, "127.0.0.1:1234", "203.0.113.9", 401},
-		{"remote with token set is left to the registry", true, "172.31.12.5:1234", "", 200},
+		{"loopback without token", "", "127.0.0.1:1234", "", "", 200},
+		{"remote without token", "", "172.31.12.5:1234", "", "", 401},
+		{"via proxy on loopback", "", "127.0.0.1:1234", "203.0.113.9", "", 401},
+		{"remote, token set, none sent", "t0k", "172.31.12.5:1234", "", "", 401},
+		{"remote, token set, wrong", "t0k", "172.31.12.5:1234", "", "Bearer nope", 401},
+		{"remote, token set, other scheme", "t0k", "172.31.12.5:1234", "", "Basic t0k", 401},
+		{"loopback, token set, none sent", "t0k", "127.0.0.1:1234", "", "", 401},
+		{"remote, token set, right", "t0k", "172.31.12.5:1234", "", "Bearer t0k", 200},
+		{"scheme is case-insensitive", "t0k", "172.31.12.5:1234", "", "bearer t0k", 200},
 	}
 	for _, c := range cases {
 		req := httptest.NewRequest("GET", "/metrics", nil)
@@ -100,10 +103,42 @@ func TestMetricsGate(t *testing.T) {
 		if c.hdr != "" {
 			req.Header.Set("X-Forwarded-For", c.hdr)
 		}
+		if c.auth != "" {
+			req.Header.Set("Authorization", c.auth)
+		}
 		rec := httptest.NewRecorder()
-		metricsGate(func() bool { return c.tokenSet }, ok).ServeHTTP(rec, req)
+		metricsGate(func() string { return c.token }, ok).ServeHTTP(rec, req)
 		if rec.Code != c.want {
 			t.Errorf("%s: %d want %d", c.name, rec.Code, c.want)
+		}
+	}
+}
+
+// Why (security review): the token is cleared on the settings page while a
+// request is in flight. The gate must decide on ONE read of the token; a second
+// read that sees "" must never turn an unauthenticated remote request into a
+// served one. The token source flips after its first call (deterministic, no sleep).
+func TestMetricsGateReadsTheTokenOnce(t *testing.T) {
+	served := 0
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { served++; w.WriteHeader(200) })
+	for _, flip := range [][2]string{{"t0k", ""}, {"", "t0k"}} {
+		calls := 0
+		gate := metricsGate(func() string {
+			calls++
+			if calls == 1 {
+				return flip[0]
+			}
+			return flip[1]
+		}, next)
+		req := httptest.NewRequest("GET", "/metrics", nil)
+		req.RemoteAddr = "172.31.12.5:1234"
+		rec := httptest.NewRecorder()
+		gate.ServeHTTP(rec, req)
+		if rec.Code != 401 || served != 0 {
+			t.Errorf("flip %q: remote request without bearer got %d (served %d)", flip, rec.Code, served)
+		}
+		if calls != 1 {
+			t.Errorf("flip %q: token read %d times, want once per request", flip, calls)
 		}
 	}
 }

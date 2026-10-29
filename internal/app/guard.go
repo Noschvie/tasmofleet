@@ -1,6 +1,8 @@
 package app
 
 import (
+	"crypto/sha256"
+	"crypto/subtle"
 	"mime"
 	"net"
 	"net/http"
@@ -80,14 +82,22 @@ func metricsSwitch(enabled func() bool, next http.Handler) http.Handler {
 	})
 }
 
-// metricsGate protects /metrics. tokenSet is read on every request, so a token
-// set on the settings page applies at once. With a bearer token configured the registry
-// checks it. Without one, only local scrapers are served: a loopback TCP peer
-// that did not come through a proxy (no forwarding headers), so a reverse proxy
-// that forwards /metrics cannot publish the fleet inventory.
-func metricsGate(tokenSet func() bool, next http.Handler) http.Handler {
+// metricsGate protects /metrics and is the only place that decides. token is
+// read ONCE per request (a snapshot), so the decision cannot straddle a change on
+// the settings page: with a token, the request must carry exactly that bearer
+// token (constant-time compare); without one, only local scrapers are served: a
+// loopback TCP peer that did not come through a proxy (no forwarding headers), so
+// a reverse proxy that forwards /metrics cannot publish the fleet inventory.
+func metricsGate(token func() string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if tokenSet() {
+		if want := token(); want != "" {
+			scheme, got, ok := strings.Cut(r.Header.Get("Authorization"), " ")
+			a, b := sha256.Sum256([]byte(got)), sha256.Sum256([]byte(want))
+			if !ok || !strings.EqualFold(scheme, "Bearer") || subtle.ConstantTimeCompare(a[:], b[:]) != 1 {
+				w.Header().Set("WWW-Authenticate", `Bearer realm="metrics"`)
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
 			next.ServeHTTP(w, r)
 			return
 		}

@@ -489,7 +489,7 @@ func (a *runtime) ready(ctx context.Context) error {
 // the settings) and the token / local-scraper gate.
 func (a *runtime) metricsHandler() http.Handler {
 	return metricsSwitch(func() bool { return a.svc.Sys.Snapshot().MetricsEnabled },
-		metricsGate(func() bool { return a.svc.Sys.Snapshot().MetricsToken != "" }, a.svc.Metrics.Handler()))
+		metricsGate(func() string { return a.svc.Sys.Snapshot().MetricsToken }, a.svc.Metrics.Handler()))
 }
 
 func (a *runtime) handler() (http.Handler, error) {
