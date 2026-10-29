@@ -133,7 +133,8 @@ test("dragging a column edge resizes it; the width survives a reload and a secon
   expect(dragged).toBeGreaterThan(before + 25);
 
   await page.reload();
-  expect(Math.abs((await width(page, "devices", "Firmware")) - dragged)).toBeLessThan(3);
+  // the page lays the saved widths out again when its fonts are in (tables.js enhance): wait for that
+  await expect.poll(async () => Math.abs((await width(page, "devices", "Firmware")) - dragged)).toBeLessThan(3);
 
   // already in the server's HTML: no layout jump after load
   const html = await (await page.request.get(app.url + "/devices", { headers: adam })).text();
@@ -375,7 +376,8 @@ test("a list update during a mouse drag keeps resizing and saves the width", asy
   expect(dragged).toBeGreaterThan(before + 25);
   await expect(page.locator("body")).not.toHaveClass(/is-resizing/);
   await page.reload();
-  expect(Math.abs((await width(page, "devices", "Firmware")) - dragged)).toBeLessThan(3);
+  // the page lays the saved widths out again when its fonts are in (tables.js enhance): wait for that
+  await expect.poll(async () => Math.abs((await width(page, "devices", "Firmware")) - dragged)).toBeLessThan(3);
   await resetAll(page, "/devices", "table.devices");
 });
 

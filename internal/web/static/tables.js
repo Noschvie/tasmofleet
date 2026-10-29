@@ -641,7 +641,6 @@
   var started = new Map();
 
   function save(table, now) {
-    flushRefit(); // the layout saved is the settled one, not one a waiting refit still changes
     var key = keyOf(table);
     window.clearTimeout(timers[key]);
     var rec = { snap: snapshot(table), done: 0 };
@@ -867,7 +866,6 @@
     write(table, hiddenIdx(table), weight);
   }
   function takeSnap(table) {
-    flushRefit();
     var px = {};
     visible(table).forEach(function (v) {
       px[v.id] = v.px;
@@ -1584,22 +1582,12 @@
   // often and are coalesced too: left out, each of them ran a full enhance of the table.
   var CELL_REFIT_MS = 250,
     refit = 0;
-  // A refit that is still waiting changes widths (fitPinned) after whoever measures the table now:
-  // the start width of a drag and the layout it saves. Those run it first.
-  function flushRefit() {
-    if (refit) {
-      window.clearTimeout(refit);
-      refit = 0;
-      enhance();
-    }
-  }
   document.addEventListener("htmx:afterSettle", function (e) {
     var t = e.target;
     if (
       t instanceof Element &&
       !t.querySelector("table[data-table]") &&
-      t.closest("table[data-table], li.dcard") &&
-      !body().classList.contains("is-resizing") // a drag measures the table at every step
+      t.closest("table[data-table], li.dcard")
     ) {
       if (!refit) {
         refit = window.setTimeout(function () {
