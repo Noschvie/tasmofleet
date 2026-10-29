@@ -415,6 +415,7 @@ jobs:
       contents: read
       packages: write
     uses: ./.github/workflows/image.yml
+    secrets: inherit # DOCKERHUB_USERNAME / DOCKERHUB_TOKEN for the Docker Hub copy
 
   # A GitHub release per tag, its notes the CHANGELOG.md section, once the image is out.
   release:

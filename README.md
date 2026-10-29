@@ -100,6 +100,9 @@ docker run -d --name tasmofleet \
 docker logs tasmofleet 2>&1 | grep -o '/setup/account?token=[^"]*'
 ```
 
+The image is published to two registries under the same tags: `ghcr.io/nofuturekid/tasmofleet`
+and `nofuturekid/tasmofleet` on Docker Hub. Use either name.
+
 The UI always listens on container port 8080; `8443:8080` is the host port you pick. Upgrading
 from 0.16 or older with a `-p 8443:8443` mapping? Read [Upgrading to 0.17](docs/upgrading.md) first.
 

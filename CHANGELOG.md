@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Added
+
+- Images are also published to Docker Hub (`nofuturekid/tasmofleet`) under the same tags as on ghcr.io (#165)
+
 ### Changed
 
 - Policy rules have a stable id that survives edits, reordering and export/import; rules saved before this version get `r1`, `r2`, ... by position on the first save (#197)

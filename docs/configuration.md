@@ -140,4 +140,6 @@ with an explicit value (a saved `:8443` keeps working). New container setups lea
 docker run -d --name tasmofleet -p 8443:8080 -p 80:80 -e TZ=Europe/Berlin -v tasmofleet-data:/data ghcr.io/nofuturekid/tasmofleet:latest
 ```
 
+The same image is also on Docker Hub as `nofuturekid/tasmofleet`.
+
 See also the example env file [deploy/unraid/tasmofleet.env.example](../deploy/unraid/tasmofleet.env.example).
