@@ -31,6 +31,8 @@ type policyHead struct {
 	Line        *liveLine
 	Fleet       policy.Fleet
 	Tabs        []ui.Tab
+	// Back: the tab Run now returns to ("" = the overview).
+	Back string
 }
 
 const policySub = "Settings every device should have. Nothing is written automatically."
@@ -73,10 +75,11 @@ func (h *handler) policyHead(v view, specs []sysconfig.RuleSpec, invalid int, re
 	return p
 }
 
-// policyTabs lists the tabs whose routes exist. The Deviating devices and History tabs add their
-// own line when their pages exist.
-func policyTabs(base, current string, rules int) []ui.Tab {
+// policyTabs lists the tabs whose routes exist. The History tab adds its own line when its page
+// exists.
+func policyTabs(base, current string, rules, deviating int) []ui.Tab {
 	return []ui.Tab{
 		{Label: "Rules", Href: base + policyPath, Current: current == "rules", Badge: rules},
+		{Label: "Deviating devices", Href: base + policyDevPath, Current: current == "deviations", Badge: deviating},
 	}
 }

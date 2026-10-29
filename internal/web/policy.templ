@@ -261,7 +261,7 @@ templ policyIOPage(p policyIOView) {
 // fixPreviewPage is the Make compliant plan as a page (no JavaScript, or values that changed).
 templ fixPreviewPage(base, csrf string, p fixPage) {
 	<div class="pol-page">
-		@ui.PageHeader("Make "+plural(p.Ready, "device")+" compliant", "Nothing has been changed on any device yet. These are the exact commands, sent to each device in one batch and saved to the device once, at the end. Only Required rules are included; Advisory rules stay hints.")
+		@ui.PageHeader("Make "+plural(p.Ready, "device")+" compliant", "Nothing has been changed on any device yet. These are the exact commands, sent to each device in one batch and saved to the device once, at the end. Required deviations are included. An Advisory deviation is included only when you tick it.")
 		if p.Stale {
 			@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: "The values changed since you looked. Nothing was sent; review the commands below again.", Alert: true})
 		}
@@ -286,16 +286,37 @@ templ fixPreviewPage(base, csrf string, p fixPage) {
 						for _, s := range row.Skipped {
 							<p class="pol-fix-skip">Not changed: { s.Label }: { s.Reason }</p>
 						}
+						if len(row.Options) > 0 {
+							<fieldset class="pol-fix-adv">
+								<legend>Advisory deviations <small>(a hint; included only when ticked)</small></legend>
+								for _, o := range row.Options {
+									<label class="pol-pickc"><input type="checkbox" form="fix-select" name="pick" value={ o.Pair } checked?={ o.Picked }/><span>{ o.Name }: has <span class="mono">{ o.Have }</span>, wants <span class="mono">{ o.Want }</span></span></label>
+								}
+							</fieldset>
+						}
 					</section>
 				}
 			</div>
+			if hasFixOptions(p) {
+				<form id="fix-select" method="post" action={ templ.SafeURL(base + "/policy/fix") } hidden>
+					<input type="hidden" name="csrf" value={ csrf }/>
+					for _, f := range p.Select {
+						if f.Key == "device" {
+							<input type="hidden" name="device" value={ f.Value }/>
+						}
+					}
+				</form>
+			}
 			<form method="post" action={ templ.SafeURL(base + "/policy/fix/apply") } class="pol-fix-foot">
 				<input type="hidden" name="csrf" value={ csrf }/>
 				<input type="hidden" name="digest" value={ p.Digest }/>
-				for _, id := range p.IDs {
-					<input type="hidden" name="device" value={ devStr(id) }/>
+				for _, f := range p.Fields {
+					<input type="hidden" name={ f.Key } value={ f.Value }/>
 				}
 				<a class="btn" href={ templ.SafeURL(base + policyPath) }>Cancel</a>
+				if hasFixOptions(p) {
+					<button type="submit" class="btn" form="fix-select">Update plan</button>
+				}
 				if len(p.IDs) > 0 {
 					<button type="submit" class="btn btn-primary">Run { plural(p.Commands, "change") }</button>
 				}
@@ -331,4 +352,14 @@ func commandDescribedBy(invalid bool) string {
 		return "err-command help-command"
 	}
 	return "help-command"
+}
+
+// hasFixOptions says whether some device of the plan has Advisory deviations to tick.
+func hasFixOptions(p fixPage) bool {
+	for _, r := range p.Rows {
+		if len(r.Options) > 0 {
+			return true
+		}
+	}
+	return false
 }

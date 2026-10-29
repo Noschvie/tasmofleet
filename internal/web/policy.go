@@ -163,6 +163,7 @@ type fixDialog struct {
 	Commands int
 	Changes  []ui.KVRow
 	Fields   []ui.KVRow
+	Advisory bool // some selected device also has Advisory deviations to choose from
 }
 
 // devAlert is the banner of a Required rule that devices deviate from.
@@ -296,7 +297,7 @@ func (h *handler) policyData(r *http.Request, v view, o policyOpts) (policyView,
 	p.Head = h.policyHead(v, valid, len(invalid), rep, repErr)
 	p.Head.HasVersions = len(st.History) > 0
 	p.Head.Show = p.HasRules || p.Head.HasVersions
-	p.Head.Tabs = policyTabs(v.Base, "rules", len(st.Specs))
+	p.Head.Tabs = policyTabs(v.Base, "rules", len(st.Specs), p.Head.Fleet.Deviating)
 	if repErr == nil {
 		p.Alert = requiredAlert(rep, st.Specs)
 		if p.Admin && h.d.PolicyFix != nil {
@@ -498,7 +499,7 @@ func deviateText(n int) string {
 	return plural(n, "device") + " deviate"
 }
 
-// advisory says whether a finding comes from an Advisory rule (a hint: never in Make compliant).
+// advisory says whether a finding comes from an Advisory rule (a hint: in Make compliant only when ticked by hand).
 func advisory(f policy.Finding) bool {
 	return f.Severity == policy.SeverityInfo || f.Rule.Severity == policy.SeverityInfo
 }
@@ -655,4 +656,22 @@ func countTone(kind string) ui.Tone {
 		return ui.ToneDanger
 	}
 	return ui.ToneAccent
+}
+
+// fixDialogBody is the text of the Make compliant dialog.
+func fixDialogBody(f *fixDialog) string {
+	s := "Required deviations are included"
+	if f.Advisory {
+		s += "; Advisory ones only when you choose them"
+	}
+	return s + ". These commands run as one transaction only when you confirm. Values known only from a backup, or not known at all, are left alone."
+}
+
+// fixDialogAlt is the dialog's second button: the preview with a box per Advisory deviation. "" when
+// no selected device has one.
+func fixDialogAlt(f *fixDialog) string {
+	if f.Advisory {
+		return "Choose Advisory rows…"
+	}
+	return ""
 }

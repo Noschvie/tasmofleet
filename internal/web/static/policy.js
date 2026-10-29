@@ -33,6 +33,51 @@
       });
     });
   }
+  // Deviating devices: the boxes of Make compliant. The button counts the ticked rows, "Select all"
+  // (shown only with this file) ticks every box, and the filter field narrows the groups as you type.
+  // Without this file the button posts what is ticked and the filter is a plain GET (?q=).
+  var pickForm = document.getElementById("dev-pick");
+  if (pickForm) {
+    var pickBoxes = function () {
+      return Array.prototype.slice.call(
+        pickForm.querySelectorAll('input[type="checkbox"][name="pick"]'),
+      );
+    };
+    var pickSync = function () {
+      var boxes = pickBoxes();
+      var n = boxes.filter(function (b) {
+        return b.checked;
+      }).length;
+      document.querySelectorAll("[data-pick-label]").forEach(function (c) {
+        c.textContent = "Make compliant\u2026 (" + n + " selected)";
+      });
+      pickForm.querySelectorAll("[data-pick-all]").forEach(function (all) {
+        all.checked = boxes.length > 0 && n === boxes.length;
+        all.indeterminate = n > 0 && n < boxes.length;
+      });
+    };
+    pickForm.querySelectorAll("[data-pick-all]").forEach(function (all) {
+      all.hidden = false;
+      all.addEventListener("change", function () {
+        pickBoxes().forEach(function (b) {
+          b.checked = all.checked;
+        });
+        pickSync();
+      });
+    });
+    pickForm.addEventListener("change", pickSync);
+    pickSync();
+    var devFilter = document.querySelector("[data-dev-filter]");
+    if (devFilter) {
+      devFilter.addEventListener("input", function () {
+        var needle = devFilter.value.trim().toLowerCase();
+        pickForm.querySelectorAll("[data-dev-group]").forEach(function (g) {
+          g.hidden =
+            needle !== "" && g.textContent.toLowerCase().indexOf(needle) < 0;
+        });
+      });
+    }
+  }
   var list = document.querySelector("[data-rule-list]");
   if (!list) {
     return;

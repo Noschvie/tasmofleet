@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -40,12 +41,26 @@ type fixCmd struct {
 
 type fixSkipView struct{ Label, Reason string }
 
+// fixOption is an Advisory deviation the admin may add to the plan by ticking it (never ticked
+// unless picked before).
+type fixOption struct {
+	Pair       string // the value of the "pick" field
+	Name       string
+	Have, Want string
+	Picked     bool
+}
+
 type fixRow struct {
 	Device  model.Device
 	Cmds    []fixCmd
 	Skipped []fixSkipView
 	// Blocked is why the device is not touched at all ("" = it is).
 	Blocked string
+	// Options: the Advisory deviations of the device that can be added to the plan.
+	Options []fixOption
+	// Pairs are the picked deviations of this row the apply form has to carry (every included one
+	// in a by-pick plan, the picked Advisory ones otherwise).
+	Pairs []fixPair
 }
 
 type fixPage struct {
@@ -55,6 +70,12 @@ type fixPage struct {
 	IDs      []model.DeviceID
 	Digest   string
 	Stale    bool // the values changed since the preview the admin saw
+	// Fields are what the apply form posts back (besides csrf and digest): the devices, or the
+	// picks of a by-pick plan, and the picked Advisory deviations.
+	Fields []ui.KVRow
+	// Select is every device of the selection and its picks, for the form that re-draws the plan
+	// with other Advisory ticks (device plans only).
+	Select []ui.KVRow
 }
 
 type fixStarted struct {
@@ -68,9 +89,41 @@ var activeJobStates = []model.JobState{
 	model.JobAwaitReboot, model.JobVerify, model.JobRestoreOtaURL, model.JobRestorePower, model.JobApplying,
 }
 
-// fixSelection reads which devices the admin picked: one ("only"), every
-// deviating one ("all") or the ticked ones ("device").
-func fixSelection(r *http.Request, rep PolicyReport) []model.DeviceID {
+// fixPair names one deviation of one device by the rule's stable id; it is the unit of "pick".
+type fixPair struct {
+	Dev  model.DeviceID
+	Rule string
+}
+
+func (p fixPair) String() string { return strconv.FormatInt(int64(p.Dev), 10) + ":" + p.Rule }
+
+// fixSel is which deviations the admin asked to fix. Devices come from "only", "all" or "device"
+// (every Required deviation of those devices) or from "pick" alone (exactly the picked
+// deviations). In the device modes a pick adds one Advisory deviation of a selected device: an
+// Advisory deviation is never in the plan unless it was picked by hand.
+type fixSel struct {
+	IDs    []model.DeviceID
+	Picks  map[fixPair]bool // only pairs that are findings of the report, of selected devices
+	ByPick bool             // the plan holds the picked deviations and nothing else
+}
+
+func (s fixSel) has(id model.DeviceID) bool { return slices.Contains(s.IDs, id) }
+
+// include says whether a finding is part of the plan.
+func (s fixSel) include(f policy.Finding) bool {
+	if !s.has(f.DeviceID) {
+		return false
+	}
+	picked := s.Picks[fixPair{f.DeviceID, f.Rule.ID}]
+	if s.ByPick || advisory(f) {
+		return picked
+	}
+	return true
+}
+
+// fixSelection reads which deviations the admin picked. A pick for a pair that is not a finding
+// of the report is dropped, so a forged form never widens the plan.
+func fixSelection(r *http.Request, rep PolicyReport) fixSel {
 	parse := func(vals []string) []model.DeviceID {
 		var out []model.DeviceID
 		seen := map[model.DeviceID]bool{}
@@ -82,37 +135,75 @@ func fixSelection(r *http.Request, rep PolicyReport) []model.DeviceID {
 		}
 		return out
 	}
+	known := map[fixPair]bool{}
+	for _, f := range rep.Findings {
+		if f.Rule.ID != "" {
+			known[fixPair{f.DeviceID, f.Rule.ID}] = true
+		}
+	}
+	var picks []fixPair
+	for _, v := range r.PostForm["pick"] {
+		dev, rule, ok := strings.Cut(v, ":")
+		n, err := strconv.ParseInt(dev, 10, 64)
+		if p := (fixPair{model.DeviceID(n), rule}); ok && err == nil && known[p] {
+			picks = append(picks, p)
+		}
+	}
+	var sel fixSel
 	switch {
 	case r.PostForm.Get("only") != "":
-		return parse(r.PostForm["only"][:1])
+		sel.IDs = parse(r.PostForm["only"][:1])
 	case r.PostForm.Get("all") != "":
-		var out []model.DeviceID
 		seen := map[model.DeviceID]bool{}
 		for _, f := range rep.Findings {
 			if !f.Unknown && !advisory(f) && !seen[f.DeviceID] {
 				seen[f.DeviceID] = true
-				out = append(out, f.DeviceID)
+				sel.IDs = append(sel.IDs, f.DeviceID)
 			}
 		}
-		return out
+	case len(r.PostForm["device"]) > 0:
+		sel.IDs = parse(r.PostForm["device"])
+	default:
+		sel.ByPick = true
+		for _, p := range picks {
+			if !sel.has(p.Dev) {
+				sel.IDs = append(sel.IDs, p.Dev)
+			}
+		}
 	}
-	return parse(r.PostForm["device"])
+	sel.Picks = map[fixPair]bool{}
+	for _, p := range picks {
+		if sel.has(p.Dev) {
+			sel.Picks[p] = true
+		}
+	}
+	return sel
 }
 
-// fixRows turns the report's findings for the picked devices into the plan the
-// admin reviews. Only Required rules are included (an Advisory rule is a hint, design v2
-// N3) and only values read live count (see policy.PlanFix); a device with an active job is
-// listed as not touched.
-func (h *handler) fixRows(ctx context.Context, rep PolicyReport, ids []model.DeviceID) []fixRow {
+// fixRows turns the report's findings of the selection into the plan the admin reviews. Every
+// Required deviation of a selected device is included; an Advisory one (a hint) only when it was
+// picked by hand (fixSel.include). Only values read live count (see policy.PlanFix); a device
+// with an active job is listed as not touched.
+func (h *handler) fixRows(ctx context.Context, rep PolicyReport, sel fixSel) []fixRow {
 	live := func(id model.DeviceID, key string) bool { return rep.Provenance[id][key].Kind == "live" }
-	pick := map[model.DeviceID]bool{}
-	for _, id := range ids {
-		pick[id] = true
-	}
 	var findings []policy.Finding
+	included := map[model.DeviceID][]fixPair{}
+	options := map[model.DeviceID][]fixOption{}
 	for _, f := range rep.Findings {
-		if pick[f.DeviceID] && !advisory(f) {
+		if !sel.has(f.DeviceID) {
+			continue
+		}
+		pair := fixPair{f.DeviceID, f.Rule.ID}
+		if sel.include(f) {
 			findings = append(findings, f)
+			if sel.ByPick || advisory(f) {
+				included[f.DeviceID] = append(included[f.DeviceID], pair)
+			}
+		}
+		if !sel.ByPick && advisory(f) && !f.Unknown && f.Rule.ID != "" && live(f.DeviceID, strings.ToLower(f.Rule.Command)) {
+			options[f.DeviceID] = append(options[f.DeviceID], fixOption{
+				Pair: pair.String(), Name: ruleTitle(f.Rule), Have: f.Have, Want: f.Rule.Want, Picked: sel.Picks[pair],
+			})
 		}
 	}
 	plans := map[model.DeviceID]policy.FixPlan{}
@@ -122,10 +213,10 @@ func (h *handler) fixRows(ctx context.Context, rep PolicyReport, ids []model.Dev
 	now := h.d.Clock.Now()
 	var rows []fixRow
 	for _, d := range rep.Devices {
-		if !pick[d.ID] {
+		if !sel.has(d.ID) {
 			continue
 		}
-		row := fixRow{Device: d}
+		row := fixRow{Device: d, Options: options[d.ID], Pairs: included[d.ID]}
 		p := plans[d.ID]
 		for _, c := range p.Commands {
 			cmd := fixCmd{Label: settings.Label(c.Command), Text: c.Text, Have: c.Have, Want: c.Want}
@@ -151,6 +242,8 @@ func (h *handler) fixRows(ctx context.Context, rep PolicyReport, ids []model.Dev
 			row.Skipped = append(row.Skipped, v)
 		}
 		switch {
+		case len(row.Cmds) == 0 && len(row.Skipped) == 0 && len(row.Options) > 0:
+			row.Blocked = "No Required rule deviates. Tick an Advisory deviation below to include it."
 		case len(row.Cmds) == 0 && len(row.Skipped) == 0:
 			row.Blocked = "Already compliant, nothing to change."
 		case len(row.Cmds) == 0:
@@ -168,18 +261,30 @@ func (h *handler) fixRows(ctx context.Context, rep PolicyReport, ids []model.Dev
 	return rows
 }
 
-func fixPageOf(rows []fixRow) fixPage {
+// fixPageOf builds the page of a plan. The digest covers every command per device and the picked
+// deviations, so a changed pick can never apply under the digest of another plan.
+func fixPageOf(rows []fixRow, byPick bool) fixPage {
 	p := fixPage{Rows: rows}
 	sum := sha256.New()
 	for _, row := range rows {
+		if !byPick {
+			p.Select = append(p.Select, ui.KVRow{Key: "device", Value: strconv.FormatInt(int64(row.Device.ID), 10)})
+		}
 		if row.Blocked != "" {
 			continue
 		}
 		p.Ready++
 		p.IDs = append(p.IDs, row.Device.ID)
+		if !byPick {
+			p.Fields = append(p.Fields, ui.KVRow{Key: "device", Value: strconv.FormatInt(int64(row.Device.ID), 10)})
+		}
 		for _, c := range row.Cmds {
 			p.Commands++
 			sum.Write([]byte(strconv.FormatInt(int64(row.Device.ID), 10) + "\x00" + c.Text + "\n"))
+		}
+		for _, pair := range row.Pairs {
+			p.Fields = append(p.Fields, ui.KVRow{Key: "pick", Value: pair.String()})
+			sum.Write([]byte("pick\x00" + pair.String() + "\n"))
 		}
 	}
 	p.Digest = hex.EncodeToString(sum.Sum(nil))
@@ -206,7 +311,8 @@ func (h *handler) policyFixPreview(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	p := fixPageOf(h.fixRows(r.Context(), rep, fixSelection(r, rep)))
+	sel := fixSelection(r, rep)
+	p := fixPageOf(h.fixRows(r.Context(), rep, sel), sel.ByPick)
 	h.fixRender(w, r, http.StatusOK, p)
 }
 
@@ -218,8 +324,9 @@ func (h *handler) policyFixApply(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rows := h.fixRows(r.Context(), rep, fixSelection(r, rep))
-	p := fixPageOf(rows)
+	sel := fixSelection(r, rep)
+	rows := h.fixRows(r.Context(), rep, sel)
+	p := fixPageOf(rows, sel.ByPick)
 	if p.Digest != r.PostForm.Get("digest") {
 		p.Stale = true
 		h.fixRender(w, r, http.StatusConflict, p)
@@ -271,25 +378,27 @@ func (h *handler) fixRender(w http.ResponseWriter, r *http.Request, status int, 
 }
 
 // fixDialogOf is the plan behind "Make compliant (N)…" on the policy page: every device with
-// a Required deviation read live. nil when there is nothing to change.
+// a Required deviation read live. nil when there is nothing to change. Advisory deviations are
+// not in it; "Choose Advisory rows…" opens the preview where they can be ticked.
 func (h *handler) fixDialogOf(ctx context.Context, rep PolicyReport) *fixDialog {
-	var ids []model.DeviceID
+	sel := fixSel{Picks: map[fixPair]bool{}}
 	seen := map[model.DeviceID]bool{}
 	for _, f := range rep.Findings {
 		if !f.Unknown && !advisory(f) && !seen[f.DeviceID] {
 			seen[f.DeviceID] = true
-			ids = append(ids, f.DeviceID)
+			sel.IDs = append(sel.IDs, f.DeviceID)
 		}
 	}
-	p := fixPageOf(h.fixRows(ctx, rep, ids))
+	rows := h.fixRows(ctx, rep, sel)
+	p := fixPageOf(rows, false)
 	if p.Ready == 0 {
 		return nil
 	}
-	d := &fixDialog{Ready: p.Ready, Commands: p.Commands, Fields: []ui.KVRow{{Key: "digest", Value: p.Digest}}}
-	for _, id := range p.IDs {
-		d.Fields = append(d.Fields, ui.KVRow{Key: "device", Value: strconv.FormatInt(int64(id), 10)})
-	}
-	for _, row := range p.Rows {
+	d := &fixDialog{Ready: p.Ready, Commands: p.Commands, Fields: append([]ui.KVRow{{Key: "digest", Value: p.Digest}}, p.Fields...)}
+	for _, row := range rows {
+		if len(row.Options) > 0 {
+			d.Advisory = true
+		}
 		if row.Blocked != "" {
 			continue
 		}

@@ -1226,6 +1226,17 @@ version the person saw (stale: 409); the drag posts positions plus the version. 
 parameters are ignored: the old `?edit=`, `?new=` and `?v=` no longer open an editor or a diff.
 The empty page offers New rule and the first templates (admins), or says an admin can add rules.
 
+The Deviating devices tab (`GET /policy/deviations`, `?show=required|advisory|unknown`, `?q=`) lists every
+deviation grouped by device. Admins get a box per row read live (a backup-only value has none): Required rows
+start ticked, Advisory rows never do. The boxes post `pick=<deviceID>:<ruleID>` to `/policy/fix`: with only
+`pick` the plan is exactly the picked deviations. With `only`, `all` or `device` (device tile, overview banner) the
+plan is every Required deviation of those devices, and an Advisory deviation joins only when its pick is
+posted; the preview offers each as an unticked box ("Update plan"), the dialog a "Choose Advisory rows…"
+button. A pick for a pair that is not a finding of the report, or of a device outside the selection, is dropped, and
+the apply digest covers the picks. Devices that cannot be judged sit in a fold: those with an unknown value a
+backup decodes (`policy.BackupReadable`) get "Back up these N" (POST `/devices/bulk/backup`, admin), the others a
+hint and Run now.
+
 ### 14.5 Notifications
 
 `notify.Notifier` implementations for a webhook (e.g. a Home Assistant webhook trigger)

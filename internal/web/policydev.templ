@@ -1,0 +1,196 @@
+package web
+
+import (
+	"net/url"
+
+	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+)
+
+// policyDevPage is GET /policy/deviations: the filter row, the deviations grouped by device (a box
+// per row for Make compliant) and the fold of the devices that cannot be judged.
+templ policyDevPage(p devView) {
+	<div class="pol-page">
+		@policyShell(p.Head) {
+			if p.Failed {
+				@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: "No deviations can be shown: the live check failed. Retry it in the Live check tile.", Alert: true})
+			} else {
+				@policyDevToolbar(p)
+				if p.Show != "unknown" {
+					@policyDevTable(p)
+				}
+				@policyDevUnjudged(p)
+			}
+		}
+		<script src={ p.Base + "/static/" + asset("policy.js") } defer></script>
+	</div>
+}
+
+templ policyDevChip(p devView, show, label string, n int) {
+	<a class="dv-chip" href={ templ.SafeURL(devHref(p.Base, show, p.Q)) } aria-current?={ p.Show == show }>{ label }<span class="dv-n">{ itoa(n) }</span></a>
+}
+
+// policyDevToolbar: the Show filters, the text filter and the Make compliant button.
+templ policyDevToolbar(p devView) {
+	<div class="pol-dev-bar">
+		<div class="dv-chips" role="group" aria-label="Show">
+			@policyDevChip(p, "", "All", p.NReq+p.NAdv)
+			@policyDevChip(p, "required", "Required", p.NReq)
+			@policyDevChip(p, "advisory", "Advisory", p.NAdv)
+			@policyDevChip(p, "unknown", "Not judged", p.NUnknown)
+		</div>
+		<form method="get" action={ templ.SafeURL(p.Base + policyDevPath) } class="pol-dev-q" role="search">
+			if p.Show != "" {
+				<input type="hidden" name="show" value={ p.Show }/>
+			}
+			<input type="search" name="q" value={ p.Q } placeholder="Filter devices…" aria-label="Filter devices" data-dev-filter/>
+		</form>
+		if p.CanFix && p.Show != "unknown" && p.Pickable > 0 {
+			<button type="submit" form="dev-pick" class="btn btn-primary"><span data-pick-label>{ "Make compliant… (" + itoa(p.Checked) + " selected)" }</span></button>
+		}
+	</div>
+}
+
+// policyDevTable is the deviations grouped by device. One tbody per device: its header row, then a
+// row per deviating rule. Admins get a box per row that was read live; Required rows start ticked,
+// Advisory rows never.
+templ policyDevTable(p devView) {
+	if len(p.Groups) == 0 {
+		@ui.Empty("No device deviates from a rule.", emptyDevText(p)) {
+			if p.Show != "" || p.Q != "" {
+				<a class="btn" href={ templ.SafeURL(p.Base + policyDevPath) }>Clear the filter</a>
+			}
+		}
+	} else {
+		<form id="dev-pick" method="post" action={ templ.SafeURL(p.Base + "/policy/fix") }>
+			<input type="hidden" name="csrf" value={ p.CSRF }/>
+			<section class="devcard" id="deviations" aria-label="Deviations by device">
+				<table class="dense">
+					<thead>
+						<tr>
+							if p.CanFix {
+								<th class="sel"><input type="checkbox" data-pick-all hidden aria-label="Select all"/></th>
+							}
+							<th>Device / rule</th>
+							<th>Expected</th>
+							<th>Actual</th>
+							<th>Source</th>
+							<th><span class="sr-only">Open</span></th>
+						</tr>
+					</thead>
+					for _, g := range p.Groups {
+						<tbody data-dev-group>
+							<tr class="pol-grp">
+								<td colspan="6">
+									<a class="mono" href={ templ.SafeURL(p.Base + "/devices/" + devStr(g.ID)) }>{ g.Name }</a>
+									<span class="pol-none">{ g.meta() } · { g.Count }</span>
+								</td>
+							</tr>
+							for _, r := range g.Rows {
+								<tr>
+									if p.CanFix {
+										<td class="sel" data-label="Select">
+											if r.Pickable {
+												<label class="hit"><input type="checkbox" name="pick" value={ r.Pair } checked?={ r.Checked } aria-label={ "Select " + r.Rule + " on " + g.Name }/></label>
+											}
+										</td>
+									}
+									<td class="p1" data-label="Rule">
+										{ r.Rule }{ " " }
+										if r.Required {
+											@ui.Badge(ui.ToneWarn, "Required")
+										} else {
+											@ui.Badge(ui.ToneAccent, "Advisory")
+										}
+									</td>
+									<td data-label="Expected" title={ r.Expected }><span class="mono pol-dev-v">{ r.Expected }</span></td>
+									<td data-label="Actual" title={ r.Actual }><span class="mono pol-dev-v pol-dev-bad">{ r.Actual }</span></td>
+									<td data-label="Source">
+										{ r.Source }
+										if r.NotLiveNote != "" {
+											<span class="pol-none">{ r.NotLiveNote }</span>
+										}
+									</td>
+									<td data-label="Device" class="rowacts"><a href={ templ.SafeURL(p.Base + "/devices/" + devStr(g.ID)) }>Device →</a></td>
+								</tr>
+							}
+						</tbody>
+					}
+				</table>
+			</section>
+		</form>
+	}
+}
+
+// policyDevUnjudged is the fold of the devices that cannot be judged: the ones a backup would tell
+// (a button for admins) and the ones only a live read tells (Run now).
+templ policyDevUnjudged(p devView) {
+	if len(p.Backup)+len(p.Live) > 0 {
+		<details class="fold" id="unjudged" open?={ p.Show == "unknown" }>
+			<summary>{ plural(len(p.Backup)+len(p.Live), "device") } cannot be judged<span class="meta">no backup or recent reading</span></summary>
+			if len(p.Backup) > 0 {
+				<div class="pol-dev-fold">
+					<p class="pol-none">A backup of these would tell their settings.</p>
+					<div class="chips">
+						for _, c := range p.Backup {
+							<a class="tag mono" href={ templ.SafeURL(p.Base + "/devices/" + devStr(c.ID)) }>{ c.Name }</a>
+						}
+					</div>
+					if p.CanBackup {
+						<form method="post" action={ templ.SafeURL(p.Base + "/devices/bulk/backup") } class="pol-inline">
+							<input type="hidden" name="csrf" value={ p.CSRF }/>
+							for _, c := range p.Backup {
+								<input type="hidden" name="id" value={ devStr(c.ID) }/>
+							}
+							<button type="submit" class="btn btn-sm">Back up these { itoa(len(p.Backup)) }</button>
+						</form>
+					}
+				</div>
+			}
+			if len(p.Live) > 0 {
+				<div class="pol-dev-fold">
+					<p class="pol-none">Only a live read tells these: no backup holds the setting.</p>
+					<div class="chips">
+						for _, c := range p.Live {
+							<a class="tag mono" href={ templ.SafeURL(p.Base + "/devices/" + devStr(c.ID)) }>{ c.Name }</a>
+						}
+					</div>
+					<form method="post" action={ templ.SafeURL(p.Base + "/policy/live") } class="pol-inline">
+						<input type="hidden" name="csrf" value={ p.CSRF }/>
+						<input type="hidden" name="back" value="deviations"/>
+						<button type="submit" class="btn btn-sm">Run now</button>
+					</form>
+				</div>
+			}
+		</details>
+	}
+}
+
+func devHref(base, show, q string) string {
+	v := url.Values{}
+	if show != "" {
+		v.Set("show", show)
+	}
+	if q != "" {
+		v.Set("q", q)
+	}
+	if len(v) == 0 {
+		return base + policyDevPath
+	}
+	return base + policyDevPath + "?" + v.Encode()
+}
+
+func emptyDevText(p devView) string {
+	if p.Show != "" || p.Q != "" {
+		return "Nothing matches this filter."
+	}
+	return "Every rule that applies is met, or cannot be judged yet."
+}
+
+// meta is the device's family and address, as the group header reads them.
+func (g devGroup) meta() string {
+	s := g.Address
+	if g.Family != "" {
+		s = g.Family + " · " + s
+	}
+	return s
+}

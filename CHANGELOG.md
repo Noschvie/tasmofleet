@@ -8,6 +8,8 @@ always upgrade automatically.
 
 ### Added
 
+- Policy: Deviating devices tab (`/policy/deviations`) with the deviations grouped by device, per-row Make compliant (admins tick the rows; Required rows start ticked) and Back up for devices that cannot be judged yet (#197)
+- Advisory deviations can be selected by hand for Make compliant (never preselected), on the Deviating devices tab, in the overview dialog and in the device tile's preview (#197)
 - Images are also published to Docker Hub (`nofuturekid/tasmofleet`) under the same tags as on ghcr.io (#165)
 - Policy rules have a page of their own, `/policy/rules/{id}`: four tiles (applies to, match, deviate, not judged), the editor, and the devices the rule judges with the value each has and where it came from (live or backup); the table updates as you edit without reading any device. Operators see the same page read-only (#197)
 - New rule page (`/policy/rules/new`): start from a template, from Any command (refused commands show the reason) or with Copy from a device (a fresh live read of that one command; backup value when the device does not answer, with the source shown). Each opens an unsaved draft; nothing is stored before Save rule (#197)

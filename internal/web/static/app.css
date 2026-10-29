@@ -13482,3 +13482,78 @@ a.pol-tpl {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ==== Policy: Deviating devices tab (/policy/deviations) ==== */
+.pol-dev-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8) var(--sp-12);
+  margin: var(--sp-16) 0 var(--sp-12);
+}
+.pol-dev-bar .dv-chips {
+  flex: 1 1 auto;
+}
+.pol-dev-q input {
+  width: 14rem;
+  max-width: 100%;
+}
+.pol-dev-v {
+  display: block;
+  max-width: 24rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pol-dev-bad {
+  color: var(--color-warn-fg);
+}
+tr.pol-grp td {
+  background: var(--color-surface-2);
+  font-size: var(--fs-small);
+  color: var(--color-text-2);
+}
+.pol-dev-fold {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-8) var(--sp-12);
+  padding: var(--sp-8) 0;
+}
+.pol-dev-fold .pol-none {
+  flex: 1 1 100%;
+  margin: 0;
+}
+.pol-fix-adv {
+  margin: var(--sp-8) 0 0;
+  padding: var(--sp-8) 0 0;
+  border: 0;
+  border-top: var(--hair-w) solid var(--color-border);
+  font-size: 12.5px;
+}
+.pol-fix-adv legend {
+  padding: 0;
+  font-weight: 600;
+}
+@media (max-width: 44.99rem) {
+  .pol-dev-q,
+  .pol-dev-q input {
+    width: 100%;
+  }
+  .pol-dev-bar .btn-primary {
+    width: 100%;
+  }
+  #deviations td.p1 .bdg {
+    flex: none;
+    white-space: nowrap;
+  }
+  table.dense tr.pol-grp {
+    padding-left: 0 !important;
+    background: var(--color-surface-2);
+  }
+  .pol-dev-v {
+    max-width: none;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}

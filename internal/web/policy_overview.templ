@@ -42,9 +42,10 @@ templ policyPage(p policyView) {
 		if p.Fix != nil {
 			@ui.Dialog(ui.DialogData{
 				ID: "dlg-fix", Title: "Make " + plural(p.Fix.Ready, "device") + " compliant",
-				Body:    "Only Required rules are included; Advisory rules stay hints. These commands run as one transaction only when you confirm. Values known only from a backup, or not known at all, are left alone.",
+				Body:    fixDialogBody(p.Fix),
 				Changes: p.Fix.Changes, Action: p.Base + "/policy/fix/apply", CSRF: p.CSRF, Fields: p.Fix.Fields,
 				Verb: "Run " + plural(p.Fix.Commands, "change"),
+				Alt:  fixDialogAlt(p.Fix), AltAction: p.Base + "/policy/fix",
 			})
 		}
 		if p.Admin && p.CanRules {
@@ -189,15 +190,15 @@ templ policyRowOp(p policyView, r ruleRow, path, move, back, label string) {
 	</form>
 }
 
-// policyAlert is the banner of devices that deviate from a Required rule. Show goes to the table
-// until the Deviating devices tab exists; Make compliant opens the plan for all of them.
+// policyAlert is the banner of devices that deviate from a Required rule. Show opens the Deviating
+// devices tab; Make compliant opens the plan for all of them.
 templ policyAlert(p policyView) {
 	<div class="banner tone-warn" role="status">
 		<span class="banner-dot"></span>
 		<div class="banner-text">
 			{ p.Alert.Text }<span class="mono">{ p.Alert.Devices }</span> ({ p.Alert.Rules })
 		</div>
-		<a class="banner-btn" href="#rules">Show</a>
+		<a class="banner-btn" href={ templ.SafeURL(p.Base + policyPath + "/deviations") }>Show</a>
 		if p.Fix != nil {
 			<form method="post" action={ templ.SafeURL(p.Base + "/policy/fix") } class="pol-inline">
 				<input type="hidden" name="csrf" value={ p.CSRF }/>

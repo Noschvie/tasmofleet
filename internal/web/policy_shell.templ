@@ -79,6 +79,9 @@ templ policyLiveForm(h policyHead, action, label string) {
 		}
 	>
 		<input type="hidden" name="csrf" value={ h.CSRF }/>
+		if h.Back != "" && action == "/policy/live" {
+			<input type="hidden" name="back" value={ h.Back }/>
+		}
 		<button type="submit" class="btn btn-sm">{ label }</button>
 	</form>
 }

@@ -187,9 +187,12 @@ type DialogData struct {
 	Action, CSRF    string
 	Fields          []KVRow // hidden fields the form posts (Key = name)
 	Verb            string
-	Danger          bool
-	Static          bool // drawn open in the flow (style guide), left alone by the scripts
-	OOB             bool // sent as an htmx out-of-band swap of the dialog already on the page
+	// Alt, when set, is a second button that posts the same fields to AltAction instead
+	// (Make compliant: "Choose Advisory rows…" opens the preview with the boxes).
+	Alt, AltAction string
+	Danger         bool
+	Static         bool // drawn open in the flow (style guide), left alone by the scripts
+	OOB            bool // sent as an htmx out-of-band swap of the dialog already on the page
 }
 
 // StepUpData is the "Confirm it's you" dialog of local account and SSO changes.

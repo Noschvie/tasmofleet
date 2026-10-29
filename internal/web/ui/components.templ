@@ -481,6 +481,9 @@ templ Dialog(d DialogData) {
 			}
 			<div class="udlg-foot">
 				<button type="button" class="btn" data-close>Cancel</button>
+				if d.Alt != "" {
+					<button type="submit" class="btn" formaction={ templ.SafeURL(d.AltAction) }>{ d.Alt }</button>
+				}
 				<button type="submit" class={ "btn", templ.KV("btn-danger-solid", d.Danger), templ.KV("btn-primary", !d.Danger) }>{ d.Verb }</button>
 			</div>
 		</form>

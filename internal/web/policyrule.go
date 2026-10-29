@@ -690,6 +690,10 @@ func (h *handler) liveCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PostForm.Get("rule")
 	if id == "" {
+		if r.PostForm.Get("back") == "deviations" {
+			h.devRender(w, r, http.StatusOK, true)
+			return
+		}
 		h.policyRender(w, r, http.StatusOK, policyOpts{live: true})
 		return
 	}

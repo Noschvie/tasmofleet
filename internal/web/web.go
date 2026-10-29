@@ -293,6 +293,7 @@ func Handler(d Deps) (http.Handler, error) {
 	h.registerSysConfig(route, adm)
 	h.registerSetup(route, adm)
 	h.registerPolicy(route, op)
+	h.registerPolicyDev(route, op)
 	h.registerPolicyLivePause(route, adm)
 	h.registerPolicyFix(route, adm)
 	h.registerBulkCommand(route, adm)

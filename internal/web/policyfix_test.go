@@ -262,3 +262,143 @@ func TestPolicyFixLeavesAdvisoryRulesOut(t *testing.T) {
 		t.Error("the Make compliant dialog lists an Advisory command")
 	}
 }
+
+// advisoryFixReport is fixReport with kitchen's SetOption0 rule (r2) turned Advisory: kitchen
+// deviates from one Required rule (r1) and one hint (r2), both read live.
+func advisoryFixReport() PolicyReport {
+	rep := fixReport()
+	adv := ruleSO0
+	adv.Severity = policy.SeverityInfo
+	for i, f := range rep.Findings {
+		if f.Rule.ID == "r2" {
+			rep.Findings[i].Rule, rep.Findings[i].Severity = adv, policy.SeverityInfo
+		}
+	}
+	return rep
+}
+
+func advisoryEnv(t *testing.T, fix *fakeFix) *env {
+	t.Helper()
+	return setupWith(t, func(d *Deps) { d.Policy = &fakePolicy{rep: advisoryFixReport()}; d.PolicyFix = fix })
+}
+
+var kitchenAdvisoryBox = regexp.MustCompile(`<input type="checkbox"[^>]*name="pick" value="1:r2"[^>]*>`)
+
+// Why (PO decision: the difference between Required and Advisory may blur): an Advisory deviation
+// can be written, but only because the admin ticked it. The device tile and the banner keep
+// their Required-only selection and list the hint unticked; ticking it re-draws the plan with the
+// command; the apply form then carries the pick and the digest binds it, so the same reviewed
+// plan without the pick is refused as stale.
+func TestPolicyFixAdvisoryIsWrittenOnlyWhenPicked(t *testing.T) {
+	fix := &fakeFix{}
+	e := advisoryEnv(t, fix)
+	for _, form := range []url.Values{{"only": {"1"}}, {"all": {"1"}}, {"device": {"1"}}} {
+		body := previewFor(t, e, form)
+		if strings.Contains(body, cmdHTML("SetOption0 0")) || !strings.Contains(body, cmdHTML("PowerOnState 0")) {
+			t.Fatalf("%v: the preselected plan is Required only:\n%s", form, body)
+		}
+		if box := kitchenAdvisoryBox.FindString(body); box == "" || strings.Contains(box, "checked") {
+			t.Fatalf("%v: the Advisory deviation is offered unticked, got %q", form, box)
+		}
+	}
+
+	picked := previewFor(t, e, url.Values{"only": {"1"}, "pick": {"1:r2"}})
+	if !strings.Contains(picked, cmdHTML("SetOption0 0")) || !strings.Contains(picked, cmdHTML("PowerOnState 0")) {
+		t.Fatalf("the picked hint joins the plan:\n%s", picked)
+	}
+	if box := kitchenAdvisoryBox.FindString(picked); !strings.Contains(box, "checked") {
+		t.Errorf("a picked hint stays ticked, got %q", box)
+	}
+	if !strings.Contains(picked, `name="pick" value="1:r2"`) {
+		t.Error("the apply form carries the pick")
+	}
+	m := digestRe.FindStringSubmatch(picked)
+	r, out := e.do(t, "POST", "/policy/fix/apply", "admin", url.Values{"csrf": {"tok"}, "digest": {m[1]}, "device": {"1"}, "pick": {"1:r2"}})
+	if r.StatusCode != 303 || len(fix.reqs) != 1 || strings.Join(fix.reqs[0].Commands, "|") != "PowerOnState 0|SetOption0 0" {
+		t.Fatalf("apply: %d, submitted %+v\n%s", r.StatusCode, fix.reqs, out)
+	}
+	// the digest of the reviewed plan does not authorise a plan without (or with another) pick
+	fix.reqs = nil
+	if r, _ = e.do(t, "POST", "/policy/fix/apply", "admin", url.Values{"csrf": {"tok"}, "digest": {m[1]}, "device": {"1"}}); r.StatusCode != 409 || len(fix.reqs) != 0 {
+		t.Errorf("without the pick the reviewed digest is stale: %d, %+v", r.StatusCode, fix.reqs)
+	}
+}
+
+// Why: the overview banner's dialog is the second entry point. It lists the Required plan only, says
+// the Advisory ones are chosen on the preview, and offers that way (a second submit button to the
+// same route); the Make compliant dialog of a fleet without hints offers nothing extra.
+func TestPolicyFixBannerDialogOffersTheAdvisoryChoice(t *testing.T) {
+	e := advisoryEnv(t, &fakeFix{})
+	_, page := e.do(t, "GET", "/policy", "admin", nil)
+	for _, want := range []string{"Choose Advisory rows…", `formaction="/tf/policy/fix"`, "Advisory ones only when you choose them", "PowerOnState 0"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("dialog misses %q", want)
+		}
+	}
+	if strings.Contains(page, "SetOption0 0") {
+		t.Error("an Advisory command is never preselected in the dialog")
+	}
+	plain := fixEnv(t, &fakeFix{}, nil)
+	if _, page = plain.do(t, "GET", "/policy", "admin", nil); strings.Contains(page, "Choose Advisory rows") {
+		t.Error("no hint to choose, no extra button")
+	}
+}
+
+// Why: the Deviating devices tab posts "pick" only: the plan is exactly the ticked rows, nothing
+// else of the same device (kitchen's other Required deviation stays out), and the apply form carries
+// the picks so the reviewed commands are what runs.
+func TestPolicyFixByPickWritesExactlyTheTickedRows(t *testing.T) {
+	fix := &fakeFix{}
+	e := fixEnv(t, fix, nil)
+	body := previewFor(t, e, url.Values{"pick": {"1:r1"}})
+	if !strings.Contains(body, cmdHTML("PowerOnState 0")) || strings.Contains(body, cmdHTML("SetOption0 0")) {
+		t.Fatalf("only the ticked rule is in the plan:\n%s", body)
+	}
+	if strings.Contains(body, `name="device"`) || !strings.Contains(body, `name="pick" value="1:r1"`) {
+		t.Error("a by-pick plan carries picks, not devices")
+	}
+	m := digestRe.FindStringSubmatch(body)
+	e.do(t, "POST", "/policy/fix/apply", "admin", url.Values{"csrf": {"tok"}, "digest": {m[1]}, "pick": {"1:r1"}})
+	if len(fix.reqs) != 1 || strings.Join(fix.reqs[0].Commands, "|") != "PowerOnState 0" {
+		t.Fatalf("submitted %+v", fix.reqs)
+	}
+	// an Advisory row ticked by hand on the tab is written
+	adv := advisoryEnv(t, fix)
+	fix.reqs = nil
+	body = previewFor(t, adv, url.Values{"pick": {"1:r2"}})
+	if !strings.Contains(body, cmdHTML("SetOption0 0")) || strings.Contains(body, cmdHTML("PowerOnState 0")) {
+		t.Fatalf("the ticked hint alone:\n%s", body)
+	}
+}
+
+// Why: a forged or stale form must never widen what is written. A pick for a rule the device does
+// not deviate from, for a device that is not in the report, or for another selected device
+// than the one picked, adds nothing; and a deviation known only from an old backup is never
+// fixed, even when picked.
+func TestPolicyFixPickForAPairNotInTheReportIsIgnored(t *testing.T) {
+	fix := &fakeFix{}
+	e := fixEnv(t, fix, nil)
+	for name, form := range map[string]url.Values{
+		"unknown rule id":   {"pick": {"1:rzzz"}},
+		"unknown device":    {"pick": {"99:r1"}},
+		"shed is fine":      {"pick": {"4:r1"}},
+		"malformed":         {"pick": {"1", ":r1", "x:r1", "1:"}},
+		"other device only": {"only": {"4"}, "pick": {"1:r1", "1:r2"}},
+	} {
+		body := previewFor(t, e, form)
+		if strings.Contains(body, cmdHTML("PowerOnState 0")) || strings.Contains(body, cmdHTML("SetOption0 0")) {
+			t.Errorf("%s widened the plan:\n%s", name, body)
+		}
+	}
+	body := previewFor(t, e, url.Values{"pick": {"2:r1"}}) // attic: value only in an old backup
+	if strings.Contains(body, cmdHTML("PowerOnState 0")) || !strings.Contains(body, "only known from a backup, not read live") {
+		t.Errorf("a backup-only value is never fixed:\n%s", body)
+	}
+	m := digestRe.FindStringSubmatch(body)
+	if m != nil {
+		e.do(t, "POST", "/policy/fix/apply", "admin", url.Values{"csrf": {"tok"}, "digest": {m[1]}, "pick": {"2:r1"}})
+	}
+	if len(fix.reqs) != 0 {
+		t.Fatalf("nothing may be submitted: %+v", fix.reqs)
+	}
+}
