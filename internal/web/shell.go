@@ -21,7 +21,7 @@ func shellData(v view) ui.ShellData {
 	return ui.ShellData{
 		Title: v.Title, Nav: v.Nav, Path: v.Path, Base: v.Base, CSRF: v.CSRF,
 		UserName: v.User.Name, UserMethod: v.User.Method, RoleName: v.RoleName, IsAdmin: v.IsAdmin,
-		Flash: v.Flash, Banner: v.Banner, Live: v.Live, Theme: v.Theme, NewDevices: v.NewDevices, News: v.News, Version: v.Version,
+		Flash: v.Flash, Banner: v.Banner, Live: v.Live, EventSeq: v.EventSeq, Theme: v.Theme, NewDevices: v.NewDevices, News: v.News, Version: v.Version,
 		Updates: v.Features.Updates, Firmware: v.Features.Firmware, Policy: v.Features.Policy,
 		Discovery: v.Features.Discovery, SysConfig: v.Features.SysConfig,
 		Crumbs: v.Crumbs,

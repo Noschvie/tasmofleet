@@ -243,7 +243,7 @@ func TestDashboardEmptyFleet(t *testing.T) {
 func TestDashboardIsLive(t *testing.T) {
 	e := setup(t)
 	_, body := e.do(t, "GET", "/", "operator", nil)
-	if !strings.Contains(body, `sse-connect="/tf/events"`) {
+	if !strings.Contains(body, `sse-connect="/tf/events?since=`) {
 		t.Error("the dashboard opens no event stream")
 	}
 	if !strings.Contains(body, `<div id="dash" hx-get="/tf/" hx-trigger="sse:state throttle:2s, sse:device throttle:2s, sse:job throttle:2s, sse:resync" hx-select="#dash" hx-swap="outerHTML">`) {

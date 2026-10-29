@@ -54,9 +54,7 @@ func (h *handler) headOf(v view, d model.Device, hl model.Health, running *model
 			t.UpdateTo = latest
 		}
 	}
-	if seen := lastContact(d, hl); !seen.IsZero() {
-		t.LastSeenAgo = agoWords(h.d.Clock.Now(), seen)
-	}
+	t.OfflineSince = offlineSince(d, hl)
 	return t
 }
 
@@ -98,14 +96,6 @@ func (t deviceTabs) stateTone() ui.Tone {
 
 // offline says whether the header shows the offline banner.
 func (t deviceTabs) offline() bool { return !t.Updating && t.Health == model.HealthOffline }
-
-// powerAction is what the header switch asks for: the opposite of relay 1's state.
-func (t deviceTabs) powerAction() string {
-	if t.Power == "ON" {
-		return "OFF"
-	}
-	return "ON"
-}
 
 // headPage renders a device tab: the shell with the device trail around content.
 func (h *handler) headPage(w http.ResponseWriter, r *http.Request, status int, page string, v view, d model.Device, content templ.Component) {
@@ -201,4 +191,22 @@ func passwordHelp(has bool) string {
 		return "Leave empty to keep the stored password."
 	}
 	return "Stored encrypted."
+}
+
+// offlineSince is when the device went offline, as far as TasmoFleet knows: the state change, or
+// the last time it answered when that is later (the change was recorded before this run).
+func offlineSince(d model.Device, hl model.Health) time.Time {
+	seen := lastContact(d, hl)
+	if hl.Since.After(seen) {
+		return hl.Since
+	}
+	return seen
+}
+
+// healthMore is the detail of a state change as the tail of the Activity line.
+func healthMore(source model.HealthSource, detail string) string {
+	if d := healthDetail(source, detail); d != "" {
+		return " · " + d
+	}
+	return ""
 }

@@ -96,8 +96,6 @@ var tableDefs = func() map[string]tableDef {
 	list := []tableDef{
 		{"devices", []colDef{edge(sideLeft, srt(lk("name", "Name", 28))), srt(c("status", "Status", 17)), c("reach", "MQTT · HTTP", 15), srt(c("firmware", "Firmware", 14)), srt(c("family", "Chip", 10)), srt(c("address", "Address", 13)), srt(c("uptime", "Uptime", 11)), srt(c("wifi", "Wi-Fi", 12)), srt(c("restart", "Last restart", 18)), pinned(sideRight, srt(c("power", "Power", 7))), act(lk("actions", "Actions", 5))}},
 		{"audit", []colDef{srt(lk("when", "When", 10)), srt(c("actor", "User", 12)), srt(c("action", "Action", 14)), srt(c("target", "Target", 10)), c("summary", "Summary", 22), srt(c("result", "Result", 12)), act(lk("details", "Details", 8))}},
-		{"device_history", []colDef{lk("when", "When", 20), c("change", "Change", 25), c("source", "Source", 15), c("detail", "Detail", 40)}},
-		{"device_transactions", []colDef{lk("transaction", "Transaction", 20), c("state", "State", 15), c("target", "Target", 20), c("when", "When", 20), c("error", "Error", 25)}},
 		{"keyvalue", []colDef{lk("key", "Key", 30), c("value", "Value", 70)}},
 		{"transaction_retry", []colDef{lk("device", "Device", 34), c("target", "Target", 33), c("last", "Last result", 33)}},
 		{"device_settings", []colDef{lk("setting", "Setting", 30), c("command", "Command sent", 40), c("result", "Result", 30)}},

@@ -302,16 +302,14 @@ type deviceTabs struct {
 	CanReplace bool // the Replace device tab
 	Drift      bool // the Drift tab (live snapshots can be read)
 
-	CSRF        string
-	IsAdmin     bool
-	Address     string // host[:port], as the device list shows it
-	Chip        string // chip family, "" when unknown
-	Version     string // firmware version, "" when unknown
-	UpdateTo    string // a newer stable release from the cached feed; "" when current or unknown
-	HeadPower   bool   // the Power switch: one relay and the command service
-	Power       string // relay 1 as reported: "ON", "OFF" or ""
-	CanRestart  bool   // admin and the command service
-	LastSeenAgo string // "5h ago", for the offline banner
+	CSRF         string
+	IsAdmin      bool
+	Address      string    // host[:port], as the device list shows it
+	Chip         string    // chip family, "" when unknown
+	Version      string    // firmware version, "" when unknown
+	UpdateTo     string    // a newer stable release from the cached feed; "" when current or unknown
+	CanRestart   bool      // admin and the command service
+	OfflineSince time.Time // the offline banner: when the device went offline; zero when unknown
 }
 
 // tabsFor builds the device tabs for the viewer. Settings and Console are
@@ -328,11 +326,6 @@ func tabsFor(v view, d model.Device, hl model.Health, running *model.Job, active
 	}
 	if d.Port != 0 && d.Port != 80 {
 		t.Address += ":" + strconv.Itoa(d.Port)
-	}
-	// The header switch stands for the device's one relay; a device with several relays is
-	// switched per relay on the overview.
-	if relays := relayStates(hl); v.Features.DeviceCmd && len(relays) == 1 && relays[0].N == 1 {
-		t.HeadPower, t.Power = true, relays[0].State
 	}
 	t.Reason = blockReason(d, hl, running)
 	return t
@@ -461,14 +454,6 @@ func mqttText(d model.Device, brokerConfigured bool, same func(host string, port
 	default:
 		return "other broker " + target + topic
 	}
-}
-
-func (h *handler) mqttLine(d model.Device) string {
-	var same func(string, int) bool
-	if h.d.MQTTBroker != nil {
-		same = h.d.MQTTBroker.Same
-	}
-	return mqttText(d, h.d.MQTT() != "disabled", same)
 }
 
 // refreshProblem is the sentence under a failed "Refresh identity".

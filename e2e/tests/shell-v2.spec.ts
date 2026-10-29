@@ -35,7 +35,7 @@ test("a broken event stream shows Reconnecting, then Offline, and Live once it i
   test.setTimeout(90_000);
   await page.setExtraHTTPHeaders(admin);
   let refuse = true;
-  await page.route("**/events", (route) =>
+  await page.route("**/events?since=*", (route) =>
     refuse ? route.fulfill({ status: 503, body: "down" }) : route.fallback(),
   );
   await page.goto(app.url + "/about");

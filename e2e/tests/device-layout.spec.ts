@@ -1,9 +1,8 @@
 import { test, expect } from "../support/fixtures";
 import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
-// The device overview (maintainer feedback, items 7d, 7e, 9): sibling cards never touch
-// (they keep the gap token), and the header's power control looks like its neighbours in every
-// state and theme (the generic button[aria-pressed=true] rule once made it a light pill).
+// The device overview (maintainer feedback, items 7d, 9; #145): sibling cards never touch (they
+// keep the gap token) and the overview links to the complete Activity list.
 const adam = { "X-authentik-username": "adam", "X-authentik-groups": "adm" };
 let app: App;
 let env: Devenv;
@@ -46,7 +45,7 @@ for (const width of [1440, 1100, 800, 600, 375]) {
     await page.goto(app.url + href);
     await expect(page.locator(".devcard").first()).toBeVisible();
     const bad = await page.evaluate(() => {
-      const gap = parseFloat(getComputedStyle(document.querySelector(".devgrid")!).getPropertyValue("--card-gap")) || 12;
+      const gap = parseFloat(getComputedStyle(document.querySelector(".devlive")!).getPropertyValue("--card-gap")) || 12;
       const cards = [...document.querySelectorAll(".devcard")].filter((c) => c.getBoundingClientRect().height > 0);
       const name = (c: Element) => c.querySelector("h2")?.textContent ?? "?";
       const out: string[] = [];
@@ -68,36 +67,14 @@ for (const width of [1440, 1100, 800, 600, 375]) {
   });
 }
 
-for (const scheme of ["dark", "light"] as const) {
-  for (const [device, state] of [["esp32-dimmer", "on"], ["lamp-1m", "off"]] as const) {
-    test(`header power control looks like its neighbours: ${state}, ${scheme} theme`, async ({ page }) => {
-      await page.setExtraHTTPHeaders(adam);
-      await page.emulateMedia({ colorScheme: scheme });
-      await page.setViewportSize({ width: 1440, height: 900 });
-      const href = await deviceHref(page, device);
-      await page.goto(app.url + href);
-      const power = page.locator(".devhd-pwr");
-      await expect(power).toBeVisible();
-      await expect(power).toHaveAttribute("aria-pressed", state === "on" ? "true" : "false");
-      const look = (l: import("@playwright/test").Locator) => l.evaluate((e) => { const s = getComputedStyle(e); return { bg: s.backgroundColor, border: s.borderTopColor, color: s.color, h: e.getBoundingClientRect().height }; });
-      const mine = await look(power);
-      const neighbour = await look(page.getByRole("button", { name: "Back up" }));
-      expect(mine).toEqual(neighbour);
-    });
-  }
-}
-
-// Item 10: the overview shows a short list and links to the complete ones.
-test("the device overview links to the complete state history and to the device's transactions", async ({ page }) => {
+// Item 10 (#145): the overview shows a short Activity list and links to the complete, paged one,
+// and to the device's transactions.
+test("the device overview links to the complete activity list", async ({ page }) => {
   await page.setExtraHTTPHeaders(adam);
   const href = await deviceHref(page, "esp32-dimmer");
   await page.goto(app.url + href);
-  await page.getByRole("link", { name: "All state changes" }).click();
+  await page.getByRole("link", { name: "All activity" }).click();
   await expect(page).toHaveURL(/\/devices\/\d+\/history$/);
-  await expect(page.getByRole("heading", { name: "State changes" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Activity" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Back to the overview" })).toBeVisible();
-  await page.goto(app.url + href);
-  await page.getByRole("link", { name: "All transactions" }).click();
-  await expect(page).toHaveURL(/\/transactions\?device=\d+$/);
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("Transactions of esp32-dimmer");
 });

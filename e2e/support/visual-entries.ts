@@ -60,7 +60,7 @@ export const entries: Entry[] = [
   { id: "devices-conn-reconnecting", owner: "F3", route: "/devices", steps: [{custom: "conn-reconnecting"}] },
   { id: "devices-conn-offline", owner: "F3", route: "/devices", steps: [{custom: "conn-offline"}] },
   { id: "devices-v-filtered", owner: "P2", route: "/devices", steps: [{custom: "filter-chips"}] },
-  { id: "device-overview", owner: "P3", route: "/devices/{d2}" },
+  { id: "device-overview", owner: "P3", route: "/devices/{d2}", note: "intentional divergence from the v2 prototype: the Overview follows the #145 mockups (docs/design/device-overview): live tiles, relay box, Identity | Connection, Activity" },
   { id: "device-overview-conn-reconnecting", owner: "F3", route: "/devices/{d2}", steps: [{custom: "conn-reconnecting"}] },
   { id: "device-overview-conn-offline", owner: "F3", route: "/devices/{d2}", steps: [{custom: "conn-offline"}] },
   { id: "device-settings", owner: "P3", route: "/devices/{d2}/settings" },

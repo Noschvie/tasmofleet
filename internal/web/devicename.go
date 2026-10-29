@@ -107,13 +107,14 @@ func (h *handler) nameAnswer(w http.ResponseWriter, r *http.Request, answer func
 	}
 	v := h.view(r, "", "", nil)
 	hl, running := h.deviceState(r, d)
-	c := h.identity(v, d, running != nil, h.factsOf(r.Context(), d))
+	tabs := h.headOf(v, d, hl, running, "overview")
+	c := h.identity(v, d, running != nil, tabs.offline(), h.factsOf(r.Context(), d))
 	c.Error = failure
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	parts := []templ.Component{identityCard(c)}
 	if failure == "" {
-		parts = append(parts, deviceHeadSwap(h.headOf(v, d, hl, running, "overview"), deviceCrumbs(d)))
+		parts = append(parts, deviceHeadSwap(tabs, deviceCrumbs(d)))
 	}
 	if err := templ.Join(parts...).Render(r.Context(), w); err != nil {
 		h.log.WarnContext(r.Context(), "name answer: render", "err", err)

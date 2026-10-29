@@ -19,6 +19,16 @@ always upgrade automatically.
 
 ### Changed
 
+- Device page, Overview reworked (#145): a row of live tiles (Power and Energy today for devices with an
+  energy meter, Wi-Fi signal with a quality bar or Link for Ethernet, Uptime, Reachability, Policy), a
+  relay box that is the same for one relay and four (per-channel watts when the device meters each
+  channel), Identity next to Connection, and one Activity list that merges state changes and
+  transactions, newest first. An offline device gets an amber banner ("Offline since ..."); everything it
+  last reported is dimmed and what needs the device is disabled, while Edit, Delete and Activity stay. The
+  "Chip" row and the power sparkline are gone, the header Power button too (switch in the relay box).
+  "All activity" opens the complete, paged list.
+- The device list, the dashboard and the device page now refresh themselves after the live stream opens
+  or reopens when events were missed in between; the stream's address carries the page's event number.
 - The 2-hour power sparkline on the device overview is gone (its history was only a minute ring of the
   last `tele/SENSOR` watts); the card shows the current power and the energy counters (#145).
 - The `/metrics` bearer token is now a setting: System settings, Metrics, "Scrape token" (write-only,
@@ -32,6 +42,10 @@ always upgrade automatically.
 - Resizing a column no longer snaps back for a moment when two list updates overlap: an older answer that
   lands after a newer one now still gets the width you just set (it was judged by the newest request's
   start, so the old layout stayed on screen until the next update) (#166).
+- The device page follows the device live (a relay switched on the device, going offline, a finished
+  transaction) without a reload (#126, thanks @Noschvie).
+- A device that went offline between the page render and the opening of the live stream, or during a
+  stream outage, no longer keeps showing its old state until another event arrives (#160).
 - "Today" and "Yesterday" (dashboard transactions, transaction history, Add devices "First seen", users page
   sessions and activity), the transaction log's clock times and the policy page's "paused at" now follow the browser's time
   zone like every other timestamp; before, the server's zone decided and one page could show two zones.

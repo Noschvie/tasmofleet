@@ -365,7 +365,7 @@ func TestDeviceListShowsHealthAndBasePathLinks(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Fatalf("status %d", resp.StatusCode)
 	}
-	for _, want := range []string{`href="/tf/devices/1"`, "kitchen", "attic", "online", "unknown", "16.0.0", "esp8266", `sse-connect="/tf/events"`, `/tf/static/app.css`} {
+	for _, want := range []string{`href="/tf/devices/1"`, "kitchen", "attic", "online", "unknown", "16.0.0", "esp8266", `sse-connect="/tf/events?since=`, `/tf/static/app.css`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q in device list", want)
 		}

@@ -88,6 +88,42 @@
     }
   }
 
+  // Device overview (#145, #126): the page refreshes #devlive, the header and the Activity list
+  // when the device changes, but never the Identity and Connection cards (they hold answers and
+  // notices). Those follow the offline state from here: dimmed, and Refresh identity disabled.
+  function syncDeviceDim() {
+    var live = document.getElementById("devlive");
+    if (!live) {
+      return;
+    }
+    var off = live.hasAttribute("data-off");
+    document.querySelectorAll("#identity, #devconn").forEach(function (el) {
+      el.classList.toggle("is-dim", off);
+      el.setAttribute("aria-disabled", off ? "true" : "false");
+    });
+    document
+      .querySelectorAll("#identity [data-needs-device]")
+      .forEach(function (b) {
+        b.disabled = off;
+      });
+  }
+  document.addEventListener("htmx:afterSettle", syncDeviceDim);
+
+  // A refresh never swaps the page under an open dialog (Restart): the next event refreshes it.
+  document.addEventListener("htmx:beforeRequest", function (e) {
+    var t = e.target;
+    var cfg = e.detail && e.detail.requestConfig;
+    if (
+      t &&
+      t.id === "devlive" &&
+      cfg &&
+      cfg.verb === "get" &&
+      document.querySelector("dialog[open]")
+    ) {
+      e.preventDefault();
+    }
+  });
+
   // Retry now: reload the page when the server answers (fresh values and a fresh stream); while
   // it does not, the banner stays and says when the next try is.
   document.addEventListener("click", function (e) {

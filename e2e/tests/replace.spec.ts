@@ -136,5 +136,5 @@ test("replace device: refused while the old one answers, then done with a new bo
   // the entry kept its name and now points at the new board
   await page.goto(app.url + "/devices/1");
   await expect(page.getByRole("heading", { name: /plug-4m/ })).toBeVisible();
-  await expect(page.locator("section", { has: page.locator("#dc-net") })).toContainText(spare); // the Network card's IP address
+  await expect(page.locator("#devconn")).toContainText(spare); // the Connection card's address
 });

@@ -399,7 +399,7 @@ test("a refused form field has the danger border", async ({ page }) => {
 });
 
 // Why: the health line wrapped inside "wifi 36%" on phones. Since design v2 (P3) the signal is in the
-// Wi-Fi card: its readings stay on one line each on a phone.
+// Wi-Fi tile (#145): its readings stay on one line each on a phone.
 test("the Wi-Fi readings never split over two lines on a phone", async ({
   page,
 }) => {
@@ -409,15 +409,15 @@ test("the Wi-Fi readings never split over two lines on a phone", async ({
     .filter({ hasText: /\S/ })
     .first()
     .getAttribute("href");
-  const wifi = page.locator("section", { has: page.locator("#dc-wifi") });
+  const wifi = page.locator("[data-tile=wifi]");
   // the first poll has to land before there is a signal to show
   await expect(async () => {
     await page.goto(app.url + href!.replace(app.url, ""));
-    await expect(wifi.locator("dd", { hasText: /dBm/ })).toHaveCount(1, {
+    await expect(wifi.locator(".dev-tile-v", { hasText: /dBm/ })).toHaveCount(1, {
       timeout: 1000,
     });
   }).toPass({ timeout: 30_000 });
-  const n = await wifi.locator("dd").evaluateAll((els) =>
+  const n = await wifi.locator(".dev-tile-v").evaluateAll((els) =>
     els.map((e) => {
       const r = document.createRange();
       r.selectNodeContents(e);

@@ -148,3 +148,17 @@ func TestPublishFillsInTimestamp(t *testing.T) {
 		t.Fatal("At not set; SSE ids and ordering need a timestamp")
 	}
 }
+
+// Why (#160): a page records Seq before it reads its data; the stream compares it with the hub's
+// to learn whether events were published in between. Every publish counts, delivered or not.
+func TestSeqCountsEveryPublish(t *testing.T) {
+	h := NewHub(1)
+	if h.Seq() != 0 {
+		t.Fatalf("fresh hub: %d", h.Seq())
+	}
+	h.Publish(Event{Topic: TopicJob}) // nobody subscribed: still counted
+	h.Publish(Event{Topic: TopicHealth})
+	if h.Seq() != 2 {
+		t.Fatalf("seq %d, want 2", h.Seq())
+	}
+}

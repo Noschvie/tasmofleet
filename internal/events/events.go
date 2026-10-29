@@ -6,6 +6,7 @@ package events
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -30,6 +31,7 @@ type Event struct {
 
 // Hub fans events out to subscribers.
 type Hub struct {
+	seq  atomic.Uint64 // events published so far (see Seq)
 	mu   sync.Mutex
 	buf  int
 	subs map[*subscriber]struct{}
@@ -58,6 +60,7 @@ func (h *Hub) Publish(e Event) {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	h.seq.Add(1)
 	for s := range h.subs {
 		if len(s.topics) > 0 {
 			if _, ok := s.topics[e.Topic]; !ok {
@@ -81,6 +84,11 @@ func (h *Hub) Publish(e Event) {
 		s.ch <- Event{Topic: e.Topic, At: e.At, Resync: true}
 	}
 }
+
+// Seq counts the events published so far. A page reads it before it reads what it shows, hands it
+// to its event stream, and the stream says "resync" when more were published since: the page was
+// built from older data than the stream starts with (#160).
+func (h *Hub) Seq() uint64 { return h.seq.Load() }
 
 // Subscribe returns a channel of events for the given topics (all topics
 // when none are given) and a cancel func that closes the channel. cancel is

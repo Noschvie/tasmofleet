@@ -8453,22 +8453,6 @@ body:has(.dv-list .bulkbar:not([hidden])) {
   gap: var(--sp-6);
   flex-wrap: wrap;
 }
-.btn.devhd-pwr {
-  gap: var(--sp-8);
-  padding: 0 var(--sp-12) 0 var(--sp-8);
-}
-/* The generic button[aria-pressed="true"] inverts a button (ink background): right for a pressed
-   toggle button, wrong here. The switch inside shows On; the button stays a neighbour of Restart
-   and Back up in every state and theme. */
-.btn.devhd-pwr[aria-pressed="true"] {
-  background: var(--color-surface);
-  border-color: var(--color-border-strong);
-  color: var(--color-text);
-}
-.btn.devhd-pwr[aria-pressed="true"]:hover,
-.btn.devhd-pwr[aria-pressed="true"]:active {
-  background: var(--color-surface-2);
-}
 /* the switch of the header and of a relay: a track with a white knob, the accent when on */
 .devsw {
   position: relative;
@@ -8504,8 +8488,9 @@ body:has(.dv-list .bulkbar:not([hidden])) {
   padding: var(--sp-10) 14px;
   margin-bottom: var(--sp-12);
   border-radius: 9px;
-  border: var(--hair-w) solid var(--color-border);
-  background: var(--color-surface);
+  border: var(--hair-w) solid var(--color-warn);
+  background: var(--color-warn-bg);
+  color: var(--color-warn-fg);
   font-size: 13px;
 }
 .devhd-off > div {
@@ -8519,32 +8504,13 @@ body:has(.dv-list .bulkbar:not([hidden])) {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--color-danger);
+  background: var(--color-warn);
 }
 .devhd ~ .banner {
   margin: 0 0 var(--sp-12);
 }
 
-/* overview: cards in columns of at least 320 px */
-.devgrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
-  gap: var(--card-gap);
-  align-items: start;
-}
-/* The overview cards differ in height: columns (not grid rows) let the short ones stack under each
-   other, so no row leaves a hole beside a tall card. A column box drops the bottom margin of its
-   last card, so the gap to whatever follows comes from .devgrid-more's own top margin, not from
-   the cards' margins (they touched the row below before). */
-.devgrid:not(.devgrid-more) {
-  display: block;
-  columns: 320px 3;
-  column-gap: var(--card-gap);
-}
-.devgrid-more {
-  margin-top: var(--card-gap);
-}
-.devgrid:not(.devgrid-more) > .devcard {
+.devcard {
   break-inside: avoid;
   margin-bottom: var(--card-gap);
 }
@@ -8596,70 +8562,6 @@ body:has(.dv-list .bulkbar:not([hidden])) {
   font: 600 12px var(--font-sans);
   color: var(--color-text-2);
 }
-.devpow {
-  display: flex;
-  align-items: flex-end;
-  gap: 14px;
-  margin-bottom: var(--sp-12);
-}
-.devpow-w {
-  font: 600 30px/1 var(--font-sans);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
-}
-.devpow-w span {
-  margin-left: 3px;
-  font-size: 15px;
-  color: var(--color-text-2);
-}
-.devpow-sub {
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--color-text-3);
-}
-.devspark {
-  flex: 1;
-  height: 40px;
-}
-/* N8: the bars are SVG rects with presentation attributes (D6); the prototype's 2 px gaps and
-   accent at .45 */
-.devspark svg {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-.devspark-note {
-  display: flex;
-  height: 100%;
-  align-items: flex-end;
-  justify-content: flex-end;
-  font-size: 12px;
-  color: var(--color-text-2);
-}
-.devspark-bar {
-  fill: var(--color-accent);
-  opacity: 0.45;
-}
-.devrelay {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-10);
-  margin: 0;
-  padding: 4px 0;
-  border-top: var(--hair-w) solid var(--color-border);
-}
-.devrelay-n {
-  flex: 1;
-  font-size: 13px;
-}
-.devrelay-n .mono {
-  font: 400 12px var(--font-mono);
-  color: var(--color-text-3);
-}
-.devrelay-s {
-  font-size: 12.5px;
-  color: var(--color-text-2);
-}
 .devrelay-sw {
   display: grid;
   place-items: center;
@@ -8680,47 +8582,164 @@ body:has(.dv-list .bulkbar:not([hidden])) {
 .devrelay-sw[aria-checked="true"] .devsw::after {
   left: 16px;
 }
-.devwifi {
+/* ==== device overview (#145): live tiles, relay box, Identity | Connection, Activity ==== */
+.devlive {
   display: flex;
-  align-items: center;
-  gap: var(--sp-8);
-  margin-top: var(--sp-8);
+  flex-direction: column;
+  gap: var(--card-gap);
+  margin-bottom: var(--card-gap);
+}
+/* one row, equal width; a tile that does not apply is not built, so the row has no holes. Three
+   across between phone and desktop, two on a phone */
+.dev-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--sp-10);
+}
+@media (max-width: 44.99rem) {
+  .dev-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.dev-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  min-width: 0;
+  padding: var(--sp-14);
+  background: var(--color-surface);
+  border: var(--hair-w) solid var(--color-border);
+  border-radius: var(--r-card);
+}
+.dev-tile-l {
+  font: 500 12.5px var(--font-sans);
+  color: var(--color-text-2);
+}
+.dev-tile-v {
+  font: 600 var(--fs-stat) / 1 var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  color: var(--t, var(--color-text));
+  overflow-wrap: anywhere;
+}
+.dev-tile-s {
   font-size: 12px;
   color: var(--color-text-3);
+  overflow-wrap: anywhere;
 }
-.devwifi-bar {
-  flex: 1;
+.dev-tile-fix {
+  align-self: flex-start;
+  margin-top: var(--sp-4);
+}
+.dev-bar {
+  display: block;
+  width: 100%;
   height: 6px;
   border-radius: 3px;
 }
-.devwifi-track {
+.dev-bar-track {
   fill: var(--color-surface-3);
 }
-.devwifi-fill {
-  fill: var(--color-warn);
+.dev-bar-fill {
+  fill: var(--t, var(--color-warn));
 }
-.devwifi-bar.is-ok .devwifi-fill {
-  fill: var(--color-ok);
+/* offline: the last reported state, dimmed. The controls inside are disabled by the page */
+.is-dim {
+  opacity: 0.55;
 }
-.devpol-ok .sdot {
-  gap: var(--sp-8);
+.dev-box-meta {
+  font-size: 12px;
+  color: var(--color-text-2);
 }
-.devdev {
+/* always the same four-column box, one column at 375 px, two in between */
+.dev-relays {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--sp-10);
+}
+@media (max-width: 70rem) {
+  .dev-relays {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 30rem) {
+  .dev-relays {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.dev-relay {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-10);
+  min-width: 0;
+  margin: 0;
+  padding: var(--sp-6) var(--sp-10);
+  border: var(--hair-w) solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface-2);
+}
+.dev-relay-t {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  margin-bottom: var(--sp-6);
-  padding: var(--sp-8) var(--sp-10);
-  border-radius: 7px;
-  background: var(--color-warn-bg);
-  color: var(--color-warn-fg);
-  font: 400 12.5px var(--font-mono);
+  min-width: 0;
+  font-size: 13px;
 }
-.devdev-r {
-  font: 600 12.5px var(--font-sans);
+.dev-relay-n {
+  overflow-wrap: anywhere;
 }
-.btn.devpol-fix {
-  margin-top: var(--sp-6);
+.dev-relay-n .mono {
+  font: 400 11px var(--font-mono);
+  color: var(--color-text-3);
+}
+.dev-relay-s {
+  font-size: 12px;
+  color: var(--color-text-2);
+}
+.dev-box .error {
+  margin: var(--sp-8) 0 0;
+}
+/* Identity | Connection: two equal columns, stacked on a phone */
+.dev-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--card-gap);
+  align-items: start;
+  margin-bottom: var(--card-gap);
+}
+@media (max-width: 44.99rem) {
+  .dev-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.dev-act {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dev-act li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--sp-4) var(--sp-12);
+  padding: var(--sp-6) 0;
+  border-top: var(--hair-w) solid var(--color-border);
+  font-size: 13px;
+}
+.dev-act li:first-child {
+  border-top: 0;
+}
+.dev-act-at {
+  flex: none;
+  min-width: 9.5em;
+  font: 400 12px var(--font-mono);
+  color: var(--color-text-3);
+}
+.dev-act-more {
+  color: var(--color-text-2);
+  overflow-wrap: anywhere;
 }
 .devnote {
   margin: var(--sp-10) 0 0;
@@ -8999,9 +9018,6 @@ nav.crumbs a {
   }
   .devrelay-sw {
     height: 40px;
-  }
-  .devrelay {
-    padding: 2px 0;
   }
 }
 /* the settings form's labels are <label for> elements beside the control: the field label's

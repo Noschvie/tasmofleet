@@ -31,9 +31,10 @@ type ShellData struct {
 	RoleName   string
 	IsAdmin    bool
 
-	Flash  string // confirmation after a redirect ("Saved.")
-	Banner string // standing notice for admins, e.g. no device networks yet
-	Live   bool   // open the SSE stream
+	Flash    string // confirmation after a redirect ("Saved.")
+	Banner   string // standing notice for admins, e.g. no device networks yet
+	Live     bool   // open the SSE stream
+	EventSeq uint64 // Hub.Seq when the page was built: the stream asks for a resync when more events followed
 
 	// Features switch menu entries on; a missing service has no page.
 	Updates, Firmware, Policy, Discovery, SysConfig bool

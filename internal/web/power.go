@@ -159,6 +159,14 @@ func (h *handler) devicePower(w http.ResponseWriter, r *http.Request) {
 	case state != "":
 		cell.setState(n, state)
 	}
+	if r.Header.Get("HX-Request") != "" && r.PostFormValue("back") == "device" {
+		var just *relayState
+		if perr == nil && state != "" {
+			just = &relayState{N: n, State: state}
+		}
+		h.powerLive(w, r, d, just, cell.Error)
+		return
+	}
 	if r.Header.Get("HX-Request") == "" {
 		if perr != nil {
 			v := h.view(r, d.Name, "devices", cell.Error)

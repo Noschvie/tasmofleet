@@ -4,26 +4,23 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"net"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/a-h/templ"
 
-	"github.com/nofuturekid/tasmofleet/internal/health"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/policy"
 	"github.com/nofuturekid/tasmofleet/internal/store"
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
 
-// The device overview (design v2, WP P3; prototype screen "device", tab "overview"): the cards
-// Identity, Power & energy, Network, Wi-Fi and Policy compliance, then the device's state
-// changes and transactions (kept from v1, below the prototype's cards: structure deviation S8).
+// The device overview (#145, mockups in docs/design/device-overview): a row of live tiles, the
+// relay box, Identity next to Connection and one Activity list. The live part (tiles, relay box,
+// Activity, header, offline banner) is rebuilt by GET /devices/{id}/live whenever the device
+// changes (#126); the Identity card is never swapped because it holds answers and notices.
 
 // deviceOverview is the view of GET /devices/{id}.
 type deviceOverview struct {
@@ -32,35 +29,85 @@ type deviceOverview struct {
 	CSRF     string
 	Updating *jobView // an operation holds the device: it is silent on purpose
 	NotYet   string   // the device never answered: what to check
+	Live     liveView
 	Ident    identCard
-	Energy   *energyCard // nil: the device reports no energy readings
-	Relays   []relayRow
-	// RelaysOn says whether the relay switches can be used (command service, device answering).
-	RelaysOn bool
-	Network  []ui.KVRow
-	Wifi     []ui.KVRow
-	WifiPct  int // signal quality bar, 0..100; 0 hides the bar's fill
-	WifiOK   bool
-	Wired    bool // the link card is the Ethernet card: no signal bar
-	Policy   *policyCard
-	Events   []store.HealthEvent
-	Jobs     []model.Job
-	// HistHref is the complete list of the device's state changes; TxHref the transactions
-	// filtered by this device ("" without the update feature). The cards show the newest
-	// overviewRows of each.
-	HistHref, TxHref string
+	Conn     connCard
+	Activity devActivity
 }
 
-// overviewRows is how many state changes and transactions the overview shows; the complete
-// lists are one link away.
+// liveView is the part of the overview that follows the device: tiles and the relay box.
+type liveView struct {
+	ID   model.DeviceID
+	Base string
+	CSRF string
+	// Off dims the region: the device does not answer, what shows is its last reported state.
+	Off   bool
+	Tiles []tile
+	Box   *relayBox // nil: the device has no relays
+}
+
+// tile is one stat tile of the top row. A tile that does not apply is not built at all, so the
+// row never has holes.
+type tile struct {
+	Key, Label, Value, Sub string
+	Tone                   ui.Tone // colour of the value
+	Bar                    int     // Wi-Fi signal quality 0..100; 0 draws no bar
+	BarTone                ui.Tone
+	SubPrefix              string    // "Last restart ": the sub line is this text and the time At
+	At                     time.Time // zero: the sub line is just Sub
+	Fix                    bool      // "Make compliant…" for this device
+	Mask                   bool      // a reading the pixel comparison cannot reproduce
+}
+
+// relayBox is the box of relay switches. Right is the metering line of the box header.
+type relayBox struct {
+	Right   string
+	Rows    []relayRow
+	Enabled bool   // the switches can be used now
+	Err     string // why the last switch failed (htmx switches show it in place)
+}
+
+// relayRow is one relay switch. Line is what shows under the name: the channel's watts when the
+// device meters each channel, else On/Off.
+type relayRow struct {
+	N            int
+	Name, Cmd    string
+	Line         string
+	On           bool
+	Action, Aria string
+}
+
+// devActivity is the Activity box: the newest state changes and transactions of the device,
+// merged. All is the complete, paged list.
+type devActivity struct {
+	Base string
+	Rows []devActRow
+	All  string
+}
+
+// devActRow is one state change or one transaction. Exactly one of Event and Job is set.
+type devActRow struct {
+	At    time.Time
+	Event *store.HealthEvent
+	Job   *model.Job
+}
+
+// connCard is the Connection card: how TasmoFleet reaches the device and how the device is
+// connected.
+type connCard struct {
+	Title string // "Connection · Wi-Fi" or "Connection · Ethernet"
+	Rows  []ui.KVRow
+}
+
+// overviewRows is how many entries the Activity box shows; the complete list is one link away.
 const overviewRows = 10
 
-// historyView is the page of all state changes of one device.
+// historyView is the page of all activity of one device.
 type historyView struct {
-	Tabs   deviceTabs
-	Base   string
-	Events []store.HealthEvent
-	Pager  pager
+	Tabs  deviceTabs
+	Base  string
+	Rows  []devActRow
+	Pager pager
 }
 
 // identCard is the Identity card. "Refresh identity" swaps the whole card, so the rows show what
@@ -70,6 +117,7 @@ type identCard struct {
 	ID       model.DeviceID
 	Rows     []ui.KVRow
 	CanProbe bool // not while an operation holds the device
+	Off      bool // dimmed: the device does not answer, so Refresh identity is disabled too
 	Notice   string
 	Error    string
 	// NameOffer is the DeviceName the device reports while the stored name differs (#125);
@@ -77,22 +125,6 @@ type identCard struct {
 	NameOffer string
 	CanAnswer bool
 	KeepOK    bool
-}
-
-// energyCard is the power reading now, the energy counters
-// of the device's meter.
-type energyCard struct {
-	Watts string
-	Rows  []ui.KVRow
-}
-
-// relayRow is one relay switch of the Power & energy card.
-type relayRow struct {
-	N            int
-	Name, Cmd    string
-	State        string // "On", "Off" or "Unknown"
-	On           bool
-	Action, Aria string
 }
 
 // policyCard is the device's policy compliance: the rules that apply, the deviations, and
@@ -196,10 +228,10 @@ func orUnknown(s string) string {
 
 // identity builds the Identity card for the viewer. Credentials never leave the server: the
 // card says only whether a web login is stored.
-func (h *handler) identity(v view, d model.Device, updating bool, f snapFacts) identCard {
-	chip := chipText(d.Identity.Family)
-	if mb := d.Identity.FlashSizeKB / 1024; chip != "" && mb > 0 {
-		chip += " · " + strconv.Itoa(mb) + " MB flash"
+func (h *handler) identity(v view, d model.Device, updating, off bool, f snapFacts) identCard {
+	hw := d.Identity.Hardware
+	if mb := d.Identity.FlashSizeKB / 1024; hw != "" && mb > 0 {
+		hw += " · " + strconv.Itoa(mb) + " MB flash"
 	}
 	fw := ""
 	if d.Identity.Version != "" {
@@ -213,13 +245,12 @@ func (h *handler) identity(v view, d model.Device, updating bool, f snapFacts) i
 	}
 	rows := []ui.KVRow{
 		{Key: "Device name", Value: d.Name, Mono: true},
-		{Key: "Hardware", Value: orUnknown(d.Identity.Hardware), Mono: true},
-		{Key: "Build", Value: orUnknown(build), Mono: true},
-		{Key: "Chip", Value: orUnknown(chip), Mono: true},
-		{Key: "Firmware", Value: orUnknown(fw), Mono: true},
 		{Key: "Hostname", Value: orUnknown(f.Hostname), Mono: true, Mask: true},
-		{Key: "MAC", Value: orUnknown(macShown(d, f.Wired)), Mono: true, Mask: true},
 		{Key: "MQTT topic", Value: orUnknown(d.Topic), Mono: true},
+		{Key: "Hardware", Value: orUnknown(hw), Mono: true},
+		{Key: "Build", Value: orUnknown(build), Mono: true},
+		{Key: "Firmware", Value: orUnknown(fw), Mono: true},
+		{Key: "MAC", Value: orUnknown(d.MAC), Mono: true, Mask: true},
 	}
 	if d.HTTPUser != "" || d.HTTPPassword != "" {
 		login := "password set"
@@ -240,156 +271,8 @@ func (h *handler) identity(v view, d model.Device, updating bool, f snapFacts) i
 	if d.Notes != "" {
 		rows = append(rows, ui.KVRow{Key: "Notes", Value: d.Notes})
 	}
-	return identCard{Base: v.Base, ID: d.ID, Rows: rows, CanProbe: !updating,
+	return identCard{Base: v.Base, ID: d.ID, Rows: rows, CanProbe: !updating, Off: off,
 		NameOffer: nameOffer(d), CanAnswer: v.IsAdmin, KeepOK: h.d.DeviceNames != nil}
-}
-
-// energyOf is the Power & energy reading of the device's meter (channel "" or the first one).
-func energyOf(t health.Telemetry) *energyCard {
-	if len(t.Energy) == 0 {
-		return nil
-	}
-	ch, ok := t.Energy[""]
-	if !ok {
-		ch = t.Energy["1"]
-	}
-	num := func(p *float64, unit string, prec int) string {
-		if p == nil {
-			return "—"
-		}
-		return strconv.FormatFloat(*p, 'f', prec, 64) + " " + unit
-	}
-	c := &energyCard{Watts: "—"}
-	if ch.Power != nil {
-		c.Watts = strconv.FormatFloat(*ch.Power, 'f', 0, 64)
-	}
-	c.Rows = []ui.KVRow{
-		{Key: "Today", Value: num(ch.Today, "kWh", 2), Mono: true, Mask: true},
-		{Key: "Yesterday", Value: num(ch.Yesterday, "kWh", 2), Mono: true, Mask: true},
-		{Key: "Total", Value: num(ch.Total, "kWh", 1), Mono: true, Mask: true},
-	}
-	return c
-}
-
-// relaysOf are the relay switches: "POWER" for a single relay, "POWER1".. for several.
-func relaysOf(hl model.Health) []relayRow {
-	rs := relayStates(hl)
-	out := make([]relayRow, 0, len(rs))
-	for _, r := range rs {
-		row := relayRow{N: r.N, Name: "Relay " + strconv.Itoa(r.N), Cmd: "POWER", State: "Unknown", On: r.State == "ON", Action: "ON"}
-		if len(rs) > 1 {
-			row.Cmd += strconv.Itoa(r.N)
-		}
-		switch r.State {
-		case "ON":
-			row.State, row.Action = "On", "OFF"
-		case "OFF":
-			row.State = "Off"
-		}
-		row.Aria = row.Name + " is " + row.State + ": switch it " + label(row.Action)
-		out = append(out, row)
-	}
-	return out
-}
-
-// networkRows is the Network card: the address the fleet uses, the gateway the device was set
-// up with, its broker and how the two channels answer now.
-func (h *handler) networkRows(d model.Device, hl model.Health, f snapFacts) []ui.KVRow {
-	addr := d.Address
-	if d.Port != 0 && d.Port != 80 {
-		addr = net.JoinHostPort(d.Address, strconv.Itoa(d.Port))
-	}
-	broker := ""
-	if d.MQTTHost != "" {
-		port := d.MQTTPort
-		if port == 0 {
-			port = 1883
-		}
-		broker = net.JoinHostPort(d.MQTTHost, strconv.Itoa(port))
-	}
-	// Connected / Not connected for a device on our broker; otherwise the sentence says why
-	// TasmoFleet does not watch it (disabled, another broker, no broker configured).
-	mqtt := h.mqttLine(d)
-	switch {
-	case hl.LWT == "Online" || hl.LWT == "" && !hl.SeenMQTT.IsZero() && hl.State == model.HealthOnline:
-		mqtt = "Connected"
-	case hl.LWT == "Offline" || d.MQTT == model.MQTTOurs:
-		mqtt = "Not connected"
-	}
-	httpState := "Not polled yet"
-	switch {
-	case hl.State == model.HealthAuthFailed:
-		httpState = "Refuses the stored credentials"
-	case hl.State == model.HealthOffline || hl.State == model.HealthUnknown && !hl.LastSeen.IsZero():
-		httpState = "No response"
-	case !hl.SeenHTTP.IsZero():
-		httpState = "Reachable"
-	}
-	restart, restartTime := "", restartAt(hl)
-	if !restartTime.IsZero() {
-		restart = sinceText(restartTime)
-	}
-	// "Address" is where TasmoFleet reaches the device. The IP the device reports is a second row
-	// only when it says something else (the address is a DNS name, or the device moved).
-	rows := []ui.KVRow{{Key: "Address", Value: addr, Mono: true, Mask: true}}
-	if f.IP != "" && f.IP != d.Address {
-		rows = append(rows, ui.KVRow{Key: "IP address", Value: f.IP, Mono: true, Mask: true})
-	}
-	return append(rows,
-		ui.KVRow{Key: "Gateway", Value: orUnknown(f.Gateway), Mono: true, Mask: true},
-		ui.KVRow{Key: "MQTT broker", Value: orUnknown(broker), Mono: true, Soft: true},
-		ui.KVRow{Key: "MQTT", Value: mqtt, Mono: true},
-		ui.KVRow{Key: "HTTP", Value: httpState, Mono: true},
-		ui.KVRow{Key: "Last restart", Value: orUnknown(restart), Mono: true, Mask: true, At: restartTime},
-	)
-}
-
-// wifiRows is the Wi-Fi card and its quality bar (the prototype's scale: -92 dBm is empty,
-// -40 dBm full; below -70 dBm the bar turns to the warning colour).
-func wifiRows(hl model.Health, t health.Telemetry, f snapFacts, now time.Time) (rows []ui.KVRow, pct int, ok bool) {
-	dbm, has := t.SignalDBm, t.HasSignal
-	if !has && hl.RSSI > 0 {
-		dbm, has = hl.RSSI/2-100, true // Tasmota maps -100..-50 dBm to 0..100 %
-	}
-	signal, quality := "—", "—"
-	if has {
-		signal = strconv.Itoa(dbm) + " dBm"
-		pct = min(100, max(6, (dbm+92)*19/10))
-		ok = dbm > -70
-	}
-	if hl.RSSI > 0 {
-		quality = strconv.Itoa(hl.RSSI) + " %"
-	}
-	channel := ""
-	if f.Channel > 0 {
-		band := "2.4 GHz"
-		if f.Channel > 14 {
-			band = "5 GHz"
-		}
-		channel = fmt.Sprintf("%d (%s)", f.Channel, band)
-	}
-	uptime := "—"
-	switch {
-	case hl.State == model.HealthOffline && !hl.LastSeen.IsZero():
-		uptime = "seen " + agoWords(now, hl.LastSeen)
-	case hl.UptimeSec > 0:
-		uptime = humanDuration(time.Duration(hl.UptimeSec) * time.Second)
-	}
-	if f.Wired {
-		// No access point, signal or channel on a cable: the card says how it is connected.
-		return []ui.KVRow{
-			{Key: "Connection", Value: "Ethernet", Mono: true},
-			{Key: "Uptime", Value: uptime, Mono: true, Mask: true},
-		}, 0, false
-	}
-	return []ui.KVRow{
-		{Key: "SSID", Value: orUnknown(f.SSID), Mono: true, Mask: true},
-		{Key: "BSSID", Value: orUnknown(f.BSSID), Mono: true, Mask: true},
-		{Key: "Channel", Value: orUnknown(channel), Mono: true, Mask: true},
-		{Key: "Signal", Value: signal, Mono: true, Mask: true},
-		{Key: "Quality", Value: quality, Mono: true, Mask: true},
-		{Key: "Uptime", Value: uptime, Mono: true, Mask: true},
-	}, pct, ok
 }
 
 // policyOf is the device's part of the policy report (values already read; nothing is sent).
@@ -425,86 +308,6 @@ func ruleTitle(r policy.Rule) string {
 	return r.Command + " " + r.Want
 }
 
-func (h *handler) deviceDetail(w http.ResponseWriter, r *http.Request) {
-	d, ok := h.device(w, r)
-	if !ok {
-		return
-	}
-	ctx := r.Context()
-	v := h.view(r, d.Name, "devices", nil)
-	hl := h.d.Health.Get(d.ID)
-	if hl.State == model.HealthOffline {
-		hl.LastSeen = lastContact(d, hl) // the "seen ..." in the cards, as on the list
-	}
-	if hl.State == "" {
-		hl.State = model.HealthUnknown
-	}
-	p := deviceOverview{Base: v.Base, CSRF: v.CSRF, RelaysOn: h.d.DeviceCmd != nil, HistHref: v.Base + devPath(d.ID, "/history")}
-	if v.Features.Updates {
-		p.TxHref = v.Base + "/transactions?device=" + strconv.FormatInt(int64(d.ID), 10)
-	}
-	var err error
-	if h.d.History != nil {
-		if p.Events, err = h.d.History.ListHealthEvents(ctx, d.ID, overviewRows); err != nil {
-			h.fail(w, r, err)
-			return
-		}
-	}
-	if h.d.Jobs != nil {
-		if p.Jobs, err = h.d.Jobs.ListJobs(ctx, store.JobFilter{DeviceID: d.ID, Limit: overviewRows}); err != nil {
-			h.fail(w, r, err)
-			return
-		}
-	}
-	for _, j := range p.Jobs {
-		if !j.State.Terminal() {
-			// During an update the device stops answering (it downloads, then reboots). That is
-			// expected, not a failure, so the page says so instead of offering commands.
-			uv := jobView{Job: j, Base: v.Base}
-			uv.Step, uv.StepLabel = jobStep(j.State, j.Stage)
-			switch {
-			case j.IsPolicy():
-				uv.Step, uv.StepLabel = policyStep(j.State)
-			case j.IsCommand():
-				uv.Step, uv.StepLabel = commandStep(j.State)
-			case j.IsBackup():
-				uv.Step, uv.StepLabel = backupStep(j.State)
-			}
-			p.Updating = &uv
-			break
-		}
-	}
-	var running *model.Job
-	if p.Updating != nil {
-		running = &p.Updating.Job
-	}
-	p.Tabs = h.headOf(v, d, hl, running, "overview")
-	if p.Updating == nil && hl.LastSeen.IsZero() && d.Identity.DetectedAt.IsZero() {
-		p.NotYet = "This device has not answered yet"
-		if !d.CreatedAt.IsZero() {
-			p.NotYet += " (added " + sinceText(d.CreatedAt) + ")"
-		}
-		p.NotYet += ". Check that it is powered and that its address (" + d.Address + ") is right."
-	}
-	facts := h.factsOf(ctx, d)
-	var tele health.Telemetry
-	if tl, ok := h.d.Health.(interface {
-		Telemetry() map[model.DeviceID]health.Telemetry
-	}); ok {
-		tele = tl.Telemetry()[d.ID]
-	}
-	p.Ident = h.identity(v, d, p.Updating != nil, facts)
-	p.Energy = energyOf(tele)
-	p.Relays = relaysOf(hl)
-	p.RelaysOn = p.RelaysOn && hl.State != model.HealthOffline && p.Updating == nil
-	p.Network = h.networkRows(d, hl, facts)
-	p.Wired = facts.Wired
-	p.Wifi, p.WifiPct, p.WifiOK = wifiRows(hl, tele, facts, h.d.Clock.Now())
-	p.Policy = h.policyOf(r, v, d.ID)
-	v.Live = true
-	h.headPage(w, r, http.StatusOK, "device", v, d, deviceOverviewPage(p))
-}
-
 func (h *handler) deviceProbe(w http.ResponseWriter, r *http.Request) {
 	d, ok := h.device(w, r)
 	if !ok {
@@ -531,46 +334,17 @@ func (h *handler) deviceProbe(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	hl, running := h.deviceState(r, d)
-	c := h.identity(v, d, running != nil, h.factsOf(r.Context(), d))
+	tabs := h.headOf(v, d, hl, running, "overview")
+	c := h.identity(v, d, running != nil, tabs.offline(), h.factsOf(r.Context(), d))
 	c.Notice, c.Error = notice, failure
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	parts := []templ.Component{identityCard(c)}
 	if failure == "" {
 		// The header, breadcrumb and title show the same stored device as the card (#104).
-		parts = append(parts, deviceHeadSwap(h.headOf(v, d, hl, running, "overview"), deviceCrumbs(d)))
+		parts = append(parts, deviceHeadSwap(tabs, deviceCrumbs(d)))
 	}
 	if err := templ.Join(parts...).Render(r.Context(), w); err != nil {
 		h.log.WarnContext(r.Context(), "probe: render", "err", err)
 	}
-}
-
-// stateHistory is GET /devices/{id}/history: every recorded state change of the device, newest
-// first, paged like the other long tables. The overview shows only the newest few.
-func (h *handler) stateHistory(w http.ResponseWriter, r *http.Request) {
-	d, ok := h.device(w, r)
-	if !ok {
-		return
-	}
-	if h.d.History == nil {
-		h.notFound(w, r)
-		return
-	}
-	all, err := h.d.History.ListHealthEvents(r.Context(), d.ID, 0)
-	if err != nil {
-		h.fail(w, r, err)
-		return
-	}
-	v := h.view(r, d.Name+": state changes", "devices", nil)
-	q := r.URL.Query()
-	page, _ := strconv.Atoi(q.Get("page"))
-	def := savedPageSize(h.userPrefs(r))
-	size := pageSize(q, def)
-	p := historyView{Base: v.Base, Tabs: h.tabsOf(r, v, d, "overview")}
-	p.Pager = newPager(v.Base+devPath(d.ID, "/history"), url.Values{}, page, size, def, len(all), "changes")
-	lo := (p.Pager.Page - 1) * size
-	if hi := min(lo+size, len(all)); lo < hi {
-		p.Events = all[lo:hi]
-	}
-	h.headPage(w, r, http.StatusOK, "device-history", v, d, deviceHistoryPage(p))
 }

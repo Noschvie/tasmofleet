@@ -32,12 +32,12 @@ const snapshotDoc = `{"Status5":{"StatusNET":{"Hostname":"kitchen-lamp","IPAddre
 	`"Status11":{"StatusSTS":{"Wifi":{"SSId":"lab-iot","BSSId":"F0:9F:C2:1A:4E:07","Channel":6,"Signal":-61}}},` +
 	`"Status6":{"StatusMQT":{"MqttHost":"x","MqttPassword":"must-not-appear"}}}`
 
-// Why: the overview is the place to read a device at a glance: its identity, what it draws,
-// how it is connected and whether it follows the policy. The network and Wi-Fi facts come from
-// the newest backup snapshot (the live health has none of them), the energy from the meter's
+// Why: the overview is the place to read a device at a glance: what it draws, how it is
+// connected, whether it follows the policy, then who it is. The network facts come from the
+// newest backup snapshot (the live health has none of them), the energy from the meter's
 // telemetry, and every value the pixel comparison cannot reproduce is marked for masking. A
 // secret in the snapshot never reaches the page.
-func TestDeviceOverviewShowsTheCardsFromRealData(t *testing.T) {
+func TestDeviceOverviewShowsTheTilesFromRealData(t *testing.T) {
 	rule := policy.Rule{Name: "Telemetry every 5 min", Command: "TelePeriod", Want: "300"}
 	fp := &fakePolicy{rep: PolicyReport{Rules: []policy.Rule{rule, {Command: "SetOption0", Want: "0"}},
 		Findings: []policy.Finding{{DeviceID: 1, Rule: rule, Have: "60"}, {DeviceID: 2, Rule: rule, Have: "10"}}}}
@@ -54,16 +54,15 @@ func TestDeviceOverviewShowsTheCardsFromRealData(t *testing.T) {
 	e.bk.data = []byte(snapshotDoc)
 	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
 	for _, want := range []string{
-		`<h2 id="dc-ident">Identity</h2>`, `<h2 id="dc-power">Power &amp; energy</h2>`, `<h2 id="dc-net">Network</h2>`, `<h2 id="dc-wifi">Wi-Fi</h2>`, `<h2 id="dc-pol">Policy compliance</h2>`,
+		`<h2 id="dc-ident">Identity</h2>`, `<h2 id="dc-conn">Connection · Wi-Fi</h2>`, `<h2 id="dc-act">Activity</h2>`, `<h2 id="dc-relays">Relays</h2>`,
 		`<dd class="mono" data-visual-mask>kitchen-lamp</dd>`, // hostname from the snapshot
 		`<dd class="mono" data-visual-mask>10.0.0.254</dd>`,   // gateway
-		`<dd class="mono" data-visual-mask>lab-iot</dd>`, `<dd class="mono" data-visual-mask>6 (2.4 GHz)</dd>`, `<dd class="mono" data-visual-mask>-61 dBm</dd>`,
-		`<dd class="mono">Connected</dd>`, `<dd class="mono">Reachable</dd>`,
-		`<div class="devpow-w" data-visual-mask>12<span>W</span></div>`, `<dd class="mono" data-visual-mask>0.02 kWh</dd>`, `<dd class="mono" data-visual-mask>11.0 kWh</dd>`,
+		`<dd class="mono" data-visual-mask>lab-iot</dd>`, `<dd class="mono" data-visual-mask>6 (2.4 GHz)</dd>`,
+		`data-tile="power"`, `data-visual-mask>12 W</div>`, `data-visual-mask>0.02 kWh</div>`, `Yesterday 0.03 · Total 11.0`,
+		`data-visual-mask>-61 dBm</div>`, `78 % · lab-iot · ch 6`,
+		`>MQTT · HTTP</div>`, "Connected · Reachable",
+		`data-tile="policy"`, `>1 / 2</div>`, "TelePeriod 60 → 300", "Make compliant…", `name="only" value="1"`,
 		`Relay 1 <span class="mono">POWER</span>`, `aria-label="Relay 1 is On: switch it Off"`,
-		"Telemetry every 5 min", "TelePeriod 60 → 300", "Make compliant…", `name="only" value="1"`,
-		`<input type="hidden" name="action" value="OFF">`, // the header switch asks for the opposite state, never a blind toggle
-		`>Power On</span>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("overview lacks %q", want)
@@ -72,40 +71,54 @@ func TestDeviceOverviewShowsTheCardsFromRealData(t *testing.T) {
 	if strings.Contains(body, "must-not-appear") || strings.Contains(body, "s3cret-pw") {
 		t.Fatal("a secret reached the page")
 	}
-	// An operator reads the same cards but cannot start the fix.
+	if strings.Contains(body, "devhd-pwr") {
+		t.Error("the header Power button is gone (D4): the relay box is the place to switch")
+	}
+	// An operator reads the same tiles but cannot start the fix.
 	_, op := e.do(t, "GET", "/devices/1", "operator", nil)
 	if strings.Contains(op, "Make compliant") || !strings.Contains(op, "TelePeriod 60 → 300") {
-		t.Errorf("operator: the deviations without the admin action:\n%s", op)
-	}
-	// A device without deviations matches all rules (the count of rules, not of findings).
-	_, d2 := e.do(t, "GET", "/devices/2", "admin", nil)
-	if !strings.Contains(d2, "TelePeriod 10 → 300") {
-		t.Error("device 2 deviates too")
+		t.Errorf("operator: the deviation without the admin action:\n%s", op)
 	}
 	fp.rep.Findings = nil
 	_, ok := e.do(t, "GET", "/devices/1", "admin", nil)
-	if !strings.Contains(ok, "Matches all 2 rules") || strings.Contains(ok, "Make compliant") {
+	if !strings.Contains(ok, ">2 / 2</div>") || !strings.Contains(ok, "Matches all rules") || strings.Contains(ok, "Make compliant") {
 		t.Errorf("a compliant device:\n%s", ok)
 	}
 }
 
-// Why: an offline device must say so at the top of every tab, with when it was last seen, and
-// its switches must not pretend they can reach it.
-func TestOfflineDeviceShowsTheBannerAndDisablesTheSwitches(t *testing.T) {
+// Why: an offline device must say so at the top of every tab, with since when, dim what it last
+// reported and disable what needs the device; Edit and Delete work on the inventory record alone
+// and stay, so does the Activity (history) (#145).
+func TestOfflineDeviceShowsTheBannerDimsAndDisablesWhatNeedsIt(t *testing.T) {
 	e := setupWith(t, func(d *Deps) {
 		h := d.Health.(fakeHealth)
-		h[1] = model.Health{DeviceID: 1, State: model.HealthOffline, LastSeen: time.Now().Add(-5 * time.Hour), Power: map[string]string{"POWER": "OFF"}}
+		h[1] = model.Health{DeviceID: 1, State: model.HealthOffline, LastSeen: time.Now().Add(-5 * time.Hour), Since: time.Now().Add(-5 * time.Hour), Power: map[string]string{"POWER": "OFF"}}
 		d.DeviceCmd = &fakeCmd{}
 	})
 	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
-	for _, want := range []string{`<div class="devhd-off" id="devhd-off" role="status">`, `last seen <span data-visual-mask>5h ago</span>`, `<span class="devhd-state t-danger">`, `aria-pressed="false" disabled>`, `role="switch" aria-checked="false" aria-label="Relay 1 is Off: switch it On" disabled>`} {
+	for _, want := range []string{`<div class="devhd-off" id="devhd-off" role="status">`, `<b>Offline since <time data-visual-mask`, `<span class="devhd-state t-danger">`,
+		`role="switch" aria-checked="false" aria-label="Relay 1 is Off: switch it On" disabled>`,
+		`id="devlive" class="devlive" data-off`, `data-needs-device disabled>Refresh identity`,
+		`id="identity" class="devcard dev-dim is-dim" data-dim aria-disabled="true"`, `id="devconn" class="devcard dev-dim is-dim" data-dim aria-disabled="true"`,
+		`<button type="button" class="btn" disabled>Restart</button>`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("offline overview lacks %q", want)
 		}
 	}
+	if strings.Contains(body, `<section id="devact" class="devcard dev-dim`) {
+		t.Error("Activity is history: it must not be dimmed")
+	}
+	for _, want := range []string{`href="/tf/devices/1/edit"`, `href="/tf/devices/1/delete"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("Edit and Delete stay active offline: lacks %s", want)
+		}
+	}
 	_, online := e.do(t, "GET", "/devices/2", "admin", nil)
-	if strings.Contains(online, "devhd-off") {
+	if strings.Contains(online, `id="devhd-off"`) {
 		t.Error("a device that never answered is not offline: it gets the not-answered notice, not the banner")
+	}
+	if !strings.Contains(online, `<div id="devhd-slot"></div>`) {
+		t.Error("the banner slot must always be on the page, so a live refresh can fill it")
 	}
 }
 
@@ -244,82 +257,61 @@ func stateChanges(n int) []store.HealthEvent {
 	return out
 }
 
-// Why: maintainer feedback showed the Columns button on a row of its own under the card title, detached from
-// the card ("looks lost"). On the device page it sits in the card's head, on the title's line.
-func TestStateChangesColumnsButtonSitsInTheCardHead(t *testing.T) {
-	at := time.Date(2026, 10, 23, 9, 0, 0, 0, time.UTC)
-	e := setupWith(t, func(d *Deps) {
-		d.History = fakeHistory{[]store.HealthEvent{
-			{DeviceID: 1, At: at, From: model.HealthOnline, To: model.HealthOffline, Source: model.SourceHTTP},
-			{DeviceID: 1, At: at.Add(-time.Hour), From: model.HealthUnknown, To: model.HealthOnline, Source: model.SourceHTTP},
-		}}
-	})
-	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
-	i := strings.Index(body, `<h2 id="dc-hist">State changes</h2>`)
-	if i < 0 {
-		t.Fatal("no State changes card")
-	}
-	end := strings.Index(body[i:], "<details class=\"m-fold\">") // the table's fold follows the card head
-	if head := body[i : i+end]; !strings.Contains(head, `<details class="colmenu"`) {
-		t.Fatalf("the Columns chooser is not in the card head:\n%s", head)
-	}
-	if strings.Contains(body, `class="tabletools"`) {
-		t.Error("a separate Columns bar above the table is back")
-	}
-}
-
-// rows counts the data rows of the first table of the card that starts at marker.
-func rowsAfter(body, marker string) int {
-	i := strings.Index(body, marker)
-	if i < 0 {
-		return -1
-	}
-	rest := body[i:]
-	if j := strings.Index(rest, "</table>"); j >= 0 {
-		rest = rest[:j]
-	}
-	return strings.Count(rest, "<tr><td") + strings.Count(rest, "<tr>\n<td")
-}
-
-// Why: maintainer feedback asked how far the lists on the device page can grow. The overview is a summary:
-// the newest 10 of each, and a link to the complete list (the state history page, and the
-// transactions filtered by this device).
-func TestDeviceOverviewListsTheNewest10WithLinksToTheCompleteLists(t *testing.T) {
+// Why: the overview is a summary: one Activity list with the newest 10 of state changes and
+// transactions together, newest first, and a link to the complete, paged list.
+func TestDeviceOverviewActivityIsTheNewest10OfBothKinds(t *testing.T) {
 	var jobs []model.Job
-	for i := 1; i <= 14; i++ {
-		jobs = append(jobs, model.Job{ID: model.JobID(i), BatchID: model.BatchID(i), DeviceID: 1, State: model.JobSucceeded, TargetRelease: "16.0.0", UpdatedAt: time.Now()})
+	base := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC) // newer than every state change below
+	for i := 14; i >= 1; i-- {                             // the store hands jobs out newest first
+		jobs = append(jobs, model.Job{ID: model.JobID(i), BatchID: model.BatchID(i), DeviceID: 1, State: model.JobSucceeded, TargetRelease: "16.0.0", UpdatedAt: base.Add(time.Duration(i) * time.Hour)})
 	}
 	e := setupWith(t, func(d *Deps) {
 		d.History = fakeHistory{stateChanges(25)}
 		d.Jobs, d.OTA = &fakeJobs{jobs: jobs}, &fakeOTA{}
 	})
 	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
-	if n := rowsAfter(body, `<h2 id="dc-hist">`); n != 10 {
-		t.Errorf("state changes: %d rows, want the newest 10", n)
+	if n := strings.Count(body, `class="dev-act-at"`); n != 10 {
+		t.Errorf("activity: %d rows, want the newest 10", n)
 	}
-	if n := rowsAfter(body, `<h2 id="dc-tx">`); n != 10 {
-		t.Errorf("transactions: %d rows, want the newest 10", n)
+	if !strings.Contains(body, "Transaction #14") || strings.Contains(body, "change 0") {
+		t.Errorf("not the newest 10 merged newest first:\n%s", body)
 	}
-	for _, want := range []string{`href="/tf/devices/1/history"`, `href="/tf/transactions?device=1"`} {
-		if !strings.Contains(body, want) {
-			t.Errorf("no link %s to the complete list", want)
+	if !strings.Contains(body, `href="/tf/devices/1/history">All activity`) {
+		t.Error("no link to the complete list")
+	}
+}
+
+// Why: state changes and transactions interleave by time, whichever kind is newer comes first.
+func TestMergeActivityIsNewestFirstAcrossBothKinds(t *testing.T) {
+	at := time.Date(2026, 10, 23, 12, 0, 0, 0, time.UTC)
+	ev := []store.HealthEvent{{At: at.Add(-1 * time.Hour)}, {At: at.Add(-3 * time.Hour)}}
+	jobs := []model.Job{{ID: 7, UpdatedAt: at}, {ID: 6, UpdatedAt: at.Add(-2 * time.Hour)}}
+	var got []string
+	for _, r := range mergeActivity(ev, jobs) {
+		if r.Job != nil {
+			got = append(got, "job"+strconv.Itoa(int(r.Job.ID)))
+		} else {
+			got = append(got, "event")
 		}
+	}
+	if strings.Join(got, ",") != "job7,event,job6,event" {
+		t.Fatalf("order %v", got)
 	}
 }
 
 // Why: the complete list of a device's state changes needs a page of its own, with paging
 // (a flapping device has thousands). Newest first, every change reachable, no row twice.
-func TestDeviceStateHistoryPagesThroughEveryChange(t *testing.T) {
+func TestDeviceActivityPagesThroughEveryEntry(t *testing.T) {
 	e := setupWith(t, func(d *Deps) { d.History = fakeHistory{stateChanges(60)} })
 	_, p1 := e.do(t, "GET", "/devices/1/history", "operator", nil)
 	_, p3 := e.do(t, "GET", "/devices/1/history?page=3", "operator", nil)
-	if a, b := strings.Count(p1, "<time data-ts="), strings.Count(p3, "<time data-ts="); a != 25 || b != 10 {
+	if a, b := strings.Count(p1, `class="dev-act-at"`), strings.Count(p3, `class="dev-act-at"`); a != 25 || b != 10 {
 		t.Fatalf("page 1 has %d rows, page 3 has %d; want 25 and 10", a, b)
 	}
 	if !strings.Contains(p1, "change 0") || strings.Contains(p1, "change 25<") || !strings.Contains(p3, "change 59") {
 		t.Error("the pages are not the newest first, in order")
 	}
-	if !strings.Contains(p1, "Page 1 of 3, 60 changes") || !strings.Contains(p1, `aria-current="page">Overview</a>`) {
+	if !strings.Contains(p1, "Page 1 of 3, 60 entries") || !strings.Contains(p1, `aria-current="page">Overview</a>`) {
 		t.Errorf("the pager or the device tabs are missing:\n%s", p1)
 	}
 	if r, _ := e.do(t, "GET", "/devices/99/history", "operator", nil); r.StatusCode != 404 {
@@ -409,12 +401,12 @@ func TestWiredDeviceShowsAnEthernetCardAndItsEthernetMAC(t *testing.T) {
 	d.Net = model.NetFacts{Hostname: "tasmota-2BE970-eth", IP: "192.168.7.139", Gateway: "192.168.7.1", Wired: true, ReadAt: time.Now()}
 	e.inv.devs[1] = d
 	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
-	for _, want := range []string{`<h2 id="dc-wifi">Ethernet</h2>`, `<dt>Connection</dt><dd class="mono">Ethernet</dd>`, `>08:d1:f9:2b:e9:71</dd>`, `>192.168.7.1</dd>`} {
+	for _, want := range []string{`<h2 id="dc-conn">Connection · Ethernet</h2>`, `<dt>Ethernet MAC</dt><dd class="mono" data-visual-mask>08:d1:f9:2b:e9:71</dd>`, `>192.168.7.1</dd>`, `data-tile="link"`, ">Wi-Fi off</div>"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("overview lacks %q", want)
 		}
 	}
-	for _, bad := range []string{"<dt>SSID</dt>", "<dt>Signal</dt>", "devwifi-bar", "0.0.0.0", `<h2 id="dc-wifi">Wi-Fi</h2>`} {
+	for _, bad := range []string{"<dt>SSID</dt>", "<dt>Signal</dt>", "dev-bar", "0.0.0.0", `data-tile="wifi"`, "Connection · Wi-Fi"} {
 		if strings.Contains(body, bad) {
 			t.Errorf("wired device page still has %q", bad)
 		}

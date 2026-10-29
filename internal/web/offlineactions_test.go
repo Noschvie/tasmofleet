@@ -70,7 +70,7 @@ func TestOfflineDeviceHeaderDisablesRestartAndUpdate(t *testing.T) {
 		t.Errorf("the restart dialog can still be opened")
 	}
 	// the offline banner is the visible reason; a self-explanatory button takes no tooltip
-	if !strings.Contains(body, "actions need the device to answer") {
+	if !strings.Contains(body, "Edit and Delete still work") {
 		t.Errorf("no visible reason on the page")
 	}
 }

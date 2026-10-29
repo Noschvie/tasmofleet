@@ -25,17 +25,6 @@ var colTips = map[string]string{ //nolint:gosec // G101: header texts, no creden
 	"audit.result":  "How it ended.",
 	"audit.details": "The recorded details of the entry.",
 
-	"device_history.when":   "When the state changed.",
-	"device_history.change": "The old and the new state.",
-	"device_history.source": "Where the change was noticed.",
-	"device_history.detail": "Details of the change.",
-
-	"device_transactions.transaction": "The update transaction.",
-	"device_transactions.state":       "Where the update stands.",
-	"device_transactions.target":      "The firmware being installed.",
-	"device_transactions.when":        "When it started.",
-	"device_transactions.error":       "Why the update failed.",
-
 	"keyvalue.key":   "The item.",
 	"keyvalue.value": "Its value.",
 

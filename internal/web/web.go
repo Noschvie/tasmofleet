@@ -243,6 +243,7 @@ func Handler(d Deps) (http.Handler, error) {
 	route("POST /devices/new", adm, h.deviceCreate)
 	route("GET /devices/{id}", op, h.deviceDetail)
 	route("GET /devices/{id}/history", op, h.stateHistory)
+	route("GET /devices/{id}/live", op, h.deviceLive)
 	route("GET /devices/{id}/edit", adm, h.deviceEditForm)
 	route("POST /devices/{id}", adm, h.deviceUpdate)
 	route("POST /devices/{id}/delete", adm, h.deviceDelete)
@@ -335,6 +336,7 @@ type view struct {
 	RoleName string
 	Flash    string
 	Live     bool   // open the SSE stream (pages with live data; the top bar then shows its state)
+	EventSeq uint64 // events published before the page was built (Hub.Seq): the stream resyncs when more followed (#160)
 	Path     string // request path below the base path (crumbs)
 	Theme    string // the user's theme choice, "" = Auto
 	// Crumbs is a ported page's own breadcrumb trail; nil derives it from the navigation
@@ -369,6 +371,9 @@ func (h *handler) view(r *http.Request, title, nav string, data any) view {
 		Title: title, Nav: nav, Base: httpx.BasePath(r.Context()), CSRF: h.d.Guard.CSRFToken(r),
 		User: p, IsAdmin: p.Role >= model.RoleAdmin, RoleName: roleName(p.Role),
 		Flash: flashes[r.URL.Query().Get("ok")], Data: data, Path: r.URL.Path,
+	}
+	if h.d.Hub != nil {
+		v.EventSeq = h.d.Hub.Seq()
 	}
 	v.Features.Updates = h.d.OTA != nil
 	v.Features.Firmware = h.d.Firmware != nil

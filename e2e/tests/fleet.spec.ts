@@ -243,7 +243,7 @@ test("update batch: preview, staged ESP8266 and direct ESP32 succeed, unknown ch
   const consoleTab = second.locator("nav.utabs [aria-disabled=true]", { hasText: "Console" });
   await expect(consoleTab, "the tab stays, disabled, with the reason as its title").toHaveAttribute("title", /Unavailable while/);
   await expect(second.getByRole("button", { name: "Back up", exact: true }), "nothing that needs the device is offered while it is held").toBeDisabled();
-  await expect(second.getByRole("heading", { name: "Transactions" })).toBeVisible();
+  await expect(second.getByRole("heading", { name: "Activity" })).toBeVisible();
   // The Console page of that device: its tab cannot be used, but it is the page you are on, so it is not drawn grey.
   await second.goto(second.url() + "/console");
   await expect(second.locator("nav.utabs a[aria-current=page]")).toHaveText("Console");

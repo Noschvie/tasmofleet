@@ -226,7 +226,7 @@ func TestLiveStreamOnlyWhenAsked(t *testing.T) {
 	}
 	d.Live, d.Base = true, "/fleet"
 	got := render(t, d)
-	if !strings.Contains(got, `hx-ext="sse" sse-connect="/fleet/events"`) {
+	if !strings.Contains(got, `hx-ext="sse" sse-connect="/fleet/events?since=0"`) {
 		t.Fatalf("live page without the stream: %s", got)
 	}
 	for _, want := range []string{"Live updates interrupted.", "Connection to the server lost.", "Retry now", ">Reconnecting…<", ">Offline<"} {

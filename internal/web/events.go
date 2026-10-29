@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -76,12 +77,28 @@ func (h *handler) events(w http.ResponseWriter, r *http.Request) {
 	}
 	ch, cancel := h.d.Hub.Subscribe(events.TopicHealth, events.TopicDevice, events.TopicJob, events.TopicBackup)
 	defer cancel()
+	// The page was built from what the hub had published up to "since" (view.EventSeq). Anything
+	// published after that and before this subscription is lost to this stream, and so is
+	// everything of a stream outage: the browser reconnects with the same URL. Say so right away,
+	// so every live region reloads itself (#160). Subscribing first leaves no gap.
+	if since, err := strconv.ParseUint(r.URL.Query().Get("since"), 10, 64); err == nil && h.d.Hub.Seq() > since {
+		var buf bytes.Buffer
+		writeSSE(&buf, "resync", "")
+		if _, err := buf.WriteTo(w); err != nil {
+			return
+		}
+		if err := rc.Flush(); err != nil {
+			return
+		}
+	}
 	// states is what this stream last said about each device's state. Health messages arrive with
 	// every telemetry; "state" goes out only when the state really changed (the dashboard reloads on it).
 	states := map[model.DeviceID]model.HealthState{}
+	powers := map[model.DeviceID]string{} // relay states as this stream last said them (devstate)
 	if h.d.Health != nil {
 		for id, hl := range h.d.Health.All() {
 			states[id] = hl.State
+			powers[id] = powerSig(hl)
 		}
 	}
 	tick := time.NewTicker(h.d.SSERecheck)
@@ -108,9 +125,19 @@ func (h *handler) events(w http.ResponseWriter, r *http.Request) {
 			var buf bytes.Buffer
 			h.encodeEvent(&buf, ev, base)
 			if hl, ok := ev.Payload.(model.Health); ok && !ev.Resync {
+				changed := false
 				if prev, seen := states[hl.DeviceID]; !seen || prev != hl.State {
 					states[hl.DeviceID] = hl.State
 					writeSSE(&buf, "state", fmt.Sprint(hl.DeviceID))
+					changed = true
+				}
+				if sig := powerSig(hl); powers[hl.DeviceID] != sig {
+					powers[hl.DeviceID] = sig
+					changed = true
+				}
+				if changed {
+					// the device page reloads its tiles and header, and only that device's does
+					writeSSE(&buf, "devstate-"+devID(hl.DeviceID), "")
 				}
 			}
 			if buf.Len() == 0 {
@@ -158,12 +185,23 @@ func (h *handler) encodeEvent(buf *bytes.Buffer, ev events.Event, base string) {
 		}
 	case model.Device:
 		writeSSE(buf, "device", "")
+		writeSSE(buf, "devstate-"+devID(p.ID), "") // the device page's header and facts follow the inventory
 	case model.Job:
 		writeSSE(buf, "job", fmt.Sprint(p.ID))
 		writeSSE(buf, fmt.Sprintf("job-%d", p.ID), "") // the batch page refreshes just this job
+		writeSSE(buf, "devjob-"+devID(p.DeviceID), "") // the device page's Activity and header
 	case model.Backup:
 		writeSSE(buf, "backup", "")
 	}
+}
+
+// powerSig is the relay states of a health as one comparable string.
+func powerSig(hl model.Health) string {
+	var sb strings.Builder
+	for _, r := range relayStates(hl) {
+		sb.WriteString(strconv.Itoa(r.N) + r.State + ";")
+	}
+	return sb.String()
 }
 
 // writeSSE writes one event. Newlines in data become separate data: lines.

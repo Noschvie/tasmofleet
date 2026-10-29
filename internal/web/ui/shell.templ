@@ -45,7 +45,7 @@ templ Shell(d ShellData, content templ.Component) {
 			hx-headers={ csrfHeaders(d.CSRF) }
 			if d.Live {
 				hx-ext="sse"
-				sse-connect={ d.Base + "/events" }
+				sse-connect={ d.Base + "/events?since=" + strconv.FormatUint(d.EventSeq, 10) }
 			}
 		>
 			<header class="top">

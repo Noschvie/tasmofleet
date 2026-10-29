@@ -22,7 +22,9 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -185,6 +187,7 @@ func run(ctx context.Context, args []string, out, errOut io.Writer) error {
 		_, _ = fmt.Fprintf(out, "DEVENV_OIDC_ISSUER=%s\n", idp.Issuer())
 		_, _ = fmt.Fprintf(out, "DEVENV_OIDC_CLIENT_ID=tasmofleet\nDEVENV_OIDC_CLIENT_SECRET=mock-secret\n")
 	}
+	reg := &deviceRegistry{byName: map[string]simulator.Device{}}
 	var df *designFleet
 	if design != nil {
 		var err error
@@ -192,8 +195,8 @@ func run(ctx context.Context, args []string, out, errOut io.Writer) error {
 			return err
 		}
 	}
-	if idp != nil || df != nil {
-		ctl, err := startControl(idp, df, feed, *bind)
+	{
+		ctl, err := startControl(idp, df, feed, reg, *bind)
 		if err != nil {
 			return err
 		}
@@ -209,6 +212,7 @@ func run(ctx context.Context, args []string, out, errOut io.Writer) error {
 		if err != nil {
 			return err
 		}
+		reg.add(spec.Name, d)
 		mqtt := "mqtt"
 		for _, f := range spec.Faults {
 			if f.Kind == simulator.FaultHTTPOnly {
@@ -296,7 +300,7 @@ func startUpstream(fixtures, version, bind string, releases int, older []string,
 // it before clicking "sign in". With a design fleet it also serves
 // POST /fixture/offline, which closes the fixture's offline devices once the
 // app has seen them online. Either part is absent when its dependency is nil.
-func startControl(idp *oidcmock.Server, df *designFleet, feed *upstreamFeed, bind string) (*http.Server, error) {
+func startControl(idp *oidcmock.Server, df *designFleet, feed *upstreamFeed, reg *deviceRegistry, bind string) (*http.Server, error) {
 	var lc net.ListenConfig
 	l, err := lc.Listen(context.Background(), "tcp", net.JoinHostPort(bind, "0"))
 	if err != nil {
@@ -314,6 +318,10 @@ func startControl(idp *oidcmock.Server, df *designFleet, feed *upstreamFeed, bin
 			w.WriteHeader(http.StatusNoContent)
 		})
 	}
+	// The plain fleet's devices by name: tests pull a plug or press a button, and the app has to
+	// notice (the device page follows both live, #126).
+	mux.HandleFunc("POST /device/{name}/{action}", reg.act)
+	mux.HandleFunc("POST /device/{name}/relay/{n}/{state}", reg.relay)
 	if df != nil {
 		mux.HandleFunc("POST /fixture/offline", func(w http.ResponseWriter, _ *http.Request) {
 			df.GoOffline()
@@ -508,4 +516,59 @@ func writeDecoderShim() (path string, cleanup func(), err error) {
 		return "", nil, err
 	}
 	return path, func() { _ = os.RemoveAll(dir) }, nil
+}
+
+// deviceRegistry holds the simulated devices of the plain fleet by name for the control server.
+type deviceRegistry struct {
+	mu     sync.Mutex
+	byName map[string]simulator.Device
+}
+
+func (r *deviceRegistry) add(name string, d simulator.Device) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.byName[name] = d
+}
+
+func (r *deviceRegistry) control(w http.ResponseWriter, req *http.Request) (simulator.Controller, bool) {
+	r.mu.Lock()
+	d, ok := r.byName[req.PathValue("name")]
+	r.mu.Unlock()
+	if ok {
+		if c, isCtl := simulator.Control(d); isCtl {
+			return c, true
+		}
+	}
+	http.NotFound(w, req)
+	return nil, false
+}
+
+// act is POST /device/{name}/off (the plug is pulled: LWT Offline, HTTP closed for good).
+func (r *deviceRegistry) act(w http.ResponseWriter, req *http.Request) {
+	c, ok := r.control(w, req)
+	if !ok {
+		return
+	}
+	if req.PathValue("action") != "off" {
+		http.NotFound(w, req)
+		return
+	}
+	c.PowerOff()
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// relay is POST /device/{name}/relay/{n}/{on|off}: as if someone pressed the button.
+func (r *deviceRegistry) relay(w http.ResponseWriter, req *http.Request) {
+	c, ok := r.control(w, req)
+	if !ok {
+		return
+	}
+	n, err := strconv.Atoi(req.PathValue("n"))
+	state := req.PathValue("state")
+	if err != nil || n < 1 || (state != "on" && state != "off") {
+		http.NotFound(w, req)
+		return
+	}
+	c.SetRelay(n, state == "on")
+	w.WriteHeader(http.StatusNoContent)
 }
