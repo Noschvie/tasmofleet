@@ -51,6 +51,7 @@ type dashView struct {
 }
 
 func (h *handler) dashboard(w http.ResponseWriter, r *http.Request) {
+	seq := h.eventSeq() // before anything is read (#160)
 	// An admin on a fresh install lands in the setup until it is finished or skipped.
 	if p, _ := auth.FromContext(r.Context()); h.d.Setup != nil && h.d.SysConfig != nil && p.Role >= model.RoleAdmin && !h.d.Setup.Done() {
 		redirect(w, r, setupPath)
@@ -62,6 +63,7 @@ func (h *handler) dashboard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	v := h.view(r, "Dashboard", "dashboard", nil)
+	v.EventSeq = seq
 	v.Live = true // "state streams in live": the body reloads on state changes (TestDashboardIsLive)
 	facts := h.fleetFacts(r.Context(), actor(r))
 	facts.annotate(rows)

@@ -365,6 +365,16 @@ var flashes = map[string]string{
 	"backup-taken": "Backup taken.",
 }
 
+// eventSeq is the hub's event number now. A handler that reads its data before it builds its view
+// takes it first and sets view.EventSeq to it, so events published while it read are not lost to
+// the page's stream (#160).
+func (h *handler) eventSeq() uint64 {
+	if h.d.Hub == nil {
+		return 0
+	}
+	return h.d.Hub.Seq()
+}
+
 func (h *handler) view(r *http.Request, title, nav string, data any) view {
 	p, _ := auth.FromContext(r.Context())
 	v := view{

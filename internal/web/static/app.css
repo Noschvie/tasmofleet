@@ -8600,9 +8600,15 @@ body:has(.dv-list .bulkbar:not([hidden])) {
   .dev-tiles {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  /* "MQTT · HTTP" stays on one line in a half-width tile */
+  /* "MQTT · HTTP" stays on one line in a half-width tile; a lone last tile takes the whole row */
   .dev-tile-v {
-    font-size: 21px;
+    font-size: 20px;
+  }
+  .dev-tile[data-tile="reach"] .dev-tile-v {
+    white-space: nowrap;
+  }
+  .dev-tile:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
   }
 }
 .dev-tile {
@@ -8727,7 +8733,7 @@ body:has(.dv-list .bulkbar:not([hidden])) {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--card-gap);
-  align-items: start;
+  align-items: stretch;
   margin-bottom: var(--card-gap);
 }
 @media (max-width: 44.99rem) {

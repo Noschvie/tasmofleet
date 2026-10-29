@@ -88,7 +88,7 @@ func overviewDevices() []simulator.DeviceSpec {
 		{Name: "ov-double-switch", Profile: simulator.ProfileESP8266_4M, Relays: 2, Energy: 1},
 		{Name: "ov-power-strip", Profile: simulator.ProfileESP32C3, Relays: 4, Energy: 4, Power: []bool{true, true, true, false},
 			FriendlyNames: []string{"Monitor", "PC", "Lamp", "Charger"}},
-		{Name: "ov-ethernet-rack", Profile: simulator.ProfileESP8266_4M, Relays: 4, Wired: true},
+		{Name: "ov-ethernet-rack", Profile: simulator.ProfileESP32, Relays: 4, Wired: true},
 		{Name: "ov-climate", Profile: simulator.ProfileESP32C3, NoRelay: true, Sensors: map[string]map[string]float64{
 			"BME280": {"Temperature": 12.4, "Humidity": 71, "Pressure": 1012}, "BH1750": {"Illuminance": 3400}}},
 		{Name: "ov-http-only", Profile: simulator.ProfileESP8266_4M, Faults: []simulator.Fault{{Kind: simulator.FaultHTTPOnly}}},

@@ -219,9 +219,9 @@ func reachTile(d model.Device, hl model.Health) tile {
 	case r.MQTTOK:
 		tl.Value, tl.Tone, tl.Sub = "MQTT", ui.ToneOK, "Connected · HTTP not polled yet"
 	case r.MQTTOn:
-		tl.Value, tl.Tone, tl.Sub = "HTTP", ui.ToneWarn, "MQTT not connected"
+		tl.Value, tl.Tone, tl.Sub = "HTTP", ui.ToneWarn, "Reachable · MQTT not connected"
 	default:
-		tl.Value, tl.Tone, tl.Sub = "HTTP", ui.ToneOK, "MQTT not configured"
+		tl.Value, tl.Tone, tl.Sub = "HTTP", ui.ToneOK, "Reachable · MQTT not configured"
 	}
 	return tl
 }
@@ -509,11 +509,13 @@ func (h *handler) overviewOf(r *http.Request, v view, d model.Device, just *rela
 }
 
 func (h *handler) deviceDetail(w http.ResponseWriter, r *http.Request) {
+	seq := h.eventSeq() // before the device and its state are read (#160)
 	d, ok := h.device(w, r)
 	if !ok {
 		return
 	}
 	v := h.view(r, d.Name, "devices", nil)
+	v.EventSeq = seq
 	p, err := h.overviewOf(r, v, d, nil)
 	if err != nil {
 		h.fail(w, r, err)

@@ -148,22 +148,42 @@ func powerMask(relays []bool) uint64 {
 	return m
 }
 
-var reStatusNET = regexp.MustCompile(`"StatusNET":\{[^}]*`)
+var (
+	reStatusNET   = regexp.MustCompile(`"StatusNET":\{[^}]*`)
+	reIdleEthObj  = regexp.MustCompile(`,"Ethernet":\{[^}]*\}`)
+	ethKeys       = []string{"Hostname", "IPAddress", "Gateway", "Subnetmask", "DNSServer1", "DNSServer2", "Mac"}
+	idleEthValues = []string{"IPAddress", "Gateway", "Subnetmask", "DNSServer1"}
+)
 
 // wiredStatus5 turns the captured Status 5 into an Ethernet board's: the Wi-Fi values at the top
 // level stay unset and the "Ethernet" object carries the active interface (own MAC, as on a
-// board with both).
+// board with both). A capture of a board that has Ethernet support already holds an idle
+// "Ethernet" object; it is dropped first, or the result would hold two.
 func (d *simDevice) wiredStatus5(s string) string {
+	s = reIdleEthObj.ReplaceAllString(s, "")
 	m := reStatusNET.FindString(s)
 	if m == "" {
 		return s
 	}
-	eth := strings.NewReplacer(`"Mac":"`+d.mac+`"`, `"Mac":"`+d.ethMAC()+`"`).Replace(m)
+	value := func(k string) string {
+		if f := regexp.MustCompile(`"` + k + `":"([^"]*)"`).FindStringSubmatch(m); f != nil {
+			return f[1]
+		}
+		return ""
+	}
+	parts := make([]string, 0, len(ethKeys))
+	for _, k := range ethKeys {
+		v := value(k)
+		if k == "Mac" {
+			v = d.ethMAC()
+		}
+		parts = append(parts, `"`+k+`":"`+v+`"`)
+	}
 	idle := m
-	for _, k := range []string{"IPAddress", "Gateway", "Subnetmask", "DNSServer1"} {
+	for _, k := range idleEthValues {
 		idle = regexp.MustCompile(`"`+k+`":"[^"]*"`).ReplaceAllString(idle, `"`+k+`":"0.0.0.0"`)
 	}
-	return strings.Replace(s, m, idle+`,"Ethernet":{`+strings.TrimPrefix(eth, `"StatusNET":{`)+`}`, 1)
+	return strings.Replace(s, m, idle+`,"Ethernet":{`+strings.Join(parts, ",")+`}`, 1)
 }
 
 // ethMAC is the Ethernet MAC of a wired device, different from its Wi-Fi MAC.

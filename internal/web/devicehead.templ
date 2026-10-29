@@ -103,10 +103,10 @@ templ deviceHead(t deviceTabs, attrs templ.Attributes) {
 	</div>
 }
 
-// deviceHeadRest is what follows the header block: the offline banner, the tabs and the restart dialog.
+// deviceHeadRest is what follows the header block: the tabs, the offline banner under them (as in the mockup) and the restart dialog.
 templ deviceHeadRest(t deviceTabs) {
-	@deviceOffSlot(t, nil)
 	@ui.Tabs("Device pages", t.headTabs())
+	@deviceOffSlot(t, nil)
 	if t.CanRestart {
 		@restartDialog(t, false)
 	}

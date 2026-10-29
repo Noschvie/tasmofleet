@@ -5,6 +5,8 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -121,8 +123,8 @@ func TestReachTileSaysWhichChannelsAnswer(t *testing.T) {
 		tone       ui.Tone
 	}{
 		{"both", ours, onlineHealth(nil), "MQTT · HTTP", "Connected · Reachable", ui.ToneOK},
-		{"HTTP only", model.Device{}, model.Health{State: model.HealthOnline, LastSeen: now0, SeenHTTP: now0}, "HTTP", "MQTT not configured", ui.ToneOK},
-		{"on our broker but silent", ours, model.Health{State: model.HealthOnline, LastSeen: now0, SeenHTTP: now0}, "HTTP", "MQTT not connected", ui.ToneWarn},
+		{"HTTP only", model.Device{}, model.Health{State: model.HealthOnline, LastSeen: now0, SeenHTTP: now0}, "HTTP", "Reachable · MQTT not configured", ui.ToneOK},
+		{"on our broker but silent", ours, model.Health{State: model.HealthOnline, LastSeen: now0, SeenHTTP: now0}, "HTTP", "Reachable · MQTT not connected", ui.ToneWarn},
 		{"offline", ours, model.Health{State: model.HealthOffline, LastSeen: now0, LWT: "Offline"}, "Offline", "MQTT LWT offline · HTTP no answer", ui.ToneNeutral},
 		{"never answered", model.Device{}, model.Health{State: model.HealthUnknown}, "Unknown", "The device has not answered yet", ui.ToneNeutral},
 	}
@@ -517,5 +519,48 @@ func TestMultiChannelMeterWithSummedCountersIsStillPerChannel(t *testing.T) {
 	one := relayBoxOf(model.Health{Power: map[string]string{"POWER1": "ON", "POWER2": "OFF"}}, health.Telemetry{Energy: map[string]health.EnergyChannel{"": meter(60, 1, 1, 1)}}, nil, true)
 	if one.Right != "1 of 2 on · one meter for all" {
 		t.Fatalf("shared meter: %+v", one)
+	}
+}
+
+// publishingHealth publishes a hub event whenever the page reads a device's health: an event that
+// arrives while the page is being built.
+type publishingHealth struct {
+	fakeHealth
+	hub *events.Hub
+}
+
+func (p publishingHealth) Get(id model.DeviceID) model.Health {
+	p.hub.Publish(events.Event{Topic: events.TopicBackup})
+	return p.fakeHealth.Get(id)
+}
+
+func (p publishingHealth) All() map[model.DeviceID]model.Health {
+	p.hub.Publish(events.Event{Topic: events.TopicBackup})
+	return p.fakeHealth.All()
+}
+
+// Why (#160): the page's event number must be taken before its data is read. Taken after, an event
+// published while the page was being built is counted as already seen, and the stream would not
+// ask for a refresh although the page shows data older than that event.
+func TestPagesTakeTheEventNumberBeforeReadingTheirData(t *testing.T) {
+	hub := events.NewHub(8)
+	e := setupWith(t, func(d *Deps) {
+		d.Hub = hub
+		d.Health = publishingHealth{fakeHealth: d.Health.(fakeHealth), hub: hub}
+	})
+	for _, path := range []string{"/devices/1", "/"} {
+		before := hub.Seq()
+		_, body := e.do(t, "GET", path, "operator", nil)
+		after := hub.Seq()
+		if after == before {
+			t.Fatalf("%s: the test health published nothing while the page was built", path)
+		}
+		m := regexp.MustCompile(`events\?since=(\d+)`).FindStringSubmatch(body)
+		if m == nil {
+			t.Fatalf("%s: no stream address", path)
+		}
+		if since, _ := strconv.ParseUint(m[1], 10, 64); since != before {
+			t.Errorf("%s: since=%d, want %d (the number before the page read anything; now %d)", path, since, before, after)
+		}
 	}
 }

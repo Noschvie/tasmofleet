@@ -43,6 +43,14 @@ async function control(path: string) {
 async function shot(page: Page, name: string) {
   if (!shots) return;
   mkdirSync(shots, { recursive: true });
+  // a full-page capture draws a sticky bar where the scroll position happens to be: park it at the top
+  await page.evaluate(() => {
+    for (const el of document.querySelectorAll<HTMLElement>("body *")) {
+      const pos = getComputedStyle(el).position;
+      if (pos === "sticky" || pos === "fixed") if (!el.closest("dialog")) el.style.position = "static";
+    }
+    window.scrollTo(0, 0);
+  });
   await page.screenshot({ path: `${shots}/${name}.png`, fullPage: true });
 }
 

@@ -104,10 +104,25 @@
     document
       .querySelectorAll("#identity [data-needs-device]")
       .forEach(function (b) {
-        b.disabled = off;
+        // a Refresh identity in flight is disabled by htmx and enabled again by htmx
+        if (!b.classList.contains("htmx-request")) {
+          b.disabled = off;
+        }
       });
   }
   document.addEventListener("htmx:afterSettle", syncDeviceDim);
+
+  // A refresh that was held back by an open dialog is asked for again when the dialog closes (the
+  // close event does not bubble, hence the capture).
+  document.addEventListener(
+    "close",
+    function (e) {
+      if (e.target instanceof HTMLDialogElement && document.getElementById("devlive")) {
+        htmx.trigger("#devlive", "sse:resync");
+      }
+    },
+    true,
+  );
 
   // A refresh never swaps the page under an open dialog (Restart): the next event refreshes it.
   document.addEventListener("htmx:beforeRequest", function (e) {

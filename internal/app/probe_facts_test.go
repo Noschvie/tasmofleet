@@ -224,3 +224,23 @@ func TestDescribeFillsOtaURLAndRelayNames(t *testing.T) {
 		t.Fatalf("OTAURL %q, relays %q", got.OTAURL, got.RelayNames)
 	}
 }
+
+// Why: a capture of a board with Ethernet support (the ESP32 ones) already holds an idle "Ethernet"
+// object inside StatusNET. Making that device "wired" used to nest a second Ethernet object, so
+// the Status 5 was invalid JSON and "Refresh identity" failed with "answer could not be read" for
+// every such device. Every profile must give a readable Status 5 with the Ethernet address.
+func TestWiredDeviceOfEveryProfileHasAReadableStatus5(t *testing.T) {
+	for _, prof := range []simulator.Profile{simulator.ProfileESP8266_1M, simulator.ProfileESP8266_4M, // not the minimal image: it answers no Status 5
+		simulator.ProfileESP32, simulator.ProfileESP32C3, simulator.ProfileESP32S3} {
+		t.Run(string(prof), func(t *testing.T) {
+			p, st, id, _ := factsSetup(t, simulator.DeviceSpec{Name: "rack", Profile: prof, Wired: true})
+			if err := p.ReadNet(context.Background(), id); err != nil {
+				t.Fatal(err)
+			}
+			d, _ := st.GetDevice(context.Background(), id)
+			if !d.Net.Wired || d.Net.Subnet != "255.255.255.0" || d.Net.IP == "" || d.Net.IP == "0.0.0.0" {
+				t.Fatalf("Net = %+v: want Wired with the Ethernet address and subnet", d.Net)
+			}
+		})
+	}
+}

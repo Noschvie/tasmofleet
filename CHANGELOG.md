@@ -29,18 +29,14 @@ always upgrade automatically.
   "All activity" opens the complete, paged list.
 - The device list, the dashboard and the device page now refresh themselves after the live stream opens
   or reopens when events were missed in between; the stream's address carries the page's event number.
-- The 2-hour power sparkline on the device overview is gone (its history was only a minute ring of the
-  last `tele/SENSOR` watts); the card shows the current power and the energy counters (#145).
 - The `/metrics` bearer token is now a setting: System settings, Metrics, "Scrape token" (write-only,
   stored encrypted, applies to the next scrape). `TASMOFLEET_METRICS_TOKEN` (and `_FILE`) stays
   valid and now locks the field: it wins over the page and is never copied into the database, so
   installs that set it, such as the Unraid template, keep working unchanged. An empty variable
   counts as unset (#151).
-
 - Device page: the Identity card shows the OTA URL the device would update from, when it is known (#127,
   thanks @Noschvie); the relay box uses the names the device gives its relays (Tasmota's default names stay
   "Relay N"); the Connection card of an Ethernet device shows subnet mask and DNS.
-
 - Device page: a device without a relay gets a Sensors box with the readings of its MQTT telemetry
   (dimmed while the device is offline), "Last restart" and "Offline since" follow the browser's time
   zone (Today/Yesterday), and the users page's "Last sign-in" does too (#145, #137).
