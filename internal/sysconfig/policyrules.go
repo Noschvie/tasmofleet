@@ -3,6 +3,7 @@ package sysconfig
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,6 +23,10 @@ import (
 // hold it. Its JSON form is exactly the POLICY_RULES format, so a stored
 // version can be exported and used as a file.
 type RuleSpec struct {
+	// ID names the rule across versions and reorders. Empty on a submitted
+	// spec means "new rule": a fresh id is assigned when it is stored. A
+	// version stored before 0.19 has none; decoding gives it policy.LegacyID.
+	ID       string   `json:"id,omitempty"`
 	Name     string   `json:"name,omitempty"`
 	Command  string   `json:"command"`
 	Want     string   `json:"want"`
@@ -113,7 +118,8 @@ type RulesState struct {
 	History   []store.PolicyRuleVersion
 }
 
-func decodeSpecs(data []byte) ([]RuleSpec, error) {
+// decodeRaw reads a rule list as it is, ids included or not.
+func decodeRaw(data []byte) ([]RuleSpec, error) {
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	var specs []RuleSpec
@@ -121,6 +127,103 @@ func decodeSpecs(data []byte) ([]RuleSpec, error) {
 		return nil, fmt.Errorf("policy rules: %w", err)
 	}
 	return specs, nil
+}
+
+// decodeSpecs reads a stored version. Rules without an id (every version
+// before 0.19) get policy.LegacyID of their position, the scheme POLICY_RULES
+// files get too, so a link to a rule survives the upgrade. The stored row is
+// not touched; the next save persists the ids.
+func decodeSpecs(data []byte) ([]RuleSpec, error) {
+	specs, err := decodeRaw(data)
+	if err != nil {
+		return nil, err
+	}
+	taken := make(map[string]bool, len(specs))
+	for _, s := range specs {
+		taken[s.ID] = true
+	}
+	for i := range specs {
+		if specs[i].ID != "" {
+			continue
+		}
+		id := policy.LegacyID(i)
+		if taken[id] { // an explicit id elsewhere in the list already uses it
+			id = newRuleID()
+		}
+		specs[i].ID, taken[id] = id, true
+	}
+	return specs, nil
+}
+
+// newRuleID returns "r" plus 10 random lowercase base32 characters, with at
+// least one letter so it can never be mistaken for a legacy position id.
+func newRuleID() string {
+	const alphabet = "abcdefghijklmnopqrstuvwxyz234567"
+	for {
+		var b [10]byte
+		if _, err := rand.Read(b[:]); err != nil {
+			panic("sysconfig: no randomness: " + err.Error()) // crypto/rand does not fail on supported platforms
+		}
+		id := make([]byte, 1, 11)
+		id[0] = 'r'
+		letter := false
+		for _, c := range b {
+			ch := alphabet[int(c)%32] // 256 is a multiple of 32: no modulo bias
+			letter = letter || ch <= 'z' && ch >= 'a'
+			id = append(id, ch)
+		}
+		if letter {
+			return string(id)
+		}
+	}
+}
+
+// isLegacyID reports whether id is a position id (policy.LegacyID form), which
+// names a slot rather than a rule.
+func isLegacyID(id string) bool {
+	n, err := strconv.Atoi(strings.TrimPrefix(id, "r"))
+	return err == nil && n > 0 && id == policy.LegacyID(n-1)
+}
+
+// withIDs returns specs with a fresh id for every rule that has none; the
+// input is not changed.
+func withIDs(specs []RuleSpec) []RuleSpec {
+	out := slices.Clone(specs)
+	for i := range out {
+		if out[i].ID == "" {
+			out[i].ID = newRuleID()
+		}
+	}
+	return out
+}
+
+// IndexOf returns the position of the rule with the given id, or -1.
+func (r *Rules) IndexOf(specs []RuleSpec, id string) int {
+	if id == "" {
+		return -1
+	}
+	return slices.IndexFunc(specs, func(s RuleSpec) bool { return s.ID == id })
+}
+
+// sameRules reports whether next is cur without a real edit: equal in every
+// field, where a next rule without an id matches whatever id cur has.
+func sameRules(cur, next []RuleSpec) bool {
+	if len(cur) != len(next) {
+		return false
+	}
+	for i := range cur {
+		if next[i].ID != "" && next[i].ID != cur[i].ID {
+			return false
+		}
+		a, b := cur[i], next[i]
+		a.ID, b.ID = "", ""
+		ja, _ := json.Marshal(a) // a plain struct always encodes
+		jb, _ := json.Marshal(b)
+		if !bytes.Equal(ja, jb) {
+			return false
+		}
+	}
+	return true
 }
 
 func encodeSpecs(specs []RuleSpec) ([]byte, error) {
@@ -169,7 +272,9 @@ func (r *Rules) Validate(specs []RuleSpec) ([]policy.Rule, error) {
 // one-time import of a POLICY_RULES file was only ever checked by ParseRules, and
 // importing it must not lose a rule over a stricter check).
 func (r *Rules) validate(specs []RuleSpec, checkWant bool) ([]policy.Rule, error) {
-	data, err := encodeSpecs(specs)
+	// A rule without an id is new and gets its id when stored; validating it
+	// must not let ParseRules's position ids collide with explicit ones.
+	data, err := encodeSpecs(withIDs(specs))
 	if err != nil {
 		return nil, err
 	}
@@ -276,6 +381,8 @@ type storeReq struct {
 // store validates and stores q.specs as a new version on top of cur, audits
 // it and tells OnChange. The caller holds r.mu.
 func (r *Rules) store(ctx context.Context, cur currentVersion, q storeReq, rec audit.Recorder) (int64, error) {
+	submitted := q.specs
+	q.specs = withIDs(q.specs)
 	rules, err := r.validate(q.specs, q.checkWant)
 	if err != nil {
 		return 0, err
@@ -284,7 +391,9 @@ func (r *Rules) store(ctx context.Context, cur currentVersion, q storeReq, rec a
 	if err != nil {
 		return 0, err
 	}
-	if cur.ID != 0 && string(bytes.TrimSpace([]byte(cur.Raw))) == string(data) && q.revertOf == 0 {
+	// Opening a version stored before 0.19 and saving it unedited is no change:
+	// the ids the decoder synthesised do not count as an edit.
+	if cur.ID != 0 && q.revertOf == 0 && sameRules(cur.Specs, submitted) {
 		return 0, ErrNoChange
 	}
 	id, err := r.o.Store.AddPolicyRuleVersion(ctx, store.PolicyRuleVersion{Rules: string(data), Note: q.note, Actor: q.actor, RevertOf: q.revertOf})
@@ -357,6 +466,7 @@ func (r *Rules) Duplicate(ctx context.Context, actor string, base int64, idx int
 			return nil, ErrNoSuchRule
 		}
 		c := cloneSpec(specs[idx])
+		c.ID = newRuleID()
 		c.Disabled = true
 		if c.Name != "" {
 			c.Name = copyName(c.Name)
@@ -440,7 +550,7 @@ func (r *Rules) ParseImport(data []byte) ([]RuleSpec, error) {
 	if len(data) > 256<<10 {
 		return nil, &RuleError{Index: -1, Msg: "the file is too large"}
 	}
-	specs, err := decodeSpecs(data)
+	specs, err := decodeRaw(data) // ids are kept as given; rules without one get theirs when saved
 	if err != nil {
 		return nil, &RuleError{Index: -1, Msg: strings.TrimPrefix(err.Error(), "policy rules: ")}
 	}
@@ -480,17 +590,32 @@ func ruleLabel(s RuleSpec) string {
 	return s.Command
 }
 
-// DiffSpecs compares two rule lists. Rules are matched by name (or by command
-// and scope); a changed expected value, scope, severity or note is "changed".
+// DiffSpecs compares two rule lists. Rules with a real id (not a position id)
+// are matched by id, so a renamed rule is "changed", not removed and added; the
+// rest are matched by name (or by command and scope). A changed expected value,
+// scope, severity or note is "changed".
 func DiffSpecs(a, b []RuleSpec) []RuleChange {
 	var out []RuleChange
 	used := make([]bool, len(b))
-	for _, x := range a {
-		match := -1
+	byID := make([]int, len(a)) // index in b of the rule with the same real id, or -1
+	for i, x := range a {
+		byID[i] = -1
+		if x.ID == "" || isLegacyID(x.ID) {
+			continue
+		}
+		byID[i] = slices.IndexFunc(b, func(y RuleSpec) bool { return y.ID == x.ID })
+		if byID[i] >= 0 {
+			used[byID[i]] = true
+		}
+	}
+	for i, x := range a {
+		match := byID[i]
 		for j, y := range b {
+			if match >= 0 {
+				break
+			}
 			if !used[j] && ruleKey(x) == ruleKey(y) {
 				match = j
-				break
 			}
 		}
 		if match < 0 {

@@ -14,6 +14,8 @@ import (
 
 // Rule is one expected setting.
 type Rule struct {
+	// ID names the rule across versions and reorders (see RuleIDRe, LegacyID).
+	ID      string
 	Name    string // short title shown in the editor and the report, optional
 	Command string // e.g. "PowerOnState"
 	Want    string // e.g. "0"

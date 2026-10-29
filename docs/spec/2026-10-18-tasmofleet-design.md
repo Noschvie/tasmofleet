@@ -1186,6 +1186,15 @@ generic rule has no value validator, is not read from backups and never restarts
 `Sleep`, `SerialLog` and `SysLog` reply nested (`{"Sleep":{"50":{"Active":"100"}}}`); the rule
 compares the configured value (the object key), not the active one.
 
+**Rule ids.** Each rule has a stable `id` (`^r[a-z0-9]{1,15}$`, optional in the JSON format: `policy.Rule.ID`,
+`sysconfig.RuleSpec.ID`) that survives edits, reordering and export/import, so a link names a rule and
+not a slot. New rules get `r` plus 10 random base32 characters; ids are unique within a list (an import
+with a duplicate or malformed id is refused). A list without ids (every version stored before 0.19, and
+`POLICY_RULES` files without ids) gets `r1`...`rN` by position (`policy.LegacyID`) when it is read; stored
+rows are never rewritten, the next save persists the ids. Opening and saving such a version unedited is
+no change. Because position ids name slots, the version diff matches rules by id only for real
+(non-position) ids and by name otherwise.
+
 ### 14.5 Notifications
 
 `notify.Notifier` implementations for a webhook (e.g. a Home Assistant webhook trigger)

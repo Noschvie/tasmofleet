@@ -142,3 +142,29 @@ func TestPlanFixGenericRuleNeedsALiveValue(t *testing.T) {
 		t.Error("a generic command must not be guessed from a backup")
 	}
 }
+
+// Why: env mode (POLICY_RULES without ids) must name rules exactly like a
+// stored pre-0.19 version does, so a link means the same rule in both.
+func TestParseRulesGivesPositionIDsToRulesWithoutOne(t *testing.T) {
+	rs, err := ParseRules([]byte(`[{"command":"SaveData","want":"0"},{"id":"rkeep","command":"Timezone","want":"99"},{"command":"Latitude","want":"52"}]`), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rs[0].ID != LegacyID(0) || rs[0].ID != "r1" || rs[1].ID != "rkeep" || rs[2].ID != "r3" {
+		t.Fatalf("ids %q %q %q", rs[0].ID, rs[1].ID, rs[2].ID)
+	}
+}
+
+// Why: two rules with one id would make a link ambiguous; refusing beats
+// guessing which rule the policy meant.
+func TestParseRulesRefusesBadIDs(t *testing.T) {
+	for name, in := range map[string]string{
+		"duplicate":         `[{"id":"rx","command":"SaveData","want":"0"},{"id":"rx","command":"Timezone","want":"99"}]`,
+		"clash with legacy": `[{"command":"SaveData","want":"0"},{"id":"r1","command":"Timezone","want":"99"}]`,
+		"bad format":        `[{"id":"X1","command":"SaveData","want":"0"}]`,
+	} {
+		if _, err := ParseRules([]byte(in), nil); err == nil {
+			t.Errorf("%s accepted", name)
+		}
+	}
+}

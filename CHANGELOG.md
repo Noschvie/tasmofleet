@@ -4,6 +4,16 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## Unreleased
+
+### Changed
+
+- Policy rules have a stable id that survives edits, reordering and export/import; rules saved before this version get `r1`, `r2`, ... by position on the first save (#197)
+
+### Breaking
+
+- The policy rules export (and `POLICY_RULES` format) gains an optional `id` per rule; exports now include it, and an import with a duplicate or malformed id is refused (#197)
+
 ## 0.18.0 (2026-10-29)
 
 ### Upgrade notes

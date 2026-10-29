@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 
 	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
 	"github.com/nofuturekid/tasmofleet/internal/model"
@@ -18,7 +19,14 @@ const MaxRules = 100
 var (
 	commandRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]{0,31}$`)
 	wantRe    = regexp.MustCompile(`^[A-Za-z0-9.,:+_/ -]{1,64}$`)
+	// RuleIDRe is the format of a rule id: "r" plus 1 to 15 lowercase letters or digits.
+	RuleIDRe = regexp.MustCompile(`^r[a-z0-9]{1,15}$`)
 )
+
+// LegacyID is the id given to the rule at position i (0-based) of a list that
+// has no ids: rules stored before 0.19 and POLICY_RULES files without ids. It
+// is derived from the position, so the same list always gets the same ids.
+func LegacyID(i int) string { return "r" + strconv.Itoa(i+1) }
 
 var knownFamilies = []model.ChipFamily{
 	model.ChipESP8266, model.ChipESP32, model.ChipESP32S2, model.ChipESP32S3, model.ChipESP32C2,
@@ -51,6 +59,7 @@ func esp32Families() []model.ChipFamily {
 }
 
 type ruleJSON struct {
+	ID       string   `json:"id"`
 	Name     string   `json:"name"`
 	Severity string   `json:"severity"`
 	Tags     []string `json:"tags"`
@@ -84,11 +93,22 @@ func ParseRules(data []byte, allowed func(command string) bool) ([]Rule, error) 
 		return nil, fmt.Errorf("policy rules: at most %d rules", MaxRules)
 	}
 	out := make([]Rule, 0, len(in))
+	seen := make(map[string]bool, len(in))
 	for i, j := range in {
-		r := Rule{Name: j.Name, Command: j.Command, Want: j.Want, Note: j.Note, Except: j.Except, Tags: j.Tags, Devices: j.Devices, Severity: j.Severity, Disabled: j.Disabled}
+		if j.ID != "" && !RuleIDRe.MatchString(j.ID) {
+			return nil, fmt.Errorf("policy rules: rule at index %d: invalid id %q", i, j.ID)
+		}
+		r := Rule{ID: j.ID, Name: j.Name, Command: j.Command, Want: j.Want, Note: j.Note, Except: j.Except, Tags: j.Tags, Devices: j.Devices, Severity: j.Severity, Disabled: j.Disabled}
 		if r.Severity == "" {
 			r.Severity = SeverityWarn
 		}
+		if r.ID == "" {
+			r.ID = LegacyID(i)
+		}
+		if seen[r.ID] {
+			return nil, fmt.Errorf("policy rules: rule at index %d: duplicate id %q", i, r.ID)
+		}
+		seen[r.ID] = true
 		if err := checkScopeFields(i, j); err != nil {
 			return nil, err
 		}

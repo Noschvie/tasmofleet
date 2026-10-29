@@ -3,6 +3,7 @@ package sysconfig
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -198,5 +199,159 @@ func TestImportLegacyKeepsRulesThatOnlyParseRulesChecked(t *testing.T) {
 	}
 	if _, err := r.ImportLegacy(ctx, "x", []byte(`[{"command":"MqttPassword","want":"x"}]`), nil); err == nil {
 		t.Fatal("secret queries are refused as always")
+	}
+}
+
+// legacyVersion seeds a version as 0.18 stored it: no ids.
+func legacyVersion(st *memRules, rules string) {
+	st.vs = append(st.vs, store.PolicyRuleVersion{ID: int64(len(st.vs) + 1), Rules: rules, Actor: "old"})
+}
+
+const legacyTwo = `[{"name":"A","command":"SaveData","want":"0"},{"name":"B","command":"Timezone","want":"99"}]`
+
+// Why: deep links to a rule must survive the upgrade. A version stored before
+// 0.19 decodes with r1..rN, and the first save persists exactly those ids.
+func TestLegacyVersionGetsPositionIDsAndASaveKeepsThem(t *testing.T) {
+	r, st, _ := newRules("", nil)
+	ctx := context.Background()
+	legacyVersion(st, legacyTwo)
+	state, err := r.State(ctx)
+	if err != nil || state.Specs[0].ID != "r1" || state.Specs[1].ID != "r2" {
+		t.Fatalf("state %+v err %v", state.Specs, err)
+	}
+	edited := slices.Clone(state.Specs)
+	edited[1].Want = "98"
+	if _, err := r.Save(ctx, "alice", "", edited, nil); err != nil {
+		t.Fatal(err)
+	}
+	cur, _ := st.CurrentPolicyRules(ctx)
+	if !strings.Contains(cur.Rules, `"id":"r1"`) || !strings.Contains(cur.Rules, `"id":"r2"`) {
+		t.Fatalf("saved version lost the ids: %s", cur.Rules)
+	}
+	if old, _ := st.GetPolicyRuleVersion(ctx, 1); strings.Contains(old.Rules, `"id"`) {
+		t.Fatal("old version rows must never be rewritten")
+	}
+}
+
+// Why: merely opening a legacy version and pressing save must not create a
+// version; synthesised ids are not an edit (also when the form sends no ids).
+func TestSavingALegacyVersionUneditedIsNoChange(t *testing.T) {
+	r, st, _ := newRules("", nil)
+	ctx := context.Background()
+	legacyVersion(st, legacyTwo)
+	state, _ := r.State(ctx)
+	if _, err := r.Save(ctx, "a", "", state.Specs, nil); !errors.Is(err, ErrNoChange) {
+		t.Fatalf("with ids: %v", err)
+	}
+	bare := slices.Clone(state.Specs)
+	for i := range bare {
+		bare[i].ID = ""
+	}
+	if _, err := r.Save(ctx, "a", "", bare, nil); !errors.Is(err, ErrNoChange) {
+		t.Fatalf("without ids: %v", err)
+	}
+}
+
+// Why: a link follows the rule, not the slot.
+func TestReorderKeepsIDsAndDuplicateGetsAFreshOne(t *testing.T) {
+	r, _, _ := newRules("", nil)
+	ctx := context.Background()
+	v, err := r.Save(ctx, "a", "", []RuleSpec{flash, {Command: "Timezone", Want: "99"}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st0, _ := r.State(ctx)
+	idA, idB := st0.Specs[0].ID, st0.Specs[1].ID
+	if !policy.RuleIDRe.MatchString(idA) || idA == idB || isLegacyID(idA) {
+		t.Fatalf("new rules need distinct random ids, got %q %q", idA, idB)
+	}
+	v, err = r.Reorder(ctx, "a", v, []int{1, 0}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st1, _ := r.State(ctx)
+	if st1.Specs[0].ID != idB || st1.Specs[1].ID != idA {
+		t.Fatalf("reorder moved the ids away from their rules: %+v", st1.Specs)
+	}
+	if _, _, err := r.Duplicate(ctx, "a", v, 0, nil); err != nil {
+		t.Fatal(err)
+	}
+	st2, _ := r.State(ctx)
+	if st2.Specs[1].ID == st2.Specs[0].ID || st2.Specs[1].ID == "" || r.IndexOf(st2.Specs, st2.Specs[1].ID) != 1 {
+		t.Fatalf("a copy needs its own id: %+v", st2.Specs)
+	}
+	if r.IndexOf(st2.Specs, "rnone") != -1 || r.IndexOf(st2.Specs, "") != -1 {
+		t.Fatal("IndexOf must say -1 for an unknown id")
+	}
+}
+
+// Why: a half-understood policy is worse than none, so a repeated id or a
+// malformed one is refused with the rule's position.
+func TestImportRefusesDuplicateAndMalformedIDs(t *testing.T) {
+	r, _, _ := newRules("", nil)
+	for name, in := range map[string]string{
+		"duplicate": `[{"id":"rabc","command":"SaveData","want":"0"},{"id":"rabc","command":"Timezone","want":"99"}]`,
+		"no r":      `[{"id":"abc","command":"SaveData","want":"0"}]`,
+		"upper":     `[{"id":"rAbc","command":"SaveData","want":"0"}]`,
+		"too long":  `[{"id":"rabcdefghijklmnop","command":"SaveData","want":"0"}]`,
+		"bare r":    `[{"id":"r","command":"SaveData","want":"0"}]`,
+	} {
+		_, err := r.ParseImport([]byte(in))
+		var re *RuleError
+		if !errors.As(err, &re) || re.Index < 0 {
+			t.Errorf("%s: err = %v", name, err)
+		}
+	}
+	specs, err := r.ParseImport([]byte(`[{"id":"rkeep1","command":"SaveData","want":"0"},{"command":"Timezone","want":"99"}]`))
+	if err != nil || specs[0].ID != "rkeep1" || specs[1].ID != "" {
+		t.Fatalf("valid ids are kept, missing ones stay open: %+v %v", specs, err)
+	}
+}
+
+// Why: an export then import must give the same links back.
+func TestExportIncludesIDsAndRoundTripKeepsThem(t *testing.T) {
+	r, _, _ := newRules("", nil)
+	ctx := context.Background()
+	if _, err := r.Save(ctx, "a", "", []RuleSpec{flash, {Command: "Timezone", Want: "99"}}, nil); err != nil {
+		t.Fatal(err)
+	}
+	before, _ := r.State(ctx)
+	data, _ := r.Export(ctx)
+	if !strings.Contains(string(data), `"id": "`+before.Specs[0].ID+`"`) {
+		t.Fatalf("export lacks ids:\n%s", data)
+	}
+	specs, err := r.ParseImport(data)
+	if err != nil || specs[0].ID != before.Specs[0].ID || specs[1].ID != before.Specs[1].ID {
+		t.Fatalf("round trip %+v %v", specs, err)
+	}
+}
+
+// Why: a renamed rule is one change, not a removal plus an addition, when both
+// versions know the rule by a real id; position ids name slots, so those fall
+// back to matching by name.
+func TestDiffMatchesByRealIDBeforeName(t *testing.T) {
+	a := []RuleSpec{{ID: "rreal01", Name: "Old", Command: "SaveData", Want: "0"}}
+	b := []RuleSpec{{ID: "rreal01", Name: "New", Command: "SaveData", Want: "0"}}
+	d := DiffSpecs(a, b)
+	if len(d) != 1 || d[0].Kind != "changed" || !strings.Contains(d[0].Detail, `name "Old" -> "New"`) {
+		t.Fatalf("real ids: %+v", d)
+	}
+	a[0].ID, b[0].ID = "r1", "r1"
+	d = DiffSpecs(a, b)
+	if len(d) != 2 {
+		t.Fatalf("position ids must not match a renamed rule: %+v", d)
+	}
+}
+
+// Why: POLICY_RULES files get the same ids as the stored legacy versions, so a
+// link means the same rule in env mode and after the import.
+func TestImportLegacyPersistsPositionIDs(t *testing.T) {
+	r, st, _ := newRules("", nil)
+	if _, err := r.ImportLegacy(context.Background(), "env", []byte(legacyTwo), nil); err != nil {
+		t.Fatal(err)
+	}
+	cur, _ := st.CurrentPolicyRules(context.Background())
+	if !strings.Contains(cur.Rules, `"id":"r1"`) || !strings.Contains(cur.Rules, `"id":"r2"`) {
+		t.Fatalf("%s", cur.Rules)
 	}
 }
