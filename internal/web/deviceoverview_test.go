@@ -439,3 +439,83 @@ func TestIdentityShowsTheOTAURLOnlyWhenKnown(t *testing.T) {
 		t.Error("OTA URL belongs after Firmware")
 	}
 }
+
+// Why (#145, D5): a device without a relay gets a Sensors box instead of the relay box, filled from
+// MQTT telemetry only (no Status 10 polling). A device we do not hear over MQTT says so in one
+// line instead of showing an empty box that looks like a fault; one that does but has sent nothing
+// yet says that.
+func TestSensorsBoxReplacesTheRelayBox(t *testing.T) {
+	tele := health.Telemetry{Sensors: []health.SensorReading{
+		{Sensor: "BME280", Name: "Temperature", Value: 12.4, Unit: "°C"},
+		{Sensor: "BME280", Name: "Pressure", Value: 1012, Unit: "hPa"},
+		{Sensor: "BH1750", Name: "Illuminance", Value: 3400.256, Unit: "lx"},
+	}}
+	box := sensorBoxOf(overviewIn{Dev: model.Device{MQTT: model.MQTTOurs}, Health: onlineHealth(nil), Tele: tele})
+	if box == nil || len(box.Cells) != 3 || box.Right != "no relay" || box.Note != "" {
+		t.Fatalf("%+v", box)
+	}
+	want := []sensorCell{{"Temperature · BME280", "12.4 °C"}, {"Pressure · BME280", "1012 hPa"}, {"Illuminance · BH1750", "3400.26 lx"}}
+	for i, c := range want {
+		if box.Cells[i] != c {
+			t.Errorf("cell %d: %+v, want %+v", i, box.Cells[i], c)
+		}
+	}
+	httpOnly := sensorBoxOf(overviewIn{Dev: model.Device{}, Health: model.Health{State: model.HealthOnline, SeenHTTP: now0}})
+	if len(httpOnly.Cells) != 0 || !strings.Contains(httpOnly.Note, "MQTT") {
+		t.Errorf("HTTP-only device: %+v", httpOnly)
+	}
+	quiet := sensorBoxOf(overviewIn{Dev: model.Device{MQTT: model.MQTTOurs}, Health: onlineHealth(nil)})
+	if quiet.Note != "No sensor readings yet." {
+		t.Errorf("no readings yet: %q", quiet.Note)
+	}
+}
+
+// Why: the page shows a sensor box for a relay-less device and a relay box for one with relays,
+// never both; the box is dimmed with the rest of the live state when the device is offline (its
+// readings are stale).
+func TestOverviewShowsSensorsOnlyWithoutRelays(t *testing.T) {
+	var hh telemetryHealth
+	e := setupWith(t, func(d *Deps) {
+		hh = telemetryHealth{fakeHealth: d.Health.(fakeHealth), tele: map[model.DeviceID]health.Telemetry{
+			1: {Sensors: []health.SensorReading{{Sensor: "BME280", Name: "Temperature", Value: 12.4, Unit: "°C"}}},
+		}}
+		hh.fakeHealth[1] = model.Health{DeviceID: 1, State: model.HealthOnline, LastSeen: time.Now(), SeenHTTP: time.Now(), SeenMQTT: time.Now(), LWT: "Online"}
+		d.Health = hh
+	})
+	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
+	if !strings.Contains(body, `<h2 id="dc-sensors">Sensors</h2>`) || !strings.Contains(body, "Temperature · BME280") || !strings.Contains(body, "12.4 °C") || strings.Contains(body, `id="dc-relays"`) {
+		t.Errorf("sensor device:\n%s", body)
+	}
+	if strings.Contains(body, `class="devcard dev-box dev-dim is-dim"`) {
+		t.Error("an online device's sensors are not dimmed")
+	}
+	hh.fakeHealth[1] = model.Health{DeviceID: 1, State: model.HealthOffline, LastSeen: time.Now().Add(-time.Hour)}
+	_, off := e.do(t, "GET", "/devices/1", "admin", nil)
+	if !strings.Contains(off, `class="devcard dev-box dev-dim is-dim"`) || !strings.Contains(off, `aria-labelledby="dc-sensors"`) {
+		t.Errorf("offline sensors must be dimmed:\n%s", off)
+	}
+}
+
+// Why: this is the shape a real multi-channel meter reports (and the simulator, from the fleet's
+// captures): Power as an array, one value per channel, but Today, Yesterday and Total once, summed
+// over the channels. The scalar counters are not a fifth channel: counting them as one made a
+// 4-relay strip "5 meter channels" instead of "metered per channel".
+func TestMultiChannelMeterWithSummedCountersIsStillPerChannel(t *testing.T) {
+	tele := health.Telemetry{Energy: map[string]health.EnergyChannel{
+		"1": {Power: f64(42)}, "2": {Power: f64(96)}, "3": {Power: f64(20)}, "4": {Power: f64(0)},
+		"": {Today: f64(1.62), Yesterday: f64(2.04), Total: f64(412)},
+	}}
+	tl := powerTiles(tele)
+	if tl[0].Value != "158 W" || tl[0].Sub != "all channels" || tl[1].Value != "1.62 kWh" || tl[1].Sub != "Yesterday 2.04 · Total 412" {
+		t.Fatalf("tiles: %+v", tl)
+	}
+	box := relayBoxOf(model.Health{Power: map[string]string{"POWER1": "ON", "POWER2": "ON", "POWER3": "ON", "POWER4": "OFF"}}, tele, nil, true)
+	if box.Right != "3 of 4 on · metered per channel" || box.Rows[1].Line != "96 W" {
+		t.Fatalf("box: %+v", box)
+	}
+	// one relay on a single meter: the entry "" alone is one meter, not zero channels
+	one := relayBoxOf(model.Health{Power: map[string]string{"POWER1": "ON", "POWER2": "OFF"}}, health.Telemetry{Energy: map[string]health.EnergyChannel{"": meter(60, 1, 1, 1)}}, nil, true)
+	if one.Right != "1 of 2 on · one meter for all" {
+		t.Fatalf("shared meter: %+v", one)
+	}
+}

@@ -249,3 +249,14 @@ func TestSoftPartsBreakAtNaturalPoints(t *testing.T) {
 		t.Errorf("SoftJSONParts = %q", got)
 	}
 }
+
+// Why: a KV row's time is shown by time.js in the browser's zone. The default is the short date
+// and time; a row that names another format (a relative day for "Last sign-in") must get exactly
+// that format, or Today/Yesterday would again be decided by the server's zone (#137).
+func TestKVRowTimeFormatDefaultsToShortAndHonoursStamp(t *testing.T) {
+	at := time.Date(2026, 10, 29, 9, 41, 0, 0, time.UTC)
+	got := renderC(t, KV([]KVRow{{Key: "Seen", Value: "x", At: at}, {Key: "Last", Value: "y", At: at, Stamp: StampDay}}), context.Background())
+	if !strings.Contains(got, `data-ts="short"`) || !strings.Contains(got, `data-ts="day"`) {
+		t.Fatalf("formats:\n%s", got)
+	}
+}

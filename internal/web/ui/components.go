@@ -157,7 +157,8 @@ type KVRow struct {
 	Mono       bool
 	Mask       bool      // a value the pixel comparison cannot reproduce (address, MAC, readings): data-visual-mask
 	Soft       bool      // a host:port, URL or file name: break opportunities at its natural points (Soft)
-	At         time.Time // when set, Value is the fallback text of that instant (StampShort) and time.js shows it in the browser's zone
+	At         time.Time // when set, Value is the fallback text of that instant and time.js shows it in the browser's zone
+	Stamp      StampFmt  // how time.js shows At; the zero value is StampShort
 }
 
 // Tab is one tab of a tab row. Tabs are links (each tab its own route). A disabled tab says why.
@@ -395,3 +396,11 @@ func AvatarTone(username string) Tone {
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
+
+// stampOf is the format of a KVRow's time: StampShort unless the row names another.
+func (r KVRow) stampOf() StampFmt {
+	if r.Stamp.Key == "" {
+		return StampShort
+	}
+	return r.Stamp
+}

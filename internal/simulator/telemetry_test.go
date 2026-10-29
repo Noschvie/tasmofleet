@@ -79,3 +79,24 @@ func TestSimulatorPublishesSensorTelemetry(t *testing.T) {
 		t.Error("a device without Energy or Sensors must not publish tele/SENSOR")
 	}
 }
+
+// Why: the Sensors box exists for devices without a relay; a simulator whose every device reports
+// POWER could not exercise it end to end. NoRelay removes the key from the STATE the broker sees
+// and the JSON stays valid.
+func TestNoRelayDeviceReportsNoPowerKey(t *testing.T) {
+	_, c, f := newBrokerFleet(t, Extra{})
+	add(t, f, DeviceSpec{Name: "climate", Profile: ProfileESP8266_1M, NoRelay: true, Sensors: map[string]map[string]float64{"BME280": {"Temperature": 21.5}}})
+	prefix := "tele/climate/STATE="
+	c.waitFor(t, prefix)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, m := range c.msgs {
+		if body, ok := strings.CutPrefix(m, prefix); ok {
+			if strings.Contains(body, "POWER") || !json.Valid([]byte(body)) {
+				t.Fatalf("STATE of a relay-less device: %s", body)
+			}
+			return
+		}
+	}
+	t.Fatal("no STATE seen")
+}

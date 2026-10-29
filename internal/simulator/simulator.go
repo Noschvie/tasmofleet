@@ -66,6 +66,9 @@ type DeviceSpec struct {
 	// Relays is the number of relays (POWER1..n); 0 or 1 is a single relay
 	// reported as POWER. Relay 1 starts as captured, the others OFF.
 	Relays int
+	// NoRelay makes a sensor-only device: no POWER key in Status, STATE or RESULT. Relays
+	// and Power are ignored.
+	NoRelay bool
 	// Light marks a PWM light (MagicHome and the like): after a reboot it
 	// reports its old state for about 3 s and then switches itself OFF (unless
 	// SetOption0 1), which is what the fleet's lights do after an update.

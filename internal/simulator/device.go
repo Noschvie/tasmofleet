@@ -245,7 +245,7 @@ func (d *simDevice) viewLocked() view {
 	return view{
 		now: time.Now(), startup: d.bootAt.Add(-time.Duration(d.uptimeBase) * time.Second),
 		uptimeSec: d.uptimeBase + int(time.Since(d.bootAt).Seconds()),
-		relays:    slices.Clone(d.relays), light: d.spec.Light, otaURL: d.runtime.otaURL, bootCount: d.runtime.bootCount,
+		relays:    slices.Clone(d.relays), light: d.spec.Light, noRelay: d.spec.NoRelay, otaURL: d.runtime.otaURL, bootCount: d.runtime.bootCount,
 		mqttCount: d.mqttCount, reason: d.reason, image: d.image, version: d.version, kv: cloneKV(d.runtime.kv),
 	}
 }

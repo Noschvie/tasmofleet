@@ -16,6 +16,7 @@ type view struct {
 	uptimeSec int
 	relays    []bool
 	light     bool // PWM light: Status 11 carries Dimmer and CT
+	noRelay   bool // a sensor-only device: no POWER key anywhere
 	otaURL    string
 	bootCount int
 	mqttCount int
@@ -104,6 +105,10 @@ func (d *simDevice) render(file string, v view) []byte {
 		s = reLightKeys.ReplaceAllString(s, "")
 	}
 	rep(rePowerName, powerFields(v.relays, v.light && !strings.Contains(s, `"Dimmer"`)))
+	if v.noRelay {
+		// the capture's POWER key goes, and with it the comma that held it in place
+		s = strings.NewReplacer(`"POWER":"ON",`, "", `"POWER":"OFF",`, "", `,"POWER":"ON"`, "", `,"POWER":"OFF"`, "", `"POWER":"ON"`, "", `"POWER":"OFF"`, "").Replace(s)
+	}
 	rep(rePowerMask, `"Power":"`+strconv.FormatUint(powerMask(v.relays), 16)+`"`)
 	rep(reOtaURL, `"OtaUrl":`+jsonString(v.otaURL))
 	return []byte(s)

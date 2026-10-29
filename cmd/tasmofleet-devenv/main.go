@@ -77,6 +77,25 @@ func fleetDevices() []simulator.DeviceSpec {
 	}
 }
 
+// overviewDevices are the shapes of the Overview mockups, one device each (docs/design/device-overview):
+// a metered plug, a plug without a meter, two relays on one meter, four relays metered per channel with
+// names, four relays over Ethernet, a sensor-only device, an HTTP-only plug and a device the e2e tests
+// take offline.
+func overviewDevices() []simulator.DeviceSpec {
+	return []simulator.DeviceSpec{
+		{Name: "ov-metered-plug", Profile: simulator.ProfileESP8266_4M, Energy: 1},
+		{Name: "ov-plain-plug", Profile: simulator.ProfileESP8266_4M},
+		{Name: "ov-double-switch", Profile: simulator.ProfileESP8266_4M, Relays: 2, Energy: 1},
+		{Name: "ov-power-strip", Profile: simulator.ProfileESP32C3, Relays: 4, Energy: 4, Power: []bool{true, true, true, false},
+			FriendlyNames: []string{"Monitor", "PC", "Lamp", "Charger"}},
+		{Name: "ov-ethernet-rack", Profile: simulator.ProfileESP8266_4M, Relays: 4, Wired: true},
+		{Name: "ov-climate", Profile: simulator.ProfileESP32C3, NoRelay: true, Sensors: map[string]map[string]float64{
+			"BME280": {"Temperature": 12.4, "Humidity": 71, "Pressure": 1012}, "BH1750": {"Illuminance": 3400}}},
+		{Name: "ov-http-only", Profile: simulator.ProfileESP8266_4M, Faults: []simulator.Fault{{Kind: simulator.FaultHTTPOnly}}},
+		{Name: "ov-offline", Profile: simulator.ProfileESP8266_1M},
+	}
+}
+
 // extraProfiles are cycled through by the additional devices of -fleet-size, so
 // a large fleet still mixes ESP8266 and ESP32 variants.
 var extraProfiles = []simulator.Profile{
@@ -111,6 +130,7 @@ func run(ctx context.Context, args []string, out, errOut io.Writer) error {
 	bind := fs.String("bind", "127.0.0.1", "address all listeners bind to; anything else exposes the OTA download gadget (opt-in)")
 	fleetSize := fs.Int("fleet-size", 0, "total number of simulated devices; 0 or less than the base fleet keeps the base fleet")
 	releases := fs.Int("releases", 1, "number of releases the fake GitHub releases feed (<upstream>/github) offers")
+	overview := fs.Bool("overview-shapes", false, "add the device shapes of the Overview mockups (docs/design/device-overview): meters, several relays, Ethernet, sensors only, HTTP only")
 	designFile := fs.String("design-fixture", "", "JSON file (testdata/design/v2-fixture.json) with the prototype's 60 devices and releases; replaces the mixed fleet, -fleet-size and the release list, and enables POST /fixture/offline and /fixture/feed/{down,dl-down,slow,up} on the control server")
 	var redirects multiFlag
 	fs.Var(&redirects, "oidc-redirect", "redirect URI registered at the mock IdP (repeatable); enables the mock IdP")
@@ -204,6 +224,9 @@ func run(ctx context.Context, args []string, out, errOut io.Writer) error {
 		_, _ = fmt.Fprintf(out, "DEVENV_CONTROL_URL=http://%s\n", ctl.Addr)
 	}
 	specs := fleetOfSize(*fleetSize)
+	if *overview {
+		specs = append(specs, overviewDevices()...)
+	}
 	if design != nil {
 		specs = nil // the design fixture above is the whole fleet
 	}

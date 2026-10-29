@@ -2,6 +2,7 @@ package web
 
 import (
 	"fmt"
+	"math"
 	"net"
 	"net/http"
 	"net/url"
@@ -44,23 +45,31 @@ func signalBar(dbm int) (pct int, tone ui.Tone) {
 	return pct, tone
 }
 
-// meterChannels are the energy channels of the meter in channel order: "" (a single meter) or
-// "1", "2", ...
-func meterChannels(t health.Telemetry) []health.EnergyChannel {
+// meterChannels splits the telemetry of the meter the way Tasmota sends it: the keyed entries
+// "1", "2", ... are the channels of an array (in channel order), and the entry "" holds what the
+// device reports once for all channels, for example the summed counters of a multi-channel meter
+// or everything of a single meter. A counter is either in the channels or in "", never both, so
+// sums run over all of them.
+func meterChannels(t health.Telemetry) (channels, all []health.EnergyChannel) {
 	keys := make([]string, 0, len(t.Energy))
 	for k := range t.Energy {
-		keys = append(keys, k)
+		if k != "" {
+			keys = append(keys, k)
+		}
 	}
 	sort.Slice(keys, func(i, j int) bool {
 		a, _ := strconv.Atoi(keys[i])
 		b, _ := strconv.Atoi(keys[j])
 		return a < b
 	})
-	out := make([]health.EnergyChannel, 0, len(keys))
 	for _, k := range keys {
-		out = append(out, t.Energy[k])
+		channels = append(channels, t.Energy[k])
 	}
-	return out
+	all = channels
+	if c, ok := t.Energy[""]; ok {
+		all = append(append([]health.EnergyChannel(nil), channels...), c)
+	}
+	return channels, all
 }
 
 // sumOf adds the readings of a channel field; ok is false when no channel reported it.
@@ -92,7 +101,7 @@ func totalText(v float64, ok bool) string {
 // powerTiles are the Power and Energy today tiles: only for a device with an energy meter. With
 // several channels the power is their sum and the tile says so.
 func powerTiles(t health.Telemetry) []tile {
-	ch := meterChannels(t)
+	channels, ch := meterChannels(t)
 	if len(ch) == 0 {
 		return nil
 	}
@@ -104,7 +113,7 @@ func powerTiles(t health.Telemetry) []tile {
 	if wok {
 		power.Value = fmtNum(w, true, 0) + " W"
 	}
-	if len(ch) > 1 {
+	if len(channels) > 1 {
 		power.Sub = "all channels"
 	}
 	energy := tile{Key: "energy", Label: "Energy today", Value: "—", Mask: true,
@@ -146,13 +155,13 @@ func linkTile(in overviewIn) tile {
 
 // uptimeTile is the uptime with the last restart as its sub line. An offline device has no
 // uptime, only the restart it last reported.
-func uptimeTile(hl model.Health) tile {
+func uptimeTile(hl model.Health, now time.Time) tile {
 	tl := tile{Key: "uptime", Label: "Uptime", Value: "—", Mask: true}
 	if hl.State != model.HealthOffline && hl.UptimeSec > 0 {
 		tl.Value = humanDuration(time.Duration(hl.UptimeSec) * time.Second)
 	}
 	if at := restartAt(hl); !at.IsZero() {
-		tl.SubPrefix, tl.At = "Last restart ", at
+		tl.SubPrefix, tl.At, tl.AtText = "Last restart ", at, ui.StampDayText(now, at)
 	}
 	return tl
 }
@@ -245,7 +254,7 @@ func policyTile(c *policyCard, off bool) *tile {
 // tilesOf is the tile row in its fixed order; tiles that do not apply are left out.
 func tilesOf(in overviewIn) []tile {
 	tiles := powerTiles(in.Tele)
-	tiles = append(tiles, linkTile(in), uptimeTile(in.Health), reachTile(in.Dev, in.Health))
+	tiles = append(tiles, linkTile(in), uptimeTile(in.Health, in.Now), reachTile(in.Dev, in.Health))
 	if p := policyTile(in.Policy, in.Health.State == model.HealthOffline); p != nil {
 		tiles = append(tiles, *p)
 	}
@@ -272,7 +281,7 @@ func relayBoxOf(hl model.Health, t health.Telemetry, names []string, enabled boo
 	if len(rs) == 0 {
 		return nil
 	}
-	ch := meterChannels(t)
+	ch, all := meterChannels(t)
 	perChannel := len(rs) > 1 && len(ch) == len(rs)
 	box := &relayBox{Enabled: enabled}
 	on := 0
@@ -300,13 +309,13 @@ func relayBoxOf(hl model.Health, t health.Telemetry, names []string, enabled boo
 	}
 	var meter string
 	switch {
-	case len(ch) == 0:
+	case len(all) == 0:
 		meter = "no energy meter"
 	case len(rs) == 1:
 		meter = "metered"
 	case perChannel:
 		meter = "metered per channel"
-	case len(ch) == 1:
+	case len(ch) <= 1:
 		meter = "one meter for all"
 	default:
 		meter = plural(len(ch), "meter channel")
@@ -315,6 +324,27 @@ func relayBoxOf(hl model.Health, t health.Telemetry, names []string, enabled boo
 		box.Right = fmt.Sprintf("%d of %d on · %s", on, len(rs), meter)
 	} else {
 		box.Right = meter
+	}
+	return box
+}
+
+// sensorBoxOf is the Sensors box of a device without relays: the numeric readings of its MQTT
+// telemetry (D5: nothing is polled for them). Without readings it says why in one line.
+func sensorBoxOf(in overviewIn) *sensorBox {
+	box := &sensorBox{Right: "no relay"}
+	for _, r := range in.Tele.Sensors {
+		v := strconv.FormatFloat(math.Round(r.Value*100)/100, 'f', -1, 64)
+		if r.Unit != "" {
+			v += " " + r.Unit
+		}
+		box.Cells = append(box.Cells, sensorCell{Label: r.Name + " · " + r.Sensor, Value: v})
+	}
+	switch {
+	case len(box.Cells) > 0:
+	case !reachOf(in.Dev, in.Health).MQTTOn:
+		box.Note = "Sensor readings come from MQTT telemetry. This device does not report to TasmoFleet's MQTT broker."
+	default:
+		box.Note = "No sensor readings yet."
 	}
 	return box
 }
@@ -470,6 +500,9 @@ func (h *handler) overviewOf(r *http.Request, v view, d model.Device, just *rela
 	off := p.Tabs.offline() // an update silences the device on purpose: that is not "offline"
 	p.Live = liveView{ID: d.ID, Base: v.Base, CSRF: v.CSRF, Off: off, Tiles: tilesOf(in),
 		Box: relayBoxOf(hl, tele, d.RelayNames, h.d.DeviceCmd != nil && !off && p.Updating == nil)}
+	if p.Live.Box == nil {
+		p.Live.Sensors = sensorBoxOf(in)
+	}
 	p.Ident = h.identity(v, d, p.Updating != nil, off, facts)
 	p.Conn = connOf(in)
 	return p, nil

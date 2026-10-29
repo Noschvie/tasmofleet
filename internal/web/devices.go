@@ -310,6 +310,8 @@ type deviceTabs struct {
 	UpdateTo     string    // a newer stable release from the cached feed; "" when current or unknown
 	CanRestart   bool      // admin and the command service
 	OfflineSince time.Time // the offline banner: when the device went offline; zero when unknown
+	// OfflineSinceText is its fallback text (StampDay) for a page without JavaScript
+	OfflineSinceText string
 }
 
 // tabsFor builds the device tabs for the viewer. Settings and Console are

@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bufio"
+	"context"
 	"github.com/nofuturekid/tasmofleet/internal/simulator"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -20,6 +24,33 @@ func TestDeviceControlRefusesWhatItDoesNotKnow(t *testing.T) {
 		mux.ServeHTTP(rec, httptest.NewRequest("POST", path, nil))
 		if rec.Code != http.StatusNotFound {
 			t.Errorf("%s: %d, want 404", path, rec.Code)
+		}
+	}
+}
+
+// Why: the Overview e2e tests need one device per mockup shape, but the base fleet is counted by
+// other tests; the shapes are opt-in and must all start.
+func TestOverviewShapesAreOptInAndAllStart(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	pr, pw := io.Pipe()
+	go func() {
+		_ = run(ctx, []string{"-fixtures", "../../testdata/fixtures", "-time-scale", "0.02", "-overview-shapes"}, pw, io.Discard)
+		_ = pw.Close()
+	}()
+	var lines []string
+	sc := bufio.NewScanner(pr)
+	for sc.Scan() {
+		lines = append(lines, sc.Text())
+		if sc.Text() == "DEVENV_READY=1" {
+			break
+		}
+	}
+	go io.Copy(io.Discard, pr) //nolint:errcheck // drain
+	text := strings.Join(lines, "\n")
+	for _, s := range overviewDevices() {
+		if !strings.Contains(text, "name="+s.Name+" ") {
+			t.Errorf("shape %s did not start", s.Name)
 		}
 	}
 }

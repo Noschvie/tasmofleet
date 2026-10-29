@@ -8600,6 +8600,10 @@ body:has(.dv-list .bulkbar:not([hidden])) {
   .dev-tiles {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  /* "MQTT · HTTP" stays on one line in a half-width tile */
+  .dev-tile-v {
+    font-size: 21px;
+  }
 }
 .dev-tile {
   display: flex;
@@ -8695,6 +8699,25 @@ body:has(.dv-list .bulkbar:not([hidden])) {
 .dev-relay-s {
   font-size: 12px;
   color: var(--color-text-2);
+}
+.dev-sensor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-width: 0;
+  padding: var(--sp-8) var(--sp-10);
+  border: var(--hair-w) solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface-2);
+}
+.dev-sensor-l {
+  font-size: 12px;
+  color: var(--color-text-2);
+}
+.dev-sensor-v {
+  font: 600 18px var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 .dev-box .error {
   margin: var(--sp-8) 0 0;

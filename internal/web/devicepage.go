@@ -44,6 +44,8 @@ type liveView struct {
 	Off   bool
 	Tiles []tile
 	Box   *relayBox // nil: the device has no relays
+	// Sensors replaces the relay box on a device without relays
+	Sensors *sensorBox
 }
 
 // tile is one stat tile of the top row. A tile that does not apply is not built at all, so the
@@ -55,6 +57,7 @@ type tile struct {
 	BarTone                ui.Tone
 	SubPrefix              string    // "Last restart ": the sub line is this text and the time At
 	At                     time.Time // zero: the sub line is just Sub
+	AtText                 string    // the fallback text of At (StampDay), for a page without JavaScript
 	Fix                    bool      // "Make compliant…" for this device
 	Mask                   bool      // a reading the pixel comparison cannot reproduce
 }
@@ -66,6 +69,16 @@ type relayBox struct {
 	Enabled bool   // the switches can be used now
 	Err     string // why the last switch failed (htmx switches show it in place)
 }
+
+// sensorBox is the Sensors box of a device without relays.
+type sensorBox struct {
+	Right string
+	Cells []sensorCell
+	Note  string // why there are no cells
+}
+
+// sensorCell is one reading: "Temperature · BME280" and "12.4 °C".
+type sensorCell struct{ Label, Value string }
 
 // relayRow is one relay switch. Line is what shows under the name: the channel's watts when the
 // device meters each channel, else On/Off.

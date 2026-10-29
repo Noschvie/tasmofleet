@@ -54,7 +54,10 @@ func (h *handler) headOf(v view, d model.Device, hl model.Health, running *model
 			t.UpdateTo = latest
 		}
 	}
-	t.OfflineSince = offlineSince(d, hl)
+	if t.offline() {
+		t.OfflineSince = offlineSince(d, hl)
+		t.OfflineSinceText = ui.StampDayText(h.d.Clock.Now(), t.OfflineSince)
+	}
 	return t
 }
 

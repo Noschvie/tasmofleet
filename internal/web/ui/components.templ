@@ -112,7 +112,7 @@ templ KV(rows []KVRow) {
 				<dt>{ r.Key }</dt>
 				<dd class={ templ.KV("mono", r.Mono) } data-visual-mask?={ r.Mask }>
 					if !r.At.IsZero() {
-						<time { StampAttrs(r.At, StampShort)... }>{ r.Value }</time>
+						<time { StampAttrs(r.At, r.stampOf())... }>{ r.Value }</time>
 					} else if r.Soft {
 						@Soft(r.Value)
 					} else {

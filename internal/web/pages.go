@@ -512,11 +512,12 @@ func userDetailViewOf(d auth.UserDetailData, now time.Time, nameOf func(subject 
 	if !d.CreatedAt.IsZero() {
 		v.Facts = append(v.Facts, ui.KVRow{Key: "Created", Value: d.CreatedAt.In(now.Location()).Format("2 Jan 2006") + createdBy(d.CreatedBy, nameOf), Mask: true})
 	}
-	last := "Never"
+	last := ui.KVRow{Key: "Last sign-in", Value: "Never"}
 	if !u.LastLogin.IsZero() {
-		last = dayDate(now, u.LastLogin)
+		// Today/Yesterday are decided in the browser's zone, like every other relative day
+		last = ui.KVRow{Key: "Last sign-in", Value: ui.StampDayText(now, u.LastLogin), Mask: true, At: u.LastLogin, Stamp: ui.StampDay}
 	}
-	v.Facts = append(v.Facts, ui.KVRow{Key: "Last sign-in", Value: last, Mask: !u.LastLogin.IsZero()})
+	v.Facts = append(v.Facts, last)
 	if !d.OTPExpiresAt.IsZero() {
 		otp := "Valid until " + ui.StampDayText(now, d.OTPExpiresAt)
 		if d.OTPExpired {
@@ -594,19 +595,6 @@ func createdBy(by string, nameOf func(string) string) string {
 		return " by " + n
 	}
 	return " by " + nameOf(by)
-}
-
-// dayDate is a day as the prototype's details write it: "Today, 07:58", "Yesterday, 22:04", else
-// "28 Sep 2026".
-func dayDate(now, t time.Time) string {
-	s := ui.StampDayText(now, t)
-	if rest, ok := strings.CutPrefix(s, "Today "); ok {
-		return "Today, " + rest
-	}
-	if rest, ok := strings.CutPrefix(s, "Yesterday "); ok {
-		return "Yesterday, " + rest
-	}
-	return t.In(now.Location()).Format("2 Jan 2006")
 }
 
 // otpView is the one-time password page.

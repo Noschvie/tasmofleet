@@ -128,7 +128,7 @@ templ deviceOffBanner(t deviceTabs) {
 		<span class="devhd-offdot" aria-hidden="true"></span>
 		<div>
 			if !t.OfflineSince.IsZero() {
-				<b>Offline since <time data-visual-mask { ui.StampAttrs(t.OfflineSince, ui.StampDateTime)... }>{ ui.StampText(t.OfflineSince, ui.StampDateTime) }</time>.</b>
+				<b>Offline since <time data-visual-mask { ui.StampAttrs(t.OfflineSince, ui.StampDay)... }>{ t.OfflineSinceText }</time>.</b>
 			} else {
 				<b>Offline.</b> The device has not answered since TasmoFleet started.
 			}
@@ -192,6 +192,8 @@ templ liveRegion(l liveView) {
 		</div>
 		if l.Box != nil {
 			@relayBoxView(l)
+		} else if l.Sensors != nil {
+			@sensorBoxView(l)
 		}
 	</div>
 }
@@ -222,7 +224,7 @@ templ liveTile(t tile, l liveView) {
 		}
 		<div class="dev-tile-s">
 			if !t.At.IsZero() {
-				{ t.SubPrefix }<time data-visual-mask { ui.StampAttrs(t.At, ui.StampDateTime)... }>{ ui.StampText(t.At, ui.StampDateTime) }</time>
+				{ t.SubPrefix }<time data-visual-mask { ui.StampAttrs(t.At, ui.StampDay)... }>{ t.AtText }</time>
 			} else {
 				{ t.Sub }
 			}
@@ -269,6 +271,29 @@ templ relayBoxView(l liveView) {
 		</div>
 		if l.Box.Err != "" {
 			<p class="error" role="alert">{ l.Box.Err }</p>
+		}
+	</section>
+}
+
+// sensorBoxView is the Sensors box that takes the place of the relay box on a device without
+// relays. Its readings are the last ones received: dimmed with the rest while the device is offline.
+templ sensorBoxView(l liveView) {
+	<section class={ "devcard", "dev-box", dimClass(l.Off) } data-dim aria-disabled={ ariaBool(l.Off) } aria-labelledby="dc-sensors">
+		<div class="devcard-head">
+			<h2 id="dc-sensors">Sensors</h2>
+			<span class="dev-box-meta">{ l.Sensors.Right }</span>
+		</div>
+		if len(l.Sensors.Cells) > 0 {
+			<div class="dev-relays">
+				for _, c := range l.Sensors.Cells {
+					<div class="dev-sensor">
+						<span class="dev-sensor-l">{ c.Label }</span>
+						<span class="dev-sensor-v" data-visual-mask>{ c.Value }</span>
+					</div>
+				}
+			</div>
+		} else {
+			<p class="devcard-note">{ l.Sensors.Note }</p>
 		}
 	</section>
 }

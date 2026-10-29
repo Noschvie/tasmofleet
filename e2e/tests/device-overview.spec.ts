@@ -14,7 +14,7 @@ let env: Devenv;
 
 test.beforeAll(async () => {
   test.setTimeout(120_000);
-  env = await startDevenv();
+  env = await startDevenv(["-overview-shapes"]);
   const fwPort = await freePort();
   app = await startApp({
     env: {
@@ -46,15 +46,20 @@ async function shot(page: Page, name: string) {
   await page.screenshot({ path: `${shots}/${name}.png`, fullPage: true });
 }
 
+// A probe renames an entry that still carries its imported name to the device's own DeviceName (#125),
+// so a device is looked up by name once per worker and by address afterwards.
+const hrefs = new Map<string, string>();
+
 /** open the overview of a device once it has reported its relay state */
 async function openDevice(page: Page, name: string, width = 1280) {
   await page.setExtraHTTPHeaders(adam);
   await page.setViewportSize({ width, height: 900 });
   await page.goto(app.url + "/devices");
   await page.locator("table[data-table=devices] .pwr:not([disabled])").first().waitFor({ state: "attached", timeout: 30_000 });
-  const href = (await page.getByRole("link", { name, exact: true }).first().getAttribute("href"))!;
+  const href = hrefs.get(name) ?? (await page.getByRole("link", { name, exact: true }).first().getAttribute("href"))!;
+  hrefs.set(name, href);
   await page.goto(app.url + href);
-  await expect(page.locator("#devlive .dev-relay").first()).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator("#devlive .dev-relay, #devlive .dev-sensor").first()).toBeVisible({ timeout: 30_000 });
   return href;
 }
 
@@ -125,4 +130,111 @@ test("no credentials in the overview", async ({ page }) => {
   expect(html).not.toContain("devenv-fake-password");
   expect(await page.locator("#identity").innerText()).not.toMatch(/password/i);
   expect(href).toBeTruthy();
+});
+
+// One device per mockup shape (devenv -overview-shapes). Each renders what its shape promises, and
+// is looked at in 375/1280, light and dark (UX_SHOTS).
+const shapes: { device: string; check: (page: Page) => Promise<void> }[] = [
+  {
+    device: "ov-metered-plug", // mockup 1
+    check: async (page) => {
+      await expect(page.locator("[data-tile=power]")).toContainText(/\d+ W/, { timeout: 30_000 });
+      await expect(page.locator("[data-tile=energy]")).toContainText("kWh");
+      await expect(page.locator("#devlive .dev-box-meta")).toHaveText("metered");
+    },
+  },
+  {
+    device: "ov-plain-plug", // mockup 2
+    check: async (page) => {
+      await expect(page.locator("[data-tile=power]")).toHaveCount(0);
+      await expect(page.locator("[data-tile=energy]")).toHaveCount(0);
+      await expect(page.locator("#devlive .dev-box-meta")).toHaveText("no energy meter");
+    },
+  },
+  {
+    device: "ov-double-switch", // mockup 3
+    check: async (page) => {
+      await expect(page.locator("#devlive .dev-relay")).toHaveCount(2);
+      await expect(page.locator("#devlive .dev-box-meta")).toContainText("one meter for all", { timeout: 30_000 });
+      await expect(page.locator("#devlive .dev-relay-s").first()).toHaveText(/^(On|Off)$/);
+    },
+  },
+  {
+    device: "ov-power-strip", // mockup 4
+    check: async (page) => {
+      await expect(page.locator("#devlive .dev-relay")).toHaveCount(4);
+      await expect(page.locator("#devlive .dev-box-meta")).toContainText("of 4 on · metered per channel", { timeout: 30_000 });
+      await expect(page.locator("#devlive .dev-relay-n").first()).toContainText("Monitor");
+      await expect(page.locator("#devlive .dev-relay-s").first()).toHaveText(/\d+ W/);
+      await expect(page.locator("[data-tile=power]")).toContainText("all channels");
+    },
+  },
+  {
+    device: "ov-ethernet-rack", // mockup 5
+    check: async (page) => {
+      // Ethernet is a fact the probe reads; a device that was only imported does not know it yet
+      await page.getByRole("button", { name: "Refresh identity" }).click();
+      await expect(page.getByText("Identity refreshed.")).toBeVisible();
+      await page.reload();
+      await expect(page.locator("[data-tile=link]")).toContainText("Ethernet");
+      await expect(page.locator("[data-tile=wifi]")).toHaveCount(0);
+      await expect(page.getByRole("heading", { name: "Connection · Ethernet" })).toBeVisible();
+      await expect(page.locator("#devconn")).toContainText("Ethernet MAC");
+    },
+  },
+  {
+    device: "ov-climate", // mockup 6
+    check: async (page) => {
+      await expect(page.getByRole("heading", { name: "Sensors" })).toBeVisible();
+      await expect(page.locator("#devlive .dev-sensor", { hasText: "Temperature · BME280" })).toContainText("12.4 °C", { timeout: 30_000 });
+      await expect(page.locator("#devlive .dev-relay")).toHaveCount(0);
+    },
+  },
+  {
+    device: "ov-http-only", // mockup 7
+    check: async (page) => {
+      await expect(page.locator("[data-tile=reach]")).toContainText("MQTT not configured");
+    },
+  },
+];
+
+for (const shape of shapes) {
+  for (const width of [375, 1280]) {
+    for (const scheme of ["light", "dark"] as const) {
+      test(`shape ${shape.device} at ${width}px ${scheme}`, async ({ page }) => {
+        await page.emulateMedia({ colorScheme: scheme });
+        await openDevice(page, shape.device, width);
+        await shape.check(page);
+        await expectNoOverflow(page, shape.device);
+        await shot(page, `shape-${shape.device}-${width}-${scheme}`);
+      });
+    }
+  }
+}
+
+// Ethernet facts come from a probe: Refresh identity reads subnet mask and DNS (WP0) and the card shows them.
+test("an Ethernet device shows subnet mask and DNS after Refresh identity", async ({ page }) => {
+  await openDevice(page, "ov-ethernet-rack");
+  await page.getByRole("button", { name: "Refresh identity" }).click();
+  await expect(page.getByText("Identity refreshed.")).toBeVisible();
+  await page.reload();
+  const conn = page.locator("#devconn");
+  await expect(conn.locator("dt", { hasText: "Subnet mask" }).locator("xpath=following-sibling::dd")).not.toHaveText("Unknown");
+  await expect(conn.locator("dt", { hasText: "DNS" }).locator("xpath=following-sibling::dd")).not.toHaveText("Unknown");
+});
+
+// Mockup 8 in both schemes and sizes: an offline device with relays dimmed. One test, because the plug
+// can only be pulled once.
+test("an offline device with relays at 375/1280, light and dark", async ({ page }) => {
+  await openDevice(page, "ov-offline");
+  await control("/device/ov-offline/off");
+  await expect(page.locator("#devhd-off")).toContainText("Offline since", { timeout: 60_000 });
+  for (const width of [375, 1280]) {
+    for (const scheme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await expectNoOverflow(page, `offline ${width} ${scheme}`);
+      await shot(page, `shape-ov-offline-${width}-${scheme}`);
+    }
+  }
 });

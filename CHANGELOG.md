@@ -41,6 +41,10 @@ always upgrade automatically.
   thanks @Noschvie); the relay box uses the names the device gives its relays (Tasmota's default names stay
   "Relay N"); the Connection card of an Ethernet device shows subnet mask and DNS.
 
+- Device page: a device without a relay gets a Sensors box with the readings of its MQTT telemetry
+  (dimmed while the device is offline), "Last restart" and "Offline since" follow the browser's time
+  zone (Today/Yesterday), and the users page's "Last sign-in" does too (#145, #137).
+
 ### Fixed
 
 - Resizing a column no longer snaps back for a moment when two list updates overlap: an older answer that
