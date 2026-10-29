@@ -32,7 +32,8 @@ const (
 	ProfileESP8266_1M  Profile = "esp8266-1m" // ESP8285N08, needs staged update
 	ProfileESP8266_4M  Profile = "esp8266-4m" // ESP8266EX, direct
 	ProfileESP8266Min  Profile = "esp8266-minimal"
-	ProfileESP32       Profile = "esp32" // ESP32-D0WD-V3, tasmota32
+	ProfileESP32       Profile = "esp32"      // ESP32-D0WD-V3, tasmota32
+	ProfileESP32Dual   Profile = "esp32-dual" // two app partitions: the push upload goes straight to the running firmware (#30)
 	ProfileESP32C3     Profile = "esp32c3"
 	ProfileESP32S2     Profile = "esp32s2" // two upstream builds (s2, s2cdc) behind one image tag (#88)
 	ProfileESP32S3     Profile = "esp32s3"
@@ -108,6 +109,10 @@ type DeviceSpec struct {
 	// FriendlyNames are the device's FriendlyName1..n (one per relay), as plain Status and
 	// Status 0 report them. Nil keeps the capture's single name.
 	FriendlyNames []string
+	// FreeKB overrides the "Free" flash space Status 4 reports (0 = as captured). A running
+	// partition with almost no free space is what an ESP32 with the safeboot layout looks like to
+	// an image upload (#30).
+	FreeKB int
 	// Energy makes the device publish an ENERGY block in tele/SENSOR, shaped like the
 	// fleet's energy-status.json captures: 0 = no meter, 1 = one meter (a number per
 	// field), n >= 2 = n channels the way Tasmota sends them: Power, ApparentPower,

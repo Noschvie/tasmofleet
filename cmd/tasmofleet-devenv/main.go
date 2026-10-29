@@ -73,6 +73,8 @@ func fleetDevices() []simulator.DeviceSpec {
 		{Name: "esp32c3-sensor", Profile: simulator.ProfileESP32C3},
 		{Name: "esp32s3-http", Profile: simulator.ProfileESP32S3, Faults: httpOnly},
 		{Name: "esp32s2-board", Profile: simulator.ProfileESP32S2},
+		// An ESP32 with the safeboot layout: its running partition has no room for a full image (#30).
+		{Name: "esp32-safeboot-layout", Profile: simulator.ProfileESP32, FreeKB: 1},
 		{Name: "mystery-chip", Profile: simulator.ProfileUnknownChip},
 		{Name: "locked-plug", Profile: simulator.ProfileESP8266_4M, User: "admin", Password: "devenv-fake-password"},
 	}

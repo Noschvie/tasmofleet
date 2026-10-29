@@ -36,10 +36,28 @@ func uploadSim(t *testing.T, spec simulator.DeviceSpec) (simulator.Controller, T
 	if err != nil {
 		t.Fatal(err)
 	}
+	c, _ := simulator.Control(d)
+	tg := simTarget(t, d)
+	tg.user, tg.pass = spec.User, spec.Password
+	return c, tg
+}
+
+// uploadSimIn adds one device of the profile to an existing fleet.
+func uploadSimIn(t *testing.T, f simulator.Fleet, name string, profile simulator.Profile) (simulator.Controller, Target) {
+	t.Helper()
+	d, err := f.Add(context.Background(), simulator.DeviceSpec{Name: name, Profile: profile, Version: "16.0.0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, _ := simulator.Control(d)
+	return c, simTarget(t, d)
+}
+
+func simTarget(t *testing.T, d simulator.Device) Target {
+	t.Helper()
 	host, ps, _ := net.SplitHostPort(d.Addr())
 	port, _ := strconv.Atoi(ps)
-	c, _ := simulator.Control(d)
-	return c, TargetFor(model.Device{ID: 7, Address: host, Port: port, HTTPUser: spec.User, HTTPPassword: spec.Password})
+	return TargetFor(model.Device{ID: 7, Address: host, Port: port})
 }
 
 func simImage(t *testing.T, name, version string) []byte {

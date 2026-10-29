@@ -28,6 +28,7 @@ func testCfg() Config {
 		RebootWindow:       8 * time.Minute,
 		ProbeInterval:      5 * time.Second,
 		MaxAttempts:        2,
+		SafebootWindow:     2 * time.Minute,
 		RestoreOtaURL:      true,
 		PowerRestoreMaxAge: 20 * time.Minute,
 	}

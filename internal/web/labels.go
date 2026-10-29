@@ -20,7 +20,7 @@ var labels = map[string]string{
 	"ON": "On", "OFF": "Off",
 	// OTA job states
 	"queued": "Queued", "preflight": "Checking", "backup": "Backing up",
-	"set_ota_url": "Preparing", "upgrade_issued": "Flashing", "await_reboot": "Rebooting",
+	"set_ota_url": "Preparing", "upgrade_issued": "Flashing", "await_reboot": "Rebooting", "safeboot_switch": "Restarting into safeboot", "safeboot_recover": "Switching back",
 	"applying": "Applying", "apply": "Sending the commands", "done": "Done", "verify": "Verifying", "restore_ota_url": "Cleaning up", "restore_power": "Restoring power",
 	"succeeded": "Succeeded", "failed": "Failed", "cancelled": "Cancelled",
 	// OTA stages
@@ -63,7 +63,7 @@ var tones = map[string]string{
 	"created": "ok", "updated": "warn", "skipped": "neutral", // import result lines (the plan says create, merge, skip)
 	"queued": "neutral", "cancelled": "neutral", "unknown": "neutral",
 	"done": "ok", "sending": "info", "waiting": "info", "verifying": "info",
-	"applying": "info", "preflight": "info", "backup": "info", "set_ota_url": "info", "upgrade_issued": "info",
+	"applying": "info", "preflight": "info", "backup": "info", "set_ota_url": "info", "upgrade_issued": "info", "safeboot_switch": "info", "safeboot_recover": "info",
 	"await_reboot": "info", "verify": "info", "restore_ota_url": "info", "restore_power": "info", "new": "info",
 }
 
@@ -105,6 +105,10 @@ func jobStep(state model.JobState, stage model.Stage) (int, string) {
 			return 3, "Installing the minimal image"
 		}
 		return 5, "Installing the firmware"
+	case model.JobSafebootSwitch:
+		return 5, "Restarting the device into safeboot"
+	case model.JobSafebootRecover:
+		return 5, "Switching the device back from safeboot"
 	case model.JobAwaitReboot:
 		if minimal {
 			return 4, "Rebooting into the minimal image"

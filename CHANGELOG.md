@@ -21,6 +21,16 @@ always upgrade automatically.
   known settings as suggestions. `Status` in any spelling, secrets, commands that act when sent
   bare and commands that need a confirmation in the console are refused, with the reason.
   Make compliant sets such a rule like any other, admin only (#36).
+- **Push upload into safeboot, prepared, not enabled yet** (#30). An ESP32 with the safeboot layout
+  (one app partition, such as the QuinLED boards) cannot take a full image while its firmware runs,
+  so "push where possible" downloads there. The new path does what the web UI does: restart the
+  device into safeboot once, upload the image there, wait for the new version. Every step is guarded
+  (Guard before the restart and again right before the upload), the restart is never sent twice, a
+  lost reply is probed, never answered with a second upload, and a job that ends with the device in
+  safeboot sends it back once; if that fails, the job says "Device is still in safeboot at
+  <address>" and what to do by hand. The code is in this release but switched off
+  (`safebootPushEnabled`) until it ran on a real device; the preview says "Downloads instead: push
+  into safeboot is not enabled yet". Migration 0034 adds the job column.
 
 ### Changed
 

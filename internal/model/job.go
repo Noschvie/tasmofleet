@@ -27,19 +27,25 @@ type JobState string
 
 // OTA job states. Terminal states: Succeeded, Failed, Cancelled.
 const (
-	JobQueued        JobState = "queued"          // waiting for a free slot
-	JobPreflight     JobState = "preflight"       // identity detection, guard, plan
-	JobBackup        JobState = "backup"          // pre-OTA config backup (skippable per batch)
-	JobSetOtaURL     JobState = "set_ota_url"     // OtaUrl <url> issued
-	JobUpgradeIssued JobState = "upgrade_issued"  // Upgrade 1 issued, waiting for the device to drop off
-	JobAwaitReboot   JobState = "await_reboot"    // device gone, waiting for it to come back
-	JobVerify        JobState = "verify"          // device back, checking version/variant/family
-	JobRestoreOtaURL JobState = "restore_ota_url" // putting the original OtaUrl back
-	JobRestorePower  JobState = "restore_power"   // switching the relays that were ON before the update back on
-	JobApplying      JobState = "applying"        // policy job: commands are being sent and saved (JobVerify then reads them back)
-	JobSucceeded     JobState = "succeeded"
-	JobFailed        JobState = "failed"
-	JobCancelled     JobState = "cancelled"
+	JobQueued        JobState = "queued"         // waiting for a free slot
+	JobPreflight     JobState = "preflight"      // identity detection, guard, plan
+	JobBackup        JobState = "backup"         // pre-OTA config backup (skippable per batch)
+	JobSetOtaURL     JobState = "set_ota_url"    // OtaUrl <url> issued
+	JobUpgradeIssued JobState = "upgrade_issued" // Upgrade 1 issued, waiting for the device to drop off
+	JobAwaitReboot   JobState = "await_reboot"   // device gone, waiting for it to come back
+	// JobSafebootSwitch: a push job on an ESP32 with the safeboot layout has sent the one restart
+	// into safeboot and waits for the device to answer as safeboot (#30). Never re-sent, also not after a restart.
+	JobSafebootSwitch JobState = "safeboot_switch"
+	// JobSafebootRecover: the job ended with the device in (or possibly in) safeboot; the one
+	// switch back to the app has been sent and the job waits for the old firmware to answer.
+	JobSafebootRecover JobState = "safeboot_recover"
+	JobVerify          JobState = "verify"          // device back, checking version/variant/family
+	JobRestoreOtaURL   JobState = "restore_ota_url" // putting the original OtaUrl back
+	JobRestorePower    JobState = "restore_power"   // switching the relays that were ON before the update back on
+	JobApplying        JobState = "applying"        // policy job: commands are being sent and saved (JobVerify then reads them back)
+	JobSucceeded       JobState = "succeeded"
+	JobFailed          JobState = "failed"
+	JobCancelled       JobState = "cancelled"
 )
 
 // Terminal reports whether no further transition can leave the state.
@@ -177,6 +183,10 @@ type Job struct {
 	// Upgrade 1), DeliveryPush is tasmofleet uploading it to the device's /u2.
 	// Fixed at creation.
 	Delivery Delivery
+	// ViaSafeboot: a push job on an ESP32 whose image does not fit its running partition
+	// (single-OTA layout): the device is restarted into safeboot and the image is uploaded
+	// there (#30). Only with DeliveryPush; fixed at creation.
+	ViaSafeboot bool
 
 	// BatchParallel caps how many jobs of this job's transaction run at the
 	// same time (bulk "One device at a time", "Devices at a time"); 0 leaves

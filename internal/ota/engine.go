@@ -19,6 +19,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/fwselect"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/nofuturekid/tasmofleet/internal/tasmota"
 )
 
 // DeviceAPI is what the engine needs from a device. The production
@@ -204,7 +205,9 @@ type Engine struct {
 	clk     clock.Clock
 	notify  Notifier
 	sel     selector
-	log     *slog.Logger
+	// safebootPush opens the push into safeboot (#30); NewEngine takes it from safebootPushEnabled.
+	safebootPush bool
+	log          *slog.Logger
 
 	tune atomic.Pointer[Tuning]
 
@@ -229,7 +232,7 @@ func NewEngine(o Options, jobs store.JobStore, devices store.DeviceStore, api De
 	}
 	return &Engine{
 		opts: o, power: o.Power, audit: o.Audit, jobs: jobs, devices: devices, api: api, fw: fw, backups: b, clk: clk, notify: n,
-		sel: fwselectFuncs{}, log: slog.Default().With("component", "ota"),
+		sel: fwselectFuncs{}, safebootPush: safebootPushEnabled, log: slog.Default().With("component", "ota"),
 		workers: map[model.JobID]chan Event{}, fixing: map[model.JobID]bool{}, byDev: map[model.DeviceID]model.JobID{}, wake: make(chan struct{}, 1),
 	}
 }
@@ -314,6 +317,9 @@ type PreviewItem struct {
 	// says why ("" when the request is kept).
 	Delivery     model.Delivery
 	DeliveryNote string
+	// ViaSafeboot: the push goes through safeboot (the device restarts into it, the image is
+	// uploaded there). Only with Delivery push.
+	ViaSafeboot bool
 	// PowerRestore lists the relays that are ON now and would be switched
 	// back on after the update, e.g. "1, 3"; empty when nothing would be
 	// switched (all OFF, restore turned off, or the state is unreadable).
@@ -393,12 +399,15 @@ type planResult struct {
 	// for a device or plan that cannot take an upload; fallback says why.
 	delivery model.Delivery
 	fallback string
+	// viaSafeboot: a push whose image does not fit the running partition goes through safeboot
+	// (restart into it, upload there); only with delivery push (#30).
+	viaSafeboot bool
 }
 
 // planFor runs Decide, Select, firmware.Ensure, Plan and Guard for every
 // artifact the job would send. It is shared by Preview and the plan action
 // so the dry run shows exactly what the job will do.
-func (e *Engine) planFor(ctx context.Context, id model.Identity, c fwselect.Choice, custom string, delivery model.Delivery) (planResult, error) {
+func (e *Engine) planFor(ctx context.Context, d model.Device, id model.Identity, c fwselect.Choice, custom string, delivery model.Delivery) (planResult, error) {
 	var p planResult
 	dec, err := e.sel.Decide(id, c)
 	if err != nil {
@@ -430,6 +439,15 @@ func (e *Engine) planFor(ctx context.Context, id model.Identity, c fwselect.Choi
 		}
 		if err != nil {
 			p.delivery, p.fallback = model.DeliveryPull, err.Error()
+			var space *pushSpaceError
+			if errors.As(err, &space) {
+				// An ESP32 with the safeboot layout can take the image there (#30).
+				if via, note := e.safebootRoute(ctx, d, id); via {
+					p.delivery, p.fallback, p.viaSafeboot = model.DeliveryPush, "", true
+				} else if note != "" {
+					p.fallback = note
+				}
+			}
 		}
 	}
 	if err := e.sel.Guard(id, p.target, e.fw.URLFor(p.target), c); err != nil {
@@ -537,7 +555,7 @@ func (e *Engine) previewDevice(ctx context.Context, d model.Device, r Request) P
 		return it
 	}
 	fctx, cancel := context.WithTimeout(ctx, planTimeoutFactor*e.opts.Machine.CommandTimeout)
-	p, err := e.planFor(fctx, ident, choiceFor(r), r.Custom, r.Delivery)
+	p, err := e.planFor(fctx, d, ident, choiceFor(r), r.Custom, r.Delivery)
 	cancel()
 	if err != nil {
 		it.Reason = err.Error()
@@ -555,7 +573,7 @@ func (e *Engine) previewDevice(ctx context.Context, d model.Device, r Request) P
 	}
 	it.Plan = p.plan
 	it.Filename = p.sel.Filename
-	it.Delivery, it.DeliveryNote = p.delivery, p.fallback
+	it.Delivery, it.DeliveryNote, it.ViaSafeboot = p.delivery, p.fallback, p.viaSafeboot
 	if !r.SkipPowerRestore && !isIntermediate(ident.Variant) {
 		e.previewPower(ctx, d, r.RestoreRelays, &it)
 	}
@@ -686,15 +704,16 @@ func (e *Engine) submit(ctx context.Context, actor string, reqs []Request, retry
 	}
 	// Each job stores the delivery its preview decided (push where possible).
 	delivery := map[model.DeviceID]model.Delivery{}
+	viaSafeboot := map[model.DeviceID]bool{}
 	for _, it := range items {
-		delivery[it.DeviceID] = it.Delivery
+		delivery[it.DeviceID], viaSafeboot[it.DeviceID] = it.Delivery, it.ViaSafeboot
 	}
 	now := e.clk.Now()
 	jobs := make([]model.Job, 0, len(rest))
 	for _, r := range rest {
 		c := choiceFor(r)
 		j := model.Job{DeviceID: r.DeviceID, State: model.JobQueued, Policy: c.Policy, SkipBackup: r.SkipBackup, SkipPowerRestore: r.SkipPowerRestore, RestoreRelays: r.RestoreRelays,
-			TargetRelease: r.Release, TargetBuild: r.Build, TargetCustom: r.Custom, Delivery: delivery[r.DeviceID], OriginalOtaURL: r.OriginalOtaURL, CreatedBy: actor, CreatedAt: now, UpdatedAt: now}
+			TargetRelease: r.Release, TargetBuild: r.Build, TargetCustom: r.Custom, Delivery: delivery[r.DeviceID], ViaSafeboot: viaSafeboot[r.DeviceID], OriginalOtaURL: r.OriginalOtaURL, CreatedBy: actor, CreatedAt: now, UpdatedAt: now}
 		if r.AllowVariantChange {
 			j.TargetVariant = r.Variant
 		}
@@ -719,6 +738,7 @@ func (e *Engine) submit(ctx context.Context, actor string, reqs []Request, retry
 
 var activeStates = []model.JobState{
 	model.JobQueued, model.JobPreflight, model.JobBackup, model.JobSetOtaURL,
+	model.JobSafebootSwitch, model.JobSafebootRecover,
 	model.JobUpgradeIssued, model.JobAwaitReboot, model.JobVerify, model.JobRestoreOtaURL, model.JobRestorePower, model.JobApplying,
 }
 
@@ -923,7 +943,7 @@ func (e *Engine) startWorker(ctx context.Context, wg *sync.WaitGroup, j model.Jo
 }
 
 func waiting(s model.JobState) bool {
-	return s == model.JobUpgradeIssued || s == model.JobAwaitReboot
+	return s == model.JobUpgradeIssued || s == model.JobAwaitReboot || s == model.JobSafebootSwitch || s == model.JobSafebootRecover
 }
 
 // work drives one job: Step, persist, then run the requested actions and
@@ -950,7 +970,7 @@ func (e *Engine) work(ctx context.Context, j model.Job, ev Event, inbox <-chan E
 		// deadline. Probing first means a device that rebooted just
 		// before the deadline is still verified, never re-flashed.
 		if fromAction && waiting(j.State) && j.State == before.State && !e.clk.Now().Before(j.DeadlineAt) {
-			ev, fromAction = Event{Kind: EvTimeout}, false
+			ev, fromAction = Event{Kind: EvTimeout, Addr: e.safebootAddr(ctx, j)}, false
 			continue
 		}
 		var got bool
@@ -1041,7 +1061,7 @@ func (e *Engine) exec(ctx context.Context, j model.Job, a Action) Event {
 			return Event{Kind: EvProbeOffline, Err: msg}
 		case ActBackup:
 			return Event{Kind: EvBackupFailed, Err: msg}
-		case ActProbeIdentity, ActPlan, ActSetOtaURL, ActUpgrade, ActRestoreOtaURL, ActRestorePower, ActNotify:
+		case ActProbeIdentity, ActPlan, ActSetOtaURL, ActUpgrade, ActSafebootSwitch, ActSafebootBack, ActRestoreOtaURL, ActRestorePower, ActNotify:
 		}
 		return Event{Kind: EvCommandFailed, Err: msg}
 	}
@@ -1053,7 +1073,7 @@ func (e *Engine) exec(ctx context.Context, j model.Job, a Action) Event {
 		timeout *= backupTimeoutFactor
 	case ActRestorePower:
 		timeout *= powerTimeoutFactor
-	case ActProbeIdentity, ActSetOtaURL, ActUpgrade, ActProbe, ActRestoreOtaURL, ActNotify:
+	case ActProbeIdentity, ActSetOtaURL, ActUpgrade, ActSafebootSwitch, ActSafebootBack, ActProbe, ActRestoreOtaURL, ActNotify:
 	}
 	if a.Kind == ActUpgrade && j.Delivery == model.DeliveryPush {
 		timeout *= uploadTimeoutFactor
@@ -1105,17 +1125,21 @@ func (e *Engine) exec(ctx context.Context, j model.Job, a Action) Event {
 		}
 		return ev
 	case ActPlan:
-		p, err := e.planFor(cctx, j.IdentityBefore, planChoice(j), j.TargetCustom, j.Delivery)
+		p, err := e.planFor(cctx, d, j.IdentityBefore, planChoice(j), j.TargetCustom, j.Delivery)
 		if err != nil {
 			return failEvent(err)
 		}
 		if p.decision == fwselect.DecideSkip {
 			return Event{Kind: EvPlanned, Skip: true}
 		}
-		if p.delivery != j.Delivery {
-			// Submitted as a push, but the device or plan no longer allows
-			// it: never switch to the download unseen.
-			return failEvent(refused(errors.New(p.fallback + "; the update was planned as a push upload, start a new one")))
+		if p.delivery != j.Delivery || p.viaSafeboot != j.ViaSafeboot {
+			// Submitted as a push (through safeboot or not), but the device or plan no longer
+			// allows exactly that: never switch the delivery unseen.
+			why := p.fallback
+			if why == "" {
+				why = "the way to the device changed"
+			}
+			return failEvent(refused(errors.New(why + "; the update was planned as a push upload, start a new one")))
 		}
 		ev := Event{Kind: EvPlanned, Plan: p.plan, TargetVariant: p.sel.Variant, TargetArtifact: p.target.ID}
 		// Recorded for direct plans too: Tasmota's own fallback may fetch the
@@ -1143,7 +1167,7 @@ func (e *Engine) exec(ctx context.Context, j model.Job, a Action) Event {
 		if j.Delivery == model.DeliveryPush {
 			// No OtaUrl: the image is uploaded in the next step. Check now that
 			// it can be read, so a damaged cache file fails the job cleanly.
-			if err := e.pushCheck(cctx, art); err != nil {
+			if err := e.pushCheck(cctx, art, j.ViaSafeboot); err != nil {
 				return failEvent(err)
 			}
 			return ev
@@ -1158,6 +1182,13 @@ func (e *Engine) exec(ctx context.Context, j model.Job, a Action) Event {
 			return failEvent(err)
 		}
 		if j.Delivery == model.DeliveryPush {
+			if j.ViaSafeboot {
+				// Right after Guard: the device must serve the plain upload form, i.e. run safeboot
+				// now. The upload page of the app (upl(this)) would send the image to the wrong place.
+				if ev, ok := e.safebootUploadReady(cctx, d); !ok {
+					return ev
+				}
+			}
 			return e.push(cctx, d, art)
 		}
 		echo, err := e.api.Upgrade(cctx, d)
@@ -1168,6 +1199,18 @@ func (e *Engine) exec(ctx context.Context, j model.Job, a Action) Event {
 			return Event{Kind: EvCommandOK, Err: fmt.Sprintf("device flashes %q, expected %q", echo, u)}
 		}
 		return Event{Kind: EvCommandOK}
+	case ActSafebootSwitch:
+		// Guard once more, then the one restart into safeboot. The state was persisted before this ran.
+		if _, _, err := e.stageArtifact(cctx, j); err != nil {
+			return failEvent(err)
+		}
+		if j.CancelRequested {
+			// Cancelled before the restart was sent: do not start it.
+			return Event{Kind: EvCommandFailed, NotFlashed: true, Err: "cancelled by the user"}
+		}
+		return e.switchBoot(cctx, d, tasmota.BootSafeboot)
+	case ActSafebootBack:
+		return e.switchBoot(cctx, d, tasmota.BootApp)
 	case ActProbe:
 		ident, up, err := e.api.Probe(cctx, d)
 		if err != nil {

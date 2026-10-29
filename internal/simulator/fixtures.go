@@ -19,6 +19,7 @@ type profileDef struct {
 	Chip     string // esp8266, esp32, esp32c3, esp32s2, esp32s3, unknown
 	FlashKB  int
 	Minimal  bool   // starts in the minimal image
+	DualOTA  bool   // ESP32 with two app partitions: no safeboot to switch to, /up shows the plain upload form
 	Hardware string // filled from the capture
 }
 
@@ -27,6 +28,7 @@ var profileDefs = map[Profile]profileDef{
 	ProfileESP8266_4M:  {Dir: "synthetic-esp8266-4m", Chip: "esp8266", FlashKB: 4096},
 	ProfileESP8266Min:  {Dir: "livingroom-readinglamp", Chip: "esp8266", FlashKB: 1024, Minimal: true},
 	ProfileESP32:       {Dir: "office-monitor-guest", Chip: "esp32", FlashKB: 4096},
+	ProfileESP32Dual:   {Dir: "synthetic-esp32-dual", Chip: "esp32", FlashKB: 4096, DualOTA: true},
 	ProfileESP32C3:     {Dir: "synthetic-esp32c3", Chip: "esp32c3", FlashKB: 4096},
 	ProfileESP32S2:     {Dir: "synthetic-esp32s2", Chip: "esp32s2", FlashKB: 4096},
 	ProfileESP32S3:     {Dir: "synthetic-esp32s3", Chip: "esp32s3", FlashKB: 4096},

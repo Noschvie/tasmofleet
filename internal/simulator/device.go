@@ -97,11 +97,15 @@ type simDevice struct {
 	nextImage     *flashed
 	restartQueued bool // a settings change already scheduled the restart
 	uploadArmed   bool // a GET /up set the firmware upload type; the next POST /u2 flashes
-	flapping      bool
-	configDump    []byte
-	httpAddr      string
-	srv           *httpServer
-	mq            *mqttLink
+	// appImage and appVersion: the app that was running when /u4?u4=fct switched to safeboot, which
+	// /u4?u4=ota boots again. safebootVersion is what the factory partition reports.
+	appImage, appVersion string
+	safebootVersion      string
+	flapping             bool
+	configDump           []byte
+	httpAddr             string
+	srv                  *httpServer
+	mq                   *mqttLink
 }
 
 // flashed is a downloaded image waiting for the restart.
@@ -132,6 +136,7 @@ func newDevice(f *fleet, spec DeviceSpec, def profileDef, c *capture) (*simDevic
 	if d.version == "" {
 		d.version = c.version
 	}
+	d.safebootVersion = d.version
 	d.image = c.image
 	if variant := strings.ToLower(spec.Variant); variant != "" && variant != "tasmota" && variant != "tasmota32" {
 		d.image = variant

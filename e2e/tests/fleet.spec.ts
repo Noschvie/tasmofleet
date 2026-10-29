@@ -343,6 +343,22 @@ test("push where possible: ESP32 is updated by upload, ESP8266 downloads, nothin
   expect(status.StatusFWR.Version).toContain("16.1.0");
 });
 
+// Push into safeboot (#30) ships gated: an ESP32 with the safeboot layout (the image does not fit its
+// running partition) still downloads, and the preview says why. The gate opens after the sequence was
+// run on a real device.
+test("push where possible: a safeboot-layout ESP32 downloads while push into safeboot is gated", { tag: "@core" }, async ({ page }) => {
+  await page.setExtraHTTPHeaders(operator);
+  await pickForUpdate(page, app.url, ["esp32-safeboot-layout"]);
+  await page.locator("label.upd-relopt", { hasText: "Tasmota 16.1.0" }).click();
+  await page.locator("select[name=delivery]").selectOption("push");
+  await page.getByRole("button", { name: "Review update" }).click();
+  const row = page.locator(".upd-prow").filter({ hasText: "esp32-safeboot-layout" });
+  await expect(row).toContainText("→ 16.1.0");
+  await expect(row).toContainText("Downloads instead: push into safeboot is not enabled yet.");
+  await expect(row).not.toContainText("Push upload");
+  await expect(page.getByRole("button", { name: "Start update", exact: true })).toBeEnabled();
+});
+
 test("backup now, download is admin only", async ({ page, request }) => {
   await page.setExtraHTTPHeaders(operator);
   await page.goto(app.url + "/devices");

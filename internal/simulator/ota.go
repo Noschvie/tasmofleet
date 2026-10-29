@@ -275,7 +275,9 @@ func (d *simDevice) reboot(commit bool) {
 	}
 	d.mu.Lock()
 	_, stay := d.armedLocked(FaultStayOldVersion)
-	if d.nextImage != nil && !stay {
+	// A device stuck in safeboot keeps booting its factory partition whatever was flashed or switched.
+	stuck := d.isSafebootLocked() && len(d.faultsForLocked("", FaultStuckInSafeboot)) > 0
+	if d.nextImage != nil && !stay && !stuck {
 		d.image, d.version = d.nextImage.kind, d.nextImage.version
 	}
 	// Observed on the fleet (HA history, 2026-10-19): a relay keeps its state

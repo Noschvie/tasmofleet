@@ -395,6 +395,22 @@ data directory (TasmoAdmin lesson A4).
   allows one fails before touching the device instead of switching unseen. A push job
   sends its image once (no second attempt after a stalled or lost upload). ESP8266 stays
   on the download until a real-hardware test.
+- **Push into safeboot (#30, ESP32 with the safeboot layout; gated by `safebootPushEnabled`, off until
+  the sequence ran on a real device)**: an image larger than the running partition's free flash goes
+  through the factory partition, as the web UI does. `GET /up` tells the layout without side effects:
+  the button calls `upl(this)` only in the single-OTA form (`tasmota.ParseUpLayout`, research doc).
+  The job (`Job.ViaSafeboot`, decided in the preview, `PreviewItem.ViaSafeboot`) runs
+  `set_ota_url` (Guard only) -> `safeboot_switch` (Guard, **one** `GET /u4?u4=fct&api=`; `false`
+  means restarting; probe until the device answers as safeboot, `SafebootWindow`) -> `upgrade_issued`
+  (Guard again, `/up` must now show the plain form, one upload to `/u2`) -> `await_reboot` -> `verify`.
+  `/u4` is never re-sent (the browser script re-sends it every 6 s; tasmofleet does not) and a lost
+  reply is probed. A job that ends with the device in or possibly in safeboot (upload refused or lost,
+  deadline in safeboot, Guard refusal, cancel) goes through `safeboot_recover`: **one**
+  `GET /u4?u4=ota&api=`, probe; the old version answering ends the job `failed` ("Upload into safeboot
+  failed; the device was switched back to <old>"), anything else ends it `failed` with the address
+  and the manual instruction. A restart of tasmofleet resumes both states by probing only. The image
+  must start with `0xE9` (checked before the device is restarted). While the gate is off the preview
+  says "Downloads instead: push into safeboot is not enabled yet".
 - Device output is untrusted text. It is size-limited and parsed with tolerant JSON
   (control characters stripped), and HTML-escaped by templ on output.
 
@@ -722,7 +738,8 @@ The same Guard applies; audit: `firmware.custom.upload`, `firmware.custom.use`,
 
 ### 9.2 States
 
-`queued`, `preflight`, `backup`, `set_ota_url`, `upgrade_issued`, `await_reboot`, `verify`,
+`queued`, `preflight`, `backup`, `set_ota_url`, `safeboot_switch` and `safeboot_recover` (push into
+safeboot only, below), `upgrade_issued`, `await_reboot`, `verify`,
 `restore_ota_url`, `restore_power`, terminal `succeeded`, `failed`, `cancelled`. `Stage` is `minimal` or
 `final`; staged jobs pass through `set_ota_url -> ... -> verify` twice.
 
@@ -766,6 +783,22 @@ The same Guard applies; audit: `firmware.custom.upload`, `firmware.custom.use`,
 | restore_ota_url                        | command_failed / timeout    |                                                                                  | succeeded, LastError "could not restore OtaUrl"                                                     | notify                                                              |
 | queued, preflight, backup, set_ota_url | cancel                      |                                                                                  | cancelled                                                                                           | notify                                                              |
 | upgrade_issued, await_reboot, verify   | cancel                      |                                                                                  | same state, CancelRequested                                                                         | none (the device is flashing; finish the stage)                     |
+| set_ota_url                            | command_ok                  | `ViaSafeboot`                                                                    | safeboot_switch, deadline now+SafebootWindow (Attempt unchanged)                                    | safeboot_switch (Guard, one `/u4?u4=fct`)                           |
+| safeboot_switch                        | command_ok                  | device answered `false` or `true`                                                | same state                                                                                          | probe after ProbeInterval                                           |
+| safeboot_switch                        | command_failed              | certain: the device did not switch (no factory partition, error status, cancel)  | failed ("device was not touched"), cancelled if CancelRequested                                     | notify                                                              |
+| safeboot_switch                        | command_failed              | lost reply (uncertain)                                                           | same state                                                                                          | probe after ProbeInterval, never `/u4` again                        |
+| safeboot_switch                        | probe_offline / probe_online| not answering as safeboot                                                        | same state                                                                                          | probe after ProbeInterval                                           |
+| safeboot_switch                        | probe_online                | answers as safeboot                                                              | upgrade_issued (Attempt+1, UptimeBefore = safeboot's uptime, deadline now+UpgradeAccept)            | upgrade (Guard again, `/up` must be the plain form, one upload)     |
+| safeboot_switch                        | probe_online                | answers as safeboot, CancelRequested                                             | safeboot_recover                                                                                    | safeboot_back                                                       |
+| safeboot_switch                        | timeout                     |                                                                                  | safeboot_recover (reason "did not answer as safeboot")                                              | safeboot_back                                                       |
+| upgrade_issued (ViaSafeboot)           | command_failed (refused) / guard_refused / timeout | the device is in safeboot                                         | safeboot_recover                                                                                    | safeboot_back                                                       |
+| await_reboot (ViaSafeboot)             | timeout                     | never seen offline                                                               | safeboot_recover                                                                                    | safeboot_back                                                       |
+| verify (ViaSafeboot)                   | identity                    | device is in safeboot                                                            | safeboot_recover                                                                                    | safeboot_back                                                       |
+| safeboot_recover                       | command_ok / probe_offline / probe_online | still safeboot or unknown; lost reply                                | same state                                                                                          | probe after ProbeInterval, never `/u4` again                        |
+| safeboot_recover                       | probe_online                | app answers with the version from before                                         | failed ("Upload into safeboot failed; the device was switched back to <old>"), cancelled if CancelRequested | notify                                                              |
+| safeboot_recover                       | probe_online                | app answers with another version                                                 | verify                                                                                              | probe_identity                                                      |
+| safeboot_recover                       | timeout / command_failed (certain) |                                                                           | failed ("Device is still in safeboot at <address>: open its web page and upload the firmware, or use Upgrade by download") | notify                                                              |
+| safeboot_switch, safeboot_recover      | cancel                      |                                                                                  | same state, CancelRequested (the recovery ends the job as cancelled)                                | none                                                                |
 | any terminal                           | any                         |                                                                                  | unchanged                                                                                           | none                                                                |
 | any other (state, event)               |                             |                                                                                  | unchanged                                                                                           | none (logged at debug)                                              |
 
@@ -822,6 +855,7 @@ Resume (process start): non-terminal jobs get `resume`.
 | backup                       | backup                                                    |
 | set_ota_url                  | set_ota_url (idempotent)                                  |
 | upgrade_issued, await_reboot | **probe**, deadline = now + RebootWindow. Never `Upgrade` |
+| safeboot_switch, safeboot_recover | **probe**, deadline = now + SafebootWindow. Never `/u4` |
 | restore_ota_url              | restore_ota_url                                           |
 
 ### 9.4 Staged ESP8266 flow and the OtaUrl rule
@@ -847,6 +881,7 @@ written.
 | UpgradeAccept  | 3 min                            | download blocks the web server, so "no answer" is expected; OBS end-to-end 20-40 s           |
 | RebootWindow   | 8 min                            | 10 download attempts on ESP8266 (SRC) plus boot plus Wi-Fi join                              |
 | ProbeInterval  | 5 s                              |                                                                                              |
+| SafebootWindow | 2 min                            | ESP32 restart into the other partition plus Wi-Fi join, expected 10 to 25 s (unmeasured, #30) |
 | MaxAttempts    | 2 per stage                      |                                                                                              |
 | OTA_PARALLEL   | 2 jobs past `queued`, fleet-wide | ESP8266 web servers and a small firmware server; staged jobs hold their slot for both stages |
 

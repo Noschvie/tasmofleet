@@ -133,6 +133,23 @@ func (g *guardedAPI) UploadFirmware(ctx context.Context, d model.Device, name st
 	return up.UploadFirmware(ctx, d, name, size, body)
 }
 
+// UpLayout and SwitchBoot pass the safeboot capability through (see UploadFirmware).
+func (g *guardedAPI) UpLayout(ctx context.Context, d model.Device) (tasmota.UpLayout, error) {
+	sb, ok := g.DeviceAPI.(SafebootAPI)
+	if !ok {
+		return "", errors.New("test: the wrapped DeviceAPI cannot read the layout")
+	}
+	return sb.UpLayout(ctx, d)
+}
+
+func (g *guardedAPI) SwitchBoot(ctx context.Context, d model.Device, to tasmota.BootTarget) (tasmota.BootReply, error) {
+	sb, ok := g.DeviceAPI.(SafebootAPI)
+	if !ok {
+		return "", errors.New("test: the wrapped DeviceAPI cannot switch")
+	}
+	return sb.SwitchBoot(ctx, d, to)
+}
+
 type noBackups struct {
 	n    atomic.Int32
 	hook func() // runs inside Backup
@@ -171,6 +188,7 @@ type itEnv struct {
 	// beforeUpgrade runs right before the Upgrade command is sent.
 	beforeUpgrade func(model.DeviceID)
 	keepBackup    bool
+	safebootPush  bool         // open the gate of the push into safeboot (#30) for the engines of this test
 	runCancel     atomic.Value // context.CancelFunc of the running engine
 
 	// engine lifecycle
@@ -351,13 +369,21 @@ func (e *itEnv) addDevice(spec simulator.DeviceSpec) model.DeviceID {
 }
 
 func (e *itEnv) newEngine(maxParallel int) *Engine {
-	return NewEngine(Options{Machine: e.machine, MaxParallel: maxParallel, Power: e.power}, e.st, e.st, e.api, e.cache, e.backups, e.clk, e.log)
+	eng := NewEngine(Options{Machine: e.machine, MaxParallel: maxParallel, Power: e.power}, e.st, e.st, e.api, e.cache, e.backups, e.clk, e.log)
+	eng.safebootPush = e.safebootPush // the gate of the push into safeboot, set by the test before start
+	return eng
 }
 
 // start runs a fresh engine (a "process start"). Any running one is stopped first.
 func (e *itEnv) start(maxParallel int) *Engine {
 	e.stop()
 	eng := e.newEngine(maxParallel)
+	e.runEngine(eng)
+	return eng
+}
+
+// runEngine runs eng like a process start; start is newEngine plus runEngine.
+func (e *itEnv) runEngine(eng *Engine) {
 	ctx, cancel := context.WithCancel(context.Background())
 	e.cancel, e.done = cancel, make(chan struct{})
 	e.runCancel.Store(cancel)
@@ -368,7 +394,6 @@ func (e *itEnv) start(maxParallel int) *Engine {
 			e.t.Errorf("Run: %v", err)
 		}
 	}()
-	return eng
 }
 
 // stop ends the running engine like a process exit: workers stop where they are.

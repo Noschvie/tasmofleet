@@ -266,4 +266,39 @@ SRC (`tasmota/tasmota_xdrv_driver/xdrv_01_9_webserver.ino` unless noted):
 Consequence: a push to this layout needs a restart into safeboot first (a new, separate device action
 with its own failure mode: a device left in safeboot), so tasmofleet does not do it. "Push where possible"
 uses the download for any device whose Status 4 `Free` is too small for the image, and a refusal by the
-device ends the job at once. The safeboot push is a follow-up: <https://github.com/nofuturekid/tasmofleet/issues/30>.
+device ends the job at once. The safeboot push is #30; its design is below.
+
+### Telling the layouts apart from `GET /up` (research for #30, SRC v16.0.0, no device)
+
+Verified by reading the v16.0.0 tag (`1c21739`), `xdrv_01_9_webserver.ino` and
+`html_uncompressed/HTTP_HEAD_LAST_SCRIPT32.h`:
+
+* The only upload form with a call of `upl(` is `HTTP_FORM_RST_UPG_FCT` (line 382; `return upl(this);` at
+  line 391). The dual-OTA/ESP8266 form `HTTP_FORM_RST_UPG` (lines 367-380) has an `onclick` that only hides
+  `f1`, shows `f2`, appends the file size and calls `this.form.submit()`; it contains no `upl(`.
+  `grep -rn "upl(this)"` over the whole tag finds line 391 and one coding guide, nothing else. The
+  script that defines `function upl(t)` (SCRIPT32.h:28) says `upl(t)`, never `upl(this)`, so the string
+  `upl(this)` occurs on the page only in the form's button.
+* `HandleUpgradeFirmware` (3406) picks the form at 3420: `EspSingleOtaPartition() && !EspRunningFactoryPartition()`
+  gives the FCT form, everything else (dual layout, ESP8266, **or the same single-OTA device while it runs
+  safeboot**) gets `HTTP_FORM_RST_UPG` (3423, 3426). (`HTTP_FORM_RST_UPG` is also the restore form at 3044,
+  not on `/up`.)
+* So `upl(this)` on `/up` means exactly: "single-OTA (safeboot) layout, normal firmware running; a file
+  upload needs the restart into safeboot first". Its absence means a dual layout (direct upload) **or**
+  safeboot itself; the two are told apart by the running image (Status 2 Unknown / image `safeboot`), never
+  by the form. The marker is read-only (a plain GET of `/up`, which the upload does anyway).
+* `/u4` has no side effect on the "wrong" side: `u4=ota` while running the normal firmware on a single-OTA
+  device does nothing and answers `true` (3856-3862); `u4=fct` in safeboot answers `true` and restarts
+  nothing (3864-3866, 3889). Only `u4=fct` from the normal firmware restarts (3880), after sending `false`.
+  tasmofleet still sends `fct` exactly once and never polls with it (the browser's `fct()` re-sends it every
+  6 s; that is safe there only because the second call arrives in safeboot).
+* `upl()` only takes the safeboot route for a file that starts with `0xE9`; a gzip (`0x1F`) is posted
+  straight to the running firmware. A tasmofleet safeboot push therefore refuses an image that does not start
+  with `0xE9`.
+
+Design of the safeboot push (tasmofleet, #30): `GET /up` shows `upl(this)` -> job state `safeboot_switch`:
+Guard, one `GET /u4?u4=fct&api=`, probe until the device answers as safeboot; Guard again, one upload to
+`/u2` there, then the normal `await_reboot`/`verify`. A job that ends with the device in safeboot sends one
+`GET /u4?u4=ota&api=` and probes; if that does not bring the old version back the job fails with the
+address so the user can finish by hand. Timing assumptions for the deadline: see the PR for #30 (not
+measured yet; the first real run records them).

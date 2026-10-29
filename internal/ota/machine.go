@@ -79,6 +79,9 @@ type Event struct {
 	// NotFlashed (EvCommandFailed in upgrade_issued): the device certainly
 	// flashed nothing, it refused the upload. The job ends at once.
 	NotFlashed bool
+	// Addr (EvTimeout only, filled by the engine for a push into safeboot): how to reach the
+	// device, for the instruction in the failure text.
+	Addr string
 
 	// EvPlanned only: the outcome of the plan action. Skip is true when the
 	// update policy decided there is nothing to do.
@@ -94,15 +97,17 @@ type ActionKind string
 
 // Actions.
 const (
-	ActProbeIdentity ActionKind = "probe_identity" // Status 2 (+Upgrade probe), Status 4, Status 11, OtaUrl
-	ActPlan          ActionKind = "plan"           // fwselect.Select/Plan, firmware.Ensure, fwselect.Guard
-	ActBackup        ActionKind = "backup"         // backup.Service.Backup
-	ActSetOtaURL     ActionKind = "set_ota_url"    // OtaUrl <URL>
-	ActUpgrade       ActionKind = "upgrade"        // Upgrade 1 (engine re-runs Guard first)
-	ActProbe         ActionKind = "probe"          // Status 2 + Status 11 (+Upgrade probe on Unknown)
-	ActRestoreOtaURL ActionKind = "restore_ota_url"
-	ActRestorePower  ActionKind = "restore_power" // switch the relays that were ON back on (read, switch, verify)
-	ActNotify        ActionKind = "notify"        // publish job update (SSE, audit, metrics)
+	ActProbeIdentity  ActionKind = "probe_identity"  // Status 2 (+Upgrade probe), Status 4, Status 11, OtaUrl
+	ActPlan           ActionKind = "plan"            // fwselect.Select/Plan, firmware.Ensure, fwselect.Guard
+	ActBackup         ActionKind = "backup"          // backup.Service.Backup
+	ActSetOtaURL      ActionKind = "set_ota_url"     // OtaUrl <URL>
+	ActUpgrade        ActionKind = "upgrade"         // Upgrade 1 (engine re-runs Guard first); the image upload of a push job
+	ActSafebootSwitch ActionKind = "safeboot_switch" // Guard, then GET /u4?u4=fct&api= once (push into safeboot)
+	ActSafebootBack   ActionKind = "safeboot_back"   // GET /u4?u4=ota&api= once: the one recovery attempt
+	ActProbe          ActionKind = "probe"           // Status 2 + Status 11 (+Upgrade probe on Unknown)
+	ActRestoreOtaURL  ActionKind = "restore_ota_url"
+	ActRestorePower   ActionKind = "restore_power" // switch the relays that were ON back on (read, switch, verify)
+	ActNotify         ActionKind = "notify"        // publish job update (SSE, audit, metrics)
 )
 
 // Action is one requested side effect.
@@ -120,7 +125,12 @@ type Config struct {
 	RebootWindow   time.Duration // await_reboot: device must be back within (download + flash + boot)
 	ProbeInterval  time.Duration // polling interval while waiting
 	MaxAttempts    int           // Upgrade attempts per stage
-	RestoreOtaURL  bool          // put the original OtaUrl back after success
+	// SafebootWindow is how long the push into safeboot waits for the device to answer as safeboot
+	// after the switch, and for the app after the switch back. A restart into the other partition
+	// takes the ESP32 a few seconds to reboot plus its Wi-Fi join, 10 to 25 s expected (to be
+	// measured on the real device, #30); the window is about five times that.
+	SafebootWindow time.Duration
+	RestoreOtaURL  bool // put the original OtaUrl back after success
 	// PowerRestoreMaxAge is how old the relay state (read in preflight,
 	// refreshed right before the first Upgrade) may be when the restore
 	// would run. Older than that, nobody expects the load to come back on.
@@ -135,6 +145,7 @@ func DefaultConfig() Config {
 		RebootWindow:       8 * time.Minute,
 		ProbeInterval:      5 * time.Second,
 		MaxAttempts:        2,
+		SafebootWindow:     2 * time.Minute,
 		RestoreOtaURL:      true,
 		PowerRestoreMaxAge: 20 * time.Minute,
 	}
@@ -156,6 +167,7 @@ const (
 	ErrTextNoEffect        = "upgrade did not take effect"
 	ErrTextUnexpected      = "unexpected firmware after upgrade"
 	ErrTextRestoreFailed   = "could not restore OtaUrl"
+	ErrTextSafebootFailed  = "Upload into safeboot failed"
 	ErrTextPowerFailed     = "could not restore power state"
 	ErrTextPowerUnreadable = "relay state unreadable"
 )
@@ -185,6 +197,10 @@ func Step(j model.Job, ev Event, now time.Time, cfg Config) (model.Job, []Action
 		return stepBackup(j, ev, now, cfg)
 	case model.JobSetOtaURL:
 		return stepSetOtaURL(j, ev, now, cfg)
+	case model.JobSafebootSwitch:
+		return stepSafebootSwitch(j, ev, now, cfg)
+	case model.JobSafebootRecover:
+		return stepSafebootRecover(j, ev, now, cfg)
 	case model.JobUpgradeIssued:
 		return stepUpgradeIssued(j, ev, now, cfg)
 	case model.JobAwaitReboot:
@@ -279,6 +295,12 @@ func resume(j model.Job, now time.Time, cfg Config) (model.Job, []Action) {
 	case model.JobSetOtaURL:
 		j.DeadlineAt = now.Add(cfg.CommandTimeout)
 		return j, []Action{{Kind: ActSetOtaURL}}
+	case model.JobSafebootSwitch, model.JobSafebootRecover:
+		// Never send /u4 on resume: whether the first one reached the device is unknown, so look
+		// first. A switch that never happened ends in the recovery after the window, which is a
+		// no-op on a device that runs the app.
+		j.DeadlineAt = now.Add(cfg.SafebootWindow)
+		return j, []Action{{Kind: ActProbe}}
 	case model.JobUpgradeIssued, model.JobAwaitReboot:
 		// Never Upgrade on resume: whether the first Upgrade reached the
 		// device is unknown, so look first.
@@ -308,8 +330,9 @@ func cancel(j model.Job, now time.Time) (model.Job, []Action) {
 	case model.JobQueued, model.JobPreflight, model.JobBackup, model.JobSetOtaURL:
 		j = to(j, model.JobCancelled, now)
 		return j, notify()
-	case model.JobUpgradeIssued, model.JobAwaitReboot, model.JobVerify:
-		// The device may be flashing; finish the stage, then stop.
+	case model.JobSafebootSwitch, model.JobSafebootRecover, model.JobUpgradeIssued, model.JobAwaitReboot, model.JobVerify:
+		// The device may be restarting or flashing; finish the stage, then stop. A cancel during
+		// the switch ends in the same recovery as a failure: the device is brought back, never left.
 		j.CancelRequested = true
 		j.UpdatedAt = now
 		return j, nil
@@ -393,6 +416,13 @@ func stepSetOtaURL(j model.Job, ev Event, now time.Time, cfg Config) (model.Job,
 	switch ev.Kind {
 	case EvCommandOK:
 		j = checkPowerBeforeUpgrade(j, ev, now)
+		if j.ViaSafeboot {
+			// Nothing was sent to the device yet: Guard ran, the image was read.
+			j = to(j, model.JobSafebootSwitch, now)
+			j.SeenOffline = false
+			j.DeadlineAt = now.Add(cfg.SafebootWindow)
+			return j, []Action{{Kind: ActSafebootSwitch}}
+		}
 		j = to(j, model.JobUpgradeIssued, now)
 		j.Attempt++
 		j.SeenOffline = false
@@ -420,6 +450,10 @@ func stepUpgradeIssued(j model.Job, ev Event, now time.Time, cfg Config) (model.
 		}
 		return pushUploaded(j, now, cfg), probeLater(cfg)
 	case EvCommandFailed:
+		if ev.NotFlashed && j.ViaSafeboot {
+			// Nothing was flashed, but the device sits in safeboot: bring it back.
+			return toSafebootRecover(j, now, cfg, withErr("upload refused, nothing was flashed", ev.Err))
+		}
 		if ev.NotFlashed {
 			// The device refused the image and keeps running: no reboot
 			// will come, and the relays were never touched.
@@ -450,8 +484,16 @@ func stepUpgradeIssued(j model.Job, ev Event, now time.Time, cfg Config) (model.
 		}
 		return retry(j, now, cfg, ev.Err)
 	case EvTimeout:
+		if j.ViaSafeboot {
+			// Answering the whole window without ever restarting: still in safeboot.
+			return toSafebootRecover(j, now, cfg, "the device did not restart after the upload")
+		}
 		return retry(j, now, cfg, ErrTextNoUpgradeStart)
 	case EvGuardRefused:
+		if j.ViaSafeboot {
+			// The upload was not sent and the device waits in safeboot.
+			return toSafebootRecover(j, now, cfg, withErr("guard refused", ev.Err))
+		}
 		// Upgrade was not sent.
 		return fail(j, now, withErr("guard refused", ev.Err))
 	case EvStart, EvResume, EvIdentity, EvPlanned, EvBackupDone, EvBackupFailed, EvPowerReport, EvCancel:
@@ -476,10 +518,16 @@ func pushUploaded(j model.Job, now time.Time, cfg Config) model.Job {
 // rebooted reports whether a probe answer proves the device restarted or
 // changed firmware since Upgrade was issued.
 func rebooted(j model.Job, ev Event) bool {
+	id := ev.Identity
+	if j.ViaSafeboot {
+		// The upload went into safeboot: the device has restarted when an app answers. Safeboot's
+		// own answers (any uptime) are not a reboot, and the app's uptime before the switch says
+		// nothing about this restart.
+		return id.Variant != "" && !isIntermediate(id.Variant)
+	}
 	if ev.Uptime > 0 && ev.Uptime < j.UptimeBefore {
 		return true
 	}
-	id := ev.Identity
 	if runsIntermediate(j) {
 		return id.Variant != "" && id.Variant != variantMinimal
 	}
@@ -516,9 +564,15 @@ func stepAwaitReboot(j model.Job, ev Event, now time.Time, cfg Config) (model.Jo
 		return j, []Action{{Kind: ActProbeIdentity}}
 	case EvTimeout:
 		if !j.SeenOffline {
+			if j.ViaSafeboot {
+				return toSafebootRecover(j, now, cfg, "the device did not restart after the upload")
+			}
 			// Online on the old image for the whole window: the
 			// download is over and failed; the device is idle.
 			return retry(j, now, cfg, ErrTextNoEffect)
+		}
+		if j.ViaSafeboot {
+			return fail(j, now, joinNotes(ErrTextNotBack, "it may be in safeboot"+atAddr(ev.Addr)+": open its web page and upload the firmware, or use Upgrade by download"))
 		}
 		return fail(j, now, ErrTextNotBack)
 	case EvStart, EvResume, EvIdentity, EvPlanned, EvCommandOK, EvCommandFailed, EvGuardRefused, EvBackupDone, EvBackupFailed, EvUpgradeReport, EvPowerReport, EvCancel:
@@ -569,6 +623,9 @@ func stepVerify(j model.Job, ev Event, now time.Time, cfg Config) (model.Job, []
 		return notTaken(j, ev, now, cfg)
 	}
 	if isIntermediate(id.Variant) {
+		if j.ViaSafeboot {
+			return toSafebootRecover(j, now, cfg, "the device is back in safeboot after the upload")
+		}
 		if runsIntermediate(j) || j.AutoContinueSeen {
 			return notTaken(j, ev, now, cfg)
 		}

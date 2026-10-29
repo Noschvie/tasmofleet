@@ -101,6 +101,10 @@ func jobBadge(j model.Job) (string, ui.Tone) {
 		return "Downloading", ui.ToneAccent
 	case model.JobUpgradeIssued:
 		return "Flashing", ui.ToneAccent
+	case model.JobSafebootSwitch:
+		return "Restarting into safeboot", ui.ToneAccent
+	case model.JobSafebootRecover:
+		return "Switching back", ui.ToneAccent
 	case model.JobAwaitReboot:
 		return "Rebooting", ui.ToneAccent
 	case model.JobVerify:

@@ -29,6 +29,19 @@ type FirmwareUploader interface {
 	UploadFirmware(ctx context.Context, d model.Device, filename string, size int64, body io.Reader) error
 }
 
+// SafebootAPI is implemented by a DeviceAPI that can read the upload layout of
+// a device and switch its boot partition (push into safeboot, #30). It is
+// optional like FirmwareUploader: without it a device that needs safeboot
+// downloads.
+type SafebootAPI interface {
+	// UpLayout is a read-only GET of /up.
+	UpLayout(ctx context.Context, d model.Device) (tasmota.UpLayout, error)
+	// SwitchBoot sends GET /u4?u4=<to>&api= once. tasmota.BootRestarting says
+	// the device restarts. An error other than tasmota.ErrSwitchNotDone and
+	// tasmota.ErrAuth leaves open whether it does: probe, never send again.
+	SwitchBoot(ctx context.Context, d model.Device, to tasmota.BootTarget) (tasmota.BootReply, error)
+}
+
 // FirmwareFiles is implemented by the firmware cache next to Firmware: the
 // bytes of a cached artifact, verified against its SHA-256.
 type FirmwareFiles interface {
@@ -48,7 +61,16 @@ const (
 	errPushChip     = "push upload needs a device with a known ESP32 chip"
 	errPushSafeboot = "push upload needs a device running a normal firmware, not safeboot or minimal"
 	errPushStaged   = "push upload cannot do a two-step update"
+	// errPushSafebootOff is the note of a device that would need the push into safeboot while it
+	// is gated off.
+	errPushSafebootOff = "push into safeboot is not enabled yet"
 )
+
+// safebootPushEnabled gates the push into safeboot (#30). It stays false until the sequence was
+// run on a real device (restart into safeboot, upload there, recovery; see the PR of #30). While
+// false, a device that needs safeboot for an upload downloads instead, as before. NewEngine copies
+// it into Engine.safebootPush, which the tests set on their own engine.
+const safebootPushEnabled = false
 
 // pushDeviceRefusal says why a device cannot take a push upload, or nil. It
 // is decided on the detected identity, before any image is fetched.
@@ -78,10 +100,39 @@ func pushSpaceRefusal(id model.Identity, size int64) error {
 		return errors.New("the device's free flash is unknown (Status 4)")
 	}
 	if size > int64(id.FreeKB)*1024-uploadMarginBytes {
-		return fmt.Errorf("not enough free flash for an upload (image %d KB, %d KB free)", (size+1023)/1024, id.FreeKB)
+		return &pushSpaceError{fmt.Sprintf("not enough free flash for an upload (image %d KB, %d KB free)", (size+1023)/1024, id.FreeKB)}
 	}
 	return nil
 }
+
+// pushSpaceError: the image is larger than the running partition can take. On an ESP32 with the
+// safeboot layout this is the case the push into safeboot is for.
+type pushSpaceError struct{ msg string }
+
+func (e *pushSpaceError) Error() string { return e.msg }
+
+// safebootRoute decides, for a push request whose image does not fit the running partition, whether
+// the job pushes into safeboot. It reads /up (read-only): the safeboot layout shows the upload form
+// that calls upl(this) while the normal firmware runs. It returns the note why the device downloads
+// instead, "" to keep the space refusal's own text.
+func (e *Engine) safebootRoute(ctx context.Context, d model.Device, id model.Identity) (via bool, note string) {
+	sb, ok := e.api.(SafebootAPI)
+	if !ok || !id.Family.IsESP32() {
+		return false, ""
+	}
+	layout, err := sb.UpLayout(ctx, d)
+	if err != nil || layout != tasmota.UpLayoutSafeboot {
+		return false, "" // a dual layout cannot be told from an unreadable page: the plain refusal stands
+	}
+	if !e.safebootPush {
+		return false, errPushSafebootOff
+	}
+	return true, ""
+}
+
+// firstByteImage is the first byte of every ESP32 image: the browser's own upload script
+// (HTTP_HEAD_LAST_SCRIPT32.h upl()) takes the safeboot route only for a file that starts with it.
+const firstByteImage = 0xE9
 
 // pushPlanRefusal: a staged plan means a minimal hop, which the upload does not drive.
 func pushPlanRefusal(p model.Plan) error {
@@ -93,13 +144,22 @@ func pushPlanRefusal(p model.Plan) error {
 
 // pushCheck verifies, before the job commits to the upload, that the image can
 // be read and still matches the cache: a damaged file is found while the
-// job can still fail cleanly.
-func (e *Engine) pushCheck(ctx context.Context, a model.Artifact) error {
+// job can still fail cleanly. For the push into safeboot it also checks that
+// the image is a plain ESP32 image: this runs before the device is restarted.
+func (e *Engine) pushCheck(ctx context.Context, a model.Artifact, viaSafeboot bool) error {
 	rc, err := e.openImage(ctx, a)
 	if err != nil {
 		return err
 	}
-	return rc.Close()
+	defer rc.Close() //nolint:errcheck // read-only file
+	if !viaSafeboot {
+		return nil
+	}
+	var first [1]byte
+	if _, err := io.ReadFull(rc, first[:]); err != nil || first[0] != firstByteImage {
+		return refused(fmt.Errorf("%s does not start with the ESP32 image byte 0xE9; the safeboot upload takes only a plain image", a.Filename))
+	}
+	return nil
 }
 
 func (e *Engine) openImage(ctx context.Context, a model.Artifact) (io.ReadCloser, error) {

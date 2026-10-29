@@ -14,17 +14,17 @@ import (
 
 const jobCols = `id, batch_id, device_id, state, stage, plan, policy, skip_backup, attempt, target_release, target_variant, target_build, target_custom,
 	target_artifact, minimal_artifact, identity_before, original_ota_url, uptime_before, seen_offline, cancel_requested,
-	auto_continue_seen, skip_power_restore, power_on, power_read_at, power_note, restore_relays, power_cutoff, deadline_at, last_error, created_by, created_at, updated_at, kind, commands, created_kind, delivery, batch_parallel, reply_timeout_ms`
+	auto_continue_seen, skip_power_restore, power_on, power_read_at, power_note, restore_relays, power_cutoff, deadline_at, last_error, created_by, created_at, updated_at, kind, commands, created_kind, delivery, batch_parallel, reply_timeout_ms, via_safeboot`
 
 func scanJob(r scanner) (model.Job, error) {
 	var j model.Job
 	var state, stage, plan, policy, ident, kind, delivery string
-	var skip, seen, cancel, autoCont, skipPower, restoreRel int
+	var skip, seen, cancel, autoCont, skipPower, restoreRel, viaSafeboot int
 	var power uint32
 	var deadline, created, updated, powerAt, cutoff, replyMS int64
 	err := r.Scan(&j.ID, &j.BatchID, &j.DeviceID, &state, &stage, &plan, &policy, &skip, &j.Attempt, &j.TargetRelease,
 		&j.TargetVariant, &j.TargetBuild, &j.TargetCustom, &j.TargetArtifact, &j.MinimalArtifact, &ident, &j.OriginalOtaURL, &j.UptimeBefore, &seen, &cancel,
-		&autoCont, &skipPower, &power, &powerAt, &j.PowerNote, &restoreRel, &cutoff, &deadline, &j.LastError, &j.CreatedBy, &created, &updated, &kind, &j.Commands, &j.CreatedKind, &delivery, &j.BatchParallel, &replyMS)
+		&autoCont, &skipPower, &power, &powerAt, &j.PowerNote, &restoreRel, &cutoff, &deadline, &j.LastError, &j.CreatedBy, &created, &updated, &kind, &j.Commands, &j.CreatedKind, &delivery, &j.BatchParallel, &replyMS, &viaSafeboot)
 	if err != nil {
 		return model.Job{}, err
 	}
@@ -34,7 +34,7 @@ func scanJob(r scanner) (model.Job, error) {
 	j.PowerOn, j.PowerReadAt = model.RelaySet(power), fromMS(powerAt)
 	j.RestoreRelays, j.PowerCutoff = restoreRel != 0, fromMS(cutoff)
 	j.AutoContinueSeen, j.SkipPowerRestore = autoCont != 0, skipPower != 0
-	j.Delivery = model.Delivery(delivery)
+	j.Delivery, j.ViaSafeboot = model.Delivery(delivery), viaSafeboot != 0
 	j.ReplyTimeout = time.Duration(replyMS) * time.Millisecond
 	if kind != storedUpdate {
 		j.Kind = model.JobKind(kind)
@@ -90,12 +90,12 @@ func (s *SQLite) createBatch(ctx context.Context, createdBy string, retryOf mode
 		}
 		res, err := tx.ExecContext(ctx, `INSERT INTO ota_jobs (batch_id, device_id, state, stage, plan, policy, skip_backup, attempt,
 			target_release, target_variant, target_build, target_custom, target_artifact, minimal_artifact, identity_before, original_ota_url, uptime_before,
-			seen_offline, cancel_requested, auto_continue_seen, skip_power_restore, power_on, power_read_at, power_note, restore_relays, power_cutoff, deadline_at, last_error, created_by, created_at, updated_at, kind, commands, created_kind, delivery, batch_parallel, reply_timeout_ms)
-			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			seen_offline, cancel_requested, auto_continue_seen, skip_power_restore, power_on, power_read_at, power_note, restore_relays, power_cutoff, deadline_at, last_error, created_by, created_at, updated_at, kind, commands, created_kind, delivery, batch_parallel, reply_timeout_ms, via_safeboot)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			bid, j.DeviceID, string(j.State), string(j.Stage), string(j.Plan), string(j.Policy), b2i(j.SkipBackup), j.Attempt,
 			j.TargetRelease, j.TargetVariant, j.TargetBuild, j.TargetCustom, j.TargetArtifact, j.MinimalArtifact, string(ident), j.OriginalOtaURL, j.UptimeBefore,
 			b2i(j.SeenOffline), b2i(j.CancelRequested), b2i(j.AutoContinueSeen), b2i(j.SkipPowerRestore), uint32(j.PowerOn), toMS(j.PowerReadAt), j.PowerNote, b2i(j.RestoreRelays), toMS(j.PowerCutoff),
-			toMS(j.DeadlineAt), j.LastError, createdBy, now, now, kindOf(j), j.Commands, j.CreatedKind, string(j.Delivery), j.BatchParallel, j.ReplyTimeout.Milliseconds())
+			toMS(j.DeadlineAt), j.LastError, createdBy, now, now, kindOf(j), j.Commands, j.CreatedKind, string(j.Delivery), j.BatchParallel, j.ReplyTimeout.Milliseconds(), b2i(j.ViaSafeboot))
 		if err != nil {
 			return 0, nil, fmt.Errorf("device %d: %w", j.DeviceID, mapErr(err))
 		}

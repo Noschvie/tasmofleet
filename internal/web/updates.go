@@ -477,6 +477,8 @@ func (r previewRow) DeliveryText() string {
 	switch {
 	case !r.Go || !r.Push:
 		return ""
+	case r.Item.Delivery == model.DeliveryPush && r.Item.ViaSafeboot:
+		return "Push upload through safeboot (the device restarts into its safeboot partition first)."
 	case r.Item.Delivery == model.DeliveryPush:
 		return "Push upload."
 	case r.Item.DeliveryNote != "":

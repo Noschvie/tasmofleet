@@ -50,6 +50,8 @@ func formatUptime(sec int) string {
 // render returns a captured file with the device's identity substituted and,
 // unless verbatim, the live fields recomputed. Everything else stays the
 // recorded text, so decimals and key order are exactly as the device sent.
+var reFreeKB = regexp.MustCompile(`"Free":\d+`)
+
 func (d *simDevice) render(file string, v view) []byte {
 	raw, ok := d.cap.files[file]
 	if !ok {
@@ -74,6 +76,9 @@ func (d *simDevice) render(file string, v view) []byte {
 		s = strings.NewReplacer(pairs...).Replace(s)
 	}
 	s = d.applySettings(s, v.kv)
+	if d.spec.FreeKB > 0 {
+		s = reFreeKB.ReplaceAllLiteralString(s, `"Free":`+strconv.Itoa(d.spec.FreeKB))
+	}
 	if file == "status-5.json" && d.spec.Wired {
 		s = d.wiredStatus5(s)
 	}

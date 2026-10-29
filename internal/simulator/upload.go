@@ -47,7 +47,8 @@ func (d *simDevice) serveU2(w http.ResponseWriter, r *http.Request) {
 	lost := len(d.faultsForLocked("u2", FaultUploadLostReply)) > 0
 	slow := d.faultsForLocked("u2", FaultSlowWrite)
 	wrong := len(d.faultsForLocked("u2", FaultWrongFamily)) > 0
-	noSpace := len(d.faultsForLocked("u2", FaultUploadNoSpace)) > 0
+	noSpace := len(d.faultsForLocked("u2", FaultUploadNoSpace)) > 0 ||
+		(d.isSafebootLocked() && len(d.faultsForLocked("u2", FaultSafebootRefuseUpload)) > 0)
 	d.mu.Unlock()
 	reply := func(ok bool, msg string) {
 		d.setHeaders(w, "", "text/html")

@@ -178,6 +178,8 @@ func (d *simDevice) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		d.servePage(w, "up.html")
 	case "/u2":
 		d.serveU2(w, r)
+	case "/u4":
+		d.serveU4(w, r)
 	case "/u1":
 		d.serveU1(w, r)
 	case "/dl":
@@ -194,7 +196,7 @@ func (d *simDevice) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // gets the 404 page.
 func refererGuarded(path string) bool {
 	switch path {
-	case "/cm", "/dl", "/up", "/u1", "/u2":
+	case "/cm", "/dl", "/up", "/u1", "/u2", "/u4":
 		return true
 	}
 	return false
@@ -282,7 +284,11 @@ func (d *simDevice) servePage(w http.ResponseWriter, file string) {
 			version+" (release-"+image+") by Theo Arends</a></div></div></body></html>"))
 		return
 	}
-	d.writeBody(w, http.StatusOK, d.render(file, v))
+	body := d.render(file, v)
+	if file == "up.html" && d.isSafeboot() {
+		body = plainUploadForm(body) // safeboot serves the plain form even on the single-OTA layout
+	}
+	d.writeBody(w, http.StatusOK, body)
 }
 
 func (d *simDevice) titleFor(captured string) string {
