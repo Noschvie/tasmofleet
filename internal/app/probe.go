@@ -617,7 +617,9 @@ func (p *Prober) overMQTT(d model.Device, err error) bool {
 // the bus limits and audits each question). The MAC rule is the same as over HTTP. MQTT is the
 // weaker source (anyone with broker access can answer), so (#87): the identity is written only
 // for a device no HTTP probe identified (store.UpdateIdentityFromMQTT), never with DetectedAt,
-// never as minimal or safeboot; no MAC is bound; name and topic are left alone.
+// never as minimal or safeboot; no MAC is bound; the topic is left alone. The DeviceName is read
+// with the plain Status (never Status 0) and stored by store.UpdateProbeName under the same follow
+// rule as over HTTP (#125); that call never writes the identity.
 func (p *Prober) refreshMQTT(ctx context.Context, d model.Device, actor string) error {
 	raw5, err := p.MQTT.askStatus(ctx, d, 5, actor)
 	if err != nil {

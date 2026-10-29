@@ -317,7 +317,13 @@ data directory (TasmoAdmin lesson A4).
   (`device_name`, `device_topic`, migration 0029). The stored name follows the DeviceName while
   it is still the recorded one, or, for devices probed before 0029, while it is the hostname,
   topic or address tasmofleet filled in itself (not when the DeviceName is Tasmota's default
-  `Tasmota`). A name the user chose differs from these and is kept (#52). The stored topic is
+  `Tasmota`). A name the user chose differs from these and is kept (#52); the Identity card then
+  shows the notice "Name on the device: X" (#125) while `device_name` differs from `name`, is not
+  Tasmota's default `Tasmota` and is not equal to `device_name_kept`. Admins can answer it: "Use device
+  name" sets the name through `Inventory.UpdateIf` (compare-and-set, audited as `device.update`), "Keep"
+  stores the declined name in `device_name_kept` (migration 0030, audited as `device.name_kept`), so the
+  notice returns only when the device reports another name. An answer for a name the device no longer
+  reports is refused. Operators see the notice without the buttons. The stored topic is
   only a mirror used to match MQTT messages, so it always follows the topic the device reports
   (#111; also for rows from before migration 0029, whose `device_topic` is empty), audited as
   `device.topic_changed` with old and new. If another device already has that topic, the
@@ -332,7 +338,11 @@ data directory (TasmoAdmin lesson A4).
   (`identity.mqtt_ask`), a live answer on the device's own topic within 10 s. MQTT data stays
   the weaker source: it writes the identity only while `identity_at` is unset
   (`UpdateIdentityFromMQTT`), never sets `identity_at`, refuses minimal/safeboot answers, binds
-  no MAC and does not touch name or topic; the network facts are stored (`UpdateNet`).
+  no MAC and leaves the topic alone; the network facts are stored (`UpdateNet`). It also reads
+  the DeviceName with the plain `Status` (never Status 0) and stores it with `UpdateProbeName`
+  under the same follow rule as over HTTP; that call never writes the identity (#125). This is
+  accepted and cosmetic: anyone with broker access can change the name of a device whose name was
+  never edited by hand; a hand-set name only gets the notice below.
   Contract change in this step: `web.Prober.Refresh` takes the actor; `store.ProbeResult` gained
   `DeviceName`, `NameFrom`, `DeviceTopic`, `BindMACs` and lost `Topic` (the old repair rule is
   part of the topic rule above).
@@ -381,7 +391,7 @@ Inputs: `Status 2` (`StatusFWR`), `Status 4` (`StatusMEM`), and on minimal firmw
 | `ESP8266EX`, `ESP8266`                                                    | `esp8266`                  | OBS                              |
 | `ESP8285N08`, `ESP8285H16`, `ESP8285`                                     | `esp8266`                  | OBS / SRC                        |
 | `ESP32-D0WD`, `ESP32-D0WDQ6`, `ESP32-D0WD-V3`, `ESP32-D2WD`, `ESP32-PICO` | `esp32`                    | OBS (`ESP32-D0WDQ6 v1.0`) / SRC  |
-| `ESP32-U4WDH`                                                             | `esp32`                    | OBS (#155)                       |
+| `ESP32-U4WDH` (`-D`: dual core)                                           | `esp32`                    | SRC (`ESP32-U4WDH-D`)            |
 | `ESP32-S0WD`, `ESP32-SOLO`, `ESP32-U4WDH-S` (single core)                 | `esp32`, `SingleCore=true` | SRC / OBS (`ESP32-U4WDH-S v3.0`) |
 | `ESP32-S2`                                                                | `esp32s2`                  | SRC                              |
 | `ESP32-S3`                                                                | `esp32s3`                  | SRC                              |

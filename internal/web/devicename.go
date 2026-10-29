@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/a-h/templ"
 
+	"github.com/nofuturekid/tasmofleet/internal/inventory"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/store"
 )
@@ -52,8 +54,20 @@ func (h *handler) deviceNameAdopt(w http.ResponseWriter, r *http.Request) {
 		if d.DeviceName != seen || nameOffer(d) == "" {
 			return nameStale
 		}
-		d.Name = seen
-		if err := h.d.Inventory.Update(r.Context(), actor(r), d); err != nil {
+		cas, ok := h.d.Inventory.(interface {
+			UpdateIf(ctx context.Context, actor string, expected, next model.Device) error
+		})
+		if !ok {
+			h.log.ErrorContext(r.Context(), "adopt device name: the inventory has no compare-and-set update")
+			return "The name could not be changed. The server log has the details."
+		}
+		next := d
+		next.Name = seen
+		// Written only if the device is still the one the page showed: an edit made meanwhile is not lost.
+		switch err := cas.UpdateIf(r.Context(), actor(r), d, next); {
+		case errors.Is(err, inventory.ErrConflict):
+			return "The device changed meanwhile. Check it below."
+		case err != nil:
 			h.log.WarnContext(r.Context(), "adopt device name", "device", d.ID, "err", err)
 			return "The name could not be changed. The server log has the details."
 		}
@@ -72,6 +86,8 @@ func (h *handler) deviceNameKeep(w http.ResponseWriter, r *http.Request) {
 			h.log.WarnContext(r.Context(), "keep device name", "device", d.ID, "err", err)
 			return "The answer could not be saved. The server log has the details."
 		}
+		h.recordFirmware(r, "device.name_kept", "device:"+strconv.FormatInt(int64(d.ID), 10),
+			map[string]any{"device_name": seen, "name": d.Name}, "ok")
 		return ""
 	})
 }

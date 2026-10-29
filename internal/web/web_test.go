@@ -34,6 +34,7 @@ type fakeInv struct {
 	// unproven makes Update demand the unverified-move confirmation; confirmedMoves counts those given.
 	unproven       bool
 	confirmedMoves int
+	beforeUpdateIf func() // test hook: runs first in UpdateIf, outside the lock
 	lastDelete     inventory.DeleteOptions
 }
 
@@ -70,6 +71,22 @@ func (f *fakeInv) Create(_ context.Context, _ string, d model.Device) (model.Dev
 	f.devs[d.ID], f.last = d, d
 	return d.ID, nil
 }
+
+// UpdateIf is the compare-and-set of inventory.Manager: it writes only if the stored device still
+// equals expected (beforeUpdateIf lets a test change it first).
+func (f *fakeInv) UpdateIf(_ context.Context, _ string, expected, next model.Device) error {
+	if f.beforeUpdateIf != nil {
+		f.beforeUpdateIf()
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if cur := f.devs[next.ID]; cur.Name != expected.Name || cur.Notes != expected.Notes {
+		return fmt.Errorf("%w: device %d", inventory.ErrConflict, next.ID)
+	}
+	f.devs[next.ID], f.last = next, next
+	return nil
+}
+
 func (f *fakeInv) Update(ctx context.Context, _ string, d model.Device) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()

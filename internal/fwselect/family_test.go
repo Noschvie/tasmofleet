@@ -37,6 +37,7 @@ func TestFamilyFromHardware(t *testing.T) {
 		{"ESP32-SOLO-1", model.ChipESP32, true},
 		{"ESP32-U4WDH-S v3.0", model.ChipESP32, true}, // #155, real hardware string of a solo1 build
 		{"ESP32-U4WDH v3.0", model.ChipESP32, false},
+		{"ESP32-U4WDH-D v3.0", model.ChipESP32, false}, // "-D": the dual-core part (Tasmota support_esp.ino)
 		// Newer chips.
 		{"ESP32-S2", model.ChipESP32S2, false},
 		{"ESP32-S2FH4", model.ChipESP32S2, false},

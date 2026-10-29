@@ -118,6 +118,16 @@ func TestKeepSilencesOnlyThatDeviceName(t *testing.T) {
 	if d := e.inv.devs[1]; d.Name != "Fan" || d.KeptDeviceName != "Modbus Lüftung Test" {
 		t.Fatalf("name %q kept %q", d.Name, d.KeptDeviceName)
 	}
+	// the decision is in the audit log: who declined which name
+	var kept *model.AuditEvent
+	for _, ev := range e.aud.events {
+		if ev.Action == "device.name_kept" {
+			kept = &ev
+		}
+	}
+	if kept == nil || kept.Target != "device:1" || !strings.Contains(kept.Detail, "Modbus Lüftung Test") || kept.Result != "ok" {
+		t.Fatalf("no device.name_kept audit event: %+v", e.aud.events)
+	}
 	_, body = e.do(t, "GET", "/devices/1", "admin", nil)
 	if strings.Contains(body, `Name on the device:`) {
 		t.Fatal("the page offers the declined name again")
@@ -160,5 +170,25 @@ func TestOperatorsCannotAnswerTheNameOffer(t *testing.T) {
 	}
 	if d := e.inv.devs[1]; d.Name != "Fan" || d.KeptDeviceName != "" {
 		t.Fatalf("%+v", d)
+	}
+}
+
+// Why (#125 review): "Use device name" must not undo an edit made between reading the page and the
+// click. It writes only if the stored device is still the one it read (UpdateIf); otherwise nothing
+// changes and the card shows what is stored now.
+func TestAdoptDoesNotOverwriteAConcurrentEdit(t *testing.T) {
+	e := nameSetup(t)
+	e.inv.beforeUpdateIf = func() {
+		d := e.inv.devs[1]
+		d.Notes = "edited meanwhile"
+		e.inv.devs[1] = d
+	}
+	_, body := e.do(t, "POST", "/devices/1/name/adopt", "admin", nameForm("Modbus Lüftung Test"), "HX-Request", "true")
+	d := e.inv.devs[1]
+	if d.Name != "Fan" || d.Notes != "edited meanwhile" {
+		t.Fatalf("the concurrent edit was lost or the name written: %+v", d)
+	}
+	if !strings.Contains(body, `role="alert"`) || !strings.Contains(body, "changed meanwhile") {
+		t.Fatalf("no conflict message:\n%s", body)
 	}
 }
