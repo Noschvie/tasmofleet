@@ -12,6 +12,13 @@ import (
 // tag "tasmota32" cannot name the build, so the variant is "unknown" (§6.2).
 var idS2Real = ident(model.ChipESP32S2, "ESP32-S2", "release-tasmota32", "unknown", "")
 
+// Self-compiled or custom S2 images stay "unknown" and must never be replaced without an explicit choice.
+var (
+	idS2Bare   = ident(model.ChipESP32S2, "ESP32-S2", "tasmota32", "unknown", "")
+	idS2Bare2  = ident(model.ChipESP32S2, "ESP32-S2", "tasmota32s2", "unknown", "")
+	idS2Custom = ident(model.ChipESP32S2, "ESP32-S2", "release-mycustom", "unknown", "")
+)
+
 func buildChoice(build string) Choice { return Choice{Release: rel, Build: build} }
 
 // TestSelectBuild: the build is the user's explicit decision. Without it an
@@ -30,6 +37,11 @@ func TestSelectBuild(t *testing.T) {
 	}{
 		{name: "s2 without build is refused", id: idS2Real, c: Choice{Release: rel}, wantErr: ErrBuildChoiceNeeded},
 		{name: "s2 without build with variant change is still refused", id: idS2Real, c: Choice{Release: rel, Variant: "tasmota", AllowVariantChange: true}, wantErr: ErrBuildChoiceNeeded},
+		{name: "s2 custom bare tag with a build alone is not replaced", id: idS2Bare, c: buildChoice("s2"), wantErr: ErrVariantChange},
+		{name: "s2 custom bare s2 tag with a build alone is not replaced", id: idS2Bare2, c: buildChoice("s2cdc"), wantErr: ErrVariantChange},
+		{name: "s2 custom image with a build alone is not replaced", id: idS2Custom, c: buildChoice("s2"), wantErr: ErrVariantChange},
+		{name: "s2 bare tag with explicit variant change and build", id: idS2Bare, c: Choice{Release: rel, Variant: "tasmota", AllowVariantChange: true, Build: "s2"}, file: "tasmota32s2.bin", variant: "tasmota"},
+		{name: "s2 custom image with explicit variant change and build", id: idS2Custom, c: Choice{Release: rel, Variant: "tasmota", AllowVariantChange: true, Build: "s2cdc"}, file: "tasmota32s2cdc.bin", variant: "tasmota"},
 		{name: "s2 explicit s2", id: idS2Real, c: buildChoice("s2"), file: "tasmota32s2.bin", variant: "tasmota"},
 		{name: "s2 explicit s2cdc", id: idS2Real, c: buildChoice("s2cdc"), file: "tasmota32s2cdc.bin", variant: "tasmota"},
 		{name: "s2 build with explicit plain variant", id: idS2Real, c: Choice{Release: rel, Build: "s2cdc", Variant: "tasmota"}, file: "tasmota32s2cdc.bin", variant: "tasmota"},

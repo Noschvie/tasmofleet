@@ -100,7 +100,10 @@ func applyBuild(id model.Identity, c Choice) (Choice, error) {
 	if c.Variant == "" {
 		c.Variant = variantTasmota
 	}
-	if c.Variant == variantTasmota && id.Variant == variantUnknown {
+	// The implied change from "unknown" is granted only when the tag proves an official chip build
+	// ("<sha-or-release>-tasmota32"). A self-compiled build (bare tag) or any other image stays
+	// unknown and is never replaced without an explicit variant choice (§6.2).
+	if _, img, ok := strings.Cut(id.Image, "-"); ok && img == "tasmota32" && c.Variant == variantTasmota && id.Variant == variantUnknown {
 		c.AllowVariantChange = true
 	}
 	return c, nil

@@ -538,10 +538,11 @@ The chip build of the newer chips comes from `Hardware` alone: the one build of 
 P4 the build whose revision range contains the chip revision (§6.2); every other case returns
 `ErrUnknownHardware`. ESP32-S2 returns `ErrBuildChoiceNeeded` (an `ErrUnknownHardware`) unless
 `Choice.Build` is `s2` or `s2cdc` (`BuildOptions(identity)`); that explicit build implies the plain `tasmota`
-variant and the change from the detected `unknown`, and only it does. A build on any other chip, or one that
+variant and the change from the detected `unknown` of an official `tasmota32` tag, and only it does (a
+self-compiled or custom S2 image stays `unknown` and needs an explicit variant choice as well, §6.2). A build on any other chip, or one that
 contradicts a provable revision (`p4` on a 3.1 P4), returns `ErrNoSuchVariant`; a P4 outside the known
 revisions stays refused with or without a build. The build is chosen per update in the update preview and
-kept on the job (`Job.TargetBuild`, `ota_jobs.target_build`, migration 0032); Guard rule 7 holds the artifact
+kept on the job (`Job.TargetBuild`, `ota_jobs.target_build`, migration 0033); Guard rule 7 holds the artifact
 to it. Remembering the choice per device is not part of this. This also covers the minimal/safeboot auto-default ("tasmota" chosen for the device).
 
 ### 7.3 Decide (update policy)

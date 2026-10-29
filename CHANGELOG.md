@@ -15,7 +15,7 @@ always upgrade automatically.
   choice the refusal stays. The choice is per update and kept on the job (visible in the update
   and transaction views, copied by a retry, kept across a restart). A build that does not belong to
   the chip, or contradicts a known chip revision, is refused. Not tested on a real ESP32-S2 yet.
-  Migration 0032 adds the job column.
+  Migration 0033 adds the job column.
 
 ### Changed
 

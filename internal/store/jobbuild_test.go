@@ -37,7 +37,7 @@ func TestJobTargetBuildRoundTrip(t *testing.T) {
 
 // Why: live databases upgrade from 0.17 (migration 0031) with finished and queued jobs in
 // them; those jobs must load with "no build chosen" and behave as before.
-func TestMigration0032KeepsExistingJobsWithoutBuild(t *testing.T) {
+func TestMigration0033KeepsExistingJobsWithoutBuild(t *testing.T) {
 	db, path := rawDB(t)
 	upTo, all := fstest.MapFS{}, fstest.MapFS{}
 	err := fs.WalkDir(Migrations, "migrations", func(p string, d fs.DirEntry, err error) error {
@@ -49,7 +49,7 @@ func TestMigration0032KeepsExistingJobsWithoutBuild(t *testing.T) {
 			return rerr
 		}
 		all[p] = &fstest.MapFile{Data: b}
-		if p < "migrations/0032" {
+		if p < "migrations/0033" {
 			upTo[p] = &fstest.MapFile{Data: b}
 		}
 		return nil

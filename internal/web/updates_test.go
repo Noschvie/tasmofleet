@@ -546,6 +546,13 @@ func TestPreviewOffersTheS2BuildsAndCarriesTheChoice(t *testing.T) {
 	if o.previewReqs[1].Build != "" {
 		t.Fatalf("a build was sent without a choice: %+v", o.previewReqs)
 	}
+	// The S2 waits for a choice: it is neither "Refused" nor "Skipped", and the box says what to do.
+	if strings.Contains(body, "<dt>Refused</dt>") || strings.Contains(body, "<dt>Skipped</dt>") {
+		t.Fatalf("a device waiting for its build counts as refused or skipped: %s", body)
+	}
+	if !strings.Contains(body, "<dt>Needs a choice</dt>") {
+		t.Fatalf("the summary does not count the device that needs a choice: %s", body)
+	}
 	start, _, _ := strings.Cut(body[strings.Index(body, `<form id="start"`):], "</form>")
 	if strings.Contains(start, `name="id" value="4"`) || strings.Contains(start, "build_4") {
 		t.Fatalf("a refused device must not be in the start form: %s", start)
@@ -582,5 +589,24 @@ func TestTransactionRowShowsTheChosenBuild(t *testing.T) {
 	_, body = e.do(t, "GET", "/transactions/7", "operator", nil)
 	if !strings.Contains(body, "build s2cdc") {
 		t.Fatalf("the chosen build is not shown: %s", body)
+	}
+}
+
+// Why: only-S2 batch: nothing can start until the build is chosen, so the box must say that, not
+// "No device can be updated" (a dead end); and a refused S2 whose build was chosen but whose custom
+// firmware is not replaced keeps the radios (the choice stays checked) and explains the variant.
+func TestPreviewOnlyS2NeedsAChoiceNotADeadEnd(t *testing.T) {
+	e, o, _, _ := setupOTA(t)
+	e.inv.devs[4] = model.Device{ID: 4, Name: "s2-board", Address: "10.0.0.4", Identity: model.Identity{Family: model.ChipESP32S2, Hardware: "ESP32-S2", Version: "16.0.0", Variant: "unknown", Image: "tasmota32"}}
+	o.items[4] = ota.PreviewItem{DeviceID: 4, Decision: "refuse", Reason: "select: variant change", BuildChoice: true}
+	form := url.Values{"id": {"4"}, "release": {"16.1.0"}, "policy": {"only-newer"}}
+	_, body := e.do(t, "POST", "/updates/preview", "operator", form)
+	if !strings.Contains(body, "Choose a build above, then recheck.") || strings.Contains(body, "No device can be updated") {
+		t.Fatalf("hint: %s", body)
+	}
+	form.Set("build_4", "s2")
+	_, body = e.do(t, "POST", "/updates/preview", "operator", form)
+	if !strings.Contains(body, `value="s2" form="recheck" checked`) || !strings.Contains(body, "custom or unrecognised firmware") {
+		t.Fatalf("refused with a build: %s", body)
 	}
 }

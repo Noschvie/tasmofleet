@@ -9314,6 +9314,9 @@ nav.crumbs a {
 .upd-bad {
   color: var(--color-danger-fg);
 }
+.upd-warn {
+  color: var(--color-warn-fg);
+}
 .upd-of {
   color: var(--color-text-3);
 }

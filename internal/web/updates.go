@@ -534,11 +534,12 @@ func (p previewPage) Upgrades() int {
 	return n
 }
 
-// Refused counts the rows the engine refuses: they are blocked, not just left alone.
+// Refused counts the rows the engine refuses: they are blocked, not just left alone. A device
+// that waits for the user's build choice is counted by ChoosingBuilds instead.
 func (p previewPage) Refused() int {
 	n := 0
 	for _, r := range p.Rows {
-		if r.Item.Decision == "refuse" {
+		if r.Item.Decision == "refuse" && len(r.BuildOptions) == 0 {
 			n++
 		}
 	}
@@ -557,7 +558,9 @@ func (p previewPage) ChoosingBuilds() int {
 }
 
 // Skips counts the devices that need nothing (already at the target); a refused device is not one of them.
-func (p previewPage) Skips() int { return len(p.Rows) - p.Upgrades() - p.Refused() }
+func (p previewPage) Skips() int {
+	return len(p.Rows) - p.Upgrades() - p.Refused() - p.ChoosingBuilds()
+}
 
 type previewPage struct {
 	ReleaseText string // the release as the user chose it, "custom: label (version)" for an upload
@@ -667,8 +670,8 @@ func (h *handler) updatePreview(w http.ResponseWriter, r *http.Request) {
 		if it.BuildChoice {
 			row.BuildOptions = buildOptionsFor(d.Identity)
 		}
+		row.Build = q.Build
 		if row.Go && q.Build != "" {
-			row.Build = q.Build
 			row.Note = "Build " + q.Build + ", chosen by you."
 			if p.Builds == nil {
 				p.Builds = map[string]string{}

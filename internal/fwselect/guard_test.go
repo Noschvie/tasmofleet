@@ -226,6 +226,7 @@ func TestGuardRule7Variant(t *testing.T) {
 		// #88: the build is the user's explicit choice; Guard holds the artifact to it.
 		{name: "s2 build s2 gets the s2cdc artifact", id: idS2Real, a: artS2CDC, c: Choice{Release: rel, Build: "s2"}, want: ErrVariantChange},
 		{name: "s2 build s2cdc gets the s2 artifact", id: idS2Real, a: artS2, c: Choice{Release: rel, Build: "s2cdc"}, want: ErrVariantChange},
+		{name: "s2 custom image, build alone, gets s2", id: idS2Custom, a: artS2, c: Choice{Release: rel, Build: "s2"}, want: ErrVariantChange},
 		{name: "s2 without build gets s2cdc", id: idS2Real, a: artS2CDC, c: changeTo("tasmota"), want: ErrBuildChoiceNeeded},
 		{name: "classic esp32 with a build", id: idESP32, a: artESP32, c: Choice{Release: rel, Build: "s2"}, want: ErrNoSuchVariant},
 		{name: "p4 revision 3.1 with build p4", id: idP4R3, a: artP4, c: Choice{Release: rel, Build: "p4"}, want: ErrNoSuchVariant},

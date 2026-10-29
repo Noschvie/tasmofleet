@@ -1315,3 +1315,16 @@ func TestBuildTravelsWithTheJob(t *testing.T) {
 		t.Errorf("choiceFor lost the build: %+v", c)
 	}
 }
+
+// Why: an S2 that runs a custom image is refused for its variant; the page must still offer the
+// build (with the explanation) instead of a dead end, but an ESP8266 refused the same way must not.
+func TestPreviewOffersTheBuildForAnS2RefusedForItsVariant(t *testing.T) {
+	s2 := plugDevice()
+	s2.ident.Family = model.ChipESP32S2
+	h := newHarness(t, 2, s2, plugDevice())
+	h.sel.selectErr = fwselect.ErrVariantChange
+	items, err := h.e.Preview(context.Background(), []Request{{DeviceID: 1, Release: "16.0.0", Build: "s2"}, {DeviceID: 2, Release: "16.0.0"}})
+	if err != nil || !items[0].BuildChoice || items[1].BuildChoice {
+		t.Fatalf("items %+v err %v", items, err)
+	}
+}

@@ -306,7 +306,7 @@ type PreviewItem struct {
 	Plan     model.Plan
 	Filename string
 	Reason   string // for skip/refuse: the guard or policy error text
-	// BuildChoice is set when the refusal is fwselect.ErrBuildChoiceNeeded: the
+	// BuildChoice is set when the refusal is fwselect.ErrBuildChoiceNeeded (or an S2's variant change): the
 	// user may choose a build (fwselect.BuildOptions of the device) and recheck.
 	BuildChoice bool
 	// Delivery is what the job would use: a push request falls back to the
@@ -541,7 +541,9 @@ func (e *Engine) previewDevice(ctx context.Context, d model.Device, r Request) P
 	cancel()
 	if err != nil {
 		it.Reason = err.Error()
-		if errors.Is(err, fwselect.ErrBuildChoiceNeeded) {
+		// An S2 refused for its variant (a custom or unrecognised image runs) still offers the build:
+		// the replacement needs the user's explicit variant as well, which the page explains.
+		if errors.Is(err, fwselect.ErrBuildChoiceNeeded) || (ident.Family == model.ChipESP32S2 && errors.Is(err, fwselect.ErrVariantChange)) {
 			it.BuildChoice = true
 		}
 		return it
