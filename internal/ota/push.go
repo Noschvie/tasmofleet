@@ -122,7 +122,7 @@ func (e *Engine) safebootRoute(ctx context.Context, d model.Device, id model.Ide
 	}
 	layout, err := sb.UpLayout(ctx, d)
 	if err != nil || layout != tasmota.UpLayoutSafeboot {
-		return false, "" // a dual layout cannot be told from an unreadable page: the plain refusal stands
+		return false, "" // a dual layout cannot be told from an unreadable page: the plain refusal stands (the upload re-checks /up and refuses upl(this), #191)
 	}
 	if !e.safebootPush {
 		return false, errPushSafebootOff

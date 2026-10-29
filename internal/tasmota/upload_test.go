@@ -21,6 +21,7 @@ import (
 
 const simFixtures = "../../testdata/fixtures"
 
+// uploadSim is a dual-OTA ESP32: the only layout that takes a plain upload into the running app (#191).
 func uploadSim(t *testing.T, spec simulator.DeviceSpec) (simulator.Controller, Target) {
 	t.Helper()
 	f, err := simulator.NewFleetWith(simulator.FleetOptions{FixturesDir: simFixtures}, simulator.Extra{TimeScale: 0.02})
@@ -28,7 +29,7 @@ func uploadSim(t *testing.T, spec simulator.DeviceSpec) (simulator.Controller, T
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = f.Close() })
-	spec.Name, spec.Profile = "plug", simulator.ProfileESP32
+	spec.Name, spec.Profile = "plug", simulator.ProfileESP32Dual
 	if spec.Version == "" {
 		spec.Version = "16.0.0"
 	}
@@ -146,6 +147,27 @@ func TestUploadFirmwareNeedsTheUploadForm(t *testing.T) {
 	}
 	if posts.Load() != 0 {
 		t.Error("an image was sent to a device without a plain upload form")
+	}
+}
+
+// Why: #191. The running app of a single-OTA ESP32 serves an upload form whose button calls
+// upl(this). A plain POST /u2 there would overwrite the running firmware, so the client sends
+// nothing even when the caller (planner) could not read the layout earlier.
+func TestUploadFirmwareRefusesTheSingleOTAAppPage(t *testing.T) {
+	var posts atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			posts.Add(1)
+		}
+		_, _ = w.Write([]byte("<html><form method='post' action='u2'><input type='file' name='u2'><button onclick='upl(this)'>Start upgrade</button></form></html>"))
+	}))
+	defer srv.Close()
+	err := upload(uploader(t, Options{}), target(t, srv, 1, "", ""), []byte{0xE9, 1, 2, 3})
+	if !errors.Is(err, ErrUploadUnsupported) {
+		t.Fatalf("got %v", err)
+	}
+	if posts.Load() != 0 {
+		t.Error("an image was sent into the running app of a single-OTA device")
 	}
 }
 

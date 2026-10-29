@@ -78,6 +78,10 @@ func (c *httpClient) UploadFirmware(ctx context.Context, t Target, filename stri
 	if !upUploadForm.Match(page) {
 		return &deviceError{ErrUploadUnsupported, "the upgrade page has no file upload form"}
 	}
+	// #191: the single-OTA app page (upl(this)) must never get a plain upload into the running firmware.
+	if strings.Contains(string(page), uplCall) {
+		return &deviceError{ErrUploadUnsupported, "the device runs the single-app (safeboot) layout; a plain upload would go into the running firmware"}
+	}
 
 	var head bytes.Buffer
 	mw := multipart.NewWriter(&head)
