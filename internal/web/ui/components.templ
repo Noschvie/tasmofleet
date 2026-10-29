@@ -366,6 +366,16 @@ templ HealthBar(ok, off, unk int) {
 	</svg>
 }
 
+// ComplianceBar is a rule's compliance: devices that match, deviate and cannot be judged, drawn
+// like the fleet health bar (same segments and CSS); only the text for assistive technology differs.
+templ ComplianceBar(match, deviate, unknown int) {
+	<svg class="health-bar" viewBox="0 0 1000 8" preserveAspectRatio="none" role="img" aria-label={ itoa(match) + " match, " + itoa(deviate) + " deviate, " + itoa(unknown) + " not judged" }>
+		for _, s := range complianceSegments(match, deviate, unknown) {
+			<rect class={ "bar-seg", s.Tone.class() } x={ itoa(s.X) } y="0" width={ itoa(s.W) } height="8"></rect>
+		}
+	</svg>
+}
+
 // AttentionList is the "Needs attention" list: proposals with two inline actions first, then
 // devices with their reason.
 templ AttentionList(props []AttProposal, items []AttItem, csrf string) {

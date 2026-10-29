@@ -40,9 +40,9 @@ func (a *activeOn) ListJobs(_ context.Context, f store.JobFilter) ([]model.Job, 
 }
 
 var (
-	ruleOn0  = policy.Rule{Command: "PowerOnState", Want: "0"}
-	ruleSO0  = policy.Rule{Command: "SetOption0", Want: "0"}
-	ruleSave = policy.Rule{Command: "SaveData", Want: "0"}
+	ruleOn0  = policy.Rule{ID: "r1", Command: "PowerOnState", Want: "0"}
+	ruleSO0  = policy.Rule{ID: "r2", Command: "SetOption0", Want: "0"}
+	ruleSave = policy.Rule{ID: "r3", Command: "SaveData", Want: "0"}
 )
 
 // fixReport: kitchen deviates live (two settings), attic deviates only in an
@@ -56,6 +56,13 @@ func fixReport() PolicyReport {
 			{DeviceID: 1, Rule: ruleOn0, Have: "3"}, {DeviceID: 1, Rule: ruleSO0, Have: "1"},
 			{DeviceID: 2, Rule: ruleOn0, Have: "2"},
 			{DeviceID: 3, Rule: ruleSave, Unknown: true}, {DeviceID: 3, Rule: ruleOn0, Have: "5"},
+		},
+		// The one evaluation the overview reads (its banner and tiles); the findings are its
+		// Deviate and Unknown entries.
+		Outcomes: []policy.Outcome{
+			{DeviceID: 1, RuleIndex: 0, RuleID: "r1", Kind: policy.OutcomeDeviate}, {DeviceID: 1, RuleIndex: 1, RuleID: "r2", Kind: policy.OutcomeDeviate},
+			{DeviceID: 2, RuleIndex: 0, RuleID: "r1", Kind: policy.OutcomeDeviate},
+			{DeviceID: 3, RuleIndex: 2, RuleID: "r3", Kind: policy.OutcomeUnknown}, {DeviceID: 3, RuleIndex: 0, RuleID: "r1", Kind: policy.OutcomeDeviate},
 		},
 		Provenance: map[model.DeviceID]map[string]ValueSource{
 			1: {"poweronstate": live, "setoption0": live},
@@ -192,10 +199,10 @@ func TestPolicyFixIsAdminOnly(t *testing.T) {
 	if strings.Contains(op, "Make compliant") || strings.Contains(op, "dlg-fix") {
 		t.Error("operators must not be offered the action")
 	}
-	// The admin's button counts the devices that get commands (kitchen and cellar: attic's
-	// value is only known from a backup); its dialog lists the commands and applies exactly
-	// the reviewed plan (digest and devices).
-	for _, want := range []string{"Make compliant (2)…", `data-dialog="dlg-fix"`, `name="all" value="1"`, `name="device" value="1"`, `name="device" value="3"`,
+	// The admin's banner offers Make compliant; its dialog counts the devices that get commands
+	// (kitchen and cellar: attic's value is only known from a backup), lists the commands and
+	// applies exactly the reviewed plan (digest and devices).
+	for _, want := range []string{"Make compliant…", "Make 2 devices compliant", `data-dialog="dlg-fix"`, `name="all" value="1"`, `name="device" value="1"`, `name="device" value="3"`,
 		`name="digest"`, "PowerOnState 0; SetOption0 0", "Run 3 changes"} {
 		if !strings.Contains(adm, want) {
 			t.Errorf("admin page misses %q", want)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/nofuturekid/tasmofleet/internal/backup"
 	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/policy"
 	"github.com/nofuturekid/tasmofleet/internal/store"
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
@@ -112,8 +113,8 @@ func (h *handler) backupDeleteConfirm(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) rulesDeleteConfirm(w http.ResponseWriter, r *http.Request) {
-	n, err := strconv.Atoi(r.URL.Query().Get("idx"))
-	if err != nil || n < 0 {
+	id := r.URL.Query().Get("id")
+	if !policy.RuleIDRe.MatchString(id) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -122,7 +123,8 @@ func (h *handler) rulesDeleteConfirm(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	if n >= len(st.Specs) {
+	n := indexOfRule(st.Specs, id)
+	if n < 0 {
 		h.notFound(w, r)
 		return
 	}
@@ -142,8 +144,8 @@ func (h *handler) rulesDeleteConfirm(w http.ResponseWriter, r *http.Request) {
 		Crumbs: []confirmLink{{"/devices", "Devices"}, {policyPath, "Policy"}},
 		Last:   "Delete",
 		Action: rulesPath + "/delete",
-		Fields: []confirmField{{"idx", strconv.Itoa(n)}, {"version", strconv.FormatInt(st.VersionID, 10)}},
-		Verb:   "Delete rule", CancelHref: policyPath + "?edit=" + strconv.Itoa(n), CancelLabel: "Cancel",
+		Fields: []confirmField{{"id", id}, {"version", strconv.FormatInt(st.VersionID, 10)}},
+		Verb:   "Delete rule", CancelHref: rulesPath + "/" + id, CancelLabel: "Cancel",
 	})
 }
 

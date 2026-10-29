@@ -1,0 +1,233 @@
+package web
+
+import "github.com/nofuturekid/tasmofleet/internal/web/ui"
+
+// policyPage is GET /policy: tiles, tabs and the rule table. A rule opens on its own page
+// (/policy/rules/{id}); the table only reorders, duplicates, enables, disables and deletes.
+templ policyPage(p policyView) {
+	<div class="pol-page">
+		@policyShell(p.Head) {
+			if p.Env {
+				@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Text: "These rules come from POLICY_RULES (the environment). They can't be changed here."})
+			}
+			if p.Banner != "" {
+				@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: p.Banner, Alert: true})
+			}
+			if !p.HasRules {
+				@policyEmpty(p)
+			} else {
+				@policyTable(p)
+				if p.Alert != nil {
+					@policyAlert(p)
+				}
+				if len(p.Conflicts) > 0 {
+					<div class="pol-confs">
+						for _, c := range p.Conflicts {
+							<div class="pol-conf" role="note"><span class="pol-conf-dot" aria-hidden="true"></span><span>{ c }</span></div>
+						}
+					</div>
+				}
+				<p class="pol-none">
+					if p.Admin && p.CanRules {
+						When rules overlap, the higher one wins. Drag ⋮⋮ to reorder.
+					} else {
+						When rules overlap, the higher one wins.
+					}
+				</p>
+			}
+			if len(p.History) > 0 {
+				@versionHistory(p)
+			}
+		}
+		if p.Fix != nil {
+			@ui.Dialog(ui.DialogData{
+				ID: "dlg-fix", Title: "Make " + plural(p.Fix.Ready, "device") + " compliant",
+				Body:    "Only Required rules are included; Advisory rules stay hints. These commands run as one transaction only when you confirm. Values known only from a backup, or not known at all, are left alone.",
+				Changes: p.Fix.Changes, Action: p.Base + "/policy/fix/apply", CSRF: p.CSRF, Fields: p.Fix.Fields,
+				Verb: "Run " + plural(p.Fix.Commands, "change"),
+			})
+		}
+		if p.Admin && p.CanRules {
+			for _, r := range p.Rows {
+				@ui.Dialog(ui.DialogData{
+					ID: "dlg-rule-" + r.ID, Title: "Delete rule “" + r.Name + "”?", Body: r.Delete,
+					Action: p.Base + rulesPath + "/delete", CSRF: p.CSRF,
+					Fields: []ui.KVRow{{Key: "id", Value: r.ID}, {Key: "version", Value: vstr(p.Version)}},
+					Verb:   "Delete rule", Danger: true,
+				})
+			}
+		}
+		<script src={ p.Base + "/static/" + asset("policy.js") } defer></script>
+	</div>
+}
+
+// policyTable is the rule table. Admins get the drag handle and the row menu; on a phone every
+// row is a card (name, menu, then the labelled values).
+templ policyTable(p policyView) {
+	<section class="devcard" id="rules" aria-label="Rules, highest first">
+		<table class="dense">
+			<thead>
+				<tr>
+					if p.Admin && p.CanRules {
+						<th><span class="sr-only">Order</span></th>
+					}
+					<th>Rule</th>
+					<th>Setting</th>
+					<th>Applies to</th>
+					<th>When it deviates</th>
+					<th>Compliance</th>
+					if p.Admin && p.CanRules {
+						<th><span class="sr-only">Actions</span></th>
+					}
+				</tr>
+			</thead>
+			<tbody data-rule-list data-order-form="rule-order">
+				for i, r := range p.Rows {
+					@policyRow(p, i, r)
+				}
+			</tbody>
+		</table>
+		if p.Admin && p.CanRules {
+			<form id="rule-order" method="post" action={ templ.SafeURL(p.Base + rulesPath + "/order") } hidden>
+				<input type="hidden" name="csrf" value={ p.CSRF }/>
+				<input type="hidden" name="version" value={ vstr(p.Version) }/>
+				<input type="hidden" name="order" value=""/>
+			</form>
+		}
+	</section>
+}
+
+templ policyRow(p policyView, i int, r ruleRow) {
+	<tr
+		class={ templ.KV("is-dim", r.Disabled) }
+		data-rule-idx={ itoa(i) }
+		if p.Admin && p.CanRules {
+			draggable="true"
+		}
+	>
+		if p.Admin && p.CanRules {
+			<td aria-hidden="true"><span class="pol-grip" title="Drag to reorder">⋮⋮</span></td>
+		}
+		<td class="p1" data-label="Rule">
+			<a href={ templ.SafeURL(p.Base + rulesPath + "/" + r.ID) }>{ r.Name }</a>
+			if r.Disabled {
+				{ " " }
+				@ui.Badge(ui.ToneNeutral, "Disabled")
+			}
+		</td>
+		<td data-label="Setting" title={ r.Setting }><span class="mono">{ r.Setting }</span></td>
+		<td data-label="Applies to">{ r.Applies }</td>
+		<td data-label="When it deviates">
+			if r.Required {
+				@ui.Badge(ui.ToneWarn, r.Severity)
+			} else {
+				@ui.Badge(ui.ToneAccent, r.Severity)
+			}
+		</td>
+		<td data-label="Compliance">
+			switch {
+				case r.Disabled:
+					<span class="pol-none">not checked while disabled</span>
+				case r.Counted && r.Applied == 0:
+					<span class="pol-none">applies to no device</span>
+				case r.Counted:
+					<div>
+						@ui.ComplianceBar(r.Match, r.Deviate, r.Unknown)
+						<span>{ r.Text }</span>
+					</div>
+				default:
+					<span class="pol-none">–</span>
+			}
+		</td>
+		if p.Admin && p.CanRules {
+			<td data-label="Actions" class="rowacts">
+				@policyRowMenu(p, r)
+			</td>
+		}
+	</tr>
+}
+
+// policyRowMenu is the rule's "⋯" menu: Edit, Duplicate, Enable / Disable, the moves (the way to
+// reorder without JavaScript or on a phone) and Delete….
+templ policyRowMenu(p policyView, r ruleRow) {
+	<details class={ "rowmenu", "umenu", templ.KV("up", r.Last && !r.First) }>
+		<summary class="btn btn-ghost btn-icon icon" aria-label={ "Actions for " + r.Name }>⋯</summary>
+		<div class="rowmenu-body menu-panel" role="menu">
+			<a class="menu-item" role="menuitem" href={ templ.SafeURL(p.Base + rulesPath + "/" + r.ID) }><span>Edit</span></a>
+			@policyRowOp(p, r, "/duplicate", "", "", "Duplicate")
+			if r.Disabled {
+				@policyRowOp(p, r, "/enable", "", "list", "Enable")
+			} else {
+				@policyRowOp(p, r, "/disable", "", "list", "Disable")
+			}
+			if !r.First {
+				@policyRowOp(p, r, "/order", "up", "", "Move up")
+			}
+			if !r.Last {
+				@policyRowOp(p, r, "/order", "down", "", "Move down")
+			}
+			<hr/>
+			<a class="menu-item danger" role="menuitem" href={ templ.SafeURL(p.Base + rulesPath + "/delete?id=" + r.ID) } data-dialog={ "dlg-rule-" + r.ID }><span>Delete…</span></a>
+		</div>
+	</details>
+}
+
+templ policyRowOp(p policyView, r ruleRow, path, move, back, label string) {
+	<form method="post" action={ templ.SafeURL(p.Base + rulesPath + path) }>
+		<input type="hidden" name="csrf" value={ p.CSRF }/>
+		<input type="hidden" name="version" value={ vstr(p.Version) }/>
+		<input type="hidden" name="id" value={ r.ID }/>
+		if move != "" {
+			<input type="hidden" name="move" value={ move }/>
+		}
+		if back != "" {
+			<input type="hidden" name="back" value={ back }/>
+		}
+		<button type="submit" class="menu-item" role="menuitem">{ label }</button>
+	</form>
+}
+
+// policyAlert is the banner of devices that deviate from a Required rule. Show goes to the table
+// until the Deviating devices tab exists; Make compliant opens the plan for all of them.
+templ policyAlert(p policyView) {
+	<div class="banner tone-warn" role="status">
+		<span class="banner-dot"></span>
+		<div class="banner-text">
+			{ p.Alert.Text }<span class="mono">{ p.Alert.Devices }</span> ({ p.Alert.Rules })
+		</div>
+		<a class="banner-btn" href="#rules">Show</a>
+		if p.Fix != nil {
+			<form method="post" action={ templ.SafeURL(p.Base + "/policy/fix") } class="pol-inline">
+				<input type="hidden" name="csrf" value={ p.CSRF }/>
+				<input type="hidden" name="all" value="1"/>
+				<button type="submit" class="banner-btn" data-dialog="dlg-fix">Make compliant…</button>
+			</form>
+		}
+	</div>
+}
+
+// policyEmpty is the empty state. Admins get New rule and the first templates, each a link to a
+// draft (nothing is saved before Save rule).
+templ policyEmpty(p policyView) {
+	if p.Admin && p.CanRules {
+		@ui.Empty("No policy rules yet", "Start with a template. You can change every field afterwards.") {
+			<a class="btn btn-primary" href={ templ.SafeURL(p.Base + rulesPath + "/new") }>New rule</a>
+		}
+		if len(p.Templates) > 0 {
+			<div class="pol-tpls">
+				for _, t := range p.Templates {
+					<a class="pol-tpl" href={ templ.SafeURL(p.Base + rulesPath + "/new?template=" + t.ID) }>
+						<span class="pol-tpl-name">{ t.Title }</span>
+						<span class="pol-tpl-kv">{ t.kv() }</span>
+						<span class="pol-tpl-text">{ t.Text }</span>
+						<span class="pol-tpl-use">Use template</span>
+					</a>
+				}
+			</div>
+		}
+	} else if p.CanRules {
+		@ui.Empty("No policy rules yet", "An admin can add them.")
+	} else {
+		@ui.Empty("No policy rules yet", "No rules are configured in POLICY_RULES.")
+	}
+}

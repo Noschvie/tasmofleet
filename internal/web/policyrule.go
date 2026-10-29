@@ -276,7 +276,6 @@ type rulePageView struct {
 	Disabled   bool
 	Line       string
 	Version    int64
-	Idx        int
 	Origin     string
 	Banner     string
 	BannerTone ui.Tone
@@ -366,7 +365,7 @@ func (h *handler) rulePageRender(w http.ResponseWriter, r *http.Request, status 
 	p := rulePageView{
 		Base: v.Base, CSRF: v.CSRF, Admin: canEdit, ID: o.ID, Draft: draft, Env: !src.Editable,
 		Name: name, Required: spec.Severity != policy.SeverityInfo, Disabled: spec.Disabled,
-		Version: src.Version, Idx: pos, Origin: o.Origin, Source: o.Source,
+		Version: src.Version, Origin: o.Origin, Source: o.Source,
 		Banner: o.Banner, BannerTone: ui.ToneDanger,
 		Tiles: ruleTiles(stat, spec),
 	}
@@ -384,7 +383,7 @@ func (h *handler) rulePageRender(w http.ResponseWriter, r *http.Request, status 
 			h.fail(w, r, err)
 			return
 		}
-		e.Idx, e.Version = o.ID, src.Version
+		e.ID, e.Version = o.ID, src.Version
 		e.Err, e.ErrField = o.ErrMsg, o.ErrField
 		e.Control.Invalid = o.ErrField == "want"
 		e.Enabled = !spec.Disabled

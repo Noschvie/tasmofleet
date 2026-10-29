@@ -40,25 +40,27 @@ func TestBackupDeleteConfirmPage(t *testing.T) {
 func TestRuleDeleteConfirmPage(t *testing.T) {
 	e, mem, _ := rulesEnv(t, "")
 	saveRule(t, e, url.Values{"change_note": {"first"}})
-	if r, _ := e.do(t, "GET", "/policy/rules/delete?idx=0", "operator", nil); r.StatusCode != 403 {
+	if r, _ := e.do(t, "GET", "/policy/rules/delete?id=r1", "operator", nil); r.StatusCode != 403 {
 		t.Fatalf("operator: %d", r.StatusCode)
 	}
-	r, body := e.do(t, "GET", "/policy/rules/delete?idx=0", "admin", nil)
-	if r.StatusCode != 200 || !strings.Contains(body, `action="/tf/policy/rules/delete"`) || !strings.Contains(body, `name="idx" value="0"`) ||
+	id := ruleIDs(t, mem)[0]
+	r, body := e.do(t, "GET", "/policy/rules/delete?id="+id, "admin", nil)
+	if r.StatusCode != 200 || !strings.Contains(body, `action="/tf/policy/rules/delete"`) || !strings.Contains(body, `name="id" value="`+id+`"`) ||
+		!strings.Contains(body, `href="/tf/policy/rules/`+id+`"`) ||
 		!strings.Contains(body, `name="version" value="1"`) || !strings.Contains(body, "Flash wear") {
 		t.Fatalf("%d %.600s", r.StatusCode, body)
 	}
-	if r, _ := e.do(t, "GET", "/policy/rules/delete?idx=7", "admin", nil); r.StatusCode != 404 {
+	if r, _ := e.do(t, "GET", "/policy/rules/delete?id=r9z9z9", "admin", nil); r.StatusCode != 404 {
 		t.Errorf("missing rule: %d", r.StatusCode)
 	}
-	if r, _ := e.do(t, "GET", "/policy/rules/delete?idx=x", "admin", nil); r.StatusCode != 400 {
-		t.Errorf("bad index: %d", r.StatusCode)
+	if r, _ := e.do(t, "GET", "/policy/rules/delete?id=x", "admin", nil); r.StatusCode != 400 {
+		t.Errorf("bad id: %d", r.StatusCode)
 	}
 	if len(mem.vs) != 1 {
 		t.Fatalf("opening the page saved a version: %d", len(mem.vs))
 	}
 	_, list := e.do(t, "GET", "/policy", "admin", nil)
-	if !strings.Contains(list, `href="/tf/policy/rules/delete?idx=0" data-dialog="dlg-rule-0"`) {
+	if !strings.Contains(list, `href="/tf/policy/rules/delete?id=`+id+`" data-dialog="dlg-rule-`+id+`"`) {
 		t.Errorf("the Delete opener has no href:\n%s", list)
 	}
 }

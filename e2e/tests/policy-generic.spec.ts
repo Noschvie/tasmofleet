@@ -76,6 +76,7 @@ test("a free command rule: refusals with the reason, then live read, preview and
   await expect(page.getByText("Rule saved")).toBeVisible();
   await expect(page.getByRole("heading", { level: 1 })).toContainText("LED state 3");
   await expect(page.locator(".pghead-sub")).toContainText("LedState = 3");
+  const ruleURL = page.url().split("?")[0];
 
   // Check now reads LedState from the devices (the simulator reports 1); the rule page lists them.
   const devRow = page.locator("#rule-devices tr").filter({ hasText: "plug-4m-http" });
@@ -85,11 +86,10 @@ test("a free command rule: refusals with the reason, then live read, preview and
   await expect(page.locator("[data-tile='deviate'] .dev-tile-v")).not.toHaveText("0");
   await shot("preview-flags");
 
-  // The same on the policy page, for the Make compliant steps below.
+  // The same on the policy overview, for the Make compliant steps below: its banner names the deviation.
   await page.goto(app.url + "/policy");
   await page.getByRole("button", { name: "Run now" }).click();
-  const row = page.locator(".pol-pv-row").filter({ hasText: "plug-4m-http" });
-  await expect(row).toContainText("→ 3", { timeout: 60_000 });
+  await expect(page.locator(".banner", { hasText: "deviate from a required rule" })).toBeVisible({ timeout: 60_000 });
 
   // Operators see the rule but have no way to change it or to fix.
   await page.setExtraHTTPHeaders(operator);
@@ -100,14 +100,15 @@ test("a free command rule: refusals with the reason, then live read, preview and
   // Make compliant sends exactly the reviewed command and ends compliant.
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/policy");
-  await page.getByRole("button", { name: /^Make compliant \(\d+\)…$/ }).click();
+  await page.getByRole("button", { name: "Make compliant…" }).click();
   const dlg = page.locator("dialog#dlg-fix");
   await expect(dlg).toBeVisible();
   await expect(dlg).toContainText("LedState 3");
   await dlg.getByRole("button", { name: /^Run \d+ changes?$/ }).click();
   await expect(page).toHaveURL(/\/transactions\/\d+/);
   await expect(page.locator(".upd-dev").getByText("Applied", { exact: true }).first()).toBeVisible({ timeout: 60_000 });
-  await page.goto(app.url + "/policy");
-  await expect(row).toHaveCount(0);
+  await page.goto(ruleURL + "?show=deviate");
+  await expect(page.locator("#rule-devices")).toBeVisible();
+  await expect(devRow).toHaveCount(0);
   testInfo.annotations.push({ type: "note", description: "LedState rule fixed through the generic path" });
 });

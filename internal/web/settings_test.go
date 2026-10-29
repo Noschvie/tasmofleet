@@ -216,13 +216,18 @@ func (f *fakePolicy) Report(_ context.Context, _ string, live bool) (PolicyRepor
 // Why: the view must tell drift, unknown and ok apart; "unknown" must never
 // render as compliant, and the age of a value is part of the verdict.
 func TestPolicyPage(t *testing.T) {
-	rule := policy.Rule{Command: "SetOption0", Want: "0", Note: "flash wear", Families: []model.ChipFamily{model.ChipESP8266}}
+	rule := policy.Rule{ID: "r1", Command: "SetOption0", Want: "0", Note: "flash wear", Families: []model.ChipFamily{model.ChipESP8266}}
 	fp := &fakePolicy{rep: PolicyReport{
 		Rules:   []policy.Rule{rule},
 		Devices: []model.Device{{ID: 1, Name: "kitchen"}, {ID: 2, Name: "attic"}, {ID: 3, Name: "cellar"}},
 		Findings: []policy.Finding{
 			{DeviceID: 1, Rule: rule, Have: "1"},
 			{DeviceID: 3, Rule: rule, Unknown: true},
+		},
+		Outcomes: []policy.Outcome{
+			{DeviceID: 1, RuleID: "r1", Kind: policy.OutcomeDeviate, Have: "1"},
+			{DeviceID: 2, RuleID: "r1", Kind: policy.OutcomeMatch, Have: "0"},
+			{DeviceID: 3, RuleID: "r1", Kind: policy.OutcomeUnknown},
 		},
 		Provenance: map[model.DeviceID]map[string]ValueSource{
 			1: {"setoption0": {Kind: "live", At: time.Now().Add(-5 * time.Minute)}},
@@ -235,13 +240,16 @@ func TestPolicyPage(t *testing.T) {
 	if resp.StatusCode != 200 {
 		t.Fatalf("status %d", resp.StatusCode)
 	}
-	for _, want := range []string{"SetOption0 = 0", "Chip family: ESP8266", "flash wear", "1 rule · 1 device deviates", "1 → <b>0</b>", "unknown → <b>0</b>", "checked 5m ago (live)", "last run 1m ago"} {
+	// One Required rule over three devices: kitchen deviates, attic matches, cellar cannot be
+	// judged. "Unknown" must never count as compliant, so only attic is compliant.
+	for _, want := range []string{"SetOption0 = 0", "Chip family: ESP8266 · 3", "1 / 3 · 1 deviate · 1 ?", "kitchen", "last run 1m ago",
+		`data-tile="compliant"`, `1 / 3</div>`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q in %s", want, body)
 		}
 	}
-	if strings.Contains(body, "attic") {
-		t.Error("the compliant attic is not flagged")
+	if strings.Contains(body, "attic") || strings.Contains(body, "cellar") {
+		t.Error("only the deviating kitchen is named; the matching attic and the unjudged cellar are not")
 	}
 	if _, _ = e.do(t, "POST", "/policy/live", "operator", url.Values{"csrf": {"tok"}}); len(fp.live) != 2 || fp.live[0] || !fp.live[1] {
 		t.Errorf("live flags %v", fp.live)
@@ -298,29 +306,5 @@ func TestSettingsAlwaysSavesOnce(t *testing.T) {
 	e.do(t, "POST", "/devices/1/settings", "admin", baseForm("TelePeriod", "60"))
 	if len(fs.saved) != 0 {
 		t.Fatal("must not guess the SaveData value")
-	}
-}
-
-// Why: backups are stale; when one stands in for a missing live value the page
-// must say so with its date, and a setting that cannot be read without side
-// effects must say that instead of looking like missing data.
-func TestPolicyPageLabelsBackupAndNotReadable(t *testing.T) {
-	r1 := policy.Rule{Command: "SaveData", Want: "0"}
-	r2 := policy.Rule{Command: "Reset", Want: "0"}
-	taken := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
-	fp := &fakePolicy{rep: PolicyReport{
-		Rules: []policy.Rule{r1, r2}, Devices: []model.Device{{ID: 1, Name: "kitchen"}},
-		Findings:   []policy.Finding{{DeviceID: 1, Rule: r1, Have: "5"}, {DeviceID: 1, Rule: r2, RuleIndex: 1, Unknown: true}},
-		Provenance: map[model.DeviceID]map[string]ValueSource{1: {"savedata": {Kind: "backup", At: taken}}},
-		NotLive:    map[string]bool{"reset": true},
-	}}
-	e := setupWith(t, func(d *Deps) { d.Policy = fp })
-	_, body := e.do(t, "GET", "/policy", "operator", nil)
-	if !strings.Contains(body, "from backup of 2026-10-01") {
-		t.Errorf("the backup value must name its date:\n%s", body)
-	}
-	// The second rule (index 1) is the one with the value that cannot be read live.
-	if _, body = e.do(t, "GET", "/policy?edit=1", "operator", nil); !strings.Contains(body, "not readable live") {
-		t.Error("an unreadable setting says so")
 	}
 }

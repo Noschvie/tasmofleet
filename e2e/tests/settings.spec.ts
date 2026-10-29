@@ -18,7 +18,7 @@ test.beforeAll(async () => {
       TASMOFLEET_POLICY_RULES: JSON.stringify([
         { command: "SetOption0", want: "0", families: ["esp8266"], note: "save_state off" },
         { command: "SetOption0", want: "1", families: ["esp32", "esp32s3"], note: "ESP32 exception" },
-        { command: "PowerOnState", want: "7", note: "deliberately impossible" },
+        { command: "PowerOnState", want: "5", note: "never satisfied by the replayed capture" },
       ]),
     },
   });
@@ -77,15 +77,20 @@ test("policy view: the live check finds drift per rule, the ESP32 exception is a
   await expect(page.getByText("SetOption0 = 0")).toBeVisible();
 
   await page.getByRole("button", { name: "Run now" }).click();
-  await expect(page.locator(".pol-line")).toContainText("last run", { timeout: 60_000 });
-  // PowerOnState comes from the side-effect-free Status; the replayed capture says 0
-  await page.goto(app.url + "/policy?edit=2");
-  const row = page.locator(".pol-pv-row").filter({ hasText: "plug-4m-http" });
-  await expect(row).toContainText("0 → 7");
-  await expect(row).toContainText("(live)");
-  // the replayed OFF satisfies the ESP8266 rule: the device is not flagged by it
-  await page.goto(app.url + "/policy?edit=0");
-  await expect(page.locator(".pol-pv-row").filter({ hasText: "plug-4m-http" })).toHaveCount(0);
+  await expect(page.locator("#live-tile")).toContainText("last run", { timeout: 60_000 });
+  // per rule: PowerOnState 5 is never satisfied by the replay, so the overview counts a deviation on its row,
+  // and the ESP8266 rule (the replayed OFF satisfies it) counts none
+  const rows = page.locator("section#rules tbody tr");
+  await expect(rows.nth(2)).toContainText("deviate");
+  await expect(rows.nth(0)).not.toContainText("deviate");
+  const esp8266 = (await rows.nth(0).locator("td.p1 a").getAttribute("href"))!;
+  // The ESP8266 rule's page lists the device with the live value (PowerOnState rules read the
+  // side-effect-free Status; the replayed capture says OFF), and the replayed OFF satisfies the
+  // rule: the device is not among those that deviate.
+  await page.goto(app.url + esp8266);
+  await expect(page.locator("#rule-devices tr").filter({ hasText: "plug-4m-http" })).toContainText("live ·");
+  await page.goto(app.url + esp8266 + "?show=deviate");
+  await expect(page.locator("#rule-devices tr").filter({ hasText: "plug-4m-http" })).toHaveCount(0);
 });
 
 // Why (N9 + N2): a device deleted with "keep the backups" leaves backups no device page lists.

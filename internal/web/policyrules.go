@@ -93,18 +93,9 @@ type valueControl struct {
 	Invalid  bool // the expected value is the failing field of the last save
 }
 
-// rulePreview is the live "what would this rule flag" fragment.
-type rulePreview struct {
-	Hint, Err        string
-	OK               bool
-	Flagged, Unknown int
-	Devices          int
-}
-
 // ruleEditor is the editor panel: a new rule or one saved rule.
 type ruleEditor struct {
-	Idx      string // "new" or the list position
-	Title    string
+	ID       string // "new" or the rule's id
 	Spec     sysconfig.RuleSpec
 	Version  int64
 	Err      string // sentence for the failing field (ErrField), or for the whole rule when ErrField is empty
@@ -115,14 +106,7 @@ type ruleEditor struct {
 	Tags     []chip
 	Devices  []chip
 	Except   string
-	Preview  rulePreview
 	Enabled  bool // the Enabled switch
-}
-
-// rulesPage carries the editor while it is built.
-type rulesPage struct {
-	Current int64
-	Editor  *ruleEditor
 }
 
 var setOptionRe = regexp.MustCompile(`^SetOption[0-9]{1,3}$`)
@@ -272,24 +256,7 @@ func (h *handler) editorFields(r *http.Request, spec sysconfig.RuleSpec) (*ruleE
 	}, nil
 }
 
-// buildEditor fills the editor panel of the policy page.
-func (h *handler) buildEditor(r *http.Request, p *rulesPage, idx string, spec sysconfig.RuleSpec, saved []sysconfig.RuleSpec) error {
-	e, err := h.editorFields(r, spec)
-	if err != nil {
-		return err
-	}
-	title := "New rule"
-	if idx != "new" {
-		title = "Edit rule"
-	}
-	e.Idx, e.Title, e.Version = idx, title, p.Current
-	e.Preview = h.previewFor(r.Context(), saved, ruleDraft{Idx: idx, Spec: spec})
-	p.Editor = e
-	return nil
-}
-
 var (
-	idxRe     = regexp.MustCompile(`^(new|[0-9]{1,3})$`)
 	originRe  = regexp.MustCompile(`^(command|template:[a-z0-9-]{1,32}|copy:[0-9]{1,18})$`)
 	versionRe = regexp.MustCompile(`^[0-9]{1,18}$`)
 )
@@ -316,8 +283,7 @@ func strictForm(w http.ResponseWriter, r *http.Request, single, multi []string) 
 
 // ruleDraft is what the editor form carries.
 type ruleDraft struct {
-	Idx        string // "new" or a list position
-	ID         string // the rule page's form: "new" or the rule's id; then Idx is set from it
+	ID         string // "new" or the rule's id
 	Origin     string // where a new rule came from: template:<id>, copy:<device id> or command
 	Version    int64  // the version the editor was opened on
 	Spec       sysconfig.RuleSpec
@@ -335,7 +301,7 @@ func uniq(list []string) []string {
 	return out
 }
 
-var draftSingle = []string{"csrf", "idx", "id", "origin", "version", "name", "command", "want", "severity", "tags_extra", "except", "note", "change_note"}
+var draftSingle = []string{"csrf", "id", "origin", "version", "name", "command", "want", "severity", "tags_extra", "except", "note", "change_note"}
 
 // draftForm reads the editor form (save and preview). The Enabled switch is a checkbox after a
 // hidden "state=disabled": a ticked box sends both and the last one wins.
@@ -344,21 +310,14 @@ func (h *handler) draftForm(w http.ResponseWriter, r *http.Request) (ruleDraft, 
 	if !ok {
 		return ruleDraft{}, false
 	}
-	d := ruleDraft{Idx: f.Get("idx"), ID: f.Get("id"), Origin: f.Get("origin"), ChangeNote: strings.TrimSpace(f.Get("change_note"))}
+	d := ruleDraft{ID: f.Get("id"), Origin: f.Get("origin"), ChangeNote: strings.TrimSpace(f.Get("change_note"))}
 	switch {
-	case d.ID != "" && d.Idx != "":
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return ruleDraft{}, false
-	case d.ID != "" && d.ID != "new" && !policy.RuleIDRe.MatchString(d.ID):
+	case d.ID != "new" && !policy.RuleIDRe.MatchString(d.ID):
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return ruleDraft{}, false
 	case d.Origin != "" && !originRe.MatchString(d.Origin):
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return ruleDraft{}, false
-	case d.ID == "new":
-		d.Idx = "new" // the rule page's draft is a new rule
-	case d.ID == "" && d.Idx == "":
-		d.Idx = "new"
 	}
 	if v := f.Get("version"); v != "" {
 		n, err := strconv.ParseInt(v, 10, 64)
@@ -367,10 +326,6 @@ func (h *handler) draftForm(w http.ResponseWriter, r *http.Request) (ruleDraft, 
 			return ruleDraft{}, false
 		}
 		d.Version = n
-	}
-	if d.Idx != "" && !idxRe.MatchString(d.Idx) {
-		http.Error(w, "bad request", http.StatusBadRequest)
-		return ruleDraft{}, false
 	}
 	states := f["state"]
 	for _, st := range states {
@@ -421,59 +376,26 @@ func draftDisabled(d ruleDraft, saved []sysconfig.RuleSpec) bool {
 	case "disabled":
 		return true
 	}
-	if n, err := strconv.Atoi(d.Idx); err == nil && n >= 0 && n < len(saved) {
+	if n := indexOfRule(saved, d.ID); n >= 0 {
 		return saved[n].Disabled
 	}
 	return false
 }
 
-// place puts spec into a copy of the saved list: appended for "new",
-// otherwise replacing the rule at that position. pos is its position.
-func place(saved []sysconfig.RuleSpec, idx string, spec sysconfig.RuleSpec) (list []sysconfig.RuleSpec, pos int, ok bool) {
+// place puts spec into a copy of the saved list: appended for "new", otherwise replacing the rule
+// with that id (which keeps its id). pos is its position.
+func place(saved []sysconfig.RuleSpec, id string, spec sysconfig.RuleSpec) (list []sysconfig.RuleSpec, pos int, ok bool) {
 	list = slices.Clone(saved)
-	if idx == "new" {
+	if id == "new" {
 		return append(list, spec), len(list), true
 	}
-	n, err := strconv.Atoi(idx)
-	if err != nil || n < 0 || n >= len(list) {
+	n := indexOfRule(list, id)
+	if n < 0 {
 		return nil, 0, false
 	}
-	spec.ID = list[n].ID // the form carries no id: an edit keeps the rule's own, a new rule stays empty
+	spec.ID = id
 	list[n] = spec
 	return list, n, true
-}
-
-// previewFor says what the draft would flag. It uses Rules.Preview, which
-// stores nothing and reads no device.
-func (h *handler) previewFor(ctx context.Context, saved []sysconfig.RuleSpec, d ruleDraft) rulePreview {
-	if d.Spec.Command == "" || d.Spec.Want == "" {
-		return rulePreview{Hint: "Enter a command and an expected value to see which devices the rule would flag."}
-	}
-	// The editor previews the rule as if enabled, at its place in the list:
-	// what it would flag is the point, also for a rule that is still disabled.
-	spec := d.Spec
-	spec.Disabled = false
-	list, pos, ok := place(saved, d.Idx, spec)
-	if !ok {
-		return rulePreview{Err: "This rule no longer exists. Reload the page."}
-	}
-	res, err := h.d.PolicyRules.Preview(ctx, list)
-	var re *sysconfig.RuleError
-	switch {
-	case errors.As(err, &re) && re.Index == pos:
-		if field, text := ruleProblem(re.Msg); field == "command" {
-			return rulePreview{Err: text} // the reason, not the validator's sentence
-		}
-		return rulePreview{Err: re.Msg}
-	case errors.As(err, &re):
-		return rulePreview{Err: "Another saved rule is invalid: " + re.Error()}
-	case err != nil:
-		h.log.ErrorContext(ctx, "policy rules preview failed", "err", err)
-		return rulePreview{Err: "The preview is not available."}
-	case pos >= len(res.Rules):
-		return rulePreview{Err: "The preview is not available."}
-	}
-	return rulePreview{OK: true, Flagged: res.Rules[pos].Flagged, Unknown: res.Rules[pos].Unknown, Devices: res.Devices}
 }
 
 func (h *handler) rulesPreview(w http.ResponseWriter, r *http.Request) {
@@ -486,11 +408,7 @@ func (h *handler) rulesPreview(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	if d.ID != "" {
-		h.ruleDevicesPreview(w, r, d, st)
-		return
-	}
-	h.component(w, r, http.StatusOK, rulePreviewLine(h.previewFor(r.Context(), st.Specs, d)))
+	h.ruleDevicesPreview(w, r, d, st)
 }
 
 // rulesValueControl renders the expected-value input for the chosen setting.
@@ -509,8 +427,8 @@ func (h *handler) rulesValueControl(w http.ResponseWriter, r *http.Request) {
 // staleText is the banner of a change made on an outdated version of the rules.
 const staleText = "Nothing was saved. The rules were changed by someone else since you opened this page. Check the list and make your change again."
 
-// rulesStale answers a request made on an outdated version of the rules. The
-// draft is not shown again: the position it refers to may now be another rule.
+// rulesStale answers a request made on an outdated version of the rules: the overview with the
+// banner (nothing was changed).
 func (h *handler) rulesStale(w http.ResponseWriter, r *http.Request) {
 	h.policyRender(w, r, http.StatusConflict, policyOpts{banner: staleText})
 }
@@ -529,16 +447,8 @@ func (h *handler) rulesSave(w http.ResponseWriter, r *http.Request) {
 		h.draftStale(w, r, d)
 		return
 	}
-	if d.ID != "" && d.ID != "new" {
-		i := slices.IndexFunc(st.Specs, func(s sysconfig.RuleSpec) bool { return s.ID == d.ID })
-		if i < 0 {
-			h.notFound(w, r)
-			return
-		}
-		d.Idx = strconv.Itoa(i)
-	}
 	d.Spec.Disabled = draftDisabled(d, st.Specs)
-	list, pos, ok := place(st.Specs, d.Idx, d.Spec)
+	list, pos, ok := place(st.Specs, d.ID, d.Spec)
 	if !ok {
 		h.notFound(w, r)
 		return
@@ -553,10 +463,6 @@ func (h *handler) rulesSave(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err = h.d.PolicyRules.Save(r.Context(), actor(r), note, list, h.d.Recorder)
 	if err == nil {
-		if d.ID == "" {
-			redirect(w, r, policyPath+"?ok=saved&edit="+strconv.Itoa(pos))
-			return
-		}
 		h.ruleSaved(w, r, d.ID, pos)
 		return
 	}
@@ -613,29 +519,19 @@ func (h *handler) originNote(r *http.Request, origin string) string {
 	return ""
 }
 
-// draftStale answers a save made on an outdated version of the rules. The rule page of the
-// editor's rule opens again (without the draft; a new rule keeps it); the policy page's editor shows the policy page.
+// draftStale answers a save made on an outdated version of the rules: the rule page opens
+// again (a new rule keeps what was typed, it exists nowhere else).
 func (h *handler) draftStale(w http.ResponseWriter, r *http.Request, d ruleDraft) {
-	if d.ID == "" {
-		h.rulesStale(w, r)
-		return
-	}
 	if d.ID == "new" {
-		// A new rule exists nowhere else: keep what was typed, on the current version.
 		h.rulePageRender(w, r, http.StatusConflict, ruleOpts{ID: d.ID, Draft: &d, Origin: d.Origin, Banner: staleText})
 		return
 	}
 	h.rulePageRender(w, r, http.StatusConflict, ruleOpts{ID: d.ID, Banner: staleText})
 }
 
-// draftRender shows a draft again with its problem: on the rule page when the form came from
-// there (it carries an id), else on the policy page.
+// draftRender shows a draft again with its problem on the rule page.
 func (h *handler) draftRender(w http.ResponseWriter, r *http.Request, status int, d ruleDraft, errField, errMsg, banner string) {
-	if d.ID != "" {
-		h.rulePageRender(w, r, status, ruleOpts{ID: d.ID, Draft: &d, Origin: d.Origin, ErrField: errField, ErrMsg: errMsg, Banner: banner})
-		return
-	}
-	h.policyRender(w, r, status, policyOpts{draft: &d, errField: errField, errMsg: errMsg, banner: banner})
+	h.rulePageRender(w, r, status, ruleOpts{ID: d.ID, Draft: &d, Origin: d.Origin, ErrField: errField, ErrMsg: errMsg, Banner: banner})
 }
 
 // draftProblem finds what the form left empty before anything is validated or
@@ -677,13 +573,12 @@ func (h *handler) rulesInvalid(w http.ResponseWriter, r *http.Request, d ruleDra
 }
 
 func (h *handler) rulesDelete(w http.ResponseWriter, r *http.Request) {
-	f, ok := strictForm(w, r, []string{"csrf", "idx", "version"}, nil)
+	f, ok := strictForm(w, r, []string{"csrf", "id", "version"}, nil)
 	if !ok {
 		return
 	}
 	ver, e1 := strconv.ParseInt(f.Get("version"), 10, 64)
-	n, e2 := strconv.Atoi(f.Get("idx"))
-	if e1 != nil || e2 != nil || ver < 0 || n < 0 {
+	if e1 != nil || ver < 0 || !versionRe.MatchString(f.Get("version")) || !policy.RuleIDRe.MatchString(f.Get("id")) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
@@ -696,7 +591,8 @@ func (h *handler) rulesDelete(w http.ResponseWriter, r *http.Request) {
 		h.rulesStale(w, r)
 		return
 	}
-	if n >= len(st.Specs) {
+	n := indexOfRule(st.Specs, f.Get("id"))
+	if n < 0 {
 		h.notFound(w, r)
 		return
 	}

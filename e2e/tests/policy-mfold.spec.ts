@@ -59,57 +59,60 @@ test("Setup is one card without folds", async ({ page }) => {
   }
 });
 
-// Why: the policy page's sections are cards with a title and a surface (design v2, N3), not
-// folds: nothing is hidden behind a chevron on a desktop.
-test("desktop: policy sections are titled cards without folds", async ({ page }) => {
+// Why: the policy overview is tiles, tabs and one table (design v2, N3), not folds: nothing is
+// hidden behind a chevron on a desktop, and the rule page's cards are titled surfaces.
+test("desktop: the policy overview is tiles, tabs and a table without folds", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(app.url + "/policy");
-  for (const sel of [".pol-editor", ".pol-preview", ".pol-hist"]) {
-    const sec = page.locator(sel);
-    await expect(sec.locator("h2").first(), `${sel} title`).toBeVisible();
-    const bg = await sec.evaluate((c) => getComputedStyle(c).backgroundColor);
-    expect(bg, `${sel} background`).not.toBe("rgba(0, 0, 0, 0)");
-  }
+  await expect(page.locator(".dev-tile")).toHaveCount(5);
+  await expect(page.locator("nav.utabs")).toBeVisible();
+  await expect(page.locator("section#rules table.dense tbody tr").first()).toBeVisible();
   await expect(page.locator("main details.m-fold")).toHaveCount(0);
+  await page.locator("td.p1 a").first().click();
+  for (const id of ["#dc-rule", "#dc-devs"]) {
+    const sec = page.locator(`section:has(${id})`);
+    await expect(sec.locator("h2").first(), `${id} title`).toBeVisible();
+    const bg = await sec.evaluate((c) => getComputedStyle(c).backgroundColor);
+    expect(bg, `${id} background`).not.toBe("rgba(0, 0, 0, 0)");
+  }
 });
 
-// Why: on a phone the three columns stack (cards, editor, preview) and nothing scrolls sideways;
-// each rule card keeps its name, its setting and its "⋯" menu on screen.
-test("phone: the policy page stacks its columns and a rule card keeps its menu", async ({ page }) => {
+// Why: on a phone the rule table becomes cards and nothing scrolls sideways; each rule card keeps
+// its name, its setting and its "⋯" menu on screen, and the drag handle (no drag on a phone) is gone.
+test("phone: the rule table becomes cards and a rule card keeps its menu", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto(app.url + "/policy");
   const sw = await page.evaluate(() => document.documentElement.scrollWidth);
   expect(sw).toBeLessThanOrEqual(375);
-  const card = page.locator(".pol-card").first();
-  await expect(card.locator(".pol-card-name")).toHaveText("Keep power state");
-  await expect(card.locator(".pol-card-kv")).toContainText("SetOption0");
+  const card = page.locator("section#rules tbody tr").first();
+  await expect(card.locator("td.p1 a")).toHaveText("Keep power state");
+  await expect(card.locator("td[data-label=Setting]")).toContainText("SetOption0");
+  await expect(card.locator(".pol-grip")).toBeHidden();
   const box = (await card.boundingBox())!;
-  const menu = (await card.getByLabel("Rule actions").boundingBox())!;
+  const menu = (await card.getByLabel(/^Actions for/).boundingBox())!;
   expect(menu.x + menu.width).toBeLessThanOrEqual(box.x + box.width + 0.5);
-  const ed = (await page.locator(".pol-editor").boundingBox())!;
-  expect(ed.x, "the editor sits under the cards, not beside them").toBeLessThan(box.x + 1);
 });
 
 // Why: the Note had only a fold title as its label once; it is a labelled field at every width.
-test("desktop: the rule editor's Note has a visible label", async ({ page }) => {
+test("desktop: the rule page's Note has a visible label", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto(app.url + "/policy?new=1");
-  const note = page.locator("#editor textarea[name=note]");
+  await page.goto(app.url + "/policy/rules/new?command=SetOption0");
+  const note = page.locator("#rule-form textarea[name=note]");
   await expect(note).toBeVisible();
   const label = note.locator("xpath=preceding-sibling::span[contains(@class,'ufield-label')]");
   await expect(label).toHaveText("Note");
   expect((await label.boundingBox())!.width, "visible label text").toBeGreaterThan(10);
 });
 
-// Why: "60 → 300" in the live preview is one value; it must not break between its parts while a
-// long device name has room to wrap. (A value too long for the card wraps instead, see
+// Why: an actual value in the rule page's devices card is one value; it must not break between its
+// parts while a long device name has room to wrap. (A value too long for the card wraps instead, see
 // policy-long-value.spec.ts, so this checks the rendered height, not white-space: nowrap.)
-test("desktop: a preview value stays on one line", async ({ page }) => {
+test("desktop: a devices-card value stays on one line", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(app.url + "/policy");
   await page.getByRole("button", { name: "Run now" }).click();
-  await page.goto(app.url + "/policy?edit=" + (await lastRuleIndex(page)));
-  const val = page.locator(".pol-pv-val").first();
+  await page.locator("td.p1 a").last().click(); // the e2e target rule (PowerOnState 2)
+  const val = page.locator("#rule-devices td[data-label=Actual] .mono").first();
   await expect(val).toBeVisible({ timeout: 60_000 });
   const { height, font } = await val.evaluate((el) => ({ height: el.getBoundingClientRect().height, font: parseFloat(getComputedStyle(el).fontSize) }));
   expect(height, "a short value is one line (a second line would double the height)").toBeLessThan(font * 2);
@@ -129,8 +132,3 @@ test("phone: the make compliant plan stays inside the screen", async ({ page }) 
     expect(r.x + r.width).toBeLessThanOrEqual(375);
   }
 });
-
-/** lastRuleIndex is the position of the e2e target rule (PowerOnState 2, the last one). */
-async function lastRuleIndex(page: import("@playwright/test").Page): Promise<number> {
-  return (await page.locator(".pol-card").count()) - 1;
-}

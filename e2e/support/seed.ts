@@ -110,9 +110,7 @@ export const hash40 = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b";
 async function savePolicyVersion(page: Page, app: App, name: string, command: string, want: string, note: string): Promise<void> {
   await page.setExtraHTTPHeaders({ "X-authentik-username": hash40, "X-authentik-groups": "adm" });
   try {
-    await page.goto(app.url + "/policy?new=1");
-    await page.locator("input[name=command]").fill(command);
-    await page.locator("input[name=command]").blur(); // the change event loads the value control
+    await page.goto(app.url + "/policy/rules/new?command=" + encodeURIComponent(command)); // the draft rule page
     await expect(page.locator("#want")).toBeEnabled();
     await page.locator("input[name=name]").fill(name);
     const control = page.locator("#want");
@@ -120,7 +118,7 @@ async function savePolicyVersion(page: Page, app: App, name: string, command: st
     else await control.fill(want);
     await page.locator("input[name=change_note]").fill(note);
     await page.getByRole("button", { name: "Save rule" }).click();
-    await expect(page.getByRole("heading", { name: "Version history" })).toBeVisible();
+    await expect(page.getByText("Rule saved")).toBeVisible();
   } finally {
     await page.setExtraHTTPHeaders({ "X-authentik-username": "adam", "X-authentik-groups": "adm" });
   }

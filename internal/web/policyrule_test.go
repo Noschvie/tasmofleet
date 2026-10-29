@@ -89,7 +89,6 @@ func ruleIDs(t *testing.T, mem *rulesMem) []string {
 func ruleSeed(t *testing.T, e *env, mem *rulesMem, extra url.Values) string {
 	t.Helper()
 	f := ruleForm(extra)
-	f.Del("idx")
 	f.Set("id", "new")
 	f.Set("version", vstr(int64(len(mem.vs))))
 	r, body := e.do(t, "POST", "/policy/rules/save", "admin", f)
@@ -156,7 +155,6 @@ func TestRulePageUnknownIDIs404(t *testing.T) {
 		}
 	}
 	f := ruleForm(url.Values{"version": {"1"}})
-	f.Del("idx")
 	f.Set("id", "rzzzzzzzzzz")
 	if r, _ := e.do(t, "POST", "/policy/rules/save", "admin", f); r.StatusCode != 404 {
 		t.Errorf("save of an unknown id = %d, want 404", r.StatusCode)
@@ -175,7 +173,6 @@ func TestRulePageSaveKeepsTheIDAndLandsOnIt(t *testing.T) {
 		t.Fatalf("reorder moved the ids with the rules: %v", ids)
 	}
 	f := ruleForm(url.Values{"name": {"Second renamed"}, "want": {"1"}, "version": {vstr(int64(len(mem.vs)))}})
-	f.Del("idx")
 	f.Set("id", second)
 	r, body := e.do(t, "POST", "/policy/rules/save", "admin", f)
 	if r.StatusCode != 303 || r.Header.Get("Location") != "/tf/policy/rules/"+second+"?ok=saved" {
@@ -195,7 +192,6 @@ func TestRulePageSaveKeepsTheIDAndLandsOnIt(t *testing.T) {
 func TestRuleNewSaveRedirectsToTheNewID(t *testing.T) {
 	e, mem := ruleEnvWith(t, defaultRP())
 	f := ruleForm(url.Values{"name": {"Telemetry every 5 minutes"}, "command": {"TelePeriod"}, "want": {"300"}, "origin": {"template:telemetry"}})
-	f.Del("idx")
 	f.Set("id", "new")
 	f.Set("version", "0")
 	r, body := e.do(t, "POST", "/policy/rules/save", "admin", f)
@@ -363,7 +359,6 @@ func TestRulePageStaleVersionShowsTheRuleWithABanner(t *testing.T) {
 	e, mem := ruleEnvWith(t, defaultRP())
 	id := ruleSeed(t, e, mem, nil)
 	f := ruleForm(url.Values{"name": {"Late edit"}, "version": {"0"}})
-	f.Del("idx")
 	f.Set("id", id)
 	r, body := e.do(t, "POST", "/policy/rules/save", "admin", f)
 	if r.StatusCode != 409 || !strings.Contains(body, "Nothing was saved. The rules were changed by someone else") {
@@ -382,7 +377,6 @@ func TestRulePageInvalidDraftShowsTheProblemAtTheField(t *testing.T) {
 	e, mem := ruleEnvWith(t, defaultRP())
 	id := ruleSeed(t, e, mem, nil)
 	f := ruleForm(url.Values{"name": {"Edited"}, "command": {"Status0"}, "version": {"1"}})
-	f.Del("idx")
 	f.Set("id", id)
 	r, body := e.do(t, "POST", "/policy/rules/save", "admin", f)
 	if r.StatusCode != 422 || !strings.Contains(body, `id="err-command"`) || !strings.Contains(body, `value="Edited"`) {
@@ -393,18 +387,17 @@ func TestRulePageInvalidDraftShowsTheProblemAtTheField(t *testing.T) {
 	}
 }
 
-// Why: the old editor (idx) and the rule page (id) are two forms of one route; sending both
-// would be ambiguous (which rule?), so it is refused.
-func TestRuleSaveRefusesIDAndIdxTogether(t *testing.T) {
+// Why: a rule is named by its id only. The position field of the old editor is gone: a form that
+// still sends it is refused (a position names whatever rule sits there now), and so is a bad origin.
+func TestRuleSaveRefusesTheOldIdxField(t *testing.T) {
 	e, mem := ruleEnvWith(t, defaultRP())
 	id := ruleSeed(t, e, mem, nil)
-	f := ruleForm(url.Values{"version": {"1"}})
+	f := ruleForm(url.Values{"version": {"1"}, "idx": {"0"}})
 	f.Set("id", id)
 	if r, _ := e.do(t, "POST", "/policy/rules/save", "admin", f); r.StatusCode != 400 {
 		t.Errorf("id and idx = %d, want 400", r.StatusCode)
 	}
 	f = ruleForm(url.Values{"version": {"1"}, "origin": {"javascript:x"}})
-	f.Del("idx")
 	f.Set("id", id)
 	if r, _ := e.do(t, "POST", "/policy/rules/save", "admin", f); r.StatusCode != 400 {
 		t.Errorf("bad origin = %d, want 400", r.StatusCode)
@@ -418,7 +411,6 @@ func TestRulePreviewJudgesTheDraftFromCachedValuesOnly(t *testing.T) {
 	e, mem := ruleEnvWith(t, rp)
 	id := ruleSeed(t, e, mem, url.Values{"family": {}, "tag": {}, "tags_extra": {""}, "except": {}})
 	f := ruleForm(url.Values{"want": {"1"}, "family": {}, "tag": {}, "tags_extra": {""}, "except": {}})
-	f.Del("idx")
 	f.Set("id", id)
 	rp.live, rp.reads = 0, nil
 	r, body := e.do(t, "POST", "/policy/rules/preview?show=deviate", "admin", f)
@@ -473,7 +465,7 @@ func TestRuleCheckNowRunsTheLiveCheckAndComesBack(t *testing.T) {
 func TestRulePageDisabledRuleChecksNothing(t *testing.T) {
 	e, mem := ruleEnvWith(t, defaultRP())
 	id := ruleSeed(t, e, mem, url.Values{"family": {}, "tag": {}, "tags_extra": {""}, "except": {}})
-	r, body := e.do(t, "POST", "/policy/rules/disable", "admin", url.Values{"csrf": {"tok"}, "version": {"1"}, "idx": {"0"}, "back": {"rule"}})
+	r, body := e.do(t, "POST", "/policy/rules/disable", "admin", url.Values{"csrf": {"tok"}, "version": {"1"}, "id": {id}, "back": {"rule"}})
 	if r.StatusCode != 303 || r.Header.Get("Location") != "/tf/policy/rules/"+id+"?ok=disabled" {
 		t.Fatalf("disable with back=rule: %d %q\n%s", r.StatusCode, r.Header.Get("Location"), body)
 	}
@@ -579,7 +571,6 @@ func (p *envPolicy) Report(context.Context, string, bool) (PolicyReport, error) 
 func TestRuleNewRefusedSaveKeepsTheOrigin(t *testing.T) {
 	e, _ := ruleEnvWith(t, defaultRP())
 	f := ruleForm(url.Values{"command": {"Status0"}, "origin": {"template:telemetry"}})
-	f.Del("idx")
 	f.Set("id", "new")
 	f.Set("version", "0")
 	r, body := e.do(t, "POST", "/policy/rules/save", "admin", f)
@@ -611,7 +602,6 @@ func TestRuleNewStaleSaveKeepsTheTypedDraft(t *testing.T) {
 	e, mem := ruleEnvWith(t, defaultRP())
 	ruleSeed(t, e, mem, nil)
 	f := ruleForm(url.Values{"name": {"Typed by hand"}, "command": {"TelePeriod"}, "want": {"60"}})
-	f.Del("idx")
 	f.Set("id", "new")
 	f.Set("version", "0")
 	r, body := e.do(t, "POST", "/policy/rules/save", "admin", f)

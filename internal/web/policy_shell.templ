@@ -1,0 +1,84 @@
+package web
+
+import "github.com/nofuturekid/tasmofleet/internal/web/ui"
+
+// policyShell is the header the policy tabs share: Import / Export / New rule, the five tiles
+// and the tab row. The tab's own content is the child.
+templ policyShell(h policyHead) {
+	@ui.PageHeader("Policy", policySub) {
+		if h.Admin && h.CanRules {
+			<a class="btn" href={ templ.SafeURL(h.Base + policyIOPath + "?tab=import") }>Import…</a>
+		}
+		if h.CanRules {
+			<a class="btn" href={ templ.SafeURL(h.Base + policyIOPath) }>Export</a>
+		}
+		if h.Admin && h.CanRules {
+			<a class="btn btn-primary" href={ templ.SafeURL(h.Base + rulesPath + "/new") }>New rule</a>
+		}
+	}
+	if h.Show {
+		<div class="devlive">
+			<div class="dev-tiles">
+				for _, t := range h.Tiles {
+					<div class="dev-tile" data-tile={ t.Key }>
+						<div class="dev-tile-l">{ t.Label }</div>
+						<div class={ "dev-tile-v", toneClass(t.Tone) }>{ t.Value }</div>
+						<div class="dev-tile-s">{ t.Sub }</div>
+					</div>
+				}
+				@policyLiveTile(h)
+			</div>
+		</div>
+		@ui.Tabs("Policy views", h.Tabs)
+	}
+	{ children... }
+}
+
+// policyLiveTile is the live-check tile: its state, when it last ran, Run now and Pause / Resume
+// (or Retry now after a failure).
+templ policyLiveTile(h policyHead) {
+	<div class="dev-tile" data-tile="live" id="live-tile">
+		<div class="dev-tile-l">Live check</div>
+		<div class={ "dev-tile-v", toneClass(h.Line.Tone) }>{ h.Line.Value }</div>
+		<div class="dev-tile-s" role="status">
+			if h.Line.State == "paused" {
+				Live check paused by { h.Line.PausedBy } at <time { ui.StampAttrs(h.Line.PausedAt, ui.StampClock)... }>{ ui.StampText(h.Line.PausedAt, ui.StampClock) }</time>
+				if !h.Line.Shown.IsZero() {
+					{ " · deviations shown are from " }<time { ui.StampAttrs(h.Line.Shown, ui.StampClock)... }>{ ui.StampText(h.Line.Shown, ui.StampClock) }</time>
+				}
+			} else {
+				{ h.Line.Sub }
+			}
+		</div>
+		<div class="pol-line-acts">
+			switch h.Line.State {
+				case "failed":
+					@policyLiveForm(h, "/policy/live", "Retry now")
+				case "paused":
+					if h.Line.CanPause {
+						@policyLiveForm(h, "/policy/live/resume", "Resume")
+					}
+					@policyLiveForm(h, "/policy/live", "Run now")
+				default:
+					@policyLiveForm(h, "/policy/live", "Run now")
+					if h.Line.CanPause {
+						@policyLiveForm(h, "/policy/live/pause", "Pause")
+					}
+			}
+		</div>
+	</div>
+}
+
+templ policyLiveForm(h policyHead, action, label string) {
+	<form
+		method="post"
+		action={ templ.SafeURL(h.Base + action) }
+		class="pol-inline"
+		if action == "/policy/live" {
+			id="live-check"
+		}
+	>
+		<input type="hidden" name="csrf" value={ h.CSRF }/>
+		<button type="submit" class="btn btn-sm">{ label }</button>
+	</form>
+}

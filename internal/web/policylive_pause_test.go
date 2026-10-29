@@ -108,10 +108,10 @@ func TestPolicyLivePauseNeedsAdmin(t *testing.T) {
 type pausePolicy struct{ noEval }
 
 func (pausePolicy) Report(context.Context, string, bool) (PolicyReport, error) {
-	return PolicyReport{Rules: []policy.Rule{{Command: "SaveData", Want: "0"}}}, nil
+	return PolicyReport{Rules: []policy.Rule{{ID: "r1", Command: "SaveData", Want: "0"}}}, nil
 }
 
-// Why (N21): the status line is where people see that the automatic check is not running,
+// Why (N21): the live-check tile is where people see that the automatic check is not running,
 // who stopped it and since when; Resume is next to it. Run now stays: it is an on-demand
 // check independent of the paused background reads. Viewers see the state but no forms.
 func TestPolicyLiveLineShowsThePause(t *testing.T) {
@@ -129,7 +129,7 @@ func TestPolicyLiveLineShowsThePause(t *testing.T) {
 	}
 	r, _ := e.do(t, "POST", "/policy/live/pause", "admin", url.Values{"csrf": {"tok"}})
 	_, body = e.do(t, "GET", r.Header.Get("Location")[len("/tf"):], "admin", nil)
-	for _, want := range []string{"pol-line-paused", "Live check paused by test:admin at <time", `data-ts="time"`, `action="/tf/policy/live/resume"`, ">Resume<", "Live check paused</span>", ">Run now<"} {
+	for _, want := range []string{`data-tile="live"`, ">Paused<", "Live check paused by test:admin at <time", `data-ts="time"`, `action="/tf/policy/live/resume"`, ">Resume<", "Live check paused</span>", ">Run now<"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("paused page lacks %q", want)
 		}
@@ -159,7 +159,7 @@ func (failingPolicy) Report(context.Context, string, bool) (PolicyReport, error)
 }
 
 // Why (N3): a live check that fails must not take the page with it: the rules stay visible,
-// the line says what failed in red and offers "Retry now", and no deviation count pretends
+// the tile says what failed in red and offers "Retry now", and no deviation count pretends
 // to be current.
 func TestPolicyLiveLineShowsAFailure(t *testing.T) {
 	e, _, _ := rulesEnvDeps(t, func(d *Deps) { d.Policy = failingPolicy{} })
@@ -168,7 +168,7 @@ func TestPolicyLiveLineShowsAFailure(t *testing.T) {
 	if r.StatusCode != 200 {
 		t.Fatalf("status %d", r.StatusCode)
 	}
-	for _, want := range []string{"pol-line-failed", "Live check failed: The device list could not be read.", ">Retry now<", "Flash wear"} {
+	for _, want := range []string{`data-tile="live"`, ">Failed<", "Live check failed: The device list could not be read.", ">Retry now<", "Flash wear"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("failed page lacks %q", want)
 		}

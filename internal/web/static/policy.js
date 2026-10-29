@@ -1,4 +1,4 @@
-// Policy page (design v2, N3): drag a rule card to change the order, which is the precedence.
+// Policy page (design v2, N3): drag a rule row to change the order, which is the precedence.
 // On drop the new order (the old positions, comma separated) is posted with the version the
 // page was drawn on; the server answers 409 when someone changed the rules meanwhile. Without
 // this file the rule menu's "Move up" / "Move down" do the same, one place at a time.

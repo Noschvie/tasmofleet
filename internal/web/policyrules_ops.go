@@ -4,70 +4,61 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
-	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/nofuturekid/tasmofleet/internal/policy"
 	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
 )
 
-// List operations of the merged policy page (design v2, N3): reorder (the
-// order is the precedence), duplicate (a disabled copy below), enable/disable,
-// and adding a rule from a template. Each is a plain form POST that names the
-// version the person saw; on success it redirects back to the rules, a stale
-// version answers 409 like the other rule changes.
+// List operations of the policy page and the rule page: reorder (the order is the precedence),
+// duplicate (a disabled copy below) and enable/disable. A rule is named by its id (never by its
+// position). Each is a plain form POST that names the version the person saw; on success it
+// redirects back, a stale version answers 409 like the other rule changes.
 
 func (h *handler) registerPolicyRuleOps(route func(string, func(http.Handler) http.Handler, http.HandlerFunc), adm func(http.Handler) http.Handler) {
 	route("POST "+rulesPath+"/order", adm, h.rulesOrder)
 	route("POST "+rulesPath+"/duplicate", adm, h.rulesDuplicate)
 	route("POST "+rulesPath+"/enable", adm, func(w http.ResponseWriter, r *http.Request) { h.rulesSetEnabled(w, r, true) })
 	route("POST "+rulesPath+"/disable", adm, func(w http.ResponseWriter, r *http.Request) { h.rulesSetEnabled(w, r, false) })
-	route("POST "+rulesPath+"/template", adm, h.rulesFromTemplate)
 }
 
-// opForm reads version and, when withIdx, idx of a list operation.
-func opForm(w http.ResponseWriter, r *http.Request, single []string, withIdx bool) (f url.Values, ver int64, idx int, ok bool) {
+// opForm reads the version and the rule id of a list operation and finds the rule's position in
+// the stored list. A stale version answers 409 before an unknown id answers 404.
+func (h *handler) opForm(w http.ResponseWriter, r *http.Request, single []string) (f url.Values, ver int64, idx int, ok bool) {
 	f, ok = strictForm(w, r, single, nil)
 	if !ok {
 		return nil, 0, 0, false
 	}
 	ver, err := strconv.ParseInt(f.Get("version"), 10, 64)
-	bad := err != nil || ver < 0 || !versionRe.MatchString(f.Get("version"))
-	if withIdx {
-		var e2 error
-		idx, e2 = strconv.Atoi(f.Get("idx"))
-		bad = bad || e2 != nil || idx < 0 || !idxRe.MatchString(f.Get("idx"))
-	}
-	if bad {
+	if err != nil || ver < 0 || !versionRe.MatchString(f.Get("version")) || !policy.RuleIDRe.MatchString(f.Get("id")) {
 		http.Error(w, "bad request", http.StatusBadRequest)
+		return nil, 0, 0, false
+	}
+	st, err := h.d.PolicyRules.State(r.Context())
+	if err != nil {
+		h.fail(w, r, err)
+		return nil, 0, 0, false
+	}
+	if ver != st.VersionID {
+		h.rulesStale(w, r)
+		return nil, 0, 0, false
+	}
+	if idx = indexOfRule(st.Specs, f.Get("id")); idx < 0 {
+		h.notFound(w, r)
 		return nil, 0, 0, false
 	}
 	return f, ver, idx, true
 }
 
-// rulesOpDone answers a list operation: back to the policy page with its confirmation, the
-// rule at edit (>= 0) open in the editor.
-func (h *handler) rulesOpDone(w http.ResponseWriter, r *http.Request, err error, ok string, edit int) {
-	h.rulesOpBack(w, r, err, ok, edit, "")
-}
-
-// rulesOpBack is rulesOpDone for a form that may say where to return: back=rule returns to the
-// rule page of the rule at edit (the rule page's own buttons), anything else to the policy page.
-func (h *handler) rulesOpBack(w http.ResponseWriter, r *http.Request, err error, ok string, edit int, back string) {
+// rulesOpBack answers a list operation. On success: back=rule returns to the rule page of rule
+// id (the rule page's own buttons), anything else to the policy page with the confirmation.
+func (h *handler) rulesOpBack(w http.ResponseWriter, r *http.Request, err error, ok, id, back string) {
 	switch {
-	case err == nil && back == "rule" && edit >= 0:
-		st, serr := h.d.PolicyRules.State(r.Context())
-		if serr != nil || edit >= len(st.Specs) {
-			redirect(w, r, policyPath+"?ok="+ok)
-			return
-		}
-		redirect(w, r, rulesPath+"/"+st.Specs[edit].ID+"?ok="+ok)
+	case err == nil && back == "rule" && id != "":
+		redirect(w, r, rulesPath+"/"+id+"?ok="+ok)
 	case err == nil:
-		to := policyPath + "?ok=" + ok
-		if edit >= 0 {
-			to += "&edit=" + strconv.Itoa(edit)
-		}
-		redirect(w, r, to)
+		redirect(w, r, policyPath+"?ok="+ok)
 	case errors.Is(err, sysconfig.ErrStale):
 		h.rulesStale(w, r)
 	case errors.Is(err, sysconfig.ErrNoSuchRule):
@@ -77,11 +68,11 @@ func (h *handler) rulesOpBack(w http.ResponseWriter, r *http.Request, err error,
 	}
 }
 
-// rulesOrder stores a new order. Two forms: "order" is the full list of old
-// positions in their new order, comma separated (drag and drop); "idx" with
-// "move" = up|down moves one rule by one place (the buttons without JS).
+// rulesOrder stores a new order. Two forms: "order" is the full list of old positions in their
+// new order, comma separated (drag and drop); "id" with "move" = up|down moves one rule by one
+// place (the menu entries without JS).
 func (h *handler) rulesOrder(w http.ResponseWriter, r *http.Request) {
-	f, ok := strictForm(w, r, []string{"csrf", "version", "order", "idx", "move"}, nil)
+	f, ok := strictForm(w, r, []string{"csrf", "version", "order", "id", "move"}, nil)
 	if !ok {
 		return
 	}
@@ -92,7 +83,7 @@ func (h *handler) rulesOrder(w http.ResponseWriter, r *http.Request) {
 	}
 	var order []int
 	switch {
-	case f.Get("order") != "" && f.Get("move") == "":
+	case f.Get("order") != "" && f.Get("move") == "" && f.Get("id") == "":
 		parts := strings.Split(f.Get("order"), ",")
 		if len(parts) > 1000 {
 			http.Error(w, "bad request", http.StatusBadRequest)
@@ -106,12 +97,7 @@ func (h *handler) rulesOrder(w http.ResponseWriter, r *http.Request) {
 			}
 			order = append(order, n)
 		}
-	case f.Get("order") == "" && (f.Get("move") == "up" || f.Get("move") == "down"):
-		idx, err := strconv.Atoi(f.Get("idx"))
-		if err != nil || !idxRe.MatchString(f.Get("idx")) {
-			http.Error(w, "bad request", http.StatusBadRequest)
-			return
-		}
+	case f.Get("order") == "" && (f.Get("move") == "up" || f.Get("move") == "down") && policy.RuleIDRe.MatchString(f.Get("id")):
 		st, err := h.d.PolicyRules.State(r.Context())
 		if err != nil {
 			h.fail(w, r, err)
@@ -121,7 +107,7 @@ func (h *handler) rulesOrder(w http.ResponseWriter, r *http.Request) {
 			h.rulesStale(w, r)
 			return
 		}
-		if order, ok = moveOrder(len(st.Specs), idx, f.Get("move") == "up"); !ok {
+		if order, ok = moveOrder(len(st.Specs), indexOfRule(st.Specs, f.Get("id")), f.Get("move") == "up"); !ok {
 			h.notFound(w, r)
 			return
 		}
@@ -130,7 +116,7 @@ func (h *handler) rulesOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, err = h.d.PolicyRules.Reorder(r.Context(), actor(r), ver, order, h.d.Recorder)
-	h.rulesOpDone(w, r, err, "saved", -1)
+	h.rulesOpBack(w, r, err, "saved", "", "")
 }
 
 // moveOrder is the permutation that moves the rule at idx one place up or
@@ -154,18 +140,32 @@ func moveOrder(n, idx int, up bool) ([]int, bool) {
 	return order, true
 }
 
+// rulesDuplicate adds a disabled copy below the rule and opens the copy's rule page.
 func (h *handler) rulesDuplicate(w http.ResponseWriter, r *http.Request) {
-	f, ver, idx, ok := opForm(w, r, []string{"csrf", "version", "idx", "back"}, true)
+	_, ver, idx, ok := h.opForm(w, r, []string{"csrf", "version", "id"})
 	if !ok {
 		return
 	}
 	_, at, err := h.d.PolicyRules.Duplicate(r.Context(), actor(r), ver, idx, h.d.Recorder)
-	h.rulesOpBack(w, r, err, "duplicated", at, f.Get("back"))
+	if err != nil {
+		h.rulesOpBack(w, r, err, "duplicated", "", "")
+		return
+	}
+	st, serr := h.d.PolicyRules.State(r.Context())
+	if serr != nil || at < 0 || at >= len(st.Specs) {
+		redirect(w, r, policyPath+"?ok=duplicated")
+		return
+	}
+	redirect(w, r, rulesPath+"/"+st.Specs[at].ID+"?ok=duplicated")
 }
 
 func (h *handler) rulesSetEnabled(w http.ResponseWriter, r *http.Request, enabled bool) {
-	f, ver, idx, ok := opForm(w, r, []string{"csrf", "version", "idx", "back"}, true)
+	f, ver, idx, ok := h.opForm(w, r, []string{"csrf", "version", "id", "back"})
 	if !ok {
+		return
+	}
+	if b := f.Get("back"); b != "" && b != "rule" && b != "list" {
+		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
 	_, err := h.d.PolicyRules.SetEnabled(r.Context(), actor(r), ver, idx, enabled, h.d.Recorder)
@@ -173,31 +173,5 @@ func (h *handler) rulesSetEnabled(w http.ResponseWriter, r *http.Request, enable
 	if enabled {
 		done = "enabled"
 	}
-	h.rulesOpBack(w, r, err, done, idx, f.Get("back"))
-}
-
-// rulesFromTemplate appends the template named by "template" to the rules.
-func (h *handler) rulesFromTemplate(w http.ResponseWriter, r *http.Request) {
-	f, ver, _, ok := opForm(w, r, []string{"csrf", "version", "template"}, false)
-	if !ok {
-		return
-	}
-	tpls := policyTemplates(h.brokerHost())
-	i := slices.IndexFunc(tpls, func(t ruleTemplate) bool { return t.ID == f.Get("template") })
-	if i < 0 {
-		h.notFound(w, r)
-		return
-	}
-	st, err := h.d.PolicyRules.State(r.Context())
-	if err != nil {
-		h.fail(w, r, err)
-		return
-	}
-	if ver != st.VersionID {
-		h.rulesStale(w, r)
-		return
-	}
-	list := append(slices.Clone(st.Specs), tpls[i].Spec)
-	_, err = h.d.PolicyRules.Save(r.Context(), actor(r), "from template: "+tpls[i].Title, list, h.d.Recorder)
-	h.rulesOpDone(w, r, err, "template", len(list)-1)
+	h.rulesOpBack(w, r, err, done, f.Get("id"), f.Get("back"))
 }

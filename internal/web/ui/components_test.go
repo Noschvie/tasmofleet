@@ -260,3 +260,20 @@ func TestKVRowTimeFormatDefaultsToShortAndHonoursStamp(t *testing.T) {
 		t.Fatalf("formats:\n%s", got)
 	}
 }
+
+// Why: the rule table's bar is the health bar with other parts. A rule that 17 of 18 devices meet
+// must draw 17 green units and one warn segment, and say the same in words, because the colours
+// alone tell a screen reader nothing.
+func TestComplianceBarSegmentsAndText(t *testing.T) {
+	segs := complianceSegments(17, 1, 0)
+	if len(segs) != 2 || segs[0].Tone != ToneOK || segs[1].Tone != ToneWarn {
+		t.Fatalf("segments: %+v", segs)
+	}
+	out := comp(t, ComplianceBar(17, 1, 2))
+	if !strings.Contains(out, `aria-label="17 match, 1 deviate, 2 not judged"`) {
+		t.Errorf("aria text: %s", out)
+	}
+	if strings.Contains(comp(t, ComplianceBar(0, 0, 0)), "<rect") {
+		t.Error("a rule that applies to no device draws no segment")
+	}
+}

@@ -45,8 +45,10 @@ const BUDGET_SCREENS = 2.25;
 // design v2 (W1, N3): the policy page is the prototype's merged page (rule cards, editor, live preview,
 // version history stacked); the prototype's own is 2626 px at 375 (3.23 screens). Ours adds the change
 // note and the folded "cannot be judged" row: 2726 px (3.36), so 3.45 with the editor open or new.
+// design v2 (#197 WP5): "policy rule editor" is a rule page since the overview lost its editor: tiles, the rule
+// card and the devices card stacked, 3203 px at 375 (3.94 screens) on the realistic seed.
 const BUDGET_OVERRIDES: Record<string, number> = {
-  devices: 6.0, update: 2.5, audit: 4.3, policy: 3.45, "policy rule editor": 3.45, "new policy rule": 3.45, "device detail": 2.75, firmware: 2.75, "firmware, all releases": 2.55,
+  devices: 6.0, update: 2.5, audit: 4.3, policy: 3.45, "policy rule editor": 4.0, "new policy rule": 3.45, "device detail": 2.75, firmware: 2.75, "firmware, all releases": 2.55,
 };
 
 let app: App;
@@ -89,6 +91,9 @@ async function phonePages(page: import("@playwright/test").Page): Promise<Record
   await page.goto(app.url + "/devices");
   const lamp = await page.getByRole("link", { name: "lamp-1m", exact: true }).getAttribute("href");
   expect(lamp).toBeTruthy();
+  await page.goto(app.url + "/policy");
+  const rule = await page.locator("td.p1 a").first().getAttribute("href");
+  expect(rule).toBeTruthy();
   await page.goto(app.url + "/transactions");
   const tx = await page.locator("a.upd-hrow").first().getAttribute("href");
   expect(tx).toBeTruthy();
@@ -100,7 +105,7 @@ async function phonePages(page: import("@playwright/test").Page): Promise<Record
     "firmware, all releases": "/firmware?older=1",
     policy: "/policy",
     "policy import / export": "/policy/io",
-    "policy rule editor": "/policy?edit=0",
+    "policy rule editor": rule!.replace(app.url, "").replace(/^(?!\/)/, "/"),
     "new policy rule": "/policy/rules/new",
     transactions: "/transactions",
     "transaction detail": tx!.replace(app.url, "").replace(/^(?!\/)/, "/"),
@@ -458,16 +463,16 @@ test("phone: proposal rows keep the name, the facts and the buttons on their own
 
 // Why (QA v0.9.0, kept for design v2): a long device name wraps instead of being clipped, so two
 // devices with a common prefix can be told apart; in the live preview the value stays beside it.
-test("phone: policy preview device names wrap instead of being clipped", async ({ page }) => {
+test("phone: the rule page's device names wrap instead of being clipped", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: SCREEN });
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/policy");
   await page.getByRole("button", { name: "Run now" }).click();
-  const n = await page.locator(".pol-card").count();
+  const links = await page.locator("td.p1 a").evaluateAll((as) => as.map((a) => (a as HTMLAnchorElement).href));
   let rows = 0;
-  for (let i = 0; i < n; i++) {
-    await page.goto(app.url + `/policy?edit=${i}`);
-    const names = page.locator(".pol-pv-name");
+  for (const [i, href] of links.entries()) {
+    await page.goto(href);
+    const names = page.locator("#rule-devices td.p1 a");
     const c = await names.count();
     rows += c;
     for (let j = 0; j < c; j++) {
@@ -475,7 +480,7 @@ test("phone: policy preview device names wrap instead of being clipped", async (
       expect(ok, `rule ${i}: ${await names.nth(j).innerText()} is cut off`).toBe(true);
     }
   }
-  expect(rows, "the live check flags devices to show").toBeGreaterThan(0);
+  expect(rows, "the rules judge devices to show").toBeGreaterThan(0);
 });
 
 // Why: on a phone a cached file is a card of two lines; the name, the release and size, and the

@@ -1214,6 +1214,18 @@ setting of one device to start a rule from it: a command refused by `policy.Read
 commands a backup holds (`policy.BackupReadable`); a value with credentials or one that cannot be an
 expected value is refused; the audit entry `policy.copy` names device and command, never the value.
 
+**Overview (`/policy`).** Five tiles: Rules (enabled and disabled), Compliant devices, Deviating
+(required and advisory), Not judged (all `policy.FleetTally`) and the live-check tile (state, last
+run, Run now, Pause or Resume for admins, Retry now after a failure). Tabs follow (Rules, and the other
+views as their pages exist), then the rule table in stored order: a drag handle (admins), name (a link to
+`/policy/rules/{id}`, Disabled chip), setting, applies to with the device count, Required or Advisory, a
+compliance bar from `policy.Tally` read by rule id, and the row menu (Edit, Duplicate, Enable or Disable,
+Move up, Move down, Delete). A disabled rule is dimmed and is not checked. A banner names the devices that
+break a Required rule, with Show and Make compliant. Every list operation names its rule by id and the
+version the person saw (stale: 409); the drag posts positions plus the version. Unknown query
+parameters are ignored: the old `?edit=`, `?new=` and `?v=` no longer open an editor or a diff.
+The empty page offers New rule and the first templates (admins), or says an admin can add rules.
+
 ### 14.5 Notifications
 
 `notify.Notifier` implementations for a webhook (e.g. a Home Assistant webhook trigger)
@@ -1550,7 +1562,7 @@ UI listener (all paths relative to the base path; `R` = role needed; non-GET = C
 | POST      | `/backups/{id}/restore`                                             | admin                             | restore                                                                                    | 2   |
 | GET, POST | `/discovery`, `/discovery/scan`                                     | admin                             | proposals, scans                                                                           | 2   |
 | GET, POST | `/bulk`, `/bulk/preview`                                            | operator/admin                    | bulk commands                                                                              | 2   |
-| GET       | `/policy`                                                           | operator                          | drift view                                                                                 | 2   |
+| GET       | `/policy`                                                           | operator                          | overview: tiles, rule table, live check                                                    | 2   |
 | GET       | `/policy/rules/{id}`                                                | operator                          | rule page (read-only for operators)                                                        | 2   |
 | GET, POST | `/policy/rules/new, /new/copy`                                      | admin                             | New rule: template, any command, copy from a device (unsaved draft)                        | 2   |
 | POST      | `/import/tasmoadmin`                                                | admin                             | web import                                                                                 | 2   |

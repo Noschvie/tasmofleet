@@ -264,12 +264,12 @@ for (const m of modes) {
     await look("policy");
     // a live check, the rule menu, the Make compliant dialog and its page without JavaScript
     await page.getByRole("button", { name: "Run now" }).click();
-    await expect(page.locator(".pol-line")).toContainText("last run", { timeout: 60_000 });
+    await expect(page.locator("#live-tile")).toContainText("last run", { timeout: 60_000 });
     await look("policy-checked");
-    await page.getByLabel("Rule actions").first().click();
+    await page.getByLabel(/^Actions for/).first().click();
     await look("policy-rulemenu");
     await page.keyboard.press("Escape");
-    const fix = page.getByRole("button", { name: /^Make compliant \(\d+\)…$/ });
+    const fix = page.getByRole("button", { name: "Make compliant…" });
     if (await fix.count()) {
       await fix.click();
       await expect(page.locator("dialog#dlg-fix")).toBeVisible();
@@ -326,7 +326,9 @@ for (const m of modes) {
     await look("policy-io");
     await page.goto(app.url + "/policy/rules/new");
     await look("policy-rule-new");
-    await page.goto(app.url + "/policy/rules/delete?idx=0");
+    await page.goto(app.url + "/policy");
+    const firstRule = (await page.locator("td.p1 a").first().getAttribute("href"))!.split("/").pop();
+    await page.goto(app.url + "/policy/rules/delete?id=" + firstRule);
     await look("policy-rule-delete");
     await page.goto(deviceURL + "/backups");
     const bkDelete = await page.locator('a[href$="/delete"][data-dialog="dlg-bkdel"]').first().getAttribute("href");
@@ -406,7 +408,7 @@ test("phone width: policy, rule editor and setup never scroll sideways", async (
   await expect(versions.getByText(hash40)).toHaveCount(0);
   await expect(versions.locator(`[title*="${hash40}"]`).first()).toContainText(hash40.slice(0, 8));
   // A scope that covers every ESP32 variant reads as one name, not nine.
-  await expect(page.locator(".pol-card", { hasText: "ESP32 (all variants)" }).first()).toBeVisible();
+  await expect(page.locator("section#rules tbody tr", { hasText: "ESP32 (all variants)" }).first()).toBeVisible();
   await expect(page.getByText("esp32c61", { exact: true }).filter({ visible: true })).toHaveCount(0);
   await page.goto(app.url + "/policy/rules/new?template=timezone");
   await page.locator(".pol-scope > summary").click(); // the scope choices are a fold

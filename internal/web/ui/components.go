@@ -370,6 +370,11 @@ func healthSegments(ok, off, unk int) []barSeg {
 	return segments(2, part{ok, ToneOK}, part{off, ToneDanger}, part{unk, ToneNeutral})
 }
 
+// complianceSegments are a rule's bar: match, deviate, not judged. Same math as the health bar.
+func complianceSegments(match, deviate, unknown int) []barSeg {
+	return segments(2, part{match, ToneOK}, part{deviate, ToneWarn}, part{unknown, ToneNeutral})
+}
+
 // txnSegments are the transaction bar's parts: succeeded, failed, running. The devices still
 // waiting (Total minus the three) are the empty rest of the bar, as in the prototype.
 func txnSegments(t TxnData) []barSeg {

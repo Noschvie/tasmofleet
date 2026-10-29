@@ -12385,6 +12385,58 @@ main.bare {
   flex: none;
   background: var(--color-accent);
 }
+/* overview: the live-check tile's buttons, the rule table (handle, dragged row, setting column,
+   compliance bar beside its numbers) */
+.uempty + .pol-tpls {
+  margin-top: var(--sp-14);
+}
+.dev-tile .pol-line-acts {
+  margin-top: var(--sp-4);
+}
+tbody[data-rule-list] > tr.is-drag {
+  opacity: 0.4;
+}
+tbody[data-rule-list] td[data-label="Setting"] {
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+tbody[data-rule-list] td[data-label="Compliance"] > div {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-10);
+}
+tbody[data-rule-list] td[data-label="Compliance"] .health-bar {
+  flex: 1 1 0;
+  min-width: 4rem;
+  margin: 0;
+}
+tbody[data-rule-list] td[data-label="Compliance"] > div > span {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+@media (max-width: 44.99rem) {
+  tbody[data-rule-list] td[aria-hidden="true"] {
+    display: none;
+  }
+  /* 40 px touch targets: the row menu and the live-check tile's buttons */
+  tbody[data-rule-list] summary.btn-icon {
+    min-width: 40px;
+    min-height: 40px;
+  }
+  .dev-tile .pol-line-acts .btn {
+    min-height: 40px;
+  }
+  tbody[data-rule-list] td[data-label="Compliance"] > div > span {
+    white-space: normal;
+  }
+  tbody[data-rule-list] td[data-label="Setting"] {
+    max-width: none;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
 /* the empty state: a dashed frame with the four templates */
 .pol-empty {
   display: flex;

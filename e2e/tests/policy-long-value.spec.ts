@@ -54,7 +54,7 @@ async function expectReadableRows(rows: Locator, nameSel: string, listSel: strin
 async function openPolicy(page: Page): Promise<void> {
   await page.goto(app.url + "/policy");
   await page.getByRole("button", { name: "Run now" }).click(); // the values are read live
-  await expect(page.locator(".pol-pv-row").first()).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator(".banner", { hasText: "deviate from a required rule" })).toBeVisible({ timeout: 60_000 }); // the banner offers Make compliant
   await openFolds(page);
 }
 
@@ -83,7 +83,7 @@ for (const vp of [
 
     await openPolicy(page);
 
-    await page.getByRole("button", { name: /^Make compliant \(\d+\)…$/ }).click();
+    await page.getByRole("button", { name: "Make compliant…" }).click();
     const dlg = page.locator("dialog#dlg-fix");
     await expect(dlg).toBeVisible();
     await expectReadableRows(dlg.locator(".udlg-changes > div"), "span:first-child", ".udlg-changes", "make compliant dialog");

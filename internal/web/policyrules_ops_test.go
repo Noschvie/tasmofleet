@@ -62,17 +62,21 @@ func TestPolicyRulesReorder(t *testing.T) {
 	if len(*live) != 3 || (*live)[0].Name != "C" {
 		t.Fatalf("the live check must use the new order: %+v", *live)
 	}
-	if r, _ := e.do(t, "POST", "/policy/rules/order", "admin", url.Values{"csrf": {"tok"}, "version": {"4"}, "idx": {"2"}, "move": {"up"}}); r.StatusCode != 303 {
+	// the move names the rule by id, never by position: C,A,B -> the third rule (B) goes up
+	if r, _ := e.do(t, "POST", "/policy/rules/order", "admin", url.Values{"csrf": {"tok"}, "version": {"4"}, "id": {ruleIDs(t, mem)[2]}, "move": {"up"}}); r.StatusCode != 303 {
 		t.Fatalf("move: %d", r.StatusCode)
 	}
 	if got := ruleNames(storedSpecs(t, mem)); got != "C,B,A" {
 		t.Fatalf("after move up %s", got)
 	}
+	first := ruleIDs(t, mem)[0]
 	for name, f := range map[string]url.Values{
-		"both":     {"version": {"5"}, "order": {"0,1,2"}, "idx": {"0"}, "move": {"up"}},
-		"neither":  {"version": {"5"}},
-		"garbage":  {"version": {"5"}, "order": {"0,x,2"}},
-		"bad move": {"version": {"5"}, "idx": {"0"}, "move": {"left"}},
+		"both":        {"version": {"5"}, "order": {"0,1,2"}, "id": {first}, "move": {"up"}},
+		"neither":     {"version": {"5"}},
+		"garbage":     {"version": {"5"}, "order": {"0,x,2"}},
+		"bad move":    {"version": {"5"}, "id": {first}, "move": {"left"}},
+		"move, no id": {"version": {"5"}, "move": {"up"}},
+		"old idx":     {"version": {"5"}, "idx": {"0"}, "move": {"up"}},
 	} {
 		f.Set("csrf", "tok")
 		if r, _ := e.do(t, "POST", "/policy/rules/order", "admin", f); r.StatusCode != 400 {
@@ -82,22 +86,26 @@ func TestPolicyRulesReorder(t *testing.T) {
 	if r, _ := e.do(t, "POST", "/policy/rules/order", "admin", url.Values{"csrf": {"tok"}, "version": {"5"}, "order": {"0,0,1"}}); r.StatusCode != 422 {
 		t.Errorf("not a permutation: %d", r.StatusCode)
 	}
+	if r, _ := e.do(t, "POST", "/policy/rules/order", "admin", url.Values{"csrf": {"tok"}, "version": {"5"}, "id": {"r9z9z9"}, "move": {"up"}}); r.StatusCode != 404 {
+		t.Errorf("move of an unknown rule: %d", r.StatusCode)
+	}
 }
 
-// Why: positions refer to the version the admin saw; an operation on an older
+// Why: a list operation refers to the version the admin saw; an operation on an older
 // version must change nothing and say so (409, like a stale save).
 func TestPolicyRulesOpsRefuseStaleVersion(t *testing.T) {
 	e, mem, _ := rulesEnv(t, "")
 	threeRules(t, e)
+	ids := ruleIDs(t, mem)
 	for _, c := range []struct {
 		path string
 		f    url.Values
 	}{
 		{"/policy/rules/order", url.Values{"order": {"2,1,0"}}},
-		{"/policy/rules/order", url.Values{"idx": {"1"}, "move": {"down"}}},
-		{"/policy/rules/duplicate", url.Values{"idx": {"0"}}},
-		{"/policy/rules/disable", url.Values{"idx": {"0"}}},
-		{"/policy/rules/template", url.Values{"template": {"telemetry"}}},
+		{"/policy/rules/order", url.Values{"id": {ids[1]}, "move": {"down"}}},
+		{"/policy/rules/duplicate", url.Values{"id": {ids[0]}}},
+		{"/policy/rules/disable", url.Values{"id": {ids[0]}}},
+		{"/policy/rules/enable", url.Values{"id": {ids[0]}}},
 	} {
 		c.f.Set("csrf", "tok")
 		c.f.Set("version", "2")
@@ -123,25 +131,40 @@ func TestPolicyRulesDuplicateAndEnable(t *testing.T) {
 			t.Fatalf("%s: %d\n%s", path, r.StatusCode, body)
 		}
 	}
-	post("/policy/rules/duplicate", url.Values{"version": {"3"}, "idx": {"0"}}, 303)
+	ids := ruleIDs(t, mem)
+	// Duplicate adds the disabled copy below and opens the copy's own page.
+	r, _ := e.do(t, "POST", "/policy/rules/duplicate", "admin", url.Values{"csrf": {"tok"}, "version": {"3"}, "id": {ids[0]}})
 	if got := ruleNames(storedSpecs(t, mem)); got != "A,A (copy)(off),B,C" {
 		t.Fatalf("duplicate %s", got)
 	}
-	post("/policy/rules/disable", url.Values{"version": {"4"}, "idx": {"2"}}, 303)
-	post("/policy/rules/enable", url.Values{"version": {"5"}, "idx": {"1"}}, 303)
+	ids = ruleIDs(t, mem)
+	if loc := r.Header.Get("Location"); r.StatusCode != 303 || !strings.HasSuffix(loc, "/policy/rules/"+ids[1]+"?ok=duplicated") || ids[1] == ids[0] {
+		t.Fatalf("duplicate must land on the copy's page (a new id): %d %s", r.StatusCode, loc)
+	}
+	// Disable / Enable name the rule by id; back=rule returns to its page, back=list (or nothing) to the table.
+	r, _ = e.do(t, "POST", "/policy/rules/disable", "admin", url.Values{"csrf": {"tok"}, "version": {"4"}, "id": {ids[2]}, "back": {"list"}})
+	if loc := r.Header.Get("Location"); r.StatusCode != 303 || !strings.HasSuffix(loc, "/policy?ok=disabled") {
+		t.Fatalf("disable, back=list: %d %s", r.StatusCode, loc)
+	}
+	r, _ = e.do(t, "POST", "/policy/rules/enable", "admin", url.Values{"csrf": {"tok"}, "version": {"5"}, "id": {ids[1]}, "back": {"rule"}})
+	if loc := r.Header.Get("Location"); r.StatusCode != 303 || !strings.HasSuffix(loc, "/policy/rules/"+ids[1]+"?ok=enabled") {
+		t.Fatalf("enable, back=rule: %d %s", r.StatusCode, loc)
+	}
 	if got := ruleNames(storedSpecs(t, mem)); got != "A,A (copy),B(off),C" {
 		t.Fatalf("enable/disable %s", got)
 	}
-	// the legacy editor form has no state switch: B stays disabled
-	saveRule(t, e, url.Values{"idx": {"2"}, "version": {"6"}, "name": {"B2"}})
-	// the new editor sends it
-	saveRule(t, e, url.Values{"idx": {"3"}, "version": {"7"}, "name": {"C"}, "state": {"disabled"}})
+	// a form without the state switch keeps B disabled
+	saveRule(t, e, url.Values{"id": {ids[2]}, "version": {"6"}, "name": {"B2"}})
+	// the rule page's form sends it
+	saveRule(t, e, url.Values{"id": {ids[3]}, "version": {"7"}, "name": {"C"}, "state": {"disabled"}})
 	if got := ruleNames(storedSpecs(t, mem)); got != "A,A (copy),B2(off),C(off)" {
 		t.Fatalf("editor state %s", got)
 	}
-	post("/policy/rules/duplicate", url.Values{"version": {"8"}, "idx": {"9"}}, 404)
-	post("/policy/rules/enable", url.Values{"version": {"8"}, "idx": {"x"}}, 400)
-	post("/policy/rules/save", url.Values{"version": {"8"}, "idx": {"new"}, "command": {"SaveData"}, "want": {"0"}, "state": {"maybe"}}, 400)
+	post("/policy/rules/duplicate", url.Values{"version": {"8"}, "id": {"r9z9z9"}}, 404)
+	post("/policy/rules/enable", url.Values{"version": {"8"}, "id": {"x"}}, 400)
+	post("/policy/rules/enable", url.Values{"version": {"8"}, "id": {ids[0]}, "back": {"elsewhere"}}, 400)
+	post("/policy/rules/duplicate", url.Values{"version": {"8"}, "idx": {"0"}}, 400) // the position field is gone
+	post("/policy/rules/save", url.Values{"version": {"8"}, "id": {"new"}, "command": {"SaveData"}, "want": {"0"}, "state": {"maybe"}}, 400)
 }
 
 // Why: templates are the empty state's way to start; a template adds an
@@ -174,23 +197,14 @@ func TestPolicyRulesTemplates(t *testing.T) {
 			t.Errorf("template %s is invalid: %v", tp.ID, err)
 		}
 	}
-	// without SysConfig in the test deps there is no broker: three templates
+	// Templates open an unsaved draft (GET /policy/rules/new?template=ID): the old route that saved
+	// one at once is gone.
 	e, mem, _ := rulesEnv(t, "")
-	for i, id := range []string{"telemetry", "poweron", "timezone"} {
-		f := url.Values{"csrf": {"tok"}, "version": {string(rune('0' + i))}, "template": {id}}
-		if r, body := e.do(t, "POST", "/policy/rules/template", "admin", f); r.StatusCode != 303 {
-			t.Fatalf("%s: %d\n%s", id, r.StatusCode, body)
-		}
+	if r, _ := e.do(t, "POST", "/policy/rules/template", "admin", url.Values{"csrf": {"tok"}, "version": {"0"}, "template": {"telemetry"}}); r.StatusCode != 404 && r.StatusCode != 405 {
+		t.Fatalf("POST /policy/rules/template: %d", r.StatusCode)
 	}
-	if r, _ := e.do(t, "POST", "/policy/rules/template", "admin", url.Values{"csrf": {"tok"}, "version": {"3"}, "template": {"broker"}}); r.StatusCode != 404 {
-		t.Fatalf("broker template without a broker: %d", r.StatusCode)
-	}
-	s := storedSpecs(t, mem)
-	if len(s) != 3 || s[0].Name != "Telemetry every 5 minutes" || s[0].Severity != "info" || s[0].Disabled {
-		t.Fatalf("stored %+v", s)
-	}
-	if r, _ := e.do(t, "POST", "/policy/rules/template", "admin", url.Values{"csrf": {"tok"}, "version": {"3"}, "template": {"nope"}}); r.StatusCode != 404 {
-		t.Fatalf("unknown template: %d", r.StatusCode)
+	if len(mem.vs) != 0 {
+		t.Fatal("nothing may be saved by a template")
 	}
 }
 
@@ -199,8 +213,8 @@ func TestPolicyRulesTemplates(t *testing.T) {
 func TestPolicyRulesOpsAreAdminOnly(t *testing.T) {
 	e, mem, _ := rulesEnv(t, "")
 	threeRules(t, e)
-	for _, p := range []string{"/policy/rules/order", "/policy/rules/duplicate", "/policy/rules/enable", "/policy/rules/disable", "/policy/rules/template"} {
-		f := url.Values{"csrf": {"tok"}, "version": {"3"}, "idx": {"0"}, "order": {"2,1,0"}, "template": {"telemetry"}}
+	for _, p := range []string{"/policy/rules/order", "/policy/rules/duplicate", "/policy/rules/enable", "/policy/rules/disable"} {
+		f := url.Values{"csrf": {"tok"}, "version": {"3"}, "id": {ruleIDs(t, mem)[0]}, "order": {"2,1,0"}}
 		if r, _ := e.do(t, "POST", p, "operator", f); r.StatusCode != 403 {
 			t.Errorf("POST %s as operator: %d", p, r.StatusCode)
 		}
@@ -233,25 +247,9 @@ func fmtInts(v []int) string {
 	return strings.ReplaceAll(strings.ReplaceAll(string(b), ",", " "), "\"", "")
 }
 
-// stateOnly is a SysConfigService that only reports field values (the broker URL, the live
-// check's interval).
-type stateOnly struct{ fields []sysconfig.FieldState }
-
-func (s stateOnly) State() []sysconfig.FieldState { return s.fields }
-func (stateOnly) ReadOnly() []sysconfig.Row       { return nil }
-func (stateOnly) Skipped() map[string]string      { return nil }
-func (stateOnly) Apply(context.Context, sysconfig.Request) (sysconfig.Result, error) {
-	return sysconfig.Result{}, nil
-}
-func (stateOnly) Reset(context.Context, sysconfig.ResetRequest) (sysconfig.Result, error) {
-	return sysconfig.Result{}, nil
-}
-func (stateOnly) TestMQTT(context.Context, sysconfig.TestRequest) (string, error) { return "", nil }
-func (stateOnly) TestSSO(context.Context, sysconfig.TestRequest) (string, error)  { return "", nil }
-
 func cardNames(body string) []string {
 	var out []string
-	for _, m := range regexp.MustCompile(`class="pol-card-name">([^<]*)<`).FindAllStringSubmatch(body, -1) {
+	for _, m := range regexp.MustCompile(`<td class="p1" data-label="Rule"><a href="[^"]*">([^<]*)</a>`).FindAllStringSubmatch(body, -1) {
 		out = append(out, m[1])
 	}
 	return out
@@ -261,21 +259,21 @@ func cardNames(body string) []string {
 // order; a disabled rule says so (it flags nothing), and the severity uses the words people
 // decide with (Required / Advisory), never the stored warn / info.
 func TestPolicyPageShowsRulesInOrderWithStateAndSeverity(t *testing.T) {
-	e, _, _ := rulesEnv(t, "")
+	e, mem, _ := rulesEnv(t, "")
 	threeRules(t, e)
 	e.do(t, "POST", "/policy/rules/order", "admin", url.Values{"csrf": {"tok"}, "version": {"3"}, "order": {"2,0,1"}})
-	e.do(t, "POST", "/policy/rules/disable", "admin", url.Values{"csrf": {"tok"}, "version": {"4"}, "idx": {"1"}})
-	saveRule(t, e, url.Values{"idx": {"2"}, "version": {"5"}, "name": {"B"}, "severity": {"info"}})
+	e.do(t, "POST", "/policy/rules/disable", "admin", url.Values{"csrf": {"tok"}, "version": {"4"}, "id": {ruleIDs(t, mem)[1]}})
+	saveRule(t, e, url.Values{"id": {ruleIDs(t, mem)[2]}, "version": {"5"}, "name": {"B"}, "severity": {"info"}})
 	_, body := e.do(t, "GET", "/policy", "operator", nil)
 	if got := strings.Join(cardNames(body), ","); got != "C,A,B" {
 		t.Fatalf("cards %s, want the stored order C,A,B", got)
 	}
-	cards := regexp.MustCompile(`(?s)<div class="pol-card[^"]*"[^>]*>.*?</a>`).FindAllString(body, -1)
-	if len(cards) != 3 || !strings.Contains(cards[1], "is-off") || !strings.Contains(cards[1], ">Disabled<") || strings.Contains(cards[0], ">Disabled<") {
+	cards := regexp.MustCompile(`(?s)<tr class[^>]*>.*?</tr>`).FindAllString(body, -1)
+	if len(cards) != 3 || !strings.Contains(cards[1], "is-dim") || !strings.Contains(cards[1], ">Disabled<") || strings.Contains(cards[0], ">Disabled<") {
 		t.Fatalf("only A is disabled:\n%s", strings.Join(cards, "\n---\n"))
 	}
-	if strings.Contains(cards[1], "flagged") {
-		t.Error("a disabled rule has no count: it flags nothing")
+	if !strings.Contains(cards[1], "not checked while disabled") || strings.Contains(cards[1], "health-bar") {
+		t.Error("a disabled rule has no bar: it is not checked")
 	}
 	if !strings.Contains(cards[0], ">Required<") || !strings.Contains(cards[2], ">Advisory<") || strings.Contains(body, ">warn<") || strings.Contains(body, ">info<") {
 		t.Error("severity labels must be Required / Advisory")
@@ -307,27 +305,24 @@ func TestPolicyPageConflictBanner(t *testing.T) {
 	}
 }
 
-// Why: the broker template expects the broker this server talks to; without a configured
-// broker there is no such card, and a template is a write, so only admins see the cards.
-func TestPolicyEmptyStateTemplatesFollowTheBroker(t *testing.T) {
-	cards := func(e *env) string {
-		_, body := e.do(t, "GET", "/policy", "admin", nil)
-		return body
+// Why: the empty state is the way to start: an admin gets New rule and the first templates, each a
+// link that opens an unsaved draft (nothing is saved by looking); an operator gets no write control.
+func TestPolicyEmptyStateOffersTemplatesAsDraftLinks(t *testing.T) {
+	e, mem, _ := rulesEnv(t, "")
+	_, b := e.do(t, "GET", "/policy", "admin", nil)
+	tpls := policyTemplates("")
+	if n := strings.Count(b, `href="/tf/policy/rules/new?template=`); n != 3 || !strings.Contains(b, `href="/tf/policy/rules/new?template=`+tpls[0].ID+`"`) {
+		t.Errorf("want the first 3 templates as links, got %d:\n%s", n, b)
 	}
-	e, _, _ := rulesEnv(t, "")
-	if b := cards(e); !strings.Contains(b, `value="telemetry"`) || strings.Contains(b, `value="broker"`) {
-		t.Fatalf("without a broker: telemetry yes, broker no")
+	if !strings.Contains(b, `href="/tf/policy/rules/new">New rule<`) || !strings.Contains(b, "No policy rules yet") || strings.Contains(b, `class="dev-tiles"`) {
+		t.Error("empty state: New rule, the heading, and no tiles without rules")
 	}
-	e, _, _ = rulesEnvDeps(t, func(d *Deps) {
-		d.SysConfig = stateOnly{fields: []sysconfig.FieldState{{Field: sysconfig.Field{Key: "MQTT_URL"}, Value: "tcp://mqtt.lab.home:1883"}}}
-	})
-	b := cards(e)
-	if !strings.Contains(b, `value="broker"`) || !strings.Contains(b, "MqttHost = mqtt.lab.home") {
-		t.Fatalf("with a broker the card expects its host:\n%s", b)
+	_, b = e.do(t, "GET", "/policy", "operator", nil)
+	if strings.Contains(b, "template=") || strings.Contains(b, "New rule") || !strings.Contains(b, "An admin can add them.") {
+		t.Errorf("an operator cannot start a rule:\n%s", b)
 	}
-	// every card posts the version the page was drawn on
-	if strings.Count(b, `name="version" value="0"`) < 4 {
-		t.Error("each template form must carry the version")
+	if len(mem.vs) != 0 {
+		t.Fatal("looking at the page saved something")
 	}
 }
 
@@ -347,13 +342,13 @@ func TestPolicyRulesPageIsGone(t *testing.T) {
 	}
 }
 
-// Why: positions are only meaningful for the version the admin saw. Every form of the page
+// Why: a list change is only meaningful for the version the admin saw. Every form of the page
 // that changes the list carries that version, so a change made on a stale page is refused (409)
 // instead of hitting another rule.
 func TestPolicyPageFormsCarryTheVersion(t *testing.T) {
 	e, _, _ := rulesEnv(t, "")
 	threeRules(t, e)
-	_, body := e.do(t, "GET", "/policy?edit=1", "admin", nil)
+	_, body := e.do(t, "GET", "/policy", "admin", nil)
 	forms := regexp.MustCompile(`(?s)<form method="post" action="/tf/policy/rules/(order|duplicate|enable|disable|delete|save|template)"[^>]*>.*?</form>`).FindAllStringSubmatch(body, -1)
 	seen := map[string]bool{}
 	for _, f := range forms {
@@ -362,10 +357,13 @@ func TestPolicyPageFormsCarryTheVersion(t *testing.T) {
 			t.Errorf("%s form without the version:\n%s", f[1], f[0])
 		}
 	}
-	for _, op := range []string{"order", "duplicate", "disable", "delete", "save"} {
+	for _, op := range []string{"order", "duplicate", "disable", "delete"} {
 		if !seen[op] {
 			t.Errorf("no %s form on the page", op)
 		}
+	}
+	if seen["save"] || seen["template"] || strings.Contains(body, `name="idx"`) {
+		t.Error("the overview has no editor, no template form and no position field")
 	}
 	// the moves without JavaScript: the first rule cannot move up, the last not down
 	if !strings.Contains(body, `name="move" value="up"`) || !strings.Contains(body, `name="move" value="down"`) {
@@ -396,7 +394,7 @@ func TestPolicyEditorEnabledSwitch(t *testing.T) {
 	if s := storedSpecs(t, mem); s[0].Disabled {
 		t.Fatal("ticked: enabled")
 	}
-	saveRule(t, e, url.Values{"idx": {"0"}, "version": {"1"}, "state": {"disabled"}, "want": {"1"}})
+	saveRule(t, e, url.Values{"id": {ruleIDs(t, mem)[0]}, "version": {"1"}, "state": {"disabled"}, "want": {"1"}})
 	if s := storedSpecs(t, mem); !s[0].Disabled {
 		t.Fatal("unticked: disabled")
 	}

@@ -107,11 +107,10 @@ func (noPolicy) Report(context.Context, string, bool) (PolicyReport, error) {
 	return PolicyReport{}, nil
 }
 
-// ruleForm is the editor form of one rule. idx "new" appends, a number
-// replaces that rule.
+// ruleForm is the form of one rule. id "new" appends, a rule's id replaces that rule.
 func ruleForm(extra url.Values) url.Values {
 	f := url.Values{
-		"csrf": {"tok"}, "idx": {"new"}, "version": {"0"}, "name": {"Flash wear"}, "command": {"SaveData"}, "want": {"0"}, "severity": {"warn"},
+		"csrf": {"tok"}, "id": {"new"}, "version": {"0"}, "name": {"Flash wear"}, "command": {"SaveData"}, "want": {"0"}, "severity": {"warn"},
 		"family": {"esp32*"}, "tag": {"kitchen"}, "tags_extra": {"attic, garage"}, "device": {}, "except": {"lamp"}, "note": {"keep flash alive"},
 	}
 	for k, v := range extra {
@@ -132,12 +131,12 @@ func saveRule(t *testing.T, e *env, extra url.Values) {
 func TestPolicyRulesOperatorIsReadOnly(t *testing.T) {
 	e, mem, _ := rulesEnv(t, "")
 	saveRule(t, e, nil)
-	r, body := e.do(t, "GET", "/policy?edit=0", "operator", nil)
+	r, body := e.do(t, "GET", "/policy", "operator", nil)
 	if r.StatusCode != 200 || !strings.Contains(body, "Flash wear") {
 		t.Fatalf("operator view: %d", r.StatusCode)
 	}
 	for _, bad := range []string{`name="want"`, `name="command"`, "/policy/rules/save", "/policy/rules/delete", "/policy/io/import", "/policy/rules/revert",
-		"/policy/rules/duplicate", "/policy/rules/order", "New rule", "Rule actions", "Import…", "/policy/live/pause"} {
+		"/policy/rules/duplicate", "/policy/rules/order", "New rule", "Actions for", "Import…", "draggable", "Drag", "/policy/live/pause"} {
 		if strings.Contains(body, bad) {
 			t.Errorf("operator page renders a write control: %q", bad)
 		}
@@ -200,102 +199,82 @@ func TestPolicyRulesValueControlMatchesSettingType(t *testing.T) {
 	}
 }
 
-// Why: the editor shows what a draft would do before anything is saved; the
-// number must belong to the draft rule, and a preview never stores a version.
-func TestPolicyRulesPreviewFragmentCountsTheDraftAndStoresNothing(t *testing.T) {
+// Why: the rule page's devices card shows what a draft would do before anything is saved; asking
+// for it, for a new rule or a saved one, must never store a version.
+func TestPolicyRulesPreviewStoresNothing(t *testing.T) {
 	e, mem, _ := rulesEnv(t, "")
-	r, body := e.do(t, "POST", "/policy/rules/preview", "admin", ruleForm(nil))
-	if r.StatusCode != 200 || strings.Contains(body, "<html") {
-		t.Fatalf("preview: %d", r.StatusCode)
-	}
-	if !strings.Contains(body, "Would flag <b>1</b> of 2 devices") || !strings.Contains(body, "1 cannot be judged") {
-		t.Errorf("preview text:\n%s", body)
-	}
 	saveRule(t, e, nil)
-	saveRule(t, e, url.Values{"version": {"1"}, "name": {"Second"}, "command": {"SetOption0"}, "want": {"1"}})
+	id := ruleIDs(t, mem)[0]
 	before := len(mem.vs)
-	// Editing rule 1 of the list [Flash wear, Second]: its number is position+1 = 2.
-	_, body = e.do(t, "POST", "/policy/rules/preview", "admin", ruleForm(url.Values{"idx": {"1"}, "version": {"2"}, "name": {"Second"}, "command": {"SetOption0"}, "want": {"1"}}))
-	if !strings.Contains(body, "Would flag <b>2</b>") {
-		t.Errorf("the draft must replace rule 1 in the list:\n%s", body)
-	}
-	// A new rule is appended after the two saved ones.
-	_, body = e.do(t, "POST", "/policy/rules/preview", "admin", ruleForm(nil))
-	if !strings.Contains(body, "Would flag <b>3</b>") {
-		t.Errorf("a new draft is appended:\n%s", body)
+	for name, f := range map[string]url.Values{
+		"new draft":    ruleForm(nil),
+		"saved rule":   ruleForm(url.Values{"id": {id}, "version": {"1"}, "want": {"1"}}),
+		"unfinished":   ruleForm(url.Values{"command": {""}, "want": {""}}),
+		"invalid want": ruleForm(url.Values{"want": {"abc"}}),
+	} {
+		r, body := e.do(t, "POST", "/policy/rules/preview", "admin", f)
+		if r.StatusCode != 200 || strings.Contains(body, "<html") || !strings.Contains(body, `id="rule-devices"`) {
+			t.Errorf("%s: preview %d, want the devices card fragment:\n%s", name, r.StatusCode, body)
+		}
 	}
 	if len(mem.vs) != before {
 		t.Fatal("a preview must not store a version")
 	}
-	// An invalid draft explains itself instead of failing.
-	r, body = e.do(t, "POST", "/policy/rules/preview", "admin", ruleForm(url.Values{"want": {"abc"}}))
-	if r.StatusCode != 200 || !strings.Contains(body, `class="ufield-err"`) || !strings.Contains(body, "whole number") {
-		t.Errorf("invalid draft preview: %d\n%s", r.StatusCode, body)
-	}
-	// An unfinished draft is a hint, not an error.
-	_, body = e.do(t, "POST", "/policy/rules/preview", "admin", ruleForm(url.Values{"command": {""}, "want": {""}}))
-	if strings.Contains(body, `class="ufield-err"`) || !strings.Contains(body, "Enter a command") {
-		t.Errorf("unfinished draft:\n%s", body)
+	if r, _ := e.do(t, "POST", "/policy/rules/preview", "admin", ruleForm(url.Values{"id": {"r9z9z9"}})); r.StatusCode != 404 {
+		t.Errorf("preview of an unknown rule: %d", r.StatusCode)
 	}
 }
 
-// Why: selecting a rule card already opens its editor in the middle column, so the card's "⋯"
-// menu has no "Edit" (Alice 2026-10-23: it was redundant). The card itself stays a link to the
-// editor, which keeps editing reachable without JavaScript and by keyboard; the menu keeps the
-// actions the card cannot do.
-func TestPolicyRuleMenuHasNoEditTheCardOpensTheEditor(t *testing.T) {
-	e, _, _ := rulesEnv(t, "")
+// Why: a table row opens the rule on its own page (there is no editor on the overview), and the
+// row's menu keeps the actions the table can do itself: Edit (the same page), Duplicate, Disable
+// and Delete. The old "History" entry went with the editor.
+func TestPolicyRuleMenuOpensTheRulePageAndOffersTheRowActions(t *testing.T) {
+	e, mem, _ := rulesEnv(t, "")
 	saveRule(t, e, nil)
+	id := ruleIDs(t, mem)[0]
 	_, page := e.do(t, "GET", "/policy", "admin", nil)
-	card := page[strings.Index(page, `class="pol-card`):]
-	if !strings.Contains(card[:strings.Index(card, "pol-menu")], `<a class="pol-card-main" href="/tf/policy?edit=0"`) {
-		t.Errorf("the rule card does not link to its editor:\n%s", card)
+	row := page[strings.Index(page, "<tr class"):]
+	row = row[:strings.Index(row, "</tr>")]
+	if !strings.Contains(row, `<a href="/tf/policy/rules/`+id+`">Flash wear</a>`) {
+		t.Errorf("the rule name does not link to its page:\n%s", row)
 	}
-	menu := card[strings.Index(card, "pol-menu"):]
-	menu = menu[:strings.Index(menu, "</details>")]
-	if strings.Contains(menu, ">Edit<") || strings.Contains(menu, "#editor") {
-		t.Errorf("the rule menu still offers Edit:\n%s", menu)
-	}
-	for _, w := range []string{">Duplicate<", ">Disable<", ">History<", ">Delete…<"} {
+	menu := row[strings.Index(row, `class="rowmenu`):]
+	for _, w := range []string{">Edit<", ">Duplicate<", ">Disable<", ">Delete…<", `name="id" value="` + id + `"`} {
 		if !strings.Contains(menu, w) {
 			t.Errorf("the rule menu lost %q:\n%s", w, menu)
 		}
 	}
+	if strings.Contains(menu, ">History<") || strings.Contains(menu, `name="idx"`) {
+		t.Errorf("the menu still has History or the position field:\n%s", menu)
+	}
 }
 
-// Why: each rule card says what the rule checks (setting and expected value), which devices it
-// covers, its exceptions and note, and how many devices it flags now; the editor offers every
-// setting a rule can check and the inventory's tags and devices.
-func TestPolicyRulesCardsAndEditorChoices(t *testing.T) {
-	e, _, _ := rulesEnv(t, "")
+// Why: each row says what the rule checks (setting and expected value) and which devices it
+// covers; the rule page offers every setting a rule can check and the inventory's tags and devices.
+func TestPolicyOverviewRowsAndTheRulePageChoices(t *testing.T) {
+	e, mem, _ := rulesEnv(t, "")
 	saveRule(t, e, url.Values{"command": {"SetOption0"}, "want": {"0"}, "name": {"No save state"}})
 	_, page := e.do(t, "GET", "/policy", "admin", nil)
-	card := page[strings.Index(page, `class="pol-card`):]
-	card = card[:strings.Index(card, "pol-menu")]
-	for _, w := range []string{"No save state", "SetOption0 = 0", "Chip family: ESP32 (all variants)", "Tag: kitchen, attic, garage", "1 exception", ">lamp<", "keep flash alive", "Required", "1 flagged"} {
-		if !strings.Contains(card, w) {
-			t.Errorf("the rule card lacks %q:\n%s", w, card)
+	row := page[strings.Index(page, "<tr class"):]
+	row = row[:strings.Index(row, "</tr>")]
+	for _, w := range []string{"No save state", "SetOption0 = 0", "Chip family: ESP32 (all variants)", "Required"} {
+		if !strings.Contains(row, w) {
+			t.Errorf("the rule row lacks %q:\n%s", w, row)
 		}
 	}
-	// New rule editor: setting picker (SetOptions with their description), every family chip and the inventory's tags and devices.
-	_, page = e.do(t, "GET", "/policy?new=1", "admin", nil)
-	for _, w := range []string{`id="editor"`, `<input id="rule-command" name="command"`, `<datalist id="rule-commands">`, `<option value="PowerOnState">`, `value="esp8266"`, `value="esp32*"`, `value="esp32c3"`, `name="tag" value="kitchen"`, `name="device" value="attic"`, `name="device" value="kitchen"`, `value="info"`} {
+	id := ruleIDs(t, mem)[0]
+	_, page = e.do(t, "GET", "/policy/rules/"+id, "admin", nil)
+	for _, w := range []string{`<input id="rule-command" name="command"`, `<datalist id="rule-commands">`, `<option value="PowerOnState">`, `value="esp8266"`, `value="esp32*"`, `value="esp32c3"`, `name="tag" value="kitchen"`, `name="device" value="attic"`, `name="device" value="kitchen"`, `value="info"`,
+		`value="No save state"`, `list="rule-commands" value="SetOption0"`, `name="family" value="esp32*" checked`, `name="tag" value="attic" checked`, `name="tag" value="garage" checked`, `value="lamp"`, `name="id" value="` + id + `"`} {
 		if !strings.Contains(page, w) {
-			t.Errorf("new rule editor lacks %q", w)
+			t.Errorf("rule page lacks %q", w)
 		}
 	}
 	if strings.Contains(page, `<option value="MqttPassword"`) {
 		t.Error("secret settings must not be offered")
 	}
-	// Edit: the saved values are pre-selected.
 	if !strings.Contains(page, "SetOption0 (save_state)") || !strings.Contains(page, "restore relay state") {
 		t.Error("a SetOption is offered with its name and description")
-	}
-	_, page = e.do(t, "GET", "/policy?edit=0", "admin", nil)
-	for _, w := range []string{`value="No save state"`, `name="command" class="mono" list="rule-commands" value="SetOption0"`, `name="family" value="esp32*" checked`, `name="tag" value="attic" checked`, `name="tag" value="garage" checked`, `value="lamp"`, `name="idx" value="0"`} {
-		if !strings.Contains(page, w) {
-			t.Errorf("edit editor lacks %q", w)
-		}
 	}
 }
 
@@ -310,7 +289,7 @@ func TestPolicyRulesCreateEditDeleteRevert(t *testing.T) {
 			t.Errorf("stored rules lack %s: %s", w, mem.vs[0].Rules)
 		}
 	}
-	saveRule(t, e, url.Values{"idx": {"0"}, "version": {"1"}, "want": {"1"}}) // edit
+	saveRule(t, e, url.Values{"id": {ruleIDs(t, mem)[0]}, "version": {"1"}, "want": {"1"}}) // edit
 	if len(mem.vs) != 2 || (*live)[0].Want != "1" {
 		t.Fatalf("edit: versions=%d", len(mem.vs))
 	}
@@ -321,7 +300,7 @@ func TestPolicyRulesCreateEditDeleteRevert(t *testing.T) {
 	if r, _ := e.do(t, "POST", "/policy/rules/revert/1", "admin", url.Values{"csrf": {"tok"}}); r.StatusCode != 303 || len(mem.vs) != 3 || mem.vs[2].RevertOf != 1 || (*live)[0].Want != "0" {
 		t.Fatalf("revert: versions=%d", len(mem.vs))
 	}
-	if r, _ := e.do(t, "POST", "/policy/rules/delete", "admin", url.Values{"csrf": {"tok"}, "idx": {"0"}, "version": {"3"}}); r.StatusCode != 303 || len(mem.vs) != 4 || len(*live) != 0 {
+	if r, _ := e.do(t, "POST", "/policy/rules/delete", "admin", url.Values{"csrf": {"tok"}, "id": {ruleIDs(t, mem)[0]}, "version": {"3"}}); r.StatusCode != 303 || len(mem.vs) != 4 || len(*live) != 0 {
 		t.Fatalf("delete: versions=%d live=%v", len(mem.vs), *live)
 	}
 }
@@ -330,9 +309,9 @@ func TestPolicyRulesCreateEditDeleteRevert(t *testing.T) {
 // revert does (current -> the picked version), not the history's "vN -> current" diff, which
 // reads the other way round and would announce the opposite change.
 func TestPolicyRevertDialogListsWhatTheRevertChanges(t *testing.T) {
-	e, _, _ := rulesEnv(t, "")
+	e, mem, _ := rulesEnv(t, "")
 	saveRule(t, e, url.Values{"want": {"0"}})
-	saveRule(t, e, url.Values{"idx": {"0"}, "version": {"1"}, "want": {"1"}})
+	saveRule(t, e, url.Values{"id": {ruleIDs(t, mem)[0]}, "version": {"1"}, "want": {"1"}})
 	_, body := e.do(t, "GET", "/policy?v=1", "admin", nil)
 	i := strings.Index(body, `id="dlg-revert"`)
 	if i < 0 {
@@ -354,14 +333,15 @@ func TestPolicyRevertDialogListsWhatTheRevertChanges(t *testing.T) {
 func TestPolicyRulesStaleEditorIsRefused(t *testing.T) {
 	e, mem, _ := rulesEnv(t, "")
 	saveRule(t, e, nil)
-	r, body := e.do(t, "POST", "/policy/rules/save", "admin", ruleForm(url.Values{"idx": {"0"}, "version": {"0"}, "want": {"1"}}))
+	id := ruleIDs(t, mem)[0]
+	r, body := e.do(t, "POST", "/policy/rules/save", "admin", ruleForm(url.Values{"id": {id}, "version": {"0"}, "want": {"1"}}))
 	if r.StatusCode != 409 || !strings.Contains(body, "changed") || len(mem.vs) != 1 {
 		t.Fatalf("stale save: %d versions=%d", r.StatusCode, len(mem.vs))
 	}
-	if r, _ := e.do(t, "POST", "/policy/rules/delete", "admin", url.Values{"csrf": {"tok"}, "idx": {"0"}, "version": {"0"}}); r.StatusCode != 409 || len(mem.vs) != 1 {
+	if r, _ := e.do(t, "POST", "/policy/rules/delete", "admin", url.Values{"csrf": {"tok"}, "id": {id}, "version": {"0"}}); r.StatusCode != 409 || len(mem.vs) != 1 {
 		t.Fatalf("stale delete: %d", r.StatusCode)
 	}
-	if r, _ := e.do(t, "POST", "/policy/rules/delete", "admin", url.Values{"csrf": {"tok"}, "idx": {"7"}, "version": {"1"}}); r.StatusCode != 404 {
+	if r, _ := e.do(t, "POST", "/policy/rules/delete", "admin", url.Values{"csrf": {"tok"}, "id": {"r9z9z9"}, "version": {"1"}}); r.StatusCode != 404 {
 		t.Fatalf("delete of a missing rule: %d", r.StatusCode)
 	}
 }
@@ -372,23 +352,25 @@ func TestPolicyRulesInvalidDraftShowsErrorAtTheRule(t *testing.T) {
 	e, mem, _ := rulesEnv(t, "")
 	saveRule(t, e, nil)
 	saveRule(t, e, url.Values{"version": {"1"}, "name": {"Second"}, "command": {"SetOption0"}, "want": {"1"}})
+	second := ruleIDs(t, mem)[1]
 	for name, f := range map[string]url.Values{
-		"secret":    ruleForm(url.Values{"idx": {"1"}, "version": {"2"}, "command": {"MqttPassword"}}),
-		"injection": ruleForm(url.Values{"idx": {"1"}, "version": {"2"}, "want": {"0;Restart 1"}}),
-		"severity":  ruleForm(url.Values{"idx": {"1"}, "version": {"2"}, "severity": {"fatal"}}),
-		"number":    ruleForm(url.Values{"idx": {"1"}, "version": {"2"}, "want": {"99999"}}),
+		"secret":    ruleForm(url.Values{"id": {second}, "version": {"2"}, "command": {"MqttPassword"}}),
+		"injection": ruleForm(url.Values{"id": {second}, "version": {"2"}, "want": {"0;Restart 1"}}),
+		"severity":  ruleForm(url.Values{"id": {second}, "version": {"2"}, "severity": {"fatal"}}),
+		"number":    ruleForm(url.Values{"id": {second}, "version": {"2"}, "want": {"99999"}}),
 	} {
 		r, body := e.do(t, "POST", "/policy/rules/save", "admin", f)
 		if r.StatusCode != 422 {
 			t.Errorf("%s: %d", name, r.StatusCode)
 			continue
 		}
-		if n := strings.Count(body, `role="alert"`); n != 1 {
-			t.Errorf("%s: the problem must be shown once, got %d alerts", name, n)
+		// The Rule card says it once; the Devices card next to it repeats it as its own hint.
+		if n := strings.Count(body[:strings.Index(body, `id="rule-devices"`)], `role="alert"`); n != 1 {
+			t.Errorf("%s: the problem must be shown once in the rule card, got %d alerts", name, n)
 		}
-		ed := body[strings.Index(body, `id="editor"`):]
-		if !strings.Contains(ed, `role="alert"`) || !strings.Contains(ed, `name="idx" value="1"`) || !strings.Contains(ed, `value="Flash wear"`) {
-			t.Errorf("%s: the error and the draft belong in the editor of rule 1", name)
+		ed := body[strings.Index(body, `id="rule-form"`):]
+		if !strings.Contains(ed, `role="alert"`) || !strings.Contains(ed, `name="id" value="`+second+`"`) || !strings.Contains(ed, `value="Flash wear"`) {
+			t.Errorf("%s: the error and the draft belong on the page of the second rule", name)
 		}
 	}
 	if len(mem.vs) != 2 {
@@ -401,7 +383,7 @@ func TestPolicyRulesRejectUnknownFormKeys(t *testing.T) {
 	e, mem, _ := rulesEnv(t, "")
 	for name, f := range map[string]url.Values{
 		"extra key": ruleForm(url.Values{"admin": {"1"}}), "old row key": ruleForm(url.Values{"r.0.name": {"x"}}),
-		"two commands": ruleForm(url.Values{"command": {"SaveData", "SetOption0"}}), "bad idx": ruleForm(url.Values{"idx": {"../x"}}),
+		"two commands": ruleForm(url.Values{"command": {"SaveData", "SetOption0"}}), "old idx key": ruleForm(url.Values{"idx": {"0"}}), "bad id": ruleForm(url.Values{"id": {"../x"}}),
 		"bad version": ruleForm(url.Values{"version": {"x"}}),
 	} {
 		for _, p := range []string{"/policy/rules/save", "/policy/rules/preview"} {
@@ -410,7 +392,7 @@ func TestPolicyRulesRejectUnknownFormKeys(t *testing.T) {
 			}
 		}
 	}
-	if r, _ := e.do(t, "POST", "/policy/rules/delete", "admin", url.Values{"csrf": {"tok"}, "idx": {"0"}, "version": {"0"}, "x": {"1"}}); r.StatusCode != 400 {
+	if r, _ := e.do(t, "POST", "/policy/rules/delete", "admin", url.Values{"csrf": {"tok"}, "id": {"r1"}, "version": {"0"}, "x": {"1"}}); r.StatusCode != 400 {
 		t.Errorf("delete extra key: %d", r.StatusCode)
 	}
 	if r, _ := e.do(t, "GET", "/policy/rules/value-control?command=SaveData&x=1", "admin", nil); r.StatusCode != 400 {
@@ -455,7 +437,7 @@ func TestPolicyRulesImportChecksThenSaves(t *testing.T) {
 func TestPolicyRulesSaveWithoutSettingMarksTheSettingField(t *testing.T) {
 	e, mem, _ := rulesEnv(t, "")
 	saveRule(t, e, nil)
-	r, body := e.do(t, "POST", "/policy/rules/save", "admin", ruleForm(url.Values{"idx": {"new"}, "version": {"1"}, "command": {""}, "want": {""}}))
+	r, body := e.do(t, "POST", "/policy/rules/save", "admin", ruleForm(url.Values{"id": {"new"}, "version": {"1"}, "command": {""}, "want": {""}}))
 	if r.StatusCode != 422 || len(mem.vs) != 1 {
 		t.Fatalf("status %d, versions %d", r.StatusCode, len(mem.vs))
 	}
@@ -465,7 +447,7 @@ func TestPolicyRulesSaveWithoutSettingMarksTheSettingField(t *testing.T) {
 	if n := strings.Count(body, "Enter a command."); n != 1 {
 		t.Fatalf("the sentence must appear exactly once, got %d", n)
 	}
-	ed := body[strings.Index(body, `id="editor"`):]
+	ed := body[strings.Index(body, `id="rule-form"`):]
 	sel := ed[strings.Index(ed, `<input id="rule-command"`):]
 	sel = sel[:strings.Index(sel, ">")]
 	for _, want := range []string{`aria-invalid="true"`, `aria-describedby="err-command help-command"`, `autofocus`} {
@@ -495,8 +477,8 @@ func TestPolicyRuleFreeCommandField(t *testing.T) {
 		"Template":     "This command needs a confirmation in the console and cannot be a policy rule.",
 	} {
 		want := "1"
-		r, body := e.do(t, "POST", "/policy/rules/save", "admin", ruleForm(url.Values{"idx": {"new"}, "version": {"1"}, "command": {command}, "want": {want}}))
-		ed := body[strings.Index(body, `id="editor"`):]
+		r, body := e.do(t, "POST", "/policy/rules/save", "admin", ruleForm(url.Values{"id": {"new"}, "version": {"1"}, "command": {command}, "want": {want}}))
+		ed := body[strings.Index(body, `id="rule-form"`):]
 		if r.StatusCode != 422 || len(mem.vs) != 1 || !strings.Contains(ed, `id="err-command"`) || !strings.Contains(ed, why) && command != "status 0" {
 			t.Errorf("%s: status %d, versions %d, reason %q missing in\n%s", command, r.StatusCode, len(mem.vs), why, ed)
 		}
@@ -504,7 +486,7 @@ func TestPolicyRuleFreeCommandField(t *testing.T) {
 			t.Errorf("%s: raw validator text shown", command)
 		}
 	}
-	if r, body := e.do(t, "POST", "/policy/rules/save", "admin", ruleForm(url.Values{"idx": {"new"}, "version": {"1"}, "command": {"Sleep"}, "want": {"20"}})); r.StatusCode != 303 {
+	if r, body := e.do(t, "POST", "/policy/rules/save", "admin", ruleForm(url.Values{"id": {"new"}, "version": {"1"}, "command": {"Sleep"}, "want": {"20"}})); r.StatusCode != 303 {
 		t.Fatalf("a plain command must save: %d\n%s", r.StatusCode, body)
 	}
 	_, page := e.do(t, "GET", "/policy", "admin", nil)
@@ -571,13 +553,13 @@ func TestPolicyRuleSetOptionParameterRoundTrip(t *testing.T) {
 	}
 }
 
-// Why: deep links must survive the first edit after the upgrade. The editor form
-// carries no id, so saving rule 2 of a pre-0.19 version must keep r2 (and r1).
+// Why: deep links must survive the first edit after the upgrade. Saving rule 2 of a
+// pre-0.19 version (its id is the synthesised r2) must keep r2 (and r1).
 func TestPolicyRulesEditAfterUpgradeKeepsThePositionIDs(t *testing.T) {
 	e, mem, _ := rulesEnv(t, "")
 	mem.vs = append(mem.vs, store.PolicyRuleVersion{ID: 1, Actor: "old",
 		Rules: `[{"name":"A","command":"SaveData","want":"0"},{"name":"B","command":"Timezone","want":"99"}]`})
-	saveRule(t, e, url.Values{"idx": {"1"}, "version": {"1"}, "name": {"B"}, "command": {"Timezone"}, "want": {"+01:00"}, "family": {}, "tag": {}, "tags_extra": {""}, "except": {}, "note": {""}})
+	saveRule(t, e, url.Values{"id": {"r2"}, "version": {"1"}, "name": {"B"}, "command": {"Timezone"}, "want": {"+01:00"}, "family": {}, "tag": {}, "tags_extra": {""}, "except": {}, "note": {""}})
 	if len(mem.vs) != 2 {
 		t.Fatalf("versions = %d", len(mem.vs))
 	}

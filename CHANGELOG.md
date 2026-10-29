@@ -15,6 +15,7 @@ always upgrade automatically.
 
 ### Changed
 
+- The policy page is reworked: five tiles (rules, compliant devices, deviating, not judged, live check), a rule table with a compliance bar per rule, a banner for devices that break a Required rule, and an own page per rule. Rules are reordered by dragging the handle or with Move up and Move down; a disabled rule is dimmed and not checked (#197)
 - The bundled decode-config is the upstream Ubuntu 24.04 build (newer Python runtime); the runtime image already had the required glibc
 - Policy rules have a stable id that survives edits, reordering and export/import; rules saved before this version get `r1`, `r2`, ... by position on the first save (#197)
 
@@ -31,7 +32,9 @@ always upgrade automatically.
 
 ### Breaking
 
-- Templates no longer save a rule at once: a template opens a draft on the New rule page. `POST /policy/rules/template` is removed in a later step of the policy rework (#197)
+- Templates no longer save a rule at once: a template opens a draft on the New rule page. `POST /policy/rules/template` is removed (#197)
+- `/policy?edit=N`, `/policy?new=1` and `/policy?v=ID` no longer open the editor or a diff; the overview is shown and the parameter is ignored. The rule editor is the rule page, `/policy/rules/{id}` (#197)
+- The rule forms name a rule by `id` instead of the list position `idx` (duplicate, enable, disable, move, delete and the delete confirmation `/policy/rules/delete?id=`); `idx` is refused (#197)
 - The policy rules export (and `POLICY_RULES` format) gains an optional `id` per rule; exports now include it, and an import with a duplicate or malformed id is refused (#197)
 
 ## 0.18.0 (2026-10-29)

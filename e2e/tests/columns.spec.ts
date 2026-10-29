@@ -501,7 +501,7 @@ test("the three main tables render at desktop and phone width (screenshots with 
 test("tooltips: never a page dump, never two bubbles, at most 160 characters", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.setExtraHTTPHeaders(adam);
-  for (const path of ["/", "/devices", "/policy", "/policy/live", "/policy/io", "/firmware", "/transactions", "/audit", "/settings/system", "/discovery", "/about"]) {
+  for (const path of ["/", "/devices", "/policy", "/policy/io", "/firmware", "/transactions", "/audit", "/settings/system", "/discovery", "/about"]) {
     const res = await page.goto(app.url + path);
     if (!res || res.status() >= 400) continue;
     await page.waitForLoadState("networkidle");

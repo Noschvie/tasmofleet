@@ -95,13 +95,13 @@ templ rulePageTempl(p rulePageView) {
 					</form>
 				}
 				if p.Admin && !p.Draft {
-					@ruleOpForm(p, "/duplicate", "Duplicate")
+					@ruleOpForm(p, "/duplicate", "", "Duplicate")
 					if p.Disabled {
-						@ruleOpForm(p, "/enable", "Enable")
+						@ruleOpForm(p, "/enable", "rule", "Enable")
 					} else {
-						@ruleOpForm(p, "/disable", "Disable")
+						@ruleOpForm(p, "/disable", "rule", "Disable")
 					}
-					<a class="btn btn-danger" href={ templ.SafeURL(p.Base + rulesPath + "/delete?idx=" + itoa(p.Idx)) } data-dialog="dlg-rule-delete">Delete…</a>
+					<a class="btn btn-danger" href={ templ.SafeURL(p.Base + rulesPath + "/delete?id=" + p.ID) } data-dialog="dlg-rule-delete">Delete…</a>
 				}
 			</div>
 		</div>
@@ -143,7 +143,7 @@ templ rulePageTempl(p rulePageView) {
 			@ui.Dialog(ui.DialogData{
 				ID: "dlg-rule-delete", Title: "Delete rule “" + p.Name + "”?", Body: p.DeleteText,
 				Action: p.Base + rulesPath + "/delete", CSRF: p.CSRF,
-				Fields: []ui.KVRow{{Key: "idx", Value: itoa(p.Idx)}, {Key: "version", Value: vstr(p.Version)}},
+				Fields: []ui.KVRow{{Key: "id", Value: p.ID}, {Key: "version", Value: vstr(p.Version)}},
 				Verb:   "Delete rule", Danger: true,
 			})
 		}
@@ -151,12 +151,14 @@ templ rulePageTempl(p rulePageView) {
 	</div>
 }
 
-templ ruleOpForm(p rulePageView, path, label string) {
+templ ruleOpForm(p rulePageView, path, back, label string) {
 	<form method="post" action={ templ.SafeURL(p.Base + rulesPath + path) } class="pol-inline">
 		<input type="hidden" name="csrf" value={ p.CSRF }/>
 		<input type="hidden" name="version" value={ vstr(p.Version) }/>
-		<input type="hidden" name="idx" value={ itoa(p.Idx) }/>
-		<input type="hidden" name="back" value="rule"/>
+		<input type="hidden" name="id" value={ p.ID }/>
+		if back != "" {
+			<input type="hidden" name="back" value={ back }/>
+		}
 		<button type="submit" class="btn">{ label }</button>
 	</form>
 }
@@ -184,7 +186,7 @@ templ ruleEditCard(p rulePageView, e *ruleEditor) {
 			class="pol-form"
 		>
 			<input type="hidden" name="csrf" value={ p.CSRF }/>
-			<input type="hidden" name="id" value={ e.Idx }/>
+			<input type="hidden" name="id" value={ e.ID }/>
 			<input type="hidden" name="version" value={ vstr(e.Version) }/>
 			if p.Origin != "" {
 				<input type="hidden" name="origin" value={ p.Origin }/>
