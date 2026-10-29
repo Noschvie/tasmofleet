@@ -2,6 +2,7 @@ package fwselect
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -11,6 +12,10 @@ import (
 func selectFile(id model.Identity, c Choice) (Selection, error) {
 	if !id.Known() {
 		return Selection{}, fmt.Errorf("select: %w", ErrUnknownHardware)
+	}
+	c, err := applyBuild(id, c)
+	if err != nil {
+		return Selection{}, err
 	}
 	variant := id.Variant
 	if c.Variant != "" {
@@ -51,7 +56,7 @@ func selectFile(id model.Identity, c Choice) (Selection, error) {
 	case id.Family == model.ChipESP32 && !id.SingleCore && esp32Variants[variant]:
 		sel.Filename = "tasmota32" + suffix + ".bin"
 	case id.Family != model.ChipESP8266 && id.Family != model.ChipESP32 && suffix == "":
-		build, err := chipBuild(id)
+		build, err := chipBuild(id, c.Build)
 		if err != nil {
 			return Selection{}, err
 		}
@@ -62,14 +67,55 @@ func selectFile(id model.Identity, c Choice) (Selection, error) {
 	return sel, nil
 }
 
+// applyBuild checks an explicit chip build against the device and returns the
+// choice Select works with. Only an ESP32-S2 takes a build: s2 or s2cdc, and
+// it implies the plain tasmota variant, allowing the change from the detected
+// "unknown" (the shared image tag cannot name the build, §6.2). An ESP32-P4
+// takes none (its revision decides), and a build that differs from what the
+// revision proves is refused; so is a build on any other chip.
+func applyBuild(id model.Identity, c Choice) (Choice, error) {
+	if c.Build == "" {
+		if id.Family == model.ChipESP32S2 {
+			// Said first: "choose a variant" would hide that the build is what is missing.
+			return c, fmt.Errorf("select: ESP32-S2 has two builds (s2, s2cdc) that report the same image name: %w", ErrBuildChoiceNeeded)
+		}
+		return c, nil
+	}
+	if id.Family == model.ChipESP32P4 {
+		proven, err := p4Build(id.Hardware)
+		if err != nil {
+			return c, err
+		}
+		if c.Build != proven {
+			return c, fmt.Errorf("select: build %q differs from %q, the build that boots on %q: %w", c.Build, proven, id.Hardware, ErrNoSuchVariant)
+		}
+		return c, nil
+	}
+	if id.Family != model.ChipESP32S2 {
+		return c, fmt.Errorf("select: %s has no build to choose, got %q: %w", id.Family, c.Build, ErrNoSuchVariant)
+	}
+	if !slices.Contains(BuildOptions(id), c.Build) {
+		return c, fmt.Errorf("select: build %q is not an ESP32-S2 build (s2, s2cdc): %w", c.Build, ErrNoSuchVariant)
+	}
+	if c.Variant == "" {
+		c.Variant = variantTasmota
+	}
+	if c.Variant == variantTasmota && id.Variant == variantUnknown {
+		c.AllowVariantChange = true
+	}
+	return c, nil
+}
+
 // chipBuild returns the tasmota32<chip> build for the device's chip. Every
 // chip build reports the image tag "tasmota32" (§6.2), so the build comes
 // from the hardware alone. ESP32-S2 has two builds (s2, s2cdc) that nothing
-// the device reports can tell apart: refused, never defaulted (#85). ESP32-P4
-// has two builds for disjoint chip revisions, decided by p4Build.
-func chipBuild(id model.Identity) (string, error) {
+// the device reports can tell apart: only the explicit build, validated by
+// applyBuild (which refuses an S2 without one: ErrBuildChoiceNeeded), selects
+// one (#85, #88).
+// ESP32-P4 has two builds for disjoint chip revisions, decided by p4Build.
+func chipBuild(id model.Identity, chosen string) (string, error) {
 	if id.Family == model.ChipESP32S2 {
-		return "", fmt.Errorf("select: ESP32-S2 has two builds (s2, s2cdc) that report the same image name; choosing the build is not supported yet: %w", ErrUnknownHardware)
+		return chosen, nil // validated by applyBuild
 	}
 	if id.Family == model.ChipESP32P4 {
 		return p4Build(id.Hardware)

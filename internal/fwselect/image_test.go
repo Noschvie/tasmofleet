@@ -23,6 +23,7 @@ func TestInspectImageFixtures(t *testing.T) {
 		"tasmota32solo1.bin.hdr":     {model.ChipESP32, 0x00},
 		"tasmota32-safeboot.bin.hdr": {model.ChipESP32, 0x00},
 		"tasmota32s2.bin.hdr":        {model.ChipESP32S2, 0x02},
+		"tasmota32s2cdc.bin.hdr":     {model.ChipESP32S2, 0x02},
 		"tasmota32c3.bin.hdr":        {model.ChipESP32C3, 0x05},
 		"tasmota32s3.bin.hdr":        {model.ChipESP32S3, 0x09},
 		"tasmota32c2.bin.hdr":        {model.ChipESP32C2, 0x0C},

@@ -219,7 +219,7 @@ func padded(t *testing.T, name string, big bool) []byte {
 
 var upstreamFiles = map[string][]string{
 	"/tasmota/release/":   {"tasmota.bin.gz", "tasmota-minimal.bin.gz", "tasmota-lite.bin.gz"},
-	"/tasmota32/release/": {"tasmota32.bin", "tasmota32c3.bin", "tasmota32s3.bin", "tasmota32-safeboot.bin"},
+	"/tasmota32/release/": {"tasmota32.bin", "tasmota32c3.bin", "tasmota32s3.bin", "tasmota32s2.bin", "tasmota32s2cdc.bin", "tasmota32-safeboot.bin"},
 }
 
 func (e *itEnv) serveUpstream(w http.ResponseWriter, r *http.Request) {

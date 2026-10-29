@@ -7,6 +7,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
 	"github.com/nofuturekid/tasmofleet/internal/devlock"
 	"github.com/nofuturekid/tasmofleet/internal/firmware"
+	"github.com/nofuturekid/tasmofleet/internal/fwselect"
 	"net/http"
 	"slices"
 	"sort"
@@ -419,7 +420,10 @@ func (h *handler) requests(r *http.Request, ids []model.DeviceID) ([]ota.Request
 		}
 		q := ota.Request{DeviceID: id, Release: release, Custom: custom, Delivery: delivery, Variant: variant, AllowVariantChange: variant != "",
 			Policy: policy, SkipBackup: skipBackup(r),
-			SkipPowerRestore: skipPower, RestoreRelays: restoreRelays}
+			SkipPowerRestore: skipPower, RestoreRelays: restoreRelays,
+			// The chip build of a device that has two (ESP32-S2) is chosen per device in the preview; the engine
+			// refuses a build that does not belong to the device.
+			Build: strings.TrimSpace(r.PostFormValue("build_" + strconv.FormatInt(int64(id), 10)))}
 		if q.Variant == "" && (d.Identity.Variant == "minimal" || d.Identity.Variant == "safeboot") {
 			q.Variant, q.AllowVariantChange = "tasmota", true
 		}
@@ -437,7 +441,35 @@ type previewRow struct {
 	Size     int64  // the file's size, 0 unknown
 	SkipPwr  bool   // the restore is turned off for this update
 	Push     bool   // "push where possible" was chosen: the row says its delivery
+	// BuildOptions are the builds to choose from when the device is refused only because its chip has
+	// two builds (ESP32-S2); Build is the one the user chose (the row then goes ahead).
+	BuildOptions []buildOption
+	Build        string
 }
+
+// buildOption is one chip build the user may choose for a device.
+type buildOption struct {
+	Value, Label, Text string
+}
+
+// buildTexts say, in one line each, what the S2 builds are for (Tasmota's own docs: s2 is the
+// standard build, s2cdc is for boards whose USB port is the chip's native USB with the CDC console).
+var buildTexts = map[string][2]string{
+	"s2":    {"s2: standard", "USB serial via a UART bridge"},
+	"s2cdc": {"s2cdc", "for boards whose USB port is the chip's native USB (CDC console)"},
+}
+
+func buildOptionsFor(id model.Identity) []buildOption {
+	var out []buildOption
+	for _, b := range fwselect.BuildOptions(id) {
+		t := buildTexts[b]
+		out = append(out, buildOption{Value: b, Label: t[0], Text: t[1]})
+	}
+	return out
+}
+
+// BuildName is the field name of the radio group that chooses the build of the device.
+func (r previewRow) BuildName() string { return "build_" + strconv.FormatInt(int64(r.Device.ID), 10) }
 
 // DeliveryText says how a device that is updated gets its file when push
 // where possible was chosen; "" for the download delivery.
@@ -513,6 +545,17 @@ func (p previewPage) Refused() int {
 	return n
 }
 
+// ChoosingBuilds counts the devices that wait for the user to choose a chip build.
+func (p previewPage) ChoosingBuilds() int {
+	n := 0
+	for _, r := range p.Rows {
+		if len(r.BuildOptions) > 0 {
+			n++
+		}
+	}
+	return n
+}
+
 // Skips counts the devices that need nothing (already at the target); a refused device is not one of them.
 func (p previewPage) Skips() int { return len(p.Rows) - p.Upgrades() - p.Refused() }
 
@@ -520,8 +563,9 @@ type previewPage struct {
 	ReleaseText string // the release as the user chose it, "custom: label (version)" for an upload
 	Form        updateForm
 	Rows        []previewRow
-	IDs         []string // the devices the update starts on
-	Picked      []string // every device the user picked (the way back to the picker)
+	Builds      map[string]string // device id -> the build the user chose (rows that go ahead only)
+	IDs         []string          // the devices the update starts on
+	Picked      []string          // every device the user picked (the way back to the picker)
 	Error       string
 
 	Base     string
@@ -620,7 +664,17 @@ func (h *handler) updatePreview(w http.ResponseWriter, r *http.Request) {
 		q := byID[it.DeviceID]
 		row := previewRow{Device: d, Item: it, Go: it.Decision != "refuse" && it.Decision != "skip",
 			From: d.Identity.Version, To: q.Release, SkipPwr: q.SkipPowerRestore, Push: q.Delivery == model.DeliveryPush}
-		if q.AllowVariantChange && r.PostFormValue("variant") == "" {
+		if it.BuildChoice {
+			row.BuildOptions = buildOptionsFor(d.Identity)
+		}
+		if row.Go && q.Build != "" {
+			row.Build = q.Build
+			row.Note = "Build " + q.Build + ", chosen by you."
+			if p.Builds == nil {
+				p.Builds = map[string]string{}
+			}
+			p.Builds[strconv.FormatInt(int64(it.DeviceID), 10)] = q.Build
+		} else if q.AllowVariantChange && r.PostFormValue("variant") == "" {
 			row.Note = "Runs " + d.Identity.Variant + ": installs the default tasmota build."
 		}
 		if row.Go {
@@ -899,6 +953,7 @@ func (h *handler) txnPageData(w http.ResponseWriter, r *http.Request) (txnPage, 
 		row.Badge, row.Tone = jobBadge(j.Job)
 		if j.Job.IsUpdate() {
 			row.Upload = j.Job.Delivery == model.DeliveryPush
+			row.Build = j.Job.TargetBuild
 			row.From, row.To = j.Job.IdentityBefore.Version, j.Job.TargetRelease
 			if row.From == "" {
 				row.From = j.FromVersion

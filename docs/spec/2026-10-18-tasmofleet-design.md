@@ -143,7 +143,7 @@ everything.
 | `secretbox`                             | AES-GCM at rest                               | `Box{Seal, Open}`, `LoadOrCreate(dataDir)`                                                                                                                                                                                         | stdlib                                 |
 | `store`                                 | persistence                                   | `DeviceStore`, `HealthStore`, `JobStore`, `ArtifactStore`, `BackupStore`, `AuditStore`, `SessionStore`, `LocalUserStore`, `Store`, `Open(path, box)`, `Migrations`                                                                 | model, secretbox, modernc.org/sqlite   |
 | `tasmota`                               | device HTTP protocol                          | `Client{Command, DownloadConfig, RootPage}`, `Target`, `TargetFor(Device)`, `ParseStatus2/4/11`, `ParseUpgradeProbe`, `ParseOtaURL`, errors `ErrUnknownCommand`, `ErrAuth`, `ErrUnreachable`, `ErrTimeout`, `ErrForbiddenAddr`     | model                                  |
-| `fwselect`                              | **pure** firmware decisions                   | `Detect`, `FamilyFromHardware`, `Select`, `Decide`, `InspectImage`, `Guard`, `Plan`, errors `ErrUnknownHardware`, `ErrFamilyMismatch`, `ErrFilenameMismatch`, `ErrSafeboot`, `ErrVariantChange`, `ErrNoSuchVariant`, `ErrBadImage` | model                                  |
+| `fwselect`                              | **pure** firmware decisions                   | `Detect`, `FamilyFromHardware`, `Select`, `Decide`, `InspectImage`, `Guard`, `Plan`, `BuildOptions`, `DetectedVariant`, errors `ErrUnknownHardware`, `ErrBuildChoiceNeeded`, `ErrFamilyMismatch`, `ErrFilenameMismatch`, `ErrSafeboot`, `ErrVariantChange`, `ErrNoSuchVariant`, `ErrBadImage` | model                                  |
 | `firmware`                              | upstream sources, cache, device-facing server | `Cache{Releases, Ensure, URLFor, Prune}`, `Source`, `Server(Cache)`                                                                                                                                                                | model, fwselect, store                 |
 | `ota`                                   | update state machine + engine                 | `Step(job, event, now, cfg)` (pure), `Engine{Run, Submit, Preview, Cancel}`, `DeviceAPI`, `Firmware`, `Backups`, `Notifier`                                                                                                        | model, fwselect, store, clock          |
 | `mqttbus`                               | optional MQTT                                 | `Bus{Subscribe, Command, Connected}`, `Connect`, `Message`, `Kind`                                                                                                                                                                 | paho                                   |
@@ -481,8 +481,13 @@ History and limits (SRC):
 - S2 and P4 identify with variant `unknown`. After an explicit variant choice, Select still has to prove the
   build (§7.2): P4 by the chip revision Status 2 reports in `Hardware` (`ESP32-P4 v<major>.<minor>`): `p4`
   (board `esp32p4`, chip_variant `esp32p4_es`, built for revisions 0.1-1.99) or `p4r3` (ESP-IDF default
-  3.1-3.99, `Kconfig.hw_support`); any other revision is refused. S2 is always refused (`ErrUnknownHardware`):
-  nothing the device reports tells `s2` from `s2cdc`. An explicit build choice is a follow-up issue.
+  3.1-3.99, `Kconfig.hw_support`); any other revision is refused. S2 is refused
+  (`ErrBuildChoiceNeeded`, which is an `ErrUnknownHardware`) unless the user chose the build: nothing the
+  device reports tells `s2` from `s2cdc`. The choice is `Choice.Build` (§7.2). After an update the device
+  reports the shared tag, so its variant reads `unknown`: `DetectedVariant(Selection)` is the variant
+  `Detect` will read back for a selection (`unknown` for S2 and P4, the selected variant otherwise), and
+  the OTA verify step compares with it instead of the selected `tasmota` (family, version, language and
+  reboot proof are checked as before).
 
 With unknown hardware the tag is not checked (the identity is never `Known()`). If the
 tag's chips do not include the Hardware family (e.g. `webcam` on an ESP32-C3), `Detect`
@@ -530,8 +535,14 @@ set only from a UI confirmation or a CLI flag). For esp8266 it always also names
 `tasmota-minimal.bin.gz` of the same release. Language and variant cannot be combined
 upstream (there is no `tasmota-sensors-DE`). Asking for that returns `ErrNoSuchVariant`.
 The chip build of the newer chips comes from `Hardware` alone: the one build of S3, C2, C3, C5, C6 and C61; for
-P4 the build whose revision range contains the chip revision (§6.2); ESP32-S2 and every other case return
-`ErrUnknownHardware`. This also covers the minimal/safeboot auto-default ("tasmota" chosen for the device).
+P4 the build whose revision range contains the chip revision (§6.2); every other case returns
+`ErrUnknownHardware`. ESP32-S2 returns `ErrBuildChoiceNeeded` (an `ErrUnknownHardware`) unless
+`Choice.Build` is `s2` or `s2cdc` (`BuildOptions(identity)`); that explicit build implies the plain `tasmota`
+variant and the change from the detected `unknown`, and only it does. A build on any other chip, or one that
+contradicts a provable revision (`p4` on a 3.1 P4), returns `ErrNoSuchVariant`; a P4 outside the known
+revisions stays refused with or without a build. The build is chosen per update in the update preview and
+kept on the job (`Job.TargetBuild`, `ota_jobs.target_build`, migration 0032); Guard rule 7 holds the artifact
+to it. Remembering the choice per device is not part of this. This also covers the minimal/safeboot auto-default ("tasmota" chosen for the device).
 
 ### 7.3 Decide (update policy)
 

@@ -528,6 +528,15 @@ func TestStepVerify(t *testing.T) {
 	unknownFam := finalIdent()
 	unknownFam.Family = model.ChipUnknown
 	safeboot := model.Identity{Family: model.ChipESP8266, Version: "16.0.0", Variant: "safeboot"}
+	// ESP32-S2: both builds report the shared image tag, so the device reads back "unknown" (#88).
+	s2Job := withPlan(job(model.JobVerify, model.StageFinal), model.PlanDirect)
+	s2Job.DeadlineAt = t0.Add(time.Minute)
+	s2Job.IdentityBefore = model.Identity{Family: model.ChipESP32S2, Hardware: "ESP32-S2", Version: "15.6.0", Variant: "unknown"}
+	s2Job.TargetBuild = "s2cdc"
+	s2After := s2Job.IdentityBefore
+	s2After.Version = "16.0.0"
+	s2Tasmota := s2After
+	s2Tasmota.Variant = "tasmota"
 	autoNoted := vDirect
 	autoNoted.AutoContinueSeen = true
 	autoNotedLate := autoNoted
@@ -686,6 +695,21 @@ func TestStepVerify(t *testing.T) {
 			// Staged final stage: still on minimal means the final download failed.
 			name: "verify/identity/still minimal in staged final stage", in: vFinal, ev: ident(minimalIdent("16.0.0"), "", 77),
 			state: model.JobSetOtaURL, actions: []ActionKind{ActSetOtaURL},
+		},
+		{
+			// The verify bug of #88: comparing with TargetVariant "tasmota" ended every correct S2 update as "not taken".
+			name: "verify/identity/esp32-s2 reports the shared tag (variant unknown)", in: s2Job, ev: ident(s2After, "", 3),
+			state: model.JobRestoreOtaURL, actions: []ActionKind{ActRestoreOtaURL},
+		},
+		{
+			// Version, family and reboot proof still decide: an S2 still on the old version is not a success.
+			name: "verify/identity/esp32-s2 still on the old version", in: s2Job, ev: ident(s2Job.IdentityBefore, "", 77),
+			state: model.JobSetOtaURL, actions: []ActionKind{ActSetOtaURL},
+		},
+		{
+			// An S2 cannot report "tasmota": a result that does is not what was installed.
+			name: "verify/identity/esp32-s2 reporting a provable variant", in: s2Job, ev: ident(s2Tasmota, "", 3),
+			state: model.JobFailed, actions: []ActionKind{ActNotify},
 		},
 		{
 			name: "verify/identity/wrong variant", in: vFinal, ev: ident(sensors, "", 0),

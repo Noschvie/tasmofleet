@@ -502,7 +502,7 @@ func TestDetectThenSelect(t *testing.T) {
 		{"16.0.0(release-tasmota32)", "ESP32-C5", "tasmota32c5.bin", nil},
 		{"16.0.0(release-tasmota32)", "ESP32-C6", "tasmota32c6.bin", nil},
 		{"16.0.0(release-tasmota32)", "ESP32-C61", "tasmota32c61.bin", nil},
-		{"16.0.0(release-tasmota32)", "ESP32-S2", "", ErrVariantChange},
+		{"16.0.0(release-tasmota32)", "ESP32-S2", "", ErrBuildChoiceNeeded}, // #88: the build is what is missing
 		{"16.0.0(release-tasmota32)", "ESP32-P4", "", ErrVariantChange},
 		{"16.0.0(release-tasmota32)", "ESP32-S0WD", "", ErrVariantChange},
 	}

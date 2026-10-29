@@ -12,7 +12,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/model"
 )
 
-const jobCols = `id, batch_id, device_id, state, stage, plan, policy, skip_backup, attempt, target_release, target_variant, target_custom,
+const jobCols = `id, batch_id, device_id, state, stage, plan, policy, skip_backup, attempt, target_release, target_variant, target_build, target_custom,
 	target_artifact, minimal_artifact, identity_before, original_ota_url, uptime_before, seen_offline, cancel_requested,
 	auto_continue_seen, skip_power_restore, power_on, power_read_at, power_note, restore_relays, power_cutoff, deadline_at, last_error, created_by, created_at, updated_at, kind, commands, created_kind, delivery, batch_parallel, reply_timeout_ms`
 
@@ -23,7 +23,7 @@ func scanJob(r scanner) (model.Job, error) {
 	var power uint32
 	var deadline, created, updated, powerAt, cutoff, replyMS int64
 	err := r.Scan(&j.ID, &j.BatchID, &j.DeviceID, &state, &stage, &plan, &policy, &skip, &j.Attempt, &j.TargetRelease,
-		&j.TargetVariant, &j.TargetCustom, &j.TargetArtifact, &j.MinimalArtifact, &ident, &j.OriginalOtaURL, &j.UptimeBefore, &seen, &cancel,
+		&j.TargetVariant, &j.TargetBuild, &j.TargetCustom, &j.TargetArtifact, &j.MinimalArtifact, &ident, &j.OriginalOtaURL, &j.UptimeBefore, &seen, &cancel,
 		&autoCont, &skipPower, &power, &powerAt, &j.PowerNote, &restoreRel, &cutoff, &deadline, &j.LastError, &j.CreatedBy, &created, &updated, &kind, &j.Commands, &j.CreatedKind, &delivery, &j.BatchParallel, &replyMS)
 	if err != nil {
 		return model.Job{}, err
@@ -89,11 +89,11 @@ func (s *SQLite) createBatch(ctx context.Context, createdBy string, retryOf mode
 			return 0, nil, err
 		}
 		res, err := tx.ExecContext(ctx, `INSERT INTO ota_jobs (batch_id, device_id, state, stage, plan, policy, skip_backup, attempt,
-			target_release, target_variant, target_custom, target_artifact, minimal_artifact, identity_before, original_ota_url, uptime_before,
+			target_release, target_variant, target_build, target_custom, target_artifact, minimal_artifact, identity_before, original_ota_url, uptime_before,
 			seen_offline, cancel_requested, auto_continue_seen, skip_power_restore, power_on, power_read_at, power_note, restore_relays, power_cutoff, deadline_at, last_error, created_by, created_at, updated_at, kind, commands, created_kind, delivery, batch_parallel, reply_timeout_ms)
-			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			bid, j.DeviceID, string(j.State), string(j.Stage), string(j.Plan), string(j.Policy), b2i(j.SkipBackup), j.Attempt,
-			j.TargetRelease, j.TargetVariant, j.TargetCustom, j.TargetArtifact, j.MinimalArtifact, string(ident), j.OriginalOtaURL, j.UptimeBefore,
+			j.TargetRelease, j.TargetVariant, j.TargetBuild, j.TargetCustom, j.TargetArtifact, j.MinimalArtifact, string(ident), j.OriginalOtaURL, j.UptimeBefore,
 			b2i(j.SeenOffline), b2i(j.CancelRequested), b2i(j.AutoContinueSeen), b2i(j.SkipPowerRestore), uint32(j.PowerOn), toMS(j.PowerReadAt), j.PowerNote, b2i(j.RestoreRelays), toMS(j.PowerCutoff),
 			toMS(j.DeadlineAt), j.LastError, createdBy, now, now, kindOf(j), j.Commands, j.CreatedKind, string(j.Delivery), j.BatchParallel, j.ReplyTimeout.Milliseconds())
 		if err != nil {

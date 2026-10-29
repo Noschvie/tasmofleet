@@ -23,6 +23,7 @@ package fwselect
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
 )
@@ -38,6 +39,12 @@ var (
 	ErrNoSuchVariant    = errors.New("fwselect: variant not built for this chip family")
 	ErrBadImage         = errors.New("fwselect: not an ESP firmware image")
 	ErrNotImplemented   = errors.New("fwselect: not implemented")
+
+	// ErrBuildChoiceNeeded is the refusal for a chip with two upstream builds
+	// that nothing the device reports can tell apart (ESP32-S2: s2, s2cdc, #88).
+	// It is an ErrUnknownHardware, so every caller that refuses on that keeps
+	// refusing; the UI additionally offers BuildOptions.
+	ErrBuildChoiceNeeded = fmt.Errorf("fwselect: this chip has two builds that report the same image name, choose one: %w", ErrUnknownHardware)
 )
 
 // LanguageEnglish in Choice.Language explicitly selects the English build.
@@ -100,7 +107,13 @@ type Choice struct {
 	// AllowVariantChange must be true when Variant differs from the detected
 	// one. Set only from an explicit UI/CLI confirmation.
 	AllowVariantChange bool
-	Policy             model.UpdatePolicy
+	// Build is the explicit chip build (ESP32-S2: "s2" or "s2cdc"). Empty for
+	// every device but an ESP32-S2, where Select refuses without it (#88). Set
+	// only from an explicit UI/CLI confirmation; it must be one of
+	// BuildOptions(id). For an S2 it implies the plain tasmota variant, and the
+	// variant change from the detected "unknown" that this means.
+	Build  string
+	Policy model.UpdatePolicy
 }
 
 // Decision is what Decide returns for a device.
@@ -167,4 +180,28 @@ func Guard(id model.Identity, a model.Artifact, otaURL string, c Choice) error {
 // target image as the device will download it (.bin.gz for ESP8266).
 func Plan(id model.Identity, targetSize int64) (model.Plan, error) {
 	return plan(id, targetSize)
+}
+
+// BuildOptions lists the builds the user may choose for the device's chip:
+// "s2" and "s2cdc" for an ESP32-S2, nil for every other device. An ESP32-P4
+// has two builds too, but its chip revision proves which one boots (Select),
+// so there is nothing to choose.
+func BuildOptions(id model.Identity) []string {
+	if id.Family == model.ChipESP32S2 {
+		return []string{"s2", "s2cdc"}
+	}
+	return nil
+}
+
+// DetectedVariant is the variant Detect will read from a device after it has
+// run sel. A chip with two builds reports the shared image tag "tasmota32",
+// from which Detect cannot tell the build: the variant is "unknown" there
+// although the selection is plain "tasmota". The update's verify step must
+// compare against this, not against Selection.Variant, or a correct S2 update
+// would end as "not taken".
+func DetectedVariant(sel Selection) string {
+	if ambiguousChips[sel.Family] {
+		return variantUnknown
+	}
+	return sel.Variant
 }

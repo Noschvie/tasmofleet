@@ -12,6 +12,7 @@ header: byte 8 = `0xEE` (WP pin "disabled"), bytes 12-13 = `chip_id`
 |---|---|
 | tasmota32, tasmota32solo1, tasmota32-safeboot | 0x0000 (ESP32) |
 | tasmota32s2 | 0x0002 |
+| tasmota32s2cdc | 0x0002 (a copy of the tasmota32s2 header, not fetched separately: same chip, the build only differs in the USB console; for the simulator and the file listings, #88) |
 | tasmota32c3 | 0x0005 |
 | tasmota32s3 | 0x0009 |
 | tasmota32c2 | 0x000C |

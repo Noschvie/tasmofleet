@@ -128,7 +128,7 @@ func TestLiveFieldsAreRecomputedAndIdentityRewritten(t *testing.T) {
 func TestHardwareOfSyntheticProfiles(t *testing.T) {
 	f := newTestFleet(t, "", Extra{})
 	for prof, want := range map[Profile]string{
-		ProfileESP32C3: "ESP32-C3", ProfileESP32S3: "ESP32-S3", ProfileUnknownChip: "ESP32-X9", ProfileESP8266_1M: "ESP8285N08",
+		ProfileESP32C3: "ESP32-C3", ProfileESP32S2: "ESP32-S2", ProfileESP32S3: "ESP32-S3", ProfileUnknownChip: "ESP32-X9", ProfileESP8266_1M: "ESP8285N08",
 	} {
 		d := add(t, f, DeviceSpec{Name: string(prof), Profile: prof})
 		if got := cm(t, d, "Status 2"); !contains(got, want) {

@@ -72,6 +72,7 @@ func fleetDevices() []simulator.DeviceSpec {
 		{Name: "esp32-dimmer", Profile: simulator.ProfileESP32},
 		{Name: "esp32c3-sensor", Profile: simulator.ProfileESP32C3},
 		{Name: "esp32s3-http", Profile: simulator.ProfileESP32S3, Faults: httpOnly},
+		{Name: "esp32s2-board", Profile: simulator.ProfileESP32S2},
 		{Name: "mystery-chip", Profile: simulator.ProfileUnknownChip},
 		{Name: "locked-plug", Profile: simulator.ProfileESP8266_4M, User: "admin", Password: "devenv-fake-password"},
 	}

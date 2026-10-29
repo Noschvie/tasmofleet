@@ -522,3 +522,65 @@ func TestTransactionMarksUploadedDevices(t *testing.T) {
 		t.Fatal("a download job is marked as upload")
 	}
 }
+
+// Why: an ESP32-S2 has two builds nothing can tell apart (#88). The preview must offer them with
+// a line of explanation per device, never pick one, and a chosen build must reach the engine and
+// the start form (the job is created from that form), but only for devices that go ahead.
+func TestPreviewOffersTheS2BuildsAndCarriesTheChoice(t *testing.T) {
+	e, o, _, _ := setupOTA(t)
+	e.inv.devs[4] = model.Device{ID: 4, Name: "s2-board", Address: "10.0.0.4", Identity: model.Identity{Family: model.ChipESP32S2, Hardware: "ESP32-S2", Version: "16.0.0", Variant: "unknown"}}
+	o.items[4] = ota.PreviewItem{DeviceID: 4, Decision: "refuse", Reason: "select: ESP32-S2 has two builds", BuildChoice: true}
+	form := url.Values{"id": {"1", "4"}, "release": {"16.1.0"}, "policy": {"only-newer"}}
+	resp, body := e.do(t, "POST", "/updates/preview", "operator", form)
+	if resp.StatusCode != 200 {
+		t.Fatalf("%d %s", resp.StatusCode, body)
+	}
+	for _, want := range []string{"Choose the build", `name="build_4" value="s2"`, `name="build_4" value="s2cdc"`, "native USB", `id="recheck"`, "Recheck"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("preview lacks %q: %s", want, body)
+		}
+	}
+	if strings.Contains(body, `name="build_4" value="s2" checked`) || strings.Contains(body, `name="build_4" value="s2cdc" checked`) {
+		t.Fatal("no build may be preselected: nothing is guessed")
+	}
+	if o.previewReqs[1].Build != "" {
+		t.Fatalf("a build was sent without a choice: %+v", o.previewReqs)
+	}
+	start, _, _ := strings.Cut(body[strings.Index(body, `<form id="start"`):], "</form>")
+	if strings.Contains(start, `name="id" value="4"`) || strings.Contains(start, "build_4") {
+		t.Fatalf("a refused device must not be in the start form: %s", start)
+	}
+
+	// Recheck with the choice: the engine accepts, the row goes ahead and the start form carries the build.
+	o.items[4] = ota.PreviewItem{DeviceID: 4, Decision: "upgrade", Plan: model.PlanDirect, Filename: "tasmota32s2cdc.bin"}
+	form.Set("build_4", "s2cdc")
+	_, body = e.do(t, "POST", "/updates/preview", "operator", form)
+	if o.previewReqs[1].Build != "s2cdc" || o.previewReqs[0].Build != "" {
+		t.Fatalf("requests: %+v", o.previewReqs)
+	}
+	start, _, _ = strings.Cut(body[strings.Index(body, `<form id="start"`):], "</form>")
+	if !strings.Contains(start, `name="build_4" value="s2cdc"`) || !strings.Contains(body, "tasmota32s2cdc.bin") || strings.Contains(body, "Choose the build") {
+		t.Fatalf("recheck: %s", body)
+	}
+	// Submit hands the build to the engine.
+	form.Set("skip_backup", "1")
+	e.do(t, "POST", "/updates", "operator", form)
+	if len(o.submitReqs) != 2 || o.submitReqs[1].Build != "s2cdc" {
+		t.Fatalf("submit: %+v", o.submitReqs)
+	}
+}
+
+// Why: the two ESP32-S2 builds look alike everywhere else, so the transaction must say which one
+// the job installs (#88).
+func TestTransactionRowShowsTheChosenBuild(t *testing.T) {
+	e, _, j, _ := setupOTA(t)
+	_, body := e.do(t, "GET", "/transactions/7", "operator", nil)
+	if strings.Contains(body, "· build") {
+		t.Fatalf("a job without a build shows one: %s", body)
+	}
+	j.jobs[0].TargetBuild = "s2cdc"
+	_, body = e.do(t, "GET", "/transactions/7", "operator", nil)
+	if !strings.Contains(body, "build s2cdc") {
+		t.Fatalf("the chosen build is not shown: %s", body)
+	}
+}

@@ -215,6 +215,9 @@ templ txnBody(p txnPage) {
 								if r.Upload {
 									· upload
 								}
+								if r.Build != "" {
+									· build { r.Build }
+								}
 							</span>
 						}
 						<span class="upd-row-state">
@@ -419,9 +422,28 @@ templ updatePreviewPage(p previewPage, csrf string) {
 							<span class="upd-prow-file" title={ r.Item.Filename }>{ r.FileText() }</span>
 						} else {
 							<span class="upd-prow-dec">
-								@ui.Badge(r.Tone(), label(r.Item.Decision))
+								if len(r.BuildOptions) > 0 {
+									@ui.Badge(ui.ToneWarn, "Needs a choice")
+								} else {
+									@ui.Badge(r.Tone(), label(r.Item.Decision))
+								}
 							</span>
-							<span class="upd-prow-why" title={ r.Item.Reason }>{ humanReason(r.Item.Reason) }</span>
+							if len(r.BuildOptions) > 0 {
+								<span class="upd-prow-why">This chip has two builds that cannot be told apart from the device.</span>
+							} else {
+								<span class="upd-prow-why" title={ r.Item.Reason }>{ humanReason(r.Item.Reason) }</span>
+							}
+						}
+						if len(r.BuildOptions) > 0 {
+							<fieldset class="rcards upd-prow-build">
+								<legend>Choose the build</legend>
+								for _, o := range r.BuildOptions {
+									<label class="rcard">
+										<input type="radio" name={ r.BuildName() } value={ o.Value } form="recheck" required/>
+										<span class="rcard-body"><b>{ o.Label }</b><span>{ o.Text }</span></span>
+									</label>
+								}
+							</fieldset>
 						}
 						if r.Go && r.Item.Plan == model.PlanStaged {
 							<span class="upd-prow-note">Staged: minimal firmware first, then the release.</span>
@@ -438,6 +460,12 @@ templ updatePreviewPage(p previewPage, csrf string) {
 					</div>
 				}
 			</div>
+			if p.ChoosingBuilds() > 0 {
+				<div class="upd-prev-foot">
+					<p class="upd-hint">Nothing is guessed: choose the build of each device, then recheck.</p>
+					<button type="submit" class="btn btn-primary" form="recheck">Recheck</button>
+				</div>
+			}
 		</section>
 		<aside class="ucard upd-aside upd-what" aria-labelledby="what-h">
 			<h2 id="what-h">What happens</h2>
@@ -486,6 +514,9 @@ templ updatePreviewPage(p previewPage, csrf string) {
 	<form id="change" method="post" action={ templ.SafeURL(p.Base + "/updates/new") }>
 		@previewFields(p, csrf, p.Picked)
 	</form>
+	<form id="recheck" method="post" action={ templ.SafeURL(p.Base + "/updates/preview") }>
+		@previewFields(p, csrf, p.Picked)
+	</form>
 }
 
 // previewFields carry the choice of the preview to the start or back to the picker.
@@ -502,4 +533,9 @@ templ previewFields(p previewPage, csrf string, ids []string) {
 	}
 	<input type="hidden" name="power_after" value={ p.Form.PowerAfter }/>
 	<input type="hidden" name="delivery" value={ p.Form.Delivery }/>
+	for _, id := range ids {
+		if b := p.Builds[id]; b != "" {
+			<input type="hidden" name={ "build_" + id } value={ b }/>
+		}
+	}
 }

@@ -9,6 +9,13 @@ always upgrade automatically.
 ### Added
 
 - Add devices, Discovered: filter the list by state (All, Online, Offline; Offline is the device's MQTT last will) and sort it by clicking the column headers (#130, thanks @Noschvie)
+- **Update an ESP32-S2 by choosing its build** (#88). The two S2 builds (`s2` and `s2cdc`) cannot be
+  told apart from the device, so an S2 was always refused. The update preview now lists it as
+  "Choose the build" with one line on what each build is for; nothing is preselected, and without a
+  choice the refusal stays. The choice is per update and kept on the job (visible in the update
+  and transaction views, copied by a retry, kept across a restart). A build that does not belong to
+  the chip, or contradicts a known chip revision, is refused. Not tested on a real ESP32-S2 yet.
+  Migration 0032 adds the job column.
 
 ### Changed
 
@@ -31,6 +38,8 @@ always upgrade automatically.
   the broker clears the retained flag on an LWT it delivers live, so the replay for later
   subscribers missed it. Every LWT is now kept for replay, and a replay can no longer be
   overtaken by a live message (#161).
+- A correct ESP32-S2 or ESP32-P4 update no longer ends as "not taken": these chips report the shared
+  image name afterwards, so the check now compares with what the device can report.
 
 ### Security
 

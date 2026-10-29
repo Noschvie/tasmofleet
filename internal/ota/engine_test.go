@@ -488,6 +488,8 @@ type fakeSel struct {
 	// esp32Direct plans every ESP32 direct, like fwselect does (by default
 	// the fake plans by free flash for every chip).
 	esp32Direct bool
+	// selectErr, when set, is what Select returns (after recording nothing else).
+	selectErr error
 }
 
 func (s *fakeSel) Decide(id model.Identity, c fwselect.Choice) (fwselect.Decision, error) {
@@ -501,6 +503,9 @@ func (s *fakeSel) Decide(id model.Identity, c fwselect.Choice) (fwselect.Decisio
 }
 
 func (s *fakeSel) Select(model.Identity, fwselect.Choice) (fwselect.Selection, error) {
+	if s.selectErr != nil {
+		return fwselect.Selection{}, s.selectErr
+	}
 	return fwselect.Selection{Family: model.ChipESP8266, Variant: "tasmota", Filename: "tasmota.bin.gz", Minimal: "tasmota-minimal.bin.gz"}, nil
 }
 
@@ -1262,5 +1267,51 @@ func TestEngineStoresThePreflightIdentityAsHTTPDetected(t *testing.T) {
 	}
 	if got.DetectedAt.Before(t0) {
 		t.Errorf("DetectedAt %v is before the job started (%v)", got.DetectedAt, t0)
+	}
+}
+
+// Why: an ESP32-S2 without a chosen build must come back from the preview as a refusal that
+// asks for the choice, not as a plain failure, so the page can offer the builds (#88). Any
+// other refusal must not offer a choice.
+func TestPreviewFlagsABuildChoice(t *testing.T) {
+	h := newHarness(t, 2, plugDevice(), plugDevice())
+	h.sel.selectErr = fwselect.ErrBuildChoiceNeeded
+	items, err := h.e.Preview(context.Background(), []Request{{DeviceID: 1, Release: "16.0.0"}})
+	if err != nil || items[0].Decision != decisionRefuse || !items[0].BuildChoice {
+		t.Fatalf("items %+v err %v", items, err)
+	}
+	h.sel.selectErr = fwselect.ErrUnknownHardware
+	items, err = h.e.Preview(context.Background(), []Request{{DeviceID: 2, Release: "16.0.0"}})
+	if err != nil || items[0].Decision != decisionRefuse || items[0].BuildChoice {
+		t.Fatalf("other refusal offers a choice: %+v err %v", items, err)
+	}
+	if _, err := h.e.Submit(context.Background(), "u", []Request{{DeviceID: 1, Release: "16.0.0"}}); !errors.Is(err, ErrRefused) {
+		t.Fatalf("Submit without a build: %v, want ErrRefused", err)
+	}
+}
+
+// Why: the build is chosen once, at submit; the job must carry it through planning, the guard
+// re-runs (a restart resumes from the stored job alone) and a retry.
+func TestBuildTravelsWithTheJob(t *testing.T) {
+	h := newHarness(t, 2, plugDevice())
+	if _, err := h.e.Submit(context.Background(), "u", []Request{{DeviceID: 1, Release: "16.0.0", Build: "s2cdc"}}); err != nil {
+		t.Fatal(err)
+	}
+	j := h.job(t, 1)
+	if j.TargetBuild != "s2cdc" {
+		t.Fatalf("TargetBuild = %q", j.TargetBuild)
+	}
+	if c := planChoice(j); c.Build != "s2cdc" {
+		t.Errorf("plan choice lost the build: %+v", c)
+	}
+	if c := guardChoice(j); c.Build != "s2cdc" {
+		t.Errorf("guard choice lost the build: %+v", c)
+	}
+	j.TargetVariant, j.IdentityBefore.Variant = "tasmota", "unknown"
+	if r := retryRequest(j); r.Build != "s2cdc" || r.Variant != "tasmota" || !r.AllowVariantChange {
+		t.Errorf("retry request %+v", r)
+	}
+	if c := choiceFor(Request{Build: "s2"}); c.Build != "s2" {
+		t.Errorf("choiceFor lost the build: %+v", c)
 	}
 }

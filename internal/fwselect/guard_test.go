@@ -24,6 +24,7 @@ var (
 	artESP32DE  = art("tasmota32-DE.bin", model.ChipESP32, "tasmota", "DE")
 	artSolo1    = art("tasmota32solo1.bin", model.ChipESP32, "tasmota", "")
 	artC3       = art("tasmota32c3.bin", model.ChipESP32C3, "tasmota", "")
+	artS2       = art("tasmota32s2.bin", model.ChipESP32S2, "tasmota", "")
 	artS2CDC    = art("tasmota32s2cdc.bin", model.ChipESP32S2, "tasmota", "")
 	artP4       = art("tasmota32p4.bin", model.ChipESP32P4, "tasmota", "")
 	artP4R3     = art("tasmota32p4r3.bin", model.ChipESP32P4, "tasmota", "")
@@ -66,6 +67,10 @@ func TestGuardPasses(t *testing.T) {
 		{name: "esp8266 minimal stage for german device", id: idESP8266DE, a: artMinimal, c: keepChoice},
 		{name: "esp8266 sensors keep", id: idSensors, a: artSensors, c: keepChoice},
 		{name: "esp8266 german keep", id: idESP8266DE, a: artDE, c: keepChoice},
+		{name: "s2 build s2 gets s2", id: idS2Real, a: artS2, c: Choice{Release: rel, Build: "s2"}},
+		{name: "s2 build s2cdc gets s2cdc", id: idS2Real, a: artS2CDC, c: Choice{Release: rel, Build: "s2cdc"}},
+		// After planning, the job holds Variant tasmota (from Select) and the build.
+		{name: "s2 build s2cdc, job choice after planning", id: idS2Real, a: artS2CDC, c: Choice{Release: rel, Build: "s2cdc", Variant: "tasmota", AllowVariantChange: true}},
 		{name: "esp8266 variant change with flag", id: idESP8266, a: artSensors, c: changeTo("sensors")},
 		{name: "esp8266 language change with flag", id: idESP8266, a: artDE, c: changeLang("DE")},
 		{name: "esp8266 back to english with flag", id: idESP8266DE, a: artTasmota, c: changeLang(LanguageEnglish)},
@@ -218,6 +223,12 @@ func TestGuardRule7Variant(t *testing.T) {
 		// #85 review H1: an S2 build is never provable, whatever the choice.
 		{name: "s2 device gets s2", id: idS2, a: art("tasmota32s2.bin", model.ChipESP32S2, "tasmota", ""), c: changeTo("tasmota"), want: ErrUnknownHardware},
 		{name: "s2 device gets s2cdc", id: idS2, a: artS2CDC, c: changeTo("tasmota"), want: ErrUnknownHardware},
+		// #88: the build is the user's explicit choice; Guard holds the artifact to it.
+		{name: "s2 build s2 gets the s2cdc artifact", id: idS2Real, a: artS2CDC, c: Choice{Release: rel, Build: "s2"}, want: ErrVariantChange},
+		{name: "s2 build s2cdc gets the s2 artifact", id: idS2Real, a: artS2, c: Choice{Release: rel, Build: "s2cdc"}, want: ErrVariantChange},
+		{name: "s2 without build gets s2cdc", id: idS2Real, a: artS2CDC, c: changeTo("tasmota"), want: ErrBuildChoiceNeeded},
+		{name: "classic esp32 with a build", id: idESP32, a: artESP32, c: Choice{Release: rel, Build: "s2"}, want: ErrNoSuchVariant},
+		{name: "p4 revision 3.1 with build p4", id: idP4R3, a: artP4, c: Choice{Release: rel, Build: "p4"}, want: ErrNoSuchVariant},
 		{name: "p4r3 device gets plain p4", id: idP4R3, a: artP4, c: changeTo("tasmota"), want: ErrVariantChange},
 		{name: "p4 device gets p4r3", id: idP4, a: artP4R3, c: changeTo("tasmota"), want: ErrVariantChange},
 		{name: "minimal device without choice", id: idMinimal, a: artTasmota, c: keepChoice, want: ErrVariantChange},

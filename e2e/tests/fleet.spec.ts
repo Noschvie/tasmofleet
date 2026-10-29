@@ -1,3 +1,4 @@
+import { mkdirSync } from "node:fs";
 import { deviceBox } from "../support/devicelist";
 import { pickForUpdate, quickPick, startUpdate, txnState } from "../support/updates";
 import { test, expect } from "../support/fixtures";
@@ -208,6 +209,46 @@ test("address links open the device page without credentials", { tag: "@core" },
   await expect(link).toHaveAttribute("target", "_blank");
   await expect(link).toHaveAttribute("rel", "noopener noreferrer");
   expect(await link.getAttribute("href")).not.toContain("@");
+});
+
+// ESP32-S2 has two upstream builds behind one image tag (#88): the preview refuses it without a
+// choice, offers both builds, and after the choice shows the file and starts the job.
+test("ESP32-S2: refused until a build is chosen, then previewed and started", { tag: "@core" }, async ({ page }) => {
+  await page.setExtraHTTPHeaders(operator);
+  await pickForUpdate(page, app.url, ["esp32s2-board"]);
+  await page.locator("label.upd-relopt", { hasText: "Tasmota 16.1.0" }).click();
+  await page.getByRole("button", { name: "Review update" }).click();
+
+  const row = page.locator(".upd-prow").filter({ hasText: "esp32s2-board" });
+  await expect(row).toContainText("Choose the build");
+  await expect(row.getByRole("radio")).toHaveCount(2);
+  await expect(row.getByRole("radio", { checked: true }), "nothing is preselected").toHaveCount(0);
+  await expect(row).toContainText("native USB");
+  await expect(page.getByRole("button", { name: "Start update", exact: true }), "no choice, nothing to start").toHaveCount(0);
+  // UX_SHOTS=<dir> keeps screenshots of the picker (375 and 1280, light and dark).
+  const shots = process.env.UX_SHOTS;
+  if (shots) {
+    mkdirSync(shots, { recursive: true });
+    for (const width of [375, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const scheme of ["light", "dark"] as const) {
+        await page.emulateMedia({ colorScheme: scheme });
+        await page.screenshot({ path: `${shots}/picker-${width}-${scheme}.png`, fullPage: true });
+      }
+    }
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.emulateMedia({ colorScheme: "light" });
+  }
+
+  await row.locator("label.rcard", { hasText: "s2cdc" }).click();
+  await page.getByRole("button", { name: "Recheck" }).click();
+  const after = page.locator(".upd-prow").filter({ hasText: "esp32s2-board" });
+  await expect(after).toContainText("tasmota32s2cdc.bin");
+  await expect(after).toContainText("Build s2cdc");
+  await page.getByRole("button", { name: "Start update", exact: true }).click();
+  await expect(page).toHaveURL(/\/transactions\/\d+$/);
+  await expect(page.locator(".upd-row").filter({ hasText: "esp32s2-board" })).toBeVisible();
+  await expect(page.locator("body")).toContainText("build s2cdc");
 });
 
 // Quarantined: https://github.com/nofuturekid/tasmofleet/issues/20

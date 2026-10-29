@@ -281,8 +281,12 @@ type Request struct {
 	Delivery           model.Delivery
 	Variant            string // empty = keep detected
 	AllowVariantChange bool
-	Policy             model.UpdatePolicy
-	SkipBackup         bool
+	// Build is the explicit chip build of an ESP32-S2 ("s2" or "s2cdc"), chosen
+	// per update by the user; empty for every other device (#88). Without it an
+	// S2 is refused. It is stored on the job (Job.TargetBuild).
+	Build      string
+	Policy     model.UpdatePolicy
+	SkipBackup bool
 	// SkipPowerRestore turns off the default: relays that are ON before the
 	// update are switched back on afterwards.
 	SkipPowerRestore bool
@@ -302,6 +306,9 @@ type PreviewItem struct {
 	Plan     model.Plan
 	Filename string
 	Reason   string // for skip/refuse: the guard or policy error text
+	// BuildChoice is set when the refusal is fwselect.ErrBuildChoiceNeeded: the
+	// user may choose a build (fwselect.BuildOptions of the device) and recheck.
+	BuildChoice bool
 	// Delivery is what the job would use: a push request falls back to the
 	// download for a device that cannot take an upload, and DeliveryNote
 	// says why ("" when the request is kept).
@@ -359,13 +366,13 @@ func choiceFor(r Request) fwselect.Choice {
 	if pol == "" {
 		pol = model.PolicyOnlyNewer
 	}
-	return fwselect.Choice{Release: r.Release, Variant: r.Variant, AllowVariantChange: r.AllowVariantChange, Policy: pol}
+	return fwselect.Choice{Release: r.Release, Variant: r.Variant, AllowVariantChange: r.AllowVariantChange, Build: r.Build, Policy: pol}
 }
 
 // planChoice is the choice of the preflight plan: Submit persists
 // TargetVariant only when the user explicitly allowed a variant change.
 func planChoice(j model.Job) fwselect.Choice {
-	return fwselect.Choice{Release: j.TargetRelease, Variant: j.TargetVariant, AllowVariantChange: j.TargetVariant != "", Policy: j.Policy}
+	return fwselect.Choice{Release: j.TargetRelease, Variant: j.TargetVariant, AllowVariantChange: j.TargetVariant != "", Build: j.TargetBuild, Policy: j.Policy}
 }
 
 // guardChoice is the choice for the Guard re-runs after planning, when
@@ -373,7 +380,7 @@ func planChoice(j model.Job) fwselect.Choice {
 // one detected in preflight was either chosen explicitly (checked at
 // Submit) or chosen by Select (leaving minimal).
 func guardChoice(j model.Job) fwselect.Choice {
-	return fwselect.Choice{Release: j.TargetRelease, Variant: j.TargetVariant, AllowVariantChange: j.TargetVariant != j.IdentityBefore.Variant, Policy: j.Policy}
+	return fwselect.Choice{Release: j.TargetRelease, Variant: j.TargetVariant, AllowVariantChange: j.TargetVariant != j.IdentityBefore.Variant, Build: j.TargetBuild, Policy: j.Policy}
 }
 
 type planResult struct {
@@ -534,6 +541,9 @@ func (e *Engine) previewDevice(ctx context.Context, d model.Device, r Request) P
 	cancel()
 	if err != nil {
 		it.Reason = err.Error()
+		if errors.Is(err, fwselect.ErrBuildChoiceNeeded) {
+			it.BuildChoice = true
+		}
 		return it
 	}
 	it.Decision = string(p.decision)
@@ -682,7 +692,7 @@ func (e *Engine) submit(ctx context.Context, actor string, reqs []Request, retry
 	for _, r := range rest {
 		c := choiceFor(r)
 		j := model.Job{DeviceID: r.DeviceID, State: model.JobQueued, Policy: c.Policy, SkipBackup: r.SkipBackup, SkipPowerRestore: r.SkipPowerRestore, RestoreRelays: r.RestoreRelays,
-			TargetRelease: r.Release, TargetCustom: r.Custom, Delivery: delivery[r.DeviceID], OriginalOtaURL: r.OriginalOtaURL, CreatedBy: actor, CreatedAt: now, UpdatedAt: now}
+			TargetRelease: r.Release, TargetBuild: r.Build, TargetCustom: r.Custom, Delivery: delivery[r.DeviceID], OriginalOtaURL: r.OriginalOtaURL, CreatedBy: actor, CreatedAt: now, UpdatedAt: now}
 		if r.AllowVariantChange {
 			j.TargetVariant = r.Variant
 		}
@@ -1465,5 +1475,6 @@ func retryRequest(j model.Job) Request {
 	if j.TargetVariant != "" && j.TargetVariant != j.IdentityBefore.Variant {
 		r.Variant, r.AllowVariantChange = j.TargetVariant, true
 	}
+	r.Build = j.TargetBuild
 	return r
 }

@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nofuturekid/tasmofleet/internal/fwselect"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 )
 
@@ -579,7 +580,10 @@ func stepVerify(j model.Job, ev Event, now time.Time, cfg Config) (model.Job, []
 		j.DeadlineAt = now.Add(cfg.RebootWindow)
 		return j, probeLater(cfg)
 	}
-	if id.Version == j.TargetRelease && id.Variant == j.TargetVariant &&
+	// A chip with two builds reports the shared image tag, so the variant read back is "unknown"
+	// whatever was installed (#88): compare with what Detect will read, not with the selection.
+	want := fwselect.DetectedVariant(fwselect.Selection{Family: j.IdentityBefore.Family, Variant: j.TargetVariant})
+	if id.Version == j.TargetRelease && id.Variant == want &&
 		id.Language == j.IdentityBefore.Language && id.Family == j.IdentityBefore.Family {
 		return finalReached(j, ev, now, cfg)
 	}

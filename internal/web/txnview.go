@@ -296,7 +296,8 @@ type txnPage struct {
 type txnRow struct {
 	JobID          model.JobID
 	Name, From, To string
-	Upload         bool // the image is pushed to the device (push where possible)
+	Upload         bool   // the image is pushed to the device (push where possible)
+	Build          string // the chip build the user chose (ESP32-S2), "" if none
 	Badge          string
 	Tone           ui.Tone
 	Bar            bool // a running device shows its progress

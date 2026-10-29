@@ -34,6 +34,7 @@ const (
 	ProfileESP8266Min  Profile = "esp8266-minimal"
 	ProfileESP32       Profile = "esp32" // ESP32-D0WD-V3, tasmota32
 	ProfileESP32C3     Profile = "esp32c3"
+	ProfileESP32S2     Profile = "esp32s2" // two upstream builds (s2, s2cdc) behind one image tag (#88)
 	ProfileESP32S3     Profile = "esp32s3"
 	ProfileUnknownChip Profile = "unknown-chip" // Hardware string the detector must refuse
 )

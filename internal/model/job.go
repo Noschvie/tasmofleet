@@ -110,7 +110,11 @@ func (j Job) Target() string {
 	if j.IsBackup() {
 		return "Back up"
 	}
-	return strings.TrimSpace(j.TargetRelease + " " + j.TargetVariant)
+	t := strings.TrimSpace(j.TargetRelease + " " + j.TargetVariant)
+	if j.TargetBuild != "" {
+		t += " (" + j.TargetBuild + ")"
+	}
+	return t
 }
 
 // IsPolicy reports whether the job makes a device policy-compliant.
@@ -185,6 +189,7 @@ type Job struct {
 	TargetRelease   string
 	TargetCustom    string // key of the uploaded image (Artifact.Custom) this job installs; empty = the upstream release
 	TargetVariant   string // chosen variant; differs from the detected one only on explicit user choice
+	TargetBuild     string // explicit chip build (ESP32-S2: "s2" or "s2cdc"), chosen per update in the preview; empty = none (#88)
 	TargetArtifact  ArtifactID
 	MinimalArtifact ArtifactID // ESP8266: the release's tasmota-minimal; flashed only if Plan == PlanStaged, recorded for direct plans so the cache keeps it
 
