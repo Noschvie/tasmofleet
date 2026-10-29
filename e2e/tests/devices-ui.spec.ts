@@ -362,7 +362,8 @@ test("autofit: double-click and Enter on a resize handle fit the column; the wid
     `clipped ${fitted.clipped}, width ${fitted.width}, cap ${fitted.cap}`,
   ).toBe(true);
   await page.reload();
-  expect(Math.abs((await cellsFit()).width - fitted.width)).toBeLessThan(3);
+  // the page lays the saved widths out again when its fonts are in: wait for that
+  await expect.poll(async () => Math.abs((await cellsFit()).width - fitted.width)).toBeLessThan(3);
   // keyboard: Enter fits again after a manual change
   await page.getByRole("separator", { name: "Resize column Address" }).focus();
   for (let i = 0; i < 6; i++) await page.keyboard.press("ArrowLeft");
