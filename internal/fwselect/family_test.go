@@ -30,10 +30,13 @@ func TestFamilyFromHardware(t *testing.T) {
 		{"ESP32-D2WD", model.ChipESP32, false},
 		{"ESP32-PICO", model.ChipESP32, false},
 		{"ESP32-PICO-D4", model.ChipESP32, false},
+		{"ESP32-U4WDH", model.ChipESP32, false}, // #155: was unknown, so the Chip row said "Unknown" and Guard refused every update
 		// Single core needs solo1 builds: the flag is as important as the family.
 		{"ESP32-S0WD", model.ChipESP32, true},
 		{"ESP32-SOLO", model.ChipESP32, true},
 		{"ESP32-SOLO-1", model.ChipESP32, true},
+		{"ESP32-U4WDH-S v3.0", model.ChipESP32, true}, // #155, real hardware string of a solo1 build
+		{"ESP32-U4WDH v3.0", model.ChipESP32, false},
 		// Newer chips.
 		{"ESP32-S2", model.ChipESP32S2, false},
 		{"ESP32-S2FH4", model.ChipESP32S2, false},
@@ -47,6 +50,7 @@ func TestFamilyFromHardware(t *testing.T) {
 		// Unknown is final: no fallbacks, no substring guesses.
 		{"ESP32-H2", model.ChipUnknown, false},
 		{"ESP32-S31", model.ChipUnknown, false}, // a new chip, not an S3
+		{"ESP32-U4WDH2", model.ChipUnknown, false},
 		{"ESP32-C31", model.ChipUnknown, false},
 		{"ESP32-P41", model.ChipUnknown, false},
 		{"ESP32", model.ChipUnknown, false},

@@ -301,7 +301,7 @@ data directory (TasmoAdmin lesson A4).
   identity field: firmware, build, chip, hardware and flash (Status 2/4, `GET /`), the network
   facts of Status 5 (hostname, IP, gateway; Wi-Fi from Status 11 follows in the background),
   MQTT broker (Status 6, SetOption3), and DeviceName and resolved topic (plain `Status`).
-  *MAC first:* the probe sends `Status 5` first, without credentials, and compares the MAC
+  _MAC first:_ the probe sends `Status 5` first, without credentials, and compares the MAC
   (Wi-Fi or Ethernet) with the stored set before any other command. A device that answers it
   without credentials has no web password, and the whole probe runs without them; only a 401
   repeats `Status 5` with the stored credentials. Another MAC refuses the refresh
@@ -313,7 +313,7 @@ data directory (TasmoAdmin lesson A4).
   (`inventory.NormaliseMAC`) is bound. A MAC another device holds is refused the same way
   (`store.ErrMACInUse`). Minimal firmware has no Status 5: a device with a stored MAC is then
   refused (`refusedUnverified`, the stored identity and `identity_at` stay); one without a MAC
-  is refreshed. *Name and topic:* the store records the DeviceName and topic of every probe
+  is refreshed. _Name and topic:_ the store records the DeviceName and topic of every probe
   (`device_name`, `device_topic`, migration 0029). The stored name follows the DeviceName while
   it is still the recorded one, or, for devices probed before 0029, while it is the hostname,
   topic or address tasmofleet filled in itself (not when the DeviceName is Tasmota's default
@@ -324,7 +324,7 @@ data directory (TasmoAdmin lesson A4).
   stored one is kept, `device.topic_kept` is audited and the device page says so after the
   refresh (`TopicKeptError`). The retained LWT of the new topic is applied at once by the
   health reload (#105); what health learned on the old topic (its LWT, often the Offline Tasmota
-  sends there on a topic change) is dropped first (#119). *Transport:* for a device recorded as `ours` whose HTTP probe could not be used
+  sends there on a topic change) is dropped first (#119). _Transport:_ for a device recorded as `ours` whose HTTP probe could not be used
   (unreachable, timeout, HTTP API refused, address outside the device networks) the refresh
   goes over MQTT: `Status 5`, MAC rule as above, then `Status 2`, one question at a time per
   device and one per second on the bus (shared with the #87 reader; if the reader asked the
@@ -376,21 +376,22 @@ Inputs: `Status 2` (`StatusFWR`), `Status 4` (`StatusMEM`), and on minimal firmw
 
 ### 6.1 Chip family from `StatusFWR.Hardware`
 
-| Hardware string (prefix match, case-sensitive)                            | Family                     | Source                          |
-| ------------------------------------------------------------------------- | -------------------------- | ------------------------------- |
-| `ESP8266EX`, `ESP8266`                                                    | `esp8266`                  | OBS                             |
-| `ESP8285N08`, `ESP8285H16`, `ESP8285`                                     | `esp8266`                  | OBS / SRC                       |
-| `ESP32-D0WD`, `ESP32-D0WDQ6`, `ESP32-D0WD-V3`, `ESP32-D2WD`, `ESP32-PICO` | `esp32`                    | OBS (`ESP32-D0WDQ6 v1.0`) / SRC |
-| `ESP32-S0WD`, `ESP32-SOLO` (single core)                                  | `esp32`, `SingleCore=true` | SRC                             |
-| `ESP32-S2`                                                                | `esp32s2`                  | SRC                             |
-| `ESP32-S3`                                                                | `esp32s3`                  | SRC                             |
-| `ESP32-C2`                                                                | `esp32c2`                  | SRC                             |
-| `ESP32-C3`                                                                | `esp32c3`                  | SRC                             |
-| `ESP32-C5`                                                                | `esp32c5`                  | SRC                             |
-| `ESP32-C61` (check before `ESP32-C6`)                                     | `esp32c61`                 | SRC                             |
-| `ESP32-C6`                                                                | `esp32c6`                  | SRC                             |
-| `ESP32-P4`                                                                | `esp32p4`                  | SRC                             |
-| anything else (e.g. `ESP32-H2`, `ESP32-S31`, empty)                       | `unknown` -> never updated | DEC                             |
+| Hardware string (prefix match, case-sensitive)                            | Family                     | Source                           |
+| ------------------------------------------------------------------------- | -------------------------- | -------------------------------- |
+| `ESP8266EX`, `ESP8266`                                                    | `esp8266`                  | OBS                              |
+| `ESP8285N08`, `ESP8285H16`, `ESP8285`                                     | `esp8266`                  | OBS / SRC                        |
+| `ESP32-D0WD`, `ESP32-D0WDQ6`, `ESP32-D0WD-V3`, `ESP32-D2WD`, `ESP32-PICO` | `esp32`                    | OBS (`ESP32-D0WDQ6 v1.0`) / SRC  |
+| `ESP32-U4WDH`                                                             | `esp32`                    | OBS (#155)                       |
+| `ESP32-S0WD`, `ESP32-SOLO`, `ESP32-U4WDH-S` (single core)                 | `esp32`, `SingleCore=true` | SRC / OBS (`ESP32-U4WDH-S v3.0`) |
+| `ESP32-S2`                                                                | `esp32s2`                  | SRC                              |
+| `ESP32-S3`                                                                | `esp32s3`                  | SRC                              |
+| `ESP32-C2`                                                                | `esp32c2`                  | SRC                              |
+| `ESP32-C3`                                                                | `esp32c3`                  | SRC                              |
+| `ESP32-C5`                                                                | `esp32c5`                  | SRC                              |
+| `ESP32-C61` (check before `ESP32-C6`)                                     | `esp32c61`                 | SRC                              |
+| `ESP32-C6`                                                                | `esp32c6`                  | SRC                              |
+| `ESP32-P4`                                                                | `esp32p4`                  | SRC                              |
+| anything else (e.g. `ESP32-H2`, `ESP32-S31`, empty)                       | `unknown` -> never updated | DEC                              |
 
 Longest prefix wins. The table lives in one place (`fwselect`) with a test row per entry
 and one per captured fixture. Unknown is final: no fallbacks, no substring guesses.

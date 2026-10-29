@@ -25,6 +25,8 @@ var hardwareTable = []hardwareEntry{
 	{"ESP32-D0WD-V3", model.ChipESP32, false},
 	{"ESP32-D2WD", model.ChipESP32, false},
 	{"ESP32-PICO", model.ChipESP32, false},
+	{"ESP32-U4WDH", model.ChipESP32, false},
+	{"ESP32-U4WDH-S", model.ChipESP32, true}, // "-S": the single-core part, which only solo1 builds run on (#155)
 	{"ESP32-S0WD", model.ChipESP32, true},
 	{"ESP32-SOLO", model.ChipESP32, true},
 	{"ESP32-S2", model.ChipESP32S2, false},
