@@ -87,7 +87,8 @@ const heads = (page: Page) =>
     )
     .catch(() => [] as string[]);
 
-const row = (page: Page, id: string) => page.locator(`details.colmenu .colrow[data-colrow="${id}"]`);
+const row = (page: Page, id: string) =>
+  page.locator(`details.colmenu .colrow[data-colrow="${id}"]`);
 
 test("Pin left and Pin right regroup the columns and survive a reload; Name and Actions stay fixed", async ({
   page,
@@ -182,15 +183,26 @@ for (const saved of [false, true]) {
       .first()
       .waitFor({ state: "attached", timeout: 20_000 });
     const scroller = page.locator(".tablewrap[data-key=devices] .tablescroll");
-    // A device event can reload the list (and reset the scroll) at any time, so every
-    // measurement scrolls first, in the same task. A reloaded table comes from the server
-    // without the width the script gives it (min-width, set in htmx:afterSettle, where the
-    // script also adds .is-js to the frame): measured before that it does not scroll yet.
-    // So measure only a frame that has been enhanced, and look and measure in one step.
+    // A device event reloads the list (and resets the scroll) at any time, about 1.6 s after
+    // the page loads in practice (#99). The new table comes from the server without the widths
+    // the script gives it, and the frame may keep its .is-js, so the class alone does not say the
+    // table is ready: measured then it does not overflow yet (max 0). enhance() sets the pinned
+    // offsets (--pl1, see stick() in tables.js) on every table it has fitted, so measure only a
+    // frame with .is-js and a laid-out table that has them, and look and measure in one step.
     const geo = async (toEnd = false) => {
       const read = () =>
         scroller.evaluate((s, toEnd) => {
-          if (!s.classList.contains("is-js")) return null;
+          const table = s.querySelector<HTMLElement>(
+            "table[data-table=devices]",
+          );
+          if (
+            !s.classList.contains("is-js") ||
+            !table ||
+            !table.style.getPropertyValue("--pl1")
+          )
+            return null;
+          if (!s.clientWidth || !table.getBoundingClientRect().width)
+            return null; // not laid out yet
           if (toEnd) s.scrollLeft = s.scrollWidth;
           const box = (sel: string) =>
             [...s.querySelectorAll("thead th")]
