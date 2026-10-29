@@ -472,3 +472,37 @@ func TestMissingFileRowsAreMarkedRefusedAndDeletable(t *testing.T) {
 		t.Errorf("delete confirmation of a missing row: %d", resp.StatusCode)
 	}
 }
+
+// unrefStorage adds the optional unreferenced-files list to the storage fake.
+type unrefStorage struct {
+	*storageBackups
+	files []backup.UnreferencedFile
+}
+
+func (u *unrefStorage) Unreferenced(context.Context) ([]backup.UnreferencedFile, error) {
+	return u.files, nil
+}
+
+// Why (#205): files in old backup folders that no backup entry points to used to be
+// invisible, which looked like a half-finished migration. Settings -> Backups lists them
+// (read-only: no delete or keep control, TasmoFleet never touches them) and says so; with
+// none, the section does not exist.
+func TestSettingsBackupsListsUnreferencedFilesReadOnly(t *testing.T) {
+	_, sb, _, _ := storageEnv(t)
+	f := []backup.UnreferencedFile{{Path: "backups/85/20261027T104345Z-dmp.dmp", Size: 2048, ModTime: time.Date(2026, 10, 27, 10, 43, 45, 0, time.UTC)}}
+	e, _, _, _ := sysEnvWithDeps(t, func(d *Deps) { d.Backups = &unrefStorage{storageBackups: sb, files: f} })
+	_, body := e.do(t, "GET", "/settings/system?tab=backups", "admin", nil)
+	for _, want := range []string{"Unreferenced files", "backups/85/20261027T104345Z-dmp.dmp", "2.0 KiB", "you can remove them by hand"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("section lacks %q", want)
+		}
+	}
+	section := body[strings.Index(body, "Unreferenced files"):]
+	if strings.Contains(section, "/delete") || strings.Contains(section, "bk-keep") {
+		t.Error("the section is read-only: no delete or keep control")
+	}
+	e2, _, _, _ := sysEnvWithDeps(t, func(d *Deps) { d.Backups = &unrefStorage{storageBackups: sb} })
+	if _, body := e2.do(t, "GET", "/settings/system?tab=backups", "admin", nil); strings.Contains(body, "Unreferenced files") {
+		t.Error("no section without files")
+	}
+}

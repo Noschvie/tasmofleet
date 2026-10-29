@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
 )
@@ -118,6 +119,10 @@ type MigrationResult struct {
 	Current  int // already in the new layout, or not a 0.17 path
 	Left     int // not touched (mismatch, ambiguous, ...); see Reasons and the warnings
 	Missing  int // the row's file does not exist (deleted by hand): nothing to move
+	// Unindexed counts 0.17-named files in backups/<number>/ that no row points
+	// to (a restored older database, a crash before indexing, hand-copied
+	// folders). They are reported, never moved or deleted.
+	Unindexed int
 	// Reasons counts Left by reason, for the one summary line at start.
 	Reasons map[string]int
 }
@@ -247,9 +252,68 @@ func (m *Manager) MigrateLayout(ctx context.Context) (MigrationResult, error) {
 		}
 	}
 	m.removeEmptyNumericDirs()
+	unref := m.scanUnreferenced(func(rel string) bool { _, ok := used[strings.ToLower(rel)]; return ok })
+	res.Unindexed = len(unref)
 	m.o.Log.Info("backup layout", "component", "backup", "moved", res.Moved, "repaired", res.Repaired, "in_place", res.Current,
-		"left", res.Left, "left_why", reasonList(res.Reasons), "files_missing", res.Missing)
+		"left", res.Left, "left_why", reasonList(res.Reasons), "files_missing", res.Missing, "unindexed", res.Unindexed)
+	for _, f := range unref {
+		m.o.Log.Warn("backup layout: file in an old folder that no backup entry references, left alone", "component", "backup", "path", f.Path, "size", f.Size)
+	}
 	return res, nil
+}
+
+// UnreferencedFile is a 0.17-named backup file that no backup row points to.
+type UnreferencedFile struct {
+	Path    string // relative to the data directory, slash form
+	Size    int64
+	ModTime time.Time
+}
+
+// scanUnreferenced lists the files backups/<number>/<stamp>-<kind>.<ext> for
+// which referenced(path) is false, sorted by path. Only regular files whose
+// name matches legacyPath count: other names in numeric folders are not ours.
+func (m *Manager) scanUnreferenced(referenced func(rel string) bool) []UnreferencedFile {
+	var out []UnreferencedFile
+	dirs, err := os.ReadDir(m.backupsRoot())
+	if err != nil {
+		return nil
+	}
+	for _, d := range dirs {
+		if !d.IsDir() || !isDigits(d.Name()) {
+			continue
+		}
+		files, err := os.ReadDir(filepath.Join(m.backupsRoot(), d.Name()))
+		if err != nil {
+			continue
+		}
+		for _, f := range files {
+			rel := path.Join("backups", d.Name(), f.Name())
+			if !f.Type().IsRegular() || legacyPath.FindStringSubmatch(rel) == nil || referenced(rel) {
+				continue
+			}
+			info, err := f.Info()
+			if err != nil {
+				continue
+			}
+			out = append(out, UnreferencedFile{Path: rel, Size: info.Size(), ModTime: info.ModTime()})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	return out
+}
+
+// Unreferenced lists the 0.17-named files below backups/<number>/ that no
+// backup row points to, for Settings -> Backups. Read-only.
+func (m *Manager) Unreferenced(ctx context.Context) ([]UnreferencedFile, error) {
+	rows, err := m.o.Store.ListAllBackups(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("backup: list for unreferenced files: %w", err)
+	}
+	used := make(map[string]bool, len(rows))
+	for _, b := range rows {
+		used[strings.ToLower(b.Path)] = true
+	}
+	return m.scanUnreferenced(func(rel string) bool { return used[strings.ToLower(rel)] }), nil
 }
 
 type migOutcome int

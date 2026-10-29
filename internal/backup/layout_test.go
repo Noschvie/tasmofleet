@@ -876,3 +876,65 @@ func TestMigrateLayoutFindsStrandedFileByChecksum(t *testing.T) {
 		t.Errorf("not readable: %v", err)
 	}
 }
+
+// Why (#205): after a restored older database or a crash before indexing, a
+// 0.17-named file can lie in backups/<id>/ with no row. Silently ignoring it
+// looks like a half-done migration, so it is counted (and reported by the
+// caller) - but it is the user's data: never moved, never deleted.
+func TestMigrateLayoutReportsUnreferencedLegacyFilesAndLeavesThem(t *testing.T) {
+	e, _ := fleetEnv(t, host(85, "k", "kitchen"), host(7, "p", "plug"))
+	legacy(t, e, legacyFile{dev: 7, stamp: "20261018T120000Z", kind: model.BackupConfigDump, content: "indexed"})
+	stray := filepath.Join(e.dir, "backups/85/20261027T104345Z-dmp.dmp")
+	must(t, os.MkdirAll(filepath.Dir(stray), 0o700))
+	must(t, os.WriteFile(stray, []byte("unindexed"), 0o600))
+	// Not 0.17 names: not ours to report.
+	other := filepath.Join(e.dir, "backups/85/notes.txt")
+	must(t, os.WriteFile(other, []byte("x"), 0o600))
+	must(t, os.WriteFile(filepath.Join(e.dir, "backups/85/20261027T104345Z_kitchen.dmp"), []byte("x"), 0o600))
+	before := snapshotDisk(t, e.dir)
+
+	res, err := e.m.MigrateLayout(t.Context())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Unindexed != 1 || res.Moved != 1 {
+		t.Fatalf("want 1 unindexed and the indexed file moved: %+v", res)
+	}
+	after := snapshotDisk(t, e.dir)
+	if after["backups/85/20261027T104345Z-dmp.dmp"] != before["backups/85/20261027T104345Z-dmp.dmp"] {
+		t.Error("the unreferenced file was touched")
+	}
+	for p := range before {
+		if strings.HasPrefix(p, "backups/85/") {
+			if _, ok := after[p]; !ok {
+				t.Errorf("%s disappeared", p)
+			}
+		}
+	}
+	// Repeat-safe: the next start reports the same file again.
+	if res2, _ := e.m.MigrateLayout(t.Context()); res2.Unindexed != 1 {
+		t.Errorf("second run: %+v", res2)
+	}
+	files, err := e.m.Unreferenced(t.Context())
+	if err != nil || len(files) != 1 || files[0].Path != "backups/85/20261027T104345Z-dmp.dmp" || files[0].Size != int64(len("unindexed")) {
+		t.Errorf("Unreferenced: %+v %v", files, err)
+	}
+}
+
+// Why (#205): a file a row points to is a normal backup, not a leftover; it
+// must not be counted even while it still waits at its 0.17 path (left in
+// place because it cannot be moved safely).
+func TestMigrateLayoutDoesNotCountReferencedFilesAsUnindexed(t *testing.T) {
+	e, _ := fleetEnv(t, host(7, "p", "plug"))
+	rows := legacy(t, e, legacyFile{dev: 7, stamp: "20261018T120000Z", kind: model.BackupConfigDump, content: "d"})
+	// Checksum mismatch: the file stays at its 0.17 path, referenced by its row.
+	e.st.mu.Lock()
+	r := e.st.rows[rows[0].ID]
+	r.SHA256 = sha("other")
+	e.st.rows[r.ID] = r
+	e.st.mu.Unlock()
+	res, err := e.m.MigrateLayout(t.Context())
+	if err != nil || res.Left != 1 || res.Unindexed != 0 {
+		t.Fatalf("%+v %v", res, err)
+	}
+}

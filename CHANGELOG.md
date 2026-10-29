@@ -22,6 +22,7 @@ always upgrade automatically.
 - Backups: when "Back up now" is refused by the 5-minute cooldown, the message says when the last backup was taken ("Last backup 4 min 40 s ago; a new one is possible in 20 s"), also after that backup was deleted (#208, thanks @Noschvie)
 - Downloaded backups keep umlauts and other letters of the device name (`Küche-....dmp`): the header carries an ASCII fallback and the RFC 5987 `filename*`, and a hostile name cannot inject headers (#208, thanks @Noschvie)
 - The Download and Delete buttons of a backup row have their borders again, like the other buttons (#208, thanks @Noschvie)
+- Backup files left in old numeric folders that no backup entry references are now reported at start and listed under Settings → Backups instead of being silently ignored (#205, thanks @Noschvie)
 - The backup layout migration also moves the kept backups of deleted devices; backups whose files were deleted by hand are shown as missing and can be removed (#205, thanks @Noschvie)
 - Make compliant now knows which SetOptions restart the device (3, 15, 37, 55 when set to 0, 68, 69, 75, 85, 88, 97, 102 to 104, 106, 107, 115 when set to 0, 132, 151 to 153): they run last and the restart is not reported as an error (#196)
 

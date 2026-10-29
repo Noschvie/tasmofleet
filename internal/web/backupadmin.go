@@ -94,6 +94,13 @@ type BackupStorage interface {
 	Orphans(ctx context.Context) ([]model.Backup, error)
 }
 
+// BackupUnreferenced lists 0.17-named backup files in old numeric folders that no
+// backup entry points to (*backup.Manager implements it). Optional: without it the
+// section is simply absent.
+type BackupUnreferenced interface {
+	Unreferenced(ctx context.Context) ([]backup.UnreferencedFile, error)
+}
+
 // sysStorageTop is how many devices the storage table lists (largest first).
 const sysStorageTop = 10
 
@@ -104,8 +111,9 @@ type sysStorage struct {
 	Rows                []sysStorageRow
 	More                int // devices with backups beyond the top rows
 	Orphans             []sysOrphan
-	CanKeep             bool // the Keep route exists
-	CanDelete           bool // the Delete route exists
+	Unreferenced        []sysUnreferenced // files no backup entry references (#205); read-only
+	CanKeep             bool              // the Keep route exists
+	CanDelete           bool              // the Delete route exists
 }
 
 type sysStorageRow struct {
@@ -127,6 +135,12 @@ type sysOrphan struct {
 	Missing    bool // the file was deleted by hand: no Download, the row can be deleted
 	Download   string
 	DeleteText string // empty: no Delete (no dump, or deleting is not possible)
+}
+
+// sysUnreferenced is one file of the "Unreferenced files" section.
+type sysUnreferenced struct {
+	Path, Size string
+	Modified   time.Time
 }
 
 // sysStorageOf reads the storage summary and the orphans. nil when the backup service
@@ -170,6 +184,15 @@ func (h *handler) sysStorageOf(r *http.Request, base string) (*sysStorage, error
 	if len(st.Rows) > sysStorageTop {
 		st.More = len(st.Rows) - sysStorageTop
 		st.Rows = st.Rows[:sysStorageTop]
+	}
+	if ul, ok := h.d.Backups.(BackupUnreferenced); ok {
+		files, err := ul.Unreferenced(r.Context())
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range files {
+			st.Unreferenced = append(st.Unreferenced, sysUnreferenced{Path: f.Path, Size: humanBytes(f.Size), Modified: f.ModTime})
+		}
 	}
 	st.Orphans = orphanRuns(orphans, base, canDelete, h.fileMissing)
 	return st, nil

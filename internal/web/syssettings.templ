@@ -113,6 +113,9 @@ templ sysStorageBlock(p sysPage, st sysStorage) {
 		if len(st.Orphans) > 0 {
 			@sysOrphans(p, st)
 		}
+		if len(st.Unreferenced) > 0 {
+			@sysUnreferencedFiles(st)
+		}
 	</div>
 }
 
@@ -177,6 +180,29 @@ templ sysOrphans(p sysPage, st sysStorage) {
 							data-dlg-verb="Delete backup"
 						>Delete</a>
 					}
+				</div>
+			</div>
+		}
+	</div>
+}
+
+// sysUnreferencedFiles lists files in old backup folders that no backup entry points to
+// (#205). Read-only on purpose: TasmoFleet never deletes or moves them.
+templ sysUnreferencedFiles(st sysStorage) {
+	<div class="sys-head">
+		<h2>Unreferenced files</h2>
+		<p>Files in old backup folders that no backup entry points to. TasmoFleet leaves them alone; you can remove them by hand.</p>
+	</div>
+	<div class="sys-orphans">
+		for _, f := range st.Unreferenced {
+			<div class="sys-orphan sys-unref">
+				<div class="sys-orphan-main">
+					<div class="sys-orphan-title">
+						<span class="sys-store-name mono" title={ f.Path }>{ f.Path }</span>
+					</div>
+					<div class="sys-orphan-detail">
+						{ f.Size + " · " }<time { ui.StampAttrs(f.Modified, ui.StampShort)... }>{ ui.StampText(f.Modified, ui.StampShort) }</time>
+					</div>
 				</div>
 			</div>
 		}
