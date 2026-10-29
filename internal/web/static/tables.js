@@ -636,7 +636,9 @@
   // The layout last set here, until the server has it. A list update (SSE) that is fetched
   // before the save lands brings the old layout; afterSwap puts this one back.
   var recent = {};
-  var lastRequest = 0;
+  // when each request still on its way left; a response is judged by its own start, not the
+  // latest one's, and a layout is kept while an older request can still bring the old one
+  var started = new Map();
 
   function save(table, now) {
     var key = keyOf(table);
@@ -658,8 +660,15 @@
   // A swap replaces the table and its resize handles: keep the layout the user just set
   // (unless the server already had it when the update was requested) and the handle focus.
   var heldHandle = null;
-  document.addEventListener("htmx:beforeRequest", function () {
-    lastRequest = Date.now();
+  document.addEventListener("htmx:beforeRequest", function (e) {
+    if (e.detail && e.detail.xhr) {
+      started.set(e.detail.xhr, Date.now());
+    }
+  });
+  document.addEventListener("htmx:afterRequest", function (e) {
+    if (e.detail && e.detail.xhr) {
+      started.delete(e.detail.xhr);
+    }
   });
   document.addEventListener("htmx:beforeSwap", function (e) {
     var a = document.activeElement,
@@ -681,6 +690,7 @@
     if (!t) {
       return;
     }
+    var requested = (e.detail.xhr && started.get(e.detail.xhr)) || 0;
     t.querySelectorAll("table[data-table][data-cols]").forEach(
       function (table) {
         var key = keyOf(table),
@@ -688,10 +698,20 @@
         if (!rec) {
           return;
         }
-        if (rec.done && rec.done < lastRequest) {
-          delete recent[key];
+        if (rec.done && rec.done < requested) {
+          // this response was requested after the server had the layout: done with it,
+          // unless an older request is still out and will bring the old layout
+          var older = false;
+          started.forEach(function (at, xhr) {
+            if (xhr !== e.detail.xhr && at < rec.done) {
+              older = true;
+            }
+          });
+          if (!older) {
+            delete recent[key];
+          }
           return;
-        } // the server had it already
+        }
         write(table, rec.snap.hidden, rec.snap.weight);
       },
     );

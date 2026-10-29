@@ -29,6 +29,9 @@ always upgrade automatically.
 
 ### Fixed
 
+- Resizing a column no longer snaps back for a moment when two list updates overlap: an older answer that
+  lands after a newer one now still gets the width you just set (it was judged by the newest request's
+  start, so the old layout stayed on screen until the next update) (#166).
 - "Today" and "Yesterday" (dashboard transactions, transaction history, Add devices "First seen", users page
   sessions and activity), the transaction log's clock times and the policy page's "paused at" now follow the browser's time
   zone like every other timestamp; before, the server's zone decided and one page could show two zones.

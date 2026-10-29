@@ -366,6 +366,71 @@ test("a list update during a mouse drag keeps resizing and saves the width", asy
   await resetAll(page, "/devices", "table.devices");
 });
 
+// Why: two list updates overlap. The first was answered by the server before the user's new width
+// was saved (old layout), the second left after the save. The first response then landed and was
+// judged by the SECOND request's start ("the server had it already"), so the old layout stayed on
+// screen until the second answer came (seen as the flaky mouse-drag test: width read in between).
+// Every response is judged by its own start. The width is read in the swap's own task, right after the old answer lands.
+test("a late answer to an older list request does not undo a width saved since", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.setExtraHTTPHeaders(adam);
+  await page.goto(app.url + "/devices");
+  await resetAll(page, "/devices", "table.devices");
+  const th = page.locator('table[data-table="devices"] thead th', { hasText: "Status" });
+  const handle = page.getByRole("separator", { name: "Resize column Status" });
+
+  // the first list request is answered with the old layout but delivered only when released
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  let held!: () => void;
+  const isHeld = new Promise<void>((r) => (held = r));
+  let first = true;
+  await page.route(/\/devices\/table/, async (route) => {
+    if (!first) return route.continue();
+    first = false;
+    const old = await route.fetch();
+    held();
+    await gate;
+    await route.fulfill({ response: old });
+  });
+  // a different source element each time: htmx queues requests of one element behind each other
+  const ajax = (source: "devtable" | "body") =>
+    page.evaluate((src) => {
+      const t = document.getElementById("devtable")!;
+      const from = src === "body" ? document.body : t;
+      // not returned: htmx.ajax's promise settles with the swap, and the first one is held back
+      void (window as any).htmx.ajax("GET", t.getAttribute("hx-get")!, { source: from, target: t, swap: "innerHTML" });
+    }, source);
+  await ajax("devtable");
+  await isHeld;
+
+  await handle.focus();
+  const w0 = (await th.boundingBox())!.width;
+  const done = saved(page, "table.devices");
+  for (let i = 0; i < 5; i++) await page.keyboard.press("ArrowLeft");
+  await done;
+  const w1 = (await th.boundingBox())!.width;
+  expect(w1).toBeLessThan(w0 - 20);
+
+  // a second request leaves after the save; then the old answer lands
+  await page.evaluate(() => {
+    (window as any).__widths = [];
+    document.addEventListener("htmx:afterSwap", () => {
+      const h = [...document.querySelectorAll('table[data-table="devices"] thead th')].find((x) => x.textContent?.trim() === "Status");
+      (window as any).__widths.push(h ? h.getBoundingClientRect().width : 0);
+    });
+  });
+  const second = page.waitForResponse((r) => r.url().includes("/devices/table") && r.status() === 200);
+  await ajax("body");
+  await second;
+  release();
+  await expect.poll(() => page.evaluate(() => (window as any).__widths.length)).toBeGreaterThanOrEqual(2);
+  const widths: number[] = await page.evaluate(() => (window as any).__widths);
+  // the last swap is the old answer (the second one arrived first)
+  expect(Math.abs(widths[widths.length - 1] - w1)).toBeLessThan(1.5);
+  await resetAll(page, "/devices", "table.devices");
+});
+
 // The other half of the flaky "tooltips" test: a list update that lands after the handle got
 // focus but before the first arrow key (no layout was set yet, so nothing is restored by width).
 // The new table's handles are only created in the same settle step, so the focus has to wait for
