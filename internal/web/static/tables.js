@@ -660,14 +660,16 @@
   // A swap replaces the table and its resize handles: keep the layout the user just set
   // (unless the server already had it when the update was requested) and the handle focus.
   var heldHandle = null;
-  document.addEventListener("htmx:beforeRequest", function (e) {
-    if (e.detail && e.detail.xhr) {
-      started.set(e.detail.xhr, Date.now());
-    }
-  });
-  document.addEventListener("htmx:afterRequest", function (e) {
-    if (e.detail && e.detail.xhr) {
-      started.delete(e.detail.xhr);
+  // beforeSend cannot be cancelled (beforeRequest can, and then no afterRequest follows); the
+  // xhr's own loadend fires after the swap for load, error, abort and timeout alike, even when
+  // the requesting element has left the page (afterRequest would not reach document then)
+  document.addEventListener("htmx:beforeSend", function (e) {
+    var xhr = e.detail && e.detail.xhr;
+    if (xhr) {
+      started.set(xhr, Date.now());
+      xhr.addEventListener("loadend", function () {
+        started.delete(xhr);
+      });
     }
   });
   document.addEventListener("htmx:beforeSwap", function (e) {

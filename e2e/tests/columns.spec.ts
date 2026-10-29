@@ -391,7 +391,7 @@ test("a late answer to an older list request does not undo a width saved since",
     const old = await route.fetch();
     held();
     await gate;
-    await route.fulfill({ response: old });
+    await route.fulfill({ response: old, headers: { ...old.headers(), "x-held": "1" } });
   });
   // a different source element each time: htmx queues requests of one element behind each other
   const ajax = (source: "devtable" | "body") =>
@@ -415,19 +415,21 @@ test("a late answer to an older list request does not undo a width saved since",
   // a second request leaves after the save; then the old answer lands
   await page.evaluate(() => {
     (window as any).__widths = [];
-    document.addEventListener("htmx:afterSwap", () => {
+    document.addEventListener("htmx:afterSwap", (e) => {
       const h = [...document.querySelectorAll('table[data-table="devices"] thead th')].find((x) => x.textContent?.trim() === "Status");
-      (window as any).__widths.push(h ? h.getBoundingClientRect().width : 0);
+      const xhr = (e as CustomEvent).detail.xhr as XMLHttpRequest;
+      (window as any).__widths.push({ held: xhr.getResponseHeader("x-held") === "1", w: h ? h.getBoundingClientRect().width : 0 });
     });
   });
-  const second = page.waitForResponse((r) => r.url().includes("/devices/table") && r.status() === 200);
+  type Swap = { held: boolean; w: number };
+  const swaps = () => page.evaluate(() => (window as any).__widths as Swap[]);
   await ajax("body");
-  await second;
+  // release the old answer only after a newer one has landed (an extra SSE refresh counts too)
+  await expect.poll(async () => (await swaps()).some((x) => !x.held)).toBe(true);
   release();
-  await expect.poll(() => page.evaluate(() => (window as any).__widths.length)).toBeGreaterThanOrEqual(2);
-  const widths: number[] = await page.evaluate(() => (window as any).__widths);
-  // the last swap is the old answer (the second one arrived first)
-  expect(Math.abs(widths[widths.length - 1] - w1)).toBeLessThan(1.5);
+  await expect.poll(async () => (await swaps()).some((x) => x.held)).toBe(true);
+  const old = (await swaps()).find((x) => x.held)!;
+  expect(Math.abs(old.w - w1)).toBeLessThan(1.5);
   await resetAll(page, "/devices", "table.devices");
 });
 
