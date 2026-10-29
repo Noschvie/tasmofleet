@@ -307,6 +307,9 @@ func ruleFlash(ok string) string {
 	if ok == "checked" {
 		return "Live check finished"
 	}
+	if ok == "throttled" {
+		return "Live check rate-limited, try again in a moment"
+	}
 	if ok == "checkfailed" {
 		return "The live check could not run"
 	}
@@ -685,9 +688,12 @@ func (h *handler) liveCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	done := "checked"
-	if _, err := h.d.Policy.Report(r.Context(), actor(r), true); err != nil {
+	switch rep, err := h.d.Policy.Report(r.Context(), actor(r), true); {
+	case err != nil:
 		h.log.WarnContext(r.Context(), "policy live check failed", "err", err)
 		done = "checkfailed"
+	case rep.LiveThrottled:
+		done = "throttled" // the check ran a moment ago: these are its results
 	}
 	redirect(w, r, rulesPath+"/"+id+"?ok="+done)
 }

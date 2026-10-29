@@ -13591,3 +13591,41 @@ a.pol-tpl {
     padding: var(--sp-14) var(--sp-18) var(--sp-8);
   }
 }
+
+/* rule page and New rule page (#197): the pairs of the Rule card, the 55/45 and 62/38 columns,
+   the footer row, the template grid */
+.pol-page .dev-pair {
+  align-items: start;
+}
+@media (min-width: 45rem) {
+  .pol-page .dev-pair {
+    grid-template-columns: minmax(0, 11fr) minmax(0, 9fr);
+  }
+  .pol-page .dev-pair:has(.pol-cards) {
+    grid-template-columns: minmax(0, 62fr) minmax(0, 38fr);
+  }
+  .devcard .pol-two {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    align-items: start;
+  }
+}
+.devcard .pol-ed-foot {
+  flex-wrap: wrap;
+  align-items: center;
+}
+.devcard .pol-ed-foot .ufield {
+  flex: 1 1 14rem;
+}
+.dev-pair .pol-tpls {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+@media (max-width: 63.99rem) {
+  .dev-pair .pol-tpls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 44.99rem) {
+  .dev-pair .pol-tpls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

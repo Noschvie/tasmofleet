@@ -614,10 +614,15 @@ func (h *handler) originNote(r *http.Request, origin string) string {
 }
 
 // draftStale answers a save made on an outdated version of the rules. The rule page of the
-// editor's rule opens again (without the draft); the policy page's editor shows the policy page.
+// editor's rule opens again (without the draft; a new rule keeps it); the policy page's editor shows the policy page.
 func (h *handler) draftStale(w http.ResponseWriter, r *http.Request, d ruleDraft) {
 	if d.ID == "" {
 		h.rulesStale(w, r)
+		return
+	}
+	if d.ID == "new" {
+		// A new rule exists nowhere else: keep what was typed, on the current version.
+		h.rulePageRender(w, r, http.StatusConflict, ruleOpts{ID: d.ID, Draft: &d, Origin: d.Origin, Banner: staleText})
 		return
 	}
 	h.rulePageRender(w, r, http.StatusConflict, ruleOpts{ID: d.ID, Banner: staleText})
@@ -627,7 +632,7 @@ func (h *handler) draftStale(w http.ResponseWriter, r *http.Request, d ruleDraft
 // there (it carries an id), else on the policy page.
 func (h *handler) draftRender(w http.ResponseWriter, r *http.Request, status int, d ruleDraft, errField, errMsg, banner string) {
 	if d.ID != "" {
-		h.rulePageRender(w, r, status, ruleOpts{ID: d.ID, Draft: &d, ErrField: errField, ErrMsg: errMsg, Banner: banner})
+		h.rulePageRender(w, r, status, ruleOpts{ID: d.ID, Draft: &d, Origin: d.Origin, ErrField: errField, ErrMsg: errMsg, Banner: banner})
 		return
 	}
 	h.policyRender(w, r, status, policyOpts{draft: &d, errField: errField, errMsg: errMsg, banner: banner})

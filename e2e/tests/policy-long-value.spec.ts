@@ -68,7 +68,7 @@ for (const vp of [
     // mono line, the device rows stay readable and the page does not scroll sideways
     await page.goto(app.url + "/policy/rules/r1");
     await page.getByRole("button", { name: "Check now" }).click();
-    await expect(page.getByText("Live check finished")).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByText(/Live check (finished|rate-limited)/)).toBeVisible({ timeout: 60_000 });
     await expect(page.locator(".pghead-sub")).toContainText(longUrl);
     const devRows = page.locator("#rule-devices tbody tr");
     // the long Actual value wraps inside its cell (the row grows); the name keeps its width and lines

@@ -21,6 +21,7 @@ type rulePolicy struct {
 	values  map[model.DeviceID]map[string]string
 	prov    map[model.DeviceID]map[string]ValueSource
 	live    int      // Report calls with live=true
+	limited bool     // Report answers like a rate-limited live check
 	evals   int      // Evaluate calls
 	reads   []string // ReadValue commands
 	readVal string
@@ -42,7 +43,7 @@ func (p *rulePolicy) Report(_ context.Context, _ string, live bool) (PolicyRepor
 	if live {
 		p.live++
 	}
-	return PolicyReport{}, nil
+	return PolicyReport{LiveThrottled: live && p.limited}, nil
 }
 
 func (p *rulePolicy) Evaluate(_ context.Context, rules []policy.Rule) (PolicyReport, error) {
@@ -571,4 +572,58 @@ func (p *envPolicy) Report(context.Context, string, bool) (PolicyReport, error) 
 	devs := p.devices()
 	return PolicyReport{Rules: p.rules, Devices: devs, Values: p.values, Provenance: p.prov,
 		Outcomes: policy.Outcomes(p.rules, devs, p.values)}, nil
+}
+
+// Why: a refused save of a new rule must not lose where the draft came from, or the default
+// change note ("from template: X") silently disappears on the retry.
+func TestRuleNewRefusedSaveKeepsTheOrigin(t *testing.T) {
+	e, _ := ruleEnvWith(t, defaultRP())
+	f := ruleForm(url.Values{"command": {"Status0"}, "origin": {"template:telemetry"}})
+	f.Del("idx")
+	f.Set("id", "new")
+	f.Set("version", "0")
+	r, body := e.do(t, "POST", "/policy/rules/save", "admin", f)
+	if r.StatusCode != 422 || !strings.Contains(body, `name="origin" value="template:telemetry"`) {
+		t.Errorf("status %d, origin lost:\n%s", r.StatusCode, body)
+	}
+}
+
+// Why: a rate-limited live check ran nothing new; saying "finished" would pass old numbers off
+// as fresh ones.
+func TestRuleCheckNowSaysWhenTheCheckWasRateLimited(t *testing.T) {
+	rp := defaultRP()
+	e, mem := ruleEnvWith(t, rp)
+	id := ruleSeed(t, e, mem, nil)
+	rp.limited = true
+	r, _ := e.do(t, "POST", "/policy/live", "admin", url.Values{"csrf": {"tok"}, "rule": {id}})
+	if r.Header.Get("Location") != "/tf/policy/rules/"+id+"?ok=throttled" {
+		t.Fatalf("location %q", r.Header.Get("Location"))
+	}
+	_, body := e.do(t, "GET", "/policy/rules/"+id+"?ok=throttled", "admin", nil)
+	if !strings.Contains(body, "Live check rate-limited, try again in a moment") {
+		t.Error("the page says the check was rate-limited")
+	}
+}
+
+// Why: a new rule exists only in the form; a stale save must show the typed draft again (on the
+// current version) instead of throwing it away.
+func TestRuleNewStaleSaveKeepsTheTypedDraft(t *testing.T) {
+	e, mem := ruleEnvWith(t, defaultRP())
+	ruleSeed(t, e, mem, nil)
+	f := ruleForm(url.Values{"name": {"Typed by hand"}, "command": {"TelePeriod"}, "want": {"60"}})
+	f.Del("idx")
+	f.Set("id", "new")
+	f.Set("version", "0")
+	r, body := e.do(t, "POST", "/policy/rules/save", "admin", f)
+	if r.StatusCode != 409 || !strings.Contains(body, "The rules were changed by someone else") {
+		t.Fatalf("status %d", r.StatusCode)
+	}
+	for _, w := range []string{`value="Typed by hand"`, `value="60"`, `name="version" value="1"`} {
+		if !strings.Contains(body, w) {
+			t.Errorf("stale draft lacks %q", w)
+		}
+	}
+	if len(mem.vs) != 1 {
+		t.Error("nothing is stored")
+	}
 }

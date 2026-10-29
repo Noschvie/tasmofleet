@@ -189,6 +189,7 @@ templ ruleEditCard(p rulePageView, e *ruleEditor) {
 			if p.Origin != "" {
 				<input type="hidden" name="origin" value={ p.Origin }/>
 			}
+			<div class="pol-two">
 			<label class="ufield">
 				<span class="ufield-label">Name</span>
 				<input name="name" value={ e.Spec.Name } maxlength="80" placeholder="New rule"/>
@@ -226,6 +227,7 @@ templ ruleEditCard(p rulePageView, e *ruleEditor) {
 					</div>
 				</details>
 			</div>
+			</div>
 			<div class="pol-two">
 				@commandField(p.Base, e.Groups, e.Spec.Command, e.ErrField == "command", e.Err)
 				<div class="ufield" id="want-control">
@@ -255,10 +257,12 @@ templ ruleEditCard(p rulePageView, e *ruleEditor) {
 				<input type="checkbox" name="state" value="enabled" checked?={ e.Enabled }/>
 				Enabled
 			</label>
+			<div class="pol-ed-foot">
 			<label class="ufield">
-					<span class="ufield-label">Change note</span>
+					<span class="sr-only">Change note</span>
 				<input
 					name="change_note"
+					aria-label="Change note"
 					maxlength="200"
 					placeholder="Optional, shown in History"
 					if e.ErrField == "change_note" {
@@ -271,7 +275,6 @@ templ ruleEditCard(p rulePageView, e *ruleEditor) {
 					<span class="ufield-err" id="err-change_note" role="alert">{ e.Err }</span>
 				}
 			</label>
-			<div class="pol-ed-foot">
 				if p.Draft {
 					<a class="btn" href={ templ.SafeURL(p.Base + rulesPath + "/new") }>Cancel</a>
 				} else {
@@ -334,8 +337,8 @@ templ ruleDevicesCard(v ruleDevicesView) {
 						</thead>
 						<tbody>
 							for _, r := range v.Rows {
-								<tr>
-									<td class="p1" data-label="Device"><a href={ templ.SafeURL(v.Base + "/devices/" + devStr(r.ID)) }>{ r.Name }</a></td>
+								<tr class={ templ.KV("is-dim", r.Kind == policy.OutcomeUnknown) }>
+									<td class="p1" data-label="Device"><a class="mono" href={ templ.SafeURL(v.Base + "/devices/" + devStr(r.ID)) }>{ r.Name }</a></td>
 									<td data-label="Actual">
 										if r.Have != "" {
 											<span class="mono">@ui.Soft(r.Have)</span>
