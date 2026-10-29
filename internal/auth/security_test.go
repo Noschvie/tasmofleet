@@ -383,7 +383,13 @@ func TestDeviceCookieCannotBeForgedOrReused(t *testing.T) {
 	cases := map[string]func(e *env, b *browser){
 		"tampered MAC": func(_ *env, b *browser) {
 			v := b.cookie(CookieInsecure + "-device")
-			b.setCookie(CookieInsecure+"-device", v[:len(v)-2]+"AA")
+			// Always change the last character: a fixed replacement is a no-op when the random
+			// MAC already ends in it, and the cookie would then be genuine (#141).
+			last := "A"
+			if strings.HasSuffix(v, "A") {
+				last = "B"
+			}
+			b.setCookie(CookieInsecure+"-device", v[:len(v)-1]+last)
 		},
 		"username swapped, MAC kept": func(_ *env, b *browser) {
 			parts := strings.Split(b.cookie(CookieInsecure+"-device"), ".")
