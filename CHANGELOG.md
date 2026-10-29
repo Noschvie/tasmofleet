@@ -21,6 +21,11 @@ always upgrade automatically.
 
 - The 2-hour power sparkline on the device overview is gone (its history was only a minute ring of the
   last `tele/SENSOR` watts); the card shows the current power and the energy counters (#145).
+- The `/metrics` bearer token is now a setting: System settings, Metrics, "Scrape token" (write-only,
+  stored encrypted, applies to the next scrape). `TASMOFLEET_METRICS_TOKEN` (and `_FILE`) stays
+  valid and now locks the field: it wins over the page and is never copied into the database, so
+  installs that set it, such as the Unraid template, keep working unchanged. An empty variable
+  counts as unset (#151).
 
 ### Fixed
 

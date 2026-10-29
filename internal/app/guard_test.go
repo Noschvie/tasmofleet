@@ -1,7 +1,9 @@
 package app
 
 import (
+	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,8 +11,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nofuturekid/tasmofleet/internal/config"
 	"github.com/nofuturekid/tasmofleet/internal/firmware"
 	"github.com/nofuturekid/tasmofleet/internal/httpx"
+	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
 	"github.com/nofuturekid/tasmofleet/internal/web"
 )
 
@@ -97,7 +101,7 @@ func TestMetricsGate(t *testing.T) {
 			req.Header.Set("X-Forwarded-For", c.hdr)
 		}
 		rec := httptest.NewRecorder()
-		metricsGate(c.tokenSet, ok).ServeHTTP(rec, req)
+		metricsGate(func() bool { return c.tokenSet }, ok).ServeHTTP(rec, req)
 		if rec.Code != c.want {
 			t.Errorf("%s: %d want %d", c.name, rec.Code, c.want)
 		}
@@ -205,5 +209,81 @@ func TestGuardBodiesCustomFirmwareUploadNeedsHeaderTokenAndIsCapped(t *testing.T
 	}
 	if do("tok", int(firmware.MaxCustomUpload)+4096); read > firmware.MaxCustomUpload {
 		t.Errorf("handler read %d bytes, cap is %d", read, firmware.MaxCustomUpload)
+	}
+}
+
+// Why (#151): the scrape token is a setting on the page. Saving it must apply to
+// the very next /metrics request (no restart), removing it must close the
+// endpoint to remote scrapers again, and the environment variable must keep
+// winning and stay read-only (the Unraid CA template sets it that way).
+func TestMetricsTokenFromSettingsAppliesLive(t *testing.T) {
+	svc := importServices(t)
+	a := &runtime{svc: svc, cfg: svc.Cfg, log: svc.Log, bgContext: t.Context()}
+	h := a.metricsHandler()
+	scrape := func(bearer string) int {
+		req := httptest.NewRequest("GET", "/metrics", nil)
+		req.RemoteAddr = "172.31.12.5:1234"
+		if bearer != "" {
+			req.Header.Set("Authorization", "Bearer "+bearer)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		return rec.Code
+	}
+	if got := scrape(""); got != 401 {
+		t.Fatalf("remote scrape without any token: %d, want 401", got)
+	}
+	apply := func(v string) {
+		t.Helper()
+		_, err := svc.Sys.Apply(t.Context(), sysconfig.Request{Actor: "admin", StepUp: sysconfig.StepUp{Done: true, Possible: true}, Values: map[string]string{"METRICS_TOKEN": v}})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	apply("fake-scrape-token-1")
+	if got := scrape("fake-scrape-token-1"); got != 200 {
+		t.Errorf("remote scrape with the page-set token: %d, want 200", got)
+	}
+	if got := scrape("wrong"); got != 401 {
+		t.Errorf("wrong token: %d, want 401", got)
+	}
+	apply("fake-scrape-token-2")
+	if got := scrape("fake-scrape-token-1"); got != 401 {
+		t.Errorf("replaced token still accepted: %d", got)
+	}
+	if got := scrape("fake-scrape-token-2"); got != 200 {
+		t.Errorf("new token: %d, want 200", got)
+	}
+}
+
+// Why (#151): an install that sets TASMOFLEET_METRICS_TOKEN (the Unraid CA
+// template does) must keep working unchanged: the variable authenticates the
+// scraper from the first request and the page cannot override it.
+func TestMetricsTokenFromEnvironmentLocksAndWins(t *testing.T) {
+	cfg, err := config.Load([]string{
+		"TASMOFLEET_DATA_DIR=" + t.TempDir(), "TASMOFLEET_CONFIG_FILE=/dev/null", "TASMOFLEET_AUTH_MODE=local",
+		"TASMOFLEET_DEVICE_NETWORKS=127.0.0.0/8", "TASMOFLEET_ALLOW_INSECURE_HTTP=true",
+		"TASMOFLEET_METRICS_TOKEN=fake-env-token",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc, err := openServices(cfg, slog.New(slog.DiscardHandler), "test", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = svc.Close() })
+	a := &runtime{svc: svc, cfg: svc.Cfg, log: svc.Log, bgContext: t.Context()}
+	req := httptest.NewRequest("GET", "/metrics", nil)
+	req.RemoteAddr = "172.31.12.5:1234"
+	req.Header.Set("Authorization", "Bearer fake-env-token")
+	rec := httptest.NewRecorder()
+	a.metricsHandler().ServeHTTP(rec, req)
+	if rec.Code != 200 {
+		t.Fatalf("env token scrape: %d, want 200", rec.Code)
+	}
+	_, err = svc.Sys.Apply(t.Context(), sysconfig.Request{Actor: "admin", StepUp: sysconfig.StepUp{Done: true, Possible: true}, Values: map[string]string{"METRICS_TOKEN": "page"}})
+	if !errors.Is(err, sysconfig.ErrLocked) {
+		t.Fatalf("page change of an env-locked token: %v, want ErrLocked", err)
 	}
 }

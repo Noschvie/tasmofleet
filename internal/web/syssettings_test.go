@@ -38,6 +38,33 @@ func TestSystemSettingsEveryFieldHasOnePlace(t *testing.T) {
 	}
 }
 
+// Why (#151): the scrape token is edited on the page as a write-only field. An environment
+// value (the Unraid CA template sets one) locks it read-only, and neither state may put the
+// token into the HTML.
+func TestSystemSettingsMetricsTokenFieldAndLock(t *testing.T) {
+	e, svc, _, _ := sysEnv(t, true)
+	if _, err := svc.Apply(t.Context(), sysconfig.Request{Actor: "admin", StepUp: sysconfig.StepUp{Done: true, Possible: true},
+		Values: map[string]string{"METRICS_TOKEN": "fake-page-token-5"}}); err != nil {
+		t.Fatal(err)
+	}
+	_, body := e.do(t, "GET", "/settings/system", "admin", nil)
+	if !strings.Contains(body, `type="password" name="v.METRICS_TOKEN"`) {
+		t.Errorf("token must be a write-only password input:\n%s", body)
+	}
+	if strings.Contains(body, "fake-page-token-5") {
+		t.Error("stored token leaked into the page")
+	}
+
+	e, _, _, _ = sysEnvFull(t, true, nil, "TASMOFLEET_METRICS_TOKEN=fake-env-token-6")
+	_, body = e.do(t, "GET", "/settings/system", "admin", nil)
+	if strings.Contains(body, `name="v.METRICS_TOKEN"`) || !strings.Contains(body, "Set by environment (METRICS_TOKEN)") {
+		t.Errorf("env token must lock the field:\n%s", body)
+	}
+	if strings.Contains(body, "fake-env-token-6") {
+		t.Error("env token leaked into the page")
+	}
+}
+
 // Why: an on/off setting is a checkbox, and a checkbox that is off sends nothing. The page
 // marks each checkbox it drew (b.KEY), so "off" is saved as false instead of being ignored;
 // the marker is accepted only for known on/off settings (no mass assignment).

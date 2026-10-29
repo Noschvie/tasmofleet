@@ -489,7 +489,7 @@ func (a *runtime) ready(ctx context.Context) error {
 // the settings) and the token / local-scraper gate.
 func (a *runtime) metricsHandler() http.Handler {
 	return metricsSwitch(func() bool { return a.svc.Sys.Snapshot().MetricsEnabled },
-		metricsGate(a.cfg.MetricsToken != "", a.svc.Metrics.Handler()))
+		metricsGate(func() bool { return a.svc.Sys.Snapshot().MetricsToken != "" }, a.svc.Metrics.Handler()))
 }
 
 func (a *runtime) handler() (http.Handler, error) {
@@ -515,7 +515,7 @@ func (a *runtime) handler() (http.Handler, error) {
 		_, _ = w.Write([]byte("ready\n"))
 	})
 	if cfg.MetricsToken == "" {
-		a.log.Warn("TASMOFLEET_METRICS_TOKEN is not set: /metrics answers local scrapers only")
+		a.log.Warn("no metrics token is set: /metrics answers local scrapers only (set one on the settings page)")
 	}
 	mux.Handle("GET /metrics", a.metricsHandler())
 	routes := a.authSvc.Routes()

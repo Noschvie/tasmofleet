@@ -3,6 +3,7 @@ package sysconfig
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/netip"
 	"strings"
 	"sync"
@@ -232,7 +233,7 @@ func TestFreshInstallWithoutEnvironmentStartsAndWritesTheMarker(t *testing.T) {
 // authentication or move listeners. Bootstrap keys are not editable even when
 // the environment does not set them.
 func TestBootstrapAndUnknownKeysAreRejected(t *testing.T) {
-	for _, key := range []string{"TRUSTED_PROXIES", "PUBLIC_URL", "LISTEN", "ADMIN_LISTEN", "METRICS_TOKEN",
+	for _, key := range []string{"TRUSTED_PROXIES", "PUBLIC_URL", "LISTEN", "ADMIN_LISTEN",
 		"INITIAL_ADMIN_PASSWORD", "LOCAL_LOGIN", "DATA_DIR", "TLS_CERT_FILE", "NO_SUCH_KEY", "Legacy", "Locked", ""} {
 		st := newMem()
 		s, _ := newSvc(t, st)
@@ -386,7 +387,7 @@ func TestStoredValueThatNoLongerValidatesIsSkippedAndReported(t *testing.T) {
 func TestStateHidesSecretsAndListsBootstrapReadOnly(t *testing.T) {
 	st := newMem()
 	st.rows["MQTT_PASSWORD"] = store.SystemSetting{Key: "MQTT_PASSWORD", Value: "fake-secret-Zk3", Secret: true}
-	s, _ := newSvc(t, st, "TASMOFLEET_METRICS_TOKEN=fake-token-77")
+	s, _ := newSvc(t, st, "TASMOFLEET_INITIAL_ADMIN_PASSWORD=fake-token-77")
 	for _, f := range s.State() {
 		if f.Key == "MQTT_PASSWORD" && (f.Value != "" || !f.HasValue) {
 			t.Fatalf("secret field must report only that a value exists: %+v", f)
@@ -397,7 +398,7 @@ func TestStateHidesSecretsAndListsBootstrapReadOnly(t *testing.T) {
 		if strings.Contains(r.Value, "fake-token-77") || strings.Contains(r.Value, "fake-secret-Zk3") {
 			t.Fatalf("secret leaked: %+v", r)
 		}
-		if r.Key == "METRICS_TOKEN" && r.Value == "***" {
+		if r.Key == "INITIAL_ADMIN_PASSWORD" && r.Value == "***" {
 			found = true
 		}
 		if r.Key == "OTA_PARALLEL" {
@@ -405,7 +406,7 @@ func TestStateHidesSecretsAndListsBootstrapReadOnly(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Fatal("METRICS_TOKEN must be listed, masked")
+		t.Fatal("INITIAL_ADMIN_PASSWORD must be listed, masked")
 	}
 }
 func contains(l []string, s string) bool {
@@ -543,5 +544,78 @@ func TestCLIConstructionDoesNotConsumeTheLegacyImport(t *testing.T) {
 	s, _ := newSvc(t, st, "TASMOFLEET_OTA_PARALLEL=5")
 	if s.Snapshot().OTAParallel != 5 || st.rows["OTA_PARALLEL"].Value != "5" {
 		t.Fatalf("legacy value lost after a CLI run: %d", s.Snapshot().OTAParallel)
+	}
+}
+
+// Why (#151): the metrics token is a write-only setting like the other secrets:
+// stored (encrypted by the store), applied live, never in the state, the audit
+// trail or the result shown to the admin.
+func TestMetricsTokenIsLiveSecretSetting(t *testing.T) {
+	st := newMem()
+	s, aud := newSvc(t, st)
+	var ev *Event
+	s.Subscribe(func(e Event) { ev = &e })
+	res, err := s.Apply(context.Background(), Request{Actor: "a", StepUp: stepped, Values: map[string]string{"METRICS_TOKEN": "fake-scrape-token-9"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !contains(res.Live, "METRICS_TOKEN") || len(res.RestartRequired) != 0 {
+		t.Fatalf("not live: %+v", res)
+	}
+	if got := s.Snapshot().MetricsToken; got != "fake-scrape-token-9" {
+		t.Fatalf("snapshot token %q", got)
+	}
+	if ev == nil || ev.New.MetricsToken != "fake-scrape-token-9" {
+		t.Fatalf("subscribers must see the new token: %+v", ev)
+	}
+	row := st.rows["METRICS_TOKEN"]
+	if !row.Secret || row.Value != "fake-scrape-token-9" {
+		t.Fatalf("stored row %+v", row)
+	}
+	for _, f := range s.State() {
+		if f.Key == "METRICS_TOKEN" && (f.Value != "" || !f.HasValue || f.Locked) {
+			t.Fatalf("state must only say a value exists: %+v", f)
+		}
+	}
+	blob := fmt.Sprintf("%+v %+v", res, aud.ev)
+	if strings.Contains(blob, "fake-scrape-token-9") {
+		t.Fatalf("token leaked into result or audit: %s", blob)
+	}
+}
+
+// Why (#151): installs that fix the token in the environment (Unraid CA
+// template) keep working: the variable wins over any stored row, locks the
+// field, and is never copied into the database.
+func TestMetricsTokenEnvironmentLocksAndWins(t *testing.T) {
+	st := newMem()
+	st.rows["METRICS_TOKEN"] = store.SystemSetting{Key: "METRICS_TOKEN", Value: "fake-stored-token", Secret: true}
+	s, _ := newSvc(t, st, "TASMOFLEET_METRICS_TOKEN=fake-env-token")
+	if got := s.Snapshot().MetricsToken; got != "fake-env-token" {
+		t.Fatalf("env must win, got %q", got)
+	}
+	locked := false
+	for _, f := range s.State() {
+		if f.Key == "METRICS_TOKEN" {
+			locked = f.Locked
+		}
+	}
+	if !locked {
+		t.Fatal("env-set token must lock the field")
+	}
+	if _, err := s.Apply(context.Background(), Request{Actor: "a", StepUp: stepped, Values: map[string]string{"METRICS_TOKEN": "x"}}); !errors.Is(err, ErrLocked) {
+		t.Fatalf("err = %v, want ErrLocked", err)
+	}
+	if st.rows["METRICS_TOKEN"].Value != "fake-stored-token" {
+		t.Fatal("the environment value must not be written over the stored row")
+	}
+}
+
+// Why (#148): an empty variable counts as unset, so the page decides.
+func TestMetricsTokenEmptyEnvironmentLeavesItToThePage(t *testing.T) {
+	st := newMem()
+	st.rows["METRICS_TOKEN"] = store.SystemSetting{Key: "METRICS_TOKEN", Value: "fake-stored-token", Secret: true}
+	s, _ := newSvc(t, st, "TASMOFLEET_METRICS_TOKEN=")
+	if got := s.Snapshot().MetricsToken; got != "fake-stored-token" {
+		t.Fatalf("stored token expected, got %q", got)
 	}
 }

@@ -1,8 +1,11 @@
 # Metrics
 
-`/metrics` serves the Prometheus text format. It is protected by a bearer token when
-`TASMOFLEET_METRICS_TOKEN` is set (`Authorization: Bearer <token>`); unchanged by the
-per-device gauges. The metric contract lives in `internal/metrics/metrics.go`
+`/metrics` serves the Prometheus text format. It is protected by a bearer token when one
+is set (`Authorization: Bearer <token>`). Set it on the settings page (Settings, System,
+Metrics, "Scrape token"; write-only, applies at once), or fix it with
+`TASMOFLEET_METRICS_TOKEN` / `TASMOFLEET_METRICS_TOKEN_FILE`: the variable then wins and the
+field is read-only. Without a token only a scraper on this host that did not come through a
+proxy is served; the per-device gauges do not change this. The metric contract lives in `internal/metrics/metrics.go`
 (`ContractMetrics`); `deploy/grafana/tasmofleet.json` may reference only those names.
 
 ## Fleet aggregates (always on)

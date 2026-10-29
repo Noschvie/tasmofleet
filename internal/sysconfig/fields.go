@@ -139,6 +139,8 @@ var fields = []Field{
 	{Key: "OPERATOR_GROUPS", Group: GroupSignIn, Label: "Operator groups", Apply: Restart, StepUp: StepUpAlways, Help: "Comma separated IdP groups that get the operator role."},
 
 	{Key: "METRICS_ENABLED", Group: GroupMetrics, Label: "Serve /metrics", Bool: true, Apply: Live, Help: "Off: /metrics answers 404. On: token and local-scraper rules apply."},
+	{Key: "METRICS_TOKEN", Group: GroupMetrics, Label: "Scrape token", Apply: Live, Secret: true,
+		Help: "Write-only bearer token a remote Prometheus sends (Authorization: Bearer ...). Empty: only a scraper on this host, not behind a proxy, is served. Applies at once; a value set by the environment locks this field."},
 	{Key: "METRICS_DEVICE_LABELS", Group: GroupMetrics, Label: "Device names in metric labels", Bool: true, Apply: Live, Help: "Off by default: metrics then carry counts only."},
 	{Key: "AUDIT_RETENTION", Group: GroupAudit, Label: "Audit retention", Apply: Live,
 		Help: "How long audit events and finished update transactions (with their logs) are kept, at least 24h; a running transaction is never removed. Hours: 720h is 30 days, 8760h is 365 days."},

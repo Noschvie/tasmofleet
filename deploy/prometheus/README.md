@@ -1,9 +1,11 @@
 # Prometheus scrape example
 
 `/metrics` needs a bearer token unless the scrape comes from a direct loopback
-peer (no forwarding headers). Set the token on tasmofleet with
-`TASMOFLEET_METRICS_TOKEN` or, preferably, `TASMOFLEET_METRICS_TOKEN_FILE`
-(e.g. a 0600 file under `/data`). Give Prometheus the same value in a file.
+peer (no forwarding headers). Set the token on the tasmofleet settings page
+(System, Metrics, "Scrape token"), or fix it in the container with
+`TASMOFLEET_METRICS_TOKEN` / `TASMOFLEET_METRICS_TOKEN_FILE` (e.g. a 0600 file
+under `/data`; the variable then wins and locks the field). Give Prometheus
+the same value in a file.
 Never inline it in `prometheus.yml`.
 
 The running version is the label `version` of `tasmofleet_build_info{version,decoder}` (`decoder` is

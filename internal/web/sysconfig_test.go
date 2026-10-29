@@ -79,7 +79,6 @@ func sysEnvTesters(t *testing.T, stepped bool, testMQTT func(context.Context, sy
 	}}
 	cfg, err := config.Load(append([]string{
 		"TASMOFLEET_DATA_DIR=/nonexistent-tasmofleet-test", "TASMOFLEET_CONFIG_FILE=/dev/null",
-		"TASMOFLEET_METRICS_TOKEN=fake-token-77",
 	}, extraEnv...))
 	if err != nil {
 		t.Fatal(err)

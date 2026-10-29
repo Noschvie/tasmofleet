@@ -80,21 +80,23 @@ func metricsSwitch(enabled func() bool, next http.Handler) http.Handler {
 	})
 }
 
-// metricsGate protects /metrics. With a bearer token configured the registry
+// metricsGate protects /metrics. tokenSet is read on every request, so a token
+// set on the settings page applies at once. With a bearer token configured the registry
 // checks it. Without one, only local scrapers are served: a loopback TCP peer
 // that did not come through a proxy (no forwarding headers), so a reverse proxy
 // that forwards /metrics cannot publish the fleet inventory.
-func metricsGate(tokenSet bool, next http.Handler) http.Handler {
-	if tokenSet {
-		return next
-	}
+func metricsGate(tokenSet func() bool, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if tokenSet() {
+			next.ServeHTTP(w, r)
+			return
+		}
 		host, _, err := net.SplitHostPort(r.RemoteAddr)
 		ip, perr := netip.ParseAddr(host)
 		local := err == nil && perr == nil && ip.Unmap().IsLoopback() &&
 			r.Header.Get("X-Forwarded-For") == "" && r.Header.Get("Forwarded") == "" && r.Header.Get("X-Real-IP") == ""
 		if !local {
-			http.Error(w, "metrics need TASMOFLEET_METRICS_TOKEN when scraped remotely", http.StatusUnauthorized)
+			http.Error(w, "metrics need a scrape token (settings page, Metrics) when scraped remotely", http.StatusUnauthorized)
 			return
 		}
 		next.ServeHTTP(w, r)

@@ -156,12 +156,12 @@ func TestKeysMarkSecretsAndOperationalSettings(t *testing.T) {
 	}
 	// The coordinator's bootstrap list: these stay environment-only.
 	for _, k := range []string{"DATA_DIR", "LISTEN", "PUBLIC_URL", "BASE_PATH", "TRUSTED_PROXIES", "LOCAL_LOGIN",
-		"TLS_CERT_FILE", "TLS_SELF_SIGNED", "METRICS_TOKEN", "INITIAL_ADMIN_PASSWORD", "FIRMWARE_LISTEN"} {
+		"TLS_CERT_FILE", "TLS_SELF_SIGNED", "INITIAL_ADMIN_PASSWORD", "FIRMWARE_LISTEN"} {
 		if info[k].UI {
 			t.Errorf("%s is bootstrap and must not be an operational setting", k)
 		}
 	}
-	for _, k := range []string{"AUTH_MODE", "OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_DISPLAY_NAME", "ADMIN_GROUPS", "OPERATOR_GROUPS"} {
+	for _, k := range []string{"AUTH_MODE", "OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_DISPLAY_NAME", "ADMIN_GROUPS", "OPERATOR_GROUPS", "METRICS_TOKEN"} {
 		if !info[k].UI || !info[k].Lock {
 			t.Errorf("%s must be an editable sign-in setting (locked by the environment)", k)
 		}

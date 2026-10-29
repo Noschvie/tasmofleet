@@ -143,7 +143,10 @@ type Config struct {
 	// off; MQTT updates and the on-demand check stay.
 	PolicyLiveInterval time.Duration `env:"POLICY_LIVE_INTERVAL" ui:"true" default:"1h"`
 
-	MetricsToken string `env:"METRICS_TOKEN" secret:"true"` // empty: /metrics answers only loopback and trusted proxies
+	// MetricsToken is the bearer token for /metrics. Set on the settings page, or
+	// fixed by the environment (the variable then locks the field). Empty: /metrics
+	// answers only loopback scrapers that did not come through a proxy.
+	MetricsToken string `env:"METRICS_TOKEN" ui:"lock" secret:"true"`
 	// MetricsEnabled is the master switch for /metrics: off, it answers 404.
 	MetricsEnabled bool `env:"METRICS_ENABLED" ui:"true" default:"true"`
 	// MetricsDeviceLabels puts device names into metric labels (off by default).

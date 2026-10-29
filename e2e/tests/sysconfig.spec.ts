@@ -164,6 +164,25 @@ test("metrics switch: off answers 404, on serves the metrics again", async ({ pa
   expect((await request.get(app.url + "/metrics")).status(), "switched on again").toBe(200);
 });
 
+// Why (#151): the scrape token is set on the page and applies to the next request. The test
+// client is a loopback peer, which needs no token until one is set; then it needs the right one.
+test("metrics token: set on the page it applies at once, resetting it opens the local scrape again", async ({ page, request }) => {
+  await page.setExtraHTTPHeaders(admin);
+  expect((await request.get(app.url + "/metrics")).status(), "no token yet: local scrape").toBe(200);
+  await page.goto(app.url + "/settings/system?tab=metrics");
+  await page.locator("input[name='v.METRICS_TOKEN']").fill("e2e-fake-scrape-token");
+  await page.getByRole("button", { name: "Save settings" }).click();
+  await expect(page.getByText("Saved.")).toBeVisible();
+  expect((await request.get(app.url + "/metrics")).status(), "token required now").toBe(401);
+  const ok = await request.get(app.url + "/metrics", { headers: { Authorization: "Bearer e2e-fake-scrape-token" } });
+  expect(ok.status(), "right token").toBe(200);
+  await expect(page.locator("body")).not.toContainText("e2e-fake-scrape-token"); // write-only
+  await page.locator("input[name='clear.METRICS_TOKEN']").check();
+  await page.getByRole("button", { name: "Save settings" }).click();
+  await expect(page.getByText("Saved.")).toBeVisible();
+  expect((await request.get(app.url + "/metrics")).status(), "token removed").toBe(200);
+});
+
 // Why (N9): "Reset settings…" puts every stored setting back to its default, but only after the
 // admin confirmed it is them (it changes the broker, the networks and the sign-in at once).
 // Header principals cannot confirm, so a local admin does it here.

@@ -165,7 +165,8 @@ func (s *Value) Add(x float64) {
 }
 
 // SetBearerToken requires "Authorization: Bearer <token>" on the handler.
-// An empty token leaves /metrics open. Call before serving.
+// An empty token leaves /metrics open. Safe to call while serving: the next
+// request sees the new token.
 func (r *Registry) SetBearerToken(token string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
