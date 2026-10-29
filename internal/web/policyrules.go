@@ -405,6 +405,7 @@ func place(saved []sysconfig.RuleSpec, idx string, spec sysconfig.RuleSpec) (lis
 	if err != nil || n < 0 || n >= len(list) {
 		return nil, 0, false
 	}
+	spec.ID = list[n].ID // the form carries no id: an edit keeps the rule's own, a new rule stays empty
 	list[n] = spec
 	return list, n, true
 }

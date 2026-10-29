@@ -355,3 +355,32 @@ func TestImportLegacyPersistsPositionIDs(t *testing.T) {
 		t.Fatalf("%s", cur.Rules)
 	}
 }
+
+// Why: a new rule (no id) next to an explicit "r1" must not trip the duplicate
+// check with the position id ParseRules would give it; validate fills ids first.
+func TestSaveNewRuleBesideExplicitR1Succeeds(t *testing.T) {
+	r, _, _ := newRules("", nil)
+	specs := []RuleSpec{{Command: "SaveData", Want: "0"}, {ID: "r1", Command: "Timezone", Want: "99"}}
+	if _, err := r.Save(context.Background(), "a", "", specs, nil); err != nil {
+		t.Fatal(err)
+	}
+	st, _ := r.State(context.Background())
+	if st.Specs[1].ID != "r1" || st.Specs[0].ID == "" || st.Specs[0].ID == "r1" {
+		t.Fatalf("%+v", st.Specs)
+	}
+}
+
+// Why: a POLICY_RULES file mixing an id-less rule with an explicit "r1" must
+// import; the id-less rule at position 0 may not take the id r1 (decodeSpecs
+// falls back to a random id when the position id is taken).
+func TestImportLegacyWithIDClashingPositionID(t *testing.T) {
+	r, st, _ := newRules("", nil)
+	raw := []byte(`[{"command":"SaveData","want":"0"},{"id":"r1","command":"Timezone","want":"99"}]`)
+	if _, err := r.ImportLegacy(context.Background(), "env", raw, nil); err != nil {
+		t.Fatal(err)
+	}
+	cur, _ := st.CurrentPolicyRules(context.Background())
+	if strings.Count(cur.Rules, `"id":"r1"`) != 1 {
+		t.Fatalf("exactly one rule may hold r1: %s", cur.Rules)
+	}
+}

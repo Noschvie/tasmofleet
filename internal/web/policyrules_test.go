@@ -566,3 +566,20 @@ func TestPolicyRuleSetOptionParameterRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+// Why: deep links must survive the first edit after the upgrade. The editor form
+// carries no id, so saving rule 2 of a pre-0.19 version must keep r2 (and r1).
+func TestPolicyRulesEditAfterUpgradeKeepsThePositionIDs(t *testing.T) {
+	e, mem, _ := rulesEnv(t, "")
+	mem.vs = append(mem.vs, store.PolicyRuleVersion{ID: 1, Actor: "old",
+		Rules: `[{"name":"A","command":"SaveData","want":"0"},{"name":"B","command":"Timezone","want":"99"}]`})
+	saveRule(t, e, url.Values{"idx": {"1"}, "version": {"1"}, "name": {"B"}, "command": {"Timezone"}, "want": {"+01:00"}, "family": {}, "tag": {}, "tags_extra": {""}, "except": {}, "note": {""}})
+	if len(mem.vs) != 2 {
+		t.Fatalf("versions = %d", len(mem.vs))
+	}
+	for _, w := range []string{`"id":"r1"`, `"id":"r2"`, `"want":"+01:00"`} {
+		if !strings.Contains(mem.vs[1].Rules, w) {
+			t.Errorf("saved version lacks %s: %s", w, mem.vs[1].Rules)
+		}
+	}
+}

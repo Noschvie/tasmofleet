@@ -1192,8 +1192,9 @@ not a slot. New rules get `r` plus 10 random base32 characters; ids are unique w
 with a duplicate or malformed id is refused). A list without ids (every version stored before 0.19, and
 `POLICY_RULES` files without ids) gets `r1`...`rN` by position (`policy.LegacyID`) when it is read; stored
 rows are never rewritten, the next save persists the ids. Opening and saving such a version unedited is
-no change. Because position ids name slots, the version diff matches rules by id only for real
-(non-position) ids and by name otherwise.
+no change. Ids that were `r1`...`rN` at the upgrade keep that form for good and count as positions in the
+version diff: it matches rules by id only for real (non-position) ids and by name otherwise, so a rename
+of such a rule shows as removed plus added.
 
 ### 14.5 Notifications
 
