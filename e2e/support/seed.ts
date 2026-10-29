@@ -210,9 +210,15 @@ export async function seedDesignV2(page: Page, app: App, env: Devenv, fx: Design
   // "Offline" needs a first contact, so the devices the prototype shows as offline are stopped now.
   const stopped = await page.request.post(env.vars.DEVENV_CONTROL_URL + "/fixture/offline");
   expect(stopped.status()).toBe(204);
+  // Wait on what the server renders, not on a live swap (#69): the Offline update reaches an open
+  // page over SSE only if the page is connected and keeps up, which a slow runner with 60 devices
+  // coming online does not guarantee, and a missed update is never repeated. A fresh page always
+  // shows the tracker's state, so each attempt reloads.
   for (const d of fx.devices.filter((x) => x.status === "offline")) {
-    await expect(page.getByRole("row").filter({ hasText: d.name }).getByText("Offline", { exact: true }).first()).toBeVisible({ timeout: 120_000 });
-    await page.reload();
+    await expect(async () => {
+      await page.reload();
+      await expect(page.getByRole("row").filter({ hasText: d.name }).getByText("Offline", { exact: true }).first()).toBeVisible({ timeout: 15_000 });
+    }).toPass({ timeout: 120_000, intervals: [1_000] });
   }
 
   phase("devices offline");
