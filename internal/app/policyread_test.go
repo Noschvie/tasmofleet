@@ -139,6 +139,9 @@ func TestReadValueRefusesCredentials(t *testing.T) {
 		t.Fatalf("want the credentials refusal, got %v", err)
 	}
 	ev, _ := env.audit.find("policy.copy")
+	if ev.Result != "refused: the value contains credentials; enter it by hand" {
+		t.Errorf("a refused value is audited as refused, got %q", ev.Result)
+	}
 	if strings.Contains(err.Error()+ev.Detail+ev.Result, "hunter2") {
 		t.Error("password leaked")
 	}
@@ -196,5 +199,18 @@ func TestReportFindingsAreTheOutcomes(t *testing.T) {
 	}
 	if bad != len(rep.Findings) || bad != 2 { // device 1 deviates, device 2 has no value
 		t.Errorf("outcomes %d findings %d", bad, len(rep.Findings))
+	}
+}
+
+// Why: asking for a device that does not exist is a caller mistake, not a dead
+// device; the message must say so and nothing is sent or audited.
+func TestReadValueUnknownDevice(t *testing.T) {
+	env := newReadEnv(t, fakeBackupSvc{})
+	_, _, err := env.rep.ReadValue(t.Context(), "alice", 99, "TelePeriod")
+	if !refused(err) || !strings.Contains(err.Error(), "unknown device") {
+		t.Fatalf("got %v", err)
+	}
+	if len(env.dev.Commands()) != 0 {
+		t.Error("device contacted")
 	}
 }

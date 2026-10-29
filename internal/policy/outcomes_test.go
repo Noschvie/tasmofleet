@@ -209,3 +209,21 @@ func TestBackupReadableAndReadProblem(t *testing.T) {
 		t.Error("ValidWant")
 	}
 }
+
+// Why: after a reorder the slot of a rule changes but its id does not; the
+// page links and counts by id, so outcomes, shadowing and tallies must carry it.
+func TestOutcomesAndTallyFollowRuleID(t *testing.T) {
+	rules := []Rule{
+		{ID: "rb", Command: "A", Want: "1"},
+		{ID: "ra", Command: "A", Want: "2"},
+	}
+	devs := []model.Device{dev(1, "x", model.ChipESP8266)}
+	os := Outcomes(rules, devs, vals{1: {"A": "1"}})
+	if os[0].RuleID != "rb" || os[1].RuleID != "ra" || os[1].Kind != OutcomeShadowed || os[1].ByID != "rb" {
+		t.Errorf("%+v", os)
+	}
+	tl := Tally(rules, os)
+	if tl[0].RuleID != "rb" || tl[1].RuleID != "ra" || tl[1].Shadowed != 1 || tl[0].Match != 1 {
+		t.Errorf("%+v", tl)
+	}
+}

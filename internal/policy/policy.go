@@ -89,11 +89,15 @@ type Outcome struct {
 	DeviceID model.DeviceID
 	// RuleIndex is the position of the rule in the list given to Outcomes.
 	RuleIndex int
-	Kind      OutcomeKind
+	// RuleID is the rule's stable id (Rule.ID) so counts follow the rule, not its slot.
+	RuleID string
+	Kind   OutcomeKind
 	// Have is the value found; set for Match and Deviate, empty otherwise.
 	Have string
 	// ByIndex is the rule that is evaluated instead, for OutcomeShadowed only.
 	ByIndex int
+	// ByID is the id of that rule.
+	ByID string
 }
 
 // Outcomes evaluates every enabled rule against every device it is in scope
@@ -115,13 +119,13 @@ func Outcomes(rules []Rule, devices []model.Device, values map[model.DeviceID]ma
 				continue
 			}
 			key := strings.ToLower(r.Command)
-			o := Outcome{DeviceID: d.ID, RuleIndex: i}
+			o := Outcome{DeviceID: d.ID, RuleIndex: i, RuleID: r.ID}
 			by, taken := claimed[key]
 			switch {
 			case excepted(r, d):
 				o.Kind = OutcomeExcepted
 			case taken:
-				o.Kind, o.ByIndex = OutcomeShadowed, by
+				o.Kind, o.ByIndex, o.ByID = OutcomeShadowed, by, rules[by].ID
 			default:
 				claimed[key] = i
 				v, ok := have[key]
@@ -161,6 +165,8 @@ func Check(rules []Rule, devices []model.Device, values map[model.DeviceID]map[s
 
 // RuleTally counts the outcomes of one rule.
 type RuleTally struct {
+	// RuleID is the rule's id, so a tally is read by id, not by position.
+	RuleID                  string
 	Match, Deviate, Unknown int
 	// Excepted devices are exempt; Shadowed ones are judged by a higher rule.
 	// Neither counts as applying.
@@ -174,6 +180,9 @@ func (t RuleTally) Applies() int { return t.Match + t.Deviate + t.Unknown }
 // no outcomes and reads all zero.
 func Tally(rules []Rule, outcomes []Outcome) []RuleTally {
 	out := make([]RuleTally, len(rules))
+	for i, r := range rules {
+		out[i].RuleID = r.ID
+	}
 	for _, o := range outcomes {
 		t := &out[o.RuleIndex]
 		switch o.Kind {

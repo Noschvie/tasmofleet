@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -254,6 +255,9 @@ func (p *policyReporter) ReadValue(ctx context.Context, actor string, id model.D
 	if !settings.Queryable(command) {
 		return "", web.ValueSource{}, &web.ValueRefusedError{Reason: "this command cannot be read without side effects"}
 	}
+	if devs, err := p.devices.ListDevices(ctx); err == nil && !slices.ContainsFunc(devs, func(d model.Device) bool { return d.ID == id }) {
+		return "", web.ValueSource{}, &web.ValueRefusedError{Reason: "unknown device"}
+	}
 	cctx, cancel := context.WithTimeout(ctx, liveTimeout)
 	defer cancel()
 	got, readErr := p.reader.ReadKeys(cctx, id, []string{command})
@@ -264,31 +268,33 @@ func (p *policyReporter) ReadValue(ctx context.Context, actor string, id model.D
 			src = web.ValueSource{Kind: "backup", At: at}
 		}
 	}
-	p.auditCopy(ctx, actor, id, command, ok)
 	if !ok {
+		p.auditCopy(ctx, actor, id, command, "no value")
 		if readErr != nil {
 			return "", web.ValueSource{}, fmt.Errorf("the device did not answer: %w", readErr)
 		}
 		return "", web.ValueSource{}, errors.New("the device did not report this setting")
 	}
+	reason := ""
 	switch {
 	case strings.Contains(value, "***"): // the redaction marker of settings.RedactURLCredentials
-		return "", web.ValueSource{}, &web.ValueRefusedError{Reason: "the value contains credentials; enter it by hand"}
+		reason = "the value contains credentials; enter it by hand"
 	case !policy.ValidWant(value), validateWant(command, value) != nil:
-		return "", web.ValueSource{}, &web.ValueRefusedError{Reason: "this value cannot be an expected value"}
+		reason = "this value cannot be an expected value"
 	}
+	if reason != "" {
+		p.auditCopy(ctx, actor, id, command, "refused: "+reason)
+		return "", web.ValueSource{}, &web.ValueRefusedError{Reason: reason}
+	}
+	p.auditCopy(ctx, actor, id, command, "ok")
 	return value, src, nil
 }
 
-func (p *policyReporter) auditCopy(ctx context.Context, actor string, id model.DeviceID, command string, ok bool) {
+func (p *policyReporter) auditCopy(ctx context.Context, actor string, id model.DeviceID, command, result string) {
 	if p.audit == nil {
 		return
 	}
 	detail, _ := json.Marshal(map[string]any{"device": int64(id), "command": command}) // a plain map always encodes
-	result := "ok"
-	if !ok {
-		result = "no value"
-	}
 	p.audit.Record(ctx, model.AuditEvent{Actor: actor, Action: "policy.copy", Target: "device:" + strconv.FormatInt(int64(id), 10), Detail: string(detail), Result: result})
 }
 
