@@ -19,7 +19,7 @@ func TestSettingsExportImportRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	rules := newRulesService(a, nil, nil)
-	if _, err := rules.Save(ctx, "t", "", []sysconfig.RuleSpec{{Command: "SaveData", Want: "0", Name: "Flash"}}, nil); err != nil {
+	if _, err := rules.Save(ctx, "t", "", sysconfig.AnyVersion, []sysconfig.RuleSpec{{Command: "SaveData", Want: "0", Name: "Flash"}}, nil); err != nil {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer

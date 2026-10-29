@@ -117,7 +117,7 @@ func TestRulesAreVersionedWithDiffAndRevert(t *testing.T) {
 	var live []policy.Rule
 	r, st, aud := newRules("", func(rs []policy.Rule) { live = rs })
 	ctx := context.Background()
-	v1, err := r.Save(ctx, "alice", "first", []RuleSpec{flash}, nil)
+	v1, err := r.Save(ctx, "alice", "first", AnyVersion, []RuleSpec{flash}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,11 +126,11 @@ func TestRulesAreVersionedWithDiffAndRevert(t *testing.T) {
 	}
 	edited := flash
 	edited.Want = "1"
-	v2, err := r.Save(ctx, "bob", "", []RuleSpec{edited, {Command: "Timezone", Want: "99"}}, nil)
+	v2, err := r.Save(ctx, "bob", "", AnyVersion, []RuleSpec{edited, {Command: "Timezone", Want: "99"}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.Save(ctx, "bob", "", []RuleSpec{edited, {Command: "Timezone", Want: "99"}}, nil); !errors.Is(err, ErrNoChange) {
+	if _, err := r.Save(ctx, "bob", "", AnyVersion, []RuleSpec{edited, {Command: "Timezone", Want: "99"}}, nil); !errors.Is(err, ErrNoChange) {
 		t.Fatalf("an identical save must not create a version: %v", err)
 	}
 	d, err := r.VersionDiff(ctx, v1, v2)
@@ -157,7 +157,7 @@ func TestRulesAreVersionedWithDiffAndRevert(t *testing.T) {
 func TestRulesExportImportRoundTrip(t *testing.T) {
 	r, _, _ := newRules("", nil)
 	ctx := context.Background()
-	if _, err := r.Save(ctx, "a", "", []RuleSpec{flash, {Command: "SetOption0", Want: "1", Except: []string{"lamp"}}}, nil); err != nil {
+	if _, err := r.Save(ctx, "a", "", AnyVersion, []RuleSpec{flash, {Command: "SetOption0", Want: "1", Except: []string{"lamp"}}}, nil); err != nil {
 		t.Fatal(err)
 	}
 	data, err := r.Export(ctx)
@@ -237,7 +237,7 @@ func TestLegacyVersionGetsPositionIDsAndASaveKeepsThem(t *testing.T) {
 	}
 	edited := slices.Clone(state.Specs)
 	edited[1].Want = "98"
-	if _, err := r.Save(ctx, "alice", "", edited, nil); err != nil {
+	if _, err := r.Save(ctx, "alice", "", AnyVersion, edited, nil); err != nil {
 		t.Fatal(err)
 	}
 	cur, _ := st.CurrentPolicyRules(ctx)
@@ -256,14 +256,14 @@ func TestSavingALegacyVersionUneditedIsNoChange(t *testing.T) {
 	ctx := context.Background()
 	legacyVersion(st, legacyTwo)
 	state, _ := r.State(ctx)
-	if _, err := r.Save(ctx, "a", "", state.Specs, nil); !errors.Is(err, ErrNoChange) {
+	if _, err := r.Save(ctx, "a", "", AnyVersion, state.Specs, nil); !errors.Is(err, ErrNoChange) {
 		t.Fatalf("with ids: %v", err)
 	}
 	bare := slices.Clone(state.Specs)
 	for i := range bare {
 		bare[i].ID = ""
 	}
-	if _, err := r.Save(ctx, "a", "", bare, nil); !errors.Is(err, ErrNoChange) {
+	if _, err := r.Save(ctx, "a", "", AnyVersion, bare, nil); !errors.Is(err, ErrNoChange) {
 		t.Fatalf("without ids: %v", err)
 	}
 }
@@ -272,7 +272,7 @@ func TestSavingALegacyVersionUneditedIsNoChange(t *testing.T) {
 func TestReorderKeepsIDsAndDuplicateGetsAFreshOne(t *testing.T) {
 	r, _, _ := newRules("", nil)
 	ctx := context.Background()
-	v, err := r.Save(ctx, "a", "", []RuleSpec{flash, {Command: "Timezone", Want: "99"}}, nil)
+	v, err := r.Save(ctx, "a", "", AnyVersion, []RuleSpec{flash, {Command: "Timezone", Want: "99"}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -328,7 +328,7 @@ func TestImportRefusesDuplicateAndMalformedIDs(t *testing.T) {
 func TestExportIncludesIDsAndRoundTripKeepsThem(t *testing.T) {
 	r, _, _ := newRules("", nil)
 	ctx := context.Background()
-	if _, err := r.Save(ctx, "a", "", []RuleSpec{flash, {Command: "Timezone", Want: "99"}}, nil); err != nil {
+	if _, err := r.Save(ctx, "a", "", AnyVersion, []RuleSpec{flash, {Command: "Timezone", Want: "99"}}, nil); err != nil {
 		t.Fatal(err)
 	}
 	before, _ := r.State(ctx)
@@ -377,7 +377,7 @@ func TestImportLegacyPersistsPositionIDs(t *testing.T) {
 func TestSaveNewRuleBesideExplicitR1Succeeds(t *testing.T) {
 	r, _, _ := newRules("", nil)
 	specs := []RuleSpec{{Command: "SaveData", Want: "0"}, {ID: "r1", Command: "Timezone", Want: "99"}}
-	if _, err := r.Save(context.Background(), "a", "", specs, nil); err != nil {
+	if _, err := r.Save(context.Background(), "a", "", AnyVersion, specs, nil); err != nil {
 		t.Fatal(err)
 	}
 	st, _ := r.State(context.Background())
@@ -424,5 +424,47 @@ func TestValidRulesDropsOnlyTheBadRule(t *testing.T) {
 	}
 	if _, _, bad := r.ValidRules([]RuleSpec{flash}); len(bad) != 0 {
 		t.Fatalf("a valid list has nothing bad: %+v", bad)
+	}
+}
+
+// Why: two people editing the same version must not both land (#222): the second save is
+// refused with ErrStale and the first one's rules stay, instead of being silently overwritten.
+func TestSaveRefusesAStaleBase(t *testing.T) {
+	r, st, _ := newRules("", nil)
+	ctx := context.Background()
+	base, err := r.Save(ctx, "a", "", 0, []RuleSpec{flash}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mine := flash
+	mine.Want = "1"
+	theirs := flash
+	theirs.Want = "2"
+	if _, err := r.Save(ctx, "alice", "", base, []RuleSpec{mine}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Save(ctx, "bob", "", base, []RuleSpec{theirs}, nil); !errors.Is(err, ErrStale) {
+		t.Fatalf("second save on the same base: %v, want ErrStale", err)
+	}
+	if len(st.vs) != 2 || !strings.Contains(st.vs[1].Rules, `"1"`) {
+		t.Fatalf("alice's version must be the newest and unchanged: %d versions", len(st.vs))
+	}
+	// A save from an empty history is based on version 0.
+	r2, _, _ := newRules("", nil)
+	if _, err := r2.Save(ctx, "a", "", 5, []RuleSpec{flash}, nil); !errors.Is(err, ErrStale) {
+		t.Fatalf("wrong base on empty history: %v", err)
+	}
+}
+
+// Why: saving the shown version unchanged is still "nothing changed", not a conflict.
+func TestSaveWithCurrentBaseAndNoChangeIsErrNoChange(t *testing.T) {
+	r, _, _ := newRules("", nil)
+	ctx := context.Background()
+	base, err := r.Save(ctx, "a", "", 0, []RuleSpec{flash}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Save(ctx, "a", "", base, []RuleSpec{flash}, nil); !errors.Is(err, ErrNoChange) {
+		t.Fatalf("unchanged save: %v, want ErrNoChange", err)
 	}
 }

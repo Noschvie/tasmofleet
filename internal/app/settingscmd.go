@@ -70,7 +70,7 @@ func ImportSettings(ctx context.Context, svc *Services, r io.Reader, out io.Writ
 		_, _ = fmt.Fprintf(out, "%s: %s -> %s\n", c.Key, c.Old, c.New)
 	}
 	if specs != nil {
-		id, err := rules.Save(ctx, "cli", "imported from settings file", specs, svc.Audit)
+		id, err := rules.Save(ctx, "cli", "imported from settings file", sysconfig.AnyVersion, specs, svc.Audit)
 		switch {
 		case errors.Is(err, sysconfig.ErrNoChange):
 			_, _ = fmt.Fprintln(out, "policy rules: unchanged")

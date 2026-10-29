@@ -356,16 +356,22 @@ func (r *Rules) Preview(ctx context.Context, specs []RuleSpec) (PreviewResult, e
 	return r.o.Preview(ctx, rules)
 }
 
-// Save stores specs as a new version.
-func (r *Rules) Save(ctx context.Context, actor, note string, specs []RuleSpec, rec audit.Recorder) (int64, error) {
-	return r.save(ctx, actor, note, specs, 0, rec)
+// AnyVersion as the base of Save means "replace whatever is newest": the caller did not edit a
+// shown version (the CLI and the import, which replace the whole list).
+const AnyVersion int64 = -1
+
+// Save stores specs as a new version, provided the newest version is still base (the version the
+// person edited; 0 when nothing was stored yet), else ErrStale. The check and the store happen
+// under one lock, so a change that lands in between cannot be overwritten.
+func (r *Rules) Save(ctx context.Context, actor, note string, base int64, specs []RuleSpec, rec audit.Recorder) (int64, error) {
+	return r.saveChecked(ctx, actor, note, base, specs, 0, true, rec)
 }
 
 func (r *Rules) save(ctx context.Context, actor, note string, specs []RuleSpec, revertOf int64, rec audit.Recorder) (int64, error) {
-	return r.saveChecked(ctx, actor, note, specs, revertOf, true, rec)
+	return r.saveChecked(ctx, actor, note, AnyVersion, specs, revertOf, true, rec)
 }
 
-func (r *Rules) saveChecked(ctx context.Context, actor, note string, specs []RuleSpec, revertOf int64, checkWant bool, rec audit.Recorder) (int64, error) {
+func (r *Rules) saveChecked(ctx context.Context, actor, note string, base int64, specs []RuleSpec, revertOf int64, checkWant bool, rec audit.Recorder) (int64, error) {
 	if err := checkNote(note); err != nil {
 		return 0, err
 	}
@@ -377,6 +383,9 @@ func (r *Rules) saveChecked(ctx context.Context, actor, note string, specs []Rul
 	cur, err := r.current(ctx)
 	if err != nil {
 		return 0, err
+	}
+	if base != AnyVersion && cur.ID != base {
+		return 0, ErrStale
 	}
 	action := "policy.rules.save"
 	if revertOf != 0 {
@@ -784,5 +793,5 @@ func (r *Rules) ImportLegacy(ctx context.Context, actor string, raw []byte, rec 
 	if has, err := r.HasVersions(ctx); err != nil || has {
 		return 0, errors.Join(err, ErrNoChange)
 	}
-	return r.saveChecked(ctx, actor, importNote, specs, 0, false, rec)
+	return r.saveChecked(ctx, actor, importNote, AnyVersion, specs, 0, false, rec)
 }

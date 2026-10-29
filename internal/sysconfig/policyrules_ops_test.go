@@ -11,7 +11,7 @@ import (
 
 func seedRules(t *testing.T, r *Rules, specs ...RuleSpec) int64 {
 	t.Helper()
-	id, err := r.Save(context.Background(), "admin", "", specs, nil)
+	id, err := r.Save(context.Background(), "admin", "", AnyVersion, specs, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

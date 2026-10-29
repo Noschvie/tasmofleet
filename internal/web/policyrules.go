@@ -32,7 +32,7 @@ type PolicyRulesService interface {
 	// ValidRules is Validate that drops each failing rule (named in bad by its position) and
 	// keeps the rest, so one broken stored rule does not hide the others.
 	ValidRules(specs []sysconfig.RuleSpec) (rules []policy.Rule, kept []sysconfig.RuleSpec, bad []*sysconfig.RuleError)
-	Save(ctx context.Context, actor, note string, specs []sysconfig.RuleSpec, rec audit.Recorder) (int64, error)
+	Save(ctx context.Context, actor, note string, base int64, specs []sysconfig.RuleSpec, rec audit.Recorder) (int64, error)
 	Revert(ctx context.Context, actor string, id int64, rec audit.Recorder) (int64, error)
 	Export(ctx context.Context) ([]byte, error)
 	ParseImport(data []byte) ([]sysconfig.RuleSpec, error)
@@ -469,7 +469,7 @@ func (h *handler) rulesSave(w http.ResponseWriter, r *http.Request) {
 	if note == "" && d.ID == "new" {
 		note = h.originNote(r, d.Origin)
 	}
-	_, err = h.d.PolicyRules.Save(r.Context(), actor(r), note, list, h.d.Recorder)
+	_, err = h.d.PolicyRules.Save(r.Context(), actor(r), note, d.Version, list, h.d.Recorder)
 	if err == nil {
 		h.ruleSaved(w, r, d.ID, pos)
 		return
@@ -482,6 +482,8 @@ func (h *handler) rulesSave(w http.ResponseWriter, r *http.Request) {
 		h.rulesInvalid(w, r, d, field, msg, http.StatusUnprocessableEntity)
 	case errors.As(err, &re):
 		h.draftRender(w, r, http.StatusUnprocessableEntity, d, "", "", "Nothing was saved. "+re.Error())
+	case errors.Is(err, sysconfig.ErrStale):
+		h.draftStale(w, r, d)
 	case errors.Is(err, sysconfig.ErrNoChange):
 		h.draftRender(w, r, http.StatusOK, d, "", "", "Nothing changed: the rules are the same as the saved version.")
 	default:
@@ -605,7 +607,11 @@ func (h *handler) rulesDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	list := slices.Delete(slices.Clone(st.Specs), n, n+1)
-	if _, err := h.d.PolicyRules.Save(r.Context(), actor(r), "", list, h.d.Recorder); err != nil {
+	if _, err := h.d.PolicyRules.Save(r.Context(), actor(r), "", ver, list, h.d.Recorder); err != nil {
+		if errors.Is(err, sysconfig.ErrStale) {
+			h.rulesStale(w, r)
+			return
+		}
 		h.rulesFail(w, r, err)
 		return
 	}
@@ -736,7 +742,7 @@ func (h *handler) rulesImport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if f.Get("confirm") == "1" {
-		_, err := h.d.PolicyRules.Save(r.Context(), actor(r), "import", specs, h.d.Recorder)
+		_, err := h.d.PolicyRules.Save(r.Context(), actor(r), "import", sysconfig.AnyVersion, specs, h.d.Recorder)
 		var re *sysconfig.RuleError
 		switch {
 		case err == nil:

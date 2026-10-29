@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -551,5 +552,61 @@ func TestPolicyRulesEditAfterUpgradeKeepsThePositionIDs(t *testing.T) {
 		if !strings.Contains(mem.vs[1].Rules, w) {
 			t.Errorf("saved version lacks %s: %s", w, mem.vs[1].Rules)
 		}
+	}
+}
+
+// raceRules lets someone else save right after the handler read the rules, the window between
+// the handler's version check and Save.
+type raceRules struct {
+	PolicyRulesService
+	inject func()
+}
+
+func (r *raceRules) State(ctx context.Context) (sysconfig.RulesState, error) {
+	st, err := r.PolicyRulesService.State(ctx)
+	if r.inject != nil {
+		f := r.inject
+		r.inject = nil
+		f()
+	}
+	return st, err
+}
+
+// Why: the handler's own version check is not enough (#222): a change that lands between that
+// check and Save must make the save and the delete answer 409 and leave the other person's
+// change in place, not overwrite it.
+func TestPolicyRulesSaveAndDeleteDoNotOverwriteAConcurrentChange(t *testing.T) {
+	var race *raceRules
+	e, mem, _ := rulesEnvDeps(t, func(d *Deps) {
+		race = &raceRules{PolicyRulesService: d.PolicyRules}
+		d.PolicyRules = race
+	})
+	saveRule(t, e, nil)
+	id := ruleIDs(t, mem)[0]
+	// edit changes the first rule's value as someone else would (its id stays).
+	edit := func(base int64, want string) func() {
+		return func() {
+			st, err := race.State(context.Background())
+			if err != nil || len(st.Specs) == 0 {
+				t.Fatalf("state: %v", err)
+			}
+			specs := slices.Clone(st.Specs)
+			specs[0].Want = want
+			if _, err := race.Save(context.Background(), "other", "", base, specs, nil); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	race.inject = edit(1, "7")
+	r, body := e.do(t, "POST", "/policy/rules/save", "admin", ruleForm(url.Values{"id": {id}, "version": {"1"}, "want": {"1"}}))
+	if r.StatusCode != 409 || !strings.Contains(body, "changed by someone else") || len(mem.vs) != 2 {
+		t.Fatalf("raced save: %d versions=%d", r.StatusCode, len(mem.vs))
+	}
+	if !strings.Contains(mem.vs[1].Rules, `"7"`) {
+		t.Fatalf("the other change was lost: %s", mem.vs[1].Rules)
+	}
+	race.inject = edit(2, "8")
+	if r, _ := e.do(t, "POST", "/policy/rules/delete", "admin", url.Values{"csrf": {"tok"}, "id": {id}, "version": {"2"}}); r.StatusCode != 409 || len(mem.vs) != 3 {
+		t.Fatalf("raced delete: %d versions=%d", r.StatusCode, len(mem.vs))
 	}
 }
