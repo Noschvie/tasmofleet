@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
@@ -22,8 +23,8 @@ import (
 // the device reports (docs/research/tasmota-policy-templates.md).
 var templateWant = map[string]string{
 	"ntp":            "ntp.lab.home",
-	"latitude":       "52.5200",
-	"longitude":      "13.4050",
+	"latitude":       "52.52",
+	"longitude":      "13.404954",
 	"otaurl-esp8266": "http://ota.tasmota.com/tasmota/release/tasmota.bin.gz",
 	"otaurl-esp32":   "http://ota.tasmota.com/tasmota32/release/tasmota32.bin",
 }
@@ -76,7 +77,7 @@ func TestTemplatesReadableAndComparable(t *testing.T) {
 			if err != nil {
 				t.Fatalf("the rule parser refuses the template: %v", err)
 			}
-			text, err := policy.CommandText(spec.Command, spec.Want)
+			text, err := policy.CommandText(spec.Command, rules[0].Want) // what a finding carries: the canonical want
 			if err != nil {
 				t.Fatalf("Make compliant cannot set it: %v", err)
 			}
@@ -183,5 +184,77 @@ func TestCoordinateRulesSurviveTheFloat32RoundTrip(t *testing.T) {
 				t.Fatalf("%s %s reads back as %q (%v)", cmd, want, have[cmd], err)
 			}
 		}
+	}
+}
+
+// Why: admins type coordinates however they like (52.52, 52.520008). The device stores float32
+// noise, so Make compliant must converge: the rule compares and sends the four-decimal form,
+// whatever was typed, and never resends forever. A comma decimal would be sent as a different
+// number, so it is refused.
+func TestCoordinateWantsConvergeWhateverTheAdminTyped(t *testing.T) {
+	fleet, err := simulator.NewFleet(simulator.FleetOptions{FixturesDir: "../../testdata/fixtures"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = fleet.Close() })
+	dev, err := fleet.Add(t.Context(), simulator.DeviceSpec{Name: "geo2", Profile: simulator.ProfileESP8266_4M})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cl := tasmota.NewHTTPClient(tasmota.Options{AllowedNetworks: loopback()})
+	host, portS, _ := net.SplitHostPort(dev.Addr())
+	port, _ := strconv.Atoi(portS)
+	tgt := tasmota.TargetFor(model.Device{Address: host, Port: port})
+	rd := settings.New(settings.Options{Devices: oneDevice{host, port}, Client: cl})
+	for _, c := range [][2]string{{"Latitude", "52.52"}, {"Latitude", "52.520008"}, {"Longitude", "13.404954"}, {"Longitude", "-0.1278"}, {"Latitude", " 40.12 "}} {
+		data, _ := json.Marshal([]sysconfig.RuleSpec{{Command: c[0], Want: c[1]}})
+		rules, err := policy.ParseRules(data, settings.Queryable)
+		if err != nil {
+			t.Fatalf("%s %q: %v", c[0], c[1], err)
+		}
+		text, err := policy.CommandText(c[0], rules[0].Want)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := cl.Command(t.Context(), tgt, text); err != nil {
+			t.Fatal(err)
+		}
+		have, err := rd.ReadKeys(t.Context(), 1, []string{c[0]})
+		if err != nil {
+			t.Fatal(err)
+		}
+		out := policy.Outcomes(rules, []model.Device{{ID: 1}}, map[model.DeviceID]map[string]string{1: have})
+		if len(out) != 1 || out[0].Kind != policy.OutcomeMatch {
+			t.Errorf("%s typed as %q: sent %q, read %q, outcome %+v", c[0], c[1], text, have[c[0]], out)
+		}
+	}
+	for _, bad := range []string{"52,52", "abc", "91", "1e1", ""} {
+		data, _ := json.Marshal([]sysconfig.RuleSpec{{Command: "Latitude", Want: bad}})
+		if _, err := policy.ParseRules(data, settings.Queryable); err == nil {
+			t.Errorf("Latitude %q must be refused", bad)
+		}
+	}
+}
+
+// Why: the old empty state saves a template with one click, so a template whose value only the
+// admin knows (NTP server, a place, a URL) would fail validation there. It is offered on the New
+// rule page only, where the card names the command without a dangling "=".
+func TestBlankWantTemplatesAreNotOfferedWhereTheyWouldBeSavedAtOnce(t *testing.T) {
+	e, _, _ := rulesEnv(t, "")
+	r, body := e.do(t, "GET", "/policy", "admin", nil)
+	if r.StatusCode != 200 || !strings.Contains(body, "TelePeriod") {
+		t.Fatalf("empty state: %d, templates missing", r.StatusCode)
+	}
+	for _, cmd := range []string{"NtpServer1", "Latitude", "Longitude", "OtaUrl"} {
+		if strings.Contains(body, cmd) {
+			t.Errorf("the empty state offers %s, which has no value yet", cmd)
+		}
+	}
+	_, page := e.do(t, "GET", "/policy/rules/new", "admin", nil)
+	if !strings.Contains(page, "NtpServer1") {
+		t.Fatal("the New rule page lists the NTP server template")
+	}
+	if strings.Contains(page, "NtpServer1 =") || strings.Contains(page, "OtaUrl =") {
+		t.Error("a template without a value shows the command with a dangling =")
 	}
 }

@@ -224,3 +224,21 @@ func TestCoordinateRepliesAreComparableAtFourDecimals(t *testing.T) {
 		t.Fatalf("read %v, %v; want 40.1200 and -13.4050", got, err)
 	}
 }
+
+// Why: a rule's coordinate is compared with a reading that has four decimals, so the rule must
+// be reduced to the same form; any other command's value must stay exactly as typed.
+func TestCanonicalWant(t *testing.T) {
+	for _, c := range [][3]string{
+		{"Latitude", "52.52", "52.5200"}, {"latitude", "52.520008", "52.5200"}, {"Longitude", " -13.404954 ", "-13.4050"},
+		{"Longitude", "180", "180.0000"}, {"Sleep", "50", "50"}, {"OtaUrl", "http://a/b", "http://a/b"},
+	} {
+		if got, err := CanonicalWant(c[0], c[1]); err != nil || got != c[2] {
+			t.Errorf("CanonicalWant(%q, %q) = %q, %v; want %q", c[0], c[1], got, err, c[2])
+		}
+	}
+	for _, c := range [][2]string{{"Latitude", "52,52"}, {"Latitude", "90.1"}, {"Longitude", "-181"}, {"Latitude", "x"}, {"Latitude", "1e1"}, {"Latitude", ""}} {
+		if got, err := CanonicalWant(c[0], c[1]); err == nil {
+			t.Errorf("CanonicalWant(%q, %q) = %q, want an error", c[0], c[1], got)
+		}
+	}
+}

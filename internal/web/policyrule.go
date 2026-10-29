@@ -636,7 +636,7 @@ func (h *handler) ruleNewRender(w http.ResponseWriter, r *http.Request, status i
 	needle := strings.ToLower(o.Q)
 	byGroup := map[string][]tplCard{}
 	for _, t := range policyTemplates(h.brokerHost()) {
-		kv := t.Spec.Command + " = " + t.Spec.Want
+		kv := t.kv()
 		if needle != "" && !strings.Contains(strings.ToLower(t.Title+" "+kv+" "+t.Hint), needle) {
 			continue
 		}

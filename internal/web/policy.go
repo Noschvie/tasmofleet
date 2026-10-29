@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -346,7 +347,9 @@ func (h *handler) policyData(r *http.Request, v view, o policyOpts) (policyView,
 		}
 	}
 	if !p.HasRules && editable {
-		p.Templates = policyTemplates(h.brokerHost())
+		// The empty state saves a template at once, so it offers only those that are complete;
+		// a blank want (a server, a place, a URL) is typed on the draft page of New rule.
+		p.Templates = slices.DeleteFunc(policyTemplates(h.brokerHost()), func(t ruleTemplate) bool { return t.Spec.Want == "" })
 	}
 	if p.CanRules {
 		p.History, p.Diff, p.DiffFrom, p.SelAt = h.historyOf(ctx, st, o.version)

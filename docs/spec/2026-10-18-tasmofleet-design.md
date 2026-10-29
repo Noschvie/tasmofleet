@@ -1185,6 +1185,11 @@ whose set form needs a console confirmation. The checks are `cmdpolicy.PolicyRea
 generic rule has no value validator, is not read from backups and never restarts the device.
 `Sleep`, `SerialLog` and `SysLog` reply nested (`{"Sleep":{"50":{"Active":"100"}}}`); the rule
 compares the configured value (the object key), not the active one.
+`Latitude` and `Longitude` are stored by the device as float32 micro-degrees and read back with float32
+noise, so they are compared at four decimals (11 m): `settings.CanonicalWant` reduces a rule's `want`
+to that form in `policy.ParseRules` (a non-number or an out-of-range value is an invalid want), and
+`policy.Rule.Want` carries the canonical form, which is what the check compares and Make compliant sends.
+The stored `RuleSpec.Want` keeps what the admin typed. Every other command's `want` is used as typed.
 
 **Rule ids.** Each rule has a stable `id` (`^r[a-z0-9]{1,15}$`, optional in the JSON format: `policy.Rule.ID`,
 `sysconfig.RuleSpec.ID`) that survives edits, reordering and export/import, so a link names a rule and

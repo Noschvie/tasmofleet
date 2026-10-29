@@ -124,6 +124,11 @@ func ParseRules(data []byte, allowed func(command string) bool) ([]Rule, error) 
 		case len(j.Note) > 300:
 			return nil, fmt.Errorf("policy rules: rule at index %d: note too long", i)
 		}
+		w, err := settings.CanonicalWant(j.Command, j.Want)
+		if err != nil {
+			return nil, fmt.Errorf("policy rules: rule at index %d: invalid want: %w", i, err)
+		}
+		r.Want = w // compared and sent in this form; the stored spec keeps what was typed
 		for _, e := range j.Except {
 			if e == "" {
 				return nil, fmt.Errorf("policy rules: rule at index %d: empty exception", i)

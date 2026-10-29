@@ -18,6 +18,14 @@ type ruleTemplate struct {
 	Spec  sysconfig.RuleSpec
 }
 
+// kv is the card's "command = value" line; a template without a value shows the command only.
+func (t ruleTemplate) kv() string {
+	if t.Spec.Want == "" {
+		return t.Spec.Command
+	}
+	return t.Spec.Command + " = " + t.Spec.Want
+}
+
 // templateGroups is the order of the headings on the New rule page; a group without a template
 // is not shown.
 var templateGroups = []string{"Time and location", "Updates", "MQTT and telemetry", "Behaviour"}
@@ -37,11 +45,11 @@ func policyTemplates(brokerHost string) []ruleTemplate {
 		{ID: "ntp", Group: "Time and location", Title: "NTP server", Hint: "Every device takes its time from one server",
 			Text: "Every device takes its time from the same NTP server (first slot).",
 			Spec: sysconfig.RuleSpec{Command: "NtpServer1"}},
-		{ID: "latitude", Group: "Time and location", Title: "Latitude", Hint: "Write it with six decimals, as devices report it",
-			Text: "Every device knows where it is, for sunrise and sunset. Write the value with six decimals, as a device reports it (52.520008).",
+		{ID: "latitude", Group: "Time and location", Title: "Latitude", Hint: "Any decimals; compared to 4 decimals (about 11 m)",
+			Text: "Every device knows where it is, for sunrise and sunset. Any decimals; compared to 4 decimals (about 11 m), e.g. 52.52.",
 			Spec: sysconfig.RuleSpec{Command: "Latitude"}},
-		{ID: "longitude", Group: "Time and location", Title: "Longitude", Hint: "Write it with six decimals, as devices report it",
-			Text: "Every device knows where it is, for sunrise and sunset. Write the value with six decimals, as a device reports it (13.404954).",
+		{ID: "longitude", Group: "Time and location", Title: "Longitude", Hint: "Any decimals; compared to 4 decimals (about 11 m)",
+			Text: "Every device knows where it is, for sunrise and sunset. Any decimals; compared to 4 decimals (about 11 m), e.g. 13.40.",
 			Spec: sysconfig.RuleSpec{Command: "Longitude"}},
 		{ID: "otaurl-esp8266", Group: "Updates", Title: "OTA URL for ESP8266", Hint: "Where ESP8266 devices fetch firmware",
 			Text: "ESP8266 devices fetch firmware from one address.",

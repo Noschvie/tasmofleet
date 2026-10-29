@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -219,17 +220,47 @@ func replyValue(key string, raw json.RawMessage) (string, bool) {
 // (support_command.ino: CmndSleep, CmndSeriallog, CmndSyslog). Every other command is read as is.
 var activeReplyCommands = []string{"Sleep", "SerialLog", "SysLog"}
 
-// coordinateDecimals is how many decimals a Latitude/Longitude reading keeps. Tasmota stores
-// (int)(float32 * 1000000) and answers (float32)n / 1000000 with six decimals
-// (xdrv_09_timers.ino CmndLatitude/CmndLongitude), so a value written as 52.52 reads back as
-// 52.519997 or 52.520004: six decimals can never be compared with what a rule says. The
+// coordinateDecimals is how many decimals a Latitude/Longitude value keeps, in a reading and in
+// a rule. Tasmota stores (int)(float32 * 1000000) and answers (float32)n / 1000000 with six
+// decimals (xdrv_09_timers.ino CmndLatitude/CmndLongitude), so a value written as 52.52 reads
+// back as 52.519997 or 52.520004: six decimals can never be compared with what a rule says. The
 // float32 error stays below 3e-5 degrees, so four decimals (11 m) read back exactly as written.
 const coordinateDecimals = 4
+
+var coordinateRe = regexp.MustCompile(`^[+-]?[0-9]+(\.[0-9]+)?$`)
+
+func isCoordinate(cmd string) (limit float64, ok bool) {
+	switch {
+	case strings.EqualFold(cmd, "Latitude"):
+		return 90, true
+	case strings.EqualFold(cmd, "Longitude"):
+		return 180, true
+	}
+	return 0, false
+}
+
+// CanonicalWant is the form in which a rule's expected value is compared and sent. Only
+// Latitude and Longitude have one: the number with four decimals (see coordinateDecimals), which
+// is also how their readings are rendered. Admins type coordinates however they like; the rule
+// must converge on what the device reports, or Make compliant would resend it forever. Every
+// other command is returned unchanged.
+func CanonicalWant(cmd, want string) (string, error) {
+	limit, ok := isCoordinate(cmd)
+	if !ok {
+		return want, nil
+	}
+	v := strings.TrimSpace(want)
+	f, err := strconv.ParseFloat(v, 64)
+	if !coordinateRe.MatchString(v) || err != nil || math.Abs(f) > limit {
+		return "", fmt.Errorf("a number like 52.52, between -%g and %g", limit, limit)
+	}
+	return strconv.FormatFloat(f, 'f', coordinateDecimals, 64), nil
+}
 
 // replyScalar is scalar plus the two replies that are not a plain comparable scalar:
 // configured/active, and coordinates rounded to what a rule can state.
 func replyScalar(cmd string, val json.RawMessage) (string, bool) {
-	if strings.EqualFold(cmd, "Latitude") || strings.EqualFold(cmd, "Longitude") {
+	if _, coord := isCoordinate(cmd); coord {
 		v, ok := scalar(val)
 		if f, err := strconv.ParseFloat(v, 64); ok && err == nil && !math.IsNaN(f) && !math.IsInf(f, 0) {
 			return strconv.FormatFloat(f, 'f', coordinateDecimals, 64), true

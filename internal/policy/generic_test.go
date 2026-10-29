@@ -168,3 +168,16 @@ func TestParseRulesRefusesBadIDs(t *testing.T) {
 		}
 	}
 }
+
+// Why: a coordinate is judged against a four-decimal reading, so ParseRules reduces the rule's
+// want to that form (Make compliant then sends it too); a want that is not a number is refused
+// instead of being sent as some other number.
+func TestParseRulesCanonicalisesCoordinates(t *testing.T) {
+	rules, err := ParseRules([]byte(`[{"command":"Latitude","want":"52.520008"},{"command":"Sleep","want":"50"}]`), nil)
+	if err != nil || rules[0].Want != "52.5200" || rules[1].Want != "50" {
+		t.Fatalf("rules %+v, %v", rules, err)
+	}
+	if _, err := ParseRules([]byte(`[{"command":"Longitude","want":"13,40"}]`), nil); err == nil {
+		t.Fatal("a comma decimal must be refused")
+	}
+}
