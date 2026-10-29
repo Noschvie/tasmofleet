@@ -422,47 +422,94 @@ func TestDiscoveredTabListsUnidentifiedTopics(t *testing.T) {
 
 // Why (#144): the stream used to replace the whole tab on every progress tick, Stop scan included,
 // so a click on it was lost to the re-render, the bulk bar flickered and ticked rows were cleared.
-// While a scan runs the stream may only replace the progress and the results (event "scan"); the scan
-// bar stays put. Only the end replaces the whole body ("scan-done").
-func TestRunningScanStreamKeepsTheScanBarOutOfTheSwap(t *testing.T) {
+// While a scan runs the progress is swapped on every tick ("scan-progress", nothing to click in it)
+// and the results (chips, bulk bar, table) only when a device was found ("scan"); the scan bar is
+// never swapped. Only the end replaces the whole body ("scan-done").
+func TestRunningScanStreamSwapsResultsOnlyWhenDevicesAreFound(t *testing.T) {
 	e, fd := setupDiscovery(t)
 	fd.mu.Lock()
 	fd.scan.State = discovery.ScanRunning
 	fd.scan.Done = 1
 	fd.mu.Unlock()
+	set := func(f func(s *discovery.ScanStatus)) {
+		fd.mu.Lock()
+		defer fd.mu.Unlock()
+		f(&fd.scan)
+	}
 	go func() {
 		time.Sleep(700 * time.Millisecond)
-		fd.mu.Lock()
-		fd.scan.State = discovery.ScanDone
-		fd.scan.Done = fd.scan.Total
-		fd.mu.Unlock()
+		set(func(s *discovery.ScanStatus) { s.Done = 2 }) // progress only
+		time.Sleep(700 * time.Millisecond)
+		set(func(s *discovery.ScanStatus) { s.Done = 3 }) // progress only
+		time.Sleep(700 * time.Millisecond)
+		set(func(s *discovery.ScanStatus) {
+			s.Done = 4
+			s.Hits = append(s.Hits, discovery.Hit{Address: "10.0.0.60", Port: 80, MAC: "aa:bb:cc:dd:ee:09", Name: "m", Outcome: "new proposal"})
+		})
+		time.Sleep(700 * time.Millisecond)
+		set(func(s *discovery.ScanStatus) { s.State = discovery.ScanDone })
 	}()
 	_, body := e.do(t, "GET", "/discovery/scan/abc123/stream", "admin", nil)
 	running, done, ok := strings.Cut(body, "event: scan-done")
-	if !ok || !strings.HasPrefix(running, "event: scan\n") {
-		t.Fatalf("want a running event then scan-done: %q", body)
+	if !ok {
+		t.Fatalf("want a final scan-done event: %q", body)
+	}
+	if n := strings.Count(running, "event: scan\n"); n != 2 {
+		t.Errorf("results are sent at the start and once for the new device, not on every tick: %d times", n)
+	}
+	if n := strings.Count(running, "event: scan-progress\n"); n != 4 {
+		t.Errorf("progress is sent on every change: %d times", n)
 	}
 	if strings.Contains(running, "Stop scan") || strings.Contains(running, "add-scanbar") {
-		t.Errorf("the running event must not replace the scan bar (Stop scan): %q", running)
+		t.Errorf("a running event must not replace the scan bar (Stop scan): %q", running)
 	}
 	if !strings.Contains(running, "add-progress") || !strings.Contains(running, "data-bulkbar") {
-		t.Errorf("the running event carries the progress and the bulk bar, so found rows can be selected: %q", running)
+		t.Errorf("progress and the bulk bar are streamed, so found rows can be selected: %q", running)
+	}
+	// the progress events hold nothing to click
+	for _, ev := range strings.Split(running, "\n\n") {
+		if strings.HasPrefix(ev, "event: scan-progress") && (strings.Contains(ev, "<button") || strings.Contains(ev, "<input") || strings.Contains(ev, "<a ")) {
+			t.Errorf("a progress event must not hold controls: %q", ev)
+		}
 	}
 	if !strings.Contains(done, "add-scanbar") || strings.Contains(done, "sse-connect") {
 		t.Errorf("the final event is the whole body without stream attributes: %q", done)
 	}
 }
 
-// Why (#144): the page of a running scan puts the swapped part in its own element, apart from the scan bar.
-func TestRunningScanPageSwapsOnlyTheLivePart(t *testing.T) {
+// Why (#144): the page of a running scan puts the swapped parts in their own elements, apart from the scan bar.
+func TestRunningScanPageSwapsOnlyTheLiveParts(t *testing.T) {
 	e, fd := setupDiscovery(t)
 	fd.mu.Lock()
 	fd.scan.State = discovery.ScanRunning
 	fd.mu.Unlock()
 	_, body := e.do(t, "GET", "/discovery/scan/abc123", "admin", nil)
+	prog := strings.Index(body, `id="scan-progress"`)
 	live := strings.Index(body, `id="scan-live"`)
 	stop := strings.Index(body, "Stop scan")
-	if live < 0 || stop < 0 || stop > live || !strings.Contains(body, `sse-swap="scan"`) || !strings.Contains(body, `sse-swap="scan-done"`) {
-		t.Fatalf("the Stop button must sit before, not inside, the swapped #scan-live: live=%d stop=%d", live, stop)
+	if prog < 0 || live < 0 || stop < 0 || stop > prog || stop > live {
+		t.Fatalf("the Stop button must sit before, not inside, the swapped parts: progress=%d live=%d stop=%d", prog, live, stop)
+	}
+	for _, want := range []string{`sse-swap="scan-progress"`, `sse-swap="scan"`, `sse-swap="scan-done"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %s", want)
+		}
+	}
+}
+
+// Why (#144): the chips filter the results while the scan runs; the stream must keep the chosen
+// filter, or its first event resets the table to "All".
+func TestRunningScanStreamKeepsTheChosenFilter(t *testing.T) {
+	e, fd := setupDiscovery(t)
+	fd.mu.Lock()
+	fd.scan.State = discovery.ScanRunning
+	fd.mu.Unlock()
+	_, body := e.do(t, "GET", "/discovery/scan/abc123?f=new", "admin", nil)
+	if !strings.Contains(body, `sse-connect="/tf/discovery/scan/abc123/stream?f=new"`) {
+		t.Error("the stream URL must carry the filter")
+	}
+	_, body = e.do(t, "GET", "/discovery/scan/abc123", "admin", nil)
+	if !strings.Contains(body, `sse-connect="/tf/discovery/scan/abc123/stream"`) {
+		t.Error("no filter, no query")
 	}
 }

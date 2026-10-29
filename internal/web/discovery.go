@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/a-h/templ"
 	"github.com/nofuturekid/tasmofleet/internal/discovery"
 	"github.com/nofuturekid/tasmofleet/internal/httpx"
 	"github.com/nofuturekid/tasmofleet/internal/inventory"
@@ -354,6 +355,7 @@ func (h *handler) discoveryScanStream(w http.ResponseWriter, r *http.Request) {
 	defer poll.Stop()
 	lastCheck := h.d.Clock.Now()
 	lastKey := ""
+	lastHits := -1
 	for {
 		s, ok := h.d.Discovery.Scan(id)
 		if !ok {
@@ -361,19 +363,34 @@ func (h *handler) discoveryScanStream(w http.ResponseWriter, r *http.Request) {
 		}
 		if key := fmt.Sprint(s.State, s.Done, len(s.Hits)); key != lastKey {
 			lastKey = key
-			// while it runs only the progress and the results are replaced, so the scan bar (Stop) and
-			// the reader's click on it survive; the end replaces the whole body (#144)
+			// While it runs, the progress is replaced on every tick and the results (chips, bulk bar,
+			// table) only when a device was found: the scan bar (Stop) is never replaced, and nothing
+			// clickable is swapped away under the reader's mouse (#144). The end replaces the whole body.
 			b := h.scanBodyData(r, s)
-			event, comp := "scan", scanLive(b)
-			if s.State != discovery.ScanRunning {
-				event, comp = "scan-done", scanBody(b)
+			var buf bytes.Buffer
+			send := func(event string, comp templ.Component) error {
+				var frag bytes.Buffer
+				if err := comp.Render(r.Context(), &frag); err != nil {
+					return err
+				}
+				writeSSE(&buf, event, frag.String())
+				return nil
 			}
-			var frag bytes.Buffer
-			if err := comp.Render(r.Context(), &frag); err != nil {
+			var err error
+			if s.State != discovery.ScanRunning {
+				err = send("scan-done", scanBody(b))
+			} else {
+				if len(s.Hits) != lastHits {
+					lastHits = len(s.Hits)
+					err = send("scan", scanLive(b))
+				}
+				if err == nil {
+					err = send("scan-progress", scanProgress(b))
+				}
+			}
+			if err != nil {
 				return
 			}
-			var buf bytes.Buffer
-			writeSSE(&buf, event, frag.String())
 			if _, err := buf.WriteTo(w); err != nil || rc.Flush() != nil {
 				return
 			}

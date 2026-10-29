@@ -263,3 +263,13 @@ func (h *handler) discoveryScanPage(w http.ResponseWriter, r *http.Request) {
 	}
 	h.scanRender(w, r, http.StatusOK, h.scanTabData(r, &s))
 }
+
+// scanStreamURL is the event stream of a running scan. It carries the chosen filter, or the first
+// event would reset the chips to "All".
+func scanStreamURL(b scanBodyView) string {
+	u := b.Base + "/discovery/scan/" + b.ID + "/stream"
+	if b.Filter != "" {
+		u += "?f=" + url.QueryEscape(b.Filter)
+	}
+	return u
+}

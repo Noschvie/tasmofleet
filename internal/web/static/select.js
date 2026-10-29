@@ -357,31 +357,38 @@
     });
   });
   // The network scan streams its results into #scan-live while the reader ticks rows (#144): the
-  // ticked ids are put back after each swap, and htmx:afterSettle recomputes the bulk bar.
+  // ticked ids are put back after each swap, and htmx:afterSettle recomputes the bulk bar. The last
+  // event replaces the whole #scan (outerHTML): its old element is detached after the swap and its
+  // htmx:sseMessage no longer reaches the document, so htmx:afterSwap of the new one restores as well.
   var keptScan = null;
-  document.addEventListener("htmx:sseBeforeMessage", function (e) {
-    var t = e.target;
-    if (!t || t.id !== "scan-live") {
-      return;
-    }
-    keptScan = Array.prototype.map.call(
-      t.querySelectorAll('input[name="id"]:checked'),
-      function (b) {
-        return b.value;
-      },
-    );
-  });
-  document.addEventListener("htmx:sseMessage", function (e) {
-    var t = e.target;
-    if (!t || t.id !== "scan-live" || !keptScan) {
+  function restoreScan() {
+    var live = document.getElementById("scan-live");
+    if (!keptScan || !live) {
       return;
     }
     var ids = keptScan;
     keptScan = null;
-    t.querySelectorAll('input[name="id"]').forEach(function (b) {
+    live.querySelectorAll('input[name="id"]').forEach(function (b) {
       b.checked = ids.indexOf(b.value) >= 0;
     });
+  }
+  document.addEventListener("htmx:sseBeforeMessage", function (e) {
+    var t = e.target;
+    if (!t || (t.id !== "scan-live" && t.id !== "scan")) {
+      return;
+    }
+    var live = document.getElementById("scan-live");
+    keptScan = live
+      ? Array.prototype.map.call(
+          live.querySelectorAll('input[name="id"]:checked'),
+          function (b) {
+            return b.value;
+          },
+        )
+      : null;
   });
+  document.addEventListener("htmx:sseMessage", restoreScan);
+  document.addEventListener("htmx:afterSwap", restoreScan);
   // toggle and close do not bubble: listen in the capture phase; wait a tick for the state to settle
   ["toggle", "close"].forEach(function (n) {
     document.addEventListener(

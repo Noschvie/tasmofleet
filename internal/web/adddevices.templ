@@ -370,7 +370,7 @@ templ scanBody(b scanBodyView) {
 		class="add-scan"
 		if b.Running {
 			hx-ext="sse"
-			sse-connect={ b.Base + "/discovery/scan/" + b.ID + "/stream" }
+			sse-connect={ scanStreamURL(b) }
 			sse-swap="scan-done"
 			hx-swap="outerHTML"
 		}
@@ -406,6 +406,15 @@ templ scanBody(b scanBodyView) {
 			}
 		</form>
 		<div
+			id="scan-progress"
+			if b.Running {
+				sse-swap="scan-progress"
+				hx-swap="innerHTML"
+			}
+		>
+			@scanProgress(b)
+		</div>
+		<div
 			id="scan-live"
 			if b.Running {
 				sse-swap="scan"
@@ -417,8 +426,9 @@ templ scanBody(b scanBodyView) {
 	</div>
 }
 
-// scanLive is what the stream swaps while a scan runs: progress, filter chips, bulk bar and the table.
-templ scanLive(b scanBodyView) {
+// scanProgress is the progress bar of a running scan, or the note of a finished one. The stream swaps
+// it on every tick; it holds nothing to click.
+templ scanProgress(b scanBodyView) {
 	if b.Running {
 		<div class="add-progress" role="status">
 			<div class="add-progress-head">
@@ -434,6 +444,11 @@ templ scanLive(b scanBodyView) {
 			<span class="add-note-text"><b>Scan finished.</b> { b.Summary }</span>
 		</div>
 	}
+}
+
+// scanLive is filter chips, bulk bar and the table. The stream swaps it only when a device was found,
+// so ticks and clicks are not lost to a refresh that changes nothing.
+templ scanLive(b scanBodyView) {
 	if b.HasScan {
 		<form method="post" action={ templ.SafeURL(b.Base + "/discovery/proposals/accept") }>
 			<input type="hidden" name="csrf" value={ b.CSRF }/>
