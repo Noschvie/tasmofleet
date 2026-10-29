@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +16,20 @@ import (
 )
 
 type anyBroker struct{}
+
+// subscribeSpy closes subscribed on the first Subscribe: the point from which the bus
+// hands every message, live or retained, to the health tracker.
+type subscribeSpy struct {
+	mqttbus.Bus
+	subscribed chan struct{}
+	once       sync.Once
+}
+
+func (s *subscribeSpy) Subscribe(kinds []mqttbus.Kind, h func(mqttbus.Message)) func() {
+	unsub := s.Bus.Subscribe(kinds, h)
+	s.once.Do(func() { close(s.subscribed) })
+	return unsub
+}
 
 func (anyBroker) Same(string, int) bool { return true }
 
@@ -57,8 +72,18 @@ func TestTopicChangeByRefreshAppliesTheNewTopicsRetainedLWT(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tr := health.New(health.Deps{Store: st, Client: p.Client, Bus: bus, Hub: hub}, health.Options{})
+	spy := &subscribeSpy{Bus: bus, subscribed: make(chan struct{})}
+	tr := health.New(health.Deps{Store: st, Client: p.Client, Bus: spy, Hub: hub}, health.Options{})
 	go func() { _ = tr.Run(ctx) }() // ends with ctx
+	// Why (#140): the broker hands a live (not retained) message to the bus the moment the bus
+	// has subscribed, even if the tracker is still loading the inventory, and the bus does not
+	// keep it. Publishing before the tracker has subscribed could lose the first Online
+	// (seen under -race, where the start is slow), so wait for that point.
+	select {
+	case <-spy.subscribed:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the health tracker never subscribed to the bus")
+	}
 
 	lwt := func(topic, payload string) {
 		t.Helper()
