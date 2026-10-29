@@ -1484,6 +1484,13 @@ password; `POLICY_RULES` (inline JSON or a file) becomes the first managed rule 
 the variables are ignored (warning). `tasmofleet settings export|import <file>` moves the
 settings and the policy rules as JSON for automated setups (secrets are never exported).
 
+**Policy history.** Every save of the policy rules is a stored version (append-only). The history
+view is derived: consecutive versions of one actor with each gap at most 2 minutes fold into one
+entry (a revert, an import and the current version never fold; nothing is stored), days are grouped
+in the server's zone, and each entry carries a summary from the diff against the version before it
+(rules matched by id, or by name for versions stored without ids). `sysconfig.Rules.History` pages
+it with a `before` cursor; `sysconfig.RuleHistory` lists the versions that touched one rule.
+
 Validation errors at start name the key and stop the process. Settings saved on the page use the
 same validators; a stored value that stops validating is skipped with a log line and shown on the page.
 

@@ -84,6 +84,7 @@ type RulesStore interface {
 	CurrentPolicyRules(ctx context.Context) (store.PolicyRuleVersion, error)
 	GetPolicyRuleVersion(ctx context.Context, id int64) (store.PolicyRuleVersion, error)
 	ListPolicyRuleVersions(ctx context.Context, limit int) ([]store.PolicyRuleVersion, error)
+	ListPolicyRuleVersionsBefore(ctx context.Context, beforeID int64, limit int) ([]store.PolicyRuleVersion, error)
 }
 
 // RulesOptions configures NewRules.
@@ -571,9 +572,16 @@ func (r *Rules) HasVersions(ctx context.Context) (bool, error) {
 
 // RuleChange is one line of a diff between two rule lists.
 type RuleChange struct {
-	Kind   string `json:"kind"` // added, removed, changed
-	Rule   string `json:"rule"`
+	Kind string `json:"kind"` // added, removed, changed
+	Rule string `json:"rule"`
+	// RuleID is the id the rule has on the side it is shown from (the new side
+	// for added and changed, the old side for removed). A position id of a
+	// version stored before 0.19 does not identify a rule across versions.
+	RuleID string `json:"ruleId,omitempty"`
 	Detail string `json:"detail,omitempty"`
+	// Fields names what a changed rule differs in: "command", "expected value",
+	// "scope", "severity", "name", "state", "note". Empty for added and removed.
+	Fields []string `json:"fields,omitempty"`
 }
 
 func ruleKey(s RuleSpec) string {
@@ -619,45 +627,57 @@ func DiffSpecs(a, b []RuleSpec) []RuleChange {
 			}
 		}
 		if match < 0 {
-			out = append(out, RuleChange{Kind: "removed", Rule: ruleLabel(x), Detail: "expected " + x.Want})
+			out = append(out, RuleChange{Kind: "removed", Rule: ruleLabel(x), RuleID: x.ID, Detail: "expected " + x.Want})
 			continue
 		}
 		used[match] = true
-		if d := specDelta(x, b[match]); d != "" {
-			out = append(out, RuleChange{Kind: "changed", Rule: ruleLabel(b[match]), Detail: d})
+		if d, fields := specDelta(x, b[match]); d != "" {
+			out = append(out, RuleChange{Kind: "changed", Rule: ruleLabel(b[match]), RuleID: b[match].ID, Detail: d, Fields: fields})
 		}
 	}
 	for j, y := range b {
 		if !used[j] {
-			out = append(out, RuleChange{Kind: "added", Rule: ruleLabel(y), Detail: "expected " + y.Want})
+			out = append(out, RuleChange{Kind: "added", Rule: ruleLabel(y), RuleID: y.ID, Detail: "expected " + y.Want})
 		}
 	}
 	return out
 }
 
-func specDelta(x, y RuleSpec) string {
-	var parts []string
-	add := func(label, from, to string) {
-		if from != to {
-			parts = append(parts, label+" "+strconv.Quote(from)+" -> "+strconv.Quote(to))
+// specDelta describes how y differs from x: the detail text and the changed
+// fields in a fixed order.
+func specDelta(x, y RuleSpec) (string, []string) {
+	var parts, fields []string
+	field := func(f string) {
+		if !slices.Contains(fields, f) {
+			fields = append(fields, f)
 		}
 	}
-	add("command", x.Command, y.Command)
-	add("expected", x.Want, y.Want)
-	add("severity", orWarn(x.Severity), orWarn(y.Severity))
-	add("note", x.Note, y.Note)
-	add("name", x.Name, y.Name)
-	add("state", stateWord(x), stateWord(y))
+	add := func(label, from, to, f string) {
+		if from != to {
+			parts = append(parts, label+" "+strconv.Quote(from)+" -> "+strconv.Quote(to))
+			field(f)
+		}
+	}
+	add("command", x.Command, y.Command, "command")
+	add("expected", x.Want, y.Want, "expected value")
+	add("severity", orWarn(x.Severity), orWarn(y.Severity), "severity")
+	add("note", x.Note, y.Note, "note")
+	add("name", x.Name, y.Name, "name")
+	add("state", stateWord(x), stateWord(y), "state")
 	for label, p := range map[string][2][]string{
 		"families": {x.Families, y.Families}, "tags": {x.Tags, y.Tags}, "devices": {x.Devices, y.Devices}, "except": {x.Except, y.Except},
 	} {
 		if !slices.Equal(p[0], p[1]) {
 			parts = append(parts, label+" ["+strings.Join(p[0], ",")+"] -> ["+strings.Join(p[1], ",")+"]")
+			field("scope")
 		}
 	}
 	slices.Sort(parts)
-	return strings.Join(parts, "; ")
+	slices.SortFunc(fields, func(a, b string) int { return slices.Index(fieldOrder, a) - slices.Index(fieldOrder, b) })
+	return strings.Join(parts, "; "), fields
 }
+
+var fieldOrder = []string{"name", "command", "expected value", "scope", "severity", "state", "note"}
 
 func stateWord(s RuleSpec) string {
 	if s.Disabled {
@@ -694,6 +714,10 @@ func (r *Rules) VersionDiff(ctx context.Context, from, to int64) ([]RuleChange, 
 	return DiffSpecs(sa, sb), nil
 }
 
+// importNote is the note of the version ImportLegacy stores; the history never
+// folds it into other saves.
+const importNote = "imported from POLICY_RULES"
+
 // ImportLegacy stores the content of a POLICY_RULES variable or file as the first
 // managed version. It is checked like the variable always was (ParseRules with the
 // queryable rule) and refused if rules were saved already.
@@ -705,5 +729,5 @@ func (r *Rules) ImportLegacy(ctx context.Context, actor string, raw []byte, rec 
 	if has, err := r.HasVersions(ctx); err != nil || has {
 		return 0, errors.Join(err, ErrNoChange)
 	}
-	return r.saveChecked(ctx, actor, "imported from POLICY_RULES", specs, 0, false, rec)
+	return r.saveChecked(ctx, actor, importNote, specs, 0, false, rec)
 }

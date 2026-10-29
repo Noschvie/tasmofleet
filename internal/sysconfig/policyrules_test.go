@@ -53,6 +53,22 @@ func (m *memRules) ListPolicyRuleVersions(_ context.Context, limit int) ([]store
 	return out, nil
 }
 
+func (m *memRules) ListPolicyRuleVersionsBefore(_ context.Context, before int64, limit int) ([]store.PolicyRuleVersion, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []store.PolicyRuleVersion
+	for i := len(m.vs) - 1; i >= 0; i-- {
+		if before > 0 && m.vs[i].ID >= before {
+			continue
+		}
+		if limit > 0 && len(out) == limit {
+			break
+		}
+		out = append(out, m.vs[i])
+	}
+	return out, nil
+}
+
 func queryable(c string) bool { return c != "MqttPassword" && c != "Restart" }
 
 func newRules(env string, onChange func([]policy.Rule)) (*Rules, *memRules, *memAudit) {

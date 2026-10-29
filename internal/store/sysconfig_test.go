@@ -85,6 +85,37 @@ func TestPolicyRuleVersionsKeepHistory(t *testing.T) {
 	}
 }
 
+// Why: the History tab pages with a cursor; a page must start strictly below the
+// cursor so no version appears twice or is skipped between two pages.
+func TestListPolicyRuleVersionsBeforePagesWithoutOverlap(t *testing.T) {
+	s, _, _ := newStore(t)
+	ctx := context.Background()
+	var ids []int64
+	for i := 0; i < 5; i++ {
+		id, err := s.AddPolicyRuleVersion(ctx, PolicyRuleVersion{Rules: `[]`, Actor: "a"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+	top, _ := s.ListPolicyRuleVersionsBefore(ctx, 0, 2)
+	if len(top) != 2 || top[0].ID != ids[4] || top[1].ID != ids[3] {
+		t.Fatalf("beforeID 0 must start at the newest: %+v", top)
+	}
+	next, _ := s.ListPolicyRuleVersionsBefore(ctx, top[1].ID, 2)
+	if len(next) != 2 || next[0].ID != ids[2] || next[1].ID != ids[1] {
+		t.Fatalf("second page %+v", next)
+	}
+	last, _ := s.ListPolicyRuleVersionsBefore(ctx, next[1].ID, 2)
+	if len(last) != 1 || last[0].ID != ids[0] {
+		t.Fatalf("last page %+v", last)
+	}
+	none, _ := s.ListPolicyRuleVersionsBefore(ctx, ids[0], 2)
+	if len(none) != 0 {
+		t.Fatalf("below the oldest: %+v", none)
+	}
+}
+
 // Why (review F7): a stored secret that cannot be decrypted (key lost, database
 // restored elsewhere) must not stop the start; the row is reported as unreadable
 // and the admin enters the value again.

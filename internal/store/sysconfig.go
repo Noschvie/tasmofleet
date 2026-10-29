@@ -51,6 +51,10 @@ type SystemSettingsStore interface {
 	GetPolicyRuleVersion(ctx context.Context, id int64) (PolicyRuleVersion, error)
 	// ListPolicyRuleVersions returns the newest versions first.
 	ListPolicyRuleVersions(ctx context.Context, limit int) ([]PolicyRuleVersion, error)
+	// ListPolicyRuleVersionsBefore returns up to limit versions with an id
+	// below beforeID, newest first. beforeID 0 starts from the newest; limit 0
+	// means no limit. It pages the history without loading all of it.
+	ListPolicyRuleVersionsBefore(ctx context.Context, beforeID int64, limit int) ([]PolicyRuleVersion, error)
 }
 
 func (s *SQLite) LoadSystemSettings(ctx context.Context) (map[string]SystemSetting, error) {
@@ -139,7 +143,16 @@ func (s *SQLite) GetPolicyRuleVersion(ctx context.Context, id int64) (PolicyRule
 }
 
 func (s *SQLite) ListPolicyRuleVersions(ctx context.Context, limit int) ([]PolicyRuleVersion, error) {
-	q, args := "SELECT "+policyVersionCols+" FROM policy_rule_versions ORDER BY id DESC", []any(nil)
+	return s.ListPolicyRuleVersionsBefore(ctx, 0, limit)
+}
+
+func (s *SQLite) ListPolicyRuleVersionsBefore(ctx context.Context, beforeID int64, limit int) ([]PolicyRuleVersion, error) {
+	q, args := "SELECT "+policyVersionCols+" FROM policy_rule_versions", []any(nil)
+	if beforeID > 0 {
+		q += " WHERE id < ?"
+		args = append(args, beforeID)
+	}
+	q += " ORDER BY id DESC"
 	if limit > 0 {
 		q += " LIMIT ?"
 		args = append(args, limit)

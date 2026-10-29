@@ -52,6 +52,10 @@ func (m *rulesMem) ListPolicyRuleVersions(context.Context, int) ([]store.PolicyR
 	return out, nil
 }
 
+func (m *rulesMem) ListPolicyRuleVersionsBefore(context.Context, int64, int) ([]store.PolicyRuleVersion, error) {
+	return nil, nil
+}
+
 func rulesEnv(t *testing.T, envJSON string, tweak ...func(*sysconfig.RulesOptions)) (*env, *rulesMem, *[]policy.Rule) {
 	t.Helper()
 	return rulesEnvDeps(t, nil, tweak...)
