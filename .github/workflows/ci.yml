@@ -174,10 +174,10 @@ jobs:
       - name: install decode-config (pinned, verified)
         env:
           DECODER_VERSION: v16.0.0
-          DECODER_SHA256: 00f6fde13ddae11b497252e7ddc421b35c009d3bc795cde219e0dd475a410622
+          DECODER_SHA256: b92b8465fec5a940306cb24becb1365c0b4e56fd6695445a890ff4aec6287d6c
         run: |
           set -eu
-          curl -fsSL -o "$RUNNER_TEMP/dc.tgz" "https://github.com/tasmota/decode-config/releases/download/$DECODER_VERSION/decode-config-ubuntu-22.04.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/dc.tgz" "https://github.com/tasmota/decode-config/releases/download/$DECODER_VERSION/decode-config-ubuntu-24.04.tar.gz"
           echo "$DECODER_SHA256  $RUNNER_TEMP/dc.tgz" | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/decode-config" && tar -xzf "$RUNNER_TEMP/dc.tgz" -C "$RUNNER_TEMP/decode-config" decode-config
           "$RUNNER_TEMP/decode-config/decode-config" --version

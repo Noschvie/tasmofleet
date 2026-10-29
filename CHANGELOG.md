@@ -12,6 +12,7 @@ always upgrade automatically.
 
 ### Changed
 
+- The bundled decode-config is the upstream Ubuntu 24.04 build (newer Python runtime); the runtime image already had the required glibc
 - Policy rules have a stable id that survives edits, reordering and export/import; rules saved before this version get `r1`, `r2`, ... by position on the first save (#197)
 
 ### Fixed
@@ -61,6 +62,7 @@ always upgrade automatically.
 
 ### Changed
 
+- The bundled decode-config is the upstream Ubuntu 24.04 build (newer Python runtime); the runtime image already had the required glibc
 - **Backups are named after the device (#129, thanks @Noschvie), breaking for scripts that read the data directory.**
   Files now live in `backups/<hostname>/` and are called `<stamp>_<hostname>.dmp`
   (`.snapshot.json`, `.decoded.json`) instead of `backups/<device-id>/<stamp>-<kind>.<ext>`.
@@ -141,6 +143,7 @@ run`, Compose, or an Unraid container whose UI listen row was deleted from its t
 
 ### Changed
 
+- The bundled decode-config is the upstream Ubuntu 24.04 build (newer Python runtime); the runtime image already had the required glibc
 - Device page, Overview reworked (#145): a row of live tiles (Power and Energy today for devices with an
   energy meter, Wi-Fi signal with a quality bar or Link for Ethernet, Uptime, Reachability, Policy), a
   relay box that is the same for one relay and four (per-channel watts when the device meters each
@@ -239,6 +242,7 @@ run`, Compose, or an Unraid container whose UI listen row was deleted from its t
 
 ### Changed
 
+- The bundled decode-config is the upstream Ubuntu 24.04 build (newer Python runtime); the runtime image already had the required glibc
 - Log: successful `/healthz` requests (the container health check) are logged at debug instead of info, log
   timestamps have millisecond precision (`2006-01-02T15:04:05.000Z07:00`), and the access log's `duration` is
   now `duration_ms`, a float in milliseconds (#132, thanks @Noschvie).
@@ -256,6 +260,7 @@ run`, Compose, or an Unraid container whose UI listen row was deleted from its t
 
 ### Changed
 
+- The bundled decode-config is the upstream Ubuntu 24.04 build (newer Python runtime); the runtime image already had the required glibc
 - The first log line at startup is now `tasmofleet starting version=... go=... decoder=...`, so the running
   version can be read from the log (#73).
 - The Devices list puts the "Online" filter pill right after "All", before Offline / unknown, Outdated and
@@ -396,6 +401,7 @@ run`, Compose, or an Unraid container whose UI listen row was deleted from its t
 
 ### Changed
 
+- The bundled decode-config is the upstream Ubuntu 24.04 build (newer Python runtime); the runtime image already had the required glibc
 - README: the Docker Compose example sets `container_name: tasmofleet` (#62, thanks @Noschvie).
 
 ### Fixed
@@ -466,6 +472,7 @@ run`, Compose, or an Unraid container whose UI listen row was deleted from its t
 
 ### Changed
 
+- The bundled decode-config is the upstream Ubuntu 24.04 build (newer Python runtime); the runtime image already had the required glibc
 - Devices: the tooltip of "HTTP –" in the MQTT · HTTP column says the channel is on standby while MQTT delivers
   ("only polled when MQTT goes quiet"), so the dash no longer reads as "HTTP is down"; screen readers hear
   "standby". The column itself looks the same.
@@ -507,6 +514,7 @@ run`, Compose, or an Unraid container whose UI listen row was deleted from its t
 
 ### Changed
 
+- The bundled decode-config is the upstream Ubuntu 24.04 build (newer Python runtime); the runtime image already had the required glibc
 - Push where possible: a device whose free flash (Status 4 `Free`, read with the preview's identity) is too small
   for the image, or unknown, gets the download instead, and the preview says so ("not enough free flash for an
   upload (image 2183 KB, 697 KB free)"). This covers ESP32s with the safeboot partition layout, which can only take
@@ -522,6 +530,7 @@ run`, Compose, or an Unraid container whose UI listen row was deleted from its t
 
 ### Changed
 
+- The bundled decode-config is the upstream Ubuntu 24.04 build (newer Python runtime); the runtime image already had the required glibc
 - The Delivery choice of an update is "Download (all devices)" (the default, as before) or "Push where possible
   (ESP32; others download)". Push no longer refuses devices that cannot take an upload: an ESP8266, an unknown chip,
   a device on safeboot or minimal, or a two-step plan gets the normal download instead. The preview says per device
@@ -552,6 +561,7 @@ run`, Compose, or an Unraid container whose UI listen row was deleted from its t
 
 ### Changed
 
+- The bundled decode-config is the upstream Ubuntu 24.04 build (newer Python runtime); the runtime image already had the required glibc
 - The network facts (hostname, IP, gateway, SSID, BSSID, channel from Status 5 and Status 11) are read in the
   background and never hold anything up: first contact after an import or add and "Refresh identity" no longer
   wait for them (Status 11 is not sent there at all; Status 5 is still read for the MAC). The server reads them,
@@ -598,6 +608,7 @@ run`, Compose, or an Unraid container whose UI listen row was deleted from its t
 
 ### Changed
 
+- The bundled decode-config is the upstream Ubuntu 24.04 build (newer Python runtime); the runtime image already had the required glibc
 - A device's first observation after the app started is a baseline, not a state change: a restart no longer
   logs "Unknown to Online" for every device. The cost: a change that happened while the app was down is not
   recorded.
@@ -628,6 +639,7 @@ run`, Compose, or an Unraid container whose UI listen row was deleted from its t
 
 ### Changed
 
+- The bundled decode-config is the upstream Ubuntu 24.04 build (newer Python runtime); the runtime image already had the required glibc
 - The project moved to GitHub (github.com/nofuturekid/tasmofleet) with a fresh history;
   container images are published to `ghcr.io/nofuturekid/tasmofleet`.
 - **License: AGPL-3.0-or-later** (was MIT). The About page links to the source code.
@@ -828,6 +840,7 @@ run`, Compose, or an Unraid container whose UI listen row was deleted from its t
 
 ### Changed
 
+- The bundled decode-config is the upstream Ubuntu 24.04 build (newer Python runtime); the runtime image already had the required glibc
 - The last html/template pages are gone (design v2, Z1): result and refusal notices ("Nothing
   to retry", "Command started", ...) and the transaction retry page are templ pages built from the
   design system's page header, card, banner and buttons; the device list's rows, phone-card cells
@@ -1290,6 +1303,7 @@ run`, Compose, or an Unraid container whose UI listen row was deleted from its t
 
 ### Changed
 
+- The bundled decode-config is the upstream Ubuntu 24.04 build (newer Python runtime); the runtime image already had the required glibc
 - Design system spec, Deviation 7: all pages are ported and `knownLayoutIssues` is empty; the
   deviation now lists the pages that still use the legacy CSS block.
 - Stylesheet clean-up, no visible change: the old app.css token aliases (`--bg`, `--muted`,
@@ -1511,6 +1525,7 @@ run`, Compose, or an Unraid container whose UI listen row was deleted from its t
 
 ### Changed
 
+- The bundled decode-config is the upstream Ubuntu 24.04 build (newer Python runtime); the runtime image already had the required glibc
 - System settings: seven tabs (Network, MQTT, Firmware, Discovery, Backups, Sign-in, Advanced)
   instead of a side list; "Test MQTT" and "Test discovery" are buttons of the settings form
   (they use only the broker or issuer fields and never save anything); the container-only
@@ -1724,6 +1739,7 @@ run`, Compose, or an Unraid container whose UI listen row was deleted from its t
 
 ### Changed
 
+- The bundled decode-config is the upstream Ubuntu 24.04 build (newer Python runtime); the runtime image already had the required glibc
 - Restore needs no password step-up any more. One confirmation names every risk (restart,
   replaced configuration, old credentials, firmware major change, unchecked chip family);
   the live checks run before the page is shown, and a refused restore shows no form.
@@ -1766,6 +1782,7 @@ run`, Compose, or an Unraid container whose UI listen row was deleted from its t
 
 ### Changed
 
+- The bundled decode-config is the upstream Ubuntu 24.04 build (newer Python runtime); the runtime image already had the required glibc
 - One page header on every signed-in page: the title row is as tall as a button, so the
   title no longer moves between pages; the way back (crumb) sits under the title.
 - One card component: the title sits in the frame (like a fieldset legend) on every
@@ -1823,6 +1840,7 @@ run`, Compose, or an Unraid container whose UI listen row was deleted from its t
 
 ### Changed
 
+- The bundled decode-config is the upstream Ubuntu 24.04 build (newer Python runtime); the runtime image already had the required glibc
 - Identity rule (spec 11.1): a device is identified by its set of MACs (Wi-Fi plus
   Ethernet where present; migration 0013 `device_macs`, seeded from the existing MAC).
   Discovery, the MQTT known-device index, import, restore and OTA checks match any MAC of
@@ -1873,6 +1891,7 @@ run`, Compose, or an Unraid container whose UI listen row was deleted from its t
 
 ### Changed
 
+- The bundled decode-config is the upstream Ubuntu 24.04 build (newer Python runtime); the runtime image already had the required glibc
 - Device settings: the "flash wears out" confirmation and the "Write to flash now" box are
   gone. Applying always ends with exactly one `SaveData` write (so it works with SaveData 0),
   skipped only when a restart or a SaveData change saves anyway; the page says "Saved to the
@@ -1909,6 +1928,7 @@ run`, Compose, or an Unraid container whose UI listen row was deleted from its t
 
 ### Changed
 
+- The bundled decode-config is the upstream Ubuntu 24.04 build (newer Python runtime); the runtime image already had the required glibc
 - UX sweep: one vocabulary ("Transaction", "prefetch",
   "Users"; audit targets read "transaction #3" and device names, as links); plurals agree
   ("1 deviation"); setting labels no longer show raw backticks; durations read "6h", not "6h0m0s".
@@ -1942,6 +1962,7 @@ run`, Compose, or an Unraid container whose UI listen row was deleted from its t
 
 ### Changed
 
+- The bundled decode-config is the upstream Ubuntu 24.04 build (newer Python runtime); the runtime image already had the required glibc
 - One sign-in page: `/login` shows a "Sign in with <name>" button (OIDC) and the local username/password
   form side by side. The browser goes straight to the IdP only when OIDC is the only method (local
   sign-in off or no local account). The button name is the new sign-in setting `OIDC_DISPLAY_NAME`
@@ -2037,6 +2058,7 @@ run`, Compose, or an Unraid container whose UI listen row was deleted from its t
 
 ### Changed
 
+- The bundled decode-config is the upstream Ubuntu 24.04 build (newer Python runtime); the runtime image already had the required glibc
 - Settings apply live: device networks, MQTT broker, backup retention, update engine and health intervals need no restart.
 - The live-check poll interval is the system setting `POLICY_LIVE_INTERVAL` (default 1h, 0 = off).
 - Step-up on the System settings page is limited to the sign-in settings; routine settings (device networks,
@@ -2092,6 +2114,7 @@ run`, Compose, or an Unraid container whose UI listen row was deleted from its t
 
 ### Changed
 
+- The bundled decode-config is the upstream Ubuntu 24.04 build (newer Python runtime); the runtime image already had the required glibc
 - Navigation grouped (Devices, Updates, System menus); one wide page container; stable
   device table and relay switches; static assets are cache-busted.
 - Raw HTML in release notes is dropped instead of being shown as text.
@@ -2117,6 +2140,7 @@ From this release on tasmofleet follows SemVer (see CLAUDE.md, "Releases").
 
 ### Changed
 
+- The bundled decode-config is the upstream Ubuntu 24.04 build (newer Python runtime); the runtime image already had the required glibc
 - `/jobs` is replaced by `/transactions` and `/transactions/{id}`.
 - The policy view and its navigation entry always exist (empty state without rules).
 
