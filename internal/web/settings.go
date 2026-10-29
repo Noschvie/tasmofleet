@@ -250,7 +250,7 @@ func (h *handler) persist(r *http.Request, id model.DeviceID, saveData string, c
 		if res.Key == "SaveData" {
 			return "Written to flash by the SaveData change."
 		}
-		if settings.RestartsDevice(res.Key) {
+		if settings.RestartsDevice(res.Key, changes[res.Key]) {
 			return "The device restarts after this change, which writes all settings to flash."
 		}
 	}

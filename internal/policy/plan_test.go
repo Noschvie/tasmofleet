@@ -91,6 +91,23 @@ func TestOrderCommandsPutsSaveDataThenRestartLast(t *testing.T) {
 	}
 }
 
+// Why: a restarting SetOption cuts the command queue like Hostname does, so it goes after
+// SaveData and the other commands; SetOption55 on does not restart and keeps its place.
+func TestOrderCommandsPutsRestartingSetOptionsLast(t *testing.T) {
+	cs := []FixCommand{
+		{Command: "SetOption68", Want: "1"}, {Command: "SaveData", Want: "0"},
+		{Command: "SetOption55", Want: "1"}, {Command: "SetOption55", Want: "0"}, {Command: "PowerOnState", Want: "0"},
+	}
+	var got []string
+	for _, c := range OrderCommands(cs) {
+		got = append(got, c.Command+" "+c.Want)
+	}
+	want := []string{"SetOption55 1", "PowerOnState 0", "SaveData 0", "SetOption68 1", "SetOption55 0"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("order %v, want %v", got, want)
+	}
+}
+
 // Why: two findings that expect different values for the same setting cannot
 // both be right; picking one would silently decide for the admin. Check never
 // produces such a pair any more (precedence, see the next test), but PlanFix

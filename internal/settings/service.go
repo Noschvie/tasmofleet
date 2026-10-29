@@ -325,7 +325,9 @@ func (m *Manager) Apply(ctx context.Context, actor string, id model.DeviceID, ch
 		return nil, &ValidationError{Fields: bad}
 	}
 	// Commands that restart the device go last: a later command would race the reboot.
-	sort.SliceStable(todo, func(i, j int) bool { return !RestartsDevice(todo[i].Key) && RestartsDevice(todo[j].Key) })
+	sort.SliceStable(todo, func(i, j int) bool {
+		return !RestartsDevice(todo[i].Key, changes[todo[i].Key]) && RestartsDevice(todo[j].Key, changes[todo[j].Key])
+	})
 	d, err := m.o.Devices.GetDevice(ctx, id)
 	if err != nil {
 		return nil, err

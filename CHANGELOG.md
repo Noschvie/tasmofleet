@@ -10,6 +10,10 @@ always upgrade automatically.
 
 - Policy rules have a stable id that survives edits, reordering and export/import; rules saved before this version get `r1`, `r2`, ... by position on the first save (#197)
 
+### Fixed
+
+- Make compliant now knows which SetOptions restart the device (3, 15, 37, 55 when set to 0, 68, 69, 75, 85, 88, 97, 102 to 104, 106, 107, 115 when set to 0, 132, 151 to 153): they run last and the restart is not reported as an error (#196)
+
 ### Breaking
 
 - The policy rules export (and `POLICY_RULES` format) gains an optional `id` per rule; exports now include it, and an import with a duplicate or malformed id is refused (#197)

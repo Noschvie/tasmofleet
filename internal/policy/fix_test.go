@@ -210,3 +210,55 @@ func TestVerifyRetriesWhileTheDeviceRestarts(t *testing.T) {
 		t.Fatalf("err %v after %d reads", err, len(r.calls))
 	}
 }
+
+// Why: SetOption68 (and the other restarting SetOptions) set restart_flag = 2 like Hostname, so
+// the reply may never arrive and the restart saves everything. Without that knowledge a
+// following SaveData would hit the reboot and come back as an error.
+func TestApplyTreatsARestartingSetOptionLikeHostname(t *testing.T) {
+	c := &fakeCmd{err: func(string) error { return tasmota.ErrTimeout }}
+	if err := newFixer(c, &fakeRead{}).Apply(context.Background(), model.Device{}, []string{"SetOption68 1"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(c.sent) != 1 || c.sent[0] != "Backlog SetOption68 1" {
+		t.Fatalf("sent %q, want only the Backlog (the restart saves, no SaveData after it)", c.sent)
+	}
+}
+
+// Why: SetOption55 restarts the device only when switched off. Switched on it must keep the
+// normal path: SaveData is sent, and a timeout is a real failure, not a restart.
+func TestApplyDoesNotTreatSetOption55OnAsARestart(t *testing.T) {
+	c := &fakeCmd{err: func(string) error { return tasmota.ErrTimeout }}
+	err := newFixer(c, &fakeRead{vals: map[string]string{"SaveData": "0"}}).Apply(context.Background(), model.Device{}, []string{"SetOption55 1"})
+	if !errors.Is(err, tasmota.ErrTimeout) {
+		t.Fatalf("err %v, want the timeout reported", err)
+	}
+	c = &fakeCmd{}
+	if err := newFixer(c, &fakeRead{vals: map[string]string{"SaveData": "0"}}).Apply(context.Background(), model.Device{}, []string{"SetOption55 1"}); err != nil || count(c.sent, "SaveData") != 1 {
+		t.Fatalf("err %v, sent %q, want one SaveData", err, c.sent)
+	}
+	c = &fakeCmd{err: func(string) error { return tasmota.ErrTimeout }}
+	if err := newFixer(c, &fakeRead{}).Apply(context.Background(), model.Device{}, []string{"SetOption55 0"}); err != nil {
+		t.Fatalf("SetOption55 0 restarts, its timeout is tolerated: %v", err)
+	}
+}
+
+// Why: a restart fires once the Backlog queue is empty (support_tasmota.ino:1580,
+// CommandsReady), so restarting commands only work if nothing is sent to the device after
+// them. They must all sit in the last run(s), never mixed into an earlier run with plain
+// commands, and two restarting commands in one Backlog both run before the reboot.
+func TestApplyKeepsRestartingCommandsTogetherInTheLastBacklog(t *testing.T) {
+	c := &fakeCmd{}
+	// seven plain commands fill a run to one short of the limit; plain chunking would put the
+	// first restarting command into it and the other two into the next run
+	lines := []string{"SetOption1 0", "SetOption2 0", "SetOption4 0", "SetOption5 0", "SetOption6 0", "SetOption7 0", "SaveData 0", "SetOption37 1", "SetOption85 1", "Hostname plug"}
+	if err := newFixer(c, &fakeRead{}).Apply(context.Background(), model.Device{}, lines); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"Backlog SetOption1 0; SetOption2 0; SetOption4 0; SetOption5 0; SetOption6 0; SetOption7 0; SaveData 0",
+		"Backlog SetOption37 1; SetOption85 1; Hostname plug",
+	}
+	if !reflect.DeepEqual(c.sent, want) {
+		t.Fatalf("sent %q, want %q", c.sent, want)
+	}
+}

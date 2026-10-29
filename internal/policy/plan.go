@@ -172,7 +172,7 @@ func OrderCommands(cs []FixCommand) []FixCommand {
 	var plain, save, restart []FixCommand
 	for _, c := range cs {
 		switch {
-		case settings.RestartsDevice(c.Command):
+		case settings.RestartsDevice(c.Command, c.Want):
 			restart = append(restart, c)
 		case strings.EqualFold(c.Command, "SaveData"):
 			save = append(save, c)

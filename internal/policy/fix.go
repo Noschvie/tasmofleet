@@ -87,7 +87,7 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 	saves, restarts := false, false
 	for _, l := range parsed {
 		saves = saves || strings.EqualFold(l.key, "SaveData")
-		restarts = restarts || settings.RestartsDevice(l.key)
+		restarts = restarts || settings.RestartsDevice(l.key, l.value)
 	}
 	keep := ""
 	if !saves && !restarts {
@@ -102,7 +102,7 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 		restart := false
 		for i, l := range chunk {
 			texts[i] = l.text
-			restart = restart || settings.RestartsDevice(l.key)
+			restart = restart || settings.RestartsDevice(l.key, l.value)
 		}
 		_, err := f.Client.Command(ctx, t, "Backlog "+strings.Join(texts, "; "))
 		switch {
@@ -121,8 +121,34 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 	return nil
 }
 
-// chunks splits the lines into Backlog-sized runs, keeping their order.
+// chunks splits the lines into Backlog-sized runs, keeping their order. The
+// restarting lines (from the first one on) are packed into runs of their own,
+// so they are never split across a run boundary that plain lines could avoid:
+// they join the last plain run only when all of them fit there.
+// Why this is safe within one run: Tasmota only counts down a restart while
+// the backlog is empty (Every250mSeconds, support_tasmota.ino:1580 with
+// CommandsReady() = BACKLOG_EMPTY, support_tasmota.ino:1336), so every command
+// queued by the same Backlog runs before restart_flag = 2 takes effect, and a
+// second restarting command in the run still executes.
 func chunks(lines []fixLine) [][]fixLine {
+	cut := len(lines)
+	for i, l := range lines {
+		if settings.RestartsDevice(l.key, l.value) {
+			cut = i
+			break
+		}
+	}
+	plain, tail := pack(lines[:cut]), pack(lines[cut:])
+	if len(plain) > 0 && len(tail) == 1 {
+		if merged := pack(append(append([]fixLine{}, plain[len(plain)-1]...), tail[0]...)); len(merged) == 1 {
+			return append(plain[:len(plain)-1], merged[0])
+		}
+	}
+	return append(plain, tail...)
+}
+
+// pack splits lines into runs within the Backlog limits.
+func pack(lines []fixLine) [][]fixLine {
 	var out [][]fixLine
 	var cur []fixLine
 	size := 0
@@ -134,7 +160,10 @@ func chunks(lines []fixLine) [][]fixLine {
 		cur = append(cur, l)
 		size += len(l.text) + 2
 	}
-	return append(out, cur)
+	if len(cur) > 0 {
+		out = append(out, cur)
+	}
+	return out
 }
 
 // Verify reads the changed settings back from the device and compares them

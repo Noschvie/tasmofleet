@@ -34,11 +34,11 @@ func TestQueryableGenericCommands(t *testing.T) {
 // (and must not turn a curated setting's restart off by another spelling).
 func TestGenericCommandsDoNotRestartTheDevice(t *testing.T) {
 	for _, k := range []string{"Sleep", "LedState", "hostname", "SetOption19"} {
-		if RestartsDevice(k) {
+		if RestartsDevice(k, "1") {
 			t.Errorf("%s restarts the device", k)
 		}
 	}
-	if !RestartsDevice("Hostname") {
+	if !RestartsDevice("Hostname", "plug") {
 		t.Fatal("Hostname restarts the device")
 	}
 }
@@ -170,5 +170,42 @@ func TestSleepUnwrapIsExact(t *testing.T) {
 	// no heuristics for other commands: the same shape under another name stays unknown
 	if v := ParseReply([]byte(`{"WebLog":{"50":{"Active":"1"}}}`)); v != nil {
 		t.Errorf("WebLog gave %v", v)
+	}
+}
+
+// Why: Make compliant orders and tolerates restarts by this table, so it must equal what Tasmota
+// v16 does. Source: tasmota/tasmota_support/support_command.ino, CmndSetoptionBase. A wrong
+// entry either hides a real restart (SaveData lost or reported as an error) or claims one that
+// never happens (a needless wait).
+func TestRestartsDeviceMatchesTasmotaV16SetOptions(t *testing.T) {
+	type row struct{ key, value string }
+	restarts := []row{
+		{"SetOption37", "0"}, {"SetOption37", "255"}, // :1697-1699, any accepted value of the numeric option
+		{"SetOption3", "0"}, {"SetOption3", "1"}, {"SetOption15", "1"}, // :1733-1735
+		{"SetOption55", "0"},                                             // :1757-1760, only off
+		{"SetOption68", "1"}, {"SetOption69", "0"}, {"SetOption75", "1"}, // :1765-1770
+		{"SetOption85", "1"}, {"SetOption88", "0"}, {"SetOption97", "1"}, {"SetOption102", "1"}, // :1782-1790
+		{"SetOption103", "1"}, {"SetOption104", "0"}, {"SetOption106", "1"}, {"SetOption107", "1"},
+		{"SetOption115", "0"},                                               // :1802-1805, only off
+		{"SetOption132", "1"},                                               // :1807-1808
+		{"SetOption151", "1"}, {"SetOption152", "0"}, {"SetOption153", "1"}, // :1815-1818
+	}
+	for _, r := range restarts {
+		if !RestartsDevice(r.key, r.value) {
+			t.Errorf("%s %s must restart", r.key, r.value)
+		}
+	}
+	quiet := []row{
+		{"SetOption55", "1"}, {"SetOption115", "1"}, // restart only when set to 0
+		{"SetOption37", "256"},                    // out of range: Command Error, nothing happens
+		{"SetOption3", "2"}, {"SetOption68", "2"}, // flag value above 1: Command Error
+		{"SetOption0", "1"}, {"SetOption19", "1"}, {"SetOption36", "1"}, {"SetOption56", "0"},
+		{"SetOption114", "0"}, {"SetOption150", "1"}, {"SetOption154", "1"}, {"SetOption", "1"},
+		{"SetOption68", "x"}, {"SetOption68", "-1"}, {"Sleep", "1"},
+	}
+	for _, r := range quiet {
+		if RestartsDevice(r.key, r.value) {
+			t.Errorf("%s %s must not restart", r.key, r.value)
+		}
 	}
 }

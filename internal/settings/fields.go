@@ -499,6 +499,58 @@ var restartKeys = map[string]bool{
 	"MqttHost": true, "MqttPort": true, "MqttUser": true, "MqttPassword": true,
 }
 
-// RestartsDevice reports whether Tasmota restarts after the setting changes
-// (a restart also saves all settings).
-func RestartsDevice(key string) bool { return restartKeys[key] }
+// restartSetOptions are the SetOptions that set restart_flag = 2 in Tasmota
+// v16 (CmndSetoptionBase, tasmota_support/support_command.ino). They restart
+// for either flag value (0 or 1); a value above 1 is a Command Error there and
+// restarts nothing. The line numbers are those of the v16 source:
+//
+//	3, 15 (1733-1735), 68, 69, 75 (1765-1770), 85, 88, 97, 102, 103, 104, 106,
+//	107 (1782-1790), 132 (1807-1808), 151, 152, 153 (1815-1818)
+//
+// 69 only exists when the build has USE_SERIAL_BRIDGE (the default builds do).
+var restartSetOptions = map[int]bool{
+	3: true, 15: true, 68: true, 69: true, 75: true,
+	85: true, 88: true, 97: true, 102: true, 103: true, 104: true, 106: true, 107: true,
+	132: true, 151: true, 152: true, 153: true,
+}
+
+// restartSetOptionsWhenOff restart only when switched off (value 0):
+// SetOption55 (disable mDNS, support_command.ino:1757-1760) and SetOption115
+// (disable ESP32 MI32, support_command.ino:1802-1805).
+var restartSetOptionsWhenOff = map[int]bool{55: true, 115: true}
+
+// setOptionRGBRemap is SetOption37 (P_RGB_REMAP, a numeric SetOption): any
+// accepted value 0..255 restarts the device (support_command.ino:1697-1700),
+// only in builds with USE_LIGHT (like SetOption69 needs USE_SERIAL_BRIDGE).
+const setOptionRGBRemap = 37
+
+// RestartsDevice reports whether Tasmota restarts after the setting is set to
+// value (a restart also saves all settings). value matters only for the
+// SetOptions: some restart for every accepted value, SetOption55 and
+// SetOption115 only when set to 0, and a value the device refuses restarts
+// nothing. Hostname, Topic and the MQTT settings restart whatever the value.
+func RestartsDevice(key, value string) bool {
+	if restartKeys[key] {
+		return true
+	}
+	if !setOptionKeyRe.MatchString(key) {
+		return false
+	}
+	n, err := strconv.Atoi(key[len("SetOption"):])
+	if err != nil {
+		return false
+	}
+	v, err := strconv.Atoi(value)
+	if err != nil || v < 0 {
+		return false
+	}
+	switch {
+	case n == setOptionRGBRemap:
+		return v <= 255
+	case restartSetOptions[n]:
+		return v <= 1
+	case restartSetOptionsWhenOff[n]:
+		return v == 0
+	}
+	return false
+}
