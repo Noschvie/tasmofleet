@@ -4,6 +4,19 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## Unreleased
+
+### Fixed
+
+- An OtaUrl whose password contains `/`, `#` or `?` could be shown or compared in part. The
+  URL credential redaction now parses the URL, and a value that cannot be cleaned safely is
+  shown as `***` (#168).
+
+### Security
+
+- Passwords in device URLs (OtaUrl) no longer leak through the policy report when they contain
+  `/`, `#`, `?` or `@` (#168).
+
 ## 0.17.0 (2026-10-29)
 
 ### Upgrade notes: action may be required

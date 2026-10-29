@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +15,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/fwselect"
 	"github.com/nofuturekid/tasmofleet/internal/inventory"
 	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/settings"
 	"github.com/nofuturekid/tasmofleet/internal/store"
 	"github.com/nofuturekid/tasmofleet/internal/tasmota"
 )
@@ -296,15 +296,8 @@ func parseOtaURL(raw json.RawMessage) (clean string, ok bool) {
 	if v == "" {
 		return "", true
 	}
-	u, err := url.Parse(v)
-	if err != nil || u.Host == "" {
-		return "", false
-	}
-	if u.User == nil && strings.Contains(v, "@") {
-		return "", false // an '@' url.Parse did not read as userinfo: a mis-parsed password
-	}
-	u.User, u.RawQuery, u.ForceQuery, u.Fragment, u.RawFragment = nil, "", false, "", ""
-	return u.String(), true
+	clean, _, ok = settings.SplitURLCredentials(v)
+	return clean, ok
 }
 
 // mqttSwitchedOff reads SetOption3 (MQTT on/off). Any failure counts as "on":

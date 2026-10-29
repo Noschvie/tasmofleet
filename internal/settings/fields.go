@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net/netip"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -241,12 +242,52 @@ func otaUrlV(v string) error {
 	return nil
 }
 
-var urlUserinfoRe = regexp.MustCompile(`^([A-Za-z][A-Za-z0-9+.-]*://)[^/@]*@`)
+// SplitURLCredentials cleans a URL read from a device: it drops user:password, the query and the
+// fragment. hadCreds reports whether userinfo was present. ok is false when the value cannot be
+// cleaned safely: it does not parse, has no host, or holds an '@' that url.Parse did not read as
+// userinfo or a second '@' (a password containing '#', '?' or '/' mis-parses into host, query, fragment or path).
+// An empty value is ok with nothing to clean.
+func SplitURLCredentials(v string) (clean string, hadCreds, ok bool) {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return "", false, true
+	}
+	u, err := url.Parse(v)
+	if err != nil || u.Host == "" {
+		return "", false, false
+	}
+	// Exactly one '@' is the userinfo separator; any other (or one that is not userinfo) may be
+	// part of a password that mis-parsed, e.g. "http://u:@x/@host" read as user "u:", host "x".
+	if n := strings.Count(v, "@"); n > 1 || (n == 1 && u.User == nil) {
+		return "", false, false
+	}
+	hadCreds = u.User != nil
+	u.User, u.RawQuery, u.ForceQuery, u.Fragment, u.RawFragment = nil, "", false, "", ""
+	return u.String(), hadCreds, true
+}
 
-// RedactURLCredentials hides "user:password@" in a URL read from a device, so
-// a URL with credentials is shown as a different value ("***@") and never in
-// clear text.
-func RedactURLCredentials(v string) string { return urlUserinfoRe.ReplaceAllString(v, "${1}***@") }
+// RedactURLCredentials hides "user:password@" in a URL read from a device, so a URL with
+// credentials is shown as a different value ("scheme://***@host/...") and never in clear text.
+// A value that may hold a secret but cannot be cleaned (see SplitURLCredentials) becomes "***".
+// A value without credentials is returned unchanged, query included, so policy comparison keeps
+// working on it.
+func RedactURLCredentials(v string) string {
+	clean, hadCreds, ok := SplitURLCredentials(v)
+	switch {
+	case !ok && (strings.Contains(v, "@") || !isPlainNonURL(v)):
+		return "***"
+	case !ok, !hadCreds:
+		return v
+	}
+	scheme, rest, _ := strings.Cut(clean, "://")
+	return scheme + "://***@" + rest
+}
+
+// isPlainNonURL reports a value that is not a URL at all and holds no '@': nothing to hide.
+func isPlainNonURL(v string) bool {
+	u, err := url.Parse(strings.TrimSpace(v))
+	return err == nil && u.Host == ""
+}
 
 // ruleV validates "Hemisphere,Week,Month,Day,Hour,Offset" of TimeDst/TimeStd.
 func ruleV(v string) error {
