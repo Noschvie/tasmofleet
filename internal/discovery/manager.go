@@ -499,7 +499,7 @@ func (m *Manager) propose(ctx context.Context, c candidate, kind string, existin
 	}
 	row := store.ProposalRow{
 		Kind: kind, Via: c.via, Reason: reason, ExistingID: existing, SeenAt: m.clk.Now(),
-		Device: model.Device{Name: c.name, Address: c.ip.String(), Port: c.port, MAC: c.mac, Topic: c.topic, FullTopic: c.fullTopic},
+		Device: model.Device{Name: c.name, Address: c.ip.String(), Port: c.port, MAC: c.mac, Topic: c.topic, FullTopic: c.fullTopic, Net: model.NetFacts{Hostname: c.host}},
 	}
 	if err := m.mergeSighting(ctx, &row); err != nil {
 		return err
@@ -525,6 +525,9 @@ func (m *Manager) mergeSighting(ctx context.Context, row *store.ProposalRow) err
 	if row.Via == ViaScan && prev.Via == ViaMQTT {
 		row.Via = ViaMQTT
 		row.Device.Name, row.Device.Topic, row.Device.FullTopic = prev.Device.Name, prev.Device.Topic, prev.Device.FullTopic
+	}
+	if row.Device.Net.Hostname == "" {
+		row.Device.Net.Hostname = prev.Device.Net.Hostname // a sighting without one keeps the known hostname
 	}
 	if row.Via == ViaMQTT && row.Device.Port == 0 {
 		row.Device.Port = prev.Device.Port

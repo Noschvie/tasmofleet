@@ -20,6 +20,7 @@ type candidate struct {
 	ip        netip.Addr
 	port      int // 0: unknown (MQTT), the stored port is kept
 	name      string
+	host      string // the hostname the device reported ("" when it did not), display only
 	topic     string
 	fullTopic string
 }
@@ -66,6 +67,7 @@ func parseDiscovery(topicMAC string, payload []byte) (candidate, error) {
 	}
 	c := candidate{via: ViaMQTT, mac: mac, ip: ip.Unmap(), topic: cleanTopic(p.T), fullTopic: cleanFullTopic(p.FT)}
 	c.name = cleanName(firstNonEmpty(p.DN, p.HN, p.T), mac)
+	c.host = cleanHostname(p.HN)
 	return c, nil
 }
 
@@ -97,6 +99,14 @@ func cleanName(s, mac string) string {
 		s = "tasmota-" + strings.ReplaceAll(mac, ":", "")[6:]
 	}
 	return s
+}
+
+// cleanHostname is cleanName for the hostname column: an unreported hostname stays empty.
+func cleanHostname(s string) string {
+	if strings.TrimSpace(s) == "" {
+		return ""
+	}
+	return cleanName(s, "000000000000")
 }
 
 // cleanTopic returns t if the inventory would accept it as a topic, else "".

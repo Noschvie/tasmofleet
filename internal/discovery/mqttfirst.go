@@ -374,6 +374,7 @@ func parseStatus5(topic string, payload []byte) (candidate, error) {
 		c.macs = []string{eth}
 	}
 	c.name = cleanName(firstNonEmpty(n.Hostname, topic), mac)
+	c.host = cleanHostname(n.Hostname)
 	return c, nil
 }
 

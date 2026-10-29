@@ -91,7 +91,8 @@ type discView struct {
 type propRow struct {
 	ID             int64
 	Version        string
-	Name, Hostname string // the friendly name ("" shows a dash) and the host (MQTT topic)
+	Name, Hostname string // the device name and the hostname it reported ("" shows a dash)
+	Topic          string // its MQTT topic, the name cell's tooltip
 	Address, MAC   string
 	Source         string
 	MQTT           bool
@@ -141,7 +142,8 @@ func (h *handler) discoveryOff() bool {
 }
 
 func (h *handler) discoveryData(r *http.Request) discView {
-	v := discView{ShowIgn: r.URL.Query().Get("ignored") == "1", Off: h.discoveryOff()}
+	q := listParams(r)
+	v := discView{ShowIgn: q.Get("ignored") == "1", Off: h.discoveryOff()}
 	if h.d.SysConfig != nil {
 		v.Settings = httpBase(r) + sysPath + "?section=discovery"
 	}
@@ -214,7 +216,6 @@ func (h *handler) discoveryData(r *http.Request) discView {
 		}
 		v.Unident = append(v.Unident, moveRow{Name: u.Topic, Seen: u.SeenAt, SeenText: agoWords(now, u.SeenAt) + " · " + state, New: addr, Why: capitalize(u.Reason) + "."})
 	}
-	q := r.URL.Query()
 	v.State = discState(q)
 	v.Sort, v.Dir = discSort(q)
 	// the chips count what the ignored switch shows; the filter then narrows the rows
@@ -245,7 +246,7 @@ func (h *handler) discoveryData(r *http.Request) discView {
 }
 
 func (h *handler) propRow(base string, now time.Time, p discovery.Proposal, ignored bool) propRow {
-	row := propRow{ID: p.ID, Version: p.Version, Name: p.Device.Name, Hostname: p.Device.Topic,
+	row := propRow{ID: p.ID, Version: p.Version, Name: p.Device.Name, Hostname: p.Device.Net.Hostname, Topic: p.Device.Topic,
 		Address: netaddr.Display(p.Device.Address, p.Device.Port, "http"), MAC: strings.ToUpper(p.Device.MAC),
 		Source: viaText(p.Via), MQTT: p.Via == discovery.ViaMQTT, First: p.FirstSeen, Last: p.SeenAt,
 		FirstText: firstSeenText(now, p.FirstSeen), LastText: agoWords(now, p.SeenAt), Ignored: ignored,
@@ -254,12 +255,19 @@ func (h *handler) propRow(base string, now time.Time, p discovery.Proposal, igno
 	return row
 }
 
-// Label names the row where a single name is needed (a checkbox's label): the friendly name, else the host.
+// Label names the row where a single name is needed (a checkbox's label): the device name, else
+// the hostname, else the topic.
 func (r propRow) Label() string {
-	if r.Name != "" {
-		return r.Name
+	return firstNonEmptyStr(r.Name, r.Hostname, r.Topic)
+}
+
+func firstNonEmptyStr(ss ...string) string {
+	for _, s := range ss {
+		if s != "" {
+			return s
+		}
 	}
-	return r.Hostname
+	return ""
 }
 
 // addChip is one state filter of the New devices list.
@@ -298,6 +306,32 @@ func discState(q url.Values) string {
 		return s
 	}
 	return stateAll
+}
+
+// listParams are the list's own parameters (state, sort, dir, ignored): from the URL, and on a
+// POST from the form's hidden fields, so Add, Ignore and Restore leave the list as it was.
+func listParams(r *http.Request) url.Values {
+	q := r.URL.Query()
+	if r.Method == http.MethodPost {
+		_ = r.ParseForm() // a bad form just means the defaults
+		for _, k := range []string{"state", "sort", "dir", "ignored"} {
+			if v := r.PostForm.Get(k); v != "" {
+				q.Set(k, v)
+			}
+		}
+	}
+	return q
+}
+
+// discBack is where an action returns to: the list with its filter and sort, and the result.
+func discBack(r *http.Request, ok string) string {
+	q := listParams(r)
+	key, dir := discSort(q)
+	href := discHref("", discState(q), key, dir, q.Get("ignored") == "1")
+	if strings.Contains(href, "?") {
+		return href + "&ok=" + ok
+	}
+	return href + "?ok=" + ok
 }
 
 // discHref is the Discovered tab's URL with the given filter, sort and ignored switch.
@@ -654,9 +688,9 @@ func (h *handler) discoveryAccept(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case err == nil:
 		if shown.P.Kind == discovery.KindAddressChange {
-			redirect(w, r, "/discovery?ok=moved")
+			redirect(w, r, discBack(r, "moved"))
 		} else {
-			redirect(w, r, "/discovery?ok=accepted")
+			redirect(w, r, discBack(r, "accepted"))
 		}
 	case errors.As(err, &um):
 		token := h.cmds.put(h.d.Clock.Now(), h.bindingOf(r), prefix+um.Target, nil)
@@ -725,7 +759,7 @@ func (h *handler) discoveryAcceptSelected(w http.ResponseWriter, r *http.Request
 		added++
 	}
 	if len(failed) == 0 {
-		redirect(w, r, "/discovery?ok=accepted")
+		redirect(w, r, discBack(r, "accepted"))
 		return
 	}
 	p := h.discoveryData(r)
@@ -743,7 +777,7 @@ func (h *handler) discoveryDismissSelected(w http.ResponseWriter, r *http.Reques
 			return
 		}
 	}
-	redirect(w, r, "/discovery?ok=dismissed")
+	redirect(w, r, discBack(r, "dismissed"))
 }
 
 func nameOr(p discovery.Proposal) string {
@@ -761,7 +795,7 @@ func (h *handler) discoveryDismiss(w http.ResponseWriter, r *http.Request) {
 	}
 	switch err := h.d.Discovery.Dismiss(r.Context(), actor(r), id); {
 	case err == nil:
-		redirect(w, r, "/discovery?ok=dismissed")
+		redirect(w, r, discBack(r, "dismissed"))
 	case errors.Is(err, discovery.ErrNotFound):
 		h.notFound(w, r)
 	default:
@@ -777,7 +811,7 @@ func (h *handler) discoveryUndismiss(w http.ResponseWriter, r *http.Request) {
 	}
 	switch err := h.d.Discovery.Undismiss(r.Context(), actor(r), id); {
 	case err == nil:
-		redirect(w, r, "/discovery?ok=undismissed")
+		redirect(w, r, discBack(r, "undismissed"))
 	case errors.Is(err, discovery.ErrNotFound):
 		h.notFound(w, r)
 	default:

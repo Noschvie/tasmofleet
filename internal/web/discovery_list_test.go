@@ -2,6 +2,7 @@ package web
 
 import (
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 	"testing"
@@ -19,7 +20,7 @@ func listFixture(t *testing.T) (*env, *fakeDiscovery) {
 	mk := func(id int64, name, topic, addr, mac, via, lwt string, first, seen time.Duration) discovery.Proposal {
 		return discovery.Proposal{ID: id, Version: fmt.Sprintf("v%d", id), Kind: discovery.KindNew, Via: via, LWT: lwt,
 			FirstSeen: now.Add(-first), SeenAt: now.Add(-seen),
-			Device: model.Device{Name: name, Topic: topic, Address: addr, MAC: mac}}
+			Device: model.Device{Name: name, Topic: "topic-" + topic[len(topic)-3:], Address: addr, MAC: mac, Net: model.NetFacts{Hostname: topic}}}
 	}
 	fd.props = []discovery.Proposal{
 		mk(1, "Charlie", "tasmota_ccc", "10.0.0.9", "AA:00:00:00:00:02", "mqtt", "Online", 3*time.Hour, 5*time.Minute),
@@ -173,8 +174,9 @@ func TestNewDevicesHasNoModelOrFirmwareAndSplitsNameFromHostname(t *testing.T) {
 		}
 	}
 	// a device without a friendly name shows a dash in its name column, its host in the hostname column
-	if !strings.Contains(body, `<td class="name" title="—">`) {
-		t.Error("an unnamed device shows no dash")
+	// (the MQTT topic is no column: it is the name cell's tooltip, and never shown as the hostname)
+	if !strings.Contains(body, `<td class="name" title="— · topic topic-aaa">`) {
+		t.Error("an unnamed device shows no dash, or its topic is lost")
 	}
 }
 
@@ -193,5 +195,31 @@ func TestNewDevicesSelectionSurvivesSortAndFilter(t *testing.T) {
 	}
 	if !strings.Contains(body, `action="/tf/discovery/proposals/accept"`) {
 		t.Error("the bulk form lost its action")
+	}
+}
+
+// Why: after Add, Ignore or Restore the admin is back on the list as they left it (filter,
+// sort, ignored switch), not on the default view; the page carries them in hidden fields.
+func TestNewDevicesActionsKeepStateAndSort(t *testing.T) {
+	e, _ := listFixture(t)
+	_, body := e.do(t, "GET", "/discovery?state=offline&sort=ip&dir=desc&ignored=1", "admin", nil)
+	for _, want := range []string{`name="state" value="offline"`, `name="sort" value="ip"`, `name="dir" value="desc"`, `name="ignored" value="1"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("bulk form lacks hidden %s", want)
+		}
+	}
+	form := url.Values{"state": {"offline"}, "sort": {"ip"}, "dir": {"desc"}, "ignored": {"1"}}
+	for _, path := range []string{"/discovery/proposals/1/dismiss", "/discovery/proposals/1/undismiss"} {
+		r, _ := e.do(t, "POST", path, "admin", form)
+		loc := r.Header.Get("Location")
+		for _, want := range []string{"state=offline", "sort=ip", "dir=desc", "ignored=1", "ok="} {
+			if !strings.Contains(loc, want) {
+				t.Errorf("%s redirects to %q, lacking %s", path, loc, want)
+			}
+		}
+	}
+	// the default view needs no parameters
+	if r, _ := e.do(t, "POST", "/discovery/proposals/1/dismiss", "admin", nil); r.Header.Get("Location") != "/tf/discovery?ok=dismissed" {
+		t.Errorf("default redirect %q", r.Header.Get("Location"))
 	}
 }

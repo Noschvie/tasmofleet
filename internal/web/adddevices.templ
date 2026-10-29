@@ -146,6 +146,12 @@ templ discoveredPage(p discView) {
 		if p.HasDefault {
 			<input type="hidden" name="use_default_password" value="1"/>
 		}
+		<input type="hidden" name="state" value={ p.State }/>
+		<input type="hidden" name="sort" value={ p.Sort }/>
+		<input type="hidden" name="dir" value={ p.Dir }/>
+		if p.ShowIgn {
+			<input type="hidden" name="ignored" value="1"/>
+		}
 		<div class="add-bar">
 			<h2>New devices ({ strconv.Itoa(p.NewCount) })</h2>
 			<a class="add-showign" role="checkbox" aria-checked={ ariaBool(p.ShowIgn) } href={ templ.SafeURL(showIgnoredHref(p)) }>
@@ -230,9 +236,9 @@ templ discoveredPage(p discView) {
 										<input type="checkbox" name="id" value={ strconv.FormatInt(r.ID, 10) + ":" + r.Version } aria-label={ "Select " + r.Label() }/>
 									}
 								</td>
-								<td class="name" title={ dash(r.Name) }>
+								<td class="name" title={ nameTip(r) }>
 									<span class="add-label">
-										{ dash(r.Name) }
+										<span class="add-label-t">{ dash(r.Name) }</span>
 										if r.Ignored {
 											@ui.Badge(ui.ToneNeutral, "Ignored")
 										}

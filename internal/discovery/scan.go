@@ -284,6 +284,7 @@ func (m *Manager) probe(ctx context.Context, t probeTarget) (Hit, bool) {
 		}
 	}
 	c := candidate{via: ViaScan, mac: mac, ip: t.ip, port: t.port, name: cleanName(firstNonEmpty(devName, s5.StatusNET.Hostname), mac)}
+	c.host = cleanHostname(s5.StatusNET.Hostname)
 	if ethMAC != "" && ethMAC != mac && ethMAC != "00:00:00:00:00:00" {
 		c.macs = []string{ethMAC}
 	}

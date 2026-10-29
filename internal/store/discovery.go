@@ -60,7 +60,7 @@ type DiscoveryStore interface {
 	PruneProposals(ctx context.Context, before time.Time) (int64, error)
 }
 
-const proposalCols = "id, mac, kind, via, reason, name, address, port, topic, full_topic, existing_id, dismissed, first_seen, seen_at"
+const proposalCols = "id, mac, kind, via, reason, name, address, port, topic, full_topic, existing_id, dismissed, first_seen, seen_at, hostname"
 
 func scanProposal(r scanner) (ProposalRow, error) {
 	var p ProposalRow
@@ -68,7 +68,7 @@ func scanProposal(r scanner) (ProposalRow, error) {
 	var first, seen int64
 	var existing int64
 	err := r.Scan(&p.ID, &p.Device.MAC, &p.Kind, &p.Via, &p.Reason, &p.Device.Name, &p.Device.Address, &p.Device.Port,
-		&p.Device.Topic, &p.Device.FullTopic, &existing, &dismissed, &first, &seen)
+		&p.Device.Topic, &p.Device.FullTopic, &existing, &dismissed, &first, &seen, &p.Device.Net.Hostname)
 	p.ExistingID, p.Dismissed = model.DeviceID(existing), dismissed != 0
 	p.FirstSeen, p.SeenAt = fromMS(first), fromMS(seen)
 	return p, err
@@ -88,9 +88,9 @@ func (s *SQLite) UpsertProposal(ctx context.Context, p ProposalRow, maxVisible i
 			cur.Device.Name == p.Device.Name && cur.Device.Topic == p.Device.Topic && cur.Device.FullTopic == p.Device.FullTopic
 		dismissed := cur.Dismissed && same
 		if _, err := tx.ExecContext(ctx, `UPDATE discovery_proposals SET kind=?, via=?, reason=?, name=?, address=?, port=?, topic=?,
-			full_topic=?, existing_id=?, dismissed=?, seen_at=? WHERE id=?`,
+			full_topic=?, existing_id=?, dismissed=?, seen_at=?, hostname=? WHERE id=?`,
 			p.Kind, p.Via, p.Reason, p.Device.Name, p.Device.Address, p.Device.Port, p.Device.Topic, p.Device.FullTopic,
-			int64(p.ExistingID), b2i(dismissed), now, cur.ID); err != nil {
+			int64(p.ExistingID), b2i(dismissed), now, p.Device.Net.Hostname, cur.ID); err != nil {
 			return ProposalRow{}, mapErr(err)
 		}
 		p.ID, p.FirstSeen, p.Dismissed = cur.ID, cur.FirstSeen, dismissed
@@ -104,9 +104,9 @@ func (s *SQLite) UpsertProposal(ctx context.Context, p ProposalRow, maxVisible i
 			return ProposalRow{}, ErrProposalLimit
 		}
 		res, err := tx.ExecContext(ctx, `INSERT INTO discovery_proposals (mac, kind, via, reason, name, address, port, topic,
-			full_topic, existing_id, dismissed, first_seen, seen_at) VALUES (?,?,?,?,?,?,?,?,?,?,0,?,?)`,
+			full_topic, existing_id, dismissed, first_seen, seen_at, hostname) VALUES (?,?,?,?,?,?,?,?,?,?,0,?,?,?)`,
 			p.Device.MAC, p.Kind, p.Via, p.Reason, p.Device.Name, p.Device.Address, p.Device.Port, p.Device.Topic,
-			p.Device.FullTopic, int64(p.ExistingID), now, now)
+			p.Device.FullTopic, int64(p.ExistingID), now, now, p.Device.Net.Hostname)
 		if err != nil {
 			return ProposalRow{}, mapErr(err)
 		}

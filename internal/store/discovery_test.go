@@ -174,3 +174,26 @@ func TestDismissedProposalCanBeListedAndUndismissed(t *testing.T) {
 		t.Fatalf("unknown id: %v", err)
 	}
 }
+
+// Why: #130, the hostname a device reported is shown in the New devices list. A new sighting
+// refreshes it, and it must not count as a change of the proposal (an ignored device stays ignored).
+func TestProposalHostnameIsStoredAndRefreshedWithoutUnhiding(t *testing.T) {
+	s, _, _ := newStore(t)
+	p := proposal("aa:bb:cc:dd:ee:01", "10.0.0.1")
+	p.Device.Net.Hostname = "tasmota-1234"
+	row, err := s.UpsertProposal(ctx, p, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DismissProposal(ctx, row.ID); err != nil {
+		t.Fatal(err)
+	}
+	p.Device.Net.Hostname = "renamed-host"
+	if _, err := s.UpsertProposal(ctx, p, 10); err != nil {
+		t.Fatal(err)
+	}
+	ign, err := s.ListDismissedProposals(ctx)
+	if err != nil || len(ign) != 1 || ign[0].Device.Net.Hostname != "renamed-host" {
+		t.Fatalf("dismissed = %+v, %v (hostname must be refreshed, the proposal must stay ignored)", ign, err)
+	}
+}

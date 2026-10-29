@@ -122,3 +122,43 @@ func TestMigration0031KeepsExistingDevicesAndAddsEmptyFacts(t *testing.T) {
 		t.Fatalf("defaults: %q %q %q %q", subnet, dns, ota, names)
 	}
 }
+
+// Why: live databases upgrade with discovered devices waiting in the list (#130); their rows
+// must load with an empty hostname (shown as a dash) and lose nothing.
+func TestMigration0032KeepsProposalsAndAddsAnEmptyHostname(t *testing.T) {
+	db, path := rawDB(t)
+	upTo, all := fstest.MapFS{}, fstest.MapFS{}
+	err := fs.WalkDir(Migrations, "migrations", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		b, rerr := fs.ReadFile(Migrations, p)
+		if rerr != nil {
+			return rerr
+		}
+		all[p] = &fstest.MapFile{Data: b}
+		if p < "migrations/0032" {
+			upTo[p] = &fstest.MapFile{Data: b}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := migrate(db, path, upTo); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO discovery_proposals (mac, kind, via, name, address, topic, first_seen, seen_at) VALUES ('aa:bb:cc:00:00:09','new','mqtt','old','10.0.0.1','t',1,2)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrate(db, path, all); err != nil {
+		t.Fatal(err)
+	}
+	var name, host string
+	if err := db.QueryRowContext(ctx, `SELECT name, hostname FROM discovery_proposals`).Scan(&name, &host); err != nil {
+		t.Fatal(err)
+	}
+	if name != "old" || host != "" {
+		t.Fatalf("row: %q %q", name, host)
+	}
+}

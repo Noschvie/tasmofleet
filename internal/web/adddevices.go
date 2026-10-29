@@ -243,9 +243,17 @@ func listSep(i, n int) string {
 	return ", "
 }
 
+// nameTip is the tooltip of the name cell: the name with the MQTT topic, which has no column.
+func nameTip(r propRow) string {
+	if r.Topic == "" {
+		return dash(r.Name)
+	}
+	return dash(r.Name) + " · topic " + r.Topic
+}
+
 // cardHost is the hostname line of a phone card; it is left out when it only repeats the name.
 func cardHost(r propRow) string {
-	if r.Name == "" || r.Hostname == r.Name {
+	if r.Hostname == r.Name {
 		return ""
 	}
 	return r.Hostname

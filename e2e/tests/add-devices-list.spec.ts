@@ -15,9 +15,9 @@ let env: Devenv;
 
 // Three proposals, all offline (their retained last will says so); the devenv devices that announce themselves are the online ones.
 const devices = [
-  { mac: "aa:bb:cc:00:01:01", name: "Workshop lamp", topic: "workshop_lamp", ip: "127.0.0.11", seen: 600 },
-  { mac: "aa:bb:cc:00:01:02", name: "", topic: "attic_fan", ip: "127.0.0.9", seen: 300 },
-  { mac: "aa:bb:cc:00:01:03", name: "Balcony plug", topic: "balcony_plug", ip: "127.0.0.100", seen: 60 },
+  { mac: "aa:bb:cc:00:01:01", name: "Workshop lamp", topic: "workshop_lamp", host: "workshop-lamp-1a2b", ip: "127.0.0.11", seen: 600 },
+  { mac: "aa:bb:cc:00:01:02", name: "", topic: "attic_fan", host: "tasmota-attic-3c4d", ip: "127.0.0.9", seen: 300 },
+  { mac: "aa:bb:cc:00:01:03", name: "Balcony plug", topic: "balcony_plug", host: "balcony-plug-5e6f", ip: "127.0.0.100", seen: 60 },
 ];
 
 /** publishRetained sends one retained QoS 0 message over a bare MQTT 3.1.1 connection. */
@@ -55,9 +55,9 @@ test.beforeAll(async () => {
     const now = Date.now();
     for (const d of devices) {
       db.prepare(
-        `INSERT INTO discovery_proposals (mac, kind, via, reason, name, address, port, topic, full_topic, existing_id, dismissed, first_seen, seen_at)
-         VALUES (?, 'new', 'mqtt', '', ?, ?, 80, ?, 'tasmota/%topic%/%prefix%/', 0, 0, ?, ?)`,
-      ).run(d.mac, d.name, d.ip, d.topic, now - 3600_000, now - d.seen * 1000);
+        `INSERT INTO discovery_proposals (mac, kind, via, reason, name, address, port, topic, full_topic, existing_id, dismissed, first_seen, seen_at, hostname)
+         VALUES (?, 'new', 'mqtt', '', ?, ?, 80, ?, 'tasmota/%topic%/%prefix%/', 0, 0, ?, ?, ?)`,
+      ).run(d.mac, d.name, d.ip, d.topic, now - 3600_000, now - d.seen * 1000, d.host);
     }
   } finally {
     db.close();
@@ -78,7 +78,7 @@ async function open(page: Page, query = "", width = 1280) {
 
 /** hostnames are the Hostname cells of the desktop table, top to bottom. */
 // The stack's own devices announce themselves too; only the three seeded ones are compared.
-const ours = new Set(devices.map((d) => d.topic));
+const ours = new Set(devices.map((d) => d.host));
 const hostnames = async (page: Page) => (await page.locator(".add-disc-table tbody tr td:nth-child(3)").allTextContents()).filter((h) => ours.has(h));
 
 async function shot(page: Page, name: string) {
@@ -99,11 +99,11 @@ test("the state chips filter the list and the headers sort it", async ({ page })
   await expect(page.getByRole("columnheader", { name: "Device name" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Hostname" })).toBeVisible();
   // default: last seen, newest first
-  expect(await hostnames(page)).toEqual(["balcony_plug", "attic_fan", "workshop_lamp"]);
+  expect(await hostnames(page)).toEqual(["balcony-plug-5e6f", "tasmota-attic-3c4d", "workshop-lamp-1a2b"]);
 
   await page.getByRole("link", { name: /^Offline\s*3$/ }).click();
   await expect(page).toHaveURL(/state=offline/);
-  expect(await hostnames(page)).toEqual(["balcony_plug", "attic_fan", "workshop_lamp"]);
+  expect(await hostnames(page)).toEqual(["balcony-plug-5e6f", "tasmota-attic-3c4d", "workshop-lamp-1a2b"]);
   await page.getByRole("link", { name: /^Online\s*\d+$/ }).click();
   await expect(page).toHaveURL(/state=online/);
   expect(await hostnames(page)).toEqual([]); // the offline ones are not in the online list
@@ -111,13 +111,13 @@ test("the state chips filter the list and the headers sort it", async ({ page })
 
   // a header sorts ascending, a second click flips it; the filter chip keeps the sort
   await page.getByRole("columnheader", { name: "IP" }).getByRole("link").click();
-  expect(await hostnames(page)).toEqual(["attic_fan", "workshop_lamp", "balcony_plug"]); // .9 < .11 < .100
+  expect(await hostnames(page)).toEqual(["tasmota-attic-3c4d", "workshop-lamp-1a2b", "balcony-plug-5e6f"]); // .9 < .11 < .100
   await expect(page.getByRole("columnheader", { name: "IP" })).toHaveAttribute("aria-sort", "ascending");
   await page.getByRole("columnheader", { name: "IP" }).getByRole("link").click();
-  expect(await hostnames(page)).toEqual(["balcony_plug", "workshop_lamp", "attic_fan"]);
+  expect(await hostnames(page)).toEqual(["balcony-plug-5e6f", "workshop-lamp-1a2b", "tasmota-attic-3c4d"]);
   await page.getByRole("link", { name: /^Offline\s*3$/ }).click();
   await expect(page).toHaveURL(/sort=ip/);
-  expect(await hostnames(page)).toEqual(["balcony_plug", "workshop_lamp", "attic_fan"]);
+  expect(await hostnames(page)).toEqual(["balcony-plug-5e6f", "workshop-lamp-1a2b", "tasmota-attic-3c4d"]);
 });
 
 for (const width of [375, 1280]) {

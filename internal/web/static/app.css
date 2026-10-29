@@ -10580,7 +10580,7 @@ dialog.fw-notes-dlg .fw-dlg-body {
   font-size: 13px;
 }
 .add-disc-table table {
-  min-width: 1060px;
+  min-width: 1180px;
 }
 .add-scan-table table {
   min-width: 880px;
@@ -10642,17 +10642,20 @@ dialog.fw-notes-dlg .fw-dlg-body {
   color: var(--color-text-2);
 }
 .add-label {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   font-weight: 500;
 }
-.add-sub {
-  display: block;
+.add-label-t {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  font: 400 11.5px var(--font-mono);
-  color: var(--color-text-2);
+  white-space: nowrap;
+}
+.add-label .badge {
+  flex: none;
 }
 .add-table th.act,
 .add-table td.act {
@@ -10688,28 +10691,28 @@ dialog.fw-notes-dlg .fw-dlg-body {
   width: 44px;
 }
 .add-disc-table col.c-name {
-  width: 22%;
-}
-.add-disc-table col.c-ip {
-  width: 120px;
-}
-.add-disc-table col.c-mac {
-  width: 164px;
+  width: auto;
 }
 .add-disc-table col.c-host {
-  width: 17%;
+  width: 168px;
+}
+.add-disc-table col.c-ip {
+  width: 110px;
+}
+.add-disc-table col.c-mac {
+  width: 166px;
 }
 .add-disc-table col.c-src {
-  width: 124px;
+  width: 112px;
 }
 .add-disc-table col.c-first {
-  width: 144px;
+  width: 124px;
 }
 .add-disc-table col.c-last {
-  width: 96px;
+  width: 88px;
 }
 .add-disc-table col.c-act {
-  width: 224px;
+  width: 204px;
 }
 .add-scan-table col.c-name {
   width: 26%;
