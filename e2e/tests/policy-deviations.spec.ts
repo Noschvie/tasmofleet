@@ -168,6 +168,8 @@ test("an Advisory row ticked by hand is written; the device tile's preview offer
   const hint = page.getByRole("checkbox", { name: /LED hint/ });
   await expect(hint).not.toBeChecked();
   await hint.check();
+  await expect(page.getByRole("button", { name: /^Run 1 change$/ })).toBeDisabled(); // the plan is stale until updated
+  await expect(page.getByText("Update plan to include ticked rows")).toBeVisible();
   await page.getByRole("button", { name: "Update plan" }).click();
   await expect(page.locator(".pol-fix-cmd .mono")).toHaveText(["PowerOnState 2", "LedState 3"]);
   await expect(page.getByRole("checkbox", { name: /LED hint/ })).toBeChecked();

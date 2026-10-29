@@ -2,6 +2,8 @@ package web
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"regexp"
 	"strings"
@@ -368,6 +370,44 @@ func TestPolicyFixByPickWritesExactlyTheTickedRows(t *testing.T) {
 	body = previewFor(t, adv, url.Values{"pick": {"1:r2"}})
 	if !strings.Contains(body, cmdHTML("SetOption0 0")) || strings.Contains(body, cmdHTML("PowerOnState 0")) {
 		t.Fatalf("the ticked hint alone:\n%s", body)
+	}
+	if !strings.Contains(body, `<span class="bdg t-accent">Advisory</span>`) {
+		t.Error("the preview marks the command that comes from an Advisory rule")
+	}
+	if !strings.Contains(body, `href="/tf/policy/deviations">Cancel`) {
+		t.Error("Cancel on a preview opened from the tab goes back to the tab")
+	}
+}
+
+func postForm(v url.Values) *http.Request {
+	r := httptest.NewRequest("POST", "/policy/fix", nil)
+	r.PostForm = v
+	return r
+}
+
+// Why: a pick must be a real finding of the report, or a forged one could name devices the admin never
+// saw (known filter); and in the device modes a pick may only add to a device that is selected
+// (sel.has filter), never pull another device into the plan.
+func TestPolicyFixSelectionDropsPicksOutsideTheReportAndTheSelection(t *testing.T) {
+	rep := fixReport()
+	if sel := fixSelection(postForm(url.Values{"pick": {"1:r1", "1:rzzz", "99:r1"}}), rep); !sel.ByPick || len(sel.IDs) != 1 || sel.IDs[0] != 1 || len(sel.Picks) != 1 {
+		t.Errorf("only the real finding survives: %+v", sel)
+	}
+	if sel := fixSelection(postForm(url.Values{"only": {"4"}, "pick": {"1:r1"}}), rep); len(sel.Picks) != 0 || sel.has(1) {
+		t.Errorf("a pick never adds a device to a device selection: %+v", sel)
+	}
+}
+
+// Why: the digest is what binds the reviewed plan; two plans with the same commands but different
+// picks must not share one, or a form could swap the picks under a reviewed digest.
+func TestPolicyFixDigestCoversThePicks(t *testing.T) {
+	row := func(pairs ...fixPair) fixRow {
+		return fixRow{Device: model.Device{ID: 1}, Cmds: []fixCmd{{Text: "SetOption0 0"}}, Pairs: pairs}
+	}
+	a := fixPageOf([]fixRow{row(fixPair{1, "r1"})}, true).Digest
+	b := fixPageOf([]fixRow{row(fixPair{1, "r2"})}, true).Digest
+	if a == b {
+		t.Error("the digest ignores which rule was picked")
 	}
 }
 

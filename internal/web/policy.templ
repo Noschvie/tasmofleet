@@ -276,7 +276,12 @@ templ fixPreviewPage(base, csrf string, p fixPage) {
 						<h2><a href={ templ.SafeURL(base + "/devices/" + devStr(row.Device.ID)) }>{ row.Device.Name }</a></h2>
 						for _, c := range row.Cmds {
 							<div class="pol-fix-cmd">
-								<span class="mono">{ c.Text }</span>
+								<span><span class="mono">{ c.Text }</span>
+									if c.Advisory {
+										{ " " }
+										@ui.Badge(ui.ToneAccent, "Advisory")
+									}
+								</span>
 								<span class="pol-fix-note">{ fixNote(c) }</span>
 							</div>
 						}
@@ -288,7 +293,7 @@ templ fixPreviewPage(base, csrf string, p fixPage) {
 						}
 						if len(row.Options) > 0 {
 							<fieldset class="pol-fix-adv">
-								<legend>Advisory deviations <small>(a hint; included only when ticked)</small></legend>
+								<legend>Advisory deviations <small>(a hint; included only when ticked, then choose Update plan)</small></legend>
 								for _, o := range row.Options {
 									<label class="pol-pickc"><input type="checkbox" form="fix-select" name="pick" value={ o.Pair } checked?={ o.Picked }/><span>{ o.Name }: has <span class="mono">{ o.Have }</span>, wants <span class="mono">{ o.Want }</span></span></label>
 								}
@@ -313,12 +318,17 @@ templ fixPreviewPage(base, csrf string, p fixPage) {
 				for _, f := range p.Fields {
 					<input type="hidden" name={ f.Key } value={ f.Value }/>
 				}
-				<a class="btn" href={ templ.SafeURL(base + policyPath) }>Cancel</a>
+				if p.ByPick {
+					<a class="btn" href={ templ.SafeURL(base + policyPath + "/deviations") }>Cancel</a>
+				} else {
+					<a class="btn" href={ templ.SafeURL(base + policyPath) }>Cancel</a>
+				}
 				if hasFixOptions(p) {
+					<span class="pol-none" data-plan-stale hidden>Update plan to include ticked rows</span>
 					<button type="submit" class="btn" form="fix-select">Update plan</button>
 				}
 				if len(p.IDs) > 0 {
-					<button type="submit" class="btn btn-primary">Run { plural(p.Commands, "change") }</button>
+					<button type="submit" class="btn btn-primary" data-plan-run>Run { plural(p.Commands, "change") }</button>
 				}
 			</form>
 		}

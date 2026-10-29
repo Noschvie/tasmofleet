@@ -33,6 +33,22 @@
       });
     });
   }
+  // Make compliant preview: ticking an Advisory box changes the plan, so Run is disabled until
+  // "Update plan" shows the new one. Without this file the hint beside the boxes says the same.
+  var planBoxes = document.querySelectorAll('input[type="checkbox"][form="fix-select"]');
+  if (planBoxes.length > 0) {
+    var planChanged = function () {
+      document.querySelectorAll("[data-plan-run]").forEach(function (b) {
+        b.disabled = true;
+      });
+      document.querySelectorAll("[data-plan-stale]").forEach(function (m) {
+        m.hidden = false;
+      });
+    };
+    planBoxes.forEach(function (b) {
+      b.addEventListener("change", planChanged);
+    });
+  }
   // Deviating devices: the boxes of Make compliant. The button counts the ticked rows, "Select all"
   // (shown only with this file) ticks every box, and the filter field narrows the groups as you type.
   // Without this file the button posts what is ticked and the filter is a plain GET (?q=).

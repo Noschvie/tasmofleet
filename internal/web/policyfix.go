@@ -37,6 +37,8 @@ func (h *handler) registerPolicyFix(route func(string, func(http.Handler) http.H
 
 type fixCmd struct {
 	Label, Text, Have, Want, Note string
+	// Advisory: the command comes from an Advisory rule that was picked by hand.
+	Advisory bool
 }
 
 type fixSkipView struct{ Label, Reason string }
@@ -70,6 +72,7 @@ type fixPage struct {
 	IDs      []model.DeviceID
 	Digest   string
 	Stale    bool // the values changed since the preview the admin saw
+	ByPick   bool // opened from the Deviating devices tab (Cancel goes back there)
 	// Fields are what the apply form posts back (besides csrf and digest): the devices, or the
 	// picks of a by-pick plan, and the picked Advisory deviations.
 	Fields []ui.KVRow
@@ -188,6 +191,7 @@ func (h *handler) fixRows(ctx context.Context, rep PolicyReport, sel fixSel) []f
 	live := func(id model.DeviceID, key string) bool { return rep.Provenance[id][key].Kind == "live" }
 	var findings []policy.Finding
 	included := map[model.DeviceID][]fixPair{}
+	hint := map[model.DeviceID]map[string]bool{} // device, lower-case command: every included rule is Advisory
 	options := map[model.DeviceID][]fixOption{}
 	for _, f := range rep.Findings {
 		if !sel.has(f.DeviceID) {
@@ -196,6 +200,13 @@ func (h *handler) fixRows(ctx context.Context, rep PolicyReport, sel fixSel) []f
 		pair := fixPair{f.DeviceID, f.Rule.ID}
 		if sel.include(f) {
 			findings = append(findings, f)
+			key := strings.ToLower(f.Rule.Command)
+			if hint[f.DeviceID] == nil {
+				hint[f.DeviceID] = map[string]bool{}
+			}
+			if was, ok := hint[f.DeviceID][key]; !ok || was {
+				hint[f.DeviceID][key] = advisory(f)
+			}
 			if sel.ByPick || advisory(f) {
 				included[f.DeviceID] = append(included[f.DeviceID], pair)
 			}
@@ -219,7 +230,7 @@ func (h *handler) fixRows(ctx context.Context, rep PolicyReport, sel fixSel) []f
 		row := fixRow{Device: d, Options: options[d.ID], Pairs: included[d.ID]}
 		p := plans[d.ID]
 		for _, c := range p.Commands {
-			cmd := fixCmd{Label: settings.Label(c.Command), Text: c.Text, Have: c.Have, Want: c.Want}
+			cmd := fixCmd{Label: settings.Label(c.Command), Text: c.Text, Have: c.Have, Want: c.Want, Advisory: hint[d.ID][strings.ToLower(c.Command)]}
 			if src, ok := rep.Provenance[d.ID][strings.ToLower(c.Command)]; ok {
 				cmd.Note = sourceNote(src, now)
 			}
@@ -264,7 +275,7 @@ func (h *handler) fixRows(ctx context.Context, rep PolicyReport, sel fixSel) []f
 // fixPageOf builds the page of a plan. The digest covers every command per device and the picked
 // deviations, so a changed pick can never apply under the digest of another plan.
 func fixPageOf(rows []fixRow, byPick bool) fixPage {
-	p := fixPage{Rows: rows}
+	p := fixPage{Rows: rows, ByPick: byPick}
 	sum := sha256.New()
 	for _, row := range rows {
 		if !byPick {
