@@ -194,3 +194,19 @@ func TestSensorSnapshotIsACopy(t *testing.T) {
 		t.Fatal("Telemetry shares its slice with the tracker")
 	}
 }
+
+// Why: a real two-channel meter (Tasmota EnergyFmt) sends Power as an array but the counters
+// and Voltage as one scalar. The tracker must keep the watts per channel ("1", "2") and the
+// counters under "" rather than dropping or misplacing either.
+func TestEnergyMixedScalarAndArrayShape(t *testing.T) {
+	h := newHarness(t, true, Options{}, mqttDev(1, "dual"))
+	h.listen()
+	h.bus.emit(mqttbus.KindSensor, "dual", "SENSOR", `{"ENERGY":{"Total":21.684,"Today":0.102,"Power":[10,20],"Voltage":234,"Current":[0.1,0.2]}}`, false)
+	e := h.svc.Telemetry()[1].Energy
+	if len(e) != 3 || *e[""].Total != 21.684 || *e[""].Today != 0.102 || e[""].Power != nil {
+		t.Fatalf("scalar counters must sit under the empty channel: %+v", e)
+	}
+	if *e["1"].Power != 10 || *e["2"].Power != 20 || e["1"].Total != nil {
+		t.Fatalf("watts must sit under the numbered channels: %+v", e)
+	}
+}

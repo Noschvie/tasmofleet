@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
 	"regexp"
@@ -113,6 +114,12 @@ func (d *simDevice) minimalLocked() bool { return d.image == "minimal" || d.imag
 
 func newDevice(f *fleet, spec DeviceSpec, def profileDef, c *capture) (*simDevice, error) {
 	d := &simDevice{f: f, spec: spec, cap: c, def: def, host: "127.0.0.1"}
+	if spec.Sensors != nil { // the caller may keep editing its map while the device publishes
+		d.spec.Sensors = make(map[string]map[string]float64, len(spec.Sensors))
+		for k, v := range spec.Sensors {
+			d.spec.Sensors[k] = maps.Clone(v)
+		}
+	}
 	d.topic = topicOf(spec.Name)
 	sum := sha256.Sum256([]byte(spec.Name))
 	d.mac = fmt.Sprintf("02:00:5E:%02X:%02X:%02X", sum[0], sum[1], sum[2])

@@ -106,10 +106,12 @@ type DeviceSpec struct {
 	FriendlyNames []string
 	// Energy makes the device publish an ENERGY block in tele/SENSOR, shaped like the
 	// fleet's energy-status.json captures: 0 = no meter, 1 = one meter (a number per
-	// field), n >= 2 = n channels (an array of n per field, as Tasmota sends them).
+	// field), n >= 2 = n channels the way Tasmota sends them: Power, ApparentPower,
+	// ReactivePower, Factor and Current as arrays of n; Total, Yesterday, Today (summed
+	// over the channels) and Voltage as one number each.
 	Energy int
 	// Sensors are published in tele/SENSOR as one block per sensor name, for example
-	// {"BME280": {"Temperature": 21.5}}, followed by TempUnit "C" and PressureUnit "hPa".
+	// {"BME280": {"Temperature": 21.5}}, followed by TempUnit "C" (and PressureUnit "hPa" when a block has a Pressure).
 	Sensors map[string]map[string]float64
 }
 

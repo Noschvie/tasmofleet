@@ -46,9 +46,14 @@ func TestSimulatorPublishesSensorTelemetry(t *testing.T) {
 	if err := json.Unmarshal(dual["ENERGY"], &e); err != nil {
 		t.Fatal(err)
 	}
-	var power, volt []float64
-	if json.Unmarshal(e["Power"], &power) != nil || len(power) != 2 || json.Unmarshal(e["Voltage"], &volt) != nil || len(volt) != 2 {
-		t.Fatalf("two channels: Power and Voltage must be arrays of 2, got %s", dual["ENERGY"])
+	var power []float64
+	var total, volt float64
+	if json.Unmarshal(e["Power"], &power) != nil || len(power) != 2 {
+		t.Fatalf("two channels: Power must be an array of 2, got %s", dual["ENERGY"])
+	}
+	// Tasmota (EnergyFmt, SetOption129 0) sums the counters and shares one voltage.
+	if json.Unmarshal(e["Total"], &total) != nil || json.Unmarshal(e["Voltage"], &volt) != nil {
+		t.Fatalf("two channels: Total and Voltage must be scalars, got %s", dual["ENERGY"])
 	}
 	if power[0] == power[1] {
 		t.Errorf("channels must differ, or a test cannot tell them apart: %v", power)
@@ -64,6 +69,9 @@ func TestSimulatorPublishesSensorTelemetry(t *testing.T) {
 	}
 	if string(w["TempUnit"]) != `"C"` {
 		t.Errorf("TempUnit = %s", w["TempUnit"])
+	}
+	if _, ok := w["PressureUnit"]; ok {
+		t.Error("PressureUnit without a Pressure reading")
 	}
 
 	c.waitFor(t, "tele/plain/STATE=")
