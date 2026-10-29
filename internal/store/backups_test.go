@@ -183,3 +183,79 @@ func TestMigrationsFromV010KeepBackupsAndStopTheCascade(t *testing.T) {
 		t.Errorf("foreign key violations after the rebuild: %d %v", violations, err)
 	}
 }
+
+// Why: the layout migration changes a row's path only while the row still says
+// what the migration saw; a concurrent change (or a repeated run) must never
+// be overwritten, and a missing row is reported, not invented.
+func TestUpdateBackupPathIsCompareAndSet(t *testing.T) {
+	s, _, _ := newStore(t)
+	d := mustDevice(t, s, "a", "10.0.0.1")
+	id, err := s.PutBackup(ctx, model.Backup{DeviceID: d, Kind: model.BackupConfigDump, Path: "backups/1/x-dmp.dmp", SHA256: "aa"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok, err := s.UpdateBackupPath(ctx, id, "backups/other/x", "backups/new/x"); err != nil || ok {
+		t.Fatalf("stale old path must not match: %v %v", ok, err)
+	}
+	if ok, err := s.UpdateBackupPath(ctx, id, "backups/1/x-dmp.dmp", "backups/new/x"); err != nil || !ok {
+		t.Fatalf("matching old path: %v %v", ok, err)
+	}
+	if ok, _ := s.UpdateBackupPath(ctx, id, "backups/1/x-dmp.dmp", "backups/again/x"); ok {
+		t.Error("second update from the old path must not apply")
+	}
+	if b, _ := s.GetBackup(ctx, id); b.Path != "backups/new/x" {
+		t.Errorf("path %s", b.Path)
+	}
+	if ok, err := s.UpdateBackupPath(ctx, id+99, "a", "b"); err != nil || ok {
+		t.Errorf("missing row: %v %v", ok, err)
+	}
+}
+
+// Why: a hostname directory may be used by one device only. The lookup is
+// case-insensitive (case-insensitive file systems), treats "_" and "%" as
+// literals (hostnames contain "_"), does not match prefixes of longer names,
+// and includes backups of deleted devices (reported as 0).
+func TestBackupDirOwners(t *testing.T) {
+	s, _, _ := newStore(t)
+	a := mustDevice(t, s, "a", "10.0.0.1")
+	b := mustDevice(t, s, "b", "10.0.0.2")
+	put := func(dev model.DeviceID, p string) model.BackupID {
+		id, err := s.PutBackup(ctx, model.Backup{DeviceID: dev, Kind: model.BackupConfigDump, Path: p, SHA256: "aa"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	put(a, "backups/Plug/1_Plug.dmp")
+	put(b, "backups/plug_2/1_plug.dmp")
+	put(b, "backups/plugin/1.dmp")
+	put(b, "backups/a_b/1.dmp")
+	put(a, "backups/axb/1.dmp")
+	for dir, want := range map[string][]model.DeviceID{
+		"plug":  {a},
+		"PLUG":  {a},
+		"plug_": nil, // "_" is not a wildcard: no "plug_2" match without the slash
+		"a_b":   {b},
+		"axb":   {a},
+		"none":  nil,
+		"plug2": nil,
+	} {
+		got, err := s.BackupDirOwners(ctx, dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("BackupDirOwners(%q) = %v, want %v", dir, got, want)
+		}
+	}
+	if err := s.DeleteDevice(ctx, a); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.BackupDirOwners(ctx, "plug"); !reflect.DeepEqual(got, []model.DeviceID{0}) {
+		t.Errorf("orphaned backups own their directory as 0: %v", got)
+	}
+	all, err := s.ListAllBackups(ctx)
+	if err != nil || len(all) != 5 {
+		t.Errorf("ListAllBackups includes orphans: %d %v", len(all), err)
+	}
+}

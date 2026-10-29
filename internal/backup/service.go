@@ -66,7 +66,7 @@ type DeviceGetter interface {
 
 // Options configure the service.
 type Options struct {
-	DataDir string // backups live in <DataDir>/backups/<device-id>/
+	DataDir string // backups live in <DataDir>/backups/<hostname>/ (layout.go)
 	Devices DeviceGetter
 	Store   store.BackupStore
 	Client  tasmota.Client
@@ -85,6 +85,10 @@ type Manager struct {
 	ret   atomic.Pointer[retention] // keep and max age in force; replaced by SetRetention
 	mu    sync.Mutex
 	locks map[model.DeviceID]*sync.Mutex
+	// dirMu is held from the choice of a run's directory until its first file
+	// is indexed, so two runs cannot claim one hostname directory, and while
+	// the layout migration or an empty-directory cleanup runs.
+	dirMu sync.Mutex
 }
 
 var _ Service = (*Manager)(nil)
@@ -272,11 +276,18 @@ func (m *Manager) backup(ctx context.Context, owner, dev model.Device, note stri
 		dmpNote = strings.TrimSuffix(dmpNote, ";")
 	}
 
-	dir := filepath.Join(m.o.DataDir, "backups", fmt.Sprint(int64(id)))
+	m.dirMu.Lock()
+	unlock := sync.OnceFunc(m.dirMu.Unlock)
+	defer unlock()
+	relDir, base, err := m.resolveDir(ctx, owner)
+	if err != nil {
+		return nil, fwVersion, err
+	}
+	dir := filepath.Join(m.o.DataDir, filepath.FromSlash(relDir))
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fwVersion, fmt.Errorf("backup: %w", err)
 	}
-	taken := m.freeTimestamp(dir)
+	taken := m.freeTimestamp(dir, base)
 
 	files := []outFile{
 		{model.BackupConfigDump, "dmp", dmp, dmpNote, ""},
@@ -288,7 +299,7 @@ func (m *Manager) backup(ctx context.Context, owner, dev model.Device, note stri
 
 	var stored []model.Backup
 	for _, f := range files {
-		name := taken.Format("20060102T150405Z") + "-" + string(f.kind) + "." + f.ext
+		name := fileName(taken.Format(stampLayout), base, f.kind)
 		if err := writeAtomic(dir, name, f.data); err != nil {
 			return stored, fwVersion, fmt.Errorf("backup: write %s: %w", f.kind, err)
 		}
@@ -296,7 +307,7 @@ func (m *Manager) backup(ctx context.Context, owner, dev model.Device, note stri
 		b := model.Backup{
 			DeviceID: id, DeviceName: owner.Name, DeviceMAC: owner.MAC, Kept: run.Keep, Trigger: run.Trigger, TriggerRef: run.Ref,
 			Kind: f.kind, TakenAt: taken, Version: fwVersion,
-			Path: path.Join("backups", fmt.Sprint(int64(id)), name), Size: int64(len(f.data)),
+			Path: path.Join(relDir, name), Size: int64(len(f.data)),
 			SHA256: hex.EncodeToString(sum[:]), DecoderVersion: f.decoder, Note: f.note,
 		}
 		bid, err := m.o.Store.PutBackup(ctx, b)
@@ -306,16 +317,17 @@ func (m *Manager) backup(ctx context.Context, owner, dev model.Device, note stri
 		}
 		b.ID = bid
 		stored = append(stored, b)
+		unlock() // the directory is claimed once a row points into it
 	}
 	return stored, fwVersion, nil
 }
 
 // freeTimestamp returns now (UTC, whole seconds), moved forward until no file
 // of an earlier run in dir carries the same stamp.
-func (m *Manager) freeTimestamp(dir string) time.Time {
+func (m *Manager) freeTimestamp(dir, base string) time.Time {
 	t := m.o.Clock.Now().UTC().Truncate(time.Second)
 	for {
-		_, err := os.Stat(filepath.Join(dir, t.Format("20060102T150405Z")+"-"+string(model.BackupConfigDump)+".dmp"))
+		_, err := os.Stat(filepath.Join(dir, fileName(t.Format(stampLayout), base, model.BackupConfigDump)))
 		if err != nil {
 			return t
 		}
@@ -445,6 +457,8 @@ func (m *Manager) prune(ctx context.Context, id model.DeviceID) {
 		return
 	}
 	ret := m.ret.Load()
+	var removed []string
+	defer func() { m.removeEmptyDirs(removed...) }()
 	for _, b := range Prunable(all, ret.keep, ret.maxAge, m.o.Clock.Now()) {
 		if full, ok := m.safePath(b.Path); ok {
 			if err := os.Remove(full); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -454,7 +468,9 @@ func (m *Manager) prune(ctx context.Context, id model.DeviceID) {
 		}
 		if err := m.o.Store.DeleteBackup(ctx, b.ID); err != nil {
 			m.o.Log.Error("backup retention: delete failed", "component", "backup", "device", id, "err", err)
+			continue
 		}
+		removed = append(removed, b.Path)
 	}
 }
 

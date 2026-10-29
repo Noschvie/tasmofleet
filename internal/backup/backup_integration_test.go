@@ -148,13 +148,13 @@ func TestRealDecoderBackupViaSimulator(t *testing.T) {
 			t.Errorf("%s: %v mode %v, want 0600", b.Path, err, st.Mode())
 		}
 	}
-	for _, d := range []string{"backups", filepath.Join("backups", "7")} {
+	for _, d := range []string{"backups", filepath.Join("backups", "plug")} {
 		st, err := os.Stat(filepath.Join(s.dir, d))
 		if err != nil || st.Mode().Perm() != 0o700 {
 			t.Errorf("%s: %v mode %v, want 0700", d, err, st.Mode())
 		}
 	}
-	if left, _ := filepath.Glob(filepath.Join(s.dir, "backups", "7", ".tmp-*")); len(left) != 0 {
+	if left, _ := filepath.Glob(filepath.Join(s.dir, "backups", "plug", ".tmp-*")); len(left) != 0 {
 		t.Errorf("temp files left: %v", left)
 	}
 }
@@ -244,7 +244,7 @@ func TestRetentionOnDiskWithRealFiles(t *testing.T) {
 		}
 		all = append(all, got)
 	}
-	entries, _ := filepath.Glob(filepath.Join(s.dir, "backups", "7", "*"))
+	entries, _ := filepath.Glob(filepath.Join(s.dir, "backups", "plug", "*"))
 	if len(entries) != 6 {
 		t.Fatalf("want 2 runs (newest + MaxAge-protected) x 3 files on disk, got %d: %v", len(entries), entries)
 	}

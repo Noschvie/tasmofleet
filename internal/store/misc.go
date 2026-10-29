@@ -185,6 +185,45 @@ func (s *SQLite) ListOrphanBackups(ctx context.Context) ([]model.Backup, error) 
 	return s.listBackups(ctx, "SELECT "+backupCols+" FROM backups WHERE device_id IS NULL ORDER BY taken_at DESC, id DESC")
 }
 
+// ListAllBackups returns every backup row, device or orphan, by ID.
+func (s *SQLite) ListAllBackups(ctx context.Context) ([]model.Backup, error) {
+	return s.listBackups(ctx, "SELECT "+backupCols+" FROM backups ORDER BY id")
+}
+
+// UpdateBackupPath changes a row's path only if it still is oldPath, so a
+// concurrent change is never overwritten.
+func (s *SQLite) UpdateBackupPath(ctx context.Context, id model.BackupID, oldPath, newPath string) (bool, error) {
+	res, err := s.db.ExecContext(ctx, "UPDATE backups SET path=? WHERE id=? AND path=?", newPath, id, oldPath)
+	if err != nil {
+		return false, mapErr(err)
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
+// likeEscaper escapes the LIKE wildcards of a literal (ESCAPE '\').
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+// BackupDirOwners lists the devices with backups below backups/<dir>/. SQLite's
+// LIKE ignores ASCII case, which is what a directory collision needs.
+func (s *SQLite) BackupDirOwners(ctx context.Context, dir string) ([]model.DeviceID, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT COALESCE(device_id, 0) FROM backups WHERE path LIKE ? ESCAPE '\'`,
+		"backups/"+likeEscaper.Replace(dir)+"/%")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck // rows.Err below reports iteration problems
+	var out []model.DeviceID
+	for rows.Next() {
+		var id model.DeviceID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
 func (s *SQLite) listBackups(ctx context.Context, q string, args ...any) ([]model.Backup, error) {
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {

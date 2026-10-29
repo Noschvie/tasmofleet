@@ -134,6 +134,16 @@ type BackupStore interface {
 	SetBackupsKept(ctx context.Context, ids []model.BackupID, kept bool) error
 	// ListOrphanBackups lists the kept backups of deleted devices, newest first.
 	ListOrphanBackups(ctx context.Context) ([]model.Backup, error)
+	// ListAllBackups lists every row (device or orphan), oldest ID first. The
+	// startup migration of the file layout walks it.
+	ListAllBackups(ctx context.Context) ([]model.Backup, error)
+	// UpdateBackupPath sets the path of one row only while it still is oldPath
+	// (compare-and-set). It reports false, changing nothing, when the row is
+	// gone or its path is no longer oldPath.
+	UpdateBackupPath(ctx context.Context, id model.BackupID, oldPath, newPath string) (bool, error)
+	// BackupDirOwners lists the devices that have indexed backups below
+	// backups/<dir>/ (case-insensitive); 0 stands for backups of deleted devices.
+	BackupDirOwners(ctx context.Context, dir string) ([]model.DeviceID, error)
 	// Failed backups (nothing stored), pruned with the audit retention.
 	AddBackupAttempt(ctx context.Context, a model.BackupAttempt) (int64, error)
 	ListBackupAttempts(ctx context.Context, device model.DeviceID, limit int) ([]model.BackupAttempt, error) // newest first

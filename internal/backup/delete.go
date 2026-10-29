@@ -161,6 +161,8 @@ func (m *Manager) DeleteOlderThan(ctx context.Context, actor string, device mode
 // already gone is fine; any other failure stops with the rows still indexed,
 // so nothing is left on disk without an index entry.
 func (m *Manager) removeFiles(ctx context.Context, files []model.Backup) error {
+	var removed []string
+	defer func() { m.removeEmptyDirs(removed...) }()
 	for _, b := range files {
 		full, ok := m.safePath(b.Path)
 		if !ok {
@@ -172,6 +174,7 @@ func (m *Manager) removeFiles(ctx context.Context, files []model.Backup) error {
 		if err := m.o.Store.DeleteBackup(ctx, b.ID); err != nil && !errors.Is(err, store.ErrNotFound) {
 			return err
 		}
+		removed = append(removed, b.Path)
 	}
 	return nil
 }

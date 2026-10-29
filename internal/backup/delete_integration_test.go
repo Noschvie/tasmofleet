@@ -38,7 +38,7 @@ func TestDeleteOlderThanAgainstSimulator(t *testing.T) {
 			t.Errorf("old backup %d survived", b.ID)
 		}
 	}
-	if ents, _ := os.ReadDir(e.dir + "/backups/7"); len(ents) != len(left) {
+	if ents, _ := os.ReadDir(e.dir + "/backups/plug"); len(ents) != len(left) {
 		t.Errorf("%d files on disk for %d index rows", len(ents), len(left))
 	}
 }

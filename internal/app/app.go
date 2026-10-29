@@ -374,6 +374,12 @@ func (a *runtime) setupBackups(ctx context.Context) error {
 		return err
 	}
 	a.backups = m
+	// 0.18 moved backups from backups/<device-id>/ to hostname directories. This
+	// runs before the scheduler and any backup; it only moves files whose
+	// checksum matches and never deletes one. A failure is logged, not fatal.
+	if _, err := m.MigrateLayout(ctx); err != nil {
+		a.log.Error("backup layout migration failed; existing backups stay readable where they are", "err", err)
+	}
 	return nil
 }
 

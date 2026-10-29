@@ -51,3 +51,26 @@ run with `TASMOFLEET_TRUSTED_PROXIES`.
 See [How TLS is chosen](configuration.md#how-tls-is-chosen): trusted proxies mean plain HTTP,
 a certificate means TLS with it, `ALLOW_INSECURE_HTTP=true` means plain HTTP, and with none of
 them a self-signed certificate. The port never changes with the mode.
+
+# Upgrading to 0.18: backup file layout
+
+Backups were stored as `backups/<device-id>/<stamp>-<kind>.<ext>`. From 0.18 they are named after the
+device (hostname, else inventory name): `backups/<hostname>/<stamp>_<hostname>.dmp`, `.snapshot.json`
+and `.decoded.json`. Background: [#129](https://github.com/nofuturekid/tasmofleet/issues/129).
+
+**You do not have to do anything.** At every start tasmofleet moves the old files:
+
+- A file is moved only if its SHA-256 equals the one in the index; then it is renamed (same
+  volume, no copy) and the index is updated. Nothing is deleted. A file that does not match, is
+  missing or would collide with another one stays where it is and is logged as a warning
+  ("backup layout: left in place").
+- If the container stops in the middle, the next start completes the move.
+- Empty `backups/<number>/` folders are removed afterwards; backups of deleted devices keep their
+  old folder.
+- Two devices with the same hostname get `<hostname>` and `<hostname>_<device-id>`.
+- If a device's hostname changes later, new backups go to the new folder; old ones stay put and
+  remain listed and restorable.
+- A **downgrade to 0.17** still works: the index stores each file's path.
+
+If you have scripts or a backup job that read `backups/<device-id>/`, change them to follow the new
+folders (or read the paths from the database).

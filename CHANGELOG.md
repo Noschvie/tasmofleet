@@ -6,6 +6,16 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Changed
+
+- **Backups are named after the device (#129, thanks @Noschvie), breaking for scripts that read the data directory.**
+  Files now live in `backups/<hostname>/` and are called `<stamp>_<hostname>.dmp`
+  (`.snapshot.json`, `.decoded.json`) instead of `backups/<device-id>/<stamp>-<kind>.<ext>`.
+  Existing backups are **moved automatically on the first start**, each only after its SHA-256
+  matches the index, and nothing is deleted; there is nothing to do. A downgrade to 0.17 still
+  reads them (the index stores the path). Scripts that read `backups/<id>/` must follow the new
+  names. See [Upgrading to 0.18](docs/upgrading.md#upgrading-to-018-backup-file-layout).
+
 ### Fixed
 
 - An OtaUrl whose password contains `/`, `#` or `?` could be shown or compared in part. The

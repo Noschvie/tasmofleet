@@ -285,16 +285,16 @@ func TestBackupProducesThreeFilesWithModes(t *testing.T) {
 			t.Errorf("%s: index does not match file", b.Path)
 		}
 	}
-	if !strings.HasPrefix(got[0].Path, "backups/7/20261018T120000Z-dmp.") || !strings.HasSuffix(got[0].Path, ".dmp") {
+	if !strings.HasPrefix(got[0].Path, "backups/kitchen/20261018T120000Z_kitchen.") || !strings.HasSuffix(got[0].Path, ".dmp") {
 		t.Errorf("path layout: %s", got[0].Path)
 	}
-	if st, _ := os.Stat(filepath.Join(e.dir, "backups", "7")); st.Mode().Perm() != 0o700 {
+	if st, _ := os.Stat(filepath.Join(e.dir, "backups", "kitchen")); st.Mode().Perm() != 0o700 {
 		t.Errorf("dir mode %v", st.Mode().Perm())
 	}
 	if got[2].DecoderVersion != "16.0.0.0" {
 		t.Errorf("decoded backup must be stamped with the decoder version: %+v", got[2])
 	}
-	entries, _ := os.ReadDir(filepath.Join(e.dir, "backups", "7"))
+	entries, _ := os.ReadDir(filepath.Join(e.dir, "backups", "kitchen"))
 	for _, en := range entries {
 		if strings.HasPrefix(en.Name(), ".tmp-") {
 			t.Errorf("temp file left behind: %s", en.Name())
@@ -435,7 +435,7 @@ func TestDownloadFailureStoresNothing(t *testing.T) {
 	if len(e.st.rows) != 0 {
 		t.Error("index rows written without a dump")
 	}
-	if _, err := os.Stat(filepath.Join(e.dir, "backups", "7")); err == nil {
+	if _, err := os.Stat(filepath.Join(e.dir, "backups", "kitchen")); err == nil {
 		t.Error("directory created for a failed run")
 	}
 	if len(e.audit.ev) != 1 || e.audit.ev[0].Result == "ok" {
@@ -474,7 +474,7 @@ func TestRetentionKeepsNewestRunsAndRemovesFiles(t *testing.T) {
 			t.Errorf("pruned file still on disk: %s", b.Path)
 		}
 	}
-	entries, _ := os.ReadDir(filepath.Join(e.dir, "backups", "7"))
+	entries, _ := os.ReadDir(filepath.Join(e.dir, "backups", "kitchen"))
 	if len(entries) != 6 {
 		t.Errorf("files on disk: %d", len(entries))
 	}
@@ -640,4 +640,42 @@ func TestSetRetentionAppliesFromTheNextPruning(t *testing.T) {
 	if list, _ := e.m.List(context.Background(), 7); len(list) != 3 {
 		t.Fatalf("only the newest run must be left, got %d files", len(list))
 	}
+}
+
+func (s *memBackups) ListAllBackups(context.Context) ([]model.Backup, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]model.Backup, 0, len(s.rows))
+	for id := model.BackupID(1); id <= s.next; id++ {
+		if b, ok := s.rows[id]; ok {
+			out = append(out, b)
+		}
+	}
+	return out, nil
+}
+
+func (s *memBackups) UpdateBackupPath(_ context.Context, id model.BackupID, oldPath, newPath string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	b, ok := s.rows[id]
+	if !ok || b.Path != oldPath {
+		return false, nil
+	}
+	b.Path = newPath
+	s.rows[id] = b
+	return true, nil
+}
+
+func (s *memBackups) BackupDirOwners(_ context.Context, dir string) ([]model.DeviceID, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	seen := map[model.DeviceID]bool{}
+	var out []model.DeviceID
+	for _, b := range s.rows {
+		if strings.HasPrefix(strings.ToLower(b.Path), strings.ToLower("backups/"+dir+"/")) && !seen[b.DeviceID] {
+			seen[b.DeviceID] = true
+			out = append(out, b.DeviceID)
+		}
+	}
+	return out, nil
 }

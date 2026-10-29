@@ -212,7 +212,7 @@ Tables (authoritative: `0001_init.sql`):
 | `health_events`                             | health state transitions                              | written on change only, pruned (default 90 days)                                                                                               |
 | `firmware_artifacts`                        | cache index                                           | unique (release, filename), sha256, family proven by image header, `safeboot` flag                                                             |
 | `ota_batches`, `ota_jobs`, `ota_job_events` | OTA                                                   | partial unique index: at most one non-terminal job per device. Every transition writes a row to `ota_job_events`                               |
-| `backups`                                   | backup index                                          | files under `<DATA_DIR>/backups/<device-id>/`                                                                                                  |
+| `backups`                                   | backup index                                          | files under `<DATA_DIR>/backups/<hostname>/` (every row stores its own relative path)                                                          |
 | `audit_log`                                 | append-only audit                                     | pruned by `AUDIT_RETENTION` (default 1 year)                                                                                                   |
 | `sessions`                                  | web sessions                                          | the store holds `sha256(cookie)`, never the cookie                                                                                             |
 | `local_users`                               | local accounts (role, disabled, must_change_password) | written by CLI and admin UI with step-up                                                                                                       |
@@ -227,10 +227,26 @@ File layout under `/data`:
 /data/tasmofleet.db (+ -wal, -shm)
 /data/secret.key                 32 random bytes, 0600 (device passwords at rest)
 /data/firmware/<release>/<file>  cache, 0644 (served to devices; contains no secrets)
-/data/backups/<device-id>/<UTC timestamp>-<kind>.<ext>   0600
+/data/backups/<hostname>/<UTC stamp>_<hostname>.dmp            0600
+/data/backups/<hostname>/<UTC stamp>_<hostname>.snapshot.json
+/data/backups/<hostname>/<UTC stamp>_<hostname>.decoded.json
 /data/tmp/                       decoder scratch (PyInstaller extraction), cleaned on start
 /data/tasmofleet.env             optional config file
 ```
+
+Backup naming (0.18): `<hostname>` is the device's current hostname (Status 5) reduced to
+`[A-Za-z0-9._-]` (other characters become `_`, leading dots dropped, at most 63 bytes), else the
+sanitised inventory name, else `device-<id>`. A directory that already holds another device's
+or a deleted device's backups (case-insensitive, decided from the `backups` index under one
+manager-wide lock from the choice to the first indexed file) is not shared: `<hostname>_<id>` is
+used. A hostname change only affects new backups; old files are never moved, the index finds them
+by path. Files of 0.17 (`backups/<device-id>/<stamp>-<kind>.<ext>`) are moved at every start by an
+idempotent migration: SHA-256 of the file must equal the row, `os.Rename` on the same file system,
+then a compare-and-set update of the row path. A crash between rename and update is repaired at the
+next start; anything unclear (checksum mismatch, both or neither file, target used by another row)
+is left untouched and logged; nothing is deleted except empty numeric directories (`os.Remove`).
+Backups of deleted devices stay where they are. No SQL migration; a downgrade to 0.17 still reads
+the moved files because it reads by the stored path.
 
 All files are created with explicit modes. The process never runs `chmod -R` over the
 data directory (TasmoAdmin lesson A4).
