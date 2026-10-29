@@ -209,7 +209,7 @@ func (m *Manager) MigrateLayout(ctx context.Context) (MigrationResult, error) {
 					continue
 				}
 			} else {
-				dir, base = orphanDir(rows, b, former)
+				dir, base = orphanDir(rows, stableOrphanRow(rows, b, former), former)
 			}
 			if c, ok := claimed[strings.ToLower(dir)]; ok && c != key {
 				// Another owner got this directory earlier in this run, even if
@@ -231,7 +231,7 @@ func (m *Manager) MigrateLayout(ctx context.Context) (MigrationResult, error) {
 			warn(b, "unsafe path", nil)
 			continue
 		}
-		out, why := m.migrateOne(ctx, b, newRel, oldFull, newFull)
+		out, why := m.migrateOne(ctx, b, newRel, oldFull, newFull, used)
 		switch out {
 		case migMoved:
 			res.Moved++
@@ -308,7 +308,58 @@ func (m *Manager) FileMissing(b model.Backup) bool {
 	return errors.Is(err, os.ErrNotExist)
 }
 
-func (m *Manager) migrateOne(ctx context.Context, b model.Backup, newRel, oldFull, newFull string) (migOutcome, string) {
+// stableOrphanRow is the row whose name decides an orphan's directory: the
+// lowest-id row of the same former device that is still at its 0.17 path, so
+// rows with different stored names (the device was renamed) get the same
+// target on every run.
+func stableOrphanRow(rows []model.Backup, b model.Backup, former string) model.Backup {
+	for _, o := range rows {
+		if o.DeviceID == 0 {
+			if mt := legacyPath.FindStringSubmatch(o.Path); mt != nil && mt[1] == former {
+				return o
+			}
+		}
+	}
+	return b
+}
+
+// strandedFile looks for b's file below backups/*/ under the name a migration
+// would have given it (same stamp and suffix as newRel), in a path no other row
+// uses, with the row's SHA-256. Exactly one hit is returned; zero or several
+// leave the row alone.
+func (m *Manager) strandedFile(b model.Backup, newRel string, used map[string]model.BackupID) (string, bool) {
+	name := path.Base(newRel)
+	i := strings.IndexByte(name, '_')
+	if i < 0 {
+		return "", false
+	}
+	stamp, rest := name[:i], name[i+1:]
+	suffix := rest[strings.IndexByte(rest, '.'):]
+	hits, err := filepath.Glob(filepath.Join(m.backupsRoot(), "*", stamp+"_*"+suffix))
+	if err != nil {
+		return "", false
+	}
+	var found []string
+	for _, h := range hits {
+		rel, err := filepath.Rel(m.o.DataDir, h)
+		if err != nil {
+			continue
+		}
+		rel = filepath.ToSlash(rel)
+		if other, taken := used[strings.ToLower(rel)]; taken && other != b.ID {
+			continue
+		}
+		if sum, err := fileSHA(h); err == nil && sum == b.SHA256 {
+			found = append(found, rel)
+		}
+	}
+	if len(found) != 1 {
+		return "", false
+	}
+	return found[0], true
+}
+
+func (m *Manager) migrateOne(ctx context.Context, b model.Backup, newRel, oldFull, newFull string, used map[string]model.BackupID) (migOutcome, string) {
 	left := func(why string, err error) (migOutcome, string) {
 		m.o.Log.Warn("backup layout: left in place", "component", "backup", "backup", b.ID, "path", b.Path, "why", why, "err", err)
 		return migLeft, why
@@ -336,6 +387,16 @@ func (m *Manager) migrateOne(ctx context.Context, b model.Backup, newRel, oldFul
 		return left("target unreadable", newErr)
 	}
 	if errors.Is(oldErr, os.ErrNotExist) {
+		// Neither file is where expected. A crash after a rename may have put the
+		// file in a directory a later run would not choose (the name changed since):
+		// find it by checksum before calling the row missing.
+		if cand, ok := m.strandedFile(b, newRel, used); ok {
+			if !m.setPath(ctx, b, cand) {
+				return left("row not updated", nil)
+			}
+			used[strings.ToLower(cand)] = b.ID
+			return migRepaired, ""
+		}
 		return migMissing, "" // nothing to move: the file was deleted by hand
 	}
 	if oldErr != nil {

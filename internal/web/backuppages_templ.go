@@ -638,7 +638,7 @@ func backupRowItem(p backupsView, b backupRow) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if b.Missing {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "<div class=\"bk-reason\">The file is gone from the data directory (deleted by hand?). It cannot be downloaded or restored; delete the entry to remove it.</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 56, "<div class=\"bk-reason\">The file is gone from the data directory (deleted by hand?). Check that the data volume is mounted. It cannot be downloaded or restored; delete the entry to remove it.</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

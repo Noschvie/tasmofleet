@@ -103,7 +103,7 @@ func (h *handler) restoreTarget(w http.ResponseWriter, r *http.Request) (model.B
 		return model.Backup{}, model.Device{}, false
 	}
 	_, b, err := h.d.Backups.Open(r.Context(), model.BackupID(n))
-	if errors.Is(err, backup.ErrFileMissing) {
+	if errors.Is(err, backup.ErrFileMissing) && b.Kind == model.BackupConfigDump {
 		h.backupFileMissing(w, r, b)
 		return b, model.Device{}, false
 	}

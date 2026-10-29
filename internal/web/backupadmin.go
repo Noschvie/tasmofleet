@@ -46,7 +46,7 @@ func (h *handler) backupFileMissing(w http.ResponseWriter, r *http.Request, b mo
 		where, label = fmt.Sprintf("/devices/%d/backups", b.DeviceID), "Backups of this device"
 	}
 	h.renderNotFound(w, r, "Backup file missing", "The file of this backup is missing",
-		"The file was removed from the data directory, so it cannot be downloaded, compared or restored. Remove the backup from the list to get rid of the entry.",
+		"The file was removed from the data directory, so it cannot be downloaded, compared or restored. Check that the data volume is mounted; if the file is really gone, remove the backup from the list.",
 		ui.Btn{Label: label, Kind: "primary", Href: where}, ui.Btn{Label: "Go to dashboard", Href: "/"})
 }
 

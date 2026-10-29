@@ -816,3 +816,49 @@ func TestMigrateLayoutCountsMissingFilesInNewLayout(t *testing.T) {
 		t.Fatalf("%+v %v", res, err)
 	}
 }
+
+// Why (review of #205): a crash after the rename leaves the file under the name the first
+// run chose. If the orphan's rows carry different stored names (the device was renamed), a
+// later run must not pick another directory and call the row missing: the row is repaired,
+// by a stable choice of name and, as a net, by finding the file by checksum.
+func TestMigrateLayoutOrphanWithRenamedDeviceRepairsAfterCrash(t *testing.T) {
+	e, _ := fleetEnv(t)
+	fo := &failOnce{memBackups: e.st}
+	e.m.o.Store = fo
+	rows := legacy(t, e,
+		legacyFile{dev: 4, stamp: "20261001T080000Z", kind: model.BackupConfigDump, content: "a", orphan: true, name: "Old name"},
+		legacyFile{dev: 4, stamp: "20261002T080000Z", kind: model.BackupConfigDump, content: "b", orphan: true, name: "New name"},
+	)
+	// the crash hits the first row's update (file renamed, row not changed)
+	e.m.MigrateLayout(t.Context()) //nolint:errcheck // the result is asserted through the second run
+	res, err := e.m.MigrateLayout(t.Context())
+	if err != nil || res.Missing != 0 || res.Left != 0 {
+		t.Fatalf("restart run %+v %v", res, err)
+	}
+	for _, r := range rows {
+		if data, _, err := e.m.Open(t.Context(), r.ID); err != nil || len(data) != 1 {
+			t.Errorf("row %d unreadable after repair: %v", r.ID, err)
+		}
+	}
+}
+
+// Why: even when the target differs between runs (a live device's hostname changed after the
+// crash), the moved file is found by its checksum, so it is repaired and not reported missing.
+func TestMigrateLayoutFindsStrandedFileByChecksum(t *testing.T) {
+	e, f := fleetEnv(t, host(7, "k", "kitchen"))
+	e.m.o.Store = &failOnce{memBackups: e.st}
+	rows := legacy(t, e, legacyFile{dev: 7, stamp: "20261018T120000Z", kind: model.BackupConfigDump, content: "dump-a"})
+	if res, _ := e.m.MigrateLayout(t.Context()); res.Left != 1 {
+		t.Fatalf("crash run %+v", res)
+	}
+	d := f[7]
+	d.Net.Hostname = "pantry"
+	f[7] = d
+	res, _ := e.m.MigrateLayout(t.Context())
+	if res.Repaired != 1 || res.Missing != 0 {
+		t.Fatalf("restart run %+v", res)
+	}
+	if data, _, err := e.m.Open(t.Context(), rows[0].ID); err != nil || string(data) != "dump-a" {
+		t.Errorf("not readable: %v", err)
+	}
+}
