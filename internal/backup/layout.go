@@ -142,9 +142,12 @@ func (m *Manager) MigrateLayout(ctx context.Context) (MigrationResult, error) {
 		return res, fmt.Errorf("backup: list for layout migration: %w", err)
 	}
 	used := make(map[string]model.BackupID, len(rows))
+	shared := map[string]int{} // rows per path: a file two rows point at must not move
 	for _, b := range rows {
 		used[strings.ToLower(b.Path)] = b.ID
+		shared[strings.ToLower(b.Path)]++
 	}
+	claimed := map[string]model.DeviceID{} // lower-cased dir -> device that got it in this run
 	type target struct{ dir, base string }
 	targets := map[model.DeviceID]*target{}
 	warn := func(b model.Backup, why string, err error) {
@@ -152,6 +155,9 @@ func (m *Manager) MigrateLayout(ctx context.Context) (MigrationResult, error) {
 		m.o.Log.Warn("backup layout: left in place", "component", "backup", "backup", b.ID, "path", b.Path, "why", why, "err", err)
 	}
 	for _, b := range rows {
+		if b.DeviceID != 0 && legacyPath.FindStringSubmatch(b.Path) == nil {
+			b = m.relinkLegacy(ctx, b) // row says new path, file still at the old one (lost rename)
+		}
 		mt := legacyPath.FindStringSubmatch(b.Path)
 		if mt == nil || b.DeviceID == 0 {
 			res.Current++
@@ -160,6 +166,10 @@ func (m *Manager) MigrateLayout(ctx context.Context) (MigrationResult, error) {
 		stamp, kind, ext := mt[1], model.BackupKind(mt[2]), mt[3]
 		if (kind == model.BackupConfigDump) != (ext == "dmp") {
 			warn(b, "kind and extension disagree", nil)
+			continue
+		}
+		if shared[strings.ToLower(b.Path)] > 1 {
+			warn(b, "path shared by several rows", nil)
 			continue
 		}
 		t := targets[b.DeviceID]
@@ -174,6 +184,12 @@ func (m *Manager) MigrateLayout(ctx context.Context) (MigrationResult, error) {
 				warn(b, "directory not resolvable", err)
 				continue
 			}
+			if c, ok := claimed[strings.ToLower(dir)]; ok && c != b.DeviceID {
+				// Another device got this directory earlier in this run, even if
+				// its rows were left in place and the index does not show it yet.
+				dir = path.Join("backups", fmt.Sprintf("%s_%d", base, int64(b.DeviceID)))
+			}
+			claimed[strings.ToLower(dir)] = b.DeviceID
 			t = &target{dir, base}
 			targets[b.DeviceID] = t
 		}
@@ -251,6 +267,16 @@ func (m *Manager) migrateOne(ctx context.Context, b model.Backup, newRel, oldFul
 	if err := os.Rename(oldFull, newFull); err != nil {
 		return left("rename", err)
 	}
+	// Make the rename durable before the row changes: after a power loss on a
+	// journaling/CoW file system the row must never point to a path whose
+	// directory entry was not persisted. On failure the row keeps the old path;
+	// whichever name survived is found by the next start.
+	if err := syncDir(filepath.Dir(newFull)); err != nil {
+		return left("sync target directory", err)
+	}
+	if err := syncDir(filepath.Dir(oldFull)); err != nil {
+		return left("sync source directory", err)
+	}
 	if !m.setPath(ctx, b, newRel) {
 		return migLeft // file is at newRel, row says old: the next start repairs it
 	}
@@ -310,4 +336,52 @@ func fileSHA(full string) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// syncDir flushes a directory's entries to disk.
+func syncDir(dir string) error {
+	d, err := os.Open(dir) //nolint:gosec // dir comes from safePath
+	if err != nil {
+		return err
+	}
+	if err := d.Sync(); err != nil {
+		_ = d.Close() // the sync error is the one to report
+		return err
+	}
+	return d.Close()
+}
+
+var newPath = regexp.MustCompile(`^backups/[^/]+/(\d{8}T\d{6}Z)_[^/]+\.(dmp|snapshot\.json|decoded\.json)$`)
+
+// relinkLegacy is the safety net for a row that already names the hostname
+// layout while its file is missing: if the 0.17 file is still there and
+// matches the row's checksum, the row is pointed back at it (the normal
+// migration then moves it). Anything else returns b unchanged.
+func (m *Manager) relinkLegacy(ctx context.Context, b model.Backup) model.Backup {
+	mt := newPath.FindStringSubmatch(b.Path)
+	full, ok := m.safePath(b.Path)
+	if mt == nil || !ok {
+		return b
+	}
+	if _, err := os.Stat(full); !errors.Is(err, os.ErrNotExist) {
+		return b
+	}
+	ext, kind := "json", strings.TrimSuffix(mt[2], ".json")
+	if mt[2] == "dmp" {
+		ext, kind = "dmp", "dmp"
+	}
+	rel := fmt.Sprintf("backups/%d/%s-%s.%s", int64(b.DeviceID), mt[1], kind, ext)
+	old, ok := m.safePath(rel)
+	if !ok {
+		return b
+	}
+	if sum, err := fileSHA(old); err != nil || sum != b.SHA256 {
+		return b
+	}
+	if ok, err := m.o.Store.UpdateBackupPath(ctx, b.ID, b.Path, rel); err != nil || !ok {
+		return b
+	}
+	m.o.Log.Warn("backup layout: file was still at its 0.17 path, row repaired", "component", "backup", "backup", b.ID, "from", b.Path, "to", rel)
+	b.Path = rel
+	return b
 }

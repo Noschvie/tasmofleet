@@ -560,3 +560,91 @@ func TestMigrateLayoutKeepsNonEmptyNumericDirs(t *testing.T) {
 		t.Errorf("unindexed file in legacy dir lost: %v", err)
 	}
 }
+
+// Why (M1): after a power loss the row may already name the hostname path
+// while the rename never reached the disk. If the 0.17 file is still there and
+// matches, the row is pointed back and the file migrated: the backup is not
+// orphaned.
+func TestMigrateLayoutRelinksRowWhoseRenameWasLost(t *testing.T) {
+	e, _ := fleetEnv(t, host(7, "k", "kitchen"))
+	rows := legacy(t, e, legacyFile{dev: 7, stamp: "20261018T120000Z", kind: model.BackupConfigDump, content: "dump-a"})
+	newRel := "backups/kitchen/20261018T120000Z_kitchen.dmp"
+	if ok, err := e.st.UpdateBackupPath(t.Context(), rows[0].ID, rows[0].Path, newRel); !ok || err != nil {
+		t.Fatal(ok, err)
+	}
+	res, err := e.m.MigrateLayout(t.Context())
+	if err != nil || res.Moved != 1 || res.Left != 0 {
+		t.Fatalf("%+v %v", res, err)
+	}
+	if data, b, err := e.m.Open(t.Context(), rows[0].ID); err != nil || string(data) != "dump-a" || b.Path != newRel {
+		t.Errorf("not readable at the new path: %v %s", err, b.Path)
+	}
+}
+
+// Why (M1): the safety net only trusts a checksum match; a different file at
+// the legacy name is left alone and the row is not touched.
+func TestMigrateLayoutRelinkRequiresChecksum(t *testing.T) {
+	e, _ := fleetEnv(t, host(7, "k", "kitchen"))
+	rows := legacy(t, e, legacyFile{dev: 7, stamp: "20261018T120000Z", kind: model.BackupConfigDump, content: "dump-a"})
+	must(t, os.WriteFile(filepath.Join(e.dir, rows[0].Path), []byte("other"), 0o600))
+	newRel := "backups/kitchen/20261018T120000Z_kitchen.dmp"
+	_, _ = e.st.UpdateBackupPath(t.Context(), rows[0].ID, rows[0].Path, newRel)
+	if _, err := e.m.MigrateLayout(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if g, _ := e.st.GetBackup(t.Context(), rows[0].ID); g.Path != newRel {
+		t.Errorf("row changed to %s", g.Path)
+	}
+	if b, _ := os.ReadFile(filepath.Join(e.dir, rows[0].Path)); string(b) != "other" {
+		t.Error("legacy file touched")
+	}
+}
+
+// Why (M1): the rename is only trusted after the directories are synced; a
+// directory that cannot be synced makes the sync fail loudly, not silently.
+func TestSyncDir(t *testing.T) {
+	if err := syncDir(t.TempDir()); err != nil {
+		t.Errorf("existing dir: %v", err)
+	}
+	if err := syncDir(filepath.Join(t.TempDir(), "missing")); err == nil {
+		t.Error("missing dir must fail")
+	}
+}
+
+// Why (M2): device A's only legacy row is left in place (corrupt), so the index
+// does not show A in the hostname directory. B, with the same hostname, must
+// still not take the directory A is entitled to.
+func TestMigrateLayoutSameHostnameFirstRowLeft(t *testing.T) {
+	e, _ := fleetEnv(t, host(1, "a", "plug"), host(2, "b", "plug"))
+	rows := legacy(t, e,
+		legacyFile{dev: 1, stamp: "20261018T120000Z", kind: model.BackupConfigDump, content: "one"},
+		legacyFile{dev: 2, stamp: "20261018T120000Z", kind: model.BackupConfigDump, content: "two"},
+	)
+	must(t, os.WriteFile(filepath.Join(e.dir, rows[0].Path), []byte("tampered"), 0o600))
+	res, err := e.m.MigrateLayout(t.Context())
+	if err != nil || res.Moved != 1 || res.Left != 1 {
+		t.Fatalf("%+v %v", res, err)
+	}
+	if b, _ := e.st.GetBackup(t.Context(), rows[1].ID); b.Path != "backups/plug_2/20261018T120000Z_plug.dmp" {
+		t.Errorf("B must not share A's directory: %s", b.Path)
+	}
+}
+
+// Why (M3): if two rows name one legacy file, moving it for the first would
+// leave the second dangling. Neither moves.
+func TestMigrateLayoutSkipsSharedPath(t *testing.T) {
+	e, _ := fleetEnv(t, host(7, "k", "kitchen"))
+	rows := legacy(t, e, legacyFile{dev: 7, stamp: "20261018T120000Z", kind: model.BackupConfigDump, content: "dump-a"})
+	dup := rows[0]
+	if _, err := e.st.PutBackup(t.Context(), dup); err != nil {
+		t.Fatal(err)
+	}
+	before := snapshotDisk(t, e.dir)
+	res, err := e.m.MigrateLayout(t.Context())
+	if err != nil || res.Moved != 0 || res.Left != 2 {
+		t.Fatalf("%+v %v", res, err)
+	}
+	if fmt.Sprint(snapshotDisk(t, e.dir)) != fmt.Sprint(before) {
+		t.Error("shared file moved")
+	}
+}
