@@ -300,5 +300,23 @@ Design of the safeboot push (tasmofleet, #30): `GET /up` shows `upl(this)` -> jo
 Guard, one `GET /u4?u4=fct&api=`, probe until the device answers as safeboot; Guard again, one upload to
 `/u2` there, then the normal `await_reboot`/`verify`. A job that ends with the device in safeboot sends one
 `GET /u4?u4=ota&api=` and probes; if that does not bring the old version back the job fails with the
-address so the user can finish by hand. Timing assumptions for the deadline: see the PR for #30 (not
-measured yet; the first real run records them).
+address so the user can finish by hand.
+
+#### Real-device test of the safeboot push (office-monitor-thomas, ESP32, 16.0.0, 2026-10-29)
+
+Build of PR #190 (0590da9) with the gate opened locally.
+
+* R0 (read-only): `/up` has `upl(this)` and `action='u2?fsz='`; Status 4 `Free` 697, `ProgramFlashSize` 4096.
+* R1, reinstall 16.0.0 by push: succeeded, 52 s. States: queued, preflight, backup, set_ota_url,
+  safeboot_switch, upgrade_issued, verify, succeeded. `await_reboot` was skipped: the first probe after the
+  upload hung in a TCP retry until the app was up and saw the new uptime (Status 11 `UptimeSec` 4), so the
+  job went straight to verify. Device commands: exactly one `GET /u4?u4=fct&api=` (answer `false`), the
+  probes (Status 2 `{"Command":"Unknown"}`, the bare `Upgrade` read probe, `/`), `/up` (plain form),
+  exactly one `POST /u2?fsz=2234912`, verify. No `Upgrade 1`, no OtaUrl set. Relays off before and after.
+* Timings: `/u4` reply to the first safeboot answer 5.7 s; upload about 30.6 s; upload reply to the first
+  answer of the app 7.3 s; `/u4` to app 44.8 s; whole job 52 s.
+* R2, cancel 0.1 s after the `/u4 fct`: ended cancelled, exactly one `/u4?u4=ota` (on the first probe in
+  `safeboot_recover`), no upload, app back on 16.0.0 after 10.7 s, text "Upload into safeboot failed; the
+  device was switched back to 16.0.0 (cancelled while the device switched into safeboot)", `recovery_step` 2.
+
+`SafebootWindow` stays at 2 min (measured about 6 s and 11 s).

@@ -127,8 +127,8 @@ type Config struct {
 	MaxAttempts    int           // Upgrade attempts per stage
 	// SafebootWindow is how long the push into safeboot waits for the device to answer as safeboot
 	// after the switch, and for the app after the switch back. A restart into the other partition
-	// takes the ESP32 a few seconds to reboot plus its Wi-Fi join, 10 to 25 s expected (to be
-	// measured on the real device, #30); the window is about five times that.
+	// takes the ESP32 a few seconds to reboot plus its Wi-Fi join; measured on a real ESP32: about 6 s
+	// to safeboot, about 11 s back to the app (#30). The window leaves a wide margin.
 	SafebootWindow time.Duration
 	RestoreOtaURL  bool // put the original OtaUrl back after success
 	// PowerRestoreMaxAge is how old the relay state (read in preflight,

@@ -284,6 +284,7 @@ func newItEnvMQTT(t *testing.T, mqttURL string) *itEnv {
 	e := &itEnv{t: t, clk: newScaledClock(), log: newJobLog(), backups: &noBackups{},
 		ctrl: map[model.DeviceID]simulator.Controller{}, machine: DefaultConfig()}
 	e.bigImages.Store(true)
+	e.safebootPush = safebootPushEnabled
 	dir := t.TempDir()
 	box, err := secretbox.LoadOrCreate(dir)
 	if err != nil {

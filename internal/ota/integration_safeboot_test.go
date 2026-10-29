@@ -161,10 +161,11 @@ func TestITSafebootGuardRunsBetweenSwitchAndUpload(t *testing.T) {
 // before this feature, and the preview says why. Nothing is sent to /u4.
 func TestITSafebootGateClosedDownloadsInstead(t *testing.T) {
 	e := newItEnv(t)
+	e.safebootPush = false // the gate closed, as it was before the real-device test
 	e.withBigImage()
 	dev := e.addDevice(simulator.DeviceSpec{Profile: simulator.ProfileESP32})
 	orig := e.ctrl[dev].OtaURL()
-	eng := e.start(2) // gate closed: the engine's own default
+	eng := e.start(2)
 	items, err := eng.Preview(context.Background(), []Request{{DeviceID: dev, Release: itRelease, SkipBackup: true, Delivery: model.DeliveryPush}})
 	if err != nil || len(items) != 1 {
 		t.Fatalf("Preview: %v %v", items, err)

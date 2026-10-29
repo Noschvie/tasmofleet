@@ -395,8 +395,8 @@ data directory (TasmoAdmin lesson A4).
   allows one fails before touching the device instead of switching unseen. A push job
   sends its image once (no second attempt after a stalled or lost upload). ESP8266 stays
   on the download until a real-hardware test.
-- **Push into safeboot (#30, ESP32 with the safeboot layout; gated by `safebootPushEnabled`, off until
-  the sequence ran on a real device)**: an image larger than the running partition's free flash goes
+- **Push into safeboot (#30, ESP32 with the safeboot layout; gate `safebootPushEnabled`, open since the
+  real-device test)**: an image larger than the running partition's free flash goes
   through the factory partition, as the web UI does. `GET /up` tells the layout without side effects:
   the button calls `upl(this)` only in the single-OTA form (`tasmota.ParseUpLayout`, research doc).
   The job (`Job.ViaSafeboot`, decided in the preview, `PreviewItem.ViaSafeboot`) runs
@@ -411,8 +411,9 @@ data directory (TasmoAdmin lesson A4).
   recovery after a failed verify is refused); the old version answering ends the job `failed` ("Upload into safeboot
   failed; the device was switched back to <old>"), anything else ends it `failed` with the address
   and the manual instruction. A restart of tasmofleet resumes both states by probing only. The image
-  must start with `0xE9` (checked before the device is restarted). While the gate is off the preview
-  says "Downloads instead: push into safeboot is not enabled yet".
+  must start with `0xE9` (checked before the device is restarted). With the gate closed the preview says
+  "Downloads instead: push into safeboot is not enabled yet". `await_reboot` may be skipped: when the first
+  probe after the upload already sees the new app (uptime below the reboot proof), the job goes straight to `verify`.
 - Device output is untrusted text. It is size-limited and parsed with tolerant JSON
   (control characters stripped), and HTML-escaped by templ on output.
 
@@ -886,7 +887,7 @@ written.
 | UpgradeAccept  | 3 min                            | download blocks the web server, so "no answer" is expected; OBS end-to-end 20-40 s           |
 | RebootWindow   | 8 min                            | 10 download attempts on ESP8266 (SRC) plus boot plus Wi-Fi join                              |
 | ProbeInterval  | 5 s                              |                                                                                              |
-| SafebootWindow | 2 min                            | ESP32 restart into the other partition plus Wi-Fi join, expected 10 to 25 s (unmeasured, #30) |
+| SafebootWindow | 2 min                            | ESP32 restart into the other partition plus Wi-Fi join; measured about 6 s (to safeboot) and 11 s (back to the app) |
 | MaxAttempts    | 2 per stage                      |                                                                                              |
 | OTA_PARALLEL   | 2 jobs past `queued`, fleet-wide | ESP8266 web servers and a small firmware server; staged jobs hold their slot for both stages |
 

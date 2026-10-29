@@ -62,15 +62,15 @@ const (
 	errPushSafeboot = "push upload needs a device running a normal firmware, not safeboot or minimal"
 	errPushStaged   = "push upload cannot do a two-step update"
 	// errPushSafebootOff is the note of a device that would need the push into safeboot while it
-	// is gated off.
+	// is gated off (tests only; the shipped gate is open).
 	errPushSafebootOff = "push into safeboot is not enabled yet"
 )
 
-// safebootPushEnabled gates the push into safeboot (#30). It stays false until the sequence was
-// run on a real device (restart into safeboot, upload there, recovery; see the PR of #30). While
-// false, a device that needs safeboot for an upload downloads instead, as before. NewEngine copies
-// it into Engine.safebootPush, which the tests set on their own engine.
-const safebootPushEnabled = false
+// safebootPushEnabled gates the push into safeboot (#30). It was opened after the sequence ran on a
+// real ESP32 (16.0.0 reinstall, cancel and switch back; docs/research/tasmota-minimal-and-ota.md).
+// When false, a device that needs safeboot for an upload downloads instead. NewEngine copies it into
+// Engine.safebootPush, which the tests set on their own engine.
+const safebootPushEnabled = true
 
 // pushDeviceRefusal says why a device cannot take a push upload, or nil. It
 // is decided on the detected identity, before any image is fetched.
