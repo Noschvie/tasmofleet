@@ -93,13 +93,15 @@ All screenshots show simulated devices.
 
 ```sh
 docker run -d --name tasmofleet \
-  -p 8443:8443 -p 80:80 \
-  -e TASMOFLEET_LISTEN=:8443 \
-  -e TASMOFLEET_TLS_SELF_SIGNED=true \
+  -p 8443:8080 -p 80:80 \
+  -e TZ=Europe/Berlin \
   -v tasmofleet-data:/data \
   ghcr.io/nofuturekid/tasmofleet:latest
 docker logs tasmofleet 2>&1 | grep -o '/setup/account?token=[^"]*'
 ```
+
+The UI always listens on container port 8080; `8443:8080` is the host port you pick. Upgrading
+from 0.16 or older with a `-p 8443:8443` mapping? Read [Upgrading to 0.17](docs/upgrading.md) first.
 
 Open `https://<host>:8443` followed by the printed `/setup/account?token=...` path, accept the
 self-signed certificate, set the admin password and follow the setup. The link is valid until
@@ -118,12 +120,10 @@ services:
     container_name: tasmofleet
     restart: unless-stopped
     ports:
-      - "8443:8443" # UI (HTTPS, self-signed)
+      - "8443:8080" # UI (HTTPS, self-signed; container port is always 8080)
       - "80:80" # firmware for the devices (plain HTTP)
     environment:
-      TASMOFLEET_LISTEN: ":8443"
-      TASMOFLEET_TLS_SELF_SIGNED: "true"
-      # TZ: "Europe/Berlin" # local time instead of UTC (logs, times the app formats)
+      TZ: "Europe/Berlin" # local time instead of UTC (logs, times the app formats)
     volumes:
       - tasmofleet-data:/data
 volumes:
@@ -139,13 +139,16 @@ mkdir -p /srv/tasmofleet && chown -R 65532:65532 /srv/tasmofleet
 ```
 
 Alternatively set an explicit `user: "<uid>:<gid>"` in Compose (or `--user`) that owns the
-directory. Set `TZ` (e.g. `Europe/Berlin`) to get local time instead of UTC.
+directory. Set `TZ` (e.g. `Europe/Berlin`) to get local time instead of UTC
+([what it changes](docs/configuration.md#time-zone)).
 
 With Compose, the setup link is in `docker compose logs tasmofleet`.
 
 **Unraid**: a template is in [deploy/unraid/tasmofleet.xml](deploy/unraid/tasmofleet.xml) (copy
 it to `/boot/config/plugins/dockerMan/templates-user/`); it runs plain HTTP behind a reverse
-proxy with its own IP on `br0`.
+proxy with its own IP on `br0` (UI on port 8080, firmware on port 80 of that IP). The Community
+Applications template uses the `bridge` network instead, with the port mappings as the only
+place for ports. Upgrading an existing install: [docs/upgrading.md](docs/upgrading.md).
 
 ## Configuration
 
@@ -153,10 +156,12 @@ The environment only holds bootstrap settings (listeners, data directory, truste
 sign-in mode); everything else, single sign-on included, is set in the UI and stored in the
 database. A value set in the environment locks its field in the UI.
 
-- All variables: [deploy/unraid/tasmofleet.env.example](deploy/unraid/tasmofleet.env.example)
+- **Every environment variable** (purpose, default, bootstrap/lock/legacy, secrets and `_FILE`, how TLS is
+  chosen, the time zone): [docs/configuration.md](docs/configuration.md). An example env file:
+  [deploy/unraid/tasmofleet.env.example](deploy/unraid/tasmofleet.env.example)
 - Reverse proxy, OIDC (Authentik), Prometheus, Grafana and Unraid examples: [deploy/](deploy/).
-  Behind a reverse proxy, run plain HTTP on `:8080` with `TASMOFLEET_TRUSTED_PROXIES` and
-  `TASMOFLEET_PUBLIC_URL`.
+  Behind a reverse proxy, set `TASMOFLEET_TRUSTED_PROXIES` and `TASMOFLEET_PUBLIC_URL`: the
+  same container port 8080 then serves plain HTTP.
 - Lost passwords and emergency access: [docs/runbooks/emergency-access.md](docs/runbooks/emergency-access.md)
 
 ## Status

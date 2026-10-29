@@ -195,13 +195,14 @@ func TestRemovedAdminListenerKeysWarnButDoNotFail(t *testing.T) {
 
 // Why: a fresh container must work with no configuration at all and still not
 // send passwords in clear text: without proxy, certificate or opt-in it serves a
-// self-signed certificate (and the HTTPS port by default).
+// self-signed certificate. The container port is :8080 in every mode (#152); the
+// TLS choice never moves the port.
 func TestZeroConfigurationServesSelfSignedTLSWithLocalLogin(t *testing.T) {
 	c, err := Load([]string{"TASMOFLEET_DATA_DIR=" + t.TempDir(), "TASMOFLEET_CONFIG_FILE=/dev/null"})
 	if err != nil {
 		t.Fatalf("zero configuration must load: %v", err)
 	}
-	if c.AuthMode != "local" || !c.TLSSelfSigned || !c.AutoTLS || c.Listen != ":8443" || c.FWListen != ":80" || !c.LocalLogin {
+	if c.AuthMode != "local" || !c.TLSSelfSigned || !c.AutoTLS || c.Listen != ":8080" || c.FWListen != ":80" || !c.LocalLogin {
 		t.Fatalf("%+v", c)
 	}
 	// Explicit choices are respected.

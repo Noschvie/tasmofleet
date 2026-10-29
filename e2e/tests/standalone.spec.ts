@@ -5,8 +5,8 @@ import { test, expect } from "../support/fixtures";
 import { App, startApp } from "../support/stack";
 
 // Standalone mode: no proxy, no IdP, local accounts only. Run once over plain
-// HTTP (ALLOW_INSECURE_HTTP, trusted LAN) and once with a self-signed
-// certificate. First run: the generated admin password is read from the file
+// HTTP (ALLOW_INSECURE_HTTP, trusted LAN) and once with the zero-configuration
+// self-signed certificate (no variable selects it). First run: the generated admin password is read from the file
 // in the data dir and the first sign-in forces a change.
 for (const tlsMode of ["plain", "self-signed"] as const) {
   test.describe(`standalone, ${tlsMode}`, () => {
@@ -17,7 +17,7 @@ for (const tlsMode of ["plain", "self-signed"] as const) {
         scheme: tlsMode === "plain" ? "http" : "https",
         env: {
           TASMOFLEET_AUTH_MODE: "local",
-          ...(tlsMode === "plain" ? { TASMOFLEET_ALLOW_INSECURE_HTTP: "true" } : { TASMOFLEET_TLS_SELF_SIGNED: "true" }),
+          ...(tlsMode === "plain" ? { TASMOFLEET_ALLOW_INSECURE_HTTP: "true" } : {}),
         },
       });
     });
@@ -64,7 +64,7 @@ for (const tlsMode of ["plain", "self-signed"] as const) {
         dataDir, port: Number(port), scheme: tlsMode === "plain" ? "http" : "https",
         env: {
           TASMOFLEET_AUTH_MODE: "local",
-          ...(tlsMode === "plain" ? { TASMOFLEET_ALLOW_INSECURE_HTTP: "true" } : { TASMOFLEET_TLS_SELF_SIGNED: "true" }),
+          ...(tlsMode === "plain" ? { TASMOFLEET_ALLOW_INSECURE_HTTP: "true" } : {}),
         },
       });
       await page.goto(app.url + "/login");

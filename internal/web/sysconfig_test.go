@@ -179,7 +179,7 @@ func TestSystemSettingsRejectUnknownAndBootstrapKeys(t *testing.T) {
 		if r.StatusCode != 400 {
 			t.Errorf("%v: status %d", form, r.StatusCode)
 		}
-		if svc.Snapshot().BackupKeep != 10 || len(mem.rows) != 3 || svc.Snapshot().Listen != ":8443" {
+		if svc.Snapshot().BackupKeep != 10 || len(mem.rows) != 3 || svc.Snapshot().Listen != ":8080" {
 			t.Errorf("%v: a rejected request must change nothing", form)
 		}
 	}

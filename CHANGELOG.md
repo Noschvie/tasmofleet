@@ -6,8 +6,36 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Upgrade notes: action may be required
+
+**The container port of the UI is now always 8080** (it was 8443 in the zero-configuration TLS
+mode), and `TASMOFLEET_TLS_SELF_SIGNED` no longer exists. Full steps for Unraid, `docker run` and
+Compose, and what happens if you do nothing: [Upgrading to 0.17](docs/upgrading.md).
+
+- **Unraid (Community Applications) and installs with an explicit `TASMOFLEET_LISTEN`
+  (`:8443` or `:8080`) keep working without any change** (unless UI listen was emptied, see the next
+  point). A saved `:8443` is still honoured, and the scheme of the shipped default template
+  (self-signed TLS) and of the proxy variant (plain HTTP) is unchanged. On `br0` or a custom IP
+  there is no port mapping: the container listens on the saved UI listen port (8443 with the
+  template defaults, 8080 in the proxy setup). If you delete UI listen, it listens on 8080 (UI) and
+  80 (firmware) of its IP, so update bookmarks and the reverse proxy upstream. The start log warns
+  if `TASMOFLEET_TLS_SELF_SIGNED` is still set; delete it.
+- **Any container with an `8443:8443` mapping and no (or an empty) `TASMOFLEET_LISTEN` -- `docker
+run`, Compose, or an Unraid container whose UI listen field is empty or was removed: the UI is
+  unreachable on the old port.** An empty value counts as unset (since 0.16.1), which gave `:8443`
+  before and gives `:8080` now. Change the container port to 8080 (`-p 8443:8080`, Compose
+  `"8443:8080"`).
+- **`TASMOFLEET_TLS_SELF_SIGNED=true` together with `TASMOFLEET_TRUSTED_PROXIES` (or
+  `ALLOW_INSECURE_HTTP=true`)** now serves plain HTTP (before: TLS). Point the proxy at `http://`.
+- Outside a container the zero-configuration TLS listener moves from `:8443` to `:8080`; set
+  `TASMOFLEET_LISTEN=:8443` to keep the old port.
+
 ### Added
 
+- `docs/configuration.md`: every environment variable in one place (purpose, default, kind
+  bootstrap/lock/legacy, secret and `_FILE`), how TLS is chosen, the time zone (`TZ`), linked from the
+  README and the Unraid templates; a test fails when the code and the document drift apart (#153).
+- `docs/upgrading.md`: upgrading to 0.17 step by step (#152).
 - Sensor telemetry: the tracker now keeps the numeric readings of every `tele/SENSOR` block besides ENERGY
   (BME280, BH1750, DS18B20, ...) with their units (TempUnit/PressureUnit), bounded in count and name length,
   for the device page's Sensors box. They are not exported as metrics (#145).
@@ -29,6 +57,17 @@ always upgrade automatically.
   "All activity" opens the complete, paged list.
 - The device list, the dashboard and the device page now refresh themselves after the live stream opens
   or reopens when events were missed in between; the stream's address carries the page's event number.
+- **breaking**: the UI listens on container port **8080 in every mode**; the zero-configuration
+  self-signed TLS no longer moves it to `:8443`. TLS or plain HTTP follows from the mode (nothing
+  set: self-signed TLS; trusted proxies or `ALLOW_INSECURE_HTTP`: plain HTTP; certificate files:
+  TLS), the port mapping never changes. `TASMOFLEET_LISTEN` and `TASMOFLEET_FIRMWARE_LISTEN` stay
+  as bootstrap variables for non-container installs and saved containers, but the Unraid
+  templates no longer ship them (#152).
+- **breaking**: `TASMOFLEET_TLS_SELF_SIGNED` is removed; a value that is still set is ignored with a
+  start warning (it names the one case whose scheme changes, see Upgrade notes) (#152).
+- The Unraid templates keep ports only in the port mappings (Web UI host port 8443 to container
+  port 8080, link `https://[IP]:[PORT:8080]/`), and the `docker run` and Compose examples use
+  `8443:8080` and `TZ` (#152, #153).
 - The `/metrics` bearer token is now a setting: System settings, Metrics, "Scrape token" (write-only,
   stored encrypted, applies to the next scrape). `TASMOFLEET_METRICS_TOKEN` (and `_FILE`) stays
   valid and now locks the field: it wins over the page and is never copied into the database, so
@@ -50,6 +89,9 @@ always upgrade automatically.
   transaction) without a reload (#126, thanks @Noschvie).
 - A device that went offline between the page render and the opening of the live stream, or during a
   stream outage, no longer keeps showing its old state until another event arrives (#160).
+- An empty secret file (`TASMOFLEET_*_FILE` with no content or only a newline) counts as not set,
+  like an empty variable: it no longer locks the field with an empty value or clashes with the
+  variable (#148).
 - "Today" and "Yesterday" (dashboard transactions, transaction history, Add devices "First seen", users page
   sessions and activity), the transaction log's clock times and the policy page's "paused at" now follow the browser's time
   zone like every other timestamp; before, the server's zone decided and one page could show two zones.

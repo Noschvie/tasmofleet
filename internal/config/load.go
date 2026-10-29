@@ -71,14 +71,18 @@ func Load(environ []string) (Config, error) {
 		}
 		val, ok := env[key]
 		if fileKey, has := env[key+"_FILE"]; has && f.Tag.Get("secret") == "true" {
-			if ok {
-				return Config{}, fmt.Errorf("%s%s and %s%s_FILE are both set", Prefix, key, Prefix, key)
-			}
 			b, err := os.ReadFile(fileKey) //nolint:gosec // path comes from the operator's configuration
 			if err != nil {
 				return Config{}, fmt.Errorf("%s%s_FILE: %w", Prefix, key, err)
 			}
-			val, ok = strings.TrimRight(string(b), "\r\n"), true
+			// An empty file (or one holding only a newline) counts as not set, like an
+			// empty variable (#148): it must neither lock the field nor clash with the variable.
+			if fileVal := strings.TrimRight(string(b), "\r\n"); strings.TrimSpace(fileVal) != "" {
+				if ok {
+					return Config{}, fmt.Errorf("%s%s and %s%s_FILE are both set", Prefix, key, Prefix, key)
+				}
+				val, ok = fileVal, true
+			}
 		}
 		if f.Tag.Get("ui") == "true" {
 			if ok {
@@ -99,14 +103,16 @@ func Load(environ []string) (Config, error) {
 	if c.Locked["OIDC_ISSUER"] || c.Locked["OIDC_CLIENT_SECRET"] {
 		c.Locked["OIDC_ISSUER"], c.Locked["OIDC_CLIENT_SECRET"] = true, true
 	}
-	// Zero configuration: without a proxy, a certificate or an explicit opt-in to
-	// plain HTTP the server serves a self-signed certificate, so a fresh container
-	// is reachable at once without sending passwords in clear text.
-	if c.TLSCertFile == "" && !c.TLSSelfSigned && len(c.TrustedProxies) == 0 && !c.AllowInsecureHTTP {
+	// The transport follows from the mode, never from the port or a variable (#152).
+	// Without a certificate, a proxy or an explicit opt-in to plain HTTP the server
+	// serves a self-signed certificate, so a fresh container is reachable at once
+	// without sending passwords in clear text. The container port stays LISTEN's
+	// default :8080 in every mode.
+	if c.TLSCertFile == "" && len(c.TrustedProxies) == 0 && !c.AllowInsecureHTTP {
 		c.TLSSelfSigned, c.AutoTLS = true, true
-		if _, set := env["LISTEN"]; !set {
-			c.Listen = ":8443"
-		}
+	}
+	if v, set := env["TLS_SELF_SIGNED"]; set {
+		c.Warnings = append(c.Warnings, tlsSelfSignedWarning(v, c))
 	}
 	if v, ok := env["POLICY_RULES"]; ok && strings.TrimSpace(v) != "" {
 		c.Legacy["POLICY_RULES"] = strings.TrimSpace(v)
@@ -117,6 +123,18 @@ func Load(environ []string) (Config, error) {
 		}
 	}
 	return c, c.validate()
+}
+
+// tlsSelfSignedWarning explains what happens to a TASMOFLEET_TLS_SELF_SIGNED value
+// that is still set (it was a variable until 0.16.x). The value is ignored; the
+// only saved combinations whose scheme differs from before are named exactly.
+func tlsSelfSignedWarning(value string, c Config) string {
+	msg := Prefix + "TLS_SELF_SIGNED is set but no longer exists and is ignored (removed in 0.17: TLS follows the mode, see docs/configuration.md). Delete it."
+	if on, _ := strconv.ParseBool(strings.TrimSpace(value)); on && !c.TLSSelfSigned && c.TLSCertFile == "" {
+		msg += " It was true, but with TRUSTED_PROXIES or ALLOW_INSECURE_HTTP the listener now serves plain HTTP on " + c.Listen +
+			": point the reverse proxy at http:// instead of https://, or remove TRUSTED_PROXIES to get the self-signed certificate."
+	}
+	return msg
 }
 
 // removedKeys are settings that existed once. They are ignored, but a value
@@ -241,10 +259,6 @@ func (c Config) validate() error {
 	switch {
 	case (c.TLSCertFile == "") != (c.TLSKeyFile == ""):
 		bad("TLS_CERT_FILE", "TLS_CERT_FILE and TLS_KEY_FILE must be set together")
-	case c.TLSCertFile != "" && c.TLSSelfSigned:
-		bad("TLS_SELF_SIGNED", "conflicts with TLS_CERT_FILE")
-	case c.TLSCertFile == "" && !c.TLSSelfSigned && len(c.TrustedProxies) == 0 && !c.AllowInsecureHTTP:
-		bad("ALLOW_INSECURE_HTTP", "no TLS configured and no TRUSTED_PROXIES: set TLS_CERT_FILE/TLS_KEY_FILE, TLS_SELF_SIGNED=true, or ALLOW_INSECURE_HTTP=true for a trusted LAN")
 	}
 	if c.SessionIdle <= 0 || c.SessionMax < c.SessionIdle {
 		bad("SESSION_MAX", "SESSION_IDLE must be > 0 and SESSION_MAX >= SESSION_IDLE")

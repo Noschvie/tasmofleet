@@ -22,7 +22,8 @@
 # links). The job "required" is the single status check for branch protection.
 #
 # paths-ignore lists only files no test or build reads. NOT docs-only:
-# docs/security (cmdpolicy test reads command-policy.md), docs/spec
+# docs/security (cmdpolicy test reads command-policy.md), docs/configuration.md
+# (configdoc_test checks it against the env tags), docs/spec
 # (design-system.md is read by a test), assets/branding (branding test compares
 # copies), deploy (metrics/config tests read it), design/v2 (token test),
 # testdata, internal/web/static and templates (embedded).

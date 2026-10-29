@@ -1254,7 +1254,8 @@ Example: `Tasmofleet Users` -> operator, `Tasmofleet Admins` -> admin.
 
 - `TLS_CERT_FILE` + `TLS_KEY_FILE`: the UI listener serves HTTPS. Files are re-read on
   SIGHUP.
-- `TLS_SELF_SIGNED=true`: an ECDSA P-256 certificate is generated once and persisted in
+- Neither certificate files nor a proxy nor the opt-in below (the zero-configuration mode; `TLS_SELF_SIGNED` was removed in 0.17):
+  an ECDSA P-256 certificate is generated once and persisted in
   `<DATA_DIR>/tls/` (0600 key). It is valid 1 year and renewed 30 days before expiry. The
   startup warns that browsers will show a warning.
 - Plain HTTP is allowed only behind `TRUSTED_PROXIES` (TLS ends at the proxy) or with an
@@ -1319,7 +1320,7 @@ in backups, the OIDC client secret, firmware integrity, the audit trail.
 
 ## 16. Configuration
 
-**Principle: a fresh install needs no configuration.** `docker run -p 8443:8443 -v data:/data tasmofleet`
+**Principle: a fresh install needs no configuration.** `docker run -p 8443:8080 -v data:/data tasmofleet`
 serves a self-signed certificate (no proxy, no certificate and no `ALLOW_INSECURE_HTTP`
 set), creates the first local admin (random password in `<DATA_DIR>/initial-admin-password`,
 changed at the first sign-in) and shows the setup (device networks, optional MQTT, optional
@@ -1331,30 +1332,30 @@ Two tiers:
    (prefix optional) in `/data/tasmofleet.env` (`KEY=value`, `#` comments). The environment
    wins. Secret keys also accept `<KEY>_FILE`. They are needed before the database exists or must
    never be changeable from the web; the System settings page lists them read-only (secrets
-   masked). The authoritative list is the `env` tags of `internal/config.Config` without a `ui` tag.
+   masked). The authoritative list is the `env` tags of `internal/config.Config` without a `ui` tag; the operator-facing reference is `docs/configuration.md` (checked against the tags by `configdoc_test.go`).
 2. **Operational settings: the System settings page** (`/settings/system`, admin), stored in SQLite
    (`internal/sysconfig`, `docs/security/system-settings.md`). They are no longer environment
    variables. Sign-in settings (`ui:"lock"`) are the exception: stored in the database unless
    the environment sets them, then the environment wins and the field is read-only.
 
-| Key (bootstrap, environment only)                                                                             | Default                                              | Meaning                                                                                |
-| ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------- |
-| `DATA_DIR`                                                                                                    | `/data`                                              |                                                                                        |
-| `LISTEN`                                                                                                      | `:8080` (`:8443` with the automatic self-signed TLS) | UI/API listener                                                                        |
-| `FIRMWARE_LISTEN`                                                                                             | `:80`                                                | device-facing firmware listener                                                        |
-| `PUBLIC_URL`                                                                                                  | —                                                    | external URL; required for oidc, optional otherwise                                    |
-| `BASE_PATH`                                                                                                   | `""`                                                 | static prefix, e.g. `/tasmofleet`                                                      |
-| `TRUSTED_PROXIES`                                                                                             | —                                                    | CIDRs; required for header mode; with a proxy the listener stays plain HTTP            |
-| `HEADER_USER`, `HEADER_NAME`, `HEADER_EMAIL`, `HEADER_GROUPS`, `HEADER_GROUPS_SEPARATOR`, `HEADER_LOGOUT_URL` | Authentik names, `\|`                                | header mode (`AUTH_MODE=header` is environment only)                                   |
-| `OIDC_POST_LOGOUT_URL`                                                                                        | `PUBLIC_URL`+base                                    |                                                                                        |
-| `LOCAL_LOGIN`                                                                                                 | `true`                                               | local accounts on the login page (always on in `local` mode); break-glass              |
-| `SESSION_IDLE`, `SESSION_MAX`, `OIDC_RECHECK`                                                                 | `2h`, `12h`, `15m`                                   |                                                                                        |
-| `INITIAL_ADMIN_PASSWORD(_FILE)`                                                                               | random, logged once                                  | first local admin, must change at first login                                          |
-| `TLS_CERT_FILE`, `TLS_KEY_FILE`, `TLS_SELF_SIGNED`, `ALLOW_INSECURE_HTTP`                                     | —, —, `false`, `false`                               | §15.3a; with none of them and no `TRUSTED_PROXIES` a self-signed certificate is served |
-| `TLS_SANS`                                                                                                    | —                                                    | extra DNS names/IPs for the self-signed certificate                                    |
-| `DECODER_PATH`                                                                                                | `/usr/local/bin/decode-config`                       | empty disables backup decoding                                                         |
-| `FIRMWARE_UPSTREAM_OVERRIDE`                                                                                  | —                                                    | tests and development only                                                             |
-| `LOG_FORMAT`                                                                                                  | `json`                                               |                                                                                        |
+| Key (bootstrap, environment only)                                                                             | Default                                                    | Meaning                                                                                |
+| ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `DATA_DIR`                                                                                                    | `/data`                                                    |                                                                                        |
+| `LISTEN`                                                                                                      | `:8080` (one port in every mode; containers do not set it) | UI/API listener                                                                        |
+| `FIRMWARE_LISTEN`                                                                                             | `:80`                                                      | device-facing firmware listener                                                        |
+| `PUBLIC_URL`                                                                                                  | —                                                          | external URL; required for oidc, optional otherwise                                    |
+| `BASE_PATH`                                                                                                   | `""`                                                       | static prefix, e.g. `/tasmofleet`                                                      |
+| `TRUSTED_PROXIES`                                                                                             | —                                                          | CIDRs; required for header mode; with a proxy the listener stays plain HTTP            |
+| `HEADER_USER`, `HEADER_NAME`, `HEADER_EMAIL`, `HEADER_GROUPS`, `HEADER_GROUPS_SEPARATOR`, `HEADER_LOGOUT_URL` | Authentik names, `\|`                                      | header mode (`AUTH_MODE=header` is environment only)                                   |
+| `OIDC_POST_LOGOUT_URL`                                                                                        | `PUBLIC_URL`+base                                          |                                                                                        |
+| `LOCAL_LOGIN`                                                                                                 | `true`                                                     | local accounts on the login page (always on in `local` mode); break-glass              |
+| `SESSION_IDLE`, `SESSION_MAX`, `OIDC_RECHECK`                                                                 | `2h`, `12h`, `15m`                                         |                                                                                        |
+| `INITIAL_ADMIN_PASSWORD(_FILE)`                                                                               | random, logged once                                        | first local admin, must change at first login                                          |
+| `TLS_CERT_FILE`, `TLS_KEY_FILE`, `ALLOW_INSECURE_HTTP`                                                        | —, —, `false`                                              | §15.3a; with none of them and no `TRUSTED_PROXIES` a self-signed certificate is served |
+| `TLS_SANS`                                                                                                    | —                                                          | extra DNS names/IPs for the self-signed certificate                                    |
+| `DECODER_PATH`                                                                                                | `/usr/local/bin/decode-config`                             | empty disables backup decoding                                                         |
+| `FIRMWARE_UPSTREAM_OVERRIDE`                                                                                  | —                                                          | tests and development only                                                             |
+| `LOG_FORMAT`                                                                                                  | `json`                                                     |                                                                                        |
 
 | Setting (System settings page)                                                                                                                                                                          | Default                                                                              | Applies                                                                                 |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
@@ -1369,7 +1370,7 @@ Two tiers:
 | `LOG_LEVEL` (`debug`, `info`, `warn`, `error`; the environment locks it)                                                                                                                                | `info`                                                                               | live                                                                                    |
 | `DISCOVERY_MQTT`, `DISCOVERY_SCAN`, `DISCOVERY_SCAN_INTERVAL`, `DISCOVERY_SCAN_CIDRS`                                                                                                                   | `true`, `false`, `24h`, —                                                            | live                                                                                    |
 | `METRICS_ENABLED`, `METRICS_DEVICE_LABELS`, `AUDIT_RETENTION`                                                                                                                                           | `true` (off: `/metrics` is 404), `false`, `8760h`                                    | live                                                                                    |
-| `METRICS_TOKEN(_FILE)` (secret, write-only; the environment locks it) | empty = only local scrapes | live |
+| `METRICS_TOKEN(_FILE)` (secret, write-only; the environment locks it)                                                                                                                                   | empty = only local scrapes                                                           | live                                                                                    |
 | `POLICY_LIVE_INTERVAL` (policy check background reads)                                                                                                                                                  | `1h` (0 = off)                                                                       | live                                                                                    |
 | policy rules (editor, versioned)                                                                                                                                                                        | none                                                                                 | live                                                                                    |
 

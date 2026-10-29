@@ -156,7 +156,7 @@ func TestKeysMarkSecretsAndOperationalSettings(t *testing.T) {
 	}
 	// The coordinator's bootstrap list: these stay environment-only.
 	for _, k := range []string{"DATA_DIR", "LISTEN", "PUBLIC_URL", "BASE_PATH", "TRUSTED_PROXIES", "LOCAL_LOGIN",
-		"TLS_CERT_FILE", "TLS_SELF_SIGNED", "INITIAL_ADMIN_PASSWORD", "FIRMWARE_LISTEN"} {
+		"TLS_CERT_FILE", "INITIAL_ADMIN_PASSWORD", "FIRMWARE_LISTEN"} {
 		if info[k].UI {
 			t.Errorf("%s is bootstrap and must not be an operational setting", k)
 		}

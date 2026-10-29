@@ -32,16 +32,20 @@ type Config struct {
 	// environment or the env file: they apply as before and the settings page
 	// shows them read-only. Sign-in settings left unset can be edited there.
 	Locked map[string]bool
+	// TLSSelfSigned is true when the UI listener serves a self-signed certificate
+	// (persisted under <DATA_DIR>/tls). Load decides: that is the mode when no
+	// certificate, no trusted proxy and no ALLOW_INSECURE_HTTP is configured.
+	// It has no env tag (TASMOFLEET_TLS_SELF_SIGNED was removed in 0.17).
+	TLSSelfSigned bool
 	// AutoTLS is true when the server serves a self-signed certificate only
-	// because nothing else was configured (no proxy, no certificate, no
-	// ALLOW_INSECURE_HTTP). It has no env tag: Load decides.
+	// because nothing else was configured. It has no env tag: Load decides.
 	AutoTLS bool
 	// Warnings are start-up notices Load collected (for example removed
 	// settings that are still set). They have no env tag; the caller logs them.
 	Warnings []string
 
 	DataDir   string `env:"DATA_DIR" default:"/data"`
-	Listen    string `env:"LISTEN" default:":8080"`        // UI + API
+	Listen    string `env:"LISTEN" default:":8080"`        // UI + API; one port in every mode, containers never set it
 	FWListen  string `env:"FIRMWARE_LISTEN" default:":80"` // device-facing firmware server
 	FWBaseURL string `env:"FIRMWARE_BASE_URL" ui:"true"`   // URL devices use, e.g. http://172.31.12.61 (required for OTA)
 	PublicURL string `env:"PUBLIC_URL"`                    // e.g. https://tasmofleet.example.com (required for oidc)
@@ -83,12 +87,11 @@ type Config struct {
 	// is generated and logged once.
 	InitialAdminPassword string `env:"INITIAL_ADMIN_PASSWORD" secret:"true"`
 
-	// TLS without a reverse proxy. Exactly one of: cert+key files,
-	// TLSSelfSigned (persisted under <DATA_DIR>/tls), or plain HTTP, which is
-	// allowed only behind TRUSTED_PROXIES or with AllowInsecureHTTP.
-	TLSCertFile   string `env:"TLS_CERT_FILE"`
-	TLSKeyFile    string `env:"TLS_KEY_FILE"`
-	TLSSelfSigned bool   `env:"TLS_SELF_SIGNED" default:"false"`
+	// TLS without a reverse proxy. Exactly one of: cert+key files, a
+	// self-signed certificate (TLSSelfSigned, decided by Load), or plain HTTP,
+	// which is only served behind TRUSTED_PROXIES or with AllowInsecureHTTP.
+	TLSCertFile string `env:"TLS_CERT_FILE"`
+	TLSKeyFile  string `env:"TLS_KEY_FILE"`
 	// TLSSANs are extra DNS names/IPs for the self-signed certificate
 	// (localhost, 127.0.0.1, ::1 and the hostname are always included).
 	TLSSANs           []string `env:"TLS_SANS"`
