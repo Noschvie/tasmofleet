@@ -135,9 +135,31 @@ templ rulePageTempl(p rulePageView) {
 			}
 			@ruleDevicesCard(p.Devices)
 			</div>
-			<details class="devcard" id="rule-history" hidden>
-				<summary>History of this rule</summary>
-			</details>
+			if len(p.History) > 0 {
+				<details class="devcard" id="rule-history">
+					<summary>History of this rule</summary>
+					<div class="pol-hist-list">
+						for _, v := range p.History {
+							<a class="pol-hv" href={ templ.SafeURL(p.Base + policyHistoryPath + "?v=" + vstr(v.ID) + "#diff") }>
+								<span class="pol-hv-v">v{ vstr(v.ID) }</span>
+								<span class="pol-hv-main">
+									<span class="pol-hv-what">
+										<span>{ v.Summary }</span>
+										if v.Note != "" {
+											<span class="pol-hnote" title={ v.NoteFull }>“{ v.Note }”</span>
+										}
+										if v.Current {
+											@ui.Badge(ui.ToneOK, "Current")
+										}
+									</span>
+									<span class="pol-hv-meta"><time { ui.StampAttrs(v.At, ui.StampShort)... }>{ ui.StampText(v.At, ui.StampShort) }</time> · { v.By }</span>
+								</span>
+							</a>
+						}
+					</div>
+					<p class="pol-none"><a href={ templ.SafeURL(p.Base + policyHistoryPath) }>All policy history →</a></p>
+				</details>
+			}
 		</div>
 		if p.Admin && !p.Draft {
 			@ui.Dialog(ui.DialogData{

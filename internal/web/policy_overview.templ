@@ -35,9 +35,6 @@ templ policyPage(p policyView) {
 					}
 				</p>
 			}
-			if len(p.History) > 0 {
-				@versionHistory(p)
-			}
 		}
 		if p.Fix != nil {
 			@ui.Dialog(ui.DialogData{

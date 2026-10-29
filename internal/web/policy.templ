@@ -7,8 +7,7 @@ import (
 )
 
 // Design v2 screens "policyio" and the Make compliant pages (N3, N21), the shared command and
-// value inputs of the rule page, and the temporary version list below the overview table (the
-// History tab replaces it). The overview is policy_overview.templ.
+// value inputs of the rule page. The overview is policy_overview.templ.
 
 func vstr(n int64) string { return strconv.FormatInt(n, 10) }
 
@@ -115,69 +114,6 @@ templ ruleValue(vc valueControl) {
 	if vc.Hint != "" {
 		<span class="ufield-help">{ vc.Hint }</span>
 	}
-}
-
-// versionHistory lists the saved versions; the picked one is compared with the current rules
-// and can be reverted to.
-templ versionHistory(p policyView) {
-	<section class="pol-hist" id="history" aria-labelledby="hist-h">
-		<div class="pol-hist-head">
-			<h2 id="hist-h">Version history</h2>
-			<span>Every save creates a version. Reverting never touches devices.</span>
-		</div>
-		<div class="pol-hist-body">
-			<div class="pol-hist-list">
-				for _, v := range p.History {
-					<a class={ "pol-hv", templ.KV("is-sel", v.Selected) } href={ templ.SafeURL(p.Base + policyPath + "?v=" + vstr(v.ID) + "#history") } if v.Selected {
-	aria-current="true"
-}>
-						<span class="pol-hv-v">v{ vstr(v.ID) }</span>
-						<span class="pol-hv-main">
-							<span class="pol-hv-what">
-								if v.Full != "" {
-									<span title={ v.Full }>{ v.What }</span>
-								} else {
-									<span>{ v.What }</span>
-								}
-								if v.Current {
-									@ui.Badge(ui.ToneOK, "Current")
-								}
-							</span>
-							<span class="pol-hv-meta"><time { ui.StampAttrs(v.At, ui.StampShort)... }>{ ui.StampText(v.At, ui.StampShort) }</time> · { v.By }</span>
-						</span>
-					</a>
-				}
-			</div>
-			<div class="pol-hist-diff">
-				if p.DiffFrom == p.Version || p.DiffFrom == 0 {
-					<span class="pol-none">This is the current version. Pick an older one to see what changed.</span>
-				} else {
-					<div class="pol-diff-h">v{ vstr(p.DiffFrom) } → current</div>
-					if len(p.Diff) == 0 {
-						<span class="pol-none">No differences.</span>
-					} else {
-						<div class="pol-diff">
-							for _, d := range p.Diff {
-								<div class="pol-diff-row"><span class="pol-diff-l">{ d.Rule }</span><span class="pol-diff-v">{ changeText(d) }</span></div>
-							}
-						</div>
-					}
-					if p.Admin {
-						<form method="post" action={ templ.SafeURL(p.Base + rulesPath + "/revert/" + vstr(p.DiffFrom)) }>
-							<input type="hidden" name="csrf" value={ p.CSRF }/>
-							<button type="submit" class="btn" data-dialog="dlg-revert">Revert to this version…</button>
-						</form>
-						@ui.Dialog(ui.DialogData{
-							ID: "dlg-revert", Title: "Revert the rules to version " + vstr(p.DiffFrom) + "?",
-							Body:    "The rules get the state of " + p.SelAt.Local().Format("2 Jan 2006, 15:04") + ". This is saved as a new version; nothing is written to devices.",
-							Changes: revertRows(p.RevertDiff), Action: p.Base + rulesPath + "/revert/" + vstr(p.DiffFrom), CSRF: p.CSRF,
-							Verb: "Revert to v" + vstr(p.DiffFrom),
-						})
-					}
-				}
-			</div>
-		</div>
-	</section>
 }
 
 // policyIOPage is GET /policy/io: Export (the rules as JSON) and Import (paste, check, save).

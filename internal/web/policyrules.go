@@ -37,6 +37,8 @@ type PolicyRulesService interface {
 	Export(ctx context.Context) ([]byte, error)
 	ParseImport(data []byte) ([]sysconfig.RuleSpec, error)
 	VersionDiff(ctx context.Context, from, to int64) ([]sysconfig.RuleChange, error)
+	// History is one page of the folded policy history, newest first (the History tab).
+	History(ctx context.Context, before int64, limit int) (sysconfig.HistoryPage, error)
 	Reorder(ctx context.Context, actor string, base int64, order []int, rec audit.Recorder) (int64, error)
 	Duplicate(ctx context.Context, actor string, base int64, idx int, rec audit.Recorder) (int64, int, error)
 	SetEnabled(ctx context.Context, actor string, base int64, idx int, enabled bool, rec audit.Recorder) (int64, error)
@@ -56,6 +58,9 @@ func (h *handler) registerPolicyRules(route func(string, func(http.Handler) http
 	}
 	if h.d.PolicyRules == nil {
 		return
+	}
+	if h.d.Policy != nil {
+		route("GET "+policyHistoryPath, op, h.policyHistory)
 	}
 	route("GET "+policyIOPath, op, h.policyIO)
 	route("GET "+policyIOPath+"/export", op, h.rulesExport)
@@ -621,7 +626,7 @@ func (h *handler) rulesFail(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 // rulesRevert stores the rules of an older version as a new version. Without JavaScript the
-// history's button posts here directly (a revert is itself a version and can be undone).
+// History tab's button posts here directly (a revert is itself a version and can be undone).
 func (h *handler) rulesRevert(w http.ResponseWriter, r *http.Request) {
 	limitBody(w, r)
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
@@ -637,7 +642,7 @@ func (h *handler) rulesRevert(w http.ResponseWriter, r *http.Request) {
 		h.rulesFail(w, r, err)
 		return
 	}
-	redirect(w, r, policyPath+"?ok=reverted")
+	redirect(w, r, policyHistoryPath+"?ok=reverted")
 }
 
 // ---- import / export (GET /policy/io) ----

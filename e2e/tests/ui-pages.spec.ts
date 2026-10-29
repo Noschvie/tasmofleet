@@ -403,11 +403,12 @@ test("phone width: policy, rule editor and setup never scroll sideways", async (
   await page.setViewportSize({ width: 375, height: 812 });
   // The version history once held a full 40-character identifier that cannot
   // wrap: it made the rules page 668 px wide. Show the short form, full value on hover.
-  await page.goto(app.url + "/policy");
+  await page.goto(app.url + "/policy/history");
   const versions = page.locator("#history");
   await expect(versions.getByText(hash40)).toHaveCount(0);
   await expect(versions.locator(`[title*="${hash40}"]`).first()).toContainText(hash40.slice(0, 8));
   // A scope that covers every ESP32 variant reads as one name, not nine.
+  await page.goto(app.url + "/policy");
   await expect(page.locator("section#rules tbody tr", { hasText: "ESP32 (all variants)" }).first()).toBeVisible();
   await expect(page.getByText("esp32c61", { exact: true }).filter({ visible: true })).toHaveCount(0);
   await page.goto(app.url + "/policy/rules/new?template=timezone");

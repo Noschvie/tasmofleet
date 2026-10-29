@@ -2,7 +2,6 @@ package web
 
 import (
 	"context"
-	"html"
 	"net/url"
 	"strings"
 	"sync"
@@ -52,8 +51,17 @@ func (m *rulesMem) ListPolicyRuleVersions(context.Context, int) ([]store.PolicyR
 	return out, nil
 }
 
-func (m *rulesMem) ListPolicyRuleVersionsBefore(context.Context, int64, int) ([]store.PolicyRuleVersion, error) {
-	return nil, nil
+func (m *rulesMem) ListPolicyRuleVersionsBefore(_ context.Context, before int64, limit int) ([]store.PolicyRuleVersion, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []store.PolicyRuleVersion
+	for i := len(m.vs) - 1; i >= 0; i-- {
+		if (before != 0 && m.vs[i].ID >= before) || (limit > 0 && len(out) == limit) {
+			continue
+		}
+		out = append(out, m.vs[i])
+	}
+	return out, nil
 }
 
 func rulesEnv(t *testing.T, envJSON string, tweak ...func(*sysconfig.RulesOptions)) (*env, *rulesMem, *[]policy.Rule) {
@@ -293,8 +301,8 @@ func TestPolicyRulesCreateEditDeleteRevert(t *testing.T) {
 	if len(mem.vs) != 2 || (*live)[0].Want != "1" {
 		t.Fatalf("edit: versions=%d", len(mem.vs))
 	}
-	// The history compares a picked version with the current rules, for viewers too.
-	if r, body := e.do(t, "GET", "/policy?v=1", "operator", nil); r.StatusCode != 200 || !strings.Contains(body, "v1 → current") || !strings.Contains(body, "Changed: ") {
+	// The History tab shows what a version changed, for viewers too.
+	if r, body := e.do(t, "GET", "/policy/history?v=2", "operator", nil); r.StatusCode != 200 || !strings.Contains(body, "v1 → v2") || !strings.Contains(body, "Changed: ") {
 		t.Fatalf("diff: %d", r.StatusCode)
 	}
 	if r, _ := e.do(t, "POST", "/policy/rules/revert/1", "admin", url.Values{"csrf": {"tok"}}); r.StatusCode != 303 || len(mem.vs) != 3 || mem.vs[2].RevertOf != 1 || (*live)[0].Want != "0" {
@@ -302,29 +310,6 @@ func TestPolicyRulesCreateEditDeleteRevert(t *testing.T) {
 	}
 	if r, _ := e.do(t, "POST", "/policy/rules/delete", "admin", url.Values{"csrf": {"tok"}, "id": {ruleIDs(t, mem)[0]}, "version": {"3"}}); r.StatusCode != 303 || len(mem.vs) != 4 || len(*live) != 0 {
 		t.Fatalf("delete: versions=%d live=%v", len(mem.vs), *live)
-	}
-}
-
-// Why: the revert dialog is the last look before the rules change, so it must list what the
-// revert does (current -> the picked version), not the history's "vN -> current" diff, which
-// reads the other way round and would announce the opposite change.
-func TestPolicyRevertDialogListsWhatTheRevertChanges(t *testing.T) {
-	e, mem, _ := rulesEnv(t, "")
-	saveRule(t, e, url.Values{"want": {"0"}})
-	saveRule(t, e, url.Values{"id": {ruleIDs(t, mem)[0]}, "version": {"1"}, "want": {"1"}})
-	_, body := e.do(t, "GET", "/policy?v=1", "admin", nil)
-	i := strings.Index(body, `id="dlg-revert"`)
-	if i < 0 {
-		t.Fatal("no revert dialog for an older version")
-	}
-	dlg := html.UnescapeString(body[i:])
-	dlg = dlg[:strings.Index(dlg, "</dialog>")]
-	if !strings.Contains(dlg, `expected "1" -> "0"`) || strings.Contains(dlg, `expected "0" -> "1"`) {
-		t.Fatalf("revert dialog must list current -> v1:\n%s", dlg)
-	}
-	hist := html.UnescapeString(body[:i])
-	if !strings.Contains(hist, `expected "0" -> "1"`) {
-		t.Error("the history diff still reads v1 -> current")
 	}
 }
 

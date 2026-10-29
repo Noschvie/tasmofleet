@@ -289,6 +289,7 @@ type rulePageView struct {
 	KV         []ui.KVRow
 	Devices    ruleDevicesView
 	DeleteText string
+	History    []ruleHistRow // the versions that touched this rule, newest first
 }
 
 // rulePage is GET /policy/rules/{id}.
@@ -408,6 +409,13 @@ func (h *handler) rulePageRender(w http.ResponseWriter, r *http.Request, status 
 		}
 	} else {
 		p.KV = ruleKV(spec)
+	}
+	if !draft && h.d.PolicyRules != nil {
+		key := spec.Name // the history names a rule by its name, or its command when unnamed
+		if key == "" {
+			key = spec.Command
+		}
+		p.History = h.ruleHistoryRows(r.Context(), o.ID, key, src.Version)
 	}
 	h.show(w, r, status, "policyrule", v, rulePageTempl(p))
 }
@@ -692,6 +700,10 @@ func (h *handler) liveCheck(w http.ResponseWriter, r *http.Request) {
 	if id == "" {
 		if r.PostForm.Get("back") == "deviations" {
 			h.devRender(w, r, http.StatusOK, true)
+			return
+		}
+		if r.PostForm.Get("back") == "history" && h.d.PolicyRules != nil {
+			h.historyRender(w, r, true)
 			return
 		}
 		h.policyRender(w, r, http.StatusOK, policyOpts{live: true})

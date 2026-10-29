@@ -1,0 +1,122 @@
+package web
+
+import "github.com/nofuturekid/tasmofleet/internal/web/ui"
+
+// policyHistoryPage is GET /policy/history: the versions by day (quick saves folded into one
+// entry, expandable without JavaScript) and what the picked version changed.
+templ policyHistoryPage(p policyHistoryView) {
+	<div class="pol-page">
+		@policyShell(p.Head) {
+			if len(p.Days) == 0 {
+				@ui.Empty("No versions yet", "Saving a rule creates the first one.") {
+					if p.Admin {
+						<a class="btn btn-primary" href={ templ.SafeURL(p.Base + rulesPath + "/new") }>New rule</a>
+					}
+				}
+			} else {
+				<section class="pol-hist" id="history" aria-label="Versions and changes">
+					<div class="pol-hist-body">
+						<div class="pol-hist-list">
+							for _, d := range p.Days {
+								<div class="pol-hday">{ d.Title }</div>
+								for _, e := range d.Entries {
+									@histEntryRow(e)
+								}
+							}
+							if p.Older != "" || p.Newest != "" {
+								<div class="pol-hpage">
+									if p.Newest != "" {
+										<a class="btn" href={ templ.SafeURL(p.Newest) }>Newest versions</a>
+									}
+									if p.Older != "" {
+										<a class="btn" href={ templ.SafeURL(p.Older) }>Older versions</a>
+									}
+								</div>
+							}
+						</div>
+						@histDetailCard(p)
+					</div>
+				</section>
+			}
+		}
+		if p.Admin && p.Detail != nil && p.Detail.Revert != 0 {
+			@ui.Dialog(ui.DialogData{
+				ID: "dlg-revert", Title: "Revert the rules to version " + vstr(p.Detail.Revert) + "?",
+				Body:    "The rules get the state of " + p.Detail.RevertAt.Local().Format("2 Jan 2006, 15:04") + ". This is saved as a new version; nothing is written to devices.",
+				Changes: revertRows(p.Detail.RevertDiff), Action: p.Base + rulesPath + "/revert/" + vstr(p.Detail.Revert), CSRF: p.CSRF,
+				Verb: "Revert to v" + vstr(p.Detail.Revert),
+			})
+		}
+		<script src={ p.Base + "/static/" + asset("policy.js") } defer></script>
+	</div>
+}
+
+templ histEntryRow(e histEntry) {
+	if e.Folded {
+		<details class={ "pol-hfold", templ.KV("is-sel", e.Selected) } open?={ e.Selected }>
+			<summary class="pol-hv">
+				<span class="pol-hv-v">{ e.Label }</span>
+				<span class="pol-hv-main">
+					<span class="pol-hv-what"><span>{ e.Summary }</span></span>
+					<span class="pol-hv-meta"><time { ui.StampAttrs(e.To, ui.StampClock)... }>{ ui.StampText(e.To, ui.StampClock) }</time>–<time { ui.StampAttrs(e.At, ui.StampClock)... }>{ ui.StampText(e.At, ui.StampClock) }</time> · { e.By }</span>
+				</span>
+			</summary>
+			for _, v := range e.Versions {
+				<a class={ "pol-hv pol-hsub", templ.KV("is-sel", v.Selected) } href={ templ.SafeURL(v.Href) } if v.Selected {
+	aria-current="true"
+}>
+					<span class="pol-hv-v">v{ vstr(v.ID) }</span>
+					<span class="pol-hv-main">
+						<span class="pol-hv-what"><span title={ v.WhatFull }>{ v.What }</span></span>
+						<span class="pol-hv-meta"><time { ui.StampAttrs(v.At, ui.StampClock)... }>{ ui.StampText(v.At, ui.StampClock) }</time> · { v.By }</span>
+					</span>
+				</a>
+			}
+		</details>
+	} else {
+		<a class={ "pol-hv", templ.KV("is-sel", e.Selected) } href={ templ.SafeURL(e.Href) } if e.Selected {
+	aria-current="true"
+}>
+			<span class="pol-hv-v">{ e.Label }</span>
+			<span class="pol-hv-main">
+				<span class="pol-hv-what">
+					<span>{ e.Summary }</span>
+					if e.Note != "" {
+						<span class="pol-hnote" title={ e.NoteFull }>“{ e.Note }”</span>
+					}
+					if e.Current {
+						@ui.Badge(ui.ToneOK, "Current")
+					}
+				</span>
+				<span class="pol-hv-meta"><time { ui.StampAttrs(e.At, ui.StampClock)... }>{ ui.StampText(e.At, ui.StampClock) }</time> · { e.By }</span>
+			</span>
+		</a>
+	}
+}
+
+templ histDetailCard(p policyHistoryView) {
+	<div class="pol-hist-diff" id="diff">
+		if p.Detail != nil {
+			<div class="pol-hdiff-head">
+				<h2 class="pol-diff-h">{ p.Detail.Heading }</h2>
+				if p.Admin && p.Detail.Revert != 0 {
+					<form method="post" action={ templ.SafeURL(p.Base + rulesPath + "/revert/" + vstr(p.Detail.Revert)) }>
+						<input type="hidden" name="csrf" value={ p.CSRF }/>
+						<button type="submit" class="btn" data-dialog="dlg-revert">Revert to v{ vstr(p.Detail.Revert) }…</button>
+					</form>
+				}
+			</div>
+			<div class="pol-none">{ p.Detail.Title }</div>
+			if len(p.Detail.Changes) == 0 {
+				<span class="pol-none">No rule changes.</span>
+			} else {
+				<div class="pol-diff">
+					for _, d := range p.Detail.Changes {
+						<div class="pol-diff-row"><span class="pol-diff-l">{ d.Rule }</span><span class="pol-diff-v">{ changeText(d) }</span></div>
+					}
+				</div>
+			}
+		}
+		<p class="pol-none">Saves within 2 minutes of each other are folded into one entry; expand to see each version.</p>
+	</div>
+}

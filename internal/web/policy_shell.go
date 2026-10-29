@@ -75,11 +75,16 @@ func (h *handler) policyHead(v view, specs []sysconfig.RuleSpec, invalid int, re
 	return p
 }
 
-// policyTabs lists the tabs whose routes exist. The History tab adds its own line when its page
-// exists.
-func policyTabs(base, current string, rules, deviating int) []ui.Tab {
-	return []ui.Tab{
+// policyTabs lists the tabs of the policy pages. History exists only with the rules service: in
+// POLICY_RULES mode no versions are kept, so every page agrees on having no History tab.
+func (h *handler) policyTabs(base, current string, rules, deviating int) []ui.Tab {
+	tabs := []ui.Tab{
 		{Label: "Rules", Href: base + policyPath, Current: current == "rules", Badge: rules},
 		{Label: "Deviating devices", Href: base + policyDevPath, Current: current == "deviations", Badge: deviating},
+		{Label: "History", Href: base + policyHistoryPath, Current: current == "history"},
 	}
+	if h.d.PolicyRules == nil {
+		tabs = tabs[:len(tabs)-1]
+	}
+	return tabs
 }

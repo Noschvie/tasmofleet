@@ -86,7 +86,7 @@ func (h *handler) registerPolicy(route func(string, func(http.Handler) http.Hand
 		return
 	}
 	route("GET "+policyPath, op, func(w http.ResponseWriter, r *http.Request) {
-		h.policyRender(w, r, http.StatusOK, policyOpts{version: historyPick(r)})
+		h.policyRender(w, r, http.StatusOK, policyOpts{})
 	})
 	route("POST "+policyPath+"/live", op, h.liveCheck)
 }
@@ -96,19 +96,6 @@ func (h *handler) registerPolicy(route func(string, func(http.Handler) http.Hand
 type policyOpts struct {
 	live   bool
 	banner string
-	// version is the history entry picked for the diff (0: the one before the current). The
-	// version list below the table is temporary, until the History tab replaces it.
-	version int64
-}
-
-// historyPick reads ?v=ID. Anything that is not a version number is ignored: unknown parameters
-// never make the overview a 404 (the old ?edit= and ?new= links just show the overview).
-func historyPick(r *http.Request) int64 {
-	n, err := strconv.ParseInt(r.URL.Query().Get("v"), 10, 64)
-	if err != nil || n <= 0 {
-		return 0
-	}
-	return n
 }
 
 // liveLine is the live-check tile: idle, paused or failed.
@@ -146,17 +133,6 @@ type ruleRow struct {
 	Invalid string
 }
 
-// versionRow is one entry of the version list (temporary, until the History tab).
-type versionRow struct {
-	ID       int64
-	What     string // the change note, long identifiers cut to 8 characters (they cannot wrap)
-	Full     string // the whole note when What is shortened (a tooltip)
-	By       string
-	At       time.Time
-	Current  bool
-	Selected bool
-}
-
 // fixDialog is "Make compliant (N)…": the reviewed plan the dialog applies.
 type fixDialog struct {
 	Ready    int
@@ -188,12 +164,6 @@ type policyView struct {
 	Alert     *devAlert
 	Fix       *fixDialog
 	Templates []ruleTemplate
-	// The version list below the table (temporary, until the History tab).
-	History    []versionRow
-	Diff       []sysconfig.RuleChange
-	RevertDiff []sysconfig.RuleChange // what a revert to DiffFrom changes: current -> DiffFrom
-	DiffFrom   int64
-	SelAt      time.Time
 }
 
 // policyRender writes the overview.
@@ -297,7 +267,7 @@ func (h *handler) policyData(r *http.Request, v view, o policyOpts) (policyView,
 	p.Head = h.policyHead(v, valid, len(invalid), rep, repErr)
 	p.Head.HasVersions = len(st.History) > 0
 	p.Head.Show = p.HasRules || p.Head.HasVersions
-	p.Head.Tabs = policyTabs(v.Base, "rules", len(st.Specs), p.Head.Fleet.Deviating)
+	p.Head.Tabs = h.policyTabs(v.Base, "rules", len(st.Specs), p.Head.Fleet.Deviating)
 	if repErr == nil {
 		p.Alert = requiredAlert(rep, st.Specs)
 		if p.Admin && h.d.PolicyFix != nil {
@@ -310,18 +280,6 @@ func (h *handler) policyData(r *http.Request, v view, o policyOpts) (policyView,
 		p.Templates = slices.DeleteFunc(policyTemplates(h.brokerHost()), func(t ruleTemplate) bool { return t.Spec.Want == "" })
 		if len(p.Templates) > 3 {
 			p.Templates = p.Templates[:3]
-		}
-	}
-	if p.CanRules {
-		p.History, p.Diff, p.DiffFrom, p.SelAt = h.historyOf(ctx, st, o.version)
-		if editable && p.DiffFrom != 0 && p.DiffFrom != st.VersionID {
-			// The revert dialog lists what the revert does, the other way round from the history's
-			// "vN → current" diff.
-			d, err := h.d.PolicyRules.VersionDiff(ctx, st.VersionID, p.DiffFrom)
-			if err != nil {
-				h.log.WarnContext(ctx, "policy revert diff", "err", err)
-			}
-			p.RevertDiff = d
 		}
 	}
 	return p, nil
@@ -389,51 +347,6 @@ func nameList(names []string) string {
 		return strings.Join(names, ", ")
 	}
 	return strings.Join(names[:3], ", ") + " and " + strconv.Itoa(len(names)-3) + " more"
-}
-
-// historyOf lists the versions, newest first, and the diff of the picked one against the
-// current rules (default: the version before the current one).
-func (h *handler) historyOf(ctx context.Context, st sysconfig.RulesState, pick int64) ([]versionRow, []sysconfig.RuleChange, int64, time.Time) {
-	if len(st.History) == 0 {
-		return nil, nil, 0, time.Time{}
-	}
-	if pick == 0 {
-		pick = st.VersionID
-		for _, hv := range st.History {
-			if hv.ID != st.VersionID {
-				pick = hv.ID
-				break
-			}
-		}
-	}
-	var rows []versionRow
-	var at time.Time
-	for _, hv := range st.History {
-		what := hv.Note
-		switch {
-		case what == "" && hv.RevertOf > 0:
-			what = "Reverted to v" + strconv.FormatInt(hv.RevertOf, 10)
-		case what == "":
-			what = "Rules saved"
-		}
-		short := longToken.ReplaceAllStringFunc(what, func(t string) string { return t[:8] })
-		full := ""
-		if short != what {
-			full = what
-		}
-		rows = append(rows, versionRow{ID: hv.ID, What: short, Full: full, By: h.pr.Text(hv.Actor), At: hv.At, Current: hv.ID == st.VersionID, Selected: hv.ID == pick})
-		if hv.ID == pick {
-			at = hv.At
-		}
-	}
-	if pick == st.VersionID {
-		return rows, nil, pick, at
-	}
-	diff, err := h.d.PolicyRules.VersionDiff(ctx, pick, st.VersionID)
-	if err != nil {
-		h.log.WarnContext(ctx, "policy version diff", "err", err)
-	}
-	return rows, diff, pick, at
 }
 
 // specsOf turns report rules into specs, for a page without the rules service.

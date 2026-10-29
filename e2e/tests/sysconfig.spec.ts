@@ -124,12 +124,13 @@ test("policy rule editor: create via the setting picker, live preview, edit, rev
   await expect(page).toHaveURL(url + "?ok=saved");
   await expect(page.locator(".pghead-sub")).toContainText("SaveData = 1");
 
-  // revert is still on the policy page (the version list moves to the History tab in a later step)
-  await page.goto(app.url + "/policy");
-  // The history compares the version before with the current one; reverting asks first.
-  await page.getByRole("button", { name: "Revert to this version…" }).click();
+  // The History tab shows the newest version's change; reverting to the one before asks first.
+  await page.goto(app.url + "/policy/history");
+  await page.getByRole("button", { name: /^Revert to v/ }).click();
   await page.locator("dialog[open]").getByRole("button", { name: /^Revert to v/ }).click();
+  await expect(page).toHaveURL(/\/policy\/history\?ok=reverted$/);
   await expect(page.getByText(/Reverted/)).toBeVisible();
+  await page.goto(app.url + "/policy");
   await expect(page.locator("section#rules tbody tr", { hasText: "Flash wear" })).toContainText("SaveData = 0");
 
   // operators read, but cannot edit
@@ -138,7 +139,9 @@ test("policy rule editor: create via the setting picker, live preview, edit, rev
   await expect(page.getByText("Flash wear").first()).toBeVisible();
   await expect(page.getByRole("link", { name: "New rule" })).toHaveCount(0);
   await expect(page.getByLabel(/^Actions for/)).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Revert to this version…" })).toHaveCount(0);
+  await page.goto(app.url + "/policy/history");
+  await expect(page.locator("#history")).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Revert to v/ })).toHaveCount(0);
 });
 
 // Why (N17): the log level is a UI setting now; the choice must be stored and shown again,

@@ -19,6 +19,7 @@ always upgrade automatically.
 
 - The policy page is reworked: five tiles (rules, compliant devices, deviating, not judged, live check), a rule table with a compliance bar per rule, a banner for devices that break a Required rule, and an own page per rule. Rules are reordered by dragging the handle or with Move up and Move down; a disabled rule is dimmed and not checked (#197)
 - The bundled decode-config is the upstream Ubuntu 24.04 build (newer Python runtime); the runtime image already had the required glibc
+- Policy history is its own tab, `/policy/history`: versions grouped by day, quick saves of one person within 2 minutes folded into one entry (expandable), each entry says what changed, and a rule page lists only the versions that touched it. Reverting lands on the tab (#197)
 - Policy rules have a stable id that survives edits, reordering and export/import; rules saved before this version get `r1`, `r2`, ... by position on the first save (#197)
 
 ### Fixed
