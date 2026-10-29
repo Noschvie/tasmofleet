@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -125,14 +126,15 @@ func TestRefreshStoresOtaURLWithoutCredentials(t *testing.T) {
 	}
 	n := 0
 	for i, c := range *sent {
+		if l := strings.ToLower(c); l == "status 0" || l == "status0" || strings.HasPrefix(l, "otaurl") || strings.HasPrefix(l, "upgrade") {
+			t.Fatalf("forbidden command %q sent: %v", c, *sent)
+		}
 		switch c {
 		case "Status 1":
 			n++
 			if i == 0 || (*sent)[i-1] == "Status 1" {
 				t.Fatalf("Status 1 out of order: %v", *sent)
 			}
-		case "Status 0", "OtaUrl", "Upgrade 1":
-			t.Fatalf("forbidden command %q sent: %v", c, *sent)
 		}
 	}
 	if n != 1 {
@@ -183,5 +185,42 @@ func TestRefreshOnMinimalFirmwareKeepsDeviceFacts(t *testing.T) {
 		if c == "Status 1" || c == "Status" {
 			t.Fatalf("minimal firmware was sent %q: %v", c, *sent)
 		}
+	}
+}
+
+// Why: secrets hide in more places than user:password. A password with '#', '?' or '/' makes
+// url.Parse read the rest as host, query or fragment, and tokens and signed URLs live in the
+// query. Such values are never stored: the cleaned URL carries neither, or the value is dropped.
+func TestParseOtaURLNeverKeepsASecret(t *testing.T) {
+	for _, tc := range []struct {
+		in, want string
+		ok       bool
+	}{
+		{"http://admin:s3cret@fw/x.bin", "http://fw/x.bin", true},
+		{"http://admin:12#tok@fw/x.bin", "", false},
+		{"http://admin:1?pw@fw/x.bin", "", false},
+		{"http://admin:123/abc@fw/x.bin", "", false},
+		{"http://fw/x.bin?token=abc", "http://fw/x.bin", true},
+		{"https://fw/x.bin?X-Amz-Signature=deadbeef#frag", "https://fw/x.bin", true},
+		{"http://fw/x.bin", "http://fw/x.bin", true},
+	} {
+		got, ok := parseOtaURL([]byte(`{"StatusPRM":{"OtaUrl":` + strconv.Quote(tc.in) + `}}`))
+		if got != tc.want || ok != tc.ok {
+			t.Errorf("%s: got %q, %v; want %q, %v", tc.in, got, ok, tc.want, tc.ok)
+		}
+	}
+}
+
+// Why: first contact already sends Status 1 and Status; the facts must land on the new device
+// instead of waiting for the first refresh.
+func TestDescribeFillsOtaURLAndRelayNames(t *testing.T) {
+	p, d := probeFixture(t, simulator.DeviceSpec{Name: "strip", Profile: simulator.ProfileESP8266_1M, Relays: 2, FriendlyNames: []string{"A", "B"}})
+	p.Client = override{Client: p.Client, reply: map[string]string{"Status 1": `{"StatusPRM":{"OtaUrl":"http://fw/a.bin"}}`}}
+	got, err := p.Describe(context.Background(), d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.OTAURL != "http://fw/a.bin" || !reflect.DeepEqual(got.RelayNames, []string{"A", "B"}) {
+		t.Fatalf("OTAURL %q, relays %q", got.OTAURL, got.RelayNames)
 	}
 }

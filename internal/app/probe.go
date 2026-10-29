@@ -280,9 +280,11 @@ func relayNames(in []string) []string {
 	return nil
 }
 
-// parseOtaURL reads the OtaUrl of a Status 1 answer and removes any user:password from it. ok is
-// false when the answer has no OtaUrl key or the value is not a URL that can be cleaned safely:
-// a value that cannot be parsed is dropped, never stored raw, since it might hold credentials.
+// parseOtaURL reads the OtaUrl of a Status 1 answer and removes anything that can hold a secret:
+// user:password, the query (tokens, signatures) and the fragment. ok is false when the answer has
+// no OtaUrl key or the value cannot be cleaned safely: a value that does not parse, or one with an
+// '@' that is not userinfo (a password containing '#', '?' or '/' mis-parses into host, query or
+// path) is dropped, never stored raw.
 func parseOtaURL(raw json.RawMessage) (clean string, ok bool) {
 	var s struct {
 		StatusPRM *struct{ OtaUrl *string }
@@ -298,7 +300,10 @@ func parseOtaURL(raw json.RawMessage) (clean string, ok bool) {
 	if err != nil || u.Host == "" {
 		return "", false
 	}
-	u.User = nil
+	if u.User == nil && strings.Contains(v, "@") {
+		return "", false // an '@' url.Parse did not read as userinfo: a mis-parsed password
+	}
+	u.User, u.RawQuery, u.ForceQuery, u.Fragment, u.RawFragment = nil, "", false, "", ""
 	return u.String(), true
 }
 
@@ -466,6 +471,12 @@ func (p *Prober) Describe(ctx context.Context, d model.Device) (model.Device, er
 		d.MQTT = pr.mqtt
 	}
 	d.MQTTHost, d.MQTTPort = pr.mqttHost, pr.mqttPort
+	if pr.readOTAURL {
+		d.OTAURL = pr.otaURL
+	}
+	if pr.relayNames != nil {
+		d.RelayNames = pr.relayNames
+	}
 	if d.Name == "" {
 		d.Name = inventory.CleanName(firstNonEmpty(pr.devName, pr.hostname, pr.topic, d.Address))
 	}
