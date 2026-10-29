@@ -201,3 +201,19 @@ func TestPolicyHistoryFoldWithinOneMinuteShowsOneTime(t *testing.T) {
 		t.Errorf("one minute, one time:\n%s", sum)
 	}
 }
+
+// Why: Run now on the History tab must stay on it (the other tabs do the same), and the tab
+// row of every page names the same tabs.
+func TestPolicyHistoryRunNowStaysOnTheTab(t *testing.T) {
+	e, _ := historyEnv(t)
+	r, body := e.do(t, "POST", "/policy/live", "admin", url.Values{"csrf": {"tok"}, "back": {"history"}})
+	if r.StatusCode != 200 || !strings.Contains(body, `id="history"`) || !strings.Contains(body, `name="back" value="history"`) {
+		t.Fatalf("run now on the history tab: %d", r.StatusCode)
+	}
+	_, over := e.do(t, "GET", "/policy", "admin", nil)
+	for _, w := range []string{">Rules", ">Deviating devices", ">History"} {
+		if !strings.Contains(over, w) {
+			t.Errorf("overview tabs lack %q", w)
+		}
+	}
+}
