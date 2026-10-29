@@ -514,7 +514,7 @@ func (a *runtime) handler() (http.Handler, error) {
 		}
 		_, _ = w.Write([]byte("ready\n"))
 	})
-	if cfg.MetricsToken == "" {
+	if a.svc.Sys.Snapshot().MetricsToken == "" { // effective: environment or settings page
 		a.log.Warn("no metrics token is set: /metrics answers local scrapers only (set one on the settings page)")
 	}
 	mux.Handle("GET /metrics", a.metricsHandler())

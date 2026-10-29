@@ -289,6 +289,13 @@ func TestMetricsTokenFromSettingsAppliesLive(t *testing.T) {
 	if got := scrape("fake-scrape-token-2"); got != 200 {
 		t.Errorf("new token: %d, want 200", got)
 	}
+	_, err := svc.Sys.Apply(t.Context(), sysconfig.Request{Actor: "admin", StepUp: sysconfig.StepUp{Done: true, Possible: true}, Clear: []string{"METRICS_TOKEN"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := scrape("fake-scrape-token-2"); got != 401 {
+		t.Errorf("cleared token: remote peer got %d, want 401 (loopback-only rule)", got)
+	}
 }
 
 // Why (#151): an install that sets TASMOFLEET_METRICS_TOKEN (the Unraid CA
