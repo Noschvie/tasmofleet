@@ -2,6 +2,7 @@ package sysconfig
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -24,6 +25,9 @@ type HistoryEntry struct {
 	// Summary is the one-line text of Changes.
 	Summary string
 	Folded  bool
+	// Reordered: the rules only changed their order (no other change), which
+	// matters because the first matching rule wins.
+	Reordered bool
 	// Day is local midnight, in the zone given to BuildHistory, of the newest
 	// version. Zero for RuleHistory (no zone given).
 	Day time.Time
@@ -66,12 +70,18 @@ func buildHistory(versions []store.PolicyRuleVersion, prev *store.PolicyRuleVers
 			j++
 		}
 		changes := DiffSpecs(specs[j], specs[i]) // before the oldest of the run -> its newest
+		onlyReordered := len(changes) == 0 && reordered(specs[j], specs[i])
+		summary := Summarize(changes)
+		if onlyReordered {
+			summary = "Reordered rules"
+		}
 		out = append(out, HistoryEntry{
-			Versions: versions[i:j:j],
-			Changes:  changes,
-			Summary:  Summarize(changes),
-			Folded:   j-i > 1,
-			Day:      dayOf(versions[i].At, loc),
+			Versions:  versions[i:j:j],
+			Changes:   changes,
+			Summary:   summary,
+			Folded:    j-i > 1,
+			Reordered: onlyReordered,
+			Day:       dayOf(versions[i].At, loc),
 		})
 		i = j
 	}
@@ -86,6 +96,24 @@ func lenientSpecs(v store.PolicyRuleVersion) []RuleSpec {
 		return nil
 	}
 	return s
+}
+
+// reordered reports whether b holds the same rules as a in another order. A
+// rule is identified by its real id, else (versions stored before 0.19) by its
+// name key, like DiffSpecs matches them.
+func reordered(a, b []RuleSpec) bool {
+	ident := func(specs []RuleSpec) []string {
+		out := make([]string, len(specs))
+		for i, s := range specs {
+			if s.ID != "" && !isLegacyID(s.ID) {
+				out[i] = "id:" + s.ID
+			} else {
+				out[i] = "key:" + ruleKey(s)
+			}
+		}
+		return out
+	}
+	return !slices.Equal(ident(a), ident(b))
 }
 
 func dayOf(t time.Time, loc *time.Location) time.Time {
@@ -112,14 +140,14 @@ func Summarize(changes []RuleChange) string {
 		c := changes[0]
 		switch c.Kind {
 		case "added":
-			return "Added " + c.Rule
+			return "Added " + c.Name
 		case "removed":
-			return "Removed " + c.Rule
+			return "Removed " + c.Name
 		}
 		if len(c.Fields) == 0 {
-			return "Changed " + c.Rule
+			return "Changed " + c.Name
 		}
-		return "Changed " + c.Rule + " · " + strings.Join(c.Fields, ", ")
+		return "Changed " + c.Name + " · " + strings.Join(c.Fields, ", ")
 	}
 	var added, removed, changed int
 	for _, c := range changes {
@@ -156,7 +184,7 @@ func Summarize(changes []RuleChange) string {
 // changes. versions is newest first; the oldest of them is diffed against
 // nothing, so pass the whole history. A rule is followed by its id; a position
 // id of a version stored before 0.19 names a slot, so those are matched by
-// name (ruleName, with or without the " (command)" suffix of the label).
+// name (ruleName: the rule's name, or its command when unnamed).
 func RuleHistory(versions []store.PolicyRuleVersion, ruleID, ruleName string) []HistoryEntry {
 	var out []HistoryEntry
 	for i, v := range versions {
@@ -182,7 +210,7 @@ func touches(c RuleChange, ruleID, ruleName string) bool {
 	if c.RuleID != "" && !isLegacyID(c.RuleID) {
 		return c.RuleID == ruleID
 	}
-	return c.Rule == ruleName || strings.HasPrefix(c.Rule, ruleName+" (")
+	return c.Name == ruleName
 }
 
 // History returns one page of the policy history: up to limit versions older

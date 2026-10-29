@@ -158,8 +158,8 @@ func TestHistorySummaryTexts(t *testing.T) {
 		old, new   []RuleSpec
 		wantPrefix string
 	}{
-		{"added", nil, []RuleSpec{a}, "Added Local timezone (Timezone)"},
-		{"removed", []RuleSpec{a}, nil, "Removed Local timezone (Timezone)"},
+		{"added", nil, []RuleSpec{a}, "Added Local timezone"},
+		{"removed", []RuleSpec{a}, nil, "Removed Local timezone"},
 		{"changed expected", []RuleSpec{b}, []RuleSpec{{ID: b.ID, Command: "OtaUrl", Families: b.Families, Want: "u2"}}, "Changed OtaUrl · expected value"},
 		{"changed two fields", []RuleSpec{b}, []RuleSpec{{ID: b.ID, Command: "OtaUrl", Families: []string{"ESP32"}, Want: "u2"}}, "Changed OtaUrl · expected value, scope"},
 		{"many", nil, []RuleSpec{a, b, spec("rc00000000", "C", "1")}, "3 rules added"},
@@ -200,7 +200,7 @@ func TestRulesHistoryOldestOfPageDiffsAgainstTheVersionBefore(t *testing.T) {
 	if err != nil || len(p2.Entries) != 2 || p2.NextBefore != 0 {
 		t.Fatalf("second page %+v %v", p2, err)
 	}
-	if s := p2.Entries[1].Summary; s != "Added A (SetOption1)" {
+	if s := p2.Entries[1].Summary; s != "Added A" {
 		t.Fatalf("the very first version adds everything, got %q", s)
 	}
 }
@@ -211,7 +211,7 @@ func TestHistoryLegacyVersionsWithoutIDsSummariseByName(t *testing.T) {
 	old := store.PolicyRuleVersion{ID: 1, At: t0.Add(-time.Hour), Rules: `[{"name":"Tz","command":"Timezone","want":"99"},{"name":"Led","command":"LedPower","want":"1"}]`}
 	cur := store.PolicyRuleVersion{ID: 2, At: t0, Rules: `[{"name":"Tz","command":"Timezone","want":"1"},{"name":"Led","command":"LedPower","want":"1"}]`}
 	got := buildHistory([]store.PolicyRuleVersion{cur}, &old, time.UTC, true)
-	if got[0].Summary != "Changed Tz (Timezone) · expected value" {
+	if got[0].Summary != "Changed Tz · expected value" {
 		t.Fatalf("%q", got[0].Summary)
 	}
 }
@@ -277,5 +277,56 @@ func TestHistoryDayGroupingAtLocalMidnight(t *testing.T) {
 	}
 	if got[1].Day.Equal(got[2].Day) {
 		t.Fatal("must be different days")
+	}
+}
+
+// Why: rule order decides which rule wins, so a save that only reorders must
+// not read as "no changes"; ids (or names for legacy versions) tell reorder
+// from replace.
+func TestHistoryReorderOnlySaveSaysReordered(t *testing.T) {
+	a, b := spec("ra00000000", "A", "1"), spec("rb00000000", "B", "1")
+	prev := ver(1, "x", t0.Add(-time.Hour), a, b)
+	got := buildHistory([]store.PolicyRuleVersion{ver(2, "x", t0, b, a)}, &prev, time.UTC, true)
+	if got[0].Summary != "Reordered rules" || !got[0].Reordered || len(got[0].Changes) != 0 {
+		t.Fatalf("%+v", got[0])
+	}
+	// legacy versions without ids: matched by name
+	old := store.PolicyRuleVersion{ID: 1, At: t0.Add(-time.Hour), Rules: `[{"name":"Tz","command":"Timezone","want":"1"},{"name":"Led","command":"LedPower","want":"1"}]`}
+	cur := store.PolicyRuleVersion{ID: 2, At: t0, Rules: `[{"name":"Led","command":"LedPower","want":"1"},{"name":"Tz","command":"Timezone","want":"1"}]`}
+	if got := buildHistory([]store.PolicyRuleVersion{cur}, &old, time.UTC, true); got[0].Summary != "Reordered rules" {
+		t.Fatalf("legacy: %q", got[0].Summary)
+	}
+	// an identical save stays "No rule changes"
+	same := ver(2, "x", t0, a, b)
+	if got := buildHistory([]store.PolicyRuleVersion{same}, &prev, time.UTC, true); got[0].Summary != "No rule changes" || got[0].Reordered {
+		t.Fatalf("same: %+v", got[0])
+	}
+}
+
+// Why: a fold that nets to a pure reorder says so; the intermediate saves do
+// not matter, only before-first against after-last.
+func TestHistoryFoldNettingToReorderSaysReordered(t *testing.T) {
+	a, b := spec("ra00000000", "A", "1"), spec("rb00000000", "B", "1")
+	prev := ver(1, "x", t0.Add(-time.Hour), a, b)
+	vs := []store.PolicyRuleVersion{
+		ver(3, "t", t0.Add(time.Minute), b, a),
+		ver(2, "t", t0, b, a),
+	}
+	got := buildHistory(vs, &prev, time.UTC, false)
+	if len(got) != 1 || !got[0].Folded || got[0].Summary != "Reordered rules" {
+		t.Fatalf("%+v", got)
+	}
+}
+
+// Why: the bare name is what people know a rule by; the history must not show
+// the "Name (Command)" label the diff view uses.
+func TestChangeNameIsNameOrCommand(t *testing.T) {
+	named := RuleSpec{ID: "ra00000000", Name: "Local timezone", Command: "Timezone", Want: "1"}
+	unnamed := RuleSpec{ID: "rb00000000", Command: "OtaUrl", Want: "u"}
+	for _, c := range DiffSpecs(nil, []RuleSpec{named, unnamed}) {
+		want := map[string]string{"Local timezone (Timezone)": "Local timezone", "OtaUrl": "OtaUrl"}[c.Rule]
+		if c.Name != want {
+			t.Fatalf("%+v want name %q", c, want)
+		}
 	}
 }

@@ -574,6 +574,9 @@ func (r *Rules) HasVersions(ctx context.Context) (bool, error) {
 type RuleChange struct {
 	Kind string `json:"kind"` // added, removed, changed
 	Rule string `json:"rule"`
+	// Name is the rule's name, or its command when it has none; the history
+	// summaries use it instead of the longer Rule label.
+	Name string `json:"name,omitempty"`
 	// RuleID is the id the rule has on the side it is shown from (the new side
 	// for added and changed, the old side for removed). A position id of a
 	// version stored before 0.19 does not identify a rule across versions.
@@ -589,6 +592,13 @@ func ruleKey(s RuleSpec) string {
 		return s.Name
 	}
 	return s.Command + " [" + strings.Join(s.Families, ",") + "|" + strings.Join(s.Tags, ",") + "|" + strings.Join(s.Devices, ",") + "]"
+}
+
+func ruleName(s RuleSpec) string {
+	if s.Name != "" {
+		return s.Name
+	}
+	return s.Command
 }
 
 func ruleLabel(s RuleSpec) string {
@@ -627,17 +637,17 @@ func DiffSpecs(a, b []RuleSpec) []RuleChange {
 			}
 		}
 		if match < 0 {
-			out = append(out, RuleChange{Kind: "removed", Rule: ruleLabel(x), RuleID: x.ID, Detail: "expected " + x.Want})
+			out = append(out, RuleChange{Kind: "removed", Rule: ruleLabel(x), Name: ruleName(x), RuleID: x.ID, Detail: "expected " + x.Want})
 			continue
 		}
 		used[match] = true
 		if d, fields := specDelta(x, b[match]); d != "" {
-			out = append(out, RuleChange{Kind: "changed", Rule: ruleLabel(b[match]), RuleID: b[match].ID, Detail: d, Fields: fields})
+			out = append(out, RuleChange{Kind: "changed", Rule: ruleLabel(b[match]), Name: ruleName(b[match]), RuleID: b[match].ID, Detail: d, Fields: fields})
 		}
 	}
 	for j, y := range b {
 		if !used[j] {
-			out = append(out, RuleChange{Kind: "added", Rule: ruleLabel(y), RuleID: y.ID, Detail: "expected " + y.Want})
+			out = append(out, RuleChange{Kind: "added", Rule: ruleLabel(y), Name: ruleName(y), RuleID: y.ID, Detail: "expected " + y.Want})
 		}
 	}
 	return out
