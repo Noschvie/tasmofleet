@@ -37,6 +37,10 @@ always upgrade automatically.
   installs that set it, such as the Unraid template, keep working unchanged. An empty variable
   counts as unset (#151).
 
+- Device page: the Identity card shows the OTA URL the device would update from, when it is known (#127,
+  thanks @Noschvie); the relay box uses the names the device gives its relays (Tasmota's default names stay
+  "Relay N"); the Connection card of an Ethernet device shows subnet mask and DNS.
+
 ### Fixed
 
 - Resizing a column no longer snaps back for a moment when two list updates overlap: an older answer that

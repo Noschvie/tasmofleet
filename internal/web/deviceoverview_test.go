@@ -164,28 +164,28 @@ func TestPolicyTileNamesTheFirstFailingSetting(t *testing.T) {
 func TestRelayBoxMeteringLabelsAndPerChannelWatts(t *testing.T) {
 	four := map[string]string{"POWER1": "ON", "POWER2": "ON", "POWER3": "ON", "POWER4": "OFF"}
 	perChannel := health.Telemetry{Energy: map[string]health.EnergyChannel{"1": meter(42, 0, 0, 0), "2": meter(96, 0, 0, 0), "3": meter(20, 0, 0, 0), "4": meter(0, 0, 0, 0)}}
-	box := relayBoxOf(model.Health{Power: four}, perChannel, true)
+	box := relayBoxOf(model.Health{Power: four}, perChannel, nil, true)
 	if box.Right != "3 of 4 on · metered per channel" || box.Rows[0].Line != "42 W" || box.Rows[3].Line != "0 W" || box.Rows[1].Cmd != "POWER2" {
 		t.Fatalf("per channel: %+v", box)
 	}
 	two := map[string]string{"POWER1": "ON", "POWER2": "OFF"}
-	shared := relayBoxOf(model.Health{Power: two}, health.Telemetry{Energy: map[string]health.EnergyChannel{"": meter(60, 0, 0, 0)}}, true)
+	shared := relayBoxOf(model.Health{Power: two}, health.Telemetry{Energy: map[string]health.EnergyChannel{"": meter(60, 0, 0, 0)}}, nil, true)
 	if shared.Right != "1 of 2 on · one meter for all" || shared.Rows[0].Line != "On" || shared.Rows[1].Line != "Off" {
 		t.Fatalf("one meter for two relays: %+v", shared)
 	}
 	// a meter with 3 channels on 2 relays is not "per channel": counts differ
-	if odd := relayBoxOf(model.Health{Power: two}, health.Telemetry{Energy: map[string]health.EnergyChannel{"1": meter(1, 0, 0, 0), "2": meter(2, 0, 0, 0), "3": meter(3, 0, 0, 0)}}, true); odd.Rows[0].Line != "On" {
+	if odd := relayBoxOf(model.Health{Power: two}, health.Telemetry{Energy: map[string]health.EnergyChannel{"1": meter(1, 0, 0, 0), "2": meter(2, 0, 0, 0), "3": meter(3, 0, 0, 0)}}, nil, true); odd.Rows[0].Line != "On" {
 		t.Fatalf("channel count differs from relay count: %+v", odd)
 	}
-	none := relayBoxOf(model.Health{Power: four}, health.Telemetry{}, true)
+	none := relayBoxOf(model.Health{Power: four}, health.Telemetry{}, nil, true)
 	if none.Right != "3 of 4 on · no energy meter" || none.Rows[0].Line != "On" {
 		t.Fatalf("no meter: %+v", none)
 	}
-	one := relayBoxOf(model.Health{Power: map[string]string{"POWER": "ON"}}, health.Telemetry{Energy: map[string]health.EnergyChannel{"": meter(133, 0, 0, 0)}}, true)
+	one := relayBoxOf(model.Health{Power: map[string]string{"POWER": "ON"}}, health.Telemetry{Energy: map[string]health.EnergyChannel{"": meter(133, 0, 0, 0)}}, nil, true)
 	if one.Right != "metered" || one.Rows[0].Cmd != "POWER" || one.Rows[0].Line != "On" {
 		t.Fatalf("one relay: %+v", one)
 	}
-	if relayBoxOf(model.Health{}, health.Telemetry{}, true) != nil {
+	if relayBoxOf(model.Health{}, health.Telemetry{}, nil, true) != nil {
 		t.Fatal("a device without relays has no relay box")
 	}
 }
@@ -197,8 +197,8 @@ func TestConnectionCardFollowsTheLink(t *testing.T) {
 	if wifi.Title != "Connection · Wi-Fi" || kvKeys(wifi.Rows) != "Address,Gateway,SSID,BSSID,Channel,MQTT broker" || wifi.Rows[5].Value != "mqtt.home.internal:1883" || wifi.Rows[4].Value != "11 (2.4 GHz)" {
 		t.Fatalf("wifi: %+v", wifi)
 	}
-	eth := connOf(overviewIn{Dev: model.Device{Address: "172.27.13.44", MAC: "aa", MACs: []string{"aa", "bb"}}, Facts: snapFacts{Wired: true, Gateway: "172.27.13.1"}})
-	if eth.Title != "Connection · Ethernet" || kvKeys(eth.Rows) != "Address,Gateway,Ethernet MAC,MQTT broker" || eth.Rows[2].Value != "bb" || eth.Rows[3].Value != "not configured" {
+	eth := connOf(overviewIn{Dev: model.Device{Address: "172.27.13.44", MAC: "aa", MACs: []string{"aa", "bb"}}, Facts: snapFacts{Wired: true, Gateway: "172.27.13.1", Subnet: "255.255.255.0", DNS: "172.27.13.1, 9.9.9.9"}})
+	if eth.Title != "Connection · Ethernet" || kvKeys(eth.Rows) != "Address,Gateway,Subnet mask,DNS,Ethernet MAC,MQTT broker" || eth.Rows[2].Value != "255.255.255.0" || eth.Rows[3].Value != "172.27.13.1, 9.9.9.9" || eth.Rows[4].Value != "bb" || eth.Rows[5].Value != "not configured" {
 		t.Fatalf("ethernet: %+v", eth)
 	}
 }
@@ -390,3 +390,52 @@ func TestStreamResyncsWhenEventsCameBetweenRenderAndConnect(t *testing.T) {
 }
 
 func strconvSeq(n uint64) string { return itoa(int(n)) }
+
+// Why (D2): a relay shows the name its device gives it; Tasmota's untouched defaults ("Tasmota",
+// "Tasmota2", ...) say nothing and stay "Relay N". A name missing for a relay (fewer FriendlyNames
+// than relays) falls back too.
+func TestRelayNamesComeFromTheDeviceUnlessTheyAreDefaults(t *testing.T) {
+	for _, tc := range []struct {
+		names []string
+		n     int
+		want  string
+	}{
+		{[]string{"Monitor", "PC"}, 1, "Monitor"},
+		{[]string{"Monitor", "PC"}, 2, "PC"},
+		{[]string{"Tasmota", "Tasmota2"}, 1, "Relay 1"},
+		{[]string{"Tasmota", "Tasmota2"}, 2, "Relay 2"},
+		{[]string{"Tasmota", "Tasmota12"}, 2, "Relay 2"},
+		{[]string{"Tasmota lamp"}, 1, "Tasmota lamp"},
+		{[]string{"Monitor"}, 2, "Relay 2"},
+		{[]string{" "}, 1, "Relay 1"},
+		{nil, 3, "Relay 3"},
+	} {
+		if got := relayName(tc.names, tc.n); got != tc.want {
+			t.Errorf("%v relay %d: %q, want %q", tc.names, tc.n, got, tc.want)
+		}
+	}
+	box := relayBoxOf(model.Health{Power: map[string]string{"POWER1": "ON", "POWER2": "OFF"}}, health.Telemetry{}, []string{"Monitor", "Tasmota2"}, true)
+	if box.Rows[0].Name != "Monitor" || box.Rows[1].Name != "Relay 2" || box.Rows[0].Aria != "Monitor is On: switch it Off" {
+		t.Fatalf("%+v", box.Rows)
+	}
+}
+
+// Why (#127): the OTA URL the device would update from is a row of Identity, only when the prober
+// found one (never an empty "Unknown" row for devices that were not read yet).
+func TestIdentityShowsTheOTAURLOnlyWhenKnown(t *testing.T) {
+	e := setup(t)
+	_, none := e.do(t, "GET", "/devices/1", "admin", nil)
+	if strings.Contains(none, "OTA URL") {
+		t.Error("an OTA URL row without a value")
+	}
+	d := e.inv.devs[1]
+	d.OTAURL = "http://ota.tasmota.local/tasmota32/release/tasmota32s3.bin"
+	e.inv.devs[1] = d
+	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
+	if !strings.Contains(body, "<dt>OTA URL</dt>") || !strings.Contains(strings.ReplaceAll(body, "<wbr>", ""), "ota.tasmota.local") {
+		t.Errorf("OTA URL row missing: %s", between(body, "Firmware", "MAC"))
+	}
+	if strings.Index(body, "<dt>OTA URL</dt>") < strings.Index(body, "<dt>Firmware</dt>") {
+		t.Error("OTA URL belongs after Firmware")
+	}
+}

@@ -252,10 +252,22 @@ func tilesOf(in overviewIn) []tile {
 	return tiles
 }
 
+// relayName is the name of relay n: the device's FriendlyName for it, or "Relay n" while it still
+// has Tasmota's default ("Tasmota" for the first, "Tasmota2", "Tasmota3"... for the others) (D2).
+func relayName(names []string, n int) string {
+	if n >= 1 && n <= len(names) {
+		name := strings.TrimSpace(names[n-1])
+		if rest, ok := strings.CutPrefix(name, "Tasmota"); name != "" && (!ok || strings.Trim(rest, "0123456789") != "") {
+			return name
+		}
+	}
+	return "Relay " + strconv.Itoa(n)
+}
+
 // relayBoxOf is the relay box: every relay with its switch, and in the header how many are on
 // and how the energy is metered. Nil for a device without relays. Watts show per relay only when
 // the device meters each channel (as many channels as relays), else the state.
-func relayBoxOf(hl model.Health, t health.Telemetry, enabled bool) *relayBox {
+func relayBoxOf(hl model.Health, t health.Telemetry, names []string, enabled bool) *relayBox {
 	rs := relayStates(hl)
 	if len(rs) == 0 {
 		return nil
@@ -265,7 +277,7 @@ func relayBoxOf(hl model.Health, t health.Telemetry, enabled bool) *relayBox {
 	box := &relayBox{Enabled: enabled}
 	on := 0
 	for i, r := range rs {
-		row := relayRow{N: r.N, Name: "Relay " + strconv.Itoa(r.N), Cmd: "POWER", On: r.State == "ON", Action: "ON"}
+		row := relayRow{N: r.N, Name: relayName(names, r.N), Cmd: "POWER", On: r.State == "ON", Action: "ON"}
 		if len(rs) > 1 {
 			row.Cmd += strconv.Itoa(r.N)
 		}
@@ -307,7 +319,7 @@ func relayBoxOf(hl model.Health, t health.Telemetry, enabled bool) *relayBox {
 	return box
 }
 
-// connRows is the Connection card: how TasmoFleet reaches the device, then how the device is
+// connOf is the Connection card: how TasmoFleet reaches the device, then how the device is
 // connected (Wi-Fi or Ethernet) and its broker.
 func connOf(in overviewIn) connCard {
 	d, f := in.Dev, in.Facts
@@ -325,7 +337,10 @@ func connOf(in overviewIn) connCard {
 	c := connCard{Title: "Connection · Wi-Fi"}
 	if f.Wired {
 		c.Title = "Connection · Ethernet"
-		rows = append(rows, ui.KVRow{Key: "Ethernet MAC", Value: orUnknown(macShown(d, true)), Mono: true, Mask: true})
+		rows = append(rows,
+			ui.KVRow{Key: "Subnet mask", Value: orUnknown(f.Subnet), Mono: true, Mask: true},
+			ui.KVRow{Key: "DNS", Value: orUnknown(f.DNS), Mono: true, Mask: true},
+			ui.KVRow{Key: "Ethernet MAC", Value: orUnknown(macShown(d, true)), Mono: true, Mask: true})
 	} else {
 		channel := ""
 		if f.Channel > 0 {
@@ -454,7 +469,7 @@ func (h *handler) overviewOf(r *http.Request, v view, d model.Device, just *rela
 	in := overviewIn{Dev: d, Health: hl, Tele: tele, Facts: facts, Policy: h.policyOf(r, v, d.ID), Now: h.d.Clock.Now()}
 	off := p.Tabs.offline() // an update silences the device on purpose: that is not "offline"
 	p.Live = liveView{ID: d.ID, Base: v.Base, CSRF: v.CSRF, Off: off, Tiles: tilesOf(in),
-		Box: relayBoxOf(hl, tele, h.d.DeviceCmd != nil && !off && p.Updating == nil)}
+		Box: relayBoxOf(hl, tele, d.RelayNames, h.d.DeviceCmd != nil && !off && p.Updating == nil)}
 	p.Ident = h.identity(v, d, p.Updating != nil, off, facts)
 	p.Conn = connOf(in)
 	return p, nil

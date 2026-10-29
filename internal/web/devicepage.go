@@ -144,6 +144,7 @@ type deviation struct{ Rule, Have, Want string }
 // not probed since (see factsOf).
 type snapFacts struct {
 	Hostname, IP, Gateway string
+	Subnet, DNS           string // the active interface's subnet mask and DNS servers ("" = not reported)
 	SSID, BSSID           string
 	Channel               int
 	Wired                 bool // on Ethernet: Hostname, IP and Gateway are the Ethernet ones
@@ -192,7 +193,7 @@ func (h *handler) snapFactsOf(ctx context.Context, list []model.Backup) snapFact
 // factsOf are the device's network facts: what a probe stored on it, field by field; the newest
 // backup snapshot only fills in a device that was never probed.
 func (h *handler) factsOf(ctx context.Context, d model.Device) snapFacts {
-	f := snapFacts{Hostname: d.Net.Hostname, IP: d.Net.IP, Gateway: d.Net.Gateway, SSID: d.Net.SSID, BSSID: d.Net.BSSID, Channel: d.Net.Channel, Wired: d.Net.Wired}
+	f := snapFacts{Hostname: d.Net.Hostname, IP: d.Net.IP, Gateway: d.Net.Gateway, Subnet: d.Net.Subnet, DNS: d.Net.DNS, SSID: d.Net.SSID, BSSID: d.Net.BSSID, Channel: d.Net.Channel, Wired: d.Net.Wired}
 	if !d.Net.ReadAt.IsZero() {
 		return f
 	}
@@ -250,8 +251,11 @@ func (h *handler) identity(v view, d model.Device, updating, off bool, f snapFac
 		{Key: "Hardware", Value: orUnknown(hw), Mono: true},
 		{Key: "Build", Value: orUnknown(build), Mono: true},
 		{Key: "Firmware", Value: orUnknown(fw), Mono: true},
-		{Key: "MAC", Value: orUnknown(d.MAC), Mono: true, Mask: true},
 	}
+	if d.OTAURL != "" { // #127: where the device would update from; the prober stored it without credentials
+		rows = append(rows, ui.KVRow{Key: "OTA URL", Value: d.OTAURL, Mono: true, Soft: true})
+	}
+	rows = append(rows, ui.KVRow{Key: "MAC", Value: orUnknown(d.MAC), Mono: true, Mask: true})
 	if d.HTTPUser != "" || d.HTTPPassword != "" {
 		login := "password set"
 		if d.HTTPPassword == "" {
