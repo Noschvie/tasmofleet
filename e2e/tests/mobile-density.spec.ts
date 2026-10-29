@@ -46,9 +46,10 @@ const BUDGET_SCREENS = 2.25;
 // version history stacked); the prototype's own is 2626 px at 375 (3.23 screens). Ours adds the change
 // note and the folded "cannot be judged" row: 2726 px (3.36), so 3.45 with the editor open or new.
 // design v2 (#197 WP5): "policy rule editor" is a rule page since the overview lost its editor: tiles, the rule
-// card and the devices card stacked, 3203 px at 375 (3.94 screens) on the realistic seed.
+// card and the devices card stacked, 3203 px at 375 (3.94 screens) on the realistic seed; the folded
+// "History of this rule" card (WP7) adds one 40 px row, so 4.1.
 const BUDGET_OVERRIDES: Record<string, number> = {
-  devices: 6.0, update: 2.5, audit: 4.3, policy: 3.45, "policy rule editor": 4.0, "new policy rule": 3.45, "device detail": 2.75, firmware: 2.75, "firmware, all releases": 2.55,
+  devices: 6.0, update: 2.5, audit: 4.3, policy: 3.45, "policy rule editor": 4.1, "new policy rule": 3.45, "device detail": 2.75, firmware: 2.75, "firmware, all releases": 2.55,
 };
 
 let app: App;

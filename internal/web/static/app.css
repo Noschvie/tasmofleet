@@ -13598,3 +13598,10 @@ tr.pol-grp td {
   min-width: 26px;
   white-space: nowrap;
 }
+details.devcard > summary {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  cursor: pointer;
+  font: 600 14px var(--font-sans);
+}
