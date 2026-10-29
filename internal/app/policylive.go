@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"math/rand/v2"
+	"strings"
 	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
@@ -65,14 +66,16 @@ func (p *policyReporter) applyUpdates(ctx context.Context, ch <-chan policyUpdat
 			if err != nil {
 				continue // not one of ours
 			}
-			want := map[string]bool{}
+			// A device spells a generic reply as it likes; a rule's value is stored under the
+			// rule's own spelling.
+			want := map[string]string{}
 			for _, c := range ruleCommands(p.currentRules()) {
-				want[c] = true
+				want[strings.ToLower(c)] = c
 			}
 			keep := map[string]string{}
 			for k, v := range u.vals {
-				if want[k] {
-					keep[k] = v
+				if c, ok := want[strings.ToLower(k)]; ok {
+					keep[c] = v
 				}
 			}
 			if len(keep) > 0 {

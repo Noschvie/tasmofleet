@@ -1135,6 +1135,14 @@ from decoded backups (preferred) or live `Status` replies. The view lists drift 
 Fixing it is an explicit bulk action. Example rules: PowerOnState 0,
 SetOption0 0 (ESP32 exception: 1), SaveData 0, Timezone 99.
 
+A rule's command is free text with the curated settings as suggestions: any Tasmota command that
+answers a plain query (`Sleep`, `LedState`, ...) can be a rule. It is read live by its bare name,
+one command at a time, and set with `<Command> <want>`. Never allowed: `Status` in any spelling
+(Status 0 is never sent automatically), secrets, commands that act when sent bare, and commands
+whose set form needs a console confirmation. The checks are `cmdpolicy.PolicyReadable` and
+`cmdpolicy.PolicySetText`; the claims are in docs/security/command-policy.md (G1 to G6). A
+generic rule has no value validator, is not read from backups and never restarts the device.
+
 ### 14.5 Notifications
 
 `notify.Notifier` implementations for a webhook (e.g. a Home Assistant webhook trigger)

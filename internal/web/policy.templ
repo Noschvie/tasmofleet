@@ -331,11 +331,20 @@ templ ruleEditorCard(p policyView, e *ruleEditor) {
 				</details>
 			</div>
 			<div class="pol-two">
-				<label class="ufield">
-					<span class="ufield-label">Setting</span>
-					<select
+				<div class="ufield">
+					<label class="ufield-label" for="rule-command">Command</label>
+					<input
+						id="rule-command"
 						name="command"
 						class="mono"
+						list="rule-commands"
+						value={ e.Spec.Command }
+						maxlength="32"
+						autocomplete="off"
+						autocapitalize="off"
+						spellcheck="false"
+						placeholder="e.g. PowerOnState, Sleep, SetOption19"
+						aria-describedby={ commandDescribedBy(e) }
 						hx-get={ p.Base + rulesPath + "/value-control" }
 						hx-trigger="change consume"
 						hx-target="#want-control"
@@ -343,23 +352,21 @@ templ ruleEditorCard(p policyView, e *ruleEditor) {
 						hx-include="[name='want']"
 						if e.ErrField == "command" {
 							aria-invalid="true"
-							aria-describedby="err-command"
 							autofocus
 						}
-					>
-						<option value="">Choose a setting…</option>
+					/>
+					<datalist id="rule-commands">
 						for _, g := range e.Groups {
-							<optgroup label={ g.Name }>
-								for _, c := range g.Choices {
-									<option value={ c.Key } selected?={ c.Key == e.Spec.Command }>{ c.Label }</option>
-								}
-							</optgroup>
+							for _, c := range g.Choices {
+								<option value={ c.Key }>{ c.Label }</option>
+							}
 						}
-					</select>
+					</datalist>
+					<span class="ufield-help" id="help-command">Any Tasmota command that answers a plain query, or pick a setting from the list. Status commands, secrets and commands that act when sent without a value are refused. The device is asked live, one command at a time; there is no per-rule read override.</span>
 					if e.ErrField == "command" {
 						<span class="ufield-err" id="err-command" role="alert">{ e.Err }</span>
 					}
-				</label>
+				</div>
 				<div class="ufield" id="want-control">
 					@ruleValue(e.Control)
 				</div>
@@ -448,7 +455,7 @@ templ ruleValue(vc valueControl) {
 }/>
 			}
 		case "none":
-			<input id="want" name="want" type="text" class="mono" disabled placeholder="Choose a setting first"/>
+			<input id="want" name="want" type="text" class="mono" disabled placeholder="Enter a command first"/>
 		default:
 			<input id="want" name="want" type="text" class="mono" maxlength="64" required value={ vc.Want } if vc.Invalid {
 	aria-invalid="true"
@@ -733,4 +740,13 @@ templ fixStartedPage(base string, s fixStarted) {
 			}
 		}
 	</div>
+}
+
+// commandDescribedBy names the elements that describe the command field: the help, and
+// the error when this field is the failing one.
+func commandDescribedBy(e *ruleEditor) string {
+	if e.ErrField == "command" {
+		return "err-command help-command"
+	}
+	return "help-command"
 }

@@ -16,6 +16,11 @@ always upgrade automatically.
   and transaction views, copied by a retry, kept across a restart). A build that does not belong to
   the chip, or contradicts a known chip revision, is refused. Not tested on a real ESP32-S2 yet.
   Migration 0033 adds the job column.
+- Policy rules can check any Tasmota command that answers a plain query (`Sleep`, `LedState`,
+  ...), not only the settings in the list. The rule editor has a free command field with the
+  known settings as suggestions. `Status` in any spelling, secrets, commands that act when sent
+  bare and commands that need a confirmation in the console are refused, with the reason.
+  Make compliant sets such a rule like any other, admin only (#36).
 
 ### Changed
 

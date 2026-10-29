@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/audit"
+	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/tasmota"
 )
@@ -150,12 +151,18 @@ func (m *Manager) readKeys(ctx context.Context, id model.DeviceID, keys []string
 		if slices.Contains(SideEffectQueries, k) {
 			return out, fmt.Errorf("%w: %q has a side effect when queried bare", ErrNotQueryable, k)
 		}
+		if !Queryable(k) { // right before the send: whatever the caller checked, a denied name never leaves
+			return out, fmt.Errorf("%w: %q", ErrNotQueryable, k)
+		}
 		raw, err := m.o.Client.Command(ctx, t, k) // one at a time; a bare name queries
 		switch {
 		case errors.Is(err, tasmota.ErrUnknownCommand):
 			continue
 		case err != nil:
 			return out, fmt.Errorf("read %s: %w", k, err)
+		}
+		if Generic(k) {
+			raw = cmdpolicy.ScrubReply(raw) // an uncurated reply may hold anything
 		}
 		v, ok := replyValue(k, raw)
 		if !ok {
@@ -166,9 +173,10 @@ func (m *Manager) readKeys(ctx context.Context, id model.DeviceID, keys []string
 	return out, nil
 }
 
-// safeValue keeps URL credentials out of what is read from a device.
+// safeValue keeps URL credentials out of what is read from a device: from the
+// curated URL and from every generic value.
 func safeValue(key, v string) string {
-	if key == "OtaUrl" {
+	if key == "OtaUrl" || Generic(key) {
 		return RedactURLCredentials(v)
 	}
 	return v

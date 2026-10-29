@@ -81,15 +81,20 @@ test("policy rule editor: create via the setting picker, live preview, edit, rev
 
   await page.getByRole("link", { name: "New rule" }).click();
   // The value control follows the setting: a number input for SaveData ...
-  await page.locator("select[name='command']").selectOption("SaveData");
+  const command = page.locator("input[name='command']");
+  const pick = async (name: string) => {
+    await command.fill(name);
+    await command.blur(); // the change event swaps the value control
+  };
+  await pick("SaveData");
   await expect(page.locator("input[name='want'][type='number']")).toHaveAttribute("max", "3600");
   // ... a dropdown for an enum ...
-  await page.locator("select[name='command']").selectOption("PowerOnState");
+  await pick("PowerOnState");
   await expect(page.locator("select[name='want'] option")).toHaveCount(7);
   // ... and an on/off choice for a SetOption.
-  await page.locator("select[name='command']").selectOption("SetOption0");
+  await pick("SetOption0");
   await expect(page.locator("input[type='radio'][name='want']")).toHaveCount(2);
-  await page.locator("select[name='command']").selectOption("SaveData");
+  await pick("SaveData");
   await page.locator("input[name='want']").fill("0");
   await page.locator("input[name='name']").fill("Flash wear");
   await page.locator(".pol-scope > summary").click();

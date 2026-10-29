@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"regexp"
 
+	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
 	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/settings"
 )
 
 // MaxRules bounds the policy file.
@@ -93,6 +95,8 @@ func ParseRules(data []byte, allowed func(command string) bool) ([]Rule, error) 
 		switch {
 		case !commandRe.MatchString(j.Command):
 			return nil, fmt.Errorf("policy rules: rule at index %d: invalid command %q", i, j.Command)
+		case commandProblem(j.Command, j.Want) != nil:
+			return nil, fmt.Errorf("policy rules: rule at index %d: command %q cannot be checked: %w", i, j.Command, commandProblem(j.Command, j.Want))
 		case allowed != nil && !allowed(j.Command):
 			return nil, fmt.Errorf("policy rules: rule at index %d: command %q cannot be checked (secret, unknown or side-effecting commands are refused)", i, j.Command)
 		case !wantRe.MatchString(j.Want):
@@ -119,6 +123,32 @@ func ParseRules(data []byte, allowed func(command string) bool) ([]Rule, error) 
 		out = append(out, r)
 	}
 	return out, nil
+}
+
+// commandProblem says why a rule may not name command, or nil. A curated
+// setting keeps exactly its former behaviour (its own validation, secrets
+// refused). Any other command is a generic rule: it must be readable by its
+// bare name, and its set form must be sendable by an admin without a
+// confirmation (cmdpolicy), because Make compliant sends it unasked.
+func commandProblem(command, want string) error {
+	if canon, curated := settings.Curated(command); curated {
+		f, isField := settings.Lookup(canon)
+		switch {
+		case canon != command:
+			return fmt.Errorf("write the setting as %s", canon)
+		case isField && f.Secret:
+			return errors.New("secret settings cannot be checked")
+		}
+		return nil
+	}
+	if ok, why := cmdpolicy.PolicyReadable(command); !ok {
+		return errors.New(why)
+	}
+	if !wantRe.MatchString(want) {
+		return nil // reported as the want's own problem
+	}
+	_, err := cmdpolicy.PolicySetText(command, want)
+	return err
 }
 
 const (

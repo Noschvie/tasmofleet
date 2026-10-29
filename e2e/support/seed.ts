@@ -111,7 +111,8 @@ async function savePolicyVersion(page: Page, app: App, name: string, command: st
   await page.setExtraHTTPHeaders({ "X-authentik-username": hash40, "X-authentik-groups": "adm" });
   try {
     await page.goto(app.url + "/policy?new=1");
-    await page.locator("select[name=command]").selectOption(command);
+    await page.locator("input[name=command]").fill(command);
+    await page.locator("input[name=command]").blur(); // the change event loads the value control
     await expect(page.locator("#want")).toBeEnabled();
     await page.locator("input[name=name]").fill(name);
     const control = page.locator("#want");

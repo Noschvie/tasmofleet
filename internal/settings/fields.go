@@ -16,6 +16,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
 )
 
 // Kind selects the form control of a field.
@@ -405,15 +407,45 @@ func Lookup(key string) (Field, bool) {
 
 var setOptionKeyRe = regexp.MustCompile(`^SetOption[0-9]{1,3}$`)
 
-// Queryable reports whether a command may be read with a bare query: a
-// curated field or a SetOption. The policy rules use it to refuse commands
-// that would act when sent without a value.
-func Queryable(cmd string) bool {
-	if setOptionKeyRe.MatchString(cmd) {
-		return true
+// Curated says whether cmd names a curated field or a SetOption, in any letter
+// case, and returns the spelling the catalog uses. A rule must spell such a
+// command exactly like that: another case would send it through the generic
+// path, without the curated validation and restart knowledge.
+func Curated(cmd string) (canonical string, ok bool) {
+	for _, f := range Fields {
+		if strings.EqualFold(f.Key, cmd) {
+			return f.Key, true
+		}
 	}
-	f, ok := Lookup(cmd)
-	return ok && !f.Secret
+	if len(cmd) > len("SetOption") && strings.EqualFold(cmd[:9], "SetOption") && setOptionKeyRe.MatchString("SetOption"+cmd[9:]) {
+		return "SetOption" + cmd[9:], true
+	}
+	return "", false
+}
+
+// Queryable reports whether a command may be read with a bare query: a
+// curated non-secret field, a SetOption, or any other command that
+// cmdpolicy.PolicyReadable accepts (never Status, secrets or commands that act
+// when sent bare). The policy rules use it to refuse commands that would act
+// when sent without a value.
+func Queryable(cmd string) bool {
+	if canon, ok := Curated(cmd); ok {
+		if canon != cmd {
+			return false
+		}
+		f, isField := Lookup(cmd)
+		return !isField || !f.Secret
+	}
+	ok, _ := cmdpolicy.PolicyReadable(cmd)
+	return ok
+}
+
+// Generic reports whether cmd is read and set as a generic policy command:
+// not curated, so without a validator, without restart knowledge and never
+// restarting the device.
+func Generic(cmd string) bool {
+	_, curated := Curated(cmd)
+	return !curated && Queryable(cmd)
 }
 
 // statusSource says where a setting is read when its bare query has a side

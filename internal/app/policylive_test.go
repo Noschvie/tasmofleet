@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -226,5 +228,105 @@ func TestPollerHonoursLivePause(t *testing.T) {
 	paused = true
 	if throttled := rep.refresh(t.Context(), "admin", []model.Device{{ID: 2, Name: "b"}}); throttled || rd.calls != 2 {
 		t.Fatalf("Run now must still read while paused: throttled=%v calls=%d", throttled, rd.calls)
+	}
+}
+
+// genericDevice answers a few plain settings and a reply that carries credentials. It
+// records every command, so a test can see exactly what the poller sent.
+type genericDevice struct {
+	mu   sync.Mutex
+	sent []string
+}
+
+func (g *genericDevice) Command(_ context.Context, _ tasmota.Target, cmnd string) (json.RawMessage, error) {
+	g.mu.Lock()
+	g.sent = append(g.sent, cmnd)
+	g.mu.Unlock()
+	switch cmnd {
+	case "LedState":
+		return json.RawMessage(`{"LedState":1}`), nil
+	case "Sleep":
+		return json.RawMessage(`{"Sleep":50}`), nil
+	case "Baudrate":
+		return json.RawMessage(`{"Baudrate":"https://admin:hunter2@host/x"}`), nil
+	}
+	return nil, tasmota.ErrUnknownCommand
+}
+func (*genericDevice) DownloadConfig(context.Context, tasmota.Target) ([]byte, error) {
+	return nil, nil
+}
+func (*genericDevice) RootPage(context.Context, tasmota.Target) (tasmota.RootInfo, error) {
+	return tasmota.RootInfo{}, nil
+}
+
+// Why: the poller reads every rule's command from every device every hour. A generic rule
+// is read with its bare name, one command at a time, and the poller must never send what the
+// command policy denies: not Status 0 in any spelling, not a secret, not a command that acts.
+// A reply with credentials must not reach the values the policy page shows.
+func TestPollerReadsGenericRulesAndNeverSendsADeniedCommand(t *testing.T) {
+	g := &genericDevice{}
+	rules := []policy.Rule{
+		{Command: "LedState", Want: "3"}, {Command: "Sleep", Want: "50"}, {Command: "Baudrate", Want: "x"},
+		// A rule file written by hand (or by an older version) must still be harmless at read time.
+		{Command: "Status0", Want: "1"}, {Command: "status", Want: "1"}, {Command: "MqttPassword", Want: "x"},
+		{Command: "Password", Want: "x"}, {Command: "Reset", Want: "1"}, {Command: "Backlog", Want: "x"}, {Command: "Power1", Want: "ON"},
+	}
+	rep := &policyReporter{
+		rules: rules, devices: fakeLister{{ID: 1, Name: "a"}},
+		backups: fakeBackupSvc{}, reader: settings.New(settings.Options{Devices: devGetter{}, Client: g}),
+	}
+	if !rep.readDevice(t.Context(), 1) {
+		t.Fatal("read failed")
+	}
+	if want := []string{"LedState", "Sleep", "Baudrate"}; !reflect.DeepEqual(g.sent, want) {
+		t.Fatalf("sent %v, want exactly %v", g.sent, want)
+	}
+	vals := rep.vals.get(1)
+	if vals["LedState"].value != "1" || vals["Sleep"].value != "50" {
+		t.Errorf("values %+v", vals)
+	}
+	if strings.Contains(vals["Baudrate"].value, "hunter2") || vals["Baudrate"].value == "" {
+		t.Errorf("credentials in the live value: %q", vals["Baudrate"].value)
+	}
+	r, _ := rep.Report(t.Context(), "x", false)
+	if len(r.NotLive) != 7 {
+		t.Errorf("the denied rules must be reported as not readable live, got %v", r.NotLive)
+	}
+	for _, f := range r.Findings {
+		if strings.Contains(f.Have, "hunter2") {
+			t.Errorf("credentials in a finding: %+v", f)
+		}
+	}
+}
+
+// Why: devices announce changes on MQTT; a generic rule's value must be kept from there, under the
+// spelling of the rule (a device may answer in another case), and a secret's reply never.
+func TestMQTTUpdatesKeepGenericKeys(t *testing.T) {
+	rep := &policyReporter{rules: []policy.Rule{{Command: "LedState", Want: "3"}, {Command: "Sleep", Want: "50"}}}
+	ch := make(chan policyUpdate, 4)
+	at := time.Date(2026, 10, 29, 12, 0, 0, 0, time.UTC)
+	ch <- policyUpdate{topic: "plug", vals: settings.ParseReply([]byte(`{"LEDSTATE":"OFF"}`)), at: at}
+	ch <- policyUpdate{topic: "plug", vals: settings.ParseReply([]byte(`{"Sleep":20}`)), at: at}
+	ch <- policyUpdate{topic: "plug", vals: settings.ParseReply([]byte(`{"Password":"s3cret"}`)), at: at}
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() {
+		rep.applyUpdates(ctx, ch, func(context.Context, string) (model.Device, error) { return model.Device{ID: 7}, nil })
+		close(done)
+	}()
+	deadline := time.After(2 * time.Second)
+	for len(ch) > 0 {
+		select {
+		case <-deadline:
+			t.Fatal("updates not consumed")
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+	<-done
+	v := rep.vals.get(7)
+	if len(v) != 2 || v["LedState"].value != "0" || v["Sleep"].value != "20" {
+		t.Fatalf("store %+v", v)
 	}
 }

@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strconv"
 	"strings"
+
+	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
 )
 
 // LiveReadable reports whether a setting can be read from a device without
@@ -27,8 +29,19 @@ func LiveReadable(cmd string) bool {
 }
 
 // canonicalKey maps a reply key to the curated command name (the device may
-// change the case).
+// change the case). Any other readable command keeps its reply spelling; the
+// caller matches it to a rule case-insensitively.
 func canonicalKey(k string) (string, bool) {
+	if cmd, ok := curatedKey(k); ok {
+		return cmd, true
+	}
+	if _, curated := Curated(k); !curated && Queryable(k) {
+		return k, true
+	}
+	return "", false
+}
+
+func curatedKey(k string) (string, bool) {
 	for _, f := range Fields {
 		if !f.Secret && strings.EqualFold(f.Key, k) {
 			return f.Key, true
@@ -65,6 +78,9 @@ func ParseReply(payload []byte) map[string]string {
 		cmd, ok := canonicalKey(k)
 		if !ok {
 			break
+		}
+		if Generic(cmd) {
+			raw = cmdpolicy.ScrubReply(raw)
 		}
 		if v, ok := scalar(raw); ok {
 			out[cmd] = safeValue(cmd, replyNumber(cmd, v))

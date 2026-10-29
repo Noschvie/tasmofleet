@@ -73,6 +73,26 @@ demoted at the identity provider is caught at their next sign-in. The principals
 table has one row per subject: two methods using one subject overwrite each other's
 record, and a job of the older one then fails closed.
 
+## Policy rules for any Tasmota command (2026-10-29, #36)
+
+A fleet policy rule may name any command that answers a plain query, not only the curated
+settings. tasmofleet then sends the bare command name to every device on a timer and, on
+"Make compliant", `<Command> <want>` without asking. So this path is stricter than the
+console: it has no confirmation step.
+
+| ID  | Claim | Tests |
+| --- | ----- | ----- |
+| G1  | `Status` is never sent by a rule, in any spelling: every name whose lower-case form starts with `status` (`Status`, `Status0`, `STATUS00`, `StatusSNS`, ...) is refused by `cmdpolicy.PolicyReadable`, with "Status commands are never sent automatically". This holds for the editor, the file import, the stored rules, the poller, the on-demand check, the MQTT listener and the fixer. | `TestPolicyReadableNeverAllowsStatusInAnySpelling`, `FuzzPolicyReadable`, `TestReadKeysNeverSendsADeniedCommand`, `TestPollerReadsGenericRulesAndNeverSendsADeniedCommand` |
+| G2  | A rule's command must be one plain name (no blank, no `;`, no look-alike, at most 40 bytes), not a synonym (`SO19`), not secret (the names in `secretNames` and any name containing `password`, `passwd`, `pwd`, `token`, `secret`, `apikey`, `mqttuser`, `ssid` or `key`), and not one whose bare form acts: `Backlog*`, `Restart`, `Reset`, `Upgrade`, `Upload`, `SaveData`, `TelePeriod` (both are read through their Status block as curated settings), `Delay`, `Event`, `Publish*`, `Subscribe`, `Unsubscribe`, `Rule*`, `Timer*`, `Timers`, `Power` and `Power<n>`, `Sensor<n>`, `Driver<n>`, `Wifi*`, `Ping*`, `WakeUp*`, `Script*`, `Br`, `Json`, `If`, `I2CScan`, `Buzzer`, `UfsRun`, `WebGetConfig`, `Telnet`, `SendMail`, `LoRaCommand`, `ZB*` and every `*Send`. The list is a deny list: a new Tasmota command is readable until it is listed here. | `TestPolicyReadableDenyList`, `TestPolicyReadableAllowsPlainSettings`, `FuzzPolicyReadable` |
+| G3  | A curated setting keeps its exact behaviour and its exact spelling: another letter case (`hostname`, `setoption19`) is refused, because it would skip the curated validation and the restart knowledge. A generic command never restarts the device as far as tasmofleet knows. | `TestQueryableGenericCommands`, `TestGenericCommandsDoNotRestartTheDevice`, `TestParseRulesGenericCommands` |
+| G4  | The set form `<Command> <want>` must pass `cmdpolicy.Prepare(line, RoleAdmin)` with no `Confirm` and no `Redact`. A command that asks for a confirmation in the console (`Reset`, `Module`, `Template`, `Wifi` off, `WebServer` other than 2, `IPAddress`, `Ap`, firmware commands, credentials) can therefore never be a rule. The check runs when the rule is saved or imported and again in `Fixer` for every line before anything is sent. | `TestPolicySetText`, `TestParseRulesGenericCommands`, `TestCommandTextGeneric`, `TestFixerRefusesDeniedGenericLines` |
+| G5  | A generic value is read live only, one command at a time, from a reply of exactly `{"<Command>": scalar}` (case-insensitive key); every other reply is "unknown". The raw reply goes through `ScrubReply` first and URL-like values through `settings.RedactURLCredentials`, so a credential never reaches the report, the live cache or the HTML. | `TestReadKeysGenericCommand`, `TestParseReplyKeepsGenericKeys`, `TestPollerReadsGenericRulesAndNeverSendsADeniedCommand` |
+| G6  | Make compliant sends one `Backlog <Command> <want>` and one `SaveData`, then reads the value back. It is admin only (like every policy route) and the audit log holds `cmdpolicy.Redacted` text. | `TestFixerAppliesAndVerifiesAGenericRule`, `TestPolicyFixIsAdminOnly`, `TestPolicyRuleFreeCommandField`, `TestPolicyJobAuditUsesTheRedactedCommands` |
+
+There is no per-rule read override in 0.18: a command the deny list refuses cannot be allowed
+for one rule. A rule's expected value must equal what the device reports, written as the
+device writes it (`ON` and `OFF` read as `1` and `0`).
+
 ## Maintenance
 
 - **Rule (superseded 2026-10-21).** There is no `forbiddenNames` table and no

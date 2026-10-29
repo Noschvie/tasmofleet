@@ -284,3 +284,20 @@ func TestPolicyJobWithoutApplierFails(t *testing.T) {
 		t.Fatalf("%+v", j)
 	}
 }
+
+// Why: the audit log holds only cmdpolicy.Redacted text. A generic rule's value is an
+// admin's own policy, but the log must not depend on that: harmless settings show their
+// value, any other command shows as "Name ***".
+func TestPolicyJobAuditUsesTheRedactedCommands(t *testing.T) {
+	h, _, aud := policyHarness(t, 1, 2)
+	if _, _, err := h.e.SubmitPolicy(context.Background(), "alice", []PolicyRequest{{DeviceID: 1, Commands: []string{"Sleep 20", "Pulsetime1 hunter2"}}}); err != nil {
+		t.Fatal(err)
+	}
+	h.run(t, h.e)
+	aud.mu.Lock()
+	defer aud.mu.Unlock()
+	last := aud.evs[len(aud.evs)-1]
+	if last.Action != "policy.fix" || !strings.Contains(last.Detail, `"Sleep 20"`) || !strings.Contains(last.Detail, `"Pulsetime1 ***"`) || strings.Contains(last.Detail, "hunter2") {
+		t.Fatalf("audit %+v", last)
+	}
+}

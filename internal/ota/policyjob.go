@@ -230,7 +230,7 @@ func (e *Engine) finishPolicy(ctx context.Context, j model.Job, lines []string, 
 		return
 	}
 	if e.audit != nil {
-		detail, _ := json.Marshal(map[string]any{"transaction": j.BatchID, "job": j.ID, "commands": lines}) // a plain map always encodes
+		detail, _ := json.Marshal(map[string]any{"transaction": j.BatchID, "job": j.ID, "commands": redactedLines(lines)}) // a plain map always encodes
 		result := "ok"
 		if failure != "" {
 			result = failure
@@ -257,4 +257,14 @@ func (e *Engine) policyMove(ctx context.Context, j model.Job, to model.JobState,
 	}
 	e.notify.JobChanged(next, jev)
 	return next, true
+}
+
+// redactedLines is what the audit log may hold of the commands: the allowlisted form,
+// so a value of a generic rule never reaches it unless its command is known to be harmless.
+func redactedLines(lines []string) []string {
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = cmdpolicy.Redacted(l)
+	}
+	return out
 }

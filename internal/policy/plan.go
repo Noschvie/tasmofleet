@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/settings"
 )
@@ -58,11 +59,16 @@ var setOptionRe = regexp.MustCompile(`^SetOption[0-9]{1,3}$`)
 
 var setOptionValueRe = regexp.MustCompile(`^[0-9]{1,5}$`)
 
-// CommandText is the command that sets a rule's setting to want. Only the
-// settings the editor knows can be set, with the editor's validation; a
-// SetOption takes a plain number. Nothing else is ever sent.
+// CommandText is the command that sets a rule's setting to want. The settings
+// the editor knows are set with the editor's validation; a SetOption takes a
+// plain number. Any other command (a generic rule) is set as "<Command> <want>"
+// only when the command policy lets an admin send it without a confirmation:
+// nothing that asks in the console is ever sent from a rule.
 func CommandText(command, want string) (string, error) {
 	want = canon(want)
+	if canonName, curated := settings.Curated(command); curated && canonName != command {
+		return "", fmt.Errorf("%s: write the setting as %s", command, canonName)
+	}
 	if f, ok := settings.Lookup(command); ok {
 		if f.Secret {
 			return "", fmt.Errorf("%s is write-only", command)
@@ -75,7 +81,22 @@ func CommandText(command, want string) (string, error) {
 	if setOptionRe.MatchString(command) && setOptionValueRe.MatchString(want) {
 		return command + " " + want, nil
 	}
-	return "", fmt.Errorf("%s cannot be set from the policy", command)
+	return genericText(command, want)
+}
+
+// genericText is the set command of a generic rule.
+func genericText(command, want string) (string, error) {
+	if !wantRe.MatchString(want) {
+		return "", fmt.Errorf("%s: the expected value is not a plain value", command)
+	}
+	if ok, why := cmdpolicy.PolicyReadable(command); !ok {
+		return "", fmt.Errorf("%s cannot be set from the policy: %s", command, why)
+	}
+	text, err := cmdpolicy.PolicySetText(command, want)
+	if err != nil {
+		return "", fmt.Errorf("%s cannot be set from the policy: %w", command, err)
+	}
+	return text, nil
 }
 
 // PlanFix builds one plan per device that has at least one finding, in the

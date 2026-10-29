@@ -125,6 +125,10 @@ func (d *simDevice) settingFrom(kv map[string]string, key string) string {
 			return strings.Trim(m[1], `"`)
 		}
 		return "99"
+	case "sleep":
+		return "50"
+	case "ledstate":
+		return "1"
 	case "hostname":
 		return d.topic
 	case "topic":
@@ -249,6 +253,16 @@ func (d *simDevice) settingCmdLocked(base string, idx int, hasIdx bool, data str
 		} else {
 			body = []byte(`{"SaveData":"` + v + ` seconds"}`)
 		}
+	case "sleep", "ledstate":
+		// Plain numbers that no Status block reports: the way a generic policy rule (any
+		// command answering a bare query) is read and set. Sleep 0..250, LedState 0..8.
+		hi := map[string]int{"sleep": 250, "ledstate": 8}[base]
+		if n, err := strconv.Atoi(data); err == nil && n >= 0 && n <= hi {
+			d.set(base, strconv.Itoa(n))
+			changed = true
+		}
+		name := map[string]string{"sleep": "Sleep", "ledstate": "LedState"}[base]
+		body = []byte(`{"` + name + `":` + d.get(base) + `}`)
 	case "setoption":
 		if !hasIdx {
 			return nil, false

@@ -135,32 +135,24 @@ func choiceLabel(cmd string) string {
 	return l
 }
 
-// settingGroups lists the settings a rule can check, grouped like the
-// settings editor; extra commands (from saved rules) that are not curated go
-// to "Other" so an existing rule can always be shown.
-func settingGroups(extra ...string) []settingGroup {
+// settingGroups lists the curated settings offered as suggestions for the
+// command field, grouped like the settings editor. The field takes any
+// other command too; the suggestions are only the ones with a label and a
+// checked value.
+func settingGroups() []settingGroup {
 	var out []settingGroup
 	idx := map[string]int{}
-	seen := map[string]bool{}
-	add := func(group, key string) {
-		i, ok := idx[group]
+	for _, f := range settings.Fields {
+		if f.Secret || !settings.Queryable(f.Key) {
+			continue
+		}
+		i, ok := idx[f.Group]
 		if !ok {
 			i = len(out)
-			idx[group] = i
-			out = append(out, settingGroup{Name: group})
+			idx[f.Group] = i
+			out = append(out, settingGroup{Name: f.Group})
 		}
-		out[i].Choices = append(out[i].Choices, settingChoice{Key: key, Label: choiceLabel(key)})
-		seen[key] = true
-	}
-	for _, f := range settings.Fields {
-		if !f.Secret && settings.Queryable(f.Key) {
-			add(f.Group, f.Key)
-		}
-	}
-	for _, k := range extra {
-		if k != "" && !seen[k] {
-			add("Other", k)
-		}
+		out[i].Choices = append(out[i].Choices, settingChoice{Key: f.Key, Label: choiceLabel(f.Key)})
 	}
 	return out
 }
@@ -192,6 +184,8 @@ func controlFor(command, want string, keepInvalid bool) valueControl {
 		}
 	case setOptionRe.MatchString(command) && (want == "" || want == "0" || want == "1"):
 		vc.Kind = "toggle"
+	case settings.Generic(command):
+		vc.Hint = "Compared with exactly what the device reports for " + command + ". ON and OFF count as 1 and 0."
 	}
 	return vc
 }
@@ -258,21 +252,13 @@ func (h *handler) buildEditor(r *http.Request, p *rulesPage, idx string, spec sy
 	d := ruleDraft{Idx: idx, Spec: spec}
 	p.Editor = &ruleEditor{
 		Idx: idx, Title: title, Spec: spec, Version: p.Current,
-		Groups:   settingGroups(append(commandsOf(saved), spec.Command)...),
+		Groups:   settingGroups(),
 		Control:  controlFor(spec.Command, spec.Want, true),
 		Families: fam, Tags: chips(tags, spec.Tags), Devices: chips(names, spec.Devices),
 		Except:  strings.Join(spec.Except, ", "),
 		Preview: h.previewFor(r.Context(), saved, d),
 	}
 	return nil
-}
-
-func commandsOf(specs []sysconfig.RuleSpec) []string {
-	out := make([]string, len(specs))
-	for i, s := range specs {
-		out[i] = s.Command
-	}
-	return out
 }
 
 var (
@@ -418,7 +404,7 @@ func place(saved []sysconfig.RuleSpec, idx string, spec sysconfig.RuleSpec) (lis
 // stores nothing and reads no device.
 func (h *handler) previewFor(ctx context.Context, saved []sysconfig.RuleSpec, d ruleDraft) rulePreview {
 	if d.Spec.Command == "" || d.Spec.Want == "" {
-		return rulePreview{Hint: "Choose a setting and an expected value to see which devices the rule would flag."}
+		return rulePreview{Hint: "Enter a command and an expected value to see which devices the rule would flag."}
 	}
 	// The editor previews the rule as if enabled, at its place in the list:
 	// what it would flag is the point, also for a rule that is still disabled.
@@ -432,6 +418,9 @@ func (h *handler) previewFor(ctx context.Context, saved []sysconfig.RuleSpec, d 
 	var re *sysconfig.RuleError
 	switch {
 	case errors.As(err, &re) && re.Index == pos:
+		if field, text := ruleProblem(re.Msg); field == "command" {
+			return rulePreview{Err: text} // the reason, not the validator's sentence
+		}
 		return rulePreview{Err: re.Msg}
 	case errors.As(err, &re):
 		return rulePreview{Err: "Another saved rule is invalid: " + re.Error()}
@@ -523,11 +512,11 @@ func (h *handler) rulesSave(w http.ResponseWriter, r *http.Request) {
 }
 
 // draftProblem finds what the form left empty before anything is validated or
-// saved, so the person reads "Choose a setting." and not a validator's chain.
+// saved, so the person reads "Enter a command." and not a validator's chain.
 func draftProblem(s sysconfig.RuleSpec) (field, msg string) {
 	switch {
 	case strings.TrimSpace(s.Command) == "":
-		return "command", "Choose a setting."
+		return "command", "Enter a command."
 	case strings.TrimSpace(s.Want) == "":
 		return "want", "Enter the expected value."
 	}
@@ -540,7 +529,10 @@ func draftProblem(s sysconfig.RuleSpec) (field, msg string) {
 func ruleProblem(msg string) (field, text string) {
 	switch {
 	case strings.Contains(msg, "invalid command"):
-		return "command", "Choose a setting."
+		return "command", "Enter a command."
+	case strings.Contains(msg, "cannot be checked: "):
+		_, reason, _ := strings.Cut(msg, "cannot be checked: ")
+		return "command", upperFirst(reason) + "."
 	case strings.Contains(msg, "cannot be checked"):
 		return "command", "A policy rule cannot check this setting."
 	case strings.Contains(msg, "invalid or empty want"):

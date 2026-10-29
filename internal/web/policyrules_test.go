@@ -230,7 +230,7 @@ func TestPolicyRulesPreviewFragmentCountsTheDraftAndStoresNothing(t *testing.T) 
 	}
 	// An unfinished draft is a hint, not an error.
 	_, body = e.do(t, "POST", "/policy/rules/preview", "admin", ruleForm(url.Values{"command": {""}, "want": {""}}))
-	if strings.Contains(body, `class="ufield-err"`) || !strings.Contains(body, "Choose a setting") {
+	if strings.Contains(body, `class="ufield-err"`) || !strings.Contains(body, "Enter a command") {
 		t.Errorf("unfinished draft:\n%s", body)
 	}
 }
@@ -275,12 +275,12 @@ func TestPolicyRulesCardsAndEditorChoices(t *testing.T) {
 	}
 	// New rule editor: setting picker (SetOptions with their description), every family chip and the inventory's tags and devices.
 	_, page = e.do(t, "GET", "/policy?new=1", "admin", nil)
-	for _, w := range []string{`id="editor"`, `<select name="command"`, `value="PowerOnState"`, `value="esp8266"`, `value="esp32*"`, `value="esp32c3"`, `name="tag" value="kitchen"`, `name="device" value="attic"`, `name="device" value="kitchen"`, `value="info"`} {
+	for _, w := range []string{`id="editor"`, `<input id="rule-command" name="command"`, `<datalist id="rule-commands">`, `<option value="PowerOnState">`, `value="esp8266"`, `value="esp32*"`, `value="esp32c3"`, `name="tag" value="kitchen"`, `name="device" value="attic"`, `name="device" value="kitchen"`, `value="info"`} {
 		if !strings.Contains(page, w) {
 			t.Errorf("new rule editor lacks %q", w)
 		}
 	}
-	if strings.Contains(page, `value="MqttPassword"`) {
+	if strings.Contains(page, `<option value="MqttPassword"`) {
 		t.Error("secret settings must not be offered")
 	}
 	// Edit: the saved values are pre-selected.
@@ -288,7 +288,7 @@ func TestPolicyRulesCardsAndEditorChoices(t *testing.T) {
 		t.Error("a SetOption is offered with its name and description")
 	}
 	_, page = e.do(t, "GET", "/policy?edit=0", "admin", nil)
-	for _, w := range []string{`value="No save state"`, `value="SetOption0" selected`, `name="family" value="esp32*" checked`, `name="tag" value="attic" checked`, `name="tag" value="garage" checked`, `value="lamp"`, `name="idx" value="0"`} {
+	for _, w := range []string{`value="No save state"`, `name="command" class="mono" list="rule-commands" value="SetOption0"`, `name="family" value="esp32*" checked`, `name="tag" value="attic" checked`, `name="tag" value="garage" checked`, `value="lamp"`, `name="idx" value="0"`} {
 		if !strings.Contains(page, w) {
 			t.Errorf("edit editor lacks %q", w)
 		}
@@ -446,7 +446,7 @@ func TestPolicyRulesImportChecksThenSaves(t *testing.T) {
 
 // Why: a save without a setting used to show a validator's chain ("policy rules:
 // rule 6: invalid command") twice and focus the wrong field. The person must read
-// one plain sentence under the Setting select, which is marked invalid and
+// one plain sentence under the command field, which is marked invalid and
 // takes the focus; nothing is stored.
 func TestPolicyRulesSaveWithoutSettingMarksTheSettingField(t *testing.T) {
 	e, mem, _ := rulesEnv(t, "")
@@ -458,21 +458,57 @@ func TestPolicyRulesSaveWithoutSettingMarksTheSettingField(t *testing.T) {
 	if strings.Contains(body, "policy rules:") || strings.Contains(body, "invalid command") {
 		t.Fatalf("raw validator text shown: %s", body)
 	}
-	if n := strings.Count(body, "Choose a setting."); n != 1 {
+	if n := strings.Count(body, "Enter a command."); n != 1 {
 		t.Fatalf("the sentence must appear exactly once, got %d", n)
 	}
 	ed := body[strings.Index(body, `id="editor"`):]
-	sel := ed[strings.Index(ed, `<select name="command"`):]
+	sel := ed[strings.Index(ed, `<input id="rule-command"`):]
 	sel = sel[:strings.Index(sel, ">")]
-	for _, want := range []string{`aria-invalid="true"`, `aria-describedby="err-command"`, `autofocus`} {
+	for _, want := range []string{`aria-invalid="true"`, `aria-describedby="err-command help-command"`, `autofocus`} {
 		if !strings.Contains(sel, want) {
-			t.Errorf("Setting select lacks %s: %s", want, sel)
+			t.Errorf("command field lacks %s: %s", want, sel)
 		}
 	}
 	if !strings.Contains(ed, `id="err-command"`) {
-		t.Error("no message element for the Setting select")
+		t.Error("no message element for the command field")
 	}
 	if strings.Contains(ed[:strings.Index(ed, `name="command"`)], `autofocus`) {
 		t.Error("focus must not stay on the Name field")
+	}
+}
+
+// Why: the command field takes any Tasmota command, so a refusal must come back at the field
+// with the reason in plain words (never the rejected text from a validator chain), nothing may
+// be stored, and a plain command must save and show up on the card.
+func TestPolicyRuleFreeCommandField(t *testing.T) {
+	e, mem, _ := rulesEnv(t, "")
+	saveRule(t, e, nil)
+	for command, why := range map[string]string{
+		"Status0":      "Status commands are never sent automatically.",
+		"status 0":     "Enter a command.", // not a name: the pattern check speaks first
+		"MqttPassword": "Secret settings cannot be checked.",
+		"Reset":        "This command acts when it is sent without a value",
+		"Module":       "This command needs a confirmation in the console and cannot be a policy rule.",
+	} {
+		want := "1"
+		r, body := e.do(t, "POST", "/policy/rules/save", "admin", ruleForm(url.Values{"idx": {"new"}, "version": {"1"}, "command": {command}, "want": {want}}))
+		ed := body[strings.Index(body, `id="editor"`):]
+		if r.StatusCode != 422 || len(mem.vs) != 1 || !strings.Contains(ed, `id="err-command"`) || !strings.Contains(ed, why) && command != "status 0" {
+			t.Errorf("%s: status %d, versions %d, reason %q missing in\n%s", command, r.StatusCode, len(mem.vs), why, ed)
+		}
+		if strings.Contains(body, "policy rules:") {
+			t.Errorf("%s: raw validator text shown", command)
+		}
+	}
+	if r, body := e.do(t, "POST", "/policy/rules/save", "admin", ruleForm(url.Values{"idx": {"new"}, "version": {"1"}, "command": {"Sleep"}, "want": {"20"}})); r.StatusCode != 303 {
+		t.Fatalf("a plain command must save: %d\n%s", r.StatusCode, body)
+	}
+	_, page := e.do(t, "GET", "/policy", "admin", nil)
+	if !strings.Contains(page, "Sleep = 20") {
+		t.Error("the saved generic rule is not on the page")
+	}
+	// Admin only, like every rule change.
+	if r, _ := e.do(t, "POST", "/policy/rules/save", "operator", ruleForm(url.Values{"version": {"2"}, "command": {"Sleep"}, "want": {"30"}})); r.StatusCode != 403 {
+		t.Errorf("operator save: %d", r.StatusCode)
 	}
 }
