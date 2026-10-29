@@ -330,3 +330,58 @@ func TestChangeNameIsNameOrCommand(t *testing.T) {
 		}
 	}
 }
+
+// Why: "1 rules changed" reads as a bug; counts of one are singular, and the
+// mixed case keeps the kinds apart.
+func TestSummarizeSingularAndPlural(t *testing.T) {
+	ch := func(kind string) RuleChange { return RuleChange{Kind: kind, Name: kind} }
+	cases := map[string][]RuleChange{
+		"1 rule changed, 1 removed": {ch("changed"), ch("removed")},
+		"2 rules changed, 1 added":  {ch("changed"), ch("changed"), ch("added")},
+		"2 rules added":             {ch("added"), ch("added")},
+		"2 rules removed":           {ch("removed"), ch("removed")},
+		"1 rule changed, 2 removed": {ch("changed"), ch("removed"), ch("removed")},
+		"1 added, 1 removed":        {ch("added"), ch("removed")},
+	}
+	for want, c := range cases {
+		if got := Summarize(c); got != want {
+			t.Errorf("got %q want %q", got, want)
+		}
+	}
+}
+
+// Why: a limit of 0 or less from a caller must give the default page, not a
+// slice-bounds panic on the cursor.
+func TestRulesHistoryNonPositiveLimitUsesDefault(t *testing.T) {
+	r, st, _ := newRules("", nil)
+	st.vs = append(st.vs, ver(1, "a", t0, spec("ra00000000", "A", "1")))
+	for _, l := range []int{0, -3} {
+		p, err := r.History(context.Background(), 0, l)
+		if err != nil || len(p.Entries) != 1 {
+			t.Fatalf("limit %d: %+v %v", l, p, err)
+		}
+	}
+}
+
+// Why: a stored row that cannot be decoded must be named as such; its
+// successor must be diffed against the last readable version, not against an
+// empty list ("N rules added" would be a lie).
+func TestHistoryUnreadableVersion(t *testing.T) {
+	a, b := spec("ra00000000", "A", "1"), spec("rb00000000", "B", "1")
+	bad := store.PolicyRuleVersion{ID: 2, Actor: "x", At: t0, Rules: "not json"}
+	vs := []store.PolicyRuleVersion{ver(3, "y", t0.Add(time.Hour), a, b), bad}
+	prev := ver(1, "z", t0.Add(-time.Hour), a)
+	got := buildHistory(vs, &prev, time.UTC, true)
+	if got[1].Summary != "Unreadable version" || got[1].Changes != nil {
+		t.Fatalf("bad entry %+v", got[1])
+	}
+	if got[0].Summary != "Added B" {
+		t.Fatalf("successor must diff against v1, got %q", got[0].Summary)
+	}
+	// nothing readable below: say so instead of inventing additions
+	badPrev := store.PolicyRuleVersion{ID: 1, Rules: "{"}
+	got = buildHistory(vs[:1], &badPrev, time.UTC, true)
+	if got[0].Changes != nil || !strings.HasPrefix(got[0].Summary, "Changes unknown") {
+		t.Fatalf("%+v", got[0])
+	}
+}

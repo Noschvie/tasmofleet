@@ -41,55 +41,69 @@ type HistoryPage struct {
 	NextBefore int64
 }
 
-// BuildHistory turns versions (newest first, the first being the current
-// version) into entries. prevOfOldest is the version before the last one in
-// the list, nil when there is none; the oldest entry is diffed against it.
-// Consecutive versions of one actor with every gap at most FoldWindow fold into
-// one entry; a revert, an import and the current version never fold.
-func BuildHistory(versions []store.PolicyRuleVersion, prevOfOldest *store.PolicyRuleVersion, loc *time.Location) []HistoryEntry {
-	return buildHistory(versions, prevOfOldest, loc, true)
-}
-
-// buildHistory is BuildHistory; firstPage says versions[0] is the current
-// version (later pages have none).
+// buildHistory turns versions (newest first) into entries. prev is the version
+// before the last one in the list, nil when there is none; the oldest entry is
+// diffed against it. firstPage says versions[0] is the current version (later
+// pages have none, so their newest entry may fold). Consecutive versions of one
+// actor with every gap at most FoldWindow fold into one entry; a revert, an
+// import and the current version never fold.
+//
+// A version whose rules cannot be decoded gets the entry "Unreadable version";
+// the entries above it are diffed against the nearest readable older version
+// instead of an empty list, so one bad row cannot make its successor claim
+// that every rule was added.
 func buildHistory(versions []store.PolicyRuleVersion, prev *store.PolicyRuleVersion, loc *time.Location, firstPage bool) []HistoryEntry {
 	if loc == nil {
 		loc = time.UTC
 	}
-	specs := make([][]RuleSpec, len(versions)+1)
+	n := len(versions)
+	specs := make([][]RuleSpec, n+1)
+	ok := make([]bool, n+1)
 	for i, v := range versions {
-		specs[i] = lenientSpecs(v)
+		specs[i], ok[i] = readSpecs(v)
 	}
+	ok[n] = true // no version before the oldest: an empty base
 	if prev != nil {
-		specs[len(versions)] = lenientSpecs(*prev)
+		specs[n], ok[n] = readSpecs(*prev)
 	}
 	var out []HistoryEntry
-	for i := 0; i < len(versions); {
+	for i := 0; i < n; {
 		j := i + 1
-		for j < len(versions) && (!firstPage || i > 0) && canFold(versions[j-1], versions[j]) {
+		for j < n && (!firstPage || i > 0) && canFold(versions[j-1], versions[j]) {
 			j++
 		}
-		changes := DiffSpecs(specs[j], specs[i]) // before the oldest of the run -> its newest
-		onlyReordered := len(changes) == 0 && reordered(specs[j], specs[i])
-		summary := Summarize(changes)
-		if onlyReordered {
-			summary = "Reordered rules"
+		e := HistoryEntry{Versions: versions[i:j:j], Folded: j-i > 1, Day: dayOf(versions[i].At, loc)}
+		base := j // nearest readable version at or below the run
+		for base < n && !ok[base] {
+			base++
 		}
-		out = append(out, HistoryEntry{
-			Versions:  versions[i:j:j],
-			Changes:   changes,
-			Summary:   summary,
-			Folded:    j-i > 1,
-			Reordered: onlyReordered,
-			Day:       dayOf(versions[i].At, loc),
-		})
+		switch {
+		case !ok[i]:
+			e.Summary = "Unreadable version"
+		case !ok[base]:
+			e.Summary = "Changes unknown (earlier version unreadable)"
+		default:
+			e.Changes = DiffSpecs(specs[base], specs[i]) // before the oldest of the run -> its newest
+			if len(e.Changes) == 0 && reordered(specs[base], specs[i]) {
+				e.Reordered, e.Summary = true, "Reordered rules"
+			} else {
+				e.Summary = Summarize(e.Changes)
+			}
+		}
+		out = append(out, e)
 		i = j
 	}
 	return out
 }
 
+// readSpecs decodes a stored version; ok is false when it cannot be read.
+func readSpecs(v store.PolicyRuleVersion) ([]RuleSpec, bool) {
+	s, err := decodeSpecs([]byte(v.Rules))
+	return s, err == nil
+}
+
 // lenientSpecs decodes a stored version for display; an unreadable one counts
-// as empty so one bad row cannot take the history page down.
+// as empty so one bad row cannot take a page down.
 func lenientSpecs(v store.PolicyRuleVersion) []RuleSpec {
 	s, err := decodeSpecs([]byte(v.Rules))
 	if err != nil {
@@ -168,7 +182,11 @@ func Summarize(changes []RuleChange) string {
 		return strconv.Itoa(removed) + " rules removed"
 	}
 	if changed > 0 {
-		parts = append(parts, strconv.Itoa(changed)+" rules changed")
+		word := " rules changed"
+		if changed == 1 {
+			word = " rule changed"
+		}
+		parts = append(parts, strconv.Itoa(changed)+word)
 	}
 	if added > 0 {
 		parts = append(parts, strconv.Itoa(added)+" added")
@@ -213,9 +231,15 @@ func touches(c RuleChange, ruleID, ruleName string) bool {
 	return c.Name == ruleName
 }
 
+// DefaultHistoryLimit is the page size History uses for a limit below 1.
+const DefaultHistoryLimit = 50
+
 // History returns one page of the policy history: up to limit versions older
 // than the version before (0: from the newest), folded, newest first.
 func (r *Rules) History(ctx context.Context, before int64, limit int) (HistoryPage, error) {
+	if limit <= 0 {
+		limit = DefaultHistoryLimit
+	}
 	vs, err := r.o.Store.ListPolicyRuleVersionsBefore(ctx, before, limit+1)
 	if err != nil {
 		return HistoryPage{}, err
