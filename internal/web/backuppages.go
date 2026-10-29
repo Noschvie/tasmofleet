@@ -43,13 +43,14 @@ type backupsView struct {
 
 // backupRow is one run (dump, snapshot and decoded copy taken together) or one failed attempt.
 type backupRow struct {
-	ID     model.BackupID // the run's dump (or its snapshot when it has no dump): selection, keep, delete
-	Taken  time.Time
-	Detail string // "Manual · Tasmota 14.3.0 · 4.1 KiB"
-	Size   string
-	Newest bool
-	Kept   bool
-	Pruned bool // "Pruned at next run"
+	ID      model.BackupID // the run's dump (or its snapshot when it has no dump): selection, keep, delete
+	Taken   time.Time
+	Detail  string // "Manual · Tasmota 14.3.0 · 4.1 KiB"
+	Size    string
+	Newest  bool
+	Kept    bool
+	Pruned  bool // "Pruned at next run"
+	Missing bool // the file was deleted by hand: no Download or Restore, the row can be deleted
 
 	Failed bool   // a failed attempt: nothing was stored
 	Reason string // why it failed (never credentials)
@@ -176,11 +177,12 @@ func (h *handler) backupsPage(w http.ResponseWriter, r *http.Request) {
 		total += b.Size
 		row := backupRow{ID: b.ID, Taken: b.TakenAt, Detail: runDetail(run), Size: humanBytes(b.Size),
 			Newest: b.TakenAt.Equal(newest), Kept: b.Kept, Pruned: ret.IsPruned(b)}
-		if v.IsAdmin {
+		row.Missing = h.fileMissing(b)
+		if v.IsAdmin && !row.Missing {
 			row.Download = fmt.Sprintf("%s/backups/%d", v.Base, b.ID)
 		}
 		if b.Kind == model.BackupConfigDump {
-			if v.IsAdmin && h.d.Restore != nil {
+			if v.IsAdmin && h.d.Restore != nil && !row.Missing {
 				row.Restore = fmt.Sprintf("%s/backups/%d/restore", v.Base, b.ID)
 			}
 			if p.CanDelete {

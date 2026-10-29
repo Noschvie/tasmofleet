@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
@@ -115,10 +116,15 @@ type MigrationResult struct {
 	Moved    int // files renamed and re-indexed
 	Repaired int // a crash had left the file moved: only the row was updated
 	Current  int // already in the new layout, or not a 0.17 path
-	Left     int // not touched (mismatch, missing, ambiguous); see warnings
+	Left     int // not touched (mismatch, ambiguous, ...); see Reasons and the warnings
+	Missing  int // the row's file does not exist (deleted by hand): nothing to move
+	// Reasons counts Left by reason, for the one summary line at start.
+	Reasons map[string]int
 }
 
-var legacyPath = regexp.MustCompile(`^backups/[0-9]+/(\d{8}T\d{6}Z)-(dmp|snapshot|decoded)\.(dmp|json)$`)
+// legacyPath matches a 0.17 path; group 1 is the directory's device id, which
+// for an orphan row is the only trace of the deleted device's id.
+var legacyPath = regexp.MustCompile(`^backups/([0-9]+)/(\d{8}T\d{6}Z)-(dmp|snapshot|decoded)\.(dmp|json)$`)
 
 // MigrateLayout moves the 0.17 files backups/<device-id>/<stamp>-<kind>.<ext>
 // to the hostname layout. It is idempotent and crash-safe and never loses a
@@ -132,7 +138,10 @@ var legacyPath = regexp.MustCompile(`^backups/[0-9]+/(\d{8}T\d{6}Z)-(dmp|snapsho
 //     used by another row, rename error) is left exactly as it is and counted;
 //   - nothing is ever deleted except empty numeric directories (os.Remove).
 //
-// Orphan rows (device deleted) are not touched.
+// Orphan rows (backups kept after their device was deleted) move the same way:
+// their directory comes from the stored device name (orphan-<former id> when
+// none is stored) and never shares a directory with another device's backups.
+// Rows whose file does not exist are counted as missing and left alone.
 func (m *Manager) MigrateLayout(ctx context.Context) (MigrationResult, error) {
 	m.dirMu.Lock()
 	defer m.dirMu.Unlock()
@@ -147,11 +156,13 @@ func (m *Manager) MigrateLayout(ctx context.Context) (MigrationResult, error) {
 		used[strings.ToLower(b.Path)] = b.ID
 		shared[strings.ToLower(b.Path)]++
 	}
-	claimed := map[string]model.DeviceID{} // lower-cased dir -> device that got it in this run
+	claimed := map[string]string{} // lower-cased dir -> owner key ("d<id>", "o<former id>") that got it in this run
 	type target struct{ dir, base string }
-	targets := map[model.DeviceID]*target{}
+	targets := map[string]*target{}
+	res.Reasons = map[string]int{}
 	warn := func(b model.Backup, why string, err error) {
 		res.Left++
+		res.Reasons[why]++
 		m.o.Log.Warn("backup layout: left in place", "component", "backup", "backup", b.ID, "path", b.Path, "why", why, "err", err)
 	}
 	for _, b := range rows {
@@ -159,11 +170,15 @@ func (m *Manager) MigrateLayout(ctx context.Context) (MigrationResult, error) {
 			b = m.relinkLegacy(ctx, b) // row says new path, file still at the old one (lost rename)
 		}
 		mt := legacyPath.FindStringSubmatch(b.Path)
-		if mt == nil || b.DeviceID == 0 {
-			res.Current++
+		if mt == nil {
+			if m.FileMissing(b) {
+				res.Missing++
+			} else {
+				res.Current++
+			}
 			continue
 		}
-		stamp, kind, ext := mt[1], model.BackupKind(mt[2]), mt[3]
+		former, stamp, kind, ext := mt[1], mt[2], model.BackupKind(mt[3]), mt[4]
 		if (kind == model.BackupConfigDump) != (ext == "dmp") {
 			warn(b, "kind and extension disagree", nil)
 			continue
@@ -172,26 +187,38 @@ func (m *Manager) MigrateLayout(ctx context.Context) (MigrationResult, error) {
 			warn(b, "path shared by several rows", nil)
 			continue
 		}
-		t := targets[b.DeviceID]
+		// The owner key: a live device by its id, an orphan by the id its 0.17
+		// directory carries (its backups all share that directory).
+		key, ownerID := "o"+former, former
+		if b.DeviceID != 0 {
+			ownerID = strconv.FormatInt(int64(b.DeviceID), 10)
+			key = "d" + ownerID
+		}
+		t := targets[key]
 		if t == nil {
-			dev, err := m.o.Devices.GetDevice(ctx, b.DeviceID)
-			if err != nil {
-				warn(b, "device not readable", err)
-				continue
+			var dir, base string
+			if b.DeviceID != 0 {
+				dev, err := m.o.Devices.GetDevice(ctx, b.DeviceID)
+				if err != nil {
+					warn(b, "device not readable", err)
+					continue
+				}
+				dir, base, err = m.resolveDir(ctx, dev)
+				if err != nil {
+					warn(b, "directory not resolvable", err)
+					continue
+				}
+			} else {
+				dir, base = orphanDir(rows, b, former)
 			}
-			dir, base, err := m.resolveDir(ctx, dev)
-			if err != nil {
-				warn(b, "directory not resolvable", err)
-				continue
-			}
-			if c, ok := claimed[strings.ToLower(dir)]; ok && c != b.DeviceID {
-				// Another device got this directory earlier in this run, even if
+			if c, ok := claimed[strings.ToLower(dir)]; ok && c != key {
+				// Another owner got this directory earlier in this run, even if
 				// its rows were left in place and the index does not show it yet.
-				dir = path.Join("backups", fmt.Sprintf("%s_%d", base, int64(b.DeviceID)))
+				dir = path.Join("backups", base+"_"+ownerID)
 			}
-			claimed[strings.ToLower(dir)] = b.DeviceID
+			claimed[strings.ToLower(dir)] = key
 			t = &target{dir, base}
-			targets[b.DeviceID] = t
+			targets[key] = t
 		}
 		newRel := path.Join(t.dir, fileName(stamp, t.base, kind))
 		if other, taken := used[strings.ToLower(newRel)]; taken && other != b.ID {
@@ -204,19 +231,24 @@ func (m *Manager) MigrateLayout(ctx context.Context) (MigrationResult, error) {
 			warn(b, "unsafe path", nil)
 			continue
 		}
-		switch m.migrateOne(ctx, b, newRel, oldFull, newFull) {
+		out, why := m.migrateOne(ctx, b, newRel, oldFull, newFull)
+		switch out {
 		case migMoved:
 			res.Moved++
 			used[strings.ToLower(newRel)] = b.ID
 		case migRepaired:
 			res.Repaired++
 			used[strings.ToLower(newRel)] = b.ID
+		case migMissing:
+			res.Missing++
 		case migLeft:
 			res.Left++
+			res.Reasons[why]++
 		}
 	}
 	m.removeEmptyNumericDirs()
-	m.o.Log.Info("backup layout", "component", "backup", "moved", res.Moved, "repaired", res.Repaired, "current", res.Current, "left", res.Left)
+	m.o.Log.Info("backup layout", "component", "backup", "moved", res.Moved, "repaired", res.Repaired, "in_place", res.Current,
+		"left", res.Left, "left_why", reasonList(res.Reasons), "files_missing", res.Missing)
 	return res, nil
 }
 
@@ -226,12 +258,60 @@ const (
 	migMoved migOutcome = iota
 	migRepaired
 	migLeft
+	migMissing // neither the old nor the new file exists
 )
 
-func (m *Manager) migrateOne(ctx context.Context, b model.Backup, newRel, oldFull, newFull string) migOutcome {
-	left := func(why string, err error) migOutcome {
+// orphanDir picks the directory and file base name for the kept backups of a
+// deleted device: its stored name, else orphan-<former id>. The name alone is
+// used only while no other device's backups (a live device's, or an orphan of
+// another name or MAC) are indexed below it; otherwise <base>_<former id>, the
+// same rule resolveDir applies to live devices.
+func orphanDir(rows []model.Backup, b model.Backup, former string) (dir, base string) {
+	base = SanitizeName(b.DeviceName)
+	if base == "" {
+		base = "orphan-" + former
+	}
+	prefix := strings.ToLower(path.Join("backups", base)) + "/"
+	for _, o := range rows {
+		if !strings.HasPrefix(strings.ToLower(o.Path), prefix) {
+			continue
+		}
+		if o.DeviceID != 0 || o.DeviceName != b.DeviceName || o.DeviceMAC != b.DeviceMAC {
+			return path.Join("backups", base+"_"+former), base
+		}
+	}
+	return path.Join("backups", base), base
+}
+
+// reasonList renders the left-in-place reasons as "why=count, ..." in a stable order.
+func reasonList(r map[string]int) string {
+	keys := make([]string, 0, len(r))
+	for k := range r {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%d", k, r[k]))
+	}
+	return strings.Join(parts, ", ")
+}
+
+// FileMissing reports that the row's file does not exist (deleted by hand).
+// Any other stat problem is not "missing": the file may well be there.
+func (m *Manager) FileMissing(b model.Backup) bool {
+	full, ok := m.safePath(b.Path)
+	if !ok {
+		return false
+	}
+	_, err := os.Stat(full)
+	return errors.Is(err, os.ErrNotExist)
+}
+
+func (m *Manager) migrateOne(ctx context.Context, b model.Backup, newRel, oldFull, newFull string) (migOutcome, string) {
+	left := func(why string, err error) (migOutcome, string) {
 		m.o.Log.Warn("backup layout: left in place", "component", "backup", "backup", b.ID, "path", b.Path, "why", why, "err", err)
-		return migLeft
+		return migLeft, why
 	}
 	newSum, newErr := fileSHA(newFull)
 	oldSum, oldErr := fileSHA(oldFull)
@@ -249,14 +329,17 @@ func (m *Manager) migrateOne(ctx context.Context, b model.Backup, newRel, oldFul
 			return left("old file unreadable", oldErr)
 		}
 		if !m.setPath(ctx, b, newRel) {
-			return migLeft
+			return left("row not updated", nil)
 		}
-		return migRepaired
+		return migRepaired, ""
 	case !errors.Is(newErr, os.ErrNotExist):
 		return left("target unreadable", newErr)
 	}
+	if errors.Is(oldErr, os.ErrNotExist) {
+		return migMissing, "" // nothing to move: the file was deleted by hand
+	}
 	if oldErr != nil {
-		return left("old file missing or unreadable", oldErr)
+		return left("old file unreadable", oldErr)
 	}
 	if oldSum != b.SHA256 {
 		return left("old file does not match its checksum", nil)
@@ -278,9 +361,9 @@ func (m *Manager) migrateOne(ctx context.Context, b model.Backup, newRel, oldFul
 		return left("sync source directory", err)
 	}
 	if !m.setPath(ctx, b, newRel) {
-		return migLeft // file is at newRel, row says old: the next start repairs it
+		return left("row not updated", nil) // file is at newRel, row says old: the next start repairs it
 	}
-	return migMoved
+	return migMoved, ""
 }
 
 // setPath updates the row compare-and-set and logs a failure.

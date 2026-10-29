@@ -140,6 +140,9 @@ templ sysOrphans(p sysPage, st sysStorage) {
 						if o.Kept {
 							@ui.Badge(ui.ToneAccent, "Kept")
 						}
+						if o.Missing {
+							@ui.Badge(ui.ToneDanger, "File missing")
+						}
 					</div>
 					<div class="sys-orphan-detail">
 						if o.MAC != "" {
@@ -160,7 +163,9 @@ templ sysOrphans(p sysPage, st sysStorage) {
 							</button>
 						}
 					}
-					<a class="btn btn-link bk-act" href={ templ.SafeURL(o.Download) }>Download</a>
+					if o.Download != "" {
+						<a class="btn btn-link bk-act" href={ templ.SafeURL(o.Download) }>Download</a>
+					}
 					if o.DeleteText != "" {
 						<a
 							class="btn btn-link bk-act bk-del"

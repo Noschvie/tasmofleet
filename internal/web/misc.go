@@ -3,6 +3,7 @@ package web
 import (
 	"errors"
 	"fmt"
+	"github.com/nofuturekid/tasmofleet/internal/backup"
 	"net/http"
 	"net/url"
 	"path"
@@ -29,6 +30,10 @@ func (h *handler) backupDownload(w http.ResponseWriter, r *http.Request) {
 	data, b, err := h.d.Backups.Open(r.Context(), model.BackupID(n))
 	if errors.Is(err, store.ErrNotFound) {
 		h.notFound(w, r)
+		return
+	}
+	if errors.Is(err, backup.ErrFileMissing) {
+		h.backupFileMissing(w, r, b)
 		return
 	}
 	if err != nil {

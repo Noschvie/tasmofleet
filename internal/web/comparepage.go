@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -188,11 +189,19 @@ func (h *handler) backupDiff(w http.ResponseWriter, r *http.Request) {
 	case pairOK:
 	}
 	da, _, err := h.d.Backups.Open(r.Context(), a.ID)
+	if errors.Is(err, backup.ErrFileMissing) {
+		h.backupFileMissing(w, r, a)
+		return
+	}
 	if err != nil {
 		h.fail(w, r, err)
 		return
 	}
 	db, _, err := h.d.Backups.Open(r.Context(), b.ID)
+	if errors.Is(err, backup.ErrFileMissing) {
+		h.backupFileMissing(w, r, b)
+		return
+	}
 	if err != nil {
 		h.fail(w, r, err)
 		return

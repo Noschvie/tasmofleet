@@ -81,7 +81,7 @@ func TestMigrateLayoutOnRealStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Moved != 3 || res.Left != 0 {
+	if res.Moved != 4 || res.Left != 0 {
 		t.Fatalf("%+v", res)
 	}
 	for _, r := range rows {
@@ -97,6 +97,10 @@ func TestMigrateLayoutOnRealStore(t *testing.T) {
 	p2, _ := st.GetBackup(ctx, rows[2].id)
 	if p1.Path != "backups/tasmota-A1/20261018T120000Z_tasmota-A1.dmp" || p2.Path != "backups/tasmota-A1_"+strconv.FormatInt(int64(d2.ID), 10)+"/20261018T120000Z_tasmota-A1.dmp" {
 		t.Errorf("%s / %s", p1.Path, p2.Path)
+	}
+	// The deleted device's kept backup moves too (#205), into a folder named after its stored name.
+	if po, _ := st.GetBackup(ctx, rows[3].id); po.Path != "backups/gone/20261018T120000Z_gone.dmp" {
+		t.Errorf("orphan path %s", po.Path)
 	}
 	if res2, _ := m.MigrateLayout(ctx); res2.Moved != 0 || res2.Left != 0 || res2.Repaired != 0 {
 		t.Errorf("restart: %+v", res2)

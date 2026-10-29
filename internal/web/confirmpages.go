@@ -72,7 +72,8 @@ func (h *handler) backupDeleteConfirm(w http.ResponseWriter, r *http.Request) {
 		h.notFound(w, r)
 		return
 	}
-	if err != nil {
+	// A backup whose file is gone is exactly what the admin must be able to remove.
+	if err != nil && !errors.Is(err, backup.ErrFileMissing) {
 		h.fail(w, r, err)
 		return
 	}

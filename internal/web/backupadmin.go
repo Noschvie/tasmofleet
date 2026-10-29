@@ -13,6 +13,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/backup"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
 
 // BackupAdmin is what deleting backups needs on top of backup.Service
@@ -22,6 +23,31 @@ import (
 type BackupAdmin interface {
 	PlanDelete(ctx context.Context, id model.BackupID) (backup.Deletion, error)
 	DeleteRun(ctx context.Context, actor string, id model.BackupID) (backup.Deletion, error)
+}
+
+// BackupFileChecker tells whether a backup's file is gone from the data directory
+// (deleted by hand). *backup.Manager implements it; without it no row is marked.
+type BackupFileChecker interface {
+	FileMissing(b model.Backup) bool
+}
+
+// fileMissing is true when the backup service can tell and the file is gone.
+func (h *handler) fileMissing(b model.Backup) bool {
+	c, ok := h.d.Backups.(BackupFileChecker)
+	return ok && c.FileMissing(b)
+}
+
+// backupFileMissing answers a request for the content of a backup whose file was deleted
+// by hand: it says why nothing can be downloaded, compared or restored, and where the row
+// can be removed.
+func (h *handler) backupFileMissing(w http.ResponseWriter, r *http.Request, b model.Backup) {
+	where, label := "/settings/system?tab=backups", "Backups of deleted devices"
+	if b.DeviceID != 0 {
+		where, label = fmt.Sprintf("/devices/%d/backups", b.DeviceID), "Backups of this device"
+	}
+	h.renderNotFound(w, r, "Backup file missing", "The file of this backup is missing",
+		"The file was removed from the data directory, so it cannot be downloaded, compared or restored. Remove the backup from the list to get rid of the entry.",
+		ui.Btn{Label: label, Kind: "primary", Href: where}, ui.Btn{Label: "Go to dashboard", Href: "/"})
 }
 
 func (h *handler) backupAdmin() (BackupAdmin, bool) {
@@ -98,6 +124,7 @@ type sysOrphan struct {
 	Taken      time.Time
 	Size       string
 	Kept       bool
+	Missing    bool // the file was deleted by hand: no Download, the row can be deleted
 	Download   string
 	DeleteText string // empty: no Delete (no dump, or deleting is not possible)
 }
@@ -144,13 +171,13 @@ func (h *handler) sysStorageOf(r *http.Request, base string) (*sysStorage, error
 		st.More = len(st.Rows) - sysStorageTop
 		st.Rows = st.Rows[:sysStorageTop]
 	}
-	st.Orphans = orphanRuns(orphans, base, canDelete)
+	st.Orphans = orphanRuns(orphans, base, canDelete, h.fileMissing)
 	return st, nil
 }
 
 // orphanRuns groups the files of the deleted devices into runs: per device (MAC and name)
 // and time, the way a device's Backups tab groups its own (backupRuns), newest first.
-func orphanRuns(list []model.Backup, base string, canDelete bool) []sysOrphan {
+func orphanRuns(list []model.Backup, base string, canDelete bool, missing func(model.Backup) bool) []sysOrphan {
 	type owner struct{ mac, name string }
 	var order []owner
 	byOwner := map[owner][]model.Backup{}
@@ -167,6 +194,9 @@ func orphanRuns(list []model.Backup, base string, canDelete bool) []sysOrphan {
 			b := run.Backup
 			row := sysOrphan{ID: b.ID, Name: b.DeviceName, MAC: b.DeviceMAC, Taken: b.TakenAt, Size: humanBytes(b.Size),
 				Kept: b.Kept, Download: fmt.Sprintf("%s/backups/%d", base, b.ID)}
+			if missing(b) {
+				row.Missing, row.Download = true, ""
+			}
 			if canDelete && b.Kind == model.BackupConfigDump {
 				row.DeleteText = backupData{}.DeleteText(b)
 			}

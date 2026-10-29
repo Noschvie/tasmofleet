@@ -191,6 +191,20 @@ type storageBackups struct {
 	*keepBackups
 	usage   []store.BackupUsage
 	orphans []model.Backup
+	gone    map[model.BackupID]bool // rows whose file does not exist
+}
+
+// FileMissing and Open model rows whose file was deleted by hand (#205).
+func (s *storageBackups) FileMissing(b model.Backup) bool { return s.gone[b.ID] }
+func (s *storageBackups) Open(ctx context.Context, id model.BackupID) ([]byte, model.Backup, error) {
+	if s.gone[id] {
+		for _, b := range append(append([]model.Backup{}, s.list...), s.orphans...) {
+			if b.ID == id {
+				return nil, b, backup.ErrFileMissing
+			}
+		}
+	}
+	return s.keepBackups.Open(ctx, id)
 }
 
 func (s *storageBackups) Usage(context.Context) ([]store.BackupUsage, error) { return s.usage, nil }
@@ -406,5 +420,55 @@ func TestStoreDateFitsTheColumn(t *testing.T) {
 	}
 	if got := storeDate(now, time.Date(2025, 12, 31, 23, 0, 0, 0, time.UTC)); got != "31 Dec 2025" {
 		t.Errorf("last year: %q", got)
+	}
+}
+
+// Why (#205): a user who deleted a backup directory by hand is left with rows that point
+// nowhere. They must be recognisable in both lists, offer no Download or Restore (which can
+// only fail), stay deletable so the entry can be removed, and the direct URLs must answer
+// with a reason instead of an internal error.
+func TestMissingFileRowsAreMarkedRefusedAndDeletable(t *testing.T) {
+	t0 := time.Date(2026, 10, 18, 3, 0, 0, 0, time.UTC)
+	sb := &storageBackups{keepBackups: &keepBackups{adminBackups: &adminBackups{}, deviceOf: 1}, gone: map[model.BackupID]bool{70: true, 5: true}}
+	sb.orphans = []model.Backup{
+		{ID: 70, DeviceName: "gone plug", Kind: model.BackupConfigDump, TakenAt: t0, Size: 1024},
+		{ID: 72, DeviceName: "fine plug", Kind: model.BackupConfigDump, TakenAt: t0.Add(-time.Hour), Size: 1024},
+	}
+	sb.list = []model.Backup{
+		{ID: 5, DeviceID: 1, Kind: model.BackupConfigDump, TakenAt: t0, Size: 4096},
+		{ID: 6, DeviceID: 1, Kind: model.BackupConfigDump, TakenAt: t0.Add(-time.Hour), Size: 4096},
+	}
+	e, _, _, _ := sysEnvWithDeps(t, func(d *Deps) { d.Backups = sb; d.Restore = &fakeRestore{} })
+
+	_, body := e.do(t, "GET", "/settings/system?tab=backups", "admin", nil)
+	if n := strings.Count(body, "File missing"); n != 1 {
+		t.Errorf("kept-backups list: %d File missing badges, want 1", n)
+	}
+	if strings.Contains(body, `href="/tf/backups/70"`) || !strings.Contains(body, `href="/tf/backups/72"`) {
+		t.Error("only the present file may offer a Download")
+	}
+	if !strings.Contains(body, `data-dlg-action="/tf/backups/70/delete"`) {
+		t.Error("the missing row must stay deletable")
+	}
+
+	_, body = e.do(t, "GET", "/devices/1/backups", "admin", nil)
+	if n := strings.Count(body, "File missing"); n != 1 {
+		t.Errorf("device list: %d File missing badges, want 1", n)
+	}
+	if strings.Contains(body, `/backups/5/restore`) || strings.Contains(body, `href="/tf/backups/5"`) || !strings.Contains(body, `/backups/6/restore`) {
+		t.Error("restore and download are offered for the present file only")
+	}
+	if !strings.Contains(body, `data-dlg-action="/tf/backups/5/delete"`) {
+		t.Error("the missing row must stay deletable on the device")
+	}
+
+	for _, p := range []string{"/backups/5", "/backups/70", "/backups/5/restore"} {
+		resp, b := e.do(t, "GET", p, "admin", nil)
+		if resp.StatusCode == 500 || !strings.Contains(b, "missing") {
+			t.Errorf("%s: %d, want a page that says the file is missing", p, resp.StatusCode)
+		}
+	}
+	if resp, b := e.do(t, "GET", "/backups/70/delete", "admin", nil); resp.StatusCode != 200 || strings.Contains(b, "internal error") {
+		t.Errorf("delete confirmation of a missing row: %d", resp.StatusCode)
 	}
 }

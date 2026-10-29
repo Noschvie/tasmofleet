@@ -65,8 +65,13 @@ and `.decoded.json`. Background: [#129](https://github.com/nofuturekid/tasmoflee
   missing or would collide with another one stays where it is and is logged as a warning
   ("backup layout: left in place").
 - If the container stops in the middle, the next start completes the move.
-- Empty `backups/<number>/` folders are removed afterwards; backups of deleted devices keep their
-  old folder.
+- Empty `backups/<number>/` folders are removed afterwards. The kept backups of deleted devices move
+  too (0.19 and later; 0.18.0 left them in `backups/<number>/`): into a folder named after the
+  deleted device, or `orphan-<device-id>` when no name is stored. They never share a folder with
+  another device's backups.
+- A backup whose file you deleted by hand cannot be moved. It is counted in the start-up log line
+  ("backup layout", `files_missing`), marked "File missing" in the backup lists and can be deleted
+  there.
 - Two devices with the same hostname get `<hostname>` and `<hostname>_<device-id>`.
 - If a device's hostname changes later, new backups go to the new folder; old ones stay put and
   remain listed and restorable.

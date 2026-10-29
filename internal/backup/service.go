@@ -30,6 +30,11 @@ const (
 	NoteDecodeFailed    = "decode failed"
 )
 
+// ErrFileMissing is returned by Open when the row's file is not in the data
+// directory any more (deleted by hand). The row is returned with it, so the
+// caller can still offer to remove it.
+var ErrFileMissing = errors.New("backup: the file is missing from the data directory")
+
 // ErrIntegrity is returned by Open when a file no longer matches its SHA-256.
 var ErrIntegrity = errors.New("backup: stored file does not match its checksum")
 
@@ -498,6 +503,9 @@ func (m *Manager) Open(ctx context.Context, id model.BackupID) ([]byte, model.Ba
 		return nil, model.Backup{}, fmt.Errorf("backup: refusing stored path %q", b.Path)
 	}
 	data, err := os.ReadFile(full) //nolint:gosec // full comes from safePath: relative, cleaned, below DataDir
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, b, fmt.Errorf("%w (%s)", ErrFileMissing, b.Path)
+	}
 	if err != nil {
 		return nil, model.Backup{}, fmt.Errorf("backup: %w", err)
 	}

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -269,6 +270,8 @@ type legacyFile struct {
 	kind     model.BackupKind
 	content  string
 	orphan   bool
+	name     string // DeviceName / DeviceMAC stored with the row (orphans keep them)
+	mac      string
 	skipDisk bool
 }
 
@@ -292,7 +295,7 @@ func legacy(t *testing.T, e *env, files ...legacyFile) []model.Backup {
 			}
 		}
 		sum := sha256.Sum256([]byte(lf.content))
-		b := model.Backup{DeviceID: lf.dev, Kind: lf.kind, TakenAt: time.Now(), Path: rel, Size: int64(len(lf.content)), SHA256: hex.EncodeToString(sum[:])}
+		b := model.Backup{DeviceID: lf.dev, DeviceName: lf.name, DeviceMAC: lf.mac, Kind: lf.kind, TakenAt: time.Now(), Path: rel, Size: int64(len(lf.content)), SHA256: hex.EncodeToString(sum[:])}
 		id, err := e.st.PutBackup(t.Context(), b)
 		if err != nil {
 			t.Fatal(err)
@@ -354,7 +357,7 @@ func TestMigrateLayoutMovesEverythingAndIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Moved != 4 || res.Left != 0 || res.Repaired != 0 {
+	if res.Moved != 5 || res.Left != 0 || res.Repaired != 0 {
 		t.Fatalf("result %+v", res)
 	}
 	for _, r := range rows {
@@ -370,7 +373,7 @@ func TestMigrateLayoutMovesEverythingAndIsIdempotent(t *testing.T) {
 		if sha(string(data)) != r.SHA256 {
 			t.Errorf("backup %d content changed", r.ID)
 		}
-		if strings.Contains(r.Path, "-dmp.") && r.DeviceID != 5 && got.Path == r.Path {
+		if strings.Contains(r.Path, "-dmp.") && got.Path == r.Path {
 			t.Errorf("backup %d not moved: %s", r.ID, got.Path)
 		}
 	}
@@ -383,20 +386,17 @@ func TestMigrateLayoutMovesEverythingAndIsIdempotent(t *testing.T) {
 		rows[0].ID: "backups/kitchen-spot/20261018T120000Z_kitchen-spot.dmp",
 		rows[1].ID: "backups/kitchen-spot/20261018T120000Z_kitchen-spot.snapshot.json",
 		rows[2].ID: "backups/kitchen-spot/20261018T120000Z_kitchen-spot.decoded.json",
-		rows[3].ID: "backups/Hall/20261017T080000Z_Hall.dmp", // no hostname: inventory name
-		rows[4].ID: "backups/5/20261001T080000Z-dmp.dmp",     // orphans stay where they are
+		rows[3].ID: "backups/Hall/20261017T080000Z_Hall.dmp",         // no hostname: inventory name
+		rows[4].ID: "backups/orphan-5/20261001T080000Z_orphan-5.dmp", // an orphan without a stored name
 	} {
 		if g, _ := e.st.GetBackup(t.Context(), path); g.Path != want {
 			t.Errorf("row %d path %s, want %s", path, g.Path, want)
 		}
 	}
-	for _, n := range []string{"7", "8"} {
+	for _, n := range []string{"5", "7", "8"} {
 		if _, err := os.Stat(filepath.Join(e.dir, "backups", n)); !errors.Is(err, os.ErrNotExist) {
 			t.Errorf("empty legacy dir %s stays: %v", n, err)
 		}
-	}
-	if _, err := os.Stat(filepath.Join(e.dir, "backups", "5")); err != nil {
-		t.Errorf("orphan directory must stay: %v", err)
 	}
 
 	disk, rowsNow := snapshotDisk(t, e.dir), pathsOf(t, e)
@@ -473,9 +473,6 @@ func TestMigrateLayoutLeavesUnclearCases(t *testing.T) {
 	for _, c := range []tc{
 		{"old file corrupt", func(t *testing.T, e *env, r model.Backup) {
 			must(t, os.WriteFile(filepath.Join(e.dir, r.Path), []byte("tampered"), 0o600))
-		}},
-		{"old file missing", func(t *testing.T, e *env, r model.Backup) {
-			must(t, os.Remove(filepath.Join(e.dir, r.Path)))
 		}},
 		{"target exists with other content", func(t *testing.T, e *env, r model.Backup) {
 			must(t, os.MkdirAll(filepath.Join(e.dir, "backups/kitchen"), 0o700))
@@ -646,5 +643,176 @@ func TestMigrateLayoutSkipsSharedPath(t *testing.T) {
 	}
 	if fmt.Sprint(snapshotDisk(t, e.dir)) != fmt.Sprint(before) {
 		t.Error("shared file moved")
+	}
+}
+
+// --- orphans (#205) ---
+
+func rowOf(t *testing.T, e *env, id model.BackupID) model.Backup {
+	t.Helper()
+	b, err := e.st.GetBackup(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+// Why (#205): 0.18 moved only the live devices' files, so a user was left with
+// numeric directories next to the hostname ones and the migration looked half
+// done. A kept backup of a deleted device carries the device's name; that is
+// what a person browsing the data directory recognises.
+func TestMigrateLayoutMovesOrphanByStoredName(t *testing.T) {
+	e, _ := fleetEnv(t)
+	rows := legacy(t, e,
+		legacyFile{dev: 4, stamp: "20261001T080000Z", kind: model.BackupConfigDump, content: "dump", orphan: true, name: "Old plug", mac: "AA:BB"},
+		legacyFile{dev: 4, stamp: "20261001T080000Z", kind: model.BackupSnapshot, content: "snap", orphan: true, name: "Old plug", mac: "AA:BB"},
+	)
+	res, err := e.m.MigrateLayout(t.Context())
+	if err != nil || res.Moved != 2 || res.Left != 0 {
+		t.Fatalf("%+v %v", res, err)
+	}
+	if g := rowOf(t, e, rows[0].ID); g.Path != "backups/Old_plug/20261001T080000Z_Old_plug.dmp" || g.DeviceID != 0 {
+		t.Errorf("dump row: %+v", g)
+	}
+	if g := rowOf(t, e, rows[1].ID); g.Path != "backups/Old_plug/20261001T080000Z_Old_plug.snapshot.json" {
+		t.Errorf("snapshot row: %s", g.Path)
+	}
+	if data, _, err := e.m.Open(t.Context(), rows[0].ID); err != nil || string(data) != "dump" {
+		t.Errorf("orphan not readable after the move: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(e.dir, "backups", "4")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the emptied numeric directory must go: %v", err)
+	}
+}
+
+// Why: an orphan without a stored name must still end up somewhere a person can
+// recognise as "not a live device" and that cannot clash with one.
+func TestMigrateLayoutOrphanWithoutNameUsesFormerID(t *testing.T) {
+	e, _ := fleetEnv(t)
+	rows := legacy(t, e, legacyFile{dev: 19, stamp: "20261001T080000Z", kind: model.BackupConfigDump, content: "d", orphan: true})
+	if _, err := e.m.MigrateLayout(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if g := rowOf(t, e, rows[0].ID); g.Path != "backups/orphan-19/20261001T080000Z_orphan-19.dmp" {
+		t.Errorf("path %s", g.Path)
+	}
+}
+
+// Why: the directory rule of 0.18 (a directory never mixes two devices'
+// backups) holds for orphans too. A live device whose hostname equals the
+// deleted device's name keeps the plain directory only if it is free; the
+// orphan then gets <name>_<former id>, so restoring or pruning one device can
+// never touch the other's files.
+func TestMigrateLayoutOrphanNeverSharesLiveDeviceDir(t *testing.T) {
+	e, _ := fleetEnv(t, host(7, "k", "kitchen"))
+	rows := legacy(t, e,
+		legacyFile{dev: 7, stamp: "20261018T120000Z", kind: model.BackupConfigDump, content: "live"},
+		legacyFile{dev: 3, stamp: "20261001T080000Z", kind: model.BackupConfigDump, content: "dead", orphan: true, name: "kitchen", mac: "M1"},
+	)
+	res, err := e.m.MigrateLayout(t.Context())
+	if err != nil || res.Moved != 2 || res.Left != 0 {
+		t.Fatalf("%+v %v", res, err)
+	}
+	live, orph := rowOf(t, e, rows[0].ID).Path, rowOf(t, e, rows[1].ID).Path
+	if path.Dir(live) == path.Dir(orph) {
+		t.Fatalf("live and orphan share %s", path.Dir(live))
+	}
+	if !strings.HasPrefix(path.Dir(orph), "backups/kitchen") || !strings.HasPrefix(path.Dir(live), "backups/kitchen") {
+		t.Errorf("both keep the name: %s / %s", live, orph)
+	}
+	// a later start finds the live device's directory occupied by the orphan's
+	// neighbour only through the index: nothing moves again.
+	if res, _ = e.m.MigrateLayout(t.Context()); res.Moved != 0 || res.Left != 0 {
+		t.Errorf("second run %+v", res)
+	}
+}
+
+// Why: two deleted devices with the same name are different devices (different
+// ids); they must not be merged into one directory.
+func TestMigrateLayoutTwoOrphansSameNameStaySeparate(t *testing.T) {
+	e, _ := fleetEnv(t)
+	rows := legacy(t, e,
+		legacyFile{dev: 3, stamp: "20261001T080000Z", kind: model.BackupConfigDump, content: "a", orphan: true, name: "plug", mac: "M1"},
+		legacyFile{dev: 9, stamp: "20261001T080000Z", kind: model.BackupConfigDump, content: "b", orphan: true, name: "plug", mac: "M2"},
+	)
+	if res, err := e.m.MigrateLayout(t.Context()); err != nil || res.Moved != 2 {
+		t.Fatalf("%+v %v", res, err)
+	}
+	a, b := rowOf(t, e, rows[0].ID).Path, rowOf(t, e, rows[1].ID).Path
+	if path.Dir(a) == path.Dir(b) {
+		t.Errorf("same directory %s", path.Dir(a))
+	}
+	if path.Dir(b) != "backups/plug_9" {
+		t.Errorf("second orphan: %s", b)
+	}
+}
+
+// Why: a crash between rename and row update must also heal for an orphan,
+// otherwise the users already on 0.18 would see a dangling kept backup.
+func TestMigrateLayoutOrphanRepairsCrashAfterRename(t *testing.T) {
+	e, _ := fleetEnv(t)
+	e.m.o.Store = &failOnce{memBackups: e.st}
+	rows := legacy(t, e, legacyFile{dev: 4, stamp: "20261001T080000Z", kind: model.BackupConfigDump, content: "dump", orphan: true, name: "Old plug"})
+	if res, _ := e.m.MigrateLayout(t.Context()); res.Left != 1 || res.Moved != 0 {
+		t.Fatalf("crash run %+v", res)
+	}
+	res, _ := e.m.MigrateLayout(t.Context())
+	if res.Repaired != 1 || res.Left != 0 {
+		t.Fatalf("restart run %+v", res)
+	}
+	if data, _, err := e.m.Open(t.Context(), rows[0].ID); err != nil || string(data) != "dump" {
+		t.Errorf("not readable after repair: %v", err)
+	}
+}
+
+// Why: a user who deleted the numeric directory by hand (as the reporter did)
+// leaves rows without files. The migration must not guess or delete them: it
+// counts them, and Open says plainly why nothing can be restored or downloaded.
+func TestMissingFileRowIsCountedListedAndRefused(t *testing.T) {
+	e, _ := fleetEnv(t)
+	rows := legacy(t, e,
+		legacyFile{dev: 85, stamp: "20261027T104345Z", kind: model.BackupConfigDump, content: "x", orphan: true, name: "gone", skipDisk: true},
+		legacyFile{dev: 4, stamp: "20261001T080000Z", kind: model.BackupConfigDump, content: "ok", orphan: true, name: "here"},
+	)
+	res, err := e.m.MigrateLayout(t.Context())
+	if err != nil || res.Missing != 1 || res.Moved != 1 || res.Left != 0 {
+		t.Fatalf("%+v %v", res, err)
+	}
+	if g := rowOf(t, e, rows[0].ID); g.Path != rows[0].Path {
+		t.Errorf("the missing row must stay untouched: %s", g.Path)
+	}
+	if !e.m.FileMissing(rowOf(t, e, rows[0].ID)) || e.m.FileMissing(rowOf(t, e, rows[1].ID)) {
+		t.Error("FileMissing must tell the two apart")
+	}
+	_, b, err := e.m.Open(t.Context(), rows[0].ID)
+	if !errors.Is(err, ErrFileMissing) || b.ID != rows[0].ID {
+		t.Fatalf("Open: %v (row %d)", err, b.ID)
+	}
+	// the kept-backups list still shows the row, and an admin can remove it
+	if orph, _ := e.m.Orphans(t.Context()); len(orph) != 2 {
+		t.Errorf("orphans listed: %d", len(orph))
+	}
+	if _, err := e.m.DeleteRun(t.Context(), "admin", rows[0].ID); err != nil {
+		t.Fatalf("delete the missing row: %v", err)
+	}
+	if _, err := e.st.GetBackup(t.Context(), rows[0].ID); !errors.Is(err, store.ErrNotFound) {
+		t.Errorf("row still there: %v", err)
+	}
+	// A second start is quiet: nothing left to move, nothing missing.
+	if res, _ = e.m.MigrateLayout(t.Context()); res.Moved != 0 || res.Missing != 0 || res.Left != 0 {
+		t.Errorf("second run %+v", res)
+	}
+}
+
+// Why: files deleted from a hostname-layout directory (not just a 0.17 one)
+// are missing too; the startup line must count them so the user learns of them.
+func TestMigrateLayoutCountsMissingFilesInNewLayout(t *testing.T) {
+	e, _ := fleetEnv(t, host(7, "k", "kitchen"))
+	b := backupOf(t, e, 7)
+	full := filepath.Join(e.dir, filepath.FromSlash(b.Path))
+	must(t, os.Remove(full))
+	res, err := e.m.MigrateLayout(t.Context())
+	if err != nil || res.Missing != 1 {
+		t.Fatalf("%+v %v", res, err)
 	}
 }

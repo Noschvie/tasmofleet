@@ -108,6 +108,9 @@ templ backupRowItem(p backupsView, b backupRow) {
 				if b.Kept {
 					@ui.Badge(ui.ToneAccent, "Kept")
 				}
+				if b.Missing {
+					@ui.Badge(ui.ToneDanger, "File missing")
+				}
 				if b.Pruned {
 					@ui.Badge(ui.ToneNeutral, "Pruned at next run")
 				}
@@ -116,6 +119,9 @@ templ backupRowItem(p backupsView, b backupRow) {
 				}
 			</div>
 			<div class="bk-detail">{ b.Detail }</div>
+			if b.Missing {
+				<div class="bk-reason">The file is gone from the data directory (deleted by hand?). It cannot be downloaded or restored; delete the entry to remove it.</div>
+			}
 			if b.Failed {
 				<div class="bk-reason">{ b.Reason }</div>
 			}

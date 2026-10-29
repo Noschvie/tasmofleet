@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -215,6 +216,10 @@ func (h *handler) drift(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	old, _, err := h.d.Backups.Open(r.Context(), stored.ID)
+	if errors.Is(err, backup.ErrFileMissing) {
+		h.backupFileMissing(w, r, *stored)
+		return
+	}
 	if err != nil {
 		h.fail(w, r, err)
 		return
