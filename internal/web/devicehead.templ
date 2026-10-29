@@ -167,24 +167,7 @@ templ deviceOverviewPage(p deviceOverview) {
 				<div class="devpow">
 					<div>
 						<div class="devpow-w" data-visual-mask>{ e.Watts }<span>W</span></div>
-						<div class="devpow-sub">
-							if len(e.Spark) > 0 {
-								now · last 2 h
-							} else {
-								now
-							}
-						</div>
-					</div>
-					<div class="devspark" data-visual-mask>
-						if len(e.Spark) > 0 {
-							<svg viewBox={ sparkViewBox } preserveAspectRatio="none" role="img" aria-label="Power over the last 2 hours">
-								for _, b := range e.Spark {
-									<rect class="devspark-bar" x={ b.X } y={ b.Y } width={ sparkBarW } height={ b.H } rx="1"></rect>
-								}
-							</svg>
-						} else {
-							<span class="devspark-note">{ e.SparkNote }</span>
-						}
+						<div class="devpow-sub">now</div>
 					</div>
 				</div>
 				@ui.KV(e.Rows)

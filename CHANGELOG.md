@@ -4,6 +4,19 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## Unreleased
+
+### Added
+
+- Sensor telemetry: the tracker now keeps the numeric readings of every `tele/SENSOR` block besides ENERGY
+  (BME280, BH1750, DS18B20, ...) with their units (TempUnit/PressureUnit), bounded in count and name length,
+  for the device page's Sensors box. They are not exported as metrics (#145).
+
+### Changed
+
+- The 2-hour power sparkline on the device overview is gone (its history was only a minute ring of the
+  last `tele/SENSOR` watts); the card shows the current power and the energy counters (#145).
+
 ## 0.16.2 (2026-10-29)
 
 ### Added

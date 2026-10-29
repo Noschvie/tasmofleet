@@ -223,6 +223,9 @@ func (d *simDevice) teleLoop(period time.Duration) {
 		d.mu.Unlock()
 		if run && d.mq.connected() {
 			d.mq.publish("tele/"+d.topic+"/STATE", string(d.render("state.json", v)), false)
+			if p := d.sensorPayload(); p != "" {
+				d.mq.publish("tele/"+d.topic+"/SENSOR", p, false)
+			}
 		}
 	}
 }

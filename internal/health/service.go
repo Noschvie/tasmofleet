@@ -107,10 +107,10 @@ type devState struct {
 	snapAfter time.Time // earliest next snapshot fetch
 	h         model.Health
 
-	sigDBm int                      // Wifi.Signal from STATE; valid when hasSig
-	hasSig bool                     //
-	energy map[string]EnergyChannel // channel ("" = single meter) -> last tele/SENSOR ENERGY
-	power  *powerRing               // watts per minute for the last two hours; nil until the first reading
+	sigDBm  int                      // Wifi.Signal from STATE; valid when hasSig
+	hasSig  bool                     //
+	energy  map[string]EnergyChannel // channel ("" = single meter) -> last tele/SENSOR ENERGY
+	sensors []SensorReading          // last tele/SENSOR readings other than ENERGY
 }
 
 // New builds a Service. Zero Options fields select the defaults.
@@ -543,12 +543,8 @@ func (s *Service) onMessage(m mqttbus.Message) {
 		}
 		ds.h.Power[m.Suffix] = strings.ToUpper(strings.TrimSpace(string(m.Payload)))
 	case mqttbus.KindSensor:
-		if w, ok := totalWatts(applyEnergy(ds, m.Payload)); ok {
-			if ds.power == nil {
-				ds.power = &powerRing{}
-			}
-			ds.power.add(now, w)
-		}
+		applyEnergy(ds, m.Payload)
+		applySensors(ds, m.Payload)
 	case mqttbus.KindStatus, mqttbus.KindDiscovery, mqttbus.KindUpgrade, mqttbus.KindInfo:
 		// A sign of life only; nothing to merge.
 	}

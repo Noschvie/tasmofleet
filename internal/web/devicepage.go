@@ -79,87 +79,11 @@ type identCard struct {
 	KeepOK    bool
 }
 
-// energyCard is the power reading now, the last 2 hours as a sparkline and the energy counters
+// energyCard is the power reading now, the energy counters
 // of the device's meter.
 type energyCard struct {
 	Watts string
-	Spark []sparkBar // empty: nothing to draw, SparkNote says why
-	// SparkNote replaces the sparkline when there is nothing to draw: no readings yet, or a
-	// device that drew nothing for 2 hours (a row of 24 stubs would read as a dashed line).
-	SparkNote string
-	Rows      []ui.KVRow
-}
-
-// sparkBar is one bar of the power sparkline in viewBox units (presentation attributes, D6).
-type sparkBar struct{ X, Y, H string }
-
-// The sparkline (N8) draws the 2-hour power history like the prototype: bars, one per 5-minute
-// bucket (Tasmota's default TelePeriod 300 gives one reading each), the bucket's mean watts
-// scaled to the highest bucket. A bucket without a reading stays empty, so a gap in the history
-// is a gap in the line. The smallest bar keeps a stub so a 0 W reading is still visible.
-const (
-	sparkBuckets = 24
-	sparkStep    = 5 * time.Minute
-	sparkPitch   = 10 // viewBox units per bucket
-	sparkBarW    = "8"
-	sparkHeight  = 40
-	sparkStub    = 3
-	sparkViewBox = "0 0 240 40" // sparkBuckets*sparkPitch x sparkHeight
-)
-
-// sparkOf turns the power history (oldest first, at most 2 h back from now) into bars.
-func sparkOf(samples []health.PowerSample, now time.Time) []sparkBar {
-	var sum [sparkBuckets]float64
-	var n [sparkBuckets]int
-	start := now.Add(-sparkBuckets * sparkStep)
-	for _, s := range samples {
-		if !s.At.After(start) || s.At.After(now) {
-			continue
-		}
-		i := min(int(s.At.Sub(start)/sparkStep), sparkBuckets-1)
-		sum[i] += s.Watts
-		n[i]++
-	}
-	peak := 0.0
-	for i := range sum {
-		if n[i] > 0 {
-			peak = max(peak, sum[i]/float64(n[i]))
-		}
-	}
-	var out []sparkBar
-	for i := range sum {
-		if n[i] == 0 {
-			continue
-		}
-		h := float64(sparkStub)
-		if peak > 0 {
-			h += (sparkHeight - sparkStub) * max(sum[i]/float64(n[i]), 0) / peak
-		}
-		f := func(v float64) string { return strconv.FormatFloat(v, 'f', 1, 64) }
-		out = append(out, sparkBar{X: strconv.Itoa(i * sparkPitch), Y: f(sparkHeight - h), H: f(h)})
-	}
-	return out
-}
-
-// sparkNote says why the sparkline is not drawn: there are no readings in the window yet, or
-// every one of them is 0 W. "" means draw the bars.
-func sparkNote(samples []health.PowerSample, now time.Time) string {
-	start := now.Add(-sparkBuckets * sparkStep)
-	seen, drew := false, false
-	for _, s := range samples {
-		if !s.At.After(start) || s.At.After(now) {
-			continue
-		}
-		seen = true
-		drew = drew || s.Watts > 0
-	}
-	switch {
-	case !seen:
-		return "No readings yet"
-	case !drew:
-		return "No load in the last 2 h"
-	}
-	return ""
+	Rows  []ui.KVRow
 }
 
 // relayRow is one relay switch of the Power & energy card.
@@ -571,16 +495,6 @@ func (h *handler) deviceDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	p.Ident = h.identity(v, d, p.Updating != nil, facts)
 	p.Energy = energyOf(tele)
-	if ph, ok := h.d.Health.(interface {
-		PowerHistory(model.DeviceID) []health.PowerSample
-	}); ok && p.Energy != nil {
-		samples, now := ph.PowerHistory(d.ID), h.d.Clock.Now()
-		if p.Energy.SparkNote = sparkNote(samples, now); p.Energy.SparkNote == "" {
-			p.Energy.Spark = sparkOf(samples, now)
-		}
-	} else if p.Energy != nil {
-		p.Energy.SparkNote = "No readings yet"
-	}
 	p.Relays = relaysOf(hl)
 	p.RelaysOn = p.RelaysOn && hl.State != model.HealthOffline && p.Updating == nil
 	p.Network = h.networkRows(d, hl, facts)

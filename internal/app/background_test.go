@@ -1,6 +1,7 @@
 package app
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/nofuturekid/tasmofleet/internal/health"
@@ -44,5 +45,21 @@ func TestDeviceSamplesDropOutOfRangeRelays(t *testing.T) {
 	got := deviceSamples(devs, all, nil)
 	if r := got[0].Relays; len(r) != 1 || !r["2"] {
 		t.Fatalf("relays = %v", r)
+	}
+}
+
+// Why (#145): sensor readings are for the device page only. Exporting them would add metric
+// series nobody asked for and change the exposition scrapers already parse; the samples must
+// be identical with and without them.
+func TestDeviceSamplesIgnoreSensorReadings(t *testing.T) {
+	devs := []model.Device{{ID: 1, Name: "weather"}}
+	all := map[model.DeviceID]model.Health{1: {State: model.HealthOnline}}
+	base := health.Telemetry{SignalDBm: -60, HasSignal: true}
+	with := base
+	with.Sensors = []health.SensorReading{{Sensor: "BME280", Name: "Temperature", Value: 21.5, Unit: "°C"}}
+	a := deviceSamples(devs, all, map[model.DeviceID]health.Telemetry{1: base})
+	b := deviceSamples(devs, all, map[model.DeviceID]health.Telemetry{1: with})
+	if !reflect.DeepEqual(a, b) {
+		t.Fatalf("sensor readings changed the metric samples:\n%+v\n%+v", a, b)
 	}
 }
