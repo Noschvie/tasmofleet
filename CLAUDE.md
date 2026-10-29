@@ -248,7 +248,7 @@ in `.github/workflows/ci.yml`.
   ([nofuturekid/unraid-templates](https://github.com/nofuturekid/unraid-templates), `templates/tasmofleet.xml`).
   With every release:
   - add the release to the template's `<Changes>` block;
-  - edit the first post of the [Unraid support thread](https://forums.unraid.net/topic/201022-support-nofuturekid-tasmofleet/)
+  - edit the first post of the [Unraid support thread](https://forums.unraid.net/topic/201022-support-tasmofleet/)
     (current release line, links, setup notes that are still true). A minor release, or anything users
     have to act on, also gets a reply post in the thread, upgrade notes first;
   - a release that changes ports, variables or anything else in the template ships the template change
