@@ -45,6 +45,7 @@ always upgrade automatically.
 
 ### Fixed
 
+- An ESP32 with the single-app (safeboot) layout never gets the plain upload into its running app, even when Status 4 Free is larger than the image: a push goes through safeboot (or downloads while that is off) (#191)
 - An OtaUrl whose password contains `/`, `#` or `?` could be shown or compared in part. The
   URL credential redaction now parses the URL, and a value that cannot be cleaned safely is
   shown as `***` (#168).

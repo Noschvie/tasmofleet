@@ -209,6 +209,29 @@ func TestITSafebootDualLayoutPushesDirectly(t *testing.T) {
 	_ = eng
 }
 
+// Why: #191. Status 4 Free is only a hint. A single-OTA device (/up calls upl(this)) whose Free is
+// larger than the image must still never get the plain upload into its running app: it goes the
+// safeboot route, so the one app partition is not overwritten while it runs.
+func TestITSingleOTALargeFreeTakesSafebootRoute(t *testing.T) {
+	e := newItEnv(t)
+	e.safebootPush = true
+	e.withBigImage()
+	dev := e.addDevice(simulator.DeviceSpec{Profile: simulator.ProfileESP32, FreeKB: 1800})
+	orig := e.ctrl[dev].OtaURL()
+	eng := e.start(2)
+	e.submit(eng, Request{DeviceID: dev, Delivery: model.DeliveryPush})
+	j := e.expectSuccess(dev, orig, 0, model.PlanDirect)
+	if !j.ViaSafeboot || j.Delivery != model.DeliveryPush {
+		t.Fatalf("job ViaSafeboot=%v delivery=%q", j.ViaSafeboot, j.Delivery)
+	}
+	if n := e.count(dev, "GET /u4 fct"); n != 1 {
+		t.Errorf("%d switches into safeboot, want 1: %v", n, e.ctrl[dev].Commands())
+	}
+	if e.indexOf(dev, "GET /u4 fct") > e.indexOf(dev, "POST /u2 tasmota32.bin") {
+		t.Errorf("uploaded into the running app: %v", e.ctrl[dev].Commands())
+	}
+}
+
 // failedWithDevice waits for the job to fail and returns it; the device must not be flashed.
 func (e *itEnv) failedJob(dev model.DeviceID) model.Job {
 	e.t.Helper()

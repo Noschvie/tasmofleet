@@ -50,8 +50,8 @@ func sbHarness(t *testing.T, fd *fakeDevice, layout tasmota.UpLayout, layoutErr 
 }
 
 // Why: the route is chosen only for an ESP32 whose image does not fit its running partition AND whose
-// /up asks for the safeboot detour, and only with the gate open. Every other case keeps the behaviour
-// of before #30, with the reason in the note; the read of /up is not made when it cannot matter.
+// /up asks for the safeboot detour, and only with the gate open. A single-OTA layout never gets the plain push into the running
+// app, whatever Status 4 Free says (#191). Every other case keeps the behaviour of before #30.
 func TestPreviewSafebootRoute(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
@@ -68,7 +68,11 @@ func TestPreviewSafebootRoute(t *testing.T) {
 		{"safeboot layout, gate closed", 400, tasmota.UpLayoutSafeboot, nil, false, false, model.DeliveryPull, "push into safeboot is not enabled yet", 1},
 		{"dual layout does not fit", 400, tasmota.UpLayoutDirect, nil, true, false, model.DeliveryPull, "not enough free flash for an upload", 1},
 		{"layout unreadable", 400, "", errors.New("timeout"), true, false, model.DeliveryPull, "not enough free flash for an upload", 1},
-		{"image fits: plain push, /up not read", 1800, tasmota.UpLayoutSafeboot, nil, true, false, model.DeliveryPush, "", 0},
+		// #191: Free larger than the image must not send a single-OTA device into the running app.
+		{"safeboot layout, image fits Free, gate open", 1800, tasmota.UpLayoutSafeboot, nil, true, true, model.DeliveryPush, "", 1},
+		{"safeboot layout, image fits Free, gate closed", 1800, tasmota.UpLayoutSafeboot, nil, false, false, model.DeliveryPull, "push into safeboot is not enabled yet", 1},
+		{"dual layout, image fits: plain push", 1800, tasmota.UpLayoutDirect, nil, true, false, model.DeliveryPush, "", 1},
+		{"layout unreadable, image fits: plain push as before", 1800, "", errors.New("timeout"), true, false, model.DeliveryPush, "", 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fd := esp32Device()

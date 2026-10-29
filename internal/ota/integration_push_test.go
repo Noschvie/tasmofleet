@@ -183,13 +183,14 @@ func TestITPushRefusedByDevice(t *testing.T) {
 	e.assertNoViolations()
 }
 
-// A safeboot-layout ESP32 answers "Not enough space" (office-monitor-thomas,
-// 2026-10-24): the job fails at once with the reason, after one upload,
+// An ESP32 answers "Not enough space" to a direct upload (office-monitor-thomas, a safeboot
+// layout, 2026-10-24; since #191 a safeboot layout is no longer pushed into its running app, so
+// the test uses the dual layout and the fault): the job fails at once with the reason, after one upload,
 // instead of waiting out the upgrade window; the device keeps its version and
 // never reboots.
 func TestITPushNoSpaceFailsAtOnce(t *testing.T) {
 	e := newItEnv(t)
-	dev := e.addDevice(simulator.DeviceSpec{Profile: simulator.ProfileESP32, Faults: []simulator.Fault{{Kind: simulator.FaultUploadNoSpace}}})
+	dev := e.addDevice(simulator.DeviceSpec{Profile: simulator.ProfileESP32Dual, Faults: []simulator.Fault{{Kind: simulator.FaultUploadNoSpace}}})
 	eng := e.start(2)
 	e.submit(eng, Request{DeviceID: dev, Delivery: model.DeliveryPush})
 	j := e.waitTerminal(dev)

@@ -437,17 +437,25 @@ func (e *Engine) planFor(ctx context.Context, d model.Device, id model.Identity,
 		if err == nil {
 			err = pushSpaceRefusal(id, p.target.Size)
 		}
-		if err != nil {
-			p.delivery, p.fallback = model.DeliveryPull, err.Error()
-			var space *pushSpaceError
-			if errors.As(err, &space) {
-				// An ESP32 with the safeboot layout can take the image there (#30).
-				if via, note := e.safebootRoute(ctx, d, id); via {
-					p.delivery, p.fallback, p.viaSafeboot = model.DeliveryPush, "", true
-				} else if note != "" {
-					p.fallback = note
-				}
+		var space *pushSpaceError
+		switch {
+		case err == nil:
+			// Free says the image fits, but a single-OTA ESP32 (/up calls upl(this)) must never get the
+			// plain upload into its running app (#191): safeboot route or download.
+			p.viaSafeboot, p.fallback = e.safebootRoute(ctx, d, id)
+			if !p.viaSafeboot && p.fallback != "" {
+				p.delivery = model.DeliveryPull
 			}
+		case errors.As(err, &space):
+			p.delivery, p.fallback = model.DeliveryPull, err.Error()
+			// An ESP32 with the safeboot layout can take the image there (#30).
+			if via, note := e.safebootRoute(ctx, d, id); via {
+				p.delivery, p.fallback, p.viaSafeboot = model.DeliveryPush, "", true
+			} else if note != "" {
+				p.fallback = note
+			}
+		default:
+			p.delivery, p.fallback = model.DeliveryPull, err.Error()
 		}
 	}
 	if err := e.sel.Guard(id, p.target, e.fw.URLFor(p.target), c); err != nil {
