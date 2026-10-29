@@ -189,7 +189,21 @@ func TestSettingsNothingChangedIsNeutralAndKeepsTheDeviceState(t *testing.T) {
 
 // ---- policy ----
 
+// noEval gives a policy fake the two methods the page tests do not exercise yet
+// (the rule pages of #197 use them): Evaluate returns an empty report, ReadValue
+// refuses.
+type noEval struct{}
+
+func (noEval) Evaluate(context.Context, []policy.Rule) (PolicyReport, error) {
+	return PolicyReport{}, nil
+}
+
+func (noEval) ReadValue(context.Context, string, model.DeviceID, string) (string, ValueSource, error) {
+	return "", ValueSource{}, &ValueRefusedError{Reason: "not available in this test"}
+}
+
 type fakePolicy struct {
+	noEval
 	rep  PolicyReport
 	live []bool
 }

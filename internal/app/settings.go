@@ -3,7 +3,10 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -205,7 +208,25 @@ func (p *policyReporter) Report(ctx context.Context, actor string, live bool) (w
 	if live {
 		throttled = p.refresh(ctx, actor, devs)
 	}
-	rules := p.currentRules()
+	rep := p.evaluate(ctx, devs, p.currentRules())
+	rep.LiveThrottled = throttled
+	return rep, nil
+}
+
+// Evaluate judges the given rules (a draft the rule page is editing) from the
+// cached live values and the newest backups. It never reads a device and never
+// starts a refresh.
+func (p *policyReporter) Evaluate(ctx context.Context, rules []policy.Rule) (web.PolicyReport, error) {
+	devs, err := p.devices.ListDevices(ctx)
+	if err != nil {
+		return web.PolicyReport{}, err
+	}
+	return p.evaluate(ctx, devs, rules), nil
+}
+
+// evaluate is the one evaluation behind Report and Evaluate: the findings are
+// the Deviate and Unknown outcomes of the same policy.Outcomes pass.
+func (p *policyReporter) evaluate(ctx context.Context, devs []model.Device, rules []policy.Rule) web.PolicyReport {
 	values, prov := p.values(ctx, devs, rules)
 	notLive := map[string]bool{}
 	for _, r := range rules {
@@ -215,8 +236,60 @@ func (p *policyReporter) Report(ctx context.Context, actor string, live bool) (w
 	}
 	return web.PolicyReport{
 		Rules: rules, Devices: devs, Findings: policy.Check(rules, devs, values),
-		Provenance: prov, NotLive: notLive, LiveThrottled: throttled,
-	}, nil
+		Provenance: prov, NotLive: notLive, Values: values, Outcomes: policy.Outcomes(rules, devs, values),
+	}
+}
+
+// ReadValue reads one setting of one device so a rule can start from it ("Copy
+// from a device"). A command that must not be sent is refused first, without
+// touching the device. A live read is preferred; when the device does not
+// answer, a command the decoded backups know falls back to the newest backup.
+// The value is refused when it holds credentials or cannot be an expected
+// value. Nothing goes into the live cache (the poller's semantics stay), and
+// the audit entry names the device and command, never the value.
+func (p *policyReporter) ReadValue(ctx context.Context, actor string, id model.DeviceID, command string) (string, web.ValueSource, error) {
+	if err := policy.ReadProblem(command); err != nil {
+		return "", web.ValueSource{}, &web.ValueRefusedError{Reason: err.Error()}
+	}
+	if !settings.Queryable(command) {
+		return "", web.ValueSource{}, &web.ValueRefusedError{Reason: "this command cannot be read without side effects"}
+	}
+	cctx, cancel := context.WithTimeout(ctx, liveTimeout)
+	defer cancel()
+	got, readErr := p.reader.ReadKeys(cctx, id, []string{command})
+	value, src, ok := got[command], web.ValueSource{Kind: "live", At: p.clock()}, false
+	if _, ok = got[command]; !ok && policy.BackupReadable(command) {
+		bv, at := p.fromBackup(ctx, id)
+		if value, ok = bv[command]; ok {
+			src = web.ValueSource{Kind: "backup", At: at}
+		}
+	}
+	p.auditCopy(ctx, actor, id, command, ok)
+	if !ok {
+		if readErr != nil {
+			return "", web.ValueSource{}, fmt.Errorf("the device did not answer: %w", readErr)
+		}
+		return "", web.ValueSource{}, errors.New("the device did not report this setting")
+	}
+	switch {
+	case strings.Contains(value, "***"): // the redaction marker of settings.RedactURLCredentials
+		return "", web.ValueSource{}, &web.ValueRefusedError{Reason: "the value contains credentials; enter it by hand"}
+	case !policy.ValidWant(value), validateWant(command, value) != nil:
+		return "", web.ValueSource{}, &web.ValueRefusedError{Reason: "this value cannot be an expected value"}
+	}
+	return value, src, nil
+}
+
+func (p *policyReporter) auditCopy(ctx context.Context, actor string, id model.DeviceID, command string, ok bool) {
+	if p.audit == nil {
+		return
+	}
+	detail, _ := json.Marshal(map[string]any{"device": int64(id), "command": command}) // a plain map always encodes
+	result := "ok"
+	if !ok {
+		result = "no value"
+	}
+	p.audit.Record(ctx, model.AuditEvent{Actor: actor, Action: "policy.copy", Target: "device:" + strconv.FormatInt(int64(id), 10), Detail: string(detail), Result: result})
 }
 
 // fromBackup returns the policy values of the newest decoded backup and its date.

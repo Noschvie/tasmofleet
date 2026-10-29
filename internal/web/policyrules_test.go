@@ -97,7 +97,7 @@ func rulesEnvDeps(t *testing.T, deps func(*Deps), tweak ...func(*sysconfig.Rules
 	return e, mem, live
 }
 
-type noPolicy struct{}
+type noPolicy struct{ noEval }
 
 func (noPolicy) Report(context.Context, string, bool) (PolicyReport, error) {
 	return PolicyReport{}, nil

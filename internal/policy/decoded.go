@@ -29,6 +29,14 @@ var decodedKeys = map[string][]string{
 	"SetOption19":  {"flag", "hass_discovery"},
 }
 
+// BackupReadable reports whether a decoded backup can tell the value of the
+// command (it is in decodedKeys, or Timezone). Any other command is only known
+// from a live read.
+func BackupReadable(command string) bool {
+	_, ok := decodedKeys[command]
+	return ok || command == "Timezone"
+}
+
 // ValuesFromDecoded extracts the policy-relevant settings from a decoded
 // backup (decode-config JSON). Missing or oddly typed entries are left out.
 // Secrets are never extracted.

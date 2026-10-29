@@ -31,6 +31,12 @@ type PolicyReport struct {
 	Findings   []policy.Finding
 	Provenance map[model.DeviceID]map[string]ValueSource
 	NotLive    map[string]bool
+	// Values holds, per device and lower-case command, the value each finding
+	// and outcome was judged from (live preferred, else the newest backup).
+	Values map[model.DeviceID]map[string]string
+	// Outcomes is the one evaluation of Rules over Devices (policy.Outcomes);
+	// Findings are its Deviate and Unknown entries.
+	Outcomes []policy.Outcome
 	// LiveThrottled is true when the live check was rate limited and
 	// answered from recent reads only.
 	LiveThrottled bool
@@ -41,7 +47,20 @@ type PolicyReport struct {
 // fallback for settings that have no live value.
 type PolicyService interface {
 	Report(ctx context.Context, actor string, live bool) (PolicyReport, error)
+	// Evaluate judges the given rules (a draft, not the saved ones) from cached
+	// live values and backups. It never talks to a device.
+	Evaluate(ctx context.Context, rules []policy.Rule) (PolicyReport, error)
+	// ReadValue reads one setting of one device to propose it as an expected
+	// value. A command that must not be sent is refused first, with no device
+	// contact, as a *ValueRefusedError. Nothing is cached or stored.
+	ReadValue(ctx context.Context, actor string, id model.DeviceID, command string) (value string, src ValueSource, err error)
 }
+
+// ValueRefusedError says why ReadValue will not read or offer a value. The
+// text is safe to show: it never holds a device value.
+type ValueRefusedError struct{ Reason string }
+
+func (e *ValueRefusedError) Error() string { return e.Reason }
 
 // policyPath is the merged policy page (design v2, N3): rule cards, the editor, the live
 // preview, the version history and the live-check status line. The rule changes keep their

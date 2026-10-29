@@ -7,6 +7,7 @@
 package policy
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
@@ -61,40 +62,203 @@ type Finding struct {
 	Unknown bool
 }
 
-// Check returns the findings for every device and rule, in device then rule
-// order. Compliant device/rule pairs produce no finding. values maps a device
-// to its settings by command name (case-insensitive); a missing device or
-// command means "unknown". Pure: no I/O.
+// OutcomeKind is what one enabled rule means for one device it is in scope for.
+type OutcomeKind int
+
+// Outcome kinds. A rule that is disabled, out of the device's scope or limited
+// to other chip families has no outcome for that device at all.
+const (
+	// OutcomeMatch: the rule is evaluated for the device and the value is right.
+	OutcomeMatch OutcomeKind = iota
+	// OutcomeDeviate: the rule is evaluated and the value is different.
+	OutcomeDeviate
+	// OutcomeUnknown: the rule is evaluated but there is no value (or no
+	// family to judge a family-limited rule by). Never "ok".
+	OutcomeUnknown
+	// OutcomeShadowed: a higher rule on the same command is the one evaluated
+	// for this device; ByIndex names it.
+	OutcomeShadowed
+	// OutcomeExcepted: the device is exempt from the rule. An excepted rule
+	// does not claim the command, so a lower rule still judges the device.
+	OutcomeExcepted
+)
+
+// Outcome is one device/rule pair of the single evaluation that Check and the
+// page counts are both built on.
+type Outcome struct {
+	DeviceID model.DeviceID
+	// RuleIndex is the position of the rule in the list given to Outcomes.
+	RuleIndex int
+	Kind      OutcomeKind
+	// Have is the value found; set for Match and Deviate, empty otherwise.
+	Have string
+	// ByIndex is the rule that is evaluated instead, for OutcomeShadowed only.
+	ByIndex int
+}
+
+// Outcomes evaluates every enabled rule against every device it is in scope
+// for, in device then rule order. values maps a device to its settings by
+// command name (case-insensitive); a missing device or command means unknown.
+// Pure: no I/O.
 //
 // The order of rules is their precedence: when two enabled rules apply to the
 // same command on the same device, only the first one is evaluated for that
-// device (the later one is shadowed there, see Conflicts). Disabled rules are
-// skipped entirely.
-func Check(rules []Rule, devices []model.Device, values map[model.DeviceID]map[string]string) []Finding {
-	var out []Finding
+// device and the later one is Shadowed there (see Conflicts). Disabled rules
+// are skipped entirely.
+func Outcomes(rules []Rule, devices []model.Device, values map[model.DeviceID]map[string]string) []Outcome {
+	var out []Outcome
 	for _, d := range devices {
 		have := lowerKeys(values[d.ID])
-		claimed := map[string]bool{}
+		claimed := map[string]int{}
 		for i, r := range rules {
+			if r.Disabled || !inScope(r, d) || !familyFits(r, d) {
+				continue
+			}
 			key := strings.ToLower(r.Command)
-			if r.Disabled || claimed[key] || !applies(r, d) {
-				continue
-			}
-			claimed[key] = true
-			f := Finding{DeviceID: d.ID, Rule: r, RuleIndex: i, Severity: severityOf(r)}
-			v, ok := have[key]
+			o := Outcome{DeviceID: d.ID, RuleIndex: i}
+			by, taken := claimed[key]
 			switch {
-			case len(r.Families) > 0 && d.Identity.Family == model.ChipUnknown, !ok:
-				f.Unknown = true
-			case equal(v, r.Want):
-				continue
+			case excepted(r, d):
+				o.Kind = OutcomeExcepted
+			case taken:
+				o.Kind, o.ByIndex = OutcomeShadowed, by
 			default:
-				f.Have = v
+				claimed[key] = i
+				v, ok := have[key]
+				switch {
+				case len(r.Families) > 0 && d.Identity.Family == model.ChipUnknown, !ok:
+					o.Kind = OutcomeUnknown
+				case equal(v, r.Want):
+					o.Kind, o.Have = OutcomeMatch, v
+				default:
+					o.Kind, o.Have = OutcomeDeviate, v
+				}
 			}
-			out = append(out, f)
+			out = append(out, o)
 		}
 	}
 	return out
+}
+
+// Check returns the findings for every device and rule, in device then rule
+// order: the Deviate and Unknown outcomes of Outcomes. Compliant pairs produce
+// no finding. Pure: no I/O.
+func Check(rules []Rule, devices []model.Device, values map[model.DeviceID]map[string]string) []Finding {
+	var out []Finding
+	for _, o := range Outcomes(rules, devices, values) {
+		if o.Kind != OutcomeDeviate && o.Kind != OutcomeUnknown {
+			continue
+		}
+		r := rules[o.RuleIndex]
+		f := Finding{DeviceID: o.DeviceID, Rule: r, RuleIndex: o.RuleIndex, Severity: severityOf(r), Unknown: o.Kind == OutcomeUnknown}
+		if !f.Unknown {
+			f.Have = o.Have
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
+// RuleTally counts the outcomes of one rule.
+type RuleTally struct {
+	Match, Deviate, Unknown int
+	// Excepted devices are exempt; Shadowed ones are judged by a higher rule.
+	// Neither counts as applying.
+	Excepted, Shadowed int
+}
+
+// Applies is the number of devices the rule is evaluated for.
+func (t RuleTally) Applies() int { return t.Match + t.Deviate + t.Unknown }
+
+// Tally counts the outcomes per rule, indexed like rules. A disabled rule has
+// no outcomes and reads all zero.
+func Tally(rules []Rule, outcomes []Outcome) []RuleTally {
+	out := make([]RuleTally, len(rules))
+	for _, o := range outcomes {
+		t := &out[o.RuleIndex]
+		switch o.Kind {
+		case OutcomeMatch:
+			t.Match++
+		case OutcomeDeviate:
+			t.Deviate++
+		case OutcomeUnknown:
+			t.Unknown++
+		case OutcomeShadowed:
+			t.Shadowed++
+		case OutcomeExcepted:
+			t.Excepted++
+		}
+	}
+	return out
+}
+
+// Fleet is the headline numbers of the policy page. Compliant, Deviating and
+// NotJudged are device counts out of Devices; Deviating and NotJudged never
+// overlap.
+type Fleet struct {
+	Rules, Enabled, Disabled int
+	Devices                  int
+	// Compliant: no Required rule deviates or is unknown for the device. A
+	// device that only deviates from Advisory rules is compliant.
+	Compliant int
+	// Deviating: at least one Deviate. DeviatingRequired of them break a
+	// Required rule, the other DeviatingAdvisory only Advisory ones.
+	Deviating, DeviatingRequired, DeviatingAdvisory int
+	// NotJudged: at least one Unknown and no Deviate.
+	NotJudged int
+}
+
+// FleetTally derives the page tiles from the outcomes of devices.
+func FleetTally(rules []Rule, devices []model.Device, outcomes []Outcome) Fleet {
+	f := Fleet{Rules: len(rules), Devices: len(devices)}
+	for _, r := range rules {
+		if r.Disabled {
+			f.Disabled++
+		}
+	}
+	f.Enabled = f.Rules - f.Disabled
+	type flags struct{ reqBad, devReq, devAdv, unknown bool }
+	per := make(map[model.DeviceID]*flags, len(devices))
+	for _, o := range outcomes {
+		if o.Kind != OutcomeDeviate && o.Kind != OutcomeUnknown {
+			continue
+		}
+		fl := per[o.DeviceID]
+		if fl == nil {
+			fl = &flags{}
+			per[o.DeviceID] = fl
+		}
+		required := severityOf(rules[o.RuleIndex]) != SeverityInfo
+		switch {
+		case o.Kind == OutcomeUnknown:
+			fl.unknown = true
+			fl.reqBad = fl.reqBad || required
+		case required:
+			fl.devReq, fl.reqBad = true, true
+		default:
+			fl.devAdv = true
+		}
+	}
+	for _, d := range devices {
+		fl := per[d.ID]
+		if fl == nil || !fl.reqBad {
+			f.Compliant++
+		}
+		if fl == nil {
+			continue
+		}
+		switch {
+		case fl.devReq:
+			f.Deviating++
+			f.DeviatingRequired++
+		case fl.devAdv:
+			f.Deviating++
+			f.DeviatingAdvisory++
+		case fl.unknown:
+			f.NotJudged++
+		}
+	}
+	return f
 }
 
 // applies reports whether r is evaluated for d: in scope, not excepted, and of
@@ -102,9 +266,10 @@ func Check(rules []Rule, devices []model.Device, values map[model.DeviceID]map[s
 // family-limited rule (it is reported as unknown there), so a lower rule never
 // judges a device the higher one could not rule out.
 func applies(r Rule, d model.Device) bool {
-	if excepted(r, d) || !inScope(r, d) {
-		return false
-	}
+	return !excepted(r, d) && inScope(r, d) && familyFits(r, d)
+}
+
+func familyFits(r Rule, d model.Device) bool {
 	return len(r.Families) == 0 || d.Identity.Family == model.ChipUnknown || hasFamily(r.Families, d.Identity.Family)
 }
 
@@ -240,4 +405,18 @@ func canon(v string) string {
 		return "0"
 	}
 	return v
+}
+
+// ValidWant reports whether v is acceptable as a rule's expected value.
+func ValidWant(v string) bool { return wantRe.MatchString(v) }
+
+// ReadProblem says why command may not be read from a device to propose a
+// rule (a secret, Status, a command that acts when sent bare, a name the rule
+// parser refuses), or nil. It is the rule parser's own command check with a
+// placeholder expected value, so a refused command never leaves the server.
+func ReadProblem(command string) error {
+	if !commandRe.MatchString(command) {
+		return errors.New("not a valid command name")
+	}
+	return commandProblem(command, "0")
 }

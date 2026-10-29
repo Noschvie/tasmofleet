@@ -1196,6 +1196,19 @@ no change. Ids that were `r1`...`rN` at the upgrade keep that form for good and 
 version diff: it matches rules by id only for real (non-position) ids and by name otherwise, so a rename
 of such a rule shows as removed plus added.
 
+One evaluation: `policy.Outcomes` judges every enabled rule against every device in its scope and
+returns one outcome per pair: Match, Deviate, Unknown, Shadowed (a higher rule on the same command
+is the one evaluated; the outcome names it) or Excepted (the device is exempt; an excepted rule does
+not claim the command). `policy.Check` is the Deviate and Unknown outcomes as findings, so Make
+compliant and the page counts cannot disagree. `policy.Tally` and `policy.FleetTally` derive the
+per-rule and fleet numbers: a device is Deviating with at least one Deviate, Not judged with an
+Unknown and no Deviate, Compliant with no Required rule deviating or unknown. `PolicyService.Evaluate`
+judges a draft rule list from cached values (no device call). `PolicyService.ReadValue` reads one
+setting of one device to start a rule from it: a command refused by `policy.ReadProblem` or
+`settings.Queryable` is never sent; a live read falls back to the newest decoded backup only for
+commands a backup holds (`policy.BackupReadable`); a value with credentials or one that cannot be an
+expected value is refused; the audit entry `policy.copy` names device and command, never the value.
+
 ### 14.5 Notifications
 
 `notify.Notifier` implementations for a webhook (e.g. a Home Assistant webhook trigger)

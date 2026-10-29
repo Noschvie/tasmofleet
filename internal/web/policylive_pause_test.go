@@ -105,7 +105,7 @@ func TestPolicyLivePauseNeedsAdmin(t *testing.T) {
 }
 
 // pausePolicy has one rule, so the page draws its live-check line.
-type pausePolicy struct{}
+type pausePolicy struct{ noEval }
 
 func (pausePolicy) Report(context.Context, string, bool) (PolicyReport, error) {
 	return PolicyReport{Rules: []policy.Rule{{Command: "SaveData", Want: "0"}}}, nil
@@ -152,7 +152,7 @@ func TestPolicyLiveLineShowsThePause(t *testing.T) {
 }
 
 // failingPolicy cannot build its report.
-type failingPolicy struct{}
+type failingPolicy struct{ noEval }
 
 func (failingPolicy) Report(context.Context, string, bool) (PolicyReport, error) {
 	return PolicyReport{}, errors.New("the device list could not be read")
