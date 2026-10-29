@@ -143,6 +143,9 @@ func newDevice(f *fleet, spec DeviceSpec, def profileDef, c *capture) (*simDevic
 	for k, v := range spec.Settings {
 		d.persisted.kv[strings.ToLower(k)] = v
 	}
+	for i, n := range spec.FriendlyNames {
+		d.persisted.kv["friendlyname"+strconv.Itoa(i+1)] = n
+	}
 	d.runtime = d.persisted.clone()
 	d.uptimeBase = capturedInt(c, "state.json", `"UptimeSec":(\d+)`)
 	d.bootAt = time.Now()

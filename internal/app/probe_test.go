@@ -284,7 +284,7 @@ func TestReadNetTakesTheEthernetAddressWhenWifiHasNone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := model.NetFacts{Hostname: "tasmota-2BE970-eth", IP: "192.168.7.139", Gateway: "192.168.7.1", Wired: true, ReadAt: p.Now()}
+	want := model.NetFacts{Hostname: "tasmota-2BE970-eth", IP: "192.168.7.139", Gateway: "192.168.7.1", Subnet: "255.255.255.0", DNS: "192.168.7.1", Wired: true, ReadAt: p.Now()}
 	if d.Net != want {
 		t.Fatalf("Net = %+v, want %+v (no SSID: Status 11's Wi-Fi block is not this device's link)", d.Net, want)
 	}

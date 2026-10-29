@@ -49,6 +49,14 @@ type Device struct {
 	// prober only. The zero value means "never read".
 	Net NetFacts
 
+	// OTAURL is the OtaUrl the device would update from (Status 1), without any credentials in it;
+	// "" when never read or unset. Written by the prober only.
+	OTAURL string
+	// RelayNames are the FriendlyNames of the device (plain Status), one per relay, as reported
+	// (Tasmota's defaults "Tasmota", "Tasmota2" included). Nil when never read. Written by the
+	// prober only.
+	RelayNames []string
+
 	// DeviceName is the Tasmota DeviceName the device reported at the last probe ("" when never
 	// read), written by the prober only. Name follows it while Name is still the DeviceName
 	// recorded before; a Name set by hand differs from it (#125).
@@ -151,8 +159,11 @@ func (i Identity) Known() bool {
 // fields are unknown (a wired board has no SSID).
 type NetFacts struct {
 	Hostname, IP, Gateway string
-	SSID, BSSID           string
-	Channel               int
+	// Subnet is the subnet mask and DNS the set DNS servers ("a, b") of the active interface,
+	// "" when the device reports none (0.0.0.0).
+	Subnet, DNS string
+	SSID, BSSID string
+	Channel     int
 	// Wired is true when the device is on Ethernet: its Wi-Fi station has no address and Status 5
 	// reports an Ethernet object with one. Hostname, IP and Gateway are then the Ethernet ones.
 	Wired  bool

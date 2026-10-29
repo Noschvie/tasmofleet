@@ -15,19 +15,33 @@ import (
 const deviceCols = `id, name, address, port, mac, topic, full_topic, tags, notes, http_user, http_password,
 	ota_excluded, mqtt_capability, chip_family, hardware, single_core, fw_version, fw_image, fw_variant,
 	fw_language, flash_size_kb, program_flash_kb, free_kb, identity_at, created_at, updated_at, mqtt_host, mqtt_port,
-	net_hostname, net_ip, net_gateway, net_ssid, net_bssid, net_channel, net_wired, net_at, device_name, device_name_kept`
+	net_hostname, net_ip, net_gateway, net_ssid, net_bssid, net_channel, net_wired, net_at, device_name, device_name_kept,
+	net_subnet, net_dns, ota_url, relay_names`
+
+// relayNamesJSON is the stored form of relay names (a JSON array like tags); "" for none.
+func relayNamesJSON(names []string) string {
+	if len(names) == 0 {
+		return ""
+	}
+	b, err := json.Marshal(names)
+	if err != nil { // a []string always marshals
+		return ""
+	}
+	return string(b)
+}
 
 type scanner interface{ Scan(dest ...any) error }
 
 func (s *SQLite) scanDevice(r scanner) (model.Device, error) {
 	var d model.Device
-	var tags, sealed, mqtt, family string
+	var tags, sealed, mqtt, family, relayNames string
 	var excluded, single, wired int
 	var identAt, created, updated, netAt int64
 	err := r.Scan(&d.ID, &d.Name, &d.Address, &d.Port, &d.MAC, &d.Topic, &d.FullTopic, &tags, &d.Notes, &d.HTTPUser, &sealed,
 		&excluded, &mqtt, &family, &d.Identity.Hardware, &single, &d.Identity.Version, &d.Identity.Image, &d.Identity.Variant,
 		&d.Identity.Language, &d.Identity.FlashSizeKB, &d.Identity.ProgramFlashSizeKB, &d.Identity.FreeKB, &identAt, &created, &updated, &d.MQTTHost, &d.MQTTPort,
-		&d.Net.Hostname, &d.Net.IP, &d.Net.Gateway, &d.Net.SSID, &d.Net.BSSID, &d.Net.Channel, &wired, &netAt, &d.DeviceName, &d.KeptDeviceName)
+		&d.Net.Hostname, &d.Net.IP, &d.Net.Gateway, &d.Net.SSID, &d.Net.BSSID, &d.Net.Channel, &wired, &netAt, &d.DeviceName, &d.KeptDeviceName,
+		&d.Net.Subnet, &d.Net.DNS, &d.OTAURL, &relayNames)
 	if err != nil {
 		return model.Device{}, err
 	}
@@ -36,6 +50,11 @@ func (s *SQLite) scanDevice(r scanner) (model.Device, error) {
 	}
 	if len(d.Tags) == 0 {
 		d.Tags = nil
+	}
+	if relayNames != "" {
+		if err := json.Unmarshal([]byte(relayNames), &d.RelayNames); err != nil {
+			return model.Device{}, fmt.Errorf("store: device %d relay names: %w", d.ID, err)
+		}
 	}
 	if sealed != "" {
 		// Fail loud: an empty password would turn a key problem into
@@ -188,7 +207,8 @@ func (s *SQLite) CreateDevice(ctx context.Context, d model.Device) (model.Device
 		string(d.Identity.Family), d.Identity.Hardware, b2i(d.Identity.SingleCore), d.Identity.Version, d.Identity.Image,
 		d.Identity.Variant, d.Identity.Language, d.Identity.FlashSizeKB, d.Identity.ProgramFlashSizeKB, d.Identity.FreeKB,
 		toMS(d.Identity.DetectedAt), created, toMS(now), d.MQTTHost, d.MQTTPort,
-		d.Net.Hostname, d.Net.IP, d.Net.Gateway, d.Net.SSID, d.Net.BSSID, d.Net.Channel, b2i(d.Net.Wired), toMS(d.Net.ReadAt))
+		d.Net.Hostname, d.Net.IP, d.Net.Gateway, d.Net.SSID, d.Net.BSSID, d.Net.Channel, b2i(d.Net.Wired), toMS(d.Net.ReadAt),
+		d.Net.Subnet, d.Net.DNS, d.OTAURL, relayNamesJSON(d.RelayNames))
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
@@ -197,8 +217,8 @@ func (s *SQLite) CreateDevice(ctx context.Context, d model.Device) (model.Device
 	res, err := tx.ExecContext(ctx, `INSERT INTO devices (name, address, port, mac, topic, full_topic, tags, notes,
 		http_user, http_password, ota_excluded, mqtt_capability, chip_family, hardware, single_core, fw_version, fw_image,
 		fw_variant, fw_language, flash_size_kb, program_flash_kb, free_kb, identity_at, created_at, updated_at, mqtt_host, mqtt_port,
-		net_hostname, net_ip, net_gateway, net_ssid, net_bssid, net_channel, net_wired, net_at)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, args...)
+		net_hostname, net_ip, net_gateway, net_ssid, net_bssid, net_channel, net_wired, net_at, net_subnet, net_dns, ota_url, relay_names)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, args...)
 	if err != nil {
 		return 0, mapErr(err)
 	}
@@ -288,6 +308,12 @@ type ProbeResult struct {
 	// SetNet is false when the probe read no network facts: the stored ones are kept.
 	SetNet bool
 	Net    model.NetFacts
+	// SetOTAURL is false when the probe did not read Status 1 (minimal firmware, a failed or
+	// unusable reply): the stored OTAURL is then kept. OTAURL has no credentials in it.
+	SetOTAURL bool
+	OTAURL    string
+	// RelayNames are the FriendlyNames the probe read; empty (not read) keeps the stored ones.
+	RelayNames []string
 	// DeviceName is the device's Tasmota DeviceName, "" when the probe did not read it. It is
 	// recorded, and the stored name follows it while the name is still the DeviceName recorded at
 	// the previous probe, or NameFrom (#91). Any other name was chosen by the user and is kept.
@@ -326,6 +352,7 @@ var ErrMACInUse = fmt.Errorf("%w: the MAC belongs to another device", ErrConflic
 // "ours" when the probe only finds "other" (messages seen beat name matching).
 func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuard, r ProbeResult) error {
 	i := r.Identity
+	relayNames := relayNamesJSON(r.RelayNames)
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -344,6 +371,10 @@ func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuar
 		net_channel = CASE WHEN ?=0 THEN net_channel ELSE ? END,
 		net_wired = CASE WHEN ?=0 THEN net_wired ELSE ? END,
 		net_at = CASE WHEN ?=0 THEN net_at ELSE ? END,
+		net_subnet = CASE WHEN ?=0 THEN net_subnet ELSE ? END,
+		net_dns = CASE WHEN ?=0 THEN net_dns ELSE ? END,
+		ota_url = CASE WHEN ?=0 THEN ota_url ELSE ? END,
+		relay_names = CASE WHEN ?='' THEN relay_names ELSE ? END,
 		`+followNameSQL+`
 		topic = CASE WHEN ?='' OR topic=? THEN topic
 			WHEN NOT EXISTS (SELECT 1 FROM devices o WHERE o.topic=? AND o.id<>devices.id) THEN ?
@@ -356,6 +387,7 @@ func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuar
 		b2i(r.SetMQTT), r.MQTTHost, b2i(r.SetMQTT), r.MQTTPort,
 		b2i(r.SetNet), r.Net.Hostname, b2i(r.SetNet), r.Net.IP, b2i(r.SetNet), r.Net.Gateway, b2i(r.SetNet), r.Net.SSID,
 		b2i(r.SetNet), r.Net.BSSID, b2i(r.SetNet), r.Net.Channel, b2i(r.SetNet), b2i(r.Net.Wired), b2i(r.SetNet), toMS(r.Net.ReadAt),
+		b2i(r.SetNet), r.Net.Subnet, b2i(r.SetNet), r.Net.DNS, b2i(r.SetOTAURL), r.OTAURL, relayNames, relayNames,
 		r.DeviceName, r.DeviceName, r.NameFrom, r.NameFrom, r.DeviceName, r.DeviceName, r.DeviceName,
 		r.DeviceTopic, r.DeviceTopic, r.DeviceTopic, r.DeviceTopic, r.DeviceTopic, r.DeviceTopic,
 		toMS(s.now()), id, g.Address, g.Port, strings.ToLower(g.MAC))
@@ -468,8 +500,8 @@ func (s *SQLite) UpdateIdentityFromMQTT(ctx context.Context, id model.DeviceID, 
 // began is left alone (ErrConflict).
 func (s *SQLite) UpdateNet(ctx context.Context, id model.DeviceID, g ProbeGuard, n model.NetFacts) error {
 	res, err := s.db.ExecContext(ctx, `UPDATE devices SET net_hostname=?, net_ip=?, net_gateway=?, net_ssid=?, net_bssid=?,
-		net_channel=?, net_wired=?, net_at=? WHERE id=? AND address=? AND port=? AND mac=?`,
-		n.Hostname, n.IP, n.Gateway, n.SSID, n.BSSID, n.Channel, b2i(n.Wired), toMS(n.ReadAt), id, g.Address, g.Port, strings.ToLower(g.MAC))
+		net_channel=?, net_wired=?, net_at=?, net_subnet=?, net_dns=? WHERE id=? AND address=? AND port=? AND mac=?`,
+		n.Hostname, n.IP, n.Gateway, n.SSID, n.BSSID, n.Channel, b2i(n.Wired), toMS(n.ReadAt), n.Subnet, n.DNS, id, g.Address, g.Port, strings.ToLower(g.MAC))
 	if err != nil {
 		return mapErr(err)
 	}

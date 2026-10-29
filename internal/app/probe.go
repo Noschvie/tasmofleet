@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -85,6 +86,11 @@ type probed struct {
 	mqttPort int
 	minimal  bool
 	net      model.NetFacts // what Status 5 reported (Wi-Fi facts not included)
+	// otaURL is the OtaUrl of Status 1 with its credentials removed; readOTAURL tells whether
+	// Status 1 gave a usable answer (else the stored value is kept).
+	otaURL     string
+	readOTAURL bool
+	relayNames []string // FriendlyName array of plain Status
 }
 
 func (p *Prober) pause(ctx context.Context) error {
@@ -227,12 +233,20 @@ func (p *Prober) probe(ctx context.Context, d model.Device, verify func(probed) 
 	if out.mqtt != model.MQTTNone && p.mqttSwitchedOff(ctx, t) {
 		out.mqtt = model.MQTTNone
 	}
+	// Status 1 (read-only, once per refresh, never the OtaUrl command) for the OTA URL. Best
+	// effort: a failed or unusable answer keeps the stored value.
+	if raw, err := p.cmd(ctx, t, "Status 1"); err == nil {
+		out.otaURL, out.readOTAURL = parseOtaURL(raw)
+	}
 	// Plain "Status" (not "Status 0") is the Status object only: DeviceName and the topic the
 	// device actually uses. The "Topic" command would return the setting with its placeholders
 	// ("tasmota_%06X") unresolved, and nothing on the bus ever matches that.
 	if raw, err := p.cmd(ctx, t, "Status"); err == nil {
 		var s struct {
-			Status struct{ DeviceName, Topic string }
+			Status struct {
+				DeviceName, Topic string
+				FriendlyName      []string
+			}
 		}
 		if json.Unmarshal(raw, &s) == nil {
 			// Both come from the device: only a usable topic is taken, a name is cleaned.
@@ -240,9 +254,52 @@ func (p *Prober) probe(ctx context.Context, d model.Device, verify func(probed) 
 				out.topic = s.Status.Topic
 			}
 			out.devName = inventory.CleanName(s.Status.DeviceName)
+			out.relayNames = relayNames(s.Status.FriendlyName)
 		}
 	}
 	return out, nil
+}
+
+// maxRelayNames bounds the stored FriendlyName array (Tasmota has at most 8 relays).
+const maxRelayNames = 8
+
+// relayNames cleans the FriendlyName array of Status; nil when there is no usable name.
+func relayNames(in []string) []string {
+	var out []string
+	for i, n := range in {
+		if i == maxRelayNames {
+			break
+		}
+		out = append(out, inventory.CleanName(n))
+	}
+	for _, n := range out {
+		if n != "" {
+			return out
+		}
+	}
+	return nil
+}
+
+// parseOtaURL reads the OtaUrl of a Status 1 answer and removes any user:password from it. ok is
+// false when the answer has no OtaUrl key or the value is not a URL that can be cleaned safely:
+// a value that cannot be parsed is dropped, never stored raw, since it might hold credentials.
+func parseOtaURL(raw json.RawMessage) (clean string, ok bool) {
+	var s struct {
+		StatusPRM *struct{ OtaUrl *string }
+	}
+	if json.Unmarshal(raw, &s) != nil || s.StatusPRM == nil || s.StatusPRM.OtaUrl == nil {
+		return "", false
+	}
+	v := strings.TrimSpace(*s.StatusPRM.OtaUrl)
+	if v == "" {
+		return "", true
+	}
+	u, err := url.Parse(v)
+	if err != nil || u.Host == "" {
+		return "", false
+	}
+	u.User = nil
+	return u.String(), true
 }
 
 // mqttSwitchedOff reads SetOption3 (MQTT on/off). Any failure counts as "on":
@@ -264,15 +321,17 @@ func (p *Prober) status5(ctx context.Context, t tasmota.Target, out *probed) (mo
 	return parseStatus5(raw, out)
 }
 
-// parseStatus5 reads MAC, Ethernet MAC and hostname into out and returns the network facts.
+// parseStatus5 reads MAC, Ethernet MAC and hostname into out and returns the network facts
+// (address, gateway, subnet mask and DNS servers of the active interface).
 func parseStatus5(raw json.RawMessage, out *probed) (model.NetFacts, error) {
 	var s struct {
 		StatusNET struct {
-			Hostname  string
-			IPAddress string
-			Gateway   string
-			Mac       string
-			Ethernet  struct{ Hostname, IPAddress, Gateway, Mac string }
+			Hostname                           string
+			IPAddress                          string
+			Gateway                            string
+			Subnetmask, DNSServer1, DNSServer2 string
+			Mac                                string
+			Ethernet                           struct{ Hostname, IPAddress, Gateway, Subnetmask, DNSServer1, DNSServer2, Mac string }
 		}
 	}
 	if err := json.Unmarshal(raw, &s); err != nil {
@@ -284,15 +343,36 @@ func parseStatus5(raw json.RawMessage, out *probed) (model.NetFacts, error) {
 	}
 	out.hostname = s.StatusNET.Hostname
 	n := model.NetFacts{Hostname: s.StatusNET.Hostname, IP: s.StatusNET.IPAddress, Gateway: s.StatusNET.Gateway}
+	n.Subnet, n.DNS = netMask(s.StatusNET.Subnetmask), dnsServers(s.StatusNET.DNSServer1, s.StatusNET.DNSServer2)
 	// An Ethernet build whose Wi-Fi station has no address (0.0.0.0) is wired: the top-level
 	// values are the idle Wi-Fi ones, the Ethernet object has the real ones.
 	if eth := s.StatusNET.Ethernet; unsetIP(n.IP) && !unsetIP(eth.IPAddress) {
 		n.Wired, n.IP, n.Gateway = true, eth.IPAddress, eth.Gateway
+		n.Subnet, n.DNS = netMask(eth.Subnetmask), dnsServers(eth.DNSServer1, eth.DNSServer2)
 		if eth.Hostname != "" {
 			n.Hostname = eth.Hostname
 		}
 	}
 	return n, nil
+}
+
+// netMask is a subnet mask as reported, "" when unset.
+func netMask(m string) string {
+	if unsetIP(m) {
+		return ""
+	}
+	return m
+}
+
+// dnsServers joins the DNS servers a device has set ("a, b"); an unset one (0.0.0.0) is left out.
+func dnsServers(servers ...string) string {
+	var set []string
+	for _, s := range servers {
+		if !unsetIP(s) {
+			set = append(set, s)
+		}
+	}
+	return strings.Join(set, ", ")
 }
 
 // withStoredWifi completes the facts of a Status 5 read with the Wi-Fi facts stored earlier
@@ -426,6 +506,7 @@ func (p *Prober) Refresh(ctx context.Context, id model.DeviceID, actor string) e
 		res.Identity.FlashSizeKB, res.Identity.ProgramFlashSizeKB, res.Identity.FreeKB = d.Identity.FlashSizeKB, d.Identity.ProgramFlashSizeKB, d.Identity.FreeKB
 	} else {
 		res.DeviceName, res.DeviceTopic, res.NameFrom = pr.devName, pr.topic, fallbackName(d, pr)
+		res.SetOTAURL, res.OTAURL, res.RelayNames = pr.readOTAURL, pr.otaURL, pr.relayNames
 		res.SetNet, res.Net = true, p.withStoredWifi(d.Net, pr.net)
 		if d.MAC == "" && actor != "" && bindable(pr.mac) {
 			res.BindMACs = []string{pr.mac}

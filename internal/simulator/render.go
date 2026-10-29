@@ -1,6 +1,7 @@
 package simulator
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -72,6 +73,9 @@ func (d *simDevice) render(file string, v view) []byte {
 		s = strings.NewReplacer(pairs...).Replace(s)
 	}
 	s = d.applySettings(s, v.kv)
+	if file == "status-5.json" && d.spec.Wired {
+		s = d.wiredStatus5(s)
+	}
 	if d.f.x.Verbatim {
 		return []byte(s)
 	}
@@ -137,4 +141,28 @@ func powerMask(relays []bool) uint64 {
 		}
 	}
 	return m
+}
+
+var reStatusNET = regexp.MustCompile(`"StatusNET":\{[^}]*`)
+
+// wiredStatus5 turns the captured Status 5 into an Ethernet board's: the Wi-Fi values at the top
+// level stay unset and the "Ethernet" object carries the active interface (own MAC, as on a
+// board with both).
+func (d *simDevice) wiredStatus5(s string) string {
+	m := reStatusNET.FindString(s)
+	if m == "" {
+		return s
+	}
+	eth := strings.NewReplacer(`"Mac":"`+d.mac+`"`, `"Mac":"`+d.ethMAC()+`"`).Replace(m)
+	idle := m
+	for _, k := range []string{"IPAddress", "Gateway", "Subnetmask", "DNSServer1"} {
+		idle = regexp.MustCompile(`"`+k+`":"[^"]*"`).ReplaceAllString(idle, `"`+k+`":"0.0.0.0"`)
+	}
+	return strings.Replace(s, m, idle+`,"Ethernet":{`+strings.TrimPrefix(eth, `"StatusNET":{`)+`}`, 1)
+}
+
+// ethMAC is the Ethernet MAC of a wired device, different from its Wi-Fi MAC.
+func (d *simDevice) ethMAC() string {
+	sum := sha256.Sum256([]byte(d.spec.Name))
+	return fmt.Sprintf("02:00:5E:%02X:%02X:%02X", sum[3], sum[4], sum[5])
 }

@@ -258,7 +258,7 @@ data directory (TasmoAdmin lesson A4).
   Redirects are not followed.
 - **`Status 0` is never sent by automated code.** It returns 12 sections at once; on ESP8266
   with <20 kB heap this produced spliced, undecodable payloads in this fleet. Identity
-  probing uses `Status 2`, `Status 4`, `Status 5`, `Status 6`, `Status 11` and plain `Status` (the
+  probing uses `Status 1`, `Status 2`, `Status 4`, `Status 5`, `Status 6`, `Status 11` and plain `Status` (the
   Status object only: DeviceName and the resolved Topic), one at a time, ≥200 ms apart.
 - Minimal firmware (SRC): only `Upgrade`, `Upload`, `OtaUrl`, `SerialLog`, `Restart`
   exist; everything else is Unknown. The running version comes from bare `Upgrade`
@@ -299,8 +299,13 @@ data directory (TasmoAdmin lesson A4).
   boot only; a device on a stale one is corrected by its next boot or its HTTP probe.
 - **Refresh identity (#91, #65).** `Prober.Refresh(ctx, id, actor)` re-reads and stores every
   identity field: firmware, build, chip, hardware and flash (Status 2/4, `GET /`), the network
-  facts of Status 5 (hostname, IP, gateway; Wi-Fi from Status 11 follows in the background),
-  MQTT broker (Status 6, SetOption3), and DeviceName and resolved topic (plain `Status`).
+  facts of Status 5 (hostname, IP, gateway, subnet mask, DNS servers; Wi-Fi from Status 11 follows
+  in the background), MQTT broker (Status 6, SetOption3), the OTA URL (one read-only `Status 1`, best
+  effort, never the `OtaUrl` command; credentials in the URL are stripped before it is stored, a value
+  that cannot be parsed is dropped) and DeviceName, resolved topic and relay names (the FriendlyName
+  array) from plain `Status`. Subnet, DNS, OTA URL and relay names are stored on the device
+  (migration 0031: `net_subnet`, `net_dns`, `ota_url`, `relay_names`); minimal firmware and a failed
+  `Status 1` keep the stored values.
   _MAC first:_ the probe sends `Status 5` first, without credentials, and compares the MAC
   (Wi-Fi or Ethernet) with the stored set before any other command. A device that answers it
   without credentials has no web password, and the whole probe runs without them; only a 401

@@ -403,7 +403,7 @@ func (d *simDevice) applySettings(s string, kv map[string]string) string {
 	if reFriendly.MatchString(s) {
 		var names []string
 		n := len(reFriendlyN.FindAllString(string(reFriendly.Find(d.cap.files["status-0.json"])), -1)) - 1
-		for i := 1; i <= max(n, 1); i++ {
+		for i := 1; i <= max(n, len(d.spec.FriendlyNames), 1); i++ {
 			names = append(names, jsonString(d.settingFrom(kv, "friendlyname"+strconv.Itoa(i))))
 		}
 		s = reFriendly.ReplaceAllLiteralString(s, `"FriendlyName":[`+strings.Join(names, ",")+`]`)

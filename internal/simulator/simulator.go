@@ -98,6 +98,12 @@ type DeviceSpec struct {
 	// "HTTP: Referer '' denied. Use 'SO128 1' ..."). The zero value is
 	// SetOption128 1, which is what the existing tests assume.
 	RefererCheck bool
+	// Wired makes the device an Ethernet board: Status 5 reports the Wi-Fi station idle
+	// (0.0.0.0) and the real address, gateway, subnet mask, DNS and MAC in "Ethernet".
+	Wired bool
+	// FriendlyNames are the device's FriendlyName1..n (one per relay), as plain Status and
+	// Status 0 report them. Nil keeps the capture's single name.
+	FriendlyNames []string
 }
 
 // Device is a running simulated device.
