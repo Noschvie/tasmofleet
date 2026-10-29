@@ -100,20 +100,24 @@ func (h *handler) ruleStats(ctx context.Context, src ruleList, spec sysconfig.Ru
 	}
 	var rules []policy.Rule
 	if h.d.PolicyRules != nil {
-		var err error
-		rules, err = h.d.PolicyRules.Validate(list)
-		var re *sysconfig.RuleError
-		switch {
-		case errors.As(err, &re) && re.Index == pos:
-			if field, text := ruleProblem(re.Msg); field == "command" {
-				return ruleStat{Err: text}, nil // the reason, not the validator's sentence
+		// A rule that does not validate is left out of the evaluation, so the page of a valid rule
+		// still works when another stored rule is broken. When the broken one is this rule, say why.
+		valid, _, bad := h.d.PolicyRules.ValidRules(list)
+		dropped := 0
+		for _, re := range bad {
+			switch {
+			case re.Index < 0:
+				return ruleStat{Err: re.Error()}, nil
+			case re.Index == pos:
+				if field, text := ruleProblem(re.Msg); field == "command" {
+					return ruleStat{Err: text}, nil // the reason, not the validator's sentence
+				}
+				return ruleStat{Err: re.Msg}, nil
+			case re.Index < pos:
+				dropped++
 			}
-			return ruleStat{Err: re.Msg}, nil
-		case errors.As(err, &re):
-			return ruleStat{Err: "Another saved rule is invalid: " + re.Error()}, nil
-		case err != nil:
-			return ruleStat{}, err
 		}
+		rules, pos = valid, pos-dropped
 	} else {
 		rules = slices.Clone(src.rep.Rules)
 		rules[pos].Disabled = false
@@ -352,6 +356,10 @@ func (h *handler) rulePageRender(w http.ResponseWriter, r *http.Request, status 
 		h.fail(w, r, err)
 		return
 	}
+	if o.ErrMsg != "" && stat.Err != "" {
+		// The refused save already says what is wrong at its field: the devices card does not repeat it.
+		stat = ruleStat{Hint: "Fix the rule above to see which devices it would judge."}
+	}
 	name := ruleName(spec)
 	if spec.Command == "" {
 		name = "New rule"
@@ -394,6 +402,9 @@ func (h *handler) rulePageRender(w http.ResponseWriter, r *http.Request, status 
 		if !draft {
 			p.DeleteText = "It currently judges " + plural(stat.Applies, "device") + ". They stop being checked for " + spec.Command +
 				". The change is saved as a new version you can revert to."
+			if spec.Disabled {
+				p.DeleteText = "It is disabled and judges no device. The change is saved as a new version you can revert to."
+			}
 		}
 	} else {
 		p.KV = ruleKV(spec)

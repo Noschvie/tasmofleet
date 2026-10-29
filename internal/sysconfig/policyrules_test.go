@@ -400,3 +400,29 @@ func TestImportLegacyWithIDClashingPositionID(t *testing.T) {
 		t.Fatalf("exactly one rule may hold r1: %s", cur.Rules)
 	}
 }
+
+// Why: one bad rule must not make the fleet look compliant. A legacy list holds SetOption0 = 7 (the
+// editor's value check refuses it) between two valid rules: Active keeps the valid ones and names
+// the bad one, and ValidRules maps each dropped rule back to its position in the stored list.
+func TestValidRulesDropsOnlyTheBadRule(t *testing.T) {
+	r, st, _ := newRules("", nil)
+	legacyVersion(st, `[{"name":"A","command":"SaveData","want":"0"},{"name":"Bad","command":"SetOption0","want":"7"},{"name":"C","command":"Timezone","want":"99"},{"name":"Bad2","command":"SetOption0","want":"9"}]`)
+	state, err := r.State(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	rules, kept, bad := r.ValidRules(state.Specs)
+	if len(rules) != 2 || len(kept) != 2 || rules[0].Name != "A" || rules[1].Name != "C" || kept[1].ID != "r3" {
+		t.Fatalf("valid rules: %+v kept %+v", rules, kept)
+	}
+	if len(bad) != 2 || bad[0].Index != 1 || bad[1].Index != 3 || !strings.Contains(bad[0].Msg, "0 or 1") {
+		t.Fatalf("bad: %+v", bad)
+	}
+	active, err := r.Active(context.Background())
+	if len(active) != 2 || err == nil || !strings.Contains(err.Error(), "rule 2") || !strings.Contains(err.Error(), "rule 4") {
+		t.Fatalf("Active: %d rules, err %v (valid rules with the bad ones named)", len(active), err)
+	}
+	if _, _, bad := r.ValidRules([]RuleSpec{flash}); len(bad) != 0 {
+		t.Fatalf("a valid list has nothing bad: %+v", bad)
+	}
+}

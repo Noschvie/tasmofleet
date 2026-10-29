@@ -242,7 +242,7 @@ func TestPolicyPage(t *testing.T) {
 	}
 	// One Required rule over three devices: kitchen deviates, attic matches, cellar cannot be
 	// judged. "Unknown" must never count as compliant, so only attic is compliant.
-	for _, want := range []string{"SetOption0 = 0", "Chip family: ESP8266 · 3", "1 / 3 · 1 deviate · 1 ?", "kitchen", "last run 1m ago",
+	for _, want := range []string{"SetOption0 = 0", "Chip family: ESP8266 · 3", "1 / 3 · 1 deviate · 1 ?", "kitchen", "1 min ago",
 		`data-tile="compliant"`, `1 / 3</div>`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("missing %q in %s", want, body)

@@ -35,8 +35,9 @@ type policyHead struct {
 
 const policySub = "Settings every device should have. Nothing is written automatically."
 
-// policyHead builds the shared header from the specs and the report of the page.
-func (h *handler) policyHead(v view, specs []sysconfig.RuleSpec, rep PolicyReport, repErr error) policyHead {
+// policyHead builds the shared header from the valid specs (invalid: how many stored rules were left
+// out) and the report of the page.
+func (h *handler) policyHead(v view, specs []sysconfig.RuleSpec, invalid int, rep PolicyReport, repErr error) policyHead {
 	p := policyHead{Base: v.Base, CSRF: v.CSRF, Admin: v.IsAdmin, CanRules: h.d.PolicyRules != nil}
 	disabled := 0
 	for _, s := range specs {
@@ -46,6 +47,9 @@ func (h *handler) policyHead(v view, specs []sysconfig.RuleSpec, rep PolicyRepor
 	}
 	n := strconv.Itoa
 	rules := fleetTile{Key: "rules", Label: "Rules", Value: n(len(specs)), Sub: n(len(specs)-disabled) + " enabled · " + n(disabled) + " disabled"}
+	if invalid > 0 {
+		rules.Sub += " · " + n(invalid) + " invalid" // not counted above: they are not evaluated
+	}
 	if repErr != nil {
 		dash := func(key, label string) fleetTile {
 			return fleetTile{Key: key, Label: label, Value: "–", Sub: "needs the live check"}

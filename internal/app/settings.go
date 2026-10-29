@@ -31,9 +31,9 @@ func (a *runtime) setupSettings() error {
 	a.rules = newRulesService(a.svc, rep.Preview, rep.setRules)
 	rules, err := a.rules.Active(a.bgContext)
 	if err != nil {
-		// Rules that were valid when saved can only fail here after a code change;
-		// the report then shows no rules and says so in the log.
-		a.log.Error("stored policy rules ignored", "err", err)
+		// Rules that were valid when saved can only fail here after a code change (or came from
+		// an older, laxer import); those are left out and named here, the valid ones still apply.
+		a.log.Error("stored policy rules partly ignored", "err", err)
 	}
 	rep.setRules(rules)
 	a.importLegacyPolicy()

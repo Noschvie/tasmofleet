@@ -21,6 +21,7 @@ always upgrade automatically.
 
 ### Fixed
 
+- One stored policy rule that no longer passes validation (a value from an older, laxer import) no longer switches every rule off: it is flagged on the Policy page ("invalid: …") and left out of the counts, and the other rules keep working (#197)
 - Backups: when "Back up now" is refused by the 5-minute cooldown, the message says when the last backup was taken ("Last backup 4 min 40 s ago; a new one is possible in 20 s"), also after that backup was deleted (#208, thanks @Noschvie)
 - Downloaded backups keep umlauts and other letters of the device name (`Küche-....dmp`): the header carries an ASCII fallback and the RFC 5987 `filename*`, and a hostile name cannot inject headers (#208, thanks @Noschvie)
 - The Download and Delete buttons of a backup row have their borders again, like the other buttons (#208, thanks @Noschvie)

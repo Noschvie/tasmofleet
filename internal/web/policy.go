@@ -141,6 +141,9 @@ type ruleRow struct {
 	Applied                 int    // devices the rule is evaluated for
 	Text                    string // "17 / 18 · 1 deviate · 2 ?"
 	Delete                  string // the delete dialog's body
+	// Invalid is why the stored rule no longer validates ("" when it does). Such a rule is not
+	// evaluated: it is flagged on its row and left out of the tiles.
+	Invalid string
 }
 
 // versionRow is one entry of the version list (temporary, until the History tab).
@@ -228,6 +231,20 @@ func (h *handler) policyData(r *http.Request, v view, o policyOpts) (policyView,
 	p.HasRules = len(st.Specs) > 0
 	editable := p.Admin && p.CanRules
 
+	// A stored rule that no longer validates (a legacy value the stricter checks refuse) is flagged
+	// on its row and left out of everything that is counted: one bad rule must not make the fleet
+	// look compliant, and must not hide the others.
+	valid, invalid := st.Specs, map[string]string{}
+	if p.CanRules && p.HasRules {
+		var bad []*sysconfig.RuleError
+		_, valid, bad = h.d.PolicyRules.ValidRules(st.Specs)
+		for _, re := range bad {
+			if re.Index >= 0 && re.Index < len(st.Specs) {
+				invalid[st.Specs[re.Index].ID] = re.Msg
+			}
+		}
+	}
+
 	// Conflicts between rules come from the preview (backups and recent reads; it reads no
 	// device). A failed preview leaves them out, never the list.
 	names := make([]string, len(st.Specs))
@@ -235,10 +252,14 @@ func (h *handler) policyData(r *http.Request, v view, o policyOpts) (policyView,
 		names[i] = ruleName(s)
 	}
 	if p.CanRules && p.HasRules {
-		if pr, err := h.d.PolicyRules.Preview(ctx, st.Specs); err == nil {
+		validNames := make([]string, len(valid))
+		for i, s := range valid {
+			validNames[i] = ruleName(s)
+		}
+		if pr, err := h.d.PolicyRules.Preview(ctx, valid); err == nil && len(valid) > 0 {
 			for _, c := range pr.Conflicts {
-				if c.Higher < len(names) && c.Lower < len(names) {
-					p.Conflicts = append(p.Conflicts, conflictText(names[c.Higher], names[c.Lower], c))
+				if c.Higher < len(validNames) && c.Lower < len(validNames) {
+					p.Conflicts = append(p.Conflicts, conflictText(validNames[c.Higher], validNames[c.Lower], c))
 				}
 			}
 		}
@@ -258,17 +279,21 @@ func (h *handler) policyData(r *http.Request, v view, o policyOpts) (policyView,
 			Required: s.Severity != policy.SeverityInfo, Severity: policy.SeverityLabel(s.Severity),
 			Disabled: s.Disabled, First: i == 0, Last: i == len(st.Specs)-1,
 		}
-		if t, ok := tally[s.ID]; ok && !s.Disabled {
+		row.Invalid = invalid[s.ID]
+		if t, ok := tally[s.ID]; ok && !s.Disabled && row.Invalid == "" {
 			row.Counted, row.Match, row.Deviate, row.Unknown, row.Applied = true, t.Match, t.Deviate, t.Unknown, t.Applies()
 			row.Applies += " · " + strconv.Itoa(t.Applies())
 			row.Text = complianceText(t)
 		}
 		row.Delete = "It currently judges " + plural(row.Applied, "device") + ". They stop being checked for " + s.Command +
 			". The change is saved as a new version you can revert to."
+		if s.Disabled {
+			row.Delete = "It is disabled and judges no device. The change is saved as a new version you can revert to."
+		}
 		p.Rows = append(p.Rows, row)
 	}
 
-	p.Head = h.policyHead(v, st.Specs, rep, repErr)
+	p.Head = h.policyHead(v, valid, len(invalid), rep, repErr)
 	p.Head.HasVersions = len(st.History) > 0
 	p.Head.Show = p.HasRules || p.Head.HasVersions
 	p.Head.Tabs = policyTabs(v.Base, "rules", len(st.Specs))
@@ -496,25 +521,45 @@ func (h *handler) liveLine(rep PolicyReport, repErr error, admin bool) *liveLine
 			return l
 		}
 	}
+	every := ""
 	switch iv := h.liveInterval(); iv {
 	case "":
 		l.Value = "Running"
 	case "0", "0s":
 		l.Value = "Manual"
+		every = "manual"
 	default:
-		l.Value = "Every " + iv
+		l.Value = "Running"
+		every = intervalWord(iv)
 	}
 	parts := []string{}
-	if last.IsZero() {
+	if every != "" {
+		parts = append(parts, every)
+	}
+	switch {
+	case last.IsZero():
 		parts = append(parts, "no device read yet")
-	} else {
-		parts = append(parts, "last run "+agoWords(now, last))
+	case now.Sub(last) < time.Minute:
+		parts = append(parts, "just now")
+	default:
+		parts = append(parts, shortDuration(now.Sub(last))+" ago")
 	}
 	if rep.LiveThrottled {
 		parts = append(parts, "the check ran recently, these are its results")
 	}
 	l.Sub = strings.Join(parts, " · ")
 	return l
+}
+
+// intervalWord says the check's interval the way the tile reads it: "hourly", "daily", else "every 10 min".
+func intervalWord(iv string) string {
+	switch iv {
+	case "1 h":
+		return "hourly"
+	case "24 h":
+		return "daily"
+	}
+	return "every " + iv
 }
 
 // liveInterval is the configured interval of the automatic live check ("1h", "10m"), "" when

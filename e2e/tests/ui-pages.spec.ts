@@ -264,7 +264,7 @@ for (const m of modes) {
     await look("policy");
     // a live check, the rule menu, the Make compliant dialog and its page without JavaScript
     await page.getByRole("button", { name: "Run now" }).click();
-    await expect(page.locator("#live-tile")).toContainText("last run", { timeout: 60_000 });
+    await expect(page.locator("#live-tile")).toContainText(/ago|just now/, { timeout: 60_000 });
     await look("policy-checked");
     await page.getByLabel(/^Actions for/).first().click();
     await look("policy-rulemenu");

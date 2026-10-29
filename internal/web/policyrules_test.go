@@ -364,12 +364,11 @@ func TestPolicyRulesInvalidDraftShowsErrorAtTheRule(t *testing.T) {
 			t.Errorf("%s: %d", name, r.StatusCode)
 			continue
 		}
-		// The Rule card says it once; the Devices card next to it repeats it as its own hint.
-		if n := strings.Count(body[:strings.Index(body, `id="rule-devices"`)], `role="alert"`); n != 1 {
-			t.Errorf("%s: the problem must be shown once in the rule card, got %d alerts", name, n)
+		if n := strings.Count(body, `role="alert"`); n != 1 {
+			t.Errorf("%s: the problem must be shown once, got %d alerts", name, n)
 		}
 		ed := body[strings.Index(body, `id="rule-form"`):]
-		if !strings.Contains(ed, `role="alert"`) || !strings.Contains(ed, `name="id" value="`+second+`"`) || !strings.Contains(ed, `value="Flash wear"`) {
+		if !strings.Contains(body, `role="alert"`) || !strings.Contains(ed, `name="id" value="`+second+`"`) || !strings.Contains(ed, `value="Flash wear"`) {
 			t.Errorf("%s: the error and the draft belong on the page of the second rule", name)
 		}
 	}

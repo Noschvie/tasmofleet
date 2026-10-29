@@ -12510,39 +12510,12 @@ a.pol-tpl {
   font: 500 13px var(--font-sans);
   color: var(--color-accent-fg);
 }
-/* three columns (cards, editor, preview); the history spans them */
-.pol-grid {
-  display: grid;
-  grid-template-columns: repeat(
-    auto-fit,
-    minmax(min(100%, max(320px, calc((100% - 28px) / 3))), 1fr)
-  );
-  gap: var(--sp-14);
-  align-items: start;
-}
 .pol-cards,
 .pol-list {
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: var(--sp-8);
-}
-.pol-card {
-  display: flex;
-  align-items: stretch;
-  border-radius: var(--r-card);
-  border: var(--hair-w) solid var(--color-border);
-  background: var(--color-surface);
-}
-.pol-card.is-sel {
-  border-color: var(--color-accent);
-  background: var(--color-accent-bg);
-}
-.pol-card.is-off {
-  background: var(--color-surface-2);
-}
-.pol-card.is-drag {
-  opacity: 0.45;
 }
 .pol-grip {
   width: 24px;
@@ -12553,39 +12526,6 @@ a.pol-tpl {
   cursor: grab;
   letter-spacing: -2px;
   font-size: 12px;
-}
-.pol-card-main {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  padding: var(--sp-12) 4px var(--sp-12) 0;
-  color: var(--color-text);
-  text-decoration: none;
-}
-.pol-card.is-off .pol-card-main {
-  color: var(--color-text-2);
-}
-.pol-card-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.pol-card-name {
-  font-weight: 600;
-}
-.pol-card-kv {
-  font: 400 12.5px var(--font-mono);
-  color: var(--color-text);
-}
-.pol-card-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 3px var(--sp-12);
-  font-size: 12px;
-  color: var(--color-text-2);
 }
 .pol-sev {
   font-weight: 500;
@@ -12613,42 +12553,8 @@ a.pol-tpl {
   color: var(--color-text);
   font-size: 12px;
 }
-.pol-card-note {
-  font-size: 12px;
-  color: var(--color-text-2);
-}
-/* the rule menu: the card's full-height "⋯" column */
-.pol-card > details.pol-menu {
-  display: flex;
-  flex: none;
-}
-.pol-card > details.pol-menu > summary {
-  width: 40px;
-  height: auto;
-  border: 0;
-  border-radius: 0 9px 9px 0;
-  background: none;
-  color: var(--color-text-2);
-  font: 600 16px var(--font-sans);
-}
-.pol-card > details.pol-menu > summary:hover,
-.pol-card > details.pol-menu[open] > summary {
-  background: var(--color-surface-3);
-  color: var(--color-text-2);
-}
 .pol-menu .menu-panel form {
   display: contents;
-}
-.pol-card > details.pol-menu > .rowmenu-body {
-  top: calc(100% + 4px);
-}
-.pol-card > details.pol-menu.up > .rowmenu-body {
-  top: auto;
-  bottom: calc(100% + 4px);
-}
-/* the editor */
-.pol-editor {
-  gap: var(--sp-12);
 }
 .pol-form {
   display: flex;
@@ -12668,16 +12574,6 @@ a.pol-tpl {
 .pol-form label.ufield-label {
   font: 500 12.5px var(--font-sans);
   color: var(--color-text-2);
-}
-.pol-pv-unk > summary {
-  min-height: 44px;
-  padding: 12px var(--sp-16);
-  font-size: 13px;
-  color: var(--color-text-2);
-  cursor: pointer;
-}
-.pol-pv-unk[open] > summary {
-  border-bottom: var(--hair-w) solid var(--color-border);
 }
 .pol-enabled {
   font-weight: 400;
@@ -12785,97 +12681,6 @@ a.pol-tpl {
   padding: 0;
   gap: 0;
   overflow: hidden;
-}
-.pol-pv-head {
-  padding: var(--sp-14) var(--sp-16);
-}
-.pol-pv-head h2 {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-8);
-  margin: 0;
-  font: 600 14px var(--font-sans);
-}
-.pol-pv-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--color-accent);
-  animation: tf-pulse 2.4s infinite;
-}
-.pol-pv-line {
-  margin-top: 6px;
-  font-size: 13px;
-  color: var(--color-text-2);
-}
-.pol-pv-line b {
-  font-weight: 600;
-  color: var(--color-text);
-}
-.pol-pv-none {
-  margin: 0;
-  padding: var(--sp-24) var(--sp-16);
-  border-top: var(--hair-w) solid var(--color-border);
-  text-align: center;
-  color: var(--color-text-2);
-  font-size: 13px;
-}
-.pol-pv-list {
-  max-height: 380px;
-  overflow: auto;
-  border-top: var(--hair-w) solid var(--color-border);
-}
-.pol-pv-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-10);
-  min-height: 44px;
-  padding: 9px var(--sp-16);
-  border-bottom: var(--hair-w) solid var(--color-border);
-  color: var(--color-text);
-  text-decoration: none;
-}
-.pol-pv-row:last-child {
-  border-bottom: 0;
-}
-.pol-pv-row:hover {
-  background: var(--color-surface-2);
-}
-.pol-pv-rdot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex: none;
-  background: var(--color-warn);
-}
-.pol-pv-row.is-hint .pol-pv-rdot,
-.pol-pv-row.is-unk .pol-pv-rdot {
-  background: var(--color-neutral);
-}
-.pol-pv-name {
-  /* a readable width: a long value wraps below the name instead of squeezing it to a letter a line */
-  flex: 1 1 10rem;
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: 13px;
-}
-.pol-pv-note {
-  display: block;
-  word-break: normal;
-  font-size: 12px;
-  color: var(--color-text-3);
-}
-.pol-pv-val {
-  font: 400 12px var(--font-mono);
-  color: var(--color-text-2);
-  min-width: 0;
-  max-width: 100%;
-  overflow-wrap: anywhere;
-}
-.pol-pv-val b {
-  font-weight: 400;
-  color: var(--color-text);
 }
 /* the version history */
 .pol-hist {

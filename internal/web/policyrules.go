@@ -29,6 +29,9 @@ type PolicyRulesService interface {
 	// Validate checks specs like Save does and returns them as policy rules (with their ids), so
 	// the rule page can evaluate a draft that is not saved.
 	Validate(specs []sysconfig.RuleSpec) ([]policy.Rule, error)
+	// ValidRules is Validate that drops each failing rule (named in bad by its position) and
+	// keeps the rest, so one broken stored rule does not hide the others.
+	ValidRules(specs []sysconfig.RuleSpec) (rules []policy.Rule, kept []sysconfig.RuleSpec, bad []*sysconfig.RuleError)
 	Save(ctx context.Context, actor, note string, specs []sysconfig.RuleSpec, rec audit.Recorder) (int64, error)
 	Revert(ctx context.Context, actor string, id int64, rec audit.Recorder) (int64, error)
 	Export(ctx context.Context) ([]byte, error)

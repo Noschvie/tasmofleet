@@ -1,12 +1,14 @@
 package web
 
 import (
+	"context"
 	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/policy"
+	"github.com/nofuturekid/tasmofleet/internal/store"
 )
 
 // tileValue is the big number of the tile data-tile=key.
@@ -150,5 +152,56 @@ func TestPolicyOverviewEnvModeIsReadOnly(t *testing.T) {
 		if strings.Contains(body, bad) {
 			t.Errorf("env mode renders %q", bad)
 		}
+	}
+}
+
+// validOnlyPolicy reports on the rules that validate (A = r1, C = r3), as the app does: the broken
+// stored rule (r2) never reaches the evaluation.
+type validOnlyPolicy struct{ noEval }
+
+func (validOnlyPolicy) Report(context.Context, string, bool) (PolicyReport, error) {
+	rules := []policy.Rule{{ID: "r1", Name: "A", Command: "SaveData", Want: "0"}, {ID: "r3", Name: "C", Command: "Timezone", Want: "99"}}
+	return PolicyReport{
+		Rules:   rules,
+		Devices: []model.Device{{ID: 1, Name: "alpha"}, {ID: 2, Name: "bravo"}},
+		Outcomes: []policy.Outcome{
+			{DeviceID: 1, RuleIndex: 0, RuleID: "r1", Kind: policy.OutcomeMatch}, {DeviceID: 2, RuleIndex: 0, RuleID: "r1", Kind: policy.OutcomeMatch},
+			{DeviceID: 1, RuleIndex: 1, RuleID: "r3", Kind: policy.OutcomeMatch}, {DeviceID: 2, RuleIndex: 1, RuleID: "r3", Kind: policy.OutcomeDeviate},
+		},
+	}, nil
+}
+
+// Why: one bad rule must not make the fleet look compliant. A legacy list holds PowerOnState = 7
+// (the editor's value check refuses it) between two valid rules. The overview flags that row and
+// counts the valid rules only; the pages of the valid rules still show their numbers instead of
+// refusing because "another saved rule is invalid".
+func TestPolicyOverviewOneBrokenRuleDoesNotHideTheOthers(t *testing.T) {
+	e, mem, _ := rulesEnvDeps(t, func(d *Deps) { d.Policy = validOnlyPolicy{} })
+	mem.vs = append(mem.vs, store.PolicyRuleVersion{ID: 1, Actor: "old",
+		Rules: `[{"name":"A","command":"SaveData","want":"0"},{"name":"Broken","command":"PowerOnState","want":"7"},{"name":"C","command":"Timezone","want":"99"}]`})
+	_, body := e.do(t, "GET", "/policy", "admin", nil)
+	if got := tileValue(t, body, "rules"); got != "2 | 2 enabled · 0 disabled · 1 invalid" {
+		t.Errorf("rules tile = %q: only the valid rules are counted, the invalid one is named", got)
+	}
+	if got := tileValue(t, body, "compliant"); !strings.HasPrefix(got, "1 / 2") {
+		t.Errorf("compliant tile = %q: bravo deviates from C", got)
+	}
+	rows := regexp.MustCompile(`(?s)<tr class[^>]*>.*?</tr>`).FindAllString(body, -1)
+	if len(rows) != 3 || !strings.Contains(rows[1], "invalid: ") || strings.Contains(rows[1], "health-bar") ||
+		!strings.Contains(rows[0], "2 / 2") || !strings.Contains(rows[2], "1 / 2 · 1 deviate") {
+		t.Fatalf("rows (the broken one flagged, the others counted):\n%s", strings.Join(rows, "\n---\n"))
+	}
+	for _, id := range []string{"r1", "r3"} {
+		_, page := e.do(t, "GET", "/policy/rules/"+id, "admin", nil)
+		if strings.Contains(page, "Another saved rule is invalid") || !strings.Contains(page, `data-tile="applies"`) {
+			t.Errorf("rule page %s must still judge its devices:\n%s", id, page)
+		}
+		if v := tileValue(t, page, "applies"); strings.HasPrefix(v, "–") {
+			t.Errorf("rule page %s shows no numbers: %q", id, v)
+		}
+	}
+	_, page := e.do(t, "GET", "/policy/rules/r2", "admin", nil)
+	if !strings.Contains(page, "one of 0, 1, 2, 3, 4, 5") {
+		t.Errorf("the broken rule's own page says why:\n%s", page)
 	}
 }

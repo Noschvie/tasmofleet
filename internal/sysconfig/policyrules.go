@@ -252,13 +252,56 @@ func (r *Rules) State(ctx context.Context) (RulesState, error) {
 	return st, err
 }
 
-// Active returns the rules the fleet check uses now, parsed and validated.
+// Active returns the rules the fleet check uses now: the stored ones that validate. A stored
+// rule that no longer validates (a legacy value the stricter checks refuse) is left out and named
+// in the returned error, which comes with the valid rules: one bad rule must not make the whole
+// fleet look compliant by dropping every rule.
 func (r *Rules) Active(ctx context.Context) ([]policy.Rule, error) {
 	st, err := r.State(ctx)
 	if err != nil || len(st.Specs) == 0 {
 		return nil, err
 	}
-	return r.Validate(st.Specs)
+	rules, _, bad := r.ValidRules(st.Specs)
+	if len(bad) == 0 {
+		return rules, nil
+	}
+	msgs := make([]string, len(bad))
+	for i, b := range bad {
+		msgs[i] = b.Error()
+	}
+	return rules, errors.New("stored rules left out: " + strings.Join(msgs, "; "))
+}
+
+// ValidRules validates specs like Validate, but a rule that fails is dropped and the rest are
+// checked again, so one bad rule does not hide the others. rules and kept are the valid rules as
+// policy rules and as specs (same order); bad holds one error per dropped rule, its Index the rule's
+// position in specs (-1: the list as a whole is refused, nothing is kept).
+func (r *Rules) ValidRules(specs []RuleSpec) (rules []policy.Rule, kept []RuleSpec, bad []*RuleError) {
+	kept = slices.Clone(specs)
+	orig := make([]int, len(specs))
+	for i := range orig {
+		orig[i] = i
+	}
+	for {
+		if len(kept) == 0 {
+			return nil, nil, bad
+		}
+		rs, err := r.Validate(kept)
+		if err == nil {
+			return rs, kept, bad
+		}
+		var re *RuleError
+		if !errors.As(err, &re) || re.Index < 0 || re.Index >= len(kept) {
+			msg := err.Error()
+			if re != nil {
+				msg = re.Msg
+			}
+			return nil, nil, append(bad, &RuleError{Index: -1, Msg: msg})
+		}
+		bad = append(bad, &RuleError{Index: orig[re.Index], Msg: re.Msg})
+		kept = slices.Delete(kept, re.Index, re.Index+1)
+		orig = slices.Delete(orig, re.Index, re.Index+1)
+	}
 }
 
 var indexRe = regexp.MustCompile(`index (\d+)`)

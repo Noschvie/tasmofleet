@@ -126,6 +126,8 @@ templ policyRow(p policyView, i int, r ruleRow) {
 		</td>
 		<td data-label="Compliance">
 			switch {
+				case r.Invalid != "":
+					<span class="ufield-err">invalid: { r.Invalid }</span>
 				case r.Disabled:
 					<span class="pol-none">not checked while disabled</span>
 				case r.Counted && r.Applied == 0:

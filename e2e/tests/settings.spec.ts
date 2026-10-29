@@ -77,7 +77,7 @@ test("policy view: the live check finds drift per rule, the ESP32 exception is a
   await expect(page.getByText("SetOption0 = 0")).toBeVisible();
 
   await page.getByRole("button", { name: "Run now" }).click();
-  await expect(page.locator("#live-tile")).toContainText("last run", { timeout: 60_000 });
+  await expect(page.locator("#live-tile")).toContainText(/ago|just now/, { timeout: 60_000 });
   // per rule: PowerOnState 5 is never satisfied by the replay, so the overview counts a deviation on its row,
   // and the ESP8266 rule (the replayed OFF satisfies it) counts none
   const rows = page.locator("section#rules tbody tr");
