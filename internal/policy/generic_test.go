@@ -34,12 +34,14 @@ func TestParseRulesGenericCommands(t *testing.T) {
 		{"Password", "x", "secret settings cannot be checked"},
 		{"Reset", "1", "acts when it is sent without a value"},
 		{"Backlog", "x", "acts when it is sent without a value"},
-		{"Module", "1", "needs a confirmation in the console and cannot be a policy rule"},
 		{"Template", "x", "needs a confirmation in the console and cannot be a policy rule"},
 		{"Ap", "1", "needs a confirmation in the console and cannot be a policy rule"},
 		{"hostname", "x", "write the setting as Hostname"},
 		{"setoption19", "1", "write the setting as SetOption19"},
 		{"SO19", "1", "write the full name"},
+		{"Module", "1", "restarts, locks out or actuates the device"},
+		{"Dimmer", "50", "restarts, locks out or actuates the device"},
+		{"ShutterOpen1", "1", "acts when it is sent without a value"},
 	} {
 		_, err := ParseRules(rulesJSON(c.command, c.want), settings.Queryable)
 		if err == nil || !strings.Contains(err.Error(), "cannot be checked") || !strings.Contains(err.Error(), c.why) {

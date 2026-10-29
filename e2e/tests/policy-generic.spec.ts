@@ -72,6 +72,9 @@ test("a free command rule: refusals with the reason, then live read, preview and
   // The free field: LedState is in no list.
   await command.fill("LedState");
   await command.blur();
+  // the earlier refusal described another command: it is gone, with aria-invalid
+  await expect(page.locator("#err-command")).toHaveCount(0);
+  await expect(page.locator("input[name='command']")).not.toHaveAttribute("aria-invalid", "true");
   await expect(page.locator("#want-control .ufield-help")).toContainText("Compared with exactly what the device reports for LedState");
   await page.locator("input[name='want']").fill("3");
   await page.locator("input[name='name']").fill("LED state 3");

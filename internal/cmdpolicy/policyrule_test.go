@@ -29,6 +29,19 @@ func TestPolicyReadableDenyList(t *testing.T) {
 		"Ping": reasonActs, "Ping4": reasonActs, "WakeUp": reasonActs, "WakeUpDuration": reasonActs, "Script": reasonActs,
 		"Script1": reasonActs, "Br": reasonActs, "Json": reasonActs, "If": reasonActs, "I2CScan": reasonActs, "Buzzer": reasonActs,
 		"WebSend": reasonActs, "SerialSend5": reasonActs, "TuyaSend": reasonActs, "ZbSend": reasonActs, "ZbPermitJoin": reasonActs,
+		"ShutterOpen1": reasonActs, "ShutterClose": reasonActs, "ShutterStop2": reasonActs, "ShutterToggle": reasonActs,
+		"ShutterSetOpen1": reasonActs, "ShutterSetClose1": reasonActs, "BrRestart": reasonActs, "Mp3Reset": reasonActs,
+		"Mp3Stop": reasonActs, "Mp3Play": reasonActs, "RfKey1": reasonActs, "TCPStart": reasonActs, "TCPConnect": reasonActs,
+		"BLEScan": reasonActs, "WcInit": reasonActs,
+		// bare form reports, set form restarts, locks out, actuates or corrupts counters
+		"Gpio": reasonSetActs, "Gpio4": reasonSetActs, "Gpios": reasonSetActs, "Module": reasonSetActs, "Modules": reasonSetActs,
+		"SetSensor1": reasonSetActs, "I2CDriver3": reasonSetActs, "MqttClient": reasonSetActs, "GroupTopic1": reasonSetActs,
+		"Prefix1": reasonSetActs, "Prefix3": reasonSetActs, "Emulation": reasonSetActs, "TuyaMCU": reasonSetActs, "Ethernet": reasonSetActs,
+		"EthType": reasonSetActs, "MqttFingerprint": reasonSetActs, "CpuFrequency": reasonSetActs, "DeepSleepTime": reasonSetActs,
+		"WebQuery": reasonSetActs, "UfsDelete": reasonSetActs, "UfsRename": reasonSetActs, "Exception": reasonSetActs,
+		"FlashMode": reasonSetActs, "Cfg": reasonSetActs, "CfgX": reasonSetActs, "Dimmer": reasonSetActs, "Dimmer2": reasonSetActs,
+		"Channel1": reasonSetActs, "Color": reasonSetActs, "CT": reasonSetActs, "White": reasonSetActs, "HsbColor1": reasonSetActs,
+		"PWM3": reasonSetActs, "PowerSet": reasonSetActs, "PowerCal": reasonSetActs, "EnergyReset3": reasonSetActs,
 		"UfsRun": reasonActs, "WebGetConfig": reasonActs, "Telnet": reasonActs, "SendMail": reasonActs, "LoRaCommand": reasonActs,
 		// not a plain name, or not the full name
 		"": reasonBadName, " ": reasonBadName, "Sleep 50": reasonBadName, " Sleep": reasonBadName, "Sleep ": reasonBadName,
@@ -50,7 +63,7 @@ func TestPolicyReadableDenyList(t *testing.T) {
 func TestPolicyReadableAllowsPlainSettings(t *testing.T) {
 	for _, name := range []string{
 		"Sleep", "LedState", "WebLog", "Latitude", "Longitude", "TempOffset", "PowerOnState", "PowerDelta", "Timezone",
-		"Hostname", "Module", "Pulsetime1", "Interlock", "SwitchMode3", "Baudrate", "Sensor", "Teleperiod", "NtpServer1",
+		"Hostname", "Pulsetime1", "Interlock", "SwitchMode3", "Baudrate", "Sensor", "Teleperiod", "NtpServer1",
 		strings.Repeat("a", maxNameLen),
 	} {
 		ok, why := PolicyReadable(name)
@@ -92,7 +105,7 @@ func TestPolicySetText(t *testing.T) {
 	refused := map[[2]string]string{
 		{"Reset", "1"}:         reasonConfirm,
 		{"Restart", "2"}:       reasonConfirm,
-		{"Module", "1"}:        reasonConfirm,
+		{"Template", "1"}:      reasonConfirm,
 		{"Template", "x"}:      reasonConfirm,
 		{"WifiConfig", "2"}:    reasonConfirm,
 		{"Wifi", "0"}:          reasonConfirm,
@@ -131,7 +144,7 @@ func TestPolicyCommandCombinesReadAndSetChecks(t *testing.T) {
 		{"Status0", "1", reasonStatus},
 		{"MqttPassword", "x", reasonSecret},
 		{"Reset", "1", reasonActs},
-		{"Module", "1", reasonConfirm},
+		{"Template", "1", reasonConfirm},
 		{"WebServer", "1", reasonConfirm},
 	} {
 		if err := PolicyCommand(c.name, c.want); err == nil || err.Error() != c.why {

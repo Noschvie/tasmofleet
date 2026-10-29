@@ -331,42 +331,7 @@ templ ruleEditorCard(p policyView, e *ruleEditor) {
 				</details>
 			</div>
 			<div class="pol-two">
-				<div class="ufield">
-					<label class="ufield-label" for="rule-command">Command</label>
-					<input
-						id="rule-command"
-						name="command"
-						class="mono"
-						list="rule-commands"
-						value={ e.Spec.Command }
-						maxlength="32"
-						autocomplete="off"
-						autocapitalize="off"
-						spellcheck="false"
-						placeholder="e.g. PowerOnState, Sleep, SetOption19"
-						aria-describedby={ commandDescribedBy(e) }
-						hx-get={ p.Base + rulesPath + "/value-control" }
-						hx-trigger="change consume"
-						hx-target="#want-control"
-						hx-swap="innerHTML"
-						hx-include="[name='want']"
-						if e.ErrField == "command" {
-							aria-invalid="true"
-							autofocus
-						}
-					/>
-					<datalist id="rule-commands">
-						for _, g := range e.Groups {
-							for _, c := range g.Choices {
-								<option value={ c.Key }>{ c.Label }</option>
-							}
-						}
-					</datalist>
-					<span class="ufield-help" id="help-command">Any Tasmota command that answers a plain query, or pick a setting from the list. Status commands, secrets and commands that act when sent without a value are refused. The device is asked live, one command at a time; there is no per-rule read override.</span>
-					if e.ErrField == "command" {
-						<span class="ufield-err" id="err-command" role="alert">{ e.Err }</span>
-					}
-				</div>
+				@commandField(p.Base, e.Groups, e.Spec.Command, e.ErrField == "command", e.Err, false)
 				<div class="ufield" id="want-control">
 					@ruleValue(e.Control)
 				</div>
@@ -417,6 +382,55 @@ templ ruleEditorCard(p policyView, e *ruleEditor) {
 			</div>
 		</form>
 	</section>
+}
+
+// commandField is the command input with its suggestions, help and, after a refused save, the
+// reason. Changing the command swaps the value control and this field again (out of band, oob), which
+// clears the reason of the earlier command: it only describes what was saved before.
+templ commandField(base string, groups []settingGroup, command string, invalid bool, errMsg string, oob bool) {
+	<div class="ufield" id="command-field" if oob { hx-swap-oob="true" }>
+		<label class="ufield-label" for="rule-command">Command</label>
+		<input
+			id="rule-command"
+			name="command"
+			class="mono"
+			list="rule-commands"
+			value={ command }
+			maxlength="32"
+			autocomplete="off"
+			autocapitalize="off"
+			spellcheck="false"
+			placeholder="e.g. PowerOnState, Sleep, SetOption19"
+			aria-describedby={ commandDescribedBy(invalid) }
+			hx-get={ base + rulesPath + "/value-control" }
+			hx-trigger="change consume"
+			hx-target="#want-control"
+			hx-swap="innerHTML"
+			hx-include="[name='want']"
+			if invalid {
+				aria-invalid="true"
+				autofocus
+			}
+		/>
+		<datalist id="rule-commands">
+			for _, g := range groups {
+				for _, c := range g.Choices {
+					<option value={ c.Key }>{ c.Label }</option>
+				}
+			}
+		</datalist>
+		<span class="ufield-help" id="help-command">Any Tasmota command that answers a plain query, or pick a setting from the list. Status commands, secrets and commands that act when sent without a value are refused. The device is asked live, one command at a time; there is no per-rule read override.</span>
+		if invalid {
+			<span class="ufield-err" id="err-command" role="alert">{ errMsg }</span>
+		}
+	</div>
+}
+
+// ruleValueSwap answers a change of the command: the value control, and the command field without
+// the reason of the earlier save.
+templ ruleValueSwap(vc valueControl, base string, groups []settingGroup, command string) {
+	@ruleValue(vc)
+	@commandField(base, groups, command, false, "", true)
 }
 
 // ruleValue is the expected-value input; its kind follows the setting (htmx swaps it when the
@@ -743,9 +757,9 @@ templ fixStartedPage(base string, s fixStarted) {
 }
 
 // commandDescribedBy names the elements that describe the command field: the help, and
-// the error when this field is the failing one.
-func commandDescribedBy(e *ruleEditor) string {
-	if e.ErrField == "command" {
+// the error when the field is invalid.
+func commandDescribedBy(invalid bool) string {
+	if invalid {
 		return "err-command help-command"
 	}
 	return "help-command"
