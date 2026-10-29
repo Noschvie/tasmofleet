@@ -21,6 +21,13 @@ always upgrade automatically.
 - The Chip of an ESP32 with the package `ESP32-U4WDH` (single-core: `ESP32-U4WDH-S`, e.g. `ESP32-U4WDH-S v3.0`
   on a solo1 build) showed "Unknown" and Guard refused every update; the hardware table now knows it. The
   chip always comes from `StatusFWR.Hardware`, never from the build name (#155, thanks @Noschvie).
+- The version label in the header sits on the same line as the brand name (#143, thanks @Noschvie).
+- Policy page, empty state: the template cards no longer overlap the intro text, keep their titles and
+  "Use template" links inside their borders, and stay within the page width (#131, thanks @Noschvie).
+- Add devices, network scan: "Stop scan" works. While a scan runs, only the progress and the results are
+  refreshed, no longer the scan bar with the button, so a click is not lost to the refresh. Rows found so far
+  can be ticked and added while the scan continues; ticked rows stay ticked and the "Add selected" button no
+  longer flickers (#144).
 
 ## 0.16.1 (2026-10-28)
 
@@ -1043,6 +1050,7 @@ always upgrade automatically.
   actions.
 
 ### Breaking
+
 - The policy rules page `<base>/policy/rules` is gone (no redirect): the rules are edited on
   `<base>/policy`. The export moved to `<base>/policy/io/export`, the import to
   `POST <base>/policy/io/import`; `<base>/policy/rules/diff` is replaced by `<base>/policy?v=<id>`.

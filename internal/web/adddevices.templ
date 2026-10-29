@@ -360,8 +360,10 @@ templ scanPage(t scanTab) {
 	@scanBody(t.Body)
 }
 
-// scanBody is the tab body; while a scan runs, the event stream replaces it (sse-swap="scan")
-// and its last version has no stream attributes, so the browser stops listening.
+// scanBody is the tab body. While a scan runs the event stream swaps only the progress and the results
+// (#scan-live, event "scan"): the scan bar with its Stop button stays untouched, so a click on it is not
+// lost to a re-render (#144). The last event ("scan-done") replaces the whole body with a version
+// without stream attributes, so the browser stops listening.
 templ scanBody(b scanBodyView) {
 	<div
 		id="scan"
@@ -369,7 +371,7 @@ templ scanBody(b scanBodyView) {
 		if b.Running {
 			hx-ext="sse"
 			sse-connect={ b.Base + "/discovery/scan/" + b.ID + "/stream" }
-			sse-swap="scan"
+			sse-swap="scan-done"
 			hx-swap="outerHTML"
 		}
 	>
@@ -403,132 +405,143 @@ templ scanBody(b scanBodyView) {
 				<span class="ufield-help add-scanerr" id="scan-off">Scanning is off until a device network is configured (see the notice above).</span>
 			}
 		</form>
-		if b.Running {
-			<div class="add-progress" role="status">
-				<div class="add-progress-head">
-					<span class="add-progress-t"><span class="add-note-dot pulse" aria-hidden="true"></span><b>Scanning { b.Ranges }</b></span>
-					<span class="mono add-t2">{ strconv.Itoa(b.Done) } of { strconv.Itoa(b.Total) } addresses</span>
+		<div
+			id="scan-live"
+			if b.Running {
+				sse-swap="scan"
+				hx-swap="innerHTML"
+			}
+		>
+			@scanLive(b)
+		</div>
+	</div>
+}
+
+// scanLive is what the stream swaps while a scan runs: progress, filter chips, bulk bar and the table.
+templ scanLive(b scanBodyView) {
+	if b.Running {
+		<div class="add-progress" role="status">
+			<div class="add-progress-head">
+				<span class="add-progress-t"><span class="add-note-dot pulse" aria-hidden="true"></span><b>Scanning { b.Ranges }</b></span>
+				<span class="mono add-t2">{ strconv.Itoa(b.Done) } of { strconv.Itoa(b.Total) } addresses</span>
+			</div>
+			<progress max={ strconv.Itoa(max(b.Total, 1)) } value={ strconv.Itoa(b.Done) }>{ strconv.Itoa(b.Percent()) } %</progress>
+			<div class="add-progress-found">Found { strconv.Itoa(b.Found) } Tasmota devices so far</div>
+		</div>
+	} else if b.HasScan {
+		<div class="add-note tone-ok" role="status">
+			<span class="add-note-dot" aria-hidden="true"></span>
+			<span class="add-note-text"><b>Scan finished.</b> { b.Summary }</span>
+		</div>
+	}
+	if b.HasScan {
+		<form method="post" action={ templ.SafeURL(b.Base + "/discovery/proposals/accept") }>
+			<input type="hidden" name="csrf" value={ b.CSRF }/>
+			if b.HasDefault {
+				<input type="hidden" name="use_default_password" value="1"/>
+			}
+			<div class="add-chips">
+				for _, c := range b.Chips {
+					<a class={ "add-chip", templ.KV("is-on", c.Current) } href={ templ.SafeURL(c.Href) }
+						if c.Current {
+							aria-current="true"
+						}
+					>{ c.Label }<span class="add-chip-n">{ strconv.Itoa(c.N) }</span></a>
+				}
+				<span class="add-gap"></span>
+				if b.Selectable {
+					<div class="btn-row" data-bulkbar>
+						<button type="submit" class="btn btn-primary">Add <span data-bar-count></span> selected</button>
+					</div>
+				}
+			</div>
+			if len(b.Rows) == 0 && b.More == 0 {
+				<div class="uempty add-empty">
+					<div class="uempty-icon" aria-hidden="true"><span></span></div>
+					if b.Running {
+						<h2>Nothing found so far</h2>
+						<p>The scan is still probing.</p>
+					} else {
+						<h2>Nothing found</h2>
+						<p>No Tasmota device answered in these ranges.</p>
+					}
 				</div>
-				<progress max={ strconv.Itoa(max(b.Total, 1)) } value={ strconv.Itoa(b.Done) }>{ strconv.Itoa(b.Percent()) } %</progress>
-				<div class="add-progress-found">Found { strconv.Itoa(b.Found) } Tasmota devices so far</div>
-			</div>
-		} else if b.HasScan {
-			<div class="add-note tone-ok" role="status">
-				<span class="add-note-dot" aria-hidden="true"></span>
-				<span class="add-note-text"><b>Scan finished.</b> { b.Summary }</span>
-			</div>
-		}
-		if b.HasScan {
-			<form method="post" action={ templ.SafeURL(b.Base + "/discovery/proposals/accept") }>
-				<input type="hidden" name="csrf" value={ b.CSRF }/>
-				if b.HasDefault {
-					<input type="hidden" name="use_default_password" value="1"/>
-				}
-				if !b.Running {
-					<div class="add-chips">
-						for _, c := range b.Chips {
-							<a class={ "add-chip", templ.KV("is-on", c.Current) } href={ templ.SafeURL(c.Href) }
-								if c.Current {
-									aria-current="true"
-								}
-							>{ c.Label }<span class="add-chip-n">{ strconv.Itoa(c.N) }</span></a>
-						}
-						<span class="add-gap"></span>
-						if b.Selectable {
-							<div class="btn-row" data-bulkbar>
-								<button type="submit" class="btn btn-primary">Add <span data-bar-count></span> selected</button>
-							</div>
-						}
-					</div>
-				}
-				if len(b.Rows) == 0 && b.More == 0 {
-					<div class="uempty add-empty">
-						<div class="uempty-icon" aria-hidden="true"><span></span></div>
-						if b.Running {
-							<h2>Nothing found so far</h2>
-							<p>The scan is still probing.</p>
-						} else {
-							<h2>Nothing found</h2>
-							<p>No Tasmota device answered in these ranges.</p>
-						}
-					</div>
-				} else {
-					<div class="add-table add-scan-table">
-						<table>
-							<colgroup>
-								<col class="c-sel"/>
-								<col class="c-name"/>
-								<col class="c-ip"/>
-								<col class="c-mac"/>
-								<col class="c-fw"/>
-								<col class="c-st"/>
-								<col class="c-act"/>
-							</colgroup>
-							<thead>
+			} else {
+				<div class="add-table add-scan-table">
+					<table>
+						<colgroup>
+							<col class="c-sel"/>
+							<col class="c-name"/>
+							<col class="c-ip"/>
+							<col class="c-mac"/>
+							<col class="c-fw"/>
+							<col class="c-st"/>
+							<col class="c-act"/>
+						</colgroup>
+						<thead>
+							<tr>
+								<th class="sel">
+									if b.Selectable {
+										<input type="checkbox" data-select-all hidden aria-label="Select all"/>
+									}
+								</th>
+								<th>Name</th>
+								<th>IP</th>
+								<th>MAC</th>
+								<th>Firmware</th>
+								<th>Status</th>
+								<th class="act"><span class="sr-only">Actions</span></th>
+							</tr>
+						</thead>
+						<tbody>
+							for _, r := range b.Rows {
 								<tr>
-									<th class="sel">
-										if b.Selectable {
-											<input type="checkbox" data-select-all hidden aria-label="Select all"/>
+									<td class="sel">
+										if r.Kind == "new" {
+											<input type="checkbox" name="id" value={ strconv.FormatInt(r.ProposalID, 10) + ":" + r.Version } aria-label={ "Select " + r.Name }/>
 										}
-									</th>
-									<th>Name</th>
-									<th>IP</th>
-									<th>MAC</th>
-									<th>Firmware</th>
-									<th>Status</th>
-									<th class="act"><span class="sr-only">Actions</span></th>
-								</tr>
-							</thead>
-							<tbody>
-								for _, r := range b.Rows {
-									<tr>
-										<td class="sel">
-											if r.Kind == "new" {
-												<input type="checkbox" name="id" value={ strconv.FormatInt(r.ProposalID, 10) + ":" + r.Version } aria-label={ "Select " + r.Name }/>
-											}
-										</td>
-										<td class="name" title={ r.Name }><span class="add-label">{ r.Name }</span></td>
-										<td class="mono" title={ r.Address } data-visual-mask>{ r.Address }</td>
-										<td class="mono add-t2" title={ r.MAC } data-visual-mask>{ r.MAC }</td>
-										<td class="mono">{ dash(r.Firmware) }</td>
-										<td>
-											@ui.Badge(r.Tone, r.Label)
-										</td>
-										<td class="act">
-											@scanRowActs(b, r)
-										</td>
-									</tr>
-								}
-							</tbody>
-						</table>
-						if b.More > 0 {
-							<a class="add-more-known" href={ templ.SafeURL(b.MoreHref) }>and { strconv.Itoa(b.More) } more known devices</a>
-						}
-					</div>
-					<div class="add-cards">
-						for _, r := range b.Rows {
-							<div class="add-card add-scan-card">
-								<div class="add-card-body">
-									<span class="add-card-title">
-										<span class="add-card-name">{ r.Name }</span>
+									</td>
+									<td class="name" title={ r.Name }><span class="add-label">{ r.Name }</span></td>
+									<td class="mono" title={ r.Address } data-visual-mask>{ r.Address }</td>
+									<td class="mono add-t2" title={ r.MAC } data-visual-mask>{ r.MAC }</td>
+									<td class="mono">{ dash(r.Firmware) }</td>
+									<td>
 										@ui.Badge(r.Tone, r.Label)
-									</span>
-									<span class="add-card-meta"><span data-visual-mask>{ r.Address }</span>{ metaTail(r.Firmware) }</span>
-									<span class="add-card-src mono" data-visual-mask>{ r.MAC }</span>
-									<div class="add-card-acts">
+									</td>
+									<td class="act">
 										@scanRowActs(b, r)
-									</div>
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+					if b.More > 0 {
+						<a class="add-more-known" href={ templ.SafeURL(b.MoreHref) }>and { strconv.Itoa(b.More) } more known devices</a>
+					}
+				</div>
+				<div class="add-cards">
+					for _, r := range b.Rows {
+						<div class="add-card add-scan-card">
+							<div class="add-card-body">
+								<span class="add-card-title">
+									<span class="add-card-name">{ r.Name }</span>
+									@ui.Badge(r.Tone, r.Label)
+								</span>
+								<span class="add-card-meta"><span data-visual-mask>{ r.Address }</span>{ metaTail(r.Firmware) }</span>
+								<span class="add-card-src mono" data-visual-mask>{ r.MAC }</span>
+								<div class="add-card-acts">
+									@scanRowActs(b, r)
 								</div>
 							</div>
-						}
-						if b.More > 0 {
-							<a class="add-more-known" href={ templ.SafeURL(b.MoreHref) }>and { strconv.Itoa(b.More) } more known devices</a>
-						}
-					</div>
-				}
-			</form>
-		}
-	</div>
+						</div>
+					}
+					if b.More > 0 {
+						<a class="add-more-known" href={ templ.SafeURL(b.MoreHref) }>and { strconv.Itoa(b.More) } more known devices</a>
+					}
+				</div>
+			}
+		</form>
+	}
 }
 
 templ scanRowActs(b scanBodyView, r scanRow) {

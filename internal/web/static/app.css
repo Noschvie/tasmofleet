@@ -4726,6 +4726,9 @@ header.top {
 .tb-brand .brand {
   align-self: center;
 }
+.tb-brand .ver {
+  align-self: center;
+}
 .ver {
   font: 400 11.5px var(--font-mono);
   color: var(--color-text-3);
@@ -12346,12 +12349,22 @@ main.bare {
 }
 .pol-tpls form {
   display: flex;
+  min-width: 0;
 }
+/* a card-shaped button: undo the fixed control height, the centred nowrap label and the line-height of
+   the generic button rule, or the content spills out of the box (#131) */
 .pol-tpl {
   flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
   gap: 6px;
+  height: auto;
+  line-height: 1.4;
+  font-weight: 400;
+  white-space: normal;
   padding: var(--sp-14);
   border-radius: var(--r-card);
   border: var(--hair-w) solid var(--color-border);
@@ -12375,7 +12388,8 @@ main.bare {
   color: var(--color-text-2);
 }
 .pol-tpl-use {
-  margin-top: 2px;
+  margin-top: auto; /* cards of one row stretch to the tallest: the link sits at the bottom of each */
+  padding-top: 2px;
   font: 500 13px var(--font-sans);
   color: var(--color-accent-fg);
 }

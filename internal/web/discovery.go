@@ -361,12 +361,19 @@ func (h *handler) discoveryScanStream(w http.ResponseWriter, r *http.Request) {
 		}
 		if key := fmt.Sprint(s.State, s.Done, len(s.Hits)); key != lastKey {
 			lastKey = key
+			// while it runs only the progress and the results are replaced, so the scan bar (Stop) and
+			// the reader's click on it survive; the end replaces the whole body (#144)
+			b := h.scanBodyData(r, s)
+			event, comp := "scan", scanLive(b)
+			if s.State != discovery.ScanRunning {
+				event, comp = "scan-done", scanBody(b)
+			}
 			var frag bytes.Buffer
-			if err := scanBody(h.scanBodyData(r, s)).Render(r.Context(), &frag); err != nil {
+			if err := comp.Render(r.Context(), &frag); err != nil {
 				return
 			}
 			var buf bytes.Buffer
-			writeSSE(&buf, "scan", frag.String())
+			writeSSE(&buf, event, frag.String())
 			if _, err := buf.WriteTo(w); err != nil || rc.Flush() != nil {
 				return
 			}

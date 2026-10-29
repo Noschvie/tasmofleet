@@ -419,3 +419,50 @@ func TestDiscoveredTabListsUnidentifiedTopics(t *testing.T) {
 		t.Error("the section must be left out when every topic is identified")
 	}
 }
+
+// Why (#144): the stream used to replace the whole tab on every progress tick, Stop scan included,
+// so a click on it was lost to the re-render, the bulk bar flickered and ticked rows were cleared.
+// While a scan runs the stream may only replace the progress and the results (event "scan"); the scan
+// bar stays put. Only the end replaces the whole body ("scan-done").
+func TestRunningScanStreamKeepsTheScanBarOutOfTheSwap(t *testing.T) {
+	e, fd := setupDiscovery(t)
+	fd.mu.Lock()
+	fd.scan.State = discovery.ScanRunning
+	fd.scan.Done = 1
+	fd.mu.Unlock()
+	go func() {
+		time.Sleep(700 * time.Millisecond)
+		fd.mu.Lock()
+		fd.scan.State = discovery.ScanDone
+		fd.scan.Done = fd.scan.Total
+		fd.mu.Unlock()
+	}()
+	_, body := e.do(t, "GET", "/discovery/scan/abc123/stream", "admin", nil)
+	running, done, ok := strings.Cut(body, "event: scan-done")
+	if !ok || !strings.HasPrefix(running, "event: scan\n") {
+		t.Fatalf("want a running event then scan-done: %q", body)
+	}
+	if strings.Contains(running, "Stop scan") || strings.Contains(running, "add-scanbar") {
+		t.Errorf("the running event must not replace the scan bar (Stop scan): %q", running)
+	}
+	if !strings.Contains(running, "add-progress") || !strings.Contains(running, "data-bulkbar") {
+		t.Errorf("the running event carries the progress and the bulk bar, so found rows can be selected: %q", running)
+	}
+	if !strings.Contains(done, "add-scanbar") || strings.Contains(done, "sse-connect") {
+		t.Errorf("the final event is the whole body without stream attributes: %q", done)
+	}
+}
+
+// Why (#144): the page of a running scan puts the swapped part in its own element, apart from the scan bar.
+func TestRunningScanPageSwapsOnlyTheLivePart(t *testing.T) {
+	e, fd := setupDiscovery(t)
+	fd.mu.Lock()
+	fd.scan.State = discovery.ScanRunning
+	fd.mu.Unlock()
+	_, body := e.do(t, "GET", "/discovery/scan/abc123", "admin", nil)
+	live := strings.Index(body, `id="scan-live"`)
+	stop := strings.Index(body, "Stop scan")
+	if live < 0 || stop < 0 || stop > live || !strings.Contains(body, `sse-swap="scan"`) || !strings.Contains(body, `sse-swap="scan-done"`) {
+		t.Fatalf("the Stop button must sit before, not inside, the swapped #scan-live: live=%d stop=%d", live, stop)
+	}
+}

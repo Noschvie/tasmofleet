@@ -117,7 +117,8 @@
           : "Push upload is for ESP32 devices only. " +
             (bad === 1
               ? "1 selected device is an ESP8266 or of unknown type and downloads its file instead."
-              : bad + " selected devices are ESP8266 or of unknown type and download their files instead.");
+              : bad +
+                " selected devices are ESP8266 or of unknown type and download their files instead.");
     });
     // buttons that act on the selection stay off until something is selected
     form.querySelectorAll("[data-needs-selection]").forEach(function (b) {
@@ -144,17 +145,19 @@
               : "none of them is online"
             : down + " not online, will be skipped";
     });
-    form.querySelectorAll("[data-bulkbar] [data-needs-device]").forEach(function (b) {
-      var none = n > 0 && down === n;
-      b.disabled = none;
-      // the reason is the visible note of the bar, not a tooltip (a button like "Send command"
-      // is self-explanatory and takes none)
-      if (none) {
-        b.setAttribute("aria-describedby", "bulk-note");
-      } else {
-        b.removeAttribute("aria-describedby");
-      }
-    });
+    form
+      .querySelectorAll("[data-bulkbar] [data-needs-device]")
+      .forEach(function (b) {
+        var none = n > 0 && down === n;
+        b.disabled = none;
+        // the reason is the visible note of the bar, not a tooltip (a button like "Send command"
+        // is self-explanatory and takes none)
+        if (none) {
+          b.setAttribute("aria-describedby", "bulk-note");
+        } else {
+          b.removeAttribute("aria-describedby");
+        }
+      });
     // an action on exactly two rows (compare two backups) shows only then
     form.querySelectorAll("[data-needs-pair]").forEach(function (b) {
       b.hidden = n !== 2;
@@ -349,6 +352,32 @@
     }
     var ids = kept;
     kept = null;
+    t.querySelectorAll('input[name="id"]').forEach(function (b) {
+      b.checked = ids.indexOf(b.value) >= 0;
+    });
+  });
+  // The network scan streams its results into #scan-live while the reader ticks rows (#144): the
+  // ticked ids are put back after each swap, and htmx:afterSettle recomputes the bulk bar.
+  var keptScan = null;
+  document.addEventListener("htmx:sseBeforeMessage", function (e) {
+    var t = e.target;
+    if (!t || t.id !== "scan-live") {
+      return;
+    }
+    keptScan = Array.prototype.map.call(
+      t.querySelectorAll('input[name="id"]:checked'),
+      function (b) {
+        return b.value;
+      },
+    );
+  });
+  document.addEventListener("htmx:sseMessage", function (e) {
+    var t = e.target;
+    if (!t || t.id !== "scan-live" || !keptScan) {
+      return;
+    }
+    var ids = keptScan;
+    keptScan = null;
     t.querySelectorAll('input[name="id"]').forEach(function (b) {
       b.checked = ids.indexOf(b.value) >= 0;
     });
