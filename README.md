@@ -161,8 +161,8 @@ database. A value set in the environment locks its field in the UI.
 
 ## Status
 
-**Pre-1.0 (v0.11.x), single maintainer.** It runs a home fleet of a few dozen devices every
-day, but expect breaking changes before 1.0; they are listed in [CHANGELOG.md](CHANGELOG.md).
+**Pre-1.0, single maintainer.** It runs a home fleet of a few dozen devices every
+day, but breaking changes are to be expected before 1.0: read the [CHANGELOG.md](CHANGELOG.md) before updating.
 Your data is migrated forward; configuration and routes may change. Questions and ideas are
 welcome in [Discussions](https://github.com/nofuturekid/tasmofleet/discussions), bug reports in
 the [issues](https://github.com/nofuturekid/tasmofleet/issues).
