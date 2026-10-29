@@ -4,7 +4,7 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
-## Unreleased
+## 0.17.0 (2026-10-29)
 
 ### Upgrade notes: action may be required
 
@@ -47,7 +47,6 @@ run`, Compose, or an Unraid container whose UI listen field is empty or was remo
 
 ### Changed
 
-- The "Devices" crumb on a device page returns to the list as you left it, with its filter, search and sort, per browser tab; the navigation's "Devices" link still opens the unfiltered list (#127, thanks @Noschvie).
 - Device page, Overview reworked (#145): a row of live tiles (Power and Energy today for devices with an
   energy meter, Wi-Fi signal with a quality bar or Link for Ethernet, Uptime, Reachability, Policy), a
   relay box that is the same for one relay and four (per-channel watts when the device meters each
@@ -57,7 +56,7 @@ run`, Compose, or an Unraid container whose UI listen field is empty or was remo
   "Chip" row and the power sparkline are gone, the header Power button too (switch in the relay box).
   "All activity" opens the complete, paged list.
 - The device list, the dashboard and the device page now refresh themselves after the live stream opens
-  or reopens when events were missed in between; the stream's address carries the page's event number.
+  or reopens when events were missed in between; the stream's address carries the page's event number (#160).
 - **breaking**: the UI listens on container port **8080 in every mode**; the zero-configuration
   self-signed TLS no longer moves it to `:8443`. TLS or plain HTTP follows from the mode (nothing
   set: self-signed TLS; trusted proxies or `ALLOW_INSECURE_HTTP`: plain HTTP; certificate files:
@@ -80,6 +79,9 @@ run`, Compose, or an Unraid container whose UI listen field is empty or was remo
 - Device page: a device without a relay gets a Sensors box with the readings of its MQTT telemetry
   (dimmed while the device is offline), "Last restart" and "Offline since" follow the browser's time
   zone (Today/Yesterday), and the users page's "Last sign-in" does too (#145, #137).
+- The "Devices" crumb on a device page returns to the list as you left it, with its filter, search and
+  sort, per browser tab; the navigation's "Devices" link still opens the unfiltered list (#127, thanks
+  @Noschvie).
 
 ### Fixed
 
