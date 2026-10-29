@@ -96,4 +96,7 @@
   }
   paintAtMidnight();
   document.addEventListener("visibilitychange", function () { if (!document.hidden) paint(); });
+  // timers also pause while the machine sleeps over midnight
+  window.addEventListener("focus", function () { paint(); });
+  window.addEventListener("pageshow", function () { paint(); });
 })();

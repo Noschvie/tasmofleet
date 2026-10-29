@@ -122,7 +122,7 @@ async function seedFiveMinutesAgo(): Promise<void> {
 
 const kiritimati = { timezoneId: "Pacific/Kiritimati", locale: "en-GB" };
 
-/** newDay opens a page in Kiritimati whose clock reads `offsetMs` after the seeded instant's local midnight of the next day. */
+/** pageAt opens a page in Kiritimati whose clock is fixed at `browserNow` (ms since the epoch). */
 async function pageAt(browser: import("@playwright/test").Browser, browserNow: number) {
   const ctx = await browser.newContext(kiritimati);
   const page = await ctx.newPage();
@@ -193,7 +193,9 @@ test("the policy page's pause time is the browser's clock", async ({ browser }) 
     (await t.getAttribute("datetime"))!,
   );
   await expect(t).toHaveText(want);
-  // the server (UTC) wrote its own fallback; Kiritimati is 14 h away from it
+  // the server (UTC) wrote its own fallback; Kiritimati is 14 h away from it, so the zone is what the text proves
+  const utc = await t.evaluate((el) => new Date(el.getAttribute("datetime")!).toISOString().slice(11, 16));
+  expect(want.startsWith(utc), "the text must not be the server's UTC clock").toBe(false);
   expect(await t.evaluate((el) => (el as HTMLElement).dataset.ts)).toBe("time");
   await page.getByRole("button", { name: "Resume", exact: true }).click();
   await ctx.close();
@@ -204,7 +206,7 @@ test("a day stamp turns from Today into Yesterday when the browser's midnight pa
   const ctx = await browser.newContext(kiritimati);
   const page = await ctx.newPage();
   await page.setExtraHTTPHeaders({ "X-authentik-username": "adam", "X-authentik-groups": "adm" });
-  // 20 s before the next local midnight; the page's timers are real, the clock is the test's
+  // 3 s before the next local midnight; the page's timers are real, the clock is the test's
   const midnight = nextLocalDay() - 3600_000;
   await page.clock.install({ time: midnight - 3_000 });
   await page.goto(app.url + "/transactions");

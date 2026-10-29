@@ -242,7 +242,7 @@ templ discoveredPage(p discView) {
 									if r.First.IsZero() {
 										{ r.FirstText }
 									} else {
-										<time { ui.StampAttrs(r.First, ui.StampDay)... }>{ r.FirstText }</time>
+										<time title={ stamp(r.First) } { ui.StampAttrs(r.First, ui.StampDay)... }>{ r.FirstText }</time>
 									}
 								</td>
 								<td class="add-t2"><time datetime={ r.Last.UTC().Format("2006-01-02T15:04:05Z") }>{ r.LastText }</time></td>
