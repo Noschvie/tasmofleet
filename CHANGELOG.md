@@ -22,6 +22,13 @@ always upgrade automatically.
 - The 2-hour power sparkline on the device overview is gone (its history was only a minute ring of the
   last `tele/SENSOR` watts); the card shows the current power and the energy counters (#145).
 
+### Fixed
+
+- "Today" and "Yesterday" (dashboard transactions, transaction history, Add devices "First seen", users page
+  sessions and activity), the transaction log's clock times and the policy page's "paused at" now follow the browser's time
+  zone like every other timestamp; before, the server's zone decided and one page could show two zones.
+  Today/Yesterday also turn over at the browser's midnight without a reload (#137, reported in #128, thanks @Noschvie).
+
 ## 0.16.2 (2026-10-29)
 
 ### Added
@@ -34,10 +41,6 @@ always upgrade automatically.
 
 ### Fixed
 
-- "Today" and "Yesterday" (dashboard transactions, transaction history, Add devices "First seen", users page
-  sessions and activity), the transaction log's clock times and the policy page's "paused at" now follow the browser's time
-  zone like every other timestamp; before, the server's zone decided and one page could show two zones.
-  Today/Yesterday also turn over at the browser's midnight without a reload (#137, reported in #128, thanks @Noschvie).
 - "Refresh identity" over MQTT (devices HTTP cannot reach) now reads the DeviceName too, with the plain
   `Status` (never `Status 0`); before it left the name untouched (#125, thanks @Noschvie).
 - The Chip of an ESP32 with the package `ESP32-U4WDH` (single-core: `ESP32-U4WDH-S`, e.g. `ESP32-U4WDH-S v3.0`
