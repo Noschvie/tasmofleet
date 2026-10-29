@@ -11,6 +11,11 @@ always upgrade automatically.
 - Sensor telemetry: the tracker now keeps the numeric readings of every `tele/SENSOR` block besides ENERGY
   (BME280, BH1750, DS18B20, ...) with their units (TempUnit/PressureUnit), bounded in count and name length,
   for the device page's Sensors box. They are not exported as metrics (#145).
+- Device facts for the Overview: "Refresh identity" and the background network read now store the subnet
+  mask and DNS servers (Wi-Fi and Ethernet), the relay names (the device's FriendlyName array) and the OTA
+  URL the device would update from, read with one read-only `Status 1` (never `Status 0`, never the
+  `OtaUrl` command; credentials in the URL are removed before it is stored). Minimal firmware keeps the
+  stored values. Migration 0031 (#145; OTA URL #127, thanks @Noschvie).
 
 ### Changed
 
@@ -21,11 +26,6 @@ always upgrade automatically.
 
 ### Added
 
-- Device facts for the Overview: "Refresh identity" and the background network read now store the subnet
-  mask and DNS servers (Wi-Fi and Ethernet), the relay names (the device's FriendlyName array) and the OTA
-  URL the device would update from, read with one read-only `Status 1` (never `Status 0`, never the
-  `OtaUrl` command; credentials in the URL are removed before it is stored). Minimal firmware keeps the
-  stored values. Migration 0031 (#145; OTA URL #127, thanks @Noschvie).
 - Device name: a name you set by hand is still never overwritten by "Refresh identity", but the Identity
   card now says what the device calls itself ("Name on the device: ...", on the device page for as long as
   it differs) with "Use device name" and "Keep". Keep is remembered for exactly that DeviceName; the notice
