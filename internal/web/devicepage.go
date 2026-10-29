@@ -72,6 +72,11 @@ type identCard struct {
 	CanProbe bool // not while an operation holds the device
 	Notice   string
 	Error    string
+	// NameOffer is the DeviceName the device reports while the stored name differs (#125);
+	// "" shows nothing. Admins get the two answers, KeepOK says Keep can be saved.
+	NameOffer string
+	CanAnswer bool
+	KeepOK    bool
 }
 
 // energyCard is the power reading now, the last 2 hours as a sparkline and the energy counters
@@ -311,7 +316,8 @@ func (h *handler) identity(v view, d model.Device, updating bool, f snapFacts) i
 	if d.Notes != "" {
 		rows = append(rows, ui.KVRow{Key: "Notes", Value: d.Notes})
 	}
-	return identCard{Base: v.Base, ID: d.ID, Rows: rows, CanProbe: !updating}
+	return identCard{Base: v.Base, ID: d.ID, Rows: rows, CanProbe: !updating,
+		NameOffer: nameOffer(d), CanAnswer: v.IsAdmin, KeepOK: h.d.DeviceNames != nil}
 }
 
 // energyOf is the Power & energy reading of the device's meter (channel "" or the first one).

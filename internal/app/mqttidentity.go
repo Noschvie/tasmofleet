@@ -396,6 +396,9 @@ func (m *mqttIdentity) askDue(ctx context.Context) {
 		Detail: string(detail), Result: "ok"})
 }
 
+// statusObject asks the plain "Status" (no number) over MQTT.
+const statusObject = -1
+
 var (
 	errMQTTUnavailable = errors.New("mqtt: not connected, or the device is not on our broker")
 	errMQTTBusy        = errors.New("mqtt: a question to this device is still waiting for its answer")
@@ -406,14 +409,19 @@ var (
 // mqttIDGap between two questions on the whole bus (it waits for its turn), only a live answer
 // on the device's own topic within replyWait, and every question audited.
 func (m *mqttIdentity) askStatus(ctx context.Context, d model.Device, n int, actor string) (json.RawMessage, error) {
-	if n <= 0 {
+	if n == 0 || n < statusObject {
 		return nil, errors.New("mqtt: Status 0 is never sent")
+	}
+	// statusObject is the plain "Status": the Status object only (DeviceName, Topic), as over HTTP.
+	arg, name := strconv.Itoa(n), "Status "+strconv.Itoa(n)
+	if n == statusObject {
+		arg, name = "", "Status"
 	}
 	if d.Topic == "" || d.MQTT != model.MQTTOurs || !m.bus.Connected() {
 		return nil, errMQTTUnavailable
 	}
 	now := m.now()
-	w := &mqttWaiter{suffix: "STATUS" + strconv.Itoa(n), ch: make(chan []byte, 1)}
+	w := &mqttWaiter{suffix: "STATUS" + arg, ch: make(chan []byte, 1)}
 	m.mu.Lock()
 	if p, ok := m.pending[d.ID]; (ok && now.Sub(p.at) <= mqttIDWindow) || m.waiters[d.Topic] != nil {
 		m.mu.Unlock()
@@ -438,15 +446,15 @@ func (m *mqttIdentity) askStatus(ctx context.Context, d model.Device, n int, act
 		case <-time.After(wait):
 		}
 	}
-	if err := m.bus.Command(ctx, d.Topic, "STATUS", strconv.Itoa(n)); err != nil {
-		return nil, fmt.Errorf("mqtt: Status %d not sent: %w", n, err)
+	if err := m.bus.Command(ctx, d.Topic, "STATUS", arg); err != nil {
+		return nil, fmt.Errorf("mqtt: %s not sent: %w", name, err)
 	}
 	if actor == "" {
 		actor = "system"
 	}
 	why := "refresh identity: HTTP cannot reach the device"
-	m.log.Info("mqtt identity: asked a device over MQTT", "device", d.ID, "topic", d.Topic, "command", "Status "+strconv.Itoa(n), "reason", why)
-	detail, _ := json.Marshal(map[string]any{"command": "Status " + strconv.Itoa(n), "via": "mqtt", "reason": why}) // a map of strings cannot fail
+	m.log.Info("mqtt identity: asked a device over MQTT", "device", d.ID, "topic", d.Topic, "command", name, "reason", why)
+	detail, _ := json.Marshal(map[string]any{"command": name, "via": "mqtt", "reason": why}) // a map of strings cannot fail
 	m.audit.Record(ctx, model.AuditEvent{Actor: actor, Action: "identity.mqtt_ask", Target: "device:" + strconv.FormatInt(int64(d.ID), 10),
 		Detail: string(detail), Result: "ok"})
 	select {
@@ -455,6 +463,6 @@ func (m *mqttIdentity) askStatus(ctx context.Context, d model.Device, n int, act
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-time.After(m.replyWait):
-		return nil, fmt.Errorf("mqtt: no answer to Status %d: %w", n, tasmota.ErrTimeout)
+		return nil, fmt.Errorf("mqtt: no answer to %s: %w", name, tasmota.ErrTimeout)
 	}
 }

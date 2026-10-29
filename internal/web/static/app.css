@@ -5217,6 +5217,11 @@ nav.crumbs a {
 .banner-text b {
   font-weight: 600;
 }
+.banner-actions {
+  display: flex;
+  gap: var(--sp-8);
+  flex-wrap: wrap;
+}
 .banner-text a {
   color: inherit;
 }

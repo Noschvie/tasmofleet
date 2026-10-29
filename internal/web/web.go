@@ -113,6 +113,7 @@ type Deps struct {
 	Health       health.Tracker
 	Backups      backup.Service
 	Prober       Prober
+	DeviceNames  DeviceNames // optional: "Keep" on the device-name notice (#125)
 	History      HealthHistory
 	Audit        AuditLister
 	Recorder     audit.Recorder
@@ -247,6 +248,10 @@ func Handler(d Deps) (http.Handler, error) {
 	route("POST /devices/{id}/delete", adm, h.deviceDelete)
 	h.registerDeviceConfirm(route, adm)
 	route("POST /devices/{id}/probe", op, h.deviceProbe)
+	route("POST /devices/{id}/name/adopt", adm, h.deviceNameAdopt)
+	if d.DeviceNames != nil {
+		route("POST /devices/{id}/name/keep", adm, h.deviceNameKeep)
+	}
 	route("POST /devices/{id}/backup", op, h.deviceBackup)
 	route("GET /backups/{id}", adm, h.backupDownload)
 	route("GET /audit", adm, h.auditLog)

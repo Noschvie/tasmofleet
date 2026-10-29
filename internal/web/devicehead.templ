@@ -8,6 +8,23 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
 
+// nameOfferNotice says what the device calls itself while the stored name differs (#125). The
+// stored name is never overwritten; "Use device name" adopts it, "Keep" declines exactly this name.
+templ nameOfferNotice(c identCard) {
+	<div class="banner tone-warn name-offer" role="status">
+		<span class="banner-dot"></span>
+		<div class="banner-text">Name on the device: <b>{ c.NameOffer }</b></div>
+		if c.CanAnswer {
+			<div class="banner-actions">
+				<button type="button" class="banner-btn" hx-post={ c.Base + devPath(c.ID, "/name/adopt") } hx-vals={ nameVals(c.NameOffer) } hx-target="#identity" hx-swap="outerHTML" hx-disabled-elt="this">Use device name</button>
+				if c.KeepOK {
+					<button type="button" class="banner-btn" hx-post={ c.Base + devPath(c.ID, "/name/keep") } hx-vals={ nameVals(c.NameOffer) } hx-target="#identity" hx-swap="outerHTML" hx-disabled-elt="this">Keep</button>
+				}
+			</div>
+		}
+	</div>
+}
+
 // deviceHeader is the header of every device tab (prototype screen "device"): the name with the
 // state, the address / chip / firmware line, the device buttons, the offline banner and the tabs.
 // Buttons are plain forms and links; dialog.js turns Restart into a dialog. Delete leads to the
@@ -339,6 +356,9 @@ templ identityCard(c identCard) {
 			}
 		</div>
 		@ui.KV(c.Rows)
+		if c.NameOffer != "" {
+			@nameOfferNotice(c)
+		}
 		if c.Error != "" {
 			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: c.Error, Alert: true})
 		}

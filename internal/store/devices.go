@@ -15,7 +15,7 @@ import (
 const deviceCols = `id, name, address, port, mac, topic, full_topic, tags, notes, http_user, http_password,
 	ota_excluded, mqtt_capability, chip_family, hardware, single_core, fw_version, fw_image, fw_variant,
 	fw_language, flash_size_kb, program_flash_kb, free_kb, identity_at, created_at, updated_at, mqtt_host, mqtt_port,
-	net_hostname, net_ip, net_gateway, net_ssid, net_bssid, net_channel, net_wired, net_at`
+	net_hostname, net_ip, net_gateway, net_ssid, net_bssid, net_channel, net_wired, net_at, device_name, device_name_kept`
 
 type scanner interface{ Scan(dest ...any) error }
 
@@ -27,7 +27,7 @@ func (s *SQLite) scanDevice(r scanner) (model.Device, error) {
 	err := r.Scan(&d.ID, &d.Name, &d.Address, &d.Port, &d.MAC, &d.Topic, &d.FullTopic, &tags, &d.Notes, &d.HTTPUser, &sealed,
 		&excluded, &mqtt, &family, &d.Identity.Hardware, &single, &d.Identity.Version, &d.Identity.Image, &d.Identity.Variant,
 		&d.Identity.Language, &d.Identity.FlashSizeKB, &d.Identity.ProgramFlashSizeKB, &d.Identity.FreeKB, &identAt, &created, &updated, &d.MQTTHost, &d.MQTTPort,
-		&d.Net.Hostname, &d.Net.IP, &d.Net.Gateway, &d.Net.SSID, &d.Net.BSSID, &d.Net.Channel, &wired, &netAt)
+		&d.Net.Hostname, &d.Net.IP, &d.Net.Gateway, &d.Net.SSID, &d.Net.BSSID, &d.Net.Channel, &wired, &netAt, &d.DeviceName, &d.KeptDeviceName)
 	if err != nil {
 		return model.Device{}, err
 	}
@@ -305,6 +305,15 @@ type ProbeResult struct {
 	BindMACs []string
 }
 
+// followNameSQL is the part of an UPDATE that records the DeviceName a probe read and lets the
+// stored name follow it. Seven arguments: DeviceName (name test), DeviceName (the name equals it
+// already), NameFrom twice, DeviceName (new name), DeviceName twice (record it). The name follows
+// only while it is still the DeviceName recorded at the previous probe, or NameFrom; any other
+// name was chosen by the user and stays (the device page offers the DeviceName instead, #125).
+const followNameSQL = `name = CASE WHEN ?='' OR name=? THEN name
+			WHEN (device_name<>'' AND name=device_name) OR (?<>'' AND name=?) THEN ? ELSE name END,
+		device_name = CASE WHEN ?='' THEN device_name ELSE ? END,`
+
 // ErrMACInUse is returned when a probe would bind a MAC that belongs to another device.
 var ErrMACInUse = fmt.Errorf("%w: the MAC belongs to another device", ErrConflict)
 
@@ -335,9 +344,7 @@ func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuar
 		net_channel = CASE WHEN ?=0 THEN net_channel ELSE ? END,
 		net_wired = CASE WHEN ?=0 THEN net_wired ELSE ? END,
 		net_at = CASE WHEN ?=0 THEN net_at ELSE ? END,
-		name = CASE WHEN ?='' OR name=? THEN name
-			WHEN (device_name<>'' AND name=device_name) OR (?<>'' AND name=?) THEN ? ELSE name END,
-		device_name = CASE WHEN ?='' THEN device_name ELSE ? END,
+		`+followNameSQL+`
 		topic = CASE WHEN ?='' OR topic=? THEN topic
 			WHEN NOT EXISTS (SELECT 1 FROM devices o WHERE o.topic=? AND o.id<>devices.id) THEN ?
 			ELSE topic END,
@@ -383,6 +390,53 @@ func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuar
 		}
 	}
 	return tx.Commit()
+}
+
+// UpdateProbeName stores the DeviceName a probe read, and lets the stored name follow it under the
+// rule of UpdateProbe, without touching anything else: a refresh over MQTT reads the DeviceName
+// but must not write the identity (#125). Guarded like UpdateProbe: a device deleted, moved or
+// rebound since the read began is left alone (ErrConflict). An empty deviceName changes nothing.
+func (s *SQLite) UpdateProbeName(ctx context.Context, id model.DeviceID, g ProbeGuard, deviceName, nameFrom string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE devices SET `+followNameSQL+` updated_at=?
+		WHERE id=? AND address=? AND port=? AND mac=?`,
+		deviceName, deviceName, nameFrom, nameFrom, deviceName, deviceName, deviceName,
+		toMS(s.now()), id, g.Address, g.Port, strings.ToLower(g.MAC))
+	if err != nil {
+		return mapErr(err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("%w: device %d changed or was deleted during the probe", ErrConflict, id)
+	}
+	return nil
+}
+
+// DismissDeviceName records that the admin chose to keep the stored name against deviceName, the
+// DeviceName the page showed. It only applies while the device still reports exactly that name
+// (ErrConflict otherwise: a newer name must not be silenced unseen); ErrNotFound for an unknown device.
+func (s *SQLite) DismissDeviceName(ctx context.Context, id model.DeviceID, deviceName string) error {
+	res, err := s.db.ExecContext(ctx, "UPDATE devices SET device_name_kept=? WHERE id=? AND device_name=? AND device_name<>''", deviceName, id, deviceName)
+	if err != nil {
+		return mapErr(err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		var one int
+		switch err := s.db.QueryRowContext(ctx, "SELECT 1 FROM devices WHERE id=?", id).Scan(&one); {
+		case errors.Is(err, sql.ErrNoRows):
+			return ErrNotFound
+		case err != nil:
+			return err
+		}
+		return fmt.Errorf("%w: device %d reports another name now", ErrConflict, id)
+	}
+	return nil
 }
 
 // UpdateIdentityFromMQTT stores the identity fields a device announced over MQTT (INFO1, or the

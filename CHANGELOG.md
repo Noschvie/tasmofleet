@@ -4,6 +4,24 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## Unreleased
+
+### Added
+
+- Device name: a name you set by hand is still never overwritten by "Refresh identity", but the Identity
+  card now says what the device calls itself ("Name on the device: ...", on the device page for as long as
+  it differs) with "Use device name" and "Keep". Keep is remembered for exactly that DeviceName; the notice
+  returns only when the device reports another one. A name tasmofleet filled in itself (the device's own
+  DeviceName, its hostname, topic or address) still follows the device. Migration 0030 (#125, thanks @Noschvie).
+
+### Fixed
+
+- "Refresh identity" over MQTT (devices HTTP cannot reach) now reads the DeviceName too, with the plain
+  `Status` (never `Status 0`); before it left the name untouched (#125, thanks @Noschvie).
+- The Chip of an ESP32 with the package `ESP32-U4WDH` (single-core: `ESP32-U4WDH-S`, e.g. `ESP32-U4WDH-S v3.0`
+  on a solo1 build) showed "Unknown" and Guard refused every update; the hardware table now knows it. The
+  chip always comes from `StatusFWR.Hardware`, never from the build name (#155, thanks @Noschvie).
+
 ## 0.16.1 (2026-10-28)
 
 ### Fixed

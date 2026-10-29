@@ -303,8 +303,8 @@ func TestRefreshOverMQTTWhenHTTPCannotReachTheDevice(t *testing.T) {
 	if err := p.Refresh(context.Background(), id, "admin"); err != nil {
 		t.Fatal(err)
 	}
-	if len(f.asked) != 2 || f.asked[0] != 5 || f.asked[1] != 2 {
-		t.Fatalf("asked %v, want Status 5 then Status 2", f.asked)
+	if len(f.asked) != 3 || f.asked[0] != 5 || f.asked[1] != 2 || f.asked[2] != statusObject {
+		t.Fatalf("asked %v, want Status 5, Status 2, then the plain Status (DeviceName)", f.asked)
 	}
 	got, _ := st.GetDevice(context.Background(), id)
 	if got.Identity.Version != "16.0.0" || got.Identity.Hardware != "ESP8266EX" || got.Net.Hostname != "plug-1" {
@@ -653,8 +653,8 @@ func TestRefreshOverMQTTWaitsOnceWhenTheDeviceIsBusy(t *testing.T) {
 	if err := p.Refresh(context.Background(), id, "admin"); err != nil {
 		t.Fatal(err)
 	}
-	if len(f.asked) != 3 || f.asked[2] != 2 {
-		t.Fatalf("asked %v, want 5, 2, 2", f.asked)
+	if len(f.asked) != 4 || f.asked[2] != 2 {
+		t.Fatalf("asked %v, want 5, 2, 2, plain Status", f.asked)
 	}
 	if got, _ := st.GetDevice(context.Background(), id); got.Identity.Version != "16.0.0" {
 		t.Fatalf("version %q", got.Identity.Version)
@@ -693,5 +693,59 @@ func TestRefreshReplacesTheDefaultNameTasmofleetFilledIn(t *testing.T) {
 	}
 	if got, _ := st.GetDevice(context.Background(), id); got.Name != "Irrigation Led Ring" {
 		t.Fatalf("Name = %q, want the DeviceName the device reports now", got.Name)
+	}
+}
+
+// statusDeviceNameReply is the plain Status answer of #125 (stat/tasmota_568ED0/STATUS) after the
+// DeviceName was changed on the device.
+const statusDeviceNameReply = `{"Status":{"Module":1,"DeviceName":"Modbus Lüftung Test","FriendlyName":["Tasmota"],"Topic":"tasmota_568ED0","ButtonTopic":"0","Power":"0","PowerLock":"0","PowerOnState":3,"LedState":1,"LedMask":"FFFF","SaveData":1,"SaveState":1,"SwitchTopic":"0","ButtonRetain":0,"SwitchRetain":0,"SensorRetain":0,"PowerRetain":0,"InfoRetain":0,"StateRetain":0,"StatusRetain":0}}`
+
+// Why (#125): a device on our broker that HTTP cannot reach is refreshed over MQTT, and that
+// refresh has to bring the DeviceName along (it only read the identity before, so the name never
+// followed). The plain Status is the Status object only, never Status 0. A name tasmofleet
+// recorded as the device's own follows; one set by hand stays and the page offers the DeviceName.
+func TestRefreshOverMQTTReadsTheDeviceName(t *testing.T) {
+	p, st, id, f := mqttOnlySetup(t, model.MQTTOurs)
+	f.replies[statusObject] = statusDeviceNameReply
+	cur, _ := st.GetDevice(context.Background(), id)
+	// Recorded at an earlier probe: the stored name is the device's own and follows.
+	if err := st.UpdateProbeName(context.Background(), id, store.ProbeGuard{Address: cur.Address, Port: cur.Port, MAC: cur.MAC}, cur.Name, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Refresh(context.Background(), id, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := st.GetDevice(context.Background(), id)
+	if got.Name != "Modbus Lüftung Test" || got.DeviceName != "Modbus Lüftung Test" {
+		t.Fatalf("name %q device name %q", got.Name, got.DeviceName)
+	}
+	if got.Identity.Version != "16.0.0" || !got.Identity.DetectedAt.IsZero() {
+		t.Fatalf("identity %+v: the name read must not change how the identity is stored", got.Identity)
+	}
+
+	// A hand-set name stays; the device's name is recorded for the page to offer.
+	got.Name = "Lüftung Keller"
+	if err := st.UpdateDevice(context.Background(), got); err != nil {
+		t.Fatal(err)
+	}
+	f.replies[statusObject] = strings.Replace(statusDeviceNameReply, "Modbus Lüftung Test", "Modbus Lüftung Büro", 1)
+	if err := p.Refresh(context.Background(), id, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = st.GetDevice(context.Background(), id)
+	if got.Name != "Lüftung Keller" || got.DeviceName != "Modbus Lüftung Büro" {
+		t.Fatalf("name %q device name %q, want the hand-set name kept and the device's recorded", got.Name, got.DeviceName)
+	}
+}
+
+// Why (#125): the DeviceName is a nicety. A device that does not answer the plain Status over MQTT
+// still gets its identity refreshed, and the refresh succeeds.
+func TestRefreshOverMQTTWithoutAStatusAnswerStillSucceeds(t *testing.T) {
+	p, st, id, _ := mqttOnlySetup(t, model.MQTTOurs) // no reply for the plain Status: a timeout
+	if err := p.Refresh(context.Background(), id, "admin"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := st.GetDevice(context.Background(), id); got.Identity.Version != "16.0.0" || got.DeviceName != "" {
+		t.Fatalf("version %q device name %q", got.Identity.Version, got.DeviceName)
 	}
 }

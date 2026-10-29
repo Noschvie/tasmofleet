@@ -24,6 +24,7 @@ type identityStore interface {
 	GetDevice(ctx context.Context, id model.DeviceID) (model.Device, error)
 	UpdateProbe(ctx context.Context, id model.DeviceID, g store.ProbeGuard, r store.ProbeResult) error
 	UpdateNet(ctx context.Context, id model.DeviceID, g store.ProbeGuard, n model.NetFacts) error
+	UpdateProbeName(ctx context.Context, id model.DeviceID, g store.ProbeGuard, deviceName, nameFrom string) error
 	UpdateIdentityFromMQTT(ctx context.Context, id model.DeviceID, g store.ProbeGuard, topic string, i model.Identity) error
 }
 
@@ -665,9 +666,34 @@ func (p *Prober) refreshMQTT(ctx context.Context, d model.Device, actor string) 
 	if err := p.Devices.UpdateNet(ctx, d.ID, g, p.withStoredWifi(d.Net, n)); err != nil {
 		return err
 	}
+	p.refreshNameMQTT(ctx, d, g, pr)
 	slog.InfoContext(ctx, "identity refreshed over MQTT", "device", d.ID, "topic", d.Topic, "http_identity_kept", !d.Identity.DetectedAt.IsZero())
 	p.announce(d.ID)
 	return nil
+}
+
+// refreshNameMQTT reads the DeviceName with the plain Status (the Status object, never Status 0) and
+// stores it under the rule of an HTTP refresh (#125). The name is a nicety: a device that does not
+// answer, or answers something unusable, leaves the refresh as it is.
+func (p *Prober) refreshNameMQTT(ctx context.Context, d model.Device, g store.ProbeGuard, pr probed) {
+	raw, err := p.MQTT.askStatus(ctx, d, statusObject, "")
+	if err != nil {
+		slog.DebugContext(ctx, "refresh over MQTT: DeviceName not read", "device", d.ID, "err", err)
+		return
+	}
+	var s struct {
+		Status struct{ DeviceName string }
+	}
+	if json.Unmarshal(raw, &s) != nil {
+		return
+	}
+	pr.devName, pr.topic = inventory.CleanName(s.Status.DeviceName), d.Topic
+	if pr.devName == "" {
+		return
+	}
+	if err := p.Devices.UpdateProbeName(ctx, d.ID, g, pr.devName, fallbackName(d, pr)); err != nil && !errors.Is(err, store.ErrConflict) {
+		slog.WarnContext(ctx, "refresh over MQTT: store the DeviceName", "device", d.ID, "err", err)
+	}
 }
 
 func firstNonEmpty(ss ...string) string {

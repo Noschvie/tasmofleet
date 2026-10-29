@@ -49,6 +49,14 @@ type Device struct {
 	// prober only. The zero value means "never read".
 	Net NetFacts
 
+	// DeviceName is the Tasmota DeviceName the device reported at the last probe ("" when never
+	// read), written by the prober only. Name follows it while Name is still the DeviceName
+	// recorded before; a Name set by hand differs from it (#125).
+	DeviceName string
+	// KeptDeviceName is the DeviceName the admin answered "Keep" to: while the device still
+	// reports exactly this, the page does not offer it again. Written by that action only.
+	KeptDeviceName string
+
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
