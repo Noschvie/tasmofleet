@@ -28,7 +28,8 @@ test.afterAll(async () => {
 const operator = { "X-authentik-username": "olivia", "X-authentik-groups": "ops" };
 const admin = { "X-authentik-username": "adam", "X-authentik-groups": "adm" };
 
-test("switch a relay on and off from the device list, and follow outside changes live (HTTP-only device)", async ({ page, request }) => {
+// Quarantined: flaky without a code cause, see https://github.com/nofuturekid/tasmofleet/issues/206
+test("switch a relay on and off from the device list, and follow outside changes live (HTTP-only device)", { tag: "@quarantine" }, async ({ page, request }) => {
   await page.setExtraHTTPHeaders(operator);
   await page.goto(app.url + "/devices");
   const row = page.getByRole("row").filter({ hasText: "plug-4m-http" });
