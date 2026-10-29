@@ -217,6 +217,8 @@ async function crawl(
     "/firmware",
     "/policy",
     "/policy/io",
+    "/policy/rules/new",
+    "/policy/rules/r1",
     "/discovery",
     "/discovery?ignored=1",
     "/discovery/scan",

@@ -47,9 +47,8 @@ test("a free command rule: refusals with the reason, then live read, preview and
     await page.emulateMedia({ colorScheme: null });
   };
   await page.setExtraHTTPHeaders(admin);
-  await page.goto(app.url + "/policy?new=1");
-  const command = page.locator("input[name='command']");
-  const want = page.locator("input[name='want']");
+  await page.goto(app.url + "/policy/rules/new");
+  const any = page.locator("#any-command");
 
   // Refused, each with its reason at the field; nothing is stored.
   for (const [bad, why] of [
@@ -57,41 +56,40 @@ test("a free command rule: refusals with the reason, then live read, preview and
     ["MqttPassword", "Secret settings cannot be checked."],
     ["Template", "This command needs a confirmation in the console and cannot be a policy rule."],
   ] as const) {
-    await command.fill(bad);
-    await command.blur();
-    await page.locator("input[name='want']").fill("1");
-    await page.getByRole("button", { name: "Save rule" }).click();
-    await expect(page.locator("#err-command")).toHaveText(why);
-    await expect(command).toHaveAttribute("aria-invalid", "true");
-    if (bad === "Status0") {
-      await expect(page.locator("#rule-preview")).not.toContainText('command "Status0"'); // the reason, not the validator's text
-      await shot("error-status0");
-    }
+    await any.fill(bad);
+    await page.getByRole("button", { name: "Continue" }).first().click();
+    await expect(page.locator("#err-any-command")).toHaveText(why);
+    await expect(any).toHaveAttribute("aria-invalid", "true");
+    if (bad === "Status0") await shot("error-status0");
   }
 
-  // The free field: LedState is in no list.
-  await command.fill("LedState");
-  await command.blur();
-  // the earlier refusal described another command: it is gone, with aria-invalid
-  await expect(page.locator("#err-command")).toBeEmpty();
-  await expect(page.locator("input[name='command']")).not.toHaveAttribute("aria-invalid", "true");
+  // The free field: LedState is in no list. It opens the rule page as a draft.
+  await any.fill("LedState");
+  await page.getByRole("button", { name: "Continue" }).first().click();
+  await expect(page).toHaveURL(/\/policy\/rules\/new\?command=LedState$/);
   await expect(page.locator("#want-control .ufield-help")).toContainText("Compared with exactly what the device reports for LedState");
   await page.locator("input[name='want']").fill("3");
   await page.locator("input[name='name']").fill("LED state 3");
-  await page.getByRole("radio", { name: "Required" }).check(); // only Required rules are fixed
+  await page.getByRole("radio", { name: /^Required/ }).check(); // only Required rules are fixed
   await shot("free-command");
   await page.getByRole("button", { name: "Save rule" }).click();
   await expect(page.getByText("Rule saved")).toBeVisible();
-  await expect(page.locator(".pol-card", { hasText: "LED state 3" })).toContainText("LedState = 3");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("LED state 3");
+  await expect(page.locator(".pghead-sub")).toContainText("LedState = 3");
 
-  // A live check reads LedState from the devices (the simulator reports 1), the rule flags them.
+  // Check now reads LedState from the devices (the simulator reports 1); the rule page lists them.
+  const devRow = page.locator("#rule-devices tr").filter({ hasText: "plug-4m-http" });
+  await page.getByRole("button", { name: "Check now" }).click();
+  await expect(page.getByText("Live check finished")).toBeVisible({ timeout: 60_000 });
+  await expect(devRow).toContainText("live ·");
+  await expect(page.locator("[data-tile='deviate'] .dev-tile-v")).not.toHaveText("0");
+  await shot("preview-flags");
+
+  // The same on the policy page, for the Make compliant steps below.
   await page.goto(app.url + "/policy");
   await page.getByRole("button", { name: "Run now" }).click();
   const row = page.locator(".pol-pv-row").filter({ hasText: "plug-4m-http" });
   await expect(row).toContainText("→ 3", { timeout: 60_000 });
-  await page.locator(".pol-card", { hasText: "LED state 3" }).locator(".pol-card-main").click();
-  await expect(page.locator("#rule-preview")).toContainText(/Would flag [1-9]\d* of/);
-  await shot("preview-flags");
 
   // Operators see the rule but have no way to change it or to fix.
   await page.setExtraHTTPHeaders(operator);

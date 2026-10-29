@@ -1546,6 +1546,8 @@ UI listener (all paths relative to the base path; `R` = role needed; non-GET = C
 | GET, POST | `/discovery`, `/discovery/scan`                                     | admin                             | proposals, scans                                                                           | 2   |
 | GET, POST | `/bulk`, `/bulk/preview`                                            | operator/admin                    | bulk commands                                                                              | 2   |
 | GET       | `/policy`                                                           | operator                          | drift view                                                                                 | 2   |
+| GET       | `/policy/rules/{id}`                                                | operator                          | rule page (read-only for operators)                                                        | 2   |
+| GET, POST | `/policy/rules/new, /new/copy`                                      | admin                             | New rule: template, any command, copy from a device (unsaved draft)                        | 2   |
 | POST      | `/import/tasmoadmin`                                                | admin                             | web import                                                                                 | 2   |
 | POST      | `/firmware/upload`                                                  | admin                             | custom firmware                                                                            | 2   |
 

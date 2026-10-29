@@ -94,9 +94,7 @@ func (h *handler) registerPolicy(route func(string, func(http.Handler) http.Hand
 		}
 		h.policyRender(w, r, http.StatusOK, o)
 	})
-	route("POST "+policyPath+"/live", op, func(w http.ResponseWriter, r *http.Request) {
-		h.policyRender(w, r, http.StatusOK, policyOpts{live: true})
-	})
+	route("POST "+policyPath+"/live", op, h.liveCheck)
 }
 
 // policyOpts says what the page shows beyond the saved state: the rule open in the editor,

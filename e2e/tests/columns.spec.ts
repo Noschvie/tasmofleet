@@ -534,7 +534,7 @@ test("tooltips: never a page dump, never two bubbles, at most 160 characters", a
 test("labels point at their own field, not at an (i) button", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.setExtraHTTPHeaders(adam);
-  for (const path of ["/devices/new", "/updates/new", "/settings/system", "/policy?new=1", "/firmware", "/discovery", "/import/tasmoadmin", "/setup"]) {
+  for (const path of ["/devices/new", "/updates/new", "/settings/system", "/policy/rules/new", "/firmware", "/discovery", "/import/tasmoadmin", "/setup"]) {
     const res = await page.goto(app.url + path);
     if (!res || res.status() >= 400) continue;
     const bad = await page.evaluate(() =>

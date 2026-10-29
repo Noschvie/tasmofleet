@@ -9,6 +9,8 @@ always upgrade automatically.
 ### Added
 
 - Images are also published to Docker Hub (`nofuturekid/tasmofleet`) under the same tags as on ghcr.io (#165)
+- Policy rules have a page of their own, `/policy/rules/{id}`: four tiles (applies to, match, deviate, not judged), the editor, and the devices the rule judges with the value each has and where it came from (live or backup); the table updates as you edit without reading any device. Operators see the same page read-only (#197)
+- New rule page (`/policy/rules/new`): start from a template, from Any command (refused commands show the reason) or with Copy from a device (a fresh live read of that one command; backup value when the device does not answer, with the source shown). Each opens an unsaved draft; nothing is stored before Save rule (#197)
 
 ### Changed
 
@@ -22,6 +24,7 @@ always upgrade automatically.
 
 ### Breaking
 
+- Templates no longer save a rule at once: a template opens a draft on the New rule page. `POST /policy/rules/template` is removed in a later step of the policy rework (#197)
 - The policy rules export (and `POLICY_RULES` format) gains an optional `id` per rule; exports now include it, and an import with a duplicate or malformed id is refused (#197)
 
 ## 0.18.0 (2026-10-29)

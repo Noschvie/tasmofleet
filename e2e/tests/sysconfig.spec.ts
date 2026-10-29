@@ -79,14 +79,17 @@ test("policy rule editor: create via the setting picker, live preview, edit, rev
   await page.goto(app.url + "/policy");
   await expect(page.getByText("No rules yet")).toBeVisible();
 
-  await page.getByRole("link", { name: "New rule" }).click();
+  await page.goto(app.url + "/policy/rules/new"); // the policy page's own New rule link moves with its rework
+
+  await page.locator("#any-command").fill("SaveData");
+  await page.getByRole("button", { name: "Continue" }).first().click();
+  await expect(page).toHaveURL(/\/policy\/rules\/new\?command=SaveData$/);
   // The value control follows the setting: a number input for SaveData ...
   const command = page.locator("input[name='command']");
   const pick = async (name: string) => {
     await command.fill(name);
     await command.blur(); // the change event swaps the value control
   };
-  await pick("SaveData");
   await expect(page.locator("input[name='want'][type='number']")).toHaveAttribute("max", "3600");
   // ... a dropdown for an enum ...
   await pick("PowerOnState");
@@ -100,26 +103,29 @@ test("policy rule editor: create via the setting picker, live preview, edit, rev
   await page.locator(".pol-scope > summary").click();
   await page.locator("label.pol-pickc", { hasText: "ESP32 (all variants)" }).click();
 
-  // The preview updates while editing and stores nothing.
-  await expect(page.locator("#rule-preview")).toContainText(/Would flag \d+ of/);
+  // The devices card updates while editing and stores nothing.
+  await expect(page.locator("#rule-devices")).toContainText(/Device/);
   await page.locator("input[name='want']").fill("99999");
-  await expect(page.locator("#rule-preview .ufield-err")).toBeVisible();
+  await expect(page.locator("#rule-devices .ufield-err")).toBeVisible();
   await page.locator("input[name='want']").fill("0");
-  await expect(page.locator("#rule-preview")).toContainText(/Would flag \d+ of/);
+  await expect(page.locator("#rule-devices .ufield-err")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Save rule" }).click();
+  await expect(page).toHaveURL(/\/policy\/rules\/r[a-z0-9]+\?ok=saved$/);
   await expect(page.getByText("Rule saved")).toBeVisible();
-  const card = page.locator(".pol-card", { hasText: "Flash wear" });
-  await expect(card).toContainText("ESP32 (all variants)");
-  await expect(card).toContainText("SaveData = 0");
+  await expect(page.locator(".pghead-sub")).toContainText("SaveData = 0");
+  await expect(page.locator(".pghead-sub")).toContainText("ESP32 (all variants)");
 
-  // selecting the card opens its editor (the menu has no Edit)
-  await card.locator(".pol-card-main").click();
+  // editing on the rule page keeps the address
+  const url = page.url().split("?")[0];
   await expect(page.locator("input[name='name']")).toHaveValue("Flash wear");
   await page.locator("input[name='want']").fill("1");
   await page.getByRole("button", { name: "Save rule" }).click();
-  await expect(page.locator(".pol-card", { hasText: "Flash wear" })).toContainText("SaveData = 1");
+  await expect(page).toHaveURL(url + "?ok=saved");
+  await expect(page.locator(".pghead-sub")).toContainText("SaveData = 1");
 
+  // revert is still on the policy page (its history moves in a later step)
+  await page.goto(app.url + "/policy");
   // The history compares the version before with the current one; reverting asks first.
   await page.getByRole("button", { name: "Revert to this version…" }).click();
   await page.locator("dialog[open]").getByRole("button", { name: /^Revert to v/ }).click();

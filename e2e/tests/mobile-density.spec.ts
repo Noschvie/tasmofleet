@@ -101,7 +101,7 @@ async function phonePages(page: import("@playwright/test").Page): Promise<Record
     policy: "/policy",
     "policy import / export": "/policy/io",
     "policy rule editor": "/policy?edit=0",
-    "new policy rule": "/policy?new=1",
+    "new policy rule": "/policy/rules/new",
     transactions: "/transactions",
     "transaction detail": tx!.replace(app.url, "").replace(/^(?!\/)/, "/"),
     update: "/updates/new",
@@ -378,16 +378,17 @@ test("devices: the bulk bar appears on selection and Clear hides it", async ({ p
   expect(box!.x + box!.width).toBeLessThanOrEqual(375);
 });
 
-// UX review #27: "New rule" lands on the editor with its first field focused, on screen also where
-// the columns stack (a phone puts the editor below the rule cards).
-test("policy: ?new=1 shows the editor on screen with the first field focused", async ({ page }) => {
+// UX review #27 (reworked in #197): New rule is a page of its own; its choices and the Any command
+// field are on screen, also where the columns stack.
+test("policy: New rule shows its choices on screen, with the Any command field reachable", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   for (const [w, h] of [[1280, 900], [375, SCREEN]]) {
     await page.setViewportSize({ width: w, height: h });
-    await page.goto(app.url + "/policy?new=1");
-    const name = page.locator("#editor input[name=name]");
-    await expect(name).toBeFocused();
-    await expect(name).toBeInViewport();
+    await page.goto(app.url + "/policy/rules/new");
+    await expect(page.getByRole("heading", { level: 1, name: "New rule" })).toBeInViewport();
+    await expect(page.getByRole("link", { name: /Local timezone/ })).toBeVisible();
+    await page.locator("#any-command").scrollIntoViewIfNeeded();
+    await expect(page.locator("#any-command")).toBeInViewport();
   }
 });
 

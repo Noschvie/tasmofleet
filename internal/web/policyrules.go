@@ -26,6 +26,9 @@ import (
 type PolicyRulesService interface {
 	State(ctx context.Context) (sysconfig.RulesState, error)
 	Preview(ctx context.Context, specs []sysconfig.RuleSpec) (sysconfig.PreviewResult, error)
+	// Validate checks specs like Save does and returns them as policy rules (with their ids), so
+	// the rule page can evaluate a draft that is not saved.
+	Validate(specs []sysconfig.RuleSpec) ([]policy.Rule, error)
 	Save(ctx context.Context, actor, note string, specs []sysconfig.RuleSpec, rec audit.Recorder) (int64, error)
 	Revert(ctx context.Context, actor string, id int64, rec audit.Recorder) (int64, error)
 	Export(ctx context.Context) ([]byte, error)
@@ -44,6 +47,10 @@ const rulesPath = "/policy/rules"
 const policyIOPath = "/policy/io"
 
 func (h *handler) registerPolicyRules(route func(string, func(http.Handler) http.Handler, http.HandlerFunc), op, adm func(http.Handler) http.Handler) {
+	if h.d.Policy != nil {
+		// Also in env mode (POLICY_RULES): the rule page is then read-only.
+		route("GET "+rulesPath+"/{id}", op, h.rulePage)
+	}
 	if h.d.PolicyRules == nil {
 		return
 	}
@@ -51,6 +58,8 @@ func (h *handler) registerPolicyRules(route func(string, func(http.Handler) http
 	route("GET "+policyIOPath+"/export", op, h.rulesExport)
 	route("POST "+policyIOPath+"/import", adm, h.rulesImport)
 	route("GET "+rulesPath+"/value-control", adm, h.rulesValueControl)
+	route("GET "+rulesPath+"/new", adm, h.ruleNew)
+	route("POST "+rulesPath+"/new/copy", adm, h.ruleCopy)
 	route("POST "+rulesPath+"/preview", adm, h.rulesPreview)
 	route("POST "+rulesPath+"/save", adm, h.rulesSave)
 	route("GET "+rulesPath+"/delete", adm, h.rulesDeleteConfirm)
@@ -234,12 +243,12 @@ func chips(known []string, on []string) []chip {
 	return out
 }
 
-// buildEditor fills the editor panel. Tags and device names come from the
-// inventory; values of the rule that are not in it stay selectable.
-func (h *handler) buildEditor(r *http.Request, p *rulesPage, idx string, spec sysconfig.RuleSpec, saved []sysconfig.RuleSpec) error {
+// editorFields builds the fields of the rule editor for spec: tags and device names come from
+// the inventory; values of the rule that are not in it stay selectable.
+func (h *handler) editorFields(r *http.Request, spec sysconfig.RuleSpec) (*ruleEditor, error) {
 	devs, err := h.d.Inventory.List(r.Context())
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var tags, names []string
 	for _, d := range devs {
@@ -254,24 +263,34 @@ func (h *handler) buildEditor(r *http.Request, p *rulesPage, idx string, spec sy
 	for _, f := range policy.FamilyNames() {
 		fam = append(fam, chip{Value: f, Label: policy.FamilyLabel(f), On: slices.Contains(spec.Families, f)})
 	}
+	return &ruleEditor{
+		Spec:     spec,
+		Groups:   settingGroups(),
+		Control:  controlFor(spec.Command, spec.Want, true),
+		Families: fam, Tags: chips(tags, spec.Tags), Devices: chips(names, spec.Devices),
+		Except: strings.Join(spec.Except, ", "),
+	}, nil
+}
+
+// buildEditor fills the editor panel of the policy page.
+func (h *handler) buildEditor(r *http.Request, p *rulesPage, idx string, spec sysconfig.RuleSpec, saved []sysconfig.RuleSpec) error {
+	e, err := h.editorFields(r, spec)
+	if err != nil {
+		return err
+	}
 	title := "New rule"
 	if idx != "new" {
 		title = "Edit rule"
 	}
-	d := ruleDraft{Idx: idx, Spec: spec}
-	p.Editor = &ruleEditor{
-		Idx: idx, Title: title, Spec: spec, Version: p.Current,
-		Groups:   settingGroups(),
-		Control:  controlFor(spec.Command, spec.Want, true),
-		Families: fam, Tags: chips(tags, spec.Tags), Devices: chips(names, spec.Devices),
-		Except:  strings.Join(spec.Except, ", "),
-		Preview: h.previewFor(r.Context(), saved, d),
-	}
+	e.Idx, e.Title, e.Version = idx, title, p.Current
+	e.Preview = h.previewFor(r.Context(), saved, ruleDraft{Idx: idx, Spec: spec})
+	p.Editor = e
 	return nil
 }
 
 var (
 	idxRe     = regexp.MustCompile(`^(new|[0-9]{1,3})$`)
+	originRe  = regexp.MustCompile(`^(command|template:[a-z0-9-]{1,32}|copy:[0-9]{1,18})$`)
 	versionRe = regexp.MustCompile(`^[0-9]{1,18}$`)
 )
 
@@ -298,6 +317,8 @@ func strictForm(w http.ResponseWriter, r *http.Request, single, multi []string) 
 // ruleDraft is what the editor form carries.
 type ruleDraft struct {
 	Idx        string // "new" or a list position
+	ID         string // the rule page's form: "new" or the rule's id; then Idx is set from it
+	Origin     string // where a new rule came from: template:<id>, copy:<device id> or command
 	Version    int64  // the version the editor was opened on
 	Spec       sysconfig.RuleSpec
 	ChangeNote string
@@ -314,7 +335,7 @@ func uniq(list []string) []string {
 	return out
 }
 
-var draftSingle = []string{"csrf", "idx", "version", "name", "command", "want", "severity", "tags_extra", "except", "note", "change_note"}
+var draftSingle = []string{"csrf", "idx", "id", "origin", "version", "name", "command", "want", "severity", "tags_extra", "except", "note", "change_note"}
 
 // draftForm reads the editor form (save and preview). The Enabled switch is a checkbox after a
 // hidden "state=disabled": a ticked box sends both and the last one wins.
@@ -323,8 +344,20 @@ func (h *handler) draftForm(w http.ResponseWriter, r *http.Request) (ruleDraft, 
 	if !ok {
 		return ruleDraft{}, false
 	}
-	d := ruleDraft{Idx: f.Get("idx"), ChangeNote: strings.TrimSpace(f.Get("change_note"))}
-	if d.Idx == "" {
+	d := ruleDraft{Idx: f.Get("idx"), ID: f.Get("id"), Origin: f.Get("origin"), ChangeNote: strings.TrimSpace(f.Get("change_note"))}
+	switch {
+	case d.ID != "" && d.Idx != "":
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return ruleDraft{}, false
+	case d.ID != "" && d.ID != "new" && !policy.RuleIDRe.MatchString(d.ID):
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return ruleDraft{}, false
+	case d.Origin != "" && !originRe.MatchString(d.Origin):
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return ruleDraft{}, false
+	case d.ID == "new":
+		d.Idx = "new" // the rule page's draft is a new rule
+	case d.ID == "" && d.Idx == "":
 		d.Idx = "new"
 	}
 	if v := f.Get("version"); v != "" {
@@ -335,7 +368,7 @@ func (h *handler) draftForm(w http.ResponseWriter, r *http.Request) (ruleDraft, 
 		}
 		d.Version = n
 	}
-	if !idxRe.MatchString(d.Idx) {
+	if d.Idx != "" && !idxRe.MatchString(d.Idx) {
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return ruleDraft{}, false
 	}
@@ -453,6 +486,10 @@ func (h *handler) rulesPreview(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
+	if d.ID != "" {
+		h.ruleDevicesPreview(w, r, d, st)
+		return
+	}
 	h.component(w, r, http.StatusOK, rulePreviewLine(h.previewFor(r.Context(), st.Specs, d)))
 }
 
@@ -489,8 +526,16 @@ func (h *handler) rulesSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if d.Version != st.VersionID {
-		h.rulesStale(w, r)
+		h.draftStale(w, r, d)
 		return
+	}
+	if d.ID != "" && d.ID != "new" {
+		i := slices.IndexFunc(st.Specs, func(s sysconfig.RuleSpec) bool { return s.ID == d.ID })
+		if i < 0 {
+			h.notFound(w, r)
+			return
+		}
+		d.Idx = strconv.Itoa(i)
 	}
 	d.Spec.Disabled = draftDisabled(d, st.Specs)
 	list, pos, ok := place(st.Specs, d.Idx, d.Spec)
@@ -502,9 +547,17 @@ func (h *handler) rulesSave(w http.ResponseWriter, r *http.Request) {
 		h.rulesInvalid(w, r, d, field, msg, http.StatusUnprocessableEntity)
 		return
 	}
-	_, err = h.d.PolicyRules.Save(r.Context(), actor(r), d.ChangeNote, list, h.d.Recorder)
+	note := d.ChangeNote
+	if note == "" && d.ID == "new" {
+		note = h.originNote(r, d.Origin)
+	}
+	_, err = h.d.PolicyRules.Save(r.Context(), actor(r), note, list, h.d.Recorder)
 	if err == nil {
-		redirect(w, r, policyPath+"?ok=saved&edit="+strconv.Itoa(pos))
+		if d.ID == "" {
+			redirect(w, r, policyPath+"?ok=saved&edit="+strconv.Itoa(pos))
+			return
+		}
+		h.ruleSaved(w, r, d.ID, pos)
 		return
 	}
 	var re *sysconfig.RuleError
@@ -514,12 +567,70 @@ func (h *handler) rulesSave(w http.ResponseWriter, r *http.Request) {
 		field, msg := ruleProblem(re.Msg)
 		h.rulesInvalid(w, r, d, field, msg, http.StatusUnprocessableEntity)
 	case errors.As(err, &re):
-		h.policyRender(w, r, http.StatusUnprocessableEntity, policyOpts{draft: &d, banner: "Nothing was saved. " + re.Error()})
+		h.draftRender(w, r, http.StatusUnprocessableEntity, d, "", "", "Nothing was saved. "+re.Error())
 	case errors.Is(err, sysconfig.ErrNoChange):
-		h.policyRender(w, r, http.StatusOK, policyOpts{draft: &d, banner: "Nothing changed: the rules are the same as the saved version."})
+		h.draftRender(w, r, http.StatusOK, d, "", "", "Nothing changed: the rules are the same as the saved version.")
 	default:
 		h.fail(w, r, err)
 	}
+}
+
+// ruleSaved sends the browser to the rule it just saved. A new rule has its id only now: it is
+// the one at the end of the list (the position it was appended at).
+func (h *handler) ruleSaved(w http.ResponseWriter, r *http.Request, id string, pos int) {
+	if id == "new" {
+		st, err := h.d.PolicyRules.State(r.Context())
+		if err != nil || pos >= len(st.Specs) {
+			redirect(w, r, policyPath+"?ok=saved")
+			return
+		}
+		id = st.Specs[pos].ID
+	}
+	redirect(w, r, rulesPath+"/"+id+"?ok=saved")
+}
+
+// originNote is the change note of a new rule that the person left empty: where it came from.
+func (h *handler) originNote(r *http.Request, origin string) string {
+	switch kind, val, _ := strings.Cut(origin, ":"); kind {
+	case "template":
+		if i := slices.IndexFunc(policyTemplates(h.brokerHost()), func(t ruleTemplate) bool { return t.ID == val }); i >= 0 {
+			return "from template: " + policyTemplates(h.brokerHost())[i].Title
+		}
+	case "copy":
+		id, err := strconv.ParseInt(val, 10, 64)
+		if err != nil {
+			break
+		}
+		if devs, err := h.d.Inventory.List(r.Context()); err == nil {
+			for _, d := range devs {
+				if int64(d.ID) == id {
+					return "copied from " + d.Name
+				}
+			}
+		}
+		return "copied from a device"
+	}
+	return ""
+}
+
+// draftStale answers a save made on an outdated version of the rules. The rule page of the
+// editor's rule opens again (without the draft); the policy page's editor shows the policy page.
+func (h *handler) draftStale(w http.ResponseWriter, r *http.Request, d ruleDraft) {
+	if d.ID == "" {
+		h.rulesStale(w, r)
+		return
+	}
+	h.rulePageRender(w, r, http.StatusConflict, ruleOpts{ID: d.ID, Banner: staleText})
+}
+
+// draftRender shows a draft again with its problem: on the rule page when the form came from
+// there (it carries an id), else on the policy page.
+func (h *handler) draftRender(w http.ResponseWriter, r *http.Request, status int, d ruleDraft, errField, errMsg, banner string) {
+	if d.ID != "" {
+		h.rulePageRender(w, r, status, ruleOpts{ID: d.ID, Draft: &d, ErrField: errField, ErrMsg: errMsg, Banner: banner})
+		return
+	}
+	h.policyRender(w, r, status, policyOpts{draft: &d, errField: errField, errMsg: errMsg, banner: banner})
 }
 
 // draftProblem finds what the form left empty before anything is validated or
@@ -557,7 +668,7 @@ func ruleProblem(msg string) (field, text string) {
 // rulesInvalid answers a save whose draft is incomplete or refused: the editor opens again
 // with the problem at its field and nothing is stored.
 func (h *handler) rulesInvalid(w http.ResponseWriter, r *http.Request, d ruleDraft, field, msg string, status int) {
-	h.policyRender(w, r, status, policyOpts{draft: &d, errField: field, errMsg: msg})
+	h.draftRender(w, r, status, d, field, msg, "")
 }
 
 func (h *handler) rulesDelete(w http.ResponseWriter, r *http.Request) {

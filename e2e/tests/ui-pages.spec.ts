@@ -324,7 +324,7 @@ for (const m of modes) {
     }
     await page.goto(app.url + "/policy/io");
     await look("policy-io");
-    await page.goto(app.url + "/policy?new=1");
+    await page.goto(app.url + "/policy/rules/new");
     await look("policy-rule-new");
     await page.goto(app.url + "/policy/rules/delete?idx=0");
     await look("policy-rule-delete");
@@ -378,7 +378,7 @@ for (const m of modes) {
 test("phone width: policy, rule editor and setup never scroll sideways", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await page.setExtraHTTPHeaders(admin);
-  for (const path of ["/policy", "/policy/io", "/policy?new=1", "/setup", "/transactions"]) {
+  for (const path of ["/policy", "/policy/io", "/policy/rules/new", "/setup", "/transactions"]) {
     await page.goto(app.url + path);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     await expectNoOverflow(page, path);
@@ -408,7 +408,7 @@ test("phone width: policy, rule editor and setup never scroll sideways", async (
   // A scope that covers every ESP32 variant reads as one name, not nine.
   await expect(page.locator(".pol-card", { hasText: "ESP32 (all variants)" }).first()).toBeVisible();
   await expect(page.getByText("esp32c61", { exact: true }).filter({ visible: true })).toHaveCount(0);
-  await page.goto(app.url + "/policy?new=1");
+  await page.goto(app.url + "/policy/rules/new?template=timezone");
   await page.locator(".pol-scope > summary").click(); // the scope choices are a fold
   await expect(page.getByLabel("ESP32 (all variants)")).toBeVisible();
 });

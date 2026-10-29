@@ -1,0 +1,480 @@
+package web
+
+import (
+	"strconv"
+
+	"github.com/nofuturekid/tasmofleet/internal/policy"
+	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+)
+
+// The rule page and the New rule page (#197). The editor's field pieces (commandField, ruleValue)
+// are the policy page's own; the page around them is new.
+
+func severityOptions(sev string) []ui.Option {
+	return []ui.Option{
+		{Value: policy.SeverityInfo, Label: "Advisory · hint only", Checked: sev == policy.SeverityInfo},
+		{Value: policy.SeverityWarn, Label: "Required · counts, preselected in Make compliant", Checked: sev != policy.SeverityInfo},
+	}
+}
+
+func rulePath(base, id string) string { return base + rulesPath + "/" + id }
+
+// ruleShowHref is the devices card's filter link of a saved rule (the link works without
+// JavaScript; with it the editor swaps the card, see ruleDevChip).
+func ruleShowHref(v ruleDevicesView, show string, all bool) string {
+	q := ""
+	if show != "" {
+		q = "?show=" + show
+	}
+	if all {
+		if q == "" {
+			q = "?all=1"
+		} else {
+			q += "&all=1"
+		}
+	}
+	return rulePath(v.Base, v.ID) + q
+}
+
+func ruleShowPost(v ruleDevicesView, show string, all bool) string {
+	q := "?show=" + show
+	if show == "" {
+		q = "?show=all"
+	}
+	if all {
+		q += "&all=1"
+	}
+	return v.Base + rulesPath + "/preview" + q
+}
+
+func ruleSevTone(required bool) ui.Tone {
+	if required {
+		return ui.ToneWarn
+	}
+	return ui.ToneAccent
+}
+
+func ruleSevLabel(required bool) string {
+	if required {
+		return "Required"
+	}
+	return "Advisory"
+}
+
+// rulePageTempl is GET /policy/rules/{id} and the draft of a new rule.
+templ rulePageTempl(p rulePageView) {
+	<div class="pol-page">
+		<div class="pghead">
+			<div class="pghead-t">
+				<h1>
+					{ p.Name }
+					{ " " }
+					@ui.Badge(ruleSevTone(p.Required), ruleSevLabel(p.Required))
+					{ " " }
+					if p.Draft {
+						@ui.Badge(ui.ToneNeutral, "Draft")
+					} else if p.Disabled {
+						@ui.Badge(ui.ToneNeutral, "Disabled")
+					} else {
+						@ui.Badge(ui.ToneOK, "Enabled")
+					}
+				</h1>
+				<p class="pghead-sub mono">{ p.Line }</p>
+			</div>
+			<div class="pghead-acts">
+				if !p.Draft {
+					<form method="post" action={ templ.SafeURL(p.Base + policyPath + "/live") } class="pol-inline">
+						<input type="hidden" name="csrf" value={ p.CSRF }/>
+						<input type="hidden" name="rule" value={ p.ID }/>
+						if p.Disabled {
+							<button type="submit" class="btn" disabled aria-describedby="chk-why">Check now</button>
+							<span class="sr-only" id="chk-why">Not checked while the rule is disabled.</span>
+						} else {
+							<button type="submit" class="btn">Check now</button>
+						}
+					</form>
+				}
+				if p.Admin && !p.Draft {
+					@ruleOpForm(p, "/duplicate", "Duplicate")
+					if p.Disabled {
+						@ruleOpForm(p, "/enable", "Enable")
+					} else {
+						@ruleOpForm(p, "/disable", "Disable")
+					}
+					<a class="btn btn-danger" href={ templ.SafeURL(p.Base + rulesPath + "/delete?idx=" + itoa(p.Idx)) } data-dialog="dlg-rule-delete">Delete…</a>
+				}
+			</div>
+		</div>
+		if p.Env {
+			@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Text: "These rules come from POLICY_RULES (the environment). They can't be changed here."})
+		}
+		if p.Banner != "" {
+			@ui.Banner(ui.BannerData{Tone: p.BannerTone, Text: p.Banner, Alert: p.BannerTone == ui.ToneDanger})
+		}
+		if p.Source != "" {
+			@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Text: p.Source})
+		}
+		<div class="devlive">
+			<div class="dev-tiles">
+			for _, t := range p.Tiles {
+				<div class="dev-tile" data-tile={ t.Key }>
+					<div class="dev-tile-l">{ t.Label }</div>
+					<div class={ "dev-tile-v", toneClass(t.Tone) }>{ t.Value }</div>
+					<div class="dev-tile-s">{ t.Sub }</div>
+				</div>
+			}
+			</div>
+			<div class="dev-pair">
+			if p.Editor != nil {
+				@ruleEditCard(p, p.Editor)
+			} else {
+				<section class="devcard" aria-labelledby="dc-rule">
+					<div class="devcard-head"><h2 id="dc-rule">Rule</h2></div>
+					@ui.KV(p.KV)
+				</section>
+			}
+			@ruleDevicesCard(p.Devices)
+			</div>
+			<details class="devcard" id="rule-history" hidden>
+				<summary>History of this rule</summary>
+			</details>
+		</div>
+		if p.Admin && !p.Draft {
+			@ui.Dialog(ui.DialogData{
+				ID: "dlg-rule-delete", Title: "Delete rule “" + p.Name + "”?", Body: p.DeleteText,
+				Action: p.Base + rulesPath + "/delete", CSRF: p.CSRF,
+				Fields: []ui.KVRow{{Key: "idx", Value: itoa(p.Idx)}, {Key: "version", Value: vstr(p.Version)}},
+				Verb:   "Delete rule", Danger: true,
+			})
+		}
+		<script src={ p.Base + "/static/" + asset("policy.js") } defer></script>
+	</div>
+}
+
+templ ruleOpForm(p rulePageView, path, label string) {
+	<form method="post" action={ templ.SafeURL(p.Base + rulesPath + path) } class="pol-inline">
+		<input type="hidden" name="csrf" value={ p.CSRF }/>
+		<input type="hidden" name="version" value={ vstr(p.Version) }/>
+		<input type="hidden" name="idx" value={ itoa(p.Idx) }/>
+		<input type="hidden" name="back" value="rule"/>
+		<button type="submit" class="btn">{ label }</button>
+	</form>
+}
+
+// ruleEditCard is the Rule card: the editor of the rule or draft. The devices card next to it is
+// asked for again (htmx) while the form is edited; nothing is stored before "Save rule".
+templ ruleEditCard(p rulePageView, e *ruleEditor) {
+	<section class="devcard" aria-labelledby="dc-rule">
+		<div class="devcard-head">
+			<h2 id="dc-rule">Rule</h2>
+			<span class="devcard-note">Saving creates a new version</span>
+		</div>
+		if e.Err != "" && e.ErrField == "" {
+			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: e.Err, Alert: true})
+		}
+		<form
+			id="rule-form"
+			method="post"
+			action={ templ.SafeURL(p.Base + rulesPath + "/save") }
+			hx-post={ p.Base + rulesPath + "/preview" }
+			hx-trigger="change, input changed delay:400ms, htmx:afterSwap from:#want-control delay:50ms"
+			hx-target="#rule-devices"
+			hx-swap="outerHTML"
+			novalidate
+			class="pol-form"
+		>
+			<input type="hidden" name="csrf" value={ p.CSRF }/>
+			<input type="hidden" name="id" value={ e.Idx }/>
+			<input type="hidden" name="version" value={ vstr(e.Version) }/>
+			if p.Origin != "" {
+				<input type="hidden" name="origin" value={ p.Origin }/>
+			}
+			<label class="ufield">
+				<span class="ufield-label">Name</span>
+				<input name="name" value={ e.Spec.Name } maxlength="80" placeholder="New rule"/>
+			</label>
+			<div class="ufield">
+				<span class="ufield-label">Applies to</span>
+				<details class="pol-scope">
+					<summary>{ appliesText(e.Spec) }</summary>
+					<div class="pol-scope-body">
+						<fieldset>
+							<legend>Chip families <small>(none: every family)</small></legend>
+							<div class="pol-pick">
+								for _, f := range e.Families {
+									<label class="pol-pickc"><input type="checkbox" name="family" value={ f.Value } checked?={ f.On }/> { scopeChipText(f) }</label>
+								}
+							</div>
+						</fieldset>
+						<fieldset>
+							<legend>Tags <small>(a device with any of them)</small></legend>
+							<div class="pol-pick">
+								for _, t := range e.Tags {
+									<label class="pol-pickc"><input type="checkbox" name="tag" value={ t.Value } checked?={ t.On }/> { t.Value }</label>
+								}
+							</div>
+							<label class="ufield"><span class="ufield-label">Other tags</span><input name="tags_extra" placeholder="comma separated"/></label>
+						</fieldset>
+						<fieldset>
+							<legend>Devices <small>(tags and devices together mean either; all empty: every device)</small></legend>
+							<div class="pol-pick pol-pick-scroll">
+								for _, d := range e.Devices {
+									<label class="pol-pickc"><input type="checkbox" name="device" value={ d.Value } checked?={ d.On }/> { d.Value }</label>
+								}
+							</div>
+						</fieldset>
+					</div>
+				</details>
+			</div>
+			<div class="pol-two">
+				@commandField(p.Base, e.Groups, e.Spec.Command, e.ErrField == "command", e.Err)
+				<div class="ufield" id="want-control">
+					@ruleValue(e.Control)
+				</div>
+			</div>
+			if e.ErrField == "want" {
+				<span class="ufield-err" id="err-want" role="alert">{ e.Err }</span>
+			}
+			<div class="ufield">
+				<span class="ufield-label" id="sev-l">When a device deviates</span>
+				@ui.Segmented("When a device deviates", "severity", severityOptions(e.Spec.Severity))
+				<span class="ufield-help">Nothing is ever written to devices automatically.</span>
+			</div>
+			<div class="pol-two">
+				<label class="ufield">
+					<span class="ufield-label">Exceptions</span>
+					<input name="except" value={ e.Except } placeholder="Device names or tags, comma separated"/>
+				</label>
+				<label class="ufield">
+					<span class="ufield-label">Note</span>
+					<textarea name="note" rows="2" maxlength="300" placeholder="Why this rule exists">{ e.Spec.Note }</textarea>
+				</label>
+			</div>
+			<label class="pol-enabled">
+				<input type="hidden" name="state" value="disabled"/>
+				<input type="checkbox" name="state" value="enabled" checked?={ e.Enabled }/>
+				Enabled
+			</label>
+			<label class="ufield">
+					<span class="ufield-label">Change note</span>
+				<input
+					name="change_note"
+					maxlength="200"
+					placeholder="Optional, shown in History"
+					if e.ErrField == "change_note" {
+						aria-invalid="true"
+						aria-describedby="err-change_note"
+						autofocus
+					}
+				/>
+				if e.ErrField == "change_note" {
+					<span class="ufield-err" id="err-change_note" role="alert">{ e.Err }</span>
+				}
+			</label>
+			<div class="pol-ed-foot">
+				if p.Draft {
+					<a class="btn" href={ templ.SafeURL(p.Base + rulesPath + "/new") }>Cancel</a>
+				} else {
+					<a class="btn" href={ templ.SafeURL(rulePath(p.Base, p.ID)) }>Cancel</a>
+				}
+				<button type="submit" class="btn btn-primary">Save rule</button>
+			</div>
+		</form>
+	</section>
+}
+
+// ruleDevChip is a filter of the devices card. A saved rule's chip is a link (it works without
+// JavaScript) that the editor also turns into a swap; a draft has no page to link to.
+templ ruleDevChip(v ruleDevicesView, show, label string, n int) {
+	if v.Draft {
+		<button type="button" class="dv-chip" hx-post={ ruleShowPost(v, show, false) } hx-include="#rule-form" hx-target="#rule-devices" hx-swap="outerHTML" aria-current?={ v.Show == show }>{ label }<span class="dv-n">{ itoa(n) }</span></button>
+	} else if v.Edit {
+		<a class="dv-chip" href={ templ.SafeURL(ruleShowHref(v, show, false)) } hx-post={ ruleShowPost(v, show, false) } hx-include="#rule-form" hx-target="#rule-devices" hx-swap="outerHTML" aria-current?={ v.Show == show }>{ label }<span class="dv-n">{ itoa(n) }</span></a>
+	} else {
+		<a class="dv-chip" href={ templ.SafeURL(ruleShowHref(v, show, false)) } aria-current?={ v.Show == show }>{ label }<span class="dv-n">{ itoa(n) }</span></a>
+	}
+}
+
+// ruleDevicesCard is the Devices card: what the rule says about each device it judges (also the
+// htmx answer of /policy/rules/preview).
+templ ruleDevicesCard(v ruleDevicesView) {
+	<section id="rule-devices" class="devcard" aria-labelledby="dc-devs">
+		<div class="devcard-head">
+			<h2 id="dc-devs">Devices</h2>
+			if v.Edit {
+				<span class="devcard-note">updates as you edit</span>
+			}
+		</div>
+		switch {
+			case v.Stat.Hint != "":
+				<p class="devcard-note">{ v.Stat.Hint }</p>
+			case v.Stat.Err != "":
+				<p class="ufield-err" role="alert">{ v.Stat.Err }</p>
+			case v.NoDevices:
+				@ui.Empty("No devices yet", "The rule has nothing to judge until a device is added.") {
+					<a class="btn" href={ templ.SafeURL(v.Base + "/devices") }>Devices</a>
+				}
+			case v.NAll == 0:
+				@ui.Empty("This rule applies to no device", "No device is in its scope. Check the chip family, tags and devices under Applies to.")
+			default:
+				if v.Disabled {
+					<p class="devcard-note">This rule is disabled. The numbers show what it would judge if it were enabled.</p>
+				}
+				<div class="dv-chips">
+					@ruleDevChip(v, "", "All", v.NAll)
+					@ruleDevChip(v, "deviate", "Deviate", v.Stat.Deviate)
+					@ruleDevChip(v, "unknown", "Not judged", v.Stat.Unknown)
+				</div>
+				if len(v.Rows) == 0 {
+					<p class="devcard-note">No device in this view.</p>
+				} else {
+					<table class="dense">
+						<thead>
+							<tr><th>Device</th><th>Actual</th><th>Source</th></tr>
+						</thead>
+						<tbody>
+							for _, r := range v.Rows {
+								<tr>
+									<td class="p1" data-label="Device"><a href={ templ.SafeURL(v.Base + "/devices/" + devStr(r.ID)) }>{ r.Name }</a></td>
+									<td data-label="Actual">
+										if r.Have != "" {
+											<span class="mono">@ui.Soft(r.Have)</span>
+										} else {
+											<span aria-label="no value">–</span>
+										}
+									</td>
+									<td data-label="Source">{ r.Source }</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				}
+				if !v.All && v.Shown > len(v.Rows) {
+					if v.Edit {
+						<p class="devcard-note"><a href={ templ.SafeURL(ruleShowHref(v, v.Show, true)) } hx-post={ ruleShowPost(v, v.Show, true) } hx-include="#rule-form" hx-target="#rule-devices" hx-swap="outerHTML">Show all { itoa(v.Shown) }</a></p>
+					} else {
+						<p class="devcard-note"><a href={ templ.SafeURL(ruleShowHref(v, v.Show, true)) }>Show all { itoa(v.Shown) }</a></p>
+					}
+				}
+		}
+	</section>
+}
+
+// newRulePage is GET /policy/rules/new: templates, any command, copy from a device. Each leads
+// to the rule page as an unsaved draft.
+templ newRulePage(p newRuleView) {
+	<div class="pol-page">
+		@ui.PageHeader("New rule", "Start from a template or from any Tasmota command. You can change everything on the next page before saving.")
+		if p.Banner != "" {
+			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: p.Banner, Alert: true})
+		}
+		<div class="dev-pair">
+			<section class="devcard" aria-labelledby="dc-tpl">
+				<div class="devcard-head">
+					<h2 id="dc-tpl">From a template</h2>
+					<form method="get" action={ templ.SafeURL(p.Base + rulesPath + "/new") } role="search">
+						<input type="search" name="q" value={ p.Q } placeholder="Search…" aria-label="Search templates" data-tpl-search/>
+					</form>
+				</div>
+				if p.NoMatch {
+					<p class="devcard-note">No template matches “{ p.Q }”.</p>
+				}
+				for _, g := range p.Groups {
+					<div data-tpl-group>
+						<h3 class="devcard-h3">{ g.Name }</h3>
+						<div class="pol-tpls">
+							for _, c := range g.Cards {
+								<a class="pol-tpl" href={ templ.SafeURL(p.Base + rulesPath + "/new?template=" + c.ID) } data-tpl-card>
+									<span class="pol-tpl-name">{ c.Title }</span>
+									<span class="pol-tpl-kv">{ c.KV }</span>
+									<span class="pol-tpl-text">{ c.Hint }</span>
+									if c.Already {
+										<span class="pol-tpl-use">Already a rule</span>
+									}
+								</a>
+							}
+						</div>
+					</div>
+				}
+			</section>
+			<div class="pol-cards">
+				<section class="devcard" aria-labelledby="dc-any">
+					<div class="devcard-head"><h2 id="dc-any">Any command</h2></div>
+					<form method="get" action={ templ.SafeURL(p.Base + rulesPath + "/new") } class="pol-form">
+						<div class="ufield">
+							<label class="ufield-label" for="any-command">Tasmota command</label>
+							<input
+								id="any-command"
+								name="command"
+								class="mono"
+								list="rule-commands"
+								value={ p.Command }
+								maxlength="32"
+								autocomplete="off"
+								autocapitalize="off"
+								spellcheck="false"
+								placeholder="e.g. SetOption45, Sleep, LedState"
+								if p.CommandErr != "" {
+									aria-invalid="true"
+									aria-describedby="err-any-command"
+								}
+							/>
+							<span class="ufield-help">Any command that answers a plain query. Status commands, secrets and commands that act when sent without a value are refused, with the reason.</span>
+							if p.CommandErr != "" {
+								<span class="ufield-err" id="err-any-command" role="alert">{ p.CommandErr }</span>
+							}
+						</div>
+						<div><button type="submit" class="btn btn-primary">Continue</button></div>
+					</form>
+				</section>
+				<section class="devcard" aria-labelledby="dc-copy">
+					<div class="devcard-head"><h2 id="dc-copy">Copy from a device</h2></div>
+					<form method="post" action={ templ.SafeURL(p.Base + rulesPath + "/new/copy") } class="pol-form">
+						<input type="hidden" name="csrf" value={ p.CSRF }/>
+						<p class="devcard-note">Pick a device that is set up right and a setting: its current value becomes the expected value.</p>
+						<div class="ufield">
+							<label class="ufield-label" for="copy-device">Device</label>
+							<select id="copy-device" name="device" required>
+								for _, d := range p.Devices {
+									<option value={ strconv.FormatInt(d.ID, 10) } selected?={ d.Sel }>{ d.Name }</option>
+								}
+							</select>
+						</div>
+						<div class="ufield">
+							<label class="ufield-label" for="copy-command">Tasmota command</label>
+							<input
+								id="copy-command"
+								name="command"
+								class="mono"
+								list="rule-commands"
+								value={ p.CopyCommand }
+								maxlength="32"
+								autocomplete="off"
+								autocapitalize="off"
+								spellcheck="false"
+								placeholder="e.g. PowerOnState, Timezone"
+								required
+								if p.CopyErr != "" {
+									aria-invalid="true"
+									aria-describedby="err-copy"
+								}
+							/>
+							if p.CopyErr != "" {
+								<span class="ufield-err" id="err-copy" role="alert">{ p.CopyErr }</span>
+							}
+						</div>
+						<div><button type="submit" class="btn">Continue</button></div>
+					</form>
+				</section>
+			</div>
+		</div>
+		<datalist id="rule-commands">
+			for _, g := range p.Commands {
+				for _, c := range g.Choices {
+					<option value={ c.Key }>{ c.Label }</option>
+				}
+			}
+		</datalist>
+		<script src={ p.Base + "/static/" + asset("policy.js") } defer></script>
+	</div>
+}

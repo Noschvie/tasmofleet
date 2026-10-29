@@ -12,6 +12,27 @@
       cmd.removeAttribute("aria-invalid");
     });
   }
+  // New rule: the template search filters the cards as you type. Without this file the search
+  // is a plain GET (?q=) that the server answers the same way.
+  var search = document.querySelector("[data-tpl-search]");
+  if (search) {
+    var tplCards = Array.prototype.slice.call(
+      document.querySelectorAll("[data-tpl-card]"),
+    );
+    var tplGroups = Array.prototype.slice.call(
+      document.querySelectorAll("[data-tpl-group]"),
+    );
+    search.addEventListener("input", function () {
+      var needle = search.value.trim().toLowerCase();
+      tplCards.forEach(function (c) {
+        c.hidden =
+          needle !== "" && c.textContent.toLowerCase().indexOf(needle) < 0;
+      });
+      tplGroups.forEach(function (g) {
+        g.hidden = !g.querySelector("[data-tpl-card]:not([hidden])");
+      });
+    });
+  }
   var list = document.querySelector("[data-rule-list]");
   if (!list) {
     return;

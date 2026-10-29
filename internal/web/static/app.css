@@ -12440,6 +12440,9 @@ main.bare {
   text-align: left;
   cursor: pointer;
 }
+a.pol-tpl {
+  text-decoration: none;
+}
 .pol-tpl:hover {
   border-color: var(--color-accent);
 }

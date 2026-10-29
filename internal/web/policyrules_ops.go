@@ -17,52 +17,6 @@ import (
 // version the person saw; on success it redirects back to the rules, a stale
 // version answers 409 like the other rule changes.
 
-// ruleTemplate is one entry of the empty state's "Start from a template".
-type ruleTemplate struct {
-	ID    string
-	Title string // shown on the card and used as the rule name
-	Text  string // one-line description
-	Spec  sysconfig.RuleSpec
-}
-
-// policyTemplates are the four templates of the prototype. They are added as
-// enabled Advisory rules for the whole fleet (the prototype's choice): a hint
-// first, the admin makes them Required. The broker template needs the
-// configured broker host and is left out without one.
-func policyTemplates(brokerHost string) []ruleTemplate {
-	t := []ruleTemplate{
-		{ID: "telemetry", Title: "Telemetry every 5 minutes", Text: "Devices publish their state every 5 minutes.",
-			Spec: sysconfig.RuleSpec{Command: "TelePeriod", Want: "300"}},
-		{ID: "poweron", Title: "Restore power after an outage", Text: "Relays come back the way they were.",
-			Spec: sysconfig.RuleSpec{Command: "PowerOnState", Want: "3"}},
-	}
-	if brokerHost != "" {
-		t = append(t, ruleTemplate{ID: "broker", Title: "Use one MQTT broker", Text: "Every device talks to the same broker.",
-			Spec: sysconfig.RuleSpec{Command: "MqttHost", Want: brokerHost}})
-	}
-	t = append(t, ruleTemplate{ID: "timezone", Title: "Local timezone", Text: "Daylight-saving rules from the device location (Timezone 99).",
-		Spec: sysconfig.RuleSpec{Command: "Timezone", Want: "99"}})
-	for i := range t {
-		t[i].Spec.Name, t[i].Spec.Severity = t[i].Title, "info"
-	}
-	return t
-}
-
-// brokerHost is the host of the configured MQTT broker, "" without one.
-func (h *handler) brokerHost() string {
-	if h.d.SysConfig == nil {
-		return ""
-	}
-	for _, f := range h.d.SysConfig.State() {
-		if f.Key == "MQTT_URL" && f.Value != "" {
-			if u, err := url.Parse(f.Value); err == nil {
-				return u.Hostname()
-			}
-		}
-	}
-	return ""
-}
-
 func (h *handler) registerPolicyRuleOps(route func(string, func(http.Handler) http.Handler, http.HandlerFunc), adm func(http.Handler) http.Handler) {
 	route("POST "+rulesPath+"/order", adm, h.rulesOrder)
 	route("POST "+rulesPath+"/duplicate", adm, h.rulesDuplicate)
@@ -94,7 +48,20 @@ func opForm(w http.ResponseWriter, r *http.Request, single []string, withIdx boo
 // rulesOpDone answers a list operation: back to the policy page with its confirmation, the
 // rule at edit (>= 0) open in the editor.
 func (h *handler) rulesOpDone(w http.ResponseWriter, r *http.Request, err error, ok string, edit int) {
+	h.rulesOpBack(w, r, err, ok, edit, "")
+}
+
+// rulesOpBack is rulesOpDone for a form that may say where to return: back=rule returns to the
+// rule page of the rule at edit (the rule page's own buttons), anything else to the policy page.
+func (h *handler) rulesOpBack(w http.ResponseWriter, r *http.Request, err error, ok string, edit int, back string) {
 	switch {
+	case err == nil && back == "rule" && edit >= 0:
+		st, serr := h.d.PolicyRules.State(r.Context())
+		if serr != nil || edit >= len(st.Specs) {
+			redirect(w, r, policyPath+"?ok="+ok)
+			return
+		}
+		redirect(w, r, rulesPath+"/"+st.Specs[edit].ID+"?ok="+ok)
 	case err == nil:
 		to := policyPath + "?ok=" + ok
 		if edit >= 0 {
@@ -188,16 +155,16 @@ func moveOrder(n, idx int, up bool) ([]int, bool) {
 }
 
 func (h *handler) rulesDuplicate(w http.ResponseWriter, r *http.Request) {
-	_, ver, idx, ok := opForm(w, r, []string{"csrf", "version", "idx"}, true)
+	f, ver, idx, ok := opForm(w, r, []string{"csrf", "version", "idx", "back"}, true)
 	if !ok {
 		return
 	}
 	_, at, err := h.d.PolicyRules.Duplicate(r.Context(), actor(r), ver, idx, h.d.Recorder)
-	h.rulesOpDone(w, r, err, "duplicated", at)
+	h.rulesOpBack(w, r, err, "duplicated", at, f.Get("back"))
 }
 
 func (h *handler) rulesSetEnabled(w http.ResponseWriter, r *http.Request, enabled bool) {
-	_, ver, idx, ok := opForm(w, r, []string{"csrf", "version", "idx"}, true)
+	f, ver, idx, ok := opForm(w, r, []string{"csrf", "version", "idx", "back"}, true)
 	if !ok {
 		return
 	}
@@ -206,7 +173,7 @@ func (h *handler) rulesSetEnabled(w http.ResponseWriter, r *http.Request, enable
 	if enabled {
 		done = "enabled"
 	}
-	h.rulesOpDone(w, r, err, done, idx)
+	h.rulesOpBack(w, r, err, done, idx, f.Get("back"))
 }
 
 // rulesFromTemplate appends the template named by "template" to the rules.

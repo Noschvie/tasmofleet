@@ -64,10 +64,24 @@ for (const vp of [
 ]) {
   test(`policy preview and make-compliant dialog keep a long value inside, ${vp.name}`, async ({ page }) => {
     await page.setViewportSize({ width: vp.width, height: vp.height });
+    // the rule page (env mode: the rule has the synthesised id r1): the long value sits in the
+    // mono line, the device rows stay readable and the page does not scroll sideways
+    await page.goto(app.url + "/policy/rules/r1");
+    await page.getByRole("button", { name: "Check now" }).click();
+    await expect(page.getByText("Live check finished")).toBeVisible({ timeout: 60_000 });
+    await expect(page.locator(".pghead-sub")).toContainText(longUrl);
+    const devRows = page.locator("#rule-devices tbody tr");
+    // the long Actual value wraps inside its cell (the row grows); the name keeps its width and lines
+    for (let i = 0; i < (await devRows.count()); i++) {
+      const cell = await devRows.nth(i).locator("td.p1").boundingBox();
+      const link = await devRows.nth(i).locator("td.p1 a").boundingBox();
+      expect(cell!.width, `rule page device ${i}: the name column is squeezed`).toBeGreaterThanOrEqual(80);
+      expect(link!.height, `rule page device ${i}: the name runs over ${link!.height}px`).toBeLessThanOrEqual(60);
+    }
+    const over = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(over, "the rule page scrolls sideways").toBeLessThanOrEqual(0);
+
     await openPolicy(page);
-    const rows = page.locator(".pol-pv-row:not(.is-unk)");
-    await expect(rows.first()).toContainText(longUrl);
-    await expectReadableRows(rows, ".pol-pv-name", ".pol-pv-list", "live preview");
 
     await page.getByRole("button", { name: /^Make compliant \(\d+\)…$/ }).click();
     const dlg = page.locator("dialog#dlg-fix");
