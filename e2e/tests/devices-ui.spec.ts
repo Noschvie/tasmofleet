@@ -333,6 +333,11 @@ test("autofit: double-click and Enter on a resize handle fit the column; the wid
         cap,
       };
     });
+  // A live refresh of the list (SSE, every poll) that lands between the fit and the answer of the save
+  // puts the saved widths into the new table, and for the ~60 ms until htmx has settled it the column is
+  // narrower than it is going to be. Measure once no request or swap is under way.
+  const settled = () =>
+    page.waitForFunction(() => !document.querySelector(".htmx-request, .htmx-swapping, .htmx-settling"));
   // make the column too narrow first
   const handle = page.getByRole("separator", { name: "Resize column Address" });
   await handle.focus();
@@ -341,6 +346,7 @@ test("autofit: double-click and Enter on a resize handle fit the column; the wid
   );
   for (let i = 0; i < 12; i++) await page.keyboard.press("ArrowLeft");
   await narrowed;
+  await settled();
   const narrow = await cellsFit();
   expect(narrow.clipped).toBeGreaterThan(0);
   const done = page.waitForResponse(
@@ -348,6 +354,7 @@ test("autofit: double-click and Enter on a resize handle fit the column; the wid
   );
   await handle.dblclick();
   await done;
+  await settled();
   const fitted = await cellsFit();
   expect(fitted.width).toBeGreaterThan(narrow.width);
   expect(
@@ -364,6 +371,7 @@ test("autofit: double-click and Enter on a resize handle fit the column; the wid
   );
   await page.keyboard.press("Enter");
   await enter;
+  await settled();
   const again = await cellsFit();
   expect(
     again.clipped === 0 || again.width >= again.cap - 2,

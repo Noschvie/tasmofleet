@@ -10601,7 +10601,7 @@ dialog.fw-notes-dlg .fw-dlg-body {
   font-size: 13px;
 }
 .add-disc-table table {
-  min-width: 1180px;
+  min-width: 1200px;
 }
 .add-scan-table table {
   min-width: 880px;
@@ -10724,7 +10724,7 @@ dialog.fw-notes-dlg .fw-dlg-body {
   width: 166px;
 }
 .add-disc-table col.c-src {
-  width: 112px;
+  width: 132px;
 }
 .add-disc-table col.c-first {
   width: 124px;

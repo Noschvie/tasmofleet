@@ -1578,7 +1578,8 @@
   // online, and each enhance measures every row: run per cell, that kept the device list's main
   // thread busy for minutes with 60 devices on a slow machine. Their swaps are coalesced into one
   // enhance at most every CELL_REFIT_MS (a throttle, not a debounce, so a steady stream of
-  // updates cannot postpone it forever).
+  // updates cannot postpone it forever). The live cells of the phone cards (li.dcard) swap just as
+  // often and are coalesced too: left out, each of them ran a full enhance of the table.
   var CELL_REFIT_MS = 250,
     refit = 0;
   document.addEventListener("htmx:afterSettle", function (e) {
@@ -1586,7 +1587,7 @@
     if (
       t instanceof Element &&
       !t.querySelector("table[data-table]") &&
-      t.closest("table[data-table]")
+      t.closest("table[data-table], li.dcard")
     ) {
       if (!refit) {
         refit = window.setTimeout(function () {
