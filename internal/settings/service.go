@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"slices"
 	"sort"
 	"strconv"
@@ -218,8 +219,23 @@ func replyValue(key string, raw json.RawMessage) (string, bool) {
 // (support_command.ino: CmndSleep, CmndSeriallog, CmndSyslog). Every other command is read as is.
 var activeReplyCommands = []string{"Sleep", "SerialLog", "SysLog"}
 
-// replyScalar is scalar plus the one reply shape that is not a scalar: configured/active.
+// coordinateDecimals is how many decimals a Latitude/Longitude reading keeps. Tasmota stores
+// (int)(float32 * 1000000) and answers (float32)n / 1000000 with six decimals
+// (xdrv_09_timers.ino CmndLatitude/CmndLongitude), so a value written as 52.52 reads back as
+// 52.519997 or 52.520004: six decimals can never be compared with what a rule says. The
+// float32 error stays below 3e-5 degrees, so four decimals (11 m) read back exactly as written.
+const coordinateDecimals = 4
+
+// replyScalar is scalar plus the two replies that are not a plain comparable scalar:
+// configured/active, and coordinates rounded to what a rule can state.
 func replyScalar(cmd string, val json.RawMessage) (string, bool) {
+	if strings.EqualFold(cmd, "Latitude") || strings.EqualFold(cmd, "Longitude") {
+		v, ok := scalar(val)
+		if f, err := strconv.ParseFloat(v, 64); ok && err == nil && !math.IsNaN(f) && !math.IsInf(f, 0) {
+			return strconv.FormatFloat(f, 'f', coordinateDecimals, 64), true
+		}
+		return v, ok // not a number: whatever it is, the scrubbing and safeValue see it as before
+	}
 	if slices.ContainsFunc(activeReplyCommands, func(c string) bool { return strings.EqualFold(c, cmd) }) {
 		if v, ok := sleepConfigured(val); ok {
 			return v, true

@@ -289,3 +289,37 @@ func TestSleepAndLedStateReplyLikeV16(t *testing.T) {
 		t.Errorf("LedState 3 -> %s", got)
 	}
 }
+
+// Why: Latitude/Longitude (xdrv_09_timers.ino) store (int)(float32 * 1000000) and answer
+// (float32)n / 1000000 with six decimals as an unquoted number, so a typed value does not read
+// back as typed. A simulator that echoed the input would hide that from every policy test.
+// PowerRetain (xdrv_02_9_mqtt.ino) answers ON/OFF text and ignores a value outside 0/1;
+// LedState (support_command.ino CmndLedState) accepts 0..7 only.
+func TestCoordinatePowerRetainAndLedStateReplyLikeV16(t *testing.T) {
+	d := newSettingsDevice(t)
+	if got := cm(t, d, "Latitude"); got != `{"Latitude":48.858360}` {
+		t.Errorf("default Latitude -> %s", got)
+	}
+	if got := cm(t, d, "Longitude 13.404954"); got != `{"Longitude":13.404954}` {
+		t.Errorf("Longitude 13.404954 -> %s", got)
+	}
+	// 40.12 is not representable: float32(40.12) * 1e6 truncates to 40119999
+	if got := cm(t, d, "Latitude 40.12"); got != `{"Latitude":40.119999}` {
+		t.Errorf("Latitude 40.12 -> %s", got)
+	}
+	if got := cm(t, d, "Latitude -33.8688"); got != `{"Latitude":-33.868801}` {
+		t.Errorf("Latitude -33.8688 -> %s", got)
+	}
+	if got := cm(t, d, "PowerRetain"); got != `{"PowerRetain":"OFF"}` {
+		t.Errorf("PowerRetain -> %s", got)
+	}
+	if got := cm(t, d, "PowerRetain 1"); got != `{"PowerRetain":"ON"}` {
+		t.Errorf("PowerRetain 1 -> %s", got)
+	}
+	if got := cm(t, d, "PowerRetain 2"); got != `{"PowerRetain":"ON"}` {
+		t.Errorf("PowerRetain 2 changes nothing, got %s", got)
+	}
+	if got := cm(t, d, "LedState 8"); got != `{"LedState":1}` {
+		t.Errorf("LedState 8 is out of range and changes nothing, got %s", got)
+	}
+}

@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -154,7 +155,7 @@ func TestPolicyRulesTemplates(t *testing.T) {
 		}
 	}
 	tpls = policyTemplates("mqtt.lab.home")
-	if len(tpls) != 4 || tpls[2].Spec.Command != "MqttHost" || tpls[2].Spec.Want != "mqtt.lab.home" {
+	if i := slices.IndexFunc(tpls, func(tp ruleTemplate) bool { return tp.ID == "broker" }); i < 0 || tpls[i].Spec.Command != "MqttHost" || tpls[i].Spec.Want != "mqtt.lab.home" {
 		t.Fatalf("templates %+v", tpls)
 	}
 	// every template must pass the same validation as a hand-made rule
@@ -165,7 +166,11 @@ func TestPolicyRulesTemplates(t *testing.T) {
 		return nil
 	}})
 	for _, tp := range tpls {
-		if _, err := v.Validate([]sysconfig.RuleSpec{tp.Spec}); err != nil {
+		spec := tp.Spec
+		if spec.Want == "" {
+			spec.Want = templateWant[tp.ID] // blank: the admin types it on the draft page
+		}
+		if _, err := v.Validate([]sysconfig.RuleSpec{spec}); err != nil {
 			t.Errorf("template %s is invalid: %v", tp.ID, err)
 		}
 	}

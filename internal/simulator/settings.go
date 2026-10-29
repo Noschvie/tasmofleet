@@ -129,6 +129,12 @@ func (d *simDevice) settingFrom(kv map[string]string, key string) string {
 		return "50"
 	case "ledstate":
 		return "1"
+	case "latitude":
+		return "48858360" // LATITUDE 48.858360 (my_user_config.h), micro-degrees
+	case "longitude":
+		return "2294442"
+	case "powerretain":
+		return "0" // MQTT_POWER_RETAIN false
 	case "hostname":
 		return d.topic
 	case "topic":
@@ -255,8 +261,9 @@ func (d *simDevice) settingCmdLocked(base string, idx int, hasIdx bool, data str
 		}
 	case "sleep", "ledstate":
 		// Plain numbers that no Status block reports: the way a generic policy rule (any
-		// command answering a bare query) is read and set. Sleep 0..250, LedState 0..8.
-		hi := map[string]int{"sleep": 250, "ledstate": 8}[base]
+		// command answering a bare query) is read and set. Sleep 0..250 (CmndSleep: payload < 251),
+		// LedState 0..7 (CmndLedState: payload < MAX_LED_OPTION, which is 8).
+		hi := map[string]int{"sleep": 250, "ledstate": 7}[base]
 		if n, err := strconv.Atoi(data); err == nil && n >= 0 && n <= hi {
 			d.set(base, strconv.Itoa(n))
 			changed = true
@@ -268,6 +275,26 @@ func (d *simDevice) settingCmdLocked(base string, idx int, hasIdx bool, data str
 			// (S_JSON_COMMAND_NVALUE_ACTIVE_NVALUE). The simulator has no dynamic sleep: both are equal.
 			body = []byte(`{"Sleep":{"` + d.get(base) + `":{"Active":"` + d.get(base) + `"}}}`)
 		}
+	case "latitude", "longitude":
+		// Tasmota v16 CmndLatitude/CmndLongitude (xdrv_09_timers.ino): stored as an int of
+		// micro-degrees, answered as an unquoted JSON number with 6 decimals computed in float32.
+		if data != "" {
+			d.set(base, strconv.Itoa(microDegrees(data)))
+			changed = true
+		}
+		n, _ := strconv.Atoi(d.get(base))
+		body = []byte(`{"` + map[string]string{"latitude": "Latitude", "longitude": "Longitude"}[base] + `":` + degreesReply(n) + `}`)
+	case "powerretain":
+		// Tasmota v16 CmndPowerRetain (xdrv_02_9_mqtt.ino): 0/1 (also OFF/ON, FALSE/TRUE), answered "ON"/"OFF".
+		switch strings.ToLower(data) {
+		case "0", "off", "false":
+			d.set(base, "0")
+			changed = true
+		case "1", "on", "true":
+			d.set(base, "1")
+			changed = true
+		}
+		body = []byte(`{"PowerRetain":"` + map[bool]string{true: "ON", false: "OFF"}[d.get(base) == "1"] + `"}`)
 	case "setoption":
 		if !hasIdx {
 			return nil, false
@@ -374,6 +401,63 @@ func (d *simDevice) settingCmdLocked(base string, idx int, hasIdx bool, data str
 		d.commitLocked()
 	}
 	return body, true
+}
+
+// charToFloat is Tasmota's CharToFloat (support.ino) in float32, the way the firmware computes it.
+func charToFloat(str string) float32 {
+	if len(str) > 23 {
+		str = str[:23] // strlcpy into a 24 byte buffer
+	}
+	str = strings.TrimLeft(str, " \t\n\v\f\r")
+	if str == "" {
+		return 0
+	}
+	sign := float32(1)
+	if str[0] == '-' {
+		sign = -1
+	}
+	if str[0] == '-' || str[0] == '+' {
+		str = str[1:]
+	}
+	digits := func(s string) string {
+		i := 0
+		for i < len(s) && s[i] >= '0' && s[i] <= '9' {
+			i++
+		}
+		return s[:i]
+	}
+	var left, right float32
+	if !strings.HasPrefix(str, ".") {
+		n, _ := strconv.Atoi(digits(str))
+		left = float32(n)
+		str = str[len(digits(str)):]
+	}
+	if strings.HasPrefix(str, ".") {
+		dec := digits(str[1:])
+		if len(dec) > 8 {
+			dec = dec[:8] // "limit decimals to float max of 8"
+		}
+		n, _ := strconv.Atoi(dec)
+		right = float32(n)
+		for range dec {
+			right = float32(right / 10)
+		}
+	}
+	return sign * float32(left+right)
+}
+
+// microDegrees is (int)(CharToFloat(data) * 1000000): float32 arithmetic, truncated toward zero.
+func microDegrees(data string) int {
+	f := float32(charToFloat(data) * 1000000)
+	if f > 2e9 || f < -2e9 {
+		return 0 // the C cast is undefined there; nothing sane to model
+	}
+	return int(f)
+}
+
+// degreesReply is ResponseCmndFloat((float)n / 1000000, 6): the division happens in float32.
+func degreesReply(n int) string {
+	return strconv.FormatFloat(float64(float32(float32(n)/1000000)), 'f', 6, 64)
 }
 
 func isPort(s string) bool {

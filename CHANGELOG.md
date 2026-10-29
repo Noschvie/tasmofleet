@@ -11,6 +11,7 @@ always upgrade automatically.
 - Images are also published to Docker Hub (`nofuturekid/tasmofleet`) under the same tags as on ghcr.io (#165)
 - Policy rules have a page of their own, `/policy/rules/{id}`: four tiles (applies to, match, deviate, not judged), the editor, and the devices the rule judges with the value each has and where it came from (live or backup); the table updates as you edit without reading any device. Operators see the same page read-only (#197)
 - New rule page (`/policy/rules/new`): start from a template, from Any command (refused commands show the reason) or with Copy from a device (a fresh live read of that one command; backup value when the device does not answer, with the source shown). Each opens an unsaved draft; nothing is stored before Save rule (#197)
+- Policy rule templates for NTP server, Latitude, Longitude, OTA URL (ESP8266 and ESP32), Retain power state, Status LED and Dynamic sleep, next to the existing ones; each was checked against the Tasmota 16 source (reply format, accepted values, restart behaviour), see `docs/research/tasmota-policy-templates.md` (#197)
 
 ### Changed
 
@@ -23,6 +24,7 @@ always upgrade automatically.
 - Downloaded backups keep umlauts and other letters of the device name (`Küche-....dmp`): the header carries an ASCII fallback and the RFC 5987 `filename*`, and a hostile name cannot inject headers (#208, thanks @Noschvie)
 - The Download and Delete buttons of a backup row have their borders again, like the other buttons (#208, thanks @Noschvie)
 - Backup files left in old numeric folders that no backup entry references are now reported at start and listed under Settings → Backups instead of being silently ignored (#205, thanks @Noschvie)
+- Latitude and Longitude rules could never match: a device stores them as float32 and reads back `40.119999` for `40.12`. Readings are now rounded to four decimals (11 m), so a rule states `52.5200`; the simulator accepted `LedState 8`, which Tasmota refuses (#197)
 - The backup layout migration also moves the kept backups of deleted devices; backups whose files were deleted by hand are shown as missing and can be removed (#205, thanks @Noschvie)
 - Make compliant now knows which SetOptions restart the device (3, 15, 37, 55 when set to 0, 68, 69, 75, 85, 88, 97, 102 to 104, 106, 107, 115 when set to 0, 132, 151 to 153): they run last and the restart is not reported as an error (#196)
 

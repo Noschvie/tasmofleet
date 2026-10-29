@@ -209,3 +209,18 @@ func TestRestartsDeviceMatchesTasmotaV16SetOptions(t *testing.T) {
 		}
 	}
 }
+
+// Why: Latitude/Longitude are stored as (int)(float32 * 1000000) and answered with six decimals
+// (xdrv_09_timers.ino CmndLatitude: ResponseCmndFloat(.., 6)). "Latitude 40.12" reads back as
+// 40.119999, so a rule on the six-decimal reading could never be met and Make compliant would
+// resend it forever. Four decimals (11 m) survive the float32 error and are what a rule states.
+func TestCoordinateRepliesAreComparableAtFourDecimals(t *testing.T) {
+	m, _ := newSvc(&fakeClient{replies: map[string]string{
+		"Latitude":  `{"Latitude":40.119999}`,
+		"Longitude": `{"Longitude":-13.404953}`,
+	}})
+	got, err := m.ReadKeys(t.Context(), 1, []string{"Latitude", "Longitude"})
+	if err != nil || got["Latitude"] != "40.1200" || got["Longitude"] != "-13.4050" {
+		t.Fatalf("read %v, %v; want 40.1200 and -13.4050", got, err)
+	}
+}
