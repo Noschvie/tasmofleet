@@ -4,7 +4,16 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
-## Unreleased
+## 0.19.0 (2026-10-29)
+
+### Upgrade notes
+
+- **No database migration, no change to ports, variables or the Unraid template.**
+- Policy rules get a stable id on the first save. After that, 0.18 can no longer read the saved
+  policy rules: to downgrade, restore the database copy taken before the upgrade.
+- Old policy links (`/policy?edit=N`, `?new=1`, `?v=ID`) open the overview; each rule has its own
+  page now (`/policy/rules/{id}`).
+- The image is also on Docker Hub as `nofuturekid/tasmofleet` (same tags and digest as ghcr.io).
 
 ### Added
 
