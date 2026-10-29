@@ -333,6 +333,7 @@ templ fixPreviewPage(base, csrf string, p fixPage) {
 			</form>
 		}
 	</div>
+	<script src={ base + "/static/" + asset("policy.js") } defer></script>
 }
 
 // fixStartedPage answers Make compliant when the server left devices out; otherwise the answer
