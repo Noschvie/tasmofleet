@@ -4,7 +4,16 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
-## Unreleased
+## 0.18.0 (2026-10-29)
+
+### Upgrade notes
+
+- **Backups move to a new layout on the first start, automatically.** Files go from
+  `backups/<device-id>/` to `backups/<hostname>/<stamp>_<hostname>.*`; each file is moved only after
+  its SHA-256 matches the index, nothing is deleted, and a downgrade to 0.17 still reads them. Only
+  scripts that read the data directory directly must follow the new names. See
+  [Upgrading to 0.18](docs/upgrading.md#upgrading-to-018-backup-file-layout).
+- Migrations 0032 to 0034 run automatically. No change to ports, variables or the Unraid template.
 
 ### Added
 
@@ -58,6 +67,7 @@ always upgrade automatically.
 
 ### Security
 
+- Dependency: go-jose updated from 4.1.4 to 4.1.6 (#178).
 - Passwords in device URLs (OtaUrl) no longer leak through the policy report when they contain
   `/`, `#`, `?` or `@` (#168).
 
