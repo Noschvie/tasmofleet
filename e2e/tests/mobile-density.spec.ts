@@ -143,16 +143,19 @@ test("phone: every main view fits the height budget and never scrolls sideways",
 });
 
 // UX review #22 and #36 (chips that wrapped on a phone), resolved by design v2: the Add devices
-// tabs (P6) and the settings sections (P8) are the prototype's underline tabs. On a phone each row
-// scrolls sideways inside itself instead of wrapping or widening the page, and every tab stays a
-// link (no select, so browsers without script need nothing else).
+// tabs (P6) and the settings sections (P8) are the prototype's underline tabs. On a phone the Add devices row
+// scrolls sideways inside itself instead of wrapping or widening the page and every tab stays a
+// link; the settings sections are a picker (#275).
 test("phone: the Add devices and settings tab rows scroll sideways and stay links", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   await page.setViewportSize({ width: 375, height: SCREEN });
   await page.goto(app.url + "/settings/system");
   const sections = page.getByRole("navigation", { name: "Settings sections" });
-  await expect(sections.getByRole("link", { name: "Advanced" })).toHaveCount(1);
-  expect(await sections.evaluate((n) => n.scrollWidth > n.clientWidth && getComputedStyle(n).flexWrap === "nowrap")).toBe(true);
+  // issue #275: eight sections are too many for a strip, so a phone gets a section picker; the tabs
+  // stay links in the page (without script they are the way to switch)
+  await expect(page.locator('nav.utabs[aria-label="Settings sections"] a', { hasText: "Advanced" })).toHaveCount(1);
+  await expect(page.locator("[data-sys-picker] select")).toBeVisible();
+  await expect(page.locator('nav.utabs[aria-label="Settings sections"]')).toBeHidden();
   await page.goto(app.url + "/discovery");
   const tabs = page.getByRole("navigation", { name: "Add devices" });
   await expect(tabs.getByRole("link", { name: "Add manually" })).toBeVisible();

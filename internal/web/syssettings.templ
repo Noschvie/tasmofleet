@@ -1,6 +1,7 @@
 package web
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -8,11 +9,19 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
 
-// sysSettingsPage is System settings (design v2 screen "settings", WP P8): the page header, one
-// tab per part of the prototype, and one form over all tabs, so "Save settings" saves every tab.
-// The fields are the real settings of sysconfig in the prototype's form components (D10).
+// sysSettingsPage is System settings: the page header, eight tabs (all in one form, shown one at a
+// time), a grid of cards per tab and one save bar. The danger zone and the container list sit
+// after the form. The fields are the real settings of sysconfig.
 templ sysSettingsPage(p sysPage) {
 	@ui.PageHeader("Settings", "Applies to the whole TasmoFleet instance")
+	<label class="sys-picker" data-sys-picker hidden>
+		<span>Section</span>
+		<select aria-label="Settings section">
+			for _, tab := range p.Tabs {
+				<option value={ tab.Slug } selected?={ tab.Slug == p.Active }>{ tab.Label }</option>
+			}
+		</select>
+	</label>
 	@ui.Tabs("Settings sections", sysTabLinks(p))
 	if p.Error != "" {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: p.Error, Alert: true})
@@ -36,37 +45,23 @@ templ sysSettingsPage(p sysPage) {
 			</div>
 		</div>
 	}
-	<form id="sysform" class="ucard syscard" data-keep-draft="sysconfig" method="post" action={ templ.SafeURL(p.Base + sysPath + "?tab=" + p.Active) }>
+	<form id="sysform" class="syspage" data-keep-draft="sysconfig" method="post" action={ templ.SafeURL(p.Base + sysPath + "?tab=" + p.Active) }>
 		<input type="hidden" name="csrf" value={ p.CSRF }/>
 		for _, tab := range p.Tabs {
-			<div class="sys-tab" id={ "sec-" + tab.Slug } hidden?={ tab.Slug != p.Active }>
-				switch tab.Slug {
-					case "discovery":
-						@sysDiscoveryCard(p)
-					case "backups":
-						if p.Storage != nil {
-							@sysStorageBlock(p, *p.Storage)
-						}
-				}
-				for i, sec := range tab.Sections {
-					if len(sec.Rows) > 0 {
-						@sysSectionBlock(p, tab.Slug, i, sec)
+			<div class="sys-tab" id={ "sec-" + tab.Slug } data-sys-tab={ tab.Slug } hidden?={ tab.Slug != p.Active }>
+				@ui.SettingsGrid() {
+					for _, c := range tab.Cards {
+						@sysCardView(p, c)
 					}
-				}
-				switch tab.Slug {
-					case "mqtt":
-						@sysMQTTFoot(p)
-					case "advanced":
-						@sysContainer(p.ReadOnly)
-						@sysResetBox(p)
 				}
 			</div>
 		}
-		<div class="sys-foot">
-			@ui.Button(ui.Btn{Label: "Discard", Href: p.Base + sysPath + "?tab=" + p.Active})
-			@ui.Button(ui.Btn{Label: "Save settings", Kind: "primary", Type: "submit"})
-		</div>
+		@ui.SaveBar(p.Base + sysPath + "?tab=" + p.Active)
 	</form>
+	<div class="sys-after" id="after-advanced" data-sys-tab="advanced" hidden?={ p.Active != "advanced" }>
+		@sysContainer(p.ReadOnly)
+		@sysResetBox(p)
+	</div>
 	if p.Storage != nil && len(p.Storage.Orphans) > 0 {
 		<form id="bk-orph" method="post" action={ templ.SafeURL(p.Base + sysPath + "?tab=backups") }>
 			<input type="hidden" name="csrf" value={ p.CSRF }/>
@@ -80,11 +75,174 @@ templ sysSettingsPage(p sysPage) {
 	}
 }
 
+// sysCardView is one card of a tab's grid. The Backups storage and deleted-device cards hold
+// read-only data; every other card holds the fields its definition names.
+templ sysCardView(p sysPage, c sysCard) {
+	switch c.ID {
+		case "storage":
+			if p.Storage != nil {
+				@ui.SettingsCard(ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Note: c.Note, Class: c.Class, Plain: true}) {
+					@sysStorageBlock(p, *p.Storage)
+				}
+			}
+		case "orphans":
+			if p.Storage != nil && (len(p.Storage.Orphans) > 0 || len(p.Storage.Unreferenced) > 0) {
+				@ui.SettingsCard(ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Note: "Kept when their device was deleted. Download one to restore it on a device by hand.", Class: c.Class, Plain: true}) {
+					if len(p.Storage.Orphans) > 0 {
+						@sysOrphans(p, *p.Storage)
+					}
+					if len(p.Storage.Unreferenced) > 0 {
+						@sysUnreferencedFiles(*p.Storage)
+					}
+				}
+			}
+		default:
+			if len(c.Rows) > 0 || c.ID == "mqttdiscovery" {
+				@ui.SettingsCard(ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Note: c.Note, Class: c.Class, Depends: c.Depends, Badges: sysCardBadges(c)}) {
+					if c.ID == "mqttdiscovery" {
+						@sysDiscoveryCard(p)
+					}
+					if c.ID == "credentials" {
+						<div class="sf w-xs">
+							<div class="lrow"><span class="lbl">Web user</span></div>
+							<div class="in ro mono">admin</div>
+							<small class="ufield-help">Fixed by Tasmota.</small>
+						</div>
+					}
+					for _, row := range c.Rows {
+						@sysRowView(p, row, c.RestartAll)
+						if c.ID == "idp" && row.Key == "OIDC_ISSUER" {
+							@sysTestRow("Test discovery", p.Base+sysPath+"/sso-test?tab=signin", "SSO check", p.SSOResult, "Saves nothing.")
+						}
+					}
+					if c.ID == "broker" && p.MQTT.Legacy == "" {
+						@sysTestRow("Test connection", p.Base+sysPath+"/mqtt-test?tab=mqtt", "MQTT connection test", p.MQTTResult, "Saves nothing.")
+					}
+				}
+			}
+	}
+}
+
+// sysRowView draws one setting in the control its kind calls for, then the settings that depend
+// on it, together in one group the page dims while the switch is off.
+templ sysRowView(p sysPage, row sysRow, inRestartCard bool) {
+	switch {
+		case row.Locked:
+			@sysLocked(row)
+		case row.Key == "MQTT_URL" && p.MQTT.Legacy == "":
+			@sysBroker(p, row)
+		case row.Key == "BACKUP_INTERVAL":
+			@sysSchedule(row, inRestartCard)
+		case row.Bool:
+			@sysSwitch(row, inRestartCard)
+		default:
+			@sysInput(row, inRestartCard)
+	}
+	if len(row.Deps) > 0 {
+		<div class="dep" data-depends={ "v." + row.Key }>
+			for _, d := range row.Deps {
+				@sysRowView(p, d, inRestartCard)
+			}
+		</div>
+	}
+}
+
+// sysFieldData is the label row and help of a setting; the card's restart badge replaces the
+// field's own.
+func sysFieldData(row sysRow, inRestartCard bool) ui.SettingFieldData {
+	c := sysFieldCopy(row.Key)
+	return ui.SettingFieldData{Key: row.Key, Label: sysLabel(row), Width: c.Width, Help: c.Help, Info: c.Info, Err: row.Err,
+		Restart: row.Apply != sysconfig.Live && !inRestartCard, CanReset: row.Source == "stored", Locked: row.Locked}
+}
+
+// sysInput is a text, number, password, list or choice setting.
+templ sysInput(row sysRow, inRestartCard bool) {
+	@ui.SettingField(sysFieldDataGroup(row, inRestartCard)) {
+		switch {
+			case row.Key == "LOG_LEVEL":
+				@ui.Segmented(row.Label, row.InputName(), sysLevelOptions(row.Posted))
+			case row.Key == "AUTH_MODE":
+				@ui.RadioCards(row.Label, row.InputName(), sysAuthOptions(row.Posted))
+			case len(row.Choices) > 0:
+				<div class="cks" role="group" aria-label={ row.Label }>
+					<input type="hidden" name={ "m." + row.Key } value="1"/>
+					for _, c := range row.Choices {
+						<label class="ucheck"><input type="checkbox" name={ row.InputName() } value={ c } checked?={ slices.Contains(sysChecked(row), c) }/><span>{ c }</span></label>
+					}
+				</div>
+			case row.Secret:
+				<input type="password" name={ row.InputName() } id={ ui.SettingControlID(row.Key) } class="mono" autocomplete="new-password" maxlength="128" placeholder={ sysSecretHint(row) } { sysDescribe(row)... }/>
+				if row.Key == "MQTT_PASSWORD" && row.HasValue {
+					<label class="ucheck sopt"><input type="checkbox" name={ "reuse." + row.Key } value="1"/><span>Keep the stored password if the broker changes</span></label>
+				}
+			case len(row.Enum) > 0:
+				<select name={ row.InputName() } id={ ui.SettingControlID(row.Key) } { sysDescribe(row)... }>
+					for _, o := range row.Enum {
+						<option value={ o } selected?={ o == row.Posted }>{ o }</option>
+					}
+				</select>
+			case row.Multiline:
+				<textarea name={ row.InputName() } id={ ui.SettingControlID(row.Key) } class="mono" rows="3" maxlength="2048" placeholder={ sysPlaceholder(row) } { sysDescribe(row)... }>{ row.Posted }</textarea>
+			default:
+				<input name={ row.InputName() } id={ ui.SettingControlID(row.Key) } class="mono" value={ row.Posted } maxlength="512" { sysDescribe(row)... }/>
+		}
+	}
+}
+
+// sysSwitch is an on/off setting. The b.KEY marker says the switch was on the page, so "off" is saved.
+templ sysSwitch(row sysRow, inRestartCard bool) {
+	@ui.SettingField(sysSwitchData(row, inRestartCard)) {
+		<input type="hidden" name={ "b." + row.Key } value="1"/>
+		<label class="swhit"><input type="checkbox" role="switch" id={ ui.SettingControlID(row.Key) } name={ row.InputName() } value="true" checked?={ row.Posted == "true" } { sysDescribe(row)... }/><span class="swtrack" aria-hidden="true"></span></label>
+	}
+}
+
+// sysSchedule is the backup interval behind a "Scheduled backups" switch: off stores 0 (manual
+// only). The switch is a view of the setting, composed by composeSchedule.
+templ sysSchedule(row sysRow, inRestartCard bool) {
+	@ui.SettingField(ui.SettingFieldData{Key: "BACKUP_SCHEDULE", Label: "Scheduled backups", Width: "full", Help: "Off: manual only.", Switch: true}) {
+		<input type="hidden" name="swm.BACKUP_INTERVAL" value="1"/>
+		<label class="swhit"><input type="checkbox" role="switch" id={ ui.SettingControlID("BACKUP_SCHEDULE") } name="sw.BACKUP_INTERVAL" value="1" checked?={ sysScheduleOn(row) } aria-describedby={ ui.SettingHelpID("BACKUP_SCHEDULE") }/><span class="swtrack" aria-hidden="true"></span></label>
+	}
+	<div class="dep" data-depends="sw.BACKUP_INTERVAL">
+		@sysInput(row, inRestartCard)
+	</div>
+}
+
+// sysLocked is a setting the container configuration fixes: no control, the Environment badge and
+// the key to change it by. Secrets show only whether a value is set.
+templ sysLocked(row sysRow) {
+	@ui.SettingField(ui.SettingFieldData{Key: row.Key, Label: sysLabel(row), Width: sysFieldCopy(row.Key).Width, Info: sysFieldCopy(row.Key).Info,
+		Help: row.Key + " in the container configuration.", Locked: true, Switch: false}) {
+		if row.Secret {
+			<div class="in ro mono">{ sysSetWord(row.HasValue) }</div>
+		} else {
+			<div class="in ro mono">{ row.Value }</div>
+		}
+	}
+}
+
+// sysBroker is MQTT_URL as the Broker host, port and TLS in one row (N18).
+templ sysBroker(p sysPage, row sysRow) {
+	<div class="brow">
+		@ui.SettingField(ui.SettingFieldData{Key: row.Key, Label: "Host", Width: "grow", Err: row.Err, CanReset: row.Source == "stored"}) {
+			<input name="mqtt.host" id={ ui.SettingControlID(row.Key) } class="mono" value={ p.MQTT.Host } maxlength="255" placeholder="empty: MQTT off" { sysDescribe(row)... }/>
+		}
+		<div class="sf w-port">
+			<div class="lrow"><label class="lbl" for="f-mqtt-port">Port</label></div>
+			<input name="mqtt.port" id="f-mqtt-port" class="mono" value={ p.MQTT.Port } inputmode="numeric" maxlength="5" placeholder="1883"/>
+		</div>
+		<div class="sf w-tls sf-switch">
+			<label class="swhit"><input type="checkbox" role="switch" id="f-mqtt-tls" name="mqtt.tls" value="1" checked?={ p.MQTT.TLS }/><span class="swtrack" aria-hidden="true"></span></label>
+			<div class="sf-main"><div class="lrow"><label class="lbl" for="f-mqtt-tls">Use TLS</label></div></div>
+		</div>
+	</div>
+}
+
 // sysStorageBlock is the top of the Backups tab (N9): four totals, the devices with the
 // largest backups, and the backups of deleted devices.
 templ sysStorageBlock(p sysPage, st sysStorage) {
 	<div class="sys-storage">
-		<h2 class="sys-storage-h">Storage</h2>
 		<div class="sys-sums">
 			@sysSum("Backups", strconv.Itoa(st.Runs))
 			@sysSum("Total size", st.Size)
@@ -110,12 +268,6 @@ templ sysStorageBlock(p sysPage, st sysStorage) {
 				<div class="sys-store-foot">{ st.Foot() }</div>
 			</div>
 		}
-		if len(st.Orphans) > 0 {
-			@sysOrphans(p, st)
-		}
-		if len(st.Unreferenced) > 0 {
-			@sysUnreferencedFiles(st)
-		}
 	</div>
 }
 
@@ -130,10 +282,6 @@ templ sysSum(label, value string) {
 // Download, Keep and Delete as on a device's Backups tab. The Keep buttons submit the
 // bk-orph form outside the settings form; Delete opens the shared delete dialog.
 templ sysOrphans(p sysPage, st sysStorage) {
-	<div class="sys-head">
-		<h2>Backups of deleted devices</h2>
-		<p>Kept when their device was deleted. Download one to restore it on a device by hand.</p>
-	</div>
 	<div class="sys-orphans">
 		for _, o := range st.Orphans {
 			<div class="sys-orphan">
@@ -189,10 +337,8 @@ templ sysOrphans(p sysPage, st sysStorage) {
 // sysUnreferencedFiles lists files in old backup folders that no backup entry points to
 // (#205). Read-only on purpose: TasmoFleet never deletes or moves them.
 templ sysUnreferencedFiles(st sysStorage) {
-	<div class="sys-head">
-		<h2>Unreferenced files</h2>
-		<p>Files in old backup folders that no backup entry points to. TasmoFleet leaves them alone; you can remove them by hand.</p>
-	</div>
+	<h3 class="sys-subhead">Unreferenced files</h3>
+	<p class="cnote">Files in old backup folders that no backup entry points to. TasmoFleet leaves them alone; you can remove them by hand.</p>
 	<div class="sys-orphans">
 		for _, f := range st.Unreferenced {
 			<div class="sys-orphan sys-unref">
@@ -218,165 +364,6 @@ templ sysResetBox(p sysPage) {
 			<div class="sys-danger-text">Devices, backups and users are kept.</div>
 		</div>
 		<a class="btn btn-danger-solid" href={ templ.SafeURL(p.Base + sysPath + "/reset") } data-dialog="dlg-reset">Reset settings…</a>
-	</div>
-}
-
-// sysSectionBlock is one section of a tab: its heading and line, then the fields in the
-// prototype's grid (auto-fit columns of at least 260 px).
-templ sysSectionBlock(p sysPage, tab string, i int, sec sysSection) {
-	if sec.Heading != "" {
-		<div class="sys-head">
-			<h2>{ sec.Heading }</h2>
-			if sec.Intro != "" {
-				<p>{ sec.Intro }</p>
-			}
-		</div>
-	}
-	<div class="sys-grid">
-		if tab == "devices" && i == 0 {
-			<label class="ufield">
-				<span class="ufield-label">Web user</span>
-				<input class="mono" readonly value="admin"/>
-				<small class="ufield-help">Tasmota’s web user is always admin.</small>
-			</label>
-		}
-		for _, row := range sec.Rows {
-			@sysField(p, row)
-		}
-		if tab == "signin" && i == 1 {
-			@sysTestRow("Test discovery", p.Base+sysPath+"/sso-test?tab=signin", "SSO check", p.SSOResult,
-				"Checks that the issuer answers OIDC discovery. Nothing is saved and no secret is sent.")
-		}
-	</div>
-}
-
-// sysField draws one setting in the component its kind calls for.
-templ sysField(p sysPage, row sysRow) {
-	switch {
-		case row.Locked:
-			@sysLocked(row)
-		case row.Key == "MQTT_URL" && p.MQTT.Legacy == "":
-			@sysBroker(p, row)
-		case row.Key == "LOG_LEVEL":
-			<div class="ufield ufield-wide">
-				<span class="ufield-label">{ row.Label }</span>
-				@ui.Segmented(row.Label, row.InputName(), sysLevelOptions(row.Posted))
-				@sysUnder(row)
-			</div>
-		case row.Key == "AUTH_MODE":
-			<div class="ufield-wide">
-				@ui.RadioCards(row.Label, row.InputName(), sysAuthOptions(row.Posted))
-				@sysUnder(row)
-			</div>
-		case row.Key == "METRICS_ENABLED":
-			<div class="ufield-wide">
-				<input type="hidden" name={ "b." + row.Key } value="1"/>
-				@ui.Toggle(row.InputName(), "Expose Prometheus metrics", row.Help, row.Posted == "true", false)
-				@sysUnder(row)
-			</div>
-		case row.Bool:
-			<div class="ufield-wide">
-				<input type="hidden" name={ "b." + row.Key } value="1"/>
-				<label class="ucheck">
-					<input type="checkbox" name={ row.InputName() } value="true" checked?={ row.Posted == "true" }/>
-					<span>
-						{ row.Label }
-						<small class="ucheck-text">{ row.Help }</small>
-					</span>
-				</label>
-				@sysUnder(row)
-			</div>
-		default:
-			<label class={ "ufield", templ.KV("ufield-wide", row.Multiline || row.Key == "MQTT_FULLTOPIC" || row.Key == "OIDC_ISSUER" || row.Key == "MQTT_URL") }>
-				<span class="ufield-label">{ row.Label }</span>
-				if row.Secret {
-					<input type="password" name={ row.InputName() } class="mono" autocomplete="new-password" maxlength="128" placeholder={ sysSecretHint(row) } { sysInvalid(row)... }/>
-				} else if len(row.Enum) > 0 {
-					<select name={ row.InputName() } { sysInvalid(row)... }>
-						for _, o := range row.Enum {
-							<option value={ o } selected?={ o == row.Posted }>{ o }</option>
-						}
-					</select>
-				} else if row.Multiline {
-					<textarea name={ row.InputName() } class="mono" rows="3" maxlength="2048" placeholder={ sysPlaceholder(row) } { sysInvalid(row)... }>{ row.Posted }</textarea>
-				} else {
-					<input name={ row.InputName() } class="mono" value={ row.Posted } maxlength="512" { sysInvalid(row)... }/>
-				}
-				@sysUnder(row)
-			</label>
-			@sysResets(row)
-	}
-}
-
-// sysUnder is the line under a field: the server's error, or the help with when it applies.
-templ sysUnder(row sysRow) {
-	if row.Err != "" {
-		<small class="ufield-err" id={ "err-" + row.InputName() } role="alert">{ row.Err }</small>
-	} else {
-		if row.Help != "" && !row.Bool {
-			<small class="ufield-help">{ row.Help }</small>
-		}
-		if row.Apply != sysconfig.Live || row.PendingRestart {
-			<small class="ufield-help">
-				Applies after a restart.
-				if row.PendingRestart {
-					@ui.Badge(ui.ToneWarn, "Restart required")
-				}
-			</small>
-		}
-	}
-	if row.NeedsReentry {
-		<small class="ufield-err" role="alert">{ row.Skipped }</small>
-	}
-}
-
-// sysResets are the checkboxes under a stored field: keep the broker password when the broker
-// changes, and go back to the default.
-templ sysResets(row sysRow) {
-	if row.Secret && row.HasValue && row.Key == "MQTT_PASSWORD" {
-		<label class="ucheck sys-reset"><input type="checkbox" name={ "reuse." + row.Key } value="1"/><span>Keep the stored password if the broker changes</span></label>
-	}
-	if row.Source == "stored" {
-		<label class="ucheck sys-reset"><input type="checkbox" name={ "clear." + row.Key } value="1"/><span>Reset { row.Label } to the default on save</span></label>
-	}
-}
-
-// sysLocked is a setting the container configuration fixes: read-only, with the reason.
-templ sysLocked(row sysRow) {
-	<label class="ufield">
-		<span class="ufield-label">{ row.Label }</span>
-		if row.Secret {
-			<input class="mono" readonly value={ sysSetWord(row.HasValue) }/>
-		} else {
-			<input class="mono" readonly value={ row.Value }/>
-		}
-		<small class="ufield-help">Set by environment ({ row.Key }); edit the container configuration to change it.</small>
-	</label>
-}
-
-// sysBroker is MQTT_URL as the prototype's Broker host and Port fields (N18); TLS sits with the
-// test button at the end of the tab.
-templ sysBroker(p sysPage, row sysRow) {
-	<label class="ufield">
-		<span class="ufield-label">Broker host</span>
-		<input name="mqtt.host" class="mono" value={ p.MQTT.Host } maxlength="255" placeholder="empty: MQTT off" { sysInvalid(row)... }/>
-		if row.Err != "" {
-			<span class="ufield-err" id={ "err-" + row.InputName() } role="alert">{ row.Err }</span>
-		}
-	</label>
-	<label class="ufield">
-		<span class="ufield-label">Port</span>
-		<input name="mqtt.port" class="mono" value={ p.MQTT.Port } inputmode="numeric" maxlength="5" placeholder="1883 (TLS 8883)"/>
-	</label>
-}
-
-// sysMQTTFoot is the end of the MQTT tab: Use TLS, and the connection test with its result.
-templ sysMQTTFoot(p sysPage) {
-	<div class="sys-grid">
-		if p.MQTT.Legacy == "" {
-			<label class="ucheck"><input type="checkbox" name="mqtt.tls" value="1" checked?={ p.MQTT.TLS }/><span>Use TLS</span></label>
-		}
-		@sysTestRow("Test connection", p.Base+sysPath+"/mqtt-test?tab=mqtt", "MQTT connection test", p.MQTTResult, mqttTestHelp)
 	</div>
 }
 

@@ -34,13 +34,13 @@ test("a setting changed on the page applies live: the scheduled scan starts with
   await expect(page.getByText("No scan yet")).toBeVisible();
 
   await page.goto(app.url + "/settings/system");
-  await page.getByRole("navigation", { name: "Settings sections" }).getByRole("link", { name: /Discovery/ }).click(); // one section at a time
+  await page.getByRole("navigation", { name: "Settings sections" }).getByRole("link", { name: /Discovery scan/ }).click(); // one section at a time
   await page.locator("input[name='v.DISCOVERY_SCAN']").check();
   await page.locator("textarea[name='v.DISCOVERY_SCAN_CIDRS']").fill("127.0.0.1/32");
   await page.getByRole("button", { name: "Save settings" }).click();
   await expect(page.getByText("Saved.")).toBeVisible();
   // the page comes back on the tab that was saved, so the new values are what the person sees
-  await expect(page.getByRole("navigation", { name: "Settings sections" }).getByRole("link", { name: /Discovery/ })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("navigation", { name: "Settings sections" }).getByRole("link", { name: /Discovery scan/ })).toHaveAttribute("aria-current", "page");
   await expect(page.locator("input[name='v.DISCOVERY_SCAN']")).toBeChecked();
 
   // The schedule started a scan as "system" at once.
@@ -56,7 +56,7 @@ test("a setting from the environment is locked, also against a forged request", 
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/settings/system?tab=signin"); // the locked fields live on this tab
   await expect(page.locator("input[name='v.OIDC_CLIENT_ID']")).toHaveCount(0);
-  await expect(page.getByText("set by environment").first()).toBeVisible();
+  await expect(page.locator("[data-key='OIDC_CLIENT_ID']").getByText("Environment")).toBeVisible();
   await expect(page.locator("input[name='v.LISTEN']")).toHaveCount(0);
 
   const csrf = await page.locator("input[name=csrf]").first().inputValue();
@@ -71,7 +71,7 @@ test("a setting from the environment is locked, also against a forged request", 
   });
   expect(bootstrap.status()).toBe(400);
   await page.reload();
-  await expect(page.getByText("set by environment").first()).toBeVisible();
+  await expect(page.locator("[data-key='OIDC_CLIENT_ID']").getByText("Environment")).toBeVisible();
 });
 
 test("policy rule editor: create via the setting picker, live preview, edit, revert", async ({ page }) => {
@@ -170,15 +170,15 @@ test("log level: the chosen level is saved and shown again", async ({ page }) =>
 test("metrics switch: off answers 404, on serves the metrics again", async ({ page, request }) => {
   expect((await request.get(app.url + "/metrics")).status(), "on by default").toBe(200);
   await page.setExtraHTTPHeaders(admin);
-  const toggle = page.locator("label.utoggle", { hasText: "Expose Prometheus metrics" });
-  await page.goto(app.url + "/settings/system?tab=metrics");
-  await expect(toggle.locator("input")).toBeChecked();
-  await toggle.click();
+  const toggle = page.locator("[data-key='METRICS_ENABLED']");
+  await page.goto(app.url + "/settings/system?tab=general");
+  await expect(toggle.locator("input[type=checkbox]")).toBeChecked();
+  await toggle.locator(".swtrack").click();
   await page.getByRole("button", { name: "Save settings" }).click();
   await expect(page.getByText("Saved.")).toBeVisible();
   expect((await request.get(app.url + "/metrics")).status(), "switched off").toBe(404);
-  await page.goto(app.url + "/settings/system?tab=metrics");
-  await toggle.click();
+  await page.goto(app.url + "/settings/system?tab=general");
+  await toggle.locator(".swtrack").click();
   await page.getByRole("button", { name: "Save settings" }).click();
   await expect(page.getByText("Saved.")).toBeVisible();
   expect((await request.get(app.url + "/metrics")).status(), "switched on again").toBe(200);
@@ -189,7 +189,7 @@ test("metrics switch: off answers 404, on serves the metrics again", async ({ pa
 test("metrics token: set on the page it applies at once, resetting it opens the local scrape again", async ({ page, request }) => {
   await page.setExtraHTTPHeaders(admin);
   expect((await request.get(app.url + "/metrics")).status(), "no token yet: local scrape").toBe(200);
-  await page.goto(app.url + "/settings/system?tab=metrics");
+  await page.goto(app.url + "/settings/system?tab=general");
   await page.locator("input[name='v.METRICS_TOKEN']").fill("e2e-fake-scrape-token");
   await page.getByRole("button", { name: "Save settings" }).click();
   await expect(page.getByText("Saved.")).toBeVisible();
@@ -197,7 +197,7 @@ test("metrics token: set on the page it applies at once, resetting it opens the 
   const ok = await request.get(app.url + "/metrics", { headers: { Authorization: "Bearer e2e-fake-scrape-token" } });
   expect(ok.status(), "right token").toBe(200);
   await expect(page.locator("body")).not.toContainText("e2e-fake-scrape-token"); // write-only
-  await page.locator("input[name='clear.METRICS_TOKEN']").check();
+  await page.locator("[data-key='METRICS_TOKEN'] label.srst").click();
   await page.getByRole("button", { name: "Save settings" }).click();
   await expect(page.getByText("Saved.")).toBeVisible();
   expect((await request.get(app.url + "/metrics")).status(), "token removed").toBe(200);

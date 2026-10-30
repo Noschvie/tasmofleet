@@ -302,7 +302,7 @@ test("tooltips: chips explain themselves and a cut-off value shows its full text
   expect(await cell.evaluate((c) => c.scrollWidth > c.clientWidth)).toBe(true);
 
   await page.goto(app.url + "/settings/system");
-  const help = await page.locator(".sys-tab:not([hidden]) label.ufield").count();
+  const help = await page.locator(".sys-tab:not([hidden]) .sf").count();
   expect(help).toBeGreaterThan(0);
   await resetAll(page, "/devices", "table.devices");
 });

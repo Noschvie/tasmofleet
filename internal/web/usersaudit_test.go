@@ -155,25 +155,23 @@ func TestSystemSettingsSaveReturnsToTheSavedTab(t *testing.T) {
 
 // Why: every field carries its visible label, also on the Network tab; read-only settings use
 // the same label pattern as editable ones and say why they are read-only. The read-only
-// key/value table has no Columns chooser, and the metrics switch sits on the Metrics tab, not
-// with the audit retention.
+// key/value table has no Columns chooser, and the metrics settings are a card of the General tab.
 func TestSystemSettingsTabsAreConsistent(t *testing.T) {
 	e, _, _, _ := sysEnvWith(t, true, "TASMOFLEET_OIDC_CLIENT_ID=envid")
 	_, body := e.do(t, "GET", "/settings/system?tab=network", "admin", nil)
-	if !strings.Contains(body, `<span class="ufield-label">Device networks</span>`) {
+	if !strings.Contains(body, `<label class="lbl" for="f-DEVICE_NETWORKS">Device networks</label>`) {
 		t.Error("the Network tab has no visible label for its field")
 	}
 	_, body = e.do(t, "GET", "/settings/system?tab=signin", "admin", nil)
-	if !strings.Contains(body, `<span class="ufield-label">Client ID</span> <input class="mono" readonly value="envid">`) || !strings.Contains(body, "Set by environment (OIDC_CLIENT_ID)") {
+	if !strings.Contains(body, `<label class="lbl" for="f-OIDC_CLIENT_ID">Client ID</label>`) || !strings.Contains(body, `<div class="in ro mono">envid</div>`) || !strings.Contains(body, "OIDC_CLIENT_ID in the container configuration") {
 		t.Error("a read-only setting does not use the label pattern of the editable ones, or hides why")
 	}
 	_, body = e.do(t, "GET", "/settings/system?tab=advanced", "admin", nil)
 	if strings.Contains(body, `data-table="keyvalue"`) || strings.Contains(body, `class="colmenu"`) {
 		t.Error("the read-only key/value table carries a Columns chooser")
 	}
-	general := tabBody(t, body, "general")
-	if strings.Contains(general, "METRICS_DEVICE_LABELS") || !strings.Contains(tabBody(t, body, "metrics"), `name="v.METRICS_DEVICE_LABELS"`) {
-		t.Error("METRICS_DEVICE_LABELS is not on its own Metrics tab")
+	if !strings.Contains(tabBody(t, body, "general"), `name="v.METRICS_DEVICE_LABELS"`) {
+		t.Error("METRICS_DEVICE_LABELS is not on the General tab, where Metrics now is a card")
 	}
 }
 

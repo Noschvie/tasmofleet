@@ -1,0 +1,134 @@
+package ui
+
+// Components of the Settings page (card grid, field with label row, info popover, save bar).
+
+// Info is the "i" button with its click popover: a native popover, so touch, keyboard, Escape and
+// "one open at a time" come from the browser. info.js only places it and keeps aria-expanded.
+templ Info(id, label, text string) {
+	<button type="button" class="uinfo" popovertarget={ id } aria-expanded="false" aria-controls={ id } aria-label={ "About " + label }>i</button>
+	<div id={ id } popover class="uinfo-pop" role="note">{ text }</div>
+}
+
+// SettingsGrid is the card grid of a tab: 3, 2 or 1 columns by the width available.
+templ SettingsGrid() {
+	<div class="sgrid">
+		{ children... }
+	</div>
+}
+
+// SettingsCardData describes a card: Class is "", "span2", "spanall" or "rows2"; Depends is the
+// data-depends rule (see sysform.js) that dims the card while it does not apply.
+type SettingsCardData struct {
+	ID, Title, Note, Class, Depends string
+	Badges                          []SettingsBadge
+	Plain                           bool // body is not the two-column field grid
+}
+
+// SettingsBadge is a small label in a card's header.
+type SettingsBadge struct {
+	Tone  Tone
+	Label string
+}
+
+// SettingsCard is one card of the grid: header (title, one-line note, badges) and body (children).
+templ SettingsCard(d SettingsCardData) {
+	<section class={ "scard", d.Class } id={ d.ID }
+		if d.Depends != "" {
+			data-depends={ d.Depends }
+		}
+	>
+		<div class="sch">
+			<div>
+				<h2>{ d.Title }</h2>
+				if d.Note != "" {
+					<p class="cnote">{ d.Note }</p>
+				}
+			</div>
+			if len(d.Badges) > 0 {
+				<div class="cbd">
+					for _, b := range d.Badges {
+						@Badge(b.Tone, b.Label)
+					}
+				</div>
+			}
+		</div>
+		<div class={ "sbody", templ.KV("sbody-plain", d.Plain) }>
+			{ children... }
+		</div>
+	</section>
+}
+
+// SettingFieldData describes one setting: Width is "full", "half" or "xs"; Switch puts the
+// children (the switch itself) left of the label; Group uses a span as label (radio groups).
+type SettingFieldData struct {
+	Key, Label, Width string
+	Help, Info, Err   string
+	Restart, Locked   bool
+	CanReset          bool
+	Switch, Group     bool
+	Warn              bool // a switch drawn in the warning tone while on
+}
+
+// SettingControlID is the id of a setting's control, which its label points to.
+func SettingControlID(key string) string { return "f-" + key }
+
+// SettingHelpID is the id of a setting's help line (aria-describedby).
+func SettingHelpID(key string) string { return "help-" + key }
+
+// SettingErrID is the id of a setting's error line.
+func SettingErrID(key string) string { return "err-v." + key }
+
+// SettingField is a setting: a label row (label, info button, Restart and Environment badges, the
+// "Reset to default" control), the control (children), and one help line, replaced by the error.
+// The reset control is part of the field, never a grid cell of its own.
+templ SettingField(d SettingFieldData) {
+	<div class={ "sf", "w-" + d.Width, templ.KV("sf-switch", d.Switch), templ.KV("sf-warn", d.Warn), templ.KV("sf-locked", d.Locked) } data-key={ d.Key }>
+		if d.Switch {
+			{ children... }
+		}
+		<div class="sf-main">
+			if d.Label != "" || d.Info != "" || d.Locked || d.Restart || d.CanReset {
+			<div class="lrow">
+				if d.Group {
+					<span class="lbl">{ d.Label }</span>
+				} else {
+					<label class="lbl" for={ SettingControlID(d.Key) }>{ d.Label }</label>
+				}
+				if d.Info != "" {
+					@Info("info-"+d.Key, d.Label, d.Info)
+				}
+				<span class="meta">
+					if d.Locked {
+						@Badge(ToneNeutral, "Environment")
+					} else if d.Restart {
+						@Badge(ToneWarn, "Restart")
+					}
+					if d.CanReset && !d.Locked {
+						<label class="srst"><input type="checkbox" name={ "clear." + d.Key } value="1"/><span class="srst-off">Reset to default</span><span class="srst-on">Resets on save</span></label>
+					}
+				</span>
+			</div>
+			}
+			if !d.Switch {
+				{ children... }
+			}
+			if d.Err != "" {
+				<small class="ufield-err" id={ SettingErrID(d.Key) } role="alert">{ d.Err }</small>
+			} else if d.Help != "" {
+				<small class="ufield-help" id={ SettingHelpID(d.Key) }>{ d.Help }</small>
+			}
+		</div>
+	</div>
+}
+
+// SaveBar is the page's one save bar: the form's Save and Discard, and the place where sysform.js
+// lists the tabs with unsaved changes. Without script it is just the two buttons.
+templ SaveBar(discardHref string) {
+	<div class="sbar" data-sys-bar>
+		<span class="sbar-state" data-sbar-state role="status">No unsaved changes</span>
+		<span class="sbar-chips" data-sbar-chips></span>
+		<span class="sbar-sp"></span>
+		@Button(Btn{Label: "Discard", Href: discardHref})
+		@Button(Btn{Label: "Save settings", Kind: "primary", Type: "submit"})
+	</div>
+}

@@ -161,8 +161,8 @@ func TestSystemSettingsSaveAppliesAndAudits(t *testing.T) {
 		t.Fatal("an empty write-only field means unchanged")
 	}
 	_, body := e.do(t, "GET", "/settings/system", "admin", nil)
-	if !strings.Contains(body, "restart") {
-		t.Error("BACKUP_KEEP only applies after a restart: the page must say so")
+	if !strings.Contains(body, "Restart") {
+		t.Error("restart-only settings must say so (badge)")
 	}
 }
 
@@ -262,7 +262,7 @@ func TestSystemSettingsSecretNeverComesBack(t *testing.T) {
 func TestSystemSettingsEnvironmentLockedSignInSettingIsReadOnly(t *testing.T) {
 	e, svc, mem, _ := sysEnvWith(t, true, "TASMOFLEET_OIDC_CLIENT_ID=envid")
 	_, body := e.do(t, "GET", "/settings/system", "admin", nil)
-	if strings.Contains(body, `name="v.OIDC_CLIENT_ID"`) || !strings.Contains(body, "Set by environment") || !strings.Contains(body, "envid") {
+	if strings.Contains(body, `name="v.OIDC_CLIENT_ID"`) || !strings.Contains(body, "Environment") || !strings.Contains(body, "envid") {
 		t.Fatal("locked fields are shown read-only with the reason")
 	}
 	r, _ := e.do(t, "POST", "/settings/system", "admin", url.Values{"csrf": {"tok"}, "v.OIDC_CLIENT_ID": {"x"}, "v.BACKUP_KEEP": {"2"}})

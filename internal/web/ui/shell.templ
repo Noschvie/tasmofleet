@@ -10,7 +10,7 @@ import (
 const htmxConfig = `{"allowEval":false,"allowScriptTags":false,"includeIndicatorStyles":false,"selfRequestsOnly":true,"responseHandling":[{"code":"204","swap":false},{"code":"[23]..","swap":true},{"code":"[45]..","swap":true,"error":true}]}`
 
 // deferred scripts of every page, in load order (htmx and its SSE extension load first, blocking).
-var deferredScripts = []string{"theme.js", "live.js", "toast.js", "select.js", "form.js", "batch.js", "menu.js", "copy.js", "dialog.js", "tables.js", "tooltip.js", "firmware.js", "tabs.js", "time.js", "listback.js"}
+var deferredScripts = []string{"theme.js", "live.js", "toast.js", "select.js", "form.js", "batch.js", "menu.js", "copy.js", "dialog.js", "tables.js", "tooltip.js", "info.js", "firmware.js", "tabs.js", "time.js", "listback.js", "sysform.js"}
 
 // csrfHeaders is the htmx default request header carrying the CSRF token.
 func csrfHeaders(token string) string {

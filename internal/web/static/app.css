@@ -11381,58 +11381,515 @@ dialog.fw-notes-dlg .fw-dlg-body {
 .pghead:has(+ .utabs[aria-label="Settings sections"]) {
   margin-bottom: var(--sp-14);
 }
-/* one card over all tabs: 18 px padding, 16 px between its parts, the footer under a hairline */
-.syscard {
-  max-width: 860px;
-  padding: var(--sp-18);
-  gap: var(--sp-16);
+/* Settings page (issue #275): tabs in one form, a grid of cards per tab, one save bar */
+.syspage {
+  display: block;
 }
-.sys-tab {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-16);
-}
-.sys-tab[hidden] {
+.sys-tab[hidden],
+.sys-after[hidden] {
   display: none;
 }
-.sys-head h2 {
-  margin: 0 0 var(--sp-4);
+.sgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
+  gap: var(--sp-16);
+  max-width: 1240px;
+  align-items: start;
+}
+.scard {
+  background: var(--color-surface);
+  border: var(--hair-w) solid var(--color-border);
+  border-radius: var(--r-card);
+  padding: var(--sp-16) var(--sp-18);
+  min-width: 0;
+}
+.scard.span2 {
+  grid-column: span 2;
+}
+.scard.rows2 {
+  grid-row: span 2;
+}
+.scard.spanall {
+  grid-column: 1 / -1;
+}
+.scard.is-off,
+.dep.is-off {
+  opacity: 0.5;
+}
+.sch {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--sp-10);
+  align-items: flex-start;
+  margin-bottom: var(--sp-14);
+}
+.sch h2 {
+  margin: 0;
   font: 600 14px var(--font-sans);
   letter-spacing: normal;
 }
-#sec-signin .sys-head h2 {
-  font-size: 15px;
-}
-.sys-head p {
-  margin: 0;
-  font-size: 13px;
+.cnote {
+  margin: var(--sp-2) 0 0;
+  font-size: 12.5px;
   color: var(--color-text-2);
-  text-wrap: pretty;
 }
-.sys-grid {
+.cbd {
+  display: flex;
+  gap: var(--sp-6);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.sbody {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
-  gap: var(--sp-14) var(--sp-18);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-14);
   align-items: start;
 }
-.sys-grid .rcards {
+.sbody-plain {
+  display: block;
+}
+.sbody-plain > * + * {
+  margin-top: var(--sp-12);
+}
+.sf {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  grid-column: span 2;
+}
+.sf.w-half,
+.sf.w-xs {
+  grid-column: span 1;
+}
+.sf-main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+.sf.w-xs input:not([type="checkbox"]):not([type="radio"]) {
+  max-width: 120px;
+}
+.sf input:not([type="checkbox"]):not([type="radio"]),
+.sf select,
+.sf textarea {
+  width: 100%;
+}
+.lrow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-6);
+  min-height: 20px;
+  margin-bottom: var(--sp-5);
+}
+.lbl {
+  font: 500 13px var(--font-sans);
+  color: var(--color-text-2);
+}
+.meta {
+  margin-left: auto;
+  display: flex;
+  gap: var(--sp-6);
+  align-items: center;
+}
+.sf.w-xs .meta {
+  margin-left: 0;
+}
+.srst {
+  position: relative;
+  font: 500 12px var(--font-sans);
+  color: var(--color-accent-fg);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.srst:hover {
+  text-decoration: underline;
+}
+.srst input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+}
+.srst:has(input:focus-visible) {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+}
+.srst .srst-on,
+.srst:has(input:checked) .srst-off {
+  display: none;
+}
+.srst:has(input:checked) .srst-on {
+  display: inline;
+  color: var(--color-warn-fg);
+}
+.sf:has(.srst input:checked) input:not([type="checkbox"]),
+.sf:has(.srst input:checked) textarea {
+  opacity: 0.5;
+}
+.sf.w-xs .srst .srst-off,
+.sf.w-xs .srst .srst-on {
+  font-size: 0;
+}
+.sf.w-xs .srst .srst-off::before {
+  content: "\21BA";
+  font-size: 13px;
+}
+.sf.w-xs .srst .srst-on::before {
+  content: "\21BA";
+  font-size: 13px;
+}
+.sf-locked .in.ro,
+.in.ro {
+  display: flex;
+  align-items: center;
+  min-height: var(--ctl);
+  padding: 0 10px;
+  border: var(--hair-w) dashed var(--color-border-strong);
+  border-radius: var(--r-control);
+  background: var(--color-surface-2);
+  color: var(--color-text-2);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.sf.w-xs .in.ro {
+  max-width: 120px;
+}
+.sopt {
+  min-height: 0;
+  margin-top: var(--sp-8);
+  font-size: 12.5px;
+}
+.cks {
+  display: flex;
+  gap: var(--sp-18);
+  flex-wrap: wrap;
+  min-height: var(--ctl);
+  align-items: center;
+}
+.cks .ucheck {
+  min-height: 0;
+}
+.brow {
+  grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  grid-template-columns: minmax(0, 1fr) 96px auto;
+  gap: var(--sp-14);
+  align-items: start;
+}
+.brow .sf {
+  grid-column: auto;
+}
+.brow .sf-switch {
+  padding-top: var(--sp-24);
+}
+/* switches: the track is the label of the hidden checkbox, so a click anywhere on it toggles */
+.sf-switch {
+  flex-direction: row;
+  align-items: flex-start;
   gap: var(--sp-10);
 }
-.sys-grid .rcards legend {
+.swhit {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+}
+.swhit input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+.swtrack {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 20px;
+  margin-top: var(--sp-1);
+  border-radius: 999px;
+  background: var(--color-surface-3);
+  border: var(--hair-w) solid var(--color-border-strong);
+  cursor: pointer;
+}
+.swtrack::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: var(--shadow-knob);
+  transition: left 0.15s;
+}
+input:checked + .swtrack {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+input:checked + .swtrack::after {
+  left: 16px;
+}
+.sf-warn input:checked + .swtrack {
+  background: var(--color-warn);
+  border-color: var(--color-warn);
+}
+input:focus-visible + .swtrack {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.sf-switch .lrow {
+  margin-bottom: 0;
+}
+.sf-switch .lbl {
+  color: var(--color-text);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.sf-switch .ufield-help {
+  margin-top: var(--sp-1);
+}
+/* settings that only matter while a switch is on: indented under it, dimmed while it is off */
+.dep {
   grid-column: 1 / -1;
+  margin-left: var(--sp-16);
+  padding-left: var(--sp-22);
+  border-left: 2px solid var(--color-border);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-14);
 }
-.sys-grid .utoggle {
-  padding: var(--sp-12) var(--sp-14);
-  border: var(--hair-w) solid var(--color-border);
-  border-radius: var(--r-banner);
-}
-.sys-reset {
-  min-height: 0;
-  margin-top: calc(-1 * var(--sp-8));
-  font-size: 12px;
+/* the info button and its popover */
+.uinfo {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: var(--hair-w) solid var(--color-border-strong);
+  background: var(--color-surface);
   color: var(--color-text-2);
+  font: 600 10.5px/1 var(--font-sans);
+  padding: 0;
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+}
+.uinfo:hover,
+.uinfo[aria-expanded="true"] {
+  border-color: var(--color-accent);
+  color: var(--color-accent-fg);
+  background: var(--color-accent-bg);
+}
+.uinfo-pop {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  max-width: min(300px, calc(100vw - 16px));
+  padding: var(--sp-10) var(--sp-12);
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: var(--hair-w) solid var(--color-border-strong);
+  border-radius: var(--r-sm);
+  box-shadow: var(--shadow-lg);
+  font: 12.5px/1.5 var(--font-sans);
+}
+.uinfo-pop:not(:popover-open):not(.open) {
+  display: none;
+}
+/* the sticky save bar */
+.sbar {
+  position: sticky;
+  bottom: 0;
+  z-index: var(--z-sticky);
+  display: flex;
+  align-items: center;
+  gap: var(--sp-8);
+  flex-wrap: wrap;
+  margin-top: var(--sp-24);
+  padding: var(--sp-12) 0;
+  background: var(--color-bg);
+  border-top: var(--hair-w) solid var(--color-border);
+  box-shadow: var(--shadow-bar);
+}
+.sbar-state {
+  font-size: 13px;
+  color: var(--color-text-3);
+}
+.sbar.is-dirty .sbar-state {
+  color: var(--color-text);
+  font-weight: 500;
+}
+.sbar.is-dirty .sbar-state::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: var(--sp-6);
+  border-radius: 50%;
+  background: var(--color-warn);
+  vertical-align: 1px;
+}
+.sbar-chips {
+  display: inline-flex;
+  gap: var(--sp-6);
+  flex-wrap: wrap;
+}
+.sbar-chip {
+  font: 500 12px var(--font-sans);
+  padding: var(--sp-2) var(--sp-8);
+  border-radius: 999px;
+  background: var(--color-warn-bg);
+  color: var(--color-warn-fg);
+}
+.sbar-sp {
+  flex: 1;
+}
+.utab.is-dirty::after {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-left: var(--sp-5);
+  border-radius: 50%;
+  background: var(--color-warn);
+  vertical-align: 2px;
+}
+.sys-picker {
+  display: none;
+}
+.sys-picker select {
+  flex: 1;
+}
+/* after the form: the container's settings and the danger zone */
+.sys-after {
+  max-width: 1240px;
+  margin-top: var(--sp-16);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-40);
+}
+.sys-danger {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--sp-16);
+  flex-wrap: wrap;
+  padding: var(--sp-14) var(--sp-18);
+  border: var(--hair-w) solid var(--color-danger);
+  background: var(--color-danger-bg);
+  border-radius: var(--r-card);
+}
+.sys-subhead {
+  margin: var(--sp-16) 0 0;
+  font: 600 13px var(--font-sans);
+}
+.sys-container {
+  background: var(--color-surface);
+  border: var(--hair-w) solid var(--color-border);
+  border-radius: var(--r-card);
+  padding: var(--sp-14) var(--sp-18);
+}
+.sys-container summary {
+  cursor: pointer;
+  font: 500 13px var(--font-sans);
+  color: var(--color-accent-fg);
+}
+@media (max-width: 44.99rem) {
+  /* phone: a section picker replaces the strip; cards lose their frame and become sections */
+  .sys-picker:not([hidden]) {
+    display: flex;
+    align-items: center;
+    gap: var(--sp-8);
+    margin: var(--sp-14) 0 var(--sp-6);
+    font-size: 12.5px;
+    color: var(--color-text-3);
+  }
+  .sys-picker:not([hidden]) ~ .utabs[aria-label="Settings sections"] {
+    display: none;
+  }
+  .utabs[aria-label="Settings sections"] {
+    scrollbar-width: none;
+  }
+  .utabs[aria-label="Settings sections"]::-webkit-scrollbar {
+    display: none;
+  }
+  .sgrid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
+  .scard {
+    border: 0;
+    border-top: var(--hair-w) solid var(--color-border);
+    border-radius: 0;
+    background: transparent;
+    padding: var(--sp-16) 0;
+  }
+  .scard.span2,
+  .scard.spanall,
+  .scard.rows2 {
+    grid-column: auto;
+    grid-row: auto;
+  }
+  .sch {
+    flex-wrap: wrap;
+  }
+  .cbd {
+    justify-content: flex-start;
+  }
+  .sbody,
+  .dep,
+  .brow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sf,
+  .sf.w-half,
+  .sf.w-xs {
+    grid-column: auto;
+  }
+  .sf.w-xs input:not([type="checkbox"]):not([type="radio"]),
+  .sf.w-xs .in.ro {
+    max-width: none;
+  }
+  .brow .sf-switch {
+    padding-top: 0;
+  }
+  /* 40 px touch targets: the switch and the info button reach past their drawn size */
+  .swhit {
+    min-width: 40px;
+    min-height: 40px;
+    align-items: center;
+    justify-content: center;
+    margin: calc(-1 * var(--sp-10)) calc(-1 * var(--sp-3));
+  }
+  .uinfo {
+    width: 40px;
+    height: 40px;
+    margin: calc(-1 * var(--sp-12));
+    border: 0;
+    background: radial-gradient(circle, var(--color-surface) 7px, var(--color-border-strong) 7px 8px, transparent 8px);
+  }
+  .sbar {
+    margin-top: var(--sp-8);
+  }
+  .sbar-chips,
+  .sbar-sp {
+    display: none;
+  }
+  .sbar {
+    flex-wrap: nowrap;
+  }
+  .sbar-state {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+.sbody > .sys-status {
+  grid-column: 1 / -1;
 }
 .sys-test {
   display: flex;
@@ -11488,15 +11945,6 @@ dialog.fw-notes-dlg .fw-dlg-body {
   margin: var(--sp-4) 0 0;
   padding-left: var(--sp-18);
 }
-.sys-foot {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  gap: var(--sp-8);
-  flex-wrap: wrap;
-  border-top: var(--hair-w) solid var(--color-border);
-  padding-top: var(--sp-14);
-}
 .sys-container table {
   margin-top: var(--sp-8);
 }
@@ -11512,11 +11960,6 @@ dialog.fw-notes-dlg .fw-dlg-body {
   display: flex;
   flex-direction: column;
   gap: var(--sp-12);
-}
-.sys-storage-h {
-  margin: 0;
-  font: 600 14px var(--font-sans);
-  letter-spacing: normal;
 }
 .sys-sums {
   display: grid;
@@ -11616,16 +12059,6 @@ a.sys-store-row:hover {
   color: var(--color-text-2);
 }
 /* Advanced: "Reset all settings" in a danger-bordered box */
-.sys-danger {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--sp-12);
-  flex-wrap: wrap;
-  padding: var(--sp-14);
-  border: var(--hair-w) solid var(--color-danger);
-  border-radius: 9px;
-}
 .sys-danger-title {
   font-weight: 600;
   color: var(--color-danger-fg);

@@ -32,6 +32,12 @@ func TestSystemSettingsEveryFieldHasOnePlace(t *testing.T) {
 		if st.Key == "AUTH_MODE" || st.Key == "LOG_LEVEL" {
 			n = min(n, 1) // radio inputs: one per choice
 		}
+		if len(st.Choices) > 0 {
+			n = min(n, 1) // one checkbox per choice
+		}
+		if st.Key == "BACKUP_INTERVAL" {
+			n = strings.Count(body, name) // the interval input; the schedule switch is sw.BACKUP_INTERVAL
+		}
 		if n != 1 {
 			t.Errorf("%s: %d inputs on the page, want exactly 1", st.Key, n)
 		}
@@ -57,7 +63,7 @@ func TestSystemSettingsMetricsTokenFieldAndLock(t *testing.T) {
 
 	e, _, _, _ = sysEnvFull(t, true, nil, "TASMOFLEET_METRICS_TOKEN=fake-env-token-6")
 	_, body = e.do(t, "GET", "/settings/system", "admin", nil)
-	if strings.Contains(body, `name="v.METRICS_TOKEN"`) || !strings.Contains(body, "Set by environment (METRICS_TOKEN)") {
+	if strings.Contains(body, `name="v.METRICS_TOKEN"`) || !strings.Contains(body, "METRICS_TOKEN in the container configuration") {
 		t.Errorf("env token must lock the field:\n%s", body)
 	}
 	if strings.Contains(body, "fake-env-token-6") {
@@ -145,27 +151,10 @@ func TestSystemSettingsDiscoveryStatus(t *testing.T) {
 	} {
 		e, _, _, _ := sysEnvWithDeps(t, func(d *Deps) { state := c.mqtt; d.MQTT = func() string { return state } })
 		e.do(t, "POST", "/settings/system", "admin", url.Values{"csrf": {"tok"}, "b.DISCOVERY_MQTT": {"1"}, "v.DISCOVERY_MQTT": {c.on}})
-		_, body := e.do(t, "GET", "/settings/system?tab=discovery", "admin", nil)
+		_, body := e.do(t, "GET", "/settings/system?tab=mqtt", "admin", nil)
 		if !strings.Contains(body, "<b>"+c.want+"</b>") {
 			t.Errorf("MQTT %s, discovery %s: want %q", c.mqtt, c.on, c.want)
 		}
-	}
-}
-
-// Why: the tabs are the prototype's (D14: structure 1:1); a field group that is moved to a tab
-// the prototype does not have would break the page's structure silently.
-func TestSystemSettingsTabsFollowThePrototype(t *testing.T) {
-	want := []string{"general", "network", "mqtt", "discovery", "devices", "backups", "fwsource", "metrics", "signin", "advanced"}
-	if len(sysLayout) != len(want) {
-		t.Fatalf("%d tabs", len(sysLayout))
-	}
-	for i, d := range sysLayout {
-		if d.Slug != want[i] {
-			t.Errorf("tab %d is %s, want %s", i, d.Slug, want[i])
-		}
-	}
-	if tab, _ := sysPlace(sysconfig.FieldState{Field: sysconfig.Field{Key: "SOMETHING_NEW", Group: "Unknown"}}); sysLayout[tab].Slug != "advanced" {
-		t.Error("a field without a place must land on Advanced, not vanish")
 	}
 }
 
@@ -174,7 +163,7 @@ func TestSystemSettingsTabsFollowThePrototype(t *testing.T) {
 func TestSystemSettingsCheckboxesPostTrue(t *testing.T) {
 	e, _, _, _ := sysEnv(t, true)
 	_, body := e.do(t, "GET", "/settings/system", "admin", nil)
-	boxes := regexp.MustCompile(`<input type="checkbox"[^>]*name="v\.[A-Z_]+"[^>]*>`).FindAllString(body, -1)
+	boxes := regexp.MustCompile(`<input type="checkbox" role="switch"[^>]*name="v\.[A-Z_]+"[^>]*>`).FindAllString(body, -1)
 	if len(boxes) == 0 {
 		t.Fatal("no on/off setting drawn as a checkbox")
 	}
@@ -274,7 +263,7 @@ func TestSettingsBackupsStorageSummaryAndLargestFirst(t *testing.T) {
 	if !strings.Contains(body, `href="/tf/devices/12/backups"`) {
 		t.Error("a row opens the device's Backups tab")
 	}
-	if strings.Index(body, "Storage</h2>") > strings.Index(body, "Schedule and retention") {
+	if strings.Index(body, "Storage</h2>") > strings.Index(body, "Schedule &amp; retention") {
 		t.Error("the storage summary comes before the schedule, as in the prototype")
 	}
 }

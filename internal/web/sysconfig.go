@@ -47,6 +47,7 @@ type sysRow struct {
 	sysconfig.FieldState
 	Posted string // what the admin typed, shown again after an error
 	Err    string
+	Deps   []sysRow // settings that only matter while this switch is on (see sysFieldCopy.Dep)
 }
 
 // ErrField is the input name of a row with an error (the field-error pattern
@@ -59,75 +60,6 @@ func (r sysRow) ErrField() string {
 }
 
 func (r sysRow) InputName() string { return "v." + r.Key }
-
-// sysSection is a part of a tab: an optional heading and line, then its fields in the grid.
-type sysSection struct {
-	Heading, Intro string
-	Rows           []sysRow
-}
-
-// sysTab is one tab of the page (design v2 screen "settings", sysTab). Every field has exactly
-// one place (sysPlace); a tab without fields is not shown, Advanced always is (it lists the
-// settings of the container).
-type sysTab struct {
-	Label, Slug string
-	Sections    []sysSection
-}
-
-// sysTabDef is a tab of the prototype with its sections; a section is filled by sysPlace.
-type sysTabDef struct {
-	Slug, Label string
-	Sections    []sysSection
-}
-
-// sysLayout is the prototype's tab order (SYS2) with the sections each tab draws.
-var sysLayout = []sysTabDef{
-	{"general", "General", []sysSection{{}}},
-	{"network", "Network", []sysSection{{}, {Heading: "Health checks"}}},
-	{"mqtt", "MQTT", []sysSection{{}}},
-	{"discovery", "Discovery", []sysSection{{}, {Heading: "Network scan"}}},
-	{"devices", "Devices", []sysSection{{Heading: "Default device credentials", Intro: "Prefilled when you add a device or accept a discovered one. You can still change them per device."}}},
-	{"backups", "Backups", []sysSection{{Heading: "Schedule and retention"}}},
-	{"fwsource", "Firmware source", []sysSection{{}}},
-	{"metrics", "Metrics", []sysSection{{}}},
-	{"signin", "Sign-in", []sysSection{{Heading: "How people sign in", Intro: "One method is active. The local admin account always works as a fallback."}, {}}},
-	{"advanced", "Advanced", []sysSection{{Heading: "Updates (OTA)"}, {Heading: "Other"}}},
-}
-
-// sysKeyPlace puts single fields where the prototype has them; sysGroupPlace places the rest
-// by their group. A field in neither lands in Advanced, "Other".
-var sysKeyPlace = map[string][2]int{
-	"DEVICE_DEFAULT_PASSWORD": {4, 0},
-	"DISCOVERY_SCAN":          {3, 1},
-	"DISCOVERY_SCAN_INTERVAL": {3, 1},
-	"DISCOVERY_SCAN_CIDRS":    {3, 1},
-	"AUTH_MODE":               {8, 0},
-}
-
-var sysGroupPlace = map[sysconfig.Group][2]int{
-	sysconfig.GroupLogging:   {0, 0},
-	sysconfig.GroupAudit:     {0, 0},
-	sysconfig.GroupNetwork:   {1, 0},
-	sysconfig.GroupHealth:    {1, 1},
-	sysconfig.GroupMQTT:      {2, 0},
-	sysconfig.GroupDiscovery: {3, 0},
-	sysconfig.GroupBackup:    {5, 0},
-	sysconfig.GroupFirmware:  {6, 0},
-	sysconfig.GroupMetrics:   {7, 0},
-	sysconfig.GroupSignIn:    {8, 1},
-	sysconfig.GroupOTA:       {9, 0},
-}
-
-// sysPlace is the tab and section of a field.
-func sysPlace(st sysconfig.FieldState) (tab, section int) {
-	if p, ok := sysKeyPlace[st.Key]; ok {
-		return p[0], p[1]
-	}
-	if p, ok := sysGroupPlace[st.Group]; ok {
-		return p[0], p[1]
-	}
-	return 9, 1
-}
 
 // sysMQTT is the broker of the MQTT tab as host, port and TLS (N18). Legacy is set when the
 // stored URL cannot be written as these parts; the page then keeps the URL field.
@@ -179,18 +111,14 @@ func (h *handler) sysStepUp(r *http.Request) sysconfig.StepUp {
 func (h *handler) sysData(r *http.Request, posted map[string]string, errs map[string]string) sysPage {
 	svc := h.d.SysConfig
 	p := sysPage{Base: httpBase(r), CSRF: h.d.Guard.CSRFToken(r), ReadOnly: svc.ReadOnly(), Skipped: svc.Skipped()}
-	tabs := make([]sysTab, len(sysLayout))
-	for i, def := range sysLayout {
-		tabs[i] = sysTab{Label: def.Label, Slug: def.Slug, Sections: slices.Clone(def.Sections)}
-	}
+	rows := map[string]sysRow{}
 	discoveryOn := false
 	for _, st := range svc.State() {
 		row := sysRow{FieldState: st, Posted: st.Value, Err: errs[st.Key]}
 		if v, ok := posted[st.Key]; ok && !st.Secret {
 			row.Posted = v
 		}
-		t, s := sysPlace(st)
-		tabs[t].Sections[s].Rows = append(tabs[t].Sections[s].Rows, row)
+		rows[st.Key] = row
 		if st.PendingRestart {
 			p.Pending = append(p.Pending, st.Key)
 		}
@@ -201,25 +129,13 @@ func (h *handler) sysData(r *http.Request, posted map[string]string, errs map[st
 			discoveryOn = row.Posted == "true"
 		}
 	}
-	// The prototype's General tab starts with the log level; the audit retention follows.
-	slices.SortStableFunc(tabs[0].Sections[0].Rows, func(a, b sysRow) int {
-		return sysFirst(a) - sysFirst(b)
-	})
+	p.Tabs = sysTabsOf(rows)
 	p.Discovery = h.sysDiscoveryOf(r, discoveryOn)
-	for _, tab := range tabs {
-		n := 0
-		for _, s := range tab.Sections {
-			n += len(s.Rows)
-		}
-		if n > 0 || tab.Slug == "advanced" {
-			p.Tabs = append(p.Tabs, tab)
-		}
-	}
 	p.Active = r.URL.Query().Get("tab")
 	for _, tab := range p.Tabs {
-		for _, s := range tab.Sections {
+		for _, s := range tab.Cards {
 			for _, row := range s.Rows {
-				if row.Err != "" || row.NeedsReentry {
+				if row.hasProblem() {
 					p.Active = tab.Slug // an error is shown where it happened
 				}
 			}
@@ -394,7 +310,7 @@ func (h *handler) sysForm(w http.ResponseWriter, r *http.Request, allowClear boo
 		return nil, nil, nil, false
 	}
 	values, extra = map[string]string{}, map[string]string{}
-	var boxes []string
+	var boxes, lists []string // lists: choice fields drawn as one checkbox per choice (m.KEY marks them)
 	for k, vs := range r.PostForm {
 		switch {
 		case k == "csrf":
@@ -405,10 +321,24 @@ func (h *handler) sysForm(w http.ResponseWriter, r *http.Request, allowClear boo
 				return nil, nil, nil, false
 			}
 			boxes = append(boxes, f.Key)
+		case strings.HasPrefix(k, "m."):
+			f, known := sysconfig.Lookup(strings.TrimPrefix(k, "m."))
+			if !known || len(f.Choices) == 0 || len(vs) != 1 || vs[0] != "1" {
+				http.Error(w, "unknown setting", http.StatusBadRequest)
+				return nil, nil, nil, false
+			}
+			lists = append(lists, f.Key)
 		case slices.Contains(extras, k) && len(vs) == 1:
 			extra[k] = vs[0]
 		case strings.HasPrefix(k, "v."):
 			f, known := sysconfig.Lookup(strings.TrimPrefix(k, "v."))
+			if known && len(f.Choices) > 0 {
+				for i := range vs {
+					vs[i] = strings.TrimSpace(vs[i])
+				}
+				values[f.Key] = strings.Join(vs, ",")
+				continue
+			}
 			if !known || len(vs) != 1 {
 				http.Error(w, "unknown setting", http.StatusBadRequest)
 				return nil, nil, nil, false
@@ -443,6 +373,11 @@ func (h *handler) sysForm(w http.ResponseWriter, r *http.Request, allowClear boo
 			values[k] = "false"
 		}
 	}
+	for _, k := range lists {
+		if _, on := values[k]; !on && !slices.Contains(clear, k) {
+			values[k] = "" // no box ticked: the setting rejects it, instead of silently keeping the old value
+		}
+	}
 	for _, k := range clear {
 		if _, both := values[k]; both {
 			http.Error(w, "a setting cannot be set and cleared at once", http.StatusBadRequest)
@@ -453,7 +388,7 @@ func (h *handler) sysForm(w http.ResponseWriter, r *http.Request, allowClear boo
 }
 
 func (h *handler) sysSave(w http.ResponseWriter, r *http.Request) {
-	values, clear, extra, ok := h.sysForm(w, r, true, mqttPartKeys...)
+	values, clear, extra, ok := h.sysForm(w, r, true, sysFormExtras...)
 	if !ok {
 		return
 	}
@@ -464,6 +399,10 @@ func (h *handler) sysSave(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err := composeMQTTURL(values, extra, h.storedMQTTURL()); err != nil {
+		h.sysOutcome(w, r, values, err, nil)
+		return
+	}
+	if err := composeSchedule(values, clear, extra); err != nil {
 		h.sysOutcome(w, r, values, err, nil)
 		return
 	}
@@ -550,7 +489,7 @@ func (h *handler) sysTestFragment(w http.ResponseWriter, r *http.Request, msg st
 // fields count, and nothing is saved. A password typed into the form is the one tested,
 // otherwise the setup page's test_password, otherwise the stored one (bound to its broker).
 func (h *handler) sysMQTTTest(w http.ResponseWriter, r *http.Request) {
-	all, _, extra, ok := h.sysForm(w, r, true, append([]string{"test_password"}, mqttPartKeys...)...)
+	all, _, extra, ok := h.sysForm(w, r, true, append([]string{"test_password"}, sysFormExtras...)...)
 	if !ok {
 		return
 	}
@@ -646,7 +585,7 @@ func sortedKeys(m map[string]string) []string {
 // sysSSOTest checks that the issuer answers discovery. Like the MQTT test it is a button of
 // the settings form: the whole form arrives, only the issuer counts, nothing is saved.
 func (h *handler) sysSSOTest(w http.ResponseWriter, r *http.Request) {
-	all, _, _, ok := h.sysForm(w, r, true)
+	all, _, _, ok := h.sysForm(w, r, true, sysFormExtras...)
 	if !ok {
 		return
 	}
@@ -670,6 +609,36 @@ func (h *handler) sysSSOTest(w http.ResponseWriter, r *http.Request) {
 // TLS checkbox instead of one URL field. They are not settings themselves:
 // composeMQTTURL turns them into MQTT_URL, the stored value.
 var mqttPartKeys = []string{"mqtt.host", "mqtt.port", "mqtt.tls"}
+
+// scheduleKeys are the backup schedule switch of the Backups tab: swm.* says the switch was on the
+// page (an unticked box sends nothing), sw.* is its state. They are a view of BACKUP_INTERVAL.
+var scheduleKeys = []string{"swm.BACKUP_INTERVAL", "sw.BACKUP_INTERVAL"}
+
+// sysFormExtras are the form fields that are no setting: the broker parts and the schedule switch.
+// Every button that posts the whole form must accept them.
+var sysFormExtras = append(slices.Clone(mqttPartKeys), scheduleKeys...)
+
+// composeSchedule turns the schedule switch into BACKUP_INTERVAL: off is 0 (manual only), on needs
+// a real interval. A reset to the default wins over the switch.
+func composeSchedule(values map[string]string, clear []string, extra map[string]string) error {
+	marked := extra["swm.BACKUP_INTERVAL"] == "1"
+	on := extra["sw.BACKUP_INTERVAL"] == "1"
+	for _, k := range scheduleKeys {
+		delete(extra, k)
+	}
+	if !marked || slices.Contains(clear, "BACKUP_INTERVAL") {
+		return nil
+	}
+	if !on {
+		values["BACKUP_INTERVAL"] = "0"
+		return nil
+	}
+	switch values["BACKUP_INTERVAL"] {
+	case "", "0", "0s":
+		return &sysconfig.ValidationError{Fields: map[string]string{"BACKUP_INTERVAL": "enter how often, for example 24h"}}
+	}
+	return nil
+}
 
 // composeMQTTURL replaces the posted broker parts with the MQTT_URL they
 // compose (config.JoinMQTTURL). A form without mqtt.host is left alone (the
@@ -759,12 +728,34 @@ func sysAuthOptions(cur string) []ui.Option {
 	}
 }
 
-// sysInvalid marks the input of a field the server rejected and points to its message.
-func sysInvalid(row sysRow) templ.Attributes {
-	if row.Err == "" {
-		return templ.Attributes{}
+// sysDescribe points a control at its message: the error (and aria-invalid) when the server
+// rejected it, else the help line.
+func sysDescribe(row sysRow) templ.Attributes {
+	if row.Err != "" {
+		return templ.Attributes{"aria-invalid": "true", "aria-describedby": ui.SettingErrID(row.Key)}
 	}
-	return templ.Attributes{"aria-invalid": "true", "aria-describedby": "err-" + row.InputName()}
+	if sysFieldCopy(row.Key).Help != "" {
+		return templ.Attributes{"aria-describedby": ui.SettingHelpID(row.Key)}
+	}
+	return templ.Attributes{}
+}
+
+// sysFieldDataGroup is sysFieldData for controls that are a group (segments, radio cards, boxes):
+// the label is not tied to one input.
+func sysFieldDataGroup(row sysRow, inRestartCard bool) ui.SettingFieldData {
+	d := sysFieldData(row, inRestartCard)
+	d.Group = row.Key == "LOG_LEVEL" || row.Key == "AUTH_MODE" || len(row.Choices) > 0
+	if row.Key == "AUTH_MODE" {
+		d.Label = "" // the radio cards carry their own legend
+	}
+	return d
+}
+
+// sysSwitchData is sysFieldData for an on/off setting: the switch sits left of the label.
+func sysSwitchData(row sysRow, inRestartCard bool) ui.SettingFieldData {
+	d := sysFieldData(row, inRestartCard)
+	d.Switch, d.Warn = true, row.Key == "FIRMWARE_ALLOW_SINGLE_SOURCE"
+	return d
 }
 
 // sysSecretHint is the placeholder of a write-only field: whether a value is stored.
@@ -788,12 +779,4 @@ func sysSetWord(set bool) string {
 		return "a value is set"
 	}
 	return "not set"
-}
-
-// sysFirst orders the General tab: the log level before the audit retention.
-func sysFirst(r sysRow) int {
-	if r.Key == "LOG_LEVEL" {
-		return 0
-	}
-	return 1
 }

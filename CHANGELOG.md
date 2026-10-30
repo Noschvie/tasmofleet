@@ -24,12 +24,14 @@ always upgrade automatically.
 
 - Backups tab: each backup line shows the stored file name (as on disk, to check the backup output in the file system), and the Download button's hover help names it (#290, thanks @Noschvie)
 - The start log names the served TLS certificate (SHA-256 fingerprint and expiry), as the emergency runbook promises; the unused `internal/bulk` package is removed (#250)
+- Settings page reworked (#275): cards in a grid of up to three columns instead of one narrow card, eight tabs instead of ten (Metrics joins General, Devices joins Network & devices, Updates (OTA) joins Firmware & updates, MQTT discovery sits on the MQTT tab, the network scan is its own tab "Discovery scan"), one line of help per setting with the longer text behind an info button (click, Escape, works on touch), switches for every on/off setting, settings that depend on a switch are dimmed while it is off, "Reset to default" and the Restart / Environment badges sit in the field's label row, the firmware sources are checkboxes, the backup schedule has an on/off switch (off stores 0 = manual only), the danger zone and the container list sit below the form, and one sticky save bar lists the tabs with unsaved changes (edits survive a tab change; leaving with unsaved changes asks first). On a phone a section picker replaces the tab strip. **breaking:** the tab addresses changed (`?tab=network`, `mqtt`, `scan`, `backups`, `firmware`, `signin`, `advanced`, `general`; the old `discovery`, `devices`, `fwsource` and `metrics` open the first tab, no redirects)
 - CI: a release tag now runs a shorter pipeline (the fast checks, the `@core` e2e tests, and race tests of the safety packages); the full e2e, race and mutation runs stay in the nightly build and no longer hold up a release.
 - Overview: a discovered device that is offline no longer appears under "Needs attention"; it is listed only on the Discovered page, which now shows how long it has been offline (when known) next to its hostname, and the "New devices found" tile says how many of them are offline (#294, thanks @Noschvie).
 
 ### Fixed
 
 - What's new: releases with a name in their heading (0.21.0 "Tower of Hercules" and later) were missing from the page; they are listed again, with their name
+- "Test discovery" on the Sign-in tab answered 400 because the form also carries the broker fields; it now accepts the whole form like the MQTT test (#275)
 
 ## 0.21.0 "Tower of Hercules" (2026-10-30)
 

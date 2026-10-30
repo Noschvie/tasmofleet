@@ -240,14 +240,12 @@ async function crawl(
     "/backups/{backup}/restore",
     ...[
       "general",
-      "devices",
-      "fwsource",
-      "backups",
-      "discovery",
-      "mqtt",
       "network",
+      "mqtt",
+      "scan",
+      "backups",
+      "firmware",
       "signin",
-      "metrics",
       "advanced",
     ].map((t) => `/settings/system?tab=${t}`),
   ].map(ph);
