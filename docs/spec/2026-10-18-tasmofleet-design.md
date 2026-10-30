@@ -465,7 +465,7 @@ reach manageable, #45). HTTP "not failing" means ok or unknown.
 | Update, pull | DownloadHTTP (HTTP not failing, base URL set, FWReach not "no"); else DownloadMQTT (usable, FWReach not "no"); else None |
 | Update, push where possible | HTTP not failing: the engine's decision (PushHTTP, PushSafeboot, or its fallback to DownloadHTTP, kept with its note). HTTP failing and MQTT usable: PushMQTT when the per-transaction "experimental" checkbox is set, the image fits and the password is usable; else DownloadMQTT; else None |
 
-A password "not set" or "refused since T" removes transfers over MQTT, not commands. A None for an
+Both download paths also need FIRMWARE_BASE_URL (the device needs an address to fetch from). A password "not set", "refused since T" or in broker mode without a configured MQTT_PASSWORD removes transfers over MQTT, not commands. A None for an
 update whose experimental upload would have worked ends with "choose Push where possible and allow
 upload over MQTT (experimental)". There is no per-device "force transport" setting.
 

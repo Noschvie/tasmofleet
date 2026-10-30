@@ -66,6 +66,9 @@ type MQTTFacts struct {
 type Password struct {
 	Mode  model.MQTTPasswordMode
 	BadAt time.Time // the device answered Error 1 (zero: never or cleared)
+	// Unusable, when set, is the sentence why the password cannot be used although a mode is set
+	// (broker mode without a broker password); it takes precedence over Mode and BadAt.
+	Unusable string
 }
 
 // Delivery request for an update.

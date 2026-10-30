@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,7 +44,7 @@ func newFacts(devs []model.Device, h fakeFactsHealth, mem HTTPMemory) *Transport
 	return &TransportFacts{
 		Devices: fakeFactsDevices{devs}, Health: h, Memory: mem,
 		BusConnected: func() bool { return true }, FullTopic: func() string { return "%prefix%/%topic%/" },
-		FirmwareBaseURL: func() string { return "http://fw" }, Now: func() time.Time { return factsNow },
+		FirmwareBaseURL: func() string { return "http://fw" }, BrokerPassword: func() string { return "pw" }, Now: func() time.Time { return factsNow },
 	}
 }
 
@@ -156,3 +157,36 @@ func TestForUpdateFitsFromIdentity(t *testing.T) {
 		t.Error("unknown device must fail")
 	}
 }
+
+// Why: broker mode sends MQTT_PASSWORD; with none configured a transfer would carry an empty
+// password, so Facts must mark it unusable and Choose must say why.
+func TestFactsBrokerModeWithoutBrokerPassword(t *testing.T) {
+	d := model.Device{ID: 1, Topic: "t", MQTT: model.MQTTOurs, MQTTPasswordMode: model.MQTTPasswordBroker,
+		GroupTopic: "g", GroupTopicReadAt: factsNow, HTTPPassword: ""}
+	s := newFacts([]model.Device{d}, fakeFactsHealth{1: {LWT: "Online"}}, fakeMemory{transport.HTTPFailUnreachable, factsNow.Add(-time.Hour), true})
+	f, _ := s.Facts(context.Background(), 1)
+	if f.Password.Unusable != "" {
+		t.Fatalf("with a broker password: %+v", f.Password)
+	}
+	if p := transport.Choose(f); p.Backup != transport.MQTT {
+		t.Fatalf("backup = %s", p.Backup)
+	}
+	s.BrokerPassword = func() string { return "" }
+	f, _ = s.Facts(context.Background(), 1)
+	p := transport.Choose(f)
+	if p.Backup != transport.None || p.Commands != transport.MQTT {
+		t.Fatalf("backup=%s commands=%s", p.Backup, p.Commands)
+	}
+	if got := p.Reason(transport.ActBackup); !contains(got, "TasmoFleet has no broker password configured") {
+		t.Errorf("reason = %q", got)
+	}
+	d.MQTTPasswordMode = model.MQTTPasswordOwn // own mode does not depend on the broker password
+	f, _ = newFacts([]model.Device{d}, fakeFactsHealth{}, nil).Facts(context.Background(), 1)
+	s2 := newFacts([]model.Device{d}, fakeFactsHealth{}, nil)
+	s2.BrokerPassword = func() string { return "" }
+	if f, _ = s2.Facts(context.Background(), 1); f.Password.Unusable != "" {
+		t.Errorf("own mode: %+v", f.Password)
+	}
+}
+
+func contains(s, sub string) bool { return strings.Contains(s, sub) }

@@ -120,7 +120,7 @@ func mqttBlocker(f Facts, strict bool) string {
 	case groupTopicKnown(m) && m.GroupTopic == m.Topic:
 		return "the device's topic is also its GroupTopic, so a message would reach other devices"
 	case strict && !groupTopicKnown(m):
-		return "the device's GroupTopic has not been read recently, so TasmoFleet cannot rule out that its topic is shared"
+		return "the device's GroupTopic has not been read recently, so TasmoFleet cannot rule out that its topic is shared; refresh the device's identity to read it"
 	case !m.LWTOnline:
 		return "the device is not online on MQTT"
 	}
@@ -130,6 +130,8 @@ func mqttBlocker(f Facts, strict bool) string {
 // passwordBlocker says why a transfer over MQTT cannot carry the device's MqttPassword.
 func passwordBlocker(f Facts, what string) string {
 	switch {
+	case f.Password.Unusable != "":
+		return f.Password.Unusable
 	case !f.Password.BadAt.IsZero():
 		return "the device refused its MQTT password (since " + f.Password.BadAt.UTC().Format("2006-01-02 15:04 UTC") + "); enter the right one to " + what + " over MQTT"
 	case f.Password.Mode == model.MQTTPasswordNone:

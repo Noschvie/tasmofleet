@@ -234,6 +234,8 @@ func TestGroupTopicStaleness(t *testing.T) {
 			}
 			if !c.known && !c.disqual && p.Backup == None && !strings.Contains(p.Reason(ActBackup), "GroupTopic") {
 				t.Errorf("reason does not mention GroupTopic: %q", p.Reason(ActBackup))
+			} else if p.Backup == None && !c.known && !c.disqual && !strings.Contains(p.Reason(ActBackup), "refresh the device's identity") {
+				t.Errorf("reason does not say how to fix it: %q", p.Reason(ActBackup))
 			}
 		})
 	}
@@ -430,5 +432,15 @@ func TestNoPathSentence(t *testing.T) {
 	got := Choose(f).Reason(ActUpdate)
 	if !strings.HasPrefix(got, "no path: ") || !strings.Contains(got, "needs 1900 KB, 1000 KB room") {
 		t.Errorf("got %q", got)
+	}
+}
+
+// Why: a password that is unusable for a reason of its own (no broker password) must show that reason.
+func TestPasswordUnusableReason(t *testing.T) {
+	f := httpDown(base())
+	f.Password = Password{Mode: model.MQTTPasswordBroker, Unusable: "TasmoFleet has no broker password configured"}
+	p := Choose(f)
+	if p.Backup != None || p.Commands != MQTT || !strings.Contains(p.Reason(ActBackup), "no broker password") {
+		t.Fatalf("%s %s %q", p.Backup, p.Commands, p.Reason(ActBackup))
 	}
 }

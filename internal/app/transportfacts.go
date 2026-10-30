@@ -39,7 +39,9 @@ type TransportFacts struct {
 	BusConnected    func() bool
 	FullTopic       func() string
 	FirmwareBaseURL func() string
-	Now             func() time.Time
+	// BrokerPassword is TasmoFleet's MQTT_PASSWORD; devices in broker mode send it.
+	BrokerPassword func() string
+	Now            func() time.Time
 }
 
 var _ transport.FactsSource = (*TransportFacts)(nil)
@@ -89,7 +91,7 @@ func (s *TransportFacts) Facts(ctx context.Context, id model.DeviceID) (transpor
 			GroupTopic: d.GroupTopic, GroupTopicReadAt: d.GroupTopicReadAt, LastProbeAt: probe,
 			LWTOnline: h.LWT == "Online",
 		},
-		Password:        transport.Password{Mode: d.MQTTPasswordMode, BadAt: d.MQTTPasswordBadAt},
+		Password:        s.password(d),
 		FWReach:         d.FWReach,
 		FirmwareBaseURL: s.FirmwareBaseURL() != "",
 		Identity:        d.Identity,
@@ -124,4 +126,13 @@ func (s *TransportFacts) httpState(id model.DeviceID, h model.Health, now time.T
 		return transport.HTTPState{State: transport.HTTPOK}
 	}
 	return transport.HTTPState{}
+}
+
+// password: a device in broker mode sends MQTT_PASSWORD, so without one it has no usable password.
+func (s *TransportFacts) password(d model.Device) transport.Password {
+	p := transport.Password{Mode: d.MQTTPasswordMode, BadAt: d.MQTTPasswordBadAt}
+	if d.MQTTPasswordMode == model.MQTTPasswordBroker && s.BrokerPassword() == "" {
+		p.Unusable = "TasmoFleet has no broker password configured"
+	}
+	return p
 }
