@@ -1,5 +1,7 @@
+import type { Page } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
 import { quickPick } from "../support/updates";
+import { expectNoOverflow } from "../support/layout";
 import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
 // Console and "Make compliant" over MQTT (0.20.0, #79, #256): mq-esp32 is a simulated
@@ -183,3 +185,77 @@ test("language choice required", async ({ page }) => {
   // must be a choice and not a pre-filled value.
   await expect(row.locator("select")).toHaveValue("");
 });
+// The device page's connection card (#261): mq-esp32 refuses every HTTP connection, so the router
+// remembers the failure and the card, the buttons and the list say how it is reached instead.
+const olga = { "X-authentik-username": "olga", "X-authentik-groups": "ops" };
+
+async function openDevicePage(page: Page, headers: Record<string, string>): Promise<void> {
+  await page.setExtraHTTPHeaders(headers);
+  await page.goto(app.url + "/devices");
+  await page.getByRole("link", { name: "mq-esp32", exact: true }).click();
+  // the failure is remembered after the first HTTP call that fails: reload until the card says so
+  await expect(async () => {
+    await page.reload();
+    await expect(page.locator("#devpaths-facts-sum")).toContainText("HTTP not reachable", { timeout: 2_000 });
+  }).toPass({ timeout: 60_000, intervals: [3_000] });
+}
+
+test("connection card explains paths", async ({ page }) => {
+  await openDevicePage(page, admin);
+  await page.locator("#devpaths-facts-sum").click();
+  await page.locator("#devpaths-actions-sum").click();
+  const card = page.locator("#devpaths");
+  await expect(card.locator("#devpaths-facts").getByText("Not reachable")).toBeVisible();
+  await expect(card.locator("#devpaths-facts").getByText("Experimental")).toBeVisible();
+  // commands go over MQTT, and the list marks the device
+  await expect(card.locator("#devpaths-actions").getByText("Over MQTT, because", { exact: false }).first()).toBeVisible();
+  await page.goto(app.url + "/devices");
+  await expect(page.getByRole("row").filter({ hasText: "mq-esp32" }).locator("[data-via-mqtt]")).toBeVisible();
+});
+
+test("disabled actions carry the reason", async ({ page }) => {
+  await openDevicePage(page, admin);
+  await page.locator("#devpaths-actions-sum").click();
+  const row = page.locator("#devpaths-actions .ukv-row", { hasText: "Back up" }).first();
+  const reason = (await row.locator(".devcard-note").innerText()).trim();
+  const button = page.getByRole("button", { name: "Back up", exact: true });
+  // without a way to back it up over MQTT the button says the same sentence as the card
+  if (/^No path/.test(reason)) {
+    await expect(button).toBeDisabled();
+    await expect(button).toHaveAttribute("title", reason);
+    await expect(page.locator("#devhd-why")).toContainText(reason);
+  } else {
+    await expect(button).toBeEnabled();
+  }
+});
+
+test("operators see the card read-only", async ({ page }) => {
+  await openDevicePage(page, olga);
+  await page.locator("#devpaths-facts-sum").click();
+  await expect(page.locator("#devpaths-facts")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Forget" })).toHaveCount(0);
+});
+
+test("an open fold stays open across a live refresh", async ({ page }) => {
+  await openDevicePage(page, admin);
+  const fold = page.locator("#devpaths details").first();
+  await page.locator("#devpaths-facts-sum").click();
+  await expect(fold).toHaveAttribute("open", "");
+  const live = page.waitForResponse((r) => /\/devices\/\d+\/live$/.test(r.url()));
+  await page.evaluate(() => {
+    const el = document.querySelector("#devlive")!;
+    (window as unknown as { htmx: { trigger(e: Element, n: string): void } }).htmx.trigger(el, "sse:resync");
+  });
+  await live;
+  await expect(fold).toHaveAttribute("open", "");
+});
+
+for (const width of [375, 1280]) {
+  test(`connection card stacks at ${width}px without sideways scroll`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await openDevicePage(page, admin);
+    await page.locator("#devpaths-facts-sum").click();
+    await page.locator("#devpaths-actions-sum").click();
+    await expectNoOverflow(page, "connection card");
+  });
+}
