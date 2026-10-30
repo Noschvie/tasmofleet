@@ -222,20 +222,29 @@ func TestJobAndRestoreTransportRoundTrip(t *testing.T) {
 	if got, err = s.GetJob(ctx, ids[0]); err != nil || got.Transport != model.TransportMQTT || !got.MQTTUpload {
 		t.Fatalf("after transition: transport %q upload %v, %v", got.Transport, got.MQTTUpload, err)
 	}
-	rid, err := s.CreateRestore(ctx, RestoreJob{DeviceID: dev, BackupID: 1, Actor: "u", Transport: model.TransportMQTT})
+	rid, err := s.CreateRestore(ctx, RestoreJob{DeviceID: dev, BackupID: 1, Actor: "u"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	r, err := s.GetRestore(ctx, rid)
-	if err != nil || r.Transport != model.TransportMQTT {
+	if err != nil || r.Transport != model.TransportHTTP {
 		t.Fatalf("restore transport %q, %v", r.Transport, err)
 	}
-	r.State, r.Transport = RestoreSending, model.TransportHTTP
+	// Recorded when the restore starts, so it is the update that must carry it.
+	r.State, r.Transport = RestoreSending, model.TransportMQTT
 	if err := s.UpdateRestore(ctx, r); err != nil {
 		t.Fatal(err)
 	}
-	if r, _ = s.GetRestore(ctx, rid); r.Transport != model.TransportHTTP {
+	if r, _ = s.GetRestore(ctx, rid); r.Transport != model.TransportMQTT {
 		t.Fatalf("update lost transport: %q", r.Transport)
+	}
+	// A restore created over MQTT keeps it too.
+	rid2, err := s.CreateRestore(ctx, RestoreJob{DeviceID: mustDevice(t, s, "b", "10.0.0.2"), BackupID: 1, Actor: "u", Transport: model.TransportMQTT})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r2, _ := s.GetRestore(ctx, rid2); r2.Transport != model.TransportMQTT {
+		t.Fatalf("created restore transport %q", r2.Transport)
 	}
 }
 
@@ -251,5 +260,49 @@ func TestProbeStoresLanguageKnown(t *testing.T) {
 	}
 	if d, _ := s.GetDevice(ctx, id); !d.Identity.LanguageKnown || d.Identity.Language != "DE" {
 		t.Fatalf("identity = %+v", d.Identity)
+	}
+}
+
+// Why: the language flag says "an HTTP probe read this language". A device created or moved onto
+// new hardware with a probed identity must keep that fact, or the next update asks for a language
+// choice that was already answered.
+func TestCreateAndSwapStoreLanguageKnown(t *testing.T) {
+	s, _, _ := newStore(t)
+	id, err := s.CreateDevice(ctx, model.Device{Name: "c", Address: "10.0.0.5", MAC: "aa:bb:cc:00:00:21",
+		Identity: model.Identity{Family: model.ChipESP32, Version: "16.0.0", Variant: "tasmota", LanguageKnown: true}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d, _ := s.GetDevice(ctx, id); !d.Identity.LanguageKnown {
+		t.Fatal("CreateDevice lost LanguageKnown")
+	}
+	// The swap writes the identity of the new board and forgets what the old one reached.
+	if err := s.SetFWReach(ctx, id, model.FWReach{State: model.FWReachYes, At: time.Unix(100, 0), Detail: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SwapHardware(ctx, id, HardwareSwap{ExpectMACs: []string{"aa:bb:cc:00:00:21"}, MAC: "aa:bb:cc:00:00:22",
+		Address: "10.0.0.6", Port: 80, Identity: model.Identity{Family: model.ChipESP32, Version: "16.0.0", Variant: "tasmota", LanguageKnown: true}}); err != nil {
+		t.Fatal(err)
+	}
+	d, _ := s.GetDevice(ctx, id)
+	if !d.Identity.LanguageKnown {
+		t.Fatal("SwapHardware lost LanguageKnown")
+	}
+	// Why: "yes" is tied to the device's IP (D11); new hardware may sit elsewhere.
+	if d.FWReach != (model.FWReach{}) {
+		t.Fatalf("swap kept FWReach %+v", d.FWReach)
+	}
+}
+
+// Why: a typo must not store a state the chooser then treats as neither yes nor no; and a bad
+// mark without a time would read as "never marked".
+func TestMQTTFieldWritersRejectBadInput(t *testing.T) {
+	s, _, _ := newStore(t)
+	id := mustDevice(t, s, "a", "10.0.0.1")
+	if err := s.SetFWReach(ctx, id, model.FWReach{State: "maybe"}); err == nil {
+		t.Fatal("unknown FWReach state accepted")
+	}
+	if err := s.MarkMQTTPasswordBad(ctx, id, time.Time{}); err == nil {
+		t.Fatal("zero bad time accepted")
 	}
 }

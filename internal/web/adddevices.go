@@ -123,7 +123,7 @@ func (h *handler) renderAddManual(w http.ResponseWriter, r *http.Request, status
 	f.addHead = h.addTabs(r, addTabManual)
 	v := h.addView(r, f)
 	f.Base, f.CSRF = v.Base, v.CSRF
-	f.Device.HTTPPassword = "" // never rendered
+	f.Device.HTTPPassword, f.Device.MQTTPassword = "", "" // never rendered
 	f.TagsText = strings.Join(f.Device.Tags, ", ")
 	f.HasDefault = h.d.DefaultDevicePassword != nil && h.d.DefaultDevicePassword() != ""
 	f.NoNetworks = v.Banner != ""

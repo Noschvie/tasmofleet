@@ -731,7 +731,7 @@ func (m *Manager) publish(d model.Device) {
 	if m.pub == nil {
 		return
 	}
-	d.HTTPPassword = ""
+	d.HTTPPassword, d.MQTTPassword = "", ""
 	m.pub.Publish(events.Event{Topic: events.TopicDevice, At: m.clk.Now().UTC(), Payload: d})
 }
 

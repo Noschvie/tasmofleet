@@ -72,7 +72,7 @@ func forget(p pendingPlan) {
 		p.timer.Stop()
 	}
 	for i := range p.plan.Rows {
-		p.plan.Rows[i].Device.HTTPPassword = ""
+		p.plan.Rows[i].Device.HTTPPassword, p.plan.Rows[i].Device.MQTTPassword = "", ""
 	}
 }
 
@@ -525,7 +525,7 @@ func (h *handler) importApply(w http.ResponseWriter, r *http.Request) {
 	}
 	rep, err := h.d.Import.Apply(r.Context(), actor(r), plan)
 	for i := range plan.Rows {
-		plan.Rows[i].Device.HTTPPassword = "" // best effort, see forget
+		plan.Rows[i].Device.HTTPPassword, plan.Rows[i].Device.MQTTPassword = "", "" // best effort, see forget
 	}
 	if err != nil {
 		h.log.ErrorContext(r.Context(), "import apply", "err", err)

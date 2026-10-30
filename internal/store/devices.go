@@ -599,6 +599,9 @@ func (s *SQLite) SetMQTTPassword(ctx context.Context, id model.DeviceID, mode mo
 
 // MarkMQTTPasswordBad records that the device refused the password ("Error 1") at at.
 func (s *SQLite) MarkMQTTPasswordBad(ctx context.Context, id model.DeviceID, at time.Time) error {
+	if at.IsZero() {
+		return errors.New("store: the bad mark needs a time")
+	}
 	return affected(s.db.ExecContext(ctx, `UPDATE devices SET mqtt_password_bad_at=?, updated_at=? WHERE id=?`,
 		nullMS(at), toMS(s.now()), id))
 }
@@ -606,6 +609,11 @@ func (s *SQLite) MarkMQTTPasswordBad(ctx context.Context, id model.DeviceID, at 
 // SetFWReach records whether the device reaches the firmware server; the zero FWReach resets it
 // to unknown ("Forget").
 func (s *SQLite) SetFWReach(ctx context.Context, id model.DeviceID, r model.FWReach) error {
+	switch r.State {
+	case model.FWReachUnknown, model.FWReachYes, model.FWReachNo:
+	default:
+		return fmt.Errorf("store: unknown firmware reach state %q", r.State)
+	}
 	return affected(s.db.ExecContext(ctx, `UPDATE devices SET fw_reach=?, fw_reach_at=?, fw_reach_detail=?, updated_at=? WHERE id=?`,
 		string(r.State), nullMS(r.At), r.Detail, toMS(s.now()), id))
 }
