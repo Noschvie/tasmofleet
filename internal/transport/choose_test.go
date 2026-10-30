@@ -499,7 +499,7 @@ func TestTopicShape(t *testing.T) {
 func TestChooseMQTTImpliesChannelTopicCheck(t *testing.T) {
 	channelOK := func(topic, group string) bool {
 		return topic != "" && !strings.ContainsAny(topic, "/+#") && strings.TrimSpace(topic) == topic &&
-			topic != "tasmotas" && !(group != "" && topic == group)
+			topic != "tasmotas" && (group == "" || topic != group)
 	}
 	topics := []string{"", "k", "tasmotas", "a/b", "a+", "#", " a", "a ", "a b", "g"}
 	groups := []string{"", "g", "k", "tasmotas"}
