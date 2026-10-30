@@ -12,6 +12,7 @@
 #     main's caches fresh, which PR runs restore from.
 #   FULL (nightly cron, tags v*, manual dispatch): additionally the whole
 #     e2e suite in three shards, every unit test with the race detector,
+#     the Tasmota command catalogue check (make catalogue-check),
 #     uncached test runs (TESTFLAGS=-count=1) and the full mutation run.
 #     A tag publishes the image (image.yml, called below) only after FULL
 #     passed, and fails early when CHANGELOG.md has no section for it; then
@@ -272,6 +273,21 @@ jobs:
           name: race
       - run: make race
 
+  # FULL tier: the checked-in Tasmota command catalogue must equal a regeneration from the pinned
+  # Tasmota source (the only job that downloads it; the unit tests never use the network).
+  catalogue:
+    name: Tasmota command catalogue
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.tier == 'full'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: ./.github/actions/go
+        with:
+          name: catalogue
+      - run: make catalogue-check
+
   # Mutation testing in three shards (one ota run alone takes 11 minutes on
   # one runner): each shard mutates its share of every package's files and
   # uploads the counts; mutation-gate adds them up and applies the thresholds.
@@ -368,7 +384,7 @@ jobs:
   # failed dependency) fails it. Mutation runs in FULL and for safety PRs.
   required:
     name: required
-    needs: [changes, lint, test, integration, e2e, safety-race, mutation, mutation-gate, race]
+    needs: [changes, lint, test, integration, e2e, safety-race, mutation, mutation-gate, race, catalogue]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -382,7 +398,7 @@ jobs:
           ALWAYS: ${{ needs.lint.result }} ${{ needs.test.result }} ${{ needs.integration.result }} ${{ needs.e2e.result }}
           SAFETY_JOBS: ${{ needs.safety-race.result }}
           MUTATION: ${{ needs.mutation.result }} ${{ needs.mutation-gate.result }}
-          FULL_ONLY: ${{ needs.race.result }}
+          FULL_ONLY: ${{ needs.race.result }} ${{ needs.catalogue.result }}
         run: |
           echo "changes=$CHANGES code=$CODE tier=$TIER safety=$SAFETY"
           echo "always: $ALWAYS | safety: $SAFETY_JOBS | mutation: $MUTATION | full only: $FULL_ONLY"

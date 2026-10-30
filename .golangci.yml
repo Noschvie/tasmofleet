@@ -49,7 +49,15 @@ linters:
             - pkg: github.com/nofuturekid/tasmofleet/internal
               desc: model imports only the standard library
         pure-decision-packages:
-          files: ["**/internal/fwselect/*.go", "**/internal/ota/machine*.go", "**/internal/cmdpolicy/*.go", "!$test"]
+          files:
+            [
+              "**/internal/fwselect/*.go",
+              "**/internal/ota/machine*.go",
+              "**/internal/cmdpolicy/*.go",
+              "**/internal/tasmotacmd/*.go",
+              "**/internal/tasmotacmd/extract/*.go",
+              "!$test",
+            ]
           deny:
             - pkg: net
               desc: decision code is pure, no I/O

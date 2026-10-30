@@ -44,11 +44,11 @@ TESTFLAGS ?=
 # Extra Playwright arguments, e.g. E2E_ARGS=--shard=1/2 (CI).
 E2E_ARGS  ?=
 
-.PHONY: demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test race integration mutation mutation-changed mutation-sum safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check changelog-notes clean tools
+.PHONY: catalogue catalogue-src catalogue-check demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test race integration mutation mutation-changed mutation-sum safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check changelog-notes clean tools
 
 check: templ-check fmt-check vet staticcheck lint test integration vuln build
 
-ci: check race mutation e2e
+ci: check race mutation e2e catalogue-check
 
 # templ components (internal/web/ui, internal/web) are committed together with their generated
 # *_templ.go, so go build and the Dockerfile need no generator. `make templ` regenerates them;
@@ -237,6 +237,35 @@ demo-media: build
 
 vuln:
 	$(NICE) $(TOOL) govulncheck ./...
+
+# Tasmota command catalogue (internal/tasmotacmd, docs/research/tasmota-command-catalogue.md).
+# The Tasmota source of the pinned version is fetched by catalogue-src only (never by a test or a
+# normal build), checked against its sha256 and unpacked next to the user's caches, not into the
+# repository. To pin another version: change the three variables, regenerate, update the embed in
+# internal/tasmotacmd/lookup.go.
+TASMOTA_VERSION ?= 16.0.0
+TASMOTA_SHA256  ?= d2812ba1b7a34c17dd32b4aab46de30a4f777a83ae5cce2c0d60176d34bf0f2c
+TASMOTA_SRC     ?= $(or $(XDG_CACHE_HOME),$(HOME)/.cache)/tasmofleet/tasmota-$(TASMOTA_VERSION)
+CATALOGUE       := internal/tasmotacmd/catalogue-$(TASMOTA_VERSION).json
+
+catalogue-src:
+	@if [ ! -f "$(TASMOTA_SRC)/.sha256" ] || [ "$$(cat "$(TASMOTA_SRC)/.sha256")" != "$(TASMOTA_SHA256)" ]; then \
+	  set -e; rm -rf "$(TASMOTA_SRC)"; mkdir -p "$(TASMOTA_SRC)"; \
+	  curl -fsSL --retry 3 -o "$(TASMOTA_SRC).tar.gz" "https://github.com/arendst/Tasmota/archive/refs/tags/v$(TASMOTA_VERSION).tar.gz"; \
+	  echo "$(TASMOTA_SHA256)  $(TASMOTA_SRC).tar.gz" | sha256sum -c -; \
+	  tar -xzf "$(TASMOTA_SRC).tar.gz" -C "$(TASMOTA_SRC)" --strip-components=1 "Tasmota-$(TASMOTA_VERSION)/tasmota"; \
+	  rm -f "$(TASMOTA_SRC).tar.gz"; echo "$(TASMOTA_SHA256)" > "$(TASMOTA_SRC)/.sha256"; \
+	fi
+
+# Regenerates the checked-in catalogue from the pinned source (deterministic).
+catalogue: catalogue-src
+	$(NICE) $(GO) run ./cmd/tasmofleet-catalogue -src "$(TASMOTA_SRC)/tasmota" -version $(TASMOTA_VERSION) -sha256 $(TASMOTA_SHA256) -out $(CATALOGUE)
+
+# Fails when the checked-in catalogue differs from a regeneration (FULL tier).
+catalogue-check: catalogue-src
+	@tmp=$$(mktemp); trap 'rm -f "$$tmp"' EXIT; \
+	$(NICE) $(GO) run ./cmd/tasmofleet-catalogue -src "$(TASMOTA_SRC)/tasmota" -version $(TASMOTA_VERSION) -sha256 $(TASMOTA_SHA256) -out "$$tmp" && \
+	diff -u $(CATALOGUE) "$$tmp" || { echo "catalogue-check: $(CATALOGUE) is stale; run 'make catalogue' and commit it" >&2; exit 1; }
 
 build:
 	CGO_ENABLED=0 $(NICE) $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o $(BIN)/tasmofleet ./cmd/tasmofleet
