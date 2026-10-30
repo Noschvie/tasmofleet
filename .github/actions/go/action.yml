@@ -28,6 +28,9 @@ runs:
     - id: env
       shell: bash
       run: |
+        # "|" falls back to a direct download on any proxy error, not only on 404/410: one
+        # INTERNAL_ERROR from proxy.golang.org failed a FULL mutation shard (#225).
+        echo "GOPROXY=https://proxy.golang.org|direct" >> "$GITHUB_ENV"
         {
           echo "gocache=$(go env GOCACHE)"
           echo "gomodcache=$(go env GOMODCACHE)"

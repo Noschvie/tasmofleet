@@ -92,12 +92,13 @@ func (b *fakeBus) pubs() []string {
 }
 
 type env struct {
-	svc  Service
-	rec  *recorder
-	sim  simulator.Device
-	dev  model.Device
-	bus  *fakeBus
-	devs devices
+	svc    Service
+	rec    *recorder
+	sim    simulator.Device
+	dev    model.Device
+	bus    *fakeBus
+	devs   devices
+	client tasmota.Client
 }
 
 func setup(t *testing.T, spec simulator.DeviceSpec, mqtt model.MQTTCapability, bus *fakeBus) *env {
@@ -121,7 +122,7 @@ func setup(t *testing.T, spec simulator.DeviceSpec, mqtt model.MQTTCapability, b
 	if bus != nil {
 		o.Bus = bus
 	}
-	return &env{svc: New(o), rec: rec, sim: sim, dev: dev, bus: bus, devs: devices{7: dev}}
+	return &env{svc: New(o), rec: rec, sim: sim, dev: dev, bus: bus, devs: devices{7: dev}, client: client}
 }
 
 var plug = simulator.DeviceSpec{Name: "plug", Profile: simulator.ProfileESP8266_4M}
@@ -191,6 +192,36 @@ func TestPowerUnknownDevice(t *testing.T) {
 	e := setup(t, plug, model.MQTTNone, nil)
 	if _, err := e.svc.Power(context.Background(), "x", 99, 1, "ON"); !errors.Is(err, store.ErrNotFound) {
 		t.Fatalf("got %v", err)
+	}
+}
+
+type noted struct {
+	id    model.DeviceID
+	relay int
+	state string
+	calls int
+}
+
+func (n *noted) NotePower(id model.DeviceID, relay int, state string) {
+	n.id, n.relay, n.state = id, relay, state
+	n.calls++
+}
+
+// Why (#206): the HTTP answer of a toggle must reach the health tracker, or a poll that read the device
+// just before the toggle puts the old state back in the list. Only a confirmed state is passed on.
+func TestPowerOverHTTPTellsTheTrackerTheConfirmedState(t *testing.T) {
+	n := &noted{}
+	e := setup(t, plug, model.MQTTNone, nil)
+	e.svc = New(Options{Devices: e.devs, Client: e.client, Audit: e.rec, Health: n})
+	state, err := e.svc.Power(context.Background(), "oidc:olli", 7, 1, "TOGGLE")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n.calls != 1 || n.id != 7 || n.relay != 1 || n.state != state {
+		t.Fatalf("tracker told %+v, device said %q", n, state)
+	}
+	if _, err := e.svc.Power(context.Background(), "oidc:olli", 7, 9, "ON"); err == nil || n.calls != 1 {
+		t.Fatalf("a refused command must not be passed on (calls %d, err %v)", n.calls, err)
 	}
 }
 

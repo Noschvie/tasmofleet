@@ -291,6 +291,10 @@ test("update batch: preview, staged ESP8266 and direct ESP32 succeed, unknown ch
   await expect(second.locator("nav.utabs a[aria-current=page]")).toHaveCSS("opacity", "1");
   await expect(second.locator("h1"), "the header is the same on every tab").toHaveText("lamp-1m");
   await second.close();
+  // The baseline is taken from rows that have a box. A row that is not laid out yet measures 0/0 (CI run
+  // 40938108311: baseline 0/0 and 0/0, then 285/48 and 333/48 from the first sample on), which is not a
+  // layout move of the page; toBeVisible waits for the non-empty box.
+  for (const name of ["lamp-1m", "esp32-dimmer"]) await expect(page.locator(".upd-row").filter({ hasText: name })).toBeVisible();
   const before0 = await layout();
   for (let i = 0; i < 6; i++) {
     await page.waitForTimeout(1000);

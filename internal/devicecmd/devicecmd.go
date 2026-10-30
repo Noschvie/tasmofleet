@@ -49,6 +49,12 @@ type DeviceGetter interface {
 	Get(ctx context.Context, id model.DeviceID) (model.Device, error)
 }
 
+// PowerObserver is told the state a device confirmed to a relay command sent over HTTP
+// (satisfied by health.Service).
+type PowerObserver interface {
+	NotePower(id model.DeviceID, relay int, state string)
+}
+
 // Options configure the service.
 type Options struct {
 	Devices DeviceGetter
@@ -61,6 +67,8 @@ type Options struct {
 	// publish (default 3 s).
 	MQTTWait time.Duration
 	Clock    clock.Clock
+	// Health is optional; see PowerObserver.
+	Health PowerObserver
 }
 
 type service struct{ o Options }
@@ -116,6 +124,9 @@ func (s *service) Power(ctx context.Context, actor string, id model.DeviceID, re
 		state, err = s.powerMQTT(ctx, d, relay, action)
 	} else {
 		state, err = s.powerHTTP(ctx, d, relay, action)
+		if err == nil && s.o.Health != nil {
+			s.o.Health.NotePower(id, relay, state)
+		}
 	}
 	s.record(ctx, actor, "device.power", id,
 		map[string]any{"relay": relay, "action": action, "via": via, "state": state}, err)

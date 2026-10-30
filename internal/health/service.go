@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -106,6 +107,10 @@ type devState struct {
 	hasSnap   bool      // uptime/RSSI/power came in via STATE or Status 11
 	snapAfter time.Time // earliest next snapshot fetch
 	h         model.Health
+
+	// powerGen counts the relay states a command confirmed (NotePower). A poll that began before the
+	// last one carries a stale power state and must not overwrite it (#206).
+	powerGen uint64
 
 	sigDBm  int                      // Wifi.Signal from STATE; valid when hasSig
 	hasSig  bool                     //
@@ -536,7 +541,7 @@ func (s *Service) onMessage(m mqttbus.Message) {
 			ds.lwt = "Offline"
 		}
 	case mqttbus.KindState, mqttbus.KindResult:
-		s.applyJSON(ds, m.Payload, m.Kind == mqttbus.KindState)
+		s.applyJSON(ds, m.Payload, m.Kind == mqttbus.KindState, false)
 	case mqttbus.KindPower:
 		if ds.h.Power == nil {
 			ds.h.Power = map[string]string{}
@@ -596,13 +601,14 @@ func (s *Service) enqueue(f func()) {
 
 // applyJSON merges POWERn, Wifi.RSSI and UptimeSec from a STATE/RESULT
 // payload. Unparsable payloads still count as a sign of life.
-func (s *Service) applyJSON(ds *devState, payload []byte, telemetry bool) {
+// skipPower leaves the power state as it is (a stale poll, see NotePower).
+func (s *Service) applyJSON(ds *devState, payload []byte, telemetry, skipPower bool) {
 	var raw map[string]json.RawMessage
 	if json.Unmarshal(payload, &raw) != nil {
 		return
 	}
 	for k, v := range raw {
-		if !powerKey.MatchString(k) {
+		if skipPower || !powerKey.MatchString(k) {
 			continue
 		}
 		var val string
@@ -632,6 +638,43 @@ func (s *Service) applyJSON(ds *devState, payload []byte, telemetry bool) {
 	}
 }
 
+// NotePower records the state a device confirmed to a relay command that was sent over HTTP (over MQTT
+// the device's own stat/POWER message does this). Without it the list showed the last poll's state
+// until the next poll, and a poll that had read the device before the command overwrote the result
+// (#206). The state goes under the key the device reports (POWER for a single relay, else POWERn).
+func (s *Service) NotePower(id model.DeviceID, relay int, state string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ds := s.devs[id]
+	if ds == nil {
+		return
+	}
+	key := "POWER" + strconv.Itoa(relay)
+	if relay == 1 {
+		// relay 1 keeps whichever key the device reports; unknown yet: a device that reports no POWERn is single-relay
+		if _, ok := ds.h.Power["POWER"]; ok || !hasNumberedPower(ds.h.Power) && !hasKey(ds.h.Power, key) {
+			key = "POWER"
+		}
+	}
+	if ds.h.Power == nil {
+		ds.h.Power = map[string]string{}
+	}
+	ds.h.Power[key] = state
+	ds.powerGen++
+	s.publish(ds)
+}
+
+func hasKey(m map[string]string, k string) bool { _, ok := m[k]; return ok }
+
+func hasNumberedPower(m map[string]string) bool {
+	for k := range m {
+		if k != "POWER" {
+			return true
+		}
+	}
+	return false
+}
+
 // ---- HTTP poll ----
 
 func (s *Service) poll(ctx context.Context, id model.DeviceID) {
@@ -650,6 +693,12 @@ func (s *Service) poll(ctx context.Context, id model.DeviceID) {
 		s.finishPoll(id, s.d.Clock.Now().Add(s.pollInterval())) // a vanished device is dropped by the next reload
 		return
 	}
+	s.mu.Lock()
+	powerGen := uint64(0)
+	if ds := s.devs[id]; ds != nil {
+		powerGen = ds.powerGen
+	}
+	s.mu.Unlock()
 	pctx, cancel := context.WithTimeout(ctx, pollTimeout)
 	defer cancel()
 	res, err := s.probe(pctx, dev)
@@ -673,7 +722,7 @@ func (s *Service) poll(ctx context.Context, id model.DeviceID) {
 		ds.lastHTTP = now
 		ds.minimal = res.minimal
 		if !res.minimal {
-			s.applyJSON(ds, res.sts, true)
+			s.applyJSON(ds, res.sts, true, ds.powerGen != powerGen)
 		}
 		ds.nextPoll = now
 		ds.snapAfter = now.Add(snapshotRetry)

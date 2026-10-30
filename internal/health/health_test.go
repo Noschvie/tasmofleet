@@ -1089,3 +1089,58 @@ func TestReplayedOfflineIsSupersededByLiveOnline(t *testing.T) {
 		t.Fatalf("state %s after a live Online LWT", got)
 	}
 }
+
+// Why (#206): an HTTP poll reads "Status 11" before a user's relay toggle and is applied after it. The
+// poll's pre-toggle power state then overwrote the state the toggle had just confirmed and flipped the
+// switch in the device list back until the next poll. A state the device confirmed to a command must
+// win over a poll that was already on its way when the command ran, and only over that one.
+func TestPollInFlightDuringPowerCommandDoesNotUndoIt(t *testing.T) {
+	h := newHarness(t, false, Options{}, httpDev(1))
+	h.svc.reload(h.ctx, h.clk.Now())
+	h.cl.block = make(chan struct{})
+	h.svc.tick(h.ctx) // the poll starts and waits inside the device call; it will report POWER ON (sts11)
+	for deadline := time.Now().Add(5 * time.Second); ; {
+		h.cl.mu.Lock()
+		n := h.cl.inFlight
+		h.cl.mu.Unlock()
+		if n == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the poll never reached the device")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	h.svc.NotePower(1, 1, "OFF") // the toggle ran at the device while the poll was waiting
+	close(h.cl.block)
+	h.svc.wg.Wait()
+	if got := h.svc.Get(1).Power["POWER"]; got != "OFF" {
+		t.Fatalf("POWER = %q after a poll that started before the toggle, want OFF", got)
+	}
+
+	// The next poll starts after the command and is the device's truth again (here: switched on outside).
+	h.cl.block = nil
+	h.advance(10 * time.Minute)
+	h.step()
+	if got := h.svc.Get(1).Power["POWER"]; got != "ON" {
+		t.Fatalf("POWER = %q after the next poll, want ON (a later poll must not be ignored)", got)
+	}
+}
+
+// Why: a multi-relay device reports POWER1..n; a command result for relay 2 must land in POWER2 and a
+// single-relay device keeps its one POWER key, so the cell shows one state per relay, never two.
+func TestNotePowerUsesTheKeyTheDeviceReports(t *testing.T) {
+	h := newHarness(t, false, Options{}, httpDev(1))
+	h.svc.reload(h.ctx, h.clk.Now())
+	h.step() // sts11: single relay, key POWER
+	h.svc.NotePower(1, 1, "OFF")
+	g := h.svc.Get(1)
+	if g.Power["POWER"] != "OFF" || len(g.Power) != 1 {
+		t.Fatalf("single relay: %v", g.Power)
+	}
+	h.svc.NotePower(2, 2, "ON") // unknown device id: no panic, no effect
+	h.svc.NotePower(1, 2, "ON")
+	if g := h.svc.Get(1); g.Power["POWER2"] != "ON" || g.Power["POWER"] != "OFF" {
+		t.Fatalf("second relay: %v", g.Power)
+	}
+}
