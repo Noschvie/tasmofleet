@@ -2,10 +2,13 @@ package app
 
 import (
 	"bytes"
+	"context"
 	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/nofuturekid/tasmofleet/internal/changelog"
+	"github.com/nofuturekid/tasmofleet/internal/config"
 )
 
 // Why (#124): the UI and the startup log show Version through DisplayVersion; reverting that
@@ -39,5 +42,20 @@ func TestDisplayVersionReachesTheUIAndTheLog(t *testing.T) {
 	a.logStarting()
 	if !bytes.Contains(buf.Bytes(), []byte("version="+want)) {
 		t.Errorf("startup line lacks version=%s: %s", want, buf.String())
+	}
+}
+
+// Why (#250): the emergency runbook tells the operator to compare the certificate fingerprint
+// with the start log (trust on first use for a self-signed certificate); without the log line
+// the comparison cannot be made.
+func TestTLSStartLogsCertificateFingerprintAndExpiry(t *testing.T) {
+	var buf bytes.Buffer
+	a := &runtime{log: slog.New(slog.NewTextHandler(&buf, nil)), cfg: config.Config{TLSSelfSigned: true, DataDir: t.TempDir()}}
+	if _, err := a.tlsConfig(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	if !strings.Contains(out, "fingerprint=") || !strings.Contains(out, "expires=") {
+		t.Errorf("the start log lacks the certificate fingerprint or expiry: %s", out)
 	}
 }

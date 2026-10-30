@@ -167,7 +167,7 @@ everything.
 | `devicecmd`, `devlock` | single device commands; one operation at a time per device | restore, OTA and backup take the per-device lock | see package docs |
 | `restore`, `settings`, `sysconfig` | restore and replace device; curated device settings; system settings and policy rule versions in the database | see package docs | |
 | `changelog`, `netaddr`, `web/ui` | What's new page parser; address formatting; templ components | see package docs | |
-| `bulk`, `notify` | **not wired** | `bulk.DefaultAllowlist` and the `notify.Notifier` interface exist; nothing in `app` uses them (§14.1, §14.5) | |
+| `notify` | **not wired** | the `notify.Notifier` interface exists; nothing in `app` uses it yet (§14.5, #249) | |
 
 Boundaries are enforced in `.golangci.yml` (depguard) and listed in `CLAUDE.md`.
 

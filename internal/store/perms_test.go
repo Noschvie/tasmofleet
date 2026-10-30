@@ -1,20 +1,16 @@
+//go:build !windows
+
+// POSIX file modes only: tasmofleet ships for Linux, so the file is not built on Windows.
+
 package store
 
 import (
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/nofuturekid/tasmofleet/internal/secretbox"
 )
-
-func skipWithoutUnixModes(t *testing.T) {
-	t.Helper()
-	if runtime.GOOS == "windows" {
-		t.Skip("Windows has no POSIX file modes; tasmofleet ships for Linux only")
-	}
-}
 
 func modeOf(t *testing.T, p string) os.FileMode {
 	t.Helper()
@@ -28,7 +24,6 @@ func modeOf(t *testing.T, p string) os.FileMode {
 // The DB holds session hashes, sealed device passwords and the audit log, so
 // it must never be readable by other local users, whatever the umask is.
 func TestOpenCreatesPrivateFiles(t *testing.T) {
-	skipWithoutUnixModes(t)
 	box, _ := secretbox.LoadOrCreate(t.TempDir())
 	path := filepath.Join(t.TempDir(), "new", "data", "tasmofleet.db")
 	s, err := Open(path, box)
@@ -50,7 +45,6 @@ func TestOpenCreatesPrivateFiles(t *testing.T) {
 }
 
 func TestOpenRepairsLooseDatabaseMode(t *testing.T) {
-	skipWithoutUnixModes(t)
 	box, _ := secretbox.LoadOrCreate(t.TempDir())
 	path := filepath.Join(t.TempDir(), "tasmofleet.db")
 	s, err := Open(path, box)
@@ -73,7 +67,6 @@ func TestOpenRepairsLooseDatabaseMode(t *testing.T) {
 }
 
 func TestOpenDoesNotLoosenExistingDir(t *testing.T) {
-	skipWithoutUnixModes(t)
 	box, _ := secretbox.LoadOrCreate(t.TempDir())
 	dir := t.TempDir()
 	if err := os.Chmod(dir, 0o700); err != nil {
@@ -90,7 +83,6 @@ func TestOpenDoesNotLoosenExistingDir(t *testing.T) {
 }
 
 func TestRepairModesFixesWalAndShm(t *testing.T) {
-	skipWithoutUnixModes(t)
 	base := filepath.Join(t.TempDir(), "x.db")
 	for _, p := range []string{base, base + "-wal", base + "-shm"} {
 		if err := os.WriteFile(p, nil, 0o666); err != nil {
@@ -113,7 +105,6 @@ func TestRepairModesFixesWalAndShm(t *testing.T) {
 // The copy must never be visible with a looser mode, not even briefly, and no
 // scratch directory may be left behind.
 func TestPreMigrationCopyIsPrivateAndLeavesNoScratch(t *testing.T) {
-	skipWithoutUnixModes(t)
 	db, path := rawDB(t)
 	for _, files := range [][]string{{"0001_a"}, {"0001_a", "0002_b"}} { // a fresh DB gets no copy
 		if err := migrate(db, path, mig(files...)); err != nil {

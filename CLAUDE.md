@@ -31,7 +31,9 @@ Read this file first, then the parts of the spec you need
 tasmofleet has no stable external API before 1.0 (maintainer's rule).
 Don't add or keep compatibility layers: no redirects for moved routes, no deprecated
 config/env aliases, no old CLI command names, no API compat layers. Breaking changes are
-fine. Record each one in `CHANGELOG.md` (section "Unreleased", then the release).
+fine. (One kept exception: `GET /login/local` redirects to `/login`, the old address of the
+break-glass login that bookmarks and the emergency runbook name; spec §15.1 and the runbook say so.)
+Record each one in `CHANGELOG.md` (section "Unreleased", then the release).
 **The only exception is user data:** migrations stay append-only, and the live database
 must upgrade cleanly.
 
@@ -87,7 +89,7 @@ internal/simulator        Tasmota device simulator (tests and devenv only)
 internal/testutil/oidcmock mock OIDC provider (tests and devenv only)
 internal/testutil/quarantine  quarantine.Test for flaky Go tests
 internal/discovery, policy   MQTT-first and scan discovery; policy rules and outcomes
-internal/bulk, notify        not wired into app (leftovers; see spec 14.1, 14.5)
+internal/notify              Notifier interface only, not wired into app (planned: #249; see spec 14.5)
 internal/deps            build-tagged file pinning third-party modules in go.mod (maintainer only)
 ```
 
@@ -110,7 +112,8 @@ internal/deps            build-tagged file pinning third-party modules in go.mod
 - Device network access goes only through `tasmota.Client` with a `tasmota.Target`
   built from an inventory device. Firmware downloads go only through `firmware`
   sources. Nothing else makes outbound HTTP requests (OIDC discovery and the SSO connection test in
-  `auth` are the configured exceptions).
+  `auth` are the configured exceptions, and so is the `healthcheck` client in `cmd/tasmofleet`,
+  which only calls the service's own loopback address).
 
 ## Generated code: templ
 

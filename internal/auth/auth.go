@@ -19,7 +19,7 @@
 //
 // Sessions are server-side (store.SessionStore); the cookie holds 32 random
 // bytes, HttpOnly, SameSite=Lax, Secure when the request is HTTPS (then named
-// __Host-tasmofleet), idle timeout 12h, absolute 7d, rotated on login.
+// __Host-tasmofleet), idle timeout 2h, absolute 12h, rotated on login.
 package auth
 
 import (

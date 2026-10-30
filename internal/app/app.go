@@ -59,6 +59,9 @@ func (a *runtime) tlsConfig(ctx context.Context) (*tls.Config, error) {
 	}
 	tc, reload, err := httpx.TLSConfig(httpx.TLSOptions{
 		CertFile: cfg.TLSCertFile, KeyFile: cfg.TLSKeyFile, SelfSigned: cfg.TLSSelfSigned, DataDir: cfg.DataDir, Hosts: hosts,
+		OnCert: func(fingerprint string, notAfter time.Time) {
+			a.log.Info("serving TLS certificate", "fingerprint", fingerprint, "expires", notAfter.UTC().Format(time.DateOnly))
+		},
 	})
 	if err != nil {
 		return nil, err

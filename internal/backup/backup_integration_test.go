@@ -35,7 +35,7 @@ func realDecoder(t *testing.T) *ExecDecoder {
 		if os.Getenv("REQUIRE_DECODER") == "1" {
 			t.Fatal("REQUIRE_DECODER=1 but DECODER_PATH is not set")
 		}
-		t.Skip("DECODER_PATH not set: real decode-config integration test not run (plan WP8b)")
+		t.Skip("DECODER_PATH not set: only a local run skips; CI sets REQUIRE_DECODER=1 (ci.yml) and fails above instead")
 	}
 	tmp := t.TempDir()
 	return NewExecDecoder(p, tmp)

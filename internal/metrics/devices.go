@@ -36,7 +36,7 @@ type EnergySample struct {
 // MaxIndex bounds relay numbers and energy channels per device: labels are
 // derived only from the validated numbers "1".."8" (energy: also "" for a
 // single meter), never from payload text, so a hostile publisher cannot create
-// series. At most 8 relays + 4*9 energy series + 6 plain series per device.
+// series. At most 8 relays + 4*9 energy series + 5 plain series per device (49).
 const MaxIndex = 8
 
 func validIndex(s string, allowEmpty bool) bool {
