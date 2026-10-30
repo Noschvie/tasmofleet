@@ -18,6 +18,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/nofuturekid/tasmofleet/internal/transport"
 )
 
 // Errors. Callers match with errors.Is / errors.As.
@@ -388,12 +389,13 @@ func (m *Manager) Apply(ctx context.Context, actor string, id model.DeviceID, ch
 			shown = f.Key + " ***"
 		}
 		r := Result{Key: f.Key, Command: shown}
-		_, err := m.o.Client.Command(ctx, t, cmd)
+		cctx, trace := transport.WithTrace(ctx)
+		_, err := m.o.Client.Command(cctx, t, cmd)
 		if err != nil {
 			r.Err = errorText(err)
 		}
 		results = append(results, r)
-		m.audit(ctx, actor, id, r)
+		m.audit(ctx, actor, id, r, trace.Via())
 		if err != nil && (errors.Is(err, tasmota.ErrUnreachable) || errors.Is(err, tasmota.ErrTimeout) || errors.Is(err, tasmota.ErrAuth)) {
 			for _, rest := range todo[i+1:] { // do not queue slow failures behind a dead device
 				results = append(results, Result{Key: rest.Key, Command: rest.Key + " (not sent)", Err: "not sent: the device did not answer"})
@@ -419,10 +421,11 @@ func (m *Manager) Save(ctx context.Context, actor string, id model.DeviceID, sav
 	}
 	cmd := "SaveData " + saveData
 	r := Result{Key: "SaveData", Command: cmd}
-	if _, err := m.o.Client.Command(ctx, tasmota.TargetFor(d), cmd); err != nil {
+	cctx, trace := transport.WithTrace(ctx)
+	if _, err := m.o.Client.Command(cctx, tasmota.TargetFor(d), cmd); err != nil {
 		r.Err = errorText(err)
 	}
-	m.audit(ctx, actor, id, r)
+	m.audit(ctx, actor, id, r, trace.Via())
 	return r, nil
 }
 
@@ -442,11 +445,11 @@ func errorText(err error) string {
 	return "the device answered with an error"
 }
 
-func (m *Manager) audit(ctx context.Context, actor string, id model.DeviceID, r Result) {
+func (m *Manager) audit(ctx context.Context, actor string, id model.DeviceID, r Result, via string) {
 	if m.o.Audit == nil {
 		return
 	}
-	detail, _ := json.Marshal(map[string]string{"command": r.Command}) // a string map always encodes
+	detail, _ := json.Marshal(map[string]string{"command": r.Command, "via": via}) // a string map always encodes
 	res := "ok"
 	if r.Err != "" {
 		res = r.Err

@@ -259,6 +259,27 @@ func TestConsoleRoutineAdminCommandNeedsNoConfirmation(t *testing.T) {
 	}
 }
 
+// Why (D13, #256): a device that only MQTT reaches cannot be reached again once its topic or broker
+// is changed wrongly; the console asks once and says so. A device reached over HTTP keeps the
+// no-dialog path, and a command that does not touch MQTT is never held back.
+func TestConsoleMQTTOnlyDeviceAsksBeforeACutOffChange(t *testing.T) {
+	mqttOnly := func(d *Deps) { d.MQTTOnly = func(context.Context, model.DeviceID) bool { return true } }
+	f := &fakeCmd{reply: `{"Topic":"x"}`}
+	e := setupWith(t, func(d *Deps) { d.DeviceCmd = f; mqttOnly(d) })
+	resp, body := e.do(t, "POST", "/devices/1/console", "admin", consoleForm("Topic other"))
+	if resp.StatusCode != 200 || !strings.Contains(body, "reached over MQTT only") || len(f.ran()) != 0 {
+		t.Fatalf("status %d, ran %v: %s", resp.StatusCode, f.ran(), body)
+	}
+	if _, body = e.do(t, "POST", "/devices/1/console", "admin", consoleForm("TelePeriod 120")); strings.Contains(body, "reached over MQTT only") {
+		t.Errorf("TelePeriod cannot cut the device off: %s", body)
+	}
+	g := &fakeCmd{reply: `{"Topic":"x"}`}
+	e2 := cmdEnv(t, g)
+	if _, body := e2.do(t, "POST", "/devices/1/console", "admin", consoleForm("Topic other")); strings.Contains(body, "Confirm sending") || len(g.ran()) != 1 {
+		t.Errorf("a device reached over HTTP is sent the change at once: ran %v", g.ran())
+	}
+}
+
 // Why (audit rows 6-9): formerly refused commands are sent for an admin, and
 // the destructive ones ask exactly once, naming the consequence. Nothing is
 // sent before the confirmation and the confirmation needs no retyping.

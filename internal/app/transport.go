@@ -1,0 +1,39 @@
+package app
+
+import (
+	"context"
+	"time"
+
+	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/transport"
+)
+
+// mqttPrefixes are the topic prefixes of the bus (cmnd, stat, tele). The bus is built from them and
+// the transport facts expand the devices' command topics with the first one, so both use this one value.
+var mqttPrefixes = [3]string{"cmnd", "stat", "tele"}
+
+// setupTransport gives the router its facts and the MQTT command channel. Until here the router
+// is the HTTP client it wraps (also in the CLI, which never calls this).
+func (a *runtime) setupTransport() {
+	facts := &TransportFacts{
+		Devices: a.svc.Store, Health: a.tracker, Memory: a.svc.Router.Memory(),
+		BusConnected:    a.bus.Connected,
+		FullTopic:       func() string { return a.svc.Sys.Snapshot().MQTTFullTopic },
+		FirmwareBaseURL: func() string { return a.svc.Sys.Snapshot().FWBaseURL },
+		BrokerPassword:  func() string { return a.svc.Sys.Snapshot().MQTTPassword }, // live: a change on the settings page counts at once
+		CommandPrefix:   func() string { return mqttPrefixes[0] },
+		Now:             time.Now,
+	}
+	a.facts = facts
+	a.svc.Router.SetFacts(facts)
+	a.svc.Router.SetMQTT(a.mqttCmd)
+}
+
+var _ transport.DeviceFacts = (*TransportFacts)(nil)
+
+// onlyOverMQTT reports whether commands to the device travel over MQTT because HTTP fails: a change
+// of its MQTT identity can then cut it off for good (cmdpolicy.WithMQTTOnly).
+func (a *runtime) onlyOverMQTT(ctx context.Context, id model.DeviceID) bool {
+	p, err := a.svc.Router.PathsFor(ctx, id)
+	return err == nil && p.Commands == transport.MQTT
+}

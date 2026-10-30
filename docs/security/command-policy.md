@@ -17,7 +17,9 @@ claims stay below, struck through in words, so a reviewer sees what changed and 
   part is judged on its own like a command sent alone.
 - Classes: **read** and **operator** (operator role), **admin** (admin role only). The
   zero class and `forbidden` are never sendable; `forbidden` exists only for malformed
-  lines. There is **no allowlist** and no command an admin cannot send.
+  lines. There is **no allowlist**; the only commands no role sends are `FileDownload`, `FileUpload`
+  and `Upload` (their payload carries the device's MQTT password; tasmofleet's own file-transfer code sends
+  them), alone or in a `Backlog`.
 - **Confirmation instead of refusal.** A destructive or lock-out command is still sent
   for an admin, but `Verdict.Confirm` names the consequence and the UI asks exactly
   once before it sends. Routine commands never get a second screen. The commands are

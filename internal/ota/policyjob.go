@@ -12,6 +12,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/nofuturekid/tasmofleet/internal/transport"
 )
 
 // "Make compliant" runs as a transaction: one job per device, shown and
@@ -179,26 +180,28 @@ func (e *Engine) workPolicy(ctx context.Context, j model.Job) {
 	lines := strings.Split(j.Commands, "\n")
 	d, err := e.devices.GetDevice(ctx, j.DeviceID)
 	if err != nil {
-		e.finishPolicy(ctx, j, lines, "inventory: "+err.Error())
+		e.finishPolicy(ctx, j, lines, "inventory: "+err.Error(), nil)
 		return
 	}
 	if e.opts.Policy == nil {
-		e.finishPolicy(ctx, j, lines, "this server cannot apply policy changes")
+		e.finishPolicy(ctx, j, lines, "this server cannot apply policy changes", nil)
 		return
 	}
+	var trace *transport.Trace      // which transport carried the writes, for the audit; nil until something is sent
 	if j.State != model.JobVerify { // a job interrupted while verifying only needs the read-back
 		var ok bool
 		if j, ok = e.policyMove(ctx, j, model.JobApplying, "apply", ""); !ok {
 			return
 		}
 		actx, cancel := context.WithTimeout(ctx, e.machine().CommandTimeout*policyApplyFactor)
+		actx, trace = transport.WithTrace(actx)
 		err = e.opts.Policy.Apply(actx, d, lines)
 		cancel()
 		if ctx.Err() != nil {
 			return // shutting down: the job resumes from its stored state
 		}
 		if err != nil {
-			e.finishPolicy(ctx, j, lines, err.Error())
+			e.finishPolicy(ctx, j, lines, err.Error(), trace)
 			return
 		}
 	}
@@ -213,15 +216,15 @@ func (e *Engine) workPolicy(ctx context.Context, j model.Job) {
 		return
 	}
 	if err != nil {
-		e.finishPolicy(ctx, j, lines, err.Error())
+		e.finishPolicy(ctx, j, lines, err.Error(), trace)
 		return
 	}
-	e.finishPolicy(ctx, j, lines, "")
+	e.finishPolicy(ctx, j, lines, "", trace)
 }
 
 // finishPolicy ends the job as succeeded (failure == "") or failed, and audits
 // the change.
-func (e *Engine) finishPolicy(ctx context.Context, j model.Job, lines []string, failure string) {
+func (e *Engine) finishPolicy(ctx context.Context, j model.Job, lines []string, failure string, trace *transport.Trace) {
 	to, event := model.JobSucceeded, "done"
 	if failure != "" {
 		to, event = model.JobFailed, "failed"
@@ -230,7 +233,11 @@ func (e *Engine) finishPolicy(ctx context.Context, j model.Job, lines []string, 
 		return
 	}
 	if e.audit != nil {
-		detail, _ := json.Marshal(map[string]any{"transaction": j.BatchID, "job": j.ID, "commands": redactedLines(lines)}) // a plain map always encodes
+		fields := map[string]any{"transaction": j.BatchID, "job": j.ID, "commands": redactedLines(lines)}
+		if trace != nil {
+			fields["via"] = trace.Via()
+		}
+		detail, _ := json.Marshal(fields) // a plain map always encodes
 		result := "ok"
 		if failure != "" {
 			result = failure

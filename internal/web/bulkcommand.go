@@ -69,6 +69,7 @@ func (h *handler) bulkCommandPage(w http.ResponseWriter, r *http.Request) {
 		h.showBulkScope(w, r, sv)
 		return
 	}
+	v = h.confirmation(r.Context(), cmd, v, ready...)
 	consequence, restart := v.Confirm, false
 	if consequence == "" && strings.EqualFold(v.Name, "restart") {
 		// Restart 1 is harmless enough for operators, but the devices still drop offline: say so, like the Restart button of the bulk bar does

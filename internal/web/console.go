@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -163,6 +164,19 @@ func consoleError(err error) (int, string) {
 	return status, msg
 }
 
+// confirmation adds to v the consequence of cutting off a device that is reached over MQTT only.
+func (h *handler) confirmation(ctx context.Context, cmd string, v cmdpolicy.Verdict, ids ...model.DeviceID) cmdpolicy.Verdict {
+	if h.d.MQTTOnly == nil {
+		return v
+	}
+	for _, id := range ids {
+		if h.d.MQTTOnly(ctx, id) {
+			return cmdpolicy.WithMQTTOnly(cmd, v)
+		}
+	}
+	return v
+}
+
 func (h *handler) consoleSend(w http.ResponseWriter, r *http.Request) {
 	d, ok := h.device(w, r)
 	if !ok {
@@ -190,7 +204,8 @@ func (h *handler) consoleSend(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		cmd, data.Shown, data.Input = pc.cmd, cmdpolicy.Redacted(pc.cmd), ""
-	} else if v, err := cmdpolicy.Classify(cmd); err == nil && v.Confirm != "" && p.Role >= model.RoleAdmin {
+	} else if v, err := cmdpolicy.Classify(cmd); err == nil && h.confirmation(r.Context(), cmd, v, d.ID).Confirm != "" && p.Role >= model.RoleAdmin {
+		v = h.confirmation(r.Context(), cmd, v, d.ID)
 		canon, err := cmdpolicy.Canonical(cmd)
 		if err == nil {
 			data.Confirm, data.Consequence = true, v.Confirm

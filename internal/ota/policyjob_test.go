@@ -96,7 +96,8 @@ func TestPolicyJobAppliesVerifiesAndAudits(t *testing.T) {
 	aud.mu.Lock()
 	defer aud.mu.Unlock()
 	if len(aud.evs) != 2 || aud.evs[0].Action != "policy.fix.start" || aud.evs[1].Action != "policy.fix" || aud.evs[1].Actor != "alice" ||
-		aud.evs[1].Target != "device:1" || aud.evs[1].Result != "ok" || !strings.Contains(aud.evs[1].Detail, "PowerOnState 0") {
+		aud.evs[1].Target != "device:1" || aud.evs[1].Result != "ok" || !strings.Contains(aud.evs[1].Detail, "PowerOnState 0") ||
+		!strings.Contains(aud.evs[1].Detail, `"via":"http"`) { // D5: which transport carried the writes
 		t.Fatalf("audit %+v", aud.evs)
 	}
 }

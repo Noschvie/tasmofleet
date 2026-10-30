@@ -46,7 +46,10 @@ type TransportFacts struct {
 	Now           func() time.Time
 }
 
-var _ transport.FactsSource = (*TransportFacts)(nil)
+var (
+	_ transport.FactsSource = (*TransportFacts)(nil)
+	_ transport.DeviceFacts = (*TransportFacts)(nil) // what the router uses
+)
 
 // UpdateRequest is what a person asked for when an update is planned.
 type UpdateRequest struct {
@@ -66,6 +69,19 @@ func (s *TransportFacts) Facts(ctx context.Context, id model.DeviceID) (transpor
 	if err != nil {
 		return transport.Facts{}, fmt.Errorf("transport facts: %w", err)
 	}
+	return s.FactsFor(ctx, d)
+}
+
+// HTTPState is the cheap part of the facts (the router's memory and the health service, no
+// store): the router asks it before every call to decide whether HTTP is worth trying.
+func (s *TransportFacts) HTTPState(id model.DeviceID) transport.HTTPState {
+	return s.httpState(id, s.Health.Get(id), s.Now())
+}
+
+// FactsFor is Facts for a device snapshot the caller holds: the router decides and sends from
+// the same snapshot.
+func (s *TransportFacts) FactsFor(ctx context.Context, d model.Device) (transport.Facts, error) {
+	id := d.ID
 	all, err := s.Devices.ListDevices(ctx)
 	if err != nil {
 		return transport.Facts{}, fmt.Errorf("transport facts: %w", err)
@@ -73,10 +89,7 @@ func (s *TransportFacts) Facts(ctx context.Context, id model.DeviceID) (transpor
 	h := s.Health.Get(id)
 	now := s.Now()
 
-	probe := d.OTAURLReadAt // the Status 1 stamp
-	if d.Identity.DetectedAt.After(probe) {
-		probe = d.Identity.DetectedAt
-	}
+	probe := lastProbe(d)
 	return transport.Facts{
 		Now:  now,
 		HTTP: s.httpState(id, h, now),
@@ -181,11 +194,22 @@ func topicExclusive(d model.Device, all []model.Device, prefix string) bool {
 	return true
 }
 
-// othersGroupUnread counts the other devices with an MQTT topic whose GroupTopic was never read.
+// lastProbe is the time of the device's last Status 1 read or identity detection.
+func lastProbe(d model.Device) time.Time {
+	probe := d.OTAURLReadAt // the Status 1 stamp
+	if d.Identity.DetectedAt.After(probe) {
+		probe = d.Identity.DetectedAt
+	}
+	return probe
+}
+
+// othersGroupUnread counts the other devices with an MQTT topic whose GroupTopic is not known: never
+// read, or older than that device's last probe. The same freshness rule as the device's own GroupTopic
+// (transport.groupTopicKnown), so a stale foreign value cannot let a write through.
 func othersGroupUnread(d model.Device, all []model.Device) int {
 	n := 0
 	for _, o := range all {
-		if o.ID != d.ID && o.Topic != "" && (o.GroupTopic == "" || o.GroupTopicReadAt.IsZero()) {
+		if o.ID != d.ID && o.Topic != "" && (o.GroupTopic == "" || o.GroupTopicReadAt.IsZero() || o.GroupTopicReadAt.Before(lastProbe(o))) {
 			n++
 		}
 	}

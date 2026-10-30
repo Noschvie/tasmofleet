@@ -148,6 +148,7 @@ everything.
 | `ota`                                   | update state machine + engine                 | `Step(job, event, now, cfg)` (pure), `Engine{Run, Submit, Preview, Cancel}`, `DeviceAPI`, `Firmware`, `Backups`, `Notifier`                                                                                                        | model, fwselect, store, clock          |
 | `mqttbus`                               | optional MQTT                                 | `Bus{Subscribe, Command, Connected}`, `Connect`, `Message`, `Kind`                                                                                                                                                                 | paho                                   |
 | `mqttcmd`                               | commands over MQTT (SAFETY)                   | `Channel{Do, DoLoose, Info, Connected}`, `Doer`, `ErrRefused`                                                                                                                                                                      | cmdpolicy, mqttbus, tasmota, model     |
+| `transport`                             | path choice and routing (SAFETY)              | `Choose(Facts) Paths` (pure), `Router` (a `tasmota.Client`), `WithPath`, `WithTrace`, `Memory`                                                                                                                                     | cmdpolicy, mqttcmd, tasmota, model     |
 | `health`                                | reachability                                  | `Tracker{Get, All, Run}`, `Options`                                                                                                                                                                                                | model, mqttbus, tasmota, store, events |
 | `events`                                | in-process pub/sub                            | `Hub{Publish, Subscribe}`, `Event`, `Topic`                                                                                                                                                                                        | stdlib                                 |
 | `inventory`                             | device service                                | `Service{List, Get, Create, Update, Delete, Upsert}`                                                                                                                                                                               | model, store, audit, events            |
@@ -621,7 +622,10 @@ answer. Rules (each has a test; see also `docs/research/tasmota-mqtt-transport.m
 
 - Never `Status 0` in any spelling `cmdpolicy` reads as 0, alone or inside a Backlog (`ErrRefused`,
   nothing published). Group topics, topics with `/+#` and `FileDownload`/`FileUpload`/`Upload`
-  are refused too.
+  are refused too, and so is every command that runs other commands, alone or in a Backlog: `Json`
+  (`{"Status":0}` is a Status 0), `Publish`, `Publish2`, `Rule` with a rule text (a bare `Rule1` or
+  `Rule1 1` that only reads or switches is fine), `RuleTimer`, `WebSend`, `WebQuery`, `Br`, `Script`.
+  They stay available over HTTP, where an admin confirms them.
 - One command in flight per device topic; at least 100 ms between two publishes on the bus.
 - The listener is registered before the publish, and `Bus.Connected()` is true only once the
   subscriptions of the current connection are in place (#272).
@@ -635,6 +639,8 @@ answer. Rules (each has a test; see also `docs/research/tasmota-mqtt-transport.m
 - LWT Offline -> `tasmota.ErrUnreachable`, nothing published. No answer in 8 s -> `tasmota.ErrTimeout`
   (unknown outcome, never resent by the channel). Replies to credential-setting commands are
   scrubbed (`cmdpolicy.ScrubReply`).
+- `Close()` while a command waits for its answer returns an unknown outcome (`ErrTimeout`), not
+  "not sent": the command was published. A closed channel never publishes.
 - `Info(topic)` returns the INFO1/INFO3 seen since the device's last LWT Offline (every software
   restart publishes one).
 
@@ -882,6 +888,33 @@ The same Guard applies; audit: `firmware.custom.upload`, `firmware.custom.use`,
 ---
 
 ## 9. OTA state machine (package `ota`)
+
+### 6.6 The transport router (package `transport`, #256)
+
+`transport.Router` implements `tasmota.Client` and is `app.Services.Client`; `Services.HTTP` is the raw
+HTTP client with the router's failure memory attached, used by what measures or verifies HTTP (health
+poll, prober, MAC verifier, discovery scan). The router passes `Uploader` and `BootSwitcher` straight to
+HTTP. Rules:
+
+- A call whose Target has no device ID (scan, MAC verifier, address probe) is always HTTP.
+- Unpinned calls go over HTTP while the device's HTTP state is not "failing". A command that
+  `cmdpolicy` classifies as a read follows `Paths.Commands`, any other command `Paths.Writes`.
+- **Failover inside one call** from HTTP to MQTT happens only on `tasmota.NotSent(err)`: a refused
+  connection (the dial failed), an address outside DEVICE_NETWORKS, a 401 before execution, or a device
+  that refuses the HTTP API (SetOption128). A timeout, an unparsable answer or a connection dropped after
+  the request was written prove nothing and are never followed by an MQTT send. Never MQTT to HTTP after a
+  publish. Uploads never fail over.
+- Every HTTP outcome goes into `Memory` (the failure kind and its start; a failure lasts 10 minutes and is
+  cleared by the next answer, a health poll included), which is how `Facts.HTTP` becomes "failing".
+- `transport.WithPath(ctx, HTTP|MQTT)` pins a job's transport: no failover, no rerouting. A command that starts
+  an upgrade or a restore (`Upgrade <x>`, `WebGetConfig <x>`) is sent over MQTT only when the path is pinned
+  to MQTT; the generic router never starts one on its own.
+- The device is read once, the facts and the choice come from that snapshot, and the device is read again
+  right before an MQTT send; a changed topic, group topic, FullTopic or MQTT capability sends nothing.
+- Replies of credential-setting commands are scrubbed on the MQTT path (`cmdpolicy.ScrubReply`).
+- `WithTrace(ctx)` records which transport carried the calls; the audit details of console commands,
+  settings writes and Make compliant carry it as `"via":"http"|"mqtt"` (`"http+mqtt"` when a job used both).
+- `DownloadConfig` and `RootPage` stay HTTP (the MQTT backup and identity come with their own work).
 
 ### 9.1 Principles
 
@@ -1323,7 +1356,12 @@ shows the decoded secrets. The diff/drift view redacts keys matching
   may send any Tasmota command, decision 2026-10-21), a malformed line is never sent. Destructive
   or lock-out commands (`Reset`, `WifiConfig`, firmware commands, ...) get exactly one confirmation
   that names the consequence; arguments of credential commands are never logged or audited.
-  Every command is audited. Replies are shown as escaped text. Claims: docs/security/command-policy.md.
+  Every command is audited, with the transport that carried it (`via`). Replies are shown as escaped text.
+  `FileDownload`, `FileUpload` and `Upload` are refused for every role (their payload carries the device's
+  MQTT password). On a device tasmofleet reaches over MQTT only, a change of Topic, FullTopic, GroupTopic,
+  MqttHost/Port/User/Password/Client or `SetOption3 0` gets the confirmation with the consequence
+  "this device is reached over MQTT only; this change can cut TasmoFleet off from it". Over MQTT the commands
+  that run other commands (see 6.5) are refused. Claims: docs/security/command-policy.md.
 - **Settings editing** (admin, device Settings tab): typed forms for a curated set (FriendlyName1..4,
   Hostname, Topic, FullTopic, TelePeriod, PowerOnState, SaveData, SetOption0/3/4/19 shown with names,
   MQTT host/port/user/password, NtpServer1..3, Timezone/TimeDst/TimeStd). Every field has a validator. Values are never
