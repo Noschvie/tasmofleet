@@ -26,9 +26,10 @@ func (n jobNotifier) JobChanged(j model.Job, _ model.JobEvent) {
 }
 
 // learnFWReachFromJob: a download update that succeeded proves the device reaches the firmware
-// server (D11). Push jobs, policy jobs and the MQTT upload never download from it.
+// server (D11). Push jobs, policy jobs and the MQTT upload never download from it; a skipped job (already on
+// the target, no plan) ends succeeded without any download.
 func (a *runtime) learnFWReachFromJob(j model.Job) {
-	if j.State != model.JobSucceeded || j.Kind != "" || j.Delivery != model.DeliveryPull || j.MQTTUpload {
+	if j.State != model.JobSucceeded || j.Kind != "" || j.Plan == "" || j.Delivery != model.DeliveryPull || j.MQTTUpload {
 		return
 	}
 	id := j.DeviceID

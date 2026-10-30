@@ -204,12 +204,13 @@ func TestOnlyASucceededDownloadJobSetsYes(t *testing.T) {
 		job  model.Job
 		want model.FWReachState
 	}{
-		{"download succeeded", model.Job{State: model.JobSucceeded}, model.FWReachYes},
+		{"download succeeded", model.Job{State: model.JobSucceeded, Plan: model.PlanDirect}, model.FWReachYes},
+		{"skipped, already on target", model.Job{State: model.JobSucceeded}, model.FWReachUnknown},
 		{"download failed", model.Job{State: model.JobFailed}, model.FWReachUnknown},
 		{"still running", model.Job{State: model.JobAwaitReboot}, model.FWReachUnknown},
-		{"push", model.Job{State: model.JobSucceeded, Delivery: model.DeliveryPush}, model.FWReachUnknown},
-		{"mqtt upload", model.Job{State: model.JobSucceeded, MQTTUpload: true}, model.FWReachUnknown},
-		{"policy job", model.Job{State: model.JobSucceeded, Kind: model.KindPolicy}, model.FWReachUnknown},
+		{"push", model.Job{State: model.JobSucceeded, Plan: model.PlanDirect, Delivery: model.DeliveryPush}, model.FWReachUnknown},
+		{"mqtt upload", model.Job{State: model.JobSucceeded, Plan: model.PlanDirect, MQTTUpload: true}, model.FWReachUnknown},
+		{"policy job", model.Job{State: model.JobSucceeded, Plan: model.PlanDirect, Kind: model.KindPolicy}, model.FWReachUnknown},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			a, st, ids, au := fwFixture(t, "10.0.0.1")
@@ -243,5 +244,33 @@ func TestForgetResetsToUnknownAndNamesTheActor(t *testing.T) {
 	s, src := au.last(t)
 	if s != "unknown" || src != FWReachSourceAdminForget || au.ev[len(au.ev)-1].Actor != "alice" {
 		t.Fatalf("audit %q %q %+v", s, src, au.ev[len(au.ev)-1])
+	}
+}
+
+// Why: Address and the reported IP disagreeing means one of them is stale (DHCP moved the device);
+// the request may come from another device now holding the old address, so nothing is learned. The
+// device still counts toward "several devices", so a clean owner of the same IP is not guessed.
+func TestFirmwareGetWithDisagreeingStoredIPsLearnsNothing(t *testing.T) {
+	a, st, ids, _ := fwFixture(t, "10.0.0.1", "10.0.0.5")
+	if err := st.UpdateNet(t.Context(), ids[0], store.ProbeGuard{Address: "10.0.0.1", Port: 80}, model.NetFacts{IP: "10.0.0.9", ReadAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	a.onFirmwareRequest(get200("10.0.0.1"))
+	a.bgWG.Wait()
+	if r := reachOf(t, st, ids[0]); r.State != model.FWReachUnknown {
+		t.Fatalf("stale device learned: %+v", r)
+	}
+}
+
+// Why: a staged ESP8266 update fetches twice; the second GET must not write and audit a second yes.
+func TestConcurrentYesAuditsOnce(t *testing.T) {
+	a, _, ids, au := fwFixture(t, "10.0.0.1")
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() { _ = a.fwReach.NoteYes(t.Context(), ids[0], FWReachSourceFirmwareServer) })
+	}
+	wg.Wait()
+	if len(au.ev) != 1 {
+		t.Fatalf("%d audit rows", len(au.ev))
 	}
 }

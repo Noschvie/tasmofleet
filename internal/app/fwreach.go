@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/netip"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/audit"
@@ -38,6 +39,7 @@ type FWReachLearner struct {
 	audit audit.Recorder
 	clk   clock.Clock
 	log   *slog.Logger
+	mu    sync.Mutex // one write at a time: a staged update's two GETs must not both audit a "yes"
 }
 
 func newFWReachLearner(st fwReachStore, rec audit.Recorder, clk clock.Clock, log *slog.Logger) *FWReachLearner {
@@ -74,14 +76,14 @@ func (l *FWReachLearner) NoteYesFromIP(ctx context.Context, ip string, source st
 		return fmt.Errorf("fwreach: %w", err)
 	}
 	var owner model.DeviceID
-	n := 0
+	n, consistent := 0, false
 	for _, d := range all {
-		if deviceHasIP(d, addr) {
-			owner = d.ID
+		if has, same := deviceIP(d, addr); has {
+			owner, consistent = d.ID, same
 			n++
 		}
 	}
-	if n != 1 {
+	if n != 1 || !consistent {
 		return nil
 	}
 	return l.NoteYes(ctx, owner, source)
@@ -92,18 +94,28 @@ func parseIP(s string) (netip.Addr, bool) {
 	return a.Unmap(), err == nil
 }
 
-// deviceHasIP: the stored address or the address the device itself reported (a hostname
-// address cannot be compared, the reported one can).
-func deviceHasIP(d model.Device, ip netip.Addr) bool {
+// deviceIP reports whether ip is one of the device's comparable addresses (the stored one, or the
+// one it reported itself; a hostname cannot be compared) and whether every comparable address
+// equals ip. Two that disagree mean one is stale: the device counts as a match but is not trusted.
+func deviceIP(d model.Device, ip netip.Addr) (has, same bool) {
+	same = true
 	for _, s := range []string{d.Address, d.Net.IP} {
-		if a, ok := parseIP(s); ok && a == ip {
-			return true
+		a, ok := parseIP(s)
+		if !ok {
+			continue
+		}
+		if a == ip {
+			has = true
+		} else {
+			same = false
 		}
 	}
-	return false
+	return has, same
 }
 
 func (l *FWReachLearner) set(ctx context.Context, actor string, id model.DeviceID, state model.FWReachState, detail, source string) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	d, err := l.st.GetDevice(ctx, id)
 	if err != nil {
 		return fmt.Errorf("fwreach: %w", err)

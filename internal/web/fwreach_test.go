@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/url"
+	"strconv"
 	"testing"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
@@ -12,7 +13,7 @@ import (
 type fakeForget struct{ calls []string }
 
 func (f *fakeForget) Forget(_ context.Context, actor string, id model.DeviceID) error {
-	f.calls = append(f.calls, actor+":"+string(rune('0'+id)))
+	f.calls = append(f.calls, actor+":"+strconv.Itoa(int(id)))
 	return nil
 }
 
@@ -28,7 +29,7 @@ func TestFWReachForgetIsAdminOnly(t *testing.T) {
 		t.Fatalf("operator: status %d, calls %v", resp.StatusCode, f.calls)
 	}
 	resp, _ = e.do(t, "POST", "/devices/1/fwreach/forget", "admin", form)
-	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/tf/devices/1" || len(f.calls) != 1 {
+	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/tf/devices/1" || len(f.calls) != 1 || f.calls[0] != "test:admin:1" {
 		t.Fatalf("admin: status %d, location %q, calls %v", resp.StatusCode, resp.Header.Get("Location"), f.calls)
 	}
 	resp, _ = e.do(t, "POST", "/devices/99/fwreach/forget", "admin", form)

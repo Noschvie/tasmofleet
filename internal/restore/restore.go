@@ -417,6 +417,8 @@ func (m *Manager) Handler() http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		_, _ = w.Write(dump) //nolint:gosec // G705: octet-stream attachment, the device's own config
 		m.record(m.o.Context, "device", "restore.download", e.job, e.device, "ok", "served once")
+		// Even if writing the dump failed half way: the device connected and was answered 200, which
+		// is what "reaches the firmware listener" means.
 		if m.o.OnServed != nil {
 			m.o.OnServed(e.device)
 		}
