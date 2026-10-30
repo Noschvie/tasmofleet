@@ -246,6 +246,8 @@ in `.github/workflows/ci.yml`.
   "Unreleased". The release PR moves them into a new "## X.Y.Z (date)" section BEFORE
   the tag is set; the tag build fails when that section is missing
   (`make changelog-check TAG=vX.Y.Z`).
+- **Patch releases (X.Y.Z with Z>0) never add or change a database migration; a schema change
+  always means a new minor version.** The tag build enforces it (`make migration-guard`).
 - **Credit outside contributors**: every merged PR by someone else, and every issue or
   report by someone else that led to a change, is credited at the end of that change's
   CHANGELOG line as `(#N, thanks @handle)`. Do not credit the maintainer's own work.

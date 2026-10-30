@@ -14,6 +14,7 @@ and fleet-wide commands in one Go binary with an embedded SQLite database.
 [![CI](https://github.com/nofuturekid/tasmofleet/actions/workflows/ci.yml/badge.svg)](https://github.com/nofuturekid/tasmofleet/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/nofuturekid/tasmofleet?sort=semver)](https://github.com/nofuturekid/tasmofleet/releases)
 [![License: AGPL-3.0-or-later](https://img.shields.io/github/license/nofuturekid/tasmofleet)](LICENSE)
+[![Docker Hub pulls](https://img.shields.io/docker/pulls/nofuturekid/tasmofleet?logo=docker&logoColor=white)](https://hub.docker.com/r/nofuturekid/tasmofleet)
 [![Image: ghcr.io](https://img.shields.io/badge/image-ghcr.io%2Fnofuturekid%2Ftasmofleet-blue?logo=docker&logoColor=white)](https://github.com/nofuturekid/tasmofleet/pkgs/container/tasmofleet)
 
 ![A firmware update of four devices: pick them, review, start, watch each device's progress](docs/media/demo.webp)
@@ -95,13 +96,13 @@ docker run -d --name tasmofleet \
   -p 8443:8080 -p 80:80 \
   -e TZ=Europe/Berlin \
   -v tasmofleet-data:/data \
-  ghcr.io/nofuturekid/tasmofleet:latest
+  nofuturekid/tasmofleet:latest
 docker logs tasmofleet 2>&1 | grep -o '/setup/account?token=[^"]*'
 ```
 
 The image is published to two registries under the same tags (`latest`, `X.Y.Z` and `edge`, the
-current `main`): `ghcr.io/nofuturekid/tasmofleet` and `nofuturekid/tasmofleet` on Docker Hub. Use
-either name.
+current `main`): `nofuturekid/tasmofleet` on Docker Hub and `ghcr.io/nofuturekid/tasmofleet`. Use
+either name; to pull from ghcr.io instead, put `ghcr.io/` in front of the image name.
 
 The UI always listens on container port 8080; `8443:8080` maps container port 8080 to host port 8443, which you can choose freely. Upgrading
 from 0.16 or older with a `-p 8443:8443` mapping? Read [Upgrading to 0.17](docs/upgrading.md) first.
@@ -119,7 +120,7 @@ The same with Docker Compose:
 ```yaml
 services:
   tasmofleet:
-    image: ghcr.io/nofuturekid/tasmofleet:latest
+    image: nofuturekid/tasmofleet:latest
     container_name: tasmofleet
     restart: unless-stopped
     ports:
@@ -152,6 +153,15 @@ it to `/boot/config/plugins/dockerMan/templates-user/`); it runs plain HTTP behi
 proxy with its own IP on `br0` (UI on port 8080, firmware on port 80 of that IP). The Community
 Applications template uses the `bridge` network instead, with the port mappings as the only
 place for ports. Upgrading an existing install: [docs/upgrading.md](docs/upgrading.md).
+
+## Backing up TasmoFleet
+
+Back up the whole data directory (the `/data` volume): it holds the database and the device
+configuration backups (`.dmp`). Before every database migration TasmoFleet writes a copy next
+to the database, `<db>.pre-<N>` (the newest three are kept), so an upgrade can be undone.
+
+To restore: stop the container, replace the database file (or restore the whole data
+directory), start the container.
 
 ## Configuration
 

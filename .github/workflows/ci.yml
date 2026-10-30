@@ -95,6 +95,8 @@ jobs:
             tier=full
             # Release guard, early: the image job checks it again before publishing.
             make changelog-check TAG="$REF_NAME"
+            # Patch releases never touch the migrations.
+            make migration-guard TAG="$REF_NAME" REV="$GITHUB_SHA"
           fi
           if [ "$EVENT" = pull_request ]; then
             # Fail closed: without a base or a diff, the gate fails instead of

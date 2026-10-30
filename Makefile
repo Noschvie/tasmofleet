@@ -44,7 +44,7 @@ TESTFLAGS ?=
 # Extra Playwright arguments, e.g. E2E_ARGS=--shard=1/2 (CI).
 E2E_ARGS  ?=
 
-.PHONY: catalogue catalogue-src catalogue-check demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test race integration mutation mutation-changed mutation-sum safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check changelog-notes clean tools
+.PHONY: catalogue catalogue-src catalogue-check demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test race integration mutation mutation-changed mutation-sum safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check migration-guard changelog-notes clean tools
 
 check: templ-check fmt-check vet staticcheck lint test integration vuln build
 
@@ -281,6 +281,19 @@ changelog-check:
 	@v='$(TAG)'; v=$${v#v}; \
 	grep -Eq "^## $$(printf '%s' "$$v" | sed 's/[.]/[.]/g')( \(.*\))?$$" CHANGELOG.md || { \
 		echo "CHANGELOG.md has no section '## $$v' for tag $(TAG): move \"Unreleased\" into it before tagging" >&2; exit 1; }
+
+# Release guard: a patch release (vX.Y.Z, Z>0) never adds or changes a database migration.
+# Fails when internal/store/migrations/ differs between vX.Y.0 and REV (default HEAD).
+migration-guard:
+	@test -n "$(TAG)" || { echo "usage: make migration-guard TAG=vX.Y.Z [REV=<commit>]" >&2; exit 2; }
+	@v='$(TAG)'; v=$${v#v}; v=$${v%%-*}; z=$${v##*.}; base=v$${v%.*}.0; \
+	if [ "$$z" -eq 0 ]; then exit 0; fi; \
+	git rev-parse -q --verify "refs/tags/$$base^{commit}" >/dev/null || { \
+		echo "patch release $(TAG) needs tag $$base to compare migrations against, but it does not exist" >&2; exit 1; }; \
+	changed=$$(git diff --name-only "$$base..$(or $(REV),HEAD)" -- internal/store/migrations/); \
+	if [ -n "$$changed" ]; then \
+		echo "patch release $(TAG) changes database migrations since $$base (a schema change means a new minor version):" >&2; \
+		echo "$$changed" >&2; exit 1; fi
 
 # Prints the body of the CHANGELOG.md section for TAG (the GitHub release notes).
 changelog-notes: changelog-check

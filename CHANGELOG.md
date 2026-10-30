@@ -4,28 +4,13 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
-## Unreleased
+## 0.20.0 (2026-10-30)
 
-### Added
+### Upgrade notes
 
-- Devices TasmoFleet cannot reach over HTTP are managed over MQTT when they use our broker: console, Send command, settings reads and writes, policy reads and Make compliant. HTTP stays first; MQTT takes over when HTTP is known to fail, or inside one call only when the request provably never left (connection refused, outside DEVICE_NETWORKS, SetOption128, 401). A timeout or a dropped connection is never followed by a second send on the other transport. The audit details of these writes say `via` http or mqtt. A background read of every device's GroupTopic (`Status 1`, one per two seconds) and the MQTT identity refresh keep the group-topic check of MQTT writes satisfied (Part of #256)
-
-- Firmware updates over MQTT (OtaUrl + Upgrade): a device TasmoFleet cannot reach over HTTP downloads the image from TasmoFleet's firmware server; staged ESP8266 updates included. The path is chosen once in the preview (the row says "Over MQTT" and why, or why there is no path), stored with the job and pins every call of it. The language build, which Tasmota shows only on its web page, is asked for in the preview for devices that cannot be read over HTTP. A job over MQTT keeps the identity stamp and the language fields; until the backup over MQTT is routed (#257) such a job needs "Back up each device" switched off, and the preview says so (Part of #259)
-
-- Device list: optional columns OTA URL and Group topic (hidden until chosen in Columns, sortable, long values cut off with the whole value on hover), each with the time it was read. The group topic comes from the same read-only `Status 1` as the OTA URL and from the boot announcement `tele/<topic>/INFO1`, so no new device read. Values read before this release show no time until the next probe. Migration 0035 (#239)
-- Internal tooling: Tasmota command catalogue (`internal/tasmotacmd`), generated from the pinned Tasmota v16.0.0 source by `make catalogue`: which RESULT key answers which command, with commands whose key cannot be derived statically listed as loose (#268)
-- The device page shows how TasmoFleet reaches the device (HTTP, MQTT, device MQTT password, firmware server, experimental upload over MQTT) and why an action is unavailable; disabled Back up, Restore, Update and the Settings and Console tabs carry the same sentence, and the device list marks devices managed over MQTT (#79)
-
-### Changed
-
-- A device that cannot reach the firmware server (`Failed HTTP error: connection failed` on its UPGRADE report) fails the update at once with that reason instead of retrying with a second `Upgrade 1`, and is remembered as not reaching it (Part of #259)
-
-### Security
-
-- The device MQTT password is stored encrypted like the web password, never rendered, logged or audited, and is sent only to that device's topic (#257)
-- MQTT command channel: closing it while a command waits for its answer now reports an unknown outcome (the command was published), not "nothing was sent"; a closed channel never publishes
-
-- Command policy: the confirmation for Status 0 (and Reset and other guarded commands) could be bypassed by a Backlog part spelled with a leading `Backlog` (`Backlog BacklogStatus 0`), which Tasmota strips before running it; every part is now judged after the same stripping
+- Database migrations 0035, 0036 and 0037 run automatically; a `.pre-N` copy of the database is written before each (the newest three are kept).
+- Devices that TasmoFleet reaches over MQTT only need their MQTT password set per device (device edit form) for backups over MQTT.
+- After the upgrade, the background read of every device's group topic (one device per two seconds) may hold MQTT writes for a few minutes.
 
 ### Breaking
 
@@ -33,13 +18,28 @@ always upgrade automatically.
 - Console and bulk commands refuse `FileDownload`, `FileUpload` and `Upload` for every role (their payload carries the device's MQTT password). `cmdpolicy.Prepare` takes `PrepareOpts`
 - Audit details of console commands, settings writes and Make compliant gain `"via"` (Part of #256)
 - Over MQTT the console refuses commands that run other commands (`Json`, `Publish`, `Publish2`, `Rule` with a rule text, `RuleTimer`, `WebSend`, `WebQuery`, `Br`, `Script`): they could send `Status 0`. Over HTTP they work as before. A device reached over MQTT only asks for a confirmation before a change of Topic, FullTopic, GroupTopic, MqttHost, MqttPort, MqttUser, MqttPassword, MqttClient or `SetOption3 0`
-
 - An update of a device whose language build was never read from its web page (Tasmota shows it only there) is refused until a language is chosen; `fwselect.Select` returns `ErrLanguageUnknown` unless the choice names one ("EN" is allowed), and so does Guard. It applies only where a language build exists (not to ESP32-C3/S3/..., solo1 or the non-plain variants with an official image). Devices whose language an HTTP probe read are unaffected, including those stored before this release (migration 0037); only devices known from MQTT alone need the choice (Part of #259)
 
 ### Added
 
-- `fwselect.MQTTUploadFits`: a fixed rule, no try-and-see, for whether an image fits a firmware upload over MQTT (FileUpload Type 1), from Status 4 Free. A known safeboot layout (one app partition) is refused. Nothing uses it yet (Part of #262)
+- Devices TasmoFleet cannot reach over HTTP are managed over MQTT when they use our broker: console, Send command, settings reads and writes, policy reads and Make compliant. HTTP stays first; MQTT takes over when HTTP is known to fail, or inside one call only when the request provably never left (connection refused, outside DEVICE_NETWORKS, SetOption128, 401). A timeout or a dropped connection is never followed by a second send on the other transport. The audit details of these writes say `via` http or mqtt. A background read of every device's GroupTopic (`Status 1`, one per two seconds) and the MQTT identity refresh keep the group-topic check of MQTT writes satisfied (Part of #256)
+- Firmware updates over MQTT (OtaUrl + Upgrade): a device TasmoFleet cannot reach over HTTP downloads the image from TasmoFleet's firmware server; staged ESP8266 updates included. The path is chosen once in the preview (the row says "Over MQTT" and why, or why there is no path), stored with the job and pins every call of it. The language build, which Tasmota shows only on its web page, is asked for in the preview for devices that cannot be read over HTTP. A job over MQTT keeps the identity stamp and the language fields; until the backup over MQTT is routed (#257) such a job needs "Back up each device" switched off, and the preview says so (Part of #259)
 - Config backups over MQTT (`FileDownload`) for devices on our broker whose HTTP does not answer, also in scheduled and bulk backups; the device's MQTT password is stored per device on the edit form (not set, the same as TasmoFleet's broker password, or its own; write-only, an empty field keeps it, changing it or ticking Retry clears a "device refused it" mark). The bytes equal `/dl`, size and MD5 are checked, a wrong password (`Error 1`) is remembered and blocks further MQTT transfers until it is changed, and a backup that MQTT cannot carry says why (#257) (#45, thanks @Noschvie)
+- Device list: optional columns OTA URL and Group topic (hidden until chosen in Columns, sortable, long values cut off with the whole value on hover), each with the time it was read. The group topic comes from the same read-only `Status 1` as the OTA URL and from the boot announcement `tele/<topic>/INFO1`, so no new device read. Values read before this release show no time until the next probe. Migration 0035 (#239)
+- The device page shows how TasmoFleet reaches the device (HTTP, MQTT, device MQTT password, firmware server, experimental upload over MQTT) and why an action is unavailable; disabled Back up, Restore, Update and the Settings and Console tabs carry the same sentence, and the device list marks devices managed over MQTT (#79)
+- `fwselect.MQTTUploadFits`: a fixed rule, no try-and-see, for whether an image fits a firmware upload over MQTT (FileUpload Type 1), from Status 4 Free. A known safeboot layout (one app partition) is refused. Nothing uses it yet (Part of #262)
+- Internal tooling: Tasmota command catalogue (`internal/tasmotacmd`), generated from the pinned Tasmota v16.0.0 source by `make catalogue`: which RESULT key answers which command, with commands whose key cannot be derived statically listed as loose (#268)
+
+### Changed
+
+- A device that cannot reach the firmware server (`Failed HTTP error: connection failed` on its UPGRADE report) fails the update at once with that reason instead of retrying with a second `Upgrade 1`, and is remembered as not reaching it (Part of #259)
+- Repository: removed the v1 design-system bundle (`design/ds-bundle`), its build scripts and the Claude Design sync notes; the app never used them. The v2 prototype and the fixture tools stay
+- Images: each push to main deletes the previous `edge` on ghcr.io and Docker Hub, so no untagged images pile up (releases are never deleted)
+- README: no longer lists notifications by webhook or e-mail; they were never built (#249)
+- Policy: Save rule ends the editor too: the overview names the saved rule and marks its row
+- Policy overview: shorter compliance bar, so rule names and scopes do not wrap
+- Images are built without provenance attestation: one manifest per build, so a push of `edge` no longer leaves three untagged entries behind on Docker Hub
+- Docs: checked against the code. User docs: the metrics setting name, the scan range limit, the operator role description, the build-from-source command, the Authentik refresh-token note, a certificate-fingerprint claim the server does not fulfil. Security notes: renamed test references, the legacy policy-rules variable, the address-change confirmation. Design system and fixtures: folds, breakpoints, simulator timeline, safeboot push. Spec and CLAUDE.md: route list, backup retention, settings that apply live, first-run text, and features that were planned but never built (notifications, development channel, firmware cache pruning)
 
 ### Fixed
 
@@ -49,15 +49,11 @@ always upgrade automatically.
 - Policy: Cancel in the rule editor goes back to the policy overview (it reloaded the rule page, or opened the template picker for a new rule)
 - Policy: Duplicate opens an unsaved copy; nothing is stored until Save rule
 
-### Changed
+### Security
 
-- Repository: removed the v1 design-system bundle (`design/ds-bundle`), its build scripts and the Claude Design sync notes; the app never used them. The v2 prototype and the fixture tools stay
-- Images: each push to main deletes the previous `edge` on ghcr.io and Docker Hub, so no untagged images pile up (releases are never deleted)
-- README: no longer lists notifications by webhook or e-mail; they were never built (#249)
-- Policy: Save rule ends the editor too: the overview names the saved rule and marks its row
-- Policy overview: shorter compliance bar, so rule names and scopes do not wrap
-- Images are built without provenance attestation: one manifest per build, so a push of `edge` no longer leaves three untagged entries behind on Docker Hub
-- Docs: checked against the code. User docs: the metrics setting name, the scan range limit, the operator role description, the build-from-source command, the Authentik refresh-token note, a certificate-fingerprint claim the server does not fulfil. Security notes: renamed test references, the legacy policy-rules variable, the address-change confirmation. Design system and fixtures: folds, breakpoints, simulator timeline, safeboot push. Spec and CLAUDE.md: route list, backup retention, settings that apply live, first-run text, and features that were planned but never built (notifications, development channel, firmware cache pruning)
+- The device MQTT password is stored encrypted like the web password, never rendered, logged or audited, and is sent only to that device's topic (#257)
+- MQTT command channel: closing it while a command waits for its answer now reports an unknown outcome (the command was published), not "nothing was sent"; a closed channel never publishes
+- Command policy: the confirmation for Status 0 (and Reset and other guarded commands) could be bypassed by a Backlog part spelled with a leading `Backlog` (`Backlog BacklogStatus 0`), which Tasmota strips before running it; every part is now judged after the same stripping
 
 ## 0.19.2 (2026-10-30)
 
