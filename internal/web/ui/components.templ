@@ -108,7 +108,7 @@ templ ListCard(title, linkLabel, linkHref string) {
 templ KV(rows []KVRow) {
 	<dl class="ukv">
 		for _, r := range rows {
-			<div class="ukv-row">
+			<div class={ "ukv-row", templ.KV("ukv-wide", r.Wide) }>
 				<dt>{ r.Key }</dt>
 				<dd class={ templ.KV("mono", r.Mono) } data-visual-mask?={ r.Mask }>
 					if !r.At.IsZero() {

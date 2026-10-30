@@ -409,7 +409,7 @@ templ identityFWR(c identCard) {
 	if len(c.FWR) > 0 {
 		<dl class="ukv">
 			for _, r := range c.FWR {
-				<div class="ukv-row">
+				<div class={ "ukv-row", templ.KV("ukv-wide", r.Wide) }>
 					<dt>{ r.Name } <button type="button" class="info" title={ r.Info } aria-label={ r.Name + ": " + r.Info }><span aria-hidden="true">i</span></button></dt>
 					<dd class="mono">{ r.Value }</dd>
 				</div>

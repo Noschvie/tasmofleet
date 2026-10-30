@@ -287,7 +287,7 @@ func (h *handler) identity(v view, d model.Device, updating, off bool, f snapFac
 		{Key: "MQTT topic", Value: orUnknown(d.Topic), Mono: true},
 	}
 	if d.OTAURL != "" { // #127: where the device would update from; the prober stored it without credentials
-		rows = append(rows, ui.KVRow{Key: "OTA URL", Value: d.OTAURL, Mono: true, Soft: true})
+		rows = append(rows, ui.KVRow{Key: "OTA URL", Value: d.OTAURL, Mono: true, Soft: true, Wide: true})
 	}
 	rows = append(rows, ui.KVRow{Key: "MAC", Value: orUnknown(d.MAC), Mono: true, Mask: true})
 	if d.HTTPUser != "" || d.HTTPPassword != "" {
@@ -298,7 +298,7 @@ func (h *handler) identity(v view, d model.Device, updating, off bool, f snapFac
 		if d.HTTPUser != "" {
 			login = d.HTTPUser + ", " + login
 		}
-		rows = append(rows, ui.KVRow{Key: "Web login", Value: login, Mono: true})
+		rows = append(rows, ui.KVRow{Key: "Web login", Value: login, Mono: true, Wide: true})
 	}
 	if d.OTAExcluded {
 		rows = append(rows, ui.KVRow{Key: "Updates", Value: "Excluded from OTA updates"})
@@ -307,7 +307,7 @@ func (h *handler) identity(v view, d model.Device, updating, off bool, f snapFac
 		rows = append(rows, ui.KVRow{Key: "Tag", Value: t})
 	}
 	if d.Notes != "" {
-		rows = append(rows, ui.KVRow{Key: "Notes", Value: d.Notes})
+		rows = append(rows, ui.KVRow{Key: "Notes", Value: d.Notes, Wide: true})
 	}
 	c := identCard{Base: v.Base, ID: d.ID, Rows: rows, CanProbe: !updating, Off: off,
 		NameOffer: nameOffer(d), CanAnswer: v.IsAdmin, KeepOK: h.d.DeviceNames != nil}
@@ -329,7 +329,11 @@ func (h *handler) crWarnPercent() int {
 
 // fwrRow is one StatusFWR field of Status 2 under Tasmota's own name, with the value as the
 // device sent it and a short explanation (#289).
-type fwrRow struct{ Name, Value, Info string }
+type fwrRow struct {
+	Name, Value, Info string
+	// Wide: a long value, which takes the whole row on a phone.
+	Wide bool
+}
 
 // statusFWRRows are the StatusFWR fields in the order of Tasmota's reply. A field the probe did
 // not read (never, or an old identity) is left out; the card then points at Refresh identity.
@@ -338,7 +342,7 @@ func statusFWRRows(i model.Identity) []fwrRow {
 	var rows []fwrRow
 	add := func(name, value, info string) {
 		if value != "" {
-			rows = append(rows, fwrRow{Name: name, Value: value, Info: info})
+			rows = append(rows, fwrRow{Name: name, Value: value, Info: info, Wide: name == "Version" || name == "BuildDateTime"})
 		}
 	}
 	add("Version", f.Version, "The firmware version and its build in brackets, as Tasmota prints it.")

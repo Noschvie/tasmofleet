@@ -14097,3 +14097,51 @@ details.devcard > summary {
   font-weight: 400;
   margin-left: var(--sp-4);
 }
+
+/* Identity and Connection cards on a phone (#330): the facts sit two to a row, label above value;
+   a long value (Wide) takes the whole row with its label beside it. Values stay on one line where
+   they fit and info icons sit inline. Nothing is folded away. */
+@media (max-width: 44.99rem) {
+  .dev-pair .ukv {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: var(--sp-12);
+  }
+  .dev-pair .ukv-row {
+    display: block;
+    padding: var(--sp-2) 0;
+    min-width: 0;
+  }
+  .dev-pair .ukv-row.ukv-wide {
+    display: grid;
+    grid-template-columns: 96px minmax(0, 1fr);
+    column-gap: var(--sp-8);
+    grid-column: 1 / -1;
+  }
+  .dev-pair .ukv dt {
+    font-size: 11px;
+    line-height: 1.3;
+  }
+  .dev-pair .ukv dd {
+    font-size: 12.5px;
+    line-height: 1.35;
+  }
+  .dev-pair button.info {
+    width: 16px;
+    height: 16px;
+    vertical-align: -3px;
+    font-size: 10px;
+  }
+  .dev-pair button.info::before {
+    inset: 1px;
+  }
+  /* the picture is 16px, the thumb gets 40px (the ::after reaches past the box) */
+  .dev-pair button.info::after {
+    content: "";
+    position: absolute;
+    inset: -12px;
+  }
+  .dev-pair .ukv-h {
+    margin-top: var(--sp-6);
+  }
+}

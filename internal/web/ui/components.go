@@ -156,6 +156,7 @@ type KVRow struct {
 	Key, Value string
 	Mono       bool
 	Mask       bool      // a value the pixel comparison cannot reproduce (address, MAC, readings): data-visual-mask
+	Wide       bool      // a long value: on a phone it takes the whole row of a compact card (Identity)
 	Soft       bool      // a host:port, URL or file name: break opportunities at its natural points (Soft)
 	At         time.Time // when set, Value is the fallback text of that instant and time.js shows it in the browser's zone
 	Stamp      StampFmt  // how time.js shows At; the zero value is StampShort
