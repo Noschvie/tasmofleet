@@ -449,18 +449,33 @@ AllowMQTTUpload, the `fwselect.MQTTUploadFits` verdict, the HTTP push decision t
 
 MQTT is usable when all hold: the bus is connected, `Device.MQTT` is ours, the topic is one device's
 topic (non-empty, no `/ + #`, no whitespace, not `tasmotas`), no device in the inventory listens on it
-(`TopicExclusive`: no other device's Topic and no device's GroupTopic, fresh or stale and the device's own
-included, equals it, compared raw and as expanded command topics: FullTopic with `%prefix%`=cmnd and
-`%topic%`, empty = `%prefix%/%topic%/`, trailing `/` dropped; a FullTopic without `%topic%` or with
-another placeholder counts as a collision), the FullTopic equals MQTT_FULLTOPIC (same normalisation),
-the topic is not the device's own GroupTopic (even a stale value blocks), and the last will says Online.
-`mqttcmd` checks the topic again before every publish.
+(`TopicExclusive`), the FullTopic equals MQTT_FULLTOPIC (empty = `%prefix%/%topic%/`, trailing `/`
+ignored), the topic is not the device's own GroupTopic (even a stale value blocks), and the last will says
+Online. `mqttcmd` checks the topic again before every publish.
+
+Exclusivity is decided on command stems, expanded as Tasmota's `GetTopic_P` does with the bus's real command
+prefix (mqttbus `Prefixes[0]`): `%prefix%`, `%topic%`, `//` collapsed, `/%prefix%` appended when missing,
+trailing `/` dropped. Tasmota subscribes to stem + `/#`, so two stems collide when they are equal or one is a
+level prefix of the other (`cmnd/a` and `cmnd/a/b`; not `cmnd/a` and `cmnd/ab`). The stem of the device's
+Topic and of every device's GroupTopic (fresh or stale, the device's own included) are compared with it, plus
+the raw topic strings. A FullTopic without `%topic%` or with another placeholder (`%hostname%`, `%id%`)
+has no knowable stem: for this device it means not exclusive, and so does such a FullTopic on any other device
+(unknown is not exclusive). Devices with neither Topic nor FullTopic are HTTP only and ignored.
+
+Limits: only `GroupTopic` (1) is stored (Status 1), not GroupTopic2-4; devices outside the inventory on the
+same broker are invisible. Both can still make a message reach more than one device.
 
 The GroupTopic is trusted as "known" only when it is set, stamped and not older than the last Status 1
 read (it can be stale: INFO1 is sent at boot, Status 1 only when probed). Commands are reads (Status N,
 identity refresh) and tolerate an unknown own GroupTopic; Writes (settings, Make compliant, console
-commands that change the device, backlog), transfers and the download need a known one. The reason
-text says "refresh the device's identity".
+commands that change the device, backlog), transfers and the download need a known one and also that no
+other device with a topic has an unread GroupTopic (empty or never stamped): "N other devices' group topics
+have not been read yet; refresh their identity". Reads are unaffected. The reason text says "refresh the
+device's identity".
+
+The consumer (the router) computes Facts and calls Choose from the same device snapshot it sends with, and
+re-checks the topic at send time (`mqttcmd`), so an edit between the decision and the publish cannot redirect
+a message.
 
 Order (HTTP first: the established path with synchronous replies; MQTT makes devices HTTP cannot
 reach manageable, #45). HTTP "not failing" means ok or unknown.

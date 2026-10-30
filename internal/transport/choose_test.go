@@ -559,22 +559,71 @@ func TestFullTopicTrailingSlashAndPasswordMode(t *testing.T) {
 	}
 }
 
+// Why (review M2): the stem is what the device subscribes to, expanded as Tasmota's GetTopic_P does:
+// "//" collapses, a FullTopic without %prefix% gets "/%prefix%", the prefix is the bus's real one.
 func TestCommandTopic(t *testing.T) {
 	for _, c := range []struct {
-		full, topic, want string
-		ok                bool
+		full, topic, prefix, want string
+		ok                        bool
 	}{
-		{"", "k", "cmnd/k", true},
-		{"%prefix%/%topic%/", "k", "cmnd/k", true},
-		{"%prefix%/%topic%", "k", "cmnd/k", true},
-		{"fleet/%topic%/%prefix%/", "k", "fleet/k/cmnd", true},
-		{"%prefix%/room", "k", "", false},                // no %topic%: every device shares it
-		{"%prefix%/%hostname%/%topic%/", "k", "", false}, // cannot expand
-		{"%topic%", "k", "k", true},
+		{"", "k", "cmnd", "cmnd/k", true},
+		{"%prefix%/%topic%/", "k", "cmnd", "cmnd/k", true},
+		{"%prefix%/%topic%", "k", "cmnd", "cmnd/k", true},
+		{"%prefix%/%topic%/", "k", "cmd", "cmd/k", true}, // the bus's own prefix
+		{"fleet/%topic%/%prefix%/", "k", "cmnd", "fleet/k/cmnd", true},
+		{"%prefix%//kit%topic%/", "chen", "cmnd", "cmnd/kitchen", true}, // "//" collapses
+		{"%topic%", "k", "cmnd", "k/cmnd", true},                        // %prefix% appended
+		{"%prefix%/room", "k", "cmnd", "", false},                       // no %topic%: every device shares it
+		{"%prefix%/", "k", "cmnd", "", false},
+		{"%prefix%/%hostname%/%topic%/", "k", "cmnd", "", false}, // cannot expand
+		{"%prefix%/%id%/", "k", "cmnd", "", false},
 	} {
-		got, ok := CommandTopic(c.full, c.topic)
+		got, ok := CommandTopic(c.full, c.topic, c.prefix)
 		if got != c.want || ok != c.ok {
-			t.Errorf("CommandTopic(%q,%q) = %q,%v", c.full, c.topic, got, ok)
+			t.Errorf("CommandTopic(%q,%q,%q) = %q,%v", c.full, c.topic, c.prefix, got, ok)
 		}
+	}
+}
+
+// Why (review M2): Tasmota subscribes to stem + "/#", so a stem that is a level prefix of another
+// overlaps with it; "a" and "ab" do not.
+func TestStemsOverlap(t *testing.T) {
+	for _, c := range []struct {
+		a, b string
+		want bool
+	}{
+		{"cmnd/a", "cmnd/a", true},
+		{"cmnd/a", "cmnd/a/b", true},
+		{"cmnd/a/b", "cmnd/a", true},
+		{"cmnd/a", "cmnd/ab", false},
+		{"cmnd/ab", "cmnd/a", false},
+		{"cmnd/a", "cmnd/b", false},
+	} {
+		if got := StemsOverlap(c.a, c.b); got != c.want {
+			t.Errorf("StemsOverlap(%q,%q) = %v", c.a, c.b, got)
+		}
+	}
+}
+
+// Why (review M3): another device with an unread GroupTopic could be in a group this device's topic
+// belongs to. Anything that is not a read refuses; reads go on.
+func TestOthersGroupUnread(t *testing.T) {
+	f := httpDown(base())
+	f.MQTT.OthersGroupUnread = 2
+	p := Choose(f)
+	if p.Commands != MQTT {
+		t.Errorf("reads must not wait for other devices: %s", p.Commands)
+	}
+	for a, path := range map[Action]Path{ActWrites: p.Writes, ActBackup: p.Backup, ActRestore: p.Restore, ActUpdate: p.Update} {
+		if path != None || !strings.Contains(p.Reason(a), "2 other devices' group topics have not been read yet; refresh their identity") {
+			t.Errorf("%s = %s %q", a, path, p.Reason(a))
+		}
+	}
+	f.MQTT.OthersGroupUnread = 1
+	if got := Choose(f).Reason(ActWrites); !strings.Contains(got, "1 other device's group topic has not been read yet; refresh its identity") {
+		t.Errorf("singular: %q", got)
+	}
+	if Choose(base()).Writes != HTTP {
+		t.Error("HTTP is unaffected")
 	}
 }

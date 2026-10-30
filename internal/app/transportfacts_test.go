@@ -72,7 +72,18 @@ func TestFactsTopicExclusive(t *testing.T) {
 			{ID: 1, Topic: "a", FullTopic: "%prefix%/%topic%"}, {ID: 2, Topic: "a"}}, false},
 		{"FullTopic without %topic%", []model.Device{{ID: 1, Topic: "a", FullTopic: "%prefix%/room/"}}, false},
 		{"FullTopic with an unexpandable placeholder", []model.Device{{ID: 1, Topic: "a", FullTopic: "%prefix%/%hostname%/%topic%/"}}, false},
-		{"a neighbour's odd FullTopic does not block", []model.Device{{ID: 1, Topic: "a"}, {ID: 2, Topic: "b", FullTopic: "%prefix%/%hostname%/"}}, true},
+		// Why (review recheck 1): unknown is not exclusive; a neighbour whose stem cannot be known
+		// might listen on ours (fixed topic, %hostname%, %id%).
+		{"B's FullTopic has no %topic%", []model.Device{{ID: 1, Topic: "kitchen"}, {ID: 2, Topic: "x", FullTopic: "%prefix%/kitchen/"}}, false},
+		{"B's FullTopic is only the prefix", []model.Device{{ID: 1, Topic: "kitchen"}, {ID: 2, Topic: "", FullTopic: "%prefix%/"}}, false},
+		{"B's FullTopic has %hostname%", []model.Device{{ID: 1, Topic: "kitchen"}, {ID: 2, Topic: "b", FullTopic: "%prefix%/%hostname%/"}}, false},
+		// Why (review M2): GetTopic_P collapses "//", and a stem that is a level prefix of ours overlaps.
+		{"B's // collapses onto A's stem", []model.Device{{ID: 1, Topic: "kitchen"}, {ID: 2, Topic: "chen", FullTopic: "%prefix%//kit%topic%/"}}, false},
+		{"B's stem is a level prefix of A's", []model.Device{{ID: 1, Topic: "kitchen"}, {ID: 2, Topic: "k", FullTopic: "%prefix%/%topic%/%topic%/"}}, true},
+		{"A's stem lies below B's", []model.Device{{ID: 1, Topic: "kitchen", FullTopic: "%prefix%/room/%topic%/"}, {ID: 2, Topic: "room", FullTopic: "%prefix%/%topic%/"}}, false},
+		{"B listens on a fixed level above A", []model.Device{{ID: 1, Topic: "x", FullTopic: "%prefix%/kitchen/%topic%/"}, {ID: 2, Topic: "kitchen"}}, false},
+		{"B without topic and FullTopic is HTTP only", []model.Device{{ID: 1, Topic: "a"}, {ID: 2}}, true},
+		{"similar names do not overlap", []model.Device{{ID: 1, Topic: "a"}, {ID: 2, Topic: "ab"}}, true},
 		{"no topic", []model.Device{{ID: 1}}, false},
 	}
 	for _, c := range cases {
@@ -210,3 +221,32 @@ func TestFactsBrokerModeWithoutBrokerPassword(t *testing.T) {
 }
 
 func contains(s, sub string) bool { return strings.Contains(s, sub) }
+
+// Why (review M3, 7): devices whose GroupTopic was never read are counted (HTTP-only ones are not),
+// and the bus's real command prefix is what stems are expanded with.
+func TestFactsOthersGroupUnreadAndPrefix(t *testing.T) {
+	devs := []model.Device{
+		{ID: 1, Topic: "a", GroupTopic: "g", GroupTopicReadAt: factsNow},
+		{ID: 2, Topic: "b"},                                              // never read
+		{ID: 3, Topic: "c", GroupTopic: "g"},                             // not stamped
+		{ID: 4, Topic: "d", GroupTopic: "g", GroupTopicReadAt: factsNow}, // read
+		{ID: 5}, // HTTP only
+	}
+	f, err := newFacts(devs, fakeFactsHealth{}, nil).Facts(context.Background(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.MQTT.OthersGroupUnread != 2 {
+		t.Errorf("unread = %d", f.MQTT.OthersGroupUnread)
+	}
+	// B's stem is "cmd/a/b/<prefix>": below A's stem only when the bus's prefix is "cmd".
+	devs = []model.Device{{ID: 1, Topic: "a"}, {ID: 2, Topic: "b", FullTopic: "cmd/a/%topic%"}}
+	s := newFacts(devs, fakeFactsHealth{}, nil)
+	if f, _ := s.Facts(context.Background(), 1); !f.MQTT.TopicExclusive {
+		t.Error("default prefix cmnd: stems cmnd/a and cmd/a/b/cmnd are apart")
+	}
+	s.CommandPrefix = func() string { return "cmd" }
+	if f, _ := s.Facts(context.Background(), 1); f.MQTT.TopicExclusive {
+		t.Error("prefix cmd: stem cmd/a is a level prefix of cmd/a/b/cmd")
+	}
+}

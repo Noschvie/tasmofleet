@@ -12,20 +12,36 @@ func TopicShapeOK(t string) bool {
 	return t != "" && !strings.ContainsAny(t, "/+#") && !strings.ContainsAny(t, " \t\r\n\v\f")
 }
 
-// CommandTopic expands a device's FullTopic for a command to topic: %prefix% becomes cmnd, %topic%
-// the topic; an empty FullTopic is Tasmota's default %prefix%/%topic%/. A trailing '/' is dropped.
-// ok is false when the FullTopic has no %topic% (every device would share one topic) or any other
-// placeholder (%hostname%, %id%, ...) that cannot be expanded from what tasmofleet knows.
-func CommandTopic(fullTopic, topic string) (string, bool) {
+// CommandTopic expands a device's FullTopic into the stem it listens on for commands, the way
+// Tasmota's GetTopic_P does: %prefix% becomes the command prefix (cmnd), %topic% the topic, a
+// FullTopic without %prefix% gets "/%prefix%" appended, "//" collapses to "/", the trailing '/' is
+// dropped. An empty FullTopic is Tasmota's default %prefix%/%topic%/. ok is false when the stem cannot
+// be known: the FullTopic has no %topic% (every device with it would share one stem) or contains
+// another placeholder (%hostname%, %id%, ...).
+func CommandTopic(fullTopic, topic, prefix string) (stem string, ok bool) {
 	if fullTopic == "" {
 		fullTopic = defaultFullTopic
 	}
 	if !strings.Contains(fullTopic, "%topic%") {
 		return "", false
 	}
-	tmpl := strings.ReplaceAll(strings.ReplaceAll(fullTopic, "%prefix%", "cmnd"), "%topic%", "\x00")
+	if !strings.Contains(fullTopic, "%prefix%") {
+		fullTopic += "/%prefix%"
+	}
+	tmpl := strings.ReplaceAll(strings.ReplaceAll(fullTopic, "%prefix%", prefix), "%topic%", "\x00")
 	if strings.Contains(tmpl, "%") {
 		return "", false
 	}
-	return strings.TrimRight(strings.ReplaceAll(tmpl, "\x00", topic), "/"), true
+	s := strings.ReplaceAll(tmpl, "\x00", topic)
+	for strings.Contains(s, "//") {
+		s = strings.ReplaceAll(s, "//", "/")
+	}
+	return strings.Trim(s, "/"), true
+}
+
+// StemsOverlap reports whether a device listening on stem a would also receive what is sent to stem
+// b, or the other way round: Tasmota subscribes to stem + "/#", so one stem that is a level prefix of
+// the other overlaps.
+func StemsOverlap(a, b string) bool {
+	return a == b || strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/")
 }

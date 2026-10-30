@@ -131,6 +131,8 @@ func mqttBlocker(f Facts, strict bool) string {
 		return "the device's FullTopic differs from TasmoFleet's MQTT_FULLTOPIC"
 	case m.GroupTopic != "" && m.GroupTopic == m.Topic: // even a stale value: it only ever adds a refusal
 		return "the device's topic is also its GroupTopic, so a message would reach other devices"
+	case strict && m.OthersGroupUnread > 0:
+		return othersUnreadText(m.OthersGroupUnread)
 	case strict && !groupTopicKnown(m):
 		return "the device's GroupTopic has not been read recently, so TasmoFleet cannot rule out that its topic is shared; refresh the device's identity to read it"
 	case !m.LWTOnline:
@@ -292,4 +294,11 @@ func uploadBlocker(f Facts) string {
 		return f.Request.MQTTUploadFit.Reason
 	}
 	return passwordBlocker(f, "upload firmware")
+}
+
+func othersUnreadText(n int) string {
+	if n == 1 {
+		return "1 other device's group topic has not been read yet; refresh its identity"
+	}
+	return fmt.Sprintf("%d other devices' group topics have not been read yet; refresh their identity", n)
 }
