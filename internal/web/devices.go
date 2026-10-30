@@ -2,7 +2,6 @@ package web
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -594,9 +593,7 @@ func (h *handler) deviceBackupFromList(w http.ResponseWriter, r *http.Request, d
 	if data.Error != "" {
 		text, tone = data.Error, "danger"
 	}
-	if trig, err := json.Marshal(map[string]any{"toast": map[string]string{"text": text, "tone": tone}}); err == nil {
-		w.Header().Set("HX-Trigger", string(trig))
-	}
+	setHXTrigger(w, map[string]any{"toast": map[string]string{"text": text, "tone": tone}})
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 }
