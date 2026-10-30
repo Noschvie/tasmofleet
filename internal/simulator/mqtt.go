@@ -244,7 +244,9 @@ func redactFileCmd(cmd string) string {
 	case "backlog", "backlog0", "backlog2", "backlog3":
 		segs := strings.Split(data, ";")
 		for i, s := range segs {
-			segs[i] = redactFileCmd(strings.TrimSpace(s))
+			if r := redactFileCmd(strings.TrimSpace(s)); r != strings.TrimSpace(s) {
+				segs[i] = r // only a redacted segment changes; the others stay as sent
+			}
 		}
 		return name + " " + strings.Join(segs, ";")
 	}
