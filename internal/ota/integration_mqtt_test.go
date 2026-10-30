@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/netip"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -100,6 +99,7 @@ type itMQTT struct {
 	mem    *transport.Memory
 	facts  *itFacts
 	lossy  *lossy
+	router *transport.Router
 }
 
 func newItMQTT(t *testing.T) *itMQTT {
@@ -128,6 +128,7 @@ func newItMQTT(t *testing.T) *itMQTT {
 	m.lossy = &lossy{MQTTDoer: ch}
 	client := tasmota.NewHTTPClient(tasmota.Options{AllowedNetworks: []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8")}, Timeout: 800 * time.Millisecond})
 	router := transport.NewRouter(transport.Options{HTTP: client, Devices: e.st, Memory: m.mem})
+	m.router = router
 	router.SetFacts(m.facts)
 	router.SetMQTT(m.lossy)
 	api := NewDeviceAPI(router)
@@ -226,10 +227,9 @@ func TestITMQTTLanguageChoiceRequired(t *testing.T) {
 			t.Fatalf("refused device received %q", c)
 		}
 	}
-	// With the choice the German build is selected; the test upstream does not offer it, so the row
-	// is refused for that file and for nothing else: the language was no longer the problem.
-	items, err = eng.Preview(context.Background(), []Request{{DeviceID: dev, Release: itRelease, Language: "de"}})
-	if err != nil || items[0].LanguageChoice || !items[0].LanguageDeclared || !strings.Contains(items[0].Reason, "tasmota-DE.bin.gz") {
+	// With the choice the German build is selected and planned; the language was no longer the problem.
+	items, err = eng.Preview(context.Background(), []Request{{DeviceID: dev, Release: itRelease, Language: "de", SkipBackup: true}})
+	if err != nil || items[0].LanguageChoice || !items[0].LanguageDeclared || items[0].Decision == decisionRefuse || items[0].Filename != "tasmota-DE.bin.gz" {
 		t.Fatalf("with the choice: %+v %v", items[0], err)
 	}
 }
@@ -313,4 +313,84 @@ func TestITMQTTJobTransportSurvivesEngineRestart(t *testing.T) {
 	m.expectSuccess(dev, orig, 1, model.PlanDirect)
 }
 
-var _ = strconv.Itoa
+// Why (H1): over MQTT the language cannot be read after the flash, so the verify step must not hold the
+// person's choice (DE) against the "unknown" it reads back. Staged and direct both end Succeeded, the
+// German file was flashed, and the light is back on.
+func TestITMQTTLanguageChoiceDoesNotFailTheVerify(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		profile simulator.Profile
+		upgr    int
+		plan    model.Plan
+	}{{"staged", simulator.ProfileESP8266_1M, 2, model.PlanStaged}, {"direct", simulator.ProfileESP8266_4M, 1, model.PlanDirect}} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newItMQTT(t)
+			dev := m.addMQTT(simulator.DeviceSpec{Profile: tc.profile, Light: true})
+			m.setRelays(dev, true)
+			orig := m.ctrl[dev].OtaURL()
+			eng := m.start(2)
+			m.submit(eng, Request{DeviceID: dev, Language: "de"})
+			m.expectSuccess(dev, orig, tc.upgr, tc.plan)
+			flashed := false
+			for _, c := range m.ctrl[dev].Commands() {
+				flashed = flashed || strings.HasSuffix(c, "/fw/"+itRelease+"/tasmota-DE.bin.gz")
+			}
+			if !flashed {
+				t.Fatalf("the German file was never set as OtaUrl: %v", m.ctrl[dev].Commands())
+			}
+			m.wantRelays(dev, true)
+			if d, _ := m.st.GetDevice(context.Background(), dev); d.Identity.Version != itRelease {
+				t.Fatalf("inventory shows %q, want the verified %s", d.Identity.Version, itRelease)
+			}
+		})
+	}
+}
+
+// Why: an INFO1 from before a restart describes the old firmware. The channel drops it on the LWT
+// Offline the restart publishes, and the router's page must then fail until the new boot announces
+// itself, never answer from the old one.
+func TestITMQTTPreRebootInfo1IsNeverUsed(t *testing.T) {
+	m := newItMQTT(t)
+	dev := m.addMQTT(simulator.DeviceSpec{Profile: simulator.ProfileESP8266_4M, Faults: []simulator.Fault{{After: "Restart 1", Kind: simulator.FaultLongReboot, Duration: 600 * time.Millisecond}}})
+	d, _ := m.st.GetDevice(context.Background(), dev)
+	ctx := transport.WithPath(context.Background(), transport.MQTT)
+	page := func() (tasmota.RootInfo, error) { return m.router.RootPage(ctx, tasmota.TargetFor(d)) }
+	for deadline := time.Now().Add(15 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+		if _, err := page(); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Skip("no INFO1 seen at boot in this run") // the claim needs one to lose
+		}
+	}
+	if _, err := m.ch.Do(context.Background(), d, "Restart 1"); err != nil {
+		t.Fatal(err)
+	}
+	sawGap := false
+	for deadline := time.Now().Add(20 * time.Second); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+		_, err := page()
+		if errors.Is(err, transport.ErrNoInfo) {
+			sawGap = true
+		}
+		if err == nil && sawGap {
+			return // the new boot's INFO1, after a window in which there was none
+		}
+	}
+	t.Fatalf("no gap and new INFO1 seen (gap=%v)", sawGap)
+}
+
+// Why (M1): an HTTP job and a staged MQTT job in one batch both finish; neither path disturbs the other.
+func TestITMQTTMixedBatchWithAnHTTPJob(t *testing.T) {
+	m := newItMQTT(t)
+	mq := m.addMQTT(simulator.DeviceSpec{Profile: simulator.ProfileESP8266_1M})
+	plain := m.addDevice(simulator.DeviceSpec{Profile: simulator.ProfileESP8266_4M})
+	origMQ, origPlain := m.ctrl[mq].OtaURL(), m.ctrl[plain].OtaURL()
+	eng := m.start(2)
+	m.submit(eng, Request{DeviceID: mq, Language: "en"}, Request{DeviceID: plain, Language: "en"})
+	m.expectSuccess(mq, origMQ, 2, model.PlanStaged)
+	m.expectSuccess(plain, origPlain, 1, model.PlanDirect)
+	if j := m.jobOf(plain); j.Transport != model.TransportHTTP {
+		t.Fatalf("the reachable device went over %q", j.Transport)
+	}
+	m.wantTransport(mq)
+}

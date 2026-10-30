@@ -643,3 +643,17 @@ func TestPreviewAsksForTheLanguageAndShowsTheMQTTPath(t *testing.T) {
 		t.Fatalf("the choice is not carried to Start: %s", start)
 	}
 }
+
+// Why (L4): the language is a form value; only the languages the page offers reach the engine.
+func TestPreviewRefusesALanguageThePageDoesNotOffer(t *testing.T) {
+	e, o, _, _ := setupOTA(t)
+	form := url.Values{"id": {"1"}, "release": {"16.1.0"}, "policy": {"only-newer"}, "language_1": {"XX"}}
+	resp, body := e.do(t, "POST", "/updates/preview", "operator", form)
+	if resp.StatusCode != 422 || !strings.Contains(body, "unknown language") || len(o.previewReqs) != 0 {
+		t.Fatalf("%d, reached the engine: %v", resp.StatusCode, o.previewReqs)
+	}
+	form.Set("language_1", "de")
+	if resp, _ = e.do(t, "POST", "/updates/preview", "operator", form); resp.StatusCode != 200 || o.previewReqs[0].Language != "de" {
+		t.Fatalf("%d %+v", resp.StatusCode, o.previewReqs)
+	}
+}

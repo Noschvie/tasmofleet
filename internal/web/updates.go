@@ -415,6 +415,9 @@ func (h *handler) requests(r *http.Request, ids []model.DeviceID) ([]ota.Request
 	}
 	var reqs []ota.Request
 	for _, id := range ids {
+		if l := strings.TrimSpace(r.PostFormValue("language_" + strconv.FormatInt(int64(id), 10))); l != "" && !slices.ContainsFunc(languageOptions, func(o struct{ Value, Label string }) bool { return o.Value == strings.ToUpper(l) }) {
+			return nil, fmt.Errorf("unknown language %q", l)
+		}
 		d, err := h.d.Inventory.Get(r.Context(), id)
 		if err != nil {
 			return nil, fmt.Errorf("device %d: %w", id, err)

@@ -1143,20 +1143,22 @@ func (e *Engine) exec(ctx context.Context, j model.Job, a Action) Event {
 		if err != nil {
 			return Event{Kind: EvCommandFailed, Err: err.Error()}
 		}
-		// A preflight is an HTTP probe: the stored identity says so (DetectedAt), which is what
-		// keeps MQTT-announced identities (#87) away from it. The event keeps the identity as probed.
-		// A job over MQTT stores nothing: its probe is not an HTTP one (no language, no web page), and
-		// stamping the identity would make the device's GroupTopic read look stale (it is older than the
-		// "last probe"), which blocks the very OtaUrl write this job is about to send. The MQTT identity
-		// refresh owns what is stored for such a device.
-		if j.Transport != model.TransportMQTT {
-			stored := ident
-			if stored.DetectedAt.IsZero() {
-				stored.DetectedAt = e.clk.Now()
-			}
-			if err := e.devices.UpdateIdentity(cctx, d.ID, stored); err != nil {
-				e.log.Warn("ota: could not store device identity", "device", d.ID, "err", err)
-			}
+		// The stored identity keeps its DetectedAt: that stamp marks an HTTP probe (which keeps MQTT-announced
+		// identities away from it) and makes the device's GroupTopic read look stale to the transport's write
+		// rule, so a job must not move it for a device that has one (a mixed batch would block the MQTT jobs'
+		// OtaUrl writes). Only a device that never had one gets it, and only from an HTTP job. A job over MQTT
+		// writes what it verified (version, image) and keeps the language fields as the MQTT refresh does.
+		stored := ident
+		stored.DetectedAt = d.Identity.DetectedAt
+		switch {
+		case j.Transport == model.TransportMQTT:
+			stored.Language = d.Identity.Language
+			stored.LanguageKnown = d.Identity.LanguageKnown && ident.Version == d.Identity.Version && ident.Image == d.Identity.Image
+		case stored.DetectedAt.IsZero():
+			stored.DetectedAt = e.clk.Now()
+		}
+		if err := e.devices.UpdateIdentity(cctx, d.ID, stored); err != nil {
+			e.log.Warn("ota: could not store device identity", "device", d.ID, "err", err)
 		}
 		if j.State == model.JobPreflight && j.IdentityBefore.LanguageKnown && !ident.LanguageKnown {
 			// The language the person chose in the preview (D10), for a device that cannot tell it.

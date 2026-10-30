@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/fwselect"
 	"github.com/nofuturekid/tasmofleet/internal/model"
@@ -159,7 +160,7 @@ func TestResumedJobKeepsItsTransport(t *testing.T) {
 func TestMQTTPathTurnsAPushIntoTheDownload(t *testing.T) {
 	e := &Engine{paths: &fakePaths{paths: pathsOf(transport.DownloadMQTT, "over MQTT")}}
 	it := PreviewItem{Decision: "upgrade", Delivery: model.DeliveryPush, ViaSafeboot: true}
-	e.choosePath(context.Background(), model.Device{}, Request{Delivery: model.DeliveryPush}, planResult{delivery: model.DeliveryPush, viaSafeboot: true}, &it)
+	e.choosePath(context.Background(), model.Device{}, Request{Delivery: model.DeliveryPush, SkipBackup: true}, planResult{delivery: model.DeliveryPush, viaSafeboot: true}, &it)
 	if it.Delivery != model.DeliveryPull || it.ViaSafeboot || it.Transport != model.TransportMQTT || !strings.Contains(it.DeliveryNote, "downloads the file") {
 		t.Fatalf("item %+v", it)
 	}
@@ -253,23 +254,92 @@ func TestRetryRequestKeepsTheLanguageChoice(t *testing.T) {
 	}
 }
 
-// Why: the transport's write rule treats a GroupTopic read before the device's "last probe" as stale. A
-// job over MQTT that stamped the identity itself would block its own OtaUrl write, so it stores none;
-// an HTTP job still does (its probe is the HTTP one that fills the language).
-func TestMQTTJobDoesNotStampTheStoredIdentity(t *testing.T) {
+// Why (M1): the transport's write rule treats a GroupTopic read before the device's "last probe"
+// (Identity.DetectedAt) as stale, so no job may move that stamp for a device that has one: a mixed batch
+// would block the OtaUrl writes of the MQTT jobs. A device that never had one gets it from an HTTP job
+// only (the stamp marks an HTTP probe); an MQTT job leaves it zero.
+func TestJobsDoNotMoveTheIdentityStamp(t *testing.T) {
+	old := t0.Add(-48 * time.Hour)
 	for _, tc := range []struct {
-		path      transport.Path
-		wantStamp bool
-	}{{transport.DownloadMQTT, false}, {transport.DownloadHTTP, true}} {
-		h, _ := newPathHarness(t, &fakePaths{paths: pathsOf(tc.path, "because")})
-		id := submitOne(t, h, Request{DeviceID: 1, Release: "16.0.0", SkipBackup: true})
-		h.run(t, h.e)
-		if j := h.job(t, id); j.State != model.JobSucceeded {
-			t.Fatalf("job %s %q", j.State, j.LastError)
-		}
-		d, _ := h.st.GetDevice(context.Background(), 1)
-		if stamped := !d.Identity.DetectedAt.IsZero(); stamped != tc.wantStamp {
-			t.Errorf("%s: identity stamped = %v, want %v", tc.path, stamped, tc.wantStamp)
-		}
+		name     string
+		path     transport.Path
+		before   time.Time
+		wantZero bool
+	}{
+		{"MQTT job, never HTTP-probed", transport.DownloadMQTT, time.Time{}, true},
+		{"MQTT job, probed before", transport.DownloadMQTT, old, false},
+		{"HTTP job, never probed", transport.DownloadHTTP, time.Time{}, false},
+		{"HTTP job, probed before", transport.DownloadHTTP, old, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h, _ := newPathHarness(t, &fakePaths{paths: pathsOf(tc.path, "because")})
+			d := h.st.devices[1]
+			d.Identity.DetectedAt = tc.before
+			h.st.devices[1] = d
+			id := submitOne(t, h, Request{DeviceID: 1, Release: "16.0.0", SkipBackup: true})
+			h.run(t, h.e)
+			if j := h.job(t, id); j.State != model.JobSucceeded {
+				t.Fatalf("job %s %q", j.State, j.LastError)
+			}
+			got := h.st.devices[1].Identity.DetectedAt
+			switch {
+			case tc.wantZero && !got.IsZero():
+				t.Fatalf("stamp set to %v", got)
+			case !tc.wantZero && tc.before.IsZero() && got.IsZero():
+				t.Fatal("an HTTP job must stamp a device that never had one")
+			case !tc.before.IsZero() && !got.Equal(tc.before):
+				t.Fatalf("stamp moved from %v to %v", tc.before, got)
+			}
+		})
+	}
+}
+
+// Why (M2): a job over MQTT writes what it verified, so the inventory shows the new version, and keeps the
+// language it cannot see only while the firmware is the one it was read from.
+func TestMQTTJobStoresTheVerifiedVersionAndKeepsTheLanguage(t *testing.T) {
+	h, _ := newPathHarness(t, &fakePaths{paths: pathsOf(transport.DownloadMQTT, "because")})
+	d := h.st.devices[1]
+	d.Identity = plug1M()
+	d.Identity.Language, d.Identity.LanguageKnown = "DE", true
+	h.st.devices[1] = d
+	id := submitOne(t, h, Request{DeviceID: 1, Release: "16.0.0", SkipBackup: true})
+	h.run(t, h.e)
+	if j := h.job(t, id); j.State != model.JobSucceeded {
+		t.Fatalf("job %s %q", j.State, j.LastError)
+	}
+	got := h.st.devices[1].Identity
+	if got.Version != "16.0.0" {
+		t.Fatalf("stored version %q, the verified one is 16.0.0", got.Version)
+	}
+	if got.Language != "DE" || got.LanguageKnown {
+		t.Fatalf("language %q known=%v: kept, but no longer a fact after a new version", got.Language, got.LanguageKnown)
+	}
+}
+
+// Why (M3): the backup over MQTT is not routed yet. A job that would fail at its backup step is refused
+// up front, with the way out; with the backup switched off the same device is accepted.
+func TestMQTTPathRefusesTheBackupItCannotTake(t *testing.T) {
+	h, _ := newPathHarness(t, &fakePaths{paths: pathsOf(transport.DownloadMQTT, "over MQTT")})
+	_, err := h.e.Submit(context.Background(), "alice", []Request{{DeviceID: 1, Release: "16.0.0"}})
+	var re *RefusedError
+	if !errors.As(err, &re) || !strings.Contains(re.Refused[0].Reason, "backup over MQTT is not available yet") {
+		t.Fatalf("err = %v", err)
+	}
+	if _, err := h.e.Submit(context.Background(), "alice", []Request{{DeviceID: 1, Release: "16.0.0", SkipBackup: true}}); err != nil {
+		t.Fatalf("without the backup: %v", err)
+	}
+}
+
+// Why (L2): the upload over MQTT belongs to another package of work; if a chooser ever answers PushMQTT
+// the engine refuses and nothing is sent.
+func TestPushMQTTIsRefusedAndNothingIsSent(t *testing.T) {
+	h, _ := newPathHarness(t, &fakePaths{paths: pathsOf(transport.PushMQTT, "upload over MQTT")})
+	_, err := h.e.Submit(context.Background(), "alice", []Request{{DeviceID: 1, Release: "16.0.0", SkipBackup: true}})
+	var re *RefusedError
+	if !errors.As(err, &re) || !strings.Contains(re.Refused[0].Reason, "not available yet") {
+		t.Fatalf("err = %v", err)
+	}
+	if n := h.rec.count("set_ota_url") + h.rec.count("upgrade"); n != 0 {
+		t.Fatalf("%d device writes for a refused update", n)
 	}
 }

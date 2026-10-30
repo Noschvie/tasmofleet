@@ -444,6 +444,12 @@ func stepSetOtaURL(j model.Job, ev Event, now time.Time, cfg Config) (model.Job,
 // FWUnreachableReport reports whether a stat/<t>/UPGRADE text says the device could not even connect
 // to the server it was sent to ("Failed HTTP error: connection failed"). Other "Failed" texts (a
 // 404, a short download, a bad image) keep the retry rule.
+//
+// The text is ESPhttpUpdate.getLastErrorString() behind "Failed " (support_tasmota.ino, Upgrade): on the
+// ESP8266 core "HTTP error: connection failed" (verified live on an ESP8285). The ESP32 HTTPUpdate lives in
+// the Arduino core, not in the Tasmota tree, and its text for an unreachable server ("connection refused"
+// for HTTPC_ERROR_CONNECTION_REFUSED) is not proven here, so an ESP32 keeps the retry rule until a capture
+// shows its text.
 func FWUnreachableReport(text string) bool {
 	return strings.HasPrefix(text, "Failed") && strings.Contains(strings.ToLower(text), "connection failed")
 }
@@ -591,6 +597,9 @@ func stepAwaitReboot(j model.Job, ev Event, now time.Time, cfg Config) (model.Jo
 		if j.ViaSafeboot {
 			return fail(j, now, joinNotes(ErrTextNotBack, "it may be in safeboot"+atAddr(ev.Addr)+": open its web page and upload the firmware, or use Upgrade by download"))
 		}
+		if j.Transport == model.TransportMQTT {
+			return fail(j, now, joinNotes(ErrTextNotBack, "restart the device and retry the update"))
+		}
 		return fail(j, now, ErrTextNotBack)
 	case EvStart, EvResume, EvIdentity, EvPlanned, EvCommandOK, EvCommandFailed, EvGuardRefused, EvBackupDone, EvBackupFailed, EvUpgradeReport, EvPowerReport, EvCancel:
 		// not in the transition table: the job stays unchanged
@@ -658,7 +667,9 @@ func stepVerify(j model.Job, ev Event, now time.Time, cfg Config) (model.Job, []
 	// whatever was installed (#88): compare with what Detect will read, not with the selection.
 	want := fwselect.DetectedVariant(fwselect.Selection{Family: j.IdentityBefore.Family, Variant: j.TargetVariant})
 	if id.Version == j.TargetRelease && id.Variant == want &&
-		id.Language == j.IdentityBefore.Language && id.Family == j.IdentityBefore.Family {
+		(id.Language == j.IdentityBefore.Language || !id.LanguageKnown) && id.Family == j.IdentityBefore.Family {
+		// A probe over MQTT cannot see the language build (LanguageKnown false): the person's choice or the
+		// stored language stays the reference then, and only a language that was read can contradict it.
 		return finalReached(j, ev, now, cfg)
 	}
 	return notTaken(j, ev, now, cfg)
