@@ -11,7 +11,8 @@ affiliated with Tasmota.
 | `wordmark.svg`, `wordmark-dark.svg` | Mark + name, for light / dark backgrounds (README header) |
 | `favicon.svg`, `favicon.ico` | Browser tab icon (ICO 16/32/48) |
 | `apple-touch-icon.png` | 180x180, full-bleed (iOS rounds it) |
-| `icon-192.png`, `icon-512.png` | Web manifest, Unraid `<Icon>`, Authentik application icon |
+| `icon-192.png`, `icon-512.png` | Web manifest, Authentik application icon |
+| `unraid-icon.png` | 512x512, full-bleed: Unraid template `<Icon>` (Community Applications puts icons on its own rounded tile, so transparent corners showed as grey corners) |
 | `addon-icon.png`, `addon-logo.png` | Home Assistant add-on `icon.png` (128x128) and `logo.png` (250x100) |
 
 `design/tools/brand-icons.sh` regenerates every raster from `logo.svg` (and the add-on logo from

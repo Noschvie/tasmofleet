@@ -10,7 +10,7 @@ s=internal/web/static
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-# full-bleed variant for iOS, which rounds the corners itself
+# full-bleed variant for iOS and Unraid Community Applications, which round the corners themselves
 sed 's/ rx="8"//' "$b/logo.svg" >"$tmp/fullbleed.svg"
 
 png() { # png <svg> <size> <out>: PNG without time chunks, so a rerun gives the same bytes
@@ -23,6 +23,7 @@ png "$b/logo.svg" 192 "$b/icon-192.png"
 png "$b/logo.svg" 512 "$b/icon-512.png"
 png "$b/logo.svg" 128 "$b/addon-icon.png"
 png "$tmp/fullbleed.svg" 180 "$b/apple-touch-icon.png"
+png "$tmp/fullbleed.svg" 512 "$b/unraid-icon.png"
 for n in 16 32 48; do rsvg-convert -w $n -h $n "$b/logo.svg" -o "$tmp/ico-$n.png"; done
 magick "$tmp/ico-16.png" "$tmp/ico-32.png" "$tmp/ico-48.png" "$b/favicon.ico"
 # Home Assistant add-on logo: the wordmark at 250x100
