@@ -15,7 +15,7 @@ always upgrade automatically.
 
 - Policy: Save rule ends the editor too: the overview names the saved rule and marks its row
 - Policy overview: shorter compliance bar, so rule names and scopes do not wrap
-- Docker Hub gets release tags only; `edge` stays on ghcr.io (every push to main left untagged images behind on Docker Hub)
+- Images are built without provenance attestation: one manifest per build, so a push of `edge` no longer leaves three untagged entries behind on Docker Hub
 - Docs: checked against the code. User docs: the metrics setting name, the scan range limit, the operator role description, the build-from-source command, the Authentik refresh-token note, a certificate-fingerprint claim the server does not fulfil. Security notes: renamed test references, the legacy policy-rules variable, the address-change confirmation. Design system and fixtures: folds, breakpoints, simulator timeline, safeboot push. Spec and CLAUDE.md: route list, backup retention, settings that apply live, first-run text, and features that were planned but never built (notifications, development channel, firmware cache pruning)
 
 ## 0.19.2 (2026-10-30)
