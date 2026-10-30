@@ -263,13 +263,14 @@ in `.github/workflows/ci.yml`.
 - Tags are signed (`git tag -s vX.Y.Z`) and only set on a green commit of `main`. The tag
   runs the RELEASE tier (FAST plus race tests of the safety packages, no mutation), and the image is
   published only when it passed.
-- **Announce every release.** After the tag run has published the image and the GitHub release,
-  post an Announcements discussion "TasmoFleet X.Y.Z" (`gh api graphql` `createDiscussion`, category
-  Announcements). Style of the earlier ones (e.g. #54): the image tag
-  `ghcr.io/nofuturekid/tasmofleet:X.Y.Z`, a short bullet list summarising the CHANGELOG section with
-  issue refs and the same `thanks @handle` credits, a migration note ("No database migration" or the
-  migration numbers), a link to `CHANGELOG.md`, and the closing line about Q&A discussions and issues.
-  English, no fluff.
+- **Announce every release** in the one pinned Announcements discussion "TasmoFleet releases" (#315),
+  after the tag run has published the image and the GitHub release. Edit its body (`updateDiscussion`):
+  the "Current release" section shows `TasmoFleet X.Y.Z "Name"`, the image tags
+  (`nofuturekid/tasmofleet:X.Y.Z`, also on ghcr.io), upgrade notes (migrations or "No database
+  migration"), a short bullet list of the changes with issue refs and `thanks @handle` credits, and links
+  to the GitHub release and `CHANGELOG.md`. A minor release also adds a short comment (3-5 bullets) so
+  watchers get a notification; a patch release only edits the body. No per-release discussions. English,
+  no fluff.
 - **Unraid users run `:latest` from the Community Applications template**
   ([nofuturekid/unraid-templates](https://github.com/nofuturekid/unraid-templates), `templates/tasmofleet.xml`).
   With every release:
