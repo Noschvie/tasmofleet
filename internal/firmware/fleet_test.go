@@ -124,3 +124,25 @@ func TestUpdateAvailable(t *testing.T) {
 		t.Error("no index, no update")
 	}
 }
+
+// Why: a device whose language build was never read from its page (MQTT only) could need the plain or
+// a language file, so the fleet lists none for it and says what is missing instead of guessing. A
+// device where no language build exists (a C3) is not held up by that.
+func TestFleetNeedsSkipsAnUnreadLanguageWithAReadableReason(t *testing.T) {
+	rel := Release{Version: "16.1.0", Files: []string{"tasmota.bin.gz", "tasmota-minimal.bin.gz", "tasmota32c3.bin"}}
+	devs := []model.Device{
+		dev(1, "mqtt-lamp", model.Identity{Family: model.ChipESP8266, Version: "16.0.0", Image: "release-tasmota", Variant: "tasmota"}),
+		dev(2, "mqtt-c3", model.Identity{Family: model.ChipESP32C3, Version: "16.0.0", Image: "release-tasmota32c3", Variant: "tasmota"}),
+	}
+	n := FleetNeeds(rel, devs)
+	got := map[string]DeviceNeed{}
+	for _, d := range n.Devices {
+		got[d.Name] = d
+	}
+	if s := got["mqtt-lamp"].Skip; s != "language choice needed" || len(got["mqtt-lamp"].Files) != 0 {
+		t.Errorf("unread language: skip %q files %v", s, got["mqtt-lamp"].Files)
+	}
+	if got["mqtt-c3"].Skip != "" || !slices.Equal(got["mqtt-c3"].Files, []string{"tasmota32c3.bin"}) {
+		t.Errorf("c3 needs no page: skip %q files %v", got["mqtt-c3"].Skip, got["mqtt-c3"].Files)
+	}
+}

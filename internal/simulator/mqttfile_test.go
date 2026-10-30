@@ -320,7 +320,7 @@ func TestFileUploadType1FitsOnlyWhereHeadRoomAllows(t *testing.T) {
 	})
 	t.Run("dual layout still refuses what does not fit", func(t *testing.T) {
 		_, _, _, fb := brokerDevice(t, "dual-big", ProfileESP32Dual)
-		fb.send("fileupload", fmt.Sprintf(`{"Password":%q,"Id":116,"Type":1,"Size":1700000}`, testMQTTPassword))
+		fb.send("fileupload", fmt.Sprintf(`{"Password":%q,"Id":116,"Type":1,"Size":2900000}`, testMQTTPassword))
 		if got := next(t, fb.up); got != `{"FileUpload":"Error 2"}` {
 			t.Errorf("got %s", got)
 		}
@@ -522,8 +522,8 @@ func device(t *testing.T, c Controller) *simDevice {
 //   - esp8266-4m: sketch 651 KB, Free 740 KB: 728 KiB;
 //   - esp32 safeboot layout: sketch 2182 KB, Free 697 KB, running partition at 64 KiB:
 //     floor64k(end) - floor64k(start + sketch + 128 KiB) = 512 KiB;
-//   - esp32 with two app partitions: Free 1700 KB is the other partition:
-//     floor64k(partition) - 128 KiB = 1536 KiB.
+//   - esp32 with two app partitions: Free 2880 KB is the other partition:
+//     floor64k(partition) - 128 KiB = 2752 KiB.
 //
 // For each layout an upload of exactly head_room is accepted and one sector more
 // is Error 2 (Error 2 comes before any data is touched).
@@ -531,7 +531,7 @@ func TestHeadRoomPerLayoutAndTheBoundaryOfAType1Upload(t *testing.T) {
 	for _, tc := range []struct {
 		profile Profile
 		kib     int
-	}{{ProfileESP8266_1M, 340}, {ProfileESP8266_4M, 728}, {ProfileESP32, 512}, {ProfileESP32Dual, 1536}} {
+	}{{ProfileESP8266_1M, 340}, {ProfileESP8266_4M, 728}, {ProfileESP32, 512}, {ProfileESP32Dual, 2752}} {
 		t.Run(string(tc.profile), func(t *testing.T) {
 			_, _, c, fb := brokerDevice(t, "room-"+string(tc.profile), tc.profile)
 			sd := device(t, c)

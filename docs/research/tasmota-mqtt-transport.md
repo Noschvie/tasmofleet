@@ -72,7 +72,7 @@ Paths are under `tasmota/`: `F` = `tasmota_xdrv_driver/xdrv_02_1_mqtt_file.ino`,
     (the floor makes it up to 64 KiB larger). Example from the capture (2182 KB, Free 697 KB): 512 KiB; a 2.2 MB image can never fit.
     (The live note says "rounded UP"; the source divides and multiplies, i.e. rounds **down**.)
   - **ESP32, two app partitions**: base = the other partition's address (`E32` 310-314), end = its end: `floor64k(size) - 128 KiB`. Status 4 `Free` is `ESP.getFreeSketchSpace()`,
-    the other partition's size (`E32` 486). The synthetic profile `esp32-dual` reports 1700 KB: head_room 1536 KiB.
+    the other partition's size (`E32` 486). The synthetic profile `esp32-dual` reports 2880 KB: head_room 2752 KiB.
 - **FIRMWARE_MINIMAL excludes both commands**: `M` 63-65 and 90-92 sit inside `#ifndef FIRMWARE_MINIMAL` (48-70, 82-97), so the minimal ESP8266 image and the ESP32 safeboot image
   (built with `FIRMWARE_MINIMAL`, `tasmota_configurations_ESP32.h`, not re-read here; see the live note of 2026-10-30) answer `{"Command":"Unknown","Input":"FILEUPLOAD ..."}` (the input includes the password, see 1). The second stage of a staged
   ESP8266 update therefore cannot come over Type 1, and neither can a push into safeboot.

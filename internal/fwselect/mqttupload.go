@@ -7,15 +7,15 @@ import (
 )
 
 // UpLayoutHint is what an HTTP read of the device's /up page showed about its flash layout (#30).
-// It can only sharpen the reason of a refusal; it never lets an image pass that the bound below
-// does not prove (an unknown layout is the normal case over MQTT).
+// A known safeboot layout is refused outright; the other values never let an image pass that the
+// bound below does not prove (an unknown layout is the normal case over MQTT).
 type UpLayoutHint string
 
 // Layout hints.
 const (
 	UpLayoutUnknown  UpLayoutHint = "unknown"
 	UpLayoutDirect   UpLayoutHint = "direct"   // two app partitions: the image goes into the other one
-	UpLayoutSafeboot UpLayoutHint = "safeboot" // one app partition next to safeboot: the image is staged behind the running firmware
+	UpLayoutSafeboot UpLayoutHint = "safeboot" // one app partition next to safeboot: refused
 )
 
 // MQTT FileUpload Type 1 constants (Tasmota v16.0.0).
@@ -44,16 +44,19 @@ const (
 //     FlashWriteMaxSector = EspFlashBaseEndAddress rounded down to 64 KiB.
 //   - Two app partitions (direct): EspFlashBaseAddress is the start of the OTHER partition and
 //     EspFlashBaseEndAddress its end, and ESP_getFreeSketchSpace() (Status 4 Free) is that
-//     partition's size. So head_room >= Free - 128 KiB - 63 KiB (rounding down the end), and
-//     the size of the running sketch plays no part.
+//     partition's size. So head_room > Free - 128 KiB - 64 KiB (rounding the end down loses less
+//     than 64 KiB), and the size of the running sketch plays no part.
 //   - One app partition (safeboot layout): EspFlashBaseAddress is running->address + sketch size,
 //     the end is the partition's end, and Free is partition size - sketch size. Again
-//     head_room >= Free - 128 KiB - 63 KiB.
-//   - Status 4 prints Free in whole KB (rounded down), another < 1 KiB. 128 + 63 + 1 = 192 KiB.
+//     head_room > Free - 128 KiB - 64 KiB. (That layout is refused anyway, see below.)
+//   - Status 4 prints Free in whole KB (rounded down), which only makes FreeKB smaller than the
+//     real value and the bound more conservative. 128 + 64 = 192 KiB.
 //
-// Refused outright, each with its own reason: not an ESP32 family (the only other family is ESP8266, which
-// has no second stage: minimal firmware has no FileUpload), identity not Known, variant minimal or safeboot (neither has
-// FileUpload), Free unknown, image size unknown. needKB is the rounded image size and roomKB what
+// Refused outright, each with its own reason: identity not Known, not an ESP32 family (the only
+// other family is ESP8266, which has no second stage: minimal firmware has no FileUpload), variant
+// minimal or safeboot (neither has FileUpload), a known safeboot layout (one app partition:
+// MqttFileUploadValidate calls Update.begin without the single-OTA handling of the web upload, so the
+// next update partition can be the running one), Free unknown, image size unknown. needKB is the rounded image size and roomKB what
 // the bound allows (0 when Free is below the margin or unknown).
 func MQTTUploadFits(id model.Identity, layout UpLayoutHint, imageSize int64) (ok bool, needKB, roomKB int, reason string) {
 	switch {
@@ -63,6 +66,11 @@ func MQTTUploadFits(id model.Identity, layout UpLayoutHint, imageSize int64) (ok
 		return false, 0, 0, "an ESP8266 cannot take an upload over MQTT: its minimal firmware has no FileUpload"
 	case id.Variant == variantMinimal || id.Variant == variantSafeboot:
 		return false, 0, 0, fmt.Sprintf("the device runs %s firmware, which has no FileUpload", id.Variant)
+	case layout == UpLayoutSafeboot:
+		// MqttFileUploadValidate calls Update.begin(file_size) without the single-OTA handling the web
+		// upload has; with one app partition the next update partition can be the running one. Until
+		// that is settled for the Arduino core in use, an upload over MQTT is never started there.
+		return false, 0, 0, "the device has the safeboot (single app partition) layout, where an upload over MQTT could overwrite the running firmware"
 	case id.FreeKB <= 0:
 		return false, 0, 0, "the device's free flash (Status 4) is unknown"
 	case imageSize <= 0:
@@ -72,11 +80,7 @@ func MQTTUploadFits(id model.Identity, layout UpLayoutHint, imageSize int64) (ok
 	needKB = int((need + 1023) / 1024)
 	roomKB = max(id.FreeKB-mqttUploadMarginKB, 0)
 	if need > int64(roomKB)*1024 {
-		why := "the image does not fit"
-		if layout == UpLayoutSafeboot {
-			why = "safeboot layout: the image is staged behind the running firmware and does not fit"
-		}
-		return false, needKB, roomKB, fmt.Sprintf("%s for an upload over MQTT (needs %d KB, %d KB of the %d KB free are usable)", why, needKB, roomKB, id.FreeKB)
+		return false, needKB, roomKB, fmt.Sprintf("the image does not fit for an upload over MQTT (needs %d KB, %d KB of the %d KB free are usable)", needKB, roomKB, id.FreeKB)
 	}
 	return true, needKB, roomKB, fmt.Sprintf("the image fits for an upload over MQTT (needs %d KB, %d KB usable)", needKB, roomKB)
 }

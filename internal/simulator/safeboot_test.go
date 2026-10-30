@@ -26,7 +26,7 @@ func TestUpPageShowsTheLayout(t *testing.T) {
 	if strings.Contains(page(dual), "upl(this)") {
 		t.Error("the dual layout must show the plain upload form")
 	}
-	if b, _, _ := cmWithPath(dual, "/cm", "cmnd=Status%204"); !strings.Contains(b, `"Free":1700`) {
+	if b, _, _ := cmWithPath(dual, "/cm", "cmnd=Status%204"); !strings.Contains(b, `"Free":2880`) {
 		t.Errorf("dual layout Free: %s", b)
 	}
 	// Into safeboot the same device serves the plain form.

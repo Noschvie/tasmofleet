@@ -276,6 +276,9 @@ func TestSelectLanguageUnknown(t *testing.T) {
 	unreadDE.LanguageKnown = false
 	unreadESP32 := idESP32
 	unreadESP32.LanguageKnown = false
+	unreadOf := func(id model.Identity) model.Identity { id.LanguageKnown = false; return id }
+	bareTag := unread
+	bareTag.Image = "tasmota" // self-compiled: no "<release>-" prefix, so nothing is proven
 	tests := []struct {
 		name    string
 		id      model.Identity
@@ -283,6 +286,18 @@ func TestSelectLanguageUnknown(t *testing.T) {
 		file    string
 		wantErr error
 	}{
+		// No language build exists for these, so English is a fact and no web page is needed (D10).
+		{"unread c3 passes", unreadOf(idC3), Choice{Release: rel}, "tasmota32c3.bin", nil},
+		{"unread s3 passes", unreadOf(idS3), Choice{Release: rel}, "tasmota32s3.bin", nil},
+		{"unread solo1 passes", unreadOf(idSolo1), Choice{Release: rel}, "tasmota32solo1.bin", nil},
+		{"unread esp8266 sensors passes", unreadOf(idSensors), Choice{Release: rel}, "tasmota-sensors.bin.gz", nil},
+		{"unread esp32 bluetooth passes", unreadOf(idESP32BT), Choice{Release: rel}, "tasmota32-bluetooth.bin", nil},
+		// A language build could be running: refuse.
+		{"unread esp8266 tasmota refuses", unread, Choice{Release: rel}, "", ErrLanguageUnknown},
+		{"unread esp32 tasmota refuses", unreadOf(idESP32), Choice{Release: rel}, "", ErrLanguageUnknown},
+		{"unread bare tag refuses", bareTag, Choice{Release: rel}, "", ErrLanguageUnknown},
+		{"unread unknown variant refuses", unreadOf(idUnknownV), Choice{Release: rel}, "", ErrLanguageUnknown},
+		{"unread sensors with a stored language refuses", func() model.Identity { i := unreadOf(idSensors); i.Language = "DE"; return i }(), Choice{Release: rel}, "", ErrLanguageUnknown},
 		{"unread, no choice", unread, Choice{Release: rel}, "", ErrLanguageUnknown},
 		{"unread esp32, no choice", unreadESP32, Choice{Release: rel}, "", ErrLanguageUnknown},
 		{"unread, variant named but no language", unread, Choice{Release: rel, Variant: "tasmota"}, "", ErrLanguageUnknown},

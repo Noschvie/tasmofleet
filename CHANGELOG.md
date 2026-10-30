@@ -17,11 +17,11 @@ always upgrade automatically.
 
 ### Breaking
 
-- An update of a device whose language build was never read from its web page (Tasmota shows it only there) is refused until a language is chosen; `fwselect.Select` returns `ErrLanguageUnknown` unless the choice names one ("EN" is allowed), and so does Guard. Every device that an HTTP probe has read is unaffected; devices known from before this release count as unread until their next probe (Part of #259)
+- An update of a device whose language build was never read from its web page (Tasmota shows it only there) is refused until a language is chosen; `fwselect.Select` returns `ErrLanguageUnknown` unless the choice names one ("EN" is allowed), and so does Guard. It applies only where a language build exists (not to ESP32-C3/S3/..., solo1 or the non-plain variants with an official image). Devices whose language an HTTP probe read are unaffected, including those stored before this release (migration 0037); only devices known from MQTT alone need the choice (Part of #259)
 
 ### Added
 
-- `fwselect.MQTTUploadFits`: a fixed rule, no try-and-see, for whether an image fits a firmware upload over MQTT (FileUpload Type 1), from Status 4 Free. Nothing uses it yet (Part of #262)
+- `fwselect.MQTTUploadFits`: a fixed rule, no try-and-see, for whether an image fits a firmware upload over MQTT (FileUpload Type 1), from Status 4 Free. A known safeboot layout (one app partition) is refused. Nothing uses it yet (Part of #262)
 
 ### Fixed
 

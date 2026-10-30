@@ -783,7 +783,8 @@ func (p *Prober) refreshMQTT(ctx context.Context, d model.Device, actor string) 
 	if ident.Variant == "minimal" || ident.Variant == "safeboot" {
 		return fmt.Errorf("identify over MQTT: the answer claims a %s image, which cannot answer Status 2: %w", ident.Variant, tasmota.ErrBadResponse)
 	}
-	ident.Language, ident.LanguageKnown, ident.DetectedAt = d.Identity.Language, d.Identity.LanguageKnown, time.Time{}
+	ident.Language, ident.LanguageKnown = keepLanguage(d.Identity, ident)
+	ident.DetectedAt = time.Time{}
 	g := store.ProbeGuard{Address: d.Address, Port: d.Port, MAC: d.MAC}
 	if d.Identity.DetectedAt.IsZero() {
 		// ErrConflict: an HTTP probe identified it meanwhile, and that identity wins.

@@ -17,7 +17,7 @@ func selectFile(id model.Identity, c Choice) (Selection, error) {
 	if err != nil {
 		return Selection{}, err
 	}
-	if !id.LanguageKnown && c.Language == "" {
+	if !id.LanguageKnown && c.Language == "" && !provenEnglish(id) {
 		// Never guess (D10): an unread language is not English. Said before the variant checks
 		// because the language is what the person has to supply.
 		return Selection{}, fmt.Errorf("select: %w", ErrLanguageUnknown)
@@ -70,6 +70,26 @@ func selectFile(id model.Identity, c Choice) (Selection, error) {
 		return Selection{}, fmt.Errorf("select: variant %q for %s: %w", variant, id.Family, ErrNoSuchVariant)
 	}
 	return sel, nil
+}
+
+// hasLanguageBuild reports whether upstream builds language variants for this hardware and variant
+// (select below: tasmota-XX.bin.gz on ESP8266, tasmota32-XX.bin on a dual-core ESP32; no other chip,
+// no solo1 and no other variant has one). "unknown" counts, it could be the plain build.
+func hasLanguageBuild(fam model.ChipFamily, single bool, variant string) bool {
+	if variant != variantTasmota && variant != variantUnknown {
+		return false
+	}
+	return fam == model.ChipESP8266 || (fam == model.ChipESP32 && !single)
+}
+
+// provenEnglish: the language is a fact without a web page, because no language build can be
+// running. The image is an official tagged one ("release-sensors", a bare self-compiled tag proves
+// nothing), no language was stored, it is not an intermediate image, and none exists for this hardware
+// and variant.
+func provenEnglish(id model.Identity) bool {
+	_, _, tagged := strings.Cut(id.Image, "-")
+	return tagged && id.Language == "" && id.Variant != variantMinimal && id.Variant != variantSafeboot &&
+		!hasLanguageBuild(id.Family, id.SingleCore, id.Variant)
 }
 
 // applyBuild checks an explicit chip build against the device and returns the

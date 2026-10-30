@@ -258,6 +258,7 @@ func (m *mqttIdentity) applyInfo1(ctx context.Context, d model.Device, payload [
 	}
 	next := d.Identity
 	next.Version = parsed.Version
+	next.LanguageKnown = next.LanguageKnown && parsed.Version == d.Identity.Version
 	m.store1(ctx, d, next, "INFO1")
 }
 
@@ -273,7 +274,7 @@ func (m *mqttIdentity) applyStatus2(ctx context.Context, d model.Device, payload
 		m.log.Warn("mqtt identity: Status 2 reply claims an image that cannot answer it, ignored", "device", d.ID, "image", next.Image)
 		return
 	}
-	next.Language, next.LanguageKnown = d.Identity.Language, d.Identity.LanguageKnown
+	next.Language, next.LanguageKnown = keepLanguage(d.Identity, next)
 	if m.store1(ctx, d, next, "Status 2") {
 		m.mu.Lock()
 		m.answered[d.ID] = true
@@ -511,4 +512,11 @@ func (m *mqttIdentity) askStatus(ctx context.Context, d model.Device, n int, act
 		return nil, err
 	}
 	return raw, nil
+}
+
+// keepLanguage carries the language over from the stored identity to one read over MQTT, which cannot
+// see it. It is a fact only while the firmware is the one it was read from: a new version or image
+// (flashed from the device's own page, say) may be another language build.
+func keepLanguage(stored, next model.Identity) (string, bool) {
+	return stored.Language, stored.LanguageKnown && next.Version == stored.Version && next.Image == stored.Image
 }

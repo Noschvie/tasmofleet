@@ -262,22 +262,32 @@ func TestMQTTIdentityAsksStatus2OnceAndStoresTheAnswer(t *testing.T) {
 	}
 }
 
-// Why: Status 2 carries no language build (only the web page does, D10). The answer must keep what
-// was stored, including the "read from a page" flag, or a German device would turn "unknown" or,
-// worse, lose the language it was read with.
-func TestMQTTIdentityKeepsTheStoredLanguageAndItsFlag(t *testing.T) {
-	for _, known := range []bool{true, false} {
-		d := oursDevice(1, "plug")
-		d.Identity.Language, d.Identity.LanguageKnown = "DE", known
-		e := newIDEnv(d)
-		e.online("plug")
-		e.m.askDue(t.Context())
-		e.emit(mqttbus.KindStatus, "plug", "STATUS2", status2Payload, false)
-		e.drain(t.Context())
-		got := e.inv.get(1).Identity
-		if !got.Known() || got.Language != "DE" || got.LanguageKnown != known {
-			t.Errorf("known=%v: identity language %q known %v", known, got.Language, got.LanguageKnown)
-		}
+// Why: Status 2 carries no language build (only the web page does, D10). The answer keeps what was
+// stored, and the "read from a page" flag only while the firmware is the same: a changed version or
+// image may be another language build, so the flag drops and the person is asked again.
+func TestMQTTIdentityKeepsTheStoredLanguageWhileTheFirmwareIsTheSame(t *testing.T) {
+	for _, tt := range []struct {
+		name, version, image string
+		known, want          bool
+	}{
+		{"same firmware", "16.0.0", "release-tasmota", true, true},
+		{"new version", "15.0.0", "release-tasmota", true, false},
+		{"new image", "16.0.0", "release-sensors", true, false},
+		{"never read stays unread", "16.0.0", "release-tasmota", false, false},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			d := oursDevice(1, "plug")
+			d.Identity.Language, d.Identity.LanguageKnown = "DE", tt.known
+			d.Identity.Version, d.Identity.Image = tt.version, tt.image
+			e := newIDEnv(d)
+			e.bus.answers()
+			e.online("plug")
+			e.m.askDue(t.Context())
+			got := e.inv.get(1).Identity
+			if !got.Known() || got.Language != "DE" || got.LanguageKnown != tt.want {
+				t.Errorf("identity %+v, want DE known %v", got, tt.want)
+			}
+		})
 	}
 }
 

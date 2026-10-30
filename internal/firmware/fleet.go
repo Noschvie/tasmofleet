@@ -1,6 +1,7 @@
 package firmware
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -123,6 +124,9 @@ func deviceFiles(release string, d model.Device) ([]string, error) {
 		c.Variant, c.AllowVariantChange = "tasmota", true
 	}
 	sel, err := fwselect.Select(id, c)
+	if errors.Is(err, fwselect.ErrLanguageUnknown) {
+		return nil, errors.New("language choice needed")
+	}
 	if err != nil {
 		return nil, fmt.Errorf("no build can be chosen: %w", err)
 	}

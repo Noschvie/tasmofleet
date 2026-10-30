@@ -15,7 +15,7 @@ func esp32Free(freeKB int) model.Identity {
 // there, and the device would answer "Not enough space" only after TasmoFleet had sent a transfer
 // request; the fit rule must say no up front (D19: never try-and-see).
 func TestMQTTUploadFitsRefusesTheLiveSafebootDevice(t *testing.T) {
-	for _, layout := range []UpLayoutHint{UpLayoutUnknown, UpLayoutDirect, UpLayoutSafeboot} {
+	for _, layout := range []UpLayoutHint{UpLayoutUnknown, UpLayoutDirect} {
 		ok, need, room, reason := MQTTUploadFits(esp32Free(697), layout, 2200*1024)
 		if ok {
 			t.Fatalf("layout %q: a 2.2 MB image passed on 697 KB free", layout)
@@ -59,23 +59,29 @@ func TestMQTTUploadFitsBoundary(t *testing.T) {
 
 // On a dual-OTA device Status 4 Free is the size of the other partition and the running sketch
 // is irrelevant to the upload (v16 support_esp32.ino). The esp32-dual simulator fixture reports
-// ProgramSize 2182 KB next to Free 1700 KB; a rule that subtracted the sketch would refuse an
-// image that Tasmota accepts, or invert the sign.
+// ProgramSize 2182 KB next to Free 2880 KB (the other partition); a rule that subtracted the sketch
+// would leave 698 KB and refuse an image that Tasmota accepts.
 func TestMQTTUploadFitsIgnoresTheSketchSize(t *testing.T) {
-	id := esp32Free(1700)
-	id.ProgramFlashSizeKB, id.FlashSizeKB = 2182, 4096
-	ok, _, room, reason := MQTTUploadFits(id, UpLayoutDirect, 1300*1024)
-	if !ok || room != 1700-192 {
-		t.Fatalf("1300 KB on a 1700 KB partition: ok = %v room = %d (%s)", ok, room, reason)
+	id := esp32Free(2880)
+	id.ProgramFlashSizeKB, id.FlashSizeKB = 2182, 8192
+	ok, _, room, reason := MQTTUploadFits(id, UpLayoutDirect, 2500*1024)
+	if !ok || room != 2880-192 {
+		t.Fatalf("2500 KB on a 2880 KB partition: ok = %v room = %d (%s)", ok, room, reason)
 	}
 }
 
-// A layout hint only words the refusal. It must never let through what the bound refuses, and
-// never refuse what the bound proves (the layout is unknown for most devices over MQTT).
-func TestMQTTUploadFitsHintDoesNotChangeTheDecision(t *testing.T) {
+// A known safeboot layout (one app partition) is refused outright, however much room Free reports:
+// Tasmota's MQTT FileUpload calls Update.begin without the single-OTA guard, so the upload could
+// target the running partition (v16 xdrv_02_1_mqtt_file.ino). The other hints never change the
+// numeric decision (the layout is unknown for most devices over MQTT).
+func TestMQTTUploadFitsRefusesTheSafebootLayout(t *testing.T) {
+	ok, need, room, reason := MQTTUploadFits(esp32Free(8000), UpLayoutSafeboot, 100*1024)
+	if ok || need != 0 || room != 0 || !strings.Contains(reason, "safeboot") {
+		t.Errorf("ok/need/room = %v/%d/%d reason %q, want a refusal naming the layout", ok, need, room, reason)
+	}
 	for _, size := range []int64{500 * 1024, 2500 * 1024} {
 		var first bool
-		for i, layout := range []UpLayoutHint{UpLayoutUnknown, UpLayoutDirect, UpLayoutSafeboot, "garbage"} {
+		for i, layout := range []UpLayoutHint{UpLayoutUnknown, UpLayoutDirect, "garbage"} {
 			ok, _, _, _ := MQTTUploadFits(esp32Free(2240), layout, size)
 			if i == 0 {
 				first = ok
@@ -83,11 +89,6 @@ func TestMQTTUploadFitsHintDoesNotChangeTheDecision(t *testing.T) {
 				t.Errorf("size %d: layout %q decides %v, unknown decides %v", size, layout, ok, first)
 			}
 		}
-	}
-	_, _, _, plain := MQTTUploadFits(esp32Free(697), UpLayoutUnknown, 2200*1024)
-	_, _, _, safe := MQTTUploadFits(esp32Free(697), UpLayoutSafeboot, 2200*1024)
-	if plain == safe || !strings.Contains(safe, "safeboot") {
-		t.Errorf("the safeboot hint does not sharpen the reason: %q vs %q", plain, safe)
 	}
 }
 
