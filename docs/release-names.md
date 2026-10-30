@@ -10,7 +10,7 @@ At the release PR, take the next unassigned name and mark it "assigned to X.Y" h
 runs out, add more. Facts below are taken from Wikipedia; a detail that could not be checked is left out.
 
 1. **Tower of Hercules** (assigned to 0.21): A Coruna, Spain. A Roman tower, the only fully preserved Roman lighthouse still used for signalling; UNESCO World Heritage Site since 2009.
-2. **Bell Rock**: off Angus, Scotland. First lit in 1811 (Robert Stevenson); the world's oldest working sea-washed lighthouse.
+2. **Bell Rock** (assigned to 0.22): off Angus, Scotland. First lit in 1811 (Robert Stevenson); the world's oldest working sea-washed lighthouse.
 3. **Cape Hatteras**: Buxton, North Carolina, USA. The current tower was first lit in 1871; moved 2,900 ft inland in 1999.
 4. **Hook Head**: County Wexford, Ireland. The tower dates from the 12th century and is the second oldest operating lighthouse in the world.
 5. **Cape Point**: Cape Peninsula, South Africa. Lit in 1860; the new, lower lighthouse followed in 1919 after the 1911 wreck of the Lusitania.
