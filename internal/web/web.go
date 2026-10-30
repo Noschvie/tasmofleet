@@ -161,7 +161,8 @@ type Deps struct {
 	// StaleAfter is the configured silence after which a device is stale (tooltip text only); nil = the default.
 	StaleAfter func() time.Duration
 	// CRWarnPercent is the share of the settings text area (StatusFWR CR) above which the Identity
-	// card and the policy preview warn (system setting CR_WARN_PERCENT); nil = 90.
+	// card warns (system setting CR_WARN_PERCENT); nil = 90. The Make compliant preview does not
+	// use it: it warns when the plan's text values no longer fit.
 	CRWarnPercent func() int
 
 	// FirmwareSource names where releases come from ("GitHub releases (arendst/Tasmota)"),

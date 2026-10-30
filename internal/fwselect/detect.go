@@ -15,12 +15,8 @@ var errBadVersion = errors.New("fwselect: malformed firmware version")
 
 type status2Reply struct {
 	StatusFWR *struct {
-		Version       string
-		BuildDateTime string
-		Core, SDK     string
-		CpuFrequency  int
-		Hardware      string
-		CR            string
+		Version  string
+		Hardware string
 	}
 	Command string
 }
@@ -57,8 +53,7 @@ func detect(in Inputs) (model.Identity, error) {
 		Language:   languageFromRoot(in.Root),
 
 		LanguageKnown: languageKnownFromRoot(in.Root),
-		FWR: model.FWRFacts{Version: s2.StatusFWR.Version, BuildDateTime: s2.StatusFWR.BuildDateTime, Core: s2.StatusFWR.Core,
-			SDK: s2.StatusFWR.SDK, CPUFrequency: s2.StatusFWR.CpuFrequency, CR: s2.StatusFWR.CR},
+		FWR:           fwrFacts(in.Status2),
 	}
 	// An unparseable Version does not cost the device its identity (#45): the version stays
 	// empty and the variant unknown, so the identity is never Known() and Guard refuses
@@ -311,4 +306,26 @@ func languageFromRoot(r *RootInfo) string {
 // languageKnownFromRoot reports whether the language came from a device main page.
 func languageKnownFromRoot(r *RootInfo) bool {
 	return r != nil && r.LangKnown
+}
+
+// fwrFacts reads the display-only StatusFWR fields. They never decide identity or updatability,
+// so a field of an unexpected type is dropped instead of failing the detection: every field is
+// decoded on its own and only a value of the expected type is kept.
+func fwrFacts(status2 []byte) model.FWRFacts {
+	var outer struct{ StatusFWR map[string]json.RawMessage }
+	if json.Unmarshal(status2, &outer) != nil {
+		return model.FWRFacts{}
+	}
+	str := func(key string) string {
+		var v string
+		if json.Unmarshal(outer.StatusFWR[key], &v) != nil {
+			return ""
+		}
+		return v
+	}
+	var mhz int
+	if json.Unmarshal(outer.StatusFWR["CpuFrequency"], &mhz) != nil {
+		mhz = 0
+	}
+	return model.FWRFacts{Version: str("Version"), BuildDateTime: str("BuildDateTime"), Core: str("Core"), SDK: str("SDK"), CPUFrequency: mhz, CR: str("CR")}
 }

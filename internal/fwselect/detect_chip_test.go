@@ -1,6 +1,7 @@
 package fwselect
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
@@ -53,5 +54,25 @@ func TestDetectKeepsStatusFWRRaw(t *testing.T) {
 	}
 	if id.Hardware != "ESP32-S3 v0.2" {
 		t.Fatalf("Hardware %q is the raw StatusFWR.Hardware", id.Hardware)
+	}
+}
+
+// Why (#289 review): CpuFrequency and CR are shown on the Identity card only. A device that sends
+// them in another type must still get its identity (chip, hardware, variant): display fields
+// never decide whether a device can be identified or updated.
+func TestDetectIgnoresWronglyTypedDisplayFields(t *testing.T) {
+	const tmpl = `{"StatusFWR":{"Version":"16.0.0(release-tasmota32)","Hardware":"ESP32-S3 v0.2","CpuFrequency":%s,"CR":%s,"Core":%s}}`
+	good, err := Detect(Inputs{Status2: []byte(`{"StatusFWR":{"Version":"16.0.0(release-tasmota32)","Hardware":"ESP32-S3 v0.2"}}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range [][3]string{{`"80"`, `448`, `3`}, {`80.5`, `"448/699"`, `"3.3.12"`}, {`null`, `[1]`, `{}`}} {
+		id, err := Detect(Inputs{Status2: []byte(fmt.Sprintf(tmpl, c[0], c[1], c[2]))})
+		if err != nil {
+			t.Fatalf("%v: a display field of the wrong type failed the detection: %v", c, err)
+		}
+		if id.Family != good.Family || id.Hardware != good.Hardware || id.Variant != good.Variant || id.Version != good.Version {
+			t.Errorf("%v: identity changed: %+v vs %+v", c, id, good)
+		}
 	}
 }

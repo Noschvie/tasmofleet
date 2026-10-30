@@ -145,3 +145,23 @@ func shortDump(s string) string {
 	}
 	return s
 }
+
+// Why (#289 review): the growth of a text value is its new length minus the old one; the time
+// zone settings are not in the text area at all.
+func TestTextGrowth(t *testing.T) {
+	for _, tt := range []struct {
+		cmd, have, want string
+		grow            int
+	}{
+		{"OtaUrl", "http://a", "http://abcdef", 5},
+		{"OtaUrl", "", "http://abc", 10},
+		{"OtaUrl", "http://abcdef", "http://a", -5},
+		{"TimeDst", "0,0,3,1,2,120", "0,0,3,1,2,121", 0},
+		{"Timezone", "1", "+01:30", 0},
+		{"SetOption0", "1", "0", 0},
+	} {
+		if got := textGrowth(tt.cmd, tt.have, tt.want); got != tt.grow {
+			t.Errorf("%s %q -> %q: %d, want %d", tt.cmd, tt.have, tt.want, got, tt.grow)
+		}
+	}
+}

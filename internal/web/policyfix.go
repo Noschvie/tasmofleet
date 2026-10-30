@@ -286,21 +286,22 @@ func (h *handler) fixRows(ctx context.Context, rep PolicyReport, sel fixSel) []f
 }
 
 // textGrowth is how many characters setting a text value adds to the device's settings text area
-// (negative: it frees some). Numbers and switches live elsewhere in the settings, so they add
-// nothing. A value that was empty or unknown costs its length and the terminator.
+// (negative: it frees some). A change costs the length of the new value, minus the old one; the
+// time zone and its rules are not kept in the text area, nor are numbers and switches.
 func textGrowth(command, have, want string) int {
 	if !isTextSetting(command, want) {
 		return 0
 	}
-	if have == "" {
-		return len(want) + 1
-	}
 	return len(want) - len(have)
 }
 
-// isTextSetting says whether a rule's value is stored as text. The curated settings know their
-// kind; for any other command a value that is not a number is text (a rule, a template, a URL).
+// isTextSetting says whether a rule's value is stored in the settings text area. The curated
+// settings know their kind; for any other command a value that is not a number counts as text.
 func isTextSetting(command, want string) bool {
+	switch strings.ToLower(command) {
+	case "timezone", "timedst", "timestd":
+		return false
+	}
 	if f, ok := settings.Lookup(command); ok {
 		return f.Kind == settings.KindText || f.Kind == settings.KindPassword
 	}
