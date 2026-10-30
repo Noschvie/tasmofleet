@@ -102,6 +102,7 @@ func (s *memStore) UpdateDevice(_ context.Context, d model.Device) error {
 		return store.ErrConflict
 	}
 	d.Identity = o.Identity
+	d.FWReach, d.MQTTPasswordBadAt = o.FWReach, o.MQTTPasswordBadAt // like the real UpdateDevice: not its columns
 	s.devs[d.ID] = d
 	return nil
 }

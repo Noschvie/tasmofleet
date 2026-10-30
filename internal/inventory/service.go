@@ -612,10 +612,14 @@ func (m *Manager) verifyAt(ctx context.Context, address string, port int, want s
 func hasCredentials(d model.Device) bool { return d.HasCredentials() }
 
 // sameRecord reports whether the inventory-owned fields of a and b are equal.
-// Timestamps and the identity are written by other paths and are ignored.
+// Timestamps, the identity and what the transport code learns (firmware reach, the MQTT password
+// refusal mark) are written by other paths and are ignored: a learning write between the read and
+// the write of an update must not turn it into a conflict.
 func sameRecord(a, b model.Device) bool {
 	a.CreatedAt, a.UpdatedAt, a.Identity = time.Time{}, time.Time{}, model.Identity{}
 	b.CreatedAt, b.UpdatedAt, b.Identity = time.Time{}, time.Time{}, model.Identity{}
+	a.FWReach, a.MQTTPasswordBadAt = model.FWReach{}, time.Time{}
+	b.FWReach, b.MQTTPasswordBadAt = model.FWReach{}, time.Time{}
 	return reflect.DeepEqual(a, b)
 }
 

@@ -1742,6 +1742,7 @@ only when their feature is wired (updates, firmware, policy, ...) are listed wit
 | GET, POST | `/devices/{id}/delete`, `/devices/{id}/restart` | admin | confirm and delete / restart one device |
 | POST | `/devices/{id}/probe` | operator | refresh identity |
 | POST | `/devices/{id}/name/adopt`, `/devices/{id}/name/keep` | admin | answer the "Name on the device" notice (§5) |
+| POST | `/devices/{id}/fwreach/forget` | admin | forget what is known about the device reaching the firmware server (back to unknown; audit `device.fwreach`) |
 | GET, POST | `/devices/{id}/replace`, `/devices/{id}/replace/preview` | admin | Replace device (new hardware, same identity) |
 | GET, POST | `/devices/{id}/settings` | admin | settings editor |
 | GET, POST | `/devices/{id}/console` | operator | console; `cmdpolicy` raises the needed role to admin per command |

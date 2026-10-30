@@ -113,7 +113,8 @@ type Deps struct {
 	Health       health.Tracker
 	Backups      backup.Service
 	Prober       Prober
-	DeviceNames  DeviceNames // optional: "Keep" on the device-name notice (#125)
+	DeviceNames  DeviceNames      // optional: "Keep" on the device-name notice (#125)
+	FWReach      FWReachForgetter // optional: "Forget" on what the device reaches (D11)
 	History      HealthHistory
 	Audit        AuditLister
 	Recorder     audit.Recorder
@@ -252,6 +253,9 @@ func Handler(d Deps) (http.Handler, error) {
 	route("POST /devices/{id}/name/adopt", adm, h.deviceNameAdopt)
 	if d.DeviceNames != nil {
 		route("POST /devices/{id}/name/keep", adm, h.deviceNameKeep)
+	}
+	if d.FWReach != nil {
+		route("POST /devices/{id}/fwreach/forget", adm, h.fwReachForget)
 	}
 	route("POST /devices/{id}/backup", op, h.deviceBackup)
 	route("GET /backups/{id}", adm, h.backupDownload)

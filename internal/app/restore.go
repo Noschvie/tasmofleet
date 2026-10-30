@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/nofuturekid/tasmofleet/internal/devlock"
+	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/restore"
 )
 
@@ -29,6 +30,11 @@ func (a *runtime) setupRestore() error {
 		BaseURL: a.cfg.FWBaseURL, Audit: a.svc.Audit, Log: a.log, Context: a.bgContext,
 		Locks: a.deviceLocks(), Jobs: a.svc.Store,
 		Hardware: a.svc.Store, Describe: a.svc.Prober.Describe,
+		OnServed: func(id model.DeviceID) {
+			a.learnFWReach(func(ctx context.Context, l *FWReachLearner) error {
+				return l.NoteYes(ctx, id, FWReachSourceRestoreToken)
+			})
+		},
 	})
 	if err != nil {
 		return err

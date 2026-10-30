@@ -5,6 +5,9 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/nofuturekid/tasmofleet/internal/model"
 )
 
 // Why: discovery must never create a device. If the record it matched is
@@ -79,5 +82,30 @@ func TestDeleteWithRecordsTheBackupsChoice(t *testing.T) {
 	}
 	if e := al.last(t); strings.Contains(e.Detail, "backups") {
 		t.Errorf("plain delete names a choice: %+v", e)
+	}
+}
+
+// Why (#271 L6): the transport code learns FWReach and the password-refusal mark on its own
+// schedule. A discovery or import update that read the record before such a write must still land;
+// a conflict there would drop a legitimate address change for a field it does not own.
+func TestUpdateIfIgnoresWhatTheTransportCodeLearns(t *testing.T) {
+	m, st, _, _, _ := newSvcV(t)
+	ctx := context.Background()
+	id, _ := m.Create(ctx, "t", dev("lamp", "172.31.13.10"))
+	read, _ := m.Get(ctx, id)
+	st.mu.Lock() // what SetFWReach and MarkMQTTPasswordBad do in the real store
+	d := st.devs[id]
+	d.FWReach = model.FWReach{State: model.FWReachYes, At: time.Now()}
+	d.MQTTPasswordBadAt = time.Now()
+	st.devs[id] = d
+	st.mu.Unlock()
+	next := read
+	next.Address = "172.31.13.20"
+	if err := m.UpdateIf(ctx, "discovery", read, next); err != nil {
+		t.Fatalf("a learning write turned the update into a conflict: %v", err)
+	}
+	got, _ := m.Get(ctx, id)
+	if got.Address != "172.31.13.20" || got.FWReach.State != model.FWReachYes || got.MQTTPasswordBadAt.IsZero() {
+		t.Fatalf("update lost the learned state or the change: %+v", got)
 	}
 }

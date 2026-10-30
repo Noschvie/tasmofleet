@@ -25,6 +25,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/auth"
 	"github.com/nofuturekid/tasmofleet/internal/backup"
 	"github.com/nofuturekid/tasmofleet/internal/changelog"
+	"github.com/nofuturekid/tasmofleet/internal/clock"
 	"github.com/nofuturekid/tasmofleet/internal/config"
 	"github.com/nofuturekid/tasmofleet/internal/devicecmd"
 	"github.com/nofuturekid/tasmofleet/internal/devlock"
@@ -121,6 +122,7 @@ type runtime struct {
 	rules      *sysconfig.Rules
 	cache      firmware.Cache
 	restore    *restore.Manager
+	fwReach    *FWReachLearner // what devices reach (D11); nil in tests that do not need it
 	devLocks   *devlock.Locks
 	decoder    string // decode-config version, "" if unavailable
 	dec        backup.Decoder
@@ -176,8 +178,9 @@ func (a *runtime) run(ctx context.Context) error {
 	if err := a.setupFirmware(); err != nil {
 		return err
 	}
-	a.setupDeviceCmd()                        // before the OTA engine: it switches relays back on through it
-	if err := a.setupSettings(); err != nil { // before the OTA engine: it runs the policy jobs through the applier built here
+	a.fwReach = newFWReachLearner(a.svc.Store, a.svc.Audit, clock.Real{}, a.log) // before OTA and restore: both report to it
+	a.setupDeviceCmd()                                                           // before the OTA engine: it switches relays back on through it
+	if err := a.setupSettings(); err != nil {                                    // before the OTA engine: it runs the policy jobs through the applier built here
 		return err
 	}
 	a.setupOTA()
@@ -433,6 +436,27 @@ func (a *runtime) setupFirmware() error {
 func (a *runtime) onFirmwareRequest(e firmware.RequestEvent) {
 	a.log.Info("firmware request", "component", "firmware", "remote", e.RemoteIP, "method", e.Method,
 		"release", e.Release, "file", e.Filename, "status", e.Status, "bytes", e.Bytes)
+	// A served image proves the device reaches the firmware server (D11). HEAD and refusals prove nothing.
+	if e.Method == http.MethodGet && e.Status == http.StatusOK && e.Release != "" {
+		a.learnFWReach(func(ctx context.Context, l *FWReachLearner) error {
+			return l.NoteYesFromIP(ctx, e.RemoteIP, FWReachSourceFirmwareServer)
+		})
+	}
+}
+
+// learnFWReach runs one fwreach write in the background: the callers sit on a device-facing
+// request or the OTA engine's notifier and must not wait for the database.
+func (a *runtime) learnFWReach(f func(ctx context.Context, l *FWReachLearner) error) {
+	if a.fwReach == nil {
+		return
+	}
+	a.bgWG.Go(func() {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(a.bgContext), fwReachTimeout)
+		defer cancel()
+		if err := f(ctx, a.fwReach); err != nil {
+			a.log.Warn("firmware reach not recorded", "component", "fwreach", "err", err)
+		}
+	})
 }
 
 // proxy describes the trusted proxies and the external URL. Cookies follow
@@ -614,7 +638,7 @@ func (a *runtime) webDeps(guard web.Guard, rows []web.KV) web.Deps {
 	}
 	deps := web.Deps{
 		Guard: guard, Inventory: a.svc.Inventory, Health: a.tracker, Backups: a.backups,
-		Prober: a.svc.Prober, DeviceNames: a.svc.Store, History: a.svc.Store, Audit: a.svc.Store, Recorder: a.svc.Audit,
+		Prober: a.svc.Prober, DeviceNames: a.svc.Store, FWReach: a.fwReach, History: a.svc.Store, Audit: a.svc.Store, Recorder: a.svc.Audit,
 		Jobs: a.svc.Store, Batches: a.svc.Store, Artifacts: a.svc.Store, Prefs: a.svc.Store, Principals: a.svc.Store, Database: a.svc.Store, Hub: a.svc.Hub, Version: DisplayVersion(), DecoderVersion: a.decoder, MQTT: mqttState,
 		Config: rows, Pages: a.pages, FirmwareSource: a.fwSource, FirmwareFeed: a.fwFeed,
 	}

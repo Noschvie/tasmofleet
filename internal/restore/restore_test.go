@@ -343,6 +343,7 @@ type flowEnv struct {
 	srv    *httptest.Server
 	device model.Device
 	fleet  simulator.Fleet
+	served chan model.DeviceID // the devices OnServed reported
 }
 
 func dumpWith(b0, b1 byte) []byte {
@@ -406,9 +407,11 @@ func newFlow(t *testing.T, version string) *flowEnv {
 	mux := http.NewServeMux()
 	e.srv = httptest.NewServer(mux)
 	t.Cleanup(e.srv.Close)
+	e.served = make(chan model.DeviceID, 8)
 	m, err := New(Options{
 		Devices: st, Backups: hb, Store: st, Client: cl, BaseURL: e.srv.URL, Audit: au, Log: quiet,
 		Hardware: st, Describe: e.describe,
+		OnServed:     func(id model.DeviceID) { e.served <- id },
 		PollInterval: 20 * time.Millisecond, RebootTimeout: 15 * time.Second, TokenTTL: 30 * time.Second, Context: t.Context(),
 	})
 	if err != nil {
@@ -491,6 +494,15 @@ func TestRestoreRoundTripAgainstSimulator(t *testing.T) {
 	// The list shows it as "Automatic, before restore" (N1).
 	if _, b, err := e.bk.Open(t.Context(), done.PreBackupID); err != nil || b.Trigger != model.TriggerRestore {
 		t.Errorf("pre-restore backup trigger: %+v %v", b, err)
+	}
+	// Why: the device fetched the dump from the firmware listener, so it reaches it (D11).
+	select {
+	case id := <-e.served:
+		if id != e.dev {
+			t.Errorf("OnServed reported device %d, want %d", id, e.dev)
+		}
+	default:
+		t.Error("serving the dump did not report the device")
 	}
 	cmds := e.cl.sent("WebGetConfig")
 	if len(cmds) != 1 || !strings.HasPrefix(cmds[0], "WebGetConfig "+e.srv.URL+"/restore/") {

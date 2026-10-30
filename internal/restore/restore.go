@@ -150,6 +150,9 @@ type Options struct {
 	Locks *devlock.Locks
 	// Jobs lists active OTA jobs (store.JobStore); optional.
 	Jobs ActiveJobs
+	// OnServed is called, after the dump went out, with the device the one-time token was for:
+	// it proves the device reaches the firmware listener. Optional; it must not block.
+	OnServed func(model.DeviceID)
 	// Hardware stores a MAC that was missing (restore) and swaps the entry
 	// onto new hardware (replace). Optional: without it a device without a
 	// stored MAC is refused and Replace is off.
@@ -414,6 +417,9 @@ func (m *Manager) Handler() http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		_, _ = w.Write(dump) //nolint:gosec // G705: octet-stream attachment, the device's own config
 		m.record(m.o.Context, "device", "restore.download", e.job, e.device, "ok", "served once")
+		if m.o.OnServed != nil {
+			m.o.OnServed(e.device)
+		}
 	})
 }
 

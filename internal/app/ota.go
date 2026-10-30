@@ -19,9 +19,22 @@ type jobNotifier struct{ rt *runtime }
 
 func (n jobNotifier) JobChanged(j model.Job, _ model.JobEvent) {
 	n.rt.svc.Hub.Publish(events.Event{Topic: events.TopicJob, Payload: j})
+	n.rt.learnFWReachFromJob(j)
 	if j.State.Terminal() {
 		n.rt.svc.Std.OTAJobsTotal.With(string(j.State)).Inc()
 	}
+}
+
+// learnFWReachFromJob: a download update that succeeded proves the device reaches the firmware
+// server (D11). Push jobs, policy jobs and the MQTT upload never download from it.
+func (a *runtime) learnFWReachFromJob(j model.Job) {
+	if j.State != model.JobSucceeded || j.Kind != "" || j.Delivery != model.DeliveryPull || j.MQTTUpload {
+		return
+	}
+	id := j.DeviceID
+	a.learnFWReach(func(ctx context.Context, l *FWReachLearner) error {
+		return l.NoteYes(ctx, id, FWReachSourceOTADownload)
+	})
 }
 
 // setupOTA builds the OTA engine. It needs the firmware cache, which exists
