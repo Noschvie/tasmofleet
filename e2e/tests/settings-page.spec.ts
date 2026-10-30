@@ -67,13 +67,93 @@ test("info popovers open on click, close on Escape and show one at a time", asyn
 // focusable) until the switch is on.
 test("dependent settings follow their switch", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
-  await page.goto(app.url + "/settings/system?tab=scan");
+  await page.goto(app.url + "/settings/system?tab=discovery");
   const dep = page.locator("[data-depends='v.DISCOVERY_SCAN']");
   await expect(dep).toHaveClass(/is-off/);
   await page.locator("[data-key='DISCOVERY_SCAN'] .swtrack").click();
   await expect(dep).not.toHaveClass(/is-off/);
   await dep.locator("input[name='v.DISCOVERY_SCAN_INTERVAL']").fill("2h");
 
+});
+
+// Why (#334): a field that depends on a switch is an ordinary field of the card: no indent, no rule.
+test("dependent settings are not drawn as an indented block", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  await page.goto(app.url + "/settings/system?tab=discovery");
+  const dep = page.locator("[data-depends='v.DISCOVERY_SCAN']");
+  const css = await dep.evaluate((el) => { const c = getComputedStyle(el); return [c.borderLeftWidth, c.marginLeft, c.paddingLeft]; });
+  expect(css).toEqual(["0px", "0px", "0px"]);
+  const box = await dep.boundingBox();
+  const card = await page.locator("#card-scan .sbody").boundingBox();
+  expect(Math.abs(box!.x - card!.x)).toBeLessThan(1);
+});
+
+// Why (#335): the Discovery tab holds both ways of finding devices; the old tab=scan opens the first tab.
+test("Discovery tab holds MQTT discovery and the network scan; tab=scan opens General", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  await page.goto(app.url + "/settings/system?tab=discovery");
+  await expect(tabs(page).getByRole("link", { name: "Discovery", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page.locator("#card-mqttdiscovery")).toBeVisible();
+  await expect(page.locator("#card-scan")).toBeVisible();
+  await page.locator("#card-scan").getByRole("link", { name: "device networks" }).click();
+  await expect(tabs(page).getByRole("link", { name: /Network/ })).toHaveAttribute("aria-current", "page");
+  await expect(page.locator("#card-networks")).toBeVisible();
+  await page.goto(app.url + "/settings/system?tab=scan");
+  await expect(tabs(page).getByRole("link", { name: "General" })).toHaveAttribute("aria-current", "page");
+});
+
+// Why (#333): "keep the stored password" only matters while host or port differ from the stored
+// value, so it shows up then and not before. The e2e stack stores no password, so the option is
+// added to the served page.
+test("the keep-password option appears only when host or port changed", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  await page.route("**/settings/system?tab=mqtt", async (route) => {
+    const res = await route.fetch();
+    const html = (await res.text()).replace('<div class="sf w-tls', '</div><label class="ucheck sopt bkeep" data-broker-keep><input type="checkbox" name="reuse.MQTT_PASSWORD" value="1"/><span>Broker changed: keep the stored password for the new broker</span></label><div class="brow"><div class="sf w-tls');
+    await route.fulfill({ response: res, body: html });
+  });
+  await page.goto(app.url + "/settings/system?tab=mqtt");
+  const keep = page.locator("[data-broker-keep]");
+  await expect(keep).toBeHidden();
+  await page.locator("input[name='mqtt.port']").fill("1999");
+  await expect(keep).toBeVisible();
+  await page.locator("input[name='mqtt.port']").fill("");
+  await expect(keep).toBeHidden();
+  await page.locator("input[name='mqtt.host']").fill("other.example");
+  await expect(keep).toBeVisible();
+});
+
+// Why (#336): the Storage card is part of the page whichever tab it was opened on.
+test("the Backups storage card shows when the page was opened on another tab", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  await page.goto(app.url + "/settings/system?tab=general");
+  await tabs(page).getByRole("link", { name: "Backups" }).click();
+  await expect(page.locator("#card-storage")).toBeVisible();
+  await expect(page.locator("input[name='v.BACKUP_INTERVAL']")).toHaveValue("");
+});
+
+// Why (#337): a page that was just loaded has no unsaved changes, on any tab.
+test("a freshly loaded page reports no unsaved changes on any tab", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  for (const tab of ["general", "network", "mqtt", "discovery", "backups", "firmware", "signin", "advanced"]) {
+    await page.goto(app.url + "/settings/system?tab=" + tab);
+    await expect(page.locator("[data-sys-bar]"), tab).toContainText("No unsaved changes");
+  }
+});
+
+// Why (#337): switching "Scheduled backups" on proposes 24h; switching it off again must leave
+// nothing changed (off saves 0 whatever the interval field holds), not a dirty Backups tab.
+test("scheduled backups on and off again leaves the tab clean", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  await page.goto(app.url + "/settings/system?tab=backups");
+  const bar = page.locator("[data-sys-bar]");
+  const interval = page.locator("input[name='v.BACKUP_INTERVAL']");
+  await page.locator("[data-key='BACKUP_SCHEDULE'] .swtrack").click();
+  await expect(interval).toHaveValue("24h");
+  await expect(bar).toContainText("Unsaved changes:");
+  await page.locator("[data-key='BACKUP_SCHEDULE'] .swtrack").click();
+  await expect(interval).toHaveValue("");
+  await expect(bar).toContainText("No unsaved changes");
 });
 
 // Why: the backup interval showed "0s" for manual only. The switch is a view of the same
@@ -153,11 +233,16 @@ test.describe("with local accounts", () => {
       await page.emulateMedia({ colorScheme: scheme });
       for (const [size, w, h] of [["desktop", 1280, 900], ["phone", 375, 812]] as const) {
         await page.setViewportSize({ width: w, height: h });
-        for (const tab of ["general", "network", "mqtt", "scan", "backups", "firmware", "signin", "advanced"]) {
+        for (const tab of ["general", "network", "mqtt", "discovery", "backups", "firmware", "signin", "advanced"]) {
           await page.goto(local.url + "/settings/system?tab=" + tab);
           await page.screenshot({ path: `${dir}/settings-${tab}-${size}-${scheme}.png`, fullPage: true });
         }
       }
     }
+    // the Sign-in tab as three cards side by side on a wide screen (#337)
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.goto(local.url + "/settings/system?tab=signin");
+    await page.screenshot({ path: `${dir}/settings-signin-wide-1600-light.png`, fullPage: true });
   });
 });

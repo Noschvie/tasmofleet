@@ -6,6 +6,24 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Breaking
+
+- Settings: the tab "Discovery scan" is now "Discovery" (`?tab=discovery`); the old `?tab=scan` opens the first tab, no redirect (#335)
+
+### Changed
+
+- Settings, Discovery tab: the "MQTT discovery" card moved here from the MQTT tab and sits next to "Network scan", which links to the device networks it is limited to. The MQTT tab keeps Broker and Topics (#335)
+- Settings, MQTT: "Broker changed: keep the stored password for the new broker" sits under the Host/Port row and shows only while host or port differ from the stored value (always visible without script). Saving works as before (#333)
+- Settings: fields that depend on a switch are ordinary fields of their card, no indented block with a rule; they are still dimmed while the switch is off (#334)
+- Settings, Backups: the Interval is empty (placeholder 24h) while scheduled backups are off instead of showing "0s"; switching on proposes 24h; off still stores 0 (#336)
+
+### Fixed
+
+- Settings page brought back in line with the approved mockup (#338): Sign-in mode is a full-width card with the two choices side by side and the PUBLIC_URL note below (its Restart / confirm badges sit in its header, no repeated label or lone reset line), Identity provider spans two columns and Roles and claims the third; Firmware source spans two columns and two rows with Cross-check and Updates (OTA) stacked beside it; the card of deleted devices' backups is always shown (with "No backups of deleted devices."); "Set by the container" is a card with a disclosure on Advanced and the save bar sits below it; the TLS switch has its label; the MQTT discovery status is a flat strip with Open Discovered below the switch
+- Settings: "Restart" and "Asks you to confirm" badges sit on the fields they apply to instead of on whole cards (the scopes and the button name need no confirmation), and "Reset to default" shows only when the value differs from the default (#337)
+- Settings: switching "Scheduled backups" on and off again leaves the tab without unsaved changes (the Interval takes back the proposed 24h; saving with the switch off is 0 whatever the field holds) (#337)
+- Settings, Backups: the Storage card was missing when the page was opened on another tab, because the storage facts were loaded only for `?tab=backups`; they are now always loaded. The info icon of "Never prune younger than" stays next to its label (#336)
+
 ## 0.22.0 "Bell Rock" (2026-10-31)
 
 ### Upgrade notes

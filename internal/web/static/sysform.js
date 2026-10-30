@@ -86,6 +86,40 @@
     });
   }
 
+  // A link inside a tab to another tab (the network scan card names the device networks) switches
+  // the tab without a page load, so unsaved edits stay.
+  form.addEventListener("click", function (e) {
+    var a = e.target instanceof Element ? e.target.closest("a[data-sys-goto]") : null;
+    if (!a || e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) {
+      return;
+    }
+    if (showTab(a.getAttribute("data-sys-goto"))) {
+      e.preventDefault();
+      var card = document.getElementById("card-networks");
+      if (card) {
+        card.scrollIntoView();
+      }
+    }
+  });
+
+  // ---- broker changed: keep the stored password ----
+  // The option only matters while host or port differ from the stored value (defaultValue).
+  var keep = form.querySelector("[data-broker-keep]");
+  function brokerKeep() {
+    if (!keep) {
+      return;
+    }
+    var host = form.elements["mqtt.host"];
+    var port = form.elements["mqtt.port"];
+    var changed =
+      (host && host.value !== host.defaultValue) ||
+      (port && port.value !== port.defaultValue);
+    keep.hidden = !changed;
+    if (!changed) {
+      keep.querySelector("input").checked = false;
+    }
+  }
+
   // ---- unsaved changes ----
   function controls() {
     return Array.prototype.slice.call(form.elements).filter(function (c) {
@@ -101,6 +135,13 @@
   function valueOf(c) {
     if (c.type === "checkbox" || c.type === "radio") {
       return c.checked ? "1" : "0";
+    }
+    if (c.name === "v.BACKUP_INTERVAL") {
+      // Saved as 0 while the schedule switch is off, whatever the field holds.
+      var sw = form.elements["sw.BACKUP_INTERVAL"];
+      if (sw && !sw.checked) {
+        return "0";
+      }
     }
     return c.value;
   }
@@ -201,10 +242,26 @@
     ) {
       var iv = form.elements["v.BACKUP_INTERVAL"];
       if (iv && (iv.value === "" || iv.value === "0" || iv.value === "0s")) {
+        iv.setAttribute("data-before", iv.value); // what switching off puts back
         iv.value = "24h";
       }
     }
+    // Switching off again takes back the proposed 24h, so on and off leaves nothing changed.
+    if (
+      t instanceof HTMLInputElement &&
+      t.name === "sw.BACKUP_INTERVAL" &&
+      !t.checked
+    ) {
+      var pv = form.elements["v.BACKUP_INTERVAL"];
+      if (pv && pv.hasAttribute("data-before") && pv.value === "24h") {
+        pv.value = pv.getAttribute("data-before");
+      }
+      if (pv) {
+        pv.removeAttribute("data-before");
+      }
+    }
     depends();
+    brokerKeep();
     refresh();
   }
   form.addEventListener("input", changed);
@@ -230,10 +287,12 @@
   });
 
   depends();
+  brokerKeep();
   refresh();
   document.addEventListener("DOMContentLoaded", function () {
     // form.js puts back typed values after a step-up; they count as unsaved changes
     depends();
+    brokerKeep();
     refresh();
   });
 })();

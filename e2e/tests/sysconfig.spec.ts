@@ -34,13 +34,13 @@ test("a setting changed on the page applies live: the scheduled scan starts with
   await expect(page.getByText("No scan yet")).toBeVisible();
 
   await page.goto(app.url + "/settings/system");
-  await page.getByRole("navigation", { name: "Settings sections" }).getByRole("link", { name: /Discovery scan/ }).click(); // one section at a time
+  await page.getByRole("navigation", { name: "Settings sections" }).getByRole("link", { name: "Discovery", exact: true }).click(); // one section at a time
   await page.locator("input[name='v.DISCOVERY_SCAN']").check();
   await page.locator("textarea[name='v.DISCOVERY_SCAN_CIDRS']").fill("127.0.0.1/32");
   await page.getByRole("button", { name: "Save settings" }).click();
   await expect(page.getByText("Saved.")).toBeVisible();
   // the page comes back on the tab that was saved, so the new values are what the person sees
-  await expect(page.getByRole("navigation", { name: "Settings sections" }).getByRole("link", { name: /Discovery scan/ })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("navigation", { name: "Settings sections" }).getByRole("link", { name: "Discovery", exact: true })).toHaveAttribute("aria-current", "page");
   await expect(page.locator("input[name='v.DISCOVERY_SCAN']")).toBeChecked();
 
   // The schedule started a scan as "system" at once.

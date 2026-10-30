@@ -64,9 +64,10 @@ func (r sysRow) InputName() string { return "v." + r.Key }
 // sysMQTT is the broker of the MQTT tab as host, port and TLS (N18). Legacy is set when the
 // stored URL cannot be written as these parts; the page then keeps the URL field.
 type sysMQTT struct {
-	Host, Port string
-	TLS        bool
-	Legacy     string // why the parts cannot hold the stored URL; empty when they can
+	Host, Port  string
+	HasPassword bool // a password is stored: the broker row offers to keep it for a changed broker
+	TLS         bool
+	Legacy      string // why the parts cannot hold the stored URL; empty when they can
 }
 
 // sysDiscovery is the status card of the Discovery tab: what MQTT discovery does right now.
@@ -112,7 +113,7 @@ func (h *handler) sysData(r *http.Request, posted map[string]string, errs map[st
 	svc := h.d.SysConfig
 	p := sysPage{Base: httpBase(r), CSRF: h.d.Guard.CSRFToken(r), ReadOnly: svc.ReadOnly(), Skipped: svc.Skipped()}
 	rows := map[string]sysRow{}
-	discoveryOn := false
+	discoveryOn, hasMQTTPassword := false, false
 	for _, st := range svc.State() {
 		row := sysRow{FieldState: st, Posted: st.Value, Err: errs[st.Key]}
 		if v, ok := posted[st.Key]; ok && !st.Secret {
@@ -125,10 +126,13 @@ func (h *handler) sysData(r *http.Request, posted map[string]string, errs map[st
 		switch st.Key {
 		case "MQTT_URL":
 			p.MQTT = sysMQTTOf(row.Posted)
+		case "MQTT_PASSWORD":
+			hasMQTTPassword = st.HasValue
 		case "DISCOVERY_MQTT":
 			discoveryOn = row.Posted == "true"
 		}
 	}
+	p.MQTT.HasPassword = hasMQTTPassword
 	p.Tabs = sysTabsOf(rows)
 	p.Discovery = h.sysDiscoveryOf(r, discoveryOn)
 	p.Active = r.URL.Query().Get("tab")
@@ -242,7 +246,7 @@ func (h *handler) sysRender(w http.ResponseWriter, r *http.Request, status int, 
 	case p.Active == "backups" && backupsNotice(r) != "":
 		v.Flash = backupsNotice(r) // a backup of a deleted device was kept, released or deleted
 	}
-	if p.Active == "backups" && p.Storage == nil {
+	if p.Storage == nil { // the tabs switch without a page load, so the Backups tab is always in the page
 		st, err := h.sysStorageOf(r, p.Base)
 		if err != nil {
 			h.fail(w, r, err)
@@ -792,18 +796,20 @@ func sysDescribe(row sysRow) templ.Attributes {
 
 // sysFieldDataGroup is sysFieldData for controls that are a group (segments, radio cards, boxes):
 // the label is not tied to one input.
-func sysFieldDataGroup(row sysRow, inRestartCard bool) ui.SettingFieldData {
-	d := sysFieldData(row, inRestartCard)
+func sysFieldDataGroup(row sysRow) ui.SettingFieldData {
+	d := sysFieldData(row)
 	d.Group = row.Key == "LOG_LEVEL" || row.Key == "AUTH_MODE" || len(row.Choices) > 0
 	if row.Key == "AUTH_MODE" {
-		d.Label = "" // the radio cards carry their own legend
+		// The radio cards carry their own (hidden) legend, and the card's header carries the Restart
+		// and confirm badges: no label row, so no lone line above the choices.
+		d.Label, d.Restart, d.Confirm, d.CanReset = "", false, false, false
 	}
 	return d
 }
 
 // sysSwitchData is sysFieldData for an on/off setting: the switch sits left of the label.
-func sysSwitchData(row sysRow, inRestartCard bool) ui.SettingFieldData {
-	d := sysFieldData(row, inRestartCard)
+func sysSwitchData(row sysRow) ui.SettingFieldData {
+	d := sysFieldData(row)
 	d.Switch, d.Warn = true, row.Key == "FIRMWARE_ALLOW_SINGLE_SOURCE"
 	return d
 }
@@ -817,6 +823,9 @@ func sysSecretHint(row sysRow) string {
 }
 
 func sysPlaceholder(row sysRow) string {
+	if row.Key == "BACKUP_INTERVAL" {
+		return "24h"
+	}
 	if row.Key == "DEVICE_NETWORKS" {
 		return "172.31.13.0/24"
 	}
@@ -837,4 +846,20 @@ func sysNotice(row sysRow) string {
 		return row.Skipped
 	}
 	return ""
+}
+
+// sysIntervalShown is the backup interval as the field shows it: while the schedule is off the
+// stored 0 (manual only) is not a value to read, so the field is empty and its placeholder
+// proposes one. Saving with the switch off still stores 0 (composeSchedule).
+func sysIntervalShown(row sysRow) sysRow {
+	if !sysScheduleOn(row) {
+		row.Posted = ""
+	}
+	return row
+}
+
+// sysCanReset says whether "Reset to default" is offered: a stored value that differs from the
+// default (a secret that is stored always does). A stored value equal to the default has nothing to reset.
+func sysCanReset(row sysRow) bool {
+	return row.Source == "stored" && (row.Secret || row.Value != config.DefaultValue(row.Key))
 }

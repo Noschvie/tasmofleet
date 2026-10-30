@@ -45,6 +45,7 @@ templ sysSettingsPage(p sysPage) {
 			</div>
 		</div>
 	}
+	<div class="syswrap">
 	<form id="sysform" class="syspage" data-keep-draft="sysconfig" method="post" action={ templ.SafeURL(p.Base + sysPath + "?tab=" + p.Active) }>
 		<input type="hidden" name="csrf" value={ p.CSRF }/>
 		for _, tab := range p.Tabs {
@@ -61,6 +62,7 @@ templ sysSettingsPage(p sysPage) {
 	<div class="sys-after" id="after-advanced" data-sys-tab="advanced" hidden?={ p.Active != "advanced" }>
 		@sysContainer(p.ReadOnly)
 		@sysResetBox(p)
+	</div>
 	</div>
 	if p.Storage != nil && len(p.Storage.Orphans) > 0 {
 		<form id="bk-orph" method="post" action={ templ.SafeURL(p.Base + sysPath + "?tab=backups") }>
@@ -86,9 +88,13 @@ templ sysCardView(p sysPage, c sysCard) {
 				}
 			}
 		case "orphans":
-			if p.Storage != nil && (len(p.Storage.Orphans) > 0 || len(p.Storage.Unreferenced) > 0) {
-				@ui.SettingsCard(ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Note: "Kept when their device was deleted. Download one to restore it on a device by hand.", Class: c.Class, Plain: true}) {
+			if p.Storage != nil {
+				@ui.SettingsCard(ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Note: "Own list with its own delete action, outside the settings form.", Class: c.Class, Plain: true}) {
+					if len(p.Storage.Orphans) == 0 && len(p.Storage.Unreferenced) == 0 {
+						<p class="ufield-help">No backups of deleted devices.</p>
+					}
 					if len(p.Storage.Orphans) > 0 {
+						<p class="ufield-help">Kept when their device was deleted. Download one to restore it on a device by hand.</p>
 						@sysOrphans(p, *p.Storage)
 					}
 					if len(p.Storage.Unreferenced) > 0 {
@@ -110,10 +116,21 @@ templ sysCardView(p sysPage, c sysCard) {
 						</div>
 					}
 					for _, row := range c.Rows {
-						@sysRowView(p, row, c.RestartAll)
+						@sysRowView(p, row)
 						if c.ID == "idp" && row.Key == "OIDC_ISSUER" {
 							@sysTestRow("Test discovery", p.Base+sysPath+"/sso-test?tab=signin", "SSO check", p.SSOResult, "Saves nothing.")
 						}
+					}
+					if c.ID == "mode" {
+						<p class="ufield-help">Needs PUBLIC_URL. The local admin always works as a fallback.</p>
+					}
+					if c.ID == "mqttdiscovery" && p.Discovery.Link {
+						<div class="sys-card-foot">
+							@ui.Button(ui.Btn{Label: "Open Discovered", Href: p.Base + "/discovery"})
+						</div>
+					}
+					if c.ID == "scan" {
+						<p class="ufield-help scan-nets">Scans only inside the <a href={ templ.SafeURL(p.Base + sysPath + "?tab=network#card-networks") } data-sys-goto="network">device networks</a> (Network & devices).</p>
 					}
 					if c.ID == "broker" && p.MQTT.Legacy == "" {
 						@sysTestRow("Test connection", p.Base+sysPath+"/mqtt-test?tab=mqtt", "MQTT connection test", p.MQTTResult, "Saves nothing.")
@@ -125,23 +142,23 @@ templ sysCardView(p sysPage, c sysCard) {
 
 // sysRowView draws one setting in the control its kind calls for, then the settings that depend
 // on it, together in one group the page dims while the switch is off.
-templ sysRowView(p sysPage, row sysRow, inRestartCard bool) {
+templ sysRowView(p sysPage, row sysRow) {
 	switch {
 		case row.Locked:
 			@sysLocked(row)
 		case row.Key == "MQTT_URL" && p.MQTT.Legacy == "":
 			@sysBroker(p, row)
 		case row.Key == "BACKUP_INTERVAL":
-			@sysSchedule(row, inRestartCard)
+			@sysSchedule(row)
 		case row.Bool:
-			@sysSwitch(row, inRestartCard)
+			@sysSwitch(row)
 		default:
-			@sysInput(row, inRestartCard)
+			@sysInput(row)
 	}
 	if len(row.Deps) > 0 {
 		<div class="dep" data-depends={ "v." + row.Key }>
 			for _, d := range row.Deps {
-				@sysRowView(p, d, inRestartCard)
+				@sysRowView(p, d)
 			}
 		</div>
 	}
@@ -149,16 +166,16 @@ templ sysRowView(p sysPage, row sysRow, inRestartCard bool) {
 
 // sysFieldData is the label row and help of a setting; the card's restart badge replaces the
 // field's own.
-func sysFieldData(row sysRow, inRestartCard bool) ui.SettingFieldData {
+func sysFieldData(row sysRow) ui.SettingFieldData {
 	c := sysFieldCopy(row.Key)
 	return ui.SettingFieldData{Key: row.Key, Label: sysLabel(row), Width: c.Width, Help: c.Help, Info: c.Info, Err: row.Err,
 		Notice: sysNotice(row), Pending: row.PendingRestart,
-		Restart: row.Apply != sysconfig.Live && !inRestartCard, CanReset: row.Source == "stored", Locked: row.Locked}
+		Restart: row.Apply != sysconfig.Live, Confirm: row.StepUp == sysconfig.StepUpAlways, CanReset: sysCanReset(row), Locked: row.Locked}
 }
 
 // sysInput is a text, number, password, list or choice setting.
-templ sysInput(row sysRow, inRestartCard bool) {
-	@ui.SettingField(sysFieldDataGroup(row, inRestartCard)) {
+templ sysInput(row sysRow) {
+	@ui.SettingField(sysFieldDataGroup(row)) {
 		switch {
 			case row.Key == "LOG_LEVEL":
 				@ui.Segmented(row.Label, row.InputName(), sysLevelOptions(row.Posted))
@@ -173,9 +190,6 @@ templ sysInput(row sysRow, inRestartCard bool) {
 				</div>
 			case row.Secret:
 				<input type="password" name={ row.InputName() } id={ ui.SettingControlID(row.Key) } class="mono" autocomplete="new-password" maxlength="128" placeholder={ sysSecretHint(row) } { sysDescribe(row)... }/>
-				if row.Key == "MQTT_PASSWORD" && row.HasValue {
-					<label class="ucheck sopt"><input type="checkbox" name={ "reuse." + row.Key } value="1"/><span>Keep the stored password if the broker changes</span></label>
-				}
 			case len(row.Enum) > 0:
 				<select name={ row.InputName() } id={ ui.SettingControlID(row.Key) } { sysDescribe(row)... }>
 					for _, o := range row.Enum {
@@ -185,14 +199,14 @@ templ sysInput(row sysRow, inRestartCard bool) {
 			case row.Multiline:
 				<textarea name={ row.InputName() } id={ ui.SettingControlID(row.Key) } class="mono" rows="3" maxlength="2048" placeholder={ sysPlaceholder(row) } { sysDescribe(row)... }>{ row.Posted }</textarea>
 			default:
-				<input name={ row.InputName() } id={ ui.SettingControlID(row.Key) } class="mono" value={ row.Posted } maxlength="512" { sysDescribe(row)... }/>
+				<input name={ row.InputName() } id={ ui.SettingControlID(row.Key) } class="mono" value={ row.Posted } maxlength="512" placeholder={ sysPlaceholder(row) } { sysDescribe(row)... }/>
 		}
 	}
 }
 
 // sysSwitch is an on/off setting. The b.KEY marker says the switch was on the page, so "off" is saved.
-templ sysSwitch(row sysRow, inRestartCard bool) {
-	@ui.SettingField(sysSwitchData(row, inRestartCard)) {
+templ sysSwitch(row sysRow) {
+	@ui.SettingField(sysSwitchData(row)) {
 		<input type="hidden" name={ "b." + row.Key } value="1"/>
 		<label class="swhit"><input type="checkbox" role="switch" id={ ui.SettingControlID(row.Key) } name={ row.InputName() } value="true" checked?={ row.Posted == "true" } { sysDescribe(row)... }/><span class="swtrack" aria-hidden="true"></span></label>
 	}
@@ -200,13 +214,13 @@ templ sysSwitch(row sysRow, inRestartCard bool) {
 
 // sysSchedule is the backup interval behind a "Scheduled backups" switch: off stores 0 (manual
 // only). The switch is a view of the setting, composed by composeSchedule.
-templ sysSchedule(row sysRow, inRestartCard bool) {
+templ sysSchedule(row sysRow) {
 	@ui.SettingField(ui.SettingFieldData{Key: "BACKUP_SCHEDULE", Label: "Scheduled backups", Width: "full", Help: "Off: manual only.", Switch: true}) {
 		<input type="hidden" name="swm.BACKUP_INTERVAL" value="1"/>
 		<label class="swhit"><input type="checkbox" role="switch" id={ ui.SettingControlID("BACKUP_SCHEDULE") } name="sw.BACKUP_INTERVAL" value="1" checked?={ sysScheduleOn(row) } aria-describedby={ ui.SettingHelpID("BACKUP_SCHEDULE") }/><span class="swtrack" aria-hidden="true"></span></label>
 	}
 	<div class="dep" data-depends="sw.BACKUP_INTERVAL">
-		@sysInput(row, inRestartCard)
+		@sysInput(sysIntervalShown(row))
 	</div>
 }
 
@@ -234,10 +248,14 @@ templ sysBroker(p sysPage, row sysRow) {
 			<input name="mqtt.port" id="f-mqtt-port" class="mono" value={ p.MQTT.Port } inputmode="numeric" maxlength="5" placeholder="1883"/>
 		</div>
 		<div class="sf w-tls sf-switch">
+			<div class="lrow"><span class="lbl">TLS</span></div>
 			<label class="swhit"><input type="checkbox" role="switch" id="f-mqtt-tls" name="mqtt.tls" value="1" checked?={ p.MQTT.TLS }/><span class="swtrack" aria-hidden="true"></span></label>
 			<div class="sf-main"><div class="lrow"><label class="lbl" for="f-mqtt-tls">Use TLS</label></div></div>
 		</div>
 	</div>
+	if p.MQTT.HasPassword {
+		<label class="ucheck sopt bkeep" data-broker-keep><input type="checkbox" name="reuse.MQTT_PASSWORD" value="1"/><span>Broker changed: keep the stored password for the new broker</span></label>
+	}
 }
 
 // sysStorageBlock is the top of the Backups tab (N9): four totals, the devices with the
@@ -400,16 +418,15 @@ templ sysDiscoveryCard(p sysPage) {
 				}
 			</span>
 		</div>
-		if p.Discovery.Link {
-			@ui.Button(ui.Btn{Label: "Open Discovered", Href: p.Base + "/discovery"})
-		}
 	</div>
 }
 
 // sysContainer lists the bootstrap settings, which only the container configuration sets.
 templ sysContainer(rows []sysconfig.Row) {
+	@ui.SettingsGrid() {
+	@ui.SettingsCard(ui.SettingsCardData{ID: "card-container", Title: "Set by the container", Note: "Read-only. Change them in the container configuration.", Class: "span2", Plain: true}) {
 	<details class="fold sys-container">
-		<summary>Set by the container ({ strconv.Itoa(len(rows)) } settings)</summary>
+		<summary>Show { strconv.Itoa(len(rows)) } container settings</summary>
 		<p class="ucard-sub">Bootstrap settings (listeners, TLS, keys) come from the container configuration only and are never editable here.</p>
 		<table class="dense">
 			<thead><tr><th>Key</th><th>Value</th></tr></thead>
@@ -429,4 +446,6 @@ templ sysContainer(rows []sysconfig.Row) {
 			</tbody>
 		</table>
 	</details>
+	}
+	}
 }

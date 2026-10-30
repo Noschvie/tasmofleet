@@ -2,6 +2,7 @@ package web
 
 import (
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -40,7 +41,7 @@ func fieldHTML(t *testing.T, page, key string) string {
 // Why: the maintainer approved eight tabs (10 -> 8): Metrics joins General, Devices joins Network,
 // Updates (OTA) joins Firmware. A field that no tab names must still land somewhere, never vanish.
 func TestSystemSettingsHasTheEightApprovedTabs(t *testing.T) {
-	want := []string{"general", "network", "mqtt", "scan", "backups", "firmware", "signin", "advanced"}
+	want := []string{"general", "network", "mqtt", "discovery", "backups", "firmware", "signin", "advanced"}
 	if len(sysLayout) != len(want) {
 		t.Fatalf("%d tabs, want %d", len(sysLayout), len(want))
 	}
@@ -58,6 +59,128 @@ func TestSystemSettingsHasTheEightApprovedTabs(t *testing.T) {
 	_, body := e.do(t, "GET", "/settings/system?tab=fwsource", "admin", nil)
 	if !strings.Contains(body, `<a class="utab" href="/tf/settings/system?tab=general" aria-current="page">General</a>`) {
 		t.Error("an old tab name must open the first tab")
+	}
+}
+
+// Why (#335): both ways of finding new devices belong on one tab, and the MQTT tab is only the
+// connection. The old address ?tab=scan is not redirected (no shims): it opens the first tab.
+func TestSystemSettingsDiscoveryTabHoldsBothWaysOfFindingDevices(t *testing.T) {
+	e, _, _, _ := sysEnv(t, true)
+	_, page := e.do(t, "GET", "/settings/system", "admin", nil)
+	panel := func(slug string) string {
+		i := strings.Index(page, `data-sys-tab="`+slug+`"`)
+		if i < 0 {
+			t.Fatalf("no %s panel", slug)
+		}
+		rest := page[i+10:]
+		if j := strings.Index(rest, `data-sys-tab="`); j >= 0 {
+			rest = rest[:j]
+		}
+		return rest
+	}
+	mqtt, disc := panel("mqtt"), panel("discovery")
+	for _, id := range []string{`id="card-broker"`, `id="card-topics"`} {
+		if !strings.Contains(mqtt, id) {
+			t.Errorf("the MQTT tab lost %s", id)
+		}
+	}
+	if strings.Contains(mqtt, "MQTT discovery") || strings.Contains(mqtt, "DISCOVERY_MQTT") {
+		t.Error("MQTT discovery must have left the MQTT tab")
+	}
+	for _, want := range []string{`id="card-mqttdiscovery"`, `name="v.DISCOVERY_MQTT"`, `id="card-scan"`, `name="v.DISCOVERY_SCAN"`} {
+		if !strings.Contains(disc, want) {
+			t.Errorf("the Discovery tab lacks %s", want)
+		}
+	}
+	if strings.Index(disc, `id="card-mqttdiscovery"`) > strings.Index(disc, `id="card-scan"`) {
+		t.Error("MQTT discovery comes first, the network scan next to it")
+	}
+	if !strings.Contains(disc, `href="/tf/settings/system?tab=network#card-networks"`) {
+		t.Error("the network scan card must link to the device networks it is limited to")
+	}
+	if !strings.Contains(page, `href="/tf/settings/system?tab=discovery">Discovery</a>`) || strings.Contains(page, "Discovery scan") {
+		t.Error("the tab is called Discovery")
+	}
+	_, body := e.do(t, "GET", "/settings/system?tab=scan", "admin", nil)
+	if !strings.Contains(body, `<a class="utab" href="/tf/settings/system?tab=general" aria-current="page">General</a>`) {
+		t.Error("the old tab=scan must open the first tab, not redirect")
+	}
+	_, body = e.do(t, "GET", "/settings/system?tab=discovery", "admin", nil)
+	if !strings.Contains(body, `href="/tf/settings/system?tab=discovery" aria-current="page">Discovery</a>`) {
+		t.Error("?tab=discovery opens the Discovery tab")
+	}
+}
+
+// Why (#333): the option only matters while the host or port is being changed, so it belongs to
+// the Host/Port row, not to the password. Without script it stays visible there; sysform.js
+// shows it only when host or port differs from the stored value.
+func TestSystemSettingsKeepPasswordOptionSitsUnderTheBrokerRow(t *testing.T) {
+	e, _, _, _ := sysEnv(t, true)
+	_, page := e.do(t, "GET", "/settings/system?tab=mqtt", "admin", nil)
+	const word = "Broker changed: keep the stored password for the new broker"
+	if strings.Count(page, word) != 1 || strings.Contains(page, "Keep the stored password if the broker changes") {
+		t.Fatalf("want the new wording exactly once, old wording gone")
+	}
+	opt := strings.Index(page, `name="reuse.MQTT_PASSWORD"`)
+	port, pw := strings.Index(page, `name="mqtt.port"`), strings.Index(page, `name="v.MQTT_PASSWORD"`)
+	if opt < 0 || port >= opt || opt >= pw {
+		t.Errorf("option at %d must sit after the port (%d) and before the password field (%d)", opt, port, pw)
+	}
+	if !strings.Contains(page, `data-broker-keep`) {
+		t.Error("the option needs its script hook")
+	}
+}
+
+// Why (#334): a field that depends on a switch follows it as a normal field of the card; the
+// indented block with a rule on the left is gone. Dimming stays (data-depends).
+func TestSettingsDependentFieldsHaveNoIndentedBlock(t *testing.T) {
+	css, err := os.ReadFile("static/app.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := regexp.MustCompile(`(?s)\n\.dep \{(.*?)\}`).FindSubmatch(css)
+	if m == nil {
+		t.Fatal("no .dep rule")
+	}
+	for _, bad := range []string{"border-left", "margin-left", "padding-left"} {
+		if strings.Contains(string(m[1]), bad) {
+			t.Errorf(".dep must not have %s: no indented block under a switch", bad)
+		}
+	}
+}
+
+// Why (#336): the Storage card is on the Backups tab, but the tabs switch without a page load, so
+// it must be on the page whichever tab the page was opened on (it was loaded only for ?tab=backups).
+func TestSystemSettingsBackupsStorageIsOnThePageWhateverTabOpened(t *testing.T) {
+	e, _, _, _ := storageEnv(t)
+	for _, path := range []string{"/settings/system", "/settings/system?tab=mqtt"} {
+		_, body := e.do(t, "GET", path, "admin", nil)
+		if !strings.Contains(body, `id="card-storage"`) {
+			t.Errorf("%s: the Storage card is missing", path)
+		}
+	}
+}
+
+// Why (#336): with scheduled backups off the stored 0 means "manual only"; showing "0s" in the
+// dimmed Interval reads as a value. It is empty with a 24h placeholder; saving off still stores 0.
+func TestSystemSettingsBackupIntervalIsEmptyWhileTheScheduleIsOff(t *testing.T) {
+	e, svc, _, _ := sysEnv(t, true)
+	_, page := e.do(t, "GET", "/settings/system", "admin", nil)
+	m := regexp.MustCompile(`<input[^>]*name="v\.BACKUP_INTERVAL"[^>]*>`).FindString(page)
+	if m == "" || strings.Contains(m, `value="0s"`) || !strings.Contains(m, `placeholder="24h"`) {
+		t.Errorf("interval input while off: %s", m)
+	}
+	r, _ := e.do(t, "POST", "/settings/system", "admin", url.Values{"csrf": {"tok"}, "swm.BACKUP_INTERVAL": {"1"}, "v.BACKUP_INTERVAL": {""}})
+	if r.StatusCode != 303 || svc.Snapshot().BackupSchedule != 0 {
+		t.Errorf("off with an empty interval must store 0: %d, %v", r.StatusCode, svc.Snapshot().BackupSchedule)
+	}
+}
+
+// Why (#336): in a narrow cell the label of "Never prune younger than" wrapped and pushed its info
+// icon to the far edge; the field takes the whole row of its card so label and icon stay together.
+func TestSystemSettingsNeverPruneFieldIsWideEnoughForItsLabel(t *testing.T) {
+	if w := sysFieldCopy("BACKUP_MAX_AGE").Width; w != "full" {
+		t.Errorf("BACKUP_MAX_AGE width %q wraps its label", w)
 	}
 }
 
@@ -319,8 +442,23 @@ func TestSystemSettingsSSOTestAcceptsTheWholeForm(t *testing.T) {
 func TestSystemSettingsSignInCardsSayWhatTheyAsk(t *testing.T) {
 	e, _, _, _ := sysEnv(t, true)
 	_, page := e.do(t, "GET", "/settings/system?tab=signin", "admin", nil)
-	if n := strings.Count(page, "Asks you to confirm"); n != 3 {
-		t.Errorf("%d cards ask to confirm, want 3 (mode, identity provider, roles)", n)
+	// The badges sit on the fields that ask, not on the cards (#337): the scopes and the button name
+	// are saved without a confirmation, the issuer is not.
+	field := func(key string) string {
+		i := strings.Index(page, `data-key="`+key+`"`)
+		if i < 0 {
+			t.Fatalf("no field %s", key)
+		}
+		rest := page[i+10:]
+		if j := strings.Index(rest, `data-key="`); j >= 0 {
+			rest = rest[:j]
+		}
+		return rest
+	}
+	for key, want := range map[string]bool{"OIDC_ISSUER": true, "OIDC_GROUPS_CLAIM": true, "OIDC_SCOPES": false, "OIDC_DISPLAY_NAME": false} {
+		if got := strings.Contains(field(key), "Asks you to confirm"); got != want {
+			t.Errorf("%s shows the confirm badge: %v, want %v", key, got, want)
+		}
 	}
 	issuer := strings.Index(page, `data-key="OIDC_ISSUER"`)
 	test := strings.Index(page, "Test discovery")
@@ -371,7 +509,7 @@ func TestKeepSourceOrderDoesNotReorderTheStoredSources(t *testing.T) {
 // Why: a stored secret that is not used until it is entered again, and a restart-only change that
 // is still waiting, must be visible at the field, not only in the page banner.
 func TestSettingFieldShowsNoticeAndPendingRestart(t *testing.T) {
-	d := sysFieldData(sysRow{FieldState: sysconfig.FieldState{Field: sysconfig.Field{Key: "OIDC_CLIENT_SECRET", Label: "Client secret"}, NeedsReentry: true, Skipped: "enter the secret again", PendingRestart: true}}, false)
+	d := sysFieldData(sysRow{FieldState: sysconfig.FieldState{Field: sysconfig.Field{Key: "OIDC_CLIENT_SECRET", Label: "Client secret"}, NeedsReentry: true, Skipped: "enter the secret again", PendingRestart: true}})
 	if d.Notice != "enter the secret again" || !d.Pending {
 		t.Errorf("notice %q, pending %v", d.Notice, d.Pending)
 	}
@@ -387,5 +525,68 @@ func TestSystemSettingsNewFieldsLandByGroup(t *testing.T) {
 	sysGroupOnly := sysconfig.Field{Key: "TEST_ONLY_HEALTH", Group: sysconfig.GroupHealth}
 	if sysGroupCard[sysGroupOnly.Group] != "health" {
 		t.Error("the Health group has no card")
+	}
+}
+
+// Why (#337): "Reset to default" on a field whose value is the default has nothing to reset.
+func TestSystemSettingsResetIsOfferedOnlyWhenTheValueDiffersFromTheDefault(t *testing.T) {
+	stored := func(key, val string) sysRow {
+		return sysRow{FieldState: sysconfig.FieldState{Field: sysconfig.Field{Key: key}, Value: val, Source: "stored"}}
+	}
+	if sysCanReset(stored("OIDC_GROUPS_CLAIM", config.DefaultValue("OIDC_GROUPS_CLAIM"))) {
+		t.Error("a stored value equal to the default must not offer a reset")
+	}
+	if !sysCanReset(stored("OIDC_GROUPS_CLAIM", "roles")) {
+		t.Error("a stored value that differs must offer a reset")
+	}
+	if sysCanReset(sysRow{FieldState: sysconfig.FieldState{Field: sysconfig.Field{Key: "OIDC_GROUPS_CLAIM"}, Source: "default"}}) {
+		t.Error("a value that was never stored has nothing to reset")
+	}
+}
+
+// Why (#338, approved mockup v8): Sign-in mode is a full-width strip, Identity provider takes two
+// columns and Roles and claims the third; the mode card holds its Restart and confirm badges in the
+// header and says PUBLIC_URL below the choices, with no field label row (no lone reset line).
+func TestSystemSettingsSignInTabFollowsTheMockup(t *testing.T) {
+	want := map[string]string{"mode": "spanall", "idp": "span2", "roles": ""}
+	for _, d := range sysLayout {
+		if d.Slug != "signin" {
+			continue
+		}
+		for _, c := range d.Cards {
+			if c.Class != want[c.ID] {
+				t.Errorf("card %s class %q, want %q", c.ID, c.Class, want[c.ID])
+			}
+		}
+	}
+	e, _, _, _ := sysEnv(t, true)
+	_, page := e.do(t, "GET", "/settings/system?tab=signin", "admin", nil)
+	i := strings.Index(page, `id="card-mode"`)
+	mode := page[i : i+strings.Index(page[i:], `id="card-idp"`)]
+	if strings.Count(mode, "Asks you to confirm") != 1 || strings.Count(mode, ">Restart<") != 1 {
+		t.Error("the mode card carries one Restart and one confirm badge, in its header")
+	}
+	if strings.Contains(mode, `class="lrow"`) {
+		t.Error("the radio cards have no label row (it only held a lone reset line)")
+	}
+	if !strings.Contains(mode, "Needs PUBLIC_URL. The local admin always works as a fallback.") || strings.Index(mode, "Needs PUBLIC_URL") < strings.Index(mode, "rcards") {
+		t.Error("the PUBLIC_URL note sits below the choices")
+	}
+}
+
+// Why (#338, mockup): the Backups tab always has the card of deleted devices' backups, with its
+// empty text, and Advanced shows the container settings as a card with a disclosure.
+func TestSystemSettingsBackupsAndAdvancedFollowTheMockup(t *testing.T) {
+	e, _, _, _ := storageEnv(t)
+	_, page := e.do(t, "GET", "/settings/system?tab=backups", "admin", nil)
+	if !strings.Contains(page, `id="card-orphans"`) {
+		t.Error("the deleted devices card is missing")
+	}
+	e2, _, _, _ := sysEnv(t, true)
+	_, page = e2.do(t, "GET", "/settings/system?tab=advanced", "admin", nil)
+	for _, w := range []string{`id="card-container"`, "Read-only. Change them in the container configuration.", "container settings</summary>"} {
+		if !strings.Contains(page, w) {
+			t.Errorf("Advanced lacks %q", w)
+		}
 	}
 }

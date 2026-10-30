@@ -11492,6 +11492,26 @@ dialog.fw-notes-dlg .fw-dlg-body {
   gap: var(--sp-6);
   align-items: center;
 }
+.sf-nolabel .lrow {
+  min-height: 0;
+}
+.sf-nolabel .meta {
+  margin-left: 0;
+}
+.sf-nolabel .rcards {
+  flex-direction: row;
+}
+.sf-nolabel .rcard {
+  flex: 1;
+}
+.sf-nolabel .rcards legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 .sf.w-xs .meta {
   margin-left: 0;
 }
@@ -11561,6 +11581,16 @@ dialog.fw-notes-dlg .fw-dlg-body {
   min-height: 0;
   margin-top: var(--sp-8);
   font-size: 12.5px;
+}
+.sopt[hidden] {
+  display: none;
+}
+.sbody > .sopt,
+.scan-nets {
+  grid-column: 1 / -1;
+}
+.scan-nets {
+  margin: 0;
 }
 .cks {
   display: flex;
@@ -11651,12 +11681,9 @@ input:focus-visible + .swtrack {
 .sf-switch .ufield-help {
   margin-top: var(--sp-1);
 }
-/* settings that only matter while a switch is on: indented under it, dimmed while it is off */
+/* settings that only matter while a switch is on: ordinary fields of the card, dimmed while it is off */
 .dep {
   grid-column: 1 / -1;
-  margin-left: var(--sp-16);
-  padding-left: var(--sp-22);
-  border-left: 2px solid var(--color-border);
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--sp-14);
@@ -11763,6 +11790,19 @@ input:focus-visible + .swtrack {
   flex: 1;
 }
 /* after the form: the container's settings and the danger zone */
+.syswrap {
+  display: flex;
+  flex-direction: column;
+}
+.syswrap > .syspage {
+  display: contents;
+}
+.syswrap .sys-after {
+  order: 1;
+}
+.syswrap .sbar {
+  order: 2;
+}
 .sys-after {
   max-width: 1240px;
   margin-top: var(--sp-16);
@@ -11786,10 +11826,10 @@ input:focus-visible + .swtrack {
   font: 600 13px var(--font-sans);
 }
 .sys-container {
-  background: var(--color-surface);
-  border: var(--hair-w) solid var(--color-border);
-  border-radius: var(--r-card);
-  padding: var(--sp-14) var(--sp-18);
+  background: none;
+  border: 0;
+  padding: 0;
+  margin-top: var(--sp-8);
 }
 .sys-container summary {
   cursor: pointer;
@@ -11842,6 +11882,9 @@ input:focus-visible + .swtrack {
   .dep,
   .brow {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .sf-nolabel .rcards {
+    flex-direction: column;
   }
   .sf,
   .sf.w-half,
@@ -11912,10 +11955,14 @@ input:focus-visible + .swtrack {
   align-items: center;
   gap: var(--sp-12);
   flex-wrap: wrap;
-  padding: var(--sp-12) var(--sp-14);
-  border: var(--hair-w) solid var(--color-border);
-  border-radius: var(--r-card);
-  background: var(--color-surface);
+  padding: var(--sp-10) var(--sp-14);
+  border-radius: var(--r-control);
+  background: var(--color-surface-2);
+}
+.sys-card-foot {
+  grid-column: 1 / -1;
+  padding-top: var(--sp-12);
+  border-top: var(--hair-w) solid var(--color-border);
 }
 .sys-status-dot {
   width: 9px;

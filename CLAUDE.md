@@ -312,6 +312,11 @@ not ask for that job. `docs.yml` (link check) reports its own, non-required
 status. No approvals are required (single maintainer). Release tags are still pushed
 directly, on a green commit of `main`.
 
+**UI built from an approved mockup:** the PR ships paired screenshots per screen (mockup and build, same
+width at 1280 and 375 px, light and dark). Every visible difference is fixed or listed with the
+maintainer's decision that allows it, and the PR is merged only after that comparison. "Tests pass" is
+not acceptance for UI work.
+
 ## Branches and worktrees
 
 After a pull request is merged into `main`, its branch is deleted on origin and the
