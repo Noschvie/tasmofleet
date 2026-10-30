@@ -37,7 +37,10 @@ func newSimEnv(t *testing.T, spec simulator.DeviceSpec) *simEnv {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = fleet.Close() }) // test teardown
-	spec.Name, spec.Profile, spec.Version = "sim-plug", simulator.ProfileESP32, "15.1.0"
+	spec.Name, spec.Version = "sim-plug", "15.1.0"
+	if spec.Profile == "" {
+		spec.Profile = simulator.ProfileESP32
+	}
 	dev, err := fleet.Add(ctx, spec)
 	if err != nil {
 		t.Fatal(err)

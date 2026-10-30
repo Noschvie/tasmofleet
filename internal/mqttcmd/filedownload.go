@@ -28,6 +28,11 @@ const (
 	// the topic with its length byte, the payload) of this size or more closes its connection.
 	cmndBufferSize = 1200
 	downloadType   = 2 // UPL_SETTINGS
+
+	suffixDownload = "FILEDOWNLOAD"
+	suffixUpload   = "FILEUPLOAD"
+	cmdDownload    = "FileDownload"
+	cmdUpload      = "FileUpload"
 )
 
 // ErrPasswordRefused: the device answered "Error 1" to FileDownload. Its MqttPassword differs
@@ -46,6 +51,8 @@ func transferErr(format string, a ...any) error {
 // dropped; they are never logged, stored or put into an error.
 type fileMsg struct {
 	Status  *string `json:"FileDownload"` // Started | Aborted | Done | Error N
+	UpState *string `json:"FileUpload"`   // the same words on stat/<t>/FILEUPLOAD (upload.go)
+	MaxSize *int    `json:"MaxSize"`      // upload: the chunk size the device accepts next
 	Command *string `json:"Command"`      // "Unknown": minimal firmware echoing our command (with the password)
 	File    *string `json:"File"`
 	ID      *int    `json:"Id"`
@@ -61,7 +68,7 @@ func (c *Channel) onFile(m mqttbus.Message) {
 	c.mu.Lock()
 	ch := c.files[m.Topic]
 	c.mu.Unlock()
-	if ch == nil || m.Suffix != "FILEDOWNLOAD" {
+	if ch == nil || (m.Suffix != suffixDownload && m.Suffix != suffixUpload) {
 		return
 	}
 	select {
@@ -261,13 +268,19 @@ func boundedStatus(s string) string {
 
 // nextFile returns the next non-empty FILEDOWNLOAD message, or why there is none.
 func (c *Channel) nextFile(ctx context.Context, in chan mqttbus.Message, what string) (*fileMsg, error) {
+	return c.nextFileOf(ctx, in, what, suffixDownload)
+}
+
+// nextFileOf is nextFile for one direction: the device keeps one transfer state, so messages of
+// the other direction (a late "Aborted") are not answers.
+func (c *Channel) nextFileOf(ctx context.Context, in chan mqttbus.Message, what, suffix string) (*fileMsg, error) {
 	timer := time.NewTimer(c.o.ReplyWait)
 	defer timer.Stop()
 	for {
 		select {
 		case m := <-in:
 			var fm fileMsg
-			if json.Unmarshal(m.Payload, &fm) != nil {
+			if m.Suffix != suffix || json.Unmarshal(m.Payload, &fm) != nil {
 				continue // noise on the topic; never put the payload anywhere
 			}
 			return &fm, nil
@@ -285,13 +298,20 @@ func (c *Channel) nextFile(ctx context.Context, in chan mqttbus.Message, what st
 // preceded by one more chunk of a download that was still running. It never fails; the start
 // ignores whatever is left.
 func (c *Channel) waitAborted(ctx context.Context, in chan mqttbus.Message) {
+	c.waitAbortedOf(ctx, in, suffixDownload)
+}
+
+func (c *Channel) waitAbortedOf(ctx context.Context, in chan mqttbus.Message, suffix string) {
 	timer := time.NewTimer(min(abortWait, c.o.ReplyWait))
 	defer timer.Stop()
 	for {
 		select {
 		case m := <-in:
 			var fm fileMsg
-			if json.Unmarshal(m.Payload, &fm) == nil && fm.Status != nil && *fm.Status == "Aborted" {
+			if m.Suffix != suffix || json.Unmarshal(m.Payload, &fm) != nil {
+				continue
+			}
+			if st := fm.state(suffix); st != nil && *st == "Aborted" {
 				return
 			}
 		case <-timer.C:
@@ -306,44 +326,71 @@ func (c *Channel) waitAborted(ctx context.Context, in chan mqttbus.Message) {
 
 // abort ends a half-done transfer. The caller's context may be spent, so it has its own.
 func (c *Channel) abort(topic string) {
+	c.abortCmd(topic, cmdDownload)
+}
+
+func (c *Channel) abortCmd(topic, cmd string) {
 	ctx, cancel := context.WithTimeout(context.Background(), c.o.ReplyWait)
 	defer cancel()
 	// Best effort: if it is lost, the next Download starts with "FileDownload 0" again.
-	_ = c.sendFile(ctx, topic, "0")
+	_ = c.sendFileCmd(ctx, topic, cmd, "0")
 }
 
 // sendFile publishes FileDownload with payload, after the bus-wide gap. payload may carry the
 // password: it is neither logged nor wrapped into an error.
 func (c *Channel) sendFile(ctx context.Context, topic, payload string) error {
-	if room := cmndBufferSize - 5 - len("cmnd/"+topic+"/FileDownload") - 1; len(payload) > room {
+	return c.sendFileCmd(ctx, topic, cmdDownload, payload)
+}
+
+// sendFileCmd publishes cmd (FileDownload or FileUpload). The payload budget of the device's
+// 1200 byte buffer is asserted before every publish: at 5 + len(topic) + len(payload) >= 1200 the
+// device drops its connection without a DISCONNECT.
+func (c *Channel) sendFileCmd(ctx context.Context, topic, cmd, payload string) error {
+	if room := cmndBufferSize - 5 - len("cmnd/"+topic+"/"+cmd) - 1; len(payload) > room {
 		return fmt.Errorf("%w: the command does not fit the device's MQTT buffer", ErrRefused)
 	}
 	if err := ctx.Err(); err != nil { // a cancelled caller must not publish the password
-		return fmt.Errorf("mqtt: FileDownload not sent: %w", err)
+		return fmt.Errorf("mqtt: %s not sent: %w", cmd, err)
 	}
 	if err := c.waitTurn(ctx); err != nil {
-		return fmt.Errorf("mqtt: FileDownload not sent: %w", err)
+		return fmt.Errorf("mqtt: %s not sent: %w", cmd, err)
 	}
-	if err := c.bus.Command(ctx, topic, "FileDownload", payload); err != nil {
+	if err := c.bus.Command(ctx, topic, cmd, payload); err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return fmt.Errorf("%w: FileDownload may have been sent: %w", tasmota.ErrTimeout, err)
+			return fmt.Errorf("%w: %s may have been sent: %w", tasmota.ErrTimeout, cmd, err)
 		}
-		return fmt.Errorf("%w: FileDownload not sent", tasmota.ErrUnreachable) // err dropped: the bus may quote the payload
+		return fmt.Errorf("%w: %s not sent", tasmota.ErrUnreachable, cmd) // err dropped: the bus may quote the payload
 	}
 	return nil
+}
+
+// state is the status word of the direction suffix names.
+func (m *fileMsg) state(suffix string) *string {
+	if suffix == suffixUpload {
+		return m.UpState
+	}
+	return m.Status
 }
 
 // downloadStart builds {"Password":…,"Type":2} in compact framing. A password the device's
 // JSON parser might read differently (quote, backslash, control character) is refused instead
 // of escaped: nothing is sent.
 func downloadStart(password string) (string, error) {
+	if err := checkFilePassword(password); err != nil {
+		return "", err
+	}
+	return `{"Password":"` + password + `","Type":` + strconv.Itoa(downloadType) + `}`, nil
+}
+
+// checkFilePassword refuses a password that cannot be put into the start command verbatim.
+func checkFilePassword(password string) error {
 	if password == "" {
-		return "", fmt.Errorf("%w: no MQTT password is set for this device", ErrRefused)
+		return fmt.Errorf("%w: no MQTT password is set for this device", ErrRefused)
 	}
 	for _, r := range password {
 		if r == '"' || r == '\\' || r < 0x20 || r == 0x7f {
-			return "", fmt.Errorf("%w: the MQTT password contains a character that cannot be sent in a FileDownload command", ErrRefused)
+			return fmt.Errorf("%w: the MQTT password contains a character that cannot be sent in a file transfer command", ErrRefused)
 		}
 	}
-	return `{"Password":"` + password + `","Type":` + strconv.Itoa(downloadType) + `}`, nil
+	return nil
 }

@@ -7,7 +7,9 @@
 //   - Never "Status 0" (any spelling cmdpolicy would read as 0), never a group topic, never a
 //     topic with MQTT wildcards or separators. FileDownload, FileUpload and Upload are refused by Do:
 //     they carry the device's MQTT password and have their own API (Download, see filedownload.go;
-//     the uploader comes later). Download holds the topic for the whole transfer, sends one "?" per
+//     Upload, see upload.go). Upload shares Download's per-topic clean state (one FMqtt state on
+//     the device), asserts the payload budget 1200-5-len(cmnd topic)-1 before every publish, and
+//     sends "FileUpload 0" after any failure but the device's own "Error N". Download holds the topic for the whole transfer, sends one "?" per
 //     Data message, checks Size, Id and MD5, aborts with "FileDownload 0" on any irregularity, and
 //     never logs or returns a payload (the start carries the password, a minimal firmware echoes it).
 //   - One command in flight per device topic (first come, first served) and at least Gap between
