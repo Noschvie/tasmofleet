@@ -191,8 +191,10 @@ const olga = { "X-authentik-username": "olga", "X-authentik-groups": "ops" };
 
 async function openDevicePage(page: Page, headers: Record<string, string>): Promise<void> {
   await page.setExtraHTTPHeaders(headers);
-  await page.goto(app.url + "/devices");
-  await page.getByRole("link", { name: "mq-esp32", exact: true }).click();
+  // The devenv imports in a fixed order into a fresh database, so mq-esp32 is device 1; it takes the
+  // name it reports after a while, so go by the id and check it is the one we mean (by address).
+  await page.goto(app.url + "/devices/1");
+  await expect(page.locator(".devhd-meta")).toContainText(env.devices["mq-esp32"].addr);
   // the failure is remembered after the first HTTP call that fails: reload until the card says so
   await expect(async () => {
     await page.reload();
@@ -210,7 +212,7 @@ test("connection card explains paths", async ({ page }) => {
   // commands go over MQTT, and the list marks the device
   await expect(card.locator("#devpaths-actions").getByText("Over MQTT, because", { exact: false }).first()).toBeVisible();
   await page.goto(app.url + "/devices");
-  await expect(page.getByRole("row").filter({ hasText: "mq-esp32" }).locator("[data-via-mqtt]")).toBeVisible();
+  await expect(page.locator("[data-via-mqtt]").first()).toBeVisible();
 });
 
 test("disabled actions carry the reason", async ({ page }) => {
