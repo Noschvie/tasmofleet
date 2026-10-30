@@ -399,6 +399,25 @@ func TestStepUpgradeIssued(t *testing.T) {
 			check: func(t *testing.T, j model.Job, _ []Action) { wantErrContains(t, j, "404") },
 		},
 		{
+			// Why (D9): the device could not even connect to the firmware server. A second Upgrade 1 would
+			// fail the same way after the same minute, so the job ends at once, whatever the attempt count.
+			name: "upgrade_issued/upgrade_report connection failed/Attempt < Max", in: ui, ev: Event{Kind: EvUpgradeReport, Err: "Failed HTTP error: connection failed"},
+			state: model.JobFailed, actions: []ActionKind{ActNotify},
+			check: func(t *testing.T, j model.Job, _ []Action) { wantErrContains(t, j, ErrTextFWUnreachable) },
+		},
+		{
+			// Only the connection failure is final; a 404 or a short download keeps the retry rule.
+			name: "upgrade_issued/upgrade_report other HTTP error", in: ui, ev: Event{Kind: EvUpgradeReport, Err: "Failed HTTP error: 404"},
+			state: model.JobSetOtaURL, actions: []ActionKind{ActSetOtaURL},
+		},
+		{
+			// A cancel that waited for the stage still ends as cancelled, with the reason.
+			name: "upgrade_issued/upgrade_report connection failed/cancel requested", in: func() model.Job { j := ui; j.CancelRequested = true; return j }(),
+			ev:    Event{Kind: EvUpgradeReport, Err: "Failed HTTP error: connection failed"},
+			state: model.JobCancelled, actions: []ActionKind{ActNotify},
+			check: func(t *testing.T, j model.Job, _ []Action) { wantErrContains(t, j, ErrTextFWUnreachable) },
+		},
+		{
 			// "Successful" over MQTT is a hint only; the probe decides.
 			name: "upgrade_issued/upgrade_report Successful", in: ui, ev: Event{Kind: EvUpgradeReport, Err: ""},
 			state: model.JobUpgradeIssued, actions: nil,

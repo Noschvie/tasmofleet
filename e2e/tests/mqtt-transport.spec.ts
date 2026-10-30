@@ -1,4 +1,5 @@
 import { test, expect } from "../support/fixtures";
+import { quickPick } from "../support/updates";
 import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
 // Console and "Make compliant" over MQTT (0.20.0, #79, #256): mq-esp32 is a simulated
@@ -19,11 +20,16 @@ test.beforeAll(async () => {
       TASMOFLEET_ADMIN_GROUPS: "adm",
       TASMOFLEET_MQTT_URL: env.vars.TASMOFLEET_MQTT_URL,
       TASMOFLEET_POLL_INTERVAL: "5s",
+      TASMOFLEET_FIRMWARE_UPSTREAM_OVERRIDE: env.vars.DEVENV_UPSTREAM_URL,
       TASMOFLEET_POLICY_RULES: JSON.stringify([{ command: "PowerOnState", want: "2", note: "e2e target" }]),
     },
   });
   // two devices: the Columns menu (used to see when the group topics are read) needs a second row
-  const only = { "mq-esp32": env.devices["mq-esp32"], "mq-esp8266-1m": env.devices["mq-esp8266-1m"] };
+  const only = {
+    "mq-esp32": env.devices["mq-esp32"],
+    "mq-esp8266-1m": env.devices["mq-esp8266-1m"],
+    "mq-fw-blocked": env.devices["mq-fw-blocked"],
+  };
   expect(app.cli(["import", "tasmoadmin", writeTasmoAdminDir(only)])).toContain("created: mq-esp32");
 });
 test.afterAll(async () => {
@@ -90,4 +96,90 @@ test("Make compliant over MQTT", { tag: "@core" }, async ({ page }) => {
   await expect(fixedRow().first()).toBeVisible();
   const detail = page.locator("table.audittable tr.detail-row", { hasText: "PowerOnState" }).filter({ hasText: /via\W+mqtt/ });
   expect(await detail.count()).toBeGreaterThan(0);
+});
+
+// Update over MQTT (0.20.0, #79, #259). The devices answer nothing over HTTP, so the preview probes
+// them over MQTT; the language build cannot be read there, so the person says it; the update runs the
+// same engine with the job pinned to MQTT. "Back up each device" is off: the backup over MQTT is a
+// separate step (#257).
+// The devices take the DeviceName they report, so the picker is addressed by device id: the import
+// creates them in the order of the object (mq-esp32 = 1, mq-esp8266-1m = 2, mq-fw-blocked = 3).
+const deviceId = { "mq-esp32": 1, "mq-esp8266-1m": 2, "mq-fw-blocked": 3 } as const;
+async function pickById(page: import("@playwright/test").Page, name: keyof typeof deviceId) {
+  await page.goto(app.url + "/updates/new");
+  await quickPick(page, "None");
+  await page.locator(`input[name=id][value="${deviceId[name]}"]`).check();
+}
+
+async function reviewMQTTUpdate(page: import("@playwright/test").Page, name: keyof typeof deviceId) {
+  const row = () => page.locator(".upd-prow");
+  // HTTP counts as failing, and every device's group topic as read, only after the first health polls
+  // and reads: review again until the device is probed over MQTT. A short action timeout lets one
+  // failed round end (the picker lists a device as Offline until then) instead of eating the whole wait.
+  page.setDefaultTimeout(8_000);
+  await expect(async () => {
+    await pickById(page, name);
+    await page.locator("label.upd-relopt", { hasText: "Tasmota 16.1.0" }).click();
+    await page.getByLabel("Back up each device before flashing").uncheck();
+    await page.getByRole("button", { name: "Review update" }).click();
+    await expect(row()).toBeVisible();
+    await expect(row()).not.toContainText("probe failed", { timeout: 1_000 });
+  }).toPass({ timeout: 150_000, intervals: [5_000] }).catch(async (e) => {
+    throw new Error(`${e}\npicker/preview page: ${(await page.locator("main").innerText().catch(() => "?")).slice(0, 1500)}`);
+  });
+  page.setDefaultTimeout(30_000);
+  return row();
+}
+
+test("update over MQTT (staged ESP8266) from the preview", { tag: "@core" }, async ({ page }) => {
+  test.setTimeout(420_000);
+  await page.setExtraHTTPHeaders(admin);
+  const row = await reviewMQTTUpdate(page, "mq-esp8266-1m");
+  // Nothing is guessed: the language build is the person's choice, and without it nothing starts.
+  await expect(row).toContainText("Language build of this device");
+  await expect(row.locator("select")).toHaveValue("");
+  await expect(page.getByRole("button", { name: "Start update", exact: true })).toHaveCount(0);
+  await row.locator("select").selectOption("EN");
+  await page.getByRole("button", { name: "Recheck" }).click();
+  const again = page.locator(".upd-prow");
+  await expect(again).toContainText("Over MQTT");
+  await expect(again).toContainText("Staged: minimal firmware first");
+  await page.getByRole("button", { name: "Start update", exact: true }).click();
+  await expect(page).toHaveURL(/\/transactions\/\d+$/);
+  await expect(page.locator(".upd-row").getByText("Done", { exact: true })).toBeVisible({ timeout: 300_000 });
+});
+
+// FULL: a device that cannot reach the firmware server fails the update at once with that reason, and
+// from then on the preview says there is no download path (until Forget or 24 h).
+test("fw-blocked device shows no download path", async ({ page }) => {
+  test.setTimeout(420_000);
+  await page.setExtraHTTPHeaders(admin);
+  const row = await reviewMQTTUpdate(page, "mq-fw-blocked");
+  await row.locator("select").selectOption("EN");
+  await page.getByRole("button", { name: "Recheck" }).click();
+  await page.getByRole("button", { name: "Start update", exact: true }).click();
+  await expect(page).toHaveURL(/\/transactions\/\d+$/);
+  await expect(page.locator(".upd-row")).toContainText(/Failed|Done/, { timeout: 200_000 }).catch(async (e) => {
+    throw new Error(`${e}\nlog: ${(await page.locator("#log-lines").innerText().catch(() => "?")).slice(0, 1500)}`);
+  });
+  await expect(page.locator("#log-lines"), "the job's log names the reason").toContainText("cannot reach the firmware server", { timeout: 5_000 });
+  await pickById(page, "mq-fw-blocked");
+  await page.locator("label.upd-relopt", { hasText: "Tasmota 16.1.0" }).click();
+  await page.getByLabel("Back up each device before flashing").uncheck();
+  await page.getByRole("button", { name: "Review update" }).click();
+  const blocked = page.locator(".upd-prow");
+  await blocked.locator("select").selectOption("EN"); // the language is asked first, the path is judged after it
+  await page.getByRole("button", { name: "Recheck" }).click();
+  await expect(page.locator(".upd-prow")).toContainText("no path");
+  await expect(page.getByRole("button", { name: "Start update", exact: true })).toHaveCount(0);
+});
+
+// FULL: the same device without a language choice is not guessed.
+test("language choice required", async ({ page }) => {
+  test.setTimeout(240_000);
+  await page.setExtraHTTPHeaders(admin);
+  const row = await reviewMQTTUpdate(page, "mq-esp32");
+  // An ESP32 with the dual-core tasmota32 build has language builds too; whichever the row shows, it
+  // must be a choice and not a pre-filled value.
+  await expect(row.locator("select")).toHaveValue("");
 });

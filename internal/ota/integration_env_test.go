@@ -190,6 +190,8 @@ type itEnv struct {
 	keepBackup    bool
 	safebootPush  bool         // open the gate of the push into safeboot (#30) for the engines of this test
 	runCancel     atomic.Value // context.CancelFunc of the running engine
+	paths         UpdatePaths  // the path chooser of the engines of this test (nil: HTTP for every update)
+	engine        atomic.Pointer[Engine]
 
 	// engine lifecycle
 	cancel context.CancelFunc
@@ -370,7 +372,8 @@ func (e *itEnv) addDevice(spec simulator.DeviceSpec) model.DeviceID {
 }
 
 func (e *itEnv) newEngine(maxParallel int) *Engine {
-	eng := NewEngine(Options{Machine: e.machine, MaxParallel: maxParallel, Power: e.power}, e.st, e.st, e.api, e.cache, e.backups, e.clk, e.log)
+	eng := NewEngine(Options{Machine: e.machine, MaxParallel: maxParallel, Power: e.power, Paths: e.paths}, e.st, e.st, e.api, e.cache, e.backups, e.clk, e.log)
+	e.engine.Store(eng)
 	eng.safebootPush = e.safebootPush // the gate of the push into safeboot, set by the test before start
 	return eng
 }

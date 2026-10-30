@@ -162,6 +162,7 @@ const (
 const (
 	ErrTextOtaURLChanged   = "OtaUrl changed by someone else"
 	ErrTextNoUpgradeStart  = "device did not start the upgrade"
+	ErrTextFWUnreachable   = "the device cannot reach the firmware server"
 	ErrTextNotBack         = "device did not come back"
 	ErrTextHardwareChanged = "hardware changed after upgrade (critical)"
 	ErrTextNoEffect        = "upgrade did not take effect"
@@ -440,6 +441,13 @@ func stepSetOtaURL(j model.Job, ev Event, now time.Time, cfg Config) (model.Job,
 	return j, nil
 }
 
+// FWUnreachableReport reports whether a stat/<t>/UPGRADE text says the device could not even connect
+// to the server it was sent to ("Failed HTTP error: connection failed"). Other "Failed" texts (a
+// 404, a short download, a bad image) keep the retry rule.
+func FWUnreachableReport(text string) bool {
+	return strings.HasPrefix(text, "Failed") && strings.Contains(strings.ToLower(text), "connection failed")
+}
+
 func stepUpgradeIssued(j model.Job, ev Event, now time.Time, cfg Config) (model.Job, []Action) {
 	switch ev.Kind {
 	case EvCommandOK:
@@ -481,6 +489,15 @@ func stepUpgradeIssued(j model.Job, ev Event, now time.Time, cfg Config) (model.
 	case EvUpgradeReport:
 		if !strings.HasPrefix(ev.Err, "Failed") {
 			return j, nil // "Successful" is only a hint; the probe decides
+		}
+		if FWUnreachableReport(ev.Err) && j.Delivery != model.DeliveryPush {
+			// The device was told to download from tasmofleet's firmware server (Guard allows no other
+			// URL) and could not connect to it: a second Upgrade 1 would fail the same way, after the
+			// same minute of waiting (D9). The app records it as "the device does not reach the server".
+			if j.CancelRequested {
+				return cancelled(j, now, withErr(ErrTextFWUnreachable, ev.Err))
+			}
+			return fail(j, now, withErr(ErrTextFWUnreachable, ev.Err))
 		}
 		return retry(j, now, cfg, ev.Err)
 	case EvTimeout:
