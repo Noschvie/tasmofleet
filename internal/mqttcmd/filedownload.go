@@ -151,7 +151,6 @@ func (c *Channel) runDownload(ctx context.Context, topic, start string, in chan 
 		// A timeout here means the publish was attempted; a refusal or a spent context sent nothing.
 		return nil, errors.Is(err, tasmota.ErrTimeout), err
 	}
-	sent = true
 	// Anything before "Started" is a leftover of an earlier transfer (an "Aborted", a stray chunk).
 	for {
 		m, err := c.nextFile(ctx, in, "the start")
