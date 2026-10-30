@@ -24,11 +24,13 @@ func (p pub) String() string { return strings.TrimSpace(p.topic + " " + p.comman
 // fakeBus is a bus whose device side the test scripts. A reply emitted from inside Command
 // arrives before Command returns: the fastest device there is, which is what #272 was about.
 type fakeBus struct {
-	mu    sync.Mutex
-	subs  []fakeSub
-	cmds  []pub
-	down  bool
-	onPub func(b *fakeBus, p pub)
+	mu   sync.Mutex
+	subs []fakeSub
+	cmds []pub
+	down bool
+	// longPrefix, if set, replaces "cmnd/" in CommandTopic: a device behind a longer FullTopic.
+	longPrefix string
+	onPub      func(b *fakeBus, p pub)
 }
 
 type fakeSub struct {
@@ -45,6 +47,13 @@ func (b *fakeBus) Subscribe(kinds []mqttbus.Kind, h func(mqttbus.Message)) func(
 	b.subs = append(b.subs, s)
 	b.mu.Unlock()
 	return func() {}
+}
+
+func (b *fakeBus) CommandTopic(topic, command string) string {
+	if b.longPrefix != "" {
+		return b.longPrefix + topic + "/" + command
+	}
+	return "cmnd/" + topic + "/" + command
 }
 
 func (b *fakeBus) Connected() bool { return !b.down }

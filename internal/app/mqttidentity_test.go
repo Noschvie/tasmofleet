@@ -46,6 +46,10 @@ func (b *idFakeBus) Do(_ context.Context, d model.Device, cmd string) (json.RawM
 	}
 	return reply(cmd)
 }
+func (b *idFakeBus) CommandTopic(topic, command string) string {
+	return "cmnd/" + topic + "/" + command
+}
+
 func (b *idFakeBus) Connected() bool { return !b.down }
 
 // answers makes the device answer Status 2 with status2Payload.

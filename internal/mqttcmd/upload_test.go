@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/mqttbus"
 	"github.com/nofuturekid/tasmofleet/internal/simulator"
 	"github.com/nofuturekid/tasmofleet/internal/tasmota"
@@ -23,6 +24,7 @@ const upPassword = dlPassword
 func newUploadEnv(t *testing.T, profile simulator.Profile, faults ...simulator.Fault) *simEnv {
 	t.Helper()
 	e := newSimEnv(t, simulator.DeviceSpec{MQTTPassword: upPassword, Profile: profile, Faults: faults})
+	e.dvc.Identity.Family = model.ChipESP32 // Type 1 needs a known ESP32 family
 	e.waitConnected(t)
 	return e
 }
@@ -44,6 +46,13 @@ func simImage(t *testing.T) []byte {
 		t.Fatal(err)
 	}
 	return img
+}
+
+// esp32Plug is a device with a known ESP32 identity: Type 1 is refused for everything else.
+func esp32Plug() model.Device {
+	d := plug()
+	d.Identity.Family = model.ChipESP32
+	return d
 }
 
 func upload(ctx context.Context, c *Channel, e *simEnv, typ int, data []byte, pw string) error {
@@ -118,7 +127,7 @@ func (u *upDevice) attach(b *fakeBus) {
 		}
 		u.mu.Lock()
 		defer u.mu.Unlock()
-		if budget := 1200 - 5 - len("cmnd/"+p.topic+"/"+p.command) - 1; len(p.payload) > budget {
+		if budget := 1200 - 5 - len(b.CommandTopic(p.topic, p.command)) - 1; len(p.payload) > budget {
 			u.t.Errorf("payload of %d bytes exceeds the budget %d", len(p.payload), budget)
 		}
 		u.widest = max(u.widest, len(p.payload))
@@ -177,7 +186,7 @@ func runUp(t *testing.T, u *upDevice, typ int, data []byte, mod func(*Options)) 
 	if mod != nil {
 		mod(&o)
 	}
-	err := New(b, o).Upload(t.Context(), plug(), typ, "x.bin", int64(len(data)), bytes.NewReader(data), dlPassword, nil)
+	err := New(b, o).Upload(t.Context(), esp32Plug(), typ, "x.bin", int64(len(data)), bytes.NewReader(data), dlPassword, nil)
 	return b, err
 }
 
@@ -203,16 +212,112 @@ func TestUploadPayloadStaysInBudgetAndFollowsTheLatestMaxSize(t *testing.T) {
 	}
 }
 
-// Why: a device that announces more than fits its own buffer must not get a packet that closes
-// its connection: the uploader refuses to publish it and ends the transfer.
-func TestUploadRefusesAnOversizedChunkAndAborts(t *testing.T) {
+// Why: a device that announces more than the packet budget allows (or a topic longer than the
+// device assumed) must not get a packet that closes its connection: the chunk is clamped to what
+// fits, the data still arrives complete.
+func TestUploadClampsAnOversizedMaxSize(t *testing.T) {
+	data := make([]byte, 3000)
 	u := &upDevice{maxes: []int{2000}, final: `{"FileUpload":"Done"}`}
-	b, err := runUp(t, u, UploadFirmware, make([]byte, 3000), nil)
-	if !errors.Is(err, ErrRefused) {
-		t.Fatalf("want ErrRefused, got %v", err)
+	if _, err := runUp(t, u, UploadFirmware, data, nil); err != nil {
+		t.Fatal(err)
 	}
-	if u.aborts != 2 || u.data.Len() != 0 {
-		t.Fatalf("aborts %d, data %d, sent %d", u.aborts, u.data.Len(), len(b.sent()))
+	for _, n := range u.chunks {
+		if n > rawBudget(1174, 255) { // 864 for a three digit Id
+			t.Fatalf("chunk of %d bytes: %v", n, u.chunks)
+		}
+	}
+	if u.data.Len() != 3000 || u.widest > 1174 {
+		t.Fatalf("received %d bytes, widest payload %d", u.data.Len(), u.widest)
+	}
+}
+
+// Why (M1): the device sizes its buffer from the REAL command topic. Behind a longer FullTopic
+// the default budget is too big: the chunks follow the real one, and a payload that fits only the
+// default topic is refused for both directions.
+func TestUploadAndDownloadBudgetUseTheRealCommandTopic(t *testing.T) {
+	long := "cmnd/" + strings.Repeat("x", 120) + "/"
+	b := &fakeBus{longPrefix: long}
+	u := &upDevice{maxes: []int{861}, final: `{"FileUpload":"Done"}`}
+	u.t = t
+	u.attach(b)
+	data := make([]byte, 3000)
+	if err := New(b, fast()).Upload(t.Context(), esp32Plug(), UploadFirmware, "x", 3000, bytes.NewReader(data), dlPassword, nil); err != nil {
+		t.Fatal(err)
+	}
+	real := 1200 - 5 - len(long+"plug/FileUpload") - 1
+	if u.widest > real || u.data.Len() != 3000 {
+		t.Fatalf("widest %d over the real budget %d, received %d", u.widest, real, u.data.Len())
+	}
+	c := newChan(b)
+	atDefault := strings.Repeat("a", 1200-5-len("cmnd/plug/FileUpload")-1)
+	for _, cmd := range []string{cmdUpload, cmdDownload} {
+		before := len(b.sent())
+		if err := c.sendFileCmd(t.Context(), "plug", cmd, atDefault); !errors.Is(err, ErrRefused) || len(b.sent()) != before {
+			t.Fatalf("%s: %v", cmd, err)
+		}
+	}
+}
+
+// Why (H1): an aborted Type 1 runs Update.end(true); an ESP8266 would boot a truncated image.
+// Firmware over MQTT is refused unless the family is a known ESP32, and nothing is published.
+func TestUploadType1NeedsAKnownESP32(t *testing.T) {
+	for name, fam := range map[string]model.ChipFamily{"esp8266": model.ChipESP8266, "unknown": model.ChipUnknown} {
+		b := &fakeBus{}
+		d := plug()
+		d.Identity.Family = fam
+		err := newChan(b).Upload(t.Context(), d, UploadFirmware, "x", 4096, bytes.NewReader(make([]byte, 4096)), dlPassword, nil)
+		if !errors.Is(err, ErrRefused) || len(b.sent()) != 0 {
+			t.Errorf("%s: %v, sent %v", name, err, b.sent())
+		}
+	}
+	// Type 2 does not depend on the family.
+	u := &upDevice{maxes: []int{861}, final: `{"FileUpload":"Done"}`}
+	b := &fakeBus{}
+	u.t = t
+	u.attach(b)
+	d := plug()
+	d.Identity.Family = model.ChipESP8266
+	if err := New(b, fast()).Upload(t.Context(), d, UploadSettings, "x", 100, bytes.NewReader(make([]byte, 100)), dlPassword, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Why (M2): a start ack without a usable chunk size must end the transfer without any Data.
+func TestUploadMaxSizeZeroEndsWithoutData(t *testing.T) {
+	u := &upDevice{maxes: []int{0}, final: `{"FileUpload":"Done"}`}
+	_, err := runUp(t, u, UploadFirmware, make([]byte, 2000), nil)
+	if !errors.Is(err, ErrTransfer) || u.data.Len() != 0 || u.aborts != 2 {
+		t.Fatalf("%v, data %d, aborts %d", err, u.data.Len(), u.aborts)
+	}
+}
+
+// Why (M3): once every chunk of a firmware image was acknowledged, FileUpload 0 would commit the
+// complete image (Update.end(true)). A lost Done is therefore unknown and no abort follows; the
+// same loss for settings ends with the closing abort.
+func TestUploadType1AfterTheLastAckSendsNoAbort(t *testing.T) {
+	u := &upDevice{maxes: []int{861}} // never answers the Md5
+	_, err := runUp(t, u, UploadFirmware, make([]byte, 2000), nil)
+	if !errors.Is(err, ErrOutcomeUnknown) || u.aborts != 1 {
+		t.Fatalf("type 1: %v, aborts %d (only the opening one)", err, u.aborts)
+	}
+	u = &upDevice{maxes: []int{861}}
+	_, err = runUp(t, u, UploadSettings, make([]byte, 2000), nil)
+	if !errors.Is(err, ErrOutcomeUnknown) || u.aborts != 2 {
+		t.Fatalf("type 2: %v, aborts %d", err, u.aborts)
+	}
+}
+
+// Why: the file name goes into the start verbatim; the limit is 64 characters and spaces are fine.
+func TestUploadFileNameLimits(t *testing.T) {
+	for name, ok := range map[string]bool{strings.Repeat("n", 64): true, strings.Repeat("n", 65): false, "a b": true} {
+		u := &upDevice{maxes: []int{861}, final: `{"FileUpload":"Done"}`}
+		b := &fakeBus{}
+		u.t = t
+		u.attach(b)
+		err := New(b, fast()).Upload(t.Context(), plug(), 2, name, 100, bytes.NewReader(make([]byte, 100)), dlPassword, nil)
+		if ok && err != nil || !ok && !errors.Is(err, ErrRefused) {
+			t.Errorf("%d chars: %v", len(name), err)
+		}
 	}
 }
 
@@ -239,7 +344,7 @@ func TestUploadRefusesBeforePublishing(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			b := &fakeBus{}
-			err := newChan(b).Upload(t.Context(), plug(), tc.typ, tc.file, tc.size, bytes.NewReader(ok), tc.pw, nil)
+			err := newChan(b).Upload(t.Context(), esp32Plug(), tc.typ, tc.file, tc.size, bytes.NewReader(ok), tc.pw, nil)
 			if !errors.Is(err, ErrRefused) || len(b.sent()) != 0 {
 				t.Fatalf("%v, sent %v", err, b.sent())
 			}
@@ -267,7 +372,7 @@ func TestUploadWithACancelledContextPublishesNothing(t *testing.T) {
 // Why: Error 1 is the wrong-password signal (the caller marks the password bad); the device
 // reset itself, so no abort follows, and the password is in no error.
 func TestUploadErrorCodes(t *testing.T) {
-	for code, want := range map[int]string{3: "type", 5: "group topic", 7: "Error 7"} {
+	for code, want := range map[int]string{3: "type", 5: "group topic", 6: "prepare the update", 7: "Error 7"} {
 		u := &upDevice{maxes: []int{861}}
 		b := &fakeBus{}
 		u.t = t
@@ -323,13 +428,16 @@ func TestUploadFaultsAbort(t *testing.T) {
 		data []byte
 		want string
 		tout bool
+		// aborts: the opening FileUpload 0 plus the closing one; a Type 1 image whose chunks were
+		// all acknowledged gets no closing abort (it would commit the image via Update.end(true)).
+		aborts int
 	}{
-		{"ack lost", &upDevice{maxes: []int{861}, dropAck: 2}, 1, data, "no answer", true},
-		{"ack of another transfer", &upDevice{maxes: []int{861}, idOff: 1}, 1, data, "another transfer", false},
-		{"no confirmation of the start", &upDevice{maxes: []int{861}}, 1, data, "", true},
-		{"md5 mismatch", &upDevice{maxes: []int{861}, final: `{"FileUpload":"MD5 mismatch"}`}, 1, data, "MD5", false},
-		{"failed settings", &upDevice{maxes: []int{861}, final: `{"FileUpload":"Failed"}`}, 2, data, "settings dump", false},
-		{"failed image", &upDevice{maxes: []int{861}, final: `{"FileUpload":"Failed"}`}, 1, data, "image", false},
+		{"ack lost", &upDevice{maxes: []int{861}, dropAck: 2}, 1, data, "no answer", true, 2},
+		{"ack of another transfer", &upDevice{maxes: []int{861}, idOff: 1}, 1, data, "another transfer", false, 2},
+		{"no confirmation of the start", &upDevice{maxes: []int{861}}, 1, data, "", true, 2},
+		{"md5 mismatch", &upDevice{maxes: []int{861}, final: `{"FileUpload":"MD5 mismatch"}`}, 1, data, "MD5", false, 1},
+		{"failed settings", &upDevice{maxes: []int{861}, final: `{"FileUpload":"Failed"}`}, 2, data, "settings dump", false, 2},
+		{"failed image", &upDevice{maxes: []int{861}, final: `{"FileUpload":"Failed"}`}, 1, data, "image", false, 1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -349,7 +457,7 @@ func TestUploadFaultsAbort(t *testing.T) {
 					}
 				}
 			}
-			err := New(b, fast()).Upload(t.Context(), plug(), tc.typ, "x", int64(len(tc.data)), bytes.NewReader(tc.data), dlPassword, nil)
+			err := New(b, fast()).Upload(t.Context(), esp32Plug(), tc.typ, "x", int64(len(tc.data)), bytes.NewReader(tc.data), dlPassword, nil)
 			if err == nil || !errors.Is(err, ErrTransfer) || errors.Is(err, ErrOutcomeUnknown) {
 				t.Fatalf("%v", err)
 			}
@@ -362,8 +470,8 @@ func TestUploadFaultsAbort(t *testing.T) {
 			if strings.Contains(err.Error(), dlPassword) {
 				t.Fatalf("leak: %v", err)
 			}
-			if tc.u.aborts != 2 {
-				t.Fatalf("aborts %d, want the opening one and the closing one", tc.u.aborts)
+			if tc.u.aborts != tc.aborts {
+				t.Fatalf("aborts %d, want %d", tc.u.aborts, tc.aborts)
 			}
 		})
 	}
@@ -377,7 +485,7 @@ func TestUploadDataLengthMustMatchSize(t *testing.T) {
 		b := &fakeBus{}
 		u.t = t
 		u.attach(b)
-		err := New(b, fast()).Upload(t.Context(), plug(), 1, "x", size, bytes.NewReader(make([]byte, 2000)), dlPassword, nil)
+		err := New(b, fast()).Upload(t.Context(), plug(), 2, "x", size, bytes.NewReader(make([]byte, 2000)), dlPassword, nil)
 		if !errors.Is(err, ErrTransfer) || u.aborts != 2 {
 			t.Errorf("%s: %v, aborts %d", name, err, u.aborts)
 		}
@@ -403,6 +511,9 @@ func TestUploadLostDoneIsOutcomeUnknownAndTheDeviceAppliedIt(t *testing.T) {
 	}
 	if starts > 1 {
 		t.Fatalf("the upload was resent: %q", fileUpCmds(e))
+	}
+	if cmds := fileUpCmds(e); strings.HasSuffix(cmds[len(cmds)-1], " 0") {
+		t.Fatalf("a complete firmware image must not be followed by FileUpload 0 (Update.end(true)): %q", cmds)
 	}
 }
 

@@ -116,6 +116,18 @@ func (s *Switch) Command(ctx context.Context, topic, command, payload string) er
 	return b.Command(ctx, topic, command, payload)
 }
 
+// CommandTopic implements Bus. Without a connection the default shape is assumed; nothing is
+// published then.
+func (s *Switch) CommandTopic(topic, command string) string {
+	s.mu.Lock()
+	b := s.cur
+	s.mu.Unlock()
+	if b == nil {
+		return "cmnd/" + topic + "/" + command
+	}
+	return b.CommandTopic(topic, command)
+}
+
 // Connected implements Bus.
 func (s *Switch) Connected() bool {
 	s.mu.Lock()

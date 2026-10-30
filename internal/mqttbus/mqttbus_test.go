@@ -431,6 +431,8 @@ func (f *fakeBus) Command(_ context.Context, topic, c, p string) error {
 	f.cmds = append(f.cmds, topic+c+p)
 	return nil
 }
+func (f *fakeBus) CommandTopic(topic, command string) string { return "cmnd/" + topic + "/" + command }
+
 func (f *fakeBus) Connected() bool { return f.up }
 func (f *fakeBus) emit(m Message) {
 	f.mu.Lock()
@@ -572,7 +574,11 @@ type replayingBus struct{}
 
 func (replayingBus) Subscribe(_ []Kind, h func(Message)) func()            { h(Message{}); return func() {} }
 func (replayingBus) Command(context.Context, string, string, string) error { return nil }
-func (replayingBus) Connected() bool                                       { return true }
+func (replayingBus) CommandTopic(topic, command string) string {
+	return "cmnd/" + topic + "/" + command
+}
+
+func (replayingBus) Connected() bool { return true }
 
 // Why (#272): paho reports the connection open before the OnConnect handler has subscribed. A
 // consumer that publishes a command as soon as Connected() is true then loses the device's reply

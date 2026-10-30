@@ -218,7 +218,9 @@ func (b *fakeBus) Subscribe(_ []mqttbus.Kind, h func(mqttbus.Message)) func() {
 	return func() {}
 }
 func (b *fakeBus) Command(context.Context, string, string, string) error { return nil }
-func (b *fakeBus) Connected() bool                                       { return true }
+func (b *fakeBus) CommandTopic(topic, command string) string             { return "cmnd/" + topic + "/" + command }
+
+func (b *fakeBus) Connected() bool { return true }
 func (b *fakeBus) emit(kind mqttbus.Kind, topic, suffix, payload string, retained bool) {
 	b.mu.Lock()
 	subs := append([]func(mqttbus.Message){}, b.subs...)

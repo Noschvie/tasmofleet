@@ -58,6 +58,8 @@ type fakeBus struct {
 	retained  []mqttbus.Message
 }
 
+func (b *fakeBus) CommandTopic(topic, command string) string { return "cmnd/" + topic + "/" + command }
+
 func (b *fakeBus) Connected() bool { return b.connected }
 
 func (b *fakeBus) Subscribe(_ []mqttbus.Kind, h func(mqttbus.Message)) func() {

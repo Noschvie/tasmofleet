@@ -23,7 +23,11 @@ func (b *replayBus) Subscribe(_ []mqttbus.Kind, h func(mqttbus.Message)) func() 
 	return func() {}
 }
 func (b *replayBus) Command(context.Context, string, string, string) error { return nil }
-func (b *replayBus) Connected() bool                                       { return true }
+func (b *replayBus) CommandTopic(topic, command string) string {
+	return "cmnd/" + topic + "/" + command
+}
+
+func (b *replayBus) Connected() bool { return true }
 
 // Regression (v0.3.1): with a stored broker the pages hung forever. The health
 // tick held the health mutex while asking Switch.Enabled (Switch mutex), and

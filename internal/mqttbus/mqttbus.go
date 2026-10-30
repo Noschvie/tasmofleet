@@ -75,6 +75,9 @@ type Bus interface {
 	Subscribe(kinds []Kind, h func(Message)) (unsubscribe func())
 	// Command publishes cmnd/<topic>/<command> with payload.
 	Command(ctx context.Context, topic, command, payload string) error
+	// CommandTopic is the full topic Command publishes to. File transfers need its real
+	// length: the device sizes its chunks from it (1200 - 5 - len - 1).
+	CommandTopic(topic, command string) string
 	Connected() bool
 }
 
@@ -346,6 +349,8 @@ func (b *bus) call(h func(Message), msg Message) {
 	}()
 	h(msg)
 }
+
+func (b *bus) CommandTopic(topic, command string) string { return b.codec.Command(topic, command) }
 
 func (b *bus) Command(ctx context.Context, topic, command, payload string) error {
 	if topic == "" || command == "" || strings.ContainsAny(topic+command, "/+#") {

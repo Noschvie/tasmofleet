@@ -56,6 +56,8 @@ func (b *fakeBus) Command(_ context.Context, topic, command, payload string) err
 	return nil
 }
 
+func (b *fakeBus) CommandTopic(topic, command string) string { return "cmnd/" + topic + "/" + command }
+
 func (b *fakeBus) Connected() bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()

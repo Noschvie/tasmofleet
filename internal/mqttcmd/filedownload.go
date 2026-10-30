@@ -342,11 +342,15 @@ func (c *Channel) sendFile(ctx context.Context, topic, payload string) error {
 	return c.sendFileCmd(ctx, topic, cmdDownload, payload)
 }
 
+// payloadRoom is the payload budget for a command published to cmndTopic: the device closes its
+// connection for a packet of 1200 bytes or more (5 header bytes, the topic with its length byte).
+func payloadRoom(cmndTopic string) int { return cmndBufferSize - 5 - len(cmndTopic) - 1 }
+
 // sendFileCmd publishes cmd (FileDownload or FileUpload). The payload budget of the device's
 // 1200 byte buffer is asserted before every publish: at 5 + len(topic) + len(payload) >= 1200 the
 // device drops its connection without a DISCONNECT.
 func (c *Channel) sendFileCmd(ctx context.Context, topic, cmd, payload string) error {
-	if room := cmndBufferSize - 5 - len("cmnd/"+topic+"/"+cmd) - 1; len(payload) > room {
+	if room := payloadRoom(c.bus.CommandTopic(topic, cmd)); len(payload) > room {
 		return fmt.Errorf("%w: the command does not fit the device's MQTT buffer", ErrRefused)
 	}
 	if err := ctx.Err(); err != nil { // a cancelled caller must not publish the password

@@ -33,7 +33,9 @@ var ErrNoRoom = errors.New("mqttcmd: the device has no room for the file (Error 
 // ErrOutcomeUnknown: every byte was sent but the device never confirmed ("Done" lost, or the
 // connection ended while waiting). The device may well have applied the upload and be restarting.
 // Callers probe the device (settings: BootCount; firmware: version) and never resend.
-var ErrOutcomeUnknown = errors.New("mqttcmd: the upload was sent but the device never confirmed it; check the device, do not resend")
+// For Type 1 whose chunks were all acknowledged, the image may still become active at the next
+// restart, because no abort was sent.
+var ErrOutcomeUnknown = errors.New("mqttcmd: the upload was sent but the device never confirmed it (a firmware image may become active at the next restart); check the device, do not resend")
 
 // Upload sends r (size bytes) to d with FileUpload: typ 2 is a settings dump, typ 1 a firmware
 // image. name is the File field. progress, if set, is called with the bytes acknowledged so far.
@@ -42,11 +44,12 @@ var ErrOutcomeUnknown = errors.New("mqttcmd: the upload was sent but the device 
 // Protocol (docs/research/tasmota-mqtt-transport.md section 3, live test 2026-10-30):
 // start {"Password","File","Id","Type","Size"} -> "Started" and {"Id","MaxSize"}; then
 // {"Id","Data"} chunks of the latest MaxSize, one acknowledgement each; then {"Id","Md5"} ->
-// "Done". The device has one transfer state for both directions, so an upload after an unclean
+// "Done". progress runs on the uploading goroutine between chunks and must not block. The device has one transfer state for both directions, so an upload after an unclean
 // transfer (this process cannot tell what the device holds) opens with "FileUpload 0".
 //
 // After a start was (maybe) published, every failure except the device's own "Error N" ends with
-// "FileUpload 0". Nothing is retried or resent. No payload is ever logged or put into an error:
+// "FileUpload 0" -- except for Type 1 once every chunk was acknowledged: the abort would run
+// Update.end(true) and commit the complete image, so the outcome is left unknown instead. Nothing is retried or resent. No payload is ever logged or put into an error:
 // the start carries the password, and a minimal firmware echoes it back.
 func (c *Channel) Upload(ctx context.Context, d model.Device, typ int, name string, size int64, r io.Reader, password string, progress func(sent int64)) error {
 	if err := checkUpload(d, typ, name, size, r); err != nil {
@@ -94,9 +97,9 @@ func (c *Channel) Upload(ctx context.Context, d model.Device, typ int, name stri
 		}
 		c.waitAbortedOf(ctx, in, suffixUpload)
 	}
-	sent, err := c.runUpload(ctx, d.Topic, start, id, typ, size, r, in, progress)
+	abort, err := c.runUpload(ctx, d.Topic, start, id, typ, size, r, in, progress)
 	if err != nil {
-		if sent && !deviceReset(err) {
+		if abort && !deviceReset(err) {
 			c.abortCmd(d.Topic, cmdUpload) // the start may have reached the device: leave it idle
 		}
 		return err
@@ -113,6 +116,11 @@ func checkUpload(d model.Device, typ int, name string, size int64, r io.Reader) 
 	}
 	if typ != UploadFirmware && typ != UploadSettings {
 		return fmt.Errorf("%w: FileUpload type %d is not supported (only 1 and 2)", ErrRefused, typ)
+	}
+	// An aborted Type 1 runs Update.end(true): an ESP32 rejects a partial image, an ESP8266 only
+	// checks the magic byte and would boot a truncated one. Firmware over MQTT is ESP32 only.
+	if typ == UploadFirmware && !d.Identity.Family.IsESP32() {
+		return fmt.Errorf("%w: firmware over MQTT needs a known ESP32 family", ErrRefused)
 	}
 	if r == nil {
 		return fmt.Errorf("%w: no data to upload", ErrRefused)
@@ -169,6 +177,8 @@ func uploadErrorStatus(s string, typ int) error {
 			what = "the image does not fit"
 		}
 		return &deviceResetError{fmt.Errorf("%w: %w: the device refused: %s (Error 2)", ErrTransfer, ErrNoRoom, what)}
+	case 6:
+		return &deviceResetError{transferErr("the device could not prepare the update (Error 6)")}
 	case 3:
 		return &deviceResetError{transferErr("the device refused: the file type is not supported (Error 3)")}
 	case 5:
@@ -177,27 +187,33 @@ func uploadErrorStatus(s string, typ int) error {
 	return &deviceResetError{transferErr("the device refused the upload (Error %d)", n)}
 }
 
-// runUpload returns sent=true once the start was (maybe) published.
-func (c *Channel) runUpload(ctx context.Context, topic, start string, id, typ int, size int64, r io.Reader, in chan mqttbus.Message, progress func(int64)) (sent bool, err error) {
+// rawBudget is the largest raw chunk whose {"Id":N,"Data":"<b64>"} fits room (17 bytes of framing
+// plus the digits of the Id; base64 turns 3 raw bytes into 4).
+func rawBudget(room, id int) int { return (room - 17 - len(strconv.Itoa(id))) / 4 * 3 }
+
+// runUpload returns abort=true while a "FileUpload 0" must end the transfer on failure: once the
+// start was (maybe) published, and for Type 1 only until the last chunk was acknowledged.
+func (c *Channel) runUpload(ctx context.Context, topic, start string, id, typ int, size int64, r io.Reader, in chan mqttbus.Message, progress func(int64)) (abort bool, err error) {
 	if err := c.sendFileCmd(ctx, topic, cmdUpload, start); err != nil {
 		// A timeout here means the publish was attempted; a refusal or a spent context sent nothing.
 		return errors.Is(err, tasmota.ErrTimeout), err
 	}
+	abort = true
 	// Anything before "Started" is a leftover of an earlier transfer (an "Aborted", a stray chunk).
 	for {
 		m, err := c.nextFileOf(ctx, in, "the start", suffixUpload)
 		if err != nil {
-			return true, err
+			return abort, err
 		}
 		switch {
 		case m.Command != nil:
 			// A firmware without FileUpload (minimal, safeboot) echoed the command, password included.
-			return true, &deviceResetError{transferErr("the device does not support FileUpload (minimal or safeboot firmware?)")}
+			return abort, &deviceResetError{transferErr("the device does not support FileUpload (minimal or safeboot firmware?)")}
 		case m.UpState == nil:
 			continue
 		case *m.UpState == "Started":
 		case strings.HasPrefix(*m.UpState, "Error"):
-			return true, uploadErrorStatus(*m.UpState, typ)
+			return abort, uploadErrorStatus(*m.UpState, typ)
 		default:
 			continue
 		}
@@ -220,71 +236,83 @@ func (c *Channel) runUpload(ctx context.Context, topic, start string, id, typ in
 			return 0, transferErr("a message of another transfer arrived")
 		}
 		if m.MaxSize == nil || *m.MaxSize <= 0 {
-			return 0, transferErr("the device acknowledged %s without a chunk size", what)
+			return 0, transferErr("the device acknowledged %s without a usable chunk size", what)
 		}
 		return *m.MaxSize, nil
 	}
 	maxSize, err := ack("the start")
 	if err != nil {
-		return true, err
+		return abort, err
 	}
 
+	// The device sizes MaxSize from the topic it saw; the budget uses the topic we publish to.
+	room := payloadRoom(c.bus.CommandTopic(topic, cmdUpload))
 	sum := md5.New() //nolint:gosec // see import
 	var done int64
-	buf := make([]byte, 0, 4096)
 	for done < size {
-		n := int(min(int64(maxSize), size-done)) // the latest MaxSize: the device may shrink it
-		if cap(buf) < n {
-			buf = make([]byte, n)
+		n := int(min(int64(maxSize), int64(rawBudget(room, id)), size-done)) // the latest MaxSize, clamped
+		if n <= 0 {
+			return abort, transferErr("no chunk fits the device's MQTT buffer")
 		}
-		buf = buf[:n]
+		buf := make([]byte, n)
 		if _, err := io.ReadFull(r, buf); err != nil {
-			return true, transferErr("the data ended after %d of %d bytes", done, size)
+			return abort, transferErr("the data ended after %d of %d bytes", done, size)
 		}
 		sum.Write(buf)
 		payload := `{"Id":` + strconv.Itoa(id) + `,"Data":"` + base64.StdEncoding.EncodeToString(buf) + `"}`
 		if err := c.sendFileCmd(ctx, topic, cmdUpload, payload); err != nil {
-			return true, err
+			return abort, err
 		}
 		if maxSize, err = ack(fmt.Sprintf("the chunk at byte %d", done)); err != nil {
-			return true, err
+			return abort, err
 		}
 		done += int64(n)
 		if progress != nil {
 			progress(done)
 		}
 	}
-	var extra [1]byte
-	if n, _ := r.Read(extra[:]); n > 0 {
-		return true, transferErr("the data is longer than the announced %d bytes", size)
+	// Every chunk is acknowledged. An abort now would commit a complete Type 1 image (Update.end(true)).
+	complete := typ == UploadFirmware
+	if complete {
+		abort = false
+	}
+	for range 8 { // a reader may return (0, nil); do not spin on it
+		var extra [1]byte
+		n, err := r.Read(extra[:])
+		if n > 0 {
+			return abort, transferErr("the data is longer than the announced %d bytes", size)
+		}
+		if err != nil {
+			break
+		}
 	}
 
 	md5msg := `{"Id":` + strconv.Itoa(id) + `,"Md5":"` + hex.EncodeToString(sum.Sum(nil)) + `"}`
 	if err := c.sendFileCmd(ctx, topic, cmdUpload, md5msg); err != nil {
-		if errors.Is(err, tasmota.ErrTimeout) { // maybe published
-			return true, fmt.Errorf("%w: %w", ErrOutcomeUnknown, err)
+		if complete || errors.Is(err, tasmota.ErrTimeout) { // maybe published, or an image left complete
+			return abort, fmt.Errorf("%w: %w", ErrOutcomeUnknown, err)
 		}
-		return true, err
+		return abort, err
 	}
 	m, err := c.nextFileOf(ctx, in, "the final confirmation", suffixUpload)
 	if err != nil {
-		return true, fmt.Errorf("%w: %w", ErrOutcomeUnknown, err)
+		return abort, fmt.Errorf("%w: %w", ErrOutcomeUnknown, err)
 	}
 	if m.UpState == nil {
-		return true, transferErr("the device answered the MD5 with something other than a status")
+		return abort, transferErr("the device answered the MD5 with something other than a status")
 	}
 	switch st := *m.UpState; {
 	case st == "Done":
-		return true, nil
+		return abort, nil
 	case strings.HasPrefix(st, "Error"):
-		return true, uploadErrorStatus(st, typ)
+		return abort, uploadErrorStatus(st, typ)
 	case st == "Failed" && typ == UploadFirmware:
-		return true, transferErr("the device rejected the image after the upload (Failed); nothing was switched")
+		return abort, transferErr("the device rejected the image after the upload (Failed); nothing was switched")
 	case st == "Failed":
-		return true, transferErr("the device rejected the settings dump after the upload (Failed)")
+		return abort, transferErr("the device rejected the settings dump after the upload (Failed)")
 	case strings.EqualFold(st, "MD5 mismatch"):
-		return true, transferErr("the device computed another MD5 than we sent; nothing was applied")
+		return abort, transferErr("the device computed another MD5 than we sent; nothing was applied")
 	default:
-		return true, transferErr("the device ended the transfer (%s)", boundedStatus(st))
+		return abort, transferErr("the device ended the transfer (%s)", boundedStatus(st))
 	}
 }
