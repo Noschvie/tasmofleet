@@ -339,3 +339,30 @@ func TestDeviceListNotCompliantChipUnknownOrPartial(t *testing.T) {
 		}
 	}
 }
+
+// Why: #294, a discovered device that is offline is a proposal, not an inventory device: it must
+// not sit in "Needs attention" (it is not counted as an offline device either). It shows on the
+// Discovered page, with its hostname and "offline since".
+func TestOfflineProposalLeavesNeedsAttention(t *testing.T) {
+	props := []discovery.Proposal{
+		{ID: 40, Kind: discovery.KindNew, Via: discovery.ViaMQTT, Version: "v40", LWT: "Offline", Device: model.Device{Name: "Gone Lamp", Address: "10.0.0.40"}},
+		{ID: 41, Kind: discovery.KindNew, Via: discovery.ViaMQTT, Version: "v41", LWT: "Online", Device: model.Device{Name: "Live Lamp", Address: "10.0.0.41"}},
+	}
+	got := dashProposals("", props, nil)
+	if len(got) != 1 || got[0].Name != "Live Lamp" {
+		t.Fatalf("dashboard proposals = %+v, want only the online one", got)
+	}
+}
+
+func TestDiscoveredPageShowsOfflineSince(t *testing.T) {
+	e, fd := setupDiscovery(t)
+	fd.props = []discovery.Proposal{{ID: 1, Version: "v1", Kind: discovery.KindNew, Via: discovery.ViaMQTT, LWT: "Offline",
+		FirstSeen: time.Now().Add(-3 * time.Hour), SeenAt: time.Now().Add(-time.Hour), OfflineSince: time.Now().Add(-2 * time.Hour),
+		Device: model.Device{Name: "Gone Lamp", Topic: "gone", Address: "10.0.0.40", MAC: "AA:00:00:00:00:09", Net: model.NetFacts{Hostname: "tasmota-gone"}}}}
+	_, body := e.do(t, "GET", "/discovery", "admin", nil)
+	for _, want := range []string{"tasmota-gone", ">since <time"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("Discovered page lacks %q", want)
+		}
+	}
+}

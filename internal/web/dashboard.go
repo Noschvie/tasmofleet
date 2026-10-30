@@ -195,6 +195,9 @@ func dashProposals(base string, props []discovery.Proposal, devs map[model.Devic
 	for _, p := range props {
 		switch p.Kind {
 		case discovery.KindNew:
+			if p.LWT == "Offline" {
+				continue // an offline proposal is listed on the Discovered page only (#294)
+			}
 			name := p.Device.Name
 			if name == "" {
 				name = p.Device.Address

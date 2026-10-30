@@ -244,6 +244,9 @@ templ discoveredPage(p discView) {
 										}
 										if r.Offline {
 											@ui.Badge(ui.ToneWarn, "Offline")
+											if r.OfflineText != "" {
+												<span class="add-t2">since <time datetime={ r.OfflineSince.UTC().Format("2006-01-02T15:04:05Z") }>{ r.OfflineText }</time></span>
+											}
 										}
 									</span>
 								</td>
@@ -295,6 +298,9 @@ templ discoveredPage(p discView) {
 								}
 								if r.Offline {
 									@ui.Badge(ui.ToneWarn, "Offline")
+									if r.OfflineText != "" {
+										<span class="add-t2">since <time datetime={ r.OfflineSince.UTC().Format("2006-01-02T15:04:05Z") }>{ r.OfflineText }</time></span>
+									}
 								}
 							</span>
 							<span class="add-card-meta"><span data-visual-mask>{ r.Address }</span>{ metaTail(cardHost(r)) }</span>

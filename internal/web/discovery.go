@@ -102,6 +102,8 @@ type propRow struct {
 	Ignored        bool
 	AddHref        string
 	Offline        bool // its MQTT LWT says Offline: it is added as seen, without a probe
+	OfflineSince   time.Time
+	OfflineText    string // "Offline since 2 h ago" style words, "" when not offline or the moment is unknown
 }
 
 // firstSeenText is the fallback of a proposal's "First seen": a relative day, or "unknown".
@@ -251,6 +253,9 @@ func (h *handler) propRow(base string, now time.Time, p discovery.Proposal, igno
 		Source: viaText(p.Via), MQTT: p.Via == discovery.ViaMQTT, First: p.FirstSeen, Last: p.SeenAt,
 		FirstText: firstSeenText(now, p.FirstSeen), LastText: agoWords(now, p.SeenAt), Ignored: ignored,
 		AddHref: base + "/devices/new?proposal=" + strconv.FormatInt(p.ID, 10), Offline: p.LWT == "Offline"}
+	if row.Offline && !p.OfflineSince.IsZero() {
+		row.OfflineSince, row.OfflineText = p.OfflineSince, agoWords(now, p.OfflineSince)
+	}
 	row.Source = strings.ToUpper(row.Source[:1]) + row.Source[1:]
 	return row
 }

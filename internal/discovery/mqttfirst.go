@@ -44,16 +44,17 @@ const (
 
 // topicState is what MQTT told about one %topic%.
 type topicState struct {
-	lwt    string // "Online", "Offline" or "" (none seen)
-	live   bool   // a non-retained message arrived since the last Offline
-	seen   time.Time
-	up     time.Time // since when it is online (zero while offline)
-	mac    string    // resolved MAC (discovery config or Status 5), "" if unknown
-	known  bool      // an inventory device has this topic
-	asked  time.Time
-	host   string // INFO2 / Status 5 hints, for the list only
-	ip     string
-	reason string // why it is not a proposal, for the list
+	lwt          string    // "Online", "Offline" or "" (none seen)
+	offlineSince time.Time // first Offline LWT of this stretch; zero otherwise
+	live         bool      // a non-retained message arrived since the last Offline
+	seen         time.Time
+	up           time.Time // since when it is online (zero while offline)
+	mac          string    // resolved MAC (discovery config or Status 5), "" if unknown
+	known        bool      // an inventory device has this topic
+	asked        time.Time
+	host         string // INFO2 / Status 5 hints, for the list only
+	ip           string
+	reason       string // why it is not a proposal, for the list
 	// claim is the device claim of this topic that was refused only because
 	// its address lies outside the device networks. It is evaluated again
 	// when DEVICE_NETWORKS changes (#45): Tasmota repeats neither its
@@ -103,6 +104,19 @@ func (m *Manager) topicLWT(topic string) string {
 		return s.lwt
 	}
 	return ""
+}
+
+// topicOfflineSince is when topic's LWT first said Offline (zero when it is not offline).
+func (m *Manager) topicOfflineSince(topic string) time.Time {
+	if topic == "" {
+		return time.Time{}
+	}
+	m.tmu.Lock()
+	defer m.tmu.Unlock()
+	if s := m.topics[topic]; s != nil && s.lwt == "Offline" {
+		return s.offlineSince
+	}
+	return time.Time{}
 }
 
 // stateFor returns the entry of topic, creating it (and dropping the oldest
@@ -251,8 +265,11 @@ func (m *Manager) handleTopic(ctx context.Context, msg mqttbus.Message) {
 	case mqttbus.KindLWT:
 		switch p := strings.TrimSpace(string(msg.Payload)); {
 		case strings.EqualFold(p, "online"):
-			s.lwt = "Online"
+			s.lwt, s.offlineSince = "Online", time.Time{}
 		case strings.EqualFold(p, "offline"):
+			if s.offlineSince.IsZero() {
+				s.offlineSince = now
+			}
 			s.lwt, s.live = "Offline", false
 		}
 	case mqttbus.KindState, mqttbus.KindInfo:

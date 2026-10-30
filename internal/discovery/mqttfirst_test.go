@@ -899,3 +899,26 @@ func (c countingAsker) Do(ctx context.Context, d model.Device, cmd string) (json
 	*c.n++
 	return c.inner.Do(ctx, d, cmd)
 }
+
+// Why: #294, the Discovered page says "offline since ..." for a proposal. The moment is the
+// first Offline last-will, not the latest message of the topic (a repeated Offline or a
+// retained replay must not make the device look freshly lost), and it is gone once the device
+// is back, so an online proposal never claims to be offline.
+func TestProposalOfflineSinceIsTheFirstOfflineLWT(t *testing.T) {
+	e := newMQTTEnv(t, nil)
+	e.feed(discoveryMsg("02005ED22C14", "172.31.13.31", "lamp"))
+	if p := onlyNew(t, e.env); !p.OfflineSince.IsZero() {
+		t.Fatalf("no LWT seen yet, OfflineSince = %v", p.OfflineSince)
+	}
+	e.feed(mqttbus.Message{Kind: mqttbus.KindLWT, Topic: "lamp", Payload: []byte("Offline")})
+	first := e.clk.Now()
+	e.clk.add(5 * time.Minute)
+	e.feed(mqttbus.Message{Kind: mqttbus.KindLWT, Topic: "lamp", Payload: []byte("Offline")})
+	if p := onlyNew(t, e.env); !p.OfflineSince.Equal(first) {
+		t.Fatalf("OfflineSince = %v, want the first Offline at %v", p.OfflineSince, first)
+	}
+	e.feed(mqttbus.Message{Kind: mqttbus.KindLWT, Topic: "lamp", Payload: []byte("Online")})
+	if p := onlyNew(t, e.env); !p.OfflineSince.IsZero() {
+		t.Fatalf("back online, OfflineSince = %v", p.OfflineSince)
+	}
+}

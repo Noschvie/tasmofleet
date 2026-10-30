@@ -604,7 +604,7 @@ func (m *Manager) visible(ctx context.Context, rows []store.ProposalRow) ([]Prop
 			continue
 		}
 		out = append(out, Proposal{ID: r.ID, Device: r.Device, Via: r.Via, Kind: r.Kind, Reason: r.Reason, SeenAt: r.SeenAt, FirstSeen: r.FirstSeen, ExistingID: r.ExistingID, Version: versionOf(r),
-			LWT: m.topicLWT(r.Device.Topic)})
+			LWT: m.topicLWT(r.Device.Topic), OfflineSince: m.topicOfflineSince(r.Device.Topic)})
 	}
 	return out, nil
 }

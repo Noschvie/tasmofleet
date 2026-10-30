@@ -65,6 +65,8 @@ type Proposal struct {
 	// LWT is the last MQTT LWT of the proposal's topic ("Online", "Offline"
 	// or "" when none was seen). Additive (spec 11.3a).
 	LWT string
+	// OfflineSince is when the LWT first said Offline (zero while it is not offline).
+	OfflineSince time.Time
 }
 
 // ScanID names one scan run.
