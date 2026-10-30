@@ -276,8 +276,9 @@ in `.github/workflows/ci.yml`.
   With every release:
   - add the release to the template's `<Changes>` block;
   - edit the first post of the [Unraid support thread](https://forums.unraid.net/topic/201022-support-tasmofleet/)
-    (current release line, links, setup notes that are still true). A minor release, or anything users
-    have to act on, also gets a reply post in the thread, upgrade notes first;
+    (current release line, links, setup notes that are still true). No reply post per release; only a
+    release users have to act on (template, port or variable change, a manual upgrade step) also gets a
+    reply post, upgrade notes first, because only replies notify the thread's followers;
   - a release that changes ports, variables or anything else in the template ships the template change
     in the same moment the image becomes `:latest`. An existing install keeps its saved template, so such a
     release must also keep existing installs working without edits, or say exactly what to change, at the
