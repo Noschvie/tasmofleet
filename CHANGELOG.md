@@ -13,6 +13,7 @@ always upgrade automatically.
 
 ### Changed
 
+- README: no longer lists notifications by webhook or e-mail; they were never built (#249)
 - Policy: Save rule ends the editor too: the overview names the saved rule and marks its row
 - Policy overview: shorter compliance bar, so rule names and scopes do not wrap
 - Images are built without provenance attestation: one manifest per build, so a push of `edge` no longer leaves three untagged entries behind on Docker Hub

@@ -60,8 +60,6 @@ built on a home fleet of a few dozen devices. What it does differently:
   checked by its image header and served to devices over plain HTTP from a separate port.
 - **Device pages**: overview, power control, console with a command policy, settings, backups,
   drift, state and transaction history.
-- **Notifications** of finished updates and failed backups by webhook (e.g. a Home Assistant
-  webhook trigger) or e-mail (Resend API).
 - **Prometheus metrics** and an example Grafana dashboard ([deploy/](deploy/)).
 - Light and dark theme, phone layout, works behind a reverse proxy under a base path.
 - Automation stays in Home Assistant (or wherever you run it): TasmoFleet manages devices, it
