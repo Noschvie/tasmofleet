@@ -164,6 +164,8 @@ func openServices(cfg config.Config, log *slog.Logger, version string, importLeg
 	})
 	router := transport.NewRouter(transport.Options{
 		HTTP: tasmota.NewHTTPClient(tasmota.Options{Networks: nets, Logger: log}), Devices: st, Log: log,
+		BrokerPassword: func() string { return sys.Snapshot().MQTTPassword }, // live, like the facts' source
+		Marker:         st,
 	})
 	client := router.HTTPOnly()
 	inv, err := inventory.New(inventory.Options{

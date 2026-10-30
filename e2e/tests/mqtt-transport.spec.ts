@@ -184,6 +184,36 @@ test("language choice required", async ({ page }) => {
   // An ESP32 with the dual-core tasmota32 build has language builds too; whichever the row shows, it
   // must be a choice and not a pre-filled value.
   await expect(row.locator("select")).toHaveValue("");
+||||||| parent of 9827f55 (transport: backup over MQTT (FileDownload) through the router)
+
+// #257: backup over MQTT (FileDownload). The device's HTTP port refuses everything, so the backup can
+// only come over MQTT, and only with the device's MQTT password (the devenv devices have one; the
+// broker takes any).
+test("backup over MQTT", async ({ page }) => {
+  test.setTimeout(300_000);
+  await page.setExtraHTTPHeaders(admin);
+  await page.goto(app.url + "/devices");
+  await expect(page.getByRole("row").filter({ hasText: "mq-esp32" }).getByText("Online", { exact: true })).toBeVisible({ timeout: 30_000 });
+  await page.getByRole("link", { name: "mq-esp32", exact: true }).click();
+  const devicePath = new URL(page.url()).pathname;
+
+  const backUp = page.getByRole("button", { name: "Back up", exact: true });
+  await page.goto(app.url + devicePath + "/edit");
+  await page.getByLabel("MQTT password source").selectOption("own");
+  await page.getByLabel("Own MQTT password").fill("devenv-fake-mqtt-password");
+  await page.getByRole("button", { name: "Save changes" }).click();
+
+  // The group topics of both devices are read shortly after start; until then MQTT transfers are refused with the reason.
+  await expect(async () => {
+    await page.goto(app.url + devicePath);
+    await backUp.click();
+    await expect(page.getByText("Backup taken.")).toBeVisible({ timeout: 5_000 });
+  }).toPass({ timeout: 300_000, intervals: [5_000] });
+
+  await page.goto(app.url + devicePath + "/backups");
+  await expect(page.locator("table tbody tr").first()).toBeVisible();
+  const audit = await page.request.get(app.url + "/audit", { headers: admin });
+  expect(await audit.text()).not.toContain("devenv-fake-mqtt-password");
 });
 // The device page's connection card (#261): mq-esp32 refuses every HTTP connection, so the router
 // remembers the failure and the card, the buttons and the list say how it is reached instead.

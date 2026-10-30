@@ -15,6 +15,8 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/tasmota"
 )
 
+const simMQTTPassword = "sim-mqtt-pw-1"
+
 func loopback() []netip.Prefix { return []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8")} }
 
 type simRig struct {
@@ -39,7 +41,7 @@ func newSimRig(t *testing.T, faults ...simulator.Fault) *simRig {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = fleet.Close() }) // test teardown
-	dev, err := fleet.Add(ctx, simulator.DeviceSpec{Name: "sim-plug", Profile: simulator.ProfileESP32, Version: "15.1.0", Faults: faults})
+	dev, err := fleet.Add(ctx, simulator.DeviceSpec{Name: "sim-plug", Profile: simulator.ProfileESP32, Version: "15.1.0", MQTTPassword: simMQTTPassword, Faults: faults})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,5 +133,40 @@ func TestSimBacklogAndSaveDataOverMQTT(t *testing.T) {
 			t.Fatalf("%q: %v", c, err)
 		}
 		t.Logf("%q -> %s", c, raw)
+	}
+}
+
+// Why (#257 acceptance): a device HTTP cannot reach is backed up over MQTT, and the bytes are what /dl
+// serves (checked on the same device by pinning HTTP before the fault is injected is impossible, so the
+// simulator's dump is compared with the one it reports through its controller).
+func TestSimBackupOverMQTTEqualsTheDump(t *testing.T) {
+	g := newSimRig(t, simulator.Fault{Kind: simulator.FaultHTTPUnreachable})
+	g.mem.Fail(7, HTTPFailUnreachable)
+	g.devs.d.MQTTPasswordMode, g.devs.d.MQTTPassword = model.MQTTPasswordOwn, simMQTTPassword
+	dump := make([]byte, 4096)
+	for i := range dump {
+		dump[i] = byte(i * 13)
+	}
+	g.ctl.SetConfigDump(dump)
+	ctx, tr := WithTrace(t.Context())
+	got, err := g.r.DownloadConfig(ctx, g.target())
+	if err != nil || string(got) != string(dump) || tr.Via() != "mqtt" {
+		t.Fatalf("%d bytes, %v, via %s", len(got), err, tr.Via())
+	}
+}
+
+// Why (D6): a wrong password is marked bad, so nothing more is published until it is changed.
+func TestSimWrongPasswordMarksItBad(t *testing.T) {
+	g := newSimRig(t, simulator.Fault{Kind: simulator.FaultHTTPUnreachable})
+	g.mem.Fail(7, HTTPFailUnreachable)
+	g.devs.d.MQTTPasswordMode, g.devs.d.MQTTPassword = model.MQTTPasswordOwn, "not-the-one"
+	mk := &fakeMarker{}
+	g.r.o.Marker = mk
+	_, err := g.r.DownloadConfig(t.Context(), g.target())
+	if !errors.Is(err, mqttcmd.ErrPasswordRefused) || len(mk.ids) != 1 || mk.ids[0] != 7 {
+		t.Fatalf("%v, marked %v", err, mk.ids)
+	}
+	if strings.Contains(err.Error(), "not-the-one") {
+		t.Fatal("the error carries the password")
 	}
 }

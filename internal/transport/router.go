@@ -44,13 +44,43 @@ type MQTTDoer interface {
 	Connected() bool
 }
 
+// BackupBlockedError is a backup that MQTT could not carry (no usable password, the password refused,
+// a path that is not usable): Reason is a sentence for the person, written by this package and free of
+// any secret or address. Err is what the caller would have seen without it (the HTTP failure), so
+// errors.Is still finds tasmota.ErrUnreachable and the like.
+type BackupBlockedError struct {
+	Err    error
+	Reason string
+}
+
+func (e *BackupBlockedError) Error() string { return e.Err.Error() + " (" + e.Reason + ")" }
+func (e *BackupBlockedError) Unwrap() error { return e.Err }
+
+// UserReason is the sentence for the browser and the backup history.
+func (e *BackupBlockedError) UserReason() string { return e.Reason }
+
+// MQTTDownloader is what the command channel offers for FileDownload (mqttcmd.Channel.Download).
+// The channel is asserted to it, so a fake MQTTDoer without it simply has no backup over MQTT.
+type MQTTDownloader interface {
+	Download(ctx context.Context, d model.Device, password string) ([]byte, error)
+}
+
+// PasswordMarker records a refused MQTT password.
+type PasswordMarker interface {
+	MarkMQTTPasswordBad(ctx context.Context, id model.DeviceID, at time.Time) error
+}
+
 // Options configure the Router.
 type Options struct {
 	HTTP    tasmota.Client // required: the raw HTTP client
 	Devices DeviceGetter   // required
 	Facts   DeviceFacts    // set later with SetFacts: the facts need the health service
 	Memory  *Memory        // optional; NewMemory otherwise
-	Log     *slog.Logger
+	// BrokerPassword is TasmoFleet's live MQTT_PASSWORD, sent by devices in broker mode (D6).
+	BrokerPassword func() string
+	// Marker records that a device refused its MQTT password (store.MarkMQTTPasswordBad).
+	Marker PasswordMarker
+	Log    *slog.Logger
 }
 
 // Router implements tasmota.Client over two transports (D1). HTTP stays first; MQTT carries a call
@@ -387,7 +417,7 @@ func (r *Router) sendMQTT(ctx context.Context, d model.Device, cmnd string, cls 
 	if err != nil {
 		return nil, err
 	}
-	if now.Topic != d.Topic || now.GroupTopic != d.GroupTopic || now.FullTopic != d.FullTopic || now.MQTT != d.MQTT {
+	if mqttSettingsChanged(now, d) {
 		return nil, fmt.Errorf("%w: the device's MQTT settings changed while the command was prepared; nothing was sent", tasmota.ErrUnreachable)
 	}
 	var raw json.RawMessage
@@ -415,12 +445,143 @@ func notPublished(err error) bool {
 
 // ---- the rest of tasmota.Client
 
-// DownloadConfig is HTTP only until the MQTT backup lands (FileDownload, #257).
+func mqttSettingsChanged(now, d model.Device) bool {
+	return now.Topic != d.Topic || now.GroupTopic != d.GroupTopic || now.FullTopic != d.FullTopic || now.MQTT != d.MQTT
+}
+
+// DownloadConfig reads the settings dump over HTTP (/dl), or over MQTT (FileDownload, #257) when
+// HTTP is known to fail, the device is usable over MQTT and its MqttPassword is set and not refused
+// (Choose: Paths.Backup). A job that pinned its path is never rerouted. A transfer that started over
+// MQTT never falls back to HTTP: the caller sees its error.
 func (r *Router) DownloadConfig(ctx context.Context, t tasmota.Target) ([]byte, error) {
-	if pin, ok := PathFrom(ctx); ok && pin == MQTT {
-		return nil, fmt.Errorf("%w: a backup over MQTT is not available yet", tasmota.ErrNotImplemented)
+	id := t.DeviceID()
+	if id == 0 {
+		return r.http.DownloadConfig(ctx, t)
 	}
-	return r.http.DownloadConfig(ctx, t)
+	if pin, ok := PathFrom(ctx); ok {
+		if pin == HTTP {
+			return r.httpDownload(ctx, t)
+		}
+		return r.pinnedDownload(ctx, id)
+	}
+	if r.mqttDoer() == nil || r.o.Facts.HTTPState(id).State != HTTPFailing {
+		raw, err := r.httpDownload(ctx, t)
+		if err == nil || !tasmota.NotSent(err) || r.mqttDoer() == nil {
+			return raw, err
+		}
+		// HTTP proved that nothing was sent: the same chance for MQTT as a command gets (D4).
+		d, f, p, derr := r.decide(ctx, id)
+		if derr != nil {
+			return nil, err
+		}
+		if p.Backup == MQTT {
+			r.o.Log.Info("transport: HTTP did not send, backing up over MQTT", "device", int64(d.ID))
+			return r.mqttDownload(ctx, d)
+		}
+		return nil, r.explainBackup(err, f, p)
+	}
+	d, f, p, err := r.decide(ctx, id)
+	if err != nil {
+		return r.httpDownload(ctx, t)
+	}
+	if p.Backup == MQTT {
+		return r.mqttDownload(ctx, d)
+	}
+	raw, herr := r.httpDownload(ctx, t)
+	return raw, r.explainBackup(herr, f, p)
+}
+
+func (r *Router) httpDownload(ctx context.Context, t tasmota.Target) ([]byte, error) {
+	b, err := r.http.DownloadConfig(ctx, t)
+	if tasmota.NotSent(err) {
+		noteTrace(ctx, None)
+	} else {
+		noteTrace(ctx, HTTP)
+	}
+	return b, err
+}
+
+// explainBackup adds why a backup over MQTT was not possible to the HTTP error of a device on our broker.
+func (r *Router) explainBackup(err error, f Facts, p Paths) error {
+	if err == nil || !f.MQTT.Ours || f.MQTT.Topic == "" {
+		return err
+	}
+	if why := p.Reason(ActBackup); why != "" && p.Backup == None {
+		r.o.Log.Debug("transport: not using MQTT", "topic", f.MQTT.Topic, "action", string(ActBackup), "why", why)
+		return &BackupBlockedError{Err: err, Reason: why}
+	}
+	return err
+}
+
+// pinnedDownload is the backup of a job that chose MQTT: same checks as the chosen path, no HTTP.
+func (r *Router) pinnedDownload(ctx context.Context, id model.DeviceID) ([]byte, error) {
+	if r.mqttDoer() == nil {
+		return nil, fmt.Errorf("%w: MQTT is not connected", tasmota.ErrUnreachable)
+	}
+	d, err := r.o.Devices.GetDevice(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	f, err := r.o.Facts.FactsFor(ctx, d)
+	if err != nil {
+		return nil, err
+	}
+	if why := transferBlocker(f, "back up"); why != "" {
+		return nil, &BackupBlockedError{Err: fmt.Errorf("%w: a backup over MQTT is not possible", tasmota.ErrUnreachable), Reason: why}
+	}
+	return r.mqttDownload(ctx, d)
+}
+
+// mqttDownload runs FileDownload for the device snapshot d. The device is read once more right before
+// the send: a topic, broker or password change since the snapshot must not send to the old topic or
+// with the old password, and the password comes from that fresh read. Nothing here is logged or
+// returned that could contain the password.
+func (r *Router) mqttDownload(ctx context.Context, d model.Device) ([]byte, error) {
+	m := r.mqttDoer()
+	dl, ok := m.(MQTTDownloader)
+	if m == nil || !ok {
+		return nil, fmt.Errorf("%w: a backup over MQTT is not available", tasmota.ErrNotImplemented)
+	}
+	now, err := r.o.Devices.GetDevice(ctx, d.ID)
+	if err != nil {
+		return nil, err
+	}
+	if mqttSettingsChanged(now, d) {
+		return nil, fmt.Errorf("%w: the device's MQTT settings changed while the backup was prepared; nothing was sent", tasmota.ErrUnreachable)
+	}
+	pw, why := r.downloadPassword(now)
+	if why != "" {
+		noteTrace(ctx, None)
+		return nil, &BackupBlockedError{Err: fmt.Errorf("%w: a backup over MQTT is not possible", tasmota.ErrUnreachable), Reason: "a backup over MQTT is not possible: " + why}
+	}
+	data, err := dl.Download(ctx, now, pw)
+	if err == nil || !notPublished(err) {
+		noteTrace(ctx, MQTT)
+	}
+	if errors.Is(err, mqttcmd.ErrPasswordRefused) {
+		if r.o.Marker != nil {
+			// The caller may be cancelled by now; the mark must still be written.
+			if merr := r.o.Marker.MarkMQTTPasswordBad(context.WithoutCancel(ctx), now.ID, time.Now()); merr != nil {
+				r.o.Log.Warn("transport: could not record the refused MQTT password", "device", int64(now.ID), "err", merr)
+			}
+		}
+		return nil, &BackupBlockedError{Err: err, Reason: "the device refused its MQTT password; enter the right one on the device's Edit page to back up over MQTT"}
+	}
+	return data, err
+}
+
+// downloadPassword resolves the device's MqttPassword per mode (D6): its own sealed value, or TasmoFleet's
+// live broker password. why is set when there is none to send or the device refused it before.
+func (r *Router) downloadPassword(d model.Device) (pw, why string) {
+	switch {
+	case !d.MQTTPasswordBadAt.IsZero():
+		return "", "the device refused its MQTT password; enter the right one"
+	case d.MQTTPasswordMode == model.MQTTPasswordOwn && d.MQTTPassword != "":
+		return d.MQTTPassword, ""
+	case d.MQTTPasswordMode == model.MQTTPasswordBroker && r.o.BrokerPassword != nil && r.o.BrokerPassword() != "":
+		return r.o.BrokerPassword(), ""
+	}
+	return "", "the device has no usable MQTT password"
 }
 
 // UploadFirmware passes straight to HTTP: an upload never fails over (D4).

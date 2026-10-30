@@ -20,6 +20,8 @@ type fakeHTTP struct {
 	calls []string
 	err   error
 	reply string
+	dump  []byte // DownloadConfig answers it
+	dl    int    // DownloadConfig calls
 }
 
 func (h *fakeHTTP) Command(_ context.Context, _ tasmota.Target, c string) (json.RawMessage, error) {
@@ -32,7 +34,10 @@ func (h *fakeHTTP) Command(_ context.Context, _ tasmota.Target, c string) (json.
 	return json.RawMessage(h.reply), nil
 }
 func (h *fakeHTTP) DownloadConfig(context.Context, tasmota.Target) ([]byte, error) {
-	return nil, h.err
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.dl++
+	return h.dump, h.err
 }
 func (h *fakeHTTP) RootPage(context.Context, tasmota.Target) (tasmota.RootInfo, error) {
 	return tasmota.RootInfo{}, h.err
@@ -112,7 +117,7 @@ func (f *facts) FactsFor(_ context.Context, d model.Device) (Facts, error) {
 	if f.groupKnown {
 		m.GroupTopic, m.GroupTopicReadAt, m.LastProbeAt = "tasmotas", now, now.Add(-time.Hour)
 	}
-	return Facts{Now: now, HTTP: f.memState(d.ID), MQTT: m}, nil
+	return Facts{Now: now, HTTP: f.memState(d.ID), MQTT: m, Password: Password{Mode: d.MQTTPasswordMode, BadAt: d.MQTTPasswordBadAt}}, nil
 }
 
 type rig struct {
