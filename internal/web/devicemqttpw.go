@@ -35,8 +35,8 @@ type mqttChange struct {
 }
 
 // mqttFormChange reads the MQTT password section of the edit form. The password is write-only:
-// blank keeps the stored own password. A refused mark (bad_at) is cleared by saving the form,
-// so a person who fixed the device can retry without retyping anything. errMsg is for the
+// blank keeps the stored own password. The refused mark is cleared only by a touched section or
+// the "Retry the stored password" box. errMsg is for the
 // mqtt_password field; nothing is stored when it is set.
 func mqttFormChange(r *http.Request, old model.Device) (c mqttChange, mode model.MQTTPasswordMode, errMsg string) {
 	if _, present := r.PostForm[fieldMQTTMode]; !present {
@@ -62,8 +62,10 @@ func mqttFormChange(r *http.Request, old model.Device) (c mqttChange, mode model
 	default:
 		return mqttChange{}, old.MQTTPasswordMode, "Choose where the password comes from."
 	}
-	changed := mode != old.MQTTPasswordMode || (mode == model.MQTTPasswordOwn && pw != "")
-	c.apply = changed || !old.MQTTPasswordBadAt.IsZero()
+	// Only a touched section writes (and clears the refused mark): mode or password changed, or the
+	// person asked to retry the stored one. Unrelated saves leave it, and the audit log, alone.
+	touched := mode != old.MQTTPasswordMode || (mode == model.MQTTPasswordOwn && pw != "") || r.PostFormValue("retry_mqtt_password") == "1"
+	c.apply = touched
 	return c, mode, ""
 }
 

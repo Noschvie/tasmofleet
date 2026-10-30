@@ -122,11 +122,10 @@ func (c *Channel) Download(ctx context.Context, d model.Device, password string)
 		}
 		c.waitAborted(ctx, in)
 	}
-	data, err := c.runDownload(ctx, d.Topic, start, in)
+	data, sent, err := c.runDownload(ctx, d.Topic, start, in)
 	if err != nil {
-		var fail *transferFailure
-		if errors.As(err, &fail) && fail.started {
-			c.abort(d.Topic)
+		if sent && !deviceReset(err) {
+			c.abort(d.Topic) // the start may have reached the device: leave it idle
 		}
 		return nil, err
 	}
@@ -136,107 +135,111 @@ func (c *Channel) Download(ctx context.Context, d model.Device, password string)
 	return data, nil
 }
 
-// transferFailure marks an error after the device accepted the start: it is mid-transfer.
-type transferFailure struct {
-	err     error
-	started bool
+// deviceResetError marks an "Error N" answer: the device ended the transfer itself.
+type deviceResetError struct{ err error }
+
+func (e *deviceResetError) Error() string { return e.err.Error() }
+func (e *deviceResetError) Unwrap() error { return e.err }
+
+func deviceReset(err error) bool {
+	var r *deviceResetError
+	return errors.As(err, &r)
 }
 
-func (f *transferFailure) Error() string { return f.err.Error() }
-func (f *transferFailure) Unwrap() error { return f.err }
-
-func (c *Channel) runDownload(ctx context.Context, topic, start string, in chan mqttbus.Message) ([]byte, error) {
+func (c *Channel) runDownload(ctx context.Context, topic, start string, in chan mqttbus.Message) (data []byte, sent bool, err error) {
 	if err := c.sendFile(ctx, topic, start); err != nil {
-		return nil, err
+		// A timeout here means the publish was attempted; a refusal or a spent context sent nothing.
+		return nil, errors.Is(err, tasmota.ErrTimeout), err
 	}
+	sent = true
 	// Anything before "Started" is a leftover of an earlier transfer (an "Aborted", a stray chunk).
 	for {
 		m, err := c.nextFile(ctx, in, "the start")
 		if err != nil {
-			return nil, err
+			return nil, true, err
 		}
 		switch {
 		case m.Command != nil:
 			// A firmware without FileDownload (minimal) echoed the command, password included.
-			return nil, transferErr("the device does not support FileDownload (minimal firmware?)")
+			return nil, true, &deviceResetError{transferErr("the device does not support FileDownload (minimal firmware?)")}
 		case m.Status == nil:
 			continue
 		case *m.Status == "Started":
 		case strings.HasPrefix(*m.Status, "Error"):
-			return nil, errorStatus(*m.Status)
+			return nil, true, errorStatus(*m.Status)
 		default:
 			continue
 		}
 		break
 	}
 
-	fail := func(format string, a ...any) error {
-		return &transferFailure{err: transferErr(format, a...), started: true}
-	}
+	fail := func(format string, a ...any) error { return transferErr(format, a...) }
 	hdr, err := c.nextFile(ctx, in, "the file header")
 	if err != nil {
-		return nil, &transferFailure{err: err, started: true}
+		return nil, true, err
 	}
 	if hdr.Status != nil && strings.HasPrefix(*hdr.Status, "Error") {
-		return nil, errorStatus(*hdr.Status)
+		return nil, true, errorStatus(*hdr.Status)
 	}
 	if hdr.File == nil || hdr.ID == nil || hdr.Size == nil {
-		return nil, fail("the header after Started is not a file header")
+		return nil, true, fail("the header after Started is not a file header")
 	}
 	id, size := *hdr.ID, *hdr.Size
 	if size < minDumpSize || size > maxDumpSize {
-		return nil, fail("the device announced %d bytes, a settings dump has %d to %d", size, minDumpSize, maxDumpSize)
+		return nil, true, fail("the device announced %d bytes, a settings dump has %d to %d", size, minDumpSize, maxDumpSize)
 	}
 
 	var got bytes.Buffer
 	sum := md5.New() //nolint:gosec // see import
 	for {
 		if err := c.sendFile(ctx, topic, "?"); err != nil {
-			return nil, &transferFailure{err: err, started: true}
+			return nil, true, err
 		}
 		m, err := c.nextFile(ctx, in, "a data message")
 		if err != nil {
-			return nil, &transferFailure{err: err, started: true}
+			return nil, true, err
 		}
 		if m.Status != nil {
 			if strings.HasPrefix(*m.Status, "Error") {
-				return nil, errorStatus(*m.Status)
+				return nil, true, errorStatus(*m.Status)
 			}
-			return nil, fail("the device ended the transfer (%s)", boundedStatus(*m.Status))
+			return nil, true, fail("the device ended the transfer (%s)", boundedStatus(*m.Status))
 		}
 		if m.ID == nil || *m.ID != id {
-			return nil, fail("a message of another transfer arrived")
+			return nil, true, fail("a message of another transfer arrived")
 		}
 		switch {
 		case m.Md5 != nil:
 			if got.Len() != size {
-				return nil, fail("the device sent %d of %d bytes", got.Len(), size)
+				return nil, true, fail("the device sent %d of %d bytes", got.Len(), size)
 			}
 			if !strings.EqualFold(*m.Md5, hex.EncodeToString(sum.Sum(nil))) {
-				return nil, fail("the MD5 of the data does not match the one the device announced")
+				return nil, true, fail("the MD5 of the data does not match the one the device announced")
 			}
-			return got.Bytes(), nil
+			return got.Bytes(), true, nil
 		case m.Data != nil:
 			if *m.Data == "" {
-				return nil, fail("the device sent an empty data message")
+				return nil, true, fail("the device sent an empty data message")
 			}
 			raw, err := base64.StdEncoding.DecodeString(*m.Data)
 			if err != nil {
-				return nil, fail("a data message is not valid base64")
+				return nil, true, fail("a data message is not valid base64")
 			}
 			if got.Len()+len(raw) > size {
-				return nil, fail("the device sent more than the announced %d bytes", size)
+				return nil, true, fail("the device sent more than the announced %d bytes", size)
 			}
 			got.Write(raw)
 			sum.Write(raw)
 		default:
-			return nil, fail("an unexpected message arrived during the transfer")
+			return nil, true, fail("an unexpected message arrived during the transfer")
 		}
 	}
 }
 
 // errorStatus maps "Error N" of the start (or a later message) to a typed error.
-func errorStatus(s string) error {
+func errorStatus(s string) error { return &deviceResetError{errorStatusRaw(s)} }
+
+func errorStatusRaw(s string) error {
 	n, _ := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(s, "Error")))
 	switch n {
 	case 1:
@@ -316,8 +319,11 @@ func (c *Channel) sendFile(ctx context.Context, topic, payload string) error {
 	if room := cmndBufferSize - 5 - len("cmnd/"+topic+"/FileDownload") - 1; len(payload) > room {
 		return fmt.Errorf("%w: the command does not fit the device's MQTT buffer", ErrRefused)
 	}
+	if err := ctx.Err(); err != nil { // a cancelled caller must not publish the password
+		return fmt.Errorf("mqtt: FileDownload not sent: %w", err)
+	}
 	if err := c.waitTurn(ctx); err != nil {
-		return err
+		return fmt.Errorf("mqtt: FileDownload not sent: %w", err)
 	}
 	if err := c.bus.Command(ctx, topic, "FileDownload", payload); err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {

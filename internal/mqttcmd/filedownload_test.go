@@ -186,7 +186,7 @@ func (s *scriptedDevice) attach(b *fakeBus) {
 		}
 		if p.payload == "0" {
 			s.aborted.Add(1)
-			go b.emit(mqttbus.KindFile, p.topic, "FILEDOWNLOAD", `{"FileDownload":"Aborted"}`, false)
+			b.emit(mqttbus.KindFile, p.topic, "FILEDOWNLOAD", `{"FileDownload":"Aborted"}`, false) // in publish order, like a broker
 			return
 		}
 		i := int(s.n.Add(1)) - 1
@@ -194,11 +194,9 @@ func (s *scriptedDevice) attach(b *fakeBus) {
 			return
 		}
 		msgs := s.steps[i]
-		go func() {
-			for _, m := range msgs {
-				b.emit(mqttbus.KindFile, p.topic, "FILEDOWNLOAD", m, false)
-			}
-		}()
+		for _, m := range msgs { // synchronously: a broker keeps a publisher's order
+			b.emit(mqttbus.KindFile, p.topic, "FILEDOWNLOAD", m, false)
+		}
 	}
 }
 
@@ -372,24 +370,57 @@ func TestDownloadTimeouts(t *testing.T) {
 	// A device that answers every ? slowly but within ReplyWait still hits the overall limit.
 	b := &fakeBus{}
 	body := bytes.Repeat([]byte{2}, 30)
+	var questions atomic.Int32
 	b.onPub = func(b *fakeBus, p pub) {
 		if p.payload == "0" {
+			b.emit(mqttbus.KindFile, p.topic, "FILEDOWNLOAD", `{"FileDownload":"Aborted"}`, false)
 			return
 		}
 		go func() {
 			time.Sleep(40 * time.Millisecond)
-			if strings.Contains(p.payload, "Password") {
+			switch {
+			case strings.Contains(p.payload, "Password"):
 				b.emit(mqttbus.KindFile, p.topic, "FILEDOWNLOAD", started, false)
 				b.emit(mqttbus.KindFile, p.topic, "FILEDOWNLOAD", header(4, 1000), false)
-				return
+			default:
+				questions.Add(1)
+				b.emit(mqttbus.KindFile, p.topic, "FILEDOWNLOAD", data(4, body), false)
 			}
-			b.emit(mqttbus.KindFile, p.topic, "FILEDOWNLOAD", data(4, body), false)
 		}()
 	}
 	o := fast()
-	o.ReplyWait, o.FileTotal = time.Second, 200*time.Millisecond
+	o.ReplyWait, o.FileTotal = time.Second, 300*time.Millisecond
 	if _, err := New(b, o).Download(t.Context(), plug(), dlPassword); !errors.Is(err, tasmota.ErrTimeout) {
 		t.Fatalf("overall: %v", err)
+	}
+	if questions.Load() < 1 {
+		t.Fatal("the overall limit must be hit by the transfer, not spent before it started")
+	}
+}
+
+// Why: a start that was (or may have been) published and never answered leaves the device in an
+// unknown state, so it is ended with FileDownload 0; an Error N means the device reset itself.
+func TestDownloadAbortsAfterAnUnansweredStartButNotAfterAnErrorAnswer(t *testing.T) {
+	s, _, _, err := runScript(t, nil, nil) // nothing ever answers the start
+	if !errors.Is(err, tasmota.ErrTimeout) {
+		t.Fatal(err)
+	}
+	if got := s.aborted.Load(); got != 2 {
+		t.Fatalf("want opening abort + abort after the unanswered start, got %d", got)
+	}
+	s, _, _, err = runScript(t, [][]string{{`{"FileDownload":"Error 1"}`}}, nil)
+	if !errors.Is(err, ErrPasswordRefused) || s.aborted.Load() != 1 {
+		t.Fatalf("%v, aborts %d (only the opening one)", err, s.aborted.Load())
+	}
+}
+
+// Why: a caller whose context is already spent must not publish the start (it carries the password).
+func TestDownloadWithACancelledContextPublishesNothing(t *testing.T) {
+	b := &fakeBus{}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if _, err := newChan(b).Download(ctx, plug(), dlPassword); err == nil || len(b.sent()) != 0 {
+		t.Fatalf("%v, sent %v", err, b.sent())
 	}
 }
 

@@ -292,10 +292,16 @@ templ mqttPasswordFields(f deviceForm) {
 		} else {
 			<span class="ufield-help">{ mqttPasswordHelp(f.HasMQTTPassword) }</span>
 		}
-		if f.MQTTRefused {
-			<span class="ufield-warn">The device refused the stored MQTT password. Saving this form allows another try.</span>
+		if f.MQTTRetype && f.ErrField != "mqtt_password" {
+			<span class="ufield-warn">Enter the MQTT password again. It is never kept in the page.</span>
 		}
 	</label>
+	if f.MQTTRefused {
+		<div class="ufield-wide devform-checks">
+			@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: "The device refused the stored MQTT password, so transfers over MQTT are blocked. Change the password, or tick this if the device was fixed."})
+			@ui.Check("retry_mqtt_password", "Retry the stored password", "", false, false)
+		</div>
+	}
 }
 
 // editField is one input of the edit form with the server's error for it. attr/val is one more

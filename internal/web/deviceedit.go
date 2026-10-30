@@ -34,6 +34,8 @@ type deviceForm struct {
 	// HasMQTTPassword: an own MQTT password is stored (its value is never rendered).
 	HasMQTTPassword bool
 	MQTTRefused     bool // the device answered Error 1 to the stored password
+	// MQTTRetype: an own password was typed but the page is shown again, so it must be typed again.
+	MQTTRetype bool
 }
 
 // unverifiedMove is the stronger confirmation for sending a stored password to
@@ -212,10 +214,11 @@ func (h *handler) deviceUpdate(w http.ResponseWriter, r *http.Request) {
 	d, err := applyForm(r, old) // starts from the stored record, so the password and identity survive
 	form := deviceForm{Device: d, HasPassword: d.HTTPPassword != "", Stored: old.Name, MQTTMode: old.MQTTPasswordMode}
 	var mq mqttChange
-	if err == nil && h.d.MQTTPasswords != nil {
+	if h.d.MQTTPasswords != nil {
 		var msg string
 		mq, form.MQTTMode, msg = mqttFormChange(r, old)
-		if msg != "" { // nothing is saved: the other fields stay as typed
+		form.MQTTRetype = r.PostFormValue(fieldMQTTPassword) != "" // never echoed: a re-render drops it
+		if err == nil && msg != "" { // nothing is saved: the other fields stay as typed
 			form.ErrField, form.Error = fieldMQTTPassword, msg
 			h.renderForm(w, r, http.StatusUnprocessableEntity, form)
 			return

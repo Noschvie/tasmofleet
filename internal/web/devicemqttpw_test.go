@@ -79,7 +79,7 @@ func TestEditFormNeverRendersTheMQTTPassword(t *testing.T) {
 	d.MQTTPasswordBadAt = time.Now()
 	e, _ := mqttEnv(t, d)
 	_, body := e.do(t, "GET", "/devices/7/edit", "admin", nil)
-	for _, want := range []string{`name="mqtt_password_mode"`, `value="own" selected`, `placeholder="Unchanged"`, "The device refused the stored MQTT password"} {
+	for _, want := range []string{`name="mqtt_password_mode"`, `value="own" selected`, `placeholder="Unchanged"`, "The device refused the stored MQTT password", `name="retry_mqtt_password"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("form lacks %q", want)
 		}
@@ -139,19 +139,46 @@ func TestBlankKeepsTheStoredOwnPassword(t *testing.T) {
 	}
 }
 
-// Why: saving clears the refused mark (D6): a person who fixed the device retries without
-// retyping, and the stored password survives the blank field.
-func TestSavingClearsTheRefusedMarkAndKeepsThePassword(t *testing.T) {
+// Why: the refused mark is cleared only when the section was touched or "Retry the stored
+// password" is ticked; an unrelated save must not re-seal, audit or clear it.
+func TestRefusedMarkIsClearedOnlyByATouchedSection(t *testing.T) {
 	d := ownDevice()
 	d.MQTTPasswordBadAt = time.Now()
 	e, pw := mqttEnv(t, d)
-	e.do(t, "POST", "/devices/7", "admin", editPost(url.Values{"mqtt_password_mode": {"own"}}))
+	e.do(t, "POST", "/devices/7", "admin", editPost(url.Values{"notes": {"x"}, "mqtt_password_mode": {"own"}}))
+	if len(pw.got()) != 0 || e.inv.devs[7].MQTTPasswordBadAt.IsZero() {
+		t.Fatalf("an unrelated save touched the MQTT password: %+v", pw.got())
+	}
+	for _, ev := range e.aud.events {
+		if ev.Action == "device.mqtt_password" {
+			t.Fatal("an unrelated save was audited as an MQTT password change")
+		}
+	}
+	e.do(t, "POST", "/devices/7", "admin", editPost(url.Values{"mqtt_password_mode": {"own"}, "retry_mqtt_password": {"1"}}))
 	c := pw.got()
 	if len(c) != 1 || c[0].plain != storedOwnPW {
 		t.Fatalf("calls %+v", c)
 	}
 	if got := e.inv.devs[7]; !got.MQTTPasswordBadAt.IsZero() || got.MQTTPassword != storedOwnPW {
 		t.Fatalf("stored %+v", got)
+	}
+}
+
+// Why: when the page is shown again (unverified move, another field rejected) a typed password
+// is gone, so the person is told to type it again, and the chosen mode stays selected.
+func TestRerenderKeepsTheModeAndAsksForThePasswordAgain(t *testing.T) {
+	e, pw := mqttEnv(t, model.Device{ID: 7, Name: "porch", Address: "10.0.0.7", HTTPPassword: "web-pw"})
+	e.inv.unproven = true
+	res, body := e.do(t, "POST", "/devices/7", "admin", editPost(url.Values{"address": {"10.0.0.99"}, "mqtt_password_mode": {"own"}, "mqtt_password": {"typed-409-pw"}}))
+	if res.StatusCode != 409 || len(pw.got()) != 0 {
+		t.Fatalf("status %d, calls %+v", res.StatusCode, pw.got())
+	}
+	if !strings.Contains(body, `value="own" selected`) || !strings.Contains(body, "Enter the MQTT password again") || strings.Contains(body, "typed-409-pw") {
+		t.Fatal("409 re-render lost the mode, the hint, or leaks the password")
+	}
+	res, body = e.do(t, "POST", "/devices/7", "admin", editPost(url.Values{"port": {"abc"}, "mqtt_password_mode": {"broker"}}))
+	if res.StatusCode != 422 || !strings.Contains(body, `value="broker" selected`) {
+		t.Fatalf("status %d: mode lost on a rejected field", res.StatusCode)
 	}
 }
 
