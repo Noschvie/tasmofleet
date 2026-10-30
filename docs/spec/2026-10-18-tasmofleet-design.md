@@ -435,6 +435,40 @@ data directory (TasmoAdmin lesson A4).
 - Device output is untrusted text. It is size-limited and parsed with tolerant JSON
   (control characters stripped), and HTML-escaped by templ on output.
 
+### 5.x Transport and path choice (package `transport`, `Choose`)
+
+`transport.Choose(Facts) Paths` decides how each action reaches a device. It is pure
+(`internal/transport/choose*.go`, depguard, mutation-gated) and returns one `Path` per action
+(`HTTP | MQTT | DownloadHTTP | DownloadMQTT | PushHTTP | PushSafeboot | PushMQTT | None`) with one
+English sentence each (`Paths.Reasons`), shown verbatim in the UI and in errors. `Facts` come from
+a `FactsSource` (`internal/app/transportfacts.go`): HTTP state (ok = success within 15 min; failing =
+the router remembers failed calls since a time and a kind, cleared by a later success; else unknown),
+MQTT usability, the MQTT password state, `FWReach` ("no" older than 24 h counts as unknown),
+whether FIRMWARE_BASE_URL is set, the identity, and for an update the request (Delivery,
+AllowMQTTUpload, the `fwselect.MQTTUploadFits` verdict, the HTTP push decision the OTA engine makes).
+
+MQTT is usable when all hold: the bus is connected, `Device.MQTT` is ours, the topic is set and
+unique in the inventory, the FullTopic (empty = `%prefix%/%topic%/`) equals MQTT_FULLTOPIC, the topic
+is not the device's known GroupTopic, and the last will says Online. The GroupTopic is trusted only
+when it is set, stamped and not older than the last Status 1 read (it can be stale: INFO1 is sent
+at boot, Status 1 only when probed). Commands tolerate an unknown GroupTopic (the channel refuses
+known group topics itself); every other MQTT action (transfers, download) needs a known one.
+
+Order (HTTP first: the established path with synchronous replies; MQTT makes devices HTTP cannot
+reach manageable, #45). HTTP "not failing" means ok or unknown.
+
+| Action | Rule |
+| --- | --- |
+| Commands | HTTP; MQTT when HTTP is failing and MQTT is usable; else None |
+| Backup | HTTP `/dl`; MQTT FileDownload when HTTP is failing and MQTT is usable with a password that is set and not refused; else None |
+| Restore | HTTP WebGetConfig when HTTP is not failing, FIRMWARE_BASE_URL is set and FWReach is not "no"; else MQTT FileUpload Type 2 (usable, password usable); else None |
+| Update, pull | DownloadHTTP (HTTP not failing, base URL set, FWReach not "no"); else DownloadMQTT (usable, FWReach not "no"); else None |
+| Update, push where possible | HTTP not failing: the engine's decision (PushHTTP, PushSafeboot, or its fallback to DownloadHTTP, kept with its note). HTTP failing and MQTT usable: PushMQTT when the per-transaction "experimental" checkbox is set, the image fits and the password is usable; else DownloadMQTT; else None |
+
+A password "not set" or "refused since T" removes transfers over MQTT, not commands. A None for an
+update whose experimental upload would have worked ends with "choose Push where possible and allow
+upload over MQTT (experimental)". There is no per-device "force transport" setting.
+
 ---
 
 ## 6. Identity detection (package `fwselect`, `Detect`)
