@@ -4,7 +4,7 @@ Status: binding since the design v2 port. The look is the
 **Claude Design v2 prototype** ("v2"): rounded 7/10/12 px surfaces, hairline borders, Geist and Geist
 Mono, one blue accent (`oklch` hue 250), light and dark as equal themes. The prototype
 (`design/v2/`) is the binding source and is compared pixel by pixel (`make visual`, see
-`design/v2/README.md`); the v1 Modernist system (`design/ds-bundle/`) is historical. Wording follows the prototype
+`design/v2/README.md`); the v1 Modernist system was removed (see the git history before 2026-10-30). Wording follows the prototype
 (plan D14) except for the rows of the wording table below.
 
 This document is the style guide in the repository: tokens, type, spacing, every component with its

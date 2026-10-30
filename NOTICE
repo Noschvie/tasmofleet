@@ -10,9 +10,6 @@ Third-party components:
   the four variable woff2 files (latin and latin-ext subsets of each) in
   internal/web/static/; the license text is internal/web/static/geist-OFL.txt.
 
-- Archivo (SIL Open Font License 1.1), design/ds-bundle/fonts/ (design reference
-  only, not shipped in the binary); the license text is design/ds-bundle/fonts/OFL.txt.
-
 - Go modules compiled into the binary (see go.mod): templ (MIT), go-oidc
   (Apache-2.0), golang.org/x/oauth2 (BSD-3-Clause), modernc.org/sqlite
   (BSD-3-Clause), Eclipse Paho MQTT (EPL-2.0 or EDL-1.0; used under EDL-1.0,

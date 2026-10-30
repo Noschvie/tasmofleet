@@ -13,6 +13,7 @@ always upgrade automatically.
 
 ### Changed
 
+- Repository: removed the v1 design-system bundle (`design/ds-bundle`), its build scripts and the Claude Design sync notes; the app never used them. The v2 prototype and the fixture tools stay
 - Images: each push to main deletes the previous `edge` on ghcr.io and Docker Hub, so no untagged images pile up (releases are never deleted)
 - README: no longer lists notifications by webhook or e-mail; they were never built (#249)
 - Policy: Save rule ends the editor too: the overview names the saved rule and marks its row

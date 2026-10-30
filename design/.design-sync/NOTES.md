@@ -1,1 +1,0 @@
-- 2026-10-20: first upload to the Claude Design project (32 files, hand-made layout, no _ds_sync.json anchor → next sync re-verifies everything). Known template defects: firmware 375px bulk bar overlaps table header; "Needed by" line floats outside its file row.
