@@ -1,11 +1,13 @@
 package store
 
 import (
+	"database/sql"
 	"errors"
 	"io/fs"
 	"reflect"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
 )
@@ -160,5 +162,104 @@ func TestMigration0032KeepsProposalsAndAddsAnEmptyHostname(t *testing.T) {
 	}
 	if name != "old" || host != "" {
 		t.Fatalf("row: %q %q", name, host)
+	}
+}
+
+// Why (#239): the device list shows when the OTA URL and the group topic were read, so a value
+// shown there is never older than the read that stamped it. A probe that read neither (minimal
+// firmware, failed Status 1) must keep value and stamp together; a value from before the stamps
+// existed has no age ("-" in the list), not a made-up one.
+func TestUpdateProbeStampsTheReadOfOtaURLAndGroupTopic(t *testing.T) {
+	s, _, _ := newStore(t)
+	id, err := s.CreateDevice(ctx, model.Device{Name: "plug", Address: "192.0.2.10", MAC: "aa:bb:cc:00:00:01", OTAURL: "http://old.example/a.bin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, _ := s.GetDevice(ctx, id)
+	if d.OTAURL == "" || !d.OTAURLReadAt.IsZero() || d.GroupTopic != "" || !d.GroupTopicReadAt.IsZero() {
+		t.Fatalf("a stored value without a read has no age: %+v", d)
+	}
+	guard := ProbeGuard{Address: "192.0.2.10", MAC: "aa:bb:cc:00:00:01"}
+	before := time.Now().Add(-time.Second)
+	if err := s.UpdateProbe(ctx, id, guard, ProbeResult{SetOTAURL: true, OTAURL: "http://fw.example/b.bin", SetGroupTopic: true, GroupTopic: "tasmotas"}); err != nil {
+		t.Fatal(err)
+	}
+	d, _ = s.GetDevice(ctx, id)
+	if d.OTAURL != "http://fw.example/b.bin" || d.GroupTopic != "tasmotas" {
+		t.Fatalf("values: %q %q", d.OTAURL, d.GroupTopic)
+	}
+	if d.OTAURLReadAt.Before(before) || d.GroupTopicReadAt.Before(before) {
+		t.Fatalf("stamps not set: %v %v", d.OTAURLReadAt, d.GroupTopicReadAt)
+	}
+	stamp := d.GroupTopicReadAt
+	if err := s.UpdateProbe(ctx, id, guard, ProbeResult{}); err != nil {
+		t.Fatal(err)
+	}
+	d, _ = s.GetDevice(ctx, id)
+	if d.OTAURL == "" || d.GroupTopic != "tasmotas" || !d.GroupTopicReadAt.Equal(stamp) || d.OTAURLReadAt.IsZero() {
+		t.Fatalf("a probe that read nothing changed the values or their stamps: %+v", d)
+	}
+}
+
+// Why (#239): INFO1 is the boot announcement, so the group topic it carries costs no read. It
+// must only ever write that one value and its stamp, under the same guard as the other probe
+// writes (a device moved, rebound or re-topiced since is left alone).
+func TestUpdateGroupTopicFromMQTTWritesOnlyTheTopicAndItsStamp(t *testing.T) {
+	s, _, _ := newStore(t)
+	id, err := s.CreateDevice(ctx, model.Device{Name: "plug", Address: "192.0.2.10", MAC: "aa:bb:cc:00:00:01", Topic: "plug", OTAURL: "http://fw.example/a.bin", Notes: "n"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	guard := ProbeGuard{Address: "192.0.2.10", MAC: "aa:bb:cc:00:00:01"}
+	if err := s.UpdateGroupTopicFromMQTT(ctx, id, guard, "other", "tasmotas"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("wrong topic: %v", err)
+	}
+	if err := s.UpdateGroupTopicFromMQTT(ctx, id, guard, "plug", "tasmotas"); err != nil {
+		t.Fatal(err)
+	}
+	d, _ := s.GetDevice(ctx, id)
+	if d.GroupTopic != "tasmotas" || d.GroupTopicReadAt.IsZero() || d.OTAURL != "http://fw.example/a.bin" || !d.OTAURLReadAt.IsZero() || d.Notes != "n" {
+		t.Fatalf("%+v", d)
+	}
+}
+
+// Why (#239): live databases upgrade with devices in them; their OTA URL stays, without an age,
+// and the new columns start empty (append-only migration, nothing is guessed).
+func TestMigration0035AddsTheReadStampsWithoutTouchingDevices(t *testing.T) {
+	db, path := rawDB(t)
+	upTo, all := fstest.MapFS{}, fstest.MapFS{}
+	err := fs.WalkDir(Migrations, "migrations", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		b, rerr := fs.ReadFile(Migrations, p)
+		if rerr != nil {
+			return rerr
+		}
+		all[p] = &fstest.MapFile{Data: b}
+		if p < "migrations/0035" {
+			upTo[p] = &fstest.MapFile{Data: b}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := migrate(db, path, upTo); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO devices (name, address, mac, topic, ota_url, created_at, updated_at) VALUES ('old','10.0.0.1','aa:bb:cc:00:00:09','t','http://fw/x.bin',0,0)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrate(db, path, all); err != nil {
+		t.Fatal(err)
+	}
+	var url, gt string
+	var otaAt, gtAt sql.NullInt64
+	if err := db.QueryRowContext(ctx, `SELECT ota_url, group_topic, ota_url_read_at, group_topic_read_at FROM devices WHERE id=1`).Scan(&url, &gt, &otaAt, &gtAt); err != nil {
+		t.Fatal(err)
+	}
+	if url != "http://fw/x.bin" || gt != "" || otaAt.Valid || gtAt.Valid {
+		t.Fatalf("%q %q %v %v", url, gt, otaAt, gtAt)
 	}
 }

@@ -2950,6 +2950,12 @@ details.job-log > summary {
 .devtable col.c-restart {
   width: 9rem;
 }
+.devtable col.c-ota {
+  width: 16rem;
+}
+.devtable col.c-gt {
+  width: 8rem;
+}
 .devtable col.c-pow {
   width: 9rem;
 }
@@ -3526,7 +3532,9 @@ label.chip:has(input:focus-visible) {
   table.tfix .c-fam,
   table.tfix .c-up,
   table.tfix .c-wifi,
-  table.tfix .c-restart {
+  table.tfix .c-restart,
+  table.tfix .c-ota,
+  table.tfix .c-gt {
     display: table-cell;
   }
   table.tfix .c-fam .tag {
@@ -8097,6 +8105,12 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
   table.devtable col.c-restart {
     width: 180px;
   }
+  table.devtable col.c-ota {
+    width: 260px;
+  }
+  table.devtable col.c-gt {
+    width: 130px;
+  }
   table.devtable col.c-pow {
     width: 72px;
   }
@@ -8189,6 +8203,17 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
 }
 .dv-mdown {
   display: none;
+}
+/* OTA URL and group topic: one line cut off by the cell (the title holds the whole value), the
+   time it was read under it. */
+.dv-trunc {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dv-readat {
+  font-size: 0.85em;
 }
 .dv-mono,
 .dv-mono a {

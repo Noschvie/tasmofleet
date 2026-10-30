@@ -110,3 +110,27 @@ func TestChannels(t *testing.T) {
 		t.Errorf("silent mqtt: %q", got)
 	}
 }
+
+// Why (#239): the OTA URL and group topic columns are for checking the fleet at a glance, so
+// equal values must sit together (sorted case-insensitively) and devices that never reported one
+// go last in both directions, never first.
+func TestSortDevicesByOtaURLAndGroupTopic(t *testing.T) {
+	mk := func(name, ota, gt string) deviceRow {
+		return deviceRow{Device: model.Device{Name: name, OTAURL: ota, GroupTopic: gt}}
+	}
+	rows := func() []deviceRow {
+		return []deviceRow{mk("a", "http://B/x", ""), mk("b", "", "Zeta"), mk("c", "http://a/x", "alpha"), mk("d", "http://b/x", "")}
+	}
+	for _, c := range []struct{ key, dir, want string }{
+		{"otaurl", "asc", "c a d b "},
+		{"otaurl", "desc", "a d c b "},
+		{"grouptopic", "asc", "c b a d "},
+		{"grouptopic", "desc", "b c a d "},
+	} {
+		r := rows()
+		sortDevices(r, tableSort{c.key, c.dir})
+		if got := names(r); got != c.want {
+			t.Errorf("sort %s %s = %q, want %q", c.key, c.dir, got, c.want)
+		}
+	}
+}

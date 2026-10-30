@@ -2,6 +2,7 @@ package web
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
@@ -66,6 +67,20 @@ templ restartCell(v vitals) {
 		<span class="muted">-</span>
 	} else {
 		<span title="Estimated from the last report and the uptime"><time { ui.StampAttrs(v.Restart, ui.StampDateTime)... }>{ ui.StampText(v.Restart, ui.StampDateTime) }</time></span>
+	}
+}
+
+// readValueCell is a setting the device reported (OTA URL, group topic): the value on one line,
+// cut off by the cell with the whole value as its title, and under it when it was read (browser
+// time via time.js). A value stored before reads were stamped has no age line; no value is a dash.
+templ (h *handler) readValueCell(v string, at time.Time) {
+	if v == "" {
+		<span class="muted">-</span>
+	} else {
+		<span class="dv-trunc" title={ v }>{ v }</span>
+		if !at.IsZero() {
+			<span class="dv-trunc dv-readat muted"><time { ui.StampAttrs(at, ui.StampDay)... }>{ ui.StampDayText(h.d.Clock.Now(), at) }</time></span>
+		}
 	}
 }
 
@@ -160,6 +175,12 @@ templ (h *handler) deviceRows(d rowsData) {
 			</td>
 			<td data-label="Last restart" class="nowrap c-restart m-hide" sse-swap={ "restart-" + devID(row.Device.ID) }>
 				@restartCell(row.Vitals)
+			</td>
+			<td data-label="OTA URL" class="nowrap c-ota m-hide dv-mono">
+				@h.readValueCell(row.Device.OTAURL, row.Device.OTAURLReadAt)
+			</td>
+			<td data-label="Group topic" class="nowrap c-gt m-hide dv-mono">
+				@h.readValueCell(row.Device.GroupTopic, row.Device.GroupTopicReadAt)
 			</td>
 			<td data-label="Power" class="nowrap p2 pcell" sse-swap={ "power-" + devID(row.Device.ID) }>
 				@powerCellView(row.Power)

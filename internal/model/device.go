@@ -52,6 +52,14 @@ type Device struct {
 	// OTAURL is the OtaUrl the device would update from (Status 1), without any credentials in it;
 	// "" when never read or unset. Written by the prober only.
 	OTAURL string
+	// OTAURLReadAt is when OTAURL was read; zero for a value stored before the stamps existed
+	// (no age is shown). Written with OTAURL by the prober only.
+	OTAURLReadAt time.Time
+	// GroupTopic is the GroupTopic setting of the device, as the plain topic ("tasmotas"), from
+	// Status 1 or the INFO1 boot announcement; "" when never read or unset. GroupTopicReadAt is
+	// when it was read (zero: never). Written by the prober and the MQTT identity reader only.
+	GroupTopic       string
+	GroupTopicReadAt time.Time
 	// RelayNames are the FriendlyNames of the device (plain Status), one per relay, as reported
 	// (Tasmota's defaults "Tasmota", "Tasmota2" included). Nil when never read. Written by the
 	// prober only.

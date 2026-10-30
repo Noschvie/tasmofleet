@@ -310,10 +310,18 @@
   // already wide enough keeps its CSS width (the prototype's), so nothing else changes.
   function fitPinnedPx(table, cg) {
     var c = cols(table),
-      col = cg.children,
+      kids = cg.children,
       th = headers(table);
-    for (var i = 0; i < col.length; i++) {
-      col[i].style.width = "";
+    for (var i = 0; i < kids.length; i++) {
+      kids[i].style.width = "";
+    }
+    // The colgroup has no <col> for a column that is off by default (the server drops it), so
+    // its children are not indexed like the header cells: line them up (#239).
+    var hid = hiddenIdx(table),
+      col = [],
+      n = 0;
+    for (var k = 0; k < c.length; k++) {
+      col.push(hid[k] ? null : kids[n++]);
     }
     if (!desktop.matches) {
       return;

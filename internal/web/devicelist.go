@@ -23,6 +23,7 @@ var deviceCols = map[string]ui.TableCol{
 	"name": {Col: "c-name"}, "status": {Col: "c-status"}, "reach": {Class: "c-reach", Col: "c-reach"}, "firmware": {Col: "c-fw"},
 	"family": {Class: "c-fam", Col: "c-fam"}, "address": {Col: "c-addr"}, "uptime": {Class: "c-up", Col: "c-up"},
 	"wifi": {Class: "c-wifi", Col: "c-wifi"}, "restart": {Class: "c-restart", Col: "c-restart"},
+	"otaurl": {Class: "c-ota", Col: "c-ota"}, "grouptopic": {Class: "c-gt", Col: "c-gt"},
 	"power": {Col: "c-pow"}, "actions": {SrOnly: true, Col: "c-act"},
 }
 

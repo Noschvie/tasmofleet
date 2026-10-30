@@ -254,6 +254,10 @@ func sortDevices(rows []deviceRow, s tableSort) {
 		key = byInt(func(r deviceRow) int64 { return int64(r.Health.RSSI) })
 	case "restart":
 		key = byInt(func(r deviceRow) int64 { return restartAt(r.Health).Unix() })
+	case "otaurl":
+		key = byStr(func(r deviceRow) string { return r.Device.OTAURL }, lower)
+	case "grouptopic":
+		key = byStr(func(r deviceRow) string { return r.Device.GroupTopic }, lower)
 	case "power":
 		key = func(a, b deviceRow) (int, bool, bool) {
 			x, y := powerRank(a.Power), powerRank(b.Power)

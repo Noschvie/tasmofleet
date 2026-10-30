@@ -276,6 +276,14 @@ func toMS(t time.Time) int64 {
 	return t.UnixMilli()
 }
 
+// nullMS is toMS for a nullable column: NULL for the zero time (never read).
+func nullMS(t time.Time) any {
+	if t.IsZero() {
+		return nil
+	}
+	return t.UnixMilli()
+}
+
 func fromMS(ms int64) time.Time {
 	if ms == 0 {
 		return time.Time{}

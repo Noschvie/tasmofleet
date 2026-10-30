@@ -82,6 +82,18 @@ func (f *idFakeInventory) UpdateIdentityFromMQTT(_ context.Context, id model.Dev
 	return nil
 }
 
+func (f *idFakeInventory) UpdateGroupTopicFromMQTT(_ context.Context, id model.DeviceID, _ store.ProbeGuard, topic, groupTopic string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	d := f.devs[id]
+	if d.Topic != topic {
+		return store.ErrConflict
+	}
+	d.GroupTopic, d.GroupTopicReadAt = groupTopic, time.Now()
+	f.devs[id] = d
+	return nil
+}
+
 type idAudit struct {
 	mu sync.Mutex
 	ev []model.AuditEvent
@@ -506,5 +518,48 @@ func TestMQTTIdentityAppliesTheGraceAgainAfterAReconnect(t *testing.T) {
 	e.m.askDue(t.Context())
 	if got := e.bus.sent(); len(got) != 1 {
 		t.Fatalf("commands = %q after the grace, want 1", got)
+	}
+}
+
+// Why (#239): the boot announcement carries the group topic for free, so the device list needs no
+// extra read. INFO1 writes it as "cmnd/<group>/" (the prefix form), the list and Status 1 use the
+// plain "<group>"; both must read the same. It is taken even when HTTP identified the device
+// (the identity rules do not apply to it), but never from a retained message: that is not "now".
+func TestMQTTIdentityTakesTheGroupTopicFromInfo1(t *testing.T) {
+	d := oursDevice(1, "plug")
+	d.Identity = model.Identity{Family: model.ChipESP8266, Hardware: "ESP8266EX", Version: "15.0.0", Image: "release-tasmota", Variant: "tasmota", DetectedAt: time.Unix(1700000000, 0)}
+	e := newIDEnv(d)
+	e.emit(mqttbus.KindInfo, "plug", "INFO1", info1Payload, true)
+	e.drain(t.Context())
+	if got := e.inv.get(1).GroupTopic; got != "" {
+		t.Fatalf("a retained INFO1 gave group topic %q", got)
+	}
+	e.emit(mqttbus.KindInfo, "plug", "INFO1", info1Payload, false)
+	e.drain(t.Context())
+	got := e.inv.get(1)
+	if got.GroupTopic != "tasmotas" || got.GroupTopicReadAt.IsZero() {
+		t.Fatalf("group topic %q at %v, want tasmotas with a stamp", got.GroupTopic, got.GroupTopicReadAt)
+	}
+	if len(e.bus.sent()) != 0 {
+		t.Errorf("INFO1 caused commands: %q", e.bus.sent())
+	}
+}
+
+func TestInfo1GroupTopicIsThePlainTopic(t *testing.T) {
+	for in, want := range map[string]string{
+		`{"Info1":{"GroupTopic":"cmnd/tasmotas/"}}`: "tasmotas",
+		`{"Info1":{"GroupTopic":"cmnd/a/b/"}}`:      "a/b",
+		`{"Info1":{"GroupTopic":"tasmotas"}}`:       "tasmotas",
+		`{"Info1":{"GroupTopic":""}}`:               "",
+	} {
+		got, ok := info1GroupTopic([]byte(in))
+		if !ok || got != want {
+			t.Errorf("%s: %q %v, want %q", in, got, ok, want)
+		}
+	}
+	for _, in := range []string{`{"Info1":{"Version":"1"}}`, `{}`, `nope`} {
+		if _, ok := info1GroupTopic([]byte(in)); ok {
+			t.Errorf("%s: read a group topic from nothing", in)
+		}
 	}
 }

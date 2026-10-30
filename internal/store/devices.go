@@ -16,7 +16,7 @@ const deviceCols = `id, name, address, port, mac, topic, full_topic, tags, notes
 	ota_excluded, mqtt_capability, chip_family, hardware, single_core, fw_version, fw_image, fw_variant,
 	fw_language, flash_size_kb, program_flash_kb, free_kb, identity_at, created_at, updated_at, mqtt_host, mqtt_port,
 	net_hostname, net_ip, net_gateway, net_ssid, net_bssid, net_channel, net_wired, net_at, device_name, device_name_kept,
-	net_subnet, net_dns, ota_url, relay_names`
+	net_subnet, net_dns, ota_url, relay_names, group_topic, ota_url_read_at, group_topic_read_at`
 
 // relayNamesJSON is the stored form of relay names (a JSON array like tags); "" for none.
 func relayNamesJSON(names []string) string {
@@ -37,11 +37,12 @@ func (s *SQLite) scanDevice(r scanner) (model.Device, error) {
 	var tags, sealed, mqtt, family, relayNames string
 	var excluded, single, wired int
 	var identAt, created, updated, netAt int64
+	var otaAt, groupAt sql.NullInt64
 	err := r.Scan(&d.ID, &d.Name, &d.Address, &d.Port, &d.MAC, &d.Topic, &d.FullTopic, &tags, &d.Notes, &d.HTTPUser, &sealed,
 		&excluded, &mqtt, &family, &d.Identity.Hardware, &single, &d.Identity.Version, &d.Identity.Image, &d.Identity.Variant,
 		&d.Identity.Language, &d.Identity.FlashSizeKB, &d.Identity.ProgramFlashSizeKB, &d.Identity.FreeKB, &identAt, &created, &updated, &d.MQTTHost, &d.MQTTPort,
 		&d.Net.Hostname, &d.Net.IP, &d.Net.Gateway, &d.Net.SSID, &d.Net.BSSID, &d.Net.Channel, &wired, &netAt, &d.DeviceName, &d.KeptDeviceName,
-		&d.Net.Subnet, &d.Net.DNS, &d.OTAURL, &relayNames)
+		&d.Net.Subnet, &d.Net.DNS, &d.OTAURL, &relayNames, &d.GroupTopic, &otaAt, &groupAt)
 	if err != nil {
 		return model.Device{}, err
 	}
@@ -76,6 +77,7 @@ func (s *SQLite) scanDevice(r scanner) (model.Device, error) {
 	d.Identity.DetectedAt = fromMS(identAt)
 	d.CreatedAt, d.UpdatedAt = fromMS(created), fromMS(updated)
 	d.Net.Wired, d.Net.ReadAt = wired != 0, fromMS(netAt)
+	d.OTAURLReadAt, d.GroupTopicReadAt = fromMS(otaAt.Int64), fromMS(groupAt.Int64) // NULL: never read, no age
 	return d, nil
 }
 
@@ -208,7 +210,7 @@ func (s *SQLite) CreateDevice(ctx context.Context, d model.Device) (model.Device
 		d.Identity.Variant, d.Identity.Language, d.Identity.FlashSizeKB, d.Identity.ProgramFlashSizeKB, d.Identity.FreeKB,
 		toMS(d.Identity.DetectedAt), created, toMS(now), d.MQTTHost, d.MQTTPort,
 		d.Net.Hostname, d.Net.IP, d.Net.Gateway, d.Net.SSID, d.Net.BSSID, d.Net.Channel, b2i(d.Net.Wired), toMS(d.Net.ReadAt),
-		d.Net.Subnet, d.Net.DNS, d.OTAURL, relayNamesJSON(d.RelayNames))
+		d.Net.Subnet, d.Net.DNS, d.OTAURL, relayNamesJSON(d.RelayNames), d.GroupTopic, nullMS(d.OTAURLReadAt), nullMS(d.GroupTopicReadAt))
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
@@ -217,8 +219,8 @@ func (s *SQLite) CreateDevice(ctx context.Context, d model.Device) (model.Device
 	res, err := tx.ExecContext(ctx, `INSERT INTO devices (name, address, port, mac, topic, full_topic, tags, notes,
 		http_user, http_password, ota_excluded, mqtt_capability, chip_family, hardware, single_core, fw_version, fw_image,
 		fw_variant, fw_language, flash_size_kb, program_flash_kb, free_kb, identity_at, created_at, updated_at, mqtt_host, mqtt_port,
-		net_hostname, net_ip, net_gateway, net_ssid, net_bssid, net_channel, net_wired, net_at, net_subnet, net_dns, ota_url, relay_names)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, args...)
+		net_hostname, net_ip, net_gateway, net_ssid, net_bssid, net_channel, net_wired, net_at, net_subnet, net_dns, ota_url, relay_names, group_topic, ota_url_read_at, group_topic_read_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, args...)
 	if err != nil {
 		return 0, mapErr(err)
 	}
@@ -312,6 +314,9 @@ type ProbeResult struct {
 	// unusable reply): the stored OTAURL is then kept. OTAURL has no credentials in it.
 	SetOTAURL bool
 	OTAURL    string
+	// SetGroupTopic is false when Status 1 gave no GroupTopic: the stored one and its stamp are kept.
+	SetGroupTopic bool
+	GroupTopic    string
 	// RelayNames are the FriendlyNames the probe read; empty (not read) keeps the stored ones.
 	RelayNames []string
 	// DeviceName is the device's Tasmota DeviceName, "" when the probe did not read it. It is
@@ -374,6 +379,9 @@ func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuar
 		net_subnet = CASE WHEN ?=0 THEN net_subnet ELSE ? END,
 		net_dns = CASE WHEN ?=0 THEN net_dns ELSE ? END,
 		ota_url = CASE WHEN ?=0 THEN ota_url ELSE ? END,
+		ota_url_read_at = CASE WHEN ?=0 THEN ota_url_read_at ELSE ? END,
+		group_topic = CASE WHEN ?=0 THEN group_topic ELSE ? END,
+		group_topic_read_at = CASE WHEN ?=0 THEN group_topic_read_at ELSE ? END,
 		relay_names = CASE WHEN ?='' THEN relay_names ELSE ? END,
 		`+followNameSQL+`
 		topic = CASE WHEN ?='' OR topic=? THEN topic
@@ -387,7 +395,8 @@ func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuar
 		b2i(r.SetMQTT), r.MQTTHost, b2i(r.SetMQTT), r.MQTTPort,
 		b2i(r.SetNet), r.Net.Hostname, b2i(r.SetNet), r.Net.IP, b2i(r.SetNet), r.Net.Gateway, b2i(r.SetNet), r.Net.SSID,
 		b2i(r.SetNet), r.Net.BSSID, b2i(r.SetNet), r.Net.Channel, b2i(r.SetNet), b2i(r.Net.Wired), b2i(r.SetNet), toMS(r.Net.ReadAt),
-		b2i(r.SetNet), r.Net.Subnet, b2i(r.SetNet), r.Net.DNS, b2i(r.SetOTAURL), r.OTAURL, relayNames, relayNames,
+		b2i(r.SetNet), r.Net.Subnet, b2i(r.SetNet), r.Net.DNS, b2i(r.SetOTAURL), r.OTAURL, b2i(r.SetOTAURL), toMS(s.now()),
+		b2i(r.SetGroupTopic), r.GroupTopic, b2i(r.SetGroupTopic), toMS(s.now()), relayNames, relayNames,
 		r.DeviceName, r.DeviceName, r.NameFrom, r.NameFrom, r.DeviceName, r.DeviceName, r.DeviceName,
 		r.DeviceTopic, r.DeviceTopic, r.DeviceTopic, r.DeviceTopic, r.DeviceTopic, r.DeviceTopic,
 		toMS(s.now()), id, g.Address, g.Port, strings.ToLower(g.MAC))
@@ -491,6 +500,25 @@ func (s *SQLite) UpdateIdentityFromMQTT(ctx context.Context, id model.DeviceID, 
 	}
 	if n == 0 {
 		return fmt.Errorf("%w: device %d changed, was deleted or was identified over HTTP", ErrConflict, id)
+	}
+	return nil
+}
+
+// UpdateGroupTopicFromMQTT stores the GroupTopic a device announced in INFO1 and the time it was
+// read, and nothing else, under the same guard as UpdateProbe plus the topic the message came
+// from (#239). It does not care whether HTTP identified the device: the announcement is newer
+// than the last probe or at least as good.
+func (s *SQLite) UpdateGroupTopicFromMQTT(ctx context.Context, id model.DeviceID, g ProbeGuard, topic, groupTopic string) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE devices SET group_topic=?, group_topic_read_at=?
+		WHERE id=? AND address=? AND port=? AND mac=? AND topic=?`,
+		groupTopic, toMS(s.now()), id, g.Address, g.Port, strings.ToLower(g.MAC), topic)
+	if err != nil {
+		return mapErr(err)
+	}
+	if k, err := res.RowsAffected(); err != nil {
+		return err
+	} else if k == 0 {
+		return fmt.Errorf("%w: device %d changed or was deleted", ErrConflict, id)
 	}
 	return nil
 }

@@ -90,7 +90,10 @@ type probed struct {
 	// Status 1 gave a usable answer (else the stored value is kept).
 	otaURL     string
 	readOTAURL bool
-	relayNames []string // FriendlyName array of plain Status
+	// groupTopic is the GroupTopic of the same Status 1 answer; readGroupTopic tells whether it had one.
+	groupTopic     string
+	readGroupTopic bool
+	relayNames     []string // FriendlyName array of plain Status
 }
 
 func (p *Prober) pause(ctx context.Context) error {
@@ -237,6 +240,7 @@ func (p *Prober) probe(ctx context.Context, d model.Device, verify func(probed) 
 	// effort: a failed or unusable answer keeps the stored value.
 	if raw, err := p.cmd(ctx, t, "Status 1"); err == nil {
 		out.otaURL, out.readOTAURL = parseOtaURL(raw)
+		out.groupTopic, out.readGroupTopic = parseGroupTopic(raw)
 	}
 	// Plain "Status" (not "Status 0") is the Status object only: DeviceName and the topic the
 	// device actually uses. The "Topic" command would return the setting with its placeholders
@@ -298,6 +302,19 @@ func parseOtaURL(raw json.RawMessage) (clean string, ok bool) {
 	}
 	clean, _, ok = settings.SplitURLCredentials(v)
 	return clean, ok
+}
+
+// parseGroupTopic reads the GroupTopic of a Status 1 answer (the same one that carries the OtaUrl,
+// so it costs no read of its own). ok is false when the answer has no such key; an empty value is
+// a read value ("not set"). The topic is a MQTT topic, not a secret.
+func parseGroupTopic(raw json.RawMessage) (topic string, ok bool) {
+	var s struct {
+		StatusPRM *struct{ GroupTopic *string }
+	}
+	if json.Unmarshal(raw, &s) != nil || s.StatusPRM == nil || s.StatusPRM.GroupTopic == nil {
+		return "", false
+	}
+	return strings.TrimSpace(*s.StatusPRM.GroupTopic), true
 }
 
 // mqttSwitchedOff reads SetOption3 (MQTT on/off). Any failure counts as "on":
@@ -465,7 +482,10 @@ func (p *Prober) Describe(ctx context.Context, d model.Device) (model.Device, er
 	}
 	d.MQTTHost, d.MQTTPort = pr.mqttHost, pr.mqttPort
 	if pr.readOTAURL {
-		d.OTAURL = pr.otaURL
+		d.OTAURL, d.OTAURLReadAt = pr.otaURL, p.now()
+	}
+	if pr.readGroupTopic {
+		d.GroupTopic, d.GroupTopicReadAt = pr.groupTopic, p.now()
 	}
 	if pr.relayNames != nil {
 		d.RelayNames = pr.relayNames
@@ -511,6 +531,7 @@ func (p *Prober) Refresh(ctx context.Context, id model.DeviceID, actor string) e
 	} else {
 		res.DeviceName, res.DeviceTopic, res.NameFrom = pr.devName, pr.topic, fallbackName(d, pr)
 		res.SetOTAURL, res.OTAURL, res.RelayNames = pr.readOTAURL, pr.otaURL, pr.relayNames
+		res.SetGroupTopic, res.GroupTopic = pr.readGroupTopic, pr.groupTopic
 		res.SetNet, res.Net = true, p.withStoredWifi(d.Net, pr.net)
 		if d.MAC == "" && actor != "" && bindable(pr.mac) {
 			res.BindMACs = []string{pr.mac}

@@ -78,7 +78,7 @@ func TestValidatePref(t *testing.T) {
 		{"hiding a default-off column stores nothing", "table.test_off", `{"h":["extra"]}`, "", false},
 		{"only default-off columns can be shown", "table.devices", `{"v":["family"]}`, "", true},
 		{"order", "table.devices", `{"o":["firmware","status"]}`, `{"o":["firmware","status"]}`, false},
-		{"default order needs no storage", "table.devices", `{"o":["status","reach","firmware","family","address","uptime","wifi","restart","power"]}`, "", false},
+		{"default order needs no storage", "table.devices", `{"o":["status","reach","firmware","family","address","uptime","wifi","restart","otaurl","grouptopic","power"]}`, "", false},
 		{"a column fixed to its edge cannot move (Name)", "table.devices", `{"o":["status","name"]}`, "", true},
 		{"a column fixed to its edge cannot move (Actions)", "table.devices", `{"o":["actions","status"]}`, "", true},
 		{"Power is pinned but movable", "table.devices", `{"o":["power","status"]}`, `{"o":["power","status"]}`, false},
@@ -170,15 +170,15 @@ func TestTemplatesMatchColumnRegistry(t *testing.T) {
 }
 
 const sampleTable = `<p>x</p><table class="devtable dense" data-table="devices"><colgroup><col class="c-sel"></colgroup>` +
-	`<thead><tr><th><input type="checkbox" data-select-all></th><th>Name</th><th>Status</th><th>MQTT · HTTP</th><th>Firmware</th><th>Chip</th><th>Address</th><th>Uptime</th><th>Wi-Fi</th><th>Last restart</th><th>Power</th><th>Actions</th></tr></thead>` +
-	`<tbody><tr><td colspan="11">empty</td></tr><tr><td colspan="11">more</td></tr></tbody></table><p>y</p>`
+	`<thead><tr><th><input type="checkbox" data-select-all></th><th>Name</th><th>Status</th><th>MQTT · HTTP</th><th>Firmware</th><th>Chip</th><th>Address</th><th>Uptime</th><th>Wi-Fi</th><th>Last restart</th><th>OTA URL</th><th>Group topic</th><th>Power</th><th>Actions</th></tr></thead>` +
+	`<tbody><tr><td colspan="13">empty</td></tr><tr><td colspan="13">more</td></tr></tbody></table><p>y</p>`
 
 // Why: without saved preferences the page must stay exactly as designed (own
 // column widths, no forced layout) but still carry the menu.
 func TestApplyTablePrefsDefaults(t *testing.T) {
 	out := string(applyTablePrefs([]byte(sampleTable), nil))
-	for _, want := range []string{`class="devtable dense pl1 pl2 pr11 pr12"`, `data-cols=",name:28:l:fix,status:17,reach:15,firmware:14,family:10,address:13,uptime:11,wifi:12,restart:18,power:7:r,actions:5:r:fix"`,
-		`data-order="status,reach,firmware,family,address,uptime,wifi,restart,power"`, `<div class="tablewrap" data-key="devices">`, `<div class="tablescroll"><table`, `data-colid="family" checked`, `data-cols-reset`, `<col class="c-sel">`, "</table></div></div><p>y</p>"} {
+	for _, want := range []string{`class="devtable dense pl1 pl2 hc11 hc12 pr13 pr14"`, `data-cols=",name:28:l:fix,status:17,reach:15,firmware:14,family:10,address:13,uptime:11,wifi:12,restart:18,otaurl:24:off,grouptopic:14:off,power:7:r,actions:5:r:fix"`,
+		`data-order="status,reach,firmware,family,address,uptime,wifi,restart,otaurl,grouptopic,power"`, `<div class="tablewrap" data-key="devices">`, `<div class="tablescroll"><table`, `data-colid="family" checked`, `data-cols-reset`, `<col class="c-sel">`, "</table></div></div><p>y</p>"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("missing %q in\n%s", want, out)
 		}
@@ -486,13 +486,13 @@ func TestDevicesSortIsRememberedPerUser(t *testing.T) {
 func TestColumnOrderIsRenderedOnTheServer(t *testing.T) {
 	in := sampleWithRow()
 	out := string(applyTablePrefs([]byte(in), map[string]string{"table.devices": `{"o":["address","status"]}`}))
-	if !strings.Contains(out, `<tr><td>S</td><td>n</td><td>ad</td><td>st</td><td>mh</td><td>fw</td><td>fa</td><td>up</td><td>wi</td><td>re</td><td>po</td><td>ac</td></tr>`) {
+	if !strings.Contains(out, `<tr><td>S</td><td>n</td><td>ad</td><td>st</td><td>mh</td><td>fw</td><td>fa</td><td>up</td><td>wi</td><td>re</td><td>ot</td><td>gt</td><td>po</td><td>ac</td></tr>`) {
 		t.Errorf("body cells not moved:\n%s", out)
 	}
-	if got := heads(out); got != ",Name,Address,Status,MQTT · HTTP,Firmware,Chip,Uptime,Wi-Fi,Last restart,Power,Actions" {
+	if got := heads(out); got != ",Name,Address,Status,MQTT · HTTP,Firmware,Chip,Uptime,Wi-Fi,Last restart,OTA URL,Group topic,Power,Actions" {
 		t.Errorf("header order %q", got)
 	}
-	if !strings.Contains(out, `data-cols=",name:28:l:fix,address:13,status:17,`) || !strings.Contains(out, "tfix") || !strings.Contains(out, `<td colspan="11">empty</td>`) {
+	if !strings.Contains(out, `data-cols=",name:28:l:fix,address:13,status:17,`) || !strings.Contains(out, "tfix") || !strings.Contains(out, `<td colspan="13">empty</td>`) {
 		t.Errorf("script map, forced layout or the empty row wrong:\n%s", out)
 	}
 	if !strings.Contains(out, `power:7:r,actions:5:r:fix"`) || strings.Contains(out, `data-moveid="actions"`) || strings.Contains(out, `data-moveid="name"`) {
@@ -506,8 +506,8 @@ func TestColumnOrderIsRenderedOnTheServer(t *testing.T) {
 
 // sampleWithRow is sampleTable with one data row whose cells name their column.
 func sampleWithRow() string {
-	row := `<tr><td>S</td><td>n</td><td>st</td><td>mh</td><td>fw</td><td>fa</td><td>ad</td><td>up</td><td>wi</td><td>re</td><td>po</td><td>ac</td></tr>`
-	return strings.Replace(sampleTable, `<tbody><tr><td colspan="11">empty</td></tr>`, `<tbody>`+row+`<tr><td colspan="11">empty</td></tr>`, 1)
+	row := `<tr><td>S</td><td>n</td><td>st</td><td>mh</td><td>fw</td><td>fa</td><td>ad</td><td>up</td><td>wi</td><td>re</td><td>ot</td><td>gt</td><td>po</td><td>ac</td></tr>`
+	return strings.Replace(sampleTable, `<tbody><tr><td colspan="13">empty</td></tr>`, `<tbody>`+row+`<tr><td colspan="13">empty</td></tr>`, 1)
 }
 
 // heads lists the header texts of a rewritten table.
@@ -527,13 +527,13 @@ func heads(out string) string {
 func TestPinnedColumnsAreGroupedAtTheirEdge(t *testing.T) {
 	in := sampleWithRow()
 	out := string(applyTablePrefs([]byte(in), map[string]string{"table.devices": `{"p":{"wifi":"left","status":"right"}}`}))
-	if got := heads(out); got != ",Name,Wi-Fi,MQTT · HTTP,Firmware,Chip,Address,Uptime,Last restart,Status,Power,Actions" {
+	if got := heads(out); got != ",Name,Wi-Fi,MQTT · HTTP,Firmware,Chip,Address,Uptime,Last restart,OTA URL,Group topic,Status,Power,Actions" {
 		t.Errorf("header order %q", got)
 	}
-	if !strings.Contains(out, `<tr><td>S</td><td>n</td><td>wi</td><td>mh</td><td>fw</td><td>fa</td><td>ad</td><td>up</td><td>re</td><td>st</td><td>po</td><td>ac</td></tr>`) {
+	if !strings.Contains(out, `<tr><td>S</td><td>n</td><td>wi</td><td>mh</td><td>fw</td><td>fa</td><td>ad</td><td>up</td><td>re</td><td>ot</td><td>gt</td><td>st</td><td>po</td><td>ac</td></tr>`) {
 		t.Errorf("body cells not grouped:\n%s", out)
 	}
-	if !strings.Contains(out, `class="devtable dense pl1 pl2 pl3 pr10 pr11 pr12 tfix"`) {
+	if !strings.Contains(out, `class="devtable dense pl1 pl2 pl3 hc10 hc11 pr12 pr13 pr14 tfix"`) {
 		t.Errorf("pin classes wrong:\n%s", out)
 	}
 	for _, want := range []string{
@@ -546,15 +546,15 @@ func TestPinnedColumnsAreGroupedAtTheirEdge(t *testing.T) {
 		}
 	}
 	unpinned := string(applyTablePrefs([]byte(in), map[string]string{"table.devices": `{"p":{"power":"none"},"o":["power","status"]}`}))
-	if got := heads(unpinned); got != ",Name,Power,Status,MQTT · HTTP,Firmware,Chip,Address,Uptime,Wi-Fi,Last restart,Actions" {
+	if got := heads(unpinned); got != ",Name,Power,Status,MQTT · HTTP,Firmware,Chip,Address,Uptime,Wi-Fi,Last restart,OTA URL,Group topic,Actions" {
 		t.Errorf("unpinned Power: header order %q", got)
 	}
-	if strings.Contains(unpinned, " pr3") || !strings.Contains(unpinned, " pr12") {
+	if strings.Contains(unpinned, " pr3") || !strings.Contains(unpinned, " pr14") {
 		t.Errorf("unpinned Power must not stick, Actions must:\n%s", unpinned)
 	}
 	// a layout saved before pinning existed reads as the defaults
 	old := string(applyTablePrefs([]byte(in), map[string]string{"table.devices": `{"w":{"name":30}}`}))
-	if !strings.Contains(old, " pr11 pr12") || !strings.Contains(old, "pl1 pl2") {
+	if !strings.Contains(old, " pr13 pr14") || !strings.Contains(old, "pl1 pl2") {
 		t.Errorf("an old layout lost the default pins:\n%s", old)
 	}
 }
@@ -562,7 +562,7 @@ func TestPinnedColumnsAreGroupedAtTheirEdge(t *testing.T) {
 // Why (QA #51): a Columns button above a table with fewer than two rows offers
 // a choice about nothing; the table itself keeps its saved layout.
 func TestNoColumnsMenuAboveATableWithFewerThanTwoRows(t *testing.T) {
-	one := strings.Replace(sampleTable, `<tr><td colspan="11">more</td></tr>`, "", 1)
+	one := strings.Replace(sampleTable, `<tr><td colspan="13">more</td></tr>`, "", 1)
 	if out := string(applyTablePrefs([]byte(one), nil)); strings.Contains(out, "colmenu") || !strings.Contains(out, `data-cols=`) {
 		t.Errorf("one row: want no Columns menu but a rewritten table:\n%s", out)
 	}

@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Added
+
+- Device list: optional columns OTA URL and Group topic (hidden until chosen in Columns, sortable, long values cut off with the whole value on hover), each with the time it was read. The group topic comes from the same read-only `Status 1` as the OTA URL and from the boot announcement `tele/<topic>/INFO1`, so no new device read. Values read before this release show no time until the next probe. Migration 0035 (#239)
+
 ### Fixed
 
 - Policy: Cancel in the rule editor goes back to the policy overview (it reloaded the rule page, or opened the template picker for a new rule)

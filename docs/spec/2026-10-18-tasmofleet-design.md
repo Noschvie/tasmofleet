@@ -209,7 +209,7 @@ knows, and says so. Before applying migrations, the store writes a copy of the d
 to `<DATA_DIR>/tasmofleet.db.pre-<N>` (only when migrations are pending; the newest 3
 copies are kept).
 
-Tables (34 migrations, `0001` to `0034`; the files in `internal/store/migrations/` are authoritative, this list names what each table is for):
+Tables (35 migrations, `0001` to `0035`; the files in `internal/store/migrations/` are authoritative, this list names what each table is for):
 
 | Table                                       | Content                                               | Notes                                                                                                                                          |
 | ------------------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -334,7 +334,11 @@ data directory (TasmoAdmin lesson A4).
   that cannot be parsed is dropped) and DeviceName, resolved topic and relay names (the FriendlyName
   array) from plain `Status`. Subnet, DNS, OTA URL and relay names are stored on the device
   (migration 0031: `net_subnet`, `net_dns`, `ota_url`, `relay_names`); minimal firmware and a failed
-  `Status 1` keep the stored values.
+  `Status 1` keep the stored values. The group topic (`GroupTopic` of the same `Status 1` answer, or of
+  the INFO1 boot announcement, normalised from `cmnd/<group>/` to `<group>`) and the times `ota_url` and
+  `group_topic` were read are stored too (migration 0035: `group_topic`, `ota_url_read_at`,
+  `group_topic_read_at`, the stamps NULL until read); the device list shows both as optional columns, read-only,
+  and never reads a device or a backup file to fill them (#239).
   _MAC first:_ the probe sends `Status 5` first, without credentials, and compares the MAC
   (Wi-Fi or Ethernet) with the stored set before any other command. A device that answers it
   without credentials has no web password, and the whole probe runs without them; only a 401

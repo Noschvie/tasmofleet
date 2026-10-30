@@ -308,3 +308,42 @@ func TestDeviceListOnlineChipSitsRightAfterAll(t *testing.T) {
 		t.Errorf("want Online before Outdated before Not compliant: %s", chips)
 	}
 }
+
+// Why (#239): OTA URL and Group topic are optional columns: in the table for everyone (the
+// column chooser hides them by default), read-only, from what the record already holds. A long
+// URL must not stretch the table, so the full value is the cell's title; the age of the reading
+// is a <time> that time.js shows in the browser's zone, and a value without an age shows none.
+func TestDeviceListHasOtaURLAndGroupTopicColumns(t *testing.T) {
+	e := setup(t)
+	long := "http://ota.example.internal/firmware/with/a/very/long/path/that/would/stretch/the/table/tasmota32s3.bin.gz"
+	d := e.inv.devs[1]
+	d.OTAURL, d.OTAURLReadAt = long, time.Date(2026, 10, 30, 8, 15, 0, 0, time.UTC)
+	d.GroupTopic = "tasmotas"
+	e.inv.devs[1] = d
+	_, body := e.do(t, "GET", "/devices", "operator", nil)
+	for _, want := range []string{`sort=otaurl`, `sort=grouptopic`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("header %s missing", want)
+		}
+	}
+	cell := func(label string, has string) string {
+		for _, part := range strings.Split(body, `data-label="`+label+`"`)[1:] {
+			c, _, _ := strings.Cut(part, "</td>")
+			if strings.Contains(c, has) {
+				return c
+			}
+		}
+		return ""
+	}
+	ota := cell("OTA URL", "ota.example.internal")
+	if !strings.Contains(ota, `title="`+long+`"`) || !strings.Contains(ota, `datetime="2026-10-30T08:15:00Z"`) || !strings.Contains(ota, `data-ts=`) {
+		t.Errorf("OTA URL cell lacks the full value as title or the read time:\n%s", ota)
+	}
+	gt := cell("Group topic", "tasmotas")
+	if gt == "" || strings.Contains(gt, "<time") {
+		t.Errorf("a group topic without an age must show the value and no time:\n%s", gt)
+	}
+	if cell("OTA URL", ">-</span>") == "" || cell("Group topic", ">-</span>") == "" {
+		t.Error("a device without a value shows a dash")
+	}
+}

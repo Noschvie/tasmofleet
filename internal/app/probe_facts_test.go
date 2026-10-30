@@ -244,3 +244,55 @@ func TestWiredDeviceOfEveryProfileHasAReadableStatus5(t *testing.T) {
 		})
 	}
 }
+
+// Why (#239): the group topic comes from the same Status 1 that already carries the OTA URL, so
+// the list costs no extra read; both are stamped with the read time, and a failed Status 1 keeps
+// value and stamp.
+func TestRefreshStoresGroupTopicAndStampsTheReads(t *testing.T) {
+	p, st, id, sent := factsSetup(t, simulator.DeviceSpec{Name: "plug", Profile: simulator.ProfileESP8266_1M})
+	base := p.Client
+	p.Client = recorder{override{Client: base, reply: map[string]string{
+		"Status 1": `{"StatusPRM":{"GroupTopic":"tasmotas","OtaUrl":"http://fw.example/a.bin"}}`,
+	}}, sent}
+	if err := p.Refresh(context.Background(), id, ""); err != nil {
+		t.Fatal(err)
+	}
+	d, _ := st.GetDevice(context.Background(), id)
+	if d.GroupTopic != "tasmotas" || d.GroupTopicReadAt.IsZero() || d.OTAURLReadAt.IsZero() {
+		t.Fatalf("%q %v %v", d.GroupTopic, d.GroupTopicReadAt, d.OTAURLReadAt)
+	}
+	stamp := d.GroupTopicReadAt
+	p.Client = recorder{override{Client: base, reply: map[string]string{"Status 1": `{"Command":"Unknown"}`}}, sent}
+	if err := p.Refresh(context.Background(), id, ""); err != nil {
+		t.Fatal(err)
+	}
+	d, _ = st.GetDevice(context.Background(), id)
+	if d.GroupTopic != "tasmotas" || !d.GroupTopicReadAt.Equal(stamp) {
+		t.Fatalf("a failed Status 1 changed value or stamp: %q %v", d.GroupTopic, d.GroupTopicReadAt)
+	}
+	for _, c := range *sent {
+		if l := strings.ToLower(c); l == "status 0" || l == "status0" || strings.HasPrefix(l, "grouptopic") {
+			t.Fatalf("forbidden command %q: %v", c, *sent)
+		}
+	}
+}
+
+// Why (#239): a device that has no group topic set answers "" (or the key is missing on very old
+// firmware): "" is a read value (not set) only when the key is there.
+func TestParseGroupTopic(t *testing.T) {
+	for _, tc := range []struct {
+		in   string
+		want string
+		ok   bool
+	}{
+		{`{"StatusPRM":{"GroupTopic":"tasmotas"}}`, "tasmotas", true},
+		{`{"StatusPRM":{"GroupTopic":" "}}`, "", true},
+		{`{"StatusPRM":{"OtaUrl":"x"}}`, "", false},
+		{`{"Command":"Unknown"}`, "", false},
+	} {
+		got, ok := parseGroupTopic([]byte(tc.in))
+		if got != tc.want || ok != tc.ok {
+			t.Errorf("%s: %q %v", tc.in, got, ok)
+		}
+	}
+}

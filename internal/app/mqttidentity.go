@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -45,6 +46,7 @@ const (
 // identityMQTTStore is the part of the store the identity reader writes through.
 type identityMQTTStore interface {
 	UpdateIdentityFromMQTT(ctx context.Context, id model.DeviceID, g store.ProbeGuard, topic string, i model.Identity) error
+	UpdateGroupTopicFromMQTT(ctx context.Context, id model.DeviceID, g store.ProbeGuard, topic, groupTopic string) error
 }
 
 type mqttIDTopic struct {
@@ -189,6 +191,9 @@ func (m *mqttIdentity) deviceOf(ctx context.Context, topic string) (model.Device
 
 func (m *mqttIdentity) handle(ctx context.Context, msg mqttbus.Message) {
 	d, ok := m.deviceOf(ctx, msg.Topic)
+	if ok && msg.Suffix == "INFO1" && !msg.Retained {
+		m.applyGroupTopic(ctx, d, msg.Payload) // #239: whatever the identity rules below say
+	}
 	if !ok || !d.Identity.DetectedAt.IsZero() {
 		return // not ours, or HTTP has identified it: that identity is the one we keep
 	}
@@ -218,6 +223,36 @@ func (m *mqttIdentity) handle(ctx context.Context, msg mqttbus.Message) {
 		return
 	}
 	m.applyInfo1(ctx, d, msg.Payload)
+}
+
+// info1GroupTopic is the GroupTopic of an INFO1 message as the plain topic. INFO1 writes it in
+// its command-prefix form ("cmnd/tasmotas/"), Status 1 and the settings as "tasmotas"; the list
+// shows one form. ok is false when the message has no GroupTopic.
+func info1GroupTopic(payload []byte) (string, bool) {
+	var m struct {
+		Info1 *struct{ GroupTopic *string }
+	}
+	if json.Unmarshal(payload, &m) != nil || m.Info1 == nil || m.Info1.GroupTopic == nil {
+		return "", false
+	}
+	g := strings.TrimSpace(*m.Info1.GroupTopic)
+	g = strings.TrimPrefix(g, "cmnd/")
+	return strings.TrimSuffix(g, "/"), true
+}
+
+// applyGroupTopic stores the group topic a live INFO1 announced (#239). It is display only and
+// costs no read; a retained INFO1 is no reading of now and never reaches this.
+func (m *mqttIdentity) applyGroupTopic(ctx context.Context, d model.Device, payload []byte) {
+	g, ok := info1GroupTopic(payload)
+	if !ok {
+		return
+	}
+	sctx, cancel := context.WithTimeout(ctx, mqttIDTimeout)
+	defer cancel()
+	err := m.store.UpdateGroupTopicFromMQTT(sctx, d.ID, store.ProbeGuard{Address: d.Address, Port: d.Port, MAC: d.MAC}, d.Topic, g)
+	if err != nil && !errors.Is(err, store.ErrConflict) {
+		m.log.Warn("mqtt identity: could not store the group topic", "device", d.ID, "err", err)
+	}
 }
 
 // applyInfo1 takes the version of an INFO1 and nothing else: it carries no hardware, so it must
