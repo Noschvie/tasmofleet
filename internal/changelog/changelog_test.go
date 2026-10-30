@@ -197,3 +197,19 @@ func TestDisplayVersion(t *testing.T) {
 		t.Errorf("without a released heading there is no base: %q", got)
 	}
 }
+
+// A minor release carries a lighthouse name in its heading (docs/release-names.md); the What's
+// new page must still list it, with its name, or the running release silently disappears there.
+func TestParseNamedReleaseHeading(t *testing.T) {
+	rels := Parse("## Unreleased\n\n## 0.21.0 \"Tower of Hercules\" (2026-10-30)\n\n### Added\n- x\n\n## 0.20.0 (2026-10-30)\n\n- y\n")
+	if len(rels) != 3 {
+		t.Fatalf("got %d releases, want 3: %+v", len(rels), rels)
+	}
+	r := rels[1]
+	if r.Version != "0.21.0" || r.Name != "Tower of Hercules" || r.Date != "2026-10-30" {
+		t.Fatalf("named heading parsed as %+v", r)
+	}
+	if rels[2].Name != "" || rels[2].Version != "0.20.0" {
+		t.Fatalf("unnamed heading parsed as %+v", rels[2])
+	}
+}

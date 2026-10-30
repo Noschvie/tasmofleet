@@ -13251,6 +13251,11 @@ a.pol-tpl {
   font: 700 16px var(--font-mono);
   letter-spacing: normal;
 }
+.wn-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-2);
+}
 .wn-d {
   font-size: 12.5px;
   color: var(--color-text-2);

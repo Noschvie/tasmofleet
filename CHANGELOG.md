@@ -12,6 +12,10 @@ always upgrade automatically.
 - CI: a release tag now runs a shorter pipeline (the fast checks, the `@core` e2e tests, and race tests of the safety packages); the full e2e, race and mutation runs stay in the nightly build and no longer hold up a release.
 - Overview: a discovered device that is offline no longer appears under "Needs attention"; it is listed only on the Discovered page, which now shows how long it has been offline (when known) next to its hostname, and the "New devices found" tile says how many of them are offline (#294, thanks @Noschvie).
 
+### Fixed
+
+- What's new: releases with a name in their heading (0.21.0 "Tower of Hercules" and later) were missing from the page; they are listed again, with their name
+
 ## 0.21.0 "Tower of Hercules" (2026-10-30)
 
 ### Upgrade notes

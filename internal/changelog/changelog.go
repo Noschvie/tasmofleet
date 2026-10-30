@@ -17,9 +17,10 @@ import (
 // Unreleased is the version heading of changes not yet in a release.
 const Unreleased = "Unreleased"
 
-// Release is one "## <version> (<date>)" block, newest first in the file.
+// Release is one "## <version> ["<name>"] (<date>)" block, newest first in the file.
 type Release struct {
 	Version  string
+	Name     string              // release name (a lighthouse, docs/release-names.md), empty for older releases
 	Date     string              // YYYY-MM-DD, empty when the heading has none
 	Intro    [][]firmware.Inline // paragraphs before the first section or item
 	Sections []Section
@@ -39,7 +40,7 @@ type Item struct {
 }
 
 var (
-	releaseHead = regexp.MustCompile(`^## +(\S+)(?: +\((\d{4}-\d{2}-\d{2})\))?\s*$`)
+	releaseHead = regexp.MustCompile(`^## +(\S+)(?: +"([^"]+)")?(?: +\((\d{4}-\d{2}-\d{2})\))?\s*$`)
 	semver      = regexp.MustCompile(`^(\d+)\.(\d+)\.(\d+)$`)
 )
 
@@ -83,7 +84,7 @@ func Parse(md string) []Release {
 		case releaseHead.MatchString(line):
 			flush()
 			m := releaseHead.FindStringSubmatch(line)
-			out = append(out, Release{Version: m[1], Date: m[2]})
+			out = append(out, Release{Version: m[1], Name: m[2], Date: m[3]})
 			rel, sec = &out[len(out)-1], nil
 		case rel == nil:
 			// preamble

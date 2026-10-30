@@ -13,6 +13,9 @@ templ whatsNewPage(p whatsNewView) {
 				<section class="wn-rel" id={ "v" + r.Version } aria-labelledby={ "wn-h-" + r.Version }>
 					<div class="wn-head">
 						<h2 class="wn-v" id={ "wn-h-" + r.Version }>{ r.Version }</h2>
+						if r.Name != "" {
+							<span class="wn-name">“{ r.Name }”</span>
+						}
 						if r.Date != "" {
 							<time class="wn-d" datetime={ r.Date }>{ isoDay(r.Date) }</time>
 						}
