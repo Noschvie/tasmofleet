@@ -36,7 +36,7 @@ MUTATION := ./internal/fwselect:90 ./internal/ota:85 ./internal/policy:85 ./inte
 # credentials, accounts, trusted proxies) plus the mutation packages. A pull request that changes
 # one of them runs their race tests and the mutation gate (make safety BASE=<ref>) in the FAST
 # tier; ci.yml reads this list.
-SAFETY := ./internal/fwselect ./internal/ota ./internal/tasmota ./internal/secretbox ./internal/auth ./internal/httpx ./internal/policy ./internal/cmdpolicy
+SAFETY := ./internal/fwselect ./internal/ota ./internal/tasmota ./internal/secretbox ./internal/auth ./internal/httpx ./internal/policy ./internal/cmdpolicy ./internal/mqttcmd
 
 # go test flags for test and integration. Empty locally and on PRs, so unchanged packages come
 # from the go test cache; the FULL tier passes TESTFLAGS=-count=1.

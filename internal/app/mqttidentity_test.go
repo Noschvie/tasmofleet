@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"strconv"
@@ -12,27 +13,51 @@ import (
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/mqttbus"
+	"github.com/nofuturekid/tasmofleet/internal/mqttcmd"
 	"github.com/nofuturekid/tasmofleet/internal/simulator"
 	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/nofuturekid/tasmofleet/internal/tasmota"
 )
 
 // Identity over MQTT (#87): devices on our broker get their firmware from INFO1 and one
 // Status 2 when HTTP cannot identify them.
 
+// idFakeBus is the bus and the command channel in one: Do records "<topic> <command>" and answers
+// from reply (default: no answer, the timeout a silent device gives).
 type idFakeBus struct {
-	mu   sync.Mutex
-	cmds []string // "<topic> <command> <payload>"
-	down bool
+	mu    sync.Mutex
+	cmds  []string
+	down  bool
+	reply func(cmd string) (json.RawMessage, error)
 }
 
 func (b *idFakeBus) Subscribe([]mqttbus.Kind, func(mqttbus.Message)) func() { return func() {} }
-func (b *idFakeBus) Command(_ context.Context, topic, command, payload string) error {
+func (b *idFakeBus) Command(context.Context, string, string, string) error {
+	panic("the identity reader must send through the command channel")
+}
+func (b *idFakeBus) Do(_ context.Context, d model.Device, cmd string) (json.RawMessage, error) {
 	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.cmds = append(b.cmds, topic+" "+command+" "+payload)
-	return nil
+	b.cmds = append(b.cmds, d.Topic+" "+cmd)
+	reply := b.reply
+	b.mu.Unlock()
+	if reply == nil {
+		return nil, tasmota.ErrTimeout
+	}
+	return reply(cmd)
 }
 func (b *idFakeBus) Connected() bool { return !b.down }
+
+// answers makes the device answer Status 2 with status2Payload.
+func (b *idFakeBus) answers() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.reply = func(cmd string) (json.RawMessage, error) {
+		if cmd == "Status 2" {
+			return json.RawMessage(status2Payload), nil
+		}
+		return nil, tasmota.ErrTimeout
+	}
+}
 func (b *idFakeBus) sent() []string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -118,8 +143,9 @@ func newIDEnv(devs ...model.Device) *idEnv {
 	for _, d := range devs {
 		e.inv.devs[d.ID] = d
 	}
-	e.m = newMQTTIdentity(e.bus, e.inv.list, e.inv, e.audit, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	e.m = newMQTTIdentity(e.bus, e.bus, e.inv.list, e.inv, e.audit, nil, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	e.m.now = func() time.Time { return e.now }
+	e.m.spawn = func(f func()) { f() } // the question runs inline: the test sees its effect when askDue returns
 	return e
 }
 
@@ -211,18 +237,17 @@ func TestMQTTIdentityNeverOverwritesAnHTTPIdentity(t *testing.T) {
 // our broker, and the answer is a full identity that passes the same Known() rule as HTTP.
 func TestMQTTIdentityAsksStatus2OnceAndStoresTheAnswer(t *testing.T) {
 	e := newIDEnv(oursDevice(1, "plug"))
+	e.bus.answers()
 	e.online("plug")
 	e.m.askDue(t.Context())
 	e.advance(5 * time.Second)
-	e.m.askDue(t.Context()) // still waiting for the answer: no second command
-	if got := e.bus.sent(); len(got) != 1 || got[0] != "plug STATUS 2" {
-		t.Fatalf("commands = %q, want exactly one \"plug STATUS 2\"", got)
+	e.m.askDue(t.Context()) // answered: no second command
+	if got := e.bus.sent(); len(got) != 1 || got[0] != "plug Status 2" {
+		t.Fatalf("commands = %q, want exactly one \"plug Status 2\"", got)
 	}
 	if len(e.audit.ev) != 1 || e.audit.ev[0].Action != "identity.mqtt_ask" || e.audit.ev[0].Target != "device:1" {
 		t.Errorf("audit = %+v", e.audit.ev)
 	}
-	e.emit(mqttbus.KindStatus, "plug", "STATUS2", status2Payload, false)
-	e.drain(t.Context())
 	got := e.inv.get(1).Identity
 	if !got.Known() || got.Hardware != "ESP8266EX" || got.Version != "16.0.0" {
 		t.Fatalf("identity = %+v", got)
@@ -269,7 +294,7 @@ func TestMQTTIdentityDoesNotAskWhenHTTPWorksOrIsStillTrying(t *testing.T) {
 	e.emit(mqttbus.KindLWT, "plug", "LWT", "Online", true)
 	e.m.askDue(t.Context())
 	got := e.bus.sent()
-	if len(got) != 1 || got[0] != "fresh STATUS 2" {
+	if len(got) != 1 || got[0] != "fresh Status 2" {
 		t.Fatalf("commands = %q: only the device HTTP did not identify, and only after the grace, may be asked", got)
 	}
 }
@@ -316,15 +341,16 @@ func TestMQTTIdentityKeepsOneSecondBetweenQuestions(t *testing.T) {
 		t.Fatalf("commands = %q, want one question to each device", got)
 	}
 	for _, c := range got {
-		if !strings.HasSuffix(c, " STATUS 2") {
+		if !strings.HasSuffix(c, " Status 2") {
 			t.Errorf("automated code sent %q (never Status 0)", c)
 		}
 	}
 }
 
-// Why: anyone on the broker can publish stat/<topic>/STATUS2. Only a timely reply to our own
-// question may become an identity.
-func TestMQTTIdentityIgnoresUnsolicitedAndLateStatus2(t *testing.T) {
+// Why: anyone on the broker can publish stat/<topic>/STATUS2. Only the reply the command channel
+// matched to our own question may become an identity: a STATUS2 on the bus is ignored, before and
+// after a question, and an answer that does not parse leaves the identity alone.
+func TestMQTTIdentityIgnoresUnsolicitedStatus2(t *testing.T) {
 	e := newIDEnv(oursDevice(1, "plug"))
 	e.emit(mqttbus.KindStatus, "plug", "STATUS2", status2Payload, false)
 	e.drain(t.Context())
@@ -332,12 +358,12 @@ func TestMQTTIdentityIgnoresUnsolicitedAndLateStatus2(t *testing.T) {
 		t.Fatal("an unsolicited STATUS2 became the identity")
 	}
 	e.online("plug")
+	e.bus.reply = func(string) (json.RawMessage, error) { return json.RawMessage(`{"nope":1}`), nil }
 	e.m.askDue(t.Context())
-	e.advance(mqttIDWindow + time.Second)
 	e.emit(mqttbus.KindStatus, "plug", "STATUS2", status2Payload, false)
 	e.drain(t.Context())
 	if e.inv.get(1).Identity.Hardware != "" {
-		t.Fatal("a late STATUS2 became the identity")
+		t.Fatal("a STATUS2 from the bus, or an unusable answer, became the identity")
 	}
 }
 
@@ -367,7 +393,9 @@ func TestMQTTIdentityWithSimulatedDevice(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.m.bus = bus
+	e.m.cmd = mqttcmd.New(bus, mqttcmd.Options{})
 	e.m.now = time.Now
+	e.m.spawn = func(f func()) { go f() }
 	e.m.grace = 200 * time.Millisecond
 	go e.m.run(ctx)
 
@@ -474,11 +502,10 @@ func TestMQTTIdentityReadsOnlyDevicesOnOurBroker(t *testing.T) {
 // must be asked again after the usual 10 minutes, not left without identity until a restart.
 func TestMQTTIdentityCountsOnlyAStoredAnswer(t *testing.T) {
 	e := newIDEnv(oursDevice(1, "plug"))
+	e.bus.answers()
 	e.online("plug")
-	e.m.askDue(t.Context())
 	e.inv.fail = store.ErrConflict
-	e.emit(mqttbus.KindStatus, "plug", "STATUS2", status2Payload, false)
-	e.drain(t.Context())
+	e.m.askDue(t.Context())
 	e.inv.fail = nil
 	e.advance(11 * time.Minute)
 	e.m.askDue(t.Context())

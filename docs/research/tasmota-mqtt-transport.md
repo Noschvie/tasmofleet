@@ -112,3 +112,12 @@ disconnects cleanly so that closing a fleet does not fire wills.
 ## 7. WebGetConfig and an unreachable firmware server
 
 `WebGetConfig <url>` downloads synchronously in the web command handler (`xdrv_01_9_webserver.ino` 4510-4588, status texts at 4264). When the device cannot reach the server it answers `{"WebGetConfig":"Connect failed"}` after the connect timeout and neither restarts nor changes settings. The simulator does this under `fw_unreachable` (the default wait is the 66 s of the OTA connect attempt, scaled).
+
+## 8. Which RESULT answers which command (mqttcmd)
+
+`mqttcmd` accepts a `stat/<topic>/RESULT` as the answer when a top-level key names the command (case-insensitive, same index; `POWER` counts as index 1, index 0 takes any). Read against `support_command.ino` at v16.0.0:
+
+- `CmndModule` answers with the command name as key (`S_JSON_COMMAND_NVALUE_SVALUE`, `Module2` for index 2), `CmndModules` with `"Modules"`, `CmndGpio` with `GPIOn` or `GPIO` keys (`Gpio`, `Gpio 1`, `Gpio 10`, `Gpio 255`). All match by name.
+- `CmndTemplate` answers `TemplateJson()`: `{"NAME":..,"GPIO":[..],"FLAG":..,"BASE":..}`, without the command name. `CmndGpios` publishes its lines through `ShowGpios` and then `ResponseClear()`s. These two are the table of `DoLoose` (console): the first RESULT counts. An automated read of them is not possible over MQTT and times out by design.
+- A failed command answers `{"Command":"Unknown"|"Error","Input":"<COMMAND> <args>"}` on RESULT. `Input` is compared with the command (first word, index stripped) so another poller's failure is not taken as ours; it is never returned or logged (for `WebPassword`, `MqttPassword` and the file commands it holds the secret).
+- `WebPassword` and `MqttPassword` echo the new password in clear in their RESULT: the reply of any command `cmdpolicy` marks `Redact` is scrubbed before it leaves the channel.

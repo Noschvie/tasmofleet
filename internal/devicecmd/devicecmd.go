@@ -13,13 +13,12 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/audit"
 	"github.com/nofuturekid/tasmofleet/internal/clock"
 	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
 	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/mqttbus"
+	"github.com/nofuturekid/tasmofleet/internal/mqttcmd"
 	"github.com/nofuturekid/tasmofleet/internal/tasmota"
 )
 
@@ -60,13 +59,11 @@ type Options struct {
 	Devices DeviceGetter
 	Client  tasmota.Client
 	Audit   audit.Recorder
-	// Bus is optional. It is used for Power only when the device's MQTT
-	// capability is MQTTOurs and the bus is connected.
-	Bus mqttbus.Bus
-	// MQTTWait is how long Power waits for the device's report after a
-	// publish (default 3 s).
-	MQTTWait time.Duration
-	Clock    clock.Clock
+	// MQTT is optional. It is used for Power only when the device's MQTT
+	// capability is MQTTOurs and the connection is usable. The command channel
+	// serialises per device and waits for the reply (8 s by default).
+	MQTT  mqttcmd.Doer
+	Clock clock.Clock
 	// Health is optional; see PowerObserver.
 	Health PowerObserver
 }
@@ -75,9 +72,6 @@ type service struct{ o Options }
 
 // New returns the service. Devices, Client and Audit are required.
 func New(o Options) Service {
-	if o.MQTTWait == 0 {
-		o.MQTTWait = 3 * time.Second
-	}
 	if o.Clock == nil {
 		o.Clock = clock.Real{}
 	}
@@ -134,7 +128,7 @@ func (s *service) Power(ctx context.Context, actor string, id model.DeviceID, re
 }
 
 func (s *service) useMQTT(d model.Device) bool {
-	return s.o.Bus != nil && d.MQTT == model.MQTTOurs && d.Topic != "" && s.o.Bus.Connected()
+	return s.o.MQTT != nil && d.MQTT == model.MQTTOurs && d.Topic != "" && s.o.MQTT.Connected()
 }
 
 func (s *service) powerHTTP(ctx context.Context, d model.Device, relay int, action string) (string, error) {
@@ -142,6 +136,11 @@ func (s *service) powerHTTP(ctx context.Context, d model.Device, relay int, acti
 	if err != nil {
 		return "", err
 	}
+	return powerState(raw, relay)
+}
+
+// powerState reads the relay state out of a Power reply ({"POWER1":"ON"}).
+func powerState(raw json.RawMessage, relay int) (string, error) {
 	var reply map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &reply); err != nil {
 		return "", fmt.Errorf("devicecmd: unreadable power reply: %w", tasmota.ErrBadResponse)
@@ -160,35 +159,17 @@ func (s *service) powerHTTP(ctx context.Context, d model.Device, relay int, acti
 	return "", fmt.Errorf("%w: relay %d", ErrNoRelay, relay)
 }
 
+// powerMQTT goes through the command channel: one command per device at a time, the reply is the
+// RESULT that names the relay, and a button press or a retained report is never taken for it.
 func (s *service) powerMQTT(ctx context.Context, d model.Device, relay int, action string) (string, error) {
-	// A single-relay device reports POWER, others POWERn: accept both for relay 1.
-	want := map[string]bool{"POWER" + strconv.Itoa(relay): true}
-	if relay == 1 {
-		want["POWER"] = true
+	raw, err := s.o.MQTT.Do(ctx, d, fmt.Sprintf("Power%d %s", relay, action))
+	if errors.Is(err, tasmota.ErrTimeout) {
+		return "", fmt.Errorf("%w (relay %d)", ErrUnconfirmed, relay)
 	}
-	got := make(chan string, 1)
-	unsub := s.o.Bus.Subscribe([]mqttbus.Kind{mqttbus.KindPower}, func(m mqttbus.Message) {
-		// Retained reports are old news, not the answer to this command.
-		if m.Retained || m.Topic != d.Topic || !want[m.Suffix] {
-			return
-		}
-		select {
-		case got <- strings.ToUpper(strings.TrimSpace(string(m.Payload))):
-		default:
-		}
-	})
-	defer unsub()
-	if err := s.o.Bus.Command(ctx, d.Topic, "Power"+strconv.Itoa(relay), action); err != nil {
+	if err != nil {
 		return "", err
 	}
-	select {
-	case st := <-got:
-		return st, nil
-	case <-s.o.Clock.After(s.o.MQTTWait):
-		return "", fmt.Errorf("%w (relay %d)", ErrUnconfirmed, relay)
-	case <-ctx.Done():
-		return "", ctx.Err()
-	}
+	return powerState(raw, relay)
 }
 
 func (s *service) Run(ctx context.Context, p model.Principal, id model.DeviceID, cmd string) (json.RawMessage, error) {

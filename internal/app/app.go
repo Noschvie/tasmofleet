@@ -35,6 +35,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/httpx"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/mqttbus"
+	"github.com/nofuturekid/tasmofleet/internal/mqttcmd"
 	"github.com/nofuturekid/tasmofleet/internal/ota"
 	"github.com/nofuturekid/tasmofleet/internal/policy"
 	"github.com/nofuturekid/tasmofleet/internal/restore"
@@ -107,6 +108,7 @@ type runtime struct {
 	discovery  *discovery.Manager
 	deviceCmd  devicecmd.Service
 	bus        mqttbus.Bus
+	mqttCmd    *mqttcmd.Channel // the one place that sends commands over MQTT (#256)
 	sw         *mqttbus.Switch
 	mqttKnown  *knownIndex
 	tracker    *health.Service
@@ -160,7 +162,7 @@ func (a *runtime) run(ctx context.Context) error {
 	a.svc.Prober.ReadNetLater = nf.later
 	a.goBG("netfacts", func() error { nf.run(bg); return nil })
 	// Firmware version over MQTT for devices on our broker that HTTP did not identify (#87).
-	mid := newMQTTIdentity(a.bus, a.svc.Inventory.List, a.svc.Store, a.svc.Audit,
+	mid := newMQTTIdentity(a.bus, a.mqttCmd, a.svc.Inventory.List, a.svc.Store, a.svc.Audit,
 		func(id model.DeviceID) { a.svc.Prober.announce(id) }, a.log)
 	mid.known = a.mqttKnown.Known
 	a.svc.Prober.MQTT = mid // "Refresh identity" over MQTT for devices HTTP cannot reach (#91)
@@ -272,6 +274,7 @@ func (a *runtime) startMQTT(ctx context.Context) error {
 	a.mqttKnown = newKnownIndex()
 	a.sw = mqttbus.NewSwitch()
 	a.bus = a.sw
+	a.mqttCmd = mqttcmd.New(a.bus, mqttcmd.Options{Known: a.mqttKnown.Known})
 	a.goBG("mqtt-known-index", func() error { return a.runKnownIndex(ctx) })
 	a.connectMQTT(ctx, a.cfg)
 	a.svc.Sys.Subscribe(func(e sysconfig.Event) {

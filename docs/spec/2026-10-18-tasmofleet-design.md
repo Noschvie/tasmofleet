@@ -147,6 +147,7 @@ everything.
 | `firmware`                              | upstream sources, cache, device-facing server | `Cache{Releases, Ensure, URLFor, Prune}`, `Source`, `Server(Cache)`                                                                                                                                                                | model, fwselect, store                 |
 | `ota`                                   | update state machine + engine                 | `Step(job, event, now, cfg)` (pure), `Engine{Run, Submit, Preview, Cancel}`, `DeviceAPI`, `Firmware`, `Backups`, `Notifier`                                                                                                        | model, fwselect, store, clock          |
 | `mqttbus`                               | optional MQTT                                 | `Bus{Subscribe, Command, Connected}`, `Connect`, `Message`, `Kind`                                                                                                                                                                 | paho                                   |
+| `mqttcmd`                               | commands over MQTT (SAFETY)                   | `Channel{Do, DoLoose, Info, Connected}`, `Doer`, `ErrRefused`                                                                                                                                                                      | cmdpolicy, mqttbus, tasmota, model     |
 | `health`                                | reachability                                  | `Tracker{Get, All, Run}`, `Options`                                                                                                                                                                                                | model, mqttbus, tasmota, store, events |
 | `events`                                | in-process pub/sub                            | `Hub{Publish, Subscribe}`, `Event`, `Topic`                                                                                                                                                                                        | stdlib                                 |
 | `inventory`                             | device service                                | `Service{List, Get, Create, Update, Delete, Upsert}`                                                                                                                                                                               | model, store, audit, events            |
@@ -546,6 +547,30 @@ From `Status 6` (`StatusMQT`): missing, `MqttHost` empty, or SetOption3 off -> `
 Otherwise `other`, until a message on our broker matches the device's topic -> `ours`.
 Health uses MQTT only for `ours` devices. A device is never marked degraded because MQTT
 is missing (TasmoAdmin `mqtt_expected` lesson).
+
+### 6.5 Commands over MQTT (package `mqttcmd`, #256)
+
+`mqttcmd.Channel` is the one place that publishes a command to `cmnd/<topic>/...` and reads its
+answer. Rules (each has a test; see also `docs/research/tasmota-mqtt-transport.md`):
+
+- Never `Status 0` in any spelling `cmdpolicy` reads as 0, alone or inside a Backlog (`ErrRefused`,
+  nothing published). Group topics, topics with `/+#` and `FileDownload`/`FileUpload`/`Upload`
+  are refused too.
+- One command in flight per device topic; at least 100 ms between two publishes on the bus.
+- The listener is registered before the publish, and `Bus.Connected()` is true only once the
+  subscriptions of the current connection are in place (#272).
+- The answer is the first live (never retained) `stat/<t>/STATUSn` for `Status n`, else a `RESULT`
+  whose top-level keys name the command and its index (`POWER1` answers `Power1`, not `Power2`),
+  or `{"Command":"Unknown"|"Error"}` for that command. Other messages on the topic (button
+  presses, other pollers) are ignored. `DoLoose` (console) takes the first `RESULT` for
+  `Template` and `Gpios` only.
+- A Backlog has no merged reply over MQTT: one `RESULT` per queued command is collected and
+  merged (later keys win).
+- LWT Offline -> `tasmota.ErrUnreachable`, nothing published. No answer in 8 s -> `tasmota.ErrTimeout`
+  (unknown outcome, never resent by the channel). Replies to credential-setting commands are
+  scrubbed (`cmdpolicy.ScrubReply`).
+- `Info(topic)` returns the INFO1/INFO3 seen since the device's last LWT Offline (every software
+  restart publishes one).
 
 ---
 

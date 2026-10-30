@@ -16,6 +16,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/mqttbus"
+	"github.com/nofuturekid/tasmofleet/internal/mqttcmd"
 	"github.com/nofuturekid/tasmofleet/internal/simulator"
 	"github.com/nofuturekid/tasmofleet/internal/store"
 	"github.com/nofuturekid/tasmofleet/internal/tasmota"
@@ -118,9 +119,10 @@ func setup(t *testing.T, spec simulator.DeviceSpec, mqtt model.MQTTCapability, b
 		HTTPUser: spec.User, HTTPPassword: spec.Password}
 	client := tasmota.NewHTTPClient(tasmota.Options{AllowedNetworks: []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8")}})
 	rec := &recorder{}
-	o := Options{Devices: devices{7: dev}, Client: client, Audit: rec, MQTTWait: 30 * time.Millisecond}
+	o := Options{Devices: devices{7: dev}, Client: client, Audit: rec}
 	if bus != nil {
-		o.Bus = bus
+		// The real command channel on a scripted bus: what Power sends and accepts is decided there.
+		o.MQTT = mqttcmd.New(bus, mqttcmd.Options{Gap: time.Millisecond, ReplyWait: 60 * time.Millisecond})
 	}
 	return &env{svc: New(o), rec: rec, sim: sim, dev: dev, bus: bus, devs: devices{7: dev}, client: client}
 }
@@ -230,7 +232,7 @@ func TestPowerOverHTTPTellsTheTrackerTheConfirmedState(t *testing.T) {
 func TestPowerOverMQTT(t *testing.T) {
 	bus := &fakeBus{connected: true}
 	bus.answer = func(topic, command, payload string) *mqttbus.Message {
-		return &mqttbus.Message{Kind: mqttbus.KindPower, Topic: topic, Suffix: "POWER", Payload: []byte("ON")}
+		return &mqttbus.Message{Kind: mqttbus.KindResult, Topic: topic, Suffix: "RESULT", Payload: []byte(`{"POWER":"ON"}`)}
 	}
 	e := setup(t, plug, model.MQTTOurs, bus)
 	state, err := e.svc.Power(context.Background(), "oidc:olli", 7, 1, "ON")
@@ -245,13 +247,13 @@ func TestPowerOverMQTT(t *testing.T) {
 	}
 }
 
-// Why: a retained stat/POWER is old news; taking it as the answer would show
-// a wrong state right after a click.
+// Why: a retained stat message is old news, and a button press on the same topic is not the
+// answer to our command; taking either would show a wrong state right after a click.
 func TestPowerOverMQTTIgnoresRetained(t *testing.T) {
 	bus := &fakeBus{connected: true}
-	bus.retained = []mqttbus.Message{{Kind: mqttbus.KindPower, Topic: "plug", Suffix: "POWER", Payload: []byte("OFF"), Retained: true}}
+	bus.retained = []mqttbus.Message{{Kind: mqttbus.KindResult, Topic: "plug", Suffix: "RESULT", Payload: []byte(`{"POWER":"OFF"}`), Retained: true}}
 	bus.answer = func(topic, _, _ string) *mqttbus.Message {
-		return &mqttbus.Message{Kind: mqttbus.KindPower, Topic: topic, Suffix: "POWER", Payload: []byte("ON")}
+		return &mqttbus.Message{Kind: mqttbus.KindResult, Topic: topic, Suffix: "RESULT", Payload: []byte(`{"POWER":"ON"}`)}
 	}
 	e := setup(t, plug, model.MQTTOurs, bus)
 	state, err := e.svc.Power(context.Background(), "x", 7, 1, "ON")
@@ -264,7 +266,7 @@ func TestPowerOverMQTTMultiRelayAnswersPerRelay(t *testing.T) {
 	bus := &fakeBus{connected: true}
 	bus.answer = func(topic, _, _ string) *mqttbus.Message {
 		// another relay's report arrives first and must not be mistaken
-		return &mqttbus.Message{Kind: mqttbus.KindPower, Topic: topic, Suffix: "POWER1", Payload: []byte("ON")}
+		return &mqttbus.Message{Kind: mqttbus.KindResult, Topic: topic, Suffix: "RESULT", Payload: []byte(`{"POWER1":"ON"}`)}
 	}
 	e := setup(t, plug, model.MQTTOurs, bus)
 	_, err := e.svc.Power(context.Background(), "x", 7, 2, "ON")

@@ -133,6 +133,8 @@ func (c TopicCodec) Decode(t string) (kind Kind, topic, suffix string, ok bool) 
 			return KindResult, topic, suffix, true
 		case suffix == "UPGRADE":
 			return KindUpgrade, topic, suffix, true
+		case suffix == "FILEDOWNLOAD" || suffix == "FILEUPLOAD":
+			return KindFile, topic, suffix, true
 		case statusSuffix.MatchString(suffix):
 			return KindStatus, topic, suffix, true
 		case powerSuffix.MatchString(suffix):

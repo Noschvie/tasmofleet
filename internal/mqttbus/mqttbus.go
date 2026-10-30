@@ -6,7 +6,7 @@
 // Subscriptions (default FullTopic %prefix%/%topic%/):
 //
 //	tele/+/LWT, tele/+/STATE, tele/+/SENSOR, tele/+/INFO+, stat/+/RESULT,
-//	stat/+/STATUS+, stat/+/POWER+, stat/+/UPGRADE, tasmota/discovery/+/config (retained)
+//	stat/+/STATUS+, stat/+/POWER+, stat/+/UPGRADE, stat/+/FILE*, tasmota/discovery/+/config (retained)
 //
 // MQTT is optional: with no broker configured Connect is never called and
 // every consumer works from HTTP alone.
@@ -27,6 +27,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -53,6 +54,7 @@ const (
 	KindDiscovery Kind = "discovery"
 	KindUpgrade   Kind = "upgrade" // stat/<topic>/UPGRADE {"Upgrade":"Successful. Restarting"|"Failed ..."}
 	KindInfo      Kind = "info"    // tele/<topic>/INFO1..3, published once per boot
+	KindFile      Kind = "file"    // stat/<topic>/FILEDOWNLOAD and FILEUPLOAD (file transfer over MQTT, #79)
 )
 
 // Message is one decoded MQTT message.
@@ -152,9 +154,11 @@ func Connect(ctx context.Context, o Options) (Bus, error) {
 				slog.Warn("mqtt subscribe failed", "filter", f, "err", tok.Error())
 			}
 		}
+		b.subscribed.Store(true) // after the attempts, so a refused filter (logged above) does not keep the bus "down" for good
 		slog.Info("mqtt connected", "broker", redactURL(o.BrokerURL))
 	})
 	po.SetConnectionLostHandler(func(_ paho.Client, err error) {
+		b.subscribed.Store(false)
 		slog.Warn("mqtt connection lost", "err", err)
 	})
 	b.client = paho.NewClient(po)
@@ -194,6 +198,8 @@ type sub struct {
 type bus struct {
 	client paho.Client
 	codec  TopicCodec
+	// subscribed is set once the OnConnect handler has tried every filter and cleared when the connection is lost.
+	subscribed atomic.Bool
 
 	mu     sync.RWMutex
 	nextID int
@@ -206,7 +212,10 @@ type bus struct {
 	onDropped func(string)
 }
 
-func (b *bus) Connected() bool { return b.client.IsConnectionOpen() }
+// Connected is true when the connection is open AND the subscriptions of the current connection
+// are in place. paho reports the connection open before the OnConnect handler has subscribed, and a
+// command published in that window would be answered into the void (#272).
+func (b *bus) Connected() bool { return b.client.IsConnectionOpen() && b.subscribed.Load() }
 
 func (b *bus) Subscribe(kinds []Kind, h func(Message)) func() {
 	s := &sub{kinds: make(map[Kind]struct{}, len(kinds)), h: h}

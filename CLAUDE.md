@@ -62,6 +62,7 @@ internal/fwselect         PURE: identity detection, artifact selection, image he
 internal/firmware         upstream sources, firmware cache, device-facing firmware HTTP server
 internal/ota              PURE state machine (machine.go) + engine (engine.go)
 internal/mqttbus          optional MQTT connection (paho), topic decoding
+internal/mqttcmd          commands over MQTT: publish, reply correlation, one in flight per device (SAFETY)
 internal/health           health tracker (MQTT + HTTP poll fallback)
 internal/events           in-process pub/sub for SSE
 internal/inventory        device service layer (validation, upsert, audit)

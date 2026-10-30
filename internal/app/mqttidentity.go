@@ -15,6 +15,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/fwselect"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/mqttbus"
+	"github.com/nofuturekid/tasmofleet/internal/mqttcmd"
 	"github.com/nofuturekid/tasmofleet/internal/store"
 	"github.com/nofuturekid/tasmofleet/internal/tasmota"
 )
@@ -25,9 +26,11 @@ import (
 //   - INFO1, which every device publishes at boot, carries the version: it is read with the
 //     Status 2 grammar (fwselect.DetectInfo1). It has no hardware, so on its own it never makes
 //     the identity Known().
-//   - Status 2 is asked once over MQTT (cmnd/<topic>/STATUS 2) for the hardware. Never Status 0,
+//   - Status 2 is asked once over MQTT (cmnd/<topic>/Status 2) for the hardware. Never Status 0,
 //     one command at a time per device, once per device per 10 minutes, at most one per second
 //     on the whole bus, only for devices that are online, and audited like discovery's Status 5.
+//     The question goes through the MQTT command channel (internal/mqttcmd), which owns the
+//     publish, the reply correlation and the timeout; this file keeps the limits above.
 //
 // The HTTP probe stays the primary path. MQTT only fills a device that no probe has identified
 // (DetectedAt zero; the store refuses the write otherwise) and never sets DetectedAt, so the
@@ -37,8 +40,7 @@ const (
 	mqttIDGap     = time.Second      // between two Status 2 questions on the whole bus
 	mqttIDEvery   = 10 * time.Minute // between two questions to one device
 	mqttIDGrace   = 30 * time.Second // how long a device must be online before it is asked: HTTP goes first
-	mqttIDWindow  = 30 * time.Second // how long after the question a STATUS2 reply is taken
-	mqttIDQueue   = 64               // INFO1 and STATUS2 messages waiting for the worker; more are dropped
+	mqttIDQueue   = 64               // INFO1 messages waiting for the worker; more are dropped
 	mqttIDTick    = time.Second
 	mqttIDTimeout = 10 * time.Second
 )
@@ -55,13 +57,9 @@ type mqttIDTopic struct {
 	up   time.Time // since when it is online (zero while offline)
 }
 
-type mqttIDPending struct {
-	topic string
-	at    time.Time
-}
-
 type mqttIdentity struct {
-	bus      mqttbus.Bus
+	bus      mqttbus.Bus // online state of the topics; commands go through cmd
+	cmd      mqttcmd.Doer
 	list     func(context.Context) ([]model.Device, error)
 	store    identityMQTTStore
 	audit    audit.Recorder
@@ -79,26 +77,19 @@ type mqttIdentity struct {
 	topics   map[string]*mqttIDTopic
 	lastAsk  time.Time
 	asked    map[model.DeviceID]time.Time
-	pending  map[model.DeviceID]mqttIDPending
 	answered map[model.DeviceID]bool // a Status 2 reply was stored; not asked again until restart
 	info1    map[string][]byte       // INFO1 of a topic whose device was not yet recorded as ours
-	waiters  map[string]*mqttWaiter  // topic -> a refresh waiting for its Status N answer (askStatus)
+	asking   map[string]bool         // topic -> a question (background or refresh) waits for its answer
 
-	replyWait time.Duration // how long askStatus waits for an answer
+	spawn func(func()) // runs the background question; tests run it inline
 }
 
-// mqttWaiter is a refresh waiting for the answer to its Status N question.
-type mqttWaiter struct {
-	suffix string // "STATUS5"
-	ch     chan []byte
-}
-
-func newMQTTIdentity(bus mqttbus.Bus, list func(context.Context) ([]model.Device, error), st identityMQTTStore,
+func newMQTTIdentity(bus mqttbus.Bus, cmd mqttcmd.Doer, list func(context.Context) ([]model.Device, error), st identityMQTTStore,
 	rec audit.Recorder, announce func(model.DeviceID), log *slog.Logger) *mqttIdentity {
-	return &mqttIdentity{bus: bus, list: list, store: st, audit: rec, announce: announce, now: time.Now, log: log, grace: mqttIDGrace,
+	return &mqttIdentity{bus: bus, cmd: cmd, list: list, store: st, audit: rec, announce: announce, now: time.Now, log: log, grace: mqttIDGrace,
 		msgs: make(chan mqttbus.Message, mqttIDQueue), topics: map[string]*mqttIDTopic{},
-		asked: map[model.DeviceID]time.Time{}, pending: map[model.DeviceID]mqttIDPending{}, answered: map[model.DeviceID]bool{}, info1: map[string][]byte{},
-		waiters: map[string]*mqttWaiter{}, replyWait: mqttIDTimeout}
+		asked: map[model.DeviceID]time.Time{}, answered: map[model.DeviceID]bool{}, info1: map[string][]byte{},
+		asking: map[string]bool{}, spawn: func(f func()) { go f() }}
 }
 
 // run reads the bus until ctx ends.
@@ -148,12 +139,6 @@ func (m *mqttIdentity) onMessage(msg mqttbus.Message) {
 		if !msg.Retained {
 			t.live = true // a retained telemetry message says nothing about now
 		}
-		if w := m.waiters[msg.Topic]; w != nil && msg.Kind == mqttbus.KindStatus && !msg.Retained && msg.Suffix == w.suffix {
-			select {
-			case w.ch <- append([]byte(nil), msg.Payload...):
-			default: // the first answer counts
-			}
-		}
 	case mqttbus.KindSensor, mqttbus.KindResult, mqttbus.KindPower, mqttbus.KindDiscovery, mqttbus.KindUpgrade:
 		// not subscribed
 	}
@@ -165,7 +150,7 @@ func (m *mqttIdentity) onMessage(msg mqttbus.Message) {
 		t.up = now
 	}
 	m.mu.Unlock()
-	if (msg.Kind == mqttbus.KindInfo && msg.Suffix == "INFO1") || (msg.Kind == mqttbus.KindStatus && msg.Suffix == "STATUS2") {
+	if msg.Kind == mqttbus.KindInfo && msg.Suffix == "INFO1" {
 		select {
 		case m.msgs <- msg:
 		default:
@@ -207,19 +192,6 @@ func (m *mqttIdentity) handle(ctx context.Context, msg mqttbus.Message) {
 			}
 			m.mu.Unlock()
 		}
-		return
-	}
-	if msg.Suffix == "STATUS2" {
-		m.mu.Lock()
-		p, asked := m.pending[d.ID]
-		if asked && p.topic == msg.Topic {
-			delete(m.pending, d.ID)
-		}
-		m.mu.Unlock()
-		if !asked || p.topic != msg.Topic || m.now().Sub(p.at) > mqttIDWindow {
-			return // only a timely reply to our own question (a reply anyone can publish is no source)
-		}
-		m.applyStatus2(ctx, d, msg.Payload)
 		return
 	}
 	m.applyInfo1(ctx, d, msg.Payload)
@@ -380,7 +352,7 @@ func (m *mqttIdentity) askDue(ctx context.Context) {
 		// What was known about "online" is stale once the connection is lost: after the reconnect
 		// the retained LWTs say it again, and the grace period for HTTP starts anew.
 		m.mu.Lock()
-		m.topics, m.pending = map[string]*mqttIDTopic{}, map[model.DeviceID]mqttIDPending{}
+		m.topics = map[string]*mqttIDTopic{}
 		m.mu.Unlock()
 		return
 	}
@@ -414,7 +386,7 @@ func (m *mqttIdentity) askDue(ctx context.Context) {
 		if !wantsStatus2(*d) || m.answered[d.ID] || t == nil || t.up.IsZero() || now.Sub(t.up) < m.grace {
 			continue
 		}
-		if p, ok := m.pending[d.ID]; (ok && now.Sub(p.at) <= mqttIDWindow) || m.waiters[d.Topic] != nil {
+		if m.asking[d.Topic] {
 			continue // one command at a time per device
 		}
 		last, was := m.asked[d.ID]
@@ -430,22 +402,43 @@ func (m *mqttIdentity) askDue(ctx context.Context) {
 		return
 	}
 	m.asked[pick.ID], m.lastAsk = now, now
-	m.pending[pick.ID] = mqttIDPending{topic: pick.Topic, at: now}
+	m.asking[pick.Topic] = true
 	m.mu.Unlock()
+	d := *pick
+	m.spawn(func() { m.askStatus2(ctx, d) })
+}
 
-	why := "on our broker without a usable firmware version over HTTP; Status 2 reports it"
-	if err := m.bus.Command(ctx, pick.Topic, "STATUS", "2"); err != nil {
+// askStatus2 puts the one background Status 2 to d. Only the reply the command channel matched to
+// the question can become an identity (a reply anyone can publish is no source).
+func (m *mqttIdentity) askStatus2(ctx context.Context, d model.Device) {
+	defer func() {
 		m.mu.Lock()
-		delete(m.asked, pick.ID)
-		delete(m.pending, pick.ID)
+		delete(m.asking, d.Topic)
 		m.mu.Unlock()
-		m.log.Warn("mqtt identity: Status 2 not sent", "device", pick.ID, "topic", pick.Topic, "err", err)
+	}()
+	raw, err := m.cmd.Do(ctx, d, "Status 2")
+	if notSent(err) {
+		m.mu.Lock()
+		delete(m.asked, d.ID) // nothing was sent: no reason to wait ten minutes
+		m.mu.Unlock()
+		m.log.Warn("mqtt identity: Status 2 not sent", "device", d.ID, "topic", d.Topic, "err", err)
 		return
 	}
-	m.log.Info("mqtt identity: asked a device for its firmware over MQTT", "device", pick.ID, "topic", pick.Topic, "command", "Status 2", "reason", why)
+	why := "on our broker without a usable firmware version over HTTP; Status 2 reports it"
+	m.log.Info("mqtt identity: asked a device for its firmware over MQTT", "device", d.ID, "topic", d.Topic, "command", "Status 2", "reason", why)
 	detail, _ := json.Marshal(map[string]any{"command": "Status 2", "via": "mqtt", "reason": why}) // a map of strings cannot fail
-	m.audit.Record(ctx, model.AuditEvent{Actor: "system", Action: "identity.mqtt_ask", Target: "device:" + strconv.FormatInt(int64(pick.ID), 10),
+	m.audit.Record(ctx, model.AuditEvent{Actor: "system", Action: "identity.mqtt_ask", Target: "device:" + strconv.FormatInt(int64(d.ID), 10),
 		Detail: string(detail), Result: "ok"})
+	if err != nil {
+		m.log.Debug("mqtt identity: no usable Status 2 answer", "device", d.ID, "err", err)
+		return
+	}
+	m.applyStatus2(ctx, d, raw)
+}
+
+// notSent says the channel refused or could not publish: the device was not asked.
+func notSent(err error) bool {
+	return errors.Is(err, mqttcmd.ErrRefused) || errors.Is(err, tasmota.ErrUnreachable) || errors.Is(err, context.Canceled)
 }
 
 // statusObject asks the plain "Status" (no number) over MQTT.
@@ -458,24 +451,24 @@ var (
 
 // askStatus asks d one Status n over MQTT for a refresh (#91) and returns the answer. It keeps
 // the limits of the background reader: never Status 0, one question at a time per device,
-// mqttIDGap between two questions on the whole bus (it waits for its turn), only a live answer
-// on the device's own topic within replyWait, and every question audited.
+// mqttIDGap between two questions on the whole bus (it waits for its turn), and every question
+// audited. The command channel publishes, takes only the live STATUSn on the device's own topic
+// as the answer and times out after its reply wait.
 func (m *mqttIdentity) askStatus(ctx context.Context, d model.Device, n int, actor string) (json.RawMessage, error) {
 	if n == 0 || n < statusObject {
 		return nil, errors.New("mqtt: Status 0 is never sent")
 	}
 	// statusObject is the plain "Status": the Status object only (DeviceName, Topic), as over HTTP.
-	arg, name := strconv.Itoa(n), "Status "+strconv.Itoa(n)
+	name := "Status " + strconv.Itoa(n)
 	if n == statusObject {
-		arg, name = "", "Status"
+		name = "Status"
 	}
 	if d.Topic == "" || d.MQTT != model.MQTTOurs || !m.bus.Connected() {
 		return nil, errMQTTUnavailable
 	}
 	now := m.now()
-	w := &mqttWaiter{suffix: "STATUS" + arg, ch: make(chan []byte, 1)}
 	m.mu.Lock()
-	if p, ok := m.pending[d.ID]; (ok && now.Sub(p.at) <= mqttIDWindow) || m.waiters[d.Topic] != nil {
+	if m.asking[d.Topic] {
 		m.mu.Unlock()
 		return nil, errMQTTBusy
 	}
@@ -484,11 +477,11 @@ func (m *mqttIdentity) askStatus(ctx context.Context, d model.Device, n int, act
 		turn = next
 	}
 	m.lastAsk = turn
-	m.waiters[d.Topic] = w
+	m.asking[d.Topic] = true
 	m.mu.Unlock()
 	defer func() {
 		m.mu.Lock()
-		delete(m.waiters, d.Topic)
+		delete(m.asking, d.Topic)
 		m.mu.Unlock()
 	}()
 	if wait := turn.Sub(now); wait > 0 {
@@ -498,7 +491,8 @@ func (m *mqttIdentity) askStatus(ctx context.Context, d model.Device, n int, act
 		case <-time.After(wait):
 		}
 	}
-	if err := m.bus.Command(ctx, d.Topic, "STATUS", arg); err != nil {
+	raw, err := m.cmd.Do(ctx, d, name)
+	if notSent(err) {
 		return nil, fmt.Errorf("mqtt: %s not sent: %w", name, err)
 	}
 	if actor == "" {
@@ -509,12 +503,8 @@ func (m *mqttIdentity) askStatus(ctx context.Context, d model.Device, n int, act
 	detail, _ := json.Marshal(map[string]any{"command": name, "via": "mqtt", "reason": why}) // a map of strings cannot fail
 	m.audit.Record(ctx, model.AuditEvent{Actor: actor, Action: "identity.mqtt_ask", Target: "device:" + strconv.FormatInt(int64(d.ID), 10),
 		Detail: string(detail), Result: "ok"})
-	select {
-	case b := <-w.ch:
-		return b, nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-time.After(m.replyWait):
-		return nil, fmt.Errorf("mqtt: no answer to %s: %w", name, tasmota.ErrTimeout)
+	if err != nil {
+		return nil, err
 	}
+	return raw, nil
 }

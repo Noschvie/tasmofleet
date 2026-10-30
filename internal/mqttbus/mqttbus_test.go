@@ -573,3 +573,26 @@ type replayingBus struct{}
 func (replayingBus) Subscribe(_ []Kind, h func(Message)) func()            { h(Message{}); return func() {} }
 func (replayingBus) Command(context.Context, string, string, string) error { return nil }
 func (replayingBus) Connected() bool                                       { return true }
+
+// Why (#272): paho reports the connection open before the OnConnect handler has subscribed. A
+// consumer that publishes a command as soon as Connected() is true then loses the device's reply
+// (it arrives before the SUBSCRIBE is in place), which showed up as a flaky 10 s timeout. With a
+// slow broker the old Connected() was true for the whole subscribe delay; now a reply published
+// the moment Connected() turns true must always arrive.
+func TestConnectedMeansSubscribed(t *testing.T) {
+	b := newTestBrokerDelayed(t, 150*time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() {
+		cancel()
+		b.waitNoClients(t)
+	})
+	bus, err := Connect(ctx, Options{BrokerURL: b.url()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got capture
+	bus.Subscribe([]Kind{KindResult}, got.add)
+	waitFor(t, "connection", bus.Connected)
+	b.publish("stat/plug/RESULT", `{"POWER":"ON"}`, false)
+	waitFor(t, "the reply published right after Connected() turned true", func() bool { return len(got.snapshot()) == 1 })
+}

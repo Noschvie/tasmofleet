@@ -12,6 +12,7 @@ import (
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/mqttbus"
+	"github.com/nofuturekid/tasmofleet/internal/mqttcmd"
 	"github.com/nofuturekid/tasmofleet/internal/secretbox"
 	"github.com/nofuturekid/tasmofleet/internal/simulator"
 	"github.com/nofuturekid/tasmofleet/internal/store"
@@ -423,6 +424,7 @@ func TestMQTTAskStatusAgainstASimulatedDevice(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.m.bus = bus
+	e.m.cmd = mqttcmd.New(bus, mqttcmd.Options{})
 	e.m.now = time.Now
 	go e.m.run(ctx)
 	deadline := time.Now().Add(5 * time.Second)
@@ -465,7 +467,7 @@ func TestMQTTAskStatusAgainstASimulatedDevice(t *testing.T) {
 func TestMQTTAskStatusWaitsForNoOtherQuestion(t *testing.T) {
 	d := oursDevice(1, "plug")
 	e := newIDEnv(d)
-	e.m.pending[d.ID] = mqttIDPending{topic: "plug", at: e.now}
+	e.m.asking["plug"] = true
 	if _, err := e.m.askStatus(context.Background(), d, 5, "admin"); !errors.Is(err, errMQTTBusy) {
 		t.Fatalf("err = %v, want busy", err)
 	}
