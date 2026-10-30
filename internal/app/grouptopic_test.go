@@ -189,6 +189,13 @@ func newBlindRig(t *testing.T) *blindRig {
 			t.Fatal("bus never connected")
 		}
 	}
+	// Why (#272): Connected() is our side only; the simulated device must be subscribed too.
+	ctl, _ := simulator.Control(dev)
+	readyCtx, readyCancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer readyCancel()
+	if err := ctl.WaitFor(readyCtx, func(c simulator.Controller) bool { return c.MQTTReady() }); err != nil {
+		t.Fatalf("simulated device never subscribed to its command topic: %v", err)
+	}
 	ch := mqttcmd.New(bus, mqttcmd.Options{Gap: 5 * time.Millisecond})
 	t.Cleanup(ch.Close)
 	host, ps, _ := net.SplitHostPort(dev.Addr())

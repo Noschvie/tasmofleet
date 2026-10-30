@@ -435,6 +435,13 @@ func TestMQTTAskStatusAgainstASimulatedDevice(t *testing.T) {
 	for !bus.Connected() && time.Now().Before(deadline) {
 		time.Sleep(20 * time.Millisecond)
 	}
+	// Why (#272): Connected() covers TasmoFleet's own subscription only. The simulated device
+	// has to be subscribed to its cmnd topic too, or Status 5 is published into the void.
+	readyCtx, readyCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer readyCancel()
+	if err := ctl.WaitFor(readyCtx, func(c simulator.Controller) bool { return c.MQTTReady() }); err != nil {
+		t.Fatalf("simulated device never subscribed to its command topic: %v", err)
+	}
 	start := time.Now()
 	raw5, err := e.m.askStatus(ctx, d, 5, "admin")
 	if err != nil {

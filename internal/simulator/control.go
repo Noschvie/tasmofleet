@@ -20,6 +20,10 @@ type Controller interface {
 	OtaURL() string          // RAM value
 	PersistedOtaURL() string // flash value, what the next boot reads
 	SetOtaURL(url string)    // as if another tool changed it (RAM only; flash too on a normal image)
+	// MQTTReady is true once the device is connected to the broker and subscribed to its
+	// cmnd topics, so a command published now is received. Tests wait on it instead of
+	// sleeping before they send the first command.
+	MQTTReady() bool
 	Boots() int              // reboots since creation
 	BootCount() int          // Tasmota's persisted BootCount
 	DownloadAttempts() int   // attempts of the latest OTA
@@ -141,6 +145,7 @@ func (d *simDevice) SetOtaURL(url string) {
 	d.runtime.otaURL = url
 	d.commitLocked()
 }
+func (d *simDevice) MQTTReady() bool { return d.mq.ready() }
 func (d *simDevice) Boots() int {
 	d.mu.Lock()
 	defer d.mu.Unlock()

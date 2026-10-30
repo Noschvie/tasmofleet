@@ -277,6 +277,17 @@ func (c *collector) waitFor(t *testing.T, prefix string) {
 	t.Fatalf("no message %q in %v", prefix, c.msgs)
 }
 
+func (c *collector) waitForCount(t *testing.T, prefix string, n int) {
+	t.Helper()
+	for i := 0; i < 400; i++ {
+		if c.count(prefix) >= n {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("want %d messages %q, have %d", n, prefix, c.count(prefix))
+}
+
 // Why: tasmofleet's client authenticates with HTTP Basic only, while older
 // tools use query parameters; the real firmware takes both, so must the
 // simulator, or a locked device could not be probed in e2e.

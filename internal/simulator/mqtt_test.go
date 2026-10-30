@@ -40,6 +40,23 @@ func TestMQTTBasics(t *testing.T) {
 	c.waitFor(t, `stat/livingroom-readinglamp/STATUS2={"StatusFWR"`)
 }
 
+// Why (#272): a real device is subscribed to its cmnd topics before it announces itself, so a
+// controller that sends a command the moment the device shows up is answered. The simulator
+// used to fire its SUBSCRIBEs without waiting for the SUBACKs (and the tests raced them).
+func TestMQTTDeviceIsSubscribedWhenItAnnouncesItself(t *testing.T) {
+	b, c, f := newBrokerFleet(t, Extra{})
+	d := newDirect(t, f, "plug")
+	ctl, _ := Control(d)
+	c.waitFor(t, "[R]tele/plug/LWT=Online")
+	if !ctl.MQTTReady() {
+		t.Fatal("LWT Online published but the device is not subscribed to its command topic")
+	}
+	if err := b.Publish("cmnd/plug/Power", []byte("ON"), false); err != nil {
+		t.Fatal(err)
+	}
+	c.waitFor(t, "stat/plug/POWER=ON")
+}
+
 // Why: Tasmota's PubSubClient::disconnect() sends no DISCONNECT packet by
 // default, so EspRestart (WifiShutdown -> MqttDisconnect) makes the broker fire
 // the will: LWT Offline before every reboot, seen live on 2026-10-30 (see
@@ -51,13 +68,16 @@ func TestMQTTUpgradeShowsOfflineAndReportsResult(t *testing.T) {
 	_, c, f := newBrokerFleet(t, Extra{})
 	d := newDirect(t, f, "plug")
 	c.waitFor(t, "[R]tele/plug/LWT=Online")
+	// LWT Online comes before INFO1-3 within a boot: sample only once the first boot's INFO3
+	// (its last message) is in, or its INFO1 would be counted as the second boot's.
+	c.waitFor(t, "tele/plug/INFO3=")
 	before := c.count("tele/plug/INFO1=")
+	before3 := c.count("tele/plug/INFO3=")
 	startUpgrade(t, d, fw, "tasmota.bin.gz")
 	settled(t, d, 1)
 	c.waitFor(t, `stat/plug/UPGRADE={"Upgrade":"Successful. Restarting"}`)
-	for i := 0; i < 200 && c.count("tele/plug/INFO1=") == before; i++ {
-		time.Sleep(10 * time.Millisecond)
-	}
+	// INFO3 is the last message of a boot, so once it is in, the boot's INFO1 count is final.
+	c.waitForCount(t, "tele/plug/INFO3=", before3+1)
 	if c.count("tele/plug/INFO1=") != before+1 {
 		t.Error("INFO1 must be published once per boot")
 	}

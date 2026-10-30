@@ -21,6 +21,9 @@ type mqttLink struct {
 	client paho.Client
 	conn   net.Conn
 	muted  bool // main loop blocked: nothing is published or processed
+	// subscribed is the client whose cmnd subscriptions the broker has acknowledged; the
+	// device answers commands only from then on (see ready).
+	subscribed paho.Client
 }
 
 func newMQTTLink(d *simDevice, brokerURL string) *mqttLink {
@@ -76,8 +79,16 @@ func (m *mqttLink) connect() {
 	m.client = c
 	m.mu.Unlock()
 	handler := func(_ paho.Client, msg paho.Message) { m.onCommand(msg) }
-	c.Subscribe("cmnd/"+d.topic+"/#", 0, handler)
-	c.Subscribe("cmnd/tasmotas/#", 0, handler)
+	// Wait for the SUBACKs: a real device is subscribed before it announces itself, and a
+	// controller that sends a command the moment LWT Online (or ready) shows must be answered.
+	for _, f := range []string{"cmnd/" + d.topic + "/#", "cmnd/tasmotas/#"} {
+		if t := c.Subscribe(f, 0, handler); !t.WaitTimeout(6*time.Second) || t.Error() != nil {
+			return
+		}
+	}
+	m.mu.Lock()
+	m.subscribed = c
+	m.mu.Unlock()
 	m.raw("tele/"+d.topic+"/LWT", "Online", true)
 	d.mu.Lock()
 	minimal := d.minimalLocked()
@@ -118,6 +129,17 @@ func (m *mqttLink) connected() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.client != nil && m.client.IsConnected() && !m.muted
+}
+
+// ready reports whether the device is connected and subscribed to its command topics, i.e.
+// a command published now is received. A nil link (HTTP only device) is never ready.
+func (m *mqttLink) ready() bool {
+	if m == nil {
+		return false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.client != nil && m.client == m.subscribed && m.client.IsConnected()
 }
 
 func (m *mqttLink) raw(topic, payload string, retain bool) {
