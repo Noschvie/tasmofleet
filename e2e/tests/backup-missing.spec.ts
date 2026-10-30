@@ -47,6 +47,15 @@ test("a backup whose file was deleted by hand is marked, refused and removable",
   await expect(rows.getByRole("link", { name: /^Restore/ })).toHaveCount(1);
   const backupId = await rows.locator("input[name=id]").inputValue();
 
+  // #290: the row names the stored file, the Download hover help repeats it, and a phone
+  // screen wraps the name instead of scrolling sideways
+  const file = (await rows.locator(".bk-file").innerText()).trim();
+  expect(file, "the file name as on disk").toMatch(/\.dmp$/);
+  await expect(rows.getByRole("link", { name: "Download" })).toHaveAttribute("title", `Download ${file}`);
+  await page.setViewportSize({ width: 375, height: 700 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), "no sideways scroll").toBe(true);
+  await page.setViewportSize({ width: 1280, height: 720 });
+
   // remove the files by hand, the way the reporter removed a directory
   const dir = join(app.dataDir, "backups");
   for (const sub of readdirSync(dir)) rmSync(join(dir, sub), { recursive: true });

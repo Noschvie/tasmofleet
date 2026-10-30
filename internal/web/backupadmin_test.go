@@ -265,3 +265,24 @@ func TestBackupsTabCountMatchesTheListedRows(t *testing.T) {
 		t.Errorf("the run's incomplete snapshot is not named, or the snapshot-only run has no download:\n%s", body)
 	}
 }
+
+// Why (#290): users verify the backup output in the file system, so every row names the file
+// as stored (the base name of the run's dump, not the decoded copy or the data dir path) and
+// the Download button's hover help names it too.
+func TestBackupRowNamesTheStoredFileAndDownloadHoverRepeatsIt(t *testing.T) {
+	e, ab, _ := newAdminEnv(t)
+	ab.list[0].Path = "backups/kitchen-aabbcc000001/2026-10-18T11-00-00Z-config.dmp"
+	ab.list[1].Path = "backups/kitchen-aabbcc000001/2026-10-18T10-00-00Z-config.dmp"
+	_, body := e.do(t, "GET", "/devices/1/backups", "admin", nil)
+	for _, name := range []string{"2026-10-18T11-00-00Z-config.dmp", "2026-10-18T10-00-00Z-config.dmp"} {
+		if !strings.Contains(body, `<div class="bk-file" title="`+name+`">`+name+`</div>`) {
+			t.Errorf("the row does not show the file name %s", name)
+		}
+		if !strings.Contains(body, `title="Download `+name+`"`) {
+			t.Errorf("the Download hover help does not name %s", name)
+		}
+	}
+	if strings.Contains(body, "kitchen-aabbcc000001/2026") {
+		t.Error("only the file name is shown, not the directory path")
+	}
+}

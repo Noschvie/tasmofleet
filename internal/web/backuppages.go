@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -48,6 +49,7 @@ type backupRow struct {
 	ID      model.BackupID // the run's dump (or its snapshot when it has no dump): selection, keep, delete
 	Taken   time.Time
 	Detail  string // "Manual · Tasmota 14.3.0 · 4.1 KiB"
+	File    string // the stored file as on disk (base name of the run's dump): lets users verify the output in the file system
 	Size    string
 	Newest  bool
 	Kept    bool
@@ -115,6 +117,22 @@ func backupRuns(list []model.Backup) []backupRun {
 	return runs
 }
 
+// storedFileName is the file's name as on disk; empty when the row has no path.
+func storedFileName(p string) string {
+	if p == "" {
+		return ""
+	}
+	return path.Base(p)
+}
+
+// downloadHelp is the Download button's hover help: it names the file the user gets.
+func downloadHelp(b backupRow) string {
+	if b.File == "" {
+		return "Download this backup"
+	}
+	return "Download " + b.File
+}
+
 // runDetail is a row's second line: trigger, label, firmware, size.
 func runDetail(r backupRun) string {
 	var parts []string
@@ -177,7 +195,7 @@ func (h *handler) backupsPage(w http.ResponseWriter, r *http.Request) {
 	for _, run := range runs {
 		b := run.Backup
 		total += b.Size
-		row := backupRow{ID: b.ID, Taken: b.TakenAt, Detail: runDetail(run), Size: humanBytes(b.Size),
+		row := backupRow{ID: b.ID, Taken: b.TakenAt, Detail: runDetail(run), File: storedFileName(b.Path), Size: humanBytes(b.Size),
 			Newest: b.TakenAt.Equal(newest), Kept: b.Kept, Pruned: ret.IsPruned(b)}
 		row.Missing = h.fileMissing(b)
 		if v.IsAdmin && !row.Missing {

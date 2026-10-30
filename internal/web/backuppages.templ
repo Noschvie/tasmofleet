@@ -122,6 +122,9 @@ templ backupRowItem(p backupsView, b backupRow) {
 				}
 			</div>
 			<div class="bk-detail">{ b.Detail }</div>
+			if b.File != "" {
+				<div class="bk-file" title={ b.File }>{ b.File }</div>
+			}
 			if b.Missing {
 				<div class="bk-reason">The file is gone from the data directory (deleted by hand?). Check that the data volume is mounted. It cannot be downloaded or restored; delete the entry to remove it.</div>
 			}
@@ -147,7 +150,7 @@ templ backupRowItem(p backupsView, b backupRow) {
 					}
 				}
 				if b.Download != "" {
-					<a class="btn" href={ templ.SafeURL(b.Download) }>Download</a>
+					<a class="btn" href={ templ.SafeURL(b.Download) } title={ downloadHelp(b) }>Download</a>
 				}
 				if b.Restore != "" && p.RestoreBlocked != "" {
 					<button type="button" class="btn" disabled title={ p.RestoreBlocked } aria-disabled="true" aria-describedby="bk-restore-why">Restore…</button>

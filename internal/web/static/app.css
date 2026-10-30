@@ -11906,6 +11906,11 @@ main.bare {
   font-size: 12px;
   color: var(--color-text-2);
 }
+.bk-file {
+  font: 400 12px var(--font-mono);
+  color: var(--color-text-2);
+  overflow-wrap: anywhere;
+}
 .bk-reason {
   margin-top: 2px;
   font-size: 12.5px;
