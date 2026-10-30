@@ -1323,7 +1323,10 @@ other irregularity ends with `FileDownload 0` and an error, with no retry. `Erro
 `ErrPasswordRefused`. Messages are never logged and never put into errors: the start command carries the
 password and a minimal firmware echoes it back as `{"Command":"Unknown"}`. The password per device is
 set on the edit form (admin; mode not set / broker / own; write-only, blank keeps, saving clears the
-refused mark) and stored sealed (D6).
+refused mark) and stored sealed (D6). `transport.Router.DownloadConfig` uses it when `Paths.Backup` is
+MQTT (or pinned to it): own mode sends the sealed value, broker mode the live `MQTT_PASSWORD`; `Error 1` writes
+`mqtt_password_bad_at`; a started transfer never falls back to HTTP; a backup MQTT cannot carry fails with a
+`BackupBlockedError` whose reason reaches the device page and the backup history.
 
 ### 12.2 decode-config integration
 

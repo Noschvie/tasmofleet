@@ -193,8 +193,10 @@ test("backup over MQTT", async ({ page }) => {
   test.setTimeout(300_000);
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/devices");
-  await expect(page.getByRole("row").filter({ hasText: "mq-esp32" }).getByText("Online", { exact: true })).toBeVisible({ timeout: 30_000 });
-  await page.getByRole("link", { name: "mq-esp32", exact: true }).click();
+  // Either device will do (both are HTTP-dead, on the broker and have the devenv password); the earlier
+  // tests may have renamed them to what they report, so the first row is taken, not a name.
+  await expect(page.getByText("Online", { exact: true }).first()).toBeVisible({ timeout: 30_000 });
+  await page.locator("table[data-table=devices] tbody tr a").first().click();
   const devicePath = new URL(page.url()).pathname;
 
   const backUp = page.getByRole("button", { name: "Back up", exact: true });
@@ -211,7 +213,8 @@ test("backup over MQTT", async ({ page }) => {
   }).toPass({ timeout: 300_000, intervals: [5_000] });
 
   await page.goto(app.url + devicePath + "/backups");
-  await expect(page.locator("table tbody tr").first()).toBeVisible();
+  await expect(page.locator("section.bk-list")).toBeVisible();
+  await expect(page.getByText("No backups yet")).toHaveCount(0);
   const audit = await page.request.get(app.url + "/audit", { headers: admin });
   expect(await audit.text()).not.toContain("devenv-fake-mqtt-password");
 });

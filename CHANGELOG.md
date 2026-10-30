@@ -22,7 +22,7 @@ always upgrade automatically.
 
 ### Security
 
-- The device MQTT password is stored encrypted like the web password, never rendered, logged or audited, and is sent only to that device's topic (Part of #257)
+- The device MQTT password is stored encrypted like the web password, never rendered, logged or audited, and is sent only to that device's topic (#257)
 - MQTT command channel: closing it while a command waits for its answer now reports an unknown outcome (the command was published), not "nothing was sent"; a closed channel never publishes
 
 - Command policy: the confirmation for Status 0 (and Reset and other guarded commands) could be bypassed by a Backlog part spelled with a leading `Backlog` (`Backlog BacklogStatus 0`), which Tasmota strips before running it; every part is now judged after the same stripping
@@ -39,7 +39,7 @@ always upgrade automatically.
 ### Added
 
 - `fwselect.MQTTUploadFits`: a fixed rule, no try-and-see, for whether an image fits a firmware upload over MQTT (FileUpload Type 1), from Status 4 Free. A known safeboot layout (one app partition) is refused. Nothing uses it yet (Part of #262)
-- The device edit form (admins) has an MQTT password section: not set, the same as TasmoFleet's broker password, or the device's own password. The password is write-only (never shown, an empty field keeps the stored one) and saving clears a "device refused it" mark. It is what backup over MQTT will send with `FileDownload`; `mqttcmd.Download` reads a settings dump over MQTT with the one-`?`-per-message protocol and the Size, Id and MD5 checks, and nothing uses it yet (Part of #257)
+- Config backups over MQTT (`FileDownload`) for devices on our broker whose HTTP does not answer, also in scheduled and bulk backups; the device's MQTT password is stored per device on the edit form (not set, the same as TasmoFleet's broker password, or its own; write-only, an empty field keeps it, changing it or ticking Retry clears a "device refused it" mark). The bytes equal `/dl`, size and MD5 are checked, a wrong password (`Error 1`) is remembered and blocks further MQTT transfers until it is changed, and a backup that MQTT cannot carry says why (#79, #257, thanks @Noschvie)
 
 ### Fixed
 
