@@ -1254,6 +1254,18 @@ No migration, no store contract change and no new dependency.
 
 Files are `0600`, written via temp file + rename, and SHA-256 indexed.
 
+Over MQTT (0.20.0, #257) the raw `.dmp` comes from `FileDownload {"Password":…,"Type":2}` instead of
+`/dl` and must be byte-identical. `mqttcmd.Download` follows the live-tested protocol: `FileDownload 0`
+first when the state of the topic is unknown (process start or after a bad transfer), then the start
+command, answered by `Started` and the header `{File,Id,Type,Size}` (no `?` after `Started`), then exactly
+one `?` per Data message until `{Id,Md5}`. Id must stay constant, Size is 2..16 KiB, the received bytes
+must equal Size and hash to the MD5; an empty Data, a timeout (8 s per message, 30 s overall) or any
+other irregularity ends with `FileDownload 0` and an error, with no retry. `Error 1` is the typed
+`ErrPasswordRefused`. Messages are never logged and never put into errors: the start command carries the
+password and a minimal firmware echoes it back as `{"Command":"Unknown"}`. The password per device is
+set on the edit form (admin; mode not set / broker / own; write-only, blank keeps, saving clears the
+refused mark) and stored sealed (D6).
+
 ### 12.2 decode-config integration
 
 - License LGPL-3.0. Shipped in the image as the unmodified upstream PyInstaller binary

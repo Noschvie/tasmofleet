@@ -21,6 +21,7 @@ const (
 	DefaultReplyWait    = 8 * time.Second
 	DefaultBacklogQuiet = 600 * time.Millisecond
 	DefaultBacklogMax   = 10 * time.Second
+	DefaultFileTotal    = 30 * time.Second
 
 	maxTopics = 1024 // bound of the LWT and INFO tables; known devices are far fewer
 	waitDepth = 32   // messages kept for one waiting command; more are dropped
@@ -46,6 +47,7 @@ type Options struct {
 	ReplyWait    time.Duration // for the reply to one command
 	BacklogQuiet time.Duration // after the last collected Backlog reply
 	BacklogMax   time.Duration // for a whole Backlog
+	FileTotal    time.Duration // for a whole FileDownload (ReplyWait applies to each message)
 	// Known, if set, limits the LWT and INFO tables to inventory devices.
 	Known func(mqttbus.Message) bool
 }
@@ -64,6 +66,9 @@ type Channel struct {
 	sems    map[string]chan struct{}
 	waiters map[string]*waiter
 	nextPub time.Time
+
+	files     map[string]chan mqttbus.Message // topic -> stat/<t>/FILEDOWNLOAD|FILEUPLOAD of the transfer in flight
+	fileClean map[string]bool                 // topic -> the last download ended with a matching MD5
 }
 
 // waiter receives the live replies of the one command in flight on a topic.
@@ -86,8 +91,11 @@ func New(bus mqttbus.Bus, o Options) *Channel {
 	if o.BacklogMax == 0 {
 		o.BacklogMax = DefaultBacklogMax
 	}
-	c := &Channel{bus: bus, o: o, lwt: map[string]string{}, info: map[string]*Info{}, sems: map[string]chan struct{}{}, waiters: map[string]*waiter{}, done: make(chan struct{})}
-	c.unsub = bus.Subscribe([]mqttbus.Kind{mqttbus.KindLWT, mqttbus.KindInfo, mqttbus.KindResult, mqttbus.KindStatus, mqttbus.KindPower}, c.onMessage)
+	if o.FileTotal == 0 {
+		o.FileTotal = DefaultFileTotal
+	}
+	c := &Channel{bus: bus, o: o, lwt: map[string]string{}, info: map[string]*Info{}, sems: map[string]chan struct{}{}, waiters: map[string]*waiter{}, files: map[string]chan mqttbus.Message{}, fileClean: map[string]bool{}, done: make(chan struct{})}
+	c.unsub = bus.Subscribe([]mqttbus.Kind{mqttbus.KindLWT, mqttbus.KindInfo, mqttbus.KindResult, mqttbus.KindStatus, mqttbus.KindPower, mqttbus.KindFile}, c.onMessage)
 	return c
 }
 
@@ -319,7 +327,9 @@ func (c *Channel) onMessage(m mqttbus.Message) {
 			default: // a flood must not block the bus; the real reply is lost, the caller times out
 			}
 		}
-	case mqttbus.KindState, mqttbus.KindSensor, mqttbus.KindDiscovery, mqttbus.KindUpgrade, mqttbus.KindFile:
+	case mqttbus.KindFile:
+		c.onFile(m)
+	case mqttbus.KindState, mqttbus.KindSensor, mqttbus.KindDiscovery, mqttbus.KindUpgrade:
 		// not subscribed
 	}
 }

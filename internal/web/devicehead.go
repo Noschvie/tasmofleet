@@ -189,6 +189,20 @@ func passwordPlaceholder(has bool) string {
 	return ""
 }
 
+func mqttPasswordPlaceholder(has bool) string {
+	if has {
+		return "Unchanged"
+	}
+	return ""
+}
+
+func mqttPasswordHelp(has bool) string {
+	if has {
+		return "Used with \"Own password\". Leave empty to keep the stored password; stored encrypted."
+	}
+	return "Used with \"Own password\". Stored encrypted, never shown again."
+}
+
 func passwordHelp(has bool) string {
 	if has {
 		return "Leave empty to keep the stored password."

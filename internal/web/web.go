@@ -108,35 +108,36 @@ type KV struct{ Key, Value string }
 
 // Deps bundles the services the UI needs. Filled by package app.
 type Deps struct {
-	Guard        Guard
-	Inventory    inventory.Service
-	Health       health.Tracker
-	Backups      backup.Service
-	Prober       Prober
-	DeviceNames  DeviceNames      // optional: "Keep" on the device-name notice (#125)
-	FWReach      FWReachForgetter // optional: "Forget" on what the device reaches (D11)
-	History      HealthHistory
-	Audit        AuditLister
-	Recorder     audit.Recorder
-	Jobs         JobLister        // optional
-	Batches      store.BatchStore // optional: batch info and retries of a batch
-	OTA          OTA              // optional: nil without FIRMWARE_BASE_URL
-	DeviceCmd    DeviceCmd        // optional: power toggle and console
-	Firmware     firmware.Cache
-	Import       ImportService // optional: TasmoAdmin web import
-	Discovery    Discovery     // optional
-	Artifacts    ArtifactLister
-	Hub          *events.Hub
-	Clock        clock.Clock
-	Pages        *Pages             // optional: the account pages of package auth join the app shell
-	Settings     SettingsService    // optional (M2-2): per-device settings editor
-	Policy       PolicyService      // optional (M2-2): nil hides the policy view
-	PolicyFix    PolicyFix          // optional: "Make compliant" on the policy page
-	CommandBatch PolicyFix          // optional: "Send command" to several devices (admin)
-	BackupBatch  BackupBatch        // optional: "Back up" several devices (admin)
-	Restore      RestoreService     // optional: nil without FIRMWARE_BASE_URL (M2-5)
-	SysConfig    SysConfigService   // optional: system settings page
-	PolicyRules  PolicyRulesService // optional: policy rule editor
+	Guard         Guard
+	Inventory     inventory.Service
+	Health        health.Tracker
+	Backups       backup.Service
+	Prober        Prober
+	DeviceNames   DeviceNames      // optional: "Keep" on the device-name notice (#125)
+	FWReach       FWReachForgetter // optional: "Forget" on what the device reaches (D11)
+	MQTTPasswords MQTTPasswords    // optional: the MQTT password section of the device edit form (#257)
+	History       HealthHistory
+	Audit         AuditLister
+	Recorder      audit.Recorder
+	Jobs          JobLister        // optional
+	Batches       store.BatchStore // optional: batch info and retries of a batch
+	OTA           OTA              // optional: nil without FIRMWARE_BASE_URL
+	DeviceCmd     DeviceCmd        // optional: power toggle and console
+	Firmware      firmware.Cache
+	Import        ImportService // optional: TasmoAdmin web import
+	Discovery     Discovery     // optional
+	Artifacts     ArtifactLister
+	Hub           *events.Hub
+	Clock         clock.Clock
+	Pages         *Pages             // optional: the account pages of package auth join the app shell
+	Settings      SettingsService    // optional (M2-2): per-device settings editor
+	Policy        PolicyService      // optional (M2-2): nil hides the policy view
+	PolicyFix     PolicyFix          // optional: "Make compliant" on the policy page
+	CommandBatch  PolicyFix          // optional: "Send command" to several devices (admin)
+	BackupBatch   BackupBatch        // optional: "Back up" several devices (admin)
+	Restore       RestoreService     // optional: nil without FIRMWARE_BASE_URL (M2-5)
+	SysConfig     SysConfigService   // optional: system settings page
+	PolicyRules   PolicyRulesService // optional: policy rule editor
 	// PolicyLivePause is optional: Pause / Resume of the automatic policy live check.
 	PolicyLivePause PolicyLivePause
 	Setup           SetupService         // optional: first-run setup

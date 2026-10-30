@@ -27,6 +27,13 @@ type deviceForm struct {
 	// Stored is the device's name as saved: the edit page's subtitle and trail while the form
 	// carries the name being typed.
 	Stored string
+	// MQTTMode is the MQTT password mode shown selected: the stored one, or the one just posted.
+	MQTTMode model.MQTTPasswordMode
+	// MQTTSection says whether the form has the MQTT password section (admin with the store wired).
+	MQTTSection bool
+	// HasMQTTPassword: an own MQTT password is stored (its value is never rendered).
+	HasMQTTPassword bool
+	MQTTRefused     bool // the device answered Error 1 to the stored password
 }
 
 // unverifiedMove is the stronger confirmation for sending a stored password to
@@ -40,6 +47,9 @@ type unverifiedMove struct {
 }
 
 func (h *handler) renderForm(w http.ResponseWriter, r *http.Request, status int, f deviceForm) {
+	f.HasMQTTPassword = f.Device.MQTTPasswordMode == model.MQTTPasswordOwn && f.Device.MQTTPassword != ""
+	f.MQTTRefused = !f.Device.MQTTPasswordBadAt.IsZero()
+	f.MQTTSection = h.d.MQTTPasswords != nil
 	f.Device.HTTPPassword, f.Device.MQTTPassword = "", "" // never rendered
 	f.TagsText = strings.Join(f.Device.Tags, ", ")
 	v := h.view(r, "Edit "+f.Stored, "devices", nil)
@@ -190,7 +200,7 @@ func (h *handler) deviceEditForm(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	h.renderForm(w, r, http.StatusOK, deviceForm{Device: d, HasPassword: d.HTTPPassword != "", Stored: d.Name})
+	h.renderForm(w, r, http.StatusOK, deviceForm{Device: d, HasPassword: d.HTTPPassword != "", Stored: d.Name, MQTTMode: d.MQTTPasswordMode})
 }
 
 func (h *handler) deviceUpdate(w http.ResponseWriter, r *http.Request) {
@@ -200,7 +210,17 @@ func (h *handler) deviceUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	limitBody(w, r)
 	d, err := applyForm(r, old) // starts from the stored record, so the password and identity survive
-	form := deviceForm{Device: d, HasPassword: d.HTTPPassword != "", Stored: old.Name}
+	form := deviceForm{Device: d, HasPassword: d.HTTPPassword != "", Stored: old.Name, MQTTMode: old.MQTTPasswordMode}
+	var mq mqttChange
+	if err == nil && h.d.MQTTPasswords != nil {
+		var msg string
+		mq, form.MQTTMode, msg = mqttFormChange(r, old)
+		if msg != "" { // nothing is saved: the other fields stay as typed
+			form.ErrField, form.Error = fieldMQTTPassword, msg
+			h.renderForm(w, r, http.StatusUnprocessableEntity, form)
+			return
+		}
+	}
 	if err == nil {
 		ctx := r.Context()
 		if token := r.PostFormValue("token"); token != "" {
@@ -225,6 +245,10 @@ func (h *handler) deviceUpdate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.renderForm(w, r, http.StatusUnprocessableEntity, form)
+		return
+	}
+	if err := h.saveMQTTPassword(r, d.ID, old, mq); err != nil {
+		h.fail(w, r, err) // the other fields are saved; the log has the cause
 		return
 	}
 	redirect(w, r, "/devices/"+strconv.FormatInt(int64(d.ID), 10)+"?ok=saved")

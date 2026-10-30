@@ -5,8 +5,11 @@
 // Rules, each with a test:
 //
 //   - Never "Status 0" (any spelling cmdpolicy would read as 0), never a group topic, never a
-//     topic with MQTT wildcards or separators. FileDownload, FileUpload and Upload are refused:
-//     they carry the device's MQTT password and have their own, later API.
+//     topic with MQTT wildcards or separators. FileDownload, FileUpload and Upload are refused by Do:
+//     they carry the device's MQTT password and have their own API (Download, see filedownload.go;
+//     the uploader comes later). Download holds the topic for the whole transfer, sends one "?" per
+//     Data message, checks Size, Id and MD5, aborts with "FileDownload 0" on any irregularity, and
+//     never logs or returns a payload (the start carries the password, a minimal firmware echoes it).
 //   - One command in flight per device topic (first come, first served) and at least Gap between
 //     two publishes on the whole bus: the heap rule of Status queries applies on MQTT too.
 //   - The reply listener is registered before the publish, so a fast device cannot answer into

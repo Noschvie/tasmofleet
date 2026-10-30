@@ -638,7 +638,7 @@ func (a *runtime) webDeps(guard web.Guard, rows []web.KV) web.Deps {
 	}
 	deps := web.Deps{
 		Guard: guard, Inventory: a.svc.Inventory, Health: a.tracker, Backups: a.backups,
-		Prober: a.svc.Prober, DeviceNames: a.svc.Store, FWReach: a.fwReach, History: a.svc.Store, Audit: a.svc.Store, Recorder: a.svc.Audit,
+		Prober: a.svc.Prober, DeviceNames: a.svc.Store, FWReach: a.fwReach, MQTTPasswords: a.svc.Store, History: a.svc.Store, Audit: a.svc.Store, Recorder: a.svc.Audit,
 		Jobs: a.svc.Store, Batches: a.svc.Store, Artifacts: a.svc.Store, Prefs: a.svc.Store, Principals: a.svc.Store, Database: a.svc.Store, Hub: a.svc.Hub, Version: DisplayVersion(), DecoderVersion: a.decoder, MQTT: mqttState,
 		Config: rows, Pages: a.pages, FirmwareSource: a.fwSource, FirmwareFeed: a.fwFeed,
 	}

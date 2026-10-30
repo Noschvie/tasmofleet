@@ -226,6 +226,9 @@ templ editPage(f deviceForm, base, csrf string) {
 		@editField(f, ui.FieldData{Label: "HTTP port", Name: "port", Type: "number", Value: portValue(f.Device.Port), Mono: true, Placeholder: "80", Help: "Empty means 80."}, "", "", "")
 		@editField(f, ui.FieldData{Label: "Web user", Name: "http_user", Value: f.Device.HTTPUser, Mono: true, Autocomplete: "off"}, "", "", "")
 		@editField(f, ui.FieldData{Label: "Web password", Name: "http_password", Type: "password", Placeholder: passwordPlaceholder(f.HasPassword), Autocomplete: "new-password", Help: passwordHelp(f.HasPassword)}, "", "", "")
+		if f.MQTTSection {
+			@mqttPasswordFields(f)
+		}
 		<label class="ufield ufield-wide">
 			<span class="ufield-label">Notes</span>
 			<textarea name="notes" rows="3" maxlength="4000" aria-invalid?={ f.ErrField == "notes" } autofocus?={ f.ErrField == "notes" }>{ f.Device.Notes }</textarea>
@@ -256,6 +259,43 @@ templ editPage(f deviceForm, base, csrf string) {
 			<button type="submit" class="btn btn-primary">Save changes</button>
 		</div>
 	</form>
+}
+
+// mqttPasswordFields is the MQTT password section of the edit form. The value is write-only: it is
+// never rendered, and an empty field keeps the stored one.
+templ mqttPasswordFields(f deviceForm) {
+	<label class="ufield">
+		<span class="ufield-label">MQTT password source</span>
+		<select name="mqtt_password_mode">
+			<option value="" selected?={ f.MQTTMode == "" }>Not set</option>
+			<option value="broker" selected?={ f.MQTTMode == "broker" }>Same as TasmoFleet's broker password</option>
+			<option value="own" selected?={ f.MQTTMode == "own" }>Own password</option>
+		</select>
+		<span class="ufield-help">Needed only to back up or restore over MQTT (FileDownload, FileUpload). Sent only to this device's topic.</span>
+	</label>
+	<label class="ufield">
+		<span class="ufield-label">Own MQTT password</span>
+		<input
+			name="mqtt_password"
+			type="password"
+			autocomplete="new-password"
+			placeholder={ mqttPasswordPlaceholder(f.HasMQTTPassword) }
+			maxlength="128"
+			if f.ErrField == "mqtt_password" {
+				aria-invalid="true"
+				aria-describedby="err-mqtt_password"
+				autofocus
+			}
+		/>
+		if f.ErrField == "mqtt_password" {
+			<span class="ufield-err" id="err-mqtt_password">{ f.Error }</span>
+		} else {
+			<span class="ufield-help">{ mqttPasswordHelp(f.HasMQTTPassword) }</span>
+		}
+		if f.MQTTRefused {
+			<span class="ufield-warn">The device refused the stored MQTT password. Saving this form allows another try.</span>
+		}
+	</label>
 }
 
 // editField is one input of the edit form with the server's error for it. attr/val is one more
