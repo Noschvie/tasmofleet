@@ -12084,6 +12084,7 @@ main.bare {
   flex-direction: column;
   gap: 3px;
 }
+.rs-path,
 .rs-cred {
   margin: 0;
   font-size: 12.5px;

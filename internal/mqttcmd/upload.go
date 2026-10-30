@@ -11,6 +11,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/mqttbus"
@@ -24,6 +25,8 @@ const (
 
 	maxUploadSize = 1<<31 - 1
 	maxNameLen    = 64
+	// settingsDumpSize is the smallest settings dump (a .dmp is one 4 KiB flash sector).
+	settingsDumpSize = 4096
 )
 
 // ErrNoRoom: the device answered "Error 2" to FileUpload: the image does not fit its OTA space, or
@@ -170,8 +173,8 @@ func checkUpload(d model.Device, typ int, name string, size int64, r io.Reader) 
 	switch {
 	case size <= 0 || size > maxUploadSize:
 		return fmt.Errorf("%w: invalid upload size %d", ErrRefused, size)
-	case typ == UploadSettings && (size < minDumpSize || size > maxDumpSize):
-		return fmt.Errorf("%w: a settings dump has %d to %d bytes, not %d", ErrRefused, minDumpSize, maxDumpSize, size)
+	case typ == UploadSettings && (size < settingsDumpSize || size > maxDumpSize):
+		return fmt.Errorf("%w: a settings dump has %d to %d bytes, not %d", ErrRefused, settingsDumpSize, maxDumpSize, size)
 	}
 	return nil
 }
@@ -219,6 +222,43 @@ func uploadErrorStatus(s string, typ int) error {
 		return &deviceResetError{transferErr("the device refused: the command arrived on a group topic (Error 5)")}
 	}
 	return &deviceResetError{transferErr("the device refused the upload (Error %d)", n)}
+}
+
+// startSettle is how long the uploader listens for a second answer to the start.
+const startSettle = 50 * time.Millisecond
+
+// moreAnswers reports whether another FILEUPLOAD message arrives within settle.
+func (c *Channel) moreAnswers(ctx context.Context, in chan mqttbus.Message, settle time.Duration) bool {
+	timer := time.NewTimer(settle)
+	defer timer.Stop()
+	for {
+		select {
+		case m := <-in:
+			if m.Suffix == suffixUpload {
+				return true
+			}
+		case <-timer.C:
+			return false
+		case <-ctx.Done():
+			return false
+		case <-c.done:
+			return false
+		}
+	}
+}
+
+// queuedAnswer reports, without waiting, whether another FILEUPLOAD message is already queued.
+func queuedAnswer(in chan mqttbus.Message) bool {
+	for {
+		select {
+		case m := <-in:
+			if m.Suffix == suffixUpload {
+				return true
+			}
+		default:
+			return false
+		}
+	}
 }
 
 // rawBudget is the largest raw chunk whose {"Id":N,"Data":"<b64>"} fits room (17 bytes of framing
@@ -278,6 +318,11 @@ func (c *Channel) runUpload(ctx context.Context, topic, start string, id, typ in
 	if err != nil {
 		return abort, err
 	}
+	// A second device on the topic answers the start too. Wait a moment for it: a second Started or
+	// MaxSize for this Id is fatal and ends with FileUpload 0 (the first device is left idle).
+	if c.moreAnswers(ctx, in, startSettle) {
+		return abort, transferErr("more than one device answered the start; is another device using this topic?")
+	}
 
 	// The device sizes MaxSize from the topic it saw; the budget uses the topic we publish to.
 	room := payloadRoom(c.bus.CommandTopic(topic, cmdUpload))
@@ -299,6 +344,9 @@ func (c *Channel) runUpload(ctx context.Context, topic, start string, id, typ in
 		}
 		if maxSize, err = ack(fmt.Sprintf("the chunk at byte %d", done)); err != nil {
 			return abort, err
+		}
+		if queuedAnswer(in) { // one chunk, one acknowledgement
+			return abort, transferErr("more than one acknowledgement for the chunk at byte %d; is another device using this topic?", done)
 		}
 		done += int64(n)
 		if progress != nil {

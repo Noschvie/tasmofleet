@@ -11,11 +11,14 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/backup"
 	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/mqttcmd"
 	"github.com/nofuturekid/tasmofleet/internal/store"
 	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/nofuturekid/tasmofleet/internal/transport"
 )
 
 // step stores a state change; a failure to store is logged, the run goes on.
@@ -37,6 +40,11 @@ func (m *Manager) fail(ctx context.Context, j *Job, why string) {
 func (m *Manager) run(ctx context.Context, j Job, dev model.Device, dmp []byte, ips []netip.Addr) {
 	target := tasmota.TargetFor(dev)
 	ctx = backup.WithRun(ctx, backup.Run{Trigger: model.TriggerRestore})
+	if j.Transport == model.TransportMQTT {
+		ctx = transport.WithPath(ctx, transport.MQTT) // the safety backup, the checks and the verification too
+	} else {
+		ctx = transport.WithPath(ctx, transport.HTTP) // a restore that began over HTTP never moves to MQTT
+	}
 
 	m.step(ctx, &j, store.RestoreBackup, "taking a backup of the current configuration")
 	pre, err := m.o.Backups.Backup(ctx, j.Actor, dev.ID)
@@ -50,6 +58,10 @@ func (m *Manager) run(ctx context.Context, j Job, dev model.Device, dmp []byte, 
 		}
 	}
 
+	if j.Transport == model.TransportMQTT {
+		m.sendMQTT(ctx, &j, dev, target, dmp)
+		return
+	}
 	m.step(ctx, &j, store.RestoreSending, "asking the device to fetch the configuration")
 	// The address may have changed hands since Start (DHCP): the dump of this
 	// device must never go to another one.
@@ -90,6 +102,82 @@ func (m *Manager) run(ctx context.Context, j Job, dev model.Device, dmp []byte, 
 		return
 	}
 
+	m.finish(ctx, j, dev, dmp)
+}
+
+// sendMQTT is the upload half of a restore over MQTT: identity, BootCount, FileUpload, wait for
+// the restart. The order is the same as over HTTP (safety backup, identity, send); the device
+// applies the dump only after the MD5 matched, so a failed or aborted upload leaves it unchanged.
+func (m *Manager) sendMQTT(ctx context.Context, j *Job, dev model.Device, target tasmota.Target, dmp []byte) {
+	m.step(ctx, j, store.RestoreSending, "uploading the configuration over MQTT")
+	if err := m.checkIdentity(ctx, dev); err != nil {
+		m.fail(ctx, j, failUnchanged+err.Error())
+		return
+	}
+	before, err := m.bootCount(ctx, target)
+	if err != nil {
+		m.fail(ctx, j, failUnreachable+err.Error())
+		return
+	}
+	if err := m.o.Uploader.UploadConfig(ctx, target, dmp, transport.BindingOf(dev)); err != nil {
+		// A lost "Done" is an unknown outcome: the device may have applied the dump and be
+		// restarting. Look at the device (BootCount) instead of failing; the upload is never repeated.
+		if !errors.Is(err, mqttcmd.ErrOutcomeUnknown) {
+			m.fail(ctx, j, failUpload+err.Error())
+			return
+		}
+		m.o.Log.Warn("restore: FileUpload outcome unknown, checking the device", "component", "restore", "job", j.ID)
+	}
+	m.step(ctx, j, store.RestoreWaiting, "waiting for the restart")
+	if err := m.waitBoot(ctx, target, before); err != nil {
+		m.fail(ctx, j, err.Error())
+		return
+	}
+	m.finish(ctx, *j, dev, dmp)
+}
+
+// bootCount reads Status 1 (a fresh answer from the device, not the INFO3 of an earlier boot).
+func (m *Manager) bootCount(ctx context.Context, t tasmota.Target) (int, error) {
+	raw, err := m.o.Client.Command(ctx, t, "Status 1")
+	if err != nil {
+		return 0, err
+	}
+	var s struct {
+		StatusPRM struct{ BootCount *int }
+	}
+	if err := json.Unmarshal(raw, &s); err != nil || s.StatusPRM.BootCount == nil {
+		return 0, tasmota.ErrBadResponse
+	}
+	return *s.StatusPRM.BootCount, nil
+}
+
+// waitBoot returns when Status 1 answers with a larger BootCount than before the upload and
+// Status 11 shows an uptime shorter than the wait so far (the device really restarted since: a
+// count that rose for another reason, or a stale answer, is not a restart). While the device
+// restarts the channel refuses (LWT Offline) or the poll times out; both just mean "not yet" until
+// the deadline.
+func (m *Manager) waitBoot(ctx context.Context, t tasmota.Target, before int) error {
+	began := m.o.Clock.Now()
+	deadline := began.Add(m.o.RebootTimeout)
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-m.o.Clock.After(m.o.PollInterval):
+		}
+		if n, err := m.bootCount(ctx, t); err == nil && n > before {
+			if up, uerr := m.uptime(ctx, t); uerr == nil && time.Duration(up)*time.Second <= m.o.Clock.Now().Sub(began)+2*time.Second {
+				return nil
+			}
+		}
+		if m.o.Clock.Now().After(deadline) {
+			return errors.New("the device did not restart in time (its boot count did not change); the configuration may or may not have been applied")
+		}
+	}
+}
+
+// finish takes the fresh backup and compares it with the restored one.
+func (m *Manager) finish(ctx context.Context, j Job, dev model.Device, dmp []byte) {
 	m.step(ctx, &j, store.RestoreVerifying, "taking a fresh backup to verify")
 	if err := m.checkIdentity(ctx, dev); err != nil {
 		m.fail(ctx, &j, failAfterRestore+err.Error())
@@ -234,6 +322,15 @@ func colonMAC(n string) string {
 // password answers 401 to that, and only then the stored credentials are
 // used (the same host is about to receive them with every command anyway).
 func (m *Manager) liveMAC(ctx context.Context, dev model.Device) (string, error) {
+	if pin, ok := transport.PathFrom(ctx); ok && pin == transport.MQTT {
+		// Over MQTT there is no address to leak a password to, and the router needs the device ID
+		// in the target to find its topic (a target without it is a raw HTTP call).
+		raw, err := m.o.Client.Command(ctx, tasmota.TargetFor(dev), "Status 5")
+		if err != nil {
+			return "", err
+		}
+		return macOf(raw)
+	}
 	var lastErr error
 	for _, withCreds := range []bool{false, true} {
 		t := model.Device{Address: dev.Address, Port: dev.Port}
@@ -248,15 +345,20 @@ func (m *Manager) liveMAC(ctx context.Context, dev model.Device) (string, error)
 		if err != nil {
 			return "", err
 		}
-		var s struct {
-			StatusNET struct{ Mac string }
-		}
-		if err := json.Unmarshal(raw, &s); err != nil || s.StatusNET.Mac == "" {
-			return "", tasmota.ErrBadResponse
-		}
-		return normMAC(s.StatusNET.Mac), nil
+		return macOf(raw)
 	}
 	return "", lastErr
+}
+
+// macOf reads the MAC out of a Status 5 reply.
+func macOf(raw json.RawMessage) (string, error) {
+	var s struct {
+		StatusNET struct{ Mac string }
+	}
+	if err := json.Unmarshal(raw, &s); err != nil || s.StatusNET.Mac == "" {
+		return "", tasmota.ErrBadResponse
+	}
+	return normMAC(s.StatusNET.Mac), nil
 }
 
 // checkIdentity refuses unless the host at the address reports the MAC the
@@ -344,7 +446,13 @@ func (m *Manager) preflight(ctx context.Context, actor string, dev *model.Device
 	case (fam == familyESP8266) != (dev.Identity.Family == model.ChipESP8266):
 		return ErrFamilyMismatch
 	}
-	if need.Major || need.Family {
+	if pin, ok := transport.PathFrom(ctx); ok && pin == transport.MQTT && !opt.AllowMQTTLockout {
+		if risk := m.mqttLockout(ctx, *dev, b); risk != "" {
+			need.Lockout = true
+			why = append(why, risk)
+		}
+	}
+	if need.Major || need.Family || need.Lockout {
 		need.Detail = strings.Join(why, "; ")
 		return &need
 	}
@@ -401,12 +509,19 @@ func (m *Manager) Assess(ctx context.Context, bid model.BackupID) (Assessment, e
 	if err != nil {
 		return Assessment{}, err
 	}
-	ips, err := m.o.Resolve(ctx, dev.Address)
-	if err != nil || len(distinct(ips)) != 1 {
-		return Assessment{}, ErrNoAddress
+	path, note, err := m.route(ctx, dev)
+	if err != nil {
+		return Assessment{}, err
 	}
-	dev.Address = distinct(ips)[0].String()
-	a := Assessment{MACUnknown: normMAC(dev.MAC) == ""}
+	ctx = transport.WithPath(ctx, path)
+	if path != transport.MQTT {
+		ips, err := m.o.Resolve(ctx, dev.Address)
+		if err != nil || len(distinct(ips)) != 1 {
+			return Assessment{}, ErrNoAddress
+		}
+		dev.Address = distinct(ips)[0].String()
+	}
+	a := Assessment{MACUnknown: normMAC(dev.MAC) == "", ViaMQTT: path == transport.MQTT, PathNote: note}
 	err = m.preflight(ctx, "", &dev, b, StartOptions{}, false)
 	if a.MACUnknown {
 		a.LiveMAC, a.Address, a.Chip = dev.MAC, dev.Address, string(dev.Identity.Family)
@@ -414,7 +529,7 @@ func (m *Manager) Assess(ctx context.Context, bid model.BackupID) (Assessment, e
 	var need *OverrideError
 	switch {
 	case errors.As(err, &need):
-		a.Major, a.Family, a.Detail = need.Major, need.Family, need.Detail
+		a.Major, a.Family, a.Lockout, a.Detail = need.Major, need.Family, need.Lockout, need.Detail
 		return a, nil
 	case err != nil:
 		return a, err

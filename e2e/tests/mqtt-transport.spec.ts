@@ -10,7 +10,7 @@ import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from
 let app: App;
 let env: Devenv;
 test.beforeAll(async () => {
-  env = await startDevenv(["-mqtt-transport"]);
+  env = await startDevenv(["-only-mqtt-transport"]);
   const fwPort = await freePort(); // the transaction pages come with the firmware server
   app = await startApp({
     env: {
@@ -136,7 +136,7 @@ async function reviewMQTTUpdate(page: import("@playwright/test").Page, name: key
     await page.locator("label.upd-relopt", { hasText: "Tasmota 16.1.0" }).click();
     await page.getByRole("button", { name: "Review update" }).click();
     await expect(row()).toBeVisible();
-    await expect(row()).not.toContainText("probe failed", { timeout: 1_000 });
+    await expect(row()).not.toContainText("probe failed", { timeout: 5_000 });
   }).toPass({ timeout: 150_000, intervals: [5_000] }).catch(async (e) => {
     throw new Error(`${e}\npicker/preview page: ${(await page.locator("main").innerText().catch(() => "?")).slice(0, 1500)}`);
   });

@@ -454,3 +454,42 @@ func TestRestoreRefusalsUseFixedTexts(t *testing.T) {
 		}
 	}
 }
+
+// Why (spec 12.4): the admin must see how the restore reaches the device. Over MQTT the page
+// says so, and it no longer claims a plain HTTP download; a refusal for lack of any path names
+// the reason.
+func TestRestorePageShowsThePathAndRefusesWithoutOne(t *testing.T) {
+	e, _, rs := newDiffEnv(t)
+	rs.assess = restore.Assessment{ViaMQTT: true, PathNote: "over MQTT (FileUpload), because the device's HTTP API refuses connections"}
+	resp, body := e.do(t, "GET", "/backups/1/restore", "admin", nil)
+	if resp.StatusCode != 200 || !strings.Contains(body, "Over MQTT (FileUpload), because the device") || !strings.Contains(body, "travels over your MQTT broker") || strings.Contains(body, "plain HTTP") {
+		t.Errorf("%d\n%s", resp.StatusCode, body)
+	}
+	rs.assess = restore.Assessment{}
+	rs.assessErr = fmt.Errorf("%w: HTTP is unreachable; the device has no MQTT password", restore.ErrNoPath)
+	_, body = e.do(t, "GET", "/backups/1/restore", "admin", nil)
+	if strings.Contains(body, `name="confirm"`) || !strings.Contains(body, "no way to restore this device") || !strings.Contains(body, "no MQTT password") {
+		t.Errorf("no path must refuse with its reason:\n%s", body)
+	}
+}
+
+// Why (H1): the lockout risk of a restore over MQTT is named in the one confirmation and travels
+// as a hidden field; the start passes the admin's acceptance on to the service.
+func TestRestoreConfirmNamesTheMQTTLockout(t *testing.T) {
+	e, _, rs := newDiffEnv(t)
+	rs.assess = restore.Assessment{ViaMQTT: true, PathNote: "over MQTT (FileUpload)", Lockout: true, Detail: "this backup changes Topic; TasmoFleet reaches the device only over MQTT and may lose it"}
+	_, body := e.do(t, "GET", "/backups/1/restore", "admin", nil)
+	for _, want := range []string{`name="lockout_ok"`, "changes Topic", "may lose it"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	if !strings.Contains(body, "which TasmoFleet reaches only over MQTT, and TasmoFleet may lose it") {
+		t.Error("the acknowledgement must name the risk")
+	}
+	rs.opts = nil
+	e.do(t, "POST", "/backups/1/restore", "admin", url.Values{"confirm": {"1"}, "lockout_ok": {"1"}})
+	if len(rs.opts) != 1 || !rs.opts[0].AllowMQTTLockout {
+		t.Errorf("options %+v", rs.opts)
+	}
+}

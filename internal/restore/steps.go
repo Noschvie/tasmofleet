@@ -25,6 +25,7 @@ const (
 	failUnreachable      = "device not reachable, nothing was changed: "
 	failToken            = "token generation failed: "
 	failWebGetConfig     = "WebGetConfig was not accepted: "
+	failUpload           = "FileUpload was not accepted: "
 	failAfterRestore     = "restored, but "
 	failTakeOver         = "the replacement device was restored, but "
 )
@@ -55,7 +56,7 @@ func FailedStep(detail string) int {
 		return StepBackup
 	case strings.HasPrefix(detail, failAfterRestore), strings.HasPrefix(detail, failTakeOver):
 		return StepVerify
-	case strings.Contains(detail, failUnchanged), strings.HasPrefix(detail, failToken), strings.HasPrefix(detail, failWebGetConfig):
+	case strings.Contains(detail, failUnchanged), strings.HasPrefix(detail, failToken), strings.HasPrefix(detail, failWebGetConfig), strings.HasPrefix(detail, failUpload):
 		return StepUpload
 	}
 	return StepRestart

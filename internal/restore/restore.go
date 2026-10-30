@@ -1,13 +1,16 @@
 // Package restore puts a stored config dump (.dmp) back onto a device.
 //
-// The device pulls the dump itself: tasmofleet sends "WebGetConfig
+// Two ways reach the device (spec §12.4). Over HTTP the device pulls the dump itself: tasmofleet sends "WebGetConfig
 // http://<firmware listener>/restore/<token>" and the firmware listener
 // serves the dump once, to that device only. This avoids Tasmota's
 // authenticated upload route and never exposes the dump on a URL that works
 // twice or for anybody else (docs/security/restore.md).
 //
-// A restore is: automatic backup of the current config, token, command,
-// wait for the reboot, fresh backup, diff against the restored backup.
+// Over MQTT (a device HTTP cannot reach, or one that cannot reach the firmware listener) tasmofleet
+// pushes the dump with FileUpload Type 2 and needs no firmware listener at all.
+//
+// A restore is: automatic backup of the current config, identity check, token and command (or the
+// upload), wait for the reboot, fresh backup, diff against the restored backup.
 package restore
 
 import (
@@ -31,6 +34,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/store"
 	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/nofuturekid/tasmofleet/internal/transport"
 )
 
 // Errors returned by Start.
@@ -39,7 +43,8 @@ var (
 	ErrNotDump        = errors.New("restore: only a config dump (.dmp) can be restored")
 	ErrNewerBackup    = errors.New("restore: the backup comes from a newer firmware than the device runs")
 	ErrNoAddress      = errors.New("restore: the device address does not resolve to exactly one IP")
-	ErrNotConfigured  = errors.New("restore: the firmware base URL is not configured")
+	ErrNotConfigured  = errors.New("restore: neither the firmware base URL nor a restore over MQTT is available")
+	ErrNoPath         = errors.New("restore: no way to reach the device")
 	ErrIdentity       = errors.New("restore: the device at this address is not the inventory device")
 	ErrVersionUnknown = errors.New("restore: the firmware version of the device or of the backup is unknown")
 	ErrFamilyMismatch = errors.New("restore: the backup comes from another chip family")
@@ -52,6 +57,9 @@ var (
 type OverrideError struct {
 	Major  bool // firmware major version differs
 	Family bool // chip family of the backup could not be checked
+	// Lockout: a restore over MQTT whose backup changes the device's MQTT settings (or cannot be
+	// compared), which could cut TasmoFleet off from a device it reaches only over MQTT.
+	Lockout bool
 	// MAC is set when the device has no stored MAC and the admin has not yet
 	// confirmed the one it reports (StartOptions.ExpectMAC).
 	MAC    string
@@ -64,6 +72,7 @@ func (e *OverrideError) Error() string { return "restore: confirmation needed: "
 type StartOptions struct {
 	AllowMajorChange   bool
 	AllowUnknownFamily bool
+	AllowMQTTLockout   bool // accept the MQTT lockout risk (restore over MQTT only)
 	// ExpectMAC is the MAC the admin saw and confirmed for a device that has
 	// no stored MAC (trust on first use). The live MAC must still be this one
 	// when the restore starts, or it is refused.
@@ -72,9 +81,10 @@ type StartOptions struct {
 
 // Assessment is what Assess found: the risks the admin has to accept.
 type Assessment struct {
-	Major  bool   // firmware major version differs
-	Family bool   // chip family of the backup could not be checked
-	Detail string // sentence naming them
+	Major   bool   // firmware major version differs
+	Family  bool   // chip family of the backup could not be checked
+	Lockout bool   // a restore over MQTT whose backup changes the device's MQTT settings
+	Detail  string // sentence naming them
 	// MACUnknown is true when the inventory holds no MAC for the device: the
 	// start reads the live MAC and stores it.
 	MACUnknown bool
@@ -84,6 +94,10 @@ type Assessment struct {
 	// Address and Chip describe the device for that sentence (Chip is the family
 	// the inventory holds, empty when unknown).
 	Address, Chip string
+	// ViaMQTT is true when the restore goes over MQTT (FileUpload); PathNote is the sentence
+	// the page shows for the path, as transport.Choose gave it.
+	ViaMQTT  bool
+	PathNote string
 }
 
 // Job is one restore run.
@@ -130,8 +144,15 @@ type Options struct {
 	Store   store.RestoreStore
 	Client  tasmota.Client
 	// BaseURL is what devices use to reach the firmware listener
-	// (FIRMWARE_BASE_URL), e.g. http://172.31.12.61:8081.
+	// (FIRMWARE_BASE_URL), e.g. http://172.31.12.61:8081. Empty: no restore over HTTP
+	// (WebGetConfig); a restore over MQTT still works when Uploader is set.
 	BaseURL string
+	// Uploader sends the dump with FileUpload (the Router); nil: no restore over MQTT.
+	Uploader transport.ConfigUploader
+	// PathFor says how a restore reaches the device (transport.Choose on the live facts): HTTP
+	// (WebGetConfig), MQTT (FileUpload) or None with the sentence why. The second result is the
+	// path's reason, shown on the confirmation page. nil: always HTTP.
+	PathFor func(ctx context.Context, d model.Device) (transport.Path, string)
 	Audit   audit.Recorder // optional
 	Clock   clock.Clock    // default clock.Real
 	Log     *slog.Logger
@@ -153,6 +174,9 @@ type Options struct {
 	// OnServed is called, after the dump went out, with the device the one-time token was for:
 	// it proves the device reaches the firmware listener. Optional; it must not block.
 	OnServed func(model.DeviceID)
+	// BrokerPassword is TasmoFleet's live broker password, which a device in broker mode uses as its
+	// MqttPassword; the restore compares it with the backup's. Optional.
+	BrokerPassword func() string
 	// Hardware stores a MAC that was missing (restore) and swaps the entry
 	// onto new hardware (replace). Optional: without it a device without a
 	// stored MAC is refused and Replace is off.
@@ -203,7 +227,7 @@ func New(o Options) (*Manager, error) {
 	if o.Devices == nil || o.Backups == nil || o.Store == nil || o.Client == nil {
 		return nil, errors.New("restore: Devices, Backups, Store and Client are required")
 	}
-	if o.BaseURL == "" {
+	if o.BaseURL == "" && o.Uploader == nil {
 		return nil, ErrNotConfigured
 	}
 	o.BaseURL = strings.TrimRight(o.BaseURL, "/")
@@ -280,12 +304,20 @@ func (m *Manager) StartWith(ctx context.Context, actor string, bid model.BackupI
 	if err != nil {
 		return Job{}, err
 	}
-	ips, err := m.o.Resolve(ctx, dev.Address)
-	if err != nil || len(distinct(ips)) != 1 {
-		return Job{}, ErrNoAddress
+	path, _, err := m.route(ctx, dev)
+	if err != nil {
+		return Job{}, err
 	}
-	ips = distinct(ips)
-	dev.Address = ips[0].String() // from here on the name is never used again
+	var ips []netip.Addr
+	ctx = transport.WithPath(ctx, path) // identity and version checks go over the same path
+	if path != transport.MQTT {
+		ips, err = m.o.Resolve(ctx, dev.Address)
+		if err != nil || len(distinct(ips)) != 1 {
+			return Job{}, ErrNoAddress
+		}
+		ips = distinct(ips)
+		dev.Address = ips[0].String() // from here on the name is never used again
+	}
 
 	release, holder, ok := m.o.Locks.TryAcquire(dev.ID, "restore")
 	if !ok {
@@ -304,7 +336,11 @@ func (m *Manager) StartWith(ctx context.Context, actor string, bid model.BackupI
 		return Job{}, err
 	}
 
-	id, err := m.o.Store.CreateRestore(ctx, Job{DeviceID: dev.ID, BackupID: bid, Actor: actor})
+	job0 := Job{DeviceID: dev.ID, BackupID: bid, Actor: actor}
+	if path == transport.MQTT {
+		job0.Transport = model.TransportMQTT
+	}
+	id, err := m.o.Store.CreateRestore(ctx, job0)
 	if errors.Is(err, store.ErrConflict) {
 		return Job{}, ErrBusy
 	}
@@ -324,6 +360,28 @@ func (m *Manager) StartWith(ctx context.Context, actor string, bid model.BackupI
 		m.run(m.o.Context, job, dev, dmp, ips)
 	}()
 	return job, nil
+}
+
+// route decides how this restore reaches the device and checks that the service can do it. The
+// second result is the path's reason for the confirmation page.
+func (m *Manager) route(ctx context.Context, dev model.Device) (transport.Path, string, error) {
+	p, why := transport.HTTP, "the device fetches the configuration from TasmoFleet (WebGetConfig)"
+	if m.o.PathFor != nil {
+		p, why = m.o.PathFor(ctx, dev)
+	}
+	if p == transport.MQTT {
+		if m.o.Uploader == nil {
+			return p, why, ErrNotConfigured
+		}
+		return transport.MQTT, why, nil
+	}
+	if p == transport.HTTP {
+		if m.o.BaseURL == "" {
+			return p, why, ErrNotConfigured
+		}
+		return transport.HTTP, why, nil
+	}
+	return transport.None, why, fmt.Errorf("%w: %s", ErrNoPath, why)
 }
 
 func distinct(in []netip.Addr) []netip.Addr {

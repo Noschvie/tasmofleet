@@ -146,7 +146,7 @@ func (m *Manager) Candidates(ctx context.Context, eps []Endpoint) []Endpoint {
 // PreviewReplace implements Replacer: every check a start does, nothing
 // changed on any device.
 func (m *Manager) PreviewReplace(ctx context.Context, req ReplaceRequest) (ReplacePreview, error) {
-	if m.o.Hardware == nil || m.o.Describe == nil {
+	if m.o.Hardware == nil || m.o.Describe == nil || m.o.BaseURL == "" { // a replacement is restored through the firmware listener
 		return ReplacePreview{}, ErrReplaceOff
 	}
 	p, err := m.planReplace(ctx, req)
@@ -395,7 +395,7 @@ func (m *Manager) carries(ctx context.Context, b model.Backup) Carries {
 
 // StartReplace implements Replacer.
 func (m *Manager) StartReplace(ctx context.Context, actor string, req ReplaceRequest, opt StartOptions) (Job, error) {
-	if m.o.Hardware == nil || m.o.Describe == nil {
+	if m.o.Hardware == nil || m.o.Describe == nil || m.o.BaseURL == "" { // a replacement is restored through the firmware listener
 		return Job{}, ErrReplaceOff
 	}
 	release, holder, ok := m.o.Locks.TryAcquire(req.Device, "replace")

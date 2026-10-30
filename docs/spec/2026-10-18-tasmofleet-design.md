@@ -1371,6 +1371,17 @@ shows the decoded secrets. The diff/drift view redacts keys matching
   valid 5 min, bound to the device IP) and sends `WebGetConfig http://<fw>/restore/<token>`.
   The firmware listener serves the `.dmp` once to that IP only. Audited. This avoids
   TasmoAdmin's authenticated-route problem (lesson B8).
+- Restore over MQTT (0.20.0, D8/D12): `transport.Choose` decides per restore (`Paths.Restore`): HTTP
+  (WebGetConfig) while HTTP works and the device reaches the firmware server, else MQTT (FileUpload Type 2)
+  for a device on our broker with a usable MQTT password; otherwise the restore is refused with the reason.
+  `restore.New` no longer needs `FIRMWARE_BASE_URL` (`ErrNotConfigured` only when neither path exists;
+  Replace device still needs it). The order is unchanged: safety backup (through the same path), identity
+  (Status 5), then the upload. The device applies the dump only after the MD5 matched, so an upload that
+  fails or is aborted leaves the settings unchanged. Restart detection: the boot count from a fresh
+  `Status 1` must rise (the channel refuses while the LWT says Offline, so a stale INFO3 never counts), within
+  `RebootTimeout` (3 minutes). A lost "Done" is an unknown outcome and is checked on the device, never
+  uploaded again. Error 1 marks the device's MQTT password bad. The job records its transport and the
+  confirmation page names the path.
 
 ---
 

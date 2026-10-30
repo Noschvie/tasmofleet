@@ -235,7 +235,9 @@ jobs:
           # One worker per two cores: every worker runs its own app, simulator
           # fleet and browser, and more made layout and timing tests flaky.
           n=$(( $(nproc) / 2 )); [ "$n" -lt 1 ] && n=1
-          E2E_WORKERS=$n make "$TARGET" E2E_ARGS="--shard=$SHARD"
+          # The MQTT specs are not sharded: the first shard runs them once.
+          mqtt=1; [ "${SHARD%%/*}" = 1 ] || mqtt=0
+          E2E_WORKERS=$n make "$TARGET" E2E_ARGS="--shard=$SHARD" E2E_MQTT=$mqtt
       - name: upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v7.0.2

@@ -162,11 +162,22 @@ e2e-deps:
 # e2e is the whole behaviour suite (FULL tier), e2e-core the tests tagged @core (FAST tier, every
 # PR), e2e-quarantine the tests tagged @quarantine with retries (nightly only). Tag a test with
 # test("title", { tag: "@core" }, ...); see CLAUDE.md "Running the gates" for what belongs in core.
+# Two Playwright runs, always both, and the target fails if either failed: the "chromium" project
+# (E2E_ARGS, e.g. --shard) and the "mqtt" project (one worker, never sharded; E2E_MQTT_ARGS). A CI shard
+# that must not repeat it sets E2E_MQTT=0.
+E2E_MQTT ?= 1
+define playwright-both
+	@rc=0; \
+	(cd e2e && npx playwright test --project=chromium $(1) $(E2E_ARGS)) || rc=1; \
+	if [ "$(E2E_MQTT)" = 1 ]; then (cd e2e && npx playwright test --project=mqtt $(1) $(E2E_MQTT_ARGS)) || rc=1; fi; \
+	exit $$rc
+endef
+
 e2e: build
-	cd e2e && npx playwright test --project=chromium --grep-invert @quarantine $(E2E_ARGS)
+	$(call playwright-both,--grep-invert @quarantine)
 
 e2e-core: build
-	cd e2e && npx playwright test --project=chromium --grep @core --grep-invert @quarantine $(E2E_ARGS)
+	$(call playwright-both,--grep @core --grep-invert @quarantine)
 
 e2e-quarantine: build
 	cd e2e && npx playwright test --project=chromium --grep @quarantine --retries=2 --pass-with-no-tests $(E2E_ARGS)

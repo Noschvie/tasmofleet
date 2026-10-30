@@ -31,7 +31,10 @@ templ restoreConfirm(c restoreConfirmView) {
 				<li>The backup is uploaded and the device restarts (relays switch off for a few seconds).</li>
 				<li>Settings are read back and compared with the backup.</li>
 			</ol>
-			<p class="rs-cred">Old credentials come back: the Wi-Fi, MQTT and web passwords in the backup replace the current ones. The download is plain HTTP on your device network.</p>
+			if c.Path != "" {
+				<p class="rs-path">{ c.Path }</p>
+			}
+			<p class="rs-cred">{ c.Cred }</p>
 			for _, w := range c.Risks {
 				@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: w})
 			}

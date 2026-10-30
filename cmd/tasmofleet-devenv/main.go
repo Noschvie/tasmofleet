@@ -155,6 +155,7 @@ func run(ctx context.Context, args []string, out, errOut io.Writer) error {
 	fleetSize := fs.Int("fleet-size", 0, "total number of simulated devices; 0 or less than the base fleet keeps the base fleet")
 	releases := fs.Int("releases", 1, "number of releases the fake GitHub releases feed (<upstream>/github) offers")
 	mqttTransport := fs.Bool("mqtt-transport", false, "add the devices TasmoFleet reaches only over MQTT (http_unreachable, fw_unreachable, MqttPassword "+MQTTPassword+")")
+	onlyMQTT := fs.Bool("only-mqtt-transport", false, "only the devices of -mqtt-transport, no base fleet: for the specs that need nothing else and should not pay for it")
 	overview := fs.Bool("overview-shapes", false, "add the device shapes of the Overview mockups (docs/design/device-overview): meters, several relays, Ethernet, sensors only, HTTP only")
 	designFile := fs.String("design-fixture", "", "JSON file (testdata/design/v2-fixture.json) with the prototype's 60 devices and releases; replaces the mixed fleet, -fleet-size and the release list, and enables POST /fixture/offline and /fixture/feed/{down,dl-down,slow,up} on the control server")
 	var redirects multiFlag
@@ -254,6 +255,9 @@ func run(ctx context.Context, args []string, out, errOut io.Writer) error {
 	}
 	if *mqttTransport {
 		specs = append(specs, mqttTransportDevices()...)
+	}
+	if *onlyMQTT {
+		specs = mqttTransportDevices()
 	}
 	if design != nil {
 		specs = nil // the design fixture above is the whole fleet

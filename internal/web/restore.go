@@ -32,21 +32,24 @@ func (h *handler) registerRestore(route func(string, func(http.Handler) http.Han
 }
 
 type confirmPage struct {
-	Backup     model.Backup
-	Device     model.Device
-	Rows       []diffRow
-	HasPreview bool
-	WifiChange bool
-	Secrets    bool // the preview holds changed secrets: they come back
-	Error      string
-	Refused    bool   // the live checks refuse this restore: no form
-	NeedMajor  bool   // the backup is from another firmware major version
-	NeedFamily bool   // the chip family of the backup could not be checked
-	MACUnknown bool   // the inventory has no MAC: the one the device reports is recorded
-	LiveMAC    string // that MAC, shown and confirmed
-	LiveAddr   string
-	LiveChip   string
-	Detail     string // why the risks above apply
+	Backup      model.Backup
+	Device      model.Device
+	Rows        []diffRow
+	HasPreview  bool
+	WifiChange  bool
+	Secrets     bool // the preview holds changed secrets: they come back
+	Error       string
+	Refused     bool   // the live checks refuse this restore: no form
+	NeedMajor   bool   // the backup is from another firmware major version
+	NeedFamily  bool   // the chip family of the backup could not be checked
+	NeedLockout bool   // a restore over MQTT that changes the device's MQTT settings
+	MACUnknown  bool   // the inventory has no MAC: the one the device reports is recorded
+	LiveMAC     string // that MAC, shown and confirmed
+	LiveAddr    string
+	LiveChip    string
+	Detail      string // why the risks above apply
+	ViaMQTT     bool   // the restore goes over MQTT (FileUpload)
+	PathNote    string // how it reaches the device, as the transport choice words it
 }
 
 // confirmData fills the page shared by the GET and the refusals. The live
@@ -66,14 +69,15 @@ func (h *handler) confirmData(r *http.Request, b model.Backup, d model.Device) c
 		}
 		return p
 	}
-	p.NeedMajor, p.NeedFamily, p.MACUnknown, p.Detail = a.Major, a.Family, a.MACUnknown, a.Detail
+	p.NeedMajor, p.NeedFamily, p.NeedLockout, p.MACUnknown, p.Detail = a.Major, a.Family, a.Lockout, a.MACUnknown, a.Detail
 	p.LiveMAC, p.LiveAddr, p.LiveChip = a.LiveMAC, a.Address, a.Chip
+	p.ViaMQTT, p.PathNote = a.ViaMQTT, a.PathNote
 	return p
 }
 
 func isRefusal(err error) bool {
 	for _, t := range []error{restore.ErrIdentity, restore.ErrFamilyMismatch, restore.ErrVersionUnknown, restore.ErrNewerBackup,
-		restore.ErrNotDump, restore.ErrNoAddress, restore.ErrBusy, restore.ErrOTAActive} {
+		restore.ErrNotDump, restore.ErrNoAddress, restore.ErrBusy, restore.ErrOTAActive, restore.ErrNoPath, restore.ErrNotConfigured} {
 		if errors.Is(err, t) {
 			return true
 		}
@@ -186,14 +190,14 @@ func (h *handler) restoreStart(w http.ResponseWriter, r *http.Request) {
 		h.renderConfirm(w, r, http.StatusUnprocessableEntity, p)
 		return
 	}
-	opt := restore.StartOptions{AllowMajorChange: r.PostFormValue("major_ok") == "1", AllowUnknownFamily: r.PostFormValue("family_ok") == "1",
+	opt := restore.StartOptions{AllowMajorChange: r.PostFormValue("major_ok") == "1", AllowUnknownFamily: r.PostFormValue("family_ok") == "1", AllowMQTTLockout: r.PostFormValue("lockout_ok") == "1",
 		ExpectMAC: r.PostFormValue("expect_mac")}
 	job, err := h.d.Restore.StartWith(r.Context(), actor(r), b.ID, opt)
 	var need *restore.OverrideError
 	switch {
 	case errors.As(err, &need):
 		p := h.confirmData(r, b, d)
-		p.NeedMajor, p.NeedFamily, p.Detail = need.Major, need.Family, need.Detail
+		p.NeedMajor, p.NeedFamily, p.NeedLockout, p.Detail = need.Major, need.Family, need.Lockout, need.Detail
 		p.MACUnknown = p.MACUnknown || need.MAC != ""
 		p.Error = "Something changed since the page was shown: confirm the risk named below."
 		h.renderConfirm(w, r, http.StatusUnprocessableEntity, p)
@@ -223,6 +227,10 @@ func refusalText(err error) string {
 		return "The backup comes from a newer firmware than the device runs. Update the device first, or restore an older backup."
 	case errors.Is(err, restore.ErrNotDump):
 		return "Only a config dump can be restored."
+	case errors.Is(err, restore.ErrNoPath):
+		return "TasmoFleet has no way to restore this device right now: " + strings.TrimPrefix(err.Error(), restore.ErrNoPath.Error()+": ")
+	case errors.Is(err, restore.ErrNotConfigured):
+		return "A restore needs the firmware base URL (FIRMWARE_BASE_URL) or a device on the MQTT broker with its MQTT password set."
 	default:
 		return "The device address does not resolve to exactly one IP address."
 	}

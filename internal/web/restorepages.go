@@ -30,6 +30,8 @@ type restoreConfirmView struct {
 	CSRF       string
 	Hidden     []ui.KVRow // the risk flags the form carries
 	Ack        string     // the acknowledgement's text
+	Path       string     // how the restore reaches the device
+	Cred       string     // the sentence about old credentials and the transfer
 	CancelHref string
 }
 
@@ -69,6 +71,11 @@ func restoreConfirmOf(v view, p confirmPage) restoreConfirmView {
 		}
 		c.Changes = append(c.Changes, row)
 	}
+	c.Path = sentence(p.PathNote)
+	c.Cred = "Old credentials come back: the Wi-Fi, MQTT and web passwords in the backup replace the current ones. The download is plain HTTP on your device network."
+	if p.ViaMQTT {
+		c.Cred = "Old credentials come back: the Wi-Fi, MQTT and web passwords in the backup replace the current ones. The configuration travels over your MQTT broker."
+	}
 	if p.Detail != "" {
 		c.Risks = append(c.Risks, sentence(p.Detail))
 	}
@@ -92,12 +99,18 @@ func restoreConfirmOf(v view, p confirmPage) restoreConfirmView {
 	if p.NeedFamily {
 		c.Hidden = append(c.Hidden, ui.KVRow{Key: "family_ok", Value: "1"})
 	}
+	if p.NeedLockout {
+		c.Hidden = append(c.Hidden, ui.KVRow{Key: "lockout_ok", Value: "1"})
+	}
 	ack := "I understand that " + p.Device.Name + " restarts, its configuration is replaced by this backup and the old credentials (Wi-Fi, MQTT, web password) come back"
 	if p.MACUnknown {
 		ack += "; that MAC " + p.LiveMAC + " is recorded as its identity"
 	}
 	if p.NeedMajor {
 		ack += "; that the backup is from another firmware major version"
+	}
+	if p.NeedLockout {
+		ack += "; that this restore changes the MQTT settings of " + p.Device.Name + ", which TasmoFleet reaches only over MQTT, and TasmoFleet may lose it"
 	}
 	if p.NeedFamily {
 		ack += "; and I confirm that the backup belongs to the same chip family as " + p.Device.Name
@@ -189,7 +202,7 @@ func restoreJobOf(base string, p jobPage, target, pre model.Backup) restoreJobVi
 				}
 			case restore.StepUpload:
 				if target.ID != 0 {
-					s.Detail = humanBytes(target.Size) + " uploaded over HTTP"
+					s.Detail = humanBytes(target.Size) + " uploaded over " + map[bool]string{true: "MQTT", false: "HTTP"}[j.Transport == model.TransportMQTT]
 				}
 			case restore.StepRestart:
 				s.Detail = "Back online"

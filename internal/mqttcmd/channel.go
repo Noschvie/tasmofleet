@@ -164,9 +164,27 @@ func (c *Channel) DoLoose(ctx context.Context, d model.Device, cmd string) (json
 }
 
 func (c *Channel) do(ctx context.Context, d model.Device, cmd string, loose bool) (json.RawMessage, error) {
+	all, err := c.doAll(ctx, d, cmd, loose, 0)
+	if err != nil {
+		return nil, err
+	}
+	return all[0], nil
+}
+
+// DoAll is Do that keeps the topic and listens for window after the first reply and returns every
+// reply that matched, the first one first. A second reply means two devices answer on the topic.
+// It is for identity checks (Status 5) right before a transfer; Backlogs are not supported.
+func (c *Channel) DoAll(ctx context.Context, d model.Device, cmd string, window time.Duration) ([]json.RawMessage, error) {
+	return c.doAll(ctx, d, cmd, false, window)
+}
+
+func (c *Channel) doAll(ctx context.Context, d model.Device, cmd string, loose bool, window time.Duration) ([]json.RawMessage, error) {
 	req, err := parseRequest(cmd)
 	if err != nil {
 		return nil, err
+	}
+	if window > 0 && req.backlog != nil {
+		return nil, fmt.Errorf("%w: DoAll does not take a Backlog", ErrRefused)
 	}
 	if err := checkTopic(d); err != nil {
 		return nil, err
@@ -221,6 +239,10 @@ func (c *Channel) do(ctx context.Context, d model.Device, cmd string, loose bool
 		c.holdUntilLate(d.Topic, w, req, release)
 		return nil, err
 	}
+	var more []json.RawMessage
+	if err == nil && window > 0 {
+		more = c.moreReplies(ctx, w, req, loose, window) // the topic stays ours meanwhile
+	}
 	c.setWaiter(d.Topic, nil)
 	release()
 	if err != nil {
@@ -229,7 +251,28 @@ func (c *Channel) do(ctx context.Context, d model.Device, cmd string, loose bool
 	if req.redact {
 		raw = cmdpolicy.ScrubReply(raw)
 	}
-	return raw, nil
+	return append([]json.RawMessage{raw}, more...), nil
+}
+
+// moreReplies returns the further replies that match req within window.
+func (c *Channel) moreReplies(ctx context.Context, w *waiter, req *request, loose bool, window time.Duration) []json.RawMessage {
+	var out []json.RawMessage
+	timer := time.NewTimer(window)
+	defer timer.Stop()
+	for {
+		select {
+		case m := <-w.ch:
+			if v, ok := req.match(m, loose); ok && v.err == nil {
+				out = append(out, v.reply)
+			}
+		case <-timer.C:
+			return out
+		case <-ctx.Done():
+			return out
+		case <-c.done:
+			return out
+		}
+	}
 }
 
 // holdUntilLate keeps the topic busy and the old listener registered until a reply that matches

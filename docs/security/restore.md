@@ -16,6 +16,23 @@ reboot, fresh backup, diff. The device pulls the dump itself, so tasmofleet
 never uploads through Tasmota's authenticated `/u2` route and the dump is never
 on a URL that works twice or for anybody else.
 
+## Restore over MQTT
+
+When HTTP fails or the device cannot reach the firmware listener, the restore sends the dump with
+`FileUpload` Type 2 (`mqttcmd.Upload`) instead of the token flow. There is no token and no listener
+involved; R1 to R6, R16 and R17 concern the HTTP path only. The rest holds unchanged: R7 (one
+confirmation), R8 (safety backup first, over the same path), R13 (identity from Status 5 right before
+the upload), R14 (the address is not used by the MQTT path), R15, R9, R10 and R11.
+
+| ID  | Invariant |
+| --- | --------- |
+| R23 | The path is chosen once, at the start, from `transport.Choose` and recorded on the job (`transport`); the whole job (safety backup, checks, upload, verification) is pinned to it. A restore never falls back to the other path, and a restore pinned to MQTT never sends `WebGetConfig`. |
+| R24 | The dump goes to the topic of this device only, with the device's own MQTT password (sealed in the store, never in an error, log, audit record or page). `Error 1` marks the password bad; a bad mark makes `Choose` refuse the path until the password is saved again. |
+| R25 | The device applies the dump only after the MD5 matched (v16 `xdrv_02_1_mqtt_file.ino`, Type 2). A wrong password, a refusal, a lost chunk or an abort therefore leave the settings unchanged and the device running; the job fails at the upload step. A lost final "Done" is an unknown outcome: the job checks the device and does not upload again. |
+| R26 | The restart is proven by a larger `BootCount` in a fresh `Status 1`, within 3 minutes. An upload that returns while the boot count is unchanged fails at the restart step. |
+| R27 | The identity check and the upload are bound to one target. The restore passes the identity it checked (topic, FullTopic, GroupTopic, MQTT capability, stored MAC set) into `UploadConfig`; the router re-reads the device and sends nothing if any of it changed, and asks `Status 5` over the same topic right before the `FileUpload` start: another MAC answering there is refused with "the device on this topic is not <name> any more" (`ErrIdentityChanged`), nothing uploaded. |
+| R28 | A restore over MQTT cannot silently cut TasmoFleet off. Over MQTT the service compares the decoded backup with the device (Topic, FullTopic, GroupTopic, MqttHost, MqttPort, live MqttUser, and MqttPassword against the stored own or broker password); any difference, or a backup that cannot be decoded, needs the admin's own acceptance (`AllowMQTTLockout`, part of the one confirmation) with a sentence naming the fields, never the values. Over HTTP the device stays reachable and the check does not apply. |
+
 ## Invariants
 
 | ID  | Invariant                                                                                                                                                                                                                                                                |

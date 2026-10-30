@@ -352,7 +352,10 @@ func dumpWith(b0, b1 byte) []byte {
 	return d
 }
 
-func newFlow(t *testing.T, version string) *flowEnv {
+func newFlow(t *testing.T, version string) *flowEnv { return newFlowWith(t, version, fakeDecoder{}) }
+
+// newFlowWith is newFlow with the decoder that turns dumps into decoded backups.
+func newFlowWith(t *testing.T, version string, dec backup.Decoder) *flowEnv {
 	t.Helper()
 	dir := t.TempDir()
 	box, err := secretbox.LoadOrCreate(dir)
@@ -397,7 +400,7 @@ func newFlow(t *testing.T, version string) *flowEnv {
 	cl.mu.Unlock()
 	quiet := slog.New(slog.NewTextHandler(io.Discard, nil))
 	au := &auditSink{}
-	bk, err := backup.New(backup.Options{DataDir: dir, Devices: st, Store: st, Client: cl, Decoder: fakeDecoder{}, Audit: au, Log: quiet})
+	bk, err := backup.New(backup.Options{DataDir: dir, Devices: st, Store: st, Client: cl, Decoder: dec, Audit: au, Log: quiet})
 	if err != nil {
 		t.Fatal(err)
 	}

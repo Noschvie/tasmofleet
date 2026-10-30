@@ -106,16 +106,18 @@ func TestUploadType1SafebootNoRoomAndDualSuccess(t *testing.T) {
 // publish stays within the budget at the announced MaxSize, and a MaxSize that shrinks between
 // acks is followed (the latest one wins).
 type upDevice struct {
-	t       *testing.T
-	mu      sync.Mutex
-	maxes   []int // MaxSize announced after the start, then after each chunk (last repeats)
-	final   string
-	dropAck int // 1-based data message whose ack is not published
-	idOff   int // added to the Id in acks
-	chunks  []int
-	widest  int
-	aborts  int
-	data    bytes.Buffer
+	t        *testing.T
+	mu       sync.Mutex
+	maxes    []int // MaxSize announced after the start, then after each chunk (last repeats)
+	final    string
+	dupStart bool // a second device answers the start
+	dupAck   bool // a second device acknowledges every chunk
+	dropAck  int  // 1-based data message whose ack is not published
+	idOff    int  // added to the Id in acks
+	chunks   []int
+	widest   int
+	aborts   int
+	data     bytes.Buffer
 }
 
 var idRe = regexp.MustCompile(`"Id":(\d+)`)
@@ -147,6 +149,10 @@ func (u *upDevice) attach(b *fakeBus) {
 		case strings.Contains(p.payload, "Password"):
 			emit(`{"FileUpload":"Started"}`)
 			emit(fmt.Sprintf(`{"Id":%d,"MaxSize":%d}`, id+u.idOff, max()))
+			if u.dupStart {
+				emit(`{"FileUpload":"Started"}`)
+				emit(fmt.Sprintf(`{"Id":%d,"MaxSize":%d}`, id+u.idOff, max()))
+			}
 		case strings.Contains(p.payload, `"Data"`):
 			m := regexp.MustCompile(`"Data":"([^"]*)"`).FindStringSubmatch(p.payload)
 			raw := decodeB64(u.t, m[1])
@@ -160,6 +166,9 @@ func (u *upDevice) attach(b *fakeBus) {
 			}
 			emit("") // the device always publishes; empty payloads are no messages
 			emit(fmt.Sprintf(`{"Id":%d,"MaxSize":%d}`, id+u.idOff, max()))
+			if u.dupAck {
+				emit(fmt.Sprintf(`{"Id":%d,"MaxSize":%d}`, id+u.idOff, max()))
+			}
 		case strings.Contains(p.payload, `"Md5"`):
 			if u.final != "" {
 				emit(u.final)
@@ -277,7 +286,7 @@ func TestUploadType1NeedsAKnownESP32(t *testing.T) {
 	u.attach(b)
 	d := plug()
 	d.Identity.Family = model.ChipESP8266
-	if err := New(b, fast()).Upload(t.Context(), d, UploadSettings, "x", 100, bytes.NewReader(make([]byte, 100)), dlPassword, nil); err != nil {
+	if err := New(b, fast()).Upload(t.Context(), d, UploadSettings, "x", 4096, bytes.NewReader(make([]byte, 4096)), dlPassword, nil); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -301,7 +310,7 @@ func TestUploadType1AfterTheLastAckSendsNoAbort(t *testing.T) {
 		t.Fatalf("type 1: %v, aborts %d (only the opening one)", err, u.aborts)
 	}
 	u = &upDevice{maxes: []int{861}}
-	_, err = runUp(t, u, UploadSettings, make([]byte, 2000), nil)
+	_, err = runUp(t, u, UploadSettings, make([]byte, 4096), nil)
 	if !errors.Is(err, ErrOutcomeUnknown) || u.aborts != 2 {
 		t.Fatalf("type 2: %v, aborts %d", err, u.aborts)
 	}
@@ -314,7 +323,7 @@ func TestUploadFileNameLimits(t *testing.T) {
 		b := &fakeBus{}
 		u.t = t
 		u.attach(b)
-		err := New(b, fast()).Upload(t.Context(), plug(), 2, name, 100, bytes.NewReader(make([]byte, 100)), dlPassword, nil)
+		err := New(b, fast()).Upload(t.Context(), plug(), 2, name, 4096, bytes.NewReader(make([]byte, 4096)), dlPassword, nil)
 		if ok && err != nil || !ok && !errors.Is(err, ErrRefused) {
 			t.Errorf("%d chars: %v", len(name), err)
 		}
@@ -339,6 +348,7 @@ func TestUploadRefusesBeforePublishing(t *testing.T) {
 		{"quote in name", 2, `a"b`, dlPassword, 4096},
 		{"empty name", 2, "", dlPassword, 4096},
 		{"dump too big", 2, "x", dlPassword, 20000},
+		{"dump too small", 2, "x", dlPassword, 4095},
 		{"zero size", 1, "x", dlPassword, 0},
 	}
 	for _, tc := range cases {
@@ -436,7 +446,7 @@ func TestUploadFaultsAbort(t *testing.T) {
 		{"ack of another transfer", &upDevice{maxes: []int{861}, idOff: 1}, 1, data, "another transfer", false, 2},
 		{"no confirmation of the start", &upDevice{maxes: []int{861}}, 1, data, "", true, 2},
 		{"md5 mismatch", &upDevice{maxes: []int{861}, final: `{"FileUpload":"MD5 mismatch"}`}, 1, data, "MD5", false, 1},
-		{"failed settings", &upDevice{maxes: []int{861}, final: `{"FileUpload":"Failed"}`}, 2, data, "settings dump", false, 2},
+		{"failed settings", &upDevice{maxes: []int{861}, final: `{"FileUpload":"Failed"}`}, 2, bytes.Repeat([]byte{9}, 4096), "settings dump", false, 2},
 		{"failed image", &upDevice{maxes: []int{861}, final: `{"FileUpload":"Failed"}`}, 1, data, "image", false, 1},
 	}
 	for _, tc := range cases {
@@ -480,12 +490,12 @@ func TestUploadFaultsAbort(t *testing.T) {
 // Why: a reader that is shorter or longer than the announced size would make the device wait
 // forever or hash different bytes; both fail and abort.
 func TestUploadDataLengthMustMatchSize(t *testing.T) {
-	for name, size := range map[string]int64{"short": 3000, "long": 1000} {
+	for name, size := range map[string]int64{"short": 5000, "long": 4096} {
 		u := &upDevice{maxes: []int{861}, final: `{"FileUpload":"Done"}`}
 		b := &fakeBus{}
 		u.t = t
 		u.attach(b)
-		err := New(b, fast()).Upload(t.Context(), plug(), 2, "x", size, bytes.NewReader(make([]byte, 2000)), dlPassword, nil)
+		err := New(b, fast()).Upload(t.Context(), plug(), 2, "x", size, bytes.NewReader(make([]byte, 4500)), dlPassword, nil)
 		if !errors.Is(err, ErrTransfer) || u.aborts != 2 {
 			t.Errorf("%s: %v, aborts %d", name, err, u.aborts)
 		}
@@ -552,9 +562,9 @@ func TestUploadAndDownloadShareTheCleanState(t *testing.T) {
 		u.attach(b)
 		return u
 	}
-	data := bytes.Repeat([]byte{4}, 100)
+	data := bytes.Repeat([]byte{4}, 4096)
 	up := func(c *Channel) error {
-		return c.Upload(t.Context(), plug(), 2, "x", 100, bytes.NewReader(data), dlPassword, nil)
+		return c.Upload(t.Context(), plug(), 2, "x", 4096, bytes.NewReader(data), dlPassword, nil)
 	}
 
 	b := &fakeBus{}
@@ -595,7 +605,7 @@ func TestUploadAndDownloadShareTheCleanState(t *testing.T) {
 // Why (coordinator notes): empty payloads exist, the "Aborted" of a download is no answer to an
 // upload, and an Unknown echo (minimal firmware) carries the password: a clear failure, never repeated.
 func TestUploadIgnoresNoiseAndNeverRepeatsAnEcho(t *testing.T) {
-	data := bytes.Repeat([]byte{4}, 100)
+	data := bytes.Repeat([]byte{4}, 4096)
 	b := &fakeBus{}
 	u := &upDevice{t: t, maxes: []int{861}, final: `{"FileUpload":"Done"}`}
 	u.attach(b)
@@ -608,14 +618,14 @@ func TestUploadIgnoresNoiseAndNeverRepeatsAnEcho(t *testing.T) {
 		}
 		inner(b, p)
 	}
-	if err := New(b, fast()).Upload(t.Context(), plug(), 2, "x", 100, bytes.NewReader(data), dlPassword, nil); err != nil {
+	if err := New(b, fast()).Upload(t.Context(), plug(), 2, "x", 4096, bytes.NewReader(data), dlPassword, nil); err != nil {
 		t.Fatal(err)
 	}
 
 	b = &fakeBus{}
 	echo := fmt.Sprintf(`{"Command":"Unknown","Input":"FILEUPLOAD {\"Password\":\"%s\"}"}`, dlPassword)
 	b.onPub = wrapStart(nil, echo)
-	err := New(b, fast()).Upload(t.Context(), plug(), 2, "x", 100, bytes.NewReader(data), dlPassword, nil)
+	err := New(b, fast()).Upload(t.Context(), plug(), 2, "x", 4096, bytes.NewReader(data), dlPassword, nil)
 	if err == nil || !strings.Contains(err.Error(), "does not support") || strings.Contains(err.Error(), dlPassword) || strings.Contains(err.Error(), "Input") {
 		t.Fatalf("%v", err)
 	}
@@ -626,7 +636,7 @@ func TestUploadOfflineDeviceGetsNothing(t *testing.T) {
 	b := &fakeBus{}
 	c := newChan(b)
 	b.emit(mqttbus.KindLWT, "plug", "LWT", "Offline", false)
-	err := c.Upload(t.Context(), plug(), 2, "x", 100, bytes.NewReader(make([]byte, 100)), dlPassword, nil)
+	err := c.Upload(t.Context(), plug(), 2, "x", 4096, bytes.NewReader(make([]byte, 4096)), dlPassword, nil)
 	if !errors.Is(err, tasmota.ErrUnreachable) || len(b.sent()) != 0 {
 		t.Fatalf("%v, sent %v", err, b.sent())
 	}
@@ -643,14 +653,14 @@ func TestUploadType1UnknownOutcomeBlocksTheTopicUntilTheDeviceRestarted(t *testi
 	u.t = t
 	u.attach(b)
 	c := newChan(b)
-	data := make([]byte, 2000)
-	err := c.Upload(t.Context(), esp32Plug(), UploadFirmware, "x", 2000, bytes.NewReader(data), dlPassword, nil)
+	data := make([]byte, 4200)
+	err := c.Upload(t.Context(), esp32Plug(), UploadFirmware, "x", 4200, bytes.NewReader(data), dlPassword, nil)
 	if !errors.Is(err, ErrOutcomeUnknown) {
 		t.Fatal(err)
 	}
 	before := len(b.sent())
 	_, derr := c.Download(t.Context(), esp32Plug(), dlPassword)
-	uerr := c.Upload(t.Context(), esp32Plug(), UploadSettings, "x", 100, bytes.NewReader(data[:100]), dlPassword, nil)
+	uerr := c.Upload(t.Context(), esp32Plug(), UploadSettings, "x", 4096, bytes.NewReader(data[:4096]), dlPassword, nil)
 	if !errors.Is(derr, ErrRefused) || !errors.Is(uerr, ErrRefused) || len(b.sent()) != before {
 		t.Fatalf("download %v, upload %v, published %d more", derr, uerr, len(b.sent())-before)
 	}
@@ -658,12 +668,12 @@ func TestUploadType1UnknownOutcomeBlocksTheTopicUntilTheDeviceRestarted(t *testi
 		t.Fatalf("%v", uerr)
 	}
 	b.emit(mqttbus.KindLWT, "plug", "LWT", "Offline", false)
-	if err := c.Upload(t.Context(), esp32Plug(), UploadSettings, "x", 100, bytes.NewReader(data[:100]), dlPassword, nil); !errors.Is(err, tasmota.ErrUnreachable) || len(b.sent()) != before {
+	if err := c.Upload(t.Context(), esp32Plug(), UploadSettings, "x", 4096, bytes.NewReader(data[:4096]), dlPassword, nil); !errors.Is(err, tasmota.ErrUnreachable) || len(b.sent()) != before {
 		t.Fatalf("while rebooting: %v", err) // offline: still nothing sent
 	}
 	b.emit(mqttbus.KindLWT, "plug", "LWT", "Online", false)
 	u.final = `{"FileUpload":"Done"}`
-	if err := c.Upload(t.Context(), esp32Plug(), UploadSettings, "x", 100, bytes.NewReader(data[:100]), dlPassword, nil); err != nil {
+	if err := c.Upload(t.Context(), esp32Plug(), UploadSettings, "x", 4096, bytes.NewReader(data[:4096]), dlPassword, nil); err != nil {
 		t.Fatal(err)
 	}
 	if first := b.sent()[before]; first.payload != "0" {
@@ -693,7 +703,48 @@ func TestUploadType1RebootDuringTheWaitLeavesNothingPending(t *testing.T) {
 		t.Fatal(err)
 	}
 	u.final = `{"FileUpload":"Done"}`
-	if err := c.Upload(t.Context(), esp32Plug(), UploadSettings, "x", 100, bytes.NewReader(make([]byte, 100)), dlPassword, nil); err != nil {
+	if err := c.Upload(t.Context(), esp32Plug(), UploadSettings, "x", 4096, bytes.NewReader(make([]byte, 4096)), dlPassword, nil); err != nil {
 		t.Fatalf("a rebooted device must not stay blocked: %v", err)
+	}
+}
+
+// Why (M1): two devices on one topic answer every transfer message twice. A second answer to the
+// start, or a second acknowledgement of a chunk, is fatal and ends with FileUpload 0 (open + close).
+func TestUploadSecondDeviceOnTheTopicIsFatal(t *testing.T) {
+	for name, u := range map[string]*upDevice{
+		"second answer to the start":   {maxes: []int{861}, final: `{"FileUpload":"Done"}`, dupStart: true},
+		"second chunk acknowledgement": {maxes: []int{861}, final: `{"FileUpload":"Done"}`, dupAck: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := runUp(t, u, UploadFirmware, make([]byte, 4200), nil)
+			if !errors.Is(err, ErrTransfer) || !strings.Contains(err.Error(), "another device") || u.aborts != 2 {
+				t.Fatalf("%v, aborts %d", err, u.aborts)
+			}
+		})
+	}
+}
+
+// Why (M1): DoAll listens after the first reply; a second device answering on the topic shows up
+// as a second reply (the router refuses the upload then).
+func TestDoAllReturnsEveryReplyWithinTheWindow(t *testing.T) {
+	b := &fakeBus{}
+	b.onPub = func(b *fakeBus, p pub) {
+		if p.command == "Status" {
+			b.emit(mqttbus.KindStatus, p.topic, "STATUS5", `{"StatusNET":{"Mac":"AA:AA:AA:AA:AA:01"}}`, false)
+			b.emit(mqttbus.KindStatus, p.topic, "STATUS5", `{"StatusNET":{"Mac":"BB:BB:BB:BB:BB:02"}}`, false)
+		}
+	}
+	got, err := newChan(b).DoAll(t.Context(), plug(), "Status 5", 80*time.Millisecond)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("%d replies, %v", len(got), err)
+	}
+	b.onPub = func(b *fakeBus, p pub) {
+		b.emit(mqttbus.KindStatus, p.topic, "STATUS5", `{"StatusNET":{"Mac":"AA:AA:AA:AA:AA:01"}}`, false)
+	}
+	if got, err = newChan(b).DoAll(t.Context(), plug(), "Status 5", 80*time.Millisecond); err != nil || len(got) != 1 {
+		t.Fatalf("%d replies, %v", len(got), err)
+	}
+	if _, err := newChan(b).DoAll(t.Context(), plug(), "Backlog Power ON; Status 5", time.Second); !errors.Is(err, ErrRefused) {
+		t.Fatalf("a Backlog: %v", err)
 	}
 }
