@@ -106,6 +106,7 @@ type simDevice struct {
 	httpAddr             string
 	srv                  *httpServer
 	mq                   *mqttLink
+	mf                   mqttFile // MQTT FileDownload/FileUpload state (FMqtt)
 }
 
 // flashed is a downloaded image waiting for the restart.
@@ -157,6 +158,9 @@ func newDevice(f *fleet, spec DeviceSpec, def profileDef, c *capture) (*simDevic
 	}
 	for i, n := range spec.FriendlyNames {
 		d.persisted.kv["friendlyname"+strconv.Itoa(i+1)] = n
+	}
+	if spec.MQTTPassword != "" {
+		d.persisted.kv["mqttpassword"] = spec.MQTTPassword
 	}
 	d.runtime = d.persisted.clone()
 	d.uptimeBase = capturedInt(c, "state.json", `"UptimeSec":(\d+)`)
@@ -285,6 +289,12 @@ func (f Fault) matches(cmd string) bool {
 }
 
 func normCmd(s string) string { return strings.ToLower(strings.Join(strings.Fields(s), " ")) }
+
+func (d *simDevice) hasFault(kind string) bool {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.hasFaultLocked(kind)
+}
 
 func (d *simDevice) hasFaultLocked(kind string) bool {
 	for _, f := range d.faults {

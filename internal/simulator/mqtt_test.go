@@ -40,9 +40,13 @@ func TestMQTTBasics(t *testing.T) {
 	c.waitFor(t, `stat/livingroom-readinglamp/STATUS2={"StatusFWR"`)
 }
 
-// Why: a software restart disconnects cleanly, so the broker must NOT see an
-// LWT Offline; the retained LWT Online and INFO1 reappear after the boot.
-func TestMQTTUpgradeShowsNoOfflineAndReportsResult(t *testing.T) {
+// Why: Tasmota's PubSubClient::disconnect() sends no DISCONNECT packet by
+// default, so EspRestart (WifiShutdown -> MqttDisconnect) makes the broker fire
+// the will: LWT Offline before every reboot, seen live on 2026-10-30 (see
+// docs/research/tasmota-mqtt-transport.md). Health and the OTA engine must be
+// tested against that, not against a silent restart. The retained LWT Online
+// and INFO1 reappear after the boot.
+func TestMQTTUpgradeShowsOfflineAndReportsResult(t *testing.T) {
 	fw := newFirmwareServer(t, map[string]string{"tasmota.bin.gz": "16.1.0"})
 	_, c, f := newBrokerFleet(t, Extra{})
 	d := newDirect(t, f, "plug")
@@ -57,8 +61,8 @@ func TestMQTTUpgradeShowsNoOfflineAndReportsResult(t *testing.T) {
 	if c.count("tele/plug/INFO1=") != before+1 {
 		t.Error("INFO1 must be published once per boot")
 	}
-	if c.has("[R]tele/plug/LWT=Offline") || c.has("tele/plug/LWT=Offline") {
-		t.Error("clean restart must not produce LWT Offline")
+	if !c.has("[R]tele/plug/LWT=Offline") && !c.has("tele/plug/LWT=Offline") {
+		t.Error("a software restart must produce LWT Offline (no DISCONNECT packet)")
 	}
 	c.waitFor(t, `tele/plug/INFO1={"Info1":{"Module":"Sonoff Basic","Version":"16.1.0(release-tasmota)"`)
 }

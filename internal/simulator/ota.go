@@ -16,17 +16,18 @@ import (
 // Nominal ESP8266 timeline in seconds (docs/research/tasmota-minimal-and-ota.md
 // section 6), multiplied by the fleet's time scale.
 const (
-	secPending      = 3.0
-	secDownloadMin  = 10.0 // blocking download of a ~0.5-1 MB gz image
-	secRestartWait  = 7.0  // 2 s after the download + restart_flag 5
-	secRebootGap    = 8.0  // bootloader copy + wifi join
-	secRetryDelay   = 1.5
-	secAutoLoader   = 6.0   // minimal continues on its own after ota_loader
-	secLightSettle  = 0.004 // a light shows its old state this long after the boot (4 ms observed on the fleet), then switches itself off
-	secLWTBlock     = 45.0  // keepalive 30 s * 1.5: the broker fires the will
-	secRestartCmd   = 2.0
-	attemptsESP8266 = 10
-	attemptsESP32   = 5
+	secPending       = 3.0
+	secDownloadMin   = 10.0 // blocking download of a ~0.5-1 MB gz image
+	secRestartWait   = 7.0  // 2 s after the download + restart_flag 5
+	secRebootGap     = 8.0  // bootloader copy + wifi join
+	secRetryDelay    = 1.5
+	secAutoLoader    = 6.0   // minimal continues on its own after ota_loader
+	secLightSettle   = 0.004 // a light shows its old state this long after the boot (4 ms observed on the fleet), then switches itself off
+	secLWTBlock      = 45.0  // keepalive 30 s * 1.5: the broker fires the will
+	secRestartCmd    = 2.0
+	secFWConnectFail = 66.0 // ESPhttpUpdate gives up connecting after 66 s (live, 2026-10-30)
+	attemptsESP8266  = 10
+	attemptsESP32    = 5
 )
 
 var errTooLarge = devErr("Not Enough space")
@@ -35,7 +36,7 @@ func (d *simDevice) armLocked(cmd string) {
 	d.armed = nil
 	for _, f := range d.faults {
 		switch f.Kind {
-		case FaultDownloadFail, FaultStayOldVersion, FaultLongReboot, FaultWrongFamily, FaultNeverReturns:
+		case FaultDownloadFail, FaultFWUnreachable, FaultStayOldVersion, FaultLongReboot, FaultWrongFamily, FaultNeverReturns:
 			if f.matches(cmd) {
 				d.armed = append(d.armed, f)
 			}
@@ -75,6 +76,10 @@ func (d *simDevice) runOTA(skipPending bool) {
 			return
 		}
 	}
+	if f, ok := d.firmwareUnreachable(); ok {
+		d.failUnreachable(f)
+		return
+	}
 	d.mu.Lock()
 	d.attempts = 0
 	d.setPhaseLocked(PhaseDownloading)
@@ -106,6 +111,31 @@ func (d *simDevice) runOTA(skipPending bool) {
 		return
 	}
 	d.reboot(true)
+}
+
+func (d *simDevice) firmwareUnreachable() (Fault, bool) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.armedLocked(FaultFWUnreachable)
+}
+
+// failUnreachable is a connect attempt to a firmware server the device cannot
+// reach: it takes secFWConnectFail, then Upgrade reports the failure. The
+// device neither reboots nor goes silent (live, 2026-10-30: MQTT stayed up
+// and the next Upgrade worked at once).
+func (d *simDevice) failUnreachable(f Fault) {
+	wait := f.Duration
+	if wait <= 0 {
+		wait = d.dur(secFWConnectFail)
+	}
+	if !d.sleepFor(wait) {
+		return
+	}
+	d.mu.Lock()
+	d.armed = nil
+	d.setPhaseLocked(PhaseRun)
+	d.mu.Unlock()
+	d.mq.publish("stat/"+d.topic+"/UPGRADE", `{"Upgrade":"Failed HTTP error: connection failed"}`, false)
 }
 
 func (d *simDevice) downloadWithRetries() (*flashed, error) {
@@ -262,7 +292,7 @@ func (d *simDevice) reboot(commit bool) {
 		}
 	}
 	d.mu.Unlock()
-	d.mq.disconnectClean()
+	d.mq.dropUnclean() // EspRestart -> WifiShutdown -> MqttDisconnect: no DISCONNECT packet, the broker fires the will
 	if !hang {
 		d.stopHTTP()
 	}

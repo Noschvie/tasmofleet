@@ -49,6 +49,8 @@ type Fault struct {
 	Kind string
 	// Duration for timeouts and reboot gaps.
 	Duration time.Duration
+	// Chunks: data chunks acknowledged before FaultMQTTUploadCut falls silent (default 1).
+	Chunks int
 }
 
 // DeviceSpec describes one simulated device.
@@ -113,6 +115,9 @@ type DeviceSpec struct {
 	// partition with almost no free space is what an ESP32 with the safeboot layout looks like to
 	// an image upload (#30).
 	FreeKB int
+	// MQTTPassword is the device's MqttPassword, which FileDownload and FileUpload
+	// compare their "Password" with (Error 1 on a mismatch).
+	MQTTPassword string
 	// Energy makes the device publish an ENERGY block in tele/SENSOR, shaped like the
 	// fleet's energy-status.json captures: 0 = no meter, 1 = one meter (a number per
 	// field), n >= 2 = n channels the way Tasmota sends them: Power, ApparentPower,
@@ -164,6 +169,15 @@ const (
 	FaultWrongFamily    = "wrong_family"     // header check fails ("Verify Bin Header Failed") whatever the image
 	FaultNeverReturns   = "never_returns"    // device goes offline after the restart and stays there
 	FaultHTTPOnly       = "http_only"        // device does not use MQTT even if the fleet has a broker
+
+	// FaultHTTPUnreachable: HTTP is cut off (every connection is accepted and closed at once
+	// without a byte), MQTT works: a device TasmoFleet cannot reach but the broker can.
+	FaultHTTPUnreachable = "http_unreachable"
+	// FaultFWUnreachable: the device cannot reach the firmware server. Upgrade 1 is accepted;
+	// after Duration (default the 66 s the connect attempt takes, scaled) it publishes
+	// stat/<t>/UPGRADE {"Upgrade":"Failed HTTP error: connection failed"}. No reboot, the
+	// device stays responsive (observed live, 2026-10-30). WebGetConfig fetches nothing either.
+	FaultFWUnreachable = "fw_unreachable"
 )
 
 // Extra holds fleet options beyond the frozen FleetOptions.

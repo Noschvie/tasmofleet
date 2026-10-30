@@ -66,6 +66,16 @@ func (d *simDevice) exec(cmd string) ([]byte, []outMsg) {
 	return d.execLocked(cmd)
 }
 
+// execMQTT is exec for a command that arrived over MQTT: the file transfer
+// needs the length of the topic and whether it was the group topic.
+func (d *simDevice) execMQTT(cmd string, topicLen int, group bool) ([]byte, []outMsg) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.mf.topicSize, d.mf.group = uint32(topicLen), group //nolint:gosec // G115: a topic is far below 4 GiB
+	defer func() { d.mf.group = false }()
+	return d.execLocked(cmd)
+}
+
 func (d *simDevice) execLocked(cmd string) ([]byte, []outMsg) {
 	cmd = strings.TrimSpace(cmd)
 	if cmd == "" {
@@ -120,6 +130,10 @@ func (d *simDevice) execLocked(cmd string) ([]byte, []outMsg) {
 			return result([]byte(`{"Restart":"Restarting"}`))
 		}
 		return result([]byte(`{"Restart":"1 to restart, 2 to halt"}`))
+	case "filedownload":
+		return d.fileDownloadLocked(data)
+	case "fileupload":
+		return d.fileUploadLocked(data)
 	case "webgetconfig":
 		return result(d.webGetConfigLocked(data))
 	case "seriallog":
@@ -135,15 +149,19 @@ func (d *simDevice) execLocked(cmd string) ([]byte, []outMsg) {
 		if data == "" {
 			return result(d.render("backlog-empty.json", v))
 		}
+		// Backlog itself answers nothing (CmndBacklog: ResponseClear). Each queued command
+		// runs later and publishes its own messages; the merged body is what /cm returns.
 		var parts [][]byte
+		var out []outMsg
 		for _, seg := range strings.Split(data, ";") {
 			if strings.TrimSpace(seg) == "" {
 				continue
 			}
-			b, _ := d.execLocked(seg)
+			b, msgs := d.execLocked(seg)
 			parts = append(parts, b)
+			out = append(out, msgs...)
 		}
-		return result(mergeObjects(parts...))
+		return mergeObjects(parts...), out
 	}
 	_ = name
 	if f, ok := queryFiles[base]; ok {

@@ -25,6 +25,9 @@ func (d *simDevice) webGetConfigLocked(data string) []byte {
 		return errorReply("WEBGETCONFIG " + data)
 	}
 	raw := u.String()
+	if d.hasFaultLocked(FaultFWUnreachable) {
+		return []byte(`{"WebGetConfig":"Done"}`) // accepted; the download never connects
+	}
 	d.spawn(func() {
 		d.fetchConfig(raw)
 	})
@@ -49,10 +52,14 @@ func (d *simDevice) fetchConfig(rawURL string) {
 		return
 	}
 	d.mu.Lock()
-	d.configDump = body
+	d.applyConfigLocked(body)
 	d.mu.Unlock()
 	if !d.sleep(secRestartCmd) {
 		return
 	}
 	d.reboot(false)
 }
+
+// applyConfigLocked replaces the settings with a dump (SettingsConfigRestore);
+// the caller restarts. Shared by WebGetConfig and MQTT FileUpload Type 2.
+func (d *simDevice) applyConfigLocked(dump []byte) { d.configDump = dump }

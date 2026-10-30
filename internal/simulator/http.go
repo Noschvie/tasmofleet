@@ -141,6 +141,10 @@ func (d *simDevice) writeBody(w http.ResponseWriter, code int, body []byte) {
 }
 
 func (d *simDevice) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if d.hasFault(FaultHTTPUnreachable) {
+		drop(w)
+		return
+	}
 	if !d.waitServing(r) {
 		drop(w)
 		return

@@ -947,8 +947,10 @@ Submit.
   devices only when stale. Offline devices back off exponentially up to 30 min. At most 4
   polls in flight.
 - MQTT messages update `LastSeen`, power state and RSSI immediately and push SSE events.
-- A software restart publishes no LWT `Offline` (clean disconnect, SRC). Health does not
-  try to detect reboots; the OTA engine uses uptime.
+- A software restart publishes LWT `Offline` about 2 s after the command and before every OTA reboot
+  (Tasmota's PubSubClient closes the socket without a DISCONNECT packet, so the broker fires the will;
+  `docs/research/tasmota-mqtt-transport.md` section 5, live 2026-10-30). Health does not try to
+  detect reboots; the OTA engine uses uptime.
 - Only transitions are persisted (`health_events`), plus `devices.health_state/last_seen_at`
   for a correct picture right after a restart. A device's first observation after the app
   started (state "unknown" to anything) is a baseline, not a change: `devices.health_state` is

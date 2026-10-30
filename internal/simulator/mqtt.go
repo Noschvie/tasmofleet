@@ -144,8 +144,9 @@ func (m *mqttLink) publish(topic, payload string, retain bool) {
 	m.raw(topic, payload, retain)
 }
 
-// disconnectClean is EspRestart: DISCONNECT sent, so the broker does not
-// publish the will (no LWT Offline on a software restart).
+// disconnectClean ends the simulated device for good (Close): DISCONNECT
+// sent, so the broker does not publish a will. Tasmota's own restart is not
+// this: see reboot.
 func (m *mqttLink) disconnectClean() {
 	if m == nil {
 		return
@@ -199,12 +200,46 @@ func (m *mqttLink) onCommand(msg paho.Message) {
 	if len(parts) < 3 {
 		return
 	}
+	// PubSubClient::readPacket closes the connection (no DISCONNECT, so the will fires)
+	// for a packet of MQTT_MAX_PACKET_SIZE bytes or more.
+	if packetSize(msg) >= mqttMaxPacket {
+		d.spawn(func() {
+			m.dropUnclean()
+			if d.sleep(secMQTTRetry) {
+				m.connect()
+			}
+		})
+		return
+	}
 	cmd := strings.TrimSpace(parts[2] + " " + string(msg.Payload()))
 	d.mu.Lock()
-	d.cmds = append(d.cmds, cmd)
+	d.cmds = append(d.cmds, redactFileCmd(cmd))
 	d.mu.Unlock()
-	_, out := d.exec(cmd)
+	_, out := d.execMQTT(cmd, len(msg.Topic()), parts[1] == "tasmotas")
 	d.publishAll(out)
+}
+
+// packetSize is the size on the wire of the PUBLISH the device received.
+func packetSize(msg paho.Message) int {
+	rl := 2 + len(msg.Topic()) + len(msg.Payload())
+	if msg.Qos() > 0 {
+		rl += 2
+	}
+	llen := 1
+	for n := rl; n >= 128; n >>= 7 {
+		llen++
+	}
+	return 1 + llen + rl
+}
+
+// redactFileCmd keeps the credentials of FileDownload/FileUpload out of the
+// recorded commands: the payload carries the device's MQTT password.
+func redactFileCmd(cmd string) string {
+	name, data, _ := strings.Cut(cmd, " ")
+	if l := strings.ToLower(name); (l == "filedownload" || l == "fileupload") && len(data) > 8 {
+		return name + " <" + itoa(len(data)) + " bytes>"
+	}
+	return cmd
 }
 
 // teleLoop publishes STATE every TelePeriod while the device is running.

@@ -149,7 +149,7 @@ During the whole blocked/rebooting window `/cm` gets no answer (connect timeout 
 * TCP: the ESP8266 lwIP stack may still complete the 3-way handshake during the blocking download (queued, never answered) -> client sees read timeout; while rebooting: no ARP/host unreachable. A simulator should offer both "accept and hang" and "refuse/close" modes.
 * Error strings (MEM, ESP8266httpUpdate::getLastErrorString): `HTTP error: connection refused`, `HTTP error: connection lost`, `File Not Found (404)`, `Forbidden (403)`, `Wrong HTTP Code`, `Not Enough space`, `New Binary Does Not Fit Flash Size`, `Verify Bin Header Failed`, `Update error: ...`.
 * Failed upgrade does NOT reboot; the next `Upgrade` works again; `ota_retry_counter` is re-armed at state 2.
-* MQTT view: no `tele/<t>/LWT Offline` is published by the device on a software restart (clean disconnect does not fire the will).
+* MQTT view: SUPERSEDED (2026-10-30): Tasmota restarts without an MQTT DISCONNECT packet, so the broker DOES publish `tele/<t>/LWT Offline` ~2 s after a restart command and before each OTA reboot, see tasmota-mqtt-transport.md section 5.
   The broker publishes the will only on an unclean drop (keepalive 30 s -> ~45 s): possible if the blocking download lasts > ~45 s.
 * After reboot (normal fw) Info1/Info2/Info3 are published once per boot (not retained unless SetOption `mqtt_info_retain`), `RestartReason` = `Software/System restart`, Uptime restarts at 0, `BootCount` +1.
   (OBS fleet: RestartReason "Software/System restart" and BootCount 218 on Sonoff.)

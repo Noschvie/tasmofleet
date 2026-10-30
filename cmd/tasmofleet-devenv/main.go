@@ -101,6 +101,25 @@ func overviewDevices() []simulator.DeviceSpec {
 	}
 }
 
+// MQTTPassword is the MqttPassword of the devices below; the devenv broker takes any, so it only has to be
+// the value TasmoFleet is told for FileDownload/FileUpload.
+const MQTTPassword = "devenv-fake-mqtt-password" //nolint:gosec // G101: a fake value for the dev broker, which takes any password
+
+// mqttTransportDevices are the devices of the MQTT transport (0.20.0, #79): TasmoFleet reaches them only
+// over the broker. A staged ESP8266 1 MB; an ESP32 and an ESP32 with two app partitions that cannot reach
+// the firmware server either (the dual one can only be updated by Type 1 file upload); a 1 MB device that
+// reaches neither.
+func mqttTransportDevices() []simulator.DeviceSpec {
+	noHTTP := simulator.Fault{Kind: simulator.FaultHTTPUnreachable}
+	noFW := simulator.Fault{Kind: simulator.FaultFWUnreachable}
+	return []simulator.DeviceSpec{
+		{Name: "mq-esp8266-1m", Profile: simulator.ProfileESP8266_1M, MQTTPassword: MQTTPassword, Faults: []simulator.Fault{noHTTP}},
+		{Name: "mq-esp32", Profile: simulator.ProfileESP32, MQTTPassword: MQTTPassword, Faults: []simulator.Fault{noHTTP}},
+		{Name: "mq-fw-blocked", Profile: simulator.ProfileESP8266_1M, MQTTPassword: MQTTPassword, Faults: []simulator.Fault{noHTTP, noFW}},
+		{Name: "mq-esp32-dual", Profile: simulator.ProfileESP32Dual, MQTTPassword: MQTTPassword, Faults: []simulator.Fault{noHTTP, noFW}},
+	}
+}
+
 // extraProfiles are cycled through by the additional devices of -fleet-size, so
 // a large fleet still mixes ESP8266 and ESP32 variants.
 var extraProfiles = []simulator.Profile{
@@ -135,6 +154,7 @@ func run(ctx context.Context, args []string, out, errOut io.Writer) error {
 	bind := fs.String("bind", "127.0.0.1", "address all listeners bind to; anything else exposes the OTA download gadget (opt-in)")
 	fleetSize := fs.Int("fleet-size", 0, "total number of simulated devices; 0 or less than the base fleet keeps the base fleet")
 	releases := fs.Int("releases", 1, "number of releases the fake GitHub releases feed (<upstream>/github) offers")
+	mqttTransport := fs.Bool("mqtt-transport", false, "add the devices TasmoFleet reaches only over MQTT (http_unreachable, fw_unreachable, MqttPassword "+MQTTPassword+")")
 	overview := fs.Bool("overview-shapes", false, "add the device shapes of the Overview mockups (docs/design/device-overview): meters, several relays, Ethernet, sensors only, HTTP only")
 	designFile := fs.String("design-fixture", "", "JSON file (testdata/design/v2-fixture.json) with the prototype's 60 devices and releases; replaces the mixed fleet, -fleet-size and the release list, and enables POST /fixture/offline and /fixture/feed/{down,dl-down,slow,up} on the control server")
 	var redirects multiFlag
@@ -231,6 +251,9 @@ func run(ctx context.Context, args []string, out, errOut io.Writer) error {
 	specs := fleetOfSize(*fleetSize)
 	if *overview {
 		specs = append(specs, overviewDevices()...)
+	}
+	if *mqttTransport {
+		specs = append(specs, mqttTransportDevices()...)
 	}
 	if design != nil {
 		specs = nil // the design fixture above is the whole fleet
