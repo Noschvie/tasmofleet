@@ -50,7 +50,7 @@ var sysLayout = []sysTabDef{
 	}},
 	{"network", "Network & devices", []sysCardDef{
 		{ID: "networks", Title: "Device networks", Note: "Where your devices live.", Keys: []string{"DEVICE_NETWORKS"}},
-		{ID: "health", Title: "Health checks", Note: "How often devices are checked.", Keys: []string{"POLL_INTERVAL", "POLICY_LIVE_INTERVAL", "TELEPERIOD"}},
+		{ID: "health", Title: "Health checks", Note: "How often devices are checked.", Keys: []string{"POLL_INTERVAL", "POLICY_LIVE_INTERVAL", "TELEPERIOD", "CR_WARN_PERCENT"}},
 		{ID: "credentials", Title: "Default device credentials", Note: "Prefilled for new devices.", Keys: []string{"DEVICE_DEFAULT_PASSWORD"}},
 	}},
 	{"mqtt", "MQTT", []sysCardDef{
@@ -86,12 +86,31 @@ var sysLayout = []sysTabDef{
 // sysAdvanced is the index of the Advanced tab and its catch-all card.
 const sysAdvanced, sysOtherCard = 7, 0
 
-// sysPlace is the tab and card of a setting; one that no card names lands in Advanced.
+// sysGroupCard is where a new setting that no card names yet lands, by its sysconfig group, so it
+// shows next to its relatives; a group without an entry goes to Advanced, "Other settings".
+var sysGroupCard = map[sysconfig.Group]string{
+	sysconfig.GroupLogging: "logging", sysconfig.GroupAudit: "logging", sysconfig.GroupMetrics: "metrics",
+	sysconfig.GroupNetwork: "networks", sysconfig.GroupHealth: "health", sysconfig.GroupMQTT: "broker",
+	sysconfig.GroupDiscovery: "scan", sysconfig.GroupBackup: "schedule", sysconfig.GroupFirmware: "source",
+	sysconfig.GroupOTA: "ota", sysconfig.GroupSignIn: "idp",
+}
+
+// sysPlace is the tab and card of a setting: the card that names it, else the card of its group,
+// else Advanced.
 func sysPlace(key string) (tab, card int) {
 	for ti, t := range sysLayout {
 		for ci, c := range t.Cards {
 			if slices.Contains(c.Keys, key) {
 				return ti, ci
+			}
+		}
+	}
+	if f, ok := sysconfig.Lookup(key); ok {
+		for ti, t := range sysLayout {
+			for ci, c := range t.Cards {
+				if c.ID == sysGroupCard[f.Group] {
+					return ti, ci
+				}
 			}
 		}
 	}
@@ -126,10 +145,10 @@ func sysTabsOf(rows map[string]sysRow) []sysTab {
 			}
 		}
 	}
-	other := &tabs[sysAdvanced].Cards[sysOtherCard]
 	for _, k := range keys {
 		if !placed[k] {
-			other.Rows = append(other.Rows, rows[k])
+			ti, ci := sysPlace(k)
+			tabs[ti].Cards[ci].Rows = append(tabs[ti].Cards[ci].Rows, rows[k])
 		}
 	}
 	for ti := range tabs {
@@ -207,6 +226,7 @@ var sysCopies = map[string]sysCopy{
 	"DEVICE_NETWORKS":         {Help: "CIDRs, one per line or comma separated.", Width: "full", Info: "TasmoFleet never contacts an address outside these networks: no polling, no scan, no update."},
 	"POLL_INTERVAL":           {Help: "Without MQTT. At least 1s.", Width: "xs"},
 	"POLICY_LIVE_INTERVAL":    {Label: "Policy check read", Help: "0 = off.", Width: "xs", Info: "How often each device is read for the policy view (jittered, side-effect-free queries). 0 = no background reads; MQTT updates and the on-demand check stay."},
+	"CR_WARN_PERCENT":         {Help: "Percent, 50 to 100.", Width: "xs", Info: "Warn on the device page when a device's settings text area (Status 2 CR) is fuller than this."},
 	"TELEPERIOD":              {Label: "Telemetry period", Help: "Stale after 2× + 1 min.", Width: "xs", Info: "Expected telemetry period. A device counts as stale after twice this period plus a minute."},
 	"DEVICE_DEFAULT_PASSWORD": {Help: "Write-only. Prefills new devices.", Width: "half", Info: "Prefilled as the web password when you add a device or accept a discovered one (user admin). Each device keeps its own copy; you can still change it per device."},
 

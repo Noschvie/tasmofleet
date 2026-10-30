@@ -376,3 +376,16 @@ func TestSettingFieldShowsNoticeAndPendingRestart(t *testing.T) {
 		t.Errorf("notice %q, pending %v", d.Notice, d.Pending)
 	}
 }
+
+// Why: a setting that no card names yet (a new sysconfig field) must show up next to its relatives
+// by group, not only in Advanced; and the settings text area warning sits with the health checks.
+func TestSystemSettingsNewFieldsLandByGroup(t *testing.T) {
+	if tab, card := sysPlace("CR_WARN_PERCENT"); sysLayout[tab].Cards[card].ID != "health" {
+		t.Errorf("CR_WARN_PERCENT is on card %s", sysLayout[tab].Cards[card].ID)
+	}
+	// without an explicit key, a health-group field still lands on the health card
+	sysGroupOnly := sysconfig.Field{Key: "TEST_ONLY_HEALTH", Group: sysconfig.GroupHealth}
+	if sysGroupCard[sysGroupOnly.Group] != "health" {
+		t.Error("the Health group has no card")
+	}
+}
