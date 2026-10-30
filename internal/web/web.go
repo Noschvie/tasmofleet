@@ -41,6 +41,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/ota"
 	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/nofuturekid/tasmofleet/internal/transport"
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
 
@@ -134,15 +135,19 @@ type Deps struct {
 	Artifacts     ArtifactLister
 	Hub           *events.Hub
 	Clock         clock.Clock
-	Pages         *Pages             // optional: the account pages of package auth join the app shell
-	Settings      SettingsService    // optional (M2-2): per-device settings editor
-	Policy        PolicyService      // optional (M2-2): nil hides the policy view
-	PolicyFix     PolicyFix          // optional: "Make compliant" on the policy page
-	CommandBatch  PolicyFix          // optional: "Send command" to several devices (admin)
-	BackupBatch   BackupBatch        // optional: "Back up" several devices (admin)
-	Restore       RestoreService     // optional: nil without FIRMWARE_BASE_URL (M2-5)
-	SysConfig     SysConfigService   // optional: system settings page
-	PolicyRules   PolicyRulesService // optional: policy rule editor
+	// Transport is optional: the facts the device page and the device list read to show how a
+	// device is reached and which actions are available (#261). Nil hides the card and leaves
+	// every action to the general reason.
+	Transport    transport.FactsSource
+	Pages        *Pages             // optional: the account pages of package auth join the app shell
+	Settings     SettingsService    // optional (M2-2): per-device settings editor
+	Policy       PolicyService      // optional (M2-2): nil hides the policy view
+	PolicyFix    PolicyFix          // optional: "Make compliant" on the policy page
+	CommandBatch PolicyFix          // optional: "Send command" to several devices (admin)
+	BackupBatch  BackupBatch        // optional: "Back up" several devices (admin)
+	Restore      RestoreService     // optional: nil without FIRMWARE_BASE_URL (M2-5)
+	SysConfig    SysConfigService   // optional: system settings page
+	PolicyRules  PolicyRulesService // optional: policy rule editor
 	// PolicyLivePause is optional: Pause / Resume of the automatic policy live check.
 	PolicyLivePause PolicyLivePause
 	Setup           SetupService         // optional: first-run setup

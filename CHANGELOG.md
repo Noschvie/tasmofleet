@@ -14,6 +14,7 @@ always upgrade automatically.
 
 - Device list: optional columns OTA URL and Group topic (hidden until chosen in Columns, sortable, long values cut off with the whole value on hover), each with the time it was read. The group topic comes from the same read-only `Status 1` as the OTA URL and from the boot announcement `tele/<topic>/INFO1`, so no new device read. Values read before this release show no time until the next probe. Migration 0035 (#239)
 - Internal tooling: Tasmota command catalogue (`internal/tasmotacmd`), generated from the pinned Tasmota v16.0.0 source by `make catalogue`: which RESULT key answers which command, with commands whose key cannot be derived statically listed as loose (#268)
+- The device page shows how TasmoFleet reaches the device (HTTP, MQTT, device MQTT password, firmware server, experimental upload over MQTT) and why an action is unavailable; disabled Back up, Restore, Update and the Settings and Console tabs carry the same sentence, and the device list marks devices managed over MQTT (#79)
 
 ### Changed
 
