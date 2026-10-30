@@ -269,7 +269,7 @@ func TestSavingALegacyVersionUneditedIsNoChange(t *testing.T) {
 }
 
 // Why: a link follows the rule, not the slot.
-func TestReorderKeepsIDsAndDuplicateGetsAFreshOne(t *testing.T) {
+func TestReorderKeepsIDs(t *testing.T) {
 	r, _, _ := newRules("", nil)
 	ctx := context.Background()
 	v, err := r.Save(ctx, "a", "", AnyVersion, []RuleSpec{flash, {Command: "Timezone", Want: "99"}}, nil)
@@ -281,7 +281,7 @@ func TestReorderKeepsIDsAndDuplicateGetsAFreshOne(t *testing.T) {
 	if !policy.RuleIDRe.MatchString(idA) || idA == idB || isLegacyID(idA) {
 		t.Fatalf("new rules need distinct random ids, got %q %q", idA, idB)
 	}
-	v, err = r.Reorder(ctx, "a", v, []int{1, 0}, nil)
+	_, err = r.Reorder(ctx, "a", v, []int{1, 0}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,13 +289,7 @@ func TestReorderKeepsIDsAndDuplicateGetsAFreshOne(t *testing.T) {
 	if st1.Specs[0].ID != idB || st1.Specs[1].ID != idA {
 		t.Fatalf("reorder moved the ids away from their rules: %+v", st1.Specs)
 	}
-	if _, _, err := r.Duplicate(ctx, "a", v, 0, nil); err != nil {
-		t.Fatal(err)
-	}
 	st2, _ := r.State(ctx)
-	if st2.Specs[1].ID == st2.Specs[0].ID || st2.Specs[1].ID == "" || r.IndexOf(st2.Specs, st2.Specs[1].ID) != 1 {
-		t.Fatalf("a copy needs its own id: %+v", st2.Specs)
-	}
 	if r.IndexOf(st2.Specs, "rnone") != -1 || r.IndexOf(st2.Specs, "") != -1 {
 		t.Fatal("IndexOf must say -1 for an unknown id")
 	}

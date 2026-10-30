@@ -12420,6 +12420,13 @@ tbody[data-rule-list] td[data-label="Compliance"] > div > span {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
+/* the approved design gives the Compliance column 230 px (bar + numbers); Rule, Setting and Applies
+   to share the rest and do not wrap at desktop width. On a phone the row is a card. */
+@media (min-width: 45rem) {
+  tbody[data-rule-list] td[data-label="Compliance"] {
+    width: 230px;
+  }
+}
 @media (max-width: 44.99rem) {
   tbody[data-rule-list] td[aria-hidden="true"] {
     display: none;

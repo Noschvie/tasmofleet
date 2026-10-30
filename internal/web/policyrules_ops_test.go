@@ -103,7 +103,6 @@ func TestPolicyRulesOpsRefuseStaleVersion(t *testing.T) {
 	}{
 		{"/policy/rules/order", url.Values{"order": {"2,1,0"}}},
 		{"/policy/rules/order", url.Values{"id": {ids[1]}, "move": {"down"}}},
-		{"/policy/rules/duplicate", url.Values{"id": {ids[0]}}},
 		{"/policy/rules/disable", url.Values{"id": {ids[0]}}},
 		{"/policy/rules/enable", url.Values{"id": {ids[0]}}},
 	} {
@@ -118,10 +117,9 @@ func TestPolicyRulesOpsRefuseStaleVersion(t *testing.T) {
 	}
 }
 
-// Why: Duplicate adds a disabled copy right below, Enable/Disable flips only
-// that rule; and saving a disabled rule from a form without the switch must
-// not quietly turn it back on.
-func TestPolicyRulesDuplicateAndEnable(t *testing.T) {
+// Why: Enable/Disable flip only that rule; and saving a disabled rule from a form without the
+// switch must not quietly turn it back on.
+func TestPolicyRulesEnable(t *testing.T) {
 	e, mem, _ := rulesEnv(t, "")
 	threeRules(t, e)
 	post := func(path string, f url.Values, want int) {
@@ -132,39 +130,97 @@ func TestPolicyRulesDuplicateAndEnable(t *testing.T) {
 		}
 	}
 	ids := ruleIDs(t, mem)
-	// Duplicate adds the disabled copy below and opens the copy's own page.
-	r, _ := e.do(t, "POST", "/policy/rules/duplicate", "admin", url.Values{"csrf": {"tok"}, "version": {"3"}, "id": {ids[0]}})
-	if got := ruleNames(storedSpecs(t, mem)); got != "A,A (copy)(off),B,C" {
-		t.Fatalf("duplicate %s", got)
-	}
-	ids = ruleIDs(t, mem)
-	if loc := r.Header.Get("Location"); r.StatusCode != 303 || !strings.HasSuffix(loc, "/policy/rules/"+ids[1]+"?ok=duplicated") || ids[1] == ids[0] {
-		t.Fatalf("duplicate must land on the copy's page (a new id): %d %s", r.StatusCode, loc)
-	}
 	// Disable / Enable name the rule by id; back=rule returns to its page, back=list (or nothing) to the table.
-	r, _ = e.do(t, "POST", "/policy/rules/disable", "admin", url.Values{"csrf": {"tok"}, "version": {"4"}, "id": {ids[2]}, "back": {"list"}})
+	r, _ := e.do(t, "POST", "/policy/rules/disable", "admin", url.Values{"csrf": {"tok"}, "version": {"3"}, "id": {ids[1]}, "back": {"list"}})
 	if loc := r.Header.Get("Location"); r.StatusCode != 303 || !strings.HasSuffix(loc, "/policy?ok=disabled") {
 		t.Fatalf("disable, back=list: %d %s", r.StatusCode, loc)
 	}
-	r, _ = e.do(t, "POST", "/policy/rules/enable", "admin", url.Values{"csrf": {"tok"}, "version": {"5"}, "id": {ids[1]}, "back": {"rule"}})
+	if got := ruleNames(storedSpecs(t, mem)); got != "A,B(off),C" {
+		t.Fatalf("disable %s", got)
+	}
+	r, _ = e.do(t, "POST", "/policy/rules/enable", "admin", url.Values{"csrf": {"tok"}, "version": {"4"}, "id": {ids[1]}, "back": {"rule"}})
 	if loc := r.Header.Get("Location"); r.StatusCode != 303 || !strings.HasSuffix(loc, "/policy/rules/"+ids[1]+"?ok=enabled") {
 		t.Fatalf("enable, back=rule: %d %s", r.StatusCode, loc)
 	}
-	if got := ruleNames(storedSpecs(t, mem)); got != "A,A (copy),B(off),C" {
-		t.Fatalf("enable/disable %s", got)
-	}
+	post("/policy/rules/disable", url.Values{"version": {"5"}, "id": {ids[1]}}, 303)
 	// a form without the state switch keeps B disabled
-	saveRule(t, e, url.Values{"id": {ids[2]}, "version": {"6"}, "name": {"B2"}})
+	saveRule(t, e, url.Values{"id": {ids[1]}, "version": {"6"}, "name": {"B2"}})
 	// the rule page's form sends it
-	saveRule(t, e, url.Values{"id": {ids[3]}, "version": {"7"}, "name": {"C"}, "state": {"disabled"}})
-	if got := ruleNames(storedSpecs(t, mem)); got != "A,A (copy),B2(off),C(off)" {
+	saveRule(t, e, url.Values{"id": {ids[2]}, "version": {"7"}, "name": {"C"}, "state": {"disabled"}})
+	if got := ruleNames(storedSpecs(t, mem)); got != "A,B2(off),C(off)" {
 		t.Fatalf("editor state %s", got)
 	}
-	post("/policy/rules/duplicate", url.Values{"version": {"8"}, "id": {"r9z9z9"}}, 404)
 	post("/policy/rules/enable", url.Values{"version": {"8"}, "id": {"x"}}, 400)
 	post("/policy/rules/enable", url.Values{"version": {"8"}, "id": {ids[0]}, "back": {"elsewhere"}}, 400)
-	post("/policy/rules/duplicate", url.Values{"version": {"8"}, "idx": {"0"}}, 400) // the position field is gone
 	post("/policy/rules/save", url.Values{"version": {"8"}, "id": {"new"}, "command": {"SaveData"}, "want": {"0"}, "state": {"maybe"}}, 400)
+	// duplicating is no POST operation any more: it only opens a draft
+	post("/policy/rules/duplicate", url.Values{"version": {"8"}, "id": {ids[0]}}, 404)
+}
+
+// Why: Duplicate used to store a disabled copy at once, which left a rule nobody asked to keep when
+// the person only wanted to look. It is a GET now and must write nothing: no new version, the same
+// rules, whatever the source (even a disabled one).
+func TestDuplicateOpensADraftAndWritesNothing(t *testing.T) {
+	e, mem, _ := rulesEnv(t, "")
+	saveRule(t, e, url.Values{"name": {"Full"}, "command": {"Timezone"}, "want": {"99"}, "severity": {"warn"},
+		"family": {"esp32*"}, "tag": {"kitchen", "attic"}, "device": {"lamp"}, "tags_extra": {""}, "except": {"bench, test"}, "note": {"why: DST"}, "state": {"disabled"}})
+	saveRule(t, e, url.Values{"name": {"Other"}, "version": {"1"}})
+	ids := ruleIDs(t, mem)
+	before := len(mem.vs)
+	r, body := e.do(t, "GET", "/policy/rules/duplicate?id="+ids[0], "admin", nil)
+	if r.StatusCode != 200 {
+		t.Fatalf("duplicate = %d\n%s", r.StatusCode, body)
+	}
+	if len(mem.vs) != before || ruleNames(storedSpecs(t, mem)) != "Full(off),Other" {
+		t.Fatalf("GET duplicate wrote: %d versions, %s", len(mem.vs), ruleNames(storedSpecs(t, mem)))
+	}
+	// Why: the draft must carry every field of the source or the person re-types the rule.
+	for _, w := range []string{`name="id" value="new"`, `name="origin" value="duplicate:` + ids[0] + `"`, `value="Full (copy)"`, `value="Timezone"`, `value="99"`,
+		"Nothing is saved until you press Save rule", "Draft", "esp32*", "kitchen", "attic", "lamp", "bench", "why: DST"} {
+		if !strings.Contains(body, w) {
+			t.Errorf("draft lacks %q", w)
+		}
+	}
+	if r, _ := e.do(t, "GET", "/policy/rules/duplicate?id=r9z9z9", "admin", nil); r.StatusCode != 404 {
+		t.Errorf("unknown rule = %d, want 404", r.StatusCode)
+	}
+	if r, _ := e.do(t, "GET", "/policy/rules/duplicate?id=x", "admin", nil); r.StatusCode != 400 {
+		t.Errorf("bad id = %d, want 400", r.StatusCode)
+	}
+	if r, _ := e.do(t, "GET", "/policy/rules/duplicate?id="+ids[0], "operator", nil); r.StatusCode != 403 {
+		t.Errorf("operator = %d, want 403", r.StatusCode)
+	}
+	if len(mem.vs) != before {
+		t.Fatalf("a refused duplicate wrote: %d versions", len(mem.vs))
+	}
+}
+
+// Why: only Save creates the rule: exactly one, with the draft's fields (the person may have edited
+// them), right below its source so the copy sits where the original is read, and the change note
+// says where it came from.
+func TestDuplicateDraftSaveCreatesOneRuleBelowTheSource(t *testing.T) {
+	e, mem, _ := rulesEnv(t, "")
+	threeRules(t, e)
+	ids := ruleIDs(t, mem)
+	f := ruleForm(url.Values{"id": {"new"}, "version": {"3"}, "name": {"A (copy)"}, "origin": {"duplicate:" + ids[0]}})
+	r, body := e.do(t, "POST", "/policy/rules/save", "admin", f)
+	if r.StatusCode != 303 {
+		t.Fatalf("save: %d\n%s", r.StatusCode, body)
+	}
+	if got := ruleNames(storedSpecs(t, mem)); got != "A,A (copy),B,C" {
+		t.Fatalf("saved copy must be exactly one rule below its source: %s", got)
+	}
+	if loc := r.Header.Get("Location"); !strings.Contains(loc, "ok=saved") {
+		t.Errorf("a saved duplicate confirms like any saved rule: %s", loc)
+	}
+	// a source that is gone meanwhile (same version cannot happen, but a bad id must not lose the rule): append
+	f = ruleForm(url.Values{"id": {"new"}, "version": {"4"}, "name": {"Z"}, "origin": {"duplicate:r9z9z9"}})
+	if r, body := e.do(t, "POST", "/policy/rules/save", "admin", f); r.StatusCode != 303 {
+		t.Fatalf("save: %d\n%s", r.StatusCode, body)
+	}
+	if got := ruleNames(storedSpecs(t, mem)); got != "A,A (copy),B,C,Z" {
+		t.Fatalf("unknown source appends: %s", got)
+	}
 }
 
 // Why: templates are the empty state's way to start; a template adds an
@@ -213,7 +269,7 @@ func TestPolicyRulesTemplates(t *testing.T) {
 func TestPolicyRulesOpsAreAdminOnly(t *testing.T) {
 	e, mem, _ := rulesEnv(t, "")
 	threeRules(t, e)
-	for _, p := range []string{"/policy/rules/order", "/policy/rules/duplicate", "/policy/rules/enable", "/policy/rules/disable"} {
+	for _, p := range []string{"/policy/rules/order", "/policy/rules/enable", "/policy/rules/disable"} {
 		f := url.Values{"csrf": {"tok"}, "version": {"3"}, "id": {ruleIDs(t, mem)[0]}, "order": {"2,1,0"}}
 		if r, _ := e.do(t, "POST", p, "operator", f); r.StatusCode != 403 {
 			t.Errorf("POST %s as operator: %d", p, r.StatusCode)
@@ -357,10 +413,14 @@ func TestPolicyPageFormsCarryTheVersion(t *testing.T) {
 			t.Errorf("%s form without the version:\n%s", f[1], f[0])
 		}
 	}
-	for _, op := range []string{"order", "duplicate", "disable", "delete"} {
+	for _, op := range []string{"order", "disable", "delete"} {
 		if !seen[op] {
 			t.Errorf("no %s form on the page", op)
 		}
+	}
+	// Why: Duplicate changes nothing, so it is a plain link (GET), never a form post.
+	if seen["duplicate"] || !strings.Contains(body, `href="/tf/policy/rules/duplicate?id=`) {
+		t.Error("Duplicate must be a GET link in the row menu, not a form")
 	}
 	if seen["save"] || seen["template"] || strings.Contains(body, `name="idx"`) {
 		t.Error("the overview has no editor, no template form and no position field")
@@ -400,5 +460,18 @@ func TestPolicyEditorEnabledSwitch(t *testing.T) {
 	}
 	if r, _ := e.do(t, "POST", "/policy/rules/save", "admin", ruleForm(url.Values{"version": {"2"}, "state": {"disabled", "enabled", "enabled"}})); r.StatusCode != 400 {
 		t.Errorf("three states: %d", r.StatusCode)
+	}
+}
+
+// Why: a copied name must stay within the name limit (80 bytes), or saving the duplicate draft
+// would fail validation on a long rule name.
+func TestCopyNameStaysWithinLimit(t *testing.T) {
+	long := strings.Repeat("ä", 40) // 80 bytes
+	got := copyName(long)
+	if len(got) > 80 || !strings.HasSuffix(got, " (copy)") {
+		t.Fatalf("%q (%d bytes)", got, len(got))
+	}
+	if copyName("Telemetry") != "Telemetry (copy)" {
+		t.Fatal(copyName("Telemetry"))
 	}
 }

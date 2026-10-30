@@ -12,13 +12,12 @@ import (
 )
 
 // List operations of the policy page and the rule page: reorder (the order is the precedence),
-// duplicate (a disabled copy below) and enable/disable. A rule is named by its id (never by its
+// enable/disable. A rule is named by its id (never by its
 // position). Each is a plain form POST that names the version the person saw; on success it
 // redirects back, a stale version answers 409 like the other rule changes.
 
 func (h *handler) registerPolicyRuleOps(route func(string, func(http.Handler) http.Handler, http.HandlerFunc), adm func(http.Handler) http.Handler) {
 	route("POST "+rulesPath+"/order", adm, h.rulesOrder)
-	route("POST "+rulesPath+"/duplicate", adm, h.rulesDuplicate)
 	route("POST "+rulesPath+"/enable", adm, func(w http.ResponseWriter, r *http.Request) { h.rulesSetEnabled(w, r, true) })
 	route("POST "+rulesPath+"/disable", adm, func(w http.ResponseWriter, r *http.Request) { h.rulesSetEnabled(w, r, false) })
 }
@@ -138,25 +137,6 @@ func moveOrder(n, idx int, up bool) ([]int, bool) {
 		order[idx], order[to] = order[to], order[idx]
 	}
 	return order, true
-}
-
-// rulesDuplicate adds a disabled copy below the rule and opens the copy's rule page.
-func (h *handler) rulesDuplicate(w http.ResponseWriter, r *http.Request) {
-	_, ver, idx, ok := h.opForm(w, r, []string{"csrf", "version", "id"})
-	if !ok {
-		return
-	}
-	_, at, err := h.d.PolicyRules.Duplicate(r.Context(), actor(r), ver, idx, h.d.Recorder)
-	if err != nil {
-		h.rulesOpBack(w, r, err, "duplicated", "", "")
-		return
-	}
-	st, serr := h.d.PolicyRules.State(r.Context())
-	if serr != nil || at < 0 || at >= len(st.Specs) {
-		redirect(w, r, policyPath+"?ok=duplicated")
-		return
-	}
-	redirect(w, r, rulesPath+"/"+st.Specs[at].ID+"?ok=duplicated")
 }
 
 func (h *handler) rulesSetEnabled(w http.ResponseWriter, r *http.Request, enabled bool) {

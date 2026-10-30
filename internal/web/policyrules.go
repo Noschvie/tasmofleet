@@ -40,7 +40,6 @@ type PolicyRulesService interface {
 	// History is one page of the folded policy history, newest first (the History tab).
 	History(ctx context.Context, before int64, limit int) (sysconfig.HistoryPage, error)
 	Reorder(ctx context.Context, actor string, base int64, order []int, rec audit.Recorder) (int64, error)
-	Duplicate(ctx context.Context, actor string, base int64, idx int, rec audit.Recorder) (int64, int, error)
 	SetEnabled(ctx context.Context, actor string, base int64, idx int, enabled bool, rec audit.Recorder) (int64, error)
 }
 
@@ -67,6 +66,7 @@ func (h *handler) registerPolicyRules(route func(string, func(http.Handler) http
 	route("POST "+policyIOPath+"/import", adm, h.rulesImport)
 	route("GET "+rulesPath+"/value-control", adm, h.rulesValueControl)
 	route("GET "+rulesPath+"/new", adm, h.ruleNew)
+	route("GET "+rulesPath+"/duplicate", adm, h.ruleDuplicate)
 	route("POST "+rulesPath+"/new/copy", adm, h.ruleCopy)
 	route("POST "+rulesPath+"/preview", adm, h.rulesPreview)
 	route("POST "+rulesPath+"/save", adm, h.rulesSave)
@@ -265,7 +265,7 @@ func (h *handler) editorFields(r *http.Request, spec sysconfig.RuleSpec) (*ruleE
 }
 
 var (
-	originRe  = regexp.MustCompile(`^(command|template:[a-z0-9-]{1,32}|copy:[0-9]{1,18})$`)
+	originRe  = regexp.MustCompile(`^(command|template:[a-z0-9-]{1,32}|copy:[0-9]{1,18}|duplicate:r[a-z0-9]{1,15})$`)
 	versionRe = regexp.MustCompile(`^[0-9]{1,18}$`)
 )
 
@@ -461,13 +461,20 @@ func (h *handler) rulesSave(w http.ResponseWriter, r *http.Request) {
 		h.notFound(w, r)
 		return
 	}
+	if src, isCopy := strings.CutPrefix(d.Origin, "duplicate:"); isCopy && d.ID == "new" {
+		// A duplicate lands right below its source (the end of the list when the source is gone).
+		if n := indexOfRule(st.Specs, src); n >= 0 {
+			list = slices.Insert(slices.Clone(st.Specs), n+1, d.Spec)
+			pos = n + 1
+		}
+	}
 	if field, msg := draftProblem(d.Spec); field != "" {
 		h.rulesInvalid(w, r, d, field, msg, http.StatusUnprocessableEntity)
 		return
 	}
 	note := d.ChangeNote
 	if note == "" && d.ID == "new" {
-		note = h.originNote(r, d.Origin)
+		note = h.originNote(r, d.Origin, st.Specs)
 	}
 	_, err = h.d.PolicyRules.Save(r.Context(), actor(r), note, d.Version, list, h.d.Recorder)
 	if err == nil {
@@ -506,12 +513,17 @@ func (h *handler) ruleSaved(w http.ResponseWriter, r *http.Request, id string, p
 }
 
 // originNote is the change note of a new rule that the person left empty: where it came from.
-func (h *handler) originNote(r *http.Request, origin string) string {
+func (h *handler) originNote(r *http.Request, origin string, saved []sysconfig.RuleSpec) string {
 	switch kind, val, _ := strings.Cut(origin, ":"); kind {
 	case "template":
 		if i := slices.IndexFunc(policyTemplates(h.brokerHost()), func(t ruleTemplate) bool { return t.ID == val }); i >= 0 {
 			return "from template: " + policyTemplates(h.brokerHost())[i].Title
 		}
+	case "duplicate":
+		if n := indexOfRule(saved, val); n >= 0 {
+			return "duplicated from " + ruleName(saved[n])
+		}
+		return "duplicated from a rule"
 	case "copy":
 		id, err := strconv.ParseInt(val, 10, 64)
 		if err != nil {

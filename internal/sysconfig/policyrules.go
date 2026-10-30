@@ -510,42 +510,6 @@ func (r *Rules) Reorder(ctx context.Context, actor string, base int64, order []i
 	}, rec)
 }
 
-// Duplicate stores version base with a disabled copy of the rule at idx right
-// below it. The copy is disabled so duplicating never changes what is flagged.
-// It returns the new version and the copy's position.
-func (r *Rules) Duplicate(ctx context.Context, actor string, base int64, idx int, rec audit.Recorder) (int64, int, error) {
-	id, err := r.mutate(ctx, actor, base, "duplicate", func(specs []RuleSpec) ([]RuleSpec, error) {
-		if idx < 0 || idx >= len(specs) {
-			return nil, ErrNoSuchRule
-		}
-		c := cloneSpec(specs[idx])
-		c.ID = newRuleID()
-		c.Disabled = true
-		if c.Name != "" {
-			c.Name = copyName(c.Name)
-		}
-		return slices.Insert(specs, idx+1, c), nil
-	}, rec)
-	return id, idx + 1, err
-}
-
-// copyName is the name of a duplicated rule: "<name> (copy)", shortened so it
-// stays within the name limit.
-func copyName(name string) string {
-	const suffix = " (copy)"
-	if len(name)+len(suffix) > maxRuleName {
-		rs := []rune(name)
-		for len(string(rs))+len(suffix) > maxRuleName {
-			rs = rs[:len(rs)-1]
-		}
-		name = strings.TrimSpace(string(rs))
-	}
-	return name + suffix
-}
-
-// maxRuleName is policy's limit on a rule name (in bytes).
-const maxRuleName = 80
-
 func cloneSpec(s RuleSpec) RuleSpec {
 	s.Families, s.Tags = slices.Clone(s.Families), slices.Clone(s.Tags)
 	s.Devices, s.Except = slices.Clone(s.Devices), slices.Clone(s.Except)

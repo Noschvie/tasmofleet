@@ -72,9 +72,6 @@ func TestListOperationsRefuseStaleVersion(t *testing.T) {
 	if _, err := r.Reorder(ctx, "a", base, []int{1, 0}, nil); !errors.Is(err, ErrStale) {
 		t.Errorf("reorder: %v", err)
 	}
-	if _, _, err := r.Duplicate(ctx, "a", base, 0, nil); !errors.Is(err, ErrStale) {
-		t.Errorf("duplicate: %v", err)
-	}
 	if _, err := r.SetEnabled(ctx, "a", base, 0, false, nil); !errors.Is(err, ErrStale) {
 		t.Errorf("enable: %v", err)
 	}
@@ -96,44 +93,6 @@ func TestReorderNeedsAPermutation(t *testing.T) {
 	}
 	if _, err := r.Reorder(context.Background(), "a", base, []int{0, 1, 2}, nil); !errors.Is(err, ErrNoChange) {
 		t.Errorf("same order must be no change: %v", err)
-	}
-}
-
-// Why: the prototype's Duplicate adds a copy right below; it is disabled so
-// duplicating never changes what the fleet check flags until the admin edits
-// and enables it.
-func TestDuplicateInsertsDisabledCopyBelow(t *testing.T) {
-	r, _, aud := newRules("", nil)
-	base := seedRules(t, r, flash, tele, pos)
-	_, at, err := r.Duplicate(context.Background(), "ann", base, 1, nil)
-	if err != nil || at != 2 {
-		t.Fatalf("at %d err %v", at, err)
-	}
-	s, _ := r.State(context.Background())
-	if got := commands(s.Specs); got != "SaveData=0,TelePeriod=300,TelePeriod=300(off),PowerOnState=3" {
-		t.Fatalf("list %s", got)
-	}
-	if s.Specs[2].Name != "Telemetry (copy)" || s.Specs[2].Tags[0] != "plug" {
-		t.Fatalf("copy %+v", s.Specs[2])
-	}
-	if !strings.Contains(aud.last().Detail, `"op":"duplicate"`) {
-		t.Fatalf("audit %+v", aud.last())
-	}
-	if _, _, err := r.Duplicate(context.Background(), "ann", s.VersionID, 4, nil); !errors.Is(err, ErrNoSuchRule) {
-		t.Fatalf("out of range: %v", err)
-	}
-}
-
-// Why: a copied name must stay within the name limit, or duplicating a long
-// rule would fail validation.
-func TestCopyNameStaysWithinLimit(t *testing.T) {
-	long := strings.Repeat("ä", 40) // 80 bytes
-	got := copyName(long)
-	if len(got) > maxRuleName || !strings.HasSuffix(got, " (copy)") {
-		t.Fatalf("%q (%d bytes)", got, len(got))
-	}
-	if copyName("Telemetry") != "Telemetry (copy)" {
-		t.Fatal(copyName("Telemetry"))
 	}
 }
 

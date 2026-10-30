@@ -63,22 +63,21 @@ type ValueRefusedError struct{ Reason string }
 func (e *ValueRefusedError) Error() string { return e.Reason }
 
 // policyPath is the policy overview: the fleet tiles, the tabs and the rule table. Each rule has
-// its own page under rulesPath; the rule changes (reorder, duplicate, enable, delete) are form
+// its own page under rulesPath; the rule changes (reorder, enable, delete) are form
 // routes there and come back here.
 const policyPath = "/policy"
 
 // policyFlashes are the confirmations after a change that came back to the page (the
 // prototype's toasts).
 var policyFlashes = map[string]string{
-	"saved":      "Rule saved",
-	"deleted":    "Rule deleted",
-	"duplicated": "Rule duplicated · disabled until you enable it",
-	"enabled":    "Rule enabled",
-	"disabled":   "Rule disabled · it no longer flags devices",
-	"reverted":   "Reverted: the old rules are saved as a new version",
-	"imported":   "Rules imported as a new version",
-	"paused":     "Live check paused",
-	"resumed":    "Live check resumed",
+	"saved":    "Rule saved",
+	"deleted":  "Rule deleted",
+	"enabled":  "Rule enabled",
+	"disabled": "Rule disabled · it no longer flags devices",
+	"reverted": "Reverted: the old rules are saved as a new version",
+	"imported": "Rules imported as a new version",
+	"paused":   "Live check paused",
+	"resumed":  "Live check resumed",
 }
 
 func (h *handler) registerPolicy(route func(string, func(http.Handler) http.Handler, http.HandlerFunc), op func(http.Handler) http.Handler) {

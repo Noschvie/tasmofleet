@@ -9,6 +9,7 @@ always upgrade automatically.
 ### Fixed
 
 - Policy: Cancel in the rule editor goes back to the policy overview (it reloaded the rule page, or opened the template picker for a new rule)
+- Policy: Duplicate opens an unsaved copy; nothing is stored until Save rule
 
 ### Changed
 

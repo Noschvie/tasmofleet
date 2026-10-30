@@ -95,7 +95,7 @@ templ rulePageTempl(p rulePageView) {
 					</form>
 				}
 				if p.Admin && !p.Draft {
-					@ruleOpForm(p, "/duplicate", "", "Duplicate")
+					<a class="btn" href={ templ.SafeURL(p.Base + rulesPath + "/duplicate?id=" + p.ID) }>Duplicate</a>
 					if p.Disabled {
 						@ruleOpForm(p, "/enable", "rule", "Enable")
 					} else {

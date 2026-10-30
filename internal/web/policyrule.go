@@ -26,7 +26,7 @@ type ruleOpts struct {
 	ID       string              // "new" for a draft, else the rule's id
 	Draft    *ruleDraft          // the form as posted (a refused save): shown again with its problem
 	Spec     *sysconfig.RuleSpec // a draft the server built (template, command, copy)
-	Origin   string              // template:<id>, copy:<device id> or command: kept in the form
+	Origin   string              // template:<id>, copy:<device id>, duplicate:<rule id> or command: kept in the form
 	Source   string              // the draft's source in words ("Copied from kitchen · read live now")
 	ErrField string
 	ErrMsg   string
@@ -395,10 +395,7 @@ func (h *handler) rulePageRender(w http.ResponseWriter, r *http.Request, status 
 		e.ID, e.Version = o.ID, src.Version
 		e.Err, e.ErrField = o.ErrMsg, o.ErrField
 		e.Control.Invalid = o.ErrField == "want"
-		e.Enabled = !spec.Disabled
-		if draft && o.Draft == nil {
-			e.Enabled = true
-		}
+		e.Enabled = !spec.Disabled // a duplicate keeps its source's state; the other drafts start enabled
 		p.Editor = e
 		if !draft {
 			p.DeleteText = "It currently judges " + plural(stat.Applies, "device") + ". They stop being checked for " + spec.Command +
@@ -570,6 +567,56 @@ func commandRefusal(command string) string {
 		return "This command cannot be read without side effects."
 	}
 	return ""
+}
+
+// ruleDuplicate is GET /policy/rules/duplicate?id=: an unsaved draft that starts as a copy of the
+// rule. Nothing is stored; Save rule creates the copy (below its source, see place).
+func (h *handler) ruleDuplicate(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	for k, vs := range q {
+		if k != "id" || len(vs) != 1 {
+			http.Error(w, "unknown form field", http.StatusBadRequest)
+			return
+		}
+	}
+	id := q.Get("id")
+	if !policy.RuleIDRe.MatchString(id) {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	st, err := h.d.PolicyRules.State(r.Context())
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	n := indexOfRule(st.Specs, id)
+	if n < 0 {
+		h.notFound(w, r)
+		return
+	}
+	spec := st.Specs[n]
+	spec.ID = ""
+	spec.Families, spec.Tags = slices.Clone(spec.Families), slices.Clone(spec.Tags)
+	spec.Devices, spec.Except = slices.Clone(spec.Devices), slices.Clone(spec.Except)
+	if spec.Name != "" {
+		spec.Name = copyName(spec.Name)
+	}
+	h.rulePageRender(w, r, http.StatusOK, ruleOpts{ID: "new", Spec: &spec, Origin: "duplicate:" + id,
+		Source: "A copy of " + ruleName(st.Specs[n]) + ". Nothing is saved until you press Save rule."})
+}
+
+// copyName is the name of a duplicated rule: "<name> (copy)", shortened so it stays within the
+// name limit (80 bytes).
+func copyName(name string) string {
+	const suffix, limit = " (copy)", 80
+	if len(name)+len(suffix) > limit {
+		rs := []rune(name)
+		for len(string(rs))+len(suffix) > limit {
+			rs = rs[:len(rs)-1]
+		}
+		name = strings.TrimSpace(string(rs))
+	}
+	return name + suffix
 }
 
 // ruleCopy is POST /policy/rules/new/copy: read one setting of one device and open a draft rule

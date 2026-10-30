@@ -154,7 +154,7 @@ templ policyRowMenu(p policyView, r ruleRow) {
 		<summary class="btn btn-ghost btn-icon icon" aria-label={ "Actions for " + r.Name }>⋯</summary>
 		<div class="rowmenu-body menu-panel" role="menu">
 			<a class="menu-item" role="menuitem" href={ templ.SafeURL(p.Base + rulesPath + "/" + r.ID) }><span>Edit</span></a>
-			@policyRowOp(p, r, "/duplicate", "", "", "Duplicate")
+			<a class="menu-item" role="menuitem" href={ templ.SafeURL(p.Base + rulesPath + "/duplicate?id=" + r.ID) }><span>Duplicate</span></a>
 			if r.Disabled {
 				@policyRowOp(p, r, "/enable", "", "list", "Enable")
 			} else {
