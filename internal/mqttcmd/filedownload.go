@@ -113,6 +113,10 @@ func (c *Channel) Download(ctx context.Context, d model.Device, password string)
 	defer cancel()
 	in := make(chan mqttbus.Message, waitDepth)
 	c.mu.Lock()
+	if err := c.firmwarePendingLocked(d.Topic); err != nil {
+		c.mu.Unlock()
+		return nil, err
+	}
 	c.files[d.Topic] = in
 	clean := c.fileClean[d.Topic]
 	c.fileClean[d.Topic] = false // clean again only after a matching MD5

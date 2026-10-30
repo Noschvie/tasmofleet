@@ -81,6 +81,11 @@ func (c *Channel) Upload(ctx context.Context, d model.Device, typ int, name stri
 
 	in := make(chan mqttbus.Message, waitDepth)
 	c.mu.Lock()
+	if err := c.firmwarePendingLocked(d.Topic); err != nil {
+		c.mu.Unlock()
+		return err
+	}
+	boots := c.reboots[d.Topic]
 	c.files[d.Topic] = in
 	clean := c.fileClean[d.Topic] // shared with Download: one FMqtt state on the device
 	c.fileClean[d.Topic] = false  // clean again only after "Done"
@@ -98,6 +103,13 @@ func (c *Channel) Upload(ctx context.Context, d model.Device, typ int, name stri
 		c.waitAbortedOf(ctx, in, suffixUpload)
 	}
 	abort, err := c.runUpload(ctx, d.Topic, start, id, typ, size, r, in, progress)
+	if err != nil && typ == UploadFirmware && errors.Is(err, ErrOutcomeUnknown) {
+		c.mu.Lock()
+		if c.reboots[d.Topic] == boots { // the device has not restarted since the transfer began
+			c.fwPending[d.Topic] = boots
+		}
+		c.mu.Unlock()
+	}
 	if err != nil {
 		if abort && !deviceReset(err) {
 			c.abortCmd(d.Topic, cmdUpload) // the start may have reached the device: leave it idle
@@ -108,6 +120,28 @@ func (c *Channel) Upload(ctx context.Context, d model.Device, typ int, name stri
 	c.fileClean[d.Topic] = true
 	c.mu.Unlock()
 	return nil
+}
+
+// firmwarePendingLocked refuses a transfer on a topic whose Type 1 upload has an unknown outcome.
+//
+// Every chunk of the image was acknowledged but nothing confirmed it, so the device holds a
+// complete image in FMqtt (file_id still set, Update still open) that "FileUpload 0" would commit
+// with Update.end(true) (xdrv_02_1_mqtt_file.ino, Tasmota v16.0.0, lines 162-171). Any further
+// file command is refused until the device has restarted (LWT Offline then Online), which drops
+// that state. "FileDownload 0" would not call Update.end (its abort path only frees the settings
+// buffer, lines 369-375), but it does not clear file_id either and a download start on a busy
+// FMqtt falls through into the upload's dummy buffer, so it is refused too. After the reboot the
+// topic is "unclean" as usual and the next transfer opens with its abort.
+func (c *Channel) firmwarePendingLocked(topic string) error {
+	at, pending := c.fwPending[topic]
+	if !pending {
+		return nil
+	}
+	if c.reboots[topic] > at {
+		delete(c.fwPending, topic)
+		return nil
+	}
+	return fmt.Errorf("%w: a firmware upload to this device has an unknown outcome; wait for the device to restart", ErrRefused)
 }
 
 func checkUpload(d model.Device, typ int, name string, size int64, r io.Reader) error {

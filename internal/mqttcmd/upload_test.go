@@ -633,3 +633,67 @@ func TestUploadOfflineDeviceGetsNothing(t *testing.T) {
 }
 
 func base64Std(s string) ([]byte, error) { return base64.StdEncoding.DecodeString(s) }
+
+// Why: after a Type 1 whose chunks were all acknowledged but never confirmed, the device holds a
+// complete image that FileUpload 0 would commit. Nothing may be published to the topic (neither
+// direction) until the device has restarted; then it is unclean as usual and opens with the abort.
+func TestUploadType1UnknownOutcomeBlocksTheTopicUntilTheDeviceRestarted(t *testing.T) {
+	b := &fakeBus{}
+	u := &upDevice{maxes: []int{861}} // never answers the Md5
+	u.t = t
+	u.attach(b)
+	c := newChan(b)
+	data := make([]byte, 2000)
+	err := c.Upload(t.Context(), esp32Plug(), UploadFirmware, "x", 2000, bytes.NewReader(data), dlPassword, nil)
+	if !errors.Is(err, ErrOutcomeUnknown) {
+		t.Fatal(err)
+	}
+	before := len(b.sent())
+	_, derr := c.Download(t.Context(), esp32Plug(), dlPassword)
+	uerr := c.Upload(t.Context(), esp32Plug(), UploadSettings, "x", 100, bytes.NewReader(data[:100]), dlPassword, nil)
+	if !errors.Is(derr, ErrRefused) || !errors.Is(uerr, ErrRefused) || len(b.sent()) != before {
+		t.Fatalf("download %v, upload %v, published %d more", derr, uerr, len(b.sent())-before)
+	}
+	if !strings.Contains(uerr.Error(), "wait for the device to restart") {
+		t.Fatalf("%v", uerr)
+	}
+	b.emit(mqttbus.KindLWT, "plug", "LWT", "Offline", false)
+	if err := c.Upload(t.Context(), esp32Plug(), UploadSettings, "x", 100, bytes.NewReader(data[:100]), dlPassword, nil); !errors.Is(err, tasmota.ErrUnreachable) || len(b.sent()) != before {
+		t.Fatalf("while rebooting: %v", err) // offline: still nothing sent
+	}
+	b.emit(mqttbus.KindLWT, "plug", "LWT", "Online", false)
+	u.final = `{"FileUpload":"Done"}`
+	if err := c.Upload(t.Context(), esp32Plug(), UploadSettings, "x", 100, bytes.NewReader(data[:100]), dlPassword, nil); err != nil {
+		t.Fatal(err)
+	}
+	if first := b.sent()[before]; first.payload != "0" {
+		t.Fatalf("after the restart the transfer opens with the abort, got %q", first.payload)
+	}
+}
+
+// Why: a restart that happened while the upload waited for Done already dropped the device's
+// transfer state, so nothing is pending and the topic is usable (unclean) at once.
+func TestUploadType1RebootDuringTheWaitLeavesNothingPending(t *testing.T) {
+	b := &fakeBus{}
+	u := &upDevice{maxes: []int{861}}
+	u.t = t
+	u.attach(b)
+	inner := b.onPub
+	b.onPub = func(b *fakeBus, p pub) {
+		inner(b, p)
+		if strings.Contains(p.payload, `"Md5"`) {
+			b.emit(mqttbus.KindLWT, "plug", "LWT", "Offline", false)
+			b.emit(mqttbus.KindLWT, "plug", "LWT", "Online", false)
+		}
+	}
+	c := newChan(b)
+	// The LWT Offline/Online pair must be known before the upload starts to make the transition.
+	b.emit(mqttbus.KindLWT, "plug", "LWT", "Online", false)
+	if err := c.Upload(t.Context(), esp32Plug(), UploadFirmware, "x", 2000, bytes.NewReader(make([]byte, 2000)), dlPassword, nil); !errors.Is(err, ErrOutcomeUnknown) {
+		t.Fatal(err)
+	}
+	u.final = `{"FileUpload":"Done"}`
+	if err := c.Upload(t.Context(), esp32Plug(), UploadSettings, "x", 100, bytes.NewReader(make([]byte, 100)), dlPassword, nil); err != nil {
+		t.Fatalf("a rebooted device must not stay blocked: %v", err)
+	}
+}

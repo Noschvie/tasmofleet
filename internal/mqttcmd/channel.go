@@ -69,6 +69,8 @@ type Channel struct {
 
 	files     map[string]chan mqttbus.Message // topic -> stat/<t>/FILEDOWNLOAD|FILEUPLOAD of the transfer in flight
 	fileClean map[string]bool                 // topic -> the last download ended with a matching MD5
+	reboots   map[string]int                  // topic -> LWT Offline->Online pairs seen (bounded by lwt)
+	fwPending map[string]int                  // topic -> reboots when a Type 1 upload ended unconfirmed
 }
 
 // waiter receives the live replies of the one command in flight on a topic.
@@ -94,7 +96,7 @@ func New(bus mqttbus.Bus, o Options) *Channel {
 	if o.FileTotal == 0 {
 		o.FileTotal = DefaultFileTotal
 	}
-	c := &Channel{bus: bus, o: o, lwt: map[string]string{}, info: map[string]*Info{}, sems: map[string]chan struct{}{}, waiters: map[string]*waiter{}, files: map[string]chan mqttbus.Message{}, fileClean: map[string]bool{}, done: make(chan struct{})}
+	c := &Channel{bus: bus, o: o, lwt: map[string]string{}, info: map[string]*Info{}, sems: map[string]chan struct{}{}, waiters: map[string]*waiter{}, files: map[string]chan mqttbus.Message{}, fileClean: map[string]bool{}, reboots: map[string]int{}, fwPending: map[string]int{}, done: make(chan struct{})}
 	c.unsub = bus.Subscribe([]mqttbus.Kind{mqttbus.KindLWT, mqttbus.KindInfo, mqttbus.KindResult, mqttbus.KindStatus, mqttbus.KindPower, mqttbus.KindFile}, c.onMessage)
 	return c
 }
@@ -349,6 +351,9 @@ func (c *Channel) onLWT(m mqttbus.Message) {
 	defer c.mu.Unlock()
 	if !have && len(c.lwt) >= maxTopics {
 		return
+	}
+	if state == "Online" && c.lwt[m.Topic] == "Offline" {
+		c.reboots[m.Topic]++ // a reboot: Offline (the will) followed by Online
 	}
 	c.lwt[m.Topic] = state
 	if m.Retained {
