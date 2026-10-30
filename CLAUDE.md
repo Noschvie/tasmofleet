@@ -196,7 +196,7 @@ with e.g. `make check JOBS=4`. `make test` and `make integration` use the go tes
   `publish` calling `image.yml`) and the GitHub release made only after this tier passed.
 - **FULL** (nightly cron on `main`, manual dispatch): additionally every e2e test in three shards, every
   unit test with the race detector, the command catalogue check, uncached test runs and the full mutation
-  run. It blocks no release. Layout and visual regressions, race outside the safety packages and
+  run. It blocks no release; when it fails, the job `nightly-failure-issue` opens an issue "Nightly FULL failed on main (date)" (labels `ci`, `flaky`) with the failed jobs, or comments on the one that is still open. Layout and visual regressions, race outside the safety packages and
   the full mutation run (a PR that changes a safety package already gates its own mutation) are caught here, so the nightly FULL is the place to look for them; a
   failure is fixed through an issue, not by holding a release.
 - **Which e2e tests are `@core`**: smoke, sign-in and authorization (header, local, OIDC, standalone,
