@@ -43,7 +43,7 @@ var (
 	// ErrLanguageUnknown: the language build of the device was never read from its web page
 	// (MQTT-only devices), so Select will not pick a file without an explicit Choice.Language.
 	// "EN" is an allowed explicit choice. Never guess: a German device must not get the English build.
-	ErrLanguageUnknown = errors.New("fwselect: language build unknown, choose a language")
+	ErrLanguageUnknown = errors.New("fwselect: language build never read from the device, choose a language")
 
 	// ErrBuildChoiceNeeded is the refusal for a chip with two upstream builds
 	// that nothing the device reports can tell apart (ESP32-S2: s2, s2cdc, #88).

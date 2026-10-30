@@ -20,7 +20,7 @@ func selectFile(id model.Identity, c Choice) (Selection, error) {
 	if !id.LanguageKnown && c.Language == "" {
 		// Never guess (D10): an unread language is not English. Said before the variant checks
 		// because the language is what the person has to supply.
-		return Selection{}, fmt.Errorf("select: the language build of this device was never read from its web page: %w", ErrLanguageUnknown)
+		return Selection{}, fmt.Errorf("select: %w", ErrLanguageUnknown)
 	}
 	variant := id.Variant
 	if c.Variant != "" {
