@@ -11,12 +11,13 @@
 #     Push to main runs the same jobs (the PR already proved them); it keeps
 #     main's caches fresh, which PR runs restore from.
 #   RELEASE (tags v*): the FAST tier (cached tests, the @core e2e tests in two
-#     shards) plus, always and not only when changed, the race tests and the
-#     mutation gate of the SAFETY packages (a tag has no PR base, so
-#     safety-race and mutation-changed run every package), and the early
-#     changelog and migration guards. A tag publishes the image (image.yml,
-#     called below) only after this tier passed; then the job "release" makes
-#     the GitHub release from the CHANGELOG.md section.
+#     shards) plus, always and not only when changed, the race tests of the
+#     SAFETY packages (a tag has no PR base, so safety-race runs every one),
+#     and the early changelog and migration guards. No mutation: every PR that
+#     touches a SAFETY package already passed mutation-changed, and the
+#     nightly FULL runs the whole mutation. A tag publishes the image
+#     (image.yml, called below) only after this tier passed; then the job
+#     "release" makes the GitHub release from the CHANGELOG.md section.
 #   FULL (nightly cron, manual dispatch): additionally the whole e2e suite in
 #     three shards (layout and visual guards), every unit test with the race
 #     detector, the Tasmota command catalogue check (make catalogue-check),
@@ -97,7 +98,7 @@ jobs:
           tier=fast
           case "$EVENT" in schedule|workflow_dispatch) tier=full ;; esac
           if [ "$REF_TYPE" = tag ]; then
-            # RELEASE tier: FAST plus race and mutation of the SAFETY packages, always.
+            # RELEASE tier: FAST plus the race tests of the SAFETY packages, always.
             tier=release
             safety=true
             # Release guard, early: the image job checks it again before publishing.
@@ -316,11 +317,11 @@ jobs:
   # uploads the counts; mutation-gate adds them up and applies the thresholds.
   # FULL tier: every MUTATION package. FAST tier: only for PRs that change a
   # SAFETY package, and only the changed mutation packages (mutation-changed).
-  # RELEASE tier (tags): mutation-changed without a base runs every package.
+  # RELEASE tier (tags): no mutation.
   mutation:
-    name: mutation tests (${{ needs.changes.outputs.tier == 'fast' && 'changed' || 'all' }}, ${{ matrix.shard }})
+    name: mutation tests (${{ needs.changes.outputs.tier == 'full' && 'all' || 'changed' }}, ${{ matrix.shard }})
     needs: changes
-    if: needs.changes.outputs.code == 'true' && (needs.changes.outputs.tier == 'full' || needs.changes.outputs.safety == 'true')
+    if: needs.changes.outputs.code == 'true' && (needs.changes.outputs.tier == 'full' || (needs.changes.outputs.tier == 'fast' && needs.changes.outputs.safety == 'true'))
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -362,7 +363,7 @@ jobs:
           pattern: mutation-counts-*
           path: ${{ runner.temp }}/counts
       - env:
-          ALL: ${{ needs.changes.outputs.tier == 'fast' && '' || '1' }}
+          ALL: ${{ needs.changes.outputs.tier == 'full' && '1' || '' }}
         run: make mutation-sum MUTATION_COUNTS="$RUNNER_TEMP/counts" MUTATION_SHARDS=3 MUTATION_ALL="$ALL"
 
   # Known-flaky tests, nightly (and dispatch) only, with retries. Never part of
@@ -405,7 +406,7 @@ jobs:
   # only when its tier did not ask for it: everything for a docs-only PR, the
   # safety jobs when no SAFETY package changed, race and full mutation outside
   # the FULL tier. Any other result (failure, cancelled, or a skip caused by a
-  # failed dependency) fails it. Mutation runs in FULL and for safety PRs.
+  # failed dependency) fails it. Mutation runs in FULL and for safety PRs, not on tags.
   required:
     name: required
     needs: [changes, lint, test, integration, e2e, safety-race, mutation, mutation-gate, race, catalogue]
@@ -445,7 +446,7 @@ jobs:
           check "$f" $FULL_ONLY
           c=$docs; [ "$TIER" = full ] || [ "$CAT_CHANGED" = true ] || c=true
           check "$c" $CATALOGUE
-          m=$docs; [ "$TIER" = full ] || [ "$SAFETY" = true ] || m=true
+          m=$docs; [ "$TIER" = full ] || { [ "$TIER" = fast ] && [ "$SAFETY" = true ]; } || m=true
           check "$m" $MUTATION
 
   # Release: a tag publishes the image only when the RELEASE tier passed.

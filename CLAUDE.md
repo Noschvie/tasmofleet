@@ -190,14 +190,14 @@ with e.g. `make check JOBS=4`. `make test` and `make integration` use the go tes
   (`make mutation-sum`). CI restores the Go build/test cache (`.github/actions/go`, keyed on Go
   version and `go.sum`) and sets file mtimes from git (`tools/git-mtimes.sh`), so unchanged packages
   are not retested.
-- **RELEASE** (tags `vX.Y.Z`): the FAST tier plus, always, the race tests and the mutation gate of the
-  `SAFETY` packages (a tag has no PR base, so every one of them runs). A tag without its `CHANGELOG.md`
+- **RELEASE** (tags `vX.Y.Z`): the FAST tier plus, always, the race tests of the
+  `SAFETY` packages (a tag has no PR base, so every one of them runs), and no mutation. A tag without its `CHANGELOG.md`
   section, or a patch tag that changes a migration, fails at once. The image is published (ci.yml job
   `publish` calling `image.yml`) and the GitHub release made only after this tier passed.
 - **FULL** (nightly cron on `main`, manual dispatch): additionally every e2e test in three shards, every
   unit test with the race detector, the command catalogue check, uncached test runs and the full mutation
   run. It blocks no release. Layout and visual regressions, race outside the safety packages and
-  mutation of non-safety code are caught here, so the nightly FULL is the place to look for them; a
+  the full mutation run (a PR that changes a safety package already gates its own mutation) are caught here, so the nightly FULL is the place to look for them; a
   failure is fixed through an issue, not by holding a release.
 - **Which e2e tests are `@core`**: smoke, sign-in and authorization (header, local, OIDC, standalone,
   operators refused), first-run setup, base path, the device list, the OTA update flow (batch, push upload),
@@ -261,7 +261,7 @@ in `.github/workflows/ci.yml`.
   report by someone else that led to a change, is credited at the end of that change's
   CHANGELOG line as `(#N, thanks @handle)`. Do not credit the maintainer's own work.
 - Tags are signed (`git tag -s vX.Y.Z`) and only set on a green commit of `main`. The tag
-  runs the RELEASE tier (FAST plus race and mutation of the safety packages), and the image is
+  runs the RELEASE tier (FAST plus race tests of the safety packages, no mutation), and the image is
   published only when it passed.
 - **Announce every release.** After the tag run has published the image and the GitHub release,
   post an Announcements discussion "TasmoFleet X.Y.Z" (`gh api graphql` `createDiscussion`, category
