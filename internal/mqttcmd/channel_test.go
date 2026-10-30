@@ -24,12 +24,11 @@ func (p pub) String() string { return strings.TrimSpace(p.topic + " " + p.comman
 // fakeBus is a bus whose device side the test scripts. A reply emitted from inside Command
 // arrives before Command returns: the fastest device there is, which is what #272 was about.
 type fakeBus struct {
-	mu       sync.Mutex
-	subs     []fakeSub
-	cmds     []pub
-	down     bool
-	inflight int // set by the scripts, see slowDevice
-	onPub    func(b *fakeBus, p pub)
+	mu    sync.Mutex
+	subs  []fakeSub
+	cmds  []pub
+	down  bool
+	onPub func(b *fakeBus, p pub)
 }
 
 type fakeSub struct {

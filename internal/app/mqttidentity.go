@@ -139,7 +139,7 @@ func (m *mqttIdentity) onMessage(msg mqttbus.Message) {
 		if !msg.Retained {
 			t.live = true // a retained telemetry message says nothing about now
 		}
-	case mqttbus.KindSensor, mqttbus.KindResult, mqttbus.KindPower, mqttbus.KindDiscovery, mqttbus.KindUpgrade:
+	case mqttbus.KindSensor, mqttbus.KindResult, mqttbus.KindPower, mqttbus.KindDiscovery, mqttbus.KindUpgrade, mqttbus.KindFile:
 		// not subscribed
 	}
 	online := t.live || t.lwt == "Online"

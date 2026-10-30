@@ -9,7 +9,7 @@ func prefixFor(c TopicCodec, k Kind) string {
 	switch k {
 	case KindLWT, KindState, KindSensor, KindInfo:
 		return c.prefixes[2]
-	case KindResult, KindStatus, KindPower, KindUpgrade, KindDiscovery:
+	case KindResult, KindStatus, KindPower, KindUpgrade, KindDiscovery, KindFile:
 		return c.prefixes[1]
 	}
 	return c.prefixes[1]

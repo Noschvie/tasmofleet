@@ -551,7 +551,7 @@ func (s *Service) onMessage(m mqttbus.Message) {
 	case mqttbus.KindSensor:
 		applyEnergy(ds, m.Payload)
 		applySensors(ds, m.Payload)
-	case mqttbus.KindStatus, mqttbus.KindDiscovery, mqttbus.KindUpgrade, mqttbus.KindInfo:
+	case mqttbus.KindStatus, mqttbus.KindDiscovery, mqttbus.KindUpgrade, mqttbus.KindInfo, mqttbus.KindFile:
 		// A sign of life only; nothing to merge.
 	}
 	tr, changed := s.evaluate(ds, now, model.SourceMQTT, "mqtt "+string(m.Kind))
