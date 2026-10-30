@@ -100,19 +100,12 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 		}
 	}
 	t := tasmota.TargetFor(d)
-	// Lines that can cut an MQTT-only device off go last and in chunks of their own: the router
-	// refuses to publish them without a person's confirmation, and Make compliant never has one. A
-	// device reached over HTTP takes them like any other line.
-	var plainLines, cutLines []fixLine
-	for _, l := range parsed {
-		if cmdpolicy.CutsMQTTOff(l.text) {
-			cutLines = append(cutLines, l)
-		} else {
-			plainLines = append(plainLines, l)
-		}
-	}
+	// The chunks are those of always. Only when the router refuses one (ErrCutOff: a line that can cut off a
+	// device reached over MQTT only, and Make compliant never has a person's consent) is it known that
+	// nothing of it was sent: the lines that are not the cut-off ones go again, the others are skipped.
 	var skipped []fixLine
-	send := func(chunk []fixLine, cut bool) error {
+	var send func(chunk []fixLine) error
+	send = func(chunk []fixLine) error {
 		texts := make([]string, len(chunk))
 		restart := false
 		for i, l := range chunk {
@@ -122,8 +115,23 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 		_, err := f.Client.Command(ctx, t, "Backlog "+strings.Join(texts, "; "))
 		switch {
 		case err == nil:
-		case cut && errors.Is(err, transport.ErrCutOff):
-			skipped = append(skipped, chunk...)
+		case errors.Is(err, transport.ErrCutOff):
+			var others []fixLine
+			for _, l := range chunk {
+				if cmdpolicy.CutsMQTTOff(l.text) {
+					skipped = append(skipped, l)
+				} else {
+					others = append(others, l)
+				}
+			}
+			if len(others) == len(chunk) {
+				return fmt.Errorf("sending %s: %w", strings.Join(texts, "; "), err) // refused, but not for a cut-off line: do not loop
+			}
+			for _, c := range chunks(others) {
+				if err := send(c); err != nil {
+					return err
+				}
+			}
 		case restart && (errors.Is(err, tasmota.ErrUnreachable) || errors.Is(err, tasmota.ErrTimeout)):
 			// the device is restarting; the read-back tells whether it applied
 		default:
@@ -131,13 +139,8 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 		}
 		return nil
 	}
-	for _, chunk := range chunks(plainLines) {
-		if err := send(chunk, false); err != nil {
-			return err
-		}
-	}
-	for _, chunk := range pack(cutLines) {
-		if err := send(chunk, true); err != nil {
+	for _, chunk := range chunks(parsed) {
+		if err := send(chunk); err != nil {
 			return err
 		}
 	}

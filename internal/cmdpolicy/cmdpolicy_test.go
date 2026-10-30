@@ -547,7 +547,7 @@ func TestFileTransferCommandsAreNeverSent(t *testing.T) {
 func TestMQTTOnlyNamesTheCutOffConsequence(t *testing.T) {
 	cut := []string{"Topic other", "FullTopic %prefix%/x/%topic%/", "GroupTopic g", "MqttHost 10.0.0.1", "MqttPort 8883",
 		"MqttUser u", "MqttPassword p", "MqttClient c", "SetOption3 0", "SO3 off", "Backlog Power ON; Topic other",
-		"Prefix1 x", "Prefix3 x", "MqttFingerprint aa", "SetOption103 1", "SetOption132 1"}
+		"Prefix1 x", "Prefix3 x", "MqttFingerprint aa", "TLSKey1 abc", "SetOption103 1", "SetOption132 1"}
 	for _, cmd := range cut {
 		_, v, err := Prepare(cmd, model.RoleAdmin, PrepareOpts{MQTTOnly: true})
 		if err != nil || !strings.Contains(v.Confirm, "reached over MQTT only") {

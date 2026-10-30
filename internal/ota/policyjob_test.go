@@ -351,3 +351,28 @@ func TestPolicyJobVerifiesOnlyWhatWasSentAndSaysWhatWasSkipped(t *testing.T) {
 		t.Errorf("audit %+v", aud.evs)
 	}
 }
+
+// Why: a restart while a job verifies must not verify the lines Apply left out on purpose (they would
+// "deviate" for ever) and must not lose the note. The store keeps the planned commands, so the engine
+// finds both in the verify event that was written before the restart.
+func TestPolicyJobResumedInVerifyKeepsTheSkippedLinesAndTheNote(t *testing.T) {
+	h, ap, aud := policyHarness(t, 1, 1)
+	id := h.st.put(model.Job{DeviceID: 1, Kind: model.KindPolicy, Commands: "PowerOnState 0\nTopic other", State: model.JobVerify, CreatedBy: "alice"})
+	h.st.events = append(h.st.events, model.JobEvent{JobID: id, From: model.JobApplying, To: model.JobVerify, Event: "verify",
+		Detail: skipDetail("applied 1; skipped Topic: reached over MQTT only (use the console)", []string{"Topic other"})})
+	h.run(t, h.e)
+	if h.job(t, id).State != model.JobSucceeded {
+		t.Fatalf("state %s", h.job(t, id).State)
+	}
+	if strings.Join(ap.verifiedLines, "|") != "PowerOnState 0" {
+		t.Errorf("verified %v after the restart", ap.verifiedLines)
+	}
+	aud.mu.Lock()
+	defer aud.mu.Unlock()
+	for _, e := range aud.evs {
+		if e.Action == "policy.fix" && strings.Contains(e.Detail, "skipped Topic") {
+			return
+		}
+	}
+	t.Errorf("the note was lost: %+v", aud.evs)
+}

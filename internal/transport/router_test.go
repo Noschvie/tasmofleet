@@ -87,9 +87,17 @@ type facts struct {
 	groupKnown  bool
 	othersUnrd  int
 	snapshotted int
+	healthNewer bool
 }
 
 func (f *facts) HTTPState(id model.DeviceID) HTTPState {
+	if f.healthNewer {
+		return HTTPState{} // a health poll succeeded after the failure: the cheap check says "try HTTP"
+	}
+	return f.memState(id)
+}
+
+func (f *facts) memState(id model.DeviceID) HTTPState {
 	if kind, since, ok := f.mem.HTTPFailure(id); ok {
 		return HTTPState{State: HTTPFailing, Kind: kind, Since: since}
 	}
@@ -104,7 +112,7 @@ func (f *facts) FactsFor(_ context.Context, d model.Device) (Facts, error) {
 	if f.groupKnown {
 		m.GroupTopic, m.GroupTopicReadAt, m.LastProbeAt = "tasmotas", now, now.Add(-time.Hour)
 	}
-	return Facts{Now: now, HTTP: f.HTTPState(d.ID), MQTT: m}, nil
+	return Facts{Now: now, HTTP: f.memState(d.ID), MQTT: m}, nil
 }
 
 type rig struct {
@@ -472,6 +480,26 @@ func TestAPIRefusedFailsOverOnlyForReadsOrAKnownRefusal(t *testing.T) {
 	// memory says failing, so Choose already routes this write to MQTT up front
 	if _, err := g.r.Command(t.Context(), g.target(), "Power1 TOGGLE"); err != nil || g.mq.n() != 1 || g.http.n() != 0 {
 		t.Fatalf("known refusal: err=%v mqtt=%d http=%d", err, g.mq.n(), g.http.n())
+	}
+}
+
+func TestAPIRefusedWriteFailsOverWhenTheMemoryAlreadyKnewTheRefusal(t *testing.T) {
+	// Why (D4 amended): the cheap HTTP check (a health poll newer than the failure) says "try HTTP", while
+	// the memory still holds API-refused from before this call. The answer to the write is then the same
+	// refusal the memory already knew, so the write goes over MQTT once. Without that history it does not.
+	g := newRig(t)
+	g.mem.Fail(7, HTTPFailAPIRefused)
+	g.f.healthNewer = true
+	g.http.err = tasmota.ErrHTTPAPIRefused
+	if _, err := g.r.Command(t.Context(), g.target(), "Power1 TOGGLE"); err != nil || g.http.n() != 1 || g.mq.n() != 1 {
+		t.Fatalf("err=%v http=%d mqtt=%d", err, g.http.n(), g.mq.n())
+	}
+	g = newRig(t)
+	g.mem.Fail(7, HTTPFailUnreachable) // failing, but not because of the API
+	g.f.healthNewer = true
+	g.http.err = tasmota.ErrHTTPAPIRefused
+	if _, err := g.r.Command(t.Context(), g.target(), "Power1 TOGGLE"); !errors.Is(err, tasmota.ErrHTTPAPIRefused) || g.mq.n() != 0 {
+		t.Fatalf("a write whose first refusal is this call: err=%v mqtt=%d", err, g.mq.n())
 	}
 }
 

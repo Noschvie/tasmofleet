@@ -113,3 +113,7 @@ Commands that run other commands (`Json`, `Publish`, `Publish2`, `Rule` with a r
 `Br`, `Script`, `UfsRun`) need no confirmation of their own for an admin over HTTP, so `Json {"Status":0}` or a
 `Rule` that does `Status 0` reaches a device that way. The classification is by command name; making the policy
 unwrap them is out of scope. Over MQTT the channel refuses all of them (docs/security/mqtt-transport.md, T1).
+
+`TLSKey<n>` (the mutual-TLS client key of the MQTT connection) is a plain command in the list of settings that can
+cut off a device reached over MQTT only (`cmdpolicy.CutOffName`): over MQTT it needs the console's confirmation,
+and Make compliant skips it there.

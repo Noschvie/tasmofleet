@@ -535,7 +535,7 @@ type PrepareOpts struct {
 }
 
 // cutsMQTTOff reports whether p changes how the device talks MQTT: its topics, prefixes, host, port,
-// login, client name or TLS fingerprint (Prefix<n>, MqttFingerprint, SetOption103 TLS, SetOption132
+// login, client name, TLS fingerprint or client key (Prefix<n>, MqttFingerprint, TLSKey<n>, SetOption103 TLS, SetOption132
 // fingerprint check), or switches MQTT off (SetOption3 0). Queries (no argument) do not.
 func cutsMQTTOff(p parsed) bool {
 	if p.args == "" {
@@ -543,7 +543,7 @@ func cutsMQTTOff(p parsed) bool {
 	}
 	switch p.base {
 	case "topic", "fulltopic", "grouptopic", "mqtthost", "mqttport", "mqttuser", "mqttpassword", "mqttclient",
-		"prefix", "mqttfingerprint":
+		"prefix", "mqttfingerprint", "tlskey":
 		return true
 	case "setoption":
 		switch {

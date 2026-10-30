@@ -285,9 +285,9 @@ func TestApplyLeavesOutWhatCouldCutAnMQTTOnlyDeviceOff(t *testing.T) {
 		t.Errorf("text: %v", err)
 	}
 	// Topic and MqttHost would have restarted (and so saved) the device; they were left out, so it is saved by hand.
-	want := []string{"Backlog PowerOnState 0", "Backlog Topic other; MqttHost 10.0.0.9", "SaveData 0"}
+	want := []string{"Backlog Topic other; PowerOnState 0; MqttHost 10.0.0.9", "Backlog PowerOnState 0", "SaveData 0"}
 	if !reflect.DeepEqual(c.sent, want) {
-		t.Fatalf("sent %q, want %q: the settings that can be changed are saved, the refused ones were tried last", c.sent, want)
+		t.Fatalf("sent %q, want %q: the chunk of always, then what the refusal left of it, then the save", c.sent, want)
 	}
 	// nothing but cut-off lines: nothing is saved and the result says nothing was applied
 	c2 := &fakeCmd{err: func(string) error { return transport.ErrCutOff }}
@@ -295,9 +295,22 @@ func TestApplyLeavesOutWhatCouldCutAnMQTTOnlyDeviceOff(t *testing.T) {
 	if !errors.As(err, &sk) || sk.AppliedAny() || count(c2.sent, "SaveData") != 0 {
 		t.Fatalf("err = %v, sent %q", err, c2.sent)
 	}
-	// over HTTP the same lines are sent like any other
+	// over HTTP the same lines go out exactly as they always did: the chunks of chunks(), nothing reordered
 	c3 := &fakeCmd{}
-	if err := newFixer(c3, r).Apply(context.Background(), model.Device{ID: 1}, []string{"Topic other", "PowerOnState 0"}); err != nil {
+	lines := []string{"Topic other", "PowerOnState 0", "MqttHost 10.0.0.9"}
+	if err := newFixer(c3, r).Apply(context.Background(), model.Device{ID: 1}, lines); err != nil {
 		t.Fatal(err)
+	}
+	parsed, _ := parseLines(lines)
+	var wantHTTP []string
+	for _, ch := range chunks(parsed) {
+		texts := make([]string, len(ch))
+		for i, l := range ch {
+			texts[i] = l.text
+		}
+		wantHTTP = append(wantHTTP, "Backlog "+strings.Join(texts, "; "))
+	}
+	if !reflect.DeepEqual(c3.sent, wantHTTP) || len(wantHTTP) != 1 {
+		t.Fatalf("an HTTP device got %q, want %q", c3.sent, wantHTTP)
 	}
 }

@@ -32,6 +32,52 @@ type PolicyApplier interface {
 	Verify(ctx context.Context, d model.Device, lines []string) error
 }
 
+// verifySkips is the detail of the verify event of a job whose Apply left lines out. The store keeps the
+// job's commands as they were planned (a retry replays them), so the engine finds the skipped ones here
+// when it resumes in the verify state.
+type verifySkips struct {
+	Note    string   `json:"note"`
+	Skipped []string `json:"skipped"`
+}
+
+func skipDetail(note string, skipped []string) string {
+	if note == "" && len(skipped) == 0 {
+		return ""
+	}
+	b, _ := json.Marshal(verifySkips{note, skipped}) // strings only
+	return string(b)
+}
+
+// skippedOf is the lines of all that are not in kept.
+func skippedOf(all, kept []string) []string {
+	var out []string
+	for _, l := range all {
+		if !slices.Contains(kept, l) {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// skippedBeforeVerify reads the skipped lines and the note from the job's verify event.
+func (e *Engine) skippedBeforeVerify(ctx context.Context, j model.Job, lines []string) (string, []string) {
+	evs, err := e.jobs.JobEvents(ctx, j.ID)
+	if err != nil {
+		e.log.Warn("policy job: could not read the events of a job resumed in verify", "job", j.ID, "err", err)
+		return "", lines
+	}
+	for i := len(evs) - 1; i >= 0; i-- {
+		if evs[i].To != model.JobVerify || evs[i].Detail == "" {
+			continue
+		}
+		var v verifySkips
+		if json.Unmarshal([]byte(evs[i].Detail), &v) == nil {
+			return v.Note, withoutLines(lines, v.Skipped)
+		}
+	}
+	return "", lines
+}
+
 // skippedApply is what Apply returns when it left out lines on purpose (policy.SkippedError).
 type skippedApply interface {
 	error
@@ -197,6 +243,7 @@ func (e *Engine) retryPolicy(ctx context.Context, actor string, batchID model.Ba
 // workPolicy drives one policy job to its end.
 func (e *Engine) workPolicy(ctx context.Context, j model.Job) {
 	lines := strings.Split(j.Commands, "\n")
+	allLines := lines
 	d, err := e.devices.GetDevice(ctx, j.DeviceID)
 	if err != nil {
 		e.finishPolicy(ctx, j, lines, "inventory: "+err.Error(), nil, "")
@@ -234,7 +281,10 @@ func (e *Engine) workPolicy(ctx context.Context, j model.Job) {
 		}
 	}
 	var ok bool
-	if j, ok = e.policyMove(ctx, j, model.JobVerify, "verify", ""); !ok {
+	if j.State == model.JobVerify {
+		// resumed after a restart: what Apply left out was recorded with the verify event
+		note, lines = e.skippedBeforeVerify(ctx, j, lines)
+	} else if j, ok = e.policyMove(ctx, j, model.JobVerify, "verify", skipDetail(note, skippedOf(allLines, lines))); !ok {
 		return
 	}
 	vctx, cancel := context.WithTimeout(ctx, policyVerifyLimit)
