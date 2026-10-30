@@ -4,6 +4,12 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## Unreleased
+
+### Security
+
+- golang.org/x/net 0.62.0 (GO-2026-6860, GO-2026-6866 in the HTML parser; govulncheck finds no call path from TasmoFleet, reported by Docker Scout)
+
 ## 0.19.1 (2026-10-30)
 
 ### Changed
