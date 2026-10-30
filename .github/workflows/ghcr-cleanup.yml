@@ -3,6 +3,10 @@
 # untagged images (with their attestation manifests) plus ghost, partial and
 # orphaned ones. Tagged images (:X.Y.Z, :latest, :edge) and the manifests
 # they reference are never touched, so every release stays pullable.
+# It also keeps only the newest X.Y.Z of each older minor version, on ghcr and on Docker Hub
+# (the decision lives in scripts/prune-patch-tags.mjs): all patches of the highest minor,
+# :latest, :edge and every other tag stay. A ghcr version is deleted only if all its tags are
+# superseded patches; its now untagged child manifests go in the untagged pass below.
 # Runs daily and after each image build; dispatch with dry-run to preview.
 name: ghcr-cleanup
 
@@ -28,13 +32,76 @@ concurrency:
 
 jobs:
   cleanup:
-    name: delete untagged images
+    name: prune images
     if: github.event_name != 'workflow_run' || github.event.workflow_run.event == 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       packages: write
+    env:
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: ghcr, delete superseded patch versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -eu
+          owner=$(echo "$OWNER" | tr 'A-Z' 'a-z')
+          api="/users/$owner/packages/container/tasmofleet/versions"
+          gh api --paginate "$api?per_page=100" |
+            jq -s '[.[][] | {id, digest: .name, tags: (.metadata.container.tags // [])}]' >versions.json
+          node scripts/prune-patch-tags.mjs <versions.json >delete.json
+          echo "ghcr: $(jq length delete.json) superseded patch versions"
+          jq -r '.[] | "\(.id)\t\(.tags | join(","))"' delete.json | while IFS="$(printf '\t')" read -r id tags; do
+            if [ "$DRY_RUN" = true ]; then
+              echo "ghcr: would delete $tags (version $id)"
+            elif gh api -X DELETE "$api/$id" >/dev/null; then
+              echo "ghcr: deleted $tags (version $id)"
+            else
+              echo "::warning::ghcr: could not delete $tags (version $id)"
+            fi
+          done
+      - name: Docker Hub, delete superseded patch tags
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -eu
+          if [ -z "$DOCKERHUB_USERNAME" ] || [ -z "$DOCKERHUB_TOKEN" ]; then
+            echo "Docker Hub is not configured, skipping"
+            exit 0
+          fi
+          user=$(echo "$DOCKERHUB_USERNAME" | tr 'A-Z' 'a-z')
+          # Tags are listed publicly; one entry per digest, so a digest that `latest` points to is
+          # kept with all its tags.
+          url="https://hub.docker.com/v2/repositories/$user/tasmofleet/tags?page_size=100"
+          : >tags.ndjson
+          while [ -n "$url" ] && [ "$url" != null ]; do
+            page=$(curl -fsS "$url")
+            echo "$page" | jq -c '.results[] | {name, digest}' >>tags.ndjson
+            url=$(echo "$page" | jq -r '.next')
+          done
+          jq -s 'group_by(.digest) | map({id: .[0].digest, digest: .[0].digest, tags: map(.name)})' tags.ndjson >versions.json
+          node scripts/prune-patch-tags.mjs <versions.json >delete.json
+          echo "Docker Hub: $(jq '[.[].tags[]] | length' delete.json) superseded patch tags"
+          if [ "$DRY_RUN" = true ]; then
+            jq -r '.[].tags[] | "Docker Hub: would delete " + .' delete.json
+            exit 0
+          fi
+          jwt=$(jq -n --arg u "$DOCKERHUB_USERNAME" --arg p "$DOCKERHUB_TOKEN" '{username:$u,password:$p}' |
+            curl -fsS -H 'Content-Type: application/json' -d @- https://hub.docker.com/v2/users/login | jq -r .token)
+          jq -r '.[].tags[]' delete.json | while read -r tag; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE -H "Authorization: JWT $jwt" \
+              "https://hub.docker.com/v2/repositories/$user/tasmofleet/tags/$tag/")
+            case "$code" in
+              2*) echo "Docker Hub: deleted $tag" ;;
+              *) echo "::warning::Docker Hub: deleting $tag answered $code" ;;
+            esac
+          done
       - uses: dataaxiom/ghcr-cleanup-action@v1.2.2
         with:
           package: tasmofleet
@@ -42,4 +109,4 @@ jobs:
           delete-ghost-images: true
           delete-partial-images: true
           delete-orphaned-images: true
-          dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}
+          dry-run: ${{ env.DRY_RUN }}

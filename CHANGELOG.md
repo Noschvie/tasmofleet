@@ -8,6 +8,7 @@ always upgrade automatically.
 
 ### Added
 
+- The registry cleanup keeps only the newest patch of each older minor version on ghcr and Docker Hub (`latest`, `edge` and every patch of the newest minor stay); the older patch images of 0.11 to 0.19 are removed, so pin to the newest patch of a minor or to `latest` (#300)
 - Config restore over MQTT (FileUpload Type 2) for devices on our broker, when HTTP fails or the device cannot reach the firmware listener: the safety backup, the identity check, the upload and the verification use the same path, the restart is proven by the boot count, and the restore page names the path and records it on the job. A restore over MQTT whose backup changes the device's topic, broker, user or password (or cannot be compared) needs an extra acceptance, because TasmoFleet could lose the device. `FIRMWARE_BASE_URL` is needed only for the HTTP path and Replace device (#79)
 
 ### Breaking

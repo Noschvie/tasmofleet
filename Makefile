@@ -44,9 +44,13 @@ TESTFLAGS ?=
 # Extra Playwright arguments, e.g. E2E_ARGS=--shard=1/2 (CI).
 E2E_ARGS  ?=
 
-.PHONY: catalogue catalogue-src catalogue-check demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test race integration mutation mutation-changed mutation-sum safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check migration-guard changelog-notes clean tools
+.PHONY: catalogue catalogue-src catalogue-check demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test race integration mutation mutation-changed mutation-sum safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check migration-guard changelog-notes clean tools
 
-check: templ-check fmt-check vet staticcheck lint test integration vuln build
+check: templ-check fmt-check vet staticcheck lint test scripts-test integration vuln build
+
+# Unit tests of the registry cleanup's version selection (pure, no registry access).
+scripts-test:
+	node --test scripts/
 
 ci: check race mutation e2e catalogue-check
 
