@@ -205,7 +205,8 @@ test("backup over MQTT", async ({ page }) => {
   await page.getByLabel("Own MQTT password").fill("devenv-fake-mqtt-password");
   await page.getByRole("button", { name: "Save changes" }).click();
 
-  // The group topics of both devices are read shortly after start; until then MQTT transfers are refused with the reason.
+  // The group topics of both devices are read shortly after start; until then the backup is refused with the
+  // reason, which starts no cooldown, so retrying every 5 s is a bounded wait for those reads only.
   await expect(async () => {
     await page.goto(app.url + devicePath);
     await backUp.click();

@@ -506,6 +506,7 @@ func (h *handler) deviceBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := h.d.Backups.Backup(r.Context(), actor(r), d.ID); err != nil {
+		h.backupNotSent(d.ID, err)
 		refuse(http.StatusOK, h.backupProblem(err))
 		return
 	}
@@ -536,6 +537,19 @@ func (h *handler) backupWait(id model.DeviceID) string {
 	}
 	h.lastBackup[id] = now
 	return ""
+}
+
+// backupNotSent ends the cooldown a refused backup started: when nothing was sent (no usable path or
+// password, see transport.BackupBlockedError) the person fixes the cause and retries at once. Only an
+// attempted transfer counts against the limit.
+func (h *handler) backupNotSent(id model.DeviceID, err error) {
+	var blocked *transport.BackupBlockedError
+	if !errors.As(err, &blocked) || blocked.Attempted {
+		return
+	}
+	h.backupMu.Lock()
+	delete(h.lastBackup, id)
+	h.backupMu.Unlock()
 }
 
 // backupDeleted ends the cooldown of a device whose last backup was just deleted, so the user
@@ -577,6 +591,7 @@ func (h *handler) deviceBackupFromTab(w http.ResponseWriter, r *http.Request, d 
 		data.Error = wait + "."
 		status = http.StatusTooManyRequests
 	} else if _, err := h.d.Backups.Backup(r.Context(), actor(r), d.ID); err != nil {
+		h.backupNotSent(d.ID, err)
 		data.Error = h.backupProblem(err)
 	} else {
 		redirect(w, r, fmt.Sprintf("/devices/%d/backups?ok=backed-up", d.ID))
@@ -595,6 +610,7 @@ func (h *handler) deviceBackupFromList(w http.ResponseWriter, r *http.Request, d
 		data.Error = d.Name + ": " + strings.ToLower(wait[:1]) + wait[1:] + "."
 		status = http.StatusTooManyRequests
 	} else if _, err := h.d.Backups.Backup(r.Context(), actor(r), d.ID); err != nil {
+		h.backupNotSent(d.ID, err)
 		msg := h.backupProblem(err)
 		data.Error = "Backup of " + d.Name + " failed: " + strings.ToLower(msg[:1]) + msg[1:]
 	} else {

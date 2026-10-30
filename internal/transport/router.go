@@ -51,6 +51,9 @@ type MQTTDoer interface {
 type BackupBlockedError struct {
 	Err    error
 	Reason string
+	// Attempted: a transfer was started before it was refused (the device answered Error 1). Otherwise
+	// nothing was sent for the backup and the person can fix the cause and retry at once.
+	Attempted bool
 }
 
 func (e *BackupBlockedError) Error() string { return e.Err.Error() + " (" + e.Reason + ")" }
@@ -565,7 +568,7 @@ func (r *Router) mqttDownload(ctx context.Context, d model.Device) ([]byte, erro
 				r.o.Log.Warn("transport: could not record the refused MQTT password", "device", int64(now.ID), "err", merr)
 			}
 		}
-		return nil, &BackupBlockedError{Err: err, Reason: "the device refused its MQTT password; enter the right one on the device's Edit page to back up over MQTT"}
+		return nil, &BackupBlockedError{Err: err, Reason: "the device refused its MQTT password; enter the right one on the device's Edit page to back up over MQTT", Attempted: true}
 	}
 	return data, err
 }
