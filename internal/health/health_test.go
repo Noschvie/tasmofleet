@@ -1144,3 +1144,43 @@ func TestNotePowerUsesTheKeyTheDeviceReports(t *testing.T) {
 		t.Fatalf("second relay: %v", g.Power)
 	}
 }
+
+// Why (#206, MQTT path): the same race as with a command over HTTP. A device reachable by both channels
+// reports its new power state on MQTT (stat/POWER, or a RESULT) while an HTTP poll that read it earlier is
+// still on its way; the older poll must not undo the newer report.
+func TestPollInFlightDuringMQTTPowerReportDoesNotUndoIt(t *testing.T) {
+	for _, tc := range []struct{ name, kind, suffix, payload string }{
+		{"stat/POWER", "power", "POWER", "OFF"},
+		{"RESULT", "result", "RESULT", `{"POWER":"OFF"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := httpDev(1)
+			d.Topic = "plug1" // matched by topic, still polled: MQTT capability is not "ours"
+			h := newHarness(t, true, Options{}, d)
+			h.listen()
+			h.cl.block = make(chan struct{})
+			h.svc.tick(h.ctx) // the poll waits inside the device call; it will report POWER ON (sts11)
+			for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(time.Millisecond) {
+				h.cl.mu.Lock()
+				n := h.cl.inFlight
+				h.cl.mu.Unlock()
+				if n == 1 {
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatal("the poll never reached the device")
+				}
+			}
+			kind := mqttbus.KindPower
+			if tc.kind == "result" {
+				kind = mqttbus.KindResult
+			}
+			h.bus.emit(kind, "plug1", tc.suffix, tc.payload, false)
+			close(h.cl.block)
+			h.svc.wg.Wait()
+			if got := h.svc.Get(1).Power["POWER"]; got != "OFF" {
+				t.Fatalf("POWER = %q after the MQTT report, want OFF (the older poll said ON)", got)
+			}
+		})
+	}
+}

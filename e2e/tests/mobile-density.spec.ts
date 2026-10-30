@@ -21,8 +21,8 @@ const BUDGET_SCREENS = 2.25;
 // audit (QA M7): a log that does not say WHO changed WHAT is useless, so the user shares the time line and the target
 // gets a line of its own (25 entries per page): 4.2. The app writes entries at times nobody controls (the devices' first
 // MQTT messages, identity and discovery probes of the locked device), and which of them landed on the first page moved the
-// height from 3370 to 3502 px (#237). seedAuditTail now fills the first page with 25 entries the seed wrote, 3418 px measured here,
-// so the budget of 4.3 (3492 px) is no longer a bet on a tie.
+// height from 3370 to 3502 px (#237). seedAuditTail now fills the first page with 25 entries the seed wrote, half of them on the long device names
+// (the target is one ellipsized line, so they add no height): 3418 px measured here, so the budget of 4.3 (3492 px) is no longer a bet on a tie.
 // A real regression adds a line to every row (about 500 px), far beyond it.
 // policy: a device name wraps instead of being clipped (QA v0.9.0), so the long names of the seed take a second line each.
 // The unchecked policy page is deterministic on the realistic seed: measured 1907 px = 2.35 screens, identical in four runs

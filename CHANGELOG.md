@@ -12,8 +12,8 @@ always upgrade automatically.
 
 ### Fixed
 
-- Device list: switching a relay of an HTTP-only device could flip back to its old state when a health poll that read the device just before the toggle finished just after it; the confirmed state now wins over that poll (#206)
-- CI: module downloads fall back to a direct fetch when proxy.golang.org fails, which once failed a full mutation shard (#225); the flaky e2e checks of #218 and #237 are fixed in the tests
+- Device list: switching a relay of an HTTP-only device could flip back to its old state when a health poll that read the device just before the toggle finished just after it, and likewise for a state reported over MQTT; the newer state now wins over that poll (#206)
+- CI: module downloads fall back to a direct fetch when proxy.golang.org fails, which once failed a full mutation shard (#225); the flaky e2e check of #237 is fixed in the test, and the one of #218 waits for the rows to have a box before it measures (a mitigation, the cause is not proven)
 - Policy: Cancel in the rule editor goes back to the policy overview (it reloaded the rule page, or opened the template picker for a new rule)
 - Policy: Duplicate opens an unsaved copy; nothing is stored until Save rule
 

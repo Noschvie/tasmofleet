@@ -94,14 +94,16 @@ export async function seedProposals(app: App): Promise<void> {
 }
 
 /**
- * seedAuditTail appends `count` audit entries newer than everything the app has written so far, each a copy
- * of the newest backup entry (an operator's action on a device with a short name). The app writes entries
- * of its own at times nobody controls: the burst of "Edit device" rows when the devices' first MQTT
- * messages arrive (any order, in the same second), "Identity mqtt ask" and "Discovery reprobe" rows of
- * the locked device. Whichever of them falls into the first page of the audit log changes its height
- * (#237: 3502 px against 3414 to 3436 px, budget 3492). With a tail as long as the page, the first page
- * holds only entries this function wrote, and its height depends on nothing else. The tail is dated 30 s
- * ahead so that entries the app writes while the tests start stay behind it.
+ * seedAuditTail appends `count` audit entries newer than everything the app has written so far, copies of
+ * the newest backup entry (an operator's action on a device) whose target rotates over the device with a
+ * short name and the devices the seed renamed to long names, so the audit page still covers wrapping and
+ * overflow of long targets on a phone. The app writes entries of its own at times nobody controls: the burst
+ * of "Edit device" rows when the devices' first MQTT messages arrive (any order, in the same second),
+ * "Identity mqtt ask" and "Discovery reprobe" rows of the locked device. Whichever of them fell into the
+ * first page of the audit log changed its height (#237: 3502 px against 3414 to 3436 px, budget 3492). With
+ * a tail as long as the page, the first page holds only entries this function wrote, and its height depends
+ * on nothing else. The tail is dated an hour ahead so that nothing the app writes while the tests run (the
+ * MQTT identity grace alone is 30 s) can sort in front of it.
  */
 export async function seedAuditTail(app: App, count: number): Promise<void> {
   const { DatabaseSync } = await import("node:sqlite");
@@ -109,14 +111,20 @@ export async function seedAuditTail(app: App, count: number): Promise<void> {
   try {
     db.exec("PRAGMA busy_timeout=5000");
     const latest = (db.prepare("SELECT MAX(at) AS at FROM audit_log").get() as { at: number }).at;
+    const names = Object.values(renamedDevices);
+    const longs = db
+      .prepare(`SELECT id FROM devices WHERE name IN (${names.map(() => "?").join(",")}) ORDER BY id`)
+      .all(...names) as { id: number }[];
+    if (longs.length !== names.length) throw new Error("seedAuditTail: the renamed devices are missing");
+    const model = db.prepare("SELECT target FROM audit_log WHERE action LIKE 'backup%' ORDER BY id DESC LIMIT 1").get() as { target: string } | undefined;
+    if (!model) throw new Error("seedAuditTail: the seed wrote no backup entry to copy");
+    // short, long, short, long, ...: half of the entries carry a long target
+    const targets = longs.flatMap((d) => [model.target, `device:${d.id}`]);
     const copy = db.prepare(
       `INSERT INTO audit_log (at, actor, action, target, detail, result, remote_addr)
-       SELECT ?, actor, action, target, detail, result, remote_addr FROM audit_log WHERE action LIKE 'backup%' ORDER BY id DESC LIMIT 1`,
+       SELECT ?, actor, action, ?, detail, result, remote_addr FROM audit_log WHERE action LIKE 'backup%' ORDER BY id DESC LIMIT 1`,
     );
-    for (let i = 1; i <= count; i++) {
-      const { changes } = copy.run(latest + 30_000 + i * 1000);
-      if (Number(changes) !== 1) throw new Error("seedAuditTail: the seed wrote no backup entry to copy");
-    }
+    for (let i = 1; i <= count; i++) copy.run(latest + 3_600_000 + i * 1000, targets[i % targets.length]);
   } finally {
     db.close();
   }

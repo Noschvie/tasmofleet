@@ -547,6 +547,7 @@ func (s *Service) onMessage(m mqttbus.Message) {
 			ds.h.Power = map[string]string{}
 		}
 		ds.h.Power[m.Suffix] = strings.ToUpper(strings.TrimSpace(string(m.Payload)))
+		ds.powerGen++ // a poll that read the device before this report is older than it
 	case mqttbus.KindSensor:
 		applyEnergy(ds, m.Payload)
 		applySensors(ds, m.Payload)
@@ -617,6 +618,9 @@ func (s *Service) applyJSON(ds *devState, payload []byte, telemetry, skipPower b
 				ds.h.Power = map[string]string{}
 			}
 			ds.h.Power[k] = val
+			if !telemetry {
+				ds.powerGen++ // a command RESULT is as fresh as a NotePower: see there
+			}
 		}
 	}
 	if !telemetry {
