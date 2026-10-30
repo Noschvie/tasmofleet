@@ -48,7 +48,10 @@ type MQTTFacts struct {
 	BusConnected bool // the connection to our broker is up
 	Ours         bool // Device.MQTT == model.MQTTOurs
 	Topic        string
-	TopicUnique  bool // no other inventory device has the same Topic
+	// TopicExclusive: no device in the inventory (this one's GroupTopic included) listens on this
+	// topic, as Topic or GroupTopic, compared raw and as expanded command topics. Computed by the
+	// facts source; the shape of the topic is checked by Choose.
+	TopicExclusive bool
 	// FullTopic is the device's FullTopic ("" = Tasmota default); OurFullTopic is MQTT_FULLTOPIC.
 	FullTopic    string
 	OurFullTopic string

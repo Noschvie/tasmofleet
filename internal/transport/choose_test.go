@@ -18,7 +18,7 @@ func base() Facts {
 		HTTP:            HTTPState{State: HTTPOK},
 		FirmwareBaseURL: true,
 		MQTT: MQTTFacts{
-			BusConnected: true, Ours: true, Topic: "kitchen", TopicUnique: true,
+			BusConnected: true, Ours: true, Topic: "kitchen", TopicExclusive: true,
 			GroupTopic: "tasmotas", GroupTopicReadAt: t0.Add(-time.Hour), LastProbeAt: t0.Add(-time.Hour),
 			LWTOnline: true,
 		},
@@ -79,7 +79,7 @@ func TestChooseOrder(t *testing.T) {
 			if p.Commands != c.commands || p.Backup != c.backup || p.Restore != c.restore || p.Update != c.upd {
 				t.Fatalf("got commands=%s backup=%s restore=%s update=%s\nreasons: %v", p.Commands, p.Backup, p.Restore, p.Update, p.Reasons)
 			}
-			if len(p.Reasons) != 4 {
+			if len(p.Reasons) != 5 {
 				t.Fatalf("want one reason per action, got %d", len(p.Reasons))
 			}
 			for _, r := range p.Reasons {
@@ -109,10 +109,10 @@ func TestReasonTexts(t *testing.T) {
 	f := httpDown(base())
 	f.Password = Password{}
 	p := Choose(f)
-	if got := p.Reason(ActBackup); !strings.Contains(got, "Enter the device's MQTT password to back up over MQTT") {
+	if got := p.Reason(ActBackup); !strings.Contains(got, "enter the device's MQTT password to back up over MQTT") {
 		t.Errorf("backup reason = %q", got)
 	}
-	if got := p.Reason(ActRestore); !strings.Contains(got, "Enter the device's MQTT password to restore over MQTT") {
+	if got := p.Reason(ActRestore); !strings.Contains(got, "enter the device's MQTT password to restore over MQTT") {
 		t.Errorf("restore reason = %q", got)
 	}
 	f.Password.BadAt = t0.Add(-time.Hour)
@@ -156,7 +156,7 @@ func TestMQTTUsability(t *testing.T) {
 		{"other broker", func(f *Facts) { f.MQTT.Ours = false }, "does not use TasmoFleet's MQTT broker"},
 		{"no topic", func(f *Facts) { f.MQTT.Topic = "" }, "no MQTT topic"},
 		// Why: a message to a shared topic reaches two devices; a transfer would hit the wrong one.
-		{"shared topic", func(f *Facts) { f.MQTT.TopicUnique = false }, "same MQTT topic"},
+		{"shared topic", func(f *Facts) { f.MQTT.TopicExclusive = false }, "another device listens on this topic"},
 		// Why: we publish under our FullTopic; the device listens under its own.
 		{"foreign full topic", func(f *Facts) { f.MQTT.FullTopic = "x/%topic%/%prefix%/" }, "FullTopic"},
 		{"our full topic differs, device default", func(f *Facts) { f.MQTT.OurFullTopic = "fleet/%prefix%/%topic%/" }, "FullTopic"},
@@ -207,8 +207,8 @@ func TestGroupTopicStaleness(t *testing.T) {
 		{"older than last probe", func(m *MQTTFacts) { m.LastProbeAt = m.GroupTopicReadAt.Add(time.Second) }, false, false},
 		{"same instant as probe", func(m *MQTTFacts) { m.LastProbeAt = m.GroupTopicReadAt }, true, false},
 		{"fresh and equal", func(m *MQTTFacts) { m.GroupTopic = m.Topic }, true, true},
-		// Why: a stale equal value is unknown, not proof; it must not block commands.
-		{"stale and equal", func(m *MQTTFacts) { m.GroupTopic = m.Topic; m.LastProbeAt = m.GroupTopicReadAt.Add(time.Second) }, false, false},
+		// Why: a stale value equal to the topic still adds a refusal; staleness only ever removes trust.
+		{"stale and equal", func(m *MQTTFacts) { m.GroupTopic = m.Topic; m.LastProbeAt = m.GroupTopicReadAt.Add(time.Second) }, false, true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -224,6 +224,14 @@ func TestGroupTopicStaleness(t *testing.T) {
 			}
 			if p.Commands != wantCmd {
 				t.Errorf("commands = %s", p.Commands)
+			}
+			// writes follow the transfers' strict rule
+			wantWrites := MQTT
+			if !c.known || c.disqual {
+				wantWrites = None
+			}
+			if p.Writes != wantWrites {
+				t.Errorf("writes = %s, want %s", p.Writes, wantWrites)
 			}
 			wantXfer := MQTT
 			if !c.known || c.disqual {
@@ -254,7 +262,8 @@ func TestFWReachExpiry(t *testing.T) {
 		{"no, older than 24h counts as unknown", model.FWReach{State: model.FWReachNo, At: t0.Add(-24*time.Hour - time.Second)}, DownloadHTTP},
 		{"yes, old", model.FWReach{State: model.FWReachYes, At: t0.Add(-72 * time.Hour)}, DownloadHTTP},
 		{"unknown", model.FWReach{}, DownloadHTTP},
-		{"no without a time stays no", model.FWReach{State: model.FWReachNo}, None},
+		// Why: a "no" that cannot be dated cannot expire, so it is not trusted (review L1).
+		{"no without a time is unknown", model.FWReach{State: model.FWReachNo}, DownloadHTTP},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			f := base()
@@ -442,5 +451,130 @@ func TestPasswordUnusableReason(t *testing.T) {
 	p := Choose(f)
 	if p.Backup != None || p.Commands != MQTT || !strings.Contains(p.Reason(ActBackup), "no broker password") {
 		t.Fatalf("%s %s %q", p.Backup, p.Commands, p.Reason(ActBackup))
+	}
+}
+
+// Why (review H1): a topic that another device listens on, as its Topic or its GroupTopic (fresh or
+// stale), makes every MQTT action reach the wrong device. Reads, writes and transfers all refuse.
+func TestTopicExclusivityBlocksEveryAction(t *testing.T) {
+	f := httpDown(base())
+	f.MQTT.TopicExclusive = false
+	p := Choose(f)
+	for a, path := range map[Action]Path{ActCommands: p.Commands, ActWrites: p.Writes, ActBackup: p.Backup, ActRestore: p.Restore, ActUpdate: p.Update} {
+		if path != None {
+			t.Errorf("%s = %s", a, path)
+		}
+		if !strings.Contains(p.Reason(a), "another device listens on this topic (its Topic or GroupTopic)") {
+			t.Errorf("%s reason %q", a, p.Reason(a))
+		}
+	}
+}
+
+// Why (review H1): the default group topic is shared by every fresh Tasmota; and a topic with
+// wildcards, levels or whitespace is not one device's topic. This mirrors mqttcmd's checkTopic,
+// which stays the second guard.
+func TestTopicShape(t *testing.T) {
+	for topic, ok := range map[string]bool{
+		"kitchen": true, "kitchen_1": true, "Kitchen": true,
+		"": false, "tasmotas": false, "a/b": false, "a+": false, "#": false, "+": false,
+		"a b": false, " a": false, "a ": false, "a\tb": false, "a\nb": false,
+	} {
+		f := httpDown(base())
+		f.MQTT.Topic = topic
+		f.MQTT.GroupTopic = "grp"
+		got := Choose(f).Commands == MQTT
+		if got != ok {
+			t.Errorf("topic %q: usable = %v, want %v", topic, got, ok)
+		}
+		if TopicShapeOK(topic) != (ok || topic == "tasmotas") {
+			t.Errorf("TopicShapeOK(%q)", topic)
+		}
+	}
+}
+
+// Why (review M1): whatever Choose lets onto MQTT must also pass mqttcmd.checkTopic (non-empty, no
+// '/+#', no surrounding space, not tasmotas, not the device's own GroupTopic), or the channel would
+// refuse what the UI promised. Mirrors checkTopic; the reverse (checkTopic stricter than Choose)
+// is what this guards against.
+func TestChooseMQTTImpliesChannelTopicCheck(t *testing.T) {
+	channelOK := func(topic, group string) bool {
+		return topic != "" && !strings.ContainsAny(topic, "/+#") && strings.TrimSpace(topic) == topic &&
+			topic != "tasmotas" && !(group != "" && topic == group)
+	}
+	topics := []string{"", "k", "tasmotas", "a/b", "a+", "#", " a", "a ", "a b", "g"}
+	groups := []string{"", "g", "k", "tasmotas"}
+	for _, topic := range topics {
+		for _, group := range groups {
+			for _, fresh := range []bool{true, false} {
+				f := httpDown(base())
+				f.MQTT.Topic, f.MQTT.GroupTopic = topic, group
+				if !fresh {
+					f.MQTT.GroupTopicReadAt = time.Time{}
+				}
+				p := Choose(f)
+				for a, path := range map[Action]Path{ActCommands: p.Commands, ActWrites: p.Writes, ActBackup: p.Backup, ActRestore: p.Restore, ActUpdate: p.Update} {
+					if (path == MQTT || path == DownloadMQTT || path == PushMQTT) && !channelOK(topic, group) {
+						t.Errorf("topic %q group %q fresh=%v: %s = %s but the channel refuses it", topic, group, fresh, a, path)
+					}
+				}
+			}
+		}
+	}
+}
+
+// Why (review H1): writes (settings, Make compliant, console) hit the device like a transfer; an
+// unknown own GroupTopic must not let them through, while reads (Status N) may pass.
+func TestWritesNeedKnownGroupTopicReadsDoNot(t *testing.T) {
+	f := httpDown(base())
+	f.MQTT.GroupTopic = ""
+	p := Choose(f)
+	if p.Commands != MQTT || p.Writes != None {
+		t.Fatalf("commands=%s writes=%s", p.Commands, p.Writes)
+	}
+	if !strings.Contains(p.Reason(ActWrites), "refresh the device's identity") {
+		t.Errorf("writes reason %q", p.Reason(ActWrites))
+	}
+	if Choose(base()).Writes != HTTP {
+		t.Error("writes use HTTP while it works")
+	}
+}
+
+// Why (review L3, L4): a trailing '/' does not make FullTopics differ; an unrecognised password
+// mode is not a password.
+func TestFullTopicTrailingSlashAndPasswordMode(t *testing.T) {
+	f := httpDown(base())
+	f.MQTT.FullTopic, f.MQTT.OurFullTopic = "%prefix%/%topic%", "%prefix%/%topic%/"
+	if Choose(f).Commands != MQTT {
+		t.Error("trailing slash must not matter")
+	}
+	f = httpDown(base())
+	f.Password.Mode = model.MQTTPasswordMode("weird")
+	p := Choose(f)
+	if p.Backup != None || p.Commands != MQTT || !strings.Contains(p.Reason(ActBackup), "not recognised") {
+		t.Errorf("backup=%s %q", p.Backup, p.Reason(ActBackup))
+	}
+	f.Password.Mode = model.MQTTPasswordBroker
+	if Choose(f).Backup != MQTT {
+		t.Error("broker mode is a password")
+	}
+}
+
+func TestCommandTopic(t *testing.T) {
+	for _, c := range []struct {
+		full, topic, want string
+		ok                bool
+	}{
+		{"", "k", "cmnd/k", true},
+		{"%prefix%/%topic%/", "k", "cmnd/k", true},
+		{"%prefix%/%topic%", "k", "cmnd/k", true},
+		{"fleet/%topic%/%prefix%/", "k", "fleet/k/cmnd", true},
+		{"%prefix%/room", "k", "", false},                // no %topic%: every device shares it
+		{"%prefix%/%hostname%/%topic%/", "k", "", false}, // cannot expand
+		{"%topic%", "k", "k", true},
+	} {
+		got, ok := CommandTopic(c.full, c.topic)
+		if got != c.want || ok != c.ok {
+			t.Errorf("CommandTopic(%q,%q) = %q,%v", c.full, c.topic, got, ok)
+		}
 	}
 }

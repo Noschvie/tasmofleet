@@ -447,19 +447,28 @@ MQTT usability, the MQTT password state, `FWReach` ("no" older than 24 h counts 
 whether FIRMWARE_BASE_URL is set, the identity, and for an update the request (Delivery,
 AllowMQTTUpload, the `fwselect.MQTTUploadFits` verdict, the HTTP push decision the OTA engine makes).
 
-MQTT is usable when all hold: the bus is connected, `Device.MQTT` is ours, the topic is set and
-unique in the inventory, the FullTopic (empty = `%prefix%/%topic%/`) equals MQTT_FULLTOPIC, the topic
-is not the device's known GroupTopic, and the last will says Online. The GroupTopic is trusted only
-when it is set, stamped and not older than the last Status 1 read (it can be stale: INFO1 is sent
-at boot, Status 1 only when probed). Commands tolerate an unknown GroupTopic (the channel refuses
-known group topics itself); every other MQTT action (transfers, download) needs a known one.
+MQTT is usable when all hold: the bus is connected, `Device.MQTT` is ours, the topic is one device's
+topic (non-empty, no `/ + #`, no whitespace, not `tasmotas`), no device in the inventory listens on it
+(`TopicExclusive`: no other device's Topic and no device's GroupTopic, fresh or stale and the device's own
+included, equals it, compared raw and as expanded command topics: FullTopic with `%prefix%`=cmnd and
+`%topic%`, empty = `%prefix%/%topic%/`, trailing `/` dropped; a FullTopic without `%topic%` or with
+another placeholder counts as a collision), the FullTopic equals MQTT_FULLTOPIC (same normalisation),
+the topic is not the device's own GroupTopic (even a stale value blocks), and the last will says Online.
+`mqttcmd` checks the topic again before every publish.
+
+The GroupTopic is trusted as "known" only when it is set, stamped and not older than the last Status 1
+read (it can be stale: INFO1 is sent at boot, Status 1 only when probed). Commands are reads (Status N,
+identity refresh) and tolerate an unknown own GroupTopic; Writes (settings, Make compliant, console
+commands that change the device, backlog), transfers and the download need a known one. The reason
+text says "refresh the device's identity".
 
 Order (HTTP first: the established path with synchronous replies; MQTT makes devices HTTP cannot
 reach manageable, #45). HTTP "not failing" means ok or unknown.
 
 | Action | Rule |
 | --- | --- |
-| Commands | HTTP; MQTT when HTTP is failing and MQTT is usable; else None |
+| Commands (reads) | HTTP; MQTT when HTTP is failing and MQTT is usable; else None |
+| Writes | HTTP; MQTT when HTTP is failing and MQTT is usable with a known own GroupTopic; else None |
 | Backup | HTTP `/dl`; MQTT FileDownload when HTTP is failing and MQTT is usable with a password that is set and not refused; else None |
 | Restore | HTTP WebGetConfig when HTTP is not failing, FIRMWARE_BASE_URL is set and FWReach is not "no"; else MQTT FileUpload Type 2 (usable, password usable); else None |
 | Update, pull | DownloadHTTP (HTTP not failing, base URL set, FWReach not "no"); else DownloadMQTT (usable, FWReach not "no"); else None |

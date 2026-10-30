@@ -16,8 +16,11 @@ const defaultFullTopic = "%prefix%/%topic%/"
 
 // Paths is the answer of Choose: one path per action and the sentence for each.
 type Paths struct {
-	Commands, Backup, Restore, Update Path
-	// Reasons has one entry per action, in the order Commands, Backup, Restore, Update, each with a
+	// Commands are reads (Status N, identity refresh): they may go over MQTT with an unknown own
+	// GroupTopic. Writes are commands that change the device (settings, Make compliant, non-read
+	// console commands, backlog): they follow the strict rule of the transfers.
+	Commands, Writes, Backup, Restore, Update Path
+	// Reasons has one entry per action, in the order Commands, Writes, Backup, Restore, Update, each with a
 	// non-empty Text.
 	Reasons []Reason
 }
@@ -51,6 +54,8 @@ func Choose(f Facts) Paths {
 	var t string
 	p.Commands, t = chooseCommands(f)
 	p.Reasons = append(p.Reasons, Reason{ActCommands, p.Commands, t})
+	p.Writes, t = chooseWrites(f)
+	p.Reasons = append(p.Reasons, Reason{ActWrites, p.Writes, t})
 	p.Backup, t = chooseBackup(f)
 	p.Reasons = append(p.Reasons, Reason{ActBackup, p.Backup, t})
 	p.Restore, t = chooseRestore(f)
@@ -64,7 +69,8 @@ func httpFailing(f Facts) bool { return f.HTTP.State == HTTPFailing }
 
 // fwReach is the firmware-server reach with the 24 h expiry of "no" applied.
 func fwReach(f Facts) model.FWReachState {
-	if f.FWReach.State == model.FWReachNo && !f.FWReach.At.IsZero() && f.Now.Sub(f.FWReach.At) > fwReachTTL {
+	// a "no" without a time cannot be dated, so it cannot be trusted either
+	if f.FWReach.State == model.FWReachNo && (f.FWReach.At.IsZero() || f.Now.Sub(f.FWReach.At) > fwReachTTL) {
 		return model.FWReachUnknown
 	}
 	return f.FWReach.State
@@ -87,11 +93,13 @@ func fwBlocker(f Facts) string {
 	return ""
 }
 
+// fullTopic normalises a FullTopic for comparison: empty is Tasmota's default, a trailing '/' is
+// not significant.
 func fullTopic(s string) string {
 	if s == "" {
-		return defaultFullTopic
+		s = defaultFullTopic
 	}
-	return s
+	return strings.TrimRight(s, "/")
 }
 
 // groupTopicKnown reports whether the stored GroupTopic can be trusted: set, stamped, and not
@@ -113,11 +121,15 @@ func mqttBlocker(f Facts, strict bool) string {
 		return "the device does not use TasmoFleet's MQTT broker"
 	case m.Topic == "":
 		return "the device has no MQTT topic"
-	case !m.TopicUnique:
-		return "another device has the same MQTT topic"
+	case !TopicShapeOK(m.Topic):
+		return "the device's MQTT topic contains characters that are not allowed"
+	case m.Topic == DefaultGroupTopic:
+		return "the device's topic is the default group topic, which many devices listen on"
+	case !m.TopicExclusive:
+		return "another device listens on this topic (its Topic or GroupTopic)"
 	case fullTopic(m.FullTopic) != fullTopic(m.OurFullTopic):
 		return "the device's FullTopic differs from TasmoFleet's MQTT_FULLTOPIC"
-	case groupTopicKnown(m) && m.GroupTopic == m.Topic:
+	case m.GroupTopic != "" && m.GroupTopic == m.Topic: // even a stale value: it only ever adds a refusal
 		return "the device's topic is also its GroupTopic, so a message would reach other devices"
 	case strict && !groupTopicKnown(m):
 		return "the device's GroupTopic has not been read recently, so TasmoFleet cannot rule out that its topic is shared; refresh the device's identity to read it"
@@ -135,7 +147,9 @@ func passwordBlocker(f Facts, what string) string {
 	case !f.Password.BadAt.IsZero():
 		return "the device refused its MQTT password (since " + f.Password.BadAt.UTC().Format("2006-01-02 15:04 UTC") + "); enter the right one to " + what + " over MQTT"
 	case f.Password.Mode == model.MQTTPasswordNone:
-		return "Enter the device's MQTT password to " + what + " over MQTT"
+		return "enter the device's MQTT password to " + what + " over MQTT"
+	case f.Password.Mode != model.MQTTPasswordBroker && f.Password.Mode != model.MQTTPasswordOwn:
+		return "the device's MQTT password mode is not recognised"
 	}
 	return ""
 }
@@ -165,6 +179,16 @@ func chooseCommands(f Facts) (Path, string) {
 	}
 	if why := mqttBlocker(f, false); why != "" {
 		return None, noPath(httpFailText(f.HTTP), "MQTT is not usable: "+why)
+	}
+	return MQTT, "over MQTT, because " + httpFailText(f.HTTP)
+}
+
+func chooseWrites(f Facts) (Path, string) {
+	if !httpFailing(f) {
+		return HTTP, "over the device's HTTP API"
+	}
+	if why := mqttBlocker(f, true); why != "" {
+		return None, noPath(httpFailText(f.HTTP), "changing the device over MQTT is not possible: "+why)
 	}
 	return MQTT, "over MQTT, because " + httpFailText(f.HTTP)
 }

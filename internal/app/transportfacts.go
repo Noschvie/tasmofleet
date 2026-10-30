@@ -71,12 +71,6 @@ func (s *TransportFacts) Facts(ctx context.Context, id model.DeviceID) (transpor
 	h := s.Health.Get(id)
 	now := s.Now()
 
-	unique := d.Topic != ""
-	for _, o := range all {
-		if o.ID != d.ID && d.Topic != "" && o.Topic == d.Topic {
-			unique = false
-		}
-	}
 	probe := d.OTAURLReadAt // the Status 1 stamp
 	if d.Identity.DetectedAt.After(probe) {
 		probe = d.Identity.DetectedAt
@@ -86,7 +80,7 @@ func (s *TransportFacts) Facts(ctx context.Context, id model.DeviceID) (transpor
 		HTTP: s.httpState(id, h, now),
 		MQTT: transport.MQTTFacts{
 			BusConnected: s.BusConnected(), Ours: d.MQTT == model.MQTTOurs,
-			Topic: d.Topic, TopicUnique: unique,
+			Topic: d.Topic, TopicExclusive: topicExclusive(d, all),
 			FullTopic: d.FullTopic, OurFullTopic: s.FullTopic(),
 			GroupTopic: d.GroupTopic, GroupTopicReadAt: d.GroupTopicReadAt, LastProbeAt: probe,
 			LWTOnline: h.LWT == "Online",
@@ -135,4 +129,37 @@ func (s *TransportFacts) password(d model.Device) transport.Password {
 		p.Unusable = "TasmoFleet has no broker password configured"
 	}
 	return p
+}
+
+// topicExclusive reports whether no device in the inventory listens on d's command topic: not as
+// its Topic, not as its GroupTopic (fresh or stale, d's own included), compared raw and as the
+// expanded command topic (FullTopic with %prefix%=cmnd, %topic% = the topic, trailing '/' dropped).
+// A message to a shared topic reaches the wrong device. d's own FullTopic must be expandable and
+// contain %topic%, else every device with it would share one topic. Another device whose FullTopic
+// cannot be expanded (%hostname%, ...) is compared by its raw topics only: its real topic is not
+// knowable here.
+func topicExclusive(d model.Device, all []model.Device) bool {
+	mine, ok := transport.CommandTopic(d.FullTopic, d.Topic)
+	if d.Topic == "" || !ok {
+		return false
+	}
+	for _, o := range all {
+		if o.ID != d.ID && o.Topic == d.Topic {
+			return false
+		}
+		if o.GroupTopic != "" && o.GroupTopic == d.Topic {
+			return false
+		}
+		if o.ID != d.ID {
+			if x, ok := transport.CommandTopic(o.FullTopic, o.Topic); ok && x == mine {
+				return false
+			}
+		}
+		if o.GroupTopic != "" {
+			if x, ok := transport.CommandTopic(o.FullTopic, o.GroupTopic); ok && x == mine {
+				return false
+			}
+		}
+	}
+	return true
 }

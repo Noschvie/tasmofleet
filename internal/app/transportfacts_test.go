@@ -48,25 +48,45 @@ func newFacts(devs []model.Device, h fakeFactsHealth, mem HTTPMemory) *Transport
 	}
 }
 
-// Why: a topic that two inventory devices share must reach Choose as non-unique, or a transfer to it
-// would hit the wrong device; the device itself and an empty topic must not count.
-func TestFactsTopicUniqueness(t *testing.T) {
-	devs := []model.Device{{ID: 1, Topic: "a"}, {ID: 2, Topic: "a"}, {ID: 3, Topic: "b"}, {ID: 4}, {ID: 5}}
-	s := newFacts(devs, fakeFactsHealth{}, nil)
-	for id, want := range map[model.DeviceID]bool{1: false, 2: false, 3: true} {
-		f, err := s.Facts(context.Background(), id)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if f.MQTT.TopicUnique != want {
-			t.Errorf("device %d: unique = %v", id, f.MQTT.TopicUnique)
-		}
+// Why (review H1): a message to a topic another device listens on, as Topic or as GroupTopic
+// (fresh or stale, own included), reaches the wrong device; Facts must say so for every shape of it.
+func TestFactsTopicExclusive(t *testing.T) {
+	cases := []struct {
+		name string
+		devs []model.Device
+		want bool // for device 1
+	}{
+		{"alone", []model.Device{{ID: 1, Topic: "a"}}, true},
+		{"others different, default group topics", []model.Device{{ID: 1, Topic: "a", GroupTopic: "tasmotas"}, {ID: 2, Topic: "b", GroupTopic: "tasmotas"}}, true},
+		{"same topic", []model.Device{{ID: 1, Topic: "a"}, {ID: 2, Topic: "a"}}, false},
+		{"case differs: MQTT topics are case sensitive", []model.Device{{ID: 1, Topic: "a"}, {ID: 2, Topic: "A"}}, true},
+		{"B's GroupTopic is A's Topic", []model.Device{{ID: 1, Topic: "a"}, {ID: 2, Topic: "b", GroupTopic: "a"}}, false},
+		{"B's stale GroupTopic is A's Topic", []model.Device{{ID: 1, Topic: "a"}, {ID: 2, Topic: "b", GroupTopic: "a", GroupTopicReadAt: time.Time{}}}, false},
+		{"own GroupTopic is the Topic", []model.Device{{ID: 1, Topic: "a", GroupTopic: "a"}}, false},
+		{"expanded topics collide through FullTopic", []model.Device{
+			{ID: 1, Topic: "a", FullTopic: "%prefix%/%topic%/"},
+			{ID: 2, Topic: "a", FullTopic: "x/%topic%/"}}, false},
+		{"B's group topic expands to A's command topic", []model.Device{
+			{ID: 1, Topic: "a"}, {ID: 2, Topic: "b", GroupTopic: "a", FullTopic: "%prefix%/%topic%"}}, false},
+		{"trailing slash is not a difference", []model.Device{
+			{ID: 1, Topic: "a", FullTopic: "%prefix%/%topic%"}, {ID: 2, Topic: "a"}}, false},
+		{"FullTopic without %topic%", []model.Device{{ID: 1, Topic: "a", FullTopic: "%prefix%/room/"}}, false},
+		{"FullTopic with an unexpandable placeholder", []model.Device{{ID: 1, Topic: "a", FullTopic: "%prefix%/%hostname%/%topic%/"}}, false},
+		{"a neighbour's odd FullTopic does not block", []model.Device{{ID: 1, Topic: "a"}, {ID: 2, Topic: "b", FullTopic: "%prefix%/%hostname%/"}}, true},
+		{"no topic", []model.Device{{ID: 1}}, false},
 	}
-	// no topic: not "unique", Choose refuses on the empty topic anyway
-	if f, _ := s.Facts(context.Background(), 4); f.MQTT.TopicUnique {
-		t.Error("empty topic must not be unique")
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f, err := newFacts(c.devs, fakeFactsHealth{}, nil).Facts(context.Background(), 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if f.MQTT.TopicExclusive != c.want {
+				t.Errorf("exclusive = %v", f.MQTT.TopicExclusive)
+			}
+		})
 	}
-	if _, err := s.Facts(context.Background(), 99); err == nil {
+	if _, err := newFacts(nil, fakeFactsHealth{}, nil).Facts(context.Background(), 99); err == nil {
 		t.Error("unknown device must fail")
 	}
 }

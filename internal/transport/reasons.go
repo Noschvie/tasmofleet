@@ -25,7 +25,8 @@ type Action string
 
 // Actions Choose answers.
 const (
-	ActCommands Action = "commands" // console, settings, policy
+	ActCommands Action = "commands" // reads: Status N, identity refresh, read-only console commands
+	ActWrites   Action = "writes"   // console, settings, Make compliant, backlog: commands that change the device
 	ActBackup   Action = "backup"
 	ActRestore  Action = "restore"
 	ActUpdate   Action = "update"
