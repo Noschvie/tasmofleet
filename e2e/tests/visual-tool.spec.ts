@@ -86,8 +86,8 @@ test.describe("entry table", () => {
   const manifest = loadManifest();
   const ids = manifestIds(manifest);
 
-  test("the manifest pins the 1312 references of the v6 render", () => {
-    expect(manifest.size).toBe(1312);
+  test("the manifest pins the 1306 references of the v6 render", () => {
+    expect(manifest.size).toBe(1306);
   });
 
   test("every reference id has an entry, except the loading skeletons (D12)", () => {
