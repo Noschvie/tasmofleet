@@ -463,7 +463,7 @@ func (h *handler) overviewOf(r *http.Request, v view, d model.Device, just *rela
 	if err != nil {
 		return p, err
 	}
-	p.Activity = devActivity{Base: v.Base, Rows: rows, All: v.Base + devPath(d.ID, "/history")}
+	p.Activity = devActivity{Base: v.Base, Rows: rows, All: v.Base + devPath(d.ID, "/history"), Sig: activitySig(rows)}
 	for _, j := range jobs {
 		if !j.State.Terminal() {
 			// During an update the device stops answering (it downloads, then reboots). That is
@@ -499,7 +499,7 @@ func (h *handler) overviewOf(r *http.Request, v view, d model.Device, just *rela
 	tele := h.telemetryOf(d.ID)
 	in := overviewIn{Dev: d, Health: hl, Tele: tele, Facts: facts, Policy: h.policyOf(r, v, d.ID), Now: h.d.Clock.Now()}
 	off := p.Tabs.offline() // an update silences the device on purpose: that is not "offline"
-	p.Live = liveView{ID: d.ID, Base: v.Base, CSRF: v.CSRF, Off: off, Tiles: tilesOf(in),
+	p.Live = liveView{ActSig: p.Activity.Sig, ID: d.ID, Base: v.Base, CSRF: v.CSRF, Off: off, Tiles: tilesOf(in),
 		Box: relayBoxOf(hl, tele, d.RelayNames, h.d.DeviceCmd != nil && !off && p.Updating == nil)}
 	if p.Live.Box == nil {
 		p.Live.Sensors = sensorBoxOf(in)
@@ -558,6 +558,7 @@ func (h *handler) deviceLive(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
+	p.Activity.Unchanged = p.Activity.Sig == r.URL.Query().Get("act")
 	h.component(w, r, http.StatusOK, deviceLiveParts(p))
 }
 

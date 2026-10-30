@@ -57,6 +57,9 @@ templ deviceHead(t deviceTabs, attrs templ.Attributes) {
 			</div>
 			<div class="devhd-meta">
 				<span data-visual-mask>{ t.Address }</span>
+				if t.Hostname != "" {
+					<span data-visual-mask>{ t.Hostname }</span>
+				}
 				if t.Chip != "" {
 					<span>{ t.Chip }</span>
 				}
@@ -181,7 +184,9 @@ templ deviceOverviewPage(p deviceOverview) {
 // Activity box, the header and the offline banner out of band.
 templ deviceLiveParts(p deviceOverview) {
 	@liveRegion(p.Live)
-	@devActBox(p.Activity, templ.Attributes{"hx-swap-oob": "true"})
+	if !p.Activity.Unchanged {
+		@devActBox(p.Activity, templ.Attributes{"hx-swap-oob": "true"})
+	}
 	if p.Paths != nil {
 		@pathsLive(*p.Paths)
 	}
@@ -197,7 +202,7 @@ templ liveRegion(l liveView) {
 		id="devlive"
 		class="devlive"
 		data-off?={ l.Off }
-		hx-get={ l.Base + devPath(l.ID, "/live") }
+		hx-get={ l.Base + devPath(l.ID, "/live") + "?act=" + l.ActSig }
 		hx-trigger={ "sse:devstate-" + devID(l.ID) + " throttle:2s, sse:devjob-" + devID(l.ID) + " throttle:2s, sse:power-" + devID(l.ID) + " throttle:10s, sse:uptime-" + devID(l.ID) + " throttle:10s, sse:resync" }
 		hx-swap="outerHTML"
 	>
@@ -380,6 +385,10 @@ templ identityCard(c identCard) {
 			}
 		</div>
 		@ui.KV(c.Rows)
+		@identityFWR(c)
+		if c.CRWarn != "" {
+			@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: c.CRWarn})
+		}
 		if c.NameOffer != "" {
 			@nameOfferNotice(c)
 		}
@@ -390,4 +399,28 @@ templ identityCard(c identCard) {
 			@ui.Banner(ui.BannerData{Tone: ui.ToneOK, Text: c.Notice})
 		}
 	</section>
+}
+
+// identityFWR is the StatusFWR block of the Identity card (#289): the fields of Status 2 under
+// Tasmota's own names with the values as sent, each explained behind an info button (the
+// tooltip pattern of button.info), then TasmoFleet's own reading of them, kept apart.
+templ identityFWR(c identCard) {
+	<h3 class="ukv-h">Reported by the device <span class="ukv-sub">Status 2 · StatusFWR</span></h3>
+	if len(c.FWR) > 0 {
+		<dl class="ukv">
+			for _, r := range c.FWR {
+				<div class="ukv-row">
+					<dt>{ r.Name } <button type="button" class="info" title={ r.Info } aria-label={ r.Name + ": " + r.Info }><span aria-hidden="true">i</span></button></dt>
+					<dd class="mono">{ r.Value }</dd>
+				</div>
+			}
+		</dl>
+	}
+	if !c.FWRRead {
+		<p class="devcard-note">Most of Status 2 is not read yet. Refresh identity reads it.</p>
+	}
+	if len(c.Reading) > 0 {
+		<h3 class="ukv-h">TasmoFleet&#39;s reading <span class="ukv-sub">worked out by TasmoFleet, not reported by the device</span></h3>
+		@ui.KV(c.Reading)
+	}
 }

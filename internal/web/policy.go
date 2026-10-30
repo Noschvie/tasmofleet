@@ -140,6 +140,7 @@ type fixDialog struct {
 	Changes  []ui.KVRow
 	Fields   []ui.KVRow
 	Advisory bool // some selected device also has Advisory deviations to choose from
+	CRFull   int  // devices whose settings text area cannot take the plan's text values (#289)
 }
 
 // devAlert is the banner of a Required rule that devices deviate from.
@@ -585,7 +586,11 @@ func fixDialogBody(f *fixDialog) string {
 	if f.Advisory {
 		s += "; Advisory ones only when you choose them"
 	}
-	return s + ". These commands run as one transaction only when you confirm. Values known only from a backup, or not known at all, are left alone."
+	s += ". These commands run as one transaction only when you confirm. Values known only from a backup, or not known at all, are left alone."
+	if f.CRFull > 0 {
+		s += " " + plural(f.CRFull, "device") + " may not have room in the settings text area for these text values; the preview names them."
+	}
+	return s
 }
 
 // fixDialogAlt is the dialog's second button: the preview with a box per Advisory deviation. "" when

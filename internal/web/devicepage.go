@@ -2,6 +2,8 @@ package web
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -47,6 +49,8 @@ type liveView struct {
 	Box   *relayBox // nil: the device has no relays
 	// Sensors replaces the relay box on a device without relays
 	Sensors *sensorBox
+	// ActSig is devActivity.Sig of the same answer: the next refresh sends it back.
+	ActSig string
 }
 
 // tile is one stat tile of the top row. A tile that does not apply is not built at all, so the
@@ -97,6 +101,28 @@ type devActivity struct {
 	Base string
 	Rows []devActRow
 	All  string
+	// Sig identifies the rows. The live region names it in its refresh request, and a refresh whose
+	// answer would carry the same rows leaves the box out (Unchanged), so the table is not redrawn
+	// and does not flicker while nothing in it changed (#308).
+	Sig       string
+	Unchanged bool
+}
+
+// activitySig is a short fingerprint of what the Activity box shows.
+func activitySig(rows []devActRow) string {
+	var b strings.Builder
+	for _, r := range rows {
+		b.WriteString(strconv.FormatInt(r.At.UnixNano(), 10))
+		if e := r.Event; e != nil {
+			b.WriteString("|e|" + string(e.From) + "|" + string(e.To) + "|" + string(e.Source) + "|" + e.Detail)
+		}
+		if j := r.Job; j != nil {
+			b.WriteString("|j|" + strconv.FormatInt(int64(j.ID), 10) + "|" + strconv.FormatInt(int64(j.BatchID), 10) + "|" + string(j.State) + "|" + j.LastError + "|" + j.Target())
+		}
+		b.WriteByte('\n')
+	}
+	sum := sha256.Sum256([]byte(b.String()))
+	return hex.EncodeToString(sum[:8])
 }
 
 // devActRow is one state change or one transaction. Exactly one of Event and Job is set.
@@ -139,6 +165,13 @@ type identCard struct {
 	NameOffer string
 	CanAnswer bool
 	KeepOK    bool
+	// FWR are the StatusFWR fields of Status 2 as the device sent them, Reading what TasmoFleet
+	// derives from them (#289). FWRRead says the probe stored them at all.
+	FWR     []fwrRow
+	Reading []ui.KVRow
+	FWRRead bool
+	// CRWarn is the warning that the settings text area is nearly full; "" shows nothing.
+	CRWarn string
 }
 
 // policyCard is the device's policy compliance: the rules that apply, the deviations, and
@@ -244,27 +277,14 @@ func orUnknown(s string) string {
 // identity builds the Identity card for the viewer. Credentials never leave the server: the
 // card says only whether a web login is stored.
 func (h *handler) identity(v view, d model.Device, updating, off bool, f snapFacts) identCard {
-	hw := d.Identity.Hardware
-	if mb := d.Identity.FlashSizeKB / 1024; hw != "" && mb > 0 {
-		hw += " · " + strconv.Itoa(mb) + " MB flash"
-	}
-	fw := ""
-	if d.Identity.Version != "" {
-		fw = "Tasmota " + d.Identity.Version
-	}
 	build := d.Identity.Variant
 	if build == "unknown" && d.Identity.Image != "" && !strings.Contains(d.Identity.Image, "-") {
 		build = d.Identity.Image + " (self-compiled)" // a bare tag: the name the device reports
-	} else if build != "" && d.Identity.Language != "" {
-		build += " " + d.Identity.Language
 	}
 	rows := []ui.KVRow{
 		{Key: "Device name", Value: d.Name, Mono: true},
 		{Key: "Hostname", Value: orUnknown(f.Hostname), Mono: true, Mask: true},
 		{Key: "MQTT topic", Value: orUnknown(d.Topic), Mono: true},
-		{Key: "Hardware", Value: orUnknown(hw), Mono: true},
-		{Key: "Build", Value: orUnknown(build), Mono: true},
-		{Key: "Firmware", Value: orUnknown(fw), Mono: true},
 	}
 	if d.OTAURL != "" { // #127: where the device would update from; the prober stored it without credentials
 		rows = append(rows, ui.KVRow{Key: "OTA URL", Value: d.OTAURL, Mono: true, Soft: true})
@@ -289,8 +309,74 @@ func (h *handler) identity(v view, d model.Device, updating, off bool, f snapFac
 	if d.Notes != "" {
 		rows = append(rows, ui.KVRow{Key: "Notes", Value: d.Notes})
 	}
-	return identCard{Base: v.Base, ID: d.ID, Rows: rows, CanProbe: !updating, Off: off,
+	c := identCard{Base: v.Base, ID: d.ID, Rows: rows, CanProbe: !updating, Off: off,
 		NameOffer: nameOffer(d), CanAnswer: v.IsAdmin, KeepOK: h.d.DeviceNames != nil}
+	c.FWR, c.Reading = statusFWRRows(d.Identity), tasmoFleetReading(d.Identity, build)
+	c.FWRRead = d.Identity.FWR.Read()
+	c.CRWarn = crWarning(d.Identity.FWR, h.crWarnPercent())
+	return c
+}
+
+// defaultCRWarnPercent is the threshold when no system setting is wired (tests).
+const defaultCRWarnPercent = 90
+
+func (h *handler) crWarnPercent() int {
+	if h.d.CRWarnPercent == nil {
+		return defaultCRWarnPercent
+	}
+	return h.d.CRWarnPercent()
+}
+
+// fwrRow is one StatusFWR field of Status 2 under Tasmota's own name, with the value as the
+// device sent it and a short explanation (#289).
+type fwrRow struct{ Name, Value, Info string }
+
+// statusFWRRows are the StatusFWR fields in the order of Tasmota's reply. A field the probe did
+// not read (never, or an old identity) is left out; the card then points at Refresh identity.
+func statusFWRRows(i model.Identity) []fwrRow {
+	f := i.FWR
+	var rows []fwrRow
+	add := func(name, value, info string) {
+		if value != "" {
+			rows = append(rows, fwrRow{Name: name, Value: value, Info: info})
+		}
+	}
+	add("Version", f.Version, "The firmware version and its build in brackets, as Tasmota prints it.")
+	add("BuildDateTime", f.BuildDateTime, "When this firmware was compiled.")
+	add("Core", f.Core, "Version of the Arduino core the firmware is built on.")
+	add("SDK", f.SDK, "Version of the Espressif SDK below the core.")
+	if f.CPUFrequency > 0 {
+		add("CpuFrequency", strconv.Itoa(f.CPUFrequency), "Current CPU clock in MHz.")
+	}
+	add("Hardware", i.Hardware, "The chip as Tasmota names it: model, revision and, on an ESP32, the package.")
+	add("CR", f.CR, "Characters used / available in the settings text area, where names, topics, rules, URLs and passwords share one small space. When it is full, longer values are not saved.")
+	return rows
+}
+
+// tasmoFleetReading is what TasmoFleet derives from Status 2 and Status 4 itself. It is shown
+// apart from the StatusFWR fields because the device does not report it (#289).
+func tasmoFleetReading(i model.Identity, build string) []ui.KVRow {
+	var rows []ui.KVRow
+	if build != "" {
+		rows = append(rows, ui.KVRow{Key: "Variant", Value: build, Mono: true})
+	}
+	if i.Language != "" {
+		rows = append(rows, ui.KVRow{Key: "Language", Value: i.Language, Mono: true})
+	}
+	if mb := i.FlashSizeKB / 1024; mb > 0 {
+		rows = append(rows, ui.KVRow{Key: "Flash size", Value: strconv.Itoa(mb) + " MB", Mono: true})
+	}
+	return rows
+}
+
+// crWarning is the Identity card's warning when the settings text area is fuller than percent,
+// "" when it is not or CR was not read.
+func crWarning(f model.FWRFacts, percent int) string {
+	used, total, ok := f.CRUsage()
+	if !ok || used*100 <= percent*total {
+		return ""
+	}
+	return "Settings text area almost full (" + strconv.Itoa(used) + "/" + strconv.Itoa(total) + "): longer values such as OtaUrl may not be saved."
 }
 
 // policyOf is the device's part of the policy report (values already read; nothing is sent).

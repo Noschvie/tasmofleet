@@ -221,6 +221,9 @@ templ fixPreviewPage(base, csrf string, p fixPage) {
 								<span class="pol-fix-note">{ fixNote(c) }</span>
 							</div>
 						}
+						if row.CRWarn != "" && row.Blocked == "" {
+							<p class="pol-fix-skip" role="alert">{ row.CRWarn }</p>
+						}
 						if row.Blocked != "" {
 							<p class="pol-fix-skip">{ row.Blocked }</p>
 						}

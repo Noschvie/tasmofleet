@@ -107,6 +107,8 @@ var fields = []Field{
 	{Key: "BACKUP_INTERVAL", Group: GroupBackup, Label: "Scheduled backup interval", Apply: Live,
 		Help: "How often all devices are backed up, e.g. 24h. 0 = manual only."},
 
+	{Key: "CR_WARN_PERCENT", Group: GroupHealth, Label: "Settings text area warning", Apply: Live,
+		Help: "A device's Identity card warns when its settings text area (StatusFWR CR) is fuller than this percentage, 50 to 100."},
 	{Key: "POLL_INTERVAL", Group: GroupHealth, Label: "HTTP poll interval", Apply: Live, Help: "Health check by HTTP for devices without MQTT, at least 1s."},
 	{Key: "POLICY_LIVE_INTERVAL", Group: GroupHealth, Label: "Policy check read interval", Apply: Live,
 		Help: "How often each device is read for the policy view (jittered, side-effect-free queries), e.g. 1h. 0 = no background reads; MQTT updates and the on-demand check stay."},

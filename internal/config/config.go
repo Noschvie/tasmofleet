@@ -126,6 +126,10 @@ type Config struct {
 	// (tests and dev only; the host allowlist then is that URL's host).
 	FWUpstreamOverride string `env:"FIRMWARE_UPSTREAM_OVERRIDE"`
 
+	// CRWarnPercent: the Identity card warns when the settings text area of a device (StatusFWR.CR)
+	// is fuller than this many percent. 50..100.
+	CRWarnPercent int `env:"CR_WARN_PERCENT" ui:"true" default:"90"`
+
 	BackupKeep int `env:"BACKUP_KEEP" ui:"true" default:"10"`
 	// BackupMaxAge: backups younger than this are never pruned, however many
 	// newer ones exist (so repeated manual runs cannot evict the restore points).

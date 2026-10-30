@@ -263,3 +263,62 @@ func TestMigration0035AddsTheReadStampsWithoutTouchingDevices(t *testing.T) {
 		t.Fatalf("%q %q %v %v", url, gt, otaAt, gtAt)
 	}
 }
+
+// Why (#289): the Identity card shows the StatusFWR fields as the device sent them, and the CR
+// warning relies on them, so a probe must persist them and a probe that read no Status 2 (minimal
+// firmware, identity over MQTT) must not blank them.
+func TestUpdateProbeStoresStatusFWRRawAndKeepsItWhenNotRead(t *testing.T) {
+	s, _, _ := newStore(t)
+	id, _ := s.CreateDevice(ctx, model.Device{Name: "plug", Address: "192.0.2.10", MAC: "aa:bb:cc:00:00:01"})
+	guard := ProbeGuard{Address: "192.0.2.10", MAC: "aa:bb:cc:00:00:01"}
+	fwr := model.FWRFacts{Version: "16.0.0(tasmota32)", BuildDateTime: "2026-10-16T18:34:59", Core: "3.3.12", SDK: "5.5.5", CPUFrequency: 240, CR: "650/699"}
+	if err := s.UpdateProbe(ctx, id, guard, ProbeResult{Identity: model.Identity{Hardware: "ESP32-S3", FWR: fwr}}); err != nil {
+		t.Fatal(err)
+	}
+	if d, _ := s.GetDevice(ctx, id); d.Identity.FWR != fwr {
+		t.Fatalf("FWR = %+v, want %+v", d.Identity.FWR, fwr)
+	}
+	if err := s.UpdateProbe(ctx, id, guard, ProbeResult{Identity: model.Identity{Hardware: "ESP32-S3"}}); err != nil {
+		t.Fatal(err)
+	}
+	if d, _ := s.GetDevice(ctx, id); d.Identity.FWR != fwr {
+		t.Fatalf("a probe without Status 2 wiped the facts: %+v", d.Identity.FWR)
+	}
+}
+
+// Why: live databases upgrade with devices in them; they must load and show no StatusFWR facts
+// until the next refresh instead of failing on the new column.
+func TestMigration0038KeepsExistingDevicesWithoutStatusFWR(t *testing.T) {
+	db, path := rawDB(t)
+	upTo, all := fstest.MapFS{}, fstest.MapFS{}
+	err := fs.WalkDir(Migrations, "migrations", func(p string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return err
+		}
+		b, rerr := fs.ReadFile(Migrations, p)
+		if rerr != nil {
+			return rerr
+		}
+		all[p] = &fstest.MapFile{Data: b}
+		if p < "migrations/0038" {
+			upTo[p] = &fstest.MapFile{Data: b}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := migrate(db, path, upTo); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO devices (name, address, mac, topic, created_at, updated_at) VALUES ('old','10.0.0.1','aa:bb:cc:00:00:09','t',0,0)`); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrate(db, path, all); err != nil {
+		t.Fatal(err)
+	}
+	var raw string
+	if err := db.QueryRowContext(ctx, `SELECT fwr_facts FROM devices WHERE id=1`).Scan(&raw); err != nil || raw != "" {
+		t.Fatalf("fwr_facts = %q, %v; want empty", raw, err)
+	}
+}

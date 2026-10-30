@@ -13652,3 +13652,15 @@ details.devcard > summary {
   cursor: pointer;
   font: 600 14px var(--font-sans);
 }
+
+/* Identity card (#289): the StatusFWR block and TasmoFleet's own reading under it. */
+.ukv-h {
+  margin: var(--sp-12) 0 var(--sp-4);
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--color-text-2);
+}
+.ukv-sub {
+  font-weight: 400;
+  margin-left: var(--sp-4);
+}

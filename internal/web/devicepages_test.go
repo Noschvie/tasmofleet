@@ -108,13 +108,17 @@ func TestBackupIsDisabledWhileAnOperationHoldsTheDevice(t *testing.T) {
 // current one.
 func TestSettingsUnreachableOffersAWayOut(t *testing.T) {
 	e := withSettings(t, &fakeSettings{readErr: tasmota.ErrUnreachable})
-	resp, body := e.do(t, "GET", "/devices/1/settings", "admin", nil)
+	// The tab itself comes at once (#308) and keeps the Settings tab current; the failure is in the part it fetches.
+	if _, tab := e.do(t, "GET", "/devices/1/settings", "admin", nil); !strings.Contains(tab, `aria-current="page">Settings</a>`) {
+		t.Errorf("the Settings tab is not the current one:\n%s", shortDump(tab))
+	}
+	resp, body := e.do(t, "GET", "/devices/1/settings/form", "admin", nil)
 	if resp.StatusCode != 502 {
 		t.Fatalf("status %d", resp.StatusCode)
 	}
-	for _, want := range []string{`class="devform devform-msg" aria-labelledby="rd-h" role="alert"`, "The device is unreachable.", `>Try again</a>`, `>Back to the overview</a>`, `aria-current="page">Settings</a>`} {
+	for _, want := range []string{`class="devform devform-msg" aria-labelledby="rd-h" role="alert"`, "The device is unreachable.", `>Try again</a>`, `>Back to the overview</a>`} {
 		if !strings.Contains(body, want) {
-			t.Errorf("missing %q:\n%s", want, body)
+			t.Errorf("missing %q:\n%s", want, shortDump(body))
 		}
 	}
 	if strings.Contains(body, `<p class="error"`) {

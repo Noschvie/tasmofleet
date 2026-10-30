@@ -42,6 +42,9 @@ type settingsPage struct {
 	Done      bool
 	Saved     string // what happened to the write to flash after the batch
 	Tabs      deviceTabs
+	// Loading: the tab is drawn without reading the device; its body is fetched from
+	// GET /devices/{id}/settings/form (#308), so a slow device never holds the page.
+	Loading bool
 	// PolicyWant is the value a policy rule expects, by field key, for the settings this device
 	// deviates in: the field says so instead of its help.
 	PolicyWant map[string]string
@@ -82,7 +85,8 @@ func (h *handler) registerSettings(route func(string, func(http.Handler) http.Ha
 	if h.d.Settings == nil {
 		return
 	}
-	route("GET /devices/{id}/settings", adm, h.settingsForm)
+	route("GET /devices/{id}/settings", adm, h.settingsTabPage)
+	route("GET /devices/{id}/settings/form", adm, h.settingsForm)
 	route("POST /devices/{id}/settings", adm, h.settingsApply)
 }
 
@@ -135,6 +139,17 @@ func readErrorText(err error) string {
 	return "The device could not be read."
 }
 
+// settingsTabPage is GET /devices/{id}/settings: the tab with its header at once and a loading
+// state; the device is read by settingsForm, which the page fetches into it (#308).
+func (h *handler) settingsTabPage(w http.ResponseWriter, r *http.Request) {
+	d, ok := h.device(w, r)
+	if !ok {
+		return
+	}
+	h.renderSettings(w, r, http.StatusOK, settingsPage{Device: d, Loading: true})
+}
+
+// settingsForm is GET /devices/{id}/settings/form: the body of the tab, read from the device.
 func (h *handler) settingsForm(w http.ResponseWriter, r *http.Request) {
 	d, ok := h.device(w, r)
 	if !ok {
@@ -142,15 +157,18 @@ func (h *handler) settingsForm(w http.ResponseWriter, r *http.Request) {
 	}
 	cur, err := h.d.Settings.Read(r.Context(), d.ID)
 	p := settingsPage{Device: d}
+	status := http.StatusOK
 	if err != nil {
 		// Show nothing editable: a form built from a partial read would make
 		// every missing field look like a change.
 		p.ReadError = readErrorText(err)
-		h.renderSettings(w, r, http.StatusBadGateway, p)
-		return
+		status = http.StatusBadGateway
+	} else {
+		p.Groups = buildGroups(cur, cur, nil)
+		p.PolicyWant = h.policyWants(r, d.ID)
 	}
-	p.Groups = buildGroups(cur, cur, nil)
-	h.renderSettings(w, r, http.StatusOK, p)
+	v := h.view(r, "", "", nil)
+	h.component(w, r, status, settingsBody(p, v.Base, v.CSRF))
 }
 
 // formKeys are the posted names besides the field values.

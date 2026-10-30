@@ -1,6 +1,10 @@
 package model
 
-import "time"
+import (
+	"strconv"
+	"strings"
+	"time"
+)
 
 // DeviceID is the inventory primary key (SQLite rowid).
 type DeviceID int64
@@ -198,7 +202,38 @@ type Identity struct {
 	// False for identities stored before MQTT transport existed and for identities read over MQTT.
 	LanguageKnown bool
 
+	// FWR is what Status 2 (StatusFWR) reported, raw and under Tasmota's own names. Identity's other
+	// fields are TasmoFleet's reading of it (Variant, Language, Version without the image tag).
+	FWR FWRFacts
+
 	DetectedAt time.Time
+}
+
+// FWRFacts are the StatusFWR fields of Status 2 as the device sent them (#289). Hardware is
+// Identity.Hardware. Empty fields were never read (a device identified before TasmoFleet kept
+// them, or over MQTT).
+type FWRFacts struct {
+	Version       string // "16.0.0(tasmota32)"
+	BuildDateTime string
+	Core, SDK     string
+	CPUFrequency  int
+	CR            string // "448/699": characters used / available in the settings text area
+}
+
+// Read reports whether a probe stored the facts.
+func (f FWRFacts) Read() bool { return f != FWRFacts{} }
+
+// CRUsage splits CR ("650/699") into used and total characters. ok is false when CR is empty or
+// not of that form.
+func (f FWRFacts) CRUsage() (used, total int, ok bool) {
+	u, t, found := strings.Cut(f.CR, "/")
+	if !found {
+		return 0, 0, false
+	}
+	var err1, err2 error
+	used, err1 = strconv.Atoi(strings.TrimSpace(u))
+	total, err2 = strconv.Atoi(strings.TrimSpace(t))
+	return used, total, err1 == nil && err2 == nil && used >= 0 && total > 0
 }
 
 // Known reports whether the identity is complete enough to select firmware.

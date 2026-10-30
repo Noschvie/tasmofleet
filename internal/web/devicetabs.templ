@@ -39,6 +39,26 @@ templ settingsTab(p settingsPage, base, csrf string) {
 	if p.Notice != "" {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Text: p.Notice})
 	}
+	if p.Loading {
+		@settingsLoading(p, base)
+	} else {
+		@settingsBody(p, base, csrf)
+	}
+}
+
+// settingsLoading is the body of the tab until the device has answered. It fetches the form into
+// itself the moment the page is there (#308) and is replaced by it, or by the reason the read failed.
+templ settingsLoading(p settingsPage, base string) {
+	<section id="settings-body" class="devform devform-msg" aria-busy="true" role="status" hx-get={ base + devPath(p.Device.ID, "/settings/form") } hx-trigger="load" hx-swap="outerHTML">
+		<h2>Reading the settings from the device&#8230;</h2>
+		<p>This takes a moment. Nothing is changed on the device.</p>
+		<noscript><p>This page needs JavaScript to read the settings. <a href={ templ.SafeURL(base + devPath(p.Device.ID, "/settings/form")) }>Read them without it</a>.</p></noscript>
+	</section>
+}
+
+// settingsBody is what the tab shows once the device was read: the form, the reason the read failed
+// or the result of a save.
+templ settingsBody(p settingsPage, base, csrf string) {
 	if p.ReadError != "" {
 		<section class="devform devform-msg" aria-labelledby="rd-h" role="alert">
 			<h2 id="rd-h">The settings could not be read.</h2>

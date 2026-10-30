@@ -15,6 +15,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/health"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/policy"
+	"github.com/nofuturekid/tasmofleet/internal/store"
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
 
@@ -214,7 +215,8 @@ func kvKeys(rows []ui.KVRow) string {
 }
 
 // Why: Identity is the static facts in a fixed order; "Chip" is gone (the family is in the header's
-// meta line) and the hardware row carries the flash size.
+// meta line). The device's own fields (StatusFWR, #289) follow the card's own rows, TasmoFleet's
+// reading comes last and carries the flash size.
 func TestIdentityRowsFollowTheMockup(t *testing.T) {
 	e := setup(t)
 	d := e.inv.devs[1]
@@ -224,10 +226,10 @@ func TestIdentityRowsFollowTheMockup(t *testing.T) {
 	i := strings.Index(body, `id="dc-ident"`)
 	j := strings.Index(body, `id="dc-conn"`)
 	ident := body[i:j]
-	if strings.Contains(ident, "<dt>Chip</dt>") || !strings.Contains(ident, "ESP8266EX · 2 MB flash") {
+	if strings.Contains(ident, "<dt>Chip</dt>") || !strings.Contains(ident, "2 MB") {
 		t.Errorf("identity:\n%s", ident)
 	}
-	last, order := -1, []string{"<dt>Device name", "<dt>Hostname", "<dt>MQTT topic", "<dt>Hardware", "<dt>Build", "<dt>Firmware", "<dt>MAC"}
+	last, order := -1, []string{"<dt>Device name", "<dt>Hostname", "<dt>MQTT topic", "<dt>MAC", "<dt>Hardware", "TasmoFleet&#39;s reading", "<dt>Variant", "<dt>Flash size"}
 	for _, k := range order {
 		at := strings.Index(ident, k)
 		if at < last {
@@ -243,7 +245,7 @@ func TestIdentityRowsFollowTheMockup(t *testing.T) {
 func TestOverviewLiveRegionListensToThisDeviceOnly(t *testing.T) {
 	e := setup(t)
 	_, body := e.do(t, "GET", "/devices/1", "operator", nil)
-	for _, want := range []string{`hx-get="/tf/devices/1/live"`, `sse:devstate-1 throttle:2s`, `sse:devjob-1 throttle:2s`, `sse:power-1 throttle:10s`, `sse:uptime-1 throttle:10s`, `sse:resync`} {
+	for _, want := range []string{`hx-get="/tf/devices/1/live?act=`, `sse:devstate-1 throttle:2s`, `sse:devjob-1 throttle:2s`, `sse:power-1 throttle:10s`, `sse:uptime-1 throttle:10s`, `sse:resync`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("live region lacks %q", want)
 		}
@@ -562,5 +564,35 @@ func TestPagesTakeTheEventNumberBeforeReadingTheirData(t *testing.T) {
 		if since, _ := strconv.ParseUint(m[1], 10, 64); since != before {
 			t.Errorf("%s: since=%d, want %d (the number before the page read anything; now %d)", path, since, before, after)
 		}
+	}
+}
+
+// Why (#308): every telemetry event refreshes the live region, and the Activity box used to be
+// swapped with it each time, so its table flickered and lost the reader's place although no
+// entry had changed. The page tells the server which Activity it shows; an unchanged list is
+// not sent again, a changed one is.
+func TestLiveRefreshLeavesAnUnchangedActivityBoxAlone(t *testing.T) {
+	hist := &fakeHistory{events: stateChanges(3)}
+	e := setupWith(t, func(d *Deps) { d.History = hist })
+	_, page := e.do(t, "GET", "/devices/1", "operator", nil)
+	m := regexp.MustCompile(`hx-get="/tf/devices/1/live\?act=([0-9a-f]+)"`).FindStringSubmatch(page)
+	if m == nil {
+		t.Fatalf("the live region does not name the Activity it shows:\n%s", shortDump(page))
+	}
+	_, same := e.do(t, "GET", "/devices/1/live?act="+m[1], "operator", nil)
+	if strings.Contains(same, `id="devact"`) {
+		t.Error("the unchanged Activity box was sent again")
+	}
+	if !strings.Contains(same, `id="devlive"`) || !strings.Contains(same, `id="devhd"`) {
+		t.Error("the rest of the live answer must still come")
+	}
+	hist.events = append([]store.HealthEvent{{DeviceID: 1, At: time.Date(2026, 10, 23, 13, 0, 0, 0, time.UTC), From: model.HealthOnline, To: model.HealthOffline, Source: model.SourceHTTP}}, hist.events...)
+	_, changed := e.do(t, "GET", "/devices/1/live?act="+m[1], "operator", nil)
+	if !strings.Contains(changed, `id="devact"`) {
+		t.Error("a new state change must update the Activity box")
+	}
+	_, unknown := e.do(t, "GET", "/devices/1/live", "operator", nil)
+	if !strings.Contains(unknown, `id="devact"`) {
+		t.Error("without a signature the box is always sent")
 	}
 }

@@ -291,6 +291,9 @@ func (c Config) validate() error {
 	if c.OTAParallel < 1 {
 		bad("OTA_PARALLEL", "must be >= 1")
 	}
+	if c.CRWarnPercent < 50 || c.CRWarnPercent > 100 {
+		bad("CR_WARN_PERCENT", "must be between 50 and 100")
+	}
 	if c.BackupKeep < 1 {
 		bad("BACKUP_KEEP", "must be >= 1")
 	}

@@ -6,6 +6,20 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Upgrade notes
+
+- Database migration 0038 adds one column for the raw Status 2 fields. Devices show them after the next identity refresh or probe.
+
+### Added
+
+- Device page, Identity card: a block with exactly the `StatusFWR` fields of Status 2 under Tasmota's names and with the values as the device sent them (`Version`, `BuildDateTime`, `Core`, `SDK`, `CpuFrequency`, `Hardware`, `CR`), each with a short explanation behind an info icon. What TasmoFleet works out itself (variant, language, self-compiled, flash size) is shown below it as "TasmoFleet's reading". The former "Hardware", "Build" and "Firmware" rows are replaced by these two blocks (#289, thanks @Noschvie)
+- The Identity card warns when the settings text area is nearly full ("Settings text area almost full (650/699): longer values such as OtaUrl may not be saved"), and the Make compliant preview warns when the text values of a plan would not fit any more. The threshold is the system setting `CR_WARN_PERCENT` (50 to 100, default 90) (#289, thanks @Noschvie)
+- The device header shows the hostname the device reported (#290, thanks @Noschvie)
+
+### Fixed
+
+- Device page: the Settings tab opens at once with a loading state and reads the device into it, instead of showing nothing until the device had answered; a failed read keeps its reason text. The Activity table is no longer redrawn on every live refresh when nothing in it changed, which made it flicker. The Console and Backups tabs read only local data and already opened at once (#308)
+
 ### Changed
 
 - Backups tab: each backup line shows the stored file name (as on disk, to check the backup output in the file system), and the Download button's hover help names it (#290, thanks @Noschvie)

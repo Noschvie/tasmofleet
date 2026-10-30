@@ -15,8 +15,12 @@ var errBadVersion = errors.New("fwselect: malformed firmware version")
 
 type status2Reply struct {
 	StatusFWR *struct {
-		Version  string
-		Hardware string
+		Version       string
+		BuildDateTime string
+		Core, SDK     string
+		CpuFrequency  int
+		Hardware      string
+		CR            string
 	}
 	Command string
 }
@@ -53,6 +57,8 @@ func detect(in Inputs) (model.Identity, error) {
 		Language:   languageFromRoot(in.Root),
 
 		LanguageKnown: languageKnownFromRoot(in.Root),
+		FWR: model.FWRFacts{Version: s2.StatusFWR.Version, BuildDateTime: s2.StatusFWR.BuildDateTime, Core: s2.StatusFWR.Core,
+			SDK: s2.StatusFWR.SDK, CPUFrequency: s2.StatusFWR.CpuFrequency, CR: s2.StatusFWR.CR},
 	}
 	// An unparseable Version does not cost the device its identity (#45): the version stays
 	// empty and the variant unknown, so the identity is never Known() and Guard refuses

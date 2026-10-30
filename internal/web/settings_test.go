@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,9 +22,20 @@ type fakeSettings struct {
 	applyIn []map[string]string
 	applyEr error
 	saved   []string
+	// block, when set, holds every Read until it is closed (a slow device); reads counts the calls.
+	block chan struct{}
+	reads atomic.Int32
 }
 
-func (f *fakeSettings) Read(context.Context, model.DeviceID) (map[string]string, error) {
+func (f *fakeSettings) Read(ctx context.Context, _ model.DeviceID) (map[string]string, error) {
+	f.reads.Add(1)
+	if f.block != nil {
+		select {
+		case <-f.block:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 	return f.values, f.readErr
 }
 func (f *fakeSettings) Apply(_ context.Context, _ string, _ model.DeviceID, ch map[string]string) ([]settings.Result, error) {
@@ -86,7 +98,7 @@ func TestSettingsRoles(t *testing.T) {
 func TestSettingsFormContent(t *testing.T) {
 	fs := &fakeSettings{values: map[string]string{"TelePeriod": "300", "SetOption0": "0", "MqttUser": "tasmota", "MqttPassword": "must-not-appear"}}
 	e := withSettings(t, fs)
-	resp, body := e.do(t, "GET", "/devices/1/settings", "admin", nil)
+	resp, body := e.do(t, "GET", "/devices/1/settings/form", "admin", nil)
 	if resp.StatusCode != 200 {
 		t.Fatalf("status %d", resp.StatusCode)
 	}
@@ -106,7 +118,7 @@ func TestSettingsFormContent(t *testing.T) {
 // Why: a form built from a failed read would make every field look changed.
 func TestSettingsReadFailureShowsNoForm(t *testing.T) {
 	e := withSettings(t, &fakeSettings{readErr: tasmota.ErrUnreachable})
-	resp, body := e.do(t, "GET", "/devices/1/settings", "admin", nil)
+	resp, body := e.do(t, "GET", "/devices/1/settings/form", "admin", nil)
 	if resp.StatusCode != 502 || !strings.Contains(body, "unreachable") || strings.Contains(body, "<form class=\"stack\"") {
 		t.Fatalf("status %d body %s", resp.StatusCode, body)
 	}
@@ -267,7 +279,7 @@ func TestPolicyPage(t *testing.T) {
 func TestSettingsUnreportedSelectIsUnchanged(t *testing.T) {
 	fs := &fakeSettings{values: map[string]string{"TelePeriod": "300"}}
 	e := withSettings(t, fs)
-	_, body := e.do(t, "GET", "/devices/1/settings", "admin", nil)
+	_, body := e.do(t, "GET", "/devices/1/settings/form", "admin", nil)
 	i := strings.Index(body, `name="SetOption3"`)
 	if i < 0 || !strings.Contains(body[i:i+200], `<option value="" selected>(unchanged`) {
 		t.Fatalf("SetOption3 lacks the unchanged option: %s", body[i:i+200])
@@ -306,5 +318,47 @@ func TestSettingsAlwaysSavesOnce(t *testing.T) {
 	e.do(t, "POST", "/devices/1/settings", "admin", baseForm("TelePeriod", "60"))
 	if len(fs.saved) != 0 {
 		t.Fatal("must not guess the SaveData value")
+	}
+}
+
+// Why (#308): clicking Settings used to show nothing until the device had answered (a slow read
+// holds the whole page). The tab must come at once, with a loading state that fetches the form
+// into it, and the device must be read by that fetch, not by the page.
+func TestSettingsTabAnswersAtOnceAndLoadsTheFormSeparately(t *testing.T) {
+	fs := &fakeSettings{values: map[string]string{"TelePeriod": "300"}, block: make(chan struct{})}
+	defer close(fs.block)
+	e := withSettings(t, fs)
+	resp, body := e.do(t, "GET", "/devices/1/settings", "admin", nil)
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+	for _, want := range []string{`aria-current="page">Settings</a>`, `hx-get="/tf/devices/1/settings/form"`, `hx-trigger="load"`, `aria-busy="true"`, "Reading the settings from the device"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("tab lacks %q", want)
+		}
+	}
+	if strings.Contains(body, `name="TelePeriod"`) {
+		t.Error("the form is part of the page again, so the page waits for the device")
+	}
+	if n := fs.reads.Load(); n != 0 {
+		t.Errorf("the page read the device %d times, want 0", n)
+	}
+}
+
+// Why (#308): the fetched part is only the body: the header and tabs are already on the page and
+// must not be drawn twice. A failed read keeps its reason text and status (swapped by htmx).
+func TestSettingsFormPartHasNoHeaderAndKeepsTheReadError(t *testing.T) {
+	e := withSettings(t, &fakeSettings{values: map[string]string{"TelePeriod": "300"}})
+	_, body := e.do(t, "GET", "/devices/1/settings/form", "admin", nil)
+	if strings.Contains(body, "<html") || strings.Contains(body, `id="devhd"`) || !strings.Contains(body, `name="TelePeriod"`) {
+		t.Errorf("part is not just the form:\n%s", shortDump(body))
+	}
+	e = withSettings(t, &fakeSettings{readErr: tasmota.ErrTimeout})
+	resp, body := e.do(t, "GET", "/devices/1/settings/form", "admin", nil)
+	if resp.StatusCode != 502 || !strings.Contains(body, "The device did not answer in time.") || !strings.Contains(body, "Try again") {
+		t.Errorf("status %d:\n%s", resp.StatusCode, shortDump(body))
+	}
+	if resp, _ := e.do(t, "GET", "/devices/1/settings/form", "operator", nil); resp.StatusCode != 403 {
+		t.Errorf("operators must not read the settings form: %d", resp.StatusCode)
 	}
 }

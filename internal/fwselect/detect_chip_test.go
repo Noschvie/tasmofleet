@@ -39,3 +39,19 @@ func TestDetectChipFromHardwareNotFromTheBuildName(t *testing.T) {
 		})
 	}
 }
+
+// Why (#289): the Identity card shows StatusFWR under Tasmota's names and with the raw values, so
+// detection must keep them as sent and not only the parts TasmoFleet derives from them.
+func TestDetectKeepsStatusFWRRaw(t *testing.T) {
+	id, err := Detect(Inputs{Status2: []byte(`{"StatusFWR":{"Version":"16.0.0(tasmota32)","BuildDateTime":"2026-10-16T18:34:59","Core":"3.3.12","SDK":"5.5.5","CpuFrequency":240,"Hardware":"ESP32-S3 v0.2","CR":"448/699"}}`)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := model.FWRFacts{Version: "16.0.0(tasmota32)", BuildDateTime: "2026-10-16T18:34:59", Core: "3.3.12", SDK: "5.5.5", CPUFrequency: 240, CR: "448/699"}
+	if id.FWR != want {
+		t.Fatalf("FWR %+v, want %+v", id.FWR, want)
+	}
+	if id.Hardware != "ESP32-S3 v0.2" {
+		t.Fatalf("Hardware %q is the raw StatusFWR.Hardware", id.Hardware)
+	}
+}

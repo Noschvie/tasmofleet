@@ -175,7 +175,7 @@ func TestSettingsFieldNamesThePolicyValue(t *testing.T) {
 		d.Settings = &fakeSettings{values: map[string]string{"TelePeriod": "60", "Hostname": "lamp-1"}}
 		d.Policy = fp
 	})
-	_, body := e.do(t, "GET", "/devices/1/settings", "admin", nil)
+	_, body := e.do(t, "GET", "/devices/1/settings/form", "admin", nil)
 	i := strings.Index(body, `name="TelePeriod"`)
 	if i < 0 || !strings.Contains(body[i:i+400], "Policy expects 300.") {
 		t.Errorf("TelePeriod lacks the policy hint:\n%s", body)

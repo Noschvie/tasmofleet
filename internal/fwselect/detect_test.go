@@ -258,6 +258,8 @@ func TestDetectUnparseableVersion(t *testing.T) {
 			want := model.Identity{
 				Family: model.ChipESP32, Hardware: "ESP32-D0WD-V3", Variant: variantUnknown, Language: "DE",
 				FlashSizeKB: 4096, ProgramFlashSizeKB: 4096, FreeKB: 1408,
+				// the raw string stays for the Identity card, which shows what the device sent (#289)
+				FWR: model.FWRFacts{Version: v},
 			}
 			if id != want {
 				t.Errorf("identity = %+v, want %+v", id, want)

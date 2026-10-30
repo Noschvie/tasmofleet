@@ -314,6 +314,7 @@ type deviceTabs struct {
 	CSRF         string
 	IsAdmin      bool
 	Address      string    // host[:port], as the device list shows it
+	Hostname     string    // what the device calls itself on the network (Status 5), "" when never read
 	Chip         string    // chip family, "" when unknown
 	Version      string    // firmware version, "" when unknown
 	UpdateTo     string    // a newer stable release from the cached feed; "" when current or unknown
@@ -330,7 +331,7 @@ func tabsFor(v view, d model.Device, hl model.Health, running *model.Job, active
 	t := deviceTabs{Base: v.Base, ID: d.ID, Active: active,
 		Settings: v.IsAdmin && v.Features.Settings, Console: v.Features.DeviceCmd,
 		Name: d.Name, Health: hl.State, Updating: running != nil,
-		CSRF: v.CSRF, IsAdmin: v.IsAdmin, Address: d.Address, Chip: chipText(d.Identity.Family), Version: d.Identity.Version,
+		CSRF: v.CSRF, IsAdmin: v.IsAdmin, Address: d.Address, Hostname: d.Net.Hostname, Chip: chipText(d.Identity.Family), Version: d.Identity.Version,
 		CanRestart: v.IsAdmin && v.Features.DeviceCmd}
 	if t.Health == "" {
 		t.Health = model.HealthUnknown

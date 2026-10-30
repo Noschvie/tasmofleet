@@ -160,6 +160,9 @@ type Deps struct {
 	Database              DBInfoer // optional: About's database row (N13)
 	// StaleAfter is the configured silence after which a device is stale (tooltip text only); nil = the default.
 	StaleAfter func() time.Duration
+	// CRWarnPercent is the share of the settings text area (StatusFWR CR) above which the Identity
+	// card and the policy preview warn (system setting CR_WARN_PERCENT); nil = 90.
+	CRWarnPercent func() int
 
 	// FirmwareSource names where releases come from ("GitHub releases (arendst/Tasmota)"),
 	// FirmwareFeed its short name ("GitHub"); the firmware page's subtitle and status line.

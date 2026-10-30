@@ -17,7 +17,7 @@ const deviceCols = `id, name, address, port, mac, topic, full_topic, tags, notes
 	fw_language, flash_size_kb, program_flash_kb, free_kb, identity_at, created_at, updated_at, mqtt_host, mqtt_port,
 	net_hostname, net_ip, net_gateway, net_ssid, net_bssid, net_channel, net_wired, net_at, device_name, device_name_kept,
 	net_subnet, net_dns, ota_url, relay_names, group_topic, ota_url_read_at, group_topic_read_at,
-	mqtt_password, mqtt_password_mode, mqtt_password_bad_at, fw_reach, fw_reach_at, fw_reach_detail, identity_lang_known`
+	mqtt_password, mqtt_password_mode, mqtt_password_bad_at, fw_reach, fw_reach_at, fw_reach_detail, identity_lang_known, fwr_facts`
 
 // relayNamesJSON is the stored form of relay names (a JSON array like tags); "" for none.
 func relayNamesJSON(names []string) string {
@@ -39,14 +39,14 @@ func (s *SQLite) scanDevice(r scanner) (model.Device, error) {
 	var excluded, single, wired, langKnown int
 	var identAt, created, updated, netAt int64
 	var otaAt, groupAt sql.NullInt64
-	var sealedMQTT, pwMode, reach string
+	var sealedMQTT, pwMode, reach, fwr string
 	var badAt, reachAt sql.NullInt64
 	err := r.Scan(&d.ID, &d.Name, &d.Address, &d.Port, &d.MAC, &d.Topic, &d.FullTopic, &tags, &d.Notes, &d.HTTPUser, &sealed,
 		&excluded, &mqtt, &family, &d.Identity.Hardware, &single, &d.Identity.Version, &d.Identity.Image, &d.Identity.Variant,
 		&d.Identity.Language, &d.Identity.FlashSizeKB, &d.Identity.ProgramFlashSizeKB, &d.Identity.FreeKB, &identAt, &created, &updated, &d.MQTTHost, &d.MQTTPort,
 		&d.Net.Hostname, &d.Net.IP, &d.Net.Gateway, &d.Net.SSID, &d.Net.BSSID, &d.Net.Channel, &wired, &netAt, &d.DeviceName, &d.KeptDeviceName,
 		&d.Net.Subnet, &d.Net.DNS, &d.OTAURL, &relayNames, &d.GroupTopic, &otaAt, &groupAt,
-		&sealedMQTT, &pwMode, &badAt, &reach, &reachAt, &d.FWReach.Detail, &langKnown)
+		&sealedMQTT, &pwMode, &badAt, &reach, &reachAt, &d.FWReach.Detail, &langKnown, &fwr)
 	if err != nil {
 		return model.Device{}, err
 	}
@@ -83,6 +83,9 @@ func (s *SQLite) scanDevice(r scanner) (model.Device, error) {
 	d.MQTTPasswordBadAt = fromMS(badAt.Int64)
 	d.FWReach.State, d.FWReach.At = model.FWReachState(reach), fromMS(reachAt.Int64)
 	d.Identity.LanguageKnown = langKnown != 0
+	if d.Identity.FWR, err = parseFWR(fwr); err != nil {
+		return model.Device{}, fmt.Errorf("store: device %d StatusFWR facts: %w", d.ID, err)
+	}
 	d.OTAExcluded = excluded != 0
 	d.MQTT = model.MQTTCapability(mqtt)
 	d.Identity.Family = model.ChipFamily(family)
@@ -223,7 +226,7 @@ func (s *SQLite) CreateDevice(ctx context.Context, d model.Device) (model.Device
 		d.Identity.Variant, d.Identity.Language, d.Identity.FlashSizeKB, d.Identity.ProgramFlashSizeKB, d.Identity.FreeKB,
 		toMS(d.Identity.DetectedAt), created, toMS(now), d.MQTTHost, d.MQTTPort,
 		d.Net.Hostname, d.Net.IP, d.Net.Gateway, d.Net.SSID, d.Net.BSSID, d.Net.Channel, b2i(d.Net.Wired), toMS(d.Net.ReadAt),
-		d.Net.Subnet, d.Net.DNS, d.OTAURL, relayNamesJSON(d.RelayNames), d.GroupTopic, nullMS(d.OTAURLReadAt), nullMS(d.GroupTopicReadAt), b2i(d.Identity.LanguageKnown))
+		d.Net.Subnet, d.Net.DNS, d.OTAURL, relayNamesJSON(d.RelayNames), d.GroupTopic, nullMS(d.OTAURLReadAt), nullMS(d.GroupTopicReadAt), b2i(d.Identity.LanguageKnown), fwrJSON(d.Identity.FWR))
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
@@ -232,8 +235,8 @@ func (s *SQLite) CreateDevice(ctx context.Context, d model.Device) (model.Device
 	res, err := tx.ExecContext(ctx, `INSERT INTO devices (name, address, port, mac, topic, full_topic, tags, notes,
 		http_user, http_password, ota_excluded, mqtt_capability, chip_family, hardware, single_core, fw_version, fw_image,
 		fw_variant, fw_language, flash_size_kb, program_flash_kb, free_kb, identity_at, created_at, updated_at, mqtt_host, mqtt_port,
-		net_hostname, net_ip, net_gateway, net_ssid, net_bssid, net_channel, net_wired, net_at, net_subnet, net_dns, ota_url, relay_names, group_topic, ota_url_read_at, group_topic_read_at, identity_lang_known)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, args...)
+		net_hostname, net_ip, net_gateway, net_ssid, net_bssid, net_channel, net_wired, net_at, net_subnet, net_dns, ota_url, relay_names, group_topic, ota_url_read_at, group_topic_read_at, identity_lang_known, fwr_facts)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, args...)
 	if err != nil {
 		return 0, mapErr(err)
 	}
@@ -299,9 +302,10 @@ func (s *SQLite) UpdateDevice(ctx context.Context, d model.Device) error {
 
 func (s *SQLite) UpdateIdentity(ctx context.Context, id model.DeviceID, i model.Identity) error {
 	return affected(s.db.ExecContext(ctx, `UPDATE devices SET chip_family=?, hardware=?, single_core=?, fw_version=?, fw_image=?,
-		fw_variant=?, fw_language=?, flash_size_kb=?, program_flash_kb=?, free_kb=?, identity_at=?, identity_lang_known=?, updated_at=? WHERE id=?`,
+		fw_variant=?, fw_language=?, flash_size_kb=?, program_flash_kb=?, free_kb=?, identity_at=?, identity_lang_known=?,
+		fwr_facts = CASE WHEN ?='' THEN fwr_facts ELSE ? END, updated_at=? WHERE id=?`,
 		string(i.Family), i.Hardware, b2i(i.SingleCore), i.Version, i.Image, i.Variant, i.Language,
-		i.FlashSizeKB, i.ProgramFlashSizeKB, i.FreeKB, toMS(i.DetectedAt), b2i(i.LanguageKnown), toMS(s.now()), id))
+		i.FlashSizeKB, i.ProgramFlashSizeKB, i.FreeKB, toMS(i.DetectedAt), b2i(i.LanguageKnown), fwrJSON(i.FWR), fwrJSON(i.FWR), toMS(s.now()), id))
 }
 
 // ProbeGuard names the record a probe was made against. The result is only
@@ -378,6 +382,7 @@ func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuar
 	defer tx.Rollback() //nolint:errcheck // no-op after commit; on failure the original error is returned
 	res, err := tx.ExecContext(ctx, `UPDATE devices SET chip_family=?, hardware=?, single_core=?, fw_version=?, fw_image=?,
 		fw_variant=?, fw_language=?, flash_size_kb=?, program_flash_kb=?, free_kb=?, identity_at=?, identity_lang_known=?,
+		fwr_facts = CASE WHEN ?='' THEN fwr_facts ELSE ? END,
 		mqtt_capability = CASE WHEN ?=0 THEN mqtt_capability WHEN mqtt_capability='ours' AND ?='other' THEN 'ours' ELSE ? END,
 		mqtt_host = CASE WHEN ?=0 THEN mqtt_host ELSE ? END,
 		mqtt_port = CASE WHEN ?=0 THEN mqtt_port ELSE ? END,
@@ -403,7 +408,7 @@ func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuar
 		device_topic = CASE WHEN ?='' THEN device_topic ELSE ? END,
 		updated_at=? WHERE id=? AND address=? AND port=? AND mac=?`,
 		string(i.Family), i.Hardware, b2i(i.SingleCore), i.Version, i.Image, i.Variant, i.Language,
-		i.FlashSizeKB, i.ProgramFlashSizeKB, i.FreeKB, toMS(i.DetectedAt), b2i(i.LanguageKnown),
+		i.FlashSizeKB, i.ProgramFlashSizeKB, i.FreeKB, toMS(i.DetectedAt), b2i(i.LanguageKnown), fwrJSON(i.FWR), fwrJSON(i.FWR),
 		b2i(r.SetMQTT), string(r.MQTT), string(r.MQTT),
 		b2i(r.SetMQTT), r.MQTTHost, b2i(r.SetMQTT), r.MQTTPort,
 		b2i(r.SetNet), r.Net.Hostname, b2i(r.SetNet), r.Net.IP, b2i(r.SetNet), r.Net.Gateway, b2i(r.SetNet), r.Net.SSID,
@@ -501,8 +506,8 @@ func (s *SQLite) DismissDeviceName(ctx context.Context, id model.DeviceID, devic
 // ErrConflict, nothing written. It never sets identity_at, so the first HTTP probe still runs.
 func (s *SQLite) UpdateIdentityFromMQTT(ctx context.Context, id model.DeviceID, g ProbeGuard, topic string, i model.Identity) error {
 	res, err := s.db.ExecContext(ctx, `UPDATE devices SET chip_family=?, hardware=?, single_core=?, fw_version=?, fw_image=?,
-		fw_variant=?, updated_at=? WHERE id=? AND address=? AND port=? AND mac=? AND topic=? AND identity_at=0`,
-		string(i.Family), i.Hardware, b2i(i.SingleCore), i.Version, i.Image, i.Variant,
+		fw_variant=?, fwr_facts = CASE WHEN ?='' THEN fwr_facts ELSE ? END, updated_at=? WHERE id=? AND address=? AND port=? AND mac=? AND topic=? AND identity_at=0`,
+		string(i.Family), i.Hardware, b2i(i.SingleCore), i.Version, i.Image, i.Variant, fwrJSON(i.FWR), fwrJSON(i.FWR),
 		toMS(s.now()), id, g.Address, g.Port, strings.ToLower(g.MAC), topic)
 	if err != nil {
 		return mapErr(err)
@@ -616,4 +621,24 @@ func (s *SQLite) SetFWReach(ctx context.Context, id model.DeviceID, r model.FWRe
 	}
 	return affected(s.db.ExecContext(ctx, `UPDATE devices SET fw_reach=?, fw_reach_at=?, fw_reach_detail=?, updated_at=? WHERE id=?`,
 		string(r.State), nullMS(r.At), r.Detail, toMS(s.now()), id))
+}
+
+// fwrJSON is the stored form of the StatusFWR facts: "" when none were read.
+func fwrJSON(f model.FWRFacts) string {
+	if !f.Read() {
+		return ""
+	}
+	b, err := json.Marshal(f)
+	if err != nil { // a struct of strings and one int cannot fail to marshal
+		return ""
+	}
+	return string(b)
+}
+
+func parseFWR(raw string) (model.FWRFacts, error) {
+	var f model.FWRFacts
+	if raw == "" {
+		return f, nil
+	}
+	return f, json.Unmarshal([]byte(raw), &f)
 }

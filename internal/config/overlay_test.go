@@ -108,6 +108,7 @@ func TestValidationRejectsBadOperationalValues(t *testing.T) {
 		{"FIRMWARE_BASE_URL", "https://fw.example"},
 		{"MQTT_URL", "ftp://broker"}, {"MQTT_URL", "ws://broker:80"}, {"MQTT_URL", "wss://broker:443"}, {"MQTT_URL", "tcp://"}, {"POLL_INTERVAL", "500ms"},
 		{"DISCOVERY_SCAN_INTERVAL", "10s"}, {"BACKUP_INTERVAL", "5s"},
+		{"CR_WARN_PERCENT", "49"}, {"CR_WARN_PERCENT", "101"}, {"CR_WARN_PERCENT", "x"},
 	}
 	for _, tc := range cases {
 		c, _ := Load(base(t.TempDir()))
@@ -228,5 +229,27 @@ func TestShortDuration(t *testing.T) {
 	}
 	if got := shortDuration(10 * time.Second); got != "10s" {
 		t.Errorf("10s is shown as %q", got)
+	}
+}
+
+// Why (#289): the Identity card warns when the settings text area is fuller than this; below
+// 50 % it would warn on healthy devices, above 100 % never, so the range is enforced and a
+// device page that reads the default sees 90.
+func TestCRWarnPercentDefaultAndRange(t *testing.T) {
+	c, err := Load(base(t.TempDir()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.CRWarnPercent != 90 {
+		t.Fatalf("default = %d, want 90", c.CRWarnPercent)
+	}
+	for _, v := range []string{"50", "100"} {
+		c, _ := Load(base(t.TempDir()))
+		if err := Set(&c, "CR_WARN_PERCENT", v); err != nil {
+			t.Fatalf("%s: %v", v, err)
+		}
+		if err := Validate(c); err != nil {
+			t.Fatalf("%s must be valid: %v", v, err)
+		}
 	}
 }

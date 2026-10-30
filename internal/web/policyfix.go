@@ -64,6 +64,8 @@ type fixRow struct {
 	// Pairs are the picked deviations of this row the apply form has to carry (every included one
 	// in a by-pick plan, the picked Advisory ones otherwise).
 	Pairs []fixPair
+	// CRWarn: the text values of the plan would not fit the device's settings text area (#289); "" = they fit.
+	CRWarn string
 }
 
 type fixPage struct {
@@ -231,6 +233,7 @@ func (h *handler) fixRows(ctx context.Context, rep PolicyReport, sel fixSel) []f
 		row := fixRow{Device: d, Options: options[d.ID], Pairs: included[d.ID]}
 		p := plans[d.ID]
 		onlyMQTT := h.d.MQTTOnly != nil && h.d.MQTTOnly(ctx, d.ID)
+		need := 0 // characters the plan's text values add to the settings text area
 		for _, c := range p.Commands {
 			if onlyMQTT && cmdpolicy.CutsMQTTOff(c.Text) {
 				// Make compliant never confirms a change that can cut off a device reached over MQTT only
@@ -243,7 +246,9 @@ func (h *handler) fixRows(ctx context.Context, rep PolicyReport, sel fixSel) []f
 				cmd.Note = sourceNote(src, now)
 			}
 			row.Cmds = append(row.Cmds, cmd)
+			need += textGrowth(c.Command, c.Have, c.Want)
 		}
+		row.CRWarn = crOverflow(d.Identity.FWR, need)
 		// Two rules for one setting (a different expected value each) skip with the same words:
 		// say it once, with the number of rules.
 		var skipped []fixSkipView
@@ -278,6 +283,39 @@ func (h *handler) fixRows(ctx context.Context, rep PolicyReport, sel fixSel) []f
 		return strings.ToLower(rows[i].Device.Name) < strings.ToLower(rows[j].Device.Name)
 	})
 	return rows
+}
+
+// textGrowth is how many characters setting a text value adds to the device's settings text area
+// (negative: it frees some). Numbers and switches live elsewhere in the settings, so they add
+// nothing. A value that was empty or unknown costs its length and the terminator.
+func textGrowth(command, have, want string) int {
+	if !isTextSetting(command, want) {
+		return 0
+	}
+	if have == "" {
+		return len(want) + 1
+	}
+	return len(want) - len(have)
+}
+
+// isTextSetting says whether a rule's value is stored as text. The curated settings know their
+// kind; for any other command a value that is not a number is text (a rule, a template, a URL).
+func isTextSetting(command, want string) bool {
+	if f, ok := settings.Lookup(command); ok {
+		return f.Kind == settings.KindText || f.Kind == settings.KindPassword
+	}
+	_, err := strconv.Atoi(strings.TrimSpace(want))
+	return err != nil
+}
+
+// crOverflow is the plan warning of a device whose settings text area cannot take need more
+// characters; "" when they fit, CR was never read, or the plan frees space.
+func crOverflow(f model.FWRFacts, need int) string {
+	used, total, ok := f.CRUsage()
+	if !ok || need <= 0 || used+need <= total {
+		return ""
+	}
+	return fmt.Sprintf("Settings text area almost full (%d/%d): the text values of this plan need about %d more characters and may not be saved.", used, total, need)
 }
 
 // fixPageOf builds the page of a plan. The digest covers every command per device and the picked
@@ -417,6 +455,9 @@ func (h *handler) fixDialogOf(ctx context.Context, rep PolicyReport) *fixDialog 
 	for _, row := range rows {
 		if len(row.Options) > 0 {
 			d.Advisory = true
+		}
+		if row.Blocked == "" && row.CRWarn != "" {
+			d.CRFull++
 		}
 		if row.Blocked != "" {
 			continue
