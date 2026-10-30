@@ -540,16 +540,26 @@ func TestMQTTIdentityTakesTheGroupTopicFromInfo1(t *testing.T) {
 	if got.GroupTopic != "tasmotas" || got.GroupTopicReadAt.IsZero() {
 		t.Fatalf("group topic %q at %v, want tasmotas with a stamp", got.GroupTopic, got.GroupTopicReadAt)
 	}
+	for _, bad := range []string{"tasmotas/cmnd/", "cmnd/bad#/", "cmnd/" + strings.Repeat("a", 200) + "/"} {
+		e.emit(mqttbus.KindInfo, "plug", "INFO1", `{"Info1":{"GroupTopic":"`+bad+`"}}`, false)
+		e.drain(t.Context())
+		if g := e.inv.get(1).GroupTopic; g != "tasmotas" {
+			t.Fatalf("INFO1 %.30q changed the stored group topic to %.30q", bad, g)
+		}
+	}
 	if len(e.bus.sent()) != 0 {
 		t.Errorf("INFO1 caused commands: %q", e.bus.sent())
 	}
 }
 
+// Why (#239, review): only the default FullTopic form "cmnd/<group>/" is unambiguous. With another
+// FullTopic the same announcement would be stored as e.g. "tasmotas/cmnd" while Status 1 stores
+// "tasmotas": the value would flip between reads and a topic equal to it would be missed (#260).
+// Such a message is left to Status 1. A value any broker client could send that is too long or
+// holds a wildcard or control character is refused, so the stored value stays.
 func TestInfo1GroupTopicIsThePlainTopic(t *testing.T) {
 	for in, want := range map[string]string{
 		`{"Info1":{"GroupTopic":"cmnd/tasmotas/"}}`: "tasmotas",
-		`{"Info1":{"GroupTopic":"cmnd/a/b/"}}`:      "a/b",
-		`{"Info1":{"GroupTopic":"tasmotas"}}`:       "tasmotas",
 		`{"Info1":{"GroupTopic":""}}`:               "",
 	} {
 		got, ok := info1GroupTopic([]byte(in))
@@ -557,9 +567,18 @@ func TestInfo1GroupTopicIsThePlainTopic(t *testing.T) {
 			t.Errorf("%s: %q %v, want %q", in, got, ok, want)
 		}
 	}
-	for _, in := range []string{`{"Info1":{"Version":"1"}}`, `{}`, `nope`} {
-		if _, ok := info1GroupTopic([]byte(in)); ok {
-			t.Errorf("%s: read a group topic from nothing", in)
+	for _, in := range []string{
+		`{"Info1":{"GroupTopic":"tasmotas/cmnd/"}}`, // FullTopic %topic%/%prefix%/
+		`{"Info1":{"GroupTopic":"tasmotas"}}`,
+		`{"Info1":{"GroupTopic":"my/cmnd/tasmotas/"}}`,
+		`{"Info1":{"GroupTopic":"cmnd/a/b/"}}`,
+		`{"Info1":{"GroupTopic":"cmnd/tasmotas"}}`,
+		`{"Info1":{"GroupTopic":"cmnd/ta#smotas/"}}`,
+		`{"Info1":{"GroupTopic":"cmnd/` + strings.Repeat("a", 200) + `/"}}`,
+		`{"Info1":{"Version":"1"}}`, `{}`, `nope`,
+	} {
+		if g, ok := info1GroupTopic([]byte(in)); ok {
+			t.Errorf("%.60s: took %.20q", in, g)
 		}
 	}
 }

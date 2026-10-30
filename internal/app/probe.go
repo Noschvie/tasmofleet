@@ -314,7 +314,27 @@ func parseGroupTopic(raw json.RawMessage) (topic string, ok bool) {
 	if json.Unmarshal(raw, &s) != nil || s.StatusPRM == nil || s.StatusPRM.GroupTopic == nil {
 		return "", false
 	}
-	return strings.TrimSpace(*s.StatusPRM.GroupTopic), true
+	topic = strings.TrimSpace(*s.StatusPRM.GroupTopic)
+	if !validGroupTopic(topic) {
+		return "", false
+	}
+	return topic, true
+}
+
+// validGroupTopic says whether a group topic read from a device or from the bus is shown: at most
+// Tasmota's TOPSZ (151) bytes, no MQTT wildcard, NUL or control character. Any client on the broker
+// can publish an INFO1, and the value is rendered on every device list load, so anything else is
+// refused and the stored value stays.
+func validGroupTopic(t string) bool {
+	if len(t) > 151 {
+		return false
+	}
+	for _, r := range t {
+		if r == '+' || r == '#' || r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	return true
 }
 
 // mqttSwitchedOff reads SetOption3 (MQTT on/off). Any failure counts as "on":

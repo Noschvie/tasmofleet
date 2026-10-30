@@ -205,7 +205,7 @@ func TestParseOtaURLNeverKeepsASecret(t *testing.T) {
 		{"http://fw/x.bin", "http://fw/x.bin", true},
 	} {
 		got, ok := parseOtaURL([]byte(`{"StatusPRM":{"OtaUrl":` + strconv.Quote(tc.in) + `}}`))
-		if got != tc.want || ok != tc.ok {
+		if ok != tc.ok || (ok && got != tc.want) {
 			t.Errorf("%s: got %q, %v; want %q, %v", tc.in, got, ok, tc.want, tc.ok)
 		}
 	}
@@ -289,6 +289,10 @@ func TestParseGroupTopic(t *testing.T) {
 		{`{"StatusPRM":{"GroupTopic":" "}}`, "", true},
 		{`{"StatusPRM":{"OtaUrl":"x"}}`, "", false},
 		{`{"Command":"Unknown"}`, "", false},
+		{`{"StatusPRM":{"GroupTopic":"bad#"}}`, "", false},
+		{`{"StatusPRM":{"GroupTopic":"a+b"}}`, "", false},
+		{`{"StatusPRM":{"GroupTopic":"a\u0000b"}}`, "", false},
+		{`{"StatusPRM":{"GroupTopic":"` + strings.Repeat("a", 200) + `"}}`, "", false},
 	} {
 		got, ok := parseGroupTopic([]byte(tc.in))
 		if got != tc.want || ok != tc.ok {

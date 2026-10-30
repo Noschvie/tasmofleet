@@ -227,7 +227,7 @@ func (m *mqttIdentity) handle(ctx context.Context, msg mqttbus.Message) {
 
 // info1GroupTopic is the GroupTopic of an INFO1 message as the plain topic. INFO1 writes it in
 // its command-prefix form ("cmnd/tasmotas/"), Status 1 and the settings as "tasmotas"; the list
-// shows one form. ok is false when the message has no GroupTopic.
+// shows one form. ok is false when the message has no GroupTopic, not in that form, or not usable.
 func info1GroupTopic(payload []byte) (string, bool) {
 	var m struct {
 		Info1 *struct{ GroupTopic *string }
@@ -236,8 +236,25 @@ func info1GroupTopic(payload []byte) (string, bool) {
 		return "", false
 	}
 	g := strings.TrimSpace(*m.Info1.GroupTopic)
-	g = strings.TrimPrefix(g, "cmnd/")
-	return strings.TrimSuffix(g, "/"), true
+	if g == "" {
+		return "", true
+	}
+	// Only the default FullTopic form "cmnd/<group>/" says what the group is. With another FullTopic
+	// ("%topic%/%prefix%/", a custom prefix) the announcement cannot be told from the plain topic
+	// without the device's patterns, so it is left to Status 1: guessing would make the value flip
+	// between the two reads and miss a topic that equals it (#260).
+	g, ok := strings.CutPrefix(g, "cmnd/")
+	if !ok {
+		return "", false
+	}
+	g, ok = strings.CutSuffix(g, "/")
+	if !ok || strings.Contains(g, "/") {
+		return "", false
+	}
+	if !validGroupTopic(g) {
+		return "", false
+	}
+	return g, true
 }
 
 // applyGroupTopic stores the group topic a live INFO1 announced (#239). It is display only and
