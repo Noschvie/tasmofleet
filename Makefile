@@ -44,7 +44,7 @@ TESTFLAGS ?=
 # Extra Playwright arguments, e.g. E2E_ARGS=--shard=1/2 (CI).
 E2E_ARGS  ?=
 
-.PHONY: catalogue catalogue-src catalogue-check demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test race integration mutation mutation-changed mutation-sum safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check migration-guard changelog-notes clean tools
+.PHONY: catalogue catalogue-src catalogue-check demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test race integration mutation mutation-changed mutation-sum safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check changelog-title migration-guard changelog-notes clean tools
 
 check: templ-check fmt-check vet staticcheck lint test scripts-test integration vuln build
 
@@ -290,12 +290,20 @@ image:
 	docker build --build-arg VERSION=$(VERSION) -t tasmofleet:$(VERSION) .
 
 # Release guard: fails when CHANGELOG.md has no "## X.Y.Z" section for TAG (vX.Y.Z).
+# The heading is "## X.Y.Z (date)" or, for a named release, "## X.Y.Z "Name" (date)".
 # The tag build in the CI image workflow calls it.
 changelog-check:
 	@test -n "$(TAG)" || { echo "usage: make changelog-check TAG=vX.Y.Z" >&2; exit 2; }
 	@v='$(TAG)'; v=$${v#v}; \
-	grep -Eq "^## $$(printf '%s' "$$v" | sed 's/[.]/[.]/g')( \(.*\))?$$" CHANGELOG.md || { \
+	grep -Eq "^## $$(printf '%s' "$$v" | sed 's/[.]/[.]/g')( \"[^\"]+\")?( \(.*\))?$$" CHANGELOG.md || { \
 		echo "CHANGELOG.md has no section '## $$v' for tag $(TAG): move \"Unreleased\" into it before tagging" >&2; exit 1; }
+
+# Prints the GitHub release title for TAG: TasmoFleet X.Y.Z "Name" when the CHANGELOG
+# heading carries a name, TasmoFleet X.Y.Z otherwise.
+changelog-title: changelog-check
+	@v='$(TAG)'; v=$${v#v}; \
+	name=$$(grep -E "^## $$(printf '%s' "$$v" | sed 's/[.]/[.]/g') \"[^\"]+\"" CHANGELOG.md | head -n1 | sed -E 's/^[^"]*"([^"]+)".*$$/\1/'); \
+	if [ -n "$$name" ]; then echo "TasmoFleet $$v \"$$name\""; else echo "TasmoFleet $$v"; fi
 
 # Release guard: a patch release (vX.Y.Z, Z>0) never adds or changes a database migration.
 # Fails when internal/store/migrations/ differs between vX.Y.0 and REV (default HEAD).
@@ -313,7 +321,7 @@ migration-guard:
 # Prints the body of the CHANGELOG.md section for TAG (the GitHub release notes).
 changelog-notes: changelog-check
 	@v='$(TAG)'; v=$${v#v}; \
-	awk -v v="$$v" '$$0 == "## " v || index($$0, "## " v " (") == 1 { on = 1; next } \
+	awk -v v="$$v" '$$0 == "## " v || index($$0, "## " v " ") == 1 { on = 1; next } \
 		on && /^## / { exit } on' CHANGELOG.md
 
 tools:

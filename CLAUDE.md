@@ -243,9 +243,15 @@ in `.github/workflows/ci.yml`.
   must be listed in `CHANGELOG.md`.
 - `CHANGELOG.md` has one section per version with the subsections Added, Changed, Fixed,
   Breaking and Security (empty ones omitted). Every merge adds its lines under
-  "Unreleased". The release PR moves them into a new "## X.Y.Z (date)" section BEFORE
+  "Unreleased". The release PR moves them into a new "## X.Y.Z "Name" (date)" section BEFORE
   the tag is set; the tag build fails when that section is missing
   (`make changelog-check TAG=vX.Y.Z`).
+- **Release names**: every minor release is named after a lighthouse. The release PR takes the next
+  free name from `docs/release-names.md` and marks it assigned there; the heading is
+  `## 0.21.0 "Name" (YYYY-MM-DD)`. Patch releases repeat their minor's name. Tags stay `vX.Y.Z`. The
+  GitHub release title is `TasmoFleet X.Y.Z "Name"` (derived from the heading by
+  `make changelog-title`), and announcements and forum posts use the same form. Old sections without a
+  name stay valid.
 - **Patch releases (X.Y.Z with Z>0) never add or change a database migration; a schema change
   always means a new minor version.** The tag build enforces it (`make migration-guard`).
 - **Credit outside contributors**: every merged PR by someone else, and every issue or

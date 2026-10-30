@@ -469,5 +469,6 @@ jobs:
         run: |
           set -eu
           make -s changelog-notes TAG="$TAG" > notes.md
+          title=$(make -s changelog-title TAG="$TAG")
           pre=; case "$TAG" in *-*) pre=--prerelease ;; esac
-          gh release create "$TAG" --verify-tag --title "${TAG#v}" --notes-file notes.md $pre
+          gh release create "$TAG" --verify-tag --title "$title" --notes-file notes.md $pre
