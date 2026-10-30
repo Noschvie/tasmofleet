@@ -77,6 +77,26 @@ test("desktop: the policy overview is tiles, tabs and a table without folds", as
   }
 });
 
+// Why: the Compliance column is a fixed 230 px (approved design); when the bar took the whole rest
+// of the row, "Local timezone" and "All devices · 27" wrapped onto two lines.
+test("desktop: the compliance column stays 230 px so rule names and scopes do not wrap", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(app.url + "/policy");
+  const cell = page.locator('section#rules td[data-label="Compliance"]:has(.health-bar)').first();
+  await expect(cell).toBeVisible();
+  const w = (await cell.boundingBox())!.width;
+  expect(w, "compliance cell width").toBeLessThanOrEqual(232);
+  for (const label of ["Rule", "Applies to"]) {
+    const c = page.locator(`section#rules td[data-label="${label}"]`).first();
+    const lines = await c.evaluate((e) => {
+      const r = document.createRange();
+      r.selectNodeContents(e);
+      return new Set([...r.getClientRects()].map((q) => Math.round(q.top))).size;
+    });
+    expect(lines, `${label} stays on one line`).toBe(1);
+  }
+});
+
 // Why: on a phone the rule table becomes cards and nothing scrolls sideways; each rule card keeps
 // its name, its setting and its "⋯" menu on screen, and the drag handle (no drag on a phone) is gone.
 test("phone: the rule table becomes cards and a rule card keeps its menu", async ({ page }) => {

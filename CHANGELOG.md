@@ -14,6 +14,7 @@ always upgrade automatically.
 ### Changed
 
 - Policy: Save rule ends the editor too: the overview names the saved rule and marks its row
+- Policy overview: shorter compliance bar, so rule names and scopes do not wrap
 
 ## 0.19.2 (2026-10-30)
 
