@@ -88,7 +88,7 @@ func (a *deviceAPI) firmwareInputs(ctx context.Context, t tasmota.Target, withRo
 		if err != nil {
 			return in, unknown, fmt.Errorf("root page: %w", err)
 		}
-		in.Root = &fwselect.RootInfo{Version: ri.Version, Image: ri.Image, Lang: ri.Lang, Minimal: ri.Minimal}
+		in.Root = &fwselect.RootInfo{Version: ri.Version, Image: ri.Image, Lang: ri.Lang, LangKnown: ri.LangKnown, Minimal: ri.Minimal}
 	}
 	return in, unknown, nil
 }

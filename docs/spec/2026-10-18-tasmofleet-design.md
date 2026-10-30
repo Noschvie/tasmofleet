@@ -534,6 +534,14 @@ Language builds (`tasmota-DE.bin.gz`, `tasmota32-DE.bin`) keep the image tag `ta
 `tasmota32`. The language is read from `<html lang>` on `GET /` (`de` -> `DE`, `en` ->
 empty), and Detect takes it from `RootInfo`.
 
+**Language is known only from the web page.** Tasmota prints the language build in `<html lang>` of the
+main page and nowhere else: not in `Status 2`, not in `INFO1`. `Identity.LanguageKnown` is true only when
+the identity was detected with a `RootInfo` whose `LangKnown` is set (`tasmota.ParseRootPage` sets it when
+the page carries a non-empty `lang` attribute, so every HTTP probe does). An identity read over MQTT, or
+stored before 0.20.0, keeps whatever language it had and `LanguageKnown` false; an empty `Language` is then
+no proof of the English build (D10). `mqttidentity` and the MQTT identify keep both fields of the stored
+identity, they never set them.
+
 ### 6.3 Flash from `Status 4`
 
 `FlashSize`, `ProgramFlashSize`, `Free` (KB). The fleet's 1 MB devices report
@@ -606,6 +614,14 @@ revisions stays refused with or without a build. The build is chosen per update 
 kept on the job (`Job.TargetBuild`, `ota_jobs.target_build`, migration 0033); Guard rule 7 holds the artifact
 to it. Remembering the choice per device is not part of this. This also covers the minimal/safeboot auto-default ("tasmota" chosen for the device).
 
+**Language unknown.** When `Identity.LanguageKnown` is false and `Choice.Language` is empty, Select returns
+`ErrLanguageUnknown` (checked right after the unknown-hardware check, before any variant rule, because the
+language is what the person must supply). `Choice.Language = "EN"` is a valid explicit answer, as is any
+upstream language suffix. Guard rule 7 runs Select, so an unread language also stops an OtaUrl or Upgrade. A
+synthetic identity that stands for no device (the custom-upload file name) is built with `LanguageKnown`
+true. This mirrors the ESP32-S2 build choice (`ErrBuildChoiceNeeded`): never guess. The update preview
+offers the choice (WP-D2).
+
 ### 7.3 Decide (update policy)
 
 Per batch: `only-newer` (default), `reinstall`, `allow-downgrade`. Versions compare
@@ -660,6 +676,40 @@ ESP8285N08 lamps and the ESP8266EX plugs alike, reports `FlashSize 1024`,
 (263 670) fits. The compressed image is what lands in flash (the bootloader unpacks it),
 so the gz size is the one to compare. For ESP32, `Free` (697 KB on the QuinLED) is not
 the OTA partition size and is ignored; ESP32 is always direct.
+
+### 7.7 MQTT upload fit (`MQTTUploadFits`)
+
+`MQTTUploadFits(identity, layoutHint, imageSize) (ok, needKB, roomKB, reason)` decides before anything is sent
+whether Tasmota will accept the image as `FileUpload` Type 1. It is pure and never "tries and sees". The rule,
+for both ESP32 flash layouts and without knowing which one the device has:
+
+```
+round_up_4096(imageSize) <= FreeKB * 1024 - 192 KiB          FreeKB = Status 4 "Free"
+```
+
+Refused outright, each with its own reason: ESP8266 (its minimal firmware has no `FileUpload`), identity not
+known, variant `minimal` or `safeboot` (neither has `FileUpload`), `FreeKB` <= 0, image size <= 0.
+`UpLayoutHint` (`unknown`, `direct`, `safeboot`; from a read of `/up`, #30) only changes the wording of a
+refusal. It never lets an image pass that the bound refuses.
+
+Derivation (SRC: Tasmota v16.0.0, `xdrv_02_1_mqtt_file.ino` `MqttFileUploadValidate`; `support_esp32.ino`):
+
+- The device refuses (error 2, "Not enough space") when `round_up_4096(file_size) > head_room`, with
+  `head_room = (FlashWriteMaxSector() - FlashWriteStartSector()) * 4096`.
+- `FlashWriteStartSector()` = `EspFlashBaseAddress() + 2 * 64 KiB`, rounded down to 64 KiB.
+  `FlashWriteMaxSector()` = `EspFlashBaseEndAddress()` rounded down to 64 KiB.
+- Two app partitions (direct): `EspFlashBaseAddress()` is `esp_ota_get_next_update_partition()->address`, the
+  start of the other partition, and `EspFlashBaseEndAddress()` is its end. `ESP_getFreeSketchSpace()` (what
+  Status 4 prints as `Free`) is `ESP.getFreeSketchSpace()`, the size of that same partition. So
+  `head_room >= Free - 128 KiB - 63 KiB`; the size of the running sketch is irrelevant.
+- One app partition next to safeboot: `EspFlashBaseAddress()` is `running->address + ESP_getSketchSize()`, the
+  end is the end of the partition, and `Free` is `partition size - sketch size`
+  (`ESP_getFreeSketchSpace()`, `EspSingleOtaPartition()` branch). So again `head_room >= Free - 128 KiB - 63 KiB`.
+- Status 4 prints `Free` in whole KB (rounded down), one more KiB: 128 + 63 + 1 = 192 KiB. The bound is therefore
+  provable without the layout, and an unknown layout never passes unless the bound proves room.
+
+The simulator's esp32-dual fixture reports `ProgramSize` 2182 KB next to `Free` 1700 KB, which no real device
+does; the rule does not use `ProgramSize` for that reason. Not verified on a real dual-OTA device (#263).
 
 ---
 

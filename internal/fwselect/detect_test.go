@@ -25,7 +25,7 @@ func fixtureInputs(t *testing.T, dev string) Inputs {
 	return Inputs{
 		Status2: readFixture(t, filepath.Join("devices", dev, "status-2.json")),
 		Status4: readFixture(t, filepath.Join("devices", dev, "status-4.json")),
-		Root:    &RootInfo{Lang: string(m[1])},
+		Root:    &RootInfo{Lang: string(m[1]), LangKnown: true},
 	}
 }
 
@@ -508,7 +508,8 @@ func TestDetectThenSelect(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.version+" on "+tt.hw, func(t *testing.T) {
-			id, err := Detect(Inputs{Status2: status2(tt.version, tt.hw)})
+			// A main page read over HTTP makes the language a fact (D10); without it Select refuses.
+			id, err := Detect(Inputs{Status2: status2(tt.version, tt.hw), Root: &RootInfo{Lang: "en", LangKnown: true}})
 			if err != nil {
 				t.Fatalf("Detect: %v", err)
 			}
@@ -516,6 +517,34 @@ func TestDetectThenSelect(t *testing.T) {
 			wantErr(t, err, tt.wantErr)
 			if sel.Filename != tt.want {
 				t.Errorf("file = %q, want %q", sel.Filename, tt.want)
+			}
+		})
+	}
+}
+
+// Only a main page read from the device makes the language a fact (D10). An identity from Status 2
+// alone (MQTT) has an empty Language that must not be mistaken for the English build.
+func TestDetectLanguageKnown(t *testing.T) {
+	s2 := status2("16.0.0(release-tasmota)", "ESP8266EX")
+	tests := []struct {
+		name     string
+		root     *RootInfo
+		lang     string
+		wantKnow bool
+	}{
+		{"http page, german", &RootInfo{Lang: "de", LangKnown: true}, "DE", true},
+		{"http page, english", &RootInfo{Lang: "en", LangKnown: true}, "", true},
+		{"root passed but language not read", &RootInfo{Lang: "", LangKnown: false}, "", false},
+		{"no root page at all", nil, "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			id, err := Detect(Inputs{Status2: s2, Root: tt.root})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if id.Language != tt.lang || id.LanguageKnown != tt.wantKnow {
+				t.Errorf("language %q known %v, want %q known %v", id.Language, id.LanguageKnown, tt.lang, tt.wantKnow)
 			}
 		})
 	}

@@ -7,7 +7,7 @@ import (
 )
 
 func ident(fam model.ChipFamily, hw, image, variant, lang string) model.Identity {
-	return model.Identity{Family: fam, Hardware: hw, Version: "15.0.0", Image: image, Variant: variant, Language: lang}
+	return model.Identity{Family: fam, Hardware: hw, Version: "15.0.0", Image: image, Variant: variant, Language: lang, LanguageKnown: true}
 }
 
 var (
@@ -19,7 +19,7 @@ var (
 	idESP32     = ident(model.ChipESP32, "ESP32-D0WD-V3", "release-tasmota32", "tasmota", "")
 	idESP32DE   = ident(model.ChipESP32, "ESP32-D0WD-V3", "release-tasmota32", "tasmota", "DE")
 	idESP32BT   = ident(model.ChipESP32, "ESP32-D0WD-V3", "release-tasmota32-bluetooth", "bluetooth", "")
-	idSolo1     = model.Identity{Family: model.ChipESP32, Hardware: "ESP32-S0WD", SingleCore: true, Version: "15.0.0", Image: "release-tasmota32solo1", Variant: "tasmota"}
+	idSolo1     = model.Identity{Family: model.ChipESP32, Hardware: "ESP32-S0WD", SingleCore: true, Version: "15.0.0", Image: "release-tasmota32solo1", Variant: "tasmota", LanguageKnown: true}
 	idSafeboot  = ident(model.ChipESP32, "ESP32-D0WD-V3", "release-safeboot", "safeboot", "")
 	idC3        = ident(model.ChipESP32C3, "ESP32-C3", "release-tasmota32c3", "tasmota", "")
 	idS2        = ident(model.ChipESP32S2, "ESP32-S2 v0.0", "release-tasmota32", "tasmota", "")
@@ -264,4 +264,54 @@ func TestSelectTwoBuildChips(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A language that was never read from the web page (a device only seen over MQTT) is not English:
+// choosing the plain build for it would silently turn a German device English. Select refuses
+// until a person names the language; "EN" is a valid explicit answer (D10).
+func TestSelectLanguageUnknown(t *testing.T) {
+	unread := idESP8266
+	unread.LanguageKnown = false
+	unreadDE := idESP8266DE // language DE was stored, but not read from a page
+	unreadDE.LanguageKnown = false
+	unreadESP32 := idESP32
+	unreadESP32.LanguageKnown = false
+	tests := []struct {
+		name    string
+		id      model.Identity
+		c       Choice
+		file    string
+		wantErr error
+	}{
+		{"unread, no choice", unread, Choice{Release: rel}, "", ErrLanguageUnknown},
+		{"unread esp32, no choice", unreadESP32, Choice{Release: rel}, "", ErrLanguageUnknown},
+		{"unread, variant named but no language", unread, Choice{Release: rel, Variant: "tasmota"}, "", ErrLanguageUnknown},
+		{"unread, stored DE is no proof", unreadDE, Choice{Release: rel}, "", ErrLanguageUnknown},
+		{"unread, explicit EN", unread, Choice{Release: rel, Language: LanguageEnglish}, "tasmota.bin.gz", nil},
+		{"unread, explicit DE", unread, Choice{Release: rel, Language: "DE", AllowVariantChange: true}, "tasmota-DE.bin.gz", nil},
+		{"unread esp32, explicit DE", unreadESP32, Choice{Release: rel, Language: "DE", AllowVariantChange: true}, "tasmota32-DE.bin", nil},
+		{"read, no choice", idESP8266, Choice{Release: rel}, "tasmota.bin.gz", nil},
+		{"read german, no choice", idESP8266DE, Choice{Release: rel}, "tasmota-DE.bin.gz", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sel, err := Select(tt.id, tt.c)
+			wantErr(t, err, tt.wantErr)
+			if sel.Filename != tt.file {
+				t.Errorf("file = %q, want %q", sel.Filename, tt.file)
+			}
+		})
+	}
+}
+
+// Guard re-runs Select (rule 7), so an unread language cannot reach OtaUrl or Upgrade even when the
+// artifact was prepared earlier; an explicit choice that the job carries passes.
+func TestGuardLanguageUnknown(t *testing.T) {
+	unread := idESP8266
+	unread.LanguageKnown = false
+	runGuard(t, []guardCase{
+		{name: "unread language", id: unread, a: artTasmota, c: keepChoice, want: ErrLanguageUnknown},
+		{name: "unread language, explicit english", id: unread, a: artTasmota, c: Choice{Release: rel, Language: LanguageEnglish}},
+		{name: "unread language, minimal stage", id: unread, a: artMinimal, c: keepChoice, want: ErrLanguageUnknown},
+	})
 }

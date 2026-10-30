@@ -21,13 +21,13 @@ func TestFleetNeedsMixedFleet(t *testing.T) {
 		"tasmota.bin.gz", "tasmota-sensors.bin.gz", "tasmota-minimal.bin.gz", "tasmota32.bin", "tasmota32c3.bin", "tasmota32s3.bin",
 	}}
 	devs := []model.Device{
-		dev(1, "lamp-1m", model.Identity{Family: model.ChipESP8266, Version: "16.0.0", Variant: "tasmota", ProgramFlashSizeKB: 1024}),
-		dev(2, "dimmer", model.Identity{Family: model.ChipESP32, Version: "16.1.0", Variant: "tasmota"}),
-		dev(3, "c3-node", model.Identity{Family: model.ChipESP32C3, Version: "16.2.0", Variant: "tasmota", Image: "tasmota32c3"}),
-		dev(4, "plug-sensors", model.Identity{Family: model.ChipESP8266, Version: "15.0.0", Variant: "sensors"}),
+		dev(1, "lamp-1m", model.Identity{LanguageKnown: true, Family: model.ChipESP8266, Version: "16.0.0", Variant: "tasmota", ProgramFlashSizeKB: 1024}),
+		dev(2, "dimmer", model.Identity{LanguageKnown: true, Family: model.ChipESP32, Version: "16.1.0", Variant: "tasmota"}),
+		dev(3, "c3-node", model.Identity{LanguageKnown: true, Family: model.ChipESP32C3, Version: "16.2.0", Variant: "tasmota", Image: "tasmota32c3"}),
+		dev(4, "plug-sensors", model.Identity{LanguageKnown: true, Family: model.ChipESP8266, Version: "15.0.0", Variant: "sensors"}),
 		dev(5, "mystery", model.Identity{}),
-		dev(6, "excluded", model.Identity{Family: model.ChipESP32S3, Version: "15.0.0", Variant: "tasmota", Image: "tasmota32s3"}),
-		dev(7, "stuck-minimal", model.Identity{Family: model.ChipESP8266, Version: "16.0.0", Variant: "minimal"}),
+		dev(6, "excluded", model.Identity{LanguageKnown: true, Family: model.ChipESP32S3, Version: "15.0.0", Variant: "tasmota", Image: "tasmota32s3"}),
+		dev(7, "stuck-minimal", model.Identity{LanguageKnown: true, Family: model.ChipESP8266, Version: "16.0.0", Variant: "minimal"}),
 	}
 	devs[5].OTAExcluded = true
 
@@ -82,8 +82,8 @@ func TestFleetNeedsMixedFleet(t *testing.T) {
 func TestFleetNeedsSafebootTwoBuildChips(t *testing.T) {
 	rel := Release{Version: "16.1.0", Files: []string{"tasmota32s2.bin", "tasmota32s2cdc.bin", "tasmota32p4.bin", "tasmota32p4r3.bin"}}
 	devs := []model.Device{
-		dev(1, "s2-safeboot", model.Identity{Family: model.ChipESP32S2, Hardware: "ESP32-S2 v0.0", Version: "16.0.0", Image: "release-safeboot", Variant: "safeboot"}),
-		dev(2, "p4-safeboot", model.Identity{Family: model.ChipESP32P4, Hardware: "ESP32-P4 v3.1", Version: "16.0.0", Image: "release-safeboot", Variant: "safeboot"}),
+		dev(1, "s2-safeboot", model.Identity{LanguageKnown: true, Family: model.ChipESP32S2, Hardware: "ESP32-S2 v0.0", Version: "16.0.0", Image: "release-safeboot", Variant: "safeboot"}),
+		dev(2, "p4-safeboot", model.Identity{LanguageKnown: true, Family: model.ChipESP32P4, Hardware: "ESP32-P4 v3.1", Version: "16.0.0", Image: "release-safeboot", Variant: "safeboot"}),
 	}
 	n := FleetNeeds(rel, devs)
 	if !slices.Equal(n.Files, []string{"tasmota32p4r3.bin"}) {
@@ -101,7 +101,7 @@ func TestFleetNeedsSafebootTwoBuildChips(t *testing.T) {
 func TestFleetNeedsReportsFilesTheReleaseLacks(t *testing.T) {
 	rel := Release{Version: "15.0.0", Files: []string{"tasmota.bin.gz"}}
 	n := FleetNeeds(rel, []model.Device{
-		dev(1, "a", model.Identity{Family: model.ChipESP8266, Version: "14.0.0", Variant: "tasmota"}),
+		dev(1, "a", model.Identity{LanguageKnown: true, Family: model.ChipESP8266, Version: "14.0.0", Variant: "tasmota"}),
 	})
 	if !slices.Equal(n.Files, []string{"tasmota.bin.gz"}) || !slices.Equal(n.Missing, []string{"tasmota-minimal.bin.gz"}) {
 		t.Fatalf("files %v missing %v", n.Files, n.Missing)

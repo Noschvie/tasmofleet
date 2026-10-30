@@ -201,7 +201,7 @@ func (p *Prober) probe(ctx context.Context, d model.Device, verify func(probed) 
 		}
 		// The language only comes from the page; the identity is usable without it.
 	} else {
-		in.Root = &fwselect.RootInfo{Version: root.Version, Image: root.Image, Lang: root.Lang, Minimal: root.Minimal}
+		in.Root = &fwselect.RootInfo{Version: root.Version, Image: root.Image, Lang: root.Lang, LangKnown: root.LangKnown, Minimal: root.Minimal}
 	}
 	if out.identity, err = fwselect.Detect(in); err != nil {
 		return out, fmt.Errorf("identify: %w", err)
@@ -783,7 +783,7 @@ func (p *Prober) refreshMQTT(ctx context.Context, d model.Device, actor string) 
 	if ident.Variant == "minimal" || ident.Variant == "safeboot" {
 		return fmt.Errorf("identify over MQTT: the answer claims a %s image, which cannot answer Status 2: %w", ident.Variant, tasmota.ErrBadResponse)
 	}
-	ident.Language, ident.DetectedAt = d.Identity.Language, time.Time{}
+	ident.Language, ident.LanguageKnown, ident.DetectedAt = d.Identity.Language, d.Identity.LanguageKnown, time.Time{}
 	g := store.ProbeGuard{Address: d.Address, Port: d.Port, MAC: d.MAC}
 	if d.Identity.DetectedAt.IsZero() {
 		// ErrConflict: an HTTP probe identified it meanwhile, and that identity wins.

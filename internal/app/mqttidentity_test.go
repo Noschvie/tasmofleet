@@ -104,6 +104,8 @@ func (f *idFakeInventory) UpdateIdentityFromMQTT(_ context.Context, id model.Dev
 	f.writes++
 	d.Identity.Family, d.Identity.Hardware, d.Identity.SingleCore = i.Family, i.Hardware, i.SingleCore
 	d.Identity.Version, d.Identity.Image, d.Identity.Variant = i.Version, i.Image, i.Variant
+	// The real store writes the language columns from the identity it is given (devices.go).
+	d.Identity.Language, d.Identity.LanguageKnown = i.Language, i.LanguageKnown
 	f.devs[id] = d
 	return nil
 }
@@ -257,6 +259,25 @@ func TestMQTTIdentityAsksStatus2OnceAndStoresTheAnswer(t *testing.T) {
 	e.m.askDue(t.Context())
 	if len(e.bus.sent()) != 1 {
 		t.Errorf("asked again after the answer: %q", e.bus.sent())
+	}
+}
+
+// Why: Status 2 carries no language build (only the web page does, D10). The answer must keep what
+// was stored, including the "read from a page" flag, or a German device would turn "unknown" or,
+// worse, lose the language it was read with.
+func TestMQTTIdentityKeepsTheStoredLanguageAndItsFlag(t *testing.T) {
+	for _, known := range []bool{true, false} {
+		d := oursDevice(1, "plug")
+		d.Identity.Language, d.Identity.LanguageKnown = "DE", known
+		e := newIDEnv(d)
+		e.online("plug")
+		e.m.askDue(t.Context())
+		e.emit(mqttbus.KindStatus, "plug", "STATUS2", status2Payload, false)
+		e.drain(t.Context())
+		got := e.inv.get(1).Identity
+		if !got.Known() || got.Language != "DE" || got.LanguageKnown != known {
+			t.Errorf("known=%v: identity language %q known %v", known, got.Language, got.LanguageKnown)
+		}
 	}
 }
 

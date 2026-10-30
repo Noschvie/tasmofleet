@@ -44,6 +44,10 @@ func TestDescribeFillsIdentityWithoutStatus0(t *testing.T) {
 	if got.MQTT == model.MQTTUnknown {
 		t.Fatal("MQTT capability must be probed")
 	}
+	// The language comes from the main page this probe read, so it is a fact (D10).
+	if !got.Identity.LanguageKnown {
+		t.Error("an HTTP probe must mark the language as read")
+	}
 }
 
 // Why: minimal firmware only answers a few commands; the probe has to take

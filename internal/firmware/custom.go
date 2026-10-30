@@ -150,7 +150,8 @@ func validLabel(s string) bool {
 // for a device that keeps (or is told to switch to) this variant, so the Guard
 // accepts the artifact for the matching devices and for no others.
 func customFilename(fam model.ChipFamily, singleCore bool, variant string) (string, error) {
-	id := model.Identity{Family: fam, Version: "1", Variant: "tasmota", SingleCore: singleCore && fam == model.ChipESP32}
+	// No device: nothing to read a language from, and the variant choice carries none.
+	id := model.Identity{Family: fam, Version: "1", Variant: "tasmota", SingleCore: singleCore && fam == model.ChipESP32, LanguageKnown: true}
 	sel, err := fwselect.Select(id, fwselect.Choice{Variant: variant, AllowVariantChange: true})
 	if err != nil {
 		return "", refuse("variant %q is not a Tasmota build for %s", variant, fam)

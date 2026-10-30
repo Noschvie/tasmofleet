@@ -273,7 +273,7 @@ func (m *mqttIdentity) applyStatus2(ctx context.Context, d model.Device, payload
 		m.log.Warn("mqtt identity: Status 2 reply claims an image that cannot answer it, ignored", "device", d.ID, "image", next.Image)
 		return
 	}
-	next.Language = d.Identity.Language
+	next.Language, next.LanguageKnown = d.Identity.Language, d.Identity.LanguageKnown
 	if m.store1(ctx, d, next, "Status 2") {
 		m.mu.Lock()
 		m.answered[d.ID] = true

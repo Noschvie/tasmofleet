@@ -269,8 +269,8 @@ func TestParseRootPage_Fixtures(t *testing.T) {
 			if "<title>"+got.Title != title {
 				t.Errorf("Title %q vs %q", got.Title, title)
 			}
-			if got.Lang != "en" {
-				t.Errorf("Lang = %q", got.Lang)
+			if got.Lang != "en" || !got.LangKnown {
+				t.Errorf("Lang = %q known = %v, want en read from the page", got.Lang, got.LangKnown)
 			}
 			// Normal firmware must never be flagged minimal; that would trigger
 			// the "upgrade out of minimal" recovery path on a healthy device.
@@ -286,7 +286,7 @@ func TestParseRootPage_Minimal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := RootInfo{Version: "16.0.0", Image: "release-minimal", Lang: "de", Minimal: true, Title: "Prusa Plug Main Menu"}
+	want := RootInfo{Version: "16.0.0", Image: "release-minimal", Lang: "de", LangKnown: true, Minimal: true, Title: "Prusa Plug Main Menu"}
 	if got != want {
 		t.Errorf("got %+v, want %+v", got, want)
 	}
@@ -309,6 +309,11 @@ func TestParseRootPage_SafebootAndEdgeCases(t *testing.T) {
 	got, _ = ParseRootPage([]byte(dev))
 	if got.Version != "16.0.0" || got.Image != "abc1234-tasmota" {
 		t.Errorf("dev build: %+v", got)
+	}
+	// A page without a lang attribute proves nothing about the language build (D10): not known.
+	noLang := strings.Replace(minimalRoot, ` lang="de"`, "", 1)
+	if got, err := ParseRootPage([]byte(noLang)); err != nil || got.LangKnown || got.Lang != "" {
+		t.Errorf("page without lang: %+v, %v", got, err)
 	}
 	for _, bad := range []string{"", "<html>no footer</html>", "File Not Found\n\nURI: /\n"} {
 		if _, err := ParseRootPage([]byte(bad)); !errors.Is(err, ErrBadResponse) {

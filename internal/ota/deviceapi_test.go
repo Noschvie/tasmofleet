@@ -105,7 +105,7 @@ func TestDeviceAPIProbeIdentityNormalFirmware(t *testing.T) {
 	if !strings.Contains(string(in.Status2), "StatusFWR") || !strings.Contains(string(in.Status4), "StatusMEM") || in.Upgrade != nil {
 		t.Fatalf("detect inputs %+v", in)
 	}
-	if in.Root == nil || in.Root.Lang != "en" || in.Root.Image != "release-tasmota" {
+	if in.Root == nil || in.Root.Lang != "en" || !in.Root.LangKnown || in.Root.Image != "release-tasmota" {
 		t.Fatalf("root info %+v", in.Root)
 	}
 	if up != 4235 || otaURL != "http://tasmoadmin.example.internal:80/data/firmwares/tasmota-minimal.bin.gz" || id.Version != "16.0.0" {

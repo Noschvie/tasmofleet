@@ -99,9 +99,9 @@ func (f *fakeMgrFW) DeleteUnused(context.Context) (firmware.DeleteResult, error)
 
 func mixedFleet() []model.Device {
 	return []model.Device{
-		{ID: 1, Name: "lamp-1m", Address: "10.0.0.1", Identity: model.Identity{Family: model.ChipESP8266, Version: "16.0.0", Variant: "tasmota", ProgramFlashSizeKB: 1024}},
-		{ID: 2, Name: "dimmer", Address: "10.0.0.2", Identity: model.Identity{Family: model.ChipESP32, Version: "16.1.0", Variant: "tasmota"}},
-		{ID: 3, Name: "c3-node", Address: "10.0.0.3", Identity: model.Identity{Family: model.ChipESP32C3, Version: "16.2.0", Variant: "tasmota", Image: "tasmota32c3"}},
+		{ID: 1, Name: "lamp-1m", Address: "10.0.0.1", Identity: model.Identity{LanguageKnown: true, Family: model.ChipESP8266, Version: "16.0.0", Variant: "tasmota", ProgramFlashSizeKB: 1024}},
+		{ID: 2, Name: "dimmer", Address: "10.0.0.2", Identity: model.Identity{LanguageKnown: true, Family: model.ChipESP32, Version: "16.1.0", Variant: "tasmota"}},
+		{ID: 3, Name: "c3-node", Address: "10.0.0.3", Identity: model.Identity{LanguageKnown: true, Family: model.ChipESP32C3, Version: "16.2.0", Variant: "tasmota", Image: "tasmota32c3"}},
 	}
 }
 

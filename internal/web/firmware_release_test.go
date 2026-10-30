@@ -39,9 +39,9 @@ func feedReleases() []firmware.Release {
 
 func relFleet() []model.Device {
 	return []model.Device{
-		{ID: 1, Name: "lamp", Address: "10.0.0.1", Identity: model.Identity{Family: model.ChipESP8266, Version: "15.0.0", Variant: "tasmota"}},
-		{ID: 2, Name: "plug", Address: "10.0.0.2", Identity: model.Identity{Family: model.ChipESP8266, Version: "16.1.0", Variant: "tasmota"}},
-		{ID: 3, Name: "dimmer", Address: "10.0.0.3", Identity: model.Identity{Family: model.ChipESP32, Version: "16.1.0", Variant: "tasmota"}},
+		{ID: 1, Name: "lamp", Address: "10.0.0.1", Identity: model.Identity{LanguageKnown: true, Family: model.ChipESP8266, Version: "15.0.0", Variant: "tasmota"}},
+		{ID: 2, Name: "plug", Address: "10.0.0.2", Identity: model.Identity{LanguageKnown: true, Family: model.ChipESP8266, Version: "16.1.0", Variant: "tasmota"}},
+		{ID: 3, Name: "dimmer", Address: "10.0.0.3", Identity: model.Identity{LanguageKnown: true, Family: model.ChipESP32, Version: "16.1.0", Variant: "tasmota"}},
 	}
 }
 

@@ -90,8 +90,11 @@ type RootInfo struct {
 	Version string // "16.0.0" from "Tasmota 16.0.0 (release-minimal) by Theo Arends"
 	Image   string // "release-minimal"
 	Lang    string // <html lang="..">, e.g. "en", "de"
-	Minimal bool   // page shows "MINIMAL firmware" (or "Safeboot" on ESP32)
-	Title   string // "<DeviceName> Main Menu"
+	// LangKnown: the page carried a lang attribute, so Lang ("en" = English build) is read
+	// from the device and not assumed. Only an HTTP main page can set it (D10).
+	LangKnown bool
+	Minimal   bool   // page shows "MINIMAL firmware" (or "Safeboot" on ESP32)
+	Title     string // "<DeviceName> Main Menu"
 }
 
 // Options configure the HTTP client.

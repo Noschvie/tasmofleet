@@ -40,6 +40,11 @@ var (
 	ErrBadImage         = errors.New("fwselect: not an ESP firmware image")
 	ErrNotImplemented   = errors.New("fwselect: not implemented")
 
+	// ErrLanguageUnknown: the language build of the device was never read from its web page
+	// (MQTT-only devices), so Select will not pick a file without an explicit Choice.Language.
+	// "EN" is an allowed explicit choice. Never guess: a German device must not get the English build.
+	ErrLanguageUnknown = errors.New("fwselect: language build unknown, choose a language")
+
 	// ErrBuildChoiceNeeded is the refusal for a chip with two upstream builds
 	// that nothing the device reports can tell apart (ESP32-S2: s2, s2cdc, #88).
 	// It is an ErrUnknownHardware, so every caller that refuses on that keeps
@@ -78,7 +83,10 @@ type RootInfo struct {
 	Version string
 	Image   string // e.g. "release-minimal"
 	Lang    string // <html lang>, e.g. "en", "de"
-	Minimal bool
+	// LangKnown: Lang was read from a device main page (HTTP). Without it the language build is
+	// unknown, because only the web page shows it (D10); an empty Lang is then no proof of English.
+	LangKnown bool
+	Minimal   bool
 }
 
 // Detect builds an identity from the device answers. It never guesses: an
@@ -103,7 +111,7 @@ func FamilyFromHardware(hw string) model.ChipFamily {
 type Choice struct {
 	Release  string // e.g. "16.0.0"
 	Variant  string // empty = keep the detected variant
-	Language string // empty = keep the detected language
+	Language string // empty = keep the detected language; required when Identity.LanguageKnown is false
 	// AllowVariantChange must be true when Variant differs from the detected
 	// one. Set only from an explicit UI/CLI confirmation.
 	AllowVariantChange bool

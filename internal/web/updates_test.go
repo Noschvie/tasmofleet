@@ -125,7 +125,7 @@ func setupOTA(t *testing.T) (*env, *fakeOTA, *fakeJobs, *fakeFW) {
 	t.Helper()
 	e := setup(t)
 	// devices: 1 kitchen (esp8266 tasmota), 2 attic (esp32), 3 stuck on minimal
-	e.inv.devs[3] = model.Device{ID: 3, Name: "stuck", Address: "10.0.0.3", Identity: model.Identity{Family: model.ChipESP8266, Version: "16.0.0", Variant: "minimal"}}
+	e.inv.devs[3] = model.Device{ID: 3, Name: "stuck", Address: "10.0.0.3", Identity: model.Identity{LanguageKnown: true, Family: model.ChipESP8266, Version: "16.0.0", Variant: "minimal"}}
 	o := &fakeOTA{items: map[model.DeviceID]ota.PreviewItem{}}
 	j := &fakeJobs{jobs: []model.Job{{ID: 1, BatchID: 7, DeviceID: 1, State: model.JobAwaitReboot, TargetRelease: "16.1.0", CreatedAt: time.Now()}}}
 	fw := &fakeFW{}
@@ -528,7 +528,7 @@ func TestTransactionMarksUploadedDevices(t *testing.T) {
 // the start form (the job is created from that form), but only for devices that go ahead.
 func TestPreviewOffersTheS2BuildsAndCarriesTheChoice(t *testing.T) {
 	e, o, _, _ := setupOTA(t)
-	e.inv.devs[4] = model.Device{ID: 4, Name: "s2-board", Address: "10.0.0.4", Identity: model.Identity{Family: model.ChipESP32S2, Hardware: "ESP32-S2", Version: "16.0.0", Variant: "unknown"}}
+	e.inv.devs[4] = model.Device{ID: 4, Name: "s2-board", Address: "10.0.0.4", Identity: model.Identity{LanguageKnown: true, Family: model.ChipESP32S2, Hardware: "ESP32-S2", Version: "16.0.0", Variant: "unknown"}}
 	o.items[4] = ota.PreviewItem{DeviceID: 4, Decision: "refuse", Reason: "select: ESP32-S2 has two builds", BuildChoice: true}
 	form := url.Values{"id": {"1", "4"}, "release": {"16.1.0"}, "policy": {"only-newer"}}
 	resp, body := e.do(t, "POST", "/updates/preview", "operator", form)
@@ -597,7 +597,7 @@ func TestTransactionRowShowsTheChosenBuild(t *testing.T) {
 // firmware is not replaced keeps the radios (the choice stays checked) and explains the variant.
 func TestPreviewOnlyS2NeedsAChoiceNotADeadEnd(t *testing.T) {
 	e, o, _, _ := setupOTA(t)
-	e.inv.devs[4] = model.Device{ID: 4, Name: "s2-board", Address: "10.0.0.4", Identity: model.Identity{Family: model.ChipESP32S2, Hardware: "ESP32-S2", Version: "16.0.0", Variant: "unknown", Image: "tasmota32"}}
+	e.inv.devs[4] = model.Device{ID: 4, Name: "s2-board", Address: "10.0.0.4", Identity: model.Identity{LanguageKnown: true, Family: model.ChipESP32S2, Hardware: "ESP32-S2", Version: "16.0.0", Variant: "unknown", Image: "tasmota32"}}
 	o.items[4] = ota.PreviewItem{DeviceID: 4, Decision: "refuse", Reason: "select: variant change", BuildChoice: true}
 	form := url.Values{"id": {"4"}, "release": {"16.1.0"}, "policy": {"only-newer"}}
 	_, body := e.do(t, "POST", "/updates/preview", "operator", form)

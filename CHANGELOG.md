@@ -15,6 +15,14 @@ always upgrade automatically.
 
 - Command policy: the confirmation for Status 0 (and Reset and other guarded commands) could be bypassed by a Backlog part spelled with a leading `Backlog` (`Backlog BacklogStatus 0`), which Tasmota strips before running it; every part is now judged after the same stripping
 
+### Breaking
+
+- An update of a device whose language build was never read from its web page (Tasmota shows it only there) is refused until a language is chosen; `fwselect.Select` returns `ErrLanguageUnknown` unless the choice names one ("EN" is allowed), and so does Guard. Every device that an HTTP probe has read is unaffected; devices known from before this release count as unread until their next probe (Part of #259)
+
+### Added
+
+- `fwselect.MQTTUploadFits`: a fixed rule, no try-and-see, for whether an image fits a firmware upload over MQTT (FileUpload Type 1), from Status 4 Free. Nothing uses it yet (Part of #262)
+
 ### Fixed
 
 - Device list: switching a relay of an HTTP-only device could flip back to its old state when a health poll that read the device just before the toggle finished just after it, and likewise for a state reported over MQTT; the newer state now wins over that poll (#206)

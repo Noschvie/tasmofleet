@@ -203,6 +203,7 @@ func ParseRootPage(page []byte) (RootInfo, error) {
 	info := RootInfo{Version: string(g[1]), Image: string(g[2])}
 	if l := rootLang.FindSubmatch(page); l != nil {
 		info.Lang = html.UnescapeString(string(l[1]))
+		info.LangKnown = strings.TrimSpace(info.Lang) != ""
 	}
 	if t := rootTitle.FindSubmatch(page); t != nil {
 		info.Title = html.UnescapeString(strings.TrimSpace(string(t[1])))

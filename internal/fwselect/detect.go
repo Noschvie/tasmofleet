@@ -51,6 +51,8 @@ func detect(in Inputs) (model.Identity, error) {
 		SingleCore: single,
 		Variant:    variantUnknown,
 		Language:   languageFromRoot(in.Root),
+
+		LanguageKnown: languageKnownFromRoot(in.Root),
 	}
 	// An unparseable Version does not cost the device its identity (#45): the version stays
 	// empty and the variant unknown, so the identity is never Known() and Guard refuses
@@ -154,6 +156,8 @@ func detectMinimal(in Inputs) (model.Identity, error) {
 		Image:    in.Root.Image,
 		Variant:  image,
 		Language: languageFromRoot(in.Root),
+
+		LanguageKnown: languageKnownFromRoot(in.Root),
 	}, nil
 }
 
@@ -296,4 +300,9 @@ func languageFromRoot(r *RootInfo) string {
 		return ""
 	}
 	return l
+}
+
+// languageKnownFromRoot reports whether the language came from a device main page.
+func languageKnownFromRoot(r *RootInfo) bool {
+	return r != nil && r.LangKnown
 }

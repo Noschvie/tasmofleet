@@ -369,7 +369,7 @@ func TestGuardAppliesToCustomImages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dev8266 := model.Identity{Family: model.ChipESP8266, Version: "15.0.0", Variant: "tasmota"}
+	dev8266 := model.Identity{LanguageKnown: true, Family: model.ChipESP8266, Version: "15.0.0", Variant: "tasmota"}
 	choice := fwselect.Choice{Release: "16.0.0.9"}
 	if err := fwselect.Guard(dev8266, esp32.Artifact, c.URLFor(esp32.Artifact), choice); !errors.Is(err, fwselect.ErrFamilyMismatch) {
 		t.Fatalf("ESP32 image for an ESP8266 device: %v", err)
@@ -416,7 +416,7 @@ func TestCustomReleaseGetsAMinimalImage(t *testing.T) {
 	if err != nil || again.ID != m.ID {
 		t.Fatalf("second Ensure: %+v, %v", again, err)
 	}
-	if err := fwselect.Guard(model.Identity{Family: model.ChipESP8266, Version: "15.0.0", Variant: "tasmota"}, m, c.URLFor(m), fwselect.Choice{Release: "16.0.0.9"}); err != nil {
+	if err := fwselect.Guard(model.Identity{LanguageKnown: true, Family: model.ChipESP8266, Version: "15.0.0", Variant: "tasmota"}, m, c.URLFor(m), fwselect.Choice{Release: "16.0.0.9"}); err != nil {
 		t.Errorf("guard refuses the minimal stage: %v", err)
 	}
 }
