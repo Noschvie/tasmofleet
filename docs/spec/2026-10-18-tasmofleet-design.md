@@ -930,7 +930,7 @@ HTTP. Rules:
 Background GroupTopic read (`internal/app/grouptopic.go`): shortly after start and after a device is
 adopted, one `Status 1` per two seconds (through the router: HTTP while it works, else the MQTT channel) for
 every device with a topic whose GroupTopic was never read or is older than its last probe; a device that
-gave no answer is asked again after 10 s, 30 s, 2 min, then every 15 min. The MQTT identity refresh reads
+gave no answer is asked again after 10 s, 30 s, 2 min, then every 15 min, but at once when it comes online after a failed attempt. Offline devices are not asked. When no device needs a read the reader does not list the inventory for 30 s. The MQTT identity refresh reads
 `Status 1` too and stores the GroupTopic.
 
 ### 9.1 Principles

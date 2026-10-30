@@ -27,7 +27,7 @@ func (a *runtime) setupTransport() {
 	a.facts = facts
 	a.svc.Router.SetFacts(facts)
 	a.svc.Router.SetMQTT(a.mqttCmd)
-	gr := newGroupTopicReader(a.svc.Inventory.List, a.svc.Client, a.svc.Store, a.log)
+	gr := newGroupTopicReader(a.svc.Inventory.List, a.tracker.Get, a.svc.Client, a.svc.Store, a.log)
 	a.goBG("group-topic", func() error { gr.run(a.bgContext); return nil })
 }
 

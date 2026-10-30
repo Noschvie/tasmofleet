@@ -55,6 +55,8 @@ func (s *gtStore) UpdateGroupTopicFromMQTT(_ context.Context, id model.DeviceID,
 	return nil
 }
 
+func online(model.DeviceID) model.Health { return model.Health{State: model.HealthOnline} }
+
 type gtClient struct {
 	mu    sync.Mutex
 	asked []model.DeviceID
@@ -94,13 +96,13 @@ func TestGroupTopicReaderReadsOneUnreadDevicePerTick(t *testing.T) {
 		{ID: 5, Topic: "e"}, // added from the broker, no HTTP address
 	}}
 	c := &gtClient{}
-	r := newGroupTopicReader(st.list, c, st, slog.New(slog.DiscardHandler))
+	r := newGroupTopicReader(st.list, online, c, st, slog.New(slog.DiscardHandler))
 	r.now = func() time.Time { return now }
-	for range 6 {
+	for i := range 6 {
 		r.tick(t.Context())
-	}
-	if len(c.asked) != 3 || c.asked[0] != 1 && c.asked[0] != 4 && c.asked[0] != 5 {
-		t.Fatalf("asked %v, want devices 1, 4 and 5 once each, one per tick", c.asked)
+		if want := min(i+1, 3); len(c.asked) != want {
+			t.Fatalf("after tick %d: asked %v, want %d reads (one per tick, three devices need one)", i+1, c.asked, want)
+		}
 	}
 	seen := map[model.DeviceID]bool{}
 	for i, id := range c.asked {
@@ -125,7 +127,7 @@ func TestGroupTopicReaderBacksOffAfterAFailedRead(t *testing.T) {
 	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
 	st := &gtStore{now: func() time.Time { return now }, devs: []model.Device{{ID: 1, Topic: "a", Address: "192.0.2.1"}}}
 	c := &gtClient{fail: map[model.DeviceID]bool{1: true}}
-	r := newGroupTopicReader(st.list, c, st, slog.New(slog.DiscardHandler))
+	r := newGroupTopicReader(st.list, online, c, st, slog.New(slog.DiscardHandler))
 	r.now = func() time.Time { return now }
 	r.tick(t.Context())
 	r.tick(t.Context())
@@ -213,7 +215,7 @@ func TestGroupTopicReaderClearsOthersGroupUnread(t *testing.T) {
 	if f.MQTT.OthersGroupUnread != 1 {
 		t.Fatalf("OthersGroupUnread = %d before the read", f.MQTT.OthersGroupUnread)
 	}
-	r := newGroupTopicReader(g.st.list, g.router, g.st, slog.New(slog.DiscardHandler))
+	r := newGroupTopicReader(g.st.list, online, g.router, g.st, slog.New(slog.DiscardHandler))
 	// the device has to come online on the broker first; the first reads may find it offline
 	for deadline := time.Now().Add(15 * time.Second); ; time.Sleep(50 * time.Millisecond) {
 		r.tried = map[model.DeviceID]groupTry{}
@@ -237,7 +239,7 @@ func TestMakeCompliantReachesADeviceOnlyMQTTReaches(t *testing.T) {
 	set := settings.New(settings.Options{Devices: g.st, Client: g.router})
 	fix := &policy.Fixer{Client: g.router, Reader: set}
 	d, _ := g.st.GetDevice(t.Context(), 1)
-	r := newGroupTopicReader(g.st.list, g.router, g.st, slog.New(slog.DiscardHandler))
+	r := newGroupTopicReader(g.st.list, online, g.router, g.st, slog.New(slog.DiscardHandler))
 	for deadline := time.Now().Add(15 * time.Second); ; time.Sleep(50 * time.Millisecond) {
 		r.tried = map[model.DeviceID]groupTry{}
 		r.tick(t.Context())
@@ -255,5 +257,115 @@ func TestMakeCompliantReachesADeviceOnlyMQTTReaches(t *testing.T) {
 	got, err := set.ReadKeys(t.Context(), 1, []string{"PowerOnState"})
 	if err != nil || got["PowerOnState"] != "2" {
 		t.Fatalf("read back %v, %v; the device saw %v", got, err, g.dev.Commands()[before:])
+	}
+}
+
+func newTestReader(st *gtStore, c *gtClient, now *time.Time, h func(model.DeviceID) model.Health) *groupTopicReader {
+	r := newGroupTopicReader(st.list, h, c, st, slog.New(slog.DiscardHandler))
+	r.now = func() time.Time { return *now }
+	return r
+}
+
+// Why: a device nobody has tried yet comes before a retry that is already due, or a failing device would
+// starve the new ones.
+func TestGroupTopicReaderPrefersADeviceNeverTried(t *testing.T) {
+	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	st := &gtStore{now: func() time.Time { return now }, devs: []model.Device{{ID: 1, Topic: "a", Address: "192.0.2.1"}}}
+	c := &gtClient{fail: map[model.DeviceID]bool{1: true}}
+	r := newTestReader(st, c, &now, online)
+	r.tick(t.Context())
+	now = now.Add(time.Minute) // device 1's retry is due
+	st.devs = append(st.devs, model.Device{ID: 2, Topic: "b", Address: "192.0.2.2"})
+	r.tick(t.Context())
+	if len(c.asked) != 2 || c.asked[1] != 2 {
+		t.Fatalf("asked %v, want the new device 2 before the due retry of 1", c.asked)
+	}
+}
+
+// Why (M1): an offline device cannot answer, so it is not asked; when it comes online after a failed
+// attempt it is read at once, not after its backoff (an MQTT-only device whose LWT arrives late).
+func TestGroupTopicReaderSkipsOfflineAndReadsAtOnceWhenOnline(t *testing.T) {
+	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	st := &gtStore{now: func() time.Time { return now }, devs: []model.Device{{ID: 1, Topic: "a", Address: "192.0.2.1"}}}
+	c := &gtClient{fail: map[model.DeviceID]bool{1: true}}
+	state := model.HealthOffline
+	r := newTestReader(st, c, &now, func(model.DeviceID) model.Health { return model.Health{State: state} })
+	r.tick(t.Context())
+	if len(c.asked) != 0 {
+		t.Fatalf("an offline device was asked: %v", c.asked)
+	}
+	state = model.HealthUnknown // not yet heard of: tried once, and it fails
+	r.tick(t.Context())
+	if len(c.asked) != 1 {
+		t.Fatalf("an unknown device is tried: %v", c.asked)
+	}
+	now = now.Add(time.Second)
+	c.fail[1] = false
+	state = model.HealthOnline // its LWT came Online
+	r.tick(t.Context())
+	if len(c.asked) != 2 {
+		t.Fatalf("not read at once when it came online: %v", c.asked)
+	}
+}
+
+// Why: the backoff caps at 15 minutes, a success forgets the device, a device gone from the inventory is
+// forgotten too (the map must not grow with every id ever seen).
+func TestGroupTopicReaderBackoffCapSuccessAndPrune(t *testing.T) {
+	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	st := &gtStore{now: func() time.Time { return now }, devs: []model.Device{{ID: 1, Topic: "a", Address: "192.0.2.1"}, {ID: 2, Topic: "b", Address: "192.0.2.2"}}}
+	c := &gtClient{fail: map[model.DeviceID]bool{1: true, 2: true}}
+	r := newTestReader(st, c, &now, online)
+	for range 8 { // far more failures than steps
+		r.tick(t.Context())
+		r.tick(t.Context())
+		now = now.Add(groupTopicBackoff[len(groupTopicBackoff)-1] + time.Second)
+	}
+	if got := r.tried[1].wait(); got != 15*time.Minute {
+		t.Fatalf("the backoff is %v after many failures, want it capped at 15 minutes", got)
+	}
+	c.fail[1] = false
+	st.devs = st.devs[:1] // device 2 is deleted
+	r.tick(t.Context())
+	if _, ok := r.tried[1]; ok {
+		t.Error("a successful read must remove the device's backoff entry")
+	}
+	if _, ok := r.tried[2]; ok {
+		t.Error("a device that left the inventory must be forgotten")
+	}
+}
+
+// Why (L4): when nothing needs a read the reader does not list the inventory every tick.
+func TestGroupTopicReaderIdlesWhenNothingIsNeeded(t *testing.T) {
+	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
+	lists := 0
+	st := &gtStore{now: func() time.Time { return now }, devs: []model.Device{{ID: 1, Topic: "a", GroupTopic: "tasmotas", GroupTopicReadAt: now}}}
+	c := &gtClient{}
+	r := newGroupTopicReader(func(ctx context.Context) ([]model.Device, error) { lists++; return st.list(ctx) }, online, c, st, slog.New(slog.DiscardHandler))
+	r.now = func() time.Time { return now }
+	for range 5 {
+		r.tick(t.Context())
+		now = now.Add(groupTopicTick)
+	}
+	if lists != 1 {
+		t.Fatalf("listed %d times in 5 ticks", lists)
+	}
+	now = now.Add(groupTopicIdle)
+	r.tick(t.Context())
+	if lists != 2 {
+		t.Fatalf("not listed again after the idle time: %d", lists)
+	}
+}
+
+func TestGroupTopicReaderRunReturnsWhenCancelled(t *testing.T) {
+	st := &gtStore{now: time.Now}
+	r := newGroupTopicReader(st.list, online, &gtClient{}, st, slog.New(slog.DiscardHandler))
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan struct{})
+	go func() { r.run(ctx); close(done) }()
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("run did not return after the context ended")
 	}
 }

@@ -1,7 +1,7 @@
 import { test, expect } from "../support/fixtures";
 import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
-// Commands, settings and "Make compliant" over MQTT (0.20.0, #79, #256): mq-esp32 is a simulated
+// Console and "Make compliant" over MQTT (0.20.0, #79, #256): mq-esp32 is a simulated
 // device whose HTTP port refuses every connection but which is on the broker. TasmoFleet reaches it
 // only through MQTT (the second device, mq-esp8266-1m, is the same kind).
 let app: App;
@@ -78,12 +78,16 @@ test("Make compliant over MQTT", { tag: "@core" }, async ({ page }) => {
     await page.getByRole("button", { name: "Make compliant…" }).click();
     const dlg = page.locator("dialog#dlg-fix");
     await expect(dlg).toBeVisible();
-    const mine = dlg.locator(".udlg-changes > div").first(); // the devices take the DeviceName they report, so no name match
-    await expect(mine).toContainText("PowerOnState 2");
+    // The devices take the DeviceName they report after a while, so the plan is not matched by name.
+    await expect(dlg.locator(".udlg-changes > div").first()).toContainText("PowerOnState 2");
     await dlg.getByRole("button", { name: /^Run \d+ changes?$/ }).click();
     await expect(page).toHaveURL(/\/transactions\/\d+/);
     await expect(page.locator(".upd-dev").getByText("Applied", { exact: true }).first()).toBeVisible({ timeout: 15_000 });
   }).toPass({ timeout: 240_000, intervals: [5_000] });
   await page.goto(app.url + "/audit");
-  await expect(fixedRow().first()).toBeVisible(); // written over MQTT (the device's HTTP port refuses every connection) and ok
+  // The fix was written and succeeded; the audit says it travelled over MQTT (the device's HTTP port
+  // refuses every connection).
+  await expect(fixedRow().first()).toBeVisible();
+  const detail = page.locator("table.audittable tr.detail-row", { hasText: "PowerOnState" }).filter({ hasText: /via\W+mqtt/ });
+  expect(await detail.count()).toBeGreaterThan(0);
 });
