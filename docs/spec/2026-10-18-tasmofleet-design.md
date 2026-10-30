@@ -470,7 +470,7 @@ The GroupTopic is trusted as "known" only when it is set, stamped and not older 
 read (it can be stale: INFO1 is sent at boot, Status 1 only when probed). Commands are reads (Status N,
 identity refresh) and tolerate an unknown own GroupTopic; Writes (settings, Make compliant, console
 commands that change the device, backlog), transfers and the download need a known one and also that no
-other device with a topic has an unread GroupTopic (empty or never stamped): "N other devices' group topics
+other device with a topic has an unread GroupTopic (empty, never stamped, or older than that device's last probe; a device whose last will is Offline is left out, since our commands are never retained, while its topic still counts for exclusivity): "N other devices' group topics
 have not been read yet; refresh their identity". Reads are unaffected. The reason text says "refresh the
 device's identity".
 

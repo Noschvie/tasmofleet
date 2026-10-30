@@ -96,7 +96,7 @@ func (s *TransportFacts) FactsFor(ctx context.Context, d model.Device) (transpor
 		MQTT: transport.MQTTFacts{
 			BusConnected: s.BusConnected(), Ours: d.MQTT == model.MQTTOurs,
 			Topic: d.Topic, TopicExclusive: topicExclusive(d, all, s.commandPrefix()),
-			OthersGroupUnread: othersGroupUnread(d, all),
+			OthersGroupUnread: othersGroupUnread(d, all, func(id model.DeviceID) bool { return s.Health.Get(id).LWT == "Offline" }),
 			FullTopic:         d.FullTopic, OurFullTopic: s.FullTopic(),
 			GroupTopic: d.GroupTopic, GroupTopicReadAt: d.GroupTopicReadAt, LastProbeAt: probe,
 			LWTOnline: h.LWT == "Online",
@@ -203,13 +203,22 @@ func lastProbe(d model.Device) time.Time {
 	return probe
 }
 
-// othersGroupUnread counts the other devices with an MQTT topic whose GroupTopic is not known: never
-// read, or older than that device's last probe. The same freshness rule as the device's own GroupTopic
-// (transport.groupTopicKnown), so a stale foreign value cannot let a write through.
-func othersGroupUnread(d model.Device, all []model.Device) int {
+// groupTopicStale says the device's GroupTopic is not known: never read, empty, or older than the
+// device's last probe. The one rule for the device's own GroupTopic (transport.groupTopicKnown), for
+// the other devices' (othersGroupUnread) and for the background reader.
+func groupTopicStale(d model.Device) bool {
+	return d.GroupTopic == "" || d.GroupTopicReadAt.IsZero() || d.GroupTopicReadAt.Before(lastProbe(d))
+}
+
+// othersGroupUnread counts the other devices with an MQTT topic whose GroupTopic is not known. A device
+// whose last will is Offline (the broker confirmed it disconnected, not merely "unknown") is left out:
+// our commands are never published retained, so it cannot receive one and cannot be in a group that a
+// message now would reach; one dead device must not block MQTT writes for the whole fleet. Its topic and
+// stale GroupTopic still count for TopicExclusive, which stays fail-closed.
+func othersGroupUnread(d model.Device, all []model.Device, offline func(model.DeviceID) bool) int {
 	n := 0
 	for _, o := range all {
-		if o.ID != d.ID && o.Topic != "" && (o.GroupTopic == "" || o.GroupTopicReadAt.IsZero() || o.GroupTopicReadAt.Before(lastProbe(o))) {
+		if o.ID != d.ID && o.Topic != "" && groupTopicStale(o) && !offline(o.ID) {
 			n++
 		}
 	}
