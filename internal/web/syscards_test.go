@@ -329,3 +329,50 @@ func TestSystemSettingsSignInCardsSayWhatTheyAsk(t *testing.T) {
 		t.Errorf("Test discovery must sit right after the issuer (issuer %d, test %d, client %d)", issuer, test, client)
 	}
 }
+
+// Why: the form always posts the broker fields, so "Reset to default" on the broker host used to
+// compose a URL and clear it in the same request, which the server refuses. The reset must win.
+func TestSystemSettingsResetOfTheBrokerWinsOverTheBrokerFields(t *testing.T) {
+	e, svc, _, _ := sysEnv(t, true)
+	r, body := e.do(t, "POST", "/settings/system", "admin", url.Values{"csrf": {"tok"}, "clear.MQTT_URL": {"1"}, "clear.MQTT_PASSWORD": {"1"}, "mqtt.host": {"broker.lan"}, "mqtt.port": {"1883"}})
+	if r.StatusCode != 303 {
+		t.Fatalf("status %d %s", r.StatusCode, body)
+	}
+	if got := svc.Snapshot().MQTTURL; got != "" {
+		t.Errorf("MQTT_URL %q, want the default (off)", got)
+	}
+}
+
+// Why: the first firmware source is the primary one, but the checkboxes are drawn in the order of
+// the known sources. A save that changes nothing must not reorder the stored list (it would count
+// as a change: restart notice, audit entry); a real change keeps the stored order.
+func TestKeepSourceOrderDoesNotReorderTheStoredSources(t *testing.T) {
+	for _, c := range []struct{ posted, current, want string }{
+		{"github,ota.tasmota.com", "ota.tasmota.com,github", "ota.tasmota.com,github"}, // same set: untouched
+		{"github", "ota.tasmota.com,github", "github"},                                 // one removed
+		{"github,ota.tasmota.com", "ota.tasmota.com", "ota.tasmota.com,github"},        // one added: appended
+		{"", "github", ""}, // none ticked
+	} {
+		if got := keepSourceOrder(c.posted, c.current); got != c.want {
+			t.Errorf("posted %q, stored %q: %q, want %q", c.posted, c.current, got, c.want)
+		}
+	}
+	e, svc, _, _ := sysEnv(t, true)
+	if _, err := svc.Apply(t.Context(), sysconfig.Request{Actor: "admin", StepUp: sysconfig.StepUp{Done: true, Possible: true},
+		Values: map[string]string{"FIRMWARE_SOURCES": "ota.tasmota.com,github"}}); err != nil {
+		t.Fatal(err)
+	}
+	e.do(t, "POST", "/settings/system", "admin", url.Values{"csrf": {"tok"}, "m.FIRMWARE_SOURCES": {"1"}, "v.FIRMWARE_SOURCES": {"github", "ota.tasmota.com"}})
+	if got := svc.Snapshot().FWSources; len(got) != 2 || got[0] != "ota.tasmota.com" {
+		t.Errorf("sources %v: the primary source changed", got)
+	}
+}
+
+// Why: a stored secret that is not used until it is entered again, and a restart-only change that
+// is still waiting, must be visible at the field, not only in the page banner.
+func TestSettingFieldShowsNoticeAndPendingRestart(t *testing.T) {
+	d := sysFieldData(sysRow{FieldState: sysconfig.FieldState{Field: sysconfig.Field{Key: "OIDC_CLIENT_SECRET", Label: "Client secret"}, NeedsReentry: true, Skipped: "enter the secret again", PendingRestart: true}}, false)
+	if d.Notice != "enter the secret again" || !d.Pending {
+		t.Errorf("notice %q, pending %v", d.Notice, d.Pending)
+	}
+}

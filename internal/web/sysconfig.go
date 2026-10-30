@@ -375,7 +375,7 @@ func (h *handler) sysForm(w http.ResponseWriter, r *http.Request, allowClear boo
 	}
 	for _, k := range lists {
 		if _, on := values[k]; !on && !slices.Contains(clear, k) {
-			values[k] = "" // no box ticked: the setting rejects it, instead of silently keeping the old value
+			values[k] = "" // no box ticked: store "no source" instead of silently keeping the old value
 		}
 	}
 	for _, k := range clear {
@@ -398,9 +398,17 @@ func (h *handler) sysSave(w http.ResponseWriter, r *http.Request) {
 			reuse = append(reuse, strings.TrimPrefix(k, "reuse."))
 		}
 	}
-	if err := composeMQTTURL(values, extra, h.storedMQTTURL()); err != nil {
+	if slices.Contains(clear, "MQTT_URL") {
+		// A reset to the default wins over the broker fields, which the form always posts.
+		for _, k := range mqttPartKeys {
+			delete(extra, k)
+		}
+	} else if err := composeMQTTURL(values, extra, h.storedMQTTURL()); err != nil {
 		h.sysOutcome(w, r, values, err, nil)
 		return
+	}
+	if v, ok := values["FIRMWARE_SOURCES"]; ok {
+		values["FIRMWARE_SOURCES"] = keepSourceOrder(v, h.storedValue("FIRMWARE_SOURCES"))
 	}
 	if err := composeSchedule(values, clear, extra); err != nil {
 		h.sysOutcome(w, r, values, err, nil)
@@ -690,6 +698,48 @@ func composeMQTTURL(values, extra map[string]string, current string) error {
 	return nil
 }
 
+// keepSourceOrder merges the ticked firmware sources with the stored list. The order matters (the
+// first source is the primary one), but the checkboxes are drawn in the order of the known sources:
+// the same set keeps the stored value untouched (no spurious change, restart notice or audit entry),
+// a changed set keeps the stored order for the sources still ticked and appends the new ones.
+func keepSourceOrder(posted, current string) string {
+	split := func(s string) []string {
+		var out []string
+		for _, p := range strings.Split(s, ",") {
+			if p = strings.TrimSpace(p); p != "" {
+				out = append(out, p)
+			}
+		}
+		return out
+	}
+	ticked, stored := split(posted), split(current)
+	if len(ticked) == len(stored) && !slices.ContainsFunc(ticked, func(t string) bool { return !slices.Contains(stored, t) }) {
+		return current
+	}
+	var out []string
+	for _, c := range stored {
+		if slices.Contains(ticked, c) {
+			out = append(out, c)
+		}
+	}
+	for _, t := range ticked {
+		if !slices.Contains(out, t) {
+			out = append(out, t)
+		}
+	}
+	return strings.Join(out, ",")
+}
+
+// storedValue is the current value of a setting from the settings service.
+func (h *handler) storedValue(key string) string {
+	for _, f := range h.d.SysConfig.State() {
+		if f.Key == key {
+			return f.Value
+		}
+	}
+	return ""
+}
+
 // storedMQTTURL is the current MQTT_URL from the settings service.
 func (h *handler) storedMQTTURL() string {
 	for _, f := range h.d.SysConfig.State() {
@@ -779,4 +829,12 @@ func sysSetWord(set bool) string {
 		return "a value is set"
 	}
 	return "not set"
+}
+
+// sysNotice is the message of a stored secret that must be entered again, shown under the field.
+func sysNotice(row sysRow) string {
+	if row.NeedsReentry {
+		return row.Skipped
+	}
+	return ""
 }

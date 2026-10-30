@@ -64,6 +64,8 @@ type SettingFieldData struct {
 	Key, Label, Width string
 	Help, Info, Err   string
 	Restart, Locked   bool
+	Pending           bool   // the stored value waits for a restart
+	Notice            string // a second message under the help: a stored value that is ignored, a secret to enter again
 	CanReset          bool
 	Switch, Group     bool
 	Warn              bool // a switch drawn in the warning tone while on
@@ -100,6 +102,8 @@ templ SettingField(d SettingFieldData) {
 				<span class="meta">
 					if d.Locked {
 						@Badge(ToneNeutral, "Environment")
+					} else if d.Pending {
+						@Badge(ToneWarn, "Restart required")
 					} else if d.Restart {
 						@Badge(ToneWarn, "Restart")
 					}
@@ -116,6 +120,9 @@ templ SettingField(d SettingFieldData) {
 				<small class="ufield-err" id={ SettingErrID(d.Key) } role="alert">{ d.Err }</small>
 			} else if d.Help != "" {
 				<small class="ufield-help" id={ SettingHelpID(d.Key) }>{ d.Help }</small>
+			}
+			if d.Notice != "" {
+				<small class="ufield-err" role="alert">{ d.Notice }</small>
 			}
 		</div>
 	</div>

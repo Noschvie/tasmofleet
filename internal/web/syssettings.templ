@@ -152,6 +152,7 @@ templ sysRowView(p sysPage, row sysRow, inRestartCard bool) {
 func sysFieldData(row sysRow, inRestartCard bool) ui.SettingFieldData {
 	c := sysFieldCopy(row.Key)
 	return ui.SettingFieldData{Key: row.Key, Label: sysLabel(row), Width: c.Width, Help: c.Help, Info: c.Info, Err: row.Err,
+		Notice: sysNotice(row), Pending: row.PendingRestart,
 		Restart: row.Apply != sysconfig.Live && !inRestartCard, CanReset: row.Source == "stored", Locked: row.Locked}
 }
 
