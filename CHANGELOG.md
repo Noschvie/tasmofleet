@@ -22,6 +22,7 @@ always upgrade automatically.
 
 ### Breaking
 
+- Make compliant does not change Topic, FullTopic, MqttHost and the like on a device TasmoFleet reaches over MQTT only; the job reports them as skipped (use the console, which asks to confirm). Bulk commands that could cut such a device off are refused in the preview (Part of #256)
 - Console and bulk commands refuse `FileDownload`, `FileUpload` and `Upload` for every role (their payload carries the device's MQTT password). `cmdpolicy.Prepare` takes `PrepareOpts`
 - Audit details of console commands, settings writes and Make compliant gain `"via"` (Part of #256)
 - Over MQTT the console refuses commands that run other commands (`Json`, `Publish`, `Publish2`, `Rule` with a rule text, `RuleTimer`, `WebSend`, `WebQuery`, `Br`, `Script`): they could send `Status 0`. Over HTTP they work as before. A device reached over MQTT only asks for a confirmation before a change of Topic, FullTopic, GroupTopic, MqttHost, MqttPort, MqttUser, MqttPassword, MqttClient or `SetOption3 0`

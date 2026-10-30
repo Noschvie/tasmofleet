@@ -624,7 +624,7 @@ answer. Rules (each has a test; see also `docs/research/tasmota-mqtt-transport.m
   nothing published). Group topics, topics with `/+#` and `FileDownload`/`FileUpload`/`Upload`
   are refused too, and so is every command that runs other commands, alone or in a Backlog: `Json`
   (`{"Status":0}` is a Status 0), `Publish`, `Publish2`, `Rule` with a rule text (a bare `Rule1` or
-  `Rule1 1` that only reads or switches is fine), `RuleTimer`, `WebSend`, `WebQuery`, `Br`, `Script`.
+  `Rule1 1` that only reads or switches is fine), `RuleTimer`, `WebSend`, `WebQuery`, `Br`, `Script`, `UfsRun`.
   They stay available over HTTP, where an admin confirms them.
 - One command in flight per device topic; at least 100 ms between two publishes on the bus.
 - The listener is registered before the publish, and `Bus.Connected()` is true only once the
@@ -901,7 +901,8 @@ HTTP. Rules:
   `cmdpolicy` classifies as a read follows `Paths.Commands`, any other command `Paths.Writes`.
 - **Failover inside one call** from HTTP to MQTT happens only on `tasmota.NotSent(err)`: a refused
   connection (the dial failed), an address outside DEVICE_NETWORKS, a 401 before execution, or a device
-  that refuses the HTTP API (SetOption128). A timeout, an unparsable answer or a connection dropped after
+  that refuses the HTTP API (SetOption128; for a *write* only when the failure memory already held that
+  kind before the call, because the silence of a refusing handler can also follow a command that ran). A timeout, an unparsable answer or a connection dropped after
   the request was written prove nothing and are never followed by an MQTT send. Never MQTT to HTTP after a
   publish. Uploads never fail over.
 - Every HTTP outcome goes into `Memory` (the failure kind and its start; a failure lasts 10 minutes and is
@@ -914,6 +915,16 @@ HTTP. Rules:
 - Replies of credential-setting commands are scrubbed on the MQTT path (`cmdpolicy.ScrubReply`).
 - `WithTrace(ctx)` records which transport carried the calls; the audit details of console commands,
   settings writes and Make compliant carry it as `"via":"http"|"mqtt"` (`"http+mqtt"` when a job used both).
+- A write that can cut off a device reached over MQTT only (`cmdpolicy.CutOffName`: Topic, FullTopic, GroupTopic,
+  Prefix<n>, Mqtt host/port/user/password/client/fingerprint, `SetOption3 0`, `SetOption103`, `SetOption132`) is
+  published over MQTT only when the call carries `transport.WithCutOffConsent`, on the routed path and after a
+  failover alike; otherwise `ErrCutOff` ("not sent: this device is reached over MQTT only; changing X can cut
+  TasmoFleet off from it. Use the console, which asks to confirm"), nothing published, audit `via` "none". The
+  console sets the consent on the confirmation that showed the consequence. Bulk commands are refused for such
+  devices in the preview. Make compliant never sets it: `policy.Fixer.Apply` sends such lines last in chunks of their
+  own, a refusal is reported as `SkippedError` ("applied N; skipped Topic, MqttHost: reached over MQTT only (use the
+  console)"), the job succeeds for the rest and verifies only what was sent, and the preview lists them as skipped.
+  The settings page reports the refusal per field.
 - `DownloadConfig` and `RootPage` stay HTTP (the MQTT backup and identity come with their own work).
 
 ### 9.1 Principles

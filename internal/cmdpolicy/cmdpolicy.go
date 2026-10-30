@@ -534,39 +534,58 @@ type PrepareOpts struct {
 	MQTTOnly bool
 }
 
-// cutsMQTTOff reports whether p changes how the device talks MQTT: its topics, host, port, login
-// or client name, or switches MQTT off (SetOption3 0). Queries (no argument) do not.
+// cutsMQTTOff reports whether p changes how the device talks MQTT: its topics, prefixes, host, port,
+// login, client name or TLS fingerprint (Prefix<n>, MqttFingerprint, SetOption103 TLS, SetOption132
+// fingerprint check), or switches MQTT off (SetOption3 0). Queries (no argument) do not.
 func cutsMQTTOff(p parsed) bool {
 	if p.args == "" {
 		return false
 	}
 	switch p.base {
-	case "topic", "fulltopic", "grouptopic", "mqtthost", "mqttport", "mqttuser", "mqttpassword", "mqttclient":
+	case "topic", "fulltopic", "grouptopic", "mqtthost", "mqttport", "mqttuser", "mqttpassword", "mqttclient",
+		"prefix", "mqttfingerprint":
 		return true
 	case "setoption":
-		return p.has && p.idx == 3 && unclearOrOff(p.args)
+		switch {
+		case !p.has:
+			return false
+		case p.idx == 3:
+			return unclearOrOff(p.args)
+		case p.idx == 103 || p.idx == 132:
+			return true
+		}
 	}
 	return false
 }
 
-// WithMQTTOnly adds the consequence of cutting an MQTT-only device off to the verdict of cmd (a
-// Backlog is judged part by part). It never lowers the class and never removes a confirmation.
-func WithMQTTOnly(cmd string, v Verdict) Verdict {
+// CutOffName returns the name of the first command in cmd (a Backlog is judged part by part) that can
+// cut a device off that tasmofleet reaches over MQTT only, "" when none can.
+func CutOffName(cmd string) string {
 	p, bad := parse(cmd)
 	if bad != "" {
-		return v
+		return ""
 	}
-	cut := false
-	if p.base == "backlog" {
-		for _, part := range strings.Split(p.args, ";") {
-			if sub, bad := parse(stripBacklogPrefix(part)); bad == "" && cutsMQTTOff(sub) {
-				cut = true
-			}
+	if p.base != "backlog" {
+		if cutsMQTTOff(p) {
+			return p.name
 		}
-	} else {
-		cut = cutsMQTTOff(p)
+		return ""
 	}
-	if !cut || v.Class == ClassForbidden || strings.Contains(v.Confirm, whyMQTTOnly) {
+	for _, part := range strings.Split(p.args, ";") {
+		if sub, bad := parse(stripBacklogPrefix(part)); bad == "" && cutsMQTTOff(sub) {
+			return sub.name
+		}
+	}
+	return ""
+}
+
+// CutsMQTTOff reports whether cmd can cut an MQTT-only device off (see CutOffName).
+func CutsMQTTOff(cmd string) bool { return CutOffName(cmd) != "" }
+
+// WithMQTTOnly adds the consequence of cutting an MQTT-only device off to the verdict of cmd. It never
+// lowers the class and never removes a confirmation.
+func WithMQTTOnly(cmd string, v Verdict) Verdict {
+	if !CutsMQTTOff(cmd) || v.Class == ClassForbidden || strings.Contains(v.Confirm, whyMQTTOnly) {
 		return v
 	}
 	if v.Confirm != "" {

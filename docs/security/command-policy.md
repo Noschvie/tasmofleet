@@ -106,3 +106,10 @@ device writes it (`ON` and `OFF` read as `1` and `0`).
 - `FuzzPolicy` runs as a seed-corpus test in `make test`. Run it for a minute after
   any change to `cmdpolicy.go`: `go test ./internal/cmdpolicy -run xxx -fuzz FuzzPolicy -fuzztime 60s`.
 - Mutation gate: `tools/mutation-gate.sh ./internal/cmdpolicy 90` (also in `make mutation`).
+
+## Known gap: executors over HTTP
+
+Commands that run other commands (`Json`, `Publish`, `Publish2`, `Rule` with a rule text, `WebSend`, `WebQuery`,
+`Br`, `Script`, `UfsRun`) need no confirmation of their own for an admin over HTTP, so `Json {"Status":0}` or a
+`Rule` that does `Status 0` reaches a device that way. The classification is by command name; making the policy
+unwrap them is out of scope. Over MQTT the channel refuses all of them (docs/security/mqtt-transport.md, T1).

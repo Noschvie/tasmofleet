@@ -727,7 +727,7 @@ func TestCommandsThatRunOtherCommandsAreRefused(t *testing.T) {
 	for _, cmd := range []string{
 		`Json {"Status":0}`, `json {"Backlog":"Status 0"}`, `Publish cmnd/plug/Status 0`, `Publish2 cmnd/plug/Status 0`,
 		`Rule1 ON System#Boot DO Status 0 ENDON`, `Rule ON System#Boot DO Status 0 ENDON`, `RuleTimer1 5`,
-		`WebSend [192.0.2.1] Status 0`, `WebQuery http://192.0.2.1/cm?cmnd=Status%200 GET`, `Br print(1)`, `Script >D`,
+		`WebSend [192.0.2.1] Status 0`, `WebQuery http://192.0.2.1/cm?cmnd=Status%200 GET`, `Br print(1)`, `Script >D`, `UfsRun x.be`,
 		`Backlog Power ON; Json {"Status":0}`, `Backlog Publish cmnd/plug/Status 0`,
 	} {
 		b := &fakeBus{}

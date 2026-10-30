@@ -433,6 +433,8 @@ func trimInvalid(err error) string { return strings.TrimPrefix(err.Error(), ErrI
 
 func errorText(err error) string {
 	switch {
+	case errors.Is(err, transport.ErrCutOff):
+		return "not sent: the device is reached over MQTT only and this change can cut TasmoFleet off from it; use the console, which asks to confirm"
 	case errors.Is(err, tasmota.ErrUnknownCommand):
 		return "the firmware does not know this command"
 	case errors.Is(err, tasmota.ErrAuth):

@@ -5,12 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/settings"
 	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/nofuturekid/tasmofleet/internal/transport"
 )
 
 // Commander is the part of tasmota.Client the fixer sends with.
@@ -97,7 +100,19 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 		}
 	}
 	t := tasmota.TargetFor(d)
-	for _, chunk := range chunks(parsed) {
+	// Lines that can cut an MQTT-only device off go last and in chunks of their own: the router
+	// refuses to publish them without a person's confirmation, and Make compliant never has one. A
+	// device reached over HTTP takes them like any other line.
+	var plainLines, cutLines []fixLine
+	for _, l := range parsed {
+		if cmdpolicy.CutsMQTTOff(l.text) {
+			cutLines = append(cutLines, l)
+		} else {
+			plainLines = append(plainLines, l)
+		}
+	}
+	var skipped []fixLine
+	send := func(chunk []fixLine, cut bool) error {
 		texts := make([]string, len(chunk))
 		restart := false
 		for i, l := range chunk {
@@ -107,10 +122,33 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 		_, err := f.Client.Command(ctx, t, "Backlog "+strings.Join(texts, "; "))
 		switch {
 		case err == nil:
+		case cut && errors.Is(err, transport.ErrCutOff):
+			skipped = append(skipped, chunk...)
 		case restart && (errors.Is(err, tasmota.ErrUnreachable) || errors.Is(err, tasmota.ErrTimeout)):
 			// the device is restarting; the read-back tells whether it applied
 		default:
 			return fmt.Errorf("sending %s: %w", strings.Join(texts, "; "), err)
+		}
+		return nil
+	}
+	for _, chunk := range chunks(plainLines) {
+		if err := send(chunk, false); err != nil {
+			return err
+		}
+	}
+	for _, chunk := range pack(cutLines) {
+		if err := send(chunk, true); err != nil {
+			return err
+		}
+	}
+	if len(skipped) == len(parsed) {
+		return &SkippedError{Skipped: skipped}
+	}
+	if keep == "" && !saves && len(skipped) > 0 && !restartsAfterSkips(parsed, skipped) {
+		// The lines that would have restarted (and so saved) the device were left out: save the rest.
+		got, err := f.Reader.ReadKeys(ctx, d.ID, []string{"SaveData"})
+		if keep = got["SaveData"]; err != nil || keep == "" {
+			return errors.New("the settings are applied but the current SaveData value could not be read, so they were not written to flash")
 		}
 	}
 	if keep != "" {
@@ -118,8 +156,51 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 			return fmt.Errorf("the settings are applied but could not be written to flash: %w", err)
 		}
 	}
+	if len(skipped) > 0 {
+		return &SkippedError{Applied: len(parsed) - len(skipped), Skipped: skipped}
+	}
 	return nil
 }
+
+// restartsAfterSkips reports whether a line that was actually sent restarts the device.
+func restartsAfterSkips(parsed, skipped []fixLine) bool {
+	for _, l := range parsed {
+		if settings.RestartsDevice(l.key, l.value) && !slices.Contains(skipped, l) {
+			return true
+		}
+	}
+	return false
+}
+
+// SkippedError says Apply sent what it could and left out the lines that can cut off a device reached over
+// MQTT only. The lines it names were not sent and must not be verified. With Applied == 0 nothing was done.
+type SkippedError struct {
+	Applied int
+	Skipped []fixLine
+}
+
+func (e *SkippedError) Error() string {
+	names := make([]string, len(e.Skipped))
+	for i, l := range e.Skipped {
+		names[i] = l.key
+	}
+	if e.Applied == 0 {
+		return fmt.Sprintf("nothing applied; skipped %s: reached over MQTT only (use the console)", strings.Join(names, ", "))
+	}
+	return fmt.Sprintf("applied %d; skipped %s: reached over MQTT only (use the console)", e.Applied, strings.Join(names, ", "))
+}
+
+// SkippedLines are the command lines that were left out.
+func (e *SkippedError) SkippedLines() []string {
+	out := make([]string, len(e.Skipped))
+	for i, l := range e.Skipped {
+		out[i] = l.text
+	}
+	return out
+}
+
+// AppliedAny reports whether anything was sent (a skipped-only result is a failure).
+func (e *SkippedError) AppliedAny() bool { return e.Applied > 0 }
 
 // chunks splits the lines into Backlog-sized runs, keeping their order. The
 // restarting lines (from the first one on) are packed into runs of their own,

@@ -546,7 +546,8 @@ func TestFileTransferCommandsAreNeverSent(t *testing.T) {
 // console asks once and says so. Queries and unrelated commands stay as they were.
 func TestMQTTOnlyNamesTheCutOffConsequence(t *testing.T) {
 	cut := []string{"Topic other", "FullTopic %prefix%/x/%topic%/", "GroupTopic g", "MqttHost 10.0.0.1", "MqttPort 8883",
-		"MqttUser u", "MqttPassword p", "MqttClient c", "SetOption3 0", "SO3 off", "Backlog Power ON; Topic other"}
+		"MqttUser u", "MqttPassword p", "MqttClient c", "SetOption3 0", "SO3 off", "Backlog Power ON; Topic other",
+		"Prefix1 x", "Prefix3 x", "MqttFingerprint aa", "SetOption103 1", "SetOption132 1"}
 	for _, cmd := range cut {
 		_, v, err := Prepare(cmd, model.RoleAdmin, PrepareOpts{MQTTOnly: true})
 		if err != nil || !strings.Contains(v.Confirm, "reached over MQTT only") {
@@ -557,7 +558,7 @@ func TestMQTTOnlyNamesTheCutOffConsequence(t *testing.T) {
 			t.Errorf("%q: a device reached over HTTP must not get the MQTT-only text: %q", cmd, v.Confirm)
 		}
 	}
-	for _, cmd := range []string{"Topic", "FullTopic", "MqttHost", "SetOption3 1", "SetOption3", "SetOption4 0", "TelePeriod 60", "Power1 TOGGLE", "Status 2"} {
+	for _, cmd := range []string{"Topic", "FullTopic", "MqttHost", "Prefix1", "SetOption103", "SetOption3 1", "SetOption3", "SetOption4 0", "TelePeriod 60", "Power1 TOGGLE", "Status 2"} {
 		if _, v, _ := Prepare(cmd, model.RoleAdmin, PrepareOpts{MQTTOnly: true}); strings.Contains(v.Confirm, "reached over MQTT only") {
 			t.Errorf("%q does not cut the device off, got %q", cmd, v.Confirm)
 		}
@@ -673,6 +674,17 @@ func TestOperatorMaySwitchEveryRelay(t *testing.T) {
 	for _, cmd := range []string{"Power", "Power1", "Power8"} {
 		if _, err := Authorize(cmd, model.RoleOperator); err != nil {
 			t.Errorf("operator may not query %q: %v", cmd, err)
+		}
+	}
+}
+
+// Why: the router refuses a write that can cut an MQTT-only device off unless a person confirmed it;
+// it asks CutOffName, so the name it reports and the Backlog handling must be exact.
+func TestCutOffName(t *testing.T) {
+	for cmd, want := range map[string]string{"Topic x": "Topic", "Backlog Power ON; MqttHost h": "MqttHost", "Backlog backlogTopic x": "Topic",
+		"SetOption3 0": "SetOption3", "Prefix2 x": "Prefix2", "Power1 ON": "", "Topic": "", "Backlog Power ON": "", "Status 2": "", "\x00": ""} {
+		if got := CutOffName(cmd); got != want {
+			t.Errorf("CutOffName(%q) = %q, want %q", cmd, got, want)
 		}
 	}
 }

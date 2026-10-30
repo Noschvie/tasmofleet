@@ -26,12 +26,12 @@ var fileCommands = map[string]bool{"filedownload": true, "fileupload": true, "up
 // executors are commands that run other commands, or publish messages that do: Json (CmndJson ->
 // Backlog0, so {"Status":0} is a Status 0), Publish and Publish2 (to the device's own cmnd topic),
 // Rule and RuleTimer (DO Status 0), WebSend and WebQuery (to any host, a device included), Br
-// (Berry) and Script. Status 0 is never sent, so a command that can send it on our behalf is
+// (Berry), Script and UfsRun (runs a script file). Status 0 is never sent, so a command that can send it on our behalf is
 // never published either, alone or inside a Backlog. The console and bulk keep them for devices
 // reached over HTTP (cmdpolicy asks an admin to confirm there); over MQTT there is no such path.
 var executors = map[string]bool{
 	"json": true, "publish": true, "publish2": true, "rule": true, "ruletimer": true,
-	"websend": true, "webquery": true, "br": true, "script": true,
+	"websend": true, "webquery": true, "br": true, "script": true, "ufsrun": true,
 }
 
 // ruleSwitch reports a Rule command that only reads or switches a rule ("Rule1", "Rule1 1",

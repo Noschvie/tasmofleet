@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -29,6 +30,24 @@ type PolicyApplier interface {
 	Apply(ctx context.Context, d model.Device, lines []string) error
 	// Verify reads the settings back and fails when one differs from the line.
 	Verify(ctx context.Context, d model.Device, lines []string) error
+}
+
+// skippedApply is what Apply returns when it left out lines on purpose (policy.SkippedError).
+type skippedApply interface {
+	error
+	SkippedLines() []string
+	AppliedAny() bool
+}
+
+// withoutLines is lines minus the skipped ones.
+func withoutLines(lines, skipped []string) []string {
+	out := make([]string, 0, len(lines))
+	for _, l := range lines {
+		if !slices.Contains(skipped, l) {
+			out = append(out, l)
+		}
+	}
+	return out
 }
 
 // PolicyRequest is one device of SubmitPolicy.
@@ -180,13 +199,14 @@ func (e *Engine) workPolicy(ctx context.Context, j model.Job) {
 	lines := strings.Split(j.Commands, "\n")
 	d, err := e.devices.GetDevice(ctx, j.DeviceID)
 	if err != nil {
-		e.finishPolicy(ctx, j, lines, "inventory: "+err.Error(), nil)
+		e.finishPolicy(ctx, j, lines, "inventory: "+err.Error(), nil, "")
 		return
 	}
 	if e.opts.Policy == nil {
-		e.finishPolicy(ctx, j, lines, "this server cannot apply policy changes", nil)
+		e.finishPolicy(ctx, j, lines, "this server cannot apply policy changes", nil, "")
 		return
 	}
+	note := ""                      // what Apply left out on purpose
 	var trace *transport.Trace      // which transport carried the writes, for the audit; nil until something is sent
 	if j.State != model.JobVerify { // a job interrupted while verifying only needs the read-back
 		var ok bool
@@ -200,8 +220,16 @@ func (e *Engine) workPolicy(ctx context.Context, j model.Job) {
 		if ctx.Err() != nil {
 			return // shutting down: the job resumes from its stored state
 		}
+		var sk skippedApply
+		if errors.As(err, &sk) && sk.AppliedAny() {
+			// Lines that could cut off a device reached over MQTT only were left out on purpose: the job
+			// succeeds for the rest, says so, and verifies only what was sent.
+			note = err.Error()
+			lines = withoutLines(lines, sk.SkippedLines())
+			err = nil
+		}
 		if err != nil {
-			e.finishPolicy(ctx, j, lines, err.Error(), trace)
+			e.finishPolicy(ctx, j, lines, err.Error(), trace, "")
 			return
 		}
 	}
@@ -216,26 +244,29 @@ func (e *Engine) workPolicy(ctx context.Context, j model.Job) {
 		return
 	}
 	if err != nil {
-		e.finishPolicy(ctx, j, lines, err.Error(), trace)
+		e.finishPolicy(ctx, j, lines, err.Error(), trace, note)
 		return
 	}
-	e.finishPolicy(ctx, j, lines, "", trace)
+	e.finishPolicy(ctx, j, lines, "", trace, note)
 }
 
 // finishPolicy ends the job as succeeded (failure == "") or failed, and audits
 // the change.
-func (e *Engine) finishPolicy(ctx context.Context, j model.Job, lines []string, failure string, trace *transport.Trace) {
-	to, event := model.JobSucceeded, "done"
+func (e *Engine) finishPolicy(ctx context.Context, j model.Job, lines []string, failure string, trace *transport.Trace, note string) {
+	to, event, detail := model.JobSucceeded, "done", note
 	if failure != "" {
-		to, event = model.JobFailed, "failed"
+		to, event, detail = model.JobFailed, "failed", failure
 	}
-	if _, ok := e.policyMove(ctx, j, to, event, failure); !ok {
+	if _, ok := e.policyMove(ctx, j, to, event, detail); !ok {
 		return
 	}
 	if e.audit != nil {
 		fields := map[string]any{"transaction": j.BatchID, "job": j.ID, "commands": redactedLines(lines)}
 		if trace != nil {
 			fields["via"] = trace.Via()
+		}
+		if note != "" {
+			fields["note"] = note
 		}
 		detail, _ := json.Marshal(fields) // a plain map always encodes
 		result := "ok"

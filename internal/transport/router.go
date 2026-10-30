@@ -21,10 +21,9 @@ import (
 // DefaultFailFor is how long a failed HTTP call keeps the device's HTTP state "failing" (D4).
 const DefaultFailFor = 10 * time.Minute
 
-// ErrJobCommand is returned for a command that starts a firmware upgrade or a configuration restore
-// on a path nobody chose: those commands go over MQTT only when the job that runs them pinned the
-// path (WithPath). Nothing was sent.
-var ErrJobCommand = errors.New("transport: this command starts an update or a restore, which only a job sends over MQTT")
+// ErrCutOff is returned for a write over MQTT that can cut the device off (a new topic, broker or login)
+// when no person confirmed it (WithCutOffConsent). Nothing was published.
+var ErrCutOff = errors.New("not sent")
 
 // DeviceGetter reads one inventory device.
 type DeviceGetter interface {
@@ -119,6 +118,7 @@ const (
 	keyPath ctxKey = iota
 	keyTrace
 	keyLoose
+	keyConsent
 )
 
 // WithPath pins the transport of every call made with ctx (D5): a job that chose its path (OTA,
@@ -140,10 +140,21 @@ func PathFrom(ctx context.Context) (Path, bool) {
 // name (Template, Gpios) is accepted as the answer (mqttcmd DoLoose).
 func WithConsole(ctx context.Context) context.Context { return context.WithValue(ctx, keyLoose, true) }
 
+// WithCutOffConsent marks calls a person confirmed after being told that the device is reached over MQTT
+// only and that the change can cut TasmoFleet off from it (the console's confirmation). Without it the
+// router publishes no such write over MQTT. Make compliant and bulk commands never carry it.
+func WithCutOffConsent(ctx context.Context) context.Context {
+	return context.WithValue(ctx, keyConsent, true)
+}
+
+// HasCutOffConsent reports whether ctx carries WithCutOffConsent.
+func HasCutOffConsent(ctx context.Context) bool { c, _ := ctx.Value(keyConsent).(bool); return c }
+
 // Trace records which transports carried the calls made under its context, for the audit "via".
 type Trace struct {
 	mu         sync.Mutex
 	http, mqtt bool
+	refused    bool // a call was stopped before anything was sent
 }
 
 // WithTrace returns a context whose calls are recorded in the returned Trace.
@@ -158,15 +169,19 @@ func (t *Trace) note(p Path) {
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if p == MQTT {
+	switch p {
+	case MQTT:
 		t.mqtt = true
-	} else {
+	case None:
+		t.refused = true
+	case HTTP, DownloadHTTP, DownloadMQTT, PushHTTP, PushSafeboot, PushMQTT:
 		t.http = true
 	}
 }
 
-// Via is the audit value of "via": "http", "mqtt", or "http+mqtt" when a job used both. Nothing
-// recorded reads as "http", the default path.
+// Via is the audit value of "via": "http", "mqtt", or "http+mqtt" when a job used both; "none" when
+// every call was stopped before anything was sent. Nothing recorded at all (no router involved) reads
+// as "http", the default path.
 func (t *Trace) Via() string {
 	if t == nil {
 		return "http"
@@ -178,6 +193,10 @@ func (t *Trace) Via() string {
 		return "http+mqtt"
 	case t.mqtt:
 		return "mqtt"
+	case t.http:
+		return "http"
+	case t.refused:
+		return "none"
 	}
 	return "http"
 }
@@ -259,9 +278,16 @@ func (r *Router) Command(ctx context.Context, t tasmota.Target, cmnd string) (js
 // refuses the HTTP API. A timeout, an unparsable answer or a connection dropped after the request
 // went out prove nothing; the command may have run and is never sent a second time.
 func (r *Router) httpFirst(ctx context.Context, t tasmota.Target, cmnd string, cls cmdClass) (json.RawMessage, error) {
+	kind, _, had := r.o.Memory.HTTPFailure(t.DeviceID())
 	raw, err := r.httpCommand(ctx, t, cmnd)
 	if err == nil || !tasmota.NotSent(err) || cls.job || r.mqttDoer() == nil {
 		return raw, err
+	}
+	// SetOption128 0 makes the handler send nothing, but a write that got that answer on its first try is
+	// not proven unsent (the same silence can be a command that ran): only reads fail over, or a device
+	// the memory already knew to refuse the API.
+	if errors.Is(err, tasmota.ErrHTTPAPIRefused) && cls.write && (!had || kind != HTTPFailAPIRefused) {
+		return nil, err
 	}
 	d, f, p, derr := r.decide(ctx, t.DeviceID())
 	if derr != nil {
@@ -313,7 +339,9 @@ func (r *Router) decide(ctx context.Context, id model.DeviceID) (model.Device, F
 
 func (r *Router) httpCommand(ctx context.Context, t tasmota.Target, cmnd string) (json.RawMessage, error) {
 	raw, err := r.http.Command(ctx, t, cmnd)
-	if !tasmota.NotSent(err) {
+	if tasmota.NotSent(err) {
+		noteTrace(ctx, None)
+	} else {
 		noteTrace(ctx, HTTP)
 	}
 	return raw, err
@@ -346,6 +374,14 @@ func (r *Router) sendMQTT(ctx context.Context, d model.Device, cmnd string, cls 
 	m := r.mqttDoer()
 	if m == nil {
 		return nil, fmt.Errorf("%w: MQTT is not connected", tasmota.ErrUnreachable)
+	}
+	if cls.write {
+		if name := cmdpolicy.CutOffName(cmnd); name != "" {
+			if !HasCutOffConsent(ctx) {
+				noteTrace(ctx, None)
+				return nil, fmt.Errorf("%w: this device is reached over MQTT only; changing %s can cut TasmoFleet off from it. Use the console, which asks to confirm", ErrCutOff, name)
+			}
+		}
 	}
 	now, err := r.o.Devices.GetDevice(ctx, d.ID)
 	if err != nil {
@@ -421,14 +457,4 @@ func (r *Router) SwitchBoot(ctx context.Context, t tasmota.Target, to tasmota.Bo
 		return "", fmt.Errorf("%w: the HTTP client cannot switch the boot partition", tasmota.ErrNotImplemented)
 	}
 	return s.SwitchBoot(ctx, t, to)
-}
-
-// PathsFor is Choose for a device, from one snapshot: the console and the settings pages ask it
-// how a command would travel.
-func (r *Router) PathsFor(ctx context.Context, id model.DeviceID) (Paths, error) {
-	if r.o.Facts == nil {
-		return Paths{}, errors.New("transport: no facts source")
-	}
-	_, _, p, err := r.decide(ctx, id)
-	return p, err
 }

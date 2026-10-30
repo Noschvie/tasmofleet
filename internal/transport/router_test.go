@@ -409,3 +409,82 @@ func TestMQTTBlockerMatchesChoose(t *testing.T) {
 		t.Error("an unread group topic blocks writes only")
 	}
 }
+
+func TestACutOffWriteNeedsAConfirmationOverMQTT(t *testing.T) {
+	// Why (D13): a new topic, host or login published to a device that only MQTT reaches can cut it off
+	// for good. The console's confirmation carries the consent; nothing else does, and a refusal
+	// publishes nothing, over the routed path and after a failover alike.
+	for _, name := range []string{"routed", "failover"} {
+		t.Run(name, func(t *testing.T) {
+			g := newRig(t)
+			if name == "routed" {
+				g.mem.Fail(7, HTTPFailUnreachable)
+			} else {
+				g.http.err = tasmota.ErrForbiddenAddr
+			}
+			for _, c := range []string{"Topic other", "Backlog Power ON; MqttHost 10.0.0.9", "SetOption3 0", "Prefix1 x"} {
+				ctx, tr := WithTrace(t.Context())
+				_, err := g.r.Command(ctx, g.target(), c)
+				if !errors.Is(err, ErrCutOff) || g.mq.n() != 0 || tr.Via() != "none" {
+					t.Fatalf("%q: err=%v mqtt=%d via=%s, want a refusal that published nothing", c, err, g.mq.n(), tr.Via())
+				}
+				if !strings.Contains(err.Error(), "not sent: this device is reached over MQTT only") || strings.Contains(err.Error(), "other") {
+					t.Errorf("%q: text = %v", c, err)
+				}
+			}
+			if _, err := g.r.Command(WithCutOffConsent(t.Context()), g.target(), "Topic other"); err != nil || g.mq.n() != 1 {
+				t.Fatalf("with the consent: err=%v mqtt=%d", err, g.mq.n())
+			}
+			// a plain write and a query need no consent
+			if _, err := g.r.Command(t.Context(), g.target(), "Topic"); err != nil {
+				t.Fatalf("query: %v", err)
+			}
+		})
+	}
+}
+
+func TestOverHTTPACutOffWriteIsSentAsAlways(t *testing.T) {
+	// Why: the consent only concerns the MQTT path; a device HTTP reaches takes the change.
+	g := newRig(t)
+	if _, err := g.r.Command(t.Context(), g.target(), "Topic other"); err != nil || g.http.n() != 1 || g.mq.n() != 0 {
+		t.Fatalf("err=%v http=%d mqtt=%d", err, g.http.n(), g.mq.n())
+	}
+}
+
+func TestAPIRefusedFailsOverOnlyForReadsOrAKnownRefusal(t *testing.T) {
+	// Why (D4 amended): a device with SetOption128 0 sends nothing for a /cm request with the wrong
+	// Referer, but the same silence can follow a command that ran. A write that gets that answer on its
+	// first try is therefore not repeated over MQTT; reads are, and so is any call to a device the memory
+	// already knows to refuse the API.
+	g := newRig(t)
+	g.http.err = tasmota.ErrHTTPAPIRefused
+	if _, err := g.r.Command(t.Context(), g.target(), "Power1 TOGGLE"); !errors.Is(err, tasmota.ErrHTTPAPIRefused) || g.mq.n() != 0 {
+		t.Fatalf("first-try write: err=%v mqtt=%d", err, g.mq.n())
+	}
+	g = newRig(t)
+	g.http.err = tasmota.ErrHTTPAPIRefused
+	if _, err := g.r.Command(t.Context(), g.target(), "Status 2"); err != nil || g.mq.n() != 1 {
+		t.Fatalf("read: err=%v mqtt=%d", err, g.mq.n())
+	}
+	g = newRig(t)
+	g.mem.Fail(7, HTTPFailAPIRefused)
+	g.http.err = tasmota.ErrHTTPAPIRefused
+	// memory says failing, so Choose already routes this write to MQTT up front
+	if _, err := g.r.Command(t.Context(), g.target(), "Power1 TOGGLE"); err != nil || g.mq.n() != 1 || g.http.n() != 0 {
+		t.Fatalf("known refusal: err=%v mqtt=%d http=%d", err, g.mq.n(), g.http.n())
+	}
+}
+
+func TestTraceSaysNoneWhenNothingWasSent(t *testing.T) {
+	g := newRig(t)
+	g.http.err = tasmota.ErrForbiddenAddr
+	g.mq.down = true // no MQTT either
+	ctx, tr := WithTrace(t.Context())
+	_, _ = g.r.Command(ctx, g.target(), "Power1 ON")
+	if tr.Via() != "none" {
+		t.Fatalf("via = %s", tr.Via())
+	}
+	if (*Trace)(nil).Via() != "http" {
+		t.Error("no trace reads as http")
+	}
+}

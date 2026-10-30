@@ -31,9 +31,26 @@ func (a *runtime) setupTransport() {
 
 var _ transport.DeviceFacts = (*TransportFacts)(nil)
 
-// onlyOverMQTT reports whether commands to the device travel over MQTT because HTTP fails: a change
-// of its MQTT identity can then cut it off for good (cmdpolicy.WithMQTTOnly).
-func (a *runtime) onlyOverMQTT(ctx context.Context, id model.DeviceID) bool {
-	p, err := a.svc.Router.PathsFor(ctx, id)
-	return err == nil && p.Commands == transport.MQTT
+// onlyOverMQTT reports whether commands to any of the devices travel over MQTT because HTTP fails: a
+// change of its MQTT identity can then cut it off for good (cmdpolicy.WithMQTTOnly). The inventory is
+// listed once for all of them.
+func (a *runtime) onlyOverMQTT(ctx context.Context, ids ...model.DeviceID) bool {
+	all, err := a.facts.Devices.ListDevices(ctx)
+	if err != nil {
+		return false
+	}
+	want := make(map[model.DeviceID]bool, len(ids))
+	for _, id := range ids {
+		want[id] = true
+	}
+	for _, d := range all {
+		if !want[d.ID] {
+			continue
+		}
+		f, err := a.facts.factsFor(ctx, d, all)
+		if err == nil && transport.Choose(f).Commands == transport.MQTT {
+			return true
+		}
+	}
+	return false
 }

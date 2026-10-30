@@ -81,11 +81,16 @@ func (s *TransportFacts) HTTPState(id model.DeviceID) transport.HTTPState {
 // FactsFor is Facts for a device snapshot the caller holds: the router decides and sends from
 // the same snapshot.
 func (s *TransportFacts) FactsFor(ctx context.Context, d model.Device) (transport.Facts, error) {
-	id := d.ID
 	all, err := s.Devices.ListDevices(ctx)
 	if err != nil {
 		return transport.Facts{}, fmt.Errorf("transport facts: %w", err)
 	}
+	return s.factsFor(ctx, d, all)
+}
+
+// factsFor is FactsFor with the inventory the caller already listed.
+func (s *TransportFacts) factsFor(_ context.Context, d model.Device, all []model.Device) (transport.Facts, error) {
+	id := d.ID
 	h := s.Health.Get(id)
 	now := s.Now()
 
