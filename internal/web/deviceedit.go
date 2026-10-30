@@ -218,7 +218,7 @@ func (h *handler) deviceUpdate(w http.ResponseWriter, r *http.Request) {
 		var msg string
 		mq, form.MQTTMode, msg = mqttFormChange(r, old)
 		form.MQTTRetype = r.PostFormValue(fieldMQTTPassword) != "" // never echoed: a re-render drops it
-		if err == nil && msg != "" { // nothing is saved: the other fields stay as typed
+		if err == nil && msg != "" {                               // nothing is saved: the other fields stay as typed
 			form.ErrField, form.Error = fieldMQTTPassword, msg
 			h.renderForm(w, r, http.StatusUnprocessableEntity, form)
 			return
