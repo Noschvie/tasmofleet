@@ -39,7 +39,7 @@ always upgrade automatically.
 ### Added
 
 - `fwselect.MQTTUploadFits`: a fixed rule, no try-and-see, for whether an image fits a firmware upload over MQTT (FileUpload Type 1), from Status 4 Free. A known safeboot layout (one app partition) is refused. Nothing uses it yet (Part of #262)
-- Config backups over MQTT (`FileDownload`) for devices on our broker whose HTTP does not answer, also in scheduled and bulk backups; the device's MQTT password is stored per device on the edit form (not set, the same as TasmoFleet's broker password, or its own; write-only, an empty field keeps it, changing it or ticking Retry clears a "device refused it" mark). The bytes equal `/dl`, size and MD5 are checked, a wrong password (`Error 1`) is remembered and blocks further MQTT transfers until it is changed, and a backup that MQTT cannot carry says why (#79, #257, thanks @Noschvie)
+- Config backups over MQTT (`FileDownload`) for devices on our broker whose HTTP does not answer, also in scheduled and bulk backups; the device's MQTT password is stored per device on the edit form (not set, the same as TasmoFleet's broker password, or its own; write-only, an empty field keeps it, changing it or ticking Retry clears a "device refused it" mark). The bytes equal `/dl`, size and MD5 are checked, a wrong password (`Error 1`) is remembered and blocks further MQTT transfers until it is changed, and a backup that MQTT cannot carry says why (#257) (#45, thanks @Noschvie)
 
 ### Fixed
 

@@ -33,6 +33,27 @@ const defaultGroupTopic = "tasmotas"
 // ErrRefused marks a command the channel will not publish. Nothing was sent.
 var ErrRefused = errors.New("mqttcmd: command refused")
 
+// Causes of a refusal that a person can fix. Each wraps with ErrRefused; Reason turns them into a
+// sentence written here, so callers never have to quote an error text.
+var (
+	ErrFirmwarePending = errors.New("a firmware upload to this device has an unknown outcome; wait for the device to restart")
+	ErrPasswordChars   = errors.New("the MQTT password contains a character that cannot be sent in a file transfer command; choose another password")
+	ErrBufferFull      = errors.New("the command does not fit the device's MQTT buffer")
+	ErrNoPassword      = errors.New("no MQTT password is set for this device")
+)
+
+// Reason is the sentence for a refusal (nothing was sent), or a generic one when the cause is not one
+// of the named ones. It is never built from err.Error(): refusals of file transfers sit next to the
+// device's password.
+func Reason(err error) string {
+	for _, c := range []error{ErrFirmwarePending, ErrPasswordChars, ErrBufferFull, ErrNoPassword} {
+		if errors.Is(err, c) {
+			return c.Error()
+		}
+	}
+	return "the MQTT channel refused the transfer; nothing was sent"
+}
+
 // Doer is what consumers (devicecmd, identity, later the transport router) depend on.
 type Doer interface {
 	// Do sends cmd to d over MQTT and returns the matching reply.

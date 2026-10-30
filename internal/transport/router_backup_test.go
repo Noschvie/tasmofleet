@@ -3,6 +3,7 @@ package transport
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -179,5 +180,54 @@ func TestHTTPThatNeverSentFailsOverToAMQTTBackup(t *testing.T) {
 		if len(g.dl.pws) != want {
 			t.Errorf("%v: %d MQTT downloads, want %d", err, len(g.dl.pws), want)
 		}
+	}
+}
+
+func TestRefusedByTheChannelIsExplainedInItsOwnWords(t *testing.T) {
+	// Why (review M1): a refusal before anything was sent (a pending firmware upload, an unsendable password
+	// character) reaches the person as a sentence written by mqttcmd, never as the error text.
+	g := newDLRig(t)
+	g.dl.derr = fmt.Errorf("%w: %w: and a password-looking detail", mqttcmd.ErrRefused, mqttcmd.ErrFirmwarePending)
+	_, err := g.r.DownloadConfig(t.Context(), g.target())
+	var blocked *BackupBlockedError
+	if !errors.As(err, &blocked) || blocked.Attempted || !strings.Contains(blocked.UserReason(), "wait for the device to restart") {
+		t.Fatalf("%v", err)
+	}
+	if strings.Contains(blocked.UserReason(), "password-looking") || len(g.marker.ids) != 0 {
+		t.Fatalf("reason %q, marked %v", blocked.UserReason(), g.marker.ids)
+	}
+}
+
+func TestPasswordRefusedAfterTheSnapshotIsNotPublished(t *testing.T) {
+	// Why (review L1): the refused mark is checked on the fresh read right before the send, not only on
+	// the snapshot the facts were built from.
+	g := newDLRig(t)
+	g.r.o.Facts = markAfterFacts{inner: g.f, devs: g.devs}
+	if _, err := g.r.DownloadConfig(t.Context(), g.target()); err == nil || len(g.dl.pws) != 0 {
+		t.Fatalf("%v, downloads %v", err, g.dl.pws)
+	}
+}
+
+type markAfterFacts struct {
+	inner *facts
+	devs  *fakeDevices
+}
+
+func (c markAfterFacts) HTTPState(id model.DeviceID) HTTPState { return c.inner.HTTPState(id) }
+func (c markAfterFacts) FactsFor(ctx context.Context, d model.Device) (Facts, error) {
+	f, err := c.inner.FactsFor(ctx, d)
+	c.devs.mu.Lock()
+	c.devs.d.MQTTPasswordBadAt = time.Now() // another backup's Error 1 lands between the facts and the send
+	c.devs.mu.Unlock()
+	return f, err
+}
+
+func TestATraceInsideATraceReportsToBoth(t *testing.T) {
+	// Why: the backup service traces its own run for the audit while a bulk job traces the whole step.
+	outer, otr := WithTrace(t.Context())
+	inner, itr := WithTrace(outer)
+	noteTrace(inner, MQTT)
+	if otr.Via() != "mqtt" || itr.Via() != "mqtt" {
+		t.Fatalf("outer %s inner %s", otr.Via(), itr.Via())
 	}
 }

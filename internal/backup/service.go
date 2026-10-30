@@ -22,6 +22,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/store"
 	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/nofuturekid/tasmofleet/internal/transport"
 )
 
 // Notes set on stored backups.
@@ -191,8 +192,9 @@ func (m *Manager) finishBackup(ctx context.Context, actor string, owner, dev mod
 	if run.Label != "" {
 		note = strings.TrimSuffix(strings.TrimSpace(run.Label+"; "+note), ";")
 	}
+	ctx, tr := transport.WithTrace(ctx) // which transport carried the dump, for the audit entry
 	out, version, err := m.backup(ctx, owner, dev, note, run)
-	detail := map[string]any{"files": len(out), "firmware": version, "trigger": run.Trigger}
+	detail := map[string]any{"files": len(out), "firmware": version, "trigger": run.Trigger, "via": tr.Via()}
 	if run.Keep {
 		detail["kept"] = true
 	}

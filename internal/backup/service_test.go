@@ -21,6 +21,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/store"
 	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/nofuturekid/tasmofleet/internal/transport"
 )
 
 const fixtureDir = "../../testdata/fixtures/devices/kitchen-spotlight"
@@ -678,4 +679,18 @@ func (s *memBackups) BackupDirOwners(_ context.Context, dir string) ([]model.Dev
 		}
 	}
 	return out, nil
+}
+
+// Why (#257): the audit entry of a backup says which transport carried the dump ("via"), like the
+// audit of a command does; a backup through a router over HTTP reads "http".
+func TestBackupAuditSaysWhichTransportCarriedTheDump(t *testing.T) {
+	e := newEnv(t, func(o *Options) {
+		o.Client = transport.NewRouter(transport.Options{HTTP: &fakeDevice{t: t, dmp: bytes.Repeat([]byte{1}, 64)}, Devices: devs{model.Device{ID: 7, Name: "kitchen", Address: "172.31.13.28"}}})
+	})
+	if _, err := e.m.Backup(context.Background(), "alice", 7); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.audit.ev) != 1 || !strings.Contains(e.audit.ev[0].Detail, `"via":"http"`) {
+		t.Fatalf("audit: %+v", e.audit.ev)
+	}
 }

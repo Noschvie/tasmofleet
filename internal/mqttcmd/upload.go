@@ -141,7 +141,7 @@ func (c *Channel) firmwarePendingLocked(topic string) error {
 		delete(c.fwPending, topic)
 		return nil
 	}
-	return fmt.Errorf("%w: a firmware upload to this device has an unknown outcome; wait for the device to restart", ErrRefused)
+	return fmt.Errorf("%w: %w", ErrRefused, ErrFirmwarePending)
 }
 
 func checkUpload(d model.Device, typ int, name string, size int64, r io.Reader) error {

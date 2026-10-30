@@ -355,7 +355,7 @@ func payloadRoom(cmndTopic string) int { return cmndBufferSize - 5 - len(cmndTop
 // device drops its connection without a DISCONNECT.
 func (c *Channel) sendFileCmd(ctx context.Context, topic, cmd, payload string) error {
 	if room := payloadRoom(c.bus.CommandTopic(topic, cmd)); len(payload) > room {
-		return fmt.Errorf("%w: the command does not fit the device's MQTT buffer", ErrRefused)
+		return fmt.Errorf("%w: %w", ErrRefused, ErrBufferFull)
 	}
 	if err := ctx.Err(); err != nil { // a cancelled caller must not publish the password
 		return fmt.Errorf("mqtt: %s not sent: %w", cmd, err)

@@ -136,22 +136,20 @@ func TestSimBacklogAndSaveDataOverMQTT(t *testing.T) {
 	}
 }
 
-// Why (#257 acceptance): a device HTTP cannot reach is backed up over MQTT, and the bytes are what /dl
-// serves (checked on the same device by pinning HTTP before the fault is injected is impossible, so the
-// simulator's dump is compared with the one it reports through its controller).
-func TestSimBackupOverMQTTEqualsTheDump(t *testing.T) {
-	g := newSimRig(t, simulator.Fault{Kind: simulator.FaultHTTPUnreachable})
-	g.mem.Fail(7, HTTPFailUnreachable)
+// Why (#257 acceptance, backups from both paths must be interchangeable): the dump over MQTT is
+// byte for byte what /dl serves. The device here has a working HTTP port, so the same bytes are read
+// both ways (HTTP pinned, then MQTT pinned).
+func TestSimBackupOverMQTTEqualsDl(t *testing.T) {
+	g := newSimRig(t)
 	g.devs.d.MQTTPasswordMode, g.devs.d.MQTTPassword = model.MQTTPasswordOwn, simMQTTPassword
-	dump := make([]byte, 4096)
-	for i := range dump {
-		dump[i] = byte(i * 13)
+	viaHTTP, err := g.r.DownloadConfig(WithPath(t.Context(), HTTP), g.target())
+	if err != nil || len(viaHTTP) == 0 {
+		t.Fatalf("/dl: %d bytes, %v", len(viaHTTP), err)
 	}
-	g.ctl.SetConfigDump(dump)
-	ctx, tr := WithTrace(t.Context())
-	got, err := g.r.DownloadConfig(ctx, g.target())
-	if err != nil || string(got) != string(dump) || tr.Via() != "mqtt" {
-		t.Fatalf("%d bytes, %v, via %s", len(got), err, tr.Via())
+	ctx, tr := WithTrace(WithPath(t.Context(), MQTT))
+	viaMQTT, err := g.r.DownloadConfig(ctx, g.target())
+	if err != nil || string(viaMQTT) != string(viaHTTP) || tr.Via() != "mqtt" {
+		t.Fatalf("MQTT: %d bytes vs %d, %v, via %s", len(viaMQTT), len(viaHTTP), err, tr.Via())
 	}
 }
 

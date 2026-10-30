@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
 	"github.com/nofuturekid/tasmofleet/internal/model"
@@ -59,8 +60,14 @@ type BackupBlockedError struct {
 func (e *BackupBlockedError) Error() string { return e.Err.Error() + " (" + e.Reason + ")" }
 func (e *BackupBlockedError) Unwrap() error { return e.Err }
 
-// UserReason is the sentence for the browser and the backup history.
-func (e *BackupBlockedError) UserReason() string { return e.Reason }
+// UserReason is the sentence for the browser and the backup history, starting with a capital.
+func (e *BackupBlockedError) UserReason() string {
+	r := []rune(e.Reason)
+	if len(r) > 0 {
+		r[0] = unicode.ToUpper(r[0])
+	}
+	return string(r)
+}
 
 // MQTTDownloader is what the command channel offers for FileDownload (mqttcmd.Channel.Download).
 // The channel is asserted to it, so a fake MQTTDoer without it simply has no backup over MQTT.
@@ -185,6 +192,7 @@ func HasCutOffConsent(ctx context.Context) bool { c, _ := ctx.Value(keyConsent).
 
 // Trace records which transports carried the calls made under its context, for the audit "via".
 type Trace struct {
+	parent     *Trace // a trace opened inside another one reports to it too
 	mu         sync.Mutex
 	http, mqtt bool
 	refused    bool // a call was stopped before anything was sent
@@ -192,7 +200,8 @@ type Trace struct {
 
 // WithTrace returns a context whose calls are recorded in the returned Trace.
 func WithTrace(ctx context.Context) (context.Context, *Trace) {
-	t := &Trace{}
+	outer, _ := ctx.Value(keyTrace).(*Trace)
+	t := &Trace{parent: outer}
 	return context.WithValue(ctx, keyTrace, t), t
 }
 
@@ -200,6 +209,7 @@ func (t *Trace) note(p Path) {
 	if t == nil {
 		return
 	}
+	t.parent.note(p)
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	switch p {
@@ -561,6 +571,9 @@ func (r *Router) mqttDownload(ctx context.Context, d model.Device) ([]byte, erro
 	if err == nil || !notPublished(err) {
 		noteTrace(ctx, MQTT)
 	}
+	if errors.Is(err, mqttcmd.ErrRefused) { // nothing was sent: say why, in our own words, never the error text
+		return nil, &BackupBlockedError{Err: fmt.Errorf("%w: %w", tasmota.ErrUnreachable, mqttcmd.ErrRefused), Reason: "a backup over MQTT was refused: " + mqttcmd.Reason(err)}
+	}
 	if errors.Is(err, mqttcmd.ErrPasswordRefused) {
 		if r.o.Marker != nil {
 			// The caller may be cancelled by now; the mark must still be written.
@@ -581,8 +594,12 @@ func (r *Router) downloadPassword(d model.Device) (pw, why string) {
 		return "", "the device refused its MQTT password; enter the right one"
 	case d.MQTTPasswordMode == model.MQTTPasswordOwn && d.MQTTPassword != "":
 		return d.MQTTPassword, ""
-	case d.MQTTPasswordMode == model.MQTTPasswordBroker && r.o.BrokerPassword != nil && r.o.BrokerPassword() != "":
-		return r.o.BrokerPassword(), ""
+	case d.MQTTPasswordMode == model.MQTTPasswordBroker:
+		if r.o.BrokerPassword != nil {
+			if bp := r.o.BrokerPassword(); bp != "" {
+				return bp, ""
+			}
+		}
 	}
 	return "", "the device has no usable MQTT password"
 }

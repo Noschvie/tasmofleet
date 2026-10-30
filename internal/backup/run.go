@@ -67,7 +67,7 @@ func AttemptReason(err error) string {
 	var ur interface{ UserReason() string } // a reason a package wrote for the person (transport.BackupBlockedError)
 	switch {
 	case errors.As(err, &ur):
-		return capitalise(ur.UserReason())
+		return ur.UserReason()
 	case errors.Is(err, tasmota.ErrAuth):
 		return "HTTP 401: the device rejected the web password"
 	case errors.Is(err, tasmota.ErrUnreachable):
@@ -82,13 +82,4 @@ func AttemptReason(err error) string {
 		return "The device returned an empty configuration"
 	}
 	return "The device did not hand over its configuration"
-}
-
-func capitalise(s string) string {
-	if s == "" {
-		return s
-	}
-	r := []rune(s)
-	r[0] = unicode.ToUpper(r[0])
-	return string(r)
 }

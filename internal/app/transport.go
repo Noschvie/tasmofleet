@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/mqttcmd"
 	"github.com/nofuturekid/tasmofleet/internal/transport"
 )
 
@@ -31,7 +32,10 @@ func (a *runtime) setupTransport() {
 	a.goBG("group-topic", func() error { gr.run(a.bgContext); return nil })
 }
 
-var _ transport.DeviceFacts = (*TransportFacts)(nil)
+var (
+	_ transport.DeviceFacts    = (*TransportFacts)(nil)
+	_ transport.MQTTDownloader = (*mqttcmd.Channel)(nil) // the router asserts this at run time: a changed signature must not silently turn backups off
+)
 
 // onlyOverMQTT reports whether commands to any of the devices travel over MQTT because HTTP fails: a
 // change of its MQTT identity can then cut it off for good (cmdpolicy.WithMQTTOnly). The inventory is

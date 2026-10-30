@@ -8,6 +8,7 @@ import (
 
 	"github.com/nofuturekid/tasmofleet/internal/backup"
 	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/transport"
 )
 
 // BackupOptions are the choices of a bulk backup: "Keep these backups" and a
@@ -103,7 +104,8 @@ func (e *Engine) workBackup(ctx context.Context, j model.Job) {
 		e.finishCommand(ctx, j, "", err.Error())
 		return
 	}
-	bs, err := e.backups.Backup(backup.WithRun(ctx, backupRun(j.Commands)), j.CreatedBy, j.DeviceID)
+	tctx, tr := transport.WithTrace(ctx)
+	bs, err := e.backups.Backup(backup.WithRun(tctx, backupRun(j.Commands)), j.CreatedBy, j.DeviceID)
 	if ctx.Err() != nil {
 		return // shutting down: the job runs again
 	}
@@ -114,6 +116,12 @@ func (e *Engine) workBackup(ctx context.Context, j model.Job) {
 	note := "backup taken"
 	if len(bs) > 1 {
 		note = strconv.Itoa(len(bs)) + " backup files taken"
+	}
+	switch tr.Via() { // the page of the job says which way the dump came
+	case "mqtt", "http+mqtt":
+		note += " over MQTT"
+	case "http":
+		note += " over HTTP"
 	}
 	e.finishCommand(ctx, j, note, "")
 }
