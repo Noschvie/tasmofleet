@@ -882,3 +882,9 @@ func TestCheckAddressAgreesWithCreate(t *testing.T) {
 		t.Errorf("outside network must be matchable: %v", err)
 	}
 }
+
+func (s *memStore) SetMQTTPassword(context.Context, model.DeviceID, model.MQTTPasswordMode, string) error {
+	return nil
+}
+func (s *memStore) MarkMQTTPasswordBad(context.Context, model.DeviceID, time.Time) error { return nil }
+func (s *memStore) SetFWReach(context.Context, model.DeviceID, model.FWReach) error      { return nil }

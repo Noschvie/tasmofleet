@@ -30,6 +30,19 @@ type Device struct {
 	HTTPUser     string
 	HTTPPassword string
 
+	// MQTTPassword is the device's own MqttPassword, plaintext in memory only (the store seals it
+	// at rest); only FileDownload and FileUpload need it. It is meaningful in MQTTPasswordModeOwn
+	// only. Written by Store.SetMQTTPassword, never by UpdateDevice.
+	MQTTPassword     string
+	MQTTPasswordMode MQTTPasswordMode
+	// MQTTPasswordBadAt is when the device answered "Error 1" to a transfer (zero: never or since
+	// cleared); saving the password clears it.
+	MQTTPasswordBadAt time.Time
+
+	// FWReach is whether the device reaches tasmofleet's firmware server. Written by the
+	// transport code only.
+	FWReach FWReach
+
 	// OTAExcluded keeps the device out of every OTA batch (TasmoAdmin "isUpdatable" = 0).
 	OTAExcluded bool
 
@@ -99,6 +112,34 @@ func (d Device) HasMAC(mac string) bool {
 // always "admin"), so only a non-empty password counts.
 func (d Device) HasCredentials() bool { return d.HTTPPassword != "" }
 
+// MQTTPasswordMode says where the MqttPassword for FileDownload/FileUpload comes from.
+type MQTTPasswordMode string
+
+// Password modes. We never assume the fleet convention: the default is not set.
+const (
+	MQTTPasswordNone   MQTTPasswordMode = ""       // not set
+	MQTTPasswordBroker MQTTPasswordMode = "broker" // tasmofleet's MQTT_PASSWORD, resolved at send time
+	MQTTPasswordOwn    MQTTPasswordMode = "own"    // the device's own, stored sealed
+)
+
+// FWReachState says whether a device reaches tasmofleet's firmware server.
+type FWReachState string
+
+// Reach states. Unknown means "try".
+const (
+	FWReachUnknown FWReachState = ""
+	FWReachYes     FWReachState = "yes"
+	FWReachNo      FWReachState = "no"
+)
+
+// FWReach is what is known about a device reaching the firmware server, and since when.
+// Detail is a short English note for the UI ("" for yes and unknown).
+type FWReach struct {
+	State  FWReachState
+	At     time.Time
+	Detail string
+}
+
 // MQTTCapability says whether tasmofleet can rely on MQTT for a device.
 type MQTTCapability string
 
@@ -152,6 +193,10 @@ type Identity struct {
 	FlashSizeKB        int // Status 4 FlashSize
 	ProgramFlashSizeKB int // Status 4 ProgramFlashSize
 	FreeKB             int // Status 4 Free (OTA space available)
+
+	// LanguageKnown: an HTTP probe read the language build, so Language ("" = English) is a fact.
+	// False for identities stored before MQTT transport existed and for identities read over MQTT.
+	LanguageKnown bool
 
 	DetectedAt time.Time
 }

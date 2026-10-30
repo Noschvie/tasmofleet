@@ -48,6 +48,9 @@ type RestoreJob struct {
 	NewMAC     string
 	NewAddress string
 	NewPort    int
+	// Transport is how the restore reached the device, recorded when it starts: empty (every job
+	// made before MQTT transport) is HTTP, "mqtt" otherwise.
+	Transport model.Transport
 }
 
 // Terminal reports whether the job is finished.
@@ -69,13 +72,15 @@ type RestoreStore interface {
 	FailActiveRestores(ctx context.Context, reason string) (int64, error)
 }
 
-const restoreCols = "id, device_id, backup_id, pre_backup_id, state, detail, verified, changes, actor, created_at, updated_at, kind, new_mac, new_address, new_port"
+const restoreCols = "id, device_id, backup_id, pre_backup_id, state, detail, verified, changes, actor, created_at, updated_at, kind, new_mac, new_address, new_port, transport"
 
 func scanRestore(r scanner) (RestoreJob, error) {
 	var j RestoreJob
 	var verified int
 	var created, updated int64
-	err := r.Scan(&j.ID, &j.DeviceID, &j.BackupID, &j.PreBackupID, &j.State, &j.Detail, &verified, &j.Changes, &j.Actor, &created, &updated, &j.Kind, &j.NewMAC, &j.NewAddress, &j.NewPort)
+	var transport string
+	err := r.Scan(&j.ID, &j.DeviceID, &j.BackupID, &j.PreBackupID, &j.State, &j.Detail, &verified, &j.Changes, &j.Actor, &created, &updated, &j.Kind, &j.NewMAC, &j.NewAddress, &j.NewPort, &transport)
+	j.Transport = model.Transport(transport)
 	j.Verified, j.CreatedAt, j.UpdatedAt = verified != 0, fromMS(created), fromMS(updated)
 	return j, err
 }
@@ -86,9 +91,9 @@ func (s *SQLite) CreateRestore(ctx context.Context, j RestoreJob) (RestoreID, er
 		j.Kind = KindRestore
 	}
 	res, err := s.db.ExecContext(ctx, `INSERT INTO restore_jobs (device_id, backup_id, pre_backup_id, state, detail, verified, changes, actor,
-		created_at, updated_at, kind, new_mac, new_address, new_port) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		created_at, updated_at, kind, new_mac, new_address, new_port, transport) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		j.DeviceID, j.BackupID, j.PreBackupID, RestorePending, j.Detail, b2i(j.Verified), j.Changes, j.Actor, now, now,
-		j.Kind, strings.ToLower(j.NewMAC), j.NewAddress, j.NewPort)
+		j.Kind, strings.ToLower(j.NewMAC), j.NewAddress, j.NewPort, string(j.Transport))
 	if err != nil {
 		return 0, mapErr(err)
 	}
@@ -102,8 +107,8 @@ func (s *SQLite) GetRestore(ctx context.Context, id RestoreID) (RestoreJob, erro
 }
 
 func (s *SQLite) UpdateRestore(ctx context.Context, j RestoreJob) error {
-	res, err := s.db.ExecContext(ctx, `UPDATE restore_jobs SET pre_backup_id=?, state=?, detail=?, verified=?, changes=?, updated_at=? WHERE id=?`,
-		j.PreBackupID, j.State, j.Detail, b2i(j.Verified), j.Changes, toMS(s.now()), j.ID)
+	res, err := s.db.ExecContext(ctx, `UPDATE restore_jobs SET pre_backup_id=?, state=?, detail=?, verified=?, changes=?, transport=?, updated_at=? WHERE id=?`,
+		j.PreBackupID, j.State, j.Detail, b2i(j.Verified), j.Changes, string(j.Transport), toMS(s.now()), j.ID)
 	if err != nil {
 		return mapErr(err)
 	}

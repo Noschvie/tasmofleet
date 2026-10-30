@@ -32,6 +32,13 @@ type DeviceStore interface {
 	UpdateDevice(ctx context.Context, d model.Device) error
 	UpdateIdentity(ctx context.Context, id model.DeviceID, ident model.Identity) error
 	DeleteDevice(ctx context.Context, id model.DeviceID) error
+	// SetMQTTPassword stores the device's MqttPassword mode and, for mode own, the sealed value;
+	// it clears the bad mark. UpdateDevice never touches these columns.
+	SetMQTTPassword(ctx context.Context, id model.DeviceID, mode model.MQTTPasswordMode, plain string) error
+	// MarkMQTTPasswordBad records that the device refused the password at at.
+	MarkMQTTPasswordBad(ctx context.Context, id model.DeviceID, at time.Time) error
+	// SetFWReach records whether the device reaches the firmware server (zero value: unknown).
+	SetFWReach(ctx context.Context, id model.DeviceID, r model.FWReach) error
 	// SetLastSeen persists the coarse health summary (written on state change only).
 	SetLastSeen(ctx context.Context, id model.DeviceID, state model.HealthState, at time.Time) error
 }

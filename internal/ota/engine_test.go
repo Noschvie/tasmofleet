@@ -1328,3 +1328,9 @@ func TestPreviewOffersTheBuildForAnS2RefusedForItsVariant(t *testing.T) {
 		t.Fatalf("items %+v err %v", items, err)
 	}
 }
+
+func (s *fakeStore) SetMQTTPassword(context.Context, model.DeviceID, model.MQTTPasswordMode, string) error {
+	return nil
+}
+func (s *fakeStore) MarkMQTTPasswordBad(context.Context, model.DeviceID, time.Time) error { return nil }
+func (s *fakeStore) SetFWReach(context.Context, model.DeviceID, model.FWReach) error      { return nil }

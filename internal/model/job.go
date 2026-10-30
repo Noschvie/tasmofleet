@@ -144,6 +144,15 @@ const (
 	DeliveryPush Delivery = "push" // tasmofleet uploads the image to the device's /u2
 )
 
+// Transport is the way a job talks to its device.
+type Transport string
+
+// Transports. Empty reads as HTTP.
+const (
+	TransportHTTP Transport = ""
+	TransportMQTT Transport = "mqtt"
+)
+
 // Job is one OTA job for one device. Every field needed to resume after a
 // process restart is persisted; nothing lives only in memory.
 type Job struct {
@@ -192,6 +201,13 @@ type Job struct {
 	// request goes out, so a second recovery or a second switch back is impossible, also after a
 	// restart of tasmofleet.
 	RecoveryStep int
+
+	// Transport is how the job reaches its device, recorded at preflight from the path choice:
+	// empty (every job made before MQTT transport) is HTTP.
+	Transport Transport
+	// MQTTUpload: the transaction allowed the experimental firmware upload over MQTT. Decided in
+	// the update preview, fixed at creation, kept so a resume goes the same way.
+	MQTTUpload bool
 
 	// BatchParallel caps how many jobs of this job's transaction run at the
 	// same time (bulk "One device at a time", "Devices at a time"); 0 leaves
