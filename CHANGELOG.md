@@ -16,6 +16,8 @@ always upgrade automatically.
 - Docker Hub gets release tags only; `edge` stays on ghcr.io (every push to main left untagged images behind on Docker Hub)
 ||||||| parent of 6fcf902 (docs: user-facing docs checked against the code)
 - Docs: checked against the code; corrected the metrics setting name, the scan range limit, the operator role description, the build-from-source command, the Authentik refresh-token note and a certificate-fingerprint claim that the server does not fulfil
+||||||| parent of 098d037 (docs: design spec and CLAUDE.md checked against the code)
+- Docs: design spec and CLAUDE.md checked against the code; corrected the route list, backup retention, settings that apply live, first-run and sign-in text, and features that were planned but never built (notifications, development channel, firmware cache pruning)
 - Policy: Save rule ends the editor too: the overview names the saved rule and marks its row
 - Policy overview: shorter compliance bar, so rule names and scopes do not wrap
 - Docs: security notes checked against the code; corrected renamed test references, the policy-rules environment variable (legacy one-time import), the device address-change confirmation and the stale restore open item
