@@ -513,10 +513,10 @@ func headBack(tab string) string {
 }
 
 // backupWait reserves a manual backup slot for the device and returns the refusal sentence
-// ("" when the slot is granted) when the last one is too recent. The cooldown protects the
-// device's single-threaded web server, so it counts from the last backup run even when that
+// ("" when the slot is granted) when the last one is too recent. The cooldown keeps repeated
+// clicks from evicting restore points, so it counts from the last backup run even when that
 // backup was deleted since; the sentence names that time so the refusal explains itself (#208).
-// Only deleting the device's last backup ends it (backupDeleted): nothing is left to protect.
+// Only deleting the device's last backup ends it (backupDeleted): nothing is left to evict.
 func (h *handler) backupWait(id model.DeviceID) string {
 	h.backupMu.Lock()
 	defer h.backupMu.Unlock()
