@@ -10,6 +10,10 @@ always upgrade automatically.
 
 - Policy: Cancel in the rule editor goes back to the policy overview (it reloaded the rule page, or opened the template picker for a new rule)
 
+### Changed
+
+- Policy: Save rule ends the editor too: the overview names the saved rule and marks its row
+
 ## 0.19.2 (2026-10-30)
 
 ### Security

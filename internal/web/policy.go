@@ -120,6 +120,7 @@ type ruleRow struct {
 	Required bool
 	Severity string // Required / Advisory
 	Disabled bool
+	Saved    bool // the rule the editor just saved (?ok=saved&rule=<id>): its row is marked
 	First    bool
 	Last     bool
 	// Counted: the numbers below are known (the report ran). A disabled rule is never counted.
@@ -176,6 +177,14 @@ func (h *handler) policyRender(w http.ResponseWriter, r *http.Request, status in
 	}
 	if f := policyFlashes[r.URL.Query().Get("ok")]; f != "" {
 		v.Flash = f
+	}
+	if r.URL.Query().Get("ok") == "saved" {
+		for i := range p.Rows {
+			if p.Rows[i].ID == r.URL.Query().Get("rule") {
+				p.Rows[i].Saved = true
+				v.Flash = "Rule “" + p.Rows[i].Name + "” saved"
+			}
+		}
 	}
 	if o.live && p.Head.Line != nil && p.Head.Line.State != "failed" {
 		v.Flash = "Live check finished · " + deviateText(p.Head.Fleet.Deviating)

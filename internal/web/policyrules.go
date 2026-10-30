@@ -491,8 +491,8 @@ func (h *handler) rulesSave(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// ruleSaved sends the browser to the rule it just saved. A new rule has its id only now: it is
-// the one at the end of the list (the position it was appended at).
+// ruleSaved ends the editor: the overview names and marks the rule just saved. A new rule has
+// its id only now: it is the one at the end of the list (the position it was appended at).
 func (h *handler) ruleSaved(w http.ResponseWriter, r *http.Request, id string, pos int) {
 	if id == "new" {
 		st, err := h.d.PolicyRules.State(r.Context())
@@ -502,7 +502,7 @@ func (h *handler) ruleSaved(w http.ResponseWriter, r *http.Request, id string, p
 		}
 		id = st.Specs[pos].ID
 	}
-	redirect(w, r, rulesPath+"/"+id+"?ok=saved")
+	redirect(w, r, policyPath+"?ok=saved&rule="+id)
 }
 
 // originNote is the change note of a new rule that the person left empty: where it came from.

@@ -8657,6 +8657,10 @@ body:has(.dv-list .bulkbar:not([hidden])) {
 .is-dim {
   opacity: 0.55;
 }
+/* the policy rule the editor just saved */
+tr.is-saved > td {
+  background: var(--color-accent-bg);
+}
 .dev-box-meta {
   font-size: 12px;
   color: var(--color-text-2);

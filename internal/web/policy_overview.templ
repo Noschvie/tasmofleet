@@ -97,7 +97,7 @@ templ policyTable(p policyView) {
 
 templ policyRow(p policyView, i int, r ruleRow) {
 	<tr
-		class={ templ.KV("is-dim", r.Disabled) }
+		class={ templ.KV("is-dim", r.Disabled), templ.KV("is-saved", r.Saved) }
 		data-rule-idx={ itoa(i) }
 		if p.Admin && p.CanRules {
 			draggable="true"

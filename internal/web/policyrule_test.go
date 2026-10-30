@@ -164,7 +164,7 @@ func TestRulePageUnknownIDIs404(t *testing.T) {
 // Why: deep links must survive edits. The rule page's form sends the rule's id, so saving it
 // keeps the id, lands on the same URL and changes the right rule even when another rule moved
 // in front of it meanwhile.
-func TestRulePageSaveKeepsTheIDAndLandsOnIt(t *testing.T) {
+func TestRulePageSaveKeepsTheIDAndNamesItForTheOverview(t *testing.T) {
 	e, mem := ruleEnvWith(t, defaultRP())
 	first := ruleSeed(t, e, mem, url.Values{"name": {"First"}, "command": {"TelePeriod"}, "want": {"300"}})
 	second := ruleSeed(t, e, mem, url.Values{"name": {"Second"}})
@@ -175,7 +175,7 @@ func TestRulePageSaveKeepsTheIDAndLandsOnIt(t *testing.T) {
 	f := ruleForm(url.Values{"name": {"Second renamed"}, "want": {"1"}, "version": {vstr(int64(len(mem.vs)))}})
 	f.Set("id", second)
 	r, body := e.do(t, "POST", "/policy/rules/save", "admin", f)
-	if r.StatusCode != 303 || r.Header.Get("Location") != "/tf/policy/rules/"+second+"?ok=saved" {
+	if r.StatusCode != 303 || r.Header.Get("Location") != "/tf/policy?ok=saved&rule="+second {
 		t.Fatalf("save: %d %q\n%s", r.StatusCode, r.Header.Get("Location"), body)
 	}
 	ids := ruleIDs(t, mem)
@@ -187,8 +187,8 @@ func TestRulePageSaveKeepsTheIDAndLandsOnIt(t *testing.T) {
 	}
 }
 
-// Why: a new rule's id exists only after it is stored; the save must send the browser to that
-// id, and the default change note says where the rule came from.
+// Why: a new rule's id exists only after it is stored; the save names that id for the overview
+// to point at, and the default change note says where the rule came from.
 func TestRuleNewSaveRedirectsToTheNewID(t *testing.T) {
 	e, mem := ruleEnvWith(t, defaultRP())
 	f := ruleForm(url.Values{"name": {"Telemetry every 5 minutes"}, "command": {"TelePeriod"}, "want": {"300"}, "origin": {"template:telemetry"}})
@@ -199,7 +199,7 @@ func TestRuleNewSaveRedirectsToTheNewID(t *testing.T) {
 		t.Fatalf("versions = %d\n%s", len(mem.vs), body)
 	}
 	id := ruleIDs(t, mem)[0]
-	if r.StatusCode != 303 || r.Header.Get("Location") != "/tf/policy/rules/"+id+"?ok=saved" {
+	if r.StatusCode != 303 || r.Header.Get("Location") != "/tf/policy?ok=saved&rule="+id {
 		t.Errorf("save: %d %q (new id %s)", r.StatusCode, r.Header.Get("Location"), id)
 	}
 	if mem.vs[0].Note != "from template: Telemetry every 5 minutes" {
@@ -629,5 +629,23 @@ func TestRuleEditorCancelGoesBackToTheOverview(t *testing.T) {
 		if !strings.Contains(body, `href="/tf/policy">Cancel</a>`) {
 			t.Errorf("%s: Cancel does not lead to the overview", p)
 		}
+	}
+}
+
+// Why: Save ends the editor like Cancel does (product owner, 2026-10-30): the overview says which
+// rule was saved and marks its row, so its compliance bar is the first thing the user sees.
+func TestRuleSaveLandsOnTheOverviewWithTheRuleMarked(t *testing.T) {
+	e, mem := ruleEnvWith(t, defaultRP())
+	id := ruleSeed(t, e, mem, url.Values{"name": {"Flash wear"}})
+	_, body := e.do(t, "GET", "/policy?ok=saved&rule="+id, "admin", nil)
+	if !strings.Contains(body, "Rule “Flash wear” saved") {
+		t.Error("the flash does not name the saved rule")
+	}
+	if strings.Count(body, `class="is-saved"`) != 1 {
+		t.Error("the saved rule's row is not marked exactly once")
+	}
+	_, body = e.do(t, "GET", "/policy?ok=saved&rule=rnope", "admin", nil)
+	if !strings.Contains(body, "Rule saved") || strings.Contains(body, `class="is-saved"`) {
+		t.Error("an unknown rule id must fall back to the plain flash and mark nothing")
 	}
 }
