@@ -73,10 +73,10 @@ func (e *Engine) choosePath(ctx context.Context, d model.Device, r Request, p pl
 		it.Decision, it.Reason = decisionRefuse, it.PathText
 	case transport.DownloadMQTT:
 		it.Transport = model.TransportMQTT
-		if !r.SkipBackup {
-			// The backup over MQTT (FileDownload, #257) is not routed yet; a job that cannot take its backup
-			// would fail only after the preflight, so say it now.
-			it.Decision, it.Reason = decisionRefuse, "a backup over MQTT is not available yet; turn off \"Back up each device\" for this device"
+		if !r.SkipBackup && paths.Backup != transport.MQTT {
+			// The update backs the device up first; a job whose backup has no path would fail only after
+			// the preflight, so say it now, with the chooser's reason.
+			it.Decision, it.Reason = decisionRefuse, paths.Reason(transport.ActBackup)+"; or turn off \"Back up each device\" for this device"
 			return
 		}
 		if it.Delivery == model.DeliveryPush {

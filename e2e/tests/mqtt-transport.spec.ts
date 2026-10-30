@@ -102,12 +102,24 @@ test("Make compliant over MQTT", { tag: "@core" }, async ({ page }) => {
 
 // Update over MQTT (0.20.0, #79, #259). The devices answer nothing over HTTP, so the preview probes
 // them over MQTT; the language build cannot be read there, so the person says it; the update runs the
-// same engine with the job pinned to MQTT. "Back up each device" is off: the backup over MQTT is a
-// separate step (#257).
+// same engine with the job pinned to MQTT. The backup before flashing runs over MQTT too (#257), so each
+// device gets its MQTT password first (the devenv devices have the same one, the broker takes any).
 // The devices take the DeviceName they report, so the picker is addressed by device id: the import
 // creates them in the order of the object (mq-esp32 = 1, mq-esp8266-1m = 2, mq-fw-blocked = 3).
 const deviceId = { "mq-esp32": 1, "mq-esp8266-1m": 2, "mq-fw-blocked": 3 } as const;
+const withPassword = new Set<number>();
+async function ensurePassword(page: import("@playwright/test").Page, id: number) {
+  if (withPassword.has(id)) return;
+  await page.goto(app.url + `/devices/${id}/edit`);
+  await page.getByLabel("MQTT password source").selectOption("own");
+  await page.getByLabel("Own MQTT password").fill("devenv-fake-mqtt-password");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page).toHaveURL(/ok=saved/);
+  withPassword.add(id);
+}
+
 async function pickById(page: import("@playwright/test").Page, name: keyof typeof deviceId) {
+  await ensurePassword(page, deviceId[name]);
   await page.goto(app.url + "/updates/new");
   await quickPick(page, "None");
   await page.locator(`input[name=id][value="${deviceId[name]}"]`).check();
@@ -122,7 +134,6 @@ async function reviewMQTTUpdate(page: import("@playwright/test").Page, name: key
   await expect(async () => {
     await pickById(page, name);
     await page.locator("label.upd-relopt", { hasText: "Tasmota 16.1.0" }).click();
-    await page.getByLabel("Back up each device before flashing").uncheck();
     await page.getByRole("button", { name: "Review update" }).click();
     await expect(row()).toBeVisible();
     await expect(row()).not.toContainText("probe failed", { timeout: 1_000 });
@@ -167,7 +178,6 @@ test("fw-blocked device shows no download path", async ({ page }) => {
   await expect(page.locator("#log-lines"), "the job's log names the reason").toContainText("cannot reach the firmware server", { timeout: 5_000 });
   await pickById(page, "mq-fw-blocked");
   await page.locator("label.upd-relopt", { hasText: "Tasmota 16.1.0" }).click();
-  await page.getByLabel("Back up each device before flashing").uncheck();
   await page.getByRole("button", { name: "Review update" }).click();
   const blocked = page.locator(".upd-prow");
   await blocked.locator("select").selectOption("EN"); // the language is asked first, the path is judged after it
@@ -184,7 +194,7 @@ test("language choice required", async ({ page }) => {
   // An ESP32 with the dual-core tasmota32 build has language builds too; whichever the row shows, it
   // must be a choice and not a pre-filled value.
   await expect(row.locator("select")).toHaveValue("");
-||||||| parent of 9827f55 (transport: backup over MQTT (FileDownload) through the router)
+});
 
 // #257: backup over MQTT (FileDownload). The device's HTTP port refuses everything, so the backup can
 // only come over MQTT, and only with the device's MQTT password (the devenv devices have one; the

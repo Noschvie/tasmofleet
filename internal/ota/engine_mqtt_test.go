@@ -316,17 +316,32 @@ func TestMQTTJobStoresTheVerifiedVersionAndKeepsTheLanguage(t *testing.T) {
 	}
 }
 
-// Why (M3): the backup over MQTT is not routed yet. A job that would fail at its backup step is refused
-// up front, with the way out; with the backup switched off the same device is accepted.
-func TestMQTTPathRefusesTheBackupItCannotTake(t *testing.T) {
-	h, _ := newPathHarness(t, &fakePaths{paths: pathsOf(transport.DownloadMQTT, "over MQTT")})
-	_, err := h.e.Submit(context.Background(), "alice", []Request{{DeviceID: 1, Release: "16.0.0"}})
-	var re *RefusedError
-	if !errors.As(err, &re) || !strings.Contains(re.Refused[0].Reason, "backup over MQTT is not available yet") {
-		t.Fatalf("err = %v", err)
+// Why (#257): the update backs the device up first, and over MQTT that is only possible when the chooser
+// found a path for the backup. With one the update is accepted; without one it is refused up front with the
+// chooser's reason and the way out; with the backup switched off the same device is accepted.
+func TestMQTTPathAcceptsTheBackupOnlyWhenItHasAPath(t *testing.T) {
+	update := transport.DownloadMQTT
+	withBackup := func(p transport.Path, text string) transport.Paths {
+		ps := pathsOf(update, "over MQTT")
+		ps.Backup = p
+		ps.Reasons = append(ps.Reasons, transport.Reason{Action: transport.ActBackup, Path: p, Text: text})
+		return ps
 	}
-	if _, err := h.e.Submit(context.Background(), "alice", []Request{{DeviceID: 1, Release: "16.0.0", SkipBackup: true}}); err != nil {
-		t.Fatalf("without the backup: %v", err)
+	submit := func(ps transport.Paths, skip bool) error {
+		h, _ := newPathHarness(t, &fakePaths{paths: ps})
+		_, err := h.e.Submit(context.Background(), "alice", []Request{{DeviceID: 1, Release: "16.0.0", SkipBackup: skip}})
+		return err
+	}
+	if err := submit(withBackup(transport.MQTT, "over MQTT (FileDownload)"), false); err != nil {
+		t.Fatalf("a backup with an MQTT path must be accepted: %v", err)
+	}
+	err := submit(withBackup(transport.None, "a backup over MQTT is not possible: enter the device's MQTT password to back up over MQTT"), false)
+	var re *RefusedError
+	if !errors.As(err, &re) || !strings.Contains(re.Refused[0].Reason, "enter the device's MQTT password") || !strings.Contains(re.Refused[0].Reason, `turn off "Back up each device"`) {
+		t.Fatalf("a backup without a path must be refused with the chooser's reason and the way out: %v", err)
+	}
+	if err := submit(withBackup(transport.None, "no path"), true); err != nil {
+		t.Fatalf("without the backup the same device is accepted: %v", err)
 	}
 }
 
