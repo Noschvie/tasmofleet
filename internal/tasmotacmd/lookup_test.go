@@ -2,6 +2,7 @@ package tasmotacmd
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -103,20 +104,22 @@ func TestEmbeddedCatalogueLoads(t *testing.T) {
 // lists the words its reason must contain, so a different reason does not pass unnoticed.
 func TestGoldenCommandsTasmoFleetSends(t *testing.T) {
 	keys := map[string][]string{
-		"OtaUrl":        {"OtaUrl"},
-		"SetOption19":   {"SetOption19"},
-		"TelePeriod":    {"TelePeriod"},
-		"Template":      {"Template", "NAME", "ARCH", "GPIO", "FLAG", "BASE"},
-		"Module":        {"Module", "Module2"},
-		"MqttHost":      {"MqttHost"},
-		"Topic":         {"Topic"},
-		"FullTopic":     {"FullTopic"},
-		"WebPassword":   {"WebPassword"},
-		"GroupTopic":    {"GroupTopic1"},
-		"Module 0":      {"Module", "Module2"},
-		"Upgrade":       {"Upgrade"},
-		"Restart 1":     {"Restart"},
-		"FriendlyName2": {"FriendlyName2"},
+		"OtaUrl":      {"OtaUrl"},
+		"SetOption19": {"SetOption19"},
+		"TelePeriod":  {"TelePeriod"},
+		"Template":    {"Template", "NAME", "ARCH", "GPIO", "FLAG", "BASE"},
+		"Module":      {"Module"},
+		"Module2":     {"Module", "Module2"},
+		"MqttHost":    {"MqttHost"},
+		"Topic":       {"Topic"},
+		"FullTopic":   {"FullTopic"},
+		"WebPassword": {"WebPassword"},
+		"GroupTopic":  {"GroupTopic1", "GroupTopic2", "GroupTopic3", "GroupTopic4"},
+		"Module 0":    {"Module"},
+		"Upgrade":     {"Upgrade"},
+		"Restart 1":   {"Restart"},
+		// FriendlyName tests !usridx && !data_len, a form the extractor does not split: the typed reply is the superset
+		"FriendlyName2": {"FriendlyName1", "FriendlyName2", "FriendlyName3", "FriendlyName4", "FriendlyName5", "FriendlyName6", "FriendlyName7", "FriendlyName8"},
 	}
 	for cmd, want := range keys {
 		got, ok := ReplyKeys(cmd)
@@ -132,7 +135,7 @@ func TestGoldenCommandsTasmoFleetSends(t *testing.T) {
 	}
 	for cmd, word := range loose {
 		r, known := Lookup(cmd)
-		if !known || r.Loose == "" || !contains(r.Loose, word) {
+		if !known || r.Loose == "" || !strings.Contains(r.Loose, word) {
 			t.Errorf("Lookup(%q) = %+v, known %v; want loose mentioning %q", cmd, r, known, word)
 		}
 		if keys, ok := ReplyKeys(cmd); ok || keys != nil {
@@ -141,11 +144,16 @@ func TestGoldenCommandsTasmoFleetSends(t *testing.T) {
 	}
 }
 
-func contains(s, sub string) bool {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return true
+func TestNoCommandNameEndsInADigit(t *testing.T) {
+	// Lookup reads trailing digits as the index (Power1); a command whose own name ended in a
+	// digit would never be found.
+	c, err := Default()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, cmd := range c.Commands {
+		if n := cmd.Command; n != "" && n[len(n)-1] >= '0' && n[len(n)-1] <= '9' {
+			t.Errorf("command %q ends in a digit", n)
 		}
 	}
-	return false
 }

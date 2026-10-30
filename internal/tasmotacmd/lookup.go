@@ -4,12 +4,15 @@ import (
 	"embed"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"strconv"
 	"strings"
 	"sync"
 )
 
-//go:embed catalogue-16.0.0.json
+// The one catalogue file; pinning another Tasmota version replaces it (make catalogue).
+//
+//go:embed catalogue-*.json
 var embedded embed.FS
 
 // Reply is what the catalogue knows about the answer to one command.
@@ -41,7 +44,16 @@ var (
 // Default returns the embedded catalogue of the pinned Tasmota version.
 func Default() (*Catalogue, error) {
 	defaultOnce.Do(func() {
-		data, err := embedded.ReadFile("catalogue-16.0.0.json")
+		files, err := fs.Glob(embedded, "catalogue-*.json")
+		if err != nil {
+			defaultErr = fmt.Errorf("tasmotacmd: %w", err)
+			return
+		}
+		if len(files) != 1 {
+			defaultErr = fmt.Errorf("tasmotacmd: want exactly one embedded catalogue, found %v", files)
+			return
+		}
+		data, err := embedded.ReadFile(files[0])
 		if err != nil {
 			defaultErr = err
 			return

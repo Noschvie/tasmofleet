@@ -93,9 +93,11 @@ internal/deps            build-tagged file pinning third-party modules in go.mod
 ## Package boundaries (enforced by depguard in `.golangci.yml`)
 
 - `internal/model` imports only the standard library.
-- `internal/fwselect`, `internal/cmdpolicy`, `internal/tasmotacmd` (and its `extract`) and `internal/ota/machine*.go` are pure: no `net`, `os`, `database/sql`.
+- `internal/fwselect`, `internal/cmdpolicy` and `internal/ota/machine*.go` are pure: no `net`, `os`, `database/sql`.
   They take data and return decisions. These are the safety-critical parts and run
   under mutation testing.
+- `internal/tasmotacmd` (and its `extract`) is pure too (same depguard rule) but not under mutation testing
+  or in `SAFETY`.
 - Only `internal/store` imports `database/sql` / `modernc.org/sqlite`.
 - Production code never imports `internal/simulator`, `internal/testutil/...` or the
   embedded MQTT broker.

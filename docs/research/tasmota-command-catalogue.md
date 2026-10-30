@@ -53,11 +53,11 @@ preprocessor, types or control flow.
    length (upstream's Stcc and ZCDimmer tables do not), the entries are loose and no pairing is guessed.
 3. A handler is read together with the functions it calls that build replies (to depth 6). Recognised:
    `ResponseCmndNumber/Float/Char/Char_P/StateText/Done/Error/Failed`, the `Idx` variants and `ResponseCmndAll`
-   (key = command name, with `<n>` for the Idx forms), `ResponseCmnd()`, and `Response_P` / `ResponseAppend_P`
+   (key = command name, `<n>` for the Idx forms; `ResponseCmndAll` lists `<cmd>1` .. `<cmd>N` when its count is a plain number or constant, otherwise the command is loose), `ResponseCmnd()`, and `Response_P` / `ResponseAppend_P`
    with a literal format (also through macros such as `S_JSON_COMMAND_NVALUE`). The format is reconstructed
    with `%s` filled from `XdrvMailbox.command` or a string literal, and its top-level JSON keys are read.
 4. Idioms that change the key are followed: `snprintf_P(XdrvMailbox.command, ..., "SetOption")` (renames, so `SO19` is
-   answered as `SetOption19`), `strlcat(XdrvMailbox.command, "2")` (an extra key `Module2`), `if (!XdrvMailbox.usridx)` (the
+   answered as `SetOption19`), `strlcat(XdrvMailbox.command, "2")` (an extra key `Module2`, listed in `indexed` only), `if (!XdrvMailbox.usridx)` (the
    reply differs with and without a typed index; stored as `keys` and `indexed`), and `if (indexed)` on a literal
    argument (`CmndSetoptionBase(0)` for synonyms against `(1)` for `SetOption`).
 
@@ -105,7 +105,7 @@ the template), `Timer<n>`.
   of a set of either command.
 - `Template` does not answer `{"Template":...}` but `{"NAME":..,"ARCH":..,"GPIO":[..],"FLAG":..,"BASE":..}`;
   `Template` is also a key, but only for the invalid-JSON error.
-- `Module2` is answered as `Module2`.
+- `Module2` is answered as `Module2`; plain `Module` as `Module`.
 
 ## Regenerating
 
@@ -117,5 +117,5 @@ make catalogue-check    # FULL tier: fails when the checked-in file differs from
 The tarball (`TASMOTA_VERSION` / `TASMOTA_SHA256` in the Makefile) is unpacked under
 `~/.cache/tasmofleet/` (`TASMOTA_SRC` overrides it), never into the repository; only `make catalogue-src`
 touches the network. To pin another Tasmota version, change the three Makefile variables, run
-`make catalogue`, rename the embed in `internal/tasmotacmd/lookup.go`, and read the diff: a changed
+`make catalogue`, delete the old `catalogue-*.json` (the package embeds exactly one), and read the diff: a changed
 key or a newly loose command shows what upstream changed.

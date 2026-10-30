@@ -37,6 +37,7 @@ func (f *condFrame) active() []string {
 }
 
 var (
+	reIntConst  = regexp.MustCompile(`(?m)^(?:static\s+)?const(?:expr)?\s+(?:u?int\d*_t|int|unsigned(?:\s+int)?)\s+(\w+)\s*=\s*([^;]+);`)
 	reDirective = regexp.MustCompile(`^#\s*(\w+)\s*(.*)$`)
 	reDefine    = regexp.MustCompile(`^([A-Za-z_]\w*)(\(?)\s*(.*)$`)
 	reSpaces    = regexp.MustCompile(`\s+`)
@@ -137,6 +138,10 @@ func loadSource(path, raw string, shared bool) *srcFile {
 		f.addLine(&b, line, stack)
 	}
 	f.text = b.String()
+	// typed integer constants (const uint8_t MAX_FRIENDLYNAMES = 8;) behave like numeric macros here
+	for _, m := range reIntConst.FindAllStringSubmatch(f.text, -1) {
+		f.defs[m[1]] = append(f.defs[m[1]], strings.TrimSpace(m[2]))
+	}
 	return f
 }
 

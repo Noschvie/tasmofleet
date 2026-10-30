@@ -230,6 +230,7 @@ func (a *analyzer) commands(nt *nameTable, ft *funcTable, st *synTable) []tasmot
 			if c.Indexed != nil && c.Indexed.Loose == c.Loose && c.Indexed.Kind == c.Kind && strings.Join(c.Indexed.Keys, ",") == strings.Join(c.Keys, ",") {
 				c.Indexed = nil
 			}
+			splitSuffixKeys(&c)
 			c.Via = dedupe(r.via)
 			c.Index = a.indexOf(handlers[0], nt.file)
 		}
@@ -246,6 +247,50 @@ var reUsridxIf = regexp.MustCompile(`\bif\s*\(\s*!?\s*XdrvMailbox\.usridx\s*\)`)
 func (a *analyzer) branchesOnUsridx(handler string, prefer *srcFile) bool {
 	for _, d := range a.lookup(handler, prefer) {
 		if reUsridxIf.MatchString(d.body) {
+			return true
+		}
+	}
+	return false
+}
+
+// splitSuffixKeys moves keys that carry an appended suffix (Module2) into the indexed reply: the
+// bare command is answered under its own name, only the typed index adds the suffix.
+func splitSuffixKeys(c *tasmotacmd.Command) {
+	strip := func(keys []string) (plain, all []string) {
+		for _, k := range keys {
+			base := k
+			if i := strings.Index(k, phSfx); i >= 0 {
+				base = k[:i] + k[i+len(phSfx):]
+			} else {
+				plain = append(plain, k)
+			}
+			all = append(all, base)
+		}
+		return plain, all
+	}
+	plain, all := strip(c.Keys)
+	if c.Indexed != nil {
+		_, ik := strip(c.Indexed.Keys)
+		c.Indexed.Keys = ik
+	}
+	if len(plain) == len(all) {
+		return
+	}
+	c.Keys = plain
+	if c.Indexed == nil {
+		c.Indexed = &tasmotacmd.IndexedReply{Keys: all, Kind: c.Kind, Loose: c.Loose}
+		return
+	}
+	for _, k := range all {
+		if !contains(c.Indexed.Keys, k) {
+			c.Indexed.Keys = append(c.Indexed.Keys, k)
+		}
+	}
+}
+
+func contains(l []string, s string) bool {
+	for _, e := range l {
+		if e == s {
 			return true
 		}
 	}

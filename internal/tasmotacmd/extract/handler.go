@@ -3,6 +3,7 @@ package extract
 import (
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -13,6 +14,7 @@ const (
 	phChar   = "\x02"
 	phNum    = "\x03"
 	phIdx    = "\x04" // XdrvMailbox.index
+	phSfx    = "\x05" // marks a suffix appended to the command name; such keys answer a typed index only
 )
 
 type replyKey struct{ tmpl, kind string }
@@ -168,7 +170,7 @@ func (a *analyzer) body(d fnDef, r *reply, depth int) {
 	spellings := func(t string) []string {
 		out := []string{cmdName(t)}
 		for _, sfx := range suffixes {
-			out = append(out, strings.ReplaceAll(t, phCmd, phCmd+sfx))
+			out = append(out, strings.ReplaceAll(t, phCmd, phCmd+phSfx+sfx))
 		}
 		return out
 	}
@@ -209,6 +211,23 @@ func (a *analyzer) body(d fnDef, r *reply, depth int) {
 		return a.analyze(c.name, d.file, depth+1, a.literalArgs(c)).started
 	}
 	for ci, c := range all {
+		if c.name == "ResponseCmndAll" {
+			// ResponseCmndAll(text_index, count) answers <cmd>1 .. <cmd>count
+			flush()
+			r.started = true
+			n, ok := 0, false
+			if len(c.args) >= 2 {
+				n, ok = a.w.evalInt(d.file, c.args[1], 0)
+			}
+			if !ok || n < 1 || n > 64 {
+				r.addLoose("ResponseCmndAll count is not a plain number: " + strings.Join(c.args, ", "))
+				continue
+			}
+			for i := 1; i <= n; i++ {
+				addKey(phCmd+strconv.Itoa(i), "text")
+			}
+			continue
+		}
 		if s, ok := simpleReplies[c.name]; ok {
 			flush()
 			k := phCmd

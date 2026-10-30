@@ -33,7 +33,7 @@
    ],
    "index": {
     "min": "1",
-    "max": "MAX_ADCS"
+    "max": "1"
    },
    "keys": [
     "AdcParam"
@@ -607,12 +607,19 @@
    ],
    "index": {
     "min": "1",
-    "max": "MAX_SSIDS"
+    "max": "2"
    },
    "keys": [
-    "BSSId<n>"
+    "BSSId1",
+    "BSSId2"
    ],
-   "kind": "text"
+   "kind": "text",
+   "indexed": {
+    "keys": [
+     "BSSId<n>"
+    ],
+    "kind": "text"
+   }
   },
   {
    "command": "ButtonDebounce",
@@ -990,7 +997,7 @@
    ],
    "index": {
     "min": "1",
-    "max": "MAX_COUNTERS"
+    "max": "4"
    },
    "keys": [
     "Counter<n>"
@@ -1050,7 +1057,7 @@
    ],
    "index": {
     "min": "1",
-    "max": "MAX_COUNTERS"
+    "max": "4"
    },
    "keys": [
     "CounterType<n>"
@@ -1591,10 +1598,13 @@
    ],
    "index": {
     "min": "1",
-    "max": "MAX_DEV_GROUP_NAMES"
+    "max": "4"
    },
    "keys": [
-    "DevGroupName<n>"
+    "DevGroupName1",
+    "DevGroupName2",
+    "DevGroupName3",
+    "DevGroupName4"
    ],
    "kind": "text"
   },
@@ -1662,7 +1672,7 @@
    ],
    "index": {
     "min": "1",
-    "max": "MAX_DEV_GROUP_NAMES"
+    "max": "4"
    },
    "loose": "a reply key ends in a number chosen at run time: DevGroupTie<#>"
   },
@@ -2484,7 +2494,7 @@
    ],
    "index": {
     "min": "0",
-    "max": "MAX_RELAYS_SET"
+    "max": "32"
    },
    "keys": [
     "DzIdx<n>"
@@ -2522,7 +2532,7 @@
    ],
    "index": {
     "min": "1",
-    "max": "MAX_DOMOTICZ_IDX"
+    "max": "4"
    },
    "keys": [
     "DzKeyIdx<n>"
@@ -2644,7 +2654,7 @@
    ],
    "index": {
     "min": "1",
-    "max": "MAX_DOMOTICZ_IDX"
+    "max": "4"
    },
    "keys": [
     "DzSwitchIdx<n>"
@@ -3447,9 +3457,17 @@
    ],
    "index": {
     "min": "1",
-    "max": "MAX_FRIENDLYNAMES"
+    "max": "8"
    },
    "keys": [
+    "FriendlyName1",
+    "FriendlyName2",
+    "FriendlyName3",
+    "FriendlyName4",
+    "FriendlyName5",
+    "FriendlyName6",
+    "FriendlyName7",
+    "FriendlyName8",
     "FriendlyName<n>"
    ],
    "kind": "text"
@@ -3706,9 +3724,17 @@
    ],
    "index": {
     "min": "1",
-    "max": "MAX_FRIENDLYNAMES"
+    "max": "8"
    },
    "keys": [
+    "FriendlyName1",
+    "FriendlyName2",
+    "FriendlyName3",
+    "FriendlyName4",
+    "FriendlyName5",
+    "FriendlyName6",
+    "FriendlyName7",
+    "FriendlyName8",
     "FriendlyName<n>"
    ],
    "kind": "text"
@@ -3950,10 +3976,13 @@
    ],
    "index": {
     "min": "1",
-    "max": "MAX_GROUP_TOPICS"
+    "max": "4"
    },
    "keys": [
-    "GroupTopic<n>"
+    "GroupTopic1",
+    "GroupTopic2",
+    "GroupTopic3",
+    "GroupTopic4"
    ],
    "kind": "text"
   },
@@ -4730,7 +4759,7 @@
     "USE_I2C"
    ],
    "index": {
-    "max": "MAX_I2C_DRIVERS-1"
+    "max": "159"
    },
    "keys": [
     "I2CDriver"
@@ -5541,7 +5570,7 @@
    ],
    "index": {
     "min": "1",
-    "max": "MAX_KNX_CB"
+    "max": "10"
    },
    "keys": [
     "Knx_CB<n>"
@@ -5587,7 +5616,7 @@
    ],
    "index": {
     "min": "1",
-    "max": "MAX_KNX_GA"
+    "max": "10"
    },
    "keys": [
     "Knx_GA<n>"
@@ -6232,7 +6261,7 @@
    ],
    "index": {
     "min": "1",
-    "max": "MAX_LEDS"
+    "max": "4"
    },
    "keys": [
     "LedPower<n>"
@@ -6249,7 +6278,7 @@
    ],
    "index": {
     "min": "1",
-    "max": "MAX_LEDS"
+    "max": "4"
    },
    "keys": [
     "LedPwmMode<n>"
@@ -6800,12 +6829,33 @@
    ],
    "index": {
     "min": "1",
-    "max": "MAX_RULE_MEMS"
+    "max": "16"
    },
    "keys": [
-    "Mem<n>"
+    "Mem1",
+    "Mem2",
+    "Mem3",
+    "Mem4",
+    "Mem5",
+    "Mem6",
+    "Mem7",
+    "Mem8",
+    "Mem9",
+    "Mem10",
+    "Mem11",
+    "Mem12",
+    "Mem13",
+    "Mem14",
+    "Mem15",
+    "Mem16"
    ],
-   "kind": "text"
+   "kind": "text",
+   "indexed": {
+    "keys": [
+     "Mem<n>"
+    ],
+    "kind": "text"
+   }
   },
   {
    "command": "MemDump",
@@ -7275,10 +7325,16 @@
    ],
    "index": {},
    "keys": [
-    "Module",
-    "Module2"
+    "Module"
    ],
-   "kind": "object"
+   "kind": "object",
+   "indexed": {
+    "keys": [
+     "Module",
+     "Module2"
+    ],
+    "kind": "object"
+   }
   },
   {
    "command": "ModuleAddress",
@@ -8339,12 +8395,20 @@
    ],
    "index": {
     "min": "1",
-    "max": "MAX_NTP_SERVERS"
+    "max": "3"
    },
    "keys": [
-    "NtpServer<n>"
+    "NtpServer1",
+    "NtpServer2",
+    "NtpServer3"
    ],
-   "kind": "text"
+   "kind": "text",
+   "indexed": {
+    "keys": [
+     "NtpServer<n>"
+    ],
+    "kind": "text"
+   }
   },
   {
    "command": "ot_blor",
@@ -9284,12 +9348,20 @@
    ],
    "index": {
     "min": "1",
-    "max": "MAX_MQTT_PREFIXES"
+    "max": "3"
    },
    "keys": [
-    "Prefix<n>"
+    "Prefix1",
+    "Prefix2",
+    "Prefix3"
    ],
-   "kind": "text"
+   "kind": "text",
+   "indexed": {
+    "keys": [
+     "Prefix<n>"
+    ],
+    "kind": "text"
+   }
   },
   {
    "command": "PressRes",
@@ -9342,7 +9414,7 @@
    ],
    "index": {
     "min": "1",
-    "max": "MAX_PULSETIMERS"
+    "max": "32"
    },
    "keys": [
     "PulseTime"
@@ -9360,7 +9432,7 @@
    ],
    "index": {
     "min": "1",
-    "max": "MAX_PWMS"
+    "max": "5"
    },
    "loose": "keys appended by MqttShowPWMState are not read; reply has no literal top-level key"
   },
@@ -10722,7 +10794,7 @@
     "!FIRMWARE_MINIMAL"
    ],
    "index": {
-    "max": "MAX_XSNS_DRIVERS-1"
+    "max": "127"
    },
    "keys": [
     "SetSensor"
@@ -10836,7 +10908,7 @@
    ],
    "index": {
     "min": "1",
-    "max": "MAX_SHUTTERS"
+    "max": "4"
    },
    "keys": [
     "ShutterButton<n>"
@@ -11569,7 +11641,7 @@
     "USE_SHUTTER"
    ],
    "index": {
-    "max": "MAX_SHUTTERS"
+    "max": "4"
    },
    "loose": "a reply key ends in a number chosen at run time: ShutterRelay<#>"
   },
@@ -12546,12 +12618,19 @@
    ],
    "index": {
     "min": "1",
-    "max": "MAX_SSIDS"
+    "max": "2"
    },
    "keys": [
-    "SSId<n>"
+    "SSId1",
+    "SSId2"
    ],
-   "kind": "text"
+   "kind": "text",
+   "indexed": {
+    "keys": [
+     "SSId<n>"
+    ],
+    "kind": "text"
+   }
   },
   {
    "command": "SSPMDisplay",
@@ -12870,12 +12949,21 @@
    ],
    "index": {
     "min": "1",
-    "max": "MAX_STATE_TEXT"
+    "max": "4"
    },
    "keys": [
-    "StateText<n>"
+    "StateText1",
+    "StateText2",
+    "StateText3",
+    "StateText4"
    ],
-   "kind": "text"
+   "kind": "text",
+   "indexed": {
+    "keys": [
+     "StateText<n>"
+    ],
+    "kind": "text"
+   }
   },
   {
    "command": "Status",
@@ -13089,7 +13177,7 @@
    ],
    "index": {
     "min": "1",
-    "max": "MAX_SWITCHES_SET"
+    "max": "32"
    },
    "keys": [
     "SwitchMode<n>",
@@ -13132,7 +13220,8 @@
    "keys": [
     "SwitchText<n>"
    ],
-   "kind": "text"
+   "kind": "text",
+   "loose": "ResponseCmndAll count is not a plain number: SET_SWITCH_TXT1, MAX_SWITCHES_TXT"
   },
   {
    "command": "SwitchTopic",
@@ -16501,12 +16590,49 @@
    ],
    "index": {
     "min": "1",
-    "max": "MAX_BUTTON_TEXT"
+    "max": "32"
    },
    "keys": [
-    "WebButton<n>"
+    "WebButton1",
+    "WebButton2",
+    "WebButton3",
+    "WebButton4",
+    "WebButton5",
+    "WebButton6",
+    "WebButton7",
+    "WebButton8",
+    "WebButton9",
+    "WebButton10",
+    "WebButton11",
+    "WebButton12",
+    "WebButton13",
+    "WebButton14",
+    "WebButton15",
+    "WebButton16",
+    "WebButton17",
+    "WebButton18",
+    "WebButton19",
+    "WebButton20",
+    "WebButton21",
+    "WebButton22",
+    "WebButton23",
+    "WebButton24",
+    "WebButton25",
+    "WebButton26",
+    "WebButton27",
+    "WebButton28",
+    "WebButton29",
+    "WebButton30",
+    "WebButton31",
+    "WebButton32"
    ],
-   "kind": "text"
+   "kind": "text",
+   "indexed": {
+    "keys": [
+     "WebButton<n>"
+    ],
+    "kind": "text"
+   }
   },
   {
    "command": "WebCanvas",
@@ -16651,7 +16777,7 @@
     "!FIRMWARE_MINIMAL"
    ],
    "index": {
-    "max": "MAX_XSNS_DRIVERS-1"
+    "max": "127"
    },
    "keys": [
     "WebSensor"

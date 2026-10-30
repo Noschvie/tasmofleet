@@ -139,18 +139,26 @@ func TestSynonymAnswersUnderItsOwnName(t *testing.T) {
 
 func TestAppendedSuffixIsAnAlternateKey(t *testing.T) {
 	// Module2 is answered as {"Module2":..}: the handler does strlcat(XdrvMailbox.command, "2").
-	// Listing only "Module" would drop the reply to Module2.
+	// Listing only "Module" would drop the reply to Module2; the suffix belongs to the typed index
+	// only, so the bare Module keeps just its own name.
 	c := fixture(t)["Module"]
-	if keysOf(c) != "Module,Module2" || c.Kind != "object" || c.Loose != "" {
+	if keysOf(c) != "Module" || c.Kind != "object" || c.Loose != "" {
 		t.Fatalf("Module: %+v", c)
+	}
+	if c.Indexed == nil || strings.Join(c.Indexed.Keys, ",") != "Module,Module2" {
+		t.Fatalf("Module indexed: %+v", c.Indexed)
 	}
 }
 
 func TestResponseCmndAllWithoutIndex(t *testing.T) {
 	// FriendlyName answers FriendlyName1..N without an index and FriendlyName2 with one.
+	// ResponseCmndAll(SET_FRIENDLYNAME1, MAX_FRIENDLYNAMES) lists every key; the count comes from the macro.
 	c := fixture(t)["FriendlyName"]
-	if keysOf(c) != "FriendlyName<n>" || c.Loose != "" {
+	if keysOf(c) != "FriendlyName1,FriendlyName2,FriendlyName3,FriendlyName4,FriendlyName5,FriendlyName6,FriendlyName7,FriendlyName8" || c.Loose != "" {
 		t.Fatalf("FriendlyName: %+v", c)
+	}
+	if c.Indexed == nil || strings.Join(c.Indexed.Keys, ",") != "FriendlyName<n>" {
+		t.Fatalf("FriendlyName indexed: %+v", c.Indexed)
 	}
 }
 

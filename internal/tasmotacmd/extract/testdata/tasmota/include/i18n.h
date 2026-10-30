@@ -16,6 +16,7 @@
 #define D_CMND_SETOPTION "SetOption"
 #define D_CMND_TEMPLATE "Template"
 #define D_CMND_GPIO "GPIO"
+#define MAX_FRIENDLYNAMES 8
 #define D_CMND_MODULE "Module"
 #define D_CMND_FRIENDLYNAME "FriendlyName"
 #define D_SO_WIFINOSLEEP "WifiNoSleep"

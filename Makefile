@@ -241,8 +241,8 @@ vuln:
 # Tasmota command catalogue (internal/tasmotacmd, docs/research/tasmota-command-catalogue.md).
 # The Tasmota source of the pinned version is fetched by catalogue-src only (never by a test or a
 # normal build), checked against its sha256 and unpacked next to the user's caches, not into the
-# repository. To pin another version: change the three variables, regenerate, update the embed in
-# internal/tasmotacmd/lookup.go.
+# repository. To pin another version: change the three variables, regenerate, delete the old catalogue-*.json
+# (the package embeds exactly one).
 TASMOTA_VERSION ?= 16.0.0
 TASMOTA_SHA256  ?= d2812ba1b7a34c17dd32b4aab46de30a4f777a83ae5cce2c0d60176d34bf0f2c
 TASMOTA_SRC     ?= $(or $(XDG_CACHE_HOME),$(HOME)/.cache)/tasmofleet/tasmota-$(TASMOTA_VERSION)
@@ -252,7 +252,7 @@ catalogue-src:
 	@if [ ! -f "$(TASMOTA_SRC)/.sha256" ] || [ "$$(cat "$(TASMOTA_SRC)/.sha256")" != "$(TASMOTA_SHA256)" ]; then \
 	  set -e; rm -rf "$(TASMOTA_SRC)"; mkdir -p "$(TASMOTA_SRC)"; \
 	  curl -fsSL --retry 3 -o "$(TASMOTA_SRC).tar.gz" "https://github.com/arendst/Tasmota/archive/refs/tags/v$(TASMOTA_VERSION).tar.gz"; \
-	  echo "$(TASMOTA_SHA256)  $(TASMOTA_SRC).tar.gz" | sha256sum -c -; \
+	  echo "$(TASMOTA_SHA256)  $(TASMOTA_SRC).tar.gz" | sha256sum -c - || { echo "catalogue-src: sha256 mismatch: the upstream archive of v$(TASMOTA_VERSION) changed (or the download is damaged); do not update TASMOTA_SHA256 without reading why" >&2; rm -f "$(TASMOTA_SRC).tar.gz"; exit 1; }; \
 	  tar -xzf "$(TASMOTA_SRC).tar.gz" -C "$(TASMOTA_SRC)" --strip-components=1 "Tasmota-$(TASMOTA_VERSION)/tasmota"; \
 	  rm -f "$(TASMOTA_SRC).tar.gz"; echo "$(TASMOTA_SHA256)" > "$(TASMOTA_SRC)/.sha256"; \
 	fi
