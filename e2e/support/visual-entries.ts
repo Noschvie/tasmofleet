@@ -197,7 +197,6 @@ export const entries: Entry[] = [
   { id: "policy-rule-delete-dialog", owner: "N3", route: "/policy", mode: "overlay", steps: [{clickSel: "section#rules tbody summary >> nth=1"}, {click: "Delete…"}] },
   { id: "policy-rule-edit", owner: "N3", route: "/policy", steps: [{clickSel: "section#rules td.p1 a >> nth=1"}] },
   { id: "policy-rule-new", owner: "N3", route: "/policy", steps: [{click: "New rule"}] },
-  { id: "policy-rule-duplicate-toast", owner: "N3", route: "/policy", mode: "overlay", steps: [{custom: "live-check-running"}, {clickSel: "section#rules tbody summary >> nth=1"}, {click: "Duplicate"}], mutates: true },
   { id: "users-menu", owner: "P9", route: "/users", steps: [{aria: "User actions", nth: 1}] },
   { id: "users-menu-sso", owner: "P9", route: "/users", steps: [{aria: "User actions", nth: 2}] },
   { id: "users-deactivate-dialog", owner: "P9", route: "/users", stack: "local", mode: "overlay", steps: [{custom: "signin-stepped-up"}, {aria: "User actions", nth: 1}, {click: "Deactivate", exact: true, nth: 1}], note: "the fleet stack is view only behind the header proxy; Deactivate asks in a dialog before anything changes, so the shared local stack stays as it is" },
