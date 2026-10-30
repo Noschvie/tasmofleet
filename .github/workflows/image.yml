@@ -130,3 +130,19 @@ jobs:
             org.opencontainers.image.licenses=AGPL-3.0-or-later
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      # The Docker Hub overview follows deploy/dockerhub/README.md with every release.
+      - name: Docker Hub overview
+        if: steps.v.outputs.dockerhub == 'true' && github.ref_type == 'tag'
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          set -eu
+          user=$(echo "$DOCKERHUB_USERNAME" | tr 'A-Z' 'a-z')
+          jwt=$(jq -n --arg u "$DOCKERHUB_USERNAME" --arg p "$DOCKERHUB_TOKEN" '{username:$u,password:$p}' |
+            curl -fsS -H 'Content-Type: application/json' -d @- https://hub.docker.com/v2/users/login | jq -r .token)
+          jq -n --rawfile fd deploy/dockerhub/README.md \
+            --arg d 'Self-hosted fleet manager for Tasmota devices: backups, policy, safe bulk firmware updates' \
+            '{full_description:$fd, description:$d}' |
+            curl -fsS -o /dev/null -X PATCH -H "Authorization: JWT $jwt" -H 'Content-Type: application/json' -d @- \
+              "https://hub.docker.com/v2/repositories/$user/tasmofleet/"
