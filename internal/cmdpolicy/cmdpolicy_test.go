@@ -135,6 +135,13 @@ func TestClassify(t *testing.T) {
 		{"MqttPassword", ClassAdmin, true, false, "the bare form asks nothing but stays redacted"},
 		{"Backlog Power ON; Reset 1", ClassAdmin, false, true, "a Reset inside a Backlog asks like a Reset alone"},
 		{"Backlog WebPassword x", ClassAdmin, true, true, "a secret inside a Backlog is redacted and asks"},
+		// Tasmota's CmndBacklog strips leading "Backlog" words from every part, case-insensitive, with no
+		// space needed; a part spelled that way must be judged as the command behind it.
+		{"Backlog BacklogStatus 0", ClassAdmin, false, true, "Status 0 behind a glued Backlog prefix asks"},
+		{"Backlog Power1 1;backlogstatus0", ClassAdmin, false, true, "same in the second part"},
+		{"Backlog  BACKLOGBacklogStatus 0", ClassAdmin, false, true, "repeated prefixes, any case"},
+		{"Backlog Backlog Reset 1", ClassAdmin, false, true, "a Reset behind a prefix asks"},
+		{"Backlog BacklogWebPassword x", ClassAdmin, true, true, "a secret behind a prefix is redacted"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.cmd, func(t *testing.T) {

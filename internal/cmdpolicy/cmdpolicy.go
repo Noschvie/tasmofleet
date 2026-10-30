@@ -315,7 +315,7 @@ func classifyBacklog(p parsed, v Verdict) (Verdict, string) {
 	v.Class, v.Reason = ClassAdmin, "changes device state"
 	seen := map[string]bool{}
 	for _, part := range strings.Split(p.args, ";") {
-		part = strings.TrimSpace(part)
+		part = stripBacklogPrefix(part)
 		if part == "" {
 			continue
 		}
@@ -337,6 +337,19 @@ func classifyBacklog(p parsed, v Verdict) (Verdict, string) {
 		v.Redact = v.Redact || sv.Redact
 	}
 	return v, ""
+}
+
+// stripBacklogPrefix removes the leading "Backlog" words of one Backlog part the way Tasmota's
+// CmndBacklog does (support_command.ino): trim, strip "backlog" case-insensitively with or
+// without a space after it, repeat. "BacklogStatus 0" and "BACKLOGBacklogStatus 0" are Status 0.
+func stripBacklogPrefix(part string) string {
+	for {
+		part = strings.TrimSpace(part)
+		if len(part) < len("backlog") || !strings.EqualFold(part[:len("backlog")], "backlog") {
+			return part
+		}
+		part = part[len("backlog"):]
+	}
 }
 
 // unclearOrOff reports whether arg is anything but a plain positive number or

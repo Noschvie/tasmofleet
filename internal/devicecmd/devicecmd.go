@@ -169,7 +169,15 @@ func (s *service) powerMQTT(ctx context.Context, d model.Device, relay int, acti
 	if err != nil {
 		return "", err
 	}
-	return powerState(raw, relay)
+	state, err := powerState(raw, relay)
+	if err != nil {
+		return "", err
+	}
+	if (action == "ON" || action == "OFF") && state != action {
+		// A reply that disagrees with the request is not its confirmation (a button press, a late reply).
+		return "", fmt.Errorf("%w (relay %d reported %s, asked %s)", ErrUnconfirmed, relay, state, action)
+	}
+	return state, nil
 }
 
 func (s *service) Run(ctx context.Context, p model.Principal, id model.DeviceID, cmd string) (json.RawMessage, error) {

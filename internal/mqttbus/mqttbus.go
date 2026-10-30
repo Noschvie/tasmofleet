@@ -157,6 +157,9 @@ func Connect(ctx context.Context, o Options) (Bus, error) {
 		b.subscribed.Store(true) // after the attempts, so a refused filter (logged above) does not keep the bus "down" for good
 		slog.Info("mqtt connected", "broker", redactURL(o.BrokerURL))
 	})
+	po.SetReconnectingHandler(func(paho.Client, *paho.ClientOptions) {
+		b.subscribed.Store(false) // before the new connection's OnConnect runs, whatever the lost handler did
+	})
 	po.SetConnectionLostHandler(func(_ paho.Client, err error) {
 		b.subscribed.Store(false)
 		slog.Warn("mqtt connection lost", "err", err)

@@ -149,6 +149,7 @@ func (a *runtime) run(ctx context.Context) error {
 	if err := a.startMQTT(bg); err != nil {
 		return err
 	}
+	a.goBG("mqtt-cmd", func() error { <-bg.Done(); a.mqttCmd.Close(); return nil }) // wakes commands in flight
 	a.tracker = health.New(health.Deps{
 		Store: svc.Store, Client: svc.Client, Bus: a.bus, Hub: svc.Hub, OnMQTTSeen: a.onMQTTSeen,
 	}, health.Options{
@@ -165,7 +166,8 @@ func (a *runtime) run(ctx context.Context) error {
 	mid := newMQTTIdentity(a.bus, a.mqttCmd, a.svc.Inventory.List, a.svc.Store, a.svc.Audit,
 		func(id model.DeviceID) { a.svc.Prober.announce(id) }, a.log)
 	mid.known = a.mqttKnown.Known
-	a.svc.Prober.MQTT = mid // "Refresh identity" over MQTT for devices HTTP cannot reach (#91)
+	mid.spawn = func(f func()) { a.goBG("mqtt-identity-ask", func() error { f(); return nil }) } // waited for at shutdown
+	a.svc.Prober.MQTT = mid                                                                      // "Refresh identity" over MQTT for devices HTTP cannot reach (#91)
 	a.goBG("mqtt-identity", func() error { mid.run(bg); return nil })
 
 	if err := a.setupBackups(bg); err != nil {

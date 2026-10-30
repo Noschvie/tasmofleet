@@ -174,6 +174,8 @@ func TestStatus0IsNeverPublished(t *testing.T) {
 		"Status 0", "status 0", "Status0", "status0", "Status  0", "Status 00", "Status +0", "Status 0x0", "Status off",
 		"Status1 0", "Status 14", "Status -1", "Status 1 2", "Status 01",
 		"Backlog Power ON; Status 0", "Backlog Status0", "Backlog0 status 00", "backlog Status 5;Status 0",
+		// Tasmota strips leading "Backlog" words from every part (CmndBacklog): these are Status 0.
+		"Backlog BacklogStatus 0", "Backlog Power1 1;backlogstatus0", "Backlog  BACKLOGBacklogStatus 0", "Backlog Backlog Status 0",
 	} {
 		b := &fakeBus{}
 		c := newChan(b)
@@ -451,7 +453,7 @@ func TestFileCommandsAreRefused(t *testing.T) {
 // other topics; the channel addresses exactly one device.
 func TestTopicsThatReachMoreThanOneDeviceAreRefused(t *testing.T) {
 	for _, d := range []model.Device{
-		{Topic: "tasmotas", GroupTopic: "tasmotas"}, {Topic: "a/b"}, {Topic: "+"}, {Topic: "#"}, {Topic: ""}, {Topic: " x"},
+		{Topic: "tasmotas", GroupTopic: "tasmotas"}, {Topic: "tasmotas"}, {Topic: "x", GroupTopic: "x"}, {Topic: "a/b"}, {Topic: "+"}, {Topic: "#"}, {Topic: ""}, {Topic: " x"},
 	} {
 		b := &fakeBus{}
 		if _, err := newChan(b).Do(t.Context(), d, "Hostname"); !errors.Is(err, ErrRefused) || len(b.sent()) != 0 {
@@ -534,5 +536,139 @@ func TestKnownLimitsTheTables(t *testing.T) {
 	defer c.mu.Unlock()
 	if len(c.info) != 1 || len(c.lwt) != 0 {
 		t.Fatalf("info %d, lwt %d", len(c.info), len(c.lwt))
+	}
+}
+
+// Why: a Backlog inside a Backlog is refused (Tasmota strips the inner word, so it would only hide
+// the real command from the checks); nothing is published.
+func TestNestedBacklogIsRefused(t *testing.T) {
+	for _, cmd := range []string{"Backlog Backlog Power ON", "Backlog Power ON; Backlog Power OFF", "Backlog backlog", "Backlog Backlog"} {
+		b := &fakeBus{}
+		if _, err := newChan(b).Do(t.Context(), plug(), cmd); !errors.Is(err, ErrRefused) || len(b.sent()) != 0 {
+			t.Errorf("%q: err = %v, sent %v", cmd, err, b.sent())
+		}
+	}
+}
+
+// Why: after a timeout the reply may still come. It must not be taken as the answer of the NEXT
+// command with the same key (a stale value reported as the result of a new write): the topic stays
+// busy until the late reply arrives, and that reply is dropped.
+func TestALateReplyDoesNotAnswerTheNextCommand(t *testing.T) {
+	b := &fakeBus{}
+	n := 0
+	var mu sync.Mutex
+	b.onPub = func(b *fakeBus, p pub) {
+		mu.Lock()
+		n++
+		k := n
+		mu.Unlock()
+		if k == 2 {
+			go b.result(p.topic, `{"Hostname":"new"}`)
+		}
+	}
+	c := newChan(b)
+	if _, err := c.Do(t.Context(), plug(), "Hostname"); !errors.Is(err, tasmota.ErrTimeout) {
+		t.Fatalf("first: %v", err)
+	}
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		b.result("plug", `{"Hostname":"old"}`) // the late reply of the first command
+	}()
+	got, err := c.Do(t.Context(), plug(), "Hostname")
+	if err != nil || string(got) != `{"Hostname":"new"}` {
+		t.Fatalf("second: %s, %v", got, err)
+	}
+}
+
+// Why: a device that never answers must not block its topic for ever; the hold ends after a grace.
+func TestTheTopicIsReleasedAfterTheGrace(t *testing.T) {
+	b := &fakeBus{}
+	c := newChan(b)
+	if _, err := c.Do(t.Context(), plug(), "Hostname"); !errors.Is(err, tasmota.ErrTimeout) {
+		t.Fatal(err)
+	}
+	b.onPub = func(b *fakeBus, p pub) { b.result(p.topic, `{"Hostname":"x"}`) }
+	if _, err := c.Do(t.Context(), plug(), "Hostname"); err != nil {
+		t.Fatalf("second command after the grace: %v", err)
+	}
+}
+
+// Why: a caller that gives up AFTER the publish does not know whether the command ran: that is
+// the unknown outcome (ErrTimeout, still matching the context error), unlike giving up while
+// queued, where nothing was sent.
+func TestGivingUpAfterThePublishIsAnUnknownOutcome(t *testing.T) {
+	b := &fakeBus{}
+	o := fast()
+	o.ReplyWait = 5 * time.Second
+	c := New(b, o)
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+	_, err := c.Do(ctx, plug(), "Restart 1")
+	if !errors.Is(err, tasmota.ErrTimeout) || !errors.Is(err, context.DeadlineExceeded) || len(b.sent()) != 1 {
+		t.Fatalf("err = %v, sent %v", err, b.sent())
+	}
+	// Queued only: plain context error, not an unknown outcome.
+	c.sem("other") <- struct{}{}
+	ctx2, cancel2 := context.WithTimeout(t.Context(), 30*time.Millisecond)
+	defer cancel2()
+	_, err = c.Do(ctx2, model.Device{Topic: "other"}, "Hostname")
+	if errors.Is(err, tasmota.ErrTimeout) || !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("queued: err = %v", err)
+	}
+}
+
+// Why: a retained LWT arrives only right after we subscribed; the device may have rebooted while we
+// were away, so an INFO1 cached before is of unknown age and must not be used for minimal detection.
+func TestRetainedLWTDropsTheInfo(t *testing.T) {
+	b := &fakeBus{}
+	c := newChan(b)
+	b.emit(mqttbus.KindInfo, "plug", "INFO1", `{"Info1":{"Version":"15.0.0"}}`, false)
+	b.emit(mqttbus.KindLWT, "plug", "LWT", "Online", true)
+	if _, ok := c.Info("plug"); ok {
+		t.Fatal("INFO1 from before a retained LWT survived")
+	}
+	b.emit(mqttbus.KindInfo, "plug", "INFO1", `{"Info1":{"Version":"16.0.0"}}`, false)
+	b.emit(mqttbus.KindLWT, "plug", "LWT", "Online", false)
+	if _, ok := c.Info("plug"); !ok {
+		t.Fatal("a live Online dropped the INFO1 that followed")
+	}
+}
+
+// Why: with SetOption4 1 a device reports a switched relay on stat/<t>/POWERn and not on RESULT;
+// that still confirms the switch (the old behaviour of Power over MQTT), for its own relay only.
+func TestPowerTopicAnswersAPowerCommand(t *testing.T) {
+	b := &fakeBus{}
+	b.onPub = func(b *fakeBus, p pub) { b.emit(mqttbus.KindPower, p.topic, "POWER2", "ON", false) }
+	got, err := newChan(b).Do(t.Context(), plug(), "Power2 ON")
+	if err != nil || string(got) != `{"POWER2":"ON"}` {
+		t.Fatalf("%s, %v", got, err)
+	}
+	if _, err := newChan(b).Do(t.Context(), plug(), "Power1 ON"); !errors.Is(err, tasmota.ErrTimeout) {
+		t.Fatalf("POWER2 answered Power1: %v", err)
+	}
+	b2 := &fakeBus{}
+	b2.onPub = func(b *fakeBus, p pub) { b.emit(mqttbus.KindPower, p.topic, "POWER", "ON", true) }
+	if _, err := newChan(b2).Do(t.Context(), plug(), "Power ON"); !errors.Is(err, tasmota.ErrTimeout) {
+		t.Fatalf("a retained POWER answered: %v", err)
+	}
+}
+
+// Why: on shutdown a command in flight must not hold the process for its whole reply wait.
+func TestCloseWakesACommandInFlight(t *testing.T) {
+	b := &fakeBus{}
+	o := fast()
+	o.ReplyWait = time.Minute
+	c := New(b, o)
+	errc := make(chan error, 1)
+	go func() { _, err := c.Do(t.Context(), plug(), "Hostname"); errc <- err }()
+	waitFor(t, "the publish", func() bool { return len(b.sent()) == 1 })
+	c.Close()
+	select {
+	case err := <-errc:
+		if !errors.Is(err, tasmota.ErrUnreachable) {
+			t.Fatalf("err = %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Close did not wake the command")
 	}
 }

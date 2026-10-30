@@ -94,6 +94,11 @@ func parseBacklog(r *request) (*request, error) {
 		if part == "" {
 			continue
 		}
+		// Tasmota strips leading "Backlog" words from every part (CmndBacklog, case-insensitive, no
+		// space needed), so "BacklogStatus 0" is Status 0. No part may start that way.
+		if len(part) >= len("backlog") && strings.EqualFold(part[:len("backlog")], "backlog") {
+			return nil, refuse("a Backlog part starts with \"Backlog\"")
+		}
 		sub, err := parseRequest(part)
 		if err != nil {
 			return nil, err
@@ -126,6 +131,13 @@ func (r *request) match(m mqttbus.Message, loose bool) (v verdict, ok bool) {
 	if r.status != "" && m.Kind == mqttbus.KindStatus {
 		if m.Suffix == r.status {
 			return verdict{reply: m.Payload}, true
+		}
+		return verdict{}, false
+	}
+	if m.Kind == mqttbus.KindPower && r.base == "power" && (string(m.Payload) == "ON" || string(m.Payload) == "OFF") {
+		// SetOption4 1 devices report a switched relay on stat/<t>/POWERn instead of RESULT.
+		if keyNames(m.Suffix, r.name, r.base) {
+			return verdict{reply: []byte(`{"` + m.Suffix + `":"` + string(m.Payload) + `"}`)}, true
 		}
 		return verdict{}, false
 	}
@@ -166,6 +178,20 @@ func (r *request) match(m mqttbus.Message, loose bool) (v verdict, ok bool) {
 		return verdict{reply: m.Payload}, true
 	}
 	return verdict{}, false
+}
+
+// matchesAny reports whether m would have answered r in any mode: a late reply to an abandoned request.
+func (r *request) matchesAny(m mqttbus.Message) bool {
+	if r.backlog != nil {
+		for _, sub := range r.backlog {
+			if _, ok := sub.match(m, true); ok {
+				return true
+			}
+		}
+		return false
+	}
+	_, ok := r.match(m, true)
+	return ok
 }
 
 // keyNames says whether a reply key belongs to the command: "POWER1" and "POWER" answer Power1,

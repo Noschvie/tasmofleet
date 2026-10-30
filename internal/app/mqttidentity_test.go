@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"strconv"
@@ -607,5 +608,31 @@ func TestInfo1GroupTopicIsThePlainTopic(t *testing.T) {
 		if g, ok := info1GroupTopic([]byte(in)); ok {
 			t.Errorf("%.60s: took %.20q", in, g)
 		}
+	}
+}
+
+// Why: a question the caller abandoned after the publish (deadline) may have been answered; the
+// device is not asked again for ten minutes. Only a question that was never sent (refused, offline,
+// still queued when the deadline hit) may be retried at once.
+func TestMQTTIdentityKeepsTheTenMinutesAfterAnAbandonedQuestion(t *testing.T) {
+	for name, tc := range map[string]struct {
+		err     error
+		reasked bool
+	}{
+		"sent, caller gave up": {fmt.Errorf("%w: %w", tasmota.ErrTimeout, context.DeadlineExceeded), false},
+		"still queued":         {context.DeadlineExceeded, true},
+		"offline":              {tasmota.ErrUnreachable, true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := newIDEnv(oursDevice(1, "plug"))
+			e.bus.reply = func(string) (json.RawMessage, error) { return nil, tc.err }
+			e.online("plug")
+			e.m.askDue(t.Context())
+			e.advance(2 * time.Second)
+			e.m.askDue(t.Context())
+			if got := len(e.bus.sent()) == 2; got != tc.reasked {
+				t.Fatalf("commands %q, asked again = %v, want %v", e.bus.sent(), got, tc.reasked)
+			}
+		})
 	}
 }

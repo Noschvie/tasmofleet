@@ -26,6 +26,9 @@ const (
 	waitDepth = 32   // messages kept for one waiting command; more are dropped
 )
 
+// defaultGroupTopic is Tasmota's default GroupTopic: a command to it reaches every device that kept it.
+const defaultGroupTopic = "tasmotas"
+
 // ErrRefused marks a command the channel will not publish. Nothing was sent.
 var ErrRefused = errors.New("mqttcmd: command refused")
 
@@ -52,6 +55,8 @@ type Channel struct {
 	bus   mqttbus.Bus
 	o     Options
 	unsub func()
+	done  chan struct{} // closed by Close: wakes every command in flight
+	once  sync.Once
 
 	mu      sync.Mutex
 	lwt     map[string]string // topic -> "Online" | "Offline"
@@ -81,13 +86,22 @@ func New(bus mqttbus.Bus, o Options) *Channel {
 	if o.BacklogMax == 0 {
 		o.BacklogMax = DefaultBacklogMax
 	}
-	c := &Channel{bus: bus, o: o, lwt: map[string]string{}, info: map[string]*Info{}, sems: map[string]chan struct{}{}, waiters: map[string]*waiter{}}
-	c.unsub = bus.Subscribe([]mqttbus.Kind{mqttbus.KindLWT, mqttbus.KindInfo, mqttbus.KindResult, mqttbus.KindStatus}, c.onMessage)
+	c := &Channel{bus: bus, o: o, lwt: map[string]string{}, info: map[string]*Info{}, sems: map[string]chan struct{}{}, waiters: map[string]*waiter{}, done: make(chan struct{})}
+	c.unsub = bus.Subscribe([]mqttbus.Kind{mqttbus.KindLWT, mqttbus.KindInfo, mqttbus.KindResult, mqttbus.KindStatus, mqttbus.KindPower}, c.onMessage)
 	return c
 }
 
-// Close stops listening.
-func (c *Channel) Close() { c.unsub() }
+// Close stops listening and wakes every command in flight with ErrUnreachable.
+func (c *Channel) Close() {
+	c.once.Do(func() {
+		c.unsub()
+		close(c.done)
+	})
+}
+
+func (c *Channel) closed() error {
+	return fmt.Errorf("%w: the MQTT command channel is closed", tasmota.ErrUnreachable)
+}
 
 // Connected reports whether the bus is connected and subscribed.
 func (c *Channel) Connected() bool { return c.bus.Connected() }
@@ -120,23 +134,30 @@ func (c *Channel) do(ctx context.Context, d model.Device, cmd string, loose bool
 	select {
 	case sem <- struct{}{}: // one command in flight per topic; blocked callers are served in order
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, ctx.Err() // still queued: nothing was sent
+	case <-c.done:
+		return nil, c.closed()
 	}
-	defer func() { <-sem }()
+	release := func() { <-sem }
 
 	if c.offline(d.Topic) { // checked after the wait: the device may have gone while we queued
+		release()
 		return nil, fmt.Errorf("%w: the device reported itself offline (LWT), nothing was sent", tasmota.ErrUnreachable)
 	}
 	if err := c.waitTurn(ctx); err != nil {
+		release()
 		return nil, err
 	}
 	w := &waiter{ch: make(chan mqttbus.Message, waitDepth), off: make(chan struct{}, 1)}
 	c.setWaiter(d.Topic, w)
-	defer c.setWaiter(d.Topic, nil)
 	if err := c.bus.Command(ctx, d.Topic, req.name, req.args); err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return nil, err
+			// The publish was attempted: the command may have reached the device.
+			c.holdUntilLate(d.Topic, w, req, release)
+			return nil, fmt.Errorf("%w: %s may have been sent: %w", tasmota.ErrTimeout, req.name, err)
 		}
+		c.setWaiter(d.Topic, nil)
+		release()
 		return nil, fmt.Errorf("%w: %s not sent: %w", tasmota.ErrUnreachable, req.name, err)
 	}
 	var raw json.RawMessage
@@ -145,6 +166,14 @@ func (c *Channel) do(ctx context.Context, d model.Device, cmd string, loose bool
 	} else {
 		raw, err = c.collect(ctx, w, req, loose)
 	}
+	if errors.Is(err, tasmota.ErrTimeout) {
+		// The outcome is unknown and the reply may still come. Keep the topic and the listener for a
+		// grace period and drop that reply, or it would answer the next command with the same key.
+		c.holdUntilLate(d.Topic, w, req, release)
+		return nil, err
+	}
+	c.setWaiter(d.Topic, nil)
+	release()
 	if err != nil {
 		return nil, err
 	}
@@ -152,6 +181,32 @@ func (c *Channel) do(ctx context.Context, d model.Device, cmd string, loose bool
 		raw = cmdpolicy.ScrubReply(raw)
 	}
 	return raw, nil
+}
+
+// holdUntilLate keeps the topic busy and the old listener registered until a reply that matches
+// the abandoned request arrives (and is dropped), the device goes offline, or ReplyWait has
+// passed again. It returns at once; the topic is released by a goroutine.
+func (c *Channel) holdUntilLate(topic string, w *waiter, req *request, release func()) {
+	go func() {
+		defer release()
+		defer c.setWaiter(topic, nil)
+		timer := time.NewTimer(c.o.ReplyWait)
+		defer timer.Stop()
+		for {
+			select {
+			case m := <-w.ch:
+				if req.matchesAny(m) {
+					return // the late reply, dropped
+				}
+			case <-w.off:
+				return
+			case <-timer.C:
+				return
+			case <-c.done:
+				return
+			}
+		}
+	}()
 }
 
 // collect waits for the one reply of a single command.
@@ -174,7 +229,9 @@ func (c *Channel) collect(ctx context.Context, w *waiter, req *request, loose bo
 		case <-timer.C:
 			return nil, fmt.Errorf("mqtt: no answer to %s: %w", req.name, tasmota.ErrTimeout)
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, fmt.Errorf("mqtt: %s was sent and not answered before the caller gave up (outcome unknown): %w: %w", req.name, tasmota.ErrTimeout, ctx.Err())
+		case <-c.done:
+			return nil, c.closed()
 		}
 	}
 }
@@ -185,7 +242,7 @@ func checkTopic(d model.Device) error {
 		return fmt.Errorf("%w: the device has no MQTT topic", ErrRefused)
 	case strings.ContainsAny(d.Topic, "/+#") || strings.TrimSpace(d.Topic) != d.Topic:
 		return fmt.Errorf("%w: the topic contains characters that are not allowed", ErrRefused)
-	case d.GroupTopic != "" && d.Topic == d.GroupTopic:
+	case d.Topic == defaultGroupTopic || (d.GroupTopic != "" && d.Topic == d.GroupTopic):
 		return fmt.Errorf("%w: the topic is the group topic, which would reach many devices", ErrRefused)
 	}
 	return nil
@@ -249,7 +306,7 @@ func (c *Channel) onMessage(m mqttbus.Message) {
 		c.onLWT(m)
 	case mqttbus.KindInfo:
 		c.onInfo(m)
-	case mqttbus.KindResult, mqttbus.KindStatus:
+	case mqttbus.KindResult, mqttbus.KindStatus, mqttbus.KindPower:
 		if m.Retained {
 			return // old news, never an answer
 		}
@@ -262,7 +319,7 @@ func (c *Channel) onMessage(m mqttbus.Message) {
 			default: // a flood must not block the bus; the real reply is lost, the caller times out
 			}
 		}
-	case mqttbus.KindState, mqttbus.KindSensor, mqttbus.KindPower, mqttbus.KindDiscovery, mqttbus.KindUpgrade, mqttbus.KindFile:
+	case mqttbus.KindState, mqttbus.KindSensor, mqttbus.KindDiscovery, mqttbus.KindUpgrade, mqttbus.KindFile:
 		// not subscribed
 	}
 }
@@ -284,6 +341,11 @@ func (c *Channel) onLWT(m mqttbus.Message) {
 		return
 	}
 	c.lwt[m.Topic] = state
+	if m.Retained {
+		// Replayed right after we subscribed: we may have missed a reboot, so what the device
+		// announced before is of unknown age.
+		delete(c.info, m.Topic)
+	}
 	if state == "Offline" {
 		// Every software restart publishes Offline (the will, no DISCONNECT): what the device
 		// announced before it is stale, and a command waiting for its answer lost it.

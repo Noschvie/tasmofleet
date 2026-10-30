@@ -438,7 +438,11 @@ func (m *mqttIdentity) askStatus2(ctx context.Context, d model.Device) {
 
 // notSent says the channel refused or could not publish: the device was not asked.
 func notSent(err error) bool {
-	return errors.Is(err, mqttcmd.ErrRefused) || errors.Is(err, tasmota.ErrUnreachable) || errors.Is(err, context.Canceled)
+	if errors.Is(err, tasmota.ErrTimeout) {
+		return false // published, outcome unknown (this includes a caller that gave up after the publish)
+	}
+	return errors.Is(err, mqttcmd.ErrRefused) || errors.Is(err, tasmota.ErrUnreachable) ||
+		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) // still queued
 }
 
 // statusObject asks the plain "Status" (no number) over MQTT.

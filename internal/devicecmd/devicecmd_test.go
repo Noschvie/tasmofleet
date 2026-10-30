@@ -598,3 +598,20 @@ func TestRunUnknownDeviceIsAudited(t *testing.T) {
 		t.Fatalf("audit: %+v", ev)
 	}
 }
+
+// Why: a RESULT that disagrees with the request (a button press, a stale reply) is not the
+// confirmation of an explicit ON or OFF; showing it as the new state would hide that the switch
+// did not do what was asked. TOGGLE has no expected state and takes what the device reports.
+func TestPowerOverMQTTReplyThatContradictsTheRequestIsUnconfirmed(t *testing.T) {
+	bus := &fakeBus{connected: true}
+	bus.answer = func(topic, _, _ string) *mqttbus.Message {
+		return &mqttbus.Message{Kind: mqttbus.KindResult, Topic: topic, Suffix: "RESULT", Payload: []byte(`{"POWER":"OFF"}`)}
+	}
+	e := setup(t, plug, model.MQTTOurs, bus)
+	if _, err := e.svc.Power(context.Background(), "x", 7, 1, "ON"); !errors.Is(err, ErrUnconfirmed) {
+		t.Fatalf("ON answered OFF: %v", err)
+	}
+	if state, err := e.svc.Power(context.Background(), "x", 7, 1, "TOGGLE"); err != nil || state != "OFF" {
+		t.Fatalf("TOGGLE: %q, %v", state, err)
+	}
+}
