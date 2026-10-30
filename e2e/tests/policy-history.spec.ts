@@ -51,13 +51,16 @@ test("history: quick saves fold, the summary names the rule, revert lands on the
   // v1: the timezone rule from its template
   await page.goto(app.url + "/policy/rules/new?template=timezone");
   await page.getByRole("button", { name: "Save rule" }).click();
-  await expect(page).toHaveURL(/\/policy\/rules\/r[a-z0-9]+\?ok=saved$/);
-  const timezoneRule = page.url().split("?")[0];
-  // v2..v4: three quick edits of the expected value
+  // Save ends the editor on the overview, which names the rule and marks its row
+  await expect(page).toHaveURL(/\/policy\?ok=saved&rule=r[a-z0-9]+$/);
+  const timezoneRule = app.url + "/policy/rules/" + new URL(page.url()).searchParams.get("rule");
+  await expect(page.getByText("Rule “Local timezone” saved")).toBeVisible();
+  // v2..v4: three quick edits of the expected value, each reopened from the rule's address
   for (const want of ["1", "2", "3"]) {
+    await page.goto(timezoneRule);
     await page.locator("input[name='want']").fill(want);
     await page.getByRole("button", { name: "Save rule" }).click();
-    await expect(page).toHaveURL(timezoneRule + "?ok=saved");
+    await expect(page).toHaveURL(/\/policy\?ok=saved&rule=r[a-z0-9]+$/);
   }
   // another rule, so the first rule's own history has something to leave out (v5)
   await page.goto(app.url + "/policy/rules/new");
@@ -65,7 +68,7 @@ test("history: quick saves fold, the summary names the rule, revert lands on the
   await page.getByRole("button", { name: "Continue" }).first().click();
   await page.locator("input[name='want']").fill("3");
   await page.getByRole("button", { name: "Save rule" }).click();
-  await expect(page).toHaveURL(/\/policy\/rules\/r[a-z0-9]+\?ok=saved$/);
+  await expect(page).toHaveURL(/\/policy\?ok=saved&rule=r[a-z0-9]+$/);
 
   await page.goto(app.url + "/policy");
   await page.getByRole("link", { name: "History" }).first().click();
@@ -119,7 +122,7 @@ test("history at 375 px: the list comes first, the diff below, nothing scrolls s
   await page.setViewportSize({ width: 375, height: 800 });
   await page.goto(app.url + "/policy/rules/new?template=timezone");
   await page.getByRole("button", { name: "Save rule" }).click();
-  await expect(page).toHaveURL(/\?ok=saved$/);
+  await expect(page).toHaveURL(/\/policy\?ok=saved&rule=r[a-z0-9]+$/);
   await page.goto(app.url + "/policy/history?v=1");
   await shot(page, "history-phone");
   const lb = await page.locator(".pol-hist-list").boundingBox();

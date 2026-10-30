@@ -118,7 +118,7 @@ async function savePolicyVersion(page: Page, app: App, name: string, command: st
     else await control.fill(want);
     await page.locator("input[name=change_note]").fill(note);
     await page.getByRole("button", { name: "Save rule" }).click();
-    await expect(page.getByText("Rule saved")).toBeVisible();
+    await expect(page.getByText(`Rule “${name}” saved`)).toBeVisible(); // Save ends on the overview
   } finally {
     await page.setExtraHTTPHeaders({ "X-authentik-username": "adam", "X-authentik-groups": "adm" });
   }

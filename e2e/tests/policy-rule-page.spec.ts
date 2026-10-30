@@ -63,7 +63,7 @@ async function shot(page: Page, name: string) {
   await page.emulateMedia({ colorScheme: null });
 }
 
-const ruleID = (url: string) => new URL(url).pathname.split("/").pop()!;
+const savedRuleID = (url: string) => new URL(url).searchParams.get("rule")!;
 
 test("a new rule from a template is a draft until Save, then lives at its own id that survives a reorder", async ({
   page,
@@ -81,12 +81,16 @@ test("a new rule from a template is a draft until Save, then lives at its own id
   await shot(page, "draft-from-template");
 
   await page.getByRole("button", { name: "Save rule" }).click();
-  await expect(page).toHaveURL(/\/policy\/rules\/r[a-z0-9]{2,15}\?ok=saved$/);
-  const first = ruleID(page.url().split("?")[0]);
+  // Save ends the editor on the overview: the flash names the rule and its row is marked
+  await expect(page).toHaveURL(/\/policy\?ok=saved&rule=r[a-z0-9]{2,15}$/);
+  const first = savedRuleID(page.url());
+  await expect(page.getByText("Rule “Local timezone” saved")).toBeVisible();
+  await expect(page.locator("tr.is-saved")).toHaveCount(1);
+  await expect(page.locator("tr.is-saved")).toContainText("Local timezone");
+  await page.goto(app.url + "/policy/rules/" + first);
   await expect(page.getByRole("heading", { level: 1 })).toContainText(
     "Local timezone",
   );
-  await expect(page.getByText("Rule saved")).toBeVisible();
   await expect(page.locator(".dev-tile")).toHaveCount(4);
   await shot(page, "rule-page");
 
@@ -97,11 +101,12 @@ test("a new rule from a template is a draft until Save, then lives at its own id
   await expect(page).toHaveURL(/\/policy\/rules\/new\?command=LedState$/);
   await page.locator("input[name='want']").fill("3");
   await page.getByRole("button", { name: "Save rule" }).click();
-  await expect(page).toHaveURL(/\/policy\/rules\/r[a-z0-9]{2,15}\?ok=saved$/);
-  const second = ruleID(page.url().split("?")[0]);
+  await expect(page).toHaveURL(/\/policy\?ok=saved&rule=r[a-z0-9]{2,15}$/);
+  const second = savedRuleID(page.url());
   expect(second).not.toBe(first);
 
   // reorder: the second rule goes first. The first rule's address still names the timezone rule.
+  await page.goto(app.url + "/policy/rules/" + second);
   const csrf = await page.locator("input[name='csrf']").first().inputValue();
   const version = await page
     .locator("input[name='version']")
@@ -124,13 +129,14 @@ test("a new rule from a template is a draft until Save, then lives at its own id
   await page.goto(app.url + "/policy/rules/rzzzzzzzzzz");
   await expect(page.getByText("This page doesn't exist")).toBeVisible();
 
-  // editing the rule keeps its id and the page it lands on
+  // editing the rule keeps its id; Save lands on the overview with that rule marked
   await page.goto(app.url + "/policy/rules/" + first);
   await page.locator("textarea[name='note']").fill("local time everywhere");
   await page.getByRole("button", { name: "Save rule" }).click();
   await expect(page).toHaveURL(
-    new RegExp(`/policy/rules/${first}\\?ok=saved$`),
+    new RegExp(`/policy\\?ok=saved&rule=${first}$`),
   );
+  await page.goto(app.url + "/policy/rules/" + first);
   await expect(page.locator("textarea[name='note']")).toHaveValue(
     "local time everywhere",
   );
@@ -207,8 +213,8 @@ test("an operator sees the rule read-only and cannot open New rule", async ({
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/policy/rules/new?template=poweron");
   await page.getByRole("button", { name: "Save rule" }).click();
-  await expect(page).toHaveURL(/\/policy\/rules\/r[a-z0-9]{2,15}\?ok=saved$/);
-  const id = ruleID(page.url().split("?")[0]);
+  await expect(page).toHaveURL(/\/policy\?ok=saved&rule=r[a-z0-9]{2,15}$/);
+  const id = savedRuleID(page.url());
 
   await page.setExtraHTTPHeaders(operator);
   await page.goto(app.url + "/policy/rules/" + id);

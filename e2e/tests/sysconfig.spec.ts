@@ -111,18 +111,24 @@ test("policy rule editor: create via the setting picker, live preview, edit, rev
   await expect(page.locator("#rule-devices .ufield-err")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Save rule" }).click();
-  await expect(page).toHaveURL(/\/policy\/rules\/r[a-z0-9]+\?ok=saved$/);
-  await expect(page.getByText("Rule saved")).toBeVisible();
-  await expect(page.locator(".pghead-sub")).toContainText("SaveData = 0");
-  await expect(page.locator(".pghead-sub")).toContainText("ESP32 (all variants)");
+  // Save ends the editor on the overview: the flash names the rule and its row is marked
+  await expect(page).toHaveURL(/\/policy\?ok=saved&rule=r[a-z0-9]+$/);
+  await expect(page.getByText("Rule “Flash wear” saved")).toBeVisible();
+  const saved = page.locator("tr.is-saved");
+  await expect(saved).toHaveCount(1);
+  await expect(saved).toContainText("Flash wear");
+  await expect(saved).toContainText("SaveData = 0");
+  await expect(saved).toContainText("ESP32 (all variants)");
 
   // editing on the rule page keeps the address
-  const url = page.url().split("?")[0];
+  const ruleId = new URL(page.url()).searchParams.get("rule");
+  const url = app.url + "/policy/rules/" + ruleId;
+  await page.goto(url);
   await expect(page.locator("input[name='name']")).toHaveValue("Flash wear");
   await page.locator("input[name='want']").fill("1");
   await page.getByRole("button", { name: "Save rule" }).click();
-  await expect(page).toHaveURL(url + "?ok=saved");
-  await expect(page.locator(".pghead-sub")).toContainText("SaveData = 1");
+  await expect(page).toHaveURL(app.url + "/policy?ok=saved&rule=" + ruleId);
+  await expect(page.locator("tr.is-saved")).toContainText("SaveData = 1");
 
   // The History tab shows the newest version's change; reverting to the one before asks first.
   await page.goto(app.url + "/policy/history");

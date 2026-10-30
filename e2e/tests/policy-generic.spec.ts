@@ -73,10 +73,14 @@ test("a free command rule: refusals with the reason, then live read, preview and
   await page.getByRole("radio", { name: /^Required/ }).check(); // only Required rules are fixed
   await shot("free-command");
   await page.getByRole("button", { name: "Save rule" }).click();
-  await expect(page.getByText("Rule saved")).toBeVisible();
+  // Save ends the editor on the overview: the flash names the rule and its row is marked
+  await expect(page).toHaveURL(/\/policy\?ok=saved&rule=r[a-z0-9]+$/);
+  await expect(page.getByText("Rule “LED state 3” saved")).toBeVisible();
+  await expect(page.locator("tr.is-saved")).toContainText("LedState = 3");
+  const ruleURL = app.url + "/policy/rules/" + new URL(page.url()).searchParams.get("rule");
+  await page.goto(ruleURL);
   await expect(page.getByRole("heading", { level: 1 })).toContainText("LED state 3");
   await expect(page.locator(".pghead-sub")).toContainText("LedState = 3");
-  const ruleURL = page.url().split("?")[0];
 
   // Check now reads LedState from the devices (the simulator reports 1); the rule page lists them.
   const devRow = page.locator("#rule-devices tr").filter({ hasText: "plug-4m-http" });
