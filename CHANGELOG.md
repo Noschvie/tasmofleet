@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Changed
+
+- CI: a release tag now runs a shorter pipeline (the fast checks, the `@core` e2e tests, and race and mutation tests of the safety packages); the full e2e, race and mutation runs stay in the nightly build and no longer hold up a release.
+
 ## 0.21.0 "Tower of Hercules" (2026-10-30)
 
 ### Upgrade notes

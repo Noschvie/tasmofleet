@@ -10,13 +10,18 @@
 #     of the changed mutation packages. Target: "required" green in <= 5 min.
 #     Push to main runs the same jobs (the PR already proved them); it keeps
 #     main's caches fresh, which PR runs restore from.
-#   FULL (nightly cron, tags v*, manual dispatch): additionally the whole
-#     e2e suite in three shards, every unit test with the race detector,
-#     the Tasmota command catalogue check (make catalogue-check),
+#   RELEASE (tags v*): the FAST tier (cached tests, the @core e2e tests in two
+#     shards) plus, always and not only when changed, the race tests and the
+#     mutation gate of the SAFETY packages (a tag has no PR base, so
+#     safety-race and mutation-changed run every package), and the early
+#     changelog and migration guards. A tag publishes the image (image.yml,
+#     called below) only after this tier passed; then the job "release" makes
+#     the GitHub release from the CHANGELOG.md section.
+#   FULL (nightly cron, manual dispatch): additionally the whole e2e suite in
+#     three shards (layout and visual guards), every unit test with the race
+#     detector, the Tasmota command catalogue check (make catalogue-check),
 #     uncached test runs (TESTFLAGS=-count=1) and the full mutation run.
-#     A tag publishes the image (image.yml, called below) only after FULL
-#     passed, and fails early when CHANGELOG.md has no section for it; then
-#     the job "release" makes the GitHub release from that section.
+#     It blocks no release; a failure is an issue to fix.
 #   QUARANTINE (nightly and dispatch only, never blocking): the tests tagged
 #     @quarantine / quarantine.Test, with retries; one "flaky" issue each.
 # Docs-only PRs skip the heavy jobs (the "changes" job decides; docs.yml checks
@@ -92,7 +97,9 @@ jobs:
           tier=fast
           case "$EVENT" in schedule|workflow_dispatch) tier=full ;; esac
           if [ "$REF_TYPE" = tag ]; then
-            tier=full
+            # RELEASE tier: FAST plus race and mutation of the SAFETY packages, always.
+            tier=release
+            safety=true
             # Release guard, early: the image job checks it again before publishing.
             make changelog-check TAG="$REF_NAME"
             # Patch releases never touch the migrations.
@@ -248,7 +255,8 @@ jobs:
             e2e/test-results
           retention-days: 7
 
-  # FAST tier, only when a PR changes a SAFETY package: its race tests ...
+  # FAST tier, only when a PR changes a SAFETY package: its race tests (all of
+  # them on a tag, which has no base to diff against) ...
   safety-race:
     name: safety race tests (changed safety packages)
     needs: changes
@@ -308,8 +316,9 @@ jobs:
   # uploads the counts; mutation-gate adds them up and applies the thresholds.
   # FULL tier: every MUTATION package. FAST tier: only for PRs that change a
   # SAFETY package, and only the changed mutation packages (mutation-changed).
+  # RELEASE tier (tags): mutation-changed without a base runs every package.
   mutation:
-    name: mutation tests (${{ needs.changes.outputs.tier == 'full' && 'all' || 'changed' }}, ${{ matrix.shard }})
+    name: mutation tests (${{ needs.changes.outputs.tier == 'fast' && 'changed' || 'all' }}, ${{ matrix.shard }})
     needs: changes
     if: needs.changes.outputs.code == 'true' && (needs.changes.outputs.tier == 'full' || needs.changes.outputs.safety == 'true')
     runs-on: ubuntu-24.04
@@ -353,7 +362,7 @@ jobs:
           pattern: mutation-counts-*
           path: ${{ runner.temp }}/counts
       - env:
-          ALL: ${{ needs.changes.outputs.tier == 'full' && '1' || '' }}
+          ALL: ${{ needs.changes.outputs.tier == 'fast' && '' || '1' }}
         run: make mutation-sum MUTATION_COUNTS="$RUNNER_TEMP/counts" MUTATION_SHARDS=3 MUTATION_ALL="$ALL"
 
   # Known-flaky tests, nightly (and dispatch) only, with retries. Never part of
@@ -439,7 +448,7 @@ jobs:
           m=$docs; [ "$TIER" = full ] || [ "$SAFETY" = true ] || m=true
           check "$m" $MUTATION
 
-  # Release: a tag publishes the image only when the FULL tier passed.
+  # Release: a tag publishes the image only when the RELEASE tier passed.
   publish:
     name: publish image (tags)
     needs: required

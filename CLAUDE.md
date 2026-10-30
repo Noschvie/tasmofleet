@@ -155,23 +155,23 @@ fixture or a fault instead of mocking HTTP by hand.
 
 ## Running the gates
 
-| Gate                                                      | Command                                                                       |
-| --------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| FAST tier, everything but e2e (run before every commit)   | `make check`                                                                  |
-| FAST tier, the `@core` e2e tests                          | `make e2e-core`                                                               |
-| FAST tier, a safety package changed (race + mutation)     | `make safety BASE=origin/main`                                                |
-| FULL tier, everything CI runs nightly and on release tags | `make ci TESTFLAGS=-count=1`                                                  |
-| format                                                    | `make fmt` / `make fmt-check`                                                 |
-| go vet                                                    | `make vet`                                                                    |
-| staticcheck                                               | `make staticcheck`                                                            |
-| golangci-lint (incl. depguard boundaries)                 | `make lint`                                                                   |
-| unit tests                                                | `make test`                                                                   |
-| integration tests                                         | `make integration`                                                            |
-| race detector                                             | `make race`                                                                   |
-| mutation tests (MUTATION in the Makefile)                 | `make mutation` / `make mutation-changed BASE=<ref>`                          |
-| e2e (Playwright), all but quarantined                     | `make e2e-deps` once, `npx playwright install chromium` once, then `make e2e` |
-| quarantined tests (nightly only)                          | `make test-quarantine` / `make e2e-quarantine`                                |
-| vulnerabilities                                           | `make vuln`                                                                   |
+| Gate                                                    | Command                                                                       |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| FAST tier, everything but e2e (run before every commit) | `make check`                                                                  |
+| FAST tier, the `@core` e2e tests                        | `make e2e-core`                                                               |
+| FAST tier, a safety package changed (race + mutation)   | `make safety BASE=origin/main`                                                |
+| FULL tier, everything CI runs nightly                   | `make ci TESTFLAGS=-count=1`                                                  |
+| format                                                  | `make fmt` / `make fmt-check`                                                 |
+| go vet                                                  | `make vet`                                                                    |
+| staticcheck                                             | `make staticcheck`                                                            |
+| golangci-lint (incl. depguard boundaries)               | `make lint`                                                                   |
+| unit tests                                              | `make test`                                                                   |
+| integration tests                                       | `make integration`                                                            |
+| race detector                                           | `make race`                                                                   |
+| mutation tests (MUTATION in the Makefile)               | `make mutation` / `make mutation-changed BASE=<ref>`                          |
+| e2e (Playwright), all but quarantined                   | `make e2e-deps` once, `npx playwright install chromium` once, then `make e2e` |
+| quarantined tests (nightly only)                        | `make test-quarantine` / `make e2e-quarantine`                                |
+| vulnerabilities                                         | `make vuln`                                                                   |
 
 Tools are pinned in `tools/go.mod` and run via `go tool -modfile=tools/go.mod <tool>`.
 Run a single package's tests with `go test ./internal/fwselect/ -run TestGuard -v`.
@@ -190,12 +190,15 @@ with e.g. `make check JOBS=4`. `make test` and `make integration` use the go tes
   (`make mutation-sum`). CI restores the Go build/test cache (`.github/actions/go`, keyed on Go
   version and `go.sum`) and sets file mtimes from git (`tools/git-mtimes.sh`), so unchanged packages
   are not retested.
-- **FULL** (nightly cron on `main`, tags `vX.Y.Z`, manual dispatch): additionally every e2e test in three
-  shards, every unit test with the race detector, uncached test runs and the full mutation run. A tag's
-  image is published (ci.yml job `publish` calling `image.yml`) only after FULL passed, and a tag without
-  its `CHANGELOG.md` section fails at once. Anything that only FULL checks (layout and visual guards, race
-  outside the safety packages, mutation of unchanged packages) is caught nightly at the latest, and always
-  before a release.
+- **RELEASE** (tags `vX.Y.Z`): the FAST tier plus, always, the race tests and the mutation gate of the
+  `SAFETY` packages (a tag has no PR base, so every one of them runs). A tag without its `CHANGELOG.md`
+  section, or a patch tag that changes a migration, fails at once. The image is published (ci.yml job
+  `publish` calling `image.yml`) and the GitHub release made only after this tier passed.
+- **FULL** (nightly cron on `main`, manual dispatch): additionally every e2e test in three shards, every
+  unit test with the race detector, the command catalogue check, uncached test runs and the full mutation
+  run. It blocks no release. Layout and visual regressions, race outside the safety packages and
+  mutation of non-safety code are caught here, so the nightly FULL is the place to look for them; a
+  failure is fixed through an issue, not by holding a release.
 - **Which e2e tests are `@core`**: smoke, sign-in and authorization (header, local, OIDC, standalone,
   operators refused), first-run setup, base path, the device list, the OTA update flow (batch, push upload),
   the chip-family and OTA-exclusion refusals in the UI, device writes (console, settings, restore, make
@@ -258,8 +261,8 @@ in `.github/workflows/ci.yml`.
   report by someone else that led to a change, is credited at the end of that change's
   CHANGELOG line as `(#N, thanks @handle)`. Do not credit the maintainer's own work.
 - Tags are signed (`git tag -s vX.Y.Z`) and only set on a green commit of `main`. The tag
-  runs the FULL tier, and the image is published only when it passed. Before tagging, a
-  FULL run of that commit (nightly or manual dispatch) should already be green.
+  runs the RELEASE tier (FAST plus race and mutation of the safety packages), and the image is
+  published only when it passed.
 - **Announce every release.** After the tag run has published the image and the GitHub release,
   post an Announcements discussion "TasmoFleet X.Y.Z" (`gh api graphql` `createDiscussion`, category
   Announcements). Style of the earlier ones (e.g. #54): the image tag
