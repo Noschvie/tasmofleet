@@ -4,6 +4,12 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## Unreleased
+
+### Changed
+
+- Backups: the manual backup cooldown is 1 minute and ends when the last backup of a device is deleted (#208, thanks @Noschvie)
+
 ## 0.19.0 (2026-10-29)
 
 ### Upgrade notes

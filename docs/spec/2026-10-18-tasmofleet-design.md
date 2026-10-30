@@ -1117,7 +1117,7 @@ shows the decoded secrets. The diff/drift view redacts keys matching
 
 - Manual (device page, batch) and automatic before every OTA (job state `backup`, skippable
   per batch).
-- Manual backups have a cooldown of 5 minutes per device (HTTP 429 "Try again in ...").
+- Manual backups have a cooldown of 1 minute per device (HTTP 429 "Try again in ..."); deleting the last backup of a device ends it.
   Every backup reads the device config over its single-threaded web server, so repeated
   clicks must not hammer an ESP8266. Pre-OTA and scheduled backups are not limited. Optional periodic schedule `BACKUP_INTERVAL` (default off).
 - Retention: newest `BACKUP_KEEP` (10) runs per device; older runs are deleted after a

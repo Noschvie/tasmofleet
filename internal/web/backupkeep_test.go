@@ -55,7 +55,7 @@ func (k *keepBackups) DeleteRuns(_ context.Context, _ string, device model.Devic
 		return backup.Deletion{}, backup.ErrForeignBackup
 	}
 	k.selected = append(k.selected, ids)
-	return backup.Deletion{Device: device, Runs: len(ids)}, nil
+	return backup.Deletion{Device: device, Runs: len(ids), Remaining: k.remaining}, nil
 }
 func (k *keepBackups) DeleteAll(_ context.Context, _ string, device model.DeviceID) (backup.Deletion, error) {
 	k.all = append(k.all, device)

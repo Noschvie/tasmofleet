@@ -801,16 +801,44 @@ func TestBackupDownloadNameKeepsUmlautsAndNeverInjects(t *testing.T) {
 	}
 }
 
-// Why (#208): the cooldown protects the device's web server, not the backup list, so deleting
-// the backup does not lift it. The refusal says when the last backup was taken, so the user
-// who deleted it and finds "Back up now" refused understands why and how long to wait.
-func TestCooldownRefusalNamesTheLastBackupEvenAfterDelete(t *testing.T) {
-	e := setupWith(t, func(d *Deps) { d.BackupCooldown = time.Hour })
-	e.do(t, "POST", "/devices/1/backup", "operator", url.Values{})
-	e.bk.list = nil // the backup is deleted
-	resp, body := e.do(t, "POST", "/devices/1/backup", "operator", url.Values{})
-	if resp.StatusCode != http.StatusTooManyRequests || e.bk.taken != 1 || !strings.Contains(body, "Last backup 0 s ago; a new one is possible in 60 min") {
-		t.Fatalf("got %d taken=%d %s", resp.StatusCode, e.bk.taken, body)
+// Why (#208, Noschvie): a user who deletes the only backup of a device and clicks "Back up now"
+// must not be told to wait; with nothing left there is nothing to protect. While other backups
+// remain, the cooldown stays (and its refusal still names the last backup), so repeated clicks
+// cannot evict restore points. Both delete routes (single run, selected runs) behave alike.
+func TestDeletingTheLastBackupEndsTheCooldown(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		remaining int
+		wantCode  int
+	}{
+		{"last backup deleted", 0, http.StatusSeeOther},
+		{"other backups remain", 2, http.StatusTooManyRequests},
+	} {
+		for _, route := range []struct {
+			name, path string
+			form       url.Values
+		}{
+			{"single run", "/backups/4/delete", url.Values{}},
+			{"selected runs", "/devices/1/backups/delete", url.Values{"id": {"4"}, "confirm": {"1"}}},
+		} {
+			t.Run(tc.name+"/"+route.name, func(t *testing.T) {
+				k := &keepBackups{adminBackups: &adminBackups{remaining: tc.remaining}, deviceOf: 1}
+				e := setupWith(t, func(d *Deps) { d.Backups = k; d.BackupCooldown = time.Hour })
+				if resp, _ := e.do(t, "POST", "/devices/1/backup", "operator", url.Values{}); resp.StatusCode != 303 {
+					t.Fatalf("first backup: %d", resp.StatusCode)
+				}
+				if resp, _ := e.do(t, "POST", route.path, "admin", route.form); resp.StatusCode != 303 {
+					t.Fatalf("delete: %d", resp.StatusCode)
+				}
+				resp, body := e.do(t, "POST", "/devices/1/backup", "operator", url.Values{})
+				if resp.StatusCode != tc.wantCode {
+					t.Fatalf("backup after delete: %d (want %d) %s", resp.StatusCode, tc.wantCode, body)
+				}
+				if tc.wantCode == http.StatusTooManyRequests && !strings.Contains(body, "Last backup 0 s ago; a new one is possible in 60 min") {
+					t.Fatalf("refusal must name the last backup: %s", body)
+				}
+			})
+		}
 	}
 }
 

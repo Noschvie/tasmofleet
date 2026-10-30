@@ -20,6 +20,8 @@ type adminBackups struct {
 	deleted []model.BackupID
 	newest  bool
 	planErr error
+	// remaining is the number of runs the device keeps after a delete (0: it was the last).
+	remaining int
 }
 
 func (a *adminBackups) PlanDelete(context.Context, model.BackupID) (backup.Deletion, error) {
@@ -29,7 +31,7 @@ func (a *adminBackups) DeleteRun(_ context.Context, _ string, id model.BackupID)
 	a.mu2.Lock()
 	defer a.mu2.Unlock()
 	a.deleted = append(a.deleted, id)
-	return backup.Deletion{Device: 1, Runs: 1, Files: 3, Newest: a.newest}, nil
+	return backup.Deletion{Device: 1, Runs: 1, Files: 3, Newest: a.newest, Remaining: a.remaining}, nil
 }
 
 type replRestore struct {

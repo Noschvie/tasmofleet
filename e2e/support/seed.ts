@@ -223,7 +223,7 @@ export async function seedDesignV2(page: Page, app: App, env: Devenv, fx: Design
   phase("devices offline");
   const ids = await deviceIds(page, app);
   const d2 = fx.devices.find((d) => d.id === "d2")!;
-  // A manual backup is refused for 5 minutes after the last one, so one real backup is taken and
+  // A manual backup is refused for 1 minute after the last one, so one real backup is taken and
   // the older ones are copies of its rows, dated as far back as the prototype's list.
   await page.goto(`${app.url}/devices/${ids.get(d2.name)}`);
   const taken = page.waitForResponse((r) => r.request().method() === "POST" && /\/devices\/\d+\/backup$/.test(new URL(r.url()).pathname), { timeout: 60_000 });

@@ -516,6 +516,7 @@ func headBack(tab string) string {
 // ("" when the slot is granted) when the last one is too recent. The cooldown protects the
 // device's single-threaded web server, so it counts from the last backup run even when that
 // backup was deleted since; the sentence names that time so the refusal explains itself (#208).
+// Only deleting the device's last backup ends it (backupDeleted): nothing is left to protect.
 func (h *handler) backupWait(id model.DeviceID) string {
 	h.backupMu.Lock()
 	defer h.backupMu.Unlock()
@@ -525,6 +526,17 @@ func (h *handler) backupWait(id model.DeviceID) string {
 	}
 	h.lastBackup[id] = now
 	return ""
+}
+
+// backupDeleted ends the cooldown of a device whose last backup was just deleted, so the user
+// is not locked out of taking a fresh one (#208).
+func (h *handler) backupDeleted(d backup.Deletion) {
+	if d.Remaining > 0 {
+		return
+	}
+	h.backupMu.Lock()
+	delete(h.lastBackup, d.Device)
+	h.backupMu.Unlock()
 }
 
 // cooldownText is "Last backup 4 min 40 s ago; a new one is possible in 20 s".

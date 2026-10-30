@@ -165,7 +165,7 @@ type Deps struct {
 	MaxStreams        int
 
 	// BackupCooldown is the minimum time between two manual backups of one
-	// device (default 5 minutes), so repeated clicks cannot evict restore points.
+	// device (default 1 minute), so repeated clicks cannot evict restore points.
 	BackupCooldown time.Duration
 
 	Version        string
@@ -215,7 +215,7 @@ func Handler(d Deps) (http.Handler, error) {
 		d.MaxStreams = 200
 	}
 	if d.BackupCooldown == 0 {
-		d.BackupCooldown = 5 * time.Minute
+		d.BackupCooldown = time.Minute
 	}
 	h := &handler{d: d, pr: pr, started: d.Clock.Now(), log: slog.Default(), lastBackup: map[model.DeviceID]time.Time{}, sseUsers: map[string]int{}}
 	if d.Pages != nil {
