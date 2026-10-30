@@ -293,8 +293,11 @@ test("update batch: preview, staged ESP8266 and direct ESP32 succeed, unknown ch
   await second.close();
   // The baseline is taken from rows that have a box. A row that is not laid out yet measures 0/0 (CI run
   // 40938108311: baseline 0/0 and 0/0, then 285/48 and 333/48 from the first sample on), which is not a
-  // layout move of the page; toBeVisible waits for the non-empty box.
+  // layout move of the page. toBeVisible alone was not enough (the same failure came back in the v0.21.0
+  // tag run, #218): the measurement itself is polled until both rows report a box, and that
+  // measurement is the baseline.
   for (const name of ["lamp-1m", "esp32-dimmer"]) await expect(page.locator(".upd-row").filter({ hasText: name })).toBeVisible();
+  await expect.poll(async () => (await layout()).filter((box) => !box.endsWith("/0")).length, { message: "both device rows get a box before the baseline", timeout: 15_000 }).toBe(2);
   const before0 = await layout();
   for (let i = 0; i < 6; i++) {
     await page.waitForTimeout(1000);
