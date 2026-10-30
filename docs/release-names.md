@@ -3,13 +3,13 @@
 Every minor release (`0.X.0`) is named after a famous lighthouse: its English common name, taken
 in order from the list below (no alphabet rule). Patch releases (`0.X.Y`) inherit the name of their
 minor release. Tags stay `vX.Y.Z`; the name appears only in the `CHANGELOG.md` heading
-(`## 0.21.0 "Eddystone" (YYYY-MM-DD)`), the GitHub release title and announcements
+(`## 0.21.0 "Tower of Hercules" (YYYY-MM-DD)`), the GitHub release title and announcements
 (`TasmoFleet X.Y.Z "Name"`).
 
 At the release PR, take the next unassigned name and mark it "assigned to X.Y" here. When the list
 runs out, add more. Facts below are taken from Wikipedia; a detail that could not be checked is left out.
 
-1. **Eddystone** (assigned to 0.21): Eddystone Rocks off Cornwall, England. The first tower was lit in 1698; the current tower, designed by James Douglass, in 1882.
+1. **Tower of Hercules** (assigned to 0.21): A Coruna, Spain. A Roman tower, the only fully preserved Roman lighthouse still used for signalling; UNESCO World Heritage Site since 2009.
 2. **Bell Rock**: off Angus, Scotland. First lit in 1811 (Robert Stevenson); the world's oldest working sea-washed lighthouse.
 3. **Cape Hatteras**: Buxton, North Carolina, USA. The current tower was first lit in 1871; moved 2,900 ft inland in 1999.
 4. **Hook Head**: County Wexford, Ireland. The tower dates from the 12th century and is the second oldest operating lighthouse in the world.
@@ -18,7 +18,7 @@ runs out, add more. Facts below are taken from Wikipedia; a detail that could no
 7. **Cordouan**: mouth of the Gironde, France. Completed in 1611 (Louis de Foix); UNESCO World Heritage Site since 2021.
 8. **Cape Byron**: New South Wales, Australia. Lit in 1901 on the easternmost point of the Australian mainland.
 9. **Portland Head**: Cape Elizabeth, Maine, USA. First lit in 1791; the first lighthouse built by the US government.
-10. **Tower of Hercules**: A Coruna, Spain. A Roman tower, the only fully preserved Roman lighthouse still used for signalling; UNESCO World Heritage Site since 2009.
+10. **Eddystone**: Eddystone Rocks off Cornwall, England. The first tower was lit in 1698; the current tower, designed by James Douglass, in 1882.
 11. **Cape Spear**: near St. John's, Newfoundland, Canada. Lit in 1836; the oldest surviving lighthouse in Newfoundland.
 12. **Fastnet**: off County Cork, Ireland. The current tower entered service in 1904; at 54 m the tallest lighthouse in Ireland, nicknamed "Ireland's Teardrop".
 13. **Dondra Head**: southern Sri Lanka. Lit in 1890; at 49 m the tallest lighthouse in Sri Lanka.
@@ -36,7 +36,7 @@ runs out, add more. Facts below are taken from Wikipedia; a detail that could no
 25. **Rubjerg Knude**: North Sea coast of Jutland, Denmark. Lit in 1900; moved 70 m inland in 2019 to escape erosion.
 26. **Cape Agulhas**: Western Cape, South Africa. Lit in 1849; the second oldest lighthouse still operating in South Africa.
 27. **Pigeon Point**: California, USA. Lit in 1872; its 35 m tower ties with Point Arena as the tallest on the US West Coast.
-28. **Kannonzaki**: Yokosuka, Japan. Lit in 1869; the first lighthouse built in Japan, under the French engineer Leonce Verny.
+28. **Kannonzaki**: Yokosuka, Japan. Lit in 1869; the first Western-style lighthouse in Japan, built under the French engineer Leonce Verny.
 29. **South Stack**: off Holy Island, Anglesey, Wales. First lit in 1809; automated since 1983.
 30. **Sambro Island**: entrance of Halifax Harbour, Nova Scotia, Canada. First lit in 1758; the oldest surviving lighthouse in North America.
 31. **Cape Bruny**: Bruny Island, Tasmania, Australia. Lit in 1838; Australia's second oldest surviving lighthouse tower.

@@ -13,7 +13,7 @@ const dir = mkdtempSync(join(tmpdir(), "changelog-"));
 copyFileSync(join(repo, "Makefile"), join(dir, "Makefile"));
 writeFileSync(
   join(dir, "CHANGELOG.md"),
-  '## Unreleased\n\n## 0.21.1 "Eddystone" (2026-11-02)\n\npatch\n\n## 0.21.0 "Eddystone" (2026-11-01)\n\nnamed\n\n## 0.20.0 (2026-10-30)\n\nold\n',
+  '## Unreleased\n\n## 0.21.1 "Tower of Hercules" (2026-11-02)\n\npatch\n\n## 0.21.0 "Tower of Hercules" (2026-11-01)\n\nnamed\n\n## 0.20.0 (2026-10-30)\n\nold\n',
 );
 const make = (target, tag) =>
   execFileSync("make", ["-s", target, `TAG=${tag}`], { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
@@ -25,12 +25,12 @@ test("an unnamed heading passes and yields a plain title", () => {
 
 test("a named heading passes, is named in the title and its notes are extracted", () => {
   make("changelog-check", "v0.21.0");
-  assert.equal(make("changelog-title", "v0.21.0"), 'TasmoFleet 0.21.0 "Eddystone"\n');
+  assert.equal(make("changelog-title", "v0.21.0"), 'TasmoFleet 0.21.0 "Tower of Hercules"\n');
   assert.equal(make("changelog-notes", "v0.21.0").trim(), "named");
 });
 
 test("a patch heading repeats its minor's name and the title carries it", () => {
-  assert.equal(make("changelog-title", "v0.21.1"), 'TasmoFleet 0.21.1 "Eddystone"\n');
+  assert.equal(make("changelog-title", "v0.21.1"), 'TasmoFleet 0.21.1 "Tower of Hercules"\n');
 });
 
 test("a missing section still fails the guard", () => {
