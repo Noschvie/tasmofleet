@@ -267,7 +267,14 @@ func (m *Manager) handleTopic(ctx context.Context, msg mqttbus.Message) {
 		case strings.EqualFold(p, "online"):
 			s.lwt, s.offlineSince = "Online", time.Time{}
 		case strings.EqualFold(p, "offline"):
-			if s.offlineSince.IsZero() {
+			// Only a live transition knows when the device went away; a retained
+			// Offline (replayed at subscribe, e.g. after a restart) says only that it is.
+			switch {
+			case msg.Retained:
+				if s.lwt != "Offline" {
+					s.offlineSince = time.Time{}
+				}
+			case s.lwt != "Offline":
 				s.offlineSince = now
 			}
 			s.lwt, s.live = "Offline", false

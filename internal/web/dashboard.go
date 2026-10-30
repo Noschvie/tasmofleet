@@ -172,6 +172,9 @@ func dashTiles(base string, s fleetSummary) []ui.StatTileData {
 		case s.NewFound > 0:
 			hint = "waiting to be added"
 		}
+		if s.NewFoundOffline > 0 { // the list below hides them, the Discovered page shows them
+			hint += " · " + itoa(s.NewFoundOffline) + " offline"
+		}
 		tiles = append(tiles, ui.StatTileData{Tone: ui.ToneAccent, Label: "New devices found", Value: itoa(s.NewFound), Hint: hint, Href: base + "/discovery"})
 	}
 	return tiles

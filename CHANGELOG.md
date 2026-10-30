@@ -10,7 +10,7 @@ always upgrade automatically.
 
 - Backups tab: each backup line shows the stored file name (as on disk, to check the backup output in the file system), and the Download button's hover help names it (#290, thanks @Noschvie)
 - CI: a release tag now runs a shorter pipeline (the fast checks, the `@core` e2e tests, and race tests of the safety packages); the full e2e, race and mutation runs stay in the nightly build and no longer hold up a release.
-- Overview: a discovered device that is offline no longer appears under "Needs attention"; it is listed only on the Discovered page, which now shows how long it has been offline next to its hostname (#294, thanks @Noschvie).
+- Overview: a discovered device that is offline no longer appears under "Needs attention"; it is listed only on the Discovered page, which now shows how long it has been offline (when known) next to its hostname, and the "New devices found" tile says how many of them are offline (#294, thanks @Noschvie).
 
 ## 0.21.0 "Tower of Hercules" (2026-10-30)
 

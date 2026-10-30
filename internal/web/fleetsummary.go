@@ -84,10 +84,11 @@ type fleetSummary struct {
 	// HasDiscovery is true for admins with discovery switched on: proposals
 	// are admin-only. NewFound counts devices found but not adopted (kind
 	// "new"), AddressChanged the known devices that announced a new address.
-	HasDiscovery   bool
-	NewFound       int
-	AddressChanged int
-	Chips          []chipCount
+	HasDiscovery    bool
+	NewFound        int
+	NewFoundOffline int // of NewFound, those whose LWT says Offline
+	AddressChanged  int
+	Chips           []chipCount
 }
 
 // fleetFacts reads the cached feed and the policy report. Neither talks to a
@@ -207,6 +208,9 @@ func summarize(rows []deviceRow, f fleetFacts, props []discovery.Proposal, withD
 		switch p.Kind {
 		case discovery.KindNew:
 			s.NewFound++
+			if p.LWT == "Offline" {
+				s.NewFoundOffline++
+			}
 		case discovery.KindAddressChange:
 			s.AddressChanged++
 		}

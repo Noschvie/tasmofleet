@@ -65,7 +65,8 @@ type Proposal struct {
 	// LWT is the last MQTT LWT of the proposal's topic ("Online", "Offline"
 	// or "" when none was seen). Additive (spec 11.3a).
 	LWT string
-	// OfflineSince is when the LWT first said Offline (zero while it is not offline).
+	// OfflineSince is when a live (non-retained) LWT turned Offline; zero while online or when
+	// only a retained Offline was seen, as after a restart (the moment is unknown then).
 	OfflineSince time.Time
 }
 

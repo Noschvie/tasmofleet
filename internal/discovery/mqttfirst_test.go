@@ -922,3 +922,16 @@ func TestProposalOfflineSinceIsTheFirstOfflineLWT(t *testing.T) {
 		t.Fatalf("back online, OfflineSince = %v", p.OfflineSince)
 	}
 }
+
+// Why: #294 review. After a restart the broker replays the retained Offline LWT at subscribe
+// time; that is not when the device went away, so "offline since" must stay unknown (zero)
+// instead of showing the restart time.
+func TestRetainedOfflineLWTHasNoOfflineSince(t *testing.T) {
+	e := newMQTTEnv(t, nil)
+	e.feed(discoveryMsg("02005ED22C14", "172.31.13.31", "lamp"))
+	e.feed(mqttbus.Message{Kind: mqttbus.KindLWT, Topic: "lamp", Payload: []byte("Offline"), Retained: true})
+	p := onlyNew(t, e.env)
+	if p.LWT != "Offline" || !p.OfflineSince.IsZero() {
+		t.Fatalf("retained Offline: LWT = %q, OfflineSince = %v, want Offline and zero", p.LWT, p.OfflineSince)
+	}
+}

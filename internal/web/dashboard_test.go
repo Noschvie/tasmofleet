@@ -366,3 +366,21 @@ func TestDiscoveredPageShowsOfflineSince(t *testing.T) {
 		}
 	}
 }
+
+// Why: #294 review. The tile counts every new device, offline ones included, and says how many
+// are offline so tile and Discovered page agree even though the dashboard list hides them.
+func TestNewDevicesTileCountsOfflineProposals(t *testing.T) {
+	props := []discovery.Proposal{
+		{Kind: discovery.KindNew, LWT: "Offline"}, {Kind: discovery.KindNew, LWT: "Offline"}, {Kind: discovery.KindNew, LWT: "Online"},
+	}
+	s := summarize(nil, fleetFacts{}, props, true)
+	var tile struct{ Value, Hint string }
+	for _, ti := range dashTiles("", s) {
+		if ti.Label == "New devices found" {
+			tile.Value, tile.Hint = ti.Value, ti.Hint
+		}
+	}
+	if tile.Value != "3" || !strings.Contains(tile.Hint, "2 offline") {
+		t.Fatalf("tile = %+v, want 3 with \"2 offline\"", tile)
+	}
+}
