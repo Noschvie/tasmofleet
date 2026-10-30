@@ -206,12 +206,12 @@ test("backup over MQTT", async ({ page }) => {
   await page.getByRole("button", { name: "Save changes" }).click();
 
   // The group topics of both devices are read shortly after start; until then the backup is refused with the
-  // reason, which starts no cooldown, so retrying every 5 s is a bounded wait for those reads only.
+  // reason, which starts only a 5 s floor, so retrying every 6 s is a bounded wait for those reads only.
   await expect(async () => {
     await page.goto(app.url + devicePath);
     await backUp.click();
     await expect(page.getByText("Backup taken.")).toBeVisible({ timeout: 5_000 });
-  }).toPass({ timeout: 300_000, intervals: [5_000] });
+  }).toPass({ timeout: 300_000, intervals: [6_000] });
 
   await page.goto(app.url + devicePath + "/backups");
   await expect(page.locator("section.bk-list")).toBeVisible();

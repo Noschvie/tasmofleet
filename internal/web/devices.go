@@ -539,16 +539,20 @@ func (h *handler) backupWait(id model.DeviceID) string {
 	return ""
 }
 
-// backupNotSent ends the cooldown a refused backup started: when nothing was sent (no usable path or
-// password, see transport.BackupBlockedError) the person fixes the cause and retries at once. Only an
-// attempted transfer counts against the limit.
+// refusedBackupFloor is the pause after a backup that was refused before anything was published (no
+// usable path or password, see transport.BackupBlockedError): the person fixes the cause and retries
+// soon, but a client cannot hammer the endpoint, the store and the router in a loop. Only a backup
+// with an attempted transfer starts the full cooldown. A variable so the test need not wait.
+var refusedBackupFloor = 5 * time.Second
+
+// backupNotSent shortens the cooldown a refused backup started to refusedBackupFloor.
 func (h *handler) backupNotSent(id model.DeviceID, err error) {
 	var blocked *transport.BackupBlockedError
-	if !errors.As(err, &blocked) || blocked.Attempted {
+	if !errors.As(err, &blocked) || blocked.Attempted || h.d.BackupCooldown <= refusedBackupFloor {
 		return
 	}
 	h.backupMu.Lock()
-	delete(h.lastBackup, id)
+	h.lastBackup[id] = h.d.Clock.Now().Add(refusedBackupFloor - h.d.BackupCooldown)
 	h.backupMu.Unlock()
 }
 

@@ -445,3 +445,23 @@ func TestDownloadOfflineDeviceGetsNothing(t *testing.T) {
 		t.Fatalf("%v, sent %v", err, b.sent())
 	}
 }
+
+// Why (#257 review): a failure after ANY publish, the opening FileDownload 0 included, is marked
+// ErrPublished so the caller counts it as an attempt; a refusal decided before the first publish
+// is not.
+func TestDownloadFailureAfterTheOpeningAbortIsMarkedPublished(t *testing.T) {
+	b := &fakeBus{}
+	ctx, cancel := context.WithCancel(t.Context())
+	b.onPub = func(b *fakeBus, p pub) {
+		if p.payload == "0" {
+			cancel() // the caller gives up right after the abort went out: the start is never sent
+		}
+	}
+	_, err := newChan(b).Download(ctx, plug(), dlPassword)
+	if err == nil || !errors.Is(err, ErrPublished) {
+		t.Fatalf("%v", err)
+	}
+	if _, err := newChan(&fakeBus{}).Download(t.Context(), plug(), `a"b`); !errors.Is(err, ErrRefused) || errors.Is(err, ErrPublished) {
+		t.Fatalf("a refusal before any publish must not be marked: %v", err)
+	}
+}

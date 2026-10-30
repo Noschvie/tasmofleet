@@ -85,7 +85,7 @@ func (c *Channel) onFile(m mqttbus.Message) {
 // is answered by "Started" and the header (no "?" for the header); then exactly one "?" per Data
 // message until {"Id","Md5"}. Any irregularity aborts with "FileDownload 0"; there is no retry.
 // The topic is held for the whole transfer, so it is one command in flight like any other.
-func (c *Channel) Download(ctx context.Context, d model.Device, password string) ([]byte, error) {
+func (c *Channel) Download(ctx context.Context, d model.Device, password string) (data []byte, rerr error) {
 	if err := checkTopic(d); err != nil {
 		return nil, err
 	}
@@ -105,6 +105,12 @@ func (c *Channel) Download(ctx context.Context, d model.Device, password string)
 		return nil, c.closed()
 	}
 	defer func() { <-sem }()
+	before := c.published(d.Topic)
+	defer func() { // anything published for this transfer, the opening abort included, makes a failure "attempted"
+		if rerr != nil && c.published(d.Topic) > before && !errors.Is(rerr, ErrPublished) {
+			rerr = fmt.Errorf("%w: %w", ErrPublished, rerr)
+		}
+	}()
 	if c.offline(d.Topic) {
 		return nil, fmt.Errorf("%w: the device reported itself offline (LWT), nothing was sent", tasmota.ErrUnreachable)
 	}
@@ -350,6 +356,13 @@ func (c *Channel) sendFile(ctx context.Context, topic, payload string) error {
 // connection for a packet of 1200 bytes or more (5 header bytes, the topic with its length byte).
 func payloadRoom(cmndTopic string) int { return cmndBufferSize - 5 - len(cmndTopic) - 1 }
 
+// published is how many file transfer commands were handed to the bus for topic so far.
+func (c *Channel) published(topic string) int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.pubs[topic]
+}
+
 // sendFileCmd publishes cmd (FileDownload or FileUpload). The payload budget of the device's
 // 1200 byte buffer is asserted before every publish: at 5 + len(topic) + len(payload) >= 1200 the
 // device drops its connection without a DISCONNECT.
@@ -363,6 +376,9 @@ func (c *Channel) sendFileCmd(ctx context.Context, topic, cmd, payload string) e
 	if err := c.waitTurn(ctx); err != nil {
 		return fmt.Errorf("mqtt: %s not sent: %w", cmd, err)
 	}
+	c.mu.Lock()
+	c.pubs[topic]++ // counted before the publish: a publish that may have happened must count
+	c.mu.Unlock()
 	if err := c.bus.Command(ctx, topic, cmd, payload); err != nil {
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return fmt.Errorf("%w: %s may have been sent: %w", tasmota.ErrTimeout, cmd, err)

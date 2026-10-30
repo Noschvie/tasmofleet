@@ -42,6 +42,11 @@ var (
 	ErrNoPassword      = errors.New("no MQTT password is set for this device")
 )
 
+// ErrPublished marks a failed transfer for which at least one command reached the bus (the opening
+// abort, the start, ...), whatever else went wrong: the device may have been touched. Errors that
+// lack it were decided before anything was published.
+var ErrPublished = errors.New("mqttcmd: a command was published for this transfer")
+
 // Reason is the sentence for a refusal (nothing was sent), or a generic one when the cause is not one
 // of the named ones. It is never built from err.Error(): refusals of file transfers sit next to the
 // device's password.
@@ -89,6 +94,7 @@ type Channel struct {
 	nextPub time.Time
 
 	files     map[string]chan mqttbus.Message // topic -> stat/<t>/FILEDOWNLOAD|FILEUPLOAD of the transfer in flight
+	pubs      map[string]int                  // topic -> file transfer commands handed to the bus (see Download)
 	fileClean map[string]bool                 // topic -> the last download ended with a matching MD5
 	reboots   map[string]int                  // topic -> LWT Offline->Online pairs seen (bounded by lwt)
 	fwPending map[string]int                  // topic -> reboots when a Type 1 upload ended unconfirmed
@@ -117,7 +123,7 @@ func New(bus mqttbus.Bus, o Options) *Channel {
 	if o.FileTotal == 0 {
 		o.FileTotal = DefaultFileTotal
 	}
-	c := &Channel{bus: bus, o: o, lwt: map[string]string{}, info: map[string]*Info{}, sems: map[string]chan struct{}{}, waiters: map[string]*waiter{}, files: map[string]chan mqttbus.Message{}, fileClean: map[string]bool{}, reboots: map[string]int{}, fwPending: map[string]int{}, done: make(chan struct{})}
+	c := &Channel{bus: bus, o: o, lwt: map[string]string{}, info: map[string]*Info{}, sems: map[string]chan struct{}{}, waiters: map[string]*waiter{}, files: map[string]chan mqttbus.Message{}, fileClean: map[string]bool{}, pubs: map[string]int{}, reboots: map[string]int{}, fwPending: map[string]int{}, done: make(chan struct{})}
 	c.unsub = bus.Subscribe([]mqttbus.Kind{mqttbus.KindLWT, mqttbus.KindInfo, mqttbus.KindResult, mqttbus.KindStatus, mqttbus.KindPower, mqttbus.KindFile}, c.onMessage)
 	return c
 }

@@ -196,6 +196,12 @@ func TestRefusedByTheChannelIsExplainedInItsOwnWords(t *testing.T) {
 	if strings.Contains(blocked.UserReason(), "password-looking") || len(g.marker.ids) != 0 {
 		t.Fatalf("reason %q, marked %v", blocked.UserReason(), g.marker.ids)
 	}
+	// Why: a refusal after something was published (the opening abort) is an attempt, not "nothing sent".
+	g.dl.derr = fmt.Errorf("%w: %w: %w", mqttcmd.ErrPublished, mqttcmd.ErrRefused, mqttcmd.ErrFirmwarePending)
+	_, err = g.r.DownloadConfig(t.Context(), g.target())
+	if !errors.As(err, &blocked) || !blocked.Attempted {
+		t.Fatalf("a refusal after a publish must be Attempted: %v", err)
+	}
 }
 
 func TestPasswordRefusedAfterTheSnapshotIsNotPublished(t *testing.T) {

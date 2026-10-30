@@ -52,8 +52,9 @@ type MQTTDoer interface {
 type BackupBlockedError struct {
 	Err    error
 	Reason string
-	// Attempted: a transfer was started before it was refused (the device answered Error 1). Otherwise
-	// nothing was sent for the backup and the person can fix the cause and retry at once.
+	// Attempted: something was published for this backup before it was refused (the opening abort, a
+	// start that may have been sent, an Error 1 answer). Only a refusal decided before the first publish
+	// has it false; the web layer then lets the person retry after a short floor instead of the cooldown.
 	Attempted bool
 }
 
@@ -572,7 +573,7 @@ func (r *Router) mqttDownload(ctx context.Context, d model.Device) ([]byte, erro
 		noteTrace(ctx, MQTT)
 	}
 	if errors.Is(err, mqttcmd.ErrRefused) { // nothing was sent: say why, in our own words, never the error text
-		return nil, &BackupBlockedError{Err: fmt.Errorf("%w: %w", tasmota.ErrUnreachable, mqttcmd.ErrRefused), Reason: "a backup over MQTT was refused: " + mqttcmd.Reason(err)}
+		return nil, &BackupBlockedError{Err: fmt.Errorf("%w: %w", tasmota.ErrUnreachable, mqttcmd.ErrRefused), Reason: "a backup over MQTT was refused: " + mqttcmd.Reason(err), Attempted: errors.Is(err, mqttcmd.ErrPublished)}
 	}
 	if errors.Is(err, mqttcmd.ErrPasswordRefused) {
 		if r.o.Marker != nil {
