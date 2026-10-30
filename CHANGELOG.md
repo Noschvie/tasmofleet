@@ -16,6 +16,7 @@ always upgrade automatically.
 - Docker Hub gets release tags only; `edge` stays on ghcr.io (every push to main left untagged images behind on Docker Hub)
 - Policy: Save rule ends the editor too: the overview names the saved rule and marks its row
 - Policy overview: shorter compliance bar, so rule names and scopes do not wrap
+- Docs: security notes checked against the code; corrected renamed test references, the policy-rules environment variable (legacy one-time import), the device address-change confirmation and the stale restore open item
 
 ## 0.19.2 (2026-10-30)
 
