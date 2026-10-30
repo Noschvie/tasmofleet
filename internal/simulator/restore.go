@@ -25,8 +25,18 @@ func (d *simDevice) webGetConfigLocked(data string) []byte {
 		return errorReply("WEBGETCONFIG " + data)
 	}
 	raw := u.String()
-	if d.hasFaultLocked(FaultFWUnreachable) {
-		return []byte(`{"WebGetConfig":"Done"}`) // accepted; the download never connects
+	if fs := d.faultsForLocked("webgetconfig", FaultFWUnreachable); len(fs) > 0 {
+		// The web command downloads synchronously (xdrv_01_9_webserver.ino, WebGetConfig,
+		// v16 lines 4510-4588): the connect attempt takes its time, then it answers the
+		// failure. The lock is released meanwhile, as for any slow command.
+		wait := fs[0].Duration
+		if wait <= 0 {
+			wait = d.dur(secFWConnectFail)
+		}
+		d.mu.Unlock()
+		d.sleepFor(wait)
+		d.mu.Lock()
+		return []byte(`{"WebGetConfig":"Connect failed"}`)
 	}
 	d.spawn(func() {
 		d.fetchConfig(raw)

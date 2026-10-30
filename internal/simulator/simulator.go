@@ -170,13 +170,13 @@ const (
 	FaultNeverReturns   = "never_returns"    // device goes offline after the restart and stays there
 	FaultHTTPOnly       = "http_only"        // device does not use MQTT even if the fleet has a broker
 
-	// FaultHTTPUnreachable: HTTP is cut off (every connection is accepted and closed at once
-	// without a byte), MQTT works: a device TasmoFleet cannot reach but the broker can.
+	// FaultHTTPUnreachable: HTTP refuses every connection (no listener; the address stays and
+	// the refusal survives reboots), MQTT works: a device TasmoFleet cannot reach but the broker can.
 	FaultHTTPUnreachable = "http_unreachable"
 	// FaultFWUnreachable: the device cannot reach the firmware server. Upgrade 1 is accepted;
 	// after Duration (default the 66 s the connect attempt takes, scaled) it publishes
 	// stat/<t>/UPGRADE {"Upgrade":"Failed HTTP error: connection failed"}. No reboot, the
-	// device stays responsive (observed live, 2026-10-30). WebGetConfig fetches nothing either.
+	// device stays responsive (observed live, 2026-10-30). WebGetConfig answers "Connect failed" after the same time.
 	FaultFWUnreachable = "fw_unreachable"
 )
 

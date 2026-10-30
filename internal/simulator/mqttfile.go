@@ -45,7 +45,8 @@ const (
 	responseSizeESP32   = 6000
 	secMQTTRetry        = 10.0 // mqtt_retry: the device reconnects 10 s after a lost connection
 	flashSector         = 4096
-	mmuPage             = 0x10000 // SPI_FLASH_MMU_PAGE_SIZE: ESP32 flash write areas are 64 kB aligned
+	settingsBufferMax   = 16 << 10 // SettingsBufferAlloc takes 2 to 16 KiB
+	mmuPage             = 0x10000  // SPI_FLASH_MMU_PAGE_SIZE: ESP32 flash write areas are 64 kB aligned
 )
 
 // Faults of the file transfer (After is "" or "fileupload").
@@ -137,6 +138,8 @@ type fileOut struct {
 	cmd  string // "FileUpload" or "FileDownload"
 	msgs []outMsg
 	resp string // the Response buffer
+	// skipFinal: nothing is published at the end (FaultMQTTUploadLostDone).
+	skipFinal bool
 }
 
 func (o *fileOut) publish(payload string) {
@@ -163,8 +166,8 @@ func (o *fileOut) finish() {
 	if !o.d.mf.active {
 		o.d.mf.reset()
 	}
-	if o.resp != "" {
-		o.publish(o.resp)
+	if !o.skipFinal {
+		o.publish(o.resp) // MqttFilePublish always publishes, an empty response too
 	}
 }
 
@@ -269,7 +272,7 @@ func (d *simDevice) uploadValidateLocked(o *fileOut, rcvID uint32, payload int) 
 			return 1
 		}
 		if m.typ == uplSettings {
-			if m.size > configDumpSize {
+			if m.size > settingsBufferMax {
 				return 2 // SettingsBufferAlloc: Settings supports max size
 			}
 		} else {
@@ -354,7 +357,7 @@ func (d *simDevice) uploadStepLocked(o *fileOut, b64 *string) {
 		return
 	}
 	if len(d.faultsForLocked("fileupload", FaultMQTTUploadLostDone)) > 0 {
-		o.resp = ""
+		o.skipFinal = true
 	}
 	d.spawn(func() {
 		if d.sleep(secRestartCmd) {

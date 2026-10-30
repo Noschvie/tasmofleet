@@ -57,7 +57,7 @@ Paths are under `tasmota/`: `F` = `tasmota_xdrv_driver/xdrv_02_1_mqtt_file.ino`,
   for payloads above 125 bytes. The 850-byte chunk of a 34-character topic is 1156 payload bytes and 1195 on the wire: 4 bytes of slack. The broker then fires the will.
   (`MqttDataHandler` also ignores `data_len >= 1200`, `M` 914, which the readPacket check makes unreachable.)
 - Group topic: Error 5 (`F` 88).
-- Type 2 (settings): `SettingsBufferAlloc(size)` failing is Error 2 (`F` 98-101); an accepted dump restarts (`F` 299).
+- Type 2 (settings): `SettingsBufferAlloc(size)` failing is Error 2 (`F` 98-101); it takes 2 to 16 KiB, so only more than 16 KiB is refused. A dump that `SettingsConfigRestore` rejects ends in `Failed`, an accepted one restarts (`F` 295-299). The simulator accepts only 4096-byte dumps at the end.
 - Type 1 (OTA firmware), the order in `MqttFileUploadValidate` (`F` 97-130):
   1. password (Error 1);
   2. `head_room = (FlashWriteMaxSector() - FlashWriteStartSector()) * 4096`, `rounded = round_up_4k(Size)`; `rounded > head_room` is **Error 2** and happens
@@ -105,6 +105,10 @@ disconnects cleanly so that closing a fleet does not fire wills.
 ## 6. What stays unverified
 
 - Type 1 success on a real device (no ESP32 with a dual-OTA layout was tested); only Error 2 on the safeboot layout was seen live.
-- The empty `?` after a finished transfer: the source publishes nothing useful; the simulator publishes nothing.
+- The empty `?` after a finished transfer: `MqttFilePublish` always publishes (`F` 79), so an empty message arrives on `stat/<topic>/FILEDOWNLOAD`; the simulator does the same (not seen live).
 - The `_1` garbage message of the stray-`?` run (not explained by the source read).
 - Whether `Update.begin()` can fail for reasons other than size; the simulator assumes it succeeds when head_room is enough.
+
+## 7. WebGetConfig and an unreachable firmware server
+
+`WebGetConfig <url>` downloads synchronously in the web command handler (`xdrv_01_9_webserver.ino` 4510-4588, status texts at 4264). When the device cannot reach the server it answers `{"WebGetConfig":"Connect failed"}` after the connect timeout and neither restarts nor changes settings. The simulator does this under `fw_unreachable` (the default wait is the 66 s of the OTA connect attempt, scaled).

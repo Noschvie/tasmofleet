@@ -27,6 +27,12 @@ func (d *simDevice) startHTTP() {
 	d.httpAddr = l.Addr().String()
 	d.srv = &httpServer{srv: srv, l: l}
 	d.mu.Unlock()
+	if d.hasFault(FaultHTTPUnreachable) {
+		// The address stays (the inventory holds it) but nothing listens: connections are
+		// refused, also after every reboot, like a device on another network.
+		_ = l.Close() // the point is the refusal
+		return
+	}
 	served := d.spawn(func() {
 		// net.ErrClosed: a reboot closed the listener first (reboot)
 		if err := srv.Serve(l); err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, net.ErrClosed) {
@@ -141,10 +147,6 @@ func (d *simDevice) writeBody(w http.ResponseWriter, code int, body []byte) {
 }
 
 func (d *simDevice) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if d.hasFault(FaultHTTPUnreachable) {
-		drop(w)
-		return
-	}
 	if !d.waitServing(r) {
 		drop(w)
 		return
@@ -221,7 +223,7 @@ func (d *simDevice) refererOK(r *http.Request) bool {
 
 func (d *simDevice) record(cmd string) {
 	d.mu.Lock()
-	d.cmds = append(d.cmds, cmd)
+	d.cmds = append(d.cmds, redactFileCmd(cmd))
 	d.mu.Unlock()
 }
 

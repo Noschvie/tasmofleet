@@ -236,8 +236,17 @@ func packetSize(msg paho.Message) int {
 // recorded commands: the payload carries the device's MQTT password.
 func redactFileCmd(cmd string) string {
 	name, data, _ := strings.Cut(cmd, " ")
-	if l := strings.ToLower(name); (l == "filedownload" || l == "fileupload") && len(data) > 8 {
-		return name + " <" + itoa(len(data)) + " bytes>"
+	switch strings.ToLower(name) {
+	case "filedownload", "fileupload":
+		if len(data) > 8 {
+			return name + " <" + itoa(len(data)) + " bytes>"
+		}
+	case "backlog", "backlog0", "backlog2", "backlog3":
+		segs := strings.Split(data, ";")
+		for i, s := range segs {
+			segs[i] = redactFileCmd(strings.TrimSpace(s))
+		}
+		return name + " " + strings.Join(segs, ";")
 	}
 	return cmd
 }

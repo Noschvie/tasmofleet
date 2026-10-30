@@ -103,3 +103,32 @@ func TestMQTTTransportDevicesAreOptInAndHTTPIsCutOff(t *testing.T) {
 		t.Error("mq-esp32 answers over HTTP")
 	}
 }
+
+// Why: other tests count the base fleet; the MQTT transport devices must not
+// appear unless asked for.
+func TestMQTTTransportDevicesAreAbsentByDefault(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	pr, pw := io.Pipe()
+	go func() {
+		_ = run(ctx, []string{"-fixtures", "../../testdata/fixtures", "-time-scale", "0.02"}, pw, io.Discard)
+		_ = pw.Close()
+	}()
+	sc := bufio.NewScanner(pr)
+	var lines []string
+	for sc.Scan() {
+		lines = append(lines, sc.Text())
+		if sc.Text() == "DEVENV_READY=1" {
+			break
+		}
+	}
+	go io.Copy(io.Discard, pr) //nolint:errcheck // drain
+	for _, l := range lines {
+		if strings.Contains(l, "name=mq-") {
+			t.Errorf("unrequested device: %s", l)
+		}
+	}
+	if len(lines) < 5 {
+		t.Errorf("the fleet did not start: %v", lines)
+	}
+}

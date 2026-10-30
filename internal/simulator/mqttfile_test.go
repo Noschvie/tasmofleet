@@ -6,8 +6,11 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -351,14 +354,34 @@ func TestFileCommandsAreUnknownInMinimal(t *testing.T) {
 }
 
 // Why: the payload of a file command carries the device password; the
-// recorded commands (Commands(), used in assertions and dev output) must not.
+// recorded commands (Commands(), used in assertions and dev output) must not,
+// whichever way the command arrived: MQTT, HTTP /cm or inside a Backlog.
 func TestRecordedFileCommandsDoNotContainThePassword(t *testing.T) {
-	_, _, d, fb := brokerDevice(t, "redact", ProfileESP8266_4M)
+	b, _, d, fb := brokerDevice(t, "redact", ProfileESP8266_4M)
 	fb.download(testMQTTPassword)
-	for _, cmd := range d.Commands() {
+	payload := fmt.Sprintf(`{"Password":"%s","Type":2}`, testMQTTPassword)
+	cm(t, d, "FileDownload "+payload)
+	cm(t, d, "FileDownload 0")
+	if err := b.Publish("cmnd/redact/Backlog", []byte("Power ON;FileDownload "+payload), false); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Publish("cmnd/redact/Status", []byte("2"), false); err != nil { // behind the backlog
+		t.Fatal(err)
+	}
+	for i := 0; i < 100 && len(d.Commands()) < 8; i++ {
+		time.Sleep(20 * time.Millisecond)
+	}
+	cmds := d.Commands()
+	var sawHTTP, sawBacklog bool
+	for _, cmd := range cmds {
 		if strings.Contains(cmd, testMQTTPassword) {
 			t.Errorf("recorded %q", cmd)
 		}
+		sawHTTP = sawHTTP || strings.HasPrefix(cmd, "FileDownload <")
+		sawBacklog = sawBacklog || strings.HasPrefix(cmd, "Backlog ")
+	}
+	if !sawHTTP || !sawBacklog {
+		t.Errorf("the HTTP and Backlog commands were not recorded: %v", cmds)
 	}
 }
 
@@ -400,16 +423,51 @@ func TestFaultMQTTUploadLostDoneStillFlashes(t *testing.T) {
 }
 
 // Why: a device TasmoFleet cannot reach over HTTP but the broker can is the
-// whole case for the MQTT transport.
-func TestFaultHTTPUnreachableRefusesHTTPAndKeepsMQTT(t *testing.T) {
+// whole case for the MQTT transport. The prober must see a refused connection
+// (what an unreachable host gives), not an EOF, and it must stay that way after
+// a reboot.
+func TestFaultHTTPUnreachableRefusesConnectionsAndKeepsMQTT(t *testing.T) {
 	b, c, d, _ := brokerDevice(t, "nohttp", ProfileESP8266_4M, Fault{Kind: FaultHTTPUnreachable})
-	if _, _, err := cmWith(d, "Status", time.Second, nil); err == nil {
-		t.Error("HTTP answered")
+	refused := func(when string) {
+		t.Helper()
+		conn, err := net.DialTimeout("tcp", d.Addr(), time.Second)
+		if err == nil {
+			_ = conn.Close()
+			t.Fatalf("%s: the connection was accepted", when)
+		}
+		if !errors.Is(err, syscall.ECONNREFUSED) {
+			t.Errorf("%s: %v, want connection refused", when, err)
+		}
 	}
+	refused("at start")
 	if err := b.Publish("cmnd/nohttp/Power", []byte("ON"), false); err != nil {
 		t.Fatal(err)
 	}
 	c.waitFor(t, `stat/nohttp/RESULT={"POWER":"ON"}`)
+	if err := b.Publish("cmnd/nohttp/Restart", []byte("1"), false); err != nil {
+		t.Fatal(err)
+	}
+	settled(t, d, 1)
+	refused("after a reboot")
+}
+
+// Why: with a firmware server the device cannot reach, the restore download is
+// a synchronous connect attempt that ends in "Connect failed" (WebGetConfig,
+// v16 xdrv_01_9_webserver.ino 4510-4588); an immediate "Done" would send the
+// restore flow looking for a reboot that never comes.
+func TestFaultFWUnreachableMakesWebGetConfigFailAfterTheConnectTimeout(t *testing.T) {
+	f := newTestFleet(t, "", Extra{})
+	d := add(t, f, DeviceSpec{Name: "nofwrestore", Profile: ProfileESP8266_4M, Faults: []Fault{{Kind: FaultFWUnreachable, Duration: 150 * time.Millisecond}}})
+	start := time.Now()
+	got := cm(t, d, "WebGetConfig http://127.0.0.1:1/restore/tok")
+	if got != `{"WebGetConfig":"Connect failed"}` {
+		t.Errorf("reply: %s", got)
+	}
+	if time.Since(start) < 150*time.Millisecond {
+		t.Error("the failure came before the connect timeout")
+	}
+	time.Sleep(100 * time.Millisecond)
+	eq(t, "boots", d.Boots(), 0)
 }
 
 // Why: the failure the maintainer's VLAN produces: Upgrade 1 is accepted, the
@@ -445,4 +503,131 @@ func TestBacklogOverMQTTPublishesOneResultPerCommand(t *testing.T) {
 	if c.has("stat/bl/RESULT={\"POWER\":\"ON\",") || c.has(`stat/bl/RESULT={"Backlog"`) {
 		t.Error("Backlog must not publish a merged or own reply")
 	}
+}
+
+func device(t *testing.T, c Controller) *simDevice {
+	t.Helper()
+	d, ok := c.(*simDevice)
+	if !ok {
+		t.Fatalf("%T is not a simDevice", c)
+	}
+	return d
+}
+
+// Why: head_room decides which devices may take an update over MQTT, so the
+// formula (not a constant) has to be pinned per layout. Inputs are the Status 4
+// numbers of the profile; the expectations are worked out from the v16 source
+// (docs/research/tasmota-mqtt-transport.md section 3):
+//   - esp8266-1m: sketch 651 KB, Free 352 KB: ceil4k(sketch) + Free - floor4k(sketch) - 16 KiB = 340 KiB;
+//   - esp8266-4m: sketch 651 KB, Free 740 KB: 728 KiB;
+//   - esp32 safeboot layout: sketch 2182 KB, Free 697 KB, running partition at 64 KiB:
+//     floor64k(end) - floor64k(start + sketch + 128 KiB) = 512 KiB;
+//   - esp32 with two app partitions: Free 1700 KB is the other partition:
+//     floor64k(partition) - 128 KiB = 1536 KiB.
+//
+// For each layout an upload of exactly head_room is accepted and one sector more
+// is Error 2 (Error 2 comes before any data is touched).
+func TestHeadRoomPerLayoutAndTheBoundaryOfAType1Upload(t *testing.T) {
+	for _, tc := range []struct {
+		profile Profile
+		kib     int
+	}{{ProfileESP8266_1M, 340}, {ProfileESP8266_4M, 728}, {ProfileESP32, 512}, {ProfileESP32Dual, 1536}} {
+		t.Run(string(tc.profile), func(t *testing.T) {
+			_, _, c, fb := brokerDevice(t, "room-"+string(tc.profile), tc.profile)
+			sd := device(t, c)
+			sd.mu.Lock()
+			got := sd.headRoomLocked()
+			sd.mu.Unlock()
+			if got != tc.kib*1024 {
+				t.Fatalf("head_room %d KiB, want %d KiB", got/1024, tc.kib)
+			}
+			fb.send("fileupload", fmt.Sprintf(`{"Password":%q,"Id":116,"Type":1,"Size":%d}`, testMQTTPassword, got))
+			if m := next(t, fb.up); m != `{"FileUpload":"Started"}` {
+				t.Fatalf("Size == head_room: %s", m)
+			}
+			next(t, fb.up) // MaxSize
+			fb.send("fileupload", "0")
+			if m := next(t, fb.up); m != `{"FileUpload":"Aborted"}` {
+				t.Fatalf("abort: %s", m)
+			}
+			fb.send("fileupload", fmt.Sprintf(`{"Password":%q,"Id":117,"Type":1,"Size":%d}`, testMQTTPassword, got+4096))
+			if m := next(t, fb.up); m != `{"FileUpload":"Error 2"}` {
+				t.Errorf("Size == head_room + one sector: %s", m)
+			}
+		})
+	}
+}
+
+// Why: a settings dump may be 2 to 16 KiB (SettingsBufferAlloc); only more is
+// Error 2. Refusing a 4 KiB-plus size would keep a valid restore off the MQTT path.
+func TestFileUploadType2AcceptsUpTo16KiB(t *testing.T) {
+	_, _, _, fb := brokerDevice(t, "t2size", ProfileESP8266_4M)
+	for _, size := range []int{2048, 8192, 16384} {
+		fb.send("fileupload", fmt.Sprintf(`{"Password":%q,"Id":5,"Type":2,"Size":%d}`, testMQTTPassword, size))
+		if m := next(t, fb.up); m != `{"FileUpload":"Started"}` {
+			t.Fatalf("Size %d: %s", size, m)
+		}
+		next(t, fb.up)
+		fb.send("fileupload", "0")
+		next(t, fb.up)
+	}
+	fb.send("fileupload", fmt.Sprintf(`{"Password":%q,"Id":5,"Type":2,"Size":16385}`, testMQTTPassword))
+	if m := next(t, fb.up); m != `{"FileUpload":"Error 2"}` {
+		t.Errorf("Size 16385: %s", m)
+	}
+}
+
+// Why: every way out of a transfer must be a clear answer the client can act
+// on: Aborted for FileUpload 0 and for a data message with another Id, Error 3
+// for a type the device does not know (after the room check).
+func TestFileUploadAbortMismatchedIdAndInvalidType(t *testing.T) {
+	_, _, _, fb := brokerDevice(t, "abort", ProfileESP8266_4M)
+	start := func() {
+		fb.send("fileupload", fmt.Sprintf(`{"Password":%q,"Id":116,"Type":2,"Size":4096}`, testMQTTPassword))
+		next(t, fb.up)
+		next(t, fb.up)
+	}
+	start()
+	fb.send("fileupload", "0")
+	if m := next(t, fb.up); m != `{"FileUpload":"Aborted"}` {
+		t.Errorf("FileUpload 0: %s", m)
+	}
+	start()
+	fb.send("fileupload", `{"Id":117,"Data":"AAAA"}`)
+	if m := next(t, fb.up); m != `{"FileUpload":"Aborted"}` {
+		t.Errorf("mismatched Id: %s", m)
+	}
+	fb.send("fileupload", fmt.Sprintf(`{"Password":%q,"Id":118,"Type":3,"Size":4096}`, testMQTTPassword))
+	if m := next(t, fb.up); m != `{"FileUpload":"Error 3"}` {
+		t.Errorf("type 3: %s", m)
+	}
+}
+
+// Why: the device converts chunk_size to the base64 payload size again on every
+// message that arrives while no byte has been stored (F 282-284). A sender that
+// sends an empty Data first sees MaxSize shrink 850 -> 619; sizing chunks from
+// the latest MaxSize (not the first) is what the protocol needs.
+func TestFileUploadMaxSizeShrinksOnRepeatedPositionZeroMessages(t *testing.T) {
+	_, _, _, fb := brokerDevice(t, "balcony-windowsill", ProfileESP8266_4M)
+	fb.send("fileupload", fmt.Sprintf(`{"Password":%q,"Id":116,"Type":2,"Size":4096}`, testMQTTPassword))
+	next(t, fb.up)
+	if got := jsonField(t, next(t, fb.up), "MaxSize"); got != float64(850) {
+		t.Fatalf("first MaxSize %v", got)
+	}
+	fb.send("fileupload", `{"Id":116,"Data":""}`)
+	if got := jsonField(t, next(t, fb.up), "MaxSize"); got != float64(619) {
+		t.Errorf("MaxSize after an empty message: %v, want 619", got)
+	}
+}
+
+// Why: the ESP32 safeboot image is built with FIRMWARE_MINIMAL, so it has no
+// file commands either; a push over MQTT cannot target it.
+func TestFileCommandsAreUnknownInESP32Safeboot(t *testing.T) {
+	b, c, f := newBrokerFleet(t, Extra{})
+	add(t, f, DeviceSpec{Name: "sb", Profile: ProfileESP32, Variant: "safeboot", MQTTPassword: testMQTTPassword})
+	c.waitFor(t, "[R]tele/sb/LWT=Online")
+	if err := b.Publish("cmnd/sb/filedownload", []byte(`{"Password":"x","Type":2}`), false); err != nil {
+		t.Fatal(err)
+	}
+	c.waitFor(t, `stat/sb/RESULT={"Command":"Unknown"`)
 }
