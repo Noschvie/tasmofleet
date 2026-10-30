@@ -13,6 +13,7 @@ always upgrade automatically.
 
 ### Changed
 
+- Images: each push to main deletes the previous `edge` on ghcr.io and Docker Hub, so no untagged images pile up (releases are never deleted)
 - README: no longer lists notifications by webhook or e-mail; they were never built (#249)
 - Policy: Save rule ends the editor too: the overview names the saved rule and marks its row
 - Policy overview: shorter compliance bar, so rule names and scopes do not wrap

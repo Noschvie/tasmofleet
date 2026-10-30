@@ -117,6 +117,29 @@ jobs:
           registry: docker.io
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      # edge is replaced on every push to main; remember the digest it points to now, so the step
+      # after the push can delete exactly that manifest (product owner, 2026-10-30). Releases are
+      # never deleted.
+      - name: previous edge
+        id: prev
+        if: steps.v.outputs.push == 'true' && github.ref_type != 'tag'
+        env:
+          OWNER: ${{ github.repository_owner }}
+          DOCKERHUB: ${{ steps.v.outputs.dockerhub }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+        run: |
+          set -u
+          digest() { docker buildx imagetools inspect "$1" --format '{{json .Manifest}}' 2>/dev/null | jq -r '.digest // empty'; }
+          ghcr="ghcr.io/$(echo "$OWNER" | tr 'A-Z' 'a-z')/tasmofleet"
+          {
+            echo "ghcr_edge=$(digest "$ghcr:edge")"
+            echo "ghcr_latest=$(digest "$ghcr:latest")"
+            if [ "$DOCKERHUB" = true ]; then
+              dh="docker.io/$(echo "$DOCKERHUB_USERNAME" | tr 'A-Z' 'a-z')/tasmofleet"
+              echo "dh_edge=$(digest "$dh:edge")"
+              echo "dh_latest=$(digest "$dh:latest")"
+            fi
+          } >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@v7.4.0
         with:
           context: .
@@ -134,6 +157,49 @@ jobs:
             org.opencontainers.image.licenses=AGPL-3.0-or-later
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      # Delete the manifest the old edge pointed to, unless edge did not move or latest still uses
+      # it. A failure here only warns: the image is already published.
+      - name: delete the previous edge
+        if: steps.prev.outcome == 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          DOCKERHUB: ${{ steps.v.outputs.dockerhub }}
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          GHCR_EDGE: ${{ steps.prev.outputs.ghcr_edge }}
+          GHCR_LATEST: ${{ steps.prev.outputs.ghcr_latest }}
+          DH_EDGE: ${{ steps.prev.outputs.dh_edge }}
+          DH_LATEST: ${{ steps.prev.outputs.dh_latest }}
+        run: |
+          set -u
+          digest() { docker buildx imagetools inspect "$1" --format '{{json .Manifest}}' 2>/dev/null | jq -r '.digest // empty'; }
+          owner=$(echo "$OWNER" | tr 'A-Z' 'a-z')
+          ghcr="ghcr.io/$owner/tasmofleet"
+          now=$(digest "$ghcr:edge")
+          if [ -n "$GHCR_EDGE" ] && [ -n "$now" ] && [ "$GHCR_EDGE" != "$now" ] && [ "$GHCR_EDGE" != "$GHCR_LATEST" ]; then
+            id=$(gh api "/users/$owner/packages/container/tasmofleet/versions?per_page=100" --jq ".[] | select(.name == \"$GHCR_EDGE\") | .id")
+            if [ -n "$id" ] && gh api -X DELETE "/users/$owner/packages/container/tasmofleet/versions/$id"; then
+              echo "ghcr: deleted the previous edge $GHCR_EDGE"
+            else
+              echo "::warning::ghcr: could not delete the previous edge $GHCR_EDGE"
+            fi
+          fi
+          if [ "$DOCKERHUB" = true ]; then
+            user=$(echo "$DOCKERHUB_USERNAME" | tr 'A-Z' 'a-z')
+            now=$(digest "docker.io/$user/tasmofleet:edge")
+            if [ -n "$DH_EDGE" ] && [ -n "$now" ] && [ "$DH_EDGE" != "$now" ] && [ "$DH_EDGE" != "$DH_LATEST" ]; then
+              token=$(curl -fsS -u "$DOCKERHUB_USERNAME:$DOCKERHUB_TOKEN" \
+                "https://auth.docker.io/token?service=registry.docker.io&scope=repository:$user/tasmofleet:pull,push,delete" | jq -r .token)
+              code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE -H "Authorization: Bearer $token" \
+                "https://registry-1.docker.io/v2/$user/tasmofleet/manifests/$DH_EDGE")
+              case "$code" in
+                202 | 200) echo "Docker Hub: deleted the previous edge $DH_EDGE" ;;
+                *) echo "::warning::Docker Hub: deleting the previous edge $DH_EDGE answered $code" ;;
+              esac
+            fi
+          fi
       # The Docker Hub overview follows deploy/dockerhub/README.md with every release.
       - name: Docker Hub overview
         if: steps.v.outputs.dockerhub == 'true' && github.ref_type == 'tag'
