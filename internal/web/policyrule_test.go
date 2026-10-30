@@ -617,3 +617,17 @@ func TestRuleNewStaleSaveKeepsTheTypedDraft(t *testing.T) {
 		t.Error("nothing is stored")
 	}
 }
+
+// Why: Cancel ends the editor. The rule page always shows the editor to admins, so a Cancel
+// that pointed at the rule page itself only reloaded it, and a draft's Cancel led to the
+// template picker; both now go back to the policy overview, where the user came from.
+func TestRuleEditorCancelGoesBackToTheOverview(t *testing.T) {
+	e, mem := ruleEnvWith(t, defaultRP())
+	id := ruleSeed(t, e, mem, url.Values{"family": {}, "tag": {}, "tags_extra": {""}, "except": {}})
+	for _, p := range []string{"/policy/rules/" + id, "/policy/rules/new?template=telemetry"} {
+		_, body := e.do(t, "GET", p, "admin", nil)
+		if !strings.Contains(body, `href="/tf/policy">Cancel</a>`) {
+			t.Errorf("%s: Cancel does not lead to the overview", p)
+		}
+	}
+}

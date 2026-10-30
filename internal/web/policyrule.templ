@@ -299,11 +299,7 @@ templ ruleEditCard(p rulePageView, e *ruleEditor) {
 					<span class="ufield-err" id="err-change_note" role="alert">{ e.Err }</span>
 				}
 			</label>
-				if p.Draft {
-					<a class="btn" href={ templ.SafeURL(p.Base + rulesPath + "/new") }>Cancel</a>
-				} else {
-					<a class="btn" href={ templ.SafeURL(rulePath(p.Base, p.ID)) }>Cancel</a>
-				}
+				<a class="btn" href={ templ.SafeURL(p.Base + policyPath) }>Cancel</a>
 				<button type="submit" class="btn btn-primary">Save rule</button>
 			</div>
 		</form>
