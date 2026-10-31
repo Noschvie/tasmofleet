@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -688,11 +689,6 @@ func TestRememberedBuildIsShownOnceAndStartTakesExactlyThat(t *testing.T) {
 	if !strings.Contains(start, `name="build_4" value="s2cdc"`) {
 		t.Fatalf("Start must carry the build the screen shows: %s", start)
 	}
-	// A recheck for something else (no build_4 posted) keeps it remembered; it never turns into "chosen by you".
-	_, body = e.do(t, "POST", "/updates/preview", "operator", form)
-	if strings.Contains(body, "chosen by you") || !strings.Contains(body, "remembered from your last update") {
-		t.Fatalf("a recheck relabelled the remembered build: %s", body)
-	}
 	if got := e.inv.devs[4].BuildMemory; got != "s2cdc" {
 		t.Fatalf("a preview changed the memory to %q", got)
 	}
@@ -785,10 +781,78 @@ func TestPreviewKeepsAskingWithoutAMemory(t *testing.T) {
 // Why (#186): only the ESP32-S2 builds are remembered; a p4 build is decided by the chip revision and
 // there is nothing to remember (and the store would refuse it with a warning on every start).
 func TestOnlyS2BuildsAreRemembered(t *testing.T) {
-	e, _, _, _ := setupOTA(t)
-	form := url.Values{"id": {"1"}, "release": {"16.1.0"}, "policy": {"only-newer"}, "delivery": {"pull"}, "skip_backup": {"1"}, "build_1": {"p4"}}
+	e, o, _, _ := setupOTA(t)
+	form := url.Values{"id": {"1"}, "release": {"16.1.0"}, "policy": {"only-newer"}, "skip_backup": {"1"}, "build_1": {"p4"}}
 	e.do(t, "POST", "/updates", "operator", form)
+	if len(o.submitReqs) != 1 || o.submitReqs[0].Build != "p4" {
+		t.Fatalf("the update did not start with the p4 build, so nothing is proven: %+v", o.submitReqs)
+	}
 	if got := e.inv.devs[1].BuildMemory; got != "" {
 		t.Fatalf("a p4 build was remembered: %q", got)
+	}
+}
+
+var hiddenField = regexp.MustCompile(`<input type="hidden" name="([^"]*)" value="([^"]*)"`)
+
+// replayRecheck posts what the browser would send from the preview's recheck form: its hidden fields
+// plus the picks the person made (radios, which live outside that form's own markup).
+func replayRecheck(t *testing.T, e *env, body string, picks url.Values) string {
+	t.Helper()
+	i := strings.Index(body, `<form id="recheck"`)
+	if i < 0 {
+		t.Fatalf("no recheck form: %s", body)
+	}
+	form, _, _ := strings.Cut(body[i:], "</form>")
+	post := url.Values{}
+	for _, m := range hiddenField.FindAllStringSubmatch(form, -1) {
+		post.Add(m[1], m[2])
+	}
+	for k, v := range picks {
+		post[k] = v
+	}
+	_, out := e.do(t, "POST", "/updates/preview", "operator", post)
+	return out
+}
+
+// Why (#186): the real recheck form carries the hidden fields of the page. A remembered build in them
+// would come back as a posted pick, and the row would turn into "chosen by you" just because the person
+// answered ANOTHER device. A remembered row must stay remembered across a recheck.
+func TestRecheckForAnotherDeviceKeepsTheRememberedBuildRemembered(t *testing.T) {
+	e, o, _, _ := setupOTA(t)
+	s2 := model.Identity{LanguageKnown: true, Family: model.ChipESP32S2, Hardware: "ESP32-S2", Version: "16.0.0", Variant: "unknown"}
+	e.inv.devs[4] = model.Device{ID: 4, Name: "s2-a", Address: "10.0.0.4", BuildMemory: "s2cdc", Identity: s2}
+	e.inv.devs[5] = model.Device{ID: 5, Name: "s2-b", Address: "10.0.0.5", Identity: s2}
+	o.items[4] = ota.PreviewItem{DeviceID: 4, Decision: "upgrade", Plan: model.PlanDirect, Filename: "tasmota32s2cdc.bin"}
+	o.items[5] = ota.PreviewItem{DeviceID: 5, Decision: "refuse", Reason: "select: ESP32-S2 has two builds", BuildChoice: true}
+	form := url.Values{"id": {"4", "5"}, "release": {"16.1.0"}, "policy": {"only-newer"}}
+	_, body := e.do(t, "POST", "/updates/preview", "operator", form)
+	body = replayRecheck(t, e, body, url.Values{"build_5": {"s2"}})
+	if strings.Contains(body, "chosen by you") && !strings.Contains(body, "s2-b") {
+		t.Fatal("unexpected page")
+	}
+	if !strings.Contains(body, "upd-prev-list") {
+		t.Fatalf("recheck failed: %.600s", body[strings.Index(body, "<main"):])
+	}
+	prev := body[strings.Index(body, `class="upd-prev-list"`):]
+	row4 := prev[strings.Index(prev, "s2-a"):strings.Index(prev, "s2-b")]
+	if !strings.Contains(row4, "remembered from your last update") || strings.Contains(row4, "chosen by you") {
+		t.Fatalf("device A lost its remembered state on a recheck for B: %s", row4)
+	}
+	start, _, _ := strings.Cut(body[strings.Index(body, `<form id="start"`):], "</form>")
+	if !strings.Contains(start, `name="build_4" value="s2cdc"`) {
+		t.Fatalf("Start must still carry A's remembered build: %s", start)
+	}
+}
+
+// Why (#186): Forget on a device with nothing remembered changes nothing, so it leaves no audit entry.
+func TestForgetWithoutAMemoryIsNotAudited(t *testing.T) {
+	e, o, _, _ := setupOTA(t)
+	e.inv.devs[4] = model.Device{ID: 4, Name: "s2-a", Address: "10.0.0.4",
+		Identity: model.Identity{LanguageKnown: true, Family: model.ChipESP32S2, Hardware: "ESP32-S2", Version: "16.0.0", Variant: "unknown"}}
+	o.items[4] = ota.PreviewItem{DeviceID: 4, Decision: "refuse", Reason: "select: ESP32-S2 has two builds", BuildChoice: true}
+	form := url.Values{"id": {"4"}, "release": {"16.1.0"}, "policy": {"only-newer"}, "forget_build": {"4"}}
+	e.do(t, "POST", "/updates/preview", "operator", form)
+	if slices.ContainsFunc(e.aud.events, func(ev model.AuditEvent) bool { return ev.Action == "device.build_forgotten" }) {
+		t.Fatalf("an empty Forget was audited: %+v", e.aud.events)
 	}
 }

@@ -547,18 +547,20 @@ templ updatePreviewPage(p previewPage, csrf string) {
 		</aside>
 	</div>
 	<form id="start" method="post" action={ templ.SafeURL(p.Base + "/updates") }>
-		@previewFields(p, csrf, p.IDs)
+		@previewFields(p, csrf, p.IDs, true)
 	</form>
 	<form id="change" method="post" action={ templ.SafeURL(p.Base + "/updates/new") }>
-		@previewFields(p, csrf, p.Picked)
+		@previewFields(p, csrf, p.Picked, false)
 	</form>
 	<form id="recheck" method="post" action={ templ.SafeURL(p.Base + "/updates/preview") }>
-		@previewFields(p, csrf, p.Picked)
+		@previewFields(p, csrf, p.Picked, false)
 	</form>
 }
 
-// previewFields carry the choice of the preview to the start or back to the picker.
-templ previewFields(p previewPage, csrf string, ids []string) {
+// previewFields carry the choice of the preview to the start or back to the picker. A build that comes
+// from the device's memory goes to the start only: carried through a recheck it would turn into a
+// posted pick ("chosen by you"), and the memory applies again by itself.
+templ previewFields(p previewPage, csrf string, ids []string, start bool) {
 	<input type="hidden" name="csrf" value={ csrf }/>
 	for _, id := range ids {
 		<input type="hidden" name="id" value={ id }/>
@@ -572,7 +574,7 @@ templ previewFields(p previewPage, csrf string, ids []string) {
 	<input type="hidden" name="power_after" value={ p.Form.PowerAfter }/>
 	<input type="hidden" name="delivery" value={ p.Form.Delivery }/>
 	for _, id := range ids {
-		if b := p.Builds[id]; b != "" {
+		if b := p.Builds[id]; b != "" && (start || !p.RememberedIDs[id]) {
 			<input type="hidden" name={ "build_" + id } value={ b }/>
 		}
 		if l := p.Languages[id]; l != "" {

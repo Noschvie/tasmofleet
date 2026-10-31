@@ -461,11 +461,18 @@ func (h *handler) buildAnswers(w http.ResponseWriter, r *http.Request, ids []mod
 				h.fail(w, r, errors.New("nothing to forget"))
 				return nil, false
 			}
-			if err := h.d.BuildMemory.SetBuildMemory(r.Context(), id, ""); err != nil {
+			d, err := h.d.Inventory.Get(r.Context(), id)
+			if err != nil {
 				h.fail(w, r, err)
 				return nil, false
 			}
-			h.recordFirmware(r, "device.build_forgotten", "device:"+raw, map[string]any{}, "ok")
+			if d.BuildMemory != "" {
+				if err := h.d.BuildMemory.SetBuildMemory(r.Context(), id, ""); err != nil {
+					h.fail(w, r, err)
+					return nil, false
+				}
+				h.recordFirmware(r, "device.build_forgotten", "device:"+raw, map[string]any{"build": d.BuildMemory}, "ok")
+			}
 		}
 		skip[id] = true
 		r.PostForm.Del("build_" + raw)
@@ -696,10 +703,12 @@ type previewPage struct {
 	Form        updateForm
 	Rows        []previewRow
 	Builds      map[string]string // device id -> the build the user chose (rows that go ahead only)
-	Languages   map[string]string // device id -> the language build the user said (rows that go ahead only)
-	IDs         []string          // the devices the update starts on
-	Picked      []string          // every device the user picked (the way back to the picker)
-	Error       string
+	// RememberedIDs are the devices whose entry in Builds comes from the memory (not from the person).
+	RememberedIDs map[string]bool
+	Languages     map[string]string // device id -> the language build the user said (rows that go ahead only)
+	IDs           []string          // the devices the update starts on
+	Picked        []string          // every device the user picked (the way back to the picker)
+	Error         string
 
 	Base     string
 	Parallel int      // devices updated at a time
@@ -818,6 +827,10 @@ func (h *handler) updatePreview(w http.ResponseWriter, r *http.Request) {
 			p.Languages[strconv.FormatInt(int64(it.DeviceID), 10)] = q.Language
 		}
 		if row.Go && row.Remembered {
+			if p.RememberedIDs == nil {
+				p.RememberedIDs = map[string]bool{}
+			}
+			p.RememberedIDs[strconv.FormatInt(int64(it.DeviceID), 10)] = true
 			if p.Builds == nil {
 				p.Builds = map[string]string{}
 			}
