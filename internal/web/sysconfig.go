@@ -45,9 +45,10 @@ func (h *handler) registerSysConfig(route func(string, func(http.Handler) http.H
 
 type sysRow struct {
 	sysconfig.FieldState
-	Posted string // what the admin typed, shown again after an error
-	Err    string
-	Deps   []sysRow // settings that only matter while this switch is on (see sysFieldCopy.Dep)
+	Posted        string // what the admin typed, shown again after an error
+	Err           string
+	InRestartCard bool     // the card header carries the Restart badge for all of its settings
+	Deps          []sysRow // settings that only matter while this switch is on (see sysFieldCopy.Dep)
 }
 
 // ErrField is the input name of a row with an error (the field-error pattern
@@ -800,9 +801,9 @@ func sysFieldDataGroup(row sysRow) ui.SettingFieldData {
 	d := sysFieldData(row)
 	d.Group = row.Key == "LOG_LEVEL" || row.Key == "AUTH_MODE" || len(row.Choices) > 0
 	if row.Key == "AUTH_MODE" {
-		// The radio cards carry their own (hidden) legend, and the card's header carries the Restart
-		// and confirm badges: no label row, so no lone line above the choices.
-		d.Label, d.Restart, d.Confirm, d.CanReset = "", false, false, false
+		// The radio cards carry their own (hidden) legend and the card's header the badges: no label
+		// row, so no lone line above the choices.
+		d.Label, d.Restart, d.CanReset = "", false, false
 	}
 	return d
 }

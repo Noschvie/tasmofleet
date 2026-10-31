@@ -51,8 +51,19 @@ templ sysSettingsPage(p sysPage) {
 		for _, tab := range p.Tabs {
 			<div class="sys-tab" id={ "sec-" + tab.Slug } data-sys-tab={ tab.Slug } hidden?={ tab.Slug != p.Active }>
 				@ui.SettingsGrid() {
+					if slices.ContainsFunc(tab.Cards, func(c sysCard) bool { return c.Col }) {
+						<div class="scol">
+							for _, c := range tab.Cards {
+								if c.Col {
+									@sysCardView(p, c)
+								}
+							}
+						</div>
+					}
 					for _, c := range tab.Cards {
-						@sysCardView(p, c)
+						if !c.Col {
+							@sysCardView(p, c)
+						}
 					}
 				}
 			</div>
@@ -170,7 +181,7 @@ func sysFieldData(row sysRow) ui.SettingFieldData {
 	c := sysFieldCopy(row.Key)
 	return ui.SettingFieldData{Key: row.Key, Label: sysLabel(row), Width: c.Width, Help: c.Help, Info: c.Info, Err: row.Err,
 		Notice: sysNotice(row), Pending: row.PendingRestart,
-		Restart: row.Apply != sysconfig.Live, Confirm: row.StepUp == sysconfig.StepUpAlways, CanReset: sysCanReset(row), Locked: row.Locked}
+		Restart: row.Apply != sysconfig.Live && !row.InRestartCard, CanReset: sysCanReset(row), Locked: row.Locked}
 }
 
 // sysInput is a text, number, password, list or choice setting.
@@ -247,10 +258,12 @@ templ sysBroker(p sysPage, row sysRow) {
 			<div class="lrow"><label class="lbl" for="f-mqtt-port">Port</label></div>
 			<input name="mqtt.port" id="f-mqtt-port" class="mono" value={ p.MQTT.Port } inputmode="numeric" maxlength="5" placeholder="1883"/>
 		</div>
-		<div class="sf w-tls sf-switch">
+		<div class="sf w-tls">
 			<div class="lrow"><span class="lbl">TLS</span></div>
-			<label class="swhit"><input type="checkbox" role="switch" id="f-mqtt-tls" name="mqtt.tls" value="1" checked?={ p.MQTT.TLS }/><span class="swtrack" aria-hidden="true"></span></label>
-			<div class="sf-main"><div class="lrow"><label class="lbl" for="f-mqtt-tls">Use TLS</label></div></div>
+			<div class="sf-switch tlsrow">
+				<label class="swhit"><input type="checkbox" role="switch" id="f-mqtt-tls" name="mqtt.tls" value="1" checked?={ p.MQTT.TLS }/><span class="swtrack" aria-hidden="true"></span></label>
+				<div class="sf-main"><div class="lrow"><label class="lbl" for="f-mqtt-tls">Use TLS</label></div></div>
+			</div>
 		</div>
 	</div>
 	if p.MQTT.HasPassword {

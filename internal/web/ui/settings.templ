@@ -64,7 +64,6 @@ type SettingFieldData struct {
 	Key, Label, Width string
 	Help, Info, Err   string
 	Restart, Locked   bool
-	Confirm           bool // saving this setting asks the admin to confirm
 	Pending           bool   // the stored value waits for a restart
 	Notice            string // a second message under the help: a stored value that is ignored, a secret to enter again
 	CanReset          bool
@@ -90,7 +89,7 @@ templ SettingField(d SettingFieldData) {
 			{ children... }
 		}
 		<div class="sf-main">
-			if d.Label != "" || d.Info != "" || d.Locked || d.Restart || d.Confirm || d.CanReset {
+			if d.Label != "" || d.Info != "" || d.Locked || d.Restart || d.CanReset {
 			<div class="lrow">
 				if d.Group {
 					<span class="lbl">{ d.Label }</span>
@@ -107,9 +106,6 @@ templ SettingField(d SettingFieldData) {
 						@Badge(ToneWarn, "Restart required")
 					} else if d.Restart {
 						@Badge(ToneWarn, "Restart")
-					}
-					if d.Confirm && !d.Locked {
-						@Badge(ToneAccent, "Asks you to confirm")
 					}
 					if d.CanReset && !d.Locked {
 						<label class="srst"><input type="checkbox" name={ "clear." + d.Key } value="1"/><span class="srst-off">Reset to default</span><span class="srst-on">Resets on save</span></label>

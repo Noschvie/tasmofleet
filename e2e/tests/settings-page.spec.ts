@@ -156,6 +156,25 @@ test("scheduled backups on and off again leaves the tab clean", async ({ page })
   await expect(bar).toContainText("No unsaved changes");
 });
 
+// Why (#336, #338): "Kept per device" and "Never prune younger than" sit side by side as small
+// inputs; the label stays on one line with its info icon right behind it, and the Storage card and
+// the deleted devices' card stack without a gap.
+test("backups: schedule fields side by side, label and icon together, left cards without a gap", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(app.url + "/settings/system?tab=backups");
+  const keep = page.locator("[data-key='BACKUP_KEEP']");
+  const prune = page.locator("[data-key='BACKUP_MAX_AGE']");
+  const k = (await keep.boundingBox())!, p = (await prune.boundingBox())!;
+  expect(Math.abs(k.y - p.y)).toBeLessThan(2);
+  expect((await prune.locator("input").boundingBox())!.width).toBeLessThan(140);
+  const lbl = (await prune.locator(".lbl").boundingBox())!, info = (await prune.locator(".uinfo").boundingBox())!;
+  expect(lbl.height).toBeLessThan(24);
+  expect(info.x - (lbl.x + lbl.width)).toBeLessThan(12);
+  const a = (await page.locator("#card-storage").boundingBox())!, b = (await page.locator("#card-orphans").boundingBox())!;
+  expect(b.y - (a.y + a.height)).toBeLessThan(24);
+});
+
 // Why: the backup interval showed "0s" for manual only. The switch is a view of the same
 // setting: off stores 0, on keeps the interval.
 test("backup schedule switch dims the interval and stores 0 when off", async ({ page }) => {

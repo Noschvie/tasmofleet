@@ -18,6 +18,8 @@ import (
 // data-depends rule that dims the card (sysform.js). Special cards (Backups storage, the deleted devices' backups) have no keys.
 type sysCardDef struct {
 	ID, Title, Note, Class, Depends string
+	Col                             bool // stacked with the other Col cards in one two-column group (no row gaps)
+	StepUp                          bool // saving asks the admin to confirm: a badge in the header
 	Keys                            []string
 }
 
@@ -30,7 +32,8 @@ type sysTabDef struct {
 // sysCard is a card with the rows it shows.
 type sysCard struct {
 	sysCardDef
-	Rows []sysRow
+	Rows       []sysRow
+	RestartAll bool // every setting of the card applies after a restart: one badge in the header
 }
 
 // sysTab is one tab of the page.
@@ -59,9 +62,9 @@ var sysLayout = []sysTabDef{
 		{ID: "scan", Title: "Network scan", Keys: []string{"DISCOVERY_SCAN", "DISCOVERY_SCAN_INTERVAL", "DISCOVERY_SCAN_CIDRS"}},
 	}},
 	{"backups", "Backups", []sysCardDef{
-		{ID: "storage", Title: "Storage", Note: "Read-only. Not part of the form.", Class: "span2"},
+		{ID: "storage", Title: "Storage", Note: "Read-only. Not part of the form.", Col: true},
 		{ID: "schedule", Title: "Schedule & retention", Class: "rows2", Keys: []string{"BACKUP_INTERVAL", "BACKUP_KEEP", "BACKUP_MAX_AGE"}},
-		{ID: "orphans", Title: "Backups of deleted devices", Class: "span2"},
+		{ID: "orphans", Title: "Backups of deleted devices", Col: true},
 	}},
 	{"firmware", "Firmware & updates", []sysCardDef{
 		{ID: "source", Title: "Firmware source", Class: "span2 rows2", Keys: []string{"FIRMWARE_BASE_URL", "FIRMWARE_SOURCES", "FIRMWARE_REFRESH_INTERVAL"}},
@@ -69,10 +72,10 @@ var sysLayout = []sysTabDef{
 		{ID: "ota", Title: "Updates (OTA)", Keys: []string{"OTA_PARALLEL", "OTA_POWER_MAX_AGE", "OTA_RESTORE_OTAURL"}},
 	}},
 	{"signin", "Sign-in", []sysCardDef{
-		{ID: "mode", Title: "Sign-in mode", Class: "spanall", Keys: []string{"AUTH_MODE"}},
-		{ID: "idp", Title: "Identity provider", Note: "Disabled while Local accounts is selected.", Class: "span2", Depends: "v.AUTH_MODE=oidc",
+		{ID: "mode", Title: "Sign-in mode", Class: "spanall", StepUp: true, Keys: []string{"AUTH_MODE"}},
+		{ID: "idp", Title: "Identity provider", Note: "Disabled while Local accounts is selected.", Class: "span2", Depends: "v.AUTH_MODE=oidc", StepUp: true,
 			Keys: []string{"OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_SCOPES", "OIDC_DISPLAY_NAME"}},
-		{ID: "roles", Title: "Roles and claims", Depends: "v.AUTH_MODE=oidc",
+		{ID: "roles", Title: "Roles and claims", Depends: "v.AUTH_MODE=oidc", StepUp: true,
 			Keys: []string{"ADMIN_GROUPS", "OPERATOR_GROUPS", "OIDC_GROUPS_CLAIM", "OIDC_USERNAME_CLAIM"}},
 	}},
 	{"advanced", "Advanced", []sysCardDef{
@@ -152,6 +155,14 @@ func sysTabsOf(rows map[string]sysRow) []sysTab {
 		for ci := range tabs[ti].Cards {
 			c := &tabs[ti].Cards[ci]
 			c.Rows = sysNest(c.Rows)
+			if c.RestartAll = sysRestartAll(c.Rows); c.RestartAll {
+				for i := range c.Rows {
+					c.Rows[i].InRestartCard = true
+					for j := range c.Rows[i].Deps {
+						c.Rows[i].Deps[j].InRestartCard = true
+					}
+				}
+			}
 		}
 	}
 	return tabs
@@ -170,6 +181,24 @@ func sysNest(rows []sysRow) []sysRow {
 		out = append(out, r)
 	}
 	return out
+}
+
+// sysRestartAll says that every editable setting of a card applies after a restart, so the card
+// carries one badge instead of each field.
+func sysRestartAll(rows []sysRow) bool {
+	n := 0
+	for _, r := range rows {
+		for _, x := range append([]sysRow{r}, r.Deps...) {
+			if x.Locked {
+				continue
+			}
+			if x.Apply == sysconfig.Live {
+				return false
+			}
+			n++
+		}
+	}
+	return n > 0
 }
 
 // hasProblem is a row with an error or a stored secret that must be entered again: the page opens
@@ -219,7 +248,7 @@ var sysCopies = map[string]sysCopy{
 
 	"BACKUP_INTERVAL": {Label: "Interval", Help: "e.g. 24h.", Width: "xs"},
 	"BACKUP_KEEP":     {Label: "Kept per device", Help: "Lowering it can delete restore points.", Width: "xs"},
-	"BACKUP_MAX_AGE":  {Label: "Never prune younger than", Help: "e.g. 720h.", Width: "full", Info: "Protects restore points from repeated manual runs: a backup younger than this is never pruned, even above the per-device count."},
+	"BACKUP_MAX_AGE":  {Label: "Never prune younger than", Help: "e.g. 720h.", Width: "xs", Info: "Protects restore points from repeated manual runs: a backup younger than this is never pruned, even above the per-device count."},
 
 	"FIRMWARE_BASE_URL":            {Help: "Plain http:// address devices fetch firmware from.", Width: "full", Info: "Devices download firmware from this address, e.g. the container address. Required for updates."},
 	"FIRMWARE_SOURCES":             {Help: "Two sources = cross-check.", Width: "full"},
@@ -282,11 +311,15 @@ func sysChecked(r sysRow) []string {
 	return strings.Split(r.Posted, ",")
 }
 
-// sysCardBadges are the badges in a card's header: only the Sign-in mode card has them, because
-// its one setting is drawn as the radio cards without a label row of their own.
+// sysCardBadges are the badges in a card's header: one Restart badge when every setting needs a
+// restart, and the note that saving asks to confirm.
 func sysCardBadges(c sysCard) []ui.SettingsBadge {
-	if c.ID != "mode" {
-		return nil
+	var out []ui.SettingsBadge
+	if c.RestartAll {
+		out = append(out, ui.SettingsBadge{Tone: ui.ToneWarn, Label: "Restart"})
 	}
-	return []ui.SettingsBadge{{Tone: ui.ToneWarn, Label: "Restart"}, {Tone: ui.ToneAccent, Label: "Asks you to confirm"}}
+	if c.StepUp {
+		out = append(out, ui.SettingsBadge{Tone: ui.ToneAccent, Label: "Asks you to confirm"})
+	}
+	return out
 }

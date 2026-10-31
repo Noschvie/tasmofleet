@@ -176,14 +176,6 @@ func TestSystemSettingsBackupIntervalIsEmptyWhileTheScheduleIsOff(t *testing.T) 
 	}
 }
 
-// Why (#336): in a narrow cell the label of "Never prune younger than" wrapped and pushed its info
-// icon to the far edge; the field takes the whole row of its card so label and icon stay together.
-func TestSystemSettingsNeverPruneFieldIsWideEnoughForItsLabel(t *testing.T) {
-	if w := sysFieldCopy("BACKUP_MAX_AGE").Width; w != "full" {
-		t.Errorf("BACKUP_MAX_AGE width %q wraps its label", w)
-	}
-}
-
 // Why: the staggered grid came from "Reset ... on save" being its own grid cell next to the field.
 // The reset control now belongs to the field that owns it, so no field can push another around.
 func TestSystemSettingsResetControlIsInsideItsOwnField(t *testing.T) {
@@ -442,23 +434,13 @@ func TestSystemSettingsSSOTestAcceptsTheWholeForm(t *testing.T) {
 func TestSystemSettingsSignInCardsSayWhatTheyAsk(t *testing.T) {
 	e, _, _, _ := sysEnv(t, true)
 	_, page := e.do(t, "GET", "/settings/system?tab=signin", "admin", nil)
-	// The badges sit on the fields that ask, not on the cards (#337): the scopes and the button name
-	// are saved without a confirmation, the issuer is not.
-	field := func(key string) string {
-		i := strings.Index(page, `data-key="`+key+`"`)
-		if i < 0 {
-			t.Fatalf("no field %s", key)
-		}
-		rest := page[i+10:]
-		if j := strings.Index(rest, `data-key="`); j >= 0 {
-			rest = rest[:j]
-		}
-		return rest
+	// The approved mockup puts the badges once in each card's header (#338, overriding #337 item 2).
+	page = page[strings.Index(page, `id="sec-signin"`):strings.Index(page, `id="sec-advanced"`)]
+	if n := strings.Count(page, "Asks you to confirm"); n != 3 {
+		t.Errorf("%d confirm badges, want 3 (mode, identity provider, roles), none on fields", n)
 	}
-	for key, want := range map[string]bool{"OIDC_ISSUER": true, "OIDC_GROUPS_CLAIM": true, "OIDC_SCOPES": false, "OIDC_DISPLAY_NAME": false} {
-		if got := strings.Contains(field(key), "Asks you to confirm"); got != want {
-			t.Errorf("%s shows the confirm badge: %v, want %v", key, got, want)
-		}
+	if n := strings.Count(page, ">Restart<"); n != 3 {
+		t.Errorf("%d Restart badges on the Sign-in tab, want 3 (one per card header)", n)
 	}
 	issuer := strings.Index(page, `data-key="OIDC_ISSUER"`)
 	test := strings.Index(page, "Test discovery")
