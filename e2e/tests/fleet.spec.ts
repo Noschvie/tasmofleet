@@ -263,9 +263,9 @@ test("ESP32-S2: refused until a build is chosen, then previewed and started", { 
   await page.locator("select[name=policy]").selectOption("reinstall"); // the board already runs 16.1.0
   await page.getByRole("button", { name: "Review update" }).click();
   const again = page.locator(".upd-prow").filter({ hasText: "esp32s2-board" });
-  await expect(again).toContainText("Remembered from your last update");
-  await expect(again.getByRole("radio", { checked: true })).toHaveCount(1);
-  await expect(again.locator("label.rcard", { hasText: "s2cdc" }).getByRole("radio")).toBeChecked();
+  await expect(again).toContainText("remembered from your last update");
+  await expect(again).toContainText("Build s2cdc");
+  await expect(again.getByRole("radio"), "a remembered row has no radios: Start takes what the screen says").toHaveCount(0);
   if (shots) {
     for (const width of [375, 1280]) {
       await page.setViewportSize({ width, height: 900 });
@@ -281,7 +281,7 @@ test("ESP32-S2: refused until a build is chosen, then previewed and started", { 
   const forgotten = page.locator(".upd-prow").filter({ hasText: "esp32s2-board" });
   await expect(forgotten).toContainText("Choose the build");
   await expect(forgotten.getByRole("radio", { checked: true }), "forgotten: nothing preselected").toHaveCount(0);
-  await expect(page.locator("body")).not.toContainText("Remembered from your last update");
+  await expect(page.locator("body")).not.toContainText("remembered from your last update");
 });
 
 // Quarantined: https://github.com/nofuturekid/tasmofleet/issues/20

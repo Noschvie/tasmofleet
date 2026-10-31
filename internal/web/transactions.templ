@@ -450,16 +450,11 @@ templ updatePreviewPage(p previewPage, csrf string) {
 							</fieldset>
 						}
 						if r.Remembered {
-							<fieldset class="rcards upd-prow-build">
-								<legend>Build · remembered from your last update</legend>
-								for _, o := range r.PickBuilds {
-									<label class="rcard">
-										<input type="radio" name={ r.BuildName() } value={ o.Value } form="recheck" checked?={ r.Build == o.Value } required/>
-										<span class="rcard-body"><b>{ o.Label }</b><span>{ o.Text }</span></span>
-									</label>
-								}
+							<span class="upd-prow-note upd-prow-mem">
+								<span>Build { r.Build } · remembered from your last update</span>
+								<button type="submit" class="btn btn-link btn-sm" form="recheck" name="change_build" value={ strconv.FormatInt(int64(r.Device.ID), 10) } formnovalidate>Change</button>
 								<button type="submit" class="btn btn-link btn-sm" form="recheck" name="forget_build" value={ strconv.FormatInt(int64(r.Device.ID), 10) } formnovalidate>Forget</button>
-							</fieldset>
+							</span>
 						}
 						if r.LanguageChoice {
 							<label class="upd-prow-build">
@@ -490,11 +485,9 @@ templ updatePreviewPage(p previewPage, csrf string) {
 					</div>
 				}
 			</div>
-			if p.ChoosingBuilds() > 0 || p.ChoosingLanguages() > 0 || p.Remembering() > 0 {
+			if p.ChoosingBuilds() > 0 || p.ChoosingLanguages() > 0 {
 				<div class="upd-prev-foot">
-					if p.ChoosingBuilds() == 0 && p.ChoosingLanguages() == 0 {
-						<p class="upd-hint">A remembered build is only a preselection. Change it and recheck, or start as is.</p>
-					} else if p.ChoosingLanguages() == 0 {
+					if p.ChoosingLanguages() == 0 {
 						<p class="upd-hint">Nothing is guessed: choose the build of each device, then recheck.</p>
 					} else {
 						<p class="upd-hint">Nothing is guessed: choose the build or language of each device, then recheck.</p>

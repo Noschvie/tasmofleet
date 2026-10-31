@@ -438,40 +438,54 @@ func (h *handler) requests(r *http.Request, ids []model.DeviceID) ([]ota.Request
 	return reqs, nil
 }
 
-// forgetBuild handles the preview's "Forget" button (forget_build=<device id>): the memory is cleared
-// and the build the form still carries for that device (the preselected radio) is dropped, so the
-// device is back to "choose a build". False: the answer was written.
-func (h *handler) forgetBuild(w http.ResponseWriter, r *http.Request) bool {
-	raw := strings.TrimSpace(r.PostFormValue("forget_build"))
-	if raw == "" {
-		return true
+// buildAnswers handles the two buttons of a remembered row in the preview: forget_build=<device id>
+// clears the memory, change_build=<device id> only asks again for this request. Either way the build the
+// form carries for that device is dropped, so the device is back to "choose a build" (the choice radios
+// appear, and Start ignores the row until one is chosen and rechecked). It returns the devices that must
+// not get their memory applied in this request. False: the answer was written.
+func (h *handler) buildAnswers(w http.ResponseWriter, r *http.Request, ids []model.DeviceID) (map[model.DeviceID]bool, bool) {
+	skip := map[model.DeviceID]bool{}
+	for _, field := range []string{"change_build", "forget_build"} {
+		raw := strings.TrimSpace(r.PostFormValue(field))
+		if raw == "" {
+			continue
+		}
+		n, err := strconv.ParseInt(raw, 10, 64)
+		id := model.DeviceID(n)
+		if err != nil || !slices.Contains(ids, id) {
+			h.fail(w, r, errors.New("that device is not part of this update"))
+			return nil, false
+		}
+		if field == "forget_build" {
+			if h.d.BuildMemory == nil {
+				h.fail(w, r, errors.New("nothing to forget"))
+				return nil, false
+			}
+			if err := h.d.BuildMemory.SetBuildMemory(r.Context(), id, ""); err != nil {
+				h.fail(w, r, err)
+				return nil, false
+			}
+			h.recordFirmware(r, "device.build_forgotten", "device:"+raw, map[string]any{}, "ok")
+		}
+		skip[id] = true
+		r.PostForm.Del("build_" + raw)
+		r.Form.Del("build_" + raw)
 	}
-	id, err := strconv.ParseInt(raw, 10, 64)
-	if err != nil || h.d.BuildMemory == nil {
-		h.fail(w, r, errors.New("nothing to forget"))
-		return false
-	}
-	if err := h.d.BuildMemory.SetBuildMemory(r.Context(), model.DeviceID(id), ""); err != nil {
-		h.fail(w, r, err)
-		return false
-	}
-	r.PostForm.Del("build_" + raw)
-	r.Form.Del("build_" + raw)
-	return true
+	return skip, true
 }
 
 // applyRememberedBuilds fills Request.Build from the device's memory for every device the person has
 // not given a build in this form. It is an ordinary explicit build from there on: the engine and
 // fwselect.Guard check it like a posted one, and a build the chip does not have is never applied.
 // The result maps the device ids it filled to the build.
-func (h *handler) applyRememberedBuilds(r *http.Request, reqs []ota.Request) map[model.DeviceID]string {
+func (h *handler) applyRememberedBuilds(r *http.Request, reqs []ota.Request, skip map[model.DeviceID]bool) map[model.DeviceID]string {
 	if h.d.BuildMemory == nil {
 		return nil
 	}
 	out := map[model.DeviceID]string{}
 	for i := range reqs {
 		q := &reqs[i]
-		if q.Build != "" {
+		if q.Build != "" || skip[q.DeviceID] {
 			continue
 		}
 		d, err := h.d.Inventory.Get(r.Context(), q.DeviceID)
@@ -491,7 +505,7 @@ func (h *handler) rememberBuilds(r *http.Request, reqs []ota.Request) {
 		return
 	}
 	for _, q := range reqs {
-		if q.Build == "" {
+		if q.Build != "s2" && q.Build != "s2cdc" { // only the ESP32-S2 builds are remembered
 			continue
 		}
 		if err := h.d.BuildMemory.SetBuildMemory(r.Context(), q.DeviceID, q.Build); err != nil {
@@ -513,10 +527,9 @@ type previewRow struct {
 	// two builds (ESP32-S2); Build is the one the user chose (the row then goes ahead).
 	BuildOptions []buildOption
 	Build        string
-	// Remembered: Build was preselected from the device's memory (#186), not posted by the person.
-	// PickBuilds are then the builds to switch to; the row goes ahead meanwhile.
+	// Remembered: Build comes from the device's memory (#186), not from the person's pick in this form.
+	// The row shows it with Change and Forget, no radios: what the screen says is what Start takes.
 	Remembered bool
-	PickBuilds []buildOption
 	// LanguageChoice: the row waits for the language build of the device (it cannot be read over MQTT);
 	// Language is the one chosen, "" before the choice.
 	LanguageChoice bool
@@ -662,17 +675,6 @@ func (p previewPage) ChoosingLanguages() int {
 	return n
 }
 
-// Remembering counts the devices whose build was preselected from the memory.
-func (p previewPage) Remembering() int {
-	n := 0
-	for _, r := range p.Rows {
-		if r.Remembered {
-			n++
-		}
-	}
-	return n
-}
-
 // ChoosingBuilds counts the devices that wait for the user to choose a chip build.
 func (p previewPage) ChoosingBuilds() int {
 	n := 0
@@ -745,7 +747,8 @@ func (h *handler) updatePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ids := h.formIDs(r)
-	if !h.forgetBuild(w, r) {
+	skipMemory, ok := h.buildAnswers(w, r, ids)
+	if !ok {
 		return
 	}
 	redo := func(msg string) {
@@ -772,7 +775,7 @@ func (h *handler) updatePreview(w http.ResponseWriter, r *http.Request) {
 		redo(err.Error())
 		return
 	}
-	remembered := h.applyRememberedBuilds(r, reqs)
+	remembered := h.applyRememberedBuilds(r, reqs, skipMemory)
 	items, err := h.d.OTA.Preview(r.Context(), reqs)
 	if err != nil {
 		h.fail(w, r, err)
@@ -804,10 +807,8 @@ func (h *handler) updatePreview(w http.ResponseWriter, r *http.Request) {
 		}
 		row.Build = q.Build
 		if row.Go && remembered[it.DeviceID] != "" && q.Build == remembered[it.DeviceID] {
-			// Shown and changeable like a fresh choice: the radios stay, the note says where it came from.
 			row.Remembered = true
 			row.BuildOptions = nil
-			row.PickBuilds = buildOptionsFor(d.Identity)
 		}
 		row.LanguageChoice, row.Language = it.LanguageChoice, q.Language
 		if row.Go && q.Language != "" {
@@ -817,7 +818,6 @@ func (h *handler) updatePreview(w http.ResponseWriter, r *http.Request) {
 			p.Languages[strconv.FormatInt(int64(it.DeviceID), 10)] = q.Language
 		}
 		if row.Go && row.Remembered {
-			row.Note = "Build " + q.Build + ". Remembered from your last update."
 			if p.Builds == nil {
 				p.Builds = map[string]string{}
 			}

@@ -659,43 +659,71 @@ func TestPreviewRefusesALanguageThePageDoesNotOffer(t *testing.T) {
 }
 
 // Why (#186): the S2 build is asked again on every update although the person said it once. The
-// preview preselects the build remembered from the last update, says so and still shows the choice
-// (radios, changeable); the memory is written only when an update with that build is STARTED, and
-// changing the pick then changes the memory. Nothing is implicit: the build reaches the engine (and
-// so fwselect.Guard) as an ordinary explicit Request.Build.
-func TestPreviewPreselectsTheRememberedBuildAndStartUpdatesIt(t *testing.T) {
+// preview preselects the build remembered from the last update and says so, once, inline with Change
+// and Forget. It shows NO radios: radios belong to the recheck form while Start takes the build from
+// its own hidden field, so a live radio could show s2 while Start flashes s2cdc. What the screen says
+// is what Start takes. The memory is written only when an update is STARTED.
+func TestRememberedBuildIsShownOnceAndStartTakesExactlyThat(t *testing.T) {
 	e, o, _, _ := setupOTA(t)
 	e.inv.devs[4] = model.Device{ID: 4, Name: "s2-board", Address: "10.0.0.4", BuildMemory: "s2cdc",
 		Identity: model.Identity{LanguageKnown: true, Family: model.ChipESP32S2, Hardware: "ESP32-S2", Version: "16.0.0", Variant: "unknown"}}
 	o.items[4] = ota.PreviewItem{DeviceID: 4, Decision: "upgrade", Plan: model.PlanDirect, Filename: "tasmota32s2cdc.bin"}
-	form := url.Values{"id": {"4"}, "release": {"16.1.0"}, "policy": {"only-newer"}}
+	form := url.Values{"id": {"4"}, "release": {"16.1.0"}, "policy": {"only-newer"}, "skip_backup": {"1"}}
 	_, body := e.do(t, "POST", "/updates/preview", "operator", form)
 	if o.previewReqs[0].Build != "s2cdc" {
 		t.Fatalf("the remembered build did not reach the engine as an explicit build: %+v", o.previewReqs)
 	}
-	for _, want := range []string{"Remembered from your last update", `value="s2cdc" form="recheck" checked`, `name="build_4" value="s2"`, "Forget"} {
+	if strings.Count(body, "remembered from your last update") != 1 || !strings.Contains(body, "Build s2cdc · remembered") {
+		t.Fatalf("the memory must be said once, with the build: %s", body)
+	}
+	for _, want := range []string{`name="change_build"`, `name="forget_build"`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("preview lacks %q: %s", want, body)
 		}
 	}
-	// Previewing alone remembers nothing new, and a different pick is what Start stores.
-	form.Set("build_4", "s2")
-	form.Set("skip_backup", "1")
+	if strings.Contains(body, `type="radio" name="build_4"`) || strings.Contains(body, "Choose the build") || strings.Contains(body, "chosen by you") {
+		t.Fatalf("a remembered row must not offer radios or claim the person chose: %s", body)
+	}
+	start, _, _ := strings.Cut(body[strings.Index(body, `<form id="start"`):], "</form>")
+	if !strings.Contains(start, `name="build_4" value="s2cdc"`) {
+		t.Fatalf("Start must carry the build the screen shows: %s", start)
+	}
+	// A recheck for something else (no build_4 posted) keeps it remembered; it never turns into "chosen by you".
 	_, body = e.do(t, "POST", "/updates/preview", "operator", form)
-	if o.previewReqs[0].Build != "s2" || strings.Contains(body, "Remembered from your last update") {
-		t.Fatalf("an explicit pick must win over the memory: %+v", o.previewReqs)
+	if strings.Contains(body, "chosen by you") || !strings.Contains(body, "remembered from your last update") {
+		t.Fatalf("a recheck relabelled the remembered build: %s", body)
 	}
 	if got := e.inv.devs[4].BuildMemory; got != "s2cdc" {
 		t.Fatalf("a preview changed the memory to %q", got)
 	}
+	// Starting with a different explicit build replaces the memory.
+	form.Set("build_4", "s2")
 	e.do(t, "POST", "/updates", "operator", form)
 	if got := e.inv.devs[4].BuildMemory; got != "s2" {
 		t.Fatalf("Start update did not store the chosen build: %q", got)
 	}
 }
 
-// Why (#186): "Forget" must really clear the memory and put the device back to "nothing is guessed",
-// even though the posted form still carries the build that was preselected.
+// Why (#186): "Change" asks again for this device without losing the memory: the row falls back to the
+// normal choice radios (nothing preselected, nothing in the start form) until a build is chosen and rechecked.
+func TestChangeBuildAsksAgainAndKeepsTheMemory(t *testing.T) {
+	e, o, _, _ := setupOTA(t)
+	e.inv.devs[4] = model.Device{ID: 4, Name: "s2-board", Address: "10.0.0.4", BuildMemory: "s2",
+		Identity: model.Identity{LanguageKnown: true, Family: model.ChipESP32S2, Hardware: "ESP32-S2", Version: "16.0.0", Variant: "unknown"}}
+	o.items[4] = ota.PreviewItem{DeviceID: 4, Decision: "refuse", Reason: "select: ESP32-S2 has two builds", BuildChoice: true}
+	form := url.Values{"id": {"4"}, "release": {"16.1.0"}, "policy": {"only-newer"}, "change_build": {"4"}}
+	_, body := e.do(t, "POST", "/updates/preview", "operator", form)
+	if o.previewReqs[0].Build != "" || e.inv.devs[4].BuildMemory != "s2" {
+		t.Fatalf("request %+v, memory %q", o.previewReqs, e.inv.devs[4].BuildMemory)
+	}
+	start, _, _ := strings.Cut(body[strings.Index(body, `<form id="start"`):], "</form>")
+	if !strings.Contains(body, "Choose the build") || strings.Contains(body, " checked") || strings.Contains(start, "build_4") || strings.Contains(body, "remembered from your last update") {
+		t.Fatalf("Change must fall back to the plain choice: %s", body)
+	}
+}
+
+// Why (#186): "Forget" must really clear the memory, audit it, and put the device back to "nothing is
+// guessed"; it may only act on a device that is part of this update.
 func TestForgetClearsTheRememberedBuild(t *testing.T) {
 	e, o, _, _ := setupOTA(t)
 	e.inv.devs[4] = model.Device{ID: 4, Name: "s2-board", Address: "10.0.0.4", BuildMemory: "s2",
@@ -706,13 +734,24 @@ func TestForgetClearsTheRememberedBuild(t *testing.T) {
 	if e.inv.devs[4].BuildMemory != "" || o.previewReqs[0].Build != "" {
 		t.Fatalf("memory %q, request %+v", e.inv.devs[4].BuildMemory, o.previewReqs)
 	}
-	if strings.Contains(body, "Remembered from your last update") || strings.Contains(body, " checked") {
+	if strings.Contains(body, "remembered from your last update") || strings.Contains(body, " checked") {
 		t.Fatalf("a forgotten build is still shown or preselected: %s", body)
+	}
+	if !slices.ContainsFunc(e.aud.events, func(ev model.AuditEvent) bool {
+		return ev.Action == "device.build_forgotten" && ev.Target == "device:4"
+	}) {
+		t.Fatalf("Forget was not audited as device.build_forgotten: %+v", e.aud.events)
+	}
+	// A device that is not part of this update is none of its business.
+	e.inv.devs[4] = model.Device{ID: 4, Name: "s2-board", BuildMemory: "s2", Identity: e.inv.devs[4].Identity}
+	form = url.Values{"id": {"1"}, "release": {"16.1.0"}, "policy": {"only-newer"}, "forget_build": {"4"}}
+	resp, _ := e.do(t, "POST", "/updates/preview", "operator", form)
+	if resp.StatusCode < 400 || e.inv.devs[4].BuildMemory != "s2" {
+		t.Fatalf("status %d, memory %q", resp.StatusCode, e.inv.devs[4].BuildMemory)
 	}
 }
 
-// Why (#186): a memory must never fill a build the chip does not have, and a device that carries no
-// memory must keep asking (the refusal stays); the stored value is a hint, not a decision.
+// Why (#186): a memory must never fill a build the chip does not have; the stored value is a hint.
 func TestRememberedBuildIsIgnoredForAnotherChip(t *testing.T) {
 	e, o, _, _ := setupOTA(t)
 	d := e.inv.devs[1]
@@ -722,5 +761,34 @@ func TestRememberedBuildIsIgnoredForAnotherChip(t *testing.T) {
 	e.do(t, "POST", "/updates/preview", "operator", form)
 	if o.previewReqs[0].Build != "" {
 		t.Fatalf("a memory was applied to a chip without builds: %+v", o.previewReqs)
+	}
+}
+
+// Why (#186): without a memory the refusal stays: nothing is preselected and no build reaches the
+// engine, and starting an update without a build stores nothing.
+func TestPreviewKeepsAskingWithoutAMemory(t *testing.T) {
+	e, o, _, _ := setupOTA(t)
+	e.inv.devs[4] = model.Device{ID: 4, Name: "s2-board", Address: "10.0.0.4",
+		Identity: model.Identity{LanguageKnown: true, Family: model.ChipESP32S2, Hardware: "ESP32-S2", Version: "16.0.0", Variant: "unknown"}}
+	o.items[4] = ota.PreviewItem{DeviceID: 4, Decision: "refuse", Reason: "select: ESP32-S2 has two builds", BuildChoice: true}
+	form := url.Values{"id": {"4"}, "release": {"16.1.0"}, "policy": {"only-newer"}}
+	_, body := e.do(t, "POST", "/updates/preview", "operator", form)
+	if o.previewReqs[0].Build != "" || !strings.Contains(body, "Choose the build") || strings.Contains(body, " checked") || strings.Contains(body, "remembered") {
+		t.Fatalf("without a memory the choice must be asked: %+v %s", o.previewReqs, body)
+	}
+	e.do(t, "POST", "/updates", "operator", form)
+	if got := e.inv.devs[4].BuildMemory; got != "" {
+		t.Fatalf("an update without a chosen build stored %q", got)
+	}
+}
+
+// Why (#186): only the ESP32-S2 builds are remembered; a p4 build is decided by the chip revision and
+// there is nothing to remember (and the store would refuse it with a warning on every start).
+func TestOnlyS2BuildsAreRemembered(t *testing.T) {
+	e, _, _, _ := setupOTA(t)
+	form := url.Values{"id": {"1"}, "release": {"16.1.0"}, "policy": {"only-newer"}, "delivery": {"pull"}, "skip_backup": {"1"}, "build_1": {"p4"}}
+	e.do(t, "POST", "/updates", "operator", form)
+	if got := e.inv.devs[1].BuildMemory; got != "" {
+		t.Fatalf("a p4 build was remembered: %q", got)
 	}
 }
