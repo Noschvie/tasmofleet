@@ -13,6 +13,11 @@ always upgrade automatically.
 
 - Console and bulk "Send command": Arrow Up and Arrow Down walk through the last 50 commands of this browser (newest first, duplicates collapsed, shared by every device's console), Escape brings back what you had typed, and "Clear history" empties it. Commands with a credential and commands the policy refused are never kept (#321).
 
+### Fixed
+
+- Stylesheet: a missing closing brace after the policy "Deviating devices" mobile rules made every rule after it (policy History tab spacing and indented folds, Identity card headings) apply only on narrow screens; the brace is back, and a unit test now fails when braces do not balance (#346)
+- Device page: the info text of the Status 2 field "CR" is below the 160-character tooltip limit (#346)
+
 ## 0.22.1 "Bell Rock" (2026-10-31)
 
 ### Upgrade notes

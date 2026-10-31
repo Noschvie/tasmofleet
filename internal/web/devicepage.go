@@ -353,7 +353,7 @@ func statusFWRRows(i model.Identity) []fwrRow {
 		add("CpuFrequency", strconv.Itoa(f.CPUFrequency), "Current CPU clock in MHz.")
 	}
 	add("Hardware", i.Hardware, "The chip as Tasmota names it: model, revision and, on an ESP32, the package.")
-	add("CR", f.CR, "Characters used / available in the settings text area, where names, topics, rules, URLs and passwords share one small space. When it is full, longer values are not saved.")
+	add("CR", f.CR, "Characters used / available in the settings text area, which names, topics, rules, URLs and passwords share. When it is full, longer values are not saved.")
 	return rows
 }
 

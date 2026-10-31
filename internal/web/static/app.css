@@ -14129,6 +14129,7 @@ tr.pol-grp td {
     white-space: normal;
     overflow-wrap: anywhere;
   }
+}
 /* policy history tab: day headers, folded quick saves, notes */
 .pol-hday {
   padding: var(--sp-8) var(--sp-16);

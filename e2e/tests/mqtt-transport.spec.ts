@@ -287,7 +287,7 @@ test("an open fold stays open across a live refresh", async ({ page }) => {
   const fold = page.locator("#devpaths details").first();
   await page.locator("#devpaths-facts-sum").click();
   await expect(fold).toHaveAttribute("open", "");
-  const live = page.waitForResponse((r) => /\/devices\/\d+\/live$/.test(r.url()));
+  const live = page.waitForResponse((r) => /\/devices\/\d+\/live(\?|$)/.test(r.url()));
   await page.evaluate(() => {
     const el = document.querySelector("#devlive")!;
     (window as unknown as { htmx: { trigger(e: Element, n: string): void } }).htmx.trigger(el, "sse:resync");

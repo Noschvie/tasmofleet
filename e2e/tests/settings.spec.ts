@@ -110,13 +110,17 @@ test("settings backups: totals, and a deleted device's kept backup is listed and
   const sum = (label: string) => page.locator(".sys-sum", { hasText: label }).locator(".sys-sum-value");
   await expect(sum("Backups")).toHaveText(/^[1-9]\d*$/);
   await expect(page.locator(".sys-store").getByRole("row", { name: /lamp-1m/ })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Backups of deleted devices" })).toHaveCount(0);
+  // The card is always there since the 0.22 Backups tab; with nothing kept it says so and lists nothing.
+  await expect(page.getByRole("heading", { name: "Backups of deleted devices" })).toHaveCount(1);
+  await expect(page.getByText("No backups of deleted devices.")).toBeVisible();
+  await expect(page.locator(".sys-orphan")).toHaveCount(0);
 
   const del = await page.request.post(`${app.url}/devices/${id}/delete`, { headers: admin, form: { csrf, backups: "keep", ack: "1" }, maxRedirects: 0 });
   expect(del.status(), "device deleted, backups kept").toBe(303);
 
   await page.goto(app.url + "/settings/system?tab=backups");
   await expect(sum("Backups"), "the kept backup still counts").toHaveText(/^[1-9]\d*$/);
+  await expect(page.getByText("No backups of deleted devices.")).toHaveCount(0);
   const orphan = page.locator(".sys-orphan", { hasText: "lamp-1m" });
   await expect(orphan).toHaveCount(1);
   await expect(orphan.getByRole("link", { name: "Download" })).toBeVisible();
