@@ -12,8 +12,10 @@
 # is also pushed under the same tags to docker.io/<DOCKERHUB_USERNAME>/tasmofleet
 # (no rebuild); without them (forks) that part is skipped.
 # The image is a multi-arch manifest (linux/amd64 and linux/arm64) under every tag. The Go binary is
-# cross-compiled on the amd64 runner (no emulation); the arm64 image has no decoder (Dockerfile).
-# Before anything is pushed, the arm64 image is built, loaded and started under QEMU (--version).
+# cross-compiled on the amd64 runner (no emulation); the arm64 image carries the unofficial
+# aarch64 decoder build (Dockerfile).
+# Before anything is pushed, the arm64 image is built, loaded and started under QEMU (version, and
+# the decoder decodes a real backup fixture).
 # Layers are cached in the GitHub Actions cache.
 name: image
 
@@ -170,6 +172,15 @@ jobs:
           # version differs per build kind (release, edge, pr), so it is not matched
           [ -n "$out" ]
           docker image inspect tasmofleet:smoke-arm64 --format '{{.Os}}/{{.Architecture}}' | grep -qx linux/arm64
+          # The arm64 decoder (unofficial build, see the Dockerfile) decodes the synthetic backup of the
+          # integration tests to exactly the JSON stored next to it (header.env is host info).
+          fx=internal/backup/testdata/synthetic
+          docker run --rm --platform linux/arm64 --entrypoint /usr/local/bin/decode-config \
+            -v "$PWD/$fx/synthetic-15.6.0.3.dmp:/in/s.dmp:ro" tasmofleet:smoke-arm64 --version
+          docker run --rm --platform linux/arm64 --entrypoint /usr/local/bin/decode-config \
+            -v "$PWD/$fx/synthetic-15.6.0.3.dmp:/in/s.dmp:ro" tasmofleet:smoke-arm64 \
+            --source /in/s.dmp --output-format json | jq -S 'del(.header.env)' > /tmp/decoded-arm64.json
+          jq -S . "$fx/decoded.json" | diff - /tmp/decoded-arm64.json
       - uses: docker/build-push-action@v7.4.0
         with:
           context: .

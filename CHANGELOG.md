@@ -8,7 +8,8 @@ always upgrade automatically.
 
 ### Added
 
-- Container image for linux/arm64 (Raspberry Pi 4/5) next to linux/amd64: every tag is now a multi-arch image. The arm64 image has no backup decoder, because upstream decode-config publishes x86_64 builds only: System → About shows it as "Missing", backups keep the raw `.dmp` file, and only the decoded JSON view and the comparison are unavailable (#354, thanks @t4nki)
+- Container image for linux/arm64 (Raspberry Pi 4/5) next to linux/amd64: every tag is now a multi-arch image. The arm64 image carries the backup decoder as well (#354, thanks @t4nki)
+- Backup decoder in the arm64 image: decode-config is an unofficial aarch64 build of exactly upstream v16.0.0 plus the merged workflow change tasmota/decode-config#127 (LGPL-3.0, built in [nofuturekid/tasmota-decode-config](https://github.com/nofuturekid/tasmota-decode-config/releases/tag/v16.0.0-arm64)), so System → About shows it as available and backups get the decoded JSON view and the comparison on arm64 too. The Dockerfile pins its SHA-256 and goes back to upstream's asset once upstream releases aarch64. The image smoke check decodes a backup under QEMU (#211)
 
 ### Changed
 

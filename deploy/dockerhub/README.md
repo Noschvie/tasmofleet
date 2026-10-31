@@ -54,7 +54,7 @@ Docker Compose, Unraid and all settings:
 - `X.Y.Z`: a release ([changelog](https://github.com/nofuturekid/tasmofleet/blob/main/CHANGELOG.md))
 - `edge`: the current `main`, not for production
 
-The same images are on `ghcr.io/nofuturekid/tasmofleet`. Every tag is a multi-arch image: linux/amd64 and linux/arm64 (Raspberry Pi 4/5). The arm64 image has no backup decoder (upstream decode-config is x86_64 only): backups keep the raw `.dmp`, without the decoded JSON view and comparison.
+The same images are on `ghcr.io/nofuturekid/tasmofleet`. Every tag is a multi-arch image: linux/amd64 and linux/arm64 (Raspberry Pi 4/5). Both include the backup decoder (decode-config, LGPL-3.0); on arm64 it is an unofficial build of upstream v16.0.0 plus tasmota/decode-config#127, from [nofuturekid/tasmota-decode-config](https://github.com/nofuturekid/tasmota-decode-config/releases/tag/v16.0.0-arm64), until upstream ships aarch64.
 
 ## License
 
