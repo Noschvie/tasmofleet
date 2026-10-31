@@ -297,10 +297,17 @@ func (h *handler) bulkResult(w http.ResponseWriter, r *http.Request) {
 	}
 	if kind == bulkCmd {
 		rv.Command = strings.TrimPrefix(txTarget(first), "Send ") // the redacted command
-		rv.HistoryAdd = historyText(rv.Command)
+		if r.URL.Query().Get("sent") == "1" {                     // only the page the person's own send led to; later visits add nothing
+			rv.HistoryAdd = historyText(rv.Command)
+		}
 	}
 	if rv.Running {
-		rv.Self = v.Base + r.URL.RequestURI() // handlers see the path below the base
+		q := r.URL.Query()
+		q.Del("sent")                 // a refresh is not a send
+		rv.Self = v.Base + r.URL.Path // handlers see the path below the base
+		if len(q) > 0 {
+			rv.Self += "?" + q.Encode()
+		}
 	}
 	byDev := map[model.DeviceID]bulkResultRow{}
 	var order []model.DeviceID

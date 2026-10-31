@@ -138,3 +138,20 @@ func TestBulkRestartRedrawKeepsDevicesAtATime(t *testing.T) {
 		t.Errorf("an invalid value falls back to the default 3: %s", body)
 	}
 }
+
+// Why (#321): only the result page that follows the person's own send may add to the command
+// history; opening the transaction later (bookmark, audit log, reload) must not bump an old command.
+func TestBulkResultOffersCommandToHistoryOnlyAfterOwnSend(t *testing.T) {
+	now := time.Now()
+	e := resultEnv(t,
+		model.Job{ID: 1, BatchID: 7, DeviceID: 1, Kind: model.KindCommand, Commands: "Status 5", State: model.JobFailed, CreatedAt: now, UpdatedAt: now},
+	)
+	_, body := e.do(t, "GET", "/devices/bulk/result/7?id=1", "admin", nil)
+	if strings.Contains(body, "data-history-add") {
+		t.Error("a later visit offered the command to the history")
+	}
+	_, body = e.do(t, "GET", "/devices/bulk/result/7?id=1&sent=1", "admin", nil)
+	if !strings.Contains(body, `data-history-add="Status 5"`) {
+		t.Errorf("the page after the send did not offer the command: %s", body)
+	}
+}

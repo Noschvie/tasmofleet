@@ -269,7 +269,7 @@ func (h *handler) consoleSend(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	raw, err := h.d.DeviceCmd.Run(ctx, p, d.ID, cmd)
-	if !errors.Is(err, cmdpolicy.ErrInvalid) && !errors.Is(err, cmdpolicy.ErrForbidden) && !errors.Is(err, cmdpolicy.ErrRole) {
+	if !errors.Is(err, cmdpolicy.ErrInvalid) && !errors.Is(err, cmdpolicy.ErrForbidden) && !errors.Is(err, cmdpolicy.ErrRole) && !errors.Is(err, transport.ErrCutOff) {
 		data.HistoryAdd = historyText(cmd) // a device that failed to answer is worth a retry; a refusal is not
 	}
 	status := http.StatusOK

@@ -67,7 +67,7 @@ func TestBulkCommandPreviewThenRun(t *testing.T) {
 	if resp.StatusCode != http.StatusSeeOther || len(fb.reqs) != 1 || len(fb.reqs[0]) != 1 {
 		t.Fatalf("run: %d %v", resp.StatusCode, fb.reqs)
 	}
-	if loc := resp.Header.Get("Location"); loc != "/tf/devices/bulk/result/12?id=2" {
+	if loc := resp.Header.Get("Location"); loc != "/tf/devices/bulk/result/12?id=2&sent=1" {
 		t.Errorf("the result page of the transaction, with the posted devices (only the form knows the skipped ones): %q", loc)
 	}
 	if r := fb.reqs[0][0]; r.DeviceID != 1 || len(r.Commands) != 1 || r.Commands[0] != "Status 2" {

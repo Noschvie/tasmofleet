@@ -185,7 +185,13 @@ func (h *handler) bulkCommandRun(w http.ResponseWriter, r *http.Request) {
 	case err != nil:
 		h.fail(w, r, err)
 	case len(skipped) == 0:
-		redirect(w, r, resultURL(batch, h.formIDs(r)))
+		u := resultURL(batch, h.formIDs(r))
+		if strings.Contains(u, "?") { // the page that follows the person's own send: history.js may keep the command
+			u += "&sent=1"
+		} else {
+			u += "?sent=1"
+		}
+		redirect(w, r, u)
 	default:
 		h.message(w, r, http.StatusOK, h.view(r, "Command started", "devices",
 			"Transaction #"+strconv.FormatInt(int64(batch), 10)+" was started. Left out: "+h.refusalText(r, skipped)))

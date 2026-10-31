@@ -43,6 +43,17 @@
   var added = document.querySelector("[data-history-add]");
   if (added) {
     add(added.getAttribute("data-history-add"));
+    // The result page of a bulk send carries ?sent=1 so that only that visit adds; drop it so a
+    // reload or a bookmark does not.
+    try {
+      var u = new URL(window.location.href);
+      if (u.searchParams.has("sent")) {
+        u.searchParams.delete("sent");
+        window.history.replaceState(null, "", u.pathname + u.search + u.hash);
+      }
+    } catch (err) {
+      // no History API: the page is merely reloaded with the parameter
+    }
   }
 
   document.querySelectorAll("[data-history-clear]").forEach(function (b) {
@@ -80,19 +91,19 @@
       if (e.key !== "ArrowUp" && e.key !== "ArrowDown") {
         return;
       }
-      // In the multi-line box the arrows move the caret between lines; recall only at its edge.
-      if (multi) {
-        var caret = field.selectionStart;
-        if (e.key === "ArrowUp" && field.value.slice(0, caret).indexOf("\n") >= 0) {
-          return;
-        }
-        if (e.key === "ArrowDown" && field.value.slice(caret).indexOf("\n") >= 0) {
-          return;
-        }
+      // In the multi-line box the arrows move the caret; start a recall only when it is already at
+      // the very start (Up) or end (Down), where the arrow would do nothing. Once recalling, the
+      // caret sits at the end of the line we put there, so every arrow keeps walking.
+      if (multi && pos < 0 && (field.selectionStart !== field.selectionEnd ||
+        (e.key === "ArrowUp" ? field.selectionStart !== 0 : field.selectionStart !== field.value.length))) {
+        return;
       }
       var list = read();
       if (e.key === "ArrowUp") {
-        if (list.length === 0 || pos >= list.length - 1) {
+        if (list.length === 0) {
+          return; // nothing to recall: the key keeps its usual job
+        }
+        if (pos >= list.length - 1) {
           e.preventDefault();
           return;
         }

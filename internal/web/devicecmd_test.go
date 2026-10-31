@@ -755,3 +755,24 @@ func TestConsoleNeverOffersSecretOrRefusedCommandToHistory(t *testing.T) {
 		t.Errorf("a refused command reached the history: %s", body)
 	}
 }
+
+// Why (#321): historyText is the only gate between a command and the browser's storage. Each row
+// holds a secret in a different place; every one must be dropped, so removing the redaction
+// comparison fails this test (the page-level test stops at a confirmation page before the gate).
+func TestHistoryTextKeepsOnlyCommandsWithoutSecret(t *testing.T) {
+	for cmd, want := range map[string]string{
+		"Hostname foo":                     "Hostname foo",
+		"  Power   TOGGLE ":                "Power TOGGLE",
+		"MqttPassword x":                   "",
+		"MqttPassword ***":                 "",
+		"Backlog Power ON; MqttPassword x": "",
+		"FriendlyName1 password=x":         "",
+		"MqttHost u:p@h":                   "",
+		"Power ON; Power OFF":              "",
+		"":                                 "",
+	} {
+		if got := historyText(cmd); got != want {
+			t.Errorf("historyText(%q) = %q, want %q", cmd, got, want)
+		}
+	}
+}
