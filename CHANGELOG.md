@@ -12,6 +12,7 @@ always upgrade automatically.
 
 ### Changed
 
+- System → About: the page uses the full content width; the version card is a band with only "What's new" (the Styleguide button is gone, it has its own menu entry), the components are a 2×2 grid, and the effective configuration is always visible in two tables side by side with its values in monospace (#351)
 - Settings → Advanced: "Set by the container" and "Reset all settings" take the full width; the container settings are no longer behind a disclosure but sit always visible in two key/value tables side by side (one table on a phone) (#350)
 - Console and bulk command: `Upgrade` and `OtaUrl` with an argument are refused while a TasmoFleet update job (queued or running) holds the device, with a clear message; the bulk preview names each refused device and the rest still goes (#240)
 - Policy rule form: "Applies to" is an always-open, full-width section after "When a device deviates": a summary line, chip families as toggle pills, tags as chips with an input and the tags in use with their device count, picked devices as chips above a search (name, IP, tag) over a fixed-height list, and Exceptions with the same names. Nothing on the page shifts while the scope is edited. The four tiles and the line under the title now follow the draft like the Devices card (#235)

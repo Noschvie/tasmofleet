@@ -1,6 +1,10 @@
 package web
 
-import "strconv"
+import (
+	"strconv"
+
+	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+)
 
 // aboutView is the About page (design v2 screen "about", the templ pilot of WP F3): the version
 // card, the components with their health, and the effective configuration.
@@ -40,7 +44,6 @@ templ aboutPage(p aboutView) {
 			<div class="about-meta" data-visual-mask>Up { p.Uptime } · { strconv.Itoa(p.Devices) } devices</div>
 			<div class="about-actions">
 				<a class="button" href={ templ.SafeURL(p.Base + "/whats-new") } data-visual-mask>What’s new in { p.Version }</a>
-				<a class="button" href={ templ.SafeURL(p.Base + "/styleguide") }>Styleguide</a>
 			</div>
 		</section>
 		<section class="about-card about-comps" aria-labelledby="about-comps">
@@ -56,12 +59,22 @@ templ aboutPage(p aboutView) {
 			</ul>
 		</section>
 	</div>
-	<details class="fold about-config">
-		<summary>Effective configuration ({ strconv.Itoa(len(p.Config)) } settings, secrets masked)</summary>
-		<table class="dense" data-table="keyvalue">
+	@ui.SettingsCard(ui.SettingsCardData{ID: "card-config", Title: "Effective configuration (" + strconv.Itoa(len(p.Config)) + " settings, secrets masked)", Class: "span2 about-cfg", Plain: true}) {
+		<div class="cset">
+			@aboutConfigTable(p.Config[:(len(p.Config)+1)/2])
+			@aboutConfigTable(p.Config[(len(p.Config)+1)/2:])
+		</div>
+	}
+	<p class="muted about-links">TasmoFleet { p.Version }, AGPL-3.0-or-later. <a href={ templ.SafeURL(sourceURL) } target="_blank" rel="noopener noreferrer">Source</a> · <a href={ templ.SafeURL(p.Base + "/whats-new") }>Changelog</a> · <a href={ templ.SafeURL(licenceURL) } target="_blank" rel="noopener noreferrer">Licence</a></p>
+}
+
+// aboutConfigTable is one half of the effective configuration; the two halves sit side by side.
+templ aboutConfigTable(rows []aboutSetting) {
+	<div class="table-scroll">
+		<table class="dense">
 			<thead><tr><th>Key</th><th>Value</th></tr></thead>
 			<tbody>
-				for _, kv := range p.Config {
+				for _, kv := range rows {
 					<tr>
 						<td data-label="Key" class="p1"><code>{ kv.Key }</code></td>
 						<td data-label="Value" class="wrap s grow">
@@ -70,15 +83,14 @@ templ aboutPage(p aboutView) {
 							} else if kv.Secret {
 								<span class="muted" title="A secret: set, but never shown">*** set, hidden</span>
 							} else if kv.Link != nil {
-								<a class="ext" href={ templ.SafeURL(kv.Link.Href) } target="_blank" rel="noopener noreferrer">{ kv.Link.Display }<span class="sr-only"> (opens in a new tab)</span></a>
+								<a class="ext" href={ templ.SafeURL(kv.Link.Href) } target="_blank" rel="noopener noreferrer"><code>{ kv.Link.Display }</code><span class="sr-only"> (opens in a new tab)</span></a>
 							} else {
-								{ kv.Value }
+								<code>{ kv.Value }</code>
 							}
 						</td>
 					</tr>
 				}
 			</tbody>
 		</table>
-	</details>
-	<p class="muted about-links">TasmoFleet { p.Version }, AGPL-3.0-or-later. <a href={ templ.SafeURL(sourceURL) } target="_blank" rel="noopener noreferrer">Source</a> · <a href={ templ.SafeURL(p.Base + "/whats-new") }>Changelog</a> · <a href={ templ.SafeURL(licenceURL) } target="_blank" rel="noopener noreferrer">Licence</a></p>
+	</div>
 }

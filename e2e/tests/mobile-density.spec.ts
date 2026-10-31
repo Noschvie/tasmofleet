@@ -51,8 +51,10 @@ const BUDGET_SCREENS = 2.25;
 // section (family pills, tags, a 236 px device list, exceptions) instead of a fold: 4017 px (4.95), so 5.05.
 // system settings, advanced (#350): the 25 container settings are always visible (no disclosure, the approved mockup), one
 // two-line row each on a phone: 2539 px = 3.13 screens measured; 3.2 leaves about 2 % margin.
+// about (#351): the 64 effective settings are always visible (no disclosure, the approved mockup) and stack as one key/value
+// pair each on a phone: 5689 px = 7.01 screens measured; 7.15 leaves about 2 % margin.
 const BUDGET_OVERRIDES: Record<string, number> = {
-  devices: 6.0, update: 2.5, audit: 4.3, policy: 3.45, "policy rule editor": 5.05, "new policy rule": 3.45, "device detail": 2.75, firmware: 2.75, "firmware, all releases": 2.55, "system settings, advanced": 3.2,
+  devices: 6.0, update: 2.5, audit: 4.3, policy: 3.45, "policy rule editor": 5.05, "new policy rule": 3.45, "device detail": 2.75, firmware: 2.75, "firmware, all releases": 2.55, "system settings, advanced": 3.2, about: 7.15,
 };
 
 let app: App;

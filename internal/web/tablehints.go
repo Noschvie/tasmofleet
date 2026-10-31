@@ -27,9 +27,6 @@ var colTips = map[string]string{ //nolint:gosec // G101: header texts, no creden
 	"audit.result":  "How it ended.",
 	"audit.details": "The recorded details of the entry.",
 
-	"keyvalue.key":   "The item.",
-	"keyvalue.value": "Its value.",
-
 	"transaction_retry.device": "The device.",
 	"transaction_retry.target": "The firmware being installed.",
 	"transaction_retry.last":   "How the last attempt ended.",

@@ -7105,10 +7105,9 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
 }
 .about-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--sp-14);
   align-items: start;
-  max-width: 980px;
 }
 .about-card {
   background: var(--color-surface);
@@ -7117,6 +7116,20 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
 }
 .about-version {
   padding: var(--sp-16);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "name actions" "build actions" "meta actions";
+  column-gap: var(--sp-24);
+  align-items: center;
+}
+.about-version .about-name {
+  grid-area: name;
+}
+.about-version .about-build {
+  grid-area: build;
+}
+.about-version .about-meta {
+  grid-area: meta;
 }
 .about-name {
   font: 600 18px var(--font-sans);
@@ -7136,6 +7149,11 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
   flex-wrap: wrap;
   gap: var(--sp-8);
   margin-top: var(--sp-14);
+}
+.about-version .about-actions {
+  grid-area: actions;
+  margin-top: 0;
+  justify-content: flex-end;
 }
 .about-actions .button {
   height: var(--ctl);
@@ -7157,6 +7175,14 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.comp-list .comp:nth-child(odd) {
+  border-right: var(--hair-w) solid var(--color-border);
+}
+.comp-list .comp:nth-last-child(-n + 2) {
+  border-bottom: 0;
 }
 .comp {
   display: flex;
@@ -7216,9 +7242,54 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
   --t-bg: var(--color-neutral-bg);
   --t-fg: var(--color-neutral-fg);
 }
-.about-config {
-  margin-top: var(--sp-24);
-  max-width: 980px;
+/* the effective configuration: a full-width card of two tables (.cset, shared with Advanced); keys stay on one line on a desktop */
+.about-cfg {
+  margin-top: var(--sp-14);
+}
+.about-cfg .cset table {
+  table-layout: fixed;
+  width: 100%;
+}
+.about-cfg .cset th:first-child {
+  width: 58%;
+}
+.about-cfg .cset td.p1 code {
+  white-space: nowrap;
+}
+.about-cfg .cset td.grow {
+  overflow-wrap: anywhere;
+}
+.about-links {
+  margin-top: var(--sp-20);
+}
+@media (max-width: 44.99rem) {
+  .about-version {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "name" "build" "meta" "actions";
+  }
+  .about-version .about-actions {
+    margin-top: var(--sp-14);
+    justify-content: flex-start;
+  }
+  .comp-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .comp-list .comp:nth-child(odd) {
+    border-right: 0;
+  }
+  .comp-list .comp:nth-last-child(-n + 2) {
+    border-bottom: var(--hair-w) solid var(--color-border);
+  }
+  .comp-list .comp:last-child {
+    border-bottom: 0;
+  }
+  .about-cfg .cset th:first-child {
+    width: 50%;
+  }
+  .about-cfg .cset td.p1 code {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
 }
 
 /* count pill on a navigation entry: "Add devices 5" */

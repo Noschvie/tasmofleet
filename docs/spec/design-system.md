@@ -348,7 +348,7 @@ Also: [desktop, dark](../design/styleguide/notes-desktop-dark.png) · [phone, li
   the same 45rem. Other breakpoints remain: 60rem (the bulk bar folds into one Actions menu) and
   72rem (the audit table layout, the two-column settings grid).
 - **Folds.** `details.fold` holds something secondary and is closed at every width unless it has
-  `open` (About's effective configuration, account and user editing, a rule's Unjudged devices).
+  `open` (account and user editing, a rule's Unjudged devices).
   The system container settings are no fold any more (#350). No page uses `details.m-fold` any more (the phone-only fold of the
   first design port); its CSS is left over.
 - **Form errors sit at the input.** A handler that rejects a value sets the input's name
@@ -407,7 +407,7 @@ The structure deviations S1-S7 are listed with their reasons in the plan (sectio
    item of the System menu and linked from About.
 2. S2: the Columns chooser pins left or right (F5, P2).
 3. S3: the policy live check can be paused (N3, N21).
-4. S4: About keeps the effective configuration and the source line below its two cards.
+4. S4: About is full width: the version band, the components as a 2x2 grid, the effective configuration always visible in two tables (#351), and the source line below.
 5. S5: the phone drawer ends with the account, What's new, the Light / Dark / Auto switch and Sign out.
 6. S6: the live indicator and the connection banners only on pages that hold the event stream.
 7. S7: the navigation is the same for every role; pages enforce their permission. The style guide

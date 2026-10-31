@@ -626,6 +626,38 @@ func TestAboutMasksConfigAndShowsVersion(t *testing.T) {
 	}
 }
 
+// Why (#351): the 60-odd effective settings were hidden behind a disclosure; they are the
+// reason to open About, so they are always visible in two tables side by side (order kept, the
+// first half left), values in monospace as in Advanced. Styleguide has its own menu entry, so the
+// version card offers only "What's new".
+func TestAboutShowsConfigInTwoTablesWithoutDisclosure(t *testing.T) {
+	e := setup(t)
+	_, body := e.do(t, "GET", "/about", "admin", nil)
+	if strings.Contains(body, `class="fold about-config"`) || strings.Contains(body, "<summary>Effective configuration") {
+		t.Error("the effective configuration is behind a disclosure again")
+	}
+	i := strings.Index(body, `id="card-config"`)
+	if i < 0 {
+		t.Fatal("no effective configuration card")
+	}
+	card := body[i:]
+	card = card[:strings.Index(card, "</section>")]
+	if n := strings.Count(card, "<table "); n != 2 {
+		t.Errorf("config card has %d tables, want 2 side by side", n)
+	}
+	if !strings.Contains(card, "Effective configuration (") {
+		t.Error("the card lost its heading")
+	}
+	a := body[strings.Index(body, `class="about-actions"`):]
+	if strings.Contains(a[:strings.Index(a, "</div>")], "Styleguide") {
+		t.Error("the version card still has a Styleguide button")
+	}
+	// a configured value is code, like the Advanced tab
+	if !strings.Contains(card, `<code>`) {
+		t.Error("config values are not in monospace")
+	}
+}
+
 // Why: the live table relies on ready-made fragments named per device and on
 // resync when the hub dropped events.
 func TestSSEStreamsHealthFragments(t *testing.T) {
