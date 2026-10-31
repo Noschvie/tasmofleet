@@ -6,6 +6,12 @@ always upgrade automatically.
 
 ## Unreleased
 
+## 0.22.1 "Bell Rock" (2026-10-31)
+
+### Upgrade notes
+
+- No database migration, nothing to change in the template.
+
 ### Breaking
 
 - Settings: the tab "Discovery scan" is now "Discovery" (`?tab=discovery`); the old `?tab=scan` opens the first tab, no redirect (#335)
