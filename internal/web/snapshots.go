@@ -79,6 +79,16 @@ func (h *handler) snapStepUp(w http.ResponseWriter, r *http.Request, what, actio
 	return false
 }
 
+// snapKeyParam is the query value that carries the choice "Include secret.key" through a step-up: only
+// the boolean, never a secret (#387).
+const snapKeyParam = "dlkey"
+
+// snapKeyChosen says whether the person chose to include secret.key: in the download POST that the
+// step-up interrupted, or in the address the step-up returned to.
+func snapKeyChosen(r *http.Request) bool {
+	return r.URL.Query().Get(snapKeyParam) == "1" || r.PostForm.Get("include_key") == "1"
+}
+
 // snapDownload makes a consistent copy of the live database for one download; with include_key
 // the response is a .tar of the database and secret.key. The copy exists only for the response.
 func (h *handler) snapDownload(w http.ResponseWriter, r *http.Request) {
@@ -227,15 +237,20 @@ func snapReason(err error) string {
 
 // sysDB is the "TasmoFleet database" card and the status of the snapshot schedule card.
 type sysDB struct {
-	LiveSize  string // about how big a download is; empty when unknown
-	Hint      string // the line next to the download button
-	Dir       string // the snapshots folder, as the server sees it
-	DataDir   string // the data directory
-	Files     []sysSnapshot
-	Kept      int // SNAPSHOT_KEEP
-	On        bool
-	Status    sysSnapStatus
-	CanDelete bool
+	// KeepKey: the person ticked "Include secret.key" before the step-up; the box stays ticked (#387).
+	KeepKey bool
+	// FocusDownload: the page is the return from the step-up; the Download button takes the focus, so
+	// Enter or Space finishes what the person started.
+	FocusDownload bool
+	LiveSize      string // about how big a download is; empty when unknown
+	Hint          string // the line next to the download button
+	Dir           string // the snapshots folder, as the server sees it
+	DataDir       string // the data directory
+	Files         []sysSnapshot
+	Kept          int // SNAPSHOT_KEEP
+	On            bool
+	Status        sysSnapStatus
+	CanDelete     bool
 }
 
 // sysSnapshot is one stored snapshot.
@@ -268,6 +283,8 @@ func (h *handler) sysDBOf(r *http.Request, base string) (*sysDB, error) {
 		return nil, err
 	}
 	db := &sysDB{Dir: s.Dir(), DataDir: filepath.Dir(s.Dir()), CanDelete: true}
+	db.KeepKey = snapKeyChosen(r)
+	db.FocusDownload = r.Method == http.MethodGet && snapKeyChosen(r) // the return from the step-up, not the locked page itself
 	if h.d.Database != nil {
 		if info, err := h.d.Database.DBInfo(r.Context()); err == nil && info.Size > 0 {
 			db.LiveSize = humanBytes(info.Size)

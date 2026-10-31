@@ -479,8 +479,8 @@ templ sysSnapshotStatus(db sysDB) {
 // restore. There is no restore button on purpose.
 templ sysDatabaseBlock(p sysPage, db sysDB) {
 	<div class="sys-test">
-		<button type="submit" form="db-dl" class="btn" id="btn-dl">Download snapshot</button>
-		<label class="db-incl"><input type="checkbox" form="db-dl" name="include_key" value="1"/> Include <span class="mono">secret.key</span> (as .tar)</label>
+		<button type="submit" form="db-dl" class="btn" id="btn-dl" autofocus?={ db.FocusDownload }>Download snapshot</button>
+		<label class="db-incl"><input type="checkbox" form="db-dl" name="include_key" value="1" checked?={ db.KeepKey }/> Include <span class="mono">secret.key</span> (as .tar)</label>
 		<span class="sys-test-help">{ db.Hint }</span>
 	</div>
 	<div class="notice plain db-contents" role="note">

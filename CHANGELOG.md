@@ -15,6 +15,10 @@ always upgrade automatically.
 - Fresh installs and upgrades start pruning at once: with more than three cached releases the older ones are deleted at the first clean-up after the update. Set "Releases kept" to 0 to keep everything as before (#252)
 - A firmware command typed in the console or sent as a bulk command (`Upgrade 1`, `OtaUrl`) now holds the device for TasmoFleet updates until it has restarted (LWT offline then online, or an uptime that shows a new boot) or 10 minutes have passed: the update preview marks the device as refused and says that the typed update is probably still running, and a submit or retry for it is refused. Before, the command's job ended as soon as the device answered, so an update started in the following minute of flashing could overlap it. The hold is kept in memory only; a TasmoFleet restart forgets it (#347)
 
+### Fixed
+
+- Settings, Backups, "Download snapshot": after the password or identity-provider confirmation the page comes back with "Include secret.key" still ticked and the Download button focused, so one key press finishes the download. Before, the box was unticked again and the person had to tick and click a second time (#387)
+
 ## 0.24.0 "Hook Head" (2026-10-31)
 
 ### Upgrade notes

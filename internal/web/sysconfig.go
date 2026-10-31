@@ -227,12 +227,17 @@ func (h *handler) sysStepUpData(r *http.Request, p sysPage) ui.StepUpData {
 		what = "Changing " + strings.Join(labels, ", ")
 	}
 	back := sysPath + "?tab=" + p.Active + "&restore=1"
+	keyQuery := ""
+	if p.Active == "backups" && snapKeyChosen(r) {
+		keyQuery = "&" + snapKeyParam + "=1" // the snapshot download continues with the box as it was ticked (#387)
+		back += keyQuery
+	}
 	d := ui.StepUpData{ID: "stepup", Name: name, Sub: sub, What: what,
 		CSRF: p.CSRF, Next: back, Open: true, Error: p.StepUpErr}
 	if h.stepUpKind(r) == stepUpOIDC {
 		d.IdP, d.IdPHref, d.Action = h.idpName(), p.Base+"/oidc/stepup", p.Base+"/oidc/stepup"
 	} else {
-		d.Local, d.Action = true, p.Base+sysPath+"/stepup?tab="+p.Active
+		d.Local, d.Action = true, p.Base+sysPath+"/stepup?tab="+p.Active+keyQuery
 	}
 	return d
 }
@@ -600,6 +605,9 @@ func (h *handler) sysStepUpPost(w http.ResponseWriter, r *http.Request) {
 		back := sysPath + "?restore=1" // form.js puts the typed values back
 		if tab := sysTabSlug(r.URL.Query().Get("tab")); tab != "" {
 			back = sysPath + "?tab=" + tab + "&restore=1"
+			if tab == "backups" && r.URL.Query().Get(snapKeyParam) == "1" {
+				back += "&" + snapKeyParam + "=1"
+			}
 		}
 		redirect(w, r, back)
 	}

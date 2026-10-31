@@ -54,6 +54,29 @@ test("download: password first, then a SQLite file; the key only inside a .tar w
   await expect(page.locator("table.audittable").getByText("Database snapshot download").first()).toBeVisible();
 });
 
+// Why (#387): the person ticked "Include secret.key" and clicked Download. After the password they must not
+// have to tick and click again (and a forgotten tick yields a file that cannot be read later): the page
+// comes back with the box still ticked and the Download button focused, so one key press finishes it.
+// A download started by the redirect itself is not used: browsers may block it without a user gesture.
+test("download: the key choice survives the password step-up", { tag: "@core" }, async ({ page }) => {
+  await signIn(page);
+  await page.goto(app.url + "/settings/system?tab=backups");
+  const card = page.locator("#card-database");
+  await card.locator("input[name='include_key']").check();
+  await card.getByRole("button", { name: "Download snapshot" }).click();
+  const stepup = page.locator("dialog#stepup");
+  await expect(stepup).toBeVisible();
+  await stepup.getByLabel("Password").fill("e2e-fake-password-1");
+  await stepup.getByRole("button", { name: "Confirm" }).click();
+
+  await expect(page).toHaveURL(/tab=backups.*dlkey=1/);
+  await expect(page.locator("#card-database input[name='include_key']")).toBeChecked();
+  await expect(page.locator("#btn-dl")).toBeFocused();
+  const [withKey] = await Promise.all([page.waitForEvent("download"), page.keyboard.press("Enter")]);
+  expect(withKey.suggestedFilename()).toMatch(/^tasmofleet-\d{8}-\d{4}Z\.tar$/);
+  expect(readFileSync((await withKey.path())!).includes("secret.key")).toBe(true);
+});
+
 // Why: the schedule is off until switched on; switching it on takes a snapshot at once (like the
 // other schedules), it is listed with Download and Delete, and the card says when it ran.
 test("schedule: switch on, a snapshot appears, it can be downloaded and deleted", async ({ page }) => {

@@ -423,3 +423,44 @@ func TestDatabaseCardNamesTheRealDataDirectory(t *testing.T) {
 		t.Error("the copy must say that SSO accounts confirm at their identity provider")
 	}
 }
+
+// Why (#387): the person ticked "Include secret.key" and clicked Download; the password prompt must not
+// make them tick and click again, and a forgotten key would leave them with a file that cannot be read
+// later. The choice (a boolean, nothing else) rides along the step-up to the page it returns to, which
+// shows the box ticked and the Download button focused. Without the choice nothing is added.
+func TestSnapshotStepUpKeepsTheKeyChoice(t *testing.T) {
+	s := snapSetup(t, false)
+	_, withKey := s.do(t, "POST", "/settings/system/snapshot", "admin", url.Values{"csrf": {"tok"}, "include_key": {"1"}})
+	if !strings.Contains(withKey, `/settings/system/stepup?tab=backups&amp;dlkey=1`) {
+		t.Error("the password prompt must post to a step-up that remembers the key choice")
+	}
+	_, without := s.do(t, "POST", "/settings/system/snapshot", "admin", url.Values{"csrf": {"tok"}})
+	if strings.Contains(without, "dlkey") {
+		t.Error("no key chosen: nothing to carry")
+	}
+
+	r, _ := s.do(t, "POST", "/settings/system/stepup?tab=backups&dlkey=1", "admin", url.Values{"csrf": {"tok"}, "current": {"right"}})
+	if loc := r.Header.Get("Location"); r.StatusCode != 303 || !strings.Contains(loc, "tab=backups") || !strings.Contains(loc, "dlkey=1") {
+		t.Fatalf("return address %d %q must carry the choice", r.StatusCode, loc)
+	}
+	r, _ = s.do(t, "POST", "/settings/system/stepup?tab=backups", "admin", url.Values{"csrf": {"tok"}, "current": {"right"}})
+	if loc := r.Header.Get("Location"); strings.Contains(loc, "dlkey") {
+		t.Errorf("no choice, none carried: %q", loc)
+	}
+	// A wrong password shows the prompt again, still remembering the choice.
+	s.stepped.Store(false)
+	_, again := s.do(t, "POST", "/settings/system/stepup?tab=backups&dlkey=1", "admin", url.Values{"csrf": {"tok"}, "current": {"wrong"}})
+	if !strings.Contains(again, `stepup?tab=backups&amp;dlkey=1`) {
+		t.Error("a retry after a wrong password must not forget the choice")
+	}
+
+	s.stepped.Store(true)
+	_, back := s.do(t, "GET", "/settings/system?tab=backups&restore=1&dlkey=1", "admin", nil)
+	if !strings.Contains(back, `name="include_key" value="1" checked`) || !strings.Contains(back, `id="btn-dl" autofocus`) {
+		t.Error("the return page must show the box ticked and the Download button focused")
+	}
+	_, plain := s.do(t, "GET", "/settings/system?tab=backups", "admin", nil)
+	if strings.Contains(plain, `name="include_key" value="1" checked`) || strings.Contains(plain, `id="btn-dl" autofocus`) {
+		t.Error("an ordinary visit starts unticked and unfocused")
+	}
+}
