@@ -6,9 +6,7 @@ always upgrade automatically.
 
 ## Unreleased
 
-### Fixed
-
-- Device settings, Options: the help line of SetOption19 (and SetOption4) no longer repeats the description in the label; each fact is shown once (#363).
+## 0.23.1 "Cape Hatteras" (2026-10-31)
 
 ### Added
 
@@ -21,6 +19,7 @@ always upgrade automatically.
 
 ### Fixed
 
+- Device settings, Options: the help line of SetOption19 (and SetOption4) no longer repeats the description in the label; each fact is shown once (#363).
 - Settings: the yellow "unsaved" dots (on the tab and in the save bar) no longer move their neighbours when they appear or disappear; their space is reserved, so tabs, text and buttons stay where they are (#362).
 
 ### Security
