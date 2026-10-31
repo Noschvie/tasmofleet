@@ -88,7 +88,7 @@ test("Applies to is an open section: search, chips, tags, exceptions, and nothin
   await list.locator(".pol-row:not([hidden]) input").first().check();
   await expect(section.locator("[data-dev-chips] .pol-chip")).toHaveCount(1);
   await expect(tiles).toHaveText("1");
-  await expect(page.locator("#rule-line")).toContainText("Device: ");
+  await expect(page.locator("#rule-line")).toContainText("1 device");
   await expect(section.locator("#scope-summary")).toContainText("1 picked device");
   expect(await yOf("#rule-command")).toBe(cmdY);
   expect((await list.boundingBox())!.height).toBe(boxH);
@@ -98,7 +98,7 @@ test("Applies to is an open section: search, chips, tags, exceptions, and nothin
   await expect(pill.locator(".pol-pill-n")).toHaveText(String(Math.ceil(total / 2)));
   await pill.locator("input").check();
   await expect(section.locator("[data-tag-chips] label.pol-tag")).toHaveCount(1);
-  await expect(page.locator("#rule-line")).toContainText("Tag: lights");
+  await expect(page.locator("#rule-line")).toContainText("tag lights");
 
   // the state of the approved mockup: ESP8266, tag lights, two picked devices, one exception
   await section.locator("label.pol-pill", { hasText: "ESP8266" }).click();
@@ -108,9 +108,14 @@ test("Applies to is an open section: search, chips, tags, exceptions, and nothin
 
   // exceptions come from the same names (devices or tags)
   const except = section.locator("[data-except-add]");
-  await except.fill(Object.keys(env.devices)[1]);
+  const inventoryName = (await list.locator(".pol-row span").first().textContent())!; // a name the inventory really has
+  await except.fill(inventoryName);
   await except.press("Enter");
   await expect(section.locator("[data-except-chips] .pol-chip")).toHaveCount(1);
+  // the tile and the line under the title follow the exception, not only the section's own summary
+  await expect(page.locator("[data-tile='applies'] .dev-tile-s")).toContainText("1 exception");
+  await expect(page.locator("#rule-line")).toContainText("1 exception");
+  await expect(page.locator("#rule-line")).toContainText("ESP8266, tag lights, 2 devices");
   await expect(section.locator("#scope-summary")).toContainText("ESP8266, tag “lights” or 2 picked devices, minus 1 exception");
   await shot("applies-to");
 

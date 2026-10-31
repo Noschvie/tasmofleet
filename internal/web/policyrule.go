@@ -205,7 +205,7 @@ func ruleTiles(st ruleStat, spec sysconfig.RuleSpec) []ruleTile {
 		dash := func(key, label string) ruleTile { return ruleTile{Key: key, Label: label, Value: "–"} }
 		return []ruleTile{dash("applies", "Applies to"), dash("match", "Match"), dash("deviate", "Deviate"), dash("unknown", "Not judged")}
 	}
-	exc := plural(st.Excepted, "exception")
+	exc := plural(len(spec.Except), "exception") // the draft's own count, so it follows the form
 	matchSub := "no device in scope"
 	if st.Applies > 0 {
 		matchSub = strconv.Itoa((st.Match*100+st.Applies/2)/st.Applies) + " % of the devices it applies to"
@@ -215,7 +215,7 @@ func ruleTiles(st ruleStat, spec sysconfig.RuleSpec) []ruleTile {
 		devSub = "advisory: hint only"
 	}
 	return []ruleTile{
-		{Key: "applies", Label: "Applies to", Value: strconv.Itoa(st.Applies), Sub: appliesText(spec) + " · " + exc},
+		{Key: "applies", Label: "Applies to", Value: strconv.Itoa(st.Applies), Sub: scopeShort(spec, true) + " · " + exc},
 		{Key: "match", Label: "Match", Value: strconv.Itoa(st.Match), Sub: matchSub, Tone: ui.ToneOK},
 		{Key: "deviate", Label: "Deviate", Value: strconv.Itoa(st.Deviate), Sub: devSub, Tone: ui.ToneWarn},
 		{Key: "unknown", Label: "Not judged", Value: strconv.Itoa(st.Unknown), Sub: "no backup or recent reading"},
@@ -437,11 +437,39 @@ func ruleKV(s sysconfig.RuleSpec) []ui.KVRow {
 
 // ruleLine is the line under the title: what the rule checks and whom it applies to.
 func ruleLine(spec sysconfig.RuleSpec, draft bool, version int64) string {
-	line := spec.Command + " = " + spec.Want + " · " + appliesText(spec)
+	line := spec.Command + " = " + spec.Want + " · " + scopeShort(spec, false)
+	if n := len(spec.Except); n > 0 {
+		line += " · " + plural(n, "exception")
+	}
 	if !draft {
 		line += " · version " + vstr(version)
 	}
 	return line
+}
+
+// scopeShort is the scope in few words, as the tiles and the line under the title show it:
+// "ESP8266, tag lights, 2 devices" (tiles count tags: "ESP8266, 1 tag, 2 devices").
+func scopeShort(s sysconfig.RuleSpec, countTags bool) string {
+	var parts []string
+	if len(s.Families) > 0 {
+		parts = append(parts, strings.Join(policy.ScopeLabels(s.Families), ", "))
+	}
+	if n := len(s.Tags); n > 0 {
+		if countTags {
+			parts = append(parts, plural(n, "tag"))
+		} else if n == 1 {
+			parts = append(parts, "tag "+s.Tags[0])
+		} else {
+			parts = append(parts, "tags "+strings.Join(s.Tags, ", "))
+		}
+	}
+	if n := len(s.Devices); n > 0 {
+		parts = append(parts, plural(n, "device"))
+	}
+	if len(parts) == 0 {
+		return "All devices"
+	}
+	return strings.Join(parts, ", ")
 }
 
 // scopeSummary is the line of the Applies to section: how many devices the draft reaches and why.

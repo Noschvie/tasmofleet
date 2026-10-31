@@ -343,7 +343,7 @@ func TestRuleCopyOtaUrlDefaultsToTheSourceChipFamily(t *testing.T) {
 	rp.readVal, rp.readSrc = "http://ota.example/tasmota.bin", ValueSource{Kind: "live", At: time.Now()}
 	e, _ := ruleEnvWith(t, rp)
 	_, body := e.do(t, "POST", "/policy/rules/new/copy", "admin", url.Values{"csrf": {"tok"}, "device": {"1"}, "command": {"OtaUrl"}})
-	if !strings.Contains(body, "Chip family: ESP8266") {
+	if !strings.Contains(body, `name="family" value="esp8266" checked`) || !strings.Contains(body, "OtaUrl = http://ota.example/tasmota.bin · ESP8266") {
 		t.Errorf("OtaUrl copied from an ESP8266 applies to that family:\n%s", body)
 	}
 	rp.readVal = "+01:00"

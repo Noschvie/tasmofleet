@@ -67,6 +67,12 @@ func TestRulePreviewAlsoSwapsTilesTitleLineAndSummary(t *testing.T) {
 			t.Errorf("preview answer lacks %q:\n%s", w, body)
 		}
 	}
+	// the draft's own exceptions are counted in the tile and the title line, not only in the form
+	for _, w := range []string{`ESP8266 · 2 exceptions</div>`, `SaveData = 1 · ESP8266 · 2 exceptions · version 1</p>`} {
+		if !strings.Contains(body, w) {
+			t.Errorf("preview answer lacks %q:\n%s", w, body)
+		}
+	}
 	if n := strings.Count(body, `hx-swap-oob="true"`); n != 3 {
 		t.Errorf("want 3 out-of-band parts (tiles, line, summary), got %d", n)
 	}
