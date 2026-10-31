@@ -111,19 +111,24 @@ func TestCheckDoesNotJudgeAVersionNewerThanEveryPin(t *testing.T) {
 	}
 }
 
-func TestCheckIndexOutOfRangeIsNotACommand(t *testing.T) {
-	// SetOption200 does not exist even though SetOption does: the range is part of "exists".
+func TestCheckIndexOutOfRangeWarnsButNeverRefuses(t *testing.T) {
+	// The index range is read from the source heuristically, so SetOption200 is a warning on the
+	// versions that state a range; only a command name that no fleet version knows is refused.
 	s := testSet(t)
 	fleet := []FleetDevice{dev("a", "16.0.0", "esp32", "tasmota")}
-	if r := s.Check("SetOption200", fleet); !r.Refuse {
+	r := s.Check("SetOption200", fleet)
+	if r.Refuse || r.Versions[0].Exists != True || !r.Versions[0].IndexBad {
 		t.Fatalf("SetOption200: %+v", r)
 	}
-	r := s.Check("SetOption19", fleet)
-	if r.Refuse || r.Name != "SetOption" || !r.Range.OK || r.Range.Hi != 177 || r.Range.Typed != 19 {
+	if r := s.Check("NoSuchCommand9", fleet); !r.Refuse {
+		t.Fatalf("an unknown name stays refused: %+v", r)
+	}
+	r = s.Check("SetOption19", fleet)
+	if r.Refuse || r.Versions[0].IndexBad || r.Name != "SetOption" || !r.Range.OK || r.Range.Hi != 177 || r.Range.Typed != 19 {
 		t.Fatalf("SetOption19: %+v", r)
 	}
-	// a range the source gives only as a run-time expression (Power) never blocks an index
-	if r := s.Check("Power9", fleet); r.Refuse {
+	// a range given only as a run-time expression (Power) never flags an index
+	if r := s.Check("Power9", fleet); r.Refuse || r.Versions[0].IndexBad {
 		t.Fatalf("Power9: %+v", r)
 	}
 }

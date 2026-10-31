@@ -28,6 +28,9 @@ type VersionVerdict struct {
 	// Exists: the command (with its index) exists in the catalogue. False is only said when it
 	// is sure, see MatchBeyond; Unknown then.
 	Exists Tri
+	// IndexBad: the command exists but the typed index is outside the range the source states.
+	// The range is read heuristically, so this is a warning and never a reason to refuse.
+	IndexBad bool
 	// Lacking lists the devices whose build lacks a feature; empty unless Exists is True.
 	Lacking []DeviceNeeds
 }
@@ -36,7 +39,8 @@ type VersionVerdict struct {
 type Result struct {
 	// Versions has one entry per firmware version in the fleet, newest first.
 	Versions []VersionVerdict
-	// Refuse is true when the command exists in none of the versions in the fleet. The check
+	// Refuse is true when the command name exists in none of the versions in the fleet (an index
+	// out of range does not count, see VersionVerdict.IndexBad). The check
 	// warns about everything else and lets the rule be saved.
 	Refuse bool
 	// Unjudged counts the devices whose version is unknown.
@@ -85,8 +89,9 @@ func (s *Set) Check(cmd string, fleet []FleetDevice) Result {
 		vv := VersionVerdict{Version: versionString(g.ver), Pinned: cat.Tasmota, Match: m}
 		f, found := cat.Find(cmd)
 		switch {
-		case found && f.IndexOK():
+		case found:
 			vv.Exists = True
+			vv.IndexBad = !f.IndexOK()
 		case m == MatchBeyond:
 			vv.Exists = Unknown
 		default:
