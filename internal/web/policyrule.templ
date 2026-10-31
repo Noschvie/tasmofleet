@@ -66,19 +66,7 @@ templ rulePageTempl(p rulePageView) {
 	<div class="pol-page">
 		<div class="pghead">
 			<div class="pghead-t">
-				<h1>
-					{ p.Name }
-					{ " " }
-					@ui.Badge(ruleSevTone(p.Required), ruleSevLabel(p.Required))
-					{ " " }
-					if p.Draft {
-						@ui.Badge(ui.ToneNeutral, "Draft")
-					} else if p.Disabled {
-						@ui.Badge(ui.ToneNeutral, "Disabled")
-					} else {
-						@ui.Badge(ui.ToneOK, "Enabled")
-					}
-				</h1>
+				@rulePageTitle(p.Name, p.Required, p.Draft, p.Disabled, false)
 				@ruleLine_(p.Line, false)
 			</div>
 			<div class="pghead-acts">
@@ -111,9 +99,7 @@ templ rulePageTempl(p rulePageView) {
 		if p.Banner != "" {
 			@ui.Banner(ui.BannerData{Tone: p.BannerTone, Text: p.Banner, Alert: p.BannerTone == ui.ToneDanger})
 		}
-		if p.Source != "" {
-			@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Text: p.Source})
-		}
+		@ruleSource(p.Source, false)
 		<div class="devlive">
 			@ruleTilesRow(p.Tiles, false)
 			<div class="dev-pair">
@@ -208,10 +194,43 @@ templ scopeSummaryLine(v scopeSummary, oob bool) {
 	</span>
 }
 
+// rulePageTitle is the page title with its badges; the preview swaps it so it follows the Name field.
+templ rulePageTitle(name string, required, draft, disabled, oob bool) {
+	<h1 id="rule-title" if oob { hx-swap-oob="true" }>
+		{ name }
+		{ " " }
+		@ui.Badge(ruleSevTone(required), ruleSevLabel(required))
+		{ " " }
+		if draft {
+			@ui.Badge(ui.ToneNeutral, "Draft")
+		} else if disabled {
+			@ui.Badge(ui.ToneNeutral, "Disabled")
+		} else {
+			@ui.Badge(ui.ToneOK, "Enabled")
+		}
+	</h1>
+}
+
+// ruleSource is the notice of where the draft came from; for a draft started from a command the
+// preview swaps it, so it names the command being edited.
+templ ruleSource(text string, oob bool) {
+	<div id="rule-source" if oob { hx-swap-oob="true" }>
+		if text != "" {
+			@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Text: text})
+		}
+	</div>
+}
+
 // rulePreviewAnswer is the answer of /policy/rules/preview: the devices card (the swap target)
 // and the parts that follow the draft out-of-band.
-templ rulePreviewAnswer(card templ.Component, tiles []ruleTile, line string, sum scopeSummary) {
+templ rulePreviewAnswer(card templ.Component, tiles []ruleTile, line string, sum scopeSummary, t ruleHead) {
 	@card
+	@rulePageTitle(t.Name, t.Required, t.Draft, t.Disabled, true)
+	@ui.CrumbsOOB(t.Crumbs, t.Base)
+	@ui.PhoneTitleOOB(t.Name)
+	if t.Source != "" {
+		@ruleSource(t.Source, true)
+	}
 	@ruleTilesRow(tiles, true)
 	@ruleLine_(line, true)
 	@scopeSummaryLine(sum, true)

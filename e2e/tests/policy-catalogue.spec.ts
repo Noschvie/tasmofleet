@@ -208,6 +208,16 @@ test("a command that needs a feature names the devices whose build lacks it", { 
   await shots(page, "check-feature");
 });
 
+test("the title, the trail and the notice follow the draft's name and command", { tag: "@core" }, async ({ page }) => {
+  await draft(page, "Power lock");
+  await page.locator("#rule-command").fill("PowerLock");
+  await page.locator("#rule-command").dispatchEvent("change");
+  await expect(page.locator("#rule-title")).toContainText("Power lock");
+  await expect(page.locator(".crumb-here")).toHaveText("Power lock");
+  await expect(page.locator("#ph-title")).toHaveText("Power lock");
+  await expect(page.locator("#rule-source")).toContainText("A new rule for PowerLock.");
+});
+
 test("a command that no Tasmota version of the fleet has is refused with the versions named", { tag: "@core" }, async ({ page }) => {
   await draft(page, "Nothing");
   await page.locator("#rule-command").fill("NoSuchCmdAnywhere");

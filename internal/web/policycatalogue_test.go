@@ -181,3 +181,24 @@ func TestNotJudgedNoteNamesTheMissingCommand(t *testing.T) {
 		t.Errorf("no version, no note: %q", got)
 	}
 }
+
+// Why: the title, the trail, the phone title and the "new rule for" notice describe the draft, so
+// they follow the Name field and the command instead of staying at what the page started from.
+func TestPreviewKeepsTitleTrailAndNoticeInStepWithTheDraft(t *testing.T) {
+	e, _, _ := rulesEnv(t, "")
+	f := ruleForm(url.Values{"id": {"new"}, "origin": {"command"}, "name": {"Power lock"}, "command": {"PowerLock"}, "want": {"0"}})
+	r, body := e.do(t, "POST", "/policy/rules/preview", "admin", f)
+	if r.StatusCode != 200 {
+		t.Fatalf("%d", r.StatusCode)
+	}
+	for _, w := range []string{`<h1 id="rule-title" hx-swap-oob="true">`, "Power lock", `<span class="crumb-here" aria-current="page">Power lock</span>`, `id="ph-title" hx-swap-oob="true">Power lock`, "A new rule for PowerLock."} {
+		if !strings.Contains(body, w) {
+			t.Errorf("preview answer lacks %q", w)
+		}
+	}
+	f.Set("origin", "template:flash")
+	_, body = e.do(t, "POST", "/policy/rules/preview", "admin", f)
+	if strings.Contains(body, `id="rule-source"`) {
+		t.Error("a draft that did not start from a command keeps the notice it has")
+	}
+}

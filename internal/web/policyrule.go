@@ -520,6 +520,15 @@ func newScopeSummary(spec sysconfig.RuleSpec, st ruleStat) scopeSummary {
 	return sum
 }
 
+// ruleHead is what the preview swaps in the page head: the title, the trail, the phone title and,
+// for a draft started from a command, the notice that names it.
+type ruleHead struct {
+	Name                      string
+	Required, Draft, Disabled bool
+	Base, Source              string
+	Crumbs                    []ui.Crumb
+}
+
 // ruleDevicesPreview answers the editor's htmx post: the devices card for the draft in the
 // form. Cached values and backups only, no device is read, nothing is stored.
 func (h *handler) ruleDevicesPreview(w http.ResponseWriter, r *http.Request, d ruleDraft, st sysconfig.RulesState) {
@@ -545,9 +554,18 @@ func (h *handler) ruleDevicesPreview(w http.ResponseWriter, r *http.Request, d r
 	spec.Disabled = d.State == "disabled"
 	// The devices card is the swap target; the tiles, the line under the title and the summary of
 	// the Applies to section describe the same draft and are swapped out-of-band.
+	name := ruleName(spec)
+	if spec.Command == "" {
+		name = "New rule"
+	}
+	head := ruleHead{Name: name, Required: spec.Severity != policy.SeverityInfo, Draft: d.ID == "new", Disabled: spec.Disabled, Base: httpBase(r),
+		Crumbs: []ui.Crumb{{Label: "Devices", Path: "/devices"}, {Label: "Policy", Path: policyPath}, {Label: name}}}
+	if d.Origin == "command" {
+		head.Source = "A new rule for " + spec.Command + ". Nothing is saved until you press Save rule."
+	}
 	h.component(w, r, http.StatusOK, rulePreviewAnswer(
 		ruleDevicesCard(newRuleDevices(httpBase(r), d.ID, true, spec, stat, show, all)),
-		ruleTiles(stat, spec), ruleLine(spec, d.ID == "new", st.VersionID), newScopeSummary(spec, stat)))
+		ruleTiles(stat, spec), ruleLine(spec, d.ID == "new", st.VersionID), newScopeSummary(spec, stat), head))
 }
 
 // ---- New rule ----
