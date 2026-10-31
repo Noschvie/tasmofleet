@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
@@ -39,7 +38,7 @@ func (c holdingCmd) Run(ctx context.Context, p model.Principal, id model.DeviceI
 	// An unknown outcome (a timeout over HTTP, a lost reply over MQTT, an unconfirmed publish) may have
 	// reached the device, so it holds too: holding too long costs ten minutes, too short risks a brick.
 	// Only what certainly never left TasmoFleet does not.
-	if !neverSent(err) && startsUpgrade(cmd) {
+	if !neverSent(err) && cmdpolicy.StartsFirmwareUpgrade(cmd) {
 		var up int64
 		if c.uptime != nil {
 			up = c.uptime(id)
@@ -54,24 +53,6 @@ func (c holdingCmd) Run(ctx context.Context, p model.Principal, id model.DeviceI
 func neverSent(err error) bool {
 	return err != nil && (errors.Is(err, cmdpolicy.ErrInvalid) || errors.Is(err, cmdpolicy.ErrForbidden) || errors.Is(err, cmdpolicy.ErrRole) ||
 		errors.Is(err, cmdpolicy.ErrUpdateJob) || errors.Is(err, devlock.ErrBusy) || errors.Is(err, store.ErrNotFound) || errors.Is(err, transport.ErrCutOff))
-}
-
-// startsUpgrade reports whether cmd makes the device flash and restart: an Upgrade with an argument, alone
-// or inside a Backlog. A bare OtaUrl only stores the address; no restart follows, so nothing to wait for.
-func startsUpgrade(cmd string) bool {
-	if !cmdpolicy.StartsFirmware(cmd) {
-		return false
-	}
-	body := strings.TrimSpace(cmd)
-	if f := strings.Fields(body); len(f) > 0 && strings.HasPrefix(strings.ToLower(f[0]), "backlog") {
-		body = strings.TrimSpace(body[len(f[0]):])
-	}
-	for _, one := range strings.Split(body, ";") {
-		if f := strings.Fields(one); len(f) > 1 && strings.EqualFold(f[0], "upgrade") {
-			return true
-		}
-	}
-	return false
 }
 
 // observeFirmwareHolds feeds the health tracker's reports to holds until ctx is done: a restarted device

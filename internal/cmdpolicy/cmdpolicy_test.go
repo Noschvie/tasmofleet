@@ -713,3 +713,42 @@ func TestStartsFirmware(t *testing.T) {
 		}
 	}
 }
+
+// Why: a typed Upgrade makes the device flash and restart, so a TasmoFleet update must wait for that restart;
+// a bare OtaUrl only stores an address and no restart follows. The answer has to be the one cmdpolicy's own
+// parser gives (case, index suffix, Backlog prefixes and separators), or a spelling Tasmota accepts would
+// slip past the hold, or one it ignores would hold a device for nothing.
+func TestStartsFirmwareUpgrade(t *testing.T) {
+	for cmd, want := range map[string]bool{
+		"Upgrade 1":                    true,
+		"upgrade 1":                    true,
+		"UPGRADE 1":                    true,
+		"Upgrade 2":                    true,
+		"Upgrade1 1":                   true, // an index suffix is still the Upgrade command
+		"  Upgrade   1  ":              true,
+		"Backlog Power1 ON; Upgrade 1": true,
+		"Backlog OtaUrl http://x/y.bin;Upgrade 1":   true,
+		"Backlog0 OtaUrl http://x/y.bin; Upgrade 1": true,
+		"BACKLOG Upgrade 1":                         true,
+		"Backlog Backlog Upgrade 1":                 true,
+		"Backlog Power1 ON;BacklogUpgrade 1":        true,
+		"Backlog Status 2;;Upgrade 1":               true,  // an empty part is skipped
+		"OtaUrl http://x/y.bin":                     false, // no restart follows
+		"Backlog OtaUrl http://x/y.bin":             false,
+		"Backlog Power1 ON; OtaUrl http://x/y.bin":  false,
+		"Upgrade":                     false, // a query
+		"Backlog Upgrade":             false,
+		"Status 2":                    false,
+		"Backlog Power1 ON; Status 2": false,
+		"Upload http://x/y.bin":       false,
+		"Upgrade 1;Reset 1":           false, // malformed
+		"":                            false,
+	} {
+		if got := StartsFirmwareUpgrade(cmd); got != want {
+			t.Errorf("StartsFirmwareUpgrade(%q) = %v, want %v", cmd, got, want)
+		}
+		if want && !StartsFirmware(cmd) {
+			t.Errorf("%q: an Upgrade start is always a firmware start", cmd)
+		}
+	}
+}

@@ -292,6 +292,37 @@ func StartsFirmware(cmd string) bool {
 	return err == nil && strings.Contains(v.Confirm, whyFirmware)
 }
 
+// StartsFirmwareUpgrade is StartsFirmware restricted to the Upgrade family: the command makes the device
+// flash and restart (Upgrade with an argument, alone or inside a Backlog). A bare OtaUrl only stores the
+// address and is not one. It reads the command exactly like Classify (same parse, same Backlog split, same
+// case and index handling), so callers never parse commands themselves.
+func StartsFirmwareUpgrade(cmd string) bool {
+	if !StartsFirmware(cmd) {
+		return false
+	}
+	p, bad := parse(cmd)
+	return bad == "" && upgradeIn(p)
+}
+
+// upgradeIn reports whether p, or a part of a Backlog p, is an Upgrade with an argument.
+func upgradeIn(p parsed) bool {
+	switch p.base {
+	case "upgrade":
+		return p.args != "" // as in confirmFor
+	case "backlog":
+		for _, part := range strings.Split(p.args, ";") {
+			part = stripBacklogPrefix(part)
+			if part == "" {
+				continue
+			}
+			if sub, bad := parse(part); bad == "" && upgradeIn(sub) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // confirmFor names the consequence of the destructive or lock-out commands,
 // or returns "" for everything else.
 func confirmFor(p parsed) string {
