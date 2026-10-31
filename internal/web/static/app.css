@@ -13368,6 +13368,14 @@ button.pol-chip-x {
   color: var(--color-text-3);
   font-size: 12.5px;
 }
+.pol-pickc {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  font: 400 13px var(--font-sans);
+  color: var(--color-text);
+}
 .pol-ed-foot {
   display: flex;
   justify-content: flex-end;
