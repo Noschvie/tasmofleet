@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Security
+
+- Single sign-on and proxy-header identities whose subject starts with `local:` are refused at sign-in (403 with a clear message, audit entry `denied: reserved subject`). That prefix is the subject of local accounts, and the audit log, the Users page and the user directory tell local accounts by it, so such an identity could appear as the local admin and share its audit rows. Roles were never affected (#380)
+
 ### Changed
 
 - Device settings tab: the fields sit in grouped cards (Names, Options, Network & telemetry, MQTT, Power & flash, Time) in three independent columns from about 1200 px, two balanced columns below and one on a phone; each card has a one-line note, the Save bar spans the full width and stays in view. SetOption0 moved from Options to Power & flash, next to the other flash-write settings (#367)

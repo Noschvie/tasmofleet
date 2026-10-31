@@ -316,6 +316,43 @@ type ctxInfo struct {
 	sessionID   string // store ID hash; empty for header principals
 	passwordGen int64  // local sessions: the generation the session is bound to
 	mustChange  bool   // local user has to change the password first
+	reserved    string // err is ErrReservedSubject: the refused header user
+}
+
+// ErrReservedSubject is the refusal of an SSO or proxy identity whose subject starts with "local:",
+// the namespace of local accounts (#380).
+var ErrReservedSubject = fmt.Errorf("%w: the subject is reserved for local accounts", ErrUnauthenticated)
+
+// reservedSubject reports whether subject is in the namespace of local accounts ("local:<name>"). The
+// audit log, the Users page and the principals table tell local accounts by that prefix alone, so an
+// identity provider or proxy must not be able to present one.
+func reservedSubject(subject string) bool { return strings.HasPrefix(subject, localSubjectPrefix) }
+
+// localSubjectPrefix starts the subject of every local account.
+const localSubjectPrefix = "local:"
+
+// reservedMessage is the page a reserved subject gets instead of a session.
+func reservedMessage(base string) MessageData {
+	return MessageData{
+		BasePath: base, Title: "Sign-in refused",
+		Text: "The identity your sign-in provider sent starts with \"local:\", which is reserved for local accounts. Ask the administrator of the identity provider for a different username.",
+	}
+}
+
+// firstRefusal says whether a refused header user is worth an audit row now: at most one per
+// headerSeenEvery and subject, because a header user is refused on every request.
+func (s *Service) firstRefusal(subject string) bool {
+	key, now := "refused:"+subject, s.o.Clock.Now()
+	s.seenMu.Lock()
+	defer s.seenMu.Unlock()
+	if last, ok := s.seen[key]; ok && now.Sub(last) < headerSeenEvery {
+		return false
+	}
+	if len(s.seen) >= 1024 {
+		clear(s.seen)
+	}
+	s.seen[key] = now
+	return true
 }
 
 type infoKey struct{}
@@ -328,6 +365,9 @@ func (s *Service) resolve(r *http.Request) ctxInfo {
 	}
 	if s.o.Mode == ModeHeader && s.o.Proxy.Trusted(r) {
 		if user := strings.TrimSpace(r.Header.Get(s.o.Header.User)); user != "" {
+			if reservedSubject(user) {
+				return ctxInfo{err: ErrReservedSubject, reserved: user}
+			}
 			p := model.Principal{
 				Subject: user, Name: r.Header.Get(s.o.Header.Name), Email: r.Header.Get(s.o.Header.Email),
 				Groups: splitGroups(r.Header.Get(s.o.Header.Groups), s.o.Header.GroupsSep), Method: ModeHeader,
@@ -480,6 +520,13 @@ func (s *Service) require(min model.Role, allowMustChange bool) func(http.Handle
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			ci := s.resolve(r)
 			base := httpx.BasePath(r.Context())
+			if errors.Is(ci.err, ErrReservedSubject) {
+				if s.firstRefusal(ci.reserved) {
+					s.record(r, ci.reserved, "auth.login.header", "denied: reserved subject", nil)
+				}
+				s.o.Pages.Message(w, r, http.StatusForbidden, reservedMessage(base))
+				return
+			}
 			if ci.err != nil {
 				login := base + "/login?next=" + url.QueryEscape(httpx.LocalPath(r.URL.RequestURI()))
 				if errors.Is(ci.err, ErrSessionExpired) {

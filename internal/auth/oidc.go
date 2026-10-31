@@ -181,6 +181,11 @@ func (s *Service) callback(w http.ResponseWriter, r *http.Request) {
 		s.stepUpCallback(w, r, f, idt.Subject, claims)
 		return
 	}
+	if reservedSubject(idt.Subject) {
+		s.record(r, idt.Subject, "auth.login.oidc", "denied: reserved subject", nil)
+		s.o.Pages.Message(w, r, http.StatusForbidden, reservedMessage(base))
+		return
+	}
 	p := model.Principal{
 		Subject: idt.Subject, Name: str(claims[s.o.OIDC.UsernameClaim]), Email: str(claims["email"]),
 		Groups: groupsClaim(claims[s.o.OIDC.GroupsClaim]), Method: ModeOIDC,
