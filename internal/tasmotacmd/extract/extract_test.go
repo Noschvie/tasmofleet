@@ -232,3 +232,57 @@ func TestEmptySourceIsAnError(t *testing.T) {
 		t.Fatal("want an error for a tree without source files")
 	}
 }
+
+func TestIndexRangeIsFollowedIntoTheDecodeHelper(t *testing.T) {
+	// SetOption19 is checked in SetoptionDecode (index < 178), two calls away from the handler.
+	// Without the range the policy editor cannot say that SetOption200 does not exist.
+	c := fixture(t)["SetOption"]
+	if c.Index == nil || c.Index.Max != "177" {
+		t.Fatalf("SetOption index: %+v", c.Index)
+	}
+}
+
+func TestValueBoundsComeFromTheRangeCheckOfThePayload(t *testing.T) {
+	// "(payload >= 0) && (payload < 3601)" is the whole range the device accepts: the editor
+	// refuses a TelePeriod of 4000 before it is saved, instead of a rule that can never match.
+	c := fixture(t)["TelePeriod"]
+	if c.Value == nil || c.Value.Min == nil || c.Value.Max == nil || *c.Value.Min != 0 || *c.Value.Max != 3600 {
+		t.Fatalf("TelePeriod value: %+v", c.Value)
+	}
+	if v := fixture(t)["Latitude"].Value; v != nil {
+		t.Fatalf("Latitude checks no range, bounds must not be guessed: %+v", v)
+	}
+}
+
+func TestDecimalCommandsAreMarked(t *testing.T) {
+	// An integer-only number field would refuse a latitude of 52.52.
+	m := fixture(t)
+	if !m["Latitude"].Decimal || m["TelePeriod"].Decimal {
+		t.Fatalf("decimal flags: Latitude=%v TelePeriod=%v", m["Latitude"].Decimal, m["TelePeriod"].Decimal)
+	}
+}
+
+func TestBuildsReadTheDefinesOfEachVariant(t *testing.T) {
+	// "Latitude needs USE_SUNRISE" is only a fair warning for a device whose build certainly lacks
+	// it: the lite variant undefines it, the default build has it. Reading the source's own
+	// #define/#undef keeps this out of a hand-written table of which variant has what.
+	cat := mustExtract(t)
+	has := func(key, name string) bool {
+		for _, n := range cat.Builds[key] {
+			if n == name {
+				return true
+			}
+		}
+		return false
+	}
+	// only names some command requires are listed; the fixture's Latitude requires USE_SUNRISE
+	if !has("esp8266/tasmota", "USE_SUNRISE") || !has("esp32/tasmota", "USE_SUNRISE") {
+		t.Fatalf("default builds lack USE_SUNRISE: %v", cat.Builds)
+	}
+	if has("esp8266/FIRMWARE_LITE", "USE_SUNRISE") || has("esp32/FIRMWARE_MINIMAL", "USE_SUNRISE") {
+		t.Fatalf("lite and minimal undefine USE_SUNRISE: %v", cat.Builds)
+	}
+	if has("esp8266/tasmota", "USE_WEBCAM") || !has("esp32/tasmota", "USE_WEBCAM") {
+		t.Fatalf("#ifdef ESP8266 #undef must only hit the ESP8266 build: %v", cat.Builds)
+	}
+}

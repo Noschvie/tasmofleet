@@ -20,7 +20,7 @@
 #     "release" makes the GitHub release from the CHANGELOG.md section.
 #   FULL (nightly cron, manual dispatch): additionally the whole e2e suite in
 #     three shards (layout and visual guards), every unit test with the race
-#     detector, the Tasmota command catalogue check (make catalogue-check),
+#     detector, the Tasmota command catalogue check (make catalogue-check, docs-anchors-check),
 #     uncached test runs (TESTFLAGS=-count=1) and the full mutation run.
 #     It blocks no release; a failure opens an issue (job nightly-failure-issue).
 #   QUARANTINE (nightly and dispatch only, never blocking): the tests tagged
@@ -305,12 +305,13 @@ jobs:
         with:
           name: catalogue
       - id: pin
-        run: echo "sha=$(sed -n 's/^TASMOTA_SHA256 *?= *//p' Makefile)" >> "$GITHUB_OUTPUT"
+        run: echo "sha=$(sed -n '/^TASMOTA_PINS/,/^TASMOTA_CACHE/p' Makefile | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@v6.1.0
         with:
           path: ~/.cache/tasmofleet
           key: tasmota-src-${{ steps.pin.outputs.sha }}
       - run: make catalogue-check
+      - run: make docs-anchors-check
 
   # Mutation testing in three shards (one ota run alone takes 11 minutes on
   # one runner): each shard mutates its share of every package's files and

@@ -12,6 +12,10 @@ type Catalogue struct {
 	SourceSHA256  string         `json:"source_sha256"`
 	Commands      []Command      `json:"commands"`
 	SkippedTables []SkippedTable `json:"skipped_tables,omitempty"`
+	// Builds says which USE_ defines (the ones some command requires) the stock builds have:
+	// key "<family>/<variant>", family esp8266 or esp32, variant "tasmota" or a FIRMWARE_ macro of
+	// tasmota_configurations.h. Read from the source's default configuration, not from a build.
+	Builds map[string][]string `json:"builds,omitempty"`
 
 	once   sync.Once
 	byName map[string][]*Command
@@ -34,6 +38,10 @@ type Command struct {
 	// Keys are the top-level keys of the reply. "<n>" stands for the index of the command
 	// (1 when none is typed). Empty when Loose is set and nothing was derived.
 	Keys []string `json:"keys,omitempty"`
+	// Value is the range the handler accepts for a numeric payload; nil when it checks none.
+	Value *Bounds `json:"value,omitempty"`
+	// Decimal is set when the reply is a floating-point number (Latitude), so the value is not a whole number.
+	Decimal bool `json:"decimal,omitempty"`
 	// Kind is the value kind of the reply keys: number, text, state, array, object or mixed; empty when unknown.
 	Kind string `json:"kind,omitempty"`
 	// Indexed is the reply when the command is sent with an index (SetOption19, FriendlyName2)
@@ -50,6 +58,12 @@ type IndexedReply struct {
 	Keys  []string `json:"keys,omitempty"`
 	Kind  string   `json:"kind,omitempty"`
 	Loose string   `json:"loose,omitempty"`
+}
+
+// Bounds is an inclusive numeric range.
+type Bounds struct {
+	Min *int `json:"min,omitempty"`
+	Max *int `json:"max,omitempty"`
 }
 
 // Index is the index range a handler checks, as source text: a number, a macro or a run-time expression.

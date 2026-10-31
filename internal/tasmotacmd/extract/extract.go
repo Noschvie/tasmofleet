@@ -131,6 +131,7 @@ func Extract(src fs.FS, version, sha256 string) (*tasmotacmd.Catalogue, error) {
 			cat.Commands = append(cat.Commands, a.commands(nt, ft, st)...)
 		}
 	}
+	cat.Builds = extractBuilds(src, requiredUseNames(cat.Commands))
 	sort.SliceStable(cat.Commands, func(i, j int) bool {
 		x, y := cat.Commands[i], cat.Commands[j]
 		if lx, ly := strings.ToLower(x.Command), strings.ToLower(y.Command); lx != ly {
@@ -232,7 +233,9 @@ func (a *analyzer) commands(nt *nameTable, ft *funcTable, st *synTable) []tasmot
 			}
 			splitSuffixKeys(&c)
 			c.Via = dedupe(r.via)
-			c.Index = a.indexOf(handlers[0], nt.file)
+			c.Index = a.indexOf(handlers[0], nt.file, c.SynonymOf == "")
+			c.Value = a.valueBounds(handlers[0], nt.file)
+			c.Decimal = a.usesCall(handlers[0], nt.file, "ResponseCmndFloat", "ResponseCmndIdxFloat")
 		}
 		out = append(out, c)
 	}
@@ -324,24 +327,69 @@ func dedupe(in []string) []string {
 	return out
 }
 
-var (
-	reIdxLower1 = regexp.MustCompile(`XdrvMailbox\.index\s*(>=|>)\s*([\w.]+)`)
-	reIdxLower2 = regexp.MustCompile(`([\w.]+)\s*(<=|<)\s*XdrvMailbox\.index\b`)
-	reIdxUpper1 = regexp.MustCompile(`XdrvMailbox\.index\s*(<=|<)\s*([\w.]+)`)
-	reIdxUpper2 = regexp.MustCompile(`([\w.]+)\s*(>=|>)\s*XdrvMailbox\.index\b`)
-)
-
-// indexOf reports how the handler itself reads XdrvMailbox.index. Bounds are the first
-// comparison against a literal or a name found in the body; callees are not followed.
-func (a *analyzer) indexOf(handler string, prefer *srcFile) *tasmotacmd.Index {
+// indexOf reports how the handler reads XdrvMailbox.index. Bounds are the first comparison
+// against a literal or a name. When the handler itself compares nothing, the functions it calls
+// are read (two levels), and a callee that gets XdrvMailbox.index as a parameter is read for
+// comparisons of that parameter (SetOption: CmndSetoption, CmndSetoptionBase, SetoptionDecode).
+func (a *analyzer) indexOf(handler string, prefer *srcFile, follow bool) *tasmotacmd.Index {
 	defs := a.lookup(handler, prefer)
-	if len(defs) == 0 || !strings.Contains(defs[0].body, "XdrvMailbox.index") {
+	if len(defs) == 0 {
 		return nil
 	}
-	body, f := defs[0].body, defs[0].file
+	depth := 0
+	if follow {
+		depth = 2 // a SetOption synonym is called with a fixed index: its range is not the user's
+	}
+	ix := a.indexIn(defs[0], "XdrvMailbox.index", depth)
+	if ix == nil && !strings.Contains(defs[0].body, "XdrvMailbox.index") {
+		return nil
+	}
+	if ix == nil {
+		ix = &tasmotacmd.Index{}
+	}
+	return ix
+}
+
+// indexIn reads the bounds of variable v in d; nil when v is not used or not bounded there and
+// not in any callee within depth.
+func (a *analyzer) indexIn(d fnDef, v string, depth int) *tasmotacmd.Index {
+	if ix := a.boundsOf(d, v); ix != nil {
+		return ix
+	}
+	if depth == 0 {
+		return nil
+	}
+	for _, c := range calls(d.body) {
+		callee := a.lookup(c.name, d.file)
+		if len(callee) == 0 || callee[0].body == d.body {
+			continue
+		}
+		for i, arg := range c.args {
+			if strings.TrimSpace(arg) == v && i < len(callee[0].params) && callee[0].params[i] != "" {
+				if ix := a.indexIn(callee[0], callee[0].params[i], depth-1); ix != nil {
+					return ix
+				}
+			}
+		}
+		if strings.Contains(callee[0].body, "XdrvMailbox.index") && v == "XdrvMailbox.index" {
+			if ix := a.indexIn(callee[0], v, depth-1); ix != nil {
+				return ix
+			}
+		}
+	}
+	return nil
+}
+
+func (a *analyzer) boundsOf(d fnDef, v string) *tasmotacmd.Index {
+	body, f := d.body, d.file
+	q := regexp.QuoteMeta(v)
+	lower1 := regexp.MustCompile(q + `\s*(>=|>)\s*([\w.]+)`)
+	lower2 := regexp.MustCompile(`([\w.]+)\s*(<=|<)\s*` + q + `\b`)
+	upper1 := regexp.MustCompile(q + `\s*(<=|<)\s*([\w.]+)`)
+	upper2 := regexp.MustCompile(`([\w.]+)\s*(>=|>)\s*` + q + `\b`)
 	bound := func(expr string, delta int) string {
-		if v, ok := a.w.evalInt(f, expr, 0); ok {
-			return strconv.Itoa(v + delta)
+		if n, ok := a.w.evalInt(f, expr, 0); ok {
+			return strconv.Itoa(n + delta)
 		}
 		switch {
 		case delta > 0:
@@ -352,15 +400,67 @@ func (a *analyzer) indexOf(handler string, prefer *srcFile) *tasmotacmd.Index {
 		return expr
 	}
 	ix := &tasmotacmd.Index{}
-	if m := reIdxLower1.FindStringSubmatch(body); m != nil {
+	if m := lower1.FindStringSubmatch(body); m != nil {
 		ix.Min = bound(m[2], map[string]int{">": 1, ">=": 0}[m[1]])
-	} else if m := reIdxLower2.FindStringSubmatch(body); m != nil {
+	} else if m := lower2.FindStringSubmatch(body); m != nil {
 		ix.Min = bound(m[1], map[string]int{"<": 1, "<=": 0}[m[2]])
 	}
-	if m := reIdxUpper1.FindStringSubmatch(body); m != nil {
+	if m := upper1.FindStringSubmatch(body); m != nil {
 		ix.Max = bound(m[2], map[string]int{"<": -1, "<=": 0}[m[1]])
-	} else if m := reIdxUpper2.FindStringSubmatch(body); m != nil {
+	} else if m := upper2.FindStringSubmatch(body); m != nil {
 		ix.Max = bound(m[1], map[string]int{">": -1, ">=": 0}[m[2]])
 	}
+	if ix.Min == "" && ix.Max == "" {
+		return nil
+	}
 	return ix
+}
+
+// valueBounds reads the one range check Tasmota writes for a numeric payload: both bounds in one
+// conjunction, "(XdrvMailbox.payload >= 0) && (XdrvMailbox.payload < 3601)". A lone
+// comparison is not a range (it is often a clamp or a mode switch), so nothing is guessed from it.
+func (a *analyzer) valueBounds(handler string, prefer *srcFile) *tasmotacmd.Bounds {
+	defs := a.lookup(handler, prefer)
+	if len(defs) == 0 {
+		return nil
+	}
+	body, f := defs[0].body, defs[0].file
+	for _, m := range rePayloadRange.FindAllStringSubmatch(body, -1) {
+		lop, lo, hip, hi := m[1], m[2], m[3], m[4]
+		l, ok1 := a.w.evalInt(f, lo, 0)
+		h, ok2 := a.w.evalInt(f, hi, 0)
+		if !ok1 || !ok2 {
+			continue
+		}
+		if lop == ">" {
+			l++
+		}
+		if hip == "<" {
+			h--
+		}
+		if l > h {
+			continue
+		}
+		return &tasmotacmd.Bounds{Min: &l, Max: &h}
+	}
+	return nil
+}
+
+// payload >= A && payload < B, the form Tasmota writes
+var rePayloadRange = regexp.MustCompile(`XdrvMailbox\.payload\s*(>=|>)\s*(\w+)\s*\)?\s*&&\s*\(?\s*XdrvMailbox\.payload\s*(<=|<)\s*(\w+)`)
+
+// usesCall reports whether the handler's own body calls one of names.
+func (a *analyzer) usesCall(handler string, prefer *srcFile, names ...string) bool {
+	defs := a.lookup(handler, prefer)
+	if len(defs) == 0 {
+		return false
+	}
+	for _, c := range calls(defs[0].body) {
+		for _, n := range names {
+			if c.name == n {
+				return true
+			}
+		}
+	}
+	return false
 }

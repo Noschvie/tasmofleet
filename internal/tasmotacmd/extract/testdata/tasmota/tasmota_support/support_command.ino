@@ -8,6 +8,12 @@ const char kTasmotaCommands[] PROGMEM = "|"  // No prefix
   D_CMND_BACKLOG "|" D_CMND_POWER "|" D_CMND_STATUS "|" D_CMND_TELEPERIOD "|"
   D_CMND_SO "|" D_CMND_SETOPTION "|" D_CMND_MODULE "|" D_CMND_TEMPLATE "|" D_CMND_GPIO "|" D_CMND_FRIENDLYNAME
 #endif  //FIRMWARE_MINIMAL
+#ifdef USE_SUNRISE
+  "|" D_CMND_LATITUDE
+#endif
+#ifdef USE_WEBCAM
+  "|" D_CMND_WCTEST
+#endif
   ;
 
 SO_SYNONYMS(kTasmotaSynonyms,
@@ -20,6 +26,12 @@ void (* const TasmotaCommand[])(void) PROGMEM = {
   &CmndBacklog, &CmndPower, &CmndStatus, &CmndTeleperiod,
   &CmndSetoption, &CmndSetoption, &CmndModule, &CmndTemplate, &CmndGpio, &CmndFriendlyname
 #endif  //FIRMWARE_MINIMAL
+#ifdef USE_SUNRISE
+  , &CmndLatitude
+#endif
+#ifdef USE_WEBCAM
+  , &CmndWcTest
+#endif
 };
 
 void ResponseCmndNumber(int value) {
@@ -122,6 +134,17 @@ void SetOptionShow(uint32_t option) {
   ResponseAppend_P(PSTR("\"SetOptionSet\":["));
 }
 
+// The index range of SetOption is only in the helper that decodes the index: SetOption0 .. SetOption177
+bool SetoptionDecode(uint32_t index, uint32_t *ptype, uint32_t *pindex) {
+  if (index < 178) {
+    if (index <= 31) {
+      *ptype = 2;
+    }
+    return true;
+  }
+  return false;
+}
+
 // indexed=1 answers SetOption16, indexed=0 (the synonyms, e.g. WifiNoSleep) answers the synonym name
 void CmndSetoptionBase(bool indexed) {
   if (SetoptionDecode(XdrvMailbox.index, &ptype, &pindex)) {
@@ -150,6 +173,18 @@ void CmndFriendlyname(void) {
       ResponseCmndIdxChar(SettingsText(SET_FRIENDLYNAME1 + XdrvMailbox.index -1));
     }
   }
+}
+
+// ResponseCmndFloat: a decimal number; no bounds are checked
+void CmndLatitude(void) {
+  if (XdrvMailbox.data_len) {
+    Settings->latitude = (int)(CharToFloat(XdrvMailbox.data) *1000000);
+  }
+  ResponseCmndFloat((float)(Settings->latitude) /1000000, 6);
+}
+
+void CmndWcTest(void) {
+  ResponseCmndDone();
 }
 
 void ExecuteCommand(const char *cmnd, uint32_t source)

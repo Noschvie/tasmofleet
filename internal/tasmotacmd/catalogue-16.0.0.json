@@ -12,7 +12,10 @@
     "!FIRMWARE_MINIMAL",
     "USE_ADC"
    ],
-   "index": {},
+   "index": {
+    "min": "1",
+    "max": "1"
+   },
    "keys": [
     "AdcGpio"
    ],
@@ -97,6 +100,10 @@
    "keys": [
     "AmpRes"
    ],
+   "value": {
+    "min": 0,
+    "max": 3
+   },
    "kind": "number"
   },
   {
@@ -110,6 +117,10 @@
    "keys": [
     "Ap"
    ],
+   "value": {
+    "min": 0,
+    "max": 2
+   },
    "kind": "object"
   },
   {
@@ -220,6 +231,10 @@
    "keys": [
     "Bh1750MTime<n>"
    ],
+   "value": {
+    "min": 31,
+    "max": 254
+   },
    "kind": "number"
   },
   {
@@ -239,6 +254,10 @@
    "keys": [
     "Bh1750Resolution<n>"
    ],
+   "value": {
+    "min": 0,
+    "max": 2
+   },
    "kind": "number"
   },
   {
@@ -540,6 +559,10 @@
    "keys": [
     "BlinkCount"
    ],
+   "value": {
+    "min": 0,
+    "max": 32000
+   },
    "kind": "number"
   },
   {
@@ -553,6 +576,10 @@
    "keys": [
     "BlinkTime"
    ],
+   "value": {
+    "min": 2,
+    "max": 3600
+   },
    "kind": "number"
   },
   {
@@ -632,6 +659,10 @@
    "keys": [
     "ButtonDebounce"
    ],
+   "value": {
+    "min": 40,
+    "max": 1000
+   },
    "kind": "number"
   },
   {
@@ -645,6 +676,10 @@
    "keys": [
     "ButtonRetain"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state",
    "via": [
     "SendKey",
@@ -725,6 +760,10 @@
    "keys": [
     "CalcRes"
    ],
+   "value": {
+    "min": 0,
+    "max": 7
+   },
    "kind": "number"
   },
   {
@@ -768,6 +807,9 @@
     "USE_I2C",
     "USE_CCS811_V2"
    ],
+   "index": {
+    "max": "CCS811_devices_found"
+   },
    "keys": [
     "CCS811Baseline<n>"
    ],
@@ -783,6 +825,9 @@
     "USE_I2C",
     "USE_CCS811_V2"
    ],
+   "index": {
+    "max": "CCS811_devices_found"
+   },
    "keys": [
     "CCS811FWApp<n>"
    ],
@@ -798,6 +843,9 @@
     "USE_I2C",
     "USE_CCS811_V2"
    ],
+   "index": {
+    "max": "CCS811_devices_found"
+   },
    "keys": [
     "CCS811HW<n>"
    ],
@@ -871,6 +919,10 @@
    "keys": [
     "Channel<n>"
    ],
+   "value": {
+    "min": 0,
+    "max": 100
+   },
    "kind": "number"
   },
   {
@@ -1016,6 +1068,10 @@
    "keys": [
     "CounterDebounce"
    ],
+   "value": {
+    "min": 0,
+    "max": 32000
+   },
    "kind": "number"
   },
   {
@@ -1030,6 +1086,10 @@
    "keys": [
     "CounterDebounceHigh"
    ],
+   "value": {
+    "min": 0,
+    "max": 32000
+   },
    "kind": "number"
   },
   {
@@ -1044,6 +1104,10 @@
    "keys": [
     "CounterDebounceLow"
    ],
+   "value": {
+    "min": 0,
+    "max": 32000
+   },
    "kind": "number"
   },
   {
@@ -1062,6 +1126,10 @@
    "keys": [
     "CounterType<n>"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "number"
   },
   {
@@ -1102,6 +1170,10 @@
    "keys": [
     "CT"
    ],
+   "value": {
+    "min": 153,
+    "max": 500
+   },
    "kind": "number"
   },
   {
@@ -1195,6 +1267,10 @@
     "ESP32",
     "USE_ENERGY_SENSOR"
    ],
+   "index": {
+    "min": "0",
+    "max": "8"
+   },
    "keys": [
     "CurrentHigh",
     "CurrentHigh<n>"
@@ -1232,6 +1308,10 @@
     "ESP32",
     "USE_ENERGY_SENSOR"
    ],
+   "index": {
+    "min": "0",
+    "max": "8"
+   },
    "keys": [
     "CurrentLow",
     "CurrentLow<n>"
@@ -1269,6 +1349,9 @@
     "ESP32",
     "USE_ENERGY_SENSOR"
    ],
+   "index": {
+    "min": "1"
+   },
    "keys": [
     "CurrentSetCal"
    ],
@@ -1290,6 +1373,10 @@
    "keys": [
     "Dali"
    ],
+   "value": {
+    "min": 0,
+    "max": 2
+   },
    "kind": "number",
    "via": [
     "ResponseDali"
@@ -1336,6 +1423,10 @@
    "keys": [
     "DaliBS"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -1351,6 +1442,10 @@
    "keys": [
     "DaliChannels"
    ],
+   "value": {
+    "min": 1,
+    "max": 5
+   },
    "kind": "number"
   },
   {
@@ -1397,6 +1492,10 @@
     "min": "101",
     "max": "116"
    },
+   "value": {
+    "min": 0,
+    "max": 100
+   },
    "via": [
     "ResponseDali"
    ],
@@ -1417,6 +1516,10 @@
     "Present",
     "Address"
    ],
+   "value": {
+    "min": 1,
+    "max": 64
+   },
    "kind": "mixed"
   },
   {
@@ -1449,6 +1552,10 @@
    "keys": [
     "DaliGroupSliders"
    ],
+   "value": {
+    "min": 0,
+    "max": 16
+   },
    "kind": "number"
   },
   {
@@ -1478,6 +1585,10 @@
    "index": {
     "min": "101",
     "max": "116"
+   },
+   "value": {
+    "min": 0,
+    "max": 254
    },
    "via": [
     "ResponseDali"
@@ -1512,6 +1623,10 @@
    "keys": [
     "DaliRetry"
    ],
+   "value": {
+    "min": 0,
+    "max": 64
+   },
    "kind": "number"
   },
   {
@@ -1558,6 +1673,10 @@
    "keys": [
     "DaliTarget"
    ],
+   "value": {
+    "min": 1,
+    "max": 64
+   },
    "kind": "number"
   },
   {
@@ -1738,6 +1857,10 @@
    "keys": [
     "Dimmer"
    ],
+   "value": {
+    "min": 0,
+    "max": 100
+   },
    "kind": "number",
    "via": [
     "LightAnimate"
@@ -1862,6 +1985,10 @@
    "keys": [
     "DisplayAddress<n>"
    ],
+   "value": {
+    "min": 0,
+    "max": 255
+   },
    "kind": "number"
   },
   {
@@ -1896,6 +2023,10 @@
    "keys": [
     "DisplayBlinkrate"
    ],
+   "value": {
+    "min": 0,
+    "max": 3
+   },
    "kind": "number"
   },
   {
@@ -1942,6 +2073,10 @@
    "keys": [
     "DisplayCols<n>"
    ],
+   "value": {
+    "min": 1,
+    "max": 64
+   },
    "kind": "number"
   },
   {
@@ -1956,6 +2091,10 @@
    "keys": [
     "DisplayDimmer"
    ],
+   "value": {
+    "min": 0,
+    "max": 100
+   },
    "kind": "number"
   },
   {
@@ -1998,6 +2137,10 @@
    "keys": [
     "DisplayFont"
    ],
+   "value": {
+    "min": 0,
+    "max": 4
+   },
    "kind": "number"
   },
   {
@@ -2026,6 +2169,10 @@
    "keys": [
     "DisplayInvert"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "number"
   },
   {
@@ -2068,6 +2215,10 @@
    "keys": [
     "DisplayModel"
    ],
+   "value": {
+    "min": 0,
+    "max": 31
+   },
    "kind": "number"
   },
   {
@@ -2124,6 +2275,10 @@
    "keys": [
     "DisplayRefresh"
    ],
+   "value": {
+    "min": 1,
+    "max": 7
+   },
    "kind": "number"
   },
   {
@@ -2152,6 +2307,10 @@
    "keys": [
     "DisplayRotate"
    ],
+   "value": {
+    "min": 0,
+    "max": 3
+   },
    "kind": "number"
   },
   {
@@ -2166,6 +2325,10 @@
    "keys": [
     "DisplayRows"
    ],
+   "value": {
+    "min": 1,
+    "max": 64
+   },
    "kind": "number"
   },
   {
@@ -2236,6 +2399,10 @@
    "keys": [
     "DisplaySize"
    ],
+   "value": {
+    "min": 1,
+    "max": 4
+   },
    "kind": "number"
   },
   {
@@ -2282,6 +2449,10 @@
    "keys": [
     "DisplayType"
    ],
+   "value": {
+    "min": 0,
+    "max": 7
+   },
    "kind": "number"
   },
   {
@@ -2309,6 +2480,10 @@
    "keys": [
     "DnsTimeout"
    ],
+   "value": {
+    "min": 100,
+    "max": 20000
+   },
    "kind": "number"
   },
   {
@@ -2693,6 +2868,10 @@
    "keys": [
     "DzUpdateTimer"
    ],
+   "value": {
+    "min": 0,
+    "max": 3600
+   },
    "kind": "number"
   },
   {
@@ -2708,6 +2887,10 @@
    "keys": [
     "DzUpdateTimer"
    ],
+   "value": {
+    "min": 0,
+    "max": 3600
+   },
    "kind": "number"
   },
   {
@@ -2754,6 +2937,10 @@
    "keys": [
     "EnergyCols"
    ],
+   "value": {
+    "min": 1,
+    "max": 8
+   },
    "kind": "number"
   },
   {
@@ -2885,6 +3072,10 @@
    "keys": [
     "EnergyRes"
    ],
+   "value": {
+    "min": 0,
+    "max": 5
+   },
    "kind": "number"
   },
   {
@@ -3077,6 +3268,10 @@
    "keys": [
     "EthClockMode"
    ],
+   "value": {
+    "min": 0,
+    "max": 3
+   },
    "kind": "number"
   },
   {
@@ -3110,6 +3305,10 @@
    "keys": [
     "Ethernet"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -3347,6 +3546,10 @@
    "keys": [
     "Fade"
    ],
+   "value": {
+    "min": 0,
+    "max": 2
+   },
    "kind": "state"
   },
   {
@@ -3360,6 +3563,10 @@
    "keys": [
     "FanSpeed"
    ],
+   "value": {
+    "min": 0,
+    "max": 3
+   },
    "kind": "number"
   },
   {
@@ -3445,6 +3652,10 @@
    "keys": [
     "FlashMode"
    ],
+   "value": {
+    "min": 0,
+    "max": 3
+   },
    "kind": "number"
   },
   {
@@ -3498,6 +3709,10 @@
    "keys": [
     "FpDelete"
    ],
+   "value": {
+    "min": 1,
+    "max": 128
+   },
    "kind": "text"
   },
   {
@@ -3512,6 +3727,10 @@
    "keys": [
     "FpEnroll"
    ],
+   "value": {
+    "min": 1,
+    "max": 128
+   },
    "kind": "text",
    "loose": "some paths clear the reply (ResponseClear): the answer is published by other code or by other commands"
   },
@@ -3644,6 +3863,10 @@
    "keys": [
     "FreqRes"
    ],
+   "value": {
+    "min": 0,
+    "max": 3
+   },
    "kind": "number"
   },
   {
@@ -3706,6 +3929,9 @@
     "ESP32",
     "USE_ENERGY_SENSOR"
    ],
+   "index": {
+    "max": "Energy"
+   },
    "keys": [
     "FrequencySetCal"
    ],
@@ -3830,6 +4056,11 @@
     "GlobalHum<n>",
     "GlobalHum"
    ],
+   "value": {
+    "min": 0,
+    "max": 250
+   },
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -3845,6 +4076,11 @@
     "GlobalPress<n>",
     "GlobalPress"
    ],
+   "value": {
+    "min": 0,
+    "max": 250
+   },
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -3860,6 +4096,11 @@
     "GlobalTemp<n>",
     "GlobalTemp"
    ],
+   "value": {
+    "min": 0,
+    "max": 250
+   },
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -3920,6 +4161,10 @@
    "keys": [
     "GM861Zone<n>"
    ],
+   "value": {
+    "min": 0,
+    "max": 2500
+   },
    "kind": "number",
    "loose": "some paths clear the reply (ResponseClear): the answer is published by other code or by other commands"
   },
@@ -3937,6 +4182,10 @@
    "keys": [
     "GPIO"
    ],
+   "value": {
+    "min": 10,
+    "max": 12
+   },
    "kind": "mixed",
    "loose": "a reply key ends in a number chosen at run time: GPIO<#>"
   },
@@ -3998,6 +4247,10 @@
    "keys": [
     "GVPort"
    ],
+   "value": {
+    "min": 1,
+    "max": 65535
+   },
    "kind": "number"
   },
   {
@@ -4012,6 +4265,10 @@
    "keys": [
     "GVSampling"
    ],
+   "value": {
+    "min": 20,
+    "max": 1000
+   },
    "kind": "number"
   },
   {
@@ -4040,6 +4297,10 @@
    "keys": [
     "GVViewer"
    ],
+   "value": {
+    "min": 0,
+    "max": 2
+   },
    "kind": "text"
   },
   {
@@ -4380,6 +4641,7 @@
    "keys": [
     "HumOffset"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -4393,6 +4655,10 @@
    "keys": [
     "HumRes"
    ],
+   "value": {
+    "min": 0,
+    "max": 3
+   },
    "kind": "number"
   },
   {
@@ -4488,6 +4754,7 @@
    "keys": [
     "HVACRemoteTemp"
    ],
+   "decimal": true,
    "kind": "mixed"
   },
   {
@@ -4867,6 +5134,10 @@
    "keys": [
     "I2SGain"
    ],
+   "value": {
+    "min": 0,
+    "max": 100
+   },
    "kind": "number"
   },
   {
@@ -5015,6 +5286,10 @@
    "keys": [
     "I2SStream"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "number"
   },
   {
@@ -5151,6 +5426,10 @@
    "keys": [
     "Ifx"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "object"
   },
   {
@@ -5265,6 +5544,10 @@
    "keys": [
     "IfxPeriod"
    ],
+   "value": {
+    "min": 0,
+    "max": 3600
+   },
    "kind": "number"
   },
   {
@@ -5279,6 +5562,10 @@
    "keys": [
     "IfxPort"
    ],
+   "value": {
+    "min": 1,
+    "max": 65535
+   },
    "kind": "number"
   },
   {
@@ -5307,6 +5594,10 @@
    "keys": [
     "IfxSensor"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -5363,6 +5654,10 @@
    "keys": [
     "InfoRetain"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state",
    "loose": "some paths clear the reply (ResponseClear): the answer is published by other code or by other commands"
   },
@@ -5460,6 +5755,9 @@
    "requires": [
     "defined(USE_IR_REMOTE) && !defined(USE_IR_REMOTE_FULL)"
    ],
+   "index": {
+    "min": "repeat+1"
+   },
    "keys": [
     "IRSend"
    ],
@@ -5476,6 +5774,9 @@
    "requires": [
     "USE_IR_REMOTE_FULL"
    ],
+   "index": {
+    "min": "1"
+   },
    "keys": [
     "IRSend",
     "IRHVAC"
@@ -5514,6 +5815,10 @@
    "keys": [
     "JsonPP"
    ],
+   "value": {
+    "min": 0,
+    "max": 7
+   },
    "kind": "number",
    "loose": "some paths clear the reply (ResponseClear): the answer is published by other code or by other commands"
   },
@@ -5589,6 +5894,10 @@
    "keys": [
     "Knx_Enabled"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "text"
   },
   {
@@ -5603,6 +5912,10 @@
    "keys": [
     "Knx_Enhanced"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "text"
   },
   {
@@ -5768,6 +6081,7 @@
    "keys": [
     "Latitude"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -5969,6 +6283,10 @@
    "keys": [
     "LD2410"
    ],
+   "value": {
+    "min": 1,
+    "max": 65535
+   },
    "kind": "object",
    "via": [
     "Ld2410Response"
@@ -6266,6 +6584,10 @@
    "keys": [
     "LedPower<n>"
    ],
+   "value": {
+    "min": 0,
+    "max": 2
+   },
    "kind": "text"
   },
   {
@@ -6283,6 +6605,10 @@
    "keys": [
     "LedPwmMode<n>"
    ],
+   "value": {
+    "min": 0,
+    "max": 2
+   },
    "kind": "text"
   },
   {
@@ -6335,6 +6661,10 @@
    "keys": [
     "LedTable"
    ],
+   "value": {
+    "min": 0,
+    "max": 2
+   },
    "kind": "state"
   },
   {
@@ -6361,6 +6691,10 @@
    "keys": [
     "LogPort"
    ],
+   "value": {
+    "min": 1,
+    "max": 65535
+   },
    "kind": "number"
   },
   {
@@ -6375,6 +6709,7 @@
    "keys": [
     "Longitude"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -6597,6 +6932,10 @@
    "keys": [
     "MagicSwitchPulse"
    ],
+   "value": {
+    "min": 1000,
+    "max": 499999
+   },
    "kind": "number"
   },
   {
@@ -6611,6 +6950,10 @@
    "keys": [
     "MagicSwitchWindow"
    ],
+   "value": {
+    "min": 1,
+    "max": 255
+   },
    "kind": "number"
   },
   {
@@ -6655,7 +6998,10 @@
     "ESP32",
     "USE_ENERGY_SENSOR"
    ],
-   "index": {},
+   "index": {
+    "min": "0",
+    "max": "8"
+   },
    "keys": [
     "MaxEnergy",
     "MaxEnergy<n>"
@@ -6694,6 +7040,10 @@
     "ESP32",
     "USE_ENERGY_SENSOR"
    ],
+   "index": {
+    "min": "0",
+    "max": "8"
+   },
    "keys": [
     "MaxEnergyStart",
     "MaxEnergyStart<n>"
@@ -6732,6 +7082,10 @@
     "ESP32",
     "USE_ENERGY_SENSOR"
    ],
+   "index": {
+    "min": "0",
+    "max": "8"
+   },
    "keys": [
     "MaxPower",
     "MaxPower<n>"
@@ -6770,6 +7124,10 @@
     "ESP32",
     "USE_ENERGY_SENSOR"
    ],
+   "index": {
+    "min": "0",
+    "max": "8"
+   },
    "keys": [
     "MaxPowerHold",
     "MaxPowerHold<n>"
@@ -6808,6 +7166,10 @@
     "ESP32",
     "USE_ENERGY_SENSOR"
    ],
+   "index": {
+    "min": "0",
+    "max": "8"
+   },
    "keys": [
     "MaxPowerWindow",
     "MaxPowerWindow<n>"
@@ -6901,6 +7263,10 @@
    "keys": [
     "MeshChannel"
    ],
+   "value": {
+    "min": 1,
+    "max": 13
+   },
    "kind": "number"
   },
   {
@@ -6915,6 +7281,10 @@
    "keys": [
     "MeshInterval"
    ],
+   "value": {
+    "min": 2,
+    "max": 200
+   },
    "kind": "number"
   },
   {
@@ -7253,6 +7623,10 @@
    "keys": [
     "ModbusSerialConfig"
    ],
+   "value": {
+    "min": 5,
+    "max": 8
+   },
    "kind": "text"
   },
   {
@@ -7348,6 +7722,10 @@
    "keys": [
     "ModuleAddress"
    ],
+   "value": {
+    "min": 1,
+    "max": 3
+   },
    "kind": "text"
   },
   {
@@ -7362,6 +7740,10 @@
    "keys": [
     "ModuleAddress"
    ],
+   "value": {
+    "min": 1,
+    "max": 8
+   },
    "kind": "text"
   },
   {
@@ -7546,6 +7928,10 @@
    "keys": [
     "MqttKeepAlive"
    ],
+   "value": {
+    "min": 1,
+    "max": 100
+   },
    "kind": "number"
   },
   {
@@ -7601,6 +7987,10 @@
    "keys": [
     "MqttPort"
    ],
+   "value": {
+    "min": 1,
+    "max": 65535
+   },
    "kind": "number"
   },
   {
@@ -7614,6 +8004,10 @@
    "keys": [
     "MqttRetry"
    ],
+   "value": {
+    "min": 10,
+    "max": 32000
+   },
    "kind": "number"
   },
   {
@@ -7627,6 +8021,10 @@
    "keys": [
     "MqttTimeout"
    ],
+   "value": {
+    "min": 1,
+    "max": 100
+   },
    "kind": "number"
   },
   {
@@ -7685,6 +8083,10 @@
    "keys": [
     "MqttWifiTimeout"
    ],
+   "value": {
+    "min": 100,
+    "max": 20000
+   },
    "kind": "number"
   },
   {
@@ -7816,6 +8218,10 @@
    "keys": [
     "NPCLRes"
    ],
+   "value": {
+    "min": 0,
+    "max": 3
+   },
    "kind": "number"
   },
   {
@@ -7920,6 +8326,10 @@
     "NPFiltrationspeed",
     "Command"
    ],
+   "value": {
+    "min": 1,
+    "max": 3
+   },
    "kind": "mixed",
    "via": [
     "NeopoolResponseError",
@@ -7939,6 +8349,10 @@
    "keys": [
     "NPgPerh"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "number"
   },
   {
@@ -7998,6 +8412,10 @@
    "keys": [
     "NPIONRes"
    ],
+   "value": {
+    "min": 0,
+    "max": 3
+   },
    "kind": "number"
   },
   {
@@ -8031,6 +8449,10 @@
    "keys": [
     "NPOnError"
    ],
+   "value": {
+    "min": 0,
+    "max": 10
+   },
    "kind": "number"
   },
   {
@@ -8111,6 +8533,10 @@
    "keys": [
     "NPPHRes"
    ],
+   "value": {
+    "min": 0,
+    "max": 3
+   },
    "kind": "number"
   },
   {
@@ -8258,6 +8684,10 @@
    "keys": [
     "NPSetOption<n>"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "text"
   },
   {
@@ -8276,6 +8706,10 @@
    "keys": [
     "NPSO<n>"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "text"
   },
   {
@@ -8290,6 +8724,10 @@
    "keys": [
     "NPTelePeriod"
    ],
+   "value": {
+    "min": 5,
+    "max": 3600
+   },
    "kind": "number"
   },
   {
@@ -8493,6 +8931,7 @@
     "ot_tboiler<n>",
     "ot_tboiler"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -8507,6 +8946,7 @@
    "keys": [
     "ot_twater"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -8580,6 +9020,10 @@
    "keys": [
     "PDCurrent"
    ],
+   "value": {
+    "min": 1250,
+    "max": 5000
+   },
    "kind": "number"
   },
   {
@@ -8595,6 +9039,10 @@
    "keys": [
     "PDOutput"
    ],
+   "value": {
+    "min": 0,
+    "max": 2
+   },
    "kind": "text"
   },
   {
@@ -8610,6 +9058,10 @@
    "keys": [
     "PDVoltage"
    ],
+   "value": {
+    "min": 3300,
+    "max": 20000
+   },
    "kind": "number"
   },
   {
@@ -8658,6 +9110,7 @@
    "keys": [
     "PidDSmooth"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -8688,6 +9141,7 @@
    "keys": [
     "PidManualPower"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -8718,6 +9172,7 @@
    "keys": [
     "PidPb"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -8733,6 +9188,7 @@
    "keys": [
     "PidPv"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -8763,6 +9219,7 @@
    "keys": [
     "PidSp"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -8778,6 +9235,7 @@
    "keys": [
     "PidTd"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -8793,6 +9251,7 @@
    "keys": [
     "PidTi"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -9034,6 +9493,10 @@
    "keys": [
     "PipSolarSerialConfig"
    ],
+   "value": {
+    "min": 5,
+    "max": 8
+   },
    "kind": "text"
   },
   {
@@ -9049,6 +9512,10 @@
    "keys": [
     "Pixels"
    ],
+   "value": {
+    "min": 1,
+    "max": 512
+   },
    "kind": "number"
   },
   {
@@ -9082,6 +9549,10 @@
    "keys": [
     "PixelType"
    ],
+   "value": {
+    "min": 0,
+    "max": 31
+   },
    "kind": "number"
   },
   {
@@ -9149,6 +9620,10 @@
    "keys": [
     "PowerDelta<n>"
    ],
+   "value": {
+    "min": 0,
+    "max": 32000
+   },
    "kind": "number"
   },
   {
@@ -9160,6 +9635,10 @@
     "ESP32",
     "USE_ENERGY_SENSOR"
    ],
+   "index": {
+    "min": "0",
+    "max": "8"
+   },
    "keys": [
     "PowerDelta",
     "PowerDelta<n>"
@@ -9197,6 +9676,10 @@
     "ESP32",
     "USE_ENERGY_SENSOR"
    ],
+   "index": {
+    "min": "0",
+    "max": "8"
+   },
    "keys": [
     "PowerHigh",
     "PowerHigh<n>"
@@ -9250,6 +9733,10 @@
     "ESP32",
     "USE_ENERGY_SENSOR"
    ],
+   "index": {
+    "min": "0",
+    "max": "8"
+   },
    "keys": [
     "PowerLow",
     "PowerLow<n>"
@@ -9299,6 +9786,10 @@
    "keys": [
     "PowerRetain"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state",
    "loose": "some paths clear the reply (ResponseClear): the answer is published by other code or by other commands"
   },
@@ -9329,6 +9820,9 @@
     "ESP32",
     "USE_ENERGY_SENSOR"
    ],
+   "index": {
+    "min": "1"
+   },
    "keys": [
     "PowerSetCal"
    ],
@@ -9374,6 +9868,10 @@
    "keys": [
     "PressRes"
    ],
+   "value": {
+    "min": 0,
+    "max": 3
+   },
    "kind": "number"
   },
   {
@@ -9419,6 +9917,10 @@
    "keys": [
     "PulseTime"
    ],
+   "value": {
+    "min": 0,
+    "max": 65535
+   },
    "kind": "object",
    "loose": "a reply key ends in a number chosen at run time: <cmd><#>"
   },
@@ -9494,6 +9996,10 @@
    "keys": [
     "PWMRange"
    ],
+   "value": {
+    "min": 255,
+    "max": 1023
+   },
    "kind": "number"
   },
   {
@@ -9787,6 +10293,10 @@
    "keys": [
     "RgxNAPT"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -9851,6 +10361,10 @@
    "keys": [
     "RgxState"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -9939,6 +10453,10 @@
     "!USE_SCRIPT"
    ],
    "index": {},
+   "value": {
+    "min": 0,
+    "max": 10
+   },
    "loose": "a reply key ends in a number chosen at run time: <cmd><#>; some paths clear the reply (ResponseClear): the answer is published by other code or by other commands"
   },
   {
@@ -9966,6 +10484,10 @@
    "keys": [
     "SaveData"
    ],
+   "value": {
+    "min": 0,
+    "max": 3600
+   },
    "kind": "text"
   },
   {
@@ -10030,6 +10552,10 @@
    "keys": [
     "Scd30Auto"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "mixed",
    "via": [
     "CmndScd30Error"
@@ -10048,6 +10574,10 @@
    "keys": [
     "Scd30Cal"
    ],
+   "value": {
+    "min": 400,
+    "max": 2000
+   },
    "kind": "mixed",
    "via": [
     "CmndScd30Error"
@@ -10066,6 +10596,10 @@
    "keys": [
     "Scd30Int"
    ],
+   "value": {
+    "min": 2,
+    "max": 1800
+   },
    "kind": "mixed",
    "via": [
     "CmndScd30Error"
@@ -10084,6 +10618,10 @@
    "keys": [
     "Scd30Pres"
    ],
+   "value": {
+    "min": 700,
+    "max": 1400
+   },
    "kind": "mixed",
    "via": [
     "CmndScd30Error"
@@ -10102,6 +10640,11 @@
    "keys": [
     "Scd30TOff"
    ],
+   "value": {
+    "min": 0,
+    "max": 20
+   },
+   "decimal": true,
    "kind": "mixed",
    "via": [
     "CmndScd30Error"
@@ -10120,6 +10663,10 @@
    "keys": [
     "Scd40Alt"
    ],
+   "value": {
+    "min": 0,
+    "max": 3000
+   },
    "kind": "mixed",
    "via": [
     "CmndScd40Error"
@@ -10138,6 +10685,10 @@
    "keys": [
     "Scd40Auto"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "mixed",
    "via": [
     "CmndScd40Error"
@@ -10210,6 +10761,10 @@
    "keys": [
     "Scd40Pres"
    ],
+   "value": {
+    "min": 700,
+    "max": 1200
+   },
    "kind": "mixed",
    "via": [
     "CmndScd40Error"
@@ -10348,6 +10903,11 @@
    "keys": [
     "Scd40TOff"
    ],
+   "value": {
+    "min": 0,
+    "max": 20
+   },
+   "decimal": true,
    "kind": "mixed",
    "via": [
     "CmndScd40Error"
@@ -10429,6 +10989,10 @@
     "Sen6xAlt",
     "SEN6x"
    ],
+   "value": {
+    "min": 0,
+    "max": 3000
+   },
    "kind": "object",
    "via": [
     "CmndSen6xError",
@@ -10525,6 +11089,10 @@
     "Sen6xPres",
     "SEN6x"
    ],
+   "value": {
+    "min": 700,
+    "max": 1200
+   },
    "kind": "object",
    "via": [
     "CmndSen6xError",
@@ -10666,6 +11234,10 @@
    "keys": [
     "SensorRetain"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state",
    "loose": "also publishes on topics of its own (stat/<topic>/SENSOR, ENERGY); some paths clear the reply (ResponseClear): the answer is published by other code or by other commands"
   },
@@ -10723,6 +11295,10 @@
    "keys": [
     "SerialConfig"
    ],
+   "value": {
+    "min": 5,
+    "max": 8
+   },
    "kind": "text"
   },
   {
@@ -10773,6 +11349,9 @@
    "requires": [
     "!FIRMWARE_MINIMAL"
    ],
+   "index": {
+    "max": "177"
+   },
    "keys": [
     "SetOption32_49"
    ],
@@ -11033,7 +11612,10 @@
     "ESP32",
     "USE_SHUTTER"
    ],
-   "index": {},
+   "index": {
+    "min": "1",
+    "max": "TasmotaGlobal.shutters_present"
+   },
    "loose": "no reply call found in the handler or the functions it calls (it may dispatch through XdrvCall or a function pointer)"
   },
   {
@@ -11046,7 +11628,10 @@
     "ESP8266",
     "USE_SHUTTER"
    ],
-   "index": {},
+   "index": {
+    "min": "1",
+    "max": "TasmotaGlobal.shutters_present"
+   },
    "loose": "no reply call found in the handler or the functions it calls (it may dispatch through XdrvCall or a function pointer)"
   },
   {
@@ -11066,6 +11651,7 @@
    "keys": [
     "ShutterCloseDuration<n>"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -11085,6 +11671,7 @@
    "keys": [
     "ShutterCloseDuration<n>"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -11097,6 +11684,10 @@
     "ESP32",
     "USE_SHUTTER"
    ],
+   "index": {
+    "min": "1",
+    "max": "TasmotaGlobal.shutters_present"
+   },
    "keys": [
     "ShutterCloseEndStopTime<n>"
    ],
@@ -11115,6 +11706,10 @@
     "ESP8266",
     "USE_SHUTTER"
    ],
+   "index": {
+    "min": "1",
+    "max": "TasmotaGlobal.shutters_present"
+   },
    "keys": [
     "ShutterCloseEndStopTime<n>"
    ],
@@ -11136,6 +11731,10 @@
    "keys": [
     "ShutterFrequency"
    ],
+   "value": {
+    "min": 1,
+    "max": 20000
+   },
    "kind": "number"
   },
   {
@@ -11151,6 +11750,10 @@
    "keys": [
     "ShutterFrequency"
    ],
+   "value": {
+    "min": 1,
+    "max": 20000
+   },
    "kind": "number"
   },
   {
@@ -11163,6 +11766,10 @@
     "ESP32",
     "USE_SHUTTER"
    ],
+   "index": {
+    "min": "1",
+    "max": "TasmotaGlobal.shutters_present"
+   },
    "keys": [
     "ShutterInvert<n>"
    ],
@@ -11181,6 +11788,10 @@
     "ESP8266",
     "USE_SHUTTER"
    ],
+   "index": {
+    "min": "1",
+    "max": "TasmotaGlobal.shutters_present"
+   },
    "keys": [
     "ShutterInvert<n>"
    ],
@@ -11199,6 +11810,10 @@
     "ESP32",
     "USE_SHUTTER"
    ],
+   "index": {
+    "min": "1",
+    "max": "TasmotaGlobal.shutters_present"
+   },
    "keys": [
     "ShutterInvertWebButtons<n>"
    ],
@@ -11217,6 +11832,10 @@
     "ESP8266",
     "USE_SHUTTER"
    ],
+   "index": {
+    "min": "1",
+    "max": "TasmotaGlobal.shutters_present"
+   },
    "keys": [
     "ShutterInvertWebButtons<n>"
    ],
@@ -11235,6 +11854,10 @@
     "ESP32",
     "USE_SHUTTER"
    ],
+   "index": {
+    "min": "1",
+    "max": "TasmotaGlobal.shutters_present"
+   },
    "keys": [
     "ShutterLock<n>"
    ],
@@ -11253,6 +11876,10 @@
     "ESP8266",
     "USE_SHUTTER"
    ],
+   "index": {
+    "min": "1",
+    "max": "TasmotaGlobal.shutters_present"
+   },
    "keys": [
     "ShutterLock<n>"
    ],
@@ -11274,6 +11901,10 @@
    "keys": [
     "ShutterMode"
    ],
+   "value": {
+    "min": 0,
+    "max": 8
+   },
    "kind": "number",
    "indexed": {
     "loose": "no reply call found in the handler or the functions it calls (it may dispatch through XdrvCall or a function pointer)"
@@ -11292,6 +11923,10 @@
    "keys": [
     "ShutterMode"
    ],
+   "value": {
+    "min": 0,
+    "max": 8
+   },
    "kind": "number",
    "indexed": {
     "loose": "no reply call found in the handler or the functions it calls (it may dispatch through XdrvCall or a function pointer)"
@@ -11314,6 +11949,7 @@
    "keys": [
     "ShutterMotorDelay<n>"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -11333,6 +11969,7 @@
    "keys": [
     "ShutterMotorDelay<n>"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -11381,7 +12018,10 @@
     "ESP32",
     "USE_SHUTTER"
    ],
-   "index": {},
+   "index": {
+    "min": "1",
+    "max": "TasmotaGlobal.shutters_present"
+   },
    "keys": [
     "ShutterOpen",
     "ShutterOpen<n>"
@@ -11413,7 +12053,10 @@
     "ESP8266",
     "USE_SHUTTER"
    ],
-   "index": {},
+   "index": {
+    "min": "1",
+    "max": "TasmotaGlobal.shutters_present"
+   },
    "keys": [
     "ShutterOpen",
     "ShutterOpen<n>"
@@ -11452,6 +12095,7 @@
    "keys": [
     "ShutterOpenDuration<n>"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -11471,6 +12115,7 @@
    "keys": [
     "ShutterOpenDuration<n>"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -11483,6 +12128,10 @@
     "ESP32",
     "USE_SHUTTER"
    ],
+   "index": {
+    "min": "1",
+    "max": "TasmotaGlobal.shutters_present"
+   },
    "keys": [
     "ShutterOpenEndStopTime<n>"
    ],
@@ -11501,6 +12150,10 @@
     "ESP8266",
     "USE_SHUTTER"
    ],
+   "index": {
+    "min": "1",
+    "max": "TasmotaGlobal.shutters_present"
+   },
    "keys": [
     "ShutterOpenEndStopTime<n>"
    ],
@@ -11628,6 +12281,10 @@
    "index": {
     "max": "16"
    },
+   "value": {
+    "min": 0,
+    "max": 32
+   },
    "loose": "a reply key ends in a number chosen at run time: ShutterRelay<#>"
   },
   {
@@ -11643,6 +12300,10 @@
    "index": {
     "max": "4"
    },
+   "value": {
+    "min": 0,
+    "max": 32
+   },
    "loose": "a reply key ends in a number chosen at run time: ShutterRelay<#>"
   },
   {
@@ -11655,6 +12316,10 @@
     "ESP32",
     "USE_SHUTTER"
    ],
+   "index": {
+    "min": "1",
+    "max": "TasmotaGlobal.shutters_present"
+   },
    "keys": [
     "ShutterSetClose<n>"
    ],
@@ -11717,6 +12382,10 @@
    "keys": [
     "ShutterSetHalfway<n>"
    ],
+   "value": {
+    "min": 0,
+    "max": 100
+   },
    "kind": "number"
   },
   {
@@ -11736,6 +12405,10 @@
    "keys": [
     "ShutterSetHalfway<n>"
    ],
+   "value": {
+    "min": 0,
+    "max": 100
+   },
    "kind": "number"
   },
   {
@@ -11748,6 +12421,10 @@
     "ESP32",
     "USE_SHUTTER"
    ],
+   "index": {
+    "min": "1",
+    "max": "TasmotaGlobal.shutters_present"
+   },
    "keys": [
     "ShutterSetOpen<n>"
    ],
@@ -12109,6 +12786,10 @@
     "ESP32",
     "USE_SHUTTER"
    ],
+   "index": {
+    "min": "1",
+    "max": "TasmotaGlobal.shutters_present"
+   },
    "keys": [
     "ShutterStopRelay<n>"
    ],
@@ -12407,6 +13088,10 @@
     "ESP32",
     "USE_SHUTTER"
    ],
+   "index": {
+    "min": "1",
+    "max": "TasmotaGlobal.shutters_present"
+   },
    "loose": "no reply call found in the handler or the functions it calls (it may dispatch through XdrvCall or a function pointer)"
   },
   {
@@ -12419,6 +13104,10 @@
     "ESP8266",
     "USE_SHUTTER"
    ],
+   "index": {
+    "min": "1",
+    "max": "TasmotaGlobal.shutters_present"
+   },
    "loose": "no reply call found in the handler or the functions it calls (it may dispatch through XdrvCall or a function pointer)"
   },
   {
@@ -12431,6 +13120,10 @@
     "ESP32",
     "USE_SHUTTER"
    ],
+   "index": {
+    "min": "1",
+    "max": "TasmotaGlobal.shutters_present"
+   },
    "loose": "no reply call found in the handler or the functions it calls (it may dispatch through XdrvCall or a function pointer)"
   },
   {
@@ -12443,6 +13136,10 @@
     "ESP8266",
     "USE_SHUTTER"
    ],
+   "index": {
+    "min": "1",
+    "max": "TasmotaGlobal.shutters_present"
+   },
    "loose": "no reply call found in the handler or the functions it calls (it may dispatch through XdrvCall or a function pointer)"
   },
   {
@@ -12482,6 +13179,10 @@
    "keys": [
     "Sleep"
    ],
+   "value": {
+    "min": 0,
+    "max": 250
+   },
    "kind": "object"
   },
   {
@@ -12492,6 +13193,9 @@
    "requires": [
     "!FIRMWARE_MINIMAL"
    ],
+   "index": {
+    "max": "177"
+   },
    "keys": [
     "SetOption32_49"
    ],
@@ -12534,6 +13238,10 @@
     "Speed",
     "Speed<n>"
    ],
+   "value": {
+    "min": 0,
+    "max": 40
+   },
    "kind": "mixed"
   },
   {
@@ -12547,6 +13255,10 @@
    "keys": [
     "SpeedUnit"
    ],
+   "value": {
+    "min": 0,
+    "max": 6
+   },
    "kind": "number"
   },
   {
@@ -12576,6 +13288,10 @@
    "keys": [
     "SSerialConfig"
    ],
+   "value": {
+    "min": 5,
+    "max": 8
+   },
    "kind": "text"
   },
   {
@@ -12662,6 +13378,10 @@
    "keys": [
     "SSPMDump"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "number"
   },
   {
@@ -12702,6 +13422,7 @@
    "keys": [
     "SSPMEnergyTotal"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -12722,6 +13443,7 @@
    "keys": [
     "SSPMEnergyYesterday"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -12828,6 +13550,10 @@
    "keys": [
     "SSPMPowerOnState"
    ],
+   "value": {
+    "min": 0,
+    "max": 2
+   },
    "kind": "array"
   },
   {
@@ -12893,6 +13619,10 @@
    "keys": [
     "SSPMSimulate"
    ],
+   "value": {
+    "min": 0,
+    "max": 7
+   },
    "kind": "number"
   },
   {
@@ -12936,6 +13666,10 @@
    "keys": [
     "StateRetain"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state",
    "loose": "also publishes on topics of its own (stat/<topic>/STATE); some paths clear the reply (ResponseClear): the answer is published by other code or by other commands"
   },
@@ -13017,6 +13751,10 @@
    "keys": [
     "StatusRetain"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state",
    "loose": "also publishes on topics of its own (stat/<topic>/Status); some paths clear the reply (ResponseClear): the answer is published by other code or by other commands"
   },
@@ -13088,6 +13826,10 @@
    "keys": [
     "StepPixels"
    ],
+   "value": {
+    "min": 0,
+    "max": 255
+   },
    "kind": "number"
   },
   {
@@ -13103,6 +13845,10 @@
    "keys": [
     "StepPixels"
    ],
+   "value": {
+    "min": 0,
+    "max": 255
+   },
    "kind": "number"
   },
   {
@@ -13152,6 +13898,10 @@
    "keys": [
     "Sunrise"
    ],
+   "value": {
+    "min": 0,
+    "max": 3
+   },
    "kind": "number"
   },
   {
@@ -13165,6 +13915,10 @@
    "keys": [
     "SwitchDebounce"
    ],
+   "value": {
+    "min": 40,
+    "max": 1009
+   },
    "kind": "number"
   },
   {
@@ -13196,6 +13950,10 @@
    "keys": [
     "SwitchRetain"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state",
    "via": [
     "SendKey",
@@ -13352,6 +14110,10 @@
    "keys": [
     "TelePeriod"
    ],
+   "value": {
+    "min": 0,
+    "max": 3600
+   },
    "kind": "number"
   },
   {
@@ -13412,6 +14174,7 @@
    "keys": [
     "TempAntiWindupResetSet<n>"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -13430,6 +14193,7 @@
    "keys": [
     "TempAntiWindupResetSet<n>"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -13464,6 +14228,7 @@
    "keys": [
     "TempFrostProtectSet<n>"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -13482,6 +14247,7 @@
    "keys": [
     "TempHystSet<n>"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -13500,6 +14266,7 @@
    "keys": [
     "TempHystSet<n>"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -13540,6 +14307,7 @@
    "keys": [
     "TempMeasuredGrdRead<n>"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -13557,6 +14325,7 @@
    "keys": [
     "TempMeasuredSet<n>"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -13570,6 +14339,7 @@
    "keys": [
     "TempOffset"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -13587,6 +14357,7 @@
    "keys": [
     "TempRampupPiAccErrSet<n>"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -13600,6 +14371,10 @@
    "keys": [
     "TempRes"
    ],
+   "value": {
+    "min": 0,
+    "max": 3
+   },
    "kind": "number"
   },
   {
@@ -13617,6 +14392,7 @@
    "keys": [
     "TempRupDeltInSet<n>"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -13634,6 +14410,7 @@
    "keys": [
     "TempRupDeltOutSet<n>"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -13651,6 +14428,7 @@
    "keys": [
     "TempTargetSet<n>"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -13664,6 +14442,10 @@
    "keys": [
     "TeraTerm"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -13696,6 +14478,10 @@
    "requires": [
     "!FIRMWARE_MINIMAL"
    ],
+   "value": {
+    "min": 1,
+    "max": 4
+   },
    "loose": "some paths clear the reply (ResponseClear): the answer is published by other code or by other commands"
   },
   {
@@ -13914,6 +14700,7 @@
    "keys": [
     "Timeprop_SetPower_"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -13971,6 +14758,7 @@
    "keys": [
     "TimepropSetFallbackPower"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -14020,6 +14808,10 @@
     "USE_TIMERS"
    ],
    "index": {},
+   "value": {
+    "min": 0,
+    "max": 16
+   },
    "loose": "a reply key ends in a number chosen at run time: Timer<#>; keys appended by PrepShowTimer are not read; reply has no literal top-level key"
   },
   {
@@ -14084,6 +14876,10 @@
    "keys": [
     "Timers"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "text",
    "loose": "keys appended by PrepShowTimer are not read"
   },
@@ -14192,6 +14988,10 @@
    "keys": [
     "TmPoll"
    ],
+   "value": {
+    "min": 4,
+    "max": 300
+   },
    "kind": "number"
   },
   {
@@ -14220,6 +15020,10 @@
    "keys": [
     "TmState"
    ],
+   "value": {
+    "min": 0,
+    "max": 7
+   },
    "kind": "object"
   },
   {
@@ -14563,7 +15367,9 @@
    "requires": [
     "USE_TUYAMCUBR"
    ],
-   "index": {},
+   "index": {
+    "min": "256"
+   },
    "keys": [
     "TuyaMCUBool",
     "TuyaMCU"
@@ -14584,6 +15390,9 @@
    "requires": [
     "USE_TUYAMCUBR"
    ],
+   "index": {
+    "min": "256"
+   },
    "keys": [
     "TuyaMCUEnum",
     "TuyaMCU"
@@ -14605,6 +15414,9 @@
    "requires": [
     "USE_TUYAMCUBR"
    ],
+   "index": {
+    "min": "256"
+   },
    "keys": [
     "TuyaMCUValue",
     "TuyaMCU"
@@ -14692,6 +15504,10 @@
    "keys": [
     "TuyaTempSetRes"
    ],
+   "value": {
+    "min": 0,
+    "max": 3
+   },
    "kind": "number"
   },
   {
@@ -14707,6 +15523,10 @@
    "keys": [
     "TuyaTempSetRes"
    ],
+   "value": {
+    "min": 0,
+    "max": 3
+   },
    "kind": "number"
   },
   {
@@ -14786,6 +15606,10 @@
    "keys": [
     "UfsFTP"
    ],
+   "value": {
+    "min": 0,
+    "max": 2
+   },
    "kind": "number"
   },
   {
@@ -15018,6 +15842,10 @@
     "ESP32",
     "USE_ENERGY_SENSOR"
    ],
+   "index": {
+    "min": "0",
+    "max": "8"
+   },
    "keys": [
     "VoltageHigh",
     "VoltageHigh<n>"
@@ -15055,6 +15883,10 @@
     "ESP32",
     "USE_ENERGY_SENSOR"
    ],
+   "index": {
+    "min": "0",
+    "max": "8"
+   },
    "keys": [
     "VoltageLow",
     "VoltageLow<n>"
@@ -15091,6 +15923,9 @@
     "ESP32",
     "USE_ENERGY_SENSOR"
    ],
+   "index": {
+    "max": "Energy"
+   },
    "keys": [
     "VoltageSetCal"
    ],
@@ -15110,6 +15945,10 @@
    "keys": [
     "VoltRes"
    ],
+   "value": {
+    "min": 0,
+    "max": 3
+   },
    "kind": "number"
   },
   {
@@ -15123,6 +15962,10 @@
    "keys": [
     "Wakeup"
    ],
+   "value": {
+    "min": 0,
+    "max": 100
+   },
    "kind": "text"
   },
   {
@@ -15136,6 +15979,10 @@
    "keys": [
     "WakeUpDuration"
    ],
+   "value": {
+    "min": 1,
+    "max": 3000
+   },
    "kind": "number"
   },
   {
@@ -15149,6 +15996,10 @@
    "keys": [
     "WattRes"
    ],
+   "value": {
+    "min": 0,
+    "max": 3
+   },
    "kind": "number"
   },
   {
@@ -15199,6 +16050,10 @@
    "keys": [
     "WCAEC"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -15215,6 +16070,10 @@
    "keys": [
     "WCAEC"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -15232,6 +16091,10 @@
    "keys": [
     "WCAECDSP"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -15248,6 +16111,10 @@
    "keys": [
     "WCAECDSP"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -15265,6 +16132,10 @@
    "keys": [
     "WCAECValue"
    ],
+   "value": {
+    "min": 0,
+    "max": 1200
+   },
    "kind": "number"
   },
   {
@@ -15281,6 +16152,10 @@
    "keys": [
     "WCAECValue"
    ],
+   "value": {
+    "min": 0,
+    "max": 1200
+   },
    "kind": "number"
   },
   {
@@ -15331,6 +16206,10 @@
    "keys": [
     "WCAGC"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -15347,6 +16226,10 @@
    "keys": [
     "WCAGC"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -15364,6 +16247,10 @@
    "keys": [
     "WCAGCGain"
    ],
+   "value": {
+    "min": 0,
+    "max": 30
+   },
    "kind": "number"
   },
   {
@@ -15380,6 +16267,10 @@
    "keys": [
     "WCAGCGain"
    ],
+   "value": {
+    "min": 0,
+    "max": 30
+   },
    "kind": "number"
   },
   {
@@ -15413,6 +16304,10 @@
    "keys": [
     "WCAuth"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "number"
   },
   {
@@ -15429,6 +16324,10 @@
    "keys": [
     "WCAuth"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "number"
   },
   {
@@ -15446,6 +16345,10 @@
    "keys": [
     "WCAWB"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -15462,6 +16365,10 @@
    "keys": [
     "WCAWB"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -15479,6 +16386,10 @@
    "keys": [
     "WCAWBGain"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -15495,6 +16406,10 @@
    "keys": [
     "WCAWBGain"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -15511,6 +16426,10 @@
    "keys": [
     "WCBerryframes"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -15528,6 +16447,10 @@
    "keys": [
     "WCBPC"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -15544,6 +16467,10 @@
    "keys": [
     "WCBPC"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -15594,6 +16521,10 @@
    "keys": [
     "WCClock"
    ],
+   "value": {
+    "min": 10,
+    "max": 200
+   },
    "kind": "number"
   },
   {
@@ -15610,6 +16541,10 @@
    "keys": [
     "WCClock"
    ],
+   "value": {
+    "min": 10,
+    "max": 200
+   },
    "kind": "number"
   },
   {
@@ -15627,6 +16562,10 @@
    "keys": [
     "WCColorbar"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -15643,6 +16582,10 @@
    "keys": [
     "WCColorbar"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -15726,6 +16669,10 @@
    "keys": [
     "WCDCW"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -15742,6 +16689,10 @@
    "keys": [
     "WCDCW"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -15759,6 +16710,10 @@
    "keys": [
     "WCFeature"
    ],
+   "value": {
+    "min": 0,
+    "max": 2
+   },
    "kind": "number"
   },
   {
@@ -15775,6 +16730,10 @@
    "keys": [
     "WCFeature"
    ],
+   "value": {
+    "min": 0,
+    "max": 2
+   },
    "kind": "number"
   },
   {
@@ -15792,6 +16751,10 @@
    "keys": [
     "WCFlip"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -15808,6 +16771,10 @@
    "keys": [
     "WCFlip"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -15825,6 +16792,10 @@
    "keys": [
     "WCGainCeiling"
    ],
+   "value": {
+    "min": 0,
+    "max": 6
+   },
    "kind": "number"
   },
   {
@@ -15841,6 +16812,10 @@
    "keys": [
     "WCGainCeiling"
    ],
+   "value": {
+    "min": 0,
+    "max": 6
+   },
    "kind": "number"
   },
   {
@@ -15858,6 +16833,10 @@
    "keys": [
     "WCGammaCorrect"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -15874,6 +16853,10 @@
    "keys": [
     "WCGammaCorrect"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -15973,6 +16956,10 @@
    "keys": [
     "WCInterrupt"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "number"
   },
   {
@@ -15990,6 +16977,10 @@
    "keys": [
     "WCLensCorrect"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -16006,6 +16997,10 @@
    "keys": [
     "WCLensCorrect"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -16022,6 +17017,10 @@
    "keys": [
     "WCMenuVideoDisable"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -16039,6 +17038,10 @@
    "keys": [
     "WCMirror"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -16055,6 +17058,10 @@
    "keys": [
     "WCMirror"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -16152,6 +17159,10 @@
    "keys": [
     "WCRtsp"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -16169,6 +17180,10 @@
    "keys": [
     "WCRtsp"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -16284,6 +17299,10 @@
    "keys": [
     "WCSetmotiondetect"
    ],
+   "value": {
+    "min": 0,
+    "max": 255
+   },
    "kind": "number"
   },
   {
@@ -16336,6 +17355,10 @@
    "keys": [
     "WCSpecialEffect"
    ],
+   "value": {
+    "min": 0,
+    "max": 6
+   },
    "kind": "number"
   },
   {
@@ -16352,6 +17375,10 @@
    "keys": [
     "WCSpecialEffect"
    ],
+   "value": {
+    "min": 0,
+    "max": 6
+   },
    "kind": "number"
   },
   {
@@ -16479,6 +17506,10 @@
    "keys": [
     "WCStream"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -16496,6 +17527,10 @@
    "keys": [
     "WCStream"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -16513,6 +17548,10 @@
    "keys": [
     "WCWBMode"
    ],
+   "value": {
+    "min": 0,
+    "max": 4
+   },
    "kind": "number"
   },
   {
@@ -16529,6 +17568,10 @@
    "keys": [
     "WCWBMode"
    ],
+   "value": {
+    "min": 0,
+    "max": 4
+   },
    "kind": "number"
   },
   {
@@ -16561,6 +17604,10 @@
    "keys": [
     "WCWPC"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -16577,6 +17624,10 @@
    "keys": [
     "WCWPC"
    ],
+   "value": {
+    "min": 0,
+    "max": 1
+   },
    "kind": "state"
   },
   {
@@ -16736,6 +17787,10 @@
    "keys": [
     "WebRefresh"
    ],
+   "value": {
+    "min": 400,
+    "max": 65000
+   },
    "kind": "number"
   },
   {
@@ -16796,6 +17851,10 @@
    "keys": [
     "Webserver"
    ],
+   "value": {
+    "min": 0,
+    "max": 2
+   },
    "kind": "mixed"
   },
   {
@@ -16824,6 +17883,10 @@
    "keys": [
     "WeightRes"
    ],
+   "value": {
+    "min": 0,
+    "max": 3
+   },
    "kind": "number"
   },
   {
@@ -16866,6 +17929,10 @@
    "keys": [
     "White"
    ],
+   "value": {
+    "min": 0,
+    "max": 100
+   },
    "kind": "number"
   },
   {
@@ -16901,6 +17968,10 @@
     "Width",
     "Width<n>"
    ],
+   "value": {
+    "min": 0,
+    "max": 4
+   },
    "kind": "number"
   },
   {
@@ -16921,6 +17992,10 @@
     "Width",
     "Width<n>"
    ],
+   "value": {
+    "min": 0,
+    "max": 4
+   },
    "kind": "number"
   },
   {
@@ -17069,6 +18144,7 @@
    "keys": [
     "WifiPower"
    ],
+   "decimal": true,
    "kind": "number"
   },
   {
@@ -17115,6 +18191,10 @@
    "keys": [
     "Wiper<n>"
    ],
+   "value": {
+    "min": 0,
+    "max": 127
+   },
    "kind": "number"
   },
   {
@@ -17863,5 +18943,1144 @@
    ],
    "loose": "name table (2 entries, 0 synonyms) and handler table (1 entries) never have the same length, e.g. 2 against 1 in the last configuration tried"
   }
- ]
+ ],
+ "builds": {
+  "esp32/FIRMWARE_BLUETOOTH": [
+   "USE_AC_ZERO_CROSS_DIMMER",
+   "USE_ADC",
+   "USE_BERRY",
+   "USE_BLE_ESP32",
+   "USE_BUZZER",
+   "USE_COUNTER",
+   "USE_DEEPSLEEP",
+   "USE_DEVICE_GROUPS",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_DHT",
+   "USE_DOMOTICZ",
+   "USE_DS18x20",
+   "USE_EMULATION",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_ENERGY_SENSOR",
+   "USE_EQ3_ESP32",
+   "USE_EXS_DIMMER",
+   "USE_GPIO_VIEWER",
+   "USE_I2C",
+   "USE_INFLUXDB",
+   "USE_IR_REMOTE",
+   "USE_LIGHT",
+   "USE_LIGHT_PALETTE",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_MI_ESP32",
+   "USE_MQTT_TLS",
+   "USE_PING",
+   "USE_PWM_DIMMER",
+   "USE_RULES",
+   "USE_SERIAL_BRIDGE",
+   "USE_SHELLY_DIMMER",
+   "USE_SHUTTER",
+   "USE_SONOFF_IFAN",
+   "USE_SONOFF_L1",
+   "USE_SONOFF_RF",
+   "USE_SPI",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TIMERS",
+   "USE_TUYA_MCU",
+   "USE_UFILESYS",
+   "USE_WEBSERVER",
+   "USE_WS2812",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp32/FIRMWARE_DISPLAYS": [
+   "USE_AC_ZERO_CROSS_DIMMER",
+   "USE_ADC",
+   "USE_BERRY",
+   "USE_COUNTER",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_DHT",
+   "USE_DISPLAY",
+   "USE_DS18x20",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_GPIO_VIEWER",
+   "USE_I2C",
+   "USE_IR_REMOTE",
+   "USE_LIGHT",
+   "USE_LIGHT_PALETTE",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_MQTT_TLS",
+   "USE_PING",
+   "USE_RULES",
+   "USE_SERIAL_BRIDGE",
+   "USE_SONOFF_L1",
+   "USE_SPI",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TIMERS",
+   "USE_TUYA_MCU",
+   "USE_UFILESYS",
+   "USE_WEBSERVER",
+   "USE_WS2812",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp32/FIRMWARE_IR": [
+   "USE_AC_ZERO_CROSS_DIMMER",
+   "USE_ADC",
+   "USE_BERRY",
+   "USE_COUNTER",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_DOMOTICZ",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_GPIO_VIEWER",
+   "USE_IR_REMOTE",
+   "USE_IR_REMOTE_FULL",
+   "USE_LIGHT",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_MQTT_TLS",
+   "USE_PING",
+   "USE_RULES",
+   "USE_SPI",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TIMERS",
+   "USE_UFILESYS",
+   "USE_WEBSERVER",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp32/FIRMWARE_KNX_NO_EMULATION": [
+   "USE_AC_ZERO_CROSS_DIMMER",
+   "USE_ADC",
+   "USE_BERRY",
+   "USE_BUZZER",
+   "USE_COUNTER",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_DHT",
+   "USE_DOMOTICZ",
+   "USE_DS18x20",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_ENERGY_SENSOR",
+   "USE_EXS_DIMMER",
+   "USE_GPIO_VIEWER",
+   "USE_I2C",
+   "USE_IR_REMOTE",
+   "USE_KNX",
+   "USE_LIGHT",
+   "USE_LIGHT_PALETTE",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_MQTT_TLS",
+   "USE_PING",
+   "USE_PWM_DIMMER",
+   "USE_RULES",
+   "USE_SERIAL_BRIDGE",
+   "USE_SHELLY_DIMMER",
+   "USE_SHUTTER",
+   "USE_SONOFF_IFAN",
+   "USE_SONOFF_L1",
+   "USE_SONOFF_RF",
+   "USE_SPI",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TIMERS",
+   "USE_TUYA_MCU",
+   "USE_UFILESYS",
+   "USE_WEBSERVER",
+   "USE_WS2812",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp32/FIRMWARE_LITE": [
+   "USE_ADC",
+   "USE_BERRY",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_EMULATION",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_GPIO_VIEWER",
+   "USE_LIGHT",
+   "USE_PING",
+   "USE_RULES",
+   "USE_SPI",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TIMERS",
+   "USE_TUYA_MCU",
+   "USE_UFILESYS",
+   "USE_WEBSERVER",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp32/FIRMWARE_LVGL": [
+   "USE_AC_ZERO_CROSS_DIMMER",
+   "USE_ADC",
+   "USE_BERRY",
+   "USE_BUZZER",
+   "USE_COUNTER",
+   "USE_DEEPSLEEP",
+   "USE_DEVICE_GROUPS",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_DHT",
+   "USE_DISPLAY",
+   "USE_DS18x20",
+   "USE_EMULATION",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_ENERGY_SENSOR",
+   "USE_GPIO_VIEWER",
+   "USE_I2C",
+   "USE_IR_REMOTE",
+   "USE_LIGHT",
+   "USE_LIGHT_PALETTE",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_MQTT_TLS",
+   "USE_PING",
+   "USE_RTC_CHIPS",
+   "USE_RULES",
+   "USE_SERIAL_BRIDGE",
+   "USE_SHUTTER",
+   "USE_SONOFF_L1",
+   "USE_SONOFF_RF",
+   "USE_SPI",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TIMERS",
+   "USE_TUYA_MCU",
+   "USE_UFILESYS",
+   "USE_WEBSERVER",
+   "USE_WS2812",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp32/FIRMWARE_MINICUSTOM": [
+   "USE_AC_ZERO_CROSS_DIMMER",
+   "USE_ADC",
+   "USE_BUZZER",
+   "USE_COUNTER",
+   "USE_DEEPSLEEP",
+   "USE_DEVICE_GROUPS",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_DHT",
+   "USE_DOMOTICZ",
+   "USE_DS18x20",
+   "USE_EMULATION",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_ENERGY_SENSOR",
+   "USE_EXS_DIMMER",
+   "USE_GPIO_VIEWER",
+   "USE_I2C",
+   "USE_IR_REMOTE",
+   "USE_LIGHT",
+   "USE_LIGHT_PALETTE",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_MQTT_TLS",
+   "USE_PWM_DIMMER",
+   "USE_RULES",
+   "USE_SERIAL_BRIDGE",
+   "USE_SHELLY_DIMMER",
+   "USE_SHUTTER",
+   "USE_SONOFF_IFAN",
+   "USE_SONOFF_L1",
+   "USE_SONOFF_RF",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TIMERS",
+   "USE_TUYA_MCU",
+   "USE_WEBSERVER",
+   "USE_WS2812",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp32/FIRMWARE_MINIMAL": [
+   "USE_ADC",
+   "USE_BERRY",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_LIGHT_PALETTE",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_MQTT_TLS",
+   "USE_SONOFF_L1",
+   "USE_WEBSERVER",
+   "USE_WS2812",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp32/FIRMWARE_NSPANEL": [
+   "USE_AC_ZERO_CROSS_DIMMER",
+   "USE_ADC",
+   "USE_BERRY",
+   "USE_BH1750",
+   "USE_BUZZER",
+   "USE_CCS811_V2",
+   "USE_COUNTER",
+   "USE_DALI",
+   "USE_DEEPSLEEP",
+   "USE_DEVICE_GROUPS",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_DHT",
+   "USE_DISPLAY_TM1621_SONOFF",
+   "USE_DOMOTICZ",
+   "USE_DS18x20",
+   "USE_EMULATION",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_ENERGY_SENSOR",
+   "USE_ESP32_TWAI",
+   "USE_GPIO_VIEWER",
+   "USE_I2C",
+   "USE_INFLUXDB",
+   "USE_IR_REMOTE",
+   "USE_KNX",
+   "USE_LIGHT",
+   "USE_LIGHT_ARTNET",
+   "USE_LIGHT_PALETTE",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_LORAWAN_BRIDGE",
+   "USE_MODBUS_BRIDGE",
+   "USE_MQTT_TLS",
+   "USE_PING",
+   "USE_PWM_DIMMER",
+   "USE_RC_SWITCH",
+   "USE_RULES",
+   "USE_SCD30",
+   "USE_SCD40",
+   "USE_SEN6X",
+   "USE_SERIAL_BRIDGE",
+   "USE_SHIFT595",
+   "USE_SHUTTER",
+   "USE_SONOFF_L1",
+   "USE_SONOFF_RF",
+   "USE_SONOFF_SPM",
+   "USE_SPI",
+   "USE_SPI_LORA",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TIMERS",
+   "USE_TUYA_MCU",
+   "USE_UFILESYS",
+   "USE_WEBSERVER",
+   "USE_WS2812",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp32/FIRMWARE_SAFEBOOT": [
+   "USE_ADC",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_LIGHT_PALETTE",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_MQTT_TLS",
+   "USE_SONOFF_L1",
+   "USE_WEBSERVER",
+   "USE_WS2812",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp32/FIRMWARE_SENSORS": [
+   "USE_AC_ZERO_CROSS_DIMMER",
+   "USE_ADC",
+   "USE_BERRY",
+   "USE_BH1750",
+   "USE_BUZZER",
+   "USE_COUNTER",
+   "USE_DEEPSLEEP",
+   "USE_DEVICE_GROUPS",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_DHT",
+   "USE_DOMOTICZ",
+   "USE_DS18x20",
+   "USE_EMULATION",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_ENERGY_SENSOR",
+   "USE_GPIO_VIEWER",
+   "USE_HM10",
+   "USE_I2C",
+   "USE_IR_REMOTE",
+   "USE_LIGHT",
+   "USE_LIGHT_PALETTE",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_MQTT_TLS",
+   "USE_PING",
+   "USE_RC_SWITCH",
+   "USE_RULES",
+   "USE_SCD30",
+   "USE_SERIAL_BRIDGE",
+   "USE_SONOFF_L1",
+   "USE_SONOFF_RF",
+   "USE_SPI",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TIMERS",
+   "USE_TUYAMCUBR",
+   "USE_TUYA_MCU",
+   "USE_UFILESYS",
+   "USE_WEBSERVER",
+   "USE_WS2812",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp32/FIRMWARE_TASMOTA32": [
+   "USE_AC_ZERO_CROSS_DIMMER",
+   "USE_ADC",
+   "USE_BERRY",
+   "USE_BH1750",
+   "USE_BUZZER",
+   "USE_CCS811_V2",
+   "USE_COUNTER",
+   "USE_DALI",
+   "USE_DEEPSLEEP",
+   "USE_DEVICE_GROUPS",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_DHT",
+   "USE_DISPLAY_TM1621_SONOFF",
+   "USE_DOMOTICZ",
+   "USE_DS18x20",
+   "USE_EMULATION",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_ENERGY_SENSOR",
+   "USE_ESP32_TWAI",
+   "USE_GPIO_VIEWER",
+   "USE_I2C",
+   "USE_INFLUXDB",
+   "USE_IR_REMOTE",
+   "USE_KNX",
+   "USE_LIGHT",
+   "USE_LIGHT_ARTNET",
+   "USE_LIGHT_PALETTE",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_LORAWAN_BRIDGE",
+   "USE_MODBUS_BRIDGE",
+   "USE_MQTT_TLS",
+   "USE_PING",
+   "USE_PWM_DIMMER",
+   "USE_RC_SWITCH",
+   "USE_RULES",
+   "USE_SCD30",
+   "USE_SCD40",
+   "USE_SEN6X",
+   "USE_SERIAL_BRIDGE",
+   "USE_SHIFT595",
+   "USE_SHUTTER",
+   "USE_SONOFF_L1",
+   "USE_SONOFF_RF",
+   "USE_SONOFF_SPM",
+   "USE_SPI",
+   "USE_SPI_LORA",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TIMERS",
+   "USE_TUYA_MCU",
+   "USE_UFILESYS",
+   "USE_WEBSERVER",
+   "USE_WS2812",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp32/FIRMWARE_WEBCAM": [
+   "USE_BERRY",
+   "USE_COUNTER",
+   "USE_DEEPSLEEP",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_EMULATION",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_EXS_DIMMER",
+   "USE_GPIO_VIEWER",
+   "USE_I2C",
+   "USE_LIGHT",
+   "USE_LIGHT_PALETTE",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_MQTT_TLS",
+   "USE_PING",
+   "USE_RULES",
+   "USE_SHELLY_DIMMER",
+   "USE_SONOFF_IFAN",
+   "USE_SONOFF_L1",
+   "USE_SONOFF_RF",
+   "USE_SPI",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TIMERS",
+   "USE_UFILESYS",
+   "USE_WEBCAM",
+   "USE_WEBCAM_V2",
+   "USE_WEBSERVER",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp32/FIRMWARE_ZBBRDGPRO": [
+   "USE_AC_ZERO_CROSS_DIMMER",
+   "USE_ADC",
+   "USE_BERRY",
+   "USE_BUZZER",
+   "USE_COUNTER",
+   "USE_DEEPSLEEP",
+   "USE_DEVICE_GROUPS",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_DHT",
+   "USE_DS18x20",
+   "USE_EMULATION",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_GPIO_VIEWER",
+   "USE_I2C",
+   "USE_INFLUXDB",
+   "USE_LIGHT",
+   "USE_LIGHT_PALETTE",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_MQTT_TLS",
+   "USE_PING",
+   "USE_PWM_DIMMER",
+   "USE_RULES",
+   "USE_SERIAL_BRIDGE",
+   "USE_SONOFF_L1",
+   "USE_SONOFF_RF",
+   "USE_SPI",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TCP_BRIDGE",
+   "USE_TIMERS",
+   "USE_TUYA_MCU",
+   "USE_UFILESYS",
+   "USE_WEBSERVER",
+   "USE_WS2812",
+   "USE_ZIGBEE",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp32/FIRMWARE_ZBBRIDGE": [
+   "USE_AC_ZERO_CROSS_DIMMER",
+   "USE_ADC",
+   "USE_BERRY",
+   "USE_COUNTER",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_DOMOTICZ",
+   "USE_EMULATION",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_GPIO_VIEWER",
+   "USE_I2C",
+   "USE_INFLUXDB",
+   "USE_LIGHT",
+   "USE_MQTT_TLS",
+   "USE_PING",
+   "USE_RULES",
+   "USE_SPI",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TCP_BRIDGE",
+   "USE_TIMERS",
+   "USE_UFILESYS",
+   "USE_WEBSERVER",
+   "USE_ZIGBEE",
+   "USE_ZIGBEE_EZSP"
+  ],
+  "esp32/tasmota": [
+   "USE_AC_ZERO_CROSS_DIMMER",
+   "USE_ADC",
+   "USE_BERRY",
+   "USE_BUZZER",
+   "USE_COUNTER",
+   "USE_DEEPSLEEP",
+   "USE_DEVICE_GROUPS",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_DHT",
+   "USE_DOMOTICZ",
+   "USE_DS18x20",
+   "USE_EMULATION",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_ENERGY_SENSOR",
+   "USE_EXS_DIMMER",
+   "USE_GPIO_VIEWER",
+   "USE_I2C",
+   "USE_IR_REMOTE",
+   "USE_LIGHT",
+   "USE_LIGHT_PALETTE",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_MQTT_TLS",
+   "USE_PING",
+   "USE_PWM_DIMMER",
+   "USE_RULES",
+   "USE_SERIAL_BRIDGE",
+   "USE_SHELLY_DIMMER",
+   "USE_SHUTTER",
+   "USE_SONOFF_IFAN",
+   "USE_SONOFF_L1",
+   "USE_SONOFF_RF",
+   "USE_SPI",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TIMERS",
+   "USE_TUYA_MCU",
+   "USE_UFILESYS",
+   "USE_WEBSERVER",
+   "USE_WS2812",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp8266/FIRMWARE_BLUETOOTH": [
+   "USE_AC_ZERO_CROSS_DIMMER",
+   "USE_BUZZER",
+   "USE_COUNTER",
+   "USE_DEEPSLEEP",
+   "USE_DEVICE_GROUPS",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_DHT",
+   "USE_DOMOTICZ",
+   "USE_DS18x20",
+   "USE_EMULATION",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_ENERGY_SENSOR",
+   "USE_EXS_DIMMER",
+   "USE_FTP",
+   "USE_I2C",
+   "USE_IR_REMOTE",
+   "USE_LIGHT",
+   "USE_LIGHT_PALETTE",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_PING",
+   "USE_PWM_DIMMER",
+   "USE_RULES",
+   "USE_SERIAL_BRIDGE",
+   "USE_SHELLY_DIMMER",
+   "USE_SHUTTER",
+   "USE_SONOFF_IFAN",
+   "USE_SONOFF_L1",
+   "USE_SONOFF_RF",
+   "USE_SPI",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TIMERS",
+   "USE_TUYA_MCU",
+   "USE_UFILESYS",
+   "USE_WEBSERVER",
+   "USE_WS2812",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp8266/FIRMWARE_DISPLAYS": [
+   "USE_AC_ZERO_CROSS_DIMMER",
+   "USE_COUNTER",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_DHT",
+   "USE_DISPLAY",
+   "USE_DS18x20",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_FTP",
+   "USE_I2C",
+   "USE_IR_REMOTE",
+   "USE_LIGHT",
+   "USE_LIGHT_PALETTE",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_PING",
+   "USE_RULES",
+   "USE_SERIAL_BRIDGE",
+   "USE_SONOFF_L1",
+   "USE_SPI",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TIMERS",
+   "USE_TUYA_MCU",
+   "USE_UFILESYS",
+   "USE_WEBSERVER",
+   "USE_WS2812",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp8266/FIRMWARE_IR": [
+   "USE_AC_ZERO_CROSS_DIMMER",
+   "USE_COUNTER",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_DOMOTICZ",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_FTP",
+   "USE_IR_REMOTE",
+   "USE_IR_REMOTE_FULL",
+   "USE_LIGHT",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_PING",
+   "USE_RULES",
+   "USE_SPI",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TIMERS",
+   "USE_UFILESYS",
+   "USE_WEBSERVER",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp8266/FIRMWARE_KNX_NO_EMULATION": [
+   "USE_AC_ZERO_CROSS_DIMMER",
+   "USE_BUZZER",
+   "USE_COUNTER",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_DHT",
+   "USE_DOMOTICZ",
+   "USE_DS18x20",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_ENERGY_SENSOR",
+   "USE_EXS_DIMMER",
+   "USE_FTP",
+   "USE_I2C",
+   "USE_IR_REMOTE",
+   "USE_KNX",
+   "USE_LIGHT",
+   "USE_LIGHT_PALETTE",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_PING",
+   "USE_PWM_DIMMER",
+   "USE_RULES",
+   "USE_SERIAL_BRIDGE",
+   "USE_SHELLY_DIMMER",
+   "USE_SHUTTER",
+   "USE_SONOFF_IFAN",
+   "USE_SONOFF_L1",
+   "USE_SONOFF_RF",
+   "USE_SPI",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TIMERS",
+   "USE_TUYA_MCU",
+   "USE_UFILESYS",
+   "USE_WEBSERVER",
+   "USE_WS2812",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp8266/FIRMWARE_LITE": [
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_EMULATION",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_FTP",
+   "USE_LIGHT",
+   "USE_PING",
+   "USE_RULES",
+   "USE_SPI",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TIMERS",
+   "USE_TUYA_MCU",
+   "USE_UFILESYS",
+   "USE_WEBSERVER",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp8266/FIRMWARE_LVGL": [
+   "USE_AC_ZERO_CROSS_DIMMER",
+   "USE_BUZZER",
+   "USE_COUNTER",
+   "USE_DEEPSLEEP",
+   "USE_DEVICE_GROUPS",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_DHT",
+   "USE_DOMOTICZ",
+   "USE_DS18x20",
+   "USE_EMULATION",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_ENERGY_SENSOR",
+   "USE_EXS_DIMMER",
+   "USE_FTP",
+   "USE_I2C",
+   "USE_IR_REMOTE",
+   "USE_LIGHT",
+   "USE_LIGHT_PALETTE",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_PING",
+   "USE_PWM_DIMMER",
+   "USE_RULES",
+   "USE_SERIAL_BRIDGE",
+   "USE_SHELLY_DIMMER",
+   "USE_SHUTTER",
+   "USE_SONOFF_IFAN",
+   "USE_SONOFF_L1",
+   "USE_SONOFF_RF",
+   "USE_SPI",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TIMERS",
+   "USE_TUYA_MCU",
+   "USE_UFILESYS",
+   "USE_WEBSERVER",
+   "USE_WS2812",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp8266/FIRMWARE_MINICUSTOM": [
+   "USE_AC_ZERO_CROSS_DIMMER",
+   "USE_BUZZER",
+   "USE_COUNTER",
+   "USE_DEEPSLEEP",
+   "USE_DEVICE_GROUPS",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_DHT",
+   "USE_DOMOTICZ",
+   "USE_DS18x20",
+   "USE_EMULATION",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_ENERGY_SENSOR",
+   "USE_EXS_DIMMER",
+   "USE_I2C",
+   "USE_IR_REMOTE",
+   "USE_LIGHT",
+   "USE_LIGHT_PALETTE",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_PWM_DIMMER",
+   "USE_RULES",
+   "USE_SERIAL_BRIDGE",
+   "USE_SHELLY_DIMMER",
+   "USE_SHUTTER",
+   "USE_SONOFF_IFAN",
+   "USE_SONOFF_L1",
+   "USE_SONOFF_RF",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TIMERS",
+   "USE_TUYA_MCU",
+   "USE_WEBSERVER",
+   "USE_WS2812",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp8266/FIRMWARE_MINIMAL": [
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_LIGHT_PALETTE",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_SONOFF_L1",
+   "USE_WEBSERVER",
+   "USE_WS2812",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp8266/FIRMWARE_NSPANEL": [
+   "USE_AC_ZERO_CROSS_DIMMER",
+   "USE_BUZZER",
+   "USE_COUNTER",
+   "USE_DEEPSLEEP",
+   "USE_DEVICE_GROUPS",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_DHT",
+   "USE_DOMOTICZ",
+   "USE_DS18x20",
+   "USE_EMULATION",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_ENERGY_SENSOR",
+   "USE_EXS_DIMMER",
+   "USE_FTP",
+   "USE_I2C",
+   "USE_IR_REMOTE",
+   "USE_LIGHT",
+   "USE_LIGHT_PALETTE",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_PING",
+   "USE_PWM_DIMMER",
+   "USE_RULES",
+   "USE_SERIAL_BRIDGE",
+   "USE_SHELLY_DIMMER",
+   "USE_SHUTTER",
+   "USE_SONOFF_IFAN",
+   "USE_SONOFF_L1",
+   "USE_SONOFF_RF",
+   "USE_SPI",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TIMERS",
+   "USE_TUYA_MCU",
+   "USE_UFILESYS",
+   "USE_WEBSERVER",
+   "USE_WS2812",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp8266/FIRMWARE_SAFEBOOT": [
+   "USE_AC_ZERO_CROSS_DIMMER",
+   "USE_BUZZER",
+   "USE_COUNTER",
+   "USE_DEEPSLEEP",
+   "USE_DEVICE_GROUPS",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_DHT",
+   "USE_DOMOTICZ",
+   "USE_DS18x20",
+   "USE_EMULATION",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_ENERGY_SENSOR",
+   "USE_EXS_DIMMER",
+   "USE_FTP",
+   "USE_I2C",
+   "USE_IR_REMOTE",
+   "USE_LIGHT",
+   "USE_LIGHT_PALETTE",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_PING",
+   "USE_PWM_DIMMER",
+   "USE_RULES",
+   "USE_SERIAL_BRIDGE",
+   "USE_SHELLY_DIMMER",
+   "USE_SHUTTER",
+   "USE_SONOFF_IFAN",
+   "USE_SONOFF_L1",
+   "USE_SONOFF_RF",
+   "USE_SPI",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TIMERS",
+   "USE_TUYA_MCU",
+   "USE_UFILESYS",
+   "USE_WEBSERVER",
+   "USE_WS2812",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp8266/FIRMWARE_SENSORS": [
+   "USE_AC_ZERO_CROSS_DIMMER",
+   "USE_BH1750",
+   "USE_BUZZER",
+   "USE_COUNTER",
+   "USE_DEEPSLEEP",
+   "USE_DEVICE_GROUPS",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_DHT",
+   "USE_DOMOTICZ",
+   "USE_DS18x20",
+   "USE_EMULATION",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_ENERGY_SENSOR",
+   "USE_FTP",
+   "USE_HM10",
+   "USE_I2C",
+   "USE_IR_REMOTE",
+   "USE_LIGHT",
+   "USE_LIGHT_PALETTE",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_PING",
+   "USE_RC_SWITCH",
+   "USE_RULES",
+   "USE_SCD30",
+   "USE_SERIAL_BRIDGE",
+   "USE_SONOFF_L1",
+   "USE_SONOFF_RF",
+   "USE_SPI",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TIMERS",
+   "USE_TUYAMCUBR",
+   "USE_TUYA_MCU",
+   "USE_UFILESYS",
+   "USE_WEBSERVER",
+   "USE_WS2812",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp8266/FIRMWARE_TASMOTA32": [
+   "USE_AC_ZERO_CROSS_DIMMER",
+   "USE_BUZZER",
+   "USE_COUNTER",
+   "USE_DEEPSLEEP",
+   "USE_DEVICE_GROUPS",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_DHT",
+   "USE_DOMOTICZ",
+   "USE_DS18x20",
+   "USE_EMULATION",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_ENERGY_SENSOR",
+   "USE_EXS_DIMMER",
+   "USE_FTP",
+   "USE_I2C",
+   "USE_IR_REMOTE",
+   "USE_LIGHT",
+   "USE_LIGHT_PALETTE",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_PING",
+   "USE_PWM_DIMMER",
+   "USE_RULES",
+   "USE_SERIAL_BRIDGE",
+   "USE_SHELLY_DIMMER",
+   "USE_SHUTTER",
+   "USE_SONOFF_IFAN",
+   "USE_SONOFF_L1",
+   "USE_SONOFF_RF",
+   "USE_SPI",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TIMERS",
+   "USE_TUYA_MCU",
+   "USE_UFILESYS",
+   "USE_WEBSERVER",
+   "USE_WS2812",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp8266/FIRMWARE_WEBCAM": [
+   "USE_AC_ZERO_CROSS_DIMMER",
+   "USE_BUZZER",
+   "USE_COUNTER",
+   "USE_DEEPSLEEP",
+   "USE_DEVICE_GROUPS",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_DHT",
+   "USE_DOMOTICZ",
+   "USE_DS18x20",
+   "USE_EMULATION",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_ENERGY_SENSOR",
+   "USE_EXS_DIMMER",
+   "USE_FTP",
+   "USE_I2C",
+   "USE_IR_REMOTE",
+   "USE_LIGHT",
+   "USE_LIGHT_PALETTE",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_PING",
+   "USE_PWM_DIMMER",
+   "USE_RULES",
+   "USE_SERIAL_BRIDGE",
+   "USE_SHELLY_DIMMER",
+   "USE_SHUTTER",
+   "USE_SONOFF_IFAN",
+   "USE_SONOFF_L1",
+   "USE_SONOFF_RF",
+   "USE_SPI",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TIMERS",
+   "USE_TUYA_MCU",
+   "USE_UFILESYS",
+   "USE_WEBSERVER",
+   "USE_WS2812",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp8266/FIRMWARE_ZBBRDGPRO": [
+   "USE_AC_ZERO_CROSS_DIMMER",
+   "USE_BUZZER",
+   "USE_COUNTER",
+   "USE_DEEPSLEEP",
+   "USE_DEVICE_GROUPS",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_DHT",
+   "USE_DOMOTICZ",
+   "USE_DS18x20",
+   "USE_EMULATION",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_ENERGY_SENSOR",
+   "USE_EXS_DIMMER",
+   "USE_FTP",
+   "USE_I2C",
+   "USE_IR_REMOTE",
+   "USE_LIGHT",
+   "USE_LIGHT_PALETTE",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_PING",
+   "USE_PWM_DIMMER",
+   "USE_RULES",
+   "USE_SERIAL_BRIDGE",
+   "USE_SHELLY_DIMMER",
+   "USE_SHUTTER",
+   "USE_SONOFF_IFAN",
+   "USE_SONOFF_L1",
+   "USE_SONOFF_RF",
+   "USE_SPI",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TIMERS",
+   "USE_TUYA_MCU",
+   "USE_UFILESYS",
+   "USE_WEBSERVER",
+   "USE_WS2812",
+   "USE_ZIGBEE_ZNP"
+  ],
+  "esp8266/FIRMWARE_ZBBRIDGE": [
+   "USE_AC_ZERO_CROSS_DIMMER",
+   "USE_COUNTER",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_DOMOTICZ",
+   "USE_EMULATION",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_FTP",
+   "USE_I2C",
+   "USE_INFLUXDB",
+   "USE_LIGHT",
+   "USE_MQTT_TLS",
+   "USE_PING",
+   "USE_RULES",
+   "USE_SPI",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TCP_BRIDGE",
+   "USE_TIMERS",
+   "USE_UFILESYS",
+   "USE_WEBSERVER",
+   "USE_ZIGBEE",
+   "USE_ZIGBEE_EZSP"
+  ],
+  "esp8266/tasmota": [
+   "USE_AC_ZERO_CROSS_DIMMER",
+   "USE_BUZZER",
+   "USE_COUNTER",
+   "USE_DEEPSLEEP",
+   "USE_DEVICE_GROUPS",
+   "USE_DEVICE_GROUPS_SEND",
+   "USE_DGR_LIGHT_SEQUENCE",
+   "USE_DHT",
+   "USE_DOMOTICZ",
+   "USE_DS18x20",
+   "USE_EMULATION",
+   "USE_ENERGY_MARGIN_DETECTION",
+   "USE_ENERGY_POWER_LIMIT",
+   "USE_ENERGY_SENSOR",
+   "USE_EXS_DIMMER",
+   "USE_FTP",
+   "USE_I2C",
+   "USE_IR_REMOTE",
+   "USE_LIGHT",
+   "USE_LIGHT_PALETTE",
+   "USE_LIGHT_VIRTUAL_CT",
+   "USE_PING",
+   "USE_PWM_DIMMER",
+   "USE_RULES",
+   "USE_SERIAL_BRIDGE",
+   "USE_SHELLY_DIMMER",
+   "USE_SHUTTER",
+   "USE_SONOFF_IFAN",
+   "USE_SONOFF_L1",
+   "USE_SONOFF_RF",
+   "USE_SPI",
+   "USE_SUNRISE",
+   "USE_TASMOTA_DISCOVERY",
+   "USE_TIMERS",
+   "USE_TUYA_MCU",
+   "USE_UFILESYS",
+   "USE_WEBSERVER",
+   "USE_WS2812",
+   "USE_ZIGBEE_ZNP"
+  ]
+ }
 }

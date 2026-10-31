@@ -7,7 +7,9 @@ data generated from the Tasmota source, not as a hand-written table (#268, part 
 
 ## What is in the package
 
-- `catalogue-16.0.0.json`: one entry per command-table entry of Tasmota v16.0.0, embedded.
+- `catalogue-<version>.json`: one entry per command-table entry of a pinned Tasmota version, embedded. One
+  catalogue is pinned per Tasmota version the policy editor should judge (`TASMOTA_PINS` in the Makefile; #269);
+  `tasmotacmd.Pinned()` holds them all, `Default()` is the newest.
 - `tasmotacmd.ReplyKeys(cmd) ([]string, ok)`: the keys that answer `cmd`. `cmd` is the command as sent
   (`OtaUrl`, `SetOption19`, `Power1 on`); arguments are ignored, matching is case-insensitive, trailing
   digits are the index. `<n>` in a stored key becomes the typed index (1 when none is typed, as in
@@ -32,6 +34,8 @@ same as loose.
 | `keys`       | Top-level reply keys. `<n>` stands for the command's index.                                                                |
 | `kind`       | `number`, `text`, `state`, `array`, `object` or `mixed`; empty when the value is not a literal.                            |
 | `indexed`    | Reply when an index is typed (`SetOption19`), only when the handler answers it differently from the bare command.          |
+| `value`      | `min`/`max` of the range the handler accepts for a numeric payload; only read from one `(payload >= a) && (payload < b)` check. |
+| `decimal`    | The reply is a floating-point number (`ResponseCmndFloat`), so the value is not a whole number.                            |
 | `via`        | Functions the handler calls that build the reply.                                                                          |
 | `loose`      | The reason the keys are not derivable.                                                                                     |
 
@@ -119,3 +123,26 @@ The tarball (`TASMOTA_VERSION` / `TASMOTA_SHA256` in the Makefile) is unpacked u
 touches the network. To pin another Tasmota version, change the three Makefile variables, run
 `make catalogue`, delete the old `catalogue-*.json` (the package embeds exactly one), and read the diff: a changed
 key or a newly loose command shows what upstream changed.
+
+## What the policy editor uses (#269)
+
+The rule editor takes its suggestions, index ranges, value kinds and checks from the catalogues, not from a table of its own.
+
+- **Suggestions and checks per fleet version.** `Set.For(version)` picks the catalogue that judges a firmware version: the
+  pinned one for that version, else the next newer pin (a command missing there is missing in the version too), else, for a
+  version newer than every pin, the newest pin, which then only ever says "present" (a command missing there may be new).
+  `Set.Check(cmd, fleet)` returns one verdict per firmware version in the fleet and `Refuse` when the command exists in none
+  of them. The editor warns about the rest and lets the rule be saved.
+- **Index ranges.** `index` is read from the handler and, when it compares nothing itself, from the helpers it passes
+  `XdrvMailbox.index` to (`SetOption`: `SetoptionDecode`, `index < 178`). A range counts only when both ends are numbers; the
+  index of a command is part of "exists" (`SetOption200` is not a command). SetOption synonyms take no index.
+- **Features.** `builds` lists, per family and variant, which `USE_` defines the stock build has (only those some command
+  requires). They are read from `my_user_config.h`, `tasmota_configurations.h` and `tasmota_configurations_ESP32.h` with a
+  small preprocessor (`#define`, `#undef`, `#if` over `defined`, `!`, `&&`, `||`); a block whose condition it cannot decide is
+  skipped. `Catalogue.Lacks` evaluates a command's `requires` for a device's chip and variant with three-valued logic: it
+  names a define only when the device's build certainly lacks it. Defines a build gets from its platformio environment, and
+  custom builds, are not seen, so the editor words the result as a warning.
+- **Help.** `descriptions` in `describe.go` are our own one-liners (the docs state no licence, so none of their text is
+  copied). `DocsURL` links to the Commands page of the Tasmota docs, but only to an anchor in `docs-anchors.txt`, the ids and
+  heading slugs of that page at a pinned commit (`make docs-anchors`, checked by `make docs-anchors-check` in the catalogue job).
+  A test builds the link of every command of every catalogue and fails on one that is not in the list.

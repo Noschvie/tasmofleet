@@ -19,6 +19,7 @@
 #define MAX_FRIENDLYNAMES 8
 #define D_CMND_MODULE "Module"
 #define D_CMND_FRIENDLYNAME "FriendlyName"
+#define D_CMND_LATITUDE "Latitude"
 #define D_SO_WIFINOSLEEP "WifiNoSleep"
 #define D_PRFX_MQTT "Mqtt"
 #define D_CMND_MQTTHOST "Host"
@@ -28,3 +29,4 @@ const char S_JSON_COMMAND_SVALUE[] PROGMEM =                  "{\"%s\":\"%s\"}";
 const char S_JSON_COMMAND_INDEX_NVALUE[] PROGMEM =            "{\"%s%d\":%d}";
 const char S_JSON_COMMAND_INDEX_SVALUE[] PROGMEM =            "{\"%s%d\":\"%s\"}";
 const char S_JSON_COMMAND_NVALUE_SVALUE[] PROGMEM =           "{\"%s\":{\"%d\":\"%s\"}}";
+#define D_CMND_WCTEST "WCTest"

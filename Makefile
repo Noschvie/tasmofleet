@@ -44,7 +44,7 @@ TESTFLAGS ?=
 # Extra Playwright arguments, e.g. E2E_ARGS=--shard=1/2 (CI).
 E2E_ARGS  ?=
 
-.PHONY: catalogue catalogue-src catalogue-check demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test race integration mutation mutation-changed mutation-sum safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check changelog-title migration-guard changelog-notes clean tools
+.PHONY: catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test race integration mutation mutation-changed mutation-sum safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check changelog-title migration-guard changelog-notes clean tools
 
 check: templ-check fmt-check vet staticcheck lint test scripts-test integration vuln build
 
@@ -253,34 +253,69 @@ demo-media: build
 vuln:
 	$(NICE) $(TOOL) govulncheck ./...
 
-# Tasmota command catalogue (internal/tasmotacmd, docs/research/tasmota-command-catalogue.md).
-# The Tasmota source of the pinned version is fetched by catalogue-src only (never by a test or a
-# normal build), checked against its sha256 and unpacked next to the user's caches, not into the
-# repository. To pin another version: change the three variables, regenerate, delete the old catalogue-*.json
-# (the package embeds exactly one).
-TASMOTA_VERSION ?= 16.0.0
-TASMOTA_SHA256  ?= d2812ba1b7a34c17dd32b4aab46de30a4f777a83ae5cce2c0d60176d34bf0f2c
-TASMOTA_SRC     ?= $(or $(XDG_CACHE_HOME),$(HOME)/.cache)/tasmofleet/tasmota-$(TASMOTA_VERSION)
-CATALOGUE       := internal/tasmotacmd/catalogue-$(TASMOTA_VERSION).json
+# Tasmota command catalogues (internal/tasmotacmd, docs/research/tasmota-command-catalogue.md): one
+# catalogue per pinned Tasmota version, so the policy editor can judge a command against the
+# firmware versions in the fleet (#269). The Tasmota source of a version is fetched by catalogue-src
+# only (never by a test or a normal build), checked against its sha256 and unpacked next to the
+# user's caches, not into the repository. To pin another version: add "version=sha256" to
+# TASMOTA_PINS and run `make catalogue`; to drop one, remove it and delete its catalogue-*.json
+# (catalogue-check fails on a file without a pin). The newest pin is the one used for a version
+# newer than every pin.
+TASMOTA_PINS ?= \
+  12.5.0=0c89a141b0db569603f224248c45229c45ca8c5b8ef0d598e7343c78e874524d \
+  13.4.0=869dc19e0e2c2f04e8eaa43f62e6486832b3f24e57c226fa4825502bee6a6885 \
+  14.4.1=beb873eea61944fb9aaec8e0b943e21be7a6527723b2c2873b993c90e449d0ac \
+  15.6.0=91365e7308ec45aee6e7bef8debfb78fbadf5315a1c5d7529ffd87de198b8d4f \
+  16.0.0=d2812ba1b7a34c17dd32b4aab46de30a4f777a83ae5cce2c0d60176d34bf0f2c
+TASMOTA_CACHE ?= $(or $(XDG_CACHE_HOME),$(HOME)/.cache)/tasmofleet
 
 catalogue-src:
-	@if [ ! -f "$(TASMOTA_SRC)/.sha256" ] || [ "$$(cat "$(TASMOTA_SRC)/.sha256")" != "$(TASMOTA_SHA256)" ]; then \
-	  set -e; rm -rf "$(TASMOTA_SRC)"; mkdir -p "$(TASMOTA_SRC)"; \
-	  curl -fsSL --retry 3 -o "$(TASMOTA_SRC).tar.gz" "https://github.com/arendst/Tasmota/archive/refs/tags/v$(TASMOTA_VERSION).tar.gz"; \
-	  echo "$(TASMOTA_SHA256)  $(TASMOTA_SRC).tar.gz" | sha256sum -c - || { echo "catalogue-src: sha256 mismatch: the upstream archive of v$(TASMOTA_VERSION) changed (or the download is damaged); do not update TASMOTA_SHA256 without reading why" >&2; rm -f "$(TASMOTA_SRC).tar.gz"; exit 1; }; \
-	  tar -xzf "$(TASMOTA_SRC).tar.gz" -C "$(TASMOTA_SRC)" --strip-components=1 "Tasmota-$(TASMOTA_VERSION)/tasmota"; \
-	  rm -f "$(TASMOTA_SRC).tar.gz"; echo "$(TASMOTA_SHA256)" > "$(TASMOTA_SRC)/.sha256"; \
-	fi
+	@set -e; for pin in $(TASMOTA_PINS); do v=$${pin%%=*}; sha=$${pin#*=}; src="$(TASMOTA_CACHE)/tasmota-$$v"; \
+	if [ ! -f "$$src/.sha256" ] || [ "$$(cat "$$src/.sha256")" != "$$sha" ]; then \
+	  rm -rf "$$src"; mkdir -p "$$src"; \
+	  curl -fsSL --retry 3 -o "$$src.tar.gz" "https://github.com/arendst/Tasmota/archive/refs/tags/v$$v.tar.gz"; \
+	  echo "$$sha  $$src.tar.gz" | sha256sum -c - || { echo "catalogue-src: sha256 mismatch: the upstream archive of v$$v changed (or the download is damaged); do not update its pin without reading why" >&2; rm -f "$$src.tar.gz"; exit 1; }; \
+	  tar -xzf "$$src.tar.gz" -C "$$src" --strip-components=1 "Tasmota-$$v/tasmota"; \
+	  rm -f "$$src.tar.gz"; echo "$$sha" > "$$src/.sha256"; \
+	fi; done
 
-# Regenerates the checked-in catalogue from the pinned source (deterministic).
+# Regenerates the checked-in catalogues from the pinned sources (deterministic).
 catalogue: catalogue-src
-	$(NICE) $(GO) run ./cmd/tasmofleet-catalogue -src "$(TASMOTA_SRC)/tasmota" -version $(TASMOTA_VERSION) -sha256 $(TASMOTA_SHA256) -out $(CATALOGUE)
+	@set -e; for pin in $(TASMOTA_PINS); do v=$${pin%%=*}; sha=$${pin#*=}; \
+	$(NICE) $(GO) run ./cmd/tasmofleet-catalogue -src "$(TASMOTA_CACHE)/tasmota-$$v/tasmota" -version $$v -sha256 $$sha -out internal/tasmotacmd/catalogue-$$v.json; done
 
-# Fails when the checked-in catalogue differs from a regeneration (FULL tier).
+# Fails when a checked-in catalogue differs from a regeneration, or a catalogue file has no pin (FULL tier).
 catalogue-check: catalogue-src
-	@tmp=$$(mktemp); trap 'rm -f "$$tmp"' EXIT; \
-	$(NICE) $(GO) run ./cmd/tasmofleet-catalogue -src "$(TASMOTA_SRC)/tasmota" -version $(TASMOTA_VERSION) -sha256 $(TASMOTA_SHA256) -out "$$tmp" && \
-	diff -u $(CATALOGUE) "$$tmp" || { echo "catalogue-check: $(CATALOGUE) is stale; run 'make catalogue' and commit it" >&2; exit 1; }
+	@set -e; tmp=$$(mktemp); trap 'rm -f "$$tmp"' EXIT; \
+	for pin in $(TASMOTA_PINS); do v=$${pin%%=*}; sha=$${pin#*=}; \
+	$(NICE) $(GO) run ./cmd/tasmofleet-catalogue -src "$(TASMOTA_CACHE)/tasmota-$$v/tasmota" -version $$v -sha256 $$sha -out "$$tmp" >/dev/null && \
+	diff -u internal/tasmotacmd/catalogue-$$v.json "$$tmp" || { echo "catalogue-check: internal/tasmotacmd/catalogue-$$v.json is stale; run 'make catalogue' and commit it" >&2; exit 1; }; done; \
+	for f in internal/tasmotacmd/catalogue-*.json; do v=$${f#internal/tasmotacmd/catalogue-}; v=$${v%.json}; \
+	case " $(TASMOTA_PINS) " in *" $$v="*) ;; *) echo "catalogue-check: $$f has no pin in TASMOTA_PINS" >&2; exit 1;; esac; done
+
+# The anchors of the Tasmota docs' Commands page (the help links of the policy editor, #269): the page at
+# a pinned commit of tasmota/docs, its sha256 checked, reduced to the ids and heading slugs a link can
+# point to. A test fails when a link the editor builds is not in this list; catalogue-check's sibling
+# docs-anchors-check fails when the list differs from the pinned page. Only the page's anchors are kept,
+# none of its text.
+TASMOTA_DOCS_COMMIT ?= 1c05b9917d284470332fedd8cade3a3f756b0e8b
+TASMOTA_DOCS_SHA256 ?= e2f1a30c8723d60f0d09de349ca74a6a45c1e17844706dde2c388912d8bc1deb
+DOCS_ANCHORS       := internal/tasmotacmd/docs-anchors.txt
+
+define docs_anchors_gen
+set -e; page=$$(mktemp); trap 'rm -f "$$page"' EXIT; \
+curl -fsSL --retry 3 -o "$$page" "https://raw.githubusercontent.com/tasmota/docs/$(TASMOTA_DOCS_COMMIT)/docs/Commands.md"; \
+echo "$(TASMOTA_DOCS_SHA256)  $$page" | sha256sum -c - >/dev/null || { echo "docs-anchors: sha256 mismatch for Commands.md at $(TASMOTA_DOCS_COMMIT)" >&2; exit 1; }; \
+echo "# Anchors of docs/Commands.md of tasmota/docs at $(TASMOTA_DOCS_COMMIT) (sha256 $(TASMOTA_DOCS_SHA256)). Generated by make docs-anchors."; \
+{ grep -o 'id="[^"]*"' "$$page" | sed 's/^id="//; s/"$$//'; \
+  sed -n 's/^##\{1,3\} //p' "$$page" | tr 'A-Z' 'a-z' | sed 's/[^a-z0-9 _-]//g; s/ /-/g'; } | LC_ALL=C sort -u
+endef
+
+docs-anchors:
+	@($(docs_anchors_gen)) > $(DOCS_ANCHORS)
+
+docs-anchors-check:
+	@tmp=$$(mktemp); trap 'rm -f "$$tmp"' EXIT; ($(docs_anchors_gen)) > "$$tmp" && diff -u $(DOCS_ANCHORS) "$$tmp" || { echo "docs-anchors-check: $(DOCS_ANCHORS) differs from the pinned page; run 'make docs-anchors'" >&2; exit 1; }
 
 build:
 	CGO_ENABLED=0 $(NICE) $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o $(BIN)/tasmofleet ./cmd/tasmofleet

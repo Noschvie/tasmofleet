@@ -157,3 +157,56 @@ func TestNoCommandNameEndsInADigit(t *testing.T) {
 		}
 	}
 }
+
+func TestPinnedSetHoldsOneCatalogueEachWithBuilds(t *testing.T) {
+	// The policy editor judges a command against every Tasmota version in the fleet; a pin without
+	// Builds would silently turn every "needs USE_X" check off for that version.
+	s, err := Pinned()
+	if err != nil {
+		t.Fatal(err)
+	}
+	vs := s.Versions()
+	if len(vs) < 4 {
+		t.Fatalf("pinned versions: %v", vs)
+	}
+	for i, c := range s.cats {
+		if c.Tasmota != vs[i] || len(c.Builds["esp8266/tasmota"]) == 0 || len(c.Builds["esp32/FIRMWARE_TASMOTA32"]) == 0 {
+			t.Errorf("%s: builds %d/%d", c.Tasmota, len(c.Builds["esp8266/tasmota"]), len(c.Builds["esp32/FIRMWARE_TASMOTA32"]))
+		}
+	}
+	if d, _ := Default(); d != s.Newest() || d.Tasmota != vs[len(vs)-1] {
+		t.Fatalf("Default must be the newest pin, got %s", d.Tasmota)
+	}
+}
+
+func TestRealCatalogueKnowsWhatTheEditorNeeds(t *testing.T) {
+	// End to end on the generated data: the three facts the approved mockup shows.
+	s, err := Pinned()
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := s.Newest()
+	f, ok := c.Find("SetOption19")
+	if lo, hi, rok := f.IndexRange(); !ok || !rok || lo != 0 || hi != 177 || !f.IndexOK() {
+		t.Fatalf("SetOption19: %+v %d..%d", f, lo, hi)
+	}
+	if f, _ := c.Find("SetOption200"); f.IndexOK() {
+		t.Fatal("SetOption200 is out of range")
+	}
+	f, _ = c.Find("TelePeriod")
+	if v := f.Value(); v.Kind != ValueNumber || v.Min == nil || *v.Min != 0 || *v.Max != 3600 {
+		t.Fatalf("TelePeriod: %+v", v)
+	}
+	f, _ = c.Find("Latitude")
+	if v := f.Value(); v.Kind != ValueNumber || !v.Decimal {
+		t.Fatalf("Latitude: %+v", v)
+	}
+	// a stock ESP8266 build has no webcam commands; the stock ESP32 has none either, the webcam build does
+	f, _ = c.Find("WCSetOptions")
+	if got := c.Lacks(f, Env{Chip: "esp8266", Variant: "tasmota"}); len(got) == 0 {
+		t.Fatalf("an ESP8266 lacks the webcam commands: %v", got)
+	}
+	if got := c.Lacks(f, Env{Chip: "esp32", Variant: "webcam"}); len(got) != 0 {
+		t.Fatalf("the webcam build has them: %v", got)
+	}
+}

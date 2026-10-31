@@ -10,7 +10,8 @@ import (
 	"sync"
 )
 
-// The one catalogue file; pinning another Tasmota version replaces it (make catalogue).
+// One catalogue file per pinned Tasmota version; `make catalogue` regenerates them all and
+// catalogue-check fails on a file without a pin.
 //
 //go:embed catalogue-*.json
 var embedded embed.FS
@@ -36,31 +37,45 @@ func Parse(data []byte) (*Catalogue, error) {
 }
 
 var (
-	defaultOnce sync.Once
-	defaultCat  *Catalogue
-	defaultErr  error
+	setOnce sync.Once
+	pinned  *Set
+	setErr  error
 )
 
-// Default returns the embedded catalogue of the pinned Tasmota version.
-func Default() (*Catalogue, error) {
-	defaultOnce.Do(func() {
+// Pinned returns the embedded catalogues, one per pinned Tasmota version.
+func Pinned() (*Set, error) {
+	setOnce.Do(func() {
 		files, err := fs.Glob(embedded, "catalogue-*.json")
 		if err != nil {
-			defaultErr = fmt.Errorf("tasmotacmd: %w", err)
+			setErr = fmt.Errorf("tasmotacmd: %w", err)
 			return
 		}
-		if len(files) != 1 {
-			defaultErr = fmt.Errorf("tasmotacmd: want exactly one embedded catalogue, found %v", files)
-			return
+		var cats []*Catalogue
+		for _, f := range files {
+			data, err := embedded.ReadFile(f)
+			if err != nil {
+				setErr = err
+				return
+			}
+			c, err := Parse(data)
+			if err != nil {
+				setErr = fmt.Errorf("%s: %w", f, err)
+				return
+			}
+			cats = append(cats, c)
 		}
-		data, err := embedded.ReadFile(files[0])
-		if err != nil {
-			defaultErr = err
-			return
-		}
-		defaultCat, defaultErr = Parse(data)
+		pinned, setErr = NewSet(cats)
 	})
-	return defaultCat, defaultErr
+	return pinned, setErr
+}
+
+// Default returns the catalogue of the newest pinned Tasmota version.
+func Default() (*Catalogue, error) {
+	s, err := Pinned()
+	if err != nil {
+		return nil, err
+	}
+	return s.Newest(), nil
 }
 
 // ReplyKeys returns the RESULT keys that answer cmd in the embedded catalogue; see Catalogue.ReplyKeys.
