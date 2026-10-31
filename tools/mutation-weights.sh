@@ -12,7 +12,7 @@ out=tools/mutation-weights.txt
 tool=${TOOL:-go tool -modfile=tools/go.mod}
 keep=$(mktemp)
 trap 'rm -f "$keep"' EXIT
-grep -E '^(#|cost )' "$out" >"$keep" || true
+grep -E '^(#|cost )' "$out" >"$keep" || true # per-file cost overrides (4th field) are lost: re-add by hand
 {
 	cat "$keep"
 	for p in "$@"; do

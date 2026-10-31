@@ -1,4 +1,4 @@
-# Mutation shard weights, see tools/mutation-weights.sh.
+# Mutation shard weights, see tools/mutation-weights.sh. Line: <pkg> <file> <runnable mutants> [seconds per mutant x 100, overriding the package cost; measured per file group from FULL run 41207308381].
 cost internal/fwselect 49
 cost internal/ota 214
 cost internal/policy 50
@@ -14,17 +14,17 @@ internal/fwselect image.go 6
 internal/fwselect mqttupload.go 12
 internal/fwselect plan.go 12
 internal/fwselect select.go 45
-internal/ota backupjob.go 12
+internal/ota backupjob.go 12 300
 internal/ota batchopts.go 4
-internal/ota commandjob.go 19
-internal/ota deviceapi.go 72
-internal/ota engine.go 197
+internal/ota commandjob.go 19 126
+internal/ota deviceapi.go 72 350
+internal/ota engine.go 197 300
 internal/ota engine_safeboot.go 1
-internal/ota machine.go 104
-internal/ota machine_safeboot.go 22
-internal/ota mqttpath.go 7
-internal/ota policyjob.go 47
-internal/ota push.go 18
+internal/ota machine.go 104 126
+internal/ota machine_safeboot.go 22 300
+internal/ota mqttpath.go 7 126
+internal/ota policyjob.go 47 350
+internal/ota push.go 18 300
 internal/policy decoded.go 9
 internal/policy fix.go 60
 internal/policy plan.go 8
@@ -33,12 +33,12 @@ internal/policy rules.go 24
 internal/cmdpolicy cmdpolicy.go 110
 internal/cmdpolicy policyrule.go 5
 internal/cmdpolicy scrub.go 24
-internal/mqttcmd backlog.go 12
-internal/mqttcmd channel.go 36
-internal/mqttcmd correlate.go 47
-internal/mqttcmd filedownload.go 64
-internal/mqttcmd info.go 10
-internal/mqttcmd upload.go 81
+internal/mqttcmd backlog.go 12 210
+internal/mqttcmd channel.go 36 450
+internal/mqttcmd correlate.go 47 210
+internal/mqttcmd filedownload.go 64 390
+internal/mqttcmd info.go 10 450
+internal/mqttcmd upload.go 81 450
 internal/transport choose.go 55
 internal/transport configupload.go 18
 internal/transport memory.go 1

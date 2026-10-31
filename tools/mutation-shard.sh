@@ -24,10 +24,10 @@ done | awk -v wf="$weights" '
 		while ((getline line < wf) > 0) {
 			split(line, a, " ")
 			if (a[1] == "#") continue
-			if (a[1] == "cost") cost[a[2]] = a[3]; else n[a[1] " " a[2]] = a[3]
+			if (a[1] == "cost") cost[a[2]] = a[3]; else { n[a[1] " " a[2]] = a[3]; if (a[4] != "") fc[a[1] " " a[2]] = a[4] }
 		}
 	}
-	{ c = ($1 in cost) ? cost[$1] : 100; m = (($1 " " $2) in n) ? n[$1 " " $2] : 1; print m * c, $1, $2 }' | sort -k1,1nr -k2,2 -k3,3)
+	{ c = ($1 in cost) ? cost[$1] : 100; if (($1 " " $2) in fc) c = fc[$1 " " $2]; m = (($1 " " $2) in n) ? n[$1 " " $2] : 1; print m * c, $1, $2 }' | sort -k1,1nr -k2,2 -k3,3)
 
 if [ "$1" = plan ]; then
 	echo "$items" | awk -v n="$2" '
