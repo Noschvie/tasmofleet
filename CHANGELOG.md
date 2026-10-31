@@ -6,9 +6,18 @@ always upgrade automatically.
 
 ## Unreleased
 
+## 0.23.0 "Cape Hatteras" (2026-10-31)
+
 ### Upgrade notes
 
 - Database migration 0039 adds a nullable column to `devices` (the remembered ESP32-S2 build). Nothing to change in the template.
+
+### Added
+
+- Status bar fixed to the bottom of every page: browser live state, MQTT broker (host and port, since when it is down), running jobs with progress and a link (two named, then "+N more"), the last scheduled backup run (time, OK or how many devices failed) and the version. On a phone it is one collapsed line that opens into a sheet. It refreshes from the existing event stream plus a new `broker` event; nothing polls, and no credentials or error texts are shown. The last backup run is kept in memory, so it is empty after a restart until the next scheduled run ends (#307)
+- Console and bulk "Send command": Arrow Up and Arrow Down walk through the last 50 commands of this browser (newest first, duplicates collapsed, shared by every device's console), Escape brings back what you had typed, and "Clear history" empties it. Commands with a credential and commands the policy refused are never kept (#321).
+- Policy rule editor: the command field learns from the Tasmota command catalogue (#268) instead of a hand-written list. Suggestions come from the Tasmota versions present in the fleet (one catalogue is pinned per version: 12.5.0, 13.4.0, 14.4.1, 15.6.0, 16.0.0), indexed commands such as `SetOption<n>` offer their index range as a number box, the value field follows the command's kind (number with the range the firmware checks, decimals where it answers one, on/off, text), and a short description with a link to the Tasmota docs is shown (only links to anchors that exist, checked against a pinned list). A check warns when a command does not exist in some Tasmota versions of the fleet, when a build lacks the feature it needs or when an index is out of range, and the devices card says why a device is "Not judged"; saving is refused only for a command that exists in no Tasmota version present in the fleet (#269)
+- Update preview: the ESP32-S2 build (s2 or s2cdc) you chose for a device is remembered and preselected next time, shown as "Build s2cdc, remembered from your last update" with Change (ask again) and Forget (clear), and the firmware safety check still verifies the build (#186)
 
 ### Changed
 
@@ -18,20 +27,11 @@ always upgrade automatically.
 - Console and bulk command: `Upgrade` and `OtaUrl` with an argument are refused while a TasmoFleet update job (queued or running) holds the device, with a clear message; the bulk preview names each refused device and the rest still goes (#240)
 - Policy rule form: "Applies to" is an always-open, full-width section after "When a device deviates": a summary line, chip families as toggle pills, tags as chips with an input and the tags in use with their device count, picked devices as chips above a search (name, IP, tag) over a fixed-height list, and Exceptions with the same names. Nothing on the page shifts while the scope is edited. The four tiles and the line under the title now follow the draft like the Devices card (#235)
 - Policy rule page: the tile "Applies to" and the line under the title count the exceptions listed in the rule (what the form shows), no longer only the devices an exception actually removed (#235)
-### Added
-
-- Status bar fixed to the bottom of every page: browser live state, MQTT broker (host and port, since when it is down), running jobs with progress and a link (two named, then "+N more"), the last scheduled backup run (time, OK or how many devices failed) and the version. On a phone it is one collapsed line that opens into a sheet. It refreshes from the existing event stream plus a new `broker` event; nothing polls, and no credentials or error texts are shown. The last backup run is kept in memory, so it is empty after a restart until the next scheduled run ends (#307)
-- Console and bulk "Send command": Arrow Up and Arrow Down walk through the last 50 commands of this browser (newest first, duplicates collapsed, shared by every device's console), Escape brings back what you had typed, and "Clear history" empties it. Commands with a credential and commands the policy refused are never kept (#321).
-- Policy rule editor: the command field learns from the Tasmota command catalogue (#268) instead of a hand-written list. Suggestions come from the Tasmota versions present in the fleet (one catalogue is pinned per version: 12.5.0, 13.4.0, 14.4.1, 15.6.0, 16.0.0), indexed commands such as `SetOption<n>` offer their index range as a number box, the value field follows the command's kind (number with the range the firmware checks, decimals where it answers one, on/off, text), and a short description with a link to the Tasmota docs is shown (only links to anchors that exist, checked against a pinned list). A check warns when a command does not exist in some Tasmota versions of the fleet, when a build lacks the feature it needs or when an index is out of range, and the devices card says why a device is "Not judged"; saving is refused only for a command that exists in no Tasmota version present in the fleet (#269)
 
 ### Fixed
 
 - Stylesheet: a missing closing brace after the policy "Deviating devices" mobile rules made every rule after it (policy History tab spacing and indented folds, Identity card headings) apply only on narrow screens; the brace is back, and a unit test now fails when braces do not balance (#346)
 - Device page: the info text of the Status 2 field "CR" is below the 160-character tooltip limit (#346)
-
-### Added
-
-- Update preview: the ESP32-S2 build (s2 or s2cdc) you chose for a device is remembered and preselected next time, shown as "Build s2cdc, remembered from your last update" with Change (ask again) and Forget (clear), and the firmware safety check still verifies the build (#186)
 
 ## 0.22.1 "Bell Rock" (2026-10-31)
 
