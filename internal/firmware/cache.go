@@ -551,24 +551,32 @@ func syncDir(dir string) error {
 // ---- prune ----
 
 // Prune deletes every release beyond the newest keep cached ones, except
-// releases that contain an artifact used by an active job. It returns the
-// number of artifacts deleted. If the in-use lookup fails nothing is deleted.
-func (c *cache) Prune(ctx context.Context, keep int) (int, error) {
+// releases that contain an artifact used by an active or queued job. Uploads
+// (custom firmware) are never touched. Every file goes through Delete, so it
+// takes the per-file lock and re-checks "in use" at the moment of deletion.
+// If the in-use lookup fails nothing is deleted. Rows whose names could point
+// outside the cache directory are skipped, never deleted.
+func (c *cache) Prune(ctx context.Context, keep int) (DeleteResult, error) {
+	var res DeleteResult
 	if keep < 0 {
-		return 0, fmt.Errorf("firmware: Prune keep=%d", keep)
+		return res, fmt.Errorf("firmware: Prune keep=%d", keep)
 	}
 	all, err := c.store.ListArtifacts(ctx)
 	if err != nil {
-		return 0, err
+		return res, err
 	}
 	inUse, err := c.ArtifactsInUse(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("firmware: prune aborted, cannot determine artifacts in use: %w", err)
+		return res, fmt.Errorf("firmware: prune aborted, cannot determine artifacts in use: %w", err)
 	}
 	byRel := map[string][]model.Artifact{}
 	for _, a := range all {
-		if IsCustomSource(a.Source) {
+		if IsCustomSource(a.Source) || a.Custom != "" {
 			continue // uploads are kept until an admin deletes them
+		}
+		if !c.confined(a) {
+			c.log.Warn("firmware: prune skips an artifact whose name leaves the cache directory", "id", a.ID, "release", a.Release, "file", a.Filename)
+			continue
 		}
 		byRel[a.Release] = append(byRel[a.Release], a)
 	}
@@ -577,7 +585,6 @@ func (c *cache) Prune(ctx context.Context, keep int) (int, error) {
 		rels = append(rels, r)
 	}
 	sort.Slice(rels, func(i, j int) bool { return compareVersions(rels[i], rels[j]) > 0 })
-	deleted := 0
 	for i, rel := range rels {
 		if i < keep {
 			continue
@@ -588,25 +595,35 @@ func (c *cache) Prune(ctx context.Context, keep int) (int, error) {
 			busy = busy || held
 		}
 		if busy {
+			res.Kept += len(byRel[rel])
 			continue
 		}
 		for _, a := range byRel[rel] {
-			// Index first: a row without file is repaired by Ensure, a file
-			// without row is simply never served.
-			if err := c.store.DeleteArtifact(ctx, a.ID); err != nil && !errors.Is(err, store.ErrNotFound) {
-				return deleted, err
+			deleted, err := c.Delete(ctx, a.ID)
+			var held *InUseError
+			switch {
+			case err == nil:
+				res.Deleted = append(res.Deleted, deleted)
+				res.Freed += deleted.Size
+			case errors.As(err, &held):
+				res.Kept++ // a job took it since the lookup above
+			case errors.Is(err, store.ErrNotFound):
+			default:
+				return res, err
 			}
-			if err := os.Remove(c.path(a.Release, a.Filename)); err != nil && !errors.Is(err, fs.ErrNotExist) {
-				return deleted, err
-			}
-			deleted++
-		}
-		// Only succeeds when empty; a non-empty dir (stray file) is left alone.
-		if err := os.Remove(filepath.Join(c.opts.Dir, rel)); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			c.log.Warn("firmware: release directory not removed", "release", rel, "err", err)
 		}
 	}
-	return deleted, nil
+	return res, nil
+}
+
+// confined reports whether the file of a cached (non-upload) artifact lies
+// inside the cache directory with plain release and file names.
+func (c *cache) confined(a model.Artifact) bool {
+	if !validRelease(a.Release) || !validPathElement(a.Filename) {
+		return false
+	}
+	rel, err := filepath.Rel(c.opts.Dir, c.path(a.Release, a.Filename))
+	return err == nil && filepath.IsLocal(rel)
 }
 
 // Open returns the cached file of an artifact for a push upload to a device.

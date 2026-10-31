@@ -284,6 +284,9 @@ func (c Config) validate() error {
 	if c.FWRefreshInterval < 0 {
 		bad("FIRMWARE_REFRESH_INTERVAL", "must not be negative (0 = refresh only at start)")
 	}
+	if c.FWKeepReleases < 0 {
+		bad("FIRMWARE_KEEP_RELEASES", "must not be negative (0 = never prune)")
+	}
 	if c.BasePath != "" && (!strings.HasPrefix(c.BasePath, "/") || strings.HasSuffix(c.BasePath, "/")) {
 		bad("BASE_PATH", `must start with "/" and not end with "/"`)
 	}

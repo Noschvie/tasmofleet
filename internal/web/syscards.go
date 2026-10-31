@@ -70,7 +70,7 @@ var sysLayout = []sysTabDef{
 		{ID: "database", Title: "TasmoFleet database", Note: "Download and delete act at once, outside the settings form. Admins only; every download and every scheduled snapshot is written to the audit log.", Class: "span2"},
 	}},
 	{"firmware", "Firmware & updates", []sysCardDef{
-		{ID: "source", Title: "Firmware source", Class: "span2 rows2", Keys: []string{"FIRMWARE_BASE_URL", "FIRMWARE_SOURCES", "FIRMWARE_REFRESH_INTERVAL"}},
+		{ID: "source", Title: "Firmware source", Class: "span2 rows2", Keys: []string{"FIRMWARE_BASE_URL", "FIRMWARE_SOURCES", "FIRMWARE_REFRESH_INTERVAL", "FIRMWARE_KEEP_RELEASES"}},
 		{ID: "crosscheck", Title: "Cross-check", Keys: []string{"FIRMWARE_ALLOW_SINGLE_SOURCE"}},
 		{ID: "ota", Title: "Updates (OTA)", Keys: []string{"OTA_PARALLEL", "OTA_POWER_MAX_AGE", "OTA_RESTORE_OTAURL"}},
 	}},
@@ -258,6 +258,7 @@ var sysCopies = map[string]sysCopy{
 	"FIRMWARE_BASE_URL":            {Help: "Plain http:// address devices fetch firmware from.", Width: "full", Info: "Devices download firmware from this address, e.g. the container address. Required for updates."},
 	"FIRMWARE_SOURCES":             {Help: "Two sources = cross-check.", Width: "full"},
 	"FIRMWARE_REFRESH_INTERVAL":    {Help: "0 = only at start.", Width: "xs", Info: "How often the upstream index is refreshed in the background, e.g. 6h."},
+	"FIRMWARE_KEEP_RELEASES":       {Help: "0 = never delete.", Width: "xs", Info: "Cached firmware of releases older than the newest this many is deleted after an index refresh and once a day. Files a queued or running update needs and uploads stay."},
 	"FIRMWARE_ALLOW_SINGLE_SOURCE": {Help: "Off is recommended.", Width: "full", Info: "Off: a firmware file must be offered by two sources with the same checksum. On: one source is enough. Shown in the warning colour while on."},
 
 	"OTA_PARALLEL":       {Help: "Fleet-wide.", Width: "xs"},

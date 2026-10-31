@@ -68,9 +68,10 @@ type Cache interface {
 	// URLFor returns the device-facing URL of a cached artifact, built from
 	// the configured firmware base URL (e.g. http://192.168.1.10/fw/...).
 	URLFor(a model.Artifact) string
-	// Prune deletes artifacts not referenced by an active job and older than
-	// the newest keep releases.
-	Prune(ctx context.Context, keep int) (int, error)
+	// Prune deletes artifacts not referenced by an active or queued job and
+	// older than the newest keep cached releases; uploads are never pruned.
+	// It reports what it deleted, the bytes freed and what it kept in use.
+	Prune(ctx context.Context, keep int) (DeleteResult, error)
 }
 
 // CachedLister is implemented by the cache returned by New: the releases of

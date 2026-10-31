@@ -192,3 +192,24 @@ func TestIndexStatusTracksSuccessFailureAndKeepsOldIndex(t *testing.T) {
 		t.Fatalf("old index lost: %v %v", rels, err)
 	}
 }
+
+// Why: pruning follows a refresh (that is when the "newest N" can change), but a failed refresh
+// says nothing new about the releases and must not trigger a delete run.
+func TestRunRefresherCallsOnRefreshedOnlyAfterSuccess(t *testing.T) {
+	r := &scriptedRefresher{results: []error{errors.New("down"), nil}, called: make(chan struct{}, 10)}
+	clk := newStepClock()
+	hooks := make(chan struct{}, 10)
+	stop := runRefresher(t, r, RefreshOptions{Clock: clk, Interval: time.Hour, Logger: quietLog(), OnRefreshed: func(context.Context) { hooks <- struct{}{} }})
+	defer stop()
+	<-r.called
+	clk.nextWait(t) // backoff after the failure
+	if len(hooks) != 0 {
+		t.Fatal("OnRefreshed ran after a failed refresh")
+	}
+	<-r.called
+	select {
+	case <-hooks:
+	case <-time.After(5 * time.Second):
+		t.Fatal("OnRefreshed did not run after a successful refresh")
+	}
+}

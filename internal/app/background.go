@@ -174,6 +174,7 @@ func (a *runtime) prune(ctx context.Context) {
 	} else if n > 0 {
 		a.log.Info("pruned finished update jobs", "n", n)
 	}
+	a.pruneFirmware(ctx)
 	if _, err := a.svc.Store.PruneHealthEvents(ctx, now.Add(-healthKeep)); err != nil {
 		a.log.Warn("prune health events", "err", err)
 	}

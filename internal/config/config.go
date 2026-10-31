@@ -120,6 +120,10 @@ type Config struct {
 	// FWRefreshInterval is how often the upstream index is refreshed in the
 	// background (after the refresh at start); 0 = only at start.
 	FWRefreshInterval time.Duration `env:"FIRMWARE_REFRESH_INTERVAL" ui:"true" default:"6h"`
+	// FWKeepReleases: after a refresh and once a day the cache deletes the files of releases
+	// older than the newest this many cached ones, except files a queued or running update needs
+	// and uploads; 0 = never prune.
+	FWKeepReleases int `env:"FIRMWARE_KEEP_RELEASES" ui:"true" default:"3"`
 	// FWAllowSingleSource accepts files that only one configured source
 	// offers (no cross-check possible); default refuses them.
 	FWAllowSingleSource bool `env:"FIRMWARE_ALLOW_SINGLE_SOURCE" ui:"true" default:"false"`

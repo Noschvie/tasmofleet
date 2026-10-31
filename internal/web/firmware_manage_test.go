@@ -33,7 +33,9 @@ type fakeMgrFW struct {
 
 func (f *fakeMgrFW) Releases(context.Context) ([]firmware.Release, error) { return f.releases, nil }
 func (f *fakeMgrFW) URLFor(model.Artifact) string                         { return "" }
-func (f *fakeMgrFW) Prune(context.Context, int) (int, error)              { return 0, nil }
+func (f *fakeMgrFW) Prune(context.Context, int) (firmware.DeleteResult, error) {
+	return firmware.DeleteResult{}, nil
+}
 func (f *fakeMgrFW) Ensure(_ context.Context, rel, file string) (model.Artifact, error) {
 	if f.slow != nil {
 		<-f.slow

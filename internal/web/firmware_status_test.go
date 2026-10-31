@@ -22,9 +22,11 @@ func (f *statusFW) Releases(context.Context) ([]firmware.Release, error) {
 func (f *statusFW) Ensure(context.Context, string, string) (model.Artifact, error) {
 	return model.Artifact{}, nil
 }
-func (f *statusFW) URLFor(model.Artifact) string            { return "" }
-func (f *statusFW) Prune(context.Context, int) (int, error) { return 0, nil }
-func (f *statusFW) IndexStatus() firmware.IndexStatus       { return f.st }
+func (f *statusFW) URLFor(model.Artifact) string { return "" }
+func (f *statusFW) Prune(context.Context, int) (firmware.DeleteResult, error) {
+	return firmware.DeleteResult{}, nil
+}
+func (f *statusFW) IndexStatus() firmware.IndexStatus { return f.st }
 
 func firmwarePageBody(t *testing.T, fw *statusFW) string {
 	t.Helper()

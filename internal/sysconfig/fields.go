@@ -94,6 +94,8 @@ var fields = []Field{
 		Help: "Off (recommended): a file must be offered by two sources (cross-check)."},
 	{Key: "FIRMWARE_REFRESH_INTERVAL", Group: GroupFirmware, Label: "Index refresh interval", Apply: Restart,
 		Help: "How often the upstream index is refreshed in the background, e.g. 6h. 0 = only at start."},
+	{Key: "FIRMWARE_KEEP_RELEASES", Group: GroupFirmware, Label: "Releases kept", Apply: Live,
+		Help: "After an index refresh and once a day, cached firmware of releases older than the newest this many is deleted. Files a queued or running update needs and uploads stay. 0 = never delete."},
 
 	{Key: "OTA_PARALLEL", Group: GroupOTA, Label: "Updates in parallel", Apply: Live, Help: "Fleet-wide number of devices updated at the same time."},
 	{Key: "OTA_RESTORE_OTAURL", Bool: true, Group: GroupOTA, Label: "Restore original OtaUrl", Apply: Live,

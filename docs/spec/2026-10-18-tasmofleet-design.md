@@ -809,9 +809,13 @@ error in the UI. The index is refreshed at start (async, backoff 30 s..30 min un
 `/data/firmware/<release>/<filename>`, immutable, indexed in `firmware_artifacts` with
 size, SHA-256, header-proven family, variant, language and safeboot flag. Downloads go to
 a temp file, then fsync and rename. Size limit 8 MiB. A redirect hop outside the allowlist
-aborts. The cache is never pruned automatically: `Cache.Prune(keep)` exists, but nothing calls it and there is no
-`FIRMWARE_KEEP_RELEASES` setting (the original plan kept the newest 3 releases). Files leave the cache by the
-admin's Delete and "delete unused" (§8.2a). Uploads never wipe the cache (TasmoAdmin lesson B6).
+aborts. The cache prunes itself: `FIRMWARE_KEEP_RELEASES` (System settings, live, default 3, `0` = never) keeps the
+files of the newest N cached releases. `Cache.Prune(keep)` runs after every successful index refresh and in the daily
+retention run; it goes through `Delete` per file (per-file lock, "in use" re-checked), so files an active or
+queued job holds stay, a release with a held file stays whole, uploads are never pruned, and a row whose name would
+leave the cache directory is skipped. It fails closed when the in-use lookup fails. A run that deletes something
+(or fails) is audited as `firmware.prune` by `system` with file count, bytes freed and the count kept in use.
+Files also leave the cache by the admin's Delete and "delete unused" (§8.2a). Uploads never wipe the cache (TasmoAdmin lesson B6).
 
 ### 8.2a Firmware page: cache management, prefetch, changelog (M2)
 

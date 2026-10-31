@@ -27,7 +27,7 @@ func TestOperationalEnvironmentValuesAreLegacyNotConfiguration(t *testing.T) {
 		t.Fatalf("applied from the environment: parallel=%d url=%q", c.OTAParallel, c.MQTTURL)
 	}
 	want := map[string]string{
-		"OTA_PARALLEL": "9", "MQTT_URL": "tcp://b:1883", "MQTT_PASSWORD": "from-file", "POLICY_RULES": "[]",
+		"OTA_PARALLEL": "9", "MQTT_URL": "tcp://b:1883", "MQTT_PASSWORD": "from-file", "POLICY_RULES": "[]", "FIRMWARE_KEEP_RELEASES": "3",
 		"DEVICE_NETWORKS": "172.31.13.0/24, 172.31.23.0/24", "OPERATOR_GROUPS": "",
 	}
 	for k, v := range want {
@@ -40,9 +40,6 @@ func TestOperationalEnvironmentValuesAreLegacyNotConfiguration(t *testing.T) {
 		if strings.TrimSpace(c.Legacy[k]) != strings.TrimSpace(v) {
 			t.Errorf("Legacy[%s] = %q, want %q", k, c.Legacy[k], v)
 		}
-	}
-	if _, ok := c.Legacy["FIRMWARE_KEEP_RELEASES"]; ok {
-		t.Error("removed keys are ignored")
 	}
 	// A garbage operational value does not stop the start; the import reports it.
 	if _, err := Load(base(t.TempDir(), "TASMOFLEET_OTA_PARALLEL=lots")); err != nil {
@@ -104,7 +101,7 @@ func TestOverlayAppliesValuesThatDependOnEachOther(t *testing.T) {
 func TestValidationRejectsBadOperationalValues(t *testing.T) {
 	cases := []struct{ key, val string }{
 		{"OTA_PARALLEL", "0"}, {"OTA_PARALLEL", "x"}, {"BACKUP_KEEP", "0"},
-		{"DEVICE_NETWORKS", "not-a-cidr"}, {"FIRMWARE_REFRESH_INTERVAL", "-1h"}, {"FIRMWARE_SOURCES", "evil.example"},
+		{"DEVICE_NETWORKS", "not-a-cidr"}, {"FIRMWARE_REFRESH_INTERVAL", "-1h"}, {"FIRMWARE_KEEP_RELEASES", "-1"}, {"FIRMWARE_SOURCES", "evil.example"},
 		{"FIRMWARE_BASE_URL", "https://fw.example"},
 		{"MQTT_URL", "ftp://broker"}, {"MQTT_URL", "ws://broker:80"}, {"MQTT_URL", "wss://broker:443"}, {"MQTT_URL", "tcp://"}, {"POLL_INTERVAL", "500ms"},
 		{"DISCOVERY_SCAN_INTERVAL", "10s"}, {"BACKUP_INTERVAL", "5s"},

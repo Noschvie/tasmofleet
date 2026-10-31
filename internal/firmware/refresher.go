@@ -41,6 +41,10 @@ type RefreshOptions struct {
 	Rand   func() float64
 	Clock  clock.Clock // nil = real time
 	Logger *slog.Logger
+	// OnRefreshed runs after every successful refresh (the cache prunes old
+	// releases there: a refresh is when newer ones become the newest). Not
+	// called after a failed refresh.
+	OnRefreshed func(ctx context.Context)
 }
 
 // RunRefresher refreshes the index now and then every Interval until ctx
@@ -73,6 +77,9 @@ func RunRefresher(ctx context.Context, r Refresher, o RefreshOptions) {
 			}
 		} else {
 			backoff = refreshBackoffStart
+			if o.OnRefreshed != nil {
+				o.OnRefreshed(ctx)
+			}
 			if o.Interval <= 0 {
 				return
 			}

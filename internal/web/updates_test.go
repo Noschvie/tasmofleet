@@ -119,9 +119,11 @@ func (f *fakeFW) Releases(context.Context) ([]firmware.Release, error) {
 func (f *fakeFW) Ensure(_ context.Context, rel, file string) (model.Artifact, error) {
 	return model.Artifact{Release: rel, Filename: file}, nil
 }
-func (f *fakeFW) URLFor(model.Artifact) string            { return "" }
-func (f *fakeFW) Prune(context.Context, int) (int, error) { return 0, nil }
-func (f *fakeFW) Refresh(context.Context) error           { f.refreshed = true; return nil }
+func (f *fakeFW) URLFor(model.Artifact) string { return "" }
+func (f *fakeFW) Prune(context.Context, int) (firmware.DeleteResult, error) {
+	return firmware.DeleteResult{}, nil
+}
+func (f *fakeFW) Refresh(context.Context) error { f.refreshed = true; return nil }
 
 func setupOTA(t *testing.T) (*env, *fakeOTA, *fakeJobs, *fakeFW) {
 	t.Helper()

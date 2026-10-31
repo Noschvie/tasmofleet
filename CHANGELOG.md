@@ -6,6 +6,14 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Added
+
+- The firmware cache now prunes itself. A new setting, Settings, Firmware & updates, "Releases kept" (`FIRMWARE_KEEP_RELEASES`, default 3, `0` = never delete, applies at once), keeps the files of the newest cached releases. After every successful index refresh and in the daily clean-up older releases are deleted, except files a queued or running update needs (a release with one such file stays whole) and uploaded firmware. Every run that deletes something is in the audit log as "Prune firmware cache" with the number of files and the bytes freed (#252)
+
+### Changed
+
+- Fresh installs and upgrades start pruning at once: with more than three cached releases the older ones are deleted at the first clean-up after the update. Set "Releases kept" to 0 to keep everything as before (#252)
+
 ## 0.24.0 "Hook Head" (2026-10-31)
 
 ### Upgrade notes

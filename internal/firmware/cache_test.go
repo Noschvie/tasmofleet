@@ -533,6 +533,9 @@ func TestNewRemovesStaleTempFiles(t *testing.T) {
 	}
 }
 
+// Why: pruning exists to give disk back without ever hurting an update. The newest releases stay
+// (a device may need them next), a release a queued or running job holds stays however old it is,
+// and the report says what was freed so the audit trail can show it.
 func TestPrune(t *testing.T) {
 	u := newUpstream(t)
 	inUse := map[model.ArtifactID]bool{}
@@ -545,10 +548,10 @@ func TestPrune(t *testing.T) {
 		if err := os.MkdirAll(filepath.Join(o.Dir, rel), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(o.Dir, rel, name), []byte("x"), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(o.Dir, rel, name), []byte("xxxxx"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		a := model.Artifact{Release: rel, Filename: name, Size: 1}
+		a := model.Artifact{Release: rel, Filename: name, Size: 5}
 		id, err := st.PutArtifact(ctx, a)
 		if err != nil {
 			t.Fatal(err)
@@ -565,12 +568,12 @@ func TestPrune(t *testing.T) {
 		}
 	}
 	inUse[old.ID] = true // an active job still needs 14.0.0
-	n, err := c.Prune(ctx, 2)
+	res, err := c.Prune(ctx, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n != 2 { // 15.9.0: two artifacts; 14.0.0 is protected
-		t.Fatalf("pruned %d, want 2", n)
+	if len(res.Deleted) != 2 || res.Freed != 10 || res.Kept != 2 { // 15.9.0: two artifacts; 14.0.0 is protected
+		t.Fatalf("pruned %d freed %d kept %d, want 2 / 10 / 2", len(res.Deleted), res.Freed, res.Kept)
 	}
 	for rel, want := range map[string]bool{"16.0.0": true, "15.10.0": true, "14.0.0": true, "15.9.0": false} {
 		_, err := os.Stat(filepath.Join(o.Dir, rel, "tasmota.bin.gz"))
@@ -584,14 +587,46 @@ func TestPrune(t *testing.T) {
 	}
 	// Once the job is gone the old release can go too.
 	delete(inUse, old.ID)
-	if n, err := c.Prune(ctx, 2); err != nil || n != 2 {
-		t.Fatalf("second prune: %d %v", n, err)
+	if res, err := c.Prune(ctx, 2); err != nil || len(res.Deleted) != 2 {
+		t.Fatalf("second prune: %d %v", len(res.Deleted), err)
 	}
 	if _, err := os.Stat(filepath.Join(o.Dir, "14.0.0")); !os.IsNotExist(err) {
 		t.Fatal("empty release directory not removed")
 	}
 	if _, err := c.Prune(ctx, -1); err == nil {
 		t.Fatal("negative keep accepted")
+	}
+}
+
+// Why: an upload is the admin's own file, not a download that can be fetched again. Pruning an
+// old-looking release name must never take it, nor an artifact row whose name points out of the
+// cache directory (a bad row must not turn pruning into a delete of some other file).
+func TestPruneLeavesUploadsAndNamesOutsideTheCache(t *testing.T) {
+	u := newUpstream(t)
+	c, st, o := newTestCache(t, u, nil)
+	ctx := context.Background()
+	outside := filepath.Join(filepath.Dir(o.Dir), "outside.bin")
+	if err := os.WriteFile(outside, []byte("precious"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range []model.Artifact{
+		{Release: "1.0.0", Filename: "../../outside.bin", Size: 8},
+		{Release: "..", Filename: "outside.bin", Size: 8},
+		{Release: "0.1.0", Filename: "tasmota.bin.gz", Size: 1, Source: CustomSource, Custom: "k1"},
+	} {
+		if _, err := st.PutArtifact(ctx, a); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res, err := c.Prune(ctx, 0)
+	if err != nil || len(res.Deleted) != 0 {
+		t.Fatalf("Prune = %+v, %v; want nothing deleted", res, err)
+	}
+	if _, err := os.Stat(outside); err != nil {
+		t.Fatalf("file outside the cache was touched: %v", err)
+	}
+	if all, _ := st.ListArtifacts(ctx); len(all) != 3 {
+		t.Fatalf("%d rows left, want 3", len(all))
 	}
 }
 

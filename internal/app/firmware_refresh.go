@@ -21,6 +21,8 @@ type firmwareIndexOptions struct {
 	Interval   time.Duration // FIRMWARE_REFRESH_INTERVAL
 	GaugeEvery time.Duration
 	Log        *slog.Logger
+	// OnRefreshed runs after every successful index refresh (nil = nothing).
+	OnRefreshed func(ctx context.Context)
 }
 
 // startFirmwareRefresh refreshes the upstream index at start and then
@@ -30,7 +32,7 @@ func (a *runtime) startFirmwareRefresh() {
 	if a.cache == nil {
 		return
 	}
-	o := firmwareIndexOptions{Clock: clock.Real{}, Interval: a.cfg.FWRefreshInterval, GaugeEvery: firmwareGaugeEvery, Log: a.log}
+	o := firmwareIndexOptions{Clock: clock.Real{}, Interval: a.cfg.FWRefreshInterval, GaugeEvery: firmwareGaugeEvery, Log: a.log, OnRefreshed: a.pruneFirmware}
 	a.goBG("firmware-index", func() error {
 		superviseFirmwareIndex(a.bgContext, a.cache, a.svc.Std.FirmwareIndexAge, o)
 		return nil
@@ -44,7 +46,7 @@ func superviseFirmwareIndex(ctx context.Context, c firmware.Cache, age *metrics.
 	var wg sync.WaitGroup
 	if r, ok := c.(firmware.Refresher); ok {
 		wg.Go(func() {
-			firmware.RunRefresher(ctx, r, firmware.RefreshOptions{Interval: o.Interval, Jitter: firmwareJitter, Clock: o.Clock, Logger: o.Log})
+			firmware.RunRefresher(ctx, r, firmware.RefreshOptions{Interval: o.Interval, Jitter: firmwareJitter, Clock: o.Clock, Logger: o.Log, OnRefreshed: o.OnRefreshed})
 		})
 	} else {
 		o.Log.Warn("firmware cache cannot refresh its index in the background")

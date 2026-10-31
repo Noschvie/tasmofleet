@@ -39,7 +39,7 @@ var auditLabels = map[string]string{
 	"discovery.scan_start": "Network scan", "discovery.scan_end": "Network scan finished", "discovery.scan_cancel": "Network scan cancelled",
 	"discovery.scan_refused": "Network scan refused", "discovery.accept": "Accept discovered device",
 	"discovery.dismiss": "Ignore discovered device", "discovery.undismiss": "Un-ignore discovered device",
-	"firmware.delete": "Delete firmware file", "firmware.prefetch": "Download firmware",
+	"firmware.delete": "Delete firmware file", "firmware.prune": "Prune firmware cache", "firmware.prefetch": "Download firmware",
 	"firmware.custom.upload": "Upload firmware", "firmware.custom.use": "Use uploaded firmware",
 	"backup.bulk.start": "Start backups", "command.bulk.start": "Start command run",
 	"import.tasmoadmin": "TasmoAdmin import", "transaction.retry": "Retry transaction", "transaction.start": "Start update",
@@ -271,6 +271,10 @@ func summaryOK(e model.AuditEvent, d map[string]any) (string, bool) {
 		return join(label(dStr(d, "kind")), dStr(d, "address")), true
 	case "firmware.delete":
 		return join(dStr(d, "release"), dStr(d, "file")), true
+	case "firmware.prune":
+		n, _ := dInt(d, "files")
+		b, _ := dInt(d, "bytes")
+		return join(count(n, "file", "files"), humanBytes(int64(b))+" freed"), true
 	case "firmware.prefetch":
 		n, _ := dInt(d, "files")
 		return count(n, "file", "files"), true

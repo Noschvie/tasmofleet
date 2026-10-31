@@ -460,8 +460,8 @@ func TestCustomDeleteAndRetention(t *testing.T) {
 	if res, err := m.DeleteUnused(ctx); err != nil || len(res.Deleted) != 1 { // the upstream minimal only
 		t.Fatalf("DeleteUnused = %+v, %v", res, err)
 	}
-	if n, err := c.Prune(ctx, 0); err != nil || n != 0 {
-		t.Fatalf("Prune removed %d, %v", n, err)
+	if res, err := c.Prune(ctx, 0); err != nil || len(res.Deleted) != 0 {
+		t.Fatalf("Prune removed %d, %v", len(res.Deleted), err)
 	}
 	if _, err := customOf(t, c).EnsureCustom(ctx, img.Artifact.Custom, "16.0.0.9", "tasmota.bin.gz"); err != nil {
 		t.Fatalf("upload gone after cleanup: %v", err)
