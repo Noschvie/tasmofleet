@@ -104,6 +104,12 @@ The image is published to two registries under the same tags (`latest`, `X.Y.Z` 
 current `main`): `nofuturekid/tasmofleet` on Docker Hub and `ghcr.io/nofuturekid/tasmofleet`. Use
 either name; to pull from ghcr.io instead, put `ghcr.io/` in front of the image name.
 
+Every tag is a multi-arch image: `linux/amd64` and `linux/arm64` (Raspberry Pi 4/5 and other 64-bit
+ARM boards). Docker picks the right one. **The arm64 image has no backup decoder**: upstream
+[decode-config](https://github.com/tasmota/decode-config) publishes x86_64 builds only. On arm64,
+System → About shows the decoder as "Missing"; backups still work and keep the raw `.dmp` file, only
+the decoded JSON view and the comparison between backups are unavailable. 32-bit ARM is not built.
+
 The UI always listens on container port 8080; `8443:8080` maps container port 8080 to host port 8443, which you can choose freely. Upgrading
 from 0.16 or older with a `-p 8443:8443` mapping? Read [Upgrading to 0.17](docs/upgrading.md) first.
 

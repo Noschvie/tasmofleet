@@ -11,6 +11,9 @@
 # repository secrets DOCKERHUB_USERNAME and DOCKERHUB_TOKEN exist, the same build
 # is also pushed under the same tags to docker.io/<DOCKERHUB_USERNAME>/tasmofleet
 # (no rebuild); without them (forks) that part is skipped.
+# The image is a multi-arch manifest (linux/amd64 and linux/arm64) under every tag. The Go binary is
+# cross-compiled on the amd64 runner (no emulation); the arm64 image has no decoder (Dockerfile).
+# Before anything is pushed, the arm64 image is built, loaded and started under QEMU (--version).
 # Layers are cached in the GitHub Actions cache.
 name: image
 
@@ -104,6 +107,9 @@ jobs:
             echo "tags=$tags"
             echo "push=$push"
           } >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@v4.4.0
+        with:
+          platforms: arm64
       - uses: docker/setup-buildx-action@v4.4.1
       - uses: docker/login-action@v4.7.0
         if: steps.v.outputs.push == 'true'
@@ -130,23 +136,44 @@ jobs:
         run: |
           set -u
           digest() { docker buildx imagetools inspect "$1" --format '{{json .Manifest}}' 2>/dev/null | jq -r '.digest // empty'; }
+          # the per-platform manifests an index points to (space separated)
+          kids() { docker buildx imagetools inspect "$1" --format '{{json .Manifest}}' 2>/dev/null | jq -r '[.manifests[]?.digest] | join(" ")'; }
           ghcr="ghcr.io/$(echo "$OWNER" | tr 'A-Z' 'a-z')/tasmofleet"
           {
             echo "ghcr_edge=$(digest "$ghcr:edge")"
+            echo "ghcr_edge_kids=$(kids "$ghcr:edge")"
             echo "ghcr_latest=$(digest "$ghcr:latest")"
             if [ "$DOCKERHUB" = true ]; then
               dh="docker.io/$(echo "$DOCKERHUB_USERNAME" | tr 'A-Z' 'a-z')/tasmofleet"
               echo "dh_edge=$(digest "$dh:edge")"
+              echo "dh_edge_kids=$(kids "$dh:edge")"
               echo "dh_latest=$(digest "$dh:latest")"
             fi
           } >> "$GITHUB_OUTPUT"
+      # Smoke check, before any push: the arm64 image starts. QEMU is used for this run only.
       - uses: docker/build-push-action@v7.4.0
         with:
           context: .
-          platforms: linux/amd64
+          platforms: linux/arm64
+          load: true
+          provenance: false
+          tags: tasmofleet:smoke-arm64
+          build-args: VERSION=${{ steps.v.outputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: arm64 smoke run
+        run: |
+          set -eu
+          out=$(docker run --rm --platform linux/arm64 tasmofleet:smoke-arm64 version)
+          echo "$out"
+          echo "$out" | grep -q "${{ steps.v.outputs.version }}"
+          docker image inspect tasmofleet:smoke-arm64 --format '{{.Os}}/{{.Architecture}}' | grep -qx linux/arm64
+      - uses: docker/build-push-action@v7.4.0
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
           push: ${{ steps.v.outputs.push == 'true' }}
-          # One plain image manifest per build: no attestation, so no image index. Each push of
-          # edge then leaves a single untagged manifest behind instead of three.
+          # No attestation manifests: the index lists the two platform images and nothing else.
           provenance: false
           tags: ${{ steps.v.outputs.tags }}
           build-args: VERSION=${{ steps.v.outputs.version }}
@@ -169,6 +196,8 @@ jobs:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
           GHCR_EDGE: ${{ steps.prev.outputs.ghcr_edge }}
+          GHCR_EDGE_KIDS: ${{ steps.prev.outputs.ghcr_edge_kids }}
+          DH_EDGE_KIDS: ${{ steps.prev.outputs.dh_edge_kids }}
           GHCR_LATEST: ${{ steps.prev.outputs.ghcr_latest }}
           DH_EDGE: ${{ steps.prev.outputs.dh_edge }}
           DH_LATEST: ${{ steps.prev.outputs.dh_latest }}
@@ -179,12 +208,15 @@ jobs:
           ghcr="ghcr.io/$owner/tasmofleet"
           now=$(digest "$ghcr:edge")
           if [ -n "$GHCR_EDGE" ] && [ -n "$now" ] && [ "$GHCR_EDGE" != "$now" ] && [ "$GHCR_EDGE" != "$GHCR_LATEST" ]; then
-            id=$(gh api "/users/$owner/packages/container/tasmofleet/versions?per_page=100" --jq ".[] | select(.name == \"$GHCR_EDGE\") | .id")
-            if [ -n "$id" ] && gh api -X DELETE "/users/$owner/packages/container/tasmofleet/versions/$id"; then
-              echo "ghcr: deleted the previous edge $GHCR_EDGE"
-            else
-              echo "::warning::ghcr: could not delete the previous edge $GHCR_EDGE"
-            fi
+            # the index first, then the platform manifests it listed
+            for d in $GHCR_EDGE $GHCR_EDGE_KIDS; do
+              id=$(gh api "/users/$owner/packages/container/tasmofleet/versions?per_page=100" --jq ".[] | select(.name == \"$d\") | .id")
+              if [ -n "$id" ] && gh api -X DELETE "/users/$owner/packages/container/tasmofleet/versions/$id"; then
+                echo "ghcr: deleted the previous edge manifest $d"
+              else
+                echo "::warning::ghcr: could not delete the previous edge manifest $d"
+              fi
+            done
           fi
           if [ "$DOCKERHUB" = true ]; then
             user=$(echo "$DOCKERHUB_USERNAME" | tr 'A-Z' 'a-z')
@@ -192,12 +224,14 @@ jobs:
             if [ -n "$DH_EDGE" ] && [ -n "$now" ] && [ "$DH_EDGE" != "$now" ] && [ "$DH_EDGE" != "$DH_LATEST" ]; then
               token=$(curl -fsS -u "$DOCKERHUB_USERNAME:$DOCKERHUB_TOKEN" \
                 "https://auth.docker.io/token?service=registry.docker.io&scope=repository:$user/tasmofleet:pull,push,delete" | jq -r .token)
-              code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE -H "Authorization: Bearer $token" \
-                "https://registry-1.docker.io/v2/$user/tasmofleet/manifests/$DH_EDGE")
-              case "$code" in
-                202 | 200) echo "Docker Hub: deleted the previous edge $DH_EDGE" ;;
-                *) echo "::warning::Docker Hub: deleting the previous edge $DH_EDGE answered $code" ;;
-              esac
+              for d in $DH_EDGE $DH_EDGE_KIDS; do
+                code=$(curl -s -o /dev/null -w '%{http_code}' -X DELETE -H "Authorization: Bearer $token" \
+                  "https://registry-1.docker.io/v2/$user/tasmofleet/manifests/$d")
+                case "$code" in
+                  202 | 200) echo "Docker Hub: deleted the previous edge manifest $d" ;;
+                  *) echo "::warning::Docker Hub: deleting the previous edge manifest $d answered $code" ;;
+                esac
+              done
             fi
           fi
       # The Docker Hub overview follows deploy/dockerhub/README.md with every release.

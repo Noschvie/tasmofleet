@@ -54,7 +54,7 @@ Docker Compose, Unraid and all settings:
 - `X.Y.Z`: a release ([changelog](https://github.com/nofuturekid/tasmofleet/blob/main/CHANGELOG.md))
 - `edge`: the current `main`, not for production
 
-The same images are on `ghcr.io/nofuturekid/tasmofleet`. linux/amd64 only.
+The same images are on `ghcr.io/nofuturekid/tasmofleet`. Every tag is a multi-arch image: linux/amd64 and linux/arm64 (Raspberry Pi 4/5). The arm64 image has no backup decoder (upstream decode-config is x86_64 only): backups keep the raw `.dmp`, without the decoded JSON view and comparison.
 
 ## License
 

@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Added
+
+- Container image for linux/arm64 (Raspberry Pi 4/5) next to linux/amd64: every tag is now a multi-arch image. The arm64 image has no backup decoder, because upstream decode-config publishes x86_64 builds only: System → About shows it as "Missing", backups keep the raw `.dmp` file, and only the decoded JSON view and the comparison are unavailable (#354, thanks @t4nki)
+
 ## 0.23.0 "Cape Hatteras" (2026-10-31)
 
 ### Upgrade notes
