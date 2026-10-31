@@ -8868,6 +8868,28 @@ tr.is-saved > td {
   font: 400 12.5px var(--font-mono);
 }
 
+/* command history: the "Clear history" link under the console prompt (history.js shows it) */
+.console .console-histbar {
+  display: block;
+  padding: 0 var(--sp-14) var(--sp-8);
+  text-align: right;
+}
+.console .console-histlink {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-term-dim);
+  font: 500 12px var(--font-sans);
+  cursor: pointer;
+}
+.console .console-histlink:hover {
+  color: var(--color-term-fg);
+  text-decoration: underline;
+}
+.console .console-histlink[hidden] {
+  display: none;
+}
+
 /* settings tab and edit form: one card, label-above fields in columns of at least 260 px */
 .devform {
   display: grid;

@@ -289,6 +289,7 @@ type ConsoleLine struct{ Time, Datetime, Text, Kind, Who string }
 type ConsoleData struct {
 	Title, Action, CSRF string
 	Input               string // the prompt's value (a command sent back for correction)
+	HistoryAdd          string // a command just sent that the browser may keep in its Arrow Up history ("" keeps nothing)
 	ClearHref           string
 	Hidden              []KVRow
 	Lines               []ConsoleLine

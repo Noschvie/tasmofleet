@@ -49,7 +49,7 @@ templ bulkScopePage(v bulkScopeView) {
 				case bulkCmd:
 					<label class="bk-field">
 						Command
-						<textarea name="command" rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="255" required
+						<textarea name="command" data-history-input rows="3" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="255" required
 							if v.CommandError != "" {
 								aria-invalid="true"
 								aria-describedby="bk-cmd-err"
@@ -61,6 +61,7 @@ templ bulkScopePage(v bulkScopeView) {
 							<span class="bk-help">Use Backlog to send several commands in one go.</span>
 						}
 					</label>
+					<button type="button" class="btn btn-link btn-sm" data-history-clear hidden>Clear history</button>
 					@bulkCheck("wait", "Wait up to 5 s for each response", "", v.Wait, false)
 					@bulkCheck("serial", "One device at a time", "", v.Serial, false)
 				case bulkBackup:
@@ -181,7 +182,7 @@ templ bulkResultPage(v bulkResultView) {
 			</div>
 		</div>
 		if v.Command != "" {
-			<div class="bk-cmdline">› { v.Command }</div>
+			<div class="bk-cmdline" if v.HistoryAdd != "" { data-history-add={ v.HistoryAdd } }>› { v.Command }</div>
 		}
 		<div class="bk-tiles">
 			@bulkTile(ui.ToneOK, "Succeeded", v.OK)

@@ -726,5 +726,32 @@ func TestConsoleFirmwareCommandIgnoresNonUpdateJobs(t *testing.T) {
 		if strings.Contains(body, "update job") || !strings.Contains(body, "Confirm sending") {
 			t.Errorf("%s job: %d %s", k, resp.StatusCode, body)
 		}
+||||||| parent of a9fe930 (Console: command history with Arrow Up/Down (#321))
+
+// Why (#321): the browser keeps a command history for Arrow Up. The server decides what may be
+// kept, using the same rule as the audit log (cmdpolicy.Redacted), so a secret never reaches
+// localStorage and a command the policy refused is not offered again.
+func TestConsoleOffersSentCommandToHistory(t *testing.T) {
+	f := &fakeCmd{reply: `{"POWER":"ON"}`}
+	e := cmdEnv(t, f)
+	_, body := e.do(t, "POST", "/devices/1/console", "operator", consoleForm("  Power   TOGGLE "))
+	if !strings.Contains(body, `data-history-add="Power TOGGLE"`) {
+		t.Fatalf("sent command not offered in its canonical form: %s", body)
+	}
+}
+
+func TestConsoleNeverOffersSecretOrRefusedCommandToHistory(t *testing.T) {
+	f := &fakeCmd{reply: `{}`}
+	e := cmdEnv(t, f)
+	for _, cmd := range []string{"WebPassword hunter2", "Backlog Power ON; MqttPassword hunter2", "Password1 hunter2"} {
+		_, body := e.do(t, "POST", "/devices/1/console", "admin", consoleForm(cmd))
+		if strings.Contains(body, "data-history-add") {
+			t.Errorf("%q reached the history: %s", cmd, body)
+		}
+	}
+	// refused by role: an operator may not send SetOption19
+	_, body := e.do(t, "POST", "/devices/1/console", "operator", consoleForm("SetOption19 1"))
+	if strings.Contains(body, "data-history-add") {
+		t.Errorf("a refused command reached the history: %s", body)
 	}
 }

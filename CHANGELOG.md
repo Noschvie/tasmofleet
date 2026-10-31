@@ -9,6 +9,10 @@ always upgrade automatically.
 ### Changed
 
 - Console and bulk command: `Upgrade` and `OtaUrl` with an argument are refused while a TasmoFleet update job (queued or running) holds the device, with a clear message; the bulk preview names each refused device and the rest still goes (#240)
+||||||| parent of a9fe930 (Console: command history with Arrow Up/Down (#321))
+### Added
+
+- Console and bulk "Send command": Arrow Up and Arrow Down walk through the last 50 commands of this browser (newest first, duplicates collapsed, shared by every device's console), Escape brings back what you had typed, and "Clear history" empties it. Commands with a credential and commands the policy refused are never kept (#321).
 
 ## 0.22.1 "Bell Rock" (2026-10-31)
 

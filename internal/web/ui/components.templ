@@ -619,7 +619,7 @@ templ AuthCard(base, version, host string) {
 // Console is the device console: a dark panel with timestamped lines and the prompt, the quick
 // commands below it. Quick commands are submit buttons that send their command (no JavaScript).
 templ Console(c ConsoleData) {
-	<div class="console">
+	<div class="console" if c.HistoryAdd != "" { data-history-add={ c.HistoryAdd } }>
 		<div class="console-head">
 			<span class="console-dot" aria-hidden="true"></span><span class="console-title">{ c.Title }</span>
 			if c.ClearHref != "" {
@@ -650,9 +650,10 @@ templ Console(c ConsoleData) {
 				<input type="hidden" name={ f.Key } value={ f.Value }/>
 			}
 			<span class="console-prompt" aria-hidden="true">›</span>
-			<input name="command" value={ c.Input } placeholder="Type a Tasmota command, e.g. Status 5" aria-label="Command" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="255" required/>
+			<input name="command" data-history-input value={ c.Input } placeholder="Type a Tasmota command, e.g. Status 5" aria-label="Command" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="255" required/>
 			<button type="submit" class="console-send">Send</button>
 		</form>
+		<div class="console-histbar"><button type="button" class="console-histlink" data-history-clear hidden>Clear history</button></div>
 	</div>
 	if len(c.Quick) > 0 {
 		<form method="post" action={ templ.SafeURL(c.Action) } class="console-quick">

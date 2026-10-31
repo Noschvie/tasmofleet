@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/auth"
@@ -41,8 +42,11 @@ type consoleData struct {
 	Token       string
 	Reply       string
 	Error       string
-	History     []historyRow
-	Tabs        deviceTabs
+	// HistoryAdd is the command the browser may keep for Arrow Up, set after the policy let it
+	// through (see historyText).
+	HistoryAdd string
+	History    []historyRow
+	Tabs       deviceTabs
 }
 
 // history reads the console history from the audit log: what was sent to the
@@ -129,9 +133,10 @@ func (h *handler) renderConsole(w http.ResponseWriter, r *http.Request, status i
 	c := ui.ConsoleData{
 		Title:  "Console · HTTP · " + data.Tabs.Address,
 		Action: v.Base + devPath(d.ID, "/console"), CSRF: v.CSRF, Input: data.Input,
-		ClearHref: v.Base + devPath(d.ID, "/console?since="+strconv.FormatInt(now.Unix(), 10)),
-		Lines:     consoleLines(data, consoleSince(since), now),
-		Quick:     quickCommands,
+		ClearHref:  v.Base + devPath(d.ID, "/console?since="+strconv.FormatInt(now.Unix(), 10)),
+		HistoryAdd: data.HistoryAdd,
+		Lines:      consoleLines(data, consoleSince(since), now),
+		Quick:      quickCommands,
 	}
 	if !consoleSince(since).IsZero() {
 		c.Hidden = []ui.KVRow{{Key: "since", Value: since}}
@@ -264,6 +269,9 @@ func (h *handler) consoleSend(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	raw, err := h.d.DeviceCmd.Run(ctx, p, d.ID, cmd)
+	if !errors.Is(err, cmdpolicy.ErrInvalid) && !errors.Is(err, cmdpolicy.ErrForbidden) && !errors.Is(err, cmdpolicy.ErrRole) {
+		data.HistoryAdd = historyText(cmd) // a device that failed to answer is worth a retry; a refusal is not
+	}
 	status := http.StatusOK
 	if err != nil {
 		status, data.Error = consoleError(err)
@@ -275,6 +283,18 @@ func (h *handler) consoleSend(w http.ResponseWriter, r *http.Request) {
 		data.Reply, data.Input = compactJSON(raw), ""
 	}
 	h.renderConsole(w, r, status, d, data)
+}
+
+// historyText is the form of cmd the browser may keep in its command history, or "" for none. It
+// is the same rule the audit log uses (cmdpolicy.Redacted): a command whose logged form differs
+// from what was sent holds, or may hold, a secret and is not kept. A line that already shows the
+// mask is a redacted one (the bulk result page only has those).
+func historyText(cmd string) string {
+	canon, err := cmdpolicy.Canonical(cmd)
+	if err != nil || canon == "" || cmdpolicy.Redacted(cmd) != canon || strings.Contains(canon, "***") {
+		return ""
+	}
+	return canon
 }
 
 // compactJSON is a device reply on one console line; anything unparsable is shown as is. The

@@ -207,6 +207,7 @@ type bulkResultView struct {
 	Self                string // the page's own URL while it refreshes; "" when finished
 	Running             bool
 	Command             string // Send command: the redacted command line
+	HistoryAdd          string // Send command: the command the browser may keep for Arrow Up ("" keeps nothing)
 	When                time.Time
 	Took, By            string
 	Batch               model.BatchID // 0: no transaction (power is switched in the request)
@@ -296,6 +297,7 @@ func (h *handler) bulkResult(w http.ResponseWriter, r *http.Request) {
 	}
 	if kind == bulkCmd {
 		rv.Command = strings.TrimPrefix(txTarget(first), "Send ") // the redacted command
+		rv.HistoryAdd = historyText(rv.Command)
 	}
 	if rv.Running {
 		rv.Self = v.Base + r.URL.RequestURI() // handlers see the path below the base
