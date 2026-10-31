@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -187,11 +188,8 @@ func (s *Service) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := model.Principal{
-		Subject: idt.Subject, Name: str(claims[s.o.OIDC.UsernameClaim]), Email: str(claims["email"]),
+		Subject: idt.Subject, Name: s.oidcName(claims), Email: str(claims["email"]),
 		Groups: groupsClaim(claims[s.o.OIDC.GroupsClaim]), Method: ModeOIDC,
-	}
-	if p.Name == "" {
-		p.Name = str(claims["name"])
 	}
 	p.Role = s.o.Roles.Role(p.Groups)
 	if p.Role == model.RoleNone {
@@ -250,4 +248,14 @@ func roleName(r model.Role) string {
 		return "none"
 	}
 	return "unknown"
+}
+
+// oidcName is the name a person is shown under: the name claim (their full name), else the user name
+// claim. A name chosen on the Account page replaces it (store.SetCustomName); the identity is the
+// subject, never this name.
+func (s *Service) oidcName(claims map[string]any) string {
+	if n := strings.TrimSpace(str(claims[s.o.OIDC.NameClaim])); n != "" {
+		return n
+	}
+	return str(claims[s.o.OIDC.UsernameClaim])
 }

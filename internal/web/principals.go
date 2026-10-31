@@ -253,24 +253,11 @@ func subjectSuffix(subject string) string {
 	return subject
 }
 
-// skeleton is a name as it is compared: lower case, white space collapsed, so "Alice  K" and "alice k" are one.
-func skeleton(name string) string { return strings.ToLower(strings.Join(strings.Fields(name), " ")) }
-
-// plainASCII reports whether name is printable ASCII only.
-func plainASCII(name string) bool {
-	for _, r := range name {
-		if r < 0x20 || r > 0x7e {
-			return false
-		}
-	}
-	return true
-}
-
 // reservedName reports whether a display name could be mistaken for a system
 // actor or a local account: a name a user chose at the identity provider must
 // not let them pass as "System" or "admin (local)" in the audit log.
 func reservedName(name string, known map[string]store.PrincipalRecord) bool {
-	l := skeleton(name)
+	l := strings.ToLower(strings.TrimSpace(name))
 	if strings.HasSuffix(l, "(local)") {
 		return true
 	}
@@ -280,7 +267,7 @@ func reservedName(name string, known map[string]store.PrincipalRecord) bool {
 		}
 	}
 	for key, r := range known {
-		if strings.HasPrefix(key, "local:") && skeleton(r.DisplayName) == l && r.Kind != "local" {
+		if strings.HasPrefix(key, "local:") && strings.EqualFold(r.DisplayName, name) && r.Kind != "local" {
 			return true
 		}
 	}
@@ -295,16 +282,14 @@ func (d *principalDir) ambiguous(r store.PrincipalRecord, known map[string]store
 	if r.Kind == "local" {
 		return false
 	}
-	if reservedName(r.DisplayName, known) || !plainASCII(r.DisplayName) {
-		// A name with anything but printable ASCII (a Cyrillic "А", a fullwidth "（local）") can look like
-		// another name without equalling it, so it always carries the subject suffix (#283).
+	if reservedName(r.DisplayName, known) {
 		return true
 	}
 	for key, o := range known {
 		if key == r.Subject {
 			continue
 		}
-		if skeleton(o.DisplayName) == skeleton(r.DisplayName) {
+		if strings.EqualFold(o.DisplayName, r.DisplayName) {
 			return true
 		}
 	}

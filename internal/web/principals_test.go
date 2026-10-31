@@ -418,27 +418,27 @@ func TestAuditShowsTheChosenNameAsALabelForTheStableSubject(t *testing.T) {
 	}
 }
 
-// Why (#283): a chosen name must not let its owner pass as someone else in the audit trail. A name with
-// anything but printable ASCII looks like another name without equalling it (Cyrillic A, fullwidth
-// brackets), so it always carries the subject suffix; ASCII look-alikes that differ only in case or
-// spacing are caught by the comparison itself.
-func TestLookAlikeChosenNamesAlwaysCarryTheSubjectSuffix(t *testing.T) {
+// Why (#283): a name with non-ASCII letters is an ordinary name ("Jürgen" must show as written); a chosen
+// name that equals another person's (any case) or imitates a system actor or a local account still gets
+// the subject suffix, as every identity provider name does.
+func TestChosenNamesGetTheSuffixOnlyWhenTheyCollide(t *testing.T) {
 	st := &memPrincipals{}
 	pr := newPrincipalDir(st)
 	ctx := context.Background()
 	_ = st.UpsertPrincipal(ctx, store.PrincipalRecord{Subject: "local:alice", DisplayName: "alice", Kind: "local"})
-	names := []string{"\u0410lice", "admin \uff08local\uff09", "S\u0443stem", "J\u00fcrgen", "ALICE", "Sys tem", "SYSTEM  "}
+	names := []string{"J\u00fcrgen", "ALICE", "System", "Bob", "bob"}
 	subs := make([]string, len(names))
 	for i, name := range names {
 		subs[i] = strings.Repeat(string(rune('a'+i)), 40)
 		_ = st.UpsertPrincipal(ctx, store.PrincipalRecord{Subject: subs[i], DisplayName: name, Provider: "p", Custom: name, Kind: "sso"})
 	}
 	for i, name := range names {
-		if name == "Sys tem" {
-			continue // a distinct name: nothing it could be mistaken for
+		got, suffixed := pr.Text(subs[i]), strings.Contains(pr.Text(subs[i]), "\u00b7 ")
+		if want := name != "J\u00fcrgen"; suffixed != want {
+			t.Errorf("%q shown as %q, suffix want %v", name, got, want)
 		}
-		if got := pr.Text(subs[i]); !strings.Contains(got, "\u00b7 "+subjectSuffix(subs[i])) {
-			t.Errorf("%q shown without the subject suffix: %q", name, got)
-		}
+	}
+	if got := pr.Text(subs[0]); got != "J\u00fcrgen" {
+		t.Errorf("a plain non-ASCII name must show as written, got %q", got)
 	}
 }

@@ -8,7 +8,7 @@ always upgrade automatically.
 
 ### Added
 
-- Display name for SSO and proxy-header accounts: on System → Account every user can set a name of their own, shown in the header menu, the avatar, the Users page and as the label of the audit user. It is kept when the identity provider's name changes at the next sign-in, and clearing it brings the provider's name back. The identity does not change: audit rows keep naming the stable subject, and a name that could pass for another (a system actor, a local account, the same name in other case or spacing) or that holds anything but printable ASCII gets the subject suffix, while zero-width, bidirectional and other invisible characters are refused. This suffix rule applies to names sent by the identity provider too. Database migration 0040 adds one nullable column (#283)
+- Display name for SSO and proxy-header accounts: single sign-on now shows the identity provider's full name (the `name` claim, configurable as `OIDC_NAME_CLAIM`; for a proxy the existing name header) instead of the user name, at every sign-in. On System → Account every user can override it with a name of their own, shown in the header menu, the avatar, the Users page and as the label of the audit user. The override is kept at the next sign-in, and clearing it brings back the provider's name, then the user name. The identity does not change: audit rows keep naming the stable subject, a name equal to another person's or imitating a system actor or a local account gets the subject suffix, and zero-width, bidirectional and other invisible characters are refused in names. Database migration 0040 adds one nullable column (#283)
 
 ### Changed
 

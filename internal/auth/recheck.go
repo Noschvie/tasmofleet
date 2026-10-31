@@ -74,7 +74,7 @@ func (s *Service) recheck(ctx context.Context, sess store.Session) (store.Sessio
 	}
 	p := cur.Principal
 	p.Groups = groupsClaim(claims[s.o.OIDC.GroupsClaim])
-	if n := str(claims[s.o.OIDC.UsernameClaim]); n != "" {
+	if n := s.oidcName(claims); n != "" {
 		p.Name = n
 	}
 	if e := str(claims["email"]); e != "" {

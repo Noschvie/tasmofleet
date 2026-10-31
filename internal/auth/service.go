@@ -44,6 +44,7 @@ type OIDCOptions struct {
 	Scopes        []string // default openid, profile, email
 	GroupsClaim   string   // default "groups"
 	UsernameClaim string   // default "preferred_username"
+	NameClaim     string   // the full name, shown instead of the user name; default "name"
 	DisplayName   string   // login button: "Sign in with <DisplayName>"; default "Single sign-on"
 	PostLogoutURL string   // default PUBLIC_URL + BASE_PATH + "/"
 	// HTTPClient talks to the IdP (discovery, token, JWKS). Default: 10 s timeout.
@@ -171,6 +172,7 @@ func New(o Options) (*Service, error) {
 		}
 		def(&o.OIDC.GroupsClaim, "groups")
 		def(&o.OIDC.UsernameClaim, "preferred_username")
+		def(&o.OIDC.NameClaim, "name")
 		def(&o.OIDC.DisplayName, "Single sign-on")
 		def(&o.OIDC.PostLogoutURL, o.Proxy.URL("/"))
 		if len(o.OIDC.Scopes) == 0 {

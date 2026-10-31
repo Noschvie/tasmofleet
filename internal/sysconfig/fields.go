@@ -135,6 +135,7 @@ var fields = []Field{
 	{Key: "OIDC_SCOPES", Group: GroupSignIn, Label: "Scopes", Apply: Restart, Help: "Comma separated, default openid,profile,email."},
 	{Key: "OIDC_GROUPS_CLAIM", Group: GroupSignIn, Label: "Groups claim", Apply: Restart, StepUp: StepUpAlways, Help: "Claim in the ID token that lists the user's groups. Default: groups."},
 	{Key: "OIDC_USERNAME_CLAIM", Group: GroupSignIn, Label: "User name claim", Apply: Restart, StepUp: StepUpAlways, Help: "Claim shown as the user name. Default: preferred_username."},
+	{Key: "OIDC_NAME_CLAIM", Group: GroupSignIn, Label: "Display name claim", Apply: Restart, Help: "Claim with the person's full name, shown in the header and the user lists instead of the user name. Default: name."},
 	{Key: "OIDC_DISPLAY_NAME", Group: GroupSignIn, Label: "Button name", Apply: Restart,
 		Help: "Name of your identity provider on the login page: the button reads \"Sign in with <name>\". Default: Single sign-on."},
 	{Key: "ADMIN_GROUPS", Group: GroupSignIn, Label: "Admin groups", Apply: Restart, StepUp: StepUpAlways, Help: "Comma separated IdP groups that get the admin role."},

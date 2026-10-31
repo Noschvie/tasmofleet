@@ -491,7 +491,7 @@ func (a *runtime) setupAuth(ctx context.Context) error {
 		Proxy: a.proxy(),
 		OIDC: auth.OIDCOptions{
 			Issuer: cfg.OIDCIssuer, ClientID: cfg.OIDCClientID, ClientSecret: cfg.OIDCClientSecret, Scopes: cfg.OIDCScopes,
-			GroupsClaim: cfg.OIDCGroupsClaim, UsernameClaim: cfg.OIDCUsernameClaim, DisplayName: cfg.OIDCDisplayName, PostLogoutURL: cfg.OIDCPostLogoutURL,
+			GroupsClaim: cfg.OIDCGroupsClaim, UsernameClaim: cfg.OIDCUsernameClaim, NameClaim: cfg.OIDCNameClaim, DisplayName: cfg.OIDCDisplayName, PostLogoutURL: cfg.OIDCPostLogoutURL,
 		},
 		Header: auth.HeaderOptions{
 			User: cfg.HeaderUser, Name: cfg.HeaderName, Email: cfg.HeaderEmail, Groups: cfg.HeaderGroups,

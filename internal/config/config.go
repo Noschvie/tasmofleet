@@ -68,6 +68,7 @@ type Config struct {
 	OIDCScopes        []string      `env:"OIDC_SCOPES" ui:"lock" default:"openid,profile,email"` // Authentik puts "groups" into the profile scope
 	OIDCGroupsClaim   string        `env:"OIDC_GROUPS_CLAIM" ui:"lock" default:"groups"`
 	OIDCUsernameClaim string        `env:"OIDC_USERNAME_CLAIM" ui:"lock" default:"preferred_username"`
+	OIDCNameClaim     string        `env:"OIDC_NAME_CLAIM" ui:"lock" default:"name"`             // the person's full name, shown instead of the user name (#283)
 	OIDCDisplayName   string        `env:"OIDC_DISPLAY_NAME" ui:"lock" default:"Single sign-on"` // login button: "Sign in with <name>"
 	OIDCPostLogoutURL string        `env:"OIDC_POST_LOGOUT_URL" ui:"lock"`                       // default PUBLIC_URL + base path
 	HeaderUser        string        `env:"HEADER_USER" default:"X-authentik-username"`

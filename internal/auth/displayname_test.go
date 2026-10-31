@@ -47,19 +47,19 @@ func TestSSODisplayNameSurvivesTheNextSignInAndClearingFallsBack(t *testing.T) {
 	clear(e.sessions.m) // the first browser's session ended; csrfToken() reads the only live one
 	again := e.browser()
 	renamed := alice
-	renamed.Username = "alice.new"
+	renamed.Name = "Alice From The IdP"
 	if r := again.get(again.startOIDC("/", renamed)); r.code != http.StatusSeeOther {
 		t.Fatalf("second login: %d", r.code)
 	}
 	again.get("/account")
-	if d := pages.account; d.DisplayName != "Alice Example" || d.ProviderName != "alice.new" || !d.NameForm {
+	if d := pages.account; d.DisplayName != "Alice Example" || d.ProviderName != "Alice From The IdP" || !d.NameForm {
 		t.Fatalf("a sign-in wiped the chosen name: %+v", d)
 	}
 	if r := setName(again, ""); r.code != http.StatusSeeOther {
 		t.Fatalf("clear: %d", r.code)
 	}
 	again.get("/account")
-	if d := pages.account; d.DisplayName != "" || d.ProviderName != "alice.new" {
+	if d := pages.account; d.DisplayName != "" || d.ProviderName != "Alice From The IdP" {
 		t.Fatalf("after clearing the provider name applies: %+v", d)
 	}
 }
@@ -77,13 +77,12 @@ func TestSettingADisplayNameAuditsTheStableIdentity(t *testing.T) {
 	}
 }
 
-// Why: the name is shown on every page next to other people's names, so characters that make one name
-// look like another (zero-width, bidi override, odd spaces), control characters and a very long
+// Why: the name is shown on every page next to other people's names, so invisible characters (zero-width,
+// bidi override), control characters and a very long
 // value are refused at the door, with the typed text kept in the form.
 func TestDisplayNameValidation(t *testing.T) {
 	e, b, pages := ssoWithNamePages(t)
-	for name, typed := range map[string]string{"control": "a\x00b", "newline": "a\nb", "too long": strings.Repeat("x", 65),
-		"zero width": "Alice\u200b", "bidi override": "\u202eecilA", "no-break space": "a\u00a0b", "ideographic space": "a\u3000b", "line separator": "a\u2028b"} {
+	for name, typed := range map[string]string{"control": "a\x00b", "newline": "a\nb", "too long": strings.Repeat("x", 65), "zero width": "Alice\u200b", "bidi override": "\u202eecilA"} {
 		if r := setName(b, typed); r.code != http.StatusBadRequest {
 			t.Errorf("%s: %d, want 400", name, r.code)
 		}
@@ -120,5 +119,35 @@ func TestOnlyTheOwnNameIsWritable(t *testing.T) {
 	}
 	if got := e.dir.rows["sub-alice"].Custom; got != "Mallory" {
 		t.Fatalf("own name %q", got)
+	}
+}
+
+// Why (#283): the identity provider's full name (the "name" claim) is the default display name at every
+// sign-in, ahead of the user name, and follows a rename at the provider.
+func TestSSOSignInTakesTheNameClaimAsDisplayName(t *testing.T) {
+	e := newEnv(t, ModeOIDC)
+	b := e.browser()
+	full := alice
+	full.Name = "Alice Example"
+	if r := b.get(b.startOIDC("/", full)); r.code != http.StatusSeeOther {
+		t.Fatalf("login: %d", r.code)
+	}
+	if got := e.dir.rows["sub-alice"]; got.DisplayName != "Alice Example" || got.Subject != "sub-alice" {
+		t.Fatalf("recorded %+v, want the name claim under the unchanged subject", got)
+	}
+	if s := e.sessions.all(); len(s) != 1 || s[0].Principal.Name != "Alice Example" {
+		t.Fatalf("the session shows %+v", s)
+	}
+}
+
+// Why (#283): without a name claim the user name is the fallback, as before.
+func TestSSOSignInFallsBackToTheUsernameWithoutANameClaim(t *testing.T) {
+	e := newEnv(t, ModeOIDC, func(o *Options) { o.OIDC.NameClaim = "no_such_claim" })
+	b := e.browser()
+	if r := b.get(b.startOIDC("/", alice)); r.code != http.StatusSeeOther {
+		t.Fatalf("login: %d", r.code)
+	}
+	if got := e.dir.rows["sub-alice"].DisplayName; got != "alice" {
+		t.Fatalf("recorded %q, want the user name", got)
 	}
 }

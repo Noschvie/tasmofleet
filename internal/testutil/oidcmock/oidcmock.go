@@ -30,6 +30,7 @@ import (
 type User struct {
 	Subject  string
 	Username string
+	Name     string // the "name" claim (full name); empty: the username
 	Email    string
 	Groups   []string
 }
@@ -302,7 +303,7 @@ func (s *Server) issue(w http.ResponseWriter, u User, nonce string, authTime tim
 	claims := map[string]any{
 		"iss": s.Issuer(), "sub": u.Subject, "aud": s.opts.ClientID,
 		"iat": now.Unix(), "exp": now.Add(5 * time.Minute).Unix(),
-		"preferred_username": u.Username, "email": u.Email, "name": u.Username,
+		"preferred_username": u.Username, "email": u.Email, "name": u.fullName(),
 		"groups": append([]string{}, u.Groups...),
 	}
 	if nonce != "" {
@@ -377,3 +378,10 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 func b64(b []byte) string { return base64.RawURLEncoding.EncodeToString(b) }
 
 func randString() string { return rand.Text() }
+
+func (u User) fullName() string {
+	if u.Name != "" {
+		return u.Name
+	}
+	return u.Username
+}

@@ -74,7 +74,7 @@ var sysLayout = []sysTabDef{
 	{"signin", "Sign-in", []sysCardDef{
 		{ID: "mode", Title: "Sign-in mode", Class: "spanall", StepUp: true, Keys: []string{"AUTH_MODE"}},
 		{ID: "idp", Title: "Identity provider", Note: "Disabled while Local accounts is selected.", Class: "span2", Depends: "v.AUTH_MODE=oidc", StepUp: true,
-			Keys: []string{"OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_SCOPES", "OIDC_DISPLAY_NAME"}},
+			Keys: []string{"OIDC_ISSUER", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_SCOPES", "OIDC_NAME_CLAIM", "OIDC_DISPLAY_NAME"}},
 		{ID: "roles", Title: "Roles and claims", Depends: "v.AUTH_MODE=oidc", StepUp: true,
 			Keys: []string{"ADMIN_GROUPS", "OPERATOR_GROUPS", "OIDC_GROUPS_CLAIM", "OIDC_USERNAME_CLAIM"}},
 	}},
@@ -264,6 +264,7 @@ var sysCopies = map[string]sysCopy{
 	"OIDC_CLIENT_ID":      {Help: "Registered for TasmoFleet at your IdP.", Width: "full"},
 	"OIDC_CLIENT_SECRET":  {Help: "Write-only.", Width: "half", Info: "Sent only to the issuer it was entered for. Change the issuer and the secret must be entered again."},
 	"OIDC_SCOPES":         {Help: "Comma separated.", Width: "half"},
+	"OIDC_NAME_CLAIM":     {Help: "Default: name.", Width: "half", Info: "Claim with the person's full name, shown instead of the user name. Users can override it on their Account page."},
 	"OIDC_DISPLAY_NAME":   {Help: "“Sign in with <name>”.", Width: "half", Info: "Name of your identity provider on the login page. Default: Single sign-on."},
 	"ADMIN_GROUPS":        {Help: "IdP groups, comma separated.", Width: "full"},
 	"OPERATOR_GROUPS":     {Help: "IdP groups, comma separated.", Width: "full"},
