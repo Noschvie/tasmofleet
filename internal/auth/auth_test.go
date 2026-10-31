@@ -642,7 +642,7 @@ func TestOnlyAccountRoutesChangeCredentials(t *testing.T) {
 	// is pending, so they redirect like the others.
 	wantAcc := []string{"GET /account", "POST /account/password", "GET /users", "GET /users/new", "POST /users",
 		"POST /users/stepup", "POST /users/local/{name}", "POST /users/sessions", "GET /users/{name}",
-		"GET /users/principal/{subject...}", "POST /account/profile", "GET /setup/account", "POST /setup/account"}
+		"GET /users/principal/{subject...}", "POST /account/profile", "POST /account/name", "GET /setup/account", "POST /setup/account"}
 	if !slices.Equal(accountRoutePatterns, wantAcc) {
 		t.Fatalf("account routes changed: %v; review the role and step-up checks, then update this test", accountRoutePatterns)
 	}

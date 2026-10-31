@@ -85,6 +85,9 @@ func (p *Pages) ChangePassword(w http.ResponseWriter, r *http.Request, status in
 		return
 	}
 	v := p.h.view(r, "Account", "account", nil)
+	if d.NameForm && d.DisplayName != "" {
+		v.User.Name = d.DisplayName // fresh from the save, the cached directory may lag a few seconds
+	}
 	p.h.show(w, r, status, "account", v, accountPage(accountViewOf(v, d)))
 }
 

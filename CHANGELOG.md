@@ -6,13 +6,17 @@ always upgrade automatically.
 
 ## Unreleased
 
-### Security
+### Added
 
-- Single sign-on and proxy-header identities whose subject starts with `local:` are refused at sign-in (403 with a clear message, audit entry `denied: reserved subject`). That prefix is the subject of local accounts, and the audit log, the Users page and the user directory tell local accounts by it, so such an identity could appear as the local admin and share its audit rows. Roles were never affected (#380)
+- Display name for SSO and proxy-header accounts: on System → Account every user can set a name of their own, shown in the header menu, the avatar, the Users page and as the label of the audit user. It is kept when the identity provider's name changes at the next sign-in, and clearing it brings the provider's name back. The identity does not change: audit rows keep naming the stable subject, and a name that could pass for another (a system actor, a local account, the same name in other case or spacing) or that holds anything but printable ASCII gets the subject suffix, while zero-width, bidirectional and other invisible characters are refused. This suffix rule applies to names sent by the identity provider too. Database migration 0040 adds one nullable column (#283)
 
 ### Changed
 
 - Device settings tab: the fields sit in grouped cards (Names, Options, Network & telemetry, MQTT, Power & flash, Time) in three independent columns from about 1200 px, two balanced columns below and one on a phone; each card has a one-line note, the Save bar spans the full width and stays in view. SetOption0 moved from Options to Power & flash, next to the other flash-write settings (#367)
+
+### Security
+
+- Single sign-on and proxy-header identities whose subject starts with `local:` are refused at sign-in (403 with a clear message, audit entry `denied: reserved subject`). That prefix is the subject of local accounts, and the audit log, the Users page and the user directory tell local accounts by it, so such an identity could appear as the local admin and share its audit rows. Roles were never affected (#380)
 
 ## 0.23.1 "Cape Hatteras" (2026-10-31)
 

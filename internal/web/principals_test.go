@@ -30,6 +30,17 @@ func (m *memPrincipals) UpsertPrincipal(_ context.Context, p store.PrincipalReco
 	if m.rows == nil {
 		m.rows = map[string]store.PrincipalRecord{}
 	}
+	// Like the SQL upsert: the sign-in name replaces the provider name, the chosen name stays, and
+	// ListPrincipals shows the chosen name when there is one.
+	if p.Custom == "" {
+		p.Custom = m.rows[p.Subject].Custom
+	}
+	if p.Provider == "" {
+		p.Provider = p.DisplayName
+	}
+	if p.Custom != "" {
+		p.DisplayName = p.Custom
+	}
 	m.rows[p.Subject] = p
 	return nil
 }
@@ -362,5 +373,72 @@ func TestUsersViewNeverPrintsRawSubject(t *testing.T) {
 	}
 	if v.Rows[1].SubTitle != "" {
 		t.Error("a readable subject needs no tooltip")
+	}
+}
+
+// Why (#283): a name the person chose replaces the identity provider's name in the header and avatar,
+// and is escaped like any other text (it is typed by a user and shown to admins).
+func TestChosenDisplayNameShowsInTheHeaderEscaped(t *testing.T) {
+	st := &memPrincipals{}
+	e := setupWith(t, func(d *Deps) { d.Principals = st })
+	chosen := `Dr. <b>Tester</b>`
+	_ = st.UpsertPrincipal(context.Background(), store.PrincipalRecord{Subject: "test:admin", DisplayName: chosen, Provider: "Tester", Custom: chosen, Kind: "sso"})
+	_, body := e.do(t, "GET", "/whats-new", "admin", nil)
+	if !strings.Contains(body, `<div class="um-name" data-visual-mask>Dr. &lt;b&gt;Tester&lt;/b&gt;</div>`) {
+		t.Fatalf("header does not show the chosen name, escaped: %s", body[strings.Index(body, "um-who")-40:][:300])
+	}
+	if strings.Contains(body, "<b>Tester</b>") {
+		t.Fatal("the chosen name reached the page unescaped")
+	}
+}
+
+// Why (#283): the audit trail names the actor by the stable subject. A chosen name is only the label
+// shown for it (the subject stays in the tooltip and the row stays filterable by it), and a name
+// that imitates a system actor or a local account is told apart by the subject suffix.
+func TestAuditShowsTheChosenNameAsALabelForTheStableSubject(t *testing.T) {
+	st := &memPrincipals{}
+	e := setupWith(t, func(d *Deps) { d.Principals = st })
+	ctx := context.Background()
+	_ = st.UpsertPrincipal(ctx, store.PrincipalRecord{Subject: testSub, DisplayName: "Thomas Kroll", Provider: "thomas", Custom: "Thomas Kroll", Kind: "sso"})
+	_ = st.UpsertPrincipal(ctx, store.PrincipalRecord{Subject: otherSub, DisplayName: "System", Provider: "mallory", Custom: "System", Kind: "sso"})
+	e.aud.events = []model.AuditEvent{
+		{ID: 1, At: time.Now(), Actor: testSub, Action: "device.update", Target: "device:1", Result: "ok"},
+		{ID: 2, At: time.Now(), Actor: otherSub, Action: "device.restart", Target: "device:1", Result: "ok"},
+	}
+	_, body := e.do(t, "GET", "/audit?since=all", "admin", nil)
+	if !strings.Contains(body, `class="who" title="`+testSub) || !strings.Contains(body, "Thomas Kroll") {
+		t.Errorf("the chosen name must label the row with the subject in the tooltip: %s", body[strings.Index(body, "<main"):])
+	}
+	if !strings.Contains(body, "System · "+subjectSuffix(otherSub)) {
+		t.Errorf("a chosen name that imitates a system actor must carry the subject suffix")
+	}
+	_, body = e.do(t, "GET", "/audit?since=all&actor="+testSub, "admin", nil)
+	if !strings.Contains(body, "device.update") || strings.Contains(body, "device.restart") {
+		t.Errorf("the row stays selectable by the stable subject")
+	}
+}
+
+// Why (#283): a chosen name must not let its owner pass as someone else in the audit trail. A name with
+// anything but printable ASCII looks like another name without equalling it (Cyrillic A, fullwidth
+// brackets), so it always carries the subject suffix; ASCII look-alikes that differ only in case or
+// spacing are caught by the comparison itself.
+func TestLookAlikeChosenNamesAlwaysCarryTheSubjectSuffix(t *testing.T) {
+	st := &memPrincipals{}
+	pr := newPrincipalDir(st)
+	ctx := context.Background()
+	_ = st.UpsertPrincipal(ctx, store.PrincipalRecord{Subject: "local:alice", DisplayName: "alice", Kind: "local"})
+	names := []string{"\u0410lice", "admin \uff08local\uff09", "S\u0443stem", "J\u00fcrgen", "ALICE", "Sys tem", "SYSTEM  "}
+	subs := make([]string, len(names))
+	for i, name := range names {
+		subs[i] = strings.Repeat(string(rune('a'+i)), 40)
+		_ = st.UpsertPrincipal(ctx, store.PrincipalRecord{Subject: subs[i], DisplayName: name, Provider: "p", Custom: name, Kind: "sso"})
+	}
+	for i, name := range names {
+		if name == "Sys tem" {
+			continue // a distinct name: nothing it could be mistaken for
+		}
+		if got := pr.Text(subs[i]); !strings.Contains(got, "\u00b7 "+subjectSuffix(subs[i])) {
+			t.Errorf("%q shown without the subject suffix: %q", name, got)
+		}
 	}
 }

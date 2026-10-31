@@ -172,10 +172,18 @@ func (a *Accounts) create(ctx context.Context, nu NewUser, mustChange bool, crea
 	return otp, nil
 }
 
+// invisibleRune is a character a display name must not contain: control characters, format characters
+// (zero-width, bidirectional overrides), line and paragraph separators and every space but U+0020. Such
+// characters make one name look like another (#283).
+func invisibleRune(r rune) bool {
+	return unicode.IsControl(r) || unicode.Is(unicode.Cf, r) || unicode.Is(unicode.Zl, r) || unicode.Is(unicode.Zp, r) ||
+		(unicode.Is(unicode.Zs, r) && r != ' ') || unicode.Is(unicode.Co, r) || unicode.Is(unicode.Cs, r)
+}
+
 // CleanProfile trims and checks the profile fields; both may be empty.
 func CleanProfile(displayName, email string) (string, string, error) {
 	displayName, email = strings.TrimSpace(displayName), strings.TrimSpace(email)
-	if utf8.RuneCountInString(displayName) > maxDisplayName || strings.IndexFunc(displayName, unicode.IsControl) >= 0 {
+	if utf8.RuneCountInString(displayName) > maxDisplayName || strings.IndexFunc(displayName, invisibleRune) >= 0 {
 		return "", "", ErrBadName
 	}
 	if email != "" {
@@ -352,7 +360,7 @@ func inputProblem(err error) (field, msg string) {
 	case errors.Is(err, ErrLastAdmin):
 		return "", "This would leave no enabled administrator."
 	case errors.Is(err, ErrBadName):
-		return "display_name", fmt.Sprintf("Use at most %d characters.", maxDisplayName)
+		return "display_name", fmt.Sprintf("Use at most %d characters, without control, invisible or special space characters.", maxDisplayName)
 	case errors.Is(err, ErrBadEmail):
 		return "email", "Enter an address like name@example.org, or leave it empty."
 	case errors.Is(err, errConfirmMismatch):

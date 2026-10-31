@@ -70,3 +70,23 @@ test("the login page offers the IdP button and the local form together", async (
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
 });
+
+// #283: an SSO user chooses how their name shows. The identity provider keeps sending its own name at
+// every sign-in; the chosen one must survive that, and clearing it brings the provider name back.
+test("an SSO user sets a display name that survives the next sign-in", async ({ page }) => {
+  await loginAs("operator");
+  await page.goto(app.url + "/login/sso?next=%2Faccount"); // a local account may exist: no automatic redirect to the IdP
+  await page.getByText("Edit display name").click();
+  await page.getByLabel("Display name").fill("Olivia Operator");
+  await page.getByRole("button", { name: "Save display name" }).click();
+  await expect(page.getByText("Profile saved.")).toBeVisible();
+  await expect(page.locator("summary.um-btn").getByText("Olivia", { exact: true })).toBeVisible();
+  await signOut(page);
+  await loginAs("operator");
+  await page.goto(app.url + "/login/sso?next=%2Faccount");
+  await expect(page.locator("summary.um-btn").getByText("Olivia", { exact: true })).toBeVisible();
+  await page.getByText("Edit display name").click();
+  await page.getByLabel("Display name").fill("");
+  await page.getByRole("button", { name: "Save display name" }).click();
+  await expect(page.locator("summary.um-btn").getByText("olivia", { exact: true })).toBeVisible();
+});

@@ -229,6 +229,16 @@ templ accountPage(v accountView) {
 					</form>
 				</details>
 			}
+			if v.D.NameForm {
+				<details class="fold acct-edit" open?={ v.D.ErrField == "display_name" }>
+					<summary>Edit display name</summary>
+					<form class="acct-form" method="post" action={ templ.SafeURL(v.D.BasePath + "/account/name") }>
+						<input type="hidden" name="csrf" value={ v.D.CSRFToken }/>
+						@ui.Field(ui.FieldData{Label: "Display name", Name: "display_name", Value: v.D.DisplayName, Autocomplete: "name", Help: nameHelp(v.D.ProviderName), Error: fieldErr(v.D.ErrField, "display_name", v.D.Error), Autofocus: focus(v.D.ErrField, "display_name", false)})
+						<button type="submit" class="btn">Save display name</button>
+					</form>
+				</details>
+			}
 		}
 		if v.D.Local {
 			<section class="ucard acct-pw" aria-labelledby="acct-pw-h">
@@ -243,6 +253,14 @@ templ accountPage(v accountView) {
 			</section>
 		}
 	</div>
+}
+
+// nameHelp is the hint under the display name field: what shows when it is left empty.
+func nameHelp(provider string) string {
+	if provider == "" {
+		return "Shown instead of the name your sign-in sends. Leave empty to use that name."
+	}
+	return "Shown instead of " + provider + ". Leave empty to use that name."
 }
 
 func orDash(s string) string {

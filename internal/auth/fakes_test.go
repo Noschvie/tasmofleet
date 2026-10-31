@@ -132,7 +132,19 @@ func (d *fakeDir) RecordLogin(_ context.Context, p store.PrincipalRecord) error 
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	p.LastLogin = p.UpdatedAt
+	p.Custom = d.rows[p.Subject].Custom // like the SQL upsert: a sign-in never touches the chosen name
 	d.rows[p.Subject] = p
+	return nil
+}
+func (d *fakeDir) SetCustomName(_ context.Context, subject, name string) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	r, ok := d.rows[subject]
+	if !ok {
+		return store.ErrNotFound
+	}
+	r.Custom = name
+	d.rows[subject] = r
 	return nil
 }
 func (d *fakeDir) ListPrincipals(context.Context) ([]store.PrincipalRecord, error) {
@@ -140,6 +152,10 @@ func (d *fakeDir) ListPrincipals(context.Context) ([]store.PrincipalRecord, erro
 	defer d.mu.Unlock()
 	var out []store.PrincipalRecord
 	for _, r := range d.rows {
+		r.Provider = r.DisplayName // the stored row holds the sign-in name; DisplayName is what ListPrincipals shows
+		if r.Custom != "" {
+			r.DisplayName = r.Custom
+		}
 		out = append(out, r)
 	}
 	return out, nil

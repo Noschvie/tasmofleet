@@ -33,6 +33,11 @@ type PasswordPageData struct {
 	// /account is open to every signed-in user; the forms stay local-only).
 	Local bool
 	IdP   string // the identity provider's name with AUTH_MODE=oidc ("Sign-in: SSO (IdP)")
+	// NameForm: an SSO or proxy user, who can set a display name of their own (POST /account/name,
+	// field "display_name"; #283). Then DisplayName is that chosen name (empty: none) and
+	// ProviderName the name of the last sign-in, which shows again when it is cleared.
+	NameForm     bool
+	ProviderName string
 }
 
 // Sign-in methods of a UserRow.
@@ -122,6 +127,7 @@ var accountRoutePatterns = []string{
 	"GET /users/{name}",
 	"GET /users/principal/{subject...}",
 	"POST /account/profile",
+	"POST /account/name",
 	"GET /setup/account",
 	"POST /setup/account",
 }
@@ -129,7 +135,7 @@ var accountRoutePatterns = []string{
 // MountPaths are the paths to mount Routes() on (ServeMux patterns).
 func (s *Service) MountPaths() []string {
 	return []string{"/login", "/login/sso", "/login/local", "/oidc/callback", "/oidc/stepup", "/logout", "/account", "/account/password",
-		"/account/profile", "/users", "/users/", "/setup/account"}
+		"/account/profile", "/account/name", "/users", "/users/", "/setup/account"}
 }
 
 // localOnly refuses principals that are not local accounts.
@@ -163,6 +169,7 @@ func (s *Service) accountHandlers() map[string]http.Handler {
 		"GET /users/{name}":                 admin(s.localDetailPage),
 		"GET /users/principal/{subject...}": admin(s.principalDetailPage),
 		"POST /account/profile":             settled(s.profileSubmit),
+		"POST /account/name":                anyone(s.nameSubmit),
 		"GET /setup/account":                http.HandlerFunc(s.setupAccountPage),
 		"POST /setup/account":               http.HandlerFunc(s.setupAccountSubmit),
 	}
@@ -203,11 +210,12 @@ func (s *Service) passwordForm(w http.ResponseWriter, r *http.Request) {
 			d.DisplayName, d.Email = u.DisplayName, u.Email
 		}
 	} else if dir := s.o.Directory; dir != nil {
-		// SSO and proxy users: the name and address of their last sign-in.
+		// SSO and proxy users: the address of their last sign-in, the name of it and the name they chose.
+		d.NameForm = true
 		if seen, err := dir.ListPrincipals(r.Context()); err == nil {
 			for _, p := range seen {
 				if p.Subject == ci.p.Subject {
-					d.DisplayName, d.Email = p.DisplayName, p.Email
+					d.DisplayName, d.ProviderName, d.Email = p.Custom, p.Provider, p.Email
 				}
 			}
 		}

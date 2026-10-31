@@ -140,6 +140,30 @@ func TestAccountPageShowsProfileAndPasswordForm(t *testing.T) {
 	}
 }
 
+// Why (#283): an SSO user has no profile form, but can choose how their name shows; the form says what
+// shows when it stays empty, and a local account keeps its own profile form instead of getting both.
+func TestAccountPageOffersTheDisplayNameToSSOUsers(t *testing.T) {
+	pages := NewPages()
+	setupWith(t, func(d *Deps) { d.Pages = pages })
+	body := renderAccountPage(t, pages, func(w http.ResponseWriter, r *http.Request) {
+		pages.ChangePassword(w, r, http.StatusOK, auth.PasswordPageData{BasePath: "/tf", CSRFToken: "tok", NameForm: true, DisplayName: "Thomas Kroll", ProviderName: "thomas"})
+	})
+	for _, want := range []string{`action="/tf/account/name"`, `name="display_name"`, `value="Thomas Kroll"`, "Shown instead of thomas."} {
+		if !strings.Contains(body, want) {
+			t.Errorf("SSO account page lacks %q", want)
+		}
+	}
+	if strings.Contains(body, `action="/tf/account/profile"`) {
+		t.Error("an SSO account got the local profile form")
+	}
+	local := renderAccountPage(t, pages, func(w http.ResponseWriter, r *http.Request) {
+		pages.ChangePassword(w, r, http.StatusOK, auth.PasswordPageData{BasePath: "/tf", CSRFToken: "tok", Local: true})
+	})
+	if strings.Contains(local, `action="/tf/account/name"`) {
+		t.Error("a local account got the SSO name form")
+	}
+}
+
 // Why: a person who saves the Backups tab must see the values they just saved, not the first tab.
 func TestSystemSettingsSaveReturnsToTheSavedTab(t *testing.T) {
 	e, _, _, _ := sysEnv(t, true)

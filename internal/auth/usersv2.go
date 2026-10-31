@@ -298,6 +298,43 @@ func (s *Service) profileSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// nameSubmit is POST /account/name: an SSO or proxy user sets, or with an empty value clears, the
+// display name shown instead of the name their identity provider sends. It is presentation only:
+// the subject that audit rows store and the role do not change, and a later sign-in does not
+// overwrite it (store.SetCustomName). Local accounts have the profile form instead.
+func (s *Service) nameSubmit(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	ci := s.resolve(r)
+	if ci.p.Method == ModeLocal || s.o.Directory == nil {
+		s.o.Pages.Message(w, r, http.StatusForbidden, MessageData{
+			BasePath: httpx.BasePath(ctx), Title: "Not available",
+			Text: "Local accounts set their name in the profile form.",
+		})
+		return
+	}
+	typed := r.PostFormValue("display_name")
+	name, _, err := CleanProfile(typed, "")
+	if err == nil {
+		err = s.o.Directory.SetCustomName(ctx, ci.p.Subject, name)
+	}
+	switch {
+	case err == nil:
+		action := "account.display_name"
+		if name == "" {
+			action = "account.display_name.clear"
+		}
+		s.record(r, ci.p.Subject, action, "ok", nil)
+		s.redirectLocal(w, r, "/account?profile=saved")
+	case errors.Is(err, ErrBadName):
+		d := PasswordPageData{BasePath: httpx.BasePath(ctx), CSRFToken: ci.csrf, Self: ci.p.Name, IdP: s.idpName(), NameForm: true, DisplayName: typed}
+		d.ErrField, d.Error = inputProblem(err)
+		s.accountPages().ChangePassword(w, r, http.StatusBadRequest, d)
+	default:
+		slog.ErrorContext(ctx, "set display name", "err", err) // includes store.ErrNotFound: a subject that never signed in cannot be here
+		http.Error(w, "internal error", http.StatusInternalServerError)
+	}
+}
+
 // endOneSession ends the single session (form field "session") of subject.
 // The caller has checked the step-up.
 func (s *Service) endOneSession(w http.ResponseWriter, r *http.Request, ci ctxInfo, subject, id string) {

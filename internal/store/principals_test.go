@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -112,4 +113,54 @@ func TestCountSessionsCountsOnlyLiveOnesPerSubject(t *testing.T) {
 	if err != nil || len(got) != 2 || got["sub-a"] != 2 || got["sub-b"] != 1 {
 		t.Fatalf("%v %v", got, err)
 	}
+}
+
+// Why (#283): a person's own display name must survive the next sign-in, which rewrites the name the
+// identity provider sends; and clearing it must fall back to that provider name.
+func TestCustomNameSurvivesSignInAndClearingFallsBack(t *testing.T) {
+	s, _, _ := newStore(t)
+	ctx := context.Background()
+	rec := PrincipalRecord{Subject: "sub-1", DisplayName: "thomas", Kind: "sso", Role: "admin"}
+	if err := s.RecordLogin(ctx, rec); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetCustomName(ctx, "sub-1", "Thomas Kroll"); err != nil {
+		t.Fatal(err)
+	}
+	rec.DisplayName = "thomas.k" // the identity provider renamed the claim
+	for _, write := range []func() error{
+		func() error { return s.RecordLogin(ctx, rec) },
+		func() error { return s.UpsertPrincipal(ctx, rec) }, // the per-request name upsert of the web layer
+	} {
+		if err := write(); err != nil {
+			t.Fatal(err)
+		}
+		p := onlyPrincipal(t, s)
+		if p.DisplayName != "Thomas Kroll" || p.Custom != "Thomas Kroll" || p.Provider != "thomas.k" {
+			t.Fatalf("a sign-in must not wipe the chosen name, got %+v", p)
+		}
+	}
+	if err := s.SetCustomName(ctx, "sub-1", ""); err != nil {
+		t.Fatal(err)
+	}
+	if p := onlyPrincipal(t, s); p.DisplayName != "thomas.k" || p.Custom != "" {
+		t.Fatalf("clearing falls back to the provider name, got %+v", p)
+	}
+}
+
+// Why: setting a name for a subject nobody recorded must not invent a principal row.
+func TestSetCustomNameNeedsAKnownSubject(t *testing.T) {
+	s, _, _ := newStore(t)
+	if err := s.SetCustomName(context.Background(), "nobody", "X"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("got %v", err)
+	}
+}
+
+func onlyPrincipal(t *testing.T, s *SQLite) PrincipalRecord {
+	t.Helper()
+	got, err := s.ListPrincipals(context.Background())
+	if err != nil || len(got) != 1 {
+		t.Fatalf("%v %v", got, err)
+	}
+	return got[0]
 }

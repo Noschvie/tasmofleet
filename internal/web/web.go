@@ -408,6 +408,13 @@ func (h *handler) view(r *http.Request, title, nav string, data any) view {
 		User: p, IsAdmin: p.Role >= model.RoleAdmin, RoleName: roleName(p.Role),
 		Flash: flashes[r.URL.Query().Get("ok")], Data: data, Path: r.URL.Path,
 	}
+	if p.Method != auth.ModeLocal {
+		// A name an SSO or proxy user chose replaces the one the identity provider sends in the header
+		// and the avatar. Presentation only: p.Subject, the identity, is untouched.
+		if c := h.pr.Custom(p.Subject); c != "" {
+			v.User.Name = c
+		}
+	}
 	if h.d.Hub != nil {
 		v.EventSeq = h.d.Hub.Seq()
 	}

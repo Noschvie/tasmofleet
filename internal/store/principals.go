@@ -6,11 +6,17 @@ import (
 	"time"
 )
 
-// PrincipalRecord is the display name captured at the last sign-in of a
-// subject. Kind is "sso", "local" or "header".
+// PrincipalRecord is the display name of a subject. Kind is "sso", "local" or "header".
+//
+// Writing (UpsertPrincipal, RecordLogin): DisplayName is the name captured at the sign-in and replaces
+// the stored one; Custom and Provider are ignored, the chosen name has its own writer (SetCustomName).
+// Reading (ListPrincipals): DisplayName is the name to show (Custom when the person chose one, else
+// Provider), Provider the sign-in name, Custom the chosen name (empty: none).
 type PrincipalRecord struct {
 	Subject     string
 	DisplayName string
+	Provider    string
+	Custom      string
 	Kind        string
 	UpdatedAt   time.Time
 	// Role is the role of the last sign-in ("admin", "operator"; empty when
@@ -40,6 +46,9 @@ type UserDirectory interface {
 	// CountSessions returns the live web sessions per subject: not expired at
 	// now and seen within idle.
 	CountSessions(ctx context.Context, now time.Time, idle time.Duration) (map[string]int, error)
+	// SetCustomName stores the display name a person chose for themselves (empty clears it, so the
+	// sign-in name shows again). ErrNotFound when the subject was never recorded. Sign-ins never touch it.
+	SetCustomName(ctx context.Context, subject, name string) error
 	// ListSubjectSessions returns the live sessions of one subject (not
 	// expired at now, seen within idle), most recently seen first.
 	ListSubjectSessions(ctx context.Context, subject string, now time.Time, idle time.Duration) ([]Session, error)
@@ -76,6 +85,17 @@ func (s *SQLite) CountSessions(ctx context.Context, now time.Time, idle time.Dur
 	return out, rows.Err()
 }
 
+func (s *SQLite) SetCustomName(ctx context.Context, subject, name string) error {
+	n, err := rowsDeleted(s.db.ExecContext(ctx, `UPDATE principals SET custom_name = NULLIF(?, '') WHERE subject = ?`, name, subject))
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *SQLite) UpsertPrincipal(ctx context.Context, p PrincipalRecord) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO principals (subject, display_name, kind, updated_at) VALUES (?,?,?,?)
 		ON CONFLICT(subject) DO UPDATE SET display_name = excluded.display_name, kind = excluded.kind, updated_at = excluded.updated_at`,
@@ -84,7 +104,7 @@ func (s *SQLite) UpsertPrincipal(ctx context.Context, p PrincipalRecord) error {
 }
 
 func (s *SQLite) ListPrincipals(ctx context.Context) ([]PrincipalRecord, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT subject, display_name, kind, updated_at, role, last_login_at, email FROM principals ORDER BY subject`)
+	rows, err := s.db.QueryContext(ctx, `SELECT subject, COALESCE(NULLIF(custom_name, ''), display_name), display_name, COALESCE(custom_name, ''), kind, updated_at, role, last_login_at, email FROM principals ORDER BY subject`)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +113,7 @@ func (s *SQLite) ListPrincipals(ctx context.Context) ([]PrincipalRecord, error) 
 	for rows.Next() {
 		var p PrincipalRecord
 		var at, login int64
-		if err := rows.Scan(&p.Subject, &p.DisplayName, &p.Kind, &at, &p.Role, &login, &p.Email); err != nil {
+		if err := rows.Scan(&p.Subject, &p.DisplayName, &p.Provider, &p.Custom, &p.Kind, &at, &p.Role, &login, &p.Email); err != nil {
 			return nil, err
 		}
 		p.UpdatedAt = fromMS(at)
