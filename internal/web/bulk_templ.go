@@ -341,7 +341,7 @@ func bulkScopePage(v bulkScopeView) templ.Component {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "</label> <button type=\"button\" class=\"btn btn-link btn-sm\" data-history-clear hidden>Clear history</button>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 32, "</label> <a href=\"#\" class=\"bk-histlink\" data-history-clear hidden>Clear history</a>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

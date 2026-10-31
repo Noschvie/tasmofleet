@@ -8874,6 +8874,13 @@ tr.is-saved > td {
   padding: 0 var(--sp-14) var(--sp-8);
   text-align: right;
 }
+.bk-histlink {
+  align-self: flex-start;
+  font-size: 12px;
+}
+.bk-histlink[hidden] {
+  display: none;
+}
 .console .console-histlink {
   padding: 0;
   border: 0;

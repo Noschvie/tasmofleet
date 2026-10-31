@@ -61,7 +61,7 @@ templ bulkScopePage(v bulkScopeView) {
 							<span class="bk-help">Use Backlog to send several commands in one go.</span>
 						}
 					</label>
-					<button type="button" class="btn btn-link btn-sm" data-history-clear hidden>Clear history</button>
+					<a href="#" class="bk-histlink" data-history-clear hidden>Clear history</a>
 					@bulkCheck("wait", "Wait up to 5 s for each response", "", v.Wait, false)
 					@bulkCheck("serial", "One device at a time", "", v.Serial, false)
 				case bulkBackup:

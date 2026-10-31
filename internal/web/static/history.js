@@ -47,7 +47,8 @@
 
   document.querySelectorAll("[data-history-clear]").forEach(function (b) {
     b.hidden = false;
-    b.addEventListener("click", function () {
+    b.addEventListener("click", function (e) {
+      e.preventDefault(); // the bulk box's link is an anchor
       write([]);
     });
   });
