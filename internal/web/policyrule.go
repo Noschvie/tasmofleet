@@ -279,6 +279,7 @@ type rulePageView struct {
 	Required   bool
 	Disabled   bool
 	Line       string
+	Scope      scopeSummary
 	Version    int64
 	Origin     string
 	Banner     string
@@ -381,10 +382,8 @@ func (h *handler) rulePageRender(w http.ResponseWriter, r *http.Request, status 
 	if strings.HasPrefix(o.Banner, "Nothing changed") {
 		p.BannerTone = ui.ToneAccent
 	}
-	p.Line = spec.Command + " = " + spec.Want + " · " + appliesText(spec)
-	if !draft {
-		p.Line += " · version " + vstr(src.Version)
-	}
+	p.Line = ruleLine(spec, draft, src.Version)
+	p.Scope = newScopeSummary(spec, stat)
 	p.Devices = newRuleDevices(v.Base, o.ID, canEdit, spec, stat, show, all)
 	if canEdit {
 		e, err := h.editorFields(r, spec)
@@ -436,6 +435,59 @@ func ruleKV(s sysconfig.RuleSpec) []ui.KVRow {
 	return rows
 }
 
+// ruleLine is the line under the title: what the rule checks and whom it applies to.
+func ruleLine(spec sysconfig.RuleSpec, draft bool, version int64) string {
+	line := spec.Command + " = " + spec.Want + " · " + appliesText(spec)
+	if !draft {
+		line += " · version " + vstr(version)
+	}
+	return line
+}
+
+// scopeSummary is the line of the Applies to section: how many devices the draft reaches and why.
+type scopeSummary struct {
+	Count string // "12 devices"; empty while the draft cannot be judged
+	Text  string // "ESP8266, tag “lights” or 2 picked devices, minus 1 exception"
+}
+
+func newScopeSummary(spec sysconfig.RuleSpec, st ruleStat) scopeSummary {
+	var parts []string
+	if len(spec.Families) > 0 {
+		parts = append(parts, strings.Join(policy.ScopeLabels(spec.Families), ", "))
+	}
+	if len(spec.Tags) > 0 {
+		quoted := make([]string, len(spec.Tags))
+		for i, t := range spec.Tags {
+			quoted[i] = "“" + t + "”"
+		}
+		noun := "tag "
+		if len(quoted) > 1 {
+			noun = "tags "
+		}
+		parts = append(parts, noun+strings.Join(quoted, ", "))
+	}
+	text := strings.Join(parts, ", ")
+	if n := len(spec.Devices); n > 0 {
+		picked := plural(n, "picked device")
+		if text == "" {
+			text = picked
+		} else {
+			text += " or " + picked
+		}
+	}
+	if text == "" {
+		text = "every device"
+	}
+	if n := len(spec.Except); n > 0 {
+		text += ", minus " + plural(n, "exception")
+	}
+	sum := scopeSummary{Text: text}
+	if st.OK {
+		sum.Count = plural(st.Applies, "device")
+	}
+	return sum
+}
+
 // ruleDevicesPreview answers the editor's htmx post: the devices card for the draft in the
 // form. Cached values and backups only, no device is read, nothing is stored.
 func (h *handler) ruleDevicesPreview(w http.ResponseWriter, r *http.Request, d ruleDraft, st sysconfig.RulesState) {
@@ -459,7 +511,11 @@ func (h *handler) ruleDevicesPreview(w http.ResponseWriter, r *http.Request, d r
 		return
 	}
 	spec.Disabled = d.State == "disabled"
-	h.component(w, r, http.StatusOK, ruleDevicesCard(newRuleDevices(httpBase(r), d.ID, true, spec, stat, show, all)))
+	// The devices card is the swap target; the tiles, the line under the title and the summary of
+	// the Applies to section describe the same draft and are swapped out-of-band.
+	h.component(w, r, http.StatusOK, rulePreviewAnswer(
+		ruleDevicesCard(newRuleDevices(httpBase(r), d.ID, true, spec, stat, show, all)),
+		ruleTiles(stat, spec), ruleLine(spec, d.ID == "new", st.VersionID), newScopeSummary(spec, stat)))
 }
 
 // ---- New rule ----

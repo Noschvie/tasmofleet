@@ -111,10 +111,26 @@ type ruleEditor struct {
 	Groups   []settingGroup
 	Control  valueControl
 	Families []chip
-	Tags     []chip
-	Devices  []chip
-	Except   string
+	Tags     []scopeTag    // every tag in use, the rule's own too, with how many devices carry it
+	Devices  []scopeDevice // every device of the inventory, the rule's own names too
+	Names    []string      // devices and tags: what the exceptions search offers
+	Except   []string
 	Enabled  bool // the Enabled switch
+}
+
+// scopeTag is a tag in the Applies to section: N devices carry it, On when the rule uses it.
+type scopeTag struct {
+	Value string
+	N     int
+	On    bool
+}
+
+// scopeDevice is a row of the device search in the Applies to section.
+type scopeDevice struct {
+	Name   string
+	Meta   string // family and tags, as shown beside the name
+	Search string // lower case name, address and tags: what the search matches
+	On     bool
 }
 
 var setOptionRe = regexp.MustCompile(`^SetOption[0-9]{1,3}$`)
@@ -220,21 +236,6 @@ func wantText(cmd, want string) string {
 	return want
 }
 
-func chips(known []string, on []string) []chip {
-	all := slices.Clone(known)
-	for _, v := range on {
-		if !slices.Contains(all, v) {
-			all = append(all, v)
-		}
-	}
-	sort.Strings(all)
-	out := make([]chip, len(all))
-	for i, v := range all {
-		out[i] = chip{Value: v, On: slices.Contains(on, v)}
-	}
-	return out
-}
-
 // editorFields builds the fields of the rule editor for spec: tags and device names come from
 // the inventory; values of the rule that are not in it stay selectable.
 func (h *handler) editorFields(r *http.Request, spec sysconfig.RuleSpec) (*ruleEditor, error) {
@@ -242,14 +243,44 @@ func (h *handler) editorFields(r *http.Request, spec sysconfig.RuleSpec) (*ruleE
 	if err != nil {
 		return nil, err
 	}
-	var tags, names []string
+	use := map[string]int{}
+	rows := make([]scopeDevice, 0, len(devs)+len(spec.Devices))
 	for _, d := range devs {
-		names = append(names, d.Name)
 		for _, t := range d.Tags {
-			if !slices.Contains(tags, t) {
-				tags = append(tags, t)
-			}
+			use[t]++
 		}
+		meta := "family unknown"
+		if d.Identity.Family != "" {
+			meta = policy.FamilyLabel(string(d.Identity.Family))
+		}
+		if len(d.Tags) > 0 {
+			meta += " · " + strings.Join(d.Tags, ", ")
+		}
+		search := strings.ToLower(d.Name + " " + d.Address + " " + strings.Join(d.Tags, " "))
+		rows = append(rows, scopeDevice{Name: d.Name, Meta: meta, Search: search, On: slices.Contains(spec.Devices, d.Name)})
+	}
+	for _, v := range spec.Devices { // a name the inventory no longer has stays selectable
+		if !slices.ContainsFunc(rows, func(r scopeDevice) bool { return r.Name == v }) {
+			rows = append(rows, scopeDevice{Name: v, Meta: "not in the inventory", Search: strings.ToLower(v), On: true})
+		}
+	}
+	sort.Slice(rows, func(i, j int) bool { return strings.ToLower(rows[i].Name) < strings.ToLower(rows[j].Name) })
+	for _, v := range spec.Tags {
+		if _, ok := use[v]; !ok {
+			use[v] = 0
+		}
+	}
+	tags := make([]scopeTag, 0, len(use))
+	for v, n := range use {
+		tags = append(tags, scopeTag{Value: v, N: n, On: slices.Contains(spec.Tags, v)})
+	}
+	sort.Slice(tags, func(i, j int) bool { return tags[i].Value < tags[j].Value })
+	names := make([]string, 0, len(rows)+len(tags))
+	for _, d := range rows {
+		names = append(names, d.Name)
+	}
+	for _, t := range tags {
+		names = append(names, t.Value)
 	}
 	fam := make([]chip, 0, len(policy.FamilyNames()))
 	for _, f := range policy.FamilyNames() {
@@ -259,8 +290,8 @@ func (h *handler) editorFields(r *http.Request, spec sysconfig.RuleSpec) (*ruleE
 		Spec:     spec,
 		Groups:   settingGroups(),
 		Control:  controlFor(spec.Command, spec.Want, true),
-		Families: fam, Tags: chips(tags, spec.Tags), Devices: chips(names, spec.Devices),
-		Except: strings.Join(spec.Except, ", "),
+		Families: fam, Tags: tags, Devices: rows, Names: names,
+		Except: slices.Clone(spec.Except),
 	}, nil
 }
 
@@ -309,12 +340,12 @@ func uniq(list []string) []string {
 	return out
 }
 
-var draftSingle = []string{"csrf", "id", "origin", "version", "name", "command", "want", "severity", "tags_extra", "except", "note", "change_note"}
+var draftSingle = []string{"csrf", "id", "origin", "version", "name", "command", "want", "severity", "tags_extra", "note", "change_note"}
 
 // draftForm reads the editor form (save and preview). The Enabled switch is a checkbox after a
 // hidden "state=disabled": a ticked box sends both and the last one wins.
 func (h *handler) draftForm(w http.ResponseWriter, r *http.Request) (ruleDraft, bool) {
-	f, ok := strictForm(w, r, draftSingle, []string{"family", "tag", "device", "state"})
+	f, ok := strictForm(w, r, draftSingle, []string{"family", "tag", "device", "except", "state"})
 	if !ok {
 		return ruleDraft{}, false
 	}
@@ -355,7 +386,7 @@ func (h *handler) draftForm(w http.ResponseWriter, r *http.Request) (ruleDraft, 
 		Families: uniq(f["family"]),
 		Tags:     uniq(append(slices.Clone(f["tag"]), splitList(f.Get("tags_extra"))...)),
 		Devices:  uniq(f["device"]),
-		Except:   uniq(splitList(f.Get("except"))),
+		Except:   uniq(splitList(strings.Join(f["except"], ","))),
 	}
 	return d, true
 }

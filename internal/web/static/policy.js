@@ -12,6 +12,192 @@
       cmd.removeAttribute("aria-invalid");
     });
   }
+  // Rule form, "Applies to" (#235). The section is plain form fields (family, tag, device, except),
+  // so it works without this file; this file adds the chips of the picked devices, the device
+  // search, tags that move between "used" and the chips, and exceptions as chips. The search
+  // fields never reach the live preview while you type: only changes of the scope do.
+  var scope = document.querySelector("[data-scope]");
+  if (scope) {
+    var fire = function (el) {
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+    var chipX = function (label) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "pol-chip-x";
+      b.setAttribute("aria-label", label);
+      b.textContent = "\u00d7";
+      return b;
+    };
+    var hush = function (el, types) {
+      types.forEach(function (t) {
+        el.addEventListener(t, function (e) {
+          e.stopPropagation();
+        });
+      });
+    };
+    // devices: chips of the ticked rows, and the search over the rows
+    var rows = Array.prototype.slice.call(scope.querySelectorAll("[data-scope-list] .pol-row"));
+    var devChips = scope.querySelector("[data-dev-chips]");
+    var devSearch = scope.querySelector("[data-scope-search]");
+    var count = scope.querySelector("[data-scope-count]");
+    var none = scope.querySelector("[data-scope-none]");
+    var countText = count ? count.textContent : "";
+    var drawDevChips = function () {
+      devChips.textContent = "";
+      rows.forEach(function (row) {
+        var box = row.querySelector("input");
+        if (!box.checked) {
+          return;
+        }
+        var chip = document.createElement("span");
+        chip.className = "pol-chip";
+        chip.appendChild(document.createTextNode(box.value));
+        var x = chipX("Remove " + box.value);
+        x.addEventListener("click", function () {
+          box.checked = false;
+          drawDevChips();
+          fire(box);
+        });
+        chip.appendChild(x);
+        devChips.appendChild(chip);
+      });
+    };
+    var filter = function () {
+      var needle = devSearch.value.trim().toLowerCase();
+      var shown = 0;
+      rows.forEach(function (row) {
+        var hit = needle === "" || row.getAttribute("data-search").indexOf(needle) >= 0;
+        row.hidden = !hit;
+        if (hit) {
+          shown++;
+        }
+      });
+      none.hidden = shown > 0;
+      count.textContent =
+        needle === ""
+          ? countText
+          : shown + " of " + rows.length + " devices match \u201c" + devSearch.value.trim() +
+            "\u201d. Searches name, IP and tag; the list never grows past this box.";
+    };
+    drawDevChips();
+    devSearch.addEventListener("input", filter);
+    hush(devSearch, ["input", "change"]);
+    scope.querySelector("[data-scope-list]").addEventListener("change", drawDevChips);
+    // tags: a ticked tag is a chip, an unticked one a pill with its count (an unused one is gone)
+    var tagChips = scope.querySelector("[data-tag-chips]");
+    var tagUsed = scope.querySelector("[data-tag-used]");
+    var placeTag = function (label) {
+      var box = label.querySelector("input");
+      if (box.checked) {
+        tagChips.appendChild(label);
+      } else if (label.getAttribute("data-n") === "0") {
+        label.remove();
+      } else {
+        tagUsed.appendChild(label);
+      }
+    };
+    var tagLabels = function () {
+      return Array.prototype.slice.call(scope.querySelectorAll("label.pol-tag"));
+    };
+    scope.addEventListener("change", function (e) {
+      var label = e.target instanceof Element ? e.target.closest("label.pol-tag") : null;
+      if (label) {
+        placeTag(label);
+      }
+    });
+    var addTag = function (name) {
+      var found = tagLabels().filter(function (l) {
+        return l.querySelector("input").value === name;
+      })[0];
+      if (!found) {
+        found = document.createElement("label");
+        found.className = "pol-pill pol-tag";
+        found.setAttribute("data-n", "0");
+        var box = document.createElement("input");
+        box.type = "checkbox";
+        box.name = "tag";
+        box.value = name;
+        var text = document.createElement("span");
+        text.textContent = name;
+        var x = document.createElement("span");
+        x.className = "pol-chip-x";
+        x.setAttribute("aria-hidden", "true");
+        x.textContent = "\u00d7";
+        found.append(box, text, x);
+        tagChips.appendChild(found);
+      }
+      var cb = found.querySelector("input");
+      if (!cb.checked) {
+        cb.checked = true;
+        placeTag(found);
+        fire(cb);
+      }
+    };
+    // a text field that turns what you type (comma or Enter) into chips; "known" lets a pick from
+    // the suggestion list count at once
+    var commitField = function (input, add, known) {
+      var commit = function () {
+        input.value
+          .split(",")
+          .map(function (v) {
+            return v.trim();
+          })
+          .filter(Boolean)
+          .forEach(add);
+        input.value = "";
+      };
+      input.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" || e.key === ",") {
+          e.preventDefault();
+          commit();
+        }
+      });
+      input.addEventListener("change", commit);
+      input.addEventListener("input", function (e) {
+        if (known && known(input.value.trim()) && !(e instanceof InputEvent && e.inputType !== "insertReplacementText")) {
+          commit();
+        }
+      });
+      hush(input, ["input"]);
+    };
+    commitField(scope.querySelector("[data-tag-add]"), addTag, null);
+    // exceptions: devices or tags; each chip carries its own hidden field
+    var exChips = scope.querySelector("[data-except-chips]");
+    var exNames = Array.prototype.slice.call(scope.querySelectorAll("#scope-names option")).map(function (o) {
+      return o.value;
+    });
+    var bindExRemove = function (chip) {
+      chip.querySelector("[data-chip-remove]").addEventListener("click", function () {
+        chip.remove();
+        fire(exChips);
+      });
+    };
+    Array.prototype.forEach.call(exChips.children, bindExRemove);
+    var addExcept = function (name) {
+      var have = exChips.querySelectorAll('input[type="hidden"]');
+      for (var i = 0; i < have.length; i++) {
+        if (have[i].value === name) {
+          return;
+        }
+      }
+      var chip = document.createElement("span");
+      chip.className = "pol-chip pol-chip-ex";
+      var h = document.createElement("input");
+      h.type = "hidden";
+      h.name = "except";
+      h.value = name;
+      var x = chipX("Remove exception " + name);
+      x.setAttribute("data-chip-remove", "");
+      chip.append(h, document.createTextNode(name), x);
+      exChips.appendChild(chip);
+      bindExRemove(chip);
+      fire(exChips);
+    };
+    commitField(scope.querySelector("[data-except-add]"), addExcept, function (v) {
+      return exNames.indexOf(v) >= 0;
+    });
+  }
   // New rule: the template search filters the cards as you type. Without this file the search
   // is a plain GET (?q=) that the server answers the same way.
   var search = document.querySelector("[data-tpl-search]");

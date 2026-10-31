@@ -414,6 +414,5 @@ test("phone width: policy, rule editor and setup never scroll sideways", async (
   await expect(page.locator("section#rules tbody tr", { hasText: "ESP32 (all variants)" }).first()).toBeVisible();
   await expect(page.getByText("esp32c61", { exact: true }).filter({ visible: true })).toHaveCount(0);
   await page.goto(app.url + "/policy/rules/new?template=timezone");
-  await page.locator(".pol-scope > summary").click(); // the scope choices are a fold
-  await expect(page.getByLabel("ESP32 (all variants)")).toBeVisible();
+  await expect(page.getByLabel("ESP32 (all variants)")).toBeVisible(); // Applies to is always open
 });

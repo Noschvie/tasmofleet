@@ -13203,68 +13203,170 @@ a.pol-tpl {
   font: 400 12.5px var(--font-sans);
   color: var(--color-text-3);
 }
-/* "Applies to": a select-looking fold with the family, tag and device choices */
-.pol-scope > summary {
-  display: flex;
-  align-items: center;
-  height: var(--ctl);
-  padding: 0 30px 0 10px;
-  border: var(--hair-w) solid var(--color-border-strong);
-  border-radius: var(--r-control);
-  background-color: var(--color-surface);
-  background-image:
-    linear-gradient(45deg, transparent 50%, currentColor 50%),
-    linear-gradient(135deg, currentColor 50%, transparent 50%);
-  background-position:
-    calc(100% - 15px) 50%,
-    calc(100% - 10px) 50%;
-  background-size: 5px 5px;
-  background-repeat: no-repeat;
-  color: var(--color-text);
-  font: 400 13.5px var(--font-sans);
-  list-style: none;
-  cursor: pointer;
-}
-.pol-scope > summary::-webkit-details-marker {
-  display: none;
-}
-.pol-scope-body {
+/* "Applies to" (#235): an always-open, full-width section of the rule form. Nothing in it changes
+   height while the scope is edited: the device list is a box of fixed height. */
+.pol-sec {
   display: flex;
   flex-direction: column;
-  gap: var(--sp-10);
-  margin-top: var(--sp-8);
-  padding: var(--sp-10);
-  border: var(--hair-w) solid var(--color-border);
-  border-radius: var(--r-control);
+  gap: var(--sp-12);
+  padding-top: var(--sp-16);
+  border-top: var(--hair-w) solid var(--color-border);
 }
-.pol-scope-body fieldset {
-  margin: 0;
-  padding: 0;
-  border: 0;
-  min-width: 0;
-}
-.pol-scope-body legend {
-  padding: 0;
-  margin-bottom: 4px;
-  font: 500 12.5px var(--font-sans);
-  color: var(--color-text-2);
-}
-.pol-pick {
+.pol-sec-head {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px var(--sp-12);
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--sp-4) var(--sp-12);
 }
-.pol-pick-scroll {
-  max-height: 160px;
-  overflow: auto;
+.pol-sec-head h3 {
+  margin: 0;
+  font: 600 13.5px var(--font-sans);
 }
-.pol-pickc {
+.pol-sec-sum {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.pol-sec-sum b {
+  color: var(--color-text);
+  font-weight: 600;
+}
+.pol-scope label.ufield-label {
+  display: block;
+}
+.pol-scope .ufield-label small {
+  font-weight: 400;
+  color: var(--color-text-3);
+}
+.pol-scope-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-16);
+  align-items: start;
+}
+@media (min-width: 52rem) {
+  .pol-scope-cols {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  }
+}
+.pol-pills {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-6);
+}
+.pol-chips {
+  min-height: 28px;
+}
+/* a pill is a checkbox you can see as a toggle; a ticked tag looks like a chip with a cross */
+.pol-pill {
+  position: relative;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 28px;
-  font: 400 13px var(--font-sans);
+  padding: 5px 11px;
+  border: var(--hair-w) solid var(--color-border-strong);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-text-2);
+  font: 500 12.5px var(--font-sans);
+  cursor: pointer;
+}
+.pol-pill input {
+  position: absolute;
+  opacity: 0;
+  inset: 0;
+  margin: 0;
+  cursor: pointer;
+}
+.pol-pill:has(input:checked) {
+  background: var(--color-accent-bg);
+  border-color: var(--color-accent);
   color: var(--color-text);
+}
+.pol-pill:has(input:focus-visible) {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.pol-pill-n::before {
+  content: "· ";
+}
+.pol-pill-n {
+  color: var(--color-text-3);
+  font-variant-numeric: tabular-nums;
+}
+.pol-tag .pol-chip-x {
+  display: none;
+}
+.pol-tag:has(input:checked) .pol-pill-n {
+  display: none;
+}
+.pol-tag:has(input:checked) .pol-chip-x {
+  display: inline;
+  color: var(--color-text-2);
+}
+.pol-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px 3px 10px;
+  border: var(--hair-w) solid var(--color-accent);
+  border-radius: 999px;
+  background: var(--color-accent-bg);
+  color: var(--color-text);
+  font: 500 12.5px var(--font-sans);
+}
+.pol-chip-ex {
+  border-color: var(--color-warn);
+  background: var(--color-warn-bg);
+}
+button.pol-chip-x {
+  padding: 0 6px;
+  border: 0;
+  background: none;
+  color: var(--color-text-2);
+  font: 500 14px var(--font-sans);
+  cursor: pointer;
+}
+.pol-form .pol-except input:not([type="hidden"]) {
+  flex: 0 1 280px;
+  width: auto;
+  min-width: 0;
+}
+.pol-results {
+  box-sizing: border-box;
+  height: 236px;
+  overflow: auto;
+  border: var(--hair-w) solid var(--color-border);
+  border-radius: var(--r-control);
+  background: var(--color-surface);
+}
+.pol-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 11px;
+  border-bottom: var(--hair-w) solid var(--color-border);
+  font: 400 13px var(--font-sans);
+  cursor: pointer;
+}
+.pol-row[hidden] {
+  display: none;
+}
+.pol-row:last-of-type {
+  border-bottom: 0;
+}
+.pol-row-meta {
+  margin-left: auto;
+  color: var(--color-text-3);
+  font-size: 11.5px;
+  text-align: right;
+}
+.pol-row-none {
+  margin: 0;
+  padding: var(--sp-12);
+  color: var(--color-text-3);
+  font-size: 12.5px;
 }
 .pol-ed-foot {
   display: flex;
@@ -14056,12 +14158,22 @@ a.pol-tpl {
   .pol-page .dev-pair {
     grid-template-columns: minmax(0, 11fr) minmax(0, 9fr);
   }
+  /* the editor and the devices card sit side by side only when both have room (the mockup wraps
+     them the same way); until then the Rule card takes the full width */
+  .pol-page .dev-pair:has(#rule-form) {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .pol-page .dev-pair:has(.pol-cards) {
     grid-template-columns: minmax(0, 62fr) minmax(0, 38fr);
   }
   .devcard .pol-two {
-    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     align-items: start;
+  }
+}
+@media (min-width: 84rem) {
+  .pol-page .dev-pair:has(#rule-form) {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
   }
 }
 .devcard .pol-ed-foot {

@@ -79,7 +79,7 @@ templ rulePageTempl(p rulePageView) {
 						@ui.Badge(ui.ToneOK, "Enabled")
 					}
 				</h1>
-				<p class="pghead-sub mono">{ p.Line }</p>
+				@ruleLine_(p.Line, false)
 			</div>
 			<div class="pghead-acts">
 				if !p.Draft {
@@ -115,15 +115,7 @@ templ rulePageTempl(p rulePageView) {
 			@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Text: p.Source})
 		}
 		<div class="devlive">
-			<div class="dev-tiles">
-			for _, t := range p.Tiles {
-				<div class="dev-tile" data-tile={ t.Key }>
-					<div class="dev-tile-l">{ t.Label }</div>
-					<div class={ "dev-tile-v", toneClass(t.Tone) }>{ t.Value }</div>
-					<div class="dev-tile-s">{ t.Sub }</div>
-				</div>
-			}
-			</div>
+			@ruleTilesRow(p.Tiles, false)
 			<div class="dev-pair">
 			if p.Editor != nil {
 				@ruleEditCard(p, p.Editor)
@@ -185,6 +177,46 @@ templ ruleOpForm(p rulePageView, path, back, label string) {
 	</form>
 }
 
+// ruleLine_ is the line under the title; the preview swaps it out-of-band.
+templ ruleLine_(line string, oob bool) {
+	<p id="rule-line" class="pghead-sub mono" if oob { hx-swap-oob="true" }>{ line }</p>
+}
+
+// ruleTilesRow is the four tiles; the preview swaps them out-of-band so they describe the draft.
+templ ruleTilesRow(tiles []ruleTile, oob bool) {
+	<div id="rule-tiles" class="dev-tiles" if oob { hx-swap-oob="true" }>
+		for _, t := range tiles {
+			<div class="dev-tile" data-tile={ t.Key }>
+				<div class="dev-tile-l">{ t.Label }</div>
+				<div class={ "dev-tile-v", toneClass(t.Tone) }>{ t.Value }</div>
+				<div class="dev-tile-s">{ t.Sub }</div>
+			</div>
+		}
+	</div>
+}
+
+// scopeSummaryLine is the summary of the Applies to section; the preview swaps it out-of-band.
+templ scopeSummaryLine(v scopeSummary, oob bool) {
+	<span id="scope-summary" class="ufield-help pol-sec-sum" if oob { hx-swap-oob="true" }>
+		Now:
+		{ " " }
+		if v.Count != "" {
+			<b>{ v.Count }</b>
+			{ " · " }
+		}
+		{ v.Text }
+	</span>
+}
+
+// rulePreviewAnswer is the answer of /policy/rules/preview: the devices card (the swap target)
+// and the parts that follow the draft out-of-band.
+templ rulePreviewAnswer(card templ.Component, tiles []ruleTile, line string, sum scopeSummary) {
+	@card
+	@ruleTilesRow(tiles, true)
+	@ruleLine_(line, true)
+	@scopeSummaryLine(sum, true)
+}
+
 // ruleEditCard is the Rule card: the editor of the rule or draft. The devices card next to it is
 // asked for again (htmx) while the form is edited; nothing is stored before "Save rule".
 templ ruleEditCard(p rulePageView, e *ruleEditor) {
@@ -213,45 +245,10 @@ templ ruleEditCard(p rulePageView, e *ruleEditor) {
 			if p.Origin != "" {
 				<input type="hidden" name="origin" value={ p.Origin }/>
 			}
-			<div class="pol-two">
 			<label class="ufield">
 				<span class="ufield-label">Name</span>
 				<input name="name" value={ e.Spec.Name } maxlength="80" placeholder="New rule"/>
 			</label>
-			<div class="ufield">
-				<span class="ufield-label">Applies to</span>
-				<details class="pol-scope">
-					<summary>{ appliesText(e.Spec) }</summary>
-					<div class="pol-scope-body">
-						<fieldset>
-							<legend>Chip families <small>(none: every family)</small></legend>
-							<div class="pol-pick">
-								for _, f := range e.Families {
-									<label class="pol-pickc"><input type="checkbox" name="family" value={ f.Value } checked?={ f.On }/> { scopeChipText(f) }</label>
-								}
-							</div>
-						</fieldset>
-						<fieldset>
-							<legend>Tags <small>(a device with any of them)</small></legend>
-							<div class="pol-pick">
-								for _, t := range e.Tags {
-									<label class="pol-pickc"><input type="checkbox" name="tag" value={ t.Value } checked?={ t.On }/> { t.Value }</label>
-								}
-							</div>
-							<label class="ufield"><span class="ufield-label">Other tags</span><input name="tags_extra" placeholder="comma separated"/></label>
-						</fieldset>
-						<fieldset>
-							<legend>Devices <small>(tags and devices together mean either; all empty: every device)</small></legend>
-							<div class="pol-pick pol-pick-scroll">
-								for _, d := range e.Devices {
-									<label class="pol-pickc"><input type="checkbox" name="device" value={ d.Value } checked?={ d.On }/> { d.Value }</label>
-								}
-							</div>
-						</fieldset>
-					</div>
-				</details>
-			</div>
-			</div>
 			<div class="pol-two">
 				@commandField(p.Base, e.Groups, e.Spec.Command, e.ErrField == "command", e.Err)
 				<div class="ufield" id="want-control">
@@ -266,21 +263,18 @@ templ ruleEditCard(p rulePageView, e *ruleEditor) {
 				@ui.Segmented("When a device deviates", "severity", severityOptions(e.Spec.Severity))
 				<span class="ufield-help">Nothing is ever written to devices automatically.</span>
 			</div>
-			<div class="pol-two">
-				<label class="ufield">
-					<span class="ufield-label">Exceptions</span>
-					<input name="except" value={ e.Except } placeholder="Device names or tags, comma separated"/>
-				</label>
+			@ruleScopeSection(e, p.Scope)
+			<div class="pol-sec">
 				<label class="ufield">
 					<span class="ufield-label">Note</span>
 					<textarea name="note" rows="2" maxlength="300" placeholder="Why this rule exists">{ e.Spec.Note }</textarea>
 				</label>
-			</div>
 			<label class="pol-enabled">
 				<input type="hidden" name="state" value="disabled"/>
 				<input type="checkbox" name="state" value="enabled" checked?={ e.Enabled }/>
 				Enabled
 			</label>
+			</div>
 			<div class="pol-ed-foot">
 			<label class="ufield">
 					<span class="sr-only">Change note</span>
@@ -304,6 +298,83 @@ templ ruleEditCard(p rulePageView, e *ruleEditor) {
 			</div>
 		</form>
 	</section>
+}
+
+// ruleScopeSection is "Applies to": an always-open, full-width section of the rule form (#235).
+// Everything in it is plain form fields (family, tag, device, except), so it works without
+// JavaScript; policy.js adds the chips, the device search and moving a tag between its two lists.
+templ ruleScopeSection(e *ruleEditor, sum scopeSummary) {
+	<section class="pol-sec pol-scope" aria-labelledby="scope-h" data-scope>
+		<div class="pol-sec-head">
+			<h3 id="scope-h">Applies to</h3>
+			@scopeSummaryLine(sum, false)
+		</div>
+		<div class="ufield">
+			<span class="ufield-label" id="fam-l">Chip families <small>(none: every family)</small></span>
+			<div class="pol-pills" role="group" aria-labelledby="fam-l">
+				for _, f := range e.Families {
+					<label class="pol-pill"><input type="checkbox" name="family" value={ f.Value } checked?={ f.On }/><span>{ scopeChipText(f) }</span></label>
+				}
+			</div>
+		</div>
+		<div class="pol-scope-cols">
+			<div class="ufield">
+				<label class="ufield-label" for="scope-tag-add">Tags <small>(a device with any of them)</small></label>
+				<div class="pol-pills" data-tag-chips>
+					for _, t := range e.Tags {
+						if t.On {
+							@scopeTagPill(t)
+						}
+					}
+				</div>
+				<input id="scope-tag-add" name="tags_extra" placeholder="Add a tag…" autocomplete="off" data-tag-add/>
+				<div class="pol-pills" role="group" aria-label="Tags in use">
+					<span class="ufield-help">Used:</span>
+					<span class="pol-pills" data-tag-used>
+						for _, t := range e.Tags {
+							if !t.On {
+								@scopeTagPill(t)
+							}
+						}
+					</span>
+				</div>
+			</div>
+			<div class="ufield">
+				<label class="ufield-label" for="scope-dev-search">Devices <small>(tags and devices together mean either)</small></label>
+				<div class="pol-pills pol-chips" data-dev-chips></div>
+				<input id="scope-dev-search" type="search" placeholder="Search name, IP or tag…" autocomplete="off" aria-describedby="scope-count" data-scope-search/>
+				<div class="pol-results" role="group" aria-label="Matching devices" data-scope-list>
+					for _, d := range e.Devices {
+						<label class="pol-row" data-search={ d.Search }><input type="checkbox" name="device" value={ d.Name } checked?={ d.On }/><span>{ d.Name }</span><span class="pol-row-meta">{ d.Meta }</span></label>
+					}
+					<p class="pol-row-none" data-scope-none hidden>No device matches.</p>
+				</div>
+				<span id="scope-count" class="ufield-help" data-scope-count>{ plural(len(e.Devices), "device") }. Searches name, IP and tag; the list never grows past this box.</span>
+			</div>
+		</div>
+		<div class="ufield">
+			<label class="ufield-label" for="scope-except">Exceptions <small>(devices or tags left out even when they match)</small></label>
+			<div class="pol-pills pol-except">
+				<span class="pol-pills" data-except-chips>
+					for _, x := range e.Except {
+						<span class="pol-chip pol-chip-ex"><input type="hidden" name="except" value={ x }/>{ x }<button type="button" class="pol-chip-x" data-chip-remove aria-label={ "Remove exception " + x }>×</button></span>
+					}
+				</span>
+				<input id="scope-except" name="except" list="scope-names" placeholder="Search a device or tag…" autocomplete="off" data-except-add/>
+				<datalist id="scope-names">
+					for _, n := range e.Names {
+						<option value={ n }></option>
+					}
+				</datalist>
+			</div>
+		</div>
+	</section>
+}
+
+// scopeTagPill is a tag of the Applies to section: a pill with its device count while unused, a
+// chip once ticked (the same checkbox; policy.js moves it between the two lists).
+templ scopeTagPill(t scopeTag) {
+	<label class="pol-pill pol-tag" data-n={ itoa(t.N) }><input type="checkbox" name="tag" value={ t.Value } checked?={ t.On }/><span>{ t.Value }</span><span class="pol-pill-n">{ itoa(t.N) }</span><span class="pol-chip-x" aria-hidden="true">×</span></label>
 }
 
 // ruleDevChip is a filter of the devices card. A saved rule's chip is a link (it works without
