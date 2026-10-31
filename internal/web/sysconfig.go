@@ -42,6 +42,7 @@ func (h *handler) registerSysConfig(route func(string, func(http.Handler) http.H
 	route("POST "+sysPath+"/sso-test", adm, h.sysSSOTest)
 	route("GET "+sysPath+"/reset", adm, h.sysResetConfirm)
 	route("POST "+sysPath+"/reset", adm, h.sysReset)
+	h.registerSnapshots(route, adm)
 }
 
 type sysRow struct {
@@ -101,6 +102,8 @@ type sysPage struct {
 	Discovery    sysDiscovery
 	Storage      *sysStorage // Backups tab: storage summary and orphans (N9); nil without them
 	Resetting    bool        // the step-up dialog is for "Reset settings…"
+	StepUpWhat   string      // what the step-up dialog says it is for, when it is not a settings save
+	DB           *sysDB      // Backups tab: the database card and the snapshot schedule's status; nil without snapshots
 }
 
 // sysStepUp is what the principal can do about a confirmation. Header
@@ -216,6 +219,8 @@ func (h *handler) sysStepUpData(r *http.Request, p sysPage) ui.StepUpData {
 	}
 	what := "Changing the sign-in settings" // a failed password confirmation no longer knows the keys
 	switch {
+	case p.StepUpWhat != "":
+		what = p.StepUpWhat
 	case p.Resetting:
 		what = "Resetting all settings"
 	case len(labels) > 0:
@@ -250,6 +255,8 @@ func (h *handler) sysRender(w http.ResponseWriter, r *http.Request, status int, 
 	switch q := r.URL.Query(); {
 	case q.Get("ok") == "reset":
 		v.Flash = "All settings are back at their defaults."
+	case q.Get("ok") == "snapshot-deleted":
+		v.Flash = "Snapshot deleted."
 	case p.Active == "backups" && backupsNotice(r) != "":
 		v.Flash = backupsNotice(r) // a backup of a deleted device was kept, released or deleted
 	}
@@ -260,6 +267,14 @@ func (h *handler) sysRender(w http.ResponseWriter, r *http.Request, status int, 
 			return
 		}
 		p.Storage = st
+	}
+	if p.DB == nil && h.d.Snapshots != nil {
+		db, err := h.sysDBOf(r, p.Base)
+		if err != nil {
+			h.fail(w, r, err)
+			return
+		}
+		p.DB = db
 	}
 	h.show(w, r, status, "system_settings", v, sysSettingsPage(p))
 }
@@ -637,32 +652,50 @@ func (h *handler) sysSSOTest(w http.ResponseWriter, r *http.Request) {
 // composeMQTTURL turns them into MQTT_URL, the stored value.
 var mqttPartKeys = []string{"mqtt.host", "mqtt.port", "mqtt.tls"}
 
-// scheduleKeys are the backup schedule switch of the Backups tab: swm.* says the switch was on the
-// page (an unticked box sends nothing), sw.* is its state. They are a view of BACKUP_INTERVAL.
-var scheduleKeys = []string{"swm.BACKUP_INTERVAL", "sw.BACKUP_INTERVAL"}
+// scheduleIntervals are the settings that sit behind a schedule switch on the Backups tab: the
+// device backup interval and the database snapshot interval.
+var scheduleIntervals = []string{"BACKUP_INTERVAL", "SNAPSHOT_INTERVAL"}
 
-// sysFormExtras are the form fields that are no setting: the broker parts and the schedule switch.
+// scheduleKeys are the schedule switches of the Backups tab: swm.* says the switch was on the
+// page (an unticked box sends nothing), sw.* is its state. They are a view of the interval settings.
+var scheduleKeys = func() []string {
+	var out []string
+	for _, k := range scheduleIntervals {
+		out = append(out, "swm."+k, "sw."+k)
+	}
+	return out
+}()
+
+// sysFormExtras are the form fields that are no setting: the broker parts and the schedule switches.
 // Every button that posts the whole form must accept them.
 var sysFormExtras = append(slices.Clone(mqttPartKeys), scheduleKeys...)
 
-// composeSchedule turns the schedule switch into BACKUP_INTERVAL: off is 0 (manual only), on needs
-// a real interval. A reset to the default wins over the switch.
+// composeSchedule turns each schedule switch into its interval setting: off is 0 (manual only /
+// no snapshots), on needs a real interval. A reset to the default wins over the switch.
 func composeSchedule(values map[string]string, clear []string, extra map[string]string) error {
-	marked := extra["swm.BACKUP_INTERVAL"] == "1"
-	on := extra["sw.BACKUP_INTERVAL"] == "1"
-	for _, k := range scheduleKeys {
-		delete(extra, k)
+	var bad map[string]string
+	for _, key := range scheduleIntervals {
+		marked := extra["swm."+key] == "1"
+		on := extra["sw."+key] == "1"
+		delete(extra, "swm."+key)
+		delete(extra, "sw."+key)
+		if !marked || slices.Contains(clear, key) {
+			continue
+		}
+		if !on {
+			values[key] = "0"
+			continue
+		}
+		switch values[key] {
+		case "", "0", "0s":
+			if bad == nil {
+				bad = map[string]string{}
+			}
+			bad[key] = "enter how often, for example 24h"
+		}
 	}
-	if !marked || slices.Contains(clear, "BACKUP_INTERVAL") {
-		return nil
-	}
-	if !on {
-		values["BACKUP_INTERVAL"] = "0"
-		return nil
-	}
-	switch values["BACKUP_INTERVAL"] {
-	case "", "0", "0s":
-		return &sysconfig.ValidationError{Fields: map[string]string{"BACKUP_INTERVAL": "enter how often, for example 24h"}}
+	if bad != nil {
+		return &sysconfig.ValidationError{Fields: bad}
 	}
 	return nil
 }
@@ -838,7 +871,7 @@ func sysSecretHint(row sysRow) string {
 }
 
 func sysPlaceholder(row sysRow) string {
-	if row.Key == "BACKUP_INTERVAL" {
+	if row.Key == "BACKUP_INTERVAL" || row.Key == "SNAPSHOT_INTERVAL" {
 		return "24h"
 	}
 	if row.Key == "DEVICE_NETWORKS" {

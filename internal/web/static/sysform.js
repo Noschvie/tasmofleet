@@ -138,13 +138,15 @@
       );
     });
   }
+  // The interval fields that sit behind a schedule switch (sw.<KEY> next to v.<KEY>).
+  var schedules = ["v.BACKUP_INTERVAL", "v.SNAPSHOT_INTERVAL"];
   function valueOf(c) {
     if (c.type === "checkbox" || c.type === "radio") {
       return c.checked ? "1" : "0";
     }
-    if (c.name === "v.BACKUP_INTERVAL") {
+    if (schedules.indexOf(c.name) >= 0) {
       // Saved as 0 while the schedule switch is off, whatever the field holds.
-      var sw = form.elements["sw.BACKUP_INTERVAL"];
+      var sw = form.elements["sw." + c.name.slice(2)];
       if (sw && !sw.checked) {
         return "0";
       }
@@ -239,26 +241,22 @@
   }
 
   function changed(e) {
-    // Switching the backup schedule on with no interval fills a sensible one.
+    // Switching a schedule on with no interval fills a sensible one.
     var t = e.target;
-    if (
+    var isSwitch =
       t instanceof HTMLInputElement &&
-      t.name === "sw.BACKUP_INTERVAL" &&
-      t.checked
-    ) {
-      var iv = form.elements["v.BACKUP_INTERVAL"];
+      schedules.indexOf("v." + t.name.slice(3)) >= 0 &&
+      t.name.slice(0, 3) === "sw.";
+    if (isSwitch && t.checked) {
+      var iv = form.elements["v." + t.name.slice(3)];
       if (iv && (iv.value === "" || iv.value === "0" || iv.value === "0s")) {
         iv.setAttribute("data-before", iv.value); // what switching off puts back
         iv.value = "24h";
       }
     }
     // Switching off again takes back the proposed 24h, so on and off leaves nothing changed.
-    if (
-      t instanceof HTMLInputElement &&
-      t.name === "sw.BACKUP_INTERVAL" &&
-      !t.checked
-    ) {
-      var pv = form.elements["v.BACKUP_INTERVAL"];
+    if (isSwitch && !t.checked) {
+      var pv = form.elements["v." + t.name.slice(3)];
       if (pv && pv.hasAttribute("data-before") && pv.value === "24h") {
         pv.value = pv.getAttribute("data-before");
       }

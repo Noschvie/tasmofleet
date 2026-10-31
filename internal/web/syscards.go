@@ -19,6 +19,7 @@ import (
 type sysCardDef struct {
 	ID, Title, Note, Class, Depends string
 	Col                             bool // stacked with the other Col cards in one two-column group (no row gaps)
+	Side                            bool // stacked with the other Side cards in one column next to the Col group
 	StepUp                          bool // saving asks the admin to confirm: a badge in the header
 	Keys                            []string
 }
@@ -63,8 +64,10 @@ var sysLayout = []sysTabDef{
 	}},
 	{"backups", "Backups", []sysCardDef{
 		{ID: "storage", Title: "Storage", Note: "Read-only. Not part of the form.", Col: true},
-		{ID: "schedule", Title: "Schedule & retention", Class: "rows2", Keys: []string{"BACKUP_INTERVAL", "BACKUP_KEEP", "BACKUP_MAX_AGE"}},
+		{ID: "schedule", Title: "Device backup schedule", Side: true, Keys: []string{"BACKUP_INTERVAL", "BACKUP_KEEP", "BACKUP_MAX_AGE"}},
+		{ID: "snapshots", Title: "Snapshot schedule", Side: true, Keys: []string{"SNAPSHOT_INTERVAL", "SNAPSHOT_KEEP"}},
 		{ID: "orphans", Title: "Backups of deleted devices", Col: true},
+		{ID: "database", Title: "TasmoFleet database", Note: "Download and delete act at once, outside the settings form. Admins only; every download and every scheduled snapshot is written to the audit log.", Class: "span2"},
 	}},
 	{"firmware", "Firmware & updates", []sysCardDef{
 		{ID: "source", Title: "Firmware source", Class: "span2 rows2", Keys: []string{"FIRMWARE_BASE_URL", "FIRMWARE_SOURCES", "FIRMWARE_REFRESH_INTERVAL"}},
@@ -91,7 +94,7 @@ const sysAdvanced, sysOtherCard = 7, 0
 var sysGroupCard = map[sysconfig.Group]string{
 	sysconfig.GroupLogging: "logging", sysconfig.GroupAudit: "logging", sysconfig.GroupMetrics: "metrics",
 	sysconfig.GroupNetwork: "networks", sysconfig.GroupHealth: "health", sysconfig.GroupMQTT: "broker",
-	sysconfig.GroupDiscovery: "scan", sysconfig.GroupBackup: "schedule", sysconfig.GroupFirmware: "source",
+	sysconfig.GroupDiscovery: "scan", sysconfig.GroupBackup: "schedule", sysconfig.GroupSnapshot: "snapshots", sysconfig.GroupFirmware: "source",
 	sysconfig.GroupOTA: "ota", sysconfig.GroupSignIn: "idp",
 }
 
@@ -246,9 +249,11 @@ var sysCopies = map[string]sysCopy{
 	"DISCOVERY_SCAN_INTERVAL": {Help: "At least 1h.", Width: "xs", Dep: "DISCOVERY_SCAN"},
 	"DISCOVERY_SCAN_CIDRS":    {Help: "Inside the device networks, max /22 each.", Width: "full", Dep: "DISCOVERY_SCAN", Info: "Each CIDR must lie inside the device networks and hold at most 1024 addresses (/22)."},
 
-	"BACKUP_INTERVAL": {Label: "Interval", Help: "e.g. 24h.", Width: "xs"},
-	"BACKUP_KEEP":     {Label: "Kept per device", Help: "Lowering it can delete restore points.", Width: "xs"},
-	"BACKUP_MAX_AGE":  {Label: "Never prune younger than", Help: "e.g. 720h.", Width: "xs", Info: "Protects restore points from repeated manual runs: a backup younger than this is never pruned, even above the per-device count."},
+	"BACKUP_INTERVAL":   {Label: "Interval", Help: "e.g. 24h.", Width: "xs"},
+	"BACKUP_KEEP":       {Label: "Kept per device", Help: "Lowering it can delete restore points.", Width: "xs"},
+	"SNAPSHOT_INTERVAL": {Label: "Interval", Help: "e.g. 24h.", Width: "xs"},
+	"SNAPSHOT_KEEP":     {Label: "Snapshots kept", Help: "The oldest are deleted first.", Width: "xs", Dep: "SNAPSHOT_INTERVAL"},
+	"BACKUP_MAX_AGE":    {Label: "Never prune younger than", Help: "e.g. 720h.", Width: "xs", Info: "Protects restore points from repeated manual runs: a backup younger than this is never pruned, even above the per-device count."},
 
 	"FIRMWARE_BASE_URL":            {Help: "Plain http:// address devices fetch firmware from.", Width: "full", Info: "Devices download firmware from this address, e.g. the container address. Required for updates."},
 	"FIRMWARE_SOURCES":             {Help: "Two sources = cross-check.", Width: "full"},
@@ -323,4 +328,18 @@ func sysCardBadges(c sysCard) []ui.SettingsBadge {
 		out = append(out, ui.SettingsBadge{Tone: ui.ToneAccent, Label: "Asks you to confirm"})
 	}
 	return out
+}
+
+// sysDependsOn is the control a dependent setting follows: the switch of a schedule (the interval
+// field itself is no switch), else the setting's own on/off control.
+func sysDependsOn(key string) string {
+	if slices.Contains(scheduleIntervals, key) {
+		return "sw." + key
+	}
+	return "v." + key
+}
+
+// snapDeleteText is the dialog text of "Delete" on a stored snapshot.
+func snapDeleteText(name string) string {
+	return "The snapshot " + name + " is deleted from the data directory. The running database and the other snapshots are not touched."
 }

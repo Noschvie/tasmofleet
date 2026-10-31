@@ -77,6 +77,10 @@ func (a *runtime) setupSysConfigLive() {
 		a.everyLive(a.bgContext, func() time.Duration { return sys.Snapshot().BackupSchedule }, []string{"BACKUP_INTERVAL"}, true, a.backupAll)
 		return nil
 	})
+	a.goBG("snapshot-schedule", func() error {
+		a.everyLive(a.bgContext, func() time.Duration { return sys.Snapshot().SnapshotSchedule }, []string{"SNAPSHOT_INTERVAL"}, true, a.scheduledSnapshot)
+		return nil
+	})
 	a.goBG("discovery-scan-schedule", func() error {
 		a.everyLive(a.bgContext, func() time.Duration {
 			if c := sys.Snapshot(); c.DiscoveryScan {

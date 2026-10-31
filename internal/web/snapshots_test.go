@@ -1,0 +1,343 @@
+package web
+
+import (
+	"archive/tar"
+	"bytes"
+	"context"
+	"errors"
+	"io"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/nofuturekid/tasmofleet/internal/secretbox"
+	"github.com/nofuturekid/tasmofleet/internal/snapshot"
+	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
+)
+
+const fakeKey = "fake-secret-key-0123456789abcdef"
+
+type snapSource struct{}
+
+func (snapSource) VacuumInto(_ context.Context, dst string) error {
+	hdr := make([]byte, 100)
+	copy(hdr, "SQLite format 3\x00")
+	hdr[63] = 39 // user_version, big endian at offset 60
+	return os.WriteFile(dst, append(hdr, "fake database body"...), 0o600)
+}
+
+type snapEnv struct {
+	*env
+	svc     *sysconfig.Service
+	mgr     *snapshot.Manager
+	dir     string
+	audit   *fakeAudit
+	stepped *atomic.Bool
+}
+
+func snapSetup(t *testing.T, stepped bool) *snapEnv {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, secretbox.KeyFile), []byte(fakeKey), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mgr := snapshot.New(snapSource{}, dir)
+	aud := &fakeAudit{}
+	e, svc, _, st := sysEnvFull(t, stepped, func(d *Deps) { d.Snapshots, d.Recorder = mgr, aud })
+	return &snapEnv{env: e, svc: svc, mgr: mgr, dir: dir, audit: aud, stepped: st}
+}
+
+func (s *snapEnv) actions() []string {
+	s.audit.mu.Lock()
+	defer s.audit.mu.Unlock()
+	var out []string
+	for _, e := range s.audit.events {
+		out = append(out, e.Action+" "+e.Result+" "+e.Detail)
+	}
+	return out
+}
+
+// Why: the file holds every user's password hash and the encrypted device and broker
+// passwords. Only an admin may take it, and every attempt from a lower role is a 403/401.
+func TestSnapshotRoutesAreAdminOnly(t *testing.T) {
+	s := snapSetup(t, true)
+	if _, _, err := s.mgr.Run(t.Context(), 7); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := s.mgr.List()
+	name := list[0].Name
+	for _, role := range []string{"", "operator"} {
+		want := 403
+		if role == "" {
+			want = 401
+		}
+		for _, c := range []struct{ method, path string }{
+			{"POST", "/settings/system/snapshot"},
+			{"GET", "/settings/system/snapshots/" + name + "/download"},
+			{"GET", "/settings/system/snapshots/" + name + "/delete"},
+			{"POST", "/settings/system/snapshots/" + name + "/delete"},
+		} {
+			r, body := s.do(t, c.method, c.path, role, url.Values{"csrf": {"tok"}})
+			if c.method == "GET" {
+				r, body = s.do(t, c.method, c.path, role, nil)
+			}
+			if r.StatusCode != want || strings.Contains(body, "SQLite format") {
+				t.Errorf("%q %s %s: status %d, want %d", role, c.method, c.path, r.StatusCode, want)
+			}
+		}
+	}
+	if l, _ := s.mgr.List(); len(l) != 1 {
+		t.Fatal("a refused delete must delete nothing")
+	}
+}
+
+// Why: a stolen session must not be enough to take the secrets out. Without a fresh
+// confirmation nothing is made or sent; the page asks for the password instead.
+func TestSnapshotDownloadNeedsStepUp(t *testing.T) {
+	s := snapSetup(t, false)
+	r, body := s.do(t, "POST", "/settings/system/snapshot", "admin", url.Values{"csrf": {"tok"}, "include_key": {"1"}})
+	if r.StatusCode != 403 || strings.Contains(body, "SQLite format") || r.Header.Get("Content-Disposition") != "" {
+		t.Fatalf("status %d: nothing may be sent before the confirmation", r.StatusCode)
+	}
+	for _, want := range []string{`<dialog id="stepup"`, `data-autoopen`, "Downloading a snapshot of the database", `name="current"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("dialog lacks %q", want)
+		}
+	}
+	if left, _ := filepath.Glob(filepath.Join(s.dir, ".snapshot-*")); len(left) != 0 {
+		t.Fatalf("no copy may be made before the confirmation: %v", left)
+	}
+	if len(s.actions()) != 0 {
+		t.Fatalf("nothing happened, nothing to audit: %v", s.actions())
+	}
+	// A stored snapshot is as secret as a fresh one.
+	if _, _, err := s.mgr.Run(t.Context(), 7); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := s.mgr.List()
+	if r, _ := s.do(t, "GET", "/settings/system/snapshots/"+list[0].Name+"/download", "admin", nil); r.StatusCode != 403 || r.Header.Get("Content-Disposition") != "" {
+		t.Fatalf("stored download without confirmation: %d", r.StatusCode)
+	}
+	// After the password the same request goes through.
+	s.stepped.Store(true)
+	if r, _ := s.do(t, "POST", "/settings/system/snapshot", "admin", url.Values{"csrf": {"tok"}}); r.StatusCode != 200 {
+		t.Fatalf("confirmed: %d", r.StatusCode)
+	}
+}
+
+// Why: the key is the only thing that makes the encrypted values readable. It is in the
+// download only when the admin ticked the box, and the audit says which kind was taken without
+// ever holding the key.
+func TestSnapshotDownloadWithAndWithoutKeyIsAudited(t *testing.T) {
+	s := snapSetup(t, true)
+	r, body := s.do(t, "POST", "/settings/system/snapshot", "admin", url.Values{"csrf": {"tok"}})
+	if r.StatusCode != 200 || !strings.HasPrefix(body, "SQLite format 3") || strings.Contains(body, fakeKey) {
+		t.Fatalf("plain download: %d, %.20q", r.StatusCode, body)
+	}
+	cd := r.Header.Get("Content-Disposition")
+	if !strings.HasPrefix(cd, `attachment; filename="tasmofleet-`) || !strings.HasSuffix(cd, `.db"`) ||
+		r.Header.Get("Cache-Control") != "no-store" || r.Header.Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("headers: %v", r.Header)
+	}
+
+	r, body = s.do(t, "POST", "/settings/system/snapshot", "admin", url.Values{"csrf": {"tok"}, "include_key": {"1"}})
+	if r.StatusCode != 200 || !strings.HasSuffix(r.Header.Get("Content-Disposition"), `.tar"`) || r.Header.Get("Content-Type") != "application/x-tar" {
+		t.Fatalf("tar download: %d %v", r.StatusCode, r.Header)
+	}
+	got := map[string]string{}
+	tr := tar.NewReader(bytes.NewReader([]byte(body)))
+	for {
+		h, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(tr)
+		got[h.Name] = string(b)
+	}
+	if got[secretbox.KeyFile] != fakeKey || !strings.HasPrefix(got["tasmofleet.db"], "SQLite format 3") {
+		t.Fatalf("tar entries: %v", len(got))
+	}
+
+	acts := s.actions()
+	if len(acts) != 2 || !strings.Contains(acts[0], `"with_key":false`) || !strings.Contains(acts[1], `"with_key":true`) ||
+		!strings.HasPrefix(acts[0], "snapshot.download ok") {
+		t.Fatalf("audit: %v", acts)
+	}
+	for _, a := range acts {
+		if strings.Contains(a, fakeKey) {
+			t.Fatalf("the key is in the audit: %s", a)
+		}
+	}
+	// The handler removes the copy when it returns, which can be a moment after the client has the body.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		left, _ := filepath.Glob(filepath.Join(s.dir, ".snapshot-*"))
+		if len(left) == 0 {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the scratch copy outlived the download: %v", left)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// Why: the form posts only csrf and include_key. Anything else is a forged or broken request.
+func TestSnapshotDownloadRejectsUnknownFormKeys(t *testing.T) {
+	s := snapSetup(t, true)
+	if r, _ := s.do(t, "POST", "/settings/system/snapshot", "admin", url.Values{"csrf": {"tok"}, "path": {"/etc/passwd"}}); r.StatusCode != 400 {
+		t.Fatalf("status %d", r.StatusCode)
+	}
+}
+
+// Why: the name comes from the URL. Whatever it says, only a file the snapshot folder lists
+// itself may be read or deleted (CodeQL path-injection, and the key sits one level up).
+func TestStoredSnapshotNamesCannotLeaveTheSnapshotFolder(t *testing.T) {
+	s := snapSetup(t, true)
+	if _, _, err := s.mgr.Run(t.Context(), 7); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{
+		"..%2Fsecret.key", "..%2f..%2fetc%2fpasswd", "%2e%2e%2fsecret.key", "secret.key", "tasmofleet.db",
+		"tasmofleet-20260101-0000.db%00", "tasmofleet-99999999-9999.db", "tasmofleet-20261029-0300.db%2F..%2F..%2Fsecret.key",
+	} {
+		for _, c := range []struct{ method, suffix string }{{"GET", "/download"}, {"GET", "/delete"}, {"POST", "/delete"}} {
+			r, body := s.do(t, c.method, "/settings/system/snapshots/"+name+c.suffix, "admin", url.Values{"csrf": {"tok"}})
+			if c.method == "GET" {
+				r, body = s.do(t, c.method, "/settings/system/snapshots/"+name+c.suffix, "admin", nil)
+			}
+			// 307: the mux cleans a path with ".." and sends the client to the cleaned address, where
+			// the name is just another route (checked above: nothing there serves a file).
+			if r.StatusCode != 404 && r.StatusCode != 400 && r.StatusCode != 307 || strings.Contains(body, fakeKey) {
+				t.Errorf("%s %s%s: status %d", c.method, name, c.suffix, r.StatusCode)
+			}
+		}
+	}
+	if _, err := os.Stat(filepath.Join(s.dir, secretbox.KeyFile)); err != nil {
+		t.Fatalf("the key was touched: %v", err)
+	}
+	if l, _ := s.mgr.List(); len(l) != 1 {
+		t.Fatal("the stored snapshot must survive")
+	}
+}
+
+// Why: Download and Delete of a stored snapshot work outside the settings form, are audited,
+// and a delete really removes the file.
+func TestStoredSnapshotDownloadAndDelete(t *testing.T) {
+	s := snapSetup(t, true)
+	if _, _, err := s.mgr.Run(t.Context(), 7); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := s.mgr.List()
+	name := list[0].Name
+	r, body := s.do(t, "GET", "/settings/system/snapshots/"+name+"/download", "admin", nil)
+	if r.StatusCode != 200 || !strings.HasPrefix(body, "SQLite format 3") || !strings.Contains(r.Header.Get("Content-Disposition"), name) {
+		t.Fatalf("download: %d", r.StatusCode)
+	}
+	if r, _ := s.do(t, "GET", "/settings/system/snapshots/"+name+"/delete", "admin", nil); r.StatusCode != 200 {
+		t.Fatalf("confirmation page: %d", r.StatusCode)
+	}
+	r, _ = s.do(t, "POST", "/settings/system/snapshots/"+name+"/delete", "admin", url.Values{"csrf": {"tok"}})
+	if r.StatusCode != 303 || !strings.Contains(r.Header.Get("Location"), "ok=snapshot-deleted") {
+		t.Fatalf("delete: %d %v", r.StatusCode, r.Header)
+	}
+	if l, _ := s.mgr.List(); len(l) != 0 {
+		t.Fatalf("still stored: %v", l)
+	}
+	acts := strings.Join(s.actions(), "\n")
+	if !strings.Contains(acts, "snapshot.download ok") || !strings.Contains(acts, "snapshot.delete ok") || !strings.Contains(acts, name) {
+		t.Fatalf("audit:\n%s", acts)
+	}
+	if r, _ := s.do(t, "POST", "/settings/system/snapshots/"+name+"/delete", "admin", url.Values{"csrf": {"tok"}}); r.StatusCode != 404 {
+		t.Fatalf("a second delete: %d", r.StatusCode)
+	}
+}
+
+// Why: the card is what makes the feature findable; it lists what is stored, says restore is by
+// hand, and the old card name is gone (the schedule card now says it is for device backups).
+func TestBackupsTabShowsTheDatabaseCardAndRenamedSchedule(t *testing.T) {
+	s := snapSetup(t, true)
+	if _, _, err := s.mgr.Run(t.Context(), 7); err != nil {
+		t.Fatal(err)
+	}
+	_, body := s.do(t, "GET", "/settings/system?tab=backups", "admin", nil)
+	for _, want := range []string{
+		`id="card-database"`, "TasmoFleet database", `<button type="submit" form="db-dl" class="btn" id="btn-dl">Download snapshot</button>`,
+		`name="include_key" value="1"`, `id="db-dl" method="post" action="/tf/settings/system/snapshot"`,
+		"The file holds secrets. Keep it like a password.", "There is no restore button on purpose.",
+		`id="card-snapshots"`, "Snapshot schedule", `name="sw.SNAPSHOT_INTERVAL"`, `name="v.SNAPSHOT_KEEP"`,
+		"Device backup schedule", `data-dlg-action="/tf/settings/system/snapshots/`, "Latest", "schema 39",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+	if strings.Contains(body, "Schedule &amp; retention") || strings.Contains(body, "Schedule & retention") {
+		t.Error("the card is renamed Device backup schedule")
+	}
+	if strings.Contains(body, `name="include_key" value="1" checked`) {
+		t.Error("the key must be off by default")
+	}
+}
+
+// Why: a failed schedule must be seen on the page, with the reason, not only in a log.
+func TestBackupsTabReportsAFailedScheduledSnapshot(t *testing.T) {
+	dir := t.TempDir()
+	mgr := snapshot.New(failSource{}, dir)
+	e, svc, _, _ := sysEnvFull(t, true, func(d *Deps) { d.Snapshots = mgr })
+	if _, err := svc.Apply(t.Context(), sysconfig.Request{Actor: "admin", Values: map[string]string{"SNAPSHOT_INTERVAL": "24h"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := mgr.Run(t.Context(), 7); err == nil {
+		t.Fatal("expected a failure")
+	}
+	_, body := e.do(t, "GET", "/settings/system?tab=backups", "admin", nil)
+	for _, want := range []string{"The last scheduled snapshot failed.", "no space left on device", "Last attempt failed", "No good snapshot yet", "see the audit log"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+}
+
+type failSource struct{}
+
+func (failSource) VacuumInto(context.Context, string) error {
+	return &os.PathError{Op: "write", Path: "x", Err: errors.New("no space left on device")}
+}
+
+// Why: the switch is a view of SNAPSHOT_INTERVAL like the device schedule's. Off stores 0 (no
+// snapshots), on without an interval is refused at the field, on with one stores it; the
+// minimum protects the disk from a snapshot a minute.
+func TestSnapshotScheduleSwitchIsComposedIntoTheInterval(t *testing.T) {
+	s := snapSetup(t, true)
+	post := func(f url.Values) (int, string) {
+		f.Set("csrf", "tok")
+		r, b := s.do(t, "POST", "/settings/system?tab=backups", "admin", f)
+		return r.StatusCode, b
+	}
+	if code, body := post(url.Values{"swm.SNAPSHOT_INTERVAL": {"1"}, "sw.SNAPSHOT_INTERVAL": {"1"}, "v.SNAPSHOT_INTERVAL": {""}}); code != 422 || !strings.Contains(body, "enter how often") {
+		t.Fatalf("on without an interval: %d", code)
+	}
+	if code, _ := post(url.Values{"swm.SNAPSHOT_INTERVAL": {"1"}, "sw.SNAPSHOT_INTERVAL": {"1"}, "v.SNAPSHOT_INTERVAL": {"1m"}}); code != 422 {
+		t.Fatalf("one minute: %d", code)
+	}
+	if code, _ := post(url.Values{"swm.SNAPSHOT_INTERVAL": {"1"}, "sw.SNAPSHOT_INTERVAL": {"1"}, "v.SNAPSHOT_INTERVAL": {"24h"}, "v.SNAPSHOT_KEEP": {"5"}}); code != 303 {
+		t.Fatalf("on with 24h: %d", code)
+	}
+	if c := s.svc.Snapshot(); c.SnapshotSchedule.Hours() != 24 || c.SnapshotKeep != 5 {
+		t.Fatalf("stored %v / %d", c.SnapshotSchedule, c.SnapshotKeep)
+	}
+	if code, _ := post(url.Values{"swm.SNAPSHOT_INTERVAL": {"1"}, "v.SNAPSHOT_INTERVAL": {"24h"}}); code != 303 || s.svc.Snapshot().SnapshotSchedule != 0 {
+		t.Fatalf("switch off must store 0: %d %v", code, s.svc.Snapshot().SnapshotSchedule)
+	}
+	if code, _ := post(url.Values{"v.SNAPSHOT_KEEP": {"0"}}); code != 422 {
+		t.Fatalf("keep 0: %d", code)
+	}
+}

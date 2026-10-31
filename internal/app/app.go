@@ -41,6 +41,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/policy"
 	"github.com/nofuturekid/tasmofleet/internal/restore"
 	"github.com/nofuturekid/tasmofleet/internal/settings"
+	"github.com/nofuturekid/tasmofleet/internal/snapshot"
 	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
 	"github.com/nofuturekid/tasmofleet/internal/web"
 )
@@ -115,8 +116,9 @@ type runtime struct {
 	mqttCmd    *mqttcmd.Channel // the one place that sends commands over MQTT (#256)
 	facts      *TransportFacts  // the router's view of a device (transport.Facts)
 	sw         *mqttbus.Switch
-	broker     *brokerWatch  // the broker state the status bar shows (#307)
-	backupRun  *scheduledRun // the scheduled backup run the status bar shows
+	broker     *brokerWatch      // the broker state the status bar shows (#307)
+	backupRun  *scheduledRun     // the scheduled backup run the status bar shows
+	snapshots  *snapshot.Manager // copies of TasmoFleet's own database (download, schedule)
 	mqttKnown  *knownIndex
 	tracker    *health.Service
 	backups    *backup.Manager
@@ -147,6 +149,8 @@ func (a *runtime) run(ctx context.Context) error {
 	defer cancelBG()
 	a.bgContext = bg
 	a.backupRun = newScheduledRun(svc.Hub)
+	a.snapshots = snapshot.New(svc.Store, cfg.DataDir)
+	a.snapshots.CleanTemp() // scratch copies a crash left behind
 	if err := a.setupDecoder(bg); err != nil {
 		return err
 	}
@@ -666,6 +670,9 @@ func (a *runtime) webDeps(guard web.Guard, rows []web.KV) web.Deps {
 			return web.BackupRunInfo{}
 		}
 		return a.backupRun.Status()
+	}
+	if a.snapshots != nil {
+		deps.Snapshots = a.snapshots
 	}
 	deps.MQTTOnly = a.onlyOverMQTT
 	if a.facts != nil {

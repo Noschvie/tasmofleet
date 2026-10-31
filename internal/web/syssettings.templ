@@ -4,7 +4,9 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/nofuturekid/tasmofleet/internal/snapshot"
 	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
@@ -60,8 +62,17 @@ templ sysSettingsPage(p sysPage) {
 							}
 						</div>
 					}
+					if slices.ContainsFunc(tab.Cards, func(c sysCard) bool { return c.Side }) {
+						<div class="scol-side">
+							for _, c := range tab.Cards {
+								if c.Side {
+									@sysCardView(p, c)
+								}
+							}
+						</div>
+					}
 					for _, c := range tab.Cards {
-						if !c.Col {
+						if !c.Col && !c.Side {
 							@sysCardView(p, c)
 						}
 					}
@@ -79,6 +90,13 @@ templ sysSettingsPage(p sysPage) {
 		<form id="bk-orph" method="post" action={ templ.SafeURL(p.Base + sysPath + "?tab=backups") }>
 			<input type="hidden" name="csrf" value={ p.CSRF }/>
 		</form>
+	}
+	if p.DB != nil {
+		<form id="db-dl" method="post" action={ templ.SafeURL(p.Base + sysPath + "/snapshot") }>
+			<input type="hidden" name="csrf" value={ p.CSRF }/>
+		</form>
+	}
+	if (p.Storage != nil && len(p.Storage.Orphans) > 0) || (p.DB != nil && len(p.DB.Files) > 0) {
 		@backupDeleteDialog(backupsView{CSRF: p.CSRF})
 	}
 	@ui.Dialog(ui.DialogData{ID: "dlg-reset", Title: "Reset all settings?", Body: sysResetText,
@@ -113,6 +131,12 @@ templ sysCardView(p sysPage, c sysCard) {
 					}
 				}
 			}
+		case "database":
+			if p.DB != nil {
+				@ui.SettingsCard(ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Note: c.Note, Class: c.Class, Plain: true}) {
+					@sysDatabaseBlock(p, *p.DB)
+				}
+			}
 		default:
 			if len(c.Rows) > 0 || c.ID == "mqttdiscovery" {
 				@ui.SettingsCard(ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Note: c.Note, Class: c.Class, Depends: c.Depends, Badges: sysCardBadges(c)}) {
@@ -131,6 +155,9 @@ templ sysCardView(p sysPage, c sysCard) {
 						if c.ID == "idp" && row.Key == "OIDC_ISSUER" {
 							@sysTestRow("Test discovery", p.Base+sysPath+"/sso-test?tab=signin", "SSO check", p.SSOResult, "Saves nothing.")
 						}
+					}
+					if c.ID == "snapshots" && p.DB != nil {
+						@sysSnapshotStatus(*p.DB)
 					}
 					if c.ID == "mode" {
 						<p class="ufield-help">Needs PUBLIC_URL. The local admin always works as a fallback.</p>
@@ -160,7 +187,9 @@ templ sysRowView(p sysPage, row sysRow) {
 		case row.Key == "MQTT_URL" && p.MQTT.Legacy == "":
 			@sysBroker(p, row)
 		case row.Key == "BACKUP_INTERVAL":
-			@sysSchedule(row)
+			@sysSchedule(row, "BACKUP_SCHEDULE", "Scheduled backups", "Off: manual only.")
+		case row.Key == "SNAPSHOT_INTERVAL":
+			@sysSchedule(row, "SNAPSHOT_SCHEDULE", "Scheduled snapshots", "Besides the download above, on a timer.")
 		case row.Bool:
 			@sysSwitch(row)
 		default:
@@ -170,7 +199,7 @@ templ sysRowView(p sysPage, row sysRow) {
 		@sysKeepLegacy(p)
 	}
 	if len(row.Deps) > 0 {
-		<div class="dep" data-depends={ "v." + row.Key }>
+		<div class="dep" data-depends={ sysDependsOn(row.Key) }>
 			for _, d := range row.Deps {
 				@sysRowView(p, d)
 			}
@@ -226,14 +255,14 @@ templ sysSwitch(row sysRow) {
 	}
 }
 
-// sysSchedule is the backup interval behind a "Scheduled backups" switch: off stores 0 (manual
-// only). The switch is a view of the setting, composed by composeSchedule.
-templ sysSchedule(row sysRow) {
-	@ui.SettingField(ui.SettingFieldData{Key: "BACKUP_SCHEDULE", Label: "Scheduled backups", Width: "full", Help: "Off: manual only.", Switch: true}) {
-		<input type="hidden" name="swm.BACKUP_INTERVAL" value="1"/>
-		<label class="swhit"><input type="checkbox" role="switch" id={ ui.SettingControlID("BACKUP_SCHEDULE") } name="sw.BACKUP_INTERVAL" value="1" checked?={ sysScheduleOn(row) } aria-describedby={ ui.SettingHelpID("BACKUP_SCHEDULE") }/><span class="swtrack" aria-hidden="true"></span></label>
+// sysSchedule is an interval behind a schedule switch: off stores 0 (manual only, or no
+// snapshots). The switch is a view of the setting, composed by composeSchedule.
+templ sysSchedule(row sysRow, id, label, help string) {
+	@ui.SettingField(ui.SettingFieldData{Key: id, Label: label, Width: "full", Help: help, Switch: true}) {
+		<input type="hidden" name={ "swm." + row.Key } value="1"/>
+		<label class="swhit"><input type="checkbox" role="switch" id={ ui.SettingControlID(id) } name={ "sw." + row.Key } value="1" checked?={ sysScheduleOn(row) } aria-describedby={ ui.SettingHelpID(id) }/><span class="swtrack" aria-hidden="true"></span></label>
 	}
-	<div class="dep" data-depends="sw.BACKUP_INTERVAL">
+	<div class="dep" data-depends={ "sw." + row.Key }>
 		@sysInput(sysIntervalShown(row))
 	</div>
 }
@@ -396,6 +425,129 @@ templ sysUnreferencedFiles(st sysStorage) {
 			</div>
 		}
 	</div>
+}
+
+// sysSnapshotStatus is the last scheduled snapshot under the snapshot schedule: green when it
+// worked, red with the day of the failure when it did not. Nothing while the schedule is off.
+templ sysSnapshotStatus(db sysDB) {
+	if db.On {
+		switch db.Status.State {
+			case "fail":
+				<div class="sys-status st-fail">
+					<span class="sys-status-dot t-danger" aria-hidden="true"></span>
+					<div class="sys-status-text">
+						<b>Last attempt failed, <time { ui.StampAttrs(db.Status.Attempt, ui.StampStore)... }>{ storeDate(time.Now(), db.Status.Attempt) }</time></b>
+						<span>
+							if !db.Status.Taken.IsZero() {
+								Last good snapshot <time { ui.StampAttrs(db.Status.Taken, ui.StampStore)... }>{ storeDate(time.Now(), db.Status.Taken) }</time>
+							} else {
+								No good snapshot yet
+							}
+							if !db.Status.Next.IsZero() {
+								{ " · next attempt " }<time { ui.StampAttrs(db.Status.Next, ui.StampStore)... }>{ storeDate(time.Now(), db.Status.Next) }</time>
+							}
+						</span>
+					</div>
+				</div>
+			case "ok":
+				<div class="sys-status st-on">
+					<span class="sys-status-dot t-ok" aria-hidden="true"></span>
+					<div class="sys-status-text">
+						<b>Last snapshot <time { ui.StampAttrs(db.Status.Taken, ui.StampStore)... }>{ storeDate(time.Now(), db.Status.Taken) }</time></b>
+						<span>
+							if !db.Status.Next.IsZero() {
+								Next <time { ui.StampAttrs(db.Status.Next, ui.StampStore)... }>{ storeDate(time.Now(), db.Status.Next) }</time>{ " · " }
+							}
+							{ strconv.Itoa(db.Status.Count) + " of " + strconv.Itoa(db.Kept) + " kept" }
+						</span>
+					</div>
+				</div>
+			default:
+				<div class="sys-status">
+					<span class="sys-status-dot t-neutral" aria-hidden="true"></span>
+					<div class="sys-status-text">
+						<b>No snapshot taken yet</b>
+						<span>The first one is taken as soon as the schedule is saved.</span>
+					</div>
+				</div>
+		}
+	}
+	<p class="ufield-help db-note">Stored in the data directory (<span class="mono">{ "/data/" + snapshot.DirName }</span>), so the host backup of <span class="mono">/data</span> covers them. They sit on the same disk as the database: they protect against a bad upgrade or a deleted row, not against a dead disk.</p>
+}
+
+// sysDatabaseBlock is the "TasmoFleet database" card: the download (a form outside the settings
+// form, "db-dl"), what the file holds, the stored snapshots with Download and Delete, and how to
+// restore. There is no restore button on purpose.
+templ sysDatabaseBlock(p sysPage, db sysDB) {
+	<div class="sys-test">
+		<button type="submit" form="db-dl" class="btn" id="btn-dl">Download snapshot</button>
+		<label class="db-incl"><input type="checkbox" form="db-dl" name="include_key" value="1"/> Include <span class="mono">secret.key</span> (as .tar)</label>
+		<span class="sys-test-help">{ db.Hint }</span>
+	</div>
+	<div class="notice plain db-contents" role="note">
+		<b>The file holds secrets. Keep it like a password.</b>
+		<ul class="db-list">
+			<li><b>Inside:</b> devices, groups, settings, users with their password hashes, sessions, audit log and the backup index.</li>
+			<li><b>Encrypted inside:</b> device HTTP and MQTT passwords, the default device password, the MQTT broker password, the OIDC client secret and refresh tokens, the metrics token. The key is <span class="mono">secret.key</span> and it is <b>not</b> in the database file: without it these values cannot be read, with it they can.</li>
+			<li><b>Not inside:</b> device backup files (.dmp), the firmware cache, <span class="mono">secret.key</span> (unless ticked above).</li>
+		</ul>
+	</div>
+	if db.Status.State == "fail" {
+		<div class="st-fail">
+			<div class="error" role="alert">
+				<b>The last scheduled snapshot failed.</b>
+				<time { ui.StampAttrs(db.Status.Attempt, ui.StampStore)... }>{ storeDate(time.Now(), db.Status.Attempt) }</time>: could not write <span class="mono">{ "/data/" + snapshot.DirName + "/" + db.Status.File }</span> ({ db.Status.Reason }). Nothing was deleted.
+				if !db.Status.Next.IsZero() {
+					The next attempt is <time { ui.StampAttrs(db.Status.Next, ui.StampStore)... }>{ storeDate(time.Now(), db.Status.Next) }</time>;
+				}
+				<a href={ templ.SafeURL(p.Base + "/audit") }>see the audit log</a>.
+			</div>
+		</div>
+	}
+	<h3 class="sys-subhead">Scheduled snapshots <span class="db-where mono">{ "/data/" + snapshot.DirName }</span></h3>
+	if len(db.Files) == 0 {
+		<p class="ufield-help">No snapshots yet. Turn on the schedule on the right, or download one now. Downloads are not kept on the server.</p>
+	} else {
+		<div class="sys-orphans">
+			for _, f := range db.Files {
+				<div class="sys-orphan">
+					<div class="sys-orphan-main">
+						<div class="sys-orphan-title">
+							<span class="sys-store-name mono">{ f.Name }</span>
+							if f.Latest {
+								@ui.Badge(ui.ToneOK, "Latest")
+							}
+						</div>
+						<div class="sys-orphan-detail">
+							<time { ui.StampAttrs(f.Taken, ui.StampStore)... }>{ storeDate(time.Now(), f.Taken) }</time>{ " · " + f.Size }
+							if f.Schema > 0 {
+								{ " · schema " + strconv.Itoa(f.Schema) }
+							}
+						</div>
+					</div>
+					<div class="bk-acts">
+						<a class="btn" href={ templ.SafeURL(f.Download) }>Download</a>
+						<a
+							class="btn btn-danger bk-del"
+							href={ templ.SafeURL(f.Delete) }
+							data-dialog="dlg-bkdel"
+							data-dlg-title="Delete this snapshot?"
+							data-dlg-text={ snapDeleteText(f.Name) }
+							data-dlg-action={ f.Delete }
+							data-dlg-verb="Delete snapshot"
+						>Delete</a>
+					</div>
+				</div>
+			}
+		</div>
+	}
+	<h3 class="sys-subhead">Restore</h3>
+	<ol class="db-restore">
+		<li>Stop the container.</li>
+		<li>Replace <span class="mono">/data/tasmofleet.db</span> with the snapshot and delete <span class="mono">tasmofleet.db-wal</span> and <span class="mono">tasmofleet.db-shm</span>.</li>
+		<li>Make sure <span class="mono">/data/secret.key</span> is the one from the same time, then start the container.</li>
+	</ol>
+	<p class="ufield-help">There is no restore button on purpose. A snapshot from an older version is migrated at start; one from a newer version is refused. The <span class="mono">tasmofleet.db.pre-N</span> copies made before an upgrade are restored the same way.</p>
 }
 
 // sysResetBox is "Reset all settings" at the end of the Advanced tab (N9). The button opens

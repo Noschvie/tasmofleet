@@ -11881,6 +11881,75 @@ dialog.fw-notes-dlg .fw-dlg-body {
   gap: var(--sp-16);
   min-width: 0;
 }
+/* Backups tab: the TasmoFleet database card and the snapshot schedule (#301) */
+.db-incl {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-8);
+  font-size: 13px;
+}
+.db-contents {
+  margin: var(--sp-12) 0 0;
+  max-width: none;
+}
+.db-list {
+  margin: var(--sp-6) 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+}
+.db-list li {
+  margin: var(--sp-4) 0;
+}
+.db-where {
+  font-weight: 400;
+  color: var(--color-text-3);
+  font-size: 12px;
+  margin-left: var(--sp-8);
+}
+.db-restore {
+  margin: var(--sp-6) 0;
+  padding-left: 20px;
+  font-size: 13px;
+}
+.db-restore li {
+  margin: var(--sp-4) 0;
+}
+.db-note {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+#card-database .sys-orphans {
+  margin-top: var(--sp-8);
+}
+#card-database .st-fail > .error {
+  margin: var(--sp-12) 0 0;
+  max-width: none;
+}
+#card-database .sys-subhead {
+  margin-top: var(--sp-16);
+}
+#card-snapshots .sys-status {
+  margin-top: var(--sp-4);
+}
+/* side column: device schedule and snapshot schedule stacked, spanning the same two rows */
+.scol-side {
+  grid-row: span 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  min-width: 0;
+}
+@media (max-width: 44.99rem) {
+  .scol-side {
+    display: contents;
+  }
+  #card-database {
+    order: 1;
+  }
+  #card-snapshots {
+    order: 2;
+  }
+}
 #card-schedule .sbody {
   grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
 }

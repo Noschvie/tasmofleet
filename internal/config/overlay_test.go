@@ -108,6 +108,7 @@ func TestValidationRejectsBadOperationalValues(t *testing.T) {
 		{"FIRMWARE_BASE_URL", "https://fw.example"},
 		{"MQTT_URL", "ftp://broker"}, {"MQTT_URL", "ws://broker:80"}, {"MQTT_URL", "wss://broker:443"}, {"MQTT_URL", "tcp://"}, {"POLL_INTERVAL", "500ms"},
 		{"DISCOVERY_SCAN_INTERVAL", "10s"}, {"BACKUP_INTERVAL", "5s"},
+		{"SNAPSHOT_INTERVAL", "30m"}, {"SNAPSHOT_KEEP", "0"}, // a snapshot every few minutes would fill the disk; keeping none is no snapshot
 		{"CR_WARN_PERCENT", "49"}, {"CR_WARN_PERCENT", "101"}, {"CR_WARN_PERCENT", "x"},
 	}
 	for _, tc := range cases {

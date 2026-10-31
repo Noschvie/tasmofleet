@@ -138,6 +138,11 @@ type Config struct {
 	BackupSchedule time.Duration `env:"BACKUP_INTERVAL" ui:"true" default:"0s"`              // 0 = manual only
 	DecoderPath    string        `env:"DECODER_PATH" default:"/usr/local/bin/decode-config"` // empty disables
 
+	// SnapshotSchedule is how often TasmoFleet writes a consistent copy of its own database to
+	// <DATA_DIR>/snapshots (0 = off); SnapshotKeep is how many copies stay (the oldest go first).
+	SnapshotSchedule time.Duration `env:"SNAPSHOT_INTERVAL" ui:"true" default:"0s"`
+	SnapshotKeep     int           `env:"SNAPSHOT_KEEP" ui:"true" default:"7"`
+
 	// Discovery. MQTT discovery listens to Tasmota discovery messages (needs MQTT).
 	// The scheduled scan probes DiscoveryScanCIDRs (inside DEVICE_NETWORKS) every
 	// DiscoveryScanInterval; it is off by default.

@@ -62,6 +62,7 @@ func TestAuditSummaryPerActionType(t *testing.T) {
 		{"sysconfig", ev("sysconfig.update", "settings:system", "ok", `{"changes":[{"key":"BACKUP_KEEP","old":"5","new":"7"},{"key":"POLL_INTERVAL"}]}`), "System settings", "ok", "BACKUP_KEEP, POLL_INTERVAL"},
 		{"sysconfig reset", ev("sysconfig.reset", "settings:system", "ok", `{"changes":[{"key":"BACKUP_KEEP","old":"4","new":"10"}]}`), "Settings reset", "ok", "BACKUP_KEEP"},
 		{"sysconfig denied", ev("sysconfig.update", "settings:system", "denied: step-up required", `{"changes":[]}`), "System settings", "refused", "Step-up required"},
+		{"snapshot download with key", ev("snapshot.download", "database", "ok", `{"with_key":true,"file":"tasmofleet-20261031-0300.tar","bytes":10}`), "Database snapshot download", "ok", "tasmofleet-20261031-0300.tar · with secret.key"},
 		{"env import", ev("sysconfig.env_import", "settings:system", "ok", `{"keys":["MQTT_URL"]}`), "Settings from environment", "ok", "MQTT_URL"},
 		{"restore start", ev("restore.start", "device:1", "ok", `{"restore":4,"info":"backup 9 (16.0.0)"}`), "Restore", "ok", "backup 9 (16.0.0)"},
 		{"restore finish", ev("restore.finish", "device:1", "ok", `{"restore":4,"info":"settings restored"}`), "Restore finished", "ok", "settings restored"},

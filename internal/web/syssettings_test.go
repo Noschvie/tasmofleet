@@ -263,7 +263,7 @@ func TestSettingsBackupsStorageSummaryAndLargestFirst(t *testing.T) {
 	if !strings.Contains(body, `href="/tf/devices/12/backups"`) {
 		t.Error("a row opens the device's Backups tab")
 	}
-	if strings.Index(body, "Storage</h2>") > strings.Index(body, "Schedule &amp; retention") {
+	if strings.Index(body, "Storage</h2>") > strings.Index(body, "Device backup schedule") {
 		t.Error("the storage summary comes before the schedule, as in the prototype")
 	}
 }

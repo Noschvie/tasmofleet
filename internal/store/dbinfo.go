@@ -24,3 +24,11 @@ func (s *SQLite) DBInfo(ctx context.Context) (DBInfo, error) {
 	d.Size = pages * size
 	return d, nil
 }
+
+// VacuumInto writes a consistent copy of the live database to dst with VACUUM INTO (consistent
+// under WAL, while the application keeps writing). dst must not exist; the caller owns its
+// directory and permissions.
+func (s *SQLite) VacuumInto(ctx context.Context, dst string) error {
+	_, err := s.db.ExecContext(ctx, "VACUUM INTO ?", dst)
+	return err
+}

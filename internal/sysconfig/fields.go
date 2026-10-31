@@ -51,6 +51,7 @@ const (
 	GroupFirmware  Group = "Firmware"
 	GroupOTA       Group = "Updates (OTA)"
 	GroupBackup    Group = "Backups"
+	GroupSnapshot  Group = "Database snapshots"
 	GroupHealth    Group = "Health"
 	GroupMQTT      Group = "MQTT broker"
 	GroupDiscovery Group = "Discovery"
@@ -106,6 +107,11 @@ var fields = []Field{
 		Help: "Protects restore points from repeated manual runs, e.g. 720h."},
 	{Key: "BACKUP_INTERVAL", Group: GroupBackup, Label: "Scheduled backup interval", Apply: Live,
 		Help: "How often all devices are backed up, e.g. 24h. 0 = manual only."},
+
+	{Key: "SNAPSHOT_INTERVAL", Group: GroupSnapshot, Label: "Scheduled snapshot interval", Apply: Live,
+		Help: "How often TasmoFleet writes a consistent copy of its own database to the snapshots folder of the data directory, e.g. 24h. At least 1h. 0 = off."},
+	{Key: "SNAPSHOT_KEEP", Group: GroupSnapshot, Label: "Snapshots kept", Apply: Live,
+		Help: "How many scheduled snapshots stay; the oldest are deleted first."},
 
 	{Key: "CR_WARN_PERCENT", Group: GroupHealth, Label: "Settings text area warning", Apply: Live,
 		Help: "A device's Identity card warns when its settings text area (StatusFWR CR) is fuller than this percentage, 50 to 100."},

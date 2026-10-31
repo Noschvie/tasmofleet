@@ -344,6 +344,12 @@ func (c Config) validateOperational(bad func(key, msg string)) {
 	if c.BackupSchedule != 0 && c.BackupSchedule < time.Minute {
 		bad("BACKUP_INTERVAL", "must be 0 (manual only) or at least 1m")
 	}
+	if c.SnapshotSchedule != 0 && c.SnapshotSchedule < time.Hour {
+		bad("SNAPSHOT_INTERVAL", "must be 0 (off) or at least 1h")
+	}
+	if c.SnapshotKeep < 1 {
+		bad("SNAPSHOT_KEEP", "must be >= 1")
+	}
 	if c.PolicyLiveInterval != 0 && c.PolicyLiveInterval < time.Minute {
 		bad("POLICY_LIVE_INTERVAL", "must be 0 (no background reads) or at least 1m")
 	}
