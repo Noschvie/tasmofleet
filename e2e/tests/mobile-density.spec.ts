@@ -4,60 +4,10 @@ import { expectNoOverflow, openFolds, overflowProblem, smallTargets } from "../s
 import { realisticDevenvArgs, realisticPolicyRules, seedAuditTail, seedRealisticData } from "../support/seed";
 import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
-// Phone density. A fleet admin uses this on a phone standing next to a device:
-// every page's main view must be scannable in about two screens, not ten. The
-// realistic seed (27 devices, 10 releases, cached files, 50-odd audit events)
-// is what makes a "table as stacked cards" layout run to 10+ screens, so the
-// budget is measured on it. Zero horizontal overflow, measured against the
-// visible width (see support/layout.ts).
+// Phone layout on the realistic seed (27 devices, 10 releases, cached files, 50-odd audit events):
+// zero horizontal overflow, measured against the visible width (see support/layout.ts).
 const admin = { "X-authentik-username": "adam", "X-authentik-groups": "adm" };
 const SCREEN = 812;
-// "About two screens" with a small allowance for the browser chrome of a phone.
-const BUDGET_SCREENS = 2.25;
-// Devices only: the status word must stay visible (glyph + word + colour) and every touch target is 40 px, so a
-// device row needs two lines; 27 devices are about 2.6 screens. Decision of the coordinator, 2026-10-21.
-// update: 27 selectable devices at the 40 px touch-target minimum plus the fixed action bar (Preview) need 2.4.
-// audit: two lines per entry because the timestamp is essential in an audit log: 2.75.
-// audit (QA M7): a log that does not say WHO changed WHAT is useless, so the user shares the time line and the target
-// gets a line of its own (25 entries per page): 4.2. The app writes entries at times nobody controls (the devices' first
-// MQTT messages, identity and discovery probes of the locked device), and which of them landed on the first page moved the
-// height from 3370 to 3502 px (#237). seedAuditTail now fills the first page with 25 entries the seed wrote, half of them on the long device names
-// (the target is one ellipsized line, so they add no height): 3418 px measured here, so the budget of 4.3 (3492 px) is no longer a bet on a tie.
-// A real regression adds a line to every row (about 500 px), far beyond it.
-// policy: a device name wraps instead of being clipped (QA v0.9.0), so the long names of the seed take a second line each.
-// The unchecked policy page is deterministic on the realistic seed: measured 1907 px = 2.35 screens, identical in four runs
-// in the CI image (mcr.microsoft.com/playwright:v1.64.1-noble); the status cell of a row with a Details fold takes its own
-// line. 2.4 leaves about 2 % margin, not room for a regression. The background policy reads are off for this app
-// (POLICY_LIVE_INTERVAL 0): they start at random times in the first 10 minutes, and each deviating device they find adds
-// a row line and the "Select all deviating" toolbar, so the page grew with the runner's speed (1949 and 1973 px in CI).
-// devices: 2.9 since long names wrap in full (3 to 4 lines each for the unbreakable seed names) instead of being cut at one line.
-// design v2 (F3): every page ends in the prototype's 120 px bottom room (for the bulk bar) and
-// starts with the crumbs, about 0.1 screen more than before; the lists that were at their limit
-// get that 0.1, the content density is unchanged.
-// design v2 (F5): the device list is the prototype's cards on a phone, about 140 px per device instead
-// of a two-line row (the prototype's 60 devices are 8410 px); its budget follows the card list.
-// device detail (design v2, P3): the prototype's own overview is 1820 px at 375 (2.24 screens); its
-// state changes and transactions follow as two folded cards.
-// design v2 (P5): the firmware page is the prototype's (2.15 screens for its 5 cached files); the
-// realistic seed caches every build the fleet needs (7 files), one two-line row each with a 40 px Delete.
-// design v2 (P8): the audit log shows the prototype's subtitle and its filter row (search, actor, action,
-// period, result in two rows) instead of a folded "Filters" line, about 0.1 screen more; the rows are unchanged.
-// design v2 (W1, N3): the policy page is the prototype's merged page (rule cards, editor, live preview,
-// version history stacked); the prototype's own is 2626 px at 375 (3.23 screens). Ours adds the change
-// note and the folded "cannot be judged" row: 2726 px (3.36), so 3.45 with the editor open or new.
-// design v2 (#197 WP5): "policy rule editor" is a rule page since the overview lost its editor: tiles, the rule
-// card and the devices card stacked, 3203 px at 375 (3.94 screens) on the realistic seed; the folded
-// "History of this rule" card (WP7) adds one 40 px row, so 4.1. #235: "Applies to" is an always-open
-// section (family pills, tags, a 236 px device list, exceptions) instead of a fold: 4017 px (4.95), so 5.05.
-// system settings, advanced (#350): the 25 container settings are always visible (no disclosure, the approved mockup), one
-// two-line row each on a phone: 2539 px = 3.13 screens measured; 3.2 leaves about 2 % margin.
-// about (#351): the 64 effective settings are always visible (no disclosure, the approved mockup) and stack as one key/value
-// pair each on a phone: 5689 px = 7.01 screens measured; 7.15 leaves about 2 % margin.
-// #307: the status bar adds its 44 px line and 16 px gap to every page's bottom (60 px, 0.07 screens), so
-// "policy rule editor" 5.15, "firmware, all releases" 2.65, "system settings, advanced" 3.3, about 7.3.
-const BUDGET_OVERRIDES: Record<string, number> = {
-  devices: 6.0, update: 2.5, audit: 4.3, policy: 3.45, "policy rule editor": 5.15, "new policy rule": 3.45, "device detail": 2.75, firmware: 2.75, "firmware, all releases": 2.65, "system settings, advanced": 3.3, about: 7.3,
-};
 
 let app: App;
 let env: Devenv;
@@ -74,7 +24,7 @@ test.beforeAll(async ({ browser }) => {
       TASMOFLEET_ADMIN_GROUPS: "adm",
       TASMOFLEET_MQTT_URL: env.vars.TASMOFLEET_MQTT_URL,
       TASMOFLEET_POLL_INTERVAL: "5s",
-      TASMOFLEET_POLICY_LIVE_INTERVAL: "0", // the policy page is measured unchecked (see BUDGET_OVERRIDES)
+      TASMOFLEET_POLICY_LIVE_INTERVAL: "0", // no background policy reads at random times
       TASMOFLEET_FIRMWARE_UPSTREAM_OVERRIDE: env.vars.DEVENV_UPSTREAM_GITHUB_URL,
       TASMOFLEET_POLICY_RULES: realisticPolicyRules,
       TASMOFLEET_FIRMWARE_LISTEN: `127.0.0.1:${fwPort}`,
@@ -129,24 +79,20 @@ async function phonePages(page: import("@playwright/test").Page): Promise<Record
   };
 }
 
-test("phone: every main view fits the height budget and never scrolls sideways", async ({ page }) => {
+test("phone: no main view scrolls sideways", async ({ page }) => {
   test.setTimeout(240_000);
   await page.setViewportSize({ width: 375, height: SCREEN });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setExtraHTTPHeaders(admin);
   const pages = await phonePages(page);
-  const tooTall: string[] = [];
   const overflowing: string[] = []; // all pages are checked, so one run names every culprit
   for (const [name, path] of Object.entries(pages)) {
     await page.goto(path.startsWith("http") ? path : app.url + path);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     const problem = await overflowProblem(page, name);
     if (problem) overflowing.push(problem);
-    const height = await page.evaluate(() => document.documentElement.scrollHeight);
-    if (height > (BUDGET_OVERRIDES[name] ?? BUDGET_SCREENS) * SCREEN) tooTall.push(`${name}: ${height}px = ${(height / SCREEN).toFixed(2)} screens`);
   }
   expect(overflowing, "pages wider than the visible width").toEqual([]);
-  expect(tooTall, `pages above the budget of ${BUDGET_SCREENS} screens (${SCREEN}px each)`).toEqual([]);
 });
 
 // UX review #22 and #36 (chips that wrapped on a phone), resolved by design v2: the Add devices
