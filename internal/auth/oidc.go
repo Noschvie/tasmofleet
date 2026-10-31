@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -254,8 +253,37 @@ func roleName(r model.Role) string {
 // claim. A name chosen on the Account page replaces it (store.SetCustomName); the identity is the
 // subject, never this name.
 func (s *Service) oidcName(claims map[string]any) string {
-	if n := strings.TrimSpace(str(claims[s.o.OIDC.NameClaim])); n != "" {
+	if n := s.cleanIdPName(str(claims[s.o.OIDC.NameClaim]), "oidc name claim"); n != "" {
 		return n
 	}
 	return str(claims[s.o.OIDC.UsernameClaim])
+}
+
+// cleanIdPName applies the display name rules (trim, length, no control or invisible characters) to a
+// name the identity provider or proxy sent. A name that fails them is dropped, so the caller falls back
+// to the login name; the warning names the source, never the value. Empty in, empty out.
+func (s *Service) cleanIdPName(raw, source string) string {
+	n, _, err := CleanProfile(raw, "")
+	if err != nil {
+		if s.firstWarning(source) {
+			slog.Warn("auth: a sign-in name was refused, the login name is used instead", "source", source, "err", err)
+		}
+		return ""
+	}
+	return n
+}
+
+// firstWarning limits a repeated warning to one per headerSeenEvery and key.
+func (s *Service) firstWarning(key string) bool {
+	now := s.o.Clock.Now()
+	s.seenMu.Lock()
+	defer s.seenMu.Unlock()
+	if last, ok := s.seen["warn:"+key]; ok && now.Sub(last) < headerSeenEvery {
+		return false
+	}
+	if len(s.seen) >= 1024 {
+		clear(s.seen)
+	}
+	s.seen["warn:"+key] = now
+	return true
 }

@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 // namePages keeps the data the account page is given, so a test can see what the web UI shows.
@@ -149,5 +150,35 @@ func TestSSOSignInFallsBackToTheUsernameWithoutANameClaim(t *testing.T) {
 	}
 	if got := e.dir.rows["sub-alice"].DisplayName; got != "alice" {
 		t.Fatalf("recorded %q, want the user name", got)
+	}
+}
+
+// Why (#283): a name an identity provider or proxy sends is shown on every page and in the audit labels,
+// so it follows the same rules as a typed one. One with a zero-width or control character, or an absurd
+// length, is dropped and the login name shows instead; the sign-in itself is not refused.
+func TestIdPNamesFollowTheDisplayNameRules(t *testing.T) {
+	for name, claim := range map[string]string{"zero width": "Alice\u200bX", "bidi": "\u202eecilA", "control": "A\x07B", "too long": strings.Repeat("n", 65)} {
+		e := newEnv(t, ModeOIDC)
+		b := e.browser()
+		u := alice
+		u.Name = claim
+		if r := b.get(b.startOIDC("/", u)); r.code != http.StatusSeeOther {
+			t.Fatalf("%s: login refused: %d", name, r.code)
+		}
+		if got := e.dir.rows["sub-alice"].DisplayName; got != "alice" {
+			t.Errorf("%s: recorded %q, want the login name", name, got)
+		}
+	}
+	e := newEnv(t, ModeHeader)
+	hdr := map[string]string{"X-authentik-username": "boss", "X-authentik-name": "Bo\u200bss", "X-authentik-groups": "fleet-admins"}
+	e.browser().do(http.MethodGet, "/account", nil, hdr)
+	if got := e.dir.rows["boss"].DisplayName; got != "boss" {
+		t.Errorf("header: recorded %q, want the login name", got)
+	}
+	hdr["X-authentik-name"] = "  Bo Ss  "
+	e.clock.Advance(headerSeenEvery + time.Minute)
+	e.browser().do(http.MethodGet, "/account", nil, hdr)
+	if got := e.dir.rows["boss"].DisplayName; got != "Bo Ss" {
+		t.Errorf("header: recorded %q, want the trimmed name", got)
 	}
 }

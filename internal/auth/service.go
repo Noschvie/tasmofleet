@@ -374,7 +374,7 @@ func (s *Service) resolve(r *http.Request) ctxInfo {
 				Subject: user, Name: r.Header.Get(s.o.Header.Name), Email: r.Header.Get(s.o.Header.Email),
 				Groups: splitGroups(r.Header.Get(s.o.Header.Groups), s.o.Header.GroupsSep), Method: ModeHeader,
 			}
-			if p.Name == "" {
+			if p.Name = s.cleanIdPName(p.Name, "header name"); p.Name == "" {
 				p.Name = user
 			}
 			p.Role = s.o.Roles.Role(p.Groups)
