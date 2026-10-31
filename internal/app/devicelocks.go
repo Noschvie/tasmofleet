@@ -23,6 +23,9 @@ import (
 type deviceGuard struct {
 	locks *devlock.Locks
 	jobs  store.JobStore
+	// holds is the set of devices on which a typed firmware command has just started an update (#347); nil
+	// holds nothing. Update starts are refused for those until they have restarted.
+	holds *devlock.FirmwareHolds
 }
 
 var activeStates = []model.JobState{
@@ -124,7 +127,35 @@ type lockedOTA struct {
 	g deviceGuard
 }
 
+// Preview marks a device that a typed firmware command holds as refused, with the reason, so the person
+// sees it before confirming; Submit refuses it too.
+func (l lockedOTA) Preview(ctx context.Context, reqs []ota.Request) ([]ota.PreviewItem, error) {
+	items, err := l.OTA.Preview(ctx, reqs)
+	if err != nil || l.g.holds == nil {
+		return items, err
+	}
+	ids := make([]model.DeviceID, 0, len(items))
+	for _, it := range items {
+		ids = append(ids, it.DeviceID)
+	}
+	reasons := l.g.heldReasons(ids)
+	for i, it := range items {
+		if r, ok := reasons[it.DeviceID]; ok {
+			items[i].Decision, items[i].Reason = "refuse", r
+			items[i].BuildChoice, items[i].LanguageChoice = false, false // a choice cannot lift this refusal
+		}
+	}
+	return items, nil
+}
+
 func (l lockedOTA) Submit(ctx context.Context, actor string, reqs []ota.Request) (model.BatchID, error) {
+	ids := make([]model.DeviceID, 0, len(reqs))
+	for _, r := range reqs {
+		ids = append(ids, r.DeviceID)
+	}
+	if err := l.g.refuseHeld(ids); err != nil {
+		return 0, err // like any refusal, all or nothing: the person sees which device and why
+	}
 	var releases []func()
 	defer func() {
 		for _, r := range releases {
@@ -157,6 +188,15 @@ func (l lockedOTA) SubmitRetry(ctx context.Context, actor string, batch model.Ba
 	want := map[model.DeviceID]bool{}
 	for _, d := range devices {
 		want[d] = true
+	}
+	var retried []model.DeviceID
+	for _, j := range jobs {
+		if (len(want) == 0 || want[j.DeviceID]) && (j.State == model.JobFailed || j.State == model.JobCancelled) {
+			retried = append(retried, j.DeviceID)
+		}
+	}
+	if err := l.g.refuseHeld(retried); err != nil {
+		return ota.RetryResult{}, err
 	}
 	var releases []func()
 	defer func() {

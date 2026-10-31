@@ -112,6 +112,7 @@ type runtime struct {
 	engine     *ota.Engine
 	discovery  *discovery.Manager
 	deviceCmd  devicecmd.Service
+	fwHolds    *devlock.FirmwareHolds // devices a typed firmware command is still updating (#347)
 	bus        mqttbus.Bus
 	mqttCmd    *mqttcmd.Channel // the one place that sends commands over MQTT (#256)
 	facts      *TransportFacts  // the router's view of a device (transport.Facts)
@@ -683,7 +684,7 @@ func (a *runtime) webDeps(guard web.Guard, rows []web.KV) web.Deps {
 	if a.tracker != nil {
 		deps.StaleAfter = a.tracker.StaleAfter
 	}
-	g := deviceGuard{locks: a.deviceLocks(), jobs: a.svc.Store}
+	g := deviceGuard{locks: a.deviceLocks(), jobs: a.svc.Store, holds: a.fwHolds}
 	if a.deviceCmd != nil {
 		deps.DeviceCmd = lockedDeviceCmd{DeviceCmd: a.deviceCmd, g: g}
 	}
