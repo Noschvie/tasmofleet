@@ -44,6 +44,28 @@ var actingExact = map[string]bool{
 var actingPrefix = []string{"backlog", "publish", "rule", "timer", "wifi", "ping", "wakeup", "script", "zb",
 	"shutter", "mp3", "rfkey", "br"}
 
+// actingBareSuffix are name endings of commands that act when sent without a value: a
+// peripheral reset, a clear or erase, a scan, a start or stop, a save to flash, a self test.
+// Checked on the name without its index digits, case-insensitive, in addition to the
+// "send" ending. Found in the Tasmota 16.0.0 source (#358): RC522Reset runs
+// RC522FullReset(), ClientReset resets the co-processor, TRVReset, WieAllReset, SSPMReset,
+// DisplayClear, FramErase, I2CScan, LoRaInit and so on all act on a bare call. The catalogue
+// does not record whether a handler acts without a value, so the rule is by name: it
+// refuses too much rather than too little (GM861Reset only acts on "1" but is refused too).
+var actingBareSuffix = []string{"reset", "clear", "erase", "restart", "reboot", "scan", "rescan",
+	"start", "stop", "init", "reinit", "test", "save", "format", "pair"}
+
+// actingBare are commands that act when sent bare but have no such ending (verified against
+// the 16.0.0 handlers, see the table test in policyrule_test.go).
+var actingBare = map[string]bool{
+	"scd40fact": true, "scd40rein": true, "scd40strt": true, "scd40stlp": true, "scd40sing": true,
+	"scd40srht": true, "scd40pers": true,
+	"ld2410engineeringend": true, "npexec": true, "npescape": true,
+	"sen6xclean": true, "sen6xheat": true, "wcappendpic": true, "wcsavepic": true,
+	"wcsetdefaults": true, "wcpoweroff": true, "wgconnect": true, "i2spause": true, "i2sloop": true,
+	"trvdevlist": true, "bripreset": true,
+}
+
 // setActingExact are commands whose bare form only reports but whose set form, which
 // Make compliant would send, restarts the device (Gpio, Module, SetSensor, I2CDriver,
 // MqttClient, GroupTopic, Prefix, Emulation, TuyaMCU, MqttFingerprint, CpuFrequency),
@@ -110,10 +132,15 @@ func PolicyReadable(name string) (ok bool, why string) {
 		return false, reasonSecret
 	case actingExact[base]:
 		return false, reasonActs
-	case strings.HasSuffix(base, "send"):
+	case strings.HasSuffix(base, "send"), actingBare[base]:
 		return false, reasonActs
 	case setActingExact[base]:
 		return false, reasonSetActs
+	}
+	for _, suf := range actingBareSuffix {
+		if strings.HasSuffix(base, suf) {
+			return false, reasonActs
+		}
 	}
 	for _, pre := range setActingPrefix {
 		if strings.HasPrefix(base, pre) {

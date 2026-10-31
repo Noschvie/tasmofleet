@@ -189,3 +189,86 @@ func FuzzPolicyReadable(f *testing.F) {
 		}
 	})
 }
+
+// Why (#358): a policy rule on a command whose handler acts when called without a value makes
+// every hourly policy read perform that action on the whole fleet (RC522Reset resets the reader,
+// ClientReset the co-processor, Scd40Strt starts a measurement, I2CScan scans the bus). The
+// catalogue does not say which handlers act bare, so the rule is by name plus a list; each entry
+// below is the handler in the Tasmota 16.0.0 source (tasmota/ directory) that acts on a bare call.
+// A name that is refused here but was read before must show as invalid, never be read.
+func TestPolicyReadableRefusesBareActingCommands(t *testing.T) {
+	for name, src := range map[string]string{
+		"RC522Reset":     "tasmota_xsns_sensor/xsns_80_mfrc522.ino:358 RC522FullReset()",
+		"GM861Reset":     "tasmota_xsns_sensor/xsns_107_gm861.ino:358 acts only on payload 1; refused anyway, name rule",
+		"SSPMReset":      "tasmota_xdrv_driver/xdrv_86_esp32_sonoff_spm.ino:2609",
+		"ClientReset":    "tasmota_xdrv_driver/xdrv_31_tasmota_client.ino:479 TasmotaClient_Reset()",
+		"TRVReset":       "tasmota_xdrv_driver/xdrv_85_esp32_ble_eq3_trv.ino:1536",
+		"TRVDevList":     "xdrv_85_esp32_ble_eq3_trv.ino:1544 same handler as TRVScan",
+		"TRVScan":        "xdrv_85_esp32_ble_eq3_trv.ino:1544 starts a BLE scan",
+		"WieAllReset":    "tasmota_xsns_sensor/xsns_82_wiegand.ino:506",
+		"WieTimeReset":   "xsns_82_wiegand.ino:500",
+		"StccReset":      "name rule: Reset suffix",
+		"DisplayClear":   "tasmota_xdrv_driver/xdrv_13_display.ino:2271 clears the screen",
+		"Displayreinit":  "xdrv_13_display.ino:2362 re-initialises the driver",
+		"IBEACONclear":   "tasmota_xsns_sensor/xsns_52_esp32_ibeacon_ble.ino:155 clears the beacon list",
+		"LoRaInit":       "tasmota_xdrv_driver/xdrv_73_9_lora.ino:361",
+		"FramErase":      "xdrv_93_fm24cxx.ino: erases the FRAM",
+		"BrRestart":      "xdrv_52_9_berry.ino:445 BerryInit() restarts the VM",
+		"HM10Scan":       "name rule: Scan suffix",
+		"SSPMScan":       "name rule: Scan suffix",
+		"ZbScan":         "name rule: Scan suffix",
+		"WiFiScan":       "name rule: Scan suffix",
+		"DS18Rescan":     "name rule: Rescan suffix",
+		"DaliScan":       "name rule: Scan suffix",
+		"MaxEnergyStart": "name rule: Start suffix",
+		"Scd40Strt":      "xsns_92_scd40.ino:513 starts periodic measurement",
+		"Scd40StLP":      "xsns_92_scd40.ino:491 starts low-power measurement",
+		"Scd40Stop":      "name rule: Stop suffix",
+		"Scd40Fact":      "xsns_92_scd40.ino:593 factory reset of the sensor EEPROM",
+		"Scd40Rein":      "xsns_92_scd40.ino:574 re-initialises the sensor",
+		"Scd40Pers":      "xsns_92_scd40.ino:546 writes sensor settings to EEPROM",
+		"Scd40Sing":      "xsns_92_scd40.ino:610 single-shot measurement",
+		"Scd40SRHT":      "xsns_92_scd40.ino:633 single-shot measurement",
+		"Scd40Test":      "name rule: Test suffix",
+		"GM861Save":      "name rule: Save suffix",
+		"NPSave":         "name rule: Save suffix",
+		"ZbSave":         "name rule: Save suffix",
+		// LD2402_* and LD2410S_* contain an underscore: refused already as a bad name
+		"LD2410EngineeringEnd":   "xsns_102_ld2410.ino:557 leaves engineering mode",
+		"LD2410EngineeringStart": "name rule: Start suffix",
+		"NPExec":                 "xsns_83_neopool.ino:3339 writes MBF_EXEC",
+		"NPEscape":               "xsns_83_neopool.ino:3349 writes MBF_ESCAPE",
+		"Sen6xClean":             "xsns_119_sen6x.ino:447 runs fan cleaning",
+		"Sen6xHeat":              "xsns_119_sen6x.ino:458 runs the SHT heater",
+		"WCSavePic":              "xdrv_81_esp32_webcam_task.ino:2683",
+		"WCAppendPic":            "xdrv_81_esp32_webcam_task.ino:2689",
+		"WCPoweroff":             "xdrv_81_esp32_webcam_task.ino:2513",
+		"WCSetDefaults":          "xdrv_81_esp32_webcam.ino:1526",
+		"WGConnect":              "xdrv_80_wireguard_client.ino:200",
+		"WGStop":                 "name rule: Stop suffix",
+		"I2SPause":               "xdrv_42_0_i2s_audio_idf51.ino:914",
+		"I2SLoop":                "xdrv_42_0_i2s_audio_idf51.ino:909 starts playback",
+		"I2SStop":                "name rule: Stop suffix",
+		"BriPreset":              "xdrv_35_pwm_dimmer.ino:733 applies a preset",
+		"BLEPair":                "name rule: Pair suffix",
+		"FramReadFormat":         "name rule: Format suffix",
+		"ModbusTCPStart":         "name rule: Start suffix",
+		"CLIENTRESET":            "case does not matter",
+		"WieAllReset2":           "index digits do not matter",
+	} {
+		ok, why := PolicyReadable(name)
+		if ok || why != reasonActs {
+			t.Errorf("PolicyReadable(%q) = %v, %q; want denied with %q (%s)", name, ok, why, reasonActs, src)
+		}
+	}
+}
+
+// Why: refusing by suffix must not swallow plain readings; a list that refuses everything is safe
+// and useless. These end in letters near the denied endings but only report.
+func TestPolicyReadableKeepsNamesNearBareActingEndings(t *testing.T) {
+	for _, name := range []string{"RC522Status", "Altitude", "Latitude", "Timezone", "Hostname", "Baudrate", "LD2410Get", "Scd40Alti"} {
+		if ok, why := PolicyReadable(name); !ok {
+			t.Errorf("PolicyReadable(%q) denied (%s), want readable", name, why)
+		}
+	}
+}

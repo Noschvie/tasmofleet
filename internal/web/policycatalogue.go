@@ -46,11 +46,6 @@ func commandKeep(name string) bool {
 	if f, ok := settings.Lookup(name); ok {
 		return !f.Secret
 	}
-	// names that end in Reset act when sent bare (RC522Reset, SSPMReset, ClientReset ...); the
-	// read check does not know them all yet, so they are left out of the suggestions
-	if strings.HasSuffix(strings.ToLower(name), "reset") {
-		return false
-	}
 	return commandRefusal(name) == ""
 }
 

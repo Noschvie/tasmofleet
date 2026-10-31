@@ -462,3 +462,15 @@ func TestSaveWithCurrentBaseAndNoChangeIsErrNoChange(t *testing.T) {
 		t.Fatalf("unchanged save: %v, want ErrNoChange", err)
 	}
 }
+
+// Why (#358): a rule stored before 0.23.1 may name a command that acts when sent bare
+// (RC522Reset resets the reader). It must be left out of the active rules at read time, so no
+// policy read ever sends it, and named as invalid; the valid rules around it stay.
+func TestStoredRuleOnBareActingCommandIsNotRead(t *testing.T) {
+	r, st, _ := newRules("", nil)
+	legacyVersion(st, `[{"name":"A","command":"Timezone","want":"99"},{"name":"Reader","command":"RC522Reset","want":"0"}]`)
+	active, err := r.Active(context.Background())
+	if len(active) != 1 || active[0].Name != "A" || err == nil || !strings.Contains(err.Error(), "rule 2") {
+		t.Fatalf("Active: %+v, err %v (RC522Reset must be dropped and named)", active, err)
+	}
+}
