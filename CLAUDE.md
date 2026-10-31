@@ -89,7 +89,7 @@ internal/simulator        Tasmota device simulator (tests and devenv only)
 internal/testutil/oidcmock mock OIDC provider (tests and devenv only)
 internal/testutil/quarantine  quarantine.Test for flaky Go tests
 internal/discovery, policy   MQTT-first and scan discovery; policy rules and outcomes
-internal/notify              Notifier interface only, not wired into app (planned: #249; see spec 14.5)
+internal/notify              webhook and SMTP notifications for finished updates, failed scheduled backups and snapshots (#249; spec 14.5)
 internal/deps            build-tagged file pinning third-party modules in go.mod (maintainer only)
 ```
 
@@ -111,7 +111,7 @@ internal/deps            build-tagged file pinning third-party modules in go.mod
   never on concrete types from another package. Fakes live in the consumer's `_test.go`.
 - Device network access goes only through `tasmota.Client` with a `tasmota.Target`
   built from an inventory device. Firmware downloads go only through `firmware`
-  sources. Nothing else makes outbound HTTP requests (OIDC discovery and the SSO connection test in
+  sources. Nothing else makes outbound HTTP requests (the notification webhook sender in `notify`, OIDC discovery and the SSO connection test in
   `auth` are the configured exceptions, and so is the `healthcheck` client in `cmd/tasmofleet`,
   which only calls the service's own loopback address).
 

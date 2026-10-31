@@ -52,6 +52,19 @@ templ sysSettingsPage(p sysPage) {
 		for _, tab := range p.Tabs {
 			<div class="sys-tab" id={ "sec-" + tab.Slug } data-sys-tab={ tab.Slug } hidden?={ tab.Slug != p.Active }>
 				@ui.SettingsGrid() {
+					if slices.ContainsFunc(tab.Cards, func(c sysCard) bool { return c.Stack > 0 }) {
+						<div class="fcols fcols-n">
+							for stack := 1; stack <= 2; stack++ {
+								<div class="fcol">
+									for _, c := range tab.Cards {
+										if c.Stack == stack {
+											@sysCardView(p, c)
+										}
+									}
+								</div>
+							}
+						</div>
+					}
 					if slices.ContainsFunc(tab.Cards, func(c sysCard) bool { return c.Col }) {
 						<div class="scol">
 							for _, c := range tab.Cards {
@@ -71,7 +84,7 @@ templ sysSettingsPage(p sysPage) {
 						</div>
 					}
 					for _, c := range tab.Cards {
-						if !c.Col && !c.Side {
+						if !c.Col && !c.Side && c.Stack == 0 {
 							@sysCardView(p, c)
 						}
 					}
@@ -137,7 +150,7 @@ templ sysCardView(p sysPage, c sysCard) {
 				}
 			}
 		default:
-			if len(c.Rows) > 0 || c.ID == "mqttdiscovery" {
+			if len(c.Rows) > 0 || c.ID == "mqttdiscovery" || c.ID == "notify-message" {
 				@ui.SettingsCard(ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Note: c.Note, Class: c.Class, Depends: c.Depends, Badges: sysCardBadges(c)}) {
 					if c.ID == "mqttdiscovery" {
 						@sysDiscoveryCard(p)
@@ -172,6 +185,22 @@ templ sysCardView(p sysPage, c sysCard) {
 					if c.ID == "broker" && p.MQTT.Legacy == "" {
 						@sysTestRow("Test connection", p.Base+sysPath+"/mqtt-test?tab=mqtt", "MQTT connection test", p.MQTTResult, "Saves nothing.")
 					}
+					if c.ID == "notify-message" {
+						<div class="sf w-full">
+							<div class="sf-main">
+								<pre class="sys-pre">{ p.Notify.Preview }</pre>
+								<small class="ufield-help">Webhook body. The e-mail uses the title as subject, text and link as body.</small>
+							</div>
+						</div>
+					}
+					if c.ID == "notify-webhook" && p.Notify.On {
+						@sysChannelStatus(p.Notify.Webhook)
+						@sysTestRow("Send test", p.Base+sysPath+"/notify-test/webhook?tab=notifications", "Webhook test", p.Notify.WebhookResult, webhookTestHelp)
+					}
+					if c.ID == "notify-email" && p.Notify.On {
+						@sysChannelStatus(p.Notify.Email)
+						@sysTestRow("Send test", p.Base+sysPath+"/notify-test/email?tab=notifications", "E-mail test", p.Notify.EmailResult, emailTestHelp)
+					}
 				}
 			}
 	}
@@ -200,7 +229,14 @@ templ sysRowView(p sysPage, row sysRow) {
 	if len(row.Deps) > 0 {
 		<div class="dep" data-depends={ sysDependsOn(row.Key) }>
 			for _, d := range row.Deps {
-				@sysRowView(p, d)
+				switch d.Key {
+					case "NOTIFY_SMTP_HOST":
+						@sysSMTPServer(row.Deps)
+					case "NOTIFY_SMTP_PORT", "NOTIFY_SMTP_SECURITY":
+						// drawn with the host
+					default:
+						@sysRowView(p, d)
+				}
 			}
 		</div>
 	}
@@ -223,6 +259,8 @@ templ sysInput(row sysRow) {
 				@ui.Segmented(row.Label, row.InputName(), sysLevelOptions(row.Posted))
 			case row.Key == "AUTH_MODE":
 				@ui.RadioCards(row.Label, row.InputName(), sysAuthOptions(row.Posted))
+			case sysSegmentedEnum(row.Key):
+				@ui.Segmented(row.Label, row.InputName(), sysEnumOptions(row))
 			case len(row.Choices) > 0:
 				<div class="cks" role="group" aria-label={ row.Label }>
 					<input type="hidden" name={ "m." + row.Key } value="1"/>
@@ -231,11 +269,11 @@ templ sysInput(row sysRow) {
 					}
 				</div>
 			case row.Secret:
-				<input type="password" name={ row.InputName() } id={ ui.SettingControlID(row.Key) } class="mono" autocomplete="new-password" maxlength="128" placeholder={ sysSecretHint(row) } { sysDescribe(row)... }/>
+				<input type="password" name={ row.InputName() } id={ ui.SettingControlID(row.Key) } class="mono" autocomplete="new-password" maxlength={ sysSecretMax(row) } placeholder={ sysSecretHint(row) } { sysDescribe(row)... }/>
 			case len(row.Enum) > 0:
 				<select name={ row.InputName() } id={ ui.SettingControlID(row.Key) } { sysDescribe(row)... }>
 					for _, o := range row.Enum {
-						<option value={ o } selected?={ o == row.Posted }>{ o }</option>
+						<option value={ o } selected?={ o == row.Posted }>{ sysEnumLabel(row.Key, o) }</option>
 					}
 				</select>
 			case row.Multiline:
@@ -300,6 +338,32 @@ templ sysBroker(p sysPage, row sysRow) {
 	if p.MQTT.HasPassword {
 		<label class="ucheck sopt bkeep" data-broker-keep data-stored-host={ p.MQTT.StoredHost } data-stored-port={ p.MQTT.StoredPort }><input type="checkbox" name="reuse.MQTT_PASSWORD" value="1" checked?={ p.MQTT.KeepTicked }/><span>Broker changed: keep the stored password for the new broker</span></label>
 	}
+}
+
+// sysSMTPServer is the mail server in one row: host, port and security, like the MQTT broker.
+templ sysSMTPServer(rows []sysRow) {
+	<div class="brow">
+		for _, key := range []string{"NOTIFY_SMTP_HOST", "NOTIFY_SMTP_PORT", "NOTIFY_SMTP_SECURITY"} {
+			@sysInput(sysNoReset(sysRowOf(rows, key)))
+		}
+	</div>
+}
+
+// sysChannelStatus is the status line of a notification channel: its last delivery or test, or why it is not set up.
+templ sysChannelStatus(ch sysChannel) {
+	<div class="sys-status">
+		<span class={ "sys-status-dot", "t-" + ch.Tone } aria-hidden="true"></span>
+		<div class="sys-status-text">
+			<b>{ ch.Title }</b>
+			<span>
+				{ ch.Lead }
+				if !ch.At.IsZero() {
+					<time { ui.StampAttrs(ch.At, ui.StampStore)... }>{ storeDate(time.Now(), ch.At) }</time>
+				}
+				{ ch.Tail }
+			</span>
+		</div>
+	</div>
 }
 
 // sysKeepLegacy is the keep option under the single broker URL field, which has no host and port
@@ -487,7 +551,7 @@ templ sysDatabaseBlock(p sysPage, db sysDB) {
 		<b>The file holds secrets. Keep it like a password.</b>
 		<ul class="db-list">
 			<li><b>Inside:</b> devices, groups, settings, users with their password hashes, sessions, audit log and the backup index.</li>
-			<li><b>Encrypted inside:</b> device HTTP and MQTT passwords, the default device password, the MQTT broker password, the OIDC client secret and refresh tokens, the metrics token. The key is <span class="mono">secret.key</span> and it is <b>not</b> in the database file: without it these values cannot be read, with it they can.</li>
+			<li><b>Encrypted inside:</b> device HTTP and MQTT passwords, the default device password, the MQTT broker password, the OIDC client secret and refresh tokens, the metrics token, the notification webhook header value and SMTP password. The key is <span class="mono">secret.key</span> and it is <b>not</b> in the database file: without it these values cannot be read, with it they can.</li>
 			<li><b>Not inside:</b> device backup files (.dmp), the firmware cache, <span class="mono">secret.key</span> (unless ticked above).</li>
 		</ul>
 	</div>

@@ -39,9 +39,10 @@ func fieldHTML(t *testing.T, page, key string) string {
 }
 
 // Why: the maintainer approved eight tabs (10 -> 8): Metrics joins General, Devices joins Network,
-// Updates (OTA) joins Firmware. A field that no tab names must still land somewhere, never vanish.
-func TestSystemSettingsHasTheEightApprovedTabs(t *testing.T) {
-	want := []string{"general", "network", "mqtt", "discovery", "backups", "firmware", "signin", "advanced"}
+// Updates (OTA) joins Firmware; #249 adds Notifications between Backups and Firmware & updates.
+// A field that no tab names must still land somewhere, never vanish.
+func TestSystemSettingsHasTheApprovedTabs(t *testing.T) {
+	want := []string{"general", "network", "mqtt", "discovery", "backups", "notifications", "firmware", "signin", "advanced"}
 	if len(sysLayout) != len(want) {
 		t.Fatalf("%d tabs, want %d", len(sysLayout), len(want))
 	}
@@ -347,7 +348,7 @@ func TestSystemSettingsHasOneSaveBarInsideTheForm(t *testing.T) {
 }
 
 // Why: on a phone eight tabs scroll sideways. A section picker (a select) replaces the strip, and
-// lists the same eight sections.
+// lists the same nine sections.
 func TestSystemSettingsOffersASectionPickerForPhones(t *testing.T) {
 	e, _, _, _ := sysEnv(t, true)
 	_, page := e.do(t, "GET", "/settings/system?tab=mqtt", "admin", nil)
@@ -357,8 +358,8 @@ func TestSystemSettingsOffersASectionPickerForPhones(t *testing.T) {
 	}
 	sel := page[i:]
 	sel = sel[:strings.Index(sel, "</select>")]
-	if strings.Count(sel, "<option") != 8 || !strings.Contains(sel, `value="mqtt" selected`) {
-		t.Errorf("the picker must list all eight sections with the current one selected: %s", sel)
+	if strings.Count(sel, "<option") != 9 || !strings.Contains(sel, `value="mqtt" selected`) {
+		t.Errorf("the picker must list all nine sections with the current one selected: %s", sel)
 	}
 }
 

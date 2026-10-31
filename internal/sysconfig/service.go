@@ -177,6 +177,13 @@ func New(ctx context.Context, o Options) (*Service, error) {
 	svc.cur = cur
 	svc.cur = svc.bindSecrets(svc.cur)
 	for k, bound := range svc.mismatch {
+		if strings.HasPrefix(k, "NOTIFY_") {
+			// The target of a notification secret is a webhook address in full (its path or query can
+			// be the credential) or a mail login: never printed, only that it changed.
+			skipped[k] = errors.New("the stored secret was entered for another target; enter it again")
+			o.Log.Warn("stored secret not used: its target changed", "component", "sysconfig", "key", k)
+			continue
+		}
 		now := secretTargets[k](svc.cur)
 		skipped[k] = fmt.Errorf("the stored secret was entered for %s, the target is now %s; enter it again", orNone(bound), orNone(now))
 		o.Log.Warn("stored secret not used: its target changed", "component", "sysconfig", "key", k, "bound_to", bound, "now", now)
@@ -197,6 +204,17 @@ func orNone(s string) string {
 var secretTargets = map[string]func(config.Config) string{
 	"MQTT_PASSWORD":      func(c config.Config) string { return hostPort(c.MQTTURL) },
 	"OIDC_CLIENT_SECRET": func(c config.Config) string { return hostPort(c.OIDCIssuer) },
+	// The notification secrets go only where they were entered (#249): to the webhook address as
+	// stored (any change of scheme, host, port, path or query drops the secret), to the mail
+	// server's host, port, security mode (a downgrade to none included) and user. Without this, an admin could point
+	// the address at a host of their own and read the stored secret there.
+	"NOTIFY_WEBHOOK_SECRET": func(c config.Config) string { return strings.TrimSpace(c.NotifyWebhookURL) }, // the whole address: scheme, host, port, path, query
+	"NOTIFY_SMTP_PASSWORD": func(c config.Config) string {
+		if c.NotifySMTPHost == "" {
+			return ""
+		}
+		return fmt.Sprintf("%s:%d|%s|%s", strings.TrimSpace(c.NotifySMTPHost), c.NotifySMTPPort, c.NotifySMTPSecurity, strings.TrimSpace(c.NotifySMTPUser))
+	},
 }
 
 // setSecret stores v in the field of c that belongs to key.
@@ -206,6 +224,10 @@ func setSecret(c *config.Config, key, v string) {
 		c.MQTTPassword = v
 	case "OIDC_CLIENT_SECRET":
 		c.OIDCClientSecret = v
+	case "NOTIFY_WEBHOOK_SECRET":
+		c.NotifyWebhookSecret = v
+	case "NOTIFY_SMTP_PASSWORD":
+		c.NotifySMTPPassword = v
 	}
 }
 
@@ -307,6 +329,9 @@ func (s *Service) State() []FieldState {
 	for _, f := range fields {
 		val, _ := config.Format(s.cur, f.Key)
 		st := FieldState{Field: f, Value: redactURL(val), HasValue: val != "", Source: SourceDefault}
+		if f.Key == "NOTIFY_WEBHOOK_URL" {
+			st.Value = val // the admin edits the address as stored: a token in the query must survive a save (it holds no user info: validation refuses that)
+		}
 		if f.Secret {
 			st.Value = ""
 		}
@@ -548,6 +573,9 @@ func (s *Service) apply(ctx context.Context, req Request) (Result, *Event, error
 			writes = append(writes, w)
 		}
 		shownOld, shownNew := redactURL(oldV), redactURL(newV)
+		if k == "NOTIFY_WEBHOOK_URL" {
+			shownOld, shownNew = redactWebhookURL(oldV), redactWebhookURL(newV) // the path can be a secret (a Home Assistant webhook id)
+		}
 		if f.Secret {
 			shownOld, shownNew = maskSecret(oldV), maskSecret(newV)
 		} else if f.Key == "MQTT_USER" {
@@ -610,6 +638,10 @@ func secretValue(c config.Config, key string) string {
 		return c.MQTTPassword
 	case "OIDC_CLIENT_SECRET":
 		return c.OIDCClientSecret
+	case "NOTIFY_WEBHOOK_SECRET":
+		return c.NotifyWebhookSecret
+	case "NOTIFY_SMTP_PASSWORD":
+		return c.NotifySMTPPassword
 	}
 	return ""
 }
@@ -830,7 +862,9 @@ func importLegacy(ctx context.Context, o *Options, rows map[string]store.SystemS
 		}
 		f, _ := Lookup(k)
 		ch := store.SystemSettingChange{Key: k, Value: v, Secret: f.Secret}
-		if f.Secret {
+		if t, bound := secretTargets[k]; f.Secret && bound {
+			ch.Target = t(next)
+		} else if f.Secret {
 			ch.Target = hostPort(next.MQTTURL)
 		} else if formatted, err := config.Format(next, k); err == nil {
 			ch.Value = formatted
@@ -942,4 +976,49 @@ func (s *Service) MarkSetupDone(ctx context.Context, actor string) error {
 	}
 	s.stored[setupMarker] = store.SystemSetting{Key: setupMarker, Value: "1", UpdatedBy: actor}
 	return nil
+}
+
+// Preview is the effective configuration with the given form values on top, validated but not
+// stored: the base of the notification test buttons. A key that is missing (an empty secret field
+// is not posted) keeps its current value, so a stored secret is used by the test without ever
+// being shown, but only for the target it was entered for: when the form names another target
+// the stored secret is dropped from the preview and its key is returned, so the test cannot be
+// used to send a write-only secret to a host of the admin's choice.
+func (s *Service) Preview(values map[string]string) (config.Config, []string, error) {
+	cur := s.Snapshot()
+	cand := cur
+	for k, v := range values {
+		if _, ok := Lookup(k); !ok {
+			return config.Config{}, nil, &ValidationError{Fields: map[string]string{k: "not an editable setting"}}
+		}
+		if err := config.Set(&cand, k, v); err != nil {
+			return config.Config{}, nil, &ValidationError{Fields: map[string]string{k: config.KeyErrors(err)[k]}}
+		}
+	}
+	if err := config.Validate(cand); err != nil {
+		return config.Config{}, nil, &ValidationError{Fields: config.KeyErrors(err)}
+	}
+	var dropped []string
+	for key, target := range secretTargets {
+		if _, typed := values[key]; typed || secretValue(cand, key) == "" || target(cand) == target(cur) {
+			continue
+		}
+		setSecret(&cand, key, "")
+		dropped = append(dropped, key)
+	}
+	return cand, dropped, nil
+}
+
+// redactWebhookURL keeps scheme, host and port of a webhook address for the audit log and hides
+// the path and query, which can be the secret itself (a Home Assistant webhook id, an ntfy topic).
+func redactWebhookURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	out := u.Scheme + "://" + u.Host
+	if u.Path != "" && u.Path != "/" || u.RawQuery != "" {
+		out += "/***"
+	}
+	return out
 }

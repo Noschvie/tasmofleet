@@ -359,6 +359,7 @@ func (c Config) validateOperational(bad func(key, msg string)) {
 	if c.AuditKeep < 24*time.Hour {
 		bad("AUDIT_RETENTION", "must be at least 24h")
 	}
+	c.validateNotify(bad)
 	if c.DiscoveryScanInterval < time.Hour {
 		bad("DISCOVERY_SCAN_INTERVAL", "must be at least 1h")
 	}

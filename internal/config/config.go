@@ -169,4 +169,25 @@ type Config struct {
 	// MetricsDeviceLabels puts device names into metric labels (off by default).
 	MetricsDeviceLabels bool          `env:"METRICS_DEVICE_LABELS" ui:"true" default:"false"`
 	AuditKeep           time.Duration `env:"AUDIT_RETENTION" ui:"true" default:"8760h"`
+
+	// Notifications (#249): which events are sent, and the two channels they go to. Both channels
+	// are off until switched on. The two secrets are write-only on the settings page.
+	NotifyUpdate        bool   `env:"NOTIFY_UPDATE" ui:"true" default:"true"`
+	NotifyUpdateWhen    string `env:"NOTIFY_UPDATE_WHEN" ui:"true" default:"any"` // any | problems
+	NotifyBackup        bool   `env:"NOTIFY_BACKUP" ui:"true" default:"true"`
+	NotifySnapshot      bool   `env:"NOTIFY_SNAPSHOT" ui:"true" default:"true"`
+	NotifyWebhook       bool   `env:"NOTIFY_WEBHOOK" ui:"true" default:"false"`
+	NotifyWebhookFormat string `env:"NOTIFY_WEBHOOK_FORMAT" ui:"true" default:"json"` // json | homeassistant
+	NotifyWebhookURL    string `env:"NOTIFY_WEBHOOK_URL" ui:"true"`
+	NotifyWebhookAuth   string `env:"NOTIFY_WEBHOOK_AUTH" ui:"true" default:"none"` // none | header
+	NotifyWebhookHeader string `env:"NOTIFY_WEBHOOK_HEADER" ui:"true" default:"Authorization"`
+	NotifyWebhookSecret string `env:"NOTIFY_WEBHOOK_SECRET" ui:"true" secret:"true"`
+	NotifySMTP          bool   `env:"NOTIFY_SMTP" ui:"true" default:"false"`
+	NotifySMTPHost      string `env:"NOTIFY_SMTP_HOST" ui:"true"`
+	NotifySMTPPort      int    `env:"NOTIFY_SMTP_PORT" ui:"true" default:"587"`
+	NotifySMTPSecurity  string `env:"NOTIFY_SMTP_SECURITY" ui:"true" default:"starttls"` // starttls | tls | none
+	NotifySMTPUser      string `env:"NOTIFY_SMTP_USER" ui:"true"`
+	NotifySMTPPassword  string `env:"NOTIFY_SMTP_PASSWORD" ui:"true" secret:"true"`
+	NotifySMTPFrom      string `env:"NOTIFY_SMTP_FROM" ui:"true"`
+	NotifySMTPTo        string `env:"NOTIFY_SMTP_TO" ui:"true"` // comma separated addresses
 }

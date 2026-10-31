@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/notify"
 	"github.com/nofuturekid/tasmofleet/internal/snapshot"
 )
 
@@ -30,6 +31,9 @@ func (a *runtime) scheduledSnapshot(ctx context.Context) {
 		ev.Result = "failed: " + st.Reason
 		ev.Detail = auditJSON(map[string]any{"file": st.File})
 		a.log.Warn("scheduled database snapshot failed", "file", st.File, "err", err)
+		if a.notifier != nil {
+			a.notifier.Emit(notify.SnapshotFailed(a.notifier.Config(), st.Reason, time.Now()))
+		}
 	case res.PruneErr != nil:
 		// The snapshot is good; only the retention is behind. The card keeps showing the good one.
 		reason := snapshot.ReasonOf(res.PruneErr)

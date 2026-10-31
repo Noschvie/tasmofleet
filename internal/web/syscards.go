@@ -5,11 +5,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nofuturekid/tasmofleet/internal/config"
 	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
 
-// The Settings page is eight tabs; each tab is a grid of cards, each card names the settings it
+// The Settings page is nine tabs; each tab is a grid of cards, each card names the settings it
 // holds, in reading order. A setting that no card names lands in Advanced, "Other settings", so it
 // can never vanish from the UI. Adding a setting is: its sysconfig field, its key in a card here,
 // and its sysFieldCopy entry.
@@ -21,6 +22,7 @@ type sysCardDef struct {
 	Col                             bool // stacked with the other Col cards in one two-column group (no row gaps)
 	Side                            bool // stacked with the other Side cards in one column next to the Col group
 	StepUp                          bool // saving asks the admin to confirm: a badge in the header
+	Stack                           int  // 1 or 2: the card sits in that column stack of the tab (cards stack directly under each other); 0 = grid cell
 	Keys                            []string
 }
 
@@ -69,6 +71,15 @@ var sysLayout = []sysTabDef{
 		{ID: "orphans", Title: "Backups of deleted devices", Col: true},
 		{ID: "database", Title: "TasmoFleet database", Note: "Download and delete act at once, outside the settings form. Admins only; every download and every scheduled snapshot is written to the audit log.", Class: "span2"},
 	}},
+	{"notifications", "Notifications", []sysCardDef{
+		{ID: "notify-events", Title: "Events", Note: "What is sent. Both channels get the same events.", Stack: 1,
+			Keys: []string{"NOTIFY_UPDATE", "NOTIFY_UPDATE_WHEN", "NOTIFY_BACKUP", "NOTIFY_SNAPSHOT"}},
+		{ID: "notify-message", Title: "Message", Note: "Read-only preview.", Stack: 1},
+		{ID: "notify-webhook", Title: "Webhook", Note: "Home Assistant, ntfy, Gotify, anything that takes a JSON POST.", Stack: 2,
+			Keys: []string{"NOTIFY_WEBHOOK", "NOTIFY_WEBHOOK_FORMAT", "NOTIFY_WEBHOOK_URL", "NOTIFY_WEBHOOK_AUTH", "NOTIFY_WEBHOOK_HEADER", "NOTIFY_WEBHOOK_SECRET"}},
+		{ID: "notify-email", Title: "E-mail (SMTP)", Note: "SMTP with STARTTLS, TLS or none. No provider APIs in this version.", Stack: 2,
+			Keys: []string{"NOTIFY_SMTP", "NOTIFY_SMTP_HOST", "NOTIFY_SMTP_PORT", "NOTIFY_SMTP_SECURITY", "NOTIFY_SMTP_USER", "NOTIFY_SMTP_PASSWORD", "NOTIFY_SMTP_FROM", "NOTIFY_SMTP_TO"}},
+	}},
 	{"firmware", "Firmware & updates", []sysCardDef{
 		{ID: "source", Title: "Firmware source", Class: "span2 rows2", Keys: []string{"FIRMWARE_BASE_URL", "FIRMWARE_SOURCES", "FIRMWARE_REFRESH_INTERVAL", "FIRMWARE_KEEP_RELEASES"}},
 		{ID: "crosscheck", Title: "Cross-check", Keys: []string{"FIRMWARE_ALLOW_SINGLE_SOURCE"}},
@@ -87,7 +98,7 @@ var sysLayout = []sysTabDef{
 }
 
 // sysAdvanced is the index of the Advanced tab and its catch-all card.
-const sysAdvanced, sysOtherCard = 7, 0
+const sysAdvanced, sysOtherCard = 8, 0
 
 // sysGroupCard is where a new setting that no card names yet lands, by its sysconfig group, so it
 // shows next to its relatives; a group without an entry goes to Advanced, "Other settings".
@@ -95,7 +106,7 @@ var sysGroupCard = map[sysconfig.Group]string{
 	sysconfig.GroupLogging: "logging", sysconfig.GroupAudit: "logging", sysconfig.GroupMetrics: "metrics",
 	sysconfig.GroupNetwork: "networks", sysconfig.GroupHealth: "health", sysconfig.GroupMQTT: "broker",
 	sysconfig.GroupDiscovery: "scan", sysconfig.GroupBackup: "schedule", sysconfig.GroupSnapshot: "snapshots", sysconfig.GroupFirmware: "source",
-	sysconfig.GroupOTA: "ota", sysconfig.GroupSignIn: "idp",
+	sysconfig.GroupOTA: "ota", sysconfig.GroupSignIn: "idp", sysconfig.GroupNotify: "notify-events",
 }
 
 // sysPlace is the tab and card of a setting: the card that names it, else the card of its group,
@@ -171,19 +182,35 @@ func sysTabsOf(rows map[string]sysRow) []sysTab {
 	return tabs
 }
 
-// sysNest hangs each dependent row under the switch it names, when that switch is in the card.
+// sysNest hangs each dependent row under the switch it names, when that switch is in the card. A
+// row may hang under a row that itself hangs under a switch (the webhook header under the
+// authentication choice under the webhook switch).
 func sysNest(rows []sysRow) []sysRow {
 	var out []sysRow
 	for _, r := range rows {
 		dep := sysFieldCopy(r.Key).Dep
-		i := slices.IndexFunc(out, func(o sysRow) bool { return o.Key == dep })
-		if dep != "" && i >= 0 {
-			out[i].Deps = append(out[i].Deps, r)
-			continue
+		if dep != "" {
+			if target := sysFindRow(out, dep); target != nil {
+				target.Deps = append(target.Deps, r)
+				continue
+			}
 		}
 		out = append(out, r)
 	}
 	return out
+}
+
+// sysFindRow finds a row by key among rows and the rows hung under them.
+func sysFindRow(rows []sysRow, key string) *sysRow {
+	for i := range rows {
+		if rows[i].Key == key {
+			return &rows[i]
+		}
+		if t := sysFindRow(rows[i].Deps, key); t != nil {
+			return t
+		}
+	}
+	return nil
 }
 
 // sysRestartAll says that every editable setting of a card applies after a restart, so the card
@@ -225,6 +252,29 @@ type sysCopy struct {
 
 // sysCopies is the copy of every setting. Help is the one line under the field; Info is the rest.
 var sysCopies = map[string]sysCopy{
+	"NOTIFY_UPDATE":      {Help: "One message per job, not per device.", Width: "full"},
+	"NOTIFY_UPDATE_WHEN": {Label: "Send when", Width: "full", Dep: "NOTIFY_UPDATE"},
+	"NOTIFY_BACKUP":      {Help: "One message per run, listing the devices.", Width: "full", Info: "Counts the scheduled run only. A manual backup shows its error on screen. All devices that fail in one run make one message."},
+	"NOTIFY_SNAPSHOT":    {Help: "The nightly SQLite snapshot.", Width: "full"},
+	"NOTIFY_WEBHOOK":     {Help: "POST with a JSON body when an event above happens.", Width: "full"},
+	"NOTIFY_WEBHOOK_FORMAT": {Help: "Same body; Home Assistant reads trigger.json.event.", Width: "full", Dep: "NOTIFY_WEBHOOK",
+		Info: "Generic JSON and the Home Assistant preset send the same body. For Home Assistant use a webhook trigger and the address http://<host>:8123/api/webhook/<id>; the automation reads trigger.json.event, .result, .title and .text."},
+	"NOTIFY_WEBHOOK_URL": {Help: "http or https. Local addresses are fine.", Width: "full", Dep: "NOTIFY_WEBHOOK", Info: "The address is stored as entered. Its path and query can be a secret (a Home Assistant webhook id): the audit log, the status line and the logs show only scheme, host and port."},
+	"NOTIFY_WEBHOOK_AUTH": {Width: "full", Dep: "NOTIFY_WEBHOOK",
+		Info: "None: a Home Assistant webhook id is its own secret. Secret header: a fixed header such as a bearer token, sent with every message."},
+	"NOTIFY_WEBHOOK_HEADER": {Width: "half", Dep: "NOTIFY_WEBHOOK_AUTH"},
+	"NOTIFY_WEBHOOK_SECRET": {Help: "Write-only. Empty keeps it, for the same address only.", Width: "half", Dep: "NOTIFY_WEBHOOK_AUTH",
+		Info: "Sent only to the exact address it was entered for. Change the address (host, port, scheme, path or query) and it must be entered again; a save or a test without it sends none."},
+	"NOTIFY_SMTP":          {Help: "One message per event.", Width: "full"},
+	"NOTIFY_SMTP_HOST":     {Width: "grow", Dep: "NOTIFY_SMTP"},
+	"NOTIFY_SMTP_PORT":     {Width: "port", Dep: "NOTIFY_SMTP"},
+	"NOTIFY_SMTP_SECURITY": {Width: "tls", Dep: "NOTIFY_SMTP"},
+	"NOTIFY_SMTP_USER":     {Help: "Empty if the server needs no login.", Width: "half", Dep: "NOTIFY_SMTP"},
+	"NOTIFY_SMTP_PASSWORD": {Help: "Write-only. Empty keeps it, for the same server only.", Width: "half", Dep: "NOTIFY_SMTP",
+		Info: "Sent only to the server, port, security and user it was entered for. Change one of them and it must be entered again; a save or a test without it sends none."},
+	"NOTIFY_SMTP_FROM": {Width: "half", Dep: "NOTIFY_SMTP"},
+	"NOTIFY_SMTP_TO":   {Help: "Several addresses separated by commas.", Width: "half", Dep: "NOTIFY_SMTP"},
+
 	"LOG_LEVEL":       {Help: "Applies at once. Debug is verbose.", Width: "full"},
 	"AUDIT_RETENTION": {Help: "At least 24h. 720h = 30 days.", Width: "xs", Info: "How long audit events and finished update transactions (with their logs) are kept. A running transaction is never removed. 8760h is 365 days."},
 
@@ -336,6 +386,9 @@ func sysCardBadges(c sysCard) []ui.SettingsBadge {
 func sysDependsOn(key string) string {
 	if slices.Contains(scheduleIntervals, key) {
 		return "sw." + key
+	}
+	if key == "NOTIFY_WEBHOOK_AUTH" {
+		return "v." + key + "=" + config.NotifyAuthHeader // a choice, not a switch: the header fields follow "Secret header"
 	}
 	return "v." + key
 }

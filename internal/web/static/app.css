@@ -15094,3 +15094,61 @@ details.devcard > summary {
     top: calc(var(--ctl) + 40px);
   }
 }
+
+/* Settings, Notifications tab (#249): two column stacks (the .fcol pattern of the device Settings
+   tab), so a short card sits directly under the one above it instead of leaving a row gap. The
+   left stack is one grid column wide, the right one two. */
+.fcols.fcols-n {
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+}
+@media (min-width: 60rem) {
+  /* the device Settings rules above turn .fcols into text columns below 75rem; this tab keeps its two stacks */
+  .fcols.fcols-n {
+    display: grid;
+    columns: auto;
+  }
+  .fcols-n .fcol {
+    display: flex;
+  }
+}
+.sys-pre {
+  margin: 0;
+  padding: var(--sp-10) var(--sp-12);
+  border: var(--hair-w) solid var(--color-border);
+  border-radius: var(--r-control);
+  background: var(--color-surface-2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+@media (max-width: 59.99rem) {
+  /* one column: the cards in reading order, not column by column */
+  .fcols.fcols-n {
+    display: flex;
+    flex-direction: column;
+    columns: auto;
+    gap: var(--sp-16);
+  }
+  .fcols-n .fcol {
+    display: contents;
+  }
+  .fcols-n #card-notify-events {
+    order: 1;
+  }
+  .fcols-n #card-notify-webhook {
+    order: 2;
+  }
+  .fcols-n #card-notify-message {
+    order: 3;
+  }
+  .fcols-n #card-notify-email {
+    order: 4;
+  }
+}
+@media (max-width: 44.99rem) {
+  .fcols.fcols-n {
+    gap: 0;
+  }
+}

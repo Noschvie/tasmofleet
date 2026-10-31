@@ -37,6 +37,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/mqttbus"
 	"github.com/nofuturekid/tasmofleet/internal/mqttcmd"
+	"github.com/nofuturekid/tasmofleet/internal/notify"
 	"github.com/nofuturekid/tasmofleet/internal/ota"
 	"github.com/nofuturekid/tasmofleet/internal/policy"
 	"github.com/nofuturekid/tasmofleet/internal/restore"
@@ -109,39 +110,41 @@ type runtime struct {
 	cfg config.Config
 	log *slog.Logger
 
-	engine     *ota.Engine
-	discovery  *discovery.Manager
-	deviceCmd  devicecmd.Service
-	fwHolds    *devlock.FirmwareHolds // devices a typed firmware command is still updating (#347)
-	bus        mqttbus.Bus
-	mqttCmd    *mqttcmd.Channel // the one place that sends commands over MQTT (#256)
-	facts      *TransportFacts  // the router's view of a device (transport.Facts)
-	sw         *mqttbus.Switch
-	broker     *brokerWatch      // the broker state the status bar shows (#307)
-	backupRun  *scheduledRun     // the scheduled backup run the status bar shows
-	snapshots  *snapshot.Manager // copies of TasmoFleet's own database (download, schedule)
-	mqttKnown  *knownIndex
-	tracker    *health.Service
-	backups    *backup.Manager
-	settings   *settings.Manager
-	policy     web.PolicyService
-	policyLive *policyReporter
-	livePause  *sysconfig.LivePause // Pause / Resume of the background policy reads
-	fixer      *policy.Fixer        // "Make compliant": sends and reads back; nil until setupSettings ran
-	rules      *sysconfig.Rules
-	cache      firmware.Cache
-	restore    *restore.Manager
-	fwReach    *FWReachLearner // what devices reach (D11); nil in tests that do not need it
-	devLocks   *devlock.Locks
-	decoder    string // decode-config version, "" if unavailable
-	dec        backup.Decoder
-	authSvc    *auth.Service
-	pages      *web.Pages // sign-in and account pages; Handler attaches the app shell
-	fwUp       atomic.Bool
-	fwSource   string // where releases come from, for the firmware page (sourceText)
-	fwFeed     string // its short name
-	bgWG       sync.WaitGroup
-	bgContext  context.Context
+	engine          *ota.Engine
+	discovery       *discovery.Manager
+	deviceCmd       devicecmd.Service
+	fwHolds         *devlock.FirmwareHolds // devices a typed firmware command is still updating (#347)
+	bus             mqttbus.Bus
+	mqttCmd         *mqttcmd.Channel // the one place that sends commands over MQTT (#256)
+	facts           *TransportFacts  // the router's view of a device (transport.Facts)
+	sw              *mqttbus.Switch
+	broker          *brokerWatch       // the broker state the status bar shows (#307)
+	backupRun       *scheduledRun      // the scheduled backup run the status bar shows
+	snapshots       *snapshot.Manager  // copies of TasmoFleet's own database (download, schedule)
+	notifier        *notify.Dispatcher // webhook and e-mail notifications (#249); nil in tests that do not need it
+	notifiedBatches sync.Map           // transactions whose "update finished" message was sent
+	mqttKnown       *knownIndex
+	tracker         *health.Service
+	backups         *backup.Manager
+	settings        *settings.Manager
+	policy          web.PolicyService
+	policyLive      *policyReporter
+	livePause       *sysconfig.LivePause // Pause / Resume of the background policy reads
+	fixer           *policy.Fixer        // "Make compliant": sends and reads back; nil until setupSettings ran
+	rules           *sysconfig.Rules
+	cache           firmware.Cache
+	restore         *restore.Manager
+	fwReach         *FWReachLearner // what devices reach (D11); nil in tests that do not need it
+	devLocks        *devlock.Locks
+	decoder         string // decode-config version, "" if unavailable
+	dec             backup.Decoder
+	authSvc         *auth.Service
+	pages           *web.Pages // sign-in and account pages; Handler attaches the app shell
+	fwUp            atomic.Bool
+	fwSource        string // where releases come from, for the firmware page (sourceText)
+	fwFeed          string // its short name
+	bgWG            sync.WaitGroup
+	bgContext       context.Context
 }
 
 func (a *runtime) run(ctx context.Context) error {
@@ -152,6 +155,7 @@ func (a *runtime) run(ctx context.Context) error {
 	a.backupRun = newScheduledRun(svc.Hub)
 	a.snapshots = snapshot.New(svc.Store, cfg.DataDir)
 	a.snapshots.CleanTemp() // scratch copies a crash left behind
+	a.setupNotify()
 	if err := a.setupDecoder(bg); err != nil {
 		return err
 	}
@@ -268,6 +272,7 @@ func (a *runtime) run(ctx context.Context) error {
 	}
 	cancelBG()
 	a.bgWG.Wait()
+	a.drainNotifications()
 	return errors.Join(runErr, err)
 }
 
@@ -705,6 +710,9 @@ func (a *runtime) webDeps(guard web.Guard, rows []web.KV) web.Deps {
 	deps.Import = a.svc.Importer()
 	deps.Discovery = a.discovery
 	deps.SysConfig = a.svc.Sys
+	if a.notifier != nil {
+		deps.Notify = a.notifier
+	}
 	deps.PolicyRules = a.rules
 	deps.PolicyLivePause = a.livePause
 	deps.Setup = newSetupService(a.svc.Sys)

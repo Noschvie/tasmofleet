@@ -149,6 +149,7 @@ type Deps struct {
 	Restore      RestoreService     // optional: nil without FIRMWARE_BASE_URL (M2-5)
 	SysConfig    SysConfigService   // optional: system settings page
 	Snapshots    SnapshotService    // optional: database snapshots on the Backups tab (needs SysConfig)
+	Notify       NotifyService      // optional: status lines and test buttons of the Notifications tab (needs SysConfig)
 	PolicyRules  PolicyRulesService // optional: policy rule editor
 	// PolicyLivePause is optional: Pause / Resume of the automatic policy live check.
 	PolicyLivePause PolicyLivePause

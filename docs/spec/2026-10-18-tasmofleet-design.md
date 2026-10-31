@@ -167,7 +167,7 @@ everything.
 | `devicecmd`, `devlock` | single device commands; one operation at a time per device | restore, OTA and backup take the per-device lock | see package docs |
 | `restore`, `settings`, `sysconfig` | restore and replace device; curated device settings; system settings and policy rule versions in the database | see package docs | |
 | `changelog`, `netaddr`, `web/ui` | What's new page parser; address formatting; templ components | see package docs | |
-| `notify` | **not wired** | the `notify.Notifier` interface exists; nothing in `app` uses it yet (§14.5, #249) | |
+| `notify` | webhook and SMTP notifications (§14.5, #249) | `Dispatcher.Emit`, `Dispatcher.Test`, `Selected` | config |
 
 Boundaries are enforced in `.golangci.yml` (depguard) and listed in `CLAUDE.md`.
 
@@ -1522,10 +1522,26 @@ hint and Run now.
 
 ### 14.5 Notifications
 
-Planned, **not built**: the `notify.Notifier` interface exists (webhook and Resend mail were meant as
-implementations; triggers batch finished with failures, device offline longer than X, backup failed),
-but nothing in `app` creates or calls a notifier. Transactions, the audit log and `/metrics` are the
-ways to see failures today.
+Package `notify` tells a person about events they did not watch (#249). Events: `update.finished`
+(one per update transaction, sent by the job callback when the last job of the transaction ends; result
+`ok`, `partial`, `failed` or `cancelled`), `backup.scheduled_failed` (one per scheduled run, naming
+the failed devices), `snapshot.failed` (scheduled database snapshot), and `test`. Settings
+(`NOTIFY_*`, Settings page, tab Notifications) select the events and configure two channels:
+
+- **Webhook:** POST of the JSON body `{event, result, title, text, url, time}`; the Home Assistant
+  preset sends the same body (its webhook trigger exposes it as `trigger.json`). Optional secret
+  header. Ten seconds per attempt, one retry on a network error, 5xx or 429, never on 4xx, no proxy
+  from the environment, redirects only to the same host. The address is never part of a status or log text.
+- **E-mail:** `net/smtp` with STARTTLS (never skipped when chosen), implicit TLS or none; PLAIN or
+  LOGIN login; quoted-printable UTF-8 text with the title as subject.
+
+Delivery runs in the background and never fails the caller. The last delivery and the last test per
+channel are kept in memory (empty after a restart). The two secrets are write-only and stored with
+the other secrets (secretbox) and bound to the target they were entered for (the webhook address in full;
+mail host, port, security and user), like the MQTT password: a save that changes the target must enter the
+secret again, and a test with another target in the form sends the stored secret nowhere. "Send test" posts the form of the tab, saves nothing and uses the
+stored secret when the field is empty. Not in this version: device-offline events, HMAC signatures,
+provider APIs, a delivery queue or history.
 
 ---
 

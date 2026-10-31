@@ -58,6 +58,7 @@ const (
 	GroupAudit     Group = "Audit"
 	GroupMetrics   Group = "Metrics"
 	GroupLogging   Group = "Logging"
+	GroupNotify    Group = "Notifications"
 	GroupSignIn    Group = "Single sign-on (OIDC)"
 )
 
@@ -157,6 +158,35 @@ var fields = []Field{
 		Help: "How long audit events and finished update transactions (with their logs) are kept, at least 24h; a running transaction is never removed. Hours: 720h is 30 days, 8760h is 365 days."},
 	{Key: "LOG_LEVEL", Group: GroupLogging, Label: "Log level", Apply: Live, Enum: config.LogLevels(),
 		Help: "How much the server logs. debug is verbose; changes apply at once."},
+
+	{Key: "NOTIFY_UPDATE", Bool: true, Group: GroupNotify, Label: "Update job finished", Apply: Live,
+		Help: "One message per update transaction, not per device."},
+	{Key: "NOTIFY_UPDATE_WHEN", Group: GroupNotify, Label: "Send when", Apply: Live, Enum: config.NotifyChoices("NOTIFY_UPDATE_WHEN"),
+		Help: "any: every finished transaction. problems: only failed or partial ones."},
+	{Key: "NOTIFY_BACKUP", Bool: true, Group: GroupNotify, Label: "Scheduled device backup failed", Apply: Live,
+		Help: "One message per scheduled run, listing the devices that failed."},
+	{Key: "NOTIFY_SNAPSHOT", Bool: true, Group: GroupNotify, Label: "Database snapshot failed", Apply: Live,
+		Help: "The scheduled SQLite snapshot."},
+	{Key: "NOTIFY_WEBHOOK", Bool: true, Group: GroupNotify, Label: "Send to a webhook", Apply: Live,
+		Help: "POST with a JSON body when an event above happens."},
+	{Key: "NOTIFY_WEBHOOK_FORMAT", Group: GroupNotify, Label: "Format", Apply: Live, Enum: config.NotifyChoices("NOTIFY_WEBHOOK_FORMAT"),
+		Help: "json: generic JSON. homeassistant: the same JSON for a Home Assistant webhook trigger."},
+	{Key: "NOTIFY_WEBHOOK_URL", Group: GroupNotify, Label: "Webhook URL", Apply: Live,
+		Help: "http or https. Local addresses are fine. A Home Assistant webhook id in the address is a secret: it is not shown in messages or logs."},
+	{Key: "NOTIFY_WEBHOOK_AUTH", Group: GroupNotify, Label: "Authentication", Apply: Live, Enum: config.NotifyChoices("NOTIFY_WEBHOOK_AUTH"),
+		Help: "none, or one secret header such as a bearer token."},
+	{Key: "NOTIFY_WEBHOOK_HEADER", Group: GroupNotify, Label: "Header name", Apply: Live, Help: "Name of the secret header, e.g. Authorization."},
+	{Key: "NOTIFY_WEBHOOK_SECRET", Group: GroupNotify, Label: "Header value", Apply: Live, Secret: true,
+		Help: "Write-only. Empty keeps the stored value."},
+	{Key: "NOTIFY_SMTP", Bool: true, Group: GroupNotify, Label: "Send e-mail", Apply: Live, Help: "One message per event."},
+	{Key: "NOTIFY_SMTP_HOST", Group: GroupNotify, Label: "SMTP host", Apply: Live, Help: "Host name of the mail server."},
+	{Key: "NOTIFY_SMTP_PORT", Group: GroupNotify, Label: "Port", Apply: Live, Help: "Usually 587 (STARTTLS), 465 (TLS) or 25 (none)."},
+	{Key: "NOTIFY_SMTP_SECURITY", Group: GroupNotify, Label: "Security", Apply: Live, Enum: config.NotifyChoices("NOTIFY_SMTP_SECURITY"),
+		Help: "starttls, tls (from the first byte) or none (clear text)."},
+	{Key: "NOTIFY_SMTP_USER", Group: GroupNotify, Label: "User", Apply: Live, Help: "Empty if the server needs no login."},
+	{Key: "NOTIFY_SMTP_PASSWORD", Group: GroupNotify, Label: "Password", Apply: Live, Secret: true, Help: "Write-only. Empty keeps the stored password."},
+	{Key: "NOTIFY_SMTP_FROM", Group: GroupNotify, Label: "From", Apply: Live, Help: "Sender address, e.g. TasmoFleet <tasmofleet@example.com>."},
+	{Key: "NOTIFY_SMTP_TO", Group: GroupNotify, Label: "To", Apply: Live, Help: "One or more addresses, comma separated."},
 }
 
 // Fields returns the editable fields in page order.
