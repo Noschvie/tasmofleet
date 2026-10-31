@@ -111,12 +111,18 @@
     }
     var host = form.elements["mqtt.host"];
     var port = form.elements["mqtt.port"];
+    var box = keep.querySelector("input");
+    // Compare with the broker that is SAVED (data attributes), not with what the page loaded with:
+    // after a refused save the page shows the new broker, and the server still wants the choice.
     var changed =
-      (host && host.value !== host.defaultValue) ||
-      (port && port.value !== port.defaultValue);
+      (host && host.value !== keep.getAttribute("data-stored-host")) ||
+      (port && port.value !== keep.getAttribute("data-stored-port"));
+    if (box.defaultChecked) {
+      changed = true; // ticked in the save that is shown again: never hide or untick it
+    }
     keep.hidden = !changed;
     if (!changed) {
-      keep.querySelector("input").checked = false;
+      box.checked = false;
     }
   }
 

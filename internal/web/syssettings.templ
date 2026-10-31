@@ -166,6 +166,9 @@ templ sysRowView(p sysPage, row sysRow) {
 		default:
 			@sysInput(row)
 	}
+	if row.Key == "MQTT_URL" && p.MQTT.Legacy != "" {
+		@sysKeepLegacy(p)
+	}
 	if len(row.Deps) > 0 {
 		<div class="dep" data-depends={ "v." + row.Key }>
 			for _, d := range row.Deps {
@@ -267,7 +270,15 @@ templ sysBroker(p sysPage, row sysRow) {
 		</div>
 	</div>
 	if p.MQTT.HasPassword {
-		<label class="ucheck sopt bkeep" data-broker-keep><input type="checkbox" name="reuse.MQTT_PASSWORD" value="1"/><span>Broker changed: keep the stored password for the new broker</span></label>
+		<label class="ucheck sopt bkeep" data-broker-keep data-stored-host={ p.MQTT.StoredHost } data-stored-port={ p.MQTT.StoredPort }><input type="checkbox" name="reuse.MQTT_PASSWORD" value="1" checked?={ p.MQTT.KeepTicked }/><span>Broker changed: keep the stored password for the new broker</span></label>
+	}
+}
+
+// sysKeepLegacy is the keep option under the single broker URL field, which has no host and port
+// to compare: always visible.
+templ sysKeepLegacy(p sysPage) {
+	if p.MQTT.HasPassword {
+		<label class="ucheck sopt bkeep"><input type="checkbox" name="reuse.MQTT_PASSWORD" value="1" checked?={ p.MQTT.KeepTicked }/><span>Broker changed: keep the stored password for the new broker</span></label>
 	}
 }
 

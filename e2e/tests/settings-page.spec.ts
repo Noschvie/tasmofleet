@@ -109,7 +109,7 @@ test("the keep-password option appears only when host or port changed", async ({
   await page.setExtraHTTPHeaders(admin);
   await page.route("**/settings/system?tab=mqtt", async (route) => {
     const res = await route.fetch();
-    const html = (await res.text()).replace('<div class="sf w-tls', '</div><label class="ucheck sopt bkeep" data-broker-keep><input type="checkbox" name="reuse.MQTT_PASSWORD" value="1"/><span>Broker changed: keep the stored password for the new broker</span></label><div class="brow"><div class="sf w-tls');
+    const html = (await res.text()).replace('<div class="sf w-tls', '</div><label class="ucheck sopt bkeep" data-broker-keep data-stored-host="" data-stored-port=""><input type="checkbox" name="reuse.MQTT_PASSWORD" value="1"/><span>Broker changed: keep the stored password for the new broker</span></label><div class="brow"><div class="sf w-tls');
     await route.fulfill({ response: res, body: html });
   });
   await page.goto(app.url + "/settings/system?tab=mqtt");
@@ -121,6 +121,41 @@ test("the keep-password option appears only when host or port changed", async ({
   await expect(keep).toBeHidden();
   await page.locator("input[name='mqtt.host']").fill("other.example");
   await expect(keep).toBeVisible();
+});
+
+// Why (review of #333): after a refused save the page shows the new broker; the keep option must
+// still be there, still ticked (the server wants a decision about the stored password), and
+// compared with the SAVED broker, not with the broker the page was loaded with.
+test("keep-password option survives a refused save with a new broker", async ({ page }) => {
+  const own = await startApp({
+    env: { TASMOFLEET_AUTH_MODE: "header", TASMOFLEET_TRUSTED_PROXIES: "127.0.0.1/32", TASMOFLEET_ADMIN_GROUPS: "adm" },
+  });
+  try {
+    await page.setExtraHTTPHeaders(admin);
+    await page.goto(own.url + "/settings/system?tab=mqtt");
+    await page.locator("input[name='mqtt.host']").fill("127.0.0.1");
+    await page.locator("input[name='mqtt.port']").fill("1883");
+    await page.locator("input[name='v.MQTT_PASSWORD']").fill("fake-e2e-password");
+    await page.getByRole("button", { name: "Save settings" }).click();
+    await expect(page.getByText("Saved.")).toBeVisible();
+    const keep = page.locator("[data-broker-keep]");
+    await expect(keep).toBeHidden(); // the broker is the saved one
+    await page.locator("input[name='mqtt.host']").fill("other.example");
+    await expect(keep).toBeVisible();
+    await keep.locator("input").check();
+    await page.locator("[data-sys-tab='backups'] input[name='v.BACKUP_KEEP']").evaluate((el) => { (el as HTMLInputElement).type = "text"; (el as HTMLInputElement).value = "not-a-number"; });
+    await page.getByRole("button", { name: "Save settings" }).click();
+    await expect(page.locator("[data-key='BACKUP_KEEP'] .ufield-err")).toBeVisible();
+    await tabs(page).getByRole("link", { name: "MQTT" }).click(); // the page opens the tab with the error
+    await expect(page.locator("input[name='mqtt.host']")).toHaveValue("other.example");
+    await expect(keep).toBeVisible();
+    await expect(keep.locator("input")).toBeChecked();
+    // going back to the saved broker is what hides it
+    await page.locator("input[name='mqtt.host']").fill("127.0.0.1");
+    await expect(keep).toBeVisible(); // ticked in the refused save: never hidden by the page
+  } finally {
+    await own.stop();
+  }
 });
 
 // Why (#336): the Storage card is part of the page whichever tab it was opened on.

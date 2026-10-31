@@ -572,3 +572,27 @@ func TestSystemSettingsBackupsAndAdvancedFollowTheMockup(t *testing.T) {
 		}
 	}
 }
+
+// Why (review of #333): after a refused save the page shows the NEW broker, but the server still
+// wants the person to keep, re-enter or remove the password. The option must compare with the SAVED
+// broker (data attributes), stay ticked as it was posted, and exist for the single URL field too.
+func TestSystemSettingsKeepPasswordOptionSurvivesARefusedSave(t *testing.T) {
+	e, _, _, _ := sysEnv(t, true)
+	r, page := e.do(t, "POST", "/settings/system?tab=mqtt", "admin", url.Values{"csrf": {"tok"},
+		"mqtt.host": {"new.lan"}, "mqtt.port": {"1883"}, "reuse.MQTT_PASSWORD": {"1"}, "v.BACKUP_KEEP": {"not-a-number"}})
+	if r.StatusCode != 422 {
+		t.Fatalf("status %d, want the page again with an error", r.StatusCode)
+	}
+	if !strings.Contains(page, `data-stored-host="broker.lan"`) || !strings.Contains(page, `value="new.lan"`) {
+		t.Error("the option compares with the saved broker while the field shows the new one")
+	}
+	if !regexp.MustCompile(`name="reuse.MQTT_PASSWORD" value="1" checked`).MatchString(page) {
+		t.Error("the ticked option must come back ticked")
+	}
+	// the single URL field (a stored URL the parts cannot hold) offers the option too
+	_, page = e.do(t, "POST", "/settings/system?tab=mqtt", "admin", url.Values{"csrf": {"tok"},
+		"v.MQTT_URL": {"tcp://broker.lan/path"}, "v.BACKUP_KEEP": {"not-a-number"}})
+	if !strings.Contains(page, `name="v.MQTT_URL"`) || !strings.Contains(page, `name="reuse.MQTT_PASSWORD"`) {
+		t.Error("the single URL field lacks the keep option")
+	}
+}

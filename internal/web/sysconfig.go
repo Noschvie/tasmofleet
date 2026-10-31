@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"errors"
+	"maps"
 	"net/http"
 	"slices"
 	"strconv"
@@ -65,10 +66,12 @@ func (r sysRow) InputName() string { return "v." + r.Key }
 // sysMQTT is the broker of the MQTT tab as host, port and TLS (N18). Legacy is set when the
 // stored URL cannot be written as these parts; the page then keeps the URL field.
 type sysMQTT struct {
-	Host, Port  string
-	HasPassword bool // a password is stored: the broker row offers to keep it for a changed broker
-	TLS         bool
-	Legacy      string // why the parts cannot hold the stored URL; empty when they can
+	Host, Port             string
+	StoredHost, StoredPort string // the broker that is saved: the keep option shows while the fields differ from it
+	KeepTicked             bool   // the keep option was ticked in the save that is shown again
+	HasPassword            bool   // a password is stored: the broker row offers to keep it for a changed broker
+	TLS                    bool
+	Legacy                 string // why the parts cannot hold the stored URL; empty when they can
 }
 
 // sysDiscovery is the status card of the Discovery tab: what MQTT discovery does right now.
@@ -127,13 +130,16 @@ func (h *handler) sysData(r *http.Request, posted map[string]string, errs map[st
 		switch st.Key {
 		case "MQTT_URL":
 			p.MQTT = sysMQTTOf(row.Posted)
+			stored := sysMQTTOf(st.Value)
+			p.MQTT.StoredHost, p.MQTT.StoredPort = stored.Host, stored.Port
 		case "MQTT_PASSWORD":
-			hasMQTTPassword = st.HasValue
+			hasMQTTPassword = st.HasValue && !st.Locked // an environment password cannot follow a changed broker
 		case "DISCOVERY_MQTT":
 			discoveryOn = row.Posted == "true"
 		}
 	}
 	p.MQTT.HasPassword = hasMQTTPassword
+	p.MQTT.KeepTicked = posted["reuse.MQTT_PASSWORD"] == "1"
 	p.Tabs = sysTabsOf(rows)
 	p.Discovery = h.sysDiscoveryOf(r, discoveryOn)
 	p.Active = r.URL.Query().Get("tab")
@@ -398,6 +404,14 @@ func (h *handler) sysSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var reuse []string
+	// shown is what the page shows again after a refused save: the values, and the keep option as ticked.
+	shown := func() map[string]string {
+		m := maps.Clone(values)
+		if slices.Contains(reuse, "MQTT_PASSWORD") {
+			m["reuse.MQTT_PASSWORD"] = "1"
+		}
+		return m
+	}
 	for k := range extra {
 		if strings.HasPrefix(k, "reuse.") {
 			reuse = append(reuse, strings.TrimPrefix(k, "reuse."))
@@ -409,14 +423,14 @@ func (h *handler) sysSave(w http.ResponseWriter, r *http.Request) {
 			delete(extra, k)
 		}
 	} else if err := composeMQTTURL(values, extra, h.storedMQTTURL()); err != nil {
-		h.sysOutcome(w, r, values, err, nil)
+		h.sysOutcome(w, r, shown(), err, nil)
 		return
 	}
 	if v, ok := values["FIRMWARE_SOURCES"]; ok {
 		values["FIRMWARE_SOURCES"] = keepSourceOrder(v, h.storedValue("FIRMWARE_SOURCES"))
 	}
 	if err := composeSchedule(values, clear, extra); err != nil {
-		h.sysOutcome(w, r, values, err, nil)
+		h.sysOutcome(w, r, shown(), err, nil)
 		return
 	}
 	_, err := h.d.SysConfig.Apply(r.Context(), sysconfig.Request{
@@ -427,7 +441,7 @@ func (h *handler) sysSave(w http.ResponseWriter, r *http.Request) {
 	if tab := sysTabSlug(r.URL.Query().Get("tab")); tab != "" {
 		back = sysPath + "?tab=" + tab + "&ok=saved"
 	}
-	h.sysOutcome(w, r, values, err, func() { redirect(w, r, back) })
+	h.sysOutcome(w, r, shown(), err, func() { redirect(w, r, back) })
 }
 
 // sysOutcome renders the answer to Apply or TestMQTT errors, or calls done.
