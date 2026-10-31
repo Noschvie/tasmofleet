@@ -67,10 +67,12 @@ func (h *FirmwareHolds) Holding(id model.DeviceID) (since time.Time, ok bool) {
 }
 
 // Observe feeds what the health tracker reports for a device: its LWT ("Online", "Offline" or "") and its
-// uptime. The hold ends when the device has restarted: an LWT Offline followed by Online, or an uptime
-// reading that says the device booted after the command. An unchanged uptime is the tracker's cached
-// value, not a reading, and says nothing.
-func (h *FirmwareHolds) Observe(id model.DeviceID, lwt string, uptimeSec int64) {
+// uptime, and whether it runs minimal firmware. The hold ends when the device has restarted: an LWT Offline
+// followed by Online, or an uptime reading that says the device booted after the command. An unchanged
+// uptime is the tracker's cached value, not a reading, and says nothing. While the device runs minimal
+// firmware nothing ends the hold: a two-stage update restarts into the minimal image first, which then
+// flashes the real one and restarts again.
+func (h *FirmwareHolds) Observe(id model.DeviceID, lwt string, uptimeSec int64, minimal bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	hd := h.held[id]
@@ -80,17 +82,20 @@ func (h *FirmwareHolds) Observe(id model.DeviceID, lwt string, uptimeSec int64) 
 	switch {
 	case strings.EqualFold(lwt, "offline"):
 		hd.sawOffline = true
-	case strings.EqualFold(lwt, "online") && hd.sawOffline:
+	case strings.EqualFold(lwt, "online") && hd.sawOffline && !minimal:
 		delete(h.held, id)
+		return
+	}
+	if minimal {
 		return
 	}
 	if uptimeSec <= 0 || uptimeSec == hd.uptime {
 		return
 	}
 	elapsed := h.now().Sub(hd.at)
-	// A reading lower than the cached one cannot come from the same boot; a reading shorter than the time
-	// since the command says the device booted after it.
-	if uptimeSec < hd.uptime || time.Duration(uptimeSec)*time.Second+uptimeSlack < elapsed {
+	// A reading shorter than the time since the command says the device booted after it. A reading merely
+	// lower than the cached one proves nothing: a poll that began earlier can arrive late.
+	if time.Duration(uptimeSec)*time.Second+uptimeSlack < elapsed {
 		delete(h.held, id)
 		return
 	}

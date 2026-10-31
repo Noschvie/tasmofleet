@@ -149,13 +149,6 @@ func (l lockedOTA) Preview(ctx context.Context, reqs []ota.Request) ([]ota.Previ
 }
 
 func (l lockedOTA) Submit(ctx context.Context, actor string, reqs []ota.Request) (model.BatchID, error) {
-	ids := make([]model.DeviceID, 0, len(reqs))
-	for _, r := range reqs {
-		ids = append(ids, r.DeviceID)
-	}
-	if err := l.g.refuseHeld(ids); err != nil {
-		return 0, err // like any refusal, all or nothing: the person sees which device and why
-	}
 	var releases []func()
 	defer func() {
 		for _, r := range releases {
@@ -173,6 +166,15 @@ func (l lockedOTA) Submit(ctx context.Context, actor string, reqs []ota.Request)
 			return 0, devlock.BusyError{Holder: holder}
 		}
 		releases = append(releases, release)
+	}
+	// Checked with the locks held: a console command that holds a device records its hold before it lets go,
+	// so a hold cannot appear between this check and the batch.
+	ids := make([]model.DeviceID, 0, len(reqs))
+	for _, r := range reqs {
+		ids = append(ids, r.DeviceID)
+	}
+	if err := l.g.refuseHeld(ids); err != nil {
+		return 0, err // like any refusal, all or nothing: the person sees which device and why
 	}
 	return l.OTA.Submit(ctx, actor, reqs)
 }
@@ -195,9 +197,6 @@ func (l lockedOTA) SubmitRetry(ctx context.Context, actor string, batch model.Ba
 			retried = append(retried, j.DeviceID)
 		}
 	}
-	if err := l.g.refuseHeld(retried); err != nil {
-		return ota.RetryResult{}, err
-	}
 	var releases []func()
 	defer func() {
 		for _, r := range releases {
@@ -213,6 +212,9 @@ func (l lockedOTA) SubmitRetry(ctx context.Context, actor string, batch model.Ba
 			return ota.RetryResult{}, devlock.BusyError{Holder: holder}
 		}
 		releases = append(releases, release)
+	}
+	if err := l.g.refuseHeld(retried); err != nil { // with the locks held, like Submit
+		return ota.RetryResult{}, err
 	}
 	return l.OTA.SubmitRetry(ctx, actor, batch, devices)
 }

@@ -4,16 +4,21 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
 	"github.com/nofuturekid/tasmofleet/internal/devicecmd"
 	"github.com/nofuturekid/tasmofleet/internal/devlock"
 	"github.com/nofuturekid/tasmofleet/internal/events"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/ota"
+	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/nofuturekid/tasmofleet/internal/tasmota"
 )
 
 type holdClock struct {
@@ -104,25 +109,59 @@ func TestRetryIsRefusedWhileATypedUpgradeStillRuns(t *testing.T) {
 	}
 }
 
-// Why: the hold may only follow a firmware command that reached the device, from the console and from bulk
-// jobs alike (both send through this service); a routine command or a refused one must not block updates.
-func TestOnlyAFirmwareCommandThatWasSentHoldsTheDevice(t *testing.T) {
+// Why: the hold may only follow a firmware command that may have reached the device, from the console and
+// from bulk jobs alike (both send through this service). An unknown outcome (HTTP read timeout, MQTT lost
+// reply, unconfirmed publish) counts: holding ten minutes too long is cheap, too short risks a brick. A
+// routine command, a refusal and a bare OtaUrl (it only stores the address, no restart follows) do not.
+func TestOnlyAFirmwareCommandThatMayHaveReachedTheDeviceHoldsIt(t *testing.T) {
 	ctx := context.Background()
 	_, holds, _ := newHoldGuard()
-	run := func(id model.DeviceID, cmd string, err error) {
-		c := holdingCmd{Service: errCmd{err: err}, holds: holds, uptime: func(model.DeviceID) int64 { return 0 }}
-		_, _ = c.Run(ctx, model.Principal{Role: model.RoleAdmin}, id, cmd) // the error is the fake's, the test looks at the hold
+	httpTimeout := fmt.Errorf("device: no answer from 192.0.2.7: %w", tasmota.ErrTimeout)
+	mqttLost := fmt.Errorf("mqtt: the device went offline before it answered Upgrade (outcome unknown): %w", tasmota.ErrTimeout)
+	cases := []struct {
+		id   model.DeviceID
+		cmd  string
+		err  error
+		want bool
+	}{
+		{1, "Upgrade 1", nil, true},
+		{2, "Status 2", nil, false},
+		{3, "Upgrade 1", cmdpolicy.ErrRole, false},
+		{4, "Backlog OtaUrl http://x/y.bin; Upgrade 1", nil, true},
+		{5, "Upgrade 1", devicecmd.ErrUnconfirmed, true},
+		{6, "Upgrade 1", httpTimeout, true},
+		{7, "Upgrade 1", mqttLost, true},
+		{8, "Upgrade 1", store.ErrNotFound, false},
+		{9, "Upgrade 1", devlock.BusyError{Holder: "restore"}, false},
+		{10, "Upgrade 1", cmdpolicy.ErrUpdateJob, false},
+		{11, "OtaUrl http://x/y.bin", nil, false},
+		{12, "Backlog OtaUrl http://x/y.bin", nil, false},
+		{13, "Upgrade 1", errors.New("anything else is an unknown outcome"), true},
 	}
-	run(1, "Upgrade 1", nil)
-	run(2, "Status 2", nil)
-	run(3, "Upgrade 1", errors.New("refused before the send"))
-	run(4, "Backlog OtaUrl http://x/y.bin; Upgrade 1", nil)
-	run(5, "Upgrade 1", devicecmd.ErrUnconfirmed)
-	want := map[model.DeviceID]bool{1: true, 2: false, 3: false, 4: true, 5: true}
-	for id, w := range want {
-		if _, got := holds.Holding(id); got != w {
-			t.Errorf("device %d held = %v, want %v", id, got, w)
+	for _, c := range cases {
+		h := holdingCmd{Service: errCmd{err: c.err}, holds: holds, uptime: func(model.DeviceID) int64 { return 0 }}
+		_, _ = h.Run(ctx, model.Principal{Role: model.RoleAdmin}, c.id, c.cmd) // the error is the fake's, the test looks at the hold
+		if _, got := holds.Holding(c.id); got != c.want {
+			t.Errorf("%q with %v: held = %v, want %v", c.cmd, c.err, got, c.want)
 		}
+	}
+}
+
+// Why: a console command records its hold before it lets go of the device lock, so a TasmoFleet update that
+// takes the lock afterwards must see it. Checked before the lock, the update could slip in between.
+func TestHoldRecordedUnderTheConsoleLockIsSeenBySubmit(t *testing.T) {
+	ctx := context.Background()
+	g, holds, _ := newHoldGuard()
+	lc := lockedDeviceCmd{DeviceCmd: holdingCmd{Service: errCmd{}, holds: holds}, g: g}
+	lo := lockedOTA{OTA: &countingOTA{}, g: g}
+	if _, err := lc.Run(ctx, model.Principal{Role: model.RoleAdmin}, 1, "Upgrade 1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := lo.Submit(ctx, "u", []ota.Request{{DeviceID: 1}}); !errors.Is(err, ota.ErrRefused) {
+		t.Fatalf("submit after the console command: %v", err)
+	}
+	if _, _, ok := g.locks.TryAcquire(1, "x"); !ok {
+		t.Fatal("the refused submit must release its lock")
 	}
 }
 
@@ -133,7 +172,7 @@ func TestARestartSeenInHealthEventsEndsTheHold(t *testing.T) {
 	hub := events.NewHub(16)
 	ctx, stop := context.WithCancel(context.Background())
 	done := make(chan struct{})
-	go func() { observeFirmwareHolds(ctx, hub, holds); close(done) }()
+	go func() { observeFirmwareHolds(ctx, hub, holds, nil); close(done) }()
 	defer func() { stop(); <-done }()
 
 	holds.Start(1, 0)
@@ -160,4 +199,41 @@ type errCmd struct {
 
 func (e errCmd) Run(context.Context, model.Principal, model.DeviceID, string) (json.RawMessage, error) {
 	return nil, e.err
+}
+
+// Why: the observer must hand the tracker's "minimal firmware" state to the holds, or a two-stage update is
+// released at its first restart.
+func TestObserverKeepsTheHoldWhileTheDeviceRunsMinimalFirmware(t *testing.T) {
+	_, holds, _ := newHoldGuard()
+	hub := events.NewHub(16)
+	var minimal atomic.Bool
+	minimal.Store(true)
+	ctx, stop := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		observeFirmwareHolds(ctx, hub, holds, func(model.DeviceID) bool { return minimal.Load() })
+		close(done)
+	}()
+	defer func() { stop(); <-done }()
+	holds.Start(1, 0)
+	publish := func(lwt string) {
+		hub.Publish(events.Event{Topic: events.TopicHealth, Payload: model.Health{DeviceID: 1, LWT: lwt}})
+	}
+	for i := 0; i < 20; i++ { // the subscription starts in the goroutine
+		publish("Offline")
+		publish("Online")
+		time.Sleep(10 * time.Millisecond)
+	}
+	if _, ok := holds.Holding(1); !ok {
+		t.Fatal("a restart into minimal firmware must not release the hold")
+	}
+	minimal.Store(false)
+	for i := 0; i < 100; i++ {
+		publish("Online")
+		time.Sleep(10 * time.Millisecond)
+		if _, ok := holds.Holding(1); !ok {
+			return
+		}
+	}
+	t.Fatal("the real firmware back after an Offline must release the hold")
 }

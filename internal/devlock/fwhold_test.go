@@ -36,34 +36,55 @@ func TestHoldStartsWithTheCommandAndOnlyForThatDevice(t *testing.T) {
 func TestHoldEndsAfterAnLWTOfflineOnlineCycleOnly(t *testing.T) {
 	h, _ := newHolds()
 	h.Start(1, 0)
-	h.Observe(1, "Online", 0)
+	h.Observe(1, "Online", 0, false)
 	if _, ok := h.Holding(1); !ok {
 		t.Fatal("a lone Online is no restart")
 	}
-	h.Observe(1, "Offline", 0)
+	h.Observe(1, "Offline", 0, false)
 	if _, ok := h.Holding(1); !ok {
 		t.Fatal("Offline alone: the device is not back yet")
 	}
-	h.Observe(1, "Online", 0)
+	h.Observe(1, "Online", 0, false)
 	if _, ok := h.Holding(1); ok {
 		t.Fatal("Offline then Online is a restart: the hold must end")
 	}
 }
 
-// Why: without MQTT the only sign of a restart is the uptime. A reading below the cached one cannot belong
-// to the same boot.
-func TestHoldEndsWhenTheUptimeWentBackwards(t *testing.T) {
+// Why: without MQTT the only sign of a restart is the uptime: a reading shorter than the time since the
+// command says the device booted after it. A merely lower reading proves nothing (a poll that began
+// before the command can arrive after it), so it must not release a device that is still flashing.
+func TestHoldEndsOnAnUptimeYoungerThanTheCommandNotOnALowerOne(t *testing.T) {
 	h, c := newHolds()
 	h.Start(1, 4000)
 	c.advance(40 * time.Second)
-	h.Observe(1, "", 4040)
+	h.Observe(1, "", 3000, false) // a stale poll: lower than the cached value, but older than the command
 	if _, ok := h.Holding(1); !ok {
-		t.Fatal("a normally growing uptime is the same boot")
+		t.Fatal("a lower uptime alone must not release the hold")
 	}
 	c.advance(40 * time.Second)
-	h.Observe(1, "", 12)
+	h.Observe(1, "", 12, false) // up for 12 s, 80 s since the command
 	if _, ok := h.Holding(1); ok {
-		t.Fatal("an uptime that fell is a restart")
+		t.Fatal("an uptime younger than the command is a restart")
+	}
+}
+
+// Why: a two-stage update restarts into the minimal image first, which then flashes the real firmware and
+// restarts again. Releasing at the first restart would let a TasmoFleet update start in the middle of that.
+func TestHoldSurvivesTheRestartIntoMinimalFirmware(t *testing.T) {
+	h, c := newHolds()
+	h.Start(1, 4000)
+	c.advance(30 * time.Second)
+	h.Observe(1, "Offline", 0, false)
+	h.Observe(1, "Online", 0, true) // back, but minimal
+	h.Observe(1, "", 5, true)       // young uptime, still minimal
+	if _, ok := h.Holding(1); !ok {
+		t.Fatal("minimal firmware is not the end of the update")
+	}
+	c.advance(60 * time.Second)
+	h.Observe(1, "Offline", 0, true)
+	h.Observe(1, "Online", 0, false) // the real image is up
+	if _, ok := h.Holding(1); ok {
+		t.Fatal("the restart into the real firmware ends the hold")
 	}
 }
 
@@ -74,8 +95,8 @@ func TestAStaleCachedUptimeIsNotAReading(t *testing.T) {
 	h, c := newHolds()
 	h.Start(1, 60) // booted a minute before the command
 	c.advance(5 * time.Minute)
-	h.Observe(1, "Online", 60) // the same cached value, repeated
-	h.Observe(1, "Online", 60)
+	h.Observe(1, "Online", 60, false) // the same cached value, repeated
+	h.Observe(1, "Online", 60, false)
 	if _, ok := h.Holding(1); !ok {
 		t.Fatal("the cached uptime repeated must not release the hold")
 	}
@@ -88,7 +109,7 @@ func TestHoldEndsWhenTheDeviceIsYoungerThanTheCommand(t *testing.T) {
 	h, c := newHolds()
 	h.Start(1, 10)
 	c.advance(2 * time.Minute)
-	h.Observe(1, "", 100) // 100 s up, 120 s since the command: booted 20 s after it
+	h.Observe(1, "", 100, false) // 100 s up, 120 s since the command: booted 20 s after it
 	if _, ok := h.Holding(1); ok {
 		t.Fatal("a device younger than the command has restarted")
 	}

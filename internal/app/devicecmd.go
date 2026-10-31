@@ -18,5 +18,5 @@ func (a *runtime) setupDeviceCmd() {
 	a.fwHolds = devlock.NewFirmwareHolds(time.Now, firmwareHoldTimeout)
 	up := func(id model.DeviceID) int64 { return a.tracker.Get(id).UptimeSec }
 	a.deviceCmd = holdingCmd{Service: devicecmd.New(o), holds: a.fwHolds, uptime: up}
-	a.goBG("firmware-holds", func() error { observeFirmwareHolds(a.bgContext, a.svc.Hub, a.fwHolds); return nil })
+	a.goBG("firmware-holds", func() error { observeFirmwareHolds(a.bgContext, a.svc.Hub, a.fwHolds, a.tracker.Minimal); return nil })
 }

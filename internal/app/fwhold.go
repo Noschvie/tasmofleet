@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
@@ -13,6 +14,8 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/events"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/ota"
+	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/nofuturekid/tasmofleet/internal/transport"
 )
 
 // firmwareHoldTimeout is how long a typed firmware command holds the device for update starts at most. The
@@ -33,9 +36,10 @@ type holdingCmd struct {
 
 func (c holdingCmd) Run(ctx context.Context, p model.Principal, id model.DeviceID, cmd string) (json.RawMessage, error) {
 	raw, err := c.Service.Run(ctx, p, id, cmd)
-	// An unconfirmed MQTT publish may still have reached the device: hold on that too. Every other error
-	// is a refusal or a failure before the send.
-	if (err == nil || errors.Is(err, devicecmd.ErrUnconfirmed)) && cmdpolicy.StartsFirmware(cmd) {
+	// An unknown outcome (a timeout over HTTP, a lost reply over MQTT, an unconfirmed publish) may have
+	// reached the device, so it holds too: holding too long costs ten minutes, too short risks a brick.
+	// Only what certainly never left TasmoFleet does not.
+	if !neverSent(err) && startsUpgrade(cmd) {
 		var up int64
 		if c.uptime != nil {
 			up = c.uptime(id)
@@ -45,9 +49,35 @@ func (c holdingCmd) Run(ctx context.Context, p model.Principal, id model.DeviceI
 	return raw, err
 }
 
+// neverSent reports whether err says the command certainly did not leave TasmoFleet: a policy refusal, a
+// busy device, a vanished inventory entry, a refused cut-off.
+func neverSent(err error) bool {
+	return err != nil && (errors.Is(err, cmdpolicy.ErrInvalid) || errors.Is(err, cmdpolicy.ErrForbidden) || errors.Is(err, cmdpolicy.ErrRole) ||
+		errors.Is(err, cmdpolicy.ErrUpdateJob) || errors.Is(err, devlock.ErrBusy) || errors.Is(err, store.ErrNotFound) || errors.Is(err, transport.ErrCutOff))
+}
+
+// startsUpgrade reports whether cmd makes the device flash and restart: an Upgrade with an argument, alone
+// or inside a Backlog. A bare OtaUrl only stores the address; no restart follows, so nothing to wait for.
+func startsUpgrade(cmd string) bool {
+	if !cmdpolicy.StartsFirmware(cmd) {
+		return false
+	}
+	body := strings.TrimSpace(cmd)
+	if f := strings.Fields(body); len(f) > 0 && strings.HasPrefix(strings.ToLower(f[0]), "backlog") {
+		body = strings.TrimSpace(body[len(f[0]):])
+	}
+	for _, one := range strings.Split(body, ";") {
+		if f := strings.Fields(one); len(f) > 1 && strings.EqualFold(f[0], "upgrade") {
+			return true
+		}
+	}
+	return false
+}
+
 // observeFirmwareHolds feeds the health tracker's reports to holds until ctx is done: a restarted device
-// ends its hold. A lost report (a resync marker) only delays that until the timeout.
-func observeFirmwareHolds(ctx context.Context, hub *events.Hub, holds *devlock.FirmwareHolds) {
+// ends its hold, unless it runs minimal firmware (a two-stage update: the first restart only brings up the
+// minimal image, which then flashes the real one). A lost report (a resync marker) only delays that until the timeout.
+func observeFirmwareHolds(ctx context.Context, hub *events.Hub, holds *devlock.FirmwareHolds, minimal func(model.DeviceID) bool) {
 	ch, cancel := hub.Subscribe(events.TopicHealth)
 	defer cancel()
 	for {
@@ -59,7 +89,7 @@ func observeFirmwareHolds(ctx context.Context, hub *events.Hub, holds *devlock.F
 				return
 			}
 			if h, isHealth := ev.Payload.(model.Health); isHealth {
-				holds.Observe(h.DeviceID, h.LWT, h.UptimeSec)
+				holds.Observe(h.DeviceID, h.LWT, h.UptimeSec, minimal != nil && minimal(h.DeviceID))
 			}
 		}
 	}
