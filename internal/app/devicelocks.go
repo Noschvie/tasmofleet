@@ -77,7 +77,7 @@ func (l lockedDeviceCmd) Power(ctx context.Context, actor string, id model.Devic
 func (l lockedDeviceCmd) Run(ctx context.Context, p model.Principal, id model.DeviceID, cmd string) (json.RawMessage, error) {
 	release, err := l.g.enter(ctx, id, "console")
 	if err != nil {
-		if cmdpolicy.StartsFirmware(cmd) && busyBy(err, "ota") {
+		if p.Role >= model.RoleAdmin && cmdpolicy.StartsFirmware(cmd) && busyBy(err, "ota") { // an operator may not send it at all: keep the generic text
 			return nil, cmdpolicy.ErrUpdateJob // the same decision as the console page: say why, not just "busy"
 		}
 		return nil, err

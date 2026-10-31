@@ -293,3 +293,22 @@ func TestBulkFirmwareCommandLeavesOutDevicesAnUpdateJobHolds(t *testing.T) {
 		t.Fatalf("all held: %d %s", resp.StatusCode, body)
 	}
 }
+
+// Why: only an UPDATE job makes the preview refuse a device; a command or backup job there is left to
+// the engine (generic "already has active job"), and the offline note must not count held devices.
+func TestBulkFirmwareCommandIgnoresNonUpdateJobsAndHeldIsNotOffline(t *testing.T) {
+	for _, k := range []model.JobKind{model.KindCommand, model.KindBackup} {
+		jobs := &fakeJobs{jobs: []model.Job{{ID: 5, DeviceID: 1, Kind: k, State: model.JobQueued}}}
+		e := setupWith(t, func(d *Deps) { d.DeviceCmd = &fakeCmd{}; d.CommandBatch = &fakeBatch{}; d.Jobs = jobs })
+		_, body := e.do(t, "POST", "/devices/bulk/command", "admin", bulkForm("id", "1", "command", "Upgrade 1"))
+		if strings.Contains(body, "update job") || !strings.Contains(body, "Send to 1 device") {
+			t.Errorf("%s job: %s", k, body)
+		}
+	}
+	jobs := &fakeJobs{jobs: []model.Job{{ID: 5, DeviceID: 1, State: model.JobQueued}}}
+	e := setupWith(t, func(d *Deps) { d.DeviceCmd = &fakeCmd{}; d.CommandBatch = &fakeBatch{}; d.Jobs = jobs })
+	_, body := e.do(t, "POST", "/devices/bulk/command", "admin", bulkForm("id", "1", "command", "Upgrade 1"))
+	if strings.Contains(body, "offline or unknown") {
+		t.Errorf("an online device held by an update job is not offline: %s", body)
+	}
+}

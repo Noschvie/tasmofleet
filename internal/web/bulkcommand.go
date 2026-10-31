@@ -2,6 +2,7 @@ package web
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"slices"
 	"strconv"
@@ -78,6 +79,7 @@ func (h *handler) bulkCommandPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var heldRows []ui.KVRow
+	devicesFact := sv.Summary()
 	if cmdpolicy.StartsFirmware(cmd) {
 		held, err := h.updateHeld(r.Context(), ready...)
 		if err != nil {
@@ -96,9 +98,10 @@ func (h *handler) bulkCommandPage(w http.ResponseWriter, r *http.Request) {
 					heldRows = append(heldRows, ui.KVRow{Key: "Refused", Value: row.Name + ": a TasmoFleet update job holds this device"})
 				}
 			}
-			sv.SkipN++
 		}
 		ready, sv.RunN = free, len(free)
+		// the offline note of the scope page counts offline devices only; held ones speak in their own rows
+		devicesFact = fmt.Sprintf("%s run · %d skipped", plural(sv.RunN, "device"), sv.SkipN+len(heldRows))
 		if len(ready) == 0 {
 			sv.CommandError = updateJobHoldsText
 			sv.Command = safeInput(cmd)
@@ -131,7 +134,7 @@ func (h *handler) bulkCommandPage(w http.ResponseWriter, r *http.Request) {
 		Title: sv.Title(), Heading: "Send " + shown + " to " + plural(len(ready), "device") + "?",
 		Text:    "Devices that are not online are left out. The result page lists the answer of every device.",
 		Warning: consequence,
-		Facts:   append([]ui.KVRow{{Key: "Command", Value: shown, Mono: true}, {Key: "Devices", Value: sv.Summary()}}, heldRows...),
+		Facts:   append([]ui.KVRow{{Key: "Command", Value: shown, Mono: true}, {Key: "Devices", Value: devicesFact}}, heldRows...),
 		Action:  view.Base + "/devices/bulk/command/run", CSRF: view.CSRF, Fields: fields,
 		Verb: verb, Danger: consequence != "", CancelHref: view.Base + "/devices", CancelLabel: "Cancel",
 	}))

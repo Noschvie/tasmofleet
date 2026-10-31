@@ -148,8 +148,8 @@ func TestActiveOTAJobBlocksWriters(t *testing.T) {
 	}
 }
 
-// Why: two firmware updates at once can brick a device. A typed Upgrade/OtaUrl (console, or a bulk
-// command job) while a TasmoFleet update job holds the device never reaches it, and the refusal says
+// Why: two firmware updates at once can brick a device. A typed Upgrade/OtaUrl in the console (a bulk
+// command job sends through a.deviceCmd and is excluded by the job that holds the device) while a TasmoFleet update job holds the device never reaches it, and the refusal says
 // why instead of "busy". A routine command keeps the generic busy text, and nothing is sent either way.
 func TestFirmwareCommandRefusedWhileAnUpdateJobHoldsTheDevice(t *testing.T) {
 	ctx := context.Background()
@@ -166,6 +166,9 @@ func TestFirmwareCommandRefusedWhileAnUpdateJobHoldsTheDevice(t *testing.T) {
 	}
 	if _, err := lc.Run(ctx, model.Principal{Role: model.RoleAdmin}, 2, "Upgrade 1"); err != nil {
 		t.Errorf("another device is free: %v", err)
+	}
+	if _, err := lc.Run(ctx, model.Principal{Role: model.RoleOperator}, 1, "Upgrade 1"); errors.Is(err, cmdpolicy.ErrUpdateJob) {
+		t.Error("an operator may not send it at all: no text that implies it will work later")
 	}
 	if cmd.calls != 1 {
 		t.Fatalf("only the free device's command may reach the device, got %d", cmd.calls)
@@ -217,4 +220,27 @@ func TestEveryRunningJobStateExcludesOtherWriters(t *testing.T) {
 			t.Errorf("state %s does not count as an active OTA job for the device guard", s)
 		}
 	}
+}
+
+// Why: the specific text names an UPDATE job. A command, backup or policy job holding the device is not
+// one, so it must keep the generic busy text; otherwise the message would blame an update that is not there.
+func TestFirmwareCommandDuringANonUpdateJobKeepsTheGenericBusyText(t *testing.T) {
+	for _, k := range []model.JobKind{model.KindCommand, model.KindBackup} {
+		jobs := kindJobs{kind: k}
+		g := deviceGuard{locks: devlock.New(), jobs: jobs}
+		_, err := (lockedDeviceCmd{DeviceCmd: &countingCmd{}, g: g}).Run(context.Background(), model.Principal{Role: model.RoleAdmin}, 1, "Upgrade 1")
+		if errors.Is(err, cmdpolicy.ErrUpdateJob) || !errors.Is(err, devlock.ErrBusy) {
+			t.Errorf("%s job: want the generic busy text, got %v", k, err)
+		}
+	}
+}
+
+// kindJobs reports one active job of the given kind for every device.
+type kindJobs struct {
+	store.JobStore
+	kind model.JobKind
+}
+
+func (k kindJobs) ListJobs(_ context.Context, fl store.JobFilter) ([]model.Job, error) {
+	return []model.Job{{DeviceID: fl.DeviceID, Kind: k.kind, State: model.JobQueued}}, nil
 }

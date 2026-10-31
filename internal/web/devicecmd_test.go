@@ -715,3 +715,16 @@ func TestConsoleRefusesFirmwareCommandWhileAnUpdateJobHoldsTheDevice(t *testing.
 		t.Errorf("free again, with the usual confirmation: %d %s", resp.StatusCode, body)
 	}
 }
+
+// Why: the specific refusal names an UPDATE job. A command or backup job on the device is not one, so
+// Upgrade 1 then goes on to the service (which refuses it as busy); the page must not blame an update.
+func TestConsoleFirmwareCommandIgnoresNonUpdateJobs(t *testing.T) {
+	for _, k := range []model.JobKind{model.KindCommand, model.KindBackup} {
+		jobs := &fakeJobs{jobs: []model.Job{{ID: 5, DeviceID: 1, Kind: k, State: model.JobQueued}}}
+		e := setupWith(t, func(d *Deps) { d.DeviceCmd, d.Jobs = &fakeCmd{reply: `{}`}, jobs })
+		resp, body := e.do(t, "POST", "/devices/1/console", "admin", consoleForm("Upgrade 1"))
+		if strings.Contains(body, "update job") || !strings.Contains(body, "Confirm sending") {
+			t.Errorf("%s job: %d %s", k, resp.StatusCode, body)
+		}
+	}
+}
