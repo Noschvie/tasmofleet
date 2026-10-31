@@ -72,7 +72,7 @@ func formProblem(err error) (field, msg string) {
 	case errors.Is(err, errBadPort):
 		return "port", "Use a port number between 1 and 65535, or leave it empty for 80."
 	case errors.Is(err, errAddrSpace):
-		return "address", "Enter an IP address or hostname without spaces, e.g. 192.168.20.80"
+		return "address", "Enter an IP address or hostname without spaces, e.g. 192.168.1.80"
 	case errors.Is(err, inventory.ErrOutsideNetwork):
 		return "address", "That address is outside the configured device networks."
 	case errors.Is(err, inventory.ErrInvalid):

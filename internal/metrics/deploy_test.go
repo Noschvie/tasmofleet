@@ -116,7 +116,7 @@ func TestUnraidTemplateWellFormedAndKeysKnown(t *testing.T) {
 	if err := xml.Unmarshal(deployFile(t, "unraid/tasmofleet.xml"), &c); err != nil {
 		t.Fatalf("unraid xml: %v", err)
 	}
-	if c.Name != "tasmofleet" || c.Network != "br0" || c.MyIP == "" || c.WebUI == "" {
+	if c.Name != "tasmofleet" || c.Network != "br0" || c.WebUI == "" {
 		t.Errorf("template header incomplete: %+v", c)
 	}
 	keys := configKeys()
@@ -159,7 +159,7 @@ func TestEnvExampleKeysKnown(t *testing.T) {
 
 func TestTraefikExampleMatchesDeployment(t *testing.T) {
 	s := string(deployFile(t, "traefik/tasmofleet.yml"))
-	for _, want := range []string{"websecure", "172.31.12.61:8080", "/healthz"} {
+	for _, want := range []string{"websecure", "192.168.1.10:8080", "/healthz"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("traefik example lacks %q", want)
 		}

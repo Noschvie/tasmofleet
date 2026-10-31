@@ -70,7 +70,7 @@ templ setupView(p setupPage) {
 			<input type="hidden" name="csrf" value={ p.CSRF }/>
 			<label class="ufield">
 				<span class="ufield-label">Device networks</span>
-				<textarea name="v.DEVICE_NETWORKS" class="mono" rows="2" maxlength="2048" placeholder="172.31.13.0/24" { setupInvalid(p, "DEVICE_NETWORKS")... }>{ p.Networks }</textarea>
+				<textarea name="v.DEVICE_NETWORKS" class="mono" rows="2" maxlength="2048" placeholder="192.168.1.0/24" { setupInvalid(p, "DEVICE_NETWORKS")... }>{ p.Networks }</textarea>
 				if e := p.Errors["DEVICE_NETWORKS"]; e != "" {
 					<span class="ufield-err" id="err-v.DEVICE_NETWORKS" role="alert">{ e }</span>
 				} else {

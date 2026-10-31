@@ -144,7 +144,7 @@ type Options struct {
 	Store   store.RestoreStore
 	Client  tasmota.Client
 	// BaseURL is what devices use to reach the firmware listener
-	// (FIRMWARE_BASE_URL), e.g. http://172.31.12.61:8081. Empty: no restore over HTTP
+	// (FIRMWARE_BASE_URL), e.g. http://192.168.1.10:8081. Empty: no restore over HTTP
 	// (WebGetConfig); a restore over MQTT still works when Uploader is set.
 	BaseURL string
 	// Uploader sends the dump with FileUpload (the Router); nil: no restore over MQTT.

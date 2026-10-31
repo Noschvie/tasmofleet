@@ -224,7 +224,7 @@ func setupView(p setupPage) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "\"> <label class=\"ufield\"><span class=\"ufield-label\">Device networks</span> <textarea name=\"v.DEVICE_NETWORKS\" class=\"mono\" rows=\"2\" maxlength=\"2048\" placeholder=\"172.31.13.0/24\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "\"> <label class=\"ufield\"><span class=\"ufield-label\">Device networks</span> <textarea name=\"v.DEVICE_NETWORKS\" class=\"mono\" rows=\"2\" maxlength=\"2048\" placeholder=\"192.168.1.0/24\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

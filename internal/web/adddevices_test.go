@@ -149,7 +149,7 @@ func TestScanRangeErrorSitsAtTheRangesField(t *testing.T) {
 	}
 	// Input that is no range at all is the same kind of problem.
 	_, body = e.do(t, "POST", "/discovery/scan", "admin", url.Values{"cidrs": {"nonsense"}})
-	if !strings.Contains(body, `id="err-cidrs"`) || !strings.Contains(body, "is not a range like 172.31.13.0/24") {
+	if !strings.Contains(body, `id="err-cidrs"`) || !strings.Contains(body, "is not a range like 192.168.1.0/24") {
 		t.Errorf("bad input: %s", body)
 	}
 }
@@ -478,7 +478,7 @@ func TestManualAddressWithSpacesIsATypo(t *testing.T) {
 	e := setup(t)
 	e.pr.err = errors.New("must not be probed")
 	r, body := e.do(t, "POST", "/devices/new", "admin", url.Values{"address": {"attic heater"}})
-	if r.StatusCode != 422 || !strings.Contains(body, "Enter an IP address or hostname without spaces, e.g. 192.168.20.80") || strings.Contains(body, "server log") {
+	if r.StatusCode != 422 || !strings.Contains(body, "Enter an IP address or hostname without spaces, e.g. 192.168.1.80") || strings.Contains(body, "server log") {
 		t.Fatalf("%d %s", r.StatusCode, body)
 	}
 }

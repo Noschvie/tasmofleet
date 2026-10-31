@@ -10,6 +10,10 @@ always upgrade automatically.
 
 - Container image for linux/arm64 (Raspberry Pi 4/5) next to linux/amd64: every tag is now a multi-arch image. The arm64 image has no backup decoder, because upstream decode-config publishes x86_64 builds only: System → About shows it as "Missing", backups keep the raw `.dmp` file, and only the decoded JSON view and the comparison are unavailable (#354, thanks @t4nki)
 
+### Changed
+
+- Examples, placeholders and help texts use common home-network addresses (devices 192.168.1.0/24, container 192.168.1.10, proxy 192.168.1.2) instead of homelab-shaped ones, and the Unraid template in `deploy/unraid/` no longer prefills the container IP or the trusted proxies (#368)
+
 ### Security
 
 - Policy rules can no longer name commands that act when sent without a value (`RC522Reset`, `ClientReset`, `SSPMReset`, `TRVReset`, `WieAllReset`, `DisplayClear`, `I2CScan`, `Scd40Strt` and others: names ending in Reset, Clear, Erase, Restart, Scan, Start, Stop, Init, Test, Save and the like, plus a verified list). Reading such a rule used to reset a peripheral on every policy check. Stored rules that name one are left out and shown as invalid (#358).

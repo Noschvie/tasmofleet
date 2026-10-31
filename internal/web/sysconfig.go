@@ -842,7 +842,7 @@ func sysPlaceholder(row sysRow) string {
 		return "24h"
 	}
 	if row.Key == "DEVICE_NETWORKS" {
-		return "172.31.13.0/24"
+		return "192.168.1.0/24"
 	}
 	return ""
 }

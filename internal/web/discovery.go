@@ -460,7 +460,7 @@ func parseCIDRs(s string) ([]netip.Prefix, error) {
 		}
 		a, err := netip.ParseAddr(f)
 		if err != nil {
-			return nil, fmt.Errorf("%q is not a range like 172.31.13.0/24 or an IP address", f)
+			return nil, fmt.Errorf("%q is not a range like 192.168.1.0/24 or an IP address", f)
 		}
 		out = append(out, netip.PrefixFrom(a, a.BitLen()))
 	}
@@ -480,7 +480,7 @@ func (h *handler) discoveryScanStart(w http.ResponseWriter, r *http.Request) {
 	}
 	cidrs, err := parseCIDRs(raw)
 	if err == nil && len(cidrs) == 0 {
-		err = errors.New("enter a range like 192.168.20.0/24")
+		err = errors.New("enter a range like 192.168.1.0/24")
 	}
 	if err != nil {
 		fail(http.StatusUnprocessableEntity, capitalize(err.Error())+".")

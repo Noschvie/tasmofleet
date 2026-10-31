@@ -86,7 +86,7 @@ var fields = []Field{
 		Help: "Write-only. Prefills the web password when a device is added or a discovered device is accepted (user admin); each device keeps its own copy."},
 
 	{Key: "FIRMWARE_BASE_URL", Group: GroupFirmware, Label: "Firmware base URL", Apply: Restart,
-		Help: "Plain http:// URL devices use to fetch firmware, e.g. http://172.31.12.61 (the container address). Required for updates; needs a restart."},
+		Help: "Plain http:// URL devices use to fetch firmware, e.g. http://192.168.1.10 (the container address). Required for updates; needs a restart."},
 	{Key: "FIRMWARE_SOURCES", Group: GroupFirmware, Label: "Upstream sources", Apply: Restart, Choices: config.KnownFirmwareSources(),
 		Help: "Where firmware is fetched from. Two sources allow the cross-check."},
 	{Key: "FIRMWARE_ALLOW_SINGLE_SOURCE", Bool: true, Group: GroupFirmware, Label: "Accept single-source files", Apply: Restart,

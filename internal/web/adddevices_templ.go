@@ -2136,7 +2136,7 @@ func scanBody(b scanBodyView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 194, "\" placeholder=\"192.168.20.0/24\" aria-label=\"Subnet\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 194, "\" placeholder=\"192.168.1.0/24\" aria-label=\"Subnet\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

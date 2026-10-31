@@ -66,7 +66,7 @@ type Cache interface {
 	// Ensure returns the cached artifact, downloading it first if needed.
 	Ensure(ctx context.Context, release, filename string) (model.Artifact, error)
 	// URLFor returns the device-facing URL of a cached artifact, built from
-	// the configured firmware base URL (e.g. http://172.31.12.61/fw/...).
+	// the configured firmware base URL (e.g. http://192.168.1.10/fw/...).
 	URLFor(a model.Artifact) string
 	// Prune deletes artifacts not referenced by an active job and older than
 	// the newest keep releases.

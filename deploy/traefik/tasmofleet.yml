@@ -1,5 +1,5 @@
 # Example Traefik v3 dynamic configuration (file provider) for tasmofleet.
-# example values: single entrypoint "websecure", container at 172.31.12.61.
+# example values: single entrypoint "websecure", container at 192.168.1.10.
 # OIDC mode (AUTH_MODE=oidc): tasmofleet does the login itself, so no
 # forward-auth middleware is attached. The firmware server (port 80) is
 # NOT proxied: devices talk to it directly on the container IP.
@@ -21,7 +21,7 @@ http:
       loadBalancer:
         passHostHeader: true
         servers:
-          - url: http://172.31.12.61:8080
+          - url: http://192.168.1.10:8080
         healthCheck:
           path: /healthz
           interval: 30s

@@ -21,7 +21,7 @@ scrape_configs:
       type: Bearer
       credentials_file: /etc/prometheus/secrets/tasmofleet-metrics-token
     static_configs:
-      - targets: ["172.31.12.61:8080"]   # example: container IP, UI port
+      - targets: ["192.168.1.10:8080"]   # example: container IP, UI port
 
   # Liveness via the blackbox exporter: /healthz needs no token.
   - job_name: tasmofleet-healthz
@@ -29,7 +29,7 @@ scrape_configs:
     params:
       module: [http_2xx]
     static_configs:
-      - targets: ["http://172.31.12.61:8080/healthz"]
+      - targets: ["http://192.168.1.10:8080/healthz"]
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target

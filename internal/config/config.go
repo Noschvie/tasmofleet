@@ -47,7 +47,7 @@ type Config struct {
 	DataDir   string `env:"DATA_DIR" default:"/data"`
 	Listen    string `env:"LISTEN" default:":8080"`        // UI + API; one port in every mode, containers never set it
 	FWListen  string `env:"FIRMWARE_LISTEN" default:":80"` // device-facing firmware server
-	FWBaseURL string `env:"FIRMWARE_BASE_URL" ui:"true"`   // URL devices use, e.g. http://172.31.12.61 (required for OTA)
+	FWBaseURL string `env:"FIRMWARE_BASE_URL" ui:"true"`   // URL devices use, e.g. http://192.168.1.10 (required for OTA)
 	PublicURL string `env:"PUBLIC_URL"`                    // e.g. https://tasmofleet.example.com (required for oidc)
 	BasePath  string `env:"BASE_PATH"`
 	// LogLevel is debug | info | warn | error. A sign-in style setting: the
@@ -97,7 +97,7 @@ type Config struct {
 	TLSSANs           []string `env:"TLS_SANS"`
 	AllowInsecureHTTP bool     `env:"ALLOW_INSECURE_HTTP" default:"false"`
 
-	MQTTURL       string `env:"MQTT_URL" ui:"true"` // tcp://mqtt.example.internal:1883; empty disables MQTT
+	MQTTURL       string `env:"MQTT_URL" ui:"true"` // tcp://192.168.1.5:1883; empty disables MQTT
 	MQTTUser      string `env:"MQTT_USER" ui:"true"`
 	MQTTPassword  string `env:"MQTT_PASSWORD" ui:"true" secret:"true"`
 	MQTTFullTopic string `env:"MQTT_FULLTOPIC" ui:"true" default:"%prefix%/%topic%/"`
