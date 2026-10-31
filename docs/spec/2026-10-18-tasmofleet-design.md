@@ -1165,8 +1165,13 @@ Submit.
   Status 0; three tries, then given up), and once per device the last restart from `Status 1` when
   none is stored. It also stores one Wi-Fi sample per device and clock hour. The verdict (Stable,
   Boot loop: 3 restarts in 1 h or 6 in 24 h, Weak Wi-Fi: average below -75 dBm over 24 h or 10
-  reconnects since boot) is the pure package `internal/stability`; restarts are counted from BootCount
-  steps, so ones TasmoFleet missed count when both neighbouring rows are inside the window.
+  reconnects since boot) is the pure package `internal/stability`. Every live INFO3 is one restart (it comes
+  once per boot; Tasmota raises BootCount only after 10 s of uptime, so a fast loop repeats it and BootCount
+  is no key); BootCount steps only add the restarts TasmoFleet missed, when both neighbouring rows are inside
+  the window. After a crash INFO3 carries `RestartReason` as an object, whose `Reason` is taken. A restart
+  while an update, restore or command job of the device runs (or ended within 3 minutes) is stored as
+  expected and does not count towards a boot loop, but is still the "last restart". A light behind a wall
+  switch that is flicked reports "Power on" and can show as a boot loop of power-ons.
 - Only transitions are persisted (`health_events`), plus `devices.health_state/last_seen_at`
   for a correct picture right after a restart. A device's first observation after the app
   started (state "unknown" to anything) is a baseline, not a change: `devices.health_state` is

@@ -59,6 +59,10 @@ type Deps struct {
 	// Stability is optional: with it the tracker stores the restarts it notices and an hourly Wi-Fi
 	// sample (#325).
 	Stability store.StabilityStore
+	// Expected is optional: it says whether TasmoFleet is working on a device right now (an update or
+	// restore job runs or has just ended), so that a restart it caused is stored as expected and does
+	// not count towards a boot loop. It may do I/O; the tracker calls it off the bus goroutine.
+	Expected func(model.DeviceID) bool
 
 	// OnMQTTSeen is called once per device (and run) when the first message
 	// on our broker matches the device's topic. Inventory uses it to set
@@ -116,16 +120,16 @@ type devState struct {
 	powerGen uint64
 
 	// Stability bookkeeping (stability.go).
-	lastUptime    int64     // the previous UptimeSec reading; valid when uptimeKnown
-	uptimeKnown   bool      //
-	dropUptime    int64     // the uptime before the drop that flagged checkDrop
-	baselined     bool      // the first-reading check was flagged (or INFO3 made it unnecessary)
-	bootsSeeded   bool      // lastBootCount was read from the store
-	lastBootCount int       // BootCount of the newest restart stored or seen
-	check         string    // "", checkBaseline or checkDrop: a Status 1 is wanted
-	checkTries    int       //
-	checkAfter    time.Time // earliest next Status 1
-	lastSample    time.Time // the hour of the last Wi-Fi sample
+	lastUptime  int64     // the previous UptimeSec reading; valid when uptimeKnown
+	uptimeKnown bool      //
+	dropUptime  int64     // the uptime before the drop that flagged checkDrop
+	baselined   bool      // the first-reading check was flagged (or INFO3 made it unnecessary)
+	bootsSeeded bool      // lastBootAt was read from the store
+	lastBootAt  time.Time // when the newest restart stored or seen happened
+	check       string    // "", checkBaseline or checkDrop: a Status 1 is wanted
+	checkTries  int       //
+	checkAfter  time.Time // earliest next Status 1
+	lastSample  time.Time // the hour of the last Wi-Fi sample
 
 	sigDBm  int                      // Wifi.Signal from STATE; valid when hasSig
 	hasSig  bool                     //

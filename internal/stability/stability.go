@@ -150,10 +150,12 @@ func Assess(in Input) Result {
 	return r
 }
 
-// restartsSince counts the restarts at or after from. A row counts as one restart, or as the
-// BootCount step to the row before it when that row is inside the window too: the steps in between
-// were restarts TasmoFleet did not see, and both ends being inside the window proves they happened
-// inside it. Boots must be sorted oldest first.
+// restartsSince counts the restarts at or after from. A row is one restart (Tasmota raises BootCount
+// only after 10 s of uptime, so a fast loop repeats a BootCount and every row still counts), plus the
+// BootCount steps to the row before it, when that row is inside the window too: those were restarts
+// TasmoFleet did not see, and both ends being inside the window proves they happened inside it. A row
+// TasmoFleet caused itself (an update and its retry) is not counted, but the restarts missed before
+// it are. Boots must be sorted oldest first.
 func restartsSince(boots []model.DeviceBoot, from time.Time) int {
 	n := 0
 	for i, b := range boots {
@@ -163,6 +165,9 @@ func restartsSince(boots []model.DeviceBoot, from time.Time) int {
 		w := 1
 		if i > 0 && !boots[i-1].At.Before(from) && b.BootCount > 0 && boots[i-1].BootCount > 0 && b.BootCount > boots[i-1].BootCount {
 			w = b.BootCount - boots[i-1].BootCount
+		}
+		if b.Expected {
+			w--
 		}
 		n += w
 	}
@@ -180,9 +185,11 @@ type Reason struct {
 	Known     bool
 }
 
-// Classify maps a RestartReason text by keyword. ESP8266 and ESP32 word the same events
-// differently ("Software/System restart" and "Software reset CPU"), and the texts change between
-// Tasmota versions, so matching is by keyword and an unknown text is shown as it came.
+// Classify maps a RestartReason text by keyword. ESP8266 and ESP32 word the same events differently
+// ("Software/System restart", "Software reset CPU", "Timer Group0 Watch dog reset digital core") and
+// the texts change between Tasmota versions, so matching is by keyword, and a text the mapping does
+// not know is shown as it came. The texts are the ones of Tasmota's support.ino (ESP8266 and "Blocked
+// Loop") and support_esp32.ino (ESP32). A crash dump arrives as an object whose Reason is one of them.
 func Classify(raw string) Reason {
 	s := strings.ToLower(strings.TrimSpace(raw))
 	mk := func(label, short string, attention bool) Reason {
@@ -199,17 +206,20 @@ func Classify(raw string) Reason {
 	switch {
 	case s == "":
 		return Reason{Label: "Unknown", Short: "unknown reason", Raw: raw}
-	case has("watchdog", "wdt"):
+	case has("watch dog", "watchdog", "wdt", "blocked loop", "time group", "timer group"):
+		// Time Group0/1 reset CPU is the timer group's watchdog; Blocked Loop is Tasmota's own
 		return mk("Device hung, watchdog reset", "watchdog reset", true)
 	case has("exception", "panic"):
 		return mk("Crash (exception)", "crash", true)
-	case has("brownout", "brown-out", "brown out"):
+	case has("brownout", "brown-out", "brown out", "vdd voltage is not stable"):
 		return mk("Supply voltage dropped (brown-out)", "brown-out", true)
-	case has("power on", "power-on", "poweron", "vbat"):
+	case has("glitch"):
+		return mk("Supply glitch", "supply glitch", true)
+	case has("power on", "power-on", "poweron"):
 		return mk("Power was switched on", "power-on", false)
 	case has("deep") && has("sleep"):
 		return mk("Woke from deep sleep", "deep sleep wake-up", false)
-	case has("external"):
+	case has("external system"):
 		return mk("Reset button or pin", "reset button", false)
 	case has("software", "system restart"):
 		return mk("Restarted by command or update", "restart by command", false)

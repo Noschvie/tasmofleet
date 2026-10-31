@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"github.com/nofuturekid/tasmofleet/internal/store"
 	"io/fs"
 	"path/filepath"
 	"strconv"
@@ -14,6 +13,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/metrics"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/notify"
+	"github.com/nofuturekid/tasmofleet/internal/store"
 )
 
 const (

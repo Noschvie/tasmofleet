@@ -124,8 +124,9 @@ func stabBadgeTitle(r stability.Result) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
-// stabAttention is the "Needs attention" text of a device with a problem.
-func stabAttention(r stability.Result, dbm int) string {
+// stabAttention is the "Needs attention" text of a device with a problem. A weak signal is the 24 h
+// average that made it weak, the number the card names, not the reading of this second.
+func stabAttention(r stability.Result) string {
 	if r.Level == stability.BootLoop {
 		t := "Boot loop: " + restartPhrase(r)
 		if r.DominantReason.Known && r.DominantReason.Attention {
@@ -135,10 +136,7 @@ func stabAttention(r stability.Result, dbm int) string {
 	}
 	var parts []string
 	if r.WeakBySignal {
-		if dbm == 0 {
-			dbm = r.AvgDBm
-		}
-		parts = append(parts, strconv.Itoa(dbm)+" dBm")
+		parts = append(parts, strconv.Itoa(r.AvgDBm)+" dBm")
 	}
 	if r.Reconnects > 0 {
 		parts = append(parts, strconv.Itoa(r.Reconnects)+" "+noun(r.Reconnects, "reconnect", "reconnects")+" since boot")
@@ -252,7 +250,7 @@ func loopAdvice(r stability.Reason) string {
 	case "brown-out":
 		return "The supply voltage keeps dropping under load. Check the power supply and its cable first."
 	case "power-on":
-		return "The device keeps losing power. Check the supply, the plug and whatever switches it."
+		return "The device keeps losing power. Check the supply, the plug and whatever switches it. A light behind a wall switch that is flicked also reports this reason."
 	}
 	return "Check the power supply first, then rules, scripts and the firmware build."
 }
@@ -384,7 +382,7 @@ func stabCardOf(now time.Time, r stability.Result, boots []model.DeviceBoot, hl 
 		c.Rows = append(c.Rows, rc)
 	}
 
-	if r.Level == stability.BootLoop {
+	if len(boots) > 0 {
 		for i, b := range boots {
 			if i == stabilityRecent {
 				break

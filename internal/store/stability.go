@@ -16,8 +16,8 @@ func (s *SQLite) AppendBoot(ctx context.Context, b model.DeviceBoot) error {
 		return err
 	}
 	defer tx.Rollback() //nolint:errcheck // a no-op after Commit
-	if _, err := tx.ExecContext(ctx, "INSERT INTO device_boots (device_id, at, boot_count, reason, uptime_before) VALUES (?,?,?,?,?)",
-		b.DeviceID, toMS(s.orNow(b.At)), b.BootCount, b.Reason, int64(b.UptimeBefore/time.Second)); err != nil {
+	if _, err := tx.ExecContext(ctx, "INSERT INTO device_boots (device_id, at, boot_count, reason, uptime_before, expected) VALUES (?,?,?,?,?,?)",
+		b.DeviceID, toMS(s.orNow(b.At)), b.BootCount, b.Reason, int64(b.UptimeBefore/time.Second), b2i(b.Expected)); err != nil {
 		return mapErr(err)
 	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM device_boots WHERE device_id=? AND id NOT IN
@@ -27,7 +27,7 @@ func (s *SQLite) AppendBoot(ctx context.Context, b model.DeviceBoot) error {
 	return tx.Commit()
 }
 
-const bootCols = "device_id, at, boot_count, reason, uptime_before"
+const bootCols = "device_id, at, boot_count, reason, uptime_before, expected"
 
 func scanBoots(rows *sql.Rows, err error) ([]model.DeviceBoot, error) {
 	if err != nil {
@@ -38,10 +38,12 @@ func scanBoots(rows *sql.Rows, err error) ([]model.DeviceBoot, error) {
 	for rows.Next() {
 		var b model.DeviceBoot
 		var at, up int64
-		if err := rows.Scan(&b.DeviceID, &at, &b.BootCount, &b.Reason, &up); err != nil {
+		var exp int
+		if err := rows.Scan(&b.DeviceID, &at, &b.BootCount, &b.Reason, &up, &exp); err != nil {
 			return nil, err
 		}
 		b.At, b.UptimeBefore = fromMS(at), time.Duration(up)*time.Second
+		b.Expected = exp != 0
 		out = append(out, b)
 	}
 	return out, rows.Err()

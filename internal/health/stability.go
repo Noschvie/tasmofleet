@@ -32,6 +32,8 @@ const (
 	// (a device on minimal firmware, or one TasmoFleet cannot reach over HTTP, never answers).
 	bootCheckRetry = 5 * time.Minute
 	bootCheckTries = 3
+	// bootSameWindow: two sightings of a restart (INFO3 and the uptime drop) closer than this are one.
+	bootSameWindow = 45 * time.Second
 )
 
 const (
@@ -41,9 +43,29 @@ const (
 
 type info3Doc struct {
 	Info3 struct {
-		RestartReason string `json:"RestartReason"`
-		BootCount     int    `json:"BootCount"`
+		// RestartReason is a string, or after a crash the crash dump, an object whose "Reason" is the
+		// reset reason (support_crash_recorder.ino): reasonText takes both.
+		RestartReason json.RawMessage `json:"RestartReason"`
+		BootCount     int             `json:"BootCount"`
 	} `json:"Info3"`
+}
+
+// reasonText is the RestartReason as text: the string itself, or the Reason of a crash dump.
+func reasonText(raw json.RawMessage) string {
+	var s string
+	if json.Unmarshal(raw, &s) == nil {
+		return cleanReason(s)
+	}
+	var dump struct {
+		Reason string `json:"Reason"`
+	}
+	if json.Unmarshal(raw, &dump) == nil {
+		if dump.Reason == "" {
+			return "Exception"
+		}
+		return cleanReason(dump.Reason)
+	}
+	return ""
 }
 
 // noteUptime runs under s.mu with a new UptimeSec reading and flags the checks it implies.
@@ -68,17 +90,17 @@ func (s *Service) noteInfo3(ds *devState, payload []byte, now time.Time) *model.
 		return nil
 	}
 	var doc info3Doc
-	if json.Unmarshal(payload, &doc) != nil || (doc.Info3.RestartReason == "" && doc.Info3.BootCount == 0) {
+	if json.Unmarshal(payload, &doc) != nil || (len(doc.Info3.RestartReason) == 0 && doc.Info3.BootCount == 0) {
 		return nil
 	}
-	if doc.Info3.BootCount > 0 && doc.Info3.BootCount == ds.lastBootCount {
-		return nil // the same boot again
-	}
-	b := &model.DeviceBoot{DeviceID: ds.id, At: now, BootCount: doc.Info3.BootCount, Reason: cleanReason(doc.Info3.RestartReason)}
+	// Every live INFO3 is one restart (the device sends it once per boot, when it connects; a retained
+	// one never gets here). Its BootCount is no key: Tasmota raises it only after 10 s of uptime, so a
+	// loop of faster boots repeats it.
+	b := &model.DeviceBoot{DeviceID: ds.id, At: now, BootCount: doc.Info3.BootCount, Reason: reasonText(doc.Info3.RestartReason)}
+	ds.lastBootAt = now
 	if ds.uptimeKnown { // after an earlier restart without a reading since, the old uptime belongs to the run before that
 		b.UptimeBefore = time.Duration(ds.lastUptime) * time.Second
 	}
-	ds.lastBootCount = doc.Info3.BootCount
 	ds.baselined, ds.uptimeKnown, ds.check = true, false, "" // this restart is recorded: the next reading starts a new run
 	return b
 }
@@ -134,7 +156,7 @@ func (s *Service) checkBoot(ctx context.Context, id model.DeviceID) {
 	kind, seeded := ds.check, ds.bootsSeeded
 	s.mu.Unlock()
 
-	if !seeded { // after a start the stored restarts tell the last BootCount: no duplicate row for a restart already known
+	if !seeded { // after a start the stored restarts tell when the last one was: no duplicate row for a restart already known
 		last, err := s.d.Stability.ListBoots(ctx, id, 1)
 		if err != nil {
 			slog.Warn("health: reading stored restarts failed", "device", id, "err", err)
@@ -144,8 +166,8 @@ func (s *Service) checkBoot(ctx context.Context, id model.DeviceID) {
 		s.mu.Lock()
 		if ds := s.devs[id]; ds != nil {
 			ds.bootsSeeded = true
-			if len(last) > 0 && ds.lastBootCount == 0 {
-				ds.lastBootCount = last[0].BootCount
+			if len(last) > 0 && ds.lastBootAt.IsZero() {
+				ds.lastBootAt = last[0].At
 			}
 			if kind == checkBaseline && len(last) > 0 {
 				ds.check = "" // a restart is stored already
@@ -192,20 +214,19 @@ func (s *Service) checkBoot(ctx context.Context, id model.DeviceID) {
 	}
 	ds.check = ""
 	prm := env.StatusPRM
-	if prm.BootCount > 0 && prm.BootCount == ds.lastBootCount && kind == checkDrop {
-		s.mu.Unlock() // INFO3 told us already
+	bootAt := now.Add(-time.Duration(ds.h.UptimeSec) * time.Second)
+	if kind == checkDrop && !ds.lastBootAt.IsZero() && bootAt.Sub(ds.lastBootAt).Abs() <= bootSameWindow {
+		s.mu.Unlock() // the device's own INFO3 told us about this restart already
 		return
 	}
-	b := model.DeviceBoot{DeviceID: id, At: now.Add(-time.Duration(ds.h.UptimeSec) * time.Second), BootCount: prm.BootCount,
-		Reason: cleanReason(prm.RestartReason)}
+	ds.lastBootAt = bootAt
+	b := model.DeviceBoot{DeviceID: id, At: bootAt, BootCount: prm.BootCount, Reason: cleanReason(prm.RestartReason)}
 	if kind == checkDrop {
 		b.UptimeBefore = time.Duration(ds.dropUptime) * time.Second
 	}
-	if prm.BootCount > 0 {
-		ds.lastBootCount = prm.BootCount
-	}
 	s.publish(ds)
 	s.mu.Unlock()
+	b.Expected = s.expected(id)
 	if err := s.d.Stability.AppendBoot(ctx, b); err != nil {
 		slog.Warn("health: storing a restart failed", "device", id, "err", err)
 	}
@@ -272,7 +293,13 @@ func parseDowntime(s string) (time.Duration, bool) {
 }
 
 func (s *Service) storeBoot(ctx context.Context, b model.DeviceBoot) {
+	b.Expected = s.expected(b.DeviceID)
 	if err := s.d.Stability.AppendBoot(ctx, b); err != nil {
 		slog.Warn("health: storing a restart failed", "device", b.DeviceID, "err", err)
 	}
+}
+
+// expected asks whether TasmoFleet itself was working on the device (an update or restore job).
+func (s *Service) expected(id model.DeviceID) bool {
+	return s.d.Expected != nil && s.d.Expected(id)
 }

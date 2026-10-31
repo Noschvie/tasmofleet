@@ -169,7 +169,7 @@ func (a *runtime) run(ctx context.Context) error {
 	}
 	a.goBG("mqtt-cmd", func() error { <-bg.Done(); a.mqttCmd.Close(); return nil }) // wakes commands in flight
 	a.tracker = health.New(health.Deps{
-		Store: svc.Store, Client: svc.HTTP, Bus: a.bus, Hub: svc.Hub, OnMQTTSeen: a.onMQTTSeen, Stability: svc.Store, // HTTP only: it measures HTTP
+		Store: svc.Store, Client: svc.HTTP, Bus: a.bus, Hub: svc.Hub, OnMQTTSeen: a.onMQTTSeen, Stability: svc.Store, Expected: a.expectedRestart, // HTTP only: it measures HTTP
 	}, health.Options{
 		StaleAfter: staleAfter(cfg.TelePeriod), PollInterval: cfg.PollInterval,
 	})

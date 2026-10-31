@@ -13,6 +13,9 @@ type DeviceBoot struct {
 	Reason string
 	// UptimeBefore is how long the device had been up before this restart; 0 when not known.
 	UptimeBefore time.Duration
+	// Expected: TasmoFleet itself was working on the device (an update, a restore, a command) when it
+	// restarted, so it is no sign of a fault. It still shows as the last restart.
+	Expected bool
 }
 
 // WifiSample is the signal strength of a device at one moment, in dBm.

@@ -100,7 +100,7 @@ test("a device with a weak link shows Weak Wi-Fi on the overview, the list and t
   await expect(card.locator(".stab-note")).toContainText("-84 dBm");
   await expect(card.locator(".stab-note")).toContainText("14 times");
   await expect(card).toContainText("14 since boot");
-  await expect(card.locator(".stab-boots")).toHaveCount(0); // the restart list is for a boot loop
+  await expect(card.locator(".stab-boots li")).toHaveCount(1); // the restart TasmoFleet noted when it first saw the device
   await shot(page, "overview-weakwifi-1280");
 
   await page.goto(app.url + "/devices");

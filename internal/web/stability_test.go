@@ -125,7 +125,7 @@ func TestOverviewStabilityCardForWeakWifiAndForAStableDevice(t *testing.T) {
 		}
 	}
 	if strings.Contains(card, "Recent restarts") {
-		t.Error("the list of restarts belongs to a boot loop")
+		t.Error("a device with no stored restart has no list of them")
 	}
 	_, body = e.do(t, "GET", "/devices/1", "admin", nil)
 	card = between(body, `<section id="stability"`, `</section>`)
@@ -152,11 +152,42 @@ func TestNoStabilityStoreMeansNoCardAndNoBadge(t *testing.T) {
 
 func TestStabilityTexts(t *testing.T) {
 	r := stability.Result{Level: stability.WeakWiFi, WeakByReconnects: true, Reconnects: 12}
-	if got := stabAttention(r, 0); got != "Weak Wi-Fi: 12 reconnects since boot" {
+	if got := stabAttention(r); got != "Weak Wi-Fi: 12 reconnects since boot" {
 		t.Errorf("%q", got)
 	}
 	r = stability.Result{Level: stability.WeakWiFi, WeakBySignal: true, AvgDBm: -80}
-	if got := stabAttention(r, 0); got != "Weak Wi-Fi: -80 dBm" {
+	if got := stabAttention(r); got != "Weak Wi-Fi: -80 dBm" {
 		t.Errorf("%q", got)
+	}
+}
+
+// Why (maintainer's decision): the list of recent restarts is the evidence for "Last restart" and the
+// counts, so it shows whenever TasmoFleet has seen a restart, not only in a boot loop.
+func TestRecentRestartsShowForAStableDeviceToo(t *testing.T) {
+	fs := fakeStab{boots: map[model.DeviceID][]model.DeviceBoot{1: {{DeviceID: 1, At: time.Now().Add(-26 * time.Hour), BootCount: 4, Reason: "Software/System restart", UptimeBefore: 3 * time.Hour}}}}
+	e := setupWith(t, func(d *Deps) { d.Stability = fs })
+	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
+	card := between(body, `<section id="stability"`, `</section>`)
+	for _, want := range []string{">Stable<", "Recent restarts", "Restarted by command or update", "after 3h 00m"} {
+		if !strings.Contains(card, want) {
+			t.Errorf("card lacks %q:\n%s", want, card)
+		}
+	}
+}
+
+// Why: the dashboard line must name the number the card names. The card says "averaged -82 dBm over
+// 24 hours"; a line with this second's reading (-70, the device just came closer) would contradict it.
+func TestNeedsAttentionNamesTheAverageThatMadeTheLinkWeak(t *testing.T) {
+	var samples []model.WifiSample
+	for i := 1; i <= 5; i++ {
+		samples = append(samples, model.WifiSample{DeviceID: 11, At: time.Now().Add(-time.Duration(i) * time.Hour), DBm: -88})
+	}
+	e := setupWith(t, func(d *Deps) { d.Stability = fakeStab{samples: map[model.DeviceID][]model.WifiSample{11: samples}} })
+	e.inv.devs[11] = model.Device{ID: 11, Name: "moved", Address: "10.0.3.1", Identity: model.Identity{DetectedAt: time.Now()}}
+	e.health[11] = model.Health{DeviceID: 11, State: model.HealthOnline, LastSeen: time.Now(), SignalDBm: -70, LinkCount: 1}
+	_, body := e.do(t, "GET", "/", "admin", nil)
+	att := between(body, `<h2>Needs attention</h2>`, `</section>`)
+	if !strings.Contains(att, "Weak Wi-Fi: -85 dBm") || strings.Contains(att, "-70") {
+		t.Errorf("attention: %s", att)
 	}
 }

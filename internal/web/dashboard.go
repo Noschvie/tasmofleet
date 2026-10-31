@@ -254,7 +254,7 @@ func dashAttention(base string, now time.Time, rows []deviceRow, f fleetFacts, w
 			// answers: only a policy deviation can put it on the list (below)
 		}
 		if sp := stabProblem(r.Stab); rank < 0 && sp != nil {
-			rank, it.Tone, it.Text = 4, ui.ToneDanger, stabAttention(*sp, r.Health.SignalDBm)
+			rank, it.Tone, it.Text = 4, ui.ToneDanger, stabAttention(*sp)
 			if sp.Level == stability.WeakWiFi {
 				rank, it.Tone = 5, ui.ToneWarn
 			}

@@ -19,7 +19,7 @@ func TestAppendBootKeepsTheNewestRowsPerDevice(t *testing.T) {
 	}
 	for i := 0; i < MaxBootsPerDevice+10; i++ {
 		err := s.AppendBoot(ctx, model.DeviceBoot{DeviceID: a, At: base.Add(time.Duration(i) * time.Minute), BootCount: i + 1,
-			Reason: "Power on", UptimeBefore: 90 * time.Second})
+			Reason: "Power on", UptimeBefore: 90 * time.Second, Expected: i%2 == 0})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -34,7 +34,7 @@ func TestAppendBootKeepsTheNewestRowsPerDevice(t *testing.T) {
 	if got[0].BootCount != MaxBootsPerDevice+10 || got[len(got)-1].BootCount != 11 {
 		t.Fatalf("kept BootCount %d..%d, want the newest %d..11 (newest first)", got[0].BootCount, got[len(got)-1].BootCount, MaxBootsPerDevice+10)
 	}
-	if got[0].UptimeBefore != 90*time.Second || got[0].Reason != "Power on" {
+	if got[0].UptimeBefore != 90*time.Second || got[0].Reason != "Power on" || got[0].Expected != (got[0].BootCount%2 == 1) {
 		t.Fatalf("round trip lost fields: %+v", got[0])
 	}
 	if other, _ := s.ListBoots(ctx, b, 0); len(other) != 1 {

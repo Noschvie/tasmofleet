@@ -2,14 +2,16 @@
 -- device_boots: one row per restart it noticed (MQTT INFO3, or an HTTP poll that saw the uptime drop),
 -- capped to the newest 50 per device by the code that writes it. boot_count is Tasmota's persisted
 -- BootCount (0 = not known), reason its RestartReason text as sent, uptime_before the seconds the
--- device had been up before it restarted (0 = not known).
+-- device had been up before it restarted (0 = not known), expected 1 when TasmoFleet was working on the
+-- device at the time (an update or restore job), which does not count towards a boot loop.
 CREATE TABLE device_boots (
     id            INTEGER PRIMARY KEY,
     device_id     INTEGER NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
     at            INTEGER NOT NULL,
     boot_count    INTEGER NOT NULL DEFAULT 0,
     reason        TEXT    NOT NULL DEFAULT '',
-    uptime_before INTEGER NOT NULL DEFAULT 0
+    uptime_before INTEGER NOT NULL DEFAULT 0,
+    expected      INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX device_boots_device ON device_boots(device_id, at);
 

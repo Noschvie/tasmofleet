@@ -141,38 +141,102 @@ func TestLongestUptimeAndDominantReason(t *testing.T) {
 }
 
 // Why: both chip families word the same events differently, and the maintainer wants unknown texts
-// shown raw rather than guessed. Texts are the ones the fixtures and Tasmota's source use.
-func TestClassifyMapsEsp8266AndEsp32Strings(t *testing.T) {
+// shown raw rather than guessed. The texts are the ones in Tasmota's support.ino and support_esp32.ino.
+func TestClassifyMapsTheRealEsp8266AndEsp32Strings(t *testing.T) {
+	const (
+		power   = "Power was switched on"
+		soft    = "Restarted by command or update"
+		sleep   = "Woke from deep sleep"
+		button  = "Reset button or pin"
+		hung    = "Device hung, watchdog reset"
+		crash   = "Crash (exception)"
+		brown   = "Supply voltage dropped (brown-out)"
+		glitch  = "Supply glitch"
+		unknown = ""
+	)
 	for _, c := range []struct {
 		raw, label string
 		attention  bool
 	}{
-		{"Power on", "Power was switched on", false},
-		{"Power on reset", "Power was switched on", false},
-		{"Vbat power on reset", "Power was switched on", false},
-		{"Software/System restart", "Restarted by command or update", false},
-		{"Software reset CPU", "Restarted by command or update", false},
-		{"Software reset digital core", "Restarted by command or update", false},
-		{"Deep-Sleep Wake", "Woke from deep sleep", false},
-		{"Deep Sleep Wake", "Woke from deep sleep", false},
-		{"External System", "Reset button or pin", false},
-		{"Hardware Watchdog", "Device hung, watchdog reset", true},
-		{"Software Watchdog", "Device hung, watchdog reset", true}, // not "software restart": watchdog wins
-		{"Task watchdog reset CPU", "Device hung, watchdog reset", true},
-		{"Interrupt wdt reset", "Device hung, watchdog reset", true},
-		{"Exception", "Crash (exception)", true},
-		{"Panic", "Crash (exception)", true},
-		{"Brownout reset", "Supply voltage dropped (brown-out)", true},
+		// ESP8266 (ESP.getResetReason) and Tasmota's own
+		{"Power on", power, false},
+		{"Hardware Watchdog", hung, true},
+		{"Exception", crash, true},
+		{"Software Watchdog", hung, true}, // not "software restart": the watchdog wins
+		{"Software/System restart", soft, false},
+		{"Deep-Sleep Wake", sleep, false},
+		{"External System", button, false},
+		{"Blocked Loop", hung, true},
+		// ESP32 (ESP32GetResetReason)
+		{"Vbat power on reset", power, false},
+		{"Software reset digital core", soft, false},
+		{"Legacy watch dog reset digital core", hung, true},
+		{"Deep Sleep reset digital core", sleep, false},
+		{"Timer Group0 Watch dog reset digital core", hung, true},
+		{"Timer Group1 Watch dog reset digital core", hung, true},
+		{"RTC Watch dog Reset digital core", hung, true},
+		{"Time Group0 reset CPU", hung, true},
+		{"Software reset CPU", soft, false},
+		{"RTC Watch dog Reset CPU", hung, true},
+		{"Reset when the vdd voltage is not stable", brown, true},
+		{"RTC Watch dog reset digital core and rtc module", hung, true},
+		{"Time Group1 reset CPU", hung, true},
+		{"Super watchdog reset digital core and rtc module", hung, true},
+		{"Glitch reset digital core and rtc module", glitch, true},
+		{"Power glitch reset digital core and rtc module", glitch, true},
+		// no useful words: shown as they came
+		{"or APP CPU, reseted by PRO CPU", unknown, false},
+		{"Efuse reset digital core", unknown, false},
+		{"Flux capacitor", unknown, false},
 	} {
 		r := Classify(c.raw)
-		if r.Label != c.label || r.Attention != c.attention || !r.Known {
-			t.Errorf("%q -> %+v, want %q attention %v", c.raw, r, c.label, c.attention)
+		want := c.label
+		if want == unknown {
+			want = c.raw
 		}
-	}
-	if r := Classify("Flux capacitor"); r.Known || r.Label != "Flux capacitor" || r.Attention {
-		t.Errorf("unknown text: %+v", r)
+		if r.Label != want || r.Attention != c.attention || r.Known != (c.label != unknown) {
+			t.Errorf("%q -> %+v, want %q attention %v", c.raw, r, want, c.attention)
+		}
 	}
 	if r := Classify(""); r.Known || r.Label != "Unknown" {
 		t.Errorf("empty: %+v", r)
+	}
+}
+
+// Why: Tasmota raises BootCount only after 10 s of uptime, so a loop of faster boots repeats the same
+// BootCount. Every stored row is a restart whatever its BootCount says, or the worst loops are invisible.
+func TestFastBootLoopWithAFrozenBootCountIsStillALoop(t *testing.T) {
+	var b []model.DeviceBoot
+	for i := 1; i <= 4; i++ {
+		b = append(b, boot(time.Duration(i)*5*time.Minute, 77, "Exception"))
+	}
+	if r := Assess(Input{Now: now, Boots: b}); r.Restarts1h != 4 || !r.Loop {
+		t.Fatalf("restarts %d loop %v, want 4 and a loop", r.Restarts1h, r.Loop)
+	}
+}
+
+// Why: an update restarts the device twice (through the minimal image) and a retry again; three
+// restarts in an hour that TasmoFleet caused itself are no boot loop. The thresholds stay as they are:
+// the same three restarts without that cause are one.
+func TestRestartsTasmoFleetCausedDoNotCountTowardsABootLoop(t *testing.T) {
+	var caused, own []model.DeviceBoot
+	for i := 1; i <= 3; i++ {
+		b := boot(time.Duration(i)*8*time.Minute, 40-i, "Software/System restart")
+		own = append(own, b)
+		b.Expected = true
+		caused = append(caused, b)
+	}
+	r := Assess(Input{Now: now, Boots: caused})
+	if r.Loop || r.Restarts1h != 0 || r.Last == nil {
+		t.Fatalf("update restarts: loop %v, 1h %d (last restart must still show)", r.Loop, r.Restarts1h)
+	}
+	if !Assess(Input{Now: now, Boots: own}).Loop {
+		t.Fatal("the same restarts with no known cause are a loop")
+	}
+	// Restarts missed before an expected one still count: BootCount went 10 -> 14 across it.
+	m := []model.DeviceBoot{boot(50*time.Minute, 10, "Exception"), boot(5*time.Minute, 14, "Software/System restart")}
+	m[1].Expected = true
+	if r := Assess(Input{Now: now, Boots: m}); r.Restarts1h != 1+3 {
+		t.Fatalf("restarts %d, want the first row plus 3 missed ones", r.Restarts1h)
 	}
 }

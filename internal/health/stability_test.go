@@ -179,8 +179,10 @@ func TestInfo3IsStoredAsARestart(t *testing.T) {
 }
 
 // Why: a retained INFO3 is the last boot message the broker kept, not a restart now; counting it at
-// every TasmoFleet start would add one restart per device per start.
-func TestRetainedAndRepeatedInfo3IsNotARestart(t *testing.T) {
+// every TasmoFleet start would add one restart per device per start. But every live one is a restart:
+// Tasmota raises BootCount only after 10 s of uptime, so a fast boot loop repeats the BootCount, and
+// dropping repeats would hide exactly the worst loops.
+func TestRetainedInfo3IsIgnoredAndEveryLiveOneIsARestart(t *testing.T) {
 	h, _, fs := stabilityHarness(t, true, mqttDev(1, "plug"))
 	h.listen()
 	h.bus.emit(mqttbus.KindInfo, "plug", "INFO3", `{"Info3":{"RestartReason":"Exception","BootCount":7}}`, true)
@@ -189,9 +191,69 @@ func TestRetainedAndRepeatedInfo3IsNotARestart(t *testing.T) {
 	for len(h.svc.work) > 0 {
 		(<-h.svc.work)()
 	}
-	if got := fs.all(); len(got) != 1 {
-		t.Fatalf("%d restarts stored, want 1 (retained ignored, same BootCount once)", len(got))
+	if got := fs.all(); len(got) != 2 {
+		t.Fatalf("%d restarts stored, want 2 (retained ignored, the two live ones with the same BootCount both count)", len(got))
 	}
+}
+
+// Why: after a crash Tasmota sends RestartReason as the crash dump, an object (support_crash_recorder.ino).
+// A parser that expects a string drops the whole message, and the crash is exactly the restart to see.
+func TestInfo3AfterACrashCarriesAnObjectAsReason(t *testing.T) {
+	h, _, fs := stabilityHarness(t, true, mqttDev(1, "plug"))
+	h.listen()
+	h.bus.emit(mqttbus.KindInfo, "plug", "INFO3", `{"Info3":{"RestartReason":{"Exception":28,"Reason":"Exception","EPC":["4010f4f3","00000000","00000000"],"EXCVADDR":"00000000","DEPC":"00000000"},"BootCount":12}}`, false)
+	h.bus.emit(mqttbus.KindInfo, "plug", "INFO3", `{"Info3":{"RestartReason":{"Exception":0,"Reason":"Software Watchdog","EPC":["00000000"]},"BootCount":13}}`, false)
+	for len(h.svc.work) > 0 {
+		(<-h.svc.work)()
+	}
+	got := fs.all()
+	if len(got) != 2 || got[0].Reason != "Exception" || got[0].BootCount != 12 || got[1].Reason != "Software Watchdog" {
+		t.Fatalf("restarts %+v, want the Reason of each crash dump", got)
+	}
+}
+
+// Why: an update restarts the device through the minimal image and a retry restarts it again; those
+// restarts must be stored as expected so they do not make a boot loop. Whether TasmoFleet works on
+// the device is the app's knowledge, so the tracker asks.
+func TestRestartsDuringATasmoFleetOperationAreStoredAsExpected(t *testing.T) {
+	h, _, fs := stabilityHarness(t, true, mqttDev(1, "plug"))
+	working := true
+	h.svc.d.Expected = func(model.DeviceID) bool { return working }
+	h.listen()
+	drain := func() {
+		for len(h.svc.work) > 0 {
+			(<-h.svc.work)()
+		}
+	}
+	h.bus.emit(mqttbus.KindInfo, "plug", "INFO3", `{"Info3":{"RestartReason":"Software/System restart","BootCount":7}}`, false)
+	drain()
+	working = false
+	h.bus.emit(mqttbus.KindInfo, "plug", "INFO3", `{"Info3":{"RestartReason":"Exception","BootCount":8}}`, false)
+	drain()
+	got := fs.all()
+	if len(got) != 2 || !got[0].Expected || got[1].Expected {
+		t.Fatalf("restarts %+v, want the first expected and the second not", got)
+	}
+}
+
+// Why: a restart seen twice (the device's INFO3 and the uptime drop of the next reading) is one
+// restart; but two restarts a minute apart with the same BootCount are two.
+func TestInfo3AndTheUptimeDropOfTheSameRestartAreOne(t *testing.T) {
+	h, sd, fs := stabilityHarness(t, true, mqttDev(1, "plug"))
+	h.listen()
+	h.bus.emit(mqttbus.KindState, "plug", "STATE", `{"UptimeSec":4000,"Wifi":{"Signal":-60}}`, false)
+	// the STATE of the new run arrives before the INFO3 of the same boot
+	h.bus.emit(mqttbus.KindState, "plug", "STATE", `{"UptimeSec":5,"Wifi":{"Signal":-60}}`, false)
+	h.bus.emit(mqttbus.KindInfo, "plug", "INFO3", `{"Info3":{"RestartReason":"Exception","BootCount":7}}`, false)
+	h.step()
+	h.step()
+	for len(h.svc.work) > 0 {
+		(<-h.svc.work)()
+	}
+	if got := fs.all(); len(got) != 1 || got[0].Reason != "Exception" {
+		t.Fatalf("restarts %+v, want the one from INFO3", got)
+	}
+	_ = sd
 }
 
 // Why: a failing Status 1 (minimal firmware, a device that is not reachable over HTTP) must not be
