@@ -15150,7 +15150,8 @@ details.devcard > summary {
 @media (max-width: 44.99rem) {
   .fcols.fcols-n {
     gap: 0;
-||||||| parent of 66b4d3f (Stability per device: restart reasons, boot loops, weak Wi-Fi)
+  }
+}
 
 /* Online + Boot loop / Weak Wi-Fi + a policy deviation does not fit the 170 px Status column on one line:
    the badges wrap instead of being cut (#325). */
