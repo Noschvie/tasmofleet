@@ -15,6 +15,7 @@ always upgrade automatically.
 
 - The Backups tab's "Schedule & retention" card is now called "Device backup schedule", next to the new snapshot schedule (#301)
 - Device settings tab: the fields sit in grouped cards (Names, Options, Network & telemetry, MQTT, Power & flash, Time) in three independent columns from about 1200 px, two balanced columns below and one on a phone; each card has a one-line note, the Save bar spans the full width and stays in view. SetOption0 moved from Options to Power & flash, next to the other flash-write settings (#367)
+- Add devices → Network scan starts with the ranges of your device networks already in the field, ready to scan. A range a scan refuses (larger than /22) is not prefilled; a note names it and the limit. The field is wider so two ranges fit (#270)
 
 ### Security
 

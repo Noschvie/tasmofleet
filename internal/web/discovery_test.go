@@ -12,6 +12,7 @@ import (
 
 	"github.com/nofuturekid/tasmofleet/internal/discovery"
 	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
 )
 
 type fakeDiscovery struct {
@@ -515,5 +516,53 @@ func TestRunningScanStreamKeepsTheChosenFilter(t *testing.T) {
 	_, body = e.do(t, "GET", "/discovery/scan/abc123", "admin", nil)
 	if !strings.Contains(body, `sse-connect="/tf/discovery/scan/abc123/stream"`) {
 		t.Error("no filter, no query")
+	}
+}
+
+func networksState(v string) []sysconfig.FieldState {
+	return []sysconfig.FieldState{{Field: sysconfig.Field{Key: "DEVICE_NETWORKS"}, Value: v}}
+}
+
+// Why: the person already told TasmoFleet which networks hold their devices (#270). The scan field
+// starts with those ranges so typing them again is not a step, but a range one scan refuses must
+// not be prefilled (Scan now would fail at once) and must not vanish unexplained.
+func TestScanPrefillTakesOnlyRangesAScanAcceptsAndSaysWhatItLeftOut(t *testing.T) {
+	for _, tc := range []struct {
+		name, networks, want, noteHas string
+	}{
+		{"two small ranges are both prefilled", "172.27.13.0/24, 172.27.23.0/24", "172.27.13.0/24, 172.27.23.0/24", ""},
+		{"a /16 is left out and named with the limit", "172.27.13.0/24,10.1.0.0/16", "172.27.13.0/24", "10.1.0.0/16 spans more than 1024 addresses"},
+		{"ranges that together pass the limit: the later one is named", "10.0.0.0/22,10.0.8.0/24", "10.0.0.0/22", "10.0.8.0/24 would take one scan past 1024 addresses"},
+		{"no device networks keeps the field empty", "", "", ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, note := scanPrefill(networksState(tc.networks))
+			if got != tc.want {
+				t.Errorf("prefill %q, want %q", got, tc.want)
+			}
+			if tc.noteHas == "" && note != "" || !strings.Contains(note, tc.noteHas) {
+				t.Errorf("note %q, want it to contain %q", note, tc.noteHas)
+			}
+		})
+	}
+}
+
+// Why: the prefill is for the first look only. Once a scan exists the field shows what that scan
+// covered, and a refused entry comes back as typed (scanpage.go), so the person's own text wins.
+func TestScanTabPrefillsFromDeviceNetworksOnlyBeforeAnyScan(t *testing.T) {
+	fd := &fakeDiscovery{}
+	e, _, _, _ := sysEnvWithDeps(t, func(d *Deps) { d.Discovery = fd })
+	_, body := e.do(t, "GET", "/discovery/scan", "admin", nil)
+	if !strings.Contains(body, `value="172.31.13.0/24"`) {
+		t.Fatalf("scan field is not prefilled with the device network:\n%s", body)
+	}
+	_, body = e.do(t, "POST", "/discovery/scan", "admin", url.Values{"cidrs": {"not-an-ip"}})
+	if !strings.Contains(body, `value="not-an-ip"`) {
+		t.Fatal("a refused entry was replaced by the prefill")
+	}
+	fd.scan = discovery.ScanStatus{ID: "abc123", State: discovery.ScanDone, CIDRs: []netip.Prefix{netip.MustParsePrefix("172.31.13.0/28")}}
+	_, body = e.do(t, "GET", "/discovery/scan", "admin", nil)
+	if !strings.Contains(body, `value="172.31.13.0/28"`) {
+		t.Fatal("after a scan the field shows what was scanned")
 	}
 }

@@ -432,6 +432,9 @@ templ scanBody(b scanBodyView) {
 			if b.Error != "" {
 				<span class="ufield-err add-scanerr" id="err-cidrs">{ b.Error }</span>
 			}
+			if b.Prefilled != "" {
+				<span class="ufield-help add-scanerr" id="scan-prefill-note">{ b.Prefilled }</span>
+			}
 			if b.NoNetworks {
 				<span class="ufield-help add-scanerr" id="scan-off">Scanning is off until a device network is configured (see the notice above).</span>
 			}

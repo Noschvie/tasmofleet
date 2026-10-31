@@ -11368,7 +11368,7 @@ dialog.fw-notes-dlg .fw-dlg-body {
 }
 /* the id beats the global input rule (width 100 %, font inherit) */
 #scan input.add-subnet {
-  width: 200px;
+  width: 320px; /* two prefilled /24 ranges (#270) */
   max-width: 100%;
   font-family: var(--font-mono);
 }

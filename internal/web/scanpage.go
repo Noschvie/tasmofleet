@@ -12,6 +12,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/discovery"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/netaddr"
+	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
 
@@ -29,6 +30,7 @@ type scanTab struct {
 type scanBodyView struct {
 	Base, CSRF string
 	CIDRs      string // the ranges field
+	Prefilled  string // the sentence under the field when DEVICE_NETWORKS ranges were left out of the prefill
 	Error      string // a refused range: the sentence under the field
 	NoNetworks bool   // Scan now is off: no device network is configured
 	HasScan    bool
@@ -102,8 +104,55 @@ func (h *handler) scanTabData(r *http.Request, s *discovery.ScanStatus) scanTab 
 	} else {
 		v := h.view(r, "", "", nil)
 		t.Body = scanBodyView{Base: v.Base, CSRF: v.CSRF, NoNetworks: v.Banner != "", Status: "No scan yet"}
+		// nothing to show yet: start from the networks TasmoFleet already knows (#270)
+		if h.d.SysConfig != nil {
+			t.Body.CIDRs, t.Body.Prefilled = scanPrefill(h.d.SysConfig.State())
+		}
 	}
 	return t
+}
+
+// scanPrefill is the value of the ranges field before any scan ran: the stored DEVICE_NETWORKS
+// that one scan accepts (each at most /22, all together at most MaxScanAddresses), in the
+// separator the field takes. The sentence names every range that was left out and why, so a
+// /16 is not dropped silently.
+func scanPrefill(state []sysconfig.FieldState) (ranges, note string) {
+	var raw string
+	for _, st := range state {
+		if st.Key == "DEVICE_NETWORKS" {
+			raw = st.Value
+		}
+	}
+	nets, err := parseCIDRs(raw)
+	if err != nil {
+		return "", "" // a value the settings page would refuse: leave the field empty
+	}
+	var use, tooBig, tooMany []string
+	var total uint64
+	for _, p := range nets {
+		p = p.Masked()
+		host := p.Addr().BitLen() - p.Bits()
+		switch {
+		case host > 10:
+			tooBig = append(tooBig, p.String())
+		case total+1<<host > discovery.MaxScanAddresses:
+			tooMany = append(tooMany, p.String())
+		default:
+			total += 1 << host
+			use = append(use, p.String())
+		}
+	}
+	var parts []string
+	if len(tooBig) > 0 {
+		parts = append(parts, strings.Join(tooBig, ", ")+" spans more than "+strconv.Itoa(discovery.MaxScanAddresses)+" addresses (a scan covers at most /22 per range)")
+	}
+	if len(tooMany) > 0 {
+		parts = append(parts, strings.Join(tooMany, ", ")+" would take one scan past "+strconv.Itoa(discovery.MaxScanAddresses)+" addresses in total")
+	}
+	if len(parts) > 0 {
+		note = "Left out of the prefilled ranges: " + strings.Join(parts, "; ") + ". Type a smaller range inside it to scan part of it."
+	}
+	return strings.Join(use, ", "), note
 }
 
 func (h *handler) scanBodyData(r *http.Request, s discovery.ScanStatus) scanBodyView {
