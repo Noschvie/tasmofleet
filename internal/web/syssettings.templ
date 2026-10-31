@@ -568,7 +568,9 @@ templ sysDatabaseBlock(p sysPage, db sysDB) {
 		</div>
 	}
 	<h3 class="sys-subhead">Scheduled snapshots <span class="db-where mono">{ db.Dir }</span></h3>
-	if len(db.Files) == 0 {
+	if db.ListErr != "" {
+		<div class="error" role="alert">{ db.ListErr }</div>
+	} else if len(db.Files) == 0 {
 		<p class="ufield-help">No snapshots yet. Turn on the schedule on the right, or download one now. Downloads are not kept on the server.</p>
 	} else {
 		<div class="sys-orphans">

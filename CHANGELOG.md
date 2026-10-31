@@ -18,6 +18,7 @@ always upgrade automatically.
 
 ### Fixed
 
+- System, Settings no longer answers 500 when `<data>/snapshots` is a file instead of a folder (#399): the page renders and the "TasmoFleet database" card says the snapshot folder is not a directory; scheduled snapshots fail with that reason until it is fixed
 - Settings, Backups, "Download snapshot": after the password or identity-provider confirmation the page comes back with "Include secret.key" still ticked and the Download button focused, so one key press finishes the download. Before, the box was unticked again and the person had to tick and click a second time (#387)
 
 ## 0.24.0 "Hook Head" (2026-10-31)

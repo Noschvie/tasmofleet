@@ -464,3 +464,30 @@ func TestSnapshotStepUpKeepsTheKeyChoice(t *testing.T) {
 		t.Error("an ordinary visit starts unticked and unfocused")
 	}
 }
+
+// Why (#399): a file where the snapshot folder belongs (a bind mount mistake, a stray file) used to
+// make System, Settings answer 500 for every tab, so the person could not even reach the card that
+// would explain it. The page must render and the card must name the problem; the scheduled
+// snapshot fails with the same reason.
+func TestSettingsPageSurvivesAFileWhereTheSnapshotFolderBelongs(t *testing.T) {
+	s := snapSetup(t, true)
+	if err := os.WriteFile(filepath.Join(s.dir, snapshot.DirName), []byte("in the way"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tab := range []string{"backups", "general"} {
+		r, body := s.do(t, "GET", "/settings/system?tab="+tab, "admin", nil)
+		if r.StatusCode != 200 {
+			t.Fatalf("tab %s: status %d, want the page", tab, r.StatusCode)
+		}
+		if !strings.Contains(body, "The snapshot folder is not a directory") || !strings.Contains(body, `role="alert"`) {
+			t.Errorf("tab %s: the card does not say what is wrong", tab)
+		}
+	}
+	if _, err := s.mgr.Run(t.Context(), 7); err == nil || snapshot.ReasonOf(err) == "" {
+		t.Fatalf("a scheduled snapshot must fail with a reason, got %v", err)
+	}
+	_, body := s.do(t, "GET", "/settings/system?tab=backups", "admin", nil)
+	if !strings.Contains(body, "not a directory") {
+		t.Error("the failed attempt's reason is not on the page")
+	}
+}

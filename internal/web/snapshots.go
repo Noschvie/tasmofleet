@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/auth"
@@ -251,6 +252,7 @@ type sysDB struct {
 	On            bool
 	Status        sysSnapStatus
 	CanDelete     bool
+	ListErr       string // the snapshot folder cannot be listed: shown instead of the list (#399)
 }
 
 // sysSnapshot is one stored snapshot.
@@ -279,10 +281,16 @@ type sysSnapStatus struct {
 func (h *handler) sysDBOf(r *http.Request, base string) (*sysDB, error) {
 	s := h.d.Snapshots
 	list, err := s.List()
-	if err != nil {
-		return nil, err
-	}
 	db := &sysDB{Dir: s.Dir(), DataDir: filepath.Dir(s.Dir()), CanDelete: true}
+	if err != nil {
+		// A broken snapshot folder must not take the whole Settings page down: the card says what is
+		// wrong, and the scheduled snapshots fail with the same reason (#399).
+		list = nil
+		db.ListErr = "The snapshot folder cannot be read: " + snapshot.ReasonOf(err) + "."
+		if errors.Is(err, syscall.ENOTDIR) {
+			db.ListErr = "The snapshot folder is not a directory: " + s.Dir() + " is a file. Move or delete it; scheduled snapshots fail until then."
+		}
+	}
 	db.KeepKey = snapKeyChosen(r)
 	db.FocusDownload = r.Method == http.MethodGet && snapKeyChosen(r) // the return from the step-up, not the locked page itself
 	if h.d.Database != nil {
