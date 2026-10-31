@@ -96,6 +96,10 @@ func TestCheckRefusesWhatNoFleetVersionKnows(t *testing.T) {
 	if r := s.Check("NoSuchCommand", []FleetDevice{dev("a", "", "esp32", "tasmota")}); r.Refuse || r.Unjudged != 1 {
 		t.Fatalf("no versions known must not refuse: %+v", r)
 	}
+	// a device whose version is unknown might know it: no refusal on a mixed fleet
+	if r := s.Check("NoSuchCommand", []FleetDevice{dev("a", "16.0.0", "esp32", "tasmota"), dev("b", "", "esp32", "tasmota")}); r.Refuse || r.Unjudged != 1 {
+		t.Fatalf("mixed fleet must not refuse: %+v", r)
+	}
 	if r := s.Check("NoSuchCommand", nil); r.Refuse {
 		t.Fatalf("empty fleet must not refuse: %+v", r)
 	}
@@ -239,5 +243,37 @@ func TestSuggestRanksPrefixFirstAndMarksIndexAndNeeds(t *testing.T) {
 	}
 	if got := s.Suggest("dali", []string{"13.4.0", "16.0.0"}, 10, nil); got.Total != 5 || len(got.Versions) != 2 || len(got.List) != 1 {
 		t.Fatalf("%+v", got)
+	}
+}
+
+func TestCheckMissInANewerPinIsCertainOnlyWhenTheOlderPinLacksItToo(t *testing.T) {
+	// SafePower is in 13.4.0 and gone in 14.4.1: a device on 14.0.0 (no pin of its own) may still
+	// have it, so the miss in 14.4.1 proves nothing. The same for a version older than every pin.
+	cats := []*Catalogue{
+		{Tasmota: "13.4.0", Commands: []Command{cmdEntry("SafePower", nil), cmdEntry("Sleep", nil)}},
+		{Tasmota: "14.4.1", Commands: []Command{cmdEntry("Sleep", nil)}},
+		{Tasmota: "16.0.0", Commands: []Command{cmdEntry("Sleep", nil)}},
+	}
+	s, err := NewSet(cats)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := s.Check("SafePower", []FleetDevice{dev("a", "14.0.0", "esp8266", "tasmota")})
+	if r.Refuse || r.Versions[0].Exists != Unknown {
+		t.Fatalf("14.0.0: %+v", r.Versions[0])
+	}
+	// 15.0.0 sits between 14.4.1 and 16.0.0 and both lack it: certain
+	r = s.Check("SafePower", []FleetDevice{dev("a", "15.0.0", "esp8266", "tasmota")})
+	if !r.Refuse || r.Versions[0].Exists != False || r.Versions[0].Older != "14.4.1" {
+		t.Fatalf("15.0.0: %+v", r.Versions[0])
+	}
+	// older than every pin: nothing is known about what came before
+	r = s.Check("Nope", []FleetDevice{dev("a", "11.1.0", "esp8266", "tasmota")})
+	if r.Refuse || r.Versions[0].Exists != Unknown {
+		t.Fatalf("11.1.0: %+v", r.Versions[0])
+	}
+	// an exact pin is judged on its own catalogue
+	if r := s.Check("SafePower", []FleetDevice{dev("a", "14.4.1", "esp8266", "tasmota")}); !r.Refuse {
+		t.Fatalf("14.4.1 lacks it: %+v", r)
 	}
 }

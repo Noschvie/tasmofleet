@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -45,6 +46,11 @@ func commandKeep(name string) bool {
 	if f, ok := settings.Lookup(name); ok {
 		return !f.Secret
 	}
+	// names that end in Reset act when sent bare (RC522Reset, SSPMReset, ClientReset ...); the
+	// read check does not know them all yet, so they are left out of the suggestions
+	if strings.HasSuffix(strings.ToLower(name), "reset") {
+		return false
+	}
 	return commandRefusal(name) == ""
 }
 
@@ -54,6 +60,7 @@ type checkRow struct {
 	Devices string
 	Result  string
 	OK      bool
+	Neutral bool // not checked: neither a tick nor a cross
 }
 
 // checkView is the banner under the command field.
@@ -160,10 +167,12 @@ func buildCheck(command string, res tasmotacmd.Result, fleetSize int) *checkView
 		row := checkRow{Version: v.Version, Devices: plural(len(v.Devices), "device"), OK: true, Result: "command exists"}
 		switch {
 		case v.Exists == tasmotacmd.False:
-			row.OK, row.Result = false, "not a command in Tasmota "+v.Pinned
-			if v.Pinned != v.Version {
-				row.Result = "not a command in Tasmota " + v.Pinned + " or before"
+			row.OK, row.Result = false, "not a command in Tasmota "+v.Version
+			if v.Older != "" {
+				row.Result += " (not in " + v.Older + " or " + v.Pinned + " either)"
 			}
+		case v.Exists == tasmotacmd.Unknown:
+			row.Neutral, row.Result = true, "not checked: no catalogue of this version"
 		case len(v.Lacking) > 0:
 			row.OK = false
 			first := v.Lacking[0]
@@ -356,7 +365,9 @@ func catalogueValue(vc *valueControl, command string, keepInvalid bool) bool {
 }
 
 // catalogueWantProblem checks a value against what the catalogue says the command takes: a
-// number where it answers one, within the range its handler checks. "" when fine or unknown.
+// number where it answers one, whole where it is, within the range its handler checks. "" when fine
+// or unknown. It is a warning, never a reason to refuse a save: the source is read statically and a
+// newer pin must not make a saved rule unsaveable.
 func catalogueWantProblem(command, want string) string {
 	if _, ok := settings.Lookup(command); ok || settings.SetOptionParam(command) || setOptionRe.MatchString(command) {
 		return "" // the curated checks decide
@@ -370,6 +381,9 @@ func catalogueWantProblem(command, want string) string {
 		n, err := strconv.ParseFloat(want, 64)
 		if err != nil {
 			return "Enter a number."
+		}
+		if !vc.Decimal && n != math.Trunc(n) {
+			return want + " is not a whole number."
 		}
 		if vc.HasRange && n < float64(vc.Min) {
 			return fmt.Sprintf("%s is below the minimum of %d.", want, vc.Min)
@@ -400,4 +414,14 @@ func kindBadge(kind string) string {
 		return "text"
 	}
 	return ""
+}
+
+// wantWarning is the banner under the value field when the value does not fit what the catalogue
+// says the command takes. It warns; the rule can still be saved.
+func wantWarning(command, want string) *checkView {
+	msg := catalogueWantProblem(command, strings.TrimSpace(want))
+	if msg == "" || strings.TrimSpace(want) == "" {
+		return nil
+	}
+	return &checkView{Tone: ui.ToneWarn, Title: msg, Foot: "The device would not take this value, so the rule is unlikely to match. You can still save."}
 }

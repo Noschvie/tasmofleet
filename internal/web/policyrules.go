@@ -104,6 +104,7 @@ type ruleEditor struct {
 	Err      string // sentence for the failing field (ErrField), or for the whole rule when ErrField is empty
 	ErrField string // "command", "want" or "change_note"; empty: no single field
 	Cmd      commandView
+	WantWarn *checkView // the value does not fit the catalogue: a warning
 	Control  valueControl
 	Families []chip
 	Tags     []scopeTag    // every tag in use, the rule's own too, with how many devices carry it
@@ -257,6 +258,7 @@ func (h *handler) editorFields(r *http.Request, spec sysconfig.RuleSpec) (*ruleE
 	return &ruleEditor{
 		Spec:     spec,
 		Cmd:      h.commandViewOf(r.Context(), spec.Command),
+		WantWarn: wantWarning(spec.Command, spec.Want),
 		Control:  controlFor(spec.Command, spec.Want, true),
 		Families: fam, Tags: tags, Devices: rows, Names: names,
 		Except: slices.Clone(spec.Except),
@@ -494,13 +496,12 @@ func (h *handler) rulesSave(w http.ResponseWriter, r *http.Request) {
 		h.rulesInvalid(w, r, d, field, msg, http.StatusUnprocessableEntity)
 		return
 	}
-	if msg := h.unknownCommand(r.Context(), d.Spec.Command); msg != "" {
-		h.rulesInvalid(w, r, d, "command", msg, http.StatusUnprocessableEntity)
-		return
-	}
-	if msg := catalogueWantProblem(d.Spec.Command, d.Spec.Want); msg != "" {
-		h.rulesInvalid(w, r, d, "want", msg, http.StatusUnprocessableEntity)
-		return
+	// a saved rule keeps its command: a newer pin must never make it unsaveable
+	if n := indexOfRule(st.Specs, d.ID); d.ID == "new" || n < 0 || !strings.EqualFold(st.Specs[n].Command, d.Spec.Command) {
+		if msg := h.unknownCommand(r.Context(), d.Spec.Command); msg != "" {
+			h.rulesInvalid(w, r, d, "command", msg, http.StatusUnprocessableEntity)
+			return
+		}
 	}
 	note := d.ChangeNote
 	if note == "" && d.ID == "new" {

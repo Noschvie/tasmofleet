@@ -526,6 +526,7 @@ type ruleHead struct {
 	Name                      string
 	Required, Draft, Disabled bool
 	Base, Source              string
+	WantWarn                  *checkView
 	Crumbs                    []ui.Crumb
 }
 
@@ -559,7 +560,8 @@ func (h *handler) ruleDevicesPreview(w http.ResponseWriter, r *http.Request, d r
 		name = "New rule"
 	}
 	head := ruleHead{Name: name, Required: spec.Severity != policy.SeverityInfo, Draft: d.ID == "new", Disabled: spec.Disabled, Base: httpBase(r),
-		Crumbs: []ui.Crumb{{Label: "Devices", Path: "/devices"}, {Label: "Policy", Path: policyPath}, {Label: name}}}
+		WantWarn: wantWarning(spec.Command, spec.Want),
+		Crumbs:   []ui.Crumb{{Label: "Devices", Path: "/devices"}, {Label: "Policy", Path: policyPath}, {Label: name}}}
 	if d.Origin == "command" {
 		head.Source = "A new rule for " + spec.Command + ". Nothing is saved until you press Save rule."
 	}

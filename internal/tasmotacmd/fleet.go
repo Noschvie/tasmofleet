@@ -21,8 +21,11 @@ type DeviceNeeds struct {
 
 // VersionVerdict is the result for the devices on one firmware version.
 type VersionVerdict struct {
-	Version string   // the version the devices report, three fields
-	Pinned  string   // the catalogue version that judged it
+	Version string // the version the devices report, three fields
+	Pinned  string // the catalogue version that judged it
+	// Older is the pinned catalogue just below Pinned that also lacked the command, set when the
+	// version has no pin of its own and "not a command" rests on the two pins around it.
+	Older   string
 	Match   Match    // how that catalogue stands to Version
 	Devices []string // names, sorted
 	// Exists: the command (with its index) exists in the catalogue. False is only said when it
@@ -39,8 +42,9 @@ type VersionVerdict struct {
 type Result struct {
 	// Versions has one entry per firmware version in the fleet, newest first.
 	Versions []VersionVerdict
-	// Refuse is true when the command name exists in none of the versions in the fleet (an index
-	// out of range does not count, see VersionVerdict.IndexBad). The check
+	// Refuse is true when the command name exists in none of the versions in the fleet and every
+	// device's version was judged (an index out of range does not count, see VersionVerdict.IndexBad;
+	// a device without a readable version might know the command). The check
 	// warns about everything else and lets the rule be saved.
 	Refuse bool
 	// Unjudged counts the devices whose version is unknown.
@@ -92,10 +96,15 @@ func (s *Set) Check(cmd string, fleet []FleetDevice) Result {
 		case found:
 			vv.Exists = True
 			vv.IndexBad = !f.IndexOK()
-		case m == MatchBeyond:
-			vv.Exists = Unknown
-		default:
+		case m == MatchExact:
 			vv.Exists = False
+		case m == MatchNewer:
+			// no pin of its own: missing counts only when the next older pin lacks it too
+			if old := s.Older(cat); old != nil {
+				if _, inOld := old.Find(cmd); !inOld {
+					vv.Exists, vv.Older = False, old.Tasmota
+				}
+			}
 		}
 		if found && rangeFrom == nil {
 			rangeFrom = cat
@@ -115,7 +124,7 @@ func (s *Set) Check(cmd string, fleet []FleetDevice) Result {
 		sort.Slice(vv.Lacking, func(i, j int) bool { return vv.Lacking[i].Device < vv.Lacking[j].Device })
 		res.Versions = append(res.Versions, vv)
 	}
-	res.Refuse = len(res.Versions) > 0
+	res.Refuse = len(res.Versions) > 0 && res.Unjudged == 0
 	for _, v := range res.Versions {
 		if v.Exists != False {
 			res.Refuse = false

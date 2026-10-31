@@ -99,8 +99,9 @@ const (
 	// MatchExact: a catalogue is pinned for this very version.
 	MatchExact Match = iota + 1
 	// MatchNewer: no catalogue is pinned for the version; the next newer pinned one is used. A
-	// command missing there is missing in the version too (Tasmota hardly ever drops a command);
-	// a command present there may be newer than the version.
+	// command present there may be newer than the version, and one missing there may have been
+	// dropped since (SafePower is in 13.4.0 and gone in 14.4.1): a miss is certain only when the
+	// next older pin lacks it too (Set.Older).
 	MatchNewer
 	// MatchBeyond: the version is newer than every pin. A command missing from the newest
 	// catalogue may have been added since, so nothing can be said against it.
@@ -122,4 +123,14 @@ func (s *Set) For(version string) (cat *Catalogue, m Match, ok bool) {
 		}
 	}
 	return s.Newest(), MatchBeyond, true
+}
+
+// Older is the catalogue pinned just below the version of c, nil when c is the oldest pin.
+func (s *Set) Older(c *Catalogue) *Catalogue {
+	for i, x := range s.cats {
+		if x == c && i > 0 {
+			return s.cats[i-1]
+		}
+	}
+	return nil
 }

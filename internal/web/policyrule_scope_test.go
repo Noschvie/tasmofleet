@@ -76,8 +76,8 @@ func TestRulePreviewAlsoSwapsTilesTitleLineAndSummary(t *testing.T) {
 			t.Errorf("preview answer lacks %q:\n%s", w, body)
 		}
 	}
-	if n := strings.Count(body, `hx-swap-oob="true"`); n != 6 {
-		t.Errorf("want 6 out-of-band parts (tiles, line, summary, title, trail, phone title), got %d", n)
+	if n := strings.Count(body, `hx-swap-oob="true"`); n != 7 {
+		t.Errorf("want 7 out-of-band parts (tiles, line, summary, title, trail, phone title, value warning), got %d", n)
 	}
 }
 

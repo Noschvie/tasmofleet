@@ -45,6 +45,13 @@ func TestCommandSuggestionsComeFromTheCatalogue(t *testing.T) {
 	if !strings.Contains(body, `data-name="MqttHost"`) || strings.Contains(body, `data-name="MqttPassword"`) {
 		t.Errorf("MqttHost is offered, a secret is not:\n%s", body)
 	}
+	// commands that act when sent bare are not suggested (their names end in Reset)
+	_, body = e.do(t, "GET", "/policy/rules/command-suggest?command=Reset", "admin", nil)
+	for _, bad := range []string{`data-name="SSPMReset"`, `data-name="RC522Reset"`, `data-name="ClientReset"`} {
+		if strings.Contains(body, bad) {
+			t.Errorf("%s must not be suggested", bad)
+		}
+	}
 	if r, _ := e.do(t, "GET", "/policy/rules/command-suggest?command=x&other=1", "admin", nil); r.StatusCode != 400 {
 		t.Errorf("an unknown parameter: %d", r.StatusCode)
 	}
@@ -151,19 +158,46 @@ func TestFeatureCheckNamesOnlyDevicesWhoseBuildLacksIt(t *testing.T) {
 	}
 }
 
-// Why: a number value outside the range the device's handler accepts can never match a reading.
-func TestCatalogueValueRangeIsCheckedOnSave(t *testing.T) {
+// Why: the approved design makes value checks warnings, like the other catalogue checks: the
+// source is read statically, so a wrong reading must never stop a rule from being saved.
+func TestCatalogueValueProblemsWarnAndTheRuleIsStillSaved(t *testing.T) {
 	e, mem, _ := rulesEnv(t, "")
-	r, body := e.do(t, "POST", "/policy/rules/save", "admin", ruleForm(url.Values{"command": {"BlinkTime"}, "want": {"1"}, "name": {"x"}}))
-	if r.StatusCode != 422 || !strings.Contains(body, "1 is below the minimum of 2.") {
-		t.Fatalf("%d\n%s", r.StatusCode, body)
+	for want, warn := range map[string]string{"1": "1 is below the minimum of 2.", "9999": "9999 is above the maximum of 3600.", "2.5": "2.5 is not a whole number.", "abc": "Enter a number."} {
+		_, body := e.do(t, "POST", "/policy/rules/preview", "admin", ruleForm(url.Values{"id": {"new"}, "command": {"BlinkTime"}, "want": {want}}))
+		if !strings.Contains(body, `id="want-check"`) || !strings.Contains(body, warn) || !strings.Contains(body, "tone-warn") || !strings.Contains(body, "You can still save") {
+			t.Errorf("preview of %q lacks the warning %q:\n%s", want, warn, body)
+		}
+		saveRule(t, e, url.Values{"command": {"BlinkTime"}, "want": {want}, "name": {"x" + want}, "version": {strconv.Itoa(len(mem.vs))}})
 	}
-	if r, _ := e.do(t, "POST", "/policy/rules/save", "admin", ruleForm(url.Values{"command": {"BlinkTime"}, "want": {"abc"}, "name": {"x"}})); r.StatusCode != 422 {
-		t.Fatalf("not a number: %d", r.StatusCode)
+	if len(ruleIDs(t, mem)) != 4 {
+		t.Fatalf("every value must be saved, got %d rules", len(ruleIDs(t, mem)))
 	}
-	saveRule(t, e, url.Values{"command": {"BlinkTime"}, "want": {"10"}, "name": {"x"}})
-	if len(ruleIDs(t, mem)) != 1 {
-		t.Fatal("an in-range value is saved")
+	_, body := e.do(t, "POST", "/policy/rules/preview", "admin", ruleForm(url.Values{"id": {"new"}, "command": {"BlinkTime"}, "want": {"10"}}))
+	if strings.Contains(body, "tone-warn") {
+		t.Error("an in-range value has no warning")
+	}
+	// Latitude takes decimals
+	_, body = e.do(t, "POST", "/policy/rules/preview", "admin", ruleForm(url.Values{"id": {"new"}, "command": {"Latitude"}, "want": {"52.52"}}))
+	if strings.Contains(body, "not a whole number") {
+		t.Error("a decimal command takes decimals")
+	}
+}
+
+// Why: a pin bump must never make a saved rule unsaveable: a rule keeps its command on re-save even
+// if no version of the fleet knows it any more.
+func TestExistingRuleCanAlwaysBeResaved(t *testing.T) {
+	e, mem, _ := rulesEnv(t, "")
+	saveRule(t, e, url.Values{"command": {"PowerLock"}, "want": {"0"}, "name": {"lock"}})
+	id := ruleIDs(t, mem)[0]
+	fleetOf(e, esp8266("old", "13.4.0", "tasmota")) // PowerLock is in no version of this fleet now
+	form := ruleForm(url.Values{"id": {id}, "command": {"PowerLock"}, "want": {"1"}, "name": {"lock"}, "version": {strconv.Itoa(len(mem.vs))}})
+	if r, body := e.do(t, "POST", "/policy/rules/save", "admin", form); r.StatusCode != 303 {
+		t.Fatalf("re-save: %d\n%s", r.StatusCode, body)
+	}
+	form.Set("command", "PowerLockNot")
+	form.Set("version", strconv.Itoa(len(mem.vs)))
+	if r, _ := e.do(t, "POST", "/policy/rules/save", "admin", form); r.StatusCode != 422 {
+		t.Fatalf("a new unknown command is still refused: %d", r.StatusCode)
 	}
 }
 

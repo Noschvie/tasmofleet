@@ -225,6 +225,7 @@ templ ruleSource(text string, oob bool) {
 // and the parts that follow the draft out-of-band.
 templ rulePreviewAnswer(card templ.Component, tiles []ruleTile, line string, sum scopeSummary, t ruleHead) {
 	@card
+	@wantCheck(t.WantWarn, true)
 	@rulePageTitle(t.Name, t.Required, t.Draft, t.Disabled, true)
 	@ui.CrumbsOOB(t.Crumbs, t.Base)
 	@ui.PhoneTitleOOB(t.Name)
@@ -275,6 +276,7 @@ templ ruleEditCard(p rulePageView, e *ruleEditor) {
 				</div>
 			</div>
 			@commandCheck(e.Cmd.Check, false)
+			@wantCheck(e.WantWarn, false)
 			if e.ErrField == "want" {
 				<span class="ufield-err" id="err-want" role="alert">{ e.Err }</span>
 			}

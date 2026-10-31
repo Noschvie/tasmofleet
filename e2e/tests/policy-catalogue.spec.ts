@@ -146,7 +146,7 @@ test("an index out of range is shown as a warning with the range", async ({ page
   await shots(page, "index-bad");
 });
 
-test("a number value follows the catalogue: range, step and the refusal of a value outside it", { tag: "@core" }, async ({ page }) => {
+test("a number value follows the catalogue: range, step, and a value outside it only warns", { tag: "@core" }, async ({ page }) => {
   await draft(page, "Blink time");
   // decimals where the handler answers a float
   await page.locator("#rule-command").fill("Latitude");
@@ -159,9 +159,25 @@ test("a number value follows the catalogue: range, step and the refusal of a val
   await expect(want).toHaveAttribute("max", "3600");
   await expect(page.locator("#want-control .cmd-kind")).toHaveText("number");
   await want.fill("1");
-  await page.getByRole("button", { name: "Save rule" }).click();
-  await expect(page.locator("#err-want")).toContainText("1 is below the minimum of 2.");
+  const warn = page.locator("#want-check");
+  await expect(warn).toContainText("1 is below the minimum of 2.");
+  await expect(warn.locator(".banner")).toHaveClass(/tone-warn/);
+  await expect(warn).toContainText("You can still save");
+  await want.fill("1.5");
+  await expect(warn).toContainText("1.5 is not a whole number.");
+  await want.fill("1");
+  await expect(warn).toContainText("below the minimum");
   await shots(page, "number");
+});
+
+test("a value outside the catalogue's range is saved", { tag: "@core" }, async ({ page }) => {
+  await draft(page, "Blink time");
+  await page.locator("#rule-command").fill("BlinkTime");
+  await page.locator("#rule-command").dispatchEvent("change");
+  await page.locator("#want").fill("1");
+  await expect(page.locator("#want-check")).toContainText("below the minimum");
+  await page.getByRole("button", { name: "Save rule" }).click();
+  await expect(page).toHaveURL(/\/policy(\?|$)/);
 });
 
 test("a text command shows its kind and no invented range", { tag: "@core" }, async ({ page }) => {
