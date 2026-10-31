@@ -6,6 +6,12 @@ always upgrade automatically.
 
 ## Unreleased
 
+## 0.24.0 "Hook Head" (2026-10-31)
+
+### Upgrade notes
+
+- Database migration 0040 adds a nullable column to `principals` (the chosen display name). Nothing to change in the template.
+
 ### Added
 
 - Display name for SSO and proxy-header accounts: single sign-on now shows the identity provider's full name (the `name` claim, configurable as `OIDC_NAME_CLAIM`; for a proxy the existing name header) instead of the user name, at every sign-in. On System → Account every user can override it with a name of their own, shown in the header menu, the avatar, the Users page and as the label of the audit user. The override is kept at the next sign-in, and clearing it brings back the provider's name, then the user name. The identity does not change: audit rows keep naming the stable subject, a name equal to another person's or imitating a system actor or a local account gets the subject suffix, and zero-width, bidirectional and other invisible characters are refused in names. Database migration 0040 adds one nullable column (#283)
@@ -17,13 +23,13 @@ always upgrade automatically.
 - Device settings tab: the fields sit in grouped cards (Names, Options, Network & telemetry, MQTT, Power & flash, Time) in three independent columns from about 1200 px, two balanced columns below and one on a phone; each card has a one-line note, the Save bar spans the full width and stays in view. SetOption0 moved from Options to Power & flash, next to the other flash-write settings (#367)
 - Add devices → Network scan starts with the ranges of your device networks already in the field, ready to scan. A range a scan refuses (larger than /22) is not prefilled; a note names it and the limit. The field is wider so two ranges fit (#270)
 
-### Security
-
-- Single sign-on and proxy-header identities whose subject starts with `local:` are refused at sign-in (403 with a clear message, audit entry `denied: reserved subject`). That prefix is the subject of local accounts, and the audit log, the Users page and the user directory tell local accounts by it, so such an identity could appear as the local admin and share its audit rows. Roles were never affected (#380)
-
 ### Fixed
 
 - The Columns menu now reliably reopens after you pin a column, and stays open when a device event refreshes the list at the same moment. The page that was about to reload could take the reopen note itself, and a refresh right after the menu opened could drop its open state (#273)
+
+### Security
+
+- Single sign-on and proxy-header identities whose subject starts with `local:` are refused at sign-in (403 with a clear message, audit entry `denied: reserved subject`). That prefix is the subject of local accounts, and the audit log, the Users page and the user directory tell local accounts by it, so such an identity could appear as the local admin and share its audit rows. Roles were never affected (#380)
 
 ## 0.23.1 "Cape Hatteras" (2026-10-31)
 
