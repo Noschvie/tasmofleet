@@ -87,6 +87,13 @@ test("policy rule editor: create via the setting picker, live preview, edit, rev
   // The value control follows the setting: a number input for SaveData ...
   const command = page.locator("input[name='command']");
   const pick = async (name: string) => {
+    // a command with an index range (SetOption) is a name and a number box: Change gives the text field back (#269)
+    const change = page.getByRole("button", { name: "Change command" });
+    if (await change.count()) {
+      await change.click();
+      await expect(page.locator("input#rule-command[name='command']")).toBeVisible();
+      await expect(page.locator(".htmx-added, .htmx-settling")).toHaveCount(0);
+    }
     await command.fill(name);
     await command.blur(); // the change event swaps the value control
   };

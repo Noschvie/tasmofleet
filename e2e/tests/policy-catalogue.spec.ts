@@ -61,6 +61,12 @@ async function shots(page: import("@playwright/test").Page, name: string) {
   await page.emulateMedia({ colorScheme: null });
 }
 
+// htmx attaches its handlers to swapped-in elements after a short settle delay (20 ms); a test that
+// types into a field the moment it appears would otherwise beat them (the change event then goes to the form).
+async function settled(page: import("@playwright/test").Page) {
+  await expect(page.locator(".htmx-added, .htmx-settling, .htmx-swapping")).toHaveCount(0);
+}
+
 async function draft(page: import("@playwright/test").Page, name: string) {
   await page.setExtraHTTPHeaders(admin);
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -93,6 +99,8 @@ test("suggestions come from the catalogues of the fleet's versions, with range a
   await expect(page.locator("#rule-index")).toBeFocused();
   await expect(page.locator(".cmd-idx-base")).toHaveText("SetOption");
   await page.getByRole("button", { name: "Change command" }).click();
+  await expect(page.locator("input#rule-command[name='command']")).toBeVisible();
+  await settled(page);
   await cmd.fill("");
   await cmd.dispatchEvent("change");
   await expect(page.locator("#want")).toBeDisabled();
@@ -119,6 +127,7 @@ test("an indexed command is a name and a number box, and Change gives the text f
   await page.getByRole("button", { name: "Change command" }).click();
   await expect(page.locator("input#rule-command[name='command']")).toHaveValue("SetOption20");
   await expect(page.locator("#rule-index")).toHaveCount(0);
+  await settled(page);
   await page.locator("#rule-command").fill("SetOption19");
   await page.locator("#rule-command").dispatchEvent("change");
   await expect(page.locator("#rule-index")).toHaveValue("19");
