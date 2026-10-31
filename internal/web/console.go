@@ -157,6 +157,8 @@ func consoleError(err error) (int, string) {
 		return http.StatusForbidden, "This command is not sent from TasmoFleet."
 	case errors.Is(err, cmdpolicy.ErrRole):
 		return http.StatusForbidden, "This command needs the admin role."
+	case errors.Is(err, cmdpolicy.ErrUpdateJob):
+		return http.StatusConflict, updateJobHoldsText
 	case errors.Is(err, transport.ErrCutOff):
 		return http.StatusConflict, err.Error() // names the command, never its arguments
 	}
@@ -165,6 +167,31 @@ func consoleError(err error) (int, string) {
 		return http.StatusInternalServerError, "The command failed."
 	}
 	return status, msg
+}
+
+// updateJobHoldsText is the refusal of Upgrade/OtaUrl while a TasmoFleet update job holds the device.
+const updateJobHoldsText = "A TasmoFleet update job (queued or running) holds this device. Upgrade and OtaUrl are refused until it has finished, because two updates at once can leave the device unusable."
+
+// updateHeld returns the devices among ids that a TasmoFleet update job (queued or running) holds. A
+// job of another kind (command, backup, policy) is not an update: the executing services refuse those
+// with the generic busy text.
+func (h *handler) updateHeld(ctx context.Context, ids ...model.DeviceID) (map[model.DeviceID]bool, error) {
+	held := map[model.DeviceID]bool{}
+	if h.d.Jobs == nil {
+		return held, nil
+	}
+	for _, id := range ids {
+		jobs, err := h.d.Jobs.ListJobs(ctx, store.JobFilter{DeviceID: id, States: activeJobStates})
+		if err != nil {
+			return nil, err
+		}
+		for _, j := range jobs {
+			if j.IsUpdate() {
+				held[id] = true
+			}
+		}
+	}
+	return held, nil
 }
 
 // confirmation adds to v the consequence of cutting off a device that is reached over MQTT only, and
@@ -191,6 +218,21 @@ func (h *handler) consoleSend(w http.ResponseWriter, r *http.Request) {
 	if canon, err := cmdpolicy.Canonical(cmd); err == nil && canon == data.Shown {
 		if _, err := cmdpolicy.Classify(cmd); err == nil {
 			data.Input = cmd
+		}
+	}
+	// A firmware command is refused before it asks for a confirmation while an update job holds the device.
+	if cmdpolicy.StartsFirmware(cmd) && p.Role >= model.RoleAdmin {
+		held, err := h.updateHeld(ctx, d.ID)
+		if err != nil {
+			h.log.ErrorContext(ctx, "console: active jobs", "device", d.ID, "err", err)
+			data.Error = "The command failed."
+			h.renderConsole(w, r, http.StatusInternalServerError, d, data)
+			return
+		}
+		if held[d.ID] {
+			data.Error = updateJobHoldsText
+			h.renderConsole(w, r, http.StatusConflict, d, data)
+			return
 		}
 	}
 	// A destructive or lock-out command asks once, naming the consequence.

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
 	"github.com/nofuturekid/tasmofleet/internal/devlock"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/ota"
@@ -144,6 +145,30 @@ func TestActiveOTAJobBlocksWriters(t *testing.T) {
 	// device is free again once the job ends.
 	if _, err := (lockedDeviceCmd{DeviceCmd: cmd, g: g}).Power(ctx, "u", 2, 1, "ON"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Why: two firmware updates at once can brick a device. A typed Upgrade/OtaUrl (console, or a bulk
+// command job) while a TasmoFleet update job holds the device never reaches it, and the refusal says
+// why instead of "busy". A routine command keeps the generic busy text, and nothing is sent either way.
+func TestFirmwareCommandRefusedWhileAnUpdateJobHoldsTheDevice(t *testing.T) {
+	ctx := context.Background()
+	g := deviceGuard{locks: devlock.New(), jobs: fakeActiveJobs{active: map[model.DeviceID]bool{1: true}}}
+	cmd := &countingCmd{}
+	lc := lockedDeviceCmd{DeviceCmd: cmd, g: g}
+	for _, c := range []string{"Upgrade 1", "OtaUrl http://x/y.bin", "Backlog OtaUrl http://x/y.bin; Upgrade 1"} {
+		if _, err := lc.Run(ctx, model.Principal{Role: model.RoleAdmin}, 1, c); !errors.Is(err, cmdpolicy.ErrUpdateJob) {
+			t.Errorf("%q: want ErrUpdateJob, got %v", c, err)
+		}
+	}
+	if _, err := lc.Run(ctx, model.Principal{Role: model.RoleAdmin}, 1, "Status 2"); busyHolderOf(t, err) != "ota" {
+		t.Error("a routine command keeps the generic busy refusal")
+	}
+	if _, err := lc.Run(ctx, model.Principal{Role: model.RoleAdmin}, 2, "Upgrade 1"); err != nil {
+		t.Errorf("another device is free: %v", err)
+	}
+	if cmd.calls != 1 {
+		t.Fatalf("only the free device's command may reach the device, got %d", cmd.calls)
 	}
 }
 

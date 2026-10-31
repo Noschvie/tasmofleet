@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Changed
+
+- Console and bulk command: `Upgrade` and `OtaUrl` with an argument are refused while a TasmoFleet update job (queued or running) holds the device, with a clear message; the bulk preview names each refused device and the rest still goes (#240)
+
 ## 0.22.1 "Bell Rock" (2026-10-31)
 
 ### Upgrade notes

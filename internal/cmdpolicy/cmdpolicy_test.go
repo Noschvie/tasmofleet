@@ -688,3 +688,28 @@ func TestCutOffName(t *testing.T) {
 		}
 	}
 }
+
+// Why: the update-job lock must hit exactly the commands that start or redirect a firmware update
+// (two updates at once can brick a device), including inside a Backlog, and nothing that merely reads
+// them: a lock that is too wide blocks routine work, one that is too narrow lets a second update in.
+func TestStartsFirmware(t *testing.T) {
+	for cmd, want := range map[string]bool{
+		"Upgrade 1":                     true,
+		"upgrade 1":                     true,
+		"OtaUrl http://x/y.bin":         true,
+		"Backlog Power1 ON; Upgrade 1":  true,
+		"Backlog OtaUrl http://x/y.bin": true,
+		"Upgrade":                       false, // a query
+		"OtaUrl":                        false, // a query
+		"Status 2":                      false,
+		"Restart 1":                     false,
+		"Upload http://x/y.bin":         false, // never typed at all (ClassForbidden)
+		"Backlog Power1 ON; Status 2":   false,
+		"Upgrade 1;Reset 1":             false, // malformed: refused by the policy itself
+		"":                              false,
+	} {
+		if got := StartsFirmware(cmd); got != want {
+			t.Errorf("StartsFirmware(%q) = %v, want %v", cmd, got, want)
+		}
+	}
+}

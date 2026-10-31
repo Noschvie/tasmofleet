@@ -3,7 +3,9 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
+	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
 	"github.com/nofuturekid/tasmofleet/internal/devlock"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/ota"
@@ -75,10 +77,19 @@ func (l lockedDeviceCmd) Power(ctx context.Context, actor string, id model.Devic
 func (l lockedDeviceCmd) Run(ctx context.Context, p model.Principal, id model.DeviceID, cmd string) (json.RawMessage, error) {
 	release, err := l.g.enter(ctx, id, "console")
 	if err != nil {
+		if cmdpolicy.StartsFirmware(cmd) && busyBy(err, "ota") {
+			return nil, cmdpolicy.ErrUpdateJob // the same decision as the console page: say why, not just "busy"
+		}
 		return nil, err
 	}
 	defer release()
 	return l.DeviceCmd.Run(ctx, p, id, cmd)
+}
+
+// busyBy reports whether err says the device is held by holder.
+func busyBy(err error, holder string) bool {
+	var b devlock.BusyError
+	return errors.As(err, &b) && b.Holder == holder
 }
 
 // lockedSettings serialises settings writes; reads are not locked.

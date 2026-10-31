@@ -269,3 +269,27 @@ func TestBulkCommandRefusesACutOffChangeForMQTTOnlyDevices(t *testing.T) {
 		t.Fatalf("a device reached over HTTP: %.300s", body)
 	}
 }
+
+// Why: two firmware updates at once can brick a device. In a bulk Upgrade/OtaUrl the devices an update
+// job holds are named as refused in the preview and left out of the token, while the rest still goes;
+// if every device is held, there is nothing to confirm.
+func TestBulkFirmwareCommandLeavesOutDevicesAnUpdateJobHolds(t *testing.T) {
+	fb := &fakeBatch{}
+	jobs := &fakeJobs{jobs: []model.Job{{ID: 5, DeviceID: 1, State: model.JobAwaitReboot}}}
+	e := setupWith(t, func(d *Deps) { d.DeviceCmd = &fakeCmd{}; d.CommandBatch = fb; d.Jobs = jobs })
+	e.health[2] = model.Health{DeviceID: 2, State: model.HealthOnline, LastSeen: time.Now()}
+	resp, body := e.do(t, "POST", "/devices/bulk/command", "admin", bulkForm("id", "1", "id", "2", "command", "Upgrade 1"))
+	if resp.StatusCode != 200 || !strings.Contains(body, "Send to 1 device") || !strings.Contains(body, "update job holds this device") {
+		t.Fatalf("preview: %d %s", resp.StatusCode, body)
+	}
+	if resp, _ = e.do(t, "POST", "/devices/bulk/command/run", "admin", bulkForm("token", confirmToken(t, body))); resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("run: %d", resp.StatusCode)
+	}
+	if len(fb.reqs) != 1 || len(fb.reqs[0]) != 1 || fb.reqs[0][0].DeviceID != 2 {
+		t.Fatalf("only the free device may be submitted: %+v", fb.reqs)
+	}
+	resp, body = e.do(t, "POST", "/devices/bulk/command", "admin", bulkForm("id", "1", "command", "Upgrade 1"))
+	if resp.StatusCode != 422 || !strings.Contains(body, "update job") || strings.Contains(body, `name="token"`) {
+		t.Fatalf("all held: %d %s", resp.StatusCode, body)
+	}
+}

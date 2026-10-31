@@ -68,6 +68,9 @@ var (
 	ErrInvalid   = errors.New("cmdpolicy: malformed command")
 	ErrForbidden = errors.New("cmdpolicy: command is never sent from tasmofleet")
 	ErrRole      = errors.New("cmdpolicy: command needs a higher role")
+	// ErrUpdateJob is the refusal of a firmware command (StartsFirmware) while a TasmoFleet update job holds
+	// the device. The caller knows the job state; the policy only names the rule and the reason.
+	ErrUpdateJob = errors.New("cmdpolicy: a TasmoFleet update job holds this device")
 )
 
 // RejectedText replaces a malformed command in logs and history.
@@ -277,6 +280,16 @@ func classify(p parsed) (Verdict, string) {
 		v.Class, v.Reason = ClassRead, ""
 	}
 	return v, ""
+}
+
+// StartsFirmware reports whether cmd starts or redirects a firmware update on the device: Upgrade or
+// OtaUrl with an argument, alone or inside a Backlog. It is the one place that decides this, so the
+// console, the bulk preview and the executing service cannot disagree. Upload with an argument is
+// not typed at all (ClassForbidden), so it never reaches a device and needs no lock rule.
+// Why it matters: a second update on a device that TasmoFleet is already updating can brick it.
+func StartsFirmware(cmd string) bool {
+	v, err := Classify(cmd)
+	return err == nil && strings.Contains(v.Confirm, whyFirmware)
 }
 
 // confirmFor names the consequence of the destructive or lock-out commands,

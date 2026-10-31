@@ -77,6 +77,35 @@ func (h *handler) bulkCommandPage(w http.ResponseWriter, r *http.Request) {
 		h.showBulkScope(w, r, sv)
 		return
 	}
+	var heldRows []ui.KVRow
+	if cmdpolicy.StartsFirmware(cmd) {
+		held, err := h.updateHeld(r.Context(), ready...)
+		if err != nil {
+			h.fail(w, r, err)
+			return
+		}
+		// Only these devices are refused: the rest of the bulk still goes.
+		free := ready[:0:0]
+		for _, id := range ready {
+			if !held[id] {
+				free = append(free, id)
+				continue
+			}
+			for _, row := range sv.Rows {
+				if row.ID == id {
+					heldRows = append(heldRows, ui.KVRow{Key: "Refused", Value: row.Name + ": a TasmoFleet update job holds this device"})
+				}
+			}
+			sv.SkipN++
+		}
+		ready, sv.RunN = free, len(free)
+		if len(ready) == 0 {
+			sv.CommandError = updateJobHoldsText
+			sv.Command = safeInput(cmd)
+			h.showBulkScope(w, r, sv)
+			return
+		}
+	}
 	consequence, restart := v.Confirm, false
 	if consequence == "" && strings.EqualFold(v.Name, "restart") {
 		// Restart 1 is harmless enough for operators, but the devices still drop offline: say so, like the Restart button of the bulk bar does
@@ -102,7 +131,7 @@ func (h *handler) bulkCommandPage(w http.ResponseWriter, r *http.Request) {
 		Title: sv.Title(), Heading: "Send " + shown + " to " + plural(len(ready), "device") + "?",
 		Text:    "Devices that are not online are left out. The result page lists the answer of every device.",
 		Warning: consequence,
-		Facts:   []ui.KVRow{{Key: "Command", Value: shown, Mono: true}, {Key: "Devices", Value: sv.Summary()}},
+		Facts:   append([]ui.KVRow{{Key: "Command", Value: shown, Mono: true}, {Key: "Devices", Value: sv.Summary()}}, heldRows...),
 		Action:  view.Base + "/devices/bulk/command/run", CSRF: view.CSRF, Fields: fields,
 		Verb: verb, Danger: consequence != "", CancelHref: view.Base + "/devices", CancelLabel: "Cancel",
 	}))

@@ -690,3 +690,28 @@ func TestEditConfirmationTokenIsBoundToTheTargetAndSingleUse(t *testing.T) {
 		t.Fatalf("a used token must not work again: %d moves %d", r.StatusCode, e.inv.confirmedMoves)
 	}
 }
+
+// Why: two firmware updates at once can brick a device. While a TasmoFleet update job holds the device,
+// a typed Upgrade/OtaUrl is refused with the reason, before any confirmation and before the command is
+// sent; the same device is free for it once the job has ended, and a routine command is not affected.
+func TestConsoleRefusesFirmwareCommandWhileAnUpdateJobHoldsTheDevice(t *testing.T) {
+	jobs := &fakeJobs{jobs: []model.Job{{ID: 5, DeviceID: 1, State: model.JobQueued}}}
+	f := &fakeCmd{reply: `{}`}
+	e := setupWith(t, func(d *Deps) { d.DeviceCmd, d.Jobs = f, jobs })
+	for _, c := range []string{"Upgrade 1", "OtaUrl http://x/y.bin", "Backlog OtaUrl http://x/y.bin; Upgrade 1"} {
+		resp, body := e.do(t, "POST", "/devices/1/console", "admin", consoleForm(c))
+		if resp.StatusCode != 409 || !strings.Contains(body, "update job") || strings.Contains(body, "Confirm sending") {
+			t.Errorf("%q: %d %s", c, resp.StatusCode, body)
+		}
+	}
+	if resp, _ := e.do(t, "POST", "/devices/1/console", "admin", consoleForm("Status 2")); resp.StatusCode != 200 {
+		t.Errorf("a routine command is not affected: %d", resp.StatusCode)
+	}
+	if got := f.ran(); len(got) != 1 {
+		t.Fatalf("only the routine command may be sent: %v", got)
+	}
+	jobs.jobs[0].State = model.JobSucceeded // the job ended
+	if resp, body := e.do(t, "POST", "/devices/1/console", "admin", consoleForm("Upgrade 1")); resp.StatusCode != 200 || !strings.Contains(body, "Confirm sending") {
+		t.Errorf("free again, with the usual confirmation: %d %s", resp.StatusCode, body)
+	}
+}
