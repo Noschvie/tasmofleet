@@ -2,7 +2,9 @@ package web
 
 import (
 	"strconv"
+	"strings"
 
+	"github.com/nofuturekid/tasmofleet/internal/tasmotacmd"
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
 
@@ -13,44 +15,199 @@ func vstr(n int64) string { return strconv.FormatInt(n, 10) }
 
 // commandField is the command input with its suggestions, help and, after a refused save, the
 // reason. The reason describes the command that was saved: changing the command clears it (the
-// value-control answer replaces #err-command out of band, policy.js drops aria-invalid).
-templ commandField(base string, groups []settingGroup, command string, invalid bool, errMsg string) {
-	<div class="ufield" id="command-field">
-		<label class="ufield-label" for="rule-command">Command</label>
-		<input
-			id="rule-command"
-			name="command"
-			class="mono"
-			list="rule-commands"
-			value={ command }
-			maxlength="32"
-			autocomplete="off"
-			autocapitalize="off"
-			spellcheck="false"
-			placeholder="e.g. PowerOnState, Sleep, SetOption19"
-			aria-describedby={ commandDescribedBy(invalid) }
-			hx-get={ base + rulesPath + "/value-control" }
-			hx-trigger="change consume"
-			hx-target="#want-control"
-			hx-swap="innerHTML"
-			hx-include="[name='want']"
-			if invalid {
-				aria-invalid="true"
-				autofocus
-			}
-		/>
-		<datalist id="rule-commands">
-			for _, g := range groups {
-				for _, c := range g.Choices {
-					<option value={ c.Key }>{ c.Label }</option>
+// value-control answer replaces #err-command out of band, policy.js drops aria-invalid). For a
+// command with an index range the input is a name with a number box (SetOption [19]); policy.js
+// keeps the hidden command in step with the box. oob: the answer of a change that switches
+// between the two forms replaces the whole field.
+templ commandField(base string, cv commandView, invalid bool, errMsg string, oob bool) {
+	<div class="ufield cmd-rel" id="command-field" if oob { hx-swap-oob="true" }>
+		if cv.Indexed {
+			<span class="ufield-label" id="cmd-l">Command</span>
+			<div class="cmd-idx" role="group" aria-labelledby="cmd-l">
+				<span class="cmd-idx-base mono">{ cv.Base }</span>
+				<input
+					id="rule-index"
+					name="index"
+					form="cmd-index-none"
+					class="mono"
+					type="number"
+					inputmode="numeric"
+					min={ itoa(cv.Lo) }
+					max={ itoa(cv.Hi) }
+					step="1"
+					value={ cv.Index }
+					data-cmd-base={ cv.Base }
+					aria-label={ cv.Base + " index, " + itoa(cv.Lo) + " to " + itoa(cv.Hi) }
+					aria-describedby="help-command cmd-sends"
+					hx-get={ base + rulesPath + "/value-control?base=" + cv.Base }
+					hx-trigger="change consume"
+					hx-target="#want-control"
+					hx-swap="innerHTML"
+					hx-include="[name='want']"
+					if cv.Index == "" || invalid {
+						autofocus
+					}
+					if invalid {
+						aria-invalid="true"
+					}
+				/>
+				<span class="cmd-idx-range">{ itoa(cv.Lo) } to { itoa(cv.Hi) }</span>
+				<button
+					type="button"
+					class="cmd-idx-x"
+					aria-label="Change command"
+					hx-get={ base + rulesPath + "/value-control?edit=1&base=" + cv.Base }
+					hx-include="#rule-index, [name='want']"
+					hx-target="#want-control"
+					hx-swap="innerHTML"
+				>Change</button>
+			</div>
+			<input type="hidden" id="rule-command" name="command" value={ cv.Command }/>
+			@commandSends(cv, false)
+		} else {
+			<label class="ufield-label" for="rule-command">Command</label>
+			<input
+				id="rule-command"
+				name="command"
+				class="mono"
+				value={ cv.Command }
+				maxlength="32"
+				autocomplete="off"
+				autocapitalize="off"
+				spellcheck="false"
+				placeholder="e.g. PowerOnState, Sleep, SetOption19"
+				role="combobox"
+				aria-expanded="false"
+				aria-controls="cmd-sug"
+				aria-autocomplete="list"
+				aria-describedby={ commandDescribedBy(invalid) }
+				data-cmd-suggest={ base + rulesPath + "/command-suggest" }
+				hx-get={ base + rulesPath + "/value-control" }
+				hx-trigger="change consume"
+				hx-target="#want-control"
+				hx-swap="innerHTML"
+				hx-include="[name='want']"
+				if invalid {
+					aria-invalid="true"
+					autofocus
 				}
-			}
-		</datalist>
-		<span class="ufield-help" id="help-command">Any Tasmota command that answers a plain query, or pick a setting from the list. Status commands, secrets and commands that act when sent without a value are refused. The device is asked live, one command at a time; there is no per-rule read override.</span>
+			/>
+			<div class="cmd-sug" id="cmd-sug" role="listbox" aria-label="Command suggestions" hidden></div>
+		}
+		@commandHelp(cv, false)
 		if invalid {
 			@commandErr(errMsg, false)
 		} else {
 			@commandErr("", false)
+		}
+	</div>
+}
+
+// commandSends says which command the index box sends.
+templ commandSends(cv commandView, oob bool) {
+	<span class="ufield-help" id="cmd-sends" if oob { hx-swap-oob="true" }>
+		if cv.Index != "" {
+			Sends <b class="mono">{ cv.Command }</b>. Index { itoa(cv.Lo) } to { itoa(cv.Hi) }.
+		} else {
+			Type the index, { itoa(cv.Lo) } to { itoa(cv.Hi) }.
+		}
+	</span>
+}
+
+// commandHelp is the line under the command: our own one-line description and the link to the
+// Tasmota docs when the catalogue knows the command, a pointer to the suggestions otherwise.
+templ commandHelp(cv commandView, oob bool) {
+	<p class="ufield-help cmd-help" id="help-command" if oob { hx-swap-oob="true" }>
+		if cv.Desc == "" && cv.DocsURL == "" {
+			Type a command name. Suggestions come from the Tasmota versions in your fleet. Status commands, secrets and commands that act when sent without a value are refused.
+		} else {
+			if cv.Desc != "" {
+				{ cv.Desc }
+				{ " " }
+			}
+			if cv.DocsURL != "" {
+				<a class="cmd-doc" href={ templ.SafeURL(cv.DocsURL) } target="_blank" rel="noopener">Tasmota docs<svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M4 2h6v6M10 2L3 9" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"></path></svg></a>
+			}
+		}
+	</p>
+}
+
+// commandCheck is the banner under the command and value: which Tasmota versions of the fleet know
+// the command and which devices lack a feature. It warns; only a command no fleet version has
+// cannot be saved.
+templ commandCheck(c *checkView, oob bool) {
+	<div id="command-check" if oob { hx-swap-oob="true" }>
+		if c != nil {
+			<div class={ "banner", "tone-" + string(c.Tone), "cmd-check" } role="status">
+				<span class="banner-dot"></span>
+				<div class="banner-text">
+					<b>{ c.Title }</b>
+					if len(c.Rows) > 0 {
+						<ul class="cmd-vers" aria-label="Result per Tasmota version in the fleet">
+							for _, r := range c.Rows {
+								<li class={ "cmd-v", templ.KV("ok", r.OK), templ.KV("no", !r.OK) }>
+									<span class="cmd-vn mono">{ r.Version }</span>
+									<span class="cmd-vd">{ r.Devices }</span>
+									<span class="cmd-vr">
+										if r.OK {
+											<svg class="cmd-i ok" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+										} else {
+											<svg class="cmd-i no" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path></svg>
+										}
+										{ r.Result }
+									</span>
+								</li>
+							}
+						</ul>
+					}
+					<span class="cmd-foot">{ c.Foot }</span>
+				</div>
+			</div>
+		}
+	</div>
+}
+
+// commandSuggestList is the content of the suggestion listbox for the typed text.
+templ commandSuggestList(v suggestView) {
+	if v.Shown == 0 {
+		<div class="cmd-sug-g">No command “{ v.Query }” in Tasmota { strings.Join(v.Versions, ", ") }</div>
+	} else {
+		if len(v.Starts) > 0 {
+			<div class="cmd-sug-g">Starts with “{ v.Query }”</div>
+			for _, s := range v.Starts {
+				@suggestOption(s)
+			}
+		}
+		if len(v.Contains) > 0 {
+			<div class="cmd-sug-g">Contains “{ v.Query }”</div>
+			for _, s := range v.Contains {
+				@suggestOption(s)
+			}
+		}
+	}
+	<div class="cmd-sug-f">
+		{ itoa(v.Shown) } of { itoa(v.Total) } commands in Tasmota { strings.Join(v.Versions, ", ") }
+		<span class="cmd-sug-keys" aria-hidden="true">· <kbd>↑</kbd><kbd>↓</kbd> move, <kbd>Enter</kbd> pick, <kbd>Esc</kbd> close</span>
+	</div>
+}
+
+// indexMark is the <n> after the name of a command that takes an index.
+templ indexMark(indexed bool) {
+	if indexed {
+		<i>&lt;n&gt;</i>
+	}
+}
+
+templ suggestOption(s tasmotacmd.Suggestion) {
+	<div class="cmd-opt" role="option" aria-selected="false" data-name={ s.Name }>
+		<span class="cmd-opt-n mono">{ s.Name }@indexMark(s.Indexed)</span>
+		if s.Indexed {
+			<span class="cmd-opt-r mono">{ itoa(s.Lo) + ".." + itoa(s.Hi) }</span>
+		} else if s.Needs != "" {
+			<span class="cmd-opt-r">needs { s.Needs }</span>
+		}
+		if s.Desc != "" {
+			<span class="cmd-opt-d">{ s.Desc }</span>
 		}
 	</div>
 }
@@ -61,16 +218,31 @@ templ commandErr(msg string, oob bool) {
 	<span class="ufield-err" id="err-command" if msg != "" { role="alert" } if msg == "" { hidden } if oob { hx-swap-oob="true" }>{ msg }</span>
 }
 
-// ruleValueSwap answers a change of the command: the value control, and no reason any more.
-templ ruleValueSwap(vc valueControl) {
+// ruleValueSwap answers a change of the command: the value control, no reason any more, the help
+// and the fleet check of the new command, and the field itself when it changes form.
+templ ruleValueSwap(vc valueControl, cv commandView, base string, swapField bool) {
 	@ruleValue(vc)
 	@commandErr("", true)
+	@commandCheck(cv.Check, true)
+	if swapField {
+		@commandField(base, cv, false, "", true)
+	} else {
+		@commandHelp(cv, true)
+		if cv.Indexed {
+			@commandSends(cv, true)
+		}
+	}
 }
 
 // ruleValue is the expected-value input; its kind follows the setting (htmx swaps it when the
-// setting changes).
+// setting changes). A small label names the kind.
 templ ruleValue(vc valueControl) {
-	<label class="ufield-label" for="want">Expected value</label>
+	<span class="cmd-lrow">
+		<label class="ufield-label" for="want">Expected value</label>
+		if b := kindBadge(vc.Kind); b != "" {
+			<span class="cmd-kind">{ b }</span>
+		}
+	</span>
 	switch vc.Kind {
 		case "select":
 			<select id="want" name="want" class="mono" required if vc.Invalid {
@@ -85,25 +257,30 @@ templ ruleValue(vc valueControl) {
 			</select>
 		case "toggle":
 			<span class="useg" role="radiogroup" aria-label="Expected value">
-				<label><input type="radio" name="want" value="1" checked?={ vc.Want == "1" } required/><span>on (1)</span></label>
-				<label><input type="radio" name="want" value="0" checked?={ vc.Want == "0" } required/><span>off (0)</span></label>
+				<label><input type="radio" name="want" value="1" checked?={ vc.Want == "1" } required/><span>On</span></label>
+				<label><input type="radio" name="want" value="0" checked?={ vc.Want == "0" } required/><span>Off</span></label>
+			</span>
+		case "state":
+			<span class="useg" role="radiogroup" aria-label="Expected state">
+				<label><input type="radio" name="want" value="1" checked?={ stateIsOn(vc.Want) } required/><span>On</span></label>
+				<label><input type="radio" name="want" value="0" checked?={ stateIsOff(vc.Want) } required/><span>Off</span></label>
 			</span>
 		case "number":
 			if vc.HasRange {
-				<input id="want" name="want" type="number" step="1" class="mono" required min={ itoa(vc.Min) } max={ itoa(vc.Max) } value={ vc.Want } if vc.Invalid {
+				<input id="want" name="want" type="number" step={ numberStep(vc.Decimal) } class="mono" required min={ itoa(vc.Min) } max={ itoa(vc.Max) } value={ vc.Want } if vc.Invalid {
 	aria-invalid="true"
 	aria-describedby="err-want"
 	autofocus
 }/>
 			} else {
-				<input id="want" name="want" type="number" step="1" class="mono" required value={ vc.Want } if vc.Invalid {
+				<input id="want" name="want" type="number" step={ numberStep(vc.Decimal) } class="mono" required value={ vc.Want } if vc.Invalid {
 	aria-invalid="true"
 	aria-describedby="err-want"
 	autofocus
 }/>
 			}
 		case "none":
-			<input id="want" name="want" type="text" class="mono" disabled placeholder="Enter a command first"/>
+			<input id="want" name="want" type="text" class="mono" disabled placeholder="Pick a command first"/>
 		default:
 			<input id="want" name="want" type="text" class="mono" maxlength="64" required value={ vc.Want } if vc.Invalid {
 	aria-invalid="true"
@@ -115,6 +292,16 @@ templ ruleValue(vc valueControl) {
 		<span class="ufield-help">{ vc.Hint }</span>
 	}
 }
+
+func numberStep(decimal bool) string {
+	if decimal {
+		return "any"
+	}
+	return "1"
+}
+
+func stateIsOn(w string) bool  { return w == "1" || strings.EqualFold(w, "on") }
+func stateIsOff(w string) bool { return w == "0" || strings.EqualFold(w, "off") }
 
 // policyIOPage is GET /policy/io: Export (the rules as JSON) and Import (paste, check, save).
 templ policyIOPage(p policyIOView) {

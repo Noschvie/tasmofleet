@@ -132,8 +132,10 @@ func (h *handler) ruleStats(ctx context.Context, src ruleList, spec sysconfig.Ru
 func (h *handler) ruleStatOf(rep PolicyReport, rules []policy.Rule, pos int) ruleStat {
 	st := ruleStat{OK: true, Devices: len(rep.Devices)}
 	names := make(map[model.DeviceID]string, len(rep.Devices))
+	byID := make(map[model.DeviceID]model.Device, len(rep.Devices))
 	for _, d := range rep.Devices {
 		names[d.ID] = d.Name
+		byID[d.ID] = d
 	}
 	key := strings.ToLower(rules[pos].Command)
 	now := h.d.Clock.Now()
@@ -152,7 +154,9 @@ func (h *handler) ruleStatOf(rep PolicyReport, rules []policy.Rule, pos int) rul
 			row.Have, row.Source = o.Have, valueSource(src, haveSrc, now)
 		case policy.OutcomeUnknown:
 			st.Unknown++
-			switch {
+			switch note := notJudgedNote(rules[pos].Command, byID[o.DeviceID]); {
+			case note != "":
+				row.Source = note // the device's firmware does not know the command: nothing to wait for
 			case haveSrc:
 				row.Source = "chip family unknown" // the value is there, the family-limited rule cannot be judged
 			case rep.NotLive[key]:
@@ -584,7 +588,6 @@ type newRuleView struct {
 	CopyCommand string
 	CopyErr     string
 	Banner      string
-	Commands    []settingGroup
 }
 
 // sameScope says whether two rules judge the same devices.
@@ -781,7 +784,7 @@ func (h *handler) ruleNewRender(w http.ResponseWriter, r *http.Request, status i
 		saved = st.Specs
 	}
 	p := newRuleView{Base: v.Base, CSRF: v.CSRF, Q: o.Q, Command: o.Command, CommandErr: o.CommandErr,
-		CopyCommand: o.CopyCommand, CopyErr: o.CopyErr, Banner: o.Banner, Commands: settingGroups()}
+		CopyCommand: o.CopyCommand, CopyErr: o.CopyErr, Banner: o.Banner}
 	needle := strings.ToLower(o.Q)
 	byGroup := map[string][]tplCard{}
 	for _, t := range policyTemplates(h.brokerHost()) {

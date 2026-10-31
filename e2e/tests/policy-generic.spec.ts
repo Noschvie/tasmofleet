@@ -67,7 +67,9 @@ test("a free command rule: refusals with the reason, then live read, preview and
   await any.fill("LedState");
   await page.getByRole("button", { name: "Continue" }).first().click();
   await expect(page).toHaveURL(/\/policy\/rules\/new\?command=LedState$/);
-  await expect(page.locator("#want-control .ufield-help")).toContainText("Compared with exactly what the device reports for LedState");
+  // LedState is in no curated list, so the value field follows the catalogue: it answers a number (#269)
+  await expect(page.locator("#want-control .cmd-kind")).toHaveText("number");
+  await expect(page.locator("#want-control .ufield-help")).toContainText("Whole number.");
   await page.locator("input[name='want']").fill("3");
   await page.locator("input[name='name']").fill("LED state 3");
   await page.getByRole("radio", { name: /^Required/ }).check(); // only Required rules are fixed

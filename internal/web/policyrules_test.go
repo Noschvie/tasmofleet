@@ -273,8 +273,8 @@ func TestPolicyOverviewRowsAndTheRulePageChoices(t *testing.T) {
 	}
 	id := ruleIDs(t, mem)[0]
 	_, page = e.do(t, "GET", "/policy/rules/"+id, "admin", nil)
-	for _, w := range []string{`<input id="rule-command" name="command"`, `<datalist id="rule-commands">`, `<option value="PowerOnState">`, `value="esp8266"`, `value="esp32*"`, `value="esp32c3"`, `name="tag" value="kitchen"`, `name="device" value="attic"`, `name="device" value="kitchen"`, `value="info"`,
-		`value="No save state"`, `list="rule-commands" value="SetOption0"`, `name="family" value="esp32*" checked`, `name="tag" value="attic" checked`, `name="tag" value="garage" checked`, `value="lamp"`, `name="id" value="` + id + `"`} {
+	for _, w := range []string{`<input type="hidden" id="rule-command" name="command" value="SetOption0"`, `data-cmd-base="SetOption"`, `value="esp8266"`, `value="esp32*"`, `value="esp32c3"`, `name="tag" value="kitchen"`, `name="device" value="attic"`, `name="device" value="kitchen"`, `value="info"`,
+		`value="No save state"`, `name="family" value="esp32*" checked`, `name="tag" value="attic" checked`, `name="tag" value="garage" checked`, `value="lamp"`, `name="id" value="` + id + `"`} {
 		if !strings.Contains(page, w) {
 			t.Errorf("rule page lacks %q", w)
 		}
@@ -282,8 +282,8 @@ func TestPolicyOverviewRowsAndTheRulePageChoices(t *testing.T) {
 	if strings.Contains(page, `<option value="MqttPassword"`) {
 		t.Error("secret settings must not be offered")
 	}
-	if !strings.Contains(page, "SetOption0 (save_state)") || !strings.Contains(page, "restore relay state") {
-		t.Error("a SetOption is offered with its name and description")
+	if strings.Contains(page, `rule-commands`) {
+		t.Error("the hand-written suggestion list is gone: suggestions come from the catalogue")
 	}
 }
 

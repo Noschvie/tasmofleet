@@ -346,3 +346,195 @@
     form.submit();
   });
 })();
+
+// Command field (#269): suggestions from the Tasmota command catalogue and the index box.
+// An input with data-cmd-suggest asks the server for matching commands as you type and shows them
+// in a listbox (arrow keys, Enter, Escape, mouse); picking one sets the input and fires "change",
+// which asks for the value control of that command. For a command with an index range the field is
+// a name and a number box; the hidden "command" input is kept in step here, before htmx reads it.
+// Without this file the field is a plain text input and the server checks what is saved.
+(function () {
+  "use strict";
+  var timer = null;
+  var pending = null;
+  var seq = 0;
+
+  function boxFor(input) {
+    var box = input.nextElementSibling;
+    if (box && box.classList.contains("cmd-sug")) {
+      return box;
+    }
+    box = document.createElement("div");
+    box.className = "cmd-sug";
+    box.id = "cmd-sug-" + ++seq;
+    box.setAttribute("role", "listbox");
+    box.setAttribute("aria-label", "Command suggestions");
+    box.hidden = true;
+    input.parentNode.classList.add("cmd-rel");
+    input.parentNode.insertBefore(box, input.nextSibling);
+    input.setAttribute("role", "combobox");
+    input.setAttribute("aria-autocomplete", "list");
+    input.setAttribute("aria-controls", box.id);
+    return box;
+  }
+
+  function options(box) {
+    return Array.prototype.slice.call(box.querySelectorAll("[data-name]"));
+  }
+
+  function close(input) {
+    var box = boxFor(input);
+    box.hidden = true;
+    input.setAttribute("aria-expanded", "false");
+    input.removeAttribute("aria-activedescendant");
+  }
+
+  function activate(input, box, n) {
+    var opts = options(box);
+    if (opts.length === 0) {
+      return;
+    }
+    n = (n + opts.length) % opts.length;
+    opts.forEach(function (o, i) {
+      var on = i === n;
+      o.classList.toggle("on", on);
+      o.setAttribute("aria-selected", on ? "true" : "false");
+      if (on) {
+        o.id = o.id || box.id + "-o" + i;
+        input.setAttribute("aria-activedescendant", o.id);
+        o.scrollIntoView({ block: "nearest" });
+      }
+    });
+  }
+
+  function current(box) {
+    return options(box).findIndex(function (o) {
+      return o.classList.contains("on");
+    });
+  }
+
+  function pick(input, name) {
+    input.value = name;
+    close(input);
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  function ask(input) {
+    var q = input.value.trim();
+    var box = boxFor(input);
+    if (q === "") {
+      close(input);
+      return;
+    }
+    if (pending) {
+      pending.abort();
+    }
+    pending = window.AbortController ? new AbortController() : null;
+    fetch(input.getAttribute("data-cmd-suggest") + "?command=" + encodeURIComponent(q), {
+      headers: { "HX-Request": "true" },
+      credentials: "same-origin",
+      signal: pending ? pending.signal : undefined,
+    })
+      .then(function (r) {
+        return r.ok ? r.text() : "";
+      })
+      .then(function (html) {
+        if (html === "" || document.activeElement !== input) {
+          return;
+        }
+        box.innerHTML = html;
+        box.hidden = false;
+        input.setAttribute("aria-expanded", "true");
+        activate(input, box, 0);
+      })
+      .catch(function () {
+        // aborted by a newer keystroke, or offline: the field stays a plain input
+      });
+  }
+
+  document.addEventListener("input", function (e) {
+    var t = e.target;
+    if (t && t.hasAttribute && t.hasAttribute("data-cmd-suggest")) {
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        ask(t);
+      }, 150);
+    }
+  });
+
+  document.addEventListener("keydown", function (e) {
+    var t = e.target;
+    if (!t || !t.hasAttribute || !t.hasAttribute("data-cmd-suggest")) {
+      return;
+    }
+    var box = boxFor(t);
+    if (box.hidden) {
+      return;
+    }
+    var i = current(box);
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      activate(t, box, i + (e.key === "ArrowDown" ? 1 : -1));
+    } else if (e.key === "Enter" && i >= 0) {
+      e.preventDefault();
+      pick(t, options(box)[i].getAttribute("data-name"));
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      close(t);
+    }
+  });
+
+  // mousedown, not click: the input must not lose focus before the pick
+  document.addEventListener("mousedown", function (e) {
+    var o = e.target && e.target.closest ? e.target.closest(".cmd-sug [data-name]") : null;
+    if (!o) {
+      return;
+    }
+    e.preventDefault();
+    var input = o.closest(".cmd-rel").querySelector("[data-cmd-suggest]");
+    if (input) {
+      pick(input, o.getAttribute("data-name"));
+    }
+  });
+
+  document.addEventListener("focusout", function (e) {
+    var t = e.target;
+    if (t && t.hasAttribute && t.hasAttribute("data-cmd-suggest")) {
+      close(t);
+    }
+  });
+
+  // One change of the command per value: a pick fires "change" itself, and the browser fires another
+  // when the field loses focus; the second would ask for the value control again and replace what
+  // was typed into the value field in the meantime.
+  document.addEventListener(
+    "change",
+    function (e) {
+      var t = e.target;
+      if (t && t.hasAttribute && t.hasAttribute("data-cmd-suggest")) {
+        if (t.sent === t.value) {
+          e.stopPropagation();
+          return;
+        }
+        t.sent = t.value;
+      }
+    },
+    true,
+  );
+
+  // The index box: the hidden command is the name and the number, set in the capture phase so the
+  // preview and the value-control request (htmx, bubbling) read the new command.
+  function syncIndex(e) {
+    var t = e.target;
+    if (!t || !t.hasAttribute || !t.hasAttribute("data-cmd-base")) {
+      return;
+    }
+    var hidden = document.getElementById("rule-command");
+    if (hidden) {
+      hidden.value = t.getAttribute("data-cmd-base") + t.value.trim();
+    }
+  }
+  document.addEventListener("input", syncIndex, true);
+  document.addEventListener("change", syncIndex, true);
+})();

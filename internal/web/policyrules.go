@@ -65,6 +65,7 @@ func (h *handler) registerPolicyRules(route func(string, func(http.Handler) http
 	route("GET "+policyIOPath+"/export", op, h.rulesExport)
 	route("POST "+policyIOPath+"/import", adm, h.rulesImport)
 	route("GET "+rulesPath+"/value-control", adm, h.rulesValueControl)
+	route("GET "+rulesPath+"/command-suggest", adm, h.commandSuggest)
 	route("GET "+rulesPath+"/new", adm, h.ruleNew)
 	route("GET "+rulesPath+"/duplicate", adm, h.ruleDuplicate)
 	route("POST "+rulesPath+"/new/copy", adm, h.ruleCopy)
@@ -76,13 +77,6 @@ func (h *handler) registerPolicyRules(route func(string, func(http.Handler) http
 	h.registerPolicyRuleOps(route, adm)
 }
 
-type settingChoice struct{ Key, Label string }
-
-type settingGroup struct {
-	Name    string
-	Choices []settingChoice
-}
-
 type chip struct {
 	Value string
 	Label string // shown instead of Value when set
@@ -92,11 +86,12 @@ type chip struct {
 // valueControl is the input for the expected value; its kind follows the
 // setting: select (enum), toggle (SetOption), number (with range) or text.
 type valueControl struct {
-	Kind     string // none, select, toggle, number, text
+	Kind     string // none, select, toggle, state, number, text
 	Want     string
 	Options  []settings.Option
 	Min, Max int
 	HasRange bool
+	Decimal  bool // a number that may have decimals (Latitude)
 	Hint     string
 	Invalid  bool // the expected value is the failing field of the last save
 }
@@ -108,7 +103,7 @@ type ruleEditor struct {
 	Version  int64
 	Err      string // sentence for the failing field (ErrField), or for the whole rule when ErrField is empty
 	ErrField string // "command", "want" or "change_note"; empty: no single field
-	Groups   []settingGroup
+	Cmd      commandView
 	Control  valueControl
 	Families []chip
 	Tags     []scopeTag    // every tag in use, the rule's own too, with how many devices carry it
@@ -143,36 +138,6 @@ func settingLabel(cmd string) (label, key string) {
 		return l, ""
 	}
 	return l, cmd
-}
-
-func choiceLabel(cmd string) string {
-	l, k := settingLabel(cmd)
-	if k != "" {
-		return l + " (" + k + ")"
-	}
-	return l
-}
-
-// settingGroups lists the curated settings offered as suggestions for the
-// command field, grouped like the settings editor. The field takes any
-// other command too; the suggestions are only the ones with a label and a
-// checked value.
-func settingGroups() []settingGroup {
-	var out []settingGroup
-	idx := map[string]int{}
-	for _, f := range settings.Fields {
-		if f.Secret || !settings.Queryable(f.Key) {
-			continue
-		}
-		i, ok := idx[f.Group]
-		if !ok {
-			i = len(out)
-			idx[f.Group] = i
-			out = append(out, settingGroup{Name: f.Group})
-		}
-		out[i].Choices = append(out[i].Choices, settingChoice{Key: f.Key, Label: choiceLabel(f.Key)})
-	}
-	return out
 }
 
 // controlFor picks the value control of a setting. keepInvalid keeps a
@@ -210,6 +175,9 @@ func controlFor(command, want string, keepInvalid bool) valueControl {
 		}
 	case setOptionRe.MatchString(command) && (want == "" || want == "0" || want == "1"):
 		vc.Kind = "toggle"
+		vc.Hint = "On or off. " + command + " takes 0 or 1 on the device; we compare with the state it reports."
+	case catalogueValue(&vc, command, keepInvalid):
+		// kind, range and hint come from the Tasmota command catalogue
 	case settings.Generic(command):
 		vc.Hint = "Compared with exactly what the device reports for " + command + ". ON and OFF count as 1 and 0."
 	}
@@ -225,7 +193,7 @@ func wantText(cmd, want string) string {
 				return o.Label
 			}
 		}
-	case "toggle":
+	case "toggle", "state":
 		switch want {
 		case "1":
 			return "on (1)"
@@ -288,7 +256,7 @@ func (h *handler) editorFields(r *http.Request, spec sysconfig.RuleSpec) (*ruleE
 	}
 	return &ruleEditor{
 		Spec:     spec,
-		Groups:   settingGroups(),
+		Cmd:      h.commandViewOf(r.Context(), spec.Command),
 		Control:  controlFor(spec.Command, spec.Want, true),
 		Families: fam, Tags: tags, Devices: rows, Names: names,
 		Except: slices.Clone(spec.Except),
@@ -451,18 +419,40 @@ func (h *handler) rulesPreview(w http.ResponseWriter, r *http.Request) {
 	h.ruleDevicesPreview(w, r, d, st)
 }
 
-// rulesValueControl renders the expected-value input for the chosen setting.
+// rulesValueControl answers a change of the command: the expected-value input for it, the help and
+// the fleet check, and, when the command switches between a plain input and a name with an index
+// box, the command field itself. The index form sends base and index, the plain form the command;
+// edit=1 (the Change button) asks for the plain form.
 func (h *handler) rulesValueControl(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	for k, vs := range q {
-		if (k != "command" && k != "want") || len(vs) != 1 {
+		if (k != "command" && k != "want" && k != "base" && k != "index" && k != "edit") || len(vs) != 1 {
 			http.Error(w, "unknown form field", http.StatusBadRequest)
 			return
 		}
 	}
 	command := strings.TrimSpace(q.Get("command"))
-	h.component(w, r, http.StatusOK, ruleValueSwap(controlFor(command, strings.TrimSpace(q.Get("want")), false)))
+	composite := q.Has("base")
+	if composite {
+		base, index := strings.TrimSpace(q.Get("base")), strings.TrimSpace(q.Get("index"))
+		if !baseRe.MatchString(base) || (index != "" && !indexRe.MatchString(index)) {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+		command = base + index
+	}
+	cv := h.commandViewOf(r.Context(), command)
+	if q.Get("edit") == "1" {
+		cv.Indexed = false
+	}
+	swap := cv.Indexed != composite
+	h.component(w, r, http.StatusOK, ruleValueSwap(controlFor(command, strings.TrimSpace(q.Get("want")), false), cv, httpBase(r), swap))
 }
+
+var (
+	baseRe  = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]{0,31}$`)
+	indexRe = regexp.MustCompile(`^[0-9]{1,4}$`)
+)
 
 // staleText is the banner of a change made on an outdated version of the rules.
 const staleText = "Nothing was saved. The rules were changed by someone else since you opened this page. Check the list and make your change again."
@@ -502,6 +492,14 @@ func (h *handler) rulesSave(w http.ResponseWriter, r *http.Request) {
 	}
 	if field, msg := draftProblem(d.Spec); field != "" {
 		h.rulesInvalid(w, r, d, field, msg, http.StatusUnprocessableEntity)
+		return
+	}
+	if msg := h.unknownCommand(r.Context(), d.Spec.Command); msg != "" {
+		h.rulesInvalid(w, r, d, "command", msg, http.StatusUnprocessableEntity)
+		return
+	}
+	if msg := catalogueWantProblem(d.Spec.Command, d.Spec.Want); msg != "" {
+		h.rulesInvalid(w, r, d, "want", msg, http.StatusUnprocessableEntity)
 		return
 	}
 	note := d.ChangeNote

@@ -250,11 +250,12 @@ templ ruleEditCard(p rulePageView, e *ruleEditor) {
 				<input name="name" value={ e.Spec.Name } maxlength="80" placeholder="New rule"/>
 			</label>
 			<div class="pol-two">
-				@commandField(p.Base, e.Groups, e.Spec.Command, e.ErrField == "command", e.Err)
+				@commandField(p.Base, e.Cmd, e.ErrField == "command", e.Err, false)
 				<div class="ufield" id="want-control">
 					@ruleValue(e.Control)
 				</div>
 			</div>
+			@commandCheck(e.Cmd.Check, false)
 			if e.ErrField == "want" {
 				<span class="ufield-err" id="err-want" role="alert">{ e.Err }</span>
 			}
@@ -501,7 +502,7 @@ templ newRulePage(p newRuleView) {
 								id="any-command"
 								name="command"
 								class="mono"
-								list="rule-commands"
+								data-cmd-suggest={ p.Base + rulesPath + "/command-suggest" }
 								value={ p.Command }
 								maxlength="32"
 								autocomplete="off"
@@ -540,7 +541,7 @@ templ newRulePage(p newRuleView) {
 								id="copy-command"
 								name="command"
 								class="mono"
-								list="rule-commands"
+								data-cmd-suggest={ p.Base + rulesPath + "/command-suggest" }
 								value={ p.CopyCommand }
 								maxlength="32"
 								autocomplete="off"
@@ -562,13 +563,6 @@ templ newRulePage(p newRuleView) {
 				</section>
 			</div>
 		</div>
-		<datalist id="rule-commands">
-			for _, g := range p.Commands {
-				for _, c := range g.Choices {
-					<option value={ c.Key }>{ c.Label }</option>
-				}
-			}
-		</datalist>
 		<script src={ p.Base + "/static/" + asset("policy.js") } defer></script>
 	</div>
 }
