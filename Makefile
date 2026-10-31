@@ -44,13 +44,32 @@ TESTFLAGS ?=
 # Extra Playwright arguments, e.g. E2E_ARGS=--shard=1/2 (CI).
 E2E_ARGS  ?=
 
-.PHONY: catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test race integration mutation mutation-changed mutation-sum safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check changelog-title migration-guard changelog-notes clean tools
+.PHONY: catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check changelog-title migration-guard changelog-notes clean tools
 
-check: templ-check fmt-check vet staticcheck lint test scripts-test integration vuln build
+check: templ-check fmt-check vet staticcheck lint test scripts-test shards-check integration vuln build
 
 # Unit tests of the registry cleanup's version selection (pure, no registry access).
 scripts-test:
 	node --test scripts/
+
+# CI splits the FULL tier's race run (tools/race.sh, RACE_SHARD=i/2) and mutation run
+# (MUTATION_SHARD=i/MUTATION_CI_SHARDS, tools/mutation-shard.sh) into shards. Fails when a package
+# is in no race shard, or a file of a MUTATION package is dealt to no (or two) mutation shards.
+# "make mutation-plan" prints the plan with the estimated load per shard.
+MUTATION_CI_SHARDS := 4
+MUTATION_PKGS := $(foreach e,$(MUTATION),$(firstword $(subst :, ,$(e))))
+export MUTATION_PKGS
+shards-check:
+	@tools/race.sh --check
+	@for p in $(MUTATION_PKGS); do \
+	  want=$$(go list -f '{{range .GoFiles}}{{.}}{{"\n"}}{{end}}' "$$p" | sort); got=""; \
+	  i=1; while [ $$i -le $(MUTATION_CI_SHARDS) ]; do got="$$got$$(tools/mutation-shard.sh $$i/$(MUTATION_CI_SHARDS) "$${p#./}" | awk '{print $$2}')\n"; i=$$((i+1)); done; \
+	  got=$$(printf "$$got" | grep . | sort); \
+	  [ "$$want" = "$$got" ] || { echo "shards-check: $$p files are not in exactly one of $(MUTATION_CI_SHARDS) mutation shards" >&2; exit 1; }; \
+	done; echo "shards-check: every MUTATION package file is in exactly one of $(MUTATION_CI_SHARDS) mutation shards"
+
+mutation-plan:
+	@tools/mutation-shard.sh plan $(MUTATION_CI_SHARDS)
 
 ci: check race mutation e2e catalogue-check
 

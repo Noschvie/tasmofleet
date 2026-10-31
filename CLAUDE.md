@@ -193,7 +193,7 @@ with e.g. `make check JOBS=4`. `make test` and `make integration` use the go tes
   lint, unit and integration tests from the go test cache, build, and the `@core` e2e tests in two shards.
   When a PR changes a package listed in `SAFETY` (Makefile: fwselect, ota, tasmota, secretbox, auth, httpx,
   policy, cmdpolicy), the race tests of the changed ones and `make mutation-changed` run too, and are then
-  required. CI runs mutation in three shards (`MUTATION_SHARD`) and gates on their sum
+  required. CI runs mutation in four shards (`MUTATION_SHARD`, files dealt out by estimated cost, `tools/mutation-weights.txt`) and gates on their sum
   (`make mutation-sum`). CI restores the Go build/test cache (`.github/actions/go`, keyed on Go
   version and `go.sum`) and sets file mtimes from git (`tools/git-mtimes.sh`), so unchanged packages
   are not retested.
@@ -202,7 +202,7 @@ with e.g. `make check JOBS=4`. `make test` and `make integration` use the go tes
   section, or a patch tag that changes a migration, fails at once. The image is published (ci.yml job
   `publish` calling `image.yml`) and the GitHub release made only after this tier passed.
 - **FULL** (nightly cron on `main`, manual dispatch): additionally every e2e test in three shards, every
-  unit test with the race detector, the command catalogue check, uncached test runs and the full mutation
+  unit test with the race detector (two shards: `internal/auth` alone, all other packages; `make shards-check` fails when a package is in no shard), the command catalogue check, uncached test runs and the full mutation
   run. It blocks no release; when it fails, the job `nightly-failure-issue` opens an issue "Nightly FULL failed on main (date)" (labels `ci`, `flaky`) with the failed jobs, or comments on the one that is still open. Layout and visual regressions, race outside the safety packages and
   the full mutation run (a PR that changes a safety package already gates its own mutation) are caught here, so the nightly FULL is the place to look for them; a
   failure is fixed through an issue, not by holding a release.

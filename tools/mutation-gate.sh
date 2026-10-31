@@ -13,7 +13,7 @@
 #
 # Sharding (CI runs the big packages on several runners): with
 # MUTATION_SHARD=i/n only shard i of n of the package's files is mutated
-# (files dealt out by size, largest first, to the lightest shard), the counts
+# (files dealt out by estimated cost, see tools/mutation-shard.sh), the counts
 # are appended to MUTATION_COUNTS_OUT as "killed lived timedout", and no
 # threshold is applied. --sum then adds up the shards' counts files and
 # applies the same checks to the whole package, so a sharded run decides
@@ -70,12 +70,10 @@ shard=${MUTATION_SHARD:-}
 if [ -n "$shard" ]; then
 	[ -n "${MUTATION_COUNTS_OUT:-}" ] || { echo "mutation gate: MUTATION_SHARD needs MUTATION_COUNTS_OUT" >&2; exit 1; }
 	i=${shard%/*} n=${shard#*/}
-	dir=$(go list -f '{{.Dir}}' "$pkg")
 	files=$(go list -f '{{range .GoFiles}}{{.}} {{end}}' "$pkg")
-	# Largest file first to the lightest shard; keep the files of shard i.
-	mine=$(cd "$dir" && wc -l $files | grep -v ' total$' | sort -k1,1nr -k2 | awk -v n="$n" '
-		{ b = 1; for (s = 2; s <= n; s++) if (load[s] < load[b]) b = s; load[b] += $1; print b, $2 }' |
-		awk -v i="$i" '$1 == i { print $2 }')
+	# The files of this package that tools/mutation-shard.sh dealt to shard i (weighted by
+	# mutant count and test cost, all packages together).
+	mine=$(tools/mutation-shard.sh "$shard" "${pkg#./}" | awk '{ print $2 }')
 	for f in $files; do
 		echo "$mine" | grep -qx "$f" || excludes="$excludes -E (^|/)$(echo "$f" | sed 's/[.]/[.]/g')\$"
 	done
