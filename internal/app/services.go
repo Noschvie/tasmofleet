@@ -205,7 +205,11 @@ func describeConfig(cfg config.Config) []web.KV {
 				v = "***"
 			}
 		}
-		out = append(out, web.KV{Key: config.Prefix + f.key, Value: redactURLs(strings.TrimSpace(v))})
+		shown := redactURLs(strings.TrimSpace(v))
+		if f.key == "NOTIFY_WEBHOOK_URL" {
+			shown = config.RedactWebhookURL(v) // its path or query can be the credential (a Home Assistant webhook id)
+		}
+		out = append(out, web.KV{Key: config.Prefix + f.key, Value: shown})
 	}
 	return out
 }

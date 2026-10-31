@@ -45,3 +45,24 @@ func TestCheckDataDirWritableExplainsBindMountPermissions(t *testing.T) {
 		}
 	}
 }
+
+// Why (security review): the About page lists the effective configuration. A webhook address can
+// carry its credential in the path (Home Assistant) or the query (Gotify), so it shows scheme,
+// host and port only, like a secret shows no value.
+func TestDescribeConfigRedactsTheWebhookAddressAndMasksTheNotificationSecrets(t *testing.T) {
+	cfg := config.Config{NotifyWebhookURL: "http://hass.lan:8123/api/webhook/ha-credential-77?token=gotify-88", NotifyWebhookSecret: "hdr-secret-1", NotifySMTPPassword: "mail-pass-2"}
+	var url string
+	for _, kv := range describeConfig(cfg) {
+		for _, leak := range []string{"ha-credential-77", "gotify-88", "hdr-secret-1", "mail-pass-2", "/api/webhook"} {
+			if strings.Contains(kv.Value, leak) {
+				t.Errorf("%s shows %q: %q", kv.Key, leak, kv.Value)
+			}
+		}
+		if kv.Key == "TASMOFLEET_NOTIFY_WEBHOOK_URL" {
+			url = kv.Value
+		}
+	}
+	if url != "http://hass.lan:8123/***" {
+		t.Errorf("webhook address on About = %q, want host and port with the rest hidden", url)
+	}
+}

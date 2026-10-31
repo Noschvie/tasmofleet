@@ -192,3 +192,20 @@ func TestNotificationStatusLineWordsDeliveryTestAndNothing(t *testing.T) {
 		}
 	}
 }
+
+// Why (security review): the webhook address is a credential for Home Assistant. The page that
+// shows it whole, and the About page that lists the configuration, are for admins only.
+func TestNotificationSettingsAndAboutAreAdminOnly(t *testing.T) {
+	e, svc := notifyEnv(t, &fakeNotify{})
+	if _, err := svc.Apply(t.Context(), sysconfig.Request{Actor: "admin", Values: map[string]string{"NOTIFY_WEBHOOK_URL": "http://hass.lan/api/webhook/ha-credential-77"}}); err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{"/settings/system?tab=notifications", "/about"} {
+		for _, role := range []string{"", "operator"} {
+			r, body := e.do(t, "GET", path, role, nil)
+			if r.StatusCode != 401 && r.StatusCode != 403 && r.StatusCode != 302 && r.StatusCode != 303 || strings.Contains(body, "ha-credential-77") {
+				t.Errorf("%s as %q: %d, the address must not be served", path, role, r.StatusCode)
+			}
+		}
+	}
+}

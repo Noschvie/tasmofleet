@@ -49,3 +49,18 @@ func TestNotifySettingsAreValidatedOnlyWhileTheChannelIsOn(t *testing.T) {
 		}
 	}
 }
+
+func TestRedactWebhookURLKeepsOnlySchemeHostAndPort(t *testing.T) {
+	for in, want := range map[string]string{
+		"http://hass.lan:8123/api/webhook/x?token=y": "http://hass.lan:8123/***",
+		"https://ntfy.example/topic":                 "https://ntfy.example/***",
+		"http://hass.lan:8123":                       "http://hass.lan:8123",
+		"http://hass.lan:8123/":                      "http://hass.lan:8123",
+		"junk":                                       "",
+		"":                                           "",
+	} {
+		if got := RedactWebhookURL(in); got != want {
+			t.Errorf("%q -> %q, want %q", in, got, want)
+		}
+	}
+}

@@ -21,7 +21,9 @@ type SettingsFile struct {
 	PolicyRules json.RawMessage   `json:"policy_rules,omitempty"`
 }
 
-// ExportSettings writes the stored operational settings and the managed rules.
+// ExportSettings writes the stored operational settings and the managed rules. The webhook
+// address is exported whole (an import needs it); like the file's other contents it is for the
+// host administrator who runs this command, not for the web UI.
 func ExportSettings(ctx context.Context, svc *Services, w io.Writer) error {
 	f := SettingsFile{Version: 1, Settings: map[string]string{}}
 	for _, st := range svc.Sys.State() {

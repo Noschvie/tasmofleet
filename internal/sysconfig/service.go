@@ -574,7 +574,7 @@ func (s *Service) apply(ctx context.Context, req Request) (Result, *Event, error
 		}
 		shownOld, shownNew := redactURL(oldV), redactURL(newV)
 		if k == "NOTIFY_WEBHOOK_URL" {
-			shownOld, shownNew = redactWebhookURL(oldV), redactWebhookURL(newV) // the path can be a secret (a Home Assistant webhook id)
+			shownOld, shownNew = config.RedactWebhookURL(oldV), config.RedactWebhookURL(newV) // the path can be a secret (a Home Assistant webhook id)
 		}
 		if f.Secret {
 			shownOld, shownNew = maskSecret(oldV), maskSecret(newV)
@@ -1007,18 +1007,4 @@ func (s *Service) Preview(values map[string]string) (config.Config, []string, er
 		dropped = append(dropped, key)
 	}
 	return cand, dropped, nil
-}
-
-// redactWebhookURL keeps scheme, host and port of a webhook address for the audit log and hides
-// the path and query, which can be the secret itself (a Home Assistant webhook id, an ntfy topic).
-func redactWebhookURL(raw string) string {
-	u, err := url.Parse(raw)
-	if err != nil || u.Host == "" {
-		return ""
-	}
-	out := u.Scheme + "://" + u.Host
-	if u.Path != "" && u.Path != "/" || u.RawQuery != "" {
-		out += "/***"
-	}
-	return out
 }
