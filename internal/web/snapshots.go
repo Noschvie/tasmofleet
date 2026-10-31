@@ -6,10 +6,12 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"time"
 
+	"github.com/nofuturekid/tasmofleet/internal/auth"
 	"github.com/nofuturekid/tasmofleet/internal/httpx"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/snapshot"
@@ -34,17 +36,40 @@ func (h *handler) registerSnapshots(route func(string, func(http.Handler) http.H
 	}
 	route("POST "+sysPath+"/snapshot", adm, h.snapDownload)
 	route("GET "+snapPath+"/{name}/download", adm, h.snapStoredDownload)
+	route("POST "+snapPath+"/{name}/download", adm, h.snapStoredDownload) // the confirmation of a proxy-header sign-in
 	route("GET "+snapPath+"/{name}/delete", adm, h.snapDeleteConfirm)
 	route("POST "+snapPath+"/{name}/delete", adm, h.snapDelete)
 }
 
+// snapAckText is the checkbox a proxy-header sign-in ticks instead of a password: it has nothing
+// to confirm itself with (sysStepUp), but the file holds every user's password hash and the
+// encrypted device and broker secrets, so the download is never one click.
+const snapAckText = "I understand this file holds secrets."
+
+// snapIsHeader says whether the sign-in is a proxy header.
+func snapIsHeader(r *http.Request) bool {
+	p, _ := auth.FromContext(r.Context())
+	return p.Method == "header"
+}
+
 // snapStepUp asks for the password (local account) or a new sign-in at the identity provider
-// before a snapshot leaves the server: it holds every user's password hash and the encrypted
-// device and broker passwords. It is the same confirmation as for the sign-in settings (five
-// minutes per session, package auth); a proxy-header principal, who has nothing to confirm with,
-// passes as everywhere else (needsStepUp). It answers the page with the dialog open and returns
-// false when the confirmation is due.
-func (h *handler) snapStepUp(w http.ResponseWriter, r *http.Request, what string) bool {
+// before a snapshot leaves the server; same confirmation as for the sign-in settings (five
+// minutes per session, package auth). A proxy-header principal cannot do that, so it confirms on
+// a page with a checkbox (ack=1 in a CSRF-protected POST). It answers the page and returns false
+// when the download must not go ahead yet. action is the POST path (without the base) the
+// confirmation posts to, fields its hidden values.
+func (h *handler) snapStepUp(w http.ResponseWriter, r *http.Request, what, action string, fields ...confirmField) bool {
+	if snapIsHeader(r) {
+		if r.Method == http.MethodPost && r.PostForm.Get("ack") == "1" {
+			return true
+		}
+		h.renderActionConfirm(w, r, "system", actionConfirm{
+			Title: "Download a database snapshot?", Heading: "Download a database snapshot", Text: "The file holds every user's password hash and the encrypted device, broker and sign-in secrets. Keep it like a password. Your sign-in comes from the proxy, so it cannot be asked for a password; confirm instead.",
+			Crumbs: []confirmLink{{"/settings/system", "Settings"}, {sysPath + "?tab=backups", "Backups"}}, Last: "Download snapshot",
+			Action: action, Fields: fields, Ack: snapAckText, Verb: "Download", CancelHref: sysPath + "?tab=backups", CancelLabel: "Cancel",
+		})
+		return false
+	}
 	if !h.needsStepUp(r) {
 		return true
 	}
@@ -63,13 +88,17 @@ func (h *handler) snapDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for k := range r.PostForm {
-		if k != "csrf" && k != "include_key" {
+		if k != "csrf" && k != "include_key" && k != "ack" {
 			http.Error(w, "bad request", http.StatusBadRequest)
 			return
 		}
 	}
 	withKey := r.PostForm.Get("include_key") == "1"
-	if !h.snapStepUp(w, r, "Downloading a snapshot of the database") {
+	var fields []confirmField
+	if withKey {
+		fields = append(fields, confirmField{"include_key", "1"})
+	}
+	if !h.snapStepUp(w, r, "Downloading a snapshot of the database", sysPath+"/snapshot", fields...) {
 		return
 	}
 	ex, err := h.d.Snapshots.Export(r.Context(), withKey)
@@ -92,7 +121,14 @@ func (h *handler) snapStoredDownload(w http.ResponseWriter, r *http.Request) {
 		h.notFound(w, r)
 		return
 	}
-	if !h.snapStepUp(w, r, "Downloading a snapshot of the database") {
+	if r.Method == http.MethodPost {
+		limitBody(w, r)
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+	}
+	if !h.snapStepUp(w, r, "Downloading a snapshot of the database", snapPath+"/"+name+"/download") {
 		return
 	}
 	f, in, err := h.d.Snapshots.Open(name)
@@ -104,8 +140,10 @@ func (h *handler) snapStoredDownload(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	defer f.Close() //nolint:errcheck // read-only handle
-	h.snapAudit(r, "snapshot.download", "ok", map[string]any{"with_key": false, "file": in.Name, "bytes": in.Size, "stored": true})
+	defer f.Close()                  //nolint:errcheck // read-only handle
+	if r.Method != http.MethodHead { // a HEAD sends no file
+		h.snapAudit(r, "snapshot.download", "ok", map[string]any{"with_key": false, "file": in.Name, "bytes": in.Size, "stored": true})
+	}
 	snapHeaders(w, in.Name, "application/vnd.sqlite3")
 	http.ServeContent(w, r, in.Name, in.Taken, f)
 }
@@ -168,6 +206,10 @@ func (h *handler) snapAudit(r *http.Request, action, result string, detail map[s
 	if h.d.Recorder == nil {
 		return
 	}
+	p, _ := auth.FromContext(r.Context())
+	if p.Method != "" {
+		detail["method"] = p.Method // how the admin signed in: local, oidc or header
+	}
 	d := ""
 	if b, err := json.Marshal(detail); err == nil {
 		d = string(b)
@@ -187,7 +229,8 @@ func snapReason(err error) string {
 type sysDB struct {
 	LiveSize  string // about how big a download is; empty when unknown
 	Hint      string // the line next to the download button
-	Dir       string
+	Dir       string // the snapshots folder, as the server sees it
+	DataDir   string // the data directory
 	Files     []sysSnapshot
 	Kept      int // SNAPSHOT_KEEP
 	On        bool
@@ -224,7 +267,7 @@ func (h *handler) sysDBOf(r *http.Request, base string) (*sysDB, error) {
 	if err != nil {
 		return nil, err
 	}
-	db := &sysDB{Dir: s.Dir(), CanDelete: true}
+	db := &sysDB{Dir: s.Dir(), DataDir: filepath.Dir(s.Dir()), CanDelete: true}
 	if h.d.Database != nil {
 		if info, err := h.d.Database.DBInfo(r.Context()); err == nil && info.Size > 0 {
 			db.LiveSize = humanBytes(info.Size)
@@ -234,7 +277,10 @@ func (h *handler) sysDBOf(r *http.Request, base string) (*sysDB, error) {
 	if db.LiveSize != "" {
 		db.Hint += " (about " + db.LiveSize + ")"
 	}
-	db.Hint += ". You are asked for your password first."
+	db.Hint += ". You are asked to confirm first (password, or your identity provider for SSO)."
+	if snapIsHeader(r) {
+		db.Hint = "A consistent copy of the live database, made while TasmoFleet runs. You are asked to confirm that the file holds secrets."
+	}
 	db.Kept, _ = strconv.Atoi(h.storedValue("SNAPSHOT_KEEP"))
 	every, _ := time.ParseDuration(h.storedValue("SNAPSHOT_INTERVAL"))
 	db.On = every > 0
@@ -258,6 +304,9 @@ func (h *handler) sysDBOf(r *http.Request, base string) (*sysDB, error) {
 		if every > 0 {
 			db.Status.Next = st.LastGood.Add(every)
 		}
+	}
+	if db.Status.Next.Before(h.d.Clock.Now()) {
+		db.Status.Next = time.Time{} // overdue: the schedule is about to run, no time to promise
 	}
 	return db, nil
 }

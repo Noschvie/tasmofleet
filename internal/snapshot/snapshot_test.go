@@ -172,7 +172,7 @@ func TestExportFailureLeavesNothingBehind(t *testing.T) {
 }
 
 func at(m *Manager, ts string) {
-	t, err := time.ParseInLocation("2006-01-02 15:04", ts, time.Local)
+	t, err := time.ParseInLocation("2006-01-02 15:04", ts, time.UTC)
 	if err != nil {
 		panic(err)
 	}
@@ -185,16 +185,17 @@ func TestPruneKeepsTheNewestN(t *testing.T) {
 	m := New(fakeSrc{}, dir)
 	for _, ts := range []string{"2026-10-25 03:00", "2026-10-26 03:00", "2026-10-27 03:00", "2026-10-28 03:00", "2026-10-29 03:00"} {
 		at(m, ts)
-		if _, _, err := m.Run(context.Background(), 100); err != nil {
+		if _, err := m.Run(context.Background(), 100); err != nil {
 			t.Fatal(err)
 		}
 	}
 	at(m, "2026-10-30 03:00")
-	in, pruned, err := m.Run(context.Background(), 3)
+	res, err := m.Run(context.Background(), 3)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if pruned != 3 || in.Name != "tasmofleet-20261030-0300.db" {
+	in, pruned := res.Info, res.Pruned
+	if pruned != 3 || in.Name != "tasmofleet-20261030-0300Z.db" {
 		t.Fatalf("pruned %d, took %s", pruned, in.Name)
 	}
 	list, _ := m.List()
@@ -202,7 +203,7 @@ func TestPruneKeepsTheNewestN(t *testing.T) {
 	for _, l := range list {
 		names = append(names, l.Name)
 	}
-	want := []string{"tasmofleet-20261030-0300.db", "tasmofleet-20261029-0300.db", "tasmofleet-20261028-0300.db"}
+	want := []string{"tasmofleet-20261030-0300Z.db", "tasmofleet-20261029-0300Z.db", "tasmofleet-20261028-0300Z.db"}
 	if len(names) != 3 || names[0] != want[0] || names[1] != want[1] || names[2] != want[2] {
 		t.Fatalf("kept %v, want %v", names, want)
 	}
@@ -214,19 +215,19 @@ func TestFailedRunIsReportedAndDeletesNothing(t *testing.T) {
 	dir := t.TempDir()
 	m := New(fakeSrc{}, dir)
 	at(m, "2026-10-29 03:00")
-	if _, _, err := m.Run(context.Background(), 1); err != nil {
+	if _, err := m.Run(context.Background(), 1); err != nil {
 		t.Fatal(err)
 	}
 	m.src = fakeSrc{err: &os.PathError{Op: "write", Path: "x", Err: errors.New("no space left on device")}}
 	at(m, "2026-10-30 03:00")
-	if _, _, err := m.Run(context.Background(), 1); err == nil {
+	if _, err := m.Run(context.Background(), 1); err == nil {
 		t.Fatal("expected the failure")
 	}
 	st := m.Status()
-	if !st.Failed || st.Reason != "no space left on device" || st.File != "tasmofleet-20261030-0300.db" {
+	if !st.Failed || st.Reason != "no space left on device" || st.File != "tasmofleet-20261030-0300Z.db" {
 		t.Fatalf("status %+v", st)
 	}
-	if list, _ := m.List(); len(list) != 1 || list[0].Name != "tasmofleet-20261029-0300.db" {
+	if list, _ := m.List(); len(list) != 1 || list[0].Name != "tasmofleet-20261029-0300Z.db" {
 		t.Fatalf("stored after the failure: %v", list)
 	}
 	if st.LastGood.IsZero() {
@@ -242,23 +243,23 @@ func TestOpenAndDeleteRefuseNamesOutsideTheSnapshotsFolder(t *testing.T) {
 	dir := t.TempDir()
 	m := New(fakeSrc{}, dir)
 	at(m, "2026-10-29 03:00")
-	if _, _, err := m.Run(context.Background(), 5); err != nil {
+	if _, err := m.Run(context.Background(), 5); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "secret.key"), []byte("k"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "tasmofleet-20261001-0000.db"), []byte("outside"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "tasmofleet-20261001-0000Z.db"), []byte("outside"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(filepath.Join(dir, "secret.key"), filepath.Join(m.Dir(), "tasmofleet-20260101-0000.db")); err != nil {
+	if err := os.Symlink(filepath.Join(dir, "secret.key"), filepath.Join(m.Dir(), "tasmofleet-20260101-0000Z.db")); err != nil {
 		t.Fatal(err)
 	}
 	for _, bad := range []string{
-		"../secret.key", "..%2fsecret.key", "../tasmofleet-20261001-0000.db", "/etc/passwd", "tasmofleet-20261029-0300.db/../../secret.key",
-		"tasmofleet-20261029-0300.db\x00", "secret.key", "", "tasmofleet-20261029-0300.dbx", "tasmofleet-1-2.db",
-		"tasmofleet-20260101-0000.db", // a symlink in the folder: not a regular file
-		"tasmofleet-20269999-9999.db", // well-formed but not there
+		"../secret.key", "..%2fsecret.key", "../tasmofleet-20261001-0000Z.db", "/etc/passwd", "tasmofleet-20261029-0300Z.db/../../secret.key",
+		"tasmofleet-20261029-0300Z.db\x00", "secret.key", "", "tasmofleet-20261029-0300Z.dbx", "tasmofleet-1-2.db",
+		"tasmofleet-20260101-0000Z.db", // a symlink in the folder: not a regular file
+		"tasmofleet-20269999-9999Z.db", // well-formed but not there
 	} {
 		if f, _, err := m.Open(bad); !errors.Is(err, ErrNotFound) {
 			if f != nil {
@@ -270,7 +271,7 @@ func TestOpenAndDeleteRefuseNamesOutsideTheSnapshotsFolder(t *testing.T) {
 			t.Errorf("Delete(%q) = %v, want ErrNotFound", bad, err)
 		}
 	}
-	if _, err := os.Stat(filepath.Join(dir, "tasmofleet-20261001-0000.db")); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, "tasmofleet-20261001-0000Z.db")); err != nil {
 		t.Fatalf("a file outside the folder was touched: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "secret.key")); err != nil {
@@ -279,7 +280,7 @@ func TestOpenAndDeleteRefuseNamesOutsideTheSnapshotsFolder(t *testing.T) {
 	if list, _ := m.List(); len(list) != 1 {
 		t.Fatalf("the symlink must not be listed, got %v", list)
 	}
-	f, in, err := m.Open("tasmofleet-20261029-0300.db")
+	f, in, err := m.Open("tasmofleet-20261029-0300Z.db")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -287,7 +288,7 @@ func TestOpenAndDeleteRefuseNamesOutsideTheSnapshotsFolder(t *testing.T) {
 	if in.Size == 0 {
 		t.Fatal("size")
 	}
-	if err := m.Delete("tasmofleet-20261029-0300.db"); err != nil {
+	if err := m.Delete("tasmofleet-20261029-0300Z.db"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -301,10 +302,7 @@ func TestDueWaitsForTheInterval(t *testing.T) {
 		t.Fatal("nothing stored: due")
 	}
 	at(m, "2026-10-29 03:00")
-	if _, _, err := m.Run(context.Background(), 7); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chtimes(filepath.Join(m.Dir(), "tasmofleet-20261029-0300.db"), m.now(), m.now()); err != nil {
+	if _, err := m.Run(context.Background(), 7); err != nil {
 		t.Fatal(err)
 	}
 	at(m, "2026-10-29 12:00")
@@ -332,3 +330,107 @@ func TestCleanTempRemovesLeftovers(t *testing.T) {
 		}
 	}
 }
+
+// Why: a run whose snapshot is written but whose old files cannot be deleted is a good run. The
+// card and the audit must not call it a failure, or the admin would chase a problem that is only
+// a stuck retention.
+func TestPruneFailureDoesNotMakeTheRunFail(t *testing.T) {
+	m := New(fakeSrc{}, t.TempDir())
+	at(m, "2026-10-28 03:00")
+	if _, err := m.Run(context.Background(), 5); err != nil {
+		t.Fatal(err)
+	}
+	m.remove = func(string) error { return errors.New("read-only file system") }
+	at(m, "2026-10-29 03:00")
+	res, err := m.Run(context.Background(), 1)
+	if err != nil || res.PruneErr == nil || res.Info.Name != "tasmofleet-20261029-0300Z.db" {
+		t.Fatalf("run %+v err %v: the snapshot is good, only the prune failed", res, err)
+	}
+	if st := m.Status(); st.Failed {
+		t.Fatalf("status must stay good: %+v", st)
+	}
+}
+
+// Why: names carry the time in UTC and order, age and pruning follow the name. The mtime of a
+// file changes with copies and restores of the data directory and must not decide what is
+// "newest" or gets deleted.
+func TestOrderAndPruneFollowTheNameNotTheModificationTime(t *testing.T) {
+	dir := t.TempDir()
+	m := New(fakeSrc{}, dir)
+	for _, ts := range []string{"2026-10-27 03:00", "2026-10-28 03:00", "2026-10-29 03:00"} {
+		at(m, ts)
+		if _, err := m.Run(context.Background(), 100); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := time.Date(2030, 1, 1, 0, 0, 0, 0, time.UTC) // the oldest snapshot looks like the newest by mtime
+	if err := os.Chtimes(filepath.Join(m.Dir(), "tasmofleet-20261027-0300Z.db"), old, old); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := m.List()
+	if list[0].Name != "tasmofleet-20261029-0300Z.db" || !list[0].Taken.Equal(time.Date(2026, 10, 29, 3, 0, 0, 0, time.UTC)) {
+		t.Fatalf("newest by name expected, got %s %v", list[0].Name, list[0].Taken)
+	}
+	if n, err := m.Prune(2); err != nil || n != 1 {
+		t.Fatalf("pruned %d %v", n, err)
+	}
+	if _, _, err := m.Open("tasmofleet-20261027-0300Z.db"); !errors.Is(err, ErrNotFound) {
+		t.Fatal("the oldest by name goes, whatever its mtime says")
+	}
+}
+
+// Why: a clock that jumps back must not make the run delete the snapshot it just wrote.
+func TestPruneNeverDeletesTheFileJustWritten(t *testing.T) {
+	dir := t.TempDir()
+	m := New(fakeSrc{}, dir)
+	for _, ts := range []string{"2026-10-28 03:00", "2026-10-29 03:00"} {
+		at(m, ts)
+		if _, err := m.Run(context.Background(), 100); err != nil {
+			t.Fatal(err)
+		}
+	}
+	at(m, "2026-10-01 03:00") // the clock went back
+	res, err := m.Run(context.Background(), 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := m.Open(res.Info.Name); err != nil {
+		t.Fatalf("the snapshot just written was pruned: %v", err)
+	}
+}
+
+// Why: after a restart the next run counts from the newest stored snapshot (not from the start of
+// the process), so the card's "Next" is right; an overdue schedule runs at once; a failing disk is
+// retried one interval after the failure, not in a loop.
+func TestNextRunCountsFromTheLastSnapshotOrFailure(t *testing.T) {
+	dir := t.TempDir()
+	m := New(fakeSrc{}, dir)
+	at(m, "2026-10-29 03:00")
+	if !m.NextRun(24 * time.Hour).Equal(m.now()) {
+		t.Fatal("nothing stored: now")
+	}
+	if _, err := m.Run(context.Background(), 7); err != nil {
+		t.Fatal(err)
+	}
+	fresh := New(fakeSrc{}, dir) // a restarted process: no memory of the run
+	at(fresh, "2026-10-29 20:00")
+	want := time.Date(2026, 10, 30, 3, 0, 0, 0, time.UTC)
+	if got := fresh.NextRun(24 * time.Hour); !got.Equal(want) || fresh.Due(24*time.Hour) {
+		t.Fatalf("next %v, want %v (not due yet)", got, want)
+	}
+	at(fresh, "2026-11-02 12:00")
+	if !fresh.Due(24 * time.Hour) {
+		t.Fatal("overdue after the restart: runs at once")
+	}
+	fresh.src = failSrc{}
+	if _, err := fresh.Run(context.Background(), 7); err == nil {
+		t.Fatal("expected failure")
+	}
+	if got, want := fresh.NextRun(24*time.Hour), time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC); !got.Equal(want) || fresh.Due(24*time.Hour) {
+		t.Fatalf("after a failure the retry is one interval later: %v", got)
+	}
+}
+
+type failSrc struct{}
+
+func (failSrc) VacuumInto(context.Context, string) error { return errors.New("disk full") }

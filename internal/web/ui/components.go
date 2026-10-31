@@ -226,6 +226,7 @@ type ConfirmData struct {
 	Facts                         []KVRow
 	Action, CSRF                  string
 	Fields                        []KVRow // hidden fields (Key = name)
+	Ack                           string  // a required checkbox "ack" with this label; empty: none
 	Verb                          string
 	Danger                        bool
 	CancelHref, CancelLabel       string

@@ -3,11 +3,11 @@ import { test, expect } from "../support/fixtures";
 import { App, startApp } from "../support/stack";
 
 // Settings, Backups: the TasmoFleet database card and the snapshot schedule (issue #301).
-// A local admin, because the download needs the password confirmation that header principals
-// cannot give.
+// A local admin (break-glass login) confirms with the password; a proxy-header admin, who has no
+// password to give, confirms with a checkbox.
 let app: App;
 test.beforeAll(async () => {
-  app = await startApp({ env: { TASMOFLEET_AUTH_MODE: "header", TASMOFLEET_TRUSTED_PROXIES: "127.0.0.2/32", TASMOFLEET_ADMIN_GROUPS: "adm" } });
+  app = await startApp({ env: { TASMOFLEET_AUTH_MODE: "header", TASMOFLEET_TRUSTED_PROXIES: "127.0.0.1/32", TASMOFLEET_ADMIN_GROUPS: "adm" } });
   app.cli(["user", "passwd", "--create", "--role", "admin", "snapper"], "e2e-fake-password-1\n");
 });
 test.afterAll(async () => {
@@ -40,12 +40,12 @@ test("download: password first, then a SQLite file; the key only inside a .tar w
   await expect(page).toHaveURL(/tab=backups/);
 
   const [plain] = await Promise.all([page.waitForEvent("download"), page.locator("#card-database").getByRole("button", { name: "Download snapshot" }).click()]);
-  expect(plain.suggestedFilename()).toMatch(/^tasmofleet-\d{8}-\d{4}\.db$/);
+  expect(plain.suggestedFilename()).toMatch(/^tasmofleet-\d{8}-\d{4}Z\.db$/);
   expect(readFileSync((await plain.path())!).subarray(0, 15).toString()).toBe("SQLite format 3");
 
   await page.locator("#card-database input[name='include_key']").check();
   const [withKey] = await Promise.all([page.waitForEvent("download"), page.locator("#card-database").getByRole("button", { name: "Download snapshot" }).click()]);
-  expect(withKey.suggestedFilename()).toMatch(/^tasmofleet-\d{8}-\d{4}\.tar$/);
+  expect(withKey.suggestedFilename()).toMatch(/^tasmofleet-\d{8}-\d{4}Z\.tar$/);
   const tar = readFileSync((await withKey.path())!);
   expect(tar.includes("secret.key")).toBe(true);
   expect(tar.includes("tasmofleet.db")).toBe(true);
@@ -82,7 +82,7 @@ test("schedule: switch on, a snapshot appears, it can be downloaded and deleted"
   await stepup.getByRole("button", { name: "Confirm" }).click();
   await expect(page).toHaveURL(/tab=backups/);
   const [dl] = await Promise.all([page.waitForEvent("download"), page.locator("#card-database .sys-orphan").getByRole("link", { name: "Download" }).click()]);
-  expect(dl.suggestedFilename()).toMatch(/^tasmofleet-\d{8}-\d{4}\.db$/);
+  expect(dl.suggestedFilename()).toMatch(/^tasmofleet-\d{8}-\d{4}Z\.db$/);
 
   await page.locator("#card-database .sys-orphan").getByRole("link", { name: "Delete" }).click();
   const dlg = page.locator("dialog#dlg-bkdel");
@@ -90,4 +90,18 @@ test("schedule: switch on, a snapshot appears, it can be downloaded and deleted"
   await dlg.getByRole("button", { name: "Delete snapshot" }).click();
   await expect(page.getByText("Snapshot deleted.")).toBeVisible();
   await expect(page.locator("#card-database .sys-orphan")).toHaveCount(0);
+});
+
+// Why: a proxy-header admin is not blocked, but the download is never one click: a page with a
+// required checkbox comes first, and only the ticked, CSRF-protected POST sends the file.
+test("header admin: confirm with the checkbox, then the download starts", async ({ page }) => {
+  await page.setExtraHTTPHeaders({ "X-authentik-username": "adam", "X-authentik-groups": "adm" });
+  await page.goto(app.url + "/settings/system?tab=backups");
+  await page.locator("#card-database").getByRole("button", { name: "Download snapshot" }).click();
+  await expect(page.getByText("I understand this file holds secrets.")).toBeVisible();
+  const [file] = await Promise.all([page.waitForEvent("download"), (async () => {
+    await page.getByLabel("I understand this file holds secrets.").check();
+    await page.getByRole("button", { name: "Download", exact: true }).click();
+  })()]);
+  expect(file.suggestedFilename()).toMatch(/^tasmofleet-\d{8}-\d{4}Z\.db$/);
 });

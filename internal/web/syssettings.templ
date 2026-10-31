@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/snapshot"
 	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
@@ -472,7 +471,7 @@ templ sysSnapshotStatus(db sysDB) {
 				</div>
 		}
 	}
-	<p class="ufield-help db-note">Stored in the data directory (<span class="mono">{ "/data/" + snapshot.DirName }</span>), so the host backup of <span class="mono">/data</span> covers them. They sit on the same disk as the database: they protect against a bad upgrade or a deleted row, not against a dead disk.</p>
+	<p class="ufield-help db-note">Stored in the data directory (<span class="mono">{ db.Dir }</span>), so the host backup of <span class="mono">{ db.DataDir }</span> covers them. They sit on the same disk as the database: they protect against a bad upgrade or a deleted row, not against a dead disk.</p>
 }
 
 // sysDatabaseBlock is the "TasmoFleet database" card: the download (a form outside the settings
@@ -496,7 +495,7 @@ templ sysDatabaseBlock(p sysPage, db sysDB) {
 		<div class="st-fail">
 			<div class="error" role="alert">
 				<b>The last scheduled snapshot failed.</b>
-				<time { ui.StampAttrs(db.Status.Attempt, ui.StampStore)... }>{ storeDate(time.Now(), db.Status.Attempt) }</time>: could not write <span class="mono">{ "/data/" + snapshot.DirName + "/" + db.Status.File }</span> ({ db.Status.Reason }). Nothing was deleted.
+				<time { ui.StampAttrs(db.Status.Attempt, ui.StampStore)... }>{ storeDate(time.Now(), db.Status.Attempt) }</time>: could not write <span class="mono">{ db.Dir + "/" + db.Status.File }</span> ({ db.Status.Reason }). Nothing was deleted.
 				if !db.Status.Next.IsZero() {
 					The next attempt is <time { ui.StampAttrs(db.Status.Next, ui.StampStore)... }>{ storeDate(time.Now(), db.Status.Next) }</time>;
 				}
@@ -504,7 +503,7 @@ templ sysDatabaseBlock(p sysPage, db sysDB) {
 			</div>
 		</div>
 	}
-	<h3 class="sys-subhead">Scheduled snapshots <span class="db-where mono">{ "/data/" + snapshot.DirName }</span></h3>
+	<h3 class="sys-subhead">Scheduled snapshots <span class="db-where mono">{ db.Dir }</span></h3>
 	if len(db.Files) == 0 {
 		<p class="ufield-help">No snapshots yet. Turn on the schedule on the right, or download one now. Downloads are not kept on the server.</p>
 	} else {
@@ -544,8 +543,8 @@ templ sysDatabaseBlock(p sysPage, db sysDB) {
 	<h3 class="sys-subhead">Restore</h3>
 	<ol class="db-restore">
 		<li>Stop the container.</li>
-		<li>Replace <span class="mono">/data/tasmofleet.db</span> with the snapshot and delete <span class="mono">tasmofleet.db-wal</span> and <span class="mono">tasmofleet.db-shm</span>.</li>
-		<li>Make sure <span class="mono">/data/secret.key</span> is the one from the same time, then start the container.</li>
+		<li>Replace <span class="mono">{ db.DataDir + "/tasmofleet.db" }</span> with the snapshot and delete <span class="mono">tasmofleet.db-wal</span> and <span class="mono">tasmofleet.db-shm</span>.</li>
+		<li>Make sure <span class="mono">{ db.DataDir + "/secret.key" }</span> is the one from the same time, then start the container.</li>
 	</ol>
 	<p class="ufield-help">There is no restore button on purpose. A snapshot from an older version is migrated at start; one from a newer version is refused. The <span class="mono">tasmofleet.db.pre-N</span> copies made before an upgrade are restored the same way.</p>
 }

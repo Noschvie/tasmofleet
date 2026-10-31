@@ -78,7 +78,7 @@ func (a *runtime) setupSysConfigLive() {
 		return nil
 	})
 	a.goBG("snapshot-schedule", func() error {
-		a.everyLive(a.bgContext, func() time.Duration { return sys.Snapshot().SnapshotSchedule }, []string{"SNAPSHOT_INTERVAL"}, true, a.scheduledSnapshot)
+		a.everyLive(a.bgContext, a.snapshotWait, []string{"SNAPSHOT_INTERVAL"}, true, a.scheduledSnapshot)
 		return nil
 	})
 	a.goBG("discovery-scan-schedule", func() error {

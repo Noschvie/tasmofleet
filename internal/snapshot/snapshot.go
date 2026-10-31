@@ -29,8 +29,8 @@ import (
 // DirName is the folder of the stored snapshots inside the data directory.
 const DirName = "snapshots"
 
-// nameRe is the only file name a stored snapshot has: tasmofleet-YYYYMMDD-HHMM.db.
-var nameRe = regexp.MustCompile(`^tasmofleet-[0-9]{8}-[0-9]{4}\.db$`)
+// nameRe is the only file name a stored snapshot has: tasmofleet-YYYYMMDD-HHMMZ.db (UTC).
+var nameRe = regexp.MustCompile(`^tasmofleet-[0-9]{8}-[0-9]{4}Z\.db$`)
 
 // ErrNotFound is returned for a name that is no stored snapshot (malformed, or not there).
 var ErrNotFound = errors.New("snapshot: not found")
@@ -44,7 +44,7 @@ type Source interface {
 type Info struct {
 	Name   string
 	Size   int64
-	Taken  time.Time // the file's modification time
+	Taken  time.Time // when the name says it was taken (UTC)
 	Schema int       // the database's schema version (PRAGMA user_version); 0 = unreadable
 }
 
@@ -63,6 +63,7 @@ type Manager struct {
 	dataDir string
 	dir     string
 	now     func() time.Time
+	remove  func(string) error // os.Remove; replaced in tests
 
 	mu   sync.Mutex // one copy or prune at a time
 	last Status
@@ -70,7 +71,7 @@ type Manager struct {
 
 // New returns a Manager for the data directory.
 func New(src Source, dataDir string) *Manager {
-	return &Manager{src: src, dataDir: dataDir, dir: filepath.Join(dataDir, DirName), now: time.Now}
+	return &Manager{src: src, dataDir: dataDir, dir: filepath.Join(dataDir, DirName), now: time.Now, remove: os.Remove}
 }
 
 // Dir is the folder of the stored snapshots.
@@ -80,7 +81,18 @@ func (m *Manager) Dir() string { return m.dir }
 func ValidName(name string) bool { return nameRe.MatchString(name) }
 
 // nameFor is the file name of a snapshot taken at t.
-func nameFor(t time.Time) string { return "tasmofleet-" + t.Format("20060102-1504") + ".db" }
+// The stamp is UTC, so the name sorts the same wherever the container runs and across a change of
+// time zone or summer time; order, age and pruning all follow the name, never the file's mtime.
+func nameFor(t time.Time) string { return "tasmofleet-" + t.UTC().Format("20060102-1504") + "Z.db" }
+
+// timeOf is the moment a stored snapshot's name says it was taken.
+func timeOf(name string) (time.Time, bool) {
+	if !ValidName(name) {
+		return time.Time{}, false
+	}
+	t, err := time.Parse("20060102-1504", name[len("tasmofleet-"):len(name)-len("Z.db")])
+	return t, err == nil
+}
 
 // CleanTemp removes scratch directories a crash left behind. Call it once at start.
 func (m *Manager) CleanTemp() {
@@ -95,22 +107,31 @@ func (m *Manager) CleanTemp() {
 	}
 }
 
+// RunResult is what a scheduled run did. PruneErr is a failure to delete old snapshots after the
+// new one was written: the snapshot is good, the retention is behind.
+type RunResult struct {
+	Info     Info
+	Pruned   int
+	PruneErr error
+}
+
 // Run takes a scheduled snapshot into the snapshots directory, prunes to keep and records the
-// outcome for Status. A failed copy leaves everything that is stored untouched.
-func (m *Manager) Run(ctx context.Context, keep int) (Info, int, error) {
+// outcome for Status. A failed copy leaves everything that is stored untouched; a failed prune
+// does not make the run a failure.
+func (m *Manager) Run(ctx context.Context, keep int) (RunResult, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	name := nameFor(m.now())
 	info, err := m.take(ctx, name)
 	st := Status{Attempted: m.now(), File: name}
 	if err != nil {
-		st.Failed, st.Reason = true, reasonOf(err)
+		st.Failed, st.Reason = true, ReasonOf(err)
 		m.last = st
-		return Info{}, 0, err
+		return RunResult{}, err
 	}
 	m.last = st
-	pruned, perr := m.prune(keep)
-	return info, pruned, perr
+	pruned, perr := m.prune(keep, name)
+	return RunResult{Info: info, Pruned: pruned, PruneErr: perr}, nil
 }
 
 // take writes the copy next to its final name and renames it into place, so a half-written
@@ -142,17 +163,22 @@ func (m *Manager) take(ctx context.Context, name string) (Info, error) {
 func (m *Manager) Prune(keep int) (int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.prune(keep)
+	return m.prune(keep, "")
 }
 
-func (m *Manager) prune(keep int) (int, error) {
+// prune keeps the newest keep snapshots by the time in their names. The file named protect (the
+// one just written) is never deleted, whatever the clock says.
+func (m *Manager) prune(keep int, protect string) (int, error) {
 	list, err := m.List()
 	if err != nil {
 		return 0, err
 	}
 	n := 0
 	for _, in := range list[min(len(list), max(keep, 1)):] {
-		if err := os.Remove(filepath.Join(m.dir, in.Name)); err != nil {
+		if in.Name == protect {
+			continue
+		}
+		if err := m.remove(filepath.Join(m.dir, in.Name)); err != nil {
 			return n, err
 		}
 		n++
@@ -160,14 +186,25 @@ func (m *Manager) prune(keep int) (int, error) {
 	return n, nil
 }
 
-// Due says whether a scheduled snapshot is due: none is stored, or the newest one is as old as
-// the interval (less a minute, so the timer that fires one interval after the last run counts).
-func (m *Manager) Due(every time.Duration) bool {
-	list, err := m.List()
-	if err != nil || len(list) == 0 {
-		return true
+// NextRun is when the next scheduled snapshot is due: one interval after the later of the newest
+// stored snapshot and the last failed attempt (so a failing disk is retried once per interval, not
+// in a loop). Without either it is now.
+func (m *Manager) NextRun(every time.Duration) time.Time {
+	st := m.Status()
+	base := st.LastGood
+	if st.Failed && st.Attempted.After(base) {
+		base = st.Attempted
 	}
-	return m.now().Sub(list[0].Taken) >= every-time.Minute
+	if base.IsZero() {
+		return m.now()
+	}
+	return base.Add(every)
+}
+
+// Due says whether a scheduled snapshot is due now (a minute early counts, so the timer that fires
+// one interval after the last run does).
+func (m *Manager) Due(every time.Duration) bool {
+	return !m.now().Add(time.Minute).Before(m.NextRun(every))
 }
 
 // Status is the scheduled snapshots' last attempt and the newest stored snapshot.
@@ -374,7 +411,8 @@ func statInfo(path, name string) (Info, error) {
 	if err != nil {
 		return Info{}, err
 	}
-	return Info{Name: name, Size: st.Size(), Taken: st.ModTime(), Schema: schemaOf(path)}, nil
+	taken, _ := timeOf(name)
+	return Info{Name: name, Size: st.Size(), Taken: taken, Schema: schemaOf(path)}, nil
 }
 
 // schemaOf reads PRAGMA user_version from the SQLite file header (4 bytes at offset 60), so
@@ -392,9 +430,9 @@ func schemaOf(path string) int {
 	return int(binary.BigEndian.Uint32(hdr[60:64]))
 }
 
-// reasonOf is the short cause of a failed copy: the operating system's message when there is one
+// ReasonOf is the short cause of a failed copy: the operating system's message when there is one
 // ("no space left on device"), else the error text, clipped.
-func reasonOf(err error) string {
+func ReasonOf(err error) string {
 	var pe *fs.PathError
 	if errors.As(err, &pe) {
 		return pe.Err.Error()

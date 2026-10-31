@@ -548,6 +548,9 @@ templ ConfirmPage(c ConfirmData) {
 			for _, f := range c.Fields {
 				<input type="hidden" name={ f.Key } value={ f.Value }/>
 			}
+			if c.Ack != "" {
+				<label class="ucheck"><input type="checkbox" name="ack" value="1" required/><span>{ c.Ack }</span></label>
+			}
 			<a class="btn" href={ templ.SafeURL(c.CancelHref) }>{ c.CancelLabel }</a>
 			<button type="submit" class={ "btn", templ.KV("btn-danger-solid", c.Danger), templ.KV("btn-primary", !c.Danger) }>{ c.Verb }</button>
 		</form>

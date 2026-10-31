@@ -35,6 +35,7 @@ type actionConfirm struct {
 	Facts                         []confirmFact
 	Action                        string // POST path, without the base
 	Fields                        []confirmField
+	Ack                           string // a required checkbox with this label
 	Verb                          string
 	CancelHref, CancelLabel       string
 }
@@ -50,7 +51,7 @@ func (h *handler) renderActionConfirm(w http.ResponseWriter, r *http.Request, na
 	v.Crumbs = append(v.Crumbs, ui.Crumb{Label: c.Last})
 	d := ui.ConfirmData{
 		Title: c.Title, Heading: c.Heading, Text: c.Text, Warning: c.Warning,
-		Action: v.Base + c.Action, CSRF: v.CSRF, Verb: c.Verb, Danger: true,
+		Action: v.Base + c.Action, CSRF: v.CSRF, Verb: c.Verb, Danger: true, Ack: c.Ack,
 		CancelHref: v.Base + c.CancelHref, CancelLabel: c.CancelLabel,
 	}
 	for _, f := range c.Facts {

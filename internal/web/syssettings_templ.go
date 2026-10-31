@@ -14,7 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/snapshot"
 	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
@@ -59,7 +58,7 @@ func sysSettingsPage(p sysPage) templ.Component {
 			var templ_7745c5c3_Var2 string
 			templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.ResolveAttributeValue(tab.Slug)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 23, Col: 28}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 22, Col: 28}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var2)
 			if templ_7745c5c3_Err != nil {
@@ -82,7 +81,7 @@ func sysSettingsPage(p sysPage) templ.Component {
 			var templ_7745c5c3_Var3 string
 			templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(tab.Label)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 23, Col: 77}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 22, Col: 77}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
 			if templ_7745c5c3_Err != nil {
@@ -132,7 +131,7 @@ func sysSettingsPage(p sysPage) templ.Component {
 				var templ_7745c5c3_Var4 string
 				templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(k)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 44, Col: 19}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 43, Col: 19}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 				if templ_7745c5c3_Err != nil {
@@ -145,7 +144,7 @@ func sysSettingsPage(p sysPage) templ.Component {
 				var templ_7745c5c3_Var5 string
 				templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(p.Skipped[k])
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 44, Col: 44}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 43, Col: 44}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 				if templ_7745c5c3_Err != nil {
@@ -168,7 +167,7 @@ func sysSettingsPage(p sysPage) templ.Component {
 		var templ_7745c5c3_Var6 templ.SafeURL
 		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(p.Base + sysPath + "?tab=" + p.Active))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 51, Col: 139}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 50, Col: 139}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 		if templ_7745c5c3_Err != nil {
@@ -181,7 +180,7 @@ func sysSettingsPage(p sysPage) templ.Component {
 		var templ_7745c5c3_Var7 string
 		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.ResolveAttributeValue(p.CSRF)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 52, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 51, Col: 49}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var7)
 		if templ_7745c5c3_Err != nil {
@@ -199,7 +198,7 @@ func sysSettingsPage(p sysPage) templ.Component {
 			var templ_7745c5c3_Var8 string
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.ResolveAttributeValue("sec-" + tab.Slug)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 54, Col: 46}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 53, Col: 46}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var8)
 			if templ_7745c5c3_Err != nil {
@@ -212,7 +211,7 @@ func sysSettingsPage(p sysPage) templ.Component {
 			var templ_7745c5c3_Var9 string
 			templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.ResolveAttributeValue(tab.Slug)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 54, Col: 72}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 53, Col: 72}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var9)
 			if templ_7745c5c3_Err != nil {
@@ -341,7 +340,7 @@ func sysSettingsPage(p sysPage) templ.Component {
 			var templ_7745c5c3_Var11 templ.SafeURL
 			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(p.Base + sysPath + "?tab=backups"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 90, Col: 92}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 89, Col: 92}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 			if templ_7745c5c3_Err != nil {
@@ -354,7 +353,7 @@ func sysSettingsPage(p sysPage) templ.Component {
 			var templ_7745c5c3_Var12 string
 			templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.ResolveAttributeValue(p.CSRF)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 91, Col: 50}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 90, Col: 50}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var12)
 			if templ_7745c5c3_Err != nil {
@@ -373,7 +372,7 @@ func sysSettingsPage(p sysPage) templ.Component {
 			var templ_7745c5c3_Var13 templ.SafeURL
 			templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(p.Base + sysPath + "/snapshot"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 95, Col: 87}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 94, Col: 87}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 			if templ_7745c5c3_Err != nil {
@@ -386,7 +385,7 @@ func sysSettingsPage(p sysPage) templ.Component {
 			var templ_7745c5c3_Var14 string
 			templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.ResolveAttributeValue(p.CSRF)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 96, Col: 50}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 95, Col: 50}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var14)
 			if templ_7745c5c3_Err != nil {
@@ -635,7 +634,7 @@ func sysCardView(p sysPage, c sysCard) templ.Component {
 						var templ_7745c5c3_Var20 templ.SafeURL
 						templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(p.Base + sysPath + "?tab=network#card-networks"))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 171, Col: 133}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 170, Col: 133}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 						if templ_7745c5c3_Err != nil {
@@ -737,7 +736,7 @@ func sysRowView(p sysPage, row sysRow) templ.Component {
 			var templ_7745c5c3_Var22 string
 			templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.ResolveAttributeValue(sysDependsOn(row.Key))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 202, Col: 55}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 201, Col: 55}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var22)
 			if templ_7745c5c3_Err != nil {
@@ -824,7 +823,7 @@ func sysInput(row sysRow) templ.Component {
 				var templ_7745c5c3_Var25 string
 				templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.ResolveAttributeValue(row.Label)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 228, Col: 56}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 227, Col: 56}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var25)
 				if templ_7745c5c3_Err != nil {
@@ -837,7 +836,7 @@ func sysInput(row sysRow) templ.Component {
 				var templ_7745c5c3_Var26 string
 				templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.ResolveAttributeValue("m." + row.Key)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 229, Col: 47}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 228, Col: 47}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var26)
 				if templ_7745c5c3_Err != nil {
@@ -855,7 +854,7 @@ func sysInput(row sysRow) templ.Component {
 					var templ_7745c5c3_Var27 string
 					templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.ResolveAttributeValue(row.InputName())
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 231, Col: 73}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 230, Col: 73}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var27)
 					if templ_7745c5c3_Err != nil {
@@ -868,7 +867,7 @@ func sysInput(row sysRow) templ.Component {
 					var templ_7745c5c3_Var28 string
 					templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.ResolveAttributeValue(c)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 231, Col: 85}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 230, Col: 85}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var28)
 					if templ_7745c5c3_Err != nil {
@@ -891,7 +890,7 @@ func sysInput(row sysRow) templ.Component {
 					var templ_7745c5c3_Var29 string
 					templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinStringErrs(c)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 231, Col: 147}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 230, Col: 147}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
 					if templ_7745c5c3_Err != nil {
@@ -914,7 +913,7 @@ func sysInput(row sysRow) templ.Component {
 				var templ_7745c5c3_Var30 string
 				templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.ResolveAttributeValue(row.InputName())
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 235, Col: 49}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 234, Col: 49}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var30)
 				if templ_7745c5c3_Err != nil {
@@ -927,7 +926,7 @@ func sysInput(row sysRow) templ.Component {
 				var templ_7745c5c3_Var31 string
 				templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.ResolveAttributeValue(ui.SettingControlID(row.Key))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 235, Col: 85}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 234, Col: 85}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var31)
 				if templ_7745c5c3_Err != nil {
@@ -940,7 +939,7 @@ func sysInput(row sysRow) templ.Component {
 				var templ_7745c5c3_Var32 string
 				templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.ResolveAttributeValue(sysSecretHint(row))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 235, Col: 177}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 234, Col: 177}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var32)
 				if templ_7745c5c3_Err != nil {
@@ -966,7 +965,7 @@ func sysInput(row sysRow) templ.Component {
 				var templ_7745c5c3_Var33 string
 				templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.ResolveAttributeValue(row.InputName())
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 237, Col: 34}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 236, Col: 34}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var33)
 				if templ_7745c5c3_Err != nil {
@@ -979,7 +978,7 @@ func sysInput(row sysRow) templ.Component {
 				var templ_7745c5c3_Var34 string
 				templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.ResolveAttributeValue(ui.SettingControlID(row.Key))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 237, Col: 70}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 236, Col: 70}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var34)
 				if templ_7745c5c3_Err != nil {
@@ -1005,7 +1004,7 @@ func sysInput(row sysRow) templ.Component {
 					var templ_7745c5c3_Var35 string
 					templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.ResolveAttributeValue(o)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 239, Col: 23}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 238, Col: 23}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var35)
 					if templ_7745c5c3_Err != nil {
@@ -1028,7 +1027,7 @@ func sysInput(row sysRow) templ.Component {
 					var templ_7745c5c3_Var36 string
 					templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinStringErrs(o)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 239, Col: 59}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 238, Col: 59}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var36))
 					if templ_7745c5c3_Err != nil {
@@ -1051,7 +1050,7 @@ func sysInput(row sysRow) templ.Component {
 				var templ_7745c5c3_Var37 string
 				templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.ResolveAttributeValue(row.InputName())
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 243, Col: 36}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 242, Col: 36}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var37)
 				if templ_7745c5c3_Err != nil {
@@ -1064,7 +1063,7 @@ func sysInput(row sysRow) templ.Component {
 				var templ_7745c5c3_Var38 string
 				templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.ResolveAttributeValue(ui.SettingControlID(row.Key))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 243, Col: 72}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 242, Col: 72}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var38)
 				if templ_7745c5c3_Err != nil {
@@ -1077,7 +1076,7 @@ func sysInput(row sysRow) templ.Component {
 				var templ_7745c5c3_Var39 string
 				templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.ResolveAttributeValue(sysPlaceholder(row))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 243, Col: 147}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 242, Col: 147}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var39)
 				if templ_7745c5c3_Err != nil {
@@ -1098,7 +1097,7 @@ func sysInput(row sysRow) templ.Component {
 				var templ_7745c5c3_Var40 string
 				templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.JoinStringErrs(row.Posted)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 243, Col: 186}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 242, Col: 186}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var40))
 				if templ_7745c5c3_Err != nil {
@@ -1116,7 +1115,7 @@ func sysInput(row sysRow) templ.Component {
 				var templ_7745c5c3_Var41 string
 				templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.ResolveAttributeValue(row.InputName())
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 245, Col: 33}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 244, Col: 33}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var41)
 				if templ_7745c5c3_Err != nil {
@@ -1129,7 +1128,7 @@ func sysInput(row sysRow) templ.Component {
 				var templ_7745c5c3_Var42 string
 				templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.ResolveAttributeValue(ui.SettingControlID(row.Key))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 245, Col: 69}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 244, Col: 69}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var42)
 				if templ_7745c5c3_Err != nil {
@@ -1142,7 +1141,7 @@ func sysInput(row sysRow) templ.Component {
 				var templ_7745c5c3_Var43 string
 				templ_7745c5c3_Var43, templ_7745c5c3_Err = templ.ResolveAttributeValue(row.Posted)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 245, Col: 103}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 244, Col: 103}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var43)
 				if templ_7745c5c3_Err != nil {
@@ -1155,7 +1154,7 @@ func sysInput(row sysRow) templ.Component {
 				var templ_7745c5c3_Var44 string
 				templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.ResolveAttributeValue(sysPlaceholder(row))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 245, Col: 155}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 244, Col: 155}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var44)
 				if templ_7745c5c3_Err != nil {
@@ -1225,7 +1224,7 @@ func sysSwitch(row sysRow) templ.Component {
 			var templ_7745c5c3_Var47 string
 			templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.ResolveAttributeValue("b." + row.Key)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 253, Col: 44}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 252, Col: 44}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var47)
 			if templ_7745c5c3_Err != nil {
@@ -1238,7 +1237,7 @@ func sysSwitch(row sysRow) templ.Component {
 			var templ_7745c5c3_Var48 string
 			templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.ResolveAttributeValue(ui.SettingControlID(row.Key))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 254, Col: 93}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 253, Col: 93}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var48)
 			if templ_7745c5c3_Err != nil {
@@ -1251,7 +1250,7 @@ func sysSwitch(row sysRow) templ.Component {
 			var templ_7745c5c3_Var49 string
 			templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.ResolveAttributeValue(row.InputName())
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 254, Col: 118}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 253, Col: 118}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var49)
 			if templ_7745c5c3_Err != nil {
@@ -1327,7 +1326,7 @@ func sysSchedule(row sysRow, id, label, help string) templ.Component {
 			var templ_7745c5c3_Var52 string
 			templ_7745c5c3_Var52, templ_7745c5c3_Err = templ.ResolveAttributeValue("swm." + row.Key)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 262, Col: 46}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 261, Col: 46}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var52)
 			if templ_7745c5c3_Err != nil {
@@ -1340,7 +1339,7 @@ func sysSchedule(row sysRow, id, label, help string) templ.Component {
 			var templ_7745c5c3_Var53 string
 			templ_7745c5c3_Var53, templ_7745c5c3_Err = templ.ResolveAttributeValue(ui.SettingControlID(id))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 263, Col: 88}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 262, Col: 88}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var53)
 			if templ_7745c5c3_Err != nil {
@@ -1353,7 +1352,7 @@ func sysSchedule(row sysRow, id, label, help string) templ.Component {
 			var templ_7745c5c3_Var54 string
 			templ_7745c5c3_Var54, templ_7745c5c3_Err = templ.ResolveAttributeValue("sw." + row.Key)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 263, Col: 113}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 262, Col: 113}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var54)
 			if templ_7745c5c3_Err != nil {
@@ -1376,7 +1375,7 @@ func sysSchedule(row sysRow, id, label, help string) templ.Component {
 			var templ_7745c5c3_Var55 string
 			templ_7745c5c3_Var55, templ_7745c5c3_Err = templ.ResolveAttributeValue(ui.SettingHelpID(id))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 263, Col: 197}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 262, Col: 197}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var55)
 			if templ_7745c5c3_Err != nil {
@@ -1399,7 +1398,7 @@ func sysSchedule(row sysRow, id, label, help string) templ.Component {
 		var templ_7745c5c3_Var56 string
 		templ_7745c5c3_Var56, templ_7745c5c3_Err = templ.ResolveAttributeValue("sw." + row.Key)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 265, Col: 48}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 264, Col: 48}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var56)
 		if templ_7745c5c3_Err != nil {
@@ -1464,7 +1463,7 @@ func sysLocked(row sysRow) templ.Component {
 				var templ_7745c5c3_Var59 string
 				templ_7745c5c3_Var59, templ_7745c5c3_Err = templ.JoinStringErrs(sysSetWord(row.HasValue))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 276, Col: 53}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 275, Col: 53}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var59))
 				if templ_7745c5c3_Err != nil {
@@ -1482,7 +1481,7 @@ func sysLocked(row sysRow) templ.Component {
 				var templ_7745c5c3_Var60 string
 				templ_7745c5c3_Var60, templ_7745c5c3_Err = templ.JoinStringErrs(row.Value)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 278, Col: 38}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 277, Col: 38}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var60))
 				if templ_7745c5c3_Err != nil {
@@ -1549,7 +1548,7 @@ func sysBroker(p sysPage, row sysRow) templ.Component {
 			var templ_7745c5c3_Var63 string
 			templ_7745c5c3_Var63, templ_7745c5c3_Err = templ.ResolveAttributeValue(ui.SettingControlID(row.Key))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 287, Col: 60}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 286, Col: 60}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var63)
 			if templ_7745c5c3_Err != nil {
@@ -1562,7 +1561,7 @@ func sysBroker(p sysPage, row sysRow) templ.Component {
 			var templ_7745c5c3_Var64 string
 			templ_7745c5c3_Var64, templ_7745c5c3_Err = templ.ResolveAttributeValue(p.MQTT.Host)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 287, Col: 95}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 286, Col: 95}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var64)
 			if templ_7745c5c3_Err != nil {
@@ -1593,7 +1592,7 @@ func sysBroker(p sysPage, row sysRow) templ.Component {
 		var templ_7745c5c3_Var65 string
 		templ_7745c5c3_Var65, templ_7745c5c3_Err = templ.ResolveAttributeValue(p.MQTT.Port)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 291, Col: 76}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 290, Col: 76}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var65)
 		if templ_7745c5c3_Err != nil {
@@ -1621,7 +1620,7 @@ func sysBroker(p sysPage, row sysRow) templ.Component {
 			var templ_7745c5c3_Var66 string
 			templ_7745c5c3_Var66, templ_7745c5c3_Err = templ.ResolveAttributeValue(p.MQTT.StoredHost)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 302, Col: 88}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 301, Col: 88}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var66)
 			if templ_7745c5c3_Err != nil {
@@ -1634,7 +1633,7 @@ func sysBroker(p sysPage, row sysRow) templ.Component {
 			var templ_7745c5c3_Var67 string
 			templ_7745c5c3_Var67, templ_7745c5c3_Err = templ.ResolveAttributeValue(p.MQTT.StoredPort)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 302, Col: 127}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 301, Col: 127}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var67)
 			if templ_7745c5c3_Err != nil {
@@ -1762,7 +1761,7 @@ func sysStorageBlock(p sysPage, st sysStorage) templ.Component {
 				var templ_7745c5c3_Var70 templ.SafeURL
 				templ_7745c5c3_Var70, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(row.Href))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 333, Col: 71}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 332, Col: 71}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var70))
 				if templ_7745c5c3_Err != nil {
@@ -1775,7 +1774,7 @@ func sysStorageBlock(p sysPage, st sysStorage) templ.Component {
 				var templ_7745c5c3_Var71 string
 				templ_7745c5c3_Var71, templ_7745c5c3_Err = templ.ResolveAttributeValue(row.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 334, Col: 63}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 333, Col: 63}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var71)
 				if templ_7745c5c3_Err != nil {
@@ -1788,7 +1787,7 @@ func sysStorageBlock(p sysPage, st sysStorage) templ.Component {
 				var templ_7745c5c3_Var72 string
 				templ_7745c5c3_Var72, templ_7745c5c3_Err = templ.JoinStringErrs(row.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 334, Col: 76}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 333, Col: 76}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var72))
 				if templ_7745c5c3_Err != nil {
@@ -1801,7 +1800,7 @@ func sysStorageBlock(p sysPage, st sysStorage) templ.Component {
 				var templ_7745c5c3_Var73 string
 				templ_7745c5c3_Var73, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(row.Runs))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 335, Col: 61}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 334, Col: 61}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var73))
 				if templ_7745c5c3_Err != nil {
@@ -1814,7 +1813,7 @@ func sysStorageBlock(p sysPage, st sysStorage) templ.Component {
 				var templ_7745c5c3_Var74 string
 				templ_7745c5c3_Var74, templ_7745c5c3_Err = templ.JoinStringErrs(row.Size)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 336, Col: 47}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 335, Col: 47}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var74))
 				if templ_7745c5c3_Err != nil {
@@ -1827,7 +1826,7 @@ func sysStorageBlock(p sysPage, st sysStorage) templ.Component {
 				var templ_7745c5c3_Var75 string
 				templ_7745c5c3_Var75, templ_7745c5c3_Err = templ.ResolveAttributeValue(shortDate(row.Last))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 337, Col: 80}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 336, Col: 80}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var75)
 				if templ_7745c5c3_Err != nil {
@@ -1848,7 +1847,7 @@ func sysStorageBlock(p sysPage, st sysStorage) templ.Component {
 				var templ_7745c5c3_Var76 string
 				templ_7745c5c3_Var76, templ_7745c5c3_Err = templ.JoinStringErrs(row.When)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 337, Col: 139}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 336, Col: 139}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var76))
 				if templ_7745c5c3_Err != nil {
@@ -1866,7 +1865,7 @@ func sysStorageBlock(p sysPage, st sysStorage) templ.Component {
 			var templ_7745c5c3_Var77 string
 			templ_7745c5c3_Var77, templ_7745c5c3_Err = templ.JoinStringErrs(st.Foot())
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 340, Col: 43}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 339, Col: 43}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var77))
 			if templ_7745c5c3_Err != nil {
@@ -1913,7 +1912,7 @@ func sysSum(label, value string) templ.Component {
 		var templ_7745c5c3_Var79 string
 		templ_7745c5c3_Var79, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 348, Col: 36}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 347, Col: 36}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var79))
 		if templ_7745c5c3_Err != nil {
@@ -1926,7 +1925,7 @@ func sysSum(label, value string) templ.Component {
 		var templ_7745c5c3_Var80 string
 		templ_7745c5c3_Var80, templ_7745c5c3_Err = templ.JoinStringErrs(value)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 349, Col: 36}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 348, Col: 36}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var80))
 		if templ_7745c5c3_Err != nil {
@@ -1976,7 +1975,7 @@ func sysOrphans(p sysPage, st sysStorage) templ.Component {
 			var templ_7745c5c3_Var82 string
 			templ_7745c5c3_Var82, templ_7745c5c3_Err = templ.JoinStringErrs(orphanName(o))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 362, Col: 50}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 361, Col: 50}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var82))
 			if templ_7745c5c3_Err != nil {
@@ -2010,7 +2009,7 @@ func sysOrphans(p sysPage, st sysStorage) templ.Component {
 				var templ_7745c5c3_Var83 string
 				templ_7745c5c3_Var83, templ_7745c5c3_Err = templ.JoinStringErrs(o.MAC)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 372, Col: 33}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 371, Col: 33}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var83))
 				if templ_7745c5c3_Err != nil {
@@ -2023,7 +2022,7 @@ func sysOrphans(p sysPage, st sysStorage) templ.Component {
 				var templ_7745c5c3_Var84 string
 				templ_7745c5c3_Var84, templ_7745c5c3_Err = templ.JoinStringErrs(" · ")
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 372, Col: 50}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 371, Col: 50}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var84))
 				if templ_7745c5c3_Err != nil {
@@ -2049,7 +2048,7 @@ func sysOrphans(p sysPage, st sysStorage) templ.Component {
 			var templ_7745c5c3_Var85 string
 			templ_7745c5c3_Var85, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(o.Taken, ui.StampShort))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 374, Col: 95}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 373, Col: 95}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var85))
 			if templ_7745c5c3_Err != nil {
@@ -2062,7 +2061,7 @@ func sysOrphans(p sysPage, st sysStorage) templ.Component {
 			var templ_7745c5c3_Var86 string
 			templ_7745c5c3_Var86, templ_7745c5c3_Err = templ.JoinStringErrs(" · " + o.Size)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 374, Col: 121}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 373, Col: 121}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var86))
 			if templ_7745c5c3_Err != nil {
@@ -2081,7 +2080,7 @@ func sysOrphans(p sysPage, st sysStorage) templ.Component {
 					var templ_7745c5c3_Var87 string
 					templ_7745c5c3_Var87, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.SafeURL(p.Base + "/backups/" + bkStr(o.ID) + "/keep"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 380, Col: 116}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 379, Col: 116}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var87)
 					if templ_7745c5c3_Err != nil {
@@ -2099,7 +2098,7 @@ func sysOrphans(p sysPage, st sysStorage) templ.Component {
 					var templ_7745c5c3_Var88 string
 					templ_7745c5c3_Var88, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.SafeURL(p.Base + "/backups/" + bkStr(o.ID) + "/keep"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 384, Col: 116}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 383, Col: 116}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var88)
 					if templ_7745c5c3_Err != nil {
@@ -2119,7 +2118,7 @@ func sysOrphans(p sysPage, st sysStorage) templ.Component {
 				var templ_7745c5c3_Var89 templ.SafeURL
 				templ_7745c5c3_Var89, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(o.Download))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 390, Col: 53}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 389, Col: 53}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var89))
 				if templ_7745c5c3_Err != nil {
@@ -2138,7 +2137,7 @@ func sysOrphans(p sysPage, st sysStorage) templ.Component {
 				var templ_7745c5c3_Var90 templ.SafeURL
 				templ_7745c5c3_Var90, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(p.Base + "/backups/" + bkStr(o.ID) + "/delete"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 395, Col: 75}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 394, Col: 75}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var90))
 				if templ_7745c5c3_Err != nil {
@@ -2151,7 +2150,7 @@ func sysOrphans(p sysPage, st sysStorage) templ.Component {
 				var templ_7745c5c3_Var91 string
 				templ_7745c5c3_Var91, templ_7745c5c3_Err = templ.ResolveAttributeValue(o.DeleteText)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 398, Col: 35}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 397, Col: 35}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var91)
 				if templ_7745c5c3_Err != nil {
@@ -2164,7 +2163,7 @@ func sysOrphans(p sysPage, st sysStorage) templ.Component {
 				var templ_7745c5c3_Var92 string
 				templ_7745c5c3_Var92, templ_7745c5c3_Err = templ.ResolveAttributeValue(ui.StampISO(o.Taken))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 398, Col: 72}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 397, Col: 72}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var92)
 				if templ_7745c5c3_Err != nil {
@@ -2177,7 +2176,7 @@ func sysOrphans(p sysPage, st sysStorage) templ.Component {
 				var templ_7745c5c3_Var93 string
 				templ_7745c5c3_Var93, templ_7745c5c3_Err = templ.ResolveAttributeValue(ui.StampDateTimeSec.Key)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 398, Col: 112}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 397, Col: 112}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var93)
 				if templ_7745c5c3_Err != nil {
@@ -2190,7 +2189,7 @@ func sysOrphans(p sysPage, st sysStorage) templ.Component {
 				var templ_7745c5c3_Var94 string
 				templ_7745c5c3_Var94, templ_7745c5c3_Err = templ.ResolveAttributeValue(ui.StampText(o.Taken, ui.StampDateTimeSec))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 398, Col: 174}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 397, Col: 174}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var94)
 				if templ_7745c5c3_Err != nil {
@@ -2203,7 +2202,7 @@ func sysOrphans(p sysPage, st sysStorage) templ.Component {
 				var templ_7745c5c3_Var95 string
 				templ_7745c5c3_Var95, templ_7745c5c3_Err = templ.ResolveAttributeValue(p.Base + "/backups/" + bkStr(o.ID) + "/delete")
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 399, Col: 71}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 398, Col: 71}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var95)
 				if templ_7745c5c3_Err != nil {
@@ -2262,7 +2261,7 @@ func sysUnreferencedFiles(st sysStorage) templ.Component {
 			var templ_7745c5c3_Var97 string
 			templ_7745c5c3_Var97, templ_7745c5c3_Err = templ.ResolveAttributeValue(f.Path)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 419, Col: 54}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 418, Col: 54}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var97)
 			if templ_7745c5c3_Err != nil {
@@ -2275,7 +2274,7 @@ func sysUnreferencedFiles(st sysStorage) templ.Component {
 			var templ_7745c5c3_Var98 string
 			templ_7745c5c3_Var98, templ_7745c5c3_Err = templ.JoinStringErrs(f.Path)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 419, Col: 65}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 418, Col: 65}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var98))
 			if templ_7745c5c3_Err != nil {
@@ -2288,7 +2287,7 @@ func sysUnreferencedFiles(st sysStorage) templ.Component {
 			var templ_7745c5c3_Var99 string
 			templ_7745c5c3_Var99, templ_7745c5c3_Err = templ.JoinStringErrs(f.Size + " · ")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 422, Col: 23}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 421, Col: 23}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var99))
 			if templ_7745c5c3_Err != nil {
@@ -2309,7 +2308,7 @@ func sysUnreferencedFiles(st sysStorage) templ.Component {
 			var templ_7745c5c3_Var100 string
 			templ_7745c5c3_Var100, templ_7745c5c3_Err = templ.JoinStringErrs(ui.StampText(f.Modified, ui.StampShort))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 422, Col: 120}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 421, Col: 120}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var100))
 			if templ_7745c5c3_Err != nil {
@@ -2369,7 +2368,7 @@ func sysSnapshotStatus(db sysDB) templ.Component {
 				var templ_7745c5c3_Var102 string
 				templ_7745c5c3_Var102, templ_7745c5c3_Err = templ.JoinStringErrs(storeDate(time.Now(), db.Status.Attempt))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 439, Col: 133}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 438, Col: 133}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var102))
 				if templ_7745c5c3_Err != nil {
@@ -2395,7 +2394,7 @@ func sysSnapshotStatus(db sysDB) templ.Component {
 					var templ_7745c5c3_Var103 string
 					templ_7745c5c3_Var103, templ_7745c5c3_Err = templ.JoinStringErrs(storeDate(time.Now(), db.Status.Taken))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 442, Col: 126}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 441, Col: 126}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var103))
 					if templ_7745c5c3_Err != nil {
@@ -2415,7 +2414,7 @@ func sysSnapshotStatus(db sysDB) templ.Component {
 					var templ_7745c5c3_Var104 string
 					templ_7745c5c3_Var104, templ_7745c5c3_Err = templ.JoinStringErrs(" · next attempt ")
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 447, Col: 29}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 446, Col: 29}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var104))
 					if templ_7745c5c3_Err != nil {
@@ -2436,7 +2435,7 @@ func sysSnapshotStatus(db sysDB) templ.Component {
 					var templ_7745c5c3_Var105 string
 					templ_7745c5c3_Var105, templ_7745c5c3_Err = templ.JoinStringErrs(storeDate(time.Now(), db.Status.Next))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 447, Col: 128}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 446, Col: 128}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var105))
 					if templ_7745c5c3_Err != nil {
@@ -2467,7 +2466,7 @@ func sysSnapshotStatus(db sysDB) templ.Component {
 				var templ_7745c5c3_Var106 string
 				templ_7745c5c3_Var106, templ_7745c5c3_Err = templ.JoinStringErrs(storeDate(time.Now(), db.Status.Taken))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 456, Col: 122}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 455, Col: 122}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var106))
 				if templ_7745c5c3_Err != nil {
@@ -2493,7 +2492,7 @@ func sysSnapshotStatus(db sysDB) templ.Component {
 					var templ_7745c5c3_Var107 string
 					templ_7745c5c3_Var107, templ_7745c5c3_Err = templ.JoinStringErrs(storeDate(time.Now(), db.Status.Next))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 459, Col: 110}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 458, Col: 110}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var107))
 					if templ_7745c5c3_Err != nil {
@@ -2506,7 +2505,7 @@ func sysSnapshotStatus(db sysDB) templ.Component {
 					var templ_7745c5c3_Var108 string
 					templ_7745c5c3_Var108, templ_7745c5c3_Err = templ.JoinStringErrs(" · ")
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 459, Col: 127}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 458, Col: 127}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var108))
 					if templ_7745c5c3_Err != nil {
@@ -2520,7 +2519,7 @@ func sysSnapshotStatus(db sysDB) templ.Component {
 				var templ_7745c5c3_Var109 string
 				templ_7745c5c3_Var109, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(db.Status.Count) + " of " + strconv.Itoa(db.Kept) + " kept")
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 461, Col: 81}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 460, Col: 81}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var109))
 				if templ_7745c5c3_Err != nil {
@@ -2542,15 +2541,28 @@ func sysSnapshotStatus(db sysDB) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var110 string
-		templ_7745c5c3_Var110, templ_7745c5c3_Err = templ.JoinStringErrs("/data/" + snapshot.DirName)
+		templ_7745c5c3_Var110, templ_7745c5c3_Err = templ.JoinStringErrs(db.Dir)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 475, Col: 110}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 474, Col: 89}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var110))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 203, "</span>), so the host backup of <span class=\"mono\">/data</span> covers them. They sit on the same disk as the database: they protect against a bad upgrade or a deleted row, not against a dead disk.</p>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 203, "</span>), so the host backup of <span class=\"mono\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var111 string
+		templ_7745c5c3_Var111, templ_7745c5c3_Err = templ.JoinStringErrs(db.DataDir)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 474, Col: 154}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var111))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 204, "</span> covers them. They sit on the same disk as the database: they protect against a bad upgrade or a deleted row, not against a dead disk.</p>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2577,30 +2589,30 @@ func sysDatabaseBlock(p sysPage, db sysDB) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var111 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var111 == nil {
-			templ_7745c5c3_Var111 = templ.NopComponent
+		templ_7745c5c3_Var112 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var112 == nil {
+			templ_7745c5c3_Var112 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 204, "<div class=\"sys-test\"><button type=\"submit\" form=\"db-dl\" class=\"btn\" id=\"btn-dl\">Download snapshot</button> <label class=\"db-incl\"><input type=\"checkbox\" form=\"db-dl\" name=\"include_key\" value=\"1\"> Include <span class=\"mono\">secret.key</span> (as .tar)</label> <span class=\"sys-test-help\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 205, "<div class=\"sys-test\"><button type=\"submit\" form=\"db-dl\" class=\"btn\" id=\"btn-dl\">Download snapshot</button> <label class=\"db-incl\"><input type=\"checkbox\" form=\"db-dl\" name=\"include_key\" value=\"1\"> Include <span class=\"mono\">secret.key</span> (as .tar)</label> <span class=\"sys-test-help\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var112 string
-		templ_7745c5c3_Var112, templ_7745c5c3_Err = templ.JoinStringErrs(db.Hint)
+		var templ_7745c5c3_Var113 string
+		templ_7745c5c3_Var113, templ_7745c5c3_Err = templ.JoinStringErrs(db.Hint)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 485, Col: 39}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 484, Col: 39}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var112))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var113))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 205, "</span></div><div class=\"notice plain db-contents\" role=\"note\"><b>The file holds secrets. Keep it like a password.</b><ul class=\"db-list\"><li><b>Inside:</b> devices, groups, settings, users with their password hashes, sessions, audit log and the backup index.</li><li><b>Encrypted inside:</b> device HTTP and MQTT passwords, the default device password, the MQTT broker password, the OIDC client secret and refresh tokens, the metrics token. The key is <span class=\"mono\">secret.key</span> and it is <b>not</b> in the database file: without it these values cannot be read, with it they can.</li><li><b>Not inside:</b> device backup files (.dmp), the firmware cache, <span class=\"mono\">secret.key</span> (unless ticked above).</li></ul></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 206, "</span></div><div class=\"notice plain db-contents\" role=\"note\"><b>The file holds secrets. Keep it like a password.</b><ul class=\"db-list\"><li><b>Inside:</b> devices, groups, settings, users with their password hashes, sessions, audit log and the backup index.</li><li><b>Encrypted inside:</b> device HTTP and MQTT passwords, the default device password, the MQTT broker password, the OIDC client secret and refresh tokens, the metrics token. The key is <span class=\"mono\">secret.key</span> and it is <b>not</b> in the database file: without it these values cannot be read, with it they can.</li><li><b>Not inside:</b> device backup files (.dmp), the firmware cache, <span class=\"mono\">secret.key</span> (unless ticked above).</li></ul></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if db.Status.State == "fail" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 206, "<div class=\"st-fail\"><div class=\"error\" role=\"alert\"><b>The last scheduled snapshot failed.</b> <time")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 207, "<div class=\"st-fail\"><div class=\"error\" role=\"alert\"><b>The last scheduled snapshot failed.</b> <time")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -2608,51 +2620,51 @@ func sysDatabaseBlock(p sysPage, db sysDB) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 207, ">")
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			var templ_7745c5c3_Var113 string
-			templ_7745c5c3_Var113, templ_7745c5c3_Err = templ.JoinStringErrs(storeDate(time.Now(), db.Status.Attempt))
-			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 499, Col: 107}
-			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var113))
-			if templ_7745c5c3_Err != nil {
-				return templ_7745c5c3_Err
-			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 208, "</time>: could not write <span class=\"mono\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 208, ">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var114 string
-			templ_7745c5c3_Var114, templ_7745c5c3_Err = templ.JoinStringErrs("/data/" + snapshot.DirName + "/" + db.Status.File)
+			templ_7745c5c3_Var114, templ_7745c5c3_Err = templ.JoinStringErrs(storeDate(time.Now(), db.Status.Attempt))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 499, Col: 205}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 498, Col: 107}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var114))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 209, "</span> (")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 209, "</time>: could not write <span class=\"mono\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var115 string
-			templ_7745c5c3_Var115, templ_7745c5c3_Err = templ.JoinStringErrs(db.Status.Reason)
+			templ_7745c5c3_Var115, templ_7745c5c3_Err = templ.JoinStringErrs(db.Dir + "/" + db.Status.File)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 499, Col: 234}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 498, Col: 184}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var115))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 210, "). Nothing was deleted. ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 210, "</span> (")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			var templ_7745c5c3_Var116 string
+			templ_7745c5c3_Var116, templ_7745c5c3_Err = templ.JoinStringErrs(db.Status.Reason)
+			if templ_7745c5c3_Err != nil {
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 498, Col: 213}
+			}
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var116))
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 211, "). Nothing was deleted. ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if !db.Status.Next.IsZero() {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 211, "The next attempt is <time")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 212, "The next attempt is <time")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -2660,84 +2672,84 @@ func sysDatabaseBlock(p sysPage, db sysDB) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 212, ">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 213, ">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var116 string
-				templ_7745c5c3_Var116, templ_7745c5c3_Err = templ.JoinStringErrs(storeDate(time.Now(), db.Status.Next))
+				var templ_7745c5c3_Var117 string
+				templ_7745c5c3_Var117, templ_7745c5c3_Err = templ.JoinStringErrs(storeDate(time.Now(), db.Status.Next))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 501, Col: 122}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 500, Col: 122}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var116))
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var117))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 213, "</time>; ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 214, "</time>; ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 214, "<a href=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 215, "<a href=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var117 templ.SafeURL
-			templ_7745c5c3_Var117, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(p.Base + "/audit"))
+			var templ_7745c5c3_Var118 templ.SafeURL
+			templ_7745c5c3_Var118, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(p.Base + "/audit"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 503, Col: 46}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 502, Col: 46}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var117))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var118))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 215, "\">see the audit log</a>.</div></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 216, "\">see the audit log</a>.</div></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 216, "<h3 class=\"sys-subhead\">Scheduled snapshots <span class=\"db-where mono\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 217, "<h3 class=\"sys-subhead\">Scheduled snapshots <span class=\"db-where mono\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var118 string
-		templ_7745c5c3_Var118, templ_7745c5c3_Err = templ.JoinStringErrs("/data/" + snapshot.DirName)
+		var templ_7745c5c3_Var119 string
+		templ_7745c5c3_Var119, templ_7745c5c3_Err = templ.JoinStringErrs(db.Dir)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 507, Col: 102}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 506, Col: 81}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var118))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var119))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 217, "</span></h3>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 218, "</span></h3>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if len(db.Files) == 0 {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 218, "<p class=\"ufield-help\">No snapshots yet. Turn on the schedule on the right, or download one now. Downloads are not kept on the server.</p>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 219, "<p class=\"ufield-help\">No snapshots yet. Turn on the schedule on the right, or download one now. Downloads are not kept on the server.</p>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 219, "<div class=\"sys-orphans\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 220, "<div class=\"sys-orphans\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			for _, f := range db.Files {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 220, "<div class=\"sys-orphan\"><div class=\"sys-orphan-main\"><div class=\"sys-orphan-title\"><span class=\"sys-store-name mono\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 221, "<div class=\"sys-orphan\"><div class=\"sys-orphan-main\"><div class=\"sys-orphan-title\"><span class=\"sys-store-name mono\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var119 string
-				templ_7745c5c3_Var119, templ_7745c5c3_Err = templ.JoinStringErrs(f.Name)
+				var templ_7745c5c3_Var120 string
+				templ_7745c5c3_Var120, templ_7745c5c3_Err = templ.JoinStringErrs(f.Name)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 516, Col: 49}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 515, Col: 49}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var119))
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var120))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 221, "</span> ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 222, "</span> ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -2747,7 +2759,7 @@ func sysDatabaseBlock(p sysPage, db sysDB) templ.Component {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 222, "</div><div class=\"sys-orphan-detail\"><time")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 223, "</div><div class=\"sys-orphan-detail\"><time")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -2755,110 +2767,136 @@ func sysDatabaseBlock(p sysPage, db sysDB) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 223, ">")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				var templ_7745c5c3_Var120 string
-				templ_7745c5c3_Var120, templ_7745c5c3_Err = templ.JoinStringErrs(storeDate(time.Now(), f.Taken))
-				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 522, Col: 90}
-				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var120))
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 224, "</time>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 224, ">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var121 string
-				templ_7745c5c3_Var121, templ_7745c5c3_Err = templ.JoinStringErrs(" · " + f.Size)
+				templ_7745c5c3_Var121, templ_7745c5c3_Err = templ.JoinStringErrs(storeDate(time.Now(), f.Taken))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 522, Col: 116}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 521, Col: 90}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var121))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 225, " ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 225, "</time>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var122 string
+				templ_7745c5c3_Var122, templ_7745c5c3_Err = templ.JoinStringErrs(" · " + f.Size)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 521, Col: 116}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var122))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 226, " ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				if f.Schema > 0 {
-					var templ_7745c5c3_Var122 string
-					templ_7745c5c3_Var122, templ_7745c5c3_Err = templ.JoinStringErrs(" · schema " + strconv.Itoa(f.Schema))
+					var templ_7745c5c3_Var123 string
+					templ_7745c5c3_Var123, templ_7745c5c3_Err = templ.JoinStringErrs(" · schema " + strconv.Itoa(f.Schema))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 524, Col: 48}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 523, Col: 48}
 					}
-					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var122))
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var123))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 226, "</div></div><div class=\"bk-acts\"><a class=\"btn\" href=\"")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				var templ_7745c5c3_Var123 templ.SafeURL
-				templ_7745c5c3_Var123, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(f.Download))
-				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 529, Col: 53}
-				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var123))
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 227, "\">Download</a> <a class=\"btn btn-danger bk-del\" href=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 227, "</div></div><div class=\"bk-acts\"><a class=\"btn\" href=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var124 templ.SafeURL
-				templ_7745c5c3_Var124, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(f.Delete))
+				templ_7745c5c3_Var124, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(f.Download))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 532, Col: 37}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 528, Col: 53}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var124))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 228, "\" data-dialog=\"dlg-bkdel\" data-dlg-title=\"Delete this snapshot?\" data-dlg-text=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 228, "\">Download</a> <a class=\"btn btn-danger bk-del\" href=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var125 string
-				templ_7745c5c3_Var125, templ_7745c5c3_Err = templ.ResolveAttributeValue(snapDeleteText(f.Name))
+				var templ_7745c5c3_Var125 templ.SafeURL
+				templ_7745c5c3_Var125, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(f.Delete))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 535, Col: 45}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 531, Col: 37}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var125)
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var125))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 229, "\" data-dlg-action=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 229, "\" data-dialog=\"dlg-bkdel\" data-dlg-title=\"Delete this snapshot?\" data-dlg-text=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var126 string
-				templ_7745c5c3_Var126, templ_7745c5c3_Err = templ.ResolveAttributeValue(f.Delete)
+				templ_7745c5c3_Var126, templ_7745c5c3_Err = templ.ResolveAttributeValue(snapDeleteText(f.Name))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 536, Col: 33}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 534, Col: 45}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var126)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 230, "\" data-dlg-verb=\"Delete snapshot\">Delete</a></div></div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 230, "\" data-dlg-action=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var127 string
+				templ_7745c5c3_Var127, templ_7745c5c3_Err = templ.ResolveAttributeValue(f.Delete)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 535, Col: 33}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var127)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 231, "\" data-dlg-verb=\"Delete snapshot\">Delete</a></div></div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 231, "</div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 232, "</div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 232, "<h3 class=\"sys-subhead\">Restore</h3><ol class=\"db-restore\"><li>Stop the container.</li><li>Replace <span class=\"mono\">/data/tasmofleet.db</span> with the snapshot and delete <span class=\"mono\">tasmofleet.db-wal</span> and <span class=\"mono\">tasmofleet.db-shm</span>.</li><li>Make sure <span class=\"mono\">/data/secret.key</span> is the one from the same time, then start the container.</li></ol><p class=\"ufield-help\">There is no restore button on purpose. A snapshot from an older version is migrated at start; one from a newer version is refused. The <span class=\"mono\">tasmofleet.db.pre-N</span> copies made before an upgrade are restored the same way.</p>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 233, "<h3 class=\"sys-subhead\">Restore</h3><ol class=\"db-restore\"><li>Stop the container.</li><li>Replace <span class=\"mono\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var128 string
+		templ_7745c5c3_Var128, templ_7745c5c3_Err = templ.JoinStringErrs(db.DataDir + "/tasmofleet.db")
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 546, Col: 64}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var128))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 234, "</span> with the snapshot and delete <span class=\"mono\">tasmofleet.db-wal</span> and <span class=\"mono\">tasmofleet.db-shm</span>.</li><li>Make sure <span class=\"mono\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var129 string
+		templ_7745c5c3_Var129, templ_7745c5c3_Err = templ.JoinStringErrs(db.DataDir + "/secret.key")
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 547, Col: 63}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var129))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 235, "</span> is the one from the same time, then start the container.</li></ol><p class=\"ufield-help\">There is no restore button on purpose. A snapshot from an older version is migrated at start; one from a newer version is refused. The <span class=\"mono\">tasmofleet.db.pre-N</span> copies made before an upgrade are restored the same way.</p>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2884,25 +2922,25 @@ func sysResetBox(p sysPage) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var127 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var127 == nil {
-			templ_7745c5c3_Var127 = templ.NopComponent
+		templ_7745c5c3_Var130 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var130 == nil {
+			templ_7745c5c3_Var130 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 233, "<div class=\"sys-danger\"><div><div class=\"sys-danger-title\">Reset all settings</div><div class=\"sys-danger-text\">Devices, backups and users are kept.</div></div><a class=\"btn btn-danger-solid\" href=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 236, "<div class=\"sys-danger\"><div><div class=\"sys-danger-title\">Reset all settings</div><div class=\"sys-danger-text\">Devices, backups and users are kept.</div></div><a class=\"btn btn-danger-solid\" href=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var128 templ.SafeURL
-		templ_7745c5c3_Var128, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(p.Base + sysPath + "/reset"))
+		var templ_7745c5c3_Var131 templ.SafeURL
+		templ_7745c5c3_Var131, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(p.Base + sysPath + "/reset"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 561, Col: 83}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 560, Col: 83}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var128))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var131))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 234, "\" data-dialog=\"dlg-reset\">Reset settings…</a></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 237, "\" data-dialog=\"dlg-reset\">Reset settings…</a></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -2930,97 +2968,66 @@ func sysTestRow(label, action, what, result, help string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var129 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var129 == nil {
-			templ_7745c5c3_Var129 = templ.NopComponent
+		templ_7745c5c3_Var132 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var132 == nil {
+			templ_7745c5c3_Var132 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 235, "<div class=\"sys-test\"><button type=\"submit\" class=\"btn\" formaction=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 238, "<div class=\"sys-test\"><button type=\"submit\" class=\"btn\" formaction=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var130 string
-		templ_7745c5c3_Var130, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.SafeURL(action))
+		var templ_7745c5c3_Var133 string
+		templ_7745c5c3_Var133, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.SafeURL(action))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 571, Col: 70}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 570, Col: 70}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var130)
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 236, "\" formnovalidate hx-post=\"")
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var133)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var131 string
-		templ_7745c5c3_Var131, templ_7745c5c3_Err = templ.ResolveAttributeValue(action)
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 571, Col: 104}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var131)
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 239, "\" formnovalidate hx-post=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 237, "\" hx-include=\"#sysform\" hx-target=\"closest .sys-test\" hx-swap=\"outerHTML\">")
+		var templ_7745c5c3_Var134 string
+		templ_7745c5c3_Var134, templ_7745c5c3_Err = templ.ResolveAttributeValue(action)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 570, Col: 104}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var134)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var132 string
-		templ_7745c5c3_Var132, templ_7745c5c3_Err = templ.JoinStringErrs(label)
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 571, Col: 186}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var132))
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 240, "\" hx-include=\"#sysform\" hx-target=\"closest .sys-test\" hx-swap=\"outerHTML\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 238, "</button> ")
+		var templ_7745c5c3_Var135 string
+		templ_7745c5c3_Var135, templ_7745c5c3_Err = templ.JoinStringErrs(label)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 570, Col: 186}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var135))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 241, "</button> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if result != "" {
 			if testNote(what, result).Failed {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 239, "<span class=\"sys-test-res t-danger\" role=\"alert\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 242, "<span class=\"sys-test-res t-danger\" role=\"alert\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var133 string
-				templ_7745c5c3_Var133, templ_7745c5c3_Err = templ.JoinStringErrs(what)
+				var templ_7745c5c3_Var136 string
+				templ_7745c5c3_Var136, templ_7745c5c3_Err = templ.JoinStringErrs(what)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 574, Col: 59}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 573, Col: 59}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var133))
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 240, ": ")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				var templ_7745c5c3_Var134 string
-				templ_7745c5c3_Var134, templ_7745c5c3_Err = templ.JoinStringErrs(result)
-				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 574, Col: 71}
-				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var134))
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 241, "</span>")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 242, "<span class=\"sys-test-res t-ok\" role=\"status\">")
-				if templ_7745c5c3_Err != nil {
-					return templ_7745c5c3_Err
-				}
-				var templ_7745c5c3_Var135 string
-				templ_7745c5c3_Var135, templ_7745c5c3_Err = templ.JoinStringErrs(what)
-				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 576, Col: 56}
-				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var135))
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var136))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -3028,12 +3035,12 @@ func sysTestRow(label, action, what, result, help string) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var136 string
-				templ_7745c5c3_Var136, templ_7745c5c3_Err = templ.JoinStringErrs(result)
+				var templ_7745c5c3_Var137 string
+				templ_7745c5c3_Var137, templ_7745c5c3_Err = templ.JoinStringErrs(result)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 576, Col: 68}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 573, Col: 71}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var136))
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var137))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -3041,27 +3048,58 @@ func sysTestRow(label, action, what, result, help string) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
+			} else {
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 245, "<span class=\"sys-test-res t-ok\" role=\"status\">")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var138 string
+				templ_7745c5c3_Var138, templ_7745c5c3_Err = templ.JoinStringErrs(what)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 575, Col: 56}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var138))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 246, ": ")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var139 string
+				templ_7745c5c3_Var139, templ_7745c5c3_Err = templ.JoinStringErrs(result)
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 575, Col: 68}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var139))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 247, "</span>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 245, "<span class=\"sys-test-help\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 248, "<span class=\"sys-test-help\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var137 string
-			templ_7745c5c3_Var137, templ_7745c5c3_Err = templ.JoinStringErrs(help)
+			var templ_7745c5c3_Var140 string
+			templ_7745c5c3_Var140, templ_7745c5c3_Err = templ.JoinStringErrs(help)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 579, Col: 37}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 578, Col: 37}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var137))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var140))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 246, "</span>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 249, "</span>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 247, "</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 250, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -3086,75 +3124,75 @@ func sysDiscoveryCard(p sysPage) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var138 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var138 == nil {
-			templ_7745c5c3_Var138 = templ.NopComponent
+		templ_7745c5c3_Var141 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var141 == nil {
+			templ_7745c5c3_Var141 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 248, "<div class=\"sys-status\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 251, "<div class=\"sys-status\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var139 = []any{"sys-status-dot", "t-" + p.Discovery.Tone}
-		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var139...)
+		var templ_7745c5c3_Var142 = []any{"sys-status-dot", "t-" + p.Discovery.Tone}
+		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var142...)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 249, "<span class=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 252, "<span class=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var140 string
-		templ_7745c5c3_Var140, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.CSSClasses(templ_7745c5c3_Var139).String())
+		var templ_7745c5c3_Var143 string
+		templ_7745c5c3_Var143, templ_7745c5c3_Err = templ.ResolveAttributeValue(templ.CSSClasses(templ_7745c5c3_Var142).String())
 		if templ_7745c5c3_Err != nil {
 			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 1, Col: 0}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var140)
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var143)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 250, "\" aria-hidden=\"true\"></span><div class=\"sys-status-text\"><b>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 253, "\" aria-hidden=\"true\"></span><div class=\"sys-status-text\"><b>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var141 string
-		templ_7745c5c3_Var141, templ_7745c5c3_Err = templ.JoinStringErrs(p.Discovery.Title)
+		var templ_7745c5c3_Var144 string
+		templ_7745c5c3_Var144, templ_7745c5c3_Err = templ.JoinStringErrs(p.Discovery.Title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 589, Col: 25}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 588, Col: 25}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var141))
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 251, "</b> <span>")
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var144))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var142 string
-		templ_7745c5c3_Var142, templ_7745c5c3_Err = templ.JoinStringErrs(p.Discovery.Text)
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 591, Col: 22}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var142))
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 254, "</b> <span>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 252, " ")
+		var templ_7745c5c3_Var145 string
+		templ_7745c5c3_Var145, templ_7745c5c3_Err = templ.JoinStringErrs(p.Discovery.Text)
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 590, Col: 22}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var145))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 255, " ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if p.Discovery.Waiting > 0 {
-			var templ_7745c5c3_Var143 string
-			templ_7745c5c3_Var143, templ_7745c5c3_Err = templ.JoinStringErrs(" · " + plural(p.Discovery.Waiting, "new device") + " waiting")
+			var templ_7745c5c3_Var146 string
+			templ_7745c5c3_Var146, templ_7745c5c3_Err = templ.JoinStringErrs(" · " + plural(p.Discovery.Waiting, "new device") + " waiting")
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 593, Col: 70}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 592, Col: 70}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var143))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var146))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 253, "</span></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 256, "</span></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -3181,12 +3219,12 @@ func sysContainer(rows []sysconfig.Row) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var144 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var144 == nil {
-			templ_7745c5c3_Var144 = templ.NopComponent
+		templ_7745c5c3_Var147 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var147 == nil {
+			templ_7745c5c3_Var147 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Var145 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_Var148 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 			templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 			templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 			if !templ_7745c5c3_IsBuffer {
@@ -3198,7 +3236,7 @@ func sysContainer(rows []sysconfig.Row) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Var146 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+			templ_7745c5c3_Var149 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 				templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 				templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
 				if !templ_7745c5c3_IsBuffer {
@@ -3210,7 +3248,7 @@ func sysContainer(rows []sysconfig.Row) templ.Component {
 					}()
 				}
 				ctx = templ.InitializeContext(ctx)
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 254, "<p class=\"ucard-sub\">Bootstrap settings (listeners, TLS, keys) come from the container configuration only and are never editable here.</p><div class=\"cset\">")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 257, "<p class=\"ucard-sub\">Bootstrap settings (listeners, TLS, keys) come from the container configuration only and are never editable here.</p><div class=\"cset\">")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -3222,19 +3260,19 @@ func sysContainer(rows []sysconfig.Row) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 255, "</div>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 258, "</div>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				return nil
 			})
-			templ_7745c5c3_Err = ui.SettingsCard(ui.SettingsCardData{ID: "card-container", Title: "Set by the container", Note: "Read-only. Change them in the container configuration.", Class: "span2", Plain: true}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var146), templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.SettingsCard(ui.SettingsCardData{ID: "card-container", Title: "Set by the container", Note: "Read-only. Change them in the container configuration.", Class: "span2", Plain: true}).Render(templ.WithChildren(ctx, templ_7745c5c3_Var149), templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			return nil
 		})
-		templ_7745c5c3_Err = ui.SettingsGrid().Render(templ.WithChildren(ctx, templ_7745c5c3_Var145), templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = ui.SettingsGrid().Render(templ.WithChildren(ctx, templ_7745c5c3_Var148), templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -3258,63 +3296,63 @@ func sysContainerTable(rows []sysconfig.Row) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var147 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var147 == nil {
-			templ_7745c5c3_Var147 = templ.NopComponent
+		templ_7745c5c3_Var150 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var150 == nil {
+			templ_7745c5c3_Var150 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 256, "<div class=\"table-scroll\"><table class=\"dense\"><thead><tr><th>Key</th><th>Value</th></tr></thead> <tbody>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 259, "<div class=\"table-scroll\"><table class=\"dense\"><thead><tr><th>Key</th><th>Value</th></tr></thead> <tbody>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		for _, kv := range rows {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 257, "<tr><td data-label=\"Key\" class=\"p1\"><code>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 260, "<tr><td data-label=\"Key\" class=\"p1\"><code>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var148 string
-			templ_7745c5c3_Var148, templ_7745c5c3_Err = templ.JoinStringErrs(kv.Key)
+			var templ_7745c5c3_Var151 string
+			templ_7745c5c3_Var151, templ_7745c5c3_Err = templ.JoinStringErrs(kv.Key)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 622, Col: 52}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 621, Col: 52}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var148))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var151))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 258, "</code></td><td data-label=\"Value\" class=\"s grow\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 261, "</code></td><td data-label=\"Value\" class=\"s grow\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			if kv.Value != "" {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 259, "<code>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 262, "<code>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				var templ_7745c5c3_Var149 string
-				templ_7745c5c3_Var149, templ_7745c5c3_Err = templ.JoinStringErrs(kv.Value)
+				var templ_7745c5c3_Var152 string
+				templ_7745c5c3_Var152, templ_7745c5c3_Err = templ.JoinStringErrs(kv.Value)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 625, Col: 24}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/syssettings.templ`, Line: 624, Col: 24}
 				}
-				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var149))
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var152))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 260, "</code>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 263, "</code>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			} else {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 261, "<span class=\"muted\">empty</span>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 264, "<span class=\"muted\">empty</span>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 262, "</td></tr>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 265, "</td></tr>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 263, "</tbody></table></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 266, "</tbody></table></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

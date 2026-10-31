@@ -65,7 +65,7 @@ func (s *snapEnv) actions() []string {
 // passwords. Only an admin may take it, and every attempt from a lower role is a 403/401.
 func TestSnapshotRoutesAreAdminOnly(t *testing.T) {
 	s := snapSetup(t, true)
-	if _, _, err := s.mgr.Run(t.Context(), 7); err != nil {
+	if _, err := s.mgr.Run(t.Context(), 7); err != nil {
 		t.Fatal(err)
 	}
 	list, _ := s.mgr.List()
@@ -115,7 +115,7 @@ func TestSnapshotDownloadNeedsStepUp(t *testing.T) {
 		t.Fatalf("nothing happened, nothing to audit: %v", s.actions())
 	}
 	// A stored snapshot is as secret as a fresh one.
-	if _, _, err := s.mgr.Run(t.Context(), 7); err != nil {
+	if _, err := s.mgr.Run(t.Context(), 7); err != nil {
 		t.Fatal(err)
 	}
 	list, _ := s.mgr.List()
@@ -201,12 +201,12 @@ func TestSnapshotDownloadRejectsUnknownFormKeys(t *testing.T) {
 // itself may be read or deleted (CodeQL path-injection, and the key sits one level up).
 func TestStoredSnapshotNamesCannotLeaveTheSnapshotFolder(t *testing.T) {
 	s := snapSetup(t, true)
-	if _, _, err := s.mgr.Run(t.Context(), 7); err != nil {
+	if _, err := s.mgr.Run(t.Context(), 7); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{
 		"..%2Fsecret.key", "..%2f..%2fetc%2fpasswd", "%2e%2e%2fsecret.key", "secret.key", "tasmofleet.db",
-		"tasmofleet-20260101-0000.db%00", "tasmofleet-99999999-9999.db", "tasmofleet-20261029-0300.db%2F..%2F..%2Fsecret.key",
+		"tasmofleet-20260101-0000Z.db%00", "tasmofleet-99999999-9999Z.db", "tasmofleet-20261029-0300Z.db%2F..%2F..%2Fsecret.key",
 	} {
 		for _, c := range []struct{ method, suffix string }{{"GET", "/download"}, {"GET", "/delete"}, {"POST", "/delete"}} {
 			r, body := s.do(t, c.method, "/settings/system/snapshots/"+name+c.suffix, "admin", url.Values{"csrf": {"tok"}})
@@ -232,7 +232,7 @@ func TestStoredSnapshotNamesCannotLeaveTheSnapshotFolder(t *testing.T) {
 // and a delete really removes the file.
 func TestStoredSnapshotDownloadAndDelete(t *testing.T) {
 	s := snapSetup(t, true)
-	if _, _, err := s.mgr.Run(t.Context(), 7); err != nil {
+	if _, err := s.mgr.Run(t.Context(), 7); err != nil {
 		t.Fatal(err)
 	}
 	list, _ := s.mgr.List()
@@ -264,7 +264,7 @@ func TestStoredSnapshotDownloadAndDelete(t *testing.T) {
 // hand, and the old card name is gone (the schedule card now says it is for device backups).
 func TestBackupsTabShowsTheDatabaseCardAndRenamedSchedule(t *testing.T) {
 	s := snapSetup(t, true)
-	if _, _, err := s.mgr.Run(t.Context(), 7); err != nil {
+	if _, err := s.mgr.Run(t.Context(), 7); err != nil {
 		t.Fatal(err)
 	}
 	_, body := s.do(t, "GET", "/settings/system?tab=backups", "admin", nil)
@@ -295,7 +295,7 @@ func TestBackupsTabReportsAFailedScheduledSnapshot(t *testing.T) {
 	if _, err := svc.Apply(t.Context(), sysconfig.Request{Actor: "admin", Values: map[string]string{"SNAPSHOT_INTERVAL": "24h"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := mgr.Run(t.Context(), 7); err == nil {
+	if _, err := mgr.Run(t.Context(), 7); err == nil {
 		t.Fatal("expected a failure")
 	}
 	_, body := e.do(t, "GET", "/settings/system?tab=backups", "admin", nil)
@@ -339,5 +339,87 @@ func TestSnapshotScheduleSwitchIsComposedIntoTheInterval(t *testing.T) {
 	}
 	if code, _ := post(url.Values{"v.SNAPSHOT_KEEP": {"0"}}); code != 422 {
 		t.Fatalf("keep 0: %d", code)
+	}
+}
+
+// Why (proportionate security): a proxy-header sign-in has no password to confirm with, so it must
+// not be blocked, but the file holds every password hash and the encrypted secrets, so the
+// download is never one click: a confirmation page with a checkbox comes first, for the fresh and
+// the stored download, and the audit says the sign-in was a header.
+func TestHeaderSignInsConfirmWithACheckboxBeforeASnapshotDownload(t *testing.T) {
+	s := snapSetup(t, true) // the password step-up does not apply to header principals
+	if _, err := s.mgr.Run(t.Context(), 7); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := s.mgr.List()
+	hdr := []string{"X-Test-Method", "header"}
+	dl := "/settings/system/snapshots/" + list[0].Name + "/download"
+
+	for _, c := range []struct {
+		name, method, path string
+		form               url.Values
+		action             string
+	}{
+		{"fresh", "POST", "/settings/system/snapshot", url.Values{"csrf": {"tok"}, "include_key": {"1"}}, "/tf/settings/system/snapshot"},
+		{"stored", "GET", dl, nil, "/tf" + dl},
+	} {
+		r, body := s.do(t, c.method, c.path, "admin", c.form, hdr...)
+		if r.StatusCode != 200 || strings.Contains(body, "SQLite format") || r.Header.Get("Content-Disposition") != "" {
+			t.Fatalf("%s: the first request must only ask: %d", c.name, r.StatusCode)
+		}
+		for _, want := range []string{"I understand this file holds secrets.", `name="ack" value="1" required`, `action="` + c.action + `"`, `name="csrf"`} {
+			if !strings.Contains(body, want) {
+				t.Errorf("%s: confirmation lacks %q", c.name, want)
+			}
+		}
+	}
+	if len(s.actions()) != 0 {
+		t.Fatalf("asking is not a download: %v", s.actions())
+	}
+	// Posting without the tick, or with another value, asks again.
+	if r, body := s.do(t, "POST", dl, "admin", url.Values{"csrf": {"tok"}, "ack": {"0"}}, hdr...); r.StatusCode != 200 || strings.Contains(body, "SQLite format") {
+		t.Fatalf("no tick: %d", r.StatusCode)
+	}
+	// Ticked: the file comes, with the key when asked, and the audit says header.
+	r, body := s.do(t, "POST", "/settings/system/snapshot", "admin", url.Values{"csrf": {"tok"}, "include_key": {"1"}, "ack": {"1"}}, hdr...)
+	if r.StatusCode != 200 || !strings.HasSuffix(r.Header.Get("Content-Disposition"), `.tar"`) || !strings.Contains(body, fakeKey) {
+		t.Fatalf("confirmed fresh download: %d", r.StatusCode)
+	}
+	r, body = s.do(t, "POST", dl, "admin", url.Values{"csrf": {"tok"}, "ack": {"1"}}, hdr...)
+	if r.StatusCode != 200 || !strings.HasPrefix(body, "SQLite format 3") {
+		t.Fatalf("confirmed stored download: %d", r.StatusCode)
+	}
+	acts := s.actions()
+	if len(acts) != 2 || !strings.Contains(acts[0], `"method":"header"`) || !strings.Contains(acts[1], `"method":"header"`) {
+		t.Fatalf("audit: %v", acts)
+	}
+}
+
+// Why: a HEAD request sends no file, so it is no download and must not fill the audit log.
+func TestHeadOfAStoredSnapshotIsNotAudited(t *testing.T) {
+	s := snapSetup(t, true)
+	if _, err := s.mgr.Run(t.Context(), 7); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := s.mgr.List()
+	r, _ := s.do(t, "HEAD", "/settings/system/snapshots/"+list[0].Name+"/download", "admin", nil)
+	if r.StatusCode != 200 || len(s.actions()) != 0 {
+		t.Fatalf("HEAD: %d, audit %v", r.StatusCode, s.actions())
+	}
+}
+
+// Why: the page names the folders the server really uses (DATA_DIR may not be /data), so the
+// restore steps can be followed as written.
+func TestDatabaseCardNamesTheRealDataDirectory(t *testing.T) {
+	s := snapSetup(t, true)
+	_, body := s.do(t, "GET", "/settings/system?tab=backups", "admin", nil)
+	if !strings.Contains(body, s.dir+"/tasmofleet.db") || !strings.Contains(body, s.dir+"/secret.key") || !strings.Contains(body, s.dir+"/snapshots") {
+		t.Error("the card must show the data directory in use")
+	}
+	if strings.Contains(body, "/data/snapshots") {
+		t.Error("no hard-coded /data")
+	}
+	if !strings.Contains(body, "You are asked to confirm first (password, or your identity provider for SSO).") {
+		t.Error("the copy must say that SSO accounts confirm at their identity provider")
 	}
 }
