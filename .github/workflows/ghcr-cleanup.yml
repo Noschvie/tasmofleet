@@ -106,6 +106,9 @@ jobs:
         with:
           package: tasmofleet
           delete-untagged: true
+          # A multi-arch push uploads the untagged platform manifests a moment before the index
+          # that tags them; younger packages are left alone so the cleanup cannot race a push.
+          older-than: 1 hour
           delete-ghost-images: true
           delete-partial-images: true
           delete-orphaned-images: true
