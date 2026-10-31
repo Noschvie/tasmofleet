@@ -1169,7 +1169,9 @@ Submit.
   once per boot; Tasmota raises BootCount only after 10 s of uptime, so a fast loop repeats it and BootCount
   is no key); BootCount steps only add the restarts TasmoFleet missed, when both neighbouring rows are inside
   the window. After a crash INFO3 carries `RestartReason` as an object, whose `Reason` is taken. A restart
-  while an update, restore or command job of the device runs (or ended within 3 minutes) is stored as
+  while an update, restore or command job of the device runs (or ended within 3 minutes), or within 3
+  minutes of a command that restarts it (`cmdpolicy.RestartsDevice`: the Restart button, bulk and console
+  Restart 1/99, Upgrade, Reset) is stored as
   expected and does not count towards a boot loop, but is still the "last restart". A light behind a wall
   switch that is flicked reports "Power on" and can show as a boot loop of power-ons.
 - Only transitions are persisted (`health_events`), plus `devices.health_state/last_seen_at`

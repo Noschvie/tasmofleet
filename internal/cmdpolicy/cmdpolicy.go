@@ -304,6 +304,35 @@ func StartsFirmwareUpgrade(cmd string) bool {
 	return bad == "" && upgradeIn(p)
 }
 
+// RestartsDevice reports whether the command makes the device restart: Restart 1 (saves) or Restart 99
+// (does not), Upgrade or Reset with an argument, alone or inside a Backlog. Restart 2 halts the device and
+// no restart follows. It reads the command exactly like Classify, so callers never parse commands
+// themselves. TasmoFleet uses it to know that a restart it sees was its own doing (#325).
+func RestartsDevice(cmd string) bool {
+	p, bad := parse(cmd)
+	return bad == "" && restartsIn(p)
+}
+
+func restartsIn(p parsed) bool {
+	switch p.base {
+	case "restart":
+		return p.args == "1" || p.args == "99"
+	case "upgrade", "reset":
+		return p.args != ""
+	case "backlog":
+		for _, part := range strings.Split(p.args, ";") {
+			part = stripBacklogPrefix(part)
+			if part == "" {
+				continue
+			}
+			if sub, bad := parse(part); bad == "" && restartsIn(sub) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // upgradeIn reports whether p, or a part of a Backlog p, is an Upgrade with an argument.
 func upgradeIn(p parsed) bool {
 	switch p.base {

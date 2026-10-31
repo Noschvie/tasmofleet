@@ -145,6 +145,7 @@ type runtime struct {
 	fwFeed          string // its short name
 	bgWG            sync.WaitGroup
 	bgContext       context.Context
+	restartAsks     *restartAsks // restarts TasmoFleet asked for: not a fault (#325)
 }
 
 func (a *runtime) run(ctx context.Context) error {
@@ -152,6 +153,7 @@ func (a *runtime) run(ctx context.Context) error {
 	bg, cancelBG := context.WithCancel(ctx)
 	defer cancelBG()
 	a.bgContext = bg
+	a.restartAsks = newRestartAsks(time.Now)
 	a.backupRun = newScheduledRun(svc.Hub)
 	a.snapshots = snapshot.New(svc.Store, cfg.DataDir)
 	a.snapshots.CleanTemp() // scratch copies a crash left behind

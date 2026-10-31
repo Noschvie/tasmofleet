@@ -31,6 +31,9 @@ type holdingCmd struct {
 	holds *devlock.FirmwareHolds
 	// uptime is the uptime the health tracker has cached for a device, the baseline of the hold.
 	uptime func(model.DeviceID) int64
+	// asks is told of every command that restarts a device (cmdpolicy.RestartsDevice), so that the restart
+	// that follows is stored as expected and does not count towards a boot loop (#325).
+	asks *restartAsks
 }
 
 func (c holdingCmd) Run(ctx context.Context, p model.Principal, id model.DeviceID, cmd string) (json.RawMessage, error) {
@@ -38,6 +41,9 @@ func (c holdingCmd) Run(ctx context.Context, p model.Principal, id model.DeviceI
 	// An unknown outcome (a timeout over HTTP, a lost reply over MQTT, an unconfirmed publish) may have
 	// reached the device, so it holds too: holding too long costs ten minutes, too short risks a brick.
 	// Only what certainly never left TasmoFleet does not.
+	if c.asks != nil && !neverSent(err) && cmdpolicy.RestartsDevice(cmd) {
+		c.asks.Note(id)
+	}
 	if !neverSent(err) && cmdpolicy.StartsFirmwareUpgrade(cmd) {
 		var up int64
 		if c.uptime != nil {
