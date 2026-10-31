@@ -322,3 +322,50 @@ func TestMigration0038KeepsExistingDevicesWithoutStatusFWR(t *testing.T) {
 		t.Fatalf("fwr_facts = %q, %v; want empty", raw, err)
 	}
 }
+
+// Why (#186): the remembered S2 build is an explicit choice only. Probes and device edits must never
+// fill or wipe it, "Forget" clears it, and a replaced chip must not inherit the old board's build.
+func TestBuildMemoryIsWrittenOnlyByTheChoiceAndClearedByReplace(t *testing.T) {
+	s, _, _ := newStore(t)
+	id, _ := s.CreateDevice(ctx, model.Device{Name: "s2", Address: "192.0.2.20", MAC: "aa:bb:cc:00:00:20"})
+	if d, _ := s.GetDevice(ctx, id); d.BuildMemory != "" {
+		t.Fatalf("a new device remembers %q", d.BuildMemory)
+	}
+	if err := s.SetBuildMemory(ctx, id, "s2cdc"); err != nil {
+		t.Fatal(err)
+	}
+	guard := ProbeGuard{Address: "192.0.2.20", MAC: "aa:bb:cc:00:00:20"}
+	if err := s.UpdateProbe(ctx, id, guard, ProbeResult{Identity: model.Identity{Family: model.ChipESP32S2, Hardware: "ESP32-S2", Image: "tasmota32"}}); err != nil {
+		t.Fatal(err)
+	}
+	d, _ := s.GetDevice(ctx, id)
+	if d.BuildMemory != "s2cdc" {
+		t.Fatalf("a probe changed the memory: %q", d.BuildMemory)
+	}
+	d.Notes = "edited"
+	if err := s.UpdateDevice(ctx, d); err != nil {
+		t.Fatal(err)
+	}
+	if d, _ = s.GetDevice(ctx, id); d.BuildMemory != "s2cdc" {
+		t.Fatalf("a device edit changed the memory: %q", d.BuildMemory)
+	}
+	if err := s.SetBuildMemory(ctx, id, "p4"); err == nil {
+		t.Fatal("an unknown build was stored")
+	}
+	if err := s.SetBuildMemory(ctx, id, ""); err != nil {
+		t.Fatal(err)
+	}
+	if d, _ = s.GetDevice(ctx, id); d.BuildMemory != "" {
+		t.Fatalf("Forget left %q", d.BuildMemory)
+	}
+	if err := s.SetBuildMemory(ctx, id, "s2"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SwapHardware(ctx, id, HardwareSwap{MAC: "aa:bb:cc:00:00:21", ExpectMACs: []string{"aa:bb:cc:00:00:20"}, Address: "192.0.2.21", Port: 80,
+		Identity: model.Identity{Family: model.ChipESP32S2, Hardware: "ESP32-S2"}}); err != nil {
+		t.Fatal(err)
+	}
+	if d, _ = s.GetDevice(ctx, id); d.BuildMemory != "" {
+		t.Fatalf("replaced hardware inherited the build %q", d.BuildMemory)
+	}
+}

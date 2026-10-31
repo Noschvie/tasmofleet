@@ -117,6 +117,7 @@ type Deps struct {
 	Backups     backup.Service
 	Prober      Prober
 	DeviceNames DeviceNames // optional: "Keep" on the device-name notice (#125)
+	BuildMemory BuildMemory // optional: the update preview preselects the chip build chosen last time (#186)
 	// MQTTOnly, if set, says tasmofleet reaches the device over MQTT only (HTTP fails). A console or
 	// bulk command that can cut such a device off then names that consequence on its confirmation.
 	MQTTOnly      func(ctx context.Context, ids ...model.DeviceID) bool

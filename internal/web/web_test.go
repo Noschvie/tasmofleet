@@ -38,6 +38,19 @@ type fakeInv struct {
 	lastDelete     inventory.DeleteOptions
 }
 
+// SetBuildMemory is the web.BuildMemory of the fake: the memory lives on the stored device.
+func (f *fakeInv) SetBuildMemory(_ context.Context, id model.DeviceID, build string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	d, ok := f.devs[id]
+	if !ok {
+		return store.ErrNotFound
+	}
+	d.BuildMemory = build
+	f.devs[id] = d
+	return nil
+}
+
 func newInv(ds ...model.Device) *fakeInv {
 	f := &fakeInv{devs: map[model.DeviceID]model.Device{}, next: 100}
 	for _, d := range ds {

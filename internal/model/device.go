@@ -90,6 +90,12 @@ type Device struct {
 	// reports exactly this, the page does not offer it again. Written by that action only.
 	KeptDeviceName string
 
+	// BuildMemory is the chip build ("s2" or "s2cdc", ESP32-S2 only) a person explicitly chose for this
+	// device in the update preview; "" = none remembered (#186). The preview preselects it and says so.
+	// It is never inferred from anything the device reports and never makes the choice implicit:
+	// fwselect.Guard still checks the build. Written by that choice and by "Forget" only.
+	BuildMemory string
+
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }

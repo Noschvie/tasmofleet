@@ -438,6 +438,68 @@ func (h *handler) requests(r *http.Request, ids []model.DeviceID) ([]ota.Request
 	return reqs, nil
 }
 
+// forgetBuild handles the preview's "Forget" button (forget_build=<device id>): the memory is cleared
+// and the build the form still carries for that device (the preselected radio) is dropped, so the
+// device is back to "choose a build". False: the answer was written.
+func (h *handler) forgetBuild(w http.ResponseWriter, r *http.Request) bool {
+	raw := strings.TrimSpace(r.PostFormValue("forget_build"))
+	if raw == "" {
+		return true
+	}
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || h.d.BuildMemory == nil {
+		h.fail(w, r, errors.New("nothing to forget"))
+		return false
+	}
+	if err := h.d.BuildMemory.SetBuildMemory(r.Context(), model.DeviceID(id), ""); err != nil {
+		h.fail(w, r, err)
+		return false
+	}
+	r.PostForm.Del("build_" + raw)
+	r.Form.Del("build_" + raw)
+	return true
+}
+
+// applyRememberedBuilds fills Request.Build from the device's memory for every device the person has
+// not given a build in this form. It is an ordinary explicit build from there on: the engine and
+// fwselect.Guard check it like a posted one, and a build the chip does not have is never applied.
+// The result maps the device ids it filled to the build.
+func (h *handler) applyRememberedBuilds(r *http.Request, reqs []ota.Request) map[model.DeviceID]string {
+	if h.d.BuildMemory == nil {
+		return nil
+	}
+	out := map[model.DeviceID]string{}
+	for i := range reqs {
+		q := &reqs[i]
+		if q.Build != "" {
+			continue
+		}
+		d, err := h.d.Inventory.Get(r.Context(), q.DeviceID)
+		if err != nil || d.BuildMemory == "" || !slices.Contains(fwselect.BuildOptions(d.Identity), d.BuildMemory) {
+			continue
+		}
+		q.Build = d.BuildMemory
+		out[q.DeviceID] = d.BuildMemory
+	}
+	return out
+}
+
+// rememberBuilds stores the build of every device an update was just started with (#186). Starting is
+// the person's confirmation; a failure here is logged, the update is already running.
+func (h *handler) rememberBuilds(r *http.Request, reqs []ota.Request) {
+	if h.d.BuildMemory == nil {
+		return
+	}
+	for _, q := range reqs {
+		if q.Build == "" {
+			continue
+		}
+		if err := h.d.BuildMemory.SetBuildMemory(r.Context(), q.DeviceID, q.Build); err != nil {
+			h.log.WarnContext(r.Context(), "remember chip build", "device", q.DeviceID, "err", err)
+		}
+	}
+}
+
 type previewRow struct {
 	Device   model.Device
 	Item     ota.PreviewItem
@@ -451,6 +513,10 @@ type previewRow struct {
 	// two builds (ESP32-S2); Build is the one the user chose (the row then goes ahead).
 	BuildOptions []buildOption
 	Build        string
+	// Remembered: Build was preselected from the device's memory (#186), not posted by the person.
+	// PickBuilds are then the builds to switch to; the row goes ahead meanwhile.
+	Remembered bool
+	PickBuilds []buildOption
 	// LanguageChoice: the row waits for the language build of the device (it cannot be read over MQTT);
 	// Language is the one chosen, "" before the choice.
 	LanguageChoice bool
@@ -596,6 +662,17 @@ func (p previewPage) ChoosingLanguages() int {
 	return n
 }
 
+// Remembering counts the devices whose build was preselected from the memory.
+func (p previewPage) Remembering() int {
+	n := 0
+	for _, r := range p.Rows {
+		if r.Remembered {
+			n++
+		}
+	}
+	return n
+}
+
 // ChoosingBuilds counts the devices that wait for the user to choose a chip build.
 func (p previewPage) ChoosingBuilds() int {
 	n := 0
@@ -668,6 +745,9 @@ func (h *handler) updatePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ids := h.formIDs(r)
+	if !h.forgetBuild(w, r) {
+		return
+	}
 	redo := func(msg string) {
 		f, err := h.updateFormData(r, ids, "", deviceFilter{})
 		if err != nil {
@@ -692,6 +772,7 @@ func (h *handler) updatePreview(w http.ResponseWriter, r *http.Request) {
 		redo(err.Error())
 		return
 	}
+	remembered := h.applyRememberedBuilds(r, reqs)
 	items, err := h.d.OTA.Preview(r.Context(), reqs)
 	if err != nil {
 		h.fail(w, r, err)
@@ -722,6 +803,12 @@ func (h *handler) updatePreview(w http.ResponseWriter, r *http.Request) {
 			row.BuildOptions = buildOptionsFor(d.Identity)
 		}
 		row.Build = q.Build
+		if row.Go && remembered[it.DeviceID] != "" && q.Build == remembered[it.DeviceID] {
+			// Shown and changeable like a fresh choice: the radios stay, the note says where it came from.
+			row.Remembered = true
+			row.BuildOptions = nil
+			row.PickBuilds = buildOptionsFor(d.Identity)
+		}
 		row.LanguageChoice, row.Language = it.LanguageChoice, q.Language
 		if row.Go && q.Language != "" {
 			if p.Languages == nil {
@@ -729,7 +816,13 @@ func (h *handler) updatePreview(w http.ResponseWriter, r *http.Request) {
 			}
 			p.Languages[strconv.FormatInt(int64(it.DeviceID), 10)] = q.Language
 		}
-		if row.Go && q.Build != "" {
+		if row.Go && row.Remembered {
+			row.Note = "Build " + q.Build + ". Remembered from your last update."
+			if p.Builds == nil {
+				p.Builds = map[string]string{}
+			}
+			p.Builds[strconv.FormatInt(int64(it.DeviceID), 10)] = q.Build
+		} else if row.Go && q.Build != "" {
 			row.Note = "Build " + q.Build + ", chosen by you."
 			if p.Builds == nil {
 				p.Builds = map[string]string{}
@@ -795,6 +888,7 @@ func (h *handler) updateSubmit(w http.ResponseWriter, r *http.Request) {
 			"devices": len(reqs), "release": reqs[0].Release, "variant": reqs[0].Variant, "policy": string(reqs[0].Policy),
 		}, "ok")
 		h.auditCustomUse(r, id, reqs)
+		h.rememberBuilds(r, reqs)
 		redirect(w, r, "/transactions/"+strconv.FormatInt(int64(id), 10))
 	}
 }

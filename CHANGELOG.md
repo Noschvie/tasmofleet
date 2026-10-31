@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Upgrade notes
+
+- Database migration 0039 adds a nullable column to `devices` (the remembered ESP32-S2 build). Nothing to change in the template.
+
 ### Changed
 
 - Console and bulk command: `Upgrade` and `OtaUrl` with an argument are refused while a TasmoFleet update job (queued or running) holds the device, with a clear message; the bulk preview names each refused device and the rest still goes (#240)
@@ -17,6 +21,10 @@ always upgrade automatically.
 
 - Stylesheet: a missing closing brace after the policy "Deviating devices" mobile rules made every rule after it (policy History tab spacing and indented folds, Identity card headings) apply only on narrow screens; the brace is back, and a unit test now fails when braces do not balance (#346)
 - Device page: the info text of the Status 2 field "CR" is below the 160-character tooltip limit (#346)
+
+### Added
+
+- Update preview: the ESP32-S2 build (s2 or s2cdc) you chose for a device is remembered and preselected next time, shown as "Build s2cdc, remembered from your last update" with Change (ask again) and Forget (clear), and the firmware safety check still verifies the build (#186)
 
 ## 0.22.1 "Bell Rock" (2026-10-31)
 

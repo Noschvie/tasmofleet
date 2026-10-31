@@ -22,6 +22,13 @@ type DeviceNames interface {
 	DismissDeviceName(ctx context.Context, id model.DeviceID, deviceName string) error
 }
 
+// BuildMemory keeps the chip build a person explicitly chose for a device (store.SQLite, #186).
+// Optional: without it the preview remembers nothing.
+type BuildMemory interface {
+	// SetBuildMemory remembers build ("s2" or "s2cdc"); "" forgets it.
+	SetBuildMemory(ctx context.Context, id model.DeviceID, build string) error
+}
+
 // tasmotaDefaultName is the DeviceName of a Tasmota nobody named; offering it would nag on every
 // such device (the prober treats it the same way).
 const tasmotaDefaultName = "Tasmota"

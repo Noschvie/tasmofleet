@@ -17,7 +17,7 @@ const deviceCols = `id, name, address, port, mac, topic, full_topic, tags, notes
 	fw_language, flash_size_kb, program_flash_kb, free_kb, identity_at, created_at, updated_at, mqtt_host, mqtt_port,
 	net_hostname, net_ip, net_gateway, net_ssid, net_bssid, net_channel, net_wired, net_at, device_name, device_name_kept,
 	net_subnet, net_dns, ota_url, relay_names, group_topic, ota_url_read_at, group_topic_read_at,
-	mqtt_password, mqtt_password_mode, mqtt_password_bad_at, fw_reach, fw_reach_at, fw_reach_detail, identity_lang_known, fwr_facts`
+	mqtt_password, mqtt_password_mode, mqtt_password_bad_at, fw_reach, fw_reach_at, fw_reach_detail, identity_lang_known, fwr_facts, build_memory`
 
 // relayNamesJSON is the stored form of relay names (a JSON array like tags); "" for none.
 func relayNamesJSON(names []string) string {
@@ -41,15 +41,17 @@ func (s *SQLite) scanDevice(r scanner) (model.Device, error) {
 	var otaAt, groupAt sql.NullInt64
 	var sealedMQTT, pwMode, reach, fwr string
 	var badAt, reachAt sql.NullInt64
+	var buildMemory sql.NullString
 	err := r.Scan(&d.ID, &d.Name, &d.Address, &d.Port, &d.MAC, &d.Topic, &d.FullTopic, &tags, &d.Notes, &d.HTTPUser, &sealed,
 		&excluded, &mqtt, &family, &d.Identity.Hardware, &single, &d.Identity.Version, &d.Identity.Image, &d.Identity.Variant,
 		&d.Identity.Language, &d.Identity.FlashSizeKB, &d.Identity.ProgramFlashSizeKB, &d.Identity.FreeKB, &identAt, &created, &updated, &d.MQTTHost, &d.MQTTPort,
 		&d.Net.Hostname, &d.Net.IP, &d.Net.Gateway, &d.Net.SSID, &d.Net.BSSID, &d.Net.Channel, &wired, &netAt, &d.DeviceName, &d.KeptDeviceName,
 		&d.Net.Subnet, &d.Net.DNS, &d.OTAURL, &relayNames, &d.GroupTopic, &otaAt, &groupAt,
-		&sealedMQTT, &pwMode, &badAt, &reach, &reachAt, &d.FWReach.Detail, &langKnown, &fwr)
+		&sealedMQTT, &pwMode, &badAt, &reach, &reachAt, &d.FWReach.Detail, &langKnown, &fwr, &buildMemory)
 	if err != nil {
 		return model.Device{}, err
 	}
+	d.BuildMemory = buildMemory.String
 	if err := json.Unmarshal([]byte(tags), &d.Tags); err != nil {
 		return model.Device{}, fmt.Errorf("store: device %d tags: %w", d.ID, err)
 	}
@@ -621,6 +623,20 @@ func (s *SQLite) SetFWReach(ctx context.Context, id model.DeviceID, r model.FWRe
 	}
 	return affected(s.db.ExecContext(ctx, `UPDATE devices SET fw_reach=?, fw_reach_at=?, fw_reach_detail=?, updated_at=? WHERE id=?`,
 		string(r.State), nullMS(r.At), r.Detail, toMS(s.now()), id))
+}
+
+// SetBuildMemory remembers the chip build a person chose for the device ("s2" or "s2cdc"); "" forgets it.
+// Only that explicit choice calls this: probes and UpdateDevice never touch the column.
+func (s *SQLite) SetBuildMemory(ctx context.Context, id model.DeviceID, build string) error {
+	var v any
+	switch build {
+	case "":
+	case "s2", "s2cdc":
+		v = build
+	default:
+		return fmt.Errorf("store: unknown chip build %q", build)
+	}
+	return affected(s.db.ExecContext(ctx, `UPDATE devices SET build_memory=?, updated_at=? WHERE id=?`, v, toMS(s.now()), id))
 }
 
 // fwrJSON is the stored form of the StatusFWR facts: "" when none were read.

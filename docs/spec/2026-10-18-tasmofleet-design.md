@@ -676,7 +676,11 @@ self-compiled or custom S2 image stays `unknown` and needs an explicit variant c
 contradicts a provable revision (`p4` on a 3.1 P4), returns `ErrNoSuchVariant`; a P4 outside the known
 revisions stays refused with or without a build. The build is chosen per update in the update preview and
 kept on the job (`Job.TargetBuild`, `ota_jobs.target_build`, migration 0033); Guard rule 7 holds the artifact
-to it. Remembering the choice per device is not part of this. This also covers the minimal/safeboot auto-default ("tasmota" chosen for the device).
+to it. The choice is remembered per device (#186): `devices.build_memory` (migration 0039, nullable, `s2`|`s2cdc`|NULL,
+`Device.BuildMemory`). It is written only when an update is started with an explicit build (Start update) and cleared by
+"Forget" in the preview or by Replace device; nothing a device reports fills it. The next preview preselects it
+(`Request.Build`, "Remembered from your last update", radios stay changeable) only when the chip has that build, and
+it travels as an ordinary explicit build, so Guard rule 7 checks it exactly as before. This also covers the minimal/safeboot auto-default ("tasmota" chosen for the device).
 
 **Language unknown.** When `Identity.LanguageKnown` is false and `Choice.Language` is empty, Select returns
 `ErrLanguageUnknown` unless English is proven without a page (below; checked right after the unknown-hardware check, before any variant rule, because the

@@ -214,6 +214,7 @@ test("address links open the device page without credentials", { tag: "@core" },
 // ESP32-S2 has two upstream builds behind one image tag (#88): the preview refuses it without a
 // choice, offers both builds, and after the choice shows the file and starts the job.
 test("ESP32-S2: refused until a build is chosen, then previewed and started", { tag: "@core" }, async ({ page }) => {
+  test.setTimeout(240_000);
   await page.setExtraHTTPHeaders(operator);
   await pickForUpdate(page, app.url, ["esp32s2-board"]);
   await page.locator("label.upd-relopt", { hasText: "Tasmota 16.1.0" }).click();
@@ -249,6 +250,38 @@ test("ESP32-S2: refused until a build is chosen, then previewed and started", { 
   await expect(page).toHaveURL(/\/transactions\/\d+$/);
   await expect(page.locator(".upd-row").filter({ hasText: "esp32s2-board" })).toBeVisible();
   await expect(page.locator("body")).toContainText("build s2cdc");
+
+  // #186: the next update of the same board preselects the build chosen above, says so, keeps the
+  // choice visible and changeable, and "Forget" puts it back to "choose".
+  // The board is busy until the job ends; its box is disabled meanwhile.
+  await expect(async () => {
+    await page.goto(app.url + "/updates/new");
+    await expect(page.getByLabel("Select esp32s2-board", { exact: true })).toBeEnabled({ timeout: 2_000 });
+  }).toPass({ timeout: 150_000 });
+  await pickForUpdate(page, app.url, ["esp32s2-board"]);
+  await page.locator("label.upd-relopt", { hasText: "Tasmota 16.1.0" }).click();
+  await page.locator("select[name=policy]").selectOption("reinstall"); // the board already runs 16.1.0
+  await page.getByRole("button", { name: "Review update" }).click();
+  const again = page.locator(".upd-prow").filter({ hasText: "esp32s2-board" });
+  await expect(again).toContainText("Remembered from your last update");
+  await expect(again.getByRole("radio", { checked: true })).toHaveCount(1);
+  await expect(again.locator("label.rcard", { hasText: "s2cdc" }).getByRole("radio")).toBeChecked();
+  if (shots) {
+    for (const width of [375, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      for (const scheme of ["light", "dark"] as const) {
+        await page.emulateMedia({ colorScheme: scheme });
+        await page.screenshot({ path: `${shots}/remembered-${width}-${scheme}.png`, fullPage: true });
+      }
+    }
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.emulateMedia({ colorScheme: "light" });
+  }
+  await again.getByRole("button", { name: "Forget" }).click({ timeout: 10_000 });
+  const forgotten = page.locator(".upd-prow").filter({ hasText: "esp32s2-board" });
+  await expect(forgotten).toContainText("Choose the build");
+  await expect(forgotten.getByRole("radio", { checked: true }), "forgotten: nothing preselected").toHaveCount(0);
+  await expect(page.locator("body")).not.toContainText("Remembered from your last update");
 });
 
 // Quarantined: https://github.com/nofuturekid/tasmofleet/issues/20
