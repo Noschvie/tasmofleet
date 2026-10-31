@@ -52,8 +52,13 @@ var actingPrefix = []string{"backlog", "publish", "rule", "timer", "wifi", "ping
 // DisplayClear, FramErase, I2CScan, LoRaInit and so on all act on a bare call. The catalogue
 // does not record whether a handler acts without a value, so the rule is by name: it
 // refuses too much rather than too little (GM861Reset only acts on "1" but is refused too).
-var actingBareSuffix = []string{"reset", "clear", "erase", "restart", "reboot", "scan", "rescan",
-	"start", "stop", "init", "reinit", "test", "save", "format", "pair"}
+var actingBareSuffix = []string{"reset", "clear", "erase", "scan", "start", "stop", "init", "test",
+	"save", "format", "pair", "ota", "task", "load"}
+
+// bareReadable are names that end in one of actingBareSuffix but only report when sent bare.
+// MaxEnergyStart is the start hour (0..23) of the max-energy window (xdrv_03_energy.ino:1166);
+// SSPMOverload ends in "load" and only reports bare ("Get / Set overload", xdrv_86_esp32_sonoff_spm.ino:2479).
+var bareReadable = map[string]bool{"maxenergystart": true, "sspmoverload": true}
 
 // actingBare are commands that act when sent bare but have no such ending (verified against
 // the 16.0.0 handlers, see the table test in policyrule_test.go).
@@ -63,7 +68,9 @@ var actingBare = map[string]bool{
 	"ld2410engineeringend": true, "npexec": true, "npescape": true,
 	"sen6xclean": true, "sen6xheat": true, "wcappendpic": true, "wcsavepic": true,
 	"wcsetdefaults": true, "wcpoweroff": true, "wgconnect": true, "i2spause": true, "i2sloop": true,
-	"trvdevlist": true, "bripreset": true,
+	"trvdevlist": true,
+	"hostedota":  true, "hostedload": true, "meshbroker": true, "gaugezero": true, "gaugeset": true,
+	"gaugepercent": true, "i2stime": true, "i2smic": true, "i2srec": true,
 }
 
 // setActingExact are commands whose bare form only reports but whose set form, which
@@ -138,7 +145,7 @@ func PolicyReadable(name string) (ok bool, why string) {
 		return false, reasonSetActs
 	}
 	for _, suf := range actingBareSuffix {
-		if strings.HasSuffix(base, suf) {
+		if strings.HasSuffix(base, suf) && !bareReadable[base] {
 			return false, reasonActs
 		}
 	}

@@ -198,41 +198,40 @@ func FuzzPolicyReadable(f *testing.F) {
 // A name that is refused here but was read before must show as invalid, never be read.
 func TestPolicyReadableRefusesBareActingCommands(t *testing.T) {
 	for name, src := range map[string]string{
-		"RC522Reset":     "tasmota_xsns_sensor/xsns_80_mfrc522.ino:358 RC522FullReset()",
-		"GM861Reset":     "tasmota_xsns_sensor/xsns_107_gm861.ino:358 acts only on payload 1; refused anyway, name rule",
-		"SSPMReset":      "tasmota_xdrv_driver/xdrv_86_esp32_sonoff_spm.ino:2609",
-		"ClientReset":    "tasmota_xdrv_driver/xdrv_31_tasmota_client.ino:479 TasmotaClient_Reset()",
-		"TRVReset":       "tasmota_xdrv_driver/xdrv_85_esp32_ble_eq3_trv.ino:1536",
-		"TRVDevList":     "xdrv_85_esp32_ble_eq3_trv.ino:1544 same handler as TRVScan",
-		"TRVScan":        "xdrv_85_esp32_ble_eq3_trv.ino:1544 starts a BLE scan",
-		"WieAllReset":    "tasmota_xsns_sensor/xsns_82_wiegand.ino:506",
-		"WieTimeReset":   "xsns_82_wiegand.ino:500",
-		"StccReset":      "name rule: Reset suffix",
-		"DisplayClear":   "tasmota_xdrv_driver/xdrv_13_display.ino:2271 clears the screen",
-		"Displayreinit":  "xdrv_13_display.ino:2362 re-initialises the driver",
-		"IBEACONclear":   "tasmota_xsns_sensor/xsns_52_esp32_ibeacon_ble.ino:155 clears the beacon list",
-		"LoRaInit":       "tasmota_xdrv_driver/xdrv_73_9_lora.ino:361",
-		"FramErase":      "xdrv_93_fm24cxx.ino: erases the FRAM",
-		"BrRestart":      "xdrv_52_9_berry.ino:445 BerryInit() restarts the VM",
-		"HM10Scan":       "name rule: Scan suffix",
-		"SSPMScan":       "name rule: Scan suffix",
-		"ZbScan":         "name rule: Scan suffix",
-		"WiFiScan":       "name rule: Scan suffix",
-		"DS18Rescan":     "name rule: Rescan suffix",
-		"DaliScan":       "name rule: Scan suffix",
-		"MaxEnergyStart": "name rule: Start suffix",
-		"Scd40Strt":      "xsns_92_scd40.ino:513 starts periodic measurement",
-		"Scd40StLP":      "xsns_92_scd40.ino:491 starts low-power measurement",
-		"Scd40Stop":      "name rule: Stop suffix",
-		"Scd40Fact":      "xsns_92_scd40.ino:593 factory reset of the sensor EEPROM",
-		"Scd40Rein":      "xsns_92_scd40.ino:574 re-initialises the sensor",
-		"Scd40Pers":      "xsns_92_scd40.ino:546 writes sensor settings to EEPROM",
-		"Scd40Sing":      "xsns_92_scd40.ino:610 single-shot measurement",
-		"Scd40SRHT":      "xsns_92_scd40.ino:633 single-shot measurement",
-		"Scd40Test":      "name rule: Test suffix",
-		"GM861Save":      "name rule: Save suffix",
-		"NPSave":         "name rule: Save suffix",
-		"ZbSave":         "name rule: Save suffix",
+		"RC522Reset":    "tasmota_xsns_sensor/xsns_80_mfrc522.ino:358 RC522FullReset()",
+		"GM861Reset":    "tasmota_xsns_sensor/xsns_107_gm861.ino:358 acts only on payload 1; refused anyway, name rule",
+		"SSPMReset":     "tasmota_xdrv_driver/xdrv_86_esp32_sonoff_spm.ino:2609",
+		"ClientReset":   "tasmota_xdrv_driver/xdrv_31_tasmota_client.ino:479 TasmotaClient_Reset()",
+		"TRVReset":      "tasmota_xdrv_driver/xdrv_85_esp32_ble_eq3_trv.ino:1536",
+		"TRVDevList":    "xdrv_85_esp32_ble_eq3_trv.ino:1544 same handler as TRVScan",
+		"TRVScan":       "xdrv_85_esp32_ble_eq3_trv.ino:1544 starts a BLE scan",
+		"WieAllReset":   "tasmota_xsns_sensor/xsns_82_wiegand.ino:506",
+		"WieTimeReset":  "xsns_82_wiegand.ino:500",
+		"StccReset":     "name rule: Reset suffix",
+		"DisplayClear":  "tasmota_xdrv_driver/xdrv_13_display.ino:2271 clears the screen",
+		"Displayreinit": "xdrv_13_display.ino:2362 re-initialises the driver",
+		"IBEACONclear":  "tasmota_xsns_sensor/xsns_52_esp32_ibeacon_ble.ino:155 clears the beacon list",
+		"LoRaInit":      "tasmota_xdrv_driver/xdrv_73_9_lora.ino:361",
+		"FramErase":     "xdrv_93_fm24cxx.ino: erases the FRAM",
+		"BrRestart":     "xdrv_52_9_berry.ino:445 BerryInit() restarts the VM",
+		"HM10Scan":      "name rule: Scan suffix",
+		"SSPMScan":      "name rule: Scan suffix",
+		"ZbScan":        "name rule: Scan suffix",
+		"WiFiScan":      "name rule: Scan suffix",
+		"DS18Rescan":    "name rule: Scan suffix",
+		"DaliScan":      "name rule: Scan suffix",
+		"Scd40Strt":     "xsns_92_scd40.ino:513 starts periodic measurement",
+		"Scd40StLP":     "xsns_92_scd40.ino:491 starts low-power measurement",
+		"Scd40Stop":     "name rule: Stop suffix",
+		"Scd40Fact":     "xsns_92_scd40.ino:593 factory reset of the sensor EEPROM",
+		"Scd40Rein":     "xsns_92_scd40.ino:574 re-initialises the sensor",
+		"Scd40Pers":     "xsns_92_scd40.ino:546 writes sensor settings to EEPROM",
+		"Scd40Sing":     "xsns_92_scd40.ino:610 single-shot measurement",
+		"Scd40SRHT":     "xsns_92_scd40.ino:633 single-shot measurement",
+		"Scd40Test":     "name rule: Test suffix",
+		"GM861Save":     "name rule: Save suffix",
+		"NPSave":        "name rule: Save suffix",
+		"ZbSave":        "name rule: Save suffix",
 		// LD2402_* and LD2410S_* contain an underscore: refused already as a bad name
 		"LD2410EngineeringEnd":   "xsns_102_ld2410.ino:557 leaves engineering mode",
 		"LD2410EngineeringStart": "name rule: Start suffix",
@@ -249,10 +248,21 @@ func TestPolicyReadableRefusesBareActingCommands(t *testing.T) {
 		"I2SPause":               "xdrv_42_0_i2s_audio_idf51.ino:914",
 		"I2SLoop":                "xdrv_42_0_i2s_audio_idf51.ino:909 starts playback",
 		"I2SStop":                "name rule: Stop suffix",
-		"BriPreset":              "xdrv_35_pwm_dimmer.ino:733 applies a preset",
 		"BLEPair":                "name rule: Pair suffix",
 		"FramReadFormat":         "name rule: Format suffix",
 		"ModbusTCPStart":         "name rule: Start suffix",
+		"HostedOta":              "tasmota_xdrv_driver/xdrv_84_esp32_hosted.ino:351 starts the co-processor OTA",
+		"HostedLoad":             "xdrv_84_esp32_hosted.ino:323 loads co-processor firmware",
+		"WCStarttask":            "tasmota_xdrv_driver/xdrv_81_esp32_webcam_task.ino:2524 WCStartOperationTask()",
+		"WCStoptask":             "xdrv_81_esp32_webcam_task.ino:2543 WcStopTask()",
+		"MeshBroker":             "tasmota_xdrv_driver/xdrv_57_9_tasmesh.ino:785 MESHstartBroker()",
+		"GaugeZero":              "tasmota_xdrv_driver/xdrv_92_vid6608.ino:232 moves the needle to zero",
+		"GaugeSet":               "xdrv_92_vid6608.ino:218 moves the needle",
+		"GaugePercent":           "xdrv_92_vid6608.ino:225 moves the needle",
+		"I2STime":                "tasmota_xdrv_driver/xdrv_42_3_i2s_saytime.ino:122 speaks the time",
+		"I2SMic":                 "xdrv_42_0_i2s_audio_idf51.ino:869 starts the microphone",
+		"I2SRec":                 "xdrv_42_0_i2s_audio_idf51.ino:1008 starts a recording",
+		"FileDownload":           "name rule: load suffix",
 		"CLIENTRESET":            "case does not matter",
 		"WieAllReset2":           "index digits do not matter",
 	} {
@@ -269,6 +279,40 @@ func TestPolicyReadableKeepsNamesNearBareActingEndings(t *testing.T) {
 	for _, name := range []string{"RC522Status", "Altitude", "Latitude", "Timezone", "Hostname", "Baudrate", "LD2410Get", "Scd40Alti"} {
 		if ok, why := PolicyReadable(name); !ok {
 			t.Errorf("PolicyReadable(%q) denied (%s), want readable", name, why)
+		}
+	}
+}
+
+// Why: every name-ending rule needs a name that only that ending reaches (no prefix, exact or list
+// entry refuses it), or a mutation that drops the ending would survive. Restart and Reboot have no
+// such name (BrRestart is caught by the "br" prefix, Restart by the exact list), so they are not
+// endings. Each name was readable before #358.
+func TestPolicyReadableEachEndingRefusesOnItsOwn(t *testing.T) {
+	for suffix, name := range map[string]string{
+		"reset": "RC522Reset", "clear": "DisplayClear", "erase": "FramErase", "scan": "HM10Scan",
+		"start": "ModbusTCPStart", "stop": "Scd40Stop", "init": "LoRaInit", "test": "Scd40Test",
+		"save": "GM861Save", "format": "FramReadFormat", "pair": "BLEPair", "ota": "HostedOta",
+		"task": "WCStarttask", "load": "HostedLoad",
+	} {
+		if !strings.HasSuffix(strings.ToLower(name), suffix) {
+			t.Fatalf("%s does not end in %s", name, suffix)
+		}
+		if ok, why := PolicyReadable(name); ok || why != reasonActs {
+			t.Errorf("PolicyReadable(%q) = %v, %q; want denied for ending %q", name, ok, why, suffix)
+		}
+	}
+	if len(actingBareSuffix) != 14 {
+		t.Errorf("actingBareSuffix has %d endings; add a name to the table above for each new one", len(actingBareSuffix))
+	}
+}
+
+// Why: MaxEnergyStart ends in "start" but is a plain 0..23 setting (xdrv_03_energy.ino:1166,
+// ResponseCmndEnergyMargin), and SSPMOverload ends in "load" but reports bare (xdrv_86_esp32_sonoff_spm.ino:2479);
+// refusing them would take real settings away from the policy.
+func TestPolicyReadableKeepsMaxEnergyStart(t *testing.T) {
+	for _, n := range []string{"MaxEnergyStart", "maxenergystart", "SSPMOverload"} {
+		if ok, why := PolicyReadable(n); !ok {
+			t.Errorf("PolicyReadable(%q) denied (%s), want readable", n, why)
 		}
 	}
 }
