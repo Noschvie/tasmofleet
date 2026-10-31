@@ -12148,7 +12148,8 @@ input:focus-visible + .swtrack {
   color: var(--color-text);
   font-weight: 500;
 }
-.sbar.is-dirty .sbar-state::before {
+/* the dot's space is always reserved (#362): it only becomes visible, nothing moves */
+.sbar-state::before {
   content: "";
   display: inline-block;
   width: 6px;
@@ -12157,6 +12158,10 @@ input:focus-visible + .swtrack {
   border-radius: 50%;
   background: var(--color-warn);
   vertical-align: 1px;
+  visibility: hidden;
+}
+.sbar.is-dirty .sbar-state::before {
+  visibility: visible;
 }
 .sbar-chips {
   display: inline-flex;
@@ -12173,7 +12178,8 @@ input:focus-visible + .swtrack {
 .sbar-sp {
   flex: 1;
 }
-.utab.is-dirty::after {
+/* the dot's space is always reserved on the Settings tabs (#362): it only becomes visible */
+.utabs[aria-label="Settings sections"] .utab::after {
   content: "";
   display: inline-block;
   width: 6px;
@@ -12182,6 +12188,10 @@ input:focus-visible + .swtrack {
   border-radius: 50%;
   background: var(--color-warn);
   vertical-align: 2px;
+  visibility: hidden;
+}
+.utabs[aria-label="Settings sections"] .utab.is-dirty::after {
+  visibility: visible;
 }
 .sys-picker {
   display: none;

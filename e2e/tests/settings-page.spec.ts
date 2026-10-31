@@ -300,3 +300,77 @@ test.describe("with local accounts", () => {
     await page.screenshot({ path: `${dir}/settings-signin-wide-1600-light.png`, fullPage: true });
   });
 });
+
+// Why (#362): the yellow unsaved dots (tab, save bar) used to be added as inline content, so every
+// neighbour jumped sideways the moment a value changed. Their space is reserved, so nothing moves.
+test("the unsaved dots appear without moving the tab row, the field label or the save bar", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  if (process.env.UI362_W) await page.setViewportSize({ width: +process.env.UI362_W, height: 800 });
+  if (process.env.UI362_SCHEME) await page.emulateMedia({ colorScheme: process.env.UI362_SCHEME as "light" | "dark" });
+  await page.goto(app.url + "/settings/system?tab=backups");
+  const bar = page.locator("[data-sys-bar]");
+  await expect(bar).toContainText("No unsaved changes");
+  const input = page.locator("input[name='v.BACKUP_KEEP']");
+  const row = input.locator("xpath=ancestor::*[self::label or contains(@class,'kv-row') or @data-key][1]");
+  const stripShown = await tabs(page).isVisible();
+  const boxes = async () => {
+    // Page coordinates: focusing the field may scroll the page, which is not a layout shift. The
+    // sticky save bar is viewport-anchored, so its boxes stay viewport-relative.
+    const scrollY = await page.evaluate(() => window.scrollY);
+    const rectIn = async (loc: import("@playwright/test").Locator, dy: number) => {
+      const b = await loc.boundingBox();
+      expect(b).not.toBeNull();
+      return { x: b!.x, y: b!.y + dy, width: b!.width, height: b!.height };
+    };
+    const rect = (loc: import("@playwright/test").Locator) => rectIn(loc, scrollY);
+    const barRect = (loc: import("@playwright/test").Locator) => rectIn(loc, 0);
+    return {
+      // On a phone the strip is replaced by the section picker (display: none), so it has no boxes.
+      tabs: stripShown ? await Promise.all((await tabs(page).getByRole("link").all()).map(rect)) : [],
+      row: await rect(row),
+      input: await rect(input),
+      state: await barRect(bar.locator("[data-sbar-state]")),
+      buttons: await Promise.all((await bar.getByRole("button").all()).map(barRect)),
+    };
+  };
+  const shot = process.env.UI362_DIR;
+  const scheme = await page.evaluate(() => matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  const w = page.viewportSize()!.width;
+  if (shot) await page.screenshot({ path: `${shot}/${process.env.UI362_TAG}-${w}-${scheme}-clean.png` });
+  const before = await boxes();
+  await input.fill("9");
+  await expect(bar).toContainText("Unsaved changes:");
+  await expect(page.locator("a.utab[href*='tab=backups']")).toHaveClass(/is-dirty/);
+  if (shot) await page.screenshot({ path: `${shot}/${process.env.UI362_TAG}-${w}-${scheme}-dirty.png` });
+  const after = await boxes();
+
+  // The dots are really drawn (not just hidden placeholders).
+  const dot = async (sel: string, pseudo: string) =>
+    page.locator(sel).first().evaluate((el, p) => {
+      const s = getComputedStyle(el, p);
+      return { vis: s.visibility, bg: s.backgroundColor, w: s.width };
+    }, pseudo);
+  if (stripShown) {
+    const tabDot = await dot("a.utab.is-dirty", "::after");
+    expect(tabDot.vis).toBe("visible");
+    expect(tabDot.w).toBe("6px");
+    expect(tabDot.bg).not.toBe("rgba(0, 0, 0, 0)");
+  }
+  const barDot = await dot("[data-sys-bar].is-dirty [data-sbar-state]", "::before");
+  expect(barDot.vis).toBe("visible");
+  expect(barDot.w).toBe("6px");
+
+  const near = (a: number, b: number, what: string) => expect(Math.abs(a - b), what).toBeLessThanOrEqual(0.5);
+  const same = (a: { x: number; y: number; width: number; height: number }, b: typeof a, what: string) => {
+    for (const k of ["x", "y", "width", "height"] as const) near(a[k], b[k], `${what}.${k}`);
+  };
+  before.tabs.forEach((b, i) => same(b, after.tabs[i], `tab ${i}`));
+  same(before.row, after.row, "label row");
+  same(before.input, after.input, "input");
+  // The state text itself changes ("No unsaved changes" -> "Unsaved changes:"), so only its
+  // origin and height must hold; the buttons sit on the right and must not move at all.
+  near(before.state.x, after.state.x, "state.x");
+  near(before.state.y, after.state.y, "state.y");
+  near(before.state.height, after.state.height, "state.height");
+  before.buttons.forEach((b, i) => same(b, after.buttons[i], `button ${i}`));
+});

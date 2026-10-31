@@ -15,6 +15,10 @@ always upgrade automatically.
 
 - Examples, placeholders and help texts use common home-network addresses (devices 192.168.1.0/24, container 192.168.1.10, proxy 192.168.1.2) instead of homelab-shaped ones, and the Unraid template in `deploy/unraid/` no longer prefills the container IP or the trusted proxies (#368)
 
+### Fixed
+
+- Settings: the yellow "unsaved" dots (on the tab and in the save bar) no longer move their neighbours when they appear or disappear; their space is reserved, so tabs, text and buttons stay where they are (#362).
+
 ### Security
 
 - Policy rules can no longer name commands that act when sent without a value (`RC522Reset`, `ClientReset`, `SSPMReset`, `TRVReset`, `WieAllReset`, `DisplayClear`, `I2CScan`, `Scd40Strt` and others: names ending in Reset, Clear, Erase, Restart, Scan, Start, Stop, Init, Test, Save and the like, plus a verified list). Reading such a rule used to reset a peripheral on every policy check. Stored rules that name one are left out and shown as invalid (#358).
