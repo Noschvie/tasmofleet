@@ -110,31 +110,52 @@ test("Pin left and Pin right regroup the columns and survive a reload; Name and 
     row(page, "power").getByRole("button", { name: "Pin right" }),
   ).toHaveAttribute("aria-pressed", "true");
 
-  // Status to the right: it joins Power before Actions; the page reloads with the menu open
+  // Status to the right: it joins Power before Actions; the page reloads with the menu open.
+  // The reload is awaited itself (its load event): a column may already sit where the pin puts it,
+  // so the order of the heads cannot tell the old page from the new one, and acting on the old
+  // one races the reload.
+  const reloaded = () => page.waitForEvent("load", { timeout: 20_000 });
   let saved = page.waitForResponse(
     (r) => r.url().endsWith("/prefs/table.devices") && r.status() === 204,
   );
+  let loaded = reloaded();
   await row(page, "status").getByRole("button", { name: "Pin right" }).click();
   await saved;
+  await loaded;
   await expect
-    .poll(async () => (await heads(page)).slice(-2))
+    .poll(async () => (await heads(page)).slice(-2), { timeout: 20_000 })
     .toEqual(["Status", "Power"]);
-  await expect(page.locator("details.colmenu[open]").first()).toBeVisible();
+  // the page opens the menu again once enhance() has fitted the table: that takes a while on a slow runner
+  await expect(page.locator("details.colmenu[open]").first()).toBeVisible({
+    timeout: 20_000,
+  });
   // Wi-Fi to the left: right after Name
   saved = page.waitForResponse(
     (r) => r.url().endsWith("/prefs/table.devices") && r.status() === 204,
   );
+  loaded = reloaded();
   await row(page, "wifi").getByRole("button", { name: "Pin left" }).click();
   await saved;
+  await loaded;
   await expect
-    .poll(async () => (await heads(page)).slice(0, 2))
+    .poll(async () => (await heads(page)).slice(0, 2), { timeout: 20_000 })
     .toEqual(["Name", "Wi-Fi"]);
+  // the page that came out of the reload opens the menu again
+  await expect(page.locator("details.colmenu[open]").first()).toBeVisible({
+    timeout: 20_000,
+  });
   await page.reload();
-  const after = await heads(page);
-  expect(after.slice(0, 2)).toEqual(["Name", "Wi-Fi"]);
-  expect(after.slice(-2)).toEqual(["Status", "Power"]);
+  // heads() reads once and answers [] while a navigation is under way: poll it, with the time a
+  // slow runner needs to lay the table out again
+  await expect
+    .poll(async () => (await heads(page)).slice(0, 2), { timeout: 20_000 })
+    .toEqual(["Name", "Wi-Fi"]);
+  await expect
+    .poll(async () => (await heads(page)).slice(-2), { timeout: 20_000 })
+    .toEqual(["Status", "Power"]);
   await expect(page.locator("table[data-table=devices]")).toHaveClass(
     /\bpl3\b/,
+    { timeout: 20_000 },
   );
 
   // pressing a pressed pin unpins: Wi-Fi goes back among the scrolling columns
@@ -144,12 +165,67 @@ test("Pin left and Pin right regroup the columns and survive a reload; Name and 
   );
   await row(page, "wifi").getByRole("button", { name: "Pin left" }).click();
   await saved;
-  await expect.poll(async () => (await heads(page))[1]).not.toBe("Wi-Fi");
+  await expect
+    .poll(async () => (await heads(page))[1], { timeout: 20_000 })
+    .not.toBe("Wi-Fi");
 
   // the server refuses to unpin or move Actions or Name, whatever the browser sends
   expect(await postPref(page, { p: { actions: "none" } })).toBe(400);
   expect(await postPref(page, { p: { name: "right" } })).toBe(400);
   expect(await postPref(page, {})).toBe(204);
+});
+
+// #273 (and #12 before it): a device event replaces the list, Columns menu included, with a closed
+// one, and the page opens it again. It used to learn "this menu is open" from the toggle event,
+// which comes a task after the menu opened; a swap that landed in between (a pin reloads the page
+// with the menu open, and the first device events arrive just then) left the menu shut for good.
+// The swap is done in the same task as the opening here, so the order does not depend on timing.
+test("a list swap right after the Columns menu opened keeps it open", async ({
+  page,
+}) => {
+  await open(page, 1280);
+  const opened = await page.evaluate(() => {
+    const live = document.querySelector("#devtable")!;
+    const menu = live.querySelector<HTMLDetailsElement>("details.colmenu")!;
+    menu.open = true;
+    // what htmx does for a swap of #devtable, with no task between the opening and the swap
+    live.dispatchEvent(
+      new CustomEvent("htmx:beforeSwap", {
+        bubbles: true,
+        detail: { target: live },
+      }),
+    );
+    const fresh = menu.cloneNode(true) as HTMLDetailsElement;
+    fresh.open = false; // the server renders it closed
+    menu.replaceWith(fresh);
+    live.dispatchEvent(new CustomEvent("htmx:afterSettle", { bubbles: true }));
+    return live.querySelector<HTMLDetailsElement>("details.colmenu")!.open;
+  });
+  expect(opened).toBe(true);
+  await expect(page.locator("details.colmenu[open]").first()).toBeVisible();
+});
+
+// #273: a pin saves, asks for a reload and leaves a note for the NEXT page to open the Columns
+// menu. The page that asked keeps running until the new one arrives (a slow runner: seconds), and
+// a refit of it used to read the note, so the page going away opened the menu and the new one
+// stayed shut. Here the note is left for another page and the running one refits: it must not
+// open its menu; the page that starts afterwards does.
+test("the reopen note of a pin is for the next page, not for the one that is about to go", async ({
+  page,
+}) => {
+  await open(page, 1280);
+  await page.evaluate(() => {
+    sessionStorage.setItem("tf-colmenu", "devices");
+    document
+      .querySelector("#devtable")!
+      .dispatchEvent(new CustomEvent("htmx:afterSettle", { bubbles: true }));
+  });
+  await expect(page.locator("details.colmenu").first()).not.toHaveAttribute(
+    "open",
+    "",
+  );
+  await page.reload();
+  await expect(page.locator("details.colmenu[open]").first()).toBeVisible();
 });
 
 for (const saved of [false, true]) {

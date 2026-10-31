@@ -21,6 +21,17 @@
   var desktop = window.matchMedia("(min-width: 45rem)"); // the table (not the phone list) shows from here
   var timers = {};
   var openKey = "";
+  // The Columns menu a pin reloaded the page for (applyDoc), read once when this page starts. It
+  // must not be read later: a page that has asked for its reload keeps running until the new one
+  // arrives, and an enhance() of it (a coalesced cell refit, the fonts) used to take the flag, so
+  // the page that was going away opened the menu and the new one never did.
+  var reopen = "";
+  try {
+    reopen = window.sessionStorage.getItem("tf-colmenu") || "";
+    window.sessionStorage.removeItem("tf-colmenu");
+  } catch (e) {
+    /* no storage: the menu just stays closed */
+  }
 
   function body() {
     return document.body;
@@ -1426,6 +1437,19 @@
       });
   });
 
+  // A swap of the device list replaces the Columns menu with a closed one, and enhance() opens
+  // it again from openKey. The toggle event below sets openKey a task after the menu opened, and
+  // a menu that is replaced before that task ran never reports it (the event of a detached
+  // element does not reach the document), so the menu stayed shut for good. The open state is
+  // therefore read from the page itself just before the swap.
+  document.addEventListener("htmx:beforeSwap", function (e) {
+    var target = e.detail && e.detail.target;
+    var open = document.querySelector("details.colmenu[open]:not([data-static])");
+    if (open && target instanceof Element && target.contains(open)) {
+      openKey = open.getAttribute("data-key") || "";
+    }
+  });
+
   document.addEventListener(
     "toggle",
     function (e) {
@@ -1549,19 +1573,15 @@
     document.querySelectorAll(".tablescroll").forEach(function (w) {
       w.classList.add("is-js"); // row menus are placed by followMenus, the wrapper may clip
     });
-    try {
-      var reopen = window.sessionStorage.getItem("tf-colmenu");
-      if (reopen) {
-        window.sessionStorage.removeItem("tf-colmenu");
-        var menu = document.querySelector(
-          'details.colmenu[data-key="' + reopen + '"]',
-        );
-        if (menu && desktop.matches) {
-          menu.open = true;
-        }
+    if (reopen) {
+      var menu = document.querySelector(
+        'details.colmenu[data-key="' + reopen + '"]',
+      );
+      if (menu && desktop.matches) {
+        menu.open = true;
+        openKey = reopen;
       }
-    } catch (e) {
-      /* no storage */
+      reopen = "";
     }
     if (openKey) {
       var wrap = document.querySelector(

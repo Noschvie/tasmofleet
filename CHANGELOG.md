@@ -20,6 +20,10 @@ always upgrade automatically.
 
 - Single sign-on and proxy-header identities whose subject starts with `local:` are refused at sign-in (403 with a clear message, audit entry `denied: reserved subject`). That prefix is the subject of local accounts, and the audit log, the Users page and the user directory tell local accounts by it, so such an identity could appear as the local admin and share its audit rows. Roles were never affected (#380)
 
+### Fixed
+
+- The Columns menu now reliably reopens after you pin a column, and stays open when a device event refreshes the list at the same moment. The page that was about to reload could take the reopen note itself, and a refresh right after the menu opened could drop its open state (#273)
+
 ## 0.23.1 "Cape Hatteras" (2026-10-31)
 
 ### Added
