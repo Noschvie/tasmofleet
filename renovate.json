@@ -1,0 +1,66 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "schedule": ["before 6am on monday"],
+  "timezone": "Europe/Berlin",
+  "dependencyDashboard": true,
+  "labels": ["ci"],
+  "automerge": false,
+  "prHourlyLimit": 4,
+  "semanticCommits": "disabled",
+  "commitMessageAction": "Update",
+  "commitMessageTopic": "{{depName}}",
+  "enabledManagers": ["gomod", "npm", "github-actions", "dockerfile", "custom.regex"],
+  "customManagers": [
+    {
+      "description": "decode-config: version pinned in the Dockerfile ARG and in the CI integration job. The SHA-256 next to it cannot be computed by Renovate and must be updated by hand in the PR.",
+      "customType": "regex",
+      "managerFilePatterns": ["/^Dockerfile$/", "/^\\.github/workflows/ci\\.yml$/"],
+      "matchStrings": ["DECODER_VERSION[=:] ?(?<currentValue>v\\d+\\.\\d+\\.\\d+)\\s"],
+      "depNameTemplate": "tasmota/decode-config",
+      "datasourceTemplate": "github-releases"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "One PR per ecosystem for minor and patch updates",
+      "matchManagers": ["gomod"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "groupName": "Go modules"
+    },
+    {
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "e2e npm packages"
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "groupName": "GitHub Actions"
+    },
+    {
+      "matchManagers": ["dockerfile"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "groupName": "Docker base images"
+    },
+    {
+      "description": "The Go directive in go.mod and the golang build image move together",
+      "matchDepNames": ["go", "golang", "docker.io/library/golang"],
+      "groupName": "Go toolchain"
+    },
+    {
+      "description": "Major updates are never grouped: one PR each, to be read on their own",
+      "matchUpdateTypes": ["major"],
+      "groupName": null,
+      "dependencyDashboardApproval": false
+    },
+    {
+      "matchDepNames": ["tasmota/decode-config"],
+      "groupName": "decode-config",
+      "prBodyNotes": [
+        "**Manual step:** Renovate cannot compute checksums of release assets. Update `DECODER_SHA256` in the Dockerfile and in `.github/workflows/ci.yml` to the SHA-256 of `decode-config-ubuntu-24.04.tar.gz` of the new release (`curl -fsSL <asset url> | sha256sum`), or CI and the image build fail on the SHA-256 check.",
+        "If the release ships an aarch64 asset (tasmota/decode-config#127), also switch the arm64 stage from our fork build (`DECODER_ARM64_URL` / `DECODER_ARM64_SHA256`) to upstream's `decode-config-ubuntu-24.04-arm64.tar.gz`."
+      ]
+    }
+  ]
+}
