@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Fixed
+
+- Device settings, Options: the help line of SetOption19 (and SetOption4) no longer repeats the description in the label; each fact is shown once (#363).
+
 ### Added
 
 - Container image for linux/arm64 (Raspberry Pi 4/5) next to linux/amd64: every tag is now a multi-arch image. The arm64 image carries the backup decoder as well (#354, thanks @t4nki)

@@ -595,3 +595,44 @@ func TestOtaUrlIsReadLiveWithoutCredentials(t *testing.T) {
 		t.Errorf("MQTT reply leaked credentials or dropped the value: %q", v)
 	}
 }
+
+// Why (#363): the form shows the SetOption description (in the label) and the field's own help
+// side by side. When the help restates the description the person reads the same fact twice, so
+// every toggle's help must add something instead of echoing the label.
+func TestToggleHelpDoesNotRepeatItsLabel(t *testing.T) {
+	words := func(s string) []string {
+		var out []string
+		for _, w := range strings.FieldsFunc(strings.ToLower(s), func(r rune) bool {
+			return r < 'a' || r > 'z'
+		}) {
+			if len(w) >= 4 {
+				out = append(out, w)
+			}
+		}
+		return out
+	}
+	n := 0
+	for _, f := range Fields {
+		if f.Kind != KindToggle {
+			continue
+		}
+		n++
+		label := strings.ToLower(f.Label)
+		hw := words(f.Help)
+		if len(hw) == 0 {
+			continue
+		}
+		shared := 0
+		for _, w := range hw {
+			if strings.Contains(label, w) {
+				shared++
+			}
+		}
+		if shared*2 >= len(hw) {
+			t.Errorf("%s: help %q repeats its label %q (%d of %d words shared)", f.Key, f.Help, f.Label, shared, len(hw))
+		}
+	}
+	if n == 0 {
+		t.Fatal("no toggle fields found")
+	}
+}
