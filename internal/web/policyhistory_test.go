@@ -19,13 +19,21 @@ func seedTimes(mem *rulesMem, ats []time.Time, actors []string) {
 // historyEnv has four versions of one rule: v1..v3 are quick saves of one actor, v4 (current) is another actor's.
 func historyEnv(t *testing.T) (*env, *rulesMem) {
 	t.Helper()
-	e, mem, _ := rulesEnv(t, "")
+	y, m, d := time.Now().Date()
+	return historyEnvAt(t, time.Date(y, m, d, 12, 0, 0, 0, time.Local))
+}
+
+// historyEnvAt is historyEnv with the page's clock stopped at now. The versions are seeded from the
+// start of now's day, never from now minus an hour, so "Today" holds at any time of day.
+func historyEnvAt(t *testing.T, now time.Time) (*env, *rulesMem) {
+	t.Helper()
+	e, mem, _ := rulesEnvDeps(t, func(dp *Deps) { dp.Clock = noonClock{now} })
 	saveRule(t, e, nil)
 	id := ruleIDs(t, mem)[0]
 	for i, want := range []string{"1", "0", "1"} {
 		saveRule(t, e, url.Values{"id": {id}, "version": {vstr(int64(i + 1))}, "want": {want}})
 	}
-	base := time.Now().Add(-time.Hour)
+	base := time.Date(now.Year(), now.Month(), now.Day(), 0, 1, 0, 0, now.Location())
 	seedTimes(mem, []time.Time{base, base.Add(30 * time.Second), base.Add(60 * time.Second), base.Add(30 * time.Minute)},
 		[]string{"admin", "admin", "admin", "other"})
 	return e, mem
@@ -49,6 +57,29 @@ func TestPolicyHistoryFoldsQuickSavesAndKeepsTheCurrentVersionAlone(t *testing.T
 	}
 	if !strings.Contains(body, `id="diff"`) || !strings.Contains(body, "Changes in v4") {
 		t.Error("the newest version is picked by default")
+	}
+}
+
+// Why (#340): the suite failed between 00:00 and 01:00 UTC because the versions were seeded an hour
+// before the real clock and so landed on yesterday. "Today" is decided by the page's clock; just
+// after midnight, at noon and just before the next midnight the saves of this day still read "Today",
+// and the day before reads without it.
+func TestPolicyHistoryTodayDoesNotDependOnTheTimeOfDay(t *testing.T) {
+	y, m, d := time.Now().Date()
+	for _, hm := range [][2]int{{0, 35}, {12, 0}, {23, 59}} {
+		now := time.Date(y, m, d, hm[0], hm[1], 0, 0, time.Local)
+		e, mem := historyEnvAt(t, now)
+		_, body := e.do(t, "GET", "/policy/history", "admin", nil)
+		if !strings.Contains(body, "Today · ") {
+			t.Errorf("at %02d:%02d the saves of this day lack %q", hm[0], hm[1], "Today · ")
+		}
+		for i := range mem.vs {
+			mem.vs[i].At = mem.vs[i].At.Add(-24 * time.Hour)
+		}
+		_, body = e.do(t, "GET", "/policy/history", "admin", nil)
+		if strings.Contains(body, "Today · ") {
+			t.Errorf("at %02d:%02d yesterday's saves read as Today", hm[0], hm[1])
+		}
 	}
 }
 

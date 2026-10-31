@@ -254,7 +254,7 @@ func dayTitle(day, now time.Time) string {
 }
 
 func (h *handler) histDays(pg sysconfig.HistoryPage, pick, current int64, cursor, base string) []histDay {
-	now := time.Now().In(time.Local)
+	now := h.d.Clock.Now().In(time.Local)
 	link := func(id int64) string {
 		return base + policyHistoryPath + "?" + cursor + "v=" + vstr(id) + "#diff"
 	}
