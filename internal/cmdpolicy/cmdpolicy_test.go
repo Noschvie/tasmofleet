@@ -752,3 +752,35 @@ func TestStartsFirmwareUpgrade(t *testing.T) {
 		}
 	}
 }
+
+// Why (#393): the glued "Backlog" prefix is only stripped by Tasmota inside a Backlog part
+// (CmndBacklog, tasmota/tasmota_support/support_command.ino lines 549-556, Tasmota 16.0.0). A typed
+// "BacklogUpgrade 1" never gets there: ExecuteCommand (lines 339-368) takes the whole alphanumeric run
+// "BacklogUpgrade" as the command word, CommandHandler upper-cases it and strips trailing digits
+// (lines 389-428), and DecodeCommand/GetCommandCode (tasmota_support/support.ino lines 1133-1163)
+// match whole names with strcasecmp. "BACKLOGUPGRADE" is in no command table, so the device answers
+// "Unknown" and flashes nothing. The same holds for MQTT cmnd/<topic>/BacklogUpgrade, which reaches
+// the same CommandHandler. So cmdpolicy must not treat it as a firmware start (it would hold an
+// update job and show the firmware confirmation for a command that does nothing), and it is not an
+// Upgrade in any other spelling either. Inside a Backlog part the prefix is stripped, and that stays
+// a firmware start (TestStartsFirmwareUpgrade).
+func TestGluedBacklogPrefixOutsideBacklogIsUnknown(t *testing.T) {
+	for _, cmd := range []string{
+		"BacklogUpgrade 1", "backlogupgrade 1", "BacklogUpgrade1", "Backlog0Upgrade 1",
+		"BacklogOtaUrl http://x/y.bin", "BacklogBacklogUpgrade 1",
+	} {
+		if StartsFirmware(cmd) || StartsFirmwareUpgrade(cmd) {
+			t.Errorf("%q is an unknown command on Tasmota 16.0.0, not a firmware start", cmd)
+		}
+		v, err := Classify(cmd)
+		if err != nil {
+			t.Fatalf("Classify(%q): %v", cmd, err)
+		}
+		if v.Class != ClassAdmin {
+			t.Errorf("Classify(%q) class %v, want admin (unknown names are admin-only)", cmd, v.Class)
+		}
+		if v.Confirm != "" && strings.Contains(strings.ToLower(v.Confirm), "firmware") {
+			t.Errorf("Classify(%q) asks the firmware confirmation for a command Tasmota does not run: %q", cmd, v.Confirm)
+		}
+	}
+}
