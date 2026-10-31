@@ -89,6 +89,7 @@ type simDevice struct {
 	boots         int // reboots since creation
 	mqttCount     int
 	reason        string
+	nextReason    string // the RestartReason the next boot reports instead of the default (Restart)
 	relays        []bool // relay states; Tasmota keeps them in RTC RAM across a soft restart only
 	cmds          []string
 	faults        []Fault
@@ -255,6 +256,7 @@ func (d *simDevice) viewLocked() view {
 		now: time.Now(), startup: d.bootAt.Add(-time.Duration(d.uptimeBase) * time.Second),
 		uptimeSec: d.uptimeBase + int(time.Since(d.bootAt).Seconds()),
 		relays:    slices.Clone(d.relays), light: d.spec.Light, noRelay: d.spec.NoRelay, otaURL: d.runtime.otaURL, bootCount: d.runtime.bootCount,
+		signalDBm: d.spec.SignalDBm, linkCount: d.spec.LinkCount,
 		mqttCount: d.mqttCount, reason: d.reason, image: d.image, version: d.version, kv: cloneKV(d.runtime.kv),
 	}
 }

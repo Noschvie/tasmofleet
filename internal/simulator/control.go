@@ -34,6 +34,12 @@ type Controller interface {
 	AddFault(Fault)
 	ClearFaults()
 	PowerCycle() // reboot without writing flash (RAM-only changes are lost)
+	// Restart reboots like PowerCycle and reports reason as the RestartReason ("Exception",
+	// "Hardware Watchdog", "Power on"...): in tele/INFO3 over MQTT and in Status 1.
+	Restart(reason string)
+	// SetWifi changes the reported signal (dBm) and LinkCount from now on, as if the link got worse;
+	// 0 keeps the current value.
+	SetWifi(signalDBm, linkCount int)
 	// PowerOff is the plug being pulled: the MQTT connection drops uncleanly (the
 	// broker publishes the will, LWT Offline) and the HTTP port stops. The device
 	// does not come back.
@@ -208,6 +214,30 @@ func (d *simDevice) PowerCycle() {
 	d.spawn(func() {
 		d.reboot(false)
 	})
+}
+
+func (d *simDevice) Restart(reason string) {
+	d.mu.Lock()
+	if d.phase != PhaseRun {
+		d.mu.Unlock()
+		return
+	}
+	d.nextReason = reason
+	d.mu.Unlock()
+	d.spawn(func() {
+		d.reboot(false)
+	})
+}
+
+func (d *simDevice) SetWifi(signalDBm, linkCount int) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if signalDBm != 0 {
+		d.spec.SignalDBm = signalDBm
+	}
+	if linkCount != 0 {
+		d.spec.LinkCount = linkCount
+	}
 }
 
 func (d *simDevice) WaitFor(ctx context.Context, cond func(Controller) bool) error {

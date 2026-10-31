@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/stability"
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
 
@@ -135,9 +136,10 @@ templ (h *handler) deviceRows(d rowsData) {
 					<span class="tag" data-via-mqtt title="HTTP to this device fails, so TasmoFleet manages it over MQTT">MQTT</span>
 				}
 			</td>
-			<td data-label="Status" class="nowrap s"><span class="dv-live" sse-swap={ "health-" + devID(row.Device.ID) }>
+			<td data-label="Status" class="s st-wrap"><span class="dv-live" sse-swap={ "health-" + devID(row.Device.ID) }>
 				@h.statusCell(row.Health)
 			</span>
+				@stabBadge(row.Stab)
 				if row.Deviations > 0 {
 					{ " " }
 					<span class="bdg t-warn dv-devs" title="Settings of this device that differ from the policy">{ plural(row.Deviations, "deviation") }</span>
@@ -235,5 +237,13 @@ templ listNotice(n notice) {
 	}
 	if n.Notice != "" {
 		<p class="notice" role="status">{ n.Notice }</p>
+	}
+}
+
+// stabBadge is the "Boot loop" / "Weak Wi-Fi" badge next to the status (#325); nothing for a stable or unjudged device.
+templ stabBadge(r *stability.Result) {
+	if sp := stabProblem(r); sp != nil {
+		{ " " }
+		<span class={ "bdg", stabTone(sp.Level), "dv-unst" } title={ stabBadgeTitle(*sp) }>{ sp.Level.Label() }</span>
 	}
 }

@@ -124,6 +124,10 @@ type DeviceSpec struct {
 	// ReactivePower, Factor and Current as arrays of n; Total, Yesterday, Today (summed
 	// over the channels) and Voltage as one number each.
 	Energy int
+	// SignalDBm and LinkCount replace the capture's Wi-Fi readings (Signal, the RSSI percentage derived
+	// from it, LinkCount) in every STATE and Status 11; 0 keeps the capture. A weak link is -80 with
+	// LinkCount 14.
+	SignalDBm, LinkCount int
 	// Sensors are published in tele/SENSOR as one block per sensor name, for example
 	// {"BME280": {"Temperature": 21.5}}, followed by TempUnit "C" (and PressureUnit "hPa" when a block has a Pressure).
 	Sensors map[string]map[string]float64

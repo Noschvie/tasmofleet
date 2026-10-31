@@ -167,6 +167,9 @@ templ deviceOverviewPage(p deviceOverview) {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneNeutral, Text: p.NotYet})
 	}
 	@liveRegion(p.Live)
+	if p.Stab != nil {
+		@stabilityCard(*p.Stab, nil)
+	}
 	<div class="dev-pair">
 		@identityCard(p.Ident)
 		<section id="devconn" class={ "devcard", dimClass(p.Live.Off) } data-dim aria-disabled={ ariaBool(p.Live.Off) } aria-labelledby="dc-conn">
@@ -184,6 +187,9 @@ templ deviceOverviewPage(p deviceOverview) {
 // Activity box, the header and the offline banner out of band.
 templ deviceLiveParts(p deviceOverview) {
 	@liveRegion(p.Live)
+	if p.Stab != nil {
+		@stabilityCard(*p.Stab, templ.Attributes{"hx-swap-oob": "true"})
+	}
 	if !p.Activity.Unchanged {
 		@devActBox(p.Activity, templ.Attributes{"hx-swap-oob": "true"})
 	}
@@ -423,4 +429,76 @@ templ identityFWR(c identCard) {
 		<h3 class="ukv-h">TasmoFleet&#39;s reading <span class="ukv-sub">worked out by TasmoFleet, not reported by the device</span></h3>
 		@ui.KV(c.Reading)
 	}
+}
+
+// stabilityCard is the Stability card of the Overview (#325): the verdict as a badge, a notice only
+// when there is a problem, then the numbers behind it. attrs: hx-swap-oob on a live refresh.
+templ stabilityCard(c stabCard, attrs templ.Attributes) {
+	<section id="stability" class="devcard stab-card" aria-labelledby="dc-stab" { attrs... }>
+		<div class="stab-head">
+			<h2 id="dc-stab">Stability</h2>
+			<span class={ "bdg", stabTone(c.Level) }>{ c.Level.Label() }</span>
+			<span class="stab-meta">{ c.Meta }</span>
+		</div>
+		if len(c.Note) > 0 {
+			<div class={ "stab-note", stabTone(c.Level) }>
+				for _, s := range c.Note {
+					if s.Bold {
+						<strong>{ s.Text }</strong>
+					} else {
+						{ s.Text }
+					}
+				}
+			</div>
+		}
+		<dl class="ukv">
+			for _, r := range c.Rows {
+				<div class="ukv-row">
+					<dt>{ r.Key }</dt>
+					<dd>
+						if r.Class != "" {
+							<span class={ r.Class }>{ r.Main }</span>
+						} else {
+							{ r.Main }
+						}
+						{ r.Rest }
+						if r.Sub != "" || !r.SubAt.IsZero() {
+							<span class="sub">
+								if !r.SubAt.IsZero() {
+									<time data-visual-mask { ui.StampAttrs(r.SubAt, ui.StampDay)... }>{ r.SubAtText }</time>
+								}
+								{ r.Sub }
+							</span>
+						}
+						if r.Spark != nil {
+							<svg class={ "stab-spark", r.Spark.Tone } viewBox="0 0 240 36" preserveAspectRatio="none" role="img" aria-label="Wi-Fi signal, last 24 hours, one sample per hour" data-visual-mask>
+								<line class="ref" x1="0" x2="240" y1={ r.Spark.Ref } y2={ r.Spark.Ref }></line>
+								<polyline class="line" points={ r.Spark.Points }></polyline>
+							</svg>
+						}
+					</dd>
+				</div>
+			}
+		</dl>
+		if len(c.Boots) > 0 {
+			<h3 class="devcard-h3">Recent restarts</h3>
+			<ul class="stab-boots">
+				for _, b := range c.Boots {
+					<li>
+						<span class="when"><time data-visual-mask { ui.StampAttrs(b.At, ui.StampClock)... }>{ b.AtText }</time></span>
+						<span>
+							{ b.Label }
+							if b.Raw != "" {
+								<br/>
+								<span class="raw">{ b.Raw }</span>
+							}
+						</span>
+						if b.Ran != "" {
+							<span class="ran">{ b.Ran }</span>
+						}
+					</li>
+				}
+			</ul>
+		}
+	</section>
 }

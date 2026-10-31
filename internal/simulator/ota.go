@@ -338,6 +338,9 @@ func (d *simDevice) reboot(commit bool) {
 	if d.esp32 {
 		d.reason = "Software reset CPU"
 	}
+	if d.nextReason != "" {
+		d.reason, d.nextReason = d.nextReason, ""
+	}
 	loader := d.minimalLocked() && d.otaLoader
 	d.mu.Unlock()
 	if !hang {

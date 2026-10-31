@@ -169,7 +169,7 @@ func (a *runtime) run(ctx context.Context) error {
 	}
 	a.goBG("mqtt-cmd", func() error { <-bg.Done(); a.mqttCmd.Close(); return nil }) // wakes commands in flight
 	a.tracker = health.New(health.Deps{
-		Store: svc.Store, Client: svc.HTTP, Bus: a.bus, Hub: svc.Hub, OnMQTTSeen: a.onMQTTSeen, // HTTP only: it measures HTTP
+		Store: svc.Store, Client: svc.HTTP, Bus: a.bus, Hub: svc.Hub, OnMQTTSeen: a.onMQTTSeen, Stability: svc.Store, // HTTP only: it measures HTTP
 	}, health.Options{
 		StaleAfter: staleAfter(cfg.TelePeriod), PollInterval: cfg.PollInterval,
 	})
@@ -659,7 +659,7 @@ func (a *runtime) webDeps(guard web.Guard, rows []web.KV) web.Deps {
 		}
 	}
 	deps := web.Deps{
-		Guard: guard, Inventory: a.svc.Inventory, Health: a.tracker, Backups: a.backups,
+		Guard: guard, Inventory: a.svc.Inventory, Health: a.tracker, Stability: a.svc.Store, Backups: a.backups,
 		Prober: a.svc.Prober, DeviceNames: a.svc.Store, BuildMemory: a.svc.Store, FWReach: a.fwReach, MQTTPasswords: a.svc.Store, History: a.svc.Store, Audit: a.svc.Store, Recorder: a.svc.Audit,
 		Jobs: a.svc.Store, Batches: a.svc.Store, Artifacts: a.svc.Store, Prefs: a.svc.Store, Principals: a.svc.Store, Database: a.svc.Store, Hub: a.svc.Hub, Version: DisplayVersion(), DecoderVersion: a.decoder, MQTT: mqttState,
 		Config: rows, Pages: a.pages, FirmwareSource: a.fwSource, FirmwareFeed: a.fwFeed,

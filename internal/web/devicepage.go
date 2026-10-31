@@ -32,6 +32,7 @@ type deviceOverview struct {
 	Updating *jobView // an operation holds the device: it is silent on purpose
 	NotYet   string   // the device never answered: what to check
 	Live     liveView
+	Stab     *stabCard // nil without the stability store
 	Ident    identCard
 	Conn     connCard
 	Paths    *pathCard // nil without the transport service

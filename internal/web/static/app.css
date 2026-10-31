@@ -15150,5 +15150,103 @@ details.devcard > summary {
 @media (max-width: 44.99rem) {
   .fcols.fcols-n {
     gap: 0;
+||||||| parent of 66b4d3f (Stability per device: restart reasons, boot loops, weak Wi-Fi)
+
+/* Online + Boot loop / Weak Wi-Fi + a policy deviation does not fit the 170 px Status column on one line:
+   the badges wrap instead of being cut (#325). */
+.devtable td.st-wrap {
+  white-space: normal;
+}
+
+/* Stability card of the device Overview (#325): badge, notice, numbers, sparkline, recent restarts. */
+.stab-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-10);
+}
+.stab-head h2 {
+  margin: 0;
+}
+.stab-meta {
+  margin-left: auto;
+  font-size: var(--fs-meta);
+  color: var(--color-text-2);
+}
+.stab-note {
+  margin: var(--sp-10) 0 var(--sp-8);
+  padding: var(--sp-8) var(--sp-12);
+  border-radius: var(--r-badge, 6px);
+  background: var(--t-bg);
+  color: var(--t-fg);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.stab-card .ukv {
+  margin-top: var(--sp-10);
+}
+.stab-card .ukv-row .sub {
+  display: block;
+  color: var(--color-text-2);
+  font-size: 12px;
+}
+.stab-card .num-bad {
+  color: var(--color-danger-fg);
+  font-weight: 600;
+}
+.stab-card .num-warn {
+  color: var(--color-warn-fg);
+  font-weight: 600;
+}
+.stab-spark {
+  display: block;
+  width: 100%;
+  max-width: 240px;
+  height: 28px;
+}
+.stab-spark .line {
+  fill: none;
+  stroke: var(--t);
+  stroke-width: 1.6;
+  vector-effect: non-scaling-stroke;
+}
+.stab-spark .ref {
+  stroke: var(--color-border-strong);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+}
+.stab-boots {
+  list-style: none;
+  margin: var(--sp-4) 0 0;
+  padding: 0;
+  font-size: 13px;
+}
+.stab-boots li {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
+  gap: var(--sp-10);
+  padding: var(--sp-6) 0;
+  border-top: var(--hair-w) solid var(--color-border);
+  align-items: baseline;
+}
+.stab-boots .when {
+  color: var(--color-text-2);
+  font: 400 12.5px var(--font-mono);
+}
+.stab-boots .ran {
+  color: var(--color-text-2);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+.stab-boots .raw {
+  color: var(--color-text-3);
+  font: 400 11.5px var(--font-mono);
+}
+@media (max-width: 640px) {
+  .stab-boots li {
+    grid-template-columns: 78px minmax(0, 1fr);
+  }
+  .stab-boots .ran {
+    grid-column: 2;
   }
 }

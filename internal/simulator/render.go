@@ -21,9 +21,11 @@ type view struct {
 	bootCount int
 	mqttCount int
 	reason    string
-	image     string
-	version   string
-	kv        map[string]string
+	// signalDBm and linkCount replace the captured Wi-Fi readings when not 0.
+	signalDBm, linkCount int
+	image                string
+	version              string
+	kv                   map[string]string
 }
 
 var (
@@ -40,6 +42,9 @@ var (
 	rePowerName = regexp.MustCompile(`"POWER":"(ON|OFF)"`)
 	rePowerMask = regexp.MustCompile(`"Power":"[01]"`)
 	reLightKeys = regexp.MustCompile(`,"(Dimmer|Color|HSBColor|White|CT|Channel|Scheme|Width|Fade|Speed|LedTable)":("[^"]*"|\[[^\]]*\]|-?[0-9]+)`)
+	reRSSI      = regexp.MustCompile(`"RSSI":\d+`)
+	reSignal    = regexp.MustCompile(`"Signal":-?\d+`)
+	reLinkCount = regexp.MustCompile(`"LinkCount":\d+`)
 	reOtaURL    = regexp.MustCompile(`"OtaUrl":"[^"]*"`)
 )
 
@@ -103,6 +108,13 @@ func (d *simDevice) render(file string, v view) []byte {
 	})
 	rep(reBoot, `"BootCount":`+strconv.Itoa(v.bootCount))
 	rep(reReason, `"RestartReason":`+jsonString(v.reason))
+	if v.signalDBm != 0 {
+		rep(reSignal, `"Signal":`+strconv.Itoa(v.signalDBm))
+		rep(reRSSI, `"RSSI":`+strconv.Itoa(max(0, min(100, 2*(v.signalDBm+100)))))
+	}
+	if v.linkCount != 0 {
+		rep(reLinkCount, `"LinkCount":`+strconv.Itoa(v.linkCount))
+	}
 	rep(reMqttCount, `"MqttCount":`+strconv.Itoa(v.mqttCount))
 	// The captures are mostly lights; a device that is not one reports no
 	// light state, which is how the OTA engine tells a light from a relay.

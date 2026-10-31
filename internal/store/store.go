@@ -60,6 +60,28 @@ type HealthStore interface {
 	PruneHealthEvents(ctx context.Context, before time.Time) (int64, error)
 }
 
+// Bounds of the stability history (#325): the newest restarts per device and how long hourly Wi-Fi
+// samples are kept.
+const (
+	MaxBootsPerDevice = 50
+	WifiSampleKeep    = 7 * 24 * time.Hour
+)
+
+// StabilityStore persists the restarts and Wi-Fi samples behind the Stability card.
+type StabilityStore interface {
+	// AppendBoot stores one restart and drops the device's rows beyond MaxBootsPerDevice (oldest first).
+	AppendBoot(ctx context.Context, b model.DeviceBoot) error
+	// ListBoots returns the newest restarts of a device first; limit <= 0 means all.
+	ListBoots(ctx context.Context, id model.DeviceID, limit int) ([]model.DeviceBoot, error)
+	// BootsSince returns the restarts at or after since, per device, newest first.
+	BootsSince(ctx context.Context, since time.Time) (map[model.DeviceID][]model.DeviceBoot, error)
+	// AppendWifiSample stores a sample; a second one with the same device and time replaces it.
+	AppendWifiSample(ctx context.Context, s model.WifiSample) error
+	// WifiSamplesSince returns the samples at or after since, per device, oldest first.
+	WifiSamplesSince(ctx context.Context, since time.Time) (map[model.DeviceID][]model.WifiSample, error)
+	PruneWifiSamples(ctx context.Context, before time.Time) (int64, error)
+}
+
 // JobStore persists OTA jobs. Every state change is written before the
 // engine executes the actions of that transition (write-ahead), so a restart
 // never repeats a non-idempotent step.
@@ -329,6 +351,7 @@ type DeviceCookieStore interface {
 type Store interface {
 	DeviceStore
 	HealthStore
+	StabilityStore
 	JobStore
 	JobPruner
 	ArtifactStore

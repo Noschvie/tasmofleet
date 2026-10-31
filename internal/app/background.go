@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"github.com/nofuturekid/tasmofleet/internal/store"
 	"io/fs"
 	"path/filepath"
 	"strconv"
@@ -178,6 +179,9 @@ func (a *runtime) prune(ctx context.Context) {
 	a.pruneFirmware(ctx)
 	if _, err := a.svc.Store.PruneHealthEvents(ctx, now.Add(-healthKeep)); err != nil {
 		a.log.Warn("prune health events", "err", err)
+	}
+	if _, err := a.svc.Store.PruneWifiSamples(ctx, now.Add(-store.WifiSampleKeep)); err != nil {
+		a.log.Warn("prune Wi-Fi samples", "err", err)
 	}
 	if _, err := a.svc.Store.DeleteExpiredSessions(ctx, now); err != nil {
 		a.log.Warn("prune sessions", "err", err)

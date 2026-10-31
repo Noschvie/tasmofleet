@@ -36,7 +36,13 @@ type Health struct {
 	SeenHTTP  time.Time // last successful HTTP poll
 	LWT       string    // "Online", "Offline" or "" when no MQTT
 	UptimeSec int64
-	RSSI      int               // Wifi.RSSI percentage from STATE, 0 if unknown
-	Power     map[string]string // "POWER1" -> "ON"; from STATE/RESULT
-	Since     time.Time         // when State last changed
+	RSSI      int // Wifi.RSSI percentage from STATE, 0 if unknown
+	// SignalDBm is Wifi.Signal from STATE/Status 11 (0 = not reported). LinkCount is Wifi.LinkCount,
+	// how often the device connected to its access point since it started (0 = not reported).
+	SignalDBm int
+	LinkCount int
+	// WifiDowntime is Wifi.Downtime: how long the device was disconnected since it started.
+	WifiDowntime time.Duration
+	Power        map[string]string // "POWER1" -> "ON"; from STATE/RESULT
+	Since        time.Time         // when State last changed
 }

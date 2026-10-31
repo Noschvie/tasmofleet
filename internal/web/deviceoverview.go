@@ -504,6 +504,10 @@ func (h *handler) overviewOf(r *http.Request, v view, d model.Device, just *rela
 	if p.Live.Box == nil {
 		p.Live.Sensors = sensorBoxOf(in)
 	}
+	if res, boots, ok := h.stabilityOf(ctx, d.ID, hl); ok {
+		c := stabCardOf(in.Now, res, boots, hl, facts.SSID)
+		p.Stab = &c
+	}
 	p.Ident = h.identity(v, d, p.Updating != nil, off, facts)
 	p.Conn = connOf(in)
 	if tpOK {

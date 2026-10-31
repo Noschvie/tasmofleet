@@ -101,6 +101,17 @@ func overviewDevices() []simulator.DeviceSpec {
 	}
 }
 
+// stabilityDevices are the devices of the Stability card (#325): one that stays stable, one the tests make
+// restart with a reason (POST /device/{name}/restart?reason=...), and one with a weak link from the start
+// (-84 dBm, 14 reconnects). Opt-in because other tests count the fleet.
+func stabilityDevices() []simulator.DeviceSpec {
+	return []simulator.DeviceSpec{
+		{Name: "st-stable", Profile: simulator.ProfileESP8266_4M},
+		{Name: "st-bootloop", Profile: simulator.ProfileESP32C3, RebootGap: 200 * time.Millisecond},
+		{Name: "st-weakwifi", Profile: simulator.ProfileESP8266_1M, SignalDBm: -84, LinkCount: 15},
+	}
+}
+
 // MQTTPassword is the MqttPassword of the devices below; the devenv broker takes any, so it only has to be
 // the value TasmoFleet is told for FileDownload/FileUpload.
 const MQTTPassword = "devenv-fake-mqtt-password" //nolint:gosec // G101: a fake value for the dev broker, which takes any password
@@ -154,6 +165,7 @@ func run(ctx context.Context, args []string, out, errOut io.Writer) error {
 	bind := fs.String("bind", "127.0.0.1", "address all listeners bind to; anything else exposes the OTA download gadget (opt-in)")
 	fleetSize := fs.Int("fleet-size", 0, "total number of simulated devices; 0 or less than the base fleet keeps the base fleet")
 	releases := fs.Int("releases", 1, "number of releases the fake GitHub releases feed (<upstream>/github) offers")
+	stability := fs.Bool("stability-shapes", false, "add the devices of the Stability card (#325): st-stable, st-bootloop (restarts on POST /device/{name}/restart?reason=...) and st-weakwifi")
 	mqttTransport := fs.Bool("mqtt-transport", false, "add the devices TasmoFleet reaches only over MQTT (http_unreachable, fw_unreachable, MqttPassword "+MQTTPassword+")")
 	onlyMQTT := fs.Bool("only-mqtt-transport", false, "only the devices of -mqtt-transport, no base fleet: for the specs that need nothing else and should not pay for it")
 	overview := fs.Bool("overview-shapes", false, "add the device shapes of the Overview mockups (docs/design/device-overview): meters, several relays, Ethernet, sensors only, HTTP only")
@@ -252,6 +264,9 @@ func run(ctx context.Context, args []string, out, errOut io.Writer) error {
 	specs := fleetOfSize(*fleetSize)
 	if *overview {
 		specs = append(specs, overviewDevices()...)
+	}
+	if *stability {
+		specs = append(specs, stabilityDevices()...)
 	}
 	if *mqttTransport {
 		specs = append(specs, mqttTransportDevices()...)
@@ -377,6 +392,8 @@ func startControl(idp *oidcmock.Server, df *designFleet, feed *upstreamFeed, reg
 	// notice (the device page follows both live, #126).
 	mux.HandleFunc("POST /device/{name}/{action}", reg.act)
 	mux.HandleFunc("POST /device/{name}/relay/{n}/{state}", reg.relay)
+	mux.HandleFunc("POST /device/{name}/restart", reg.restart)
+	mux.HandleFunc("POST /device/{name}/wifi", reg.wifi)
 	if df != nil {
 		mux.HandleFunc("POST /fixture/offline", func(w http.ResponseWriter, _ *http.Request) {
 			df.GoOffline()
@@ -625,5 +642,33 @@ func (r *deviceRegistry) relay(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	c.SetRelay(n, state == "on")
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// restart is POST /device/{name}/restart?reason=Exception: the device reboots and reports that
+// RestartReason (the default of a soft restart when empty).
+func (r *deviceRegistry) restart(w http.ResponseWriter, req *http.Request) {
+	c, ok := r.control(w, req)
+	if !ok {
+		return
+	}
+	c.Restart(req.URL.Query().Get("reason"))
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// wifi is POST /device/{name}/wifi?signal=-84&links=14: the link gets worse from now on.
+func (r *deviceRegistry) wifi(w http.ResponseWriter, req *http.Request) {
+	c, ok := r.control(w, req)
+	if !ok {
+		return
+	}
+	q := req.URL.Query()
+	sig, err1 := strconv.Atoi(q.Get("signal"))
+	links, err2 := strconv.Atoi(q.Get("links"))
+	if q.Get("signal") != "" && err1 != nil || q.Get("links") != "" && err2 != nil {
+		http.Error(w, "signal and links are whole numbers", http.StatusBadRequest)
+		return
+	}
+	c.SetWifi(sig, links)
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -65,7 +65,8 @@ internal/firmware         upstream sources, firmware cache, device-facing firmwa
 internal/ota              PURE state machine (machine.go) + engine (engine.go)
 internal/mqttbus          optional MQTT connection (paho), topic decoding
 internal/mqttcmd          commands over MQTT: publish, reply correlation, one in flight per device (SAFETY)
-internal/health           health tracker (MQTT + HTTP poll fallback)
+internal/health           health tracker (MQTT + HTTP poll fallback), restart and Wi-Fi history
+internal/stability        PURE: boot loop / weak Wi-Fi verdict and RestartReason wording (#325)
 internal/events           in-process pub/sub for SSE
 internal/inventory        device service layer (validation, upsert, audit)
 internal/devicecmd        single commands to single devices on behalf of a person

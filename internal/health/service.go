@@ -56,6 +56,9 @@ type Deps struct {
 	Clock  clock.Clock    // default clock.Real
 	Hub    *events.Hub    // optional; receives TopicHealth events
 	Rand   func() float64 // optional, [0,1); jitter source for tests
+	// Stability is optional: with it the tracker stores the restarts it notices and an hourly Wi-Fi
+	// sample (#325).
+	Stability store.StabilityStore
 
 	// OnMQTTSeen is called once per device (and run) when the first message
 	// on our broker matches the device's topic. Inventory uses it to set
@@ -111,6 +114,18 @@ type devState struct {
 	// powerGen counts the relay states a command confirmed (NotePower). A poll that began before the
 	// last one carries a stale power state and must not overwrite it (#206).
 	powerGen uint64
+
+	// Stability bookkeeping (stability.go).
+	lastUptime    int64     // the previous UptimeSec reading; valid when uptimeKnown
+	uptimeKnown   bool      //
+	dropUptime    int64     // the uptime before the drop that flagged checkDrop
+	baselined     bool      // the first-reading check was flagged (or INFO3 made it unnecessary)
+	bootsSeeded   bool      // lastBootCount was read from the store
+	lastBootCount int       // BootCount of the newest restart stored or seen
+	check         string    // "", checkBaseline or checkDrop: a Status 1 is wanted
+	checkTries    int       //
+	checkAfter    time.Time // earliest next Status 1
+	lastSample    time.Time // the hour of the last Wi-Fi sample
 
 	sigDBm  int                      // Wifi.Signal from STATE; valid when hasSig
 	hasSig  bool                     //
@@ -265,6 +280,9 @@ func (s *Service) tick(ctx context.Context) {
 	var due []model.DeviceID
 	snapBudget := s.o.PollParallel // per tick: no burst of snapshot fetches
 	s.mu.Lock()
+	// A flagged restart read goes before the next poll of its device (a poll is due every interval
+	// and would otherwise always take the device first).
+	checks := s.bootChecksDue(now, snapBudget)
 	for id, ds := range s.devs {
 		if tr, ok := s.evaluate(ds, now, ds.h.Source, "no recent observation"); ok {
 			trs = append(trs, tr)
@@ -281,8 +299,17 @@ func (s *Service) tick(ctx context.Context) {
 			due = append(due, id)
 		}
 	}
+	samples := s.wifiSamplesDue(now)
 	s.mu.Unlock()
 	s.persist(ctx, trs)
+	s.storeWifiSamples(ctx, samples)
+	for _, id := range checks {
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			s.checkBoot(ctx, id)
+		}()
+	}
 	for _, id := range due {
 		s.wg.Add(1)
 		go func() {
@@ -501,6 +528,10 @@ type stateDoc struct {
 	Wifi      *struct {
 		RSSI   *int `json:"RSSI"`
 		Signal *int `json:"Signal"` // dBm
+		// LinkCount is how often the device connected to its access point since it started;
+		// Downtime how long it was disconnected in total ("0T00:03:41").
+		LinkCount *int    `json:"LinkCount"`
+		Downtime  *string `json:"Downtime"`
 	} `json:"Wifi"`
 }
 
@@ -522,6 +553,7 @@ func (s *Service) onMessage(m mqttbus.Message) {
 	}
 	firstSeen := !ds.mqttSeen
 	ds.mqttSeen = true
+	var boot *model.DeviceBoot
 	// An LWT "Offline" comes from the broker (the device's will, or its replay after our
 	// restart), not from the device: it is no contact, so it must not move "last seen" or
 	// clear the failures.
@@ -551,7 +583,11 @@ func (s *Service) onMessage(m mqttbus.Message) {
 	case mqttbus.KindSensor:
 		applyEnergy(ds, m.Payload)
 		applySensors(ds, m.Payload)
-	case mqttbus.KindStatus, mqttbus.KindDiscovery, mqttbus.KindUpgrade, mqttbus.KindInfo, mqttbus.KindFile:
+	case mqttbus.KindInfo:
+		if m.Suffix == "INFO3" {
+			boot = s.noteInfo3(ds, m.Payload, now)
+		}
+	case mqttbus.KindStatus, mqttbus.KindDiscovery, mqttbus.KindUpgrade, mqttbus.KindFile:
 		// A sign of life only; nothing to merge.
 	}
 	tr, changed := s.evaluate(ds, now, model.SourceMQTT, "mqtt "+string(m.Kind))
@@ -566,6 +602,10 @@ func (s *Service) onMessage(m mqttbus.Message) {
 
 	if changed {
 		s.enqueue(func() { s.persist(context.Background(), []transition{tr}) })
+	}
+	if boot != nil {
+		b := *boot
+		s.enqueue(func() { s.storeBoot(context.Background(), b) })
 	}
 	if firstSeen && s.d.OnMQTTSeen != nil {
 		s.enqueue(func() { s.d.OnMQTTSeen(id, topic) })
@@ -633,12 +673,22 @@ func (s *Service) applyJSON(ds *devState, payload []byte, telemetry, skipPower b
 	if doc.UptimeSec != nil {
 		ds.h.UptimeSec = *doc.UptimeSec
 		ds.hasSnap = true
+		s.noteUptime(ds, *doc.UptimeSec)
 	}
 	if doc.Wifi != nil && doc.Wifi.RSSI != nil {
 		ds.h.RSSI = *doc.Wifi.RSSI
 	}
 	if doc.Wifi != nil && doc.Wifi.Signal != nil {
 		ds.sigDBm, ds.hasSig = *doc.Wifi.Signal, true
+		ds.h.SignalDBm = *doc.Wifi.Signal
+	}
+	if doc.Wifi != nil && doc.Wifi.LinkCount != nil {
+		ds.h.LinkCount = *doc.Wifi.LinkCount
+	}
+	if doc.Wifi != nil && doc.Wifi.Downtime != nil {
+		if d, ok := parseDowntime(*doc.Wifi.Downtime); ok {
+			ds.h.WifiDowntime = d
+		}
 	}
 }
 

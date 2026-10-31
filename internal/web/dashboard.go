@@ -11,6 +11,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/auth"
 	"github.com/nofuturekid/tasmofleet/internal/discovery"
 	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/stability"
 	"github.com/nofuturekid/tasmofleet/internal/store"
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
@@ -67,6 +68,7 @@ func (h *handler) dashboard(w http.ResponseWriter, r *http.Request) {
 	v.Live = true // "state streams in live": the body reloads on state changes (TestDashboardIsLive)
 	facts := h.fleetFacts(r.Context(), actor(r))
 	facts.annotate(rows)
+	h.annotateStability(r.Context(), rows)
 	s := h.fleetSummaryFor(r.Context(), v, rows, facts)
 	var txs []txView
 	if h.d.Jobs != nil {
@@ -221,7 +223,7 @@ func dashProposals(base string, props []discovery.Proposal, devs map[model.Devic
 }
 
 // dashAttention lists the devices that need a look, worst first: offline, never answered,
-// refusing the login, silent, then policy deviations; at most dashAttentionMax.
+// refusing the login, silent, a boot loop, weak Wi-Fi, then policy deviations; at most dashAttentionMax.
 func dashAttention(base string, now time.Time, rows []deviceRow, f fleetFacts, window time.Duration) []ui.AttItem {
 	type cand struct {
 		rank int
@@ -251,8 +253,14 @@ func dashAttention(base string, now time.Time, rows []deviceRow, f fleetFacts, w
 		case model.HealthOnline:
 			// answers: only a policy deviation can put it on the list (below)
 		}
+		if sp := stabProblem(r.Stab); rank < 0 && sp != nil {
+			rank, it.Tone, it.Text = 4, ui.ToneDanger, stabAttention(*sp, r.Health.SignalDBm)
+			if sp.Level == stability.WeakWiFi {
+				rank, it.Tone = 5, ui.ToneWarn
+			}
+		}
 		if rank < 0 && r.Deviations > 0 {
-			rank, it.Tone, it.Text = 4, ui.ToneWarn, deviationText(f.Details[r.Device.ID], r.Deviations)
+			rank, it.Tone, it.Text = 6, ui.ToneWarn, deviationText(f.Details[r.Device.ID], r.Deviations)
 		}
 		if rank >= 0 {
 			cs = append(cs, cand{rank, r.Device.ID, it})
@@ -262,7 +270,7 @@ func dashAttention(base string, now time.Time, rows []deviceRow, f fleetFacts, w
 	// rows come sorted by name.
 	sort.SliceStable(cs, func(i, j int) bool { return cs[i].id < cs[j].id })
 	var out []ui.AttItem
-	for rank := 0; rank <= 4 && len(out) < dashAttentionMax; rank++ {
+	for rank := 0; rank <= 6 && len(out) < dashAttentionMax; rank++ {
 		for _, c := range cs {
 			if c.rank == rank && len(out) < dashAttentionMax {
 				out = append(out, c.it)

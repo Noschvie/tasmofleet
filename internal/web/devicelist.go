@@ -80,7 +80,7 @@ func (h *handler) deviceList(ctx context.Context, p *devicesPage) error {
 		l.Cards = append(l.Cards, ui.DeviceCardData{
 			ID: id, Name: row.Device.Name, Href: p.RowsData.Base + "/devices/" + id, Meta: meta, Select: p.RowsData.Select,
 			Outdated: row.Outdated, Deviations: row.Deviations,
-			Status: h.statusCell(row.Health), Uptime: h.uptimeCell(row.Vitals),
+			Status: h.statusCell(row.Health), Stability: stabBadge(row.Stab), Uptime: h.uptimeCell(row.Vitals),
 			Wifi: wifiCell(row.Vitals), Power: powerCellView(row.Power),
 			Menu: deviceMenu(p.RowsData.Menu(i)),
 		})

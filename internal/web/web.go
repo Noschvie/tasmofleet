@@ -124,18 +124,21 @@ type Deps struct {
 	FWReach       FWReachForgetter // optional: "Forget" on what the device reaches (D11)
 	MQTTPasswords MQTTPasswords    // optional: the MQTT password section of the device edit form (#257)
 	History       HealthHistory
-	Audit         AuditLister
-	Recorder      audit.Recorder
-	Jobs          JobLister        // optional
-	Batches       store.BatchStore // optional: batch info and retries of a batch
-	OTA           OTA              // optional: nil without FIRMWARE_BASE_URL
-	DeviceCmd     DeviceCmd        // optional: power toggle and console
-	Firmware      firmware.Cache
-	Import        ImportService // optional: TasmoAdmin web import
-	Discovery     Discovery     // optional
-	Artifacts     ArtifactLister
-	Hub           *events.Hub
-	Clock         clock.Clock
+	// Stability is optional: the restarts and Wi-Fi samples behind the Stability card, the list badge and
+	// the dashboard reasons (#325). Nil shows none of them.
+	Stability store.StabilityStore
+	Audit     AuditLister
+	Recorder  audit.Recorder
+	Jobs      JobLister        // optional
+	Batches   store.BatchStore // optional: batch info and retries of a batch
+	OTA       OTA              // optional: nil without FIRMWARE_BASE_URL
+	DeviceCmd DeviceCmd        // optional: power toggle and console
+	Firmware  firmware.Cache
+	Import    ImportService // optional: TasmoAdmin web import
+	Discovery Discovery     // optional
+	Artifacts ArtifactLister
+	Hub       *events.Hub
+	Clock     clock.Clock
 	// Transport is optional: the facts the device page and the device list read to show how a
 	// device is reached and which actions are available (#261). Nil hides the card and leaves
 	// every action to the general reason.

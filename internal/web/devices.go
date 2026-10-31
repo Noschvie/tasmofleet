@@ -19,6 +19,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/httpx"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/restore"
+	"github.com/nofuturekid/tasmofleet/internal/stability"
 	"github.com/nofuturekid/tasmofleet/internal/store"
 	"github.com/nofuturekid/tasmofleet/internal/transport"
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
@@ -58,6 +59,8 @@ type deviceRow struct {
 	ViaMQTT    bool
 	Outdated   bool // a newer stable release is in the cached feed
 	Deviations int  // policy values that differ from a rule
+	// Stab is the stability verdict of an online device (annotateStability); nil = not judged.
+	Stab *stability.Result
 }
 
 type rowsData struct {
@@ -192,6 +195,7 @@ func (h *handler) devicesPageData(r *http.Request, v view) (devicesPage, error) 
 	f := filterOf(r.URL.Query())
 	facts := h.fleetFacts(r.Context(), actor(r))
 	facts.annotate(rows)
+	h.annotateStability(r.Context(), rows)
 	fams, tags := map[string]int{}, map[string]int{}
 	var shown []deviceRow
 	for _, row := range rows {

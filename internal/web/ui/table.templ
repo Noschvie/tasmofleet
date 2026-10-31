@@ -95,6 +95,8 @@ type DeviceCardData struct {
 	Deviations int
 	// Status (badges), Uptime and Wifi (last line), Power (the relay buttons) and Menu (row actions).
 	Status, Uptime, Wifi, Power, Menu templ.Component
+	// Stability is the "Boot loop" / "Weak Wi-Fi" badge (nil for a stable device), beside the status.
+	Stability templ.Component
 }
 
 // DeviceListData is the phone card list: "Select all N" and one card per device.
@@ -140,6 +142,7 @@ templ DeviceCard(c DeviceCardData) {
 				<span class="dcard-st" sse-swap={ "health-" + c.ID }>
 					@slot(c.Status)
 				</span>
+				@slot(c.Stability)
 				if c.Outdated {
 					<span class="bdg t-accent">Update available</span>
 				}

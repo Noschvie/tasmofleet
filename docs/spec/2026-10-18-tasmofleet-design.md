@@ -217,6 +217,7 @@ Tables (35 migrations, `0001` to `0035`; the files in `internal/store/migrations
 | ------------------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `devices`                                   | inventory + detected identity + coarse health         | unique MAC (if known), unique topic (if set), unique (address, port). `http_password` sealed with secretbox. `ota_excluded`, `mqtt_capability` |
 | `health_events` | health state transitions | written on change only, pruned after 90 days (fixed) |
+| `device_boots`, `device_wifi_samples` | restarts TasmoFleet noticed; hourly Wi-Fi signal | migration 0041 (#325). Newest 50 restarts per device; samples pruned after 7 days |
 | `firmware_artifacts`                        | cache index                                           | unique (release, filename), sha256, family proven by image header, `safeboot` flag                                                             |
 | `ota_batches`, `ota_jobs`, `ota_job_events` | OTA                                                   | partial unique index: at most one non-terminal job per device. Every transition writes a row to `ota_job_events`                               |
 | `backups`                                   | backup index                                          | files under `<DATA_DIR>/backups/<dir>/` (`<dir>` is the sanitised hostname, see below; every row stores its own relative path); `kept` pins a run, `trigger` says what started it                                                          |
@@ -1157,8 +1158,15 @@ Submit.
 - MQTT messages update `LastSeen`, power state and RSSI immediately and push SSE events.
 - A software restart publishes LWT `Offline` about 2 s after the command and before every OTA reboot
   (Tasmota's PubSubClient closes the socket without a DISCONNECT packet, so the broker fires the will;
-  `docs/research/tasmota-mqtt-transport.md` section 5, live 2026-10-30). Health does not try to
-  detect reboots; the OTA engine uses uptime.
+  `docs/research/tasmota-mqtt-transport.md` section 5, live 2026-10-30). Health does not use a
+  reboot to judge the device's state; the OTA engine uses uptime. Since 0.25.0 it does notice restarts
+  for the stability history (#325): the device's tele/INFO3 (RestartReason, BootCount), or an uptime
+  that fell by more than 30 s between two readings followed by one `Status 1` over HTTP (never
+  Status 0; three tries, then given up), and once per device the last restart from `Status 1` when
+  none is stored. It also stores one Wi-Fi sample per device and clock hour. The verdict (Stable,
+  Boot loop: 3 restarts in 1 h or 6 in 24 h, Weak Wi-Fi: average below -75 dBm over 24 h or 10
+  reconnects since boot) is the pure package `internal/stability`; restarts are counted from BootCount
+  steps, so ones TasmoFleet missed count when both neighbouring rows are inside the window.
 - Only transitions are persisted (`health_events`), plus `devices.health_state/last_seen_at`
   for a correct picture right after a restart. A device's first observation after the app
   started (state "unknown" to anything) is a baseline, not a change: `devices.health_state` is

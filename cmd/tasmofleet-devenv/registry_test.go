@@ -132,3 +132,45 @@ func TestMQTTTransportDevicesAreAbsentByDefault(t *testing.T) {
 		t.Errorf("the fleet did not start: %v", lines)
 	}
 }
+
+// Why: the Stability e2e tests restart a device with a reason and worsen its link through the control
+// server; a name it does not know must answer 404 and a malformed number 400, not be ignored.
+func TestControlRestartAndWifiRefuseWhatTheyDoNotKnow(t *testing.T) {
+	mux := http.NewServeMux()
+	reg := &deviceRegistry{byName: map[string]simulator.Device{}}
+	mux.HandleFunc("POST /device/{name}/restart", reg.restart)
+	mux.HandleFunc("POST /device/{name}/wifi", reg.wifi)
+	for _, path := range []string{"/device/nobody/restart?reason=Exception", "/device/nobody/wifi?signal=-80"} {
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest("POST", path, nil))
+		if rec.Code != http.StatusNotFound {
+			t.Errorf("%s: %d, want 404", path, rec.Code)
+		}
+	}
+}
+
+// Why: the stability shapes are opt-in (other tests count the fleet) and all must start.
+func TestStabilityShapesAreOptInAndAllStart(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	pr, pw := io.Pipe()
+	go func() {
+		_ = run(ctx, []string{"-fixtures", "../../testdata/fixtures", "-time-scale", "0.02", "-stability-shapes"}, pw, io.Discard)
+		_ = pw.Close()
+	}()
+	var lines []string
+	sc := bufio.NewScanner(pr)
+	for sc.Scan() {
+		lines = append(lines, sc.Text())
+		if sc.Text() == "DEVENV_READY=1" {
+			break
+		}
+	}
+	go io.Copy(io.Discard, pr) //nolint:errcheck // drain
+	text := strings.Join(lines, "\n")
+	for _, s := range stabilityDevices() {
+		if !strings.Contains(text, "name="+s.Name+" ") {
+			t.Errorf("shape %s did not start", s.Name)
+		}
+	}
+}

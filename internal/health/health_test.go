@@ -157,7 +157,7 @@ func (c *fakeClient) Command(ctx context.Context, tg tasmota.Target, cmnd string
 	if norm == "status 0" || norm == "status" || norm == "backlog status 0" {
 		c.t.Errorf("forbidden command sent: %q (Status 0 corrupts ESP8266 replies)", cmnd)
 	}
-	if cmnd != "Status 11" && cmnd != "Upgrade" {
+	if cmnd != "Status 11" && cmnd != "Status 1" && cmnd != "Upgrade" {
 		c.t.Errorf("health sent unexpected command %q", cmnd)
 	}
 	c.mu.Lock()
