@@ -5061,6 +5061,9 @@ html[data-live="offline"] .sb-stale {
     border-top: 1px solid var(--color-border-strong);
     box-shadow: 0 -10px 24px rgb(0 0 0 / 0.14);
     padding: var(--sp-4) 0 var(--sp-6);
+    /* a landscape phone is short: the sheet scrolls instead of leaving the window at the top */
+    max-height: calc(100dvh - var(--sb-h) - var(--sp-16));
+    overflow-y: auto;
   }
   .sb-sheet .sb-i {
     display: flex;
@@ -5094,6 +5097,10 @@ html[data-live="offline"] .sb-stale {
     max-width: 220px;
     margin: 6px 0 0;
   }
+}
+/* a bar without a stream is a snapshot: nothing pulses */
+.sb-static .sb-dot.run {
+  animation: none;
 }
 @media (prefers-reduced-motion: reduce) {
   .sb-dot.run {

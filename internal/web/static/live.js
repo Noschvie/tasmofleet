@@ -88,6 +88,39 @@
     }
   }
 
+  // Status bar (#307): job, backup, broker and resync events ask the bar to re-read itself. htmx's
+  // throttle runs the first request of a burst and drops the rest, so the last state of a burst
+  // (the final "done" of a bulk command) would never show. This is leading and trailing: at once
+  // for the first event, then at most once per SB_EVERY_MS, and always once after the last event.
+  // The bar's sse-swap only registers the stream's listeners; the swap is cancelled here.
+  var SB_EVERY_MS = 2000;
+  var sbLast = 0,
+    sbTimer = null;
+  function sbRefresh() {
+    sbTimer = null;
+    sbLast = Date.now();
+    var bar = document.querySelector("footer.sb[hx-get]");
+    if (bar) {
+      htmx.trigger(bar, "sb-refresh");
+    }
+  }
+  document.addEventListener("htmx:sseBeforeMessage", function (e) {
+    var t = e.target;
+    if (!(t instanceof Element) || !t.matches("footer.sb")) {
+      return;
+    }
+    e.preventDefault();
+    if (sbTimer) {
+      return; // the pending refresh runs after this event
+    }
+    var wait = SB_EVERY_MS - (Date.now() - sbLast);
+    if (wait <= 0) {
+      sbRefresh();
+    } else {
+      sbTimer = window.setTimeout(sbRefresh, wait);
+    }
+  });
+
   // Device overview (#145, #126): the page refreshes #devlive, the header and the Activity list
   // when the device changes, but never the Identity and Connection cards (they hold answers and
   // notices). Those follow the offline state from here: dimmed, and Refresh identity disabled.

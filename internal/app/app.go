@@ -655,7 +655,18 @@ func (a *runtime) webDeps(guard web.Guard, rows []web.KV) web.Deps {
 		Config: rows, Pages: a.pages, FirmwareSource: a.fwSource, FirmwareFeed: a.fwFeed,
 	}
 	deps.MQTTBroker = a.svc.Broker
-	deps.MQTTStatus, deps.ScheduledBackup = a.broker.Status, a.backupRun.Status
+	deps.MQTTStatus = func() web.BrokerInfo { // nil-safe: the bar says nothing about a broker that was never started
+		if a.broker == nil {
+			return web.BrokerInfo{}
+		}
+		return a.broker.Status()
+	}
+	deps.ScheduledBackup = func() web.BackupRunInfo {
+		if a.backupRun == nil {
+			return web.BackupRunInfo{}
+		}
+		return a.backupRun.Status()
+	}
 	deps.MQTTOnly = a.onlyOverMQTT
 	if a.facts != nil {
 		deps.Transport = webFacts{a.facts} // the router\'s own view: the card shows what the router decides

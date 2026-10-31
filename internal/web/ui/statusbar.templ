@@ -7,18 +7,22 @@ import "strconv"
 // Live, Broker, Jobs, Backup, Version. CSS: app.css "status bar".
 //
 // The bar re-reads itself on the events that change what it says (job, backup, broker, resync).
+// sse-swap only registers the listeners; live.js cancels the swap and fires "sb-refresh" at most
+// once per 2 s, always once after the last event (htmx's own throttle would drop the last one).
 // The response is out-of-band parts that swap the insides of #sb-wide and #sb-narrow, so the
 // phone sheet stays open across a refresh (the details element itself is never replaced).
 
 // StatusBarView is the bar in the page.
 templ StatusBarView(d ShellData) {
 	<footer
-		class="sb"
+		class={ "sb", templ.KV("sb-static", d.Status.Fragment == "") }
 		aria-label="TasmoFleet status"
 		if d.Status.Fragment != "" {
 			hx-get={ d.Status.Fragment }
-			hx-trigger="sse:job throttle:2s, sse:backup throttle:2s, sse:broker, sse:resync"
+			hx-trigger="sb-refresh"
+			hx-sync="this:replace"
 			hx-swap="none"
+			sse-swap="job,backup,broker,resync"
 		}
 	>
 		<span id="sb-edge" class={ d.Status.edgeClass() }></span>
@@ -81,7 +85,7 @@ templ sbWide(d ShellData) {
 				}
 				<span class="mono">{ b.Host }</span>
 				if !b.Connected {
-					<span class="sb-mut">since <time { StampAttrs(b.Since, StampClock)... }>{ StampText(b.Since, StampClock) }</time></span>
+					<span class="sb-mut">since <time { StampAttrs(b.Since, StampDay)... }>{ d.Status.dayText(b.Since) }</time></span>
 				}
 			</span>
 		</div>
@@ -127,10 +131,13 @@ templ sbJobs(s StatusBar) {
 						<span class="sb-sep">·</span>
 					}
 					<b>{ j.Kind }</b> { j.jobText() }
-					<progress class="sb-prog" max={ strconv.Itoa(j.Total) } value={ strconv.Itoa(j.Done) }></progress>
+					<progress class="sb-prog" max={ strconv.Itoa(j.Total) } value={ strconv.Itoa(j.Done) } aria-label={ j.Kind + " progress" }></progress>
 					if j.Href != "" {
 						<a class="sb-link" href={ templ.SafeURL(j.Href) }>{ j.ID }</a>
 					}
+				}
+				if s.Fragment == "" {
+					<span class="sb-mut">as of <time { StampAttrs(s.Now, StampClock)... }>{ StampText(s.Now, StampClock) }</time></span>
 				}
 				if s.More > 0 {
 					<span class="sb-sep">·</span>
@@ -152,7 +159,7 @@ templ sbNarrow(d ShellData) {
 			<span class="sb-sum-data">
 				{ sumText(d.Status) }<small>{ sumSub(d.Status) }
 					if d.Status.level() == statusWarn {
-						since <time { StampAttrs(d.Status.Broker.Since, StampClock)... }>{ StampText(d.Status.Broker.Since, StampClock) }</time>
+						since <time { StampAttrs(d.Status.Broker.Since, StampDay)... }>{ d.Status.dayText(d.Status.Broker.Since) }</time>
 					}
 				</small>
 			</span>
@@ -178,7 +185,7 @@ templ sbNarrow(d ShellData) {
 					if b.Connected {
 						Connected <span class="mono sb-mut">{ b.Host }</span>
 					} else {
-						<b>Disconnected</b> since <time { StampAttrs(b.Since, StampClock)... }>{ StampText(b.Since, StampClock) }</time><br/><span class="mono sb-mut">{ b.Host }</span>
+						<b>Disconnected</b> since <time { StampAttrs(b.Since, StampDay)... }>{ d.Status.dayText(b.Since) }</time><br/><span class="mono sb-mut">{ b.Host }</span>
 					}
 				</span>
 			</div>
@@ -234,8 +241,11 @@ templ sbSheetJobs(s StatusBar) {
 				if j.Href != "" {
 					<a class="sb-link" href={ templ.SafeURL(j.Href) }>{ j.ID }</a>
 				}
+				if s.Fragment == "" {
+					<span class="sb-mut">as of <time { StampAttrs(s.Now, StampClock)... }>{ StampText(s.Now, StampClock) }</time></span>
+				}
 				<br/>
-				<progress class="sb-prog" max={ strconv.Itoa(j.Total) } value={ strconv.Itoa(j.Done) }></progress>
+				<progress class="sb-prog" max={ strconv.Itoa(j.Total) } value={ strconv.Itoa(j.Done) } aria-label={ j.Kind + " progress" }></progress>
 			</span>
 		</div>
 	}

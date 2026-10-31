@@ -12,7 +12,7 @@ import (
 )
 
 // barOf is the status bar of a page body.
-func barOf(body string) string { return between(body, `<footer class="sb"`, `</footer>`) }
+func barOf(body string) string { return between(body, `<footer class="sb`, `</footer>`) }
 
 // Why (#307): the bar is the one place that names the version and the live state, on every page.
 // A page that came out of the shell without it would leave the version nowhere on screen.
@@ -56,10 +56,13 @@ func TestStatusBarRefreshesOnlyOnLivePages(t *testing.T) {
 	e := setup(t)
 	_, live := e.do(t, "GET", "/devices", "operator", nil)
 	bar := barOf(live)
-	for _, want := range []string{`hx-get="/tf/statusbar"`, "sse:job", "sse:backup", "sse:broker", "sse:resync", `hx-swap="none"`} {
+	for _, want := range []string{`hx-get="/tf/statusbar"`, `hx-trigger="sb-refresh"`, `sse-swap="job,backup,broker,resync"`, `hx-swap="none"`} {
 		if !strings.Contains(bar, want) {
 			t.Errorf("live page: bar lacks %q", want)
 		}
+	}
+	if strings.Contains(bar, "sb-static") || strings.Contains(bar, "throttle") {
+		t.Errorf("live bar is static or uses htmx throttle, which drops the last event of a burst: %s", bar)
 	}
 	_, still := e.do(t, "GET", "/users", "admin", nil)
 	bar = barOf(still)
@@ -119,7 +122,7 @@ func TestStatusBarNamesTwoJobsAndCountsTheRest(t *testing.T) {
 	_, body := e.do(t, "GET", "/devices", "operator", nil)
 	bar := barOf(body)
 	wide := between(bar, `id="sb-wide"`, `<details`)
-	for _, want := range []string{"<b>Update</b> 1 of 2 devices", `href="/tf/transactions/5"`, "TX-0005", `href="/tf/transactions/6"`, "TX-0006", `href="/tf/transactions">+2 more<`, `<progress class="sb-prog" max="2" value="1">`} {
+	for _, want := range []string{"<b>Update</b> 1 of 2 devices", `href="/tf/transactions/5"`, "TX-0005", `href="/tf/transactions/6"`, "TX-0006", `href="/tf/transactions">+2 more<`, `<progress class="sb-prog" max="2" value="1" aria-label="Update progress">`} {
 		if !strings.Contains(wide, want) {
 			t.Errorf("wide bar lacks %q: %s", want, wide)
 		}
@@ -248,5 +251,33 @@ func TestStreamCarriesBrokerChanges(t *testing.T) {
 		if err != nil {
 			t.Fatalf("stream ended without a broker event: %v (%q)", err, got)
 		}
+	}
+}
+
+// Why: a bar on a page without a stream is a snapshot. Its running-job dot must not pulse (it
+// would claim live progress), and the job says when the numbers are from.
+func TestStaticStatusBarSaysAsOfAndDoesNotPulse(t *testing.T) {
+	e := setupWith(t, func(d *Deps) { d.Jobs, d.OTA = &fakeJobs{jobs: barJobs(5)}, &fakeOTA{} })
+	_, body := e.do(t, "GET", "/users", "admin", nil)
+	bar := barOf(body)
+	if !strings.Contains(bar, `sb-static"`) || !strings.Contains(bar, "as of <time") {
+		t.Errorf("static bar: %s", bar)
+	}
+	_, live := e.do(t, "GET", "/devices", "operator", nil)
+	if strings.Contains(barOf(live), "as of <time data-ts") {
+		t.Error("a live bar says 'as of'")
+	}
+}
+
+// Why: a multi-day outage must read as one; "since 14:32" alone does not say which day.
+func TestStatusBarBrokerSinceIsADayStamp(t *testing.T) {
+	e := setupWith(t, func(d *Deps) {
+		d.MQTTStatus = func() BrokerInfo {
+			return BrokerInfo{Enabled: true, Host: "h:1883", Since: time.Now().Add(-72 * time.Hour)}
+		}
+	})
+	_, body := e.do(t, "GET", "/devices", "operator", nil)
+	if bar := barOf(body); strings.Count(bar, `data-ts="day"`) < 2 {
+		t.Errorf("broker since is not a day stamp: %s", bar)
 	}
 }
