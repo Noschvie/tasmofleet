@@ -338,6 +338,8 @@ test("the unsaved dots appear without moving the tab row, the field label or the
   const w = page.viewportSize()!.width;
   if (shot) await page.screenshot({ path: `${shot}/${process.env.UI362_TAG}-${w}-${scheme}-clean.png` });
   const before = await boxes();
+  const cutClean = await bar.locator("[data-sbar-state]").evaluate((e) => e.scrollWidth - e.clientWidth);
+  expect(cutClean, "clean save-bar state text truncated").toBeLessThanOrEqual(0);
   await input.fill("9");
   await expect(bar).toContainText("Unsaved changes:");
   await expect(page.locator("a.utab[href*='tab=backups']")).toHaveClass(/is-dirty/);
@@ -356,7 +358,7 @@ test("the unsaved dots appear without moving the tab row, the field label or the
     expect(tabDot.w).toBe("6px");
     expect(tabDot.bg).not.toBe("rgba(0, 0, 0, 0)");
   }
-  const barDot = await dot("[data-sys-bar].is-dirty [data-sbar-state]", "::before");
+  const barDot = await dot("[data-sys-bar].is-dirty", "::before");
   expect(barDot.vis).toBe("visible");
   expect(barDot.w).toBe("6px");
 
@@ -369,6 +371,9 @@ test("the unsaved dots appear without moving the tab row, the field label or the
   same(before.input, after.input, "input");
   // The state text itself changes ("No unsaved changes" -> "Unsaved changes:"), so only its
   // origin and height must hold; the buttons sit on the right and must not move at all.
+  // The state text is never cut off (the dot is not inline, so it takes no room from the text).
+  const cut = await bar.locator("[data-sbar-state]").evaluate((e) => e.scrollWidth - e.clientWidth);
+  expect(cut, "save-bar state text truncated").toBeLessThanOrEqual(0);
   near(before.state.x, after.state.x, "state.x");
   near(before.state.y, after.state.y, "state.y");
   near(before.state.height, after.state.height, "state.height");

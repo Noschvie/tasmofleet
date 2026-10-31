@@ -12148,19 +12148,21 @@ input:focus-visible + .swtrack {
   color: var(--color-text);
   font-weight: 500;
 }
-/* the dot's space is always reserved (#362): it only becomes visible, nothing moves */
-.sbar-state::before {
+/* the unsaved dot hangs in the gutter left of the bar (#362): out of the text flow, so it takes no
+   room (the phone's one-line state text must not be cut for it) and nothing moves when it shows */
+.sbar::before {
   content: "";
-  display: inline-block;
+  position: absolute;
+  left: calc(-1 * (6px + var(--sp-4)));
+  top: 50%;
   width: 6px;
   height: 6px;
-  margin-right: var(--sp-6);
+  margin-top: -3px;
   border-radius: 50%;
   background: var(--color-warn);
-  vertical-align: 1px;
   visibility: hidden;
 }
-.sbar.is-dirty .sbar-state::before {
+.sbar.is-dirty::before {
   visibility: visible;
 }
 .sbar-chips {
