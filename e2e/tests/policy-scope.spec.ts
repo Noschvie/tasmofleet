@@ -111,7 +111,7 @@ test("Applies to is an open section: search, chips, tags, exceptions, and nothin
   const inventoryName = (await list.locator(".pol-row span").first().textContent())!; // a name the inventory really has
   await except.fill(inventoryName);
   await except.press("Enter");
-  await expect(section.locator("[data-except-chips] .pol-chip")).toHaveCount(1);
+  await expect(section.locator("[data-except-chips] label.pol-exc")).toHaveCount(1);
   // the tile and the line under the title follow the exception, not only the section's own summary
   await expect(page.locator("[data-tile='applies'] .dev-tile-s")).toContainText("1 exception");
   await expect(page.locator("#rule-line")).toContainText("1 exception");
@@ -119,19 +119,31 @@ test("Applies to is an open section: search, chips, tags, exceptions, and nothin
   await expect(section.locator("#scope-summary")).toContainText("ESP8266, tag “lights” or 2 picked devices, minus 1 exception");
   await shot("applies-to");
 
-  // removing an exception drops it, and a new tag typed into the field becomes a chip
-  await section.locator("[data-except-chips] [data-chip-remove]").click();
-  await expect(section.locator("[data-except-chips] .pol-chip")).toHaveCount(0);
+  // a new tag typed into the field becomes a chip
   await section.locator("[data-tag-add]").fill("garden");
   await section.locator("[data-tag-add]").press("Enter");
   await expect(section.locator("[data-tag-chips] label.pol-tag")).toHaveCount(2);
 
-  // saved, the rule opens with the same form and the same scope
+  // saved, the rule opens with the same form: family, tags, devices and the exception survive
   await page.getByRole("button", { name: "Save rule" }).click();
   await expect(page).toHaveURL(/\/policy\?ok=saved/);
-  await page.goto(app.url + "/policy/rules/" + new URL(page.url()).searchParams.get("rule"));
-  await expect(page.locator("[data-scope] [data-dev-chips] .pol-chip")).toHaveCount(2);
-  await expect(page.locator("[data-scope] [data-tag-chips] label.pol-tag")).toHaveCount(2);
+  const ruleURL = app.url + "/policy/rules/" + new URL(page.url()).searchParams.get("rule");
+  await page.goto(ruleURL);
+  const saved = page.locator("[data-scope]");
+  await expect(saved.locator("input[name='family'][value='esp8266']")).toBeChecked();
+  await expect(saved.locator("[data-dev-chips] .pol-chip")).toHaveCount(2);
+  await expect(saved.locator("[data-tag-chips] label.pol-tag")).toHaveCount(2);
+  await expect(saved.locator("[data-except-chips] label.pol-exc input")).toHaveValue(inventoryName);
+  await expect(saved.locator("#scope-summary")).toContainText("minus 1 exception");
+
+  // unticking the exception removes its chip and, saved, the exception
+  await saved.locator("[data-except-chips] label.pol-exc").click();
+  await expect(saved.locator("[data-except-chips] label.pol-exc")).toHaveCount(0);
+  await expect(page.locator("[data-tile='applies'] .dev-tile-s")).toContainText("0 exceptions");
+  await page.getByRole("button", { name: "Save rule" }).click();
+  await expect(page).toHaveURL(/\/policy\?ok=saved/);
+  await page.goto(ruleURL);
+  await expect(page.locator("[data-scope] [data-except-chips] label.pol-exc")).toHaveCount(0);
 });
 
 test("without JavaScript the section is plain fields and still saves", async ({ browser }) => {
@@ -141,6 +153,14 @@ test("without JavaScript the section is plain fields and still saves", async ({ 
   await page.locator("input[name='want']").fill("99");
   await page.locator("[data-scope] label.pol-pill", { hasText: "ESP8266" }).click();
   await page.locator("[data-scope-list] input").first().check();
+  await page.locator("input[name='except_extra']").fill("someone");
+  await page.getByRole("button", { name: "Save rule" }).click();
+  await expect(page).toHaveURL(/\/policy\?ok=saved/);
+  await page.goto(app.url + "/policy/rules/" + new URL(page.url()).searchParams.get("rule"));
+  // the saved exception is a ticked box: unticking it and saving removes it, with no script
+  const exc = page.locator("input[name='except'][value='someone']");
+  await expect(exc).toBeChecked();
+  await exc.uncheck();
   await page.getByRole("button", { name: "Save rule" }).click();
   await expect(page).toHaveURL(/\/policy\?ok=saved/);
   await ctx.close();

@@ -340,7 +340,7 @@ func uniq(list []string) []string {
 	return out
 }
 
-var draftSingle = []string{"csrf", "id", "origin", "version", "name", "command", "want", "severity", "tags_extra", "note", "change_note"}
+var draftSingle = []string{"csrf", "id", "origin", "version", "name", "command", "want", "severity", "tags_extra", "except_extra", "note", "change_note"}
 
 // draftForm reads the editor form (save and preview). The Enabled switch is a checkbox after a
 // hidden "state=disabled": a ticked box sends both and the last one wins.
@@ -386,7 +386,8 @@ func (h *handler) draftForm(w http.ResponseWriter, r *http.Request) (ruleDraft, 
 		Families: uniq(f["family"]),
 		Tags:     uniq(append(slices.Clone(f["tag"]), splitList(f.Get("tags_extra"))...)),
 		Devices:  uniq(f["device"]),
-		Except:   uniq(splitList(strings.Join(f["except"], ","))),
+		// picked exceptions arrive whole (a device name may contain a comma); only the typed field is split
+		Except: uniq(append(slices.Clone(f["except"]), splitList(f.Get("except_extra"))...)),
 	}
 	return d, true
 }

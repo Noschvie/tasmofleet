@@ -13,8 +13,11 @@ func TestRuleFormAppliesToIsAnOpenSectionAfterSeverity(t *testing.T) {
 	e, mem := ruleEnvWith(t, defaultRP())
 	id := ruleSeed(t, e, mem, url.Values{"family": {"esp8266"}, "tag": {}, "tags_extra": {""}, "except": {}})
 	_, body := e.do(t, "GET", "/policy/rules/"+id, "admin", nil)
-	if strings.Contains(body, `class="pol-scope"`) || strings.Contains(body, "<details class=\"pol-scope") {
+	if strings.Contains(body, "<details") && strings.Contains(body, `pol-scope`) && strings.Contains(body, "<summary>Applies") {
 		t.Error("Applies to is still a fold")
+	}
+	if !strings.Contains(body, `<section class="pol-sec pol-scope"`) {
+		t.Error("Applies to is not a section of the form")
 	}
 	at := func(s string) int { return strings.Index(body, s) }
 	order := []string{`name="name"`, `id="rule-command"`, `name="severity"`, `id="scope-summary"`, `name="note"`, `name="state" value="enabled"`}
@@ -78,15 +81,42 @@ func TestRulePreviewAlsoSwapsTilesTitleLineAndSummary(t *testing.T) {
 	}
 }
 
-// Why: exceptions are picked from a search and sent one per field; a comma list typed without
-// JavaScript still works, so both reach the same rule.
-func TestRuleDraftExceptionsAcceptRepeatedAndCommaSeparatedFields(t *testing.T) {
+// Why: picked exceptions arrive whole (a device name may contain a comma) and are ticked boxes,
+// so without JavaScript unticking one removes it; only the typed field is a comma list.
+func TestRuleDraftExceptionsPickedStayWholeAndCanBeUnticked(t *testing.T) {
 	e, mem := ruleEnvWith(t, defaultRP())
-	id := ruleSeed(t, e, mem, url.Values{"family": {}, "tag": {}, "tags_extra": {""}, "except": {"shed", "attic, lamp"}})
+	id := ruleSeed(t, e, mem, url.Values{"family": {}, "tag": {}, "tags_extra": {""}, "except": {"Lamp, hall", "shed"}, "except_extra": {"attic, lamp"}})
 	_, body := e.do(t, "GET", "/policy/rules/"+id, "admin", nil)
-	for _, w := range []string{`name="except" value="shed"`, `name="except" value="attic"`, `name="except" value="lamp"`} {
+	for _, w := range []string{`name="except" value="Lamp, hall" checked`, `name="except" value="shed" checked`, `name="except" value="attic" checked`, `name="except" value="lamp" checked`} {
 		if !strings.Contains(body, w) {
 			t.Errorf("exception chip lacks %q", w)
 		}
+	}
+	if strings.Contains(body, `name="except" value="Lamp"`) {
+		t.Error("a picked device with a comma in its name was split into two exceptions")
+	}
+	// the form posted again without "shed" (its box unticked) drops it
+	f := ruleForm(url.Values{"family": {}, "tag": {}, "tags_extra": {""}, "except": {"Lamp, hall", "attic", "lamp"}})
+	f.Set("id", id)
+	f.Set("version", "1")
+	if r, b := e.do(t, "POST", "/policy/rules/save", "admin", f); r.StatusCode != 303 {
+		t.Fatalf("save: %d\n%s", r.StatusCode, b)
+	}
+	_, body = e.do(t, "GET", "/policy/rules/"+id, "admin", nil)
+	if strings.Contains(body, `value="shed" checked`) || !strings.Contains(body, `name="except" value="Lamp, hall" checked`) {
+		t.Errorf("unticked exception survived or the others were lost:\n%s", body)
+	}
+}
+
+// Why: like tags and devices, exceptions are capped at 32 so a form cannot store an endless list.
+func TestRuleDraftRefusesMoreThanThirtyTwoExceptions(t *testing.T) {
+	e, _ := ruleEnvWith(t, defaultRP())
+	var many []string
+	for i := 0; i < 33; i++ {
+		many = append(many, "d"+vstr(int64(i)))
+	}
+	f := ruleForm(url.Values{"family": {}, "tag": {}, "tags_extra": {""}, "except": many})
+	if r, _ := e.do(t, "POST", "/policy/rules/save", "admin", f); r.StatusCode == 303 {
+		t.Error("33 exceptions were stored")
 	}
 }

@@ -163,7 +163,7 @@ func TestPolicyRulesEnable(t *testing.T) {
 func TestDuplicateOpensADraftAndWritesNothing(t *testing.T) {
 	e, mem, _ := rulesEnv(t, "")
 	saveRule(t, e, url.Values{"name": {"Full"}, "command": {"Timezone"}, "want": {"99"}, "severity": {"warn"},
-		"family": {"esp32*"}, "tag": {"kitchen", "attic"}, "device": {"lamp"}, "tags_extra": {""}, "except": {"bench, test"}, "note": {"why: DST"}, "state": {"disabled"}})
+		"family": {"esp32*"}, "tag": {"kitchen", "attic"}, "device": {"lamp"}, "tags_extra": {""}, "except_extra": {"bench, test"}, "except": {}, "note": {"why: DST"}, "state": {"disabled"}})
 	saveRule(t, e, url.Values{"name": {"Other"}, "version": {"1"}})
 	ids := ruleIDs(t, mem)
 	before := len(mem.vs)

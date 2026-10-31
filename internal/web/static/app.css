@@ -13131,25 +13131,6 @@ a.pol-tpl {
 .pol-sev.is-req {
   color: var(--color-accent-fg);
 }
-.pol-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.pol-chip {
-  display: inline-block;
-  max-width: 220px;
-  height: 22px;
-  padding: 0 8px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  line-height: 22px;
-  border-radius: 11px;
-  background: var(--color-surface-3);
-  color: var(--color-text);
-  font-size: 12px;
-}
 .pol-menu .menu-panel form {
   display: contents;
 }
@@ -13295,13 +13276,15 @@ a.pol-tpl {
   color: var(--color-text-3);
   font-variant-numeric: tabular-nums;
 }
-.pol-tag .pol-chip-x {
+.pol-tag .pol-chip-x,
+.pol-exc .pol-chip-x {
   display: none;
 }
 .pol-tag:has(input:checked) .pol-pill-n {
   display: none;
 }
-.pol-tag:has(input:checked) .pol-chip-x {
+.pol-tag:has(input:checked) .pol-chip-x,
+.pol-exc:has(input:checked) .pol-chip-x {
   display: inline;
   color: var(--color-text-2);
 }
@@ -13309,19 +13292,20 @@ a.pol-tpl {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 4px 3px 10px;
+  padding: 5px 4px 5px 11px;
   border: var(--hair-w) solid var(--color-accent);
   border-radius: 999px;
   background: var(--color-accent-bg);
   color: var(--color-text);
   font: 500 12.5px var(--font-sans);
 }
-.pol-chip-ex {
+.pol-exc:has(input:checked) {
   border-color: var(--color-warn);
   background: var(--color-warn-bg);
 }
 button.pol-chip-x {
   padding: 0 6px;
+  line-height: 1;
   border: 0;
   background: none;
   color: var(--color-text-2);

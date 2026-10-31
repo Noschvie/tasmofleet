@@ -162,37 +162,40 @@
       hush(input, ["input"]);
     };
     commitField(scope.querySelector("[data-tag-add]"), addTag, null);
-    // exceptions: devices or tags; each chip carries its own hidden field
+    // exceptions: devices or tags; each chip is a ticked checkbox (unticking drops it)
     var exChips = scope.querySelector("[data-except-chips]");
     var exNames = Array.prototype.slice.call(scope.querySelectorAll("#scope-names option")).map(function (o) {
       return o.value;
     });
-    var bindExRemove = function (chip) {
-      chip.querySelector("[data-chip-remove]").addEventListener("click", function () {
-        chip.remove();
-        fire(exChips);
-      });
-    };
-    Array.prototype.forEach.call(exChips.children, bindExRemove);
+    exChips.addEventListener("change", function (e) {
+      var label = e.target instanceof Element ? e.target.closest("label.pol-exc") : null;
+      if (label && !e.target.checked) {
+        label.remove();
+      }
+    });
     var addExcept = function (name) {
-      var have = exChips.querySelectorAll('input[type="hidden"]');
+      var have = exChips.querySelectorAll("input");
       for (var i = 0; i < have.length; i++) {
         if (have[i].value === name) {
           return;
         }
       }
-      var chip = document.createElement("span");
-      chip.className = "pol-chip pol-chip-ex";
-      var h = document.createElement("input");
-      h.type = "hidden";
-      h.name = "except";
-      h.value = name;
-      var x = chipX("Remove exception " + name);
-      x.setAttribute("data-chip-remove", "");
-      chip.append(h, document.createTextNode(name), x);
-      exChips.appendChild(chip);
-      bindExRemove(chip);
-      fire(exChips);
+      var label = document.createElement("label");
+      label.className = "pol-pill pol-exc";
+      var box = document.createElement("input");
+      box.type = "checkbox";
+      box.name = "except";
+      box.value = name;
+      box.checked = true;
+      var text = document.createElement("span");
+      text.textContent = name;
+      var x = document.createElement("span");
+      x.className = "pol-chip-x";
+      x.setAttribute("aria-hidden", "true");
+      x.textContent = "\u00d7";
+      label.append(box, text, x);
+      exChips.appendChild(label);
+      fire(box);
     };
     commitField(scope.querySelector("[data-except-add]"), addExcept, function (v) {
       return exNames.indexOf(v) >= 0;

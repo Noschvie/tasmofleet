@@ -193,7 +193,7 @@ func checkScopeFields(i int, j ruleJSON) error {
 	if len(j.Name) > maxNameLen || hasControl(j.Name) {
 		return bad("invalid name (at most 80 characters, no control characters)")
 	}
-	for label, list := range map[string][]string{"tags": j.Tags, "devices": j.Devices} {
+	for label, list := range map[string][]string{"tags": j.Tags, "devices": j.Devices, "exceptions": j.Except} {
 		if len(list) > maxScopeList {
 			return bad("too many " + label)
 		}

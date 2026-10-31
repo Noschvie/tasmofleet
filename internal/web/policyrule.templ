@@ -357,10 +357,10 @@ templ ruleScopeSection(e *ruleEditor, sum scopeSummary) {
 			<div class="pol-pills pol-except">
 				<span class="pol-pills" data-except-chips>
 					for _, x := range e.Except {
-						<span class="pol-chip pol-chip-ex"><input type="hidden" name="except" value={ x }/>{ x }<button type="button" class="pol-chip-x" data-chip-remove aria-label={ "Remove exception " + x }>×</button></span>
+						<label class="pol-pill pol-exc"><input type="checkbox" name="except" value={ x } checked/><span>{ x }</span><span class="pol-chip-x" aria-hidden="true">×</span></label>
 					}
 				</span>
-				<input id="scope-except" name="except" list="scope-names" placeholder="Search a device or tag…" autocomplete="off" data-except-add/>
+				<input id="scope-except" name="except_extra" list="scope-names" placeholder="Search a device or tag…" autocomplete="off" data-except-add/>
 				<datalist id="scope-names">
 					for _, n := range e.Names {
 						<option value={ n }></option>

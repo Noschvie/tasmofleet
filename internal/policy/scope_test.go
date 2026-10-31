@@ -62,13 +62,14 @@ func TestParseRulesScopeSeverityAndName(t *testing.T) {
 		t.Fatalf("the default severity is warn: %q", rs[0].Severity)
 	}
 	bad := map[string]string{
-		"severity":      `[{"command":"SaveData","want":"0","severity":"fatal"}]`,
-		"long name":     `[{"command":"SaveData","want":"0","name":"` + strings.Repeat("x", 81) + `"}]`,
-		"control name":  `[{"command":"SaveData","want":"0","name":"a\u0000b"}]`,
-		"empty tag":     `[{"command":"SaveData","want":"0","tags":[""]}]`,
-		"empty device":  `[{"command":"SaveData","want":"0","devices":[""]}]`,
-		"long tag":      `[{"command":"SaveData","want":"0","tags":["` + strings.Repeat("x", 65) + `"]}]`,
-		"too many tags": `[{"command":"SaveData","want":"0","tags":[` + strings.Repeat(`"t",`, 32) + `"t"]}]`,
+		"severity":            `[{"command":"SaveData","want":"0","severity":"fatal"}]`,
+		"long name":           `[{"command":"SaveData","want":"0","name":"` + strings.Repeat("x", 81) + `"}]`,
+		"control name":        `[{"command":"SaveData","want":"0","name":"a\u0000b"}]`,
+		"empty tag":           `[{"command":"SaveData","want":"0","tags":[""]}]`,
+		"empty device":        `[{"command":"SaveData","want":"0","devices":[""]}]`,
+		"long tag":            `[{"command":"SaveData","want":"0","tags":["` + strings.Repeat("x", 65) + `"]}]`,
+		"too many exceptions": `[{"command":"SaveData","want":"0","except":[` + strings.Repeat(`"e",`, 32) + `"e"]}]`,
+		"too many tags":       `[{"command":"SaveData","want":"0","tags":[` + strings.Repeat(`"t",`, 32) + `"t"]}]`,
 	}
 	for name, s := range bad {
 		if _, err := ParseRules([]byte(s), nil); err == nil {
