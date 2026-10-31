@@ -362,3 +362,42 @@ func TestSettingsFormPartHasNoHeaderAndKeepsTheReadError(t *testing.T) {
 		t.Errorf("operators must not read the settings form: %d", resp.StatusCode)
 	}
 }
+
+// A field that no card of the device form names would silently vanish from the form (#367 moved
+// the fields into hand-listed cards), so every editable field must be in exactly one card.
+func TestSettingsCardsCoverEveryField(t *testing.T) {
+	seen := map[string]int{}
+	for _, c := range settingsCards {
+		for _, k := range c.Keys {
+			seen[k]++
+		}
+	}
+	for _, f := range settings.Fields {
+		if f.PolicyOnly {
+			if seen[f.Key] != 0 {
+				t.Errorf("policy-only %s must not be in the device form", f.Key)
+			}
+			continue
+		}
+		if seen[f.Key] != 1 {
+			t.Errorf("%s is in %d cards of the device form, want 1", f.Key, seen[f.Key])
+		}
+	}
+	for k := range seen {
+		if _, ok := settings.Lookup(k); !ok {
+			t.Errorf("card names unknown field %s", k)
+		}
+	}
+}
+
+// SetOption0 belongs with the other flash-write settings (Power & flash), not with the MQTT
+// SetOptions (#367).
+func TestSettingsSetOption0SitsInPowerCard(t *testing.T) {
+	for _, g := range buildGroups(map[string]string{}, map[string]string{}, nil) {
+		for _, r := range g.Rows {
+			if r.Field.Key == "SetOption0" && g.ID != "power" {
+				t.Errorf("SetOption0 is in card %q, want power", g.ID)
+			}
+		}
+	}
+}

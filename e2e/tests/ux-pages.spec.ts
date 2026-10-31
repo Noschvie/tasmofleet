@@ -63,31 +63,38 @@ async function pages(page: import("@playwright/test").Page): Promise<Record<stri
   };
 }
 
-// Device settings (design v2): a real device's settings in one form card, two columns of fields
-// at 1280 and one at 375, at most 2.5 screens; the Save bar stays in view while scrolling.
-test("device settings: two columns of fields at 1280, at most 2.5 screens, sticky Save bar", async ({ page }) => {
+// Device settings (#367): grouped cards in three independent column stacks at 1280, two balanced
+// columns at 1024, one at 375; the Save bar spans the full width and stays in view while scrolling.
+test("device settings: three card columns at 1280, two at 1024, one at 375, sticky Save bar", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   await page.setViewportSize({ width: 1280, height: 800 });
   const p = (await pages(page))["device settings"];
   await page.goto(app.url + p);
   await expect(page.getByRole("button", { name: "Save to device" })).toBeVisible();
   await expect(page.getByText("Applied immediately and saved to the device once.")).toBeVisible();
-  const fields = page.locator("form.devform > .ufield");
-  expect(await fields.count()).toBeGreaterThanOrEqual(6);
-  const lefts1280 = await fields.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().left)));
-  expect(new Set(lefts1280).size, "two columns at 1280").toBe(2);
-  const h = await page.evaluate(() => document.documentElement.scrollHeight);
-  expect(h / 800, `page is ${h}px high`).toBeLessThanOrEqual(2.5);
+  const cards = page.locator("form.devform-cards section.gcard");
+  await expect(cards).toHaveCount(6);
+  await expect(page.locator("#card-power input[name=SaveData]")).toBeVisible();
+  await expect(page.locator("#card-power select[name=SetOption0]")).toBeVisible();
+  const lefts = () => cards.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().left)));
+  expect(new Set(await lefts()).size, "three card columns at 1280").toBe(3);
   await expect(page.locator("nav.utabs a[aria-current=page]")).toHaveText("Settings");
   await expect(page.locator(".jumpnav")).toHaveCount(0);
-  await page.evaluate(() => window.scrollTo(0, 600));
+  const bar = await page.locator(".devform-foot").boundingBox();
+  const form = await page.locator("form.devform-cards").boundingBox();
+  expect(Math.round(bar!.width), "Save bar spans the form").toBe(Math.round(form!.width));
+  await page.evaluate(() => window.scrollTo(0, 100));
   await expect(page.getByRole("button", { name: "Save to device" })).toBeInViewport();
   await expectNoOverflow(page, "device settings 1280");
+  await page.setViewportSize({ width: 1024, height: 800 });
+  expect(new Set(await lefts()).size, "two card columns at 1024").toBe(2);
+  await expectNoOverflow(page, "device settings 1024");
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto(app.url + p);
-  await expect(fields.first()).toBeVisible();
-  const lefts = await fields.evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().left)));
-  expect(new Set(lefts).size, "one column at 375").toBe(1);
+  await expect(cards.first()).toBeVisible();
+  expect(new Set(await lefts()).size, "one column at 375").toBe(1);
+  const ids = await cards.evaluateAll((els) => els.sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top).map((e) => e.id));
+  expect(ids, "phone order").toEqual(["card-names", "card-network", "card-power", "card-options", "card-mqtt", "card-time"]);
   await expectNoOverflow(page, "device settings 375");
 });
 

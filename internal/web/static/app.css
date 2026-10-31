@@ -9458,6 +9458,92 @@ nav.crumbs a {
   color: var(--color-text-2);
 }
 
+/* the device Settings tab (#367): one card per group in three independent column stacks (cards sit
+   directly under each other); two balanced columns below 75rem, one on phones in a set order. The
+   Save bar spans the full width below. */
+.devform.devform-cards {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sp-16);
+  max-width: none;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+.fcols {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-16);
+  align-items: start;
+}
+.fcol {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-16);
+  min-width: 0;
+}
+.gcard .gbody {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-14);
+}
+.gcard .ufield {
+  min-width: 0;
+}
+.devform-cards .devform-foot {
+  margin: 0;
+  padding: 14px 18px;
+  border: var(--hair-w) solid var(--color-border);
+  border-radius: var(--r-card);
+  background: var(--color-surface);
+}
+@media (max-width: 74.99rem) {
+  .fcols {
+    display: block;
+    columns: 2;
+    column-gap: var(--sp-16);
+  }
+  .fcol {
+    display: contents;
+  }
+  .gcard {
+    break-inside: avoid;
+    margin: 0 0 var(--sp-16);
+  }
+}
+@media (max-width: 44.99rem) {
+  .fcols {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    columns: auto;
+    gap: var(--sp-16);
+  }
+  .gcard {
+    margin: 0;
+  }
+  #card-names {
+    order: 1;
+  }
+  #card-network {
+    order: 2;
+  }
+  #card-power {
+    order: 3;
+  }
+  #card-options {
+    order: 4;
+  }
+  #card-mqtt {
+    order: 5;
+  }
+  #card-time {
+    order: 6;
+  }
+}
+
 /* ==== page: device delete (/devices/{id}/delete, N2, WP W4): the prototype's "devdelete" ==== */
 .dd-page {
   max-width: 760px;

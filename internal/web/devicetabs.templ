@@ -97,16 +97,31 @@ templ settingsBody(p settingsPage, base, csrf string) {
 			</div>
 		</section>
 	} else if len(p.Groups) > 0 {
-		<form class="devform" method="post" action={ templ.SafeURL(base + devPath(p.Device.ID, "/settings")) } data-track-changes>
+		<form class="devform devform-cards" method="post" action={ templ.SafeURL(base + devPath(p.Device.ID, "/settings")) } data-track-changes>
 			<input type="hidden" name="csrf" value={ csrf }/>
-			for i, g := range p.Groups {
-				if i > 0 {
-					<h2 class="devform-h">{ g.Name }</h2>
+			<div class="fcols">
+				for col := 0; col < 3; col++ {
+					<div class="fcol">
+						for _, g := range p.Groups {
+							if g.Col == col {
+								<section class="scard gcard" id={ "card-" + g.ID }>
+									<div class="sch">
+										<div>
+											<h2>{ g.Name }</h2>
+											<p class="cnote">{ g.Note }</p>
+										</div>
+									</div>
+									<div class="gbody">
+										for _, row := range g.Rows {
+											@settingField(row, p.PolicyWant[row.Field.Key])
+										}
+									</div>
+								</section>
+							}
+						}
+					</div>
 				}
-				for _, row := range g.Rows {
-					@settingField(row, p.PolicyWant[row.Field.Key])
-				}
-			}
+			</div>
 			<div class="devform-foot">
 				<span class="devform-count">Applied immediately and saved to the device once. <span data-changed-count aria-live="polite"></span></span>
 				<button type="reset" class="btn">Reset</button>

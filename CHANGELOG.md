@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Changed
+
+- Device settings tab: the fields sit in grouped cards (Names, Options, Network & telemetry, MQTT, Power & flash, Time) in three independent columns from about 1200 px, two balanced columns below and one on a phone; each card has a one-line note, the Save bar spans the full width and stays in view. SetOption0 moved from Options to Power & flash, next to the other flash-write settings (#367)
+
 ## 0.23.1 "Cape Hatteras" (2026-10-31)
 
 ### Added

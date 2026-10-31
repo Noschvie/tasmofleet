@@ -27,9 +27,11 @@ type settingsRow struct {
 	NotReporting bool // the device did not report a value
 }
 
+// settingsGroup is one card of the form.
 type settingsGroup struct {
-	Name string
-	Rows []settingsRow
+	ID, Name, Note string
+	Col            int // 0..2: the column stack it sits in from 75rem
+	Rows           []settingsRow
 }
 
 type settingsPage struct {
@@ -50,18 +52,34 @@ type settingsPage struct {
 	PolicyWant map[string]string
 }
 
-// groupOrder is the order of the form sections.
-var groupOrder = []string{settings.GroupGeneral, settings.GroupOptions, settings.GroupMQTT, settings.GroupTime}
+// settingsCard says which fields a card of the form holds, in this order, and in which of the
+// three column stacks it sits (#367). A field that no card names is not shown, so
+// TestSettingsCardsCoverEveryField keeps this list complete.
+type settingsCard struct {
+	ID, Name, Note string
+	Col            int
+	Keys           []string
+}
+
+var settingsCards = []settingsCard{
+	{"names", "Names", "One per relay or channel.", 0, []string{"FriendlyName1", "FriendlyName2", "FriendlyName3", "FriendlyName4"}},
+	{"options", "Options", "SetOptions for MQTT replies and Home Assistant discovery.", 0, []string{"SetOption3", "SetOption4", "SetOption19"}},
+	{"network", "Network & telemetry", "How the device is named on the network and how often it reports.", 1, []string{"Hostname", "TelePeriod"}},
+	{"mqtt", "MQTT", "Broker connection and topics.", 1, []string{"Topic", "FullTopic", "MqttHost", "MqttPort", "MqttUser", "MqttPassword"}},
+	{"power", "Power & flash", "What the relay does after power loss, and how often settings are written to flash.", 2, []string{"PowerOnState", "SaveData", "SetOption0"}},
+	{"time", "Time", "NTP servers and time zone rules.", 2, []string{"NtpServer1", "NtpServer2", "NtpServer3", "Timezone", "TimeDst", "TimeStd"}},
+}
 
 // buildGroups lays out the form. orig are the values read from the device,
 // cur what the form shows (the posted values on a re-render). Secret fields
 // never carry a value.
 func buildGroups(orig, cur map[string]string, errs map[string]string) []settingsGroup {
 	var out []settingsGroup
-	for _, g := range groupOrder {
-		grp := settingsGroup{Name: g}
-		for _, f := range settings.Fields {
-			if f.Group != g {
+	for _, c := range settingsCards {
+		grp := settingsGroup{ID: c.ID, Name: c.Name, Note: c.Note, Col: c.Col}
+		for _, k := range c.Keys {
+			f, ok := settings.Lookup(k)
+			if !ok {
 				continue
 			}
 			row := settingsRow{Field: f, Err: errs[f.Key], Label: f.Label, Help: f.Help}
