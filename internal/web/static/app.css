@@ -11881,16 +11881,36 @@ input:focus-visible + .swtrack {
   margin: var(--sp-16) 0 0;
   font: 600 13px var(--font-sans);
 }
-.sys-container {
-  background: none;
-  border: 0;
-  padding: 0;
-  margin-top: var(--sp-8);
+/* Advanced (#350): the after-form cards use the full content width; the container settings sit in
+   two tables side by side, one table on a phone */
+.sys-after,
+.sys-after > .sgrid {
+  max-width: none;
 }
-.sys-container summary {
-  cursor: pointer;
-  font: 500 13px var(--font-sans);
-  color: var(--color-accent-fg);
+.sys-after > .sgrid {
+  grid-template-columns: minmax(0, 1fr);
+}
+.sys-after > .sgrid > .scard.span2 {
+  grid-column: 1 / -1;
+}
+.cset {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sp-16) var(--sp-24);
+  margin-top: var(--sp-8);
+  align-items: start;
+}
+.cset table {
+  margin: 0;
+}
+.cset td.grow code {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 44.99rem) {
+  .cset {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
+  }
 }
 @media (max-width: 44.99rem) {
   /* phone: a section picker replaces the strip; cards lose their frame and become sections */

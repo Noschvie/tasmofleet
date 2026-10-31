@@ -12,6 +12,7 @@ always upgrade automatically.
 
 ### Changed
 
+- Settings → Advanced: "Set by the container" and "Reset all settings" take the full width; the container settings are no longer behind a disclosure but sit always visible in two key/value tables side by side (one table on a phone) (#350)
 - Console and bulk command: `Upgrade` and `OtaUrl` with an argument are refused while a TasmoFleet update job (queued or running) holds the device, with a clear message; the bulk preview names each refused device and the rest still goes (#240)
 ### Added
 

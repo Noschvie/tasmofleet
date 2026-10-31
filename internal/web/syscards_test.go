@@ -557,7 +557,8 @@ func TestSystemSettingsSignInTabFollowsTheMockup(t *testing.T) {
 }
 
 // Why (#338, mockup): the Backups tab always has the card of deleted devices' backups, with its
-// empty text, and Advanced shows the container settings as a card with a disclosure.
+// empty text, and Advanced shows the container settings as a card, always visible (#350: no disclosure) in two
+// tables side by side, the first half of the list on the left.
 func TestSystemSettingsBackupsAndAdvancedFollowTheMockup(t *testing.T) {
 	e, _, _, _ := storageEnv(t)
 	_, page := e.do(t, "GET", "/settings/system?tab=backups", "admin", nil)
@@ -566,10 +567,18 @@ func TestSystemSettingsBackupsAndAdvancedFollowTheMockup(t *testing.T) {
 	}
 	e2, _, _, _ := sysEnv(t, true)
 	_, page = e2.do(t, "GET", "/settings/system?tab=advanced", "admin", nil)
-	for _, w := range []string{`id="card-container"`, "Read-only. Change them in the container configuration.", "container settings</summary>"} {
+	for _, w := range []string{`id="card-container"`, "Read-only. Change them in the container configuration.", "Bootstrap settings (listeners"} {
 		if !strings.Contains(page, w) {
 			t.Errorf("Advanced lacks %q", w)
 		}
+	}
+	// Why: a disclosure hid the whole list; the tables must be visible without a click.
+	if strings.Contains(page, "container settings</summary>") || strings.Contains(page, "sys-container") {
+		t.Error("the container settings are behind a disclosure again")
+	}
+	card := page[strings.Index(page, `id="card-container"`):]
+	if n := strings.Count(card[:strings.Index(card, "</section>")], `class="dense"`); n != 2 {
+		t.Errorf("container card has %d tables, want 2 side by side", n)
 	}
 }
 

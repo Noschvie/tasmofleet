@@ -348,8 +348,8 @@ Also: [desktop, dark](../design/styleguide/notes-desktop-dark.png) · [phone, li
   the same 45rem. Other breakpoints remain: 60rem (the bulk bar folds into one Actions menu) and
   72rem (the audit table layout, the two-column settings grid).
 - **Folds.** `details.fold` holds something secondary and is closed at every width unless it has
-  `open` (About's effective configuration, account and user editing, a rule's Unjudged devices, the
-  system container settings). No page uses `details.m-fold` any more (the phone-only fold of the
+  `open` (About's effective configuration, account and user editing, a rule's Unjudged devices).
+  The system container settings are no fold any more (#350). No page uses `details.m-fold` any more (the phone-only fold of the
   first design port); its CSS is left over.
 - **Form errors sit at the input.** A handler that rejects a value sets the input's name
   (`ErrField`) next to a human sentence (`Error`). `ui.Field` (and a page's own inputs) mark that

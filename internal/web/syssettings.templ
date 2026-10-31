@@ -445,13 +445,23 @@ templ sysDiscoveryCard(p sysPage) {
 	</div>
 }
 
-// sysContainer lists the bootstrap settings, which only the container configuration sets.
+// sysContainer lists the bootstrap settings, which only the container configuration sets: full
+// width, always visible, as two tables side by side (the first half of the list on the left).
+// On a phone they stack.
 templ sysContainer(rows []sysconfig.Row) {
 	@ui.SettingsGrid() {
 	@ui.SettingsCard(ui.SettingsCardData{ID: "card-container", Title: "Set by the container", Note: "Read-only. Change them in the container configuration.", Class: "span2", Plain: true}) {
-	<details class="fold sys-container">
-		<summary>Show { strconv.Itoa(len(rows)) } container settings</summary>
-		<p class="ucard-sub">Bootstrap settings (listeners, TLS, keys) come from the container configuration only and are never editable here.</p>
+	<p class="ucard-sub">Bootstrap settings (listeners, TLS, keys) come from the container configuration only and are never editable here.</p>
+	<div class="cset">
+		@sysContainerTable(rows[:(len(rows)+1)/2])
+		@sysContainerTable(rows[(len(rows)+1)/2:])
+	</div>
+	}
+	}
+}
+
+templ sysContainerTable(rows []sysconfig.Row) {
+	<div class="table-scroll">
 		<table class="dense">
 			<thead><tr><th>Key</th><th>Value</th></tr></thead>
 			<tbody>
@@ -469,7 +479,5 @@ templ sysContainer(rows []sysconfig.Row) {
 				}
 			</tbody>
 		</table>
-	</details>
-	}
-	}
+	</div>
 }

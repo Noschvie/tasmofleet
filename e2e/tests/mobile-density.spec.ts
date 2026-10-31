@@ -48,8 +48,10 @@ const BUDGET_SCREENS = 2.25;
 // design v2 (#197 WP5): "policy rule editor" is a rule page since the overview lost its editor: tiles, the rule
 // card and the devices card stacked, 3203 px at 375 (3.94 screens) on the realistic seed; the folded
 // "History of this rule" card (WP7) adds one 40 px row, so 4.1.
+// system settings, advanced (#350): the 25 container settings are always visible (no disclosure, the approved mockup), one
+// two-line row each on a phone: 2539 px = 3.13 screens measured; 3.2 leaves about 2 % margin.
 const BUDGET_OVERRIDES: Record<string, number> = {
-  devices: 6.0, update: 2.5, audit: 4.3, policy: 3.45, "policy rule editor": 4.1, "new policy rule": 3.45, "device detail": 2.75, firmware: 2.75, "firmware, all releases": 2.55,
+  devices: 6.0, update: 2.5, audit: 4.3, policy: 3.45, "policy rule editor": 4.1, "new policy rule": 3.45, "device detail": 2.75, firmware: 2.75, "firmware, all releases": 2.55, "system settings, advanced": 3.2,
 };
 
 let app: App;
