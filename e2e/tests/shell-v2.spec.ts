@@ -27,7 +27,7 @@ async function liveState(page: Page): Promise<string | null> {
 }
 
 // Why: when the stream breaks, values on the page silently go stale; the prototype says so in
-// the top bar and with a banner, first "Reconnecting", then "Offline" with Retry now, and says
+// the status bar (#307) and with a banner, first "Reconnecting", then "Offline" with Retry now, and says
 // "Live" again once the stream is back.
 test("a broken event stream shows Reconnecting, then Offline, and Live once it is back", async ({
   page,
@@ -43,13 +43,13 @@ test("a broken event stream shows Reconnecting, then Offline, and Live once it i
   const off = page.locator(".conn-banner.conn-off");
   await expect(re).toBeVisible();
   await expect(re).toContainText("Live updates interrupted.");
-  await expect(page.locator(".tb .live-re")).toBeVisible();
-  await expect(page.locator(".tb .live-ok")).toBeHidden();
+  await expect(page.locator(".sb-wide .sb-l-re")).toBeVisible();
+  await expect(page.locator(".sb-wide .sb-l-ok")).toBeHidden();
   // the extension retries after 0.5, 1, 2, 4 s: the fifth failure in a row is "Offline"
   await expect(off).toBeVisible({ timeout: 20_000 });
   await expect(re).toBeHidden();
   await expect(off).toContainText("Connection to the server lost.");
-  await expect(page.locator(".tb .live-off")).toBeVisible();
+  await expect(page.locator(".sb-wide .sb-l-off")).toBeVisible();
   // Retry now reloads the page when the server answers; the stream is still refused, so it
   // starts over with "Reconnecting"
   await page.getByRole("button", { name: "Retry now" }).click();
@@ -59,7 +59,7 @@ test("a broken event stream shows Reconnecting, then Offline, and Live once it i
   await expect.poll(() => liveState(page), { timeout: 20_000 }).toBe("live");
   await expect(re).toBeHidden();
   await expect(off).toBeHidden();
-  await expect(page.locator(".tb .live-ok")).toBeVisible();
+  await expect(page.locator(".sb-wide .sb-l-ok")).toBeVisible();
 });
 
 // Why (v0.11.2, live banner): a stream that drops and comes straight back (a proxy closing it, a

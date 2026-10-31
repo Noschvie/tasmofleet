@@ -1,0 +1,257 @@
+package ui
+
+import "strconv"
+
+// The status bar (#307, mockup statusbar-mockup/): fixed to the bottom of every page. A wide row
+// on a desktop, one 44 px line on a phone that opens into a sheet (a details element, no script).
+// Live, Broker, Jobs, Backup, Version. CSS: app.css "status bar".
+//
+// The bar re-reads itself on the events that change what it says (job, backup, broker, resync).
+// The response is out-of-band parts that swap the insides of #sb-wide and #sb-narrow, so the
+// phone sheet stays open across a refresh (the details element itself is never replaced).
+
+// StatusBarView is the bar in the page.
+templ StatusBarView(d ShellData) {
+	<footer
+		class="sb"
+		aria-label="TasmoFleet status"
+		if d.Status.Fragment != "" {
+			hx-get={ d.Status.Fragment }
+			hx-trigger="sse:job throttle:2s, sse:backup throttle:2s, sse:broker, sse:resync"
+			hx-swap="none"
+		}
+	>
+		<span id="sb-edge" class={ d.Status.edgeClass() }></span>
+		<div id="sb-wide" class="sb-wide shell-in">
+			@sbWide(d)
+		</div>
+		<details id="sb-narrow" class="sb-narrow">
+			@sbNarrow(d)
+		</details>
+	</footer>
+}
+
+// StatusBarOOB is the bar's refresh: the same parts as out-of-band swaps.
+templ StatusBarOOB(d ShellData) {
+	<span id="sb-edge" class={ d.Status.edgeClass() } hx-swap-oob="true"></span>
+	<div hx-swap-oob="innerHTML:#sb-wide">
+		@sbWide(d)
+	</div>
+	<details hx-swap-oob="innerHTML:#sb-narrow">
+		@sbNarrow(d)
+	</details>
+}
+
+// sbLive is the browser's own stream: live.js sets data-live on <html>, the stylesheet shows one
+// of the three labels. "last update" is filled in by live.js (data-live-since) while it is down.
+templ sbLive(sheet bool) {
+	<span class="sb-live">
+		<span class="sb-dot"></span>
+		<span class="sb-l sb-l-ok">
+			if sheet {
+				Connected
+			} else {
+				<b>Live</b>
+			}
+		</span>
+		if sheet {
+			<span class="sb-l sb-l-re">Reconnecting, last update <time data-live-since>at page load</time></span>
+			<span class="sb-l sb-l-off">Offline, last update <time data-live-since>at page load</time></span>
+		} else {
+			<span class="sb-l sb-l-re"><b>Reconnecting…</b> <span class="sb-mut">last update <time data-live-since>at page load</time></span></span>
+			<span class="sb-l sb-l-off"><b>Offline</b> <span class="sb-mut">last update <time data-live-since>at page load</time></span></span>
+		}
+	</span>
+}
+
+templ sbWide(d ShellData) {
+	if d.Live {
+		<div class="sb-i sb-i-live">
+			@sbLive(false)
+		</div>
+	}
+	if b := d.Status.Broker; b != nil {
+		<div class={ "sb-i", "sb-stale", templ.KV("t-warn", !b.Connected) }>
+			<span class={ "sb-dot", templ.KV("warn", !b.Connected) }></span>
+			<span>
+				if b.Connected {
+					<b>Broker</b>
+				} else {
+					<b>Broker disconnected</b>
+				}
+				<span class="mono">{ b.Host }</span>
+				if !b.Connected {
+					<span class="sb-mut">since <time { StampAttrs(b.Since, StampClock)... }>{ StampText(b.Since, StampClock) }</time></span>
+				}
+			</span>
+		</div>
+	}
+	@sbJobs(d.Status)
+	if b := d.Status.Backup; b != nil {
+		<div class={ "sb-i", "sb-stale", templ.KV("t-bad", !b.ok()) }>
+			<span class={ "sb-dot", templ.KV("bad", !b.ok()) }></span>
+			<span>
+				if b.ok() {
+					<b>Backup</b> <time { StampAttrs(b.At, StampDay)... }>{ d.Status.dayText(b.At) }</time> <span class="sb-sep">·</span> OK
+				} else {
+					<b>Backup failed</b> <time { StampAttrs(b.At, StampDay)... }>{ d.Status.dayText(b.At) }</time> <span class="sb-sep">·</span> { b.failedText() }
+				}
+			</span>
+		</div>
+	}
+	<span class="sb-i sb-grow"></span>
+	if d.Version != "" {
+		<a class="sb-i sb-ver" href={ templ.SafeURL(d.Base + "/whats-new") } title="What’s new in this version" data-visual-mask>{ d.Version }</a>
+	}
+}
+
+templ sbJobs(s StatusBar) {
+	if len(s.Jobs) == 0 {
+		if s.JobsHref != "" {
+			<a class="sb-i sb-stale" href={ templ.SafeURL(s.JobsHref) }>
+				<span class="sb-dot idle"></span>
+				<span class="sb-mut">No jobs running</span>
+			</a>
+		} else {
+			<div class="sb-i sb-stale">
+				<span class="sb-dot idle"></span>
+				<span class="sb-mut">No jobs running</span>
+			</div>
+		}
+	} else {
+		<div class="sb-i sb-stale">
+			<span class="sb-dot run"></span>
+			<span class="sb-jobs">
+				for i, j := range s.Jobs {
+					if i > 0 {
+						<span class="sb-sep">·</span>
+					}
+					<b>{ j.Kind }</b> { j.jobText() }
+					<progress class="sb-prog" max={ strconv.Itoa(j.Total) } value={ strconv.Itoa(j.Done) }></progress>
+					if j.Href != "" {
+						<a class="sb-link" href={ templ.SafeURL(j.Href) }>{ j.ID }</a>
+					}
+				}
+				if s.More > 0 {
+					<span class="sb-sep">·</span>
+					if s.JobsHref != "" {
+						<a class="sb-link" href={ templ.SafeURL(s.JobsHref) }>+{ strconv.Itoa(s.More) } more</a>
+					} else {
+						<span class="sb-mut">+{ strconv.Itoa(s.More) } more</span>
+					}
+				}
+			</span>
+		</div>
+	}
+}
+
+templ sbNarrow(d ShellData) {
+	<summary>
+		<span class={ d.Status.dotClass() }></span>
+		<span class="sb-sum">
+			<span class="sb-sum-data">
+				{ sumText(d.Status) }<small>{ sumSub(d.Status) }
+					if d.Status.level() == statusWarn {
+						since <time { StampAttrs(d.Status.Broker.Since, StampClock)... }>{ StampText(d.Status.Broker.Since, StampClock) }</time>
+					}
+				</small>
+			</span>
+			if d.Live {
+				<span class="sb-sum-live sb-l-re">Live stream lost<small> · as of <time data-live-since>page load</time></small></span>
+				<span class="sb-sum-live sb-l-off">Live stream offline<small> · as of <time data-live-since>page load</time></small></span>
+			}
+		</span>
+		<span class="sb-car" aria-hidden="true">&#9650;</span>
+	</summary>
+	<div class="sb-sheet">
+		if d.Live {
+			<div class="sb-i sb-row">
+				<span class="sb-lab">Live</span>
+				@sbLive(true)
+			</div>
+		}
+		if b := d.Status.Broker; b != nil {
+			<div class={ "sb-i", "sb-row", "sb-stale", templ.KV("t-warn", !b.Connected) }>
+				<span class="sb-lab">Broker</span>
+				<span class={ "sb-dot", templ.KV("warn", !b.Connected) }></span>
+				<span class="sb-val">
+					if b.Connected {
+						Connected <span class="mono sb-mut">{ b.Host }</span>
+					} else {
+						<b>Disconnected</b> since <time { StampAttrs(b.Since, StampClock)... }>{ StampText(b.Since, StampClock) }</time><br/><span class="mono sb-mut">{ b.Host }</span>
+					}
+				</span>
+			</div>
+		}
+		@sbSheetJobs(d.Status)
+		if b := d.Status.Backup; b != nil {
+			<div class={ "sb-i", "sb-row", "sb-stale", templ.KV("t-bad", !b.ok()) }>
+				<span class="sb-lab">Backup</span>
+				<span class={ "sb-dot", templ.KV("bad", !b.ok()) }></span>
+				<span class="sb-val">
+					if b.ok() {
+						<time { StampAttrs(b.At, StampDay)... }>{ d.Status.dayText(b.At) }</time>, OK
+					} else {
+						<b>Failed</b> <time { StampAttrs(b.At, StampDay)... }>{ d.Status.dayText(b.At) }</time>, { b.failedText() }
+					}
+				</span>
+			</div>
+		}
+		<div class="sb-i sb-row">
+			<span class="sb-lab">Version</span>
+			<span class="sb-dot idle"></span>
+			<span class="sb-val"><span class="mono" data-visual-mask>{ d.Version }</span> <a class="sb-link" href={ templ.SafeURL(d.Base + "/whats-new") }>What’s new</a></span>
+		</div>
+	</div>
+}
+
+templ sbSheetJobs(s StatusBar) {
+	if len(s.Jobs) == 0 {
+		if s.JobsHref != "" {
+			<a class="sb-i sb-row sb-stale" href={ templ.SafeURL(s.JobsHref) }>
+				<span class="sb-lab">Jobs</span>
+				<span class="sb-dot idle"></span>
+				<span class="sb-val">No jobs running</span>
+			</a>
+		} else {
+			<div class="sb-i sb-row sb-stale">
+				<span class="sb-lab">Jobs</span>
+				<span class="sb-dot idle"></span>
+				<span class="sb-val">No jobs running</span>
+			</div>
+		}
+	}
+	for i, j := range s.Jobs {
+		<div class="sb-i sb-row sb-stale">
+			<span class="sb-lab">
+				if i == 0 {
+					Jobs
+				}
+			</span>
+			<span class="sb-dot run"></span>
+			<span class="sb-val">
+				<b>{ j.Kind }</b> { j.sheetText() }
+				if j.Href != "" {
+					<a class="sb-link" href={ templ.SafeURL(j.Href) }>{ j.ID }</a>
+				}
+				<br/>
+				<progress class="sb-prog" max={ strconv.Itoa(j.Total) } value={ strconv.Itoa(j.Done) }></progress>
+			</span>
+		</div>
+	}
+	if s.More > 0 {
+		<div class="sb-i sb-row sb-stale">
+			<span class="sb-lab"></span>
+			<span class="sb-val">
+				if s.JobsHref != "" {
+					<a class="sb-link" href={ templ.SafeURL(s.JobsHref) }>+{ strconv.Itoa(s.More) } more</a>
+				} else {
+					+{ strconv.Itoa(s.More) } more
+				}
+			</span>
+		</div>
+	}
+}
+
+func sumText(s StatusBar) string { t, _ := s.summary(); return t }
+func sumSub(s StatusBar) string  { _, sub := s.summary(); return sub }

@@ -23,7 +23,7 @@ func csrfHeaders(token string) string {
 
 // Shell is the page frame every full page renders in (design v2): head, the top bar with its
 // sub-navigation (desktop) or the phone header, the navigation drawer, the crumbs, the
-// connection banners, the notices, the page's content and the toast region. The content is any
+// connection banners, the notices, the page's content, the status bar and the toast region. The content is any
 // component: a ported page, or the bridge that runs a not-yet-ported html/template page.
 //
 // No element is a size container (D5 as built): the gutters' cqw then resolves against the
@@ -67,6 +67,7 @@ templ Shell(d ShellData, content templ.Component) {
 				}
 				@content
 			</main>
+			@StatusBarView(d)
 			<div class="toasts" id="toasts" aria-live="polite"></div>
 		</body>
 	</html>
@@ -130,22 +131,23 @@ templ Brand(base string) {
 	</a>
 }
 
-// versionLink is the running version, small and muted next to the brand; it opens What's new
-// (the changelog of this binary). data-visual-mask: it changes with every build.
+// versionLink is the running version, small and muted next to the brand in the phone drawer; it
+// opens What's new (the changelog of this binary). The status bar carries it on every page.
+// data-visual-mask: it changes with every build.
 templ versionLink(d ShellData) {
 	if d.Version != "" {
 		<a class="ver" href={ templ.SafeURL(d.Base + "/whats-new") } title="What’s new in this version" data-visual-mask>{ d.Version }</a>
 	}
 }
 
-// topBar is the desktop row: brand, the four groups, the live indicator and the user menu. The
+// topBar is the desktop row: brand, the four groups and the user menu (the live state and the
+// version are in the status bar). The
 // groups are links to their first page; the sub-navigation lists the group's pages.
 templ topBar(d ShellData) {
 	<div class="tb">
 		<div class="shell-in tb-in">
 			<span class="tb-brand">
 				@Brand(d.Base)
-				@versionLink(d)
 			</span>
 			<nav class="tb-groups" aria-label="Main">
 				for _, g := range d.Groups() {
@@ -159,9 +161,6 @@ templ topBar(d ShellData) {
 				}
 			</nav>
 			<span class="tb-fill"></span>
-			if d.Live {
-				@liveIndicator()
-			}
 			@userMenu(d)
 		</div>
 	</div>
@@ -189,17 +188,6 @@ templ subNav(d ShellData) {
 	} else {
 		<div class="sn sn-empty"></div>
 	}
-}
-
-// liveIndicator is the connection state of the live updates: live.js sets data-live on <html>
-// from the SSE extension's events, the stylesheet shows the matching label.
-templ liveIndicator() {
-	<span class="live">
-		<span class="live-dot"></span>
-		<span class="live-l live-ok">Live</span>
-		<span class="live-l live-re">Reconnecting…</span>
-		<span class="live-l live-off">Offline</span>
-	</span>
 }
 
 // avatar is the round initials badge of the signed-in user; news > 0 adds the dot that says
@@ -277,15 +265,12 @@ func ariaBool(b bool) string {
 	return "false"
 }
 
-// phoneHeader is the top bar below 45rem: menu button, page title, live state, avatar. Both
+// phoneHeader is the top bar below 45rem: menu button, page title, avatar. Both
 // buttons are links to /nav, the drawer as a page; dialog.js opens the drawer instead.
 templ phoneHeader(d ShellData) {
 	<div class="ph">
 		<a class="ph-btn ph-menu" href={ templ.SafeURL(d.Base + "/nav") } data-dialog="nav-drawer" aria-label="Open navigation"><span class="burger" aria-hidden="true"><span></span><span></span><span></span></span></a>
 		<span class="ph-title" id="ph-title">{ d.Title }</span>
-		if d.Live {
-			@liveIndicator()
-		}
 		<a class="ph-btn ph-me" href={ templ.SafeURL(d.Base + "/nav") } data-dialog="nav-drawer" aria-label="Account and theme">
 			@avatar(d.UserName, d.News)
 		</a>

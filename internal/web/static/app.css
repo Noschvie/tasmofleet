@@ -282,6 +282,7 @@ html {
   scrollbar-gutter: stable;
 }
 body {
+  padding-bottom: calc(var(--sb-h) + var(--sp-16));
   margin: 0;
   background: var(--color-bg);
   color: var(--color-text);
@@ -1635,7 +1636,7 @@ dialog.dlg::backdrop,
    ========================================================================== */
 .bulkbar {
   position: sticky;
-  bottom: var(--sp-16);
+  bottom: calc(var(--sb-h) + var(--sp-16));
   z-index: var(--z-sticky);
   display: flex;
   flex-wrap: wrap;
@@ -2122,6 +2123,10 @@ td a.ext {
 
 :root {
   --bulkbar-h: 58px;
+  /* status bar (#307): --sb-line is its row, --sb-h the whole bar with the phone's safe area.
+     Everything fixed to the window's bottom edge lies above it: bottom: var(--sb-h) + its gap. */
+  --sb-line: 32px;
+  --sb-h: calc(var(--sb-line) + env(safe-area-inset-bottom, 0px));
 }
 
 /* ---- top bar --------------------------------------------------------------- */
@@ -2211,7 +2216,7 @@ details.rowmenu.up > .rowmenu-body {
   position: fixed;
   left: var(--page-pad);
   right: var(--page-pad);
-  bottom: var(--sp-12);
+  bottom: calc(var(--sb-h) + var(--sp-12));
   max-width: calc(var(--container) - 2 * var(--page-pad));
   min-height: var(--bulkbar-h);
   margin: 0 auto;
@@ -2221,7 +2226,7 @@ details.rowmenu.up > .rowmenu-body {
   display: none;
 }
 body:has(.bulkbar:not([hidden])) {
-  padding-bottom: calc(var(--bulkbar-h) + 2 * var(--sp-12));
+  padding-bottom: calc(var(--sb-h) + var(--bulkbar-h) + 2 * var(--sp-12));
 }
 .bulkbar .bulk-count {
   margin-right: 0;
@@ -2687,18 +2692,16 @@ td .hint {
   .bulkbar {
     left: 0;
     right: 0;
-    bottom: 0;
+    bottom: var(--sb-h);
     max-width: none;
     border-radius: 0;
     border-left: 0;
     border-right: 0;
     border-bottom: 0;
-    padding-bottom: calc(var(--sp-8) + env(safe-area-inset-bottom, 0px));
+    padding-bottom: var(--sp-8);
   }
   body:has(.bulkbar:not([hidden])) {
-    padding-bottom: calc(
-      var(--bulkbar-h) + var(--sp-12) + env(safe-area-inset-bottom, 0px)
-    );
+    padding-bottom: calc(var(--sb-h) + var(--bulkbar-h) + var(--sp-12));
   }
   .bulkbar .bulk-count,
   .bulkbar button.ghost,
@@ -3140,7 +3143,7 @@ details.job-log > summary {
 }
 .savebar {
   position: sticky;
-  bottom: 0;
+  bottom: var(--sb-h);
   z-index: var(--z-sticky);
   margin: 1rem 0 0;
   padding: 0.7rem 0;
@@ -3239,14 +3242,14 @@ label.chip:has(input:focus-visible) {
 }
 @media (max-width: 44.99rem) {
   main:has(.actionbar) {
-    padding-bottom: 8rem;
+    padding-bottom: calc(8rem + var(--sb-h));
   }
   .actionbar {
     position: fixed;
     z-index: var(--z-header);
     left: 0;
     right: 0;
-    bottom: 0;
+    bottom: var(--sb-h);
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
@@ -4734,9 +4737,6 @@ header.top {
 .tb-brand .brand {
   align-self: center;
 }
-.tb-brand .ver {
-  align-self: center;
-}
 .ver {
   font: 400 11.5px var(--font-mono);
   color: var(--color-text-3);
@@ -4786,38 +4786,319 @@ header.top {
   flex: 1;
 }
 
-/* live indicator: data-live on <html> comes from live.js; without it the page is live */
-.live {
+/* ==== status bar (#307, internal/web/ui/statusbar.templ) ====
+   Fixed to the window's bottom edge on every page: Live, Broker, Jobs, Backup, Version. A wide row
+   from 45rem; below, one 44px line (a details element) that opens into a sheet upwards. The top
+   edge carries a 2px line that turns amber or red when something is wrong. data-live on <html>
+   (live.js) picks the Live label and dims the items that may be stale. Everything else fixed to the
+   bottom edge sits above it (--sb-h). */
+@media (max-width: 44.99rem) {
+  :root {
+    --sb-line: 44px;
+  }
+}
+.sb {
+  position: fixed;
+  z-index: var(--z-header);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border-strong);
+  box-shadow: 0 -4px 14px rgb(0 0 0 / 0.07);
+  font: 500 12px/1 var(--font-sans);
+  color: var(--color-text-2);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.sb-edge {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -1px;
+  height: 2px;
+  background: transparent;
+}
+.sb-edge.sb-warn {
+  background: var(--color-warn);
+}
+.sb-edge.sb-bad {
+  background: var(--color-danger);
+}
+html[data-live="reconnecting"] .sb-edge:not(.sb-bad) {
+  background: var(--color-warn);
+}
+html[data-live="offline"] .sb-edge {
+  background: var(--color-danger);
+}
+.sb-wide {
+  display: flex;
+  align-items: stretch;
+  height: var(--sb-line);
+}
+.sb-i {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-7);
-  font: 500 12px var(--font-sans);
-  color: var(--color-text-2);
+  min-width: 0;
+  padding: 0 var(--sp-12);
   white-space: nowrap;
+  color: inherit;
+  text-decoration: none;
+  border-left: 1px solid var(--color-border);
 }
-.live-dot {
+.sb-i:first-child {
+  border-left: 0;
+  padding-left: 0;
+}
+a.sb-i:hover {
+  background: var(--color-surface-2);
+  color: var(--color-text);
+}
+.sb-i b {
+  font-weight: 600;
+  color: var(--color-text);
+}
+.sb-i .mono {
+  font: 400 11.5px var(--font-mono);
+}
+.sb-mut {
+  color: var(--color-text-3);
+  font-weight: 400;
+}
+.sb-grow {
+  flex: 1;
+  border: 0;
+}
+.sb-ver {
+  padding-right: 0;
+  font: 400 11.5px var(--font-mono);
+}
+.sb-live {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-7);
+}
+.sb-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
+  flex: none;
   background: var(--color-ok);
-  animation: tf-pulse 2.4s ease-in-out infinite;
 }
-.live-l {
+.sb-dot.idle {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--color-text-3);
+}
+.sb-dot.run {
+  background: var(--color-accent);
+  animation: tf-pulse 1.6s ease-in-out infinite;
+}
+.sb-dot.warn {
+  background: var(--color-warn);
+}
+.sb-dot.bad {
+  background: var(--color-danger);
+}
+.sb-i.t-warn {
+  background: var(--color-warn-bg);
+  color: var(--color-warn-fg);
+}
+.sb-i.t-warn b {
+  color: var(--color-warn-fg);
+}
+.sb-i.t-bad {
+  background: var(--color-danger-bg);
+  color: var(--color-danger-fg);
+}
+.sb-i.t-bad b {
+  color: var(--color-danger-fg);
+}
+.sb-prog {
+  display: inline-block;
+  width: 54px;
+  height: 4px;
+  margin: 0 2px;
+  border: 0;
+  border-radius: 2px;
+  background: var(--color-surface-3);
+  vertical-align: middle;
+}
+.sb-prog::-webkit-progress-bar {
+  background: var(--color-surface-3);
+  border-radius: 2px;
+}
+.sb-prog::-webkit-progress-value,
+.sb-prog::-moz-progress-bar {
+  background: var(--color-accent);
+  border-radius: 2px;
+}
+.sb-link {
+  color: var(--color-accent-fg);
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.sb-sep {
+  color: var(--color-text-3);
+}
+/* the running jobs: one line, the gap stands for the spaces between the words */
+.sb-jobs {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28em;
+}
+
+/* the Live label: one of three, by the stream's state */
+.sb-l,
+.sb-sum-live {
   display: none;
 }
-html:not([data-live]) .live-ok,
-html[data-live="live"] .live-ok,
-html[data-live="reconnecting"] .live-re,
-html[data-live="offline"] .live-off {
+html:not([data-live]) .sb-l-ok,
+html[data-live="live"] .sb-l-ok,
+html[data-live="reconnecting"] .sb-l-re,
+html[data-live="offline"] .sb-l-off {
   display: inline;
 }
-html[data-live="reconnecting"] .live-dot {
+html[data-live="reconnecting"] .sb-live .sb-dot {
   background: var(--color-warn);
-  animation-duration: 0.9s;
 }
-html[data-live="offline"] .live-dot {
+html[data-live="offline"] .sb-live .sb-dot {
   background: var(--color-danger);
-  animation: none;
+}
+html[data-live="reconnecting"] .sb-i:has(.sb-live) {
+  background: var(--color-warn-bg);
+  color: var(--color-warn-fg);
+}
+html[data-live="reconnecting"] .sb-i:has(.sb-live) b {
+  color: var(--color-warn-fg);
+}
+html[data-live="offline"] .sb-i:has(.sb-live) {
+  background: var(--color-danger-bg);
+  color: var(--color-danger-fg);
+}
+html[data-live="offline"] .sb-i:has(.sb-live) b {
+  color: var(--color-danger-fg);
+}
+.sb-i:first-child.t-warn,
+.sb-i:first-child.t-bad,
+html[data-live="reconnecting"] .sb-i:first-child:has(.sb-live),
+html[data-live="offline"] .sb-i:first-child:has(.sb-live) {
+  padding-left: var(--sp-12);
+}
+/* a lost stream: what the bar says about the broker, jobs and backup may be stale */
+html[data-live="reconnecting"] .sb-stale,
+html[data-live="offline"] .sb-stale {
+  opacity: 0.6;
+}
+
+/* phone: one line, tap to open the sheet */
+.sb-narrow {
+  display: none;
+}
+@media (max-width: 44.99rem) {
+  .sb-wide {
+    display: none;
+  }
+  .sb-narrow {
+    display: block;
+  }
+  .sb-narrow summary {
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: var(--sp-10);
+    height: var(--sb-line);
+    padding: 0 var(--sp-16);
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .sb-narrow summary::-webkit-details-marker {
+    display: none;
+  }
+  .sb-sum {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--color-text);
+  }
+  .sb-sum small {
+    color: var(--color-text-3);
+    font-weight: 400;
+    font-size: 12px;
+  }
+  html[data-live="reconnecting"] .sb-sum-data,
+  html[data-live="offline"] .sb-sum-data {
+    display: none;
+  }
+  html[data-live="reconnecting"] .sb-sum-live.sb-l-re,
+  html[data-live="offline"] .sb-sum-live.sb-l-off {
+    display: inline;
+  }
+  html[data-live="reconnecting"] .sb-narrow summary .sb-dot {
+    background: var(--color-warn);
+    animation: none;
+  }
+  html[data-live="offline"] .sb-narrow summary .sb-dot {
+    background: var(--color-danger);
+    animation: none;
+  }
+  .sb-car {
+    color: var(--color-text-3);
+    font-size: 10px;
+    transition: transform 0.15s;
+  }
+  .sb-narrow[open] .sb-car {
+    transform: rotate(180deg);
+  }
+  .sb-sheet {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 100%;
+    background: var(--color-surface);
+    border-top: 1px solid var(--color-border-strong);
+    box-shadow: 0 -10px 24px rgb(0 0 0 / 0.14);
+    padding: var(--sp-4) 0 var(--sp-6);
+  }
+  .sb-sheet .sb-i {
+    display: flex;
+    align-items: flex-start;
+    border-left: 0;
+    padding: var(--sp-12) var(--sp-16);
+    font-size: 13px;
+    white-space: normal;
+    flex-wrap: wrap;
+    row-gap: var(--sp-4);
+  }
+  .sb-sheet .sb-i + .sb-i {
+    border-top: 1px solid var(--color-border);
+  }
+  .sb-sheet .sb-dot {
+    margin-top: 4px;
+  }
+  .sb-lab {
+    width: 4.6rem;
+    color: var(--color-text-3);
+    font-weight: 500;
+    flex: none;
+  }
+  .sb-val {
+    flex: 1;
+    min-width: 0;
+  }
+  .sb-sheet .sb-prog {
+    display: block;
+    width: 100%;
+    max-width: 220px;
+    margin: 6px 0 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sb-dot.run {
+    animation: none;
+  }
 }
 
 /* user menu: a details element (menu.js: one open, Escape, click outside) */
@@ -5010,21 +5291,6 @@ summary.um-btn::-webkit-details-marker {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.ph .live {
-  gap: var(--sp-6);
-}
-.ph .live-dot {
-  width: 8px;
-  height: 8px;
-  margin-right: var(--sp-6);
-}
-.ph .live-l {
-  margin-right: var(--sp-4);
-}
-html:not([data-live]) .ph .live-ok,
-html[data-live="live"] .ph .live-ok {
-  display: none;
 }
 .ph-me .avatar {
   width: 30px;
@@ -5275,7 +5541,7 @@ html[data-live="offline"] .conn-banner.conn-off {
 .toasts {
   position: fixed;
   right: 16px;
-  bottom: 16px;
+  bottom: calc(var(--sb-h) + 16px);
   z-index: var(--z-toast);
   display: flex;
   flex-direction: column;
@@ -5331,7 +5597,7 @@ html[data-live="offline"] .conn-banner.conn-off {
   text-box: normal;
 }
 @media (prefers-reduced-motion: reduce) {
-  .live-dot,
+  .sb-dot.run,
   .banner-dot.pulse {
     animation: none;
   }
@@ -7803,7 +8069,7 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
   z-index: var(--z-sticky);
   left: 0;
   right: 0;
-  bottom: 16px;
+  bottom: calc(var(--sb-h) + 16px);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -7865,7 +8131,7 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
   display: none;
 }
 body:has(.bulkbar:not([hidden]) > .bulk-acts) {
-  padding-bottom: 80px;
+  padding-bottom: calc(80px + var(--sb-h));
 }
 /* how many selected devices are not online and will be skipped (select.js) */
 .bulkbar .bulk-note {
@@ -7949,7 +8215,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
     display: inline;
   }
   body:has(.bulkbar:not([hidden]) > .bulk-acts) {
-    padding-bottom: calc(180px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(180px + var(--sb-h));
   }
 }
 
@@ -8424,19 +8690,19 @@ td.pcell .pwr[aria-pressed="true"] .sw::after {
    bars stay fixed (F5) */
 .dv-list .bulkbar:has(> .bulk-acts) {
   position: sticky;
-  bottom: 16px;
+  bottom: calc(var(--sb-h) + 16px);
   margin: 14px auto 0;
 }
 body:has(.dv-list .bulkbar:not([hidden])) {
-  padding-bottom: 0;
+  padding-bottom: var(--sb-h);
 }
 @media (max-width: 44.99rem) {
   .dv-list .bulkbar:has(> .bulk-acts) {
-    bottom: 0;
+    bottom: var(--sb-h);
     margin: 12px calc(-1 * var(--page-pad, 12px)) -120px;
   }
   body:has(.dv-list .bulkbar:not([hidden])) {
-    padding-bottom: 0;
+    padding-bottom: var(--sb-h);
   }
 }
 .dcard-st {
@@ -9154,7 +9420,7 @@ tr.is-saved > td {
    form scrolls (where the form ends, it sits at its place) */
 .devform-foot {
   position: sticky;
-  bottom: 0;
+  bottom: var(--sb-h);
   margin: 0 -18px -18px;
   padding: 14px 18px 18px;
   border-radius: 0 0 var(--r-card) var(--r-card);
@@ -11855,7 +12121,7 @@ input:focus-visible + .swtrack {
 /* the sticky save bar */
 .sbar {
   position: sticky;
-  bottom: 0;
+  bottom: var(--sb-h);
   z-index: var(--z-sticky);
   display: flex;
   align-items: center;

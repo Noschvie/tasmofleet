@@ -1,8 +1,8 @@
 import { test, expect } from "../support/fixtures";
 import { App, startApp } from "../support/stack";
 
-// #124: the running version sits in the header (and in the phone's drawer) and opens What's new.
-// It is the same text the About page prints.
+// #124: the running version opens What's new, on every page. #307: it sits in the status bar at the
+// bottom (it left the top bar) and in the phone's drawer. It is the same text the About page prints.
 let app: App;
 test.beforeAll(async () => {
   test.setTimeout(120_000);
@@ -14,11 +14,12 @@ test.afterAll(async () => {
   await app?.stop();
 });
 
-test("the header shows the About version and links to What's new", async ({ page }) => {
+test("the status bar shows the About version and links to What's new", async ({ page }) => {
   await page.setExtraHTTPHeaders({ "X-authentik-username": "adam", "X-authentik-groups": "adm" });
   await page.goto(app.url + "/about");
   const about = (await page.locator(".about-name").innerText()).replace(/^TasmoFleet\s+/, "").trim();
-  const link = page.locator("header.top .tb .ver");
+  await expect(page.locator("header.top .ver")).toHaveCount(0);
+  const link = page.locator("footer.sb .sb-ver");
   await expect(link).toHaveText(about);
   await link.click();
   await expect(page).toHaveURL(/\/whats-new$/);

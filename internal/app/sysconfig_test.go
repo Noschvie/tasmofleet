@@ -149,6 +149,7 @@ func TestMQTTFollowsTheSettingsPageLive(t *testing.T) {
 	a.mqttKnown = newKnownIndex()
 	a.sw = mqttbus.NewSwitch()
 	a.bus = a.sw
+	a.broker = newBrokerWatch(a.sw, nil)
 	a.connectMQTT(t.Context(), a.svc.Sys.Snapshot())
 	if a.sw.Enabled() {
 		t.Fatal("no broker configured: MQTT is off")

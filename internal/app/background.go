@@ -189,17 +189,23 @@ func (a *runtime) backupAll(ctx context.Context) {
 		a.log.Warn("scheduled backup: list devices", "err", err)
 		return
 	}
+	a.backupRun.Start(len(devs))
+	completed := false
+	defer func() { a.backupRun.Finish(completed) }()
 	for _, d := range devs {
 		if ctx.Err() != nil {
 			return
 		}
-		if _, err := a.backups.Backup(backup.WithRun(ctx, backup.Run{Trigger: model.TriggerScheduled}), "system", d.ID); err != nil {
+		_, err := a.backups.Backup(backup.WithRun(ctx, backup.Run{Trigger: model.TriggerScheduled}), "system", d.ID)
+		if err != nil {
 			a.log.Warn("scheduled backup failed", "device", d.Name, "err", err)
 		}
+		a.backupRun.Step(err != nil)
 		select {
 		case <-ctx.Done():
 			return
 		case <-time.After(backupGap):
 		}
 	}
+	completed = true
 }

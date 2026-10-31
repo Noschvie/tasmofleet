@@ -75,7 +75,7 @@ func (h *handler) events(w http.ResponseWriter, r *http.Request) {
 	if err := rc.Flush(); err != nil {
 		return
 	}
-	ch, cancel := h.d.Hub.Subscribe(events.TopicHealth, events.TopicDevice, events.TopicJob, events.TopicBackup)
+	ch, cancel := h.d.Hub.Subscribe(events.TopicHealth, events.TopicDevice, events.TopicJob, events.TopicBackup, events.TopicBroker)
 	defer cancel()
 	// The page was built from what the hub had published up to "since" (view.EventSeq). Anything
 	// published after that and before this subscription is lost to this stream, and so is
@@ -192,6 +192,8 @@ func (h *handler) encodeEvent(buf *bytes.Buffer, ev events.Event, base string) {
 		writeSSE(buf, "devjob-"+devID(p.DeviceID), "") // the device page's Activity and header
 	case model.Backup:
 		writeSSE(buf, "backup", "")
+	case events.BrokerState:
+		writeSSE(buf, "broker", "")
 	}
 }
 

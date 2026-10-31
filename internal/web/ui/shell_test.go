@@ -217,11 +217,11 @@ func TestTrailFollowsTheNavigation(t *testing.T) {
 }
 
 // Why: the SSE connection is opened by the body attributes; a page without live data (forms)
-// must not hold a stream open per tab, and without a stream the top bar cannot claim "Live" or
+// must not hold a stream open per tab, and without a stream the status bar cannot claim "Live" or
 // show the connection banners.
 func TestLiveStreamOnlyWhenAsked(t *testing.T) {
 	d := admin()
-	if got := render(t, d); strings.Contains(got, "sse-connect") || strings.Contains(got, `class="live"`) || strings.Contains(got, "conn-banner") {
+	if got := render(t, d); strings.Contains(got, "sse-connect") || strings.Contains(got, "sb-live") || strings.Contains(got, "conn-banner") {
 		t.Fatal("stream, indicator or banners on a page that did not ask")
 	}
 	d.Live, d.Base = true, "/fleet"
@@ -363,19 +363,29 @@ func TestNewsDotOnlyWithNews(t *testing.T) {
 
 // Why (#124): a bug report needs the running version at a glance, on every page and on a phone
 // too (where the top bar is hidden and only the drawer shows the brand). It opens What's new, the
-// changelog of this binary, in the same tab; a shell without a version draws no empty link.
+// changelog of this binary, in the same tab; a shell without a version draws no empty link. The
+// status bar carries it on every page (#307, it left the top bar); the drawer keeps its own.
 func TestShellShowsTheVersionAsChangelogLink(t *testing.T) {
 	d := admin()
 	d.Base, d.Version = "/tf", "0.15.2+edge (0123456789ab)"
 	got := render(t, d)
-	if n := strings.Count(got, `<a class="ver" href="/tf/whats-new"`); n != 2 {
-		t.Fatalf("version links (top bar + drawer) = %d, want 2", n)
+	if n := strings.Count(got, `<a class="sb-i sb-ver" href="/tf/whats-new"`); n != 1 {
+		t.Fatalf("version links in the status bar = %d, want 1", n)
 	}
-	if !strings.Contains(got, ">0.15.2+edge (0123456789ab)</a>") || strings.Contains(got, `class="ver" href="/tf/whats-new" target`) {
+	if n := strings.Count(got, `<a class="ver" href="/tf/whats-new"`); n != 1 || strings.Contains(between(got, `<header class="top">`, `</header>`), `class="ver"`) {
+		t.Fatalf("version links in the drawer = %d, want 1 (and none in the top bar)", n)
+	}
+	if !strings.Contains(got, ">0.15.2+edge (0123456789ab)</a>") || strings.Contains(got, `href="/tf/whats-new" target`) {
 		t.Error("the link must carry the version and stay in the same tab")
 	}
 	d.Version = ""
-	if strings.Contains(render(t, d), `class="ver"`) {
+	if strings.Contains(render(t, d), `class="ver"`) || strings.Contains(render(t, d), `sb-ver`) {
 		t.Error("no version, no link")
 	}
+}
+
+func between(s, from, to string) string {
+	_, after, _ := strings.Cut(s, from)
+	before, _, _ := strings.Cut(after, to)
+	return before
 }

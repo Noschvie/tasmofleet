@@ -14,11 +14,13 @@ always upgrade automatically.
 
 - System → About: the page uses the full content width; the version card is a band with only "What's new" (the Styleguide button is gone, it has its own menu entry), the components are a 2×2 grid, and the effective configuration is always visible in two tables side by side with its values in monospace (#351)
 - Settings → Advanced: "Set by the container" and "Reset all settings" take the full width; the container settings are no longer behind a disclosure but sit always visible in two key/value tables side by side (one table on a phone) (#350)
+- Top bar: the version and the "Live" indicator moved into the new status bar at the bottom (the phone header loses its Live text too); the phone drawer keeps its version link (#307)
 - Console and bulk command: `Upgrade` and `OtaUrl` with an argument are refused while a TasmoFleet update job (queued or running) holds the device, with a clear message; the bulk preview names each refused device and the rest still goes (#240)
 - Policy rule form: "Applies to" is an always-open, full-width section after "When a device deviates": a summary line, chip families as toggle pills, tags as chips with an input and the tags in use with their device count, picked devices as chips above a search (name, IP, tag) over a fixed-height list, and Exceptions with the same names. Nothing on the page shifts while the scope is edited. The four tiles and the line under the title now follow the draft like the Devices card (#235)
 - Policy rule page: the tile "Applies to" and the line under the title count the exceptions listed in the rule (what the form shows), no longer only the devices an exception actually removed (#235)
 ### Added
 
+- Status bar fixed to the bottom of every page: browser live state, MQTT broker (host and port, since when it is down), running jobs with progress and a link (two named, then "+N more"), the last scheduled backup run (time, OK or how many devices failed) and the version. On a phone it is one collapsed line that opens into a sheet. It refreshes from the existing event stream plus a new `broker` event; nothing polls, and no credentials or error texts are shown. The last backup run is kept in memory, so it is empty after a restart until the next scheduled run ends (#307)
 - Console and bulk "Send command": Arrow Up and Arrow Down walk through the last 50 commands of this browser (newest first, duplicates collapsed, shared by every device's console), Escape brings back what you had typed, and "Clear history" empties it. Commands with a credential and commands the policy refused are never kept (#321).
 
 ### Fixed

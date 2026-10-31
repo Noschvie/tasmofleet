@@ -62,7 +62,7 @@ func TestBulkResultCountsAndListsEveryDevice(t *testing.T) {
 	if strings.Index(body, ">attic<") > strings.Index(body, ">kitchen<") {
 		t.Error("the devices keep the order they were posted in")
 	}
-	if strings.Contains(body, "hx-trigger") {
+	if strings.Contains(between(body, `<main id="main">`, "</main>"), "hx-trigger") { // the status bar outside <main> refreshes itself
 		t.Error("a finished result does not reload itself")
 	}
 }

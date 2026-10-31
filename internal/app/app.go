@@ -115,6 +115,8 @@ type runtime struct {
 	mqttCmd    *mqttcmd.Channel // the one place that sends commands over MQTT (#256)
 	facts      *TransportFacts  // the router's view of a device (transport.Facts)
 	sw         *mqttbus.Switch
+	broker     *brokerWatch  // the broker state the status bar shows (#307)
+	backupRun  *scheduledRun // the scheduled backup run the status bar shows
 	mqttKnown  *knownIndex
 	tracker    *health.Service
 	backups    *backup.Manager
@@ -144,6 +146,7 @@ func (a *runtime) run(ctx context.Context) error {
 	bg, cancelBG := context.WithCancel(ctx)
 	defer cancelBG()
 	a.bgContext = bg
+	a.backupRun = newScheduledRun(svc.Hub)
 	if err := a.setupDecoder(bg); err != nil {
 		return err
 	}
@@ -284,6 +287,8 @@ func (a *runtime) startMQTT(ctx context.Context) error {
 	a.mqttKnown = newKnownIndex()
 	a.sw = mqttbus.NewSwitch()
 	a.bus = a.sw
+	a.broker = newBrokerWatch(a.sw, a.svc.Hub)
+	a.goBG("broker-state", func() error { return a.broker.Run(ctx, brokerPoll) })
 	a.mqttCmd = mqttcmd.New(a.bus, mqttcmd.Options{Known: a.mqttKnown.Known})
 	a.goBG("mqtt-known-index", func() error { return a.runKnownIndex(ctx) })
 	a.connectMQTT(ctx, a.cfg)
@@ -302,6 +307,7 @@ func (a *runtime) startMQTT(ctx context.Context) error {
 func (a *runtime) connectMQTT(ctx context.Context, cfg config.Config) {
 	if cfg.MQTTURL == "" {
 		a.sw.Replace(nil, nil)
+		a.broker.SetHost("")
 		a.log.Info("MQTT is off (no broker URL); health uses HTTP polling only")
 		return
 	}
@@ -318,6 +324,7 @@ func (a *runtime) connectMQTT(ctx context.Context, cfg config.Config) {
 		return
 	}
 	a.sw.Replace(bus, cancel)
+	a.broker.SetHost(cfg.MQTTURL)
 	a.log.Info("MQTT connection configured", "broker", redactURLHost(cfg.MQTTURL))
 }
 
@@ -648,6 +655,7 @@ func (a *runtime) webDeps(guard web.Guard, rows []web.KV) web.Deps {
 		Config: rows, Pages: a.pages, FirmwareSource: a.fwSource, FirmwareFeed: a.fwFeed,
 	}
 	deps.MQTTBroker = a.svc.Broker
+	deps.MQTTStatus, deps.ScheduledBackup = a.broker.Status, a.backupRun.Status
 	deps.MQTTOnly = a.onlyOverMQTT
 	if a.facts != nil {
 		deps.Transport = webFacts{a.facts} // the router\'s own view: the card shows what the router decides

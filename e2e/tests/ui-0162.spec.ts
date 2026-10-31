@@ -54,8 +54,9 @@ for (const width of [1280, 375]) {
   }
 }
 
-// #143: the version label shares the vertical centre of the brand name (it sat a few px higher).
-test("the header version label is centred on the brand name", async ({
+// #143: the version label shared the vertical centre of the brand name (it sat a few px higher).
+// #307 moved it into the status bar: it must share the centre of the other items there.
+test("the status bar version label is centred on the bar's other items", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -68,7 +69,7 @@ test("the header version label is centred on the brand name", async ({
         const r = e.getBoundingClientRect();
         return r.top + r.height / 2;
       });
-  const brand = await centre("header.top .tb .brand");
-  const ver = await centre("header.top .tb .ver");
-  expect(Math.abs(brand - ver)).toBeLessThanOrEqual(1);
+  const live = await centre("footer.sb .sb-live");
+  const ver = await centre("footer.sb .sb-ver");
+  expect(Math.abs(live - ver)).toBeLessThanOrEqual(1);
 });

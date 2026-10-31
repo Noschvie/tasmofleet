@@ -188,6 +188,10 @@ type Deps struct {
 	Version        string
 	DecoderVersion string
 	MQTT           func() string // "connected", "disconnected" or "disabled"
+	// MQTTStatus is the broker connection for the status bar; nil shows nothing about it.
+	MQTTStatus func() BrokerInfo
+	// ScheduledBackup is the scheduled backup run for the status bar; nil shows nothing about it.
+	ScheduledBackup func() BackupRunInfo
 	// MQTTBroker compares a device's configured broker with ours; nil when
 	// tasmofleet has no broker.
 	MQTTBroker interface {
@@ -328,6 +332,7 @@ func Handler(d Deps) (http.Handler, error) {
 	route("GET /nav", op, h.navPage)
 	route("GET /styleguide", op, h.styleguide) // sample data only: every signed-in user (D17)
 	route("GET /events", op, h.events)
+	route("GET /statusbar", op, h.statusBarFragment)
 	h.registerDeviceCmd(route, op)
 	h.registerUnavailable(route, op)
 	// Every other path answers with the app's own not-found page, not Go's plain text.
@@ -356,7 +361,7 @@ type view struct {
 	IsAdmin  bool
 	RoleName string
 	Flash    string
-	Live     bool   // open the SSE stream (pages with live data; the top bar then shows its state)
+	Live     bool   // open the SSE stream (pages with live data; the status bar then shows its state)
 	EventSeq uint64 // events published before the page was built (Hub.Seq): the stream resyncs when more followed (#160)
 	Path     string // request path below the base path (crumbs)
 	Theme    string // the user's theme choice, "" = Auto

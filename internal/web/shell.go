@@ -64,6 +64,7 @@ func (h *handler) page(r *http.Request, v view, prefs map[string]string, content
 		v.NewDevices = h.newDeviceCount(r)
 	}
 	d := shellData(v)
+	d.Status = h.statusBar(r.Context(), v.Base, v.Live)
 	var inner bytes.Buffer
 	if err := content.Render(r.Context(), &inner); err != nil {
 		return nil, err

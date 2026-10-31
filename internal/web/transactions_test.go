@@ -170,7 +170,8 @@ func TestTransactionsListRunningCardAndHistory(t *testing.T) {
 		{ID: 2, BatchID: 5, DeviceID: 1, State: model.JobSucceeded, TargetRelease: "16.1.0", CreatedAt: now},
 		{ID: 3, BatchID: 5, DeviceID: 2, State: model.JobQueued, TargetRelease: "16.1.0", CreatedAt: now},
 	}
-	_, body := e.do(t, "GET", "/transactions", "operator", nil)
+	_, page := e.do(t, "GET", "/transactions", "operator", nil)
+	body := between(page, `<main id="main">`, "</main>") // the status bar below it names the running transaction too
 	card := strings.Index(body, `class="txn-card"`)
 	tx5, tx4 := strings.LastIndex(body, ">TX-0005<"), strings.Index(body, ">TX-0004<")
 	if card < 0 || tx5 < 0 || tx4 < 0 || tx5 > tx4 || card > tx5 {
