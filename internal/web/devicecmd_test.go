@@ -726,7 +726,8 @@ func TestConsoleFirmwareCommandIgnoresNonUpdateJobs(t *testing.T) {
 		if strings.Contains(body, "update job") || !strings.Contains(body, "Confirm sending") {
 			t.Errorf("%s job: %d %s", k, resp.StatusCode, body)
 		}
-||||||| parent of a9fe930 (Console: command history with Arrow Up/Down (#321))
+	}
+}
 
 // Why (#321): the browser keeps a command history for Arrow Up. The server decides what may be
 // kept, using the same rule as the audit log (cmdpolicy.Redacted), so a secret never reaches
