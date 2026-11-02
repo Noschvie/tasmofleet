@@ -25,7 +25,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: actions/setup-go@v7.0.0
+    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
         go-version-file: go.mod
         cache: false
@@ -41,7 +41,7 @@ runs:
           echo "prefix=go-${{ inputs.name }}-${{ runner.os }}-$(go env GOVERSION)"
         } >> "$GITHUB_OUTPUT"
     - if: inputs.save == 'true' && github.ref == 'refs/heads/main'
-      uses: actions/cache@v6.1.0
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ${{ steps.env.outputs.gocache }}
@@ -52,7 +52,7 @@ runs:
           ${{ steps.env.outputs.prefix }}-${{ hashFiles('go.sum', 'tools/go.sum') }}-
           ${{ steps.env.outputs.prefix }}-
     - if: inputs.save != 'true' || github.ref != 'refs/heads/main'
-      uses: actions/cache/restore@v6.1.0
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ${{ steps.env.outputs.gocache }}

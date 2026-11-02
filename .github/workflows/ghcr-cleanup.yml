@@ -49,7 +49,7 @@ jobs:
     env:
       DRY_RUN: ${{ inputs.dry-run }}
     steps:
-      - uses: actions/checkout@v7.0.1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: ghcr, delete superseded patch versions
@@ -110,7 +110,7 @@ jobs:
               *) echo "::warning::Docker Hub: deleting $tag answered $code" ;;
             esac
           done
-      - uses: dataaxiom/ghcr-cleanup-action@v1.2.2
+      - uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1.2.2
         with:
           package: tasmofleet
           delete-untagged: true
