@@ -104,7 +104,8 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 	// device reached over MQTT only, and Make compliant never has a person's consent) is it known that
 	// nothing of it was sent: the lines that are not the cut-off ones go again, the others are skipped.
 	var skipped []fixLine
-	var applied []fixLine // the lines of the chunks that went out
+	var applied []fixLine // the lines of the chunks that went out (no read-back yet)
+	var failed []fixLine  // the chunk whose send failed: it may or may not have reached the device
 	var send func(chunk []fixLine) error
 	send = func(chunk []fixLine) error {
 		texts := make([]string, len(chunk))
@@ -127,6 +128,7 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 				}
 			}
 			if len(others) == len(chunk) {
+				failed = chunk
 				return fmt.Errorf("sending %s: %w", strings.Join(texts, "; "), err) // refused, but not for a cut-off line: do not loop
 			}
 			for _, c := range chunks(others) {
@@ -138,13 +140,14 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 			// the device is restarting; the read-back tells whether it applied
 			applied = append(applied, chunk...)
 		default:
+			failed = chunk
 			return fmt.Errorf("sending %s: %w", strings.Join(texts, "; "), err)
 		}
 		return nil
 	}
 	for _, chunk := range chunks(parsed) {
 		if err := send(chunk); err != nil {
-			return f.saveAfterFailure(ctx, d, t, keep, parsed, applied, err)
+			return f.saveAfterFailure(ctx, d, t, keep, partialRun{parsed, applied, failed, skipped}, err)
 		}
 	}
 	if len(skipped) == len(parsed) {
@@ -168,31 +171,52 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 	return nil
 }
 
+// saveTimeout is the time the write to flash after a failed chunk gets. It is a limit of its own:
+// the run that failed may have used up its whole deadline, and the save is the one thing that
+// still has to go out (the SaveData value is read with it).
+const saveTimeout = 15 * time.Second
+
+// partialRun is what Apply knows when a chunk failed: every line of the plan, the ones sent
+// (the device answered; nothing is read back yet), the chunk whose send failed (it may or may not
+// have reached the device) and the ones left out on purpose (SkippedError). The rest of the
+// plan was never sent.
+type partialRun struct{ parsed, sent, failed, leftOut []fixLine }
+
 // saveAfterFailure ends a run in which a chunk failed after earlier ones went out. Those lines
 // are live on the device; with SaveData 0 (or a long save interval) they would vanish on its next
-// restart, so they are written to flash first, unless one of them saved by itself. The error says
-// what is on the device and what is not (the failed chunk may or may not have been applied, so it
-// is "not confirmed"), and still wraps the failure. With nothing applied the device is untouched
-// and cause is returned as it is.
-func (f *Fixer) saveAfterFailure(ctx context.Context, d model.Device, t tasmota.Target, keep string, parsed, applied []fixLine, cause error) error {
-	if len(applied) == 0 {
+// restart, so they are written to flash first, with a context of their own, unless one of them
+// saved by itself. The error says what is known: which lines were sent, whether they were saved,
+// which chunk failed, and which lines were not sent (the later ones, and the ones left out on
+// purpose), and still wraps the failure. With nothing sent the device is untouched and cause is
+// returned as it is.
+func (f *Fixer) saveAfterFailure(ctx context.Context, d model.Device, t tasmota.Target, keep string, run partialRun, cause error) error {
+	if len(run.sent) == 0 {
 		return cause
 	}
 	var saveErr error
-	if !savesItself(applied) {
-		saveErr = f.saveKeeping(ctx, d, t, keep)
+	if !savesItself(run.sent) {
+		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), saveTimeout)
+		defer cancel()
+		saveErr = f.saveKeeping(sctx, d, t, keep)
 	}
-	var open []fixLine // not confirmed: the failed chunk and everything after it
-	for _, l := range parsed {
-		if !slices.Contains(applied, l) {
-			open = append(open, l)
+	var later []fixLine // never sent: after the failed chunk
+	for _, l := range run.parsed {
+		if !slices.Contains(run.sent, l) && !slices.Contains(run.failed, l) && !slices.Contains(run.leftOut, l) {
+			later = append(later, l)
 		}
 	}
-	state := fmt.Sprintf("partly applied: %d of %d settings are on the device and written to flash (%s)", len(applied), len(parsed), keyNames(applied))
+	msg := fmt.Sprintf("partly sent: %d of %d settings were sent and are written to flash, not read back (%s)", len(run.sent), len(run.parsed), keyNames(run.sent))
 	if saveErr != nil {
-		state = fmt.Sprintf("partly applied: %d of %d settings are on the device but NOT written to flash (%v), so a restart loses them (%s)", len(applied), len(parsed), saveErr, keyNames(applied))
+		msg = fmt.Sprintf("partly sent: %d of %d settings were sent but are NOT written to flash (%v), so a restart loses them, and not read back (%s)", len(run.sent), len(run.parsed), saveErr, keyNames(run.sent))
 	}
-	return fmt.Errorf("%s; not confirmed: %s: %w", state, keyNames(open), cause)
+	msg += "; the failed step (" + keyNames(run.failed) + ") may or may not have reached the device"
+	if len(later) > 0 {
+		msg += "; not sent: " + keyNames(later)
+	}
+	if len(run.leftOut) > 0 {
+		msg += "; not sent, left out on purpose (reached over MQTT only): " + keyNames(run.leftOut)
+	}
+	return fmt.Errorf("%s: %w", msg, cause)
 }
 
 // savesItself reports whether a line that was sent writes the device's settings to flash: a

@@ -19,12 +19,18 @@ type fakeCmd struct {
 	mu   sync.Mutex
 	sent []string
 	err  func(cmd string) error
+	// what the context of each command looked like when it was sent (parallel to sent)
+	ctxErrs   []error
+	deadlines []time.Time
 }
 
-func (f *fakeCmd) Command(_ context.Context, _ tasmota.Target, c string) (json.RawMessage, error) {
+func (f *fakeCmd) Command(ctx context.Context, _ tasmota.Target, c string) (json.RawMessage, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sent = append(f.sent, c)
+	f.ctxErrs = append(f.ctxErrs, ctx.Err())
+	dl, _ := ctx.Deadline()
+	f.deadlines = append(f.deadlines, dl)
 	if f.err != nil {
 		if err := f.err(c); err != nil {
 			return nil, err
@@ -34,13 +40,15 @@ func (f *fakeCmd) Command(_ context.Context, _ tasmota.Target, c string) (json.R
 }
 
 type fakeRead struct {
-	vals  map[string]string
-	errs  []error // returned one per call before values are served
-	calls [][]string
+	vals    map[string]string
+	errs    []error // returned one per call before values are served
+	calls   [][]string
+	ctxErrs []error // the state of the context of each call
 }
 
-func (r *fakeRead) ReadKeys(_ context.Context, _ model.DeviceID, keys []string) (map[string]string, error) {
+func (r *fakeRead) ReadKeys(ctx context.Context, _ model.DeviceID, keys []string) (map[string]string, error) {
 	r.calls = append(r.calls, keys)
+	r.ctxErrs = append(r.ctxErrs, ctx.Err())
 	if len(r.errs) > 0 {
 		err := r.errs[0]
 		r.errs = r.errs[1:]
@@ -197,7 +205,12 @@ func TestApplyWritesEarlierChunksToFlashWhenALaterOneFails(t *testing.T) {
 		t.Errorf("the cause is lost: %v", err)
 	}
 	msg := err.Error()
-	for _, want := range []string{"partly applied", "8 of 20", "written to flash", "SetOption00", "SetOption70", "not confirmed: SetOption80", "SetOption91"} {
+	for _, want := range []string{
+		"partly sent: 8 of 20 settings were sent and are written to flash, not read back (SetOption00, SetOption10,",
+		"SetOption60, SetOption70)",
+		"the failed step (SetOption80, SetOption90, SetOption01, SetOption11, SetOption21, SetOption31, SetOption41, SetOption51) may or may not have reached the device",
+		"; not sent: SetOption61, SetOption71, SetOption81, SetOption91: sending SetOption80 1;",
+	} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("error lacks %q: %v", want, msg)
 		}
@@ -226,12 +239,96 @@ func TestApplyReportsThatPartlyAppliedChangesAreNotSavedWhenTheSaveFailsToo(t *t
 	}
 }
 
+// Why (#503, review): the person reads this error to decide what to do, so it says only what is
+// known. A chunk the device answered is "sent" (nothing is read back yet); the chunk that failed
+// may or may not have arrived; lines the router refused on purpose (they could cut off a device
+// reached over MQTT only) and lines after the failure were not sent.
+func TestApplyErrorSeparatesSentFailedAndLeftOutLines(t *testing.T) {
+	c := &fakeCmd{err: func(cmd string) error {
+		switch {
+		case strings.Contains(cmd, "Topic") || strings.Contains(cmd, "MqttHost"):
+			return transport.ErrCutOff
+		case cmd == "Backlog PowerOnState 0":
+			return errors.New("refused")
+		}
+		return nil
+	}}
+	r := &fakeRead{vals: map[string]string{"SaveData": "0"}}
+	lines := append(manyLines(8), "Topic other", "PowerOnState 0", "MqttHost 10.0.0.9")
+	err := newFixer(c, r).Apply(context.Background(), model.Device{ID: 1}, lines)
+	if err == nil {
+		t.Fatal("a failed step was reported as success")
+	}
+	msg := err.Error()
+	for _, want := range []string{
+		"partly sent: 8 of 11 settings were sent and are written to flash, not read back (SetOption00,",
+		"; the failed step (PowerOnState) may or may not have reached the device",
+		"; not sent, left out on purpose (reached over MQTT only): Topic, MqttHost: sending PowerOnState 0: refused",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("error lacks %q: %v", want, msg)
+		}
+	}
+	if strings.Contains(msg, "; not sent: ") {
+		t.Errorf("nothing came after the failed step, yet: %v", msg)
+	}
+	// Topic and MqttHost would have restarted (and so saved) the device; they were left out, so the rest is saved by hand
+	if c.sent[len(c.sent)-1] != "SaveData 0" {
+		t.Errorf("sent %q: the lines that went out must be saved", c.sent)
+	}
+}
+
+// Why (#503, review): the run that failed may have used up its whole deadline (policyjob gives
+// the apply one context for every chunk), and a save that shares it fails with the same
+// "deadline exceeded" at exactly the moment it is needed. The save, and the read of the SaveData
+// value it needs, get a context of their own: not done, with a deadline of its own.
+func TestApplySavesAfterAFailureWithAContextOfItsOwn(t *testing.T) {
+	for name, lines := range map[string][]string{
+		"SaveData value read up front":     manyLines(20),
+		"SaveData value read for the save": append(manyLines(10), "Hostname plug"), // a restart in the batch: no read up front
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+			defer cancel()
+			second := failNthBacklog(2, context.DeadlineExceeded)
+			c := &fakeCmd{err: func(cmd string) error {
+				if err := second(cmd); err != nil {
+					cancel() // the run's deadline is gone
+					return err
+				}
+				return nil
+			}}
+			r := &fakeRead{vals: map[string]string{"SaveData": "0"}}
+			err := newFixer(c, r).Apply(ctx, model.Device{ID: 1}, lines)
+			if err == nil || !errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("err = %v", err)
+			}
+			save := len(c.sent) - 1
+			if c.sent[save] != "SaveData 0" {
+				t.Fatalf("sent %q: the lines that went out were not saved", c.sent)
+			}
+			if c.ctxErrs[save] != nil {
+				t.Errorf("the save used the context of the failed run: %v", c.ctxErrs[save])
+			}
+			if left := time.Until(c.deadlines[save]); left <= 0 || left > saveTimeout {
+				t.Errorf("the save has %v left, want a deadline within %v", left, saveTimeout)
+			}
+			if n := len(r.ctxErrs); n > 0 && r.ctxErrs[n-1] != nil {
+				t.Errorf("the SaveData value was read with the context of the failed run: %v", r.ctxErrs[n-1])
+			}
+			if !strings.Contains(err.Error(), "written to flash") || strings.Contains(err.Error(), "NOT") {
+				t.Errorf("the save went out: %v", err)
+			}
+		})
+	}
+}
+
 // Why (#503): nothing was applied when the first chunk fails, so there is nothing to save and
 // the plain error stays (the device is untouched; a SaveData would only wear the flash).
 func TestApplySavesNothingWhenTheFirstChunkFails(t *testing.T) {
 	c := &fakeCmd{err: failNthBacklog(1, tasmota.ErrTimeout)}
 	err := newFixer(c, &fakeRead{vals: map[string]string{"SaveData": "0"}}).Apply(context.Background(), model.Device{ID: 1}, manyLines(20))
-	if !errors.Is(err, tasmota.ErrTimeout) || strings.Contains(err.Error(), "partly") || count(c.sent, "SaveData") != 0 || len(c.sent) != 1 {
+	if !errors.Is(err, tasmota.ErrTimeout) || strings.Contains(err.Error(), "partly sent") || count(c.sent, "SaveData") != 0 || len(c.sent) != 1 {
 		t.Fatalf("err %v, sent %q", err, c.sent)
 	}
 }
@@ -247,7 +344,7 @@ func TestApplySavesPartlyAppliedChunksOfABatchWithItsOwnSave(t *testing.T) {
 		c := &fakeCmd{err: failNthBacklog(2, errors.New("refused"))}
 		r := &fakeRead{vals: map[string]string{"SaveData": "0"}}
 		err := newFixer(c, r).Apply(context.Background(), model.Device{ID: 1}, restarting)
-		if err == nil || !strings.Contains(err.Error(), "8 of 11") || c.sent[len(c.sent)-1] != "SaveData 0" || len(r.calls) != 1 {
+		if err == nil || !strings.Contains(err.Error(), "partly sent: 8 of 11") || c.sent[len(c.sent)-1] != "SaveData 0" || len(r.calls) != 1 {
 			t.Fatalf("err %v, sent %q, reads %v", err, c.sent, r.calls)
 		}
 	})
