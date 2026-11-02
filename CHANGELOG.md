@@ -14,6 +14,10 @@ always upgrade automatically.
 
 - An ESP32-C3 that Tasmota names by its package, `ESP8685` (embedded flash) or `ESP8686` (QFN24), is recognised as ESP32-C3. Before, it showed "The chip family is not known yet" and was never updated (#470, thanks @Noschvie)
 
+### Security
+
+- GHSA-fvgh-83hf-5jr9: a relay state containing a line break (a lone carriage return) could split the live event stream into extra events. The stream now treats every line break as part of one event, and relay states with control characters are dropped.
+
 ## 0.27.0 "Cordouan" (2026-11-01)
 
 ### Upgrade notes

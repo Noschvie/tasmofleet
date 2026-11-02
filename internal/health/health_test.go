@@ -683,6 +683,40 @@ func TestPowerFromStatTopic(t *testing.T) {
 	h.want(1, model.HealthOnline)
 }
 
+// Why (GHSA-fvgh-83hf-5jr9): a relay state is shown in the browser and written into the live
+// event stream. Anything a device (or any client allowed to publish on its topic) sends as a
+// "state" that holds control characters, line breaks above all, is not a relay state: it is
+// dropped, and the last real state stays.
+func TestPowerStateWithControlCharactersIsDropped(t *testing.T) {
+	h := newHarness(t, true, Options{}, mqttDev(1, "a"))
+	h.listen()
+	h.bus.emit(mqttbus.KindResult, "a", "RESULT", `{"POWER1":"ON"}`, false)
+	for _, tc := range []struct {
+		label  string
+		kind   mqttbus.Kind
+		suffix string
+		body   string
+	}{
+		{"RESULT with CR", mqttbus.KindResult, "RESULT", `{"POWER1":"ON\r\revent: power-2\rdata: x\r"}`},
+		{"STATE with LF", mqttbus.KindState, "STATE", `{"POWER1":"OFF\n"}`},
+		{"stat/POWER with CR", mqttbus.KindPower, "POWER1", "ON\r\revent: resync"},
+		{"RESULT with NUL", mqttbus.KindResult, "RESULT", `{"POWER1":"\u0000"}`},
+	} {
+		h.bus.emit(tc.kind, "a", tc.suffix, tc.body, false)
+		if got := h.svc.Get(1).Power["POWER1"]; got != "ON" {
+			t.Errorf("%s: POWER1 = %q, want the last real state ON", tc.label, got)
+		}
+	}
+	h.svc.NotePower(1, 1, "OFF\rdata: x") // the state a power command over HTTP reported
+	if got := h.svc.Get(1).Power["POWER1"]; got != "ON" {
+		t.Errorf("NotePower: POWER1 = %q, want the last real state ON", got)
+	}
+	h.bus.emit(mqttbus.KindResult, "a", "RESULT", `{"POWER2":"ON\r"}`, false)
+	if v, ok := h.svc.Get(1).Power["POWER2"]; ok {
+		t.Errorf("POWER2 = %q, want it dropped", v)
+	}
+}
+
 func TestGarbagePayloadStillSignOfLife(t *testing.T) {
 	h := newHarness(t, true, Options{}, mqttDev(1, "a"))
 	h.listen()

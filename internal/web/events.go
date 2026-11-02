@@ -206,10 +206,19 @@ func powerSig(hl model.Health) string {
 	return sb.String()
 }
 
-// writeSSE writes one event. Newlines in data become separate data: lines.
+// sseLineBreaks turns every line break an EventSource knows (CRLF, a lone CR, LF) into LF, and
+// sseNameClean drops them from an event name.
+var (
+	sseLineBreaks = strings.NewReplacer("\r\n", "\n", "\r", "\n")
+	sseNameClean  = strings.NewReplacer("\r", "", "\n", "")
+)
+
+// writeSSE writes one event. Every line break in data (LF, CRLF or a lone CR: EventSource ends a
+// line at each of them) becomes a separate data: line, and line breaks in the name are dropped, so
+// no input can start a second event (GHSA-fvgh-83hf-5jr9).
 func writeSSE(buf *bytes.Buffer, name, data string) {
-	buf.WriteString("event: " + name + "\n")
-	for line := range strings.SplitSeq(data, "\n") {
+	buf.WriteString("event: " + sseNameClean.Replace(name) + "\n")
+	for line := range strings.SplitSeq(sseLineBreaks.Replace(data), "\n") {
 		buf.WriteString("data: " + line + "\n")
 	}
 	buf.WriteString("\n")

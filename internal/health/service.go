@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"github.com/nofuturekid/tasmofleet/internal/clock"
 	"github.com/nofuturekid/tasmofleet/internal/events"
@@ -579,10 +580,14 @@ func (s *Service) onMessage(m mqttbus.Message) {
 	case mqttbus.KindState, mqttbus.KindResult:
 		s.applyJSON(ds, m.Payload, m.Kind == mqttbus.KindState, false)
 	case mqttbus.KindPower:
+		state := strings.ToUpper(strings.TrimSpace(string(m.Payload)))
+		if !validPowerState(state) {
+			break
+		}
 		if ds.h.Power == nil {
 			ds.h.Power = map[string]string{}
 		}
-		ds.h.Power[m.Suffix] = strings.ToUpper(strings.TrimSpace(string(m.Payload)))
+		ds.h.Power[m.Suffix] = state
 		ds.powerGen++ // a poll that read the device before this report is older than it
 	case mqttbus.KindSensor:
 		applyEnergy(ds, m.Payload)
@@ -644,6 +649,14 @@ func (s *Service) enqueue(f func()) {
 	}
 }
 
+// validPowerState reports whether text a device sent can be a relay state. Tasmota's own states
+// (ON, OFF, the custom StateText words) are plain printable text; anything with a control character,
+// a line break above all, is not a state. The state goes into the page and into the live event
+// stream, so such a value is dropped instead of shown (GHSA-fvgh-83hf-5jr9).
+func validPowerState(v string) bool {
+	return !strings.ContainsFunc(v, unicode.IsControl)
+}
+
 // applyJSON merges POWERn, Wifi.RSSI and UptimeSec from a STATE/RESULT
 // payload. Unparsable payloads still count as a sign of life.
 // skipPower leaves the power state as it is (a stale poll, see NotePower).
@@ -657,7 +670,7 @@ func (s *Service) applyJSON(ds *devState, payload []byte, telemetry, skipPower b
 			continue
 		}
 		var val string
-		if json.Unmarshal(v, &val) == nil {
+		if json.Unmarshal(v, &val) == nil && validPowerState(val) {
 			if ds.h.Power == nil {
 				ds.h.Power = map[string]string{}
 			}
@@ -704,7 +717,7 @@ func (s *Service) NotePower(id model.DeviceID, relay int, state string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	ds := s.devs[id]
-	if ds == nil {
+	if ds == nil || !validPowerState(state) {
 		return
 	}
 	key := "POWER" + strconv.Itoa(relay)
