@@ -43,6 +43,7 @@ func waitBoots(t *testing.T, d Controller, n int) {
 func settle() { time.Sleep(400 * time.Millisecond) }
 
 func TestNOUSProfilesReplayTheirCapturedTemplates(t *testing.T) {
+	t.Parallel()
 	// The two real NOUS A1T captures are the case of #327: the same model on two devices. Their replies
 	// must be exactly what the devices sent, or the comparison tests would run on invented data.
 	for profile, dir := range map[Profile]string{ProfileNOUSA1TBambu: "mr-bambu-plug", ProfileNOUSA1TPrusa: "prusa-plug"} {
@@ -60,6 +61,7 @@ func TestNOUSProfilesReplayTheirCapturedTemplates(t *testing.T) {
 }
 
 func TestTemplateStaysStoredOnABuiltInModule(t *testing.T) {
+	t.Parallel()
 	// T1/T3: on a built-in module Template answers and changes only the stored template. It changes
 	// nothing that runs, so the device must not restart; Module keeps saying "Sonoff Basic".
 	d := add(t, newTestFleet(t, "", Extra{}), DeviceSpec{Name: "lamp", Profile: ProfileESP8266_1M})
@@ -83,6 +85,7 @@ func TestTemplateStaysStoredOnABuiltInModule(t *testing.T) {
 }
 
 func TestTemplateOnModule0RestartsAndIsSaved(t *testing.T) {
+	t.Parallel()
 	// T3/T5: on Module 0 a Template write changes the active pin map, so the device restarts, and the
 	// restart writes it to flash: it is still there afterwards.
 	d := nousDevice(t, DeviceSpec{})
@@ -100,6 +103,7 @@ func TestTemplateOnModule0RestartsAndIsSaved(t *testing.T) {
 }
 
 func TestTemplateNameChangesTheModuleName(t *testing.T) {
+	t.Parallel()
 	// On Module 0 the module is named after the template; the fleet view groups by this name.
 	d := nousDevice(t, DeviceSpec{})
 	cm(t, d, `Template {"NAME":"Renamed"}`)
@@ -110,6 +114,7 @@ func TestTemplateNameChangesTheModuleName(t *testing.T) {
 }
 
 func TestModuleZeroAlwaysRestartsAndClearsGpioOnlyOnAChange(t *testing.T) {
+	t.Parallel()
 	// T4: Module n restarts even when the module does not change, and only a real change clears the per-pin
 	// Gpio settings. A planner that sends "Module 0" to a device already on Module 0 must see a restart
 	// but keep the user's Gpio choices.
@@ -141,6 +146,7 @@ func TestModuleZeroAlwaysRestartsAndClearsGpioOnlyOnAChange(t *testing.T) {
 }
 
 func TestModuleRefusesAnUnknownNumber(t *testing.T) {
+	t.Parallel()
 	// An invalid module number changes nothing and does not restart (CmndModule only acts when "present").
 	d := nousDevice(t, DeviceSpec{})
 	if got := cm(t, d, "Module 9999"); got != nousModule {
@@ -153,6 +159,7 @@ func TestModuleRefusesAnUnknownNumber(t *testing.T) {
 }
 
 func TestTemplateJSONIsPartial(t *testing.T) {
+	t.Parallel()
 	// T6: every field is optional and a missing one keeps its value; BASE 0 or an unknown module becomes 18
 	// (Generic). This is why the planner must always send the full array: a short one would silently keep old pins.
 	d := nousDevice(t, DeviceSpec{})
@@ -175,6 +182,7 @@ func TestTemplateJSONIsPartial(t *testing.T) {
 }
 
 func TestTemplateRefusesTheWrongChip(t *testing.T) {
+	t.Parallel()
 	// T7: ARCH is checked against the firmware's own. The refusal is the only protection against a template of another chip,
 	// so the simulator must apply it, change nothing and not restart.
 	d := nousDevice(t, DeviceSpec{})
@@ -201,6 +209,7 @@ func TestTemplateRefusesTheWrongChip(t *testing.T) {
 }
 
 func TestTemplateArchFollowsTheChip(t *testing.T) {
+	t.Parallel()
 	// ArchName upper-cases TASMOTA_ARCH: a device reports the arch of its own chip, so a template for an
 	// ESP32-S3 is refused by a C3 although both have more than 21 pins.
 	d := add(t, newTestFleet(t, "", Extra{}), DeviceSpec{Name: "c3", Profile: ProfileESP32C3})
@@ -214,6 +223,7 @@ func TestTemplateArchFollowsTheChip(t *testing.T) {
 }
 
 func TestDeviceSpecTemplateAndModule(t *testing.T) {
+	t.Parallel()
 	// The devenv makes one NOUS plug deviate by starting it with another template; the module option starts a device on a built-in module.
 	deviant := UserTemplate{Name: "NOUS A1T", GPIO: []int{32, 0, 0, 0, 2720, 2656, 0, 0, 2624, 224, 320, 0, 0, 0}, Base: 49}
 	d := nousDevice(t, DeviceSpec{Template: &deviant})
@@ -242,6 +252,7 @@ func TestDeviceSpecTemplateAndModule(t *testing.T) {
 }
 
 func TestStatusReportsTheModule(t *testing.T) {
+	t.Parallel()
 	// The prober reads plain Status for the module (T2); after Module 1 it must say 1, or the fleet view
 	// would keep treating the device as on its template.
 	d := nousDevice(t, DeviceSpec{})
@@ -258,6 +269,7 @@ func TestStatusReportsTheModule(t *testing.T) {
 }
 
 func TestTemplateFlagNeedsGPIO(t *testing.T) {
+	t.Parallel()
 	// JsonTemplate reads FLAG only inside the GPIO block (support.ino:1944-1990): a FLAG sent alone is silently
 	// ignored. A planner that relied on FLAG alone would believe it had changed something.
 	d := nousDevice(t, DeviceSpec{})
@@ -271,6 +283,7 @@ func TestTemplateFlagNeedsGPIO(t *testing.T) {
 }
 
 func TestMinimalImageHasNoTemplateCommands(t *testing.T) {
+	t.Parallel()
 	// The Template command is not in the command table of the minimal image at all (support_command.ino:25,
 	// the #ifndef FIRMWARE_MINIMAL around the table), so it answers Unknown and changes nothing; the
 	// read-only guard inside CmndTemplate is unreachable there.

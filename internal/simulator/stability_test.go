@@ -10,6 +10,7 @@ import (
 // Why: the Stability e2e tests need a device that restarts for a named reason and one whose link got
 // worse; both must show in exactly the places Tasmota reports them (Status 1, Status 11, STATE).
 func TestRestartReportsTheGivenReasonAndABumpedBootCount(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "loop", Profile: ProfileESP8266_4M, RebootGap: 50 * time.Millisecond})
 	c, _ := Control(d)
@@ -38,6 +39,7 @@ func TestRestartReportsTheGivenReasonAndABumpedBootCount(t *testing.T) {
 }
 
 func TestSetWifiChangesSignalRSSIAndLinkCount(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "lamp", Profile: ProfileESP8266_4M})
 	c, _ := Control(d)

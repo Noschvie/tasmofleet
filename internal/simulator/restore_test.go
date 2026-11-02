@@ -32,6 +32,7 @@ func simDump(bootCount int, marker string) []byte {
 // and the live ESP32 answered "Unknown", #430). A simulator that still executed it would let a
 // restore path pass every test that cannot work on any real device.
 func TestWebGetConfigIsUnknownLikeOfficialBuilds(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "plug", Profile: ProfileESP32, Version: "16.0.0"})
 	before := dl(t, d)
@@ -48,6 +49,7 @@ func TestWebGetConfigIsUnknownLikeOfficialBuilds(t *testing.T) {
 // Why: this is how a restore over HTTP reaches the device (#430): GET /rs, then the multipart POST
 // of the dump to /u2. The device applies it, says Successful and restarts; /dl then returns it.
 func TestRestoreUploadAppliesTheDumpAndRestarts(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "plug", Profile: ProfileESP32, Version: "16.0.0"})
 	want := simDump(5, "restored")
@@ -69,6 +71,7 @@ func TestRestoreUploadAppliesTheDumpAndRestarts(t *testing.T) {
 // settings, which SettingsConfigRestore skips, so it keeps counting (live, 2026-11-01: a backup
 // with 145 restored onto a device at 147 gave 148). The restore's restart proof relies on it.
 func TestRestoreUploadKeepsCountingBoots(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "plug", Profile: ProfileESP32, Version: "16.0.0"})
 	before := d.BootCount()
@@ -84,6 +87,7 @@ func TestRestoreUploadKeepsCountingBoots(t *testing.T) {
 // "/.settings" header with the total size, the settings and the driver settings files (4224 bytes
 // on the live test device). The device takes exactly the size its header names.
 func TestRestoreUploadTakesAnESP32DumpWithItsSettingsHeader(t *testing.T) {
+	t.Parallel()
 	esp32Dump := func(size, total int) []byte {
 		b := make([]byte, total)
 		copy(b, "/.settings")
@@ -129,6 +133,7 @@ func TestRestoreUploadTakesAnESP32DumpWithItsSettingsHeader(t *testing.T) {
 // the type stays "file". A bare POST /u2 then applies no settings: the restore's own GET /rs is
 // what makes its upload a settings restore.
 func TestFileUploadLeavesTheFileTypeSet(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "plug", Profile: ProfileESP32, Version: "16.0.0"})
 	before := dl(t, d)
@@ -159,6 +164,7 @@ func TestFileUploadLeavesTheFileTypeSet(t *testing.T) {
 // Why: the device refuses a file that is not a settings dump with its own messages and neither
 // restarts nor changes anything; the client must see "Failed".
 func TestRestoreUploadRefusesBadDumps(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		name string
 		body []byte
@@ -188,6 +194,7 @@ func TestRestoreUploadRefusesBadDumps(t *testing.T) {
 // "Successful" and restarts, yet applies nothing. Only the verification after the restart can
 // tell, so the simulator keeps the trap.
 func TestRestoreUploadWithoutRsLooksSuccessfulButAppliesNothing(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "plug", Profile: ProfileESP32, Version: "16.0.0"})
 	before := dl(t, d)
@@ -203,6 +210,7 @@ func TestRestoreUploadWithoutRsLooksSuccessfulButAppliesNothing(t *testing.T) {
 
 // Why: the minimal firmware (FIRMWARE_MINIMAL) registers no /rs, so there is no restore over HTTP.
 func TestRestorePageMissingOnMinimal(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "min", Profile: ProfileESP8266Min})
 	if _, code, err := cmWithPath(d, "/rs", ""); err != nil || code != 404 {
@@ -240,6 +248,7 @@ func refPost(d Device, referer bool, filename string, data []byte) error {
 // which leaves the settings upload type of an earlier GET /rs set (seen live 2026-11-01). The
 // simulator must keep it armed, so a test can prove the next upload sets its own type first.
 func TestRefusedPostLeavesTheSettingsTypeArmed(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "plug", Profile: ProfileESP32, Version: "16.0.0", RefererCheck: true})
 	get := func(p string) []byte {

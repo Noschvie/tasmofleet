@@ -126,6 +126,7 @@ func dl(t *testing.T, d Device) []byte {
 // device really uses (live 2026-10-30: 2980 + 1116 B on an ESP8285, because
 // ResponseSize is 4000 there); an ESP32 has ResponseSize 6000 and sends 4096 B at once.
 func TestFileDownloadIsByteIdenticalToDlAndChunkedLikeTheDevice(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		profile Profile
 		chunks  []int
@@ -154,6 +155,7 @@ func TestFileDownloadIsByteIdenticalToDlAndChunkedLikeTheDevice(t *testing.T) {
 // chunk (CmndFileDownload publishes before it validates), so a client has to
 // drain it.
 func TestFileDownloadStrayQuestionMarkRunsAheadAndAbortSendsOneMoreChunk(t *testing.T) {
+	t.Parallel()
 	_, _, _, fb := brokerDevice(t, "stray", ProfileESP8266_1M)
 	fb.send("filedownload", fmt.Sprintf(`{"Password":%q,"Type":2}`, testMQTTPassword))
 	next(t, fb.down) // Started
@@ -187,6 +189,7 @@ func TestFileDownloadStrayQuestionMarkRunsAheadAndAbortSendsOneMoreChunk(t *test
 // Why: the password is the device's MqttPassword; a device that answered with
 // a wrong one would hide a restore/backup that the real device refuses.
 func TestFileCommandsRefuseWrongPasswordAndGroupTopic(t *testing.T) {
+	t.Parallel()
 	_, _, _, fb := brokerDevice(t, "guarded", ProfileESP8266_4M)
 	fb.send("filedownload", `{"Password":"wrong","Type":2}`)
 	if got := next(t, fb.down); got != `{"FileDownload":"Error 1"}` {
@@ -230,6 +233,7 @@ func (fb *fileBus) uploadAll(id int, data []byte, startArgs string) (maxSize int
 // must end up as the device's settings, with the restart that follows Done and
 // the LWT Offline that comes with it.
 func TestFileUploadType2RestoresTheDumpAndRestarts(t *testing.T) {
+	t.Parallel()
 	_, c, d, fb := brokerDevice(t, "balcony-windowsill", ProfileESP8266_1M)
 	want := bytes.Repeat([]byte{0x5A}, configDumpSize)
 	maxSize, final := fb.uploadAll(116, want, `"Type":2`)
@@ -248,6 +252,7 @@ func TestFileUploadType2RestoresTheDumpAndRestarts(t *testing.T) {
 
 // Why: a wrong MD5 must not restore anything or restart the device.
 func TestFileUploadMD5MismatchChangesNothing(t *testing.T) {
+	t.Parallel()
 	_, _, d, fb := brokerDevice(t, "md5", ProfileESP8266_4M)
 	before := dl(t, d)
 	fb.send("fileupload", fmt.Sprintf(`{"Password":%q,"Id":9,"Type":2,"Size":4096}`, testMQTTPassword))
@@ -272,6 +277,7 @@ func TestFileUploadMD5MismatchChangesNothing(t *testing.T) {
 // (no DISCONNECT, so the will fires). A client that builds a chunk one byte too
 // big would otherwise see the simulator accept what the device never does.
 func TestOversizedPacketDropsTheConnection(t *testing.T) {
+	t.Parallel()
 	b, c, _, _ := brokerDevice(t, "overflow", ProfileESP8266_4M)
 	topic := "cmnd/overflow/Status"
 	// wire size = 1 + 2 (remaining length) + 2 + len(topic) + len(payload)
@@ -294,6 +300,7 @@ func TestOversizedPacketDropsTheConnection(t *testing.T) {
 // full image on the safeboot ESP32 (office-monitor-thomas, 2026-10-30), success
 // on a dual-partition layout.
 func TestFileUploadType1FitsOnlyWhereHeadRoomAllows(t *testing.T) {
+	t.Parallel()
 	t.Run("safeboot layout refuses a full image before any data", func(t *testing.T) {
 		_, _, d, fb := brokerDevice(t, "single", ProfileESP32)
 		fb.send("fileupload", fmt.Sprintf(`{"Password":%q,"File":"tasmota32.bin","Id":116,"Type":1,"Size":2234912}`, testMQTTPassword))
@@ -330,6 +337,7 @@ func TestFileUploadType1FitsOnlyWhereHeadRoomAllows(t *testing.T) {
 // Why: the bootloader's header check also applies to an image sent over MQTT:
 // a wrong-family image must fail without a restart.
 func TestFileUploadType1WrongFamilyFailsWithoutRestart(t *testing.T) {
+	t.Parallel()
 	_, _, d, fb := brokerDevice(t, "wrongfam", ProfileESP32Dual)
 	img, err := NewImage(fixtures, "tasmota32c3.bin", "16.1.0")
 	if err != nil {
@@ -346,6 +354,7 @@ func TestFileUploadType1WrongFamilyFailsWithoutRestart(t *testing.T) {
 // Why: the minimal and safeboot builds compile the file commands out
 // (FIRMWARE_MINIMAL), so Type 1 can never be the second stage.
 func TestFileCommandsAreUnknownInMinimal(t *testing.T) {
+	t.Parallel()
 	b, c, _, _ := brokerDevice(t, "mini", ProfileESP8266Min)
 	if err := b.Publish("cmnd/mini/fileupload", []byte(`{"Password":"x","Id":1,"Type":1,"Size":4096}`), false); err != nil {
 		t.Fatal(err)
@@ -357,6 +366,7 @@ func TestFileCommandsAreUnknownInMinimal(t *testing.T) {
 // recorded commands (Commands(), used in assertions and dev output) must not,
 // whichever way the command arrived: MQTT, HTTP /cm or inside a Backlog.
 func TestRecordedFileCommandsDoNotContainThePassword(t *testing.T) {
+	t.Parallel()
 	b, _, d, fb := brokerDevice(t, "redact", ProfileESP8266_4M)
 	fb.download(testMQTTPassword)
 	payload := fmt.Sprintf(`{"Password":"%s","Type":2}`, testMQTTPassword)
@@ -388,6 +398,7 @@ func TestRecordedFileCommandsDoNotContainThePassword(t *testing.T) {
 // Why: a link that dies halfway through an upload leaves the device untouched;
 // the engine's per-ack timeout must be what ends the transfer.
 func TestFaultMQTTUploadCutStopsAcknowledging(t *testing.T) {
+	t.Parallel()
 	_, _, d, fb := brokerDevice(t, "cut", ProfileESP32Dual, Fault{Kind: FaultMQTTUploadCut, Chunks: 1})
 	img, _ := NewImage(fixtures, "tasmota32.bin", "16.1.0")
 	fb.send("fileupload", fmt.Sprintf(`{"Password":%q,"Id":116,"Type":1,"Size":%d}`, testMQTTPassword, len(img)))
@@ -406,6 +417,7 @@ func TestFaultMQTTUploadCutStopsAcknowledging(t *testing.T) {
 // Why: the nastiest case for the engine is a flash that worked while the final
 // Done never arrived: it must verify the new version, not resend.
 func TestFaultMQTTUploadLostDoneStillFlashes(t *testing.T) {
+	t.Parallel()
 	_, _, d, fb := brokerDevice(t, "lostdone", ProfileESP32Dual, Fault{Kind: FaultMQTTUploadLostDone})
 	img, _ := NewImage(fixtures, "tasmota32.bin", "16.1.0")
 	fb.send("fileupload", fmt.Sprintf(`{"Password":%q,"Id":116,"Type":1,"Size":%d}`, testMQTTPassword, len(img)))
@@ -427,6 +439,7 @@ func TestFaultMQTTUploadLostDoneStillFlashes(t *testing.T) {
 // (what an unreachable host gives), not an EOF, and it must stay that way after
 // a reboot.
 func TestFaultHTTPUnreachableRefusesConnectionsAndKeepsMQTT(t *testing.T) {
+	t.Parallel()
 	b, c, d, _ := brokerDevice(t, "nohttp", ProfileESP8266_4M, Fault{Kind: FaultHTTPUnreachable})
 	refused := func(when string) {
 		t.Helper()
@@ -455,6 +468,7 @@ func TestFaultHTTPUnreachableRefusesConnectionsAndKeepsMQTT(t *testing.T) {
 // device cannot connect, reports it after the connect timeout and neither
 // reboots nor goes silent (live, 2026-10-30).
 func TestFaultFWUnreachableReportsConnectionFailedWithoutReboot(t *testing.T) {
+	t.Parallel()
 	b, c, d, _ := brokerDevice(t, "nofw", ProfileESP8266_4M, Fault{Kind: FaultFWUnreachable, Duration: 150 * time.Millisecond})
 	cm(t, d, "OtaUrl http://127.0.0.1:1/fw/16.1.0/tasmota.bin.gz")
 	start := time.Now()
@@ -473,6 +487,7 @@ func TestFaultFWUnreachableReportsConnectionFailedWithoutReboot(t *testing.T) {
 // publishes its own RESULT (CmndBacklog calls ResponseClear). A client waiting
 // for one merged reply would wait forever.
 func TestBacklogOverMQTTPublishesOneResultPerCommand(t *testing.T) {
+	t.Parallel()
 	b, c, _, _ := brokerDevice(t, "bl", ProfileESP8266_4M)
 	if err := b.Publish("cmnd/bl/Backlog", []byte("Power ON;Power OFF"), false); err != nil {
 		t.Fatal(err)
@@ -509,6 +524,7 @@ func device(t *testing.T, c Controller) *simDevice {
 // For each layout an upload of exactly head_room is accepted and one sector more
 // is Error 2 (Error 2 comes before any data is touched).
 func TestHeadRoomPerLayoutAndTheBoundaryOfAType1Upload(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		profile Profile
 		kib     int
@@ -542,6 +558,7 @@ func TestHeadRoomPerLayoutAndTheBoundaryOfAType1Upload(t *testing.T) {
 // Why: a settings dump may be 2 to 16 KiB (SettingsBufferAlloc); only more is
 // Error 2. Refusing a 4 KiB-plus size would keep a valid restore off the MQTT path.
 func TestFileUploadType2AcceptsUpTo16KiB(t *testing.T) {
+	t.Parallel()
 	_, _, _, fb := brokerDevice(t, "t2size", ProfileESP8266_4M)
 	for _, size := range []int{2048, 8192, 16384} {
 		fb.send("fileupload", fmt.Sprintf(`{"Password":%q,"Id":5,"Type":2,"Size":%d}`, testMQTTPassword, size))
@@ -562,6 +579,7 @@ func TestFileUploadType2AcceptsUpTo16KiB(t *testing.T) {
 // on: Aborted for FileUpload 0 and for a data message with another Id, Error 3
 // for a type the device does not know (after the room check).
 func TestFileUploadAbortMismatchedIdAndInvalidType(t *testing.T) {
+	t.Parallel()
 	_, _, _, fb := brokerDevice(t, "abort", ProfileESP8266_4M)
 	start := func() {
 		fb.send("fileupload", fmt.Sprintf(`{"Password":%q,"Id":116,"Type":2,"Size":4096}`, testMQTTPassword))
@@ -589,6 +607,7 @@ func TestFileUploadAbortMismatchedIdAndInvalidType(t *testing.T) {
 // sends an empty Data first sees MaxSize shrink 850 -> 619; sizing chunks from
 // the latest MaxSize (not the first) is what the protocol needs.
 func TestFileUploadMaxSizeShrinksOnRepeatedPositionZeroMessages(t *testing.T) {
+	t.Parallel()
 	_, _, _, fb := brokerDevice(t, "balcony-windowsill", ProfileESP8266_4M)
 	fb.send("fileupload", fmt.Sprintf(`{"Password":%q,"Id":116,"Type":2,"Size":4096}`, testMQTTPassword))
 	next(t, fb.up)
@@ -604,6 +623,7 @@ func TestFileUploadMaxSizeShrinksOnRepeatedPositionZeroMessages(t *testing.T) {
 // Why: the ESP32 safeboot image is built with FIRMWARE_MINIMAL, so it has no
 // file commands either; a push over MQTT cannot target it.
 func TestFileCommandsAreUnknownInESP32Safeboot(t *testing.T) {
+	t.Parallel()
 	b, c, f := newBrokerFleet(t, Extra{})
 	add(t, f, DeviceSpec{Name: "sb", Profile: ProfileESP32, Variant: "safeboot", MQTTPassword: testMQTTPassword})
 	c.waitFor(t, "[R]tele/sb/LWT=Online")

@@ -5,6 +5,7 @@ import "testing"
 // Why: the engine's family guard and the device check must agree on the
 // header format captured from the real release images.
 func TestNewImageHeaderMatchesFamily(t *testing.T) {
+	t.Parallel()
 	for file, want := range map[string]string{
 		"tasmota.bin.gz": "esp8266", "tasmota-minimal.bin.gz": "esp8266", "tasmota32.bin": "esp32",
 		"tasmota32c3.bin": "esp32c3", "tasmota32s3.bin": "esp32s3", "tasmota32solo1.bin": "esp32",
@@ -34,6 +35,7 @@ func TestNewImageHeaderMatchesFamily(t *testing.T) {
 // Why: Upgrade parameters decide whether a device starts flashing; the matrix
 // is from the research doc (OBS/SRC).
 func TestUpgradeParameterMatrix(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	for param, accept := range map[string]bool{"": false, "0": false, "2": false, "01": false, "ON": false,
 		"16.0.0": false, "15.0.0": false, "abc": false, "1": true, "17.0.0": true, "16.0.1": true} {
@@ -51,6 +53,7 @@ func TestUpgradeParameterMatrix(t *testing.T) {
 }
 
 func TestMinimalURLRewrite(t *testing.T) {
+	t.Parallel()
 	for in, want := range map[string]string{
 		"http://h/tasmota.bin.gz": "http://h/tasmota-minimal.bin.gz", "http://h/tasmota-lite.bin": "http://h/tasmota-minimal.bin",
 		"http://h/x/tasmota": "http://h/x/tasmota-minimal",
@@ -65,6 +68,7 @@ func TestMinimalURLRewrite(t *testing.T) {
 }
 
 func TestUnknownReplyShape(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "a", Profile: ProfileESP8266_4M})
 	for in, want := range map[string]string{

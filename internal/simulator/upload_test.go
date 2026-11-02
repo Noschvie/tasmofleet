@@ -55,6 +55,7 @@ func esp32Image(t *testing.T, name, version string) []byte {
 // Why: the push delivery must flash exactly like the web UI form does:
 // GET /up, then the multipart POST; the device restarts on the new version.
 func TestU2UploadFlashesAndRestarts(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "plug", Profile: ProfileESP32, Version: "16.0.0"})
 	getUp(t, d)
@@ -83,6 +84,7 @@ func slicesContainsPrefix(l []string, p string) bool {
 // skips GET /up would report a success that did not happen; the simulator keeps
 // this trap so such a client fails its test.
 func TestU2WithoutUpPageLooksSuccessfulButFlashesNothing(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "plug", Profile: ProfileESP32, Version: "16.0.0"})
 	page, err := postU2(d, "tasmota32.bin", esp32Image(t, "tasmota32.bin", "16.1.0"))
@@ -95,6 +97,7 @@ func TestU2WithoutUpPageLooksSuccessfulButFlashesNothing(t *testing.T) {
 
 // Why: the upload type is consumed by one upload; a second POST needs a new GET /up.
 func TestU2UploadTypeIsOneShot(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "plug", Profile: ProfileESP32, Version: "16.0.0"})
 	getUp(t, d)
@@ -111,6 +114,7 @@ func TestU2UploadTypeIsOneShot(t *testing.T) {
 // Why: the device refuses what it cannot run, with Tasmota's own messages; the
 // client must see a failure and nothing may be flashed.
 func TestU2Refusals(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name    string
 		profile Profile
@@ -139,6 +143,7 @@ func TestU2Refusals(t *testing.T) {
 // Why: a body cut halfway (wifi drop) must leave the old firmware running and
 // the client with a transport error, never with a success page.
 func TestU2ConnectionCutFlashesNothing(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "plug", Profile: ProfileESP32, Version: "16.0.0", Faults: []Fault{{Kind: FaultUploadCut}}})
 	getUp(t, d)
@@ -152,6 +157,7 @@ func TestU2ConnectionCutFlashesNothing(t *testing.T) {
 // Why: the dangerous ambiguity: the image is flashed but the reply is lost. The
 // client cannot tell from the error, so it must probe and never resend.
 func TestU2LostReplyStillFlashes(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "plug", Profile: ProfileESP32, Version: "16.0.0", Faults: []Fault{{Kind: FaultUploadLostReply}}})
 	getUp(t, d)
@@ -165,6 +171,7 @@ func TestU2LostReplyStillFlashes(t *testing.T) {
 // Why: flash writes on a real device are slow; a client with a short timeout
 // must be able to hit it in a test.
 func TestU2SlowWriteDelaysTheReply(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "plug", Profile: ProfileESP32, Version: "16.0.0", Faults: []Fault{{Kind: FaultSlowWrite, Duration: 300 * time.Millisecond}}})
 	getUp(t, d)
@@ -180,6 +187,7 @@ func TestU2SlowWriteDelaysTheReply(t *testing.T) {
 // Why: the wrong_family fault is shared with the pull flow; it must make the
 // upload fail too, so one scripted fault covers both deliveries.
 func TestU2WrongFamilyFaultAppliesToAnyImage(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "plug", Profile: ProfileESP32, Version: "16.0.0", Faults: []Fault{{Kind: FaultWrongFamily}}})
 	getUp(t, d)
@@ -194,6 +202,7 @@ func TestU2WrongFamilyFaultAppliesToAnyImage(t *testing.T) {
 // Tasmota answers "Not enough space" and flashes nothing. The device keeps
 // running, and the download path (through safeboot) still works.
 func TestU2NoSpaceFaultRefusesAndKeepsRunning(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "monitor", Profile: ProfileESP32, Version: "16.0.0", Faults: []Fault{{Kind: FaultUploadNoSpace}}})
 	getUp(t, d)

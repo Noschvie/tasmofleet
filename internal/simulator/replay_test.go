@@ -9,6 +9,7 @@ import (
 // Why: the simulator is only a trustworthy stand-in if an unchanged device
 // answers exactly what the real one sent (raw text, decimals, key order).
 func TestVerbatimReplayIsByteIdentical(t *testing.T) {
+	t.Parallel()
 	cmds := map[string]string{
 		"state.json": "State", "module.json": "Module", "modules.json": "Modules", "template.json": "Template",
 		"hostname.json": "Hostname", "topic.json": "Topic", "power.json": "Power", "teleperiod.json": "TelePeriod",
@@ -45,6 +46,7 @@ func TestVerbatimReplayIsByteIdentical(t *testing.T) {
 // Why: Upgrade's reply is how a minimal device is identified, so its text
 // must follow the device version, not the capture.
 func TestUpgradeQueryFollowsDeviceVersion(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "plug", Profile: ProfileESP8266_4M, Version: "15.6.0"})
 	if got := cm(t, d, "Upgrade"); got != `{"Upgrade":"1 or >15.6.0 to upgrade"}` {
@@ -57,6 +59,7 @@ func TestUpgradeQueryFollowsDeviceVersion(t *testing.T) {
 
 // Why: pollers decide "is this device on minimal" from these replies.
 func TestMinimalAnswersOnlyItsFiveCommands(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "lamp", Profile: ProfileESP8266Min, Version: "16.0.0"})
 	for _, c := range []string{"Status 2", "Status 0", "Power", "Module", "Backlog Power ON", "State"} {
@@ -103,6 +106,7 @@ func indexOf(s, sub string) int {
 // Why: Time/Uptime/Heap must move or health checks and "uptime reset after
 // reboot" assertions would be meaningless.
 func TestLiveFieldsAreRecomputedAndIdentityRewritten(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "kitchen", Profile: ProfileESP8266_4M})
 	got := cm(t, d, "Status 0")
@@ -126,6 +130,7 @@ func TestLiveFieldsAreRecomputedAndIdentityRewritten(t *testing.T) {
 }
 
 func TestHardwareOfSyntheticProfiles(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	for prof, want := range map[Profile]string{
 		ProfileESP32C3: "ESP32-C3", ProfileESP32S2: "ESP32-S2", ProfileESP32S3: "ESP32-S3", ProfileUnknownChip: "ESP32-X9", ProfileESP8266_1M: "ESP8285N08",

@@ -27,6 +27,7 @@ func startUpgrade(t *testing.T, d Controller, fw *firmwareServer, file string) {
 // Why: a reply lost on the wire must not hide that the command ran; the
 // engine's "probe before re-sending Upgrade" rule depends on this.
 func TestDropAndTimeoutExecuteTheCommandButLoseTheReply(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := newDirect(t, f, "a", Fault{Kind: FaultDrop, After: "Power ON"}, Fault{Kind: FaultTimeout, After: "Power OFF"})
 	if _, _, err := cmWith(d, "Power ON", time.Second, nil); err == nil {
@@ -47,6 +48,7 @@ func TestDropAndTimeoutExecuteTheCommandButLoseTheReply(t *testing.T) {
 }
 
 func TestTimeoutWithDurationAnswersLate(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := newDirect(t, f, "a", Fault{Kind: FaultTimeout, After: "State", Duration: 150 * time.Millisecond})
 	start := time.Now()
@@ -59,6 +61,7 @@ func TestTimeoutWithDurationAnswersLate(t *testing.T) {
 // Why: Unknown for Status is how a poller recognises minimal; the fault must
 // let a test produce it on demand without changing the image.
 func TestUnknownCommandFaultAndAuthFault(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := newDirect(t, f, "a", Fault{Kind: FaultUnknownCommand, After: "Status 2"}, Fault{Kind: FaultAuth, After: "Upgrade 1"})
 	if got := cm(t, d, "Status 2"); got != `{"Command":"Unknown","Input":"STATUS 2"}` {
@@ -76,6 +79,7 @@ func TestUnknownCommandFaultAndAuthFault(t *testing.T) {
 
 // Why: WebPassword devices answer 401 until the right credentials are sent.
 func TestWebPasswordAuth(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "locked", Profile: ProfileESP8266_4M, User: "admin", Password: "fake-pass"})
 	_, code, _ := cmWith(d, "State", time.Second, nil)
@@ -87,6 +91,7 @@ func TestWebPasswordAuth(t *testing.T) {
 }
 
 func TestDownloadFailFaultArmedByUpgrade(t *testing.T) {
+	t.Parallel()
 	fw := newFirmwareServer(t, map[string]string{"tasmota.bin.gz": "16.1.0"})
 	f := newTestFleet(t, "", Extra{})
 	d := newDirect(t, f, "a", Fault{Kind: FaultDownloadFail, After: "Upgrade 1"})
@@ -102,6 +107,7 @@ func TestDownloadFailFaultArmedByUpgrade(t *testing.T) {
 }
 
 func TestStayOldVersionFault(t *testing.T) {
+	t.Parallel()
 	fw := newFirmwareServer(t, map[string]string{"tasmota.bin.gz": "16.1.0"})
 	f := newTestFleet(t, "", Extra{})
 	d := newDirect(t, f, "a", Fault{Kind: FaultStayOldVersion})
@@ -111,6 +117,7 @@ func TestStayOldVersionFault(t *testing.T) {
 }
 
 func TestLongRebootAndRebootGapOption(t *testing.T) {
+	t.Parallel()
 	fw := newFirmwareServer(t, map[string]string{"tasmota.bin.gz": "16.1.0"})
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "a", Profile: ProfileESP8266_4M, RebootGap: 50 * time.Millisecond,
@@ -133,6 +140,7 @@ func TestLongRebootAndRebootGapOption(t *testing.T) {
 
 // Why: "device never comes back" is a terminal scenario for the engine.
 func TestNeverReturnsFault(t *testing.T) {
+	t.Parallel()
 	fw := newFirmwareServer(t, map[string]string{"tasmota.bin.gz": "16.1.0"})
 	f := newTestFleet(t, "", Extra{})
 	d := newDirect(t, f, "a", Fault{Kind: FaultNeverReturns})
@@ -148,6 +156,7 @@ func TestNeverReturnsFault(t *testing.T) {
 }
 
 func TestRebootHangAcceptsAndHangs(t *testing.T) {
+	t.Parallel()
 	fw := newFirmwareServer(t, map[string]string{"tasmota.bin.gz": "16.1.0"})
 	f := newTestFleet(t, "", Extra{TimeScale: 0.2})
 	d := newDirect(t, f, "a", Fault{Kind: FaultRebootHang})
@@ -166,6 +175,7 @@ func TestRebootHangAcceptsAndHangs(t *testing.T) {
 // host must refuse before sending a single packet, never follow redirects
 // and never read unbounded data.
 func TestDownloadGuards(t *testing.T) {
+	t.Parallel()
 	fw := newFirmwareServer(t, map[string]string{"tasmota.bin.gz": "16.1.0"})
 	redirect := httptest.NewServer(http.RedirectHandler(fw.URL+"/tasmota.bin.gz", http.StatusFound))
 	t.Cleanup(redirect.Close)
@@ -197,6 +207,7 @@ func TestDownloadGuards(t *testing.T) {
 }
 
 func TestListenersBindLoopbackByDefault(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := newDirect(t, f, "a")
 	if !strings.HasPrefix(d.Addr(), "127.0.0.1:") {
@@ -207,6 +218,7 @@ func TestListenersBindLoopbackByDefault(t *testing.T) {
 // Why: the simulator and the embedded broker must never end up in the
 // production binary.
 func TestNotInProductionBinary(t *testing.T) {
+	t.Parallel()
 	out, err := exec.CommandContext(context.Background(), "go", "list", "-deps", "github.com/nofuturekid/tasmofleet/cmd/tasmofleet").CombinedOutput()
 	if err != nil {
 		t.Fatalf("go list: %v\n%s", err, out)
@@ -220,6 +232,7 @@ func TestNotInProductionBinary(t *testing.T) {
 
 // Why: Fleet.Close must stop everything promptly, also mid-OTA.
 func TestCloseIsPromptMidUpdate(t *testing.T) {
+	t.Parallel()
 	fw := newFirmwareServer(t, map[string]string{"tasmota.bin.gz": "16.1.0"})
 	f, err := NewFleetWith(FleetOptions{FixturesDir: fixtures}, Extra{TimeScale: 1})
 	if err != nil {
@@ -227,7 +240,9 @@ func TestCloseIsPromptMidUpdate(t *testing.T) {
 	}
 	d := add(t, f, DeviceSpec{Name: "a", Profile: ProfileESP8266_4M})
 	startUpgrade(t, d, fw, "tasmota.bin.gz")
-	time.Sleep(100 * time.Millisecond)
+	if err := d.WaitFor(ctxT(t), func(c Controller) bool { return c.Phase() != PhaseRun }); err != nil { // mid-update, not a fixed guess
+		t.Fatal(err)
+	}
 	start := time.Now()
 	_ = f.Close()
 	if time.Since(start) > 2*time.Second {
@@ -292,6 +307,7 @@ func (c *collector) waitForCount(t *testing.T, prefix string, n int) {
 // tools use query parameters; the real firmware takes both, so must the
 // simulator, or a locked device could not be probed in e2e.
 func TestWebPasswordBasicAuth(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "locked", Profile: ProfileESP8266_4M, User: "admin", Password: "fake-pass"})
 	get := func(user, pass string, useBasic bool) (int, string) {
@@ -340,6 +356,7 @@ func TestWebPasswordBasicAuth(t *testing.T) {
 // connection just closes. The simulator must reproduce exactly that, or the
 // client's Referer fix and its refusal detection cannot be tested.
 func TestRefererCheckRefusesSilentlyUnlessRefererNamesTheDevice(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	c := add(t, f, DeviceSpec{Name: "plug", Profile: ProfileESP8266_1M, Version: "15.6.0", RefererCheck: true})
 	d := c

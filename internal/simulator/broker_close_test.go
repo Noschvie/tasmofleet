@@ -24,6 +24,7 @@ import (
 // disconnecting while the broker closes is every test's cleanup, so Close
 // must not take that path.
 func TestBrokerCloseWhileClientsDisconnect(t *testing.T) {
+	t.Parallel()
 	for round := 0; round < 30; round++ {
 		b, err := StartBroker()
 		if err != nil {
@@ -88,6 +89,7 @@ func TestBrokerCloseWhileClientsDisconnect(t *testing.T) {
 // (checked against GetByListener when the fix was written); a closer that
 // takes the lock once cannot.
 func TestCloseClientsOfNeverLocksRecursively(t *testing.T) {
+	t.Parallel()
 	b, err := StartBroker()
 	if err != nil {
 		t.Fatal(err)

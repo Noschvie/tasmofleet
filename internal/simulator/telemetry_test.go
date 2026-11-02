@@ -28,6 +28,7 @@ func sensorPayload(t *testing.T, c *collector, topic string) map[string]json.Raw
 // Why: tasmofleet reads energy and sensors only from tele/SENSOR; a simulator that never
 // sends it leaves the Sensors box and the per-channel watts untestable end to end.
 func TestSimulatorPublishesSensorTelemetry(t *testing.T) {
+	t.Parallel()
 	_, c, f := newBrokerFleet(t, Extra{})
 	add(t, f, DeviceSpec{Name: "meter", Profile: ProfileESP8266_1M, Energy: 1})
 	add(t, f, DeviceSpec{Name: "dual", Profile: ProfileESP8266_1M, Energy: 2})
@@ -84,6 +85,7 @@ func TestSimulatorPublishesSensorTelemetry(t *testing.T) {
 // POWER could not exercise it end to end. NoRelay removes the key from the STATE the broker sees
 // and the JSON stays valid.
 func TestNoRelayDeviceReportsNoPowerKey(t *testing.T) {
+	t.Parallel()
 	_, c, f := newBrokerFleet(t, Extra{})
 	add(t, f, DeviceSpec{Name: "climate", Profile: ProfileESP8266_1M, NoRelay: true, Sensors: map[string]map[string]float64{"BME280": {"Temperature": 21.5}}})
 	prefix := "tele/climate/STATE="

@@ -10,6 +10,7 @@ import (
 // dual layout and safeboot itself the plain one; otherwise the engine's
 // layout test would be tested against a simulator that cannot tell them apart.
 func TestUpPageShowsTheLayout(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	single := add(t, f, DeviceSpec{Name: "single", Profile: ProfileESP32})
 	dual := add(t, f, DeviceSpec{Name: "dual", Profile: ProfileESP32Dual})
@@ -45,6 +46,7 @@ func TestUpPageShowsTheLayout(t *testing.T) {
 // partition). In safeboot fct must not restart again, and the switch back
 // must restore the app that was running.
 func TestU4SwitchesAndAnswers(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "plug", Profile: ProfileESP32, Version: "16.0.0"})
 	get := func(q string) string {
@@ -79,6 +81,7 @@ func TestU4SwitchesAndAnswers(t *testing.T) {
 // Why: the faults are what the engine's recovery is tested against; each must
 // do exactly what its name says and nothing else.
 func TestSafebootFaults(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	t.Run("no answer does not restart", func(t *testing.T) {
 		d := add(t, f, DeviceSpec{Name: "a", Profile: ProfileESP32, Faults: []Fault{{Kind: FaultSwitchNoAnswer}}})

@@ -105,6 +105,7 @@ func cmUp(t *testing.T, d Controller, cmnd string) string {
 // (The map order is random, so restart-causing settings land anywhere in the
 // loop; every command goes through cmUp.)
 func TestEditorFieldsAreStateful(t *testing.T) {
+	t.Parallel()
 	d := newSettingsDevice(t)
 	set := map[string]string{
 		"FriendlyName1 Desk": `{"FriendlyName1":"Desk"}`, "Hostname desk-plug": `{"Hostname":"desk-plug"}`,
@@ -146,6 +147,7 @@ func TestEditorFieldsAreStateful(t *testing.T) {
 // otherwise a caller that changes several settings in a row (the editor, a
 // restore) sees them vanish depending on timing, and a test of it flakes.
 func TestSettingChangedWhileRestartIsPendingSurvivesIt(t *testing.T) {
+	t.Parallel()
 	d := newSettingsDevice(t)
 	cm(t, d, "Hostname queued-restart") // queues the restart
 	cm(t, d, "TelePeriod 120")          // arrives before it happens
@@ -158,6 +160,7 @@ func TestSettingChangedWhileRestartIsPendingSurvivesIt(t *testing.T) {
 // Why: SaveData 0 is the fleet policy; its flash semantics decide whether a
 // "backup after change" shows the change and whether a power cut loses it.
 func TestSaveDataSemantics(t *testing.T) {
+	t.Parallel()
 	d := newSettingsDevice(t)
 	cm(t, d, "TelePeriod 120")
 	if dumpOf(t, d)["tele_period"] != float64(120) {
@@ -187,6 +190,7 @@ func TestSaveDataSemantics(t *testing.T) {
 // Why: Restart (and OTA) are save points; settings that restart the device
 // are saved by that restart.
 func TestRestartAndRestartingSettingsSave(t *testing.T) {
+	t.Parallel()
 	d := newSettingsDevice(t)
 	cm(t, d, "TelePeriod 200")
 	cm(t, d, "Restart 1")
@@ -206,6 +210,7 @@ func TestRestartAndRestartingSettingsSave(t *testing.T) {
 // Why: Tasmota clamps instead of failing; a simulator that stored the raw
 // value would hide clamping surprises from the settings editor.
 func TestValueRulesLikeTasmota(t *testing.T) {
+	t.Parallel()
 	d := newSettingsDevice(t)
 	for cmd, want := range map[string]string{
 		"TelePeriod 5": `{"TelePeriod":10}`, "TelePeriod 9999": `{"TelePeriod":3600}`, "TelePeriod 1": `{"TelePeriod":300}`, "TelePeriod 0": `{"TelePeriod":0}`,
@@ -220,6 +225,7 @@ func TestValueRulesLikeTasmota(t *testing.T) {
 // Why: SetOption words in Status 3 must stay consistent with the single
 // reads, as the policy view and the editor read both.
 func TestSetOptionBitsInStatus3(t *testing.T) {
+	t.Parallel()
 	d := newSettingsDevice(t)
 	before := cm(t, d, "Status 3")
 	cm(t, d, "SetOption19 1")
@@ -242,6 +248,7 @@ func TestSetOptionBitsInStatus3(t *testing.T) {
 // Why: minimal firmware has none of these commands, so a settings change
 // there is impossible and must look like Unknown.
 func TestMinimalHasNoSettings(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "lamp", Profile: ProfileESP8266Min})
 	for _, c := range []string{"TelePeriod 120", "SetOption3 1", "Hostname x", "SaveData"} {
@@ -256,6 +263,7 @@ func TestMinimalHasNoSettings(t *testing.T) {
 
 // Why: the fake decoder must refuse foreign data like the real one would.
 func TestDecodeDumpRejectsForeignData(t *testing.T) {
+	t.Parallel()
 	if _, err := DecodeDump(make([]byte, 4096)); err == nil {
 		t.Error("an all-zero dump is not a simulator dump")
 	}
@@ -264,6 +272,7 @@ func TestDecodeDumpRejectsForeignData(t *testing.T) {
 // Why: the editor list must be fully covered; every key here appears in
 // internal/settings.Fields (M2-2) as a command.
 func TestAllEditorCommandsKnown(t *testing.T) {
+	t.Parallel()
 	d := newSettingsDevice(t)
 	for _, c := range []string{"FriendlyName1", "FriendlyName2", "FriendlyName3", "FriendlyName4", "Hostname", "Topic", "FullTopic", "TelePeriod",
 		"PowerOnState", "SetOption0", "SetOption3", "SetOption4", "SetOption19", "MqttHost", "MqttPort", "MqttUser", "MqttPassword2",
@@ -278,6 +287,7 @@ func TestAllEditorCommandsKnown(t *testing.T) {
 // a Sleep rule. Tasmota v16 (CmndSleep, S_JSON_COMMAND_NVALUE_ACTIVE_NVALUE) answers
 // {"Sleep":{"<configured>":{"Active":"<active>"}}}; LedState (ResponseCmndNumber) a plain number.
 func TestSleepAndLedStateReplyLikeV16(t *testing.T) {
+	t.Parallel()
 	d := newSettingsDevice(t)
 	if got := cm(t, d, "Sleep 50"); got != `{"Sleep":{"50":{"Active":"50"}}}` {
 		t.Errorf("Sleep 50 -> %s", got)
@@ -296,6 +306,7 @@ func TestSleepAndLedStateReplyLikeV16(t *testing.T) {
 // PowerRetain (xdrv_02_9_mqtt.ino) answers ON/OFF text and ignores a value outside 0/1;
 // LedState (support_command.ino CmndLedState) accepts 0..7 only.
 func TestCoordinatePowerRetainAndLedStateReplyLikeV16(t *testing.T) {
+	t.Parallel()
 	d := newSettingsDevice(t)
 	if got := cm(t, d, "Latitude"); got != `{"Latitude":48.858360}` {
 		t.Errorf("default Latitude -> %s", got)

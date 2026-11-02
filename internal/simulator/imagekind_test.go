@@ -6,6 +6,7 @@ import "testing"
 // reports for that build (its CODE_IMAGE_STR, not the file name; #85), or the
 // simulator tests a Detect that real devices would never meet.
 func TestImageKindFollowsBuildName(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		url   string
 		esp32 bool

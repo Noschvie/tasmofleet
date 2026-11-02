@@ -20,6 +20,7 @@ func eq[T comparable](t *testing.T, what string, got, want T) {
 // reboot gap) and the OtaUrl rule must hold: the minimal URL persisted in
 // step 1 is what the full firmware boots with.
 func TestStagedUpdateTimelineAndOtaUrlRule(t *testing.T) {
+	t.Parallel()
 	fw := newFirmwareServer(t, map[string]string{"tasmota-minimal.bin.gz": "16.1.0", "tasmota.bin.gz": "16.1.0"})
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "lamp", Profile: ProfileESP8266_1M, Version: "16.0.0"})
@@ -56,6 +57,7 @@ func TestStagedUpdateTimelineAndOtaUrlRule(t *testing.T) {
 // Why: engines must not trust an OtaUrl set while minimal runs: a reboot
 // discards it.
 func TestOtaUrlSetInMinimalIsLostAfterReboot(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "lamp", Profile: ProfileESP8266Min})
 	before := d.PersistedOtaURL()
@@ -68,6 +70,7 @@ func TestOtaUrlSetInMinimalIsLostAfterReboot(t *testing.T) {
 
 // Why: on a normal image OtaUrl survives a software restart (SettingsSaveAll).
 func TestOtaUrlSetInNormalSurvivesRestart(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "plug", Profile: ProfileESP8266_4M})
 	cm(t, d, "OtaUrl http://127.0.0.1:1/a.bin.gz")
@@ -79,6 +82,7 @@ func TestOtaUrlSetInNormalSurvivesRestart(t *testing.T) {
 // Why: Tasmota's own fallback must continue without any command from the
 // manager, otherwise a 1 MB device would sit in minimal forever.
 func TestAutoFallbackContinuesOnItsOwn(t *testing.T) {
+	t.Parallel()
 	fw := newFirmwareServer(t, map[string]string{"tasmota-minimal.bin.gz": "16.1.0", "tasmota.bin.gz": "16.1.0"})
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "lamp", Profile: ProfileESP8266_1M})
@@ -103,6 +107,7 @@ func TestAutoFallbackContinuesOnItsOwn(t *testing.T) {
 
 // Why: 4 MB ESP8266 and ESP32 go direct: one reboot, no minimal hop.
 func TestDirectUpdates(t *testing.T) {
+	t.Parallel()
 	fw := newFirmwareServer(t, map[string]string{"tasmota.bin.gz": "16.1.0", "tasmota32.bin": "16.1.0", "tasmota32c3.bin": "16.1.0", "tasmota32s3.bin": "16.1.0"})
 	f := newTestFleet(t, "", Extra{})
 	for _, tc := range []struct {
@@ -123,6 +128,7 @@ func TestDirectUpdates(t *testing.T) {
 // Why: the guard is the last defence; the device must also refuse an image
 // of the wrong family like the real bootloader check does, and stay usable.
 func TestWrongFamilyImageFailsAndDeviceStaysUp(t *testing.T) {
+	t.Parallel()
 	fw := newFirmwareServer(t, map[string]string{"tasmota.bin.gz": "16.1.0", "tasmota32c3.bin": "16.1.0", "tasmota32.bin": "16.1.0"})
 	f := newTestFleet(t, "", Extra{})
 	for _, tc := range []struct {
@@ -146,6 +152,7 @@ func TestWrongFamilyImageFailsAndDeviceStaysUp(t *testing.T) {
 // Why: during the blocking download the real web server accepts the
 // connection and never answers; during the reboot the port is closed.
 func TestBlockingAndRefusingWindows(t *testing.T) {
+	t.Parallel()
 	fw := newFirmwareServer(t, map[string]string{"tasmota.bin.gz": "16.1.0"})
 	f := newTestFleet(t, "", Extra{TimeScale: 0.2})
 	d := add(t, f, DeviceSpec{Name: "plug", Profile: ProfileESP8266_4M})
@@ -175,6 +182,7 @@ func TestBlockingAndRefusingWindows(t *testing.T) {
 // Why: a download failure must leave the device on the old firmware with a
 // working web server, after the documented retry count.
 func TestDownloadFailureKeepsOldFirmware(t *testing.T) {
+	t.Parallel()
 	fw := newFirmwareServer(t, nil)
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "plug", Profile: ProfileESP8266_4M})
@@ -190,6 +198,7 @@ func TestDownloadFailureKeepsOldFirmware(t *testing.T) {
 }
 
 func TestWebUIStartsUpgrade(t *testing.T) {
+	t.Parallel()
 	fw := newFirmwareServer(t, map[string]string{"tasmota.bin.gz": "16.1.0"})
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "plug", Profile: ProfileESP8266_4M})

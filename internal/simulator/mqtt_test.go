@@ -22,6 +22,7 @@ func newBrokerFleet(t *testing.T, x Extra) (*Broker, *collector, Fleet) {
 // Why: tasmofleet's health relies on retained LWT, retained discovery and
 // periodic STATE; a simulator that skips them hides health bugs.
 func TestMQTTBasics(t *testing.T) {
+	t.Parallel()
 	b, c, f := newBrokerFleet(t, Extra{})
 	d := add(t, f, DeviceSpec{Name: "livingroom-readinglamp", Profile: ProfileESP8266_1M})
 	c.waitFor(t, "[R]tele/livingroom-readinglamp/LWT=Online")
@@ -44,6 +45,7 @@ func TestMQTTBasics(t *testing.T) {
 // controller that sends a command the moment the device shows up is answered. The simulator
 // used to fire its SUBSCRIBEs without waiting for the SUBACKs (and the tests raced them).
 func TestMQTTDeviceIsSubscribedWhenItAnnouncesItself(t *testing.T) {
+	t.Parallel()
 	b, c, f := newBrokerFleet(t, Extra{})
 	d := newDirect(t, f, "plug")
 	ctl, _ := Control(d)
@@ -64,6 +66,7 @@ func TestMQTTDeviceIsSubscribedWhenItAnnouncesItself(t *testing.T) {
 // tested against that, not against a silent restart. The retained LWT Online
 // and INFO1 reappear after the boot.
 func TestMQTTUpgradeShowsOfflineAndReportsResult(t *testing.T) {
+	t.Parallel()
 	fw := newFirmwareServer(t, map[string]string{"tasmota.bin.gz": "16.1.0"})
 	_, c, f := newBrokerFleet(t, Extra{})
 	d := newDirect(t, f, "plug")
@@ -88,6 +91,7 @@ func TestMQTTUpgradeShowsOfflineAndReportsResult(t *testing.T) {
 }
 
 func TestMQTTFailureAndWrongFamilyAreReported(t *testing.T) {
+	t.Parallel()
 	fw := newFirmwareServer(t, map[string]string{"tasmota32.bin": "16.1.0"})
 	_, c, f := newBrokerFleet(t, Extra{})
 	d := newDirect(t, f, "a")
@@ -99,6 +103,7 @@ func TestMQTTFailureAndWrongFamilyAreReported(t *testing.T) {
 }
 
 func TestFlapFault(t *testing.T) {
+	t.Parallel()
 	_, c, f := newBrokerFleet(t, Extra{})
 	newDirect(t, f, "a", Fault{Kind: FaultFlap, Duration: 60 * time.Millisecond})
 	for i := 0; i < 300 && (c.count("[R]tele/a/LWT=Offline")+c.count("tele/a/LWT=Offline") < 2); i++ {
@@ -113,6 +118,7 @@ func TestFlapFault(t *testing.T) {
 
 // Why: devices without MQTT must work in the same fleet as MQTT ones.
 func TestHTTPOnlyDeviceStaysSilent(t *testing.T) {
+	t.Parallel()
 	_, c, f := newBrokerFleet(t, Extra{})
 	d := newDirect(t, f, "quiet", Fault{Kind: FaultHTTPOnly})
 	newDirect(t, f, "chatty")
@@ -133,6 +139,7 @@ func TestHTTPOnlyDeviceStaysSilent(t *testing.T) {
 // and the HTTP port refuses. Close is a clean shutdown and says nothing, so
 // the app would keep showing the device as online until its telemetry went stale.
 func TestPowerOffFiresTheWillAndStopsHTTP(t *testing.T) {
+	t.Parallel()
 	_, c, f := newBrokerFleet(t, Extra{})
 	d := add(t, f, DeviceSpec{Name: "unplugged", Profile: ProfileESP8266_4M})
 	c.waitFor(t, "[R]tele/unplugged/LWT=Online")

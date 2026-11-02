@@ -64,6 +64,7 @@ func capturedFS(t *testing.T) DeviceSpec {
 // The simulator must answer byte for byte what the live device did, or the
 // client tests built on it prove nothing about the real thing.
 func TestUFS_CommandsReplayLiveCapture(t *testing.T) {
+	t.Parallel()
 	c := add(t, newTestFleet(t, "", Extra{}), capturedFS(t))
 	for cmd, file := range map[string]string{"UfsType": "ufstype.json", "Ufs": "ufs.json", "UfsSize": "ufssize.json", "UfsFree": "ufsfree.json",
 		"UfsList": "list-root.json", "UfsList /nonexistent": "list-missing-dir.json"} {
@@ -75,6 +76,7 @@ func TestUFS_CommandsReplayLiveCapture(t *testing.T) {
 }
 
 func TestUFS_DownloadHeadersAndMissingFileReplayLiveCapture(t *testing.T) {
+	t.Parallel()
 	c := add(t, newTestFleet(t, "", Extra{}), capturedFS(t))
 	resp, body := httpGet(t, "http://"+c.Addr()+"/ufsd?dir=2&download=%2F_persist.json")
 	if resp.Header.Get("Content-Disposition") != "attachment; filename=_persist.json" || resp.ContentLength != 299 || string(body) != string(ufsFixture(t, "download-file.body")) {
@@ -92,6 +94,7 @@ func TestUFS_DownloadHeadersAndMissingFileReplayLiveCapture(t *testing.T) {
 }
 
 func TestUFS_HiddenFilesOnlyInList2(t *testing.T) {
+	t.Parallel()
 	spec := capturedFS(t)
 	spec.Files["/.drvset000"] = FSFile{Data: []byte("x")}
 	c := add(t, newTestFleet(t, "", Extra{}), spec)
@@ -103,6 +106,7 @@ func TestUFS_HiddenFilesOnlyInList2(t *testing.T) {
 }
 
 func TestUFS_Esp8266OneMegabyteBuildHasNoFilesystem(t *testing.T) {
+	t.Parallel()
 	c := add(t, newTestFleet(t, "", Extra{}), DeviceSpec{Name: "lamp", Profile: ProfileESP8266_1M, Version: "16.0.0"})
 	_, got := httpGet(t, "http://"+c.Addr()+"/cm?cmnd=UfsType")
 	if string(got) != string(mustRead(t, filepath.Join(fixtures, "ufs", "esp8266-1m", "ufstype.json"))) {
@@ -138,6 +142,7 @@ func post(t *testing.T, addr, query, name string, data []byte) string {
 // Why: ufs_path is global state. UfsList moves it too, so a POST that follows a listing (and no
 // GET) lands in the listed folder on v16 -- the trap the client's GET-before-POST rule avoids.
 func TestUFS_UploadGoesToTheFolderTheLastRequestLeft(t *testing.T) {
+	t.Parallel()
 	c := add(t, newTestFleet(t, "", Extra{}), DeviceSpec{Name: "m", Profile: ProfileESP32, Version: "16.0.0"})
 	httpGet(t, "http://"+c.Addr()+"/cm?cmnd=UfsList%20/lib")
 	if out := post(t, c.Addr(), "fsz=1", "a.txt", []byte("x")); !strings.Contains(out, "Successful") {
@@ -159,6 +164,7 @@ func TestUFS_UploadGoesToTheFolderTheLastRequestLeft(t *testing.T) {
 // Why: before v16 only a GET /ufsd sets the upload type; a bare POST answers Successful and writes
 // nothing. A client that skipped the GET would believe the file was restored.
 func TestUFS_BarePostBeforeV16WritesNothingButSaysSuccessful(t *testing.T) {
+	t.Parallel()
 	c := add(t, newTestFleet(t, "", Extra{}), DeviceSpec{Name: "m", Profile: ProfileESP32, Version: "15.1.0"})
 	if out := post(t, c.Addr(), "fsz=1", "a.txt", []byte("x")); !strings.Contains(out, "Successful") {
 		t.Fatal(out)
@@ -174,6 +180,7 @@ func TestUFS_BarePostBeforeV16WritesNothingButSaysSuccessful(t *testing.T) {
 }
 
 func TestUFS_UploadErrors(t *testing.T) {
+	t.Parallel()
 	c := add(t, newTestFleet(t, "", Extra{}), DeviceSpec{Name: "m", Profile: ProfileESP32, Version: "16.0.0", FSSizeKB: 200})
 	httpGet(t, "http://"+c.Addr()+"/ufsd?dir=2")
 	if out := post(t, c.Addr(), "fsz=999999", "a.txt", []byte("x")); !strings.Contains(out, "File too large") {
@@ -186,6 +193,7 @@ func TestUFS_UploadErrors(t *testing.T) {
 }
 
 func TestUFS_NoFSAndMinimalImagesHaveNone(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	c := add(t, f, DeviceSpec{Name: "m", Profile: ProfileESP32, NoFS: true})
 	if _, b := httpGet(t, "http://"+c.Addr()+"/cm?cmnd=UfsType"); !strings.Contains(string(b), `"Command":"Unknown"`) {
@@ -198,6 +206,7 @@ func TestUFS_NoFSAndMinimalImagesHaveNone(t *testing.T) {
 }
 
 func TestUFS_RefererGuardApplies(t *testing.T) {
+	t.Parallel()
 	c := add(t, newTestFleet(t, "", Extra{}), DeviceSpec{Name: "m", Profile: ProfileESP32, RefererCheck: true})
 	if r, _, err := send(http.MethodGet, "http://"+c.Addr()+"/ufsd?dir=2", "", nil); err == nil {
 		t.Errorf("a request without Referer got HTTP %d; SetOption128 0 sends nothing", r.StatusCode)
@@ -207,6 +216,7 @@ func TestUFS_RefererGuardApplies(t *testing.T) {
 // Why: the device cuts "<ufs_path>/<name>" at 49 characters, and the root is "//name". The simulator
 // must do the same, or no test can show what a too long name does to another file.
 func TestUFS_UploadNameIsCutLikeTheDevice(t *testing.T) {
+	t.Parallel()
 	long47 := "/" + strings.Repeat("a", 47)
 	spec := DeviceSpec{Name: "m", Profile: ProfileESP32, Version: "16.0.0", Files: map[string]FSFile{long47: {Data: []byte("precious")}}}
 	c := add(t, newTestFleet(t, "", Extra{}), spec)

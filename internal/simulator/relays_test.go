@@ -12,6 +12,7 @@ import (
 // an ESP8266, always through the minimal image and on an ESP32.
 
 func TestMultiRelayStatusAndPower(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "strip", Profile: ProfileESP8266_4M, Relays: 3})
 	cm(t, d, "Power1 OFF")
@@ -38,6 +39,7 @@ func TestMultiRelayStatusAndPower(t *testing.T) {
 }
 
 func TestSingleRelayStillReportsPOWER(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "plug", Profile: ProfileESP8266_4M})
 	cm(t, d, "Power1 ON")
@@ -47,6 +49,7 @@ func TestSingleRelayStillReportsPOWER(t *testing.T) {
 }
 
 func TestRelayStateAcrossFlashing(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name    string
 		profile Profile
@@ -73,6 +76,7 @@ func TestRelayStateAcrossFlashing(t *testing.T) {
 }
 
 func TestRelayStateKeptThroughMinimal(t *testing.T) {
+	t.Parallel()
 	fw := newFirmwareServer(t, map[string]string{"tasmota-minimal.bin.gz": "16.1.0", "tasmota.bin.gz": "16.1.0"})
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "lamp", Profile: ProfileESP8266_1M, Version: "16.0.0", Relays: 2})
@@ -95,6 +99,7 @@ func TestRelayStateKeptThroughMinimal(t *testing.T) {
 // boot and then switch themselves OFF (observed 2026-10-19); they report
 // Dimmer and CT in Status 11, which is how the engine recognises a light.
 func TestLightComesBackOnThenOff(t *testing.T) {
+	t.Parallel()
 	fw := newFirmwareServer(t, map[string]string{"tasmota.bin.gz": "16.1.0"})
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "lamp", Profile: ProfileESP8266_4M, Version: "16.0.0", Light: true})
@@ -116,6 +121,7 @@ func TestLightComesBackOnThenOff(t *testing.T) {
 // with their state; a simulator that always clears would hide the case where
 // the restore must not act.
 func TestSetOption0KeepsStateOnEveryChipAndImage(t *testing.T) {
+	t.Parallel()
 	fw := newFirmwareServer(t, map[string]string{"tasmota32c3.bin": "16.1.0", "tasmota-minimal.bin.gz": "16.1.0", "tasmota.bin.gz": "16.1.0"})
 	f := newTestFleet(t, "", Extra{})
 	esp32 := add(t, f, DeviceSpec{Name: "lamp32", Profile: ProfileESP32C3, Version: "16.0.0", SetOption0: boolp(true)})
@@ -137,6 +143,7 @@ func TestSetOption0KeepsStateOnEveryChipAndImage(t *testing.T) {
 }
 
 func TestPulseTimeAndInterlockReads(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "door", Profile: ProfileESP8266_4M, Relays: 2, PulseTimes: []int{0, 100}, Interlock: "1,2"})
 	if got := cm(t, d, "PulseTime"); !strings.Contains(got, `"Set":[0,100,0,0,0,0,0,0]`) {
@@ -154,6 +161,7 @@ func TestPulseTimeAndInterlockReads(t *testing.T) {
 func boolp(b bool) *bool { return &b }
 
 func TestSetOption0OffOverridesTheCapture(t *testing.T) {
+	t.Parallel()
 	fw := newFirmwareServer(t, map[string]string{"tasmota32.bin": "16.1.0"})
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{Name: "lamp", Profile: ProfileESP32, Version: "16.0.0", SetOption0: boolp(false)})
@@ -168,6 +176,7 @@ func TestSetOption0OffOverridesTheCapture(t *testing.T) {
 // the engine uses that to restore lights and leave plain relays alone, so a
 // plain simulated device must not inherit the light state of a lamp capture.
 func TestOnlyLightsReportLightState(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	relay := add(t, f, DeviceSpec{Name: "plug", Profile: ProfileESP32})
 	light := add(t, f, DeviceSpec{Name: "lamp", Profile: ProfileESP32, Light: true})
@@ -184,6 +193,7 @@ func TestOnlyLightsReportLightState(t *testing.T) {
 // and MqttHost. Without spec-level initial state the devenv would have to send
 // commands at start-up, and a command that changes MqttHost restarts the device.
 func TestSpecSetsInitialPowerAndSettings(t *testing.T) {
+	t.Parallel()
 	f := newTestFleet(t, "", Extra{})
 	d := add(t, f, DeviceSpec{
 		Name: "switch", Profile: ProfileESP8266_4M, Relays: 2,
