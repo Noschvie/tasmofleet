@@ -144,7 +144,8 @@ jobs:
   nightly-failure-issue:
     name: nightly failure issue
     needs: [checks, race, mutation, ha-app, ghcr-cleanup]
-    if: ${{ failure() && github.event_name == 'schedule' }}
+    # Only the scheduled run on main reports; a manual run, from any branch, never touches the issue.
+    if: ${{ failure() && github.event_name == 'schedule' && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:

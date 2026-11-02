@@ -155,7 +155,7 @@ jobs:
   # The race tests of the SAFETY packages (Makefile): the ones a PR changed, or
   # all of them when there is no base to diff against (a tag).
   safety-race:
-    name: safety race tests (${{ inputs.base != '' && 'changed' || 'all' }} safety packages)
+    name: safety race tests
     if: inputs.safety_race
     runs-on: ubuntu-24.04
     timeout-minutes: 15
