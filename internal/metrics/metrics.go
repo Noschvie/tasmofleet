@@ -12,7 +12,7 @@
 //	tasmofleet_firmware_index_age_seconds          gauge
 //	tasmofleet_discovery_proposals_dropped_total{kind} counter
 //	tasmofleet_mqtt_dropped_total{reason}          counter
-//	tasmofleet_backup_last_success_timestamp_seconds{device} gauge
+//	tasmofleet_backup_last_success_timestamp_seconds{device,id} gauge
 //	tasmofleet_mqtt_connected                      gauge
 //	tasmofleet_http_requests_total{route,code}     counter
 //	tasmofleet_audit_errors_total                  counter
@@ -237,7 +237,7 @@ type Standard struct {
 	// MQTTDropped counts MQTT messages or retained cache entries the bus
 	// dropped ({reason}).
 	MQTTDropped   *Vec
-	BackupLastOK  *Vec // {device}
+	BackupLastOK  *Vec // {device,id}; see SetBackupAges
 	MQTTConnected *Vec // no labels
 	HTTPRequests  *Vec // {route,code}
 	AuditErrors   *Vec // no labels
@@ -260,7 +260,7 @@ func NewStandard(r *Registry, version string, decoder bool) *Standard {
 			"Seconds since the upstream firmware index was last refreshed successfully (since start if never)."),
 		MQTTDropped:      r.Counter("tasmofleet_mqtt_dropped_total", "MQTT messages or retained-cache entries dropped by the bus.", "reason"),
 		DiscoveryDropped: r.Counter("tasmofleet_discovery_proposals_dropped_total", "Discovery proposals not stored because the limit was reached.", "kind"),
-		BackupLastOK:     r.Gauge("tasmofleet_backup_last_success_timestamp_seconds", "Unix time of the last successful backup per device.", "device"),
+		BackupLastOK:     r.Gauge("tasmofleet_backup_last_success_timestamp_seconds", "Unix time of the last successful backup per device. Without device labels one series, device=\"fleet\": the oldest of the devices' newest backups.", "device", "id"),
 		MQTTConnected:    r.Gauge("tasmofleet_mqtt_connected", "1 if the MQTT connection is up."),
 		HTTPRequests:     r.Counter("tasmofleet_http_requests_total", "HTTP requests by route pattern and status code.", "route", "code"),
 		AuditErrors:      r.Counter("tasmofleet_audit_errors_total", "Failed audit writes."),

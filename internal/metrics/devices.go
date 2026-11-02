@@ -113,3 +113,31 @@ func (s *Standard) SetDevices(samples []DeviceSample) {
 		}
 	}
 }
+
+// BackupSample is the newest backup of one inventory device.
+type BackupSample struct {
+	ID    int64
+	Name  string
+	Taken time.Time
+}
+
+// SetBackupAges replaces the backup timestamps. With perDevice there is one
+// series per device, {device,id}: names are not unique, the id is, so two
+// devices named alike keep their own timestamps. Without it the only series
+// is {device="fleet"}, the oldest of the devices' newest backups (the one that
+// has gone longest without a backup), and no name or id is exported. No
+// samples: no series.
+func (s *Standard) SetBackupAges(samples []BackupSample, perDevice bool) {
+	s.BackupLastOK.Reset()
+	var oldest *BackupSample
+	for i, b := range samples {
+		if perDevice {
+			s.BackupLastOK.With(b.Name, strconv.FormatInt(b.ID, 10)).Set(float64(b.Taken.Unix()))
+		} else if oldest == nil || b.Taken.Before(oldest.Taken) {
+			oldest = &samples[i]
+		}
+	}
+	if oldest != nil {
+		s.BackupLastOK.With("fleet", "").Set(float64(oldest.Taken.Unix()))
+	}
+}

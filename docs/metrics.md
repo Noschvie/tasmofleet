@@ -13,6 +13,17 @@ proxy is served; the per-device gauges do not change this. The metric contract l
 See the package documentation of `internal/metrics` for the list (`tasmofleet_devices{health}`,
 OTA, firmware, MQTT, HTTP, audit, build info).
 
+`tasmofleet_backup_last_success_timestamp_seconds` has the labels `device` and `id`. With the setting
+**Device names in metric labels** on, there is one series per device, `{device="<name>",id="<inventory id>"}`:
+names are not unique (Tasmota's default is `Tasmota`), the id is, so devices with the same name keep their own
+timestamps. With it off the only series is `{device="fleet",id=""}`, the oldest of the devices' newest backups.
+A device without any backup has no series.
+
+```promql
+# Devices whose newest backup is older than a week
+time() - tasmofleet_backup_last_success_timestamp_seconds > 7 * 86400
+```
+
 ## Per-device gauges
 
 Exported only while the setting **Device names in metric labels** (`METRICS_DEVICE_LABELS`, System

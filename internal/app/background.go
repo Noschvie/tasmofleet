@@ -79,23 +79,15 @@ func (a *runtime) updateMetrics(ctx context.Context) {
 	}
 	std.SetDevices(samples)
 
-	std.BackupLastOK.Reset()
-	oldest := int64(0) // without device labels: the oldest "latest backup" of the fleet
+	var latest []metrics.BackupSample // the newest backup of every device that has one
 	for _, d := range devs {
 		bs, err := a.backups.List(ctx, d.ID)
 		if err != nil || len(bs) == 0 {
 			continue
 		}
-		ts := bs[0].TakenAt.Unix()
-		if a.svc.Sys.Snapshot().MetricsDeviceLabels {
-			std.BackupLastOK.With(d.Name).Set(float64(ts))
-		} else if oldest == 0 || ts < oldest {
-			oldest = ts
-		}
+		latest = append(latest, metrics.BackupSample{ID: int64(d.ID), Name: d.Name, Taken: bs[0].TakenAt})
 	}
-	if !a.svc.Sys.Snapshot().MetricsDeviceLabels && oldest != 0 {
-		std.BackupLastOK.With("fleet").Set(float64(oldest))
-	}
+	std.SetBackupAges(latest, a.svc.Sys.Snapshot().MetricsDeviceLabels)
 	if a.cache != nil {
 		std.FirmwareCache.With().Set(float64(dirSize(filepath.Join(a.cfg.DataDir, "firmware"))))
 	}

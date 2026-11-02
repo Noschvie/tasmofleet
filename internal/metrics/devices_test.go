@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -133,5 +134,72 @@ func TestHostileIndicesAddNoSeries(t *testing.T) {
 	n := strings.Count(got, "\ntasmofleet_device_power_watts{") + strings.Count(got, "\ntasmofleet_device_relay_on{")
 	if n != 9+8 {
 		t.Fatalf("series = %d, want 17:\n%s", n, got)
+	}
+}
+
+// unixText is how the exposition writes a Unix time.
+func unixText(t time.Time) string { return strconv.FormatFloat(float64(t.Unix()), 'g', -1, 64) }
+
+func backupBody(t *testing.T, s *Standard, r *Registry) string {
+	t.Helper()
+	_, body := scrape(t, r.Handler(), "")
+	var keep []string
+	for _, l := range strings.Split(body, "\n") {
+		if strings.HasPrefix(l, "tasmofleet_backup_last_success_timestamp_seconds{") {
+			keep = append(keep, l)
+		}
+	}
+	return strings.Join(keep, "\n")
+}
+
+// Why: the metric exists to alert on devices without a recent backup. Device
+// names are not unique (Tasmota's default is "Tasmota"), so keyed by name two
+// devices shared one series and the last one written won: the alert watched
+// whichever device came last and the other one's stale backup was invisible.
+// The inventory id keeps the series apart, as for the tasmofleet_device_*
+// gauges.
+func TestBackupAgeOfDevicesWithTheSameNameStaysApart(t *testing.T) {
+	r := NewRegistry()
+	s := NewStandard(r, "v1", false)
+	today := time.Date(2026, 11, 2, 3, 0, 0, 0, time.UTC)
+	s.SetBackupAges([]BackupSample{
+		{ID: 1, Name: "Tasmota", Taken: today},
+		{ID: 2, Name: "Tasmota", Taken: today.AddDate(0, 0, -40)},
+	}, true)
+	got := backupBody(t, s, r)
+	want := fmt.Sprintf("tasmofleet_backup_last_success_timestamp_seconds{device=\"Tasmota\",id=\"1\"} %s\n"+
+		"tasmofleet_backup_last_success_timestamp_seconds{device=\"Tasmota\",id=\"2\"} %s", unixText(today), unixText(today.AddDate(0, 0, -40)))
+	if got != want {
+		t.Errorf("series:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+// Why: without device labels no name or id may leave the host, so the alert
+// gets one series: the oldest "latest backup" of the fleet (the device that
+// has gone longest without one). A device that left the inventory, or a
+// switched-off setting, must not leave its series behind.
+func TestBackupAgeWithoutDeviceLabelsIsTheFleetsOldest(t *testing.T) {
+	r := NewRegistry()
+	s := NewStandard(r, "v1", false)
+	now := time.Date(2026, 11, 2, 3, 0, 0, 0, time.UTC)
+	fleetOf := []BackupSample{
+		{ID: 1, Name: "kitchen", Taken: now},
+		{ID: 2, Name: "garage", Taken: now.AddDate(0, 0, -40)},
+		{ID: 3, Name: "shed", Taken: now.AddDate(0, 0, -3)},
+	}
+	s.SetBackupAges(fleetOf, true)
+	s.SetBackupAges(fleetOf, false)
+	got := backupBody(t, s, r)
+	want := fmt.Sprintf("tasmofleet_backup_last_success_timestamp_seconds{device=\"fleet\",id=\"\"} %s", unixText(now.AddDate(0, 0, -40)))
+	if got != want {
+		t.Errorf("series after switching the labels off:\n%s\nwant:\n%s", got, want)
+	}
+	s.SetBackupAges(fleetOf[:1], true) // devices 2 and 3 deleted, labels on again
+	if got := backupBody(t, s, r); strings.Contains(got, "garage") || strings.Contains(got, `device="fleet"`) || !strings.Contains(got, `device="kitchen"`) {
+		t.Errorf("stale series after the fleet changed:\n%s", got)
+	}
+	s.SetBackupAges(nil, false) // no backup anywhere: no series, not a false "never"
+	if got := backupBody(t, s, r); got != "" {
+		t.Errorf("series without any backup:\n%s", got)
 	}
 }
