@@ -6,6 +6,13 @@ always upgrade automatically.
 
 ## Unreleased
 
+## 0.27.1 "Cordouan" (2026-11-02)
+
+### Upgrade notes
+
+- No database migration (the schema stays at 0041). Nothing to change in the template.
+- Four security fixes (GHSA-fvgh-83hf-5jr9, GHSA-cpfg-6c57-xg33, GHSA-fmj9-3vh6-rq53, GHSA-wq89-cqcx-3h3h), listed under Security below. Update when you can.
+
 ### Added
 
 - ESP32-H2 is a known chip family (`esp32h2`). It has no Wi-Fi and upstream builds no image for it, but an own build that runs over Ethernet can now be uploaded as a custom image (chip_id `0x0010`, stored as `tasmota32h2.bin`), offered and updated like any other chip; policy rules can name the family. Before, an H2 showed "The chip family is not known yet" and was never updated (#470, thanks @Noschvie)
