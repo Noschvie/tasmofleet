@@ -100,6 +100,7 @@ func TestITDirectESP8266(t *testing.T) {
 // Every ESP32 chip gets the image of its own family and one direct Upgrade. All chip builds
 // report the image tag "tasmota32" (#85), so the OtaUrl file name proves the build.
 func TestITDirectESP32PerChip(t *testing.T) {
+	t.Parallel() // the parent too, see newItEnv
 	for _, tc := range []struct {
 		name    string
 		profile simulator.Profile
@@ -423,6 +424,7 @@ type restartCase struct {
 // same database must finish the job without ever sending Upgrade into a
 // running download, and with one Upgrade per stage in total.
 func TestITRestartInEveryState(t *testing.T) {
+	t.Parallel() // the parent too, see newItEnv
 	staged := []restartCase{
 		{model.JobPreflight, 1}, {model.JobBackup, 1},
 		{model.JobSetOtaURL, 1}, {model.JobUpgradeIssued, 1}, {model.JobAwaitReboot, 1}, {model.JobVerify, 1},
@@ -478,6 +480,7 @@ func runRestart(t *testing.T, p simulator.Profile, tc restartCase, upgrades int,
 // The process dies while the device is downloading (Upgrade already sent):
 // the resumed engine must only observe.
 func TestITRestartWhileDownloading(t *testing.T) {
+	t.Parallel() // the parent too, see newItEnv
 	for _, stage := range []int{1, 2} {
 		t.Run(fmt.Sprintf("hop%d", stage), func(t *testing.T) {
 			e := newItEnv(t)

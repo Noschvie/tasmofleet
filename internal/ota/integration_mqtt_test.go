@@ -317,6 +317,7 @@ func TestITMQTTJobTransportSurvivesEngineRestart(t *testing.T) {
 // person's choice (DE) against the "unknown" it reads back. Staged and direct both end Succeeded, the
 // German file was flashed, and the light is back on.
 func TestITMQTTLanguageChoiceDoesNotFailTheVerify(t *testing.T) {
+	t.Parallel() // the parent too, see newItEnv
 	for _, tc := range []struct {
 		name    string
 		profile simulator.Profile

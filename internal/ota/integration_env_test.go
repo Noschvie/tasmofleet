@@ -268,12 +268,17 @@ func (e *itEnv) serveUpstream(w http.ResponseWriter, r *http.Request) {
 	http.NotFound(w, r)
 }
 
-// itSlots bounds the scenarios running at the same time: they mostly sleep,
-// but each starts an HTTP stack and a fleet.
-var itSlots = make(chan struct{}, 4)
+// itSlots bounds the scenarios running at the same time. They mostly sleep (timeScale),
+// so CPU is not the limit: 16 at once took 37 s on 4 cores, 4 at once 109 s (#487). Each
+// one starts an HTTP stack and a fleet, which is why it is bounded at all. go test -parallel
+// (default GOMAXPROCS) caps the number further; make integration raises it to match.
+var itSlots = make(chan struct{}, 16)
 
 // newItEnv builds the whole stack. Big images are on by default (the 1 MB
 // devices are staged); a test can switch them off before the first Preview.
+// It makes the calling test parallel. A table-driven parent that only starts
+// subtests through newItEnv must call t.Parallel() itself: its subtests pause
+// until it returns, and a serial parent holds up every test behind it (#487).
 func newItEnv(t *testing.T) *itEnv { return newItEnvMQTT(t, "") }
 
 // newItEnvMQTT is newItEnv with the simulated devices attached to the

@@ -45,6 +45,7 @@ func TestITESP32S2NeedsABuildChoice(t *testing.T) {
 // SUCCEEDED although the device reports the shared tag afterwards (variant unknown): verify must
 // compare with what the device can report, not with the selected "tasmota".
 func TestITESP32S2ExplicitBuild(t *testing.T) {
+	t.Parallel() // the parent too, see newItEnv
 	for _, build := range []string{"s2", "s2cdc"} {
 		t.Run(build, func(t *testing.T) {
 			e := newItEnv(t)
@@ -68,6 +69,7 @@ func TestITESP32S2ExplicitBuild(t *testing.T) {
 // The process dies in the middle of an S2 update: the resumed engine knows the build from the
 // stored job alone and installs the same file; nothing is asked of the user again.
 func TestITESP32S2RestartKeepsTheBuild(t *testing.T) {
+	t.Parallel() // the parent too, see newItEnv
 	for _, tc := range []restartCase{{model.JobSetOtaURL, 1}, {model.JobUpgradeIssued, 1}, {model.JobAwaitReboot, 1}, {model.JobVerify, 1}} {
 		t.Run(fmt.Sprintf("%s_%d", tc.state, tc.nth), func(t *testing.T) {
 			e := newItEnv(t)

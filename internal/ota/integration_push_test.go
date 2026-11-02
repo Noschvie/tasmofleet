@@ -72,6 +72,7 @@ func TestITPushESP32(t *testing.T) {
 // Every ESP32 chip gets the image of its own family by upload. All chip builds report the image
 // tag "tasmota32" (#85), so the uploaded file name proves the build.
 func TestITPushPerChip(t *testing.T) {
+	t.Parallel() // the parent too, see newItEnv
 	for _, tc := range []struct {
 		name    string
 		profile simulator.Profile
