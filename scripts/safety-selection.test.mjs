@@ -130,3 +130,14 @@ test("without a usable BASE every package runs, as before", () => {
   assert.equal(r.mutated("no-such-ref").length, 8);
   assert.equal(r.raced("").length, 11);
 });
+
+test("only mutation-changed hands BASE to the gate as the diff scope (#475), the full run does not", () => {
+  const r = newRepo();
+  r.git("switch", "-q", "-c", "work");
+  r.write("internal/ota/ota.go", "package ota\n// edited\n");
+  assert.match(
+    r.make("mutation-changed", ["BASE=main"]),
+    /^gate \.\/internal\/ota 85 diff=main$/m,
+  );
+  assert.doesNotMatch(r.make("mutation"), /diff=main/);
+});

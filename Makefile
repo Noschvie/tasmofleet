@@ -11,7 +11,8 @@
 # so no global installs are needed (first run builds them, then they are cached).
 
 GO        ?= go
-TOOL      := $(GO) tool -modfile=tools/go.mod
+# Absolute: tools/mutation-gate.sh runs gremlins from inside the package directory.
+TOOL      := $(GO) tool -modfile=$(CURDIR)/tools/go.mod
 # Parallelism follows the machine; override with JOBS=n. A CI runner that
 # runs several jobs at once sets JOB_SIZE_DIVISOR: each job then gets
 # nproc/JOB_SIZE_DIVISOR (at least 2), and GOMAXPROCS of test binaries and the
@@ -198,8 +199,9 @@ mutation:
 	done
 
 # Mutation gate only for the MUTATION packages with changes since BASE (a git
-# ref). CI runs it for PRs that change a SAFETY package; the FULL tier runs "mutation".
-# Without a usable BASE every package runs.
+# ref), and in those only the mutants on the changed lines (tools/mutation-gate.sh, "Diff scope", #475).
+# CI runs it for PRs that change a SAFETY package; the full run is "mutation".
+# Without a usable BASE every package runs, whole.
 mutation-changed:
 	@if [ -z "$(BASE)" ] || ! changed=$$(CHANGED_BASE="$(BASE)" tools/changed-files.sh); then \
 	  echo "mutation-changed: no usable BASE ($(BASE)), running all packages"; $(MAKE) --no-print-directory mutation; exit $$?; \
@@ -208,15 +210,17 @@ mutation-changed:
 	ran=0; \
 	for e in $(MUTATION); do \
 	  p=$${e%%:*}; d=$${p#./}; \
-	  if echo "$$changed" | grep -q "^$$d/"; then ran=1; $(mutation_gate) "$$p" "$${e##*:}" || exit 1; \
+	  if echo "$$changed" | grep -q "^$$d/"; then ran=1; MUTATION_DIFF="$(BASE)" $(mutation_gate) "$$p" "$${e##*:}" || exit 1; \
 	  else echo "== mutation $$p: unchanged since $(BASE), skipped"; fi; \
 	done; [ $$ran = 1 ] || echo "mutation-changed: no mutation package changed"
 
-# Gate of a sharded run: MUTATION_COUNTS holds one directory per shard (CI artifacts). A package
-# without counts was not run (unchanged); with MUTATION_ALL=1 (the FULL tier) every package must
-# have them. A package with counts from fewer than MUTATION_SHARDS shards fails.
+# Gate of a sharded run: MUTATION_COUNTS holds one directory per shard (CI artifacts). First the report
+# (tools/mutation-report.sh: job summary and MUTATION_COUNTS/mutation-report.json, written whatever the
+# gate decides). A package without counts was not run (unchanged); with MUTATION_ALL=1 (the full run)
+# every package must have them. A package with counts from fewer than MUTATION_SHARDS shards fails.
 mutation-sum:
 	@test -n "$(MUTATION_COUNTS)" && test -n "$(MUTATION_SHARDS)" || { echo "usage: make mutation-sum MUTATION_COUNTS=<dir> MUTATION_SHARDS=n" >&2; exit 2; }; \
+	tools/mutation-report.sh "$(MUTATION_COUNTS)" $(MUTATION) || echo "::warning::mutation-report failed; the gate below still decides" >&2; \
 	for e in $(MUTATION); do \
 	  p=$${e%%:*}; files=$$(ls "$(MUTATION_COUNTS)"/*/"$$(basename $$p)" 2>/dev/null || true); n=$$(echo "$$files" | grep -c . || true); \
 	  if [ "$$n" = 0 ] && [ "$(MUTATION_ALL)" != 1 ]; then echo "== mutation $$p: not run (unchanged)"; continue; fi; \

@@ -192,6 +192,13 @@ with e.g. `make check JOBS=4`. `make test` and `make integration` use the go tes
 (unchanged packages report `(cached)`); `TESTFLAGS=-count=1` forces a fresh run. `make integration` runs only
 the packages that have `//go:build integration` test files (found at run time, anywhere in the module); only `_test.go` files may carry the tag.
 `make check` runs `shards-check` only after a change to the Makefile, `tools/`, a `go.mod` or the package list (CI runs it every time).
+`make mutation-changed BASE=<ref>` (and `make safety`) mutates only the lines this branch changed since the merge base with `<ref>`
+(uncommitted work included) in the MUTATION packages it touched; `make mutation` mutates every package whole (the weekly full run).
+A change that only touches a package's tests or data, or an untracked source file, mutates that package whole. Fewer than 10 mutants
+on the changed lines (`MUTATION_DIFF_MIN`) are too few for a percentage: such a diff passes with at most one lived mutant but needs a
+kill, and one without any decided mutant (a comment, a declaration) passes and says so. Details and the
+gremlins `--diff` traps they work around: header of `tools/mutation-gate.sh`. A sharded run leaves `mutation-report.json` and a job
+summary (lived, timed-out and not-covered mutants per package) next to the counts (`tools/mutation-report.sh`).
 
 ### Test tiers in CI (`.github/workflows/`)
 
