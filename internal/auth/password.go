@@ -30,6 +30,12 @@ var (
 
 var b64 = base64.RawStdEncoding
 
+// hashIterations is the PBKDF2 iteration count of new hashes. In production it is always
+// PasswordIterations. Only the tests of this package lower it (TestMain), because 600 000 iterations
+// made them CPU-bound (#489); TestNewHashesUsePasswordIterations pins the real count. Existing hashes
+// keep verifying with the count encoded in them.
+var hashIterations = PasswordIterations
+
 // HashPassword returns a PHC-style PBKDF2 hash string:
 // $pbkdf2-sha256$i=600000$<salt>$<hash> (unpadded standard base64).
 func HashPassword(password string) (string, error) {
@@ -40,11 +46,11 @@ func HashPassword(password string) (string, error) {
 	if _, err := rand.Read(salt); err != nil {
 		return "", err
 	}
-	key, err := pbkdf2.Key(sha256.New, password, salt, PasswordIterations, keyLen)
+	key, err := pbkdf2.Key(sha256.New, password, salt, hashIterations, keyLen)
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("$pbkdf2-sha256$i=%d$%s$%s", PasswordIterations, b64.EncodeToString(salt), b64.EncodeToString(key)), nil
+	return fmt.Sprintf("$pbkdf2-sha256$i=%d$%s$%s", hashIterations, b64.EncodeToString(salt), b64.EncodeToString(key)), nil
 }
 
 // VerifyPassword checks password against a HashPassword string in constant

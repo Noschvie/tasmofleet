@@ -425,13 +425,9 @@ func (a *fakeAudit) last() model.AuditEvent {
 // Test password; obviously fake.
 const testPassword = "correct horse battery"
 
-var testHash = func() string {
-	h, err := HashPassword(testPassword)
-	if err != nil {
-		panic(err)
-	}
-	return h
-}()
+// testHash is testPassword hashed with testIterations. TestMain sets it: a package-level initialiser
+// would run before TestMain lowers the count and hash with the production one.
+var testHash string
 
 // env is a running app (auth stack + two protected routes) and, in OIDC
 // mode, a mock IdP.

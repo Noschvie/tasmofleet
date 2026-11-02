@@ -416,13 +416,42 @@ func TestHeaderModeLogoutAndCSRF(t *testing.T) {
 	}
 }
 
-func TestPasswordHash(t *testing.T) {
+// Why: the tests hash with testIterations (TestMain), so this is the one test that sees the production
+// setting. New hashes at fewer than 600 000 iterations (spec §15.1) must fail here, whether the constant or
+// the variable behind HashPassword was lowered. It changes hashIterations, so it must stay serial.
+func TestNewHashesUsePasswordIterations(t *testing.T) {
+	if PasswordIterations != 600000 {
+		t.Fatalf("PasswordIterations = %d, spec §15.1 says 600000", PasswordIterations)
+	}
+	if productionIterations != PasswordIterations {
+		t.Fatalf("new hashes use %d iterations unless a test lowers them, want PasswordIterations (%d)", productionIterations, PasswordIterations)
+	}
+	prev := hashIterations
+	hashIterations = productionIterations
+	t.Cleanup(func() { hashIterations = prev })
 	h, err := HashPassword(testPassword)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !regexp.MustCompile(`^\$pbkdf2-sha256\$i=600000\$[A-Za-z0-9+/]{22}\$[A-Za-z0-9+/]{43}$`).MatchString(h) {
 		t.Fatalf("hash format %q (spec: $pbkdf2-sha256$i=600000$<16-byte salt>$<hash>)", h)
+	}
+	if err := VerifyPassword(h, testPassword); err != nil {
+		t.Fatal(err)
+	}
+	// A hash made at another count keeps verifying: the count is read from the hash, not from the constant.
+	if err := VerifyPassword(testHash, testPassword); err != nil {
+		t.Fatalf("hash with %d iterations: %v", testIterations, err)
+	}
+}
+
+func TestPasswordHash(t *testing.T) {
+	h, err := HashPassword(testPassword)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !regexp.MustCompile(`^\$pbkdf2-sha256\$i=1000\$[A-Za-z0-9+/]{22}\$[A-Za-z0-9+/]{43}$`).MatchString(h) {
+		t.Fatalf("hash format %q (want $pbkdf2-sha256$i=%d$<16-byte salt>$<hash>)", h, testIterations)
 	}
 	h2, _ := HashPassword(testPassword)
 	if h == h2 {

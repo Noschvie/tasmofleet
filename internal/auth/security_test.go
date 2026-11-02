@@ -91,6 +91,12 @@ func TestKDFConcurrencyBounded(t *testing.T) {
 	for range kdfSlots {
 		e.svc.kdf <- struct{}{} // all slots busy
 	}
+	// The slots are process-wide (sharedKDF): free what is left, or a second run (-count=2) blocks here.
+	t.Cleanup(func() {
+		for len(e.svc.kdf) > 0 {
+			<-e.svc.kdf
+		}
+	})
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
 	if err := e.svc.verifyBounded(ctx, testHash, testPassword); !errors.Is(err, context.DeadlineExceeded) {
