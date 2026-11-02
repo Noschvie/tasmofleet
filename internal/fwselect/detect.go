@@ -26,6 +26,9 @@ type status4Reply struct {
 		FlashSize        int
 		ProgramFlashSize int
 		Free             int
+		// Features is read apart (localeID): a shape we do not know must not cost the device its
+		// identity.
+		Features json.RawMessage
 	}
 }
 
@@ -50,10 +53,7 @@ func detect(in Inputs) (model.Identity, error) {
 		Hardware:   hw,
 		SingleCore: single,
 		Variant:    variantUnknown,
-		Language:   languageFromRoot(in.Root),
-
-		LanguageKnown: languageKnownFromRoot(in.Root),
-		FWR:           fwrFacts(in.Status2),
+		FWR:        fwrFacts(in.Status2),
 	}
 	// An unparseable Version does not cost the device its identity (#45): the version stays
 	// empty and the variant unknown, so the identity is never Known() and Guard refuses
@@ -62,6 +62,7 @@ func detect(in Inputs) (model.Identity, error) {
 	if err != nil {
 		return model.Identity{}, err
 	}
+	lcid := ""
 	if len(in.Status4) > 0 {
 		var s4 status4Reply
 		if err := json.Unmarshal(in.Status4, &s4); err != nil {
@@ -72,8 +73,24 @@ func detect(in Inputs) (model.Identity, error) {
 			return model.Identity{}, errors.New("fwselect: Status 4 reply has no valid StatusMEM")
 		}
 		id.FlashSizeKB, id.ProgramFlashSizeKB, id.FreeKB = m.FlashSize, m.ProgramFlashSize, m.Free
+		lcid = localeID(m.Features)
 	}
+	id.Language, id.LanguageKnown = languageFromRoot(in.Root, lcid)
 	return id, nil
+}
+
+// localeID is the first entry of StatusMEM.Features: the locale ID of the language build,
+// written as "%04X" (support_features.ino, ResponseAppendFeatures). "" for anything else.
+func localeID(features json.RawMessage) string {
+	var entries []json.RawMessage
+	if json.Unmarshal(features, &entries) != nil || len(entries) == 0 {
+		return ""
+	}
+	var first string
+	if json.Unmarshal(entries[0], &first) != nil {
+		return ""
+	}
+	return first
 }
 
 // applyVersion sets Version, Image and Variant of id from a firmware version string, checking the
@@ -151,14 +168,15 @@ func detectMinimal(in Inputs) (model.Identity, error) {
 	if !isNumericVersion(version) {
 		return model.Identity{}, fmt.Errorf("%w: %q", errBadVersion, version)
 	}
+	// Minimal firmware answers no Status 4, so a page code two builds share stays unknown.
+	lang, known := languageFromRoot(in.Root, "")
 	return model.Identity{
-		Family:   fam,
-		Version:  version,
-		Image:    in.Root.Image,
-		Variant:  image,
-		Language: languageFromRoot(in.Root),
-
-		LanguageKnown: languageKnownFromRoot(in.Root),
+		Family:        fam,
+		Version:       version,
+		Image:         in.Root.Image,
+		Variant:       image,
+		Language:      lang,
+		LanguageKnown: known,
 	}, nil
 }
 
@@ -290,28 +308,19 @@ func variantFromTag(tag string, fam model.ChipFamily, single bool) (string, bool
 	return t.variant, !known || (t.esp8266 && fam == model.ChipESP8266) || (t.esp32 && fam == model.ChipESP32 && !single)
 }
 
-// languageFromRoot maps <html lang> to the upstream language suffix: "" is the plain English
-// build. The code is looked up in the language table (language.go), never derived from the
-// spelling: Tasmota writes the ISO code, the release files use their own suffixes (#509). A code
-// the table does not know, or that two builds share ("pt"), gives "" here and is not known
-// (languageKnownFromRoot), so that the person is asked and no file name is made up.
-func languageFromRoot(r *RootInfo) string {
+// languageFromRoot maps <html lang> to the upstream language suffix ("" is the plain English
+// build) and says whether that is a fact. The code is looked up in the language table
+// (language.go), never derived from the spelling: Tasmota writes the ISO code, the release files
+// use their own suffixes (#509). lcid is the locale ID of Status 4, which tells the two Portuguese
+// builds apart. A code the table does not name ("pt" without a Portuguese locale, an unlisted one)
+// leaves the language unread, like an MQTT-only device: an empty Language is then no proof of
+// English. The language is also only known when it came from a device main page.
+func languageFromRoot(r *RootInfo, lcid string) (suffix string, known bool) {
 	if r == nil {
-		return ""
+		return "", false
 	}
-	suffix, _ := languageFromHTML(r.Lang)
-	return suffix
-}
-
-// languageKnownFromRoot reports whether the language came from a device main page and names one
-// build. A page whose code does not (see languageFromRoot) leaves the language unread, like an
-// MQTT-only device: an empty Language is then no proof of English.
-func languageKnownFromRoot(r *RootInfo) bool {
-	if r == nil || !r.LangKnown {
-		return false
-	}
-	_, ok := languageFromHTML(r.Lang)
-	return ok
+	suffix, ok := languageFromHTML(r.Lang, lcid)
+	return suffix, r.LangKnown && ok
 }
 
 // fwrFacts reads the display-only StatusFWR fields. They never decide identity or updatability,
