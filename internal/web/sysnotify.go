@@ -149,7 +149,7 @@ func (h *handler) sysNotifyTest(w http.ResponseWriter, r *http.Request) {
 		what, help = "E-mail test", emailTestHelp
 	}
 	if r.Header.Get("HX-Request") != "" {
-		h.component(w, r, http.StatusOK, sysTestRow("Send test", httpBase(r)+sysPath+"/notify-test/"+string(ch)+"?tab=notifications", what, msg, help))
+		h.component(w, r, http.StatusOK, sysTestRow("Send test", httpBase(r)+sysPath+"/notify-test/"+string(ch)+"?tab=notifications", what, msg, help, sysDependsOn(prefix)))
 		return
 	}
 	p := h.sysData(r, values, nil)

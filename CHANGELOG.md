@@ -13,6 +13,7 @@ always upgrade automatically.
 ### Fixed
 
 - An ESP32-C3 that Tasmota names by its package, `ESP8685` (embedded flash) or `ESP8686` (QFN24), is recognised as ESP32-C3. Before, it showed "The chip family is not known yet" and was never updated (#470, thanks @Noschvie)
+- Settings → Notifications: "Send test" is dimmed and cannot be pressed while the switch of its channel (Webhook, E-mail) is off. It follows the switch on the page at once, before anything is saved (#471).
 
 ### Security
 

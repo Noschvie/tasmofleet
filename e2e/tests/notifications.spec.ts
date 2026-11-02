@@ -120,6 +120,28 @@ test("the cards stack per column without gaps; one column on a phone", { tag: "@
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
 
+// Why (#471): a channel that is switched off is not set up, so its "Send test" must not be usable.
+// It follows the switch like every setting that depends on one, live and before anything is saved:
+// dimmed and inert while the switch is off, usable as soon as it is on. (Placed before the tests that save a
+// channel as on: both switches are still off here.)
+test("Send test is not usable while its channel's switch is off", { tag: "@core" }, async ({ page }) => {
+  await open(page);
+  for (const [card, key] of [
+    ["#card-notify-webhook", "NOTIFY_WEBHOOK"],
+    ["#card-notify-email", "NOTIFY_SMTP"],
+  ]) {
+    const row = page.locator(`${card} .sys-test`);
+    const inert = () => row.locator("button").evaluate((el) => el.closest("[inert]") !== null);
+    await expect(row).toHaveClass(/is-off/);
+    expect(await inert()).toBe(true);
+    await page.locator(`[data-key='${key}'] .swtrack`).click();
+    await expect(row).not.toHaveClass(/is-off/);
+    expect(await inert()).toBe(false);
+    await page.locator(`[data-key='${key}'] .swtrack`).click(); // leave the form as found
+    await expect(row).toHaveClass(/is-off/);
+  }
+});
+
 // Why: the whole point is that the receiver gets the message. The Home Assistant preset sends the
 // same JSON; the secret header goes with it; and the secret must never come back to the browser.
 test("webhook: save, the secret is not shown again, Send test reaches the receiver", { tag: "@core" }, async ({ page }) => {

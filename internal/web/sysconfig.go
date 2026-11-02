@@ -566,7 +566,7 @@ func (h *handler) sysTestFragment(w http.ResponseWriter, r *http.Request, msg st
 		h.fail(w, r, err)
 		return
 	}
-	h.component(w, r, http.StatusOK, sysTestRow("Test connection", httpBase(r)+sysPath+"/mqtt-test?tab=mqtt", "MQTT connection test", msg, mqttTestHelp))
+	h.component(w, r, http.StatusOK, sysTestRow("Test connection", httpBase(r)+sysPath+"/mqtt-test?tab=mqtt", "MQTT connection test", msg, mqttTestHelp, ""))
 }
 
 // sysMQTTTest checks the broker. The "Test MQTT" button sits in the MQTT tab of the settings
@@ -889,6 +889,15 @@ func sysDescribe(row sysRow) templ.Attributes {
 		return templ.Attributes{"aria-describedby": ui.SettingHelpID(row.Key)}
 	}
 	return templ.Attributes{}
+}
+
+// sysDependsAttrs makes an element follow a switch of the settings form (sysform.js dims it and makes
+// it inert while the switch is off); no attribute for an empty rule.
+func sysDependsAttrs(rule string) templ.Attributes {
+	if rule == "" {
+		return templ.Attributes{}
+	}
+	return templ.Attributes{"data-depends": rule}
 }
 
 // sysFieldDataGroup is sysFieldData for controls that are a group (segments, radio cards, boxes):

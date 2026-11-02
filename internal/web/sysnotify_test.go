@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -206,6 +207,34 @@ func TestNotificationSettingsAndAboutAreAdminOnly(t *testing.T) {
 			if r.StatusCode != 401 && r.StatusCode != 403 && r.StatusCode != 302 && r.StatusCode != 303 || strings.Contains(body, "ha-credential-77") {
 				t.Errorf("%s as %q: %d, the address must not be served", path, role, r.StatusCode)
 			}
+		}
+	}
+}
+
+// Why (#471): a channel that is switched off is not set up, so its "Send test" must not be usable
+// (a test that works with the switch off suggests that the channel is live). The page does it the
+// way it dims every setting that depends on a switch: the row says which switch it follows
+// (data-depends), and sysform.js makes it inert while that switch is off, live, before anything is
+// saved. The row the test button swaps in keeps the attribute, or the switch would no longer
+// reach it after the first test.
+func TestNotificationSendTestFollowsItsChannelSwitch(t *testing.T) {
+	f := &fakeNotify{result: notify.Attempt{OK: true, Detail: "HTTP 200"}}
+	e, _ := notifyEnv(t, f)
+	rowOpening := func(body, channel string) string {
+		m := regexp.MustCompile(`(<div[^>]*>)\s*<button[^>]*notify-test/` + channel + `\?tab=notifications`).FindStringSubmatch(body)
+		if m == nil {
+			t.Fatalf("no Send test row for %s in:\n%s", channel, body)
+		}
+		return m[1]
+	}
+	_, page := e.do(t, "GET", "/settings/system?tab=notifications", "admin", nil)
+	for channel, sw := range map[string]string{"webhook": "v.NOTIFY_WEBHOOK", "email": "v.NOTIFY_SMTP"} {
+		if row := rowOpening(page, channel); !strings.Contains(row, `data-depends="`+sw+`"`) {
+			t.Errorf("%s: the Send test row does not follow its switch %s: %s", channel, sw, row)
+		}
+		_, swapped := e.do(t, "POST", "/settings/system/notify-test/"+channel, "admin", url.Values{"csrf": {"tok"}}, "HX-Request", "true")
+		if row := rowOpening(swapped, channel); !strings.Contains(row, `data-depends="`+sw+`"`) {
+			t.Errorf("%s: the row a test swaps in does not follow its switch %s: %s", channel, sw, row)
 		}
 	}
 }

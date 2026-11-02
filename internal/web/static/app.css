@@ -11836,7 +11836,8 @@ dialog.fw-notes-dlg .fw-dlg-body {
   grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
 }
 .scard.is-off,
-.dep.is-off {
+.dep.is-off,
+.sys-test.is-off {
   opacity: 0.5;
 }
 .sch {
