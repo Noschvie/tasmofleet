@@ -80,7 +80,7 @@ func (f *fakeDiscovery) Scans() []discovery.ScanStatus {
 	return []discovery.ScanStatus{f.scan}
 }
 
-func setupDiscovery(t *testing.T) (*env, *fakeDiscovery) {
+func setupDiscovery(t *testing.T, opts ...func(*Deps)) (*env, *fakeDiscovery) {
 	t.Helper()
 	fd := &fakeDiscovery{
 		props: []discovery.Proposal{
@@ -91,7 +91,12 @@ func setupDiscovery(t *testing.T) (*env, *fakeDiscovery) {
 		scan: discovery.ScanStatus{ID: "abc123", State: discovery.ScanDone, Total: 4, Done: 4, StartedAt: time.Now(),
 			Hits: []discovery.Hit{{Address: "10.0.0.50", Port: 80, MAC: "aa:bb:cc:dd:ee:01", Name: "n", Outcome: "new proposal"}}},
 	}
-	e := setupWith(t, func(d *Deps) { d.Discovery = fd })
+	e := setupWith(t, func(d *Deps) {
+		d.Discovery = fd
+		for _, o := range opts {
+			o(d)
+		}
+	})
 	// device 2 is bound and has no credentials: its address change can be confirmed here
 	d2 := e.inv.devs[2]
 	d2.MAC = "aa:bb:cc:dd:ee:02"

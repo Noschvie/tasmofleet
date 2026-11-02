@@ -23,6 +23,19 @@ type sessionChecker interface {
 	Principal(r *http.Request) (model.Principal, error)
 }
 
+// adminStreamOpen is the re-check of a stream of an admin-only route (network scan, firmware
+// prefetch), run every SSERecheck: the session must still be valid and still an admin. A route's
+// role is checked once when the stream opens, so without this a demoted admin keeps receiving data a
+// fresh request would be refused (GHSA-wq89-cqcx-3h3h). A stream of a new admin-only route calls it too.
+func adminStreamOpen(r *http.Request, checker sessionChecker) bool {
+	if checker == nil {
+		return true
+	}
+	// A detached context: the principal cached in the request's context is the one from connect time.
+	p, err := checker.Principal(r.Clone(httpx.Detach(r.Context())))
+	return err == nil && p.Role >= model.RoleAdmin
+}
+
 // acquireStream reserves a stream slot for the user.
 func (h *handler) acquireStream(user string) bool {
 	h.sseMu.Lock()

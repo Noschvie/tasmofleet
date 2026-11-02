@@ -16,7 +16,6 @@ import (
 
 	"github.com/a-h/templ"
 	"github.com/nofuturekid/tasmofleet/internal/discovery"
-	"github.com/nofuturekid/tasmofleet/internal/httpx"
 	"github.com/nofuturekid/tasmofleet/internal/inventory"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/netaddr"
@@ -568,10 +567,8 @@ func (h *handler) discoveryScanStream(w http.ResponseWriter, r *http.Request) {
 		}
 		if now := h.d.Clock.Now(); now.Sub(lastCheck) >= h.d.SSERecheck {
 			lastCheck = now
-			if checker != nil {
-				if _, err := checker.Principal(r.Clone(httpx.Detach(r.Context()))); err != nil {
-					return
-				}
+			if !adminStreamOpen(r, checker) {
+				return
 			}
 		}
 	}

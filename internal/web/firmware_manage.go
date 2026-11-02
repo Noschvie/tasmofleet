@@ -418,10 +418,8 @@ func (h *handler) firmwarePrefetchStream(w http.ResponseWriter, r *http.Request)
 		}
 		if now := h.d.Clock.Now(); now.Sub(lastCheck) >= h.d.SSERecheck {
 			lastCheck = now
-			if checker != nil {
-				if p, err := checker.Principal(r.Clone(httpx.Detach(r.Context()))); err != nil || p.Role < model.RoleAdmin {
-					return
-				}
+			if !adminStreamOpen(r, checker) {
+				return
 			}
 		}
 	}
