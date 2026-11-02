@@ -543,14 +543,15 @@ type previewRow struct {
 	Language       string
 }
 
-// languageOptions are the upstream language builds a person can say a device runs ("" is English).
-var languageOptions = []struct{ Value, Label string }{
-	{"EN", "English"}, {"AF", "Afrikaans"}, {"AD", "Catalan"}, {"BG", "Bulgarian"}, {"BR", "Portuguese (Brazil)"},
-	{"CN", "Chinese (simplified)"}, {"TW", "Chinese (traditional)"}, {"CZ", "Czech"}, {"NL", "Dutch"}, {"FR", "French"},
-	{"FY", "Frisian"}, {"DE", "German"}, {"GR", "Greek"}, {"HE", "Hebrew"}, {"HU", "Hungarian"}, {"IT", "Italian"},
-	{"KO", "Korean"}, {"PL", "Polish"}, {"PT", "Portuguese"}, {"RO", "Romanian"}, {"RU", "Russian"}, {"SK", "Slovak"},
-	{"ES", "Spanish"}, {"SE", "Swedish"}, {"TR", "Turkish"}, {"UK", "Ukrainian"}, {"VN", "Vietnamese"},
-}
+// languageOptions are the upstream language builds a person can say a device runs: English, then
+// the builds of the fwselect language table, the one list the detection uses too (#509).
+var languageOptions = func() []struct{ Value, Label string } {
+	opts := []struct{ Value, Label string }{{fwselect.LanguageEnglish, "English"}}
+	for _, l := range fwselect.Languages() {
+		opts = append(opts, struct{ Value, Label string }{l.Suffix, l.Name})
+	}
+	return opts
+}()
 
 // LanguageName is the field name of the select that chooses the language build of the device.
 func (r previewRow) LanguageName() string {

@@ -290,22 +290,28 @@ func variantFromTag(tag string, fam model.ChipFamily, single bool) (string, bool
 	return t.variant, !known || (t.esp8266 && fam == model.ChipESP8266) || (t.esp32 && fam == model.ChipESP32 && !single)
 }
 
-// languageFromRoot maps <html lang> to the upstream language suffix:
-// "en" (or nothing) is the plain build, anything else is upper-cased.
+// languageFromRoot maps <html lang> to the upstream language suffix: "" is the plain English
+// build. The code is looked up in the language table (language.go), never derived from the
+// spelling: Tasmota writes the ISO code, the release files use their own suffixes (#509). A code
+// the table does not know, or that two builds share ("pt"), gives "" here and is not known
+// (languageKnownFromRoot), so that the person is asked and no file name is made up.
 func languageFromRoot(r *RootInfo) string {
 	if r == nil {
 		return ""
 	}
-	l := strings.ToUpper(strings.TrimSpace(r.Lang))
-	if l == "EN" {
-		return ""
-	}
-	return l
+	suffix, _ := languageFromHTML(r.Lang)
+	return suffix
 }
 
-// languageKnownFromRoot reports whether the language came from a device main page.
+// languageKnownFromRoot reports whether the language came from a device main page and names one
+// build. A page whose code does not (see languageFromRoot) leaves the language unread, like an
+// MQTT-only device: an empty Language is then no proof of English.
 func languageKnownFromRoot(r *RootInfo) bool {
-	return r != nil && r.LangKnown
+	if r == nil || !r.LangKnown {
+		return false
+	}
+	_, ok := languageFromHTML(r.Lang)
+	return ok
 }
 
 // fwrFacts reads the display-only StatusFWR fields. They never decide identity or updatability,

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/firmware"
+	"github.com/nofuturekid/tasmofleet/internal/fwselect"
 	"github.com/nofuturekid/tasmofleet/internal/httpx"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/ota"
@@ -658,6 +659,44 @@ func TestPreviewAsksForTheLanguageAndShowsTheMQTTPath(t *testing.T) {
 	start, _, _ := strings.Cut(body[strings.Index(body, `<form id="start"`):], "</form>")
 	if !strings.Contains(start, `name="language_4" value="DE"`) {
 		t.Fatalf("the choice is not carried to Start: %s", start)
+	}
+}
+
+// Why (#509): the person is asked for the language build when the page cannot tell it (an MQTT-only
+// device, or "pt", which tasmota-BR and tasmota-PT both write). What the list offers must be what
+// upstream builds: Lithuanian was missing although tasmota-LT exists, and the two Portuguese builds
+// must be told apart in the list. The choice is the one list the detection uses (fwselect.Languages).
+func TestLanguageChoiceOffersEveryUpstreamBuild(t *testing.T) {
+	e, o, _, _ := setupOTA(t)
+	e.inv.devs[4] = model.Device{ID: 4, Name: "pt-plug", Address: "10.0.0.4", Identity: model.Identity{Family: model.ChipESP8266, Hardware: "ESP8285", Version: "15.0.0", Variant: "tasmota"}}
+	o.items[4] = ota.PreviewItem{DeviceID: 4, Decision: "refuse", Reason: "select: language build never read from the device, choose a language", LanguageChoice: true}
+	form := url.Values{"id": {"4"}, "release": {"16.1.0"}, "policy": {"only-newer"}}
+	_, body := e.do(t, "POST", "/updates/preview", "operator", form)
+	sel := body[strings.Index(body, `name="language_4"`):]
+	sel, _, _ = strings.Cut(sel, "</select>")
+	want := []string{`<option value="EN"`}
+	for _, l := range fwselect.Languages() {
+		want = append(want, `<option value="`+l.Suffix+`"`)
+	}
+	pos := 0
+	for _, w := range want {
+		i := strings.Index(sel[pos:], w)
+		if i < 0 {
+			t.Fatalf("the language choice lacks %s (or has it out of order): %s", w, sel)
+		}
+		pos += i + len(w)
+	}
+	if n := strings.Count(sel, "<option"); n != len(want)+1 { // and the "Choose the language" placeholder
+		t.Fatalf("%d options, want %d: %s", n, len(want)+1, sel)
+	}
+	for _, name := range []string{"Lithuanian", "Portuguese (Brazil)", "Portuguese (Portugal)"} {
+		if !strings.Contains(sel, name) {
+			t.Fatalf("the language choice lacks %q: %s", name, sel)
+		}
+	}
+	form.Set("language_4", "LT")
+	if resp, _ := e.do(t, "POST", "/updates/preview", "operator", form); resp.StatusCode != 200 || o.previewReqs[len(o.previewReqs)-1].Language != "LT" {
+		t.Fatalf("Lithuanian is offered but not accepted: %d %+v", resp.StatusCode, o.previewReqs)
 	}
 }
 
