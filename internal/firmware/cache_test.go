@@ -475,6 +475,141 @@ func TestEnsureSingleFlight(t *testing.T) {
 	}
 }
 
+const indexPath = "gh/repos/arendst/Tasmota/releases"
+
+// hungIndexFetch starts an index refresh that hangs at the source and returns once the source has the
+// request, i.e. while the fetch is in flight. The returned release lets it finish.
+func hungIndexFetch(t *testing.T, u *upstream, c Cache) (release func()) {
+	t.Helper()
+	release = u.holdIndex(t)
+	want := u.count(indexPath) + 1
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = c.(interface{ Refresh(context.Context) error }).Refresh(context.Background()) // outcome is not the point; the test releases it
+	}()
+	t.Cleanup(func() { release(); <-done })
+	waitForHits(t, u, indexPath, want)
+	return release
+}
+
+// ensureWithin runs Ensure with a context that expires after budget and fails the test when it does not
+// return within a few seconds (the bug being tested is an Ensure that ignores its context).
+func ensureWithin(t *testing.T, c Cache, budget time.Duration, release, name string) (model.Artifact, error) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), budget)
+	defer cancel()
+	type res struct {
+		a   model.Artifact
+		err error
+	}
+	ch := make(chan res, 1)
+	go func() {
+		a, err := c.Ensure(ctx, release, name)
+		ch <- res{a, err}
+	}()
+	select {
+	case r := <-ch:
+		return r.a, r.err
+	case <-time.After(3 * time.Second):
+		t.Fatalf("Ensure(%s) ignored its %v context and is still waiting", name, budget)
+		return model.Artifact{}, nil
+	}
+}
+
+// Why (#495): the OTA engine calls Ensure for the cached firmware right before every OtaUrl and Upgrade,
+// inside the step's 30 s command timeout. An index fetch that happens to be running (TTL expiry, someone
+// opens the firmware page, Refresh) held the cache mutex across the whole network round trip, so Ensure
+// waited for it before it even looked at the disk, and the device command then ran on an expired context.
+// A click on the firmware page must not make a healthy device's update fail.
+func TestEnsureOfACachedFileDoesNotWaitForAnIndexFetch(t *testing.T) {
+	u := newUpstream(t)
+	c, _, _ := newTestCache(t, u, nil)
+	if _, err := c.Ensure(context.Background(), "16.0.0", "tasmota32c3.bin"); err != nil {
+		t.Fatal(err)
+	}
+	hungIndexFetch(t, u, c)
+	a, err := ensureWithin(t, c, 200*time.Millisecond, "16.0.0", "tasmota32c3.bin")
+	if err != nil || a.Filename != "tasmota32c3.bin" {
+		t.Fatalf("a cached file must be returned while the index is being fetched: %+v %v", a, err)
+	}
+}
+
+// Why (#495): a file that is not cached needs the index, so it has to wait for a running fetch, but only as
+// long as its caller allows. The wait ends with the caller's context error, and a caller that gave up must
+// not leave the fetch or the next caller in a broken state.
+func TestEnsureOfAnUncachedFileStopsWaitingForTheIndexWhenItsContextEnds(t *testing.T) {
+	u := newUpstream(t)
+	c, _, _ := newTestCache(t, u, nil)
+	release := hungIndexFetch(t, u, c)
+	if _, err := ensureWithin(t, c, 200*time.Millisecond, "16.0.0", "tasmota32.bin"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Ensure past its deadline = %v, want the context error", err)
+	}
+	release()
+	if _, err := c.Ensure(context.Background(), "16.0.0", "tasmota32.bin"); err != nil {
+		t.Fatalf("Ensure after the fetch finished: %v", err)
+	}
+}
+
+// Why (#495): the same holds for the per-file lock: a second Ensure of a file that another caller is still
+// downloading waits for it only as long as its own context allows, and giving up leaves the lock table clean.
+func TestEnsureStopsWaitingForADownloadOfTheSameFileWhenItsContextEnds(t *testing.T) {
+	u := newUpstream(t)
+	u.slow = make(chan struct{})
+	release := sync.OnceFunc(func() { close(u.slow) })
+	defer release()
+	c, _, _ := newTestCache(t, u, nil)
+	first := make(chan error, 1)
+	go func() {
+		_, err := c.Ensure(context.Background(), "16.0.0", "tasmota32.bin")
+		first <- err
+	}()
+	waitForHits(t, u, "gh/dl/v16.0.0/tasmota32.bin", 1)
+	if _, err := ensureWithin(t, c, 200*time.Millisecond, "16.0.0", "tasmota32.bin"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("second Ensure = %v, want the context error", err)
+	}
+	release()
+	if err := <-first; err != nil {
+		t.Fatal(err)
+	}
+	if a, err := c.Ensure(context.Background(), "16.0.0", "tasmota32.bin"); err != nil || a.ID == 0 {
+		t.Fatalf("Ensure after the download: %+v %v", a, err)
+	}
+	if n := len(c.(*cache).keyLocks); n != 0 {
+		t.Fatalf("%d file locks left behind", n)
+	}
+}
+
+// Why (#495): moving the fetch out of the mutex must keep what the mutex gave: when the TTL has expired and
+// several callers ask at once, one fetch serves them all instead of one per caller.
+func TestConcurrentCallersAfterTheTTLShareOneIndexFetch(t *testing.T) {
+	u := newUpstream(t)
+	clk := newFakeClock()
+	c, _, _ := newTestCache(t, u, func(o *Options) { o.Clock = clk })
+	if _, err := c.Releases(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	clk.Advance(20 * time.Minute)
+	release := u.holdIndex(t)
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := c.Releases(context.Background()); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	waitForHits(t, u, indexPath, 2)
+	time.Sleep(50 * time.Millisecond) // let the others queue behind the fetch
+	release()
+	wg.Wait()
+	if n := u.count(indexPath); n != 2 {
+		t.Fatalf("index fetched %d times for 8 concurrent callers (1 warm-up + 1 shared), want 2", n)
+	}
+}
+
 func TestEnsureContextCancelStopsDownload(t *testing.T) {
 	u := newUpstream(t)
 	u.slow = make(chan struct{})

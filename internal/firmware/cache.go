@@ -57,20 +57,23 @@ type cache struct {
 	clk    clock.Clock
 	log    *slog.Logger
 
-	mu       sync.Mutex // guards the index fields and keyLocks
-	idx      []srcIndex // parallel to opts.Sources; nil entry = source failed
+	mu       sync.Mutex    // guards the index fields and keyLocks; never held across network I/O
+	fetching chan struct{} // capacity 1: the slot of the one index fetch that may run; waiting for it honours ctx
+	idx      []srcIndex    // parallel to opts.Sources; nil entry = source failed
 	idxAt    time.Time
 	idxValid bool
-	metaMu   sync.Mutex // guards meta and snap; separate so Releases can read it while a refetch holds mu
+	metaMu   sync.Mutex // guards meta and snap
 	meta     []map[string]relMeta
 	snap     []srcIndex // the last good index, for CachedReleases (never fetches)
-	stMu     sync.Mutex // guards status; separate from mu so the page can read it during a slow fetch
+	stMu     sync.Mutex // guards status
 	status   IndexStatus
 	keyLocks map[string]*keyLock
 }
 
+// keyLock is the lock of one file. held has capacity 1, so waiting for it can honour a context; refs
+// counts the callers that hold or wait for it and is guarded by cache.mu.
 type keyLock struct {
-	mu   sync.Mutex
+	held chan struct{}
 	refs int
 }
 
@@ -94,7 +97,7 @@ func New(o Options, st store.ArtifactStore) (Cache, error) {
 	if o.IndexTTL <= 0 {
 		o.IndexTTL = defaultIndexTTL
 	}
-	c := &cache{opts: o, store: st, keyLocks: map[string]*keyLock{}}
+	c := &cache{opts: o, store: st, keyLocks: map[string]*keyLock{}, fetching: make(chan struct{}, 1)}
 	c.opts.BaseURL = strings.TrimRight(o.BaseURL, "/")
 	c.clk = o.Clock
 	if c.clk == nil {
@@ -214,13 +217,25 @@ func (c *cache) Refresh(ctx context.Context) error {
 // a warning as long as another one answered; if none answered the error is
 // returned (unless an older index exists and force is off: that one is
 // served). A partial result is reused for a minute only, then retried.
+//
+// One fetch runs at a time and c.mu is not held while it does: a caller that needs the index waits for the
+// fetch in flight, but only until its ctx ends, and a caller that finds a fresh index never waits at all
+// (#495).
 func (c *cache) index(ctx context.Context, force bool) ([]srcIndex, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	now := c.clk.Now()
-	if !force && c.idxValid && now.Sub(c.idxAt) < c.opts.IndexTTL {
-		return c.idx, nil
+	if idx, ok := c.freshIndex(force); ok {
+		return idx, nil
 	}
+	select {
+	case c.fetching <- struct{}{}:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	defer func() { <-c.fetching }()
+	// The fetch we waited for may have refreshed the index already.
+	if idx, ok := c.freshIndex(force); ok {
+		return idx, nil
+	}
+	now := c.clk.Now()
 	idx := make([]srcIndex, len(c.opts.Sources))
 	meta := make([]map[string]relMeta, len(c.opts.Sources))
 	var errs []error
@@ -240,46 +255,76 @@ func (c *cache) index(ctx context.Context, force bool) ([]srcIndex, error) {
 			errs = []error{errors.New("firmware: no sources configured")}
 		}
 		c.recordIndex(now, false, errs)
-		if !force && c.idxValid {
+		c.mu.Lock()
+		stale, have := c.idx, c.idxValid
+		c.mu.Unlock()
+		if !force && have {
 			// Stale beats nothing: an upstream outage must not take down
 			// planning against an index we already have. The next call retries.
 			c.log.Warn("firmware: serving the stale index after a failed refetch", "err", errors.Join(errs...))
-			return c.idx, nil
+			return stale, nil
 		}
 		return nil, errors.Join(errs...)
 	}
 	c.recordIndex(now, true, errs)
+	c.mu.Lock()
 	c.idx, c.idxValid = idx, true
-	c.metaMu.Lock()
-	c.meta, c.snap = meta, idx
-	c.metaMu.Unlock()
 	c.idxAt = now
 	if len(errs) > 0 {
 		c.idxAt = now.Add(-c.opts.IndexTTL + time.Minute)
 	}
+	c.mu.Unlock()
+	c.metaMu.Lock()
+	c.meta, c.snap = meta, idx
+	c.metaMu.Unlock()
 	return idx, nil
+}
+
+// freshIndex returns the index in memory when it may be used without a fetch: it is within its TTL and the
+// caller does not force a refetch.
+func (c *cache) freshIndex(force bool) ([]srcIndex, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !force && c.idxValid && c.clk.Now().Sub(c.idxAt) < c.opts.IndexTTL {
+		return c.idx, true
+	}
+	return nil, false
 }
 
 // ---- ensure ----
 
-func (c *cache) lock(key string) func() {
+// lock takes the lock of key, waiting for another holder only as long as ctx lasts. The returned func
+// releases it.
+func (c *cache) lock(ctx context.Context, key string) (func(), error) {
 	c.mu.Lock()
 	kl := c.keyLocks[key]
 	if kl == nil {
-		kl = &keyLock{}
+		kl = &keyLock{held: make(chan struct{}, 1)}
 		c.keyLocks[key] = kl
 	}
 	kl.refs++
 	c.mu.Unlock()
-	kl.mu.Lock()
-	return func() {
-		kl.mu.Unlock()
+	drop := func() {
 		c.mu.Lock()
 		if kl.refs--; kl.refs == 0 {
 			delete(c.keyLocks, key)
 		}
 		c.mu.Unlock()
 	}
+	select {
+	case kl.held <- struct{}{}: // free: take it, whatever the state of ctx
+	default:
+		select {
+		case kl.held <- struct{}{}:
+		case <-ctx.Done():
+			drop()
+			return nil, ctx.Err()
+		}
+	}
+	return func() {
+		<-kl.held
+		drop()
+	}, nil
 }
 
 // Lookup returns an indexed artifact and its file path without downloading.
@@ -367,7 +412,10 @@ func (c *cache) Ensure(ctx context.Context, release, filename string) (model.Art
 	if err != nil {
 		return model.Artifact{}, err
 	}
-	unlock := c.lock(release + "/" + filename)
+	unlock, err := c.lock(ctx, release+"/"+filename)
+	if err != nil {
+		return model.Artifact{}, err
+	}
 	defer unlock()
 
 	if a, ok, err := c.cached(ctx, release, filename); err != nil || ok {

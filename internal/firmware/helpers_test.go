@@ -189,6 +189,8 @@ type upstream struct {
 	redir   string            // when set, github downloads redirect here
 	down    bool              // when set, every request answers 503
 	bodies  map[string]string // release body by tag name, injected into the GitHub index
+	// indexGate, when non-nil, holds every GitHub index request until it is closed (or the client gives up).
+	indexGate chan struct{}
 }
 
 func newUpstream(t *testing.T) *upstream {
@@ -205,6 +207,31 @@ func (u *upstream) setDown(v bool) {
 	u.mu.Lock()
 	u.down = v
 	u.mu.Unlock()
+}
+
+// holdIndex makes the GitHub index requests hang, as a slow or unreachable source does, until release is
+// called. The test's cleanup releases it too, before the server is closed.
+func (u *upstream) holdIndex(t *testing.T) (release func()) {
+	t.Helper()
+	gate := make(chan struct{})
+	u.mu.Lock()
+	u.indexGate = gate
+	u.mu.Unlock()
+	release = sync.OnceFunc(func() { close(gate) })
+	t.Cleanup(release)
+	return release
+}
+
+// waitForHits blocks until the fake upstream has seen n requests for path.
+func waitForHits(t *testing.T, u *upstream, path string, n int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for u.count(path) < n {
+		if time.Now().After(deadline) {
+			t.Fatalf("upstream saw %d requests for %s, want %d", u.count(path), path, n)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 }
 
 func (u *upstream) isDown() bool {
@@ -242,6 +269,16 @@ func (u *upstream) serveGH(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case r.URL.Path == "/repos/arendst/Tasmota/releases":
+		u.mu.Lock()
+		gate := u.indexGate
+		u.mu.Unlock()
+		if gate != nil {
+			select {
+			case <-gate:
+			case <-r.Context().Done():
+				return
+			}
+		}
 		body := strings.ReplaceAll(readTestdata(u.t, "github-releases.json"), "{{BASE}}", u.gh.URL)
 		if len(u.bodies) > 0 {
 			var rels []map[string]any

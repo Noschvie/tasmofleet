@@ -100,7 +100,10 @@ func (c *cache) Delete(ctx context.Context, id model.ArtifactID) (model.Artifact
 	if a.Custom != "" {
 		lockKey = "custom/" + a.Custom
 	}
-	unlock := c.lock(lockKey)
+	unlock, err := c.lock(ctx, lockKey)
+	if err != nil {
+		return model.Artifact{}, err
+	}
 	defer unlock()
 	if a, err = c.store.GetArtifact(ctx, id); err != nil { // deleted while we waited
 		return model.Artifact{}, err

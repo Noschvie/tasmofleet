@@ -255,7 +255,10 @@ func (c *cache) AddCustom(ctx context.Context, in CustomInput) (CustomImage, err
 	// The key is part of the URL a device fetches; the same version number as
 	// an upstream release or another upload is fine, the same bytes are not.
 	key := sum[:customKeyLen]
-	unlock := c.lock("custom/" + key)
+	unlock, err := c.lock(ctx, "custom/"+key)
+	if err != nil {
+		return CustomImage{}, err
+	}
 	defer unlock()
 	all, err := c.store.ListArtifacts(ctx)
 	if err != nil {
@@ -411,7 +414,10 @@ func (c *cache) EnsureCustom(ctx context.Context, key, release, filename string)
 	if _, err := parseName(filename); err != nil {
 		return model.Artifact{}, err
 	}
-	unlock := c.lock("custom/" + key)
+	unlock, err := c.lock(ctx, "custom/"+key)
+	if err != nil {
+		return model.Artifact{}, err
+	}
 	defer unlock()
 	cs, ok := c.store.(store.CustomFirmwareStore)
 	if !ok {

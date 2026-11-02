@@ -9,6 +9,7 @@ always upgrade automatically.
 ### Fixed
 
 - An update whose device answers again after the restart but whose firmware cannot be read (Detect or `Status 4` / `Status 11` fail every time) no longer runs for ever. The reboot window never ended it, so it held its update slot and blocked every further job for that device. It now fails when the window is over, with "device is back but its firmware cannot be read" and what failed, and sends no second `Upgrade` (#493).
+- An update step no longer fails because the firmware cache is busy. While a firmware index fetch was running (the index expiring, the firmware page opened, Refresh, a slow source: up to two minutes per source), `Ensure` waited for it even for a file that was already cached and ignored its own deadline, so the `OtaUrl` or `Upgrade` that followed ran on an expired 30 s context and failed with a timeout that had nothing to do with the device. A cached file is returned at once now, and waiting for a fetch or for another download of the same file ends with the caller's context (#495).
 
 ## 0.27.1 "Cordouan" (2026-11-02)
 
