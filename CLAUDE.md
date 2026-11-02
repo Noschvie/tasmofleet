@@ -168,8 +168,8 @@ fixture or a fault instead of mocking HTTP by hand.
 | FAST tier, a safety package changed (race + mutation)   | `make safety BASE=origin/main`                                                |
 | FULL tier, everything CI runs nightly                   | `make ci TESTFLAGS=-count=1`                                                  |
 | format                                                  | `make fmt` / `make fmt-check`                                                 |
-| go vet                                                  | `make vet`                                                                    |
-| staticcheck                                             | `make staticcheck`                                                            |
+| go vet (also inside `make lint`)                        | `make vet`                                                                    |
+| staticcheck (also inside `make lint`)                   | `make staticcheck`                                                            |
 | golangci-lint (incl. depguard boundaries)               | `make lint`                                                                   |
 | unit tests                                              | `make test`                                                                   |
 | integration tests                                       | `make integration`                                                            |

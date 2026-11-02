@@ -1,6 +1,6 @@
 # Every quality gate has a target. CI runs exactly these targets (tiers: CLAUDE.md "Running the gates").
-#   make check     FAST tier, run before every commit (templ, fmt, vet, staticcheck, lint, unit and
-#                  integration tests from the go test cache, vuln, build)
+#   make check     FAST tier, run before every commit (templ, fmt, lint, unit and integration tests
+#                  from the go test cache, vuln, build; lint includes go vet and staticcheck)
 #   make e2e-core  FAST tier: the Playwright tests tagged @core
 #   make safety    FAST tier when a safety-critical package changed (race + mutation of the changed ones)
 #   make ci        FULL tier: check + race + mutation + all e2e (nightly, release tags)
@@ -46,7 +46,9 @@ E2E_ARGS  ?=
 
 .PHONY: catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check changelog-title migration-guard changelog-notes clean tools
 
-check: templ-check fmt-check vet staticcheck lint test scripts-test shards-check integration vuln build
+# golangci-lint runs govet and staticcheck with their defaults (.golangci.yml), so check does not run
+# them a second time; the vet and staticcheck targets stay for single runs and CI.
+check: templ-check fmt-check lint test scripts-test shards-check integration vuln build
 
 # Unit tests of the registry cleanup's version selection (pure, no registry access).
 scripts-test:

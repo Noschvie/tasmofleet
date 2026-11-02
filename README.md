@@ -218,7 +218,7 @@ the [issues](https://github.com/nofuturekid/tasmofleet/issues).
 ## Development
 
 ```sh
-make check   # templ, fmt, vet, staticcheck, golangci-lint, unit and integration tests, govulncheck, build
+make check   # templ, fmt, golangci-lint (incl. go vet and staticcheck), unit and integration tests, govulncheck, build
 make ci      # everything CI runs: check plus race, mutation and e2e tests
 make demo    # the static demo (dist/demo); make demo-media renews docs/media
 ```
