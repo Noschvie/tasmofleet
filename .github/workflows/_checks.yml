@@ -173,9 +173,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # diff against the PR base
+      # Restores the cache that nightly.yml saves for its race shard 2/2 ("cache: race-1"; a restore
+      # key matches by prefix, so "race" matched neither shard's cache, #523). Saves nothing.
       - uses: ./.github/actions/go
         with:
-          name: race
+          name: race-1
           save: "false"
       - env:
           BASE: ${{ inputs.base }}
