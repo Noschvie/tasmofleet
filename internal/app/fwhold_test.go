@@ -109,6 +109,67 @@ func TestRetryIsRefusedWhileATypedUpgradeStillRuns(t *testing.T) {
 	}
 }
 
+// Why (#504): when an update job finds that the device flashes from another URL it fails and lets go of the
+// device, so the engine asks for a hold first. The next update for that device must then be refused with a
+// reason that tells the person why (the flash was started by another tool, not typed here), and an update of
+// any other device must go through.
+func TestUpdateIsRefusedAfterAJobFoundTheDeviceFlashingFromAnotherURL(t *testing.T) {
+	ctx := context.Background()
+	g, holds, clk := newHoldGuard()
+	up := &countingOTA{}
+	lo := lockedOTA{OTA: up, g: g}
+	startHold(holds, func(model.DeviceID) int64 { return 0 }, 1)
+	clk.advance(2 * time.Minute)
+
+	_, err := lo.Submit(ctx, "u", []ota.Request{{DeviceID: 1}})
+	var refused *ota.RefusedError
+	if !errors.As(err, &refused) || len(refused.Refused) != 1 || refused.Refused[0].DeviceID != 1 {
+		t.Fatalf("submit for the flashing device must be refused, got %v", err)
+	}
+	for _, want := range []string{"2 min ago", "another tool", "wait until it has restarted"} {
+		if !strings.Contains(refused.Refused[0].Reason, want) {
+			t.Errorf("reason %q lacks %q", refused.Refused[0].Reason, want)
+		}
+	}
+	if up.submits != 0 {
+		t.Fatal("a refused submit reached the engine")
+	}
+	if _, err := lo.Submit(ctx, "u", []ota.Request{{DeviceID: 2}}); err != nil {
+		t.Fatalf("another device is free: %v", err)
+	}
+}
+
+// Why (#504): the hold ends when the device is seen to restart. Its baseline is the uptime the tracker had
+// cached when the hold started: that value repeated is not a new reading, a reading shorter than the time
+// since then is a boot. Without the baseline the cached value would end the hold at once.
+func TestStartHoldTakesTheCachedUptimeAsBaseline(t *testing.T) {
+	_, holds, clk := newHoldGuard()
+	startHold(holds, func(id model.DeviceID) int64 {
+		if id != 1 {
+			t.Errorf("uptime asked for device %d", id)
+		}
+		return 30
+	}, 1)
+	clk.advance(time.Minute)
+	holds.Observe(1, "", 30, false) // the tracker's cached value again
+	if _, ok := holds.Holding(1); !ok {
+		t.Fatal("the cached uptime is no proof of a restart")
+	}
+	holds.Observe(1, "", 5, false) // shorter than the minute since: the device booted
+	if _, ok := holds.Holding(1); ok {
+		t.Fatal("a fresh boot must end the hold")
+	}
+}
+
+// startHold must cope with a missing tracker reading, as holdingCmd does.
+func TestStartHoldWithoutAnUptimeSource(t *testing.T) {
+	_, holds, _ := newHoldGuard()
+	startHold(holds, nil, 4)
+	if _, ok := holds.Holding(4); !ok {
+		t.Fatal("no hold")
+	}
+}
+
 // Why: the hold may only follow a firmware command that may have reached the device, from the console and
 // from bulk jobs alike (both send through this service). An unknown outcome (HTTP read timeout, MQTT lost
 // reply, unconfirmed publish) counts: holding ten minutes too long is cheap, too short risks a brick. A

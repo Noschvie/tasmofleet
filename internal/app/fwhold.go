@@ -17,7 +17,8 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/transport"
 )
 
-// firmwareHoldTimeout is how long a typed firmware command holds the device for update starts at most. The
+// firmwareHoldTimeout is how long a typed firmware command (or an update job that found its device flashing
+// from another URL, #504) holds the device for update starts at most. The
 // device downloads and flashes for about a minute; ten minutes cover a slow link and a slow reboot, and a
 // missed restart (the report was lost, the device has no MQTT) does not hold it for ever.
 const firmwareHoldTimeout = 10 * time.Minute
@@ -45,14 +46,28 @@ func (c holdingCmd) Run(ctx context.Context, p model.Principal, id model.DeviceI
 		c.asks.Note(id)
 	}
 	if !neverSent(err) && cmdpolicy.StartsFirmwareUpgrade(cmd) {
-		var up int64
-		if c.uptime != nil {
-			up = c.uptime(id)
-		}
-		c.holds.Start(id, up)
+		startHold(c.holds, c.uptime, id)
 	}
 	return raw, err
 }
+
+// startHold holds id for update starts from now, with the uptime the health tracker has cached for it as the
+// baseline (uptime may be nil: no baseline).
+func startHold(holds *devlock.FirmwareHolds, uptime func(model.DeviceID) int64, id model.DeviceID) {
+	var up int64
+	if uptime != nil {
+		up = uptime(id)
+	}
+	holds.Start(id, up)
+}
+
+// cachedUptime is the uptime the health tracker has cached for a device, the baseline of its hold.
+func (a *runtime) cachedUptime(id model.DeviceID) int64 { return a.tracker.Get(id).UptimeSec }
+
+// holdFlashing is ota.Options.HoldFlashing: an update job found that its device flashes from another URL
+// and is about to fail, which releases the device. The hold keeps the next update away from it until it has
+// restarted, as it does after a typed firmware command (#504).
+func (a *runtime) holdFlashing(id model.DeviceID) { startHold(a.fwHolds, a.cachedUptime, id) }
 
 // neverSent reports whether err says the command certainly did not leave TasmoFleet: a policy refusal, a
 // busy device, a vanished inventory entry, a refused cut-off.
@@ -88,7 +103,7 @@ func fwHoldReason(since, now time.Time, timeout time.Duration) string {
 	if m := int(now.Sub(since) / time.Minute); m >= 1 {
 		ago = fmt.Sprintf("%d min ago", m)
 	}
-	return fmt.Sprintf("A firmware update typed in the console or sent as a bulk command %s is probably still running on this device; wait until it has restarted (TasmoFleet stops waiting after %d min). Two updates at once can leave the device unusable", ago, int(timeout/time.Minute))
+	return fmt.Sprintf("A firmware update typed in the console, sent as a bulk command or started by another tool %s is probably still running on this device; wait until it has restarted (TasmoFleet stops waiting after %d min). Two updates at once can leave the device unusable", ago, int(timeout/time.Minute))
 }
 
 // heldReasons returns the refusal text of every device of ids that a typed firmware command holds.

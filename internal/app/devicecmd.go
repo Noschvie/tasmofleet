@@ -5,7 +5,6 @@ import (
 
 	"github.com/nofuturekid/tasmofleet/internal/devicecmd"
 	"github.com/nofuturekid/tasmofleet/internal/devlock"
-	"github.com/nofuturekid/tasmofleet/internal/model"
 )
 
 // setupDeviceCmd builds the power toggle and console service. MQTT is used
@@ -16,7 +15,6 @@ func (a *runtime) setupDeviceCmd() {
 		o.MQTT = a.mqttCmd
 	}
 	a.fwHolds = devlock.NewFirmwareHolds(time.Now, firmwareHoldTimeout)
-	up := func(id model.DeviceID) int64 { return a.tracker.Get(id).UptimeSec }
-	a.deviceCmd = holdingCmd{Service: devicecmd.New(o), holds: a.fwHolds, uptime: up, asks: a.restartAsks}
+	a.deviceCmd = holdingCmd{Service: devicecmd.New(o), holds: a.fwHolds, uptime: a.cachedUptime, asks: a.restartAsks}
 	a.goBG("firmware-holds", func() error { observeFirmwareHolds(a.bgContext, a.svc.Hub, a.fwHolds, a.tracker.Minimal); return nil })
 }

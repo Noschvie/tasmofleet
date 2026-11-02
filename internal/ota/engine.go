@@ -125,6 +125,11 @@ type Options struct {
 	// Paths chooses the path of each update (HTTP or MQTT, D2). nil means every update is an HTTP
 	// one, as before MQTT transport.
 	Paths UpdatePaths
+	// HoldFlashing is called when a job is about to end while its device is flashing a firmware the job did
+	// not choose: the Upgrade reply named another URL than the one the job set (#504). Ending the job
+	// releases the device, so the caller must keep new updates away from it, as it does after a typed
+	// firmware command (#347). It runs before the job is released and must not block. nil = no hold.
+	HoldFlashing func(model.DeviceID)
 }
 
 // Errors returned by Submit and Cancel.
@@ -1271,6 +1276,12 @@ func (e *Engine) exec(ctx context.Context, j model.Job, a Action) Event {
 			return Event{Kind: EvCommandFailed, Err: err.Error()}
 		}
 		if echo != u {
+			// The reply names a URL, so the device has accepted the upgrade and is downloading from it. The
+			// job fails because the file was not checked, but failing releases the device while it flashes:
+			// hold it first, so no second update starts on it (#504).
+			if e.opts.HoldFlashing != nil {
+				e.opts.HoldFlashing(j.DeviceID)
+			}
 			return Event{Kind: EvCommandOK, Err: fmt.Sprintf("device flashes %q, expected %q", echo, u)}
 		}
 		return Event{Kind: EvCommandOK}

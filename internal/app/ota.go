@@ -80,7 +80,8 @@ func (a *runtime) setupOTA() {
 	cfgM.PowerRestoreMaxAge = a.cfg.OTAPowerMaxAge
 	a.engine = ota.NewEngine(
 		ota.Options{Machine: cfgM, MaxParallel: a.cfg.OTAParallel, Power: a.deviceCmd, Audit: a.svc.Audit, Policy: a.policyApplier(), Templates: a.templateApplier(),
-			Commands: a.deviceCmd, Principals: principalResolver{local: a.svc.Store, dir: a.svc.Store}, Paths: a.updatePaths()},
+			Commands: a.deviceCmd, Principals: principalResolver{local: a.svc.Store, dir: a.svc.Store}, Paths: a.updatePaths(),
+			HoldFlashing: a.holdFlashing},
 		a.svc.Store, a.svc.Store, ota.NewDeviceAPI(a.svc.Client), a.cache, a.backups, clock.Real{}, jobNotifier{rt: a},
 	)
 	if a.templates != nil {

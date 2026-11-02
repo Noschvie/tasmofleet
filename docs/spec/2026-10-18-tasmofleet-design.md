@@ -738,7 +738,10 @@ Refuses, with a typed error, unless **all** hold:
 8. URL length ≤ 100 characters (Tasmota settings text pool) -> else `ErrFilenameMismatch`.
 
 The engine also checks that the `Upgrade 1` reply `Version X from <url>` echoes exactly
-the URL it set. If not (another tool changed OtaUrl in between), the job fails.
+the URL it set. If not (another tool changed OtaUrl in between), the job fails. The device has accepted
+the upgrade by then and flashes from the other URL, so the engine first asks for the device to be held
+against new updates (`Options.HoldFlashing`, the same hold a typed `Upgrade 1` starts): failing releases the
+device, and a second update on a device that is still flashing can brick it.
 
 Guard and Plan run under mutation testing with a required efficacy ≥ 90 % (§21).
 
@@ -992,7 +995,7 @@ safeboot only, below), `upgrade_issued`, `await_reboot`, `verify`,
 | set_ota_url                            | command_failed / timeout    |                                                                                  | failed                                                                                              | notify                                                              |
 | set_ota_url                            | guard_refused               | (engine re-runs Guard before OtaUrl)                                             | failed                                                                                              | notify                                                              |
 | upgrade_issued                         | command_ok                  | reply echoes the URL                                                             | upgrade_issued                                                                                      | probe after ProbeInterval                                           |
-| upgrade_issued                         | command_ok                  | URL differs                                                                      | failed ("OtaUrl changed by someone else")                                                           | notify                                                              |
+| upgrade_issued                         | command_ok                  | URL differs                                                                      | failed ("OtaUrl changed by someone else")                                                           | notify, and hold the device against new updates                     |
 | upgrade_issued                         | command_failed              |                                                                                  | upgrade_issued (unknown whether it started)                                                         | probe after ProbeInterval                                           |
 | upgrade_issued                         | guard_refused               | Guard re-run before `Upgrade` refused; Upgrade not sent                          | failed                                                                                              | notify                                                              |
 | upgrade_issued                         | probe_offline               |                                                                                  | await_reboot, SeenOffline, deadline now+RebootWindow                                                | probe after ProbeInterval                                           |

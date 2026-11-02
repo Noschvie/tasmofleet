@@ -577,6 +577,8 @@ type harness struct {
 	sel     *fakeSel
 	fw      fakeFW
 	e       *Engine
+	// hold is the engine's HoldFlashing hook; newHarness records every call in the log as "hold <device>".
+	hold func(model.DeviceID)
 }
 
 func newHarness(t *testing.T, maxParallel int, devs ...*fakeDevice) *harness {
@@ -592,12 +594,13 @@ func newHarness(t *testing.T, maxParallel int, devs ...*fakeDevice) *harness {
 	}
 	h.power = &fakePower{rec: rec, api: h.api}
 	h.backups = &fakeBackups{rec: rec}
+	h.hold = func(id model.DeviceID) { rec.add("hold %d", id) }
 	h.e = h.newEngine(maxParallel)
 	return h
 }
 
 func (h *harness) newEngine(maxParallel int) *Engine {
-	e := NewEngine(Options{Machine: testCfg(), MaxParallel: maxParallel, Power: h.power}, h.st, h.st, h.api, h.fw, h.backups, h.clk, nil)
+	e := NewEngine(Options{Machine: testCfg(), MaxParallel: maxParallel, Power: h.power, HoldFlashing: h.hold}, h.st, h.st, h.api, h.fw, h.backups, h.clk, nil)
 	e.sel = h.sel
 	return e
 }
@@ -905,6 +908,72 @@ func TestEngineIdentityUnreadableAfterTheUpdateFailsAtTheDeadline(t *testing.T) 
 	// round of it, not hours later.
 	if over := h.clk.Now().Sub(dev.upgradeTimes[0]); over > testCfg().UpgradeAccept+testCfg().RebootWindow+time.Minute {
 		t.Fatalf("job ended %v after Upgrade, the windows allow %v", over, testCfg().UpgradeAccept+testCfg().RebootWindow)
+	}
+}
+
+// Why (#504): an Upgrade reply that names another URL means the device has accepted the upgrade and is
+// downloading and flashing from that URL. The job fails (the file was not checked), but failing releases the
+// device, and a new update started in the next minute would be the second flash on a device that is still
+// writing its first: the likeliest way to brick it. The device must be held for the person-started commands'
+// hold window before the job lets go of it. Device 2 and job 1 differ on purpose: the hold is by device.
+func TestEngineUpgradeEchoMismatchHoldsTheFlashingDevice(t *testing.T) {
+	other := plugDevice()
+	other.echo = "http://other.example/tasmota.bin.gz"
+	h := newHarness(t, 2, plugDevice(), other)
+	id := submitOne(t, h, Request{DeviceID: 2, Release: "16.0.0"})
+	h.run(t, h.e)
+	if j := h.job(t, id); j.State != model.JobFailed || !strings.Contains(j.LastError, ErrTextOtaURLChanged) {
+		t.Fatalf("job %s %q", j.State, j.LastError)
+	}
+	log := h.rec.entries()
+	holdAt, failedAt := -1, -1
+	for i, e := range log {
+		switch e {
+		case "hold 2":
+			holdAt = i
+		case fmt.Sprintf("save %d %s", id, model.JobFailed):
+			failedAt = i
+		}
+	}
+	if n := h.rec.count("hold"); n != 1 || holdAt < 0 {
+		t.Fatalf("holds = %d, want exactly one for device 2\n%v", n, log)
+	}
+	if failedAt < holdAt {
+		t.Fatalf("the job was released (failed) before the device was held\n%v", log)
+	}
+}
+
+// Why (#504): the hold exists for a device that is flashing something this job did not choose. A normal
+// update and a lost Upgrade reply keep the job on the device until it is verified, so they hold nothing:
+// holding there would refuse the next update of a device that is done.
+func TestEngineHoldsNothingWhenTheUpgradeEchoMatches(t *testing.T) {
+	lost := plugDevice()
+	lost.upgradeErr = true
+	h := newHarness(t, 2, plugDevice(), lost)
+	a := submitOne(t, h, Request{DeviceID: 1, Release: "16.0.0", SkipBackup: true})
+	b := submitOne(t, h, Request{DeviceID: 2, Release: "16.0.0", SkipBackup: true})
+	h.run(t, h.e)
+	for _, id := range []model.JobID{a, b} {
+		if j := h.job(t, id); j.State != model.JobSucceeded {
+			t.Fatalf("job %d %s %q", id, j.State, j.LastError)
+		}
+	}
+	if n := h.rec.count("hold"); n != 0 {
+		t.Fatalf("holds = %d, want none\n%v", n, h.rec.entries())
+	}
+}
+
+// An engine without the hook (tests, a build without the console service) still fails the job.
+func TestEngineUpgradeEchoMismatchWithoutAHoldHook(t *testing.T) {
+	dev := plugDevice()
+	dev.echo = "http://other.example/tasmota.bin.gz"
+	h := newHarness(t, 2, dev)
+	h.hold = nil
+	h.e = h.newEngine(2)
+	id := submitOne(t, h, Request{DeviceID: 1, Release: "16.0.0"})
+	h.run(t, h.e)
+	if j := h.job(t, id); j.State != model.JobFailed || !strings.Contains(j.LastError, ErrTextOtaURLChanged) {
+		t.Fatalf("job %s %q", j.State, j.LastError)
 	}
 }
 
