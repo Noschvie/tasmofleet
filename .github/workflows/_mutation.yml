@@ -72,3 +72,12 @@ jobs:
       - env:
           ALL: ${{ inputs.scope == 'all' && '1' || '' }}
         run: make mutation-sum MUTATION_COUNTS="$RUNNER_TEMP/counts" MUTATION_SHARDS=4 MUTATION_ALL="$ALL"
+      # The gate's report (written by make mutation-sum next to the counts). Kept when the gate failed, too;
+      # nothing to upload when the gate wrote none.
+      - if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: mutation-report-${{ inputs.scope }}
+          path: ${{ runner.temp }}/counts/mutation-report.json
+          retention-days: 90
+          if-no-files-found: ignore
