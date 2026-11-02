@@ -51,8 +51,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # tools/race.sh: 1/2 is internal/auth alone (about half of all race time, run in 4
-        # parts), 2/2 every other package; make shards-check fails when a package is in neither.
+        # tools/race.sh deals the packages to the two shards (make shards-check fails when a package is in
+        # neither).
         # "cache" is the Go cache this shard saves. The safety-race job (_checks.yml) restores
         # race-1: it builds the SAFETY packages' dependencies with -race, which shard 2/2 has built (#523).
         include:
@@ -67,7 +67,6 @@ jobs:
           name: ${{ matrix.cache }}
       - env:
           RACE_SHARD: ${{ matrix.shard }}
-          AUTH_PARTS: "4"
         run: make race
 
   # Known-flaky tests, with retries. Never part of anything that gates: a failure here shows

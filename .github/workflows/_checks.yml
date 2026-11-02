@@ -188,7 +188,6 @@ jobs:
           save: "false"
       - env:
           BASE: ${{ inputs.base }}
-          AUTH_PARTS: "4"
         run: make safety-race BASE="$BASE"
 
   # The checked-in Tasmota command catalogue must equal a regeneration from the pinned
