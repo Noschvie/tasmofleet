@@ -169,7 +169,7 @@ fixture or a fault instead of mocking HTTP by hand.
 | FAST tier, a safety package changed (race + mutation)   | `make safety BASE=origin/main`                                                |
 | FULL tier, everything CI runs nightly                   | `make ci TESTFLAGS=-count=1`                                                  |
 | format                                                  | `make fmt` / `make fmt-check`                                                 |
-| go vet (also inside `make lint`)                        | `make vet`                                                                    |
+| go vet                                                  | `make vet`                                                                    |
 | staticcheck (also inside `make lint`)                   | `make staticcheck`                                                            |
 | golangci-lint (incl. depguard boundaries)               | `make lint`                                                                   |
 | unit tests                                              | `make test`                                                                   |
@@ -182,7 +182,7 @@ fixture or a fault instead of mocking HTTP by hand.
 
 Tools are pinned in `tools/go.mod` and run via `go tool -modfile=tools/go.mod <tool>`.
 Run a single package's tests with `go test ./internal/fwselect/ -run TestGuard -v`.
-`make quick` runs fmt-check, golangci-lint and the tests (the integration tests only when their package is affected) on the packages
+`make quick` runs fmt-check, vet, golangci-lint and the tests (the integration tests only when their package is affected) on the packages
 changed since `origin/main`, uncommitted and untracked files included, and on every package that imports them. It skips templ-check, scripts-test,
 shards-check, vuln and build: `make check` stays the gate before every commit.
 Parallelism follows the machine: `JOBS` defaults to `nproc` (`GOFLAGS=-p=$(JOBS)`),

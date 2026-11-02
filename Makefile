@@ -1,6 +1,6 @@
 # Every quality gate has a target. CI runs exactly these targets (tiers: CLAUDE.md "Running the gates").
-#   make check     FAST tier, run before every commit (templ, fmt, lint, unit and integration tests
-#                  from the go test cache, vuln, build; lint includes go vet and staticcheck)
+#   make check     FAST tier, run before every commit (templ, fmt, vet, lint, unit and integration
+#                  tests from the go test cache, vuln, build; lint includes staticcheck)
 #   make quick     inner loop between two edits: only the packages changed since origin/main and
 #                  their importers; make check stays the gate before a commit
 #   make e2e-core  FAST tier: the Playwright tests tagged @core
@@ -52,9 +52,10 @@ export CHANGED_BASE
 
 .PHONY: quick integration-guard shards-check-changed catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check changelog-title migration-guard changelog-notes clean tools
 
-# golangci-lint runs govet and staticcheck with their defaults (.golangci.yml), so check does not run
-# them a second time; the vet and staticcheck targets stay for single runs and CI.
-check: templ-check fmt-check lint test scripts-test shards-check-changed integration vuln build
+# golangci-lint runs staticcheck with its defaults (.golangci.yml), so check does not run it a second time;
+# the staticcheck target stays for single runs and CI. go vet stays: golangci-lint skips generated files,
+# and go vet is the only check left for the *_templ.go files.
+check: templ-check fmt-check vet lint test scripts-test shards-check-changed integration vuln build
 
 # Unit tests of the registry cleanup's version selection (pure, no registry access).
 scripts-test:
@@ -163,7 +164,7 @@ integration-guard:
 	@bad=$$(grep -rl --include='*.go' --exclude='*_test.go' -E '^//go:build .*integration' cmd internal *.go 2>/dev/null || true); \
 	[ -z "$$bad" ] || { echo "integration-guard: non-test files carry the integration build tag:" >&2; echo "$$bad" >&2; exit 1; }
 
-# make quick (#491): the inner loop between two edits. fmt-check, golangci-lint and go test run on the
+# make quick (#491): the inner loop between two edits. fmt-check, go vet, golangci-lint and go test run on the
 # packages changed since CHANGED_BASE (uncommitted and untracked files included) and on every package that
 # imports them (tools/affected-packages.sh); the integration tests run only when one of their packages is
 # among them. Not run: templ-check, scripts-test, shards-check, vuln, build. make check is the gate before a commit.
@@ -172,6 +173,7 @@ quick:
 	[ -n "$$pkgs" ] || { echo "quick: no Go package affected since $(CHANGED_BASE)"; exit 0; }; \
 	echo "quick: $$(echo "$$pkgs" | wc -l) package(s) affected since $(CHANGED_BASE)"; \
 	$(MAKE) --no-print-directory fmt-check || exit 1; \
+	$(NICE) $(GO) vet $$pkgs || exit 1; \
 	$(NICE) $(TOOL) golangci-lint run $$pkgs || exit 1; \
 	$(NICE) $(GO) test $(TESTFLAGS) $$pkgs || exit 1; \
 	ints=""; for p in $(INTEGRATION_PKGS); do \
