@@ -35,7 +35,8 @@ for e in "$@"; do
 	rest=${rest#* }
 	c=${rest%% *}
 	scope=${rest#* }
-	eff=$(awk -v k="$k" -v l="$l" 'BEGIN { if (k + l == 0) print "null"; else printf "%.1f", k * 100 / (k + l) }')
+	# the gate's efficacy: on the changed lines of a diff a mutant no test reaches counts as lived
+	eff=$(awk -v k="$k" -v l="$l" -v c="$c" -v scope="$scope" 'BEGIN { if (scope == "diff") l += c; if (k + l == 0) print "null"; else printf "%.1f", k * 100 / (k + l) }')
 	findings=$(cat "$dir"/*/"$base".findings 2>/dev/null | sort -t'|' -k3,3 -k4,4n -k2,2 || true)
 	list=$(echo "$findings" | awk -F'|' 'NF == 4 { if (n++) printf ","; printf "{\"status\":\"%s\",\"mutator\":\"%s\",\"file\":\"%s\",\"line\":%s}", $1, $2, $3, $4 }')
 	pkgs_json="$pkgs_json${pkgs_json:+,}{\"package\":\"${pkg#./}\",\"scope\":\"$scope\",\"min_efficacy\":$min,\"efficacy\":$eff,\"killed\":$k,\"lived\":$l,\"timed_out\":$t,\"not_covered\":$c,\"findings\":[$list]}"
@@ -71,7 +72,7 @@ case "$scopes" in *package*) ;; *diff*) title="Mutation testing, lines changed b
 		echo "| package | scope | efficacy | needed | killed | lived | timed out | not covered |"
 		echo "| --- | --- | --- | --- | --- | --- | --- | --- |"
 		printf '%s' "$rows"
-		case "$scopes" in *diff*) echo; echo "A diff scope judges only the mutants on the changed lines; fewer than 10 of them are not judged by the percentage (tools/mutation-gate.sh)." ;; esac
+		case "$scopes" in *diff*) echo; echo "A diff scope judges only the mutants on the changed lines, and a mutant no test reaches counts as lived there; fewer than 10 of them are not judged by the percentage (tools/mutation-gate.sh)." ;; esac
 		printf '%s\n' "$details"
 	fi
 } >"$md"

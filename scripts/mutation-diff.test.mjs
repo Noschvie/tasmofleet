@@ -162,15 +162,49 @@ test("a diff without a mutable line passes and says so (a comment is no safety c
   );
   const r = m.run({ MUTATION_DIFF: "main" });
   assert.equal(r.status, 0, r.out);
-  assert.match(r.out, /no mutant was decided on the changed lines/);
+  assert.match(r.out, /no mutant on the changed lines/);
 });
 
 test("a change that only touches the tests mutates the whole package", () => {
   const m = newModule();
   m.edit("internal/p/p_test.go", "0: 0,", "0: 0, 3: 4,");
   const r = m.run({ MUTATION_DIFF: "main" });
-  assert.match(r.out, /no non-test file of \.\/internal\/p changed/);
+  assert.match(r.out, /no non-test Go file of \.\/internal\/p changed/);
   assert.ok(r.mutants > 3, r.out);
+});
+
+test("a code change with a test change in the same package mutates the whole package", () => {
+  // the tests may have got weaker while a line changed: the changed line alone would hide it
+  const m = newModule();
+  m.edit("internal/p/p.go", "return x + 1", "return 1 + x");
+  m.edit("internal/p/p_test.go", "0: 0,", "0: 0, 3: 4,");
+  const r = m.run({ MUTATION_DIFF: "main" });
+  assert.match(r.out, /tests or data of \.\/internal\/p changed too/);
+  assert.ok(r.mutants > 4, r.out);
+});
+
+test("a code change with changed test data in the same package mutates the whole package", () => {
+  const m = newModule();
+  mkdirSync(join(m.dir, "internal/p/testdata"));
+  m.write("internal/p/testdata/case.txt", "x\n");
+  m.git("add", "-A");
+  m.git("commit", "-q", "-m", "data");
+  m.git("switch", "-q", "main");
+  m.git("merge", "-q", "--ff-only", "work");
+  m.git("switch", "-q", "-c", "work2");
+  m.write("internal/p/testdata/case.txt", "y\n");
+  m.edit("internal/p/p.go", "return x + 1", "return 1 + x");
+  const r = m.run({ MUTATION_DIFF: "main" });
+  assert.match(r.out, /tests or data of \.\/internal\/p changed too/);
+  assert.ok(r.mutants > 4, r.out);
+});
+
+test("a changed line that no test reaches fails the diff gate", () => {
+  const m = newModule();
+  m.edit("internal/p/b.go", "return x + 1", "return 1 + x"); // B has no test: its mutants are not covered
+  const r = m.run({ MUTATION_DIFF: "main" });
+  assert.equal(r.status, 1, r.out);
+  assert.match(r.out, /0 killed, 1 lived or not covered of the 1 mutants on the changed lines/);
 });
 
 test("an untracked source file mutates the whole package, git diff cannot see it", () => {
@@ -210,14 +244,23 @@ function sum(lines, min = 85) {
   return { status: r.status, out: r.stdout + r.stderr };
 }
 
-test("the whole package still fails when no mutant was decided, a diff passes", () => {
+test("the whole package still fails when no mutant was decided, a diff with no mutant at all passes", () => {
   assert.equal(sum(["0 0 0 12 package", "0 0 0 0 package"]).status, 1);
-  const r = sum(["0 0 0 2 diff", "0 0 0 0 diff"]);
+  const r = sum(["0 0 0 0 diff", "0 0 0 0 diff"]);
   assert.equal(r.status, 0, r.out);
-  assert.match(
-    r.out,
-    /no mutant was decided on the changed lines; 2 not covered/,
-  );
+  assert.match(r.out, /no mutant on the changed lines/);
+});
+
+test("on the changed lines of a diff a mutant no test reaches counts as lived", () => {
+  // a changed line that no test runs must not pass (it passed while only killed and lived counted)
+  assert.equal(sum(["0 0 0 2 diff", "0 0 0 0 diff"]).status, 1);
+  assert.equal(sum(["1 0 0 20 diff"]).status, 1);
+  assert.equal(sum(["2 0 0 1 diff"]).status, 0); // one in a handful is tolerated, like a lived one
+  assert.equal(sum(["2 0 0 2 diff"]).status, 1);
+  assert.equal(sum(["9 0 0 1 diff"]).status, 0); // 9 of 10 at 85 %
+  assert.equal(sum(["8 0 0 3 diff"]).status, 1); // 8 of 11
+  // in a whole package, as ever, the mutants nobody reaches stay out of the efficacy
+  assert.equal(sum(["8 1 0 50 package"]).status, 0);
 });
 
 test("a diff of fewer than 10 mutants may keep one lived mutant but needs a kill", () => {
@@ -225,6 +268,11 @@ test("a diff of fewer than 10 mutants may keep one lived mutant but needs a kill
   assert.equal(sum(["1 2 0 0 diff"]).status, 1); // two lived mutants in a handful
   assert.equal(sum(["0 1 0 0 diff"]).status, 1); // the only mutant lived: the line is not tested
   assert.equal(sum(["2 0 1 0 diff"]).status, 0); // a timed-out mutant in a handful is not a verdict
+});
+
+test("the timeout share of a diff is judged from 10 run mutants on, the percentage from 10 decided", () => {
+  assert.equal(sum(["9 0 5 0 diff"]).status, 1); // 9 decided (a handful), but 5 of 14 run mutants timed out
+  assert.equal(sum(["9 0 2 0 diff"]).status, 0); // 2 of 11 is within 20 %
 });
 
 test("a diff of 10 or more mutants is judged by the package's efficacy", () => {

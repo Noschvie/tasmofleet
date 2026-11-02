@@ -25,13 +25,17 @@
 # mutant into a timeout.
 #
 # Diff scope (#475): with MUTATION_DIFF=<ref> (make mutation-changed passes BASE) only the mutants on
-# lines this branch changed since the merge base with <ref> are run, not the whole package. The
-# thresholds judge those mutants alone, so a handful of them is a noisy sample: below
-# MUTATION_DIFF_MIN (default 10) decided mutants the percentage is replaced by "at least one killed,
-# at most one lived", and the timeout share is not judged. No decided mutant on the changed lines
-# passes (a comment, a declaration, code no test reaches), loudly. The whole package is mutated as
-# before when no non-test file of it changed (the tests themselves changed, so every mutant counts)
-# or when an untracked file is in it (git diff cannot see it).
+# lines this branch changed since the merge base with <ref> are run, not the whole package. A mutant
+# on such a line that no test reaches (not covered) counts as lived there: a changed line that no
+# test runs must not pass; in a whole package, as before, not covered mutants stay out of the
+# efficacy. The thresholds judge the changed lines alone, so a handful of mutants is a noisy sample:
+# below MUTATION_DIFF_MIN (default 10) decided mutants (killed + lived + not covered) the
+# percentage is replaced by "at least one killed, at most one lived or not covered"; the timeout share
+# is judged as for a package, but only from MUTATION_DIFF_MIN run mutants (decided + timed out) on.
+# No mutant at all on the changed lines passes (a comment, a declaration), loudly.
+# The whole package is mutated as before when no non-test Go file of it changed, or when anything else
+# in its directory changed too (a _test.go file, testdata, an embedded file: the tests may have got
+# weaker while a code line changed), or when an untracked file is in it (git diff cannot see it).
 #
 # gremlins --diff is only correct under two conditions, both set up here and pinned by
 # scripts/mutation-diff.test.mjs: it must run INSIDE the package directory (with a package path
@@ -46,34 +50,38 @@ mindiff=${MUTATION_DIFF_MIN:-10}
 # decide <pkg> <min> <killed> <lived> <timedout> <notcovered> <scope: package|diff>
 decide() {
 	pkg=$1 min=$2 killed=$3 lived=$4 timedout=$5 notcovered=$6 scope=$7
+	# On the changed lines of a diff a mutant no test reaches counts as lived.
+	[ "$scope" = diff ] && lived=$((lived + notcovered))
 	decided=$((killed + lived))
 	ran=$((decided + timedout))
-	small=0
-	[ "$scope" = diff ] && [ "$ran" -lt "$mindiff" ] && small=1
+	small=0 # too few decided mutants for a percentage
+	[ "$scope" = diff ] && [ "$decided" -lt "$mindiff" ] && small=1
+	judgeto=1 # too few run mutants for a timeout share
+	[ "$scope" = diff ] && [ "$ran" -lt "$mindiff" ] && judgeto=0
 	if [ "$decided" -eq 0 ]; then
 		if [ "$scope" = diff ] && [ "$timedout" -eq 0 ]; then
-			echo "mutation gate: $pkg ok (diff scope: no mutant was decided on the changed lines; $notcovered not covered by any test)"
+			echo "mutation gate: $pkg ok (diff scope: no mutant on the changed lines)"
 			exit 0
 		fi
 		echo "mutation gate: no mutant was killed or survived in $pkg (timed out: $timedout); the gate would pass without testing anything" >&2
 		exit 1
 	fi
-	if [ "$small" -eq 0 ] && [ $((timedout * 100)) -gt $((ran * maxto)) ]; then
+	if [ "$judgeto" -eq 1 ] && [ $((timedout * 100)) -gt $((ran * maxto)) ]; then
 		echo "mutation gate: $timedout of $ran mutants timed out in $pkg (> $maxto%); raise MUTATION_TIMEOUT_COEFF or lower load" >&2
 		exit 1
 	fi
 	if [ "$small" -eq 1 ]; then
 		# Too few mutants for a percentage: one equivalent mutant would fail the pull request.
 		if [ "$killed" -eq 0 ] || [ "$lived" -gt 1 ]; then
-			echo "mutation gate: $killed killed, $lived lived of the $decided mutants on the changed lines in $pkg (a diff of fewer than $mindiff mutants may keep one lived mutant, but needs a kill)" >&2
+			echo "mutation gate: $killed killed, $lived lived or not covered of the $decided mutants on the changed lines in $pkg (a diff of fewer than $mindiff mutants may keep one, but needs a kill)" >&2
 			exit 1
 		fi
-		echo "mutation gate: $pkg ok (diff scope: $killed killed, $lived lived, $timedout timed out, $notcovered not covered)"
+		echo "mutation gate: $pkg ok (diff scope: $killed killed, $lived lived or not covered, $timedout timed out)"
 		exit 0
 	fi
 	eff=$((killed * 100 / decided))
 	if [ "$eff" -lt "$min" ]; then
-		echo "mutation gate: efficacy $eff% < $min% in $pkg ($lived mutants lived)" >&2
+		echo "mutation gate: efficacy $eff% < $min% in $pkg ($lived mutants lived or not covered)" >&2
 		exit 1
 	fi
 	echo "mutation gate: $pkg ok ($scope scope, efficacy $eff%, $timedout timed out)"
@@ -107,12 +115,20 @@ if [ -n "$diff" ]; then
 	d=${pkg#./}
 	if ! changed=$(CHANGED_BASE="$diff" tools/changed-files.sh); then
 		echo "mutation gate: no merge base with $diff, mutating the whole package $pkg"
-	elif [ -z "$(echo "$changed" | grep -E "^$d/[^/]+\.go\$" | grep -v '_test\.go$')" ]; then
-		echo "mutation gate: no non-test file of $pkg changed (its tests or data did), mutating the whole package"
-	elif [ -n "$(git ls-files --others --exclude-standard -- "$d" | grep -E '\.go$' | grep -v '_test\.go$')" ]; then
-		echo "mutation gate: an untracked file in $pkg is invisible to git diff, mutating the whole package"
 	else
-		scope=diff
+		inpkg=$(echo "$changed" | grep -E "^$d/" || true)
+		code=$(echo "$inpkg" | grep -E "^$d/[^/]+\.go\$" | grep -v '_test\.go$' || true)
+		other=$(echo "$inpkg" | grep -vE "^$d/[^/]+\.go\$" || true) # data, subdirectories
+		tests=$(echo "$inpkg" | grep -E "_test\.go\$" || true)
+		if [ -z "$code" ]; then
+			echo "mutation gate: no non-test Go file of $pkg changed (its tests or data did), mutating the whole package"
+		elif [ -n "$tests$other" ]; then
+			echo "mutation gate: tests or data of $pkg changed too, mutating the whole package"
+		elif [ -n "$(git ls-files --others --exclude-standard -- "$d" | grep -E '\.go$' | grep -v '_test\.go$')" ]; then
+			echo "mutation gate: an untracked file in $pkg is invisible to git diff, mutating the whole package"
+		else
+			scope=diff
+		fi
 	fi
 fi
 
