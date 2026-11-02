@@ -44,7 +44,7 @@ TESTFLAGS ?=
 # Extra Playwright arguments, e.g. E2E_ARGS=--shard=1/2 (CI).
 E2E_ARGS  ?=
 
-.PHONY: catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check changelog-title migration-guard changelog-notes clean tools
+.PHONY: integration-guard catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check changelog-title migration-guard changelog-notes clean tools
 
 # golangci-lint runs govet and staticcheck with their defaults (.golangci.yml), so check does not run
 # them a second time; the vet and staticcheck targets stay for single runs and CI.
@@ -136,8 +136,21 @@ test-quarantine:
 
 # Integration tests (build tag "integration"): simulator fleet, embedded MQTT
 # broker, mock OIDC provider, real SQLite files. Still loopback only.
-integration:
-	$(NICE) $(GO) test $(TESTFLAGS) -tags=integration ./...
+# Only the packages with tagged test files run, found at run time so a new one is not missed (#490): the
+# tag changes the build, so ./... ran the unit tests of every package a second time.
+# IT_PARALLEL raises go test -parallel above GOMAXPROCS: the ota scenarios mostly sleep (#487).
+INTEGRATION_PKGS = $(shell grep -rl --include='*_test.go' -E '^//go:build .*integration' cmd internal | xargs -r -n1 dirname | sort -u | sed 's|^|./|')
+IT_PARALLEL ?= 16
+integration: integration-guard
+	@test -n "$(INTEGRATION_PKGS)" || { echo "integration: no package has integration-tagged tests" >&2; exit 1; }
+	$(NICE) $(GO) test $(TESTFLAGS) -parallel $(IT_PARALLEL) -tags=integration $(INTEGRATION_PKGS)
+
+# Only _test.go files may carry the integration tag. A tagged non-test file would change the build of its
+# package's unit tests, and make integration, which finds packages by their tagged test files, would miss it.
+integration-guard:
+	@bad=$$(grep -rl --include='*.go' --exclude='*_test.go' -E '^//go:build .*integration' cmd internal *.go 2>/dev/null || true); \
+	[ -z "$$bad" ] || { echo "integration-guard: non-test files carry the integration build tag:" >&2; echo "$$bad" >&2; exit 1; }
+
 
 # Sharding (CI): with MUTATION_SHARD=i/n and MUTATION_COUNTS=<dir>, mutation and mutation-changed
 # mutate only shard i of every package's files and write the counts to <dir>/<package name>;

@@ -184,7 +184,8 @@ Run a single package's tests with `go test ./internal/fwselect/ -run TestGuard -
 Parallelism follows the machine: `JOBS` defaults to `nproc` (`GOFLAGS=-p=$(JOBS)`),
 mutation workers to `nproc/2`, Playwright workers to `E2E_WORKERS` (default 6). Locally the Makefile runs tools under `nice -n 15`; CI sets `NICE=` (empty). Override
 with e.g. `make check JOBS=4`. `make test` and `make integration` use the go test cache
-(unchanged packages report `(cached)`); `TESTFLAGS=-count=1` forces a fresh run.
+(unchanged packages report `(cached)`); `TESTFLAGS=-count=1` forces a fresh run. `make integration` runs only
+the packages that have `//go:build integration` test files (found at run time); only `_test.go` files may carry the tag.
 
 ### Test tiers in CI (`.github/workflows/ci.yml`)
 
