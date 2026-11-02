@@ -18,6 +18,7 @@ always upgrade automatically.
 
 - GHSA-fvgh-83hf-5jr9: a relay state containing a line break (a lone carriage return) could split the live event stream into extra events. The stream now treats every line break as part of one event, and relay states with control characters are dropped.
 - GHSA-cpfg-6c57-xg33: the confirmation of a retry that sends a destructive command again was not tied to its transaction: a token issued for another transaction or another confirmation was accepted. It now confirms only the transaction whose retry page issued it, and a retry no longer starts when the transaction cannot be read.
+- GHSA-fmj9-3vh6-rq53: cancelling a single job skipped the admin-only check for GPIO template and unknown job kinds when the job could not be read from the database. The cancel now fails when the job cannot be read.
 
 ## 0.27.0 "Cordouan" (2026-11-01)
 

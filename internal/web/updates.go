@@ -1252,7 +1252,18 @@ func (h *handler) jobCancel(w http.ResponseWriter, r *http.Request) {
 		h.notFound(w, r)
 		return
 	}
-	if j, err := h.d.Jobs.GetJob(r.Context(), model.JobID(n)); err == nil && !h.needAdminFor(w, r, j) {
+	// Read the job first and fail closed, like needAdminForBatch: the engine cancels a running job
+	// without reading the database, so the admin-only check cannot be skipped when the read fails
+	// (GHSA-fmj9-3vh6-rq53).
+	job, err := h.d.Jobs.GetJob(r.Context(), model.JobID(n))
+	switch {
+	case errors.Is(err, store.ErrNotFound):
+		h.notFound(w, r)
+		return
+	case err != nil:
+		h.fail(w, r, err)
+		return
+	case !h.needAdminFor(w, r, job):
 		return
 	}
 	switch err := h.d.OTA.Cancel(r.Context(), actor(r), model.JobID(n)); {
