@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -75,6 +76,8 @@ func formProblem(err error) (field, msg string) {
 		return "address", "Enter an IP address or hostname without spaces, e.g. 192.168.1.80"
 	case errors.Is(err, inventory.ErrOutsideNetwork):
 		return "address", "That address is outside the configured device networks."
+	case errors.Is(err, inventory.ErrConflict):
+		return "", "The device changed while you were saving. Nothing was saved; check the values and save again."
 	case errors.Is(err, inventory.ErrInvalid):
 		detail := strings.TrimPrefix(err.Error(), inventory.ErrInvalid.Error()+": ")
 		switch {
@@ -232,7 +235,7 @@ func (h *handler) deviceUpdate(w http.ResponseWriter, r *http.Request) {
 				ctx = inventory.WithUnverifiedMoveConfirmed(ctx, strings.TrimPrefix(pc.cmd, want))
 			}
 		}
-		err = h.d.Inventory.Update(ctx, actor(r), d)
+		err = h.saveEdit(ctx, r, old, d)
 		var um *inventory.UnverifiedMoveError
 		if errors.As(err, &um) {
 			token := h.cmds.put(h.d.Clock.Now(), h.bindingOf(r), "edit:"+strconv.FormatInt(int64(old.ID), 10)+":"+um.Target, nil)
@@ -255,6 +258,41 @@ func (h *handler) deviceUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	redirect(w, r, "/devices/"+strconv.FormatInt(int64(d.ID), 10)+"?ok=saved")
+}
+
+// editTries bounds how often a save is applied again onto a record that changed under it.
+const editTries = 3
+
+// saveEdit writes the edited device d, which applyForm built from base (the record read when the
+// request started), only if the stored record is still base (compare-and-set). The form edits
+// some fields; the rest are written by the application meanwhile: onMQTTSeen sets the MQTT
+// capability once per device and run, discovery learns topic and MAC. A plain Update would put
+// the old copy of them back, and a lost MQTT flag stays lost until a restart (#502). When the
+// record changed, the form is applied again onto the fresh one, so the admin's input wins for
+// the fields it edits and the others keep what the application recorded.
+func (h *handler) saveEdit(ctx context.Context, r *http.Request, base, d model.Device) error {
+	cas, ok := h.d.Inventory.(interface {
+		UpdateIf(ctx context.Context, actor string, expected, next model.Device) error
+	})
+	if !ok {
+		h.log.ErrorContext(ctx, "save device: the inventory has no compare-and-set update")
+		return errors.New("the device could not be saved, the server log has the details")
+	}
+	for try := 1; ; try++ {
+		err := cas.UpdateIf(ctx, actor(r), base, d)
+		if !errors.Is(err, inventory.ErrConflict) || try == editTries {
+			return err
+		}
+		fresh, gerr := h.d.Inventory.Get(ctx, d.ID)
+		if gerr != nil {
+			return gerr
+		}
+		next, aerr := applyForm(r, fresh)
+		if aerr != nil {
+			return aerr
+		}
+		base, d = fresh, next
+	}
 }
 
 // deviceDelete deletes a device. backups=keep keeps its backups (they stay

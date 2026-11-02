@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -35,6 +36,7 @@ type fakeInv struct {
 	unproven       bool
 	confirmedMoves int
 	beforeUpdateIf func() // test hook: runs first in UpdateIf, outside the lock
+	afterGet       func() // test hook: runs once after the next Get has read the device, outside the lock
 	lastDelete     inventory.DeleteOptions
 }
 
@@ -69,8 +71,13 @@ func (f *fakeInv) List(context.Context) ([]model.Device, error) {
 }
 func (f *fakeInv) Get(_ context.Context, id model.DeviceID) (model.Device, error) {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	d, ok := f.devs[id]
+	hook := f.afterGet
+	f.afterGet = nil
+	f.mu.Unlock()
+	if hook != nil {
+		defer hook() // the caller already holds the record as it was before the hook changes it
+	}
 	if !ok {
 		return d, store.ErrNotFound
 	}
@@ -86,29 +93,48 @@ func (f *fakeInv) Create(_ context.Context, _ string, d model.Device) (model.Dev
 }
 
 // UpdateIf is the compare-and-set of inventory.Manager: it writes only if the stored device still
-// equals expected (beforeUpdateIf lets a test change it first).
-func (f *fakeInv) UpdateIf(_ context.Context, _ string, expected, next model.Device) error {
+// equals expected (beforeUpdateIf lets a test change it first), and demands the unverified-move
+// confirmation like Update.
+func (f *fakeInv) UpdateIf(ctx context.Context, _ string, expected, next model.Device) error {
 	if f.beforeUpdateIf != nil {
 		f.beforeUpdateIf()
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	if cur := f.devs[next.ID]; cur.Name != expected.Name || cur.Notes != expected.Notes {
+	moved, err := f.checkMove(ctx, expected, next)
+	if err != nil {
+		return err
+	}
+	if cur := f.devs[next.ID]; !reflect.DeepEqual(cur, expected) {
 		return fmt.Errorf("%w: device %d", inventory.ErrConflict, next.ID)
+	}
+	if moved {
+		f.confirmedMoves++
 	}
 	f.devs[next.ID], f.last = next, next
 	return nil
 }
 
+// checkMove: a move of a device with a stored password to an address that cannot prove the MAC
+// needs the explicit confirmation, like the real service. moved says one was given.
+func (f *fakeInv) checkMove(ctx context.Context, old, d model.Device) (moved bool, err error) {
+	if f.unproven && old.HTTPPassword != "" && d.HTTPPassword == old.HTTPPassword && d.Address != old.Address {
+		if target := inventory.MoveTarget(d.Address, d.Port); !inventory.UnverifiedMoveConfirmed(ctx, target) {
+			return false, &inventory.UnverifiedMoveError{Target: target}
+		}
+		return true, nil
+	}
+	return false, nil
+}
+
 func (f *fakeInv) Update(ctx context.Context, _ string, d model.Device) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	// A move of a device with a stored password to an address that cannot prove
-	// the MAC needs the explicit confirmation, like the real service.
-	if old := f.devs[d.ID]; f.unproven && old.HTTPPassword != "" && d.HTTPPassword == old.HTTPPassword && d.Address != old.Address {
-		if target := inventory.MoveTarget(d.Address, d.Port); !inventory.UnverifiedMoveConfirmed(ctx, target) {
-			return &inventory.UnverifiedMoveError{Target: target}
-		}
+	moved, err := f.checkMove(ctx, f.devs[d.ID], d)
+	if err != nil {
+		return err
+	}
+	if moved {
 		f.confirmedMoves++
 	}
 	f.devs[d.ID], f.last = d, d
