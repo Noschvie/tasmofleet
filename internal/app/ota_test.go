@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -102,7 +103,8 @@ func TestMQTTUpgradeBurstRunsOneLookupAtATimeAndDropsTheOverflow(t *testing.T) {
 		}
 		<-release
 		return model.Device{ID: 7}, nil
-	}, target, func() { dropped.Add(1) })
+	}, target, func(string) { dropped.Add(1) })
+	h.setTopics("plug", "plug-0")
 	ctx, cancel := context.WithCancel(t.Context())
 	var wg sync.WaitGroup
 	wg.Go(func() { h.run(ctx) })
@@ -137,7 +139,7 @@ func TestMQTTUpgradeBurstRunsOneLookupAtATimeAndDropsTheOverflow(t *testing.T) {
 
 // blockedHints returns hints whose worker is parked in the lookup of the first report until
 // release is closed. The lookup maps a topic "plug-N" to device N.
-func blockedHints(t *testing.T, dropped func()) (h *otaHints, target *fakeHintTarget, release chan struct{}, stop func()) {
+func blockedHints(t *testing.T, dropped func(string), topics ...string) (h *otaHints, target *fakeHintTarget, release chan struct{}, stop func()) {
 	t.Helper()
 	started := make(chan struct{}, 1)
 	release = make(chan struct{})
@@ -154,6 +156,7 @@ func blockedHints(t *testing.T, dropped func()) (h *otaHints, target *fakeHintTa
 		}
 		return model.Device{ID: model.DeviceID(id)}, nil
 	}, target, dropped)
+	h.setTopics(append(topics, "plug-0")...)
 	ctx, cancel := context.WithCancel(t.Context())
 	var wg sync.WaitGroup
 	wg.Go(func() { h.run(ctx) })
@@ -181,13 +184,17 @@ func waitForCalls(t *testing.T, target *fakeHintTarget, n int) {
 // and only the UPGRADE overflow is dropped and counted.
 func TestPowerOffBurstLargerThanTheQueueStillReachesTheEngineForEveryRelay(t *testing.T) {
 	var dropped atomic.Int32
-	h, target, release, stop := blockedHints(t, func() { dropped.Add(1) })
+	topics := []string{"plug-1"}
+	const devices, relays = 300, 3 // 900 distinct relays, more than three queues
+	for dev := 1; dev <= devices; dev++ {
+		topics = append(topics, fmt.Sprintf("plug-%d", dev))
+	}
+	h, target, release, stop := blockedHints(t, func(string) { dropped.Add(1) }, topics...)
 	defer stop()
 
 	for range 2 * otaHintQueue { // the queue for UPGRADE reports is full and overflowing
 		h.onUpgradeReport(upgradeReport("plug-1", "Failed x"))
 	}
-	const devices, relays = 300, 3 // 900 distinct relays, more than three queues
 	for dev := 1; dev <= devices; dev++ {
 		for relay := 1; relay <= relays; relay++ {
 			h.onPowerReport(powerOff(fmt.Sprintf("plug-%d", dev), fmt.Sprintf("POWER%d", relay)))
@@ -217,7 +224,7 @@ func TestPowerOffBurstLargerThanTheQueueStillReachesTheEngineForEveryRelay(t *te
 // off. A report that arrives after the earlier one was taken is a new one and is delivered
 // again, so a relay switched off a second time during the same update is not forgotten.
 func TestRepeatedPowerOffOfOneRelayIsCoalescedWhileWaitingOnly(t *testing.T) {
-	h, target, release, stop := blockedHints(t, func() { t.Error("dropped") })
+	h, target, release, stop := blockedHints(t, func(reason string) { t.Error("dropped:", reason) }, "plug-5")
 	defer stop()
 
 	// plug-0/1 is in flight (the worker is parked in its lookup); plug-5/2 waits.
@@ -249,7 +256,7 @@ func TestShutdownWaitsForAnInFlightMQTTHint(t *testing.T) {
 		close(started)
 		<-release
 		return model.Device{ID: 7}, nil
-	}, target)
+	}, func(context.Context) ([]model.Device, error) { return []model.Device{{ID: 7, Topic: "plug"}}, nil }, target)
 
 	h.onUpgradeReport(upgradeReport("plug", "Failed File Not Found (404)"))
 	<-started
@@ -276,7 +283,8 @@ func TestShutdownWaitsForAnInFlightMQTTHint(t *testing.T) {
 // them; a goroutine per message lets the later one overtake the earlier one.
 func TestMQTTHintsReachTheEngineInArrivalOrder(t *testing.T) {
 	target := &fakeHintTarget{}
-	h := newOTAHints(lookupAll, target, func() { t.Error("dropped with room in the queue") })
+	h := newOTAHints(lookupAll, target, func(reason string) { t.Error("dropped with room in the queue:", reason) })
+	h.setTopics("plug")
 	var want []string
 	for i := range 40 {
 		if i%2 == 0 {
@@ -305,9 +313,107 @@ func TestMQTTHintsReachTheEngineInArrivalOrder(t *testing.T) {
 	}
 }
 
+// Why (#534, security review): the topic of an MQTT report is whatever a client of the broker
+// publishes. If every new topic took a slot in the waiting set, a flood of made-up topics would
+// grow it without bound and could crowd out the OFF report of a real device. Only topics of the
+// inventory are taken in; the flood is counted and leaves the set empty, and a real device's OFF
+// still arrives.
+func TestAFloodOfMadeUpTopicsNeitherGrowsTheHintSetsNorCrowdsOutADevice(t *testing.T) {
+	reasons := map[string]int{}
+	target := &fakeHintTarget{}
+	h := newOTAHints(lookupAll, target, func(reason string) { reasons[reason]++ })
+	h.setTopics("plug")
+	const flood = 100000
+	for i := range flood {
+		h.onPowerReport(powerOff(fmt.Sprintf("junk-%d", i), "POWER1"))
+		h.onUpgradeReport(upgradeReport(fmt.Sprintf("junk-%d", i), "Failed x"))
+	}
+	h.mu.Lock()
+	waiting, offs, upgrades := len(h.pending), len(h.offs), h.upgrades
+	h.mu.Unlock()
+	if waiting != 0 || offs != 0 || upgrades != 0 {
+		t.Fatalf("%d reports waiting (%d OFF, %d UPGRADE) after a flood of unknown topics, want none", waiting, offs, upgrades)
+	}
+	if got := reasons[hintDropUnknownTopic]; got != 2*flood || len(reasons) != 1 {
+		t.Fatalf("drops by reason = %v, want %d x %s", reasons, 2*flood, hintDropUnknownTopic)
+	}
+	h.onPowerReport(powerOff("plug", "POWER2"))
+	ctx, cancel := context.WithCancel(t.Context())
+	var wg sync.WaitGroup
+	wg.Go(func() { h.run(ctx) })
+	waitForCalls(t, target, 1)
+	cancel()
+	wg.Wait()
+	if got := target.seen(); !slices.Equal(got, []string{"power 7/2"}) {
+		t.Fatalf("engine calls = %q", got)
+	}
+}
+
+// Why (#534): the set of admitted topics must follow the inventory, or a device added after the
+// start would never get its OFF reports through, and a deleted one would keep a slot. A failed
+// read must not empty the set (every OFF would then be dropped until the next read), and the
+// worker itself re-reads it on its timer.
+func TestHintTopicsFollowTheInventory(t *testing.T) {
+	var mu sync.Mutex
+	inventory := []model.Device{{ID: 1, Topic: "plug-a"}, {ID: 2}} // a device without a topic never matches
+	var listErr error
+	var reads atomic.Int32
+	h := newOTAHints(lookupAll, &fakeHintTarget{}, func(string) {})
+	h.list = func(context.Context) ([]model.Device, error) {
+		reads.Add(1)
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(inventory), listErr
+	}
+	known := func(topic string) bool {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+		_, ok := h.topics[topic]
+		return ok
+	}
+	h.refreshTopics(t.Context())
+	if !known("plug-a") || known("plug-b") || known("") {
+		t.Fatalf("topics after the first read = %v", h.topics)
+	}
+	mu.Lock()
+	inventory = []model.Device{{ID: 2, Topic: "plug-b"}}
+	mu.Unlock()
+	h.refreshTopics(t.Context())
+	if known("plug-a") || !known("plug-b") {
+		t.Fatalf("topics after a device was replaced = %v", h.topics)
+	}
+	mu.Lock()
+	listErr = errors.New("database is locked")
+	mu.Unlock()
+	h.refreshTopics(t.Context())
+	if !known("plug-b") {
+		t.Fatal("a failed read emptied the known topics")
+	}
+	mu.Lock()
+	listErr = nil
+	inventory = []model.Device{{ID: 3, Topic: "plug-c"}}
+	mu.Unlock()
+	h.every = 5 * time.Millisecond
+	ctx, cancel := context.WithCancel(t.Context())
+	var wg sync.WaitGroup
+	wg.Go(func() { h.run(ctx) })
+	deadline := time.After(10 * time.Second)
+	for !known("plug-c") {
+		select {
+		case <-deadline:
+			t.Fatal("the worker never re-read the inventory")
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+	cancel()
+	wg.Wait()
+}
+
 // Why: only a relay switched OFF by somebody (not a retained or old value, not ON) may stop the
 // power restore, and only a device in the inventory gets a hint. Everything else must neither
-// take queue room nor reach the engine.
+// take queue room nor reach the engine. A relay the engine does not know and a topic that is no
+// device are counted, so a broker that carries junk shows up; a device deleted since the last
+// refresh of the topics is still looked up and found missing.
 func TestMQTTHintsIgnoreWhatTheEngineCannotUse(t *testing.T) {
 	target := &fakeHintTarget{}
 	lookup := func(_ context.Context, topic string) (model.Device, error) {
@@ -316,7 +422,9 @@ func TestMQTTHintsIgnoreWhatTheEngineCannotUse(t *testing.T) {
 		}
 		return model.Device{ID: 7}, nil
 	}
-	h := newOTAHints(lookup, target, func() { t.Error("dropped") })
+	reasons := map[string]int{}
+	h := newOTAHints(lookup, target, func(reason string) { reasons[reason]++ })
+	h.setTopics("plug", "stranger")
 	retained := powerOff("plug", "POWER")
 	retained.Retained = true
 	on := powerOff("plug", "POWER")
@@ -330,7 +438,12 @@ func TestMQTTHintsIgnoreWhatTheEngineCannotUse(t *testing.T) {
 	}
 	h.onPowerReport(powerOff("stranger", "POWER"))
 	h.onUpgradeReport(upgradeReport("stranger", "Failed x"))
+	h.onPowerReport(powerOff("nobody", "POWER"))
+	h.onUpgradeReport(upgradeReport("nobody", "Failed x"))
 	h.onPowerReport(powerOff("plug", "POWER2"))
+	if want := map[string]int{hintDropInvalidRelay: 3, hintDropUnknownTopic: 2}; !maps.Equal(reasons, want) {
+		t.Fatalf("drops by reason = %v, want %v", reasons, want)
+	}
 	ctx, cancel := context.WithCancel(t.Context())
 	var wg sync.WaitGroup
 	wg.Go(func() { h.run(ctx) })
