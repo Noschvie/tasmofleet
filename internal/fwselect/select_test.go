@@ -28,6 +28,7 @@ var (
 	idC5        = ident(model.ChipESP32C5, "ESP32-C5", "release-tasmota32c5", "tasmota", "")
 	idC6        = ident(model.ChipESP32C6, "ESP32-C6", "release-tasmota32c6", "tasmota", "")
 	idC61       = ident(model.ChipESP32C61, "ESP32-C61", "release-tasmota32c61", "tasmota", "")
+	idH2        = ident(model.ChipESP32H2, "ESP32-H2", "release-tasmota32h2", "tasmota", "")
 	idP4        = ident(model.ChipESP32P4, "ESP32-P4 v1.0", "release-tasmota32", "tasmota", "")
 	idP4R3      = ident(model.ChipESP32P4, "ESP32-P4 v3.1", "release-tasmota32", "tasmota", "")
 	idUnknownHW = ident(model.ChipUnknown, "ESP32-H2", "release-tasmota32", "tasmota", "")
@@ -91,6 +92,7 @@ func TestSelect(t *testing.T) {
 		{name: "c5", id: idC5, c: keep, file: "tasmota32c5.bin", variant: "tasmota"},
 		{name: "c6", id: idC6, c: keep, file: "tasmota32c6.bin", variant: "tasmota"},
 		{name: "c61", id: idC61, c: keep, file: "tasmota32c61.bin", variant: "tasmota"},
+		{name: "h2", id: idH2, c: keep, file: "tasmota32h2.bin", variant: "tasmota"}, // own builds only: upstream has none
 		{name: "p4 below revision 3", id: idP4, c: keep, file: "tasmota32p4.bin", variant: "tasmota"},
 		{name: "p4 revision 3", id: idP4R3, c: keep, file: "tasmota32p4r3.bin", variant: "tasmota"},
 		{name: "c3 with dev image tag", id: ident(model.ChipESP32C3, "ESP32-C3", "85cff52-tasmota32", "tasmota", ""), c: keep, file: "tasmota32c3.bin", variant: "tasmota"},
@@ -174,6 +176,7 @@ func TestParseFilename(t *testing.T) {
 		"tasmota32s2cdc.bin":       ok(model.ChipESP32S2, "tasmota", "", false, false),
 		"tasmota32p4r3.bin":        ok(model.ChipESP32P4, "tasmota", "", false, false),
 		"tasmota32c61.bin.gz":      ok(model.ChipESP32C61, "tasmota", "", false, true),
+		"tasmota32h2.bin":          ok(model.ChipESP32H2, "tasmota", "", false, false),
 	}
 	for name, want := range valid {
 		got, isOK := parseFilename(name)
@@ -187,7 +190,7 @@ func TestParseFilename(t *testing.T) {
 		"tasmota-bluetooth.bin.gz", "tasmota-de.bin.gz", "tasmota-DEU.bin.gz",
 		"tasmota32-sensors.bin", "tasmota32-minimal.bin", "tasmota32-tasmota.bin",
 		"tasmota32c3-DE.bin", "tasmota32c3-bluetooth.bin", "tasmota32solo1-DE.bin",
-		"tasmota32solo1-bluetooth.bin", "tasmota32h2.bin", "tasmota33.bin",
+		"tasmota32solo1-bluetooth.bin", "tasmota32h21.bin", "tasmota33.bin",
 		"Tasmota.bin.gz", "firmware.bin", "xtasmota.bin.gz",
 	} {
 		if got, isOK := parseFilename(name); isOK {

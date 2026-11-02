@@ -124,6 +124,8 @@ func testInspect(h []byte) (model.ChipFamily, error) {
 		return model.ChipESP32C3, nil
 	case 0x0009:
 		return model.ChipESP32S3, nil
+	case 0x0010:
+		return model.ChipESP32H2, nil
 	default:
 		return model.ChipUnknown, fmt.Errorf("unknown chip id %#x", id)
 	}

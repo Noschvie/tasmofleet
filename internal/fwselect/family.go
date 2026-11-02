@@ -33,9 +33,12 @@ var hardwareTable = []hardwareEntry{
 	{"ESP32-S3", model.ChipESP32S3, false},
 	{"ESP32-C2", model.ChipESP32C2, false},
 	{"ESP32-C3", model.ChipESP32C3, false},
+	{"ESP8685", model.ChipESP32C3, false}, // C3 with embedded flash, named by its package (#470)
+	{"ESP8686", model.ChipESP32C3, false}, // C3 in QFN24
 	{"ESP32-C5", model.ChipESP32C5, false},
 	{"ESP32-C61", model.ChipESP32C61, false},
 	{"ESP32-C6", model.ChipESP32C6, false},
+	{"ESP32-H2", model.ChipESP32H2, false},
 	{"ESP32-P4", model.ChipESP32P4, false},
 }
 
@@ -84,12 +87,14 @@ var chipBuilds = map[string]model.ChipFamily{
 	"c5":    model.ChipESP32C5,
 	"c6":    model.ChipESP32C6,
 	"c61":   model.ChipESP32C61,
+	"h2":    model.ChipESP32H2,
 	"p4":    model.ChipESP32P4,
 	"p4r3":  model.ChipESP32P4,
 }
 
 // defaultBuild is the only tasmota32<suffix> build of each newer chip with
-// one build. S2 and P4 have two each and are resolved in chipBuild.
+// one build. S2 and P4 have two each and are resolved in chipBuild. Upstream
+// builds no h2; the name is what an own H2 build is stored and offered under.
 var defaultBuild = map[model.ChipFamily]string{
 	model.ChipESP32S3:  "s3",
 	model.ChipESP32C2:  "c2",
@@ -97,6 +102,7 @@ var defaultBuild = map[model.ChipFamily]string{
 	model.ChipESP32C5:  "c5",
 	model.ChipESP32C6:  "c6",
 	model.ChipESP32C61: "c61",
+	model.ChipESP32H2:  "h2",
 }
 
 // Variants built upstream (§7.1). "tasmota" is the plain build.

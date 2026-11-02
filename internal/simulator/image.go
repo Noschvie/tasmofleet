@@ -21,8 +21,8 @@ const versionMarker = "TASMOFLEET-SIM-VERSION="
 // ESP32 chip ids in the extended image header (bytes 12-13, little endian).
 var chipIDs = map[uint16]string{
 	0x0000: "esp32", 0x0002: "esp32s2", 0x0005: "esp32c3", 0x0009: "esp32s3",
-	0x000C: "esp32c2", 0x000D: "esp32c6", 0x0012: "esp32p4", 0x0014: "esp32c61",
-	0x0017: "esp32c5",
+	0x000C: "esp32c2", 0x000D: "esp32c6", 0x0010: "esp32h2", 0x0012: "esp32p4",
+	0x0014: "esp32c61", 0x0017: "esp32c5",
 }
 
 // imageFamily is the tiny header parser a simulated device uses to refuse

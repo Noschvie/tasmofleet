@@ -149,7 +149,7 @@ func TestMQTTUploadFitsFreeBelowTheMargin(t *testing.T) {
 
 // Every ESP32 chip family takes the upload (same support_esp32.ino), not only the classic ESP32.
 func TestMQTTUploadFitsAllESP32Families(t *testing.T) {
-	for _, fam := range []model.ChipFamily{model.ChipESP32, model.ChipESP32S2, model.ChipESP32S3, model.ChipESP32C2, model.ChipESP32C3, model.ChipESP32C5, model.ChipESP32C6, model.ChipESP32C61, model.ChipESP32P4} {
+	for _, fam := range []model.ChipFamily{model.ChipESP32, model.ChipESP32S2, model.ChipESP32S3, model.ChipESP32C2, model.ChipESP32C3, model.ChipESP32C5, model.ChipESP32C6, model.ChipESP32C61, model.ChipESP32H2, model.ChipESP32P4} {
 		id := esp32Free(2240)
 		id.Family = fam
 		if ok, _, _, reason := MQTTUploadFits(id, UpLayoutUnknown, 1<<20); !ok {

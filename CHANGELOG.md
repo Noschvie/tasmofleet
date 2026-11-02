@@ -6,6 +6,14 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Added
+
+- ESP32-H2 is a known chip family (`esp32h2`). It has no Wi-Fi and upstream builds no image for it, but an own build that runs over Ethernet can now be uploaded as a custom image (chip_id `0x0010`, stored as `tasmota32h2.bin`), offered and updated like any other chip; policy rules can name the family. Before, an H2 showed "The chip family is not known yet" and was never updated (#470, thanks @Noschvie)
+
+### Fixed
+
+- An ESP32-C3 that Tasmota names by its package, `ESP8685` (embedded flash) or `ESP8686` (QFN24), is recognised as ESP32-C3. Before, it showed "The chip family is not known yet" and was never updated (#470, thanks @Noschvie)
+
 ## 0.27.0 "Cordouan" (2026-11-01)
 
 ### Upgrade notes

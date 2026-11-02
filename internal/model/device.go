@@ -179,6 +179,7 @@ const (
 	ChipESP32C5  ChipFamily = "esp32c5"
 	ChipESP32C6  ChipFamily = "esp32c6"
 	ChipESP32C61 ChipFamily = "esp32c61"
+	ChipESP32H2  ChipFamily = "esp32h2" // no Wi-Fi, no upstream build: own builds over Ethernet
 	ChipESP32P4  ChipFamily = "esp32p4"
 )
 

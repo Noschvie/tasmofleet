@@ -163,9 +163,9 @@ func TestDetectImageTags(t *testing.T) {
 		{"self-compiled esp32", "16.0.0(tasmota32)", "ESP32-D0WD-V3", "", "unknown", "", model.ChipESP32, false, "16.0.0", nil},
 		{"self-compiled s3", "16.0.0(tasmota32)", "ESP32-S3", "", "unknown", "", model.ChipESP32S3, false, "16.0.0", nil},
 		// Unknown hardware is not an error but never Known().
-		{"unknown hardware", "16.0.0(release-tasmota32)", "ESP32-H2", "", "tasmota", "", model.ChipUnknown, false, "16.0.0", nil},
-		{"unknown hardware esp8266 tag", "16.0.0(release-sensors)", "ESP32-H2", "", "sensors", "", model.ChipUnknown, false, "16.0.0", nil},
-		{"unknown hardware esp32 tag", "16.0.0(release-webcam)", "ESP32-H2", "", "webcam", "", model.ChipUnknown, false, "16.0.0", nil},
+		{"unknown hardware", "16.0.0(release-tasmota32)", "ESP32-S31", "", "tasmota", "", model.ChipUnknown, false, "16.0.0", nil},
+		{"unknown hardware esp8266 tag", "16.0.0(release-sensors)", "ESP32-S31", "", "sensors", "", model.ChipUnknown, false, "16.0.0", nil},
+		{"unknown hardware esp32 tag", "16.0.0(release-webcam)", "ESP32-S31", "", "webcam", "", model.ChipUnknown, false, "16.0.0", nil},
 		// Family mismatches between image tag and hardware must stop.
 		{"esp32 image on esp8266", "16.0.0(release-tasmota32)", "ESP8266EX", "", "", "", "", false, "", ErrFamilyMismatch},
 		{"esp8266 image on esp32", "16.0.0(release-tasmota)", "ESP32-D0WD", "", "", "", "", false, "", ErrFamilyMismatch},
@@ -193,7 +193,7 @@ func TestDetectImageTags(t *testing.T) {
 		// family mismatch even when the tag itself says nothing about the chip.
 		{"single-core build on esp8266", "16.0.0(tasmota)single-core", "ESP8266EX", "", "", "", "", false, "", ErrFamilyMismatch},
 		{"single-core build on c3", "16.0.0(release-foobar)single-core", "ESP32-C3", "", "", "", "", false, "", ErrFamilyMismatch},
-		{"single-core build on unknown hardware", "16.0.0(solo1)single-core", "ESP32-H2", "", "unknown", "", model.ChipUnknown, false, "16.0.0", nil},
+		{"single-core build on unknown hardware", "16.0.0(solo1)single-core", "ESP32-S31", "", "unknown", "", model.ChipUnknown, false, "16.0.0", nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -504,6 +504,8 @@ func TestDetectThenSelect(t *testing.T) {
 		{"16.0.0(release-tasmota32)", "ESP32-C5", "tasmota32c5.bin", nil},
 		{"16.0.0(release-tasmota32)", "ESP32-C6", "tasmota32c6.bin", nil},
 		{"16.0.0(release-tasmota32)", "ESP32-C61", "tasmota32c61.bin", nil},
+		{"16.0.0(release-tasmota32)", "ESP8685 v0.4", "tasmota32c3.bin", nil}, // #470: a C3 by package name
+		{"16.0.0(release-tasmota32)", "ESP32-H2", "tasmota32h2.bin", nil},
 		{"16.0.0(release-tasmota32)", "ESP32-S2", "", ErrBuildChoiceNeeded}, // #88: the build is what is missing
 		{"16.0.0(release-tasmota32)", "ESP32-P4", "", ErrVariantChange},
 		{"16.0.0(release-tasmota32)", "ESP32-S0WD", "", ErrVariantChange},

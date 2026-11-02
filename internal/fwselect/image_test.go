@@ -100,7 +100,7 @@ func TestInspectImageBad(t *testing.T) {
 		{"zeros", make([]byte, 32)},
 		{"html", []byte("<html><body>404 Not Found</body></html>")},
 		{"unknown chip id 0x0001", esp32Header(0x0001)},
-		{"unknown chip id 0x0004 (H2 family)", esp32Header(0x0010)},
+		{"unknown chip id 0x0019 (H21, a chip after H2)", esp32Header(0x0019)},
 		{"unknown chip id 0xFFFF", esp32Header(0xFFFF)},
 		{"chip id high byte set", esp32Header(0x0105)},
 	}
@@ -129,6 +129,7 @@ func TestInspectImageChipIDs(t *testing.T) {
 		{0x0009, model.ChipESP32S3},
 		{0x000C, model.ChipESP32C2},
 		{0x000D, model.ChipESP32C6},
+		{0x0010, model.ChipESP32H2},
 		{0x0012, model.ChipESP32P4},
 		{0x0014, model.ChipESP32C61},
 		{0x0017, model.ChipESP32C5},

@@ -515,15 +515,20 @@ Inputs: `Status 2` (`StatusFWR`), `Status 4` (`StatusMEM`), and on minimal firmw
 | `ESP32-S3`                                                                | `esp32s3`                  | SRC                              |
 | `ESP32-C2`                                                                | `esp32c2`                  | SRC                              |
 | `ESP32-C3`                                                                | `esp32c3`                  | SRC                              |
+| `ESP8685`, `ESP8686` (a C3 named by its package, #470)                    | `esp32c3`                  | OBS (`ESP8685 v0.4`) / SRC       |
 | `ESP32-C5`                                                                | `esp32c5`                  | SRC                              |
 | `ESP32-C61` (check before `ESP32-C6`)                                     | `esp32c61`                 | SRC                              |
 | `ESP32-C6`                                                                | `esp32c6`                  | SRC                              |
+| `ESP32-H2`                                                                | `esp32h2`                  | SRC / DEC                        |
 | `ESP32-P4`                                                                | `esp32p4`                  | SRC                              |
-| anything else (e.g. `ESP32-H2`, `ESP32-S31`, empty)                       | `unknown` -> never updated | DEC                              |
+| anything else (e.g. `ESP32-H21`, `ESP32-S31`, empty)                      | `unknown` -> never updated | DEC                              |
 
 Longest prefix wins. The table lives in one place (`fwselect`) with a test row per entry
 and one per captured fixture. Unknown is final: no fallbacks, no substring guesses.
-`ESP32-S31` and other new chips are added only together with a fixture.
+`ESP32-S31` and other new chips are added only together with a fixture. `ESP32-H2` is the
+exception (DEC): it has no Wi-Fi and upstream builds no image for it, but people run own
+builds on it over Ethernet, and those must be updatable. Its build name is `h2`
+(`tasmota32h2.bin`, §7.1).
 
 ### 6.2 Image, variant and language from `StatusFWR.Version`
 
@@ -549,23 +554,23 @@ The image tag is the build's `CODE_IMAGE_STR` (SRC, arendst/Tasmota `63c3861`; e
 `testdata/fixtures/firmware-versions.json`), not the upstream file name (#85). The chip always comes from
 `Hardware` (§6.1):
 
-| image tag (after the `<sha-or-release>-` prefix)                               | runs on (Hardware)         | Variant -> file (§7.1)                                                  |
-| ------------------------------------------------------------------------------ | -------------------------- | ----------------------------------------------------------------------- |
-| `tasmota`                                                                      | esp8266                    | `tasmota` -> `tasmota.bin.gz`                                           |
-| `minimal`                                                                      | esp8266                    | `minimal`                                                               |
-| `lite`, `sensors`, `knx`, `zbbridge`, `zigbee`                                 | esp8266                    | same -> `tasmota-<v>.bin.gz`                                            |
-| `tasmota-4M`                                                                   | esp8266                    | `4M` -> `tasmota-4M.bin.gz`                                             |
-| `display`, `ir` (one `CODE_IMAGE_STR` for both families)                       | esp8266 or esp32 dual core | same -> `tasmota-<v>.bin.gz` / `tasmota32-<v>.bin`                      |
-| `webcam`, `bluetooth`, `nspanel`, `zbbrdgpro`                                  | esp32 dual core            | same -> `tasmota32-<v>.bin`                                             |
-| `lvgl-haspmota` (`lvgl` up to v11)                                             | esp32 dual core            | `lvgl` -> `tasmota32-lvgl.bin`                                          |
-| `tasmota32` (every `FIRMWARE_TASMOTA32` build but solo1, one per chip)         | esp32 dual core            | `tasmota` -> `tasmota32.bin`                                            |
-|                                                                                | s3, c2, c3, c5, c6, c61    | `tasmota` -> `tasmota32<chip>.bin`                                      |
-|                                                                                | s2, p4                     | `unknown`: two builds each (s2/s2cdc, p4/p4r3), the tag cannot tell     |
-|                                                                                | esp32 single core          | `unknown`: no official build reports this; not provable                 |
-|                                                                                | esp8266                    | `ErrFamilyMismatch`                                                     |
-| `solo1` (with suffix `single-core`)                                            | esp32 single core          | `tasmota` + `SingleCore` -> `tasmota32solo1.bin`                        |
-| `safeboot`                                                                     | any esp32 chip             | `safeboot` (device sits in safeboot; treated like minimal)              |
-| anything else, file names (`tasmota32c3`, `tasmota32-webcam`), bare tags (#52) |                            | `unknown` -> refuse updates until the user chooses a variant explicitly |
+| image tag (after the `<sha-or-release>-` prefix)                               | runs on (Hardware)          | Variant -> file (§7.1)                                                  |
+| ------------------------------------------------------------------------------ | --------------------------- | ----------------------------------------------------------------------- |
+| `tasmota`                                                                      | esp8266                     | `tasmota` -> `tasmota.bin.gz`                                           |
+| `minimal`                                                                      | esp8266                     | `minimal`                                                               |
+| `lite`, `sensors`, `knx`, `zbbridge`, `zigbee`                                 | esp8266                     | same -> `tasmota-<v>.bin.gz`                                            |
+| `tasmota-4M`                                                                   | esp8266                     | `4M` -> `tasmota-4M.bin.gz`                                             |
+| `display`, `ir` (one `CODE_IMAGE_STR` for both families)                       | esp8266 or esp32 dual core  | same -> `tasmota-<v>.bin.gz` / `tasmota32-<v>.bin`                      |
+| `webcam`, `bluetooth`, `nspanel`, `zbbrdgpro`                                  | esp32 dual core             | same -> `tasmota32-<v>.bin`                                             |
+| `lvgl-haspmota` (`lvgl` up to v11)                                             | esp32 dual core             | `lvgl` -> `tasmota32-lvgl.bin`                                          |
+| `tasmota32` (every `FIRMWARE_TASMOTA32` build but solo1, one per chip)         | esp32 dual core             | `tasmota` -> `tasmota32.bin`                                            |
+|                                                                                | s3, c2, c3, c5, c6, c61, h2 | `tasmota` -> `tasmota32<chip>.bin`                                      |
+|                                                                                | s2, p4                      | `unknown`: two builds each (s2/s2cdc, p4/p4r3), the tag cannot tell     |
+|                                                                                | esp32 single core           | `unknown`: no official build reports this; not provable                 |
+|                                                                                | esp8266                     | `ErrFamilyMismatch`                                                     |
+| `solo1` (with suffix `single-core`)                                            | esp32 single core           | `tasmota` + `SingleCore` -> `tasmota32solo1.bin`                        |
+| `safeboot`                                                                     | any esp32 chip              | `safeboot` (device sits in safeboot; treated like minimal)              |
+| anything else, file names (`tasmota32c3`, `tasmota32-webcam`), bare tags (#52) |                             | `unknown` -> refuse updates until the user chooses a variant explicitly |
 
 History and limits (SRC):
 
@@ -660,6 +665,8 @@ answer. Rules (each has a test; see also `docs/research/tasmota-mqtt-transport.m
 
 ESP8266 uses `.bin.gz` (gzip OTA since Tasmota 8.2). ESP32 uses the plain `.bin` app image.
 GitHub release assets (`arendst/Tasmota`, tag `v16.0.0`) have the same file names.
+Upstream builds nothing for esp32h2; `tasmota32h2.bin` is the name an own H2 build is stored and
+offered under, following the `tasmota32<chip>` scheme.
 
 ### 7.2 Select
 
@@ -706,8 +713,8 @@ function, table-tested (TasmoAdmin lesson A5).
 - Byte 0 must be `0xE9`, otherwise `ErrBadImage`. `.bin.gz` is gunzipped first; byte 0-1
   of the file must be the gzip magic `1f 8b`.
 - ESP32 app image: byte 8 = `0xEE` and `chip_id` = uint16 LE at offset 12. Mapping:
-  `0x0000` esp32, `0x0002` s2, `0x0005` c3, `0x0009` s3, `0x000C` c2, `0x000D` c6, `0x0012`
-  p4, `0x0014` c61, `0x0017` c5. Unknown chip_id -> `ErrBadImage`.
+  `0x0000` esp32, `0x0002` s2, `0x0005` c3, `0x0009` s3, `0x000C` c2, `0x000D` c6, `0x0010`
+  h2, `0x0012` p4, `0x0014` c61, `0x0017` c5. Unknown chip_id -> `ErrBadImage`.
 - Otherwise ESP8266 (no extended header; byte 8 is a segment load address byte).
 - solo1 and dual-core ESP32 share chip_id 0. The file name and `SingleCore` decide.
 

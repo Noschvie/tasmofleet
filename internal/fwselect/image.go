@@ -21,6 +21,7 @@ var chipIDs = map[uint16]model.ChipFamily{
 	0x0009: model.ChipESP32S3,
 	0x000C: model.ChipESP32C2,
 	0x000D: model.ChipESP32C6,
+	0x0010: model.ChipESP32H2,
 	0x0012: model.ChipESP32P4,
 	0x0014: model.ChipESP32C61,
 	0x0017: model.ChipESP32C5,

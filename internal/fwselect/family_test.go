@@ -44,12 +44,22 @@ func TestFamilyFromHardware(t *testing.T) {
 		{"ESP32-S3", model.ChipESP32S3, false},
 		{"ESP32-C2", model.ChipESP32C2, false},
 		{"ESP32-C3", model.ChipESP32C3, false},
+		{"ESP32-C3 AZ v0.4", model.ChipESP32C3, false},
+		// #470: Tasmota names a C3 by its package (support_esp32.ino GetDeviceHardware): ESP8685 with
+		// embedded flash, ESP8686 in QFN24. Without these rows the device was "unknown" and never updated.
+		{"ESP8685 v0.4", model.ChipESP32C3, false}, // #470, real string from an Eightree plug
+		{"ESP8685", model.ChipESP32C3, false},
+		{"ESP8686", model.ChipESP32C3, false},
 		{"ESP32-C5", model.ChipESP32C5, false},
 		{"ESP32-C61", model.ChipESP32C61, false}, // must not be taken for C6
 		{"ESP32-C6", model.ChipESP32C6, false},
 		{"ESP32-P4", model.ChipESP32P4, false},
+		// H2 has no Wi-Fi and no upstream build, but runs own builds (Ethernet): it must be known.
+		{"ESP32-H2", model.ChipESP32H2, false},
+		{"ESP32-H2 v1.2", model.ChipESP32H2, false},
 		// Unknown is final: no fallbacks, no substring guesses.
-		{"ESP32-H2", model.ChipUnknown, false},
+		{"ESP32-H21", model.ChipUnknown, false}, // a new chip, not an H2
+		{"ESP86851", model.ChipUnknown, false},
 		{"ESP32-S31", model.ChipUnknown, false}, // a new chip, not an S3
 		{"ESP32-U4WDH2", model.ChipUnknown, false},
 		{"ESP32-C31", model.ChipUnknown, false},

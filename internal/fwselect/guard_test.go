@@ -146,7 +146,7 @@ func TestGuardRule3FilenameMismatch(t *testing.T) {
 		{name: "esp32 name with esp8266 header", id: idESP8266, a: lying, c: keepChoice, want: ErrFilenameMismatch},
 		{name: "c3 name with esp32 header and device", id: idESP32, a: withFamily(artC3, model.ChipESP32), c: keepChoice, want: ErrFilenameMismatch},
 		{name: "unparseable name", id: idESP8266, a: art("firmware.bin.gz", model.ChipESP8266, "tasmota", ""), c: keepChoice, want: ErrFilenameMismatch},
-		{name: "unknown chip build name", id: idESP32, a: art("tasmota32h2.bin", model.ChipESP32, "tasmota", ""), c: keepChoice, want: ErrFilenameMismatch},
+		{name: "unknown chip build name", id: idESP32, a: art("tasmota32h21.bin", model.ChipESP32, "tasmota", ""), c: keepChoice, want: ErrFilenameMismatch},
 		{name: "variant metadata disagrees with name", id: idSensors, a: withVariant(artTasmota, "sensors"), c: keepChoice, want: ErrFilenameMismatch},
 		{name: "language metadata disagrees with name", id: idESP8266DE, a: art("tasmota.bin.gz", model.ChipESP8266, "tasmota", "DE"), c: keepChoice, want: ErrFilenameMismatch},
 		{name: "url basename differs", id: idESP8266, a: artTasmota, c: keepChoice, url: fwURL("tasmota-sensors.bin.gz"), want: ErrFilenameMismatch},

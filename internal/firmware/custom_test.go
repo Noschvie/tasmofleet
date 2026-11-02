@@ -118,6 +118,10 @@ func upload(body []byte, name, variant string) CustomInput {
 // ESP32 .bin) whatever container the admin uploaded.
 func TestAddCustomDetectsFamilyAndNormalisesContainer(t *testing.T) {
 	esp8266 := rawImage(t, "tasmota.bin.gz", 3000)
+	// Upstream builds no H2 image, so there is no captured header: a C3 header with the H2 chip_id
+	// (0x0010, LE at offset 12). Own H2 builds are the only way to update an H2 (#470).
+	h2 := rawImage(t, "tasmota32c3.bin", 3000)
+	h2[12], h2[13] = 0x10, 0x00
 	tests := []struct {
 		name     string
 		body     []byte
@@ -138,6 +142,7 @@ func TestAddCustomDetectsFamilyAndNormalisesContainer(t *testing.T) {
 		{"esp32 solo1", rawImage(t, "tasmota32.bin", 3000), "x.bin", "", true, model.ChipESP32, "tasmota32solo1.bin", rawImage(t, "tasmota32.bin", 3000)},
 		{"esp32c3", rawImage(t, "tasmota32c3.bin", 3000), "x.bin", "", false, model.ChipESP32C3, "tasmota32c3.bin", rawImage(t, "tasmota32c3.bin", 3000)},
 		{"esp32s3", rawImage(t, "tasmota32s3.bin", 3000), "x.bin", "", false, model.ChipESP32S3, "tasmota32s3.bin", rawImage(t, "tasmota32s3.bin", 3000)},
+		{"esp32h2 own build", h2, "x.bin", "", false, model.ChipESP32H2, "tasmota32h2.bin", h2},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

@@ -39,7 +39,7 @@ var esp32Chips = []struct {
 	{"s2cdc", model.ChipESP32S2}, {"solo1", model.ChipESP32}, {"p4r3", model.ChipESP32P4},
 	{"c61", model.ChipESP32C61}, {"s2", model.ChipESP32S2}, {"s3", model.ChipESP32S3},
 	{"c2", model.ChipESP32C2}, {"c3", model.ChipESP32C3}, {"c5", model.ChipESP32C5},
-	{"c6", model.ChipESP32C6}, {"p4", model.ChipESP32P4},
+	{"c6", model.ChipESP32C6}, {"h2", model.ChipESP32H2}, {"p4", model.ChipESP32P4},
 }
 
 func isNameChar(r rune) bool {

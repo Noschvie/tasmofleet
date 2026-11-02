@@ -30,6 +30,7 @@ func TestParseName(t *testing.T) {
 		{"tasmota32c3.bin", model.ChipESP32C3, "tasmota", "", false},
 		{"tasmota32c61.bin", model.ChipESP32C61, "tasmota", "", false},
 		{"tasmota32c6.bin", model.ChipESP32C6, "tasmota", "", false},
+		{"tasmota32h2.bin", model.ChipESP32H2, "tasmota", "", false},
 		{"tasmota32s2cdc.bin", model.ChipESP32S2, "tasmota", "", false},
 		{"tasmota32p4r3.bin", model.ChipESP32P4, "tasmota", "", false},
 		{"tasmota32c3-bluetooth.bin", model.ChipESP32C3, "bluetooth", "", false},

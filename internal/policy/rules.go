@@ -30,7 +30,7 @@ func LegacyID(i int) string { return "r" + strconv.Itoa(i+1) }
 
 var knownFamilies = []model.ChipFamily{
 	model.ChipESP8266, model.ChipESP32, model.ChipESP32S2, model.ChipESP32S3, model.ChipESP32C2,
-	model.ChipESP32C3, model.ChipESP32C5, model.ChipESP32C6, model.ChipESP32C61, model.ChipESP32P4,
+	model.ChipESP32C3, model.ChipESP32C5, model.ChipESP32C6, model.ChipESP32C61, model.ChipESP32H2, model.ChipESP32P4,
 }
 
 // AllESP32 in a rule's "families" stands for every ESP32 chip family, so a
