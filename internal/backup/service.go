@@ -340,7 +340,7 @@ func (m *Manager) backup(ctx context.Context, owner, dev model.Device, note stri
 				m.filesLost(id, filesErr, "write", err)
 				continue
 			}
-			return stored, fwVersion, fmt.Errorf("backup: write %s: %w", f.kind, err)
+			return nil, fwVersion, m.abandonRun(ctx, id, stored, fmt.Errorf("backup: write %s: %w", f.kind, err))
 		}
 		sum := sha256.Sum256(f.data)
 		b := model.Backup{
@@ -356,13 +356,29 @@ func (m *Manager) backup(ctx context.Context, owner, dev model.Device, note stri
 				m.filesLost(id, filesErr, "index", err)
 				continue
 			}
-			return stored, fwVersion, fmt.Errorf("backup: index %s: %w", f.kind, err)
+			return nil, fwVersion, m.abandonRun(ctx, id, stored, fmt.Errorf("backup: index %s: %w", f.kind, err))
 		}
 		b.ID = bid
 		stored = append(stored, b)
 		unlock() // the directory is claimed once a row points into it
 	}
 	return stored, fwVersion, nil
+}
+
+// abandonRun takes back the files of a run that failed on a required file and
+// returns cause: a failed backup stores nothing, so a dump without its
+// snapshot must not stay in the list as a restore point. A shutdown that
+// cancelled the run must not stop the cleanup. A file that cannot be taken
+// back is logged; cause is still what the caller reports.
+func (m *Manager) abandonRun(ctx context.Context, id model.DeviceID, stored []model.Backup, cause error) error {
+	if len(stored) == 0 {
+		return cause
+	}
+	// Index rows are taken back after the first file went in, which also released dirMu.
+	if err := m.removeFiles(context.WithoutCancel(ctx), stored); err != nil {
+		m.o.Log.Error("backup: incomplete run could not be removed", "component", "backup", "device", int64(id), "err", err)
+	}
+	return cause
 }
 
 // freeTimestamp returns now (UTC, whole seconds), moved forward until no file

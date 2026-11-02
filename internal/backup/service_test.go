@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -692,5 +693,74 @@ func TestBackupAuditSaysWhichTransportCarriedTheDump(t *testing.T) {
 	}
 	if len(e.audit.ev) != 1 || !strings.Contains(e.audit.ev[0].Detail, `"via":"http"`) {
 		t.Fatalf("audit: %+v", e.audit.ev)
+	}
+}
+
+// refuseKind is a store that refuses the index row of one kind of file, the
+// way a full disk or a locked database does in the middle of a run.
+type refuseKind struct {
+	*memBackups
+	kind model.BackupKind
+}
+
+func (s refuseKind) PutBackup(ctx context.Context, b model.Backup) (model.BackupID, error) {
+	if b.Kind == s.kind {
+		return 0, errors.New("disk full")
+	}
+	return s.memBackups.PutBackup(ctx, b)
+}
+
+// Why: the list must hold only complete restore points. A run that failed
+// after its dump was stored looks like a good backup (a dump without snapshot,
+// restorable, counting against BACKUP_KEEP) and pushes a real one towards
+// pruning, although the person was told the backup failed (spec 12.4: "a
+// backup that failed stores nothing"). Both ways a required file can fail:
+// the file cannot be written, or its index row cannot be stored.
+func TestFailedBackupRunLeavesNoFilesInTheList(t *testing.T) {
+	for name, tc := range map[string]struct {
+		store func(o *Options)
+		setup func(t *testing.T, e *env, good model.Backup)
+	}{
+		"snapshot row refused": {
+			store: func(o *Options) { o.Store = refuseKind{memBackups: o.Store.(*memBackups), kind: model.BackupSnapshot} },
+		},
+		"snapshot file cannot be written": {
+			// A directory where the snapshot file must go: the rename onto it fails.
+			setup: func(t *testing.T, e *env, good model.Backup) {
+				dir := filepath.Join(e.dir, filepath.FromSlash(path.Dir(good.Path)))
+				name := fileName(e.clk.t.Format(stampLayout), path.Base(path.Dir(good.Path)), model.BackupSnapshot)
+				if err := os.Mkdir(filepath.Join(dir, name), 0o700); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := newEnv(t, tc.store)
+			var good model.Backup
+			var filesBefore, rowsBefore int
+			if tc.setup != nil { // a complete run first, to learn the directory, then the failing one a day later
+				good = e.takeAt(t, time.Date(2026, 10, 1, 3, 0, 0, 0, time.UTC))
+				filesBefore, rowsBefore = e.files(t), len(e.st.rows)
+				e.clk.t = e.clk.t.Add(24 * time.Hour)
+				tc.setup(t, e, good)
+			}
+			got, err := e.m.Backup(t.Context(), "op", 7)
+			if err == nil {
+				t.Fatal("the run must fail")
+			}
+			if len(got) != 0 {
+				t.Errorf("a failed run returned %d stored files", len(got))
+			}
+			if n := len(e.st.rows); n != rowsBefore {
+				t.Errorf("%d rows in the list, want %d: the failed run left its stored files behind", n, rowsBefore)
+			}
+			if n := e.files(t); n != filesBefore {
+				t.Errorf("%d files on disk, want %d: the failed run left its stored files behind", n, filesBefore)
+			}
+			if at, _ := e.m.Attempts(t.Context(), 7, 0); len(at) != 1 {
+				t.Errorf("attempts = %d, want the failed run recorded once", len(at))
+			}
+		})
 	}
 }
