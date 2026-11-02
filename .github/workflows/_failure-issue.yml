@@ -1,0 +1,75 @@
+# The issue for a scheduled run that failed (reusable; called by nightly.yml and weekly.yml from a job
+# that needs the jobs to watch and runs only for the schedule on main, so a manual run never opens one).
+# One open issue per title collects the failing runs: a later failure comments on it instead of opening
+# a second. The body names the failed jobs, the tests their logs report as failed and the commits on
+# main since the last green scheduled run of the calling workflow, so the person reading it can start
+# at the suspects instead of the log.
+name: failure-issue
+
+on:
+  workflow_call:
+    inputs:
+      title:
+        description: 'issue title without the date, e.g. "Nightly FULL failed on main"; an open issue that starts with it is commented on'
+        type: string
+        required: true
+      labels:
+        description: comma-separated labels of a new issue (the label "ci" is how the open issue is found)
+        type: string
+        default: ci
+      workflow:
+        description: file name of the calling workflow (nightly.yml), to find its last green scheduled run
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  issue:
+    name: failure issue
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+      actions: read # the job list and the job logs of this run
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          SHA: ${{ github.sha }}
+          TITLE: ${{ inputs.title }}
+          LABELS: ${{ inputs.labels }}
+          WORKFLOW: ${{ inputs.workflow }}
+        run: |
+          set -euo pipefail
+          day=$(date -u +%F)
+          {
+            printf 'Run: %s\n\nFailed jobs:\n\n' "$RUN_URL"
+            # Per failed job: the failed tests from its log, Playwright's numbered detail blocks
+            # ("1) [chromium] > file > title") and Go's "--- FAIL: Test". Without them the job name stands alone.
+            gh run view "$RUN_ID" --json jobs -q '.jobs[] | select(.conclusion == "failure") | [.databaseId, .name] | @tsv' |
+              while IFS=$'\t' read -r id name; do
+                printf -- '- %s\n' "$name"
+                tests=$(curl -fsSL --max-time 60 -H "Authorization: Bearer $GH_TOKEN" \
+                  "https://api.github.com/repos/$GH_REPO/actions/jobs/$id/logs" 2>/dev/null |
+                  sed -E 's/\x1b\[[0-9;]*[A-Za-z]//g; s/^[^0-9]*[0-9T:.-]+Z //' |
+                  grep -E '^ *[0-9]+\) \[|--- FAIL:' |
+                  sed -E 's/^ *[0-9]+\) //; s/^ +//; s/ [─]+$//; s/ +$//' | sort -u | head -15 || true)
+                if [ -n "$tests" ]; then printf '%s\n' "$tests" | sed 's/^/  - \x60/; s/$/\x60/'; fi
+              done
+            prev=$(gh run list --workflow "$WORKFLOW" --branch main --event schedule --status success --limit 1 --json headSha -q '.[0].headSha // empty')
+            if [ -n "$prev" ] && [ "$prev" != "$SHA" ]; then
+              printf '\nCommits on main since the last green scheduled run (%s):\n\n' "${prev:0:7}"
+              gh api "repos/$GH_REPO/compare/$prev...$SHA" -q '.commits[] | "- " + .sha[0:7] + " " + (.commit.message | split("\n")[0])' | head -40 || true
+            fi
+          } > body.md
+          cat body.md
+          open=$(gh issue list --label ci --state open --json number,title -q "[.[] | select(.title | startswith(\"$TITLE\"))][0].number // empty")
+          if [ -n "$open" ]; then
+            gh issue comment "$open" --body-file body.md
+          else
+            gh issue create --title "$TITLE ($day)" --label "$LABELS" --body-file body.md
+          fi

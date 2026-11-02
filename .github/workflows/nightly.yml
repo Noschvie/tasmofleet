@@ -16,7 +16,11 @@ name: nightly
 
 on:
   schedule:
-    - cron: "23 2 * * *"
+    # GitHub starts this workflow 5 to 8 hours after its cron time (nine nights measured, 2026-10-25 to
+    # 2026-11-02: 02:23 became 07:41 to 09:40), whatever the hour of the cron, so the run lands in working
+    # hours. 22:37 UTC aims at the early morning instead (#485). Check "created" of the last runs with
+    # `gh run list --workflow nightly.yml --event schedule`; the minute is off the hour on purpose.
+    - cron: "37 22 * * *"
   workflow_dispatch:
 
 permissions:
@@ -146,31 +150,19 @@ jobs:
 
   # The nightly blocks no release, so its failure must not go unseen: one open issue
   # "Nightly FULL failed ..." (labels ci, flaky) collects the runs; a later failing night
-  # comments on it instead of opening a second one.
+  # comments on it instead of opening a second one. The body lists the failed tests and the commits
+  # since the last green night (_failure-issue.yml).
   nightly-failure-issue:
     name: nightly failure issue
     needs: [checks, race, mutation, ha-app, ghcr-cleanup]
     # Only the scheduled run on main reports; a manual run, from any branch, never touches the issue.
     if: ${{ failure() && github.event_name == 'schedule' && github.ref == 'refs/heads/main' }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
     permissions:
+      contents: read
       issues: write
-      actions: read # gh run view --json jobs
-    steps:
-      - env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          set -euo pipefail
-          day=$(date -u +%F)
-          failed=$(gh run view "$RUN_ID" --json jobs -q '.jobs[] | select(.conclusion == "failure") | "- " + .name')
-          printf 'Run: %s\n\nFailed jobs:\n\n%s\n' "$RUN_URL" "$failed" > body.md
-          open=$(gh issue list --label ci --state open --json number,title -q '[.[] | select(.title | startswith("Nightly FULL failed"))][0].number // empty')
-          if [ -n "$open" ]; then
-            gh issue comment "$open" --body-file body.md
-          else
-            gh issue create --title "Nightly FULL failed on main ($day)" --label flaky --label ci --body-file body.md
-          fi
+      actions: read
+    uses: ./.github/workflows/_failure-issue.yml
+    with:
+      title: Nightly FULL failed on main
+      labels: ci,flaky
+      workflow: nightly.yml

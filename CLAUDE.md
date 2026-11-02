@@ -210,8 +210,9 @@ SAFETY package, catalogue, image paths). Every gate runs through the Makefile.
 | `pr.yml`                                         | `pull_request`                        | FAST: `changes`, `checks`, `mutation` (SAFETY PRs), link check, image build check, **`required`**                 |
 | `main.yml`                                       | push to `main`                        | lint, unit and integration tests, build (no e2e; saves the Go caches), `:edge` image and HA app image, then `ghcr-cleanup` |
 | `release.yml`                                    | tag `v*`                              | `guards`, `checks` with safety race of all SAFETY packages, then `publish` (image), `release`, `pages`            |
-| `nightly.yml`                                    | cron 02:23 UTC, `workflow_dispatch`   | FULL: `checks` (e2e all, `-count=1`, catalogue), `race`, `mutation` (all), `quarantine`, `ha-app`, `ghcr-cleanup` |
+| `nightly.yml`                                    | cron 22:37 UTC, `workflow_dispatch`   | FULL: `checks` (e2e all, `-count=1`, catalogue), `race`, `mutation` (all), `quarantine`, `ha-app`, `ghcr-cleanup` |
 | `_checks.yml`, `_mutation.yml`, `_image.yml`     | `workflow_call` only                  | the shared jobs; the caller's `with:` says which (inputs `e2e`, `e2e_shards`, `testflags`, `safety_race`, `catalogue`, `scope`, `mode`) |
+| `_failure-issue.yml`                             | `workflow_call` only                  | the issue for a failed scheduled run: failed jobs, failed tests, commits since the last green run                 |
 | `ghcr-cleanup.yml`, `pages.yml`                  | `workflow_call`, `workflow_dispatch`  | registry pruning (manual run: dry-run preview), the demo site                                                     |
 
 - **FAST** (`pr.yml`; `required` must be green to merge, target ≤ 5 min):
@@ -235,7 +236,7 @@ SAFETY package, catalogue, image paths). Every gate runs through the Makefile.
   the demo site is deployed, each only after the one before succeeded.
 - **FULL** (`nightly.yml`: cron on `main`, manual dispatch): additionally every e2e test in three shards plus the MQTT job, every
   unit test with the race detector (two shards: the slowest packages listed in `tools/race.sh`, all others; `make shards-check` fails when a package is in no shard), the command catalogue check, uncached test runs, the full mutation
-  run, and the Home Assistant app in a real Supervisor (`tools/ha-app-devcontainer-test.sh`). It blocks no release; when it fails on the schedule, the job `nightly-failure-issue` opens an issue "Nightly FULL failed on main (date)" (labels `ci`, `flaky`) with the failed jobs, or comments on the one that is still open. A manual run never opens an issue and only previews the registry cleanup. Layout and visual regressions, race outside the safety packages and
+  run, and the Home Assistant app in a real Supervisor (`tools/ha-app-devcontainer-test.sh`). It blocks no release; when it fails on the schedule, the job `nightly-failure-issue` opens an issue "Nightly FULL failed on main (date)" (labels `ci`, `flaky`) with the failed jobs, the tests their logs name and the commits on `main` since the last green night, or comments on the one that is still open. GitHub starts the scheduled run 5 to 8 hours after its cron time, so the cron is set to land in the early morning. A manual run never opens an issue and only previews the registry cleanup. Layout and visual regressions, race outside the safety packages and
   the full mutation run (a PR that changes a safety package already gates its own mutation) are caught here, so the nightly FULL is the place to look for them; a
   failure is fixed through an issue, not by holding a release.
 - **Which e2e tests are `@core`**: smoke, sign-in and authorization (header, local, OIDC, standalone,
