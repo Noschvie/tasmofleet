@@ -43,12 +43,16 @@ SAFETY := ./internal/fwselect ./internal/ota ./internal/tasmota ./internal/secre
 TESTFLAGS ?=
 # Extra Playwright arguments, e.g. E2E_ARGS=--shard=1/2 (CI).
 E2E_ARGS  ?=
+# What "changed" means for quick and for the shards-check skip in check: the diff against the merge base
+# with this ref (tools/changed-files.sh), uncommitted and untracked files included.
+CHANGED_BASE ?= origin/main
+export CHANGED_BASE
 
-.PHONY: integration-guard catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check changelog-title migration-guard changelog-notes clean tools
+.PHONY: integration-guard shards-check-changed catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check changelog-title migration-guard changelog-notes clean tools
 
 # golangci-lint runs govet and staticcheck with their defaults (.golangci.yml), so check does not run
 # them a second time; the vet and staticcheck targets stay for single runs and CI.
-check: templ-check fmt-check lint test scripts-test shards-check integration vuln build
+check: templ-check fmt-check lint test scripts-test shards-check-changed integration vuln build
 
 # Unit tests of the registry cleanup's version selection (pure, no registry access).
 scripts-test:
@@ -69,6 +73,12 @@ shards-check:
 	  got=$$(printf "$$got" | grep . | sort); \
 	  [ "$$want" = "$$got" ] || { echo "shards-check: $$p files are not in exactly one of $(MUTATION_CI_SHARDS) mutation shards" >&2; exit 1; }; \
 	done; echo "shards-check: every MUTATION package file is in exactly one of $(MUTATION_CI_SHARDS) mutation shards"
+
+# make check runs shards-check only when it can have changed (#492): after a change to the Makefile, tools/,
+# a go.mod or the package list (tools/shards-check-needed.sh). CI's lint job runs it unconditionally.
+shards-check-changed:
+	@if tools/shards-check-needed.sh; then $(MAKE) --no-print-directory shards-check; \
+	else echo "shards-check: skipped, no change to the Makefile, tools/, go.mod or the package list since $(CHANGED_BASE) (make shards-check runs it)"; fi
 
 mutation-plan:
 	@tools/mutation-shard.sh plan $(MUTATION_CI_SHARDS)
