@@ -34,6 +34,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/fwselect"
 	"github.com/nofuturekid/tasmofleet/internal/health"
 	"github.com/nofuturekid/tasmofleet/internal/httpx"
+	"github.com/nofuturekid/tasmofleet/internal/inventory"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/mqttbus"
 	"github.com/nofuturekid/tasmofleet/internal/mqttcmd"
@@ -349,20 +350,34 @@ func redactURLHost(raw string) string {
 	return "?"
 }
 
-// onMQTTSeen records that a device reports to our broker (spec 6.4). The
-// stored record is read back and written whole, because inventory.Update
-// replaces the record (including the credentials) with what it is given.
+// mqttSeenTries bounds how often onMQTTSeen re-reads a record that an edit changed under it.
+const mqttSeenTries = 3
+
+// onMQTTSeen records that a device reports to our broker (spec 6.4). The record is read and
+// written back as a compare-and-set (inventory.UpdateIf), because inventory.Update replaces the
+// whole record, credentials included, with what it is given: a person's edit that lands between
+// the read and the write must not be undone by this background flag (#502). The health tracker
+// calls this once per device and run, so a conflict re-reads and tries again instead of dropping
+// the capability until the next restart.
 func (a *runtime) onMQTTSeen(id model.DeviceID, topic string) {
 	ctx, cancel := context.WithTimeout(a.bgContext, 10*time.Second)
 	defer cancel()
-	d, err := a.svc.Inventory.Get(ctx, id)
-	if err != nil || d.MQTT == model.MQTTOurs || d.Topic != topic {
-		return
+	for range mqttSeenTries {
+		d, err := a.svc.Inventory.Get(ctx, id)
+		if err != nil || d.MQTT == model.MQTTOurs || d.Topic != topic {
+			return
+		}
+		next := d
+		next.MQTT = model.MQTTOurs
+		err = a.svc.Inventory.UpdateIf(ctx, "system", d, next)
+		if !errors.Is(err, inventory.ErrConflict) {
+			if err != nil {
+				a.log.Warn("record MQTT capability", "device", id, "err", err)
+			}
+			return
+		}
 	}
-	d.MQTT = model.MQTTOurs
-	if err := a.svc.Inventory.Update(ctx, "system", d); err != nil {
-		a.log.Warn("record MQTT capability", "device", id, "err", err)
-	}
+	a.log.Warn("record MQTT capability: the device kept changing, not recorded", "device", id)
 }
 
 // setupDecoder finds out whether decode-config is usable and which version it is.
