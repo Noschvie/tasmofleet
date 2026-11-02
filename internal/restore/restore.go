@@ -335,7 +335,7 @@ func (m *Manager) StartWith(ctx context.Context, actor string, bid model.BackupI
 	go func() {
 		defer m.wg.Done()
 		defer release()
-		m.run(m.o.Context, job, dev, dmp, opt.ConfirmedFiles)
+		m.run(m.o.Context, job, dev, dmp, b.TakenAt, opt.ConfirmedFiles)
 	}()
 	return job, nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
@@ -18,6 +19,9 @@ type Run struct {
 	Ref     string // TriggerUpdate: the target release
 	Keep    bool   // store the run as kept ("Keep these backups" of a bulk backup)
 	Label   string // free text stored with the dump ("Label" of a bulk backup)
+	// Protect names runs (their TakenAt) that the pruning after this backup must not remove: the
+	// source of a restore or replace, whose safety backup would otherwise evict it.
+	Protect []time.Time
 }
 
 type runKey struct{}

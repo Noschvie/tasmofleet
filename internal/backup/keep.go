@@ -15,29 +15,40 @@ import (
 // backups of one device, newest first): every run beyond the newest keep runs
 // that is not younger than maxAge (0 = no age rule). Kept runs are never
 // returned and do not count against keep. A run is the set of files sharing
-// one TakenAt; it is kept when any of its files is. This is the one rule the
-// pruning applies and the "Pruned at next run" label shows, so the label
-// cannot disagree with what happens.
+// one TakenAt; it is kept when any of its files is. Runs of replacement
+// hardware (IsReplacementHardware: the safety backup of "Replace device",
+// filed under the dead device) are counted apart from the device's own runs,
+// so failed replace attempts cannot push its real configurations out. This is
+// the one rule the pruning applies and the "Pruned at next run" label shows,
+// so the label cannot disagree with what happens.
 func Prunable(list []model.Backup, keep int, maxAge time.Duration, now time.Time) []model.Backup {
 	kept := map[time.Time]bool{}
+	spare := map[time.Time]bool{}
 	for _, b := range list {
 		if b.Kept {
 			kept[b.TakenAt] = true
 		}
+		if IsReplacementHardware(b) {
+			spare[b.TakenAt] = true
+		}
 	}
+	// Run counters: [0] the device's own runs, [1] replacement-hardware runs.
+	var runs [2]int
+	var last [2]time.Time
 	var out []model.Backup
-	runs := 0
-	var last time.Time
-	first := true
 	for _, b := range list {
 		if kept[b.TakenAt] {
 			continue
 		}
-		if first || !b.TakenAt.Equal(last) {
-			runs++
-			last, first = b.TakenAt, false
+		c := 0
+		if spare[b.TakenAt] {
+			c = 1
 		}
-		if runs <= keep || (maxAge > 0 && now.Sub(b.TakenAt) < maxAge) {
+		if runs[c] == 0 || !b.TakenAt.Equal(last[c]) {
+			runs[c]++
+			last[c] = b.TakenAt
+		}
+		if runs[c] <= keep || (maxAge > 0 && now.Sub(b.TakenAt) < maxAge) {
 			continue
 		}
 		out = append(out, b)

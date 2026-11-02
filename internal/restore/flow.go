@@ -36,10 +36,12 @@ func (m *Manager) fail(ctx context.Context, j *Job, why string) {
 
 // run is the whole restore of one job. Order matters: the safety backup comes
 // first and a failure there stops everything, because without it a bad
-// restore cannot be undone.
-func (m *Manager) run(ctx context.Context, j Job, dev model.Device, dmp []byte, confirmedFiles int) {
+// restore cannot be undone. source is the TakenAt of the chosen backup: the
+// retention that follows the safety backup (and the verification backup) must
+// not delete the restore point, or a failed restore could not be retried.
+func (m *Manager) run(ctx context.Context, j Job, dev model.Device, dmp []byte, source time.Time, confirmedFiles int) {
 	target := tasmota.TargetFor(dev)
-	ctx = backup.WithRun(ctx, backup.Run{Trigger: model.TriggerRestore})
+	ctx = backup.WithRun(ctx, backup.Run{Trigger: model.TriggerRestore, Protect: []time.Time{source}})
 	if j.Transport == model.TransportMQTT {
 		ctx = transport.WithPath(ctx, transport.MQTT) // the safety backup, the checks and the verification too
 	} else {

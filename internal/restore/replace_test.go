@@ -520,3 +520,27 @@ func TestAssessNamesTheRisksAndTheRefusals(t *testing.T) {
 		t.Errorf("wrong device: %v", err)
 	}
 }
+
+// Why: the backup chosen for a replace is the configuration of a board that
+// may be dead for good. The backups the replace takes itself (the new
+// hardware before, the verification after) run the retention, which must not
+// delete the chosen run, or a replace that has to be repeated has nothing to
+// start from.
+func TestReplaceKeepsItsSourceBackupThroughTheRetentionOfItsOwnBackups(t *testing.T) {
+	e := newReplaceFlow(t, "15.6.0", "15.6.0", simulator.ProfileESP8266_4M)
+	a := e.dumpBackup(t, e.dumpA)
+	e.dumpBackup(t, dumpWith(3, 30))
+	e.bk.SetRetention(1, 0)
+	e.newSim.SetConfigDump(e.dumpB)
+	e.breakOld(t)
+	job, err := e.m.StartReplace(t.Context(), "alice", e.req(a.ID), StartOptions{AllowUnknownFamily: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done := e.finish(t, job.ID); done.State != store.RestoreDone {
+		t.Fatalf("job: %+v", done)
+	}
+	if _, _, err := e.bk.Open(t.Context(), a.ID); err != nil {
+		t.Fatalf("the backup the replace started from is gone: %v", err)
+	}
+}

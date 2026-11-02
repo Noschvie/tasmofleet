@@ -9,6 +9,7 @@ always upgrade automatically.
 ### Fixed
 
 - The device list could show a relay in its old state after you switched it, when the list reloaded itself (for example after the first probes of a new device) at the same moment, and kept it until the next poll. A reload that was rendered before the switch finished is now dropped and requested again (#463)
+- Backups: the safety backup of a restore or a replace can no longer delete the backup you are restoring. With a full history the chosen run was the oldest, so the retention that follows the safety backup removed it, and a restore the device refused left nothing to retry with. The chosen run now stays through the retention of the backups the restore or replace takes itself. Also, the safety backup of the new hardware in "Replace device" (filed under the dead device) is counted apart from the device's own backups, so failed replace attempts no longer push its real configurations out until "no backup" is left (#494)
 
 ## 0.27.2 "Cordouan" (2026-11-02)
 

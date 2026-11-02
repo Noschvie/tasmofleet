@@ -505,7 +505,9 @@ func (m *Manager) failReplace(ctx context.Context, j *Job, why string) {
 // hardware's MAC, 3) wait for the reboot and verify, 4) let the entry take
 // over the new MAC set in one transaction.
 func (m *Manager) runReplace(ctx context.Context, j Job, p *replacePlan, confirmedFiles int) {
-	ctx = backup.WithRun(ctx, backup.Run{Trigger: model.TriggerReplace})
+	// The chosen backup is the configuration of a board that may be dead for good: the retention of
+	// the backups taken here must not delete it.
+	ctx = backup.WithRun(ctx, backup.Run{Trigger: model.TriggerReplace, Protect: []time.Time{p.b.TakenAt}})
 	bare := model.Device{Address: p.cand.Address, Port: p.cand.Port}
 	target := tasmota.TargetFor(bare)
 

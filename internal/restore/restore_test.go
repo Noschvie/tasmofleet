@@ -908,3 +908,33 @@ func TestUncheckableFamilyNeedsConfirmation(t *testing.T) {
 		t.Errorf("job: %+v", done)
 	}
 }
+
+// Why: with a full history the backup an admin restores is the oldest, and the
+// retention that follows the safety backup would delete it. A restore the
+// device refuses then leaves nothing to retry with, although the chosen
+// restore point is the one copy the admin needs ("a restore must be
+// undoable"). The source run must still be there when the restore is over,
+// whether it worked or not.
+func TestRestoreKeepsItsSourceBackupThroughTheRetentionOfItsSafetyBackup(t *testing.T) {
+	for name, uploadErr := range map[string]error{
+		"restore done":   nil,
+		"upload refused": fmt.Errorf("%w: File invalid", tasmota.ErrUploadRefused),
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := newFlow(t, "15.6.0")
+			a := e.dumpBackup(t, e.dumpA)
+			e.dumpBackup(t, e.dumpB)
+			e.dumpBackup(t, dumpWith(3, 30))
+			e.bk.SetRetention(2, 0) // the oldest run is the one beyond the limit
+			e.cl.swallowErr = uploadErr
+			job, err := e.m.Start(t.Context(), "alice", a.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			e.finish(t, job.ID)
+			if _, _, err := e.bk.Open(t.Context(), a.ID); err != nil {
+				t.Fatalf("the chosen restore point is gone after the restore: %v", err)
+			}
+		})
+	}
+}

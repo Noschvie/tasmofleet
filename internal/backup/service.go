@@ -11,6 +11,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -221,7 +222,7 @@ func (m *Manager) finishBackup(ctx context.Context, actor string, owner, dev mod
 		m.recordAttempt(ctx, id, run, version, dev, err)
 		return out, err
 	}
-	m.prune(ctx, id)
+	m.prune(ctx, id, run.Protect)
 	if m.o.Events != nil {
 		for _, b := range out {
 			m.o.Events.Publish(events.Event{Topic: events.TopicBackup, At: m.o.Clock.Now().UTC(), Payload: b})
@@ -490,9 +491,9 @@ func writeAtomic(dir, name string, data []byte) (err error) {
 
 // prune applies the retention (Prunable) to the device's backups: the newest
 // Keep runs plus every run younger than MaxAge stay, kept runs always stay and
-// do not count. Failures are logged; they never fail the backup that
-// triggered the pruning.
-func (m *Manager) prune(ctx context.Context, id model.DeviceID) {
+// do not count. Runs named in protect (Run.Protect) stay this time. Failures
+// are logged; they never fail the backup that triggered the pruning.
+func (m *Manager) prune(ctx context.Context, id model.DeviceID, protect []time.Time) {
 	all, err := m.o.Store.ListBackups(ctx, id) // newest first
 	if err != nil {
 		m.o.Log.Error("backup retention: list failed", "component", "backup", "device", id, "err", err)
@@ -502,6 +503,9 @@ func (m *Manager) prune(ctx context.Context, id model.DeviceID) {
 	var removed []string
 	defer func() { m.removeEmptyDirs(removed...) }()
 	for _, b := range Prunable(all, ret.keep, ret.maxAge, m.o.Clock.Now()) {
+		if slices.ContainsFunc(protect, b.TakenAt.Equal) {
+			continue
+		}
 		if full, ok := m.safePath(b.Path); ok {
 			if err := os.Remove(full); err != nil && !errors.Is(err, os.ErrNotExist) {
 				m.o.Log.Error("backup retention: remove failed", "component", "backup", "device", id, "err", err)

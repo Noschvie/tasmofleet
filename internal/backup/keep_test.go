@@ -321,3 +321,75 @@ func TestUsagePassesTheStoreAggregateOrFailsLoud(t *testing.T) {
 		t.Fatalf("usage %+v %v", got, err)
 	}
 }
+
+// Why: a restore takes a safety backup first and that backup prunes. With a
+// full history the run the admin chose to go back to is the oldest, so the
+// retention of its own safety backup would delete the restore point, and a
+// restore that then fails cannot be retried ("a restore must be undoable").
+// A run named in Run.Protect stays through that one pruning, files included;
+// the next ordinary backup prunes it by the normal rule.
+func TestProtectedRunSurvivesThePruningOfItsOwnSafetyBackup(t *testing.T) {
+	e := newEnv(t, func(o *Options) { o.Keep = 50 })
+	start := time.Date(2026, 10, 1, 3, 0, 0, 0, time.UTC)
+	oldest := e.takeAt(t, start)
+	for i := 1; i <= 3; i++ {
+		e.takeAt(t, start.Add(time.Duration(i)*time.Hour))
+	}
+	e.m.SetRetention(2, 0)
+	e.clk.t = start.Add(10 * time.Hour)
+	ctx := WithRun(t.Context(), Run{Trigger: model.TriggerRestore, Protect: []time.Time{oldest.TakenAt}})
+	if _, err := e.m.Backup(ctx, "alice", 7); err != nil {
+		t.Fatal(err)
+	}
+	list, _ := e.m.List(t.Context(), 7)
+	if got := len(runsOf(list, oldest.TakenAt)); got != 3 {
+		t.Fatalf("the protected run has %d files, want dump, snapshot and decoded", got)
+	}
+	if _, _, err := e.m.Open(t.Context(), oldest.ID); err != nil {
+		t.Fatalf("the restore point cannot be opened after the safety backup: %v", err)
+	}
+	if n := countRuns(list); n != 3 {
+		t.Errorf("runs = %d, want the protected one plus the newest 2 (the others are pruned as usual)", n)
+	}
+	e.takeAt(t, start.Add(11*time.Hour))
+	list, _ = e.m.List(t.Context(), 7)
+	if len(runsOf(list, oldest.TakenAt)) != 0 {
+		t.Error("the protection must end with that one pruning")
+	}
+}
+
+// Why: "Replace device" files the safety backup of the new hardware under the
+// dead device's id. If those runs counted against BACKUP_KEEP, every failed
+// attempt would push one more real configuration of the dead device out until
+// nothing is left to replace it from. Replacement-hardware runs are pruned
+// among themselves by the same rule, so they do not pile up either.
+func TestReplacementHardwareRunsDoNotEvictTheDevicesOwnBackups(t *testing.T) {
+	e := newEnv(t, func(o *Options) { o.Keep = 3 })
+	start := time.Date(2026, 10, 1, 3, 0, 0, 0, time.UTC)
+	var real []model.Backup
+	for i := 0; i < 3; i++ {
+		real = append(real, e.takeAt(t, start.Add(time.Duration(i)*24*time.Hour)))
+	}
+	spare := model.Device{ID: 99, Address: "172.31.13.99"}
+	for i := 0; i < 5; i++ { // five failed replace attempts
+		e.clk.t = start.Add(time.Duration(10+i) * 24 * time.Hour)
+		if _, err := e.m.BackupOf(t.Context(), "alice", 7, spare, NoteReplacementHardware); err != nil {
+			t.Fatal(err)
+		}
+	}
+	list, _ := e.m.List(t.Context(), 7)
+	for _, r := range real {
+		if len(runsOf(list, r.TakenAt)) == 0 {
+			t.Errorf("the real backup of %s was pushed out by replacement-hardware runs", r.TakenAt.Format("2006-01-02"))
+		}
+	}
+	repl := 0
+	for _, b := range list {
+		if b.Kind == model.BackupConfigDump && IsReplacementHardware(b) {
+			repl++
+		}
+	}
+	if repl != 3 {
+		t.Errorf("replacement-hardware runs = %d, want the newest 3 (pruned among themselves)", repl)
+	}
+}
