@@ -1,0 +1,48 @@
+# Weekly (cron on main, Sunday night) and by hand: the full mutation run of every MUTATION package
+# (_mutation.yml, scope all) and its gate. The nightly does not run it any more (#480): a PR that changes
+# a SAFETY package already gates the mutation of what it changed, and the full run is expensive.
+# It blocks no release and no merge; a failing week opens an issue (job weekly-failure-issue,
+# schedule only). The run also saves the mutation Go cache that those PRs restore (from main only,
+# see .github/actions/go).
+name: weekly
+
+on:
+  schedule:
+    # Sunday 21:13 UTC. GitHub starts scheduled runs hours after their cron time (see nightly.yml), so
+    # this lands in the early hours of Monday.
+    - cron: "13 21 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# The event is part of the group: a push to main must not cancel the weekly run.
+concurrency:
+  group: weekly-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NICE: ""
+
+jobs:
+  mutation:
+    name: mutation
+    uses: ./.github/workflows/_mutation.yml
+    with:
+      scope: all
+
+  # One open issue "Weekly mutation run failed ..." (label ci) collects the failing weeks (_failure-issue.yml).
+  weekly-failure-issue:
+    name: weekly failure issue
+    needs: mutation
+    # Only the scheduled run on main reports; a manual run, from any branch, never touches the issue.
+    if: ${{ failure() && github.event_name == 'schedule' && github.ref == 'refs/heads/main' }}
+    permissions:
+      contents: read
+      issues: write
+      actions: read
+    uses: ./.github/workflows/_failure-issue.yml
+    with:
+      title: Weekly mutation run failed on main
+      labels: ci
+      workflow: weekly.yml

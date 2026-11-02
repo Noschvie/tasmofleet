@@ -167,7 +167,7 @@ fixture or a fault instead of mocking HTTP by hand.
 | inner loop between two edits (not a gate)               | `make quick`                                                                  |
 | FAST tier, the `@core` e2e tests                        | `make e2e-core`                                                               |
 | FAST tier, a safety package changed (race + mutation)   | `make safety BASE=origin/main`                                                |
-| FULL tier, everything CI runs nightly                   | `make ci TESTFLAGS=-count=1`                                                  |
+| FULL tier, everything CI runs nightly and weekly        | `make ci TESTFLAGS=-count=1`                                                  |
 | format                                                  | `make fmt` / `make fmt-check`                                                 |
 | go vet                                                  | `make vet`                                                                    |
 | staticcheck (also inside `make lint`)                   | `make staticcheck`                                                            |
@@ -210,7 +210,8 @@ SAFETY package, catalogue, image paths). Every gate runs through the Makefile.
 | `pr.yml`                                         | `pull_request`                        | FAST: `changes`, `checks`, `mutation` (SAFETY PRs), link check, image build check, **`required`**                 |
 | `main.yml`                                       | push to `main`                        | lint, unit and integration tests, build (no e2e; saves the Go caches), `:edge` image and HA app image, then `ghcr-cleanup` |
 | `release.yml`                                    | tag `v*`                              | `guards`, `checks` with safety race of all SAFETY packages, then `publish` (image), `release`, `pages`            |
-| `nightly.yml`                                    | cron 22:37 UTC, `workflow_dispatch`   | FULL: `checks` (e2e all, `-count=1`, catalogue), `race`, `mutation` (all), `quarantine`, `ha-app`, `ghcr-cleanup` |
+| `nightly.yml`                                    | cron 22:37 UTC, `workflow_dispatch`   | FULL: `checks` (e2e all, `-count=1`, catalogue), `race`, `quarantine`, `ha-app`, `ghcr-cleanup` |
+| `weekly.yml`                                     | cron Sunday 21:13 UTC, `workflow_dispatch` | the full `mutation` run (all MUTATION packages) and its gate                                               |
 | `_checks.yml`, `_mutation.yml`, `_image.yml`     | `workflow_call` only                  | the shared jobs; the caller's `with:` says which (inputs `e2e`, `e2e_shards`, `testflags`, `safety_race`, `catalogue`, `scope`, `mode`) |
 | `_failure-issue.yml`                             | `workflow_call` only                  | the issue for a failed scheduled run: failed jobs, failed tests, commits since the last green run                 |
 | `ghcr-cleanup.yml`, `pages.yml`                  | `workflow_call`, `workflow_dispatch`  | registry pruning (manual run: dry-run preview), the demo site                                                     |
@@ -223,7 +224,7 @@ SAFETY package, catalogue, image paths). Every gate runs through the Makefile.
   (`make mutation-sum`). CI restores the Go build/test cache (`.github/actions/go`, keyed on Go
   version and `go.sum`) and sets file mtimes from git (`tools/git-mtimes.sh`), so unchanged packages
   are not retested: their results come from the cache that `main.yml` saves. Only runs on `main` save caches (`main.yml`,
-  `nightly.yml`; the Go caches, the npm and Tasmota-source caches alike): a cache saved by a PR or a tag run
+  `nightly.yml`, `weekly.yml`; the Go caches, the npm and Tasmota-source caches alike): a cache saved by a PR or a tag run
   can be restored by nothing else and only evicts main's (#476).
 - **Push to `main`** (`main.yml`): lint, unit and integration tests and the build, but no e2e: `main` moves only by a
   fast-forward push of a PR head that was green, so the e2e shards would repeat the PR (#478). The tests run, cacheable, so
@@ -235,10 +236,12 @@ SAFETY package, catalogue, image paths). Every gate runs through the Makefile.
   `publish` calling `_image.yml` with `mode: release`, the only way to push a tag image), then the GitHub release is made, then
   the demo site is deployed, each only after the one before succeeded.
 - **FULL** (`nightly.yml`: cron on `main`, manual dispatch): additionally every e2e test in three shards plus the MQTT job, every
-  unit test with the race detector (two shards: the slowest packages listed in `tools/race.sh`, all others; `make shards-check` fails when a package is in no shard), the command catalogue check, uncached test runs, the full mutation
-  run, and the Home Assistant app in a real Supervisor (`tools/ha-app-devcontainer-test.sh`). It blocks no release; when it fails on the schedule, the job `nightly-failure-issue` opens an issue "Nightly FULL failed on main (date)" (labels `ci`, `flaky`) with the failed jobs, the tests their logs name and the commits on `main` since the last green night, or comments on the one that is still open. GitHub starts the scheduled run 5 to 8 hours after its cron time, so the cron is set to land in the early morning. A manual run never opens an issue and only previews the registry cleanup. Layout and visual regressions, race outside the safety packages and
-  the full mutation run (a PR that changes a safety package already gates its own mutation) are caught here, so the nightly FULL is the place to look for them; a
+  unit test with the race detector (two shards: the slowest packages listed in `tools/race.sh`, all others; `make shards-check` fails when a package is in no shard), the command catalogue check, uncached test runs, and the Home Assistant app in a real Supervisor (`tools/ha-app-devcontainer-test.sh`). It blocks no release; when it fails on the schedule, the job `nightly-failure-issue` opens an issue "Nightly FULL failed on main (date)" (labels `ci`, `flaky`) with the failed jobs, the tests their logs name and the commits on `main` since the last green night, or comments on the one that is still open. GitHub starts the scheduled run 5 to 8 hours after its cron time, so the cron is set to land in the early morning. A manual run never opens an issue and only previews the registry cleanup. Layout and visual regressions and race outside the safety packages are caught here, so the nightly FULL is the place to look for them; a
   failure is fixed through an issue, not by holding a release.
+- **WEEKLY** (`weekly.yml`: cron on `main`, Sunday night, manual dispatch): the full mutation run of every MUTATION package with its gate (`make mutation`
+  in four shards, `_mutation.yml` with scope all). The nightly does not run it (#480): a PR that changes a safety package already gates the mutation of what it
+  changed, so a surviving mutant a PR did not touch shows up here, once a week. It blocks nothing; when it fails on the schedule, the job `weekly-failure-issue` opens an
+  issue "Weekly mutation run failed on main (date)" (label `ci`) or comments on the open one. The run also saves the mutation Go cache that safety PRs restore.
 - **Which e2e tests are `@core`**: smoke, sign-in and authorization (header, local, OIDC, standalone,
   operators refused), first-run setup, base path, the device list, the OTA update flow (batch, push upload),
   the chip-family and OTA-exclusion refusals in the UI, device writes (console, settings, restore, make

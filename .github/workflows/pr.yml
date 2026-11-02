@@ -1,5 +1,5 @@
 # Pull requests: the FAST tier. One workflow per trigger (CLAUDE.md "Test tiers in CI"):
-# pr.yml (this), main.yml (push to main), release.yml (tags), nightly.yml (cron). The jobs
+# pr.yml (this), main.yml (push to main), release.yml (tags), nightly.yml and weekly.yml (cron). The jobs
 # they share are the reusable workflows _checks.yml, _mutation.yml and _image.yml; the file
 # a run comes from says which tier it is, nothing is computed at run time except which
 # parts of the repository the PR touched (job "changes").

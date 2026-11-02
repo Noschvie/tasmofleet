@@ -4,7 +4,7 @@
 # (tools/mutation-shard.sh), and uploads the counts; mutation-gate adds them up
 # and applies the thresholds.
 #   scope changed (pr.yml, only when the PR changes a SAFETY package): the changed mutation packages
-#   scope all     (nightly.yml): every MUTATION package
+#   scope all     (weekly.yml): every MUTATION package
 # A tag runs no mutation: every PR that touches a SAFETY package already passed it.
 name: mutation
 

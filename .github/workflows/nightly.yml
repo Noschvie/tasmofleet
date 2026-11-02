@@ -5,12 +5,12 @@
 #                   test in three shards plus the MQTT specs in a job of their own (layout and
 #                   visual guards), the Tasmota command catalogue check (_checks.yml)
 #   race            every unit test with the race detector, in two shards
-#   mutation        the full mutation run and its gate (_mutation.yml, scope all)
 #   quarantine      the tests tagged @quarantine / quarantine.Test, with retries; never blocking
 #   ha-app          the Home Assistant app in a real Supervisor (#442)
 #   ghcr-cleanup    prune the registries (a manual run only previews: dry-run)
 #
-# The jobs also save the Go caches that pull requests restore (from main only, see
+# The full mutation run is not part of it: weekly.yml runs it once a week (#480). The jobs
+# also save the Go caches that pull requests restore (from main only, see
 # .github/actions/go); the e2e caches are refreshed only here.
 name: nightly
 
@@ -69,12 +69,6 @@ jobs:
           RACE_SHARD: ${{ matrix.shard }}
           AUTH_PARTS: "4"
         run: make race
-
-  mutation:
-    name: mutation
-    uses: ./.github/workflows/_mutation.yml
-    with:
-      scope: all
 
   # Known-flaky tests, with retries. Never part of anything that gates: a failure here shows
   # on the run but does not fail it.
@@ -154,7 +148,7 @@ jobs:
   # since the last green night (_failure-issue.yml).
   nightly-failure-issue:
     name: nightly failure issue
-    needs: [checks, race, mutation, ha-app, ghcr-cleanup]
+    needs: [checks, race, ha-app, ghcr-cleanup]
     # Only the scheduled run on main reports; a manual run, from any branch, never touches the issue.
     if: ${{ failure() && github.event_name == 'schedule' && github.ref == 'refs/heads/main' }}
     permissions:

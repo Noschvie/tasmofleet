@@ -33,6 +33,7 @@ on:
       - ".github/workflows/pr.yml"
       - ".github/workflows/release.yml"
       - ".github/workflows/nightly.yml"
+      - ".github/workflows/weekly.yml"
       - ".github/workflows/_mutation.yml"
       - ".github/workflows/pages.yml"
 
