@@ -22,18 +22,20 @@ jobs:
     timeout-minutes: 30
     container:
       # Browsers in this image match @playwright/test in e2e/package.json; bump both together (as in _checks.yml).
-      image: mcr.microsoft.com/playwright:v1.64.1-noble
+      image: mcr.microsoft.com/playwright:v1.64.1-noble@sha256:2f05f8a734509a7b3f26a912639488ee08f58a7b292d14d62271bcff9038768f
     steps:
       - name: install make (not in the Playwright image)
         run: apt-get update -qq && apt-get install -y -qq --no-install-recommends make >/dev/null
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: trust the workspace
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      # Restore-only: this runs under the tag's ref, whose caches nothing else could use (#476). The
+      # e2e job's Go cache on main has the same builds (app and devenv).
+      - uses: ./.github/actions/go
         with:
-          go-version-file: go.mod
-          cache-dependency-path: go.sum
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+          name: e2e
+          save: "false"
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.npm
           key: npm-${{ hashFiles('e2e/package-lock.json') }}

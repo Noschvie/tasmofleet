@@ -1,17 +1,16 @@
-# Push to main: publishes :edge and keeps the Go caches fresh. It runs no test: the pushed
-# commit is the head of a pull request that was green, because main only moves forward by
-# a fast-forward push of that head (CLAUDE.md "Pull requests and the protected main"), so a
-# rerun of the FAST tier would only repeat the PR (#478).
+# Push to main: refreshes main's Go caches and publishes :edge. It runs lint, the unit and
+# the integration tests and the build, but no e2e test: the pushed commit is the head of a
+# pull request that was green, because main only moves forward by a fast-forward push of that
+# head (CLAUDE.md "Pull requests and the protected main"), so the e2e shards would only repeat
+# the PR (#478).
 #
-# Pull requests do not save Go caches (#476): a cache saved under refs/pull/N/merge can only
-# be restored by that PR. The caches the PRs restore are saved by this workflow and by
-# nightly.yml, and only from main (.github/actions/go). The cache-warm job fills the ones
-# of lint, unit tests, build and integration tests without running a test: it compiles the
-# test binaries and lints, which is what the caches are for. The e2e cache is refreshed by
-# the nightly.
+# Why these tests still run: pull requests and tags do not save Go caches (#476), they restore
+# main's. The tests run here, cacheable (no -count=1), so that the go test cache holds their
+# RESULTS and the PR and tag jobs report unchanged packages as "(cached)". The e2e caches are
+# refreshed by nightly.yml.
 #
 # Jobs:
-#   cache-warm      compile and lint, nothing is checked that the PR did not check
+#   checks          _checks.yml without e2e: lint, unit tests, build, integration tests
 #   image           build and push :edge (_image.yml, mode edge), and build-test the HA app image
 #   ghcr-cleanup    prune the registries after the image, whatever its result
 name: main
@@ -20,9 +19,13 @@ on:
   push:
     branches: [main]
     # Nothing here changes the image or the caches: docs, e2e tests, design files, fixtures and
-    # the workflows of the other triggers.
+    # the workflows of the other triggers. CHANGELOG.md is not on the list: the binary embeds it.
     paths-ignore:
-      - "**/*.md"
+      - "README.md"
+      - "ROADMAP.md"
+      - "CONTRIBUTING.md"
+      - "SECURITY.md"
+      - "CLAUDE.md"
       - "docs/**"
       - "e2e/**"
       - "design/**"
@@ -30,7 +33,6 @@ on:
       - ".github/workflows/pr.yml"
       - ".github/workflows/release.yml"
       - ".github/workflows/nightly.yml"
-      - ".github/workflows/_checks.yml"
       - ".github/workflows/_mutation.yml"
       - ".github/workflows/pages.yml"
 
@@ -45,33 +47,11 @@ env:
   NICE: ""
 
 jobs:
-  cache-warm:
-    name: Go cache (${{ matrix.name }})
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        # Same cache names and same go invocations as the jobs of _checks.yml, so that the entries
-        # saved here are the ones those jobs restore. -run=NoSuchTest compiles and links every
-        # test binary (build flags and tags are what the cache keys on) and runs no test.
-        include:
-          - name: lint
-            cache_paths: ~/.cache/golangci-lint
-            run: make lint
-          - name: test
-            cache_paths: ""
-            run: make build test TESTFLAGS=-run=NoSuchTest
-          - name: integration
-            cache_paths: ""
-            run: make integration TESTFLAGS=-run=NoSuchTest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/go
-        with:
-          name: ${{ matrix.name }}
-          paths: ${{ matrix.cache_paths }}
-      - run: ${{ matrix.run }}
+  checks:
+    name: checks
+    uses: ./.github/workflows/_checks.yml
+    with:
+      e2e: none
 
   image:
     name: image

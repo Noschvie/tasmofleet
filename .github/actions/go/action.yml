@@ -1,7 +1,9 @@
 # Go toolchain plus a build/module cache per job. The key carries the commit, so
 # every run that saves writes a fresh cache, and the next run restores the
 # newest one with the same Go version and go.sum. With the cache, go build and
-# go vet are incremental and go test reports unchanged packages as "(cached)".
+# go vet are incremental and go test reports unchanged packages as "(cached)": the test
+# results in the cache are the ones main.yml's cacheable test run saved (the nightly runs
+# with -count=1 and stores none).
 #
 # Only runs on main save (main.yml, nightly.yml). A cache is visible to its own ref
 # and to the default branch only, so one saved under refs/pull/N/merge, a tag or a

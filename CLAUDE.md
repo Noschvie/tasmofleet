@@ -201,27 +201,29 @@ SAFETY package, catalogue, image paths). Every gate runs through the Makefile.
 | File                                             | Trigger                               | Runs                                                                                                              |
 | ------------------------------------------------ | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `pr.yml`                                         | `pull_request`                        | FAST: `changes`, `checks`, `mutation` (SAFETY PRs), link check, image build check, **`required`**                 |
-| `main.yml`                                       | push to `main`                        | `:edge` image and HA app image, Go cache refresh (compile and lint, no test), then `ghcr-cleanup`                 |
+| `main.yml`                                       | push to `main`                        | lint, unit and integration tests, build (no e2e; saves the Go caches), `:edge` image and HA app image, then `ghcr-cleanup` |
 | `release.yml`                                    | tag `v*`                              | `guards`, `checks` with safety race of all SAFETY packages, then `publish` (image), `release`, `pages`            |
 | `nightly.yml`                                    | cron 02:23 UTC, `workflow_dispatch`   | FULL: `checks` (e2e all, `-count=1`, catalogue), `race`, `mutation` (all), `quarantine`, `ha-app`, `ghcr-cleanup` |
 | `_checks.yml`, `_mutation.yml`, `_image.yml`     | `workflow_call` only                  | the shared jobs; the caller's `with:` says which (inputs `e2e`, `e2e_shards`, `testflags`, `safety_race`, `catalogue`, `scope`, `mode`) |
 | `ghcr-cleanup.yml`, `pages.yml`                  | `workflow_call`, `workflow_dispatch`  | registry pruning (manual run: dry-run preview), the demo site                                                     |
 
 - **FAST** (`pr.yml`; `required` must be green to merge, target ≤ 5 min):
-  lint, unit and integration tests from the go test cache, build, and the `@core` e2e tests in two shards.
+  lint, unit and integration tests, build, and the `@core` e2e tests in two shards.
   When a PR changes a package listed in `SAFETY` (Makefile: fwselect, ota, tasmota, secretbox, auth, httpx,
   policy, cmdpolicy, mqttcmd, transport, restore), the race tests of the changed ones and `make mutation-changed` run too, and are then
   required. CI runs mutation in four shards (`MUTATION_SHARD`, files dealt out by estimated cost, `tools/mutation-weights.txt`) and gates on their sum
   (`make mutation-sum`). CI restores the Go build/test cache (`.github/actions/go`, keyed on Go
   version and `go.sum`) and sets file mtimes from git (`tools/git-mtimes.sh`), so unchanged packages
-  are not retested. Only runs on `main` save that cache (`main.yml`, `nightly.yml`): a cache saved by a PR or a tag run
+  are not retested: their results come from the cache that `main.yml` saves. Only runs on `main` save caches (`main.yml`,
+  `nightly.yml`; the Go caches, the npm and Tasmota-source caches alike): a cache saved by a PR or a tag run
   can be restored by nothing else and only evicts main's (#476).
-- **Push to `main`** (`main.yml`): no test runs. `main` moves only by a fast-forward push of a PR head that was
-  green, so a rerun would repeat the PR (#478). The job `cache-warm` compiles every test binary without running one
-  and lints, to refresh the caches the PRs restore; the e2e caches are refreshed by the nightly.
+- **Push to `main`** (`main.yml`): lint, unit and integration tests and the build, but no e2e: `main` moves only by a
+  fast-forward push of a PR head that was green, so the e2e shards would repeat the PR (#478). The tests run, cacheable, so
+  that main's go test cache holds their results for the PRs and tags (the nightly runs `-count=1` and stores none); the
+  e2e caches are refreshed by the nightly. The `:edge` image and the HA app image follow.
 - **RELEASE** (`release.yml`, tags `vX.Y.Z`): the FAST tier plus, always, the race tests of the
   `SAFETY` packages (a tag has no PR base, so every one of them runs), and no mutation. A tag without its `CHANGELOG.md`
-  section, or a patch tag that changes a migration, fails at once (job `guards`). The image is published (job
+  section, a patch tag that changes a migration, or a tag on a commit that is not on `main` fails at once (job `guards`). The image is published (job
   `publish` calling `_image.yml` with `mode: release`, the only way to push a tag image), then the GitHub release is made, then
   the demo site is deployed, each only after the one before succeeded.
 - **FULL** (`nightly.yml`: cron on `main`, manual dispatch): additionally every e2e test in three shards, every

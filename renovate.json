@@ -44,6 +44,11 @@
       "groupName": "Docker base images"
     },
     {
+      "description": "The pinned Playwright container image (digest included, in _checks.yml, nightly.yml, pages.yml) and @playwright/test must match: one PR",
+      "matchDepNames": ["mcr.microsoft.com/playwright", "@playwright/test"],
+      "groupName": "Playwright"
+    },
+    {
       "description": "The Go directive in go.mod and the golang build image move together",
       "matchDepNames": ["go", "golang", "docker.io/library/golang"],
       "groupName": "Go toolchain"

@@ -4,14 +4,16 @@
 # a run comes from says which tier it is, nothing is computed at run time except which
 # parts of the repository the PR touched (job "changes").
 #
-# FAST: lint, unit and integration tests from the go test cache, the @core e2e tests in two
-# shards, and, when the PR changes a SAFETY package (Makefile), its race tests and the
+# FAST: lint, unit and integration tests (unchanged packages come from the go test cache that
+# main.yml saves; a PR saves none), the @core e2e tests in two shards, and, when the PR changes
+# a SAFETY package (Makefile), its race tests and the
 # mutation gate of the changed mutation packages. Target: "required" green in <= 5 min.
 # Docs-only PRs skip all of that (the link check still runs). The job "required" is the
 # single status check for branch protection; it always runs.
 #
 # No paths filter on the trigger: "changes" decides, and "required" always reports.
-# Docs that are NOT safe to ignore, because a test or the build reads them: docs/security
+# Docs that are NOT safe to ignore, because a test or the build reads them: CHANGELOG.md
+# (embedded by internal/changelog, TestEmbeddedChangelog), docs/security
 # (cmdpolicy test reads command-policy.md), docs/configuration.md (configdoc_test checks it
 # against the env tags), docs/spec (design-system.md is read by a test), assets/branding
 # (branding test compares copies), deploy (metrics/config tests read it), design/v2 (token
@@ -64,7 +66,7 @@ jobs:
           markdown=false
           for f in $files; do
             case "$f" in
-              docs/research/*|docs/runbooks/*|docs/design/*|README.md|ROADMAP.md|CONTRIBUTING.md|SECURITY.md|CHANGELOG.md|CLAUDE.md|NOTICE|LICENSE) ;;
+              docs/research/*|docs/runbooks/*|docs/design/*|README.md|ROADMAP.md|CONTRIBUTING.md|SECURITY.md|CLAUDE.md|NOTICE|LICENSE) ;;
               *) code=true ;;
             esac
             case "$f" in

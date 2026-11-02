@@ -2187,8 +2187,8 @@ minimal.
 
 CI (`.github/workflows/`): one workflow per trigger. `pr.yml` runs the FAST tier on every PR (lint, unit and
 integration tests from the cache, build, `@core` e2e in two shards, safety race and mutation when a `SAFETY` package
-changed; the `required` job gates the merge). `main.yml` publishes `:edge` and refreshes the Go caches, with no
-tests. `release.yml` runs on tags: the FAST tier plus the race tests of every `SAFETY` package, and publishes the
+changed; the `required` job gates the merge). `main.yml` publishes `:edge` and saves the Go caches (lint, unit and integration
+tests, no e2e). `release.yml` runs on tags: the FAST tier plus the race tests of every `SAFETY` package, and publishes the
 image, the GitHub release and the demo site only after it passed. `nightly.yml` runs the FULL tier (every e2e test,
 race on all packages, uncached tests, full mutation, the Home Assistant app in a Supervisor) and failure-reports.
 Details: CLAUDE.md "Test tiers in CI".
