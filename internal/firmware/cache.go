@@ -219,8 +219,8 @@ func (c *cache) Refresh(ctx context.Context) error {
 // served). A partial result is reused for a minute only, then retried.
 //
 // One fetch runs at a time and c.mu is not held while it does: a caller that needs the index waits for the
-// fetch in flight, but only until its ctx ends, and a caller that finds a fresh index never waits at all
-// (#495).
+// fetch in flight, but only until its ctx ends (then it gets the stale index, if there is one, unless it
+// forces), and a caller that finds a fresh index never waits at all (#495).
 func (c *cache) index(ctx context.Context, force bool) ([]srcIndex, error) {
 	if idx, ok := c.freshIndex(force); ok {
 		return idx, nil
@@ -228,6 +228,13 @@ func (c *cache) index(ctx context.Context, force bool) ([]srcIndex, error) {
 	select {
 	case c.fetching <- struct{}{}:
 	case <-ctx.Done():
+		// Stale beats nothing, here as after a failed fetch: a slow refetch can hold the slot for minutes,
+		// and a caller that has an index in memory must not get an error for it. A forced refresh asked
+		// for fresh data and gets the context error.
+		if stale, have := c.staleIndex(); !force && have {
+			c.log.Warn("firmware: serving the stale index, the refetch in flight did not finish in time", "err", ctx.Err())
+			return stale, nil
+		}
 		return nil, ctx.Err()
 	}
 	defer func() { <-c.fetching }()
@@ -255,9 +262,7 @@ func (c *cache) index(ctx context.Context, force bool) ([]srcIndex, error) {
 			errs = []error{errors.New("firmware: no sources configured")}
 		}
 		c.recordIndex(now, false, errs)
-		c.mu.Lock()
-		stale, have := c.idx, c.idxValid
-		c.mu.Unlock()
+		stale, have := c.staleIndex()
 		if !force && have {
 			// Stale beats nothing: an upstream outage must not take down
 			// planning against an index we already have. The next call retries.
@@ -278,6 +283,13 @@ func (c *cache) index(ctx context.Context, force bool) ([]srcIndex, error) {
 	c.meta, c.snap = meta, idx
 	c.metaMu.Unlock()
 	return idx, nil
+}
+
+// staleIndex returns the last good index whatever its age; have is false before the first successful fetch.
+func (c *cache) staleIndex() (idx []srcIndex, have bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.idx, c.idxValid
 }
 
 // freshIndex returns the index in memory when it may be used without a fetch: it is within its TTL and the

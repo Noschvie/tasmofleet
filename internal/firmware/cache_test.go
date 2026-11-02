@@ -610,6 +610,35 @@ func TestConcurrentCallersAfterTheTTLShareOneIndexFetch(t *testing.T) {
 	}
 }
 
+// Why (#495 review): "stale beats nothing". During an upstream outage a refetch can hold the fetch slot for
+// minutes. A caller that has an index in memory and runs out of patience while it waits (a page preview, the
+// release list) must get that index, as it does when the fetch fails, instead of an error for a feed that
+// is there. An explicit Refresh asked for fresh data and still gets the context error.
+func TestReleasesServeTheStaleIndexWhenTheFetchInFlightOutlastsTheCaller(t *testing.T) {
+	u := newUpstream(t)
+	clk := newFakeClock()
+	c, _, _ := newTestCache(t, u, func(o *Options) { o.Clock = clk })
+	want, err := c.Releases(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	clk.Advance(20 * time.Minute) // past the TTL: the next caller has to fetch
+	hungIndexFetch(t, u, c)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	got, err := c.Releases(ctx)
+	if err != nil || len(got) != len(want) || got[0].Version != want[0].Version {
+		t.Fatalf("Releases past the caller's deadline with a stale index = %d releases, %v; want the %d of the stale index", len(got), err, len(want))
+	}
+
+	rctx, rcancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer rcancel()
+	if err := c.(interface{ Refresh(context.Context) error }).Refresh(rctx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Refresh asked for fresh data; past its deadline it = %v, want the context error", err)
+	}
+}
+
 func TestEnsureContextCancelStopsDownload(t *testing.T) {
 	u := newUpstream(t)
 	u.slow = make(chan struct{})
