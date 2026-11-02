@@ -89,28 +89,94 @@ func (a *runtime) setupOTA() {
 	}
 	a.goBG("ota", func() error { return a.engine.Run(a.bgContext) })
 	if a.bus != nil {
-		a.bus.Subscribe([]mqttbus.Kind{mqttbus.KindUpgrade}, a.onUpgradeReport)
-		a.bus.Subscribe([]mqttbus.Kind{mqttbus.KindPower}, a.onPowerReport)
+		h := a.startOTAHints(a.svc.Store.GetDeviceByTopic, a.engine)
+		a.bus.Subscribe([]mqttbus.Kind{mqttbus.KindUpgrade}, h.onUpgradeReport)
+		a.bus.Subscribe([]mqttbus.Kind{mqttbus.KindPower}, h.onPowerReport)
 	}
 }
 
+// otaHintQueue bounds the MQTT reports that wait for their device lookup.
+const otaHintQueue = 256
+
+// hintTarget is what the MQTT reports are handed to: the OTA engine.
+type hintTarget interface {
+	Hint(id model.DeviceID, report string)
+	PowerReport(id model.DeviceID, relay int, on bool)
+}
+
+// otaHint is one MQTT report waiting for its device lookup: relay 0 is an UPGRADE report
+// with text, relay >= 1 is that relay switched OFF.
+type otaHint struct {
+	topic string
+	text  string
+	relay int
+}
+
+// otaHints carries the UPGRADE and POWER OFF reports from the bus goroutine to the engine
+// (#507). The bus handler must not block, and the device is found by topic in the database,
+// so the reports wait in a bounded queue for one worker that looks them up in arrival order.
+// The engine treats both reports as hints, so one that does not fit is dropped and counted.
+type otaHints struct {
+	queue   chan otaHint
+	byTopic func(ctx context.Context, topic string) (model.Device, error)
+	target  hintTarget
+	dropped func()
+}
+
+func newOTAHints(byTopic func(context.Context, string) (model.Device, error), target hintTarget, dropped func()) *otaHints {
+	return &otaHints{queue: make(chan otaHint, otaHintQueue), byTopic: byTopic, target: target, dropped: dropped}
+}
+
+// startOTAHints starts the worker as a background task, so that shutdown waits for it.
+func (a *runtime) startOTAHints(byTopic func(context.Context, string) (model.Device, error), target hintTarget) *otaHints {
+	h := newOTAHints(byTopic, target, func() { a.svc.Std.MQTTDropped.With("ota_hint_queue_full").Inc() })
+	a.goBG("ota-hints", func() error { h.run(a.bgContext); return nil })
+	return h
+}
+
+func (h *otaHints) offer(m otaHint) {
+	select {
+	case h.queue <- m:
+	default:
+		h.dropped()
+	}
+}
+
+// run delivers the queued reports one at a time until ctx ends. A lookup in flight is finished
+// (it is bounded by its own timeout) before run returns.
+func (h *otaHints) run(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case m := <-h.queue:
+			h.deliver(ctx, m)
+		}
+	}
+}
+
+func (h *otaHints) deliver(ctx context.Context, m otaHint) {
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	d, err := h.byTopic(ctx, m.topic)
+	if err != nil {
+		return // not in the inventory: nothing to hint
+	}
+	if m.relay > 0 {
+		h.target.PowerReport(d.ID, m.relay, false)
+		return
+	}
+	h.target.Hint(d.ID, m.text)
+}
+
 // onUpgradeReport forwards stat/<topic>/UPGRADE to the engine as a hint
-// ("Failed ..." ends the wait early). It runs on the bus goroutine, so the
-// device lookup happens in its own goroutine.
-func (a *runtime) onUpgradeReport(m mqttbus.Message) {
+// ("Failed ..." ends the wait early). It runs on the bus goroutine and only queues.
+func (h *otaHints) onUpgradeReport(m mqttbus.Message) {
 	text, ok := upgradeReportText(m.Payload)
 	if !ok {
 		return
 	}
-	go func() {
-		ctx, cancel := context.WithTimeout(a.bgContext, 5*time.Second)
-		defer cancel()
-		d, err := a.svc.Store.GetDeviceByTopic(ctx, m.Topic)
-		if err != nil {
-			return // not in the inventory: nothing to hint
-		}
-		a.engine.Hint(d.ID, text)
-	}()
+	h.offer(otaHint{topic: m.Topic, text: text})
 }
 
 // upgradeReportText extracts the text of {"Upgrade":"..."}.
@@ -127,7 +193,7 @@ func upgradeReportText(payload []byte) (string, bool) {
 // onPowerReport forwards non-retained stat/<topic>/POWER[n] to the engine so
 // that a relay somebody switches off during an update is not switched back on
 // by the power restore. The engine ignores ON reports and devices without a job.
-func (a *runtime) onPowerReport(m mqttbus.Message) {
+func (h *otaHints) onPowerReport(m mqttbus.Message) {
 	if m.Retained {
 		return
 	}
@@ -135,15 +201,7 @@ func (a *runtime) onPowerReport(m mqttbus.Message) {
 	if !ok || strings.ToUpper(strings.TrimSpace(string(m.Payload))) != "OFF" {
 		return
 	}
-	go func() {
-		ctx, cancel := context.WithTimeout(a.bgContext, 5*time.Second)
-		defer cancel()
-		d, err := a.svc.Store.GetDeviceByTopic(ctx, m.Topic)
-		if err != nil {
-			return
-		}
-		a.engine.PowerReport(d.ID, relay, false)
-	}()
+	h.offer(otaHint{topic: m.Topic, relay: relay})
 }
 
 // powerRelay maps the topic suffix POWER (relay 1) or POWERn to n.
