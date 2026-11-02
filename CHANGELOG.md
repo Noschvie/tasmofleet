@@ -6,6 +6,8 @@ always upgrade automatically.
 
 ## Unreleased
 
+## 0.27.3 "Cordouan" (2026-11-02)
+
 ### Upgrade notes
 
 - Metrics: `tasmofleet_backup_last_success_timestamp_seconds` has a new `id` label (the inventory id) next to `device` (#499). Queries and recording rules that join or aggregate this metric by its exact label set (`on(device)`, `ignoring`, `sum by (device)` over devices that share a name) must add `id`; a plain `{device="..."}` selector keeps working. The bundled Grafana dashboard is updated.
