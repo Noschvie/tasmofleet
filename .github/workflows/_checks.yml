@@ -56,7 +56,8 @@ jobs:
       # golangci-lint runs staticcheck with its default set plus SA9003, a superset of make
       # staticcheck, so that one is not run again (#479). It also runs govet, but skips generated
       # files, and go vet is the only check of the *_templ.go files: make vet stays.
-      - run: make templ-check fmt-check vet lint vuln shards-check
+      # scripts-test runs on the runner's Node: the registry cleanup's version selection (scripts/, #477).
+      - run: make templ-check fmt-check vet lint vuln shards-check scripts-test
 
   test:
     name: unit tests, build

@@ -58,9 +58,10 @@ export CHANGED_BASE
 # and go vet is the only check left for the *_templ.go files.
 check: templ-check fmt-check vet lint test scripts-test shards-check-changed integration vuln build
 
-# Unit tests of the registry cleanup's version selection (pure, no registry access).
+# Unit tests of the registry cleanup's version selection (pure, no registry access). The glob is
+# expanded by the shell: since Node 21 `node --test scripts/` no longer takes a directory (#477).
 scripts-test:
-	node --test scripts/
+	node --test scripts/*.test.mjs
 
 # CI splits the FULL tier's race run (tools/race.sh, RACE_SHARD=i/2) and mutation run
 # (MUTATION_SHARD=i/MUTATION_CI_SHARDS, tools/mutation-shard.sh) into shards. Fails when a package
