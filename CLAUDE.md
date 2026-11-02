@@ -194,7 +194,8 @@ the packages that have `//go:build integration` test files (found at run time, a
 `make check` runs `shards-check` only after a change to the Makefile, `tools/`, a `go.mod` or the package list (CI runs it every time).
 `make mutation-changed BASE=<ref>` (and `make safety`) mutates only the lines this branch changed since the merge base with `<ref>`
 (uncommitted work included) in the MUTATION packages it touched; `make mutation` mutates every package whole (the weekly full run).
-A change that only touches a package's tests or data, or an untracked source file, mutates that package whole. Fewer than 10 mutants
+Any changed test or data file of a package (or an untracked source file in it) mutates that package whole, so weakened tests
+cannot hide behind a small code change. On the changed lines a mutant no test reaches counts as lived. Fewer than 10 decided mutants
 on the changed lines (`MUTATION_DIFF_MIN`) are too few for a percentage: such a diff passes with at most one lived mutant but needs a
 kill, and one without any decided mutant (a comment, a declaration) passes and says so. Details and the
 gremlins `--diff` traps they work around: header of `tools/mutation-gate.sh`. A sharded run leaves `mutation-report.json` and a job
@@ -205,16 +206,16 @@ summary (lived, timed-out and not-covered mutants per package) next to the count
 One workflow per trigger. The file a run comes from is its tier; only `pr.yml` looks at the diff (docs-only,
 SAFETY package, catalogue, image paths). Every gate runs through the Makefile.
 
-| File                                             | Trigger                               | Runs                                                                                                              |
-| ------------------------------------------------ | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `pr.yml`                                         | `pull_request`                        | FAST: `changes`, `checks`, `mutation` (SAFETY PRs), link check, image build check, **`required`**                 |
-| `main.yml`                                       | push to `main`                        | lint, unit and integration tests, build (no e2e; saves the Go caches), `:edge` image and HA app image, then `ghcr-cleanup` |
-| `release.yml`                                    | tag `v*`                              | `guards`, `checks` with safety race of all SAFETY packages, then `publish` (image), `release`, `pages`            |
-| `nightly.yml`                                    | cron 22:37 UTC, `workflow_dispatch`   | FULL: `checks` (e2e all, `-count=1`, catalogue), `race`, `quarantine`, `ha-app`, `ghcr-cleanup` |
-| `weekly.yml`                                     | cron Sunday 21:13 UTC, `workflow_dispatch` | the full `mutation` run (all MUTATION packages) and its gate                                               |
-| `_checks.yml`, `_mutation.yml`, `_image.yml`     | `workflow_call` only                  | the shared jobs; the caller's `with:` says which (inputs `e2e`, `e2e_shards`, `testflags`, `safety_race`, `catalogue`, `scope`, `mode`) |
-| `_failure-issue.yml`                             | `workflow_call` only                  | the issue for a failed scheduled run: failed jobs, failed tests, commits since the last green run                 |
-| `ghcr-cleanup.yml`, `pages.yml`                  | `workflow_call`, `workflow_dispatch`  | registry pruning (manual run: dry-run preview), the demo site                                                     |
+| File                                         | Trigger                                    | Runs                                                                                                                                    |
+| -------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `pr.yml`                                     | `pull_request`                             | FAST: `changes`, `checks`, `mutation` (SAFETY PRs), link check, image build check, **`required`**                                       |
+| `main.yml`                                   | push to `main`                             | lint, unit and integration tests, build (no e2e; saves the Go caches), `:edge` image and HA app image, then `ghcr-cleanup`              |
+| `release.yml`                                | tag `v*`                                   | `guards`, `checks` with safety race of all SAFETY packages, then `publish` (image), `release`, `pages`                                  |
+| `nightly.yml`                                | cron 22:37 UTC, `workflow_dispatch`        | FULL: `checks` (e2e all, `-count=1`, catalogue), `race`, `quarantine`, `ha-app`, `ghcr-cleanup`                                         |
+| `weekly.yml`                                 | cron Sunday 21:13 UTC, `workflow_dispatch` | the full `mutation` run (all MUTATION packages) and its gate                                                                            |
+| `_checks.yml`, `_mutation.yml`, `_image.yml` | `workflow_call` only                       | the shared jobs; the caller's `with:` says which (inputs `e2e`, `e2e_shards`, `testflags`, `safety_race`, `catalogue`, `scope`, `mode`) |
+| `_failure-issue.yml`                         | `workflow_call` only                       | the issue for a failed scheduled run: failed jobs, failed tests, commits since the last green run                                       |
+| `ghcr-cleanup.yml`, `pages.yml`              | `workflow_call`, `workflow_dispatch`       | registry pruning (manual run: dry-run preview), the demo site                                                                           |
 
 - **FAST** (`pr.yml`; `required` must be green to merge, target ≤ 5 min):
   lint, unit and integration tests, build, and the `@core` e2e tests in two shards plus the MQTT specs in a job of their own.
