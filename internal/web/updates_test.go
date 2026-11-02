@@ -59,9 +59,20 @@ func (f *fakeOTA) CancelBatch(_ context.Context, _ string, id model.BatchID) err
 	return nil
 }
 
-type fakeJobs struct{ jobs []model.Job }
+type fakeJobs struct {
+	jobs []model.Job
+	// listErr and getErr, when set, make ListJobs / GetJob fail for the calls they answer with an error
+	// (a busy or broken database).
+	listErr func(store.JobFilter) error
+	getErr  error
+}
 
 func (f *fakeJobs) ListJobs(_ context.Context, fl store.JobFilter) ([]model.Job, error) {
+	if f.listErr != nil {
+		if err := f.listErr(fl); err != nil {
+			return nil, err
+		}
+	}
 	var out []model.Job
 	for _, j := range f.jobs {
 		if fl.BatchID != 0 && j.BatchID != fl.BatchID {
@@ -84,6 +95,9 @@ func (f *fakeJobs) JobEvents(context.Context, model.JobID) ([]model.JobEvent, er
 	return []model.JobEvent{{Event: "upgrade_issued", Detail: "ok"}}, nil
 }
 func (f *fakeJobs) GetJob(_ context.Context, id model.JobID) (model.Job, error) {
+	if f.getErr != nil {
+		return model.Job{}, f.getErr
+	}
 	for _, j := range f.jobs {
 		if j.ID == id {
 			return j, nil

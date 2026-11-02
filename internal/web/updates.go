@@ -1485,7 +1485,7 @@ func (h *handler) batchRetryForm(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if page.Consequence = retryConsequences(p.Jobs); page.Consequence != "" {
-			page.Token = h.cmds.put(h.d.Clock.Now(), h.bindingOf(r), "retry:"+strconv.FormatInt(int64(p.Batch), 10), nil)
+			page.Token = h.cmds.put(h.d.Clock.Now(), h.bindingOf(r), retryConfirmKey(p.Batch), nil)
 		}
 	}
 	for _, j := range p.Jobs {
@@ -1575,6 +1575,12 @@ func (h *handler) retryViewOf(v view, page retryPage) retryView {
 	return rv
 }
 
+// retryConfirmKey is what the confirmation token of a destructive retry is bound to in the token
+// store: the transaction the retry page showed.
+func retryConfirmKey(b model.BatchID) string {
+	return "retry:" + strconv.FormatInt(int64(b), 10)
+}
+
 // batchRetry creates the retry transaction (the engine plans it afresh).
 func (h *handler) batchRetry(w http.ResponseWriter, r *http.Request) {
 	limitBody(w, r)
@@ -1589,16 +1595,25 @@ func (h *handler) batchRetry(w http.ResponseWriter, r *http.Request) {
 	if !h.needAdminForBatch(w, r, id) {
 		return
 	}
-	if jobs, _, jerr := h.jobViews(r, store.JobFilter{BatchID: id}); jerr == nil && len(jobs) > 0 && jobs[0].Job.IsTemplate() {
+	// The checks below read the transaction. If that fails, so does the request: the engine checks the
+	// role again, but never the confirmation (GHSA-cpfg-6c57-xg33).
+	jobs, _, jerr := h.jobViews(r, store.JobFilter{BatchID: id})
+	if jerr != nil {
+		h.fail(w, r, jerr)
+		return
+	}
+	if len(jobs) > 0 && jobs[0].Job.IsTemplate() {
 		h.refuseTemplateRetry(w, r)
 		return
-	} else if jerr == nil && len(jobs) > 0 && (jobs[0].Job.IsCommand() || jobs[0].Job.IsBackup()) {
+	} else if len(jobs) > 0 && (jobs[0].Job.IsCommand() || jobs[0].Job.IsBackup()) {
 		if pr, _ := auth.FromContext(r.Context()); pr.Role < model.RoleAdmin {
 			h.message(w, r, http.StatusForbidden, h.view(r, "Retry refused", "transactions", "Only an admin can retry a command or backup transaction."))
 			return
 		}
 		if retryConsequences(jobs) != "" {
-			if _, ok := h.cmds.take(h.d.Clock.Now(), r.PostFormValue("token"), h.bindingOf(r)); !ok {
+			// The token store is shared with the console, bulk commands, settings and discovery: the
+			// token must be the one the retry page of this very transaction issued.
+			if pc, ok := h.cmds.take(h.d.Clock.Now(), r.PostFormValue("token"), h.bindingOf(r)); !ok || pc.cmd != retryConfirmKey(id) {
 				h.message(w, r, http.StatusConflict, h.view(r, "Retry not started", "transactions", "This retry sends a destructive command again. Open the retry page and confirm it first."))
 				return
 			}
