@@ -6,6 +6,8 @@ always upgrade automatically.
 
 ## Unreleased
 
+## 0.27.2 "Cordouan" (2026-11-02)
+
 ### Fixed
 
 - An update whose device answers again after the restart but whose firmware cannot be read (Detect or `Status 4` / `Status 11` fail every time) no longer runs for ever. The reboot window never ended it, so it held its update slot and blocked every further job for that device. It now fails when the window is over, with "device is back but its firmware cannot be read" and what failed, and sends no second `Upgrade` (#493).
