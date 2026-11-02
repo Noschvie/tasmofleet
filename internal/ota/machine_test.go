@@ -776,21 +776,55 @@ func TestStepVerify(t *testing.T) {
 			state: model.JobFailed, actions: []ActionKind{ActNotify},
 		},
 		{
-			// Verify and await_reboot share one deadline so they cannot
-			// ping-pong forever.
-			name: "verify/command_failed", in: vFinal, ev: Event{Kind: EvCommandFailed},
+			// Verify and await_reboot share one deadline: a failed identity read inside the window goes back
+			// to waiting and keeps it.
+			name: "verify/command_failed/before the deadline", in: withDeadline(vFinal, t0.Add(time.Nanosecond)), ev: Event{Kind: EvCommandFailed},
 			state: model.JobAwaitReboot, actions: []ActionKind{ActProbe},
 			check: func(t *testing.T, j model.Job, as []Action) {
-				wantDeadline(t, j, time.Minute)
+				if !j.DeadlineAt.Equal(t0.Add(time.Nanosecond)) {
+					t.Errorf("DeadlineAt = %v, the shared deadline must not move", j.DeadlineAt)
+				}
 				wantDelay(t, as, 5*time.Second)
 			},
 		},
 		{
+			// Why (#493): a device that answers the liveness probe but whose identity cannot be read made the
+			// job swap verify and await_reboot every ProbeInterval for ever, holding its OTA slot and the
+			// device. The step that fails the read is the one that has to notice the deadline.
+			name: "verify/command_failed/at the deadline", in: withDeadline(vFinal, t0), ev: Event{Kind: EvCommandFailed, Err: "status 4: timeout"},
+			state: model.JobFailed, actions: []ActionKind{ActNotify},
+			check: func(t *testing.T, j model.Job, _ []Action) {
+				wantErrContains(t, j, ErrTextUnreadable)
+				wantErrContains(t, j, "status 4: timeout") // the person sees what was unreadable
+			},
+		},
+		{
+			name: "verify/command_failed/long past the deadline", in: withDeadline(vFinal, t0.Add(-time.Hour)), ev: Event{Kind: EvCommandFailed},
+			state: model.JobFailed, actions: []ActionKind{ActNotify},
+			check: func(t *testing.T, j model.Job, _ []Action) { wantErrContains(t, j, ErrTextUnreadable) },
+		},
+		{
+			// A timeout event means the deadline passed (EvTimeout); it ends the job whatever the stored deadline says.
 			name: "verify/timeout", in: vFinal, ev: Event{Kind: EvTimeout},
-			state: model.JobAwaitReboot, actions: []ActionKind{ActProbe},
+			state: model.JobFailed, actions: []ActionKind{ActNotify},
+			check: func(t *testing.T, j model.Job, _ []Action) { wantErrContains(t, j, ErrTextUnreadable) },
+		},
+		{
+			// Why: the end of a safeboot push says where the device can be rescued, as await_reboot does.
+			name: "verify/command_failed/past the deadline via safeboot", in: withDeadline(withSafeboot(vFinal), t0), ev: Event{Kind: EvCommandFailed, Addr: "172.31.13.35"},
+			state: model.JobFailed, actions: []ActionKind{ActNotify},
+			check: func(t *testing.T, j model.Job, _ []Action) { wantErrContains(t, j, "safeboot at 172.31.13.35") },
+		},
+		{
+			name: "verify/command_failed/past the deadline over MQTT", in: withDeadline(withTransport(vFinal, model.TransportMQTT), t0), ev: Event{Kind: EvCommandFailed},
+			state: model.JobFailed, actions: []ActionKind{ActNotify},
+			check: func(t *testing.T, j model.Job, _ []Action) { wantErrContains(t, j, "restart the device and retry") },
 		},
 	})
 }
+
+func withSafeboot(j model.Job) model.Job                      { j.ViaSafeboot = true; return j }
+func withTransport(j model.Job, tr model.Transport) model.Job { j.Transport = tr; return j }
 
 func withDeadline(j model.Job, d time.Time) model.Job       { j.DeadlineAt = d; return j }
 func withVariant(i model.Identity, v string) model.Identity { i.Variant = v; return i }

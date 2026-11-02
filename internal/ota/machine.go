@@ -164,6 +164,7 @@ const (
 	ErrTextNoUpgradeStart  = "device did not start the upgrade"
 	ErrTextFWUnreachable   = "the device cannot reach the firmware server"
 	ErrTextNotBack         = "device did not come back"
+	ErrTextUnreadable      = "device is back but its firmware cannot be read"
 	ErrTextHardwareChanged = "hardware changed after upgrade (critical)"
 	ErrTextNoEffect        = "upgrade did not take effect"
 	ErrTextUnexpected      = "unexpected firmware after upgrade"
@@ -594,17 +595,24 @@ func stepAwaitReboot(j model.Job, ev Event, now time.Time, cfg Config) (model.Jo
 			// download is over and failed; the device is idle.
 			return retry(j, now, cfg, ErrTextNoEffect)
 		}
-		if j.ViaSafeboot {
-			return fail(j, now, joinNotes(ErrTextNotBack, "it may be in safeboot"+atAddr(ev.Addr)+": open its web page and upload the firmware, or use Upgrade by download"))
-		}
-		if j.Transport == model.TransportMQTT {
-			return fail(j, now, joinNotes(ErrTextNotBack, "restart the device and retry the update"))
-		}
-		return fail(j, now, ErrTextNotBack)
+		return failNotBack(j, now, ErrTextNotBack, ev.Addr)
 	case EvStart, EvResume, EvIdentity, EvPlanned, EvCommandOK, EvCommandFailed, EvGuardRefused, EvBackupDone, EvBackupFailed, EvUpgradeReport, EvPowerReport, EvCancel:
 		// not in the transition table: the job stays unchanged
 	}
 	return j, nil
+}
+
+// failNotBack ends a job whose device never reached a state the machine can verify before the reboot window
+// ended, with the hint that fits the path the job took: where a safeboot device can be reached, or that an MQTT
+// update leaves a device that may sit on the minimal image.
+func failNotBack(j model.Job, now time.Time, reason, addr string) (model.Job, []Action) {
+	if j.ViaSafeboot {
+		return fail(j, now, joinNotes(reason, "it may be in safeboot"+atAddr(addr)+": open its web page and upload the firmware, or use Upgrade by download"))
+	}
+	if j.Transport == model.TransportMQTT {
+		return fail(j, now, joinNotes(reason, "restart the device and retry the update"))
+	}
+	return fail(j, now, reason)
 }
 
 // looksOld reports whether a probe identity is not (yet) a new image:
@@ -630,7 +638,13 @@ func hardwareChanged(before, now model.Identity) bool {
 func stepVerify(j model.Job, ev Event, now time.Time, cfg Config) (model.Job, []Action) {
 	switch ev.Kind {
 	case EvCommandFailed, EvTimeout:
-		// Keep the reboot deadline: verify and await_reboot share it.
+		// verify and await_reboot share one reboot deadline. A device that answers the liveness probe but whose
+		// identity cannot be read would otherwise be handed back and forth between the two for ever: every
+		// step changes the state, so the engine's deadline check (which looks at an unchanged waiting state)
+		// never runs (#493). The probe that just failed was the last look; after the deadline the job ends.
+		if ev.Kind == EvTimeout || !now.Before(j.DeadlineAt) {
+			return failNotBack(j, now, withErr(ErrTextUnreadable, ev.Err), ev.Addr)
+		}
 		j = to(j, model.JobAwaitReboot, now)
 		return j, probeLater(cfg)
 	case EvIdentity:

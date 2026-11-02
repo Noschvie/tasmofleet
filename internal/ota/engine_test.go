@@ -260,6 +260,7 @@ type fakeDevice struct {
 	offline      int    // probes left that fail (reboot gap)
 	ignore       bool   // accept Upgrade but never flash (download failed)
 	echo         string // override of the Upgrade echo
+	identErr     error  // ProbeIdentity fails with it while the liveness Probe still answers
 	upgradeErr   bool   // flash, but lose the reply
 	upgradeTimes []time.Time
 	// autoContinue: on Upgrade the device flashes minimal by itself
@@ -323,6 +324,9 @@ func (a *fakeAPI) ProbeIdentity(_ context.Context, d model.Device) (model.Identi
 	fd := a.dev(d.ID)
 	if !fd.step() {
 		return model.Identity{}, "", 0, errors.New("unreachable")
+	}
+	if fd.identErr != nil {
+		return model.Identity{}, "", 0, fd.identErr
 	}
 	up := fd.uptime
 	if isIntermediate(fd.ident.Variant) {
@@ -872,6 +876,35 @@ func TestEngineUpgradeEchoMismatch(t *testing.T) {
 	}
 	if n := h.rec.count("upgrade"); n != 1 {
 		t.Fatalf("Upgrade sent %d times", n)
+	}
+}
+
+// Why (#493): after the reboot the device answers Status 2 (the liveness probe) but never Detect / Status 4
+// (the identity probe). Each failed read sent the job back to waiting and each answer to verifying, so no
+// step ever left the state unchanged, the deadline check never ran and the job held its OTA slot and the
+// device for ever. It must fail within the reboot window, with the reason, and never flash a second time:
+// a device whose firmware cannot be read is not known to be idle.
+func TestEngineIdentityUnreadableAfterTheUpdateFailsAtTheDeadline(t *testing.T) {
+	dev := plugDevice()
+	h := newHarness(t, 2, dev)
+	h.api.onUpdate = func(model.DeviceID) {
+		h.api.mu.Lock()
+		h.api.dev(1).identErr = errors.New("detect: timeout")
+		h.api.mu.Unlock()
+	}
+	id := submitOne(t, h, Request{DeviceID: 1, Release: "16.0.0", SkipBackup: true})
+	h.run(t, h.e)
+	j := h.job(t, id)
+	if j.State != model.JobFailed || !strings.Contains(j.LastError, ErrTextUnreadable) || !strings.Contains(j.LastError, "detect: timeout") {
+		t.Fatalf("job %s %q", j.State, j.LastError)
+	}
+	if n := h.rec.count("upgrade"); n != 1 {
+		t.Fatalf("Upgrade sent %d times; a device that cannot be read must not be flashed again", n)
+	}
+	// The window starts when the device is first seen online after the reboot; the job ends within one probe
+	// round of it, not hours later.
+	if over := h.clk.Now().Sub(dev.upgradeTimes[0]); over > testCfg().UpgradeAccept+testCfg().RebootWindow+time.Minute {
+		t.Fatalf("job ended %v after Upgrade, the windows allow %v", over, testCfg().UpgradeAccept+testCfg().RebootWindow)
 	}
 }
 
