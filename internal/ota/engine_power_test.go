@@ -324,6 +324,64 @@ func TestPowerReportDropsRelay(t *testing.T) {
 	h.e.PowerReport(99, 1, false)
 }
 
+// Why (#534): a relay somebody switched off must never be switched back on by the restore. The
+// worker is busy with an action while the reports come in, and its inbox holds a few events; the
+// report that finds it full used to be dropped, so with enough reports in front of it (a scene,
+// a flood on the broker) the restore switched the relay back on. Now the report is recorded and
+// the worker takes it before its next action.
+func TestPowerReportThatFindsTheInboxFullStillPreventsTheRestore(t *testing.T) {
+	h := newHarness(t, 2, powerDevice(relaysOn(1, 3)))
+	var id model.JobID
+	h.backups.hook = func() {
+		h.e.mu.Lock()
+		room := cap(h.e.workers[id])
+		h.e.mu.Unlock()
+		for range room {
+			h.e.PowerReport(1, 5, false) // relay 5 is no candidate: the reports only fill the inbox
+		}
+		h.e.PowerReport(1, 3, false) // finds the inbox full
+	}
+	id = submitOne(t, h, Request{DeviceID: 1, Release: "16.0.0"})
+	h.run(t, h.e)
+	j := h.job(t, id)
+	if j.State != model.JobSucceeded || !strings.Contains(j.LastError, "relays 3 were reported off while the update was busy") {
+		t.Fatalf("job %s %q", j.State, j.LastError)
+	}
+	if got := h.api.dev(1).power; got != relaysOn(1) {
+		t.Fatalf("device power %b: relay 3 was reported off and must stay off, relay 1 comes back", got)
+	}
+	if n := len(h.e.lostOff); n != 0 {
+		t.Fatalf("%d recorded reports left behind by a finished job", n)
+	}
+}
+
+// What PowerReport records for a worker that does not take events: the relays of every report
+// that did not fit, once, and nothing for a device without a job or for an ON report.
+func TestPowerReportRecordsWhatDoesNotFitAndHandsItOverOnce(t *testing.T) {
+	h := newHarness(t, 2, powerDevice(0))
+	h.e.workers[7] = make(chan Event, 1)
+	h.e.byDev[1] = 7
+	h.e.PowerReport(1, 1, false) // fits
+	h.e.PowerReport(1, 2, false)
+	h.e.PowerReport(1, 4, false)
+	h.e.PowerReport(1, 2, false) // the same relay again: still one bit
+	h.e.PowerReport(1, 6, true)  // ON: nothing to record
+	h.e.PowerReport(99, 3, false)
+	if got := h.e.lostOff[7]; got != relaysOn(2, 4) {
+		t.Fatalf("recorded relays %b, want 2 and 4", got)
+	}
+	if _, other := h.e.lostOff[99]; other || len(h.e.lostOff) != 1 {
+		t.Fatalf("recorded for another job: %v", h.e.lostOff)
+	}
+	ev, ok := h.e.takeLostOff(7)
+	if !ok || ev.Kind != EvPowerReport || ev.Power != relaysOn(2, 4) || !ev.PowerLost {
+		t.Fatalf("handed over %+v %v", ev, ok)
+	}
+	if _, again := h.e.takeLostOff(7); again {
+		t.Fatal("the same relays were handed over twice")
+	}
+}
+
 // The first reading after the boot is the evidence: a relay that is ON
 // there was kept by the device and is never touched, even if somebody
 // switches it off right after. (Restoring it would override that person.)

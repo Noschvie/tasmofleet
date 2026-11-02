@@ -64,6 +64,11 @@ type Event struct {
 	PowerIgnored model.RelaySet
 	// At is when an EvPowerReport was received.
 	At time.Time
+	// PowerLost marks an EvPowerReport that was recorded without its time because the job's
+	// inbox was full (#534). It counts whenever it is processed, outside the reporting window
+	// too: a relay somebody switched off must never be switched back on, and the price is that a
+	// boot announcement recorded the same way also cancels that relay's restore.
+	PowerLost bool
 	// PowerRead says Power is the relay state read for this event: EvIdentity
 	// in verify (right after the final boot) and EvCommandOK in set_ota_url
 	// (right before the first Upgrade). PowerUnreadable says that read failed.
@@ -813,7 +818,7 @@ func powerReport(j model.Job, ev Event, now time.Time) (model.Job, []Action) {
 	if j.State.Terminal() || j.State == model.JobQueued {
 		return j, nil
 	}
-	if ev.At.Before(j.PowerReadAt) || (!j.PowerCutoff.IsZero() && ev.At.After(j.PowerCutoff)) {
+	if !ev.PowerLost && (ev.At.Before(j.PowerReadAt) || (!j.PowerCutoff.IsZero() && ev.At.After(j.PowerCutoff))) {
 		return j, nil
 	}
 	gone := j.PowerOn & ev.Power
@@ -822,6 +827,9 @@ func powerReport(j model.Job, ev Event, now time.Time) (model.Job, []Action) {
 	}
 	j.PowerOn &^= gone
 	j.UpdatedAt = now
+	if ev.PowerLost {
+		return powerNote(j, "relays "+gone.String()+" were reported off while the update was busy and are left off"), nil
+	}
 	return powerNote(j, "relays "+gone.String()+" were switched off during the update and are left off"), nil
 }
 

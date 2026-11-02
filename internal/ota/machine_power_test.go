@@ -129,6 +129,43 @@ func TestStepPowerReport(t *testing.T) {
 	}
 }
 
+// Why (#534): a report that found the job's inbox full is recorded without its time. It has to
+// count wherever it is processed, because the other choice is to guess that it was a boot
+// announcement, and a wrong guess switches a relay on that somebody switched off. A relay that
+// is no candidate, and a job that has not read the state yet or has ended, stay untouched.
+func TestStepPowerReportRecordedWithoutItsTimeCountsInEveryWindow(t *testing.T) {
+	lost := Event{Kind: EvPowerReport, Power: 1, PowerLost: true} // At is zero: before every reading
+	in := withPower(job(model.JobBackup, model.StageMinimal), relays13)
+	got, as := Step(in, lost, t0, testCfg())
+	if got.PowerOn != 1<<2 || len(as) != 0 {
+		t.Fatalf("PowerOn %b, actions %v: the relay reported off is still a candidate", got.PowerOn, kinds(as))
+	}
+	if !strings.Contains(got.PowerNote, "relays 1 were reported off while the update was busy and are left off") {
+		t.Errorf("note %q", got.PowerNote)
+	}
+	// ... also after the device went offline: the same report with a time there is a boot announcement
+	off := withPower(job(model.JobAwaitReboot, model.StageMinimal), relays13)
+	off.PowerCutoff = t0.Add(10 * time.Second)
+	late := Event{Kind: EvPowerReport, Power: 1, At: t0.Add(15 * time.Second)}
+	if got, _ := Step(off, late, t0.Add(16*time.Second), testCfg()); got.PowerOn != relays13 {
+		t.Fatal("a timed report after the cutoff must stay a boot announcement")
+	}
+	late.PowerLost = true
+	if got, _ := Step(off, late, t0.Add(16*time.Second), testCfg()); got.PowerOn != 1<<2 {
+		t.Error("a recorded report was ignored because the device had gone offline")
+	}
+	other := lost
+	other.Power = 1 << 1
+	if got, _ := Step(in, other, t0, testCfg()); got.PowerOn != relays13 || got.PowerNote != "" {
+		t.Error("a report about a relay that was not a candidate changed the job")
+	}
+	for _, st := range []model.JobState{model.JobQueued, model.JobSucceeded, model.JobFailed, model.JobCancelled} {
+		if got, _ := Step(withPower(job(st, model.StageFinal), relays13), lost, t0, testCfg()); got.PowerOn != relays13 {
+			t.Errorf("%s: report changed the job", st)
+		}
+	}
+}
+
 // The cutoff is when the device first went offline, set once.
 func TestStepPowerCutoffIsSetOnce(t *testing.T) {
 	in := withPower(job(model.JobUpgradeIssued, model.StageMinimal), relays13)

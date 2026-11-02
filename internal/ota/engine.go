@@ -229,6 +229,9 @@ type Engine struct {
 	workers map[model.JobID]chan Event // inbox of each running worker
 	fixing  map[model.JobID]bool       // running policy jobs, which cannot be cancelled
 	byDev   map[model.DeviceID]model.JobID
+	// lostOff holds the relays reported OFF while the job's inbox was full (#534): the report is
+	// recorded here instead of dropped and handed to the worker first thing in next.
+	lostOff map[model.JobID]model.RelaySet
 	wake    chan struct{}
 }
 
@@ -247,7 +250,7 @@ func NewEngine(o Options, jobs store.JobStore, devices store.DeviceStore, api De
 	return &Engine{
 		opts: o, power: o.Power, audit: o.Audit, jobs: jobs, devices: devices, api: api, fw: fw, backups: b, clk: clk, notify: n,
 		sel: fwselectFuncs{}, paths: o.Paths, safebootPush: safebootPushEnabled, log: slog.Default().With("component", "ota"),
-		workers: map[model.JobID]chan Event{}, fixing: map[model.JobID]bool{}, byDev: map[model.DeviceID]model.JobID{}, wake: make(chan struct{}, 1),
+		workers: map[model.JobID]chan Event{}, fixing: map[model.JobID]bool{}, byDev: map[model.DeviceID]model.JobID{}, lostOff: map[model.JobID]model.RelaySet{}, wake: make(chan struct{}, 1),
 	}
 }
 
@@ -983,6 +986,7 @@ func (e *Engine) startWorker(ctx context.Context, wg *sync.WaitGroup, j model.Jo
 			delete(e.workers, j.ID)
 			delete(e.fixing, j.ID)
 			delete(e.byDev, j.DeviceID)
+			delete(e.lostOff, j.ID)
 			e.mu.Unlock()
 			e.signal()
 		}()
@@ -1050,6 +1054,9 @@ func (e *Engine) work(ctx context.Context, j model.Job, ev Event, inbox <-chan E
 // next waits for the next event: an inbox event (cancel) or the result of
 // the pending action after its delay.
 func (e *Engine) next(ctx context.Context, j model.Job, pending []Action, inbox <-chan Event) (Event, bool, bool) {
+	if ev, ok := e.takeLostOff(j.ID); ok {
+		return ev, false, true
+	}
 	select {
 	case ev := <-inbox:
 		return ev, false, true
@@ -1439,12 +1446,28 @@ func (e *Engine) deviceMismatch(ctx context.Context, d model.Device) string {
 	return ""
 }
 
+// takeLostOff hands over the relays whose OFF report found the inbox full, as an event that
+// counts whenever it is processed (see Event.PowerLost).
+func (e *Engine) takeLostOff(id model.JobID) (Event, bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	lost, ok := e.lostOff[id]
+	if !ok {
+		return Event{}, false
+	}
+	delete(e.lostOff, id)
+	return Event{Kind: EvPowerReport, Power: lost, PowerLost: true}, true
+}
+
 // PowerReport tells the engine that someone switched relay off while the
 // device could still be switched by a person (MQTT stat/<t>/POWERn OFF, not
 // retained). The report is stamped with the time it was received; the job
 // decides by that time whether it falls into the window in which the report
 // can be a user's action. If the job planned to switch that relay back on
-// afterwards, it will not. Reports are dropped when no job runs or the worker is busy.
+// afterwards, it will not. A report for a device without a job is ignored. One that finds the
+// job's inbox full (the worker is busy with an action) is never dropped: the relay is recorded
+// and the worker takes it before anything else (#534). Dropping it would let the restore switch
+// the relay back on.
 func (e *Engine) PowerReport(deviceID model.DeviceID, relay int, on bool) {
 	if on {
 		return
@@ -1458,7 +1481,8 @@ func (e *Engine) PowerReport(deviceID model.DeviceID, relay int, on bool) {
 	select {
 	case e.workers[id] <- Event{Kind: EvPowerReport, Power: model.RelaySet(0).Add(relay), At: e.clk.Now()}:
 	default:
-		e.log.Debug("ota power report dropped, worker busy", "device", deviceID)
+		e.lostOff[id] = e.lostOff[id].Add(relay)
+		e.log.Debug("ota power report recorded without its time, worker busy", "device", deviceID, "relay", relay)
 	}
 }
 
