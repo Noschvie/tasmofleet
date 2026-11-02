@@ -1,9 +1,9 @@
 # The test jobs the other workflows share (reusable; never triggered on its own).
 # Which of them run is decided by the CALLER's inputs, not computed here:
-#   pr.yml       e2e core in two shards; safety-race and catalogue when the PR changes them
-#   release.yml  e2e core in two shards; safety-race of every SAFETY package (no base to diff against)
+#   pr.yml       e2e core in two shards and the MQTT job; safety-race and catalogue when the PR changes them
+#   release.yml  e2e core in two shards and the MQTT job; safety-race of every SAFETY package (no base to diff against)
 #   main.yml     no e2e (the PR head already passed it, #478); the run saves main's Go caches, test results included
-#   nightly.yml  e2e all in three shards, uncached tests (-count=1), catalogue
+#   nightly.yml  e2e all in three shards and the MQTT job, uncached tests (-count=1), catalogue
 # Every gate runs through the Makefile, so the same commands work locally.
 name: checks
 
@@ -15,7 +15,7 @@ on:
         type: string
         default: core
       e2e_shards:
-        description: JSON list of Playwright shards
+        description: JSON list of Playwright shards of the chromium project; the MQTT specs always get a job of their own
         type: string
         default: '["1/2","2/2"]'
       testflags:
@@ -112,6 +112,10 @@ jobs:
       fail-fast: false
       matrix:
         shard: ${{ fromJSON(inputs.e2e_shards) }}
+        # The MQTT specs (one worker, not shardable) are a job of their own, so they no longer lengthen
+        # the first shard (#474). An include entry whose shard is not in the list above is a new job.
+        include:
+          - shard: mqtt
     container:
       # The image is the browser cache: its browsers and fonts match
       # @playwright/test in e2e/package.json; bump both together.
@@ -149,9 +153,12 @@ jobs:
           # One worker per two cores: every worker runs its own app, simulator
           # fleet and browser, and more made layout and timing tests flaky.
           n=$(( $(nproc) / 2 )); [ "$n" -lt 1 ] && n=1
-          # The MQTT specs are not sharded: the first shard runs them once.
-          mqtt=1; [ "${SHARD%%/*}" = 1 ] || mqtt=0
-          E2E_WORKERS=$n make "$TARGET" E2E_ARGS="--shard=$SHARD" E2E_MQTT=$mqtt
+          # The MQTT specs are not sharded: the job "mqtt" runs them once and the shards run none.
+          if [ "$SHARD" = mqtt ]; then
+            E2E_WORKERS=$n make "$TARGET" E2E_CHROMIUM=0 E2E_MQTT=1
+          else
+            E2E_WORKERS=$n make "$TARGET" E2E_ARGS="--shard=$SHARD" E2E_MQTT=0
+          fi
       - name: upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

@@ -5,7 +5,7 @@
 # parts of the repository the PR touched (job "changes").
 #
 # FAST: lint, unit and integration tests (unchanged packages come from the go test cache that
-# main.yml saves; a PR saves none), the @core e2e tests in two shards, and, when the PR changes
+# main.yml saves; a PR saves none), the @core e2e tests in two shards plus the MQTT specs in a job of their own, and, when the PR changes
 # a SAFETY package (Makefile), its race tests and the
 # mutation gate of the changed mutation packages. Target: "required" green in <= 5 min.
 # Docs-only PRs skip all of that. The relative Markdown link check runs on every PR and gates

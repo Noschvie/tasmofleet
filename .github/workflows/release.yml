@@ -8,7 +8,7 @@
 #          tag changes no migration, so a bad tag fails in seconds (the image build checks the
 #          section again).
 # checks   the RELEASE tier: the FAST tier (lint, unit and integration tests, build, the @core e2e
-#          tests in two shards; a tag restores the Go caches main.yml saved, test results included,
+#          tests in two shards and the MQTT job; a tag restores the Go caches main.yml saved, test results included,
 #          and saves none) plus the race tests of EVERY
 #          SAFETY package (a tag has no PR base to diff against). No mutation: every PR that
 #          changes a SAFETY package already passed it, and the nightly runs all of it.

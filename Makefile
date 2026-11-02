@@ -235,12 +235,13 @@ e2e-deps:
 # PR), e2e-quarantine the tests tagged @quarantine with retries (nightly only). Tag a test with
 # test("title", { tag: "@core" }, ...); see CLAUDE.md "Running the gates" for what belongs in core.
 # Two Playwright runs, always both, and the target fails if either failed: the "chromium" project
-# (E2E_ARGS, e.g. --shard) and the "mqtt" project (one worker, never sharded; E2E_MQTT_ARGS). A CI shard
-# that must not repeat it sets E2E_MQTT=0.
+# (E2E_ARGS, e.g. --shard) and the "mqtt" project (one worker, never sharded; E2E_MQTT_ARGS). CI runs them
+# in separate jobs (#474): the chromium shards set E2E_MQTT=0, the "mqtt" job E2E_CHROMIUM=0.
 E2E_MQTT ?= 1
+E2E_CHROMIUM ?= 1
 define playwright-both
 	@rc=0; \
-	(cd e2e && npx playwright test --project=chromium $(1) $(E2E_ARGS)) || rc=1; \
+	if [ "$(E2E_CHROMIUM)" = 1 ]; then (cd e2e && npx playwright test --project=chromium $(1) $(E2E_ARGS)) || rc=1; fi; \
 	if [ "$(E2E_MQTT)" = 1 ]; then (cd e2e && npx playwright test --project=mqtt $(1) $(E2E_MQTT_ARGS)) || rc=1; fi; \
 	exit $$rc
 endef

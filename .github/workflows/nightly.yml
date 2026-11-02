@@ -2,8 +2,8 @@
 # failing night opens an issue (job nightly-failure-issue, schedule only).
 #
 #   checks          lint, unit tests (-count=1: uncached), build, integration tests, EVERY e2e
-#                   test in three shards (layout and visual guards), the Tasmota command
-#                   catalogue check (_checks.yml)
+#                   test in three shards plus the MQTT specs in a job of their own (layout and
+#                   visual guards), the Tasmota command catalogue check (_checks.yml)
 #   race            every unit test with the race detector, in two shards
 #   mutation        the full mutation run and its gate (_mutation.yml, scope all)
 #   quarantine      the tests tagged @quarantine / quarantine.Test, with retries; never blocking

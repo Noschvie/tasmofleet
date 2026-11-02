@@ -215,7 +215,7 @@ SAFETY package, catalogue, image paths). Every gate runs through the Makefile.
 | `ghcr-cleanup.yml`, `pages.yml`                  | `workflow_call`, `workflow_dispatch`  | registry pruning (manual run: dry-run preview), the demo site                                                     |
 
 - **FAST** (`pr.yml`; `required` must be green to merge, target ≤ 5 min):
-  lint, unit and integration tests, build, and the `@core` e2e tests in two shards.
+  lint, unit and integration tests, build, and the `@core` e2e tests in two shards plus the MQTT specs in a job of their own.
   When a PR changes a package listed in `SAFETY` (Makefile: fwselect, ota, tasmota, secretbox, auth, httpx,
   policy, cmdpolicy, mqttcmd, transport, restore), the race tests of the changed ones and `make mutation-changed` run too, and are then
   required. CI runs mutation in four shards (`MUTATION_SHARD`, files dealt out by estimated cost, `tools/mutation-weights.txt`) and gates on their sum
@@ -233,7 +233,7 @@ SAFETY package, catalogue, image paths). Every gate runs through the Makefile.
   section, a patch tag that changes a migration, or a tag on a commit that is not on `main` fails at once (job `guards`). The image is published (job
   `publish` calling `_image.yml` with `mode: release`, the only way to push a tag image), then the GitHub release is made, then
   the demo site is deployed, each only after the one before succeeded.
-- **FULL** (`nightly.yml`: cron on `main`, manual dispatch): additionally every e2e test in three shards, every
+- **FULL** (`nightly.yml`: cron on `main`, manual dispatch): additionally every e2e test in three shards plus the MQTT job, every
   unit test with the race detector (two shards: the slowest packages listed in `tools/race.sh`, all others; `make shards-check` fails when a package is in no shard), the command catalogue check, uncached test runs, the full mutation
   run, and the Home Assistant app in a real Supervisor (`tools/ha-app-devcontainer-test.sh`). It blocks no release; when it fails on the schedule, the job `nightly-failure-issue` opens an issue "Nightly FULL failed on main (date)" (labels `ci`, `flaky`) with the failed jobs, or comments on the one that is still open. A manual run never opens an issue and only previews the registry cleanup. Layout and visual regressions, race outside the safety packages and
   the full mutation run (a PR that changes a safety package already gates its own mutation) are caught here, so the nightly FULL is the place to look for them; a
