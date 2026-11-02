@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -169,6 +170,45 @@ func TestRebootHangAcceptsAndHangs(t *testing.T) {
 		t.Errorf("hang mode must accept and not answer, got %v", err)
 	}
 	settled(t, d, 1)
+}
+
+// Why: a device that cannot bind its HTTP port again after a reboot used to give up without a trace,
+// and the test waiting for it ran into its timeout with nothing to read. Now the fleet logger gets
+// the error (newTestFleet turns every warning and error into a test failure).
+func TestFailedRebindIsLogged(t *testing.T) {
+	t.Parallel()
+	var mu sync.Mutex
+	var lines []string
+	logger := slog.New(slog.NewTextHandler(logFunc(func(l string) { mu.Lock(); lines = append(lines, l); mu.Unlock() }), nil))
+	f := newTestFleet(t, "", Extra{Logger: logger})
+	d := add(t, f, DeviceSpec{Name: "a", Profile: ProfileESP8266_4M, RebootGap: 500 * time.Millisecond})
+	addr := d.Addr()
+	cm(t, d, "Restart 1")
+	if err := d.WaitFor(ctxT(t), func(c Controller) bool { return c.Phase() == PhaseRebooting }); err != nil {
+		t.Fatal(err)
+	}
+	// The port is closed before the phase says "rebooting": take it before the device returns.
+	var taken net.Listener
+	for deadline := time.Now().Add(2 * time.Second); taken == nil; {
+		l, err := net.Listen("tcp", addr)
+		if err == nil {
+			taken = l
+			t.Cleanup(func() { _ = l.Close() })
+		} else if time.Now().After(deadline) {
+			t.Fatalf("could not take %s while the device reboots: %v", addr, err)
+		}
+	}
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+		mu.Lock()
+		got := strings.Join(lines, "\n")
+		mu.Unlock()
+		if strings.Contains(got, "cannot bind its HTTP port") && strings.Contains(got, addr) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no error logged for a device that cannot re-bind %s; log: %q", addr, got)
+		}
+	}
 }
 
 // Why: the SSRF review item: a device told to fetch from a non-loopback

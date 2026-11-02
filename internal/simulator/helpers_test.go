@@ -3,10 +3,12 @@ package simulator
 import (
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -27,6 +29,9 @@ func newTestFleet(t *testing.T, mqttURL string, x Extra) Fleet {
 	if x.TimeScale == 0 {
 		x.TimeScale = 0.02
 	}
+	if x.Logger == nil {
+		x.Logger = failingLogger(t)
+	}
 	f, err := NewFleetWith(FleetOptions{FixturesDir: fixtures, MQTTURL: mqttURL, TelePeriod: 100 * time.Millisecond}, x)
 	if err != nil {
 		t.Fatal(err)
@@ -34,6 +39,28 @@ func newTestFleet(t *testing.T, mqttURL string, x Extra) Fleet {
 	t.Cleanup(func() { _ = f.Close() })
 	return f
 }
+
+// failingLogger is the fleet logger of the tests: a warning or error from the simulator itself (a device
+// that cannot bind its port again after a reboot, a failed serve) fails the test at once instead of
+// leaving it to time out waiting for a device that is gone. The fleet closes in a cleanup registered
+// after this one, so it stops logging before the test is over.
+func failingLogger(t *testing.T) *slog.Logger {
+	t.Helper()
+	var mu sync.Mutex
+	over := false
+	t.Cleanup(func() { mu.Lock(); over = true; mu.Unlock() })
+	return slog.New(slog.NewTextHandler(logFunc(func(line string) {
+		mu.Lock()
+		defer mu.Unlock()
+		if !over {
+			t.Errorf("simulator logged: %s", line)
+		}
+	}), &slog.HandlerOptions{Level: slog.LevelWarn}))
+}
+
+type logFunc func(string)
+
+func (f logFunc) Write(p []byte) (int, error) { f(strings.TrimSpace(string(p))); return len(p), nil }
 
 func add(t *testing.T, f Fleet, spec DeviceSpec) Controller {
 	t.Helper()
@@ -118,6 +145,11 @@ func settled(t *testing.T, c Controller, boots int) {
 		t.Fatalf("device did not finish %d reboot(s): phase %s boots %d history %v", boots, c.Phase(), c.Boots(), c.History())
 	}
 }
+
+// steady reports that the device has booted exactly n times and runs. A restart under way shows in
+// Phase() about 40 ms after the command but in Boots() only when the device is back, so the "no restart"
+// checks after a short sleep need both: Boots() alone passes while the device is still rebooting.
+func steady(c Controller, boots int) bool { return c.Boots() == boots && c.Phase() == PhaseRun }
 
 func phases(c Controller) []Phase {
 	var out []Phase

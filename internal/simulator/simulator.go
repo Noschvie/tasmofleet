@@ -21,6 +21,7 @@ package simulator
 
 import (
 	"context"
+	"log/slog"
 	"time"
 )
 
@@ -231,6 +232,9 @@ type Extra struct {
 	// BindAddr is the IP the device listeners bind to. Default 127.0.0.1;
 	// anything else is an explicit opt-in and logs a warning.
 	BindAddr string
+	// Logger receives the fleet's own warnings and errors, for example a device that cannot bind
+	// its HTTP port again after a reboot and stays unreachable. Default: discarded.
+	Logger *slog.Logger
 }
 
 // NewFleet starts an empty fleet.

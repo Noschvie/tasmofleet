@@ -20,7 +20,10 @@ func (d *simDevice) startHTTP() {
 	}
 	l, err := d.listen(addr)
 	if err != nil {
-		return // device closed while rebinding
+		if d.ctx.Err() == nil { // not closed while rebinding: the device stays unreachable, say so
+			d.f.log.Error("simulator: device cannot bind its HTTP port", "device", d.topic, "addr", addr, "err", err)
+		}
+		return
 	}
 	srv := &http.Server{Handler: d, ReadHeaderTimeout: 10 * time.Second}
 	d.mu.Lock()

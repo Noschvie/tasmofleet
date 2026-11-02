@@ -33,6 +33,9 @@ func NewFleetWith(o FleetOptions, x Extra) (Fleet, error) {
 	}
 	f := &fleet{o: o, x: x, scale: x.TimeScale, names: map[string]bool{},
 		log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	if x.Logger != nil {
+		f.log = x.Logger
+	}
 	if f.scale <= 0 {
 		f.scale = 1
 	}
