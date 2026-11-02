@@ -44,6 +44,10 @@ type Fixer struct {
 	// VerifyAttempts is how often the read-back is tried while the device does
 	// not answer (default 6).
 	VerifyAttempts int
+	// Stop (may be nil) is done when TasmoFleet is stopping. It is not the context of a run, which
+	// can end by its own deadline; it ends the save that follows a failed chunk at once, because
+	// a container is killed a few seconds after the stop signal (see saveAfterFailure).
+	Stop context.Context
 }
 
 type fixLine struct{ key, value, text string }
@@ -174,10 +178,15 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 
 // saveTimeout is the time the write to flash after a failed chunk gets. It is a limit of its own:
 // the run that failed may have used up its whole deadline, and the save is the one thing that
-// still has to go out (the SaveData value is read with it). It is not used when the run was
-// cancelled because TasmoFleet is stopping: a container is killed a few seconds after the stop
-// signal, so a save that waits on a device must not hold shutdown up (see saveAfterFailure).
+// still has to go out (the SaveData value is read with it). A stop of TasmoFleet ends the save
+// before that: a container is killed a few seconds after the stop signal, so a save that waits on
+// a device must not hold shutdown up (see saveAfterFailure).
 const saveTimeout = 15 * time.Second
+
+const notSavedStopping = "because TasmoFleet was stopping"
+
+// stopping reports whether TasmoFleet is stopping.
+func (f *Fixer) stopping() bool { return f.Stop != nil && f.Stop.Err() != nil }
 
 // partialRun is what Apply knows when a chunk failed: every line of the plan, the ones sent
 // (the device answered; nothing is read back yet), the chunk whose send failed (it may or may not
@@ -193,26 +202,37 @@ type partialRun struct{ parsed, sent, failed, leftOut []fixLine }
 // purpose), and still wraps the failure. With nothing sent the device is untouched and cause is
 // returned as it is.
 //
-// A run that was cancelled (the engine cancels its jobs when TasmoFleet stops) does not save:
-// the stop signal gives a container only a few seconds, and a device that does not answer would
-// hold the save up for saveTimeout. The error and the log say that the lines were not written to
-// flash because TasmoFleet was stopping; the job is resumed from its stored state at the next
-// start, which sends and saves the whole plan again.
+// TasmoFleet stopping (the engine cancels its jobs; Fixer.Stop is done) takes precedence: the stop
+// signal gives a container only a few seconds, and a device that does not answer would hold the
+// save up for saveTimeout. A run that was cancelled does not save at all, and a stop that arrives
+// while the save runs ends it at once. In both cases the error and the log say that the lines
+// were not written to flash because TasmoFleet was stopping; the job is resumed from its stored
+// state at the next start, which sends and saves the whole plan again. A run that failed on its
+// deadline is still saved, with a context of its own.
 func (f *Fixer) saveAfterFailure(ctx context.Context, d model.Device, t tasmota.Target, keep string, run partialRun, cause error) error {
 	if len(run.sent) == 0 {
 		return cause
 	}
 	notSaved := "" // why the lines are not in flash; empty when they are
 	if !savesItself(run.sent) {
-		if errors.Is(ctx.Err(), context.Canceled) {
-			notSaved = "because TasmoFleet was stopping"
-			slog.Warn("policy: stopped before the settings that were sent were written to flash", "device", d.ID, "sent", len(run.sent), "of", len(run.parsed))
-		} else {
+		switch {
+		case errors.Is(ctx.Err(), context.Canceled) || f.stopping():
+			notSaved = notSavedStopping
+		default:
 			sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), saveTimeout)
 			defer cancel()
+			if f.Stop != nil {
+				defer context.AfterFunc(f.Stop, cancel)() // a stop that comes now ends the save at once
+			}
 			if err := f.saveKeeping(sctx, d, t, keep); err != nil {
 				notSaved = fmt.Sprintf("(%v)", err)
+				if f.stopping() {
+					notSaved = notSavedStopping
+				}
 			}
+		}
+		if notSaved == notSavedStopping {
+			slog.Warn("policy: stopped before the settings that were sent were written to flash", "device", d.ID, "sent", len(run.sent), "of", len(run.parsed))
 		}
 	}
 	var later []fixLine // never sent: after the failed chunk

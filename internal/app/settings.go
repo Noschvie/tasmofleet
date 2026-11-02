@@ -39,7 +39,7 @@ func (a *runtime) setupSettings() error {
 	rep.setRules(rules)
 	a.importLegacyPolicy()
 	a.policy = rep
-	a.fixer = &policy.Fixer{Client: a.svc.Client, Reader: a.settings}
+	a.fixer = &policy.Fixer{Client: a.svc.Client, Reader: a.settings, Stop: a.bgContext}
 	a.templates = templates.New(templates.Options{Devices: a.svc.Store, Client: a.svc.Client, Backups: a.backups, Settings: a.settings,
 		Health: func(id model.DeviceID) model.Health {
 			if a.tracker == nil {

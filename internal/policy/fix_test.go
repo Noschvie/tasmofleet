@@ -19,6 +19,8 @@ type fakeCmd struct {
 	mu   sync.Mutex
 	sent []string
 	err  func(cmd string) error
+	// hang (may be nil) says a command never answers: it returns only when its context is done
+	hang func(cmd string) bool
 	// what the context of each command looked like when it was sent (parallel to sent)
 	ctxErrs   []error
 	deadlines []time.Time
@@ -26,15 +28,22 @@ type fakeCmd struct {
 
 func (f *fakeCmd) Command(ctx context.Context, _ tasmota.Target, c string) (json.RawMessage, error) {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.sent = append(f.sent, c)
 	f.ctxErrs = append(f.ctxErrs, ctx.Err())
 	dl, _ := ctx.Deadline()
 	f.deadlines = append(f.deadlines, dl)
+	hang := f.hang != nil && f.hang(c)
+	var err error
 	if f.err != nil {
-		if err := f.err(c); err != nil {
-			return nil, err
-		}
+		err = f.err(c)
+	}
+	f.mu.Unlock()
+	if hang {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	if err != nil {
+		return nil, err
 	}
 	return json.RawMessage(`{}`), nil
 }
@@ -292,7 +301,9 @@ func TestApplySavesAfterAFailureWithAContextOfItsOwn(t *testing.T) {
 			defer cancel()
 			c := &fakeCmd{err: failNthBacklog(2, context.DeadlineExceeded)}
 			r := &fakeRead{vals: map[string]string{"SaveData": "0"}}
-			err := newFixer(c, r).Apply(ctx, model.Device{ID: 1}, lines)
+			fx := newFixer(c, r)
+			fx.Stop = t.Context() // TasmoFleet is running
+			err := fx.Apply(ctx, model.Device{ID: 1}, lines)
 			if err == nil || !errors.Is(err, context.DeadlineExceeded) {
 				t.Fatalf("err = %v", err)
 			}
@@ -361,11 +372,68 @@ func TestApplyDoesNotSaveWhenTheRunWasCancelledBecauseTasmoFleetIsStopping(t *te
 			}
 		})
 	}
+	// The stop is Fixer.Stop, not only the run's context: a run that failed on its own deadline
+	// while TasmoFleet is stopping does not save either.
+	expired, expiredCancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer expiredCancel()
+	stopped, stopNow := context.WithCancel(context.Background())
+	stopNow()
+	c1 := &fakeCmd{err: failNthBacklog(2, context.DeadlineExceeded)}
+	fx := newFixer(c1, &fakeRead{vals: map[string]string{"SaveData": "0"}})
+	fx.Stop = stopped
+	err1 := fx.Apply(expired, model.Device{ID: 1}, manyLines(20))
+	if err1 == nil || count(c1.sent, "SaveData") != 0 || !strings.Contains(err1.Error(), "NOT written to flash because TasmoFleet was stopping") {
+		t.Fatalf("err %v, sent %q", err1, c1.sent)
+	}
 	// A run that failed for another reason is still saved: only the stop is special.
 	c := &fakeCmd{err: failNthBacklog(2, tasmota.ErrTimeout)}
 	err := newFixer(c, &fakeRead{vals: map[string]string{"SaveData": "0"}}).Apply(context.Background(), model.Device{ID: 1}, manyLines(20))
 	if err == nil || c.sent[len(c.sent)-1] != "SaveData 0" || strings.Contains(err.Error(), "stopping") {
 		t.Fatalf("err %v, sent %q", err, c.sent)
+	}
+}
+
+// Why (#503, review): a stop that arrives while the save is already running must end it at once,
+// not after saveTimeout, or the container is killed in the middle of shutdown. The run itself
+// failed on its deadline (so the save is attempted), the device never answers the SaveData, and
+// TasmoFleet stops: Apply returns promptly and says why the lines are not in flash.
+func TestApplyEndsTheSaveAtOnceWhenTasmoFleetStopsWhileItRuns(t *testing.T) {
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second)) // the run's deadline is gone
+	defer cancel()
+	stop, stopNow := context.WithCancel(context.Background())
+	defer stopNow()
+	saving := make(chan struct{})
+	c := &fakeCmd{
+		err: failNthBacklog(2, context.DeadlineExceeded),
+		hang: func(cmd string) bool {
+			if strings.HasPrefix(cmd, "SaveData") {
+				close(saving)
+				return true
+			}
+			return false
+		},
+	}
+	fx := newFixer(c, &fakeRead{vals: map[string]string{"SaveData": "0"}})
+	fx.Stop = stop
+	done := make(chan error, 1)
+	go func() { done <- fx.Apply(ctx, model.Device{ID: 1}, manyLines(20)) }()
+	select {
+	case <-saving:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the save never started")
+	}
+	stoppedAt := time.Now()
+	stopNow() // TasmoFleet stops while the device does not answer the SaveData
+	select {
+	case err := <-done:
+		if took := time.Since(stoppedAt); took > 2*time.Second {
+			t.Errorf("Apply took %v to return after the stop; the save has %v", took, saveTimeout)
+		}
+		if err == nil || !errors.Is(err, context.DeadlineExceeded) || !strings.Contains(err.Error(), "NOT written to flash because TasmoFleet was stopping") {
+			t.Fatalf("err = %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Apply still waits for the save after the stop")
 	}
 }
 
