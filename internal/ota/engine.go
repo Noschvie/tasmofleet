@@ -1461,14 +1461,15 @@ func (e *Engine) takeLostOff(id model.JobID) (Event, bool) {
 
 // PowerReport tells the engine that someone switched relay off while the
 // device could still be switched by a person (MQTT stat/<t>/POWERn OFF, not
-// retained). The report is stamped with the time it was received; the job
-// decides by that time whether it falls into the window in which the report
-// can be a user's action. If the job planned to switch that relay back on
-// afterwards, it will not. A report for a device without a job is ignored. One that finds the
-// job's inbox full (the worker is busy with an action) is never dropped: the relay is recorded
-// and the worker takes it before anything else (#534). Dropping it would let the restore switch
-// the relay back on.
-func (e *Engine) PowerReport(deviceID model.DeviceID, relay int, on bool) {
+// retained). at is when the broker delivered the report (the zero time: now);
+// the job decides by that time, not by when the worker gets to it, whether the
+// report falls into the window in which it can be a user's action. If the job
+// planned to switch that relay back on afterwards, it will not. A report for a
+// device without a job is ignored. One that finds the job's inbox full (the
+// worker is busy with an action) is never dropped: the relay is recorded and
+// the worker takes it before anything else (#534). Dropping it would let the
+// restore switch the relay back on.
+func (e *Engine) PowerReport(deviceID model.DeviceID, relay int, on bool, at time.Time) {
 	if on {
 		return
 	}
@@ -1478,8 +1479,11 @@ func (e *Engine) PowerReport(deviceID model.DeviceID, relay int, on bool) {
 	if !ok {
 		return
 	}
+	if at.IsZero() {
+		at = e.clk.Now()
+	}
 	select {
-	case e.workers[id] <- Event{Kind: EvPowerReport, Power: model.RelaySet(0).Add(relay), At: e.clk.Now()}:
+	case e.workers[id] <- Event{Kind: EvPowerReport, Power: model.RelaySet(0).Add(relay), At: at}:
 	default:
 		e.lostOff[id] = e.lostOff[id].Add(relay)
 		e.log.Debug("ota power report recorded without its time, worker busy", "device", deviceID, "relay", relay)

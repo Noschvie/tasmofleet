@@ -310,7 +310,7 @@ func TestPowerSwitchedOffDuringBackupIsNotRestored(t *testing.T) {
 // download starts, removes it from the candidates too.
 func TestPowerReportDropsRelay(t *testing.T) {
 	h := newHarness(t, 2, powerDevice(relaysOn(1, 3)))
-	h.backups.hook = func() { h.e.PowerReport(1, 3, false) }
+	h.backups.hook = func() { h.e.PowerReport(1, 3, false, time.Time{}) }
 	id := submitOne(t, h, Request{DeviceID: 1, Release: "16.0.0"})
 	h.run(t, h.e)
 	j := h.job(t, id)
@@ -320,8 +320,25 @@ func TestPowerReportDropsRelay(t *testing.T) {
 	if got := h.api.dev(1).power; got != relaysOn(1) {
 		t.Fatalf("device power %b, want only relay 1 restored", got)
 	}
-	h.e.PowerReport(1, 1, true) // ON reports and unknown devices are ignored
-	h.e.PowerReport(99, 1, false)
+	h.e.PowerReport(1, 1, true, time.Time{}) // ON reports and unknown devices are ignored
+	h.e.PowerReport(99, 1, false, time.Time{})
+}
+
+// Why (#534): the report is judged by the time the broker delivered it, not by the time the
+// worker gets to it. The hints reach the engine through a queue, so with the engine's own clock
+// a report that was old news when it arrived (a boot announcement from before the state was
+// read) would look fresh and cancel a restore that should happen.
+func TestPowerReportIsStampedWithTheTimeTheBrokerDeliveredIt(t *testing.T) {
+	h := newHarness(t, 2, powerDevice(relaysOn(1, 3)))
+	h.backups.hook = func() { h.e.PowerReport(1, 3, false, t0.Add(-time.Hour)) }
+	id := submitOne(t, h, Request{DeviceID: 1, Release: "16.0.0"})
+	h.run(t, h.e)
+	if j := h.job(t, id); j.State != model.JobSucceeded || j.LastError != "" {
+		t.Fatalf("job %s %q: a report from before the reading is old news", j.State, j.LastError)
+	}
+	if got := h.api.dev(1).power; got != relaysOn(1, 3) {
+		t.Fatalf("device power %b, want both relays restored", got)
+	}
 }
 
 // Why (#534): a relay somebody switched off must never be switched back on by the restore. The
@@ -337,9 +354,9 @@ func TestPowerReportThatFindsTheInboxFullStillPreventsTheRestore(t *testing.T) {
 		room := cap(h.e.workers[id])
 		h.e.mu.Unlock()
 		for range room {
-			h.e.PowerReport(1, 5, false) // relay 5 is no candidate: the reports only fill the inbox
+			h.e.PowerReport(1, 5, false, time.Time{}) // relay 5 is no candidate: the reports only fill the inbox
 		}
-		h.e.PowerReport(1, 3, false) // finds the inbox full
+		h.e.PowerReport(1, 3, false, time.Time{}) // finds the inbox full
 	}
 	id = submitOne(t, h, Request{DeviceID: 1, Release: "16.0.0"})
 	h.run(t, h.e)
@@ -361,12 +378,12 @@ func TestPowerReportRecordsWhatDoesNotFitAndHandsItOverOnce(t *testing.T) {
 	h := newHarness(t, 2, powerDevice(0))
 	h.e.workers[7] = make(chan Event, 1)
 	h.e.byDev[1] = 7
-	h.e.PowerReport(1, 1, false) // fits
-	h.e.PowerReport(1, 2, false)
-	h.e.PowerReport(1, 4, false)
-	h.e.PowerReport(1, 2, false) // the same relay again: still one bit
-	h.e.PowerReport(1, 6, true)  // ON: nothing to record
-	h.e.PowerReport(99, 3, false)
+	h.e.PowerReport(1, 1, false, time.Time{}) // fits
+	h.e.PowerReport(1, 2, false, time.Time{})
+	h.e.PowerReport(1, 4, false, time.Time{})
+	h.e.PowerReport(1, 2, false, time.Time{}) // the same relay again: still one bit
+	h.e.PowerReport(1, 6, true, time.Time{})  // ON: nothing to record
+	h.e.PowerReport(99, 3, false, time.Time{})
 	if got := h.e.lostOff[7]; got != relaysOn(2, 4) {
 		t.Fatalf("recorded relays %b, want 2 and 4", got)
 	}
