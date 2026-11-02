@@ -164,6 +164,7 @@ fixture or a fault instead of mocking HTTP by hand.
 | Gate                                                    | Command                                                                       |
 | ------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | FAST tier, everything but e2e (run before every commit) | `make check`                                                                  |
+| inner loop between two edits (not a gate)               | `make quick`                                                                  |
 | FAST tier, the `@core` e2e tests                        | `make e2e-core`                                                               |
 | FAST tier, a safety package changed (race + mutation)   | `make safety BASE=origin/main`                                                |
 | FULL tier, everything CI runs nightly                   | `make ci TESTFLAGS=-count=1`                                                  |
@@ -181,6 +182,9 @@ fixture or a fault instead of mocking HTTP by hand.
 
 Tools are pinned in `tools/go.mod` and run via `go tool -modfile=tools/go.mod <tool>`.
 Run a single package's tests with `go test ./internal/fwselect/ -run TestGuard -v`.
+`make quick` runs fmt-check, golangci-lint and the tests (the integration tests only when their package is affected) on the packages
+changed since `origin/main`, uncommitted and untracked files included, and on every package that imports them. It skips templ-check, scripts-test,
+shards-check, vuln and build: `make check` stays the gate before every commit.
 Parallelism follows the machine: `JOBS` defaults to `nproc` (`GOFLAGS=-p=$(JOBS)`),
 mutation workers to `nproc/2`, Playwright workers to `E2E_WORKERS` (default 6). Locally the Makefile runs tools under `nice -n 15`; CI sets `NICE=` (empty). Override
 with e.g. `make check JOBS=4`. `make test` and `make integration` use the go test cache
