@@ -764,3 +764,53 @@ func TestFailedBackupRunLeavesNoFilesInTheList(t *testing.T) {
 		})
 	}
 }
+
+// orderStore records every index row next to the directory syncs.
+type orderStore struct {
+	*memBackups
+	events *[]string
+}
+
+func (s orderStore) PutBackup(ctx context.Context, b model.Backup) (model.BackupID, error) {
+	*s.events = append(*s.events, "index "+string(b.Kind))
+	return s.memBackups.PutBackup(ctx, b)
+}
+
+// Why: a backup is the restore point after a failure, and a power loss is
+// such a failure. A renamed file whose directory entry is not on disk yet is
+// gone after the restart while its index row survives: the Backups tab lists a
+// run whose file "is missing" when it is needed. So the directory is synced
+// after the rename and before the row is written (the layout migration does
+// the same before it changes a row).
+func TestFilesAreSyncedIntoTheirDirectoryBeforeTheyAreIndexed(t *testing.T) {
+	var events []string
+	e := newEnv(t, func(o *Options) { o.Store = orderStore{memBackups: o.Store.(*memBackups), events: &events} })
+	e.m.flushDir = func(dir string) error {
+		events = append(events, "sync "+filepath.Base(dir))
+		return syncDir(dir)
+	}
+	if _, err := e.m.Backup(t.Context(), "op", 7); err != nil {
+		t.Fatal(err)
+	}
+	want := "sync kitchen, index dmp, sync kitchen, index snapshot, sync kitchen, index decoded"
+	if got := strings.Join(events, ", "); got != want {
+		t.Errorf("order = %s\nwant    %s", got, want)
+	}
+}
+
+// Why: when the directory entry cannot be made durable the file must not be
+// indexed, or a row would point at a file the next boot may not have. The
+// renamed file goes too (nothing would ever prune an unindexed file).
+func TestFileWhoseDirectoryCannotBeSyncedIsNotIndexed(t *testing.T) {
+	e := newEnv(t, nil)
+	e.m.flushDir = func(string) error { return errors.New("input/output error") }
+	if _, err := e.m.Backup(t.Context(), "op", 7); err == nil {
+		t.Fatal("the run must fail")
+	}
+	if n := len(e.st.rows); n != 0 {
+		t.Errorf("%d rows indexed for files whose directory entry is not durable", n)
+	}
+	if n := e.files(t); n != 0 {
+		t.Errorf("%d files left on disk without an index row", n)
+	}
+}

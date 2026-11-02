@@ -96,6 +96,8 @@ type Manager struct {
 	// is indexed, so two runs cannot claim one hostname directory, and while
 	// the layout migration or an empty-directory cleanup runs.
 	dirMu sync.Mutex
+	// flushDir makes a directory's entries durable (syncDir); a test replaces it to see when it runs.
+	flushDir func(dir string) error
 }
 
 var _ Service = (*Manager)(nil)
@@ -114,7 +116,7 @@ func New(o Options) (*Manager, error) {
 	if o.Log == nil {
 		o.Log = slog.Default()
 	}
-	m := &Manager{o: o, locks: map[model.DeviceID]*sync.Mutex{}}
+	m := &Manager{o: o, locks: map[model.DeviceID]*sync.Mutex{}, flushDir: syncDir}
 	m.ret.Store(&retention{keep: o.Keep, maxAge: o.MaxAge})
 	return m, nil
 }
@@ -335,7 +337,7 @@ func (m *Manager) backup(ctx context.Context, owner, dev model.Device, note stri
 	var stored []model.Backup
 	for _, f := range files {
 		name := fileName(taken.Format(stampLayout), base, f.kind)
-		if err := writeAtomic(dir, name, f.data); err != nil {
+		if err := m.writeAtomic(dir, name, f.data); err != nil {
 			if f.kind == model.BackupFiles { // best effort: the dump is stored already
 				m.filesLost(id, filesErr, "write", err)
 				continue
@@ -477,8 +479,11 @@ func (m *Manager) decode(ctx context.Context, dmp []byte, fwVersion string) (not
 	return "", out, dv
 }
 
-// writeAtomic writes data to dir/name with mode 0600 via temp file + rename.
-func writeAtomic(dir, name string, data []byte) (err error) {
+// writeAtomic writes data to dir/name with mode 0600 via temp file + rename,
+// then syncs the directory: the caller indexes the file right after, and a
+// row must not outlive the directory entry it points to. A file whose entry
+// could not be synced is removed again, since it is never indexed.
+func (m *Manager) writeAtomic(dir, name string, data []byte) (err error) {
 	f, err := os.CreateTemp(dir, ".tmp-*")
 	if err != nil {
 		return err
@@ -502,7 +507,15 @@ func writeAtomic(dir, name string, data []byte) (err error) {
 	if err = f.Close(); err != nil {
 		return err
 	}
-	return os.Rename(tmp, filepath.Join(dir, name))
+	final := filepath.Join(dir, name)
+	if err = os.Rename(tmp, final); err != nil {
+		return err
+	}
+	if err = m.flushDir(dir); err != nil {
+		_ = os.Remove(final) // not indexed, so nothing would ever prune it
+		return err
+	}
+	return nil
 }
 
 // prune applies the retention (Prunable) to the device's backups: the newest
