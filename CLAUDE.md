@@ -183,7 +183,8 @@ fixture or a fault instead of mocking HTTP by hand.
 Tools are pinned in `tools/go.mod` and run via `go tool -modfile=tools/go.mod <tool>`.
 Run a single package's tests with `go test ./internal/fwselect/ -run TestGuard -v`.
 `make quick` runs fmt-check, vet, golangci-lint and the tests (the integration tests only when their package is affected) on the packages
-changed since `origin/main`, uncommitted and untracked files included, and on every package that imports them. It skips templ-check, scripts-test,
+changed since `origin/main`, uncommitted and untracked files included, and on every package that imports them; a changed file outside every package
+(docs, assets, deploy, tools, a `testdata/`) makes it run everything, because tests read such files. It skips templ-check, scripts-test,
 shards-check, vuln and build: `make check` stays the gate before every commit.
 Parallelism follows the machine: `JOBS` defaults to `nproc` (`GOFLAGS=-p=$(JOBS)`),
 mutation workers to `nproc/2`, Playwright workers to `E2E_WORKERS` (default 6). Locally the Makefile runs tools under `nice -n 15`; CI sets `NICE=` (empty). Override

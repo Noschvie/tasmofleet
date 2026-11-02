@@ -3,19 +3,18 @@
 # one per line. A changed file belongs to the nearest package directory upwards, so embedded assets and
 # migrations count. Changed code affects its package, every package that imports it (transitively) and
 # every package whose tests import any of those (with -tags=integration, so a package whose integration
-# tests import changed code is affected too). A changed _test.go file or testdata file affects its own
-# package only. Used by "make quick" (#491).
+# tests import changed code is affected too). A changed _test.go file affects its own package only.
+# Used by "make quick" (#491).
 #
-# Prints ./... when it cannot tell: no merge base, a change to go.mod, go.sum, .golangci.yml or the root
-# testdata/ (shared by many packages), or a deleted Go file in a directory that is no package any more.
-# Prints nothing when no package is affected (a docs-only change).
+# Prints ./... when it cannot tell, that is for: no merge base; any changed file under no package
+# (docs/, deploy/, assets/, design/, e2e/, scripts/, tools/, go.mod, go.sum, .golangci.yml, the Makefile,
+# ...), because tests read such files (configdoc_test.go reads docs/, the web tests read assets/ and
+# design/, ...); any testdata/ file, because tests read other packages' testdata (web/restore_test.go
+# reads ../backup/testdata); a deleted Go file whose directory is no package any more.
+# Prints nothing only when no file changed.
 set -eu
 files=$(tools/changed-files.sh) || { echo './...'; exit 0; }
 [ -n "$files" ] || exit 0
-if printf '%s\n' "$files" | grep -Eq '^(go\.mod|go\.sum|\.golangci\.yml|testdata/)'; then
-	echo './...'
-	exit 0
-fi
 root=$(go list -m -f '{{.Dir}}')
 mod=$(go list -m)
 {
@@ -35,13 +34,14 @@ mod=$(go list -m)
 	}
 	{
 		f = $0
-		if (f !~ /\//) { if (f ~ /\.go$/ || f == "CHANGELOG.md") code(mod); next } # root package: changelog.go embeds CHANGELOG.md
+		if (f ~ /(^|\/)testdata\//) { everything = 1; next }
+		if (f !~ /\//) { if (f ~ /\.go$/ || f == "CHANGELOG.md") code(mod); else everything = 1; next } # root package: changelog.go embeds CHANGELOG.md
 		d = f; found = 0
 		while (sub(/\/?[^\/]*$/, "", d) && d != "") {
 			if ((root "/" d) in dir) { found = 1; break }
 		}
-		if (!found) { if (f ~ /\.go$/) everything = 1; next }
-		if (f ~ /_test\.go$/ || f ~ /\/testdata\//) testonly[dir[root "/" d]] = 1; else code(dir[root "/" d])
+		if (!found) { everything = 1; next }
+		if (f ~ /_test\.go$/) testonly[dir[root "/" d]] = 1; else code(dir[root "/" d])
 	}
 	END {
 		if (everything) { print "./..."; exit }
