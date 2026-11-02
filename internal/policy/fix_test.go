@@ -231,7 +231,7 @@ func TestApplyReportsThatPartlyAppliedChangesAreNotSavedWhenTheSaveFailsToo(t *t
 		return secondBacklog(cmd)
 	}}
 	err := newFixer(c, &fakeRead{vals: map[string]string{"SaveData": "0"}}).Apply(context.Background(), model.Device{ID: 1}, manyLines(20))
-	if err == nil || !strings.Contains(err.Error(), "NOT written to flash") || !strings.Contains(err.Error(), "a restart loses them") {
+	if err == nil || !strings.Contains(err.Error(), "NOT written to flash") || !strings.Contains(err.Error(), "a restart of the device loses them") {
 		t.Fatalf("err = %v", err)
 	}
 	if !errors.Is(err, tasmota.ErrTimeout) {
@@ -288,16 +288,9 @@ func TestApplySavesAfterAFailureWithAContextOfItsOwn(t *testing.T) {
 		"SaveData value read for the save": append(manyLines(10), "Hostname plug"), // a restart in the batch: no read up front
 	} {
 		t.Run(name, func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+			ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second)) // the run's deadline is gone
 			defer cancel()
-			second := failNthBacklog(2, context.DeadlineExceeded)
-			c := &fakeCmd{err: func(cmd string) error {
-				if err := second(cmd); err != nil {
-					cancel() // the run's deadline is gone
-					return err
-				}
-				return nil
-			}}
+			c := &fakeCmd{err: failNthBacklog(2, context.DeadlineExceeded)}
 			r := &fakeRead{vals: map[string]string{"SaveData": "0"}}
 			err := newFixer(c, r).Apply(ctx, model.Device{ID: 1}, lines)
 			if err == nil || !errors.Is(err, context.DeadlineExceeded) {
@@ -313,13 +306,66 @@ func TestApplySavesAfterAFailureWithAContextOfItsOwn(t *testing.T) {
 			if left := time.Until(c.deadlines[save]); left <= 0 || left > saveTimeout {
 				t.Errorf("the save has %v left, want a deadline within %v", left, saveTimeout)
 			}
-			if n := len(r.ctxErrs); n > 0 && r.ctxErrs[n-1] != nil {
-				t.Errorf("the SaveData value was read with the context of the failed run: %v", r.ctxErrs[n-1])
+			if n := len(r.ctxErrs); name == "SaveData value read for the save" && (n != 1 || r.ctxErrs[0] != nil) {
+				t.Errorf("the SaveData value was read with the context of the failed run: %v", r.ctxErrs)
 			}
 			if !strings.Contains(err.Error(), "written to flash") || strings.Contains(err.Error(), "NOT") {
 				t.Errorf("the save went out: %v", err)
 			}
 		})
+	}
+}
+
+// Why (#503, review): the engine cancels a running job when TasmoFleet stops, and a container gets
+// only a few seconds (Docker and Unraid kill it after 10) before it is killed. A save that waits
+// for a device for up to saveTimeout would get the process killed in the middle of shutdown, so a
+// run that was cancelled does not save: nothing more is sent or read, the call returns at once,
+// and the error says that the lines are not in flash because TasmoFleet was stopping. (The job
+// is resumed at the next start and sends and saves the whole plan again.)
+func TestApplyDoesNotSaveWhenTheRunWasCancelledBecauseTasmoFleetIsStopping(t *testing.T) {
+	for name, lines := range map[string][]string{
+		"SaveData value read up front": manyLines(20),
+		"no value read up front":       append(manyLines(10), "Hostname plug"),
+	} {
+		t.Run(name, func(t *testing.T) {
+			ctx, stop := context.WithCancel(context.Background())
+			defer stop()
+			second := failNthBacklog(2, context.Canceled)
+			c := &fakeCmd{err: func(cmd string) error {
+				if err := second(cmd); err != nil {
+					stop() // shutdown: the engine cancels its jobs
+					return err
+				}
+				return nil
+			}}
+			r := &fakeRead{vals: map[string]string{"SaveData": "0"}}
+			readsBefore := 0
+			if name == "SaveData value read up front" {
+				readsBefore = 1
+			}
+			start := time.Now()
+			err := newFixer(c, r).Apply(ctx, model.Device{ID: 1}, lines)
+			if time.Since(start) > time.Second {
+				t.Errorf("Apply took %v after the stop", time.Since(start))
+			}
+			if err == nil || !errors.Is(err, context.Canceled) {
+				t.Fatalf("err = %v", err)
+			}
+			if count(c.sent, "Backlog ") != 2 || count(c.sent, "SaveData") != 0 || len(r.calls) != readsBefore {
+				t.Fatalf("sent %q, %d reads: after the stop nothing more may be sent or read", c.sent, len(r.calls))
+			}
+			for _, want := range []string{"partly sent: 8 of ", "NOT written to flash because TasmoFleet was stopping", "a restart of the device loses them"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error lacks %q: %v", want, err)
+				}
+			}
+		})
+	}
+	// A run that failed for another reason is still saved: only the stop is special.
+	c := &fakeCmd{err: failNthBacklog(2, tasmota.ErrTimeout)}
+	err := newFixer(c, &fakeRead{vals: map[string]string{"SaveData": "0"}}).Apply(context.Background(), model.Device{ID: 1}, manyLines(20))
+	if err == nil || c.sent[len(c.sent)-1] != "SaveData 0" || strings.Contains(err.Error(), "stopping") {
+		t.Fatalf("err %v, sent %q", err, c.sent)
 	}
 }
 

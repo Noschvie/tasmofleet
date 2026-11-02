@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -173,7 +174,9 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 
 // saveTimeout is the time the write to flash after a failed chunk gets. It is a limit of its own:
 // the run that failed may have used up its whole deadline, and the save is the one thing that
-// still has to go out (the SaveData value is read with it).
+// still has to go out (the SaveData value is read with it). It is not used when the run was
+// cancelled because TasmoFleet is stopping: a container is killed a few seconds after the stop
+// signal, so a save that waits on a device must not hold shutdown up (see saveAfterFailure).
 const saveTimeout = 15 * time.Second
 
 // partialRun is what Apply knows when a chunk failed: every line of the plan, the ones sent
@@ -189,15 +192,28 @@ type partialRun struct{ parsed, sent, failed, leftOut []fixLine }
 // which chunk failed, and which lines were not sent (the later ones, and the ones left out on
 // purpose), and still wraps the failure. With nothing sent the device is untouched and cause is
 // returned as it is.
+//
+// A run that was cancelled (the engine cancels its jobs when TasmoFleet stops) does not save:
+// the stop signal gives a container only a few seconds, and a device that does not answer would
+// hold the save up for saveTimeout. The error and the log say that the lines were not written to
+// flash because TasmoFleet was stopping; the job is resumed from its stored state at the next
+// start, which sends and saves the whole plan again.
 func (f *Fixer) saveAfterFailure(ctx context.Context, d model.Device, t tasmota.Target, keep string, run partialRun, cause error) error {
 	if len(run.sent) == 0 {
 		return cause
 	}
-	var saveErr error
+	notSaved := "" // why the lines are not in flash; empty when they are
 	if !savesItself(run.sent) {
-		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), saveTimeout)
-		defer cancel()
-		saveErr = f.saveKeeping(sctx, d, t, keep)
+		if errors.Is(ctx.Err(), context.Canceled) {
+			notSaved = "because TasmoFleet was stopping"
+			slog.Warn("policy: stopped before the settings that were sent were written to flash", "device", d.ID, "sent", len(run.sent), "of", len(run.parsed))
+		} else {
+			sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), saveTimeout)
+			defer cancel()
+			if err := f.saveKeeping(sctx, d, t, keep); err != nil {
+				notSaved = fmt.Sprintf("(%v)", err)
+			}
+		}
 	}
 	var later []fixLine // never sent: after the failed chunk
 	for _, l := range run.parsed {
@@ -206,8 +222,8 @@ func (f *Fixer) saveAfterFailure(ctx context.Context, d model.Device, t tasmota.
 		}
 	}
 	msg := fmt.Sprintf("partly sent: %d of %d settings were sent and are written to flash, not read back (%s)", len(run.sent), len(run.parsed), keyNames(run.sent))
-	if saveErr != nil {
-		msg = fmt.Sprintf("partly sent: %d of %d settings were sent but are NOT written to flash (%v), so a restart loses them, and not read back (%s)", len(run.sent), len(run.parsed), saveErr, keyNames(run.sent))
+	if notSaved != "" {
+		msg = fmt.Sprintf("partly sent: %d of %d settings were sent but are NOT written to flash %s, so a restart of the device loses them, and not read back (%s)", len(run.sent), len(run.parsed), notSaved, keyNames(run.sent))
 	}
 	msg += "; the failed step (" + keyNames(run.failed) + ") may or may not have reached the device"
 	if len(later) > 0 {
