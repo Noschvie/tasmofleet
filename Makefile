@@ -190,7 +190,7 @@ quick:
 MUTATION_SHARD  ?=
 MUTATION_SHARDS ?=
 MUTATION_COUNTS ?=
-mutation_gate = TOOL="$(TOOL)" NICE="$(NICE)" $(if $(MUTATION_SHARD),MUTATION_SHARD=$(MUTATION_SHARD) MUTATION_COUNTS_OUT="$(MUTATION_COUNTS)/$$(basename $$p)") tools/mutation-gate.sh
+mutation_gate = GO="$(GO)" TOOL="$(TOOL)" NICE="$(NICE)" $(if $(MUTATION_SHARD),MUTATION_SHARD=$(MUTATION_SHARD) MUTATION_COUNTS_OUT="$(MUTATION_COUNTS)/$$(basename $$p)") tools/mutation-gate.sh
 
 mutation:
 	@$(if $(MUTATION_SHARD),mkdir -p "$(MUTATION_COUNTS)";) for e in $(MUTATION); do \

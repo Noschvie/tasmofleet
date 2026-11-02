@@ -11,7 +11,7 @@
 //    diff, yet it can weaken the tests, so it keeps the whole-package run.
 //
 // The thresholds of the sum over shards (--sum) are tested with made-up counts.
-import { test } from "node:test";
+import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync, execFileSync } from "node:child_process";
 import {
@@ -21,6 +21,7 @@ import {
   readFileSync,
   copyFileSync,
   chmodSync,
+  rmSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
@@ -80,13 +81,24 @@ import "testing"
 func TestC(t *testing.T) { _ = C(5) }
 `;
 
+// Every temporary directory of this file, removed when the tests are done (a seed alone is 69 MB).
+const made = [];
+after(() => {
+  for (const d of made) rmSync(d, { recursive: true, force: true });
+});
+function mkTmp(prefix) {
+  const d = mkdtempSync(join(tmpdir(), prefix));
+  made.push(d);
+  return d;
+}
+
 // The gate runs gremlins with a throwaway GOCACHE (#546). A cold one rebuilds the standard library for every
 // run (2 s on a fast machine, much more on a CI runner), so all runs start from one seed built here once.
 let seedDir;
 function gocacheSeed() {
   if (seedDir) return seedDir;
-  seedDir = mkdtempSync(join(tmpdir(), "mutation-diff-seed-"));
-  const mod = mkdtempSync(join(tmpdir(), "mutation-diff-seedmod-"));
+  seedDir = mkTmp("mutation-diff-seed-");
+  const mod = mkTmp("mutation-diff-seedmod-");
   writeFileSync(join(mod, "go.mod"), "module example.com/gm\n\ngo 1.22\n");
   writeFileSync(join(mod, "p.go"), "package p\n");
   writeFileSync(
@@ -101,7 +113,7 @@ function gocacheSeed() {
 }
 
 function newModule() {
-  const dir = mkdtempSync(join(tmpdir(), "mutation-diff-"));
+  const dir = mkTmp("mutation-diff-");
   // No global git config: the throw-away repository needs neither the user's signing key nor identity.
   const env = {
     ...process.env,
@@ -249,7 +261,7 @@ test("without MUTATION_DIFF the whole package is mutated, as in the nightly", ()
 
 // The sum over the shards' counts: "killed lived timedout notcovered scope" per shard.
 function sum(lines, min = 85) {
-  const dir = mkdtempSync(join(tmpdir(), "mutation-sum-"));
+  const dir = mkTmp("mutation-sum-");
   const files = lines.map((l, i) => {
     const f = join(dir, `shard${i}`);
     writeFileSync(f, `${l}\n`);
@@ -338,7 +350,7 @@ test("a sharded run records every unkilled mutant, and the report shows them wit
 });
 
 test("the report of a run without mutation packages is empty but valid", () => {
-  const dir = mkdtempSync(join(tmpdir(), "mutation-report-"));
+  const dir = mkTmp("mutation-report-");
   mkdirSync(join(dir, "mutation-counts-0"));
   writeFileSync(join(dir, "mutation-counts-0/shard"), "1/4\n");
   const rep = spawnSync("sh", [join(repo, "tools/mutation-report.sh"), dir, "./internal/p:50"], { encoding: "utf8" });
