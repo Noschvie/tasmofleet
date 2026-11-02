@@ -234,7 +234,7 @@ SAFETY package, catalogue, image paths). Every gate runs through the Makefile.
   `publish` calling `_image.yml` with `mode: release`, the only way to push a tag image), then the GitHub release is made, then
   the demo site is deployed, each only after the one before succeeded.
 - **FULL** (`nightly.yml`: cron on `main`, manual dispatch): additionally every e2e test in three shards, every
-  unit test with the race detector (two shards: `internal/auth` alone, all other packages; `make shards-check` fails when a package is in no shard), the command catalogue check, uncached test runs, the full mutation
+  unit test with the race detector (two shards: the slowest packages listed in `tools/race.sh`, all others; `make shards-check` fails when a package is in no shard), the command catalogue check, uncached test runs, the full mutation
   run, and the Home Assistant app in a real Supervisor (`tools/ha-app-devcontainer-test.sh`). It blocks no release; when it fails on the schedule, the job `nightly-failure-issue` opens an issue "Nightly FULL failed on main (date)" (labels `ci`, `flaky`) with the failed jobs, or comments on the one that is still open. A manual run never opens an issue and only previews the registry cleanup. Layout and visual regressions, race outside the safety packages and
   the full mutation run (a PR that changes a safety package already gates its own mutation) are caught here, so the nightly FULL is the place to look for them; a
   failure is fixed through an issue, not by holding a release.

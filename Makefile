@@ -121,15 +121,13 @@ lint:
 test:
 	$(NICE) $(GO) test $(TESTFLAGS) ./...
 
-# Every unit test with the race detector (FULL tier); tools/race.sh runs internal/auth in AUTH_PARTS
-# parallel parts (default 2) next to the other packages.
+# Every unit test with the race detector (FULL tier); CI runs it in two shards (tools/race.sh, RACE_SHARD).
 race:
 	$(NICE) tools/race.sh
 
 # Race tests of the SAFETY packages changed since BASE (all of them without a usable BASE).
 # "Changed" is what this branch changed since it left BASE (tools/changed-files.sh: merge base, working tree and
 # untracked files included), like CI's three-dot diff, not a two-dot diff against BASE's moving tip (#481).
-# tools/race.sh splits internal/auth (AUTH_PARTS) to keep the wall clock short.
 safety-race:
 	@if [ -n "$(BASE)" ] && changed=$$(CHANGED_BASE="$(BASE)" tools/changed-files.sh); then \
 	  pkgs=""; \

@@ -1,4 +1,4 @@
-# Mutation shard weights, see tools/mutation-weights.sh. Line: <pkg> <file> <runnable mutants> [seconds per mutant x 100, overriding the package cost; measured per file group from FULL run 41329298422 (2026-11-01)].
+# Mutation shard weights, see tools/mutation-weights.sh. Line: <pkg> <file> <runnable mutants> [seconds per mutant x 100, overriding the package cost; averaged over the measured file groups of the FULL runs 41329298422 (2026-11-01) and 41493544951 (2026-11-02)].
 cost internal/fwselect 49
 cost internal/ota 214
 cost internal/policy 50
@@ -7,57 +7,57 @@ cost internal/mqttcmd 395
 cost internal/transport 45
 cost internal/tasmota 300
 cost internal/restore 1000
-internal/fwselect decide.go 10
-internal/fwselect detect.go 47
-internal/fwselect family.go 15
-internal/fwselect fwselect.go 3
-internal/fwselect guard.go 32
-internal/fwselect image.go 6
-internal/fwselect mqttupload.go 12
-internal/fwselect plan.go 12
-internal/fwselect select.go 45
-internal/ota backupjob.go 12 230
-internal/ota batchopts.go 4 149
-internal/ota commandjob.go 19 149
-internal/ota deviceapi.go 72 374
-internal/ota engine.go 197 374
-internal/ota engine_safeboot.go 1 149
-internal/ota machine.go 104 149
-internal/ota machine_safeboot.go 22 374
-internal/ota mqttpath.go 7 374
-internal/ota policyjob.go 47 209
-internal/ota push.go 18 230
-internal/policy decoded.go 9
-internal/policy fix.go 60
-internal/policy plan.go 8
-internal/policy policy.go 49
-internal/policy rules.go 24
-internal/cmdpolicy cmdpolicy.go 110
-internal/cmdpolicy policyrule.go 5
-internal/cmdpolicy scrub.go 24
-internal/mqttcmd backlog.go 12 327
-internal/mqttcmd channel.go 36 1072
-internal/mqttcmd correlate.go 47 212
-internal/mqttcmd filedownload.go 64 397
-internal/mqttcmd info.go 10 212
-internal/mqttcmd upload.go 81 327
-internal/transport choose.go 55
-internal/transport configupload.go 18
-internal/transport memory.go 1
-internal/transport rootpage.go 15
-internal/transport router.go 80
-internal/transport topics.go 5
-internal/tasmota client.go 59 308
-internal/tasmota filesystem.go 125 247
-internal/tasmota networks.go 2 183
-internal/tasmota parse.go 28 308
-internal/tasmota safeboot.go 8 183
-internal/tasmota tasmota.go 1
-internal/tasmota upload.go 36 247
-internal/tasmota configrestore.go 13 183
-internal/restore files.go 97 237
-internal/restore flow.go 105 341
-internal/restore lockout.go 29 341
-internal/restore replace.go 98 426
-internal/restore restore.go 37 400
-internal/restore steps.go 2 426
+internal/fwselect decide.go 10 25
+internal/fwselect detect.go 47 25
+internal/fwselect family.go 15 36
+internal/fwselect fwselect.go 3 36
+internal/fwselect guard.go 32 25
+internal/fwselect image.go 6 25
+internal/fwselect mqttupload.go 12 35
+internal/fwselect plan.go 12 25
+internal/fwselect select.go 45 36
+internal/ota backupjob.go 12 196
+internal/ota batchopts.go 4 150
+internal/ota commandjob.go 19 180
+internal/ota deviceapi.go 72 292
+internal/ota engine.go 197 262
+internal/ota engine_safeboot.go 1 184
+internal/ota machine.go 104 150
+internal/ota machine_safeboot.go 22 292
+internal/ota mqttpath.go 7 296
+internal/ota policyjob.go 47 210
+internal/ota push.go 18 196
+internal/policy decoded.go 9 74
+internal/policy fix.go 60 42
+internal/policy plan.go 8 60
+internal/policy policy.go 49 60
+internal/policy rules.go 24 60
+internal/cmdpolicy cmdpolicy.go 110 18
+internal/cmdpolicy policyrule.go 5 27
+internal/cmdpolicy scrub.go 24 27
+internal/mqttcmd backlog.go 12 390
+internal/mqttcmd channel.go 36 904
+internal/mqttcmd correlate.go 47 234
+internal/mqttcmd filedownload.go 64 566
+internal/mqttcmd info.go 10 332
+internal/mqttcmd upload.go 81 390
+internal/transport choose.go 55 33
+internal/transport configupload.go 18 57
+internal/transport memory.go 1 49
+internal/transport rootpage.go 15 49
+internal/transport router.go 80 33
+internal/transport topics.go 5 49
+internal/tasmota client.go 59 318
+internal/tasmota filesystem.go 125 198
+internal/tasmota networks.go 2 308
+internal/tasmota parse.go 28 229
+internal/tasmota safeboot.go 8 308
+internal/tasmota tasmota.go 1 789
+internal/tasmota upload.go 36 340
+internal/tasmota configrestore.go 13 256
+internal/restore files.go 97 238
+internal/restore flow.go 105 290
+internal/restore lockout.go 29 290
+internal/restore replace.go 98 388
+internal/restore restore.go 37 375
+internal/restore steps.go 2 388
