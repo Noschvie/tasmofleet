@@ -52,9 +52,10 @@ test("switch a relay on and off from the device list, and follow outside changes
 });
 
 // #463: the list reloads itself on device events (the first probes of a fresh import end there). A reload that the
-// server rendered before the toggle finished carries the old relay state; applied after the toggle's answer it put
+// server rendered before a toggle finished carries the old relay state; applied after the toggle's answer it put
 // that state back, and nothing corrected it before the next poll. The test holds such a reload (rendered now,
-// delivered after the toggle) and wants the toggled state to survive it, and the reload to be asked for again.
+// delivered after the toggle) and wants the toggled state to survive it, and the reload to be asked for again. The
+// reload that is asked for again is judged like any other: it is held too, toggled over and must not win either.
 test("a list reload rendered before a toggle does not bring the old relay state back", async ({ page }) => {
   await page.setExtraHTTPHeaders(operator);
   await page.goto(app.url + "/devices");
@@ -64,33 +65,65 @@ test("a list reload rendered before a toggle does not bring the old relay state 
   const before = (await toggle().getAttribute("aria-pressed"))!;
   const flipped = before === "true" ? "false" : "true";
 
-  let release!: () => void;
-  const held = new Promise<void>((ok) => (release = ok));
-  let rendered!: () => void;
-  const renderedByServer = new Promise<void>((ok) => (rendered = ok));
+  // Every table reload is rendered when it is asked for and delivered when its hold is released.
+  const hold = () => {
+    let release!: () => void;
+    let rendered!: () => void;
+    return {
+      gate: new Promise<void>((ok) => (release = ok)),
+      release: () => release(),
+      renderedByServer: new Promise<void>((ok) => (rendered = ok)),
+      rendered: () => rendered(),
+    };
+  };
+  let current = hold();
   await page.route("**/devices/table*", async (route) => {
-    const res = await route.fetch(); // rendered now, with the old state
-    rendered();
-    await held;
+    const mine = current;
+    const res = await route.fetch();
+    mine.rendered();
+    await mine.gate;
     await route.fulfill({ response: res });
   });
-  // The page's own decision about the held reload (htmx fires beforeSwap whether it swaps or not), and the next reload that is applied.
-  const decided = page.evaluate(
-    () => new Promise<void>((ok) => document.body.addEventListener("htmx:beforeSwap", (e) => (e as CustomEvent).detail.target?.id === "devtable" && ok())),
-  );
+  // The page's own decision about a reload (htmx fires beforeSwap whether it swaps or not), and the next one that is applied.
+  const nextDecision = () =>
+    page.evaluate(
+      () => new Promise<void>((ok) => document.body.addEventListener("htmx:beforeSwap", (e) => (e as CustomEvent).detail.target?.id === "devtable" && ok(), { once: false })),
+    );
+  const nextSettled = () =>
+    page.evaluate(
+      () => new Promise<void>((ok) => document.body.addEventListener("htmx:afterSettle", (e) => (e as CustomEvent).detail.target?.id === "devtable" && ok())),
+    );
+
+  // 1. A reload rendered with the old state, a toggle, then the reload arrives: dropped.
+  const first = current;
+  const decidedFirst = nextDecision();
   await page.evaluate(() => (window as any).htmx.trigger("#devtable", "sse:resync"));
-  await renderedByServer;
+  await first.renderedByServer;
   await toggle().click();
   await expect(toggle()).toHaveAttribute("aria-pressed", flipped);
 
-  const reloaded = page.evaluate(
-    () => new Promise<void>((ok) => document.body.addEventListener("htmx:afterSettle", (e) => (e as CustomEvent).detail.target?.id === "devtable" && ok())),
-  );
-  release();
-  await decided;
+  // 2. The dropped reload is asked for again (rendered now, with the toggled state); a second toggle follows
+  //    before it arrives, so this one is stale as well and must be dropped.
+  current = hold();
+  const second = current;
+  first.release();
+  await decidedFirst;
   await expect(toggle()).toHaveAttribute("aria-pressed", flipped, { timeout: 1000 });
-  await reloaded; // the dropped reload was asked for again, rendered after the toggle
-  await expect(toggle()).toHaveAttribute("aria-pressed", flipped, { timeout: 1000 });
+  await second.renderedByServer;
+  const decidedSecond = nextDecision();
+  await toggle().click();
+  await expect(toggle()).toHaveAttribute("aria-pressed", before);
+  current = hold(); // the next one is not held for long: it is released at once below
+  const third = current;
+  second.release();
+  await decidedSecond;
+  await expect(toggle()).toHaveAttribute("aria-pressed", before, { timeout: 1000 });
+
+  // 3. Asked for again once more, rendered after both toggles: applied, and it agrees.
+  const settled = nextSettled();
+  third.release();
+  await settled;
+  await expect(toggle()).toHaveAttribute("aria-pressed", before, { timeout: 1000 });
 });
 
 test("switch a relay of an MQTT device", async ({ page }) => {

@@ -355,7 +355,10 @@
     }
     deferred = false;
     if (window.htmx) {
+      // source: without it htmx sends the request from document.body, and htmx:beforeSend names
+      // body, so staleReload could not tell this request from any other
       window.htmx.ajax("GET", t.getAttribute("hx-get"), {
+        source: t,
         target: t,
         swap: "innerHTML",
       });
