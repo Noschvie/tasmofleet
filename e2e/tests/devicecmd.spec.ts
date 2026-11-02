@@ -51,6 +51,48 @@ test("switch a relay on and off from the device list, and follow outside changes
   await expect(row.getByRole("button", { name: /Toggle relay 1/ })).toHaveAttribute("aria-pressed", outside, { timeout: 30_000 });
 });
 
+// #463: the list reloads itself on device events (the first probes of a fresh import end there). A reload that the
+// server rendered before the toggle finished carries the old relay state; applied after the toggle's answer it put
+// that state back, and nothing corrected it before the next poll. The test holds such a reload (rendered now,
+// delivered after the toggle) and wants the toggled state to survive it, and the reload to be asked for again.
+test("a list reload rendered before a toggle does not bring the old relay state back", async ({ page }) => {
+  await page.setExtraHTTPHeaders(operator);
+  await page.goto(app.url + "/devices");
+  const row = page.getByRole("row").filter({ hasText: "plug-4m-http" });
+  const toggle = () => row.getByRole("button", { name: /Toggle relay 1/ });
+  await expect(toggle()).toBeVisible({ timeout: 30_000 });
+  const before = (await toggle().getAttribute("aria-pressed"))!;
+  const flipped = before === "true" ? "false" : "true";
+
+  let release!: () => void;
+  const held = new Promise<void>((ok) => (release = ok));
+  let rendered!: () => void;
+  const renderedByServer = new Promise<void>((ok) => (rendered = ok));
+  await page.route("**/devices/table*", async (route) => {
+    const res = await route.fetch(); // rendered now, with the old state
+    rendered();
+    await held;
+    await route.fulfill({ response: res });
+  });
+  // The page's own decision about the held reload (htmx fires beforeSwap whether it swaps or not), and the next reload that is applied.
+  const decided = page.evaluate(
+    () => new Promise<void>((ok) => document.body.addEventListener("htmx:beforeSwap", (e) => (e as CustomEvent).detail.target?.id === "devtable" && ok())),
+  );
+  await page.evaluate(() => (window as any).htmx.trigger("#devtable", "sse:resync"));
+  await renderedByServer;
+  await toggle().click();
+  await expect(toggle()).toHaveAttribute("aria-pressed", flipped);
+
+  const reloaded = page.evaluate(
+    () => new Promise<void>((ok) => document.body.addEventListener("htmx:afterSettle", (e) => (e as CustomEvent).detail.target?.id === "devtable" && ok())),
+  );
+  release();
+  await decided;
+  await expect(toggle()).toHaveAttribute("aria-pressed", flipped, { timeout: 1000 });
+  await reloaded; // the dropped reload was asked for again, rendered after the toggle
+  await expect(toggle()).toHaveAttribute("aria-pressed", flipped, { timeout: 1000 });
+});
+
 test("switch a relay of an MQTT device", async ({ page }) => {
   await page.setExtraHTTPHeaders(operator);
   await page.goto(app.url + "/devices");

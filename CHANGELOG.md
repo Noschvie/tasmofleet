@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Fixed
+
+- The device list could show a relay in its old state after you switched it, when the list reloaded itself (for example after the first probes of a new device) at the same moment, and kept it until the next poll. A reload that was rendered before the switch finished is now dropped and requested again (#463)
+
 ## 0.27.2 "Cordouan" (2026-11-02)
 
 ### Fixed

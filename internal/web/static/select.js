@@ -315,9 +315,42 @@
       document.querySelector("dialog[open]:not([data-static])")
     );
   }
+  // A power toggle and a reload of the list race (#463): a reload that was rendered before the
+  // toggle finished carries the old relay state, and applying it after the toggle's answer puts
+  // that state back (the answer and the live events only swap the cell they were sent to, which
+  // the reload has replaced). Nothing corrects it before the next poll. So a reload is applied
+  // only if no toggle was running at any moment since it was sent; otherwise it is dropped and
+  // asked for again, which renders after the toggle. ticks orders the requests without clocks.
+  var ticks = 0;
+  var sentAt = new WeakMap(); // reload xhr -> tick at which it was sent
+  var toggling = 0; // toggles sent and not finished
+  var lastToggleEnd = 0; // tick at which the latest toggle finished
+  function staleReload(xhr) {
+    var sent = xhr && sentAt.get(xhr);
+    return sent !== undefined && (toggling > 0 || lastToggleEnd > sent);
+  }
+  document.addEventListener("htmx:beforeSend", function (e) {
+    var d = e.detail || {};
+    var el = d.elt;
+    if (!d.xhr || !el) {
+      return;
+    }
+    ticks++;
+    if (el.id === "devtable") {
+      sentAt.set(d.xhr, ticks);
+    } else if (el.classList && el.classList.contains("pwr")) {
+      toggling++;
+      // loadend follows the swap, for load, error, abort and timeout alike
+      d.xhr.addEventListener("loadend", function () {
+        toggling--;
+        lastToggleEnd = ++ticks;
+        flush();
+      });
+    }
+  });
   function flush() {
     var t = document.getElementById("devtable");
-    if (!deferred || !t || open(t)) {
+    if (!deferred || !t || open(t) || toggling > 0) {
       return;
     }
     deferred = false;
@@ -333,9 +366,12 @@
     if (!t || t.id !== "devtable") {
       return;
     }
-    if (open(t)) {
+    if (open(t) || staleReload(e.detail.xhr)) {
       e.detail.shouldSwap = false;
       deferred = true;
+      // a stale reload has nothing to wait for once the toggle is over: ask again at once (an
+      // open menu or a running toggle calls flush itself when it ends)
+      Promise.resolve().then(flush);
       return;
     }
     kept = Array.prototype.map.call(
