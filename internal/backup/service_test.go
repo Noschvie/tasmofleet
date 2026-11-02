@@ -16,6 +16,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -798,12 +799,13 @@ func TestFilesAreSyncedIntoTheirDirectoryBeforeTheyAreIndexed(t *testing.T) {
 	}
 }
 
-// Why: when the directory entry cannot be made durable the file must not be
-// indexed, or a row would point at a file the next boot may not have. The
-// renamed file goes too (nothing would ever prune an unindexed file).
+// Why: when the directory entry cannot be made durable because the disk
+// failed (EIO) the file must not be indexed, or a row would point at a file
+// the next boot may not have. The renamed file goes too (nothing would ever
+// prune an unindexed file).
 func TestFileWhoseDirectoryCannotBeSyncedIsNotIndexed(t *testing.T) {
 	e := newEnv(t, nil)
-	e.m.flushDir = func(string) error { return errors.New("input/output error") }
+	e.m.flushDir = func(dir string) error { return &os.PathError{Op: "sync", Path: dir, Err: syscall.EIO} }
 	if _, err := e.m.Backup(t.Context(), "op", 7); err == nil {
 		t.Fatal("the run must fail")
 	}
@@ -812,5 +814,32 @@ func TestFileWhoseDirectoryCannotBeSyncedIsNotIndexed(t *testing.T) {
 	}
 	if n := e.files(t); n != 0 {
 		t.Errorf("%d files left on disk without an index row", n)
+	}
+}
+
+// Why: file systems without directory fsync (vboxsf, some 9p and SMB mounts)
+// answer EINVAL, ENOTSUP or ENOSYS. There is nothing to wait for there, and
+// failing on it would make every backup on such a mount fail from 0.27.3 on.
+// The file is indexed as before, and the limitation is logged once per
+// directory, not on every file of every scheduled run.
+func TestDirectorySyncThatTheFileSystemDoesNotSupportDoesNotFailTheBackup(t *testing.T) {
+	for name, errno := range map[string]syscall.Errno{"EINVAL": syscall.EINVAL, "ENOTSUP": syscall.ENOTSUP, "ENOSYS": syscall.ENOSYS} {
+		t.Run(name, func(t *testing.T) {
+			var logs bytes.Buffer
+			e := newEnv(t, func(o *Options) { o.Log = slog.New(slog.NewTextHandler(&logs, nil)) })
+			e.m.flushDir = func(dir string) error { return &os.PathError{Op: "sync", Path: dir, Err: errno} }
+			for i := 0; i < 2; i++ {
+				e.clk.t = e.clk.t.Add(time.Hour)
+				if _, err := e.m.Backup(t.Context(), "op", 7); err != nil {
+					t.Fatalf("run %d: %v", i+1, err)
+				}
+			}
+			if n := len(e.st.rows); n != 6 {
+				t.Errorf("%d rows indexed, want the 6 files of two runs", n)
+			}
+			if n := strings.Count(logs.String(), "directory sync not supported"); n != 1 {
+				t.Errorf("limitation logged %d times, want once per directory:\n%s", n, logs.String())
+			}
+		})
 	}
 }

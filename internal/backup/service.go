@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/audit"
@@ -98,6 +99,8 @@ type Manager struct {
 	dirMu sync.Mutex
 	// flushDir makes a directory's entries durable (syncDir); a test replaces it to see when it runs.
 	flushDir func(dir string) error
+	// noDirSync holds the directories whose file system cannot sync a directory and that were logged already.
+	noDirSync sync.Map
 }
 
 var _ Service = (*Manager)(nil)
@@ -482,7 +485,10 @@ func (m *Manager) decode(ctx context.Context, dmp []byte, fwVersion string) (not
 // writeAtomic writes data to dir/name with mode 0600 via temp file + rename,
 // then syncs the directory: the caller indexes the file right after, and a
 // row must not outlive the directory entry it points to. A file whose entry
-// could not be synced is removed again, since it is never indexed.
+// could not be synced is removed again, since it is never indexed. Any real
+// error fails the write, unlike the firmware cache, which only warns: a cache
+// is reproducible, a backup is not. A file system that cannot sync a
+// directory at all (dirSyncUnsupported) is the one exception.
 func (m *Manager) writeAtomic(dir, name string, data []byte) (err error) {
 	f, err := os.CreateTemp(dir, ".tmp-*")
 	if err != nil {
@@ -512,10 +518,25 @@ func (m *Manager) writeAtomic(dir, name string, data []byte) (err error) {
 		return err
 	}
 	if err = m.flushDir(dir); err != nil {
-		_ = os.Remove(final) // not indexed, so nothing would ever prune it
-		return err
+		if !dirSyncUnsupported(err) {
+			_ = os.Remove(final) // not indexed, so nothing would ever prune it
+			return err
+		}
+		// Nothing to wait for on this file system: index the file as before.
+		if _, seen := m.noDirSync.LoadOrStore(dir, true); !seen {
+			m.o.Log.Warn("backup: directory sync not supported by this file system, backups are indexed without it",
+				"component", "backup", "dir", dir, "err", err)
+		}
 	}
 	return nil
+}
+
+// dirSyncUnsupported reports whether err says the file system has no directory
+// fsync (vboxsf, some 9p and SMB mounts answer EINVAL, ENOTSUP or ENOSYS). It
+// is not a failed write, there is just nothing to wait for; EIO and the like
+// still are.
+func dirSyncUnsupported(err error) bool {
+	return errors.Is(err, errors.ErrUnsupported) || errors.Is(err, syscall.EINVAL) // ErrUnsupported: ENOSYS, ENOTSUP, EOPNOTSUPP
 }
 
 // prune applies the retention (Prunable) to the device's backups: the newest
