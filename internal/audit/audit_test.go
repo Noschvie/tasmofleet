@@ -6,11 +6,13 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/secretbox"
 	"github.com/nofuturekid/tasmofleet/internal/store"
 )
 
@@ -131,5 +133,79 @@ func TestRedactKeysContract(t *testing.T) {
 		if !found {
 			t.Errorf("%s missing from RedactKeys", k)
 		}
+	}
+}
+
+// Why (#505): the audit log is the record of who changed what, and the action has already
+// happened when Record is called. A web handler passes the request context, which net/http
+// cancels when the client goes away (a closed tab, a proxy timeout right after the submit); the
+// insert then failed with "context canceled" and the change had no audit row. With the real
+// database, a cancelled caller context must still leave the row.
+func TestRecordStoresTheRowWhenTheCallerIsGone(t *testing.T) {
+	dir := t.TempDir()
+	box, err := secretbox.LoadOrCreate(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	db, err := store.Open(filepath.Join(dir, "t.db"), box)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() }) //nolint:errcheck // temp DB
+	failed := 0
+	r := New(db, quiet(), func() { failed++ })
+
+	gone, cancel := context.WithCancel(context.Background())
+	cancel() // the client disconnected after the action committed
+	r.Record(gone, model.AuditEvent{Actor: "alice", Action: "device.delete", Target: "device:7"})
+
+	rows, err := db.ListAudit(context.Background(), store.AuditFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if failed != 0 || len(rows) != 1 || rows[0].Action != "device.delete" || rows[0].Actor != "alice" {
+		t.Fatalf("%d failed writes, rows %+v: the action happened and must have its audit row", failed, rows)
+	}
+}
+
+type ctxKey struct{}
+
+// ctxStore records what the context the recorder writes with looks like at the time of the insert
+// (the recorder releases it right after).
+type ctxStore struct {
+	fakeStore
+	called   bool
+	err      error
+	value    any
+	deadline time.Time
+	hasDL    bool
+}
+
+func (s *ctxStore) AppendAudit(ctx context.Context, e model.AuditEvent) error {
+	s.called, s.err, s.value = true, ctx.Err(), ctx.Value(ctxKey{})
+	s.deadline, s.hasDL = ctx.Deadline()
+	return s.fakeStore.AppendAudit(ctx, e)
+}
+
+// Why (#505): the write must outlive the request but not hang for ever: it keeps the request's
+// values (the audit insert may read them) and gets a deadline of its own, so a stuck database
+// cannot hold a handler or the engine's worker indefinitely.
+func TestRecordWritesWithItsOwnDeadlineAndTheCallersValues(t *testing.T) {
+	st := &ctxStore{}
+	r := New(st, quiet(), nil)
+	caller, cancel := context.WithCancel(context.WithValue(context.Background(), ctxKey{}, "req-1"))
+	cancel()
+	r.Record(caller, model.AuditEvent{Action: "x"})
+	if !st.called {
+		t.Fatal("nothing written")
+	}
+	if st.err != nil {
+		t.Errorf("the write context is already done: %v", st.err)
+	}
+	if st.value != "req-1" {
+		t.Error("the request's values were dropped")
+	}
+	if left := time.Until(st.deadline); !st.hasDL || left > writeTimeout || left <= 0 {
+		t.Errorf("deadline in %v (set: %v), want one within %v", left, st.hasDL, writeTimeout)
 	}
 }

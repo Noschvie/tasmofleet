@@ -26,6 +26,10 @@ var RedactKeys = []string{"password", "http_password", "token", "secret", "clien
 
 const redacted = "***"
 
+// writeTimeout bounds the insert of one row. The write does not follow the caller's cancellation
+// (see Record), so it needs a limit of its own.
+const writeTimeout = 5 * time.Second
+
 // Store is the part of store.AuditStore the recorder needs.
 type Store interface {
 	AppendAudit(ctx context.Context, e model.AuditEvent) error
@@ -54,6 +58,10 @@ func New(s Store, log *slog.Logger, onError func()) *StoreRecorder {
 
 // Record redacts the detail, fills At and Result when empty, stores the event
 // and logs it at info level. Failures are logged and counted, never returned.
+//
+// The action being recorded has already happened, so the row is written even when ctx is
+// cancelled (net/http cancels a request context when the client disconnects): the insert keeps
+// ctx's values but not its cancellation, and has a deadline of its own (#505).
 func (r *StoreRecorder) Record(ctx context.Context, e model.AuditEvent) {
 	if e.At.IsZero() {
 		e.At = r.now().UTC()
@@ -62,7 +70,9 @@ func (r *StoreRecorder) Record(ctx context.Context, e model.AuditEvent) {
 		e.Result = "ok"
 	}
 	e.Detail = Redact(e.Detail)
-	if err := r.store.AppendAudit(ctx, e); err != nil {
+	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), writeTimeout)
+	defer cancel()
+	if err := r.store.AppendAudit(wctx, e); err != nil {
 		r.log.Error("audit write failed", "component", "audit", "action", e.Action, "target", e.Target, "err", err)
 		if r.onError != nil {
 			r.onError()
