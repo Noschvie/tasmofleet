@@ -8,8 +8,9 @@
 # main.yml saves; a PR saves none), the @core e2e tests in two shards, and, when the PR changes
 # a SAFETY package (Makefile), its race tests and the
 # mutation gate of the changed mutation packages. Target: "required" green in <= 5 min.
-# Docs-only PRs skip all of that (the link check still runs). The job "required" is the
-# single status check for branch protection; it always runs.
+# Docs-only PRs skip all of that. The relative Markdown link check runs on every PR and gates
+# the merge: a PR that deletes or renames a linked file breaks links without touching Markdown.
+# The job "required" is the single status check for branch protection; it always runs.
 #
 # No paths filter on the trigger: "changes" decides, and "required" always reports.
 # Docs that are NOT safe to ignore, because a test or the build reads them: CHANGELOG.md
@@ -43,7 +44,6 @@ jobs:
       safety: ${{ steps.classify.outputs.safety }}
       catalogue: ${{ steps.classify.outputs.catalogue }}
       image: ${{ steps.classify.outputs.image }}
-      markdown: ${{ steps.classify.outputs.markdown }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -63,14 +63,10 @@ jobs:
           safety=false
           catalogue=false
           image=false
-          markdown=false
           for f in $files; do
             case "$f" in
               docs/research/*|docs/runbooks/*|docs/design/*|README.md|ROADMAP.md|CONTRIBUTING.md|SECURITY.md|CLAUDE.md|NOTICE|LICENSE) ;;
               *) code=true ;;
-            esac
-            case "$f" in
-              *.md) markdown=true ;;
             esac
             # The image build check: what the Dockerfile reads and the Home Assistant app.
             case "$f" in
@@ -90,9 +86,8 @@ jobs:
             echo "safety=$safety"
             echo "catalogue=$catalogue"
             echo "image=$image"
-            echo "markdown=$markdown"
           } >> "$GITHUB_OUTPUT"
-          echo "code=$code safety=$safety catalogue=$catalogue image=$image markdown=$markdown"
+          echo "code=$code safety=$safety catalogue=$catalogue image=$image"
 
   # lint, unit and integration tests, build, e2e core; safety-race when a SAFETY package
   # changed, catalogue when the generator, its data or the pinned source changed.
@@ -118,11 +113,10 @@ jobs:
       scope: changed
       base: ${{ github.event.pull_request.base.sha }}
 
-  # Not part of "required" (the link check gates nothing yet, #482). Runs whenever a Markdown file changed.
+  # Relative links in the Markdown files resolve (tools/check-doc-links.py, about 8 s). Part of "required".
+  # No condition: it also runs for a code PR, whose change can delete a file that a document links to.
   links:
     name: relative Markdown links
-    needs: changes
-    if: needs.changes.outputs.markdown == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -147,11 +141,12 @@ jobs:
   # passes only when every job that had to run passed. "checks" and "mutation" are
   # reusable workflows: each is green only when every job inside it that was asked for
   # (by the inputs above) ran and succeeded. A skip counts only when this PR did not ask
-  # for that job: everything for a docs-only PR, mutation when no SAFETY package changed.
+  # for that job: everything for a docs-only PR, mutation when no SAFETY package changed. The link
+  # check always runs and must succeed.
   # Any other result (failure, cancelled, or a skip caused by a failed dependency) fails it.
   required:
     name: required
-    needs: [changes, checks, mutation]
+    needs: [changes, checks, mutation, links]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -163,8 +158,9 @@ jobs:
           SAFETY: ${{ needs.changes.outputs.safety }}
           CHECKS: ${{ needs.checks.result }}
           MUTATION: ${{ needs.mutation.result }}
+          LINKS: ${{ needs.links.result }}
         run: |
-          echo "changes=$CHANGES code=$CODE safety=$SAFETY | checks: $CHECKS | mutation: $MUTATION"
+          echo "changes=$CHANGES code=$CODE safety=$SAFETY | checks: $CHECKS | mutation: $MUTATION | links: $LINKS"
           [ "$CHANGES" = success ] || exit 1
           docs=false; [ "$CODE" = false ] && docs=true
           check() { # check <skip allowed> <result>
@@ -175,3 +171,4 @@ jobs:
           check "$docs" "$CHECKS"
           m=true; [ "$SAFETY" = true ] && m=$docs
           check "$m" "$MUTATION"
+          check false "$LINKS"
