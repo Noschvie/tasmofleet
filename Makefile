@@ -149,10 +149,10 @@ test-quarantine:
 
 # Integration tests (build tag "integration"): simulator fleet, embedded MQTT
 # broker, mock OIDC provider, real SQLite files. Still loopback only.
-# Only the packages with tagged test files run, found at run time so a new one is not missed (#490): the
-# tag changes the build, so ./... ran the unit tests of every package a second time.
+# Only the packages with tagged test files run, found at run time anywhere in the module so a new one is not
+# missed (#490): the tag changes the build, so ./... ran the unit tests of every package a second time.
 # IT_PARALLEL raises go test -parallel above GOMAXPROCS: the ota scenarios mostly sleep (#487).
-INTEGRATION_PKGS = $(shell grep -rl --include='*_test.go' -E '^//go:build .*integration' cmd internal | xargs -r -n1 dirname | sort -u | sed 's|^|./|')
+INTEGRATION_PKGS = $(shell tools/integration-packages.sh)
 IT_PARALLEL ?= 16
 integration: integration-guard
 	@test -n "$(INTEGRATION_PKGS)" || { echo "integration: no package has integration-tagged tests" >&2; exit 1; }
@@ -161,8 +161,7 @@ integration: integration-guard
 # Only _test.go files may carry the integration tag. A tagged non-test file would change the build of its
 # package's unit tests, and make integration, which finds packages by their tagged test files, would miss it.
 integration-guard:
-	@bad=$$(grep -rl --include='*.go' --exclude='*_test.go' -E '^//go:build .*integration' cmd internal *.go 2>/dev/null || true); \
-	[ -z "$$bad" ] || { echo "integration-guard: non-test files carry the integration build tag:" >&2; echo "$$bad" >&2; exit 1; }
+	@tools/integration-packages.sh --guard
 
 # make quick (#491): the inner loop between two edits. fmt-check, go vet, golangci-lint and go test run on the
 # packages changed since CHANGED_BASE (uncommitted and untracked files included) and on every package that
