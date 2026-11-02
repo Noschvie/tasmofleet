@@ -253,7 +253,7 @@ SAFETY package, catalogue, image paths). Every gate runs through the Makefile.
   with retries, and never block a PR or a release. Fix or delete each one within about two weeks; the fixing
   change removes the tag and closes the issue.
 
-Docs-only PRs skip the checks and run the link check (`tools/check-doc-links.py`) instead; the list of docs
+Docs-only PRs skip the checks; the link check (`tools/check-doc-links.py`) runs on every PR and gates the merge. The list of docs
 that are safe to ignore (and the ones a test reads, which are not) is in the header of `.github/workflows/pr.yml`.
 Third-party actions are pinned to a full commit SHA with the version in a comment (`uses: owner/repo@<sha> # vX.Y.Z`);
 Renovate keeps both current. Reusable workflows take their secrets by name (`secrets:`), never `secrets: inherit`.
@@ -357,8 +357,7 @@ the ruleset rejects them.
 `pr.yml` runs the FAST tier on every PR: a `changes` job detects docs-only PRs (heavy jobs
 skipped) and PRs that touch a `SAFETY` package (safety jobs added), and the final `required`
 job passes only when every job that had to run passed; a skip counts only when the PR did
-not ask for that job. The link check in `pr.yml` reports its own, non-required
-status. No approvals are required (single maintainer). Release tags are still pushed
+not ask for that job; the link check must always succeed. No approvals are required (single maintainer). Release tags are still pushed
 directly, on a green commit of `main`.
 
 **UI built from an approved mockup:** the PR ships paired screenshots per screen (mockup and build, same
