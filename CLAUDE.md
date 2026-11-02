@@ -360,10 +360,11 @@ job passes only when every job that had to run passed; a skip counts only when t
 not ask for that job; the link check must always succeed. No approvals are required (single maintainer). Release tags are still pushed
 directly, on a green commit of `main`.
 
-**UI built from an approved mockup:** the PR ships paired screenshots per screen (mockup and build, same
-width at 1280 and 375 px, light and dark). Every visible difference is fixed or listed with the
-maintainer's decision that allows it, and the PR is merged only after that comparison. "Tests pass" is
-not acceptance for UI work.
+**UI changes:** before a UI change is pushed or a PR is opened, the maintainer sees it locally: the agent
+makes the screenshot pairs per screen (mockup and build where a mockup exists, otherwise before and after;
+1280 and 375 px, light and dark), keeps them outside the repo, and the coordinator presents them to the
+maintainer. The branch is pushed only after the maintainer's OK. Screenshots are never committed to any
+branch or embedded in a PR; the PR lists the accepted differences. "Tests pass" is not acceptance for UI work.
 
 ## Branches and worktrees
 
