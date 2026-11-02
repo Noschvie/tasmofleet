@@ -200,6 +200,8 @@ on the changed lines (`MUTATION_DIFF_MIN`) are too few for a percentage: such a 
 kill, and one without any decided mutant (a comment, a declaration) passes and says so. Details and the
 gremlins `--diff` traps they work around: header of `tools/mutation-gate.sh`. A sharded run leaves `mutation-report.json` and a job
 summary (lived, timed-out and not-covered mutants per package) next to the counts (`tools/mutation-report.sh`).
+gremlins builds every mutant, and each build is garbage afterwards (+261 MB per `internal/cmdpolicy` run), so the gate runs it with a throwaway `GOCACHE`
+under `TMPDIR` that it removes when it ends (#546): neither your Go cache nor the one CI saves ever holds a mutant build (`MUTATION_GOCACHE_SEED` warms it, header of `tools/mutation-gate.sh`).
 
 ### Test tiers in CI (`.github/workflows/`)
 

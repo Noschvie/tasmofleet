@@ -80,6 +80,26 @@ import "testing"
 func TestC(t *testing.T) { _ = C(5) }
 `;
 
+// The gate runs gremlins with a throwaway GOCACHE (#546). A cold one rebuilds the standard library for every
+// run (2 s on a fast machine, much more on a CI runner), so all runs start from one seed built here once.
+let seedDir;
+function gocacheSeed() {
+  if (seedDir) return seedDir;
+  seedDir = mkdtempSync(join(tmpdir(), "mutation-diff-seed-"));
+  const mod = mkdtempSync(join(tmpdir(), "mutation-diff-seedmod-"));
+  writeFileSync(join(mod, "go.mod"), "module example.com/gm\n\ngo 1.22\n");
+  writeFileSync(join(mod, "p.go"), "package p\n");
+  writeFileSync(
+    join(mod, "p_test.go"),
+    'package p\n\nimport "testing"\n\nfunc TestP(t *testing.T) {}\n',
+  );
+  execFileSync("go", ["test", "-cover", "./..."], {
+    cwd: mod,
+    env: { ...process.env, GOCACHE: seedDir },
+  });
+  return seedDir;
+}
+
 function newModule() {
   const dir = mkdtempSync(join(tmpdir(), "mutation-diff-"));
   // No global git config: the throw-away repository needs neither the user's signing key nor identity.
@@ -126,6 +146,7 @@ function newModule() {
         ...env,
         TOOL: `go tool -modfile=${repo}/tools/go.mod`,
         MUTATION_WORKERS: "2",
+        MUTATION_GOCACHE_SEED: gocacheSeed(),
         ...extra,
       },
       encoding: "utf8",

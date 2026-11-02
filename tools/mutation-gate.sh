@@ -20,6 +20,17 @@
 # applies the same checks to the whole package, so a sharded run decides
 # exactly like an unsharded one.
 #
+# Throwaway GOCACHE (#546): gremlins builds the package and its test binary once per mutant, and a mutant's
+# build is never used again. In the shared Go cache that is pure garbage (154 mutants of internal/cmdpolicy
+# add 261 MB; several parallel runs a day filled a 255 GB disk, and CI would save it into its cache). So
+# gremlins runs with GOCACHE pointing at a fresh temporary directory (under TMPDIR) that is removed when the
+# gate ends, also on failure or interrupt. The cost is one cold build of the package's dependencies per
+# gate run (gremlins' coverage run pays it); the gremlins binary itself is built through the real cache
+# first (go tool -n), NICE (the Makefile's "nice -n 15", empty in CI) only wraps the gremlins run.
+# MUTATION_GOCACHE_SEED=<dir> copies a directory of earlier non-mutant builds into the throwaway cache first
+# (scripts/mutation-diff.test.mjs, whose toy modules would otherwise rebuild the standard library for every
+# run); unset by default, because the real cache can hold tens of GB.
+#
 # MUTATION_WORKERS (default nproc/2, at least 2) and MUTATION_TIMEOUT_COEFF (default 20) tune
 # gremlins for slow or busy machines; a coefficient that is too low turns every
 # mutant into a timeout.
@@ -107,6 +118,7 @@ workers=${MUTATION_WORKERS:-$(( ncpu / 2 > 2 ? ncpu / 2 : 2 ))}
 coeff=${MUTATION_TIMEOUT_COEFF:-20}
 # Absolute: the diff scope runs gremlins from inside the package directory.
 tool=${TOOL:-go tool -modfile=$PWD/tools/go.mod}
+nice=${NICE-}
 
 # Scope: the whole package, or only the mutants on the lines changed since MUTATION_DIFF's merge base.
 scope=package
@@ -152,16 +164,23 @@ if [ -n "$shard" ]; then
 	echo "== mutation $pkg shard $shard:" $mine
 fi
 
+# The gremlins binary comes out of the real cache (built once), the mutants go to the throwaway one.
+gremlins=$($tool -n gremlins) || { echo "mutation gate: could not build gremlins" >&2; exit 1; }
 out=$(mktemp)
-trap 'rm -f "$out"' EXIT
+cache=$(mktemp -d)
+# EXIT runs on every exit; a signal becomes an exit so the trap runs for it too.
+trap 'rm -rf "$out" "$cache"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM HUP
+[ -z "${MUTATION_GOCACHE_SEED:-}" ] || cp -R "$MUTATION_GOCACHE_SEED/." "$cache/"
 echo "== mutation $pkg ($scope scope, efficacy >= $min%, workers $workers, timeout coefficient $coeff)"
-# shellcheck disable=SC2086 # excludes is a list of flags, tool a command
+# shellcheck disable=SC2086 # excludes is a list of flags, nice a command prefix
 if [ "$scope" = diff ]; then
 	# Inside the package directory and with 0 lines of context, relative paths: see the header.
-	(cd "$pkg" && GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=diff.relative GIT_CONFIG_VALUE_0=true GIT_CONFIG_KEY_1=diff.context GIT_CONFIG_VALUE_1=0 \
-		$tool gremlins unleash --workers "$workers" --timeout-coefficient "$coeff" --diff "$diff" $excludes) >"$out" 2>&1 || failed=1
+	(cd "$pkg" && GOCACHE="$cache" GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=diff.relative GIT_CONFIG_VALUE_0=true GIT_CONFIG_KEY_1=diff.context GIT_CONFIG_VALUE_1=0 \
+		$nice "$gremlins" unleash --workers "$workers" --timeout-coefficient "$coeff" --diff "$diff" $excludes) >"$out" 2>&1 || failed=1
 else
-	$tool gremlins unleash --workers "$workers" --timeout-coefficient "$coeff" $excludes "$pkg" >"$out" 2>&1 || failed=1
+	GOCACHE="$cache" $nice "$gremlins" unleash --workers "$workers" --timeout-coefficient "$coeff" $excludes "$pkg" >"$out" 2>&1 || failed=1
 fi
 if [ -n "${failed:-}" ]; then
 	cat "$out"
