@@ -104,6 +104,7 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 	// device reached over MQTT only, and Make compliant never has a person's consent) is it known that
 	// nothing of it was sent: the lines that are not the cut-off ones go again, the others are skipped.
 	var skipped []fixLine
+	var applied []fixLine // the lines of the chunks that went out
 	var send func(chunk []fixLine) error
 	send = func(chunk []fixLine) error {
 		texts := make([]string, len(chunk))
@@ -115,6 +116,7 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 		_, err := f.Client.Command(ctx, t, "Backlog "+strings.Join(texts, "; "))
 		switch {
 		case err == nil:
+			applied = append(applied, chunk...)
 		case errors.Is(err, transport.ErrCutOff):
 			var others []fixLine
 			for _, l := range chunk {
@@ -134,6 +136,7 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 			}
 		case restart && (errors.Is(err, tasmota.ErrUnreachable) || errors.Is(err, tasmota.ErrTimeout)):
 			// the device is restarting; the read-back tells whether it applied
+			applied = append(applied, chunk...)
 		default:
 			return fmt.Errorf("sending %s: %w", strings.Join(texts, "; "), err)
 		}
@@ -141,7 +144,7 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 	}
 	for _, chunk := range chunks(parsed) {
 		if err := send(chunk); err != nil {
-			return err
+			return f.saveAfterFailure(ctx, d, t, keep, parsed, applied, err)
 		}
 	}
 	if len(skipped) == len(parsed) {
@@ -163,6 +166,68 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 		return &SkippedError{Applied: len(parsed) - len(skipped), Skipped: skipped}
 	}
 	return nil
+}
+
+// saveAfterFailure ends a run in which a chunk failed after earlier ones went out. Those lines
+// are live on the device; with SaveData 0 (or a long save interval) they would vanish on its next
+// restart, so they are written to flash first, unless one of them saved by itself. The error says
+// what is on the device and what is not (the failed chunk may or may not have been applied, so it
+// is "not confirmed"), and still wraps the failure. With nothing applied the device is untouched
+// and cause is returned as it is.
+func (f *Fixer) saveAfterFailure(ctx context.Context, d model.Device, t tasmota.Target, keep string, parsed, applied []fixLine, cause error) error {
+	if len(applied) == 0 {
+		return cause
+	}
+	var saveErr error
+	if !savesItself(applied) {
+		saveErr = f.saveKeeping(ctx, d, t, keep)
+	}
+	var open []fixLine // not confirmed: the failed chunk and everything after it
+	for _, l := range parsed {
+		if !slices.Contains(applied, l) {
+			open = append(open, l)
+		}
+	}
+	state := fmt.Sprintf("partly applied: %d of %d settings are on the device and written to flash (%s)", len(applied), len(parsed), keyNames(applied))
+	if saveErr != nil {
+		state = fmt.Sprintf("partly applied: %d of %d settings are on the device but NOT written to flash (%v), so a restart loses them (%s)", len(applied), len(parsed), saveErr, keyNames(applied))
+	}
+	return fmt.Errorf("%s; not confirmed: %s: %w", state, keyNames(open), cause)
+}
+
+// savesItself reports whether a line that was sent writes the device's settings to flash: a
+// SaveData or a setting that restarts the device.
+func savesItself(sent []fixLine) bool {
+	for _, l := range sent {
+		if strings.EqualFold(l.key, "SaveData") || settings.RestartsDevice(l.key, l.value) {
+			return true
+		}
+	}
+	return false
+}
+
+// saveKeeping writes the settings to flash with SaveData, re-sending the current value (keep, read
+// before the first chunk, or read now when the batch needed none) so that it does not change.
+func (f *Fixer) saveKeeping(ctx context.Context, d model.Device, t tasmota.Target, keep string) error {
+	if keep == "" {
+		got, err := f.Reader.ReadKeys(ctx, d.ID, []string{"SaveData"})
+		if keep = got["SaveData"]; err != nil || keep == "" {
+			return errors.New("the current SaveData value could not be read")
+		}
+	}
+	if _, err := f.Client.Command(ctx, t, "SaveData "+keep); err != nil {
+		return err
+	}
+	return nil
+}
+
+// keyNames lists the settings of the lines by name.
+func keyNames(lines []fixLine) string {
+	names := make([]string, len(lines))
+	for i, l := range lines {
+		names[i] = l.key
+	}
+	return strings.Join(names, ", ")
 }
 
 // restartsAfterSkips reports whether a line that was actually sent restarts the device.

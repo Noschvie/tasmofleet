@@ -153,6 +153,131 @@ func TestApplyStopsOnTheFirstFailedSend(t *testing.T) {
 	}
 }
 
+// manyLines is n plain settings (SetOption00..), enough for several Backlog chunks.
+func manyLines(n int) []string {
+	lines := make([]string, n)
+	for i := range lines {
+		lines[i] = "SetOption" + string(rune('0'+i%10)) + string(rune('0'+i/10)) + " 1"
+	}
+	return lines
+}
+
+// failNthBacklog fails the n-th Backlog (1-based) and nothing else.
+func failNthBacklog(n int, err error) func(string) error {
+	seen := 0
+	return func(cmd string) error {
+		if !strings.HasPrefix(cmd, "Backlog ") {
+			return nil
+		}
+		if seen++; seen == n {
+			return err
+		}
+		return nil
+	}
+}
+
+// Why (#503): a device with SaveData 0 keeps what the first chunks changed in RAM only, so a
+// later chunk that fails must not end the run before the save: the changes that are live would
+// vanish on the next restart and the person would not know the device is partly changed. The
+// save goes out, and the error says what is on the device and what is not, so nobody reads
+// "sending ..." as "nothing happened".
+func TestApplyWritesEarlierChunksToFlashWhenALaterOneFails(t *testing.T) {
+	cause := tasmota.ErrTimeout
+	c := &fakeCmd{err: failNthBacklog(2, cause)}
+	r := &fakeRead{vals: map[string]string{"SaveData": "0"}}
+	lines := manyLines(20) // chunks of 8, 8 and 4
+	err := newFixer(c, r).Apply(context.Background(), model.Device{ID: 1}, lines)
+	if err == nil {
+		t.Fatal("a failed chunk was reported as success")
+	}
+	if count(c.sent, "Backlog ") != 2 || c.sent[len(c.sent)-1] != "SaveData 0" || count(c.sent, "SaveData") != 1 {
+		t.Fatalf("sent %q: want the two Backlogs that were tried, then exactly one SaveData with the current value", c.sent)
+	}
+	if !errors.Is(err, cause) {
+		t.Errorf("the cause is lost: %v", err)
+	}
+	msg := err.Error()
+	for _, want := range []string{"partly applied", "8 of 20", "written to flash", "SetOption00", "SetOption70", "not confirmed: SetOption80", "SetOption91"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("error lacks %q: %v", want, msg)
+		}
+	}
+	if strings.Contains(msg, "NOT written") {
+		t.Errorf("the save went out, the error must not say otherwise: %v", msg)
+	}
+}
+
+// Why (#503): when the save after the failed chunk fails too, the changes live only in RAM. The
+// error must say so ("a restart loses them"), not just report the chunk.
+func TestApplyReportsThatPartlyAppliedChangesAreNotSavedWhenTheSaveFailsToo(t *testing.T) {
+	secondBacklog := failNthBacklog(2, tasmota.ErrTimeout)
+	c := &fakeCmd{err: func(cmd string) error {
+		if strings.HasPrefix(cmd, "SaveData") {
+			return tasmota.ErrUnreachable
+		}
+		return secondBacklog(cmd)
+	}}
+	err := newFixer(c, &fakeRead{vals: map[string]string{"SaveData": "0"}}).Apply(context.Background(), model.Device{ID: 1}, manyLines(20))
+	if err == nil || !strings.Contains(err.Error(), "NOT written to flash") || !strings.Contains(err.Error(), "a restart loses them") {
+		t.Fatalf("err = %v", err)
+	}
+	if !errors.Is(err, tasmota.ErrTimeout) {
+		t.Errorf("the failed chunk's error is lost: %v", err)
+	}
+}
+
+// Why (#503): nothing was applied when the first chunk fails, so there is nothing to save and
+// the plain error stays (the device is untouched; a SaveData would only wear the flash).
+func TestApplySavesNothingWhenTheFirstChunkFails(t *testing.T) {
+	c := &fakeCmd{err: failNthBacklog(1, tasmota.ErrTimeout)}
+	err := newFixer(c, &fakeRead{vals: map[string]string{"SaveData": "0"}}).Apply(context.Background(), model.Device{ID: 1}, manyLines(20))
+	if !errors.Is(err, tasmota.ErrTimeout) || strings.Contains(err.Error(), "partly") || count(c.sent, "SaveData") != 0 || len(c.sent) != 1 {
+		t.Fatalf("err %v, sent %q", err, c.sent)
+	}
+}
+
+// Why (#503): when the batch holds a SaveData or a restarting line no SaveData value was read up
+// front, but the plain chunks that went out before the failure still sit in RAM; the value is read
+// then and the save goes out. When the read fails the error says the changes are not saved. A chunk
+// that itself saved (SaveData line) needs no second save.
+func TestApplySavesPartlyAppliedChunksOfABatchWithItsOwnSave(t *testing.T) {
+	restarting := append(manyLines(10), "Hostname plug") // chunk 1: 8 lines, chunk 2: 2 lines and the restart
+	saving := append(manyLines(10), "SaveData 0")        // chunk 1: 8 lines, chunk 2: 2 lines and the SaveData
+	t.Run("restarting batch", func(t *testing.T) {
+		c := &fakeCmd{err: failNthBacklog(2, errors.New("refused"))}
+		r := &fakeRead{vals: map[string]string{"SaveData": "0"}}
+		err := newFixer(c, r).Apply(context.Background(), model.Device{ID: 1}, restarting)
+		if err == nil || !strings.Contains(err.Error(), "8 of 11") || c.sent[len(c.sent)-1] != "SaveData 0" || len(r.calls) != 1 {
+			t.Fatalf("err %v, sent %q, reads %v", err, c.sent, r.calls)
+		}
+	})
+	t.Run("SaveData value unreadable", func(t *testing.T) {
+		c := &fakeCmd{err: failNthBacklog(2, errors.New("refused"))}
+		err := newFixer(c, &fakeRead{errs: []error{tasmota.ErrTimeout}}).Apply(context.Background(), model.Device{ID: 1}, saving)
+		if err == nil || !strings.Contains(err.Error(), "NOT written to flash") || count(c.sent, "SaveData") != 0 {
+			t.Fatalf("err %v, sent %q", err, c.sent)
+		}
+	})
+	t.Run("SaveData value not reported", func(t *testing.T) {
+		c := &fakeCmd{err: failNthBacklog(2, errors.New("refused"))}
+		err := newFixer(c, &fakeRead{}).Apply(context.Background(), model.Device{ID: 1}, saving)
+		if err == nil || !strings.Contains(err.Error(), "NOT written to flash") || count(c.sent, "SaveData") != 0 {
+			t.Fatalf("err %v, sent %q: no SaveData without a value to re-send", err, c.sent)
+		}
+	})
+	t.Run("a chunk that saved itself", func(t *testing.T) {
+		// chunk 1 carries the SaveData line, chunk 2 (the restart) fails: what is on the device is saved
+		lines := append([]string{"SaveData 0"}, manyLines(9)...) // chunk 1: SaveData + 7, chunk 2: 2 + Hostname
+		lines = append(lines, "Hostname plug")
+		c := &fakeCmd{err: failNthBacklog(2, errors.New("refused"))}
+		r := &fakeRead{}
+		err := newFixer(c, r).Apply(context.Background(), model.Device{ID: 1}, lines)
+		if err == nil || !strings.Contains(err.Error(), "written to flash") || count(c.sent, "SaveData") != 0 || len(r.calls) != 0 {
+			t.Fatalf("err %v, sent %q, reads %v", err, c.sent, r.calls)
+		}
+	})
+}
+
 // Why: Hostname and Topic restart the device, so the reply may never arrive.
 // That is not a failure; the read-back decides.
 func TestApplyToleratesTheRestartCuttingTheReply(t *testing.T) {
