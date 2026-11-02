@@ -1,5 +1,5 @@
 // Package quarantine parks known-flaky tests (tests only). A quarantined test
-// is skipped in every run except the nightly quarantine job in ci.yml, which
+// is skipped in every run except the nightly quarantine job in nightly.yml, which
 // sets TASMOFLEET_QUARANTINE=1 and retries. Each quarantined test names its
 // GitHub issue (label "flaky"); it is fixed or deleted within about two weeks
 // (CLAUDE.md "Running the gates").

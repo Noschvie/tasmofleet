@@ -2185,11 +2185,13 @@ re-sends Upgrade); lost Upgrade response; another tool changed OtaUrl; auth fail
 HTTP-only device without MQTT; flapping LWT; `{"Command":"Unknown"}` for Status on
 minimal.
 
-CI (`.github/workflows/ci.yml`): two tiers. FAST on every PR and push to `main` (lint, unit and integration tests
-from the cache, build, `@core` e2e in two shards, safety race and mutation when a `SAFETY` package changed;
-the `required` job gates the merge). FULL nightly, on tags and by dispatch (every e2e test, race on all
-packages, uncached tests, full mutation); a tag's image is published only after FULL passed. Details:
-CLAUDE.md "Test tiers in CI".
+CI (`.github/workflows/`): one workflow per trigger. `pr.yml` runs the FAST tier on every PR (lint, unit and
+integration tests from the cache, build, `@core` e2e in two shards, safety race and mutation when a `SAFETY` package
+changed; the `required` job gates the merge). `main.yml` publishes `:edge` and refreshes the Go caches, with no
+tests. `release.yml` runs on tags: the FAST tier plus the race tests of every `SAFETY` package, and publishes the
+image, the GitHub release and the demo site only after it passed. `nightly.yml` runs the FULL tier (every e2e test,
+race on all packages, uncached tests, full mutation, the Home Assistant app in a Supervisor) and failure-reports.
+Details: CLAUDE.md "Test tiers in CI".
 
 ---
 

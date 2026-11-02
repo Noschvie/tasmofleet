@@ -193,23 +193,40 @@ with e.g. `make check JOBS=4`. `make test` and `make integration` use the go tes
 the packages that have `//go:build integration` test files (found at run time, anywhere in the module); only `_test.go` files may carry the tag.
 `make check` runs `shards-check` only after a change to the Makefile, `tools/`, a `go.mod` or the package list (CI runs it every time).
 
-### Test tiers in CI (`.github/workflows/ci.yml`)
+### Test tiers in CI (`.github/workflows/`)
 
-- **FAST** (every pull request and push to `main`; `required` must be green to merge, target ≤ 5 min):
+One workflow per trigger. The file a run comes from is its tier; only `pr.yml` looks at the diff (docs-only,
+SAFETY package, catalogue, image paths). Every gate runs through the Makefile.
+
+| File                                             | Trigger                               | Runs                                                                                                              |
+| ------------------------------------------------ | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `pr.yml`                                         | `pull_request`                        | FAST: `changes`, `checks`, `mutation` (SAFETY PRs), link check, image build check, **`required`**                 |
+| `main.yml`                                       | push to `main`                        | `:edge` image and HA app image, Go cache refresh (compile and lint, no test), then `ghcr-cleanup`                 |
+| `release.yml`                                    | tag `v*`                              | `guards`, `checks` with safety race of all SAFETY packages, then `publish` (image), `release`, `pages`            |
+| `nightly.yml`                                    | cron 02:23 UTC, `workflow_dispatch`   | FULL: `checks` (e2e all, `-count=1`, catalogue), `race`, `mutation` (all), `quarantine`, `ha-app`, `ghcr-cleanup` |
+| `_checks.yml`, `_mutation.yml`, `_image.yml`     | `workflow_call` only                  | the shared jobs; the caller's `with:` says which (inputs `e2e`, `e2e_shards`, `testflags`, `safety_race`, `catalogue`, `scope`, `mode`) |
+| `ghcr-cleanup.yml`, `pages.yml`                  | `workflow_call`, `workflow_dispatch`  | registry pruning (manual run: dry-run preview), the demo site                                                     |
+
+- **FAST** (`pr.yml`; `required` must be green to merge, target ≤ 5 min):
   lint, unit and integration tests from the go test cache, build, and the `@core` e2e tests in two shards.
   When a PR changes a package listed in `SAFETY` (Makefile: fwselect, ota, tasmota, secretbox, auth, httpx,
-  policy, cmdpolicy), the race tests of the changed ones and `make mutation-changed` run too, and are then
+  policy, cmdpolicy, mqttcmd, transport, restore), the race tests of the changed ones and `make mutation-changed` run too, and are then
   required. CI runs mutation in four shards (`MUTATION_SHARD`, files dealt out by estimated cost, `tools/mutation-weights.txt`) and gates on their sum
   (`make mutation-sum`). CI restores the Go build/test cache (`.github/actions/go`, keyed on Go
   version and `go.sum`) and sets file mtimes from git (`tools/git-mtimes.sh`), so unchanged packages
-  are not retested.
-- **RELEASE** (tags `vX.Y.Z`): the FAST tier plus, always, the race tests of the
+  are not retested. Only runs on `main` save that cache (`main.yml`, `nightly.yml`): a cache saved by a PR or a tag run
+  can be restored by nothing else and only evicts main's (#476).
+- **Push to `main`** (`main.yml`): no test runs. `main` moves only by a fast-forward push of a PR head that was
+  green, so a rerun would repeat the PR (#478). The job `cache-warm` compiles every test binary without running one
+  and lints, to refresh the caches the PRs restore; the e2e caches are refreshed by the nightly.
+- **RELEASE** (`release.yml`, tags `vX.Y.Z`): the FAST tier plus, always, the race tests of the
   `SAFETY` packages (a tag has no PR base, so every one of them runs), and no mutation. A tag without its `CHANGELOG.md`
-  section, or a patch tag that changes a migration, fails at once. The image is published (ci.yml job
-  `publish` calling `image.yml`) and the GitHub release made only after this tier passed.
-- **FULL** (nightly cron on `main`, manual dispatch): additionally every e2e test in three shards, every
-  unit test with the race detector (two shards: `internal/auth` alone, all other packages; `make shards-check` fails when a package is in no shard), the command catalogue check, uncached test runs and the full mutation
-  run. It blocks no release; when it fails, the job `nightly-failure-issue` opens an issue "Nightly FULL failed on main (date)" (labels `ci`, `flaky`) with the failed jobs, or comments on the one that is still open. Layout and visual regressions, race outside the safety packages and
+  section, or a patch tag that changes a migration, fails at once (job `guards`). The image is published (job
+  `publish` calling `_image.yml` with `mode: release`, the only way to push a tag image), then the GitHub release is made, then
+  the demo site is deployed, each only after the one before succeeded.
+- **FULL** (`nightly.yml`: cron on `main`, manual dispatch): additionally every e2e test in three shards, every
+  unit test with the race detector (two shards: `internal/auth` alone, all other packages; `make shards-check` fails when a package is in no shard), the command catalogue check, uncached test runs, the full mutation
+  run, and the Home Assistant app in a real Supervisor (`tools/ha-app-devcontainer-test.sh`). It blocks no release; when it fails on the schedule, the job `nightly-failure-issue` opens an issue "Nightly FULL failed on main (date)" (labels `ci`, `flaky`) with the failed jobs, or comments on the one that is still open. A manual run never opens an issue and only previews the registry cleanup. Layout and visual regressions, race outside the safety packages and
   the full mutation run (a PR that changes a safety package already gates its own mutation) are caught here, so the nightly FULL is the place to look for them; a
   failure is fixed through an issue, not by holding a release.
 - **Which e2e tests are `@core`**: smoke, sign-in and authorization (header, local, OIDC, standalone,
@@ -219,12 +236,14 @@ the packages that have `//go:build integration` test files (found at run time, a
   FULL. Add a test to core when it guards a safety rule or the main path; keep the core run short.
 - **Quarantine**: a test that fails without a code cause gets a GitHub issue (label `flaky`, failure evidence)
   and is quarantined: Playwright tag `@quarantine`, or `quarantine.Test(t, "<issue URL>")` from
-  `internal/testutil/quarantine` for Go tests. Quarantined tests run only in the nightly `quarantine` job,
+  `internal/testutil/quarantine` for Go tests. Quarantined tests run only in the `quarantine` job of `nightly.yml`,
   with retries, and never block a PR or a release. Fix or delete each one within about two weeks; the fixing
   change removes the tag and closes the issue.
 
-Docs-only changes skip CI and run the link check (`tools/check-doc-links.py`) instead; see the path list
-in `.github/workflows/ci.yml`.
+Docs-only PRs skip the checks and run the link check (`tools/check-doc-links.py`) instead; the list of docs
+that are safe to ignore (and the ones a test reads, which are not) is in the header of `.github/workflows/pr.yml`.
+Third-party actions are pinned to a full commit SHA with the version in a comment (`uses: owner/repo@<sha> # vX.Y.Z`);
+Renovate keeps both current. Reusable workflows take their secrets by name (`secrets:`), never `secrets: inherit`.
 
 ## Commits
 
@@ -274,8 +293,8 @@ in `.github/workflows/ci.yml`.
   report by someone else that led to a change, is credited at the end of that change's
   CHANGELOG line as `(#N, thanks @handle)`. Do not credit the maintainer's own work.
 - Tags are signed (`git tag -s vX.Y.Z`) and only set on a green commit of `main`. The tag
-  runs the RELEASE tier (FAST plus race tests of the safety packages, no mutation), and the image is
-  published only when it passed.
+  runs the RELEASE tier (`release.yml`: FAST plus race tests of the safety packages, no mutation), and the
+  image, the GitHub release and the demo site follow only when it passed.
 - **Announce every release** in the one pinned Announcements discussion "TasmoFleet releases" (#315),
   after the tag run has published the image and the GitHub release. Edit its body (`updateDiscussion`):
   the "Current release" section shows `TasmoFleet X.Y.Z "Name"`, the image tags
@@ -307,7 +326,7 @@ in `.github/workflows/ci.yml`.
 ## Pull requests and the protected main
 
 `main` is protected on GitHub by the ruleset `main`: no force pushes, no deletion, linear
-history, signed commits, PR and the status check `required` from `ci.yml`. Every change,
+history, signed commits, PR and the status check `required` from `pr.yml`. Every change,
 docs-only ones included, goes through a pull request: branch, push, open a PR against `main`,
 wait until CI is green on the PR, then the maintainer merges it **fast-forward only** by
 pushing the PR head to `main`, so the commits keep their own signatures:
@@ -322,10 +341,10 @@ check is green. If `main` moved, the branch is rebased (and re-signed), pushed a
 again before the fast-forward push; there is no other merge path. Never merge through the GitHub
 button: the only method enabled there is rebase, and GitHub's rebase commits are unsigned, so
 the ruleset rejects them.
-`ci.yml` runs the FAST tier on every PR: a `changes` job detects docs-only PRs (heavy jobs
+`pr.yml` runs the FAST tier on every PR: a `changes` job detects docs-only PRs (heavy jobs
 skipped) and PRs that touch a `SAFETY` package (safety jobs added), and the final `required`
-job passes only when every job that had to run passed; a skip counts only when the tier did
-not ask for that job. `docs.yml` (link check) reports its own, non-required
+job passes only when every job that had to run passed; a skip counts only when the PR did
+not ask for that job. The link check in `pr.yml` reports its own, non-required
 status. No approvals are required (single maintainer). Release tags are still pushed
 directly, on a green commit of `main`.
 

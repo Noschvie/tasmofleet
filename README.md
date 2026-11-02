@@ -11,7 +11,7 @@ A self-hosted fleet manager for [Tasmota](https://tasmota.github.io/) devices: c
 backups with restore, a settings policy with compliance view, safe bulk firmware updates, live state
 and fleet-wide commands in one Go binary with an embedded SQLite database.
 
-[![CI](https://github.com/nofuturekid/tasmofleet/actions/workflows/ci.yml/badge.svg)](https://github.com/nofuturekid/tasmofleet/actions/workflows/ci.yml)
+[![CI](https://github.com/nofuturekid/tasmofleet/actions/workflows/main.yml/badge.svg?branch=main)](https://github.com/nofuturekid/tasmofleet/actions/workflows/main.yml)
 [![Release](https://img.shields.io/github/v/release/nofuturekid/tasmofleet?sort=semver)](https://github.com/nofuturekid/tasmofleet/releases)
 [![License: AGPL-3.0-or-later](https://img.shields.io/github/license/nofuturekid/tasmofleet)](LICENSE)
 [![Docker Hub pulls](https://img.shields.io/docker/pulls/nofuturekid/tasmofleet?logo=docker&logoColor=white)](https://hub.docker.com/r/nofuturekid/tasmofleet)

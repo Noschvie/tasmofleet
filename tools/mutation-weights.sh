@@ -3,7 +3,7 @@
 # runnable (covered) mutants, from a gremlins dry run. tools/mutation-gate.sh multiplies it by the
 # package's cost line to deal files out to the CI shards (make mutation-shards-check shows the
 # result). The "cost" lines are seconds per mutant x 100, measured from the five FULL runs of
-# 2026-10-31 (ci.yml, mutation jobs); keep them when regenerating, update them by hand when the
+# 2026-10-31 (nightly.yml, mutation jobs); keep them when regenerating, update them by hand when the
 # shards drift apart again.
 #
 #   tools/mutation-weights.sh <package>...

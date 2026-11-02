@@ -6,7 +6,7 @@ real Home Assistant. Never test on the household's instance.
 
 ## What CI proves without a Supervisor
 
-`tools/ha-app-smoke.sh <ha-image> [<default-image>]` (job `ha-app` of `image.yml`, on pull requests that touch the
+`tools/ha-app-smoke.sh <ha-image> [<default-image>]` (job `ha-app` of `_image.yml`, on pull requests that touch the
 image, the profile or the app folder, and on `main`) first checks the image metadata: the `ha` image runs as root and has
 the `io.hass.type/version/arch` labels, the default image stays non-root and has none. It then starts the `ha` image
 like the Supervisor does: a fresh root-owned `/data` volume that is not filled from the image, an `options.json`,
@@ -57,7 +57,7 @@ loads the image into a local registry, checks that the Supervisor accepts `confi
 installs and starts the app with the option `initial_admin_password` (the log must show the admin created from it),
 checks `/readyz` on the mapped port, and runs the backup, uninstall, install, restore round trip (the `secret.key` of
 the first install must come back). Every wait is bounded; the whole script is limited to 25 minutes. The workflow
-`.github/workflows/ha-app.yml` runs it nightly and by `workflow_dispatch`, never on pull requests, with no secrets.
+job `ha-app` of `.github/workflows/nightly.yml` runs it nightly and by `workflow_dispatch`, never on pull requests, with no secrets.
 
 An update through the firmware port, done by hand on 2026-11-01 (#442), in the same devcontainer:
 

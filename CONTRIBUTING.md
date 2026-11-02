@@ -9,7 +9,7 @@ please open an issue before larger changes to agree on the approach.
   what happened. Logs help; remove passwords and addresses you do not want to share.
   The version is shown in the page header (and on the About page); it is the first thing to
   quote. A build from the `edge` image reads like `0.15.2+edge (0123456789ab)`.
-- **Pull requests:** one topic per PR, against `main`. CI (`.github/workflows/ci.yml`)
+- **Pull requests:** one topic per PR, against `main`. CI (`.github/workflows/pr.yml`)
   must be green. Run `make check` locally first; for UI changes also `make e2e`.
 - **Rules:** [CLAUDE.md](CLAUDE.md) is the working guide for humans and AI agents
   alike: test first (tests say why the behaviour matters), no network in tests (use
