@@ -1,0 +1,194 @@
+# The test jobs the other workflows share (reusable; never triggered on its own).
+# Which of them run is decided by the CALLER's inputs, not computed here:
+#   pr.yml       e2e core in two shards; safety-race and catalogue when the PR changes them
+#   release.yml  e2e core in two shards; safety-race of every SAFETY package (no base to diff against)
+#   nightly.yml  e2e all in three shards, uncached tests (-count=1), catalogue
+# Every gate runs through the Makefile, so the same commands work locally.
+name: checks
+
+on:
+  workflow_call:
+    inputs:
+      e2e:
+        description: "core: the @core e2e tests; all: every e2e test"
+        type: string
+        default: core
+      e2e_shards:
+        description: JSON list of Playwright shards
+        type: string
+        default: '["1/2","2/2"]'
+      testflags:
+        description: TESTFLAGS for make test and make integration (-count=1 forces fresh runs)
+        type: string
+        default: ""
+      safety_race:
+        description: run the race tests of the SAFETY packages (changed ones when base is set, else all)
+        type: boolean
+        default: false
+      base:
+        description: PR base sha that safety-race diffs against; empty on a tag
+        type: string
+        default: ""
+      catalogue:
+        description: check the Tasmota command catalogue against the pinned Tasmota source
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  NICE: ""
+
+jobs:
+  lint:
+    name: templ, fmt, golangci-lint, govulncheck
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: ./.github/actions/go
+        with:
+          name: lint
+          paths: |
+            ~/.cache/golangci-lint
+      # golangci-lint runs govet and staticcheck with the same default check sets as
+      # make vet and make staticcheck (govet: go vet's analyzers plus inline;
+      # staticcheck: its default set plus SA9003), so those two are not run again (#479).
+      - run: make templ-check fmt-check lint vuln shards-check
+
+  test:
+    name: unit tests, build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0 # git-mtimes.sh
+      - uses: ./.github/actions/go
+        with:
+          name: test
+          mtimes: "true"
+      - env:
+          TESTFLAGS: ${{ inputs.testflags }}
+        run: make test build
+
+  integration:
+    name: integration tests (real decode-config)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0 # git-mtimes.sh
+      - uses: ./.github/actions/go
+        with:
+          name: integration
+          mtimes: "true"
+      - name: install decode-config (pinned, verified)
+        env:
+          DECODER_VERSION: v16.0.0
+          DECODER_SHA256: b92b8465fec5a940306cb24becb1365c0b4e56fd6695445a890ff4aec6287d6c
+        run: |
+          set -eu
+          curl -fsSL -o "$RUNNER_TEMP/dc.tgz" "https://github.com/tasmota/decode-config/releases/download/$DECODER_VERSION/decode-config-ubuntu-24.04.tar.gz"
+          echo "$DECODER_SHA256  $RUNNER_TEMP/dc.tgz" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/decode-config" && tar -xzf "$RUNNER_TEMP/dc.tgz" -C "$RUNNER_TEMP/decode-config" decode-config
+          "$RUNNER_TEMP/decode-config/decode-config" --version
+      - name: integration tests
+        env:
+          REQUIRE_DECODER: "1"
+          TESTFLAGS: ${{ inputs.testflags }}
+        run: DECODER_PATH="$RUNNER_TEMP/decode-config/decode-config" make integration
+
+  e2e:
+    name: e2e ${{ inputs.e2e }} (${{ matrix.shard }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(inputs.e2e_shards) }}
+    container:
+      # The image is the browser cache: its browsers and fonts match
+      # @playwright/test in e2e/package.json; bump both together.
+      image: mcr.microsoft.com/playwright:v1.64.1-noble
+    steps:
+      - name: install make (not in the Playwright image)
+        run: apt-get update -qq && apt-get install -y -qq --no-install-recommends make >/dev/null
+      - uses: actions/checkout@v7.0.1
+      # The job container runs as root on a workspace owned by the runner user;
+      # without this git refuses the repository and go build cannot stamp VCS info.
+      - name: trust the workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: ./.github/actions/go
+        with:
+          name: e2e
+      - uses: actions/cache@v6.1.0
+        with:
+          path: ~/.npm
+          key: npm-${{ hashFiles('e2e/package-lock.json') }}
+      - name: install e2e dependencies
+        run: make e2e-deps
+      - name: e2e tests
+        env:
+          CI: "true"
+          TARGET: ${{ inputs.e2e == 'all' && 'e2e' || 'e2e-core' }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          # One worker per two cores: every worker runs its own app, simulator
+          # fleet and browser, and more made layout and timing tests flaky.
+          n=$(( $(nproc) / 2 )); [ "$n" -lt 1 ] && n=1
+          # The MQTT specs are not sharded: the first shard runs them once.
+          mqtt=1; [ "${SHARD%%/*}" = 1 ] || mqtt=0
+          E2E_WORKERS=$n make "$TARGET" E2E_ARGS="--shard=$SHARD" E2E_MQTT=$mqtt
+      - name: upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: playwright-report-${{ strategy.job-index }}
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 7
+
+  # The race tests of the SAFETY packages (Makefile): the ones a PR changed, or
+  # all of them when there is no base to diff against (a tag).
+  safety-race:
+    name: safety race tests (${{ inputs.base != '' && 'changed' || 'all' }} safety packages)
+    if: inputs.safety_race
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0 # diff against the PR base
+      - uses: ./.github/actions/go
+        with:
+          name: race
+          save: "false"
+      - env:
+          BASE: ${{ inputs.base }}
+          AUTH_PARTS: "4"
+        run: make safety-race BASE="$BASE"
+
+  # The checked-in Tasmota command catalogue must equal a regeneration from the pinned
+  # Tasmota source (the only job that downloads it; the unit tests never use the network).
+  catalogue:
+    name: Tasmota command catalogue
+    if: inputs.catalogue
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: ./.github/actions/go
+        with:
+          name: catalogue
+      - id: pin
+        run: echo "sha=$(sed -n '/^TASMOTA_PINS/,/^TASMOTA_CACHE/p' Makefile | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@v6.1.0
+        with:
+          path: ~/.cache/tasmofleet
+          key: tasmota-src-${{ steps.pin.outputs.sha }}
+      - run: make catalogue-check
+      - run: make docs-anchors-check

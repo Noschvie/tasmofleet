@@ -1,61 +1,48 @@
-# Container image for tasmofleet, published to ghcr.io/<owner>/tasmofleet.
-#  - tag vX.Y.Z: called by ci.yml (job "publish") only after the RELEASE tier
-#    passed on the tag; fails unless CHANGELOG.md has a "## X.Y.Z" section,
-#    then builds and pushes :X.Y.Z and :latest (a pre-release tag
-#    vX.Y.Z-suffix pushes only :X.Y.Z-suffix). Tags do not trigger this
-#    workflow on their own.
-#  - push to main: build and push :edge.
-#  - pull requests that touch the Dockerfile or the module files: build only,
-#    nothing is pushed (proves the Dockerfile still works).
-# ghcr authentication is the workflow's GITHUB_TOKEN (packages: write). When the
-# repository secrets DOCKERHUB_USERNAME and DOCKERHUB_TOKEN exist, the same build
-# is also pushed under the same tags to docker.io/<DOCKERHUB_USERNAME>/tasmofleet
-# (no rebuild); without them (forks) that part is skipped.
+# Container image for tasmofleet, published to ghcr.io/<owner>/tasmofleet (reusable; never
+# triggered on its own). The caller names the kind of build with `mode`, and the workflow refuses
+# a mode that does not match the ref it runs for:
+#  - release (release.yml, tag vX.Y.Z, only after the RELEASE tier passed): fails unless
+#    CHANGELOG.md has a "## X.Y.Z" section, then builds and pushes :X.Y.Z and :latest (a
+#    pre-release tag vX.Y.Z-suffix pushes only :X.Y.Z-suffix). Nothing else can publish a tag image.
+#  - edge (main.yml, push to main): build and push :edge.
+#  - check (pr.yml, pull requests that touch the Dockerfile, the module files or the HA app):
+#    build only, nothing is pushed (proves the Dockerfile still works).
+# ghcr authentication is the workflow's GITHUB_TOKEN (packages: write, granted by the caller). When the
+# secrets DOCKERHUB_USERNAME and DOCKERHUB_TOKEN are passed, the same build is also pushed under the
+# same tags to docker.io/<DOCKERHUB_USERNAME>/tasmofleet (no rebuild); without them (forks, check)
+# that part is skipped.
 # The image is a multi-arch manifest (linux/amd64 and linux/arm64) under every tag. The Go binary is
 # cross-compiled on the amd64 runner (no emulation); the arm64 image carries the unofficial
 # aarch64 decoder build (Dockerfile).
 # Before anything is pushed, the arm64 image is built, loaded and started under QEMU (version, and
 # the decoder decodes a real backup fixture).
 # The Home Assistant app image (Dockerfile target "ha", deploy/homeassistant) is built and smoke-tested in its
-# own job (ha-app) on every run, so it can never block the Docker/Unraid publish; it is not pushed anywhere
-# yet, publishing it comes with #444.
-# Layers are cached in the GitHub Actions cache.
+# own job (ha-app) in every mode but release, so it can never block the Docker/Unraid publish; it is not pushed
+# anywhere yet, publishing it comes with #444.
+# Layers are cached in the GitHub Actions cache; only main (mode edge) writes it, because a cache saved by a
+# pull request or a tag run cannot be restored by any other ref (#476).
 name: image
 
 on:
   workflow_call:
-  push:
-    branches: [main]
-    paths-ignore:
-      - "**/*.md"
-      - "docs/**"
-      - "e2e/**"
-      - "design/**"
-      - "testdata/**"
-      - ".github/workflows/ci.yml"
-      - ".github/workflows/docs.yml"
-  pull_request:
-    paths:
-      - "Dockerfile"
-      - ".dockerignore"
-      - "go.mod"
-      - "go.sum"
-      - ".github/workflows/image.yml"
-      - "internal/config/haprofile.go"
-      - "tools/ha-app-smoke.sh"
-      - "deploy/homeassistant/**"
-  workflow_dispatch:
+    inputs:
+      mode:
+        description: "release, edge or check (see above)"
+        type: string
+        required: true
+    secrets:
+      DOCKERHUB_USERNAME:
+        description: Docker Hub copy of the pushed tags; without it only ghcr is pushed
+        required: false
+      DOCKERHUB_TOKEN:
+        required: false
 
 permissions:
   contents: read
 
-concurrency:
-  group: image-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   image:
-    name: build image (push on main and tags)
+    name: build image (${{ inputs.mode }})
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -66,6 +53,7 @@ jobs:
       - name: version and tags
         id: v
         env:
+          MODE: ${{ inputs.mode }}
           EVENT: ${{ github.event_name }}
           REF_TYPE: ${{ github.ref_type }}
           REF_NAME: ${{ github.ref_name }}
@@ -78,28 +66,39 @@ jobs:
           set -eu
           image="ghcr.io/$(echo "$OWNER" | tr 'A-Z' 'a-z')/tasmofleet"
           push=false
-          if [ "$REF_TYPE" = tag ]; then
-            # Release images come only from ci.yml after the RELEASE tier passed.
-            [ "$EVENT" = push ] || { echo "tag images are published by ci.yml (job publish), not by $EVENT" >&2; exit 1; }
-            tag=$REF_NAME
-            echo "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' || {
-              echo "tag '$tag' is not vX.Y.Z" >&2
+          # The mode must match the ref this run is for: a tag image comes only from a tag push (release.yml),
+          # :edge only from a push to main, and a check never pushes.
+          case "$MODE" in
+            release)
+              [ "$REF_TYPE" = tag ] && [ "$EVENT" = push ] || { echo "release images are built for a tag push (release.yml), not for $EVENT $REF" >&2; exit 1; }
+              tag=$REF_NAME
+              echo "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' || {
+                echo "tag '$tag' is not vX.Y.Z" >&2
+                exit 1
+              }
+              # Release guard: CHANGELOG.md must have the section for this tag.
+              make changelog-check TAG="$tag"
+              version=${tag#v}
+              tags="$image:$version"
+              case "$version" in *-*) ;; *) tags="$tags,$image:latest" ;; esac
+              push=true
+              ;;
+            edge)
+              [ "$EVENT" = push ] && [ "$REF" = refs/heads/main ] || { echo ":edge is built for a push to main (main.yml), not for $EVENT $REF" >&2; exit 1; }
+              version="edge-$(echo "$SHA" | cut -c1-12)"
+              tags="$image:edge"
+              push=true
+              ;;
+            check)
+              [ "$REF_TYPE" != tag ] || { echo "a check build never runs for a tag ($REF)" >&2; exit 1; }
+              version="pr-$(echo "$SHA" | cut -c1-12)"
+              tags="$image:pr"
+              ;;
+            *)
+              echo "unknown mode '$MODE'" >&2
               exit 1
-            }
-            # Release guard: CHANGELOG.md must have the section for this tag.
-            make changelog-check TAG="$tag"
-            version=${tag#v}
-            tags="$image:$version"
-            case "$version" in *-*) ;; *) tags="$tags,$image:latest" ;; esac
-            push=true
-          elif [ "$EVENT" != pull_request ] && [ "$REF" = refs/heads/main ]; then
-            version="edge-$(echo "$SHA" | cut -c1-12)"
-            tags="$image:edge"
-            push=true
-          else
-            version="pr-$(echo "$SHA" | cut -c1-12)"
-            tags="$image:pr"
-          fi
+              ;;
+          esac
           # Same build, same tags on Docker Hub (edge included, so both registries match); only
           # when pushing and both secrets exist.
           dockerhub=false
@@ -136,7 +135,7 @@ jobs:
       # never deleted.
       - name: previous edge
         id: prev
-        if: steps.v.outputs.push == 'true' && github.ref_type != 'tag'
+        if: steps.v.outputs.push == 'true' && inputs.mode == 'edge'
         env:
           OWNER: ${{ github.repository_owner }}
           DOCKERHUB: ${{ steps.v.outputs.dockerhub }}
@@ -168,7 +167,7 @@ jobs:
           tags: tasmofleet:smoke-arm64
           build-args: VERSION=${{ steps.v.outputs.version }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: ${{ inputs.mode == 'edge' && 'type=gha,mode=max' || '' }}
       - name: arm64 smoke run
         run: |
           set -eu
@@ -202,7 +201,7 @@ jobs:
             org.opencontainers.image.version=${{ steps.v.outputs.version }}
             org.opencontainers.image.licenses=AGPL-3.0-or-later
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: ${{ inputs.mode == 'edge' && 'type=gha,mode=max' || '' }}
       # Delete the manifest the old edge pointed to, unless edge did not move or latest still uses
       # it. A failure here only warns: the image is already published.
       - name: delete the previous edge
@@ -255,7 +254,7 @@ jobs:
           fi
       # The Docker Hub overview follows deploy/dockerhub/README.md with every release.
       - name: Docker Hub overview
-        if: steps.v.outputs.dockerhub == 'true' && github.ref_type == 'tag'
+        if: steps.v.outputs.dockerhub == 'true' && inputs.mode == 'release'
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -272,11 +271,11 @@ jobs:
 
   # Home Assistant app image (Dockerfile target "ha"), built and tested apart from the job above: a
   # failure here is red on its own and never stops the Docker/Unraid image from being published.
-  # Not run for tags: the called workflow's result gates the GitHub release (ci.yml job release), and the
+  # Not run for a release: this workflow's result gates the GitHub release (release.yml), and the
   # app image is not part of the release yet. The tagged commit has run this job on main.
   ha-app:
     name: Home Assistant app image (build and test, not published)
-    if: github.ref_type != 'tag'
+    if: inputs.mode != 'release'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:

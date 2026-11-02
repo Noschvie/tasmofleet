@@ -1,20 +1,16 @@
 # The static demo on GitHub Pages (https://nofuturekid.github.io/tasmofleet/): `make demo` runs
 # the real binaries against tasmofleet-devenv with the design fixture fleet (60 simulated
 # devices, documentation addresses only) and saves the pages an admin reaches as static HTML
-# (e2e/tests/demo-site.spec.ts). Built on release tags and by hand; the output is never committed.
+# (e2e/tests/demo-site.spec.ts). Called by release.yml after the GitHub release was made, and by hand;
+# the output is never committed.
 name: pages
 
 on:
-  push:
-    tags: ["v*"]
+  workflow_call:
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: pages
-  cancel-in-progress: false
 
 env:
   NICE: ""
@@ -25,7 +21,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     container:
-      # Browsers in this image match @playwright/test in e2e/package.json; bump both together (as in ci.yml).
+      # Browsers in this image match @playwright/test in e2e/package.json; bump both together (as in _checks.yml).
       image: mcr.microsoft.com/playwright:v1.64.1-noble
     steps:
       - name: install make (not in the Playwright image)
@@ -56,6 +52,10 @@ jobs:
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    # One deployment at a time (a job-level group: this workflow is also called by release.yml).
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     permissions:
       pages: write
       id-token: write

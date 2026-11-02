@@ -1,0 +1,175 @@
+# Pull requests: the FAST tier. One workflow per trigger (CLAUDE.md "Test tiers in CI"):
+# pr.yml (this), main.yml (push to main), release.yml (tags), nightly.yml (cron). The jobs
+# they share are the reusable workflows _checks.yml, _mutation.yml and _image.yml; the file
+# a run comes from says which tier it is, nothing is computed at run time except which
+# parts of the repository the PR touched (job "changes").
+#
+# FAST: lint, unit and integration tests from the go test cache, the @core e2e tests in two
+# shards, and, when the PR changes a SAFETY package (Makefile), its race tests and the
+# mutation gate of the changed mutation packages. Target: "required" green in <= 5 min.
+# Docs-only PRs skip all of that (the link check still runs). The job "required" is the
+# single status check for branch protection; it always runs.
+#
+# No paths filter on the trigger: "changes" decides, and "required" always reports.
+# Docs that are NOT safe to ignore, because a test or the build reads them: docs/security
+# (cmdpolicy test reads command-policy.md), docs/configuration.md (configdoc_test checks it
+# against the env tags), docs/spec (design-system.md is read by a test), assets/branding
+# (branding test compares copies), deploy (metrics/config tests read it), design/v2 (token
+# test), testdata, internal/web/static and templates (embedded).
+name: pr
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NICE: ""
+
+jobs:
+  changes:
+    name: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.classify.outputs.code }}
+      safety: ${{ steps.classify.outputs.safety }}
+      catalogue: ${{ steps.classify.outputs.catalogue }}
+      image: ${{ steps.classify.outputs.image }}
+      markdown: ${{ steps.classify.outputs.markdown }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - id: classify
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          # Fail closed: without a base or a diff, the gate fails instead of
+          # treating the PR as docs-only.
+          [ -n "$BASE" ] || { echo "no base sha"; exit 1; }
+          files=$(git diff --name-only "$BASE"...HEAD)
+          [ -n "$files" ] || { echo "empty diff"; exit 1; }
+          echo "$files"
+          code=false
+          safety=false
+          catalogue=false
+          image=false
+          markdown=false
+          for f in $files; do
+            case "$f" in
+              docs/research/*|docs/runbooks/*|docs/design/*|README.md|ROADMAP.md|CONTRIBUTING.md|SECURITY.md|CHANGELOG.md|CLAUDE.md|NOTICE|LICENSE) ;;
+              *) code=true ;;
+            esac
+            case "$f" in
+              *.md) markdown=true ;;
+            esac
+            # The image build check: what the Dockerfile reads and the Home Assistant app.
+            case "$f" in
+              Dockerfile|.dockerignore|go.mod|go.sum|.github/workflows/_image.yml|internal/config/haprofile.go|tools/ha-app-smoke.sh|deploy/homeassistant/*) image=true ;;
+            esac
+          done
+          # The SAFETY list lives in the Makefile (make safety uses it too).
+          dirs=$(sed -n 's/^SAFETY *:= *//p' Makefile | tr ' ' '\n' | sed 's|^\./||; /^$/d')
+          [ -n "$dirs" ] || { echo "no SAFETY list in the Makefile"; exit 1; }
+          for d in $dirs; do
+            if echo "$files" | grep -q "^$d/"; then safety=true; fi
+          done
+          # The catalogue generator, its data and the pinned source (Makefile) decide the catalogue job.
+          if echo "$files" | grep -Eq '^(internal/tasmotacmd/|cmd/tasmofleet-catalogue/|Makefile$)'; then catalogue=true; fi
+          {
+            echo "code=$code"
+            echo "safety=$safety"
+            echo "catalogue=$catalogue"
+            echo "image=$image"
+            echo "markdown=$markdown"
+          } >> "$GITHUB_OUTPUT"
+          echo "code=$code safety=$safety catalogue=$catalogue image=$image markdown=$markdown"
+
+  # lint, unit and integration tests, build, e2e core; safety-race when a SAFETY package
+  # changed, catalogue when the generator, its data or the pinned source changed.
+  checks:
+    name: checks
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    uses: ./.github/workflows/_checks.yml
+    with:
+      e2e: core
+      e2e_shards: '["1/2","2/2"]'
+      safety_race: ${{ needs.changes.outputs.safety == 'true' }}
+      base: ${{ github.event.pull_request.base.sha }}
+      catalogue: ${{ needs.changes.outputs.catalogue == 'true' }}
+
+  # The mutation gate of the changed mutation packages, only for a PR that changes a SAFETY package.
+  mutation:
+    name: mutation
+    needs: changes
+    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.safety == 'true'
+    uses: ./.github/workflows/_mutation.yml
+    with:
+      scope: changed
+      base: ${{ github.event.pull_request.base.sha }}
+
+  # Not part of "required" (the link check gates nothing yet, #482). Runs whenever a Markdown file changed.
+  links:
+    name: relative Markdown links
+    needs: changes
+    if: needs.changes.outputs.markdown == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - run: python3 -I tools/check-doc-links.py .
+
+  # Build only, nothing is pushed: proves the Dockerfile and the Home Assistant app image still
+  # build. Not part of "required". The job grants what the called workflow asks for; a fork's
+  # token stays read-only whatever is asked, and no secret is passed.
+  image:
+    name: image
+    needs: changes
+    if: needs.changes.outputs.image == 'true'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/_image.yml
+    with:
+      mode: check
+
+  # The one status that branch protection on main requires. It always runs and
+  # passes only when every job that had to run passed. "checks" and "mutation" are
+  # reusable workflows: each is green only when every job inside it that was asked for
+  # (by the inputs above) ran and succeeded. A skip counts only when this PR did not ask
+  # for that job: everything for a docs-only PR, mutation when no SAFETY package changed.
+  # Any other result (failure, cancelled, or a skip caused by a failed dependency) fails it.
+  required:
+    name: required
+    needs: [changes, checks, mutation]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: all gates passed
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          CODE: ${{ needs.changes.outputs.code }}
+          SAFETY: ${{ needs.changes.outputs.safety }}
+          CHECKS: ${{ needs.checks.result }}
+          MUTATION: ${{ needs.mutation.result }}
+        run: |
+          echo "changes=$CHANGES code=$CODE safety=$SAFETY | checks: $CHECKS | mutation: $MUTATION"
+          [ "$CHANGES" = success ] || exit 1
+          docs=false; [ "$CODE" = false ] && docs=true
+          check() { # check <skip allowed> <result>
+            [ "$2" = success ] && return 0
+            [ "$2" = skipped ] && [ "$1" = true ] && return 0
+            echo "unexpected result: $2"; exit 1
+          }
+          check "$docs" "$CHECKS"
+          m=true; [ "$SAFETY" = true ] && m=$docs
+          check "$m" "$MUTATION"

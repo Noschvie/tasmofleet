@@ -1,0 +1,107 @@
+# Release: a tag vX.Y.Z (signed, set on a green commit of main; CLAUDE.md "Releases").
+#
+#   guards -+
+#           +--> publish --> release --> pages
+#   checks -+
+#
+# guards   the CHANGELOG.md section for the tag exists and a patch tag changes no migration,
+#          so a bad tag fails in seconds (the image build checks the section again).
+# checks   the RELEASE tier: the FAST tier (lint, unit and integration tests from the go test
+#          cache, build, the @core e2e tests in two shards) plus the race tests of EVERY
+#          SAFETY package (a tag has no PR base to diff against). No mutation: every PR that
+#          changes a SAFETY package already passed it, and the nightly runs all of it.
+# publish  the image to ghcr.io and Docker Hub (_image.yml, mode release), only when guards and
+#          checks succeeded. The only job that can push a tag image: _image.yml refuses mode
+#          release for anything but a tag push.
+# release  the GitHub release, its notes the CHANGELOG.md section, only when publish succeeded.
+# pages    the static demo, only when the release was made.
+# A tag whose guards or checks fail publishes no image, no release and no pages.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+# Never cancel a release in flight; a second run for the same tag waits.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  NICE: ""
+
+jobs:
+  guards:
+    name: changelog and migration guards
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0 # migration-guard compares with the previous tag
+      - env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          make changelog-check TAG="$TAG"
+          # Patch releases never touch the migrations.
+          make migration-guard TAG="$TAG" REV="$GITHUB_SHA"
+
+  checks:
+    name: checks
+    uses: ./.github/workflows/_checks.yml
+    with:
+      e2e: core
+      e2e_shards: '["1/2","2/2"]'
+      safety_race: true
+
+  # Explicit status checks on every job below: the implicit success() also looks at the
+  # skipped ancestors of a job (the first release workflow lost its publish job to that).
+  publish:
+    name: publish image
+    needs: [guards, checks]
+    if: ${{ !cancelled() && needs.guards.result == 'success' && needs.checks.result == 'success' }}
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/_image.yml
+    with:
+      mode: release
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  # A GitHub release per tag, its notes the CHANGELOG.md section, once the image is out.
+  release:
+    name: GitHub release
+    needs: publish
+    if: ${{ !cancelled() && needs.publish.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -eu
+          make -s changelog-notes TAG="$TAG" > notes.md
+          title=$(make -s changelog-title TAG="$TAG")
+          pre=; case "$TAG" in *-*) pre=--prerelease ;; esac
+          gh release create "$TAG" --verify-tag --title "$title" --notes-file notes.md $pre
+
+  # The static demo of the released version (pages.yml, also run by hand).
+  pages:
+    name: demo site
+    needs: release
+    if: ${{ !cancelled() && needs.release.result == 'success' }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/pages.yml

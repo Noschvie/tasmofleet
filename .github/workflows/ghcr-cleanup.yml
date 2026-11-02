@@ -7,15 +7,23 @@
 # (the decision lives in scripts/prune-patch-tags.mjs): all patches of the highest minor,
 # :latest, :edge and every other tag stay. A ghcr version is deleted only if all its tags are
 # superseded patches; its now untagged child manifests go in the untagged pass below.
-# Runs daily and after each image build; dispatch with dry-run to preview.
+# Called by main.yml after each :edge build and by nightly.yml (dry-run unless the schedule started it);
+# dispatch it by hand with dry-run to preview.
 name: ghcr-cleanup
 
 on:
-  schedule:
-    - cron: "17 4 * * *"
-  workflow_run:
-    workflows: [image]
-    types: [completed]
+  workflow_call:
+    inputs:
+      dry-run:
+        description: "only log what would be deleted"
+        type: boolean
+        default: false
+    secrets:
+      DOCKERHUB_USERNAME:
+        description: Docker Hub account whose superseded patch tags are pruned; without it Docker Hub is skipped
+        required: false
+      DOCKERHUB_TOKEN:
+        required: false
   workflow_dispatch:
     inputs:
       dry-run:
@@ -26,22 +34,22 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  group: ghcr-cleanup
-  cancel-in-progress: false
-
 jobs:
   cleanup:
     name: prune images
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.event == 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    # Two callers can overlap (the :edge build and the nightly); the deletes are idempotent, but run one at a time.
+    concurrency:
+      group: ghcr-cleanup
+      cancel-in-progress: false
     permissions:
+      contents: read
       packages: write
     env:
-      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}
+      DRY_RUN: ${{ inputs.dry-run }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7.0.1
         with:
           persist-credentials: false
       - name: ghcr, delete superseded patch versions

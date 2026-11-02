@@ -1,0 +1,74 @@
+# Mutation testing in four shards (reusable; never triggered on its own).
+# One ota run alone takes 11 minutes on one runner, so each shard mutates its
+# share of the files of all packages, dealt out by estimated cost
+# (tools/mutation-shard.sh), and uploads the counts; mutation-gate adds them up
+# and applies the thresholds.
+#   scope changed (pr.yml, only when the PR changes a SAFETY package): the changed mutation packages
+#   scope all     (nightly.yml): every MUTATION package
+# A tag runs no mutation: every PR that touches a SAFETY package already passed it.
+name: mutation
+
+on:
+  workflow_call:
+    inputs:
+      scope:
+        description: "changed: mutation-changed against base; all: every mutation package"
+        type: string
+        required: true
+      base:
+        description: PR base sha for scope changed
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  NICE: ""
+
+jobs:
+  mutation:
+    name: mutation tests (${{ inputs.scope }}, ${{ matrix.shard }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["1/4", "2/4", "3/4", "4/4"] # keep in step with MUTATION_CI_SHARDS (Makefile)
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0 # mutation-changed diffs against the PR base
+      - uses: ./.github/actions/go
+        with:
+          name: mutation
+          save: ${{ inputs.scope == 'all' }}
+      - env:
+          TARGET: ${{ inputs.scope == 'all' && 'mutation' || 'mutation-changed' }}
+          BASE: ${{ inputs.base }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          # The marker keeps the artifact non-empty when no mutation package changed.
+          mkdir -p "$RUNNER_TEMP/counts" && echo "$SHARD" > "$RUNNER_TEMP/counts/shard"
+          make "$TARGET" BASE="$BASE" MUTATION_SHARD="$SHARD" MUTATION_COUNTS="$RUNNER_TEMP/counts"
+      - uses: actions/upload-artifact@v7.0.2
+        with:
+          name: mutation-counts-${{ strategy.job-index }}
+          path: ${{ runner.temp }}/counts
+          if-no-files-found: error
+          retention-days: 3
+
+  mutation-gate:
+    name: mutation gate
+    needs: mutation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/download-artifact@v7.0.0
+        with:
+          pattern: mutation-counts-*
+          path: ${{ runner.temp }}/counts
+      - env:
+          ALL: ${{ inputs.scope == 'all' && '1' || '' }}
+        run: make mutation-sum MUTATION_COUNTS="$RUNNER_TEMP/counts" MUTATION_SHARDS=4 MUTATION_ALL="$ALL"
