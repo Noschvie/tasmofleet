@@ -73,8 +73,8 @@ func TestTemplateStaysStoredOnABuiltInModule(t *testing.T) {
 		t.Fatalf("template reply: %s", got)
 	}
 	settle()
-	if d.Boots() != 0 {
-		t.Errorf("restarted %d times: Template on a built-in module must not restart", d.Boots())
+	if !steady(d, 0) {
+		t.Errorf("restarted (boots %d, phase %s): Template on a built-in module must not restart", d.Boots(), d.Phase())
 	}
 	if got := cm(t, d, "Module"); got != `{"Module":{"1":"Sonoff Basic"}}` {
 		t.Errorf("module changed: %s", got)
@@ -153,8 +153,8 @@ func TestModuleRefusesAnUnknownNumber(t *testing.T) {
 		t.Errorf("reply %s", got)
 	}
 	settle()
-	if d.Boots() != 0 {
-		t.Error("restarted for an unknown module")
+	if !steady(d, 0) {
+		t.Errorf("restarted for an unknown module (boots %d, phase %s)", d.Boots(), d.Phase())
 	}
 }
 
@@ -196,8 +196,8 @@ func TestTemplateRefusesTheWrongChip(t *testing.T) {
 		}
 	}
 	settle()
-	if d.Boots() != 0 {
-		t.Error("restarted after a refused template")
+	if !steady(d, 0) {
+		t.Errorf("restarted after a refused template (boots %d, phase %s)", d.Boots(), d.Phase())
 	}
 	if got := cm(t, d, "Template"); got != nousTemplate {
 		t.Errorf("a refused template changed the stored one: %s", got)

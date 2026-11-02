@@ -41,8 +41,8 @@ func TestWebGetConfigIsUnknownLikeOfficialBuilds(t *testing.T) {
 		t.Fatalf("reply %s, want Command Unknown", got)
 	}
 	time.Sleep(200 * time.Millisecond)
-	if !bytes.Equal(dl(t, d), before) || d.Boots() != 0 {
-		t.Errorf("WebGetConfig changed the device (boots %d)", d.Boots())
+	if !bytes.Equal(dl(t, d), before) || !steady(d, 0) {
+		t.Errorf("WebGetConfig changed the device (boots %d, phase %s)", d.Boots(), d.Phase())
 	}
 }
 
@@ -183,8 +183,8 @@ func TestRestoreUploadRefusesBadDumps(t *testing.T) {
 				t.Fatalf("%v %s", err, page)
 			}
 			time.Sleep(200 * time.Millisecond)
-			if !bytes.Equal(dl(t, d), before) || d.Boots() != 0 {
-				t.Errorf("refused dump changed the device (boots %d)", d.Boots())
+			if !bytes.Equal(dl(t, d), before) || !steady(d, 0) {
+				t.Errorf("refused dump changed the device (boots %d, phase %s)", d.Boots(), d.Phase())
 			}
 		})
 	}

@@ -268,8 +268,8 @@ func TestFileUploadMD5MismatchChangesNothing(t *testing.T) {
 		t.Errorf("reply: %s", got)
 	}
 	time.Sleep(200 * time.Millisecond)
-	if !bytes.Equal(dl(t, d), before) || d.Boots() != 0 {
-		t.Error("a corrupt upload changed the device")
+	if !bytes.Equal(dl(t, d), before) || !steady(d, 0) {
+		t.Errorf("a corrupt upload changed the device (boots %d, phase %s)", d.Boots(), d.Phase())
 	}
 }
 
@@ -349,6 +349,7 @@ func TestFileUploadType1WrongFamilyFailsWithoutRestart(t *testing.T) {
 	}
 	time.Sleep(200 * time.Millisecond)
 	eq(t, "boots", d.Boots(), 0)
+	eq(t, "phase", d.Phase(), PhaseRun)
 }
 
 // Why: the minimal and safeboot builds compile the file commands out

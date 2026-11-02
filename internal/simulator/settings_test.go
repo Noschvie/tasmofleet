@@ -201,6 +201,7 @@ func TestRestartAndRestartingSettingsSave(t *testing.T) {
 	settled(t, d, 2)
 	time.Sleep(300 * time.Millisecond)
 	eq(t, "one restart for both", d.Boots(), 2)
+	eq(t, "phase", d.Phase(), PhaseRun)
 	if got := cm(t, d, "Status 5"); !strings.Contains(got, `"Hostname":"moved"`) {
 		t.Error(got)
 	}
