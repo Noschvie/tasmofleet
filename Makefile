@@ -126,10 +126,12 @@ race:
 	$(NICE) tools/race.sh
 
 # Race tests of the SAFETY packages changed since BASE (all of them without a usable BASE).
+# "Changed" is what this branch changed since it left BASE (tools/changed-files.sh: merge base, working tree and
+# untracked files included), like CI's three-dot diff, not a two-dot diff against BASE's moving tip (#481).
 # tools/race.sh splits internal/auth (AUTH_PARTS) to keep the wall clock short.
 safety-race:
-	@if [ -n "$(BASE)" ] && git rev-parse -q --verify "$(BASE)^{commit}" >/dev/null; then \
-	  changed=$$(git diff --name-only "$(BASE)" HEAD); pkgs=""; \
+	@if [ -n "$(BASE)" ] && changed=$$(CHANGED_BASE="$(BASE)" tools/changed-files.sh); then \
+	  pkgs=""; \
 	  for p in $(SAFETY); do d=$${p#./}; if echo "$$changed" | grep -q "^$$d/"; then pkgs="$$pkgs $$p"; fi; done; \
 	else echo "safety-race: no usable BASE ($(BASE)), running all packages"; pkgs="$(SAFETY)"; fi; \
 	if [ -z "$$pkgs" ]; then echo "safety-race: no safety package changed"; exit 0; fi; \
@@ -199,11 +201,11 @@ mutation:
 # ref). CI runs it for PRs that change a SAFETY package; the FULL tier runs "mutation".
 # Without a usable BASE every package runs.
 mutation-changed:
-	@if [ -z "$(BASE)" ] || ! git rev-parse -q --verify "$(BASE)^{commit}" >/dev/null; then \
+	@if [ -z "$(BASE)" ] || ! changed=$$(CHANGED_BASE="$(BASE)" tools/changed-files.sh); then \
 	  echo "mutation-changed: no usable BASE ($(BASE)), running all packages"; $(MAKE) --no-print-directory mutation; exit $$?; \
 	fi; \
 	$(if $(MUTATION_SHARD),mkdir -p "$(MUTATION_COUNTS)";) \
-	changed=$$(git diff --name-only "$(BASE)" HEAD); ran=0; \
+	ran=0; \
 	for e in $(MUTATION); do \
 	  p=$${e%%:*}; d=$${p#./}; \
 	  if echo "$$changed" | grep -q "^$$d/"; then ran=1; $(mutation_gate) "$$p" "$${e##*:}" || exit 1; \
