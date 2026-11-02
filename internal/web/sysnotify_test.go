@@ -238,3 +238,46 @@ func TestNotificationSendTestFollowsItsChannelSwitch(t *testing.T) {
 		}
 	}
 }
+
+// Why (#471, review): the dimmed button is only the page's help. Without scripts, or posted by hand,
+// the form still reaches the test route, and a channel whose switch the form says is off must not
+// send a real webhook or e-mail: it is not set up, and the answer says what to do. With the switch
+// on, the same form is sent as before (and a switch that is on the page and ticked is "true").
+func TestNotificationTestRefusesAChannelWhoseSwitchIsOff(t *testing.T) {
+	for _, tc := range []struct {
+		channel string
+		switchK string
+		form    url.Values
+	}{
+		{"webhook", "NOTIFY_WEBHOOK", url.Values{"v.NOTIFY_WEBHOOK_URL": {"http://x.lan/h"}}},
+		{"email", "NOTIFY_SMTP", url.Values{"v.NOTIFY_SMTP_HOST": {"mail.lan"}, "v.NOTIFY_SMTP_FROM": {"tf@example.com"}, "v.NOTIFY_SMTP_TO": {"me@example.com"}}},
+	} {
+		t.Run(tc.channel, func(t *testing.T) {
+			f := &fakeNotify{result: notify.Attempt{OK: true, Detail: "sent"}}
+			e, _ := notifyEnv(t, f)
+			post := func(on bool, hdr ...string) string {
+				form := url.Values{"csrf": {"tok"}, "b." + tc.switchK: {"1"}} // the switch box is on the page
+				for k, v := range tc.form {
+					form[k] = v
+				}
+				if on {
+					form.Set("v."+tc.switchK, "true")
+				}
+				_, body := e.do(t, "POST", "/settings/system/notify-test/"+tc.channel, "admin", form, hdr...)
+				return body
+			}
+			// the row a test swaps in (with scripts) and the page a plain post reloads (without)
+			for name, body := range map[string]string{"swapped row": post(false, "HX-Request", "true"), "whole page": post(false)} {
+				if !strings.Contains(body, "failed: switch the channel on to test it") {
+					t.Errorf("%s: a switched-off channel is not refused: %s", name, body)
+				}
+			}
+			if len(f.tested) != 0 {
+				t.Fatalf("a channel that is off was tested: %d sent", len(f.tested))
+			}
+			if body := post(true, "HX-Request", "true"); strings.Contains(body, "switch the channel on") || len(f.tested) != 1 {
+				t.Fatalf("with the switch on the test is sent (sent %d): %s", len(f.tested), body)
+			}
+		})
+	}
+}

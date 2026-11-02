@@ -112,7 +112,15 @@ func (h *handler) sysNotifyTest(w http.ResponseWriter, r *http.Request) {
 			values[k] = config.DefaultValue(k)
 		}
 	}
-	values[prefix] = "true" // the person pressed the button of this channel: check it as if it were on
+	// A channel whose switch the form says is off (the box was on the page and is not ticked, or "Reset to
+	// default" is) is not set up: nothing is sent. The button is dimmed then (#471); this is the answer
+	// without scripts or for a form posted by hand. A form that does not mention the switch tests the
+	// channel as if it were on, so the validation below names what is missing.
+	if values[prefix] == "false" {
+		h.sysNotifyAnswer(w, r, ch, values, "failed: switch the channel on to test it")
+		return
+	}
+	values[prefix] = "true"
 	msg := ""
 	cfg, dropped, err := h.d.SysConfig.Preview(values)
 	var ve *sysconfig.ValidationError
@@ -144,6 +152,13 @@ func (h *handler) sysNotifyTest(w http.ResponseWriter, r *http.Request) {
 	if slices.Contains(dropped, notifySecretKey[ch]) {
 		msg += " · secret not sent: target changed, enter it to test"
 	}
+	h.sysNotifyAnswer(w, r, ch, values, msg)
+}
+
+// sysNotifyAnswer shows the result of a test: the swapped row with scripts, the reloaded page
+// (with the form as it was posted) without.
+func (h *handler) sysNotifyAnswer(w http.ResponseWriter, r *http.Request, ch notify.Channel, values map[string]string, msg string) {
+	prefix := notifyKeyPrefix[ch]
 	what, help := "Webhook test", webhookTestHelp
 	if ch == notify.Email {
 		what, help = "E-mail test", emailTestHelp
