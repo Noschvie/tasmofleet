@@ -185,7 +185,7 @@ func TestUploadFirmwareSendsExactLengthAndFsz(t *testing.T) {
 		}
 		gotLen, gotTE, fsz = r.ContentLength, r.TransferEncoding, r.URL.Query().Get("fsz")
 		body, _ = io.ReadAll(r.Body)
-		_, _ = w.Write([]byte("Upload <font color='#008000'>Successful</font></b>"))
+		_, _ = w.Write([]byte("<script>setTimeout(function(){location.href='.';},10000);</script>Upload <font color='#008000'>Successful</font></b>"))
 	}))
 	defer srv.Close()
 	img := bytes.Repeat([]byte{0xE9}, 5000)

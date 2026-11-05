@@ -10,6 +10,7 @@ always upgrade automatically.
 
 - The broker a device reports to is kept current. TasmoFleet used to store it only when it probed the device, so a device moved to another broker outside TasmoFleet (its own web page or console, a restored config that points to an old broker) kept the old one and the "Other broker" hint never appeared until someone clicked Refresh identity. For each device TasmoFleet reaches over HTTP, the broker is now re-read after every restart TasmoFleet notices, after an MqttHost or MqttPort command sent through TasmoFleet (console, bulk command, settings, Make compliant), and about every six hours, one small Status 6 read at a time and never while a restore, update (one typed in the console included) or backup works on the device; a read that fails or says nothing about MQTT changes nothing, so the "Other broker" hint follows a move made outside TasmoFleet or by a restore without Refresh identity (#598)
 - Device page and device list: no "Other broker" hint for devices on TasmoFleet's broker under another name (the Home Assistant app's core-mosquitto, Docker service names): a broker counts as TasmoFleet's when devices that use it are heard there (#597)
+- Devices on a Tasmota build with a localized web UI (German, French, …) are identified and can be updated; TasmoFleet no longer expects the English footer (#468, thanks @t4nki)
 
 ## 0.29.0 "Portland Head" (2026-11-05)
 

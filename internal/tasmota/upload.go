@@ -109,14 +109,13 @@ func (c *httpClient) UploadFirmware(ctx context.Context, t Target, filename stri
 		}
 		return err
 	}
-	text := string(reply)
-	switch {
-	case strings.Contains(text, "Failed</font>"):
-		return &deviceError{ErrUploadRefused, t.redact(refusalText(text))}
-	case strings.Contains(text, "Successful</font>"):
-		return nil
+	// Read in any language (#468): the words "Successful" and "Failed" are translated.
+	err = uploadReply(string(reply))
+	var de *deviceError
+	if errors.As(err, &de) {
+		de.msg = t.redact(de.msg) // the reason is device text
 	}
-	return &deviceError{ErrBadResponse, "upload reply is neither Successful nor Failed"}
+	return err
 }
 
 // exactReader yields exactly left bytes of r and fails when r ends early. The

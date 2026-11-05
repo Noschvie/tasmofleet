@@ -39,6 +39,7 @@ mqtt/discovery-retained.jsonl  retained discovery configs seen at connect
 mqtt/samples/<type>.txt      first sample per topic per message type
 mqtt/synthetic-no-discovery.txt  SYNTHETIC (fake values): devices without tasmota/discovery (LWT, INFO1..3, STATE, STATUS5 incl. Ethernet)
 profiles/<name>/             SYNTHETIC: `profile.json` = a real capture (`base`) plus text replacements, read by internal/simulator (most have a README)
+localized-root/              SYNTHETIC main pages (GET /) of localized web UI builds, de_DE and fr_FR (section 9)
 firmware-headers/            first 32 bytes of the v16.0.0 release images (chip ids; see its README)
 firmware-upstream/           real ota.tasmota.com listings and a reduced GitHub releases reply for internal/firmware (see its README)
 tasmoadmin/                  SYNTHETIC TasmoAdmin sample data (devices.csv, MyConfig.json) for the import
@@ -171,3 +172,11 @@ written, uploaded, deleted or restarted. Facts they show (`internal/simulator` r
 * ESP8266 1 MB build: `UfsType` and `Ufs` -> `{"Command":"Unknown","Input":"UFSTYPE"}` / `"UFS"`.
 * Not captured (would write or expose secrets): `POST /ufsu`, SD card, `/tlskey`, `.settings*` downloads, throughput of a large file
   (the only file is 299 B). The device name and IP in `ufsd-page.html` are replaced like in section 7.
+
+## 9. Localized main pages, 2026-11-05 (#468)
+
+`localized-root/de_DE.html` and `fr_FR.html` are **synthetic**: no localized device was captured. Each is the real `devices/prusa-plug/root.html`
+with the strings the language build translates replaced by the values of `tasmota/language/de_DE.h` and `fr_FR.h` (Tasmota development branch,
+commit a281cec): `lang`, `D_NOSCRIPT`, `D_TOGGLE`, `D_CONFIGURATION`, `D_INFORMATION`, `D_FIRMWARE_UPGRADE`, `D_CONSOLE`, `D_CONFIRM_RESTART`,
+`D_RESTART`, and `D_BY` in the footer (`... (release-tasmota) von Theo Arends` / `... par Theo Arends`, the footer a French user reported in #468).
+The footer layout is `HTTP_END` in `xdrv_01_9_webserver.ino`. Replace them with real captures when a user provides one.

@@ -149,13 +149,13 @@ func TestRestoreConfigLostReplyIsNotARefusal(t *testing.T) {
 func TestRestoreReplyIsReadWithoutTheLanguage(t *testing.T) {
 	ok := `<script>setTimeout(function(){location.href='.';},10000);</script><b>Hochladen <font color='#008000'>Erfolgreich</font></b>`
 	bad := `<b>Hochladen <font color='#ff5661'>Fehlgeschlagen</font></b><br><br>Datei ungültig</div>`
-	if err := restoreReply(ok); err != nil {
+	if err := uploadReply(ok); err != nil {
 		t.Errorf("German success page: %v", err)
 	}
-	if err := restoreReply(bad); !errors.Is(err, ErrUploadRefused) {
+	if err := uploadReply(bad); !errors.Is(err, ErrUploadRefused) {
 		t.Errorf("German failure page: %v", err)
 	}
-	if err := restoreReply("<html>something else</html>"); !errors.Is(err, ErrBadResponse) {
+	if err := uploadReply("<html>something else</html>"); !errors.Is(err, ErrBadResponse) {
 		t.Errorf("other page: %v", err)
 	}
 }

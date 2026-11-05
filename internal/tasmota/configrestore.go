@@ -82,7 +82,7 @@ func (c *httpClient) RestoreConfig(ctx context.Context, t Target, dump []byte) e
 	if err != nil {
 		return err
 	}
-	err = restoreReply(string(reply))
+	err = uploadReply(string(reply))
 	var de *deviceError
 	if errors.As(err, &de) {
 		de.msg = t.redact(de.msg) // the reason is device text
@@ -90,9 +90,9 @@ func (c *httpClient) RestoreConfig(ctx context.Context, t Target, dump []byte) e
 	return err
 }
 
-// restoreReply reads HandleUploadDone's page: the success page carries the reload script, the
+// uploadReply reads HandleUploadDone's page (a restore and a firmware upload alike): the success page carries the reload script, the
 // failure page the coloured heading and the reason, and nothing else is an answer to the upload.
-func restoreReply(page string) error {
+func uploadReply(page string) error {
 	result := strings.Contains(page, "<font color='#")
 	switch {
 	case result && strings.Contains(page, restoreReloadScript):
@@ -100,7 +100,7 @@ func restoreReply(page string) error {
 	case result:
 		return &deviceError{ErrUploadRefused, uploadReason(page)}
 	}
-	return &deviceError{ErrBadResponse, "restore reply is neither the success nor the failure page"}
+	return &deviceError{ErrBadResponse, "upload reply is neither the success nor the failure page"}
 }
 
 // uploadReason is the text after the failure heading, in any language.

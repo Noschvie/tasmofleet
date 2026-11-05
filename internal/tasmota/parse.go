@@ -189,7 +189,11 @@ func ParseOtaURL(raw json.RawMessage) (string, error) {
 }
 
 var (
-	rootFooter = regexp.MustCompile(`Tasmota (\S+) \(([^)<>]*)\) by Theo Arends`)
+	// rootFooter is Tasmota's "Tasmota <version> (<image>) <D_BY> Theo Arends". D_BY ("by") is
+	// translated by every language build (#468), so the word between the image and the credit is
+	// not matched: anything short and markup-free will do. A language that sets it to a blank
+	// leaves nothing at all.
+	rootFooter = regexp.MustCompile(`Tasmota (\S+) \(([^)<>]*)\) [^<>]{0,40}?Theo Arends`)
 	rootLang   = regexp.MustCompile(`(?is)<html[^>]*\slang\s*=\s*["']([^"']*)["']`)
 	rootTitle  = regexp.MustCompile(`(?is)<title>(.*?)</title>`)
 )
