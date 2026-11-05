@@ -1159,37 +1159,44 @@ Submit.
 
 ## 10. Health model (package `health`)
 
-| State       | Rule                                                                                                                         |
-| ----------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| online      | MQTT device: LWT `Online` and any message within `StaleAfter`. HTTP-only device: last poll succeeded                         |
-| stale       | MQTT device: LWT `Online` but silent longer than `StaleAfter` (default 2 x TelePeriod + 60 s = 660 s). Triggers an HTTP poll |
-| offline     | LWT `Offline`, or `OfflineAfter` (3) consecutive failed polls                                                                |
-| auth_failed | the device answers but refuses our credentials (401 / `WARNING Need user=`). Never counted as online (TasmoAdmin lesson B7)  |
-| unknown     | nothing observed since start                                                                                                 |
+| State       | Rule                                                                                                                                                               |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| online      | MQTT device: LWT `Online` and any message within `StaleAfter`, or LWT `Offline` while the background poll reaches it (#619). HTTP-only device: last poll succeeded |
+| stale       | MQTT device: LWT `Online` but silent longer than `StaleAfter` (default 2 x TelePeriod + 60 s = 660 s). Triggers an HTTP poll                                       |
+| offline     | LWT `Offline` while the background poll does not reach the device, or `OfflineAfter` (3) consecutive failed polls                                                  |
+| auth_failed | the device answers but refuses our credentials (401 / `WARNING Need user=`). Never counted as online (TasmoAdmin lesson B7)                                        |
+| unknown     | nothing observed since start                                                                                                                                       |
 
 - The HTTP poll uses `Status 11` (cheap; uptime, Wi-Fi, power) and falls back to the `Upgrade`
   probe when the reply is Unknown (minimal firmware, shown as "minimal" in the UI).
 - Poll scheduling: HTTP-only devices every `POLL_INTERVAL` (5 min) with ±20 % jitter. MQTT
-  devices only when stale. Offline devices back off exponentially up to 30 min. At most 4
-  polls in flight.
+  devices only when stale, except a device whose last will is `Offline`, which is polled like an
+  HTTP-only device (#619): the retained will outlives a device that left our broker unclean (a power
+  cut while switching broker, a restored config for another broker) or has MQTT switched off. A new
+  will (one that follows `Online`) makes the device offline at once and is checked at the next tick;
+  the broker's replay of the same will after a reconnect changes nothing. Offline devices back off
+  exponentially up to 30 min. At most 4 polls in flight.
 - HTTP probe (#456): a device that is fine on MQTT is not polled, so its HTTP fact (`Health.SeenHTTP`)
   only ages. `Service.ProbeHTTP(id)` asks for one deliberate `Status 11` instead, run by the next tick: when
   the device page is opened, and when the broker re-read (#598) is due for a device whose HTTP fact is not
   fresh (one device per pass, a given device at most every 30 min). It is limited per device (not within
   5 min of an HTTP answer or of the last probe, 10 min after a failed one) and not asked for while a job, a
   lock or a typed firmware update holds the device. A probe records what HTTP showed (`SeenHTTP`,
-  `HTTPRefusedAt`) but never counts toward offline and does not move the poll schedule. It also reaches a
-  device whose last will is `Offline`, which no background poll does (#619 is separate).
+  `HTTPRefusedAt`) but never counts toward offline and does not move the poll schedule. For a device whose
+  last will is `Offline` it never moves the device between online and offline either: the background poll alone
+  decides that (#619), so opening its page neither brings the device back nor takes it offline.
 - `Health.HTTPRefusedAt` (#447): when the last HTTP call found the device's web page answering but its HTTP
   API off (`tasmota.ErrHTTPAPIRefused`, SetOption128); zero when HTTP answers or the device does not answer at
   all. The router's memory of the same finding lasts 10 min; the transport facts (`TransportFacts.httpState`) apply
   the tracker's finding after it, so the router, the page and the gates decide alike. A refused call is an answer:
   it counts as contact (`LastSeen`), never toward offline, and never as `SeenHTTP` (the API did not answer). What
   HTTP showed beats an `Offline` state on the page only when it came after the device went offline
-  (`Health.Since`); a device kept offline by its last will says in the offline banner what HTTP showed (#619
-  decides whether that makes it reachable). `Health.APIOff()` is the one rule for tile, card, list and gates. A
+  (`Health.Since`); a device kept offline by its last will says in the offline banner what HTTP showed until the
+  next background poll, whose answer or refusal makes it online (#619): with MQTT off as well, a device whose
+  API is off is online and has no path. `Health.APIOff()` is the one rule for tile, card, list and gates. A
   refused poll waits like a failing one (up to 30 min). For a device whose last will is `Offline`, only its own MQTT
-  messages count as `LastSeen`: a probe contact does not move "Offline since". An online device whose API is off
+  messages and what the background poll reaches (an answer or a refusal) count as `LastSeen`: a probe contact
+  does not move "Offline since". An online device whose API is off
   and which no MQTT path can serve has no path for backup, update, restore and changes: scheduled backups skip it
   (reason "HTTP API off (SetOption128 0)"), and updates, bulk actions and manual Back up refuse it up front.
 - MQTT messages update `LastSeen`, power state and RSSI immediately and push SSE events.

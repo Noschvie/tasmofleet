@@ -72,9 +72,10 @@ func TestProbeHTTPReachesALWTOfflineDeviceOnRequest(t *testing.T) {
 	h := newHarness(t, true, Options{}, mqttDev(1, "a"))
 	h.listen()
 	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Offline", true)
-	refuseAll(h)
-	h.step() // the poll finds the API off and backs off for ~30 minutes
+	failAll(h, errDown)
+	h.step() // the background poll reaches nothing and backs off
 	h.cl.reset()
+	refuseAll(h) // then the web page answers, its HTTP API off
 	h.svc.ProbeHTTP(1)
 	h.step()
 	g := h.svc.Get(1)
@@ -303,6 +304,14 @@ func TestRetainedOfflineWillDeviceThatAnswersHTTPComesBack(t *testing.T) {
 	if g.LWT != "Offline" {
 		t.Fatalf("the will is a fact about the broker and stays visible: %q", g.LWT)
 	}
+	// The answer is contact: "last seen" moves, here and in the store (a scheduled backup skips a device that
+	// was never seen as "never answered").
+	h.st.mu.Lock()
+	stored := h.st.seenAt[1]
+	h.st.mu.Unlock()
+	if now := h.clk.Now(); !g.LastSeen.Equal(now) || !stored.Equal(now) {
+		t.Fatalf("last seen %v, stored %v, want the poll's answer at %v", g.LastSeen, stored, now)
+	}
 	// It keeps being polled at the normal interval (the re-read needs a fresh answer), not per tick.
 	h.cl.reset()
 	h.step()
@@ -312,29 +321,141 @@ func TestRetainedOfflineWillDeviceThatAnswersHTTPComesBack(t *testing.T) {
 		t.Fatalf("%d polls over 6 minutes, want exactly the one that came due: %v", n, h.cl.commands())
 	}
 	h.want(1, model.HealthOnline)
-	// When it stops answering it goes back to offline after the usual number of failures.
+	// When it stops answering it goes back to offline after the usual number of failures, not before (an
+	// HTTP-only device does the same).
 	failAll(h, errDown)
-	for range 10 {
-		h.advance(31 * time.Minute)
+	for i := 1; i <= DefaultOfflineAfter; i++ {
+		h.advance(6 * time.Minute) // past each due time: the interval until it counts as offline
 		h.step()
+		want := model.HealthOnline
+		if i == DefaultOfflineAfter {
+			want = model.HealthOffline
+		}
+		h.want(1, want)
 	}
-	h.want(1, model.HealthOffline)
+	// And the next background poll it answers brings it back.
+	h.cl.set(func(string, string) (json.RawMessage, error) { return json.RawMessage(sts11), nil })
+	h.advance(maxBackoff)
+	h.step()
+	h.want(1, model.HealthOnline)
 }
 
-// Why (#619, #447): a device whose HTTP API is off answers with a refusal. That is contact for the banner
-// ("its web page answers") but no way to reach it, so the will's verdict stands.
-func TestRetainedOfflineWillDeviceWithHTTPAPIOffStaysOffline(t *testing.T) {
+// Why (#619, #447): a refused HTTP API is an answer, the web page is up (0.30.0). With MQTT off as well, the
+// retained Offline will kept such a device offline: the caveat #447 left to #619. Like any device that refuses
+// its API it is online, and APIOff says that no path is left, so backups skip it and actions say why. Going
+// offline at the refusal would also hide that finding (APIOff needs a refusal after the state change): the
+// tile would say "HTTP no answer" for a device whose web page answers.
+func TestRetainedOfflineWillDeviceWithHTTPAPIOffIsOnlineWithoutAPath(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		before func(h *harness)
+	}{
+		{"API off from the start (#447's device: MQTT off too)", func(*harness) {}},
+		{"answered, then the API was switched off", func(h *harness) {
+			h.step()
+			h.want(1, model.HealthOnline)
+			h.advance(6 * time.Minute)
+		}},
+		{"gone, then back with the API off", func(h *harness) {
+			failAll(h, errDown)
+			for range DefaultOfflineAfter {
+				h.step()
+				h.advance(maxBackoff)
+			}
+			h.want(1, model.HealthOffline)
+		}},
+	} {
+		h := newHarness(t, true, Options{}, mqttDev(1, "a"))
+		h.listen()
+		h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Offline", true)
+		tc.before(h)
+		refuseAll(h)
+		h.step()
+		g := h.svc.Get(1)
+		if g.State != model.HealthOnline || !g.APIOff() || !g.LastSeen.Equal(h.clk.Now()) {
+			t.Fatalf("%s: state %s, APIOff %v, last seen %v at %v", tc.name, g.State, g.APIOff(), g.LastSeen, h.clk.Now())
+		}
+	}
+}
+
+// Why (#456, decision 2026-11-05; #619): for a device its last will reports offline the background poll alone
+// decides the state. A probe a page view asked for records what HTTP showed, but it must neither bring back a
+// device the polls found gone nor take one offline whose API it finds off: opening a page would change the
+// state, and "Offline since" with it.
+func TestProbeLeavesTheStateOfADeviceItsWillReportsOffline(t *testing.T) {
 	h := newHarness(t, true, Options{}, mqttDev(1, "a"))
 	h.listen()
 	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Offline", true)
-	h.step() // answers: online
-	h.want(1, model.HealthOnline)
-	refuseAll(h)
-	h.advance(6 * time.Minute)
+	h.step() // the background poll reaches it: online
+	failAll(h, errDown)
+	for range DefaultOfflineAfter {
+		h.advance(6 * time.Minute)
+		h.step()
+	}
+	h.want(1, model.HealthOffline)
+	before := h.svc.Get(1)
+	holdPolls(h.svc, 1)
+	h.cl.set(func(string, string) (json.RawMessage, error) { return json.RawMessage(sts11), nil })
+	h.svc.ProbeHTTP(1)
 	h.step()
 	g := h.svc.Get(1)
-	if g.State != model.HealthOffline || g.HTTPRefusedAt.IsZero() {
-		t.Fatalf("state %s, refused at %v", g.State, g.HTTPRefusedAt)
+	if g.State != model.HealthOffline || !g.Since.Equal(before.Since) || !g.LastSeen.Equal(before.LastSeen) || !g.SeenHTTP.After(before.SeenHTTP) {
+		t.Fatalf("a probe's answer: state %s, since %v -> %v, last seen %v -> %v, SeenHTTP %v",
+			g.State, before.Since, g.Since, before.LastSeen, g.LastSeen, g.SeenHTTP)
+	}
+
+	h = newHarness(t, true, Options{}, mqttDev(1, "a"))
+	h.listen()
+	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Offline", true)
+	h.step()
+	h.want(1, model.HealthOnline)
+	holdPolls(h.svc, 1)
+	refuseAll(h)
+	h.advance(probeFreshFor)
+	h.svc.ProbeHTTP(1)
+	h.step()
+	if g := h.svc.Get(1); g.State != model.HealthOnline || g.HTTPRefusedAt.IsZero() {
+		t.Fatalf("a probe that found the API off: state %s, refused at %v", g.State, g.HTTPRefusedAt)
+	}
+}
+
+// Why (#619): a device that refuses the stored password answers too (401). Those refusals are no run of silence
+// that takes back what the poll reached: once the person fixes the password, the next answer (here the probe of
+// the page they open) shows the device online, not offline.
+func TestCredentialRefusalsAreNoSilenceForADeviceItsWillReportsOffline(t *testing.T) {
+	h := newHarness(t, true, Options{}, mqttDev(1, "a"))
+	h.listen()
+	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Offline", true)
+	h.step()
+	failAll(h, tasmota.ErrAuth)
+	for range DefaultOfflineAfter {
+		h.advance(maxBackoff)
+		h.step()
+	}
+	h.want(1, model.HealthAuthFailed)
+	h.cl.set(func(string, string) (json.RawMessage, error) { return json.RawMessage(sts11), nil })
+	h.advance(probeFreshFor)
+	h.svc.ProbeHTTP(1)
+	h.step()
+	h.want(1, model.HealthOnline)
+}
+
+// Why (#619): the broker replays the retained will after every reconnect of TasmoFleet's MQTT connection. That
+// replay is no news: a device the background poll reaches stays online and is not polled at once. Only a new
+// will, one that follows an Online, starts over.
+func TestReplayedOfflineWillDoesNotUndoAPollAnswer(t *testing.T) {
+	h := newHarness(t, true, Options{}, mqttDev(1, "a"))
+	h.listen()
+	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Offline", true)
+	h.step()
+	h.want(1, model.HealthOnline)
+	h.cl.reset()
+	h.advance(time.Minute)
+	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Offline", true) // the reconnect's replay
+	h.want(1, model.HealthOnline)
+	h.step()
+	if n := len(h.cl.commands()); n != 0 {
+		t.Fatalf("a replayed will was polled at once: %v", h.cl.commands())
 	}
 }
 

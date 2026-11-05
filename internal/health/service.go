@@ -123,11 +123,14 @@ type devState struct {
 	// answered, and routing, the #598 re-read and the #580 hint rely on that.
 	lastRefused time.Time
 
-	// lastPolled is when a background poll (not a probe) last got an HTTP answer from a device whose
-	// retained last will says Offline (#619). The will is a hint: a device that left our broker unclean
-	// (power cut while switching, a restored config for another broker) keeps it, yet answers HTTP.
-	// Zero until such a poll succeeds, and again after a new will, a refusal or a failed poll run.
+	// lastPolled is when the background poll (not a probe) last reached a device whose retained last will
+	// says Offline: an answer, or a refused HTTP API, which is an answer too (#619, #447). The will is a
+	// hint: a device that left our broker unclean (power cut while switching, a restored config for another
+	// broker) or has MQTT switched off keeps it, yet answers HTTP. pollGone: since then a run of OfflineAfter
+	// failed background polls ended without an answer. Only the background poll sets either, so a probe a page
+	// view asked for never moves such a device between online and offline (#456); a new will clears lastPolled.
 	lastPolled time.Time
+	pollGone   bool
 
 	nextPoll time.Time
 	polling  bool
@@ -374,8 +377,8 @@ func (s *Service) tick(ctx context.Context) {
 // works: its page is opened, a task waits for it (#456). A device that is fine on MQTT is not polled
 // over HTTP, so without this its HTTP fact would only ever age. The probe is the same Status 11 as a
 // poll, but it is a question about HTTP only: a failure never counts toward offline and the poll
-// schedule does not move. It also reaches a device whose last will is Offline, which no poll does
-// (#619): that is how a device with MQTT and its HTTP API switched off is found (#447). Asked too soon
+// schedule does not move. For a device whose last will is Offline it records what HTTP showed (an answer, a
+// refused API, #447) between two background polls, which alone decide that device's state (#619). Asked too soon
 // (an answer within probeFreshFor, a probe within its gap), or for an unknown device, it does nothing.
 // The request is picked up by the next tick.
 func (s *Service) ProbeHTTP(id model.DeviceID) {
@@ -473,9 +476,9 @@ func (s *Service) mqttMode(ds *devState) bool {
 
 func (s *Service) lastObs(ds *devState) time.Time {
 	if ds.lwt == "Offline" && s.mqttMode(ds) {
-		// For a device its last will reports offline only its own MQTT messages and the answers of the
-		// background poll (#619) count. An HTTP contact from a probe, which a person's page view asked for,
-		// must not move "Offline since" (the page's banner) nor make the device look seen now (#456).
+		// For a device its last will reports offline only its own MQTT messages and what the background poll
+		// reached (an answer or a refusal, #619) count. An HTTP contact from a probe, which a person's page view
+		// asked for, must not move "Offline since" (the page's banner) nor make the device look seen now (#456).
 		return maxTime(ds.lastMQTT, ds.lastPolled)
 	}
 	t := ds.lastMQTT
@@ -495,10 +498,11 @@ func maxTime(a, b time.Time) time.Time {
 	return a
 }
 
-// answersDespiteWill: the device's last will says Offline, but the background poll got an HTTP answer and
-// no run of failures followed (#619). It is reachable over HTTP, so it is not offline.
+// answersDespiteWill: the device's last will says Offline, but the background poll reached it (an answer or
+// a refused API) and no run of OfflineAfter failures followed (#619). It is reachable over HTTP, so it is not
+// offline. It does not read fails: a probe's answer resets that count, and a probe decides nothing here.
 func (s *Service) answersDespiteWill(ds *devState) bool {
-	return !ds.lastPolled.IsZero() && ds.fails < s.o.OfflineAfter
+	return !ds.lastPolled.IsZero() && !ds.pollGone
 }
 
 func (s *Service) fresh(ds *devState, now time.Time) bool {
@@ -904,7 +908,7 @@ func (s *Service) poll(ctx context.Context, id model.DeviceID, reach bool) {
 		ds.fails, ds.authFailed = 0, false
 		ds.lastHTTP = now
 		if !reach {
-			ds.lastPolled = now
+			ds.lastPolled, ds.pollGone = now, false
 		}
 		ds.minimal = res.minimal
 		if !res.minimal {
@@ -927,12 +931,14 @@ func (s *Service) poll(ctx context.Context, id model.DeviceID, reach bool) {
 		// password, so a refusal says nothing about the credentials).
 		ds.fails, ds.authFailed = 0, false
 		ds.refusedAt, ds.lastRefused = now, now
-		ds.lastPolled = time.Time{} // the API is off now: an older answer says nothing (#447 keeps the will's verdict)
 		detail = "http: API refused"
 		if reach {
 			ds.probeAfter = now.Add(probeFailGap)
 			break
 		}
+		// Contact for a device its last will reports offline too: it is online, and APIOff says that no path is left
+		// when MQTT cannot serve it either (#447, #619).
+		ds.lastPolled, ds.pollGone = now, false
 		// Polled again like a failing device (up to every 30 minutes), not every interval: the refusal does not
 		// change by itself, and the page's probe gives fresh information on demand.
 		ds.nextPoll = now.Add(min(s.jitter(maxBackoff), maxBackoff))
@@ -951,6 +957,11 @@ func (s *Service) poll(ctx context.Context, id model.DeviceID, reach bool) {
 		ds.fails++
 		ds.authFailed = false
 		ds.forgetRefusal(err)
+		if ds.fails >= s.o.OfflineAfter {
+			// A run of background polls without an answer ends what an earlier one reached (#619). A refused
+			// password is an answer: the device is there, and fixing the password brings it back at once.
+			ds.pollGone = true
+		}
 		ds.nextPoll = now.Add(s.failDelay(ds.fails))
 		ds.snapAfter = ds.nextPoll
 		detail = "http poll failed: " + errKind(err)

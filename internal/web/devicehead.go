@@ -74,7 +74,8 @@ func (h *handler) headWith(v view, d model.Device, hl model.Health, running *mod
 
 // offlineHTTPNote is what HTTP showed after the device went offline by its last will: the page's probe reaches
 // such a device (#456), and the banner must not say "until the device is back" under a Reachability tile that
-// says its web page answers (#447). Whether that makes the device reachable is #619's question.
+// says its web page answers (#447). The background poll decides whether that makes the device reachable (#619):
+// its next answer or refusal makes the device online, so this note covers the time until then.
 func offlineHTTPNote(hl model.Health) string {
 	switch {
 	case hl.HTTPRefusedAt.After(hl.Since) && hl.HTTPRefusedAt.After(hl.SeenHTTP):
