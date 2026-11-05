@@ -67,8 +67,11 @@ func TestParseRootPage_LocalizedFixtures(t *testing.T) {
 }
 
 // The localized minimal and safeboot pages translate the warning (D_MINIMAL_FIRMWARE_PLEASE_UPGRADE);
-// the image name in the footer does not change, and D_SAFEBOOT is "SAFEBOOT" in every language.
-// Minimal firmware must stay recognised on a localized build, or the recovery path is lost.
+// the image name in the footer ("minimal") does not change, so it decides for minimal firmware.
+// D_SAFEBOOT is translated in a few languages (it_IT "BOOT SICURO", pl_PL "Bezpieczny rozruch",
+// lt_LT "SAUGUS PALEIDIMAS"), but the official safeboot images are built with the English heading,
+// so the heading text is only a second witness. Minimal firmware must stay recognised on a
+// localized build, or the recovery path is lost.
 func TestParseRootPage_LocalizedMinimalAndSafeboot(t *testing.T) {
 	for _, c := range []struct{ name, warn, by string }{
 		{"fr_FR", "Firmware MINIMAL<br>merci de mettre à jour", "par"},
@@ -101,6 +104,7 @@ func TestParseRootPage_RefusesPagesThatAreNotTheTasmotaFooter(t *testing.T) {
 		"no credit":                       "Tasmota 15.1.0 (release-tasmota) by someone else",
 		"other project":                   "Sonoff 15.1.0 (release-tasmota) by Theo Arends",
 		"credit before the version":       "Theo Arends Tasmota 15.1.0 (release-tasmota)",
+		"41 characters before the credit": "Tasmota 15.1.0 (release-tasmota) " + strings.Repeat("x", 41) + "Theo Arends",
 	} {
 		if _, err := ParseRootPage([]byte(page)); !errors.Is(err, ErrBadResponse) {
 			t.Errorf("%s: err = %v, want ErrBadResponse", name, err)
@@ -142,5 +146,33 @@ func TestUploadFirmwareReadsLocalizedReplies(t *testing.T) {
 				t.Fatalf("got %v, want %v with %q", err, c.wantErr, c.wantReason)
 			}
 		})
+	}
+}
+
+// Why: the gap between image and credit is bounded (40 characters), and the bound is exact: a longer
+// word would admit prose around the credit, a shorter one would refuse a real translation.
+func TestParseRootPage_FooterGapIsExactly40(t *testing.T) {
+	page := func(n int) string {
+		return "Tasmota 15.1.0 (release-tasmota) " + strings.Repeat("x", n) + "Theo Arends"
+	}
+	if _, err := ParseRootPage([]byte(page(40))); err != nil {
+		t.Errorf("40 characters: %v", err)
+	}
+	if _, err := ParseRootPage([]byte(page(41))); !errors.Is(err, ErrBadResponse) {
+		t.Errorf("41 characters: err = %v, want ErrBadResponse", err)
+	}
+}
+
+// Why: success is the heading AND the reload script of HandleUploadDone. The script alone is not a
+// success (a reply could carry it without the upload having been accepted), and the Zigbee flasher's
+// page (/u3) has the heading with another redirect: a different flow, never a firmware success.
+func TestUploadReplyNeedsHeadingAndTheExactReloadScript(t *testing.T) {
+	script := `<script>setTimeout(function(){location.href='.';},10000);</script>`
+	if err := uploadReply(script + `<html>no heading</html>`); !errors.Is(err, ErrBadResponse) {
+		t.Errorf("script without heading: %v", err)
+	}
+	zigbee := `<script>setTimeout(function(){location.href='/u3';},10000);</script><b>Upload <font color='#008000'>Successful</font></b>`
+	if err := uploadReply(zigbee); err == nil {
+		t.Error("the Zigbee flasher page was read as a firmware upload success")
 	}
 }

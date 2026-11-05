@@ -37,7 +37,7 @@ type Uploader interface {
 	// GET /up, then a multipart POST of size bytes from body to /u2. A nil
 	// error means the device accepted the image and restarts. Any other
 	// error after the body was started (timeout, lost connection, a reply
-	// that is neither Successful nor Failed) leaves it open whether the
+	// that is neither the success nor the failure page, in any language) leaves it open whether the
 	// device flashes: the caller must probe, never resend. ErrUploadRefused
 	// and ErrUploadUnsupported are certain: nothing was flashed.
 	UploadFirmware(ctx context.Context, t Target, filename string, size int64, body io.Reader) error
