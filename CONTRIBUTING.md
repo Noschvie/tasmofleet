@@ -19,5 +19,6 @@ please open an issue before larger changes to agree on the approach.
   credited as `(#N, thanks @handle)`).
 - **AI-assisted contributions** are welcome; say so in the PR and make sure you
   have read and tested what you submit.
+- **Conduct:** everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
 - **License:** contributions are accepted under the project license,
   [AGPL-3.0-or-later](LICENSE).
