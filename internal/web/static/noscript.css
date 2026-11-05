@@ -1,0 +1,6 @@
+/* Loaded from <noscript> only: without JavaScript nothing rewrites the times, so the server's text shows at
+   once (app.css hides an unpainted <time data-ts> until time.js has run; #635). */
+time[data-ts]:not([data-painted]) {
+  visibility: visible;
+  animation: none;
+}

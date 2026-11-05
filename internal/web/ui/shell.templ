@@ -109,6 +109,7 @@ templ head(d ShellData) {
 		<link rel="preload" href={ d.static("geist-latin.woff2") } as="font" type="font/woff2" crossorigin/>
 		<link rel="preload" href={ d.static("geist-mono-latin.woff2") } as="font" type="font/woff2" crossorigin/>
 		<link rel="stylesheet" href={ d.static("app.css") }/>
+		<noscript><link rel="stylesheet" href={ d.static("noscript.css") }/></noscript>
 		<script src={ d.static("htmx-2.0.11.min.js") }></script>
 		<script src={ d.static("htmx-ext-sse-2.2.4.js") }></script>
 		for _, s := range deferredScripts {

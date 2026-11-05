@@ -3,6 +3,8 @@
 // zone and is what shows without JavaScript. Here the same instant is formatted with
 // Intl.DateTimeFormat. KEY picks the fields (same as the fallback's, see ui/stamp.go). An
 // element that carries a title gets the full date, time and zone name as its title.
+// Until paint() has handled an element, app.css keeps it hidden (data-painted), and reveals the server's text after
+// one second if this script never runs; noscript.css shows it at once without JavaScript (#635).
 // No inline script: CSP forbids it.
 (function () {
   "use strict";
@@ -65,6 +67,10 @@
     var els = Array.prototype.slice.call(root.querySelectorAll("time[data-ts]"));
     if (root.matches && root.matches("time[data-ts]")) els.push(root); // a swapped <time> itself
     els.forEach(function (el) {
+      // handled, whatever comes out: app.css hides a time until this mark is set, so that the server's text is
+      // never drawn on a full page load while this script is still to run (#635). The mark is also set where the
+      // server's text stays (unknown key or date, unsupported locale or zone): that text then shows.
+      el.setAttribute("data-painted", "");
       var key = el.getAttribute("data-ts");
       var d = new Date(el.getAttribute("datetime"));
       if (isNaN(d.getTime())) return; // keep the server's text
