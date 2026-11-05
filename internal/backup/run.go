@@ -68,8 +68,11 @@ func CleanLabel(s string) string {
 // error's kind, never copied from the error text: device errors can carry
 // URLs, and a URL can carry the web password.
 func AttemptReason(err error) string {
+	var lf *LimitedFirmwareError
 	var ur interface{ UserReason() string } // a reason a package wrote for the person (transport.BackupBlockedError)
 	switch {
+	case errors.As(err, &lf):
+		return lf.UserReason()
 	case errors.As(err, &ur):
 		return ur.UserReason()
 	case errors.Is(err, tasmota.ErrAuth):
@@ -86,4 +89,17 @@ func AttemptReason(err error) string {
 		return "The device returned an empty configuration"
 	}
 	return "The device did not hand over its configuration"
+}
+
+// LimitedFirmwareError is why no backup was tried: the device runs the safeboot image or the
+// minimal firmware, which answer none of the snapshot commands (#558).
+type LimitedFirmwareError struct{ Variant string }
+
+func (e *LimitedFirmwareError) Error() string {
+	return "backup: the device runs " + e.Variant + " firmware"
+}
+
+// UserReason is the sentence for the backup history.
+func (e *LimitedFirmwareError) UserReason() string {
+	return "The device runs " + e.Variant + " firmware; a backup is taken once it runs regular firmware"
 }

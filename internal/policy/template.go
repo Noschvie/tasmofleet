@@ -477,6 +477,7 @@ const (
 	RefuseLength        Refusal = "length"          // GPIO array length differs (T9)
 	RefuseArch          Refusal = "arch"            // both reported ARCH, they differ (T7)
 	RefuseMinimal       Refusal = "minimal"         // Template is read-only there (T14)
+	RefuseSafeboot      Refusal = "safeboot"        // the safeboot image does not know Template (#560)
 	RefuseUnsafeName    Refusal = "unsafe-name"
 	RefuseCommand       Refusal = "command"  // the command is not one the console policy accepts, e.g. over 255 bytes
 	RefuseEthernet      Refusal = "ethernet" // wired board, the change touches an ETH_* pin
@@ -558,8 +559,11 @@ func PlanApply(ref Reference, dev TemplateDevice, opts PlanOptions) ApplyPlan {
 			return refuse(p, RefuseArch, "ARCH %s does not belong to chip family %s", a, dev.Family)
 		}
 	}
-	if dev.Variant == "minimal" {
+	switch dev.Variant {
+	case variantMinimal:
 		return refuse(p, RefuseMinimal, "the minimal firmware cannot change the template")
+	case variantSafeboot:
+		return refuse(p, RefuseSafeboot, "the device runs the safeboot image, which does not know the Template command")
 	}
 	if redPinAssigned(dev.Family, diff) && (dev.Hardware == "" || dev.Hardware != ref.Device.Hardware) {
 		return refuse(p, RefuseRedPin, "the change assigns a pin that is dangerous on some hardware (flash or PSRAM) and the device's hardware (%q) is not known to equal the reference's (%q)", dev.Hardware, ref.Device.Hardware)

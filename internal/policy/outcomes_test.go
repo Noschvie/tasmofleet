@@ -227,3 +227,22 @@ func TestOutcomesAndTallyFollowRuleID(t *testing.T) {
 		t.Errorf("%+v", tl)
 	}
 }
+
+// Why (#558): a device on safeboot or minimal firmware answers none of the rule commands. An
+// older live value or backup of it must never judge it (it would show a stale "match"), so it
+// is not judged whatever values are passed, and only the firmware change brings it back.
+func TestOutcomesDoNotJudgeLimitedFirmware(t *testing.T) {
+	rules := []Rule{{Command: "SaveData", Want: "0"}}
+	for _, variant := range []string{"safeboot", "minimal"} {
+		d := dev(1, "d", model.ChipESP32)
+		d.Identity.Variant = variant
+		got := kinds(Outcomes(rules, []model.Device{d}, vals{1: {"SaveData": "0"}}), 1)
+		if got[0] != OutcomeUnknown {
+			t.Errorf("%s: %v, want Unknown", variant, got)
+		}
+		d.Identity.Variant = "tasmota"
+		if got := kinds(Outcomes(rules, []model.Device{d}, vals{1: {"SaveData": "0"}}), 1); got[0] != OutcomeMatch {
+			t.Errorf("regular firmware must be judged again, got %v", got)
+		}
+	}
+}

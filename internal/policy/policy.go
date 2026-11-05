@@ -130,7 +130,8 @@ func Outcomes(rules []Rule, devices []model.Device, values map[model.DeviceID]ma
 				claimed[key] = i
 				v, ok := have[key]
 				switch {
-				case len(r.Families) > 0 && d.Identity.Family == model.ChipUnknown, !ok:
+				case LimitedFirmware(d.Identity.Variant), // never judged from an old value: it answers none of them
+					len(r.Families) > 0 && d.Identity.Family == model.ChipUnknown, !ok:
 					o.Kind = OutcomeUnknown
 				case equal(v, r.Want):
 					o.Kind, o.Have = OutcomeMatch, v

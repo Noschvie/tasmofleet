@@ -52,6 +52,8 @@ type devGroup struct {
 type devChip struct {
 	ID   model.DeviceID
 	Name string
+	// Why is set for a device on safeboot or minimal firmware: "runs safeboot firmware".
+	Why string
 }
 
 type devView struct {
@@ -68,6 +70,7 @@ type devView struct {
 	Checked      int
 	Pickable     int
 	Backup, Live []devChip // unjudged: a backup would tell / only a live read tells
+	Firmware     []devChip // unjudged: safeboot or minimal firmware, nothing is sent to them (#558)
 }
 
 // devRender writes the tab. live: run the live check first (the Run now button of this tab).
@@ -201,6 +204,11 @@ func (h *handler) devFill(p *devView, rep PolicyReport) {
 			continue
 		}
 		chip := devChip{ID: d.ID, Name: d.Name}
+		if why := policy.FirmwareNote(d); why != "" { // a backup or a live read would not help: it answers none of the rules
+			chip.Why = why
+			p.Firmware = append(p.Firmware, chip)
+			continue
+		}
 		// A backup tells the settings it decodes; for the rest only a live read does.
 		if slices.ContainsFunc(rs, func(r policy.Rule) bool { return policy.BackupReadable(r.Command) }) {
 			p.Backup = append(p.Backup, chip)
@@ -208,7 +216,7 @@ func (h *handler) devFill(p *devView, rep PolicyReport) {
 			p.Live = append(p.Live, chip)
 		}
 	}
-	for _, l := range [][]devChip{p.Backup, p.Live} {
+	for _, l := range [][]devChip{p.Backup, p.Live, p.Firmware} {
 		sort.SliceStable(l, func(i, j int) bool { return strings.ToLower(l[i].Name) < strings.ToLower(l[j].Name) })
 	}
 }

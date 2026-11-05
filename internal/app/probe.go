@@ -448,13 +448,13 @@ func (p *Prober) status11(ctx context.Context, t tasmota.Target, net *model.NetF
 
 // ReadNet reads a stored device's network facts (Status 5, then best effort Status 11, one at a
 // time, never Status 0) and stores them. It runs in the background (netFactsReader), never as
-// part of first contact or a refresh. Minimal firmware answers neither command: nothing is read.
+// part of first contact or a refresh. Minimal firmware and the safeboot image answer neither command: nothing is read.
 func (p *Prober) ReadNet(ctx context.Context, id model.DeviceID) error {
 	d, err := p.Devices.GetDevice(ctx, id)
 	if err != nil {
 		return err
 	}
-	if d.Identity.Variant == "minimal" {
+	if d.Identity.Variant == "minimal" || d.Identity.Variant == "safeboot" { // #558
 		return nil
 	}
 	t := tasmota.TargetFor(d)

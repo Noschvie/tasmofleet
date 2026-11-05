@@ -538,6 +538,7 @@ func TestPlanRefusals(t *testing.T) {
 		}), RefuseLength},
 		{"other ARCH", mod(drift(nous(t, 2)), func(d *TemplateDevice) { c := *d.Template; c.Arch = "ESP32"; d.Template = &c }), RefuseArch},
 		{"minimal firmware", mod(drift(nous(t, 2)), func(d *TemplateDevice) { d.Variant = "minimal" }), RefuseMinimal},
+		{"safeboot firmware", mod(drift(nous(t, 2)), func(d *TemplateDevice) { d.Variant = "safeboot" }), RefuseSafeboot},
 		{"MQTT only", mod(drift(nous(t, 2)), func(d *TemplateDevice) { d.MQTTOnly = true }), RefuseMQTTOnly},
 	}
 	for _, c := range cases {

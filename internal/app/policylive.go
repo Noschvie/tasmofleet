@@ -172,7 +172,7 @@ func (p *policyPoller) once(ctx context.Context) {
 		sem <- struct{}{}
 		go func() {
 			defer func() { <-sem }()
-			out <- res{d.ID, p.rep.readDevice(ctx, d.ID)}
+			out <- res{d.ID, p.rep.readDevice(ctx, d)}
 		}()
 	}
 	for range todo {

@@ -75,7 +75,7 @@ func TestPollerNeverSendsSideEffectQueries(t *testing.T) {
 		rules: flashWear(), devices: fakeLister{{ID: 1, Name: "a"}},
 		backups: fakeBackupSvc{}, reader: settings.New(settings.Options{Devices: devGetter{}, Client: g}),
 	}
-	if !rep.readDevice(t.Context(), 1) {
+	if !rep.readDevice(t.Context(), model.Device{ID: 1}) {
 		t.Fatal("read failed")
 	}
 	vals := rep.vals.get(1)
@@ -275,7 +275,7 @@ func TestPollerReadsGenericRulesAndNeverSendsADeniedCommand(t *testing.T) {
 		rules: rules, devices: fakeLister{{ID: 1, Name: "a"}},
 		backups: fakeBackupSvc{}, reader: settings.New(settings.Options{Devices: devGetter{}, Client: g}),
 	}
-	if !rep.readDevice(t.Context(), 1) {
+	if !rep.readDevice(t.Context(), model.Device{ID: 1}) {
 		t.Fatal("read failed")
 	}
 	if want := []string{"LedState", "Sleep", "Baudrate"}; !reflect.DeepEqual(g.sent, want) {

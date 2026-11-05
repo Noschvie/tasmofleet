@@ -154,8 +154,12 @@ func (p *policyReporter) values(ctx context.Context, devs []model.Device, rules 
 	vals := map[model.DeviceID]map[string]string{}
 	prov := map[model.DeviceID]map[string]web.ValueSource{}
 	for _, d := range devs {
-		live := p.vals.get(d.ID)
 		v, pv := map[string]string{}, map[string]web.ValueSource{}
+		if policy.LimitedFirmware(d.Identity.Variant) { // answers none of the rules (#558): no old value judges it
+			vals[d.ID], prov[d.ID] = v, pv
+			continue
+		}
+		live := p.vals.get(d.ID)
 		var backupVals map[string]string
 		var backupAt time.Time
 		backupLoaded := false
@@ -263,8 +267,14 @@ func (p *policyReporter) ReadValue(ctx context.Context, actor string, id model.D
 	if !settings.Queryable(command) {
 		return "", web.ValueSource{}, &web.ValueRefusedError{Reason: "this command cannot be read without side effects"}
 	}
-	if devs, err := p.devices.ListDevices(ctx); err == nil && !slices.ContainsFunc(devs, func(d model.Device) bool { return d.ID == id }) {
-		return "", web.ValueSource{}, &web.ValueRefusedError{Reason: "unknown device"}
+	if devs, err := p.devices.ListDevices(ctx); err == nil {
+		i := slices.IndexFunc(devs, func(d model.Device) bool { return d.ID == id })
+		switch {
+		case i < 0:
+			return "", web.ValueSource{}, &web.ValueRefusedError{Reason: "unknown device"}
+		case policy.LimitedFirmware(devs[i].Identity.Variant):
+			return "", web.ValueSource{}, &web.ValueRefusedError{Reason: "the device " + policy.FirmwareNote(devs[i]) + " and does not know this command; it is read again once it runs regular firmware"}
+		}
 	}
 	cctx, cancel := context.WithTimeout(ctx, liveTimeout)
 	defer cancel()
@@ -368,7 +378,7 @@ func (p *policyReporter) readMany(ctx context.Context, devs []model.Device, para
 		go func() {
 			defer wg.Done()
 			defer func() { <-sem }()
-			p.readDevice(ctx, d.ID)
+			p.readDevice(ctx, d)
 		}()
 	}
 	wg.Wait()
@@ -376,8 +386,15 @@ func (p *policyReporter) readMany(ctx context.Context, devs []model.Device, para
 
 // readDevice reads the rule settings of one device with side-effect-free
 // queries and stores what it got. A dead device keeps what it answered; the
-// rest stays as it was.
-func (p *policyReporter) readDevice(ctx context.Context, id model.DeviceID) bool {
+// rest stays as it was. A device on safeboot or minimal firmware knows none of
+// the commands (#558): nothing is sent, it is not judged, and false makes the
+// poller look at it again soon, so it is read as soon as it reports regular
+// firmware.
+func (p *policyReporter) readDevice(ctx context.Context, d model.Device) bool {
+	if policy.LimitedFirmware(d.Identity.Variant) {
+		return false
+	}
+	id := d.ID
 	cmds := ruleCommands(p.currentRules())
 	if len(cmds) == 0 {
 		return true

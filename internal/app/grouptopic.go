@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/policy"
 	"github.com/nofuturekid/tasmofleet/internal/store"
 	"github.com/nofuturekid/tasmofleet/internal/tasmota"
 	"github.com/nofuturekid/tasmofleet/internal/transport"
@@ -77,7 +78,11 @@ func (r *groupTopicReader) run(ctx context.Context) {
 }
 
 // wantsGroupTopic: the device has an MQTT topic and its GroupTopic is not known (groupTopicStale).
-func wantsGroupTopic(d model.Device) bool { return d.Topic != "" && groupTopicStale(d) }
+// A device on safeboot or minimal firmware does not know Status 1 (#558): it is asked again once it
+// runs regular firmware.
+func wantsGroupTopic(d model.Device) bool {
+	return d.Topic != "" && !policy.LimitedFirmware(d.Identity.Variant) && groupTopicStale(d)
+}
 
 // tick reads one device: a never tried one before a retry that is due, else the one that has waited
 // longest. Offline devices are skipped (nothing could answer), and a device that was tried while it was

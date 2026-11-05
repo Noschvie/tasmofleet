@@ -135,6 +135,8 @@ func (h *handler) ruleStatOf(rep PolicyReport, rules []policy.Rule, pos int) rul
 		case policy.OutcomeUnknown:
 			st.Unknown++
 			switch note := notJudgedNote(rules[pos].Command, byID[o.DeviceID]); {
+			case policy.FirmwareNote(byID[o.DeviceID]) != "":
+				row.Source = policy.FirmwareNote(byID[o.DeviceID]) + "; read again once it runs regular firmware" // nothing is sent to it (#558)
 			case note != "":
 				row.Source = note // the device's firmware does not know the command: nothing to wait for
 			case haveSrc:

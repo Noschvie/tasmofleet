@@ -367,3 +367,41 @@ func TestApplyFailsTheDigestWhenADeviceVanishedSincePreview(t *testing.T) {
 		t.Fatalf("err %v, engine calls %d", err, eng.calls)
 	}
 }
+
+// Why (#558): the Templates tab reads Module and Template of every device. Safeboot and minimal
+// firmware answer neither, so a fleet-wide refresh or a preview must send nothing to them; they
+// are listed as not judged with the firmware named, even when a backup holds an old template,
+// and are read again as soon as they report regular firmware.
+func TestLimitedFirmwareIsNeverReadAndIsNotJudged(t *testing.T) {
+	f := newFleet()
+	f.add("a", "NOUS A1T", 21)
+	safe := f.add("safe", "NOUS A1T", 21)
+	mini := f.add("mini", "NOUS A1T", 21)
+	f.devs[safe-1].Identity.Variant = "safeboot"
+	f.devs[mini-1].Identity.Variant = "minimal"
+	f.snap[safe] = []byte(`{"Module":` + f.module[safe] + `,"Template":` + f.template[safe] + `}`)
+	m := newManager(f, nil)
+	ov, _ := m.Overview(context.Background(), nil, true)
+	if _, err := m.fresh(context.Background(), f.devs[mini-1]); err == nil {
+		t.Error("a direct read of a minimal device must be refused")
+	}
+	for _, c := range f.cmds {
+		if strings.HasPrefix(c, fmt.Sprintf("%d ", safe)) || strings.HasPrefix(c, fmt.Sprintf("%d ", mini)) {
+			t.Errorf("sent to a device on limited firmware: %q", c)
+		}
+	}
+	got := map[model.DeviceID]string{}
+	for _, v := range ov.NotJudged {
+		got[v.ID] = v.NotJudgedReason
+	}
+	if len(got) != 2 || !strings.Contains(got[safe], "safeboot firmware") || !strings.Contains(got[mini], "minimal firmware") {
+		t.Fatalf("not judged %v, want safe and mini with the firmware named", got)
+	}
+	f.devs[safe-1].Identity.Variant = "tasmota"
+	f.cmds = nil
+	m.lastRun = time.Time{} // past the refresh rate limit
+	ov, _ = m.Overview(context.Background(), nil, true)
+	if len(f.cmds) == 0 || len(ov.NotJudged) != 1 {
+		t.Errorf("a device on regular firmware is read again: cmds %v, not judged %d", f.cmds, len(ov.NotJudged))
+	}
+}

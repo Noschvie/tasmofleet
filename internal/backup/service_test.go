@@ -843,3 +843,41 @@ func TestDirectorySyncThatTheFileSystemDoesNotSupportDoesNotFailTheBackup(t *tes
 		})
 	}
 }
+
+// Why (#558): safeboot and minimal firmware answer "Unknown" to the 17 snapshot commands and have
+// no configuration worth a dump. A backup run for such a device sends nothing, stores nothing and
+// ends as a failed attempt with one clear reason (a stuck device must stay visible, and the failed
+// scheduled backup may notify), not as 17 device errors.
+func TestBackupOfSafebootAndMinimalSendsNothingAndSaysWhy(t *testing.T) {
+	for _, variant := range []string{"safeboot", "minimal"} {
+		e := newEnv(t, func(o *Options) {
+			o.Devices = devs{model.Device{ID: 7, Name: "kitchen", Address: "172.31.13.28", Identity: model.Identity{Variant: variant}}}
+		})
+		got, err := e.m.Backup(context.Background(), "t", 7)
+		if err == nil || len(got) != 0 {
+			t.Fatalf("%s: got %+v, %v; want a failed run", variant, got, err)
+		}
+		if got := AttemptReason(err); !strings.Contains(got, variant) || !strings.Contains(got, "regular firmware") {
+			t.Errorf("%s: reason %q must name the firmware and what to wait for", variant, got)
+		}
+		if len(e.dev.sent) != 0 || atomic.LoadInt32(&e.dev.maxSeen) != 0 || len(e.st.rows) != 0 {
+			t.Errorf("%s: nothing may be sent or stored, sent %v rows %d", variant, e.dev.sent, len(e.st.rows))
+		}
+	}
+}
+
+// Why (#558): the "changes since the last backup" view reads the same snapshot commands; for a
+// device on safeboot or minimal firmware it must refuse up front with the firmware named.
+func TestLiveSnapshotRefusesSafebootAndMinimal(t *testing.T) {
+	for _, variant := range []string{"safeboot", "minimal"} {
+		e := newEnv(t, func(o *Options) {
+			o.Devices = devs{model.Device{ID: 7, Name: "kitchen", Address: "172.31.13.28", Identity: model.Identity{Variant: variant}}}
+		})
+		if _, err := e.m.LiveSnapshot(context.Background(), 7); err == nil || !strings.Contains(err.Error(), variant) {
+			t.Errorf("%s: %v", variant, err)
+		}
+		if len(e.dev.sent) != 0 {
+			t.Errorf("%s: sent %v", variant, e.dev.sent)
+		}
+	}
+}

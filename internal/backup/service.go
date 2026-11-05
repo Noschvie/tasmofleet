@@ -248,6 +248,9 @@ func (m *Manager) LiveSnapshot(ctx context.Context, id model.DeviceID) ([]byte, 
 	if err != nil {
 		return nil, err
 	}
+	if v := dev.Identity.Variant; v == "safeboot" || v == "minimal" { // answers none of the snapshot commands (#558)
+		return nil, &LimitedFirmwareError{Variant: v}
+	}
 	data, _, _, err := m.snapshot(ctx, tasmota.TargetFor(dev))
 	return data, err
 }
@@ -276,6 +279,9 @@ func (m *Manager) filesLost(id model.DeviceID, warn *string, step string, err er
 
 func (m *Manager) backup(ctx context.Context, owner, dev model.Device, note string, run Run, filesErr *string) ([]model.Backup, string, error) {
 	id := owner.ID
+	if v := dev.Identity.Variant; v == "safeboot" || v == "minimal" { // answers none of the snapshot commands (#558)
+		return nil, "", &LimitedFirmwareError{Variant: v}
+	}
 	target := tasmota.TargetFor(dev)
 
 	dmp, err := m.o.Client.DownloadConfig(ctx, target)

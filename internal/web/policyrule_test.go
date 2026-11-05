@@ -27,9 +27,18 @@ type rulePolicy struct {
 	readVal string
 	readSrc ValueSource
 	readErr error
+	variant map[model.DeviceID]string // Identity.Variant per device (#558)
 }
 
 func (p *rulePolicy) devices() []model.Device {
+	devs := p.baseDevices()
+	for i := range devs {
+		devs[i].Identity.Variant = p.variant[devs[i].ID]
+	}
+	return devs
+}
+
+func (p *rulePolicy) baseDevices() []model.Device {
 	return []model.Device{
 		{ID: 1, Name: "kitchen", Identity: model.Identity{Family: model.ChipESP8266}},
 		{ID: 2, Name: "attic", Identity: model.Identity{Family: model.ChipESP32}},
@@ -611,5 +620,18 @@ func TestRuleSaveLandsOnTheOverviewWithTheRuleMarked(t *testing.T) {
 	_, body = e.do(t, "GET", "/policy?ok=saved&rule=rnope", "admin", nil)
 	if !strings.Contains(body, "Rule saved") || strings.Contains(body, `class="is-saved"`) {
 		t.Error("an unknown rule id must fall back to the plain flash and mark nothing")
+	}
+}
+
+// Why (#558): on the rule page a device on safeboot or minimal firmware is not judged for a reason
+// nobody can fix by backing up or waiting for a read, and the row must say which firmware it is.
+func TestRulePageNamesTheFirmwareOfANotJudgedDevice(t *testing.T) {
+	rp := defaultRP()
+	rp.variant = map[model.DeviceID]string{3: "safeboot"}
+	e, mem := ruleEnvWith(t, rp)
+	id := ruleSeed(t, e, mem, url.Values{"family": {}, "tag": {}, "tags_extra": {""}, "except": {}})
+	_, body := e.do(t, "GET", "/policy/rules/"+id, "admin", nil)
+	if !strings.Contains(body, "runs safeboot firmware; read again once it runs regular firmware") || strings.Contains(body, "no backup yet") {
+		t.Errorf("the shed row must name the firmware instead of waiting for a backup:\n%s", section(t, body, "dc-devs"))
 	}
 }

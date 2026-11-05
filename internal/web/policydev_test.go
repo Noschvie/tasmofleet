@@ -185,3 +185,25 @@ func TestPolicyTabsLinkTheDeviationsTab(t *testing.T) {
 		t.Error("the shared header links the Deviating devices tab with its badge")
 	}
 }
+
+// Why (#558): a device on safeboot or minimal firmware is not judged because it cannot answer, not
+// because nobody looked. "Back up these" or "Run now" would promise something that cannot happen,
+// so it gets its own list that names the firmware and says what ends the state.
+func TestPolicyDeviationsNamesFirmwareThatCannotBeJudged(t *testing.T) {
+	rep := devReport()
+	rep.Devices[2].Identity.Variant = "safeboot" // pantry: its OtaUrl would be backup-readable
+	rep.Devices[3].Identity.Variant = "minimal"  // cellar
+	body := devPage(t, "admin", "", rep)
+	fold := body[strings.Index(body, `id="unjudged"`):]
+	if !strings.Contains(fold, "run safeboot or minimal firmware") || !strings.Contains(fold, "read again as soon as they report regular firmware") {
+		t.Errorf("the reason is missing:\n%s", fold)
+	}
+	for _, c := range []string{`title="runs safeboot firmware"`, `title="runs minimal firmware"`} {
+		if !strings.Contains(fold, c) {
+			t.Errorf("missing %s", c)
+		}
+	}
+	if strings.Contains(fold, "Back up these") || strings.Contains(fold, "Run now") {
+		t.Error("neither a backup nor a live read can judge these devices")
+	}
+}

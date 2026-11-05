@@ -116,6 +116,8 @@ func (m *Manager) view(d model.Device, r *reading, src Source) DeviceView {
 func notJudgedReason(v DeviceView, r *reading) string {
 	var why string
 	switch {
+	case policy.LimitedFirmware(v.Reading.Variant):
+		why = "The device runs " + v.Reading.Variant + " firmware, which does not know the template; it is read again once it runs regular firmware."
 	case v.Family == model.ChipUnknown:
 		why = "The chip family is not known yet."
 	case r == nil:
@@ -168,6 +170,9 @@ func (m *Manager) snapshotReading(ctx context.Context, id model.DeviceID) *readi
 // bestReading is the live reading from the cache, else the newest snapshot.
 func (m *Manager) bestReading(ctx context.Context, d model.Device) DeviceView {
 	now := m.o.Now()
+	if policy.LimitedFirmware(d.Identity.Variant) { // answers neither Module nor Template (#558): no old reading judges it
+		return m.view(d, nil, SourceNone)
+	}
 	if r, ok := m.cache.get(d.ID, now); ok {
 		return m.view(d, &r, SourceLive)
 	}
@@ -207,8 +212,13 @@ func (m *Manager) refresh(ctx context.Context, devs []model.Device) bool {
 	return false
 }
 
+var errLimitedFirmware = errors.New("the device runs safeboot or minimal firmware")
+
 // readInto reads one device live and stores the result; a failed read leaves the cache as it was.
 func (m *Manager) readInto(ctx context.Context, d model.Device) (reading, error) {
+	if policy.LimitedFirmware(d.Identity.Variant) { // safeboot or minimal answer neither Module nor Template (#558): nothing is sent
+		return reading{}, errLimitedFirmware
+	}
 	rctx, cancel := context.WithTimeout(ctx, liveTimeout)
 	defer cancel()
 	r, err := readLive(rctx, m.o.Client, d, m.o.Now())
