@@ -207,6 +207,16 @@ Rule (maintainer, 2026-10-31, #391): in every card grid the cards stack directly
 
 Component: `ui.CardStacks(cols)`, `ui.CardStack(span)`, `ui.StackRank(n)`. Used by the System Settings tabs (Notifications included), About, the Dashboard, the device Overview and the device Settings tab.
 
+### Card widths follow their content
+
+Rule (maintainer, #419): a card is as wide as its content needs, and a page fills the width the app gives it.
+
+- **Content use.** Measured at 1280 px, a card that takes the full content width must use at least 60 % of it: its max-content width divided by its actual width. A card that uses less sits in a narrower column stack next to other cards (`ui.CardStacks`), not alone across the page. Deliberate exceptions carry a reason: the Relays card, the Console terminal, one-line bars (the device Settings save bar, the "Reset all settings" strip), and the Policy import/export card, which stays narrow.
+- **Page width.** A page uses the Dashboard's content width (1204 px at 1280, the app's capped content width on larger screens), never wider and never a fixed narrower card. The exceptions are the single-form and confirmation pages, which stay narrow on purpose: device edit, device delete, `ui.ConfirmPage` and add user. Replace device is not one of them: it uses the full content width.
+- **Transactions history** (61 % today) stays as it is.
+
+`e2e/tests/card-widths.spec.ts` (FULL tier) measures every page of the devenv fleet at 1280 px with `measureCards` (`e2e/support/card-widths.ts`) and fails for a full-width card under 60 % or for cards that do not span the content width, unless the page is on the test's exemption list. The list is in blocks, one per reason: deliberate exceptions, narrow single-form pages, and one block per group of #419 pages not converted yet (Updates and Firmware, System pages, device pages). A change that converts a group deletes its block; an entry whose page now passes fails the test, so the list cannot outlive the pages.
+
 ### Form fields
 
 Label above (`500 12.5px`, text-2), the control (34 px, radius 7, strong border), then the help line (`400 12px`, text-3) or, when the server rejected the value, the error (`400 12px`, danger-fg) instead of the help. A rejected input carries `aria-invalid` and `aria-describedby` pointing at its message; validation stays on the server. Mono fields for addresses and ports. Forms lay out in a grid of 260 px columns (`gap 14px 18px`); the style guide sample is at most 820 px wide, the add-user form 760 px.
