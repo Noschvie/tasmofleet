@@ -47,7 +47,7 @@ func dashboardPage(d dashView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "\" hx-trigger=\"sse:state throttle:2s, sse:device throttle:2s, sse:job throttle:2s, sse:resync\" hx-select=\"#dash\" hx-swap=\"outerHTML\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "\" hx-trigger=\"sse:state throttle:2s, sse:device throttle:2s, sse:job throttle:2s, sse:backup throttle:2s, sse:resync\" hx-select=\"#dash\" hx-swap=\"outerHTML\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

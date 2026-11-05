@@ -3,15 +3,18 @@ package web
 import (
 	"context"
 	"net/http"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/nofuturekid/tasmofleet/internal/backup"
 	"github.com/nofuturekid/tasmofleet/internal/discovery"
 	"github.com/nofuturekid/tasmofleet/internal/events"
 	"github.com/nofuturekid/tasmofleet/internal/importer"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/policy"
+	"github.com/nofuturekid/tasmofleet/internal/store"
 )
 
 // between returns the part of s after the first from and before the next to ("" when from is
@@ -246,7 +249,7 @@ func TestDashboardIsLive(t *testing.T) {
 	if !strings.Contains(body, `sse-connect="/tf/events?since=`) {
 		t.Error("the dashboard opens no event stream")
 	}
-	if !strings.Contains(body, `<div id="dash" hx-get="/tf/" hx-trigger="sse:state throttle:2s, sse:device throttle:2s, sse:job throttle:2s, sse:resync" hx-select="#dash" hx-swap="outerHTML">`) {
+	if !strings.Contains(body, `<div id="dash" hx-get="/tf/" hx-trigger="sse:state throttle:2s, sse:device throttle:2s, sse:job throttle:2s, sse:backup throttle:2s, sse:resync" hx-select="#dash" hx-swap="outerHTML">`) {
 		t.Errorf("the dashboard body does not refresh on stream events: %s", body)
 	}
 }
@@ -382,5 +385,56 @@ func TestNewDevicesTileCountsOfflineProposals(t *testing.T) {
 	}
 	if tile.Value != "3" || !strings.Contains(tile.Hint, "2 offline") {
 		t.Fatalf("tile = %+v, want 3 with \"2 offline\"", tile)
+	}
+}
+
+// usageBackups is the backup service that also reports each device's backup usage (BackupStorage).
+type usageBackups struct {
+	backup.Service
+	usage []store.BackupUsage
+}
+
+func (u usageBackups) Usage(context.Context) ([]store.BackupUsage, error) { return u.usage, nil }
+func (u usageBackups) Orphans(context.Context) ([]model.Backup, error)    { return nil, nil }
+
+// Why (#438): a fleet owner wants to see on the dashboard how many devices have no backup, and
+// the click must open exactly those devices: the tile counts with the device list's "No backup"
+// chip (same withoutBackup rule), links to that chip, and uses the accent tone, never warn:
+// until skipped devices are told apart from failed ones (#409) the number says "no backup yet",
+// not "something failed". It appears only when the backup service can report usage (else there
+// is no chip to link to), and the dashboard must reload on backup events or the number would
+// stay old after a backup.
+func TestDashboardNoBackupTileMatchesTheChip(t *testing.T) {
+	e, _ := dashFleet(t, func(d *Deps) {
+		d.Backups = usageBackups{Service: d.Backups, usage: []store.BackupUsage{
+			{Device: 1, Runs: 2}, {Device: 3}, {Device: 4}, {Device: 0, Runs: 5}, // 0 = deleted devices' row
+		}}
+	})
+	_, body := e.do(t, "GET", "/", "admin", nil)
+	tiles := strings.ReplaceAll(between(body, `<div class="stat-grid">`, `<svg class="health-bar"`), "</span> <span", "</span><span")
+	m := regexp.MustCompile(`<a class="stat-tile" href="([^"]*)"><span class="stat-label"><span class="sdot-dot (\S+)" aria-hidden="true"></span>No backup</span><span class="stat-value">(\d+)</span><span class="stat-hint">([^<]*)</span></a>`).FindStringSubmatch(tiles)
+	if m == nil {
+		t.Fatalf("no No backup tile in %s", tiles)
+	}
+	if m[1] != "/tf/devices?chip=nobackup" || m[3] != "2" || m[4] != "never backed up" {
+		t.Errorf("tile: href %q value %q hint %q", m[1], m[3], m[4])
+	}
+	if !strings.Contains(m[2], "accent") || strings.Contains(m[2], "warn") {
+		t.Errorf("tone class %q: want accent, never warn", m[2])
+	}
+	// the list's chip counts the same devices
+	_, list := e.do(t, "GET", "/devices?chip=nobackup", "admin", nil)
+	if !strings.Contains(list, "No backup") || strings.Count(between(list, "<tbody", "</tbody>"), "<tr") != 2 {
+		t.Errorf("the chip does not show the 2 devices the tile counted")
+	}
+	if !strings.Contains(body, "sse:backup") {
+		t.Error("the dashboard does not reload on backup events")
+	}
+
+	// no BackupStorage: no tile
+	plain, _ := dashFleet(t, nil)
+	_, body = plain.do(t, "GET", "/", "admin", nil)
+	if strings.Contains(body, "No backup") {
+		t.Error("tile shown without a backup service that reports usage")
 	}
 }

@@ -6,7 +6,7 @@ import "github.com/nofuturekid/tasmofleet/internal/web/ui"
 // The body below the header reloads itself from the event stream (TestDashboardIsLive): hx-select
 // takes the same #dash out of the whole page the GET answers with.
 templ dashboardPage(d dashView) {
-	<div id="dash" hx-get={ d.Base + "/" } hx-trigger="sse:state throttle:2s, sse:device throttle:2s, sse:job throttle:2s, sse:resync" hx-select="#dash" hx-swap="outerHTML">
+	<div id="dash" hx-get={ d.Base + "/" } hx-trigger="sse:state throttle:2s, sse:device throttle:2s, sse:job throttle:2s, sse:backup throttle:2s, sse:resync" hx-select="#dash" hx-swap="outerHTML">
 		@ui.PageHeader("Fleet overview", d.Sub) {
 			if d.AddHref != "" {
 				@ui.Button(ui.Btn{Label: "Add devices", Href: d.AddHref})

@@ -79,3 +79,37 @@ for (const tile of tiles) {
     ).toHaveCount(total);
   });
 }
+
+// #438: the "No backup" tile counts what the list's No backup chip shows, links to it, and follows
+// a backup that is taken while the dashboard is open (no reload).
+test("the No backup tile opens the chip and drops when a backup is taken, without a reload", async ({
+  page,
+}) => {
+  test.setTimeout(90_000);
+  const total = Object.keys(env.devices).length;
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.setExtraHTTPHeaders(adam);
+  await page.goto(app.url + "/");
+  const tile = page.locator("a.stat-tile").filter({ hasText: "No backup" });
+  await expect(tile.locator(".stat-value")).toHaveText(String(total));
+  await expect(tile).toHaveAttribute("href", /\/devices\?chip=nobackup$/);
+
+  await page.getByRole("link", { name: "Devices", exact: true }).first().click();
+  await page.getByRole("link", { name: "plug-4m", exact: true }).click();
+  const id = page.url().match(/devices\/(\d+)/)![1];
+  const csrf = await page.locator("input[name=csrf]").first().inputValue();
+  await page.goto(app.url + "/");
+  await page.evaluate(() => ((window as unknown as { __kept: number }).__kept = 1));
+  const took = await page.request.post(`${app.url}/devices/${id}/backup`, {
+    headers: adam,
+    form: { csrf },
+    maxRedirects: 0,
+  });
+  expect(took.status(), "backup taken").toBe(303);
+  await expect(tile.locator(".stat-value")).toHaveText(String(total - 1), { timeout: 20_000 });
+  expect(await page.evaluate(() => (window as unknown as { __kept: number }).__kept)).toBe(1);
+
+  await tile.click();
+  await expect(page).toHaveURL(/\/devices\?chip=nobackup/);
+  await expect(page.locator("table[data-table=devices] tbody tr[data-id]")).toHaveCount(total - 1);
+});

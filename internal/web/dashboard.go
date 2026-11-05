@@ -69,7 +69,23 @@ func (h *handler) dashboard(w http.ResponseWriter, r *http.Request) {
 	facts := h.fleetFacts(r.Context(), actor(r))
 	facts.annotate(rows)
 	h.annotateStability(r.Context(), rows)
+	_, hasUsage := h.d.Backups.(BackupStorage)
+	if hasUsage {
+		// The tile is not worth a failed dashboard: without the numbers it is left out.
+		if err := h.annotateBackups(r.Context(), rows); err != nil {
+			h.log.Warn("dashboard: backup usage", "err", err)
+			hasUsage = false
+		}
+	}
 	s := h.fleetSummaryFor(r.Context(), v, rows, facts)
+	if hasUsage {
+		s.HasBackups = true
+		for _, c := range s.Chips {
+			if c.Key == chipNoBackup {
+				s.NoBackup = c.N
+			}
+		}
+	}
 	var txs []txView
 	if h.d.Jobs != nil {
 		// Enough jobs to cover the last few transactions, however many devices each has.
@@ -141,7 +157,7 @@ func noun(n int, one, many string) string {
 	return many
 }
 
-// dashTiles are the prototype's six tiles; the policy tile needs a policy report and the
+// dashTiles are the prototype's six tiles and "No backup" (#438); the policy tile needs a policy report and the
 // discovery tile is for admins with discovery on. Each links to the list that shows what it counts.
 func dashTiles(base string, s fleetSummary) []ui.StatTileData {
 	chip := func(c string) string { return base + "/devices?chip=" + c }
@@ -164,6 +180,11 @@ func dashTiles(base string, s fleetSummary) []ui.StatTileData {
 			pol.Hint += ", " + itoa(s.PolicyUnchecked) + " not checked yet"
 		}
 		tiles = append(tiles, pol)
+	}
+	if s.HasBackups {
+		// Accent, never warn: a device that never answered also has no backup, and the tile does
+		// not tell it from a failed one (#438; the skipped-is-not-failed rule is #409).
+		tiles = append(tiles, ui.StatTileData{Tone: ui.ToneAccent, Label: "No backup", Value: itoa(s.NoBackup), Hint: "never backed up", Href: chip(chipNoBackup)})
 	}
 	if s.HasDiscovery {
 		hint := "None waiting"

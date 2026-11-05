@@ -90,6 +90,10 @@ type fleetSummary struct {
 	NewFoundOffline int // of NewFound, those whose LWT says Offline
 	AddressChanged  int
 	Chips           []chipCount
+	// HasBackups: the backup service reports usage, so NoBackup (the "No backup" chip's count) is
+	// known. Only the dashboard sets them (#438).
+	HasBackups bool
+	NoBackup   int
 }
 
 // fleetFacts reads the cached feed and the policy report. Neither talks to a
