@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/events"
+	"github.com/nofuturekid/tasmofleet/internal/model"
 )
 
 type fakeBusState struct{ enabled, connected atomic.Bool }
@@ -102,12 +103,12 @@ func TestScheduledRunKeepsTheLastFinishedRun(t *testing.T) {
 		t.Fatalf("fresh: %+v", s)
 	}
 	r.Start(3)
-	r.Step(false)
+	r.Step(model.BackupOutcomeOK)
 	if s := r.Status(); !s.Running || s.Done != 1 || s.Total != 3 {
 		t.Fatalf("in progress: %+v", s)
 	}
-	r.Step(true)
-	r.Step(false)
+	r.Step(model.BackupOutcomeFailed)
+	r.Step(model.BackupOutcomeOK)
 	r.Finish(true)
 	s := r.Status()
 	if s.Running || !s.Finished.Equal(end) || s.LastTotal != 3 || s.LastFailed != 1 {
@@ -118,7 +119,7 @@ func TestScheduledRunKeepsTheLastFinishedRun(t *testing.T) {
 	}
 
 	r.Start(5)
-	r.Step(true)
+	r.Step(model.BackupOutcomeFailed)
 	r.Finish(false) // shutdown
 	s = r.Status()
 	if s.Running || s.LastTotal != 3 || s.LastFailed != 1 {

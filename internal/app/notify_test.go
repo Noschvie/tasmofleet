@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/snapshot"
@@ -137,7 +138,12 @@ func TestScheduledBackupRunWithAFailureSendsOneMessageNamingTheDevice(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.Store.CreateDevice(t.Context(), model.Device{Name: "workshop-lamp", Address: "127.0.0.1", Port: port}); err != nil {
+	id, err := svc.Store.CreateDevice(t.Context(), model.Device{Name: "workshop-lamp", Address: "127.0.0.1", Port: port})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A device that was never heard is skipped, not failed (#409): this one has answered before.
+	if err := svc.Store.SetLastSeen(t.Context(), id, model.HealthOnline, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	a.backupRun = newScheduledRun(nil)

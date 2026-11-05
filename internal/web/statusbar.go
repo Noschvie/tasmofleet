@@ -66,7 +66,7 @@ func (h *handler) statusBar(ctx context.Context, base string, live bool) ui.Stat
 			}
 		}
 		if !r.Finished.IsZero() {
-			sb.Backup = &ui.StatusBackup{At: r.Finished, Failed: r.LastFailed, Total: r.LastTotal}
+			sb.Backup = &ui.StatusBackup{At: r.Finished, Failed: r.LastFailed, Total: r.LastTotal, Skipped: r.LastSkipped}
 		}
 	}
 	return sb

@@ -161,6 +161,9 @@ func (a *runtime) prune(ctx context.Context) {
 	if _, err := a.svc.Store.PruneBackupAttempts(ctx, now.Add(-a.svc.Sys.Snapshot().AuditKeep)); err != nil {
 		a.log.Warn("prune failed backup attempts", "err", err)
 	}
+	if _, err := a.svc.Store.PruneBackupRuns(ctx, now.Add(-a.svc.Sys.Snapshot().AuditKeep)); err != nil {
+		a.log.Warn("prune backup runs", "err", err)
+	}
 	// Transactions and their logs follow the audit retention (one setting for "how long the
 	// history is kept"); running ones are never pruned (store.PruneJobs).
 	if n, err := a.svc.Store.PruneJobs(ctx, now.Add(-a.svc.Sys.Snapshot().AuditKeep)); err != nil {
@@ -180,35 +183,24 @@ func (a *runtime) prune(ctx context.Context) {
 	}
 }
 
-// backupAll backs up every device one after the other (BACKUP_INTERVAL).
+// backupAll is the scheduled run (BACKUP_INTERVAL); the rules are in scheduledBackup.
 func (a *runtime) backupAll(ctx context.Context) {
-	devs, err := a.svc.Inventory.List(ctx)
-	if err != nil {
-		a.log.Warn("scheduled backup: list devices", "err", err)
-		return
+	health := func() map[model.DeviceID]model.Health { return nil } // no tracker: every device is judged by when it was last heard
+	if a.tracker != nil {
+		health = a.tracker.All
 	}
-	a.backupRun.Start(len(devs))
-	completed := false
-	defer func() { a.backupRun.Finish(completed) }()
-	var failed []string
-	for _, d := range devs {
-		if ctx.Err() != nil {
-			return
-		}
-		_, err := a.backups.Backup(backup.WithRun(ctx, backup.Run{Trigger: model.TriggerScheduled}), "system", d.ID)
-		if err != nil {
-			a.log.Warn("scheduled backup failed", "device", d.Name, "err", err)
-			failed = append(failed, d.Name)
-		}
-		a.backupRun.Step(err != nil)
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(backupGap):
+	b := &scheduledBackup{
+		log: a.log, run: a.backupRun, devices: a.svc.Inventory.List, health: health,
+		store: a.svc.Store, locks: a.deviceLocks(), now: time.Now, gap: backupGap,
+		backup: func(ctx context.Context, id model.DeviceID) error {
+			_, err := a.backups.Backup(backup.WithRun(ctx, backup.Run{Trigger: model.TriggerScheduled}), "system", id)
+			return err
+		},
+	}
+	if a.notifier != nil {
+		b.notifyFailed = func(tried int, failed []string, at time.Time) {
+			a.notifier.Emit(notify.BackupFailed(a.notifier.Config(), tried, failed, at))
 		}
 	}
-	completed = true
-	if len(failed) > 0 && a.notifier != nil { // one message per run, listing the devices
-		a.notifier.Emit(notify.BackupFailed(a.notifier.Config(), len(devs), failed, time.Now()))
-	}
+	b.Run(ctx)
 }

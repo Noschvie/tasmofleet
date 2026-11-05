@@ -1543,7 +1543,7 @@ never raise a notification. The rule:
 - `auth_failed`: tried, and failed when the device refuses (it is reachable and needs action);
 - the device's operation lock is busy: skipped, "another operation was running".
 
-The notification lists the failed devices only. The run record is pruned with `AUDIT_RETENTION`; a
+The run takes the device lock (`devlock`, owner `backup`) for each device while it backs it up. The notification lists the failed devices only. The run record is pruned with `AUDIT_RETENTION`; a
 device's item keeps its name when the device is deleted. Model: `model.BackupRun`, `BackupRunItem`,
 `BackupOutcome`, `BackupDeviceRow`; the web layer reads them through `web.BackupFleet` (`LastRun`,
 `Overview`, `PruneNext`; `Overview` does no device I/O).

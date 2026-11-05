@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nofuturekid/tasmofleet/internal/clock"
 	"github.com/nofuturekid/tasmofleet/internal/events"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 )
@@ -292,5 +293,18 @@ func TestStatusBarBrokerSinceIsADayStamp(t *testing.T) {
 	_, body := e.do(t, "GET", "/devices", "operator", nil)
 	if bar := barOf(body); strings.Count(bar, `data-ts="day"`) < 2 {
 		t.Errorf("broker since is not a day stamp: %s", bar)
+	}
+}
+
+// Why (#409): skipped devices were not tried. The bar gets their count apart from the tried total
+// and the failures, so it can say "3 skipped" without ever counting them as failed.
+func TestStatusBarCarriesTheSkippedCountApartFromFailures(t *testing.T) {
+	done := time.Date(2026, 11, 5, 3, 0, 0, 0, time.UTC)
+	h := &handler{d: Deps{Clock: clock.Real{}, ScheduledBackup: func() BackupRunInfo {
+		return BackupRunInfo{Finished: done, LastTotal: 4, LastFailed: 2, LastSkipped: 3}
+	}}}
+	b := h.statusBar(t.Context(), "", false).Backup
+	if b == nil || b.Total != 4 || b.Failed != 2 || b.Skipped != 3 {
+		t.Errorf("backup = %+v, want 4 tried, 2 failed, 3 skipped", b)
 	}
 }

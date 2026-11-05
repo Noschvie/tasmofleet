@@ -21,6 +21,8 @@ always upgrade automatically.
 
 ### Changed
 
+- Scheduled backups: a device that cannot answer is skipped, not counted as failed (#409). A run leaves out devices that never answered, devices that are offline (with "offline since" and the date) and devices another operation is working on; it tries everything else, including devices with a wrong web password (they fail, because the person has to act). The status bar and the "Backup failed" message count only the devices that were tried: "2 of 5 failed", never the skipped ones, and a run in which everything was skipped neither colours the bar nor sends a message. The last run is stored (migration 0043, kept as long as the audit log) and shows again after a restart. A device is locked against other operations while it is backed up
+
 - The update dialog has no "Power after update" choice any more, the preview shows no relay line, and a job no longer has a "Restoring power" step. TasmoFleet does not read or switch relays around an update: no `Power` command, no Status 11 reading for relays, no PulseTime/Interlock/ShutterRelay reads, no extra MAC read after the reboot. The README section "What TasmoFleet changes on your devices" says so (#551, thanks @Noschvie)
 - Device page: the MQTT broker no longer appears as a row of the Connection card (Wi-Fi or Ethernet). The "How TasmoFleet reaches this device" card names the device's broker only when it is a different one than TasmoFleet's ("Other broker", with the address the device reports to), because such a device does not show up live. Nothing is shown when MQTT is switched off in TasmoFleet, when the device reports to TasmoFleet's broker under another name or address, or when the device has no broker (#441, thanks @Noschvie)
 

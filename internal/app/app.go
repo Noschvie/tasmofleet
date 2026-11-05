@@ -159,6 +159,11 @@ func (a *runtime) run(ctx context.Context) error {
 	a.bgContext = bg
 	a.restartAsks = newRestartAsks(time.Now)
 	a.backupRun = newScheduledRun(svc.Hub)
+	if last, ok, err := svc.Store.LastBackupRun(ctx); err != nil {
+		a.log.Warn("scheduled backup: reading the last run", "err", err)
+	} else if ok {
+		a.backupRun.Restore(last)
+	}
 	a.snapshots = snapshot.New(svc.Store, cfg.DataDir)
 	a.snapshots.CleanTemp() // scratch copies a crash left behind
 	a.setupNotify()
@@ -700,6 +705,7 @@ func (a *runtime) webDeps(guard web.Guard, rows []web.KV) web.Deps {
 		}
 		return a.backupRun.Status()
 	}
+	deps.BackupFleet = a.fleetBackups()
 	if a.snapshots != nil {
 		deps.Snapshots = a.snapshots
 	}

@@ -97,44 +97,57 @@ func (w *brokerWatch) Run(ctx context.Context, every time.Duration) error {
 }
 
 // scheduledRun is the scheduled backup run (BACKUP_INTERVAL): the one in progress and the last
-// one that finished. It is in memory; after a restart the bar has no last run until the next ends.
+// one that finished. The last one is also stored (model.BackupRun); Restore reads it back at start.
 type scheduledRun struct {
 	hub *events.Hub
 	now func() time.Time
 
 	mu                  sync.Mutex
 	running             bool
-	done, total, failed int // of the run in progress
+	done, total         int // of the run in progress: devices handled of all devices
+	ok, failed, skipped int
 	last                web.BackupRunInfo
 }
 
 func newScheduledRun(hub *events.Hub) *scheduledRun { return &scheduledRun{hub: hub, now: time.Now} }
 
+// Restore sets the last finished run from the stored record (at start).
+func (r *scheduledRun) Restore(run model.BackupRun) {
+	r.mu.Lock()
+	r.last = web.BackupRunInfo{Finished: run.FinishedAt, LastTotal: run.Tried, LastFailed: run.Failed, LastSkipped: run.Skipped}
+	r.mu.Unlock()
+}
+
 // Start begins a run over total devices.
 func (r *scheduledRun) Start(total int) {
 	r.mu.Lock()
-	r.running, r.done, r.total, r.failed = true, 0, total, 0
+	r.running, r.done, r.total, r.ok, r.failed, r.skipped = true, 0, total, 0, 0, 0
 	r.mu.Unlock()
 	r.publish()
 }
 
-// Step records one device done, failed or not.
-func (r *scheduledRun) Step(failed bool) {
+// Step records one device handled: backed up, failed, or skipped (not tried, not a failure).
+func (r *scheduledRun) Step(out model.BackupOutcome) {
 	r.mu.Lock()
 	r.done++
-	if failed {
+	switch out {
+	case model.BackupOutcomeOK:
+		r.ok++
+	case model.BackupOutcomeFailed:
 		r.failed++
+	case model.BackupOutcomeSkipped:
+		r.skipped++
 	}
 	r.mu.Unlock()
 	r.publish()
 }
 
 // Finish ends the run. A run cut short by shutdown (completed false) is no result: the last
-// finished run stays as it was.
+// finished run stays as it was. The total of a result is the devices that were tried.
 func (r *scheduledRun) Finish(completed bool) {
 	r.mu.Lock()
 	if completed {
-		r.last = web.BackupRunInfo{Finished: r.now(), LastTotal: r.total, LastFailed: r.failed}
+		r.last = web.BackupRunInfo{Finished: r.now(), LastTotal: r.ok + r.failed, LastFailed: r.failed, LastSkipped: r.skipped}
 	}
 	r.running = false
 	r.mu.Unlock()
