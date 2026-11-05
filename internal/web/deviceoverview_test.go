@@ -773,9 +773,10 @@ func TestReachTileSaysTheHTTPAPIIsOffInsteadOfOffline(t *testing.T) {
 // Why (#447): the router's memory of a refused API lasts 10 minutes, the health tracker's finding
 // until HTTP answers again. The page shows the longer one, in the tile, the card and the list alike.
 func TestShownHTTPStateKeepsTheRefusalTheTrackerRemembers(t *testing.T) {
-	refused := model.Health{HTTPRefusedAt: now0.Add(-time.Hour), SeenHTTP: now0.Add(-2 * time.Hour)}
+	refused := model.Health{HTTPRefusedSince: now0.Add(-3 * time.Hour), HTTPRefusedAt: now0.Add(-time.Hour), SeenHTTP: now0.Add(-4 * time.Hour)}
 	got := shownHTTP(transport.HTTPState{}, refused)
-	if got.State != transport.HTTPFailing || got.Kind != transport.HTTPFailAPIRefused || !got.Since.Equal(refused.HTTPRefusedAt) {
+	// "Since" is the first refusal of the run, not the latest one (#645).
+	if got.State != transport.HTTPFailing || got.Kind != transport.HTTPFailAPIRefused || !got.Since.Equal(refused.HTTPRefusedSince) {
 		t.Fatalf("shown = %+v", got)
 	}
 	// The router's "ok" comes from an answer older than the refusal: the later finding is what the page shows.

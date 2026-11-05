@@ -444,3 +444,31 @@ func TestRefererCheckRefusesSilentlyUnlessRefererNamesTheDevice(t *testing.T) {
 		}
 	}
 }
+
+// Why (#645): a device with SetOption128 0 leaves every privileged handler unanswered, not only /cm: a client
+// that downloads a backup (/dl), uploads firmware (/u2) or reads the file system (/ufsd) meets the same silence.
+// The fault must model all of them (the correct Referer does not help: the API is off), and still serve "/".
+func TestHTTPAPIOffLeavesEveryPrivilegedPathUnanswered(t *testing.T) {
+	t.Parallel()
+	f := newTestFleet(t, "", Extra{})
+	d := add(t, f, DeviceSpec{Name: "plug", Profile: ProfileESP8266_1M, Version: "15.6.0"})
+	d.AddFault(Fault{Kind: FaultHTTPAPIOff})
+	get := func(path string) (int, error) {
+		req, _ := http.NewRequest(http.MethodGet, "http://"+d.Addr()+path, nil)
+		req.Header.Set("Referer", "http://"+d.Addr()+"/")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return 0, err
+		}
+		defer resp.Body.Close() //nolint:errcheck // test, body unused
+		return resp.StatusCode, nil
+	}
+	for _, p := range []string{"/cm?cmnd=Status%202", "/dl", "/up", "/u1", "/u2", "/u4", "/rs", "/ufsd", "/ufsu"} {
+		if _, err := get(p); !errors.Is(err, io.EOF) {
+			t.Errorf("%s: want a connection closed without a reply, got %v", p, err)
+		}
+	}
+	if code, err := get("/"); err != nil || code != 200 {
+		t.Errorf("GET /: %d %v (the main page must still answer, it is how a refusal is told from a dead device)", code, err)
+	}
+}

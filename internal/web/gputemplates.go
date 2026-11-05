@@ -1,7 +1,9 @@
 package web
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"slices"
@@ -17,6 +19,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
 	"github.com/nofuturekid/tasmofleet/internal/tasmotacmd"
 	"github.com/nofuturekid/tasmofleet/internal/templates"
+	"github.com/nofuturekid/tasmofleet/internal/transport"
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
 
@@ -719,7 +722,38 @@ func (h *handler) gtForm(w http.ResponseWriter, r *http.Request) (templates.Requ
 		h.message(w, r, http.StatusBadRequest, h.view(r, "Nothing to apply", "policy", "Choose a group, a reference and at least one device on the GPIO templates tab."))
 		return templates.Request{}, false
 	}
+	if why := h.gtAPIOff(r.Context(), ref, ids); why != "" {
+		h.message(w, r, http.StatusConflict, h.view(r, "Apply GPIO template", "policy", "Nothing was sent. "+why))
+		return templates.Request{}, false
+	}
 	return templates.Request{Group: k, Reference: ref, Devices: ids, Chosen: r.PostForm.Get("how") == string(policy.RefChosen)}, true
+}
+
+// gtAPIOff names the devices of a template request whose HTTP API is off and which nothing else reaches (#645): the
+// reference is read, the others are backed up and written. The request is refused as a whole before any device is
+// read or sent anything, as a plan that includes a device it cannot reach would not be the one reviewed.
+func (h *handler) gtAPIOff(ctx context.Context, ref model.DeviceID, ids []model.DeviceID) string {
+	var b strings.Builder
+	name := func(id model.DeviceID) string {
+		d, _ := h.d.Inventory.Get(ctx, id) // a vanished device shows as an empty name
+		return d.Name
+	}
+	if why := h.apiOffBlock(ctx, ref, transport.ActCommands); why != "" {
+		fmt.Fprintf(&b, "%s: %s ", name(ref), why)
+	}
+	for _, id := range ids {
+		if id == ref {
+			continue
+		}
+		why := h.apiOffBlock(ctx, id, transport.ActWrites)
+		if why == "" {
+			why = h.apiOffBlock(ctx, id, transport.ActBackup)
+		}
+		if why != "" {
+			fmt.Fprintf(&b, "%s: %s ", name(id), why)
+		}
+	}
+	return strings.TrimSpace(b.String())
 }
 
 func (h *handler) gtPreview(w http.ResponseWriter, r *http.Request) {

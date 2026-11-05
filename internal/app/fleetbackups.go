@@ -74,7 +74,7 @@ func (f *fleetBackups) Overview(ctx context.Context) ([]model.BackupDeviceRow, e
 		r.SkipReason, r.SkipSince = backupSkipReason(health[u.Device], seen[u.Device], true)
 		if r.SkipReason == "" && f.apiOffSkip != nil {
 			if why := f.apiOffSkip(ctx, u.Device, health[u.Device]); why != "" {
-				r.SkipReason, r.SkipSince = why, health[u.Device].HTTPRefusedAt
+				r.SkipReason, r.SkipSince = why, health[u.Device].HTTPRefusedSince
 			}
 		}
 		if it, ok := last[u.Device]; ok {

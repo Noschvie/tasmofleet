@@ -515,8 +515,10 @@ func TestBackupAllLeavesBusyDevicesAlone(t *testing.T) {
 func TestScheduledBackupSkipsADeviceWhoseHTTPAPIIsOff(t *testing.T) {
 	e := newFleetEnv(t)
 	at := fleetT0.Add(-time.Hour)
-	e.dev(t, "api-off", fleetT0, model.Health{State: model.HealthOnline, HTTPRefusedAt: at})
-	e.dev(t, "api-off-but-mqtt", fleetT0, model.Health{State: model.HealthOnline, HTTPRefusedAt: at})
+	// The refusal was first seen an hour ago and again a minute ago: the skip is "since" the first one (#645).
+	latest := fleetT0.Add(-time.Minute)
+	e.dev(t, "api-off", fleetT0, model.Health{State: model.HealthOnline, HTTPRefusedSince: at, HTTPRefusedAt: latest})
+	e.dev(t, "api-off-but-mqtt", fleetT0, model.Health{State: model.HealthOnline, HTTPRefusedSince: at, HTTPRefusedAt: latest})
 	e.dev(t, "fine", fleetT0, model.Health{State: model.HealthOnline})
 	e.b.apiOffSkip = func(_ context.Context, id model.DeviceID, h model.Health) string {
 		if id == e.devices["api-off"] && h.APIOff() {
@@ -572,6 +574,57 @@ func TestAPIOffSkipUsesTheTrackersFindingNotTheRoutersMemory(t *testing.T) {
 		}
 		if got := transport.Choose(f).Backup; got != tc.path {
 			t.Errorf("%s: the router backs up over %q, want %q", tc.name, got, tc.path)
+		}
+	}
+}
+
+// apiOffRuntime: device 1 is HTTP only, device 2 is on our broker with its own reads over MQTT but a strict
+// write rule that fails (another device's GroupTopic is unread), device 3 on our broker and fully served.
+func apiOffRuntime() (*runtime, map[model.DeviceID]model.Health) {
+	id := model.Identity{Family: model.ChipESP8266, Version: "16.0.0", Variant: "tasmota", FreeKB: 700}
+	httpOnly := model.Device{ID: 1, Name: "plug", Identity: id}
+	onBroker := model.Device{ID: 2, Name: "mqtt-plug", Identity: id, MQTT: model.MQTTOurs, Topic: "mqtt-plug", FullTopic: "%prefix%/%topic%/",
+		GroupTopic: "tasmotas", GroupTopicReadAt: factsNow, MQTTPasswordMode: model.MQTTPasswordOwn}
+	refused := model.Health{State: model.HealthOnline, HTTPRefusedAt: factsNow}
+	h2 := refused
+	h2.LWT = "Online"
+	hs := map[model.DeviceID]model.Health{1: refused, 2: h2}
+	return &runtime{svc: &Services{}, facts: newFacts([]model.Device{httpOnly, onBroker}, fakeFactsHealth(hs), nil)}, hs
+}
+
+// Why (#645): the silent policy read every ten minutes is skipped (no read, no error) for a device whose HTTP API is
+// off and which MQTT cannot read, like an offline one; a device MQTT can read, and one whose API answers, are read.
+func TestPolicyReadSkipsADeviceWhoseHTTPAPIIsOffAndNothingElseReads(t *testing.T) {
+	a, hs := apiOffRuntime()
+	ctx := context.Background()
+	if !a.readSkipped(ctx, 1, hs[1]) {
+		t.Error("an HTTP-only device with its API off is read")
+	}
+	if a.readSkipped(ctx, 2, hs[2]) {
+		t.Error("a device MQTT reads was skipped")
+	}
+	ok := model.Health{State: model.HealthOnline, SeenHTTP: factsNow}
+	if a.readSkipped(ctx, 1, ok) {
+		t.Error("a device whose API answers was skipped")
+	}
+	if !a.readSkipped(ctx, 1, model.Health{State: model.HealthOffline}) {
+		t.Error("an offline device is read")
+	}
+}
+
+// Why: the scheduled run and the Backups page must use the same rule as the manual Back up (the hooks are the
+// wiring a refactor can lose silently): both skip an HTTP-only device whose API is off, with the one reason.
+func TestScheduledBackupAndBackupsPageAreWiredToTheAPIOffRule(t *testing.T) {
+	a, hs := apiOffRuntime()
+	for name, hook := range map[string]func(context.Context, model.DeviceID, model.Health) string{
+		"scheduled run": a.scheduledBackup().apiOffSkip,
+		"Backups page":  a.fleetBackups().apiOffSkip,
+	} {
+		if hook == nil {
+			t.Fatalf("%s: no API-off hook", name)
+		}
+		if got := hook(context.Background(), 1, hs[1]); got != skipAPIOff {
+			t.Errorf("%s: %q, want %q", name, got, skipAPIOff)
 		}
 	}
 }

@@ -316,15 +316,34 @@ func (a *runtime) probeAllowed(id model.DeviceID) bool {
 // other device (#447). It decides on the router's own facts, which carry the tracker's finding (httpState), so a
 // device it leaves to the run is backed up the way it says: over MQTT.
 func (a *runtime) apiOffSkip(ctx context.Context, id model.DeviceID, h model.Health) string {
-	if !h.APIOff() || a.facts == nil {
-		return ""
-	}
-	f, err := a.facts.Facts(ctx, id)
-	if err != nil {
-		return ""
-	}
-	if transport.Choose(f).Backup != transport.None {
+	if !a.apiOffNoPath(ctx, id, h, transport.ActBackup) {
 		return ""
 	}
 	return skipAPIOff
+}
+
+// apiOffNoPath says the device's HTTP API is off and nothing else (MQTT) can carry the action: the one rule of the
+// gates (model.Health.APIOff plus the router's facts, #447, #645). False when the facts cannot be read.
+func (a *runtime) apiOffNoPath(ctx context.Context, id model.DeviceID, h model.Health, act transport.Action) bool {
+	if !h.APIOff() || a.facts == nil {
+		return false
+	}
+	f, err := a.facts.Facts(ctx, id)
+	if err != nil {
+		return false
+	}
+	p := transport.Choose(f)
+	switch act {
+	case transport.ActCommands:
+		return p.Commands == transport.None
+	case transport.ActWrites:
+		return p.Writes == transport.None
+	case transport.ActBackup:
+		return p.Backup == transport.None
+	case transport.ActRestore:
+		return p.Restore == transport.None
+	case transport.ActUpdate:
+		return p.Update == transport.None
+	}
+	return false
 }

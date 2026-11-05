@@ -206,8 +206,9 @@ const (
 	FaultNeverReturns   = "never_returns"    // device goes offline after the restart and stays there
 	FaultHTTPOnly       = "http_only"        // device does not use MQTT even if the fleet has a broker
 
-	// FaultHTTPAPIOff: the HTTP API is switched off (SetOption128 0 behaviour, #447): /cm closes the connection
-	// without a reply, the main page still answers. Unlike FaultHTTPUnreachable the port is open, which is what
+	// FaultHTTPAPIOff: the HTTP API is switched off (SetOption128 0 behaviour, #447): /cm and every other handler
+	// that starts with the privileged-access check (/dl, /up, /u1, /u2, /u4, /rs, /ufsd, /ufsu) close the
+	// connection without a reply (#645), the main page still answers. Unlike FaultHTTPUnreachable the port is open, which is what
 	// tells tasmota.ErrHTTPAPIRefused from a dead device. Can be added at run time (Controller.AddFault).
 	FaultHTTPAPIOff = "http_api_off"
 

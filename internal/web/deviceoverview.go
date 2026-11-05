@@ -189,7 +189,7 @@ type reach struct {
 func shownHTTP(hs transport.HTTPState, hl model.Health) transport.HTTPState {
 	switch {
 	case refusedNow(hl):
-		return transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailAPIRefused, Since: hl.HTTPRefusedAt}
+		return transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailAPIRefused, Since: hl.HTTPRefusedSince}
 	case hs.State == transport.HTTPOK && hl.State == model.HealthOffline && !hl.SeenHTTP.After(hl.Since):
 		return transport.HTTPState{}
 	}
@@ -561,7 +561,10 @@ func (h *handler) overviewOf(r *http.Request, v view, d model.Device, just *rela
 	in.OtherBroker = otherBroker
 	off := p.Tabs.offline() // an update silences the device on purpose: that is not "offline"
 	p.Live = liveView{ActSig: p.Activity.Sig, ID: d.ID, Base: v.Base, CSRF: v.CSRF, Off: off, Tiles: tilesOf(in),
-		Box: relayBoxOf(hl, tele, d.RelayNames, h.d.DeviceCmd != nil && !off && p.Updating == nil)}
+		Box: relayBoxOf(hl, tele, d.RelayNames, h.d.DeviceCmd != nil && !off && p.Updating == nil && p.Tabs.writesAPIOff() == "")}
+	if p.Live.Box != nil {
+		p.Live.Box.Why = p.Tabs.writesAPIOff()
+	}
 	if p.Live.Box == nil {
 		p.Live.Sensors = sensorBoxOf(in)
 	}
@@ -570,6 +573,7 @@ func (h *handler) overviewOf(r *http.Request, v view, d model.Device, just *rela
 		p.Stab = &c
 	}
 	p.Ident = h.identity(v, d, p.Updating != nil, off, facts)
+	p.Ident.Why = p.Tabs.readsAPIOff()
 	p.Conn = connOf(in)
 	if tpOK {
 		p.Paths = pathCardOf(v, d, tf, tp, p.Tabs)

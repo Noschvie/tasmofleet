@@ -251,9 +251,19 @@ func (h *handler) consoleSend(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		cmd, data.Shown, data.Input = pc.cmd, cmdpolicy.Redacted(pc.cmd), ""
+		if why := h.apiOffBlockCommand(ctx, d.ID, cmd); why != "" {
+			data.Error = why
+			h.renderConsole(w, r, http.StatusConflict, d, data)
+			return
+		}
 		if pc.cutOff {
 			ctx = transport.WithCutOffConsent(ctx) // the person was told, and confirmed
 		}
+	} else if why := h.apiOffBlockCommand(ctx, d.ID, cmd); why != "" {
+		// Refused before the confirmation: a device whose HTTP API is off and which nothing else reaches would only fail.
+		data.Error = why
+		h.renderConsole(w, r, http.StatusConflict, d, data)
+		return
 	} else if v0, err := cmdpolicy.Classify(cmd); err == nil && p.Role >= model.RoleAdmin {
 		v, cut := h.confirmation(ctx, cmd, v0, d.ID)
 		canon, err := cmdpolicy.Canonical(cmd)

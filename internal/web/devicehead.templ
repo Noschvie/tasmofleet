@@ -90,6 +90,15 @@ templ deviceHead(t deviceTabs, attrs templ.Attributes) {
 			if t.CanRestart {
 				if t.Health == model.HealthOffline {
 					<button type="button" class="btn" disabled>Restart</button>
+				} else if t.writesAPIOff() != "" {
+					<button
+						type="button"
+						class="btn"
+						disabled
+						title={ t.writesAPIOff() }
+						aria-disabled="true"
+						aria-describedby="devhd-why"
+					>Restart</button>
 				} else {
 					@ui.Button(ui.Btn{Label: "Restart", Href: t.Base + devPath(t.ID, "/restart"), Dialog: "dlg-restart"})
 				}
@@ -301,10 +310,24 @@ templ relayBoxView(l liveView) {
 						<span class="dev-relay-n">{ rl.Name } <span class="mono">{ rl.Cmd }</span></span>
 						<span class="dev-relay-s" data-visual-mask>{ rl.Line }</span>
 					</div>
-					<button type="submit" class="devrelay-sw" role="switch" aria-checked={ ariaBool(rl.On) } aria-label={ rl.Aria } disabled?={ !l.Box.Enabled }><span class="devsw" aria-hidden="true"></span></button>
+					<button
+						type="submit"
+						class="devrelay-sw"
+						role="switch"
+						aria-checked={ ariaBool(rl.On) }
+						aria-label={ rl.Aria }
+						disabled?={ !l.Box.Enabled }
+						if l.Box.Why != "" {
+							title={ l.Box.Why }
+							aria-describedby="dev-relays-why"
+						}
+					><span class="devsw" aria-hidden="true"></span></button>
 				</form>
 			}
 		</div>
+		if l.Box.Why != "" {
+			<p class="devcard-note" id="dev-relays-why">Switching is disabled: { l.Box.Why }</p>
+		}
 		if l.Box.Err != "" {
 			<p class="error" role="alert">{ l.Box.Err }</p>
 		}
@@ -396,7 +419,20 @@ templ identityCard(c identCard) {
 		<div class="devcard-head">
 			<h2 id="dc-ident">Identity</h2>
 			if c.CanProbe {
-				<button type="button" class="btn btn-link" hx-post={ c.Base + devPath(c.ID, "/probe") } hx-target="#identity" hx-swap="outerHTML" hx-disabled-elt="this" data-needs-device disabled?={ c.Off }>Refresh identity</button>
+				<button
+					type="button"
+					class="btn btn-link"
+					hx-post={ c.Base + devPath(c.ID, "/probe") }
+					hx-target="#identity"
+					hx-swap="outerHTML"
+					hx-disabled-elt="this"
+					data-needs-device
+					disabled?={ c.Off || c.Why != "" }
+					if c.Why != "" {
+						title={ c.Why }
+						data-refused
+					}
+				>Refresh identity</button>
 			}
 		</div>
 		@ui.KV(c.Rows)

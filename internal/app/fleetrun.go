@@ -149,7 +149,7 @@ func (b *scheduledBackup) Run(ctx context.Context) {
 		}
 		if b.apiOffSkip != nil {
 			if why := b.apiOffSkip(ctx, d.ID, health[d.ID]); why != "" {
-				add(d, model.BackupOutcomeSkipped, why, health[d.ID].HTTPRefusedAt)
+				add(d, model.BackupOutcomeSkipped, why, health[d.ID].HTTPRefusedSince)
 				continue
 			}
 		}

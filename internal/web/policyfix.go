@@ -18,6 +18,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/policy"
 	"github.com/nofuturekid/tasmofleet/internal/settings"
 	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/nofuturekid/tasmofleet/internal/transport"
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
 
@@ -265,6 +266,7 @@ func (h *handler) fixRows(ctx context.Context, rep PolicyReport, sel fixSel) []f
 			}
 			row.Skipped = append(row.Skipped, v)
 		}
+		apiOff := h.apiOffBlock(ctx, d.ID, transport.ActWrites)
 		switch {
 		case len(row.Cmds) == 0 && len(row.Skipped) == 0 && len(row.Options) > 0:
 			row.Blocked = "No Required rule deviates. Tick an Advisory deviation below to include it."
@@ -272,6 +274,8 @@ func (h *handler) fixRows(ctx context.Context, rep PolicyReport, sel fixSel) []f
 			row.Blocked = "Already compliant, nothing to change."
 		case len(row.Cmds) == 0:
 			row.Blocked = "Nothing can be changed: every deviation is unknown or not read live."
+		case apiOff != "":
+			row.Blocked = apiOff // the values are cached ones; the device would be sent commands it refuses (#645)
 		case h.d.Jobs != nil:
 			if act, err := h.d.Jobs.ListJobs(ctx, store.JobFilter{DeviceID: d.ID, States: activeJobStates, Limit: 1}); err == nil && len(act) > 0 {
 				row.Blocked = "Another transaction is running on this device (#" + strconv.FormatInt(int64(act[0].BatchID), 10) + ")."
@@ -391,8 +395,12 @@ func (h *handler) policyFixApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var reqs []ota.PolicyRequest
+	var apiOff []string
 	for _, row := range rows {
 		if row.Blocked != "" {
+			if row.Blocked == reasonAPIOff {
+				apiOff = append(apiOff, row.Device.Name+": "+row.Blocked)
+			}
 			continue
 		}
 		req := ota.PolicyRequest{DeviceID: row.Device.ID}
@@ -400,6 +408,10 @@ func (h *handler) policyFixApply(w http.ResponseWriter, r *http.Request) {
 			req.Commands = append(req.Commands, c.Text)
 		}
 		reqs = append(reqs, req)
+	}
+	if len(reqs) == 0 && len(apiOff) > 0 {
+		h.message(w, r, http.StatusConflict, h.view(r, "Nothing to change", "policy", "Nothing was sent. "+strings.Join(apiOff, " ")))
+		return
 	}
 	batch, skipped, err := h.d.PolicyFix.Submit(r.Context(), actor(r), reqs)
 	if errors.Is(err, ota.ErrNothingToFix) {

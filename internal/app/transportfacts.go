@@ -149,7 +149,7 @@ func (s *TransportFacts) httpState(id model.DeviceID, h model.Health, now time.T
 		}
 	}
 	if h.APIOff() {
-		return transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailAPIRefused, Since: h.HTTPRefusedAt}
+		return transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailAPIRefused, Since: h.HTTPRefusedSince}
 	}
 	if !h.SeenHTTP.IsZero() && now.Sub(h.SeenHTTP) < httpFreshFor {
 		return transport.HTTPState{State: transport.HTTPOK}

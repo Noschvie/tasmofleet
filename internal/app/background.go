@@ -184,7 +184,10 @@ func (a *runtime) prune(ctx context.Context) {
 }
 
 // backupAll is the scheduled run (BACKUP_INTERVAL); the rules are in scheduledBackup.
-func (a *runtime) backupAll(ctx context.Context) {
+func (a *runtime) backupAll(ctx context.Context) { a.scheduledBackup().Run(ctx) }
+
+// scheduledBackup wires the scheduled run to the store, the tracker, the guard and the backup manager.
+func (a *runtime) scheduledBackup() *scheduledBackup {
 	health := func() map[model.DeviceID]model.Health { return nil } // no tracker: every device is judged by when it was last heard
 	if a.tracker != nil {
 		health = a.tracker.All
@@ -203,5 +206,5 @@ func (a *runtime) backupAll(ctx context.Context) {
 			a.notifier.Emit(notify.BackupFailed(a.notifier.Config(), tried, failed, at))
 		}
 	}
-	b.Run(ctx)
+	return b
 }

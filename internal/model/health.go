@@ -37,9 +37,12 @@ type Health struct {
 	// HTTPRefusedAt is when the last HTTP call found the device's web page answering but its HTTP API
 	// off (SetOption128, tasmota.ErrHTTPAPIRefused); zero when the last call did not find that (#447).
 	HTTPRefusedAt time.Time
-	LWT           string // "Online", "Offline" or "" when no MQTT
-	UptimeSec     int64
-	RSSI          int // Wifi.RSSI percentage from STATE, 0 if unknown
+	// HTTPRefusedSince is when the HTTP API was first found off in the current run of refusals (HTTPRefusedAt moves
+	// with every refusal); zero together with HTTPRefusedAt. What the connection card shows as "since" (#645).
+	HTTPRefusedSince time.Time
+	LWT              string // "Online", "Offline" or "" when no MQTT
+	UptimeSec        int64
+	RSSI             int // Wifi.RSSI percentage from STATE, 0 if unknown
 	// SignalDBm is Wifi.Signal from STATE/Status 11 (0 = not reported). LinkCount is Wifi.LinkCount,
 	// how often the device connected to its access point since it started (0 = not reported).
 	SignalDBm int

@@ -278,6 +278,10 @@ test("a device with its HTTP API off is not shown as offline", { tag: "@core" },
   await expect(page.locator("#devpaths-facts")).toContainText("SetOption128 1");
   await expect(page.locator("#devpaths-actions")).toContainText("HTTP API off (SetOption128 0)");
   await expect(page.locator(".devhd-state")).toHaveText("Online");
+  // #645: nothing on the page tries and fails; the switches and Restart are disabled with the one reason
+  await expect(page.locator("#dev-relays-why")).toContainText("HTTP API off (SetOption128 0)");
+  await expect(page.locator("#devlive .devrelay-sw").first()).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Restart", exact: true })).toBeDisabled();
   for (const width of [375, 1280]) {
     for (const scheme of ["light", "dark"] as const) {
       await page.emulateMedia({ colorScheme: scheme });

@@ -16,6 +16,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/policy"
 	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/nofuturekid/tasmofleet/internal/transport"
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
 
@@ -70,6 +71,7 @@ type tile struct {
 
 // relayBox is the box of relay switches. Right is the metering line of the box header.
 type relayBox struct {
+	Why     string // the switches are disabled for this reason: the HTTP API is off and nothing else carries a change (#645)
 	Right   string
 	Rows    []relayRow
 	Enabled bool   // the switches can be used now
@@ -159,8 +161,10 @@ type identCard struct {
 	Rows     []ui.KVRow
 	CanProbe bool // not while an operation holds the device
 	Off      bool // dimmed: the device does not answer, so Refresh identity is disabled too
-	Notice   string
-	Error    string
+	// Why disables Refresh identity with a reason: the device's HTTP API is off and nothing else reaches it (#645).
+	Why    string
+	Notice string
+	Error  string
 	// NameOffer is the DeviceName the device reports while the stored name differs (#125);
 	// "" shows nothing. Admins get the two answers, KeepOK says Keep can be saved.
 	NameOffer string
@@ -424,12 +428,19 @@ func (h *handler) deviceProbe(w http.ResponseWriter, r *http.Request) {
 	}
 	v := h.view(r, "", "", nil)
 	var notice, failure string
-	err := h.d.Prober.Refresh(r.Context(), d.ID, actor(r))
+	// Refresh identity reads the device: refused up front when its HTTP API is off and nothing else reaches it.
+	apiOff := h.apiOffBlock(r.Context(), d.ID, transport.ActCommands)
+	var err error
+	if apiOff == "" {
+		err = h.d.Prober.Refresh(r.Context(), d.ID, actor(r))
+	}
 	var attention interface{ Notice() string }
 	if errors.As(err, &attention) {
 		err = nil // refreshed, with one thing to tell the admin (#111)
 	}
-	if err != nil {
+	if apiOff != "" {
+		failure = apiOff
+	} else if err != nil {
 		failure = h.refreshProblem(r, err)
 	} else {
 		notice = "Identity refreshed."
@@ -445,6 +456,7 @@ func (h *handler) deviceProbe(w http.ResponseWriter, r *http.Request) {
 	hl, running := h.deviceState(r, d)
 	tabs := h.headOf(r.Context(), v, d, hl, running, "overview")
 	c := h.identity(v, d, running != nil, tabs.offline(), h.factsOf(r.Context(), d))
+	c.Why = tabs.readsAPIOff()
 	c.Notice, c.Error = notice, failure
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")

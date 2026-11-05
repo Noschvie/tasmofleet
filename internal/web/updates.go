@@ -242,7 +242,7 @@ func (h *handler) updateFormData(r *http.Request, selected []model.DeviceID, mod
 		d := row.Device
 		blocked := blockedReason(d, row.Health.State)
 		if blocked == "" && row.Health.APIOff() {
-			blocked = h.apiOffBlock(r.Context(), d.ID, transport.ActUpdate) // online, but its HTTP API is off and MQTT cannot update it (#447)
+			blocked = h.apiOffBlockUpdate(r.Context(), d.ID, model.DeliveryPush) // online, but its HTTP API is off and MQTT cannot update it (#447)
 		}
 		if blocked == "" && busy[d.ID] {
 			blocked = "In a running transaction"
@@ -701,7 +701,7 @@ func (h *handler) updatePreview(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	apiOff := h.updateAPIOff(r.Context(), ids)
+	apiOff := h.updateAPIOff(r.Context(), ids, model.Delivery(r.PostFormValue("delivery")))
 	redo := func(msg string) {
 		f, err := h.updateFormData(r, ids, "", deviceFilter{})
 		if err != nil {
@@ -815,10 +815,10 @@ func (h *handler) updatePreview(w http.ResponseWriter, r *http.Request) {
 
 // updateAPIOff names the selected devices whose HTTP API is off and which nothing else can update (#447), with
 // the reason; "" when none. They are refused before anything starts, as the picker already greys them out.
-func (h *handler) updateAPIOff(ctx context.Context, ids []model.DeviceID) string {
+func (h *handler) updateAPIOff(ctx context.Context, ids []model.DeviceID, delivery model.Delivery) string {
 	var b strings.Builder
 	for _, id := range ids {
-		if why := h.apiOffBlock(ctx, id, transport.ActUpdate); why != "" {
+		if why := h.apiOffBlockUpdate(ctx, id, delivery); why != "" {
 			d, _ := h.d.Inventory.Get(ctx, id) // a vanished device shows as an empty name
 			fmt.Fprintf(&b, "%s: %s ", d.Name, why)
 		}
@@ -832,7 +832,7 @@ func (h *handler) updateSubmit(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	if apiOff := h.updateAPIOff(r.Context(), h.formIDs(r)); apiOff != "" {
+	if apiOff := h.updateAPIOff(r.Context(), h.formIDs(r), model.Delivery(r.PostFormValue("delivery"))); apiOff != "" {
 		h.message(w, r, http.StatusConflict, h.view(r, "Update refused", "updates", "Nothing was started. "+apiOff))
 		return
 	}
@@ -1471,10 +1471,37 @@ func (h *handler) batchRetryForm(w http.ResponseWriter, r *http.Request) {
 		page.Error = "This transaction is still running. Retry it when every device has finished."
 	} else if len(page.Devices) == 0 {
 		page.Error = "No failed or cancelled device to retry."
+	} else if why := h.retryAPIOff(r.Context(), page.Devices, nil); why != "" {
+		page.Error = "Nothing would be sent. " + why
 	}
 	v := h.view(r, fmt.Sprintf("Retry transaction %d", p.Batch), "transactions", nil)
 	v.Crumbs = []ui.Crumb{{Label: "Updates", Path: "/transactions"}, {Label: txID(p.Batch), Path: "/transactions/" + bid(p.Batch)}, {Label: "Retry"}}
 	h.show(w, r, http.StatusOK, "transaction_retry", v, retryPageView(h.retryViewOf(v, page)))
+}
+
+// retryAPIOff names the devices of a backup, command or Make compliant transaction that a retry would send to, whose
+// HTTP API is off and which nothing else reaches, with the reason; "" when none (#645). The retry is refused up front
+// as a whole, like an update. pick is the posted device ids, empty for every failed device.
+func (h *handler) retryAPIOff(ctx context.Context, jobs []jobView, pick []model.DeviceID) string {
+	var b strings.Builder
+	for _, j := range jobs {
+		if !j.CanRetry || (len(pick) > 0 && !slices.Contains(pick, j.Job.DeviceID)) {
+			continue
+		}
+		var why string
+		switch {
+		case j.Job.IsBackup():
+			why = h.apiOffBlock(ctx, j.Job.DeviceID, transport.ActBackup)
+		case j.Job.IsCommand():
+			why = h.apiOffBlockCommand(ctx, j.Job.DeviceID, j.Job.Commands)
+		case j.Job.IsPolicy():
+			why = h.apiOffBlock(ctx, j.Job.DeviceID, transport.ActWrites)
+		}
+		if why != "" {
+			fmt.Fprintf(&b, "%s: %s ", j.Device, why)
+		}
+	}
+	return strings.TrimSpace(b.String())
 }
 
 // adminOnlyKind says which transactions only an admin may cancel or retry: GPIO template transactions
@@ -1592,6 +1619,10 @@ func (h *handler) batchRetry(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
+	}
+	if why := h.retryAPIOff(r.Context(), jobs, h.formIDs(r)); why != "" {
+		h.message(w, r, http.StatusConflict, h.view(r, "Retry refused", "transactions", "Nothing was started. "+why))
+		return
 	}
 	pr, _ := auth.FromContext(r.Context())
 	res, err := h.d.OTA.SubmitRetry(ota.WithActorKind(r.Context(), pr.Method), actor(r), id, h.formIDs(r))

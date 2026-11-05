@@ -112,7 +112,7 @@ func (h *handler) probeProblem(r *http.Request, err error) (field, msg string, f
 	case errors.Is(err, tasmota.ErrAuth):
 		return "http_password", "The device asked for a web password. Enter the web user and password of the device.", true
 	case errors.Is(err, tasmota.ErrHTTPAPIRefused):
-		return "address", "The device answers, but refuses HTTP API commands from this address. Set SetOption128 1 on the device, or use its own IP address or hostname.", true
+		return "address", "The device answers: " + reasonAPIOff, true
 	case errors.Is(err, tasmota.ErrUnreachable):
 		return "address", "No device answered at this address. Check that it is on and on the network, or add it without probing.", true
 	case errors.Is(err, tasmota.ErrTimeout):

@@ -10,6 +10,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/settings"
 	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/nofuturekid/tasmofleet/internal/transport"
 )
 
 // SettingsService is the part of settings.Service the UI uses.
@@ -167,7 +168,7 @@ func readErrorText(err error) string {
 	case errors.Is(err, tasmota.ErrAuth):
 		return "The device refused the stored credentials."
 	case errors.Is(err, tasmota.ErrHTTPAPIRefused):
-		return "The device likely refuses HTTP API commands from this address. Set SetOption128 1 on it."
+		return reasonAPIOff
 	case errors.Is(err, tasmota.ErrUnreachable):
 		return "The device is unreachable."
 	case errors.Is(err, tasmota.ErrTimeout):
@@ -294,6 +295,10 @@ func (h *handler) settingsApply(w http.ResponseWriter, r *http.Request) {
 		// Not a failure: the form matches the device, so there is nothing to send.
 		page.Notice = "Nothing changed."
 		rerender(http.StatusOK, "", nil, false)
+		return
+	}
+	if why := h.apiOffBlock(r.Context(), d.ID, transport.ActWrites); why != "" {
+		h.refuseAPIOff(w, r, "Settings not written", "devices", "Nothing was written. ", why)
 		return
 	}
 	results, err := h.d.Settings.Apply(r.Context(), actor(r), d.ID, changes)

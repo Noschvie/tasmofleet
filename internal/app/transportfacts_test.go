@@ -129,9 +129,10 @@ func TestFactsHTTPState(t *testing.T) {
 		// Why (#447): the tracker keeps a refused HTTP API until HTTP answers again, the memory only ten minutes.
 		// The router decides on these facts too: with the memory cold it would try HTTP first, and a backup's
 		// /dl that Tasmota leaves unanswered is not "provably unsent", so a device MQTT can serve would fail.
-		{"API off, the memory forgot", model.Health{State: model.HealthOnline, HTTPRefusedAt: factsNow.Add(-20 * time.Minute)}, nil,
-			transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailAPIRefused, Since: factsNow.Add(-20 * time.Minute)}},
-		{"API off after a fresh answer", model.Health{State: model.HealthOnline, SeenHTTP: factsNow.Add(-12 * time.Minute), HTTPRefusedAt: factsNow.Add(-11 * time.Minute)}, fakeMemory{},
+		// Why (#645): "Since" is when the API was first found off, not the latest refusal, which moves with every poll.
+		{"API off, the memory forgot", model.Health{State: model.HealthOnline, HTTPRefusedSince: factsNow.Add(-50 * time.Minute), HTTPRefusedAt: factsNow.Add(-20 * time.Minute)}, nil,
+			transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailAPIRefused, Since: factsNow.Add(-50 * time.Minute)}},
+		{"API off after a fresh answer", model.Health{State: model.HealthOnline, SeenHTTP: factsNow.Add(-12 * time.Minute), HTTPRefusedSince: factsNow.Add(-11 * time.Minute), HTTPRefusedAt: factsNow.Add(-11 * time.Minute)}, fakeMemory{},
 			transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailAPIRefused, Since: factsNow.Add(-11 * time.Minute)}},
 		{"an answer after the refusal", model.Health{State: model.HealthOnline, SeenHTTP: factsNow.Add(-time.Minute), HTTPRefusedAt: factsNow.Add(-20 * time.Minute)}, nil,
 			transport.HTTPState{State: transport.HTTPOK}},

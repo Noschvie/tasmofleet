@@ -122,6 +122,12 @@ func (h *handler) bulkScope(r *http.Request, kind bulkKind, self, run string) (b
 	for _, d := range devs {
 		byID[d.ID] = d
 	}
+	act := bulkAction(kind)
+	if cmd := r.PostFormValue("command"); kind == bulkCmd && strings.TrimSpace(cmd) != "" {
+		act = commandAction(cmd) // a read needs only a way to read, not the strict rule of writes
+	} else if kind == bulkCmd {
+		act = transport.ActCommands // no command typed yet: the scope page does not judge by the write rule
+	}
 	var ready []model.DeviceID
 	for _, id := range ids {
 		d, ok := byID[id]
@@ -134,7 +140,7 @@ func (h *handler) bulkScope(r *http.Request, kind bulkKind, self, run string) (b
 			row.Addr += ":" + strconv.Itoa(d.Port)
 		}
 		hl := h.d.Health.Get(id)
-		if reachableNow(st) && hl.APIOff() && h.apiOffBlock(r.Context(), id, bulkAction(kind)) != "" {
+		if reachableNow(st) && hl.APIOff() && h.apiOffBlock(r.Context(), id, act) != "" {
 			row.Status, row.Tone = "HTTP API off", ui.ToneWarn // online, but nothing can carry the action (#447)
 			row.Skip = true
 			sv.SkipN++

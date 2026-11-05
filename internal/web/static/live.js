@@ -138,7 +138,7 @@
       .querySelectorAll("#identity [data-needs-device]")
       .forEach(function (b) {
         // a Refresh identity in flight is disabled by htmx and enabled again by htmx
-        if (!b.classList.contains("htmx-request")) {
+        if (!b.classList.contains("htmx-request") && !b.hasAttribute("data-refused")) {
           b.disabled = off;
         }
       });

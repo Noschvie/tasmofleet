@@ -108,15 +108,18 @@ type devState struct {
 	topic string
 	cap   model.MQTTCapability
 
-	mqttSeen   bool // a message on our broker matched this device
-	lwt        string
-	lastMQTT   time.Time
-	lastLive   time.Time // lastMQTT without replays: only what the device sent while we listened (LiveMQTT)
-	lastHTTP   time.Time
-	refusedAt  time.Time // the last HTTP call found the API off (Health.HTTPRefusedAt)
-	fails      int
-	authFailed bool
-	minimal    bool
+	mqttSeen  bool // a message on our broker matched this device
+	lwt       string
+	lastMQTT  time.Time
+	lastLive  time.Time // lastMQTT without replays: only what the device sent while we listened (LiveMQTT)
+	lastHTTP  time.Time
+	refusedAt time.Time // the last HTTP call found the API off (Health.HTTPRefusedAt)
+	// refusedSince is when the API was first found off in the current run of refusals; it is cleared with
+	// refusedAt (Health.HTTPRefusedSince). In memory only.
+	refusedSince time.Time
+	fails        int
+	authFailed   bool
+	minimal      bool
 
 	// lastRefused is when the device last refused an HTTP API call. A refusal is an answer (the web page is
 	// up, #447), so it counts as contact like lastHTTP, but it never moves lastHTTP: SeenHTTP means the API
@@ -579,7 +582,7 @@ type transition struct {
 // Health, publishes it and reports a state change for persistence.
 func (s *Service) evaluate(ds *devState, now time.Time, src model.HealthSource, detail string) (transition, bool) {
 	ds.h.LastSeen = s.lastObs(ds)
-	ds.h.SeenMQTT, ds.h.SeenHTTP, ds.h.HTTPRefusedAt = ds.lastMQTT, ds.lastHTTP, ds.refusedAt
+	ds.h.SeenMQTT, ds.h.SeenHTTP, ds.h.HTTPRefusedAt, ds.h.HTTPRefusedSince = ds.lastMQTT, ds.lastHTTP, ds.refusedAt, ds.refusedSince
 	ds.h.LWT = ds.lwt
 	if src != "" {
 		ds.h.Source = src
@@ -914,7 +917,7 @@ func (s *Service) poll(ctx context.Context, id model.DeviceID, reach bool) {
 		if !res.minimal {
 			s.applyJSON(ds, res.sts, true, ds.powerGen != powerGen)
 		}
-		ds.refusedAt = time.Time{}
+		ds.refusedAt, ds.refusedSince = time.Time{}, time.Time{}
 		if reach {
 			ds.probeAfter = now.Add(probeOKGap)
 			break
@@ -931,6 +934,9 @@ func (s *Service) poll(ctx context.Context, id model.DeviceID, reach bool) {
 		// password, so a refusal says nothing about the credentials).
 		ds.fails, ds.authFailed = 0, false
 		ds.refusedAt, ds.lastRefused = now, now
+		if ds.refusedSince.IsZero() {
+			ds.refusedSince = now // the first refusal of this run: the card's "Since" (#645)
+		}
 		detail = "http: API refused"
 		if reach {
 			ds.probeAfter = now.Add(probeFailGap)
@@ -980,7 +986,7 @@ func (s *Service) poll(ctx context.Context, id model.DeviceID, reach bool) {
 // page is gone too); a timeout or a credentials error says nothing and leaves it.
 func (ds *devState) forgetRefusal(err error) {
 	if errors.Is(err, tasmota.ErrUnreachable) {
-		ds.refusedAt = time.Time{}
+		ds.refusedAt, ds.refusedSince = time.Time{}, time.Time{}
 	}
 }
 

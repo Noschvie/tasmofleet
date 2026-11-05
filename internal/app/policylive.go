@@ -9,6 +9,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/mqttbus"
 	"github.com/nofuturekid/tasmofleet/internal/settings"
+	"github.com/nofuturekid/tasmofleet/internal/transport"
 )
 
 const (
@@ -42,10 +43,23 @@ func (a *runtime) startPolicyLive() {
 	// The interval is a system setting: a change applies at the next tick, 0 pauses the reads.
 	// Pause / Resume on the policy page (N21) stops the background reads too;
 	// the on-demand check and the MQTT updates stay.
-	p := &policyPoller{rep: rep, interval: func() time.Duration { return a.svc.Sys.Snapshot().PolicyLiveInterval }, offline: func(id model.DeviceID) bool {
-		return a.tracker != nil && a.tracker.Get(id).State == model.HealthOffline
-	}, paused: a.livePause.Paused}
+	// A device whose HTTP API is off and which MQTT cannot read is skipped like an offline one: no read, no error (#645).
+	p := &policyPoller{rep: rep, interval: func() time.Duration { return a.svc.Sys.Snapshot().PolicyLiveInterval }, offline: a.policyReadSkipped, paused: a.livePause.Paused}
 	a.goBG("policy-poll", func() error { p.run(a.bgContext, pollTick); return nil })
+}
+
+// policyReadSkipped says the background read leaves the device alone: it is offline, or its HTTP API is off and
+// nothing else (MQTT) can read it, so the read would only fail (#645).
+func (a *runtime) policyReadSkipped(id model.DeviceID) bool {
+	if a.tracker == nil {
+		return false
+	}
+	return a.readSkipped(a.bgContext, id, a.tracker.Get(id))
+}
+
+// readSkipped is policyReadSkipped for a device whose health is known.
+func (a *runtime) readSkipped(ctx context.Context, id model.DeviceID, h model.Health) bool {
+	return h.State == model.HealthOffline || a.apiOffNoPath(ctx, id, h, transport.ActCommands)
 }
 
 type policyUpdate struct {

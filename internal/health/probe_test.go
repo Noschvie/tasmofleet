@@ -487,3 +487,124 @@ func (c *fakeClient) reset() {
 	defer c.mu.Unlock()
 	c.cmds = nil
 }
+
+// Why (#645): the card's "Since" is when the API was first found off. HTTPRefusedAt moves with every refusal and
+// drives the rules; HTTPRefusedSince stays until HTTP answers or the device is gone altogether.
+func TestRefusalSinceIsTheFirstRefusalOfTheRun(t *testing.T) {
+	h := newHarness(t, false, Options{}, httpDev(1))
+	h.svc.reload(h.ctx, h.clk.Now())
+	refuseAll(h)
+	h.step()
+	first := h.clk.Now()
+	for range 3 {
+		h.advance(31 * time.Minute)
+		h.step()
+	}
+	g := h.svc.Get(1)
+	if !g.HTTPRefusedSince.Equal(first) || !g.HTTPRefusedAt.After(first) {
+		t.Fatalf("since %v, latest %v, want since the first refusal %v", g.HTTPRefusedSince, g.HTTPRefusedAt, first)
+	}
+	// nothing answers at all: the finding is gone, and a later refusal starts a new run
+	failAll(h, tasmota.ErrUnreachable)
+	h.advance(31 * time.Minute)
+	h.step()
+	if g := h.svc.Get(1); !g.HTTPRefusedSince.IsZero() {
+		t.Fatalf("an unreachable device kept the refusal since %v", g.HTTPRefusedSince)
+	}
+	refuseAll(h)
+	h.advance(31 * time.Minute)
+	h.step()
+	second := h.clk.Now()
+	if g := h.svc.Get(1); !g.HTTPRefusedSince.Equal(second) {
+		t.Fatalf("new run since %v, want %v", g.HTTPRefusedSince, second)
+	}
+	h.cl.set(func(string, string) (json.RawMessage, error) { return json.RawMessage(sts11), nil })
+	h.advance(31 * time.Minute)
+	h.step()
+	if g := h.svc.Get(1); !g.HTTPRefusedSince.IsZero() {
+		t.Fatalf("HTTP answered, the refusal since %v stayed", g.HTTPRefusedSince)
+	}
+}
+
+// Why: a refusal is an answer, so the failures before it no longer add up with those after it. Without the reset,
+// one timeout after a refusal would take a device offline that talked to us a moment ago.
+func TestRefusalResetsTheRunOfFailures(t *testing.T) {
+	h := newHarness(t, false, Options{}, httpDev(1))
+	h.svc.reload(h.ctx, h.clk.Now())
+	failAll(h, errDown)
+	h.step()
+	h.advance(31 * time.Minute)
+	h.step()
+	h.svc.mu.Lock()
+	before := h.svc.devs[1].fails
+	h.svc.mu.Unlock()
+	if before == 0 {
+		t.Fatal("fixture: no failures counted")
+	}
+	refuseAll(h)
+	h.advance(31 * time.Minute)
+	h.step()
+	h.svc.mu.Lock()
+	after := h.svc.devs[1].fails
+	h.svc.mu.Unlock()
+	if after != 0 {
+		t.Fatalf("failures after a refusal: %d, want 0 (was %d)", after, before)
+	}
+}
+
+// Why: a probe is the page's question, not a poll. A refused probe records the refusal and leaves the poll
+// schedule alone; a probe that times out says nothing about the API and keeps the finding, while one that finds
+// nothing at all (no route) drops it.
+func TestRefusedProbeKeepsThePollScheduleAndTheFindingSurvivesATimeout(t *testing.T) {
+	h := newHarness(t, true, Options{}, mqttDev(1, "a"))
+	h.listen()
+	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Online", false)
+	h.bus.emit(mqttbus.KindState, "a", "STATE", `{"UptimeSec":10}`, false)
+	h.step()
+	h.svc.mu.Lock()
+	next := h.svc.devs[1].nextPoll
+	h.svc.mu.Unlock()
+	refuseAll(h)
+	h.svc.ProbeHTTP(1)
+	h.step()
+	h.svc.mu.Lock()
+	moved := !h.svc.devs[1].nextPoll.Equal(next)
+	h.svc.mu.Unlock()
+	if h.svc.Get(1).HTTPRefusedAt.IsZero() || moved {
+		t.Fatalf("refused probe: recorded %v, poll schedule moved %v", !h.svc.Get(1).HTTPRefusedAt.IsZero(), moved)
+	}
+	failAll(h, tasmota.ErrTimeout)
+	h.advance(probeFailGap)
+	h.svc.ProbeHTTP(1)
+	h.step()
+	if h.svc.Get(1).HTTPRefusedAt.IsZero() {
+		t.Fatal("a probe that timed out dropped the refusal")
+	}
+	failAll(h, tasmota.ErrUnreachable)
+	h.advance(probeFailGap)
+	h.svc.ProbeHTTP(1)
+	h.step()
+	if !h.svc.Get(1).HTTPRefusedAt.IsZero() {
+		t.Fatal("a probe that reached nothing kept the refusal")
+	}
+}
+
+// Why (#456, #619): "Offline since" ignores a probe's HTTP contact only for a device that lives on our broker,
+// where the will is the truth. A device that is not in MQTT mode (the broker switched off, or never ours) has
+// only HTTP, so its HTTP contact is its last sighting whatever stale will it once sent.
+func TestLastObservationIgnoresHTTPProbesOnlyInMQTTMode(t *testing.T) {
+	h := newHarness(t, false, Options{}, mqttDev(1, "a"))
+	sb := &switchedBus{on: true}
+	h.svc.d.Bus = sb
+	t0 := h.clk.Now()
+	ds := &devState{topic: "a", cap: model.MQTTOurs, lwt: "Offline", lastMQTT: t0, lastPolled: t0, lastHTTP: t0.Add(time.Hour)}
+	h.svc.mu.Lock()
+	defer h.svc.mu.Unlock()
+	if got := h.svc.lastObs(ds); !got.Equal(t0) {
+		t.Fatalf("MQTT mode: last observation %v, want the will's time %v (a probe must not move it)", got, t0)
+	}
+	sb.on = false
+	if got := h.svc.lastObs(ds); !got.Equal(t0.Add(time.Hour)) {
+		t.Fatalf("not in MQTT mode: last observation %v, want the HTTP contact", got)
+	}
+}

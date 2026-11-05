@@ -1185,6 +1185,9 @@ Submit.
   `HTTPRefusedAt`) but never counts toward offline and does not move the poll schedule. For a device whose
   last will is `Offline` it never moves the device between online and offline either: the background poll alone
   decides that (#619), so opening its page neither brings the device back nor takes it offline.
+- `Health.HTTPRefusedSince` (#645): when the HTTP API was first found off in the current run of refusals (in memory;
+  cleared together with `HTTPRefusedAt`). The connection card and the skipped-backup note show it as "since";
+  `HTTPRefusedAt` keeps moving with every refusal and is what the rules read.
 - `Health.HTTPRefusedAt` (#447): when the last HTTP call found the device's web page answering but its HTTP
   API off (`tasmota.ErrHTTPAPIRefused`, SetOption128); zero when HTTP answers or the device does not answer at
   all. The router's memory of the same finding lasts 10 min; the transport facts (`TransportFacts.httpState`) apply
@@ -1198,7 +1201,7 @@ Submit.
   messages and what the background poll reaches (an answer or a refusal) count as `LastSeen`: a probe contact
   does not move "Offline since". An online device whose API is off
   and which no MQTT path can serve has no path for backup, update, restore and changes: scheduled backups skip it
-  (reason "HTTP API off (SetOption128 0)"), and updates, bulk actions and manual Back up refuse it up front.
+  (reason "HTTP API off (SetOption128 0)"), and updates, bulk actions, manual Back up, relay switches, Restart, Refresh identity, Console and Settings posts, transaction retries (backup, command, Make compliant), Make compliant and GPIO template apply refuse it up front with that reason (#645); the background policy read skips it silently.
 - MQTT messages update `LastSeen`, power state and RSSI immediately and push SSE events.
 - A software restart publishes LWT `Offline` about 2 s after the command and before every OTA reboot
   (Tasmota's PubSubClient closes the socket without a DISCONNECT packet, so the broker fires the will;

@@ -16,6 +16,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/store"
 	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/nofuturekid/tasmofleet/internal/transport"
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
 
@@ -112,7 +113,7 @@ func deviceErrorText(err error) (int, string) {
 	case errors.Is(err, store.ErrNotFound):
 		return http.StatusNotFound, "The device does not exist."
 	case errors.Is(err, tasmota.ErrHTTPAPIRefused):
-		return http.StatusBadGateway, "The device likely refuses HTTP API commands from this address. Set SetOption128 1 on it."
+		return http.StatusBadGateway, reasonAPIOff
 	case errors.Is(err, tasmota.ErrUnreachable):
 		return http.StatusBadGateway, "The device is unreachable."
 	case errors.Is(err, tasmota.ErrTimeout), errors.Is(err, context.DeadlineExceeded):
@@ -144,11 +145,19 @@ func (h *handler) devicePower(w http.ResponseWriter, r *http.Request) {
 	if action == "" {
 		action = "TOGGLE"
 	}
-	state, perr := h.d.DeviceCmd.Power(r.Context(), actor(r), d.ID, n, action)
+	// A device whose HTTP API is off and which nothing else reaches would only fail: refused before anything is sent.
+	why := h.apiOffBlock(r.Context(), d.ID, transport.ActWrites)
+	var state string
+	var perr error
+	if why == "" {
+		state, perr = h.d.DeviceCmd.Power(r.Context(), actor(r), d.ID, n, action)
+	}
 	hl := h.d.Health.Get(d.ID)
 	cell := h.powerCellOf(httpBase(r), d.ID, hl)
 	status := http.StatusOK
 	switch {
+	case why != "":
+		status, cell.Error = http.StatusConflict, why
 	case perr != nil:
 		var msg string
 		if status, msg = powerErrorText(perr); msg == "" {
@@ -161,14 +170,14 @@ func (h *handler) devicePower(w http.ResponseWriter, r *http.Request) {
 	}
 	if r.Header.Get("HX-Request") != "" && r.PostFormValue("back") == "device" {
 		var just *relayState
-		if perr == nil && state != "" {
+		if perr == nil && why == "" && state != "" {
 			just = &relayState{N: n, State: state}
 		}
 		h.powerLive(w, r, d, just, cell.Error)
 		return
 	}
 	if r.Header.Get("HX-Request") == "" {
-		if perr != nil {
+		if perr != nil || why != "" {
 			v := h.view(r, d.Name, "devices", cell.Error)
 			h.message(w, r, status, v)
 			return

@@ -3,10 +3,12 @@ package web
 import (
 	"context"
 	"net"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
 	"github.com/nofuturekid/tasmofleet/internal/fwselect"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/transport"
@@ -28,7 +30,7 @@ const reasonOffline = "The device is offline."
 // address other than its own IP or hostname (TasmoFleet sends a matching Referer), so that is a fix too.
 const (
 	apiOffName   = "HTTP API off (SetOption128 0)"
-	apiOffFix    = "Switch it on (SetOption128 1) or add the device by its own IP or hostname."
+	apiOffFix    = "Turn the device's HTTP API on (SetOption128 1) or add the device by its own IP or hostname."
 	reasonAPIOff = apiOffName + ". " + apiOffFix
 )
 
@@ -177,6 +179,52 @@ func (h *handler) apiOffBlock(ctx context.Context, id model.DeviceID, a transpor
 	return reasonAPIOff
 }
 
+// commandAction is the path a free-form command needs: the router's own rule, a command that is not classified as a
+// read counts as a write (transport.classifyCommand).
+func commandAction(cmd string) transport.Action {
+	if v, err := cmdpolicy.Classify(cmd); err == nil && v.Class == cmdpolicy.ClassRead {
+		return transport.ActCommands
+	}
+	return transport.ActWrites
+}
+
+// apiOffBlockCommand is apiOffBlock for a command typed by a person or stored in a transaction. A command the
+// policy does not accept is left to the service, which refuses it without touching the device.
+func (h *handler) apiOffBlockCommand(ctx context.Context, id model.DeviceID, cmd string) string {
+	if _, err := cmdpolicy.Classify(cmd); err != nil {
+		return ""
+	}
+	return h.apiOffBlock(ctx, id, commandAction(cmd))
+}
+
+// apiOffBlockUpdate is apiOffBlock for an update, decided on the request instead of the bare device: a device whose
+// HTTP API is off is refused only when no way of the request reaches it. The delivery is the one asked for (the picker,
+// which has not asked yet, passes DeliveryPush: the way with the most options), and the experimental upload over MQTT counts as a way, with a
+// 1-byte image as the question "could any image go this way" (the card's Upload row asks the same). Whether a
+// real image fits and the upload is offered is the OTA engine's decision, which refuses with its own reason.
+func (h *handler) apiOffBlockUpdate(ctx context.Context, id model.DeviceID, delivery model.Delivery) string {
+	if h.d.Health == nil || !h.d.Health.Get(id).APIOff() {
+		return ""
+	}
+	f, _, ok := h.transportOf(ctx, id)
+	if !ok {
+		return ""
+	}
+	fits, need, room, why := fwselect.MQTTUploadFits(f.Identity, fwselect.UpLayoutUnknown, 1)
+	f.Request = transport.Request{Delivery: delivery, AllowMQTTUpload: true,
+		MQTTUploadFit: transport.MQTTFit{OK: fits, NeedKB: need, RoomKB: room, Reason: why}}
+	if transport.Choose(f).Update != transport.None {
+		return ""
+	}
+	return reasonAPIOff
+}
+
+// refuseAPIOff answers a page that cannot be used because the device's HTTP API is off and nothing else reaches
+// it: a message page with the reason, status 409, before anything is sent.
+func (h *handler) refuseAPIOff(w http.ResponseWriter, r *http.Request, title, active, nothing, why string) {
+	h.message(w, r, http.StatusConflict, h.view(r, title, active, nothing+why))
+}
+
 // overMQTT says whether a path travels over MQTT. An offline device can only be reached that way:
 // every other path (HTTP, a download or upload over HTTP) needs the device to answer HTTP.
 func overMQTT(p transport.Path) bool {
@@ -266,6 +314,22 @@ func (t *deviceTabs) applyPaths(p transport.Paths, ok bool) {
 func (t deviceTabs) updateBtnWhy() string {
 	if t.Updating || t.Health == model.HealthOffline {
 		return t.Reason
+	}
+	return ""
+}
+
+// writesAPIOff is the reason the switches and Restart are disabled when the device's HTTP API is off and nothing else
+// carries a change, "" otherwise (#645). readsAPIOff is the same for Refresh identity (a read).
+func (t deviceTabs) writesAPIOff() string {
+	if t.APIOff && t.SettingsWhy == reasonAPIOff {
+		return reasonAPIOff
+	}
+	return ""
+}
+
+func (t deviceTabs) readsAPIOff() string {
+	if t.APIOff && t.ConsoleWhy == reasonAPIOff {
+		return reasonAPIOff
 	}
 	return ""
 }
