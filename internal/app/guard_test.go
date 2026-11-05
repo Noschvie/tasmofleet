@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nofuturekid/tasmofleet/internal/auth"
 	"github.com/nofuturekid/tasmofleet/internal/config"
 	"github.com/nofuturekid/tasmofleet/internal/firmware"
 	"github.com/nofuturekid/tasmofleet/internal/httpx"
@@ -334,6 +335,7 @@ func TestMetricsTokenFromEnvironmentLocksAndWins(t *testing.T) {
 type sessionFn struct {
 	token string // CSRF token the caller's session (or pre-session cookie) expects
 	valid bool   // the request carries a valid session
+	err   error  // a resolve error that is not "unauthenticated"
 }
 
 func (s sessionFn) CSRFToken(*http.Request) string { return s.token }
@@ -341,7 +343,10 @@ func (s sessionFn) Principal(*http.Request) (model.Principal, error) {
 	if s.valid {
 		return model.Principal{Subject: "ann"}, nil
 	}
-	return model.Principal{}, errors.New("unauthenticated")
+	if s.err != nil {
+		return model.Principal{}, s.err
+	}
+	return model.Principal{}, auth.ErrUnauthenticated
 }
 
 // Why (#508): a person whose session expired must still be able to sign out.
@@ -393,6 +398,58 @@ func TestGuardUnsafeLogoutWithoutSession(t *testing.T) {
 	for _, m := range []string{"PUT", "DELETE", "PATCH"} {
 		if c := do(expired, m, "/logout", ""); c != 403 || len(hits) != 0 {
 			t.Errorf("%s /logout without a session: %d %v, want refused", m, c, hits)
+		}
+	}
+}
+
+// Why (#508): the exemption must not widen. Every request below reaches the
+// handler only through the full chain, so without a token each is refused: wrong
+// method, any path variant (trailing or doubled slash, query, encoded letters,
+// case), and a session lookup that failed for a reason other than "no session".
+func TestGuardUnsafeLogoutExemptionIsExact(t *testing.T) {
+	reached := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { reached = true; w.WriteHeader(204) })
+	cases := []struct {
+		name, method, target string
+		s                    sessionFn
+	}{
+		{"trailing slash", "POST", "/logout/", sessionFn{}},
+		{"double slash", "POST", "//logout", sessionFn{}},
+		{"query", "POST", "/logout?x=1", sessionFn{}},
+		{"empty query", "POST", "/logout?", sessionFn{}},
+		{"encoded letter", "POST", "/%6cogout", sessionFn{}},
+		{"upper case", "POST", "/LOGOUT", sessionFn{}},
+		{"dot segment", "POST", "/x/../logout", sessionFn{}},
+		{"prefix", "POST", "/logout2", sessionFn{}},
+		{"PUT", "PUT", "/logout", sessionFn{}},
+		{"DELETE", "DELETE", "/logout", sessionFn{}},
+		{"PATCH", "PATCH", "/logout", sessionFn{}},
+		{"resolve error other than unauthenticated", "POST", "/logout", sessionFn{err: errors.New("database down")}},
+		{"valid session, no token", "POST", "/logout", sessionFn{valid: true}},
+	}
+	for _, c := range cases {
+		reached = false
+		csrf, err := httpx.NewCSRF(c.s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest(c.method, c.target, strings.NewReader("csrf=old"))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := httptest.NewRecorder()
+		guardUnsafe(c.s, csrf.Middleware, next).ServeHTTP(rec, req)
+		if rec.Code != 403 || reached {
+			t.Errorf("%s: %d reached=%v, want 403 from the full chain", c.name, rec.Code, reached)
+		}
+	}
+	// GET and HEAD are safe methods: they never needed a token and pass as before.
+	for _, m := range []string{"GET", "HEAD"} {
+		reached = false
+		s := sessionFn{}
+		csrf, _ := httpx.NewCSRF(s)
+		rec := httptest.NewRecorder()
+		guardUnsafe(s, csrf.Middleware, next).ServeHTTP(rec, httptest.NewRequest(m, "/logout", nil))
+		if rec.Code != 204 {
+			t.Errorf("%s /logout: %d", m, rec.Code)
 		}
 	}
 }

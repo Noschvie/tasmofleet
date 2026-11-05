@@ -3,12 +3,14 @@ package app
 import (
 	"crypto/sha256"
 	"crypto/subtle"
+	"errors"
 	"mime"
 	"net"
 	"net/http"
 	"net/netip"
 	"strings"
 
+	"github.com/nofuturekid/tasmofleet/internal/auth"
 	"github.com/nofuturekid/tasmofleet/internal/firmware"
 	"github.com/nofuturekid/tasmofleet/internal/httpx"
 	"github.com/nofuturekid/tasmofleet/internal/importer"
@@ -89,8 +91,8 @@ type sessionTokens interface {
 func guardUnsafe(a sessionTokens, csrf func(http.Handler) http.Handler, next http.Handler) http.Handler {
 	guarded := guardBodies(a, csrf(next))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == logoutPath {
-			if _, err := a.Principal(r); err != nil {
+		if isPlainLogout(r) {
+			if _, err := a.Principal(r); errors.Is(err, auth.ErrUnauthenticated) {
 				r.Body = http.MaxBytesReader(w, r.Body, maxFormBody)
 				next.ServeHTTP(w, r)
 				return
@@ -98,6 +100,13 @@ func guardUnsafe(a sessionTokens, csrf func(http.Handler) http.Handler, next htt
 		}
 		guarded.ServeHTTP(w, r)
 	})
+}
+
+// isPlainLogout is true only for POST to exactly /logout: no query, no encoded
+// path (RawPath is set when the path was escaped), no trailing or doubled slash.
+// Anything else, however the router might still match it, stays in the full chain.
+func isPlainLogout(r *http.Request) bool {
+	return r.Method == http.MethodPost && r.URL.Path == logoutPath && r.URL.RawPath == "" && r.URL.RawQuery == "" && !r.URL.ForceQuery
 }
 
 // metricsSwitch is the /metrics master switch (N19): while the setting is off
