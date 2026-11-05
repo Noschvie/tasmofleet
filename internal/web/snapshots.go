@@ -80,6 +80,7 @@ func (h *handler) snapStepUp(w http.ResponseWriter, r *http.Request, what, actio
 			Title: "Download a database snapshot?", Heading: "Download a database snapshot", Text: "The file holds every user's password hash and the encrypted device, broker and sign-in secrets. Keep it like a password. Your sign-in comes from the proxy, so it cannot be asked for a password; confirm instead.",
 			Crumbs: []confirmLink{{"", "System"}, {snapPath, "Snapshots"}}, Last: "Download snapshot",
 			Action: action, Fields: fields, Ack: snapAckText, Verb: "Download", CancelHref: snapPath, CancelLabel: "Cancel",
+			NoBusy: true, // the confirmed POST answers with the file, so no next page clears the busy state (#538)
 		})
 		return false
 	}

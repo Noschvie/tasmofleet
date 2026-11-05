@@ -235,6 +235,7 @@ type ConfirmData struct {
 	Verb                          string
 	Danger                        bool
 	CancelHref, CancelLabel       string
+	NoBusy                        bool // the answer is a file, not a page: form.js must not leave the button busy (#538)
 }
 
 // FieldData is a label-above input with help text and the server's error for it.

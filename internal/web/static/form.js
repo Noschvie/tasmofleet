@@ -285,13 +285,25 @@
   "use strict";
   var NOTE_MS = 10000;
   var NOTE = "Still working. A slow device can take up to a minute.";
+  var notes = new WeakMap(); // element -> the timer of its pending note
 
-  function note(still) {
-    window.setTimeout(function () {
-      if (still() && typeof window.tfToast === "function") {
-        window.tfToast(NOTE, "info");
-      }
-    }, NOTE_MS);
+  // One timer per element, cancelled when its work ends (quiet): the timer of an earlier, finished
+  // request on the same control must not speak for a later one that has only just started.
+  function note(el, still) {
+    quiet(el);
+    notes.set(
+      el,
+      window.setTimeout(function () {
+        notes.delete(el);
+        if (still() && typeof window.tfToast === "function") {
+          window.tfToast(NOTE, "info");
+        }
+      }, NOTE_MS),
+    );
+  }
+  function quiet(el) {
+    window.clearTimeout(notes.get(el));
+    notes.delete(el);
   }
   function submitButtons(form) {
     var sel = "button[type=submit], button:not([type])";
@@ -327,7 +339,6 @@
       !(form instanceof HTMLFormElement) ||
       form.method !== "post" ||
       form.target ||
-      form.hasAttribute("hx-post") ||
       form.hasAttribute("data-no-busy") ||
       form.hasAttribute("data-fw-check")
     ) {
@@ -347,7 +358,7 @@
       form.setAttribute("data-busy", "");
       var btns = sub ? [sub] : submitButtons(form).slice(0, 1);
       btns.forEach(on);
-      note(function () {
+      note(form, function () {
         return form.isConnected && form.hasAttribute("data-busy");
       });
     }, 0);
@@ -359,12 +370,16 @@
     }
     document.querySelectorAll("form[data-busy]").forEach(function (f) {
       f.removeAttribute("data-busy");
+      quiet(f);
     });
     document.querySelectorAll("button[aria-busy=true]").forEach(off);
   });
 
   function byClick(e) {
-    var t = e.detail && e.detail.requestConfig && e.detail.requestConfig.triggeringEvent;
+    var t =
+      e.detail &&
+      e.detail.requestConfig &&
+      e.detail.requestConfig.triggeringEvent;
     return !!t && (t.type === "click" || t.type === "submit");
   }
   document.addEventListener("htmx:beforeRequest", function (e) {
@@ -378,15 +393,19 @@
     }
     el.setAttribute("aria-busy", "true");
     targets(el).forEach(on);
-    note(function () {
+    note(el, function () {
       return el.isConnected && el.getAttribute("aria-busy") === "true";
     });
   });
   document.addEventListener("htmx:afterRequest", function (e) {
-    var el = e.detail && e.detail.elt;
+    // the element that sent the request: when its own swap removed it, htmx repeats this event on
+    // the closest ancestor still in the page (detail.elt), which was never busy and stays untouched
+    var cfg = e.detail && e.detail.requestConfig;
+    var el = cfg && cfg.elt;
     if (!el || !byClick(e)) {
       return;
     }
+    quiet(el);
     el.removeAttribute("aria-busy");
     targets(el).forEach(off);
   });
@@ -394,10 +413,12 @@
   // a section that loads by itself says it is still working too
   function watchPlaceholders() {
     document
-      .querySelectorAll('[aria-busy=true][hx-trigger="load"]:not([data-busy-watch])')
+      .querySelectorAll(
+        '[aria-busy=true][hx-trigger="load"]:not([data-busy-watch])',
+      )
       .forEach(function (s) {
         s.setAttribute("data-busy-watch", "");
-        note(function () {
+        note(s, function () {
           return s.isConnected && s.getAttribute("aria-busy") === "true";
         });
       });

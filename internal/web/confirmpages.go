@@ -38,6 +38,7 @@ type actionConfirm struct {
 	Ack                           string // a required checkbox with this label
 	Verb                          string
 	CancelHref, CancelLabel       string
+	NoBusy                        bool // the answer is a file download (no next page)
 }
 
 // renderActionConfirm shows the confirmation page (ui.ConfirmPage): the dialog's look, the
@@ -52,7 +53,7 @@ func (h *handler) renderActionConfirm(w http.ResponseWriter, r *http.Request, na
 	d := ui.ConfirmData{
 		Title: c.Title, Heading: c.Heading, Text: c.Text, Warning: c.Warning,
 		Action: v.Base + c.Action, CSRF: v.CSRF, Verb: c.Verb, Danger: true, Ack: c.Ack,
-		CancelHref: v.Base + c.CancelHref, CancelLabel: c.CancelLabel,
+		CancelHref: v.Base + c.CancelHref, CancelLabel: c.CancelLabel, NoBusy: c.NoBusy,
 	}
 	for _, f := range c.Facts {
 		d.Facts = append(d.Facts, ui.KVRow{Key: f.Name, Value: f.Value, Mono: f.Code})

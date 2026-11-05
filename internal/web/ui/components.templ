@@ -545,7 +545,7 @@ templ ConfirmPage(c ConfirmData) {
 		if len(c.Facts) > 0 {
 			@KV(c.Facts)
 		}
-		<form method="post" action={ templ.SafeURL(c.Action) } class="udlg-foot">
+		<form method="post" action={ templ.SafeURL(c.Action) } class="udlg-foot" data-no-busy?={ c.NoBusy }>
 			<input type="hidden" name="csrf" value={ c.CSRF }/>
 			for _, f := range c.Fields {
 				<input type="hidden" name={ f.Key } value={ f.Value }/>

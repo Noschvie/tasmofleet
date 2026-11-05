@@ -394,7 +394,9 @@ func TestHeaderSignInsConfirmWithACheckboxBeforeASnapshotDownload(t *testing.T) 
 		if r.StatusCode != 200 || strings.Contains(body, "SQLite format") || r.Header.Get("Content-Disposition") != "" {
 			t.Fatalf("%s: the first request must only ask: %d", c.name, r.StatusCode)
 		}
-		for _, want := range []string{"I understand this file holds secrets.", `name="ack" value="1" required`, `action="` + c.action + `"`, `name="csrf"`} {
+		// data-no-busy (#538): the confirmed POST answers with the file, not a page, so form.js must not
+		// leave the Download button busy (and announce "Still working") after the file arrived.
+		for _, want := range []string{"I understand this file holds secrets.", `name="ack" value="1" required`, `action="` + c.action + `" class="udlg-foot" data-no-busy>`, `name="csrf"`} {
 			if !strings.Contains(body, want) {
 				t.Errorf("%s: confirmation lacks %q", c.name, want)
 			}

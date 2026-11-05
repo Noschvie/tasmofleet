@@ -2712,7 +2712,20 @@ button.htmx-request[disabled]::after {
   border: 2px solid currentColor;
   border-right-color: transparent;
   border-radius: 50%;
-  animation: spin 0.7s linear infinite;
+  animation: ds-spin 0.8s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  button.htmx-request[disabled]::after {
+    animation: none;
+  }
+}
+/* a relay switch is a grid: a ring would be a second item that pushes the knob out of place, so a
+   busy switch only dims (disabled) and says aria-busy (#538) */
+.devrelay-sw[aria-busy="true"]::after,
+.devrelay-sw.htmx-request[disabled]::after,
+.pwr[aria-busy="true"]::after,
+.pwr.htmx-request[disabled]::after {
+  content: none;
 }
 .stack > .actionbar > p {
   margin: 0;

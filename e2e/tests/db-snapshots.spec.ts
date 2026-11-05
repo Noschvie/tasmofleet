@@ -127,4 +127,6 @@ test("header admin: confirm with the checkbox, then the download starts", async 
     await page.getByRole("button", { name: "Download", exact: true }).click();
   })()]);
   expect(file.suggestedFilename()).toMatch(/^tasmofleet-\d{8}-\d{4}Z\.db$/);
+  // #538: the answer was the file, not a page, so nothing may stay busy (form data-no-busy)
+  await expect(page.getByRole("button", { name: "Download", exact: true })).toBeEnabled();
 });
