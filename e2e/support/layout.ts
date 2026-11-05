@@ -437,11 +437,9 @@ export async function layoutGuards(page: Page, which: GuardId[] = allGuards): Pr
     // narrower than a short word (a column that gave its width away, break-all, overflow-wrap:anywhere
     // on a flex item), the "garage-plug-offl / ine" and "ESP8266E / X" of QA v2. Longer tokens (a
     // 63-letter device name, a JSON reply) have to break somewhere and are not judged. A word is a run
-    // of letters and digits: hyphens, slashes and commas are break points, not part of it. A dot between
-    // letters or digits is none: a browser does not break "readinglamp.example.internal" at its dots, so
-    // the host is one word, and one that is wider than its line has to be cut inside a label (#511). A
-    // page makes the labels breakable with a <wbr> after each dot (ui.Soft): the <wbr> ends the text node,
-    // so each label is then judged as a word of its own.
+    // of letters and digits: hyphens, dots, slashes and commas end it. A browser has no break point at a
+    // dot between letters, so a page that shows a host name in a narrow box puts a <wbr> after each dot
+    // (ui.Soft); without one the host is cut inside a label, and that cut is reported (#511).
     if (which.includes("w")) {
       const MAX_WORD = 200;
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -449,28 +447,14 @@ export async function layoutGuards(page: Page, which: GuardId[] = allGuards): Pr
         const el = n.parentElement;
         if (!el || !visible(el) || el.closest("script, style, textarea, select, option")) continue;
         const text = n.textContent ?? "";
-        // the width a line of this text has: the nearest ancestor that is not inline
-        let block: Element = el;
-        while (getComputedStyle(block).display.startsWith("inline") && block.parentElement) block = block.parentElement;
-        const lineWidth = block.clientWidth;
-        // words with their offsets; a dotted run without a letter (an address, a version) is judged group by
-        // group as before: its groups are too short to be words, and a cut inside one is not a host label
-        const words: { 0: string; index: number }[] = [];
-        for (const m of text.matchAll(/[\p{L}\p{N}]+(?:\.[\p{L}\p{N}]+)*/gu)) {
-          if (/\p{L}/u.test(m[0])) words.push({ 0: m[0], index: m.index! });
-          else for (const g of m[0].matchAll(/\p{N}+/gu)) words.push({ 0: g[0], index: m.index! + g.index! });
-        }
-        for (const m of words) {
-          if (m[0].replace(/\./g, "").length < 4) continue;
+        for (const m of text.matchAll(/[\p{L}\p{N}]{4,}/gu)) {
           const range = document.createRange();
-          range.setStart(n, m.index);
-          range.setEnd(n, m.index + m[0].length);
+          range.setStart(n, m.index!);
+          range.setEnd(n, m.index! + m[0].length);
           const rects = [...range.getClientRects()].filter((r) => r.width > 0);
           const lines = new Set(rects.map((r) => Math.round(r.top / 4)));
           if (lines.size < 2) continue;
           const width = rects.reduce((sum, r) => sum + r.width, 0);
-          // a dotted host wider than its line has no other choice than to break inside a label
-          if (m[0].includes(".") && width > lineWidth) continue;
           if (width <= MAX_WORD) add("w", `"${m[0]}" is cut over ${lines.size} lines (${Math.round(width)}px unbroken) in ${describe(el)}`);
         }
       }

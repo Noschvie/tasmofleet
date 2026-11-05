@@ -477,6 +477,19 @@ func TestNoScheduleStillListsTheLastRunsFailedAndSkippedDevices(t *testing.T) {
 	}
 }
 
+// Why (#633, as #511): a host-style name has no break point at its dots, so once the Device column
+// wraps instead of clipping, a browser cuts it inside a label ("readinglamp.exampl / e.internal").
+// Each dot and dash gets a <wbr>, so the name breaks between its labels; the name itself is unchanged.
+func TestFleetBackupsDeviceNamesBreakAtTheirLabels(t *testing.T) {
+	fleet := fleetFixture(time.Now())
+	fleet.rows[0].Name = "livingroom-readinglamp.example.internal"
+	e := fleetEnv(t, fleet)
+	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
+	if want := ">livingroom-<wbr>readinglamp.<wbr>example.<wbr>internal</a>"; !strings.Contains(cardOf(t, body, "devices"), want) {
+		t.Errorf("the device name has no break points after its dots and dash, want %q", want)
+	}
+}
+
 // Why: a cut-off reason or age must be readable in full; the cells carry a title.
 func TestTableCellsCarryATitleForCutOffText(t *testing.T) {
 	e := fleetEnv(t, fleetFixture(time.Now()))

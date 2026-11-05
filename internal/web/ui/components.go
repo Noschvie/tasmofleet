@@ -51,7 +51,8 @@ func SoftJSONParts(s string) []string {
 // SoftParts cuts s after the characters where a file name, URL or host:port reads naturally across
 // two lines: after "/", "-", "_", "|" and "=", after a "." that is followed by a letter (hostnames and
 // extensions, not the dots of an IP address or a version), and after a ":" that is followed by a
-// digit (the port). Joined again the parts are s.
+// digit (the port). A point needs a word before it: a "/", "." or ":" that starts a token stays with
+// it ("/login", ".dmp", ":8443"), so a line never ends in the bare character. Joined again the parts are s.
 func SoftParts(s string) []string {
 	var parts []string
 	start := 0
@@ -59,12 +60,27 @@ func SoftParts(s string) []string {
 		next := s[i+1]
 		isLetter := next >= 'a' && next <= 'z' || next >= 'A' && next <= 'Z'
 		isDigit := next >= '0' && next <= '9'
-		if strings.IndexByte("/-_|=", s[i]) >= 0 && next != s[i] || s[i] == '.' && isLetter || s[i] == ':' && isDigit {
+		if (strings.IndexByte("/-_|=", s[i]) >= 0 && next != s[i] || s[i] == '.' && isLetter || s[i] == ':' && isDigit) && wordBefore(s[start:i]) {
 			parts = append(parts, s[start:i+1])
 			start = i + 1
 		}
 	}
 	return append(parts, s[start:])
+}
+
+// wordBefore reports whether the text since the last space holds a letter, a digit or a non-ASCII
+// character: only then does a break point after it end a word rather than strand its first character.
+func wordBefore(p string) bool {
+	if k := strings.LastIndexAny(p, " \t\n"); k >= 0 {
+		p = p[k+1:]
+	}
+	for i := 0; i < len(p); i++ {
+		c := p[i]
+		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c >= 0x80 {
+			return true
+		}
+	}
+	return false
 }
 
 // The design system's components (design v2, WP F4; docs/spec/design-system.md, section

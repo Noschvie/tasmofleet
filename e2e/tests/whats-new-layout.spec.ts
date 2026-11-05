@@ -4,8 +4,8 @@ import { App, startApp } from "../support/stack";
 
 // #510: a section badge ("Upgrade notes: action may be required" in 0.17.0) must wrap inside its own
 // column instead of running over the first item of the list, and a path in code breaks after a "/"
-// instead of inside a word ("tasmofl / eet"). The generic layout guards judge the whole page; the
-// explicit check below names the case, so a failure says what broke.
+// instead of inside a word ("tasmofl / eet"). The explicit checks name the case, so a failure says what
+// broke; the generic layout guards then judge the whole page.
 let app: App;
 test.beforeAll(async () => {
   app = await startApp({ env: { TASMOFLEET_AUTH_MODE: "header", TASMOFLEET_TRUSTED_PROXIES: "127.0.0.1/32", TASMOFLEET_ADMIN_GROUPS: "adm" } });
@@ -21,15 +21,20 @@ for (const width of [1280, 375]) {
       await page.setViewportSize({ width, height: 900 });
       await page.emulateMedia({ colorScheme: scheme });
       await page.goto(app.url + "/whats-new");
-      await expectNoOverflow(page, "whats-new");
-      await expectLayout(page, `whats-new ${width} ${scheme}`);
-      // every section badge ends before the list of its section starts
+      // every section badge's text stays between the section's edge and its list: the text, not the badge's
+      // box, which kept its 72 px while a nowrap title ran out of it on both sides
       const overlaps = await page.evaluate(() =>
         [...document.querySelectorAll(".wn-sec")].flatMap((sec) => {
-          const b = sec.querySelector(".wn-lbl .bdg")!.getBoundingClientRect();
+          const badge = sec.querySelector(".wn-lbl .bdg")!;
+          const r = document.createRange();
+          r.selectNodeContents(badge);
+          const b = r.getBoundingClientRect();
           const l = sec.querySelector("ul")!.getBoundingClientRect();
-          const text = sec.querySelector(".wn-lbl .bdg")!.textContent;
-          return b.right > l.left + 0.5 ? [`${text}: badge ends at ${Math.round(b.right)}, list starts at ${Math.round(l.left)}`] : [];
+          const s = sec.getBoundingClientRect();
+          if (b.width === 0) return []; // a section without a title, or one folded away
+          return b.right > l.left + 0.5 || b.left < s.left - 0.5
+            ? [`${badge.textContent}: text from ${Math.round(b.left)} to ${Math.round(b.right)}, section starts at ${Math.round(s.left)}, list at ${Math.round(l.left)}`]
+            : [];
         }),
       );
       expect(overlaps).toEqual([]);
@@ -51,6 +56,8 @@ for (const width of [1280, 375]) {
         }),
       );
       expect(cut, "words of inline code cut across two lines").toEqual([]);
+      await expectNoOverflow(page, "whats-new");
+      await expectLayout(page, `whats-new ${width} ${scheme}`);
     });
   }
 }

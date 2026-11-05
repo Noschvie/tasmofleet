@@ -236,6 +236,12 @@ func TestSoftPartsBreakAtNaturalPoints(t *testing.T) {
 		{"16.0.0", []string{"16.0.0"}},
 		{"http://h/fw/a.bin", []string{"http://", "h/", "fw/", "a.", "bin"}},
 		{"?chip=down|outdated|noncompliant", []string{"?chip=", "down|", "outdated|", "noncompliant"}}, // #510: a query in the changelog
+		// a token's first character stays with it: a line never ends in a bare "/", "." or ":" (#510)
+		{"/settings/system/snapshots", []string{"/settings/", "system/", "snapshots"}},
+		{".dmp", []string{".dmp"}},
+		{":8443", []string{":8443"}},
+		{"--ctl-sm", []string{"--ctl-", "sm"}},
+		{"Sign in at /login", []string{"Sign in at /login"}},
 		{"", []string{""}},
 	} {
 		got := SoftParts(tc.in)

@@ -12755,10 +12755,7 @@ a.sys-sum:hover {
 .bk-table td.dv-name {
   overflow-wrap: anywhere;
 }
-.bk-table td[data-label="Newest backup"] {
-  white-space: normal;
-}
-.bk-table td[data-label="Newest backup"] .muted {
+.bk-table td.bk-new .muted {
   display: inline-block;
 }
 /* two half columns (tablet) leave the device table about 220 px at 768 px, less than its fixed columns
