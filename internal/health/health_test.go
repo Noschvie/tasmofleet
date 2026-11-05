@@ -568,17 +568,30 @@ func TestStaleDeviceRecoversByPoll(t *testing.T) {
 	}
 }
 
-func TestLWTOfflineIsOfflineAtOnceAndNotPolled(t *testing.T) {
+// Why (#619 replaces "not polled"): the will is a hint. It is offline at once, and a device that does not
+// answer stays offline, but it is asked over HTTP at the normal interval and then backs off, never per tick.
+func TestLWTOfflineIsOfflineAtOnceAndPolledWithBackoff(t *testing.T) {
 	h := newHarness(t, true, Options{}, mqttDev(1, "a"))
 	h.listen()
 	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Online", false)
 	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Offline", false)
 	h.want(1, model.HealthOffline)
-	h.advance(time.Hour)
-	h.step()
-	if n := len(h.cl.commands()); n != 0 {
-		t.Fatalf("offline-by-LWT device was polled: %v", h.cl.commands())
+	failAll(h, errDown)
+	for range 3 {
+		h.step()
+		h.step() // a second tick in the same instant: nothing is due
+		h.advance(11 * time.Minute)
 	}
+	n := len(h.cl.commands())
+	if n < 2 || n > 3 {
+		t.Fatalf("%d polls in 33 minutes, want one per due time and growing gaps: %v", n, h.cl.commands())
+	}
+	for _, c := range h.cl.commands() {
+		if c != "Status 11" {
+			t.Fatalf("poll sent %q, only Status 11 is allowed", c)
+		}
+	}
+	h.want(1, model.HealthOffline)
 }
 
 // After a restart of tasmofleet the broker replays the retained LWT; a device
@@ -915,14 +928,15 @@ func TestStateOverMQTTSuppressesSnapshotFetch(t *testing.T) {
 	}
 }
 
-// An offline-by-LWT device must not be probed for a snapshot.
+// An offline-by-LWT device gets no extra snapshot fetch on top of its poll: one Status 11 per due time.
 func TestOfflineLWTDeviceGetsNoSnapshotFetch(t *testing.T) {
 	h := newHarness(t, true, Options{}, mqttDev(1, "a"))
 	h.listen()
 	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Offline", true)
 	h.step()
-	if n := len(h.cl.commands()); n != 0 {
-		t.Fatalf("offline device probed: %v", h.cl.commands())
+	h.step()
+	if n := len(h.cl.commands()); n != 1 {
+		t.Fatalf("offline device read %d times in one instant: %v", n, h.cl.commands())
 	}
 }
 

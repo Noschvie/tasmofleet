@@ -123,6 +123,12 @@ type devState struct {
 	// answered, and routing, the #598 re-read and the #580 hint rely on that.
 	lastRefused time.Time
 
+	// lastPolled is when a background poll (not a probe) last got an HTTP answer from a device whose
+	// retained last will says Offline (#619). The will is a hint: a device that left our broker unclean
+	// (power cut while switching, a restored config for another broker) keeps it, yet answers HTTP.
+	// Zero until such a poll succeeds, and again after a new will, a refusal or a failed poll run.
+	lastPolled time.Time
+
 	nextPoll time.Time
 	polling  bool
 
@@ -467,10 +473,10 @@ func (s *Service) mqttMode(ds *devState) bool {
 
 func (s *Service) lastObs(ds *devState) time.Time {
 	if ds.lwt == "Offline" && s.mqttMode(ds) {
-		// Only the device's own MQTT messages count for a device its last will reports offline: no poll reaches
-		// it, so an HTTP contact is a probe a person's page view asked for. It must not move "Offline since"
-		// (the page's banner) nor make the device look seen now (#456).
-		return ds.lastMQTT
+		// For a device its last will reports offline only its own MQTT messages and the answers of the
+		// background poll (#619) count. An HTTP contact from a probe, which a person's page view asked for,
+		// must not move "Offline since" (the page's banner) nor make the device look seen now (#456).
+		return maxTime(ds.lastMQTT, ds.lastPolled)
 	}
 	t := ds.lastMQTT
 	if ds.lastHTTP.After(t) {
@@ -482,18 +488,33 @@ func (s *Service) lastObs(ds *devState) time.Time {
 	return t
 }
 
+func maxTime(a, b time.Time) time.Time {
+	if b.After(a) {
+		return b
+	}
+	return a
+}
+
+// answersDespiteWill: the device's last will says Offline, but the background poll got an HTTP answer and
+// no run of failures followed (#619). It is reachable over HTTP, so it is not offline.
+func (s *Service) answersDespiteWill(ds *devState) bool {
+	return !ds.lastPolled.IsZero() && ds.fails < s.o.OfflineAfter
+}
+
 func (s *Service) fresh(ds *devState, now time.Time) bool {
 	obs := s.lastObs(ds)
 	return !obs.IsZero() && now.Sub(obs) < s.staleAfter()
 }
 
 // pollEligible: HTTP-only devices are always polled; MQTT devices only
-// while their telemetry is silent (and the LWT does not already say offline).
+// while their telemetry is silent. A device whose last will says Offline is polled too (#619): the
+// retained will outlives a device that moved to another broker. It is polled at the normal interval
+// while it answers and backs off like any failing device (up to 30 minutes) while it does not.
 func (s *Service) pollEligible(ds *devState, now time.Time) bool {
-	if !s.mqttMode(ds) {
+	if !s.mqttMode(ds) || ds.lwt == "Offline" {
 		return true
 	}
-	if ds.lwt == "Offline" || s.fresh(ds, now) {
+	if s.fresh(ds, now) {
 		return false
 	}
 	// Silent, or never heard since start and the grace period is over.
@@ -516,6 +537,9 @@ func (s *Service) compute(ds *devState, now time.Time) model.HealthState {
 	case s.mqttMode(ds):
 		switch {
 		case ds.lwt == "Offline":
+			if s.answersDespiteWill(ds) {
+				return model.HealthOnline
+			}
 			return model.HealthOffline
 		case s.fresh(ds, now):
 			return model.HealthOnline
@@ -651,12 +675,17 @@ func (s *Service) handle(m mqttbus.Message, live bool) {
 
 	switch m.Kind {
 	case mqttbus.KindLWT:
+		wasOffline := ds.lwt == "Offline"
 		ds.lwt = strings.TrimSpace(string(m.Payload))
 		switch {
 		case strings.EqualFold(ds.lwt, "online"):
 			ds.lwt = "Online"
 		case strings.EqualFold(ds.lwt, "offline"):
 			ds.lwt = "Offline"
+			if !wasOffline {
+				// A new will is newer than any earlier poll answer: forget it and ask again now.
+				ds.lastPolled, ds.nextPoll = time.Time{}, time.Time{}
+			}
 		}
 	case mqttbus.KindState, mqttbus.KindResult:
 		s.applyJSON(ds, m.Payload, m.Kind == mqttbus.KindState, false)
@@ -874,6 +903,9 @@ func (s *Service) poll(ctx context.Context, id model.DeviceID, reach bool) {
 	case err == nil:
 		ds.fails, ds.authFailed = 0, false
 		ds.lastHTTP = now
+		if !reach {
+			ds.lastPolled = now
+		}
 		ds.minimal = res.minimal
 		if !res.minimal {
 			s.applyJSON(ds, res.sts, true, ds.powerGen != powerGen)
@@ -885,7 +917,7 @@ func (s *Service) poll(ctx context.Context, id model.DeviceID, reach bool) {
 		}
 		ds.nextPoll = now
 		ds.snapAfter = now.Add(snapshotRetry)
-		if !s.mqttMode(ds) {
+		if !s.mqttMode(ds) || ds.lwt == "Offline" {
 			ds.nextPoll = now.Add(s.jitter(s.pollInterval()))
 		}
 	case errors.Is(err, tasmota.ErrHTTPAPIRefused):
@@ -895,6 +927,7 @@ func (s *Service) poll(ctx context.Context, id model.DeviceID, reach bool) {
 		// password, so a refusal says nothing about the credentials).
 		ds.fails, ds.authFailed = 0, false
 		ds.refusedAt, ds.lastRefused = now, now
+		ds.lastPolled = time.Time{} // the API is off now: an older answer says nothing (#447 keeps the will's verdict)
 		detail = "http: API refused"
 		if reach {
 			ds.probeAfter = now.Add(probeFailGap)
