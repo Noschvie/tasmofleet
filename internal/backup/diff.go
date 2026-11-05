@@ -281,7 +281,7 @@ func FilterVolatile(in []Change) []Change {
 
 // volatileSnapshotKeys are leaf names in the Status snapshot that change
 // without anybody touching the configuration; volatileSnapshotPrefixes are
-// whole status groups that are live readings (time, sensors, Status 11).
+// whole status groups that are live readings (Status 7 time, Status 8 and 10 sensors, Status 11).
 var (
 	volatileSnapshotKeys = map[string]bool{
 		"Time": true, "Uptime": true, "UptimeSec": true, "Heap": true, "LoadAvg": true, "MqttCount": true,
@@ -289,7 +289,7 @@ var (
 		"RestartReason": true, "StackLowMark": true, "PsrFreeMem": true, "FreeMem": true, "Free": true,
 		"UTC": true, "Local": true, "Sunrise": true, "Sunset": true, "Sleep": true, "SleepMode": true,
 	}
-	volatileSnapshotPrefixes = []string{"Status7.", "Status8.", "Status11."}
+	volatileSnapshotPrefixes = []string{"Status7.", "Status8.", "Status10.", "Status11."}
 )
 
 func volatileSnapshot(path string) bool {

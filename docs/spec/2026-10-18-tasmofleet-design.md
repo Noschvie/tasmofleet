@@ -1590,6 +1590,10 @@ from decoded backups (preferred) or live `Status` replies. The view lists drift 
 Fixing it is an explicit bulk action. Example rules: PowerOnState 0,
 SetOption0 0 (ESP32 exception: 1), SaveData 0, Timezone 99.
 
+The device's Drift tab compares configuration, not readings: the live groups of the status snapshot (Status 7 time,
+Status 8 and 10 sensors and energy, Status 11 runtime) and clock, uptime and counter leaves are left out of the
+comparison and of "Show all" (#446). Restore verification has its own list and is unaffected.
+
 A rule's command is free text with the curated settings as suggestions: any Tasmota command that
 answers a plain query (`Sleep`, `LedState`, ...) can be a rule. It is read live by its bare name,
 one command at a time, and set with `<Command> <want>`. Never allowed: `Status` in any spelling

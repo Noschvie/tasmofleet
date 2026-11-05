@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Fixed
+
+- Drift no longer reports sensor readings as differences. The Drift tab compared the whole `Status 10` block (temperatures, power and energy counters, the sensor clock) between the stored snapshot and the live device, so a device with a sensor was always "drifted". Status 10 is now left out of the comparison and of "Show all", like the other live groups (#446, thanks @Noschvie)
+
 ## 0.27.4 "Cordouan" (2026-11-05)
 
 ### Fixed

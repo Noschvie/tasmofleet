@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"strings"
@@ -461,5 +462,37 @@ func TestCompareListsEverySettingButNoSecretValue(t *testing.T) {
 		if strings.Contains(flat, leak) {
 			t.Errorf("full comparison contains %q", leak)
 		}
+	}
+}
+
+// Why (#446): Status 10 (StatusSNS) is the sensor block: temperatures, ENERGY power and
+// counters, the sensor clock. They are live readings, so Drift (a comparison of configuration)
+// must neither report them as drift nor list them under "Show all". Only the Status 10 group goes:
+// a changed Status 1 or Status 6 setting, whose group name merely starts the same way, is still drift.
+func TestSnapshotDriftIgnoresSensorReadings(t *testing.T) {
+	a := []byte(`{"Status1":{"StatusPRM":{"GroupTopic":"tasmotas"}},"Status6":{"StatusMQT":{"MqttHost":"a"}},` +
+		`"Status10":{"StatusSNS":{"Time":"2026-11-05T10:00:00","ENERGY":{"Power":12,"Today":0.4,"Voltage":230},"DS18B20":{"Temperature":21.5},"TempUnit":"C"}}}`)
+	b := []byte(`{"Status1":{"StatusPRM":{"GroupTopic":"tasmotas"}},"Status6":{"StatusMQT":{"MqttHost":"a"}},` +
+		`"Status10":{"StatusSNS":{"Time":"2026-11-05T10:05:00","ENERGY":{"Power":99,"Today":0.9,"Voltage":231},"DS18B20":{"Temperature":22.1},"TempUnit":"F"}}}`)
+	for name, fn := range map[string]func(a, b []byte) ([]Change, error){"drift": SnapshotDrift, "compare": SnapshotCompare} {
+		changes, err := fn(a, b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, c := range changes {
+			if strings.HasPrefix(c.Path, "Status10.") {
+				t.Errorf("%s lists a Status 10 reading: %+v", name, c)
+			}
+		}
+	}
+	// a configuration change next to it is still found, in a group that merely starts with "Status1"
+	c := bytes.Replace(b, []byte(`"GroupTopic":"tasmotas"`), []byte(`"GroupTopic":"other"`), 1)
+	c = bytes.Replace(c, []byte(`"MqttHost":"a"`), []byte(`"MqttHost":"b"`), 1)
+	changes, err := SnapshotDrift(a, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := fmtChanges(changes), "Status1.StatusPRM.GroupTopic|\"tasmotas\"|\"other\"\nStatus6.StatusMQT.MqttHost|\"a\"|\"b\"\n"; got != want {
+		t.Errorf("got %q want %q", got, want)
 	}
 }
