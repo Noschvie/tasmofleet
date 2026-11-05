@@ -367,7 +367,7 @@ func sensorBoxOf(in overviewIn) *sensorBox {
 }
 
 // connOf is the Connection card: how TasmoFleet reaches the device, then how the device is
-// connected (Wi-Fi or Ethernet) and its broker.
+// connected (Wi-Fi or Ethernet). The device's MQTT broker is not here: see otherBrokerRow (#441).
 func connOf(in overviewIn) connCard {
 	d, f := in.Dev, in.Facts
 	addr := d.Address
@@ -402,15 +402,7 @@ func connOf(in overviewIn) connCard {
 			ui.KVRow{Key: "BSSID", Value: orUnknown(f.BSSID), Mono: true, Mask: true},
 			ui.KVRow{Key: "Channel", Value: orUnknown(channel), Mono: true, Mask: true})
 	}
-	broker := "not configured"
-	if d.MQTTHost != "" {
-		port := d.MQTTPort
-		if port == 0 {
-			port = 1883
-		}
-		broker = net.JoinHostPort(d.MQTTHost, strconv.Itoa(port))
-	}
-	c.Rows = append(rows, ui.KVRow{Key: "MQTT broker", Value: broker, Mono: true, Soft: true})
+	c.Rows = rows
 	return c
 }
 
@@ -529,6 +521,13 @@ func (h *handler) overviewOf(r *http.Request, v view, d model.Device, just *rela
 	p.Conn = connOf(in)
 	if tpOK {
 		p.Paths = pathCardOf(v, d, tf, tp, p.Tabs)
+		if row, ok := h.otherBrokerRow(d, reachOf(d, hl, tf.HTTP, in.Now).MQTTOn); ok {
+			for i := range p.Paths.Facts {
+				if p.Paths.Facts[i].Key == keyMQTT {
+					p.Paths.Facts[i] = row
+				}
+			}
+		}
 	}
 	return p, nil
 }

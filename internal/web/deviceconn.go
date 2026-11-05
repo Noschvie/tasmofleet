@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"net"
 	"strconv"
 	"strings"
 	"time"
@@ -330,6 +331,32 @@ func mqttRow(f transport.Facts) pathRow {
 		r.Sub = sentence(reads)
 	}
 	return r
+}
+
+// otherBrokerRow is the MQTT row for a device that reports to a broker other than TasmoFleet's
+// (#441): it will not show up live. It answers only when TasmoFleet has a broker (the live MQTT
+// switch is not "disabled": the matcher in Deps.MQTTBroker is never nil and matches nothing once
+// MQTT is off), the device names a broker host that is not ours, and nothing was heard from it on
+// our broker. Web only: the transport verdict (SAFETY) is unchanged.
+func (h *handler) otherBrokerRow(d model.Device, heard bool) (pathRow, bool) {
+	if h.d.MQTT == nil || h.d.MQTT() == "disabled" || h.d.MQTTBroker == nil || d.MQTTHost == "" || heard {
+		return pathRow{}, false
+	}
+	port := d.MQTTPort
+	if port == 0 {
+		port = 1883
+	}
+	if h.d.MQTTBroker.Same(d.MQTTHost, port) {
+		return pathRow{}, false
+	}
+	sub := "Reports to " + net.JoinHostPort(d.MQTTHost, strconv.Itoa(port)) + ", not to TasmoFleet's broker"
+	if h.d.MQTTStatus != nil {
+		if b := h.d.MQTTStatus(); b.Host != "" {
+			sub += " " + b.Host
+		}
+	}
+	return pathRow{Key: keyMQTT, Value: "Other broker", Tone: ui.ToneWarn,
+		Sub: sub + ", so its state does not arrive live over MQTT."}, true
 }
 
 func passwordRow(f transport.Facts) pathRow {

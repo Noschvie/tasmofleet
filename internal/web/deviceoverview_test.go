@@ -195,15 +195,16 @@ func TestRelayBoxMeteringLabelsAndPerChannelWatts(t *testing.T) {
 	}
 }
 
-// Why: Connection shows how the device is connected: SSID/BSSID/channel on Wi-Fi, the Ethernet MAC
-// on a cable, and says so when no broker is configured (HTTP-only devices, mockup 7).
+// Why (#441): Connection shows how the device is connected: SSID/BSSID/channel on Wi-Fi, the
+// Ethernet MAC on a cable. The device's MQTT broker is not a network fact and does not belong in
+// this card; "How TasmoFleet reaches it" says so when the broker is a different one.
 func TestConnectionCardFollowsTheLink(t *testing.T) {
 	wifi := connOf(overviewIn{Dev: model.Device{Address: "172.27.13.26", MQTTHost: "mqtt.home.internal"}, Facts: snapFacts{Gateway: "172.27.13.1", SSID: "IoT", BSSID: "8C:30", Channel: 11}})
-	if wifi.Title != "Connection · Wi-Fi" || kvKeys(wifi.Rows) != "Address,Gateway,SSID,BSSID,Channel,MQTT broker" || wifi.Rows[5].Value != "mqtt.home.internal:1883" || wifi.Rows[4].Value != "11 (2.4 GHz)" {
+	if wifi.Title != "Connection · Wi-Fi" || kvKeys(wifi.Rows) != "Address,Gateway,SSID,BSSID,Channel" || wifi.Rows[4].Value != "11 (2.4 GHz)" {
 		t.Fatalf("wifi: %+v", wifi)
 	}
 	eth := connOf(overviewIn{Dev: model.Device{Address: "172.27.13.44", MAC: "aa", MACs: []string{"aa", "bb"}}, Facts: snapFacts{Wired: true, Gateway: "172.27.13.1", Subnet: "255.255.255.0", DNS: "172.27.13.1, 9.9.9.9"}})
-	if eth.Title != "Connection · Ethernet" || kvKeys(eth.Rows) != "Address,Gateway,Subnet mask,DNS,Ethernet MAC,MQTT broker" || eth.Rows[2].Value != "255.255.255.0" || eth.Rows[3].Value != "172.27.13.1, 9.9.9.9" || eth.Rows[4].Value != "bb" || eth.Rows[5].Value != "not configured" {
+	if eth.Title != "Connection · Ethernet" || kvKeys(eth.Rows) != "Address,Gateway,Subnet mask,DNS,Ethernet MAC" || eth.Rows[2].Value != "255.255.255.0" || eth.Rows[3].Value != "172.27.13.1, 9.9.9.9" || eth.Rows[4].Value != "bb" {
 		t.Fatalf("ethernet: %+v", eth)
 	}
 }

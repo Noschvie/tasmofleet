@@ -10,6 +10,7 @@ import (
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/transport"
+	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
 
 // fakeFacts answers the transport facts per device; err makes the read fail.
@@ -258,5 +259,91 @@ func TestFactsSummaryByKey(t *testing.T) {
 	c := pathCard{Facts: []pathRow{{Key: keyFW, Value: "No"}, {Key: keyMQTT, Value: "On our broker"}, {Key: keyHTTP, Value: "Not reachable"}}}
 	if got, want := c.FactsSummary(), "Connection: HTTP not reachable, MQTT on our broker, firmware server no"; got != want {
 		t.Fatalf("%q, want %q", got, want)
+	}
+}
+
+type fakeBroker struct{ same bool }
+
+func (b fakeBroker) Same(string, int) bool { return b.same }
+
+// Why (#441): the device page names a device's broker only when it is not TasmoFleet's: such a
+// device will not report live, which is worth a visible hint. Everywhere else the row stays
+// silent. In particular, with MQTT switched off at runtime the broker matcher still exists but
+// matches nothing, so the "TasmoFleet has a broker" test must come from the live MQTT switch,
+// not from the matcher (else every device would be called foreign).
+func TestOtherBrokerHintOnlyOnARealMismatch(t *testing.T) {
+	other := model.Device{MQTTHost: "mqtt.other.internal", MQTTPort: 1884}
+	tests := []struct {
+		name  string
+		dev   model.Device
+		mqtt  string
+		same  bool
+		heard bool
+		want  bool
+	}{
+		{"other broker, MQTT on", other, "connected", false, false, true},
+		{"other broker, our connection down", other, "disconnected", false, false, true},
+		{"MQTT switched off at runtime", other, "disabled", false, false, false},
+		{"same broker by another name", other, "connected", true, false, false},
+		{"heard on our broker", other, "connected", false, true, false},
+		{"device has no MQTT host", model.Device{}, "connected", false, false, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &handler{d: Deps{
+				MQTT:       func() string { return tc.mqtt },
+				MQTTBroker: fakeBroker{same: tc.same},
+				MQTTStatus: func() BrokerInfo { return BrokerInfo{Enabled: true, Host: "core-broker:1883"} },
+			}}
+			row, ok := h.otherBrokerRow(tc.dev, tc.heard)
+			if ok != tc.want {
+				t.Fatalf("hint = %v, want %v (%+v)", ok, tc.want, row)
+			}
+			if !ok {
+				return
+			}
+			if row.Key != keyMQTT || row.Value != "Other broker" || row.Tone != ui.ToneWarn ||
+				row.Sub != "Reports to mqtt.other.internal:1884, not to TasmoFleet's broker core-broker:1883, so its state does not arrive live over MQTT." {
+				t.Fatalf("row: %+v", row)
+			}
+		})
+	}
+	h := &handler{d: Deps{MQTT: func() string { return "connected" }, MQTTBroker: fakeBroker{}}}
+	if row, ok := h.otherBrokerRow(model.Device{MQTTHost: "b.example"}, false); !ok || strings.Contains(row.Sub, "broker core") || !strings.Contains(row.Sub, "b.example:1883") {
+		t.Fatalf("without a status the default port shows and our broker is not named: %+v", row)
+	}
+	// no matcher at all (tasmofleet has no broker): no hint
+	h = &handler{d: Deps{MQTT: func() string { return "connected" }}}
+	if _, ok := h.otherBrokerRow(other, false); ok {
+		t.Fatal("no matcher, no hint")
+	}
+}
+
+// Why (#441): the hint reaches the page, in the MQTT row of the reach card, and a normal device
+// shows no broker anywhere on the Connection card.
+func TestOverviewPageShowsTheOtherBrokerHint(t *testing.T) {
+	now := time.Now()
+	for _, tc := range []struct {
+		name, mqtt string
+		want       bool
+	}{{"mismatch", "connected", true}, {"MQTT off", "disabled", false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := setupWith(t, func(d *Deps) {
+				d.Inventory.(*fakeInv).devs[1] = model.Device{ID: 1, Name: "kitchen", Address: "10.0.0.1", MQTTHost: "mqtt.other.internal", MQTTPort: 1883,
+					Identity: model.Identity{Family: model.ChipESP8266, Version: "16.0.0", Variant: "tasmota"}}
+				d.MQTT = func() string { return tc.mqtt }
+				d.MQTTBroker = fakeBroker{}
+				d.MQTTStatus = func() BrokerInfo { return BrokerInfo{Enabled: true, Host: "core-broker:1883"} }
+				withFacts(fakeFacts{f: map[model.DeviceID]transport.Facts{1: {Now: now,
+					HTTP: transport.HTTPState{State: transport.HTTPOK}}}})(d)
+			})
+			_, body := e.do(t, "GET", "/devices/1", "admin", nil)
+			if got := strings.Contains(body, "Other broker"); got != tc.want {
+				t.Fatalf("Other broker shown = %v, want %v", got, tc.want)
+			}
+			if strings.Contains(body, "mqtt.other.internal:1883</") && !tc.want {
+				t.Fatal("the broker leaked into the page without a mismatch")
+			}
+		})
 	}
 }
