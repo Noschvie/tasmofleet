@@ -6,6 +6,8 @@ always upgrade automatically.
 
 ## Unreleased
 
+## 0.31.0 "Cape Spear" (2026-11-05)
+
 ### Changed
 
 - The Settings tab and Policy → GPIO templates show the last values read at once, with their age ("Read 3m ago"), instead of waiting for the device, and read it in the background when they open; values older than an hour carry a "Stale" marker, a refresh that fails keeps the old values and says why, and opening a page while a read runs sends the device nothing more. The values are kept in memory, so after a restart the first open reads the device again (#599)
