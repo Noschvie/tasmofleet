@@ -60,8 +60,14 @@ check: templ-check fmt-check vet lint test scripts-test shards-check-changed mig
 
 # Unit tests of the registry cleanup's version selection (pure, no registry access). The glob is
 # expanded by the shell: since Node 21 `node --test scripts/` no longer takes a directory (#477).
+# The tests run with a TMPDIR of their own, and the target fails when they leave anything in it (#552): the
+# temp dirs of an agent's afternoon of runs filled a tmpfs /tmp.
 scripts-test:
-	node --test scripts/*.test.mjs
+	@d=$$(mktemp -d) || exit 1; \
+	TMPDIR=$$d node --test scripts/*.test.mjs; rc=$$?; \
+	left=$$(ls -A "$$d"); rm -rf "$$d"; \
+	if [ -n "$$left" ]; then echo "scripts-test left temp files behind: $$left" >&2; exit 1; fi; \
+	exit $$rc
 
 # CI splits the FULL tier's race run (tools/race.sh, RACE_SHARD=i/2) and mutation run
 # (MUTATION_SHARD=i/MUTATION_CI_SHARDS, tools/mutation-shard.sh) into shards. Fails when a package

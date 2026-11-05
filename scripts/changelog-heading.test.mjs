@@ -1,15 +1,16 @@
 // The release guard and the release title must accept both CHANGELOG heading forms
 // ("## X.Y.Z (date)" and "## X.Y.Z "Name" (date)"), so a named release never breaks the tag build.
-import { test } from "node:test";
+import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, copyFileSync } from "node:fs";
+import { mkdtempSync, writeFileSync, copyFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dir = mkdtempSync(join(tmpdir(), "changelog-"));
+after(() => rmSync(dir, { recursive: true, force: true })); // #552
 copyFileSync(join(repo, "Makefile"), join(dir, "Makefile"));
 writeFileSync(
   join(dir, "CHANGELOG.md"),

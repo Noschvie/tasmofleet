@@ -5,11 +5,12 @@
 //
 // The test runs the real Makefile targets in a throw-away repository; the two tools they call
 // (race.sh, mutation-gate.sh) are stubs that print what they were asked to do.
-import { test } from "node:test";
+import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import {
   mkdtempSync,
+  rmSync,
   mkdirSync,
   writeFileSync,
   copyFileSync,
@@ -21,8 +22,15 @@ import { fileURLToPath } from "node:url";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..");
 
+// Every throw-away repository is removed when the file is done (#552).
+const made = [];
+after(() => {
+  for (const d of made) rmSync(d, { recursive: true, force: true });
+});
+
 function newRepo() {
   const dir = mkdtempSync(join(tmpdir(), "safety-selection-"));
+  made.push(dir);
   // No global git config: the throw-away repository needs neither the user's signing key nor identity.
   const env = {
     ...process.env,
