@@ -59,7 +59,18 @@ func (f *firmwareState) effective(d model.Device) model.Device {
 		// The health poll is evidence with a time like the rest: a probe or an INFO1 that came after
 		// it wins, so a device that was fixed while it was minimal is not skipped for ever.
 		if at := f.minimalAt(d.ID); !at.IsZero() && (!ok || at.After(s.at)) {
-			s, ok = fwSeen{variant: "minimal", at: at}, true
+			// The poll cannot tell safeboot from minimal (both answer Status 11 with Unknown and know
+			// Upgrade): a name an INFO1 or a probe gave stays, and on an ESP32 it is safeboot.
+			v := "minimal"
+			switch {
+			case ok && s.variant != "":
+				v = s.variant
+			case policy.LimitedFirmware(d.Identity.Variant):
+				v = d.Identity.Variant
+			case d.Identity.Family.IsESP32():
+				v = "safeboot"
+			}
+			s, ok = fwSeen{variant: v, at: at}, true
 		}
 	}
 	if ok && s.at.After(d.Identity.DetectedAt) {
@@ -171,4 +182,21 @@ func (f *firmwareState) sightedLimitedAt(id model.DeviceID) time.Time {
 		return s.at
 	}
 	return time.Time{}
+}
+
+// healthFindings is the part of the health tracker the firmware state reads.
+type healthFindings interface {
+	Minimal(model.DeviceID) bool
+	Get(model.DeviceID) model.Health
+}
+
+// minimalSeenAt is the time of the last successful HTTP poll if it found minimal firmware, zero if it
+// found regular firmware or none ran. SeenHTTP is set under the same lock as the flag, right after the poll.
+func minimalSeenAt(h healthFindings) func(model.DeviceID) time.Time {
+	return func(id model.DeviceID) time.Time {
+		if !h.Minimal(id) {
+			return time.Time{}
+		}
+		return h.Get(id).SeenHTTP
+	}
 }

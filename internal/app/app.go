@@ -180,12 +180,7 @@ func (a *runtime) run(ctx context.Context) error {
 		StaleAfter: staleAfter(cfg.TelePeriod), PollInterval: cfg.PollInterval,
 	})
 	a.goBG("health", func() error { return a.tracker.Run(bg) })
-	a.fw = newFirmwareState(func(id model.DeviceID) time.Time {
-		if !a.tracker.Minimal(id) {
-			return time.Time{}
-		}
-		return a.tracker.Get(id).SeenHTTP // set under the same lock as the flag, right after the poll
-	})
+	a.fw = newFirmwareState(minimalSeenAt(a.tracker))
 	a.setupTransport()
 	// Network facts are read in the background, never as part of first contact or a refresh.
 	nf := newNetFactsReader(a.fw.list(a.svc.Inventory.List),

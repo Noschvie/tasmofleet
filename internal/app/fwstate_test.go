@@ -260,6 +260,34 @@ func TestHealthMinimalIsEvidenceWithATime(t *testing.T) {
 	}
 }
 
+// Why (#558, #560): the health poll cannot tell safeboot from minimal (both answer Status 11 with
+// Unknown and know Upgrade). A poll newer than the INFO1 or probe that named safeboot must not rename
+// the device: the policy row, the backup reason and the template refusal name the firmware.
+func TestHealthMinimalKeepsTheSafebootName(t *testing.T) {
+	t0 := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
+	t1, t2 := t0.Add(time.Minute), t0.Add(2*time.Minute)
+	polled := t1
+	fw := newFirmwareState(func(model.DeviceID) time.Time { return polled })
+	dev := func(variant string, fam model.ChipFamily) model.Device {
+		return model.Device{ID: 1, Identity: model.Identity{Family: fam, Variant: variant, DetectedAt: t0}}
+	}
+	variant := func(d model.Device) string { return fw.effective(d).Identity.Variant }
+	if got := variant(dev("safeboot", model.ChipUnknown)); got != "safeboot" { // what a probe in safeboot stores
+		t.Errorf("a probe named safeboot, a newer poll: %q", got)
+	}
+	if got := variant(dev("tasmota", model.ChipESP32)); got != "safeboot" {
+		t.Errorf("an ESP32 on limited firmware runs safeboot: %q", got)
+	}
+	if got := variant(dev("tasmota", model.ChipESP8266)); got != "minimal" {
+		t.Errorf("an ESP8266 on limited firmware runs minimal: %q", got)
+	}
+	fw.set(1, "safeboot", t1)
+	polled = t2
+	if got := variant(dev("tasmota", model.ChipUnknown)); got != "safeboot" {
+		t.Errorf("an INFO1 named safeboot, a newer poll: %q", got)
+	}
+}
+
 // Why (#558, M-1): the failure was real: a regular device that health calls minimal is refreshed once,
 // is regular from then on, and is not asked again an hour later.
 func TestFWRecheckFixesADeviceHealthCallsMinimal(t *testing.T) {
@@ -363,6 +391,28 @@ func TestRuntimeWiresTheFirmwareState(t *testing.T) {
 	if !rc.busy(t.Context(), 7) {
 		t.Error("a device a typed firmware command still updates is busy")
 	}
+	withJob := func(name, addr string, to model.JobState) model.DeviceID { // a device whose job is in state to
+		id, err := svc.Store.CreateDevice(t.Context(), model.Device{Name: name, Address: addr})
+		if err != nil {
+			t.Fatal(err)
+		}
+		j := model.Job{DeviceID: id, State: model.JobQueued, Stage: model.StageFinal, Policy: model.PolicyOnlyNewer, TargetRelease: "16.0.0", TargetVariant: "tasmota"}
+		_, ids, err := svc.Store.CreateBatch(t.Context(), "u", []model.Job{j})
+		if err != nil {
+			t.Fatal(err)
+		}
+		j.ID, j.State = ids[0], to
+		if err := svc.Store.SaveTransition(t.Context(), j, model.JobEvent{JobID: ids[0], From: model.JobQueued, To: to, Event: "test"}); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	if !rc.busy(t.Context(), withJob("updating", "192.0.2.1", model.JobAwaitReboot)) {
+		t.Error("a device an update job is working on is busy")
+	}
+	if rc.busy(t.Context(), withJob("updated", "192.0.2.2", model.JobSucceeded)) {
+		t.Error("a device whose update job has ended is not busy")
+	}
 	a.fw.set(5, "safeboot", time.Now())
 	if rc.sighted(5).IsZero() {
 		t.Error("the recheck must see the INFO1 sightings of the firmware state")
@@ -370,7 +420,29 @@ func TestRuntimeWiresTheFirmwareState(t *testing.T) {
 	if err := a.setupSettings(); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := a.policyLive.devices.(fwDevices); !ok {
-		t.Errorf("the policy report reads devices through %T, want the effective view", a.policyLive.devices)
+	if v, ok := a.policyLive.devices.(fwDevices); !ok || v.fw != a.fw {
+		t.Errorf("the policy report reads devices through %T, want the effective view of the runtime's state", a.policyLive.devices)
+	}
+}
+
+type fakeHealth struct {
+	minimal map[model.DeviceID]bool
+	seen    time.Time
+}
+
+func (f fakeHealth) Minimal(id model.DeviceID) bool  { return f.minimal[id] }
+func (f fakeHealth) Get(model.DeviceID) model.Health { return model.Health{SeenHTTP: f.seen} }
+
+// Why (#558, M-1): the firmware state takes the time of the poll only when that poll found minimal
+// firmware; a poll that found regular firmware must give no evidence at all, or a recovered device
+// would be skipped for ever.
+func TestMinimalSeenAtIsTheTimeOfAPollThatFoundMinimal(t *testing.T) {
+	at := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
+	f := minimalSeenAt(fakeHealth{minimal: map[model.DeviceID]bool{1: true}, seen: at})
+	if got := f(1); !got.Equal(at) {
+		t.Errorf("minimal: %v, want the time of the poll %v", got, at)
+	}
+	if got := f(2); !got.IsZero() {
+		t.Errorf("regular: %v, want zero", got)
 	}
 }

@@ -133,7 +133,10 @@ func (a *runtime) newFWRecheck() *fwRecheck {
 			return true
 		}
 		jobs, err := a.svc.Store.ListJobs(ctx, store.JobFilter{DeviceID: id, States: activeJobStates, Limit: 1})
-		return err != nil || len(jobs) > 0 // unknown counts as busy: better to wait an hour than to disturb a job
+		if err != nil {
+			a.log.Warn("firmware recheck: cannot list the jobs of a device, leaving it alone this tick", "device", id, "err", err)
+		}
+		return err != nil || len(jobs) > 0 // unknown counts as busy: better to wait a tick than to disturb a job
 	}
 	return rc
 }
