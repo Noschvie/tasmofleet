@@ -276,7 +276,7 @@ func TestSnapshotsPageShowsDownloadStoredScheduleAndRestore(t *testing.T) {
 	_, body := s.do(t, "GET", "/settings/system/snapshots", "admin", nil)
 	for _, want := range []string{
 		"<h1>Snapshots</h1>", `id="card-download"`, "Download a snapshot", `<button type="submit" form="db-dl" class="btn" id="btn-dl">Download snapshot</button>`,
-		`name="include_key" value="1"`, `id="db-dl" method="post" action="/tf/settings/system/snapshot"`,
+		`name="include_key" value="1"`, `id="db-dl" data-no-busy method="post" action="/tf/settings/system/snapshot"`,
 		"The file holds secrets. Keep it like a password.", "There is no restore button on purpose.",
 		`id="card-stored"`, "Stored snapshots", `id="card-restore"`,
 		`id="card-snapshots"`, "<h2>Schedule</h2>", `name="sw.SNAPSHOT_INTERVAL"`, `name="v.SNAPSHOT_KEEP"`,

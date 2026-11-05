@@ -107,7 +107,7 @@ templ snapshotsPage(p sysPage) {
 			@ui.SaveBar(p.Base + snapPath)
 		</form>
 	</div>
-	<form id="db-dl" method="post" action={ templ.SafeURL(p.Base + sysPath + "/snapshot") }>
+	<form id="db-dl" data-no-busy method="post" action={ templ.SafeURL(p.Base + sysPath + "/snapshot") }>
 		<input type="hidden" name="csrf" value={ p.CSRF }/>
 	</form>
 	if len(p.DB.Files) > 0 {

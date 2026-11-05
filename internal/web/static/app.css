@@ -2701,7 +2701,8 @@ td .hint {
 .pre {
   white-space: pre-wrap;
 }
-button.htmx-request[disabled] {
+button.htmx-request[disabled],
+a[aria-busy="true"] {
   cursor: progress;
 }
 button.htmx-request[disabled]::after {

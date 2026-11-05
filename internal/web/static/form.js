@@ -273,3 +273,135 @@
     }
   });
 })();
+
+// Busy state of actions (#538). The control a person clicked is disabled, spins (the
+// button.htmx-request[disabled] rule in app.css) and says aria-busy until the answer is there, so a
+// second click does nothing; after about 10 s a toast says it is still working. Two sources:
+// the submitter of a plain POST form (busy until the next page arrives, a form[data-no-busy] such
+// as a file download opts out) and the htmx controls (busy until the request ends). A section that
+// loads by itself (aria-busy="true" with hx-trigger="load") gets the same note. Without this file
+// everything works the same, minus the busy look.
+(function () {
+  "use strict";
+  var NOTE_MS = 10000;
+  var NOTE = "Still working. A slow device can take up to a minute.";
+
+  function note(still) {
+    window.setTimeout(function () {
+      if (still() && typeof window.tfToast === "function") {
+        window.tfToast(NOTE, "info");
+      }
+    }, NOTE_MS);
+  }
+  function submitButtons(form) {
+    var sel = "button[type=submit], button:not([type])";
+    var list = Array.prototype.slice.call(form.querySelectorAll(sel));
+    if (form.id) {
+      list = list.concat(
+        Array.prototype.slice.call(
+          document.querySelectorAll(
+            'button[form="' + form.id + '"]:not([type=button])',
+          ),
+        ),
+      );
+    }
+    return list;
+  }
+  function on(btn) {
+    btn.setAttribute("aria-busy", "true");
+    btn.classList.add("htmx-request");
+    btn.disabled = true;
+  }
+  function off(btn) {
+    btn.removeAttribute("aria-busy");
+    btn.classList.remove("htmx-request");
+    btn.disabled = false;
+  }
+  function targets(el) {
+    return el instanceof HTMLFormElement ? submitButtons(el) : [el];
+  }
+
+  document.addEventListener("submit", function (e) {
+    var form = e.target;
+    if (
+      !(form instanceof HTMLFormElement) ||
+      form.method !== "post" ||
+      form.target ||
+      form.hasAttribute("hx-post") ||
+      form.hasAttribute("data-no-busy") ||
+      form.hasAttribute("data-fw-check")
+    ) {
+      return;
+    }
+    if (form.hasAttribute("data-busy")) {
+      e.preventDefault();
+      return;
+    }
+    var sub = e.submitter;
+    // after the submission has started (a disabled button would not be sent) and after the other
+    // submit handlers had their say (a confirmation that cancels it must not leave the form busy)
+    window.setTimeout(function () {
+      if (e.defaultPrevented) {
+        return;
+      }
+      form.setAttribute("data-busy", "");
+      var btns = sub ? [sub] : submitButtons(form).slice(0, 1);
+      btns.forEach(on);
+      note(function () {
+        return form.isConnected && form.hasAttribute("data-busy");
+      });
+    }, 0);
+  });
+  // the page came back from the back/forward cache with its form still busy
+  window.addEventListener("pageshow", function (e) {
+    if (!e.persisted) {
+      return;
+    }
+    document.querySelectorAll("form[data-busy]").forEach(function (f) {
+      f.removeAttribute("data-busy");
+    });
+    document.querySelectorAll("button[aria-busy=true]").forEach(off);
+  });
+
+  function byClick(e) {
+    var t = e.detail && e.detail.requestConfig && e.detail.requestConfig.triggeringEvent;
+    return !!t && (t.type === "click" || t.type === "submit");
+  }
+  document.addEventListener("htmx:beforeRequest", function (e) {
+    var el = e.detail && e.detail.elt;
+    if (!el || !byClick(e)) {
+      return;
+    }
+    if (el.getAttribute("aria-busy") === "true") {
+      e.preventDefault();
+      return;
+    }
+    el.setAttribute("aria-busy", "true");
+    targets(el).forEach(on);
+    note(function () {
+      return el.isConnected && el.getAttribute("aria-busy") === "true";
+    });
+  });
+  document.addEventListener("htmx:afterRequest", function (e) {
+    var el = e.detail && e.detail.elt;
+    if (!el || !byClick(e)) {
+      return;
+    }
+    el.removeAttribute("aria-busy");
+    targets(el).forEach(off);
+  });
+
+  // a section that loads by itself says it is still working too
+  function watchPlaceholders() {
+    document
+      .querySelectorAll('[aria-busy=true][hx-trigger="load"]:not([data-busy-watch])')
+      .forEach(function (s) {
+        s.setAttribute("data-busy-watch", "");
+        note(function () {
+          return s.isConnected && s.getAttribute("aria-busy") === "true";
+        });
+      });
+  }
+  document.addEventListener("DOMContentLoaded", watchPlaceholders);
+  document.addEventListener("htmx:afterSettle", watchPlaceholders);
+})();
