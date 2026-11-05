@@ -203,13 +203,18 @@ func TestDeletingBackupsPublishesABackupEvent(t *testing.T) {
 	if len(bus.got) != 0 {
 		t.Fatalf("a refused delete published %+v", bus.got)
 	}
-	for name, del := range map[string]func() error{
-		"DeleteRun":       func() error { _, err := e.m.DeleteRun(t.Context(), "adm", a.ID); return err },
-		"DeleteRuns":      func() error { _, err := e.m.DeleteRuns(t.Context(), "adm", 7, []model.BackupID{b.ID}); return err },
-		"DeleteOlderThan": func() error { _, err := e.m.DeleteOlderThan(t.Context(), "adm", 7, d.TakenAt); return err },
+	// in this order: each call removes a run the next one does not need (a map would shuffle them)
+	for _, tc := range []struct {
+		name string
+		del  func() error
+	}{
+		{"DeleteRun", func() error { _, err := e.m.DeleteRun(t.Context(), "adm", a.ID); return err }},
+		{"DeleteRuns", func() error { _, err := e.m.DeleteRuns(t.Context(), "adm", 7, []model.BackupID{b.ID}); return err }},
+		{"DeleteOlderThan", func() error { _, err := e.m.DeleteOlderThan(t.Context(), "adm", 7, d.TakenAt); return err }},
 	} {
+		name := tc.name
 		bus.got = nil
-		if err := del(); err != nil {
+		if err := tc.del(); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
 		if len(bus.got) != 1 || bus.got[0].Topic != events.TopicBackup || bus.got[0].At.IsZero() {
