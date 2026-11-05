@@ -37,6 +37,7 @@ type BackupRunInfo struct {
 	Finished    time.Time // when the last finished run ended; zero = none since the start
 	LastTotal   int       // devices of the last finished run
 	LastFailed  int       // of which failed
+	LastSkipped int       // devices the last run left out (offline, never answered, busy); not a failure
 }
 
 // statusBar reads what the bar shows. live says whether the page holds an event stream: only then

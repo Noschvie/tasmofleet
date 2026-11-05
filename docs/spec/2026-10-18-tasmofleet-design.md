@@ -1528,6 +1528,26 @@ shows the decoded secrets. The diff/drift view redacts keys matching
 
 ---
 
+### 12.5 Fleet runs: tried, failed, skipped (#409)
+
+A scheduled run (`BACKUP_INTERVAL`) records what it did per device; the record is stored
+(`backup_runs`, `backup_run_items`) so the status bar, the dashboard and the Devices, Backups page
+show the last run after a restart. Outcomes per device: `ok`, `failed`, `skipped`. **Tried = ok + failed.**
+A skipped device was not tried; skipped devices are counted apart, never colour the status bar and
+never raise a notification. The rule:
+
+- persisted `last_seen_at` is zero: skipped, "never answered";
+- the tracker's current verdict is offline: skipped, "offline since <date time>";
+- unknown since the start but seen before: **tried** (a run right after a restart must not skip the
+  fleet);
+- `auth_failed`: tried, and failed when the device refuses (it is reachable and needs action);
+- the device's operation lock is busy: skipped, "another operation was running".
+
+The notification lists the failed devices only. The run record is pruned with `AUDIT_RETENTION`; a
+device's item keeps its name when the device is deleted. Model: `model.BackupRun`, `BackupRunItem`,
+`BackupOutcome`, `BackupDeviceRow`; the web layer reads them through `web.BackupFleet` (`LastRun`,
+`Overview`, `PruneNext`; `Overview` does no device I/O).
+
 ## 13. Device page, console and settings (M2)
 
 - **Device list with live state**: health, version, variant, family, IP, uptime, RSSI, power

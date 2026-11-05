@@ -200,6 +200,8 @@ type Deps struct {
 	MQTTStatus func() BrokerInfo
 	// ScheduledBackup is the scheduled backup run for the status bar; nil shows nothing about it.
 	ScheduledBackup func() BackupRunInfo
+	// BackupFleet serves the Devices, Backups page (#409); nil hides what needs it.
+	BackupFleet BackupFleet
 	// MQTTBroker compares a device's configured broker with ours; nil when
 	// tasmofleet has no broker.
 	MQTTBroker interface {

@@ -49,6 +49,8 @@ type StatusBackup struct {
 	At     time.Time
 	Failed int
 	Total  int
+	// Skipped devices were not tried; they are counted apart and never colour the bar.
+	Skipped int
 }
 
 // statusLevel orders what the phone's one line says: the worst fact wins.
