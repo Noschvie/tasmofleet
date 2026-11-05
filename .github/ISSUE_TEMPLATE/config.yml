@@ -6,6 +6,3 @@ contact_links:
   - name: Feature idea
     url: https://github.com/nofuturekid/tasmofleet/discussions/categories/ideas
     about: Suggest and discuss ideas in Discussions first.
-  - name: Security vulnerability
-    url: https://github.com/nofuturekid/tasmofleet/security/advisories/new
-    about: Report vulnerabilities privately; do not open a public issue (see SECURITY.md).
