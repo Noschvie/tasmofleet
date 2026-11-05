@@ -6,46 +6,35 @@ always upgrade automatically.
 
 ## Unreleased
 
+## 0.28.0 "Cape Byron" (2026-11-05)
+
 ### Upgrade notes
 
-- TasmoFleet no longer switches relays back on after a firmware update (#551, thanks @Noschvie). If you relied on that, set `SetOption0 1`, `PowerOnState 3` and `SaveData 1` on those devices (a Policy rule can do it for the fleet; the template "Restore power after an outage" covers `PowerOnState 3`). Devices that already keep their relay state are not affected.
+- TasmoFleet no longer switches relays back on after a firmware update (#551, thanks @Noschvie). If you relied on that, set `SetOption0 1`, `PowerOnState 3` and `SaveData 1` on those devices (a Policy rule can do it for the fleet and "Make compliant" applies it; the template "Restore power after an outage" covers `PowerOnState 3`). Devices that already keep their relay state are not affected.
+- Webhook notifications: if you send to ntfy (or Gotify), open Settings, Notifications and set the webhook Format to ntfy (or Gotify). Until then the webhook keeps sending JSON, which ntfy shows as raw text (#469, thanks @t4nki)
+- Migration 0042 (data only): update jobs that were waiting in the state `restore_power` end as `succeeded` with a job event. The power columns of `ota_jobs` stay in the database unused (#551, thanks @Noschvie)
+
+### Added
+
+- Notifications: the webhook Format now offers ntfy and Gotify next to Generic JSON and Home Assistant. ntfy gets a plain-text message with a title, a link to the TasmoFleet page (when PUBLIC_URL is set) and a priority that stands out for failed or partial results; Gotify gets title, message, priority and the link as the click action. The Message card previews what the saved format sends (#469, thanks @t4nki)
+- Dashboard: a "No backup" tile counts the devices that have no backup yet, the same number as the device list's "No backup" chip, and opens that list. It is blue, not amber: a device that never answered has no backup either, so the number is not a failure count. The dashboard now also refreshes when a backup is taken or deleted (#438, thanks @Noschvie)
 
 ### Changed
 
 - The update dialog has no "Power after update" choice any more, the preview shows no relay line, and a job no longer has a "Restoring power" step. TasmoFleet does not read or switch relays around an update: no `Power` command, no Status 11 reading for relays, no PulseTime/Interlock/ShutterRelay reads, no extra MAC read after the reboot. The README section "What TasmoFleet changes on your devices" says so (#551, thanks @Noschvie)
-
-### Breaking
-
-- The setting `OTA_POWER_MAX_AGE` (Settings > Firmware & updates > Updates (OTA), `TASMOFLEET_OTA_POWER_MAX_AGE`) is gone. A stored value is deleted by migration 0042; the environment variable is ignored (#551, thanks @Noschvie)
-- The drop reason `ota_hint_invalid_relay` of `tasmofleet_mqtt_dropped_total` is gone, because POWER reports no longer go to the update engine (`ota_hint_queue_full` and `ota_hint_unknown_topic` stay). Alert rules or dashboards that match it must drop it (#551, thanks @Noschvie)
-- Migration 0042 (data only): update jobs that were waiting in the state `restore_power` end as `succeeded` with a job event. The power columns of `ota_jobs` stay in the database unused (#551, thanks @Noschvie)
+- Device page: the MQTT broker no longer appears as a row of the Connection card (Wi-Fi or Ethernet). The "How TasmoFleet reaches this device" card names the device's broker only when it is a different one than TasmoFleet's ("Other broker", with the address the device reports to), because such a device does not show up live. Nothing is shown when MQTT is switched off in TasmoFleet, when the device reports to TasmoFleet's broker under another name or address, or when the device has no broker (#441, thanks @Noschvie)
 
 ### Fixed
 
 - Devices on the ESP32 safeboot image or the ESP8266 minimal firmware are no longer asked for settings they do not know. They answer `Unknown` to nearly every command, so the hourly policy reads and the live check, "Copy from a device", the changes-since-backup view, the Templates tab's reads, the group topic read and the network facts read each filled their log and MQTT topic with errors (SetOption128, TimeZone, Sleep, Status and the rest of the rule commands), and a backup run sent its 17 snapshot commands after the dump. None of these goes to such a device any more; the health poll and the device page's Settings tab are unchanged. TasmoFleet now notices from a device's `INFO1` message that it booted into safeboot (the `(safeboot)` or `(minimal)` build tag, whatever the version, chip or prefix) or left it, shows the device in the policy as "Not judged" with the firmware named (an older reading or backup never judges it), and checks it again about once an hour with an identity refresh, so a device that is back on regular firmware is read again; a regular `INFO1` ends the state at once. A backup run for such a device ends with the reason instead of failed commands (#558, thanks @Noschvie)
 - Applying a GPIO template now refuses a device that runs the safeboot image, like the minimal firmware, with a reason that names safeboot, instead of sending a `Template` command it answers with `Unknown` (#560)
-
 - Deleting a device while a job runs on it no longer makes the update engine log `ERROR ota transition not persisted ... conflict` (or `not found`). The delete is now refused while an update, command, backup, policy or template job or a restore is unfinished on the device: the delete page says what is running, links to the transaction (or the restore) and offers no Delete button, and a post answers 409 and deletes nothing, and the backups you chose to delete with the device stay too, because the check comes first. Only when a job starts in the moment between that check and the delete itself are the backups already gone; the 409 page then says so. The refusal is in the audit log. The database does the check and the delete in one step, so a job that starts at the same moment cannot slip through (the device stays). Before, the delete took the running job's row with it; the job's worker then failed to save its next step, and when SQLite had reused the job's id for a new job it reported a conflict instead. A job whose row is gone is now a single warning, not an error (#466)
-
-### Upgrade notes
-
-- Webhook notifications: if you send to ntfy (or Gotify), open Settings, Notifications and set the webhook Format to ntfy (or Gotify). Until then the webhook keeps sending JSON, which ntfy shows as raw text (#469, thanks @t4nki)
-
-### Added
-
-- Notifications: the webhook Format now offers ntfy and Gotify next to Generic JSON and Home Assistant. ntfy gets a plain-text message with a title, a link to the TasmoFleet page (when PUBLIC_URL is set) and a priority that stands out for failed or partial results; Gotify gets title, message, priority and the link as the click action. The Message card previews what the saved format sends (#469, thanks @t4nki)
-
-### Added
-
-- Dashboard: a "No backup" tile counts the devices that have no backup yet, the same number as the device list's "No backup" chip, and opens that list. It is blue, not amber: a device that never answered has no backup either, so the number is not a failure count. The dashboard now also refreshes when a backup is taken or deleted (#438, thanks @Noschvie)
-
-### Changed
-
-- Device page: the MQTT broker no longer appears as a row of the Connection card (Wi-Fi or Ethernet). The "How TasmoFleet reaches this device" card names the device's broker only when it is a different one than TasmoFleet's ("Other broker", with the address the device reports to), because such a device does not show up live. Nothing is shown when MQTT is switched off in TasmoFleet, when the device reports to TasmoFleet's broker under another name or address, or when the device has no broker (#441, thanks @Noschvie)
-
-### Fixed
-
 - Drift no longer reports sensor readings as differences. The Drift tab compared the whole `Status 10` block (temperatures, power and energy counters, the sensor clock) between the stored snapshot and the live device, so a device with a sensor was always "drifted". Status 10 is now left out of the comparison and of "Show all", like the other live groups (#446, thanks @Noschvie)
+
+### Breaking
+
+- The setting `OTA_POWER_MAX_AGE` (Settings > Firmware & updates > Updates (OTA), `TASMOFLEET_OTA_POWER_MAX_AGE`) is gone. A stored value is deleted by migration 0042; the environment variable is ignored (#551, thanks @Noschvie)
+- The drop reason `ota_hint_invalid_relay` of `tasmofleet_mqtt_dropped_total` is gone, because POWER reports no longer go to the update engine (`ota_hint_queue_full` and `ota_hint_unknown_topic` stay). Alert rules or dashboards that match it must drop it (#551, thanks @Noschvie)
 
 ## 0.27.4 "Cordouan" (2026-11-05)
 
