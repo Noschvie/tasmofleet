@@ -6,7 +6,8 @@ Fixes #
 
 ## Tests
 
-<!-- Which tests cover this, and why they fail without the change. Docs-only: write "docs only". -->
+<!-- Which tests cover this, and why they fail without the change (the CI "revert check" proves it). Docs-only: write "docs only".
+     A pure refactor or a feature where nothing should fail without the change: a line "revert-check: skip - <reason>" opts out. -->
 
 ## Checklist
 

@@ -1,9 +1,9 @@
 # Weekly (cron on main, Sunday night) and by hand: the full mutation run of every MUTATION package
-# (_mutation.yml, scope all) and its gate. The nightly does not run it any more (#480): a PR that changes
-# a SAFETY package already gates the mutation of what it changed, and the full run is expensive.
+# (_mutation.yml, scope all) and its gate. The nightly does not run it any more (#480) and no PR waits
+# for mutation testing (#555: diff coverage and a revert check replaced it in the PR path), so this is
+# the one place it runs, as a report until the keep-or-drop decision (end of November 2026).
 # It blocks no release and no merge; a failing week opens an issue (job weekly-failure-issue,
-# schedule only). The run also saves the mutation Go cache that those PRs restore (from main only,
-# see .github/actions/go).
+# schedule only). The run also saves the mutation Go cache (from main only, see .github/actions/go).
 name: weekly
 
 on:

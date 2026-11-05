@@ -1,13 +1,14 @@
 # Pull requests: the FAST tier. One workflow per trigger (CLAUDE.md "Test tiers in CI"):
 # pr.yml (this), main.yml (push to main), release.yml (tags), nightly.yml and weekly.yml (cron). The jobs
-# they share are the reusable workflows _checks.yml, _mutation.yml and _image.yml; the file
+# they share are the reusable workflows _checks.yml, _mutation.yml (weekly only) and _image.yml; the file
 # a run comes from says which tier it is, nothing is computed at run time except which
 # parts of the repository the PR touched (job "changes").
 #
 # FAST: lint, unit and integration tests (unchanged packages come from the go test cache that
-# main.yml saves; a PR saves none), the @core e2e tests in two shards plus the MQTT specs in a job of their own, and, when the PR changes
-# a SAFETY package (Makefile), its race tests and the
-# mutation gate of the changed mutation packages. Target: "required" green in <= 5 min.
+# main.yml saves; a PR saves none), the @core e2e tests in two shards plus the MQTT specs in a job of their own, the
+# revert check (a PR that changes Go code and its tests: the tests fail without the change) and, when the PR changes
+# a SAFETY package (Makefile), its race tests and diff coverage (every changed line is executed by a test).
+# No mutation testing in the PR path (#555): the weekly run keeps it. Target: "required" green in <= 5 min.
 # Docs-only PRs skip all of that. The relative Markdown link check runs on every PR and gates
 # the merge: a PR that deletes or renames a linked file breaks links without touching Markdown.
 # The migration append-only guard (#595) runs on every PR too and gates the merge. So does the release
@@ -45,6 +46,7 @@ jobs:
     outputs:
       code: ${{ steps.classify.outputs.code }}
       safety: ${{ steps.classify.outputs.safety }}
+      gocode: ${{ steps.classify.outputs.gocode }}
       catalogue: ${{ steps.classify.outputs.catalogue }}
       image: ${{ steps.classify.outputs.image }}
     steps:
@@ -64,6 +66,7 @@ jobs:
           echo "$files"
           code=false
           safety=false
+          gocode=false
           catalogue=false
           image=false
           for f in $files; do
@@ -71,6 +74,7 @@ jobs:
               docs/research/*|docs/runbooks/*|docs/design/*|README.md|ROADMAP.md|CONTRIBUTING.md|SECURITY.md|CLAUDE.md|NOTICE|LICENSE) ;;
               *) code=true ;;
             esac
+            case "$f" in *.go) gocode=true ;; esac
             # The image build check: what the Dockerfile reads and the Home Assistant app.
             case "$f" in
               Dockerfile|.dockerignore|go.mod|go.sum|.github/workflows/_image.yml|internal/config/haprofile.go|tools/ha-app-smoke.sh|deploy/homeassistant/*) image=true ;;
@@ -87,34 +91,32 @@ jobs:
           {
             echo "code=$code"
             echo "safety=$safety"
+            echo "gocode=$gocode"
             echo "catalogue=$catalogue"
             echo "image=$image"
           } >> "$GITHUB_OUTPUT"
-          echo "code=$code safety=$safety catalogue=$catalogue image=$image"
+          echo "code=$code safety=$safety gocode=$gocode catalogue=$catalogue image=$image"
 
-  # lint, unit and integration tests, build, e2e core; safety-race when a SAFETY package
-  # changed, catalogue when the generator, its data or the pinned source changed.
+  # lint, unit and integration tests, build, e2e core; safety-race and diff coverage when a SAFETY package
+  # changed, the revert check when Go code changed, catalogue when the generator, its data or the pinned source
+  # changed. The revert check reads the PR's label and body through the API (pull-requests: read).
   checks:
     name: checks
     needs: changes
     if: needs.changes.outputs.code == 'true'
+    permissions:
+      contents: read
+      pull-requests: read
     uses: ./.github/workflows/_checks.yml
     with:
       e2e: core
       e2e_shards: '["1/2","2/2"]'
       safety_race: ${{ needs.changes.outputs.safety == 'true' }}
+      diff_cover: ${{ needs.changes.outputs.safety == 'true' }}
+      revert_check: ${{ needs.changes.outputs.gocode == 'true' }}
+      pr_number: ${{ github.event.pull_request.number }}
       base: ${{ github.event.pull_request.base.sha }}
       catalogue: ${{ needs.changes.outputs.catalogue == 'true' }}
-
-  # The mutation gate of the changed mutation packages, only for a PR that changes a SAFETY package.
-  mutation:
-    name: mutation
-    needs: changes
-    if: needs.changes.outputs.code == 'true' && needs.changes.outputs.safety == 'true'
-    uses: ./.github/workflows/_mutation.yml
-    with:
-      scope: changed
-      base: ${{ github.event.pull_request.base.sha }}
 
   # Relative links in the Markdown files resolve (tools/check-doc-links.py, about 8 s). Part of "required".
   # No condition: it also runs for a code PR, whose change can delete a file that a document links to.
@@ -168,15 +170,15 @@ jobs:
       mode: check
 
   # The one status that branch protection on main requires. It always runs and
-  # passes only when every job that had to run passed. "checks" and "mutation" are
-  # reusable workflows: each is green only when every job inside it that was asked for
-  # (by the inputs above) ran and succeeded. A skip counts only when this PR did not ask
-  # for that job: everything for a docs-only PR, mutation when no SAFETY package changed. The link
+  # passes only when every job that had to run passed. "checks" is a
+  # reusable workflow: it is green only when every job inside it that was asked for
+  # (by the inputs above: safety race, diff coverage and revert check among them) ran and succeeded. A skip
+  # counts only when this PR did not ask for that job: everything for a docs-only PR. The link
   # check, the migration guard and the release section guard always run and must succeed.
   # Any other result (failure, cancelled, or a skip caused by a failed dependency) fails it.
   required:
     name: required
-    needs: [changes, checks, mutation, links, migrations, release-section]
+    needs: [changes, checks, links, migrations, release-section]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -187,12 +189,11 @@ jobs:
           CODE: ${{ needs.changes.outputs.code }}
           SAFETY: ${{ needs.changes.outputs.safety }}
           CHECKS: ${{ needs.checks.result }}
-          MUTATION: ${{ needs.mutation.result }}
           LINKS: ${{ needs.links.result }}
           MIGRATIONS: ${{ needs.migrations.result }}
           RELEASE_SECTION: ${{ needs.release-section.result }}
         run: |
-          echo "changes=$CHANGES code=$CODE safety=$SAFETY | checks: $CHECKS | mutation: $MUTATION | links: $LINKS | migrations: $MIGRATIONS | release section: $RELEASE_SECTION"
+          echo "changes=$CHANGES code=$CODE safety=$SAFETY | checks: $CHECKS | links: $LINKS | migrations: $MIGRATIONS | release section: $RELEASE_SECTION"
           [ "$CHANGES" = success ] || exit 1
           docs=false; [ "$CODE" = false ] && docs=true
           check() { # check <skip allowed> <result>
@@ -201,8 +202,6 @@ jobs:
             echo "unexpected result: $2"; exit 1
           }
           check "$docs" "$CHECKS"
-          m=true; [ "$SAFETY" = true ] && m=$docs
-          check "$m" "$MUTATION"
           check false "$LINKS"
           check false "$MIGRATIONS"
           check false "$RELEASE_SECTION"

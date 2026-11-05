@@ -96,8 +96,8 @@ internal/deps            build-tagged file pinning third-party modules in go.mod
 
 - `internal/model` imports only the standard library.
 - `internal/fwselect`, `internal/cmdpolicy` and `internal/ota/machine*.go` are pure: no `net`, `os`, `database/sql`.
-  They take data and return decisions. These are the safety-critical parts and run
-  under mutation testing.
+  They take data and return decisions. These are the safety-critical parts; they are in
+  the weekly mutation run and their changed lines are gated by diff coverage in every PR.
 - `internal/tasmotacmd` (and its `extract`) is pure too (same depguard rule) but not under mutation testing
   or in `SAFETY`.
 - Only `internal/store` imports `database/sql` / `modernc.org/sqlite`.
@@ -161,24 +161,26 @@ fixture or a fault instead of mocking HTTP by hand.
 
 ## Running the gates
 
-| Gate                                                    | Command                                                                       |
-| ------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| FAST tier, everything but e2e (run before every commit) | `make check`                                                                  |
-| inner loop between two edits (not a gate)               | `make quick`                                                                  |
-| FAST tier, the `@core` e2e tests                        | `make e2e-core`                                                               |
-| FAST tier, a safety package changed (race + mutation)   | `make safety BASE=origin/main`                                                |
-| FULL tier, everything CI runs nightly and weekly        | `make ci TESTFLAGS=-count=1`                                                  |
-| format                                                  | `make fmt` / `make fmt-check`                                                 |
-| go vet                                                  | `make vet`                                                                    |
-| staticcheck (also inside `make lint`)                   | `make staticcheck`                                                            |
-| golangci-lint (incl. depguard boundaries)               | `make lint`                                                                   |
-| unit tests                                              | `make test`                                                                   |
-| integration tests                                       | `make integration`                                                            |
-| race detector                                           | `make race`                                                                   |
-| mutation tests (MUTATION in the Makefile)               | `make mutation` / `make mutation-changed BASE=<ref>`                          |
-| e2e (Playwright), all but quarantined                   | `make e2e-deps` once, `npx playwright install chromium` once, then `make e2e` |
-| quarantined tests (nightly only)                        | `make test-quarantine` / `make e2e-quarantine`                                |
-| vulnerabilities                                         | `make vuln`                                                                   |
+| Gate                                                                      | Command                                                                       |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| FAST tier, everything but e2e (run before every commit)                   | `make check`                                                                  |
+| inner loop between two edits (not a gate)                                 | `make quick`                                                                  |
+| FAST tier, the `@core` e2e tests                                          | `make e2e-core`                                                               |
+| FAST tier, a safety package changed (race + diff coverage + revert check) | `make safety BASE=origin/main`                                                |
+| every changed SAFETY line is executed by a test                           | `make diff-cover BASE=origin/main`                                            |
+| the tests you changed fail without your production change                 | `make revert-check BASE=origin/main`                                          |
+| FULL tier, everything CI runs nightly and weekly                          | `make ci TESTFLAGS=-count=1`                                                  |
+| format                                                                    | `make fmt` / `make fmt-check`                                                 |
+| go vet                                                                    | `make vet`                                                                    |
+| staticcheck (also inside `make lint`)                                     | `make staticcheck`                                                            |
+| golangci-lint (incl. depguard boundaries)                                 | `make lint`                                                                   |
+| unit tests                                                                | `make test`                                                                   |
+| integration tests                                                         | `make integration`                                                            |
+| race detector                                                             | `make race`                                                                   |
+| mutation tests (MUTATION in the Makefile), optional                       | `make mutation` / `make mutation-changed BASE=<ref>`                          |
+| e2e (Playwright), all but quarantined                                     | `make e2e-deps` once, `npx playwright install chromium` once, then `make e2e` |
+| quarantined tests (nightly only)                                          | `make test-quarantine` / `make e2e-quarantine`                                |
+| vulnerabilities                                                           | `make vuln`                                                                   |
 
 Tools are pinned in `tools/go.mod` and run via `go tool -modfile=tools/go.mod <tool>`.
 Run a single package's tests with `go test ./internal/fwselect/ -run TestGuard -v`.
@@ -192,8 +194,21 @@ with e.g. `make check JOBS=4`. `make test` and `make integration` use the go tes
 (unchanged packages report `(cached)`); `TESTFLAGS=-count=1` forces a fresh run. `make integration` runs only
 the packages that have `//go:build integration` test files (found at run time, anywhere in the module); only `_test.go` files may carry the tag.
 `make check` runs `shards-check` only after a change to the Makefile, `tools/`, a `go.mod` or the package list (CI runs it every time).
-`make mutation-changed BASE=<ref>` (and `make safety`) mutates only the lines this branch changed since the merge base with `<ref>`
-(uncommitted work included) in the MUTATION packages it touched; `make mutation` mutates every package whole (the weekly full run).
+**Before you push** (builders): `make check`; when you changed a `SAFETY` package, also `make safety BASE=origin/main`; for every fix
+`make revert-check BASE=origin/main` (it takes seconds and is what the PR's `revert check` job runs).
+`make diff-cover` runs the tests of the changed SAFETY packages once with a coverprofile (integration-tagged tests included) and fails
+for every line you added or changed in a non-test Go file of a SAFETY package that no test of that package executes; comments,
+declarations and braces carry no code and are not checked. `make revert-check` copies the tree to a scratch directory, puts the production
+`.go` files you changed back to the merge base (files you added are removed, deleted ones restored), keeps the tests, and runs the tests you added or
+changed (the whole package when you changed a helper, a table or an import). At least one of them must fail, or the package must stop building
+(a feature whose tests use new API); a selected test that never ran is an error. The output lists every test that fails and every one that passes
+either way. A PR that changes production code without any test is not stopped by it (diff coverage covers the SAFETY packages). **Opt-out** for a pure
+refactor or a feature where nothing should fail: a line `revert-check: skip - <reason>` in the PR body, or the label `no-revert-check`;
+the job reads both from the API when it runs, so after adding it re-run the job. The gate prints "SKIPPED" and the reason; locally
+`REVERT_CHECK_SKIP="<reason>"`. Both gates diff against the merge base with `BASE` (default `origin/main`), uncommitted and untracked files included.
+Mutation testing is not part of any PR (#555, the maintainer finds it makes PRs wait and rarely catches anything):
+`make mutation-changed BASE=<ref>` mutates only the lines this branch changed since the merge base in the MUTATION packages it touched, and
+`make mutation` every package whole (the weekly full run, a report until the keep-or-drop decision at the end of November 2026).
 Any changed test or data file of a package (or an untracked source file in it) mutates that package whole, so weakened tests
 cannot hide behind a small code change. On the changed lines a mutant no test reaches counts as lived. Fewer than 10 decided mutants
 on the changed lines (`MUTATION_DIFF_MIN`) are too few for a percentage: such a diff passes with at most one lived mutant but needs a
@@ -208,22 +223,23 @@ next to your Go cache that it removes when it ends (#546): neither your Go cache
 One workflow per trigger. The file a run comes from is its tier; only `pr.yml` looks at the diff (docs-only,
 SAFETY package, catalogue, image paths). Every gate runs through the Makefile.
 
-| File                                         | Trigger                                    | Runs                                                                                                                                    |
-| -------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `pr.yml`                                     | `pull_request`                             | FAST: `changes`, `checks`, `mutation` (SAFETY PRs), link check, migration and release section guards, image build check, **`required`** |
-| `main.yml`                                   | push to `main`                             | lint, unit and integration tests, build (no e2e; saves the Go caches), `:edge` image and HA app image, then `ghcr-cleanup`              |
-| `release.yml`                                | tag `v*`                                   | `guards` (incl. green `required` + `main.yml` of the SHA), then `publish` (image), `release`, `pages`; no checks. Dispatch = dry run    |
-| `nightly.yml`                                | cron 22:37 UTC, `workflow_dispatch`        | FULL: `checks` (e2e all, `-count=1`, catalogue), `race`, `quarantine`, `ha-app`, `ghcr-cleanup`                                         |
-| `weekly.yml`                                 | cron Sunday 21:13 UTC, `workflow_dispatch` | the full `mutation` run (all MUTATION packages) and its gate                                                                            |
-| `_checks.yml`, `_mutation.yml`, `_image.yml` | `workflow_call` only                       | the shared jobs; the caller's `with:` says which (inputs `e2e`, `e2e_shards`, `testflags`, `safety_race`, `catalogue`, `scope`, `mode`) |
-| `_failure-issue.yml`                         | `workflow_call` only                       | the issue for a failed scheduled run: failed jobs, failed tests, commits since the last green run                                       |
-| `ghcr-cleanup.yml`, `pages.yml`              | `workflow_call`, `workflow_dispatch`       | registry pruning (manual run: dry-run preview), the demo site                                                                           |
+| File                                         | Trigger                                    | Runs                                                                                                                                                                   |
+| -------------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pr.yml`                                     | `pull_request`                             | FAST: `changes`, `checks` (with diff coverage on SAFETY PRs and the revert check), link check, migration and release section guards, image build check, **`required`** |
+| `main.yml`                                   | push to `main`                             | lint, unit and integration tests, build (no e2e; saves the Go caches), `:edge` image and HA app image, then `ghcr-cleanup`                                             |
+| `release.yml`                                | tag `v*`                                   | `guards` (incl. green `required` + `main.yml` of the SHA), then `publish` (image), `release`, `pages`; no checks. Dispatch = dry run                                   |
+| `nightly.yml`                                | cron 22:37 UTC, `workflow_dispatch`        | FULL: `checks` (e2e all, `-count=1`, catalogue), `race`, `quarantine`, `ha-app`, `ghcr-cleanup`                                                                        |
+| `weekly.yml`                                 | cron Sunday 21:13 UTC, `workflow_dispatch` | the full `mutation` run (all MUTATION packages) and its gate, the only place mutation runs                                                                             |
+| `_checks.yml`, `_mutation.yml`, `_image.yml` | `workflow_call` only                       | the shared jobs; the caller's `with:` says which (inputs `e2e`, `e2e_shards`, `testflags`, `safety_race`, `diff_cover`, `revert_check`, `catalogue`, `scope`, `mode`)  |
+| `_failure-issue.yml`                         | `workflow_call` only                       | the issue for a failed scheduled run: failed jobs, failed tests, commits since the last green run                                                                      |
+| `ghcr-cleanup.yml`, `pages.yml`              | `workflow_call`, `workflow_dispatch`       | registry pruning (manual run: dry-run preview), the demo site                                                                                                          |
 
 - **FAST** (`pr.yml`; `required` must be green to merge, target ≤ 5 min):
   lint, unit and integration tests, build, and the `@core` e2e tests in two shards plus the MQTT specs in a job of their own.
   When a PR changes a package listed in `SAFETY` (Makefile: fwselect, ota, tasmota, secretbox, auth, httpx,
-  policy, cmdpolicy, mqttcmd, transport, restore), the race tests of the changed ones and `make mutation-changed` run too, and are then
-  required. CI runs mutation in four shards (`MUTATION_SHARD`, files dealt out by estimated cost, `tools/mutation-weights.txt`) and gates on their sum
+  policy, cmdpolicy, mqttcmd, transport, restore), the race tests of the changed ones and diff coverage (`make diff-cover`) run too, and are then
+  required. Every PR that changes Go code also runs the revert check (`make revert-check`). There is no mutation testing in the PR path (#555);
+  the weekly run shards it in four (`MUTATION_SHARD`, files dealt out by estimated cost, `tools/mutation-weights.txt`) and gates on their sum
   (`make mutation-sum`). CI restores the Go build/test cache (`.github/actions/go`, keyed on Go
   version and `go.sum`) and sets file mtimes from git (`tools/git-mtimes.sh`), so unchanged packages
   are not retested: their results come from the cache that `main.yml` saves. Only runs on `main` save caches (`main.yml`,
@@ -248,9 +264,8 @@ SAFETY package, catalogue, image paths). Every gate runs through the Makefile.
   unit test with the race detector (two shards: the slowest packages listed in `tools/race.sh`, all others; `make shards-check` fails when a package is in no shard), the command catalogue check, uncached test runs, and the Home Assistant app in a real Supervisor (`tools/ha-app-devcontainer-test.sh`). It blocks no release; when it fails on the schedule, the job `nightly-failure-issue` opens an issue "Nightly FULL failed on main (date)" (labels `ci`, `flaky`) with the failed jobs, the tests their logs name and the commits on `main` since the last green night, or comments on the one that is still open. GitHub starts the scheduled run 5 to 8 hours after its cron time, so the cron is set to land in the early morning. A manual run never opens an issue and only previews the registry cleanup. Layout and visual regressions and race outside the safety packages are caught here, so the nightly FULL is the place to look for them; a
   failure is fixed through an issue, not by holding a release.
 - **WEEKLY** (`weekly.yml`: cron on `main`, Sunday night, manual dispatch): the full mutation run of every MUTATION package with its gate (`make mutation`
-  in four shards, `_mutation.yml` with scope all). The nightly does not run it (#480): a PR that changes a safety package already gates the mutation of what it
-  changed, so a surviving mutant a PR did not touch shows up here, once a week. It blocks nothing; when it fails on the schedule, the job `weekly-failure-issue` opens an
-  issue "Weekly mutation run failed on main (date)" (label `ci`) or comments on the open one. The run also saves the mutation Go cache that safety PRs restore.
+  in four shards, `_mutation.yml` with scope all). The nightly does not run it (#480), and no PR waits for it (#555), so this is where a surviving mutant shows up, once a week. It blocks nothing; when it fails on the schedule, the job `weekly-failure-issue` opens an
+  issue "Weekly mutation run failed on main (date)" (label `ci`) or comments on the open one. The run also saves the mutation Go cache.
 - **Which e2e tests are `@core`**: smoke, sign-in and authorization (header, local, OIDC, standalone,
   operators refused), first-run setup, base path, the device list, the OTA update flow (batch, push upload),
   the chip-family and OTA-exclusion refusals in the UI, device writes (console, settings, restore, make
@@ -376,7 +391,7 @@ again before the fast-forward push; there is no other merge path. Never merge th
 button: the only method enabled there is rebase, and GitHub's rebase commits are unsigned, so
 the ruleset rejects them.
 `pr.yml` runs the FAST tier on every PR: a `changes` job detects docs-only PRs (heavy jobs
-skipped) and PRs that touch a `SAFETY` package (safety jobs added), and the final `required`
+skipped) PRs that touch a `SAFETY` package (race and diff coverage added), Go code (revert check added), and the final `required`
 job passes only when every job that had to run passed; a skip counts only when the PR did
 not ask for that job; the link check, the migration guard and the release section guard must always succeed. No approvals are required (single maintainer). Release tags are still pushed
 directly, on a green commit of `main`.

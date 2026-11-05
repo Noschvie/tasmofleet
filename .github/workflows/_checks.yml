@@ -1,6 +1,7 @@
 # The test jobs the other workflows share (reusable; never triggered on its own).
 # Which of them run is decided by the CALLER's inputs, not computed here:
-#   pr.yml       e2e core in two shards and the MQTT job; safety-race and catalogue when the PR changes them
+#   pr.yml       e2e core in two shards and the MQTT job; safety-race, diff coverage and catalogue when the PR changes
+#                them; the revert check for every PR that changes Go code
 #   main.yml     no e2e (the PR head already passed it, #478); the run saves main's Go caches, test results included
 #   nightly.yml  e2e all in three shards and the MQTT job, uncached tests (-count=1), catalogue
 # Every gate runs through the Makefile, so the same commands work locally.
@@ -27,6 +28,18 @@ on:
         default: false
       base:
         description: PR base sha that safety-race diffs against; empty on a tag
+        type: string
+        default: ""
+      diff_cover:
+        description: diff coverage of the SAFETY packages the PR changed (needs base)
+        type: boolean
+        default: false
+      revert_check:
+        description: the tests the PR adds or changes fail with its production Go changes reverted (needs base)
+        type: boolean
+        default: false
+      pr_number:
+        description: the pull request, for the revert check's opt-out (label or PR-body marker, read live)
         type: string
         default: ""
       catalogue:
@@ -188,6 +201,50 @@ jobs:
       - env:
           BASE: ${{ inputs.base }}
         run: make safety-race BASE="$BASE"
+
+  # Every line the PR changed in a SAFETY package (non-test Go files) is executed by a test of that package
+  # (make diff-cover, #555). Replaces the mutation gate of the PR path.
+  diff-cover:
+    name: diff coverage (SAFETY packages)
+    if: inputs.diff_cover
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # merge base with the PR base
+      - uses: ./.github/actions/go
+        with:
+          name: test
+          save: "false"
+      - env:
+          BASE: ${{ inputs.base }}
+        run: make diff-cover BASE="$BASE"
+
+  # The tests the PR adds or changes fail with its production Go changes reverted (make revert-check, #555).
+  # A pure refactor or feature opts out with the label no-revert-check or a "revert-check: skip - <reason>" line
+  # in the PR body; the script reads both from the API when it runs, so a re-run after the edit sees it.
+  revert-check:
+    name: revert check (tests fail without the change)
+    if: inputs.revert_check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # merge base with the PR base
+      - uses: ./.github/actions/go
+        with:
+          name: test
+          save: "false"
+      - env:
+          BASE: ${{ inputs.base }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          GH_TOKEN: ${{ github.token }}
+        run: make revert-check BASE="$BASE"
 
   # The checked-in Tasmota command catalogue must equal a regeneration from the pinned
   # Tasmota source (the only job that downloads it; the unit tests never use the network).

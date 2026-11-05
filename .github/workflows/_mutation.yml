@@ -3,9 +3,9 @@
 # share of the files of all packages, dealt out by estimated cost
 # (tools/mutation-shard.sh), and uploads the counts; mutation-gate adds them up
 # and applies the thresholds.
-#   scope changed (pr.yml, only when the PR changes a SAFETY package): the changed mutation packages
 #   scope all     (weekly.yml): every MUTATION package
-# A tag runs no mutation: every PR that touches a SAFETY package already passed it.
+#   scope changed (no caller since #555; "make mutation-changed" is the local use): the changed mutation packages
+# Neither a PR nor a tag runs mutation testing; pr.yml has diff coverage and the revert check instead.
 name: mutation
 
 on:

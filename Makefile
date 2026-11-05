@@ -4,7 +4,7 @@
 #   make quick     inner loop between two edits: only the packages changed since origin/main and
 #                  their importers; make check stays the gate before a commit
 #   make e2e-core  FAST tier: the Playwright tests tagged @core
-#   make safety    FAST tier when a safety-critical package changed (race + mutation of the changed ones)
+#   make safety    FAST tier when a safety-critical package changed (race, diff coverage, revert check)
 #   make ci        FULL tier: check + race + mutation + all e2e (nightly, release tags)
 #
 # Tools are pinned in tools/go.mod and run with `go tool -modfile=tools/go.mod`,
@@ -37,7 +37,7 @@ MUTATION := ./internal/fwselect:90 ./internal/ota:85 ./internal/policy:85 ./inte
 
 # Safety-critical packages (CLAUDE.md "Safety rules": guard, OTA engine, device client and
 # credentials, accounts, trusted proxies) plus the mutation packages. A pull request that changes
-# one of them runs their race tests and the mutation gate (make safety BASE=<ref>) in the FAST
+# one of them runs their race tests and the diff coverage gate (make safety BASE=<ref>) in the FAST
 # tier; pr.yml reads this list.
 SAFETY := ./internal/fwselect ./internal/ota ./internal/tasmota ./internal/secretbox ./internal/auth ./internal/httpx ./internal/policy ./internal/cmdpolicy ./internal/mqttcmd ./internal/transport ./internal/restore
 
@@ -143,7 +143,20 @@ safety-race:
 	if [ -z "$$pkgs" ]; then echo "safety-race: no safety package changed"; exit 0; fi; \
 	echo "== race$$pkgs"; $(NICE) tools/race.sh $$pkgs
 
-safety: safety-race mutation-changed
+# Diff coverage (#555): every line this branch changed in a non-test Go file of a SAFETY package is executed by a
+# test of that package (tools/diff-cover.sh). Seconds. BASE defaults to CHANGED_BASE.
+diff-cover:
+	@GO="$(GO)" NICE="$(NICE)" SAFETY="$(SAFETY)" BASE="$(or $(BASE),$(CHANGED_BASE))" tools/diff-cover.sh
+
+# Revert check (#555): the tests this branch adds or changes fail with its production Go changes reverted
+# (tools/revert-check.sh, scratch copy; any Go package). A pure refactor or feature opts out in CI with the
+# label no-revert-check or a "revert-check: skip - <reason>" line in the PR body; locally REVERT_CHECK_SKIP="<reason>".
+revert-check:
+	@GO="$(GO)" NICE="$(NICE)" BASE="$(or $(BASE),$(CHANGED_BASE))" tools/revert-check.sh
+
+# What a PR that changes a SAFETY package runs (CI too). The mutation gate is no longer part of it (#555):
+# "make mutation-changed BASE=<ref>" stays for a local, optional look at the changed lines.
+safety: safety-race diff-cover revert-check
 
 # Quarantined Go tests (internal/testutil/quarantine) of every package that has one, with up to
 # three attempts. Nightly only; never part of check or ci.
@@ -205,7 +218,7 @@ mutation:
 
 # Mutation gate only for the MUTATION packages with changes since BASE (a git
 # ref), and in those only the mutants on the changed lines (tools/mutation-gate.sh, "Diff scope", #475).
-# CI runs it for PRs that change a SAFETY package; the full run is "mutation".
+# Optional and local: no PR waits for it any more (#555); the weekly run is the full "mutation".
 # Without a usable BASE every package runs, whole.
 mutation-changed:
 	@if [ -z "$(BASE)" ] || ! changed=$$(CHANGED_BASE="$(BASE)" tools/changed-files.sh); then \

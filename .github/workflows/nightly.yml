@@ -9,7 +9,7 @@
 #   ha-app          the Home Assistant app in a real Supervisor (#442)
 #   ghcr-cleanup    prune the registries (a manual run only previews: dry-run)
 #
-# The full mutation run is not part of it: weekly.yml runs it once a week (#480). The jobs
+# The full mutation run is not part of it: weekly.yml runs it once a week (#480, #555). The jobs
 # also save the Go caches that pull requests restore (from main only, see
 # .github/actions/go); the e2e caches are refreshed only here.
 name: nightly
