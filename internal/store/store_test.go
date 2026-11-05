@@ -332,6 +332,12 @@ func TestDeleteDeviceCascades(t *testing.T) {
 	if err := s.AppendHealthEvent(ctx, HealthEvent{DeviceID: id, At: time.Now(), From: model.HealthUnknown, To: model.HealthOnline, Source: model.SourceHTTP}); err != nil {
 		t.Fatal(err)
 	}
+	// A running job refuses the delete (#466, devices_delete_busy_test.go); the history of a finished one cascades.
+	fin := job(id)
+	fin.ID, fin.State = ids[0], model.JobSucceeded
+	if err := s.SaveTransition(ctx, fin, model.JobEvent{JobID: ids[0], From: model.JobQueued, To: model.JobSucceeded, Event: "done"}); err != nil {
+		t.Fatal(err)
+	}
 	if err := s.DeleteDevice(ctx, id); err != nil {
 		t.Fatal(err)
 	}

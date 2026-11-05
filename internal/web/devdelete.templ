@@ -12,6 +12,9 @@ templ deviceDeletePage(p devDeleteView) {
 			<h1>Delete { p.Name }?</h1>
 			<p class="dd-sub"><span data-visual-mask>{ p.Address }</span>{ p.Meta }</p>
 		</div>
+		if p.Hold != nil {
+			@ui.Banner(holdBanner(p.Hold))
+		}
 		if p.Runs > 0 {
 			@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Title: "This device still has " + plural(p.Runs, "backup"), Text: " (" + p.Summary + "). Choose what happens to them."})
 			<section class="dd-list" aria-label="Backups of this device">
@@ -54,7 +57,7 @@ templ deviceDeletePage(p devDeleteView) {
 			}
 			<div class="dd-acts">
 				<a class="btn" href={ templ.SafeURL(p.CancelHref) }>Cancel</a>
-				<button type="submit" class="btn btn-danger-solid dd-go">Delete device</button>
+				<button type="submit" class="btn btn-danger-solid dd-go" disabled?={ p.Hold != nil }>Delete device</button>
 			</div>
 		</form>
 	</div>

@@ -24,7 +24,8 @@ type memStore struct {
 	mu     sync.Mutex
 	next   model.DeviceID
 	devs   map[model.DeviceID]model.Device
-	idents int // UpdateIdentity calls
+	idents int                     // UpdateIdentity calls
+	busy   map[model.DeviceID]bool // DeleteDevice refuses these like the store does under a running job
 }
 
 func newMemStore() *memStore { return &memStore{devs: map[model.DeviceID]model.Device{}} }
@@ -123,6 +124,9 @@ func (s *memStore) DeleteDevice(_ context.Context, id model.DeviceID) error {
 	defer s.mu.Unlock()
 	if _, ok := s.devs[id]; !ok {
 		return store.ErrNotFound
+	}
+	if s.busy[id] {
+		return store.ErrDeviceBusy
 	}
 	delete(s.devs, id)
 	return nil
@@ -380,6 +384,24 @@ func TestDeleteAudits(t *testing.T) {
 	}
 	if err := m.Delete(context.Background(), "bob", id); !errors.Is(err, store.ErrNotFound) {
 		t.Errorf("second delete: %v", err)
+	}
+}
+
+// Why (#466): a delete under a running job must come back as the store's busy refusal, leave the
+// device alone and be audited as a failed delete, so the person can see who tried and why it stopped.
+func TestDeleteRefusedWhileBusyIsAuditedAndKeepsTheDevice(t *testing.T) {
+	m, st, al, _ := newSvc(t)
+	id, _ := m.Create(context.Background(), "t", dev("busy", "172.31.13.6"))
+	st.busy = map[model.DeviceID]bool{id: true}
+	err := m.Delete(context.Background(), "bob", id)
+	if !errors.Is(err, store.ErrDeviceBusy) || errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("busy delete: %v", err)
+	}
+	if _, ok := st.devs[id]; !ok {
+		t.Fatal("the refused delete removed the device")
+	}
+	if e := al.last(t); e.Action != "device.delete" || e.Result == "ok" || !strings.Contains(e.Result, "job holds the device") {
+		t.Errorf("audit of the refusal: %+v", e)
 	}
 }
 

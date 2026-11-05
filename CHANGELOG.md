@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Fixed
+
+- Deleting a device while a job runs on it no longer makes the update engine log `ERROR ota transition not persisted ... conflict` (or `not found`). The delete is now refused while an update, command, backup or policy job or a restore is unfinished on the device: the delete page says what is running, links to the transaction (or the restore) and offers no Delete button, and a post answers 409 and deletes nothing, not even the backups you chose to delete with the device. The refusal is in the audit log. The database does the check and the delete in one step, so a job that starts at the same moment cannot slip through. Before, the delete took the running job's row with it; the job's worker then failed to save its next step, and when SQLite had reused the job's id for a new job it reported a conflict instead. A job whose row is gone is now a single warning, not an error (#466)
+
 ### Upgrade notes
 
 - Webhook notifications: if you send to ntfy (or Gotify), open Settings, Notifications and set the webhook Format to ntfy (or Gotify). Until then the webhook keeps sending JSON, which ntfy shows as raw text (#469, thanks @t4nki)

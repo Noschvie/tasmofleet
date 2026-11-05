@@ -1142,6 +1142,16 @@ can be cancelled as a whole. `Submit` refuses devices with `OTAExcluded`, device
 already have an active job, and devices whose Preview decision is `skip` or `refuse`
 (returned to the caller, not silently dropped).
 
+**Deleting a device while a job holds it (#466).** `ota_jobs` and `restore_jobs` cascade with their device, and
+`ota_jobs.id` is reused after a delete (no AUTOINCREMENT), so a worker that still holds a deleted job would find
+its row gone or, after id reuse, another device's job in another state. The store therefore refuses the delete:
+`DeviceStore.DeleteDevice` returns `store.ErrDeviceBusy` (wraps `ErrConflict`, never `ErrNotFound`) while the device
+has a job that is not succeeded, failed or cancelled, or a restore that is not done or failed. The check and the
+delete are one statement in one transaction. The delete page says "An update is running on this device" with a link
+to the transaction (or the restore) and offers no Delete; a post is answered 409, audited as refused, and deletes no
+backups. The engine treats a vanished job row (`store.ErrNotFound` on a persist) as a quiet stop (WARN, no ERROR);
+a conflict stays an ERROR.
+
 ### 9.7 Preview (dry run)
 
 `Preview` runs read-only probes, Detect, Decide, Select, Plan and Guard (against the URL

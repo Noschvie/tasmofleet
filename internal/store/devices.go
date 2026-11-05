@@ -588,8 +588,37 @@ func (s *SQLite) UpdateNet(ctx context.Context, id model.DeviceID, g ProbeGuard,
 	return nil
 }
 
+// DeleteDevice refuses (ErrDeviceBusy) while a non-terminal update/command/backup/policy job or an
+// unfinished restore holds the device (#466). The guard sits inside the DELETE statement, so check
+// and delete cannot be separated by another writer, not even one in another process; the second
+// look only tells "busy" from "no such device".
 func (s *SQLite) DeleteDevice(ctx context.Context, id model.DeviceID) error {
-	return affected(s.db.ExecContext(ctx, "DELETE FROM devices WHERE id=?", id))
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op after commit; on failure the original error is returned
+	res, err := tx.ExecContext(ctx, `DELETE FROM devices WHERE id=?
+		AND NOT EXISTS (SELECT 1 FROM ota_jobs WHERE device_id=devices.id AND state NOT IN ('succeeded','failed','cancelled'))
+		AND NOT EXISTS (SELECT 1 FROM restore_jobs WHERE device_id=devices.id AND state NOT IN ('done','failed'))`, id)
+	if err != nil {
+		return mapErr(err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		var one int
+		switch err := tx.QueryRowContext(ctx, "SELECT 1 FROM devices WHERE id=?", id).Scan(&one); {
+		case errors.Is(err, sql.ErrNoRows):
+			return ErrNotFound
+		case err != nil:
+			return err
+		}
+		return ErrDeviceBusy
+	}
+	return tx.Commit()
 }
 
 func (s *SQLite) SetLastSeen(ctx context.Context, id model.DeviceID, state model.HealthState, at time.Time) error {

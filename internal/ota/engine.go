@@ -1116,8 +1116,8 @@ func (e *Engine) apply(ctx context.Context, j model.Job, ev Event) (model.Job, [
 	}
 	jev := model.JobEvent{JobID: j.ID, At: now, From: j.State, To: next.State, Event: string(ev.Kind), Detail: detail}
 	if err := e.jobs.SaveTransition(ctx, next, jev); err != nil {
-		e.log.Error("ota transition not persisted; job stops here and resumes from the stored state",
-			"job", j.ID, "from", j.State, "to", next.State, "err", err)
+		e.persistFailed("ota transition not persisted; job stops here and resumes from the stored state", err,
+			"job", j.ID, "from", j.State, "to", next.State)
 		return j, nil, false
 	}
 	e.notify.JobChanged(next, jev)

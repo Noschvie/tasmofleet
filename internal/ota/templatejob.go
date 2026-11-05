@@ -350,7 +350,7 @@ func (e *Engine) templateEvent(ctx context.Context, j model.Job, event, detail s
 	next := j
 	next.UpdatedAt = now
 	if err := e.jobs.SaveTransition(ctx, next, model.JobEvent{JobID: j.ID, At: now, From: j.State, To: j.State, Event: event, Detail: detail}); err != nil {
-		e.log.Error("template job: event not persisted", "job", j.ID, "event", event, "err", err)
+		e.persistFailed("template job: event not persisted", err, "job", j.ID, "event", event)
 		return false
 	}
 	return true

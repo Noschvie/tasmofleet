@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/nofuturekid/tasmofleet/internal/httpx"
 	"github.com/nofuturekid/tasmofleet/internal/inventory"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/netaddr"
@@ -307,6 +308,13 @@ func (h *handler) deviceDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	limitBody(w, r)
+	if hold, err := h.deviceHeld(r.Context(), id); err != nil {
+		h.fail(w, r, err)
+		return
+	} else if hold != nil {
+		h.refuseDeleteBusy(w, r, id, hold)
+		return
+	}
 	choice := r.PostFormValue("backups")
 	switch choice {
 	case "keep", "delete":
@@ -335,6 +343,14 @@ func (h *handler) deviceDelete(w http.ResponseWriter, r *http.Request) {
 	switch err := h.d.Inventory.DeleteWith(r.Context(), actor(r), id, inventory.DeleteOptions{Backups: choice}); {
 	case errors.Is(err, store.ErrNotFound):
 		h.notFoundDevice(w, r)
+	case errors.Is(err, store.ErrDeviceBusy):
+		// A job started between the look above and the delete; the store refused it (already audited
+		// by the inventory). Say what holds the device now, or that something does.
+		hold, herr := h.deviceHeld(r.Context(), id)
+		if herr != nil || hold == nil {
+			hold = &deviceHold{Text: holdRaceText}
+		}
+		h.renderRefusedBusy(w, r, id, hold)
 	case err != nil:
 		h.fail(w, r, err)
 	default:
@@ -351,6 +367,29 @@ func (h *handler) defaultPasswordFor(r *http.Request) string {
 		return ""
 	}
 	return h.d.DefaultDevicePassword()
+}
+
+// refuseDeleteBusy answers a delete that a running job or restore holds: 409 with the reason, the
+// refusal in the audit log, nothing deleted (the backups included).
+func (h *handler) refuseDeleteBusy(w http.ResponseWriter, r *http.Request, id model.DeviceID, hold *deviceHold) {
+	if h.d.Recorder != nil {
+		h.d.Recorder.Record(r.Context(), model.AuditEvent{Actor: actor(r), Action: "device.delete", Target: "device:" + strconv.FormatInt(int64(id), 10),
+			Result: "refused: " + hold.Text, RemoteAddr: httpx.ClientIP(r.Context()).String()})
+	}
+	h.renderRefusedBusy(w, r, id, hold)
+}
+
+func (h *handler) renderRefusedBusy(w http.ResponseWriter, r *http.Request, id model.DeviceID, hold *deviceHold) {
+	d, err := h.d.Inventory.Get(r.Context(), id)
+	if errors.Is(err, store.ErrNotFound) {
+		h.notFoundDevice(w, r)
+		return
+	}
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	h.renderDeviceDelete(w, r, http.StatusConflict, d, devDeleteView{Hold: hold})
 }
 
 // refuseDeviceDelete answers a refused delete (422) with the delete page again, the field

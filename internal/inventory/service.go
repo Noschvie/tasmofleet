@@ -405,7 +405,9 @@ func (m *Manager) Delete(ctx context.Context, actor string, id model.DeviceID) e
 	return m.DeleteWith(ctx, actor, id, DeleteOptions{})
 }
 
-// DeleteWith removes a device and records what happened to its backups.
+// DeleteWith removes a device and records what happened to its backups. While a job or restore
+// holds the device the store refuses with store.ErrDeviceBusy; the device stays and the refusal
+// is audited like any failed delete.
 func (m *Manager) DeleteWith(ctx context.Context, actor string, id model.DeviceID, opt DeleteOptions) error {
 	m.mu.Lock()
 	old, err := m.st.GetDevice(ctx, id)

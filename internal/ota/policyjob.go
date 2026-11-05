@@ -340,7 +340,7 @@ func (e *Engine) policyMove(ctx context.Context, j model.Job, to model.JobState,
 		return j, true
 	}
 	if err := e.jobs.SaveTransition(ctx, next, jev); err != nil {
-		e.log.Error("policy transition not persisted; job stops here and resumes from the stored state", "job", j.ID, "from", j.State, "to", to, "err", err)
+		e.persistFailed("policy transition not persisted; job stops here and resumes from the stored state", err, "job", j.ID, "from", j.State, "to", to)
 		return j, false
 	}
 	e.notify.JobChanged(next, jev)

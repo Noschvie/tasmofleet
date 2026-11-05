@@ -10,6 +10,7 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
@@ -20,6 +21,9 @@ var (
 	ErrNotFound       = errors.New("store: not found")
 	ErrConflict       = errors.New("store: conflict") // unique constraint, e.g. second active job for a device
 	ErrNotImplemented = errors.New("store: not implemented")
+	// ErrDeviceBusy: the device cannot be deleted because an update job or a restore holds it.
+	// It wraps ErrConflict and is never ErrNotFound.
+	ErrDeviceBusy = fmt.Errorf("%w: a job holds the device", ErrConflict)
 )
 
 // DeviceStore persists the inventory.
@@ -31,6 +35,10 @@ type DeviceStore interface {
 	CreateDevice(ctx context.Context, d model.Device) (model.DeviceID, error)
 	UpdateDevice(ctx context.Context, d model.Device) error
 	UpdateIdentity(ctx context.Context, id model.DeviceID, ident model.Identity) error
+	// DeleteDevice removes the device and, by cascade, its finished jobs and history. The check and
+	// the delete are one transaction: while a non-terminal job (ota_jobs) or an unfinished restore
+	// holds the device it returns ErrDeviceBusy (wraps ErrConflict) and deletes nothing; an unknown
+	// device is ErrNotFound.
 	DeleteDevice(ctx context.Context, id model.DeviceID) error
 	// SetMQTTPassword stores the device's MqttPassword mode and, for mode own, the sealed value;
 	// it clears the bad mark. UpdateDevice never touches these columns.

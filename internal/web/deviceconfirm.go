@@ -1,12 +1,14 @@
 package web
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"strings"
 
 	"github.com/nofuturekid/tasmofleet/internal/auth"
 	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/store"
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
 
@@ -26,6 +28,60 @@ type devDeleteView struct {
 	ChoiceErr, AckErr   bool
 	Action, CSRF        string
 	CancelHref          string
+	Hold                *deviceHold // a job or restore holds the device: say so, no Delete (#466)
+}
+
+// deviceHold is what stops a delete: the reason and where to look at it.
+type deviceHold struct{ Text, LinkText, Href string }
+
+const (
+	holdUpdateText  = "An update is running on this device. Cancel it or wait until it ends, then delete the device."
+	holdJobText     = "A job is running on this device. Wait until it ends, then delete the device."
+	holdRestoreText = "A restore is running on this device. Wait until it ends, then delete the device."
+	holdRaceText    = "The device is busy: a job started while you were on this page. Wait until it ends, then delete the device."
+)
+
+// holdBanner is the refusal at the top of the delete page.
+func holdBanner(h *deviceHold) ui.BannerData {
+	b := ui.BannerData{Tone: ui.ToneWarn, Title: "This device can’t be deleted right now", Text: h.Text}
+	if h.Href != "" {
+		b.Action = &ui.Btn{Label: h.LinkText, Href: h.Href}
+	}
+	return b
+}
+
+// deviceHeld says what holds the device, if anything: an unfinished job of the update engine
+// (updates, commands, backups, policy runs) or an unfinished restore. The store enforces the same
+// rule atomically (store.ErrDeviceBusy); this look comes first so the page can say why and, above
+// all, so "Delete the backups too" has not run when the delete is then refused.
+func (h *handler) deviceHeld(ctx context.Context, id model.DeviceID) (*deviceHold, error) {
+	if h.d.Jobs != nil {
+		jobs, err := h.d.Jobs.ListJobs(ctx, store.JobFilter{DeviceID: id, States: activeJobStates, Limit: 1})
+		if err != nil {
+			return nil, err
+		}
+		if len(jobs) > 0 {
+			j := jobs[0]
+			no := strconv.FormatInt(int64(j.BatchID), 10)
+			text := holdJobText
+			if j.IsUpdate() {
+				text = holdUpdateText
+			}
+			return &deviceHold{Text: text, LinkText: "Open transaction #" + no, Href: "/transactions/" + no}, nil
+		}
+	}
+	if h.d.Restore != nil {
+		list, err := h.d.Restore.List(ctx, id, 5)
+		if err != nil {
+			return nil, err
+		}
+		for _, j := range list {
+			if !j.Terminal() {
+				return &deviceHold{Text: holdRestoreText, LinkText: "Open restore", Href: "/restores/" + strconv.FormatInt(int64(j.ID), 10)}, nil
+			}
+		}
+	}
+	return nil, nil
 }
 
 // devDeleteRow is one backup run on the delete page: when, and the Backups tab's detail line.
@@ -55,6 +111,12 @@ func (h *handler) renderDeviceDelete(w http.ResponseWriter, r *http.Request, sta
 	if err != nil {
 		h.fail(w, r, err)
 		return
+	}
+	if p.Hold == nil {
+		if p.Hold, err = h.deviceHeld(r.Context(), d.ID); err != nil {
+			h.fail(w, r, err)
+			return
+		}
 	}
 	v := h.view(r, "Delete device", "devices", nil)
 	devPath := "/devices/" + strconv.FormatInt(int64(d.ID), 10)
@@ -91,6 +153,11 @@ func (h *handler) renderDeviceDelete(w http.ResponseWriter, r *http.Request, sta
 		p.Summary = strings.Join(parts, ", ")
 	}
 	p.Action, p.CSRF, p.CancelHref = v.Base+devPath+"/delete", v.CSRF, v.Base+devPath
+	if p.Hold != nil && p.Hold.Href != "" {
+		hold := *p.Hold
+		hold.Href = v.Base + hold.Href
+		p.Hold = &hold
+	}
 	h.show(w, r, status, "device_delete", v, deviceDeletePage(p))
 }
 
