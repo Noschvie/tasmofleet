@@ -12652,10 +12652,6 @@ a.sys-sum:hover {
   color: var(--color-text-2);
 }
 /* ==== page: Devices → Backups (#409) ==== */
-/* The page uses the Dashboard's content width: the Settings pages' 1240px cap on .syspage .cstacks is lifted here. */
-.syspage.bk-page .cstacks {
-  max-width: none;
-}
 .bk-table td .bk-rsn {
   margin-left: var(--sp-6);
   color: var(--color-text-2);
