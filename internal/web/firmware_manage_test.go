@@ -407,6 +407,23 @@ func TestFirmwarePrefetchTwiceAttachesToTheRunningOne(t *testing.T) {
 	waitFinished(t, e, strings.TrimPrefix(a.Header.Get("Location"), "/tf"))
 }
 
+// Why (#511): a host-style device name has no break point at its dots in a browser, so in the narrow
+// "Used by devices" column it was cut inside a label ("inter / nal"). Each dot gets a <wbr>; the name
+// itself is unchanged.
+func TestDeleteConfirmationLetsDottedDeviceNamesBreakAtTheirDots(t *testing.T) {
+	fw := &fakeMgrFW{releases: baseRelease(), arts: []model.Artifact{{ID: 5, Release: "16.1.0", Filename: "tasmota32.bin", Size: 1024, SHA256: "def456"}}}
+	fleet := mixedFleet()
+	fleet[1].Name = "livingroom-readinglamp.example.internal"
+	e := setupWith(t, func(d *Deps) {
+		d.Firmware, d.Artifacts = fw, fw
+		d.Inventory = newInv(fleet...)
+	})
+	_, body := e.do(t, "GET", "/firmware/artifacts/5/delete", "admin", nil)
+	if want := "livingroom-<wbr>readinglamp.<wbr>example.<wbr>internal"; !strings.Contains(body, want) {
+		t.Errorf("the device name has no break points after its dots and dash, want %q in\n%s", want, body)
+	}
+}
+
 // Why: "10 devices still need this file" next to a list of 13 names reads as a contradiction; the
 // list says which of them still need a download and which are already up to date.
 func TestUsedByTextExplainsTheDevicesThatNeedNoDownload(t *testing.T) {

@@ -15,6 +15,7 @@ always upgrade automatically.
 - Sign out after the session has expired signs out: the sign-out button no longer ends on a white "403 missing or invalid CSRF token" page, the cookie is cleared and you land on the sign-in page (#508)
 - A device on TasmoFleet's broker that left it with a retained Offline will (a power cut while switching broker, a restored config for another broker, MQTT switched off) is now asked over HTTP like any other device, at the normal interval while it answers and backing off while it does not, so it is shown online again when it answers and the broker hints and re-reads can reach it; before, it stayed Offline forever. With its HTTP API off as well, the refusal counts as an answer, as for every other device: it is online, the Reachability tile says "HTTP API off", and backups, updates and bulk actions say up front that no path is left (#619, #447, thanks @Noschvie)
 - What's new: a long section title such as "Upgrade notes: action may be required" wraps inside its badge instead of running over the first item, paths in code break after a slash instead of inside a word on phones, and the collapsed "Older releases" list no longer reserves 8 px below its title (#510)
+- Firmware: a host-style device name such as livingroom-readinglamp.example.internal in the Delete file confirmation breaks between its labels on a phone instead of inside one (#511)
 
 ## 0.30.1 "Eddystone" (2026-11-05)
 

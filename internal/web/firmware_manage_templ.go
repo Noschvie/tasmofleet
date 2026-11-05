@@ -414,7 +414,7 @@ func fwConfirmOne(v view, c fwConfirm) templ.Component {
 			{Key: "Size", Value: sizeNoWrap(c.Artifact.Size)},
 			{Key: "Source", Value: c.Artifact.Source},
 			{Key: "SHA-256", Value: c.Artifact.SHA256, Mono: true},
-			{Key: "Used by devices", Value: usedByText(c.Artifact)},
+			{Key: "Used by devices", Value: usedByText(c.Artifact), Soft: true},
 		}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err

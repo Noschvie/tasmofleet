@@ -88,7 +88,7 @@ templ fwConfirmOne(v view, c fwConfirm) {
 			{Key: "Size", Value: sizeNoWrap(c.Artifact.Size)},
 			{Key: "Source", Value: c.Artifact.Source},
 			{Key: "SHA-256", Value: c.Artifact.SHA256, Mono: true},
-			{Key: "Used by devices", Value: usedByText(c.Artifact)},
+			{Key: "Used by devices", Value: usedByText(c.Artifact), Soft: true},
 		})
 		if c.Artifact.InUse {
 			<div class="udlg-foot"><a class="btn" href={ templ.SafeURL(v.Base + "/firmware#cache") }>Back</a></div>

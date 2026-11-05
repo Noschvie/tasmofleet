@@ -327,6 +327,27 @@ for (const m of modes) {
     const deleteHref = await page.locator('a[href*="/firmware/artifacts/"][href$="/delete"]').first().getAttribute("href");
     if (deleteHref) {
       await page.goto(app.url + deleteHref.replace(/^.*?(\/firmware\/artifacts\/)/, "$1"));
+      // #511: a host-style device name ("livingroom-readinglamp.example.internal") breaks between its
+      // labels (a <wbr> after each dot), never inside one, whatever the font metrics are
+      const cut = await page.evaluate(() => {
+        const out: string[] = [];
+        for (const dd of document.querySelectorAll(".ukv-row")) {
+          if (!dd.querySelector("dt")?.textContent?.includes("Used by")) continue;
+          const w = document.createTreeWalker(dd.querySelector("dd")!, NodeFilter.SHOW_TEXT);
+          for (let n = w.nextNode(); n; n = w.nextNode()) {
+            for (const m of (n.textContent ?? "").matchAll(/[\p{L}\p{N}]{4,}/gu)) {
+              const r = document.createRange();
+              r.setStart(n, m.index!);
+              r.setEnd(n, m.index! + m[0].length);
+              const rects = [...r.getClientRects()].filter((q) => q.width > 0);
+              const wide = rects.reduce((sum, q) => sum + q.width, 0) > dd.querySelector("dd")!.clientWidth; // longer than its line: cut by force
+              if (!wide && new Set(rects.map((q) => Math.round(q.top / 4))).size > 1) out.push(m[0]);
+            }
+          }
+        }
+        return out;
+      });
+      expect(cut, "a label of a device name in 'Used by devices' is cut across two lines").toEqual([]);
       await look("firmware-artifact-delete");
     }
     await page.goto(app.url + "/policy/io");
