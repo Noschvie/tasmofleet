@@ -1675,7 +1675,7 @@ the failed devices), `snapshot.failed` (scheduled database snapshot), and `test`
   `json` is the body `{event, result, title, text, url, time}`; `homeassistant` sends the same body
   (its webhook trigger exposes it as `trigger.json`); `ntfy` sends the text as a plain-text body
   with the `Title` header (RFC 2047 encoded when not ASCII, line breaks replaced by spaces),
-  `Click` only when `PUBLIC_URL` gives a link, and `Priority` 4 for failed or partial results,
+  `Click` only when `PUBLIC_URL` gives a link, and `X-Priority` (not `Priority`, which a proxy may use for RFC 9218) 4 for failed or partial results,
   3 otherwise; `gotify` sends `{title, message, priority}` as JSON (priority 8 for failed or
   partial, 5 otherwise) with `extras["client::notification"].click.url` when there is a link
   (the token goes in the secret header `X-Gotify-Key`). An unknown format is refused, not sent as

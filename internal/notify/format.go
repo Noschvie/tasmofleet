@@ -35,7 +35,8 @@ func buildWebhook(c config.Config, ev Event) (webhookRequest, error) {
 func problem(ev Event) bool { return ev.Result == ResultFailed || ev.Result == ResultPartial }
 
 // ntfyRequest is the publish request of ntfy (docs.ntfy.sh/publish): the text is the body, the
-// headline, link and priority are headers. Click only with a link, which needs PUBLIC_URL.
+// headline, link and priority are headers. The priority goes as X-Priority, which ntfy reads first: a proxy may add
+// an RFC 9218 "Priority: u=..." header of its own, which ntfy would otherwise confuse with its own. Click only with a link, which needs PUBLIC_URL.
 func ntfyRequest(ev Event) webhookRequest {
 	prio := "3"
 	if problem(ev) {
@@ -45,7 +46,7 @@ func ntfyRequest(ev Event) webhookRequest {
 	if ev.URL != "" {
 		h = append(h, [2]string{"Click", ev.URL})
 	}
-	h = append(h, [2]string{"Priority", prio})
+	h = append(h, [2]string{"X-Priority", prio})
 	return webhookRequest{headers: h, body: []byte(ev.Text)}
 }
 

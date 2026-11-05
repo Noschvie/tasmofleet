@@ -14,6 +14,7 @@ import (
 
 type seen struct {
 	method, path, ctype, click, prio, secret string
+	clicks                                   int
 	body                                     string
 	titleRaw                                 string
 }
@@ -24,7 +25,7 @@ func capture(t *testing.T, s *seen) *httptest.Server {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
 		*s = seen{method: r.Method, path: r.URL.RequestURI(), ctype: r.Header.Get("Content-Type"), titleRaw: r.Header.Get("Title"),
-			click: r.Header.Get("Click"), prio: r.Header.Get("Priority"), secret: r.Header.Get("X-Token"), body: string(b)}
+			clicks: len(r.Header.Values("Click")), click: r.Header.Get("Click"), prio: r.Header.Get("X-Priority"), secret: r.Header.Get("X-Token"), body: string(b)}
 	}))
 	t.Cleanup(srv.Close)
 	return srv
@@ -66,18 +67,18 @@ func TestNtfyPostsPlainTextWithTitleClickAndPriority(t *testing.T) {
 		t.Errorf("Click = %q", s.click)
 	}
 	if s.prio != "4" {
-		t.Errorf("Priority = %q, want 4 for a partial result (it should stand out)", s.prio)
+		t.Errorf("X-Priority = %q, want 4 for a partial result (it should stand out)", s.prio)
 	}
 }
 
 func TestNtfyPriorityDefaultForGoodNews(t *testing.T) {
 	s := send(t, config.NotifyFormatNtfy, UpdateFinished(baseConfig(), 1, 3, 0, 0, "1", t0), nil)
 	if s.prio != "3" {
-		t.Errorf("Priority = %q, want 3 for an ok result", s.prio)
+		t.Errorf("X-Priority = %q, want 3 for an ok result", s.prio)
 	}
 	s = send(t, config.NotifyFormatNtfy, SnapshotFailed(baseConfig(), "disk full", t0), nil)
 	if s.prio != "4" {
-		t.Errorf("Priority = %q, want 4 for a failure", s.prio)
+		t.Errorf("X-Priority = %q, want 4 for a failure", s.prio)
 	}
 }
 
@@ -87,8 +88,8 @@ func TestNtfyNoClickWithoutPublicURL(t *testing.T) {
 	c := baseConfig()
 	c.PublicURL = ""
 	s := send(t, config.NotifyFormatNtfy, UpdateFinished(c, 41, 1, 0, 0, "1", t0), nil)
-	if s.click != "" {
-		t.Errorf("Click = %q, want none", s.click)
+	if s.clicks != 0 {
+		t.Errorf("Click headers = %d (%q), want none", s.clicks, s.click)
 	}
 }
 
@@ -111,8 +112,11 @@ func TestNtfyTitleIsRFC2047AndNeverHoldsLineBreaks(t *testing.T) {
 	if s.method != "POST" {
 		t.Fatal("a title with a line break must still be delivered")
 	}
-	if strings.ContainsAny(s.titleRaw, "\r\n") || s.titleRaw == "" {
+	if strings.ContainsAny(s.titleRaw, "\r\n") {
 		t.Errorf("Title = %q, want one line", s.titleRaw)
+	}
+	if dec, err := new(mime.WordDecoder).DecodeHeader(s.titleRaw); err != nil || dec != "line one Injected: yes line three" {
+		t.Errorf("decoded Title = %q (%v), want the line breaks turned into single spaces", dec, err)
 	}
 }
 
@@ -209,7 +213,7 @@ func TestWebhookPreviewFollowsFormat(t *testing.T) {
 	cases := map[string][]string{
 		config.NotifyFormatJSON:          {"POST <webhook URL>", "Content-Type: application/json", `"event": "update.finished"`},
 		config.NotifyFormatHomeAssistant: {"POST <webhook URL>", "Content-Type: application/json", `"title"`},
-		config.NotifyFormatNtfy:          {"POST <webhook URL>", "Title: Update job #41: 11 ok, 1 failed", "Priority: 4", "Click: http://tasmofleet.local/transactions/41", "12 devices to 16.1.0; 1 failed"},
+		config.NotifyFormatNtfy:          {"POST <webhook URL>", "Title: Update job #41: 11 ok, 1 failed", "X-Priority: 4", "Click: http://tasmofleet.local/transactions/41", "12 devices to 16.1.0; 1 failed"},
 		config.NotifyFormatGotify:        {"POST <webhook URL>", "Content-Type: application/json", `"priority": 8`, `"client::notification"`},
 	}
 	for f, wants := range cases {
