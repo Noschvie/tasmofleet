@@ -13,12 +13,16 @@ import (
 // serves in the background.
 func (d *simDevice) startHTTP() {
 	d.mu.Lock()
-	addr := d.httpAddr
+	addr, l := d.httpAddr, d.first
+	d.first = nil
 	d.mu.Unlock()
 	if addr == "" {
 		addr = "127.0.0.1:0"
 	}
-	l, err := d.listen(addr)
+	var err error
+	if l == nil {
+		l, err = d.listen(addr)
+	}
 	if err != nil {
 		if d.ctx.Err() == nil { // not closed while rebinding: the device stays unreachable, say so
 			d.f.log.Error("simulator: device cannot bind its HTTP port", "device", d.topic, "addr", addr, "err", err)

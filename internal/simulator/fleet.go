@@ -24,6 +24,10 @@ type fleet struct {
 	mu      sync.Mutex
 	devices []*simDevice
 	names   map[string]bool
+	// addrs are the HTTP addresses handed out to devices of this fleet. An unreachable device closes
+	// its listener at once and keeps only the address, so without this the OS could give the same port
+	// to the next device (#586). Never shrinks: a closed device does not free its address for a later one.
+	addrs map[string]bool
 }
 
 // NewFleetWith is NewFleet with the extra options.
@@ -31,7 +35,7 @@ func NewFleetWith(o FleetOptions, x Extra) (Fleet, error) {
 	if st, err := os.Stat(filepath.Join(o.FixturesDir, "devices")); err != nil || !st.IsDir() {
 		return nil, fmt.Errorf("simulator: FixturesDir %q has no devices/ directory", o.FixturesDir)
 	}
-	f := &fleet{o: o, x: x, scale: x.TimeScale, names: map[string]bool{},
+	f := &fleet{o: o, x: x, scale: x.TimeScale, names: map[string]bool{}, addrs: map[string]bool{},
 		log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 	if x.Logger != nil {
 		f.log = x.Logger
@@ -88,6 +92,9 @@ func (f *fleet) Add(ctx context.Context, spec DeviceSpec) (Device, error) {
 	}
 	d.httpAddr = net.JoinHostPort(f.x.BindAddr, "0")
 	d.host = f.x.BindAddr
+	if d.first, err = f.bindDistinct(d); err != nil {
+		return nil, err
+	}
 	d.startHTTP()
 	if d.srv == nil {
 		return nil, errors.New("simulator: cannot listen")
@@ -104,6 +111,33 @@ func (f *fleet) Add(ctx context.Context, spec DeviceSpec) (Device, error) {
 	f.devices = append(f.devices, d)
 	f.mu.Unlock()
 	return d, nil
+}
+
+// bindDistinct binds the device's first HTTP port and makes sure no other device of the fleet has
+// the same address, now or after it closed its listener. Listeners that turned out to repeat an
+// address are held until a free one is found, so the OS cannot hand the same port out again.
+func (f *fleet) bindDistinct(d *simDevice) (net.Listener, error) {
+	var repeats []net.Listener
+	defer func() {
+		for _, l := range repeats {
+			_ = l.Close() // only releases ports that were not used
+		}
+	}()
+	for range 200 {
+		l, err := d.listen(d.httpAddr)
+		if err != nil {
+			return nil, err
+		}
+		f.mu.Lock()
+		taken := f.addrs[l.Addr().String()]
+		f.addrs[l.Addr().String()] = true
+		f.mu.Unlock()
+		if !taken {
+			return l, nil
+		}
+		repeats = append(repeats, l)
+	}
+	return nil, errors.New("simulator: no free HTTP port for the device")
 }
 
 func (f *fleet) Devices() []Device {

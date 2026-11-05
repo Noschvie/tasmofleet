@@ -112,6 +112,7 @@ type simDevice struct {
 	flapping             bool
 	configDump           []byte
 	httpAddr             string
+	first                net.Listener // the listener startHTTP takes the first time (chosen by the fleet), then nil
 	srv                  *httpServer
 	mq                   *mqttLink
 	mf                   mqttFile // MQTT FileDownload/FileUpload state (FMqtt)

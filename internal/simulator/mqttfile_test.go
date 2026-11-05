@@ -2,6 +2,7 @@ package simulator
 
 import (
 	"bytes"
+	"context"
 	"crypto/md5" //nolint:gosec // the protocol mandates MD5
 	"encoding/base64"
 	"encoding/hex"
@@ -9,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -632,4 +634,26 @@ func TestFileCommandsAreUnknownInESP32Safeboot(t *testing.T) {
 		t.Fatal(err)
 	}
 	c.waitFor(t, `stat/sb/RESULT={"Command":"Unknown"`)
+}
+
+// Why (#586): an unreachable device closes its HTTP listener at once and keeps only the address. The
+// OS may then give the same port to the next device, and an inventory that keeps one row per
+// (address, port) refuses the second ("UNIQUE constraint failed: devices.address, devices.port"),
+// which made TestApplyOverMQTTOnly fail now and then. Every device of a fleet must have an address of
+// its own, whether or not it listens. 600 devices make a repeat almost certain without the rule
+// (about 28 000 ephemeral ports).
+func TestUnreachableDevicesNeverShareAnAddress(t *testing.T) {
+	f := newTestFleet(t, "", Extra{})
+	seen := map[string]string{}
+	for i := 0; i < 600; i++ {
+		name := "nohttp-" + strconv.Itoa(i)
+		d, err := f.Add(context.Background(), DeviceSpec{Name: name, Profile: ProfileESP8266_4M, Faults: []Fault{{Kind: FaultHTTPUnreachable}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if other, dup := seen[d.Addr()]; dup {
+			t.Fatalf("%s and %s share the address %s", name, other, d.Addr())
+		}
+		seen[d.Addr()] = name
+	}
 }
