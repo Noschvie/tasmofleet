@@ -35,7 +35,7 @@ func NavGroup(nav string) string {
 	switch nav {
 	case "dashboard", "", "setup":
 		return "dashboard"
-	case "devices", "discovery", "policy":
+	case "devices", "discovery", "policy", "backups":
 		return "devices"
 	case "updates", "transactions", "firmware":
 		return "updates"
@@ -97,6 +97,7 @@ func (d ShellData) Groups() []NavGroupData {
 		build("devices", "Devices", []entry{
 			{"devices", "List", "/devices", true, false},
 			{"policy", "Policy", "/policy", d.Policy, false},
+			{"backups", "Backups", "/devices/backups", d.Backups, false},
 			{"add", "Add", "/devices/new", true, true},
 		}),
 	}

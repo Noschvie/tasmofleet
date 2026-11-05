@@ -107,6 +107,7 @@ type sysPage struct {
 	Storage      *sysStorage // Backups tab: storage summary and orphans (N9); nil without them
 	Resetting    bool        // the step-up dialog is for "Reset settings…"
 	StepUpWhat   string      // what the step-up dialog says it is for, when it is not a settings save
+	Fleet        *fleetView  // the Devices, Backups page: the last run and the device table (filled by backupsRender)
 	DB           *sysDB      // the Snapshots page: stored snapshots and the schedule's status; nil without snapshots (filled by snapshotsRender)
 	Notify       sysNotify   // Notifications tab: status lines, test results, the message preview
 }
@@ -156,16 +157,19 @@ func (h *handler) sysData(r *http.Request, posted map[string]string, errs map[st
 	p.Tabs = sysTabsOf(rows)
 	p.Discovery = h.sysDiscoveryOf(r, discoveryOn)
 	p.Active = r.URL.Query().Get("tab")
-	if onSnapshots(r) {
+	switch {
+	case onSnapshots(r):
 		p.Active = sysSnapshotsSlug
-	} else if p.Active == sysSnapshotsSlug {
-		p.Active = "" // the Snapshots page is no tab of the Settings page
+	case onBackups(r):
+		p.Active = sysBackupsSlug
+	case p.Active == sysSnapshotsSlug || p.Active == sysBackupsSlug:
+		p.Active = "" // the Snapshots and Backups pages are no tabs of the Settings page
 	}
 	for _, tab := range p.Tabs {
 		for _, s := range tab.Cards {
 			for _, row := range s.Rows {
-				if row.hasProblem() {
-					p.Active = tab.Slug // an error is shown where it happened
+				if row.hasProblem() && (tab.Slug != sysBackupsSlug || onBackups(r)) {
+					p.Active = tab.Slug // an error is shown where it happened (the Backups page is no tab of this one)
 				}
 			}
 		}
@@ -243,6 +247,9 @@ func (h *handler) sysStepUpData(r *http.Request, p sysPage) ui.StepUpData {
 	}
 	back := sysPath + "?tab=" + p.Active + "&restore=1"
 	keyQuery := ""
+	if p.Active == sysBackupsSlug {
+		back = fleetPath + "?restore=1"
+	}
 	if p.Active == sysSnapshotsSlug {
 		back = snapPath + "?restore=1"
 		if snapKeyChosen(r) {
@@ -256,6 +263,9 @@ func (h *handler) sysStepUpData(r *http.Request, p sysPage) ui.StepUpData {
 		d.IdP, d.IdPHref, d.Action = h.idpName(), p.Base+"/oidc/stepup", p.Base+"/oidc/stepup"
 	} else {
 		d.Local, d.Action = true, p.Base+sysPath+"/stepup?tab="+p.Active+keyQuery
+		if p.Active == sysBackupsSlug {
+			d.Action = p.Base + fleetPath + "/stepup"
+		}
 		if p.Active == sysSnapshotsSlug {
 			d.Action = p.Base + snapPath + "/stepup?" + strings.TrimPrefix(keyQuery, "&")
 		}
@@ -281,22 +291,15 @@ func (h *handler) sysRender(w http.ResponseWriter, r *http.Request, status int, 
 		h.snapshotsRender(w, r, status, p)
 		return
 	}
-	// The Snapshots page has its own place in the System menu: the Settings page shows its other tabs.
-	p.Tabs = slices.DeleteFunc(p.Tabs, func(t sysTab) bool { return t.Slug == sysSnapshotsSlug })
-	v := h.view(r, "Settings", "system", nil)
-	switch q := r.URL.Query(); {
-	case q.Get("ok") == "reset":
-		v.Flash = "All settings are back at their defaults."
-	case p.Active == "backups" && backupsNotice(r) != "":
-		v.Flash = backupsNotice(r) // a backup of a deleted device was kept, released or deleted
+	if p.Active == sysBackupsSlug {
+		h.backupsRender(w, r, status, p)
+		return
 	}
-	if p.Storage == nil { // the tabs switch without a page load, so the Backups tab is always in the page
-		st, err := h.sysStorageOf(r, p.Base)
-		if err != nil {
-			h.fail(w, r, err)
-			return
-		}
-		p.Storage = st
+	// Snapshots and Backups have their own places in the menus: the Settings page shows its other tabs.
+	p.Tabs = slices.DeleteFunc(p.Tabs, func(t sysTab) bool { return t.Slug == sysSnapshotsSlug || t.Slug == sysBackupsSlug })
+	v := h.view(r, "Settings", "system", nil)
+	if r.URL.Query().Get("ok") == "reset" {
+		v.Flash = "All settings are back at their defaults."
 	}
 	h.show(w, r, status, "system_settings", v, sysSettingsPage(p))
 }
@@ -493,11 +496,14 @@ func (h *handler) sysSave(w http.ResponseWriter, r *http.Request) {
 	})
 	// Back to the tab that was saved, so the values just written are what the person sees.
 	back := sysPath + "?ok=saved"
-	if tab := sysTabSlug(r.URL.Query().Get("tab")); tab != "" && tab != sysSnapshotsSlug {
+	if tab := sysTabSlug(r.URL.Query().Get("tab")); tab != "" && tab != sysSnapshotsSlug && tab != sysBackupsSlug {
 		back = sysPath + "?tab=" + tab + "&ok=saved"
 	}
-	if onSnapshots(r) {
+	switch {
+	case onSnapshots(r):
 		back = snapPath + "?ok=saved"
+	case onBackups(r):
+		back = fleetPath + "?ok=saved"
 	}
 	h.sysOutcome(w, r, shown(), err, func() { redirect(w, r, back) })
 }
@@ -641,8 +647,11 @@ func (h *handler) sysStepUpPost(w http.ResponseWriter, r *http.Request) {
 		page(http.StatusForbidden, "The password is wrong.")
 	default:
 		back := sysPath + "?restore=1" // form.js puts the typed values back
-		if tab := sysTabSlug(r.URL.Query().Get("tab")); tab != "" && tab != sysSnapshotsSlug {
+		if tab := sysTabSlug(r.URL.Query().Get("tab")); tab != "" && tab != sysSnapshotsSlug && tab != sysBackupsSlug {
 			back = sysPath + "?tab=" + tab + "&restore=1"
+		}
+		if onBackups(r) {
+			back = fleetPath + "?restore=1"
 		}
 		if onSnapshots(r) {
 			back = snapPath + "?restore=1"

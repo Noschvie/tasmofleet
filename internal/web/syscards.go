@@ -68,10 +68,15 @@ var sysLayout = []sysTabDef{
 		{ID: "mqttdiscovery", Title: "MQTT discovery", Stack: 0, Keys: []string{"DISCOVERY_MQTT"}},
 		{ID: "scan", Title: "Network scan", Stack: 1, Keys: []string{"DISCOVERY_SCAN", "DISCOVERY_SCAN_INTERVAL", "DISCOVERY_SCAN_CIDRS"}},
 	}},
-	{"backups", "Backups", []int{2, 1}, []sysCardDef{
-		{ID: "storage", Title: "Storage", Note: "Read-only. Not part of the form.", Stack: 0, Phone: 1},
-		{ID: "schedule", Title: "Device backup schedule", Stack: 1, Phone: 2, Keys: []string{"BACKUP_INTERVAL", "BACKUP_KEEP", "BACKUP_MAX_AGE"}},
-		{ID: "orphans", Title: "Backups of deleted devices", Stack: 1, Phone: 3},
+	// Backups is the Devices -> Backups page, not a tab of the Settings page (sysRender splits it off, like
+	// Snapshots). The entry stays in its place: sysAdvanced is an index into this list.
+	{sysBackupsSlug, "Backups", []int{2, 1}, []sysCardDef{
+		{ID: "lastrun", Title: "Last run", Stack: 0, Phone: 1},
+		{ID: "devices", Title: "Devices", Stack: 0, Phone: 2},
+		{ID: "storage", Title: "Storage", Note: "Read-only. Not part of the form.", Stack: 1, Phone: 3},
+		{ID: "schedule", Title: "Schedule", Note: "Device backups on a timer, and how many to keep.", Stack: 1, Phone: 4, Keys: []string{"BACKUP_INTERVAL", "BACKUP_KEEP", "BACKUP_MAX_AGE"}},
+		{ID: "orphans", Title: "Backups of deleted devices", Stack: 1, Phone: 5},
+		{ID: "unreferenced", Title: "Unreferenced files", Stack: 1, Phone: 6},
 	}},
 	{"notifications", "Notifications", []int{1, 2}, []sysCardDef{
 		{ID: "notify-events", Title: "Events", Note: "What is sent. Both channels get the same events.", Stack: 0, Phone: 1,
@@ -109,6 +114,9 @@ var sysLayout = []sysTabDef{
 
 // sysSnapshotsSlug is the layout entry of the Snapshots page.
 const sysSnapshotsSlug = "snapshots"
+
+// sysBackupsSlug is the layout entry of the Devices -> Backups page.
+const sysBackupsSlug = "backups"
 
 // sysAdvanced is the index of the Advanced tab and its catch-all card.
 const sysAdvanced, sysOtherCard = 8, 0

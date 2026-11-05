@@ -328,6 +328,7 @@ func Handler(d Deps) (http.Handler, error) {
 	}
 	h.registerSettings(route, adm)
 	h.registerSysConfig(route, adm)
+	h.registerFleetBackups(route, op, adm)
 	h.registerSetup(route, adm)
 	h.registerPolicy(route, op)
 	h.registerPolicyDev(route, op)
@@ -385,7 +386,7 @@ type view struct {
 	NewDevices int
 	Version    string // the running version, as About prints it (shell header)
 	News       int    // releases new since the user last opened What's new (N5, avatar dot)
-	Features   struct{ Updates, Firmware, Policy, Settings, Import, Discovery, DeviceCmd, SysConfig, Snapshots, BulkCommand, BulkBackup, BulkRestart bool }
+	Features   struct{ Updates, Firmware, Policy, Settings, Import, Discovery, DeviceCmd, SysConfig, Snapshots, Backups, BulkCommand, BulkBackup, BulkRestart bool }
 	Banner     string // a standing notice for admins, e.g. no device networks yet
 	Static     bool   // style guide only: partials render their open variant (data-static)
 	// SortPath is the page URL the sort links of its tables return to when the
@@ -441,6 +442,7 @@ func (h *handler) view(r *http.Request, title, nav string, data any) view {
 	v.Features.DeviceCmd = h.d.DeviceCmd != nil
 	v.Features.SysConfig = h.d.SysConfig != nil
 	v.Features.Snapshots = h.d.SysConfig != nil && h.d.Snapshots != nil // the page needs both
+	v.Features.Backups = h.d.SysConfig != nil && h.d.BackupFleet != nil // the page needs both
 	v.Features.BulkCommand = h.d.CommandBatch != nil && h.d.DeviceCmd != nil
 	v.Features.BulkRestart = v.Features.BulkCommand
 	v.Features.BulkBackup = h.d.BackupBatch != nil

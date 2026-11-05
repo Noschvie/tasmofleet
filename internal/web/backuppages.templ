@@ -25,7 +25,7 @@ templ backupsTab(p backupsView) {
 				<div class="bk-retention">
 					{ p.Retention }
 					if p.CanRetention {
-						{ " " }<a class="bk-link" href={ templ.SafeURL(p.Base + "/settings/system?tab=backups") }>Change retention</a>
+						{ " " }<a class="bk-link" href={ templ.SafeURL(p.Base + "/devices/backups") }>Change retention</a>
 					}
 				</div>
 				if p.CanDelete && len(p.Prune) > 0 {

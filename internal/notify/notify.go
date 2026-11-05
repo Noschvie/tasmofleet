@@ -157,7 +157,7 @@ func BackupFailed(c config.Config, total int, failed []string, at time.Time) Eve
 func SnapshotFailed(c config.Config, reason string, at time.Time) Event {
 	return Event{Name: EventSnapshotFailed, Result: ResultFailed, Title: "Database snapshot failed",
 		Text: "The scheduled snapshot of the TasmoFleet database could not be written: " + reason,
-		URL:  Link(c, "/settings/system?tab=backups"), Time: at, Context: "database snapshot"}
+		URL:  Link(c, "/settings/system/snapshots"), Time: at, Context: "database snapshot"}
 }
 
 // TestEvent is the message of the "Send test" buttons.

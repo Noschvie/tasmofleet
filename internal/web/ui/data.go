@@ -40,7 +40,7 @@ type ShellData struct {
 	Status StatusBar
 
 	// Features switch menu entries on; a missing service has no page.
-	Updates, Firmware, Policy, Discovery, SysConfig, Snapshots bool
+	Updates, Firmware, Policy, Discovery, SysConfig, Snapshots, Backups bool
 
 	// Asset maps a static file name to its hashed name (file?v=hash), so a new build changes the URL.
 	Asset func(name string) string

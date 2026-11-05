@@ -67,6 +67,10 @@
     form.querySelectorAll("[data-bar-label]").forEach(function (c) {
       c.textContent = n === 1 ? "1 device selected" : n + " devices selected";
     });
+    // " (3)" after the label of a button that acts on the selection
+    form.querySelectorAll("[data-select-suffix]").forEach(function (c) {
+      c.textContent = n === 0 ? "" : " (" + n + ")";
+    });
     form.querySelectorAll("[data-select-n]").forEach(function (c) {
       c.textContent = n + " selected";
     });

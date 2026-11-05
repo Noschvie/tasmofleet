@@ -1,7 +1,6 @@
 package web
 
 import (
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -41,7 +40,7 @@ func (h *handler) fileMissing(b model.Backup) bool {
 // by hand: it says why nothing can be downloaded, compared or restored, and where the row
 // can be removed.
 func (h *handler) backupFileMissing(w http.ResponseWriter, r *http.Request, b model.Backup) {
-	where, label := "/settings/system?tab=backups", "Backups of deleted devices"
+	where, label := "/devices/backups", "Backups of deleted devices"
 	if b.DeviceID != 0 {
 		where, label = fmt.Sprintf("/devices/%d/backups", b.DeviceID), "Backups of this device"
 	}
@@ -130,29 +129,14 @@ func (h *handler) annotateBackups(ctx context.Context, rows []deviceRow) error {
 	return nil
 }
 
-// sysStorageTop is how many devices the storage table lists (largest first).
-const sysStorageTop = 10
-
-// sysStorage is the Storage part of Settings -> Backups.
+// sysStorage is the storage totals and the backups of deleted devices on Devices -> Backups.
 type sysStorage struct {
-	Runs, Kept, Without int
-	WithoutHref         string // the device list narrowed to those devices (the tile's link)
-	Size                string
-	Rows                []sysStorageRow
-	More                int // devices with backups beyond the top rows
-	Orphans             []sysOrphan
-	Unreferenced        []sysUnreferenced // files no backup entry references (#205); read-only
-	CanKeep             bool              // the Keep route exists
-	CanDelete           bool              // the Delete route exists
-}
-
-type sysStorageRow struct {
-	Name, Href string
-	Runs       int
-	Size       string
-	Last       time.Time
-	When       string // Last in the 110 px column: storeDate
-	bytes      int64
+	Runs, Kept   int
+	Size         string
+	Orphans      []sysOrphan
+	Unreferenced []sysUnreferenced // files no backup entry references (#205); read-only
+	CanKeep      bool              // the Keep route exists
+	CanDelete    bool              // the Delete route exists
 }
 
 // sysOrphan is one backup run of a deleted device (N2: deleted with backups=keep).
@@ -191,31 +175,13 @@ func (h *handler) sysStorageOf(r *http.Request, base string) (*sysStorage, error
 	_, canDelete := h.backupAdmin()
 	_, canKeep := h.d.Backups.(BackupKeeper)
 	st := &sysStorage{CanKeep: canKeep, CanDelete: canDelete}
-	now := time.Now()
 	var total int64
 	for _, u := range usage {
 		st.Runs += u.Runs
 		st.Kept += u.Kept
-		total += u.Bytes
-		if u.Device == 0 {
-			continue // the deleted devices count in the totals; their runs are listed below
-		}
-		if withoutBackup(u) {
-			st.Without++
-			continue
-		}
-		st.Rows = append(st.Rows, sysStorageRow{Name: u.Name, Href: fmt.Sprintf("%s/devices/%d/backups", base, u.Device),
-			Runs: u.Runs, Size: humanBytes(u.Bytes), Last: u.Last, When: storeDate(now, u.Last), bytes: u.Bytes})
+		total += u.Bytes // the deleted devices count in the totals; their runs are listed apart
 	}
-	st.WithoutHref = base + "/devices?chip=" + chipNoBackup
 	st.Size = humanBytes(total)
-	slices.SortStableFunc(st.Rows, func(a, b sysStorageRow) int {
-		return cmp.Or(cmp.Compare(b.bytes, a.bytes), cmp.Compare(a.Name, b.Name))
-	})
-	if len(st.Rows) > sysStorageTop {
-		st.More = len(st.Rows) - sysStorageTop
-		st.Rows = st.Rows[:sysStorageTop]
-	}
 	if ul, ok := h.d.Backups.(BackupUnreferenced); ok {
 		files, err := ul.Unreferenced(r.Context())
 		if err != nil {
@@ -268,14 +234,6 @@ func orphanName(o sysOrphan) string {
 		return "Deleted device"
 	}
 	return o.Name
-}
-
-// Foot is the line under the storage table: its order and the devices it leaves out.
-func (st sysStorage) Foot() string {
-	if st.More == 0 {
-		return "Largest first"
-	}
-	return "Largest first · " + plural(st.More, "more device")
 }
 
 // storeDate is a last backup short enough for the storage table's column: "23 Oct, 05:45"

@@ -167,8 +167,8 @@ func TestAccountPageOffersTheDisplayNameToSSOUsers(t *testing.T) {
 // Why: a person who saves the Backups tab must see the values they just saved, not the first tab.
 func TestSystemSettingsSaveReturnsToTheSavedTab(t *testing.T) {
 	e, _, _, _ := sysEnv(t, true)
-	r, _ := e.do(t, "POST", "/settings/system?tab=backups", "admin", url.Values{"csrf": {"tok"}, "v.BACKUP_KEEP": {"4"}})
-	if loc := r.Header.Get("Location"); r.StatusCode != 303 || !strings.Contains(loc, "tab=backups") || !strings.Contains(loc, "ok=saved") {
+	r, _ := e.do(t, "POST", "/settings/system?tab=network", "admin", url.Values{"csrf": {"tok"}, "v.BACKUP_KEEP": {"4"}})
+	if loc := r.Header.Get("Location"); r.StatusCode != 303 || !strings.Contains(loc, "tab=network") || !strings.Contains(loc, "ok=saved") {
 		t.Fatalf("status %d, back to %q", r.StatusCode, loc)
 	}
 	r, _ = e.do(t, "POST", "/settings/system?tab=x%22%3E%3Cscript", "admin", url.Values{"csrf": {"tok"}, "v.BACKUP_KEEP": {"4"}})

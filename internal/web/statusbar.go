@@ -67,6 +67,9 @@ func (h *handler) statusBar(ctx context.Context, base string, live bool) ui.Stat
 		}
 		if !r.Finished.IsZero() {
 			sb.Backup = &ui.StatusBackup{At: r.Finished, Failed: r.LastFailed, Total: r.LastTotal, Skipped: r.LastSkipped}
+			if h.d.BackupFleet != nil && h.d.SysConfig != nil {
+				sb.Backup.Href = base + fleetPath // the page that lists the run per device (#409)
+			}
 		}
 	}
 	return sb

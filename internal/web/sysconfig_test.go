@@ -126,7 +126,7 @@ func TestSystemSettingsPageShowsOperationalFieldsAndReadOnlySettings(t *testing.
 	if r.StatusCode != 200 {
 		t.Fatalf("status %d", r.StatusCode)
 	}
-	if !strings.Contains(body, `name="v.BACKUP_KEEP"`) || !strings.Contains(body, `name="v.DEVICE_NETWORKS"`) {
+	if !strings.Contains(body, `name="v.POLL_INTERVAL"`) || !strings.Contains(body, `name="v.DEVICE_NETWORKS"`) {
 		t.Error("editable fields must be inputs")
 	}
 	if strings.Contains(body, `name="v.LISTEN"`) || !strings.Contains(body, "LISTEN") {
@@ -187,8 +187,8 @@ func TestSystemSettingsRejectUnknownAndBootstrapKeys(t *testing.T) {
 
 func TestSystemSettingsValidationErrorsAreShownNextToTheField(t *testing.T) {
 	e, _, mem, _ := sysEnv(t, true)
-	r, body := e.do(t, "POST", "/settings/system", "admin", url.Values{"csrf": {"tok"}, "v.BACKUP_KEEP": {"0"}, "v.POLL_INTERVAL": {"2m"}})
-	if r.StatusCode != 422 || !strings.Contains(body, "BACKUP_KEEP") || !strings.Contains(body, `value="2m"`) {
+	r, body := e.do(t, "POST", "/settings/system", "admin", url.Values{"csrf": {"tok"}, "v.POLL_INTERVAL": {"nope"}, "v.POLICY_LIVE_INTERVAL": {"2m"}})
+	if r.StatusCode != 422 || !strings.Contains(body, "POLL_INTERVAL") || !strings.Contains(body, `value="2m"`) {
 		t.Fatalf("status %d; the page must keep what was typed", r.StatusCode)
 	}
 	if len(mem.rows) != 3 {

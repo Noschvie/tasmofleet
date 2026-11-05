@@ -47,7 +47,7 @@ func snapSetup(t *testing.T, stepped bool) *snapEnv {
 	}
 	mgr := snapshot.New(snapSource{}, dir)
 	aud := &fakeAudit{}
-	e, svc, _, st := sysEnvFull(t, stepped, func(d *Deps) { d.Snapshots, d.Recorder = mgr, aud })
+	e, svc, _, st := sysEnvFull(t, stepped, func(d *Deps) { d.Snapshots, d.Recorder, d.BackupFleet = mgr, aud, &fakeFleet{} })
 	return &snapEnv{env: e, svc: svc, mgr: mgr, dir: dir, audit: aud, stepped: st}
 }
 
@@ -284,26 +284,27 @@ func TestSnapshotsPageShowsDownloadStoredScheduleAndRestore(t *testing.T) {
 	if strings.Contains(body, `name="include_key" value="1" checked`) {
 		t.Error("the key must be off by default")
 	}
-	_, backups := s.do(t, "GET", "/settings/system?tab=backups", "admin", nil)
+	_, backups := s.do(t, "GET", "/devices/backups", "admin", nil)
 	for _, gone := range []string{`id="card-database"`, `id="db-dl"`, "Download snapshot", "SNAPSHOT_INTERVAL", "Snapshot schedule", "There is no restore button"} {
 		if strings.Contains(backups, gone) {
-			t.Errorf("the Backups tab still holds the snapshot part: %q", gone)
+			t.Errorf("the Backups page still holds the snapshot part: %q", gone)
 		}
 	}
-	if !strings.Contains(backups, "Device backup schedule") {
+	if !strings.Contains(backups, `id="card-schedule"`) {
 		t.Error("the device backup schedule is gone")
 	}
 }
 
-// Why (#410, maintainer decision): "Backups of deleted devices" sits in the narrow column under the
-// device backup schedule, so the wide column is the storage table alone.
+// Why (#410, maintainer decision; #409 mockup): "Backups of deleted devices" sits in the narrow column
+// under the schedule, below the storage totals; the wide column holds the last run and the device table.
 func TestDeletedDeviceBackupsSitUnderTheDeviceBackupSchedule(t *testing.T) {
 	e, _, _, _ := storageEnv(t)
-	_, body := e.do(t, "GET", "/settings/system?tab=backups", "admin", nil)
+	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
 	sched, orph := strings.Index(body, `id="card-schedule"`), strings.Index(body, `id="card-orphans"`)
-	narrow := strings.Index(body[strings.Index(body, `id="sec-backups"`):], `<div class="cstack">`) + strings.Index(body, `id="sec-backups"`)
+	narrow := strings.Index(body, `<div class="cstack">`)
+	wide, devs := strings.Index(body, `id="card-lastrun"`), strings.Index(body, `id="card-devices"`)
 	stor := strings.Index(body, `id="card-storage"`)
-	if stor >= narrow || narrow >= sched || sched >= orph {
+	if wide >= devs || devs >= narrow || narrow >= stor || stor >= sched || sched >= orph {
 		t.Errorf("order storage %d, narrow stack %d, schedule %d, deleted devices %d", stor, narrow, sched, orph)
 	}
 }
@@ -495,7 +496,7 @@ func TestPagesSurviveAFileWhereTheSnapshotFolderBelongs(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(s.dir, snapshot.DirName), []byte("in the way"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	for _, path := range []string{"/settings/system?tab=backups", "/settings/system?tab=general", "/settings/system/snapshots"} {
+	for _, path := range []string{"/devices/backups", "/settings/system?tab=general", "/settings/system/snapshots"} {
 		r, body := s.do(t, "GET", path, "admin", nil)
 		if r.StatusCode != 200 {
 			t.Fatalf("%s: status %d, want the page", path, r.StatusCode)

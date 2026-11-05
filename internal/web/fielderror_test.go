@@ -168,12 +168,12 @@ func TestBackupFailureIsHumanText(t *testing.T) {
 // aria-invalid, linked message), not only listed beside it.
 func TestSystemSettingErrorMarksTheInput(t *testing.T) {
 	e, _, _, _ := sysEnv(t, true)
-	_, body := e.do(t, "POST", "/settings/system", "admin", url.Values{"csrf": {"tok"}, "v.BACKUP_KEEP": {"0"}})
-	tag := inputTag(t, body, "v.BACKUP_KEEP")
-	if !strings.Contains(tag, `aria-invalid="true"`) || !strings.Contains(tag, `aria-describedby="err-v.BACKUP_KEEP"`) {
+	_, body := e.do(t, "POST", "/settings/system", "admin", url.Values{"csrf": {"tok"}, "v.POLL_INTERVAL": {"not-a-duration"}})
+	tag := inputTag(t, body, "v.POLL_INTERVAL")
+	if !strings.Contains(tag, `aria-invalid="true"`) || !strings.Contains(tag, `aria-describedby="err-v.POLL_INTERVAL"`) {
 		t.Fatalf("input not marked: %s", tag)
 	}
-	if strings.Contains(inputTag(t, body, "v.POLL_INTERVAL"), "aria-invalid") {
+	if strings.Contains(inputTag(t, body, "v.TELEPERIOD"), "aria-invalid") {
 		t.Fatal("a valid input was marked")
 	}
 }

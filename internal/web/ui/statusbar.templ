@@ -92,16 +92,15 @@ templ sbWide(d ShellData) {
 	}
 	@sbJobs(d.Status)
 	if b := d.Status.Backup; b != nil {
-		<div class={ "sb-i", "sb-stale", templ.KV("t-bad", b.none()), templ.KV("t-warn", b.partial()) }>
-			<span class={ "sb-dot", templ.KV("bad", b.none()), templ.KV("warn", b.partial()) }></span>
-			<span>
-				if b.none() {
-					<b>Backup failed</b> <time { StampAttrs(b.At, StampDay)... }>{ d.Status.dayText(b.At) }</time> <span class="sb-sep">·</span> { b.countText() }
-				} else {
-					<b>Backup</b> <time { StampAttrs(b.At, StampDay)... }>{ d.Status.dayText(b.At) }</time> <span class="sb-sep">·</span> { b.countText() }
-				}
-			</span>
-		</div>
+		if b.Href != "" {
+			<a class={ "sb-i", "sb-stale", templ.KV("t-bad", b.none()), templ.KV("t-warn", b.partial()) } href={ templ.SafeURL(b.Href) } title="Devices → Backups: last run, results per device">
+				@sbBackupWide(d, *b)
+			</a>
+		} else {
+			<div class={ "sb-i", "sb-stale", templ.KV("t-bad", b.none()), templ.KV("t-warn", b.partial()) }>
+				@sbBackupWide(d, *b)
+			</div>
+		}
 	}
 	<span class="sb-i sb-grow"></span>
 	if d.Version != "" {
@@ -152,6 +151,29 @@ templ sbJobs(s StatusBar) {
 	}
 }
 
+templ sbBackupWide(d ShellData, b StatusBackup) {
+	<span class={ "sb-dot", templ.KV("bad", b.none()), templ.KV("warn", b.partial()) }></span>
+	<span>
+		if b.none() {
+			<b>Backup failed</b> <time { StampAttrs(b.At, StampDay)... }>{ d.Status.dayText(b.At) }</time> <span class="sb-sep">·</span> { b.countText() }
+		} else {
+			<b>Backup</b> <time { StampAttrs(b.At, StampDay)... }>{ d.Status.dayText(b.At) }</time> <span class="sb-sep">·</span> { b.countText() }
+		}
+	</span>
+}
+
+templ sbBackupSheet(d ShellData, b StatusBackup) {
+	<span class="sb-lab">Backup</span>
+	<span class={ "sb-dot", templ.KV("bad", b.none()), templ.KV("warn", b.partial()) }></span>
+	<span class="sb-val">
+		if b.none() {
+			<b>Failed</b> <time { StampAttrs(b.At, StampDay)... }>{ d.Status.dayText(b.At) }</time> <span class="sb-sep">·</span> { b.countText() }
+		} else {
+			<time { StampAttrs(b.At, StampDay)... }>{ d.Status.dayText(b.At) }</time> <span class="sb-sep">·</span> { b.countText() }
+		}
+	</span>
+}
+
 templ sbNarrow(d ShellData) {
 	<summary>
 		<span class={ d.Status.dotClass() }></span>
@@ -192,17 +214,15 @@ templ sbNarrow(d ShellData) {
 		}
 		@sbSheetJobs(d.Status)
 		if b := d.Status.Backup; b != nil {
-			<div class={ "sb-i", "sb-row", "sb-stale", templ.KV("t-bad", b.none()), templ.KV("t-warn", b.partial()) }>
-				<span class="sb-lab">Backup</span>
-				<span class={ "sb-dot", templ.KV("bad", b.none()), templ.KV("warn", b.partial()) }></span>
-				<span class="sb-val">
-					if b.none() {
-						<b>Failed</b> <time { StampAttrs(b.At, StampDay)... }>{ d.Status.dayText(b.At) }</time> <span class="sb-sep">·</span> { b.countText() }
-					} else {
-						<time { StampAttrs(b.At, StampDay)... }>{ d.Status.dayText(b.At) }</time> <span class="sb-sep">·</span> { b.countText() }
-					}
-				</span>
-			</div>
+			if b.Href != "" {
+				<a class={ "sb-i", "sb-row", "sb-stale", templ.KV("t-bad", b.none()), templ.KV("t-warn", b.partial()) } href={ templ.SafeURL(b.Href) }>
+					@sbBackupSheet(d, *b)
+				</a>
+			} else {
+				<div class={ "sb-i", "sb-row", "sb-stale", templ.KV("t-bad", b.none()), templ.KV("t-warn", b.partial()) }>
+					@sbBackupSheet(d, *b)
+				</div>
+			}
 		}
 		<div class="sb-i sb-row">
 			<span class="sb-lab">Version</span>

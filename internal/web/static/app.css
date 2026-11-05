@@ -12710,6 +12710,74 @@ a.sys-store-row:hover {
   }
 }
 
+/* ==== page: Devices → Backups (#409) ==== */
+/* The page uses the Dashboard's content width: the Settings pages' 1240px cap on .syspage .cstacks is lifted here. */
+.syspage.bk-page .cstacks {
+  max-width: none;
+}
+.bk-table td .bk-rsn {
+  margin-left: var(--sp-6);
+  color: var(--color-text-2);
+  font-size: 13px;
+  white-space: normal;
+}
+.bk-tools {
+  margin-bottom: var(--sp-10);
+}
+.sys-sum-sm {
+  font-size: 15px;
+  font-weight: 600;
+}
+/* the device table keeps to its card (no sideways scroll) */
+.bk-table {
+  table-layout: fixed;
+}
+.bk-table .bk-c-sel {
+  width: 40px;
+}
+.bk-table .bk-c-dev {
+  width: 20%;
+}
+.bk-table .bk-c-new {
+  width: 22%;
+}
+.bk-table .bk-c-runs {
+  width: 52px;
+}
+.bk-table .bk-c-files {
+  width: 108px;
+}
+.bk-table .bk-c-act {
+  width: 48px;
+}
+.bk-table td.nowrap,
+.bk-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bk-table td.rowacts {
+  overflow: visible;
+}
+/* the unit after the run count is for phones only (the column header says it on desktop) */
+.bk-u {
+  display: none;
+}
+@media (max-width: 44.99rem) {
+  .bk-u {
+    display: inline;
+  }
+}
+/* Storage totals: two by two in the side column */
+#card-storage .sys-sums {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+/* wide content (>= 1700 px viewport): the result text stays on one line */
+@media (min-width: 106rem) {
+  .bk-table td .bk-rsn {
+    white-space: nowrap;
+  }
+}
+
 /* ==== page: Audit log (design v2, WP P8) ==== */
 /* the filter row: search (220-340 px) and the selects at their content width */
 .audit-filters {

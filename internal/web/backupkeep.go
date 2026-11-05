@@ -96,7 +96,7 @@ func (h *handler) backupKeep(w http.ResponseWriter, r *http.Request) {
 // Backups tab, or Settings -> Backups for a backup of a deleted device.
 func backupsHome(b model.Backup) string {
 	if b.DeviceID == 0 {
-		return "/settings/system?tab=backups&"
+		return "/devices/backups?"
 	}
 	return fmt.Sprintf("/devices/%d/backups?", b.DeviceID)
 }

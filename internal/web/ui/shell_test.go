@@ -29,7 +29,7 @@ func render(t *testing.T, d ShellData) string {
 func admin() ShellData {
 	return ShellData{
 		Title: "Devices", Nav: "devices", CSRF: "tok", UserName: "ada", UserMethod: "local", RoleName: "admin", IsAdmin: true,
-		Updates: true, Firmware: true, Policy: true, Discovery: true, SysConfig: true, Snapshots: true,
+		Updates: true, Firmware: true, Policy: true, Discovery: true, SysConfig: true, Snapshots: true, Backups: true,
 	}
 }
 
@@ -99,7 +99,7 @@ func labels(gs []NavGroupData) string {
 // all, D17) is reachable, and each page enforces its own permission. The groups and pages are
 // the prototype's (design v2 SUB table).
 func TestMenuFollowsRoleAndFeatures(t *testing.T) {
-	if got, want := labels(admin().Groups()), "Dashboard[Overview;]Devices[List;Policy;Add;]Updates[Transactions;Firmware;]System[Settings;Snapshots;Audit log;Users;About;Styleguide;]"; got != want {
+	if got, want := labels(admin().Groups()), "Dashboard[Overview;]Devices[List;Policy;Backups;Add;]Updates[Transactions;Firmware;]System[Settings;Snapshots;Audit log;Users;About;Styleguide;]"; got != want {
 		t.Errorf("admin menu\n got %s\nwant %s", got, want)
 	}
 	op := admin()

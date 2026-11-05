@@ -158,23 +158,11 @@ func TestSettingsDependentFieldsHaveNoIndentedBlock(t *testing.T) {
 	}
 }
 
-// Why (#336): the Storage card is on the Backups tab, but the tabs switch without a page load, so
-// it must be on the page whichever tab the page was opened on (it was loaded only for ?tab=backups).
-func TestSystemSettingsBackupsStorageIsOnThePageWhateverTabOpened(t *testing.T) {
-	e, _, _, _ := storageEnv(t)
-	for _, path := range []string{"/settings/system", "/settings/system?tab=mqtt"} {
-		_, body := e.do(t, "GET", path, "admin", nil)
-		if !strings.Contains(body, `id="card-storage"`) {
-			t.Errorf("%s: the Storage card is missing", path)
-		}
-	}
-}
-
 // Why (#336): with scheduled backups off the stored 0 means "manual only"; showing "0s" in the
 // dimmed Interval reads as a value. It is empty with a 24h placeholder; saving off still stores 0.
 func TestSystemSettingsBackupIntervalIsEmptyWhileTheScheduleIsOff(t *testing.T) {
-	e, svc, _, _ := sysEnv(t, true)
-	_, page := e.do(t, "GET", "/settings/system", "admin", nil)
+	e, svc, _, _ := sysEnvFull(t, true, func(d *Deps) { d.BackupFleet = &fakeFleet{} })
+	_, page := e.do(t, "GET", "/devices/backups", "admin", nil)
 	m := regexp.MustCompile(`<input[^>]*name="v\.BACKUP_INTERVAL"[^>]*>`).FindString(page)
 	if m == "" || strings.Contains(m, `value="0s"`) || !strings.Contains(m, `placeholder="24h"`) {
 		t.Errorf("interval input while off: %s", m)
@@ -188,10 +176,12 @@ func TestSystemSettingsBackupIntervalIsEmptyWhileTheScheduleIsOff(t *testing.T) 
 // Why: the staggered grid came from "Reset ... on save" being its own grid cell next to the field.
 // The reset control now belongs to the field that owns it, so no field can push another around.
 func TestSystemSettingsResetControlIsInsideItsOwnField(t *testing.T) {
-	e, _, _, _ := sysEnv(t, true)
+	e, _, _, _ := sysEnvFull(t, true, func(d *Deps) { d.BackupFleet = &fakeFleet{} })
 	// a stored BACKUP_KEEP (the fixture stores MQTT_URL and MQTT_PASSWORD) must offer a reset too
-	e.do(t, "POST", "/settings/system", "admin", url.Values{"csrf": {"tok"}, "v.BACKUP_KEEP": {"4"}})
+	e.do(t, "POST", "/devices/backups", "admin", url.Values{"csrf": {"tok"}, "v.BACKUP_KEEP": {"4"}})
 	_, page := e.do(t, "GET", "/settings/system", "admin", nil)
+	_, bk := e.do(t, "GET", "/devices/backups", "admin", nil)
+	page += bk
 	for _, key := range []string{"BACKUP_KEEP", "MQTT_URL", "MQTT_PASSWORD"} {
 		in := fieldHTML(t, page, key)
 		if !strings.Contains(in, `name="clear.`+key+`"`) {
@@ -356,7 +346,7 @@ func TestSystemSettingsHasOneSaveBarInsideTheForm(t *testing.T) {
 }
 
 // Why: on a phone eight tabs scroll sideways. A section picker (a select) replaces the strip, and
-// lists the same nine sections.
+// lists the same eight sections.
 func TestSystemSettingsOffersASectionPickerForPhones(t *testing.T) {
 	e, _, _, _ := sysEnv(t, true)
 	_, page := e.do(t, "GET", "/settings/system?tab=mqtt", "admin", nil)
@@ -366,8 +356,8 @@ func TestSystemSettingsOffersASectionPickerForPhones(t *testing.T) {
 	}
 	sel := page[i:]
 	sel = sel[:strings.Index(sel, "</select>")]
-	if strings.Count(sel, "<option") != 9 || !strings.Contains(sel, `value="mqtt" selected`) {
-		t.Errorf("the picker must list all nine sections with the current one selected: %s", sel)
+	if strings.Count(sel, "<option") != 8 || !strings.Contains(sel, `value="mqtt" selected`) {
+		t.Errorf("the picker must list all eight sections with the current one selected: %s", sel)
 	}
 }
 
@@ -376,10 +366,10 @@ func TestSystemSettingsOffersASectionPickerForPhones(t *testing.T) {
 func TestSystemSettingsBackupScheduleSwitchIsAViewOfTheInterval(t *testing.T) {
 	post := func(t *testing.T, form url.Values) (*env, *sysconfig.Service, int, string) {
 		t.Helper()
-		e, svc, _, _ := sysEnv(t, true)
+		e, svc, _, _ := sysEnvFull(t, true, func(d *Deps) { d.BackupFleet = &fakeFleet{} })
 		form.Set("csrf", "tok")
 		form.Set("swm.BACKUP_INTERVAL", "1")
-		r, body := e.do(t, "POST", "/settings/system", "admin", form)
+		r, body := e.do(t, "POST", "/devices/backups", "admin", form)
 		return e, svc, r.StatusCode, body
 	}
 	_, svc, code, _ := post(t, url.Values{"v.BACKUP_INTERVAL": {"6h"}, "sw.BACKUP_INTERVAL": {"1"}})
@@ -394,8 +384,8 @@ func TestSystemSettingsBackupScheduleSwitchIsAViewOfTheInterval(t *testing.T) {
 	if code != 422 || !strings.Contains(body, "how often") {
 		t.Fatalf("on with no interval is a field error: %d", code)
 	}
-	e, _, _, _ := sysEnv(t, true)
-	_, page := e.do(t, "GET", "/settings/system?tab=backups", "admin", nil)
+	e := fleetEnv(t, &fakeFleet{})
+	_, page := e.do(t, "GET", "/devices/backups", "admin", nil)
 	if !strings.Contains(page, `name="sw.BACKUP_INTERVAL"`) || !strings.Contains(page, `data-depends="sw.BACKUP_INTERVAL"`) {
 		t.Error("the schedule switch and its dependent interval are missing")
 	}
@@ -567,12 +557,12 @@ func TestSystemSettingsSignInTabFollowsTheMockup(t *testing.T) {
 	}
 }
 
-// Why (#338, mockup): the Backups tab always has the card of deleted devices' backups, with its
+// Why (#338, mockup): the Backups page always has the card of deleted devices' backups, with its
 // empty text, and Advanced shows the container settings as a card, always visible (#350: no disclosure) in two
 // tables side by side, the first half of the list on the left.
 func TestSystemSettingsBackupsAndAdvancedFollowTheMockup(t *testing.T) {
 	e, _, _, _ := storageEnv(t)
-	_, page := e.do(t, "GET", "/settings/system?tab=backups", "admin", nil)
+	_, page := e.do(t, "GET", "/devices/backups", "admin", nil)
 	if !strings.Contains(page, `id="card-orphans"`) {
 		t.Error("the deleted devices card is missing")
 	}

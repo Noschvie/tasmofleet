@@ -71,14 +71,6 @@ templ sysSettingsPage(p sysPage) {
 		@sysResetBox(p)
 	</div>
 	</div>
-	if p.Storage != nil && len(p.Storage.Orphans) > 0 {
-		<form id="bk-orph" method="post" action={ templ.SafeURL(p.Base + sysPath + "?tab=backups") }>
-			<input type="hidden" name="csrf" value={ p.CSRF }/>
-		</form>
-	}
-	if p.Storage != nil && len(p.Storage.Orphans) > 0 {
-		@backupDeleteDialog(backupsView{CSRF: p.CSRF})
-	}
 	@ui.Dialog(ui.DialogData{ID: "dlg-reset", Title: "Reset all settings?", Body: sysResetText,
 		Action: p.Base + sysPath + "/reset", CSRF: p.CSRF, Verb: "Reset settings", Danger: true})
 	if p.NeedStepUp {
@@ -130,25 +122,33 @@ templ snapshotsPage(p sysPage) {
 // read-only data; every other card holds the fields its definition names.
 templ sysCardView(p sysPage, c sysCard) {
 	switch c.ID {
+		case "lastrun":
+			if p.Fleet != nil {
+				@fleetLastRun(p, c)
+			}
+		case "devices":
+			if p.Fleet != nil {
+				@fleetDevices(p, c)
+			}
 		case "storage":
-			if p.Storage != nil {
-				@ui.SettingsCard(ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Note: c.Note, Class: ui.StackRank(c.Phone), Plain: true}) {
-					@sysStorageBlock(p, *p.Storage)
-				}
+			if p.Fleet != nil {
+				@fleetStorage(p, c)
 			}
 		case "orphans":
 			if p.Storage != nil {
 				@ui.SettingsCard(ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Note: "Own list with its own delete action, outside the settings form.", Class: ui.StackRank(c.Phone), Plain: true}) {
-					if len(p.Storage.Orphans) == 0 && len(p.Storage.Unreferenced) == 0 {
+					if len(p.Storage.Orphans) == 0 {
 						<p class="ufield-help">No backups of deleted devices.</p>
-					}
-					if len(p.Storage.Orphans) > 0 {
+					} else {
 						<p class="ufield-help">Kept when their device was deleted. Download one to restore it on a device by hand.</p>
 						@sysOrphans(p, *p.Storage)
 					}
-					if len(p.Storage.Unreferenced) > 0 {
-						@sysUnreferencedFiles(*p.Storage)
-					}
+				}
+			}
+		case "unreferenced":
+			if p.Storage != nil && len(p.Storage.Unreferenced) > 0 {
+				@ui.SettingsCard(ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Note: "Files in old backup folders that no backup entry points to. TasmoFleet leaves them alone; you can remove them by hand.", Class: ui.StackRank(c.Phone), Plain: true}) {
+					@sysUnreferencedFiles(*p.Storage)
 				}
 			}
 		case "download":
@@ -394,38 +394,6 @@ templ sysKeepLegacy(p sysPage) {
 	}
 }
 
-// sysStorageBlock is the top of the Backups tab (N9): four totals, the devices with the
-// largest backups, and the backups of deleted devices.
-templ sysStorageBlock(p sysPage, st sysStorage) {
-	<div class="sys-storage">
-		<div class="sys-sums">
-			@sysSum("Backups", strconv.Itoa(st.Runs))
-			@sysSum("Total size", st.Size)
-			@sysSum("Kept (never pruned)", strconv.Itoa(st.Kept))
-			@sysSumLink("Devices without a backup", strconv.Itoa(st.Without), st.WithoutHref)
-		</div>
-		if len(st.Rows) > 0 {
-			<div class="sys-store" role="table" aria-label="Backup storage per device">
-				<div class="sys-store-row sys-store-head" role="row">
-					<span role="columnheader">Device</span>
-					<span role="columnheader">Backups</span>
-					<span role="columnheader">Size</span>
-					<span role="columnheader">Last backup</span>
-				</div>
-				for _, row := range st.Rows {
-					<a class="sys-store-row" role="row" href={ templ.SafeURL(row.Href) }>
-						<span role="cell" class="sys-store-name" title={ row.Name }>{ row.Name }</span>
-						<span role="cell" class="mono">{ strconv.Itoa(row.Runs) }</span>
-						<span role="cell" class="mono">{ row.Size }</span>
-						<span role="cell" class="sys-store-last"><time title={ shortDate(row.Last) } { ui.StampAttrs(row.Last, ui.StampStore)... }>{ row.When }</time></span>
-					</a>
-				}
-				<div class="sys-store-foot">{ st.Foot() }</div>
-			</div>
-		}
-	</div>
-}
-
 // sysSumLink is a total that opens the list of what it counts (the whole tile is the link).
 templ sysSumLink(label, value, href string) {
 	<a class="sys-sum" href={ templ.SafeURL(href) }>
@@ -500,8 +468,6 @@ templ sysOrphans(p sysPage, st sysStorage) {
 // sysUnreferencedFiles lists files in old backup folders that no backup entry points to
 // (#205). Read-only on purpose: TasmoFleet never deletes or moves them.
 templ sysUnreferencedFiles(st sysStorage) {
-	<h3 class="sys-subhead">Unreferenced files</h3>
-	<p class="cnote">Files in old backup folders that no backup entry points to. TasmoFleet leaves them alone; you can remove them by hand.</p>
 	<div class="sys-orphans">
 		for _, f := range st.Unreferenced {
 			<div class="sys-orphan sys-unref">

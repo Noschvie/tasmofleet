@@ -51,6 +51,8 @@ type StatusBackup struct {
 	Total  int
 	// Skipped devices were not tried; they are counted apart and never colour the bar.
 	Skipped int
+	// Href is the page that lists the run per device (Devices, Backups); empty without it.
+	Href string
 }
 
 // statusLevel orders what the phone's one line says: the worst fact wins.
@@ -106,12 +108,12 @@ func (s StatusBar) dotClass() string {
 func (s StatusBar) summary() (text, sub string) {
 	switch s.level() { //nolint:exhaustive // the other levels are the default
 	case statusBad:
-		return "Last backup failed", " · " + s.Backup.countText()
+		return "Last backup failed", " · " + s.Backup.shortText()
 	case statusWarn:
 		if s.brokerDown() {
 			return "Broker disconnected", ""
 		}
-		return "Backup partly failed", " · " + s.Backup.countText()
+		return "Backup partly failed", " · " + s.Backup.shortText()
 	case statusRun:
 		j := s.Jobs[0]
 		switch n := len(s.Jobs) + s.More - 1; {
@@ -150,11 +152,21 @@ func (b StatusBackup) none() bool { return b.Total > 0 && b.Failed >= b.Total }
 // partial is a run where some devices were backed up and some were not.
 func (b StatusBackup) partial() bool { return b.Failed > 0 && !b.none() }
 
-// countText is "19 of 27 backed up", with " · 8 failed" when some failed.
+// countText is "19 of 27 backed up", with " · 8 failed" and " · 3 skipped" when there were any.
 func (b StatusBackup) countText() string {
-	t := strconv.Itoa(b.Total-b.Failed) + " of " + strconv.Itoa(b.Total) + " backed up"
+	return strconv.Itoa(b.Total-b.Failed) + " of " + strconv.Itoa(b.Total) + " backed up" + b.problemText()
+}
+
+// shortText is the phone line's rest: "2 failed · 3 skipped" without the backed-up count (the sheet has it).
+func (b StatusBackup) shortText() string { return strings.TrimPrefix(b.problemText(), " · ") }
+
+func (b StatusBackup) problemText() string {
+	var t string
 	if b.Failed > 0 {
 		t += " · " + strconv.Itoa(b.Failed) + " failed"
+	}
+	if b.Skipped > 0 {
+		t += " · " + strconv.Itoa(b.Skipped) + " skipped"
 	}
 	return t
 }

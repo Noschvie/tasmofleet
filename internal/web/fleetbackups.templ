@@ -1,0 +1,361 @@
+package web
+
+import (
+	"strconv"
+	"strings"
+
+	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+)
+
+// fleetBackupsPage is Devices -> Backups (#409): the last scheduled run, the device table, the storage
+// totals, the schedule form and the backups of deleted devices. The schedule is the backups entry of
+// sysLayout, saved through the same form machinery as the Settings page, with the page's own save bar.
+// An operator sees the same cards read-only: nothing on it starts a fleet run or changes a setting.
+templ fleetBackupsPage(p sysPage) {
+	@ui.PageHeader("Backups", "Device backups for the whole fleet")
+	if p.Error != "" {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: p.Error, Alert: true})
+	}
+	<div class="syswrap">
+		if p.Fleet.Admin {
+			<form id="sysform" class="syspage bk-page" data-keep-draft="backups" method="post" action={ templ.SafeURL(p.Base + fleetPath) }>
+				<input type="hidden" name="csrf" value={ p.CSRF }/>
+				@fleetStacks(p)
+				@ui.SaveBar(p.Base + fleetPath)
+			</form>
+		} else {
+			<div class="syspage bk-page">
+				@fleetStacks(p)
+			</div>
+		}
+	</div>
+	if p.Fleet.Admin {
+		<form id="picker" method="post" action={ templ.SafeURL(p.Base + "/devices/bulk/backup") }>
+			<input type="hidden" name="csrf" value={ p.CSRF }/>
+		</form>
+		<form id="bk-all" method="post" action={ templ.SafeURL(p.Base + "/devices/bulk/backup") }>
+			<input type="hidden" name="csrf" value={ p.CSRF }/>
+			for _, id := range p.Fleet.AllIDs {
+				<input type="hidden" name="id" value={ strconv.FormatInt(int64(id), 10) }/>
+			}
+		</form>
+	}
+	if p.Storage != nil && len(p.Storage.Orphans) > 0 {
+		<form id="bk-orph" method="post" action={ templ.SafeURL(p.Base + fleetPath) }>
+			<input type="hidden" name="csrf" value={ p.CSRF }/>
+		</form>
+		if p.Storage.CanDelete {
+			@backupDeleteDialog(backupsView{CSRF: p.CSRF})
+		}
+	}
+	if p.NeedStepUp {
+		@ui.StepUp(p.StepUp)
+	}
+}
+
+templ fleetStacks(p sysPage) {
+	for _, tab := range p.Tabs {
+		@ui.CardStacks(3) {
+			for si, span := range tab.Spans {
+				@ui.CardStack(span) {
+					for _, c := range tab.Cards {
+						if c.Stack == si {
+							if c.ID == "schedule" && !p.Fleet.Admin {
+								@fleetScheduleReadOnly(p, c)
+							} else {
+								@sysCardView(p, c)
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+// fleetLastRun is the first card: the last scheduled run with its failed and skipped devices apart.
+templ fleetLastRun(p sysPage, c sysCard) {
+	{{ v := p.Fleet }}
+	@ui.SettingsCard(ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Note: fleetLastNote(*v), Class: ui.StackRank(c.Phone), Plain: true}) {
+		switch {
+			case v.Run == nil && !v.Scheduled:
+				@fleetNoSchedule(*v)
+			case v.Run == nil:
+				<p class="ufield-help">No scheduled run has finished yet.</p>
+			case !v.Scheduled:
+				@fleetNoSchedule(*v)
+			default:
+				@fleetRunSums(*v)
+				@fleetRunLists(p, *v)
+		}
+	}
+}
+
+func fleetLastNote(v fleetView) string {
+	if !v.Scheduled {
+		return "Turn the schedule on under Schedule, next to this card."
+	}
+	return "The last scheduled run. Manual runs are on the Transactions page."
+}
+
+templ fleetNoSchedule(v fleetView) {
+	<div class="sys-status">
+		<span class="sys-status-dot t-neutral" aria-hidden="true"></span>
+		<div class="sys-status-text">
+			<b>No schedule</b>
+			<span>Scheduled backups are off. Devices are backed up only when someone starts it, here or on a device.</span>
+			if v.Run != nil {
+				<span>Last scheduled run <time { ui.StampAttrs(v.Run.StartedAt, ui.StampDay)... }>{ ui.StampDayText(v.Now, v.Run.StartedAt) }</time> · { v.LastLine() }</span>
+			}
+		</div>
+	</div>
+}
+
+templ fleetRunSums(v fleetView) {
+	<div class="sys-sums">
+		<div class="sys-sum">
+			<div class="sys-sum-label">Started</div>
+			<div class="sys-sum-value"><span class="sys-sum-sm"><time { ui.StampAttrs(v.Run.StartedAt, ui.StampDay)... }>{ ui.StampDayText(v.Now, v.Run.StartedAt) }</time></span></div>
+		</div>
+		@sysSum("Backed up", strconv.Itoa(v.Run.OK))
+		@sysSum("Failed", strconv.Itoa(v.Run.Failed))
+		@sysSum("Skipped", strconv.Itoa(v.Run.Skipped))
+	</div>
+}
+
+templ fleetRunLists(p sysPage, v fleetView) {
+	if len(v.Failed) > 0 {
+		<h3 class="sys-subhead">{ "Failed (" + strconv.Itoa(len(v.Failed)) + ")" }</h3>
+		@fleetRunItems(p, v.Failed, ui.ToneDanger, "Failed")
+	}
+	if len(v.Skipped) > 0 {
+		<h3 class="sys-subhead">{ "Skipped (" + strconv.Itoa(len(v.Skipped)) + ")" }</h3>
+		@fleetRunItems(p, v.Skipped, ui.ToneNeutral, "Skipped")
+		<p class="cnote">Skipped devices are not counted as failed and are not in the notification.</p>
+	}
+}
+
+templ fleetRunItems(p sysPage, items []model.BackupRunItem, tone ui.Tone, word string) {
+	<div class="sys-orphans">
+		for _, it := range items {
+			<div class="sys-orphan">
+				<div class="sys-orphan-main">
+					<div class="sys-orphan-title">
+						if it.DeviceID != 0 {
+							<a href={ templ.SafeURL(p.Base + "/devices/" + strconv.FormatInt(int64(it.DeviceID), 10) + "/backups") } class="sys-store-name">{ it.DeviceName }</a>
+						} else {
+							<span class="sys-store-name">{ it.DeviceName }</span>
+						}
+						{ " " }
+						@ui.Badge(tone, word)
+					</div>
+					if it.Reason != "" {
+						<div class="sys-orphan-detail">{ fleetSentence(it.Reason) }</div>
+					}
+				</div>
+			</div>
+		}
+	</div>
+}
+
+// fleetSentence starts a stored reason with a capital: "offline since ..." reads as a line of its own.
+func fleetSentence(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
+}
+
+// fleetDevices is the main table card: filter chips, one row per device, the run buttons.
+templ fleetDevices(p sysPage, c sysCard) {
+	{{ v := p.Fleet }}
+	<section class={ "scard", ui.StackRank(c.Phone) } id={ "card-" + c.ID }>
+		<div class="sch">
+			<div>
+				<h2>{ c.Title }</h2>
+				<p class="cnote">Newest backup, files and the result of the last scheduled run, per device.</p>
+			</div>
+			if v.Admin {
+				<div class="cbd">
+					<button type="submit" form="picker" class="btn" data-needs-selection disabled>Back up selected<span data-select-suffix></span></button>
+					<button type="submit" form="bk-all" class="btn btn-primary" title={ v.AllTitle() }>Back up all now</button>
+				</div>
+			}
+		</div>
+		<div class="sbody sbody-plain">
+			<div class="dv-tools bk-tools">
+				<div class="dv-chips">
+					for _, ch := range v.Chips {
+						<a class="dv-chip" href={ templ.SafeURL(ch.Href) } if ch.Current { aria-current="true" }>{ ch.Label }<span class="dv-n">{ strconv.Itoa(ch.N) }</span></a>
+					}
+				</div>
+			</div>
+			<div class="table-scroll">
+				<table class="dense bk-table">
+					<colgroup>
+						if v.Admin {
+							<col class="bk-c-sel"/>
+						}
+						<col class="bk-c-dev"/>
+						<col class="bk-c-new"/>
+						<col class="bk-c-runs"/>
+						<col class="bk-c-files"/>
+						<col class="bk-c-res"/>
+						<col class="bk-c-act"/>
+					</colgroup>
+					<thead>
+						<tr>
+							if v.Admin {
+								<th class="sel"><input type="checkbox" data-select-all aria-label="Select all listed devices"/><span class="sr-only">Select</span></th>
+							}
+							@fleetSortTh(*v, "device", "Device")
+							@fleetSortTh(*v, "newest", "Newest backup")
+							<th title="Backups stored for the device">Runs</th>
+							<th title="Whether the files on the device are in the backup too">Files</th>
+							@fleetSortTh(*v, "result", "Last result")
+							<th><span class="sr-only">Actions</span></th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, row := range v.Rows {
+							@fleetRowView(*v, row)
+						}
+					</tbody>
+				</table>
+			</div>
+			<p class="cnote bk-foot">{ v.FootNote() }</p>
+		</div>
+	</section>
+}
+
+templ fleetSortTh(v fleetView, col, label string) {
+	<th aria-sort={ v.AriaSort(col) }><a class={ v.SortClass(col) } href={ templ.SafeURL(v.SortHref(col)) }>{ label }<span class="sortmark" aria-hidden="true"></span></a></th>
+}
+
+templ fleetRowView(v fleetView, r fleetRow) {
+	<tr>
+		if v.Admin {
+			<td data-label="Select" class="sel"><label class="hit"><input type="checkbox" form="picker" name="id" value={ strconv.FormatInt(int64(r.ID), 10) } aria-label={ "Select " + r.Name }/></label></td>
+		}
+		<td data-label="Device" class="wrap p1 dv-name"><a href={ templ.SafeURL(r.DeviceHref) }>{ r.Name }</a></td>
+		<td data-label="Newest backup" class="nowrap s">
+			if r.Newest.IsZero() {
+				@ui.Badge(ui.ToneAccent, "No backup")
+			} else {
+				<time { ui.StampAttrs(r.Newest, ui.StampDay)... }>{ ui.StampDayText(v.Now, r.Newest) }</time>
+				<span class="muted">{ " · " + r.Ago }</span>
+			}
+		</td>
+		<td data-label="Runs" class="nowrap s" title={ r.RunsTitle }>
+			if r.Runs == 0 {
+				<span class="muted">-</span>
+			} else {
+				<span class="mono">{ strconv.Itoa(r.Runs) }</span><span class="bk-u">{ " backups" }</span>
+			}
+		</td>
+		<td data-label="Files" class="nowrap s">
+			switch {
+				case r.Files != "":
+					<span title="The files of the device are stored with the backup">{ r.Files }</span>
+				case r.FilesBadge != "":
+					<span class="bdg t-neutral" title={ fleetSentence(r.FilesWhy) }>{ r.FilesBadge }</span>
+				default:
+					<span class="muted">-</span>
+			}
+		</td>
+		<td data-label="Last result" class="wrap s">
+			switch r.Outcome {
+				case model.BackupOutcomeOK:
+					@ui.Badge(ui.ToneOK, "OK")
+				case model.BackupOutcomeFailed:
+					@ui.Badge(ui.ToneDanger, "Failed")
+					<span class="bk-rsn">{ " " + fleetSentence(r.Reason) }</span>
+				case model.BackupOutcomeSkipped:
+					@ui.Badge(ui.ToneNeutral, "Skipped")
+					<span class="bk-rsn">{ " " + fleetSentence(r.Reason) }</span>
+				default:
+					if r.NotInRun {
+						<span class="muted">Not in a run yet</span>
+					} else {
+						<span class="muted">-</span>
+					}
+			}
+		</td>
+		<td data-label="Actions" class="rowacts">
+			@ui.RowMenu("Actions for "+r.Name, fleetMenu(r), false)
+		</td>
+	</tr>
+}
+
+func fleetMenu(r fleetRow) []ui.MenuItem {
+	items := []ui.MenuItem{{Label: "Open backups", Href: r.BackupsHref}, {Label: "Open device", Href: r.DeviceHref}}
+	if r.ReplaceHref != "" {
+		items = append(items, ui.MenuItem{Label: "Replace…", Href: r.ReplaceHref})
+	}
+	return items
+}
+
+// fleetStorage is the Storage card: totals and what the next run deletes.
+templ fleetStorage(p sysPage, c sysCard) {
+	{{ v := p.Fleet }}
+	@ui.SettingsCard(ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Note: c.Note, Class: ui.StackRank(c.Phone), Plain: true}) {
+		<div class="sys-sums">
+			@sysSum("Backups", strconv.Itoa(v.Runs))
+			@sysSum("Total size", v.Size)
+			@sysSum("Kept (never pruned)", strconv.Itoa(v.Kept))
+			@sysSumLink("Devices without a backup", strconv.Itoa(v.Without), v.WithoutHref)
+		</div>
+		<h3 class="sys-subhead">{ "Pruned at the next run (" + strconv.Itoa(v.PruneRuns) + ")" }</h3>
+		if v.PruneRuns == 0 {
+			<p class="cnote">Nothing: no device is at its limit of { v.Keep } backups.</p>
+		} else {
+			<p class="cnote">A device at its limit of { v.Keep } loses its oldest backup when the next one is taken. Kept backups are never pruned.</p>
+			<div class="sys-orphans">
+				for _, pr := range v.Prune {
+					<div class="sys-orphan">
+						<div class="sys-orphan-main">
+							<div class="sys-orphan-title"><a href={ templ.SafeURL(pr.Href) } class="sys-store-name">{ pr.Name }</a></div>
+							<div class="sys-orphan-detail">{ plural(pr.Runs, "backup") + " · oldest " }<time { ui.StampAttrs(pr.Oldest, ui.StampShort)... }>{ ui.StampText(pr.Oldest, ui.StampShort) }</time>{ " · " + pr.Size }</div>
+						</div>
+					</div>
+				}
+			</div>
+			if v.PruneMore > 0 {
+				<p class="cnote">{ "and " + plural(v.PruneMore, "more device") }</p>
+			}
+		}
+	}
+}
+
+// fleetScheduleReadOnly is the Schedule card for an operator: the values, no fields.
+templ fleetScheduleReadOnly(p sysPage, c sysCard) {
+	@ui.SettingsCard(ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Note: c.Note, Class: ui.StackRank(c.Phone), Plain: true}) {
+		for _, row := range c.Rows {
+			<div class="sf w-full sf-locked">
+				<div class="lrow"><span class="lbl">{ fleetScheduleLabel(row) }</span></div>
+				<div class="in ro mono">{ fleetScheduleValue(row) }</div>
+			</div>
+		}
+		<p class="cnote">Read-only for operators. Admins change the schedule.</p>
+	}
+}
+
+func fleetScheduleLabel(row sysRow) string {
+	switch row.Key {
+	case "BACKUP_INTERVAL":
+		return "Interval"
+	case "BACKUP_KEEP":
+		return "Kept per device"
+	case "BACKUP_MAX_AGE":
+		return "Never prune younger than"
+	}
+	return row.Label
+}
+
+func fleetScheduleValue(row sysRow) string {
+	if row.Key == "BACKUP_INTERVAL" && (row.Value == "" || row.Value == "0" || row.Value == "0s") {
+		return "Off: manual only"
+	}
+	return row.Value
+}

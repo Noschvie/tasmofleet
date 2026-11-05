@@ -96,7 +96,7 @@ func TestKeepIsOperatorAndExplicit(t *testing.T) {
 	}
 	k.orphan = true
 	resp, _ = e.do(t, "POST", "/backups/5/keep", "admin", url.Values{"kept": {"0"}})
-	if !strings.HasSuffix(resp.Header.Get("Location"), "/settings/system?tab=backups&ok=released") {
+	if !strings.HasSuffix(resp.Header.Get("Location"), "/devices/backups?ok=released") {
 		t.Errorf("orphan goes back to the settings: %q", resp.Header.Get("Location"))
 	}
 	if strings.Join(k.keptCalls, " ") != "4:1 99:0 5:0" {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/url"
-	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -28,7 +27,8 @@ func TestSystemSettingsEveryFieldHasOnePlace(t *testing.T) {
 	e, svc := s.env, s.svc
 	_, body := e.do(t, "GET", "/settings/system", "admin", nil)
 	_, snaps := e.do(t, "GET", "/settings/system/snapshots", "admin", nil)
-	body += snaps
+	_, bk := e.do(t, "GET", "/devices/backups", "admin", nil)
+	body += snaps + bk
 	for _, st := range svc.State() {
 		name := `name="v.` + st.Key + `"`
 		if st.Key == "MQTT_URL" {
@@ -216,6 +216,17 @@ func (s *storageBackups) DeleteRun(ctx context.Context, actor string, id model.B
 	return d, err
 }
 
+// usageFleet is the BackupFleet of a fake backup service: one row per live device of its usage.
+func usageFleet(usage []store.BackupUsage) *fakeFleet {
+	f := &fakeFleet{}
+	for _, u := range usage {
+		if u.Device != 0 {
+			f.rows = append(f.rows, model.BackupDeviceRow{DeviceID: u.Device, Name: u.Name, NewestAt: u.Last, Runs: u.Runs, Kept: u.Kept, Bytes: u.Bytes})
+		}
+	}
+	return f
+}
+
 func storageEnv(t *testing.T) (*env, *storageBackups, *sysMem, *atomic.Bool) {
 	t.Helper()
 	t0 := time.Date(2026, 10, 18, 3, 0, 0, 0, time.UTC)
@@ -234,52 +245,47 @@ func storageEnv(t *testing.T) (*env, *storageBackups, *sysMem, *atomic.Bool) {
 		{ID: 72, DeviceName: "", DeviceMAC: "", Kind: model.BackupConfigDump, TakenAt: t0.Add(-time.Hour), Size: 1024},
 	}
 	sb.list = sb.orphans
-	e, _, mem, st := sysEnvWithDeps(t, func(d *Deps) { d.Backups = sb })
+	e, _, mem, st := sysEnvWithDeps(t, func(d *Deps) { d.Backups = sb; d.BackupFleet = usageFleet(sb.usage) })
 	return e, sb, mem, st
 }
 
-// Why (N9): the Backups tab answers "how much space do the backups take, and which devices
-// have none". The totals include the deleted devices' backups (they are on disk), the table
-// shows the ten largest devices first and says how many it leaves out, so a long fleet does
-// not push the schedule settings off the page.
-func TestSettingsBackupsStorageSummaryAndLargestFirst(t *testing.T) {
+// Why (N9, #409): the Backups page answers "how much space do the backups take, and which devices
+// have none". The totals include the deleted devices' backups (they are on disk) and the tile that
+// counts the devices without a backup opens exactly those on the same page.
+func TestBackupsPageStorageSummary(t *testing.T) {
 	e, _, _, _ := storageEnv(t)
-	r, body := e.do(t, "GET", "/settings/system?tab=backups", "admin", nil)
+	r, body := e.do(t, "GET", "/devices/backups", "admin", nil)
 	if r.StatusCode != 200 {
 		t.Fatalf("status %d", r.StatusCode)
 	}
-	sums := regexp.MustCompile(`<div class="sys-sum-label">([^<]+)</div><div class="sys-sum-value">([^<]+)</div>`).FindAllStringSubmatch(body, -1)
+	sums := regexp.MustCompile(`<(?:div|a)[^>]*class="sys-sum"[^>]*>\s*<div class="sys-sum-label">([^<]+)</div><div class="sys-sum-value">([^<]+)</div>`).FindAllStringSubmatch(body, -1)
 	got := map[string]string{}
 	for _, m := range sums {
 		got[m[1]] = m[2]
 	}
 	want := map[string]string{"Backups": "38", "Total size": "80.0 KiB", "Kept (never pruned)": "8", "Devices without a backup": "2"}
-	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("totals %v, want %v", got, want)
-	}
-	if n := strings.Count(body, `<a class="sys-store-row"`); n != 10 {
-		t.Errorf("%d device rows, want the top 10", n)
-	}
-	if i, j := strings.Index(body, ">plug-12<"), strings.Index(body, ">plug-11<"); i < 0 || j < 0 || i > j {
-		t.Error("the largest device must come first")
-	}
-	if strings.Contains(body, ">plug-02<") || !strings.Contains(body, "Largest first · 2 more devices") {
-		t.Error("the two smallest devices are summed up as 2 more devices")
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("total %q = %q, want %q (all: %v)", k, got[k], v, got)
+		}
 	}
 	if !strings.Contains(body, `href="/tf/devices/12/backups"`) {
 		t.Error("a row opens the device's Backups tab")
 	}
-	if strings.Index(body, "Storage</h2>") > strings.Index(body, "Device backup schedule") {
-		t.Error("the storage summary comes before the schedule, as in the prototype")
+	if !strings.Contains(body, `href="/tf/devices/backups?filter=none"`) {
+		t.Error("the tile opens the devices without a backup")
+	}
+	if strings.Index(body, "Storage</h2>") > strings.Index(body, `id="card-schedule"`) {
+		t.Error("the storage summary comes before the schedule, as in the mockup")
 	}
 }
 
 // Why (N2/N9): a device deleted with "keep the backups" leaves backups no device page lists;
 // Settings -> Backups is their only home. Each run appears once (not once per file), with the
 // device's name escaped and its MAC, and the same Download / Keep / Delete as on a device.
-func TestSettingsBackupsListsOrphansWithTheirActions(t *testing.T) {
+func TestBackupsPageListsOrphansWithTheirActions(t *testing.T) {
 	e, _, _, _ := storageEnv(t)
-	_, body := e.do(t, "GET", "/settings/system?tab=backups", "admin", nil)
+	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
 	if strings.Contains(body, "<b>plug</b>") || !strings.Contains(body, "garage &lt;b&gt;plug&lt;/b&gt;") {
 		t.Fatal("the deleted device's name must be escaped")
 	}
@@ -305,20 +311,20 @@ func TestSettingsBackupsListsOrphansWithTheirActions(t *testing.T) {
 // Why (N9): deleting a backup of a deleted device used to send the admin to
 // /devices/0/backups, a page that does not exist. Both the no-JS confirmation (its Cancel and
 // trail) and the delete itself must lead back to Settings -> Backups, with the notice.
-func TestOrphanDeleteGoesBackToSettingsBackups(t *testing.T) {
+func TestOrphanDeleteGoesBackToTheBackupsPage(t *testing.T) {
 	e, sb, _, _ := storageEnv(t)
 	_, body := e.do(t, "GET", "/backups/70/delete", "admin", nil)
-	if strings.Contains(body, "/devices/0") || !strings.Contains(body, `href="/tf/settings/system?tab=backups"`) {
+	if strings.Contains(body, "/devices/0") || !strings.Contains(body, `href="/tf/devices/backups"`) {
 		t.Fatalf("the confirmation must link back to the settings:\n%s", body)
 	}
 	r, _ := e.do(t, "POST", "/backups/70/delete", "admin", url.Values{"csrf": {"tok"}})
-	if loc := r.Header.Get("Location"); r.StatusCode != 303 || !strings.HasSuffix(loc, "/settings/system?tab=backups&ok=deleted&n=1") {
+	if loc := r.Header.Get("Location"); r.StatusCode != 303 || !strings.HasSuffix(loc, "/devices/backups?ok=deleted&n=1") {
 		t.Fatalf("orphan delete: %d %q", r.StatusCode, loc)
 	}
 	if len(sb.deleted) != 1 || sb.deleted[0] != 70 {
 		t.Fatalf("deleted %v", sb.deleted)
 	}
-	if _, body := e.do(t, "GET", "/settings/system?tab=backups&ok=deleted&n=1", "admin", nil); !strings.Contains(body, "Backup deleted.") {
+	if _, body := e.do(t, "GET", "/devices/backups?ok=deleted&n=1", "admin", nil); !strings.Contains(body, "Backup deleted.") {
 		t.Error("the settings page must confirm the delete")
 	}
 	// A device's own backup still goes back to the device.
@@ -433,9 +439,9 @@ func TestMissingFileRowsAreMarkedRefusedAndDeletable(t *testing.T) {
 		{ID: 5, DeviceID: 1, Kind: model.BackupConfigDump, TakenAt: t0, Size: 4096},
 		{ID: 6, DeviceID: 1, Kind: model.BackupConfigDump, TakenAt: t0.Add(-time.Hour), Size: 4096},
 	}
-	e, _, _, _ := sysEnvWithDeps(t, func(d *Deps) { d.Backups = sb; d.Restore = &fakeRestore{} })
+	e, _, _, _ := sysEnvWithDeps(t, func(d *Deps) { d.Backups = sb; d.Restore = &fakeRestore{}; d.BackupFleet = &fakeFleet{} })
 
-	_, body := e.do(t, "GET", "/settings/system?tab=backups", "admin", nil)
+	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
 	if n := strings.Count(body, "File missing"); n != 1 {
 		t.Errorf("kept-backups list: %d File missing badges, want 1", n)
 	}
@@ -485,8 +491,8 @@ func (u *unrefStorage) Unreferenced(context.Context) ([]backup.UnreferencedFile,
 func TestSettingsBackupsListsUnreferencedFilesReadOnly(t *testing.T) {
 	_, sb, _, _ := storageEnv(t)
 	f := []backup.UnreferencedFile{{Path: "backups/85/20261027T104345Z-dmp.dmp", Size: 2048, ModTime: time.Date(2026, 10, 27, 10, 43, 45, 0, time.UTC)}}
-	e, _, _, _ := sysEnvWithDeps(t, func(d *Deps) { d.Backups = &unrefStorage{storageBackups: sb, files: f} })
-	_, body := e.do(t, "GET", "/settings/system?tab=backups", "admin", nil)
+	e, _, _, _ := sysEnvWithDeps(t, func(d *Deps) { d.Backups = &unrefStorage{storageBackups: sb, files: f}; d.BackupFleet = &fakeFleet{} })
+	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
 	for _, want := range []string{"Unreferenced files", "backups/85/20261027T104345Z-dmp.dmp", "2.0 KiB", "you can remove them by hand"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("section lacks %q", want)
@@ -496,16 +502,15 @@ func TestSettingsBackupsListsUnreferencedFilesReadOnly(t *testing.T) {
 	if strings.Contains(section, "/delete") || strings.Contains(section, "bk-keep") {
 		t.Error("the section is read-only: no delete or keep control")
 	}
-	e2, _, _, _ := sysEnvWithDeps(t, func(d *Deps) { d.Backups = &unrefStorage{storageBackups: sb} })
-	if _, body := e2.do(t, "GET", "/settings/system?tab=backups", "admin", nil); strings.Contains(body, "Unreferenced files") {
+	e2, _, _, _ := sysEnvWithDeps(t, func(d *Deps) { d.Backups = &unrefStorage{storageBackups: sb}; d.BackupFleet = &fakeFleet{} })
+	if _, body := e2.do(t, "GET", "/devices/backups", "admin", nil); strings.Contains(body, "Unreferenced files") {
 		t.Error("no section without files")
 	}
 }
 
-// Why (#381): the "Devices without a backup" tile on Settings -> Backups must open exactly the
-// devices it counts. Tile, list chip and list rows come from one predicate (withoutBackup); if
-// any of them drifts (e.g. a chip that also counts devices of deleted backups) the numbers on
-// the two pages stop agreeing and the click leads to a list that does not match the tile.
+// Why (#381, #409): the "Devices without a backup" tile on the Backups page must open exactly the
+// devices it counts. Tile, chip and table rows come from one predicate; if any of them drifts the
+// numbers stop agreeing and the click leads to a list that does not match the tile.
 func TestBackupsTileOpensTheListOfDevicesWithoutABackup(t *testing.T) {
 	sb := &storageBackups{keepBackups: &keepBackups{adminBackups: &adminBackups{}, deviceOf: 1}}
 	sb.usage = []store.BackupUsage{
@@ -513,21 +518,18 @@ func TestBackupsTileOpensTheListOfDevicesWithoutABackup(t *testing.T) {
 		{Device: 2, Name: "attic"},                       // none
 		{Device: 0, Runs: 3, Bytes: 5, Last: time.Now()}, // deleted devices' backups: not a device
 	}
-	e, _, _, _ := sysEnvWithDeps(t, func(d *Deps) { d.Backups = sb })
+	e, _, _, _ := sysEnvWithDeps(t, func(d *Deps) { d.Backups = sb; d.BackupFleet = usageFleet(sb.usage) })
 
-	_, page := e.do(t, "GET", "/settings/system?tab=backups", "admin", nil)
+	_, page := e.do(t, "GET", "/devices/backups", "admin", nil)
 	m := regexp.MustCompile(`<a class="sys-sum" href="([^"]+)"><div class="sys-sum-label">Devices without a backup</div><div class="sys-sum-value">(\d+)</div></a>`).FindStringSubmatch(page)
 	if m == nil {
 		t.Fatalf("the tile is not a link: %s", page)
 	}
-	if m[1] != "/tf/devices?chip=nobackup" {
+	if m[1] != "/tf/devices/backups?filter=none" {
 		t.Errorf("tile href %q", m[1])
 	}
-	r, list := e.do(t, "GET", strings.TrimPrefix(m[1], "/tf"), "admin", nil)
-	if r.StatusCode != 200 {
-		t.Fatalf("status %d", r.StatusCode)
-	}
-	rows := regexp.MustCompile(`<li class="dcard" data-id="(\d+)">`).FindAllStringSubmatch(list, -1)
+	_, list := e.do(t, "GET", strings.TrimPrefix(m[1], "/tf"), "admin", nil)
+	rows := regexp.MustCompile(`form="picker" name="id" value="(\d+)"`).FindAllStringSubmatch(list, -1)
 	if len(rows) != 1 || rows[0][1] != "2" {
 		t.Fatalf("list shows %v, want only device 2 (attic)", rows)
 	}
