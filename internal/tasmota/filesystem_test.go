@@ -401,7 +401,7 @@ func TestUploadFile_NoRequestSlipsBetweenGetAndPost(t *testing.T) {
 			// server close the connection while the client is still writing the body, which fails
 			// the upload with "connection reset by peer" / "broken pipe" (#452).
 			_, _ = io.Copy(io.Discard, r.Body)
-			_, _ = w.Write([]byte("Upload <font color='#008000'>Successful</font>"))
+			_, _ = w.Write([]byte(ufsuTestPage(ufsuLang(t, "en_GB.h"), true, "", "008000")))
 		default:
 			_, _ = w.Write([]byte(`{"Status":{}}`))
 		}

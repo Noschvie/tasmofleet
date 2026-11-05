@@ -41,7 +41,13 @@ var backupFiles = map[string]string{
 // archive), and a device that then drifted: every file changed and one file the backup lacks.
 func filesFlow(t *testing.T) (*flowEnv, model.Backup) {
 	t.Helper()
-	e := newFlowSpec(t, "16.0.0", esp32Decoder{}, simulator.DeviceSpec{Profile: simulator.ProfileESP32, Files: fsFiles(backupFiles)})
+	return filesFlowWords(t, simulator.PageWords{})
+}
+
+// filesFlowWords is filesFlow on a device whose /ufsu pages speak the given language.
+func filesFlowWords(t *testing.T, words simulator.PageWords) (*flowEnv, model.Backup) {
+	t.Helper()
+	e := newFlowSpec(t, "16.0.0", esp32Decoder{}, simulator.DeviceSpec{Profile: simulator.ProfileESP32, Files: fsFiles(backupFiles), PageWords: words})
 	a := e.dumpBackup(t, e.dumpA)
 	e.sim.SetConfigDump(e.dumpB)
 	for p := range backupFiles {
@@ -143,6 +149,39 @@ func TestRestoreWritesTheFilesBeforeTheSettings(t *testing.T) {
 		t.Errorf("the verification must compare the files with the backup: %q", rest)
 	}
 	assertNoSecret(t, e, done)
+}
+
+// Why (#618): on an ESP32 whose Tasmota build has a localized web UI the file upload was answered
+// with a page in the device's language, which the client could not read. Every upload came back
+// "unknown", the put-back too, and the restore ended "partly written ... FILE LOST" although the
+// files were written and the settings never touched. A localized device must restore like an
+// English one: done, verified, nothing lost.
+func TestFileRestoreOnALocalizedDevice(t *testing.T) {
+	for _, w := range []simulator.PageWords{
+		{Lang: "de", Upload: "Upload", Successful: "erfolgreich", Failed: "fehlgeschlagen", ManageFileSystem: "Dateisystem verwalten"},
+		{Lang: "fr", Upload: "Upload", Successful: "Réussi", Failed: "Échoué", ManageFileSystem: "Gestion du Système de Fichier"},
+		{Lang: "zh", Upload: "上传", Successful: "成功", Failed: "失败", ManageFileSystem: "Manage File system"},
+	} {
+		t.Run(w.Lang, func(t *testing.T) {
+			e, a := filesFlowWords(t, w)
+			job, err := e.m.StartWith(t.Context(), "alice", a.ID, StartOptions{ConfirmedFiles: 3})
+			if err != nil {
+				t.Fatal(err)
+			}
+			done := e.finish(t, job.ID)
+			if done.State != store.RestoreDone || !done.Verified || strings.Contains(done.Detail, "FILE LOST") {
+				t.Fatalf("job: %+v", done)
+			}
+			for p, want := range backupFiles {
+				if got := e.devFile(t, p); got != want {
+					t.Errorf("%s on the device: %q, want the backup's content", p, got)
+				}
+			}
+			if pr := progressOf(t, e, job.ID); len(pr.Lost) != 0 || pr.Writes != 3 {
+				t.Errorf("progress: %+v", pr)
+			}
+		})
+	}
 }
 
 // Why: a failed upload can lose the file (the device deletes the old one first). The restore keeps

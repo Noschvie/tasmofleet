@@ -158,22 +158,6 @@ func (c *countingReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// refusalText is the reason on the Failed page: the text after the heading.
-func refusalText(page string) string {
-	_, after, ok := strings.Cut(page, "Failed</font></b><br><br>")
-	if !ok {
-		return "no reason given"
-	}
-	s := strings.TrimSpace(htmlTag.ReplaceAllString(after, " "))
-	if len(s) > 80 {
-		s = s[:80]
-	}
-	if s == "" {
-		return "no reason given"
-	}
-	return s
-}
-
 // fetch performs one request inside an already acquired device slot.
 func (c *httpClient) fetch(rctx, parent context.Context, t Target, method, p, rawQuery string, body io.Reader, ctype string, length int64) ([]byte, error) {
 	u := url.URL{Scheme: "http", Host: t.hostPort(), Path: p, RawQuery: rawQuery}

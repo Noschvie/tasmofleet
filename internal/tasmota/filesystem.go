@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -632,12 +633,36 @@ func (c *httpClient) UploadFile(ctx context.Context, t Target, p string, data []
 	if err != nil {
 		return err
 	}
-	text := string(reply)
-	switch {
-	case strings.Contains(text, "Failed</font>"):
-		return &deviceError{ErrUploadRefused, t.redact(refusalText(text))}
-	case strings.Contains(text, "Successful</font>"):
+	err = ufsuReply(string(reply))
+	var de *deviceError
+	if errors.As(err, &de) {
+		de.msg = t.redact(de.msg) // the reason is device text
+	}
+	return err
+}
+
+// ufsuHeading is the result heading of HandleUploadUFSDone (xdrv_50_filesystem.ino): the coloured
+// translated word, closed by </font></b><br>. What follows tells the outcome: "</div>" after a
+// success, "<br>" (a blank line) and the reason after a failure.
+var ufsuHeading = regexp.MustCompile(`<font color='#[0-9a-fA-F]{6}'>[^<]*</font></b><br>(</div>|<br>)`)
+
+// ufsuReply reads the /ufsu result page in any language: by its structure, not by its words
+// (D_SUCCESSFUL and D_FAILED are translated) and not by its colours (WebColor changes them), and not
+// like the firmware upload page, whose success carries a reload script this page never has. A page
+// that does not have the shape is unknown, which the caller treats as "may or may not be written".
+// The first heading decides, so no text after it can turn a failure into a success.
+func ufsuReply(page string) error {
+	m := ufsuHeading.FindStringSubmatchIndex(page)
+	if m == nil {
+		return &deviceError{ErrBadResponse, "upload reply is neither the success nor the failure page"}
+	}
+	if page[m[2]:m[3]] == "</div>" {
 		return nil
 	}
-	return &deviceError{ErrBadResponse, "upload reply is neither Successful nor Failed"}
+	// The reason ends at the div that closes the heading block; what follows is the link back.
+	block := page[m[0]:]
+	if i := strings.Index(block, "</div>"); i >= 0 {
+		block = block[:i]
+	}
+	return &deviceError{ErrUploadRefused, uploadReason(block)}
 }
