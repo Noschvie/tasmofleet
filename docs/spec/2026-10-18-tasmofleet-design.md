@@ -2077,6 +2077,7 @@ only when their feature is wired (updates, firmware, policy, ...) are listed wit
 | GET, POST | `/devices/new` | admin | "Add devices" (#410): one page with four boxes (Discovered, Network scan, Add manually, Import from TasmoAdmin); POST adds one device by address. `?proposal=`, `?address=`, `?port=` prefill the manual box; `?state=`, `?sort=`, `?dir=`, `?ignored=1` shape the Discovered list |
 | GET, POST | `/discovery/scan`, `/discovery/scan/{id}`, `/discovery/scan/{id}/stream`, `/discovery/scan/{id}/cancel`, `/discovery/proposals/...` (accept, dismiss, undismiss, one or many) | admin | network scan results (live while it runs) and the actions of the Discovered box. The tab routes `GET /discovery` and `GET /import/tasmoadmin` are gone (0.27.0, no redirects) |
 | POST, GET | `/import/tasmoadmin`, `/import/tasmoadmin/apply`, `/import/tasmoadmin/report.csv` | admin | web import: the Import box posts here (htmx fragments), the report downloads |
+| GET, POST | `/devices/backups` (+ `/stepup`) | GET operator, POST admin | Devices, Backups (#409): last scheduled run, device table with filter chips (`?filter=none|old|failed|skipped`, `sort`, `dir`), storage, schedule (saved with the page's own save bar), backups of deleted devices, unreferenced files; "Back up all now" and "Back up selected" post the ids to `/devices/bulk/backup`. Operators see it read-only; moved from Settings, Backups |
 | GET, POST | `/settings/system` (+ `/stepup`, `/mqtt-test`, `/sso-test`, `/reset`) | admin | System settings (§16) |
 | GET, POST | `/settings/system/snapshots` (+ `/stepup`), POST `/settings/system/snapshot`, GET, POST `/settings/system/snapshots/{name}/download`, `/delete` | admin | System, Snapshots (#410): database snapshot download, stored snapshots, schedule (saved with the page's own save bar), restore instructions; moved from Settings, Backups |
 | GET, POST | `/setup`, `/setup/mqtt-test`, `/setup/finish` | admin | first-run wizard |
@@ -2112,7 +2113,7 @@ page enforces its own permission). Groups and pages:
 - **Dashboard** (Overview): six stat tiles (Online, Offline, Unknown, Firmware behind, Policy
   deviations, New devices found; each links to a filtered device list), the fleet health bar,
   "Needs attention" and the newest update transactions.
-- **Devices**: *List*, *Policy* and *Add* (admin; since 0.27.0 one page with four boxes: Discovered and
+- **Devices**: *List*, *Policy*, *Backups* (#409, 0.29.0: the fleet's backup state on one page, content width like the Dashboard) and *Add* (admin; since 0.27.0 one page with four boxes: Discovered and
   Network scan in the wide column, Add manually and Import from TasmoAdmin in the narrow one; the full
   result of a scan is its own page, `/discovery/scan/{id}`). The page heading of the list stays "Devices". The device list is a sortable table with filter chips and a search box (`q`, health,
   family, tag, chip); the selection bar feeds Update, Back up, Send command, Restart and power.
@@ -2123,7 +2124,7 @@ page enforces its own permission). Groups and pages:
   (+ variant override; the preview shows it, no confirmation checkbox since 2026-10-20), a preview
   table, submit, then the live transaction page (per device: state, stage, attempt, last event,
   elapsed time).
-- **System**: *Settings* (System settings, admin), *Snapshots* (database snapshots, admin; 0.27.0), *Audit log* (admin), *Users* (admin), *About*
+- **System**: *Settings* (System settings, admin; eight tabs, Backups moved to Devices in 0.29.0), *Snapshots* (database snapshots, admin; 0.27.0), *Audit log* (admin), *Users* (admin), *About*
   (admin: versions, decoder, effective configuration with secrets masked, links to docs) and
   *Styleguide* (sample data). *What's new* (parsed from `CHANGELOG.md`) and the account page open from
   the avatar menu; the first-run wizard `/setup` appears for admins until it is finished.

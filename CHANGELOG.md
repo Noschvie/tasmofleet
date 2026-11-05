@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Added
+
+- Devices, Backups: one page for how the fleet is backed up (#409). It shows the last scheduled run with the failed and the skipped devices apart, one row per device (newest backup, runs, files, result of the last run) with filters for No backup, Older than, Failed last run and Skipped, the storage totals and what the next run prunes, the schedule, and the backups of deleted devices. Admins can back up the selected devices or every device that a run would try; operators see the page read-only. Devices has a new sub-navigation entry between Policy and Add.
+
 ### Changed
 
 - Device pages follow the card-width rule: Activity is one full-width card with its entries in two columns (three on a large screen), and Replace device puts the form in the wide stack and "What comes along" and "What happens" beside it; on the preview "Copied to the new device" sits under the form and "Not copied" and the start step beside it. The four always-copied options are now only shown on the first Replace page, and the preview no longer lists the files option (the Files row and the confirmation text still name the files); nothing about what Replace does or confirms changed (#419)
@@ -16,6 +20,12 @@ always upgrade automatically.
 
 - Device page: the "Other broker" hint now also shows for a device that used to report to TasmoFleet's broker and moved to another one (a broker migration, or a restored config that points to an old broker). Before, the stored "on our broker" state and the retained last will kept such a device "heard" for good, so the hint never appeared. A device now counts as being on our broker only if it sent something there within the last 2 hours; one that answers HTTP but has been silent longer shows the hint. A device that does not answer HTTP is left alone, since it may just be switched off. After TasmoFleet restarts or reconnects to its broker the retained last will counts as a message, so the hint can take up to 2 hours to appear. It also needs TasmoFleet's record of the device's broker to be current: after a change made outside TasmoFleet, use Refresh identity (#580, thanks @Noschvie)
 - Device page: the Reachability tile says "MQTT on another broker" for a device that reports to another broker, instead of "MQTT not configured", in line with the "Other broker" card (#580, thanks @Noschvie)
+- The status bar's backup item links to Devices, Backups and counts skipped devices apart ("22 of 24 backed up · 2 failed · 3 skipped"); on a phone the line shows the short form and the sheet the full text. A run that only skipped devices stays calm (#409).
+- Dashboard: the "No backup" tile opens Devices, Backups narrowed to the devices without a backup and says when the last scheduled run was. It turns amber only when that run failed for a device, never for skipped ones (#409).
+
+### Breaking
+
+- Settings, Backups is gone: its storage, schedule and deleted-device cards moved to Devices, Backups. The address `/settings/system?tab=backups` now opens the first Settings tab, and a link to the old tab (a bookmark) needs to point to `/devices/backups` (#409).
 
 ## 0.28.0 "Cape Byron" (2026-11-05)
 
