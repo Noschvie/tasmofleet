@@ -78,6 +78,18 @@ func newFixer(c *fakeCmd, r *fakeRead) *Fixer {
 	return &Fixer{Client: c, Reader: r, Wait: func(context.Context, time.Duration) error { return nil }}
 }
 
+// saves counts the saves Apply adds behind the chunks (a Backlog of a SaveData alone, #559); a
+// SaveData line inside a chunk is not one.
+func saves(sent []string) int {
+	n := 0
+	for _, s := range sent {
+		if strings.HasPrefix(s, "Backlog SaveData") && !strings.Contains(s, ";") {
+			n++
+		}
+	}
+	return n
+}
+
 func count(sent []string, prefix string) int {
 	n := 0
 	for _, s := range sent {
@@ -96,7 +108,7 @@ func TestApplyBatchesIntoBacklogWithOneSave(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"Backlog PowerOnState 0; SetOption0 0", "SaveData 0"}
+	want := []string{"Backlog PowerOnState 0; SetOption0 0", "Backlog SaveData 0"}
 	if !reflect.DeepEqual(c.sent, want) {
 		t.Fatalf("sent %q, want %q", c.sent, want)
 	}
@@ -113,7 +125,7 @@ func TestApplyAddsNoSecondSave(t *testing.T) {
 		if err := newFixer(c, r).Apply(context.Background(), model.Device{}, lines); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
-		if len(c.sent) != 1 || count(c.sent, "SaveData") > 1 || len(r.calls) != 0 {
+		if len(c.sent) != 1 || saves(c.sent) > 1 || len(r.calls) != 0 {
 			t.Fatalf("%s: sent %q, reads %v", name, c.sent, r.calls)
 		}
 	}
@@ -150,7 +162,7 @@ func TestApplySplitsLongPlans(t *testing.T) {
 	if err := newFixer(c, &fakeRead{vals: map[string]string{"SaveData": "0"}}).Apply(context.Background(), model.Device{}, lines); err != nil {
 		t.Fatal(err)
 	}
-	if len(c.sent) != 4 || count(c.sent, "Backlog ") != 3 || c.sent[3] != "SaveData 0" {
+	if len(c.sent) != 4 || count(c.sent, "Backlog ") != 4 || c.sent[3] != "Backlog SaveData 0" {
 		t.Fatalf("sent %q", c.sent)
 	}
 	for _, s := range c.sent[:3] {
@@ -207,7 +219,7 @@ func TestApplyWritesEarlierChunksToFlashWhenALaterOneFails(t *testing.T) {
 	if err == nil {
 		t.Fatal("a failed chunk was reported as success")
 	}
-	if count(c.sent, "Backlog ") != 2 || c.sent[len(c.sent)-1] != "SaveData 0" || count(c.sent, "SaveData") != 1 {
+	if count(c.sent, "Backlog ") != 3 || c.sent[len(c.sent)-1] != "Backlog SaveData 0" || saves(c.sent) != 1 {
 		t.Fatalf("sent %q: want the two Backlogs that were tried, then exactly one SaveData with the current value", c.sent)
 	}
 	if !errors.Is(err, cause) {
@@ -234,7 +246,7 @@ func TestApplyWritesEarlierChunksToFlashWhenALaterOneFails(t *testing.T) {
 func TestApplyReportsThatPartlyAppliedChangesAreNotSavedWhenTheSaveFailsToo(t *testing.T) {
 	secondBacklog := failNthBacklog(2, tasmota.ErrTimeout)
 	c := &fakeCmd{err: func(cmd string) error {
-		if strings.HasPrefix(cmd, "SaveData") {
+		if strings.HasPrefix(cmd, "Backlog SaveData") {
 			return tasmota.ErrUnreachable
 		}
 		return secondBacklog(cmd)
@@ -282,7 +294,7 @@ func TestApplyErrorSeparatesSentFailedAndLeftOutLines(t *testing.T) {
 		t.Errorf("nothing came after the failed step, yet: %v", msg)
 	}
 	// Topic and MqttHost would have restarted (and so saved) the device; they were left out, so the rest is saved by hand
-	if c.sent[len(c.sent)-1] != "SaveData 0" {
+	if c.sent[len(c.sent)-1] != "Backlog SaveData 0" {
 		t.Errorf("sent %q: the lines that went out must be saved", c.sent)
 	}
 }
@@ -308,7 +320,7 @@ func TestApplySavesAfterAFailureWithAContextOfItsOwn(t *testing.T) {
 				t.Fatalf("err = %v", err)
 			}
 			save := len(c.sent) - 1
-			if c.sent[save] != "SaveData 0" {
+			if c.sent[save] != "Backlog SaveData 0" {
 				t.Fatalf("sent %q: the lines that went out were not saved", c.sent)
 			}
 			if c.ctxErrs[save] != nil {
@@ -362,7 +374,7 @@ func TestApplyDoesNotSaveWhenTheRunWasCancelledBecauseTasmoFleetIsStopping(t *te
 			if err == nil || !errors.Is(err, context.Canceled) {
 				t.Fatalf("err = %v", err)
 			}
-			if count(c.sent, "Backlog ") != 2 || count(c.sent, "SaveData") != 0 || len(r.calls) != readsBefore {
+			if count(c.sent, "Backlog ") != 2 || saves(c.sent) != 0 || len(r.calls) != readsBefore {
 				t.Fatalf("sent %q, %d reads: after the stop nothing more may be sent or read", c.sent, len(r.calls))
 			}
 			for _, want := range []string{"partly sent: 8 of ", "NOT written to flash because TasmoFleet was stopping", "a restart of the device loses them"} {
@@ -382,13 +394,13 @@ func TestApplyDoesNotSaveWhenTheRunWasCancelledBecauseTasmoFleetIsStopping(t *te
 	fx := newFixer(c1, &fakeRead{vals: map[string]string{"SaveData": "0"}})
 	fx.Stop = stopped
 	err1 := fx.Apply(expired, model.Device{ID: 1}, manyLines(20))
-	if err1 == nil || count(c1.sent, "SaveData") != 0 || !strings.Contains(err1.Error(), "NOT written to flash because TasmoFleet was stopping") {
+	if err1 == nil || saves(c1.sent) != 0 || !strings.Contains(err1.Error(), "NOT written to flash because TasmoFleet was stopping") {
 		t.Fatalf("err %v, sent %q", err1, c1.sent)
 	}
 	// A run that failed for another reason is still saved: only the stop is special.
 	c := &fakeCmd{err: failNthBacklog(2, tasmota.ErrTimeout)}
 	err := newFixer(c, &fakeRead{vals: map[string]string{"SaveData": "0"}}).Apply(context.Background(), model.Device{ID: 1}, manyLines(20))
-	if err == nil || c.sent[len(c.sent)-1] != "SaveData 0" || strings.Contains(err.Error(), "stopping") {
+	if err == nil || c.sent[len(c.sent)-1] != "Backlog SaveData 0" || strings.Contains(err.Error(), "stopping") {
 		t.Fatalf("err %v, sent %q", err, c.sent)
 	}
 }
@@ -406,7 +418,7 @@ func TestApplyEndsTheSaveAtOnceWhenTasmoFleetStopsWhileItRuns(t *testing.T) {
 	c := &fakeCmd{
 		err: failNthBacklog(2, context.DeadlineExceeded),
 		hang: func(cmd string) bool {
-			if strings.HasPrefix(cmd, "SaveData") {
+			if strings.HasPrefix(cmd, "Backlog SaveData") {
 				close(saving)
 				return true
 			}
@@ -442,7 +454,7 @@ func TestApplyEndsTheSaveAtOnceWhenTasmoFleetStopsWhileItRuns(t *testing.T) {
 func TestApplySavesNothingWhenTheFirstChunkFails(t *testing.T) {
 	c := &fakeCmd{err: failNthBacklog(1, tasmota.ErrTimeout)}
 	err := newFixer(c, &fakeRead{vals: map[string]string{"SaveData": "0"}}).Apply(context.Background(), model.Device{ID: 1}, manyLines(20))
-	if !errors.Is(err, tasmota.ErrTimeout) || strings.Contains(err.Error(), "partly sent") || count(c.sent, "SaveData") != 0 || len(c.sent) != 1 {
+	if !errors.Is(err, tasmota.ErrTimeout) || strings.Contains(err.Error(), "partly sent") || saves(c.sent) != 0 || len(c.sent) != 1 {
 		t.Fatalf("err %v, sent %q", err, c.sent)
 	}
 }
@@ -458,21 +470,21 @@ func TestApplySavesPartlyAppliedChunksOfABatchWithItsOwnSave(t *testing.T) {
 		c := &fakeCmd{err: failNthBacklog(2, errors.New("refused"))}
 		r := &fakeRead{vals: map[string]string{"SaveData": "0"}}
 		err := newFixer(c, r).Apply(context.Background(), model.Device{ID: 1}, restarting)
-		if err == nil || !strings.Contains(err.Error(), "partly sent: 8 of 11") || c.sent[len(c.sent)-1] != "SaveData 0" || len(r.calls) != 1 {
+		if err == nil || !strings.Contains(err.Error(), "partly sent: 8 of 11") || c.sent[len(c.sent)-1] != "Backlog SaveData 0" || len(r.calls) != 1 {
 			t.Fatalf("err %v, sent %q, reads %v", err, c.sent, r.calls)
 		}
 	})
 	t.Run("SaveData value unreadable", func(t *testing.T) {
 		c := &fakeCmd{err: failNthBacklog(2, errors.New("refused"))}
 		err := newFixer(c, &fakeRead{errs: []error{tasmota.ErrTimeout}}).Apply(context.Background(), model.Device{ID: 1}, saving)
-		if err == nil || !strings.Contains(err.Error(), "NOT written to flash") || count(c.sent, "SaveData") != 0 {
+		if err == nil || !strings.Contains(err.Error(), "NOT written to flash") || saves(c.sent) != 0 {
 			t.Fatalf("err %v, sent %q", err, c.sent)
 		}
 	})
 	t.Run("SaveData value not reported", func(t *testing.T) {
 		c := &fakeCmd{err: failNthBacklog(2, errors.New("refused"))}
 		err := newFixer(c, &fakeRead{}).Apply(context.Background(), model.Device{ID: 1}, saving)
-		if err == nil || !strings.Contains(err.Error(), "NOT written to flash") || count(c.sent, "SaveData") != 0 {
+		if err == nil || !strings.Contains(err.Error(), "NOT written to flash") || saves(c.sent) != 0 {
 			t.Fatalf("err %v, sent %q: no SaveData without a value to re-send", err, c.sent)
 		}
 	})
@@ -483,7 +495,7 @@ func TestApplySavesPartlyAppliedChunksOfABatchWithItsOwnSave(t *testing.T) {
 		c := &fakeCmd{err: failNthBacklog(2, errors.New("refused"))}
 		r := &fakeRead{}
 		err := newFixer(c, r).Apply(context.Background(), model.Device{ID: 1}, lines)
-		if err == nil || !strings.Contains(err.Error(), "written to flash") || count(c.sent, "SaveData") != 0 || len(r.calls) != 0 {
+		if err == nil || !strings.Contains(err.Error(), "written to flash") || saves(c.sent) != 0 || len(r.calls) != 0 {
 			t.Fatalf("err %v, sent %q, reads %v", err, c.sent, r.calls)
 		}
 	})
@@ -502,7 +514,7 @@ func TestApplyToleratesTheRestartCuttingTheReply(t *testing.T) {
 // reported, not swallowed.
 func TestApplyReportsAFailedSave(t *testing.T) {
 	c := &fakeCmd{err: func(cmd string) error {
-		if strings.HasPrefix(cmd, "SaveData") {
+		if strings.HasPrefix(cmd, "Backlog SaveData") {
 			return tasmota.ErrTimeout
 		}
 		return nil
@@ -570,7 +582,7 @@ func TestApplyDoesNotTreatSetOption55OnAsARestart(t *testing.T) {
 		t.Fatalf("err %v, want the timeout reported", err)
 	}
 	c = &fakeCmd{}
-	if err := newFixer(c, &fakeRead{vals: map[string]string{"SaveData": "0"}}).Apply(context.Background(), model.Device{}, []string{"SetOption55 1"}); err != nil || count(c.sent, "SaveData") != 1 {
+	if err := newFixer(c, &fakeRead{vals: map[string]string{"SaveData": "0"}}).Apply(context.Background(), model.Device{}, []string{"SetOption55 1"}); err != nil || saves(c.sent) != 1 {
 		t.Fatalf("err %v, sent %q, want one SaveData", err, c.sent)
 	}
 	c = &fakeCmd{err: func(string) error { return tasmota.ErrTimeout }}
@@ -621,14 +633,14 @@ func TestApplyLeavesOutWhatCouldCutAnMQTTOnlyDeviceOff(t *testing.T) {
 		t.Errorf("text: %v", err)
 	}
 	// Topic and MqttHost would have restarted (and so saved) the device; they were left out, so it is saved by hand.
-	want := []string{"Backlog Topic other; PowerOnState 0; MqttHost 10.0.0.9", "Backlog PowerOnState 0", "SaveData 0"}
+	want := []string{"Backlog Topic other; PowerOnState 0; MqttHost 10.0.0.9", "Backlog PowerOnState 0", "Backlog SaveData 0"}
 	if !reflect.DeepEqual(c.sent, want) {
 		t.Fatalf("sent %q, want %q: the chunk of always, then what the refusal left of it, then the save", c.sent, want)
 	}
 	// nothing but cut-off lines: nothing is saved and the result says nothing was applied
 	c2 := &fakeCmd{err: func(string) error { return transport.ErrCutOff }}
 	err = newFixer(c2, r).Apply(context.Background(), model.Device{ID: 1}, []string{"Topic other"})
-	if !errors.As(err, &sk) || sk.AppliedAny() || count(c2.sent, "SaveData") != 0 {
+	if !errors.As(err, &sk) || sk.AppliedAny() || saves(c2.sent) != 0 {
 		t.Fatalf("err = %v, sent %q", err, c2.sent)
 	}
 	// over HTTP the same lines go out exactly as they always did: the chunks of chunks(), nothing reordered

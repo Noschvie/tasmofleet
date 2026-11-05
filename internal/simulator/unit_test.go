@@ -87,7 +87,8 @@ func TestUnknownReplyShape(t *testing.T) {
 	if got, _, _ := cmWith(d, "", 3e9, nil); got != `{"WARNING":"Enter command cmnd="}` {
 		t.Error(got)
 	}
-	if got := cm(t, d, "Backlog Power ON; Power"); got != `{"POWER":"ON","POWER":"ON"}` {
+	// A Backlog answers nothing itself (CmndBacklog queues and clears the reply); see backlog_test.go.
+	if got := cm(t, d, "Backlog Power ON; Power"); got != `{}` {
 		t.Error(got)
 	}
 }

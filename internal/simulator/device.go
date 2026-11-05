@@ -77,28 +77,30 @@ type simDevice struct {
 	wgMu    sync.Mutex
 	closing bool
 
-	mu            sync.Mutex
-	phase         Phase
-	phaseCh       chan struct{}
-	history       []PhaseChange
-	image         string // image name: tasmota, tasmota32, minimal, safeboot, lite ...
-	version       string
-	persisted     settings
-	runtime       settings
-	otaLoader     bool // RTC memory: survives the reboot into minimal
-	bootAt        time.Time
-	uptimeBase    int
-	boots         int // reboots since creation
-	mqttCount     int
-	reason        string
-	nextReason    string // the RestartReason the next boot reports instead of the default (Restart)
-	relays        []bool // relay states; Tasmota keeps them in RTC RAM across a soft restart only
-	cmds          []string
-	faults        []Fault
-	armed         []Fault // faults armed by the Upgrade that started the current OTA
-	attempts      int     // download attempts of the latest OTA
-	nextImage     *flashed
-	restartQueued bool // a settings change already scheduled the restart
+	mu             sync.Mutex
+	backlog        []string // queued Backlog commands (cmd.go)
+	backlogRunning bool
+	phase          Phase
+	phaseCh        chan struct{}
+	history        []PhaseChange
+	image          string // image name: tasmota, tasmota32, minimal, safeboot, lite ...
+	version        string
+	persisted      settings
+	runtime        settings
+	otaLoader      bool // RTC memory: survives the reboot into minimal
+	bootAt         time.Time
+	uptimeBase     int
+	boots          int // reboots since creation
+	mqttCount      int
+	reason         string
+	nextReason     string // the RestartReason the next boot reports instead of the default (Restart)
+	relays         []bool // relay states; Tasmota keeps them in RTC RAM across a soft restart only
+	cmds           []string
+	faults         []Fault
+	armed          []Fault // faults armed by the Upgrade that started the current OTA
+	attempts       int     // download attempts of the latest OTA
+	nextImage      *flashed
+	restartQueued  bool // a settings change already scheduled the restart
 	// uploadType is Web.upload_file_type: GET /up, /rs and /ufsd set it, a finished /u2 upload
 	// clears it. A POST the Referer check drops leaves it as it was.
 	uploadType uploadKind

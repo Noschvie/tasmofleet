@@ -166,7 +166,7 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 		}
 	}
 	if keep != "" {
-		if _, err := f.Client.Command(ctx, t, "SaveData "+keep); err != nil {
+		if _, err := f.Client.Command(ctx, t, saveCommand(keep)); err != nil {
 			return fmt.Errorf("the settings are applied but could not be written to flash: %w", err)
 		}
 	}
@@ -275,11 +275,17 @@ func (f *Fixer) saveKeeping(ctx context.Context, d model.Device, t tasmota.Targe
 			return errors.New("the current SaveData value could not be read")
 		}
 	}
-	if _, err := f.Client.Command(ctx, t, "SaveData "+keep); err != nil {
+	if _, err := f.Client.Command(ctx, t, saveCommand(keep)); err != nil {
 		return err
 	}
 	return nil
 }
+
+// saveCommand is the save that follows the chunks. Tasmota runs a Backlog from a queue, one
+// command per SetOption34 delay, but a command sent on its own at once: a plain "SaveData" would
+// write flash before the queued lines ran and lose them at the next restart (#559). Queued
+// behind them (the queue is first in, first out) it runs after the last one.
+func saveCommand(keep string) string { return "Backlog SaveData " + keep }
 
 // keyNames lists the settings of the lines by name.
 func keyNames(lines []fixLine) string {
@@ -392,34 +398,54 @@ func (f *Fixer) Verify(ctx context.Context, d model.Device, lines []string) (map
 	if attempts < 1 {
 		attempts = 6
 	}
-	var got map[string]string
-	for i := 0; ; i++ {
-		got, err = f.Reader.ReadKeys(ctx, d.ID, keys)
-		if err == nil {
-			break
+	// Over HTTP the reply to a Backlog comes before the device has run it: the first read can show
+	// the old value of every line but the first (#559). A mismatch is therefore read again a few
+	// times before it counts; the last read wins. A value the device really refuses costs
+	// settleReads seconds, no more.
+	for settle := 0; ; settle++ {
+		var got map[string]string
+		for i := 0; ; i++ {
+			got, err = f.Reader.ReadKeys(ctx, d.ID, keys)
+			if err == nil {
+				break
+			}
+			if i+1 >= attempts {
+				return got, fmt.Errorf("the settings were sent but could not be read back: %w", err)
+			}
+			if err := f.wait(ctx, 5*time.Second); err != nil {
+				return got, err
+			}
 		}
-		if i+1 >= attempts {
-			return got, fmt.Errorf("the settings were sent but could not be read back: %w", err)
+		var bad []string
+		stale := false // a value differs (rather than being absent): the queue may not have run yet
+		for _, l := range parsed {
+			have, ok := got[l.key]
+			switch {
+			case !ok:
+				bad = append(bad, l.key+" is not reported by the device")
+			case !equal(have, l.value):
+				bad = append(bad, fmt.Sprintf("%s is %s, expected %s", l.key, have, l.value))
+				stale = true
+			}
 		}
-		if err := f.wait(ctx, 5*time.Second); err != nil {
+		if len(bad) == 0 {
+			return got, nil
+		}
+		if !stale || settle >= settleReads {
+			return got, errors.New("after applying: " + strings.Join(bad, "; "))
+		}
+		if err := f.wait(ctx, settleWait); err != nil {
 			return got, err
 		}
 	}
-	var bad []string
-	for _, l := range parsed {
-		have, ok := got[l.key]
-		switch {
-		case !ok:
-			bad = append(bad, l.key+" is not reported by the device")
-		case !equal(have, l.value):
-			bad = append(bad, fmt.Sprintf("%s is %s, expected %s", l.key, have, l.value))
-		}
-	}
-	if len(bad) > 0 {
-		return got, errors.New("after applying: " + strings.Join(bad, "; "))
-	}
-	return got, nil
 }
+
+// settleReads and settleWait bound the wait for a Backlog to run: Tasmota queues at most 30
+// entries and runs one per 200 ms (SetOption34), so a few seconds cover any plan; a chunk is 8.
+const (
+	settleReads = 6
+	settleWait  = time.Second
+)
 
 func (f *Fixer) wait(ctx context.Context, d time.Duration) error {
 	if f.Wait != nil {

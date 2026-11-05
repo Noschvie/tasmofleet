@@ -82,7 +82,7 @@ func TestFixerAppliesAndVerifiesAGenericRule(t *testing.T) {
 	if err := f.Apply(context.Background(), d, []string{"LedState 3"}); err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"Backlog LedState 3", "SaveData 0"}; !reflect.DeepEqual(c.sent, want) {
+	if want := []string{"Backlog LedState 3", "Backlog SaveData 0"}; !reflect.DeepEqual(c.sent, want) {
 		t.Fatalf("sent %q, want %q", c.sent, want)
 	}
 	if _, err := f.Verify(context.Background(), d, []string{"LedState 3"}); err != nil {
@@ -123,7 +123,7 @@ func TestOtaUrlRuleDetectsATasmoAdminUrlAndMakeCompliantSetsIt(t *testing.T) {
 	if err := newFixer(c, r).Apply(context.Background(), devs[0], plans[0].Lines()); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(c.sent, []string{"Backlog " + want, "SaveData 0"}) {
+	if !reflect.DeepEqual(c.sent, []string{"Backlog " + want, "Backlog SaveData 0"}) {
 		t.Fatalf("sent %q", c.sent)
 	}
 }

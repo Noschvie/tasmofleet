@@ -33,7 +33,18 @@ func newPolicyIT(t *testing.T) *policyIT {
 		Timeout:         3 * time.Second,
 	})
 	p := &policyIT{itEnv: e, client: client, rd: settings.New(settings.Options{Devices: e.st, Client: client})}
-	fixer := &policy.Fixer{Client: client, Reader: p.rd, Wait: func(context.Context, time.Duration) error { return nil }}
+	// The simulator runs a Backlog like Tasmota (one line per scaled SetOption34 delay), so the Fixer's
+	// waits are nominal durations on the same scaled clock: a retry waits as long, in simulated time,
+	// as the queue needs, whatever the load (#559).
+	wait := func(ctx context.Context, d time.Duration) error {
+		select {
+		case <-e.clk.After(d):
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	fixer := &policy.Fixer{Client: client, Reader: p.rd, Wait: wait}
 	p.eng = NewEngine(Options{Machine: e.machine, MaxParallel: 2, Audit: e.audits, Policy: itApplier{fixer}}, e.st, e.st, nil, nil, nil, e.clk, e.log)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -139,8 +150,8 @@ func TestITMakeCompliantSavesOnceAndKeepsTheDeviceRunning(t *testing.T) {
 	}
 
 	sent := p.ctrl[dev].Commands()[before:]
-	if count(sent, "Backlog") != 1 || count(sent, "SaveData") != 1 {
-		t.Fatalf("want one Backlog and exactly one SaveData, device saw %q", sent)
+	if count(sent, "Backlog") != 2 || count(sent, "Backlog SaveData") != 1 || count(sent, "SaveData") != 0 {
+		t.Fatalf("want one Backlog and exactly one SaveData queued behind it, device saw %q", sent)
 	}
 	if p.ctrl[dev].Boots() != boots {
 		t.Fatal("no setting here needs a restart; the device must not reboot")

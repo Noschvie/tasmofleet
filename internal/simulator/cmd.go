@@ -153,19 +153,21 @@ func (d *simDevice) execLocked(cmd string) ([]byte, []outMsg) {
 		if data == "" {
 			return result(d.render("backlog-empty.json", v))
 		}
-		// Backlog itself answers nothing (CmndBacklog: ResponseClear). Each queued command
-		// runs later and publishes its own messages; the merged body is what /cm returns.
-		var parts [][]byte
-		var out []outMsg
+		// CmndBacklog only queues the commands and answers nothing (ResponseClear); the main
+		// loop runs them one per SetOption34 delay (Backlog0/2: none), so a /cm reply comes
+		// back before they ran and each one publishes its own messages when it does.
+		var segs []string
 		for _, seg := range strings.Split(data, ";") {
-			if strings.TrimSpace(seg) == "" {
-				continue
+			if strings.TrimSpace(seg) != "" {
+				segs = append(segs, seg)
 			}
-			b, msgs := d.execLocked(seg)
-			parts = append(parts, b)
-			out = append(out, msgs...)
 		}
-		return mergeObjects(parts...), out
+		delay := backlogDelaySec
+		if hasIdx && idx&1 == 0 {
+			delay = 0
+		}
+		d.queueBacklogLocked(segs, delay)
+		return mergeObjects(), nil
 	}
 	_ = name
 	if f, ok := queryFiles[base]; ok {
@@ -330,4 +332,41 @@ func (d *simDevice) readSettingLocked(base string) []byte {
 	}
 	zeros := strings.TrimSuffix(strings.Repeat("0,", 8), ",")
 	return []byte(`{"PulseTime":{"Set":[` + strings.Join(set, ",") + `],"Remaining":[` + zeros + `]}}`)
+}
+
+// backlogDelaySec is SetOption34's default (200 ms) in nominal seconds. The simulator does not
+// read the setting itself.
+const backlogDelaySec = 0.2
+
+// queueBacklogLocked appends commands to the device's backlog and starts the runner if it is
+// idle. The first command runs at once (Tasmota sets backlog_timer to now), the following ones
+// one delay apart.
+func (d *simDevice) queueBacklogLocked(segs []string, delaySec float64) {
+	d.backlog = append(d.backlog, segs...)
+	if d.backlogRunning {
+		return
+	}
+	d.backlogRunning = true
+	if !d.spawn(func() { d.runBacklog(delaySec) }) {
+		d.backlogRunning = false
+		d.backlog = nil
+	}
+}
+
+func (d *simDevice) runBacklog(delaySec float64) {
+	for {
+		d.mu.Lock()
+		seg := d.backlog[0]
+		d.backlog = d.backlog[1:]
+		_, out := d.execLocked(seg)
+		more := len(d.backlog) > 0
+		if !more {
+			d.backlogRunning = false
+		}
+		d.mu.Unlock()
+		d.publishAll(out)
+		if !more || !d.sleep(delaySec) {
+			return
+		}
+	}
 }

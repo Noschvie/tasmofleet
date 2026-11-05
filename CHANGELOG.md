@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Fixed
+
+- Make compliant no longer reports settings as failed that the device applied, and no longer saves them to flash too early. Tasmota runs a `Backlog` from a queue, one line per `SetOption34` delay (200 ms), and over HTTP it answers before the queue has run. The read-back right after the send therefore saw the old value of every line but the first ("SetOption0 is 0, expected 1; SaveData is 0, expected 1") on devices that had applied all of them, and "Retry failed" passed only because the values were already set. A value that differs is now read again up to six times, one second apart, before the job fails (the last read counts, so a value the device really refuses still fails, after about six seconds). The save that follows the changes (sent when the change has no `SaveData` of its own and does not restart the device) was a plain command, which Tasmota runs at once, before the queued lines: the later lines were written to flash after the save and lost at the next restart on a device with `SaveData 0`. It is now queued behind the lines (`Backlog SaveData <value>`). The simulator now runs a Backlog like Tasmota (#559)
+
 ### Security
 
 - GPIO templates: the `Template` command's `NAME` and `ARCH` are now encoded as JSON strings instead of concatenated into the command (CodeQL `go/unsafe-quoting`). Accepted names produce the same command byte for byte; names with a quote or backslash are still refused (#561)
