@@ -188,15 +188,20 @@ func (im *Importer) Plan(ctx context.Context, devicesCSV, myConfig, keyFile io.R
 	if err != nil {
 		return plan, err // the message never carries the key
 	}
-	if len(devs)+len(rowErrs) > MaxRows || errors.Is(errors.Join(rowErrs...), tasmoadmin.ErrTooManyRecords) {
-		return plan, fmt.Errorf("%w: more than %d rows (limit %d)", ErrTooMany, MaxRows, MaxRows)
-	}
+	// A row counts once against the limit: a kept device (also one with a non-fatal problem such
+	// as an encrypted password without the key file, which is in devs and in rowErrs) or a
+	// rejected row, never both and never once per problem.
 	rejected := map[int]bool{}
 	for _, e := range rowErrs {
 		var line *tasmoadmin.RowError
 		if errors.As(e, &line) && !errors.Is(e, tasmoadmin.ErrBadPort) && !errors.Is(e, tasmoadmin.ErrEncryptedNoKey) && !errors.Is(e, tasmoadmin.ErrDecrypt) {
 			rejected[line.Line] = true
 		}
+	}
+	if len(devs)+len(rejected) > MaxRows || errors.Is(errors.Join(rowErrs...), tasmoadmin.ErrTooManyRecords) {
+		return plan, fmt.Errorf("%w: more than %d rows (limit %d)", ErrTooMany, MaxRows, MaxRows)
+	}
+	for _, e := range rowErrs {
 		if len(plan.Errors) >= MaxReportedErrors {
 			plan.ErrorsOmitted++
 			continue

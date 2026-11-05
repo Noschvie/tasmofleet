@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/nofuturekid/tasmofleet/internal/inventory"
 	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/tasmoadmin"
 )
 
 type fakeInv struct {
@@ -119,6 +121,54 @@ func TestPlanRejectsOversizeInputs(t *testing.T) {
 	}
 	if _, err := im.Plan(context.Background(), rd(b.String()), nil, nil, false); !errors.Is(err, ErrTooMany) {
 		t.Fatalf("rows: %v", err)
+	}
+}
+
+// encRows is n distinct rows whose encrypted password cannot be read without the key file; badPort
+// adds a second non-fatal problem to each (a port outside 1..65535).
+func encRows(t *testing.T, n int, badPort bool) string {
+	t.Helper()
+	key := make([]byte, 32)
+	_, _ = rand.Read(key)
+	port := "80"
+	if badPort {
+		port = "99999"
+	}
+	var b strings.Builder
+	for i := 0; i < n; i++ {
+		fmt.Fprintf(&b, "%d,\"d%d\",10.%d.%d.1,admin,%s,bulb_1,1,1,0,0,1,%s,\"d%d\",0,t%d,0\n", i, i, i/250, i%250, encCell(t, key, "pw"), port, i, i)
+	}
+	return b.String()
+}
+
+// Why (#500): the row limit protects against huge files, not against encrypted passwords. A row
+// with non-fatal problems is one row however many problems it has; counting results instead of
+// rows refused 501 encrypted rows with a false "more than 1000 rows" and hid the real cause (the
+// missing key file) from the person who forgot it.
+func TestPlanCountsEveryRowOnceAgainstTheRowLimit(t *testing.T) {
+	im := New(Options{Inventory: &fakeInv{}})
+	for name, c := range map[string]struct {
+		rows    int
+		badPort bool
+	}{
+		"501 encrypted rows without key file": {501, false},
+		"1000 rows with two problems each":    {MaxRows, true},
+	} {
+		p, err := im.Plan(context.Background(), rd(encRows(t, c.rows, c.badPort)), nil, nil, false)
+		if err != nil {
+			t.Fatalf("%s: refused: %v", name, err)
+		}
+		if len(p.Rows) != c.rows || p.Rejected != 0 {
+			t.Errorf("%s: rows=%d rejected=%d, want %d rows and none rejected", name, len(p.Rows), p.Rejected, c.rows)
+		}
+		if len(p.Errors) != MaxReportedErrors || p.ErrorsOmitted == 0 || !slices.ContainsFunc(p.Errors, func(e tasmoadmin.RowError) bool { return errors.Is(e.Err, tasmoadmin.ErrEncryptedNoKey) }) {
+			t.Errorf("%s: the per-row notes must name the missing key: %d notes, %d omitted", name, len(p.Errors), p.ErrorsOmitted)
+		}
+	}
+	// a file that really has more than MaxRows rows is still refused, and says so
+	_, err := im.Plan(context.Background(), rd(encRows(t, MaxRows+1, false)), nil, nil, false)
+	if !errors.Is(err, ErrTooMany) || !strings.Contains(err.Error(), "more than 1000 rows") {
+		t.Fatalf("1001 rows: %v, want ErrTooMany", err)
 	}
 }
 

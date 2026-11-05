@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Fixed
+
+- Import from TasmoAdmin: a row with a problem that does not reject it (an encrypted password without the key file, a bad port) counts once against the 1000-row limit instead of once per problem, so a `devices.csv` with 501 to 1000 encrypted rows is no longer refused with a false "more than 1000 rows" (#500)
+
 ## 0.31.0 "Cape Spear" (2026-11-05)
 
 ### Changed
