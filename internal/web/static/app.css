@@ -14611,6 +14611,7 @@ button.pol-chip-x {
   .wn-stacks .cstacks {
     display: flex;
     flex-direction: column;
+    align-items: stretch;
     columns: auto;
     gap: var(--sp-16);
   }

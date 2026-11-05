@@ -50,7 +50,7 @@ for (const width of [1280, 1000, 600, 375]) {
       await page.setExtraHTTPHeaders(adam);
       await page.setViewportSize({ width, height: 900 });
       await page.goto(app.url + path);
-      await expect(page.locator(".scard:visible, .about-card:visible, .devcard:visible, .ulist:visible, .wn-rel:visible").first()).toBeVisible();
+      await expect(page.locator(".scard:visible, .about-card:visible, .devcard:visible, .ulist:visible, .wn-rel:visible, .ucard:visible").first()).toBeVisible();
       expect(await cardStackGaps(page, maxGap)).toEqual([]);
     });
   }

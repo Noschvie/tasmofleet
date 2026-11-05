@@ -55,13 +55,21 @@ for (const width of [768, 1024]) {
     await page.setExtraHTTPHeaders({ "X-authentik-username": "olivia", "X-authentik-groups": "ops" });
     await page.setViewportSize({ width, height: 900 });
     await page.goto(app.url + "/whats-new");
-    const m = await page.evaluate(() => ({
-      you: document.querySelector(".wn-you")!.getBoundingClientRect().top,
-      tops: [...document.querySelectorAll(".wn-rel")].map((e) => e.getBoundingClientRect().top),
-    }));
-    expect(m.tops.length).toBeGreaterThan(2);
-    for (let i = 1; i < m.tops.length; i++) expect(m.tops[i], `release ${i} lies below release ${i - 1}`).toBeGreaterThan(m.tops[i - 1]);
-    expect(m.you).toBeLessThan(m.tops[0]);
+    const m = await page.evaluate(() => {
+      const r = (e: Element) => e.getBoundingClientRect();
+      return {
+        you: r(document.querySelector(".wn-you")!),
+        jump: r(document.querySelector(".wn-jump")!),
+        rels: [...document.querySelectorAll(".wn-rel")].map((e) => ({ top: r(e).top, width: r(e).width })),
+        column: r(document.querySelector(".wn-stacks .cstacks")!).width,
+      };
+    });
+    expect(m.rels.length).toBeGreaterThan(2);
+    for (let i = 1; i < m.rels.length; i++) expect(m.rels[i].top, `release ${i} lies below release ${i - 1}`).toBeGreaterThan(m.rels[i - 1].top);
+    expect(m.you.top, "You are on comes first").toBeLessThan(m.jump.top);
+    expect(m.jump.top, "the jump list comes before the releases").toBeLessThan(m.rels[0].top);
+    // one column: every card as wide as the column, not as its content
+    expect([m.you.width, m.jump.width, m.rels[0].width]).toEqual([m.column, m.column, m.column]);
   });
 }
 

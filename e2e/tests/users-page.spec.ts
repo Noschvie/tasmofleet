@@ -146,10 +146,7 @@ for (const width of [768, 1024]) {
   test(`the user list takes the full content width at ${width}px`, async ({ page }) => {
     await loginAs("admin");
     await page.setViewportSize({ width, height: 900 });
-    await page.goto(app.url + "/");
-    await page.getByRole("link", { name: /Sign in with SSO/ }).or(page.getByRole("button", { name: /Sign in with SSO/ })).first().click({ timeout: 3000 }).catch(() => {}); // only when the login page shows
-    await expect(page.locator("summary.um-btn").getByText("adam")).toBeVisible();
-    await page.goto(app.url + "/users");
+    await page.goto(app.url + "/login/sso?next=%2Fusers"); // a local account may exist (the test above adds one): no automatic redirect to the IdP
     await expect(page.locator(".users-list")).toBeVisible();
     const w = await page.evaluate(() => ({
       list: document.querySelector(".users-list")!.getBoundingClientRect().width,

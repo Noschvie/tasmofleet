@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -179,5 +180,33 @@ func TestSettingsTabsFillTheThreeColumns(t *testing.T) {
 		if sum != 3 {
 			t.Errorf("tab %s: spans %v add up to %d of 3 columns", tab.Slug, tab.Spans, sum)
 		}
+	}
+}
+
+// Why: from 1200 px the narrow stack stays in view while the page scrolls, so it must stay short as the
+// changelog grows: the newest 12 releases are links, every older one sits behind "Older releases (n)".
+func TestWhatsNewJumpListShowsTheNewestTwelve(t *testing.T) {
+	var md strings.Builder
+	for i := 13; i >= 1; i-- {
+		fmt.Fprintf(&md, "## 1.%d.0 (2026-01-%02d)\n\n### Added\n\n- x\n\n", i, i)
+	}
+	p := whatsNewView{Installed: "1.13.0"}
+	for _, r := range changelog.Parse(md.String()) {
+		p.Releases = append(p.Releases, whatsNewRelease{Release: r})
+	}
+	var b strings.Builder
+	if err := whatsNewPage(p).Render(context.Background(), &b); err != nil {
+		t.Fatal(err)
+	}
+	jump := stackOf(t, b.String(), "cstack")
+	i := strings.Index(jump, `<details class="wn-older">`)
+	if i < 0 {
+		t.Fatal("13 releases and no Older releases")
+	}
+	if n := strings.Count(jump[:i], `<a href="#v`); n != 12 {
+		t.Errorf("%d releases before Older releases, want the newest 12", n)
+	}
+	if !strings.Contains(jump[i:], "Older releases (1)") || !strings.Contains(jump[i:], `<a href="#v1.1.0">`) {
+		t.Errorf("the oldest release is not behind Older releases (1): %s", jump[i:])
 	}
 }
