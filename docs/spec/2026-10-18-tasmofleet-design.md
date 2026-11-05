@@ -626,8 +626,10 @@ is read again (`Prober.ReadBroker`, stored by `store.UpdateMQTTBroker`, which wr
 three columns and keeps `ours` when the read only says `other`) after every restart the health
 tracker records, after an `MqttHost`/`MqttPort` command sent through TasmoFleet (console, bulk
 command, settings, Make compliant) and about every six hours for a device whose HTTP poll works.
-One device at a time, under the device lock (skipped while a job holds the device), never
-`Status 0`.
+A requested read waits for that too, and none goes to minimal or safeboot firmware. One device at a
+time, under the device lock (skipped while a job or a typed firmware update holds the device), never
+`Status 0`. A read that fails half way, or whose `Status 6` says nothing about MQTT (Unknown), stores
+nothing.
 
 ### 6.5 Commands over MQTT (package `mqttcmd`, #256)
 

@@ -181,8 +181,8 @@ func (a *runtime) run(ctx context.Context) error {
 	}
 	a.goBG("mqtt-cmd", func() error { <-bg.Done(); a.mqttCmd.Close(); return nil }) // wakes commands in flight
 	// The broker a device reports to is re-read after every restart the tracker records (#598); the
-	// reader itself is started below, once the fleet list it needs exists.
-	a.brokerHost = newBrokerHostReader(nil, nil, svc.Prober.ReadBroker, deviceGuard{locks: a.deviceLocks(), jobs: svc.Store}.enter, a.log)
+	// reader itself is started below (startBrokerHost), once the fleet list and the firmware holds exist.
+	a.brokerHost = newBrokerHostReader(nil, nil, svc.Prober.ReadBroker, nil, a.log)
 	a.tracker = health.New(a.healthDeps(), health.Options{
 		StaleAfter: staleAfter(cfg.TelePeriod), PollInterval: cfg.PollInterval,
 	})
@@ -195,9 +195,6 @@ func (a *runtime) run(ctx context.Context) error {
 		a.svc.Prober.ReadNet, a.log)
 	a.svc.Prober.ReadNetLater = nf.later
 	a.goBG("netfacts", func() error { nf.run(bg); return nil })
-	a.brokerHost.list = a.fw.list(a.svc.Inventory.List)
-	a.brokerHost.httpUp = func(id model.DeviceID) bool { return brokerHTTPUp(a.tracker.Get(id), time.Now()) }
-	a.goBG("broker-host", func() error { a.brokerHost.run(bg); return nil })
 	// Firmware version over MQTT for devices on our broker that HTTP did not identify (#87).
 	mid := newMQTTIdentity(a.bus, a.mqttCmd, a.svc.Inventory.List, a.svc.Store, a.svc.Audit,
 		func(id model.DeviceID) { a.svc.Prober.announce(id) }, a.log)
@@ -216,6 +213,7 @@ func (a *runtime) run(ctx context.Context) error {
 	a.fwReach = newFWReachLearner(a.svc.Store, a.svc.Audit, clock.Real{}, a.log) // before OTA and restore: both report to it
 	a.setupDeviceCmd()                                                           // before the OTA engine: its "Send command" jobs run through it
 	a.startFWRecheck(bg)                                                         // needs a.fwHolds, set by setupDeviceCmd
+	a.startBrokerHost(bg)                                                        // needs a.fwHolds too
 	if err := a.setupSettings(); err != nil {                                    // before the OTA engine: it runs the policy jobs through the applier built here
 		return err
 	}
@@ -295,7 +293,6 @@ func (a *runtime) run(ctx context.Context) error {
 	return errors.Join(runErr, err)
 }
 
-// goBG runs f in the background; an error is logged (the process keeps serving).
 // healthDeps is what the health tracker is built from. Its restart history goes through bootWatch, so
 // every restart it records also asks for a re-read of the device's broker (#598).
 func (a *runtime) healthDeps() health.Deps {
@@ -306,6 +303,7 @@ func (a *runtime) healthDeps() health.Deps {
 	}
 }
 
+// goBG runs f in the background; an error is logged (the process keeps serving).
 func (a *runtime) goBG(name string, f func() error) {
 	a.bgWG.Go(func() {
 		if err := f(); err != nil && !errors.Is(err, context.Canceled) {

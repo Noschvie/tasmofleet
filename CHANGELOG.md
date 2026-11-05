@@ -8,7 +8,7 @@ always upgrade automatically.
 
 ### Fixed
 
-- The broker a device reports to is kept current. TasmoFleet used to store it only when it probed the device, so a device moved to another broker outside TasmoFleet (its own web page or console, a restored config that points to an old broker) kept the old one and the "Other broker" hint never appeared until someone clicked Refresh identity. The broker is now re-read after every restart TasmoFleet notices, after an MqttHost or MqttPort command sent through TasmoFleet (console, bulk command, settings, Make compliant), and about every six hours for each online device, one small Status 6 read at a time and never while a restore, update or backup works on the device, so the "Other broker" hint follows a move made outside TasmoFleet or by a restore without Refresh identity (#598)
+- The broker a device reports to is kept current. TasmoFleet used to store it only when it probed the device, so a device moved to another broker outside TasmoFleet (its own web page or console, a restored config that points to an old broker) kept the old one and the "Other broker" hint never appeared until someone clicked Refresh identity. For each device TasmoFleet reaches over HTTP, the broker is now re-read after every restart TasmoFleet notices, after an MqttHost or MqttPort command sent through TasmoFleet (console, bulk command, settings, Make compliant), and about every six hours, one small Status 6 read at a time and never while a restore, update (one typed in the console included) or backup works on the device; a read that fails or says nothing about MQTT changes nothing, so the "Other broker" hint follows a move made outside TasmoFleet or by a restore without Refresh identity (#598)
 
 ## 0.29.0 "Portland Head" (2026-11-05)
 

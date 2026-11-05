@@ -29,7 +29,8 @@ import (
 //     saw (the tracker was down, the device was offline for a while).
 //
 // One device at a time on the whole process, and only while nobody else works on the device: the
-// read takes the device lock like any writer and is skipped while a job holds the device.
+// read takes the device lock like any writer and is skipped while a job holds the device or a firmware
+// update typed in the console is still flashing it (backupGuard, as for a scheduled backup).
 const (
 	// brokerHostEvery: how often an online device's broker is read without a reason. A move outside
 	// TasmoFleet is rare and a restart already triggers a read, so this only has to catch the rest;
@@ -62,8 +63,8 @@ type brokerHostReader struct {
 	// and must not hold the lock of a device it cannot reach.
 	httpUp func(model.DeviceID) bool
 	read   func(context.Context, model.DeviceID) error
-	// enter takes the device lock for the read and refuses while a job holds the device
-	// (deviceGuard.enter); the caller calls the returned release.
+	// enter takes the device lock for the read and refuses while a job or a typed firmware update holds
+	// the device (runtime.brokerReadGuard); the caller calls the returned release.
 	enter func(context.Context, model.DeviceID, string) (func(), error)
 	now   func() time.Time
 	log   *slog.Logger
@@ -117,17 +118,29 @@ func (r *brokerHostReader) want(id model.DeviceID) {
 }
 
 // pass reads the devices somebody asked for whose time has come, then at most one online device
-// whose periodic read is due.
+// whose periodic read is due. Both only for a device the read can reach (readable): a requested read
+// waits for that, without sending anything, until it is given up.
 func (r *brokerHostReader) pass(ctx context.Context) {
 	now := r.now()
+	devs, err := r.list(ctx)
+	if err != nil {
+		r.log.Warn("broker host: list devices", "err", err)
+		return
+	}
+	listed := make(map[model.DeviceID]model.Device, len(devs))
+	for _, d := range devs {
+		listed[d.ID] = d
+	}
 	for id, w := range r.pending {
 		if ctx.Err() != nil {
 			return
 		}
+		d, ok := listed[id]
 		switch {
-		case now.After(w.until):
+		case !ok || now.After(w.until): // deleted, or waited long enough: the periodic read catches up
 			delete(r.pending, id)
-		case !now.Before(w.due):
+		case now.Before(w.due) || !r.readable(d): // not yet, or nothing the read could reach now
+		default:
 			switch err := r.readOne(ctx, id); {
 			case err == nil:
 				delete(r.pending, id)
@@ -137,16 +150,11 @@ func (r *brokerHostReader) pass(ctx context.Context) {
 			} // busy: asked again at the next tick, nothing was sent
 		}
 	}
-	devs, err := r.list(ctx)
-	if err != nil {
-		r.log.Warn("broker host: list devices", "err", err)
-		return
-	}
 	for _, d := range devs {
 		if ctx.Err() != nil {
 			return
 		}
-		if _, asked := r.pending[d.ID]; asked || policy.LimitedFirmware(d.Identity.Variant) || !r.httpUp(d.ID) {
+		if _, asked := r.pending[d.ID]; asked || !r.readable(d) {
 			continue
 		}
 		if due, ok := r.next[d.ID]; ok && now.Before(due) {
@@ -156,6 +164,14 @@ func (r *brokerHostReader) pass(ctx context.Context) {
 			return // one periodic read per pass; a busy device does not use up the turn
 		}
 	}
+}
+
+// readable says whether the read can reach d. It is HTTP (Prober.ReadBroker), so only a device the HTTP
+// health poll reached lately qualifies: one online over MQTT alone would hold its lock for the whole
+// timeout at every try and refuse the person's writes as busy. And only on regular firmware: minimal and
+// safeboot answer Unknown (#558; the list gives the effective variant).
+func (r *brokerHostReader) readable(d model.Device) bool {
+	return !policy.LimitedFirmware(d.Identity.Variant) && r.httpUp(d.ID)
 }
 
 var (
@@ -220,6 +236,22 @@ func (w bootWatch) AppendBoot(ctx context.Context, b model.DeviceBoot) error {
 		w.onBoot(b.DeviceID)
 	}
 	return err
+}
+
+// startBrokerHost wires the reader to the runtime and starts it: devices with their effective
+// firmware, the HTTP health poll, and brokerReadGuard.
+func (a *runtime) startBrokerHost(ctx context.Context) {
+	a.brokerHost.list = a.fw.list(a.svc.Inventory.List)
+	a.brokerHost.httpUp = func(id model.DeviceID) bool { return brokerHTTPUp(a.tracker.Get(id), time.Now()) }
+	a.brokerHost.enter = a.brokerReadGuard()
+	a.goBG("broker-host", func() error { a.brokerHost.run(ctx); return nil })
+}
+
+// brokerReadGuard keeps the read off a device the way a scheduled backup is kept off (backupGuard): its
+// lock, an active job, and a firmware update typed in the console that is still flashing it (#347),
+// which also keeps the read away from the minimal image such an update passes through.
+func (a *runtime) brokerReadGuard() func(context.Context, model.DeviceID, string) (func(), error) {
+	return backupGuard(deviceGuard{locks: a.deviceLocks(), jobs: a.svc.Store, holds: a.fwHolds})
 }
 
 // brokerHTTPUp says whether h shows a device that answered the HTTP health poll lately.

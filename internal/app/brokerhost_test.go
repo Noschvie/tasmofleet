@@ -76,7 +76,8 @@ func (g *brokerRig) take() []model.DeviceID {
 // device, but only after it settled and not for the other devices.
 func TestRestartRecordedByTheTrackerLeadsToABrokerRead(t *testing.T) {
 	g := newBrokerRig(1, 2)
-	g.online[1], g.online[2] = false, false // only the restart may cause a read here
+	g.online[1] = false                  // not reachable: never read here
+	g.r.next[2] = g.clock.Add(time.Hour) // its periodic read is not due: only the restart may cause one
 	stab := bootWatch{StabilityStore: failingBootStore{}, onBoot: g.r.want}
 	if err := stab.AppendBoot(t.Context(), model.DeviceBoot{DeviceID: 2}); err != nil {
 		t.Fatal(err)
@@ -113,9 +114,9 @@ func TestBootWatchIgnoresAFailedStore(t *testing.T) {
 	}
 }
 
-// Why: the periodic read must stay negligible: an online device is read at most once per
-// brokerHostEvery, an offline one never, and a whole fleet is spread over passes (one device each),
-// not read in one burst.
+// Why: the periodic read must stay negligible: an online device is read about every six hours (four
+// small reads a day), an offline one never, and a whole fleet is spread over passes (one device each),
+// not read in one burst. The six hours are spelled out: a shorter brokerHostEvery must fail here.
 func TestPeriodicBrokerReadIsLowRate(t *testing.T) {
 	g := newBrokerRig(1, 2, 3)
 	g.online[3] = false
@@ -126,10 +127,10 @@ func TestPeriodicBrokerReadIsLowRate(t *testing.T) {
 		}
 	}
 	g.r.pass(t.Context())
-	g.advance(brokerHostEvery - time.Minute)
+	g.advance(6*time.Hour - time.Minute)
 	g.r.pass(t.Context())
 	if got := g.take(); len(got) != 0 {
-		t.Fatalf("read %v before %v had passed", got, brokerHostEvery)
+		t.Fatalf("read %v before six hours had passed", got)
 	}
 	g.advance(2 * time.Minute)
 	g.r.pass(t.Context())
@@ -162,7 +163,7 @@ func TestFailedPeriodicReadWaitsForTheRetry(t *testing.T) {
 // device is not read at all, and the requested read follows once the device is free.
 func TestBrokerReadWaitsWhileAnotherOperationHoldsTheDevice(t *testing.T) {
 	g := newBrokerRig(1)
-	g.online[1] = false
+	g.r.next[1] = g.clock.Add(time.Hour) // its periodic read is not due: only the requested one may happen
 	g.busy[1] = true
 	g.r.want(1)
 	g.advance(brokerHostSettle)
@@ -427,4 +428,166 @@ func TestAppFeedsTheBrokerReader(t *testing.T) {
 
 func (a applyStub) Apply(context.Context, string, model.DeviceID, map[string]string) ([]settings.Result, error) {
 	return a.res, nil
+}
+
+// Why: the read is HTTP. A device HTTP does not reach (online over MQTT alone, or gone) would be tried
+// every two minutes for half an hour after each restart, each try holding its device lock for the
+// timeout and refusing the person's console, settings, restore or update start as busy. A requested
+// read waits, without sending anything, until the HTTP poll reaches the device, and it never goes to
+// minimal or safeboot firmware, which answer Unknown (#558).
+func TestRequestedBrokerReadWaitsUntilTheReadCanReachTheDevice(t *testing.T) {
+	g := newBrokerRig(1)
+	g.online[1] = false
+	g.r.want(1)
+	for range 10 {
+		g.advance(brokerHostTick)
+		g.r.pass(t.Context())
+	}
+	if n := len(g.take()); n != 0 {
+		t.Fatalf("%d reads of a device HTTP does not reach", n)
+	}
+	g.online[1] = true
+	g.r.pass(t.Context())
+	if got := g.take(); !slices.Equal(got, []model.DeviceID{1}) {
+		t.Fatalf("read %v once HTTP reached the device, want [1]", got)
+	}
+
+	limited := newBrokerRig(2)
+	limited.r.list = func(context.Context) ([]model.Device, error) {
+		return []model.Device{{ID: 2, Identity: model.Identity{Variant: "minimal"}}}, nil
+	}
+	limited.r.want(2)
+	limited.advance(brokerHostSettle)
+	limited.r.pass(t.Context())
+	if n := len(limited.take()); n != 0 {
+		t.Fatalf("%d reads of a device on minimal firmware", n)
+	}
+}
+
+// newBrokerReadRig stores dev at the address of a simulated device of the given profile.
+func newBrokerReadRig(t *testing.T, profile simulator.Profile, dev model.Device) (*Prober, *store.SQLite, model.DeviceID, simulator.Controller) {
+	t.Helper()
+	fleet, err := simulator.NewFleet(simulator.FleetOptions{FixturesDir: "../../testdata/fixtures"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = fleet.Close() })
+	sim, err := fleet.Add(t.Context(), simulator.DeviceSpec{Name: "plug", Profile: profile})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctl, _ := simulator.Control(sim)
+	dev.Address, dev.Port = splitAddr(t, sim.Addr())
+	st := openBrokerStore(t)
+	id, err := st.CreateDevice(t.Context(), dev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := &Prober{Client: tasmota.NewHTTPClient(tasmota.Options{AllowedNetworks: loopbackNets()}), Devices: st, Gap: time.Millisecond,
+		Broker: fixedBroker{host: "mqtt.home"}}
+	return p, st, id, ctl
+}
+
+func openBrokerStore(t *testing.T) *store.SQLite {
+	t.Helper()
+	dir := t.TempDir()
+	box, err := secretbox.LoadOrCreate(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := store.Open(filepath.Join(dir, "t.db"), box)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() }) // temp DB
+	return st
+}
+
+// Why: a device on minimal or safeboot firmware right now (an update outside a job: its stored identity
+// still says regular firmware) answers Status 6 with Unknown. That says nothing about its broker, so the
+// stored one must stay: storing "none" would end "ours", and with it the transport's MQTT route, for a
+// device that is back on our broker a minute later.
+func TestReadBrokerKeepsTheBrokerWhenTheDeviceAnswersLikeMinimal(t *testing.T) {
+	p, st, id, _ := newBrokerReadRig(t, simulator.ProfileESP8266Min, model.Device{Name: "plug", MQTT: model.MQTTOurs, MQTTHost: "mqtt.home", MQTTPort: 1883,
+		Identity: model.Identity{Version: "15.1.0", Variant: "tasmota", Family: "esp8266"}})
+	if err := p.ReadBroker(t.Context(), id); err != nil {
+		t.Fatal(err)
+	}
+	if d, _ := st.GetDevice(t.Context(), id); d.MQTT != model.MQTTOurs || d.MQTTHost != "mqtt.home" || d.MQTTPort != 1883 {
+		t.Fatalf("an Unknown answer changed the broker: %q %q:%d", d.MQTT, d.MQTTHost, d.MQTTPort)
+	}
+}
+
+// Why: a read that fails half way proves nothing. Before #598 only a probe a person started wrote these
+// facts; the re-read runs unattended several times a day, so a guess here (a lost SetOption3 counted as
+// "on") would turn a device with MQTT switched off into "ours" and route its commands over MQTT for
+// hours, and a lost Status 6 must not store anything at all.
+func TestReadBrokerStoresNothingFromAFailedRead(t *testing.T) {
+	for _, lost := range []string{"Status 6", "SetOption3"} {
+		t.Run(lost, func(t *testing.T) {
+			// What a probe stores for a device configured for our broker with MQTT switched off.
+			p, st, id, ctl := newBrokerReadRig(t, simulator.ProfileESP8266_1M, model.Device{Name: "plug", MQTT: model.MQTTNone, MQTTHost: "mqtt.home", MQTTPort: 1883,
+				Identity: model.Identity{Version: "15.1.0", Variant: "tasmota", Family: "esp8266"}})
+			before, _ := st.GetDevice(t.Context(), id)
+			for _, c := range []string{"MqttHost mqtt.home", "MqttPort 1883", "SetOption3 0"} {
+				if _, err := p.Client.Command(t.Context(), tasmota.TargetFor(before), c); err != nil {
+					t.Fatal(err)
+				}
+			}
+			ctl.AddFault(simulator.Fault{After: lost, Kind: "drop"})
+			if err := p.ReadBroker(t.Context(), id); err == nil {
+				t.Fatal("a lost answer was taken as a read")
+			}
+			if d, _ := st.GetDevice(t.Context(), id); d.MQTT != model.MQTTNone || d.MQTTHost != "mqtt.home" || d.MQTTPort != 1883 {
+				t.Fatalf("a failed read stored %q %q:%d", d.MQTT, d.MQTTHost, d.MQTTPort)
+			}
+		})
+	}
+}
+
+// Why: the read must stay off a device the way a scheduled backup does: while another operation holds
+// its lock, and while a firmware update typed in the console is still flashing it (it passes through
+// the minimal image); and it must go only to a device the HTTP health poll reached. A wiring that
+// drops either would leave every other reader test green.
+func TestBrokerReaderIsGuardedLikeABackup(t *testing.T) {
+	a := &runtime{brokerHost: newBrokerHostReader(nil, nil, nil, nil, slog.New(slog.DiscardHandler)),
+		svc: &Services{Store: openBrokerStore(t)}, fwHolds: devlock.NewFirmwareHolds(time.Now, time.Minute),
+		tracker: health.New(health.Deps{}, health.Options{})}
+	ctx, stop := context.WithCancel(t.Context())
+	a.startBrokerHost(ctx)
+	defer func() { stop(); a.bgWG.Wait() }()
+	if a.brokerHost.httpUp(3) {
+		t.Error("a device the HTTP poll never reached counts as reachable")
+	}
+	release, _, _ := a.deviceLocks().TryAcquire(1, "restore")
+	defer release()
+	a.fwHolds.Start(2, 0)
+	for _, id := range []model.DeviceID{1, 2} {
+		if _, err := a.brokerHost.enter(ctx, id, "broker read"); !errors.Is(err, devlock.ErrBusy) {
+			t.Errorf("device %d: err = %v, want busy", id, err)
+		}
+	}
+	rel, err := a.brokerHost.enter(ctx, 3, "broker read")
+	if err != nil {
+		t.Fatalf("a free device was refused: %v", err)
+	}
+	rel()
+}
+
+// Why: the probe keeps its own reading (#598 made only the re-read strict): it has proved regular firmware
+// first, and a host the device is configured for must not be hidden because SetOption3 did not answer.
+func TestProbeCountsAnUnansweredSetOption3AsOn(t *testing.T) {
+	p, st, id, ctl := newBrokerReadRig(t, simulator.ProfileESP8266_1M, model.Device{Name: "plug"})
+	d, _ := st.GetDevice(t.Context(), id)
+	if _, err := p.Client.Command(t.Context(), tasmota.TargetFor(d), "MqttHost mqtt.home"); err != nil {
+		t.Fatal(err)
+	}
+	ctl.AddFault(simulator.Fault{After: "SetOption3", Kind: "drop"})
+	got, err := p.Describe(t.Context(), model.Device{Address: d.Address, Port: d.Port})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.MQTT != model.MQTTOurs || got.MQTTHost != "mqtt.home" {
+		t.Fatalf("probe with SetOption3 lost: %q %q, want ours mqtt.home", got.MQTT, got.MQTTHost)
+	}
 }

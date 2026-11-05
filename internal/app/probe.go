@@ -213,7 +213,7 @@ func (p *Prober) probe(ctx context.Context, d model.Device, verify func(probed) 
 		return out, nil
 	}
 
-	out.mqtt, out.mqttHost, out.mqttPort, err = p.readMQTT(ctx, t)
+	out.mqtt, out.mqttHost, out.mqttPort, err = p.readMQTT(ctx, t, false)
 	if err != nil {
 		return out, err
 	}
@@ -323,40 +323,61 @@ func validGroupTopic(t string) bool {
 // does not talk MQTT at all; otherwise it is "ours" when it is configured for the tasmofleet broker
 // and "other" for any other target (or when tasmofleet has no broker). Shared by the probe and the
 // background re-read (ReadBroker, #598), so both store the same facts.
-func (p *Prober) readMQTT(ctx context.Context, t tasmota.Target) (mq model.MQTTCapability, host string, port int, err error) {
+//
+// The probe has proved regular firmware first (Status 2), so there an answer that says nothing about
+// MQTT means no MQTT, and a SetOption3 without an answer counts as "on" (a missing answer must not hide
+// a configured host). strict (the re-read, which runs unattended and proves nothing first) never
+// guesses: such a Status 6 answer is errNoMQTTAnswer (minimal or safeboot right now, a build without
+// MQTT), and a SetOption3 without an answer is an error, so a half-done read stores nothing.
+func (p *Prober) readMQTT(ctx context.Context, t tasmota.Target, strict bool) (mq model.MQTTCapability, host string, port int, err error) {
 	mq = model.MQTTNone
-	if raw, err := p.cmd(ctx, t, "Status 6"); err == nil {
-		var s struct {
-			StatusMQT struct {
-				MqttHost string
-				MqttPort int
-			}
+	raw, err := p.cmd(ctx, t, "Status 6")
+	var s struct {
+		StatusMQT *struct {
+			MqttHost string
+			MqttPort int
 		}
-		if json.Unmarshal(raw, &s) == nil && s.StatusMQT.MqttHost != "" {
-			host, port = s.StatusMQT.MqttHost, s.StatusMQT.MqttPort
-			mq = model.MQTTOtherBroker
-			if p.Broker != nil && p.Broker.Same(host, port) {
-				mq = model.MQTTOurs
-			}
-		}
-	} else if !errors.Is(err, tasmota.ErrUnknownCommand) {
-		return mq, "", 0, fmt.Errorf("status 6: %w", err)
 	}
-	if mq != model.MQTTNone && p.mqttSwitchedOff(ctx, t) {
+	switch {
+	case err != nil && !errors.Is(err, tasmota.ErrUnknownCommand):
+		return mq, "", 0, fmt.Errorf("status 6: %w", err)
+	case err != nil || json.Unmarshal(raw, &s) != nil || s.StatusMQT == nil:
+		if strict {
+			return mq, "", 0, errNoMQTTAnswer
+		}
+		return mq, "", 0, nil
+	case s.StatusMQT.MqttHost == "":
+		return mq, "", 0, nil
+	}
+	host, port = s.StatusMQT.MqttHost, s.StatusMQT.MqttPort
+	mq = model.MQTTOtherBroker
+	if p.Broker != nil && p.Broker.Same(host, port) {
+		mq = model.MQTTOurs
+	}
+	off, err := p.mqttSwitchedOff(ctx, t)
+	switch {
+	case err != nil && strict:
+		return mq, host, port, fmt.Errorf("setoption3: %w", err)
+	case err == nil && off:
 		mq = model.MQTTNone
 	}
 	return mq, host, port, nil
 }
 
-// mqttSwitchedOff reads SetOption3 (MQTT on/off). Any failure counts as "on":
-// the host is configured, and a missing answer must not hide it.
-func (p *Prober) mqttSwitchedOff(ctx context.Context, t tasmota.Target) bool {
+// errNoMQTTAnswer: the device answered Status 6 without anything about MQTT (Unknown, or no StatusMQT).
+var errNoMQTTAnswer = errors.New("status 6 says nothing about MQTT")
+
+// mqttSwitchedOff reads SetOption3 (MQTT on/off); err when there is no usable answer.
+func (p *Prober) mqttSwitchedOff(ctx context.Context, t tasmota.Target) (bool, error) {
 	raw, err := p.cmd(ctx, t, "SetOption3")
 	if err != nil {
-		return false
+		return false, err
 	}
 	var s struct{ SetOption3 string }
-	return json.Unmarshal(raw, &s) == nil && strings.EqualFold(s.SetOption3, "OFF")
+	if json.Unmarshal(raw, &s) != nil || s.SetOption3 == "" {
+		return false, tasmota.ErrBadResponse
+	}
+	return strings.EqualFold(s.SetOption3, "OFF"), nil
 }
 
 func (p *Prober) status5(ctx context.Context, t tasmota.Target, out *probed) (model.NetFacts, error) {
@@ -489,7 +510,9 @@ func (p *Prober) ReadNet(ctx context.Context, id model.DeviceID) error {
 // differ from what is stored (#598). Why: the host is otherwise only stored by a probe, so a device
 // moved to another broker outside TasmoFleet kept the old one and the "Other broker" hint (#580)
 // stayed away. Callers hold the device lock (brokerHostReader). Minimal firmware and the safeboot
-// image answer neither command: nothing is read.
+// image answer neither command: nothing is read, and nothing is stored when the device answers like
+// them while its stored identity still says regular firmware (an update outside a job). A read that
+// fails half way stores nothing either (readMQTT strict).
 func (p *Prober) ReadBroker(ctx context.Context, id model.DeviceID) error {
 	d, err := p.Devices.GetDevice(ctx, id)
 	if err != nil {
@@ -498,7 +521,10 @@ func (p *Prober) ReadBroker(ctx context.Context, id model.DeviceID) error {
 	if d.Identity.Variant == "minimal" || d.Identity.Variant == "safeboot" {
 		return nil
 	}
-	c, host, port, err := p.readMQTT(ctx, tasmota.TargetFor(d))
+	c, host, port, err := p.readMQTT(ctx, tasmota.TargetFor(d), true)
+	if errors.Is(err, errNoMQTTAnswer) {
+		return nil // nothing about the broker in the answer: the stored one stays
+	}
 	if err != nil {
 		return err
 	}
