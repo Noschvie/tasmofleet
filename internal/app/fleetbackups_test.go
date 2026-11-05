@@ -60,7 +60,7 @@ func TestFleetOverviewIsABoundedNumberOfReadsWithoutDeviceIO(t *testing.T) {
 		},
 	}
 	manifestReads := 0
-	f := &fleetBackups{store: st, now: func() time.Time { return now },
+	f := &fleetBackups{store: st,
 		files: func(_ context.Context, id model.BackupID) (backup.RunFiles, error) {
 			manifestReads++
 			return backup.RunFiles{Manifest: &backup.Manifest{Files: []backup.ManifestFile{{Path: "/a"}, {Path: "/b"}, {Path: "/c"}}}}, nil
@@ -90,7 +90,7 @@ func TestFleetOverviewIsABoundedNumberOfReadsWithoutDeviceIO(t *testing.T) {
 	if g.Name != "garage" || !g.NewestAt.IsZero() || g.LastOutcome != "" || g.SkipReason != "never answered" {
 		t.Errorf("garage = %+v, want no backup, not in the last run, would be skipped as never answered", g)
 	}
-	if a.FilesNote != "settings only: no file system" || a.Files != 0 || a.LastOutcome != model.BackupOutcomeFailed || a.LastReason != "The device did not answer" || a.SkipReason != "offline since 4 Nov 12:00" {
+	if a.FilesNote != "settings only: no file system" || a.Files != 0 || a.LastOutcome != model.BackupOutcomeFailed || a.LastReason != "The device did not answer" || a.SkipReason != "offline" || !a.SkipSince.Equal(now.Add(-24*time.Hour)) {
 		t.Errorf("attic = %+v", a)
 	}
 }
@@ -104,7 +104,7 @@ func TestFleetOverviewSaysWhenAFilesArchiveCannotBeRead(t *testing.T) {
 		seen:   map[model.DeviceID]store.DeviceSeen{1: {At: now, State: model.HealthOnline}},
 		newest: map[model.DeviceID]store.NewestRun{1: {Device: 1, DumpID: 10, FilesID: 11}},
 	}
-	f := &fleetBackups{store: st, now: func() time.Time { return now },
+	f := &fleetBackups{store: st,
 		health: func() map[model.DeviceID]model.Health { return nil },
 		files: func(context.Context, model.BackupID) (backup.RunFiles, error) {
 			return backup.RunFiles{}, backup.ErrBadArchive

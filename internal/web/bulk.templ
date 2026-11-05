@@ -2,7 +2,6 @@ package web
 
 import (
 	"strconv"
-	"strings"
 
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
@@ -51,7 +50,7 @@ templ bulkScopePage(v bulkScopeView) {
 						if i > 0 {
 							{ "; " }
 						}
-						<b>{ l.Name }</b>{ ", " + strings.ToLower(l.Reason[:1]) + l.Reason[1:] }
+						<b>{ l.Name }</b>{ ": " }@fleetWhy(whyText{Reason: l.Reason, Since: l.Since, SinceText: l.SinceText})
 					}
 				</p>
 				for _, id := range v.LeftIDs {

@@ -93,7 +93,7 @@ func (h *handler) backupKeep(w http.ResponseWriter, r *http.Request) {
 }
 
 // backupsHome is the page that lists b, ready for a query: the device's
-// Backups tab, or Settings -> Backups for a backup of a deleted device.
+// Backups tab, or Devices -> Backups for a backup of a deleted device.
 func backupsHome(b model.Backup) string {
 	if b.DeviceID == 0 {
 		return "/devices/backups?"

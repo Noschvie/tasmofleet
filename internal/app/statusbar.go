@@ -106,6 +106,7 @@ type scheduledRun struct {
 	running             bool
 	done, total         int // of the run in progress: devices handled of all devices
 	ok, failed, skipped int
+	started             time.Time // when the run in progress began
 	last                web.BackupRunInfo
 }
 
@@ -114,14 +115,15 @@ func newScheduledRun(hub *events.Hub) *scheduledRun { return &scheduledRun{hub: 
 // Restore sets the last finished run from the stored record (at start).
 func (r *scheduledRun) Restore(run model.BackupRun) {
 	r.mu.Lock()
-	r.last = web.BackupRunInfo{Finished: run.FinishedAt, LastTotal: run.Tried, LastFailed: run.Failed, LastSkipped: run.Skipped}
+	r.last = web.BackupRunInfo{Started: run.StartedAt, Finished: run.FinishedAt, LastTotal: run.Tried, LastFailed: run.Failed, LastSkipped: run.Skipped}
 	r.mu.Unlock()
 }
 
-// Start begins a run over total devices.
-func (r *scheduledRun) Start(total int) {
+// Start begins a run over total devices; at is the start time the run is stored with.
+func (r *scheduledRun) Start(total int, at time.Time) {
 	r.mu.Lock()
 	r.running, r.done, r.total, r.ok, r.failed, r.skipped = true, 0, total, 0, 0, 0
+	r.started = at
 	r.mu.Unlock()
 	r.publish()
 }
@@ -155,7 +157,7 @@ func (r *scheduledRun) Step(out model.BackupOutcome) {
 func (r *scheduledRun) Finish(completed bool) {
 	r.mu.Lock()
 	if completed {
-		r.last = web.BackupRunInfo{Finished: r.now(), LastTotal: r.ok + r.failed, LastFailed: r.failed, LastSkipped: r.skipped}
+		r.last = web.BackupRunInfo{Started: r.started, Finished: r.now(), LastTotal: r.ok + r.failed, LastFailed: r.failed, LastSkipped: r.skipped}
 	}
 	r.running = false
 	r.mu.Unlock()

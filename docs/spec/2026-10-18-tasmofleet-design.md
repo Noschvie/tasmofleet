@@ -1537,7 +1537,7 @@ A skipped device was not tried; skipped devices are counted apart, never colour 
 never raise a notification. The rule:
 
 - persisted `last_seen_at` is zero (and the tracker has not heard the device either): skipped, "never answered";
-- offline: skipped, "offline since <date time>". The tracker's verdict decides; right after a start
+- offline: skipped, reason "offline" with the time it went offline stored apart (`since_at`, migration 0044; the pages word it "Offline since <time>"). The tracker's verdict decides; right after a start
   it has none (`unknown` for every device until it is heard), and the persisted `health_state` decides
   then: persisted offline is skipped (since = the persisted `last_seen_at`), anything else is
   **tried** (a run right after a restart must not skip the fleet, and must not count the devices that

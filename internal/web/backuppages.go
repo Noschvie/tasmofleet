@@ -28,7 +28,7 @@ type backupsView struct {
 	Head       templ.Component // the device header and tabs (P3 owns it; the legacy partial until then)
 
 	Retention    string // "Keeping the last 5 backups and anything kept · 3 will be pruned at the next run"
-	CanRetention bool   // admins: "Change retention" opens Settings, Backups
+	CanRetention bool   // admins: "Change retention" opens Devices, Backups
 	Total        string // "9 backups · 36.3 KiB"
 
 	CanBackup bool // Back up now and Retry (operators and admins)

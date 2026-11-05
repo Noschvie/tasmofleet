@@ -6,9 +6,13 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Upgrade notes
+
+- Migration 0044 adds the column `since_at` to `backup_run_items` (when a skipped device went offline). Earlier run records keep their text and show no time (#409).
+
 ### Added
 
-- Devices, Backups: one page for how the fleet is backed up (#409). It shows the last scheduled run with the failed and the skipped devices apart, one row per device (newest backup, runs, files, result of the last run) with filters for No backup, Older than, Failed last run and Skipped, the storage totals and what the next run prunes, the schedule, and the backups of deleted devices. Admins can back up the selected devices or every device that a run would try; operators see the page read-only. Devices has a new sub-navigation entry between Policy and Add.
+- Devices, Backups: one page for how the fleet is backed up (#409). It shows the last scheduled run with the failed and the skipped devices apart, one row per device (newest backup, runs, files, result of the last run) with filters for No backup, Older than, Failed last run and Skipped, the storage totals and what the next run prunes, the schedule, and the backups of deleted devices. Admins can back up the selected devices, or every device that a scheduled run would try ("Back up all now"): the next page lists the devices it leaves out with the reason, and it also leaves out devices that are offline right now or whose web password was refused; operators see the page read-only. Devices has a new sub-navigation entry between Policy and Add.
 
 ### Changed
 
@@ -23,6 +27,10 @@ always upgrade automatically.
 - Scheduled backups skip devices that cannot answer instead of counting them as failed. A run leaves out devices that never answered, devices that are offline (the reason says since when, with the date) and devices another operation or an update is working on; it tries the rest, including devices that refuse the web password (they fail: you have to act). After a restart a device that was offline before is still skipped. The status bar and the failure message count only the devices that were tried ("2 of 5 failed"); a run that skipped everything neither colours the bar nor sends a message. The last run is stored (migration 0043, kept as long as the audit log) and shows again after a restart. A device is locked against other operations while it is backed up (#409)
 - The status bar's backup item links to Devices, Backups and counts skipped devices apart ("22 of 24 backed up · 2 failed · 3 skipped"); on a phone the line shows the short form and the sheet the full text. A run that only skipped devices stays calm (#409).
 - Dashboard: the "No backup" tile opens Devices, Backups narrowed to the devices without a backup and says when the last scheduled run was. It turns amber only when that run failed for a device, never for skipped ones (#409).
+
+### Fixed
+
+- The notification of a failed scheduled database snapshot linked to the device backups (and, since 0.27.0, to a Settings tab that no longer held the snapshot schedule); it now links to System, Snapshots (#409).
 
 ### Breaking
 

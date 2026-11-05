@@ -467,7 +467,7 @@ func TestDashboardNoBackupTileLinksToTheBackupsPage(t *testing.T) {
 		})
 		_, body := e.do(t, "GET", "/", "admin", nil)
 		tiles := strings.ReplaceAll(between(body, `<div class="stat-grid">`, `<svg class="health-bar"`), "</span> <span", "</span><span")
-		m := regexp.MustCompile(`<a class="stat-tile" href="([^"]*)"><span class="stat-label"><span class="sdot-dot (\S+)" aria-hidden="true"></span>No backup</span><span class="stat-value">(\d+)</span><span class="stat-hint">([^<]*)</span></a>`).FindStringSubmatch(tiles)
+		m := regexp.MustCompile(`<a class="stat-tile" href="([^"]*)"><span class="stat-label"><span class="sdot-dot (\S+)" aria-hidden="true"></span>No backup</span><span class="stat-value">(\d+)</span><span class="stat-hint">(.*?)</span></a>`).FindStringSubmatch(tiles)
 		if m == nil {
 			t.Fatalf("no No backup tile in %s", tiles)
 		}
@@ -475,11 +475,11 @@ func TestDashboardNoBackupTileLinksToTheBackupsPage(t *testing.T) {
 	}
 	now := time.Now()
 	href, tone, hint := tile(&model.BackupRun{StartedAt: now, FinishedAt: now, Completed: true, OK: 3, Failed: 2, Skipped: 1, Tried: 5})
-	if href != "/tf/devices/backups?filter=none" || !strings.HasPrefix(hint, "Last run ") || !strings.HasSuffix(hint, " · 2 failed") || !strings.Contains(tone, "warn") {
+	if href != "/tf/devices/backups?filter=none" || !strings.HasPrefix(hint, "Last run <time") || !strings.Contains(hint, `data-ts="day"`) || !strings.HasSuffix(hint, " · 2 failed") || !strings.Contains(tone, "warn") {
 		t.Errorf("failed run: href %q tone %q hint %q", href, tone, hint)
 	}
 	_, tone, hint = tile(&model.BackupRun{StartedAt: now, FinishedAt: now, Completed: true, OK: 3, Skipped: 4, Tried: 3})
-	if strings.Contains(hint, "failed") || !strings.HasPrefix(hint, "Last run ") || strings.Contains(tone, "warn") || !strings.Contains(tone, "accent") {
+	if strings.Contains(hint, "failed") || !strings.HasPrefix(hint, "Last run <time") || strings.Contains(tone, "warn") || !strings.Contains(tone, "accent") {
 		t.Errorf("skipped only must stay accent: tone %q hint %q", tone, hint)
 	}
 	_, tone, hint = tile(nil)

@@ -273,3 +273,13 @@ func TestWebhookRefusesARedirectFromHTTPSToPlainHTTP(t *testing.T) {
 		}
 	}
 }
+
+// Why: a failed scheduled snapshot must lead to the page that shows it, System, Snapshots. The link
+// pointed at the Settings Backups tab (the device backups) since 0.27.0, where the snapshot schedule had
+// already moved to its own page.
+func TestSnapshotFailedLinksToTheSnapshotsPage(t *testing.T) {
+	ev := SnapshotFailed(baseConfig(), "disk full", t0)
+	if ev.URL != "http://tasmofleet.local/settings/system/snapshots" {
+		t.Errorf("snapshot failure links to %q", ev.URL)
+	}
+}

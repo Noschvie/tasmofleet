@@ -84,10 +84,10 @@ func (h *handler) backupDeleteConfirm(w http.ResponseWriter, r *http.Request) {
 		h.notFound(w, r)
 		return
 	}
-	back := strings.TrimRight(backupsHome(b), "?&") // a deleted device's backup: Settings -> Backups
+	back := strings.TrimRight(backupsHome(b), "?&") // a deleted device's backup: Devices -> Backups
 	crumbs := []confirmLink{{"/devices", "Devices"}, {fmt.Sprintf("/devices/%d", b.DeviceID), "Device"}, {back, "Backups"}}
 	if b.DeviceID == 0 {
-		crumbs = []confirmLink{{"/settings/system", "Settings"}, {back, "Backups"}}
+		crumbs = []confirmLink{{"/devices", "Devices"}, {back, "Backups"}}
 	}
 	c := actionConfirm{
 		Title: "Delete this backup?", Heading: "Delete backup",

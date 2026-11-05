@@ -308,3 +308,19 @@ func TestStatusBarCarriesTheSkippedCountApartFromFailures(t *testing.T) {
 		t.Errorf("backup = %+v, want 4 tried, 2 failed, 3 skipped", b)
 	}
 }
+
+// Why (review of #590): the bar, the Backups page and the dashboard tile must name the same run time,
+// and the page and the tile show when the run began. The bar did show when it ended.
+func TestStatusBarBackupShowsWhenTheRunStarted(t *testing.T) {
+	started := time.Date(2026, 10, 31, 3, 0, 0, 0, time.UTC)
+	e := setupWith(t, func(d *Deps) {
+		d.ScheduledBackup = func() BackupRunInfo {
+			return BackupRunInfo{Started: started, Finished: started.Add(40 * time.Minute), LastTotal: 5}
+		}
+	})
+	_, body := e.do(t, "GET", "/devices", "operator", nil)
+	bar := barOf(body)
+	if !strings.Contains(bar, `datetime="2026-10-31T03:00:00Z"`) || strings.Contains(bar, "03:40") {
+		t.Errorf("bar does not show the start of the run: %s", bar)
+	}
+}

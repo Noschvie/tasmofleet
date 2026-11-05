@@ -45,7 +45,10 @@ type BackupRunItem struct {
 	DeviceName string
 	Outcome    BackupOutcome
 	Reason     string // a human text without credentials; empty for ok
-	At         time.Time
+	// Since is when a skipped device went offline, zero when there is no such time (never answered,
+	// busy, or an item stored before 0044, whose Reason then still carries the time as text).
+	Since time.Time
+	At    time.Time
 }
 
 // BackupDeviceRow is one device on the Devices, Backups page: what it has stored and how the last
@@ -64,7 +67,10 @@ type BackupDeviceRow struct {
 	LastOutcome BackupOutcome
 	LastReason  string
 	LastAt      time.Time
-	// SkipReason is set when a run started now would skip the device ("offline since ...",
-	// "never answered"); empty when it would be tried.
+	// LastSince is the Since of that item.
+	LastSince time.Time
+	// SkipReason is set when a run started now would skip the device ("offline", "never answered");
+	// empty when it would be tried. SkipSince is since when it is offline, zero when unknown.
 	SkipReason string
+	SkipSince  time.Time
 }

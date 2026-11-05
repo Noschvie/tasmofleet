@@ -314,7 +314,7 @@ func TestBackupsPageListsOrphansWithTheirActions(t *testing.T) {
 func TestOrphanDeleteGoesBackToTheBackupsPage(t *testing.T) {
 	e, sb, _, _ := storageEnv(t)
 	_, body := e.do(t, "GET", "/backups/70/delete", "admin", nil)
-	if strings.Contains(body, "/devices/0") || !strings.Contains(body, `href="/tf/devices/backups"`) {
+	if strings.Contains(body, "/devices/0") || strings.Contains(between(body, `id="crumbs"`, `</nav>`), "Settings") || !strings.Contains(body, `href="/tf/devices/backups"`) {
 		t.Fatalf("the confirmation must link back to the settings:\n%s", body)
 	}
 	r, _ := e.do(t, "POST", "/backups/70/delete", "admin", url.Values{"csrf": {"tok"}})

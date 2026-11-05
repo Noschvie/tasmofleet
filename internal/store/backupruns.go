@@ -50,8 +50,8 @@ func (s *SQLite) SaveBackupRun(ctx context.Context, r model.BackupRun) (int64, e
 	for _, it := range r.Items {
 		// The device id is looked up, so a device deleted while the run was under way becomes NULL
 		// (its name stays) instead of failing the foreign key and losing the whole run.
-		if _, err := tx.ExecContext(ctx, `INSERT INTO backup_run_items (run_id, device_id, device_name, outcome, reason, at)
-			VALUES (?, (SELECT id FROM devices WHERE id = ?), ?,?,?,?)`, id, int64(it.DeviceID), it.DeviceName, string(it.Outcome), it.Reason, toMS(it.At)); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO backup_run_items (run_id, device_id, device_name, outcome, reason, at, since_at)
+			VALUES (?, (SELECT id FROM devices WHERE id = ?), ?,?,?,?,?)`, id, int64(it.DeviceID), it.DeviceName, string(it.Outcome), it.Reason, toMS(it.At), toMS(it.Since)); err != nil {
 			return 0, mapErr(err)
 		}
 	}
@@ -76,7 +76,7 @@ func (s *SQLite) LastBackupRun(ctx context.Context) (model.BackupRun, bool, erro
 	if finished != 0 {
 		r.FinishedAt = fromMS(finished)
 	}
-	rows, err := s.db.QueryContext(ctx, `SELECT COALESCE(device_id, 0), device_name, outcome, reason, at
+	rows, err := s.db.QueryContext(ctx, `SELECT COALESCE(device_id, 0), device_name, outcome, reason, at, since_at
 		FROM backup_run_items WHERE run_id = ? ORDER BY id`, r.ID)
 	if err != nil {
 		return model.BackupRun{}, false, err
@@ -85,11 +85,14 @@ func (s *SQLite) LastBackupRun(ctx context.Context) (model.BackupRun, bool, erro
 	for rows.Next() {
 		var it model.BackupRunItem
 		var out string
-		var at int64
-		if err := rows.Scan(&it.DeviceID, &it.DeviceName, &out, &it.Reason, &at); err != nil {
+		var at, since int64
+		if err := rows.Scan(&it.DeviceID, &it.DeviceName, &out, &it.Reason, &at, &since); err != nil {
 			return model.BackupRun{}, false, err
 		}
 		it.Outcome, it.At = model.BackupOutcome(out), fromMS(at)
+		if since != 0 {
+			it.Since = fromMS(since)
+		}
 		r.Items = append(r.Items, it)
 	}
 	return r, true, rows.Err()

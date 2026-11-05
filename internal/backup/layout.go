@@ -307,7 +307,7 @@ func (m *Manager) scanUnreferenced(referenced func(rel string) bool) []Unreferen
 }
 
 // Unreferenced lists the 0.17-named files below backups/<number>/ that no
-// backup row points to, for Settings -> Backups. Read-only.
+// backup row points to, for Devices -> Backups. Read-only.
 func (m *Manager) Unreferenced(ctx context.Context) ([]UnreferencedFile, error) {
 	rows, err := m.o.Store.ListAllBackups(ctx)
 	if err != nil {

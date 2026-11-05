@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/backup"
 	"github.com/nofuturekid/tasmofleet/internal/model"
@@ -24,7 +23,6 @@ type fleetStore interface {
 type fleetBackups struct {
 	store  fleetStore
 	health func() map[model.DeviceID]model.Health
-	now    func() time.Time
 	// files reads the manifest of a run (disk, no device I/O); *backup.Manager.RunFiles.
 	files     func(ctx context.Context, id model.BackupID) (backup.RunFiles, error)
 	pruneNext func(ctx context.Context, id model.DeviceID) ([]model.Backup, error)
@@ -64,16 +62,16 @@ func (f *fleetBackups) Overview(ctx context.Context) ([]model.BackupDeviceRow, e
 			last[it.DeviceID] = it
 		}
 	}
-	health, now := f.health(), f.now()
+	health := f.health()
 	var rows []model.BackupDeviceRow
 	for _, u := range usage {
 		if u.Device == 0 { // backups of deleted devices, no device
 			continue
 		}
-		r := model.BackupDeviceRow{DeviceID: u.Device, Name: u.Name, NewestAt: u.Last, Runs: u.Runs, Kept: u.Kept, Bytes: u.Bytes,
-			SkipReason: backupSkipReason(health[u.Device], seen[u.Device], true, now)}
+		r := model.BackupDeviceRow{DeviceID: u.Device, Name: u.Name, NewestAt: u.Last, Runs: u.Runs, Kept: u.Kept, Bytes: u.Bytes}
+		r.SkipReason, r.SkipSince = backupSkipReason(health[u.Device], seen[u.Device], true)
 		if it, ok := last[u.Device]; ok {
-			r.LastOutcome, r.LastReason, r.LastAt = it.Outcome, it.Reason, it.At
+			r.LastOutcome, r.LastReason, r.LastAt, r.LastSince = it.Outcome, it.Reason, it.At, it.Since
 		}
 		if n, ok := newest[u.Device]; ok {
 			r.Files, r.FilesNote = f.filesOf(ctx, n)
@@ -140,7 +138,7 @@ func (a *runtime) fleetBackups() *fleetBackups {
 	if a.tracker != nil {
 		health = a.tracker.All
 	}
-	f := &fleetBackups{store: a.svc.Store, health: health, now: time.Now}
+	f := &fleetBackups{store: a.svc.Store, health: health}
 	f.pruneNext = func(context.Context, model.DeviceID) ([]model.Backup, error) { return nil, nil }
 	f.files = func(context.Context, model.BackupID) (backup.RunFiles, error) { return backup.RunFiles{}, nil }
 	if a.backups != nil {

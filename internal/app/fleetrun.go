@@ -38,8 +38,9 @@ type scheduledBackup struct {
 }
 
 const (
-	skipNever = "never answered"
-	skipBusy  = "another operation was running"
+	skipOffline = "offline"
+	skipNever   = "never answered"
+	skipBusy    = "another operation was running"
 )
 
 // backupGuard is what a scheduled backup must not run into: the device guard (its lock and a running
@@ -69,37 +70,25 @@ func backupGuard(g deviceGuard) func(ctx context.Context, id model.DeviceID, own
 // the persisted state decides then: a device that was offline before the start and has not been
 // heard since is skipped, anything else is tried. Without that, every restart would count the
 // offline devices as failed.
-func backupSkipReason(h model.Health, p store.DeviceSeen, seenKnown bool, now time.Time) string {
+func backupSkipReason(h model.Health, p store.DeviceSeen, seenKnown bool) (reason string, since time.Time) {
 	seen := p.At
 	if h.LastSeen.After(seen) {
 		seen = h.LastSeen
 	}
 	if seenKnown && seen.IsZero() {
-		return skipNever
+		return skipNever, time.Time{}
 	}
 	state, since := h.State, h.Since
 	if state == "" || state == model.HealthUnknown {
 		state, since = p.State, p.At // no verdict yet: what was stored
 	}
 	if state != model.HealthOffline {
-		return ""
+		return "", time.Time{}
 	}
 	if since.IsZero() {
 		since = seen
 	}
-	if since.IsZero() {
-		return "offline"
-	}
-	return "offline since " + backupWhen(since, now)
-}
-
-// backupWhen words a time that can be days old: day and month, the year only when it is another one.
-func backupWhen(t, now time.Time) string {
-	t = t.Local()
-	if t.Year() != now.Local().Year() {
-		return t.Format("2 Jan 2006 15:04")
-	}
-	return t.Format("2 Jan 15:04")
+	return skipOffline, since // the pages word the time themselves
 }
 
 // Run backs up every device one after the other and records the run.
@@ -115,7 +104,7 @@ func (b *scheduledBackup) Run(ctx context.Context) {
 		b.log.Warn("scheduled backup: read when devices were last seen", "err", err)
 	}
 	rec := model.BackupRun{Trigger: model.BackupRunScheduled, StartedAt: b.now()}
-	b.run.Start(len(devs))
+	b.run.Start(len(devs), rec.StartedAt)
 	completed := false
 	defer func() {
 		rec.Completed, rec.FinishedAt = completed, b.now()
@@ -128,8 +117,8 @@ func (b *scheduledBackup) Run(ctx context.Context) {
 		b.run.Finish(completed)
 	}()
 	var failed []string
-	add := func(d model.Device, out model.BackupOutcome, reason string) {
-		rec.Items = append(rec.Items, model.BackupRunItem{DeviceID: d.ID, DeviceName: d.Name, Outcome: out, Reason: reason, At: b.now()})
+	add := func(d model.Device, out model.BackupOutcome, reason string, since time.Time) {
+		rec.Items = append(rec.Items, model.BackupRunItem{DeviceID: d.ID, DeviceName: d.Name, Outcome: out, Reason: reason, Since: since, At: b.now()})
 		switch out {
 		case model.BackupOutcomeOK:
 			rec.OK++
@@ -148,8 +137,8 @@ func (b *scheduledBackup) Run(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		if why := backupSkipReason(health[d.ID], seen[d.ID], seenKnown, b.now()); why != "" {
-			add(d, model.BackupOutcomeSkipped, why)
+		if why, since := backupSkipReason(health[d.ID], seen[d.ID], seenKnown); why != "" {
+			add(d, model.BackupOutcomeSkipped, why, since)
 			continue
 		}
 		release, err := b.enter(ctx, d.ID, "backup")
@@ -157,14 +146,14 @@ func (b *scheduledBackup) Run(ctx context.Context) {
 			if !errors.Is(err, devlock.ErrBusy) {
 				b.log.Warn("scheduled backup: checking whether the device is busy", "device", d.Name, "err", err)
 			}
-			add(d, model.BackupOutcomeSkipped, skipBusy)
+			add(d, model.BackupOutcomeSkipped, skipBusy, time.Time{})
 			continue
 		}
 		err = b.backup(ctx, d.ID)
 		release()
 		switch {
 		case err == nil:
-			add(d, model.BackupOutcomeOK, "")
+			add(d, model.BackupOutcomeOK, "", time.Time{})
 		case ctx.Err() != nil:
 			return // shutdown cut this device short: not a failure of the device
 		case errors.Is(err, store.ErrNotFound):
@@ -172,7 +161,7 @@ func (b *scheduledBackup) Run(ctx context.Context) {
 			continue
 		default:
 			b.log.Warn("scheduled backup failed", "device", d.Name, "err", err)
-			add(d, model.BackupOutcomeFailed, backup.AttemptReason(err))
+			add(d, model.BackupOutcomeFailed, backup.AttemptReason(err), time.Time{})
 		}
 		select {
 		case <-ctx.Done():

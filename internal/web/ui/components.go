@@ -148,6 +148,11 @@ type StatTileData struct {
 	Tone               Tone
 	Label, Value, Hint string
 	Href               string
+	// HintAt, when set, puts a time into the hint: Hint, then the instant (HintAtText is its fallback
+	// text, time.js shows it in the browser's zone like a day stamp), then HintAfter.
+	HintAt     time.Time
+	HintAtText string
+	HintAfter  string
 }
 
 // KVRow is one label/value line of a card; Mono sets the value in the monospace font

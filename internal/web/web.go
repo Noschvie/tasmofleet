@@ -592,7 +592,11 @@ type messageData struct {
 }
 
 // leftItem is a device that took no part, with the reason.
-type leftItem struct{ Name, Reason string }
+type leftItem struct {
+	Name, Reason string
+	Since        time.Time // the skip reason's time (offline since), zero for none
+	SinceText    string
+}
 
 // registerUnavailable answers the pages of a switched-off feature with an
 // explanation instead of a bare 404: a bookmark to /firmware or /transactions

@@ -44,7 +44,7 @@ func TestBackupRunRoundTrip(t *testing.T) {
 	}
 	for i, it := range got.Items {
 		w := want.Items[i]
-		if it.DeviceID != w.DeviceID || it.DeviceName != w.DeviceName || it.Outcome != w.Outcome || it.Reason != w.Reason || !it.At.Equal(w.At) {
+		if it.DeviceID != w.DeviceID || it.DeviceName != w.DeviceName || it.Outcome != w.Outcome || it.Reason != w.Reason || !it.At.Equal(w.At) || !it.Since.Equal(w.Since) {
 			t.Errorf("item %d = %+v, want %+v", i, it, w)
 		}
 	}
@@ -276,5 +276,70 @@ func TestNewestRunsIgnoresTheFilesOfAnOlderRun(t *testing.T) {
 	}
 	if r := got[a]; r.DumpID != newest || r.FilesID != 0 {
 		t.Errorf("newest run = %+v, want the newer dump and no files row", r)
+	}
+}
+
+// Why (#409): 0044 adds the time a skipped device went offline to the run items. Items stored by 0.28.0
+// (the reason holds the time as text) must survive it unchanged with no time, and a new item stores one.
+func TestMigration0044KeepsStoredRunItemsAndAddsTheOfflineTime(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "t.db")
+	db, err := openDB(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close() //nolint:errcheck // temp DB
+	upTo43 := fstest.MapFS{}
+	all, err := fs.Glob(Migrations, "migrations/*.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range all {
+		if f >= "migrations/0044" { // the migration under test
+			continue
+		}
+		b, err := fs.ReadFile(Migrations, f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		upTo43[f] = &fstest.MapFile{Data: b}
+	}
+	if err := migrate(db, path, upTo43); err != nil {
+		t.Fatalf("up to 0043: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, "INSERT INTO backup_runs (trigger, started_at) VALUES ('scheduled', 1700000000000)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, "INSERT INTO backup_run_items (run_id, device_name, outcome, reason, at) VALUES (1, 'attic', 'skipped', 'offline since 3 Nov 21:14', 1700000000000)"); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrate(db, path, Migrations); err != nil {
+		t.Fatalf("0043 -> 0044: %v", err)
+	}
+	var reason string
+	var since int64
+	if err := db.QueryRowContext(ctx, "SELECT reason, since_at FROM backup_run_items").Scan(&reason, &since); err != nil || reason != "offline since 3 Nov 21:14" || since != 0 {
+		t.Errorf("item after 0044: %q %d %v; want the old text and no time", reason, since, err)
+	}
+}
+
+// Why (#409): the time a skipped device went offline is its own value, so the pages can word it in the
+// reader's zone; it must come back exactly, and an item without one comes back with a zero time.
+func TestBackupRunItemKeepsTheOfflineSince(t *testing.T) {
+	s, _, _ := newStore(t)
+	d := mustDevice(t, s, "attic", "10.0.0.2")
+	since := time.Date(2026, 11, 3, 21, 14, 0, 0, time.UTC)
+	r := model.BackupRun{Trigger: model.BackupRunScheduled, StartedAt: ms(5000), Completed: true, Skipped: 2, Items: []model.BackupRunItem{
+		{DeviceID: d, DeviceName: "attic", Outcome: model.BackupOutcomeSkipped, Reason: "offline", Since: since, At: ms(5100)},
+		{DeviceID: 0, DeviceName: "garage", Outcome: model.BackupOutcomeSkipped, Reason: "never answered", At: ms(5200)},
+	}}
+	if _, err := s.SaveBackupRun(ctx, r); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err := s.LastBackupRun(ctx)
+	if err != nil || len(got.Items) != 2 {
+		t.Fatalf("last: %+v %v", got, err)
+	}
+	if !got.Items[0].Since.Equal(since) || got.Items[0].Reason != "offline" || !got.Items[1].Since.IsZero() {
+		t.Errorf("items = %+v, want the offline time kept and none for the other", got.Items)
 	}
 }

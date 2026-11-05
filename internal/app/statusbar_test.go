@@ -102,7 +102,7 @@ func TestScheduledRunKeepsTheLastFinishedRun(t *testing.T) {
 	if s := r.Status(); s.Running || !s.Finished.IsZero() {
 		t.Fatalf("fresh: %+v", s)
 	}
-	r.Start(3)
+	r.Start(3, time.Now())
 	r.Step(model.BackupOutcomeOK)
 	if s := r.Status(); !s.Running || s.Done != 1 || s.Total != 3 {
 		t.Fatalf("in progress: %+v", s)
@@ -118,7 +118,7 @@ func TestScheduledRunKeepsTheLastFinishedRun(t *testing.T) {
 		gotEvent(t, ch, true)
 	}
 
-	r.Start(5)
+	r.Start(5, time.Now())
 	r.Step(model.BackupOutcomeFailed)
 	r.Finish(false) // shutdown
 	s = r.Status()

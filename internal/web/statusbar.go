@@ -35,6 +35,7 @@ type BackupRunInfo struct {
 	Running     bool // a scheduled run is in progress: Done of Total devices so far
 	Done, Total int
 	Finished    time.Time // when the last finished run ended; zero = none since the start
+	Started     time.Time // when that run began, the time the bar, the page and the dashboard tile all show; zero: Finished
 	LastTotal   int       // devices of the last finished run
 	LastFailed  int       // of which failed
 	LastSkipped int       // devices the last run left out (offline, never answered, busy); not a failure
@@ -66,7 +67,11 @@ func (h *handler) statusBar(ctx context.Context, base string, live bool) ui.Stat
 			}
 		}
 		if !r.Finished.IsZero() {
-			sb.Backup = &ui.StatusBackup{At: r.Finished, Failed: r.LastFailed, Total: r.LastTotal, Skipped: r.LastSkipped}
+			at := r.Started
+			if at.IsZero() {
+				at = r.Finished
+			}
+			sb.Backup = &ui.StatusBackup{At: at, Failed: r.LastFailed, Total: r.LastTotal, Skipped: r.LastSkipped}
 			if h.d.BackupFleet != nil && h.d.SysConfig != nil {
 				sb.Backup.Href = base + fleetPath // the page that lists the run per device (#409)
 			}

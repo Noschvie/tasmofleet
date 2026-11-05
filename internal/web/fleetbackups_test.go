@@ -2,13 +2,22 @@ package web
 
 import (
 	"context"
+	"net/netip"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/nofuturekid/tasmofleet/internal/config"
 	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/secretbox"
+	"github.com/nofuturekid/tasmofleet/internal/snapshot"
+	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
 )
 
 // fakeFleet is the BackupFleet the Backups page reads.
@@ -37,14 +46,14 @@ func fleetFixture(now time.Time) *fakeFleet {
 			Tried: 3, OK: 2, Failed: 1, Skipped: 2,
 			Items: []model.BackupRunItem{
 				{DeviceID: 1, DeviceName: "attic", Outcome: model.BackupOutcomeOK, At: at},
-				{DeviceID: 2, DeviceName: "balcony", Outcome: model.BackupOutcomeSkipped, Reason: "offline since 2 Nov", At: at},
+				{DeviceID: 2, DeviceName: "balcony", Outcome: model.BackupOutcomeSkipped, Reason: "offline", Since: now.Add(-3 * 24 * time.Hour), At: at},
 				{DeviceID: 3, DeviceName: "cellar", Outcome: model.BackupOutcomeFailed, Reason: "no answer within 30 s", At: at},
 				{DeviceID: 4, DeviceName: "garage", Outcome: model.BackupOutcomeSkipped, Reason: "never answered", At: at},
 				{DeviceID: 5, DeviceName: "kitchen", Outcome: model.BackupOutcomeOK, At: at},
 			}},
 		rows: []model.BackupDeviceRow{
 			{DeviceID: 1, Name: "attic", NewestAt: at, Runs: 10, Kept: 1, Bytes: 4096, Files: 12, LastOutcome: model.BackupOutcomeOK, LastAt: at},
-			{DeviceID: 2, Name: "balcony", NewestAt: old, Runs: 8, Bytes: 2048, LastOutcome: model.BackupOutcomeSkipped, LastReason: "offline since 2 Nov", LastAt: at, SkipReason: "offline since 2 Nov"},
+			{DeviceID: 2, Name: "balcony", NewestAt: old, Runs: 8, Bytes: 2048, LastOutcome: model.BackupOutcomeSkipped, LastReason: "offline", LastSince: now.Add(-3 * 24 * time.Hour), LastAt: at, SkipReason: "offline", SkipSince: now.Add(-3 * 24 * time.Hour)},
 			{DeviceID: 3, Name: "cellar", NewestAt: now.Add(-3 * 24 * time.Hour), Runs: 9, Bytes: 2048, FilesNote: "settings only: no file system", LastOutcome: model.BackupOutcomeFailed, LastReason: "no answer within 30 s", LastAt: at},
 			{DeviceID: 4, Name: "garage", LastOutcome: model.BackupOutcomeSkipped, LastReason: "never answered", LastAt: at, SkipReason: "never answered"},
 			{DeviceID: 5, Name: "kitchen", NewestAt: at, Runs: 3, Bytes: 1024, FilesNote: "files need HTTP", LastOutcome: model.BackupOutcomeOK, LastAt: at},
@@ -87,7 +96,7 @@ func TestFleetBackupsPageAdmin(t *testing.T) {
 		t.Fatalf("status %d", r.StatusCode)
 	}
 	last := cardOf(t, body, "lastrun")
-	for _, want := range []string{"Last run", "Backed up", "Failed", "Skipped", "cellar", "No answer within 30 s", "balcony", "Offline since 2 Nov", "Never answered", `href="/tf/devices/3/backups"`} {
+	for _, want := range []string{"Last run", "Backed up", "Failed", "Skipped", "cellar", "No answer within 30 s", "balcony", "Offline since <time", "Never answered", `href="/tf/devices/3/backups"`} {
 		if !strings.Contains(last, want) {
 			t.Errorf("Last run lacks %q", want)
 		}
@@ -326,12 +335,12 @@ func TestStatusBarBackupLinksToPageAndSaysSkipped(t *testing.T) {
 func TestBackUpAllScopePageListsTheDevicesLeftOut(t *testing.T) {
 	fleet := &fakeFleet{rows: []model.BackupDeviceRow{
 		{DeviceID: 1, Name: "kitchen"},
-		{DeviceID: 2, Name: "attic", SkipReason: "offline since 2 Nov"},
+		{DeviceID: 2, Name: "attic", SkipReason: "offline", SkipSince: time.Now().Add(-48 * time.Hour)},
 	}}
 	fbk := &fakeBackupBatch{}
 	e := setupWith(t, func(d *Deps) { d.BackupBatch = fbk; d.BackupFleet = fleet })
 	_, body := e.do(t, "POST", "/devices/bulk/backup", "admin", bulkForm("id", "1", "left", "2"))
-	for _, want := range []string{"Left out: 1", "attic", "offline since 2 Nov", `name="left" value="2"`} {
+	for _, want := range []string{"Left out: 1", "attic", "Offline since", `data-ts="day"`, `name="left" value="2"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("scope page lacks %q", want)
 		}
@@ -360,5 +369,120 @@ func TestBackUpAllFormCarriesTheLeftOutIDs(t *testing.T) {
 		if !strings.Contains(form, `name="left" value="`+id+`"`) {
 			t.Errorf("skipped device %s is not posted as left out", id)
 		}
+	}
+}
+
+// Why (review of #590, High): a setting that needs attention on another Settings tab (here an unreadable
+// stored MQTT password) used to move the active tab, so /devices/backups answered with the admin Settings
+// page, for an operator too, with the webhook address (its token is part of the URL). The Backups and
+// Snapshots pages are chosen by the route, never by where a problem is.
+func TestOwnPagesAreChosenByTheRouteNotByAProblemOnAnotherTab(t *testing.T) {
+	const token = "fake-webhook-token-123"
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, secretbox.KeyFile), []byte(fakeKey), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	mgr := snapshot.New(snapSource{}, dir)
+	mem := &sysMem{rows: map[string]store.SystemSetting{
+		"MQTT_URL":           {Key: "MQTT_URL", Value: "tcp://broker.lan:1883"},
+		"MQTT_PASSWORD":      {Key: "MQTT_PASSWORD", Secret: true, Unreadable: true}, // sealed with a key we no longer have
+		"NOTIFY_WEBHOOK_URL": {Key: "NOTIFY_WEBHOOK_URL", Value: "https://hook.example.test/in?token=" + token},
+	}}
+	cfg, err := config.Load([]string{"TASMOFLEET_DATA_DIR=/nonexistent-tasmofleet-test", "TASMOFLEET_CONFIG_FILE=/dev/null"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.DeviceNetworks = []netip.Prefix{netip.MustParsePrefix("172.31.13.0/24")}
+	aud := &fakeAudit{}
+	svc, err := sysconfig.New(t.Context(), sysconfig.Options{Base: cfg, Store: mem, Audit: aud,
+		TestMQTT: func(context.Context, sysconfig.MQTTParams) error { return nil },
+		TestSSO:  func(context.Context, string) (string, error) { return "ok", nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e := setupWith(t, func(d *Deps) {
+		d.SysConfig, d.Guard, d.Recorder = svc, stepGuard{fakeGuard: fakeGuard{}, stepped: &atomic.Bool{}}, aud
+		d.BackupFleet, d.Snapshots = fleetFixture(time.Now()), mgr
+	})
+	// the fixture really has a problem on another tab (else the test proves nothing)
+	if _, body := e.do(t, "GET", "/settings/system", "admin", nil); !strings.Contains(body, `data-sys-tab="mqtt">`) {
+		t.Fatal("fixture: the Settings page does not open the MQTT tab for its problem")
+	}
+	for _, role := range []string{"operator", "admin"} {
+		_, body := e.do(t, "GET", "/devices/backups", role, nil)
+		if !strings.Contains(body, `id="card-devices"`) || strings.Contains(body, `data-sys-tab="mqtt"`) {
+			t.Errorf("%s: /devices/backups is not the Backups page", role)
+		}
+		if role == "operator" && strings.Contains(body, token) {
+			t.Error("the webhook token reached an operator")
+		}
+	}
+	_, snaps := e.do(t, "GET", "/settings/system/snapshots", "admin", nil)
+	if !strings.Contains(snaps, `id="card-stored"`) || strings.Contains(snaps, `data-sys-tab="mqtt"`) {
+		t.Error("the Snapshots page is not the Snapshots page")
+	}
+}
+
+// Why (review of #590): an operator may look at the backups of deleted devices and keep or release them,
+// but never download or delete one (both routes are admin-only): the buttons must not be offered.
+func TestOperatorSeesNoDownloadOrDeleteOnDeletedDevicesBackups(t *testing.T) {
+	e, _, _, _ := storageEnv(t)
+	_, op := e.do(t, "GET", "/devices/backups", "operator", nil)
+	if !strings.Contains(op, "garage &lt;b&gt;plug&lt;/b&gt;") {
+		t.Fatal("fixture: the deleted device's backup is not listed")
+	}
+	for _, bad := range []string{`href="/tf/backups/70"`, `>Download<`, `data-dlg-action`, `dlg-bkdel`, "bk-del"} {
+		if strings.Contains(op, bad) {
+			t.Errorf("operator page offers %q", bad)
+		}
+	}
+	if !strings.Contains(op, `formaction="/tf/backups/70/keep"`) {
+		t.Error("Keep stays for operators")
+	}
+	_, adm := e.do(t, "GET", "/devices/backups", "admin", nil)
+	for _, want := range []string{`href="/tf/backups/70"`, `data-dlg-action="/tf/backups/70/delete"`} {
+		if !strings.Contains(adm, want) {
+			t.Errorf("admin page lacks %q", want)
+		}
+	}
+}
+
+// Why: Replace is an admin action; an operator's row menu must show only what they may run. The admin's
+// shows it when the restore service can replace a device.
+func TestRowMenuShowsReplaceToAdminsOnly(t *testing.T) {
+	e, _, _, _ := sysEnvFull(t, true, func(d *Deps) { d.BackupFleet = fleetFixture(time.Now()); d.Restore = &replRestore{} })
+	_, adm := e.do(t, "GET", "/devices/backups", "admin", nil)
+	_, op := e.do(t, "GET", "/devices/backups", "operator", nil)
+	if !strings.Contains(adm, `href="/tf/devices/1/replace"`) {
+		t.Error("admin row menu lacks Replace")
+	}
+	if strings.Contains(op, "/replace") || strings.Contains(op, "Replace") {
+		t.Error("operator row menu offers Replace")
+	}
+}
+
+// Why (mockup 1c): with the schedule off the page still lists the last stored run's failed and skipped
+// devices under the "No schedule" note, as the mockup shows; they are not hidden with the sums.
+func TestNoScheduleStillListsTheLastRunsFailedAndSkippedDevices(t *testing.T) {
+	e := fleetEnv(t, fleetFixture(time.Now()), "TASMOFLEET_BACKUP_INTERVAL=0")
+	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
+	last := cardOf(t, body, "lastrun")
+	for _, want := range []string{"No schedule", "Failed (1)", "cellar", "No answer within 30 s", "Skipped (2)", "balcony", "Never answered"} {
+		if !strings.Contains(last, want) {
+			t.Errorf("no-schedule Last run lacks %q", want)
+		}
+	}
+}
+
+// Why: a cut-off reason or age must be readable in full; the cells carry a title.
+func TestTableCellsCarryATitleForCutOffText(t *testing.T) {
+	e := fleetEnv(t, fleetFixture(time.Now()))
+	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
+	devs := cardOf(t, body, "devices")
+	if !strings.Contains(devs, `class="bk-rsn" title="No answer within 30 s"`) {
+		t.Error("a failure reason is not in a title")
+	}
+	if !regexp.MustCompile(`<td data-label="Newest backup"[^>]* title="[^"]+ ago`).MatchString(devs) && !regexp.MustCompile(`<td data-label="Newest backup"[^>]*title=`).MatchString(devs) {
+		t.Error("the newest backup's age has no title")
 	}
 }

@@ -350,7 +350,9 @@ templ StatTile(s StatTileData) {
 	<a class="stat-tile" href={ templ.SafeURL(s.Href) }>
 		<span class="stat-label"><span class={ "sdot-dot", s.Tone.class() } aria-hidden="true"></span>{ s.Label }</span>
 		<span class="stat-value">{ s.Value }</span>
-		if s.Hint != "" {
+		if !s.HintAt.IsZero() {
+			<span class="stat-hint">{ s.Hint }<time { StampAttrs(s.HintAt, StampDay)... }>{ s.HintAtText }</time>{ s.HintAfter }</span>
+		} else if s.Hint != "" {
 			<span class="stat-hint">{ s.Hint }</span>
 		}
 	</a>

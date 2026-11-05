@@ -81,14 +81,14 @@ func (h *handler) backupDelete(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 	default:
 		h.backupDeleted(d)
-		// A backup of a deleted device is listed under Settings -> Backups: back there.
+		// A backup of a deleted device is listed on Devices -> Backups: back there.
 		redirect(w, r, backupsHome(model.Backup{DeviceID: d.Device})+fmt.Sprintf("ok=deleted&n=%d", d.Runs))
 	}
 }
 
-// BackupStorage is Settings -> Backups (design v2 N9): the storage summary and the backups
-// of deleted devices (*backup.Manager implements it). Deps.Backups is asserted against it;
-// without it the tab shows only its settings.
+// BackupStorage is the storage totals and the backups of deleted devices on Devices -> Backups
+// (design v2 N9; *backup.Manager implements it). Deps.Backups is asserted against it; without it
+// the page shows no totals and no deleted devices' backups.
 type BackupStorage interface {
 	Usage(ctx context.Context) ([]store.BackupUsage, error)
 	Orphans(ctx context.Context) ([]model.Backup, error)
@@ -102,7 +102,7 @@ type BackupUnreferenced interface {
 }
 
 // withoutBackup is the one definition of "device without a backup": a live device (Device 0 is
-// the deleted devices' row) with no backup run. The Backups tab's tile counts with it and the
+// the deleted devices' row) with no backup run. The Backups page's tile counts with it and the
 // device list's "No backup" chip filters with it, so the click shows what the tile counted (#381).
 func withoutBackup(u store.BackupUsage) bool { return u.Device != 0 && u.Runs == 0 }
 

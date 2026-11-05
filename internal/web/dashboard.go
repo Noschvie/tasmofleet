@@ -197,9 +197,9 @@ func dashTiles(base string, s fleetSummary) []ui.StatTileData {
 			tile.Href = base + fleetPath + "?filter=" + fleetNone
 		}
 		if r := s.BackupRun; r != nil {
-			tile.Hint = "Last run " + ui.StampDayText(s.Now, r.StartedAt)
+			tile.Hint, tile.HintAt, tile.HintAtText = "Last run ", r.StartedAt, ui.StampDayText(s.Now, r.StartedAt)
 			if r.Failed > 0 {
-				tile.Hint += " · " + itoa(r.Failed) + " failed"
+				tile.HintAfter = " · " + itoa(r.Failed) + " failed"
 				tile.Tone = ui.ToneWarn
 			}
 		}

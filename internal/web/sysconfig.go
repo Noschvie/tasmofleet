@@ -165,11 +165,16 @@ func (h *handler) sysData(r *http.Request, posted map[string]string, errs map[st
 	case p.Active == sysSnapshotsSlug || p.Active == sysBackupsSlug:
 		p.Active = "" // the Snapshots and Backups pages are no tabs of the Settings page
 	}
-	for _, tab := range p.Tabs {
-		for _, s := range tab.Cards {
-			for _, row := range s.Rows {
-				if row.hasProblem() && (tab.Slug != sysBackupsSlug || onBackups(r)) {
-					p.Active = tab.Slug // an error is shown where it happened (the Backups page is no tab of this one)
+	// An error is shown where it happened, but never by changing the page: Snapshots and Backups are
+	// pages of their own, chosen by the route, and a problem on another Settings tab must not turn them
+	// into the Settings page (it would show an operator what only admins may see).
+	if ownPage := onSnapshots(r) || onBackups(r); !ownPage {
+		for _, tab := range p.Tabs {
+			for _, s := range tab.Cards {
+				for _, row := range s.Rows {
+					if row.hasProblem() && tab.Slug != sysSnapshotsSlug && tab.Slug != sysBackupsSlug {
+						p.Active = tab.Slug
+					}
 				}
 			}
 		}
@@ -287,11 +292,14 @@ func (h *handler) sysRender(w http.ResponseWriter, r *http.Request, status int, 
 	if p.NeedStepUp {
 		p.StepUp = h.sysStepUpData(r, p)
 	}
-	if p.Active == sysSnapshotsSlug {
+	// The page comes from the route, not from which tab happens to be active.
+	switch {
+	case onSnapshots(r):
+		p.Active = sysSnapshotsSlug
 		h.snapshotsRender(w, r, status, p)
 		return
-	}
-	if p.Active == sysBackupsSlug {
+	case onBackups(r):
+		p.Active = sysBackupsSlug
 		h.backupsRender(w, r, status, p)
 		return
 	}

@@ -13,6 +13,7 @@ import (
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/restore"
+	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
 
 // BackupFleet is what the Devices, Backups page (#409) reads: the last scheduled run, one row per
@@ -28,6 +29,35 @@ type BackupFleet interface {
 	Overview(ctx context.Context) ([]model.BackupDeviceRow, error)
 	// PruneNext lists the backup runs the next backup would delete.
 	PruneNext(ctx context.Context) ([]model.Backup, error)
+}
+
+// whyText is why a device was skipped, failed or left out: the reason as a sentence, and when the
+// device went offline as an instant the page words like every other time.
+type whyText struct {
+	Reason    string
+	Since     time.Time
+	SinceText string // the fallback text of Since
+}
+
+// Plain is the reason as one text, for a title attribute.
+func (w whyText) Plain() string {
+	if w.Since.IsZero() {
+		return w.Reason
+	}
+	return w.Reason + " since " + ui.StampText(w.Since, ui.StampDateTime)
+}
+
+// NewestTitle is the full date of a device's newest backup with its age.
+func (r fleetRow) NewestTitle() string {
+	return ui.StampText(r.Newest, ui.StampDateTimeSec) + " (" + r.Ago + ")"
+}
+
+func newWhy(now time.Time, reason string, since time.Time) whyText {
+	w := whyText{Reason: fleetSentence(reason), Since: since}
+	if !since.IsZero() {
+		w.SinceText = ui.StampDayText(now, since)
+	}
+	return w
 }
 
 // fleetPath is Devices -> Backups (#409). The schedule form on it posts to the same path.
@@ -71,6 +101,7 @@ type fleetRow struct {
 	FilesBadge, FilesWhy string // "Settings only" with its full sentence; "" without
 	Outcome              model.BackupOutcome
 	Reason               string
+	Why                  whyText
 	NotInRun             bool // the last run does not name this device (added after it)
 	Skip                 bool // a run started now would leave it out
 	sortResult           int
@@ -153,7 +184,7 @@ func (h *handler) backupsRender(w http.ResponseWriter, r *http.Request, status i
 		if !v.IsAdmin {                                       // an operator may look and keep, never delete
 			st.CanDelete = false
 			for i := range st.Orphans {
-				st.Orphans[i].DeleteText = ""
+				st.Orphans[i].DeleteText, st.Orphans[i].Download = "", "" // both routes are admin-only
 			}
 		}
 	}
@@ -217,7 +248,7 @@ func (h *handler) fleetOf(r *http.Request, admin bool) (*fleetView, error) {
 	for _, o := range over {
 		row := fleetRow{ID: o.DeviceID, Name: o.Name, BackupsHref: fmt.Sprintf("%s/devices/%d/backups", base, o.DeviceID),
 			DeviceHref: fmt.Sprintf("%s/devices/%d", base, o.DeviceID), Newest: o.NewestAt, Runs: o.Runs,
-			Outcome: o.LastOutcome, Reason: o.LastReason, Skip: o.SkipReason != "", NotInRun: ok && o.LastOutcome == ""}
+			Outcome: o.LastOutcome, Reason: o.LastReason, Why: newWhy(fv.Now, o.LastReason, o.LastSince), Skip: o.SkipReason != "", NotInRun: ok && o.LastOutcome == ""}
 		if admin && canReplace {
 			row.ReplaceHref = fmt.Sprintf("%s/devices/%d/replace", base, o.DeviceID)
 		}

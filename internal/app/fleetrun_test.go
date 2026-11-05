@@ -144,8 +144,8 @@ func TestScheduledBackupSkipsAnOfflineDeviceWithTheDate(t *testing.T) {
 		t.Errorf("backed up %q, want only the online device", got)
 	}
 	it := item(e.last(t), "down")
-	if it.Outcome != model.BackupOutcomeSkipped || it.Reason != "offline since 3 Nov 21:14" {
-		t.Errorf("item = %+v, want skipped, offline since 3 Nov 21:14", it)
+	if it.Outcome != model.BackupOutcomeSkipped || it.Reason != "offline" || !it.Since.Equal(since) {
+		t.Errorf("item = %+v, want skipped, offline, since the tracker's time (a plain word and a time, not a hand-formatted text)", it)
 	}
 }
 
@@ -289,6 +289,10 @@ func TestScheduledRunSurvivesARestart(t *testing.T) {
 	if got.LastTotal != want.LastTotal || got.LastFailed != want.LastFailed || got.LastSkipped != want.LastSkipped || got.Finished.IsZero() {
 		t.Errorf("after restart %+v, want %+v", got, want)
 	}
+	// the bar, the page and the dashboard tile show the same time: when the run began
+	if got.Started.IsZero() || !got.Started.Equal(r.StartedAt) || !want.Started.Equal(r.StartedAt) {
+		t.Errorf("run started %v (before restart %v, after %v), want the stored start %v", r.StartedAt, want.Started, got.Started, r.StartedAt)
+	}
 }
 
 // Why: a run that shutdown cut short is not a result: it is stored as history only, the last
@@ -357,7 +361,7 @@ func TestScheduledBackupAfterARestartSkipsADevicePersistedAsOffline(t *testing.T
 		t.Errorf("tried %q, want only the device that was not offline before the restart", got)
 	}
 	it := item(e.last(t), "down")
-	if it.Outcome != model.BackupOutcomeSkipped || it.Reason != "offline since 3 Nov 21:00" {
+	if it.Outcome != model.BackupOutcomeSkipped || it.Reason != "offline" || !it.Since.Equal(since) {
 		t.Errorf("item = %+v, want skipped, offline since the persisted last_seen_at", it)
 	}
 	if s := e.run.Status(); s.LastFailed != 0 || s.LastSkipped != 1 || len(e.notes) != 0 {

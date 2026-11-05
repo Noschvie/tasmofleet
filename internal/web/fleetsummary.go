@@ -19,7 +19,7 @@ const (
 	chipDown         = "down"         // offline or never answered
 	chipOutdated     = "outdated"     // a newer stable release exists
 	chipNonCompliant = "noncompliant" // at least one policy deviation
-	chipNoBackup     = "nobackup"     // no backup run yet (#381; Settings -> Backups tile)
+	chipNoBackup     = "nobackup"     // no backup run yet (#381; the Devices, Backups tile)
 )
 
 // chipCount is one filter chip with the number of devices it would show.

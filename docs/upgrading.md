@@ -74,7 +74,7 @@ and `.decoded.json`. Background: [#129](https://github.com/nofuturekid/tasmoflee
   there.
 - A file in an old `backups/<number>/` folder that no index entry points to (for example after
   restoring an older database) is never moved or deleted. It is counted in the start-up log line
-  (`unindexed`), logged as a warning and listed under Settings → Backups → Unreferenced files.
+  (`unindexed`), logged as a warning and listed under Devices → Backups → Unreferenced files.
 - Two devices with the same hostname get `<hostname>` and `<hostname>_<device-id>`.
 - If a device's hostname changes later, new backups go to the new folder; old ones stay put and
   remain listed and restorable.

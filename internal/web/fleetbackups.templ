@@ -90,6 +90,7 @@ templ fleetLastRun(p sysPage, c sysCard) {
 				<p class="ufield-help">No scheduled run has finished yet.</p>
 			case !v.Scheduled:
 				@fleetNoSchedule(*v)
+				@fleetRunLists(p, *v)
 			default:
 				@fleetRunSums(*v)
 				@fleetRunLists(p, *v)
@@ -156,12 +157,21 @@ templ fleetRunItems(p sysPage, items []model.BackupRunItem, tone ui.Tone, word s
 						@ui.Badge(tone, word)
 					</div>
 					if it.Reason != "" {
-						<div class="sys-orphan-detail">{ fleetSentence(it.Reason) }</div>
+						<div class="sys-orphan-detail">@fleetWhy(newWhy(p.Fleet.Now, it.Reason, it.Since))</div>
 					}
 				</div>
 			</div>
 		}
 	</div>
+}
+
+// fleetWhy is a reason with its time: "Offline since Yesterday 21:14".
+templ fleetWhy(w whyText) {
+	if w.Since.IsZero() {
+		{ w.Reason }
+	} else {
+		{ w.Reason + " since " }<time { ui.StampAttrs(w.Since, ui.StampDay)... }>{ w.SinceText }</time>
+	}
 }
 
 // fleetSentence starts a stored reason with a capital: "offline since ..." reads as a line of its own.
@@ -244,7 +254,7 @@ templ fleetRowView(v fleetView, r fleetRow) {
 			<td data-label="Select" class="sel"><label class="hit"><input type="checkbox" form="picker" name="id" value={ strconv.FormatInt(int64(r.ID), 10) } aria-label={ "Select " + r.Name }/></label></td>
 		}
 		<td data-label="Device" class="wrap p1 dv-name"><a href={ templ.SafeURL(r.DeviceHref) }>{ r.Name }</a></td>
-		<td data-label="Newest backup" class="nowrap s">
+		<td data-label="Newest backup" class="nowrap s" if !r.Newest.IsZero() { title={ r.NewestTitle() } }>
 			if r.Newest.IsZero() {
 				@ui.Badge(ui.ToneAccent, "No backup")
 			} else {
@@ -275,10 +285,10 @@ templ fleetRowView(v fleetView, r fleetRow) {
 					@ui.Badge(ui.ToneOK, "OK")
 				case model.BackupOutcomeFailed:
 					@ui.Badge(ui.ToneDanger, "Failed")
-					<span class="bk-rsn">{ " " + fleetSentence(r.Reason) }</span>
+					<span class="bk-rsn" title={ r.Why.Plain() }>{ " " }@fleetWhy(r.Why)</span>
 				case model.BackupOutcomeSkipped:
 					@ui.Badge(ui.ToneNeutral, "Skipped")
-					<span class="bk-rsn">{ " " + fleetSentence(r.Reason) }</span>
+					<span class="bk-rsn" title={ r.Why.Plain() }>{ " " }@fleetWhy(r.Why)</span>
 				default:
 					if r.NotInRun {
 						<span class="muted">Not in a run yet</span>
