@@ -528,13 +528,13 @@ templ fwNotes(blocks []firmware.NoteBlock) {
 templ fwInlines(ins []firmware.Inline) {
 	for _, in := range ins {
 		if in.Href != "" {
-			<a href={ templ.SafeURL(in.Href) } rel="noopener noreferrer nofollow" target="_blank">{ in.Text }</a>
+			<a href={ templ.SafeURL(in.Href) } rel="noopener noreferrer nofollow" target="_blank">@ui.Soft(in.Text)</a>
 		} else if in.Code {
-			<code>{ in.Text }</code>
+			<code>@ui.Soft(in.Text)</code>
 		} else if in.Strong {
-			<strong>{ in.Text }</strong>
+			<strong>@ui.Soft(in.Text)</strong>
 		} else {
-			{ in.Text }
+			@ui.Soft(in.Text)
 		}
 	}
 }

@@ -14603,15 +14603,26 @@ button.pol-chip-x {
   font-size: 13.5px;
   line-height: 22px;
 }
+/* the label column is at least 72 px and grows with its title up to 120 px; a longer title wraps inside
+   the badge instead of running out of it over the list ("Upgrade notes: action may be required", #510) */
 .wn-lbl {
   flex: none;
-  width: 72px;
+  min-width: 72px;
+  max-width: 120px;
   padding-top: 2px;
 }
 .wn-lbl .bdg {
-  width: 72px;
+  box-sizing: border-box;
+  min-width: 72px;
+  max-width: 100%;
+  min-height: 18px;
+  height: auto;
+  padding-top: 1px;
+  padding-bottom: 1px;
   justify-content: center;
-  height: 18px;
+  text-align: center;
+  white-space: normal;
+  line-height: 16px;
 }
 .wn-sec ul {
   margin: 0;
@@ -14647,6 +14658,9 @@ button.pol-chip-x {
   cursor: pointer;
   color: var(--color-text-2);
   font-size: var(--fs-meta);
+}
+/* the gap below the summary belongs to the open list: a collapsed details is as tall as its summary (#633) */
+.wn-older[open] > summary {
   margin-bottom: var(--sp-8);
 }
 @media (min-width: 75rem) {

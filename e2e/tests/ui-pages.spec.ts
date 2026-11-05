@@ -302,6 +302,9 @@ for (const m of modes) {
     await look("system-settings-advanced");
     await page.goto(app.url + "/about");
     await look("about");
+    // #510: the 0.17.0 section badge "Upgrade notes: action may be required" and the paths in code
+    await page.goto(app.url + "/whats-new");
+    await look("whats-new");
     await page.goto(app.url + "/styleguide");
     await look("styleguide");
     // Pages behind a link or a form: the device's backups, prune confirmation, drift and replace, a

@@ -49,7 +49,7 @@ func SoftJSONParts(s string) []string {
 }
 
 // SoftParts cuts s after the characters where a file name, URL or host:port reads naturally across
-// two lines: after "/", "-" and "_", after a "." that is followed by a letter (hostnames and
+// two lines: after "/", "-", "_", "|" and "=", after a "." that is followed by a letter (hostnames and
 // extensions, not the dots of an IP address or a version), and after a ":" that is followed by a
 // digit (the port). Joined again the parts are s.
 func SoftParts(s string) []string {
@@ -59,7 +59,7 @@ func SoftParts(s string) []string {
 		next := s[i+1]
 		isLetter := next >= 'a' && next <= 'z' || next >= 'A' && next <= 'Z'
 		isDigit := next >= '0' && next <= '9'
-		if strings.IndexByte("/-_", s[i]) >= 0 && next != s[i] || s[i] == '.' && isLetter || s[i] == ':' && isDigit {
+		if strings.IndexByte("/-_|=", s[i]) >= 0 && next != s[i] || s[i] == '.' && isLetter || s[i] == ':' && isDigit {
 			parts = append(parts, s[start:i+1])
 			start = i + 1
 		}

@@ -140,6 +140,19 @@ func TestWhatsNewEscapes(t *testing.T) {
 	}
 }
 
+// Why (#510): a path in code has no space to break at; without a break point after each "/" the browser
+// cuts the word that happens to meet the line end ("tasmofl / eet") on a phone. The text stays the same.
+func TestWhatsNewCodeBreaksAtPathSegments(t *testing.T) {
+	var b strings.Builder
+	p := whatsNewView{Installed: "1.0.0", Releases: []whatsNewRelease{{Release: changelog.Parse("## 1.0.0 (2026-01-02)\n\n### Fixed\n\n- see `deploy/homeassistant/tasmofleet`\n")[0]}}}
+	if err := whatsNewPage(p).Render(context.Background(), &b); err != nil {
+		t.Fatal(err)
+	}
+	if want := "<code>deploy/<wbr>homeassistant/<wbr>tasmofleet</code>"; !strings.Contains(b.String(), want) {
+		t.Errorf("code lacks break points after the slashes, want %s in %s", want, b.String())
+	}
+}
+
 // Why: "Installed" must find the running release whether the binary was stamped from the tag
 // ("v0.10.1", local builds) or by the image build ("0.10.1").
 func TestWhatsNewInstalledWithTagPrefix(t *testing.T) {

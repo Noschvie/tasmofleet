@@ -235,6 +235,7 @@ func TestSoftPartsBreakAtNaturalPoints(t *testing.T) {
 		{"127.0.0.1:20032", []string{"127.0.0.1:", "20032"}}, // the dots of an address stay together
 		{"16.0.0", []string{"16.0.0"}},
 		{"http://h/fw/a.bin", []string{"http://", "h/", "fw/", "a.", "bin"}},
+		{"?chip=down|outdated|noncompliant", []string{"?chip=", "down|", "outdated|", "noncompliant"}}, // #510: a query in the changelog
 		{"", []string{""}},
 	} {
 		got := SoftParts(tc.in)
