@@ -227,3 +227,77 @@ test("a busy relay switch keeps its knob in place", async ({ page }) => {
   expect(await knob()).toBeCloseTo(idle, 0);
   release();
 });
+
+// Why (#538): the spinner has to turn (no ds-spin keyframes meant it never did) and must stand still
+// for a person who asked for reduced motion.
+test("the busy ring uses ds-spin and stops under reduced motion", async ({
+  page,
+}) => {
+  await page.setExtraHTTPHeaders(admin);
+  const href = await devicePath(page);
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  await page.route("**/probe", async (route) => {
+    await gate;
+    await route.continue();
+  });
+  await page.goto(app.url + href);
+  const btn = page.getByRole("button", { name: "Refresh identity" });
+  await btn.click();
+  await expect(btn).toHaveAttribute("aria-busy", "true");
+  const style = () =>
+    btn.evaluate((b) => ({
+      content: getComputedStyle(b, "::after").content,
+      anim: getComputedStyle(b, "::after").animationName,
+    }));
+  const normal = await style();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const reduced = await style();
+  release();
+  expect(normal.anim).toBe("ds-spin");
+  expect(reduced.anim).toBe("none");
+});
+
+// Why (#538): the list's power toggle is a switch; a ring next to its knob pushed the knob out of
+// place, so a busy switch only dims.
+test("a busy list power toggle has no ring and keeps its knob", async ({
+  page,
+}) => {
+  await page.setExtraHTTPHeaders(admin);
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  await page.route(/\/power\/\d+$/, async (route) => {
+    await gate;
+    await route.continue();
+  });
+  await page.goto(app.url + "/devices");
+  // pinned by its URL: once busy it is disabled, and a :not([disabled]) locator would move on
+  const url = await page
+    .locator("button.pwr:not([disabled]):visible")
+    .first()
+    .getAttribute("hx-post");
+  const pwr = page.locator(`button.pwr[hx-post="${url}"]:visible`);
+  await expect(pwr).toBeVisible();
+  const look = () =>
+    pwr.evaluate((b) => {
+      const k = b.querySelector(".sw")!.getBoundingClientRect();
+      const r = b.getBoundingClientRect();
+      return {
+        top: k.top - r.top,
+        left: k.left - r.left,
+        w: r.width,
+        h: r.height,
+        after: getComputedStyle(b, "::after").content,
+      };
+    });
+  const idle = await look();
+  await pwr.click();
+  await expect(pwr).toHaveAttribute("aria-busy", "true");
+  const busy = await look();
+  release();
+  expect(busy.after).toBe("none");
+  expect(busy.top).toBeCloseTo(idle.top, 0);
+  expect(busy.left).toBeCloseTo(idle.left, 0);
+  expect(busy.w).toBeCloseTo(idle.w, 0);
+  expect(busy.h).toBeCloseTo(idle.h, 0);
+});
