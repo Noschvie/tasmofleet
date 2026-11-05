@@ -38,7 +38,8 @@ func (p Paths) Reason(a Action) string {
 // Choose decides, from facts alone, how each action reaches the device. It is pure: no clock, no
 // I/O (Facts.Now is the clock). The order is fixed (spec §5.x):
 //
-//   - Commands: HTTP unless HTTP is failing and MQTT is usable.
+//   - Commands (reads): MQTT when usable (#456), else HTTP unless HTTP is failing.
+//   - Writes: HTTP unless HTTP is failing and MQTT is usable (strict).
 //   - Backup: HTTP unless failing; else MQTT FileDownload (usable, password set and not refused).
 //   - Restore: HTTP (the web UI's restore upload) unless HTTP is failing; else MQTT FileUpload Type 2.
 //   - Update, pull: download over HTTP, else download started over MQTT.
@@ -46,8 +47,9 @@ func (p Paths) Reason(a Action) string {
 //     upload over MQTT (only with the experimental checkbox, a fitting image and a usable
 //     password), else the download over MQTT.
 //
-// HTTP comes first because it is the established path with synchronous replies; MQTT is what
-// makes devices HTTP cannot reach manageable (#45).
+// Writes, transfers and updates keep HTTP first: it is the established path with synchronous
+// replies, and MQTT is what makes devices HTTP cannot reach manageable (#45). Reads go MQTT
+// first since #456.
 func Choose(f Facts) Paths {
 	var p Paths
 	var t string
@@ -174,14 +176,20 @@ func noPath(parts ...string) string {
 	return "no path: " + strings.Join(out, ", and ")
 }
 
+// chooseCommands: reads go over MQTT first (#456) whenever the device is on TasmoFleet's broker and
+// live there, whatever HTTP's state is. Only a device MQTT cannot serve is read over HTTP, and when
+// HTTP is failing too there is no path.
 func chooseCommands(f Facts) (Path, string) {
-	if !httpFailing(f) {
+	why := mqttBlocker(f, false)
+	switch {
+	case why == "" && httpFailing(f):
+		return MQTT, "over MQTT, because " + httpFailText(f.HTTP)
+	case why == "":
+		return MQTT, "over MQTT first (the device is online on TasmoFleet's broker)"
+	case !httpFailing(f):
 		return HTTP, "over the device's HTTP API"
 	}
-	if why := mqttBlocker(f, false); why != "" {
-		return None, noPath(httpFailText(f.HTTP), "MQTT is not usable: "+why)
-	}
-	return MQTT, "over MQTT, because " + httpFailText(f.HTTP)
+	return None, noPath(httpFailText(f.HTTP), "MQTT is not usable: "+why)
 }
 
 func chooseWrites(f Facts) (Path, string) {

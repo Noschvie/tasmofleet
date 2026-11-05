@@ -93,6 +93,7 @@ type facts struct {
 	othersUnrd  int
 	snapshotted int
 	healthNewer bool
+	lwtOffline  bool
 }
 
 func (f *facts) HTTPState(id model.DeviceID) HTTPState {
@@ -113,7 +114,7 @@ func (f *facts) FactsFor(_ context.Context, d model.Device) (Facts, error) {
 	f.snapshotted++
 	now := time.Now()
 	m := MQTTFacts{BusConnected: true, Ours: d.MQTT == model.MQTTOurs, Topic: d.Topic, TopicExclusive: true,
-		OurFullTopic: "", LWTOnline: true, OthersGroupUnread: f.othersUnrd}
+		OurFullTopic: "", LWTOnline: !f.lwtOffline, OthersGroupUnread: f.othersUnrd}
 	if f.groupKnown {
 		m.GroupTopic, m.GroupTopicReadAt, m.LastProbeAt = "tasmotas", now, now.Add(-time.Hour)
 	}
@@ -152,7 +153,8 @@ func TestFailsOverToMQTTOnlyWhenNothingWasSent(t *testing.T) {
 	}{
 		{"address outside the device networks", tasmota.ErrForbiddenAddr, true},
 		{"401 before execution", tasmota.ErrAuth, true},
-		{"SetOption128: the handler runs nothing", tasmota.ErrHTTPAPIRefused, true},
+		// a write that got this answer on its first try is not proven unsent (TestAPIRefusedFailsOverOnlyForReadsOrAKnownRefusal)
+		{"SetOption128: the handler runs nothing", tasmota.ErrHTTPAPIRefused, false},
 		{"timeout: the command may have run", tasmota.ErrTimeout, false},
 		{"unparsable answer: it ran", tasmota.ErrBadResponse, false},
 		{"unknown outcome unreachable (dropped after the write)", tasmota.ErrUnreachable, false},
@@ -160,7 +162,8 @@ func TestFailsOverToMQTTOnlyWhenNothingWasSent(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			g := newRig(t)
 			g.http.err = tc.err
-			raw, err := g.r.Command(t.Context(), g.target(), "Status 2")
+			// a write: reads go MQTT first since #456, so only writes still start on HTTP
+			raw, err := g.r.Command(t.Context(), g.target(), "Power1 ON")
 			if tc.failover {
 				if err != nil || string(raw) != `{"MQTT":"yes"}` || g.mq.n() != 1 || g.http.n() != 1 {
 					t.Fatalf("raw=%s err=%v http=%d mqtt=%d", raw, err, g.http.n(), g.mq.n())
@@ -302,7 +305,7 @@ func TestTopicChangeBetweenSnapshotAndSendSendsNothing(t *testing.T) {
 	g.mem.Fail(7, HTTPFailUnreachable)
 	g.f.mem = g.mem
 	g.r.o.Facts = changingFacts{inner: g.f, devs: g.devs}
-	if _, err := g.r.Command(t.Context(), g.target(), "Status 2"); err == nil || g.mq.n() != 0 {
+	if _, err := g.r.Command(t.Context(), g.target(), "Power1 ON"); err == nil || g.mq.n() != 0 {
 		t.Fatalf("err=%v mqtt=%d", err, g.mq.n())
 	}
 }

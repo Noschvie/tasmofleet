@@ -299,7 +299,13 @@ func (r *Router) Command(ctx context.Context, t tasmota.Target, cmnd string) (js
 		}
 		return r.pinnedMQTT(ctx, id, cmnd, cls)
 	}
-	if r.mqttDoer() == nil || r.o.Facts.HTTPState(id).State != HTTPFailing {
+	if r.mqttDoer() == nil || cls.job {
+		return r.httpFirst(ctx, t, cmnd, cls)
+	}
+	if !cls.write {
+		return r.read(ctx, t, cmnd, cls)
+	}
+	if r.o.Facts.HTTPState(id).State != HTTPFailing {
 		return r.httpFirst(ctx, t, cmnd, cls)
 	}
 	// HTTP is known to fail: ask the facts which way works.
@@ -307,14 +313,44 @@ func (r *Router) Command(ctx context.Context, t tasmota.Target, cmnd string) (js
 	if err != nil {
 		return r.httpFirst(ctx, t, cmnd, cls) // no judgement possible: the established path
 	}
-	if cls.job {
-		return r.httpFirst(ctx, t, cmnd, cls)
-	}
 	if r.pathFor(p, cls) == MQTT {
 		return r.sendMQTT(ctx, d, cmnd, cls)
 	}
 	raw, err := r.httpCommand(ctx, t, cmnd)
 	return raw, r.explain(err, f, p, cls)
+}
+
+// read sends a read (Status N, settings reads, read-only console commands) MQTT first (#456) when the
+// device is on our broker and live there (Paths.Commands), else over HTTP as before.
+//
+// HTTP is tried after MQTT only when the MQTT attempt provably published nothing (notPublished: the
+// channel refused the command, the bus was down, the device was offline by its LWT, the snapshot
+// changed). A read that was published and got no usable answer has an unknown outcome for that read:
+// the caller sees the MQTT error (a timeout, tasmota.ErrTimeout) and nothing is sent a second time.
+func (r *Router) read(ctx context.Context, t tasmota.Target, cmnd string, cls cmdClass) (json.RawMessage, error) {
+	id := t.DeviceID()
+	d, err := r.o.Devices.GetDevice(ctx, id)
+	if err != nil {
+		return r.httpFirst(ctx, t, cmnd, cls)
+	}
+	if d.MQTT != model.MQTTOurs || d.Topic == "" {
+		return r.httpFirst(ctx, t, cmnd, cls) // not on our broker: no need to gather the inventory's facts
+	}
+	f, err := r.o.Facts.FactsFor(ctx, d)
+	if err != nil {
+		return r.httpFirst(ctx, t, cmnd, cls)
+	}
+	p := Choose(f)
+	if p.Commands != MQTT {
+		raw, err := r.httpFirst(ctx, t, cmnd, cls)
+		return raw, r.explain(err, f, p, cls)
+	}
+	raw, err := r.sendMQTT(ctx, d, cmnd, cls)
+	if err == nil || !notPublished(err) {
+		return raw, err
+	}
+	r.o.Log.Info("transport: MQTT did not publish the read, using HTTP", "device", int64(id))
+	return r.httpCommand(ctx, t, cmnd)
 }
 
 // httpFirst sends over HTTP and fails over to MQTT only when the error proves that nothing was

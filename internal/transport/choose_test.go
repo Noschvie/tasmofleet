@@ -52,10 +52,10 @@ func TestChooseOrder(t *testing.T) {
 		f                              Facts
 		commands, backup, restore, upd Path
 	}{
-		// Why: HTTP is the established path with synchronous replies; nothing changes for devices
-		// HTTP reaches, even when MQTT would work too.
-		{"http ok, mqtt usable: HTTP everywhere", base(), HTTP, HTTP, HTTP, DownloadHTTP},
-		{"http unknown counts as not failing", func() Facts { f := base(); f.HTTP = HTTPState{}; return f }(), HTTP, HTTP, HTTP, DownloadHTTP},
+		// Why: HTTP is the established path with synchronous replies for everything but reads (#456
+		// stage 1: reads go MQTT first, see choose_reads_test.go).
+		{"http ok, mqtt usable: reads MQTT, the rest HTTP", base(), MQTT, HTTP, HTTP, DownloadHTTP},
+		{"http unknown counts as not failing", func() Facts { f := base(); f.HTTP = HTTPState{}; return f }(), MQTT, HTTP, HTTP, DownloadHTTP},
 		// Why: this is #45. MQTT is what makes an http_unreachable device manageable.
 		{"http failing, mqtt usable, password set", httpDown(base()), MQTT, MQTT, MQTT, DownloadMQTT},
 		// Why: a transfer carries the password; without one nothing is published. Commands do not need it.
@@ -66,11 +66,11 @@ func TestChooseOrder(t *testing.T) {
 		{"http failing, bus down", mqttOff(httpDown(base())), None, None, None, None},
 		// Why: a device that cannot fetch from the firmware server cannot download an update. A
 		// restore over HTTP is pushed to the device (#430), so it stays on HTTP, like the backup.
-		{"http ok, device does not reach firmware server", fwNo(base()), HTTP, HTTP, HTTP, None},
+		{"http ok, device does not reach firmware server", fwNo(base()), MQTT, HTTP, HTTP, None},
 		// Why: without FIRMWARE_BASE_URL no device can fetch anything (D12); a restore needs nothing
 		// from the firmware server (#430).
-		{"http ok, no FIRMWARE_BASE_URL", noBase(base()), HTTP, HTTP, HTTP, None},
-		{"http ok, no base URL, no password", noPW(noBase(base())), HTTP, HTTP, HTTP, None},
+		{"http ok, no FIRMWARE_BASE_URL", noBase(base()), MQTT, HTTP, HTTP, None},
+		{"http ok, no base URL, no password", noPW(noBase(base())), MQTT, HTTP, HTTP, None},
 		// Why: with HTTP failing and no firmware server there is no download; update is None.
 		{"http failing, fw no", fwNo(httpDown(base())), MQTT, MQTT, MQTT, None},
 	}
@@ -121,7 +121,9 @@ func TestReasonTexts(t *testing.T) {
 	if got := Choose(f).Reason(ActBackup); !strings.Contains(got, "refused its MQTT password") {
 		t.Errorf("bad password reason = %q", got)
 	}
-	if got := Choose(base()).Reason(ActCommands); !strings.Contains(got, "HTTP") {
+	other := base()
+	other.MQTT.Ours = false
+	if got := Choose(other).Reason(ActCommands); !strings.Contains(got, "HTTP") {
 		t.Errorf("commands reason = %q", got)
 	}
 	for kind, want := range map[HTTPFailKind]string{

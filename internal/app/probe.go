@@ -46,7 +46,11 @@ type brokerMatcher interface {
 // Prober learns a device's identity from individual Status queries (never
 // Status 0, spec section 5), one at a time with a pause in between.
 type Prober struct {
-	Client  tasmota.Client
+	Client tasmota.Client
+	// Reads is the client of the background reads of a stored device (ReadNet): the router, so that a
+	// device on our broker is read over MQTT first (#456). Nil: Client. Identity probes (Describe,
+	// Refresh) always use Client, which measures and verifies HTTP.
+	Reads   tasmota.Client
 	Devices identityStore
 	// Gap is the pause between two commands to the same device (default 200 ms).
 	Gap time.Duration
@@ -489,14 +493,20 @@ func (p *Prober) ReadNet(ctx context.Context, id model.DeviceID) error {
 		return nil
 	}
 	t := tasmota.TargetFor(d)
+	rp := p // the same prober, reading through the router
+	if p.Reads != nil {
+		c := *p
+		c.Client = p.Reads
+		rp = &c
+	}
 	var out probed
-	net, err := p.status5(ctx, t, &out)
+	net, err := rp.status5(ctx, t, &out)
 	if err != nil {
 		return err
 	}
 	net = p.withStoredWifi(d.Net, net) // kept when Status 11 gives none
 	if !net.Wired {
-		p.status11(ctx, t, &net)
+		rp.status11(ctx, t, &net)
 	}
 	if err := p.Devices.UpdateNet(ctx, id, store.ProbeGuard{Address: d.Address, Port: d.Port, MAC: d.MAC}, net); err != nil {
 		return err

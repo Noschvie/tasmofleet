@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Changed
+
+- Reads go over MQTT first for devices on TasmoFleet's broker that are online there: the console's read-only commands, the settings page and policy reads, the Status 1 read of the GroupTopic and the network facts (hostname, IP, Wi-Fi) are asked over MQTT, so devices HTTP cannot reach (the HTTP API switched off, another network) answer them too, and a device's reads no longer wait for an HTTP check. A device that is not on this broker, is not online on it or whose topic is shared is read over HTTP as before. HTTP is tried after MQTT only when nothing was published (the channel refused the command, or the device was offline); a read that was published and not answered is reported as a timeout and is not sent again over HTTP. Changes (settings, Make compliant, console writes), backups, restores and updates keep their order: HTTP first, MQTT when HTTP fails (#456)
+
 ### Fixed
 
 - About and Settings → Advanced: on a tablet (768 to 1199 px) the two configuration tables no longer sit side by side; the setting names overlapped the values, so they now stack in one column (#592)

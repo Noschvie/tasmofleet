@@ -57,9 +57,15 @@ func (a *runtime) onlyOverMQTT(ctx context.Context, ids ...model.DeviceID) bool 
 			continue
 		}
 		f, err := a.facts.factsFor(ctx, d, all)
-		if err == nil && transport.Choose(f).Commands == transport.MQTT {
+		if err == nil && reachedOnlyOverMQTT(f) {
 			return true
 		}
 	}
 	return false
+}
+
+// reachedOnlyOverMQTT is true when HTTP fails and MQTT works. Not "Choose(f).Commands == MQTT": reads
+// go MQTT first for every live device on our broker (#456), which says nothing about HTTP.
+func reachedOnlyOverMQTT(f transport.Facts) bool {
+	return f.HTTP.State == transport.HTTPFailing && transport.MQTTBlocker(f, false) == ""
 }
