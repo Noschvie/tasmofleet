@@ -18,7 +18,7 @@ const admin = { "X-authentik-username": "adam", "X-authentik-groups": "adm" };
 const field = (page: import("@playwright/test").Page, key: string) => page.locator(`.sf[data-key='${key}']`);
 const reset = (page: import("@playwright/test").Page, key: string) => field(page, key).locator("label.srst");
 
-test("Devices, Backups: a reset shows the default at once, the schedule stays on, Save stores it", async ({ page }) => {
+test("Devices, Backups: a reset shows the default at once, the schedule stays on, Save stores it", { tag: "@core" }, async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/devices/backups");
   // a schedule that is on, with a kept count and a protection age that differ from their defaults
@@ -125,4 +125,83 @@ test("System settings: undo brings a radio choice back, typing in a text area ca
   await page.getByRole("button", { name: "Save settings" }).click();
   await page.goto(app.url + "/settings/system?tab=discovery");
   await expect(nets).toHaveValue("127.0.1.0/24");
+});
+
+// Why (#623): the broker row resets as host, port and TLS; TLS left On would show a broker that Save
+// does not keep.
+test("the broker reset empties host and port and turns TLS off at once; undo and editing work", async ({
+  page,
+}) => {
+  await page.setExtraHTTPHeaders(admin);
+  await page.goto(app.url + "/settings/system?tab=mqtt");
+  const host = page.locator("input[name='mqtt.host']");
+  const port = page.locator("input[name='mqtt.port']");
+  const tls = page.locator("input[name='mqtt.tls']");
+  await host.fill("127.0.0.1");
+  await port.fill("18883");
+  if (!(await tls.isChecked()))
+    await page.locator("label.swhit:has(#f-mqtt-tls) .swtrack").click();
+  await page.getByRole("button", { name: "Save settings" }).click();
+  await page.goto(app.url + "/settings/system?tab=mqtt");
+  await expect(host).toHaveValue("127.0.0.1");
+  await expect(tls).toBeChecked();
+  const box = page.locator("input[name='clear.MQTT_URL']");
+  await reset(page, "MQTT_URL").click();
+  await expect(box).toBeChecked();
+  await expect(host).toHaveValue("");
+  await expect(port).toHaveValue("");
+  await expect(tls).not.toBeChecked();
+  await reset(page, "MQTT_URL").click();
+  await expect(box).not.toBeChecked();
+  await expect(host).toHaveValue("127.0.0.1");
+  await expect(port).toHaveValue("18883");
+  await expect(tls).toBeChecked();
+  // switching TLS by hand after a reset is the person's own choice: the reset is off again
+  await reset(page, "MQTT_URL").click();
+  await expect(tls).not.toBeChecked();
+  await page.locator("label.swhit:has(#f-mqtt-tls) .swtrack").click();
+  await expect(tls).toBeChecked();
+  await expect(box).not.toBeChecked();
+});
+
+
+// Why (#623): the narrow-field wrap makes room for "Default" only while the box is ticked (a wrap on
+// every narrow field moved untouched rows), and the box is named "Default, set on save" for a screen reader.
+test("a narrow row wraps only while its reset is ticked; the box is named by its text", async ({
+  page,
+}) => {
+  await page.setExtraHTTPHeaders(admin);
+  await page.goto(app.url + "/devices/backups");
+  await page.locator("input[name='v.BACKUP_KEEP']").fill("5");
+  await page.locator("input[name='v.BACKUP_MAX_AGE']").fill("48h");
+  await page.getByRole("button", { name: "Save settings" }).click();
+  await page.goto(app.url + "/devices/backups");
+  const wrap = (key: string) =>
+    field(page, key)
+      .locator(".lrow")
+      .first()
+      .evaluate((e) => getComputedStyle(e).flexWrap);
+  const before = {
+    keep: await wrap("BACKUP_KEEP"),
+    age: await wrap("BACKUP_MAX_AGE"),
+  };
+  await reset(page, "BACKUP_KEEP").click();
+  const after = {
+    keep: await wrap("BACKUP_KEEP"),
+    age: await wrap("BACKUP_MAX_AGE"),
+  };
+  const named = await field(page, "BACKUP_KEEP")
+    .getByRole("checkbox", { name: "Default, set on save", exact: true })
+    .count();
+  await reset(page, "BACKUP_MAX_AGE").click();
+  // a narrow field on another tab with nothing ticked keeps one row
+  await page.goto(app.url + "/settings/system?tab=network");
+  const other = await field(page, "CR_WARN_PERCENT")
+    .locator(".lrow")
+    .first()
+    .evaluate((e) => getComputedStyle(e).flexWrap);
+  expect(before).toEqual({ keep: "nowrap", age: "nowrap" });
+  expect(after).toEqual({ keep: "wrap", age: "nowrap" });
+  expect(other).toBe("nowrap");
+  expect(named).toBe(1);
 });
