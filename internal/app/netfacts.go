@@ -2,11 +2,11 @@ package app
 
 import (
 	"context"
-	"github.com/nofuturekid/tasmofleet/internal/policy"
 	"log/slog"
 	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/policy"
 )
 
 const (

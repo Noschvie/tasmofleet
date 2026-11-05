@@ -18,13 +18,13 @@ import (
 //
 // A device is on limited firmware (safeboot or minimal: they answer Unknown to nearly everything)
 // when the newest of three says so: the stored identity (with its DetectedAt), an INFO1 version
-// seen live (with the time it arrived), and the health poll, which finds minimal firmware over HTTP.
+// seen live (with the time it arrived), and the health poll, which finds minimal firmware over HTTP (with the time of that poll).
 type firmwareState struct {
 	mu   sync.Mutex
 	seen map[model.DeviceID]fwSeen
-	// minimal reports that the last successful health poll found minimal firmware; nil = never.
-	minimal func(model.DeviceID) bool
-	now     func() time.Time
+	// minimalAt is the time of the last successful health poll if it found minimal firmware; zero
+	// when it found regular firmware or none ran. nil = never.
+	minimalAt func(model.DeviceID) time.Time
 }
 
 type fwSeen struct {
@@ -32,8 +32,8 @@ type fwSeen struct {
 	at      time.Time
 }
 
-func newFirmwareState(minimal func(model.DeviceID) bool) *firmwareState {
-	return &firmwareState{seen: map[model.DeviceID]fwSeen{}, minimal: minimal, now: time.Now}
+func newFirmwareState(minimalAt func(model.DeviceID) time.Time) *firmwareState {
+	return &firmwareState{seen: map[model.DeviceID]fwSeen{}, minimalAt: minimalAt}
 }
 
 // set records what an INFO1 said about the device at the given time.
@@ -55,6 +55,13 @@ func (f *firmwareState) effective(d model.Device) model.Device {
 	f.mu.Lock()
 	s, ok := f.seen[d.ID]
 	f.mu.Unlock()
+	if f.minimalAt != nil {
+		// The health poll is evidence with a time like the rest: a probe or an INFO1 that came after
+		// it wins, so a device that was fixed while it was minimal is not skipped for ever.
+		if at := f.minimalAt(d.ID); !at.IsZero() && (!ok || at.After(s.at)) {
+			s, ok = fwSeen{variant: "minimal", at: at}, true
+		}
+	}
 	if ok && s.at.After(d.Identity.DetectedAt) {
 		switch {
 		case s.variant != "":
@@ -63,9 +70,6 @@ func (f *firmwareState) effective(d model.Device) model.Device {
 			d.Identity.Variant = "tasmota"
 		}
 		return d
-	}
-	if f.minimal != nil && !policy.LimitedFirmware(d.Identity.Variant) && f.minimal(d.ID) {
-		d.Identity.Variant = "minimal"
 	}
 	return d
 }
@@ -153,4 +157,18 @@ func info1Build(payload []byte) (variant string, ok bool) {
 		return "", false
 	}
 	return limitedVariant(tag), true
+}
+
+// sightedLimitedAt is the time of the newest live INFO1 that named safeboot or minimal firmware for
+// the device; zero when there is none or a regular one came after it.
+func (f *firmwareState) sightedLimitedAt(id model.DeviceID) time.Time {
+	if f == nil {
+		return time.Time{}
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if s, ok := f.seen[id]; ok && s.variant != "" {
+		return s.at
+	}
+	return time.Time{}
 }

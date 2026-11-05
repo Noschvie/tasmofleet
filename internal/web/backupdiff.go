@@ -228,7 +228,7 @@ func (h *handler) drift(w http.ResponseWriter, r *http.Request) {
 		cur, err := live.LiveSnapshot(r.Context(), d.ID)
 		var limited *backup.LimitedFirmwareError
 		if errors.As(err, &limited) { // safeboot or minimal firmware: not a failed read, and a retry would change nothing (#558)
-			p.Error = limited.UserReason()
+			p.Error = "The device runs " + limited.Variant + " firmware, which does not know the status commands the comparison reads. TasmoFleet checks it again about once an hour."
 			show(http.StatusOK)
 			return
 		}

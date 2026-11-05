@@ -61,7 +61,7 @@ func TestPolicyOverviewTilesFollowTheDefinitions(t *testing.T) {
 		"rules":     "3 | 2 enabled · 1 disabled",
 		"compliant": "2 / 5 | all required rules met",
 		"deviating": "3 | 1 required · 2 advisory",
-		"unjudged":  "1 | no backup or recent reading",
+		"unjudged":  "1 | no reading, or firmware cannot answer",
 	} {
 		if got := tileValue(t, body, key); got != want {
 			t.Errorf("tile %s = %q, want %q", key, got, want)

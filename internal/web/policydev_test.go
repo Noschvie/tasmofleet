@@ -207,3 +207,26 @@ func TestPolicyDeviationsNamesFirmwareThatCannotBeJudged(t *testing.T) {
 		t.Error("neither a backup nor a live read can judge these devices")
 	}
 }
+
+// Why (#558): the grey note of the fold says what is missing. A fold that holds devices on safeboot
+// or minimal firmware must not claim "no backup or recent reading" for them, and one without them
+// keeps the old note.
+func TestPolicyDeviationsUnjudgedNoteNamesFirmware(t *testing.T) {
+	note := func(rep PolicyReport) string {
+		body := devPage(t, "admin", "", rep)
+		return regexp.MustCompile(`<span class="meta">([^<]*)</span></summary>`).FindStringSubmatch(body[strings.Index(body, `id="unjudged"`):])[1]
+	}
+	if got := note(devReport()); got != "no backup or recent reading" {
+		t.Errorf("plain fold: %q", got)
+	}
+	rep := devReport()
+	rep.Devices[2].Identity.Variant, rep.Devices[3].Identity.Variant = "safeboot", "minimal"
+	if got := note(rep); got != "safeboot or minimal firmware" {
+		t.Errorf("only firmware devices: %q", got)
+	}
+	rep = devReport()
+	rep.Devices[2].Identity.Variant = "safeboot" // cellar still waits for a live read
+	if got := note(rep); got != "no backup or recent reading, or safeboot or minimal firmware" {
+		t.Errorf("mixed: %q", got)
+	}
+}

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"github.com/nofuturekid/tasmofleet/internal/devlock"
 	"log/slog"
 	"testing"
 	"time"
@@ -47,8 +48,7 @@ func TestInfo1BuildNamesSafebootAndMinimalWhateverTheVersion(t *testing.T) {
 // at once; one that leaves it is read again at once; a probe that ran later beats an older sighting.
 func TestFirmwareStateNewestEvidenceWins(t *testing.T) {
 	t0 := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
-	minimal := false
-	fw := newFirmwareState(func(model.DeviceID) bool { return minimal })
+	fw := newFirmwareState(nil)
 	dev := func(variant string) model.Device {
 		return model.Device{ID: 1, Identity: model.Identity{Variant: variant, DetectedAt: t0}}
 	}
@@ -73,17 +73,6 @@ func TestFirmwareStateNewestEvidenceWins(t *testing.T) {
 	later.Identity.DetectedAt = t0.Add(time.Hour) // a probe after every sighting
 	if variant(later) != "minimal" {
 		t.Error("an identity read after the last sighting decides")
-	}
-	minimal = true
-	if variant(dev("tasmota")) != "tasmota" { // the regular INFO1 at +2m is newer than t0, so it stands
-		t.Error("the health poll must not override a newer sighting")
-	}
-	if v := (*firmwareState)(nil).effective(dev("minimal")).Identity.Variant; v != "minimal" {
-		t.Error("no state: the device as stored")
-	}
-	fresh := newFirmwareState(func(model.DeviceID) bool { return true })
-	if fresh.effective(dev("tasmota")).Identity.Variant != "minimal" {
-		t.Error("the health poll found minimal firmware over HTTP")
 	}
 }
 
@@ -231,4 +220,157 @@ func (s storeOf) GetDevice(_ context.Context, id model.DeviceID) (model.Device, 
 		}
 	}
 	return model.Device{}, store.ErrNotFound
+}
+
+// Why (#558, M-1): the health poll's "minimal" finding is evidence with a time like an INFO1 or a
+// probe. Without the time it won over everything: a device that was fixed while minimal (TasmoFleet
+// restarted meanwhile, "Refresh identity" says regular) stayed skipped for ever, and the engine's
+// pre-update backup refused it.
+func TestHealthMinimalIsEvidenceWithATime(t *testing.T) {
+	t0 := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
+	t1, t2 := t0.Add(time.Minute), t0.Add(2*time.Minute)
+	var polled time.Time
+	fw := newFirmwareState(func(model.DeviceID) time.Time { return polled })
+	dev := func(detected time.Time) model.Device {
+		return model.Device{ID: 1, Identity: model.Identity{Variant: "tasmota", DetectedAt: detected}}
+	}
+	variant := func(d model.Device) string { return fw.effective(d).Identity.Variant }
+
+	polled = t1
+	if got := variant(dev(t0)); got != "minimal" {
+		t.Errorf("a poll after the probe found minimal firmware: %q", got)
+	}
+	if got := variant(dev(t2)); got != "tasmota" {
+		t.Errorf("a probe after the poll stored regular firmware and must win: %q", got)
+	}
+	fw.set(1, "", t2)
+	if got := variant(dev(t0)); got != "tasmota" {
+		t.Errorf("a regular INFO1 after the poll must win: %q", got)
+	}
+	polled = time.Time{} // the last poll found regular firmware
+	fw2 := newFirmwareState(func(model.DeviceID) time.Time { return polled })
+	if got := fw2.effective(dev(t0)).Identity.Variant; got != "tasmota" {
+		t.Errorf("no minimal finding: %q", got)
+	}
+	// a limited INFO1 newer than the poll still counts
+	polled = t1
+	fw.set(1, "safeboot", t2.Add(time.Minute))
+	if got := variant(dev(t0)); got != "safeboot" {
+		t.Errorf("a newer limited INFO1: %q", got)
+	}
+}
+
+// Why (#558, M-1): the failure was real: a regular device that health calls minimal is refreshed once,
+// is regular from then on, and is not asked again an hour later.
+func TestFWRecheckFixesADeviceHealthCallsMinimal(t *testing.T) {
+	p, st, _, _ := factsSetup(t, simulator.DeviceSpec{Name: "plug", Profile: simulator.ProfileESP8266_4M})
+	polled := time.Now() // after the stored identity
+	fw := newFirmwareState(func(model.DeviceID) time.Time { return polled })
+	now := time.Now()
+	n := 0
+	rc := newFWRecheck(fw.list(st.ListDevices), func(model.DeviceID) model.Health { return model.Health{State: model.HealthOnline} },
+		func(ctx context.Context, id model.DeviceID) error { n++; return p.Refresh(ctx, id, "") }, slog.New(slog.DiscardHandler))
+	rc.now = func() time.Time { return now }
+	devs, _ := fw.list(st.ListDevices)(t.Context())
+	if !policy.LimitedFirmware(devs[0].Identity.Variant) {
+		t.Fatal("setup: health says minimal, so the device is limited")
+	}
+	rc.tick(t.Context())
+	devs, _ = fw.list(st.ListDevices)(t.Context())
+	if n != 1 || policy.LimitedFirmware(devs[0].Identity.Variant) {
+		t.Fatalf("refreshed %d times, effective variant %q: the probe is newer than the poll and must win", n, devs[0].Identity.Variant)
+	}
+	now = now.Add(2 * time.Hour)
+	rc.tick(t.Context())
+	if n != 1 {
+		t.Errorf("a recovered device is not asked again, %d refreshes", n)
+	}
+}
+
+// Why (#558, M-2): during an update the device passes minimal (ESP8266) or safeboot (ESP32) on purpose.
+// A refresh then would write identities mid-job and bind MACs the job does not expect. A busy device is
+// skipped without a try being recorded, so it is looked at as soon as the job is over.
+func TestFWRecheckLeavesABusyDeviceAlone(t *testing.T) {
+	now := time.Now()
+	devs := []model.Device{{ID: 1, Identity: model.Identity{Variant: "minimal"}}}
+	busy := true
+	var refreshed []model.DeviceID
+	rc := newFWRecheck(func(context.Context) ([]model.Device, error) { return devs, nil },
+		func(model.DeviceID) model.Health { return model.Health{State: model.HealthOnline} },
+		func(_ context.Context, id model.DeviceID) error { refreshed = append(refreshed, id); return nil }, slog.New(slog.DiscardHandler))
+	rc.now = func() time.Time { return now }
+	rc.busy = func(context.Context, model.DeviceID) bool { return busy }
+	rc.tick(t.Context())
+	if len(refreshed) != 0 || len(rc.tried) != 0 {
+		t.Fatalf("a device in an update was refreshed %v or marked tried %v", refreshed, rc.tried)
+	}
+	busy = false
+	now = now.Add(time.Minute)
+	rc.tick(t.Context())
+	if len(refreshed) != 1 {
+		t.Errorf("after the job the device must be looked at at once, refreshed %v", refreshed)
+	}
+}
+
+// Why (#558): an INFO1 that names limited firmware after the last try means the device booted into it
+// (or something forged the message). It makes the device due again once that try is 10 minutes old, not
+// only after the hour; one without a newer INFO1 stays on the hourly rhythm.
+func TestFWRecheckAsksSoonerAfterANewLimitedInfo1(t *testing.T) {
+	now := time.Now()
+	devs := []model.Device{{ID: 1, Identity: model.Identity{Variant: "minimal"}}}
+	var sighted time.Time
+	n := 0
+	rc := newFWRecheck(func(context.Context) ([]model.Device, error) { return devs, nil },
+		func(model.DeviceID) model.Health { return model.Health{State: model.HealthOnline} },
+		func(context.Context, model.DeviceID) error { n++; return nil }, slog.New(slog.DiscardHandler))
+	rc.now = func() time.Time { return now }
+	rc.sighted = func(model.DeviceID) time.Time { return sighted }
+	rc.tick(t.Context())
+	now = now.Add(5 * time.Minute)
+	sighted = now
+	rc.tick(t.Context())
+	if n != 1 {
+		t.Fatalf("a new INFO1 5 minutes after the try must not make it due yet, %d refreshes", n)
+	}
+	now = now.Add(6 * time.Minute)
+	rc.tick(t.Context())
+	if n != 2 {
+		t.Errorf("a new INFO1 and a try 11 minutes old: due, %d refreshes", n)
+	}
+	now = now.Add(20 * time.Minute) // no INFO1 since the last try
+	rc.tick(t.Context())
+	if n != 2 {
+		t.Errorf("without a newer INFO1 it stays hourly, %d refreshes", n)
+	}
+}
+
+// Why (#558): the wiring is where this feature silently disappears (a reader that is built but never
+// asked, a store that is not wrapped). The recheck must be kept away from a device a typed firmware
+// command or an update job is working on, and must see live INFO1 sightings; the policy report must
+// get its devices through the effective view.
+func TestRuntimeWiresTheFirmwareState(t *testing.T) {
+	svc := importServices(t)
+	a := &runtime{svc: svc, cfg: svc.Cfg, log: svc.Log, bgContext: t.Context(), fw: newFirmwareState(nil),
+		fwHolds: devlock.NewFirmwareHolds(time.Now, time.Hour)}
+	rc := a.newFWRecheck()
+	if rc.busy == nil || rc.sighted == nil {
+		t.Fatal("the recheck must know about busy devices and INFO1 sightings")
+	}
+	if rc.busy(t.Context(), 99) {
+		t.Error("a device without a job or hold is not busy")
+	}
+	a.fwHolds.Start(7, 5)
+	if !rc.busy(t.Context(), 7) {
+		t.Error("a device a typed firmware command still updates is busy")
+	}
+	a.fw.set(5, "safeboot", time.Now())
+	if rc.sighted(5).IsZero() {
+		t.Error("the recheck must see the INFO1 sightings of the firmware state")
+	}
+	if err := a.setupSettings(); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := a.policyLive.devices.(fwDevices); !ok {
+		t.Errorf("the policy report reads devices through %T, want the effective view", a.policyLive.devices)
+	}
 }

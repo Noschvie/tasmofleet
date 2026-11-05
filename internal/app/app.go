@@ -180,7 +180,12 @@ func (a *runtime) run(ctx context.Context) error {
 		StaleAfter: staleAfter(cfg.TelePeriod), PollInterval: cfg.PollInterval,
 	})
 	a.goBG("health", func() error { return a.tracker.Run(bg) })
-	a.fw = newFirmwareState(a.tracker.Minimal)
+	a.fw = newFirmwareState(func(id model.DeviceID) time.Time {
+		if !a.tracker.Minimal(id) {
+			return time.Time{}
+		}
+		return a.tracker.Get(id).SeenHTTP // set under the same lock as the flag, right after the poll
+	})
 	a.setupTransport()
 	// Network facts are read in the background, never as part of first contact or a refresh.
 	nf := newNetFactsReader(a.fw.list(a.svc.Inventory.List),
@@ -196,10 +201,6 @@ func (a *runtime) run(ctx context.Context) error {
 	mid.spawn = func(f func()) { a.goBG("mqtt-identity-ask", func() error { f(); return nil }) } // waited for at shutdown
 	a.svc.Prober.MQTT = mid                                                                      // "Refresh identity" over MQTT for devices HTTP cannot reach (#91)
 	a.goBG("mqtt-identity", func() error { mid.run(bg); return nil })
-	// A device on safeboot or minimal firmware is looked at again about once an hour, so it is read again once it left that firmware (#558).
-	rc := newFWRecheck(a.fw.list(a.svc.Inventory.List), a.tracker.Get,
-		func(ctx context.Context, id model.DeviceID) error { return a.svc.Prober.Refresh(ctx, id, "") }, a.log)
-	a.goBG("fw-recheck", func() error { rc.run(bg); return nil })
 
 	if err := a.setupBackups(bg); err != nil {
 		return err
@@ -209,6 +210,7 @@ func (a *runtime) run(ctx context.Context) error {
 	}
 	a.fwReach = newFWReachLearner(a.svc.Store, a.svc.Audit, clock.Real{}, a.log) // before OTA and restore: both report to it
 	a.setupDeviceCmd()                                                           // before the OTA engine: it switches relays back on through it
+	a.startFWRecheck(bg)                                                         // needs a.fwHolds, set by setupDeviceCmd
 	if err := a.setupSettings(); err != nil {                                    // before the OTA engine: it runs the policy jobs through the applier built here
 		return err
 	}

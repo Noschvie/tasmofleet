@@ -204,7 +204,7 @@ func ruleTiles(st ruleStat, spec sysconfig.RuleSpec) []ruleTile {
 		{Key: "applies", Label: "Applies to", Value: strconv.Itoa(st.Applies), Sub: scopeShort(spec, true) + " · " + exc},
 		{Key: "match", Label: "Match", Value: strconv.Itoa(st.Match), Sub: matchSub, Tone: ui.ToneOK},
 		{Key: "deviate", Label: "Deviate", Value: strconv.Itoa(st.Deviate), Sub: devSub, Tone: ui.ToneWarn},
-		{Key: "unknown", Label: "Not judged", Value: strconv.Itoa(st.Unknown), Sub: "no backup or recent reading"},
+		{Key: "unknown", Label: "Not judged", Value: strconv.Itoa(st.Unknown), Sub: "no reading, or firmware cannot answer"},
 	}
 }
 

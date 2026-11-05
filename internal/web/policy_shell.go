@@ -67,7 +67,7 @@ func (h *handler) policyHead(v view, specs []sysconfig.RuleSpec, invalid int, re
 			rules,
 			{Key: "compliant", Label: "Compliant devices", Value: n(f.Compliant) + " / " + n(f.Devices), Sub: "all required rules met", Tone: ui.ToneOK},
 			deviating,
-			{Key: "unjudged", Label: "Not judged", Value: n(f.NotJudged), Sub: "no backup or recent reading"},
+			{Key: "unjudged", Label: "Not judged", Value: n(f.NotJudged), Sub: "no reading, or firmware cannot answer"},
 		}
 	}
 	p.Line = h.liveLine(rep, repErr, v.IsAdmin)
