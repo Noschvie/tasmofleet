@@ -22,11 +22,12 @@ type Snapshot struct {
 // Stale reports whether the reading is older than StaleAfter at now.
 func (s Snapshot) Stale(now time.Time) bool { return now.Sub(s.At) > StaleAfter }
 
-// flight is one device read that callers share.
+// flight is one device read that callers share. gen is the device's write count when it started.
 type flight struct {
 	done chan struct{}
 	vals map[string]string
 	err  error
+	gen  uint64
 }
 
 // Last returns the values of the newest successful Read of the device, without contacting it.
@@ -41,10 +42,12 @@ func (m *Manager) Last(id model.DeviceID) (Snapshot, bool) {
 }
 
 // forget drops what was remembered of a device: after a write the old values are wrong, and showing
-// them as "last known" would be worse than showing nothing.
+// them as "last known" would be worse than showing nothing. A read under way started before the write:
+// counting the write keeps its values out of last and its later readers off it (readShared).
 func (m *Manager) forget(id model.DeviceID) {
 	m.mu.Lock()
 	delete(m.last, id)
+	m.gen[id]++
 	m.mu.Unlock()
 }
 
@@ -52,21 +55,29 @@ func (m *Manager) forget(id model.DeviceID) {
 // waits for it and gets its result, so a second open of the page sends nothing to the device (the
 // client already serialises requests per device; this keeps a whole second round of ~30 queries from
 // queueing behind the first). The read runs detached from the first caller's request: the caller
-// closing the page must not fail the readers that joined, and the values are worth keeping.
+// closing the page must not fail the readers that joined, and the values are worth keeping. A read that
+// started before a write (Apply) holds values from before it: nobody joins it after the write, and its
+// values are not remembered. The next reader starts a new read, sent once the old one has ended.
 func (m *Manager) readShared(ctx context.Context, id model.DeviceID, keys []string) (map[string]string, error) {
 	m.mu.Lock()
 	f, running := m.flights[id]
-	if !running {
-		f = &flight{done: make(chan struct{})}
+	if !running || f.gen != m.gen[id] {
+		prev := f // nil, or a read from before a write: the device answers one read at a time
+		f = &flight{done: make(chan struct{}), gen: m.gen[id]}
 		m.flights[id] = f
 		go func() {
+			if prev != nil {
+				<-prev.done // bounded: every read ends within ReadTimeout
+			}
 			vals, err := m.readKeys(context.WithoutCancel(ctx), id, keys)
 			m.mu.Lock()
 			f.vals, f.err = vals, err
-			if err == nil {
+			if err == nil && f.gen == m.gen[id] {
 				m.last[id] = Snapshot{Values: maps.Clone(vals), At: m.o.Now()}
 			}
-			delete(m.flights, id)
+			if m.flights[id] == f {
+				delete(m.flights, id)
+			}
 			m.mu.Unlock()
 			close(f.done)
 		}()

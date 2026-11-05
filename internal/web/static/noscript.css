@@ -4,3 +4,8 @@ time[data-ts]:not([data-painted]):not([data-ts="title"]) {
   visibility: visible;
   animation: none;
 }
+/* the line that says a page refreshes by itself (#599): without JavaScript it never does, so it shows the <noscript> note instead */
+.agebar[aria-busy="true"]::after,
+.agebar [data-guard-note] {
+  display: none;
+}

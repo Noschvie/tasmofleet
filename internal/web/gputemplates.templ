@@ -49,7 +49,7 @@ templ policyTemplatesPage(p gtView) {
 // the ages on their rows are not taken for current.
 templ gtAgeLine(p gtView) {
 	if p.RefreshHref != "" {
-		<p class="agebar" role="status" aria-busy="true" hx-post={ p.RefreshHref } hx-trigger="load" hx-target="#gt-page" hx-swap="outerHTML" data-guard-text="Newer readings were taken. They are not shown because you changed the selection; reload the page to see them.">Showing the last readings, each with its age. Reading the devices now&#8230;</p>
+		<p class="agebar" role="status" aria-busy="true" hx-post={ p.RefreshHref } hx-trigger="load" hx-target="#gt-page" hx-swap="outerHTML" data-guard-text="The refresh is done but not shown, because you changed the selection; reload the page to see it."><span>Showing the last readings, each with its age. <span data-guard-note>Reading the devices now&#8230;</span></span><noscript><span>This page needs JavaScript to refresh by itself. Use Read again.</span></noscript></p>
 	} else if p.ReadFailed > 0 {
 		<p class="agebar is-failed" role="alert"><b>{ "Refresh failed for " + plural(p.ReadFailed, "device") + "." }</b> Their last readings are shown with their age.</p>
 	}

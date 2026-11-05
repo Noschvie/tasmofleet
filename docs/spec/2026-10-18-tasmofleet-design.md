@@ -1624,14 +1624,17 @@ device's item keeps its name when the device is deleted. Model: `model.BackupRun
   (`Last`) and runs one `Read` per device at a time; a second open while one runs waits for it and sends nothing
   (the client already serialises requests per device, so this keeps a second round of about thirty queries from
   queueing behind the first). The read runs detached from the first caller's request, so closing the page does
-  not fail the readers that joined. A write (`Apply`) forgets the values of that device. The tab is drawn from
-  `Last`, a busy line (`aria-busy`, the #538 pattern) fetches `GET /devices/{id}/settings/form`, and a failed
-  refresh keeps the old values with the reason ("Refresh failed."). GPIO templates: the service's existing
-  reading cache is kept past the hour as a `stale` reading (shown, never applied, like a backup) unless a backup
-  is newer; the tab's busy line asks `POST /policy/templates/read` (an htmx request answers the page body
-  only; reads stay POST with the CSRF token) and says how many devices could not be read. Readings older than one
-  hour (`StaleAfter`, a constant, not a setting) carry the visible marker "Stale". A refresh that arrives after
-  the person has started editing the page is not swapped in (`data-guard-swap`); the line says so.
+  not fail the readers that joined. A write (`Apply`) forgets the values of that device; a read that was under
+  way then is neither remembered nor joined by later readers, who get a read of their own once it has ended. The
+  tab is drawn from `Last`, a busy line (`aria-busy`, the #538 pattern) fetches `GET /devices/{id}/settings/form`,
+  and a failed refresh keeps the old values with the reason ("Refresh failed."). GPIO templates: the service's
+  existing reading cache is kept past the hour as a `stale` reading (shown, never applied, like a backup) unless a
+  backup is newer; the tab's busy line asks `POST /policy/templates/read` (an htmx request answers the page body
+  only; reads stay POST with the CSRF token) and says how many devices could not be read. A refresh that started
+  is read to its end when the page that asked for it is left, and a read cut off by its caller marks no device as
+  failed. Readings older than one hour (`StaleAfter`, a constant, not a setting) carry the visible marker "Stale".
+  A refresh that arrives after the person has started editing the page is not swapped in (`data-guard-swap`); the
+  line says so and keeps the age and the marker of the values shown.
 - SetOption numbers are always displayed with their internal name and a one-line
   description (e.g. "SetOption0 (`save_state`): restore relay state after power loss").
 

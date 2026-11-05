@@ -58,7 +58,8 @@ test("a second visit shows the last values at once and refreshes them in the bac
   expect(refreshes).toBe(1);
 });
 
-// Why: a refresh must not overwrite what the person types in the meantime; the page says so instead.
+// Why: a refresh must not overwrite what the person types in the meantime; the page says so instead,
+// and keeps saying how old the values on it are (they are still the remembered ones).
 test("a refresh that arrives after the person started typing leaves their input alone", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   const href = await deviceHref(page, "ov-plain-plug");
@@ -76,6 +77,7 @@ test("a refresh that arrives after the person started typing leaves their input 
   release();
   await expect(page.locator("p.agebar")).toContainText("unsaved changes");
   await expect(page.locator("p.agebar")).not.toHaveAttribute("aria-busy", "true");
+  await expect(page.locator("p.agebar")).toContainText(/Read (just now|\d+s ago|\d+m ago)/);
   await expect(hostname).toHaveValue("typed-by-hand");
 });
 
@@ -95,4 +97,41 @@ test("a device that does not answer leaves the last values on the page", async (
   await expect(age).toContainText("Refresh failed.", { timeout: 90_000 });
   await expect(age).toHaveAttribute("role", "alert");
   await expect(hostname).toHaveValue(value);
+});
+
+// Why: Reset puts the values back, so the person has nothing left to protect; a refresh that arrives
+// after it must be shown, not held back for ever by the earlier typing.
+test("after Reset the refresh is swapped in again", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  const href = await deviceHref(page, "ov-plain-plug");
+  await page.goto(app.url + href + "/settings");
+  await expect(page.locator("input[name=Hostname]")).toBeVisible({ timeout: 60_000 });
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  await page.route("**/settings/form", async (route) => {
+    await gate;
+    await route.continue();
+  });
+  await page.goto(app.url + href + "/settings");
+  await page.locator("input[name=Hostname]").fill("typed-by-hand");
+  await page.getByRole("button", { name: "Reset" }).click();
+  release();
+  await expect(page.locator("p.agebar")).toContainText("Read just now");
+  await expect(page.locator("p.agebar")).not.toContainText("unsaved");
+});
+
+// Why: without JavaScript nothing fetches the fresh values, so the line must not say "Refreshing…"
+// for ever; it offers the read instead.
+test("without JavaScript the page offers the read instead of saying it is refreshing", async ({ page, browser }) => {
+  await page.setExtraHTTPHeaders(admin);
+  const href = await deviceHref(page, "ov-plain-plug");
+  await page.goto(app.url + href + "/settings");
+  await expect(page.locator("input[name=Hostname]")).toBeVisible({ timeout: 60_000 });
+  const ctx = await browser.newContext({ javaScriptEnabled: false, extraHTTPHeaders: admin });
+  const plain = await ctx.newPage();
+  await plain.goto(app.url + href + "/settings");
+  const age = plain.locator("p.agebar");
+  await expect(age.getByRole("link", { name: "Read the device now" })).toBeVisible();
+  await expect(age.locator("[data-guard-note]")).toBeHidden(); // "Refreshing from the device…" is not promised
+  await ctx.close();
 });

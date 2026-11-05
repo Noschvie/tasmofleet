@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -176,5 +178,163 @@ func TestApplyForgetsTheRememberedValues(t *testing.T) {
 	}
 	if _, ok := m.Last(1); ok {
 		t.Error("values remembered from before a write are still offered")
+	}
+}
+
+// writeRace is a device in the middle of a slow read when a write arrives: FriendlyName1 answers "Old"
+// until the write "FriendlyName1 Lamp" is sent. The first query of a read is answered at once, every
+// later one waits for the gate (a write is never held), so the read has the old name before the write
+// and finishes after it.
+type writeRace struct {
+	fakeClient
+	gate    chan struct{}
+	held    chan struct{} // closed when a read first waits for the gate
+	once    sync.Once
+	queries atomic.Int32
+}
+
+func newWriteRace() *writeRace {
+	return &writeRace{
+		fakeClient: fakeClient{replies: map[string]string{"FriendlyName1": `{"FriendlyName1":"Old"}`}},
+		gate:       make(chan struct{}), held: make(chan struct{}),
+	}
+}
+
+func (w *writeRace) Command(ctx context.Context, t tasmota.Target, cmnd string) (json.RawMessage, error) {
+	if cmnd == "FriendlyName1 Lamp" {
+		w.mu.Lock()
+		w.replies["FriendlyName1"] = `{"FriendlyName1":"Lamp"}`
+		w.mu.Unlock()
+		return w.fakeClient.Command(ctx, t, cmnd)
+	}
+	if w.queries.Add(1) > 1 {
+		w.once.Do(func() { close(w.held) })
+		select {
+		case <-w.gate:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	return w.fakeClient.Command(ctx, t, cmnd)
+}
+
+// startRead runs Read in the background; its result arrives on the channel.
+func startRead(m *Manager) <-chan map[string]string {
+	out := make(chan map[string]string, 1)
+	go func() {
+		v, _ := m.Read(context.Background(), 1)
+		out <- v
+	}()
+	return out
+}
+
+func waitFor[T any](t *testing.T, c <-chan T, what string) T {
+	t.Helper()
+	select {
+	case v := <-c:
+		return v
+	case <-time.After(5 * time.Second):
+		t.Fatalf("timed out waiting for %s", what)
+	}
+	var zero T
+	return zero
+}
+
+// Why: a read that was under way when the person saved holds values from before the save, and it ends
+// after it. Remembering it (stamped with the time it ended) would put the old name back on the tab as
+// "read just now", which is what Apply forgetting the values is there to prevent.
+func TestAReadUnderWayDuringAWriteIsNotRemembered(t *testing.T) {
+	c := newWriteRace()
+	m := New(Options{Devices: fakeDevices{}, Client: c})
+	before := startRead(m)
+	waitFor(t, c.held, "the read to be under way")
+	if _, err := m.Apply(context.Background(), "u", 1, map[string]string{"FriendlyName1": "Lamp"}); err != nil {
+		t.Fatal(err)
+	}
+	close(c.gate)
+	if v := waitFor(t, before, "the read that started before the write"); v["FriendlyName1"] != "Old" {
+		t.Fatalf("the read under way got %q; the test needs it to have read before the write", v["FriendlyName1"])
+	}
+	if s, ok := m.Last(1); ok {
+		t.Errorf("Last = %q read at %v: a read that started before the write is remembered as the newest values", s.Values["FriendlyName1"], s.At)
+	}
+}
+
+// Why: a page opened after a save (the result page's "Read the settings again") must show the device as
+// it is now. Joining a read that started before the save would hand it the old values as fresh ones. It
+// gets a read of its own, sent after the old one ends, so the device still answers one read at a time.
+func TestAReadAfterAWriteDoesNotJoinTheReadFromBefore(t *testing.T) {
+	c := newWriteRace()
+	m := New(Options{Devices: fakeDevices{}, Client: c})
+	before := startRead(m)
+	waitFor(t, c.held, "the read to be under way")
+	if _, err := m.Apply(context.Background(), "u", 1, map[string]string{"FriendlyName1": "Lamp"}); err != nil {
+		t.Fatal(err)
+	}
+	after := startRead(m)
+	time.Sleep(100 * time.Millisecond) // the second reader arrives while the first read is still under way
+	close(c.gate)
+	waitFor(t, before, "the read that started before the write")
+	if v := waitFor(t, after, "the read asked for after the write"); v["FriendlyName1"] != "Lamp" {
+		t.Errorf("a read asked for after the write got FriendlyName1 %q, want the written \"Lamp\"", v["FriendlyName1"])
+	}
+	if s, ok := m.Last(1); !ok || s.Values["FriendlyName1"] != "Lamp" {
+		t.Errorf("Last = %q, %v; want the values read after the write", s.Values["FriendlyName1"], ok)
+	}
+	plain := &fakeClient{}
+	if _, err := New(Options{Devices: fakeDevices{}, Client: plain}).Read(context.Background(), 1); err != nil {
+		t.Fatal(err)
+	}
+	read := plain.sent // what one complete Read sends, in order
+	want := append(append([]string{read[0], "FriendlyName1 Lamp"}, read[1:]...), read...)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !slices.Equal(c.sent, want) {
+		t.Errorf("the device got\n%q\nwant the old read to its end, then the new one:\n%q", c.sent, want)
+	}
+}
+
+// heldDevices holds the first GetDevice after it is armed (the start of a read) until hold is closed,
+// and counts the armed calls.
+type heldDevices struct {
+	fakeDevices
+	armed         atomic.Bool
+	calls         atomic.Int32
+	once          sync.Once
+	reached, hold chan struct{}
+}
+
+func (h *heldDevices) GetDevice(ctx context.Context, id model.DeviceID) (model.Device, error) {
+	if h.armed.Load() {
+		h.calls.Add(1)
+		h.once.Do(func() { close(h.reached); <-h.hold })
+	}
+	return h.fakeDevices.GetDevice(ctx, id)
+}
+
+// Why: after a write the new read is the one every later reader shares. The read from before the write
+// ending must not drop it from the books, or the next open would start yet another round on the device.
+func TestReadersAfterAWriteShareOneNewRead(t *testing.T) {
+	c := newWriteRace()
+	d := &heldDevices{reached: make(chan struct{}), hold: make(chan struct{})}
+	m := New(Options{Devices: d, Client: c})
+	before := startRead(m)
+	waitFor(t, c.held, "the read to be under way")
+	if _, err := m.Apply(context.Background(), "u", 1, map[string]string{"FriendlyName1": "Lamp"}); err != nil {
+		t.Fatal(err)
+	}
+	d.armed.Store(true)
+	after := startRead(m)
+	time.Sleep(100 * time.Millisecond) // it is waiting for the old read when that one ends
+	close(c.gate)
+	waitFor(t, before, "the read from before the write")
+	waitFor(t, d.reached, "the new read to start")
+	third := startRead(m)
+	time.Sleep(100 * time.Millisecond) // the third reader arrives while the new read is under way
+	close(d.hold)
+	waitFor(t, after, "the second reader")
+	waitFor(t, third, "the third reader")
+	if n := d.calls.Load(); n != 1 {
+		t.Errorf("%d reads started after the write, want 1 that both readers share", n)
 	}
 }

@@ -84,7 +84,7 @@ test("templates tab: cached readings and their age are there at once, the refres
   await expect(busy).toHaveAttribute("aria-busy", "true");
   await expect(busy).toContainText("Reading the devices now");
   release();
-  await expect(page.locator("p.agebar[aria-busy=true]")).toHaveCount(0); // tpl-offline cannot be read: the line then says so
+  await expect(page.locator("p.agebar[aria-busy=true]")).toHaveCount(0); // locked-plug cannot be read: the line then says so
   await expect(page.locator("p.agebar")).toContainText("Refresh failed for 1 device");
   await expect(row).toBeVisible();
   expect(reads).toBe(1);

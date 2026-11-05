@@ -251,7 +251,7 @@ func gtAgeLine(p gtView) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "\" hx-trigger=\"load\" hx-target=\"#gt-page\" hx-swap=\"outerHTML\" data-guard-text=\"Newer readings were taken. They are not shown because you changed the selection; reload the page to see them.\">Showing the last readings, each with its age. Reading the devices now&#8230;</p>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "\" hx-trigger=\"load\" hx-target=\"#gt-page\" hx-swap=\"outerHTML\" data-guard-text=\"The refresh is done but not shown, because you changed the selection; reload the page to see it.\"><span>Showing the last readings, each with its age. <span data-guard-note>Reading the devices now&#8230;</span></span><noscript><span>This page needs JavaScript to refresh by itself. Use Read again.</span></noscript></p>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

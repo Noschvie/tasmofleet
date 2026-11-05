@@ -495,6 +495,9 @@ func (h *handler) gtGroupOf(g templates.GroupView, baseNeedsRef, admin bool, ran
 		if d.Source == templates.SourceStale && row.Why != "" && d.NotJudgedReason == "" {
 			// the planner words a non-live reading as "read from a backup"; this one is an old live reading
 			row.Why = "Last read live more than an hour ago: shown as stale, never applied. It is read again when this page opens."
+			if !d.OfflineSince.IsZero() {
+				row.Why = "Last read live more than an hour ago: shown as stale, never applied. The device is offline, so it is read again when it is back."
+			}
 		}
 		gg.Rows = append(gg.Rows, row)
 	}

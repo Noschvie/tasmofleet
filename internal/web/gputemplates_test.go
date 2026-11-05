@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -328,5 +329,52 @@ func TestGPIOTemplatesMarksStaleReadings(t *testing.T) {
 func TestStaleThresholdIsTheSameEverywhere(t *testing.T) {
 	if settings.StaleAfter != time.Hour || templates.StaleAfter != time.Hour || staleAfter != time.Hour {
 		t.Errorf("thresholds: settings %v, templates %v, web %v; want 1h each", settings.StaleAfter, templates.StaleAfter, staleAfter)
+	}
+}
+
+// Why (#599): the pages decide "stale" themselves from the age, and must draw the line where the services
+// do (cache: live up to and including one hour), or a reading the service still treats as live would
+// already carry the Stale marker.
+func TestReadAgeIsStaleOnlyPastTheHour(t *testing.T) {
+	now := time.Date(2026, 11, 5, 12, 0, 0, 0, time.UTC)
+	if a := newReadAge(now, now.Add(-staleAfter)); a.Stale {
+		t.Error("exactly one hour old is marked stale")
+	}
+	if a := newReadAge(now, now.Add(-staleAfter-time.Second)); !a.Stale || a.Words != "1h ago" {
+		t.Errorf("one hour and a second: %+v, want stale, \"1h ago\"", a)
+	}
+	if a := newReadAge(now, now); a.Words != "just now" || a.Stale {
+		t.Errorf("read now: %+v", a)
+	}
+}
+
+// Why (#599): without JavaScript the page never refreshes itself; its line must say so and name the
+// way (the Read again button) instead of promising a refresh. The stylesheet for that case hides the
+// promise and the spinner.
+func TestGPIOTemplatesNoScriptSaysTheRefreshNeedsJavaScript(t *testing.T) {
+	_, body := gtEnv(t, agedFixture(3*time.Minute, templates.SourceLive)).do(t, "GET", "/policy/templates", "admin", nil)
+	if !strings.Contains(body, "<noscript><span>This page needs JavaScript to refresh by itself. Use Read again.") {
+		t.Error("no <noscript> note in the refresh line")
+	}
+	css, err := os.ReadFile("static/noscript.css")
+	if err != nil || !strings.Contains(string(css), `.agebar [data-guard-note]`) || !strings.Contains(string(css), `.agebar[aria-busy="true"]::after`) {
+		t.Errorf("noscript.css does not hide the refreshing text and spinner: %v", err)
+	}
+}
+
+// Why (#599): "read again when this page opens" is false for a device that is offline; the row must
+// say it waits for the device instead.
+func TestGPIOTemplatesStaleRowOfAnOfflineDeviceDoesNotPromiseARead(t *testing.T) {
+	f := agedFixture(3*time.Hour, templates.SourceStale)
+	for gi := range f.ov.Groups {
+		for di := range f.ov.Groups[gi].Devices {
+			d := &f.ov.Groups[gi].Devices[di]
+			d.Plan = &policy.ApplyPlan{Device: d.ID, Refusal: policy.RefuseNotLive, Reason: "x"}
+			d.OfflineSince = time.Now().Add(-2 * time.Hour)
+		}
+	}
+	_, body := gtEnv(t, f).do(t, "GET", "/policy/templates", "admin", nil)
+	if !strings.Contains(body, "The device is offline, so it is read again when it is back.") || strings.Contains(body, "It is read again when this page opens.") {
+		t.Error("an offline device's stale row promises a read on open")
 	}
 }

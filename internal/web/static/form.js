@@ -527,7 +527,8 @@
 
 // A refresh that fetches values by itself must not overwrite what the person is typing (#599). A
 // container marked data-guard-swap that was edited refuses the swap; the element that asked for it
-// (data-guard-text) says so and stops being busy.
+// (data-guard-text) says so in its data-guard-note and stops being busy. The rest of that line (the
+// age of the values shown, the Stale marker) stays: the values on the page are still those.
 (function () {
   "use strict";
   function guarded(el) {
@@ -541,6 +542,13 @@
   }
   document.addEventListener("input", mark);
   document.addEventListener("change", mark);
+  // Reset puts the values back, so there is nothing left to protect
+  document.addEventListener("reset", function (e) {
+    var box = guarded(e.target);
+    if (box) {
+      box.removeAttribute("data-dirty");
+    }
+  });
   document.addEventListener("htmx:beforeSwap", function (e) {
     var t = e.detail && e.detail.target;
     var cfg = e.detail && e.detail.requestConfig;
@@ -556,6 +564,7 @@
     }
     e.detail.shouldSwap = false;
     asker.removeAttribute("aria-busy");
-    asker.textContent = asker.getAttribute("data-guard-text");
+    (asker.querySelector("[data-guard-note]") || asker).textContent =
+      asker.getAttribute("data-guard-text");
   });
 })();

@@ -66,9 +66,13 @@ func (f *fakeFleet) GetDevice(_ context.Context, id model.DeviceID) (model.Devic
 }
 
 // Command answers by device id found through the target's address.
-func (f *fakeFleet) Command(_ context.Context, t tasmota.Target, cmnd string) (json.RawMessage, error) {
+func (f *fakeFleet) Command(ctx context.Context, t tasmota.Target, cmnd string) (json.RawMessage, error) {
 	if f.gate != nil {
-		<-f.gate
+		select {
+		case <-f.gate:
+		case <-ctx.Done(): // like the real client: a request whose caller is gone ends
+			return nil, ctx.Err()
+		}
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()

@@ -193,8 +193,11 @@ func (m *Manager) bestReading(ctx context.Context, d model.Device) DeviceView {
 }
 
 // refresh reads the devices that are not offline, a few at a time. It reports whether the rate limit
-// stopped it.
+// stopped it. A run that started is read to its end even when the request that asked for it ends (the
+// tab's own refresh ends when the person clicks on): the rate limit keeps its result for a minute, and
+// each device read is bounded by liveTimeout (#599).
 func (m *Manager) refresh(ctx context.Context, devs []model.Device) bool {
+	ctx = context.WithoutCancel(ctx)
 	if !m.mu.TryLock() { // single flight: wait for the run in progress, then use what it read
 		m.mu.Lock()
 		defer m.mu.Unlock()
@@ -234,7 +237,9 @@ func (m *Manager) readInto(ctx context.Context, d model.Device) (reading, error)
 	r, err := readLive(rctx, m.o.Client, d, m.o.Now())
 	if err != nil {
 		m.o.Log.Debug("template read failed", "device", int64(d.ID), "err", err)
-		m.cache.fail(d.ID)
+		if ctx.Err() == nil { // the caller left (an abandoned preview): that says nothing about the device
+			m.cache.fail(d.ID)
+		}
 		return reading{}, err
 	}
 	m.cache.put(d.ID, r)

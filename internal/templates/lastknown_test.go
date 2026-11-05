@@ -143,3 +143,79 @@ func TestOverlappingRefreshesReadEachDeviceOnce(t *testing.T) {
 		t.Errorf("%d commands sent: %v; want 4 (one round)", len(f.cmds), f.cmds)
 	}
 }
+
+// Why (#599): a stale reading is the last thing known about the device; a backup taken before it is older
+// news and must not replace it (only a newer backup does).
+func TestAStaleReadingBeatsAnOlderBackup(t *testing.T) {
+	f := newFleet()
+	a := f.add("a", "NOUS A1T", 21)
+	f.add("b", "NOUS A1T", 21)
+	f.snap[a] = []byte(`{"Module":` + f.module[a] + `,"Template":` + f.template[a] + `}`) // taken t0-48h
+	now := t0.Add(-2 * time.Hour)
+	m := clockedManager(f, &now)
+	_, _ = m.Overview(context.Background(), nil, true)
+	now = t0
+	ov, _ := m.Overview(context.Background(), nil, false)
+	if d := deviceOf(t, ov, a); d.Source != SourceStale || !d.ReadAt.Equal(t0.Add(-2*time.Hour)) {
+		t.Fatalf("source %q read %v, want the stale reading (2 h old) over the backup (48 h old)", d.Source, d.ReadAt)
+	}
+}
+
+// Why (#599): the tab reads the fleet by itself when it opens, as the page's own request. A person who
+// clicks on (or presses Read again) before it is done ends that request. The devices did not fail: they
+// must be read all the same (the rate limit keeps the run's result for a minute, so a cut-short run
+// would leave them unread that long) and none may be shown as "refresh failed".
+func TestARefreshWhoseRequestEndsStillReadsEveryDevice(t *testing.T) {
+	f := newFleet()
+	a := f.add("a", "NOUS A1T", 21)
+	b := f.add("b", "NOUS A1T", 21)
+	f.gate = make(chan struct{})
+	now := t0
+	m := clockedManager(f, &now)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { _, _ = m.Overview(ctx, nil, true); close(done) }()
+	for i := 0; m.mu.TryLock(); i++ { // not held yet: the refresh has not started
+		m.mu.Unlock()
+		if i > 500 {
+			t.Fatal("the refresh never started")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel() // the person left the page while the devices were still answering
+	time.Sleep(50 * time.Millisecond)
+	close(f.gate)
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the refresh never ended")
+	}
+	ov, _ := m.Overview(context.Background(), nil, false)
+	if ov.ReadFailed != 0 {
+		t.Errorf("%d devices shown as failed after the request ended", ov.ReadFailed)
+	}
+	for _, id := range []model.DeviceID{a, b} {
+		if d := deviceOf(t, ov, id); d.Source != SourceLive {
+			t.Errorf("device %d: source %q, want the reading of the refresh that was asked for", id, d.Source)
+		}
+	}
+}
+
+// Why: the preview reads every device live; a person who abandons it ends the request. That says
+// nothing about the devices, so none may be marked as "refresh failed" on the tab.
+func TestAnAbandonedPreviewMarksNoDeviceFailed(t *testing.T) {
+	f := newFleet()
+	a := f.add("a", "NOUS A1T", 21)
+	b := f.add("b", "NOUS A1T", 21)
+	f.gate = make(chan struct{})
+	defer close(f.gate)
+	now := t0
+	m := clockedManager(f, &now)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, _ = m.Preview(ctx, Request{Group: policy.GroupKey{Family: model.ChipESP8266, Name: "NOUS A1T"}, Reference: a, Devices: []model.DeviceID{b}})
+	ov, _ := m.Overview(context.Background(), nil, false)
+	if ov.ReadFailed != 0 {
+		t.Errorf("%d devices shown as failed after an abandoned preview", ov.ReadFailed)
+	}
+}

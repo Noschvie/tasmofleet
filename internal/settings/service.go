@@ -91,9 +91,10 @@ type Options struct {
 // Manager implements Service.
 type Manager struct {
 	o       Options
-	mu      sync.Mutex // guards last and flights
+	mu      sync.Mutex // guards last, flights and gen
 	last    map[model.DeviceID]Snapshot
 	flights map[model.DeviceID]*flight
+	gen     map[model.DeviceID]uint64 // writes (Apply) per device; a read that started before one is outdated
 }
 
 var _ Service = (*Manager)(nil)
@@ -106,7 +107,7 @@ func New(o Options) *Manager {
 	if o.Now == nil {
 		o.Now = time.Now
 	}
-	return &Manager{o: o, last: map[model.DeviceID]Snapshot{}, flights: map[model.DeviceID]*flight{}}
+	return &Manager{o: o, last: map[model.DeviceID]Snapshot{}, flights: map[model.DeviceID]*flight{}, gen: map[model.DeviceID]uint64{}}
 }
 
 // Read implements Service.

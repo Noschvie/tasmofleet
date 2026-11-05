@@ -483,3 +483,12 @@ func TestSettingsRefreshedFormSaysItIsFresh(t *testing.T) {
 		t.Errorf("fresh form:\n%s", shortDump(body))
 	}
 }
+
+// Why (#599): without JavaScript nothing fetches the fresh values, so the line offers the read.
+func TestSettingsNoScriptOffersTheReadInsteadOfPromisingARefresh(t *testing.T) {
+	fs := &fakeSettings{last: &settings.Snapshot{Values: map[string]string{"TelePeriod": "300"}, At: time.Now().Add(-time.Minute)}}
+	_, body := withSettings(t, fs).do(t, "GET", "/devices/1/settings", "admin", nil)
+	if !strings.Contains(body, `<noscript><span>This page needs JavaScript to refresh by itself. <a href="/tf/devices/1/settings/form">Read the device now</a>`) {
+		t.Errorf("no <noscript> read link:\n%s", shortDump(body))
+	}
+}
