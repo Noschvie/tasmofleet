@@ -68,10 +68,15 @@ func (e *flowEnv) devFile(t *testing.T, p string) string {
 	return string(b)
 }
 
+// setDevFile seeds a file and checks it by reading it back, not by the upload reply: that reply is
+// what the restore under test reads, and a seed that trusted it would stop a test before the restore
+// runs whenever the reader is wrong (#618: a localized reply), hiding the outcome the test is about.
 func (e *flowEnv) setDevFile(t *testing.T, p, content string) {
 	t.Helper()
-	if err := e.cl.fs.UploadFile(t.Context(), e.target(), p, []byte(content)); err != nil {
-		t.Fatalf("seed %s: %v", p, err)
+	err := e.cl.fs.UploadFile(t.Context(), e.target(), p, []byte(content))
+	got, rerr := e.cl.fs.DownloadFile(t.Context(), e.target(), p, int64(len(content))+1) // seeds may pass the 1 MiB default
+	if rerr != nil || string(got) != content {
+		t.Fatalf("seed %s: read back %d bytes, %v (upload: %v)", p, len(got), rerr, err)
 	}
 }
 

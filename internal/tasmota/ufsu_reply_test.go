@@ -114,8 +114,8 @@ func TestUploadFileFailureNeverReadsAsSuccess(t *testing.T) {
 	}
 }
 
-// Why: only the page HandleUploadUFSDone sends is an answer to the upload. A device before about
-// v13.2 answers 303 and sends no result at all, a proxy or a captive portal sends something of its
+// Why: only the page HandleUploadUFSDone sends is an answer to the upload. A device before
+// v13.4 (through v13.3.0) answers 303 and sends no result at all, a proxy or a captive portal sends something of its
 // own, a cut reply has no end. All of these are unknown (the caller then checks the file), never a
 // success and never a refusal with an invented reason.
 func TestUploadFileUnknownPagesStayUnknown(t *testing.T) {
