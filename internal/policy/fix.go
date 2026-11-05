@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -100,7 +101,7 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 	keep := ""
 	if !saves && !restarts {
 		got, err := f.Reader.ReadKeys(ctx, d.ID, []string{"SaveData"})
-		if keep = got["SaveData"]; err != nil || keep == "" {
+		if keep = got["SaveData"]; err != nil || !validSaveData(keep) {
 			return errors.New("nothing was sent: the current SaveData value could not be read, so the changes could not be written to flash")
 		}
 	}
@@ -161,7 +162,7 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 	if keep == "" && !saves && len(skipped) > 0 && !restartsAfterSkips(parsed, skipped) {
 		// The lines that would have restarted (and so saved) the device were left out: save the rest.
 		got, err := f.Reader.ReadKeys(ctx, d.ID, []string{"SaveData"})
-		if keep = got["SaveData"]; err != nil || keep == "" {
+		if keep = got["SaveData"]; err != nil || !validSaveData(keep) {
 			return errors.New("the settings are applied but the current SaveData value could not be read, so they were not written to flash")
 		}
 	}
@@ -271,7 +272,7 @@ func savesItself(sent []fixLine) bool {
 func (f *Fixer) saveKeeping(ctx context.Context, d model.Device, t tasmota.Target, keep string) error {
 	if keep == "" {
 		got, err := f.Reader.ReadKeys(ctx, d.ID, []string{"SaveData"})
-		if keep = got["SaveData"]; err != nil || keep == "" {
+		if keep = got["SaveData"]; err != nil || !validSaveData(keep) {
 			return errors.New("the current SaveData value could not be read")
 		}
 	}
@@ -286,6 +287,17 @@ func (f *Fixer) saveKeeping(ctx context.Context, d model.Device, t tasmota.Targe
 // write flash before the queued lines ran and lose them at the next restart (#559). Queued
 // behind them (the queue is first in, first out) it runs after the last one.
 func saveCommand(keep string) string { return "Backlog SaveData " + keep }
+
+// validSaveData reports whether v, read from a device, is a plain decimal SaveData value (0..3600).
+// The value goes into a Backlog, where ";" splits commands, so anything else (a device or a spoofed
+// MQTT reply answering "1; Upgrade 1") must never be sent back.
+func validSaveData(v string) bool {
+	if v == "" || len(v) > 4 || strings.Trim(v, "0123456789") != "" {
+		return false
+	}
+	n, err := strconv.Atoi(v)
+	return err == nil && n <= 3600
+}
 
 // keyNames lists the settings of the lines by name.
 func keyNames(lines []fixLine) string {

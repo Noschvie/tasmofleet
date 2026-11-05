@@ -662,3 +662,28 @@ func TestApplyLeavesOutWhatCouldCutAnMQTTOnlyDeviceOff(t *testing.T) {
 		t.Fatalf("an HTTP device got %q, want %q", c3.sent, wantHTTP)
 	}
 }
+
+// Why (safety): the SaveData value sent back is read from the device and goes into a Backlog, where
+// ";" splits commands. A device (or a spoofed MQTT reply) answering "1; Upgrade 1" would make us
+// start an upgrade without fwselect.Guard. Only a plain number in SaveData's range is sent back;
+// anything else sends nothing, as when the value cannot be read.
+func TestSaveDataValueFromTheDeviceIsSentOnlyWhenItIsANumber(t *testing.T) {
+	for _, bad := range []string{"1; Upgrade 1", "abc", "-1", "3601", "1 ", "+1", "0x10", "1.5", "99999999999999999999"} {
+		c := &fakeCmd{}
+		err := newFixer(c, &fakeRead{vals: map[string]string{"SaveData": bad}}).Apply(context.Background(), model.Device{}, []string{"PowerOnState 0"})
+		if err == nil || !strings.Contains(err.Error(), "SaveData value could not be read") || len(c.sent) != 0 {
+			t.Errorf("Apply with SaveData %q: err %v, sent %q", bad, err, c.sent)
+		}
+		c = &fakeCmd{}
+		err = newFixer(c, &fakeRead{vals: map[string]string{"SaveData": bad}}).saveKeeping(context.Background(), model.Device{}, tasmota.Target{}, "")
+		if err == nil || !strings.Contains(err.Error(), "SaveData value could not be read") || len(c.sent) != 0 {
+			t.Errorf("saveKeeping with SaveData %q: err %v, sent %q", bad, err, c.sent)
+		}
+	}
+	for _, ok := range []string{"0", "1", "3600"} {
+		c := &fakeCmd{}
+		if err := newFixer(c, &fakeRead{vals: map[string]string{"SaveData": ok}}).Apply(context.Background(), model.Device{}, []string{"PowerOnState 0"}); err != nil || c.sent[len(c.sent)-1] != "Backlog SaveData "+ok {
+			t.Errorf("SaveData %q: err %v, sent %q", ok, err, c.sent)
+		}
+	}
+}
