@@ -178,6 +178,32 @@ test("a failed job of main.yml is refused, but ghcr-cleanup may fail", () => {
   assert.equal(ok.status, 0, ok.stderr);
 });
 
+// The Home Assistant app image is built apart from :edge and gates nothing (#522): a red one on main must not
+// refuse a release, while a red image build still does.
+test("ha-app may fail on main.yml, the image build may not", () => {
+  const ha = {
+    name: "ha-app / Home Assistant app image (build and test, not published)",
+    conclusion: "failure",
+  };
+  const ok = run({
+    jobs: {
+      jobs: [{ name: "checks / lint", conclusion: "success" }, ha],
+    },
+  });
+  assert.equal(ok.status, 0, ok.stderr);
+  const bad = run({
+    jobs: {
+      jobs: [
+        { name: "checks / lint", conclusion: "success" },
+        { name: "image / build image (edge)", conclusion: "failure" },
+        ha,
+      ],
+    },
+  });
+  assert.notEqual(bad.status, 0);
+  assert.match(bad.stderr, /image \/ build image \(edge\): failure/);
+});
+
 // A re-run of "required" is a newer check run on the same commit, like branch protection sees it: the newest attempt
 // decides, whichever order the API lists them in.
 test("the newest attempt of required decides", () => {

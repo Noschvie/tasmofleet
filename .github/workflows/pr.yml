@@ -14,6 +14,8 @@
 # The migration append-only guard (#595) runs on every PR too and gates the merge. So does the release
 # guard (#556): a PR whose tip adds a new "## X.Y.Z" section to CHANGELOG.md is the release commit of a
 # merge train and runs the tag's CHANGELOG and migration guards (make release-pr-check) before the tag exists.
+# The image build check (Dockerfile, module files) gates the merge too when the PR touches what the image reads
+# (#522); the Home Assistant app image is built next to it and does not.
 # The job "required" is the single status check for branch protection; it always runs.
 #
 # No paths filter on the trigger: "changes" decides, and "required" always reports.

@@ -254,7 +254,7 @@ SAFETY package, catalogue, image paths). Every gate runs through the Makefile.
   tests and the build on `main` (`main.yml`); running them again on identical code only delayed the image. Job `guards` fails at once, with the reason, when the
   tag is not on `main`, has no `CHANGELOG.md` section, is a patch tag that changes a migration, edits a migration of the previous tag,
   or when its commit lacks a successful `required` check run of `pr.yml` or a successful `main.yml` run (`tools/release-green.sh`;
-  only `ghcr-cleanup` may fail there). Only the head of a push to `main` gets a `main.yml` run, and a push that changes only
+  only `ghcr-cleanup` and `ha-app` may fail there). Only the head of a push to `main` gets a `main.yml` run, and a push that changes only
   paths `main.yml` ignores gets none: tag the head of the push that carried the release commit, only after `main.yml` has
   finished on it. The race tests of every `SAFETY` package run in the nightly FULL on the same
   `main`. Then the image is published (job `publish` calling `_image.yml` with `mode: release`, the only way to push a tag
