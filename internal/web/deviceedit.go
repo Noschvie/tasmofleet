@@ -328,6 +328,7 @@ func (h *handler) deviceDelete(w http.ResponseWriter, r *http.Request) {
 		h.refuseDeviceDelete(w, r, id, devDeleteView{ChoiceErr: true, AckErr: r.PostFormValue("ack") != "1"})
 		return
 	}
+	backupsGone := false
 	if choice == "delete" {
 		if del, ok := h.backupBulkDeleter(); ok {
 			if _, err := h.d.Inventory.Get(r.Context(), id); errors.Is(err, store.ErrNotFound) {
@@ -338,6 +339,7 @@ func (h *handler) deviceDelete(w http.ResponseWriter, r *http.Request) {
 				h.fail(w, r, err)
 				return
 			}
+			backupsGone = true
 		}
 	}
 	switch err := h.d.Inventory.DeleteWith(r.Context(), actor(r), id, inventory.DeleteOptions{Backups: choice}); {
@@ -349,6 +351,11 @@ func (h *handler) deviceDelete(w http.ResponseWriter, r *http.Request) {
 		hold, herr := h.deviceHeld(r.Context(), id)
 		if herr != nil || hold == nil {
 			hold = &deviceHold{Text: holdRaceText}
+		}
+		if backupsGone { // the person chose "Delete the backups too" and they went before the store refused
+			held := *hold
+			held.Text += " " + holdBackupsGoneText
+			hold = &held
 		}
 		h.renderRefusedBusy(w, r, id, hold)
 	case err != nil:

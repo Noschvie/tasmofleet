@@ -1148,8 +1148,9 @@ its row gone or, after id reuse, another device's job in another state. The stor
 `DeviceStore.DeleteDevice` returns `store.ErrDeviceBusy` (wraps `ErrConflict`, never `ErrNotFound`) while the device
 has a job that is not succeeded, failed or cancelled, or a restore that is not done or failed. The check and the
 delete are one statement in one transaction. The delete page says "An update is running on this device" with a link
-to the transaction (or the restore) and offers no Delete; a post is answered 409, audited as refused, and deletes no
-backups. The engine treats a vanished job row (`store.ErrNotFound` on a persist) as a quiet stop (WARN, no ERROR);
+to the transaction (or the restore) and offers no Delete; a post is answered 409 and audited as refused, and the check runs before "Delete the backups too", so no backup is
+deleted; only when a job starts between that check and the delete does the store refuse after the backups went, and the
+409 page says so. The engine treats a vanished job row (`store.ErrNotFound` on a persist) as a quiet stop (WARN, no ERROR);
 a conflict stays an ERROR.
 
 ### 9.7 Preview (dry run)

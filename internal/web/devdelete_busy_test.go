@@ -124,3 +124,25 @@ func TestDeleteStoreRefusalIsShownAsBusy(t *testing.T) {
 		t.Fatalf("the store's refusal must come back as 409 with a reason, not a 500: %d %.600s", resp.StatusCode, body)
 	}
 }
+
+// Why: when a job starts between the page's check and the delete, "Delete the backups too" has
+// already run. The person must be told that, not left to believe the backups are still there.
+func TestDeleteStoreRefusalAfterBackupsWentSaysSo(t *testing.T) {
+	for choice, wantGone := range map[string]bool{"delete": true, "keep": false} {
+		k := &keepBackups{adminBackups: &adminBackups{}, deviceOf: 1}
+		e := setupWith(t, func(d *Deps) {
+			d.Backups = k
+			d.Inventory = busyInv{d.Inventory.(*fakeInv)}
+		})
+		resp, body := e.do(t, "POST", "/devices/1/delete", "admin", url.Values{"backups": {choice}, "ack": {"1"}})
+		if resp.StatusCode != 409 {
+			t.Fatalf("%s: status %d", choice, resp.StatusCode)
+		}
+		if got := strings.Contains(body, "The backups were already deleted."); got != wantGone {
+			t.Errorf("%s: backups-gone note shown = %v, want %v", choice, got, wantGone)
+		}
+		if (len(k.all) == 1) != wantGone {
+			t.Errorf("%s: backups deleted %v", choice, k.all)
+		}
+	}
+}

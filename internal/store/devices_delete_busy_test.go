@@ -94,3 +94,55 @@ func TestJobForADeletedDeviceFails(t *testing.T) {
 		t.Fatal("a job was created for a deleted device")
 	}
 }
+
+// Why: the guard lists the terminal states in SQL, and the store is not mutation-tested. A typo in
+// 'failed' or 'cancelled' would make devices undeletable for ever (or a running state deletable), so
+// every state is tried, terminal ones must allow the delete and the others must refuse it.
+func TestDeleteDeviceGuardCoversEveryJobState(t *testing.T) {
+	otaStates := map[model.JobState]bool{ // true = holds the device
+		model.JobQueued: true, model.JobPreflight: true, model.JobBackup: true, model.JobSetOtaURL: true,
+		model.JobSafebootSwitch: true, model.JobSafebootRecover: true, model.JobUpgradeIssued: true,
+		model.JobAwaitReboot: true, model.JobVerify: true, model.JobRestoreOtaURL: true, model.JobApplying: true,
+		model.JobSucceeded: false, model.JobFailed: false, model.JobCancelled: false,
+	}
+	for st, holds := range otaStates {
+		s, _, _ := newStore(t)
+		dev := mustDevice(t, s, "a", "10.0.0.1")
+		j := job(dev)
+		j.State = st
+		if _, _, err := s.CreateBatch(ctx, "u", []model.Job{j}); err != nil {
+			t.Fatalf("%s: %v", st, err)
+		}
+		err := s.DeleteDevice(ctx, dev)
+		if holds != errors.Is(err, ErrDeviceBusy) || (!holds && err != nil) {
+			t.Errorf("job state %q: holds=%v but DeleteDevice returned %v", st, holds, err)
+		}
+		if st.Terminal() == holds {
+			t.Errorf("job state %q: the test table disagrees with model.JobState.Terminal", st)
+		}
+	}
+	restoreStates := map[string]bool{
+		RestorePending: true, RestoreBackup: true, RestoreFiles: true, RestoreSending: true,
+		RestoreWaiting: true, RestoreVerifying: true, RestoreDone: false, RestoreFailed: false,
+	}
+	for st, holds := range restoreStates {
+		s, _, _ := newStore(t)
+		dev := mustDevice(t, s, "a", "10.0.0.1")
+		id, err := s.CreateRestore(ctx, RestoreJob{DeviceID: dev, BackupID: 1, Actor: "u"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		r, _ := s.GetRestore(ctx, id)
+		r.State = st
+		if err := s.UpdateRestore(ctx, r); err != nil {
+			t.Fatalf("%s: %v", st, err)
+		}
+		err = s.DeleteDevice(ctx, dev)
+		if holds != errors.Is(err, ErrDeviceBusy) || (!holds && err != nil) {
+			t.Errorf("restore state %q: holds=%v but DeleteDevice returned %v", st, holds, err)
+		}
+		if r.Terminal() == holds {
+			t.Errorf("restore state %q: the test table disagrees with RestoreJob.Terminal", st)
+		}
+	}
+}

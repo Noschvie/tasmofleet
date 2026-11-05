@@ -35,10 +35,11 @@ type devDeleteView struct {
 type deviceHold struct{ Text, LinkText, Href string }
 
 const (
-	holdUpdateText  = "An update is running on this device. Cancel it or wait until it ends, then delete the device."
-	holdJobText     = "A job is running on this device. Wait until it ends, then delete the device."
-	holdRestoreText = "A restore is running on this device. Wait until it ends, then delete the device."
-	holdRaceText    = "The device is busy: a job started while you were on this page. Wait until it ends, then delete the device."
+	holdUpdateText      = "An update is running on this device. Cancel it or wait until it ends, then delete the device."
+	holdJobText         = "A job is running on this device. Wait until it ends, then delete the device."
+	holdRestoreText     = "A restore is running on this device. Wait until it ends, then delete the device."
+	holdBackupsGoneText = "The backups were already deleted."
+	holdRaceText        = "The device is busy: a job started while you were on this page. Wait until it ends, then delete the device."
 )
 
 // holdBanner is the refusal at the top of the delete page.
