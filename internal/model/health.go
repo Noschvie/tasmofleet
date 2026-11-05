@@ -28,15 +28,18 @@ const (
 // Health is the current health of one device. It lives in memory (health
 // package) and is persisted only as LastSeen/State on change.
 type Health struct {
-	DeviceID  DeviceID
-	State     HealthState
-	Source    HealthSource
-	LastSeen  time.Time // last successful observation of any kind
-	SeenMQTT  time.Time // last message on our broker (shown per channel in the UI)
-	SeenHTTP  time.Time // last successful HTTP poll
-	LWT       string    // "Online", "Offline" or "" when no MQTT
-	UptimeSec int64
-	RSSI      int // Wifi.RSSI percentage from STATE, 0 if unknown
+	DeviceID DeviceID
+	State    HealthState
+	Source   HealthSource
+	LastSeen time.Time // last successful observation of any kind
+	SeenMQTT time.Time // last message on our broker (shown per channel in the UI)
+	SeenHTTP time.Time // last successful HTTP poll or probe
+	// HTTPRefusedAt is when the last HTTP call found the device's web page answering but its HTTP API
+	// off (SetOption128, tasmota.ErrHTTPAPIRefused); zero when the last call did not find that (#447).
+	HTTPRefusedAt time.Time
+	LWT           string // "Online", "Offline" or "" when no MQTT
+	UptimeSec     int64
+	RSSI          int // Wifi.RSSI percentage from STATE, 0 if unknown
 	// SignalDBm is Wifi.Signal from STATE/Status 11 (0 = not reported). LinkCount is Wifi.LinkCount,
 	// how often the device connected to its access point since it started (0 = not reported).
 	SignalDBm int

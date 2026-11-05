@@ -273,11 +273,14 @@ func pathCardOf(v view, d model.Device, f transport.Facts, p transport.Paths, t 
 	return c
 }
 
-// httpWord is the one wording of the HTTP state (ok, failing, not checked lately); the connection
+// httpWord is the one wording of the HTTP state (ok, failing, API off, not checked lately); the connection
 // card and the Reachability tile both use it, so they cannot disagree (#416).
 func httpWord(st transport.HTTPState) string {
 	switch st.State {
 	case transport.HTTPFailing:
+		if st.Kind == transport.HTTPFailAPIRefused {
+			return "Refused"
+		}
 		return "Not reachable"
 	case transport.HTTPOK:
 		return "Reachable"
@@ -295,7 +298,7 @@ func httpRow(f transport.Facts) pathRow {
 	case transport.HTTPOK:
 		r.Value, r.Tone, r.Sub = httpWord(f.HTTP), ui.ToneOK, "TasmoFleet's last HTTP call to the device succeeded."
 	case transport.HTTPUnknown:
-		r.Value, r.Tone, r.Sub = httpWord(f.HTTP), ui.ToneNeutral, "TasmoFleet tries HTTP first and switches to MQTT when it fails."
+		r.Value, r.Tone, r.Sub = httpWord(f.HTTP), ui.ToneNeutral, "Reads go over MQTT first for a device live on TasmoFleet's broker, over HTTP otherwise; changes try HTTP first. TasmoFleet checks HTTP when this page opens or a task needs it."
 	}
 	return r
 }

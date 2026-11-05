@@ -644,7 +644,7 @@ func TestReachTileAndConnectionCardAgreeOnHTTP(t *testing.T) {
 	}{
 		{"fresh", now0.Add(-time.Minute), httpFresh, "Reachable", "Connected · Reachable"},
 		{"stale", stale, transport.HTTPState{}, "Not checked lately", "Connected · HTTP not checked lately, last answered 3d 4h ago"},
-		{"never polled", time.Time{}, transport.HTTPState{}, "Not checked lately", "Connected · HTTP not polled yet"},
+		{"never polled", time.Time{}, transport.HTTPState{}, "Not checked lately", "Connected · HTTP not checked yet"},
 		{"failing", stale, transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailUnreachable, Since: now0.Add(-time.Hour)}, "Not reachable", "Connected · HTTP not reachable"},
 	}
 	for _, tc := range tests {
@@ -725,5 +725,77 @@ func TestReachTileWarnsWhenThereIsNoLiveLinkOrHTTPFails(t *testing.T) {
 				t.Fatalf("value %q class %q, want %q with t-warn", tl.Value, toneClass(tl.Tone), tc.value)
 			}
 		})
+	}
+}
+
+var apiRefused = transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailAPIRefused, Since: now0.Add(-time.Hour)}
+
+// Why (#447): a device with MQTT and its HTTP API switched off still serves its web page. The
+// tile said "Offline / HTTP no answer", which sent people looking for a dead device. It must
+// say what is the matter (the API is off) and keep working with what works (MQTT, when live).
+func TestReachTileSaysTheHTTPAPIIsOffInsteadOfOffline(t *testing.T) {
+	ours := model.Device{MQTT: model.MQTTOurs}
+	offline := model.Health{State: model.HealthOffline, LastSeen: now0, LWT: "Offline"}
+	tests := []struct {
+		name       string
+		d          model.Device
+		hl         model.Health
+		http       transport.HTTPState
+		value, sub string
+		tone       ui.Tone
+	}{
+		{"MQTT off and API off", ours, offline, apiRefused, "HTTP API off", "The web page answers · MQTT LWT offline", ui.ToneWarn},
+		{"HTTP only device", model.Device{}, model.Health{State: model.HealthOffline, LastSeen: now0}, apiRefused, "HTTP API off", "The web page answers · MQTT not configured", ui.ToneWarn},
+		{"MQTT live keeps working", ours, onlineHealth(nil), apiRefused, "MQTT", "Connected · HTTP API off (SetOption128)", ui.ToneWarn},
+		{"HTTP answers although the last will says offline", ours, offline, httpFresh, "HTTP", "Reachable · MQTT not connected", ui.ToneWarn},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := reachTile(tc.d, tc.hl, tc.http, now0, false)
+			if got.Value != tc.value || got.Sub != tc.sub || got.Tone != tc.tone {
+				t.Fatalf("got %q / %q / %q, want %q / %q / %q", got.Value, got.Sub, got.Tone, tc.value, tc.sub, tc.tone)
+			}
+		})
+	}
+}
+
+// Why (#447): the router's memory of a refused API lasts 10 minutes, the health tracker's finding
+// until HTTP answers again. The page shows the longer one, in the tile, the card and the list alike.
+func TestShownHTTPStateKeepsTheRefusalTheTrackerRemembers(t *testing.T) {
+	refused := model.Health{HTTPRefusedAt: now0.Add(-time.Hour), SeenHTTP: now0.Add(-2 * time.Hour)}
+	got := shownHTTP(transport.HTTPState{}, refused)
+	if got.State != transport.HTTPFailing || got.Kind != transport.HTTPFailAPIRefused || !got.Since.Equal(refused.HTTPRefusedAt) {
+		t.Fatalf("shown = %+v", got)
+	}
+	if got := shownHTTP(httpFresh, refused); got.State != transport.HTTPOK {
+		t.Fatalf("a fresh HTTP answer lost to an old refusal: %+v", got)
+	}
+	answered := model.Health{HTTPRefusedAt: now0.Add(-time.Hour), SeenHTTP: now0.Add(-time.Minute)}
+	if got := shownHTTP(transport.HTTPState{}, answered); got.State == transport.HTTPFailing {
+		t.Fatalf("HTTP answered after the refusal, still shown as %+v", got)
+	}
+	// The card says the same as the tile.
+	if r := httpRow(transport.Facts{HTTP: apiRefused, Now: now0}); r.Value != "Refused" {
+		t.Fatalf("card value %q", r.Value)
+	}
+	chs := channelsOf(now0, time.Hour, model.Health{SeenMQTT: now0, HTTPRefusedAt: now0})
+	if chs[1].Tone != "bad" || !strings.Contains(chs[1].Tip, "SetOption128") {
+		t.Fatalf("list HTTP channel: %+v", chs[1])
+	}
+}
+
+// Why (#456): the device page asks for one HTTP probe when it is opened, because a device that
+// is fine on MQTT is no longer polled over HTTP; the live refreshes that follow a probe must
+// not ask again.
+func TestOpeningTheDevicePageAsksForOneHTTPProbe(t *testing.T) {
+	var asked []model.DeviceID
+	e := setupWith(t, func(d *Deps) { d.ProbeHTTP = func(id model.DeviceID) { asked = append(asked, id) } })
+	e.do(t, "GET", "/devices/1", "admin", nil)
+	if len(asked) != 1 || asked[0] != 1 {
+		t.Fatalf("probe asked for %v", asked)
+	}
+	e.do(t, "GET", "/devices", "admin", nil)
+	if len(asked) != 1 {
+		t.Fatalf("the list asked for probes: %v", asked)
 	}
 }

@@ -39,6 +39,13 @@ const (
 	// snapshotRetry spaces repeated snapshot fetches of one device that keeps
 	// answering without usable STATE data (minimal firmware).
 	snapshotRetry = time.Minute
+
+	// probeFreshFor: an HTTP answer this recent needs no probe. probeOKGap and probeFailGap space the
+	// probes of one device (ProbeHTTP): a person reloading a page cannot hammer it, and a device whose
+	// HTTP fails is asked less often than one that answers.
+	probeFreshFor = 5 * time.Minute
+	probeOKGap    = 5 * time.Minute
+	probeFailGap  = 10 * time.Minute
 )
 
 // Store is the persistence the tracker needs.
@@ -106,12 +113,16 @@ type devState struct {
 	lastMQTT   time.Time
 	lastLive   time.Time // lastMQTT without replays: only what the device sent while we listened (LiveMQTT)
 	lastHTTP   time.Time
+	refusedAt  time.Time // the last HTTP call found the API off (Health.HTTPRefusedAt)
 	fails      int
 	authFailed bool
 	minimal    bool
 
 	nextPoll time.Time
 	polling  bool
+
+	wantProbe  bool      // ProbeHTTP asked for one HTTP probe; the next tick runs it
+	probeAfter time.Time // earliest next probe
 
 	hasSnap   bool      // uptime/RSSI/power came in via STATE or Status 11
 	snapAfter time.Time // earliest next snapshot fetch
@@ -296,7 +307,7 @@ func (s *Service) tick(ctx context.Context) {
 	}
 
 	var trs []transition
-	var due []model.DeviceID
+	var due, probes []model.DeviceID
 	snapBudget := s.o.PollParallel // per tick: no burst of snapshot fetches
 	s.mu.Lock()
 	// A flagged restart read goes before the next poll of its device (a poll is due every interval
@@ -310,8 +321,11 @@ func (s *Service) tick(ctx context.Context) {
 			continue
 		}
 		if s.pollEligible(ds, now) && !now.Before(ds.nextPoll) {
-			ds.polling = true
+			ds.polling, ds.wantProbe = true, false // the poll answers what the probe would
 			due = append(due, id)
+		} else if ds.wantProbe {
+			ds.polling, ds.wantProbe = true, false
+			probes = append(probes, id)
 		} else if snapBudget > 0 && s.snapshotDue(ds, now) {
 			ds.polling = true
 			snapBudget--
@@ -333,9 +347,36 @@ func (s *Service) tick(ctx context.Context) {
 		s.wg.Add(1)
 		go func() {
 			defer s.wg.Done()
-			s.poll(ctx, id)
+			s.poll(ctx, id, false)
 		}()
 	}
+	for _, id := range probes {
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			s.poll(ctx, id, true)
+		}()
+	}
+}
+
+// ProbeHTTP asks for one HTTP check of a device, for the moment somebody needs to know whether HTTP
+// works: its page is opened, a task waits for it (#456). A device that is fine on MQTT is not polled
+// over HTTP, so without this its HTTP fact would only ever age. The probe is the same Status 11 as a
+// poll, but it is a question about HTTP only: a failure never counts toward offline and the poll
+// schedule does not move. It also reaches a device whose last will is Offline, which no poll does
+// (#619): that is how a device with MQTT and its HTTP API switched off is found (#447). Asked too soon
+// (an answer within probeFreshFor, a probe within its gap), or for an unknown device, it does nothing.
+// The request is picked up by the next tick.
+func (s *Service) ProbeHTTP(id model.DeviceID) {
+	now := s.d.Clock.Now()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ds := s.devs[id]
+	if ds == nil || ds.polling || ds.wantProbe || now.Before(ds.probeAfter) ||
+		!ds.lastHTTP.IsZero() && now.Sub(ds.lastHTTP) < probeFreshFor {
+		return
+	}
+	ds.wantProbe = true
 }
 
 // dataVersion asks the store for its change marker; stores without one
@@ -495,7 +536,7 @@ type transition struct {
 // Health, publishes it and reports a state change for persistence.
 func (s *Service) evaluate(ds *devState, now time.Time, src model.HealthSource, detail string) (transition, bool) {
 	ds.h.LastSeen = s.lastObs(ds)
-	ds.h.SeenMQTT, ds.h.SeenHTTP = ds.lastMQTT, ds.lastHTTP
+	ds.h.SeenMQTT, ds.h.SeenHTTP, ds.h.HTTPRefusedAt = ds.lastMQTT, ds.lastHTTP, ds.refusedAt
 	ds.h.LWT = ds.lwt
 	if src != "" {
 		ds.h.Source = src
@@ -773,7 +814,9 @@ func hasNumberedPower(m map[string]string) bool {
 
 // ---- HTTP poll ----
 
-func (s *Service) poll(ctx context.Context, id model.DeviceID) {
+// poll reads Status 11 over HTTP. reach: a probe (ProbeHTTP), which records what HTTP showed but leaves
+// the failure count, the credentials flag and the schedule alone.
+func (s *Service) poll(ctx context.Context, id model.DeviceID, reach bool) {
 	select {
 	case s.sem <- struct{}{}:
 		defer func() { <-s.sem }()
@@ -820,11 +863,20 @@ func (s *Service) poll(ctx context.Context, id model.DeviceID) {
 		if !res.minimal {
 			s.applyJSON(ds, res.sts, true, ds.powerGen != powerGen)
 		}
+		ds.refusedAt = time.Time{}
+		if reach {
+			ds.probeAfter = now.Add(probeOKGap)
+			break
+		}
 		ds.nextPoll = now
 		ds.snapAfter = now.Add(snapshotRetry)
 		if !s.mqttMode(ds) {
 			ds.nextPoll = now.Add(s.jitter(s.pollInterval()))
 		}
+	case reach:
+		ds.probeAfter = now.Add(probeFailGap)
+		ds.noteRefusal(err, now)
+		detail = "http probe failed: " + errKind(err)
 	case errors.Is(err, tasmota.ErrAuth):
 		ds.fails++
 		ds.authFailed = true
@@ -834,6 +886,7 @@ func (s *Service) poll(ctx context.Context, id model.DeviceID) {
 	default:
 		ds.fails++
 		ds.authFailed = false
+		ds.noteRefusal(err, now)
 		ds.nextPoll = now.Add(s.failDelay(ds.fails))
 		ds.snapAfter = ds.nextPoll
 		detail = "http poll failed: " + errKind(err)
@@ -845,6 +898,17 @@ func (s *Service) poll(ctx context.Context, id model.DeviceID) {
 	s.mu.Unlock()
 	if changed {
 		s.persist(ctx, []transition{tr})
+	}
+}
+
+// noteRefusal keeps what a failed HTTP call says about the HTTP API: refused (the device answers, its API
+// is off) or not; a timeout or a credentials error says nothing and leaves the earlier finding.
+func (ds *devState) noteRefusal(err error, now time.Time) {
+	switch {
+	case errors.Is(err, tasmota.ErrHTTPAPIRefused):
+		ds.refusedAt = now
+	case errors.Is(err, tasmota.ErrUnreachable):
+		ds.refusedAt = time.Time{}
 	}
 }
 

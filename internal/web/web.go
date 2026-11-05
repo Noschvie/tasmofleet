@@ -112,9 +112,12 @@ type KV struct{ Key, Value string }
 
 // Deps bundles the services the UI needs. Filled by package app.
 type Deps struct {
-	Guard       Guard
-	Inventory   inventory.Service
-	Health      health.Tracker
+	Guard     Guard
+	Inventory inventory.Service
+	Health    health.Tracker
+	// ProbeHTTP, if set, asks for one HTTP check of a device when its page is opened (health.Service.ProbeHTTP);
+	// it is rate-limited there and never blocks.
+	ProbeHTTP   func(model.DeviceID)
 	Backups     backup.Service
 	Prober      Prober
 	DeviceNames DeviceNames // optional: "Keep" on the device-name notice (#125)
@@ -789,7 +792,7 @@ type channelInfo struct {
 // channelsOf says, per channel, whether the device was heard from within the
 // stale window. It only presents what the health tracker already knows; the
 // health state itself is decided there. A channel the device does not use
-// shows "–" (HTTP is just not polled while MQTT delivers).
+// shows "–" (HTTP is just not polled while MQTT delivers; the device page checks it when opened).
 func channelsOf(now time.Time, window time.Duration, h model.Health) []channelInfo {
 	fresh := func(t time.Time) bool { return !t.IsZero() && now.Sub(t) <= window }
 	tip := func(name string, t time.Time, none string) string {
@@ -808,12 +811,16 @@ func channelsOf(now time.Time, window time.Duration, h model.Health) []channelIn
 		return channelInfo{name, "\u2013", "not used", "off", tip}
 	}
 	mqttFresh := fresh(h.SeenMQTT)
-	httpc := mk("HTTP", fresh(h.SeenHTTP), !h.SeenHTTP.IsZero() && !mqttFresh, tip("HTTP", h.SeenHTTP, "not polled"))
-	if httpc.Tone == "off" && mqttFresh {
+	httpc := mk("HTTP", fresh(h.SeenHTTP), !h.SeenHTTP.IsZero() && !mqttFresh, tip("HTTP", h.SeenHTTP, "not checked"))
+	if refused := !h.HTTPRefusedAt.IsZero() && h.HTTPRefusedAt.After(h.SeenHTTP); refused {
+		// The device answers but its HTTP API is off (#447): that is a fault of the channel, not idleness.
+		httpc = channelInfo{"HTTP", "\u2715", "failing", "bad", ""}
+		httpc.Tip = "HTTP: the device refuses the web API (SetOption128), seen " + ago(now, h.HTTPRefusedAt)
+	} else if httpc.Tone == "off" && mqttFresh {
 		// A bare "–" next to a green MQTT read as "HTTP is down": the tooltip (and the
 		// screen-reader word) says it is the idle fallback; the mark stays a quiet "–".
 		httpc.Word = "standby"
-		httpc.Tip = "HTTP: standby, only polled when MQTT goes quiet"
+		httpc.Tip = "HTTP: standby, checked when the device page opens or MQTT goes quiet"
 		if !h.SeenHTTP.IsZero() {
 			httpc.Tip += "; " + strings.TrimPrefix(tip("HTTP", h.SeenHTTP, ""), "HTTP: ")
 		}

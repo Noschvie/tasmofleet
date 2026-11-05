@@ -101,6 +101,9 @@ func overviewDevices() []simulator.DeviceSpec {
 		{Name: "ov-http-only", Profile: simulator.ProfileESP8266_4M, Faults: []simulator.Fault{{Kind: simulator.FaultHTTPOnly}},
 			Settings: map[string]string{"mqtthost": "other-broker.example.internal"}},
 		{Name: "ov-offline", Profile: simulator.ProfileESP8266_1M},
+		// An HTTP-only plug whose HTTP API the tests switch off at run time (POST /device/ov-api-off/api-off, #447).
+		{Name: "ov-api-off", Profile: simulator.ProfileESP8266_4M, Faults: []simulator.Fault{{Kind: simulator.FaultHTTPOnly}},
+			Settings: map[string]string{"mqtthost": "other-broker.example.internal"}},
 	}
 }
 
@@ -677,17 +680,21 @@ func (r *deviceRegistry) control(w http.ResponseWriter, req *http.Request) (simu
 	return nil, false
 }
 
-// act is POST /device/{name}/off (the plug is pulled: LWT Offline, HTTP closed for good).
+// act is POST /device/{name}/off (the plug is pulled: LWT Offline, HTTP closed for good) or /api-off (its HTTP API is switched off).
 func (r *deviceRegistry) act(w http.ResponseWriter, req *http.Request) {
 	c, ok := r.control(w, req)
 	if !ok {
 		return
 	}
-	if req.PathValue("action") != "off" {
+	switch req.PathValue("action") {
+	case "off":
+		c.PowerOff()
+	case "api-off": // SetOption128: the main page answers, /cm does not (#447)
+		c.AddFault(simulator.Fault{Kind: simulator.FaultHTTPAPIOff})
+	default:
 		http.NotFound(w, req)
 		return
 	}
-	c.PowerOff()
 	w.WriteHeader(http.StatusNoContent)
 }
 

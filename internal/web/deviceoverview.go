@@ -178,26 +178,40 @@ type reach struct {
 	HTTPOK   bool
 	HTTPWord string // the HTTP clause of the tile, e.g. "Reachable" or "not checked lately, last answered 3d 4h ago"
 	HTTPBad  bool   // HTTP is known to fail
+	APIOff   bool   // the device answers HTTP but refuses API commands (#447)
+}
+
+// shownHTTP is the HTTP state the page shows, in the tile, the card and the list alike. The router's
+// memory of a refused API lasts ten minutes; the health tracker keeps its finding until HTTP answers
+// again (#447), so the page does not flip back to "not checked" in between. A fresh answer wins.
+func shownHTTP(hs transport.HTTPState, hl model.Health) transport.HTTPState {
+	if hs.State == transport.HTTPOK || hl.HTTPRefusedAt.IsZero() || !hl.HTTPRefusedAt.After(hl.SeenHTTP) {
+		return hs
+	}
+	return transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailAPIRefused, Since: hl.HTTPRefusedAt}
 }
 
 // reachOf words the channels; the Reachability tile reads it, and so does the "Other broker" hint
-// (its MQTTOn). HTTP is the state
-// the connection card shows; a SeenHTTP of days ago must not read as "Reachable" (#416).
+// (its MQTTOn). HTTP is the state the connection card shows; a SeenHTTP of days ago must not read as
+// "Reachable" (#416). What HTTP showed beats the device's overall state: a device whose last will says
+// offline but whose web page answers is not "no response" (#447).
 func reachOf(d model.Device, hl model.Health, hs transport.HTTPState, now time.Time) reach {
-	r := reach{MQTTOn: d.MQTT == model.MQTTOurs || hl.LWT != "" || !hl.SeenMQTT.IsZero(), HTTPWord: "Not polled yet"}
+	r := reach{MQTTOn: d.MQTT == model.MQTTOurs || hl.LWT != "" || !hl.SeenMQTT.IsZero(), HTTPWord: "Not checked yet"}
 	r.MQTTOK = hl.LWT == "Online" || hl.LWT == "" && !hl.SeenMQTT.IsZero() && hl.State == model.HealthOnline
 	r.LWTOff = hl.LWT == "Offline"
 	switch {
 	case hl.State == model.HealthAuthFailed:
 		r.HTTPWord = "Refuses the stored credentials"
-	case hl.State == model.HealthOffline || hl.State == model.HealthUnknown && !hl.LastSeen.IsZero():
-		r.HTTPWord = "No response"
+	case hs.State == transport.HTTPFailing && hs.Kind == transport.HTTPFailAPIRefused:
+		r.HTTPWord, r.HTTPBad, r.APIOff = "API off (SetOption128)", true, true
 	case hs.State == transport.HTTPOK:
 		r.HTTPWord, r.HTTPOK = httpWord(hs), true
+	case hl.State == model.HealthOffline || hl.State == model.HealthUnknown && !hl.LastSeen.IsZero():
+		r.HTTPWord = "No response"
 	case hs.State == transport.HTTPFailing:
 		r.HTTPWord, r.HTTPBad = "not reachable", true
 	case hl.SeenHTTP.IsZero():
-		r.HTTPWord = "not polled yet"
+		r.HTTPWord = "not checked yet"
 	default:
 		r.HTTPWord = "not checked lately, last answered " + humanDuration(max(now.Sub(hl.SeenHTTP), 0)) + " ago"
 	}
@@ -206,12 +220,28 @@ func reachOf(d model.Device, hl model.Health, hs transport.HTTPState, now time.T
 
 // reachTile is Reachability: "MQTT · HTTP", "HTTP" with "MQTT not configured" for a device we do
 // not watch over MQTT, "Offline" when it does not answer. other: the device reports to another
-// broker, which the tile says instead of "not configured" (#580).
+// broker, which the tile says instead of "not configured" (#580). A device that answers but has its
+// HTTP API off is not offline (#447): with live MQTT the tile says what works, without it, that no
+// channel is left.
 func reachTile(d model.Device, hl model.Health, hs transport.HTTPState, now time.Time, other bool) tile {
 	r := reachOf(d, hl, hs, now)
 	tl := tile{Key: "reach", Label: "Reachability"}
 	switch {
-	case hl.State == model.HealthOffline:
+	case hl.State == model.HealthAuthFailed:
+		tl.Value, tl.Tone, tl.Sub = "Login refused", ui.ToneDanger, r.HTTPWord
+	case r.APIOff && !r.MQTTOK:
+		tl.Value, tl.Tone = "HTTP API off", ui.ToneWarn
+		switch {
+		case other:
+			tl.Sub = "The web page answers · MQTT on another broker"
+		case r.LWTOff:
+			tl.Sub = "The web page answers · MQTT LWT offline"
+		case r.MQTTOn:
+			tl.Sub = "The web page answers · MQTT not connected"
+		default:
+			tl.Sub = "The web page answers · MQTT not configured"
+		}
+	case hl.State == model.HealthOffline && !r.HTTPOK:
 		tl.Value, tl.Tone = "Offline", ui.ToneNeutral
 		var sub []string
 		switch {
@@ -224,8 +254,6 @@ func reachTile(d model.Device, hl model.Health, hs transport.HTTPState, now time
 		if r.HTTPWord == "No response" {
 			tl.Sub = strings.Replace(tl.Sub, "HTTP no response", "HTTP no answer", 1)
 		}
-	case hl.State == model.HealthAuthFailed:
-		tl.Value, tl.Tone, tl.Sub = "Login refused", ui.ToneDanger, r.HTTPWord
 	case hl.State == model.HealthUnknown:
 		tl.Value, tl.Tone, tl.Sub = "Unknown", ui.ToneNeutral, "The device has not answered yet"
 	case other && r.HTTPOK:
@@ -504,6 +532,7 @@ func (h *handler) overviewOf(r *http.Request, v view, d model.Device, just *rela
 		running = &p.Updating.Job
 	}
 	tf, tp, tpOK := h.transportOf(ctx, d.ID)
+	shown := shownHTTP(tf.HTTP, hl)
 	p.Tabs = h.headWith(v, d, hl, running, "overview", tp, tpOK)
 	if p.Updating == nil && hl.LastSeen.IsZero() && d.Identity.DetectedAt.IsZero() {
 		p.NotYet = "This device has not answered yet"
@@ -514,7 +543,7 @@ func (h *handler) overviewOf(r *http.Request, v view, d model.Device, just *rela
 	}
 	facts := h.factsOf(ctx, d)
 	tele := h.telemetryOf(d.ID)
-	in := overviewIn{Dev: d, Health: hl, Tele: tele, Facts: facts, HTTP: tf.HTTP, Policy: h.policyOf(r, v, d.ID), Now: h.d.Clock.Now()}
+	in := overviewIn{Dev: d, Health: hl, Tele: tele, Facts: facts, HTTP: shown, Policy: h.policyOf(r, v, d.ID), Now: h.d.Clock.Now()}
 	brokerRow, otherBroker := h.otherBrokerRow(d, hl, tf.HTTP.State == transport.HTTPOK, in.Now)
 	in.OtherBroker = otherBroker
 	off := p.Tabs.offline() // an update silences the device on purpose: that is not "offline"
@@ -531,6 +560,15 @@ func (h *handler) overviewOf(r *http.Request, v view, d model.Device, just *rela
 	p.Conn = connOf(in)
 	if tpOK {
 		p.Paths = pathCardOf(v, d, tf, tp, p.Tabs)
+		if shown != tf.HTTP { // the tracker remembers a refused API longer than the router (#447)
+			shownFacts := tf
+			shownFacts.HTTP = shown
+			for i := range p.Paths.Facts {
+				if p.Paths.Facts[i].Key == keyHTTP {
+					p.Paths.Facts[i] = httpRow(shownFacts)
+				}
+			}
+		}
 		if otherBroker {
 			for i := range p.Paths.Facts {
 				if p.Paths.Facts[i].Key == keyMQTT {
@@ -550,6 +588,11 @@ func (h *handler) deviceDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	v := h.view(r, d.Name, "devices", nil)
 	v.EventSeq = seq
+	if h.d.ProbeHTTP != nil {
+		// A device fine on MQTT is not polled over HTTP: opening its page is the moment to check (#456).
+		// Only here: the live refreshes that follow the probe's result must not ask again.
+		h.d.ProbeHTTP(d.ID)
+	}
 	p, err := h.overviewOf(r, v, d, nil)
 	if err != nil {
 		h.fail(w, r, err)

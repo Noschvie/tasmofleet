@@ -572,6 +572,18 @@ func TestBrokerReaderIsGuardedLikeABackup(t *testing.T) {
 		t.Fatalf("a free device was refused: %v", err)
 	}
 	rel()
+
+	// Why (#456): the HTTP probe a page view or the reader asks for is held back by the same things,
+	// so a restore or an update never meets an extra request.
+	a.bgContext = ctx
+	for _, id := range []model.DeviceID{1, 2} {
+		if a.probeAllowed(id) {
+			t.Errorf("device %d: probe allowed while the device is held", id)
+		}
+	}
+	if !a.probeAllowed(3) {
+		t.Error("probe refused for a free device")
+	}
 }
 
 // Why: the probe keeps its own reading (#598 made only the re-read strict): it has proved regular firmware
@@ -589,5 +601,82 @@ func TestProbeCountsAnUnansweredSetOption3AsOn(t *testing.T) {
 	}
 	if got.MQTT != model.MQTTOurs || got.MQTTHost != "mqtt.home" {
 		t.Fatalf("probe with SetOption3 lost: %q %q, want ours mqtt.home", got.MQTT, got.MQTTHost)
+	}
+}
+
+// Why (#456, #598): a device that is fine on MQTT is no longer HTTP-polled, so its HTTP fact is
+// rarely fresh and the periodic read would never run. The reader asks for an HTTP probe instead, but
+// for ONE device per pass (every device is due at startup; one probe per device at once is the
+// polling of devices fine on MQTT that #456 removes), and a device that never answers is not asked
+// again for half an hour, so it cannot starve the others.
+func TestBrokerReaderAsksForOneHTTPProbePerPassAndNotAgainSoon(t *testing.T) {
+	g := newBrokerRig(1, 2, 3)
+	for id := range g.online {
+		g.online[id] = false
+	}
+	var asked []model.DeviceID
+	g.r.wantHTTP = func(id model.DeviceID) { asked = append(asked, id) }
+	g.r.pass(t.Context())
+	if !slices.Equal(asked, []model.DeviceID{1}) {
+		t.Fatalf("first pass asked for probes of %v, want [1]", asked)
+	}
+	g.advance(brokerHostTick)
+	g.r.pass(t.Context())
+	g.advance(brokerHostTick)
+	g.r.pass(t.Context())
+	if !slices.Equal(asked, []model.DeviceID{1, 2, 3}) {
+		t.Fatalf("the next passes asked for %v, want each device once in turn", asked)
+	}
+	g.advance(brokerHostTick)
+	g.r.pass(t.Context())
+	if len(asked) != 3 {
+		t.Fatalf("device asked again within half an hour: %v", asked)
+	}
+	g.advance(brokerHostProbeEvery)
+	g.r.pass(t.Context())
+	if len(asked) != 4 || asked[3] != 1 {
+		t.Fatalf("no new probe request after the gap: %v", asked)
+	}
+	if n := len(g.take()); n != 0 {
+		t.Fatalf("%d broker reads of devices HTTP does not reach", n)
+	}
+}
+
+// Why: a probe is for a device whose read is due and that firmware can answer; minimal and safeboot
+// never get the read, so they are not probed for it.
+func TestBrokerReaderDoesNotProbeLimitedFirmwareOrWhenNotDue(t *testing.T) {
+	g := newBrokerRig(1)
+	g.online[1] = false
+	var asked []model.DeviceID
+	g.r.wantHTTP = func(id model.DeviceID) { asked = append(asked, id) }
+	g.r.list = func(context.Context) ([]model.Device, error) {
+		return []model.Device{{ID: 1, Identity: model.Identity{Variant: "minimal"}}}, nil
+	}
+	g.r.pass(t.Context())
+	if len(asked) != 0 {
+		t.Fatalf("probe requested for minimal firmware: %v", asked)
+	}
+	g.r.list = func(context.Context) ([]model.Device, error) { return []model.Device{{ID: 1}}, nil }
+	g.r.next[1] = g.clock.Add(time.Hour) // read not due for another hour
+	g.r.pass(t.Context())
+	if len(asked) != 0 {
+		t.Fatalf("probe requested before the read is due: %v", asked)
+	}
+}
+
+// Why (#447): the simulator's API-off fault must be what the client's refusal detection keys on
+// (a /cm that closes without a reply while the main page answers), not just any failure; a dead
+// device (nothing listens) must stay a plain "unreachable".
+func TestSimulatedAPIOffIsDetectedAsARefusedAPI(t *testing.T) {
+	_, _, _, ctl := newBrokerReadRig(t, simulator.ProfileESP8266_4M, model.Device{Name: "plug"})
+	client := tasmota.NewHTTPClient(tasmota.Options{AllowedNetworks: loopbackNets()})
+	host, port := splitAddr(t, ctl.Addr())
+	target := tasmota.TargetFor(model.Device{Address: host, Port: port})
+	if _, err := client.Command(t.Context(), target, "Status 11"); err != nil {
+		t.Fatalf("before the fault: %v", err)
+	}
+	ctl.AddFault(simulator.Fault{Kind: simulator.FaultHTTPAPIOff})
+	if _, err := client.Command(t.Context(), target, "Status 11"); !errors.Is(err, tasmota.ErrHTTPAPIRefused) {
+		t.Fatalf("API off: %v, want ErrHTTPAPIRefused", err)
 	}
 }

@@ -1172,6 +1172,18 @@ Submit.
 - Poll scheduling: HTTP-only devices every `POLL_INTERVAL` (5 min) with ±20 % jitter. MQTT
   devices only when stale. Offline devices back off exponentially up to 30 min. At most 4
   polls in flight.
+- HTTP probe (#456): a device that is fine on MQTT is not polled, so its HTTP fact (`Health.SeenHTTP`)
+  only ages. `Service.ProbeHTTP(id)` asks for one deliberate `Status 11` instead, run by the next tick: when
+  the device page is opened, and when the broker re-read (#598) is due for a device whose HTTP fact is not
+  fresh (one device per pass, a given device at most every 30 min). It is limited per device (not within
+  5 min of an HTTP answer or of the last probe, 10 min after a failed one) and not asked for while a job, a
+  lock or a typed firmware update holds the device. A probe records what HTTP showed (`SeenHTTP`,
+  `HTTPRefusedAt`) but never counts toward offline and does not move the poll schedule. It also reaches a
+  device whose last will is `Offline`, which no background poll does (#619 is separate).
+- `Health.HTTPRefusedAt` (#447): when the last HTTP call found the device's web page answering but its HTTP
+  API off (`tasmota.ErrHTTPAPIRefused`, SetOption128); zero when HTTP answers or the device does not answer at
+  all. The router's memory of the same finding lasts 10 min; the page shows the tracker's. Such a device is not
+  "offline" on the Reachability tile: with live MQTT the tile says what works, otherwise "HTTP API off".
 - MQTT messages update `LastSeen`, power state and RSSI immediately and push SSE events.
 - A software restart publishes LWT `Offline` about 2 s after the command and before every OTA reboot
   (Tasmota's PubSubClient closes the socket without a DISCONNECT packet, so the broker fires the will;

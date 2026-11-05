@@ -54,7 +54,11 @@ const (
 	// lately. A device that is online over MQTT alone (HTTP blocked or off) would otherwise hold its
 	// lock for the whole timeout at every retry and refuse the person's writes as busy.
 	brokerHostHTTPFresh = 15 * time.Minute
-	brokerHostQueue     = 64
+	// brokerHostProbeEvery: a device the read is due for but HTTP does not reach is asked for an HTTP probe
+	// at most this often (#456); a device fine on MQTT is not HTTP-polled, so this is how it gets a fresh
+	// HTTP fact, one device per pass.
+	brokerHostProbeEvery = 30 * time.Minute
+	brokerHostQueue      = 64
 )
 
 type brokerHostReader struct {
@@ -62,7 +66,10 @@ type brokerHostReader struct {
 	// httpUp says whether the HTTP health poll reached the device lately: the periodic read is HTTP
 	// and must not hold the lock of a device it cannot reach.
 	httpUp func(model.DeviceID) bool
-	read   func(context.Context, model.DeviceID) error
+	// wantHTTP asks for one HTTP probe of a device whose read is due but whose HTTP fact is not fresh
+	// (health.Service.ProbeHTTP); nil: never.
+	wantHTTP func(model.DeviceID)
+	read     func(context.Context, model.DeviceID) error
 	// enter takes the device lock for the read and refuses while a job or a typed firmware update holds
 	// the device (runtime.brokerReadGuard); the caller calls the returned release.
 	enter func(context.Context, model.DeviceID, string) (func(), error)
@@ -72,6 +79,8 @@ type brokerHostReader struct {
 	kick    chan model.DeviceID
 	pending map[model.DeviceID]brokerWant
 	next    map[model.DeviceID]time.Time // when the periodic read of a device is due again; absent: due
+	// probeNext: when a device may be asked for an HTTP probe again; absent: now.
+	probeNext map[model.DeviceID]time.Time
 }
 
 // brokerWant is a read somebody asked for.
@@ -82,7 +91,7 @@ func newBrokerHostReader(list func(context.Context) ([]model.Device, error), // 
 	httpUp func(model.DeviceID) bool,
 	read func(context.Context, model.DeviceID) error, enter func(context.Context, model.DeviceID, string) (func(), error), log *slog.Logger) *brokerHostReader {
 	return &brokerHostReader{list: list, httpUp: httpUp, read: read, enter: enter, now: time.Now, log: log,
-		kick: make(chan model.DeviceID, brokerHostQueue), pending: map[model.DeviceID]brokerWant{}, next: map[model.DeviceID]time.Time{}}
+		kick: make(chan model.DeviceID, brokerHostQueue), pending: map[model.DeviceID]brokerWant{}, next: map[model.DeviceID]time.Time{}, probeNext: map[model.DeviceID]time.Time{}}
 }
 
 // later asks for a read of id soon and returns at once.
@@ -131,6 +140,18 @@ func (r *brokerHostReader) pass(ctx context.Context) {
 	for _, d := range devs {
 		listed[d.ID] = d
 	}
+	probed := false // one probe request per pass: not the whole fleet at once
+	ask := func(d model.Device) {
+		if probed || r.wantHTTP == nil || policy.LimitedFirmware(d.Identity.Variant) {
+			return
+		}
+		if at, ok := r.probeNext[d.ID]; ok && now.Before(at) {
+			return
+		}
+		r.probeNext[d.ID] = now.Add(brokerHostProbeEvery)
+		probed = true
+		r.wantHTTP(d.ID)
+	}
 	for id, w := range r.pending {
 		if ctx.Err() != nil {
 			return
@@ -139,7 +160,9 @@ func (r *brokerHostReader) pass(ctx context.Context) {
 		switch {
 		case !ok || now.After(w.until): // deleted, or waited long enough: the periodic read catches up
 			delete(r.pending, id)
-		case now.Before(w.due) || !r.readable(d): // not yet, or nothing the read could reach now
+		case now.Before(w.due): // not yet
+		case !r.readable(d): // nothing the read could reach now: HTTP is checked, once the read is due
+			ask(d)
 		default:
 			switch err := r.readOne(ctx, id); {
 			case err == nil:
@@ -154,10 +177,14 @@ func (r *brokerHostReader) pass(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		if _, asked := r.pending[d.ID]; asked || !r.readable(d) {
+		if _, asked := r.pending[d.ID]; asked {
 			continue
 		}
 		if due, ok := r.next[d.ID]; ok && now.Before(due) {
+			continue
+		}
+		if !r.readable(d) {
+			ask(d)
 			continue
 		}
 		if err := r.readOne(ctx, d.ID); !errors.Is(err, errBrokerBusy) {
@@ -242,6 +269,11 @@ func (w bootWatch) AppendBoot(ctx context.Context, b model.DeviceBoot) error {
 // firmware, the HTTP health poll, and brokerReadGuard.
 func (a *runtime) startBrokerHost(ctx context.Context) {
 	a.brokerHost.list = a.fw.list(a.svc.Inventory.List)
+	a.brokerHost.wantHTTP = func(id model.DeviceID) {
+		if a.tracker.Get(id).State == model.HealthOnline { // a dead device is not probed for this
+			a.probeHTTP(id)
+		}
+	}
 	a.brokerHost.httpUp = func(id model.DeviceID) bool { return brokerHTTPUp(a.tracker.Get(id), time.Now()) }
 	a.brokerHost.enter = a.brokerReadGuard()
 	a.goBG("broker-host", func() error { a.brokerHost.run(ctx); return nil })
@@ -257,4 +289,23 @@ func (a *runtime) brokerReadGuard() func(context.Context, model.DeviceID, string
 // brokerHTTPUp says whether h shows a device that answered the HTTP health poll lately.
 func brokerHTTPUp(h model.Health, now time.Time) bool {
 	return h.State == model.HealthOnline && !h.SeenHTTP.IsZero() && now.Sub(h.SeenHTTP) < brokerHostHTTPFresh
+}
+
+// probeHTTP asks the tracker for one HTTP probe of a device (#456) unless something holds it.
+func (a *runtime) probeHTTP(id model.DeviceID) {
+	if a.probeAllowed(id) {
+		a.tracker.ProbeHTTP(id)
+	}
+}
+
+// probeAllowed says nothing holds the device: no job, no operation under its lock, no firmware update typed
+// in the console that is still flashing it. Taking and releasing the lock is the check; the probe itself runs
+// later and holds nothing.
+func (a *runtime) probeAllowed(id model.DeviceID) bool {
+	release, err := a.brokerReadGuard()(a.bgContext, id, "http probe")
+	if err != nil {
+		return false
+	}
+	release()
+	return true
 }

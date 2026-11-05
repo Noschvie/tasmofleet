@@ -162,6 +162,10 @@ func (d *simDevice) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		drop(w) // nothing is executed and nothing is recorded
 		return
 	}
+	if r.URL.Path == "/cm" && d.hasFault(FaultHTTPAPIOff) {
+		drop(w) // like Tasmota with the web API off: no reply, nothing executed or recorded
+		return
+	}
 	cmd := ""
 	if r.URL.Path == "/cm" {
 		cmd = strings.TrimSpace(r.URL.Query().Get("cmnd"))

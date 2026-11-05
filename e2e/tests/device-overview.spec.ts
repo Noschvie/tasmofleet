@@ -249,3 +249,26 @@ test("an offline device with relays at 375/1280, light and dark", async ({ page 
     }
   }
 });
+
+// #447: a device whose HTTP API is switched off (SetOption128) still serves its web page. The Reachability
+// tile, the Connection card and the device list say so instead of "Offline / HTTP no answer".
+test("a device with its HTTP API off is not shown as offline", { tag: "@core" }, async ({ page }) => {
+  const href = await openDevice(page, "ov-api-off");
+  await control("/device/ov-api-off/api-off");
+  // opening the page asks for an HTTP check; the refusal reaches the page through the live refresh
+  await page.goto(app.url + href);
+  const tile = page.locator("[data-tile=reach]");
+  await expect(tile).toContainText("HTTP API off", { timeout: 60_000 });
+  await expect(tile).toContainText("The web page answers");
+  await expect(tile).not.toContainText("Offline");
+  await expect(page.locator("#devpaths-facts-sum")).toContainText("HTTP refused");
+  await page.setViewportSize({ width: 1280, height: 900 });
+  for (const width of [375, 1280]) {
+    for (const scheme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.setViewportSize({ width, height: 900 });
+      await expectNoOverflow(page, `api-off ${width} ${scheme}`);
+      await shot(page, `shape-ov-api-off-${width}-${scheme}`);
+    }
+  }
+});
