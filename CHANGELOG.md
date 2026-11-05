@@ -11,6 +11,11 @@ always upgrade automatically.
 - Device pages follow the card-width rule: Activity is one full-width card with its entries in two columns (three on a large screen), and Replace device puts the form in the wide stack and "What comes along" and "What happens" beside it; on the preview "Copied to the new device" sits under the form and "Not copied" and the start step beside it. The four always-copied options are now only shown on the first Replace page, and the preview no longer lists the files option (the Files row and the confirmation text still name the files); nothing about what Replace does or confirms changed (#419)
 - New update, Firmware and release pages: the cards now follow the Dashboard's content width in column stacks instead of leaving half the page empty. The Devices and Options cards each have two inner columns, the Plan no longer sticks while you scroll, cached firmware files take two lines with a short checksum, and the custom firmware drop zone is a card of its own (#419).
 
+### Fixed
+
+- Device page: the "Other broker" hint now also shows for a device that used to report to TasmoFleet's broker and moved to another one (a broker migration, or a restored config that points to an old broker). Before, the stored "on our broker" state and the retained last will kept such a device "heard" for good, so the hint never appeared. A device now counts as being on our broker only if it sent something there within the last 2 hours; one that answers HTTP but has been silent longer shows the hint. A device that does not answer HTTP is left alone, since it may just be switched off. After a TasmoFleet restart the retained last will counts as a message, so the hint can take up to 2 hours to appear (#580, thanks @Noschvie)
+- Device page: the Reachability tile says "MQTT on another broker" for a device that reports to another broker, instead of "MQTT not configured", in line with the "Other broker" card (#580, thanks @Noschvie)
+
 ## 0.28.0 "Cape Byron" (2026-11-05)
 
 ### Upgrade notes

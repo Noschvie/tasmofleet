@@ -133,9 +133,37 @@ func TestReachTileSaysWhichChannelsAnswer(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := reachTile(tc.d, tc.hl, tc.http, now0)
+			got := reachTile(tc.d, tc.hl, tc.http, now0, false)
 			if got.Value != tc.value || got.Sub != tc.sub || got.Tone != tc.tone {
 				t.Fatalf("got %q / %q / %q", got.Value, got.Sub, got.Tone)
+			}
+		})
+	}
+}
+
+// Why (#580): a device on another broker is not "MQTT not configured" (the card below says
+// "Other broker"): the tile must say where its MQTT is, whether the device never joined our
+// broker or just stopped sending on it after a move. Without the hint the old wording stays.
+func TestReachTileNamesTheOtherBroker(t *testing.T) {
+	other := model.Device{MQTT: model.MQTTOurs, MQTTHost: "mqtt.other.internal"}
+	moved := model.Health{State: model.HealthOnline, LastSeen: now0, SeenHTTP: now0, SeenMQTT: now0.Add(-72 * time.Hour), LWT: "Online"}
+	for _, tc := range []struct {
+		name       string
+		d          model.Device
+		hl         model.Health
+		http       transport.HTTPState
+		other      bool
+		value, sub string
+	}{
+		{"never on ours", model.Device{MQTTHost: "mqtt.other.internal"}, model.Health{State: model.HealthOnline, LastSeen: now0, SeenHTTP: now0}, httpFresh, true, "HTTP", "Reachable · MQTT on another broker"},
+		{"moved away from ours", other, moved, httpFresh, true, "HTTP", "Reachable · MQTT on another broker"},
+		{"HTTP failing", model.Device{}, model.Health{State: model.HealthOnline, LastSeen: now0}, transport.HTTPState{State: transport.HTTPFailing}, true, "No live link", "HTTP not reachable · MQTT on another broker"},
+		{"no hint keeps the old wording", model.Device{}, model.Health{State: model.HealthOnline, LastSeen: now0, SeenHTTP: now0}, httpFresh, false, "HTTP", "Reachable · MQTT not configured"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := reachTile(tc.d, tc.hl, tc.http, now0, tc.other)
+			if got.Value != tc.value || got.Sub != tc.sub {
+				t.Fatalf("got %q / %q, want %q / %q", got.Value, got.Sub, tc.value, tc.sub)
 			}
 		})
 	}
@@ -624,7 +652,7 @@ func TestReachTileAndConnectionCardAgreeOnHTTP(t *testing.T) {
 			hl := onlineHealth(nil)
 			hl.SeenHTTP = tc.seen
 			card := httpRow(transport.Facts{HTTP: tc.http, Now: now0})
-			tile := reachTile(ours, hl, tc.http, now0)
+			tile := reachTile(ours, hl, tc.http, now0, false)
 			if card.Value != tc.cardWord {
 				t.Fatalf("card %q, want %q", card.Value, tc.cardWord)
 			}
@@ -692,7 +720,7 @@ func TestReachTileWarnsWhenThereIsNoLiveLinkOrHTTPFails(t *testing.T) {
 		{"MQTT connected, HTTP failing", model.Device{MQTT: model.MQTTOurs}, onlineHealth(nil), failing, "MQTT"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			tl := reachTile(tc.d, tc.hl, tc.http, now0)
+			tl := reachTile(tc.d, tc.hl, tc.http, now0, false)
 			if tl.Value != tc.value || toneClass(tl.Tone) != "t-warn" {
 				t.Fatalf("value %q class %q, want %q with t-warn", tl.Value, toneClass(tl.Tone), tc.value)
 			}

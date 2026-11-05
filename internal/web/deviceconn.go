@@ -334,13 +334,38 @@ func mqttRow(f transport.Facts) pathRow {
 	return r
 }
 
+// silentOnOurBroker is how long a device may send nothing on our broker before it counts as
+// gone from it (#580). A device on our broker sends telemetry at least every TelePeriod (default
+// 5 minutes, at most 1 hour), so two hours cover the slowest setting with a margin.
+const silentOnOurBroker = 2 * time.Hour
+
+// heardOnOurBroker says whether the device is on our broker. The stored "ours" state never turns
+// back and a retained LWT outlives a broker move, so neither counts on its own (#580): a message
+// within silentOnOurBroker does. A device that answers HTTP but sent nothing for longer is not
+// on our broker (any more); one that does not answer HTTP may simply be switched off, so it keeps
+// whatever it had.
+//
+// Known limit (accepted, #580): the health tracker counts a retained "Online" LWT replayed at
+// startup as a message, so right after a TasmoFleet restart a device that moved away still
+// reads as heard, and the hint takes up to silentOnOurBroker to appear. Telling the replay
+// apart would need a change in package health.
+func heardOnOurBroker(d model.Device, hl model.Health, httpOK bool, now time.Time) bool {
+	if !hl.SeenMQTT.IsZero() && now.Sub(hl.SeenMQTT) < silentOnOurBroker {
+		return true
+	}
+	if httpOK {
+		return false
+	}
+	return d.MQTT == model.MQTTOurs || hl.LWT != "" || !hl.SeenMQTT.IsZero()
+}
+
 // otherBrokerRow is the MQTT row for a device that reports to a broker other than TasmoFleet's
 // (#441): it will not show up live. It answers only when TasmoFleet has a broker (the live MQTT
 // switch is not "disabled": the matcher in Deps.MQTTBroker is never nil and matches nothing once
-// MQTT is off), the device names a broker host that is not ours, and nothing was heard from it on
-// our broker. Web only: the transport verdict (SAFETY) is unchanged.
-func (h *handler) otherBrokerRow(d model.Device, heard bool) (pathRow, bool) {
-	if h.d.MQTT == nil || h.d.MQTT() == "disabled" || h.d.MQTTBroker == nil || d.MQTT == model.MQTTNone || d.MQTTHost == "" || heard {
+// MQTT is off), the device names a broker host that is not ours, and it is not on our broker
+// (heardOnOurBroker). Web only: the transport verdict (SAFETY) is unchanged.
+func (h *handler) otherBrokerRow(d model.Device, hl model.Health, httpOK bool, now time.Time) (pathRow, bool) {
+	if h.d.MQTT == nil || h.d.MQTT() == "disabled" || h.d.MQTTBroker == nil || d.MQTT == model.MQTTNone || d.MQTTHost == "" || heardOnOurBroker(d, hl, httpOK, now) {
 		return pathRow{}, false
 	}
 	port := d.MQTTPort

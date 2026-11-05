@@ -274,20 +274,32 @@ func (b fakeBroker) Same(string, int) bool { return b.same }
 func TestOtherBrokerHintOnlyOnARealMismatch(t *testing.T) {
 	other := model.Device{MQTTHost: "mqtt.other.internal", MQTTPort: 1884}
 	tests := []struct {
-		name  string
-		dev   model.Device
-		mqtt  string
-		same  bool
-		heard bool
-		want  bool
+		name string
+		dev  model.Device
+		mqtt string
+		same bool
+		hl   model.Health
+		http bool // the device answers HTTP
+		want bool
 	}{
-		{"other broker, MQTT on", other, "connected", false, false, true},
-		{"other broker, our connection down", other, "disconnected", false, false, true},
-		{"MQTT switched off at runtime", other, "disabled", false, false, false},
-		{"same broker by another name", other, "connected", true, false, false},
-		{"heard on our broker", other, "connected", false, true, false},
-		{"device has no MQTT host", model.Device{}, "connected", false, false, false},
-		{"MQTT off on the device (SetOption3 0) with a stored host", model.Device{MQTT: model.MQTTNone, MQTTHost: "mqtt.other.internal", MQTTPort: 1884}, "connected", false, false, false},
+		{"other broker, MQTT on", other, "connected", false, model.Health{}, true, true},
+		{"other broker, our connection down", other, "disconnected", false, model.Health{}, true, true},
+		{"MQTT switched off at runtime", other, "disabled", false, model.Health{}, true, false},
+		{"same broker by another name", other, "connected", true, model.Health{}, true, false},
+		{"device has no MQTT host", model.Device{}, "connected", false, model.Health{}, true, false},
+		// #580: "heard" is a recency, not a flag. The stored "ours" state and a retained LWT
+		// outlive a broker move, so only fresh traffic on our broker silences the hint.
+		{"never heard, HTTP-only device", other, "connected", false, model.Health{}, true, true},
+		{"heard a minute ago", other, "connected", false, model.Health{SeenMQTT: now0.Add(-time.Minute), LWT: "Online"}, true, false},
+		{"heard just inside the window", other, "connected", false, model.Health{SeenMQTT: now0.Add(-silentOnOurBroker + time.Minute)}, true, false},
+		{"was on our broker, silent for days, answers HTTP", model.Device{MQTT: model.MQTTOurs, MQTTHost: other.MQTTHost, MQTTPort: 1884},
+			"connected", false, model.Health{SeenMQTT: now0.Add(-72 * time.Hour), LWT: "Online"}, true, true},
+		{"was on our broker, retained LWT only, answers HTTP", model.Device{MQTT: model.MQTTOurs, MQTTHost: other.MQTTHost, MQTTPort: 1884},
+			"connected", false, model.Health{LWT: "Online"}, true, true},
+		{"was on our broker, silent, HTTP does not answer (maybe switched off)", model.Device{MQTT: model.MQTTOurs, MQTTHost: other.MQTTHost},
+			"connected", false, model.Health{SeenMQTT: now0.Add(-72 * time.Hour)}, false, false},
+		{"silent, but the broker it names is ours", model.Device{MQTT: model.MQTTOurs, MQTTHost: "core-broker"},
+			"connected", true, model.Health{SeenMQTT: now0.Add(-72 * time.Hour)}, true, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -296,7 +308,7 @@ func TestOtherBrokerHintOnlyOnARealMismatch(t *testing.T) {
 				MQTTBroker: fakeBroker{same: tc.same},
 				MQTTStatus: func() BrokerInfo { return BrokerInfo{Enabled: true, Host: "core-broker:1883"} },
 			}}
-			row, ok := h.otherBrokerRow(tc.dev, tc.heard)
+			row, ok := h.otherBrokerRow(tc.dev, tc.hl, tc.http, now0)
 			if ok != tc.want {
 				t.Fatalf("hint = %v, want %v (%+v)", ok, tc.want, row)
 			}
@@ -310,12 +322,12 @@ func TestOtherBrokerHintOnlyOnARealMismatch(t *testing.T) {
 		})
 	}
 	h := &handler{d: Deps{MQTT: func() string { return "connected" }, MQTTBroker: fakeBroker{}}}
-	if row, ok := h.otherBrokerRow(model.Device{MQTTHost: "b.example"}, false); !ok || strings.Contains(row.Sub, "broker core") || !strings.Contains(row.Sub, "b.example:1883") {
+	if row, ok := h.otherBrokerRow(model.Device{MQTTHost: "b.example"}, model.Health{}, true, now0); !ok || strings.Contains(row.Sub, "broker core") || !strings.Contains(row.Sub, "b.example:1883") {
 		t.Fatalf("without a status the default port shows and our broker is not named: %+v", row)
 	}
 	// no matcher at all (tasmofleet has no broker): no hint
 	h = &handler{d: Deps{MQTT: func() string { return "connected" }}}
-	if _, ok := h.otherBrokerRow(other, false); ok {
+	if _, ok := h.otherBrokerRow(other, model.Health{}, true, now0); ok {
 		t.Fatal("no matcher, no hint")
 	}
 }

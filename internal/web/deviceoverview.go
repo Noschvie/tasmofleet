@@ -30,6 +30,8 @@ type overviewIn struct {
 	HTTP   transport.HTTPState // the state the connection card shows (app.TransportFacts)
 	Policy *policyCard
 	Now    time.Time
+	// OtherBroker: the device reports to a broker that is not ours (otherBrokerRow, #580).
+	OtherBroker bool
 }
 
 // wifi signal bar: -92 dBm is empty, -40 dBm full (the prototype's scale). Green above -60 dBm,
@@ -179,7 +181,7 @@ type reach struct {
 }
 
 // reachOf words the channels; the Reachability tile reads it, and so does the "Other broker" hint
-// (its MQTTOn: is anything heard on our broker). HTTP is the state
+// (its MQTTOn). HTTP is the state
 // the connection card shows; a SeenHTTP of days ago must not read as "Reachable" (#416).
 func reachOf(d model.Device, hl model.Health, hs transport.HTTPState, now time.Time) reach {
 	r := reach{MQTTOn: d.MQTT == model.MQTTOurs || hl.LWT != "" || !hl.SeenMQTT.IsZero(), HTTPWord: "Not polled yet"}
@@ -203,8 +205,9 @@ func reachOf(d model.Device, hl model.Health, hs transport.HTTPState, now time.T
 }
 
 // reachTile is Reachability: "MQTT · HTTP", "HTTP" with "MQTT not configured" for a device we do
-// not watch over MQTT, "Offline" when it does not answer.
-func reachTile(d model.Device, hl model.Health, hs transport.HTTPState, now time.Time) tile {
+// not watch over MQTT, "Offline" when it does not answer. other: the device reports to another
+// broker, which the tile says instead of "not configured" (#580).
+func reachTile(d model.Device, hl model.Health, hs transport.HTTPState, now time.Time, other bool) tile {
 	r := reachOf(d, hl, hs, now)
 	tl := tile{Key: "reach", Label: "Reachability"}
 	switch {
@@ -225,6 +228,10 @@ func reachTile(d model.Device, hl model.Health, hs transport.HTTPState, now time
 		tl.Value, tl.Tone, tl.Sub = "Login refused", ui.ToneDanger, r.HTTPWord
 	case hl.State == model.HealthUnknown:
 		tl.Value, tl.Tone, tl.Sub = "Unknown", ui.ToneNeutral, "The device has not answered yet"
+	case other && r.HTTPOK:
+		tl.Value, tl.Tone, tl.Sub = "HTTP", ui.ToneWarn, "Reachable · MQTT on another broker"
+	case other:
+		tl.Value, tl.Tone, tl.Sub = "No live link", ui.ToneWarn, "HTTP "+r.HTTPWord+" · MQTT on another broker"
 	case r.MQTTOK && r.HTTPOK:
 		tl.Value, tl.Tone, tl.Sub = "MQTT · HTTP", ui.ToneOK, "Connected · Reachable"
 	case r.MQTTOK:
@@ -272,7 +279,7 @@ func policyTile(c *policyCard, off bool) *tile {
 // tilesOf is the tile row in its fixed order; tiles that do not apply are left out.
 func tilesOf(in overviewIn) []tile {
 	tiles := powerTiles(in.Tele)
-	tiles = append(tiles, linkTile(in), uptimeTile(in.Health, in.Now), reachTile(in.Dev, in.Health, in.HTTP, in.Now))
+	tiles = append(tiles, linkTile(in), uptimeTile(in.Health, in.Now), reachTile(in.Dev, in.Health, in.HTTP, in.Now, in.OtherBroker))
 	if p := policyTile(in.Policy, in.Health.State == model.HealthOffline); p != nil {
 		tiles = append(tiles, *p)
 	}
@@ -359,7 +366,7 @@ func sensorBoxOf(in overviewIn) *sensorBox {
 	}
 	switch {
 	case len(box.Cells) > 0:
-	case !reachOf(in.Dev, in.Health, in.HTTP, in.Now).MQTTOn:
+	case in.OtherBroker || !reachOf(in.Dev, in.Health, in.HTTP, in.Now).MQTTOn:
 		box.Note = "Sensor readings come from MQTT telemetry. This device does not report to TasmoFleet's MQTT broker."
 	default:
 		box.Note = "No sensor readings yet."
@@ -508,6 +515,8 @@ func (h *handler) overviewOf(r *http.Request, v view, d model.Device, just *rela
 	facts := h.factsOf(ctx, d)
 	tele := h.telemetryOf(d.ID)
 	in := overviewIn{Dev: d, Health: hl, Tele: tele, Facts: facts, HTTP: tf.HTTP, Policy: h.policyOf(r, v, d.ID), Now: h.d.Clock.Now()}
+	brokerRow, otherBroker := h.otherBrokerRow(d, hl, tf.HTTP.State == transport.HTTPOK, in.Now)
+	in.OtherBroker = otherBroker
 	off := p.Tabs.offline() // an update silences the device on purpose: that is not "offline"
 	p.Live = liveView{ActSig: p.Activity.Sig, ID: d.ID, Base: v.Base, CSRF: v.CSRF, Off: off, Tiles: tilesOf(in),
 		Box: relayBoxOf(hl, tele, d.RelayNames, h.d.DeviceCmd != nil && !off && p.Updating == nil)}
@@ -522,10 +531,10 @@ func (h *handler) overviewOf(r *http.Request, v view, d model.Device, just *rela
 	p.Conn = connOf(in)
 	if tpOK {
 		p.Paths = pathCardOf(v, d, tf, tp, p.Tabs)
-		if row, ok := h.otherBrokerRow(d, reachOf(d, hl, tf.HTTP, in.Now).MQTTOn); ok {
+		if otherBroker {
 			for i := range p.Paths.Facts {
 				if p.Paths.Facts[i].Key == keyMQTT {
-					p.Paths.Facts[i] = row
+					p.Paths.Facts[i] = brokerRow
 				}
 			}
 		}
