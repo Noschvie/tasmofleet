@@ -121,11 +121,11 @@ for (const [name, path] of pages) {
     const m = await measureCards(page);
     expect(m.cards.length, "the page has cards").toBeGreaterThan(0);
     const found: Exempt[] = [];
-    for (const c of m.cards) if (c.fullWidth && c.maxContentPct < 60) found.push(use(name, c.card));
+    for (const c of m.cards) if (c.fullWidth && c.usePct < 60) found.push(use(name, c.card));
     if (m.span < m.area * 0.95) found.push(span(name));
     const key = (e: Exempt) => `${e.page}|${e.rule}|${e.card ?? ""}`;
     if (REPORT) {
-      console.log("FINDINGS", name, JSON.stringify({ area: m.area, left: m.left, span: m.span, found: found.map(key), cards: m.cards.map((c) => `${c.card} ${c.width}px ${c.maxContentPct}%`) }));
+      console.log("FINDINGS", name, JSON.stringify({ area: m.area, left: m.left, span: m.span, found: found.map(key), cards: m.cards.map((c) => `${c.card} ${c.width}px ${c.usePct}%${c.multiColumn ? " (columns)" : ""}`) }));
       return;
     }
     const exempted = new Set(exempt.filter((e) => e.page === name).map(key));
@@ -139,3 +139,29 @@ for (const [name, path] of pages) {
     expect(stale, `${name}: exemption entries that no longer apply; delete them`).toEqual([]);
   });
 }
+
+// The metric itself: the max-content width of a list in columns is one column, so a card that is
+// full of entries in three columns must not read as 33 % used (device Activity after #419-D). A
+// list in one column that fills only the left of a full-width card still reads as unused.
+test.describe("card use metric", () => {
+  const html = (items: number, cols: number) => `<style>
+    body{margin:0;background:#fff} main{display:block;padding:0} .card{border:1px solid #888;border-radius:10px;padding:16px;background:#fafafa}
+    ul{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(${cols === 1 ? "100%" : "22rem"},1fr));gap:8px 24px}
+    li{white-space:nowrap}</style>
+    <main><div class="card"><h2>Activity</h2><ul>${Array.from({ length: items }, (_, i) => `<li>Entry ${i} of the list with some words</li>`).join("")}</ul></div></main>`;
+  test("a full list in three columns counts as used", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.setContent(html(12, 3));
+    const m = await measureCards(page);
+    expect(m.cards[0]).toMatchObject({ fullWidth: true, multiColumn: true });
+    expect(m.cards[0].maxContentPct, "max-content is one column").toBeLessThan(60);
+    expect(m.cards[0].usePct).toBeGreaterThanOrEqual(60);
+  });
+  test("a list in one column in a full-width card is unused width", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.setContent(html(12, 1));
+    const m = await measureCards(page);
+    expect(m.cards[0]).toMatchObject({ fullWidth: true, multiColumn: false });
+    expect(m.cards[0].usePct).toBeLessThan(60);
+  });
+});
