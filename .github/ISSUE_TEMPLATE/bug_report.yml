@@ -12,7 +12,7 @@ body:
     id: version
     attributes:
       label: TasmoFleet version
-      description: Shown in the page header and on the About page, for example `0.27.3`. An `edge` build reads like `0.27.3+edge (0123456789ab)`.
+      description: Shown in the status bar at the bottom right of every page (and on the About page, admins only), for example `0.27.3`. An `edge` build reads like `0.27.3+edge (0123456)`.
     validations:
       required: true
   - type: dropdown
@@ -33,7 +33,7 @@ body:
       description: How TasmoFleet talks to the affected device.
       options:
         - HTTP only
-        - MQTT
+        - MQTT only
         - Both
         - Not sure
     validations:
