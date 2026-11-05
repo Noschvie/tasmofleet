@@ -138,6 +138,9 @@ func TestVerifyStillFailsForAValueTheDeviceRefuses(t *testing.T) {
 	if strings.Contains(err.Error(), "PowerOnState") || got["PowerOnState"] != "3" {
 		t.Fatalf("only the refused value is wrong, and the last read wins: %v %v", got, err)
 	}
+	if d.reads != 1+settleReads || d.waited != settleReads*settleWait {
+		t.Fatalf("a refused value is read %d times, %v apart, no more: %d reads, waited %v", 1+settleReads, settleWait, d.reads, d.waited)
+	}
 	if d.waited > 10*time.Second {
 		t.Fatalf("the wait for a failure is bounded to a few seconds, waited %v", d.waited)
 	}
