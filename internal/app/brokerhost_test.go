@@ -574,15 +574,16 @@ func TestBrokerReaderIsGuardedLikeABackup(t *testing.T) {
 	rel()
 
 	// Why (#456): the HTTP probe a page view or the reader asks for is held back by the same things,
-	// so a restore or an update never meets an extra request.
+	// so a restore or an update never meets an extra request. probeHTTP is the function both are
+	// wired to; a wiring that skipped the guard must fail here.
 	a.bgContext = ctx
-	for _, id := range []model.DeviceID{1, 2} {
-		if a.probeAllowed(id) {
-			t.Errorf("device %d: probe allowed while the device is held", id)
-		}
+	var asked []model.DeviceID
+	a.askProbe = func(id model.DeviceID) { asked = append(asked, id) }
+	for _, id := range []model.DeviceID{1, 2, 3} {
+		a.probeHTTP(id)
 	}
-	if !a.probeAllowed(3) {
-		t.Error("probe refused for a free device")
+	if !slices.Equal(asked, []model.DeviceID{3}) {
+		t.Errorf("probes asked for %v, want only the free device 3", asked)
 	}
 }
 

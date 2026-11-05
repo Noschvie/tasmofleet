@@ -55,6 +55,7 @@ func (h *handler) headOf(ctx context.Context, v view, d model.Device, hl model.H
 // headWith is headOf for a caller that has the paths already.
 func (h *handler) headWith(v view, d model.Device, hl model.Health, running *model.Job, active string, p transport.Paths, pathsOK bool) deviceTabs {
 	t := tabsFor(v, d, hl, running, active)
+	t.APIOff = hl.APIOff()
 	t.applyPaths(p, pathsOK)
 	t.CanReplace = h.canReplace(v)
 	_, t.Drift = h.d.Backups.(LiveSnapshotter)
@@ -66,8 +67,22 @@ func (h *handler) headWith(v view, d model.Device, hl model.Health, running *mod
 	if t.offline() {
 		t.OfflineSince = offlineSince(d, hl)
 		t.OfflineSinceText = ui.StampDayText(h.d.Clock.Now(), t.OfflineSince)
+		t.OfflineHTTP = offlineHTTPNote(hl)
 	}
 	return t
+}
+
+// offlineHTTPNote is what HTTP showed after the device went offline by its last will: the page's probe reaches
+// such a device (#456), and the banner must not say "until the device is back" under a Reachability tile that
+// says its web page answers (#447). Whether that makes the device reachable is #619's question.
+func offlineHTTPNote(hl model.Health) string {
+	switch {
+	case hl.HTTPRefusedAt.After(hl.Since) && hl.HTTPRefusedAt.After(hl.SeenHTTP):
+		return "Its web page answers: " + apiOffName + ", and MQTT does not reach it. " + apiOffFix
+	case hl.SeenHTTP.After(hl.Since):
+		return "Its MQTT last will says offline, but it answered over HTTP since."
+	}
+	return ""
 }
 
 // headTabs are the device tabs of the header. A tab the device cannot use right now says why.

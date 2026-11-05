@@ -49,3 +49,12 @@ type Health struct {
 	Power        map[string]string // "POWER1" -> "ON"; from STATE/RESULT
 	Since        time.Time         // when State last changed
 }
+
+// APIOff says the device's HTTP API is off and has not been seen on since (#447): its web page answered but /cm
+// did not, no HTTP answer came after that, and the device did not go offline after it (a timeout does not clear the
+// finding, so a device whose API was off and which then died must not read "API off" for good). The one rule the
+// Reachability tile, the connection card, the device list and the gates of the actions share.
+func (h Health) APIOff() bool {
+	return !h.HTTPRefusedAt.IsZero() && h.HTTPRefusedAt.After(h.SeenHTTP) &&
+		(h.State != HealthOffline || h.HTTPRefusedAt.After(h.Since))
+}

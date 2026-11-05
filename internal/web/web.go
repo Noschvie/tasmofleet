@@ -812,10 +812,10 @@ func channelsOf(now time.Time, window time.Duration, h model.Health) []channelIn
 	}
 	mqttFresh := fresh(h.SeenMQTT)
 	httpc := mk("HTTP", fresh(h.SeenHTTP), !h.SeenHTTP.IsZero() && !mqttFresh, tip("HTTP", h.SeenHTTP, "not checked"))
-	if refused := !h.HTTPRefusedAt.IsZero() && h.HTTPRefusedAt.After(h.SeenHTTP); refused {
+	if refusedNow(h) {
 		// The device answers but its HTTP API is off (#447): that is a fault of the channel, not idleness.
 		httpc = channelInfo{"HTTP", "\u2715", "failing", "bad", ""}
-		httpc.Tip = "HTTP: the device refuses the web API (SetOption128), seen " + ago(now, h.HTTPRefusedAt)
+		httpc.Tip = "HTTP: " + apiOffName + ", seen " + ago(now, h.HTTPRefusedAt)
 	} else if httpc.Tone == "off" && mqttFresh {
 		// A bare "–" next to a green MQTT read as "HTTP is down": the tooltip (and the
 		// screen-reader word) says it is the idle fallback; the mark stays a quiet "–".

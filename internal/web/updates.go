@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"github.com/nofuturekid/tasmofleet/internal/auth"
@@ -240,6 +241,9 @@ func (h *handler) updateFormData(r *http.Request, selected []model.DeviceID, mod
 	for _, row := range rows {
 		d := row.Device
 		blocked := blockedReason(d, row.Health.State)
+		if blocked == "" && row.Health.APIOff() {
+			blocked = h.apiOffBlock(r.Context(), d.ID, transport.ActUpdate) // online, but its HTTP API is off and MQTT cannot update it (#447)
+		}
 		if blocked == "" && busy[d.ID] {
 			blocked = "In a running transaction"
 		}
@@ -697,6 +701,7 @@ func (h *handler) updatePreview(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	apiOff := h.updateAPIOff(r.Context(), ids)
 	redo := func(msg string) {
 		f, err := h.updateFormData(r, ids, "", deviceFilter{})
 		if err != nil {
@@ -714,6 +719,10 @@ func (h *handler) updatePreview(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(ids) == 0 {
 		redo("Select at least one device.")
+		return
+	}
+	if apiOff != "" {
+		redo(apiOff)
 		return
 	}
 	reqs, err := h.requests(r, ids)
@@ -804,10 +813,27 @@ func (h *handler) updatePreview(w http.ResponseWriter, r *http.Request) {
 	h.show(w, r, http.StatusOK, "updates_preview", v, updatePreviewPage(p, v.CSRF))
 }
 
+// updateAPIOff names the selected devices whose HTTP API is off and which nothing else can update (#447), with
+// the reason; "" when none. They are refused before anything starts, as the picker already greys them out.
+func (h *handler) updateAPIOff(ctx context.Context, ids []model.DeviceID) string {
+	var b strings.Builder
+	for _, id := range ids {
+		if why := h.apiOffBlock(ctx, id, transport.ActUpdate); why != "" {
+			d, _ := h.d.Inventory.Get(ctx, id) // a vanished device shows as an empty name
+			fmt.Fprintf(&b, "%s: %s ", d.Name, why)
+		}
+	}
+	return strings.TrimSpace(b.String())
+}
+
 func (h *handler) updateSubmit(w http.ResponseWriter, r *http.Request) {
 	limitBody(w, r)
 	if err := r.ParseForm(); err != nil {
 		h.fail(w, r, err)
+		return
+	}
+	if apiOff := h.updateAPIOff(r.Context(), h.formIDs(r)); apiOff != "" {
+		h.message(w, r, http.StatusConflict, h.view(r, "Update refused", "updates", "Nothing was started. "+apiOff))
 		return
 	}
 	reqs, err := h.requests(r, h.formIDs(r))

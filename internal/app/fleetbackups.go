@@ -23,6 +23,8 @@ type fleetStore interface {
 type fleetBackups struct {
 	store  fleetStore
 	health func() map[model.DeviceID]model.Health
+	// apiOffSkip: see scheduledBackup; nil tries every device.
+	apiOffSkip func(ctx context.Context, id model.DeviceID, h model.Health) string
 	// files reads the manifest of a run (disk, no device I/O); *backup.Manager.RunFiles.
 	files     func(ctx context.Context, id model.BackupID) (backup.RunFiles, error)
 	pruneNext func(ctx context.Context, id model.DeviceID) ([]model.Backup, error)
@@ -70,6 +72,11 @@ func (f *fleetBackups) Overview(ctx context.Context) ([]model.BackupDeviceRow, e
 		}
 		r := model.BackupDeviceRow{DeviceID: u.Device, Name: u.Name, NewestAt: u.Last, Runs: u.Runs, Kept: u.Kept, Bytes: u.Bytes}
 		r.SkipReason, r.SkipSince = backupSkipReason(health[u.Device], seen[u.Device], true)
+		if r.SkipReason == "" && f.apiOffSkip != nil {
+			if why := f.apiOffSkip(ctx, u.Device, health[u.Device]); why != "" {
+				r.SkipReason, r.SkipSince = why, health[u.Device].HTTPRefusedAt
+			}
+		}
 		if it, ok := last[u.Device]; ok {
 			r.LastOutcome, r.LastReason, r.LastAt, r.LastSince = it.Outcome, it.Reason, it.At, it.Since
 		}
@@ -138,7 +145,7 @@ func (a *runtime) fleetBackups() *fleetBackups {
 	if a.tracker != nil {
 		health = a.tracker.All
 	}
-	f := &fleetBackups{store: a.svc.Store, health: health}
+	f := &fleetBackups{store: a.svc.Store, health: health, apiOffSkip: a.apiOffSkip}
 	f.pruneNext = func(context.Context, model.DeviceID) ([]model.Backup, error) { return nil, nil }
 	f.files = func(context.Context, model.BackupID) (backup.RunFiles, error) { return backup.RunFiles{}, nil }
 	if a.backups != nil {

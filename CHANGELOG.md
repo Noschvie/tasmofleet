@@ -14,7 +14,7 @@ always upgrade automatically.
 ### Fixed
 
 - About and Settings → Advanced: on a tablet (768 to 1199 px) the two configuration tables no longer sit side by side; the setting names overlapped the values, so they now stack in one column (#592)
-- A device with its HTTP API switched off (SetOption128) and MQTT off is no longer shown as "Offline / HTTP no answer": the Reachability tile says "HTTP API off" with "The web page answers" and the state of MQTT, the connection card and the device list name the refused API, and with live MQTT the tile says "Connected · HTTP API off" (#447, thanks @Noschvie)
+- A device whose HTTP API is switched off (SetOption128 0) is no longer counted as offline: a refused call is an answer, so the device stays online in its header and in the device list, the Reachability tile says "HTTP API off" with "The web page answers" (with live MQTT: "Connected · HTTP API off"), and the connection card and the list's HTTP channel name the refused API. With MQTT off as well, its last will keeps it offline, and the offline banner now says that its web page answers and what to switch on. Such a device is polled at most every 30 minutes (the page's check gives news on demand). When MQTT cannot serve it either, it has no path: scheduled backups skip it with the reason "HTTP API off (SetOption128 0)" (no failure, no notification), and updates, bulk actions and a manual Back up refuse it up front with that reason and the fix (SetOption128 1, or add the device by its own IP or hostname); a device that MQTT can serve is not refused. A check that reaches a device its last will reports offline no longer moves "Offline since" (#447, thanks @Noschvie)
 
 ## 0.29.1 "Portland Head" (2026-11-05)
 

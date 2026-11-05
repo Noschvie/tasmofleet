@@ -118,6 +118,11 @@ type devState struct {
 	authFailed bool
 	minimal    bool
 
+	// lastRefused is when the device last refused an HTTP API call. A refusal is an answer (the web page is
+	// up, #447), so it counts as contact like lastHTTP, but it never moves lastHTTP: SeenHTTP means the API
+	// answered, and routing, the #598 re-read and the #580 hint rely on that.
+	lastRefused time.Time
+
 	nextPoll time.Time
 	polling  bool
 
@@ -461,10 +466,20 @@ func (s *Service) mqttMode(ds *devState) bool {
 }
 
 func (s *Service) lastObs(ds *devState) time.Time {
-	if ds.lastHTTP.After(ds.lastMQTT) {
-		return ds.lastHTTP
+	if ds.lwt == "Offline" && s.mqttMode(ds) {
+		// Only the device's own MQTT messages count for a device its last will reports offline: no poll reaches
+		// it, so an HTTP contact is a probe a person's page view asked for. It must not move "Offline since"
+		// (the page's banner) nor make the device look seen now (#456).
+		return ds.lastMQTT
 	}
-	return ds.lastMQTT
+	t := ds.lastMQTT
+	if ds.lastHTTP.After(t) {
+		t = ds.lastHTTP
+	}
+	if ds.lastRefused.After(t) {
+		t = ds.lastRefused
+	}
+	return t
 }
 
 func (s *Service) fresh(ds *devState, now time.Time) bool {
@@ -515,7 +530,7 @@ func (s *Service) compute(ds *devState, now time.Time) model.HealthState {
 		switch {
 		case ds.fails >= s.o.OfflineAfter:
 			return model.HealthOffline
-		case ds.lastHTTP.IsZero():
+		case ds.lastHTTP.IsZero() && ds.lastRefused.IsZero():
 			return model.HealthUnknown
 		default:
 			return model.HealthOnline
@@ -873,9 +888,25 @@ func (s *Service) poll(ctx context.Context, id model.DeviceID, reach bool) {
 		if !s.mqttMode(ds) {
 			ds.nextPoll = now.Add(s.jitter(s.pollInterval()))
 		}
+	case errors.Is(err, tasmota.ErrHTTPAPIRefused):
+		// The device answered: its web page is up and only its HTTP API is off (SetOption128 0, #447). That is
+		// contact, not a failure, for a poll and a probe alike: it never counts toward offline. authFailed
+		// follows the last answer, as for every answer that is not a 401 (/cm checks the Referer before the
+		// password, so a refusal says nothing about the credentials).
+		ds.fails, ds.authFailed = 0, false
+		ds.refusedAt, ds.lastRefused = now, now
+		detail = "http: API refused"
+		if reach {
+			ds.probeAfter = now.Add(probeFailGap)
+			break
+		}
+		// Polled again like a failing device (up to every 30 minutes), not every interval: the refusal does not
+		// change by itself, and the page's probe gives fresh information on demand.
+		ds.nextPoll = now.Add(min(s.jitter(maxBackoff), maxBackoff))
+		ds.snapAfter = ds.nextPoll
 	case reach:
 		ds.probeAfter = now.Add(probeFailGap)
-		ds.noteRefusal(err, now)
+		ds.forgetRefusal(err)
 		detail = "http probe failed: " + errKind(err)
 	case errors.Is(err, tasmota.ErrAuth):
 		ds.fails++
@@ -886,7 +917,7 @@ func (s *Service) poll(ctx context.Context, id model.DeviceID, reach bool) {
 	default:
 		ds.fails++
 		ds.authFailed = false
-		ds.noteRefusal(err, now)
+		ds.forgetRefusal(err)
 		ds.nextPoll = now.Add(s.failDelay(ds.fails))
 		ds.snapAfter = ds.nextPoll
 		detail = "http poll failed: " + errKind(err)
@@ -901,13 +932,10 @@ func (s *Service) poll(ctx context.Context, id model.DeviceID, reach bool) {
 	}
 }
 
-// noteRefusal keeps what a failed HTTP call says about the HTTP API: refused (the device answers, its API
-// is off) or not; a timeout or a credentials error says nothing and leaves the earlier finding.
-func (ds *devState) noteRefusal(err error, now time.Time) {
-	switch {
-	case errors.Is(err, tasmota.ErrHTTPAPIRefused):
-		ds.refusedAt = now
-	case errors.Is(err, tasmota.ErrUnreachable):
+// forgetRefusal drops the finding that the HTTP API is off when nothing answers at all (no route, the web
+// page is gone too); a timeout or a credentials error says nothing and leaves it.
+func (ds *devState) forgetRefusal(err error) {
+	if errors.Is(err, tasmota.ErrUnreachable) {
 		ds.refusedAt = time.Time{}
 	}
 }

@@ -332,6 +332,10 @@ type deviceTabs struct {
 	OfflineSince time.Time // the offline banner: when the device went offline; zero when unknown
 	// OfflineSinceText is its fallback text (StampDay) for a page without JavaScript
 	OfflineSinceText string
+	// OfflineHTTP is what HTTP showed after the device went offline by its last will (offlineHTTPNote), "" when nothing
+	OfflineHTTP string
+	// APIOff: the device's HTTP API is off (model.Health.APIOff); an action without a path then says so (#447)
+	APIOff bool
 }
 
 // tabsFor builds the device tabs for the viewer. Settings and Console are
@@ -514,6 +518,10 @@ func (h *handler) deviceBackup(w http.ResponseWriter, r *http.Request) {
 	refuse := func(status int, msg string) {
 		h.message(w, r, status, h.view(r, "Backup not taken", "devices", messageData{Text: msg, LinkText: "Back to " + d.Name, Link: back}))
 	}
+	if why := h.apiOffBlock(r.Context(), d.ID, transport.ActBackup); why != "" {
+		refuse(http.StatusOK, why)
+		return
+	}
 	if wait := h.backupWait(d.ID); wait != "" {
 		refuse(http.StatusTooManyRequests, wait+".")
 		return
@@ -604,7 +612,9 @@ func minSec(d time.Duration) string {
 func (h *handler) deviceBackupFromTab(w http.ResponseWriter, r *http.Request, d model.Device) {
 	data := notice{}
 	status := http.StatusOK
-	if wait := h.backupWait(d.ID); wait != "" {
+	if why := h.apiOffBlock(r.Context(), d.ID, transport.ActBackup); why != "" {
+		data.Error = why
+	} else if wait := h.backupWait(d.ID); wait != "" {
 		data.Error = wait + "."
 		status = http.StatusTooManyRequests
 	} else if _, err := h.d.Backups.Backup(r.Context(), actor(r), d.ID); err != nil {
@@ -623,7 +633,9 @@ func (h *handler) deviceBackupFromTab(w http.ResponseWriter, r *http.Request, d 
 func (h *handler) deviceBackupFromList(w http.ResponseWriter, r *http.Request, d model.Device) {
 	data := struct{ Notice, Error string }{}
 	status := http.StatusOK
-	if wait := h.backupWait(d.ID); wait != "" {
+	if why := h.apiOffBlock(r.Context(), d.ID, transport.ActBackup); why != "" {
+		data.Error = d.Name + ": " + why
+	} else if wait := h.backupWait(d.ID); wait != "" {
 		data.Error = d.Name + ": " + strings.ToLower(wait[:1]) + wait[1:] + "."
 		status = http.StatusTooManyRequests
 	} else if _, err := h.d.Backups.Backup(r.Context(), actor(r), d.ID); err != nil {

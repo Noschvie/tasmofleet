@@ -735,7 +735,13 @@ var apiRefused = transport.HTTPState{State: transport.HTTPFailing, Kind: transpo
 // say what is the matter (the API is off) and keep working with what works (MQTT, when live).
 func TestReachTileSaysTheHTTPAPIIsOffInsteadOfOffline(t *testing.T) {
 	ours := model.Device{MQTT: model.MQTTOurs}
-	offline := model.Health{State: model.HealthOffline, LastSeen: now0, LWT: "Offline"}
+	went := now0.Add(-time.Hour) // the last will said offline then
+	// A probe after the device went offline by its last will: the API refused, or HTTP answered.
+	refusedSince := model.Health{State: model.HealthOffline, Since: went, LastSeen: now0, LWT: "Offline", HTTPRefusedAt: now0}
+	answeredSince := model.Health{State: model.HealthOffline, Since: went, LastSeen: now0, LWT: "Offline", SeenHTTP: now0}
+	// The same findings from before the will: the plug was pulled after the page's probe. They say nothing now.
+	refusedBefore := model.Health{State: model.HealthOffline, Since: went, LastSeen: went.Add(-time.Minute), LWT: "Offline", HTTPRefusedAt: went.Add(-time.Minute)}
+	answeredBefore := model.Health{State: model.HealthOffline, Since: went, LastSeen: went.Add(-time.Minute), LWT: "Offline", SeenHTTP: went.Add(-time.Minute)}
 	tests := []struct {
 		name       string
 		d          model.Device
@@ -744,10 +750,15 @@ func TestReachTileSaysTheHTTPAPIIsOffInsteadOfOffline(t *testing.T) {
 		value, sub string
 		tone       ui.Tone
 	}{
-		{"MQTT off and API off", ours, offline, apiRefused, "HTTP API off", "The web page answers · MQTT LWT offline", ui.ToneWarn},
-		{"HTTP only device", model.Device{}, model.Health{State: model.HealthOffline, LastSeen: now0}, apiRefused, "HTTP API off", "The web page answers · MQTT not configured", ui.ToneWarn},
-		{"MQTT live keeps working", ours, onlineHealth(nil), apiRefused, "MQTT", "Connected · HTTP API off (SetOption128)", ui.ToneWarn},
-		{"HTTP answers although the last will says offline", ours, offline, httpFresh, "HTTP", "Reachable · MQTT not connected", ui.ToneWarn},
+		{"MQTT off and API off", ours, refusedSince, apiRefused, "HTTP API off", "The web page answers · MQTT LWT offline", ui.ToneWarn},
+		{"HTTP only device", model.Device{}, model.Health{State: model.HealthOnline, LastSeen: now0, HTTPRefusedAt: now0}, apiRefused, "HTTP API off", "The web page answers · MQTT not configured", ui.ToneWarn},
+		{"MQTT live keeps working", ours, onlineHealth(nil), apiRefused, "MQTT", "Connected · HTTP API off (SetOption128 0)", ui.ToneWarn},
+		{"HTTP answers although the last will says offline", ours, answeredSince, httpFresh, "HTTP", "Reachable · MQTT not connected", ui.ToneWarn},
+		{"pulled plug that answered before", ours, answeredBefore, httpFresh, "Offline", "MQTT LWT offline · HTTP no answer", ui.ToneNeutral},
+		// The router still remembers the refusal (10 minutes), the plug was pulled after it.
+		{"pulled plug whose API was off before", ours, refusedBefore, apiRefused, "Offline", "MQTT LWT offline · HTTP no answer", ui.ToneNeutral},
+		// The answer after the will is no longer fresh: the banner still says it answered, so the tile must not say "no answer".
+		{"answered after the will, not lately", ours, model.Health{State: model.HealthOffline, Since: went, LastSeen: went.Add(time.Minute), LWT: "Offline", SeenHTTP: went.Add(time.Minute)}, transport.HTTPState{}, "Offline", "MQTT LWT offline · HTTP not checked lately, last answered 59m ago", ui.ToneNeutral},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -775,8 +786,25 @@ func TestShownHTTPStateKeepsTheRefusalTheTrackerRemembers(t *testing.T) {
 		t.Fatalf("HTTP answered after the refusal, still shown as %+v", got)
 	}
 	// The card says the same as the tile.
-	if r := httpRow(transport.Facts{HTTP: apiRefused, Now: now0}); r.Value != "Refused" {
+	if r := httpRow(transport.Facts{HTTP: apiRefused, Now: now0}); r.Value != "API off" {
 		t.Fatalf("card value %q", r.Value)
+	}
+	// A device that went offline after the refusal (a timeout does not clear it): the card and the list must
+	// not keep saying "refused" for a dead device, as the tile does not.
+	diedAfter := model.Health{State: model.HealthOffline, Since: now0.Add(-time.Minute), HTTPRefusedAt: now0.Add(-time.Hour)}
+	if got := shownHTTP(transport.HTTPState{}, diedAfter); got.State == transport.HTTPFailing {
+		t.Fatalf("a refusal from before the device went offline is still shown: %+v", got)
+	}
+	if r := httpRow(transport.Facts{HTTP: shownHTTP(transport.HTTPState{}, diedAfter), Now: now0}); r.Value == "Refused" {
+		t.Fatalf("card says %q for a device that died after the refusal", r.Value)
+	}
+	if c := channelsOf(now0, time.Hour, diedAfter)[1]; c.Tone == "bad" || strings.Contains(c.Tip, "SetOption128") {
+		t.Fatalf("list HTTP channel for a device that died after the refusal: %+v", c)
+	}
+	// Still offline by its will, but refused after it: that stands (#447's case).
+	refusedSince := model.Health{State: model.HealthOffline, Since: now0.Add(-time.Hour), HTTPRefusedAt: now0.Add(-time.Minute)}
+	if got := shownHTTP(transport.HTTPState{}, refusedSince); got.Kind != transport.HTTPFailAPIRefused {
+		t.Fatalf("a refusal after the will is not shown: %+v", got)
 	}
 	chs := channelsOf(now0, time.Hour, model.Health{SeenMQTT: now0, HTTPRefusedAt: now0})
 	if chs[1].Tone != "bad" || !strings.Contains(chs[1].Tip, "SetOption128") {
@@ -797,5 +825,37 @@ func TestOpeningTheDevicePageAsksForOneHTTPProbe(t *testing.T) {
 	e.do(t, "GET", "/devices", "admin", nil)
 	if len(asked) != 1 {
 		t.Fatalf("the list asked for probes: %v", asked)
+	}
+}
+
+// Why (#447, the reported case): MQTT off leaves the last will "Offline", so the device stays offline, but the
+// page's probe finds its web page answering with the HTTP API off. The header must say so: "until the device is
+// back" alone, under a tile that says "The web page answers", sends people looking for a dead device. The live
+// answer carries the same banner (a probe republishes without a state change).
+func TestOfflineBannerSaysWhatTheProbeFound(t *testing.T) {
+	went := time.Now().Add(-time.Hour)
+	for _, tc := range []struct {
+		name string
+		hl   model.Health
+		want string
+	}{
+		{"API off", model.Health{DeviceID: 1, State: model.HealthOffline, Since: went, LWT: "Offline", LastSeen: time.Now(), HTTPRefusedAt: time.Now()}, "HTTP API off (SetOption128 0)"},
+		{"HTTP answered", model.Health{DeviceID: 1, State: model.HealthOffline, Since: went, LWT: "Offline", LastSeen: time.Now(), SeenHTTP: time.Now()}, "answered over HTTP since"},
+		{"before the will", model.Health{DeviceID: 1, State: model.HealthOffline, Since: went, LWT: "Offline", LastSeen: went.Add(-time.Minute), HTTPRefusedAt: went.Add(-time.Minute)}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := setupWith(t, func(d *Deps) { d.Health.(fakeHealth)[1] = tc.hl })
+			for _, path := range []string{"/devices/1", "/devices/1/live"} {
+				_, body := e.do(t, "GET", path, "operator", nil)
+				if !strings.Contains(body, `id="devhd-off"`) {
+					t.Fatalf("%s: no offline banner", path)
+				}
+				for _, note := range []string{"HTTP API off (SetOption128 0)", "answered over HTTP since"} {
+					if got := strings.Contains(body, note); got != (note == tc.want) {
+						t.Errorf("%s: banner has %q = %v, want %v", path, note, got, note == tc.want)
+					}
+				}
+			}
+		})
 	}
 }

@@ -240,6 +240,7 @@ test("an offline device with relays at 375/1280, light and dark", async ({ page 
   await openDevice(page, "ov-offline");
   await control("/device/ov-offline/off");
   await expect(page.locator("#devhd-off")).toContainText("Offline since", { timeout: 60_000 });
+  await openCards(page);
   for (const width of [375, 1280]) {
     for (const scheme of ["light", "dark"] as const) {
       await page.emulateMedia({ colorScheme: scheme });
@@ -250,8 +251,16 @@ test("an offline device with relays at 375/1280, light and dark", async ({ page 
   }
 });
 
-// #447: a device whose HTTP API is switched off (SetOption128) still serves its web page. The Reachability
-// tile, the Connection card and the device list say so instead of "Offline / HTTP no answer".
+// #447: a device whose HTTP API is switched off (SetOption128 0) still serves its web page. The Reachability tile,
+// the Connection card and the device list say so instead of "Offline / HTTP no answer"; the device stays Online
+// (a refusal is an answer), has no path for actions, and says why with one name.
+async function openCards(page: Page) {
+  for (const id of ["#devpaths-facts-sum", "#devpaths-actions-sum"]) {
+    const el = page.locator(id);
+    if ((await el.evaluate((e) => (e.parentElement as HTMLDetailsElement).open)) === false) await el.click();
+  }
+}
+
 test("a device with its HTTP API off is not shown as offline", { tag: "@core" }, async ({ page }) => {
   const href = await openDevice(page, "ov-api-off");
   await control("/device/ov-api-off/api-off");
@@ -261,8 +270,11 @@ test("a device with its HTTP API off is not shown as offline", { tag: "@core" },
   await expect(tile).toContainText("HTTP API off", { timeout: 60_000 });
   await expect(tile).toContainText("The web page answers");
   await expect(tile).not.toContainText("Offline");
-  await expect(page.locator("#devpaths-facts-sum")).toContainText("HTTP refused");
-  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(page.locator("#devpaths-facts-sum")).toContainText("HTTP API off");
+  await openCards(page);
+  await expect(page.locator("#devpaths-facts")).toContainText("SetOption128 1");
+  await expect(page.locator("#devpaths-actions")).toContainText("HTTP API off (SetOption128 0)");
+  await expect(page.locator(".devhd-state")).toHaveText("Online");
   for (const width of [375, 1280]) {
     for (const scheme of ["light", "dark"] as const) {
       await page.emulateMedia({ colorScheme: scheme });
@@ -271,4 +283,18 @@ test("a device with its HTTP API off is not shown as offline", { tag: "@core" },
       await shot(page, `shape-ov-api-off-${width}-${scheme}`);
     }
   }
+});
+
+// The refusal is contact, not a failure: the header must not turn Offline after the polls that follow (the 3rd failed
+// poll used to flip it), and the Back up button names the reason.
+test("a device with its HTTP API off stays Online after more polls", { tag: "@full" }, async ({ page }) => {
+  const href = await openDevice(page, "ov-api-off");
+  await control("/device/ov-api-off/api-off");
+  await page.goto(app.url + href);
+  await expect(page.locator("[data-tile=reach]")).toContainText("HTTP API off", { timeout: 60_000 });
+  await page.waitForTimeout(25_000); // five 5 s poll intervals
+  await page.goto(app.url + href);
+  await expect(page.locator(".devhd-state")).toHaveText("Online");
+  await expect(page.locator("[data-tile=reach]")).toContainText("HTTP API off");
+  await expect(page.locator("#devhd-why")).toContainText("HTTP API off (SetOption128 0)");
 });

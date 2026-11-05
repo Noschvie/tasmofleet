@@ -23,6 +23,15 @@ import (
 // reasonOffline is blockReason's sentence for a device that stopped answering.
 const reasonOffline = "The device is offline."
 
+// How a device with its HTTP API switched off is named everywhere (#447): the tile, the card, the list tooltip, the
+// Back up note, the banner and the refusals of the actions. A refusal only happens when the device is reached by an
+// address other than its own IP or hostname (TasmoFleet sends a matching Referer), so that is a fix too.
+const (
+	apiOffName   = "HTTP API off (SetOption128 0)"
+	apiOffFix    = "Switch it on (SetOption128 1) or add the device by its own IP or hostname."
+	reasonAPIOff = apiOffName + ". " + apiOffFix
+)
+
 // forgetFWReach is the admin route that forgets what is known about the device reaching the
 // firmware server (WP-E2, spec §17).
 const forgetFWReach = "/fwreach/forget"
@@ -58,11 +67,19 @@ type pathCard struct {
 // FactsSummary is the line of the closed Connection list: the two states that decide the path.
 // Both lists are closed so the overview stays within the phone height budget.
 func (c pathCard) FactsSummary() string {
-	s := "Connection: HTTP " + strings.ToLower(rowByKey(c.Facts, keyHTTP).Value) + ", MQTT " + strings.ToLower(rowByKey(c.Facts, keyMQTT).Value)
+	s := "Connection: HTTP " + lowerWord(rowByKey(c.Facts, keyHTTP).Value) + ", MQTT " + lowerWord(rowByKey(c.Facts, keyMQTT).Value)
 	if fw := rowByKey(c.Facts, keyFW); fw.Value == "No" {
 		s += ", firmware server no"
 	}
 	return s
+}
+
+// lowerWord lowercases a row value for the summary line, but keeps an acronym ("API off") as it is.
+func lowerWord(s string) string {
+	if len(s) > 1 && s[1] >= 'A' && s[1] <= 'Z' {
+		return s
+	}
+	return lowerFirst(s)
 }
 
 // rowByKey finds a row by its label; a missing row is the zero row.
@@ -124,7 +141,43 @@ func (h *handler) transportOf(ctx context.Context, id model.DeviceID) (transport
 		h.log.Warn("transport facts", "device", id, "err", err)
 		return transport.Facts{}, transport.Paths{}, false
 	}
+	if h.d.Health != nil {
+		// What the page decides on (buttons, the card, the refusals below) knows a refused HTTP API for as long as the
+		// tracker does, not only for the router's ten minutes (#447). The router itself is not told.
+		f.HTTP = shownHTTP(f.HTTP, h.d.Health.Get(id))
+	}
 	return f, transport.Choose(f), true
+}
+
+// pathFor is the path an action takes in paths.
+func pathFor(p transport.Paths, a transport.Action) transport.Path {
+	switch a {
+	case transport.ActCommands:
+		return p.Commands
+	case transport.ActWrites:
+		return p.Writes
+	case transport.ActBackup:
+		return p.Backup
+	case transport.ActRestore:
+		return p.Restore
+	case transport.ActUpdate:
+		return p.Update
+	}
+	return transport.None
+}
+
+// apiOffBlock is why an action is refused up front: the device's HTTP API is off and nothing else (MQTT) can
+// carry the action. "" when the action may go ahead. A device whose API is off is Online, so the offline rules do
+// not catch it, and trying would only fail with the client's refusal (#447).
+func (h *handler) apiOffBlock(ctx context.Context, id model.DeviceID, a transport.Action) string {
+	if h.d.Health == nil || !h.d.Health.Get(id).APIOff() {
+		return ""
+	}
+	_, p, ok := h.transportOf(ctx, id)
+	if !ok || pathFor(p, a) != transport.None {
+		return ""
+	}
+	return reasonAPIOff
 }
 
 // overMQTT says whether a path travels over MQTT. An offline device can only be reached that way:
@@ -197,6 +250,17 @@ func (t *deviceTabs) applyPaths(p transport.Paths, ok bool) {
 	t.BackupWhy = actionWhy(general, p.Backup, p.Reason(transport.ActBackup))
 	t.RestoreWhy = actionWhy(general, p.Restore, p.Reason(transport.ActRestore))
 	t.UpdateWhy = actionWhy(general, p.Update, p.Reason(transport.ActUpdate))
+	if t.APIOff {
+		// The transport words the cause its own way; the page names it one way everywhere (#447).
+		for _, a := range []struct {
+			why  *string
+			path transport.Path
+		}{{&t.SettingsWhy, p.Writes}, {&t.ConsoleWhy, p.Commands}, {&t.BackupWhy, p.Backup}, {&t.RestoreWhy, p.Restore}, {&t.UpdateWhy, p.Update}} {
+			if a.path == transport.None {
+				*a.why = reasonAPIOff
+			}
+		}
+	}
 }
 
 // updateBtnWhy is why the header's "Update to" is disabled. Only the device's state gates it: the
@@ -279,7 +343,7 @@ func httpWord(st transport.HTTPState) string {
 	switch st.State {
 	case transport.HTTPFailing:
 		if st.Kind == transport.HTTPFailAPIRefused {
-			return "Refused"
+			return "API off"
 		}
 		return "Not reachable"
 	case transport.HTTPOK:
@@ -294,6 +358,9 @@ func httpRow(f transport.Facts) pathRow {
 	switch f.HTTP.State {
 	case transport.HTTPFailing:
 		r.Value, r.Tone, r.Sub = httpWord(f.HTTP), ui.ToneDanger, sentence(f.HTTP.Describe())
+		if f.HTTP.Kind == transport.HTTPFailAPIRefused {
+			r.Sub = reasonAPIOff
+		}
 		r.setSince(f.HTTP.Since, f.Now)
 	case transport.HTTPOK:
 		r.Value, r.Tone, r.Sub = httpWord(f.HTTP), ui.ToneOK, "TasmoFleet's last HTTP call to the device succeeded."

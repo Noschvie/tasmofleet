@@ -259,7 +259,7 @@ func (h *handler) devicesBulkPower(w http.ResponseWriter, r *http.Request) {
 	for _, row := range sv.Rows {
 		res := bulkResultRow{Name: row.Name, Addr: row.Addr}
 		if row.Skip {
-			res.Label, res.Tone, res.Detail = "Skipped", ui.ToneNeutral, skippedReason(h.d.Health.Get(row.ID).State)
+			res.Label, res.Tone, res.Detail = "Skipped", ui.ToneNeutral, skippedReason(h.d.Health.Get(row.ID))
 			rv.Skipped++
 			rv.Rows = append(rv.Rows, res)
 			continue

@@ -33,14 +33,20 @@ type scheduledBackup struct {
 	// notifyFailed tells the person about the failed devices of a run: tried is how many devices
 	// were tried, failed their names.
 	notifyFailed func(tried int, failed []string, at time.Time)
-	now          func() time.Time
-	gap          time.Duration // pause after a device that was tried: ESP8266 web servers are slow to recover
+	// apiOffSkip says "HTTP API off" for an online device whose HTTP API is off and which no other path can back up
+	// (apiOffSkip in the runtime); nil or "" tries the device.
+	apiOffSkip func(ctx context.Context, id model.DeviceID, h model.Health) string
+	now        func() time.Time
+	gap        time.Duration // pause after a device that was tried: ESP8266 web servers are slow to recover
 }
 
 const (
 	skipOffline = "offline"
 	skipNever   = "never answered"
 	skipBusy    = "another operation was running"
+	// skipAPIOff: online, but its HTTP API is off (SetOption128 0) and MQTT cannot carry a backup, so a run could
+	// only fail (#447). Skipped like an offline device: no failure, no notification.
+	skipAPIOff = "HTTP API off (SetOption128 0)"
 )
 
 // backupGuard is what a scheduled backup must not run into: the device guard (its lock and a running
@@ -140,6 +146,12 @@ func (b *scheduledBackup) Run(ctx context.Context) {
 		if why, since := backupSkipReason(health[d.ID], seen[d.ID], seenKnown); why != "" {
 			add(d, model.BackupOutcomeSkipped, why, since)
 			continue
+		}
+		if b.apiOffSkip != nil {
+			if why := b.apiOffSkip(ctx, d.ID, health[d.ID]); why != "" {
+				add(d, model.BackupOutcomeSkipped, why, health[d.ID].HTTPRefusedAt)
+				continue
+			}
 		}
 		release, err := b.enter(ctx, d.ID, "backup")
 		if err != nil { // the lock is held or a transaction is running; a failed check is treated the same: not now

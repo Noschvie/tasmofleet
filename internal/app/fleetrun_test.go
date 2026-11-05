@@ -507,3 +507,57 @@ func TestBackupAllLeavesBusyDevicesAlone(t *testing.T) {
 		t.Errorf("run = %+v ok=%v err=%v, want 2 skipped, none tried", r, ok, err)
 	}
 }
+
+// Why (decision 2026-11-05): a device that is online but has its HTTP API off and no MQTT path cannot be backed up.
+// The run skips it with the reason (like an offline one: no failure, no notification), and a device that MQTT can
+// serve is still backed up.
+func TestScheduledBackupSkipsADeviceWhoseHTTPAPIIsOff(t *testing.T) {
+	e := newFleetEnv(t)
+	at := fleetT0.Add(-time.Hour)
+	e.dev(t, "api-off", fleetT0, model.Health{State: model.HealthOnline, HTTPRefusedAt: at})
+	e.dev(t, "api-off-but-mqtt", fleetT0, model.Health{State: model.HealthOnline, HTTPRefusedAt: at})
+	e.dev(t, "fine", fleetT0, model.Health{State: model.HealthOnline})
+	e.b.apiOffSkip = func(_ context.Context, id model.DeviceID, h model.Health) string {
+		if id == e.devices["api-off"] && h.APIOff() {
+			return skipAPIOff
+		}
+		return ""
+	}
+	e.b.Run(context.Background())
+	if got := strings.Join(e.tried, ","); got != "api-off-but-mqtt,fine" && got != "fine,api-off-but-mqtt" {
+		t.Errorf("backed up %q, want the two others", got)
+	}
+	it := item(e.last(t), "api-off")
+	if it.Outcome != model.BackupOutcomeSkipped || it.Reason != "HTTP API off (SetOption128 0)" || !it.Since.Equal(at) {
+		t.Errorf("item = %+v, want skipped, HTTP API off, since the refusal", it)
+	}
+	if len(e.notes) != 0 {
+		t.Errorf("a skipped device raised a failure notification: %v", e.notes)
+	}
+}
+
+// Why: the real rule behind the hook: a refusal the router no longer remembers still means no HTTP path, and
+// only a device that MQTT can back up is left to the run.
+func TestAPIOffSkipUsesTheTrackersFindingNotTheRoutersMemory(t *testing.T) {
+	id := model.Identity{Family: model.ChipESP8266, Version: "16.0.0", Variant: "tasmota", FreeKB: 700}
+	httpOnly := model.Device{ID: 1, Name: "plug", Identity: id}
+	onBroker := model.Device{ID: 2, Name: "mqtt-plug", Identity: id, MQTT: model.MQTTOurs, Topic: "mqtt-plug", FullTopic: "%prefix%/%topic%/",
+		GroupTopic: "tasmotas", GroupTopicReadAt: factsNow, MQTTPasswordMode: model.MQTTPasswordOwn}
+	a := &runtime{}
+	a.facts = newFacts([]model.Device{httpOnly, onBroker}, fakeFactsHealth{2: {LWT: "Online"}}, nil)
+	refused := model.Health{State: model.HealthOnline, HTTPRefusedAt: factsNow}
+	for _, tc := range []struct {
+		name string
+		id   model.DeviceID
+		h    model.Health
+		want string
+	}{
+		{"HTTP-only device with its API off", 1, refused, skipAPIOff},
+		{"API answers", 1, model.Health{State: model.HealthOnline, SeenHTTP: factsNow}, ""},
+		{"API off but MQTT can back it up", 2, refused, ""},
+	} {
+		if got := a.apiOffSkip(context.Background(), tc.id, tc.h); got != tc.want {
+			t.Errorf("%s: %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}

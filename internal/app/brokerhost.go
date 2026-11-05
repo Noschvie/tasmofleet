@@ -11,6 +11,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/policy"
 	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/nofuturekid/tasmofleet/internal/transport"
 )
 
 // Keeping the stored broker host current (#598). TasmoFleet learns where a device reports to only
@@ -291,10 +292,11 @@ func brokerHTTPUp(h model.Health, now time.Time) bool {
 	return h.State == model.HealthOnline && !h.SeenHTTP.IsZero() && now.Sub(h.SeenHTTP) < brokerHostHTTPFresh
 }
 
-// probeHTTP asks the tracker for one HTTP probe of a device (#456) unless something holds it.
+// probeHTTP asks the tracker for one HTTP probe of a device (#456) unless something holds it. It is what
+// the device page (web.Deps.ProbeHTTP) and the broker re-read (wantHTTP) call.
 func (a *runtime) probeHTTP(id model.DeviceID) {
 	if a.probeAllowed(id) {
-		a.tracker.ProbeHTTP(id)
+		a.askProbe(id)
 	}
 }
 
@@ -308,4 +310,22 @@ func (a *runtime) probeAllowed(id model.DeviceID) bool {
 	}
 	release()
 	return true
+}
+
+// apiOffSkip is skipAPIOff for an online device whose HTTP API is off and which no other path can back up, "" for any
+// other device (#447). The router's own memory of the refusal lasts ten minutes; the tracker's finding is what counts
+// here, so the decision is made on the facts with that finding applied. The router itself is not told.
+func (a *runtime) apiOffSkip(ctx context.Context, id model.DeviceID, h model.Health) string {
+	if !h.APIOff() || a.facts == nil {
+		return ""
+	}
+	f, err := a.facts.Facts(ctx, id)
+	if err != nil {
+		return ""
+	}
+	f.HTTP = transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailAPIRefused, Since: h.HTTPRefusedAt}
+	if transport.Choose(f).Backup != transport.None {
+		return ""
+	}
+	return skipAPIOff
 }

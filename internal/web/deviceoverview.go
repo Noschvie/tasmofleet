@@ -185,11 +185,16 @@ type reach struct {
 // memory of a refused API lasts ten minutes; the health tracker keeps its finding until HTTP answers
 // again (#447), so the page does not flip back to "not checked" in between. A fresh answer wins.
 func shownHTTP(hs transport.HTTPState, hl model.Health) transport.HTTPState {
-	if hs.State == transport.HTTPOK || hl.HTTPRefusedAt.IsZero() || !hl.HTTPRefusedAt.After(hl.SeenHTTP) {
+	if hs.State == transport.HTTPOK || !refusedNow(hl) {
 		return hs
 	}
 	return transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailAPIRefused, Since: hl.HTTPRefusedAt}
 }
+
+// refusedNow says the tracker's finding that the HTTP API is off still stands: no HTTP answer came after it,
+// and the device did not go offline after it. A timeout does not clear the finding, so without the second rule a
+// device whose API was off and which then died would read "refused" for good (tile, card and list alike).
+func refusedNow(hl model.Health) bool { return hl.APIOff() }
 
 // reachOf words the channels; the Reachability tile reads it, and so does the "Other broker" hint
 // (its MQTTOn). HTTP is the state the connection card shows; a SeenHTTP of days ago must not read as
@@ -199,14 +204,17 @@ func reachOf(d model.Device, hl model.Health, hs transport.HTTPState, now time.T
 	r := reach{MQTTOn: d.MQTT == model.MQTTOurs || hl.LWT != "" || !hl.SeenMQTT.IsZero(), HTTPWord: "Not checked yet"}
 	r.MQTTOK = hl.LWT == "Online" || hl.LWT == "" && !hl.SeenMQTT.IsZero() && hl.State == model.HealthOnline
 	r.LWTOff = hl.LWT == "Offline"
+	// What HTTP showed beats an Offline state only when it came after the device went offline: an answer
+	// or a refusal from before (the page view's probe, the last poll) says nothing about a pulled plug.
+	offline := hl.State == model.HealthOffline
 	switch {
 	case hl.State == model.HealthAuthFailed:
 		r.HTTPWord = "Refuses the stored credentials"
-	case hs.State == transport.HTTPFailing && hs.Kind == transport.HTTPFailAPIRefused:
-		r.HTTPWord, r.HTTPBad, r.APIOff = "API off (SetOption128)", true, true
-	case hs.State == transport.HTTPOK:
+	case hs.State == transport.HTTPFailing && hs.Kind == transport.HTTPFailAPIRefused && (!offline || hl.HTTPRefusedAt.After(hl.Since)):
+		r.HTTPWord, r.HTTPBad, r.APIOff = "API off (SetOption128 0)", true, true
+	case hs.State == transport.HTTPOK && (!offline || hl.SeenHTTP.After(hl.Since)):
 		r.HTTPWord, r.HTTPOK = httpWord(hs), true
-	case hl.State == model.HealthOffline || hl.State == model.HealthUnknown && !hl.LastSeen.IsZero():
+	case offline && !hl.SeenHTTP.After(hl.Since) || hl.State == model.HealthUnknown && !hl.LastSeen.IsZero():
 		r.HTTPWord = "No response"
 	case hs.State == transport.HTTPFailing:
 		r.HTTPWord, r.HTTPBad = "not reachable", true

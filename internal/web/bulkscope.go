@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/transport"
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
 
@@ -132,7 +133,12 @@ func (h *handler) bulkScope(r *http.Request, kind bulkKind, self, run string) (b
 		if d.Port != 0 {
 			row.Addr += ":" + strconv.Itoa(d.Port)
 		}
-		if reachableNow(st) {
+		hl := h.d.Health.Get(id)
+		if reachableNow(st) && hl.APIOff() && h.apiOffBlock(r.Context(), id, bulkAction(kind)) != "" {
+			row.Status, row.Tone = "HTTP API off", ui.ToneWarn // online, but nothing can carry the action (#447)
+			row.Skip = true
+			sv.SkipN++
+		} else if reachableNow(st) {
 			ready = append(ready, id)
 		} else {
 			row.Skip = true
@@ -223,16 +229,28 @@ func healthTone(st model.HealthState) ui.Tone {
 	return ui.ToneNeutral
 }
 
-// skippedReason is the result line of a device that got nothing because it was not online.
-func skippedReason(st model.HealthState) string {
-	switch st {
+// bulkAction is the path an action of a bulk kind needs: the backup's, else a change (power, restart, a command).
+func bulkAction(k bulkKind) transport.Action {
+	if k == bulkBackup {
+		return transport.ActBackup
+	}
+	return transport.ActWrites
+}
+
+// skippedReason is the result line of a device that got nothing because it was not online, or because its HTTP
+// API is off and nothing else reaches it (#447).
+func skippedReason(hl model.Health) string {
+	if reachableNow(hl.State) && hl.APIOff() {
+		return apiOffName + ". Not attempted. " + apiOffFix
+	}
+	switch hl.State {
 	case model.HealthOffline:
 		return "Offline. Not attempted."
 	case model.HealthUnknown:
 		return "Has never answered. Not attempted."
 	case model.HealthOnline, model.HealthStale, model.HealthAuthFailed:
 	}
-	return label(st) + ". Not attempted."
+	return label(hl.State) + ". Not attempted."
 }
 
 // bulkResultRow is one device of the result page.
@@ -374,7 +392,7 @@ func (h *handler) bulkResult(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
-		rv.Rows = append(rv.Rows, bulkResultRow{Name: d.Name, Addr: d.Address, Label: "Skipped", Tone: ui.ToneNeutral, Detail: skippedReason(h.d.Health.Get(id).State)})
+		rv.Rows = append(rv.Rows, bulkResultRow{Name: d.Name, Addr: d.Address, Label: "Skipped", Tone: ui.ToneNeutral, Detail: skippedReason(h.d.Health.Get(id))})
 		rv.Skipped++
 	}
 	v.Title, v.Crumbs, v.Live = bulkTitle, bulkCrumbs, true

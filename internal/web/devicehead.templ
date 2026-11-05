@@ -145,6 +145,9 @@ templ deviceOffBanner(t deviceTabs) {
 			} else {
 				<b>Offline.</b> The device has not answered since TasmoFleet started.
 			}
+			if t.OfflineHTTP != "" {
+				{ t.OfflineHTTP }
+			}
 			Everything below is the last reported state. Switching, Restart, Back up and Refresh identity are disabled until the device is back; Edit and Delete still work.
 		</div>
 	</div>

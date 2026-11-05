@@ -151,6 +151,9 @@ type runtime struct {
 	bgContext       context.Context
 	restartAsks     *restartAsks      // restarts TasmoFleet asked for: not a fault (#325)
 	brokerHost      *brokerHostReader // re-reads the stored broker host (#598)
+
+	// askProbe is tracker.ProbeHTTP; probeHTTP calls it only when nothing holds the device (#456).
+	askProbe func(model.DeviceID)
 }
 
 func (a *runtime) run(ctx context.Context) error {
@@ -186,6 +189,7 @@ func (a *runtime) run(ctx context.Context) error {
 	a.tracker = health.New(a.healthDeps(), health.Options{
 		StaleAfter: staleAfter(cfg.TelePeriod), PollInterval: cfg.PollInterval,
 	})
+	a.askProbe = a.tracker.ProbeHTTP
 	a.goBG("health", func() error { return a.tracker.Run(bg) })
 	svc.Broker.aliases.Store(newBrokerAliases(svc.Store.ListDevices, a.tracker.LiveMQTT, time.Now))
 	a.fw = newFirmwareState(minimalSeenAt(a.tracker))
