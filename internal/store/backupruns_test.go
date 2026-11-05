@@ -3,7 +3,6 @@ package store
 import (
 	"io/fs"
 	"path/filepath"
-	"strings"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -126,8 +125,8 @@ func TestDevicesSeenReturnsOnlyDevicesThatWereHeard(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 || !got[heard].Equal(at) {
-		t.Errorf("DevicesSeen = %v, want only the heard device at %v", got, at)
+	if len(got) != 1 || !got[heard].At.Equal(at) || got[heard].State != model.HealthOffline {
+		t.Errorf("DevicesSeen = %v, want only the heard device, at %v, offline", got, at)
 	}
 }
 
@@ -146,7 +145,7 @@ func TestMigration0043KeepsA0280DatabaseAndAddsTheRunRecord(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, f := range all {
-		if strings.Contains(f, "0043_") {
+		if f >= "migrations/0043" { // the migration under test
 			continue
 		}
 		b, err := fs.ReadFile(Migrations, f)
@@ -172,5 +171,85 @@ func TestMigration0043KeepsA0280DatabaseAndAddsTheRunRecord(t *testing.T) {
 	var runs, items int
 	if err := db.QueryRowContext(ctx, "SELECT (SELECT COUNT(*) FROM backup_runs), (SELECT COUNT(*) FROM backup_run_items)").Scan(&runs, &items); err != nil || runs != 0 || items != 0 {
 		t.Errorf("run record after 0043: %d runs, %d items, %v; want empty tables", runs, items, err)
+	}
+}
+
+// Why (#409): the verdict of a device that was never heard since the start must not overwrite the
+// time it was last really heard (or invent one): a zero time keeps the stored last_seen_at and
+// updates only the health state.
+func TestSetLastSeenWithZeroKeepsTheStoredTime(t *testing.T) {
+	s, _, _ := newStore(t)
+	heard := mustDevice(t, s, "heard", "10.0.0.1")
+	silent := mustDevice(t, s, "silent", "10.0.0.2")
+	at := time.Date(2026, 11, 3, 21, 14, 0, 0, time.UTC)
+	if err := s.SetLastSeen(ctx, heard, model.HealthOnline, at); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []model.DeviceID{heard, silent} {
+		if err := s.SetLastSeen(ctx, id, model.HealthOffline, time.Time{}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := s.DevicesSeen(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || !got[heard].At.Equal(at) || got[heard].State != model.HealthOffline {
+		t.Errorf("DevicesSeen = %v, want only the heard device, still at %v, now offline", got, at)
+	}
+}
+
+// Why: a device deleted while a run is under way (after its turn) must not cost the whole run:
+// the item keeps the name and loses the device id instead of failing on the foreign key.
+func TestSaveBackupRunWithAnItemOfADeletedDevice(t *testing.T) {
+	s, _, _ := newStore(t)
+	d := mustDevice(t, s, "kitchen", "10.0.0.1")
+	if err := s.DeleteDevice(ctx, d); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SaveBackupRun(ctx, sampleRun(1000, d, true)); err != nil {
+		t.Fatalf("the run was lost: %v", err)
+	}
+	got, ok, err := s.LastBackupRun(ctx)
+	if err != nil || !ok || len(got.Items) != 3 {
+		t.Fatalf("run = %+v ok=%v err=%v", got, ok, err)
+	}
+	if got.Items[0].DeviceID != 0 || got.Items[0].DeviceName != "kitchen" {
+		t.Errorf("item = %+v, want the name kept and no device id", got.Items[0])
+	}
+}
+
+// Why (#409): the Backups page shows, per device, why its newest run has no files ("settings only")
+// and which archive to count. One query for all devices, the newest dump of each.
+func TestNewestRunsGivesTheNewestDumpNoteAndFilesRowPerDevice(t *testing.T) {
+	s, _, _ := newStore(t)
+	a := mustDevice(t, s, "a", "10.0.0.1")
+	b := mustDevice(t, s, "b", "10.0.0.2")
+	mustDevice(t, s, "none", "10.0.0.3")
+	put := func(dev model.DeviceID, kind model.BackupKind, at int64, note string) model.BackupID {
+		t.Helper()
+		id, err := s.PutBackup(ctx, model.Backup{DeviceID: dev, DeviceName: "x", Kind: kind, TakenAt: ms(at), Path: "p", SHA256: "x", Size: 1, Note: note})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	put(a, model.BackupConfigDump, 1000, "old")
+	newDump := put(a, model.BackupConfigDump, 2000, "files not backed up: no filesystem")
+	put(a, model.BackupSnapshot, 2000, "")
+	dumpB := put(b, model.BackupConfigDump, 1500, "")
+	filesB := put(b, model.BackupFiles, 1500, "")
+	got, err := s.NewestRuns(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("NewestRuns = %+v, want the two devices that have a backup", got)
+	}
+	if r := got[a]; r.DumpID != newDump || r.DumpNote != "files not backed up: no filesystem" || r.FilesID != 0 {
+		t.Errorf("a = %+v, want the newest dump, its note, no files row", r)
+	}
+	if r := got[b]; r.DumpID != dumpB || r.FilesID != filesB {
+		t.Errorf("b = %+v, want the files row of the same run", r)
 	}
 }

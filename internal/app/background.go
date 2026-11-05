@@ -191,7 +191,8 @@ func (a *runtime) backupAll(ctx context.Context) {
 	}
 	b := &scheduledBackup{
 		log: a.log, run: a.backupRun, devices: a.svc.Inventory.List, health: health,
-		store: a.svc.Store, locks: a.deviceLocks(), now: time.Now, gap: backupGap,
+		store: a.svc.Store, now: time.Now, gap: backupGap,
+		enter: deviceGuard{locks: a.deviceLocks(), jobs: a.svc.Store, holds: a.fwHolds}.enter,
 		backup: func(ctx context.Context, id model.DeviceID) error {
 			_, err := a.backups.Backup(backup.WithRun(ctx, backup.Run{Trigger: model.TriggerScheduled}), "system", id)
 			return err

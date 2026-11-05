@@ -621,8 +621,11 @@ func (s *SQLite) DeleteDevice(ctx context.Context, id model.DeviceID) error {
 	return tx.Commit()
 }
 
+// SetLastSeen stores the health state and, unless at is zero, the time the device was last heard. A
+// zero at (nothing heard since the start) keeps the stored time: the verdict's time is not a time
+// the device answered, and "never answered" is decided from last_seen_at being zero (#409).
 func (s *SQLite) SetLastSeen(ctx context.Context, id model.DeviceID, state model.HealthState, at time.Time) error {
-	return affected(s.db.ExecContext(ctx, "UPDATE devices SET health_state=?, last_seen_at=? WHERE id=?", string(state), toMS(at), id))
+	return affected(s.db.ExecContext(ctx, "UPDATE devices SET health_state=?, last_seen_at=CASE WHEN ?=0 THEN last_seen_at ELSE ? END WHERE id=?", string(state), toMS(at), toMS(at), id))
 }
 
 // DataVersion is SQLite's PRAGMA data_version: it changes whenever another

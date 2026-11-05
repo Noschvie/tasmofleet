@@ -1536,14 +1536,22 @@ show the last run after a restart. Outcomes per device: `ok`, `failed`, `skipped
 A skipped device was not tried; skipped devices are counted apart, never colour the status bar and
 never raise a notification. The rule:
 
-- persisted `last_seen_at` is zero: skipped, "never answered";
-- the tracker's current verdict is offline: skipped, "offline since <date time>";
-- unknown since the start but seen before: **tried** (a run right after a restart must not skip the
-  fleet);
+- persisted `last_seen_at` is zero (and the tracker has not heard the device either): skipped, "never answered";
+- offline: skipped, "offline since <date time>". The tracker's verdict decides; right after a start
+  it has none (`unknown` for every device until it is heard), and the persisted `health_state` decides
+  then: persisted offline is skipped (since = the persisted `last_seen_at`), anything else is
+  **tried** (a run right after a restart must not skip the fleet, and must not count the devices that
+  were offline before as failed);
 - `auth_failed`: tried, and failed when the device refuses (it is reachable and needs action);
-- the device's operation lock is busy: skipped, "another operation was running".
+- another operation holds the device (its lock or a running transaction, the device guard): skipped,
+  "another operation was running";
+- a device deleted before its turn is neither listed nor failed.
 
-The run takes the device lock (`devlock`, owner `backup`) for each device while it backs it up. The notification lists the failed devices only. The run record is pruned with `AUDIT_RETENTION`; a
+`devices.last_seen_at` is written only with a time the device was heard (`SetLastSeen` keeps the
+stored value for a zero time), so "never answered" stays true for a device that was only judged
+offline.
+
+The run takes the device guard (owner `backup`) for each device while it backs it up. The notification lists the failed devices only. The run record is pruned with `AUDIT_RETENTION`; a
 device's item keeps its name when the device is deleted. Model: `model.BackupRun`, `BackupRunItem`,
 `BackupOutcome`, `BackupDeviceRow`; the web layer reads them through `web.BackupFleet` (`LastRun`,
 `Overview`, `PruneNext`; `Overview` does no device I/O).

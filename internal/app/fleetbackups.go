@@ -2,8 +2,10 @@ package app
 
 import (
 	"context"
+	"strings"
 	"time"
 
+	"github.com/nofuturekid/tasmofleet/internal/backup"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/store"
 	"github.com/nofuturekid/tasmofleet/internal/web"
@@ -13,15 +15,18 @@ import (
 type fleetStore interface {
 	BackupUsage(ctx context.Context) ([]store.BackupUsage, error)
 	LastBackupRun(ctx context.Context) (model.BackupRun, bool, error)
-	DevicesSeen(ctx context.Context) (map[model.DeviceID]time.Time, error)
+	DevicesSeen(ctx context.Context) (map[model.DeviceID]store.DeviceSeen, error)
+	NewestRuns(ctx context.Context) (map[model.DeviceID]store.NewestRun, error)
 }
 
 // fleetBackups is web.BackupFleet (#409): the last scheduled run, one row per device and what the
 // next prune removes.
 type fleetBackups struct {
-	store     fleetStore
-	health    func() map[model.DeviceID]model.Health
-	now       func() time.Time
+	store  fleetStore
+	health func() map[model.DeviceID]model.Health
+	now    func() time.Time
+	// files reads the manifest of a run (disk, no device I/O); *backup.Manager.RunFiles.
+	files     func(ctx context.Context, id model.BackupID) (backup.RunFiles, error)
 	pruneNext func(ctx context.Context, id model.DeviceID) ([]model.Backup, error)
 }
 
@@ -31,9 +36,11 @@ func (f *fleetBackups) LastRun(ctx context.Context) (model.BackupRun, bool, erro
 	return f.store.LastBackupRun(ctx)
 }
 
-// Overview has one row per device, in device order, from three reads and no device request: the
-// storage per device, the last scheduled run's items and when each device was last heard. The
-// files columns (Files, FilesNote) are the page's to fill: they come from the backups' manifests.
+// Overview has one row per device, in device order, from four reads and no device request: the
+// storage per device, the last scheduled run's items, when each device was last heard and the
+// newest run's note and files row. Files is the number of files in the newest run's archive, read
+// from its manifest on disk (one read per device that has an archive); FilesNote says why a run
+// has no files ("settings only: no file system"), from the run's note.
 func (f *fleetBackups) Overview(ctx context.Context) ([]model.BackupDeviceRow, error) {
 	usage, err := f.store.BackupUsage(ctx)
 	if err != nil {
@@ -44,6 +51,10 @@ func (f *fleetBackups) Overview(ctx context.Context) ([]model.BackupDeviceRow, e
 		return nil, err
 	}
 	seen, err := f.store.DevicesSeen(ctx)
+	if err != nil {
+		return nil, err
+	}
+	newest, err := f.store.NewestRuns(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -64,9 +75,43 @@ func (f *fleetBackups) Overview(ctx context.Context) ([]model.BackupDeviceRow, e
 		if it, ok := last[u.Device]; ok {
 			r.LastOutcome, r.LastReason, r.LastAt = it.Outcome, it.Reason, it.At
 		}
+		if n, ok := newest[u.Device]; ok {
+			r.Files, r.FilesNote = f.filesOf(ctx, n)
+		}
 		rows = append(rows, r)
 	}
 	return rows, nil
+}
+
+// filesOf is the Files and FilesNote columns of a device's newest run. An archive that cannot be
+// read leaves the count empty and says so: the row must still show.
+func (f *fleetBackups) filesOf(ctx context.Context, n store.NewestRun) (int, string) {
+	if n.FilesID != 0 {
+		rf, err := f.files(ctx, n.FilesID)
+		switch {
+		case err != nil || rf.Manifest == nil:
+			return 0, "files archive could not be read"
+		default:
+			return len(rf.Manifest.Files), ""
+		}
+	}
+	return 0, filesNoteText(backup.FilesNoteOf(n.DumpNote))
+}
+
+// filesNoteText words the reason a run has no files for a table cell. reason is the sentence after
+// backup.NoteFilesPrefix; "" (an older run, from before the files step) says nothing.
+func filesNoteText(reason string) string {
+	switch {
+	case reason == "":
+		return ""
+	case reason == "no filesystem":
+		return "settings only: no file system"
+	case reason == "they need HTTP":
+		return "files need HTTP"
+	case strings.HasPrefix(reason, "firmware older than "):
+		return "settings only: " + reason + " has no file access"
+	}
+	return backup.NoteFilesPrefix + reason
 }
 
 // PruneNext lists, over all devices, the backups the next backup of each deletes.
@@ -96,10 +141,11 @@ func (a *runtime) fleetBackups() *fleetBackups {
 		health = a.tracker.All
 	}
 	f := &fleetBackups{store: a.svc.Store, health: health, now: time.Now}
+	f.pruneNext = func(context.Context, model.DeviceID) ([]model.Backup, error) { return nil, nil }
+	f.files = func(context.Context, model.BackupID) (backup.RunFiles, error) { return backup.RunFiles{}, nil }
 	if a.backups != nil {
 		f.pruneNext = a.backups.PrunedAtNextRun
-	} else {
-		f.pruneNext = func(context.Context, model.DeviceID) ([]model.Backup, error) { return nil, nil }
+		f.files = a.backups.RunFiles
 	}
 	return f
 }

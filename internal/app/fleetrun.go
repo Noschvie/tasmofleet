@@ -2,17 +2,19 @@ package app
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/backup"
 	"github.com/nofuturekid/tasmofleet/internal/devlock"
 	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/store"
 )
 
 // runStore is what a scheduled run reads and writes (*store.SQLite).
 type runStore interface {
-	DevicesSeen(ctx context.Context) (map[model.DeviceID]time.Time, error)
+	DevicesSeen(ctx context.Context) (map[model.DeviceID]store.DeviceSeen, error)
 	SaveBackupRun(ctx context.Context, r model.BackupRun) (int64, error)
 }
 
@@ -25,8 +27,9 @@ type scheduledBackup struct {
 	devices func(ctx context.Context) ([]model.Device, error)
 	health  func() map[model.DeviceID]model.Health
 	store   runStore
-	locks   *devlock.Locks
-	backup  func(ctx context.Context, id model.DeviceID) error
+	// enter takes the device guard (lock and running transactions); an error means the device is busy.
+	enter  func(ctx context.Context, id model.DeviceID, owner string) (release func(), err error)
+	backup func(ctx context.Context, id model.DeviceID) error
 	// notifyFailed tells the person about the failed devices of a run: tried is how many devices
 	// were tried, failed their names.
 	notifyFailed func(tried int, failed []string, at time.Time)
@@ -39,28 +42,35 @@ const (
 	skipBusy  = "another operation was running"
 )
 
-// backupSkipReason says why a run leaves a device out, or "" when it tries it. seen is the
-// persisted last_seen_at (zero = never heard); seenKnown is false when it could not be read, and
-// "never answered" is then not claimed. The tracker's verdict alone is not enough: right after a
-// start it says "unknown" for every device until it is heard, and a run then must not skip the fleet.
-func backupSkipReason(h model.Health, seen time.Time, seenKnown bool, now time.Time) string {
+// backupSkipReason says why a run leaves a device out, or "" when it tries it. p is what the
+// database remembers of the device (zero for a device that never answered); seenKnown is false when
+// it could not be read, and "never answered" is then not claimed. The tracker's verdict is used when
+// it has one; right after a start it has none ("unknown" for every device until it is heard), and
+// the persisted state decides then: a device that was offline before the start and has not been
+// heard since is skipped, anything else is tried. Without that, every restart would count the
+// offline devices as failed.
+func backupSkipReason(h model.Health, p store.DeviceSeen, seenKnown bool, now time.Time) string {
+	seen := p.At
 	if h.LastSeen.After(seen) {
 		seen = h.LastSeen
 	}
-	switch {
-	case seenKnown && seen.IsZero():
+	if seenKnown && seen.IsZero() {
 		return skipNever
-	case h.State == model.HealthOffline:
-		since := h.Since
-		if since.IsZero() {
-			since = seen
-		}
-		if since.IsZero() {
-			return "offline"
-		}
-		return "offline since " + backupWhen(since, now)
 	}
-	return ""
+	state, since := h.State, h.Since
+	if state == "" || state == model.HealthUnknown {
+		state, since = p.State, p.At // no verdict yet: what was stored
+	}
+	if state != model.HealthOffline {
+		return ""
+	}
+	if since.IsZero() {
+		since = seen
+	}
+	if since.IsZero() {
+		return "offline"
+	}
+	return "offline since " + backupWhen(since, now)
 }
 
 // backupWhen words a time that can be days old: day and month, the year only when it is another one.
@@ -122,18 +132,24 @@ func (b *scheduledBackup) Run(ctx context.Context) {
 			add(d, model.BackupOutcomeSkipped, why)
 			continue
 		}
-		release, _, ok := b.locks.TryAcquire(d.ID, "backup")
-		if !ok {
+		release, err := b.enter(ctx, d.ID, "backup")
+		if err != nil { // the lock is held or a transaction is running; a failed check is treated the same: not now
+			if !errors.Is(err, devlock.ErrBusy) {
+				b.log.Warn("scheduled backup: checking whether the device is busy", "device", d.Name, "err", err)
+			}
 			add(d, model.BackupOutcomeSkipped, skipBusy)
 			continue
 		}
-		err := b.backup(ctx, d.ID)
+		err = b.backup(ctx, d.ID)
 		release()
 		switch {
 		case err == nil:
 			add(d, model.BackupOutcomeOK, "")
 		case ctx.Err() != nil:
 			return // shutdown cut this device short: not a failure of the device
+		case errors.Is(err, store.ErrNotFound):
+			b.run.Gone() // deleted before its turn: no item, no failure
+			continue
 		default:
 			b.log.Warn("scheduled backup failed", "device", d.Name, "err", err)
 			add(d, model.BackupOutcomeFailed, backup.AttemptReason(err))

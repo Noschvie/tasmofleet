@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"path/filepath"
@@ -58,7 +59,7 @@ func newFleetEnv(t *testing.T) *fleetEnv {
 		devices: st.ListDevices,
 		health:  func() map[model.DeviceID]model.Health { return e.health },
 		store:   st,
-		locks:   e.locks,
+		enter:   deviceGuard{locks: e.locks, jobs: st}.enter,
 		now:     func() time.Time { return fleetT0 },
 		backup: func(_ context.Context, id model.DeviceID) error {
 			name := ""
@@ -82,13 +83,20 @@ func newFleetEnv(t *testing.T) *fleetEnv {
 // dev adds a device with its persisted last_seen_at (zero = never heard) and the tracker's current verdict.
 func (e *fleetEnv) dev(t *testing.T, name string, seen time.Time, h model.Health) model.DeviceID {
 	t.Helper()
+	return e.devP(t, name, seen, h.State, h)
+}
+
+// devP is dev with the persisted health state apart from the tracker's verdict h (a restart: the
+// database remembers, the tracker does not yet).
+func (e *fleetEnv) devP(t *testing.T, name string, seen time.Time, persisted model.HealthState, h model.Health) model.DeviceID {
+	t.Helper()
 	id, err := e.st.CreateDevice(context.Background(), model.Device{Name: name, Address: "192.0.2." + string(rune('1'+len(e.devices)))})
 	if err != nil {
 		t.Fatal(err)
 	}
 	e.devices[name] = id
 	if !seen.IsZero() {
-		if err := e.st.SetLastSeen(context.Background(), id, h.State, seen); err != nil {
+		if err := e.st.SetLastSeen(context.Background(), id, persisted, seen); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -326,4 +334,74 @@ func auditKeepSys(t *testing.T, keep time.Duration) *sysconfig.Service {
 		t.Fatal(err)
 	}
 	return sys
+}
+
+// Why (#409, the restart): the tracker says "unknown" for every device until it hears it. A device
+// that was offline before the restart and still does not answer must be skipped from what the
+// database remembers, not tried and counted as a failure (a message after every restart).
+func TestScheduledBackupAfterARestartSkipsADevicePersistedAsOffline(t *testing.T) {
+	e := newFleetEnv(t)
+	since := fleetT0.Add(-30 * time.Hour)
+	e.devP(t, "down", since, model.HealthOffline, model.Health{State: model.HealthUnknown})
+	e.devP(t, "fine", fleetT0.Add(-time.Hour), model.HealthOnline, model.Health{State: model.HealthUnknown})
+	e.fail["down"] = tasmota.ErrUnreachable // would fail if it were tried
+	e.b.Run(context.Background())
+	if got := strings.Join(e.tried, ","); got != "fine" {
+		t.Errorf("tried %q, want only the device that was not offline before the restart", got)
+	}
+	it := item(e.last(t), "down")
+	if it.Outcome != model.BackupOutcomeSkipped || it.Reason != "offline since 3 Nov 21:00" {
+		t.Errorf("item = %+v, want skipped, offline since the persisted last_seen_at", it)
+	}
+	if s := e.run.Status(); s.LastFailed != 0 || s.LastSkipped != 1 || len(e.notes) != 0 {
+		t.Errorf("status = %+v, notes %v: a skipped device must not fail the run or send a message", s, e.notes)
+	}
+}
+
+// Why: the tracker's own verdict wins over what was stored: a device that is online now is tried
+// even if the database still says offline from before.
+func TestScheduledBackupTrackerVerdictBeatsThePersistedState(t *testing.T) {
+	e := newFleetEnv(t)
+	e.devP(t, "back", fleetT0.Add(-time.Hour), model.HealthOffline, model.Health{State: model.HealthOnline})
+	e.b.Run(context.Background())
+	if got := strings.Join(e.tried, ","); got != "back" {
+		t.Errorf("tried %q, want the device that is online now", got)
+	}
+}
+
+// Why: "busy" means the device guard says so: a running update transaction excludes the backup
+// even while nobody holds the lock (the engine's job is the exclusion between its own steps).
+func TestScheduledBackupSkipsADeviceWithARunningTransaction(t *testing.T) {
+	e := newFleetEnv(t)
+	id := e.dev(t, "updating", fleetT0, model.Health{State: model.HealthOnline})
+	j := model.Job{DeviceID: id, State: model.JobQueued, Stage: model.StageFinal, Policy: model.PolicyOnlyNewer, TargetRelease: "16.0.0", TargetVariant: "tasmota"}
+	_, ids, err := e.st.CreateBatch(context.Background(), "u", []model.Job{j})
+	if err != nil {
+		t.Fatal(err)
+	}
+	j.ID, j.State = ids[0], model.JobAwaitReboot
+	if err := e.st.SaveTransition(context.Background(), j, model.JobEvent{JobID: ids[0], From: model.JobQueued, To: model.JobAwaitReboot, Event: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	e.b.Run(context.Background())
+	if len(e.tried) != 0 {
+		t.Errorf("tried %v, want none: a transaction is running on the device", e.tried)
+	}
+	if it := item(e.last(t), "updating"); it.Outcome != model.BackupOutcomeSkipped || it.Reason != skipBusy {
+		t.Errorf("item = %+v", it)
+	}
+}
+
+// Why: a device deleted before its turn is gone, not failed: no item, no failure, no message. One
+// deleted after its turn must not cost the run either (store test); here the run goes on.
+func TestScheduledBackupDeviceDeletedBeforeItsTurnIsNeitherFailedNorListed(t *testing.T) {
+	e := newFleetEnv(t)
+	e.dev(t, "gone", fleetT0, model.Health{State: model.HealthOnline})
+	e.dev(t, "stays", fleetT0, model.Health{State: model.HealthOnline})
+	e.fail["gone"] = fmt.Errorf("backup: %w", store.ErrNotFound)
+	e.b.Run(context.Background())
+	r := e.last(t)
+	if item(r, "gone").DeviceName != "" || r.Failed != 0 || r.OK != 1 || len(e.notes) != 0 {
+		t.Errorf("run = %+v, notes %v: the deleted device must leave no trace, the other is backed up", r, e.notes)
+	}
 }

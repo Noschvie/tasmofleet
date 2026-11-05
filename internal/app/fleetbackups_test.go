@@ -5,17 +5,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nofuturekid/tasmofleet/internal/backup"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/store"
 )
 
 // countingFleetStore counts how often each read happens: the page must not grow a query per device.
 type countingFleetStore struct {
-	usage []store.BackupUsage
-	run   model.BackupRun
-	hasRn bool
-	seen  map[model.DeviceID]time.Time
-	calls map[string]int
+	usage  []store.BackupUsage
+	run    model.BackupRun
+	hasRn  bool
+	seen   map[model.DeviceID]store.DeviceSeen
+	newest map[model.DeviceID]store.NewestRun
+	calls  map[string]int
 }
 
 func (c *countingFleetStore) BackupUsage(context.Context) ([]store.BackupUsage, error) {
@@ -26,9 +28,13 @@ func (c *countingFleetStore) LastBackupRun(context.Context) (model.BackupRun, bo
 	c.calls["run"]++
 	return c.run, c.hasRn, nil
 }
-func (c *countingFleetStore) DevicesSeen(context.Context) (map[model.DeviceID]time.Time, error) {
+func (c *countingFleetStore) DevicesSeen(context.Context) (map[model.DeviceID]store.DeviceSeen, error) {
 	c.calls["seen"]++
 	return c.seen, nil
+}
+func (c *countingFleetStore) NewestRuns(context.Context) (map[model.DeviceID]store.NewestRun, error) {
+	c.calls["newest"]++
+	return c.newest, nil
 }
 
 // Why (#409): the page lists the whole fleet at once and must stay cheap however big it is: a
@@ -47,9 +53,18 @@ func TestFleetOverviewIsABoundedNumberOfReadsWithoutDeviceIO(t *testing.T) {
 			{DeviceID: 1, DeviceName: "kitchen", Outcome: model.BackupOutcomeOK, At: now.Add(-2 * time.Hour)},
 			{DeviceID: 3, DeviceName: "attic", Outcome: model.BackupOutcomeFailed, Reason: "The device did not answer", At: now.Add(-2 * time.Hour)},
 		}},
-		seen: map[model.DeviceID]time.Time{1: now, 3: now.Add(-24 * time.Hour)},
+		seen: map[model.DeviceID]store.DeviceSeen{1: {At: now, State: model.HealthOnline}, 3: {At: now.Add(-24 * time.Hour), State: model.HealthOffline}},
+		newest: map[model.DeviceID]store.NewestRun{
+			1: {Device: 1, DumpID: 10, FilesID: 11},
+			3: {Device: 3, DumpID: 30, DumpNote: "files not backed up: no filesystem"},
+		},
 	}
+	manifestReads := 0
 	f := &fleetBackups{store: st, now: func() time.Time { return now },
+		files: func(_ context.Context, id model.BackupID) (backup.RunFiles, error) {
+			manifestReads++
+			return backup.RunFiles{Manifest: &backup.Manifest{Files: []backup.ManifestFile{{Path: "/a"}, {Path: "/b"}, {Path: "/c"}}}}, nil
+		},
 		health: func() map[model.DeviceID]model.Health {
 			return map[model.DeviceID]model.Health{3: {State: model.HealthOffline, Since: now.Add(-24 * time.Hour)}}
 		}}
@@ -62,17 +77,20 @@ func TestFleetOverviewIsABoundedNumberOfReadsWithoutDeviceIO(t *testing.T) {
 			t.Errorf("%s read %d times, want once however many devices there are", k, n)
 		}
 	}
+	if manifestReads != 1 {
+		t.Errorf("manifests read %d times, want once: only the device with a files archive", manifestReads)
+	}
 	if len(rows) != 3 {
 		t.Fatalf("rows = %d, want one per device (not the orphans)", len(rows))
 	}
 	k, g, a := rows[0], rows[1], rows[2]
-	if k.Name != "kitchen" || k.Runs != 4 || k.Kept != 1 || k.Bytes != 400 || k.LastOutcome != model.BackupOutcomeOK || k.SkipReason != "" || !k.NewestAt.Equal(now.Add(-2*time.Hour)) {
+	if k.Name != "kitchen" || k.Runs != 4 || k.Files != 3 || k.FilesNote != "" || k.Kept != 1 || k.Bytes != 400 || k.LastOutcome != model.BackupOutcomeOK || k.SkipReason != "" || !k.NewestAt.Equal(now.Add(-2*time.Hour)) {
 		t.Errorf("kitchen = %+v", k)
 	}
 	if g.Name != "garage" || !g.NewestAt.IsZero() || g.LastOutcome != "" || g.SkipReason != "never answered" {
 		t.Errorf("garage = %+v, want no backup, not in the last run, would be skipped as never answered", g)
 	}
-	if a.LastOutcome != model.BackupOutcomeFailed || a.LastReason != "The device did not answer" || a.SkipReason != "offline since 4 Nov 12:00" {
+	if a.FilesNote != "settings only: no file system" || a.Files != 0 || a.LastOutcome != model.BackupOutcomeFailed || a.LastReason != "The device did not answer" || a.SkipReason != "offline since 4 Nov 12:00" {
 		t.Errorf("attic = %+v", a)
 	}
 }

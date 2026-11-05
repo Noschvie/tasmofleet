@@ -18,9 +18,16 @@ type BackupRunStore interface {
 	LastBackupRun(ctx context.Context) (model.BackupRun, bool, error)
 	// PruneBackupRuns deletes the runs started before the given time, with their items.
 	PruneBackupRuns(ctx context.Context, before time.Time) (int64, error)
-	// DevicesSeen maps every device that was ever heard to its persisted last_seen_at. A device
-	// that never answered is absent.
-	DevicesSeen(ctx context.Context) (map[model.DeviceID]time.Time, error)
+	// DevicesSeen maps every device that was ever heard to its persisted last_seen_at and health
+	// state. A device that never answered is absent.
+	DevicesSeen(ctx context.Context) (map[model.DeviceID]DeviceSeen, error)
+}
+
+// DeviceSeen is what is persisted of a device's health: when it was last heard and the verdict
+// that was stored with it. Used after a start, before the tracker has heard anything.
+type DeviceSeen struct {
+	At    time.Time
+	State model.HealthState
 }
 
 var _ BackupRunStore = (*SQLite)(nil)
@@ -41,12 +48,10 @@ func (s *SQLite) SaveBackupRun(ctx context.Context, r model.BackupRun) (int64, e
 		return 0, err
 	}
 	for _, it := range r.Items {
-		var dev any // NULL for a device that is gone: the foreign key would refuse 0
-		if it.DeviceID != 0 {
-			dev = int64(it.DeviceID)
-		}
+		// The device id is looked up, so a device deleted while the run was under way becomes NULL
+		// (its name stays) instead of failing the foreign key and losing the whole run.
 		if _, err := tx.ExecContext(ctx, `INSERT INTO backup_run_items (run_id, device_id, device_name, outcome, reason, at)
-			VALUES (?,?,?,?,?,?)`, id, dev, it.DeviceName, string(it.Outcome), it.Reason, toMS(it.At)); err != nil {
+			VALUES (?, (SELECT id FROM devices WHERE id = ?), ?,?,?,?)`, id, int64(it.DeviceID), it.DeviceName, string(it.Outcome), it.Reason, toMS(it.At)); err != nil {
 			return 0, mapErr(err)
 		}
 	}
@@ -98,20 +103,21 @@ func (s *SQLite) PruneBackupRuns(ctx context.Context, before time.Time) (int64, 
 	return res.RowsAffected()
 }
 
-func (s *SQLite) DevicesSeen(ctx context.Context) (map[model.DeviceID]time.Time, error) {
-	rows, err := s.db.QueryContext(ctx, "SELECT id, last_seen_at FROM devices WHERE last_seen_at <> 0")
+func (s *SQLite) DevicesSeen(ctx context.Context) (map[model.DeviceID]DeviceSeen, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT id, last_seen_at, health_state FROM devices WHERE last_seen_at <> 0")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close() //nolint:errcheck // rows.Err below reports iteration problems
-	out := map[model.DeviceID]time.Time{}
+	out := map[model.DeviceID]DeviceSeen{}
 	for rows.Next() {
 		var id model.DeviceID
 		var at int64
-		if err := rows.Scan(&id, &at); err != nil {
+		var st string
+		if err := rows.Scan(&id, &at, &st); err != nil {
 			return nil, err
 		}
-		out[id] = fromMS(at)
+		out[id] = DeviceSeen{At: fromMS(at), State: model.HealthState(st)}
 	}
 	return out, rows.Err()
 }

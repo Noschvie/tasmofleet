@@ -41,8 +41,9 @@ type fakeStore struct {
 	devs   map[model.DeviceID]model.Device
 	events []store.HealthEvent
 	seen   map[model.DeviceID]model.HealthState
-	ver    int64 // DataVersion: bumped by foreignCommit
-	lists  int   // ListDevices calls
+	seenAt map[model.DeviceID]time.Time // the last_seen_at passed with the last SetLastSeen
+	ver    int64                        // DataVersion: bumped by foreignCommit
+	lists  int                          // ListDevices calls
 }
 
 // foreignCommit adds a device the way another process would: no hub event.
@@ -60,7 +61,7 @@ func (s *fakeStore) DataVersion(context.Context) (int64, error) {
 }
 
 func newStore(devs ...model.Device) *fakeStore {
-	s := &fakeStore{devs: map[model.DeviceID]model.Device{}, seen: map[model.DeviceID]model.HealthState{}}
+	s := &fakeStore{devs: map[model.DeviceID]model.Device{}, seen: map[model.DeviceID]model.HealthState{}, seenAt: map[model.DeviceID]time.Time{}}
 	for _, d := range devs {
 		s.devs[d.ID] = d
 	}
@@ -105,9 +106,10 @@ func (s *fakeStore) UpdateIdentity(context.Context, model.DeviceID, model.Identi
 	return nil
 }
 func (s *fakeStore) DeleteDevice(context.Context, model.DeviceID) error { return nil }
-func (s *fakeStore) SetLastSeen(_ context.Context, id model.DeviceID, st model.HealthState, _ time.Time) error {
+func (s *fakeStore) SetLastSeen(_ context.Context, id model.DeviceID, st model.HealthState, at time.Time) error {
 	s.mu.Lock()
 	s.seen[id] = st
+	s.seenAt[id] = at
 	s.mu.Unlock()
 	return nil
 }
@@ -1226,3 +1228,27 @@ func (s *fakeStore) SetMQTTPassword(context.Context, model.DeviceID, model.MQTTP
 }
 func (s *fakeStore) MarkMQTTPasswordBad(context.Context, model.DeviceID, time.Time) error { return nil }
 func (s *fakeStore) SetFWReach(context.Context, model.DeviceID, model.FWReach) error      { return nil }
+
+// Why (#409): devices.last_seen_at is what "never answered" is decided from. A device that went
+// offline without ever having answered must not get the time of the verdict as "last seen": it
+// would look like a device that was heard, and a device heard before the restart would lose its
+// real time. The tracker passes the time it heard the device, zero when it did not, and the store
+// keeps the stored value for zero.
+func TestOfflineWithoutEverHearingTheDeviceDoesNotInventALastSeen(t *testing.T) {
+	h := newHarness(t, false, Options{OfflineAfter: 2}, httpDev(1))
+	failAll(h, errDown)
+	for i := 0; i < 4; i++ {
+		h.advance(6 * time.Minute)
+		h.step()
+	}
+	h.want(1, model.HealthOffline)
+	h.st.mu.Lock()
+	at, written := h.st.seenAt[1], h.st.seen[1]
+	h.st.mu.Unlock()
+	if written != model.HealthOffline {
+		t.Fatalf("health_state = %q, the verdict must still be stored", written)
+	}
+	if !at.IsZero() {
+		t.Errorf("last_seen_at passed = %v, want zero (nothing was heard since the start)", at)
+	}
+}

@@ -126,6 +126,14 @@ func (r *scheduledRun) Start(total int) {
 	r.publish()
 }
 
+// Gone counts a device that was deleted before its turn: handled for the progress, in no result.
+func (r *scheduledRun) Gone() {
+	r.mu.Lock()
+	r.done++
+	r.mu.Unlock()
+	r.publish()
+}
+
 // Step records one device handled: backed up, failed, or skipped (not tried, not a failure).
 func (r *scheduledRun) Step(out model.BackupOutcome) {
 	r.mu.Lock()

@@ -47,7 +47,7 @@ type DeviceStore interface {
 	MarkMQTTPasswordBad(ctx context.Context, id model.DeviceID, at time.Time) error
 	// SetFWReach records whether the device reaches the firmware server (zero value: unknown).
 	SetFWReach(ctx context.Context, id model.DeviceID, r model.FWReach) error
-	// SetLastSeen persists the coarse health summary (written on state change only).
+	// SetLastSeen persists the coarse health summary (written on state change only). A zero at keeps the stored last_seen_at.
 	SetLastSeen(ctx context.Context, id model.DeviceID, state model.HealthState, at time.Time) error
 }
 
