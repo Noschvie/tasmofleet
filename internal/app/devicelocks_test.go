@@ -47,6 +47,9 @@ func (c *countingSettings) Read(context.Context, model.DeviceID) (map[string]str
 	c.reads++
 	return nil, nil
 }
+func (c *countingSettings) Last(model.DeviceID) (settings.Snapshot, bool) {
+	return settings.Snapshot{}, false
+}
 func (c *countingSettings) Apply(context.Context, string, model.DeviceID, map[string]string) ([]settings.Result, error) {
 	c.writes++
 	return nil, nil

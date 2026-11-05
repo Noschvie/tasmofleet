@@ -1617,6 +1617,21 @@ device's item keeps its name when the device is deleted. Model: `model.BackupRun
   MQTT host/port/user/password, NtpServer1..3, Timezone/TimeDst/TimeStd). Every field has a validator. Values are never
   concatenated into `Backlog` strings: each field becomes its own command, and `;` in a
   value is rejected (TasmoAdmin lesson B3). Secret fields (passwords) are write-only.
+- **Last known values** (#599): the Settings tab and the Policy GPIO templates tab draw what was read before at
+  once, with its age ("Read 3m ago"), and read the device in the background when they open; the page never
+  waits for the device. The values live in memory only (no table, no migration): after a restart the first open
+  shows the loading state and reads. Settings: `settings.Manager` remembers the last complete `Read` per device
+  (`Last`) and runs one `Read` per device at a time; a second open while one runs waits for it and sends nothing
+  (the client already serialises requests per device, so this keeps a second round of about thirty queries from
+  queueing behind the first). The read runs detached from the first caller's request, so closing the page does
+  not fail the readers that joined. A write (`Apply`) forgets the values of that device. The tab is drawn from
+  `Last`, a busy line (`aria-busy`, the #538 pattern) fetches `GET /devices/{id}/settings/form`, and a failed
+  refresh keeps the old values with the reason ("Refresh failed."). GPIO templates: the service's existing
+  reading cache is kept past the hour as a `stale` reading (shown, never applied, like a backup) unless a backup
+  is newer; the tab's busy line asks `POST /policy/templates/read` (an htmx request answers the page body
+  only; reads stay POST with the CSRF token) and says how many devices could not be read. Readings older than one
+  hour (`StaleAfter`, a constant, not a setting) carry the visible marker "Stale". A refresh that arrives after
+  the person has started editing the page is not swapped in (`data-guard-swap`); the line says so.
 - SetOption numbers are always displayed with their internal name and a one-line
   description (e.g. "SetOption0 (`save_state`): restore relay state after power loss").
 

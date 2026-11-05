@@ -15,6 +15,8 @@ import (
 // SettingsService is the part of settings.Service the UI uses.
 type SettingsService interface {
 	Read(ctx context.Context, id model.DeviceID) (map[string]string, error)
+	// Last is what the newest successful Read returned, without contacting the device (#599).
+	Last(id model.DeviceID) (settings.Snapshot, bool)
 	Apply(ctx context.Context, actor string, id model.DeviceID, changes map[string]string) ([]settings.Result, error)
 	Save(ctx context.Context, actor string, id model.DeviceID, saveData string) (settings.Result, error)
 }
@@ -51,6 +53,20 @@ type settingsPage struct {
 	// PolicyWant is the value a policy rule expects, by field key, for the settings this device
 	// deviates in: the field says so instead of its help.
 	PolicyWant map[string]string
+	// Age is set when the values come from memory (#599): when they were read, whether a refresh is
+	// under way, or why the last refresh failed.
+	Age *settingsAge
+}
+
+// settingsAge is the line above the form that says how old the shown values are.
+type settingsAge struct {
+	readAge
+	// Refreshing: the page was drawn from memory and fetches the fresh values by itself.
+	Refreshing bool
+	// Failed: why the refresh did not work ("The device is unreachable."); the values are the old ones.
+	Failed string
+	// RefreshHref is where the fresh form comes from.
+	RefreshHref string
 }
 
 // settingsCard says which fields a card of the form holds, in this order, and in which of the
@@ -160,17 +176,29 @@ func readErrorText(err error) string {
 	return "The device could not be read."
 }
 
-// settingsTabPage is GET /devices/{id}/settings: the tab with its header at once and a loading
-// state; the device is read by settingsForm, which the page fetches into it (#308).
+// settingsTabPage is GET /devices/{id}/settings: the tab with its header at once. With values
+// remembered from an earlier read it shows them with their age and fetches fresh ones in the
+// background (#599); without, a loading state. The device is read by settingsForm, which the page
+// fetches into it (#308).
 func (h *handler) settingsTabPage(w http.ResponseWriter, r *http.Request) {
 	d, ok := h.device(w, r)
 	if !ok {
 		return
 	}
-	h.renderSettings(w, r, http.StatusOK, settingsPage{Device: d, Loading: true})
+	snap, known := h.d.Settings.Last(d.ID)
+	if !known {
+		h.renderSettings(w, r, http.StatusOK, settingsPage{Device: d, Loading: true})
+		return
+	}
+	v := h.view(r, "", "", nil)
+	p := settingsPage{Device: d, Groups: buildGroups(snap.Values, snap.Values, nil)}
+	p.Age = &settingsAge{readAge: newReadAge(h.d.Clock.Now(), snap.At), Refreshing: true, RefreshHref: v.Base + devPath(d.ID, "/settings/form")}
+	h.renderSettings(w, r, http.StatusOK, p)
 }
 
 // settingsForm is GET /devices/{id}/settings/form: the body of the tab, read from the device.
+// When the read fails and an earlier one is remembered, that one stays on the page with its age and
+// the reason (#599): the person keeps what they were looking at.
 func (h *handler) settingsForm(w http.ResponseWriter, r *http.Request) {
 	d, ok := h.device(w, r)
 	if !ok {
@@ -179,14 +207,25 @@ func (h *handler) settingsForm(w http.ResponseWriter, r *http.Request) {
 	cur, err := h.d.Settings.Read(r.Context(), d.ID)
 	p := settingsPage{Device: d}
 	status := http.StatusOK
-	if err != nil {
+	now := h.d.Clock.Now()
+	switch snap, known := h.d.Settings.Last(d.ID); {
+	case err == nil:
+		p.Groups = buildGroups(cur, cur, nil)
+		p.PolicyWant = h.policyWants(r, d.ID)
+		at := now
+		if known {
+			at = snap.At
+		}
+		p.Age = &settingsAge{readAge: newReadAge(now, at)}
+	case known:
+		p.Groups = buildGroups(snap.Values, snap.Values, nil)
+		p.PolicyWant = h.policyWants(r, d.ID)
+		p.Age = &settingsAge{readAge: newReadAge(now, snap.At), Failed: readErrorText(err)}
+	default:
 		// Show nothing editable: a form built from a partial read would make
 		// every missing field look like a change.
 		p.ReadError = readErrorText(err)
 		status = http.StatusBadGateway
-	} else {
-		p.Groups = buildGroups(cur, cur, nil)
-		p.PolicyWant = h.policyWants(r, d.ID)
 	}
 	v := h.view(r, "", "", nil)
 	h.component(w, r, status, settingsBody(p, v.Base, v.CSRF))

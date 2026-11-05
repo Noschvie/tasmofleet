@@ -9,6 +9,7 @@ import (
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/policy"
+	"github.com/nofuturekid/tasmofleet/internal/settings"
 	"github.com/nofuturekid/tasmofleet/internal/templates"
 )
 
@@ -241,5 +242,91 @@ func TestGPIOTemplatesGroupWithoutReferenceAsksForOne(t *testing.T) {
 	}
 	if strings.Contains(body, "Apply reference to") {
 		t.Error("Apply offered without a reference")
+	}
+}
+
+// agedFixture is gtFixture with the readings taken `age` ago, the third plug read `balconyAge` ago and
+// marked as the service marks it (stale when past the hour).
+func agedFixture(age time.Duration, source templates.Source) *fakeTemplates {
+	f := gtFixture()
+	for gi := range f.ov.Groups {
+		for di := range f.ov.Groups[gi].Devices {
+			d := &f.ov.Groups[gi].Devices[di]
+			d.ReadAt, d.Source = time.Now().Add(-age), source
+			d.Reading.Live = source == templates.SourceLive
+		}
+	}
+	f.ov.ReadAt = time.Now().Add(-age)
+	return f
+}
+
+// Why (#599): the tab is drawn from what was read before and never waits for a device; it asks the
+// page to read the devices by itself (a POST with the CSRF header, busy meanwhile), carrying the
+// chosen reference, and shows each row's age.
+func TestGPIOTemplatesTabShowsCachedReadingsWithAgeAndRefreshesByItself(t *testing.T) {
+	f := agedFixture(3*time.Minute+20*time.Second, templates.SourceLive)
+	e := gtEnv(t, f)
+	_, body := e.do(t, "GET", "/policy/templates?ref=11", "admin", nil)
+	for _, want := range []string{`hx-post="/tf/policy/templates/read?ref=11"`, `hx-trigger="load"`, `aria-busy="true"`, `hx-target="#gt-page"`, "3m ago", "Reading the devices now"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("tab lacks %q", want)
+		}
+	}
+	if f.refreshed {
+		t.Error("the GET read the devices: the page must come from what is cached")
+	}
+	if strings.Contains(body, ">Stale<") {
+		t.Error("3 minute old readings carry the stale marker")
+	}
+}
+
+// Why (#599): the page's own refresh swaps into the page, so it must be the page body only, with no
+// second refresh in it (it would loop), and a device that could not be read must be named as such
+// while its old reading stays.
+func TestGPIOTemplatesRefreshAnswersThePageBodyAndReportsFailures(t *testing.T) {
+	f := agedFixture(10*time.Minute, templates.SourceLive)
+	f.ov.ReadFailed = 1
+	f.ov.Groups[0].Devices[2].ReadFailed = true
+	e := gtEnv(t, f)
+	resp, body := e.do(t, "POST", "/policy/templates/read", "operator", url.Values{"csrf": {"tok"}}, "HX-Request", "true")
+	if resp.StatusCode != 200 || !f.refreshed {
+		t.Fatalf("status %d, refreshed %v", resp.StatusCode, f.refreshed)
+	}
+	if strings.Contains(body, "<html") || !strings.Contains(body, `id="gt-page"`) || strings.Contains(body, `hx-trigger="load"`) {
+		t.Errorf("not just the page body without a new refresh:\n%s", shortDump(body))
+	}
+	for _, want := range []string{"Refresh failed for 1 device.", "refresh failed", "balcony-plug", "10m ago"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("refreshed page lacks %q", want)
+		}
+	}
+}
+
+// Why (#599): an old reading must not look current. It carries the word Stale (not only a colour), the
+// age, and says why it is not offered for applying.
+func TestGPIOTemplatesMarksStaleReadings(t *testing.T) {
+	f := agedFixture(3*time.Hour, templates.SourceStale)
+	for gi := range f.ov.Groups {
+		for di := range f.ov.Groups[gi].Devices {
+			d := &f.ov.Groups[gi].Devices[di]
+			d.Plan = &policy.ApplyPlan{Device: d.ID, Refusal: policy.RefuseNotLive, Reason: "the template was read from a backup; only live readings are applied"}
+		}
+	}
+	_, body := gtEnv(t, f).do(t, "GET", "/policy/templates", "admin", nil)
+	for _, want := range []string{">Stale<", "last read live", "3h ago", "shown as stale, never applied"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("stale page lacks %q", want)
+		}
+	}
+	if strings.Contains(body, "read from a backup") {
+		t.Error("an old live reading is described as coming from a backup")
+	}
+}
+
+// Why (#599): the settings cache, the templates service and the web pages each use the one-hour
+// threshold; they must not drift apart, or one page would call a value current that another calls stale.
+func TestStaleThresholdIsTheSameEverywhere(t *testing.T) {
+	if settings.StaleAfter != time.Hour || templates.StaleAfter != time.Hour || staleAfter != time.Hour {
+		t.Errorf("thresholds: settings %v, templates %v, web %v; want 1h each", settings.StaleAfter, templates.StaleAfter, staleAfter)
 	}
 }

@@ -68,6 +68,9 @@ type gtDevice struct {
 	Tone       ui.Tone
 	Meta       string // "live", "live · tasmota-minimal", "from backup"
 	At         time.Time
+	// Age is how long ago a live or stale reading was taken (#599); nil for a backup, which shows At.
+	Age        *readAge
+	ReadFailed bool // the newest attempt to read the device failed: Age is older than it should be
 	Diff       []gtDiffLine
 	WantWord   string // "reference" or "variant A"
 	Why        string
@@ -121,6 +124,11 @@ type gtView struct {
 	Failed      string
 	Throttled   bool
 	GroupsCount int
+	// RefreshHref is where the page asks for fresh readings by itself when it opens (#599): the cached
+	// readings are drawn first, with their age. "" on a page that was just refreshed.
+	RefreshHref string
+	// ReadFailed counts the devices that could not be read in the newest attempt; their last values stay.
+	ReadFailed int
 }
 
 // gtCardRef places one card in a stack: the group index, or one of the three folds.
@@ -154,6 +162,9 @@ func (h *handler) gtRefs(r *http.Request, base templates.Overview) (templates.Re
 	return refs, ids
 }
 
+// gtRender draws the tab. A plain GET only uses what is cached and asks the page to refresh itself
+// (#599); the POST that does so (the "Read again" button, or the page's own htmx request when it opens)
+// reads the devices. The page's own request gets the page body only, to swap into the page.
 func (h *handler) gtRender(w http.ResponseWriter, r *http.Request, refresh bool) {
 	ctx := r.Context()
 	v := h.view(r, "Policy", "policy", nil)
@@ -185,12 +196,23 @@ func (h *handler) gtRender(w http.ResponseWriter, r *http.Request, refresh bool)
 	}
 	p := h.gtBuild(ov, base, chosen, v.IsAdmin, r.URL.Query())
 	p.Base, p.CSRF, p.Admin = v.Base, v.CSRF, v.IsAdmin
+	p.ReadFailed = ov.ReadFailed
+	if !refresh && !p.Empty {
+		p.RefreshHref = v.Base + policyTemplatesPath + "/read"
+		if q := r.URL.RawQuery; q != "" {
+			p.RefreshHref += "?" + q
+		}
+	}
 	p.Head = h.policyHead(v, valid, invalid, rep, repErr)
 	p.Head.HasVersions = len(st.History) > 0
 	p.Head.Show = len(st.Specs) > 0 || p.Head.HasVersions
 	p.Head.Back = "templates"
 	p.Head.Tabs = h.policyTabs(v.Base, "templates", len(st.Specs), p.Head.Fleet.Deviating, p.Differ)
 	p.CanBackup = v.IsAdmin && h.d.BackupBatch != nil
+	if r.Header.Get("HX-Request") == "true" { // the page's own refresh: just the page, no flash
+		h.component(w, r, http.StatusOK, policyTemplatesPage(p))
+		return
+	}
 	if refresh {
 		switch {
 		case ov.Throttled:
@@ -406,12 +428,22 @@ func (h *handler) gtGroupOf(g templates.GroupView, baseNeedsRef, admin bool, ran
 		gg.Note = gtNoteOf(g, baseNeedsRef, q, h)
 	}
 
+	now := h.d.Clock.Now()
 	variantShown := map[int]bool{} // the diff of a variant is listed once, under its first device
 	canApply := admin && g.Reference != nil
 	for _, d := range g.Devices {
-		row := gtDevice{ID: d.ID, Name: d.Name, Href: h.devHrefOf(d.ID), Meta: "live", WantWord: "reference", At: time.Time{}}
-		if d.Source == templates.SourceBackup {
+		row := gtDevice{ID: d.ID, Name: d.Name, Href: h.devHrefOf(d.ID), Meta: "live", WantWord: "reference", At: time.Time{}, ReadFailed: d.ReadFailed}
+		switch d.Source {
+		case templates.SourceBackup:
 			row.Meta, row.At = "from backup", d.ReadAt
+		case templates.SourceLive:
+			a := newReadAge(now, d.ReadAt)
+			row.Age = &a
+		case templates.SourceStale:
+			a := newReadAge(now, d.ReadAt)
+			a.Stale = true // the service decided: it is past the hour
+			row.Meta, row.Age = "last read live", &a
+		case templates.SourceNone: // never read, no backup: nothing to date
 		}
 		if d.Reading.Variant == "minimal" {
 			row.Meta += " · tasmota-minimal"
@@ -459,6 +491,10 @@ func (h *handler) gtGroupOf(g templates.GroupView, baseNeedsRef, admin bool, ran
 		default:
 			row.Chip, row.Tone = "Not judged", ui.ToneNeutral
 			row.Why = d.NotJudgedReason
+		}
+		if d.Source == templates.SourceStale && row.Why != "" && d.NotJudgedReason == "" {
+			// the planner words a non-live reading as "read from a backup"; this one is an old live reading
+			row.Why = "Last read live more than an hour ago: shown as stale, never applied. It is read again when this page opens."
 		}
 		gg.Rows = append(gg.Rows, row)
 	}

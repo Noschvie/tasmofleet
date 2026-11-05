@@ -40,6 +40,7 @@ type fakeFleet struct {
 	powerOn    string
 	writeReply string                                                // the answer to a Template write; "" fails the write
 	status     func(model.DeviceID) (boot int, uptime time.Duration) // nil: Status 1 and 11 fail
+	gate       chan struct{}                                         // when set, every command waits until it is closed (a slow device)
 }
 
 func newFleet() *fakeFleet {
@@ -66,6 +67,9 @@ func (f *fakeFleet) GetDevice(_ context.Context, id model.DeviceID) (model.Devic
 
 // Command answers by device id found through the target's address.
 func (f *fakeFleet) Command(_ context.Context, t tasmota.Target, cmnd string) (json.RawMessage, error) {
+	if f.gate != nil {
+		<-f.gate
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	id := t.DeviceID()

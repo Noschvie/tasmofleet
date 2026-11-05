@@ -59,6 +59,42 @@ templ settingsLoading(p settingsPage, base string) {
 // settingsBody is what the tab shows once the device was read: the form, the reason the read failed
 // or the result of a save.
 templ settingsBody(p settingsPage, base, csrf string) {
+	<div id="settings-view" data-guard-swap>
+		@settingsBodyInner(p, base, csrf)
+	</div>
+}
+
+// settingsAgeLine says how old the shown values are (#599): fresh, being refreshed (busy, and the
+// fresh form is fetched into #settings-view by itself), or still the old ones because the refresh
+// failed. An old reading carries the visible Stale marker, not only a colour.
+templ settingsAgeLine(p settingsPage, a settingsAge, base string) {
+	if a.Refreshing {
+		<p class="agebar" role="status" aria-busy="true" hx-get={ a.RefreshHref } hx-trigger="load" hx-target="#settings-view" hx-swap="outerHTML" data-guard-text="Newer values were read from the device. They are not shown because you have unsaved changes; reload the page to see them.">
+			if a.Stale {
+				@ui.Badge(ui.ToneWarn, "Stale")
+			}
+			<span>Read <time title={ stamp(a.At) } { ui.StampAttrs(a.At, ui.StampTitle)... }>{ a.Words }</time>. Refreshing from the device&#8230;</span>
+			if a.Stale {
+				<span class="agebar-warn">These values may be out of date.</span>
+			}
+		</p>
+	} else if a.Failed != "" {
+		<p class="agebar is-failed" role="alert">
+			if a.Stale {
+				@ui.Badge(ui.ToneWarn, "Stale")
+			}
+			<span><b>Refresh failed.</b> { a.Failed } These are the values read <time title={ stamp(a.At) } { ui.StampAttrs(a.At, ui.StampTitle)... }>{ a.Words }</time>.</span>
+			if a.Stale {
+				<span class="agebar-warn">They may be out of date.</span>
+			}
+			<a href={ templ.SafeURL(base + devPath(p.Device.ID, "/settings")) }>Try again</a>
+		</p>
+	} else {
+		<p class="agebar" role="status"><span>Read <time title={ stamp(a.At) } { ui.StampAttrs(a.At, ui.StampTitle)... }>{ a.Words }</time>.</span></p>
+	}
+}
+
+templ settingsBodyInner(p settingsPage, base, csrf string) {
 	if p.ReadError != "" {
 		<section class="devform devform-msg" aria-labelledby="rd-h" role="alert">
 			<h2 id="rd-h">The settings could not be read.</h2>
@@ -97,6 +133,9 @@ templ settingsBody(p settingsPage, base, csrf string) {
 			</div>
 		</section>
 	} else if len(p.Groups) > 0 {
+		if p.Age != nil {
+			@settingsAgeLine(p, *p.Age, base)
+		}
 		<form class="devform devform-cards" method="post" action={ templ.SafeURL(base + devPath(p.Device.ID, "/settings")) } data-track-changes>
 			<input type="hidden" name="csrf" value={ csrf }/>
 			@ui.CardStacks(3) {

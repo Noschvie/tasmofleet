@@ -5,7 +5,7 @@ import "github.com/nofuturekid/tasmofleet/internal/web/ui"
 // policyTemplatesPage is GET /policy/templates: the summary bar, the groups as cards in two column
 // stacks, and the folds (Not judged, Built-in modules, Used by one device). Mockup: gpio-templates-mockup/1 and 1b.
 templ policyTemplatesPage(p gtView) {
-	<div class="pol-page">
+	<div class="pol-page" id="gt-page" data-guard-swap>
 		@policyShell(p.Head) {
 			<div class="pol-dev-bar gt-bar">
 				<p class="gt-sum" role="status">{ p.Summary }</p>
@@ -17,6 +17,7 @@ templ policyTemplatesPage(p gtView) {
 					<button type="submit" class="btn btn-sm">Read again</button>
 				</form>
 			</div>
+			@gtAgeLine(p)
 			<p class="gt-intro">Devices are grouped by template name and chip family. Each group is compared against its most common template, or the one you choose; the choice is not stored.</p>
 			if p.Empty {
 				@ui.Empty("No devices yet.", "Add devices to compare their GPIO templates.")
@@ -41,6 +42,17 @@ templ policyTemplatesPage(p gtView) {
 			}
 		}
 	</div>
+}
+
+// gtAgeLine is the line under the bar (#599): while the page draws cached readings it asks for fresh
+// ones by itself (busy until they are there); afterwards it says which devices could not be read, so
+// the ages on their rows are not taken for current.
+templ gtAgeLine(p gtView) {
+	if p.RefreshHref != "" {
+		<p class="agebar" role="status" aria-busy="true" hx-post={ p.RefreshHref } hx-trigger="load" hx-target="#gt-page" hx-swap="outerHTML" data-guard-text="Newer readings were taken. They are not shown because you changed the selection; reload the page to see them.">Showing the last readings, each with its age. Reading the devices now&#8230;</p>
+	} else if p.ReadFailed > 0 {
+		<p class="agebar is-failed" role="alert"><b>{ "Refresh failed for " + plural(p.ReadFailed, "device") + "." }</b> Their last readings are shown with their age.</p>
+	}
 }
 
 templ gtGroupCard(p gtView, g gtGroup, rank string) {
@@ -101,10 +113,18 @@ templ gtRow(p gtView, g gtGroup, d gtDevice) {
 				}
 				<span class="gt-meta">
 					{ d.Meta }
-					if !d.At.IsZero() {
+					if d.Age != nil {
+						{ " · " }<time title={ stamp(d.Age.At) } { ui.StampAttrs(d.Age.At, ui.StampTitle)... }>{ d.Age.Words }</time>
+					} else if !d.At.IsZero() {
 						{ " " }<time { ui.StampAttrs(d.At, ui.StampShort)... }>{ ui.StampText(d.At, ui.StampShort) }</time>
 					}
+					if d.ReadFailed {
+						{ " · refresh failed" }
+					}
 				</span>
+				if d.Age != nil && d.Age.Stale {
+					@ui.Badge(ui.ToneWarn, "Stale")
+				}
 				if d.UseRef != "" {
 					<a class="gt-act" href={ templ.SafeURL(p.Base + d.UseRef) }>Use as reference</a>
 				}

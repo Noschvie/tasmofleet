@@ -57,21 +57,46 @@ func readLive(ctx context.Context, c Commander, d model.Device, now time.Time) (
 	return r, nil
 }
 
-// cache holds the newest live reading per device. Readings older than maxAge count as not live.
+// cache holds the newest live reading per device. Readings older than maxAge count as not live (get); last
+// still returns them.
 type cache struct {
 	mu     sync.Mutex
 	m      map[model.DeviceID]reading
+	failed map[model.DeviceID]bool // the newest live read of the device failed (#599)
 	maxAge time.Duration
 }
 
 func newCache(maxAge time.Duration) *cache {
-	return &cache{m: map[model.DeviceID]reading{}, maxAge: maxAge}
+	return &cache{m: map[model.DeviceID]reading{}, failed: map[model.DeviceID]bool{}, maxAge: maxAge}
 }
 
 func (c *cache) put(id model.DeviceID, r reading) {
 	c.mu.Lock()
 	c.m[id] = r
+	delete(c.failed, id)
 	c.mu.Unlock()
+}
+
+// fail notes that reading the device failed; the reading it had stays, with its old time.
+func (c *cache) fail(id model.DeviceID) {
+	c.mu.Lock()
+	c.failed[id] = true
+	c.mu.Unlock()
+}
+
+func (c *cache) didFail(id model.DeviceID) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.failed[id]
+}
+
+// last is the newest reading of the device whatever its age: the page shows it with the stale marker
+// instead of dropping it (#599).
+func (c *cache) last(id model.DeviceID) (reading, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	r, ok := c.m[id]
+	return r, ok
 }
 
 func (c *cache) get(id model.DeviceID, now time.Time) (reading, bool) {

@@ -62,6 +62,34 @@ test("templates tab: a tied group asks for a reference, choosing one compares ag
   await expect(chosen.getByRole("link", { name: "Back to most common" })).toBeVisible();
 });
 
+// Why (#599): the tab must not look empty or stale while the devices answer. The readings taken before
+// are drawn at once, each with its age; the page reads the devices by itself (busy line meanwhile) and
+// swaps the result in.
+test("templates tab: cached readings and their age are there at once, the refresh follows", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  await readAll(page); // fills the cache
+  let release!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  let reads = 0;
+  await page.route("**/policy/templates/read", async (route) => {
+    reads++;
+    await gate; // slow devices
+    await route.continue();
+  });
+  await page.goto(app.url + "/policy/templates");
+  const row = page.locator(".gt-row", { hasText: "tpl-nous-dev" });
+  await expect(row).toBeVisible(); // while the refresh is still held
+  await expect(row.locator(".gt-meta")).toContainText(/(just now|\d+s ago|\d+m ago)/);
+  const busy = page.locator("p.agebar");
+  await expect(busy).toHaveAttribute("aria-busy", "true");
+  await expect(busy).toContainText("Reading the devices now");
+  release();
+  await expect(page.locator("p.agebar[aria-busy=true]")).toHaveCount(0); // tpl-offline cannot be read: the line then says so
+  await expect(page.locator("p.agebar")).toContainText("Refresh failed for 1 device");
+  await expect(row).toBeVisible();
+  expect(reads).toBe(1);
+});
+
 // Why: devices restart and relays may switch: the preview must show the command and demand the tick,
 // then the transaction applies the reference to one device and the tab ends up showing Matches.
 test("templates apply: preview needs the tick, the transaction applies, the tab shows Matches", { tag: "@core" }, async ({ page }) => {

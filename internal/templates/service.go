@@ -55,9 +55,11 @@ type Options struct {
 }
 
 const (
-	// liveMaxAge is how long a live reading counts as live (E5 applies it to display and reference choice
-	// only; Preview and the job read again).
-	liveMaxAge   = time.Hour
+	// StaleAfter is how long a live reading counts as live (E5 applies it to display and reference choice
+	// only; Preview and the job read again). An older one is still shown, marked stale (#599). A constant on
+	// purpose, not a setting; the web package ties its own copy to it with a test.
+	StaleAfter   = time.Hour
+	liveMaxAge   = StaleAfter
 	liveGap      = time.Minute // refresh requests closer together than this are answered from the cache
 	liveParallel = 4
 	liveTimeout  = 30 * time.Second
@@ -96,6 +98,7 @@ func New(o Options) *Manager {
 // view builds the DeviceView of d from a reading and where it came from.
 func (m *Manager) view(d model.Device, r *reading, src Source) DeviceView {
 	v := DeviceView{ID: d.ID, Name: d.Name, Family: d.Identity.Family, Hardware: d.Identity.Hardware, Source: src}
+	v.ReadFailed = m.cache.didFail(d.ID)
 	v.Reading = policy.TemplateDevice{ID: d.ID, Family: d.Identity.Family, Variant: d.Identity.Variant, Hardware: d.Identity.Hardware,
 		Wired: d.Net.Wired, Live: src == SourceLive}
 	if r != nil {
@@ -176,8 +179,15 @@ func (m *Manager) bestReading(ctx context.Context, d model.Device) DeviceView {
 	if r, ok := m.cache.get(d.ID, now); ok {
 		return m.view(d, &r, SourceLive)
 	}
-	if r := m.snapshotReading(ctx, d.ID); r != nil {
-		return m.view(d, r, SourceBackup)
+	// Past the hour a live reading is not dropped: it is stale, and shown as such unless a backup
+	// is newer than it (#599).
+	old, haveOld := m.cache.last(d.ID)
+	snap := m.snapshotReading(ctx, d.ID)
+	switch {
+	case haveOld && (snap == nil || !snap.At.After(old.At)):
+		return m.view(d, &old, SourceStale)
+	case snap != nil:
+		return m.view(d, snap, SourceBackup)
 	}
 	return m.view(d, nil, SourceNone)
 }
@@ -224,6 +234,7 @@ func (m *Manager) readInto(ctx context.Context, d model.Device) (reading, error)
 	r, err := readLive(rctx, m.o.Client, d, m.o.Now())
 	if err != nil {
 		m.o.Log.Debug("template read failed", "device", int64(d.ID), "err", err)
+		m.cache.fail(d.ID)
 		return reading{}, err
 	}
 	m.cache.put(d.ID, r)
@@ -248,6 +259,9 @@ func (m *Manager) Overview(ctx context.Context, refs Refs, refresh bool) (Overvi
 		tds = append(tds, v.Reading)
 		if v.Source == SourceLive && v.ReadAt.After(out.ReadAt) {
 			out.ReadAt = v.ReadAt
+		}
+		if v.ReadFailed {
+			out.ReadFailed++
 		}
 	}
 	groups, notJudged := policy.GroupTemplates(tds)

@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/audit"
@@ -82,12 +83,18 @@ type DeviceGetter interface {
 type Options struct {
 	Devices     DeviceGetter
 	Client      tasmota.Client
-	Audit       audit.Recorder // optional
-	ReadTimeout time.Duration  // whole Read, default 60 s
+	Audit       audit.Recorder   // optional
+	ReadTimeout time.Duration    // whole Read, default 60 s
+	Now         func() time.Time // default time.Now; stamps what Read remembers
 }
 
 // Manager implements Service.
-type Manager struct{ o Options }
+type Manager struct {
+	o       Options
+	mu      sync.Mutex // guards last and flights
+	last    map[model.DeviceID]Snapshot
+	flights map[model.DeviceID]*flight
+}
 
 var _ Service = (*Manager)(nil)
 
@@ -96,7 +103,10 @@ func New(o Options) *Manager {
 	if o.ReadTimeout == 0 {
 		o.ReadTimeout = 60 * time.Second
 	}
-	return &Manager{o: o}
+	if o.Now == nil {
+		o.Now = time.Now
+	}
+	return &Manager{o: o, last: map[model.DeviceID]Snapshot{}, flights: map[model.DeviceID]*flight{}}
 }
 
 // Read implements Service.
@@ -107,7 +117,7 @@ func (m *Manager) Read(ctx context.Context, id model.DeviceID) (map[string]strin
 			keys = append(keys, f.Key)
 		}
 	}
-	return m.readKeys(ctx, id, keys)
+	return m.readShared(ctx, id, keys)
 }
 
 // ReadKeys implements Service.
@@ -381,6 +391,7 @@ func (m *Manager) Apply(ctx context.Context, actor string, id model.DeviceID, ch
 		return nil, err
 	}
 	t := tasmota.TargetFor(d)
+	defer m.forget(id) // whatever was sent, the remembered values no longer describe the device
 	results := make([]Result, 0, len(todo))
 	for i, f := range todo {
 		cmd := f.Command(changes[f.Key])

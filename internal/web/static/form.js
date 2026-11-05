@@ -524,3 +524,38 @@
   document.addEventListener("DOMContentLoaded", watchPlaceholders);
   document.addEventListener("htmx:afterSettle", watchPlaceholders);
 })();
+
+// A refresh that fetches values by itself must not overwrite what the person is typing (#599). A
+// container marked data-guard-swap that was edited refuses the swap; the element that asked for it
+// (data-guard-text) says so and stops being busy.
+(function () {
+  "use strict";
+  function guarded(el) {
+    return el instanceof Element ? el.closest("[data-guard-swap]") : null;
+  }
+  function mark(e) {
+    var box = guarded(e.target);
+    if (box) {
+      box.setAttribute("data-dirty", "");
+    }
+  }
+  document.addEventListener("input", mark);
+  document.addEventListener("change", mark);
+  document.addEventListener("htmx:beforeSwap", function (e) {
+    var t = e.detail && e.detail.target;
+    var cfg = e.detail && e.detail.requestConfig;
+    var asker = cfg && cfg.elt;
+    if (
+      !(t instanceof Element) ||
+      !t.hasAttribute("data-guard-swap") ||
+      !t.hasAttribute("data-dirty") ||
+      !(asker instanceof Element) ||
+      !asker.hasAttribute("data-guard-text")
+    ) {
+      return;
+    }
+    e.detail.shouldSwap = false;
+    asker.removeAttribute("aria-busy");
+    asker.textContent = asker.getAttribute("data-guard-text");
+  });
+})();

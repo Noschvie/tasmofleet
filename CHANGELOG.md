@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Changed
+
+- The Settings tab and Policy → GPIO templates show the last values read at once, with their age ("Read 3m ago"), instead of waiting for the device, and read it in the background when they open; values older than an hour carry a "Stale" marker, a refresh that fails keeps the old values and says why, and opening a page while a read runs sends the device nothing more. The values are kept in memory, so after a restart the first open reads the device again (#599)
+
 ### Fixed
 
 - Sign out after the session has expired signs out: the sign-out button no longer ends on a white "403 missing or invalid CSRF token" page, the cookie is cleared and you land on the sign-in page (#508)

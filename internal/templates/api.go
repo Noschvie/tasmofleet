@@ -22,7 +22,10 @@ type Source string
 const (
 	SourceLive   Source = "live"
 	SourceBackup Source = "backup"
-	SourceNone   Source = "" // nothing read yet and no backup
+	// SourceStale is a live reading older than StaleAfter that is still the newest thing known about the
+	// device (#599). It is shown with its age and the stale marker, and treated like a backup: never applied.
+	SourceStale Source = "stale"
+	SourceNone  Source = "" // nothing read yet and no backup
 )
 
 // DeviceView is one device of the tab.
@@ -39,6 +42,9 @@ type DeviceView struct {
 	// NotJudgedReason says in a sentence why the device is in the "Not judged" fold (no reading and no
 	// backup, unknown chip family, template not read, offline); "" for a judged device.
 	NotJudgedReason string
+	// ReadFailed: the newest attempt to read the device live failed, so ReadAt (and the values) are older than
+	// the person asked for.
+	ReadFailed bool
 	// OfflineSince is set when the device is offline (the "Not judged" fold says since when); zero otherwise.
 	OfflineSince time.Time
 	// PowerOnState is the device's PowerOnState setting as last known (the raw value, "" when unknown);
@@ -74,6 +80,8 @@ type Overview struct {
 	NotJudged []DeviceView
 	// ReadAt is when the newest live reading of the fleet was taken (shown as "Read live <time>"); zero when none.
 	ReadAt time.Time
+	// ReadFailed counts the devices whose newest live read failed; their last values are still shown.
+	ReadFailed int
 	// Throttled: a live refresh was asked for but the rate limit stopped it; cached readings are shown.
 	Throttled bool
 }

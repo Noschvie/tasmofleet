@@ -25,6 +25,17 @@ type fakeSettings struct {
 	// block, when set, holds every Read until it is closed (a slow device); reads counts the calls.
 	block chan struct{}
 	reads atomic.Int32
+	// last is what Last returns: a reading remembered from before (#599). A successful Read replaces it.
+	last *settings.Snapshot
+}
+
+func (f *fakeSettings) Last(model.DeviceID) (settings.Snapshot, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.last == nil {
+		return settings.Snapshot{}, false
+	}
+	return *f.last, true
 }
 
 func (f *fakeSettings) Read(ctx context.Context, _ model.DeviceID) (map[string]string, error) {
@@ -35,6 +46,11 @@ func (f *fakeSettings) Read(ctx context.Context, _ model.DeviceID) (map[string]s
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
+	}
+	if f.readErr == nil {
+		f.mu.Lock()
+		f.last = &settings.Snapshot{Values: f.values, At: time.Now()}
+		f.mu.Unlock()
 	}
 	return f.values, f.readErr
 }
@@ -399,5 +415,71 @@ func TestSettingsSetOption0SitsInPowerCard(t *testing.T) {
 				t.Errorf("SetOption0 is in card %q, want power", g.ID)
 			}
 		}
+	}
+}
+
+// Why (#599): with values remembered from an earlier read, opening the tab shows them at once with
+// their age, even when the device is slow, and the fresh ones are fetched by the page itself. A page
+// that waited for the device again would be the #308 problem back.
+func TestSettingsTabShowsRememberedValuesAtOnceWithTheirAge(t *testing.T) {
+	fs := &fakeSettings{values: map[string]string{"TelePeriod": "999"}, block: make(chan struct{}),
+		last: &settings.Snapshot{Values: map[string]string{"TelePeriod": "300"}, At: time.Now().Add(-3*time.Minute - 20*time.Second)}}
+	defer close(fs.block)
+	e := withSettings(t, fs)
+	resp, body := e.do(t, "GET", "/devices/1/settings", "admin", nil)
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d", resp.StatusCode)
+	}
+	for _, want := range []string{`name="TelePeriod" value="300"`, "3m ago", `hx-get="/tf/devices/1/settings/form"`, `hx-trigger="load"`, `aria-busy="true"`, "Refreshing from the device"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("tab lacks %q\n%s", want, shortDump(body))
+		}
+	}
+	if strings.Contains(body, "Stale") {
+		t.Error("a 3 minute old reading carries the stale marker")
+	}
+	if n := fs.reads.Load(); n != 0 {
+		t.Errorf("the page read the device %d times, want 0: the refresh is the page's own request", n)
+	}
+}
+
+// Why (#599): an old value must not look current. Past the hour the line says so in words (a badge
+// and a sentence, not only a colour).
+func TestSettingsTabMarksOldValuesStale(t *testing.T) {
+	for _, tc := range []struct {
+		age   time.Duration
+		stale bool
+	}{{59 * time.Minute, false}, {61 * time.Minute, true}} {
+		fs := &fakeSettings{last: &settings.Snapshot{Values: map[string]string{"TelePeriod": "300"}, At: time.Now().Add(-tc.age)}}
+		_, body := withSettings(t, fs).do(t, "GET", "/devices/1/settings", "admin", nil)
+		if got := strings.Contains(body, ">Stale<") && strings.Contains(body, "may be out of date"); got != tc.stale {
+			t.Errorf("age %v: stale marker = %v, want %v", tc.age, got, tc.stale)
+		}
+	}
+}
+
+// Why (#599): the device stopped answering after the page was drawn from memory. The person keeps
+// the values they were looking at, with their age, and is told why they are old; a blank error page
+// would take away the one thing the page could still show.
+func TestSettingsRefreshFailureKeepsTheRememberedValues(t *testing.T) {
+	fs := &fakeSettings{readErr: tasmota.ErrUnreachable,
+		last: &settings.Snapshot{Values: map[string]string{"TelePeriod": "300"}, At: time.Now().Add(-5 * time.Minute)}}
+	resp, body := withSettings(t, fs).do(t, "GET", "/devices/1/settings/form", "admin", nil)
+	for _, want := range []string{`name="TelePeriod" value="300"`, "Refresh failed.", "The device is unreachable.", "5m ago"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("part lacks %q\n%s", want, shortDump(body))
+		}
+	}
+	if resp.StatusCode != 200 || strings.Contains(body, "could not be read") {
+		t.Errorf("status %d: the remembered form was replaced by the error page", resp.StatusCode)
+	}
+}
+
+// Why (#599): the fresh form says it was just read, and is not busy any more (no second refresh is
+// fetched into it).
+func TestSettingsRefreshedFormSaysItIsFresh(t *testing.T) {
+	_, body := withSettings(t, &fakeSettings{values: map[string]string{"TelePeriod": "300"}}).do(t, "GET", "/devices/1/settings/form", "admin", nil)
+	if !strings.Contains(body, "just now") || strings.Contains(body, `hx-trigger="load"`) || strings.Contains(body, `aria-busy`) {
+		t.Errorf("fresh form:\n%s", shortDump(body))
 	}
 }
