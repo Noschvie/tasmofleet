@@ -14,9 +14,11 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/transport"
 )
 
-// An HTTP-only device (no MQTT): its HTTP state is unknown (the router forgot the refusal), only the tracker knows.
+// An HTTP-only device (no MQTT) whose HTTP API is off: the router's facts carry the tracker's finding also after
+// its own memory forgot the refusal (app.TransportFacts.httpState).
 func httpOnlyFacts() transport.Facts {
 	return transport.Facts{Now: time.Now(), FirmwareBaseURL: true,
+		HTTP:     transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailAPIRefused, Since: time.Now()},
 		Identity: model.Identity{Family: model.ChipESP8266, Version: "16.0.0", Variant: "tasmota", FreeKB: 700}}
 }
 

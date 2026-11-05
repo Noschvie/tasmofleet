@@ -126,6 +126,19 @@ func TestFactsHTTPState(t *testing.T) {
 		// HTTP is "not checked lately" until the next poll, never "ok" on the router's say-so
 		// (a parsed error answer also clears, and proves reachability, not that HTTP works).
 		{"failure cleared by a router answer, stale poll", model.Health{SeenHTTP: factsNow.Add(-2 * time.Hour)}, fakeMemory{}, transport.HTTPState{}},
+		// Why (#447): the tracker keeps a refused HTTP API until HTTP answers again, the memory only ten minutes.
+		// The router decides on these facts too: with the memory cold it would try HTTP first, and a backup's
+		// /dl that Tasmota leaves unanswered is not "provably unsent", so a device MQTT can serve would fail.
+		{"API off, the memory forgot", model.Health{State: model.HealthOnline, HTTPRefusedAt: factsNow.Add(-20 * time.Minute)}, nil,
+			transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailAPIRefused, Since: factsNow.Add(-20 * time.Minute)}},
+		{"API off after a fresh answer", model.Health{State: model.HealthOnline, SeenHTTP: factsNow.Add(-12 * time.Minute), HTTPRefusedAt: factsNow.Add(-11 * time.Minute)}, fakeMemory{},
+			transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailAPIRefused, Since: factsNow.Add(-11 * time.Minute)}},
+		{"an answer after the refusal", model.Health{State: model.HealthOnline, SeenHTTP: factsNow.Add(-time.Minute), HTTPRefusedAt: factsNow.Add(-20 * time.Minute)}, nil,
+			transport.HTTPState{State: transport.HTTPOK}},
+		{"refused, then the device went offline", model.Health{State: model.HealthOffline, Since: factsNow.Add(-5 * time.Minute), HTTPRefusedAt: factsNow.Add(-20 * time.Minute)}, nil,
+			transport.HTTPState{}},
+		{"a failure the memory holds comes first", model.Health{State: model.HealthOnline, HTTPRefusedAt: factsNow.Add(-20 * time.Minute)}, fakeMemory{transport.HTTPFailUnreachable, since, true},
+			transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailUnreachable, Since: since}},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

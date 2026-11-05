@@ -138,13 +138,18 @@ func (s *TransportFacts) ForUpdate(ctx context.Context, id model.DeviceID, r Upd
 	return f, nil
 }
 
-// httpState: a remembered failure wins unless a successful HTTP call came after it began; else a
-// success within 15 minutes is ok; else unknown (which Choose treats as "try").
+// httpState: a remembered failure wins unless a successful HTTP call came after it began; else the
+// health tracker's finding that the HTTP API is off (Health.APIOff, #447), which outlives the
+// memory's ten minutes, so the router, the page and the gates decide alike; else a success within
+// 15 minutes is ok; else unknown (which Choose treats as "try").
 func (s *TransportFacts) httpState(id model.DeviceID, h model.Health, now time.Time) transport.HTTPState {
 	if s.Memory != nil {
 		if kind, since, ok := s.Memory.HTTPFailure(id); ok && !h.SeenHTTP.After(since) {
 			return transport.HTTPState{State: transport.HTTPFailing, Kind: kind, Since: since}
 		}
+	}
+	if h.APIOff() {
+		return transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailAPIRefused, Since: h.HTTPRefusedAt}
 	}
 	if !h.SeenHTTP.IsZero() && now.Sub(h.SeenHTTP) < httpFreshFor {
 		return transport.HTTPState{State: transport.HTTPOK}

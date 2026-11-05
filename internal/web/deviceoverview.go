@@ -181,14 +181,19 @@ type reach struct {
 	APIOff   bool   // the device answers HTTP but refuses API commands (#447)
 }
 
-// shownHTTP is the HTTP state the page shows, in the tile, the card and the list alike. The router's
-// memory of a refused API lasts ten minutes; the health tracker keeps its finding until HTTP answers
-// again (#447), so the page does not flip back to "not checked" in between. A fresh answer wins.
+// shownHTTP is the HTTP state the page shows, in the tile and the card alike: the router's, with the
+// tile's two rules. The tracker's finding that the HTTP API is off stands until HTTP answers again
+// (#447), also where the router's memory took the same silence for "unreachable". And an answer from
+// before the device went offline is not "Reachable": the probe of a page view makes that answer
+// fresh for 15 minutes, and a pulled plug must not read "HTTP reachable" under "Offline".
 func shownHTTP(hs transport.HTTPState, hl model.Health) transport.HTTPState {
-	if hs.State == transport.HTTPOK || !refusedNow(hl) {
-		return hs
+	switch {
+	case refusedNow(hl):
+		return transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailAPIRefused, Since: hl.HTTPRefusedAt}
+	case hs.State == transport.HTTPOK && hl.State == model.HealthOffline && !hl.SeenHTTP.After(hl.Since):
+		return transport.HTTPState{}
 	}
-	return transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailAPIRefused, Since: hl.HTTPRefusedAt}
+	return hs
 }
 
 // refusedNow says the tracker's finding that the HTTP API is off still stands: no HTTP answer came after it,
@@ -568,7 +573,7 @@ func (h *handler) overviewOf(r *http.Request, v view, d model.Device, just *rela
 	p.Conn = connOf(in)
 	if tpOK {
 		p.Paths = pathCardOf(v, d, tf, tp, p.Tabs)
-		if shown != tf.HTTP { // the tracker remembers a refused API longer than the router (#447)
+		if shown != tf.HTTP { // the card says what the tile says (shownHTTP)
 			shownFacts := tf
 			shownFacts.HTTP = shown
 			for i := range p.Paths.Facts {

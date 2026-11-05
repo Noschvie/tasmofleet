@@ -241,6 +241,9 @@ test("an offline device with relays at 375/1280, light and dark", async ({ page 
   await control("/device/ov-offline/off");
   await expect(page.locator("#devhd-off")).toContainText("Offline since", { timeout: 60_000 });
   await openCards(page);
+  // an HTTP answer from before the plug was pulled (the page's probe) is no "HTTP reachable" in the card either
+  await expect(page.locator("[data-tile=reach]")).toContainText("HTTP no answer");
+  await expect(page.locator("#devpaths-facts-sum")).not.toContainText("HTTP reachable");
   for (const width of [375, 1280]) {
     for (const scheme of ["light", "dark"] as const) {
       await page.emulateMedia({ colorScheme: scheme });
@@ -292,7 +295,7 @@ test("a device with its HTTP API off stays Online after more polls", { tag: "@fu
   await control("/device/ov-api-off/api-off");
   await page.goto(app.url + href);
   await expect(page.locator("[data-tile=reach]")).toContainText("HTTP API off", { timeout: 60_000 });
-  await page.waitForTimeout(25_000); // five 5 s poll intervals
+  await page.waitForTimeout(25_000); // a refusal counted as a failure would be polled every 5 s and turn Offline at the 3rd
   await page.goto(app.url + href);
   await expect(page.locator(".devhd-state")).toHaveText("Online");
   await expect(page.locator("[data-tile=reach]")).toContainText("HTTP API off");

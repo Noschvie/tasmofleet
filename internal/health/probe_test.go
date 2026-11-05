@@ -222,12 +222,30 @@ func TestRefusedPollsBackOffLikeFailingOnes(t *testing.T) {
 	h.svc.reload(h.ctx, h.clk.Now())
 	refuseAll(h)
 	h.step()
-	for range 5 {
-		h.advance(6 * time.Minute) // past a normal poll interval, within the back-off
+	for range 23 { // 30 minutes less the jitter's 20 %: nothing before
+		h.advance(time.Minute)
 		h.step()
 	}
-	if n := len(h.cl.commands()); n > 4 { // the poll, its follow-up is inside the client; no re-poll within 30 min
-		t.Fatalf("%d commands within 30 minutes of a refusal: %v", n, h.cl.commands())
+	if n := len(h.cl.commands()); n != 1 {
+		t.Fatalf("%d polls within 23 minutes of a refusal: %v", n, h.cl.commands())
+	}
+	h.advance(8 * time.Minute)
+	h.step()
+	if n := len(h.cl.commands()); n != 2 {
+		t.Fatalf("no poll 31 minutes after a refusal: %v", h.cl.commands())
+	}
+	// The snapshot read of a device on MQTT that never sent its STATE is such a poll too: refused, it waits as long.
+	m := newHarness(t, true, Options{}, mqttDev(1, "a"))
+	m.listen()
+	m.bus.emit(mqttbus.KindLWT, "a", "LWT", "Online", false)
+	refuseAll(m)
+	m.step()
+	for range 23 {
+		m.advance(time.Minute)
+		m.step()
+	}
+	if n := len(m.cl.commands()); n != 1 {
+		t.Fatalf("%d snapshot reads within 23 minutes of a refusal: %v", n, m.cl.commands())
 	}
 }
 

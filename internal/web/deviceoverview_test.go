@@ -778,12 +778,16 @@ func TestShownHTTPStateKeepsTheRefusalTheTrackerRemembers(t *testing.T) {
 	if got.State != transport.HTTPFailing || got.Kind != transport.HTTPFailAPIRefused || !got.Since.Equal(refused.HTTPRefusedAt) {
 		t.Fatalf("shown = %+v", got)
 	}
-	if got := shownHTTP(httpFresh, refused); got.State != transport.HTTPOK {
-		t.Fatalf("a fresh HTTP answer lost to an old refusal: %+v", got)
+	// The router's "ok" comes from an answer older than the refusal: the later finding is what the page shows.
+	if got := shownHTTP(httpFresh, refused); got.Kind != transport.HTTPFailAPIRefused {
+		t.Fatalf("an older HTTP answer hid the refusal: %+v", got)
 	}
 	answered := model.Health{HTTPRefusedAt: now0.Add(-time.Hour), SeenHTTP: now0.Add(-time.Minute)}
 	if got := shownHTTP(transport.HTTPState{}, answered); got.State == transport.HTTPFailing {
 		t.Fatalf("HTTP answered after the refusal, still shown as %+v", got)
+	}
+	if got := shownHTTP(httpFresh, answered); got.State != transport.HTTPOK {
+		t.Fatalf("a fresh HTTP answer lost to an old refusal: %+v", got)
 	}
 	// The card says the same as the tile.
 	if r := httpRow(transport.Facts{HTTP: apiRefused, Now: now0}); r.Value != "API off" {
@@ -832,6 +836,33 @@ func TestOpeningTheDevicePageAsksForOneHTTPProbe(t *testing.T) {
 // page's probe finds its web page answering with the HTTP API off. The header must say so: "until the device is
 // back" alone, under a tile that says "The web page answers", sends people looking for a dead device. The live
 // answer carries the same banner (a probe republishes without a state change).
+// Why (#456): opening the page makes an HTTP answer fresh for 15 minutes (the probe). A plug pulled after it
+// must not read "Connection: HTTP reachable" in the card under a tile that says "Offline · HTTP no answer":
+// the card says what the tile says.
+func TestPulledPlugCardSaysWhatTheTileSays(t *testing.T) {
+	went := time.Now().Add(-time.Minute)
+	f := mqttFacts(time.Now(), model.MQTTPasswordOwn)
+	f.HTTP = httpFresh // the router: the probe's answer from before the plug was pulled
+	f.MQTT.LWTOnline = false
+	e := setupWith(t, func(d *Deps) {
+		d.Transport = fakeFacts{f: map[model.DeviceID]transport.Facts{1: f}}
+		d.Health.(fakeHealth)[1] = model.Health{DeviceID: 1, State: model.HealthOffline, Since: went, LWT: "Offline",
+			LastSeen: went.Add(-time.Minute), SeenHTTP: went.Add(-5 * time.Minute)}
+	})
+	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
+	if !strings.Contains(body, "HTTP no answer") {
+		t.Fatal("the tile does not say HTTP no answer")
+	}
+	if strings.Contains(body, "HTTP reachable") || strings.Contains(body, "last HTTP call to the device succeeded") {
+		t.Error("the card says HTTP is reachable for a pulled plug")
+	}
+	// An answer after the will (#619's case) is still shown as one.
+	e.health[1] = model.Health{DeviceID: 1, State: model.HealthOffline, Since: went, LWT: "Offline", LastSeen: went.Add(-time.Minute), SeenHTTP: time.Now()}
+	if _, body := e.do(t, "GET", "/devices/1", "admin", nil); !strings.Contains(body, "HTTP reachable") {
+		t.Error("an HTTP answer after the device went offline is not shown in the card")
+	}
+}
+
 func TestOfflineBannerSaysWhatTheProbeFound(t *testing.T) {
 	went := time.Now().Add(-time.Hour)
 	for _, tc := range []struct {

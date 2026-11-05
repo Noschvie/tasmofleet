@@ -141,11 +141,8 @@ func (h *handler) transportOf(ctx context.Context, id model.DeviceID) (transport
 		h.log.Warn("transport facts", "device", id, "err", err)
 		return transport.Facts{}, transport.Paths{}, false
 	}
-	if h.d.Health != nil {
-		// What the page decides on (buttons, the card, the refusals below) knows a refused HTTP API for as long as the
-		// tracker does, not only for the router's ten minutes (#447). The router itself is not told.
-		f.HTTP = shownHTTP(f.HTTP, h.d.Health.Get(id))
-	}
+	// The router's own facts: they carry the tracker's finding that the HTTP API is off (#447), so what the page
+	// decides on (buttons, the card, the refusals below) is what the router will do.
 	return f, transport.Choose(f), true
 }
 

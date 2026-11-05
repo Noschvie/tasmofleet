@@ -25,6 +25,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/store"
 	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
 	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/nofuturekid/tasmofleet/internal/transport"
 )
 
 var fleetT0 = time.Date(2026, 11, 5, 3, 0, 0, 0, time.Local)
@@ -537,27 +538,40 @@ func TestScheduledBackupSkipsADeviceWhoseHTTPAPIIsOff(t *testing.T) {
 }
 
 // Why: the real rule behind the hook: a refusal the router no longer remembers still means no HTTP path, and
-// only a device that MQTT can back up is left to the run.
+// only a device that MQTT can back up is left to the run, which the router then backs up over MQTT (it decides
+// on the same facts; tried over HTTP first, Tasmota's silent /dl would fail the run and notify).
 func TestAPIOffSkipUsesTheTrackersFindingNotTheRoutersMemory(t *testing.T) {
 	id := model.Identity{Family: model.ChipESP8266, Version: "16.0.0", Variant: "tasmota", FreeKB: 700}
 	httpOnly := model.Device{ID: 1, Name: "plug", Identity: id}
 	onBroker := model.Device{ID: 2, Name: "mqtt-plug", Identity: id, MQTT: model.MQTTOurs, Topic: "mqtt-plug", FullTopic: "%prefix%/%topic%/",
 		GroupTopic: "tasmotas", GroupTopicReadAt: factsNow, MQTTPasswordMode: model.MQTTPasswordOwn}
-	a := &runtime{}
-	a.facts = newFacts([]model.Device{httpOnly, onBroker}, fakeFactsHealth{2: {LWT: "Online"}}, nil)
 	refused := model.Health{State: model.HealthOnline, HTTPRefusedAt: factsNow}
 	for _, tc := range []struct {
 		name string
 		id   model.DeviceID
 		h    model.Health
 		want string
+		path transport.Path // the router's backup path
 	}{
-		{"HTTP-only device with its API off", 1, refused, skipAPIOff},
-		{"API answers", 1, model.Health{State: model.HealthOnline, SeenHTTP: factsNow}, ""},
-		{"API off but MQTT can back it up", 2, refused, ""},
+		{"HTTP-only device with its API off", 1, refused, skipAPIOff, transport.None},
+		{"API answers", 1, model.Health{State: model.HealthOnline, SeenHTTP: factsNow}, "", transport.HTTP},
+		{"API off but MQTT can back it up", 2, refused, "", transport.MQTT},
 	} {
-		if got := a.apiOffSkip(context.Background(), tc.id, tc.h); got != tc.want {
+		h := tc.h
+		if tc.id == 2 {
+			h.LWT = "Online"
+		}
+		// The memory is empty: the router forgot the refusal. The facts read the same tracker as the run.
+		a := &runtime{facts: newFacts([]model.Device{httpOnly, onBroker}, fakeFactsHealth{tc.id: h}, nil)}
+		if got := a.apiOffSkip(context.Background(), tc.id, h); got != tc.want {
 			t.Errorf("%s: %q, want %q", tc.name, got, tc.want)
+		}
+		f, err := a.facts.Facts(context.Background(), tc.id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := transport.Choose(f).Backup; got != tc.path {
+			t.Errorf("%s: the router backs up over %q, want %q", tc.name, got, tc.path)
 		}
 	}
 }

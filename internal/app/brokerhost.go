@@ -313,8 +313,8 @@ func (a *runtime) probeAllowed(id model.DeviceID) bool {
 }
 
 // apiOffSkip is skipAPIOff for an online device whose HTTP API is off and which no other path can back up, "" for any
-// other device (#447). The router's own memory of the refusal lasts ten minutes; the tracker's finding is what counts
-// here, so the decision is made on the facts with that finding applied. The router itself is not told.
+// other device (#447). It decides on the router's own facts, which carry the tracker's finding (httpState), so a
+// device it leaves to the run is backed up the way it says: over MQTT.
 func (a *runtime) apiOffSkip(ctx context.Context, id model.DeviceID, h model.Health) string {
 	if !h.APIOff() || a.facts == nil {
 		return ""
@@ -323,7 +323,6 @@ func (a *runtime) apiOffSkip(ctx context.Context, id model.DeviceID, h model.Hea
 	if err != nil {
 		return ""
 	}
-	f.HTTP = transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailAPIRefused, Since: h.HTTPRefusedAt}
 	if transport.Choose(f).Backup != transport.None {
 		return ""
 	}

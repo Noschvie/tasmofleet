@@ -1182,9 +1182,10 @@ Submit.
   device whose last will is `Offline`, which no background poll does (#619 is separate).
 - `Health.HTTPRefusedAt` (#447): when the last HTTP call found the device's web page answering but its HTTP
   API off (`tasmota.ErrHTTPAPIRefused`, SetOption128); zero when HTTP answers or the device does not answer at
-  all. The router's memory of the same finding lasts 10 min; the page shows the tracker's. A refused call is an
-  answer: it counts as contact (`LastSeen`), never toward offline, and never as `SeenHTTP` (the API did not
-  answer). What HTTP showed beats an `Offline` state on the page only when it came after the device went offline
+  all. The router's memory of the same finding lasts 10 min; the transport facts (`TransportFacts.httpState`) apply
+  the tracker's finding after it, so the router, the page and the gates decide alike. A refused call is an answer:
+  it counts as contact (`LastSeen`), never toward offline, and never as `SeenHTTP` (the API did not answer). What
+  HTTP showed beats an `Offline` state on the page only when it came after the device went offline
   (`Health.Since`); a device kept offline by its last will says in the offline banner what HTTP showed (#619
   decides whether that makes it reachable). `Health.APIOff()` is the one rule for tile, card, list and gates. A
   refused poll waits like a failing one (up to 30 min). For a device whose last will is `Offline`, only its own MQTT
