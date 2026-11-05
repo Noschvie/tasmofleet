@@ -113,7 +113,7 @@ func (r *fwRecheck) tick(ctx context.Context) {
 var activeJobStates = []model.JobState{
 	model.JobQueued, model.JobPreflight, model.JobBackup, model.JobSetOtaURL,
 	model.JobSafebootSwitch, model.JobSafebootRecover,
-	model.JobUpgradeIssued, model.JobAwaitReboot, model.JobVerify, model.JobRestoreOtaURL, model.JobRestorePower, model.JobApplying,
+	model.JobUpgradeIssued, model.JobAwaitReboot, model.JobVerify, model.JobRestoreOtaURL, model.JobApplying,
 }
 
 // startFWRecheck starts the reader that brings devices back from safeboot and minimal firmware (#558).
