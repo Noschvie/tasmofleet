@@ -70,3 +70,22 @@ func TestResetOnSaveStoresTheDefault(t *testing.T) {
 		t.Errorf("resetting other fields must leave the schedule on: %v", s.BackupSchedule)
 	}
 }
+
+// Why (#623): the field shows after the click what it shows after Save. TELEPERIOD's default is written
+// 300s in the code but the page writes the value as 5m; showing 300s and then 5m (and offering a Reset
+// for a stored 5m that Save cannot change) is the mismatch the issue is about.
+func TestResetDefaultIsWrittenAsThePageWritesIt(t *testing.T) {
+	row := sysRow{FieldState: sysconfig.FieldState{Field: sysconfig.Field{Key: "TELEPERIOD"}, Value: "5m", Source: "stored"}}
+	if got := sysDefault(row); got != "5m" {
+		t.Errorf("TELEPERIOD default shown as %q, want 5m (the page's own spelling)", got)
+	}
+	if sysCanReset(row) {
+		t.Error("a stored value equal to the default has nothing to reset")
+	}
+	e, _, _, _ := sysEnv(t, true)
+	e.do(t, "POST", "/settings/system?tab=network", "admin", url.Values{"csrf": {"tok"}, "v.TELEPERIOD": {"60s"}})
+	_, page := e.do(t, "GET", "/settings/system?tab=network", "admin", nil)
+	if f := fieldHTML(t, page, "TELEPERIOD"); !strings.Contains(f, `data-default="5m"`) {
+		t.Errorf("reset control of TELEPERIOD: want data-default=\"5m\" in %s", f)
+	}
+}

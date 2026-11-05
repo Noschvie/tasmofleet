@@ -87,3 +87,42 @@ test("System, General: resetting a stored switch turns it to its default at once
   await page.goto(app.url + "/settings/system?tab=general");
   await expect(sw).not.toBeChecked();
 });
+
+// Every kind of control takes the reset the same way (#623). A radio group: undo brings the stored choice
+// back, also when it sits after the default (checking the default radio unchecks the stored one, so the old
+// state must be taken before anything changes). A text area: typing cancels the reset, as in a field, or
+// Save would throw the typed networks away. A reset switch: the settings that hang on it follow at once.
+test("System settings: undo brings a radio choice back, typing in a text area cancels a reset, dependents follow", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  await page.goto(app.url + "/settings/system?tab=general");
+  await page.locator("input[name='v.LOG_LEVEL'][value='debug']").check({ force: true });
+  await page.getByRole("button", { name: "Save settings" }).click();
+  await page.goto(app.url + "/settings/system?tab=general");
+  const level = page.locator("input[name='v.LOG_LEVEL']:checked");
+  await expect(level).toHaveValue("debug");
+  await reset(page, "LOG_LEVEL").click();
+  await expect(level).toHaveValue("info");
+  await reset(page, "LOG_LEVEL").click();
+  await expect(level).toHaveValue("debug");
+
+  await page.goto(app.url + "/settings/system?tab=discovery");
+  await field(page, "DISCOVERY_SCAN").locator(".swtrack").click();
+  const nets = page.locator("textarea[name='v.DISCOVERY_SCAN_CIDRS']");
+  await nets.fill("127.0.0.0/24");
+  await page.getByRole("button", { name: "Save settings" }).click();
+  await page.goto(app.url + "/settings/system?tab=discovery");
+  await reset(page, "DISCOVERY_SCAN_CIDRS").click();
+  await expect(nets).toHaveValue("");
+  await nets.fill("127.0.1.0/24");
+  await expect(page.locator("input[name='clear.DISCOVERY_SCAN_CIDRS']")).not.toBeChecked();
+  // the scan switch is off by default: resetting it dims its settings at once, undoing it brings them back
+  const scanDeps = page.locator(".dep[data-depends='v.DISCOVERY_SCAN']");
+  await expect(scanDeps).not.toHaveClass(/is-off/);
+  await reset(page, "DISCOVERY_SCAN").click();
+  await expect(scanDeps).toHaveClass(/is-off/);
+  await reset(page, "DISCOVERY_SCAN").click();
+  await expect(scanDeps).not.toHaveClass(/is-off/);
+  await page.getByRole("button", { name: "Save settings" }).click();
+  await page.goto(app.url + "/settings/system?tab=discovery");
+  await expect(nets).toHaveValue("127.0.1.0/24");
+});

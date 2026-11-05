@@ -189,8 +189,8 @@
     }
   });
   // "Reset to default on save" (clear.KEY) wins over the field's own value: the
-  // server refuses a setting that is set and cleared at once, and a text field
-  // always sends its value. Without this file the server refuses such a save.
+  // field is not sent next to its ticked box. Without this file the server lets
+  // the ticked box win (#623).
   document.addEventListener("submit", function (e) {
     var form = e.target;
     if (!(form instanceof HTMLFormElement)) {
@@ -212,8 +212,8 @@
   // store; unticking puts the old value back; typing in the field afterwards is the person's own
   // value and unticks the box. A switch, a choice or a segment is set the same way, and the input
   // and change events let the save bar and the settings that depend on a switch follow. The broker
-  // row (MQTT_URL) is its host and port. Without this file the box is just posted and the server
-  // stores the default.
+  // row (MQTT_URL) is its host, port and TLS switch. Without this file the box is just posted and
+  // the server stores the default.
   var resetPrev = new Map();
   var resetting = false;
   function resetFieldsOf(key) {
@@ -222,14 +222,14 @@
       return [];
     }
     var names =
-      key === "MQTT_URL" ? ["mqtt.host", "mqtt.port"] : ["v." + key];
+      key === "MQTT_URL" ? ["mqtt.host", "mqtt.port", "mqtt.tls"] : ["v." + key];
     return Array.prototype.slice.call(form.elements).filter(function (f) {
       return names.indexOf(f.name) >= 0 && f.type !== "hidden";
     });
   }
   function resetValueFor(f, def, key) {
     if (key === "MQTT_URL") {
-      return { value: "" };
+      return f.type === "checkbox" ? { checked: false } : { value: "" };
     }
     if (f.type === "checkbox") {
       return {
@@ -254,14 +254,18 @@
     }
     var key = box.name.slice("clear.".length);
     var def = box.getAttribute("data-default");
+    var fields = resetFieldsOf(key);
+    if (box.checked) {
+      // Every field first: checking the default radio unchecks the stored one of the group.
+      fields.forEach(function (f) {
+        resetPrev.set(f, { value: f.value, checked: f.checked });
+      });
+    }
     resetting = true;
-    resetFieldsOf(key).forEach(function (f) {
+    fields.forEach(function (f) {
       var to = box.checked ? resetValueFor(f, def, key) : resetPrev.get(f);
       if (!to) {
         return;
-      }
-      if (box.checked) {
-        resetPrev.set(f, { value: f.value, checked: f.checked });
       }
       if ("value" in to && f.type !== "checkbox" && f.type !== "radio") {
         f.value = to.value;
@@ -275,11 +279,19 @@
   });
   function untickResetOnEdit(e) {
     var f = e.target;
-    if (resetting || !(f instanceof HTMLInputElement || f instanceof HTMLSelectElement) || !f.form) {
+    if (
+      resetting ||
+      !(
+        f instanceof HTMLInputElement ||
+        f instanceof HTMLSelectElement ||
+        f instanceof HTMLTextAreaElement
+      ) ||
+      !f.form
+    ) {
       return;
     }
     var key = /^v\.(.+)$/.exec(f.name);
-    key = key ? key[1] : /^mqtt\.(host|port)$/.test(f.name) ? "MQTT_URL" : "";
+    key = key ? key[1] : /^mqtt\.(host|port|tls)$/.test(f.name) ? "MQTT_URL" : "";
     var box = key && f.form.elements["clear." + key];
     if (box && box.checked) {
       resetting = true; // the typed value stays; only the save bar and the switches follow

@@ -990,8 +990,20 @@ func sysCanReset(row sysRow) bool {
 	if row.Key == "BACKUP_INTERVAL" || row.Key == "SNAPSHOT_INTERVAL" {
 		return false
 	}
-	return row.Source == "stored" && (row.Secret || row.Value != config.DefaultValue(row.Key))
+	return row.Source == "stored" && (row.Secret || row.Value != sysDefault(row))
 }
 
-// sysDefault is what a ticked "Reset to default" stores, which form.js shows in the field at once.
-func sysDefault(row sysRow) string { return config.DefaultValue(row.Key) }
+// sysDefault is what a ticked "Reset to default" stores, which form.js shows in the field at once. It is
+// written the way the page writes a value (TELEPERIOD's default 300s reads 5m), so the field shows after
+// the click what it shows after Save.
+func sysDefault(row sysRow) string {
+	def := config.DefaultValue(row.Key)
+	var c config.Config
+	if config.Set(&c, row.Key, def) != nil {
+		return def
+	}
+	if v, err := config.Format(c, row.Key); err == nil {
+		return v
+	}
+	return def
+}

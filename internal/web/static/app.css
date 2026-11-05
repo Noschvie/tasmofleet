@@ -12128,9 +12128,10 @@ dialog.fw-notes-dlg .fw-dlg-body {
 }
 .sf.w-xs .srst .srst-on::before {
   content: "\21BA  Default";
+  content: "\21BA  Default" / ""; /* the box is named by its text, "Default, set on save" */
   font-size: 12px;
 }
-.sf.w-xs .lrow {
+.sf.w-xs .lrow:has(.srst input:checked) {
   flex-wrap: wrap;
 }
 .sf.w-xs .srst .srst-off::before {
