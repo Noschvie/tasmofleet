@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Fixed
+
+- About and Settings → Advanced: on a tablet (768 to 1199 px) the two configuration tables no longer sit side by side; the setting names overlapped the values, so they now stack in one column (#592)
+
 ## 0.29.1 "Portland Head" (2026-11-05)
 
 ### Fixed

@@ -12406,6 +12406,12 @@ input:focus-visible + .swtrack {
 .cset td.grow code {
   overflow-wrap: anywhere;
 }
+/* tablet (#592): half-width columns leave each table too narrow for the longest key, so the tables stack */
+@media (min-width: 45rem) and (max-width: 74.99rem) {
+  .cset {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 @media (max-width: 44.99rem) {
   .cset {
     grid-template-columns: minmax(0, 1fr);
