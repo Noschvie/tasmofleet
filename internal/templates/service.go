@@ -246,6 +246,15 @@ func (m *Manager) readInto(ctx context.Context, d model.Device) (reading, error)
 	return r, nil
 }
 
+// Refresh reads one device live into the cache, so the next page shows the reading without a click (the
+// background refresh, #600). Safeboot and minimal firmware are left alone (nothing is sent).
+func (m *Manager) Refresh(ctx context.Context, d model.Device) error {
+	if _, err := m.readInto(ctx, d); err != nil && !errors.Is(err, errLimitedFirmware) {
+		return err
+	}
+	return nil
+}
+
 // Overview implements Service.
 func (m *Manager) Overview(ctx context.Context, refs Refs, refresh bool) (Overview, error) {
 	devs, err := m.o.Devices.ListDevices(ctx)

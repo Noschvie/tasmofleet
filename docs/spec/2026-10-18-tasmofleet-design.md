@@ -1638,6 +1638,22 @@ device's item keeps its name when the device is deleted. Model: `model.BackupRun
   failed. Readings older than one hour (`StaleAfter`, a constant, not a setting) carry the visible marker "Stale".
   A refresh that arrives after the person has started editing the page is not swapped in (`data-guard-swap`); the
   line says so and keeps the age and the marker of the values shown.
+- **Device data refresh** (#600): the data pages draw from stays current without a page open. The broker re-read
+  of 6.4 (`brokerHostReader`) is the one scheduler; it visits one online device per 30-second pass and reads, in
+  that order, what is due: the broker (every 6 h), the identity (every 24 h, `Prober.RefreshFacts`: the HTTP probe
+  of an explicit refresh, but the stored name and topic do not follow the device's DeviceName and topic, no MAC is
+  bound and nothing goes over MQTT, which stays with #418) and the data (every 6 h): the Settings values
+  (`settings.Manager.Read`, which fills `Last`), the values the policy rules check (`policyReporter.readDevice`) and
+  the GPIO template reading (`templates.Manager.Refresh`). A restart the health tracker records (INFO3, or the
+  uptime drop seen in STATE) makes all three due once the device has settled (20 s); further announcements of
+  the same restart move that time back and stay one refresh. The broker and the identity are read under the
+  device lock; the data is read without it, after trying it (a device a job holds is skipped and visited again
+  at the next pass), so a person's save is not refused as busy while a read runs; the settings save counter keeps a
+  read that a save overtook out of `Last`. Offline devices, devices the HTTP poll has not reached lately and devices
+  on minimal or safeboot firmware are skipped; a failed read is retried after 10 minutes. Never `Status 0`; the
+  requests of one device go out one at a time. The policy poller (system setting `PolicyLiveInterval`) and the MQTT
+  updates keep feeding the policy values as before. The refresh buttons that remain (Refresh identity, Check now,
+  Read again) force a read and show the #538 busy state. There are no new settings and no table.
 - SetOption numbers are always displayed with their internal name and a one-line
   description (e.g. "SetOption0 (`save_state`): restore relay state after power loss").
 

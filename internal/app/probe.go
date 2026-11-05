@@ -609,13 +609,26 @@ func (p *Prober) Describe(ctx context.Context, d model.Device) (model.Device, er
 // binds (discovery D8). A device on our broker that HTTP cannot reach is refreshed over MQTT
 // (refreshMQTT). On minimal firmware the stored flash values are kept and no MAC can be read.
 func (p *Prober) Refresh(ctx context.Context, id model.DeviceID, actor string) error {
+	return p.refresh(ctx, id, actor, false)
+}
+
+// RefreshFacts is the refresh the background schedule runs (#600): the same HTTP probe and the same facts
+// (identity, MQTT facts, network facts, relay names), but nothing the person sees or relies on is renamed
+// on its own: the stored name and topic do not follow the DeviceName and topic the device reports (an
+// explicit Refresh, discovery and the first probe still do), no MAC is bound, and a device HTTP does not
+// reach is not asked over MQTT (identity over MQTT stays with #418).
+func (p *Prober) RefreshFacts(ctx context.Context, id model.DeviceID) error {
+	return p.refresh(ctx, id, "", true)
+}
+
+func (p *Prober) refresh(ctx context.Context, id model.DeviceID, actor string, factsOnly bool) error {
 	d, err := p.Devices.GetDevice(ctx, id)
 	if err != nil {
 		return err
 	}
 	pr, err := p.probe(ctx, d, func(pr probed) error { return p.checkMAC(ctx, d, pr, actor, "http") })
 	if err != nil {
-		if !p.overMQTT(d, err) {
+		if factsOnly || !p.overMQTT(d, err) {
 			return err
 		}
 		merr := p.refreshMQTT(ctx, d, actor)
@@ -643,6 +656,9 @@ func (p *Prober) Refresh(ctx context.Context, id model.DeviceID, actor string) e
 				res.BindMACs = append(res.BindMACs, pr.ethMAC)
 			}
 		}
+	}
+	if factsOnly {
+		res.DeviceName, res.DeviceTopic, res.NameFrom = "", "", "" // "" keeps the recorded DeviceName and the stored name and topic
 	}
 	// Only probe-owned fields are written, and only if the device is still
 	// the one that was probed (a slow probe must not undo an admin edit or

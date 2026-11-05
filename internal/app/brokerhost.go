@@ -29,6 +29,22 @@ import (
 //   - now and then for every online device (brokerHostEvery), which also catches a restart nobody
 //     saw (the tracker was down, the device was offline for a while).
 //
+// The same reader keeps the rest of a device's data current (#600), in the same visit, so there is one
+// scheduler and one device at a time, not several that happen to meet on a device:
+//
+//   - identity (Prober.RefreshFacts, HTTP: Status 5, 2, 4; never Status 0; it renames nothing) after a restart and every
+//     identityEvery, under the device lock like the broker read;
+//   - the Settings values (settings.Manager.Read, which fills the Settings tab's last-known values),
+//     the values the policy rules check (policyReporter.readDevice) and the GPIO template reading
+//     (templates.Manager.Refresh) after a restart and every dataEvery. These are read without the device
+//     lock: a person's save must not be refused as busy for the half minute a full read takes, and a save
+//     during the read keeps the outdated values out of the Settings cache by itself (settings save
+//     counter, #599). The lock is only tried first, so a device a job holds is skipped.
+//
+// A restart is recorded by the health tracker from INFO3 (once per boot) and from the uptime drop in
+// STATE, whichever it sees first (health/stability.go); either leads here through bootWatch, so a
+// restart is one refresh however many messages announce it.
+//
 // One device at a time on the whole process, and only while nobody else works on the device: the
 // read takes the device lock like any writer and is skipped while a job holds the device or a firmware
 // update typed in the console is still flashing it (backupGuard, as for a scheduled backup).
@@ -60,6 +76,17 @@ const (
 	// HTTP fact, one device per pass.
 	brokerHostProbeEvery = 30 * time.Minute
 	brokerHostQueue      = 64
+
+	// dataEvery: how often an online device's Settings values, policy values and template reading are read
+	// without a reason (#600). They change only when somebody changes them, and a restart (the usual
+	// moment) already triggers a read; six hours are four reads of about 40 small requests a day.
+	dataEvery = 6 * time.Hour
+	// identityEvery: how often the identity (firmware, hardware, network facts) is probed again without a
+	// reason (#600). A firmware update outside TasmoFleet restarts the device, which triggers a read.
+	identityEvery = 24 * time.Hour
+	// dataTimeout bounds the whole data read of one device (its parts have their own limits).
+	dataTimeout     = 3 * time.Minute
+	identityTimeout = 30 * time.Second
 )
 
 type brokerHostReader struct {
@@ -76,23 +103,36 @@ type brokerHostReader struct {
 	enter func(context.Context, model.DeviceID, string) (func(), error)
 	now   func() time.Time
 	log   *slog.Logger
+	// readIdentity re-probes the identity over HTTP (Prober.RefreshFacts); nil: not done.
+	readIdentity func(context.Context, model.DeviceID) error
+	// readData fills the caches of the Settings tab, the policy values and the GPIO templates from the
+	// device; nil: not done. It runs without the device lock (see above).
+	readData func(context.Context, model.Device) error
 
-	kick    chan model.DeviceID
-	pending map[model.DeviceID]brokerWant
-	next    map[model.DeviceID]time.Time // when the periodic read of a device is due again; absent: due
+	kick        chan model.DeviceID
+	kickRestart chan model.DeviceID
+	pending     map[model.DeviceID]brokerWant
+	next        map[model.DeviceID]time.Time // when the periodic read of a device is due again; absent: due
+	// dataNext and identityNext: the same for the data and the identity; absent: due.
+	dataNext, identityNext map[model.DeviceID]time.Time
 	// probeNext: when a device may be asked for an HTTP probe again; absent: now.
 	probeNext map[model.DeviceID]time.Time
 }
 
-// brokerWant is a read somebody asked for.
-type brokerWant struct{ due, until time.Time }
+// brokerWant is a read somebody asked for. restart: the device restarted, so its identity and data are
+// read as well.
+type brokerWant struct {
+	due, until time.Time
+	restart    bool
+}
 
 func newBrokerHostReader(list func(context.Context) ([]model.Device, error), // httpUp says whether the HTTP health poll reached the device lately: the periodic read is HTTP
 	// and must not hold the lock of a device it cannot reach.
 	httpUp func(model.DeviceID) bool,
 	read func(context.Context, model.DeviceID) error, enter func(context.Context, model.DeviceID, string) (func(), error), log *slog.Logger) *brokerHostReader {
 	return &brokerHostReader{list: list, httpUp: httpUp, read: read, enter: enter, now: time.Now, log: log,
-		kick: make(chan model.DeviceID, brokerHostQueue), pending: map[model.DeviceID]brokerWant{}, next: map[model.DeviceID]time.Time{}, probeNext: map[model.DeviceID]time.Time{}}
+		kick: make(chan model.DeviceID, brokerHostQueue), kickRestart: make(chan model.DeviceID, brokerHostQueue),
+		dataNext: map[model.DeviceID]time.Time{}, identityNext: map[model.DeviceID]time.Time{}, pending: map[model.DeviceID]brokerWant{}, next: map[model.DeviceID]time.Time{}, probeNext: map[model.DeviceID]time.Time{}}
 }
 
 // later asks for a read of id soon and returns at once.
@@ -106,6 +146,17 @@ func (r *brokerHostReader) later(id model.DeviceID) {
 	}
 }
 
+// restarted asks for a read of id, its identity and its data soon and returns at once.
+func (r *brokerHostReader) restarted(id model.DeviceID) {
+	if r == nil {
+		return
+	}
+	select {
+	case r.kickRestart <- id:
+	default: // queue full: the periodic reads catch up
+	}
+}
+
 func (r *brokerHostReader) run(ctx context.Context) {
 	t := time.NewTicker(brokerHostTick)
 	defer t.Stop()
@@ -115,16 +166,25 @@ func (r *brokerHostReader) run(ctx context.Context) {
 			return
 		case id := <-r.kick:
 			r.want(id)
+		case id := <-r.kickRestart:
+			r.wantRestart(id)
 		case <-t.C:
 			r.pass(ctx)
 		}
 	}
 }
 
-// want records that id is to be read once it has settled.
-func (r *brokerHostReader) want(id model.DeviceID) {
+// want records that id's broker is to be read once it has settled.
+func (r *brokerHostReader) want(id model.DeviceID) { r.request(id, false) }
+
+// wantRestart records that id restarted: its broker, identity and data are read once it has settled. A
+// device that announces its restart several times (INFO3, the uptime drop, a second boot) keeps one entry
+// whose time moves back, so it is one visit after the last announcement.
+func (r *brokerHostReader) wantRestart(id model.DeviceID) { r.request(id, true) }
+
+func (r *brokerHostReader) request(id model.DeviceID, restart bool) {
 	now := r.now()
-	r.pending[id] = brokerWant{due: now.Add(brokerHostSettle), until: now.Add(brokerHostPendingFor)}
+	r.pending[id] = brokerWant{due: now.Add(brokerHostSettle), until: now.Add(brokerHostPendingFor), restart: restart || r.pending[id].restart}
 }
 
 // pass reads the devices somebody asked for whose time has come, then at most one online device
@@ -165,7 +225,7 @@ func (r *brokerHostReader) pass(ctx context.Context) {
 		case !r.readable(d): // nothing the read could reach now: HTTP is checked, once the read is due
 			ask(d)
 		default:
-			switch err := r.readOne(ctx, id); {
+			switch err := r.visit(ctx, d, visitWhat{broker: true, identity: w.restart, data: w.restart}); {
 			case err == nil:
 				delete(r.pending, id)
 			case errors.Is(err, errBrokerRetry): // not answering: not asked again at every tick
@@ -181,14 +241,19 @@ func (r *brokerHostReader) pass(ctx context.Context) {
 		if _, asked := r.pending[d.ID]; asked {
 			continue
 		}
-		if due, ok := r.next[d.ID]; ok && now.Before(due) {
+		what := visitWhat{
+			broker:   r.isDue(r.next, d.ID, now),
+			identity: r.readIdentity != nil && r.isDue(r.identityNext, d.ID, now),
+			data:     r.readData != nil && r.isDue(r.dataNext, d.ID, now),
+		}
+		if !what.any() {
 			continue
 		}
 		if !r.readable(d) {
 			ask(d)
 			continue
 		}
-		if err := r.readOne(ctx, d.ID); !errors.Is(err, errBrokerBusy) {
+		if err := r.visit(ctx, d, what); !errors.Is(err, errBrokerBusy) {
 			return // one periodic read per pass; a busy device does not use up the turn
 		}
 	}
@@ -207,9 +272,36 @@ var (
 	errBrokerRetry = errors.New("read failed, try again")
 )
 
-// readOne reads id under the device lock. errBrokerBusy: a job holds the device, nothing was sent.
-// errBrokerRetry: the read failed. nil: stored (or nothing to store).
-func (r *brokerHostReader) readOne(ctx context.Context, id model.DeviceID) error {
+// visitWhat says what a visit to one device reads.
+type visitWhat struct{ broker, identity, data bool }
+
+func (w visitWhat) any() bool { return w.broker || w.identity || w.data }
+
+// isDue says whether the schedule m has a read of id due at now (absent: due).
+func (r *brokerHostReader) isDue(m map[model.DeviceID]time.Time, id model.DeviceID, now time.Time) bool {
+	at, ok := m[id]
+	return !ok || !now.Before(at)
+}
+
+// visit reads what the schedule or a restart asks for from one device: the broker and the identity under
+// the device lock, then the data (see the top of the file). errBrokerBusy: a job holds the device, nothing
+// was sent. errBrokerRetry: the broker read failed (nothing else is tried then: the device does not
+// answer). nil: done, or the identity or data read failed, which then waits for its own retry.
+func (r *brokerHostReader) visit(ctx context.Context, d model.Device, what visitWhat) error {
+	id := d.ID
+	if what.broker || what.identity {
+		if err := r.readLocked(ctx, id, what); err != nil {
+			return err
+		}
+	}
+	if what.data && r.readData != nil {
+		r.readDataOf(ctx, d)
+	}
+	return nil
+}
+
+// readLocked reads the broker and the identity of id under the device lock.
+func (r *brokerHostReader) readLocked(ctx context.Context, id model.DeviceID, what visitWhat) error {
 	release, err := r.enter(ctx, id, "broker read")
 	if err != nil {
 		var busy devlock.BusyError
@@ -220,17 +312,53 @@ func (r *brokerHostReader) readOne(ctx context.Context, id model.DeviceID) error
 		return errBrokerRetry
 	}
 	defer release()
-	rctx, cancel := context.WithTimeout(ctx, brokerHostTimeout)
-	defer cancel()
-	if err := r.read(rctx, id); err != nil {
-		if ctx.Err() == nil {
-			r.next[id] = r.now().Add(brokerHostRetry)
-			r.log.Debug("broker host: read failed", "device", id, "err", err)
+	if what.broker {
+		rctx, cancel := context.WithTimeout(ctx, brokerHostTimeout)
+		err := r.read(rctx, id)
+		cancel()
+		if err != nil {
+			if ctx.Err() == nil {
+				r.next[id] = r.now().Add(brokerHostRetry)
+				r.log.Debug("broker host: read failed", "device", id, "err", err)
+			}
+			return errBrokerRetry
 		}
-		return errBrokerRetry
+		r.next[id] = r.now().Add(brokerHostEvery)
 	}
-	r.next[id] = r.now().Add(brokerHostEvery)
+	if what.identity && r.readIdentity != nil {
+		ictx, cancel := context.WithTimeout(ctx, identityTimeout)
+		err := r.readIdentity(ictx, id)
+		cancel()
+		r.finished(ctx, r.identityNext, id, identityEvery, err, "identity")
+	}
 	return nil
+}
+
+// readDataOf reads the data of d if nothing holds the device. The lock is only taken and given back (the
+// check), not kept during the read.
+func (r *brokerHostReader) readDataOf(ctx context.Context, d model.Device) {
+	release, err := r.enter(ctx, d.ID, "data read")
+	if err != nil {
+		delete(r.dataNext, d.ID) // held by a job (or not available): due again at the next visit
+		return
+	}
+	release()
+	dctx, cancel := context.WithTimeout(ctx, dataTimeout)
+	err = r.readData(dctx, d)
+	cancel()
+	r.finished(ctx, r.dataNext, d.ID, dataEvery, err, "data")
+}
+
+// finished schedules the next read of kind after one that ended with err: the regular interval, or the
+// retry delay when it failed. A failure caused by shutdown is not counted.
+func (r *brokerHostReader) finished(ctx context.Context, m map[model.DeviceID]time.Time, id model.DeviceID, every time.Duration, err error, kind string) {
+	switch {
+	case err == nil:
+		m[id] = r.now().Add(every)
+	case ctx.Err() == nil:
+		m[id] = r.now().Add(brokerHostRetry)
+		r.log.Debug("device refresh: read failed", "kind", kind, "device", id, "err", err)
+	}
 }
 
 // setsBrokerTarget reports whether a command line sets MqttHost or MqttPort (also inside a Backlog).
@@ -277,7 +405,32 @@ func (a *runtime) startBrokerHost(ctx context.Context) {
 	}
 	a.brokerHost.httpUp = func(id model.DeviceID) bool { return brokerHTTPUp(a.tracker.Get(id), time.Now()) }
 	a.brokerHost.enter = a.brokerReadGuard()
+	a.wireDeviceRefresh(a.brokerHost)
 	a.goBG("broker-host", func() error { a.brokerHost.run(ctx); return nil })
+}
+
+// wireDeviceRefresh gives the reader the identity probe and the data read (#600).
+func (a *runtime) wireDeviceRefresh(r *brokerHostReader) {
+	r.readIdentity = a.svc.Prober.RefreshFacts
+	r.readData = a.refreshData
+}
+
+// refreshData fills the caches that pages and the policy report show from: the Settings values (the
+// Settings tab's last-known values, #599), the values the policy rules check, and the GPIO template
+// reading. The first part that fails ends the read: the device does not answer, and the retry reads all.
+func (a *runtime) refreshData(ctx context.Context, d model.Device) error {
+	if a.settings != nil {
+		if _, err := a.settings.Read(ctx, d.ID); err != nil {
+			return err
+		}
+	}
+	if a.policyLive != nil && !a.policyLive.readDevice(ctx, d) && !policy.LimitedFirmware(d.Identity.Variant) {
+		return errors.New("policy values not read")
+	}
+	if a.templates != nil {
+		return a.templates.Refresh(ctx, d)
+	}
+	return nil
 }
 
 // brokerReadGuard keeps the read off a device the way a scheduled backup is kept off (backupGuard): its
