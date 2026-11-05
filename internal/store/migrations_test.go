@@ -2,36 +2,11 @@ package store
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"io/fs"
 	"path/filepath"
 	"testing"
 	"testing/fstest"
 )
-
-// frozenMigrations are the SHA-256 sums of migration files that have shipped.
-// Why: a database records only its schema version, so editing a released
-// file would leave existing installations silently on the old schema. A
-// change is a new NNNN_*.sql file. Add a line here when a migration ships;
-// never change an existing one.
-var frozenMigrations = map[string]string{
-	"0001_init.sql": "edef2fb653d9d81f449d3e091c6ce74f7a0986b2ac595e38bb414bf34fdbfabb",
-	"0002_auth.sql": "fa895be00d16f0a004281d87744cf695a0d38199aea4588bd8c208930167e541",
-}
-
-func TestReleasedMigrationsAreUnchanged(t *testing.T) {
-	for name, want := range frozenMigrations {
-		b, err := fs.ReadFile(Migrations, "migrations/"+name)
-		if err != nil {
-			t.Fatalf("released migration %s is gone: %v", name, err)
-		}
-		sum := sha256.Sum256(b)
-		if got := hex.EncodeToString(sum[:]); got != want {
-			t.Errorf("%s changed (sha256 %s); released migrations are append-only, add a new migration instead", name, got)
-		}
-	}
-}
 
 // Why: installations of v0.0.1 hold a 0001 database with break-glass admins
 // and live sessions; upgrading must keep them working.

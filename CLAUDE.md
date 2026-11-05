@@ -235,7 +235,7 @@ SAFETY package, catalogue, image paths). Every gate runs through the Makefile.
   e2e caches are refreshed by the nightly. The `:edge` image and the HA app image follow.
 - **RELEASE** (`release.yml`, tags `vX.Y.Z`): the FAST tier plus, always, the race tests of the
   `SAFETY` packages (a tag has no PR base, so every one of them runs), and no mutation. A tag without its `CHANGELOG.md`
-  section, a patch tag that changes a migration, or a tag on a commit that is not on `main` fails at once (job `guards`). The image is published (job
+  section, a patch tag that changes a migration, a tag whose tree edits a migration of the previous tag, or a tag on a commit that is not on `main` fails at once (job `guards`). The image is published (job
   `publish` calling `_image.yml` with `mode: release`, the only way to push a tag image), then the GitHub release is made, then
   the demo site is deployed, each only after the one before succeeded.
 - **FULL** (`nightly.yml`: cron on `main`, manual dispatch): additionally every e2e test in three shards plus the MQTT job, every
@@ -284,7 +284,9 @@ Renovate keeps both current. Reusable workflows take their secrets by name (`sec
 - Repository: `https://github.com/nofuturekid/tasmofleet` (HTTPS remotes).
 - No secrets in the repository, not even in tests: use obviously fake values.
 - **Migrations are append-only since tag v0.0.1.** Never edit a merged file in
-  `internal/store/migrations/`; add `NNNN_name.sql`. (0001 was amended before the first tag;
+  `internal/store/migrations/`; add `NNNN_name.sql`. `make migration-append-only` (part of `make check`, job
+  `migrations` in `pr.yml`, tag job `guards`) fails when a file that exists at the latest `vX.Y.Z` tag is modified,
+  renamed or deleted; needs the tags (CI: `fetch-depth: 0`). (0001 was amended before the first tag;
   dev/test databases created before that must be recreated.)
 
 ## Releases

@@ -51,12 +51,12 @@ E2E_ARGS  ?=
 CHANGED_BASE ?= origin/main
 export CHANGED_BASE
 
-.PHONY: quick integration-guard shards-check-changed catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check changelog-title migration-guard changelog-notes clean tools
+.PHONY: quick integration-guard shards-check-changed catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check changelog-title migration-guard migration-append-only changelog-notes clean tools
 
 # golangci-lint runs staticcheck with its defaults (.golangci.yml), so check does not run it a second time;
 # the staticcheck target stays for single runs and CI. go vet stays: golangci-lint skips generated files,
 # and go vet is the only check left for the *_templ.go files.
-check: templ-check fmt-check vet lint test scripts-test shards-check-changed integration vuln build
+check: templ-check fmt-check vet lint test scripts-test shards-check-changed migration-append-only integration vuln build
 
 # Unit tests of the registry cleanup's version selection (pure, no registry access). The glob is
 # expanded by the shell: since Node 21 `node --test scripts/` no longer takes a directory (#477).
@@ -426,6 +426,13 @@ migration-guard:
 	if [ -n "$$changed" ]; then \
 		echo "patch release $(TAG) changes database migrations since $$base (a schema change means a new minor version):" >&2; \
 		echo "$$changed" >&2; exit 1; fi
+
+# Append-only guard (#595): fails when a migration file that exists at the latest release tag was modified,
+# renamed or deleted since (additions pass). Needs the tags (CI: fetch-depth 0). The tag job passes
+# TAG so the tag under test is not its own baseline. Logic and tests: tools/migration-append-only.sh,
+# scripts/migration-append-only.test.mjs.
+migration-append-only:
+	@tools/migration-append-only.sh "$(TAG)" "$(or $(REV),HEAD)"
 
 # Prints the body of the CHANGELOG.md section for TAG (the GitHub release notes).
 changelog-notes: changelog-check

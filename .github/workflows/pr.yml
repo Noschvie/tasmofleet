@@ -123,6 +123,18 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: python3 -I tools/check-doc-links.py .
 
+  # Migrations are append-only (#595): no file that exists at the latest release tag may be modified, renamed or
+  # deleted. Runs on every PR (a docs-only PR cannot touch them, the check is a second) and is part of "required".
+  migrations:
+    name: migrations append-only
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the guard compares with the latest release tag
+      - run: make migration-append-only
+
   # Build only, nothing is pushed: proves the Dockerfile and the Home Assistant app image still
   # build. Not part of "required". The job grants what the called workflow asks for; a fork's
   # token stays read-only whatever is asked, and no secret is passed.
@@ -146,7 +158,7 @@ jobs:
   # Any other result (failure, cancelled, or a skip caused by a failed dependency) fails it.
   required:
     name: required
-    needs: [changes, checks, mutation, links]
+    needs: [changes, checks, mutation, links, migrations]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -159,8 +171,9 @@ jobs:
           CHECKS: ${{ needs.checks.result }}
           MUTATION: ${{ needs.mutation.result }}
           LINKS: ${{ needs.links.result }}
+          MIGRATIONS: ${{ needs.migrations.result }}
         run: |
-          echo "changes=$CHANGES code=$CODE safety=$SAFETY | checks: $CHECKS | mutation: $MUTATION | links: $LINKS"
+          echo "changes=$CHANGES code=$CODE safety=$SAFETY | checks: $CHECKS | mutation: $MUTATION | links: $LINKS | migrations: $MIGRATIONS"
           [ "$CHANGES" = success ] || exit 1
           docs=false; [ "$CODE" = false ] && docs=true
           check() { # check <skip allowed> <result>
@@ -172,3 +185,4 @@ jobs:
           m=true; [ "$SAFETY" = true ] && m=$docs
           check "$m" "$MUTATION"
           check false "$LINKS"
+          check false "$MIGRATIONS"

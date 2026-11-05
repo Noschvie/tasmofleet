@@ -6,7 +6,8 @@
 #
 # guards   the tagged commit is on main, the CHANGELOG.md section for the tag exists and a patch
 #          tag changes no migration, so a bad tag fails in seconds (the image build checks the
-#          section again).
+#          section again). It also fails when a migration shipped in the previous tag was modified, renamed or
+#          deleted (`make migration-append-only`, #595).
 # checks   the RELEASE tier: the FAST tier (lint, unit and integration tests, build, the @core e2e
 #          tests in two shards and the MQTT job; a tag restores the Go caches main.yml saved, test results included,
 #          and saves none) plus the race tests of EVERY
@@ -56,6 +57,8 @@ jobs:
           make changelog-check TAG="$TAG"
           # Patch releases never touch the migrations.
           make migration-guard TAG="$TAG" REV="$GITHUB_SHA"
+          # No release ever edits, renames or deletes a migration shipped in the previous tag (#595).
+          make migration-append-only TAG="$TAG" REV="$GITHUB_SHA"
 
   checks:
     name: checks
