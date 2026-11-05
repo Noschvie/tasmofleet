@@ -72,8 +72,8 @@ var sysLayout = []sysTabDef{
 	// Snapshots). The entry stays in its place: sysAdvanced is an index into this list.
 	{sysBackupsSlug, "Backups", []int{2, 1}, []sysCardDef{
 		{ID: "lastrun", Title: "Last run", Stack: 0, Phone: 1},
-		{ID: "devices", Title: "Devices", Stack: 0, Phone: 2},
-		{ID: "storage", Title: "Storage", Note: "Read-only. Not part of the form.", Stack: 1, Phone: 3},
+		{ID: "devices", Title: "Devices", Stack: 0, Phone: 3},
+		{ID: "storage", Title: "Storage", Note: "Read-only. Not part of the form.", Stack: 1, Phone: 2},
 		{ID: "schedule", Title: "Schedule", Note: "Device backups on a timer, and how many to keep.", Stack: 1, Phone: 4, Keys: []string{"BACKUP_INTERVAL", "BACKUP_KEEP", "BACKUP_MAX_AGE"}},
 		{ID: "orphans", Title: "Backups of deleted devices", Stack: 1, Phone: 5},
 		{ID: "unreferenced", Title: "Unreferenced files", Stack: 1, Phone: 6},

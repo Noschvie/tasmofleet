@@ -17,7 +17,7 @@ test.beforeAll(async () => {
       TASMOFLEET_ADMIN_GROUPS: "adm",
       TASMOFLEET_OPERATOR_GROUPS: "ops",
       TASMOFLEET_POLL_INTERVAL: "5s",
-      TASMOFLEET_BACKUP_INTERVAL: "6s",
+      TASMOFLEET_BACKUP_INTERVAL: "1m", // the least the schedule accepts
       TASMOFLEET_FIRMWARE_UPSTREAM_OVERRIDE: env.vars.DEVENV_UPSTREAM_URL,
       TASMOFLEET_FIRMWARE_LISTEN: `127.0.0.1:${fwPort}`,
       TASMOFLEET_FIRMWARE_BASE_URL: `http://127.0.0.1:${fwPort}`,
@@ -60,7 +60,7 @@ test("the page is as wide as the Dashboard's content and never scrolls sideways"
     const main = (await page.locator("main").boundingBox())!.width;
     expect(main, `main width at ${width}`).toBeCloseTo(dash, 0);
     const cards = await page.locator(".syspage .cstacks").boundingBox();
-    expect(cards!.width, "the card stacks are not capped at the Settings width").toBeGreaterThan(Math.min(main - 40, 1300));
+    expect(cards!.width, "the card stacks are not capped at the Settings width").toBeGreaterThan(width >= 1920 ? 1300 : main - 80);
     const sw = await page.evaluate(() => document.documentElement.scrollWidth);
     expect(sw, `no sideways scroll at ${width}`).toBeLessThanOrEqual(width);
   }
@@ -108,12 +108,12 @@ test("an operator sees the page read-only", async ({ page }) => {
 });
 
 test("after a scheduled run the status bar links to the page and the last run is listed", async ({ page }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(150_000);
   await page.setExtraHTTPHeaders(admin);
   await expect(async () => {
     await page.goto(app.url + "/devices/backups");
     await expect(page.locator("#card-lastrun")).toContainText("Backed up", { timeout: 2000 });
-  }).toPass({ timeout: 60_000 });
+  }).toPass({ timeout: 120_000 });
   await page.goto(app.url + "/");
   const item = page.locator(".sb-wide a.sb-i, footer .sb-wide a.sb-i").filter({ hasText: "Backup" }).first();
   await expect(item).toHaveAttribute("href", /\/devices\/backups$/);

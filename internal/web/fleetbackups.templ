@@ -251,7 +251,7 @@ templ fleetRowView(v fleetView, r fleetRow) {
 			if r.Runs == 0 {
 				<span class="muted">-</span>
 			} else {
-				<span class="mono">{ strconv.Itoa(r.Runs) }</span><span class="bk-u">{ " backups" }</span>
+				<span class="mono">{ strconv.Itoa(r.Runs) }</span><span class="bk-u">{ " " + noun(r.Runs, "backup", "backups") }</span>
 			}
 		</td>
 		<td data-label="Files" class="nowrap s">
