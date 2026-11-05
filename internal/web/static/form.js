@@ -159,7 +159,8 @@
     // scrolls, never the page (#381). Not after the row's own reload: the person just used the row
     // where it was, and the default "All" pill is current whenever only Chip or Tag is chosen, so
     // scrolling it into view would throw the row back to its start (#116, #428).
-    var on = row && !kept && row.querySelectorAll('.dv-chip[aria-current="true"]');
+    var on =
+      row && !kept && row.querySelectorAll('.dv-chip[aria-current="true"]');
     if (on && on.length) {
       var chip = on[on.length - 1].getBoundingClientRect();
       var box = row.getBoundingClientRect();
@@ -350,7 +351,8 @@
     }
     var sub = e.submitter;
     // after the submission has started (a disabled button would not be sent) and after the other
-    // submit handlers had their say (a confirmation that cancels it must not leave the form busy)
+    // submit handlers had their say (a confirmation that cancels it must not leave the form busy;
+    // htmx cancels the submit of a form it sends itself, which the htmx events below cover)
     window.setTimeout(function () {
       if (e.defaultPrevented) {
         return;

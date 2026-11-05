@@ -103,7 +103,9 @@
   /* shape */
   --r-control: 7px; /* buttons, inputs, selects, segmented controls */
   --r-card: 10px; /* sections, cards, tables */
-  --card-gap: var(--sp-12); /* between sibling cards, both ways (device overview, pages of cards) */
+  --card-gap: var(
+    --sp-12
+  ); /* between sibling cards, both ways (device overview, pages of cards) */
   --r-panel: 12px; /* auth card, dialogs, menus */
   --r-banner: 9px;
   --r-code: 8px; /* pre, console, diff */
@@ -3413,7 +3415,9 @@ label.chip:has(input:focus-visible) {
   }
   /* the target needs no label here: it is the line under time and user */
   .audittable.dense
-    td.p1x[data-label]:not(.p1):not(.p2):not(.sel):not(.s):not(.rowacts)::before {
+    td.p1x[data-label]:not(.p1):not(.p2):not(.sel):not(.s):not(
+      .rowacts
+    )::before {
     content: none;
   }
   /* the kind chip (Proxy, SSO) is for the desktop column; the name says who */
@@ -5404,7 +5408,10 @@ nav.crumbs a {
 }
 .banner-text {
   flex: 1;
-  min-width: min(200px, 100%); /* in a narrow box (the style guide's sign-in card) it may not poke out of the border */
+  min-width: min(
+    200px,
+    100%
+  ); /* in a narrow box (the style guide's sign-in card) it may not poke out of the border */
 }
 .banner-text b {
   font-weight: 600;
@@ -6387,8 +6394,10 @@ dialog.udlg {
   /* a dialog taller than the screen scrolls inside itself: a soft shadow on the cut edge says there
      is more (the "local" fades cover it once the end is reached, as for pre.log) */
   background:
-    linear-gradient(var(--color-surface) 30%, transparent) center top / 100% 24px no-repeat local,
-    linear-gradient(transparent, var(--color-surface) 70%) center bottom / 100% 24px no-repeat local,
+    linear-gradient(var(--color-surface) 30%, transparent) center top / 100%
+      24px no-repeat local,
+    linear-gradient(transparent, var(--color-surface) 70%) center bottom / 100%
+      24px no-repeat local,
     linear-gradient(
         color-mix(in srgb, var(--color-text) 14%, transparent),
         transparent
@@ -7216,7 +7225,10 @@ body.page-auth main {
 @media (min-width: 45rem) {
   .cstack .users-list .urow {
     display: grid;
-    grid-template-columns: minmax(0, 1.5fr) 90px minmax(0, 100px) minmax(0, 1.6fr) auto;
+    grid-template-columns: minmax(0, 1.5fr) 90px minmax(0, 100px) minmax(
+        0,
+        1.6fr
+      ) auto;
     align-items: center;
     column-gap: var(--sp-12);
   }
@@ -7237,7 +7249,9 @@ body.page-auth main {
   border-bottom: var(--hair-w) solid var(--color-border);
 }
 .urow > a.btn {
-  margin-right: var(--sp-10); /* the row's right padding fits the icon button, not a text one */
+  margin-right: var(
+    --sp-10
+  ); /* the row's right padding fits the icon button, not a text one */
 }
 .urow-off {
   background: var(--color-surface-2);
@@ -10375,7 +10389,9 @@ html:has(dialog#dlg-txn:modal) body {
   padding: 0 8px;
 }
 .upd-opts .upd-opt select,
-.upd-opts .upd-opt input:not([type="checkbox"]):not([type="radio"]):not([type="file"]) {
+.upd-opts
+  .upd-opt
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]) {
   width: 100%;
   min-width: 0;
 }
@@ -10743,10 +10759,14 @@ dialog.fw-notes-dlg .fw-dlg-body {
   overflow: auto;
   padding-bottom: var(--sp-8);
   background:
-    linear-gradient(var(--color-surface) 30%, transparent) top / 100% 24px no-repeat local,
-    linear-gradient(transparent, var(--color-surface) 70%) bottom / 100% 24px no-repeat local,
-    linear-gradient(var(--color-border), transparent) top / 100% 8px no-repeat scroll,
-    linear-gradient(transparent, var(--color-border)) bottom / 100% 8px no-repeat scroll;
+    linear-gradient(var(--color-surface) 30%, transparent) top / 100% 24px
+      no-repeat local,
+    linear-gradient(transparent, var(--color-surface) 70%) bottom / 100% 24px
+      no-repeat local,
+    linear-gradient(var(--color-border), transparent) top / 100% 8px no-repeat
+      scroll,
+    linear-gradient(transparent, var(--color-border)) bottom / 100% 8px
+      no-repeat scroll;
 }
 .fw-cache {
   overflow: hidden;
@@ -12499,7 +12519,12 @@ input:focus-visible + .swtrack {
     height: 40px;
     margin: calc(-1 * var(--sp-12));
     border: 0;
-    background: radial-gradient(circle, var(--color-surface) 7px, var(--color-border-strong) 7px 8px, transparent 8px);
+    background: radial-gradient(
+      circle,
+      var(--color-surface) 7px,
+      var(--color-border-strong) 7px 8px,
+      transparent 8px
+    );
   }
   .sbar {
     margin-top: var(--sp-8);
