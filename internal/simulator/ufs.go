@@ -298,6 +298,43 @@ func stallDuration(f Fault) time.Duration {
 	return time.Hour // until the client gives up
 }
 
+// PageWords are the translated words of a localized Tasmota build (tasmota/language/*.h) that
+// the /ufsu result page contains. The zero value is the English build.
+type PageWords struct {
+	Lang             string // D_HTML_LANGUAGE
+	Upload           string // D_UPLOAD
+	Successful       string // D_SUCCESSFUL
+	Failed           string // D_FAILED
+	ManageFileSystem string // D_MANAGE_FILE_SYSTEM
+}
+
+func (w PageWords) orEnglish() PageWords {
+	if w == (PageWords{}) {
+		return PageWords{"en", "Upload", "Successful", "Failed", "Manage File system"}
+	}
+	return w
+}
+
+// ufsuPage is HandleUploadUFSDone's page (xdrv_50_filesystem.ino): WSContentStart_P and
+// WSContentSendStyle (a head without any reload script), the coloured heading, then "<br></div>"
+// after a success or "<br><br>" and the reason after a failure, then the link back to the file
+// system. It is NOT the firmware upload page of HandleUploadDone (reload script, restart line).
+func ufsuPage(ok bool, reason string, words PageWords) []byte {
+	w := words.orEnglish()
+	var b strings.Builder
+	b.WriteString("<!DOCTYPE html><html lang=\"" + w.Lang + "\" class=\"\"><head><meta charset='utf-8'><title>Information</title>" +
+		"<script>var x=null,lt,to,tp,pc='';</script><style>body{}</style></head><body><div style='text-align:left;display:inline-block;'>" +
+		"<div style='text-align:center;'><b>" + w.Upload + " <font color='#")
+	if ok {
+		b.WriteString("008000'>" + w.Successful + "</font></b><br>")
+	} else {
+		b.WriteString("ff5661'>" + w.Failed + "</font></b><br><br>" + reason)
+	}
+	b.WriteString("</div><br><p></p><form action='ufsd' method='get'><input type='hidden' name='download' value='/' /> <button>" +
+		w.ManageFileSystem + "</button></form></div></body></html>")
+	return []byte(b.String())
+}
+
 // serveUfsu models HandleUploadUFSLoop/HandleUploadUFSDone: POST /ufsu?fsz=
 // with a multipart field "ufsu". The file goes to ufs_path + "/" + filename,
 // after the old file was removed. ufs_path is whatever the last GET /ufsd
@@ -321,7 +358,7 @@ func (d *simDevice) serveUfsu(w http.ResponseWriter, r *http.Request) {
 	d.mu.Unlock()
 	reply := func(ok bool, msg string) {
 		d.setHeaders(w, "", "text/html")
-		d.writeBody(w, http.StatusOK, uploadPage(ok, msg))
+		d.writeBody(w, http.StatusOK, ufsuPage(ok, msg, d.spec.PageWords))
 	}
 	if oldFW && !armed {
 		_, _ = io.Copy(io.Discard, r.Body)

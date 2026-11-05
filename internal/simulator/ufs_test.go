@@ -233,3 +233,41 @@ func TestUFS_UploadNameIsCutLikeTheDevice(t *testing.T) {
 		t.Errorf("the 48 byte name must not exist (HTTP %d)", r.StatusCode)
 	}
 }
+
+// Why (#618): the /ufsu result page is HandleUploadUFSDone's, not the firmware upload page. A
+// simulator that served the firmware page (reload script, restart line) would let a wrong client
+// pass every test and break on a real device. Pinned from xdrv_50_filesystem.ino: no reload script,
+// success = heading then "</font></b><br></div>", failure = heading then "</font></b><br><br>" and
+// the reason; a localized build changes the words only.
+func TestUFS_ResultPageIsTheFileSystemPageNotTheFirmwareOne(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct {
+		name  string
+		words PageWords
+		fault []Fault
+		okEnd string // what follows the heading
+	}{
+		{"english success", PageWords{}, nil, "Successful</font></b><br></div>"},
+		{"german success", PageWords{"de", "Upload", "erfolgreich", "fehlgeschlagen", "Dateisystem verwalten"}, nil, "erfolgreich</font></b><br></div>"},
+		{"english failure", PageWords{}, []Fault{{Kind: FaultUfsUploadError}}, "Failed</font></b><br><br>Upload failed. Enable logging 3</div>"},
+		{"german failure", PageWords{"de", "Upload", "erfolgreich", "fehlgeschlagen", "Dateisystem verwalten"}, []Fault{{Kind: FaultUfsUploadError}}, "fehlgeschlagen</font></b><br><br>Upload failed. Enable logging 3</div>"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			d := add(t, newTestFleet(t, "", Extra{}), DeviceSpec{Name: "m", Profile: ProfileESP32, Version: "16.0.0", PageWords: c.words, Faults: c.fault})
+			httpGet(t, "http://"+d.Addr()+"/ufsd?dir=2")
+			out := post(t, d.Addr(), "fsz=1", "a.txt", []byte("x"))
+			if !strings.Contains(out, c.okEnd) {
+				t.Errorf("page does not end its heading like HandleUploadUFSDone: %s", out)
+			}
+			for _, firmware := range []string{"location.href", "restart", "setTimeout"} {
+				if strings.Contains(out, firmware) {
+					t.Errorf("firmware upload page element %q on the /ufsu page: %s", firmware, out)
+				}
+			}
+			if c.words.Failed != "" && strings.Contains(out, "Successful") {
+				t.Errorf("English words on a localized page: %s", out)
+			}
+		})
+	}
+}

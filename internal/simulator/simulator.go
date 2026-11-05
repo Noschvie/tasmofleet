@@ -110,6 +110,9 @@ type DeviceSpec struct {
 	// "HTTP: Referer '' denied. Use 'SO128 1' ..."). The zero value is
 	// SetOption128 1, which is what the existing tests assume.
 	RefererCheck bool
+	// PageWords makes the /ufsu result page speak a localized build's language (the heading words
+	// and the link back); the zero value is English. Only the words change, never the page structure.
+	PageWords PageWords
 	// Wired makes the device an Ethernet board: Status 5 reports the Wi-Fi station idle
 	// (0.0.0.0) and the real address, gateway, subnet mask, DNS and MAC in "Ethernet".
 	Wired bool
