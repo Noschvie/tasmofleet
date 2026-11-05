@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Fixed
+
+- Sign out after the session has expired signs out: the sign-out button no longer ends on a white "403 missing or invalid CSRF token" page, the cookie is cleared and you land on the sign-in page (#508)
+
 ## 0.30.1 "Eddystone" (2026-11-05)
 
 ### Fixed

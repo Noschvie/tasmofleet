@@ -646,8 +646,7 @@ func (a *runtime) handler() (http.Handler, error) {
 		return nil, err
 	}
 	h := a.countRequests(mux)
-	h = csrf.Middleware(h)
-	h = guardBodies(a.authSvc, h)
+	h = guardUnsafe(a.authSvc, csrf.Middleware, h)
 	h = a.authSvc.Middleware(h)
 	h = sec(h)
 	h = httpx.AccessLog(a.log, h)

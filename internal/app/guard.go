@@ -12,6 +12,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/firmware"
 	"github.com/nofuturekid/tasmofleet/internal/httpx"
 	"github.com/nofuturekid/tasmofleet/internal/importer"
+	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/web"
 )
 
@@ -65,6 +66,37 @@ func guardBodies(tokens httpx.TokenSource, next http.Handler) http.Handler {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, maxFormBody)
 		next.ServeHTTP(w, r)
+	})
+}
+
+// logoutPath is the sign-out route of package auth (relative to the base path).
+const logoutPath = "/logout"
+
+// sessionTokens is what guardUnsafe asks of package auth: the CSRF token and
+// whether the request carries a valid session.
+type sessionTokens interface {
+	httpx.TokenSource
+	Principal(r *http.Request) (model.Principal, error)
+}
+
+// guardUnsafe chains guardBodies and the CSRF middleware around next, with one
+// exception (#508): POST /logout without a valid session goes straight to next.
+// An expired session has no CSRF token, so the chain would answer 403 and the
+// cookie would never be cleared. Without a session there is nothing for a forged
+// sign-out to end, and only this one exact route is exempt; with a valid session
+// (header principals included) sign-out keeps its CSRF check. The body is capped
+// like everywhere else.
+func guardUnsafe(a sessionTokens, csrf func(http.Handler) http.Handler, next http.Handler) http.Handler {
+	guarded := guardBodies(a, csrf(next))
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == logoutPath {
+			if _, err := a.Principal(r); err != nil {
+				r.Body = http.MaxBytesReader(w, r.Body, maxFormBody)
+				next.ServeHTTP(w, r)
+				return
+			}
+		}
+		guarded.ServeHTTP(w, r)
 	})
 }
 

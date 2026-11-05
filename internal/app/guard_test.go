@@ -14,6 +14,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/config"
 	"github.com/nofuturekid/tasmofleet/internal/firmware"
 	"github.com/nofuturekid/tasmofleet/internal/httpx"
+	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
 	"github.com/nofuturekid/tasmofleet/internal/web"
 )
@@ -327,5 +328,71 @@ func TestMetricsTokenFromEnvironmentLocksAndWins(t *testing.T) {
 	_, err = svc.Sys.Apply(t.Context(), sysconfig.Request{Actor: "admin", StepUp: sysconfig.StepUp{Done: true, Possible: true}, Values: map[string]string{"METRICS_TOKEN": "page"}})
 	if !errors.Is(err, sysconfig.ErrLocked) {
 		t.Fatalf("page change of an env-locked token: %v, want ErrLocked", err)
+	}
+}
+
+type sessionFn struct {
+	token string // CSRF token the caller's session (or pre-session cookie) expects
+	valid bool   // the request carries a valid session
+}
+
+func (s sessionFn) CSRFToken(*http.Request) string { return s.token }
+func (s sessionFn) Principal(*http.Request) (model.Principal, error) {
+	if s.valid {
+		return model.Principal{Subject: "ann"}, nil
+	}
+	return model.Principal{}, errors.New("unauthenticated")
+}
+
+// Why (#508): a person whose session expired must still be able to sign out.
+// Their session has no CSRF token, so the generic chain answered 403 and the
+// cookie stayed. POST /logout without a valid session now reaches the handler,
+// but nothing else gains from that: a valid session keeps the CSRF check on
+// /logout, and every other unsafe route stays closed without a session.
+func TestGuardUnsafeLogoutWithoutSession(t *testing.T) {
+	var hits []string
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits = append(hits, r.URL.Path)
+		w.WriteHeader(http.StatusNoContent)
+	})
+	do := func(s sessionFn, method, path, body string) int {
+		hits = nil
+		csrf, err := httpx.NewCSRF(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := httptest.NewRecorder()
+		guardUnsafe(s, csrf.Middleware, next).ServeHTTP(rec, req)
+		return rec.Code
+	}
+	expired := sessionFn{}                       // no token can exist
+	staleLogin := sessionFn{token: "pre-cookie"} // a pre-session login cookie that does not match the old form token
+	valid := sessionFn{token: "tok", valid: true}
+	if c := do(expired, "POST", "/logout", "csrf=old"); c != 204 || len(hits) != 1 {
+		t.Errorf("expired session: %d %v, want the logout handler reached", c, hits)
+	}
+	if c := do(staleLogin, "POST", "/logout", "csrf=old"); c != 204 || len(hits) != 1 {
+		t.Errorf("stale pre-session cookie: %d %v, want the logout handler reached", c, hits)
+	}
+	if c := do(valid, "POST", "/logout", "csrf=wrong"); c != 403 || len(hits) != 0 {
+		t.Errorf("valid session, wrong token: %d %v, want refused", c, hits)
+	}
+	if c := do(valid, "POST", "/logout", ""); c != 403 || len(hits) != 0 {
+		t.Errorf("valid session, no token: %d %v, want refused", c, hits)
+	}
+	if c := do(valid, "POST", "/logout", "csrf=tok"); c != 204 || len(hits) != 1 {
+		t.Errorf("valid session, right token: %d %v, want signed out", c, hits)
+	}
+	for _, path := range []string{"/logout/", "/login/local", "/users", "/devices/new", "/account/password", "/x/logout"} {
+		if c := do(expired, "POST", path, "csrf=old"); c != 403 || len(hits) != 0 {
+			t.Errorf("POST %s without a session: %d %v, want refused (only /logout is exempt)", path, c, hits)
+		}
+	}
+	for _, m := range []string{"PUT", "DELETE", "PATCH"} {
+		if c := do(expired, m, "/logout", ""); c != 403 || len(hits) != 0 {
+			t.Errorf("%s /logout without a session: %d %v, want refused", m, c, hits)
+		}
 	}
 }

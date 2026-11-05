@@ -59,6 +59,19 @@ test("local sign-in works and wrong passwords are refused", { tag: "@core" }, as
   await expect(page).not.toHaveURL(/\/devices$/);
 });
 
+// Why (#508): a tab left open past the idle expiry still shows the Sign out button. The server no
+// longer knows the session, so its CSRF token is gone; the click used to end on a white "403 missing
+// or invalid CSRF token" page. Signing out must always work: the person lands on the sign-in page.
+test("Sign out after the session is gone signs out instead of answering 403", { tag: "@core" }, async ({ page }) => {
+  await signInBreakglass(page);
+  await page.context().clearCookies(); // the server-side effect of an expired session: no session cookie matches
+  await openAccountMenu(page);
+  await page.locator("details.usermenu:not([data-static])").getByRole("button", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/$|\/login/);
+  await expect(page.getByText("missing or invalid CSRF token")).toHaveCount(0);
+  await expect(page.getByLabel("Username")).toBeVisible();
+});
+
 // UX review #2: the account pages are part of the app: navigation, sign-out, the same
 // layout. Only the sign-in and the forced first password change stay centred.
 test("account pages carry the app shell", async ({ page }) => {
