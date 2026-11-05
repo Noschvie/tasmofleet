@@ -171,7 +171,7 @@ func TestSystemSettingsSaveAppliesAndAudits(t *testing.T) {
 func TestSystemSettingsRejectUnknownAndBootstrapKeys(t *testing.T) {
 	for _, form := range []url.Values{
 		{"v.LISTEN": {":1"}}, {"v.TRUSTED_PROXIES": {"0.0.0.0/0"}}, {"clear.TRUSTED_PROXIES": {"1"}},
-		{"v.NO_SUCH": {"1"}}, {"v.BACKUP_KEEP": {"20"}, "clear.BACKUP_KEEP": {"1"}}, {"LISTEN": {":1"}}, {"v.BACKUP_KEEP": {"4"}, "extra": {"1"}}, {"v.Prov": {"x"}},
+		{"v.NO_SUCH": {"1"}}, {"LISTEN": {":1"}}, {"v.BACKUP_KEEP": {"4"}, "extra": {"1"}}, {"v.Prov": {"x"}},
 	} {
 		e, svc, mem, _ := sysEnv(t, true)
 		form.Set("csrf", "tok")

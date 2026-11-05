@@ -64,6 +64,7 @@ type SettingFieldData struct {
 	Pending           bool   // the stored value waits for a restart
 	Notice            string // a second message under the help: a stored value that is ignored, a secret to enter again
 	CanReset          bool
+	Default           string // what "Reset to default" stores, shown in the field at once by form.js (#623)
 	Switch, Group     bool
 	Warn              bool // a switch drawn in the warning tone while on
 }
@@ -105,7 +106,7 @@ templ SettingField(d SettingFieldData) {
 						@Badge(ToneWarn, "Restart")
 					}
 					if d.CanReset && !d.Locked {
-						<label class="srst"><input type="checkbox" name={ "clear." + d.Key } value="1"/><span class="srst-off">Reset to default</span><span class="srst-on">Resets on save</span></label>
+						<label class="srst"><input type="checkbox" name={ "clear." + d.Key } value="1" data-default={ d.Default }/><span class="srst-off">Reset to default</span><span class="srst-on">Default, set on save</span></label>
 					}
 				</span>
 			</div>

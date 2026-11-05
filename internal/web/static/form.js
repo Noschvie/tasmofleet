@@ -207,6 +207,90 @@
           });
       });
   });
+  // "Reset to default on save" shows its result at once (#623): ticking clear.KEY puts the default
+  // (data-default on the box, from the server) into the field, so the page shows what Save will
+  // store; unticking puts the old value back; typing in the field afterwards is the person's own
+  // value and unticks the box. A switch, a choice or a segment is set the same way, and the input
+  // and change events let the save bar and the settings that depend on a switch follow. The broker
+  // row (MQTT_URL) is its host and port. Without this file the box is just posted and the server
+  // stores the default.
+  var resetPrev = new Map();
+  var resetting = false;
+  function resetFieldsOf(key) {
+    var form = document.getElementById("sysform");
+    if (!form) {
+      return [];
+    }
+    var names =
+      key === "MQTT_URL" ? ["mqtt.host", "mqtt.port"] : ["v." + key];
+    return Array.prototype.slice.call(form.elements).filter(function (f) {
+      return names.indexOf(f.name) >= 0 && f.type !== "hidden";
+    });
+  }
+  function resetValueFor(f, def, key) {
+    if (key === "MQTT_URL") {
+      return { value: "" };
+    }
+    if (f.type === "checkbox") {
+      return {
+        checked:
+          f.value === "true" ? def === "true" : def.split(",").indexOf(f.value) >= 0,
+      };
+    }
+    if (f.type === "radio") {
+      return { checked: f.value === def };
+    }
+    return { value: def };
+  }
+  document.addEventListener("change", function (e) {
+    var box = e.target;
+    if (
+      resetting ||
+      !(box instanceof HTMLInputElement) ||
+      box.name.indexOf("clear.") !== 0 ||
+      !box.hasAttribute("data-default")
+    ) {
+      return;
+    }
+    var key = box.name.slice("clear.".length);
+    var def = box.getAttribute("data-default");
+    resetting = true;
+    resetFieldsOf(key).forEach(function (f) {
+      var to = box.checked ? resetValueFor(f, def, key) : resetPrev.get(f);
+      if (!to) {
+        return;
+      }
+      if (box.checked) {
+        resetPrev.set(f, { value: f.value, checked: f.checked });
+      }
+      if ("value" in to && f.type !== "checkbox" && f.type !== "radio") {
+        f.value = to.value;
+      } else {
+        f.checked = to.checked;
+      }
+      f.dispatchEvent(new Event("input", { bubbles: true }));
+      f.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    resetting = false;
+  });
+  function untickResetOnEdit(e) {
+    var f = e.target;
+    if (resetting || !(f instanceof HTMLInputElement || f instanceof HTMLSelectElement) || !f.form) {
+      return;
+    }
+    var key = /^v\.(.+)$/.exec(f.name);
+    key = key ? key[1] : /^mqtt\.(host|port)$/.test(f.name) ? "MQTT_URL" : "";
+    var box = key && f.form.elements["clear." + key];
+    if (box && box.checked) {
+      resetting = true; // the typed value stays; only the save bar and the switches follow
+      box.checked = false;
+      resetPrev.delete(f);
+      box.dispatchEvent(new Event("change", { bubbles: true }));
+      resetting = false;
+    }
+  }
+  document.addEventListener("input", untickResetOnEdit);
+  document.addEventListener("change", untickResetOnEdit);
   // A filter form (form[data-autosubmit]: the audit filter, the backup comparison's pickers)
   // applies a changed select, checkbox or radio at once; its submit button
   // (data-autosubmit-hide) is for browsers without this file. Text fields wait for the submit.

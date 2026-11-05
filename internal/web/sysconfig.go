@@ -379,7 +379,8 @@ func (h *handler) sysReset(w http.ResponseWriter, r *http.Request) {
 // for an editable field, clear.KEY to go back to the default, b.KEY for an on/off
 // field drawn as a checkbox, and csrf. Any other key fails the whole request (no
 // mass assignment). A checkbox sends nothing when it is off, so b.KEY says the
-// field was on the page: without v.KEY next to it the field is "false".
+// field was on the page: without v.KEY next to it the field is "false". A ticked clear.KEY wins
+// over a v.KEY posted next to it.
 func (h *handler) sysForm(w http.ResponseWriter, r *http.Request, allowClear bool, extras ...string) (values map[string]string, clear []string, extra map[string]string, ok bool) {
 	limitBody(w, r)
 	if err := r.ParseForm(); err != nil {
@@ -455,11 +456,10 @@ func (h *handler) sysForm(w http.ResponseWriter, r *http.Request, allowClear boo
 			values[k] = "" // no box ticked: store "no source" instead of silently keeping the old value
 		}
 	}
+	// A ticked reset wins over the field's own value: without script the field is posted next to its
+	// reset box, and the box is the explicit choice (#623).
 	for _, k := range clear {
-		if _, both := values[k]; both {
-			http.Error(w, "a setting cannot be set and cleared at once", http.StatusBadRequest)
-			return nil, nil, nil, false
-		}
+		delete(values, k)
 	}
 	return values, clear, extra, true
 }
@@ -983,6 +983,15 @@ func sysIntervalShown(row sysRow) sysRow {
 
 // sysCanReset says whether "Reset to default" is offered: a stored value that differs from the
 // default (a secret that is stored always does). A stored value equal to the default has nothing to reset.
+//
+// A schedule's interval offers none (#623): its default 0s means off, which is what the schedule
+// switch already does, and a Reset next to a switch that still says On contradicts it.
 func sysCanReset(row sysRow) bool {
+	if row.Key == "BACKUP_INTERVAL" || row.Key == "SNAPSHOT_INTERVAL" {
+		return false
+	}
 	return row.Source == "stored" && (row.Secret || row.Value != config.DefaultValue(row.Key))
 }
+
+// sysDefault is what a ticked "Reset to default" stores, which form.js shows in the field at once.
+func sysDefault(row sysRow) string { return config.DefaultValue(row.Key) }

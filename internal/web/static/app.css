@@ -12122,19 +12122,18 @@ dialog.fw-notes-dlg .fw-dlg-body {
   display: inline;
   color: var(--color-warn-fg);
 }
-.sf:has(.srst input:checked) input:not([type="checkbox"]),
-.sf:has(.srst input:checked) textarea {
-  opacity: 0.5;
-}
 .sf.w-xs .srst .srst-off,
 .sf.w-xs .srst .srst-on {
   font-size: 0;
 }
-.sf.w-xs .srst .srst-off::before {
-  content: "\21BA";
-  font-size: 13px;
-}
 .sf.w-xs .srst .srst-on::before {
+  content: "\21BA  Default";
+  font-size: 12px;
+}
+.sf.w-xs .lrow {
+  flex-wrap: wrap;
+}
+.sf.w-xs .srst .srst-off::before {
   content: "\21BA";
   font-size: 13px;
 }

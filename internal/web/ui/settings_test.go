@@ -46,3 +46,19 @@ func TestSettingFieldErrorReplacesHelp(t *testing.T) {
 		t.Errorf("error/help: %s", got)
 	}
 }
+
+// Why (#623): after the click the field shows the default that Save stores. form.js reads it from the
+// reset control, so the control must carry it, an empty default included (a cleared field).
+func TestSettingFieldResetCarriesItsDefault(t *testing.T) {
+	got := comp(t, SettingField(SettingFieldData{Key: "BACKUP_KEEP", Label: "Kept", Width: "xs", CanReset: true, Default: "10"}))
+	if !strings.Contains(got, `name="clear.BACKUP_KEEP" value="1" data-default="10"`) {
+		t.Errorf("the reset control lacks its default: %s", got)
+	}
+	empty := comp(t, SettingField(SettingFieldData{Key: "K", Label: "L", Width: "half", CanReset: true}))
+	if !strings.Contains(empty, `data-default=""`) {
+		t.Errorf("an empty default must still be said (the field is cleared): %s", empty)
+	}
+	if !strings.Contains(got, "Default, set on save") {
+		t.Errorf("the ticked state must say it is the default: %s", got)
+	}
+}

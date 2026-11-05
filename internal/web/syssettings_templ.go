@@ -1000,7 +1000,7 @@ func sysFieldData(row sysRow) ui.SettingFieldData {
 	c := sysFieldCopy(row.Key)
 	return ui.SettingFieldData{Key: row.Key, Label: sysLabel(row), Width: c.Width, Help: c.Help, Info: c.Info, Err: row.Err,
 		Notice: sysNotice(row), Pending: row.PendingRestart,
-		Restart: row.Apply != sysconfig.Live && !row.InRestartCard, CanReset: sysCanReset(row), Locked: row.Locked}
+		Restart: row.Apply != sysconfig.Live && !row.InRestartCard, CanReset: sysCanReset(row), Default: sysDefault(row), Locked: row.Locked}
 }
 
 // sysInput is a text, number, password, list or choice setting.

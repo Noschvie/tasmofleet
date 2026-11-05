@@ -17,6 +17,10 @@ always upgrade automatically.
 - About and Settings → Advanced: on a tablet (768 to 1199 px) the two configuration tables no longer sit side by side; the setting names overlapped the values, so they now stack in one column (#592)
 - A device whose HTTP API is switched off (SetOption128 0) is no longer counted as offline: a refused call is an answer, so the device stays online in its header and in the device list, the Reachability tile says "HTTP API off" with "The web page answers" (with live MQTT: "Connected · HTTP API off"), and the connection card and the list's HTTP channel name the refused API. With MQTT off as well, its last will keeps it offline, and the offline banner now says that its web page answers and what to switch on. Such a device is polled about every 30 minutes (the page's check gives news on demand). When MQTT cannot serve it either, it has no path: scheduled backups skip it with the reason "HTTP API off (SetOption128 0)" (no failure, no notification), and updates, bulk actions and a manual Back up refuse it up front with that reason and the fix (SetOption128 1, or add the device by its own IP or hostname); a device that MQTT can serve is not refused, and is backed up and changed over MQTT for as long as its HTTP API is off. A check that reaches a device its last will reports offline no longer moves "Offline since" (#447, thanks @Noschvie)
 
+### Fixed
+
+- "Reset to default" in the settings shows the default at once: after the click the field holds the value Save will store and says "Default, set on save", instead of the old value greyed out; a reset switch (a stored on/off setting) turns to its default immediately, and typing in the field afterwards cancels the reset. The schedule intervals (Devices, Backups and System, Snapshots) no longer offer a Reset: their default is off, which is what the schedule switch does, so resetting the interval could silently switch a schedule off while the switch still said On. Without JavaScript a ticked reset now wins over the value posted next to it instead of refusing the save (#623)
+
 ## 0.29.1 "Portland Head" (2026-11-05)
 
 ### Fixed
