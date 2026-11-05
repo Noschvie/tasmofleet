@@ -208,6 +208,7 @@ func (m *Manager) DeleteRuns(ctx context.Context, actor string, device model.Dev
 	if err != nil {
 		return Deletion{}, err
 	}
+	m.publishDeleted(device)
 	return d, nil
 }
 

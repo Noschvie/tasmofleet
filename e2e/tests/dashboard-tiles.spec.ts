@@ -99,7 +99,17 @@ test("the No backup tile opens the chip and drops when a backup is taken, withou
   const id = page.url().match(/devices\/(\d+)/)![1];
   const csrf = await page.locator("input[name=csrf]").first().inputValue();
   await page.goto(app.url + "/");
-  await page.evaluate(() => ((window as unknown as { __kept: number }).__kept = 1));
+  await page.evaluate(() => {
+    const w = window as unknown as { __kept: number; __heard: number };
+    w.__kept = 1;
+    w.__heard = 0;
+    // #dash must hear the backup event itself: in the fresh devenv a state change reloads the
+    // dashboard about 200 ms after the backup anyway, so the tile dropping alone proves no trigger
+    document.body.addEventListener("htmx:sseMessage", (e) => {
+      const ev = (e as CustomEvent<MessageEvent>).detail;
+      if ((e.target as Element).id === "dash" && ev.type === "backup") w.__heard++;
+    });
+  });
   const took = await page.request.post(`${app.url}/devices/${id}/backup`, {
     headers: adam,
     form: { csrf },
@@ -108,6 +118,8 @@ test("the No backup tile opens the chip and drops when a backup is taken, withou
   expect(took.status(), "backup taken").toBe(303);
   await expect(tile.locator(".stat-value")).toHaveText(String(total - 1), { timeout: 20_000 });
   expect(await page.evaluate(() => (window as unknown as { __kept: number }).__kept)).toBe(1);
+  const heard = await page.evaluate(() => (window as unknown as { __heard: number }).__heard);
+  expect(heard, "the dashboard heard the backup event").toBeGreaterThan(0);
 
   await tile.click();
   await expect(page).toHaveURL(/\/devices\?chip=nobackup/);

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nofuturekid/tasmofleet/internal/events"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 )
 
@@ -175,5 +176,47 @@ func TestBackupOfFilesUnderTheOwnerAndMarksIt(t *testing.T) {
 	}
 	if plain := e.takeAt(t, e.clk.t.Add(time.Hour)); IsReplacementHardware(plain) {
 		t.Error("an ordinary backup must not carry the marker")
+	}
+}
+
+type busLog struct{ got []events.Event }
+
+func (b *busLog) Publish(e events.Event) { b.got = append(b.got, e) }
+
+// Why (#438): the dashboard's "No backup" tile and the status bar follow backup events. A deletion
+// can leave a device without any backup, so every successful delete path must publish one, naming
+// the device, or an open page keeps showing the old count until something else reloads it. A
+// refused delete changes nothing and must publish nothing.
+func TestDeletingBackupsPublishesABackupEvent(t *testing.T) {
+	bus := &busLog{}
+	e := newEnv(t, func(o *Options) { o.Events = bus })
+	day := time.Date(2026, 10, 1, 8, 0, 0, 0, time.UTC)
+	a := e.takeAt(t, day)
+	b := e.takeAt(t, day.Add(time.Hour))
+	e.takeAt(t, day.Add(2*time.Hour))
+	d := e.takeAt(t, day.Add(3*time.Hour))
+	bus.got = nil // the events of the backups themselves
+
+	if _, err := e.m.DeleteRuns(t.Context(), "adm", 7, nil); err == nil {
+		t.Fatal("an empty selection must be refused")
+	}
+	if len(bus.got) != 0 {
+		t.Fatalf("a refused delete published %+v", bus.got)
+	}
+	for name, del := range map[string]func() error{
+		"DeleteRun":       func() error { _, err := e.m.DeleteRun(t.Context(), "adm", a.ID); return err },
+		"DeleteRuns":      func() error { _, err := e.m.DeleteRuns(t.Context(), "adm", 7, []model.BackupID{b.ID}); return err },
+		"DeleteOlderThan": func() error { _, err := e.m.DeleteOlderThan(t.Context(), "adm", 7, d.TakenAt); return err },
+	} {
+		bus.got = nil
+		if err := del(); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if len(bus.got) != 1 || bus.got[0].Topic != events.TopicBackup || bus.got[0].At.IsZero() {
+			t.Fatalf("%s published %+v, want one backup event", name, bus.got)
+		}
+		if p, ok := bus.got[0].Payload.(model.Backup); !ok || p.DeviceID != 7 {
+			t.Fatalf("%s payload %+v, want the device", name, bus.got[0].Payload)
+		}
 	}
 }

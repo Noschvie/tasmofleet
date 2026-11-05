@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"regexp"
 	"strings"
@@ -397,6 +398,13 @@ type usageBackups struct {
 func (u usageBackups) Usage(context.Context) ([]store.BackupUsage, error) { return u.usage, nil }
 func (u usageBackups) Orphans(context.Context) ([]model.Backup, error)    { return nil, nil }
 
+// usageFailing is a backup service whose usage read fails.
+type usageFailing struct{ usageBackups }
+
+func (usageFailing) Usage(context.Context) ([]store.BackupUsage, error) {
+	return nil, errors.New("usage: disk gone")
+}
+
 // Why (#438): a fleet owner wants to see on the dashboard how many devices have no backup, and
 // the click must open exactly those devices: the tile counts with the device list's "No backup"
 // chip (same withoutBackup rule), links to that chip, and uses the accent tone, never warn:
@@ -429,6 +437,13 @@ func TestDashboardNoBackupTileMatchesTheChip(t *testing.T) {
 	}
 	if !strings.Contains(body, "sse:backup") {
 		t.Error("the dashboard does not reload on backup events")
+	}
+
+	// a failed usage read leaves the tile out, never a false "0", and the dashboard still renders
+	broken, _ := dashFleet(t, func(d *Deps) { d.Backups = usageFailing{usageBackups{Service: d.Backups}} })
+	res, body := broken.do(t, "GET", "/", "admin", nil)
+	if res.StatusCode != http.StatusOK || strings.Contains(body, "No backup") {
+		t.Errorf("usage read failed: status %d, tile shown %v", res.StatusCode, strings.Contains(body, "No backup"))
 	}
 
 	// no BackupStorage: no tile

@@ -6086,6 +6086,24 @@ html[data-live="offline"] .conn-banner.conn-off {
   .stat-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  /* an odd count leaves no hole: the last tile takes the whole row (#438) */
+  .stat-grid > .stat-tile:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+}
+/* Where the dashboard's tiles do not fit one row, two balanced rows instead of a lone last tile
+   (#438): seven (admins) as 4 + 3 below 75rem, six (operators) as 3 + 3 below 65rem. The bounds
+   are where auto-fit fits them in one row (150px minimum, the 10px gap, the page gutters and a
+   classic scrollbar); re-measure them when the page's width or gutters change. */
+@media (min-width: 45rem) and (max-width: 74.99rem) {
+  .stat-grid:has(> .stat-tile:nth-child(7):last-child) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (min-width: 45rem) and (max-width: 64.99rem) {
+  .stat-grid:has(> .stat-tile:nth-child(6):last-child) {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 .stat-tile {
   display: flex;

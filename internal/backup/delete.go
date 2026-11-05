@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nofuturekid/tasmofleet/internal/events"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/store"
 )
@@ -110,6 +111,7 @@ func (m *Manager) DeleteRun(ctx context.Context, actor string, id model.BackupID
 		return Deletion{}, err
 	}
 	m.auditDelete(ctx, actor, "backup.delete", fmt.Sprintf("backup:%d", id), d, taken, time.Time{}, nil)
+	m.publishDeleted(b.DeviceID)
 	return d, nil
 }
 
@@ -154,7 +156,17 @@ func (m *Manager) DeleteOlderThan(ctx context.Context, actor string, device mode
 	if err != nil {
 		return Deletion{}, err
 	}
+	m.publishDeleted(device)
 	return d, nil
+}
+
+// publishDeleted tells the open pages (the dashboard's "No backup" tile, the status bar) that a
+// device's backups changed: a deletion can leave the device without any (#438). The payload names
+// the device only.
+func (m *Manager) publishDeleted(device model.DeviceID) {
+	if m.o.Events != nil {
+		m.o.Events.Publish(events.Event{Topic: events.TopicBackup, At: m.o.Clock.Now().UTC(), Payload: model.Backup{DeviceID: device}})
+	}
 }
 
 // removeFiles deletes the files and then their index rows. A file that is
