@@ -58,3 +58,21 @@ func TestReadsOfADeviceWithoutMQTT(t *testing.T) {
 		t.Fatalf("reads = %s (%q)", p.Commands, p.Reason(ActCommands))
 	}
 }
+
+// Why: the connection card shows this sentence under "Console and Settings: reading"; it must say
+// what the router does (MQTT first, HTTP when MQTT is not usable or nothing could be published),
+// not the old "HTTP first" order.
+func TestReadsReasonSaysWhatTheRouterDoes(t *testing.T) {
+	got := Choose(base()).Reason(ActCommands)
+	for _, want := range []string{"over MQTT first", "online on TasmoFleet's broker", "over HTTP only when nothing could be published"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("reason %q lacks %q", got, want)
+		}
+	}
+	other := base()
+	other.MQTT.Ours = false
+	got = Choose(other).Reason(ActCommands)
+	if !strings.Contains(got, "over the device's HTTP API") || !strings.Contains(got, "does not use TasmoFleet's MQTT broker") {
+		t.Errorf("HTTP reason %q does not say why MQTT was not used", got)
+	}
+}

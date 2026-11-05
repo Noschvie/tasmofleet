@@ -185,9 +185,9 @@ func chooseCommands(f Facts) (Path, string) {
 	case why == "" && httpFailing(f):
 		return MQTT, "over MQTT, because " + httpFailText(f.HTTP)
 	case why == "":
-		return MQTT, "over MQTT first (the device is online on TasmoFleet's broker)"
+		return MQTT, "over MQTT first (the device is online on TasmoFleet's broker); over HTTP only when nothing could be published"
 	case !httpFailing(f):
-		return HTTP, "over the device's HTTP API"
+		return HTTP, "over the device's HTTP API, because MQTT is not usable: " + why
 	}
 	return None, noPath(httpFailText(f.HTTP), "MQTT is not usable: "+why)
 }
