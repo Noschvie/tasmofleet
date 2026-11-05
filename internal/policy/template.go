@@ -404,9 +404,17 @@ func BuildTemplateCommand(t GPIOTemplate, targetArch string) (string, error) {
 		return "", errors.New("template is incomplete or out of range")
 	}
 	var b strings.Builder
-	b.WriteString(`Template {"NAME":"` + t.Name + `"`)
+	name, err := jsonString(t.Name)
+	if err != nil {
+		return "", fmt.Errorf("%w: name %q", ErrUnsafeName, t.Name)
+	}
+	b.WriteString(`Template {"NAME":` + name)
 	if targetArch != "" {
-		b.WriteString(`,"ARCH":"` + targetArch + `"`)
+		arch, err := jsonString(targetArch)
+		if err != nil {
+			return "", fmt.Errorf("%w: arch %q", ErrUnsafeName, targetArch)
+		}
+		b.WriteString(`,"ARCH":` + arch)
 	}
 	b.WriteString(`,"GPIO":[`)
 	for i, v := range t.GPIO {
@@ -428,6 +436,19 @@ func BuildTemplateCommand(t GPIOTemplate, targetArch string) (string, error) {
 		return "", fmt.Errorf("%w: the policy would rewrite it", ErrCommandRejected)
 	}
 	return cmd, nil
+}
+
+// jsonString encodes s as a JSON string literal, quotes included, so no value can end the string early (#561).
+// HTML escaping is off: accepted names (no quote, backslash or control character) come out byte for byte
+// as they were typed, which keeps the command the devices get unchanged.
+func jsonString(s string) (string, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(s); err != nil {
+		return "", err
+	}
+	return strings.TrimSuffix(buf.String(), "\n"), nil
 }
 
 // safeArch accepts what Tasmota's ARCH looks like (ESP8266, ESP32S3, ...): letters, digits and '_'.

@@ -443,6 +443,40 @@ func TestBuildCommandRefusesUnsafeNames(t *testing.T) {
 	}
 }
 
+func TestBuildCommandIsByteForByteWhatDevicesAlwaysGot(t *testing.T) {
+	// #561: NAME and ARCH are now JSON-encoded instead of concatenated. Devices must get exactly the command
+	// the concatenating code built for every name that was accepted, so the expectation below is that old
+	// formula spelled out (HTML characters and non-ASCII letters unescaped), not the encoder's own output.
+	names := []string{"NOUS A1T", "Plüg 1", "Größe ÄÖÜ ß", "日本語 プラグ", "a & b", "a<b>c", "a-b_c/d(e)", "  x  ", "é" + strings.Repeat("n", 79), strings.Repeat("ü", 80)}
+	for _, name := range names {
+		for _, arch := range []string{"", "ESP8266", "ESP32S3", "ESP_32", strings.Repeat("A", 40)} {
+			want := `Template {"NAME":"` + name + `"`
+			if arch != "" {
+				want += `,"ARCH":"` + arch + `"`
+			}
+			want += `,"GPIO":[0,32],"FLAG":0,"BASE":18}`
+			got, err := BuildTemplateCommand(GPIOTemplate{Name: name, GPIO: []int{0, 32}, Base: 18}, arch)
+			if err != nil {
+				t.Errorf("name %q arch %q refused: %v", name, arch, err)
+				continue
+			}
+			if got != want {
+				t.Errorf("name %q arch %q:\n got  %s\n want %s", name, arch, got, want)
+			}
+		}
+	}
+	// Still refused, now by SafeTemplateName before any encoding.
+	for _, name := range []string{`a"b`, `a\b`, `"`, `\`} {
+		_, err := BuildTemplateCommand(GPIOTemplate{Name: name, GPIO: []int{0}, Base: 1}, "")
+		if !errors.Is(err, ErrUnsafeName) {
+			t.Errorf("name %q: %v, want ErrUnsafeName", name, err)
+		}
+	}
+	if _, err := BuildTemplateCommand(GPIOTemplate{Name: "x", GPIO: []int{0}, Base: 1}, `ES"P`); !errors.Is(err, ErrUnsafeName) {
+		t.Errorf("arch with quote: %v", err)
+	}
+}
+
 func plan(t *testing.T, ref, dev TemplateDevice, opts PlanOptions) ApplyPlan {
 	t.Helper()
 	return PlanApply(Reference{Device: ref, How: RefChosen, Count: 1, Of: 1}, dev, opts)

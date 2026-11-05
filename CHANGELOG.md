@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Security
+
+- GPIO templates: the `Template` command's `NAME` and `ARCH` are now encoded as JSON strings instead of concatenated into the command (CodeQL `go/unsafe-quoting`). Accepted names produce the same command byte for byte; names with a quote or backslash are still refused (#561)
+
 ## 0.27.3 "Cordouan" (2026-11-02)
 
 ### Upgrade notes
