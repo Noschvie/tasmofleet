@@ -105,7 +105,13 @@
     paint(t instanceof Element && t.isConnected ? t : document);
   }
   document.body.addEventListener("htmx:afterSwap", paintSwapped);
-  document.body.addEventListener("htmx:oobAfterSwap", paintSwapped);
+  // htmx fires oobAfterSwap on the swap's own elements, not on the out-of-band part, so e.target is no use
+  // here: paint the part's target (detail.target), which for an "innerHTML:" part is the container that
+  // holds the new content, wherever on the page it lies.
+  document.body.addEventListener("htmx:oobAfterSwap", function (e) {
+    var t = e.detail && e.detail.target;
+    if (t instanceof Element && t.isConnected) paint(t);
+  });
   // "Today" turns into "Yesterday" at the browser's midnight, and a hidden tab's timers sleep:
   // repaint at the next midnight and when the tab comes back.
   function untilMidnight() {

@@ -432,6 +432,10 @@
   });
   document.addEventListener("htmx:sseMessage", restoreScan);
   document.addEventListener("htmx:afterSwap", restoreScan);
+  // The server's HTML has the select-all controls hidden and the bulk bar's count empty; syncAll shows
+  // and fills them. Run it as soon as the content is in, after the restore of the ticked rows above (the
+  // count follows the ticks), not only at afterSettle: the controls blinked on every list refresh (#594).
+  document.addEventListener("htmx:afterSwap", syncAll);
   // toggle and close do not bubble: listen in the capture phase; wait a tick for the state to settle
   ["toggle", "close"].forEach(function (n) {
     document.addEventListener(

@@ -17,7 +17,8 @@
       : null;
   });
 
-  document.addEventListener("htmx:afterSettle", function (e) {
+  // afterSwap, not afterSettle: the log is drawn scrolled to the top in between (#594)
+  document.addEventListener("htmx:afterSwap", function (e) {
     var target = e.detail && e.detail.target;
     var log =
       target && target.querySelector && target.querySelector("#log-lines");

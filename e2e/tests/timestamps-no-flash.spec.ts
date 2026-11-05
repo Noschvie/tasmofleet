@@ -74,7 +74,8 @@ test("a refreshed Devices list shows browser-locale times at htmx:afterSwap, not
   await ctx.close();
 });
 
-// Other swap paths the app uses: outerHTML (the target element is replaced) and an out-of-band part.
+// Other swap paths the app uses: outerHTML (the target element is replaced) and innerHTML. The out-of-band
+// part follows in the next test.
 for (const style of ["outerHTML", "innerHTML"] as const) {
   test(`a ${style} swap is repainted by htmx:afterSwap`, async ({ browser }) => {
     const ctx = await browser.newContext({ timezoneId: "Asia/Tokyo", locale: "en-GB" });
@@ -98,3 +99,32 @@ for (const style of ["outerHTML", "innerHTML"] as const) {
     await ctx.close();
   });
 }
+
+// An out-of-band part with "innerHTML:" puts its content into a container outside the request's target.
+// htmx fires htmx:oobAfterSwap on the request's own elements, not on that container, so the part's target
+// (detail.target) is what has to be painted; read at htmx:afterSwap, before the next frame.
+test("an innerHTML: out-of-band part outside the swap target is repainted by htmx:afterSwap", async ({ browser }) => {
+  const ctx = await browser.newContext({ timezoneId: "Asia/Tokyo", locale: "en-GB" });
+  const page = await ctx.newPage();
+  await page.setExtraHTTPHeaders(adam);
+  await page.goto(app.url + "/audit");
+  await expect(page.locator("time[data-ts]").first()).toBeVisible();
+  const got = await page.evaluate(() => {
+    const host = document.createElement("div");
+    const outside = document.createElement("div");
+    outside.id = "oob-outside";
+    document.body.append(host, outside);
+    let seen = "";
+    // registered after time.js: runs after its handlers for the same event
+    document.body.addEventListener("htmx:afterSwap", () => {
+      seen = outside.textContent ?? "";
+    });
+    // @ts-expect-error htmx is a page global
+    window.htmx.swap(host, `<p>main</p><div hx-swap-oob="innerHTML:#oob-outside"><time datetime="2026-03-04T22:15:09Z" data-ts="datetime-s">SERVER-TEXT</time></div>`, { swapStyle: "innerHTML" });
+    return { seen, after: outside.textContent };
+  });
+  expect(got.after, "the part did land in its container").not.toBe("");
+  expect(got.seen).not.toBe("SERVER-TEXT");
+  expect(got.seen).not.toBe("");
+  await ctx.close();
+});
