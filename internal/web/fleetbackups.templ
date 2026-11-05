@@ -56,6 +56,7 @@ templ fleetBackupsPage(p sysPage) {
 
 templ fleetStacks(p sysPage) {
 	for _, tab := range p.Tabs {
+		<div class="sys-tab" id={ "sec-" + tab.Slug } data-sys-tab={ tab.Slug }>
 		@ui.CardStacks(3) {
 			for si, span := range tab.Spans {
 				@ui.CardStack(span) {
@@ -71,6 +72,7 @@ templ fleetStacks(p sysPage) {
 				}
 			}
 		}
+		</div>
 	}
 }
 

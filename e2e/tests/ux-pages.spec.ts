@@ -145,14 +145,14 @@ test("pages: no raw subject outside tooltips", async ({ page }) => {
 test("system settings: typed values return after a step-up (?restore=1)", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/settings/system");
-  await page.evaluate(() => sessionStorage.setItem("tf-draft:sysconfig", JSON.stringify({ "v.BACKUP_KEEP": "9", "v.OIDC_CLIENT_SECRET": "must-not-return" })));
+  await page.evaluate(() => sessionStorage.setItem("tf-draft:sysconfig", JSON.stringify({ "v.FIRMWARE_KEEP_RELEASES": "9", "v.OIDC_CLIENT_SECRET": "must-not-return" })));
   await page.goto(app.url + "/settings/system?restore=1");
-  await expect(page.locator("input[name='v.BACKUP_KEEP']")).toHaveValue("9");
+  await expect(page.locator("input[name='v.FIRMWARE_KEEP_RELEASES']")).toHaveValue("9");
   expect(await page.evaluate(() => sessionStorage.getItem("tf-draft:sysconfig"))).toBeNull();
   // an ordinary visit drops a stale draft instead of restoring it
-  await page.evaluate(() => sessionStorage.setItem("tf-draft:sysconfig", JSON.stringify({ "v.BACKUP_KEEP": "7" })));
+  await page.evaluate(() => sessionStorage.setItem("tf-draft:sysconfig", JSON.stringify({ "v.FIRMWARE_KEEP_RELEASES": "7" })));
   await page.goto(app.url + "/settings/system");
-  await expect(page.locator("input[name='v.BACKUP_KEEP']")).not.toHaveValue("7");
+  await expect(page.locator("input[name='v.FIRMWARE_KEEP_RELEASES']")).not.toHaveValue("7");
 });
 
 test("screenshots", async ({ page }) => {

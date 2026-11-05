@@ -217,7 +217,7 @@ test("backups: schedule fields side by side, label and icon together, narrow car
 // setting: off stores 0, on keeps the interval.
 test("backup schedule switch dims the interval and stores 0 when off", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
-  await page.goto(app.url + "/settings/system?tab=backups");
+  await page.goto(app.url + "/devices/backups");
   const sw = page.locator("input[name='sw.BACKUP_INTERVAL']");
   await expect(sw).not.toBeChecked(); // default: manual only
   await page.locator("[data-key='BACKUP_SCHEDULE'] .swtrack").click();
@@ -310,10 +310,10 @@ test("the unsaved dots appear without moving the tab row, the field label or the
   await page.setExtraHTTPHeaders(admin);
   if (process.env.UI362_W) await page.setViewportSize({ width: +process.env.UI362_W, height: 800 });
   if (process.env.UI362_SCHEME) await page.emulateMedia({ colorScheme: process.env.UI362_SCHEME as "light" | "dark" });
-  await page.goto(app.url + "/settings/system?tab=backups");
+  await page.goto(app.url + "/settings/system?tab=firmware");
   const bar = page.locator("[data-sys-bar]");
   await expect(bar).toContainText("No unsaved changes");
-  const input = page.locator("input[name='v.BACKUP_KEEP']");
+  const input = page.locator("input[name='v.FIRMWARE_KEEP_RELEASES']");
   const row = input.locator("xpath=ancestor::*[self::label or contains(@class,'kv-row') or @data-key][1]");
   const stripShown = await tabs(page).isVisible();
   const boxes = async () => {
@@ -345,7 +345,7 @@ test("the unsaved dots appear without moving the tab row, the field label or the
   expect(cutClean, "clean save-bar state text truncated").toBeLessThanOrEqual(0);
   await input.fill("9");
   await expect(bar).toContainText("Unsaved changes:");
-  await expect(page.locator("a.utab[href*='tab=backups']")).toHaveClass(/is-dirty/);
+  await expect(page.locator("a.utab[href*='tab=firmware']")).toHaveClass(/is-dirty/);
   if (shot) await page.screenshot({ path: `${shot}/${process.env.UI362_TAG}-${w}-${scheme}-dirty.png` });
   const after = await boxes();
 
