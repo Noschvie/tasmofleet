@@ -15612,3 +15612,10 @@ details.devcard > summary {
     top: var(--sp-16);
   }
 }
+/* About on a tablet (two balanced columns): the components take the full row, so the version and
+   licence cards above them do not leave a gap below the shorter column */
+@media (min-width: 45rem) and (max-width: 74.99rem) {
+  .cstacks .about-comps {
+    column-span: all;
+  }
+}
