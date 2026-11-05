@@ -1,7 +1,7 @@
 import { test, expect } from "../support/fixtures";
 import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
-// Why (#381): the "Devices without a backup" tile on Settings -> Backups is a number nobody can
+// Why (#381, #409): the "Devices without a backup" tile on Devices -> Backups is a number nobody can
 // act on unless it opens the devices it counts. The click must land on exactly those devices,
 // and the tile must work from the keyboard like the dashboard tiles.
 let app: App;
@@ -42,16 +42,19 @@ test("the Devices without a backup tile opens exactly those devices", async ({ p
   const took = await page.request.post(`${app.url}/devices/${id}/backup`, { headers: admin, form: { csrf }, maxRedirects: 0 });
   expect(took.status(), "backup taken").toBe(303);
 
-  await page.goto(app.url + "/settings/system?tab=backups");
+  await page.goto(app.url + "/devices/backups");
   const tile = page.getByRole("link", { name: /Devices without a backup/ });
   await expect(tile.locator(".sys-sum-value")).toHaveText(String(total - 1));
   await tile.focus();
   await page.keyboard.press("Enter");
-  await expect(page).toHaveURL(/\/devices\?chip=nobackup/);
-  const rows = page.locator("table[data-table=devices] tbody tr");
+  await expect(page).toHaveURL(/\/devices\/backups\?filter=none/);
+  const rows = page.locator(".bk-table tbody tr");
   await expect(rows).toHaveCount(total - 1);
-  await expect(page.getByRole("link", { name: "plug-4m", exact: true })).toHaveCount(0);
+  await expect(page.locator(".bk-table").getByRole("link", { name: "plug-4m", exact: true })).toHaveCount(0);
   await expect(page.locator(".dv-chip[aria-current=true]")).toContainText("No backup");
+  // the device list's own chip counts the same devices
+  await page.goto(app.url + "/devices?chip=nobackup");
+  await expect(page.locator("table[data-table=devices] tbody tr")).toHaveCount(total - 1);
 
   // On a phone the chip row is wider than the screen: the active chip must be scrolled into the
   // row's visible box, or the list looks unfiltered (coordinator review of #408).

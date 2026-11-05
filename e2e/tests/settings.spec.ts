@@ -94,10 +94,10 @@ test("policy view: the live check finds drift per rule, the ESP32 exception is a
 });
 
 // Why (N9 + N2): a device deleted with "keep the backups" leaves backups no device page lists.
-// Settings -> Backups counts them in its totals and lists them with Download, Keep and Delete;
-// deleting one comes back to that tab (it used to lead to /devices/0/backups). The delete form
+// Devices -> Backups counts them in its totals and lists them with Download, Keep and Delete;
+// deleting one comes back to that page (it used to lead to /devices/0/backups). The delete form
 // is posted directly (the delete page is another package's).
-test("settings backups: totals, and a deleted device's kept backup is listed and can be deleted", async ({ page }) => {
+test("devices backups: totals, and a deleted device's kept backup is listed and can be deleted", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/devices");
   await page.getByRole("link", { name: "lamp-1m", exact: true }).click();
@@ -106,10 +106,10 @@ test("settings backups: totals, and a deleted device's kept backup is listed and
   const took = await page.request.post(`${app.url}/devices/${id}/backup`, { headers: admin, form: { csrf }, maxRedirects: 0 });
   expect(took.status(), "backup taken").toBe(303);
 
-  await page.goto(app.url + "/settings/system?tab=backups");
-  const sum = (label: string) => page.locator(".sys-sum", { hasText: label }).locator(".sys-sum-value");
+  await page.goto(app.url + "/devices/backups");
+  const sum = (label: string) => page.locator("#card-storage .sys-sum", { hasText: label }).locator(".sys-sum-value");
   await expect(sum("Backups")).toHaveText(/^[1-9]\d*$/);
-  await expect(page.locator(".sys-store").getByRole("row", { name: /lamp-1m/ })).toBeVisible();
+  await expect(page.locator(".bk-table").getByRole("row", { name: /lamp-1m/ })).toBeVisible();
   // The card is always there since the 0.22 Backups tab; with nothing kept it says so and lists nothing.
   await expect(page.getByRole("heading", { name: "Backups of deleted devices" })).toHaveCount(1);
   await expect(page.getByText("No backups of deleted devices.")).toBeVisible();
@@ -118,19 +118,19 @@ test("settings backups: totals, and a deleted device's kept backup is listed and
   const del = await page.request.post(`${app.url}/devices/${id}/delete`, { headers: admin, form: { csrf, backups: "keep", ack: "1" }, maxRedirects: 0 });
   expect(del.status(), "device deleted, backups kept").toBe(303);
 
-  await page.goto(app.url + "/settings/system?tab=backups");
+  await page.goto(app.url + "/devices/backups");
   await expect(sum("Backups"), "the kept backup still counts").toHaveText(/^[1-9]\d*$/);
   await expect(page.getByText("No backups of deleted devices.")).toHaveCount(0);
   const orphan = page.locator(".sys-orphan", { hasText: "lamp-1m" });
   await expect(orphan).toHaveCount(1);
   await expect(orphan.getByRole("link", { name: "Download" })).toBeVisible();
-  await expect(page.locator(".sys-store").getByRole("row", { name: /lamp-1m/ })).toHaveCount(0);
+  await expect(page.locator(".bk-table").getByRole("row", { name: /lamp-1m/ })).toHaveCount(0);
 
   await orphan.getByRole("link", { name: "Delete" }).click();
   const dlg = page.locator("dialog#dlg-bkdel");
   await expect(dlg).toBeVisible();
   await dlg.getByRole("button", { name: "Delete backup" }).click();
-  await expect(page).toHaveURL(/\/settings\/system\?tab=backups&ok=deleted/);
+  await expect(page).toHaveURL(/\/devices\/backups\?ok=deleted/);
   await expect(page.getByText("Backup deleted.")).toBeVisible();
   await expect(page.locator(".sys-orphan", { hasText: "lamp-1m" })).toHaveCount(0);
 });

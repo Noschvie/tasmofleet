@@ -27,10 +27,10 @@ test("edits survive a tab change, the bar lists the tabs with changes, one Save 
 
   await page.locator("[data-key='METRICS_DEVICE_LABELS'] .swtrack").click();
   await expect(bar).toContainText("Unsaved changes:");
-  await tabs(page).getByRole("link", { name: "Backups" }).click();
-  await expect(page).toHaveURL(/tab=backups/);
-  await page.locator("input[name='v.BACKUP_KEEP']").fill("7");
-  await expect(bar.locator(".sbar-chip")).toHaveText(["General", "Backups"]);
+  await tabs(page).getByRole("link", { name: "Firmware & updates" }).click();
+  await expect(page).toHaveURL(/tab=firmware/);
+  await page.locator("input[name='v.FIRMWARE_KEEP_RELEASES']").fill("7");
+  await expect(bar.locator(".sbar-chip")).toHaveText(["General", "Firmware & updates"]);
   await expect(tabs(page).getByRole("link", { name: "General" })).toHaveClass(/is-dirty/);
 
   await tabs(page).getByRole("link", { name: "General" }).click();
@@ -38,8 +38,8 @@ test("edits survive a tab change, the bar lists the tabs with changes, one Save 
 
   await page.getByRole("button", { name: "Save settings" }).click();
   await expect(page.getByText("Saved.")).toBeVisible();
-  await page.goto(app.url + "/settings/system?tab=backups");
-  await expect(page.locator("input[name='v.BACKUP_KEEP']")).toHaveValue("7");
+  await page.goto(app.url + "/settings/system?tab=firmware");
+  await expect(page.locator("input[name='v.FIRMWARE_KEEP_RELEASES']")).toHaveValue("7");
   await page.goto(app.url + "/settings/system?tab=general");
   await expect(page.locator("input[name='v.METRICS_DEVICE_LABELS']")).toBeChecked();
   await expect(page.locator("[data-sys-bar]")).toContainText("No unsaved changes");
@@ -143,9 +143,9 @@ test("keep-password option survives a refused save with a new broker", async ({ 
     await page.locator("input[name='mqtt.host']").fill("other.example");
     await expect(keep).toBeVisible();
     await keep.locator("input").check();
-    await page.locator("[data-sys-tab='backups'] input[name='v.BACKUP_KEEP']").evaluate((el) => { (el as HTMLInputElement).type = "text"; (el as HTMLInputElement).value = "not-a-number"; });
+    await page.locator("[data-sys-tab='firmware'] input[name='v.FIRMWARE_KEEP_RELEASES']").evaluate((el) => { (el as HTMLInputElement).type = "text"; (el as HTMLInputElement).value = "not-a-number"; });
     await page.getByRole("button", { name: "Save settings" }).click();
-    await expect(page.locator("[data-key='BACKUP_KEEP'] .ufield-err")).toBeVisible();
+    await expect(page.locator("[data-key='FIRMWARE_KEEP_RELEASES'] .ufield-err")).toBeVisible();
     await tabs(page).getByRole("link", { name: "MQTT" }).click(); // the page opens the tab with the error
     await expect(page.locator("input[name='mqtt.host']")).toHaveValue("other.example");
     await expect(keep).toBeVisible();
@@ -158,19 +158,20 @@ test("keep-password option survives a refused save with a new broker", async ({ 
   }
 });
 
-// Why (#336): the Storage card is part of the page whichever tab it was opened on.
-test("the Backups storage card shows when the page was opened on another tab", async ({ page }) => {
+// Why (#409): the Backups tab moved to Devices -> Backups; Settings has eight tabs and no Backups.
+test("Settings has no Backups tab any more", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/settings/system?tab=general");
-  await tabs(page).getByRole("link", { name: "Backups" }).click();
-  await expect(page.locator("#card-storage")).toBeVisible();
-  await expect(page.locator("input[name='v.BACKUP_INTERVAL']")).toHaveValue("");
+  await expect(tabs(page).getByRole("link", { name: "Backups" })).toHaveCount(0);
+  await expect(page.locator("#card-storage")).toHaveCount(0);
+  await page.goto(app.url + "/settings/system?tab=backups");
+  await expect(tabs(page).locator("[aria-current=page]")).toHaveText("General");
 });
 
 // Why (#337): a page that was just loaded has no unsaved changes, on any tab.
 test("a freshly loaded page reports no unsaved changes on any tab", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
-  for (const tab of ["general", "network", "mqtt", "discovery", "backups", "firmware", "signin", "advanced"]) {
+  for (const tab of ["general", "network", "mqtt", "discovery", "firmware", "signin", "advanced"]) {
     await page.goto(app.url + "/settings/system?tab=" + tab);
     await expect(page.locator("[data-sys-bar]"), tab).toContainText("No unsaved changes");
   }
@@ -180,7 +181,7 @@ test("a freshly loaded page reports no unsaved changes on any tab", async ({ pag
 // nothing changed (off saves 0 whatever the interval field holds), not a dirty Backups tab.
 test("scheduled backups on and off again leaves the tab clean", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
-  await page.goto(app.url + "/settings/system?tab=backups");
+  await page.goto(app.url + "/devices/backups");
   const bar = page.locator("[data-sys-bar]");
   const interval = page.locator("input[name='v.BACKUP_INTERVAL']");
   await page.locator("[data-key='BACKUP_SCHEDULE'] .swtrack").click();
@@ -197,7 +198,7 @@ test("scheduled backups on and off again leaves the tab clean", async ({ page })
 test("backups: schedule fields side by side, label and icon together, narrow cards without a gap", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto(app.url + "/settings/system?tab=backups");
+  await page.goto(app.url + "/devices/backups");
   const keep = page.locator("[data-key='BACKUP_KEEP']");
   const prune = page.locator("[data-key='BACKUP_MAX_AGE']");
   const k = (await keep.boundingBox())!, p = (await prune.boundingBox())!;
@@ -209,7 +210,7 @@ test("backups: schedule fields side by side, label and icon together, narrow car
   const a = (await page.locator("#card-schedule").boundingBox())!, b = (await page.locator("#card-orphans").boundingBox())!;
   expect(b.y - (a.y + a.height)).toBeLessThan(24);
   expect(Math.abs(b.x - a.x), "same column").toBeLessThan(2);
-  expect((await page.locator("#card-storage").boundingBox())!.x, "the storage table keeps the wide column").toBeLessThan(a.x);
+  expect((await page.locator("#card-devices").boundingBox())!.x, "the device table keeps the wide column").toBeLessThan(a.x);
 });
 
 // Why: the backup interval showed "0s" for manual only. The switch is a view of the same
@@ -289,7 +290,7 @@ test.describe("with local accounts", () => {
       await page.emulateMedia({ colorScheme: scheme });
       for (const [size, w, h] of [["desktop", 1280, 900], ["phone", 375, 812]] as const) {
         await page.setViewportSize({ width: w, height: h });
-        for (const tab of ["general", "network", "mqtt", "discovery", "backups", "firmware", "signin", "advanced"]) {
+        for (const tab of ["general", "network", "mqtt", "discovery", "firmware", "signin", "advanced"]) {
           await page.goto(local.url + "/settings/system?tab=" + tab);
           await page.screenshot({ path: `${dir}/settings-${tab}-${size}-${scheme}.png`, fullPage: true });
         }

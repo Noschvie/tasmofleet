@@ -222,7 +222,7 @@ test("reset settings: one confirmation, then the step-up, then the defaults", as
   await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
 
   // a stored value to reset
-  await page.goto(app.url + "/settings/system?tab=backups");
+  await page.goto(app.url + "/devices/backups");
   await page.locator("input[name='v.BACKUP_KEEP']").fill("4");
   await page.getByRole("button", { name: "Save settings" }).click();
   await expect(page.getByText("Saved.")).toBeVisible();
@@ -244,7 +244,7 @@ test("reset settings: one confirmation, then the step-up, then the defaults", as
   await page.getByRole("link", { name: "Reset settings…" }).click();
   await page.locator("dialog#dlg-reset").getByRole("button", { name: "Reset settings" }).click();
   await expect(page.getByText("All settings are back at their defaults.")).toBeVisible();
-  await page.goto(app.url + "/settings/system?tab=backups");
+  await page.goto(app.url + "/devices/backups");
   await expect(page.locator("input[name='v.BACKUP_KEEP']")).toHaveValue("10");
 
   await page.goto(app.url + "/audit");

@@ -70,14 +70,14 @@ const box = (page: import("@playwright/test").Page, id: string) => page.locator(
 
 // Why: the four ways to add devices are one page, so there are fewer clicks and fewer menus: Discovered and
 // Network scan in the wide column on the left, Add manually and Import in the narrow one on the right, no
-// tabs, and the sub-navigation says List · Policy · Add.
-test("four boxes in two columns, no tabs, the menu says List, Policy, Add", { tag: "@core" }, async ({ page }) => {
+// tabs, and the sub-navigation says List · Policy · Backups · Add.
+test("four boxes in two columns, no tabs, the menu says List, Policy, Backups, Add", { tag: "@core" }, async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(app.url + "/devices/new");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Add devices");
   await expect(page.locator("nav.utabs")).toHaveCount(0);
   const sub = page.getByRole("navigation", { name: "Devices" });
-  await expect(sub.getByRole("link")).toHaveText([/^List$/, /^Policy$/, /^Add/]);
+  await expect(sub.getByRole("link")).toHaveText([/^List$/, /^Policy$/, /^Backups$/, /^Add/]);
   await expect(page.locator("#crumbs")).toContainText("Devices");
   await expect(page.locator("#crumbs")).toContainText("Add");
   const b = async (id: string) => (await box(page, id).boundingBox())!;

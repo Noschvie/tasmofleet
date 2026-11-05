@@ -33,10 +33,11 @@ test.afterAll(async () => {
   await env?.stop();
 });
 
-const tabs = ["general", "network", "mqtt", "discovery", "backups", "notifications", "firmware", "signin", "advanced"];
+const tabs = ["general", "network", "mqtt", "discovery", "notifications", "firmware", "signin", "advanced"];
 // [name, path, largest gap between stacked cards]: the policy pages keep their own card gap (--card-gap, 20 to 24 px)
 const pages: [string, string, number][] = [
   ...tabs.map((t): [string, string, number] => [`settings tab ${t}`, `/settings/system?tab=${t}`, 17]),
+  ["backups page", "/devices/backups", 17],
   ["about", "/about", 17],
   ["dashboard", "/", 17],
   ["users", "/users", 17],
