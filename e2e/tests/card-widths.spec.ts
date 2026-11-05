@@ -79,7 +79,7 @@ const exempt: Exempt[] = [
 // fleet does not have (an empty fleet, the Replace preview, which needs a spare board of the same chip
 // family and an old device that no longer answers: replace.spec.ts measures it), Drift (a table without a card), the phone
 // and tablet widths (card-stacks.spec.ts guards the stacks there) and pages of other roles.
-const tabs = ["general", "network", "mqtt", "discovery", "backups", "notifications", "firmware", "signin", "advanced"];
+const tabs = ["general", "network", "mqtt", "discovery", "notifications", "firmware", "signin", "advanced"];
 // [name, path]: path is a function where it depends on the seeded fleet
 const pages: [string, () => string][] = [
   ["dashboard", () => "/"],
@@ -101,6 +101,7 @@ const pages: [string, () => string][] = [
   ["firmware release", () => `/firmware/releases/${env.vars.DEVENV_FW_VERSION}`],
   ...tabs.map((t): [string, () => string] => [`system settings ${t}`, () => `/settings/system?tab=${t}`]),
   ["system snapshots", () => "/settings/system/snapshots"],
+  ["devices backups", () => "/devices/backups"],
   ["audit", () => "/audit?since=all"],
   ["users", () => "/users"],
   ["about", () => "/about"],
