@@ -303,10 +303,11 @@ templ updateNewPage(f updateForm, csrf string) {
 	if f.Error != "" {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: f.Error, Alert: true})
 	}
-	<form id="picker" class="upd-split" method="post" action={ templ.SafeURL(f.Base + "/updates/preview") }>
+	<form id="picker" class="upd-form" method="post" action={ templ.SafeURL(f.Base + "/updates/preview") }>
 		<input type="hidden" name="csrf" value={ csrf }/>
-		<div class="upd-main">
-			<section class="ulist upd-pick" aria-labelledby="dev-h">
+		@ui.CardStacks(3) {
+			@ui.CardStack(2) {
+			<section class={ ui.StackRank(1), "ulist", "upd-pick" } aria-labelledby="dev-h">
 				<div class="ulist-head">
 					<h2 id="dev-h">1 · Devices</h2>
 					<span class="upd-head-r">
@@ -356,24 +357,7 @@ templ updateNewPage(f updateForm, csrf string) {
 					</div>
 				}
 			</section>
-			<section class="ucard upd-rel" aria-labelledby="rel-h">
-				<h2 id="rel-h">2 · Release</h2>
-				for _, o := range f.RelOpts {
-					@relOption(o)
-				}
-				if len(f.OlderRels) > 0 {
-					<details class="upd-older">
-						<summary class="btn btn-link btn-sm">Older releases ({ strconv.Itoa(len(f.OlderRels)) })</summary>
-						for _, o := range f.OlderRels {
-							@relOption(o)
-						}
-					</details>
-				}
-				if len(f.RelOpts) == 0 {
-					<p class="upd-none">No release is known yet. Open Firmware to check for releases.</p>
-				}
-			</section>
-			<section class="ucard upd-opts" aria-labelledby="opt-h">
+			<section class={ ui.StackRank(3), "ucard", "upd-opts" } aria-labelledby="opt-h">
 				<h2 id="opt-h">3 · Options</h2>
 				<input type="hidden" name="backup_shown" value="1"/>
 				<label class="upd-opt"><input type="checkbox" name="backup" value="1" checked?={ !f.SkipBackup }/>Back up each device before flashing</label>
@@ -398,8 +382,26 @@ templ updateNewPage(f updateForm, csrf string) {
 					<input name="variant" value={ f.Variant } placeholder="keep the detected variant"/>
 				</label>
 			</section>
-		</div>
-		<aside class="ucard upd-aside" aria-labelledby="plan-h">
+			}
+			@ui.CardStack(1) {
+			<section class={ ui.StackRank(2), "ucard", "upd-rel" } aria-labelledby="rel-h">
+				<h2 id="rel-h">2 · Release</h2>
+				for _, o := range f.RelOpts {
+					@relOption(o)
+				}
+				if len(f.OlderRels) > 0 {
+					<details class="upd-older">
+						<summary class="btn btn-link btn-sm">Older releases ({ strconv.Itoa(len(f.OlderRels)) })</summary>
+						for _, o := range f.OlderRels {
+							@relOption(o)
+						}
+					</details>
+				}
+				if len(f.RelOpts) == 0 {
+					<p class="upd-none">No release is known yet. Open Firmware to check for releases.</p>
+				}
+			</section>
+		<section class={ ui.StackRank(4), "ucard", "upd-aside" } aria-labelledby="plan-h">
 			<h2 id="plan-h">Plan</h2>
 			<dl class="upd-facts">
 				<dt>Devices</dt><dd data-plan-devices>{ strconv.Itoa(f.SelectedN()) }</dd>
@@ -413,7 +415,9 @@ templ updateNewPage(f updateForm, csrf string) {
 			</ol>
 			<p class="upd-hint" role="status" data-push-hint hidden></p>
 			<button type="submit" class="btn btn-primary btn-tall">Review update</button>
-		</aside>
+			</section>
+			}
+		}
 	</form>
 	<form id="pick-form" method="get" action={ templ.SafeURL(f.Base + "/updates/new") }></form>
 }

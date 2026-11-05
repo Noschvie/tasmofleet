@@ -78,11 +78,19 @@ templ firmwareContent(v view, p firmwarePage) {
 		if p.Error != "" {
 			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: p.Error, Alert: true})
 		}
-		<div class="fw-grid">
-			<div class="fw-rels">
-				@fwReleaseList(v, p)
-			</div>
-			<div class="fw-main">
+		@ui.CardStacks(3) {
+			@ui.CardStack(1) {
+				<section class={ ui.StackRank(1), "ulist", "fw-relcard" } aria-labelledby="fw-rels-h">
+					<div class="ulist-head">
+						<h2 id="fw-rels-h">Releases</h2>
+					</div>
+					<div class="fw-rels">
+						@fwReleaseList(v, p)
+					</div>
+				</section>
+				@fwCache(v, p)
+			}
+			@ui.CardStack(2) {
 				if sel := p.Selected(); sel != nil {
 					@fwReleaseCard(v, p, *sel)
 				}
@@ -92,9 +100,16 @@ templ firmwareContent(v view, p firmwarePage) {
 						@fwUploadForm(v, false)
 					</section>
 				}
-				@fwCache(v, p)
-			</div>
-		</div>
+				if v.IsAdmin && p.CanUpload {
+					<section class={ ui.StackRank(4), "ulist", "fw-upcard" } aria-labelledby="fw-custom-h">
+						<div class="ulist-head">
+							<h2 id="fw-custom-h">Custom firmware</h2>
+						</div>
+						<p class="fw-drop" data-fw-drop>Drop a <span class="mono">.bin</span> or <span class="mono">.bin.gz</span> here to add custom firmware, or <a href={ templ.SafeURL(fwURL(v.Base, "upload", "1") + "#upload") } data-dialog="dlg-upload">choose a file</a></p>
+					</section>
+				}
+			}
+		}
 		if sel := p.Selected(); sel != nil {
 			@fwNotesDialog(v, p, *sel)
 		}
@@ -257,7 +272,7 @@ func selectedIfNewest(p firmwarePage) string {
 
 // fwReleaseCard is the selected release: notes, Update, and the files this fleet needs.
 templ fwReleaseCard(v view, p firmwarePage, r releaseView) {
-	<section class="ucard fw-sel" id="release" aria-labelledby="fw-sel-h">
+	<section class={ ui.StackRank(2), "ucard", "fw-sel" } id="release" aria-labelledby="fw-sel-h">
 		<div class="fw-sel-head">
 			<div>
 				<h2 id="fw-sel-h">Tasmota { r.Version }</h2>
@@ -526,7 +541,7 @@ templ fwInlines(ins []firmware.Inline) {
 
 // fwCache is the list of cached files with the drop zone for custom firmware.
 templ fwCache(v view, p firmwarePage) {
-	<section class="ulist fw-cache" id="cache" aria-labelledby="fw-cache-h">
+	<section class={ ui.StackRank(3), "ulist", "fw-cache" } id="cache" aria-labelledby="fw-cache-h">
 		<div class="ulist-head">
 			<h2 id="fw-cache-h">Cached files</h2>
 			<span class="fw-cache-total">
@@ -550,15 +565,12 @@ templ fwCache(v view, p firmwarePage) {
 		if len(p.Artifacts) == 0 {
 			<p class="fw-cache-empty">Nothing cached yet.</p>
 		}
-		if v.IsAdmin && p.CanUpload {
-			<p class="fw-drop" data-fw-drop>Drop a <span class="mono">.bin</span> or <span class="mono">.bin.gz</span> here to add custom firmware, or <a href={ templ.SafeURL(fwURL(v.Base, "upload", "1") + "#upload") } data-dialog="dlg-upload">choose a file</a></p>
-		}
 	</section>
 }
 
 // fwCacheRow is one cached file: name, release and size, checksum, date and Delete.
 templ fwCacheRow(v view, p firmwarePage, a artifactView) {
-	<div class="fw-crow" title={ cacheTitle(a) }>
+	<div class="fw-crow fw-crow-2" title={ cacheTitle(a) }>
 		<span class="fw-c-f">
 			if a.Upload != nil {
 				{ a.Upload.Label }
@@ -566,17 +578,7 @@ templ fwCacheRow(v view, p firmwarePage, a artifactView) {
 				@ui.Soft(a.Filename)
 			}
 		</span>
-		<span class="fw-c-v">
-			if a.Upload != nil {
-				custom { a.Release }
-			} else {
-				{ a.Release }
-			}
-			· { sizeNoWrap(a.Size) }
-		</span>
-		<span class="fw-c-h" title={ a.SHA256 } data-visual-mask>sha256 { shortHash(a.SHA256) }</span>
 		<span class="fw-c-a">
-			<time title={ stamp(a.FetchedAt) } { ui.StampAttrs(a.FetchedAt, ui.StampTitle)... }>{ shortDay(p.Now, a.FetchedAt) }</time>
 			if a.InUse {
 				if len(a.Batches) > 0 {
 					for _, b := range a.Batches {
@@ -589,6 +591,16 @@ templ fwCacheRow(v view, p firmwarePage, a artifactView) {
 				<a class="fw-del" href={ templ.SafeURL(v.Base + "/firmware/artifacts/" + strconv.FormatInt(int64(a.ID), 10) + "/delete") } data-dialog={ "dlg-file-" + strconv.FormatInt(int64(a.ID), 10) } aria-label={ "Delete " + a.Release + " " + a.Filename }>Delete</a>
 			}
 		</span>
+		<span class="fw-c-v">
+			if a.Upload != nil {
+				custom { a.Release }
+			} else {
+				{ a.Release }
+			}
+			· { sizeNoWrap(a.Size) }
+			· <time title={ stamp(a.FetchedAt) } { ui.StampAttrs(a.FetchedAt, ui.StampTitle)... }>{ shortDay(p.Now, a.FetchedAt) }</time>
+		</span>
+		<span class="fw-c-h" title={ a.SHA256 } data-visual-mask>sha256 { shortHash(a.SHA256) }</span>
 	</div>
 }
 

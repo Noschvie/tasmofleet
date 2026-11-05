@@ -73,9 +73,6 @@ const exempt: Exempt[] = [
   // Single-form and confirmation pages stay narrow (decision of 2026-11-05).
   span("device edit"),
 
-  // #419-U: Updates and Firmware pages, not converted yet. WP-419U deletes this block.
-  span("firmware"),
-
   // #419-S: System pages and Settings tabs, not converted yet. WP-419S deletes this block.
   use("users", "Users"),
   use("about", "Version"),

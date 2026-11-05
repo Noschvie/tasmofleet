@@ -167,7 +167,7 @@ test("a file held by a running update cannot be deleted", async ({ page }) => {
   }).toPass({ timeout: 200_000 });
 });
 
-// Why: the page is two columns on a desktop and one on a phone; the release cards, the selected
+// Why: the page is column stacks on a desktop and one column on a phone; the release cards, the selected
 // release and the cached files never reach past the screen, at either width.
 for (const [name, width] of [["desktop", 1280], ["phone", 375]] as const) {
   test(`${name}: the firmware page fits the screen`, async ({ page }) => {
@@ -175,8 +175,8 @@ for (const [name, width] of [["desktop", 1280], ["phone", 375]] as const) {
     await page.setViewportSize({ width, height: 900 });
     await openFirmware(page);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), "no sideways scroll").toBe(true);
-    const rel = (await page.locator(".fw-rels").boundingBox())!;
-    const main = (await page.locator(".fw-main").boundingBox())!;
+    const rel = (await page.locator(".fw-relcard").boundingBox())!;
+    const main = (await page.locator("#release").boundingBox())!;
     if (width >= 720) expect(main.x, "the selected release sits right of the list").toBeGreaterThan(rel.x + rel.width - 1);
     else expect(main.y, "on a phone the selected release follows the list").toBeGreaterThan(rel.y + rel.height - 1);
   });

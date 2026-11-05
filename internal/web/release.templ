@@ -86,15 +86,17 @@ templ releaseContent(v view, p releasePage) {
 			if p.Since {
 				@relSince(v, p)
 			} else {
-				<div class="rel-grid">
-					<article class="ucard rel-notes" aria-label="Release notes">
-						@relNotes(p)
-					</article>
-					<div class="rel-aside">
+				@ui.CardStacks(3) {
+					@ui.CardStack(2) {
+						<article class={ ui.StackRank(1), "ucard", "rel-notes" } aria-label="Release notes">
+							@relNotes(p)
+						</article>
+					}
+					@ui.CardStack(1) {
 						@relFiles(v, p)
 						@relOlder(v, p)
-					</div>
-				</div>
+					}
+				}
 			}
 		}
 	</div>
@@ -148,7 +150,7 @@ templ relNotes(p releasePage) {
 
 // relFiles is "Files this fleet needs" with each file's state and Prefetch / Retry.
 templ relFiles(v view, p releasePage) {
-	<section class="ulist rel-files" aria-labelledby="rel-files-h">
+	<section class={ ui.StackRank(2), "ulist", "rel-files" } aria-labelledby="rel-files-h">
 		<div class="ulist-head">
 			<h2 id="rel-files-h">Files this fleet needs</h2>
 			if r := p.Rel; v.IsAdmin && r.CanPrefetch && r.Cached < r.Needed && len(r.Below) > 0 && p.Run == "" {
@@ -204,7 +206,7 @@ templ relFetchButton(v view, release, file, label string) {
 
 // relOlder is "Still on older versions" with the way to update them.
 templ relOlder(v view, p releasePage) {
-	<section class="ulist rel-older" aria-labelledby="rel-older-h">
+	<section class={ ui.StackRank(3), "ulist", "rel-older" } aria-labelledby="rel-older-h">
 		<div class="ulist-head">
 			<h2 id="rel-older-h">Still on older versions</h2>
 		</div>

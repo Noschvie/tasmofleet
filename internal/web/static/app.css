@@ -9937,13 +9937,9 @@ nav.crumbs a {
   gap: 14px;
   align-items: flex-start;
 }
-.upd-main {
-  display: flex;
-  flex: 3 1 480px;
-  flex-direction: column;
-  gap: 14px;
-  max-width: 100%;
-  min-width: 0;
+/* New update (#419): the picker form is only the wrapper of the column stacks */
+.upd-form {
+  display: block;
 }
 .upd-pick,
 .upd-prev {
@@ -10119,11 +10115,13 @@ nav.crumbs a {
   font: 400 13px var(--font-sans);
 }
 .ucard.upd-aside {
+  gap: 10px;
+}
+.upd-split .ucard.upd-aside {
   position: sticky;
   top: 110px;
   flex: 1 1 280px;
   max-width: 100%;
-  gap: 10px;
 }
 .ucard.upd-aside > h2 {
   margin: 0;
@@ -10308,6 +10306,38 @@ html:has(dialog#dlg-txn:modal) body {
   width: 100%;
   min-width: 0;
 }
+/* Options in the wide stack (#419): the three fields in two columns, the checkbox row across both,
+   each label above its control */
+.cstack .upd-opts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: var(--sp-24);
+  row-gap: var(--sp-10);
+  align-content: start;
+}
+.cstack .upd-opts > h2,
+.cstack .upd-opts > .upd-opt:first-of-type {
+  grid-column: 1 / -1;
+}
+.cstack .upd-opts .upd-opt:has(select, input:not([type="checkbox"])) {
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--sp-4);
+}
+@media (max-width: 44.99rem) {
+  .cstack .upd-opts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* Devices in the wide stack: two columns of rows, the names are short */
+@media (min-width: 45rem) {
+  .cstack .upd-pick-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .cstack .upd-pick-list .upd-pick-row:nth-child(odd) {
+    border-right: var(--hair-w) solid var(--color-border);
+  }
+}
 @media (max-width: 44.99rem) {
   .upd-opts .upd-opt:has(select, input:not([type="checkbox"])) {
     grid-template-columns: minmax(0, 1fr);
@@ -10397,26 +10427,11 @@ html:has(dialog#dlg-txn:modal) body {
 .fw-down {
   margin: 0;
 }
-.fw-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px;
-  align-items: flex-start;
-}
 .fw-rels {
-  flex: 1 1 260px;
-  max-width: 100%;
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-.fw-main {
-  flex: 3 1 520px;
-  max-width: 100%;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+  padding: var(--sp-10) var(--sp-12) var(--sp-12);
 }
 .fw-rel {
   display: flex;
@@ -10680,28 +10695,36 @@ dialog.fw-notes-dlg .fw-dlg-body {
 }
 .fw-crow {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-  gap: 4px 10px;
-  align-items: center;
-  padding: 8px 16px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 2px var(--sp-12);
+  align-items: baseline;
+  padding: var(--sp-10) 16px;
   border-bottom: var(--hair-w) solid var(--color-border);
   font-size: 12.5px;
 }
 .fw-c-f {
+  grid-column: 1;
   font: 500 12.5px var(--font-mono);
   overflow-wrap: anywhere;
 }
 .fw-c-v {
+  grid-column: 1;
   font-family: var(--font-mono);
   color: var(--color-text-2);
 }
 .fw-c-h {
+  grid-column: 2;
+  grid-row: 2;
+  justify-self: end;
   font-family: var(--font-mono);
+  font-size: 12px;
   color: var(--color-text-3);
 }
 .fw-c-a {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
   display: flex;
-  justify-content: flex-end;
   gap: 6px;
   align-items: center;
   color: var(--color-text-3);
@@ -10725,6 +10748,9 @@ dialog.fw-notes-dlg .fw-dlg-body {
   font-size: 13px;
   color: var(--color-text-2);
   border-bottom: var(--hair-w) solid var(--color-border);
+}
+.fw-upcard .fw-drop {
+  margin: var(--sp-12) var(--sp-16) var(--sp-16);
 }
 .fw-drop {
   margin: 12px 16px 16px;
@@ -14500,12 +14526,6 @@ button.pol-chip-x {
 .page-release .pghead {
   align-items: flex-end;
 }
-.rel-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 740px) minmax(0, 1fr);
-  gap: var(--sp-16);
-  align-items: start;
-}
 .rel-notes {
   padding: var(--sp-20) var(--sp-22);
   display: flex;
@@ -14541,22 +14561,20 @@ button.pol-chip-x {
 .rel-breaking h4 {
   display: none;
 }
-.rel-aside {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-14);
-  min-width: 0;
-}
-.rel-aside .ulist {
+.cstack > .rel-files,
+.cstack > .rel-older {
   padding: 0 var(--sp-16) var(--sp-14);
 }
-.rel-aside .ulist-head {
+.cstack > .rel-files .ulist-head,
+.cstack > .rel-older .ulist-head {
   padding: var(--sp-14) 0 var(--sp-6);
 }
-.rel-aside .ulist-head form {
+.cstack > .rel-files .ulist-head form,
+.cstack > .rel-older .ulist-head form {
   margin: 0;
 }
-.rel-aside .ulist-head .btn-link {
+.cstack > .rel-files .ulist-head .btn-link,
+.cstack > .rel-older .ulist-head .btn-link {
   min-height: 0;
   font-size: 12.5px;
 }
@@ -14678,9 +14696,6 @@ button.pol-chip-x {
     display: inline-block;
     padding: 11px 0;
     margin: -11px 0;
-  }
-  .rel-grid {
-    grid-template-columns: minmax(0, 1fr);
   }
   .rel-notes {
     padding: var(--sp-18) var(--sp-22);
