@@ -204,7 +204,16 @@ func usersViewOf(d auth.UsersPageData, now time.Time, nameOf func(subject string
 		case u.Sessions > 0 && now.Sub(u.LastLogin) < 5*time.Minute:
 			row.Last, row.LastAt = "Active now", u.LastLogin.UTC().Format(time.RFC3339)
 		default:
-			row.Last, row.LastAt = capital(agoWords(now, u.LastLogin)), u.LastLogin.UTC().Format(time.RFC3339)
+			// a date, not an age: a last sign-in can be older than today (#419)
+			row.Last, row.LastAt, row.LastDay = ui.StampDayText(now, u.LastLogin), u.LastLogin.UTC().Format(time.RFC3339), true
+		}
+		if !u.Disabled {
+			switch u.Role {
+			case "admin":
+				v.Admins++
+			case "operator":
+				v.Operators++
+			}
 		}
 		row.Menu, row.Dialogs = userMenu(d, u, i)
 		if d.ViewOnly { // every action is disabled: nothing to open a menu for

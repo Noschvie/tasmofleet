@@ -51,7 +51,7 @@ type sysTab struct {
 
 // sysLayout is the approved tab order (maintainer, issue #275) with the cards of each tab.
 var sysLayout = []sysTabDef{
-	{"general", "General", []int{1, 1}, []sysCardDef{
+	{"general", "General", []int{1, 2}, []sysCardDef{
 		{ID: "logging", Title: "Logging & audit", Stack: 0, Keys: []string{"LOG_LEVEL", "AUDIT_RETENTION"}},
 		{ID: "metrics", Title: "Prometheus metrics", Stack: 1, Keys: []string{"METRICS_ENABLED", "METRICS_TOKEN", "METRICS_DEVICE_LABELS"}},
 	}},
@@ -64,7 +64,7 @@ var sysLayout = []sysTabDef{
 		{ID: "broker", Title: "Broker", Note: "Changes apply at once. An empty host turns MQTT off.", Stack: 0, Keys: []string{"MQTT_URL", "MQTT_USER", "MQTT_PASSWORD"}},
 		{ID: "topics", Title: "Topics", Stack: 1, Keys: []string{"MQTT_FULLTOPIC"}},
 	}},
-	{"discovery", "Discovery", []int{1, 1}, []sysCardDef{
+	{"discovery", "Discovery", []int{1, 2}, []sysCardDef{
 		{ID: "mqttdiscovery", Title: "MQTT discovery", Stack: 0, Keys: []string{"DISCOVERY_MQTT"}},
 		{ID: "scan", Title: "Network scan", Stack: 1, Keys: []string{"DISCOVERY_SCAN", "DISCOVERY_SCAN_INTERVAL", "DISCOVERY_SCAN_CIDRS"}},
 	}},

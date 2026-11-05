@@ -277,6 +277,8 @@ type usersView struct {
 	// StepUp is the "Confirm it's you" dialog; nil when the viewer is stepped up or cannot step
 	// up at all (behind a header-authenticating proxy, ViewOnly).
 	StepUp *ui.StepUpData
+	// Admins and Operators count the active people holding each role (the Roles card).
+	Admins, Operators int
 }
 
 // userRowView is one row: who, role and state, how they sign in, when last, and the menu.
@@ -293,6 +295,7 @@ type userRowView struct {
 	Source       string // "Local", "SSO · Authentik", "Proxy header"
 	Last         string // "2h ago", "Never signed in", "Deactivated"
 	LastAt       string // RFC 3339 of the last sign-in for <time>; empty: no time
+	LastDay      bool   // Last is a day text (time.js repaints it in the browser's zone), not "Active now"
 	Sessions     string // "No sessions", "1 session", "2 sessions"
 	Menu         []ui.MenuItem
 	Dialogs      []ui.DialogData
@@ -307,6 +310,8 @@ templ usersPage(v usersView) {
 		}
 	}
 	@usersBanners(v.D)
+	@ui.CardStacks(3) {
+	@ui.CardStack(2) {
 	<section class="ulist users-list" aria-label="Users">
 		for _, u := range v.Rows {
 			<div class={ "urow", templ.KV("urow-off", u.Deactivated) }>
@@ -336,7 +341,7 @@ templ usersPage(v usersView) {
 				</span>
 				<span class="urow-meta">{ u.Source }</span>
 				if u.LastAt != "" {
-					<span class="urow-meta"><time datetime={ u.LastAt }>{ u.Last }</time>{ " · " + u.Sessions }</span>
+					<span class="urow-meta"><time datetime={ u.LastAt } if u.LastDay { data-ts="day" }>{ u.Last }</time>{ " · " + u.Sessions }</span>
 				} else {
 					<span class="urow-meta">{ u.Last + " · " + u.Sessions }</span>
 				}
@@ -348,7 +353,24 @@ templ usersPage(v usersView) {
 			</div>
 		}
 	</section>
-	<p class="users-note">Admin actions ask you to confirm it’s you once every 5 minutes. Nobody can deactivate, delete or demote themselves or the last active admin.</p>
+	}
+	@ui.CardStack(1) {
+		<section class="ucard users-roles" aria-labelledby="users-roles-h">
+			<h2 id="users-roles-h">Roles</h2>
+			<ul class="roles-list">
+				<li>@ui.Badge(ui.ToneAccent, "Admin")<span>Change everything, including users.</span><span class="roles-n">{ plural(v.Admins, "user") }</span></li>
+				<li>@ui.Badge(ui.ToneNeutral, "Operator")<span>Switch, restart and back up devices.</span><span class="roles-n">{ plural(v.Operators, "user") }</span></li>
+			</ul>
+		</section>
+		<section class="ucard users-safe" aria-labelledby="users-safe-h">
+			<h2 id="users-safe-h">Safeguards</h2>
+			<ul class="safe-list">
+				<li>Admin actions ask you to confirm it’s you once every 5 minutes.</li>
+				<li>Nobody can deactivate, delete or demote themselves or the last active admin.</li>
+			</ul>
+		</section>
+	}
+	}
 	for _, u := range v.Rows {
 		for _, dlg := range u.Dialogs {
 			@ui.Dialog(dlg)

@@ -37,37 +37,44 @@ const (
 
 templ aboutPage(p aboutView) {
 	<div class="about-head"><h1>About</h1></div>
-	@ui.CardStacks(1) {
-	@ui.CardStack(ui.SpanAll) {
-		<section class="about-card about-version" aria-label="Version">
-			<div class="about-name" data-visual-mask>TasmoFleet { p.Version }</div>
-			<div class="about-build" data-visual-mask>{ p.Platform }</div>
-			<div class="about-meta" data-visual-mask>Up { p.Uptime } · { strconv.Itoa(p.Devices) } devices</div>
-			<div class="about-actions">
-				<a class="button" href={ templ.SafeURL(p.Base + "/whats-new") } data-visual-mask>What’s new in { p.Version }</a>
-			</div>
-		</section>
-		<section class="about-card about-comps" aria-labelledby="about-comps">
-			<h2 id="about-comps">Components</h2>
-			<ul class="comp-list">
-				for _, c := range p.Comps {
-					<li class="comp">
-						<span class={ "comp-dot", "t-" + c.Tone }></span>
-						<span class="comp-text"><span class="comp-name">{ c.Name }</span><span class="comp-detail">{ c.Detail }</span></span>
-						<span class={ "comp-state", "t-" + c.Tone }>{ c.State }</span>
-					</li>
-				}
-			</ul>
-		</section>
-		@ui.SettingsCard(ui.SettingsCardData{ID: "card-config", Title: "Effective configuration (" + strconv.Itoa(len(p.Config)) + " settings, secrets masked)", Class: "about-cfg", Plain: true}) {
-			<div class="cset">
-				@aboutConfigTable(p.Config[:(len(p.Config)+1)/2])
-				@aboutConfigTable(p.Config[(len(p.Config)+1)/2:])
-			</div>
+	@ui.CardStacks(3) {
+		@ui.CardStack(1) {
+			<section class="about-card about-version r1" aria-label="Version">
+				<div class="about-name" data-visual-mask>TasmoFleet { p.Version }</div>
+				<div class="about-build" data-visual-mask>{ p.Platform }</div>
+				<div class="about-meta" data-visual-mask>Up { p.Uptime } · { strconv.Itoa(p.Devices) } devices</div>
+				<div class="about-actions">
+					<a class="button" href={ templ.SafeURL(p.Base + "/whats-new") } data-visual-mask>What’s new in { p.Version }</a>
+				</div>
+			</section>
+			<section class="about-card about-proj r3" aria-labelledby="about-proj">
+				<h2 id="about-proj">Licence and links</h2>
+				<p class="muted about-links">TasmoFleet { p.Version }, AGPL-3.0-or-later. <a href={ templ.SafeURL(sourceURL) } target="_blank" rel="noopener noreferrer">Source</a> · <a href={ templ.SafeURL(p.Base + "/whats-new") }>Changelog</a> · <a href={ templ.SafeURL(licenceURL) } target="_blank" rel="noopener noreferrer">Licence</a></p>
+			</section>
+		}
+		@ui.CardStack(2) {
+			<section class="about-card about-comps r2" aria-labelledby="about-comps">
+				<h2 id="about-comps">Components</h2>
+				<ul class="comp-list">
+					for _, c := range p.Comps {
+						<li class="comp">
+							<span class={ "comp-dot", "t-" + c.Tone }></span>
+							<span class="comp-text"><span class="comp-name">{ c.Name }</span><span class="comp-detail">{ c.Detail }</span></span>
+							<span class={ "comp-state", "t-" + c.Tone }>{ c.State }</span>
+						</li>
+					}
+				</ul>
+			</section>
+		}
+		@ui.CardStack(ui.SpanAll) {
+			@ui.SettingsCard(ui.SettingsCardData{ID: "card-config", Title: "Effective configuration (" + strconv.Itoa(len(p.Config)) + " settings, secrets masked)", Class: "about-cfg r4", Plain: true}) {
+				<div class="cset">
+					@aboutConfigTable(p.Config[:(len(p.Config)+1)/2])
+					@aboutConfigTable(p.Config[(len(p.Config)+1)/2:])
+				</div>
+			}
 		}
 	}
-	}
-	<p class="muted about-links">TasmoFleet { p.Version }, AGPL-3.0-or-later. <a href={ templ.SafeURL(sourceURL) } target="_blank" rel="noopener noreferrer">Source</a> · <a href={ templ.SafeURL(p.Base + "/whats-new") }>Changelog</a> · <a href={ templ.SafeURL(licenceURL) } target="_blank" rel="noopener noreferrer">Licence</a></p>
 }
 
 // aboutConfigTable is one half of the effective configuration; the two halves sit side by side.

@@ -72,20 +72,6 @@ const exempt: Exempt[] = [
 
   // Single-form and confirmation pages stay narrow (decision of 2026-11-05).
   span("device edit"),
-
-  // #419-S: System pages and Settings tabs, not converted yet. WP-419S deletes this block.
-  use("users", "Users"),
-  use("about", "Version"),
-  span("whats new"),
-  cap("system settings network"), // the Settings 1240 px cap (decision 9), visible at 1920 only
-  cap("system settings mqtt"),
-  cap("system settings backups"),
-  cap("system settings notifications"),
-  cap("system settings firmware"),
-  cap("system settings signin"),
-  cap("system snapshots"),
-  span("system settings general"), // two cards in the three-column Settings grid: the third column stays empty
-  span("system settings discovery"),
 ];
 
 // Not measured: the narrow single-form and confirmation pages other than device edit (device delete,

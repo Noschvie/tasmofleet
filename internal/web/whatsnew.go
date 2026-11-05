@@ -22,6 +22,18 @@ type whatsNewView struct {
 	Seen      string // the release stored at the last visit, "" = never
 	NewCount  int    // releases newer than Seen ("N new since your last visit")
 	Releases  []whatsNewRelease
+	Base      string // base path, for the About link
+	IsAdmin   bool   // About is an admin page: the others get no link
+}
+
+// current is the installed release's entry (nil for a build that is no release, such as "dev").
+func (p whatsNewView) current() *whatsNewRelease {
+	for i := range p.Releases {
+		if p.Releases[i].Installed {
+			return &p.Releases[i]
+		}
+	}
+	return nil
 }
 
 type whatsNewRelease struct {
@@ -102,6 +114,7 @@ func (h *handler) whatsNew(w http.ResponseWriter, r *http.Request) {
 	p := whatsNewData(h.d.Version, h.userPrefs(r))
 	h.markNewsSeen(r)
 	v := h.view(r, "What’s new", "about", nil)
+	p.Base, p.IsAdmin = v.Base, v.IsAdmin
 	v.Crumbs = []ui.Crumb{{Label: "System"}, {Label: "About"}, {Label: "What’s new"}}
 	if v.IsAdmin { // About is an admin page; the others see the step without a link
 		v.Crumbs[1].Path = "/about"

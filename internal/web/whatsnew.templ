@@ -8,9 +8,11 @@ import "github.com/nofuturekid/tasmofleet/internal/web/ui"
 templ whatsNewPage(p whatsNewView) {
 	<div class="page-whatsnew">
 		@ui.PageHeader("What’s new in TasmoFleet", whatsNewSub(p))
-		<div class="wn-list">
+		<div class="wn-stacks">
+		@ui.CardStacks(3) {
+		@ui.CardStack(2) {
 			for _, r := range p.Releases {
-				<section class="wn-rel" id={ "v" + r.Version } aria-labelledby={ "wn-h-" + r.Version }>
+				<section class="wn-rel r3" id={ "v" + r.Version } aria-labelledby={ "wn-h-" + r.Version }>
 					<div class="wn-head">
 						<h2 class="wn-v" id={ "wn-h-" + r.Version }>{ r.Version }</h2>
 						if r.Name != "" {
@@ -60,6 +62,40 @@ templ whatsNewPage(p whatsNewView) {
 					}
 				</section>
 			}
+		}
+		@ui.CardStack(1) {
+			<section class="ucard wn-you r1" aria-labelledby="wn-you-h">
+				<h2 id="wn-you-h">You are on { p.Installed }</h2>
+				if c := p.current(); c != nil && (c.Name != "" || c.Date != "") {
+					<p class="wn-you-sub">
+						if c.Name != "" {
+							“{ c.Name }”
+						}
+						if c.Name != "" && c.Date != "" {
+							{ " · " }
+						}
+						if c.Date != "" {
+							{ isoDay(c.Date) }
+						}
+					</p>
+				}
+				<div class="btn-row">
+					if p.IsAdmin {
+						<a class="button" href={ templ.SafeURL(p.Base + "/about") }>About</a>
+					}
+					<a class="button" href={ templ.SafeURL(sourceURL + "/blob/main/CHANGELOG.md") } target="_blank" rel="noopener noreferrer">Full changelog</a>
+				</div>
+			</section>
+			<section class="ucard wn-jump r2" aria-labelledby="wn-jump-h">
+				<h2 id="wn-jump-h">Jump to a release</h2>
+				<ul class="wn-jump-l">
+					for _, r := range p.Releases {
+						<li><a href={ templ.SafeURL("#v" + r.Version) }>{ r.Version }</a></li>
+					}
+				</ul>
+			</section>
+		}
+		}
 		</div>
 	</div>
 }
