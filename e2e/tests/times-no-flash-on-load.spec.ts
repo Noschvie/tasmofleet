@@ -50,6 +50,11 @@ test.beforeAll(async ({ browser }) => {
   const csrf = await page.locator("input[name=csrf]").first().inputValue();
   const took = await page.request.post(`${app.url}/devices/${deviceId}/backup`, { headers: adam, form: { csrf }, maxRedirects: 0 });
   expect(took.status(), "backup taken").toBe(303);
+  // The device page has times (Last restart, Stability) only once the device has answered; until then they come by
+  // an htmx swap after time.js has run, and a full load of the page would prove nothing.
+  await expect
+    .poll(async () => (await page.request.get(`${app.url}/devices/${deviceId}`, { headers: adam })).text(), { timeout: 30_000 })
+    .toMatch(/<time[^>]*data-ts=/);
   await ctx.close();
 });
 test.afterAll(async () => {
@@ -60,6 +65,8 @@ test.afterAll(async () => {
 interface Report {
   /** visible time elements the probe saw */
   seen: number;
+  /** frames drawn while times were on the page and time.js had not run yet: the gap this file is about */
+  early: number;
   /** elements drawn with more than one text: [texts drawn, in order] */
   flashed: string[][];
   /** elements whose final text differs from the page's own formatter */
@@ -70,6 +77,7 @@ interface Report {
 async function installProbe(page: Page) {
   await page.addInitScript(() => {
     const drawn = new Map<Element, string[]>();
+    let early = 0;
     (window as unknown as { __probe: () => unknown }).__probe = () => {
       const f = (window as unknown as { tasmofleetFormatTime?: (i: string, k: string) => string }).tasmofleetFormatTime;
       const flashed: string[][] = [];
@@ -79,10 +87,12 @@ async function installProbe(page: Page) {
         const want = f ? f(el.getAttribute("datetime") ?? "", el.getAttribute("data-ts") ?? "") : "";
         if (want && el.getAttribute("data-ts") !== "title" && el.textContent !== want) wrong.push(`${el.textContent} != ${want}`);
       });
-      return { seen: drawn.size, flashed, wrong };
+      return { seen: drawn.size, early, flashed, wrong };
     };
     const frame = () => {
-      document.querySelectorAll("time[data-ts]").forEach((el) => {
+      const times = document.querySelectorAll("time[data-ts]");
+      if (times.length && !(window as unknown as { tasmofleetFormatTime?: unknown }).tasmofleetFormatTime) early++;
+      times.forEach((el) => {
         const h = el as HTMLElement;
         if (!h.checkVisibility({ visibilityProperty: true, opacityProperty: true, contentVisibilityAuto: true })) return;
         const r = h.getBoundingClientRect();
@@ -113,7 +123,9 @@ async function report(page: Page): Promise<Report> {
 }
 
 async function browserPage(browser: import("@playwright/test").Browser, opts: { javaScriptEnabled?: boolean } = {}) {
-  const ctx = await browser.newContext({ timezoneId: "Asia/Tokyo", locale: "en-GB", viewport: { width: 1280, height: 900 }, ...opts });
+  // 1600 px: the Devices list's time columns are on screen (at 1280 they lie outside the table's scroll view, and
+  // the probe would see times that are laid out but not drawn)
+  const ctx = await browser.newContext({ timezoneId: "Asia/Tokyo", locale: "en-GB", viewport: { width: 1600, height: 900 }, ...opts });
   const page = await ctx.newPage();
   await page.setExtraHTTPHeaders(adam);
   return { ctx, page };
@@ -132,6 +144,7 @@ test("switching the Online and All chips never draws a time in the server's form
       await expect(page.locator("table[data-table=devices] time[data-ts]").first()).toBeAttached({ timeout: 40_000 });
       const r = await report(page);
       expect(r.seen, `${chip}: the page shows times`).toBeGreaterThan(0);
+      expect(r.early, `${chip}: frames were drawn before time.js ran`).toBeGreaterThan(0);
       expect(r.flashed, `${chip}: times drawn in two formats`).toEqual([]);
       expect(r.wrong, `${chip}: final text is the browser's`).toEqual([]);
     }
@@ -155,6 +168,7 @@ for (const p of pages) {
     await expect(page.locator("time[data-ts]").first()).toBeAttached({ timeout: 40_000 });
     const r = await report(page);
     expect(r.seen, `${p.name} shows times`).toBeGreaterThan(0);
+    expect(r.early, "frames were drawn before time.js ran").toBeGreaterThan(0);
     expect(r.flashed, "times drawn in two formats").toEqual([]);
     expect(r.wrong, "final text is the browser's").toEqual([]);
     await ctx.close();
@@ -179,7 +193,9 @@ test("without JavaScript the server's text shows", async ({ browser }) => {
   const { ctx, page } = await browserPage(browser, { javaScriptEnabled: false });
   await page.goto(app.url + "/audit");
   const t = page.locator("time[data-ts=datetime-s]").first();
-  await expect(t).toBeVisible({ timeout: 40_000 });
+  await expect(t).toBeAttached({ timeout: 40_000 });
+  // at once (noscript.css), not after app.css's one-second fallback: checked once, without a retry that would wait for it
+  expect(await t.evaluate((el) => el.checkVisibility({ visibilityProperty: true })), "visible at once").toBe(true);
   // the server's fixed form in its own zone (UTC), not the Tokyo / en-GB form a script would write
   const iso = (await t.getAttribute("datetime")) ?? "";
   expect(await t.textContent()).toBe(iso.slice(0, 10) + " " + iso.slice(11, 19));
@@ -202,7 +218,8 @@ test("when the browser cannot format a time, the server's text stays visible", a
   await expect(t).toBeAttached({ timeout: 40_000 });
   await page.waitForFunction(() => typeof (window as unknown as { tasmofleetFormatTime?: unknown }).tasmofleetFormatTime === "function", null, { timeout: 15_000 });
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
-  await expect(t).toBeVisible();
+  // as soon as time.js has handled it, not after app.css's one-second fallback: checked once, without a retry
+  expect(await t.evaluate((el) => el.checkVisibility({ visibilityProperty: true })), "visible once time.js has run").toBe(true);
   const iso = (await t.getAttribute("datetime")) ?? "";
   expect(await t.textContent()).toBe(iso.slice(0, 10) + " " + iso.slice(11, 19));
   await ctx.close();
