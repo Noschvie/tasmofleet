@@ -26,7 +26,7 @@ always upgrade automatically.
 
 ### Fixed
 
-- Settings, Notifications: the preview caption names the whole request, and the preview shows a click link only when one would be sent (PUBLIC_URL set) (#579)
+- Settings, Notifications: the preview caption names the whole request, and the preview shows a link only when a message carries one (PUBLIC_URL set); the caption no longer promises a link in the e-mail without PUBLIC_URL (#579)
 - Device page: the "Other broker" hint now also shows for a device that used to report to TasmoFleet's broker and moved to another one (a broker migration, or a restored config that points to an old broker). Before, the stored "on our broker" state and the retained last will kept such a device "heard" for good, so the hint never appeared. A device now counts as being on our broker only if it sent something there within the last 2 hours; one that answers HTTP but has been silent longer shows the hint. A device that does not answer HTTP is left alone, since it may just be switched off. After TasmoFleet restarts or reconnects to its broker the retained last will counts as a message, so the hint can take up to 2 hours to appear. It also needs TasmoFleet's record of the device's broker to be current: after a change made outside TasmoFleet, use Refresh identity (#580, thanks @Noschvie)
 - Device page: the Reachability tile says "MQTT on another broker" for a device that reports to another broker, instead of "MQTT not configured", in line with the "Other broker" card (#580, thanks @Noschvie)
 - The notification of a failed scheduled database snapshot linked to the device backups (and, since 0.27.0, to a Settings tab that no longer held the snapshot schedule); it now links to System, Snapshots (#409).

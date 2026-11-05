@@ -246,7 +246,10 @@ func wireOf(t *testing.T, c config.Config, ev Event) wireRequest {
 	t.Helper()
 	var w wireRequest
 	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-		b, _ := io.ReadAll(r.Body)
+		b, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("reading the request body: %v", err)
+		}
 		w.body = string(b)
 		for k, v := range r.Header {
 			switch k {
@@ -276,23 +279,22 @@ func previewOf(t *testing.T, c config.Config) wireRequest {
 	}
 	p := wireRequest{headers: lines[1:], body: body}
 	sort.Strings(p.headers)
-	var cb strings.Builder
-	if json.Valid([]byte(body)) {
-		var v any
-		_ = json.Unmarshal([]byte(body), &v) // valid, checked above
-		out, _ := json.Marshal(v)
-		cb.Write(out)
-		p.body = cb.String()
-	}
+	p.body = compactJSON(t, body)
 	return p
 }
 
-func compactJSON(s string) string {
+// compactJSON re-marshals s when it is JSON (key order and spacing then no longer matter) and
+// returns it unchanged when it is not (the ntfy body is plain text).
+func compactJSON(t *testing.T, s string) string {
+	t.Helper()
 	var v any
 	if json.Unmarshal([]byte(s), &v) != nil {
 		return s
 	}
-	out, _ := json.Marshal(v)
+	out, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("re-marshalling %q: %v", s, err)
+	}
 	return string(out)
 }
 
@@ -304,12 +306,12 @@ func TestPreviewEqualsTheRequestAWebhookSends(t *testing.T) {
 		for _, public := range []string{"http://tasmofleet.local", ""} {
 			c := baseConfig()
 			c.NotifyWebhookFormat, c.PublicURL = f, public
-			real := UpdateFinished(c, 41, 11, 1, 0, "16.1.0", sampleAt)
-			got, want := wireOf(t, c, real), previewOf(t, c)
+			ev := UpdateFinished(c, 41, 11, 1, 0, "16.1.0", sampleAt)
+			got, want := wireOf(t, c, ev), previewOf(t, c)
 			if strings.Join(got.headers, "\n") != strings.Join(want.headers, "\n") {
 				t.Errorf("%s PUBLIC_URL=%q: headers differ\nsent:    %q\npreview: %q", f, public, got.headers, want.headers)
 			}
-			if compactJSON(got.body) != want.body {
+			if compactJSON(t, got.body) != want.body {
 				t.Errorf("%s PUBLIC_URL=%q: body differs\nsent:    %s\npreview: %s", f, public, got.body, want.body)
 			}
 		}

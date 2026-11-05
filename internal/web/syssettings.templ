@@ -213,7 +213,7 @@ templ sysCardView(p sysPage, c sysCard) {
 						<div class="sf w-full">
 							<div class="sf-main">
 								<pre class="sys-pre">{ p.Notify.Preview }</pre>
-								<small class="ufield-help">The whole webhook request: request line, headers and body (the secret header is not shown). The e-mail uses the title as subject, text and link as body.</small>
+								<small class="ufield-help">The whole webhook request: request line, headers and body (the secret header is not shown). The e-mail uses the title as subject and the text as body, with the link when PUBLIC_URL is set.</small>
 							</div>
 						</div>
 					}

@@ -310,21 +310,29 @@ func TestNotificationFormatIsASelectAndThePreviewFollowsIt(t *testing.T) {
 }
 
 // Why (#579): the card shows the whole request (request line, headers, body), so its caption must
-// not call it "Webhook body", and an ntfy preview must not show a Click link while PUBLIC_URL is
-// unset, because then no link is sent.
-func TestMessagePreviewCaptionNamesTheRequestAndHasNoLinkWithoutPublicURL(t *testing.T) {
-	e, svc := notifyEnv(t, &fakeNotify{})
-	if _, err := svc.Apply(t.Context(), sysconfig.Request{Actor: "admin", Values: map[string]string{"NOTIFY_WEBHOOK_FORMAT": "ntfy"}}); err != nil {
-		t.Fatal(err)
-	}
-	_, page := e.do(t, "GET", "/settings/system?tab=notifications", "admin", nil)
-	if strings.Contains(page, "Webhook body.") || !strings.Contains(page, "The whole webhook request") {
-		t.Errorf("caption does not name the whole request")
-	}
-	if !strings.Contains(page, "Title: Update job #41") {
-		t.Fatalf("no ntfy preview on the page")
-	}
-	if strings.Contains(page, "Click:") {
-		t.Errorf("preview shows a Click link although PUBLIC_URL is unset")
+// not call it "Webhook body". The ntfy preview shows a Click link exactly when PUBLIC_URL is set,
+// because only then a real message carries one; a handler that drops or invents PUBLIC_URL fails.
+func TestMessagePreviewCaptionNamesTheRequestAndTheLinkFollowsPublicURL(t *testing.T) {
+	for _, tc := range []struct{ public, click string }{
+		{"", ""},
+		{"http://tasmofleet.example", "Click: http://tasmofleet.example/transactions/41"},
+	} {
+		e, svc := notifyEnv(t, &fakeNotify{cfg: config.Config{PublicURL: tc.public}})
+		if _, err := svc.Apply(t.Context(), sysconfig.Request{Actor: "admin", Values: map[string]string{"NOTIFY_WEBHOOK_FORMAT": "ntfy"}}); err != nil {
+			t.Fatal(err)
+		}
+		_, page := e.do(t, "GET", "/settings/system?tab=notifications", "admin", nil)
+		if strings.Contains(page, "Webhook body.") || !strings.Contains(page, "The whole webhook request") || !strings.Contains(page, "with the link when PUBLIC_URL is set") {
+			t.Errorf("PUBLIC_URL=%q: caption does not name the whole request and the conditional link", tc.public)
+		}
+		if !strings.Contains(page, "Title: Update job #41") {
+			t.Fatalf("PUBLIC_URL=%q: no ntfy preview on the page", tc.public)
+		}
+		if tc.click == "" && strings.Contains(page, "Click:") {
+			t.Errorf("preview shows a Click link although PUBLIC_URL is unset")
+		}
+		if tc.click != "" && !strings.Contains(page, tc.click) {
+			t.Errorf("preview lacks %q with PUBLIC_URL set", tc.click)
+		}
 	}
 }
