@@ -185,7 +185,7 @@ Run a single package's tests with `go test ./internal/fwselect/ -run TestGuard -
 `make quick` runs fmt-check, vet, golangci-lint and the tests (the integration tests only when their package is affected) on the packages
 changed since `origin/main`, uncommitted and untracked files included, and on every package that imports them; a changed file outside every package
 (docs, assets, deploy, tools, a `testdata/`) makes it run everything, because tests read such files. It skips templ-check, scripts-test,
-shards-check, vuln and build: `make check` stays the gate before every commit.
+shards-check, migration-append-only, vuln and build: `make check` stays the gate before every commit.
 Parallelism follows the machine: `JOBS` defaults to `nproc` (`GOFLAGS=-p=$(JOBS)`),
 mutation workers to `nproc/2`, Playwright workers to `E2E_WORKERS` (default 6). Locally the Makefile runs tools under `nice -n 15`; CI sets `NICE=` (empty). Override
 with e.g. `make check JOBS=4`. `make test` and `make integration` use the go test cache
@@ -210,7 +210,7 @@ SAFETY package, catalogue, image paths). Every gate runs through the Makefile.
 
 | File                                         | Trigger                                    | Runs                                                                                                                                    |
 | -------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `pr.yml`                                     | `pull_request`                             | FAST: `changes`, `checks`, `mutation` (SAFETY PRs), link check, image build check, **`required`**                                       |
+| `pr.yml`                                     | `pull_request`                             | FAST: `changes`, `checks`, `mutation` (SAFETY PRs), link check, migration guard, image build check, **`required`**                      |
 | `main.yml`                                   | push to `main`                             | lint, unit and integration tests, build (no e2e; saves the Go caches), `:edge` image and HA app image, then `ghcr-cleanup`              |
 | `release.yml`                                | tag `v*`                                   | `guards`, `checks` with safety race of all SAFETY packages, then `publish` (image), `release`, `pages`                                  |
 | `nightly.yml`                                | cron 22:37 UTC, `workflow_dispatch`        | FULL: `checks` (e2e all, `-count=1`, catalogue), `race`, `quarantine`, `ha-app`, `ghcr-cleanup`                                         |
@@ -256,7 +256,8 @@ SAFETY package, catalogue, image paths). Every gate runs through the Makefile.
   with retries, and never block a PR or a release. Fix or delete each one within about two weeks; the fixing
   change removes the tag and closes the issue.
 
-Docs-only PRs skip the checks; the link check (`tools/check-doc-links.py`) runs on every PR and gates the merge. The list of docs
+Docs-only PRs skip the checks; the link check (`tools/check-doc-links.py`) and the migration guard (`make migration-append-only`)
+run on every PR and gate the merge. The list of docs
 that are safe to ignore (and the ones a test reads, which are not) is in the header of `.github/workflows/pr.yml`.
 Third-party actions are pinned to a full commit SHA with the version in a comment (`uses: owner/repo@<sha> # vX.Y.Z`);
 Renovate keeps both current. Reusable workflows take their secrets by name (`secrets:`), never `secrets: inherit`.
@@ -285,8 +286,9 @@ Renovate keeps both current. Reusable workflows take their secrets by name (`sec
 - No secrets in the repository, not even in tests: use obviously fake values.
 - **Migrations are append-only since tag v0.0.1.** Never edit a merged file in
   `internal/store/migrations/`; add `NNNN_name.sql`. `make migration-append-only` (part of `make check`, job
-  `migrations` in `pr.yml`, tag job `guards`) fails when a file that exists at the latest `vX.Y.Z` tag is modified,
-  renamed or deleted; needs the tags (CI: `fetch-depth: 0`). (0001 was amended before the first tag;
+  `migrations` in `pr.yml`, tag job `guards`) fails when a file that exists at the newest `vX.Y.Z` tag in the branch's
+  history is modified, renamed or deleted, uncommitted edits included. It needs the tags and fails without them (CI:
+  `fetch-depth: 0`; locally `git fetch --tags`). (0001 was amended before the first tag;
   dev/test databases created before that must be recreated.)
 
 ## Releases
@@ -362,7 +364,7 @@ the ruleset rejects them.
 `pr.yml` runs the FAST tier on every PR: a `changes` job detects docs-only PRs (heavy jobs
 skipped) and PRs that touch a `SAFETY` package (safety jobs added), and the final `required`
 job passes only when every job that had to run passed; a skip counts only when the PR did
-not ask for that job; the link check must always succeed. No approvals are required (single maintainer). Release tags are still pushed
+not ask for that job; the link check and the migration guard must always succeed. No approvals are required (single maintainer). Release tags are still pushed
 directly, on a green commit of `main`.
 
 **UI changes:** the agent makes screenshot pairs per screen (mockup and build where a mockup exists,

@@ -10,6 +10,7 @@
 # mutation gate of the changed mutation packages. Target: "required" green in <= 5 min.
 # Docs-only PRs skip all of that. The relative Markdown link check runs on every PR and gates
 # the merge: a PR that deletes or renames a linked file breaks links without touching Markdown.
+# The migration append-only guard (#595) runs on every PR too and gates the merge.
 # The job "required" is the single status check for branch protection; it always runs.
 #
 # No paths filter on the trigger: "changes" decides, and "required" always reports.
@@ -154,7 +155,7 @@ jobs:
   # reusable workflows: each is green only when every job inside it that was asked for
   # (by the inputs above) ran and succeeded. A skip counts only when this PR did not ask
   # for that job: everything for a docs-only PR, mutation when no SAFETY package changed. The link
-  # check always runs and must succeed.
+  # check and the migration guard always run and must succeed.
   # Any other result (failure, cancelled, or a skip caused by a failed dependency) fails it.
   required:
     name: required

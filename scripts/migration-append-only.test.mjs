@@ -1,27 +1,67 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, renameSync } from "node:fs";
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  rmSync,
+  renameSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const script = resolve("tools/migration-append-only.sh");
+const script = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "../tools/migration-append-only.sh",
+);
 
 // A throwaway repository with migrations 0001+0002 shipped as v0.1.0 (and 0003 as v0.2.0).
 function repo() {
   const dir = mkdtempSync(join(tmpdir(), "mig-"));
-  const git = (...a) => execFileSync("git", ["-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", "-c", "user.name=t", "-c", "user.email=t@example.invalid", ...a], { cwd: dir, stdio: "pipe" });
+  const git = (...a) =>
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "commit.gpgsign=false",
+        "-c",
+        "tag.gpgsign=false",
+        "-c",
+        "user.name=t",
+        "-c",
+        "user.email=t@example.invalid",
+        ...a,
+      ],
+      { cwd: dir, stdio: "pipe" },
+    );
   git("init", "-q", "-b", "main");
   const m = join(dir, "internal/store/migrations");
   mkdirSync(m, { recursive: true });
   writeFileSync(join(m, "0001_init.sql"), "create table a(x int);\n");
   writeFileSync(join(m, "0002_more.sql"), "create table b(y int);\n");
-  git("add", "-A"); git("commit", "-q", "-m", "one"); git("tag", "v0.1.0");
+  git("add", "-A");
+  git("commit", "-q", "-m", "one");
+  git("tag", "v0.1.0");
   writeFileSync(join(m, "0003_new.sql"), "create table c(z int);\n");
-  git("add", "-A"); git("commit", "-q", "-m", "two"); git("tag", "v0.2.0");
-  const run = (...args) => spawnSync("sh", [script, ...args], { cwd: dir, encoding: "utf8" });
-  const commit = (msg) => { git("add", "-A"); git("commit", "-q", "-m", msg); };
-  return { dir, m, run, commit, git, cleanup: () => rmSync(dir, { recursive: true, force: true }) };
+  git("add", "-A");
+  git("commit", "-q", "-m", "two");
+  git("tag", "v0.2.0");
+  const run = (...args) =>
+    spawnSync("sh", [script, ...args], { cwd: dir, encoding: "utf8" });
+  const commit = (msg) => {
+    git("add", "-A");
+    git("commit", "-q", "-m", msg);
+  };
+  return {
+    dir,
+    m,
+    run,
+    commit,
+    git,
+    cleanup: () => rmSync(dir, { recursive: true, force: true }),
+  };
 }
 
 // Why: a minor release that adds a migration is the normal way a schema changes; the guard must not block it.
@@ -31,7 +71,9 @@ test("adding a migration passes", () => {
     writeFileSync(join(r.m, "0004_next.sql"), "create table d(w int);\n");
     r.commit("add");
     assert.equal(r.run().status, 0);
-  } finally { r.cleanup(); }
+  } finally {
+    r.cleanup();
+  }
 });
 
 // Why: existing installations record only the schema version; an edited shipped file leaves them silently on the old schema.
@@ -44,7 +86,9 @@ test("editing a file shipped in the latest tag fails and names it", () => {
     const res = r.run();
     assert.notEqual(res.status, 0);
     assert.match(res.stderr, /0003_new\.sql/);
-  } finally { r.cleanup(); }
+  } finally {
+    r.cleanup();
+  }
 });
 
 test("deleting a shipped file fails", () => {
@@ -53,7 +97,9 @@ test("deleting a shipped file fails", () => {
     rmSync(join(r.m, "0001_init.sql"));
     r.commit("delete");
     assert.notEqual(r.run().status, 0);
-  } finally { r.cleanup(); }
+  } finally {
+    r.cleanup();
+  }
 });
 
 test("renaming a shipped file fails", () => {
@@ -62,7 +108,9 @@ test("renaming a shipped file fails", () => {
     renameSync(join(r.m, "0002_more.sql"), join(r.m, "0002_renamed.sql"));
     r.commit("rename");
     assert.notEqual(r.run().status, 0);
-  } finally { r.cleanup(); }
+  } finally {
+    r.cleanup();
+  }
 });
 
 // Why: the tag job runs with HEAD on the tag being released; comparing with that very tag would
@@ -73,12 +121,48 @@ test("TAG excludes the tag under test from the baseline", () => {
     writeFileSync(join(r.m, "0003_new.sql"), "create table c(z text);\n");
     r.commit("edit");
     r.git("tag", "v0.3.0");
-    assert.equal(r.run().status, 0, "without TAG the new tag is the baseline and hides the edit");
+    assert.equal(
+      r.run().status,
+      0,
+      "without TAG the new tag is the baseline and hides the edit",
+    );
     assert.notEqual(r.run("v0.3.0").status, 0);
-  } finally { r.cleanup(); }
+  } finally {
+    r.cleanup();
+  }
 });
 
-// Why: a guard that cannot find its baseline (shallow clone without tags) must fail loud, not pass.
+// Why: make check runs before every commit, also in worktrees not yet rebased onto a release. A release
+// that adds a migration must not fail them for "deleting" a file they never had: the baseline is the
+// newest release in the branch's own history.
+test("a branch behind the latest release compares with the release it is based on", () => {
+  const r = repo();
+  try {
+    r.git("checkout", "-q", "-b", "feature", "v0.1.0");
+    writeFileSync(join(r.dir, "feature.txt"), "x\n");
+    r.commit("feature");
+    const res = r.run();
+    assert.equal(res.status, 0, res.stderr);
+    assert.match(res.stdout, /since v0\.1\.0/);
+  } finally {
+    r.cleanup();
+  }
+});
+
+// Why: make check is the gate before a commit; it must see an edited shipped file before it is committed.
+test("an uncommitted edit of a shipped file fails", () => {
+  const r = repo();
+  try {
+    writeFileSync(join(r.m, "0001_init.sql"), "create table a(x text);\n");
+    const res = r.run();
+    assert.notEqual(res.status, 0);
+    assert.match(res.stderr, /0001_init\.sql/);
+  } finally {
+    r.cleanup();
+  }
+});
+
+// Why: a guard that cannot find its baseline (shallow checkout or clone without tags) must fail loud, not pass.
 test("no release tag fails instead of passing", () => {
   const r = repo();
   try {
@@ -86,5 +170,7 @@ test("no release tag fails instead of passing", () => {
     const res = r.run();
     assert.notEqual(res.status, 0);
     assert.match(res.stderr, /no release tag/);
-  } finally { r.cleanup(); }
+  } finally {
+    r.cleanup();
+  }
 });

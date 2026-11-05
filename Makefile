@@ -168,7 +168,7 @@ integration-guard:
 # make quick (#491): the inner loop between two edits. fmt-check, go vet, golangci-lint and go test run on the
 # packages changed since CHANGED_BASE (uncommitted and untracked files included) and on every package that
 # imports them (tools/affected-packages.sh); the integration tests run only when one of their packages is
-# among them. Not run: templ-check, scripts-test, shards-check, vuln, build. make check is the gate before a commit.
+# among them. Not run: templ-check, scripts-test, shards-check, migration-append-only, vuln, build. make check is the gate before a commit.
 quick:
 	@pkgs=$$(tools/affected-packages.sh) || exit 1; \
 	[ -n "$$pkgs" ] || { echo "quick: no Go package affected since $(CHANGED_BASE)"; exit 0; }; \
@@ -427,12 +427,12 @@ migration-guard:
 		echo "patch release $(TAG) changes database migrations since $$base (a schema change means a new minor version):" >&2; \
 		echo "$$changed" >&2; exit 1; fi
 
-# Append-only guard (#595): fails when a migration file that exists at the latest release tag was modified,
-# renamed or deleted since (additions pass). Needs the tags (CI: fetch-depth 0). The tag job passes
-# TAG so the tag under test is not its own baseline. Logic and tests: tools/migration-append-only.sh,
-# scripts/migration-append-only.test.mjs.
+# Append-only guard (#595): fails when a migration file that exists at the newest release tag in the
+# history of REV was modified, renamed or deleted since (additions pass); without REV the working tree
+# is checked. It needs the tags and fails without them (CI: fetch-depth 0; locally git fetch --tags). The tag job passes TAG so the tag under test is not its own baseline. Logic and
+# tests: tools/migration-append-only.sh, scripts/migration-append-only.test.mjs.
 migration-append-only:
-	@tools/migration-append-only.sh "$(TAG)" "$(or $(REV),HEAD)"
+	@tools/migration-append-only.sh "$(TAG)" "$(REV)"
 
 # Prints the body of the CHANGELOG.md section for TAG (the GitHub release notes).
 changelog-notes: changelog-check
