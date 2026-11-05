@@ -1,6 +1,6 @@
 # Pull requests: the FAST tier. One workflow per trigger (CLAUDE.md "Test tiers in CI"):
 # pr.yml (this), main.yml (push to main), release.yml (tags), nightly.yml and weekly.yml (cron). The jobs
-# they share are the reusable workflows _checks.yml, _mutation.yml (weekly only) and _image.yml; the file
+# they share are the reusable workflows _checks.yml, _mutation.yml (weekly only), _image.yml and _ha-app.yml; the file
 # a run comes from says which tier it is, nothing is computed at run time except which
 # parts of the repository the PR touched (job "changes").
 #
@@ -77,7 +77,7 @@ jobs:
             case "$f" in *.go) gocode=true ;; esac
             # The image build check: what the Dockerfile reads and the Home Assistant app.
             case "$f" in
-              Dockerfile|.dockerignore|go.mod|go.sum|.github/workflows/_image.yml|internal/config/haprofile.go|tools/ha-app-smoke.sh|deploy/homeassistant/*) image=true ;;
+              Dockerfile|.dockerignore|go.mod|go.sum|.github/workflows/_image.yml|.github/workflows/_ha-app.yml|internal/config/haprofile.go|tools/ha-app-smoke.sh|deploy/homeassistant/*) image=true ;;
             esac
           done
           # The SAFETY list lives in the Makefile (make safety uses it too).
@@ -155,9 +155,10 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha }}
         run: make release-pr-check BASE="$BASE"
 
-  # Build only, nothing is pushed: proves the Dockerfile and the Home Assistant app image still
-  # build. Not part of "required". The job grants what the called workflow asks for; a fork's
-  # token stays read-only whatever is asked, and no secret is passed.
+  # Build only, nothing is pushed: proves the Dockerfile still builds for both architectures (#522). Part of
+  # "required" when the PR touches what the image reads: a Renovate bump of the base image or of a Go
+  # dependency that breaks the build must not merge. The job grants what the called workflow asks for; a
+  # fork's token stays read-only whatever is asked, and no secret is passed.
   image:
     name: image
     needs: changes
@@ -169,16 +170,28 @@ jobs:
     with:
       mode: check
 
+  # The Home Assistant app image (build and smoke test), called apart from the image above and NOT part of
+  # "required": it can be red on its own and never blocks a merge (#522).
+  ha-app:
+    name: ha-app
+    needs: changes
+    if: needs.changes.outputs.image == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/_ha-app.yml
+
   # The one status that branch protection on main requires. It always runs and
   # passes only when every job that had to run passed. "checks" is a
   # reusable workflow: it is green only when every job inside it that was asked for
   # (by the inputs above: safety race, diff coverage and revert check among them) ran and succeeded. A skip
   # counts only when this PR did not ask for that job: everything for a docs-only PR. The link
-  # check, the migration guard and the release section guard always run and must succeed.
+  # check, the migration guard and the release section guard always run and must succeed; the image build
+  # must succeed when the PR touched what the image reads, and is skipped otherwise. The Home Assistant app
+  # image is not in "needs".
   # Any other result (failure, cancelled, or a skip caused by a failed dependency) fails it.
   required:
     name: required
-    needs: [changes, checks, links, migrations, release-section]
+    needs: [changes, checks, links, migrations, release-section, image]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -192,8 +205,10 @@ jobs:
           LINKS: ${{ needs.links.result }}
           MIGRATIONS: ${{ needs.migrations.result }}
           RELEASE_SECTION: ${{ needs.release-section.result }}
+          IMAGE_WANTED: ${{ needs.changes.outputs.image }}
+          IMAGE: ${{ needs.image.result }}
         run: |
-          echo "changes=$CHANGES code=$CODE safety=$SAFETY | checks: $CHECKS | links: $LINKS | migrations: $MIGRATIONS | release section: $RELEASE_SECTION"
+          echo "changes=$CHANGES code=$CODE safety=$SAFETY | checks: $CHECKS | links: $LINKS | migrations: $MIGRATIONS | release section: $RELEASE_SECTION | image (wanted: $IMAGE_WANTED): $IMAGE"
           [ "$CHANGES" = success ] || exit 1
           docs=false; [ "$CODE" = false ] && docs=true
           check() { # check <skip allowed> <result>
@@ -205,3 +220,5 @@ jobs:
           check false "$LINKS"
           check false "$MIGRATIONS"
           check false "$RELEASE_SECTION"
+          img=true; [ "$IMAGE_WANTED" = true ] && img=false
+          check "$img" "$IMAGE"

@@ -6,7 +6,7 @@ real Home Assistant. Never test on the household's instance.
 
 ## What CI proves without a Supervisor
 
-`tools/ha-app-smoke.sh <ha-image> [<default-image>]` (job `ha-app` of `_image.yml`, on pull requests that touch the
+`tools/ha-app-smoke.sh <ha-image> [<default-image>]` (workflow `_ha-app.yml`, on pull requests that touch the
 image, the profile or the app folder, and on `main`) first checks the image metadata: the `ha` image runs as root and has
 the `io.hass.type/version/arch` labels, the default image stays non-root and has none. It then starts the `ha` image
 like the Supervisor does: a fresh root-owned `/data` volume that is not filled from the image, an `options.json`,

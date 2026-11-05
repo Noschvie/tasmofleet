@@ -11,7 +11,8 @@
 #
 # Jobs:
 #   checks          _checks.yml without e2e: lint, unit tests, build, integration tests
-#   image           build and push :edge (_image.yml, mode edge), and build-test the HA app image
+#   image           build and push :edge (_image.yml, mode edge)
+#   ha-app          build-test the HA app image (_ha-app.yml); a failure never stops :edge
 #   ghcr-cleanup    prune the registries after the image, whatever its result
 name: main
 
@@ -69,6 +70,13 @@ jobs:
     secrets:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+
+  # The Home Assistant app image, built and tested apart from :edge (#522): red on its own, never stops the push.
+  ha-app:
+    name: ha-app
+    permissions:
+      contents: read
+    uses: ./.github/workflows/_ha-app.yml
 
   ghcr-cleanup:
     name: ghcr-cleanup
