@@ -24,7 +24,7 @@ test.use({
 for (const width of [1280, 1920]) {
   for (const [label, path] of [["a scrollable page", "/styleguide"], ["a short page", "/users"]] as const) {
     test(`both bars reach the window edge on ${label} (${width}px)`, { tag: "@core" }, async ({ page }) => {
-      await page.setViewportSize({ width, height: 600 });
+      await page.setViewportSize({ width, height: 760 });
       await page.goto(app.url + path);
       await expect(page.locator("footer.sb")).toBeVisible();
       const m = await page.evaluate(() => {
@@ -62,7 +62,7 @@ for (const width of [1280, 1920]) {
 test.describe("without a scrollbar strip", () => {
   for (const width of [1280, 1920]) {
     test(`both bars end exactly at the window's inner width (${width}px)`, async ({ page }) => {
-      await page.setViewportSize({ width, height: 600 });
+      await page.setViewportSize({ width, height: 760 });
       await page.goto(app.url + "/styleguide");
       await expect(page.locator("footer.sb")).toBeVisible();
       await page.evaluate(() => { document.documentElement.style.scrollbarWidth = "none"; }); // CSSOM, the CSP forbids <style>
@@ -84,7 +84,7 @@ test.describe("without a scrollbar strip", () => {
 // grows (a swap adds rows) nothing moves.
 for (const width of [1280, 1920]) {
   test(`the content column does not move between short and long pages (${width}px)`, { tag: "@core" }, async ({ page }) => {
-    await page.setViewportSize({ width, height: 600 });
+    await page.setViewportSize({ width, height: 760 });
     const column = () =>
       page.evaluate(() => {
         const r = document.querySelector("header.top .shell-in")!.getBoundingClientRect();
