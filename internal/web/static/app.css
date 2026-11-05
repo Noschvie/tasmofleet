@@ -12189,6 +12189,16 @@ dialog.fw-notes-dlg .fw-dlg-body {
 .brow .sf {
   grid-column: auto;
 }
+/* in a half-width card (tablet) the host would get under 100 px and its "Reset to default" would run
+   over the Port label: TLS drops to its own row (#633) */
+@media (min-width: 45rem) and (max-width: 50.99rem) {
+  .brow:has(.w-tls) {
+    grid-template-columns: minmax(0, 1fr) 96px;
+  }
+  .brow .w-tls {
+    grid-column: 1 / -1;
+  }
+}
 .brow .tlsrow {
   display: flex;
   align-items: center;
@@ -12739,6 +12749,25 @@ a.sys-sum:hover {
 }
 .bk-table td.rowacts {
   overflow: visible;
+}
+/* a long name and "Today 09:52 PM · 38s ago" wrap inside their fixed columns instead of being clipped
+   (#633: cut off at 768 and 1024 px) */
+.bk-table td.dv-name {
+  overflow-wrap: anywhere;
+}
+.bk-table td[data-label="Newest backup"] {
+  white-space: normal;
+}
+.bk-table td[data-label="Newest backup"] .muted {
+  display: inline-block;
+}
+/* two half columns (tablet) leave the device table about 220 px at 768 px, less than its fixed columns
+   need: the two cards that lead the page take the full width, Storage and the rest balance below (#633) */
+@media (min-width: 45rem) and (max-width: 74.99rem) {
+  #card-lastrun,
+  #card-devices {
+    column-span: all;
+  }
 }
 /* the unit after the run count is for phones only (the column header says it on desktop) */
 .bk-u {
@@ -14886,6 +14915,10 @@ button.pol-chip-x {
 .pol-page .dev-pair {
   align-items: start;
 }
+/* .devlive spaces its children with a gap: the pair's own bottom margin would double it above the history */
+.pol-page .devlive > .dev-pair {
+  margin-bottom: 0;
+}
 @media (min-width: 45rem) {
   .pol-page .dev-pair {
     grid-template-columns: minmax(0, 11fr) minmax(0, 9fr);
@@ -15333,7 +15366,7 @@ details.devcard > summary {
   font-family: var(--font-mono);
   font-size: 12px;
   white-space: pre-wrap;
-  word-break: break-all;
+  overflow-wrap: anywhere;
 }
 /* Online + Boot loop / Weak Wi-Fi + a policy deviation does not fit the 170 px Status column on one line:
    the badges wrap instead of being cut (#325). */

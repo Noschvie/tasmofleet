@@ -54,20 +54,9 @@ test.afterAll(async () => {
 
 const pages = pageList({ lamp: () => lamp, txn: () => txn, fwVersion: () => env.vars.DEVENV_FW_VERSION });
 
-// Known failures, tracked in #633: each is fixed in its own change, which deletes its entry here. A
-// fixme case is reported as skipped, never silently passed.
-const fixme: Record<string, number[]> = {
-  "devices backups": [768, 1024], // table cells cut off
-  "system settings mqtt": [768], // "Reset to default" overlaps the Port label (#630 changes this form)
-  "system settings notifications": [768], // the webhook example <pre> breaks the word "failed"
-  "policy rule": [768, 1024], // 36 px gap above the history card
-  "whats new": [768, 1024], // collapsed "Older releases" 8 px tall; badge over the title in 0.17.0
-};
-
 for (const width of [768, 1024]) {
   for (const [name, path] of pages) {
     test(`${name}: layout guards and card stacks at ${width}px`, async ({ page }) => {
-      test.fixme(fixme[name]?.includes(width) ?? false, "#633");
       await page.setExtraHTTPHeaders(adam);
       await page.setViewportSize({ width, height: 900 });
       await page.emulateMedia({ colorScheme: "light" });
