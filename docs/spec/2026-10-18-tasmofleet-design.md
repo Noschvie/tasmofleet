@@ -1543,13 +1543,15 @@ never raise a notification. The rule:
   **tried** (a run right after a restart must not skip the fleet, and must not count the devices that
   were offline before as failed);
 - `auth_failed`: tried, and failed when the device refuses (it is reachable and needs action);
-- another operation holds the device (its lock or a running transaction, the device guard): skipped,
-  "another operation was running";
+- another operation holds the device (its lock, a running transaction, or a firmware update that a
+  typed command or another tool started and that is still flashing, #347 and #504; the device guard):
+  skipped, "another operation was running". A guard that cannot tell (its database read failed) counts
+  as busy: the device is left alone;
 - a device deleted before its turn is neither listed nor failed.
 
-`devices.last_seen_at` is written only with a time the device was heard (`SetLastSeen` keeps the
-stored value for a zero time), so "never answered" stays true for a device that was only judged
-offline.
+`devices.last_seen_at` is written only with a time the device was heard, or refused our password
+(that is an answer: the device is there and needs the person); `SetLastSeen` keeps the stored value for
+a zero time, so "never answered" stays true for a device that was only judged offline.
 
 The run takes the device guard (owner `backup`) for each device while it backs it up. The notification lists the failed devices only. The run record is pruned with `AUDIT_RETENTION`; a
 device's item keeps its name when the device is deleted. Model: `model.BackupRun`, `BackupRunItem`,

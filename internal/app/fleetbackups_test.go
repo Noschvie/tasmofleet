@@ -94,3 +94,26 @@ func TestFleetOverviewIsABoundedNumberOfReadsWithoutDeviceIO(t *testing.T) {
 		t.Errorf("attic = %+v", a)
 	}
 }
+
+// Why: an archive that cannot be read (damaged, gone from disk) must not take the page down: the row
+// stays and says so.
+func TestFleetOverviewSaysWhenAFilesArchiveCannotBeRead(t *testing.T) {
+	now := time.Date(2026, 11, 5, 12, 0, 0, 0, time.Local)
+	st := &countingFleetStore{calls: map[string]int{},
+		usage:  []store.BackupUsage{{Device: 1, Name: "kitchen", Runs: 1, Last: now}},
+		seen:   map[model.DeviceID]store.DeviceSeen{1: {At: now, State: model.HealthOnline}},
+		newest: map[model.DeviceID]store.NewestRun{1: {Device: 1, DumpID: 10, FilesID: 11}},
+	}
+	f := &fleetBackups{store: st, now: func() time.Time { return now },
+		health: func() map[model.DeviceID]model.Health { return nil },
+		files: func(context.Context, model.BackupID) (backup.RunFiles, error) {
+			return backup.RunFiles{}, backup.ErrBadArchive
+		}}
+	rows, err := f.Overview(context.Background())
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("rows = %v, err = %v", rows, err)
+	}
+	if rows[0].Files != 0 || rows[0].FilesNote != "files archive could not be read" {
+		t.Errorf("row = %+v, want no count and the note", rows[0])
+	}
+}

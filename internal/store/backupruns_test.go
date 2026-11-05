@@ -253,3 +253,28 @@ func TestNewestRunsGivesTheNewestDumpNoteAndFilesRowPerDevice(t *testing.T) {
 		t.Errorf("b = %+v, want the files row of the same run", r)
 	}
 }
+
+// Why: the Files column describes the newest run. An older run that had files must not make a newer
+// run that has only the dump look as if it had an archive.
+func TestNewestRunsIgnoresTheFilesOfAnOlderRun(t *testing.T) {
+	s, _, _ := newStore(t)
+	a := mustDevice(t, s, "a", "10.0.0.1")
+	put := func(kind model.BackupKind, at int64) model.BackupID {
+		t.Helper()
+		id, err := s.PutBackup(ctx, model.Backup{DeviceID: a, DeviceName: "a", Kind: kind, TakenAt: ms(at), Path: "p", SHA256: "x", Size: 1})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	put(model.BackupConfigDump, 1000)
+	put(model.BackupFiles, 1000)
+	newest := put(model.BackupConfigDump, 2000)
+	got, err := s.NewestRuns(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := got[a]; r.DumpID != newest || r.FilesID != 0 {
+		t.Errorf("newest run = %+v, want the newer dump and no files row", r)
+	}
+}

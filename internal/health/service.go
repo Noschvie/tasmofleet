@@ -515,8 +515,14 @@ func (s *Service) persist(ctx context.Context, trs []transition) {
 			}
 		}
 		// tr.lastSeen is zero when nothing was heard since the start: the store then keeps the
-		// stored last_seen_at (the verdict's time is not a time the device was heard).
-		if err := s.d.Store.SetLastSeen(ctx, tr.id, tr.to, tr.lastSeen); err != nil {
+		// stored last_seen_at (the verdict's time is not a time the device was heard). A refused
+		// password is an answer, though: the device is there and needs the person, so it must not
+		// read as "never answered" (#409: auth_failed is tried and fails).
+		seen := tr.lastSeen
+		if seen.IsZero() && tr.to == model.HealthAuthFailed {
+			seen = tr.at
+		}
+		if err := s.d.Store.SetLastSeen(ctx, tr.id, tr.to, seen); err != nil {
 			slog.Warn("health: persisting last seen failed", "device", tr.id, "err", err)
 		}
 	}

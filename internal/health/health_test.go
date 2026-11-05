@@ -1252,3 +1252,20 @@ func TestOfflineWithoutEverHearingTheDeviceDoesNotInventALastSeen(t *testing.T) 
 		t.Errorf("last_seen_at passed = %v, want zero (nothing was heard since the start)", at)
 	}
 }
+
+// Why (#409): a device that refuses our password has answered. It must not stay "never answered"
+// (last_seen_at zero): the scheduled run would skip it silently instead of trying it and failing it with
+// the password reason, the one failure the person has to act on.
+func TestAPasswordRefusalCountsAsAnAnswerForLastSeen(t *testing.T) {
+	h := newHarness(t, false, Options{OfflineAfter: 2}, httpDev(1))
+	failAll(h, tasmota.ErrAuth)
+	h.advance(6 * time.Minute)
+	h.step()
+	h.want(1, model.HealthAuthFailed)
+	h.st.mu.Lock()
+	at := h.st.seenAt[1]
+	h.st.mu.Unlock()
+	if at.IsZero() {
+		t.Error("last_seen_at passed = zero for a device that refused the password, want the time it answered")
+	}
+}

@@ -2,12 +2,17 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -30,6 +35,7 @@ type fleetEnv struct {
 	b       *scheduledBackup
 	health  map[model.DeviceID]model.Health
 	locks   *devlock.Locks
+	holds   *devlock.FirmwareHolds
 	mu      sync.Mutex
 	tried   []string         // devices a backup was started on
 	fail    map[string]error // device name -> backup error
@@ -51,6 +57,7 @@ func newFleetEnv(t *testing.T) *fleetEnv {
 	}
 	t.Cleanup(func() { _ = st.Close() }) // temp DB
 	e := &fleetEnv{st: st, health: map[model.DeviceID]model.Health{}, locks: devlock.New(), fail: map[string]error{}, devices: map[string]model.DeviceID{}}
+	e.holds = devlock.NewFirmwareHolds(time.Now, firmwareHoldTimeout)
 	e.run = newScheduledRun(events.NewHub(64))
 	e.run.now = func() time.Time { return fleetT0.Add(time.Minute) }
 	e.b = &scheduledBackup{
@@ -59,7 +66,7 @@ func newFleetEnv(t *testing.T) *fleetEnv {
 		devices: st.ListDevices,
 		health:  func() map[model.DeviceID]model.Health { return e.health },
 		store:   st,
-		enter:   deviceGuard{locks: e.locks, jobs: st}.enter,
+		enter:   backupGuard(deviceGuard{locks: e.locks, jobs: st, holds: e.holds}),
 		now:     func() time.Time { return fleetT0 },
 		backup: func(_ context.Context, id model.DeviceID) error {
 			name := ""
@@ -403,5 +410,96 @@ func TestScheduledBackupDeviceDeletedBeforeItsTurnIsNeitherFailedNorListed(t *te
 	r := e.last(t)
 	if item(r, "gone").DeviceName != "" || r.Failed != 0 || r.OK != 1 || len(e.notes) != 0 {
 		t.Errorf("run = %+v, notes %v: the deleted device must leave no trace, the other is backed up", r, e.notes)
+	}
+}
+
+// Why: a firmware update typed in the console (or sent by another tool) keeps the device flashing after
+// its command ended; a backup then gets no answer and would count as failed. The device is busy.
+func TestScheduledBackupSkipsADeviceUnderAFirmwareHold(t *testing.T) {
+	e := newFleetEnv(t)
+	id := e.dev(t, "flashing", fleetT0, model.Health{State: model.HealthOnline})
+	e.holds.Start(id, 100)
+	e.b.Run(context.Background())
+	if len(e.tried) != 0 {
+		t.Errorf("tried %v, want none: the device is still flashing", e.tried)
+	}
+	if it := item(e.last(t), "flashing"); it.Outcome != model.BackupOutcomeSkipped || it.Reason != skipBusy {
+		t.Errorf("item = %+v", it)
+	}
+	release, _, ok := e.locks.TryAcquire(id, "x")
+	if !ok {
+		t.Fatal("the run kept the lock of a held device")
+	}
+	release()
+}
+
+// Why: when the guard cannot tell whether the device is busy (its database read failed), the device is
+// left alone: skipped, never tried, never failed.
+func TestScheduledBackupSkipsADeviceWhenTheGuardCannotTell(t *testing.T) {
+	e := newFleetEnv(t)
+	e.dev(t, "a", fleetT0, model.Health{State: model.HealthOnline})
+	e.b.enter = func(context.Context, model.DeviceID, string) (func(), error) {
+		return nil, errors.New("database is locked")
+	}
+	e.b.Run(context.Background())
+	if len(e.tried) != 0 {
+		t.Errorf("tried %v, want none", e.tried)
+	}
+	if it := item(e.last(t), "a"); it.Outcome != model.BackupOutcomeSkipped || it.Reason != skipBusy {
+		t.Errorf("item = %+v", it)
+	}
+}
+
+// Why: the run the server starts (backupAll) must use the same guard as the rules above: a device with
+// a running transaction or under a firmware hold gets no request at all.
+func TestBackupAllLeavesBusyDevicesAlone(t *testing.T) {
+	a, svc, sent := notifyRuntime(t, nil)
+	var hits atomic.Int32
+	add := func(name string) model.DeviceID {
+		t.Helper()
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			hits.Add(1)
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		t.Cleanup(srv.Close)
+		port, err := strconv.Atoi(srv.URL[strings.LastIndex(srv.URL, ":")+1:])
+		if err != nil {
+			t.Fatal(err)
+		}
+		id, err := svc.Store.CreateDevice(t.Context(), model.Device{Name: name, Address: "127.0.0.1", Port: port})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := svc.Store.SetLastSeen(t.Context(), id, model.HealthOnline, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	updating, flashing := add("updating"), add("flashing")
+	j := model.Job{DeviceID: updating, State: model.JobQueued, Stage: model.StageFinal, Policy: model.PolicyOnlyNewer, TargetRelease: "16.0.0", TargetVariant: "tasmota"}
+	_, ids, err := svc.Store.CreateBatch(t.Context(), "u", []model.Job{j})
+	if err != nil {
+		t.Fatal(err)
+	}
+	j.ID, j.State = ids[0], model.JobAwaitReboot
+	if err := svc.Store.SaveTransition(t.Context(), j, model.JobEvent{JobID: ids[0], From: model.JobQueued, To: model.JobAwaitReboot, Event: "test"}); err != nil {
+		t.Fatal(err)
+	}
+	a.fwHolds = devlock.NewFirmwareHolds(time.Now, firmwareHoldTimeout)
+	a.fwHolds.Start(flashing, 0)
+	a.backupRun = newScheduledRun(nil)
+	if err := a.setupBackups(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	a.backupAll(t.Context())
+	if n := hits.Load(); n != 0 {
+		t.Errorf("busy devices got %d requests, want none", n)
+	}
+	if got := sent(); len(got) != 0 {
+		t.Errorf("sent %v for busy devices", got)
+	}
+	r, ok, err := svc.Store.LastBackupRun(t.Context())
+	if err != nil || !ok || r.Tried != 0 || r.Skipped != 2 {
+		t.Errorf("run = %+v ok=%v err=%v, want 2 skipped, none tried", r, ok, err)
 	}
 }

@@ -27,7 +27,7 @@ type scheduledBackup struct {
 	devices func(ctx context.Context) ([]model.Device, error)
 	health  func() map[model.DeviceID]model.Health
 	store   runStore
-	// enter takes the device guard (lock and running transactions); an error means the device is busy.
+	// enter is backupGuard: the device lock, a running transaction, a firmware hold; an error means busy.
 	enter  func(ctx context.Context, id model.DeviceID, owner string) (release func(), err error)
 	backup func(ctx context.Context, id model.DeviceID) error
 	// notifyFailed tells the person about the failed devices of a run: tried is how many devices
@@ -41,6 +41,26 @@ const (
 	skipNever = "never answered"
 	skipBusy  = "another operation was running"
 )
+
+// backupGuard is what a scheduled backup must not run into: the device guard (its lock and a running
+// transaction) and a firmware update typed in the console, sent as a bulk command or found running by an
+// update job, which keeps the device flashing after its job ended (#347). The hold is checked with the
+// lock held, as lockedOTA.Submit does.
+func backupGuard(g deviceGuard) func(ctx context.Context, id model.DeviceID, owner string) (func(), error) {
+	return func(ctx context.Context, id model.DeviceID, owner string) (func(), error) {
+		release, err := g.enter(ctx, id, owner)
+		if err != nil {
+			return nil, err
+		}
+		if g.holds != nil {
+			if _, held := g.holds.Holding(id); held {
+				release()
+				return nil, devlock.BusyError{Holder: "firmware"}
+			}
+		}
+		return release, nil
+	}
+}
 
 // backupSkipReason says why a run leaves a device out, or "" when it tries it. p is what the
 // database remembers of the device (zero for a device that never answered); seenKnown is false when
