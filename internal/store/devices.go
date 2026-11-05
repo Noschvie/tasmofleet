@@ -588,6 +588,26 @@ func (s *SQLite) UpdateNet(ctx context.Context, id model.DeviceID, g ProbeGuard,
 	return nil
 }
 
+// UpdateMQTTBroker stores where a device is configured to report (host, port and the capability
+// derived from them) without touching anything else a probe owns (#598). Like UpdateProbe, a device
+// that already reports to our broker keeps "ours" when the new value only says "other" (messages
+// seen beat name matching), and a device deleted, moved or rebound since the read is left alone.
+func (s *SQLite) UpdateMQTTBroker(ctx context.Context, id model.DeviceID, g ProbeGuard, c model.MQTTCapability, host string, port int) error {
+	res, err := s.db.ExecContext(ctx, `UPDATE devices SET
+		mqtt_capability = CASE WHEN mqtt_capability='ours' AND ?='other' THEN 'ours' ELSE ? END,
+		mqtt_host=?, mqtt_port=?, updated_at=? WHERE id=? AND address=? AND port=? AND mac=?`,
+		string(c), string(c), host, port, toMS(s.now()), id, g.Address, g.Port, strings.ToLower(g.MAC))
+	if err != nil {
+		return mapErr(err)
+	}
+	if k, err := res.RowsAffected(); err != nil {
+		return err
+	} else if k == 0 {
+		return fmt.Errorf("%w: device %d changed or was deleted during the read", ErrConflict, id)
+	}
+	return nil
+}
+
 // DeleteDevice refuses (ErrDeviceBusy) while a non-terminal update/command/backup/policy job or an
 // unfinished restore holds the device (#466). The guard sits inside the DELETE statement, so check
 // and delete cannot be separated by another writer, not even one in another process; the second

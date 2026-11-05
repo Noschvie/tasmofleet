@@ -102,6 +102,8 @@ func busyBy(err error, holder string) bool {
 type lockedSettings struct {
 	web.SettingsService
 	g deviceGuard
+	// onBroker is told of a device whose MqttHost or MqttPort was set (#598); nil: nobody.
+	onBroker func(model.DeviceID)
 }
 
 func (l lockedSettings) Apply(ctx context.Context, actor string, id model.DeviceID, changes map[string]string) ([]settings.Result, error) {
@@ -110,7 +112,16 @@ func (l lockedSettings) Apply(ctx context.Context, actor string, id model.Device
 		return nil, err
 	}
 	defer release()
-	return l.SettingsService.Apply(ctx, actor, id, changes)
+	res, err := l.SettingsService.Apply(ctx, actor, id, changes)
+	if l.onBroker != nil {
+		for _, r := range res {
+			if r.OK() && (r.Key == "MqttHost" || r.Key == "MqttPort") {
+				l.onBroker(id)
+				break
+			}
+		}
+	}
+	return res, err
 }
 
 func (l lockedSettings) Save(ctx context.Context, actor string, id model.DeviceID, saveData string) (settings.Result, error) {

@@ -25,6 +25,7 @@ type identityStore interface {
 	GetDevice(ctx context.Context, id model.DeviceID) (model.Device, error)
 	UpdateProbe(ctx context.Context, id model.DeviceID, g store.ProbeGuard, r store.ProbeResult) error
 	UpdateNet(ctx context.Context, id model.DeviceID, g store.ProbeGuard, n model.NetFacts) error
+	UpdateMQTTBroker(ctx context.Context, id model.DeviceID, g store.ProbeGuard, c model.MQTTCapability, host string, port int) error
 	UpdateProbeName(ctx context.Context, id model.DeviceID, g store.ProbeGuard, deviceName, nameFrom string) error
 	UpdateIdentityFromMQTT(ctx context.Context, id model.DeviceID, g store.ProbeGuard, topic string, i model.Identity) error
 	UpdateGroupTopicFromMQTT(ctx context.Context, id model.DeviceID, g store.ProbeGuard, topic, groupTopic string) error
@@ -212,30 +213,9 @@ func (p *Prober) probe(ctx context.Context, d model.Device, verify func(probed) 
 		return out, nil
 	}
 
-	// Status 6: no MqttHost, or SetOption3 off, means the device does not
-	// talk MQTT at all. Otherwise it is "ours" when it is configured for the
-	// tasmofleet broker and "other" for any other target (or when tasmofleet
-	// has no broker).
-	out.mqtt = model.MQTTNone
-	if raw, err := p.cmd(ctx, t, "Status 6"); err == nil {
-		var s struct {
-			StatusMQT struct {
-				MqttHost string
-				MqttPort int
-			}
-		}
-		if json.Unmarshal(raw, &s) == nil && s.StatusMQT.MqttHost != "" {
-			out.mqttHost, out.mqttPort = s.StatusMQT.MqttHost, s.StatusMQT.MqttPort
-			out.mqtt = model.MQTTOtherBroker
-			if p.Broker != nil && p.Broker.Same(out.mqttHost, out.mqttPort) {
-				out.mqtt = model.MQTTOurs
-			}
-		}
-	} else if !errors.Is(err, tasmota.ErrUnknownCommand) {
-		return out, fmt.Errorf("status 6: %w", err)
-	}
-	if out.mqtt != model.MQTTNone && p.mqttSwitchedOff(ctx, t) {
-		out.mqtt = model.MQTTNone
+	out.mqtt, out.mqttHost, out.mqttPort, err = p.readMQTT(ctx, t)
+	if err != nil {
+		return out, err
 	}
 	// Status 1 (read-only, once per refresh, never the OtaUrl command) for the OTA URL. Best
 	// effort: a failed or unusable answer keeps the stored value.
@@ -336,6 +316,36 @@ func validGroupTopic(t string) bool {
 		}
 	}
 	return true
+}
+
+// readMQTT reads where the device itself is configured to report (Status 6, then SetOption3 when a
+// host is set) and classifies it against our broker. No MqttHost, or SetOption3 off, means the device
+// does not talk MQTT at all; otherwise it is "ours" when it is configured for the tasmofleet broker
+// and "other" for any other target (or when tasmofleet has no broker). Shared by the probe and the
+// background re-read (ReadBroker, #598), so both store the same facts.
+func (p *Prober) readMQTT(ctx context.Context, t tasmota.Target) (mq model.MQTTCapability, host string, port int, err error) {
+	mq = model.MQTTNone
+	if raw, err := p.cmd(ctx, t, "Status 6"); err == nil {
+		var s struct {
+			StatusMQT struct {
+				MqttHost string
+				MqttPort int
+			}
+		}
+		if json.Unmarshal(raw, &s) == nil && s.StatusMQT.MqttHost != "" {
+			host, port = s.StatusMQT.MqttHost, s.StatusMQT.MqttPort
+			mq = model.MQTTOtherBroker
+			if p.Broker != nil && p.Broker.Same(host, port) {
+				mq = model.MQTTOurs
+			}
+		}
+	} else if !errors.Is(err, tasmota.ErrUnknownCommand) {
+		return mq, "", 0, fmt.Errorf("status 6: %w", err)
+	}
+	if mq != model.MQTTNone && p.mqttSwitchedOff(ctx, t) {
+		mq = model.MQTTNone
+	}
+	return mq, host, port, nil
 }
 
 // mqttSwitchedOff reads SetOption3 (MQTT on/off). Any failure counts as "on":
@@ -468,6 +478,36 @@ func (p *Prober) ReadNet(ctx context.Context, id model.DeviceID) error {
 		p.status11(ctx, t, &net)
 	}
 	if err := p.Devices.UpdateNet(ctx, id, store.ProbeGuard{Address: d.Address, Port: d.Port, MAC: d.MAC}, net); err != nil {
+		return err
+	}
+	p.announce(id)
+	return nil
+}
+
+// ReadBroker re-reads the broker a stored device is configured for (Status 6, and SetOption3 when a
+// host is set; never Status 0, one command at a time) and stores host, port and capability when they
+// differ from what is stored (#598). Why: the host is otherwise only stored by a probe, so a device
+// moved to another broker outside TasmoFleet kept the old one and the "Other broker" hint (#580)
+// stayed away. Callers hold the device lock (brokerHostReader). Minimal firmware and the safeboot
+// image answer neither command: nothing is read.
+func (p *Prober) ReadBroker(ctx context.Context, id model.DeviceID) error {
+	d, err := p.Devices.GetDevice(ctx, id)
+	if err != nil {
+		return err
+	}
+	if d.Identity.Variant == "minimal" || d.Identity.Variant == "safeboot" {
+		return nil
+	}
+	c, host, port, err := p.readMQTT(ctx, tasmota.TargetFor(d))
+	if err != nil {
+		return err
+	}
+	// A device stored as "ours" stays so when the read only says "other" (store.UpdateMQTTBroker).
+	sameCap := c == d.MQTT || (d.MQTT == model.MQTTOurs && c == model.MQTTOtherBroker)
+	if host == d.MQTTHost && port == d.MQTTPort && sameCap {
+		return nil // nothing moved: no write, no event
+	}
+	if err := p.Devices.UpdateMQTTBroker(ctx, id, store.ProbeGuard{Address: d.Address, Port: d.Port, MAC: d.MAC}, c, host, port); err != nil {
 		return err
 	}
 	p.announce(id)

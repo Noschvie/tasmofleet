@@ -35,6 +35,8 @@ type holdingCmd struct {
 	// asks is told of every command that restarts a device (cmdpolicy.RestartsDevice), so that the restart
 	// that follows is stored as expected and does not count towards a boot loop (#325).
 	asks *restartAsks
+	// onBroker is told of a device that was sent MqttHost or MqttPort and answered (#598); nil: nobody.
+	onBroker func(model.DeviceID)
 }
 
 func (c holdingCmd) Run(ctx context.Context, p model.Principal, id model.DeviceID, cmd string) (json.RawMessage, error) {
@@ -44,6 +46,9 @@ func (c holdingCmd) Run(ctx context.Context, p model.Principal, id model.DeviceI
 	// Only what certainly never left TasmoFleet does not.
 	if c.asks != nil && !neverSent(err) && cmdpolicy.RestartsDevice(cmd) {
 		c.asks.Note(id)
+	}
+	if c.onBroker != nil && err == nil && setsBrokerTarget(cmd) {
+		c.onBroker(id)
 	}
 	if !neverSent(err) && cmdpolicy.StartsFirmwareUpgrade(cmd) {
 		startHold(c.holds, c.uptime, id)

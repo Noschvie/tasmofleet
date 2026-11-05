@@ -15,6 +15,6 @@ func (a *runtime) setupDeviceCmd() {
 		o.MQTT = a.mqttCmd
 	}
 	a.fwHolds = devlock.NewFirmwareHolds(time.Now, firmwareHoldTimeout)
-	a.deviceCmd = holdingCmd{Service: devicecmd.New(o), holds: a.fwHolds, uptime: a.cachedUptime, asks: a.restartAsks}
+	a.deviceCmd = holdingCmd{Service: devicecmd.New(o), holds: a.fwHolds, uptime: a.cachedUptime, asks: a.restartAsks, onBroker: a.brokerHost.later}
 	a.goBG("firmware-holds", func() error { observeFirmwareHolds(a.bgContext, a.svc.Hub, a.fwHolds, a.tracker.Minimal); return nil })
 }

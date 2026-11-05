@@ -149,7 +149,8 @@ type runtime struct {
 	fwFeed          string // its short name
 	bgWG            sync.WaitGroup
 	bgContext       context.Context
-	restartAsks     *restartAsks // restarts TasmoFleet asked for: not a fault (#325)
+	restartAsks     *restartAsks      // restarts TasmoFleet asked for: not a fault (#325)
+	brokerHost      *brokerHostReader // re-reads the stored broker host (#598)
 }
 
 func (a *runtime) run(ctx context.Context) error {
@@ -179,9 +180,10 @@ func (a *runtime) run(ctx context.Context) error {
 		return err
 	}
 	a.goBG("mqtt-cmd", func() error { <-bg.Done(); a.mqttCmd.Close(); return nil }) // wakes commands in flight
-	a.tracker = health.New(health.Deps{
-		Store: svc.Store, Client: svc.HTTP, Bus: a.bus, Hub: svc.Hub, OnMQTTSeen: a.onMQTTSeen, Stability: svc.Store, Expected: a.expectedRestart, // HTTP only: it measures HTTP
-	}, health.Options{
+	// The broker a device reports to is re-read after every restart the tracker records (#598); the
+	// reader itself is started below, once the fleet list it needs exists.
+	a.brokerHost = newBrokerHostReader(nil, nil, svc.Prober.ReadBroker, deviceGuard{locks: a.deviceLocks(), jobs: svc.Store}.enter, a.log)
+	a.tracker = health.New(a.healthDeps(), health.Options{
 		StaleAfter: staleAfter(cfg.TelePeriod), PollInterval: cfg.PollInterval,
 	})
 	a.goBG("health", func() error { return a.tracker.Run(bg) })
@@ -193,6 +195,9 @@ func (a *runtime) run(ctx context.Context) error {
 		a.svc.Prober.ReadNet, a.log)
 	a.svc.Prober.ReadNetLater = nf.later
 	a.goBG("netfacts", func() error { nf.run(bg); return nil })
+	a.brokerHost.list = a.fw.list(a.svc.Inventory.List)
+	a.brokerHost.httpUp = func(id model.DeviceID) bool { return brokerHTTPUp(a.tracker.Get(id), time.Now()) }
+	a.goBG("broker-host", func() error { a.brokerHost.run(bg); return nil })
 	// Firmware version over MQTT for devices on our broker that HTTP did not identify (#87).
 	mid := newMQTTIdentity(a.bus, a.mqttCmd, a.svc.Inventory.List, a.svc.Store, a.svc.Audit,
 		func(id model.DeviceID) { a.svc.Prober.announce(id) }, a.log)
@@ -291,6 +296,16 @@ func (a *runtime) run(ctx context.Context) error {
 }
 
 // goBG runs f in the background; an error is logged (the process keeps serving).
+// healthDeps is what the health tracker is built from. Its restart history goes through bootWatch, so
+// every restart it records also asks for a re-read of the device's broker (#598).
+func (a *runtime) healthDeps() health.Deps {
+	svc := a.svc
+	return health.Deps{
+		Store: svc.Store, Client: svc.HTTP, Bus: a.bus, Hub: svc.Hub, OnMQTTSeen: a.onMQTTSeen, Expected: a.expectedRestart, // HTTP only: it measures HTTP
+		Stability: bootWatch{StabilityStore: svc.Store, onBoot: a.brokerHost.later},
+	}
+}
+
 func (a *runtime) goBG(name string, f func() error) {
 	a.bgWG.Go(func() {
 		if err := f(); err != nil && !errors.Is(err, context.Canceled) {
@@ -736,7 +751,7 @@ func (a *runtime) webDeps(guard web.Guard, rows []web.KV) web.Deps {
 		}
 	}
 	if s := a.settingsDep(); s != nil {
-		deps.Settings = lockedSettings{SettingsService: s, g: g}
+		deps.Settings = lockedSettings{SettingsService: s, g: g, onBroker: a.brokerHost.later}
 	}
 	deps.Policy = a.policy
 	deps.Import = a.svc.Importer()

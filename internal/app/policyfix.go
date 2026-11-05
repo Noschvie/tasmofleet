@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"slices"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/ota"
@@ -21,7 +22,11 @@ func (a *runtime) policyApplier() ota.PolicyApplier {
 }
 
 func (p policyApplier) Apply(ctx context.Context, d model.Device, lines []string) error {
-	return p.a.fixer.Apply(ctx, d, lines)
+	err := p.a.fixer.Apply(ctx, d, lines)
+	if err == nil && p.a.brokerHost != nil && slices.ContainsFunc(lines, setsBrokerTarget) {
+		p.a.brokerHost.later(d.ID) // the device moved to another broker (#598)
+	}
+	return err
 }
 
 func (p policyApplier) Verify(ctx context.Context, d model.Device, lines []string) error {

@@ -621,6 +621,14 @@ Otherwise `other`, until a message on our broker matches the device's topic -> `
 Health uses MQTT only for `ours` devices. A device is never marked degraded because MQTT
 is missing (TasmoAdmin `mqtt_expected` lesson).
 
+The host, port and capability are stored by a probe and kept current afterwards (#598): `Status 6`
+is read again (`Prober.ReadBroker`, stored by `store.UpdateMQTTBroker`, which writes only these
+three columns and keeps `ours` when the read only says `other`) after every restart the health
+tracker records, after an `MqttHost`/`MqttPort` command sent through TasmoFleet (console, bulk
+command, settings, Make compliant) and about every six hours for a device whose HTTP poll works.
+One device at a time, under the device lock (skipped while a job holds the device), never
+`Status 0`.
+
 ### 6.5 Commands over MQTT (package `mqttcmd`, #256)
 
 `mqttcmd.Channel` is the one place that publishes a command to `cmnd/<topic>/...` and reads its

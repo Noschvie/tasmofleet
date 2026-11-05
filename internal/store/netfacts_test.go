@@ -186,3 +186,36 @@ func TestUpdateFWRFactsRefusesAnUnidentifiedDevice(t *testing.T) {
 		t.Fatalf("err = %v, want ErrConflict", err)
 	}
 }
+
+// Why (#598): the broker a device reports to is re-read in the background. The write must store
+// host, port and capability only, keep "ours" when the read only says "other" (messages seen beat
+// name matching, as in UpdateProbe), and write nothing for a device moved or rebound meanwhile.
+func TestUpdateMQTTBrokerStoresOnlyTheBrokerOfTheSameDevice(t *testing.T) {
+	s, _, _ := newStore(t)
+	id, err := s.CreateDevice(ctx, model.Device{Name: "plug", Address: "192.0.2.10", MAC: "aa:bb:cc:00:00:01", Notes: "kept",
+		MQTT: model.MQTTOurs, MQTTHost: "mqtt.home", MQTTPort: 1883, Identity: model.Identity{Version: "15.1.0"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	guard := ProbeGuard{Address: "192.0.2.10", MAC: "aa:bb:cc:00:00:01"}
+	if err := s.UpdateMQTTBroker(ctx, id, guard, model.MQTTOtherBroker, "old.example", 1884); err != nil {
+		t.Fatal(err)
+	}
+	d, _ := s.GetDevice(ctx, id)
+	if d.MQTTHost != "old.example" || d.MQTTPort != 1884 || d.MQTT != model.MQTTOurs || d.Notes != "kept" || d.Identity.Version != "15.1.0" {
+		t.Fatalf("after the move: %+v", d)
+	}
+	if err := s.UpdateMQTTBroker(ctx, id, guard, model.MQTTNone, "", 0); err != nil {
+		t.Fatal(err)
+	}
+	if d, _ = s.GetDevice(ctx, id); d.MQTT != model.MQTTNone || d.MQTTHost != "" {
+		t.Fatalf("a device without MQTT must read as none: %+v", d)
+	}
+	moved := ProbeGuard{Address: "192.0.2.99", MAC: "aa:bb:cc:00:00:01"}
+	if err := s.UpdateMQTTBroker(ctx, id, moved, model.MQTTOtherBroker, "x", 1); !errors.Is(err, ErrConflict) {
+		t.Fatalf("err = %v, want ErrConflict", err)
+	}
+	if d, _ = s.GetDevice(ctx, id); d.MQTTHost != "" {
+		t.Fatalf("a stale read overwrote the broker: %+v", d)
+	}
+}

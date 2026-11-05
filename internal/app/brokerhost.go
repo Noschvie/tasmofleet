@@ -1,0 +1,228 @@
+package app
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"strings"
+	"time"
+
+	"github.com/nofuturekid/tasmofleet/internal/devlock"
+	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/policy"
+	"github.com/nofuturekid/tasmofleet/internal/store"
+)
+
+// Keeping the stored broker host current (#598). TasmoFleet learns where a device reports to only
+// when it probes the device, so a device moved to another broker outside TasmoFleet (its own web
+// page, its console, a restored config that points to an old broker) kept the old host and the
+// "Other broker" hint (#580) stayed away. The reader re-reads it (Prober.ReadBroker: Status 6,
+// never Status 0) in three cases:
+//
+//   - the device restarted: Tasmota restarts after MqttHost and MqttPort (restart_flag = 2,
+//     xdrv_02_9_mqtt.ino CmndMqttHost / CmndMqttPort) and after a config restore (the upload sets
+//     restart_flag = 2, xdrv_01_9_webserver.ino HandleUploadDone), so a changed host always comes
+//     with a restart that the health tracker records (tracker.AppendBoot);
+//   - TasmoFleet sent MqttHost or MqttPort (console, bulk command, settings, policy fix): the
+//     result of that command is observed where it is sent;
+//   - now and then for every online device (brokerHostEvery), which also catches a restart nobody
+//     saw (the tracker was down, the device was offline for a while).
+//
+// One device at a time on the whole process, and only while nobody else works on the device: the
+// read takes the device lock like any writer and is skipped while a job holds the device.
+const (
+	// brokerHostEvery: how often an online device's broker is read without a reason. A move outside
+	// TasmoFleet is rare and a restart already triggers a read, so this only has to catch the rest;
+	// six hours keep the load at four small Status 6 reads per device and day.
+	brokerHostEvery = 6 * time.Hour
+	// brokerHostTick: how often the reader looks for work. At most one device is read per tick for
+	// the periodic reads, so a fleet is spread out over time instead of read in one burst.
+	brokerHostTick = 30 * time.Second
+	// brokerHostSettle: a read asked for by a restart or a command waits this long, so the device
+	// has finished restarting and the session that caused it has let go of the device.
+	brokerHostSettle = 20 * time.Second
+	// brokerHostRetry: a periodic read that failed (offline, timeout) is tried again after this.
+	brokerHostRetry = 10 * time.Minute
+	// brokerHostPendingFor: a requested read that cannot run (device busy or not answering) is
+	// given up after this; the periodic read catches up later.
+	brokerHostPendingFor = 30 * time.Minute
+	// brokerHostAskAgain: a requested read that failed is asked again after this.
+	brokerHostAskAgain = 2 * time.Minute
+	brokerHostTimeout  = 15 * time.Second
+	// brokerHostHTTPFresh: the periodic read goes only to a device the HTTP health poll reached this
+	// lately. A device that is online over MQTT alone (HTTP blocked or off) would otherwise hold its
+	// lock for the whole timeout at every retry and refuse the person's writes as busy.
+	brokerHostHTTPFresh = 15 * time.Minute
+	brokerHostQueue     = 64
+)
+
+type brokerHostReader struct {
+	list func(context.Context) ([]model.Device, error)
+	// httpUp says whether the HTTP health poll reached the device lately: the periodic read is HTTP
+	// and must not hold the lock of a device it cannot reach.
+	httpUp func(model.DeviceID) bool
+	read   func(context.Context, model.DeviceID) error
+	// enter takes the device lock for the read and refuses while a job holds the device
+	// (deviceGuard.enter); the caller calls the returned release.
+	enter func(context.Context, model.DeviceID, string) (func(), error)
+	now   func() time.Time
+	log   *slog.Logger
+
+	kick    chan model.DeviceID
+	pending map[model.DeviceID]brokerWant
+	next    map[model.DeviceID]time.Time // when the periodic read of a device is due again; absent: due
+}
+
+// brokerWant is a read somebody asked for.
+type brokerWant struct{ due, until time.Time }
+
+func newBrokerHostReader(list func(context.Context) ([]model.Device, error), // httpUp says whether the HTTP health poll reached the device lately: the periodic read is HTTP
+	// and must not hold the lock of a device it cannot reach.
+	httpUp func(model.DeviceID) bool,
+	read func(context.Context, model.DeviceID) error, enter func(context.Context, model.DeviceID, string) (func(), error), log *slog.Logger) *brokerHostReader {
+	return &brokerHostReader{list: list, httpUp: httpUp, read: read, enter: enter, now: time.Now, log: log,
+		kick: make(chan model.DeviceID, brokerHostQueue), pending: map[model.DeviceID]brokerWant{}, next: map[model.DeviceID]time.Time{}}
+}
+
+// later asks for a read of id soon and returns at once.
+func (r *brokerHostReader) later(id model.DeviceID) {
+	if r == nil {
+		return
+	}
+	select {
+	case r.kick <- id:
+	default: // queue full: the periodic read catches up
+	}
+}
+
+func (r *brokerHostReader) run(ctx context.Context) {
+	t := time.NewTicker(brokerHostTick)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case id := <-r.kick:
+			r.want(id)
+		case <-t.C:
+			r.pass(ctx)
+		}
+	}
+}
+
+// want records that id is to be read once it has settled.
+func (r *brokerHostReader) want(id model.DeviceID) {
+	now := r.now()
+	r.pending[id] = brokerWant{due: now.Add(brokerHostSettle), until: now.Add(brokerHostPendingFor)}
+}
+
+// pass reads the devices somebody asked for whose time has come, then at most one online device
+// whose periodic read is due.
+func (r *brokerHostReader) pass(ctx context.Context) {
+	now := r.now()
+	for id, w := range r.pending {
+		if ctx.Err() != nil {
+			return
+		}
+		switch {
+		case now.After(w.until):
+			delete(r.pending, id)
+		case !now.Before(w.due):
+			switch err := r.readOne(ctx, id); {
+			case err == nil:
+				delete(r.pending, id)
+			case errors.Is(err, errBrokerRetry): // not answering: not asked again at every tick
+				w.due = now.Add(brokerHostAskAgain)
+				r.pending[id] = w
+			} // busy: asked again at the next tick, nothing was sent
+		}
+	}
+	devs, err := r.list(ctx)
+	if err != nil {
+		r.log.Warn("broker host: list devices", "err", err)
+		return
+	}
+	for _, d := range devs {
+		if ctx.Err() != nil {
+			return
+		}
+		if _, asked := r.pending[d.ID]; asked || policy.LimitedFirmware(d.Identity.Variant) || !r.httpUp(d.ID) {
+			continue
+		}
+		if due, ok := r.next[d.ID]; ok && now.Before(due) {
+			continue
+		}
+		if err := r.readOne(ctx, d.ID); !errors.Is(err, errBrokerBusy) {
+			return // one periodic read per pass; a busy device does not use up the turn
+		}
+	}
+}
+
+var (
+	errBrokerBusy  = errors.New("device busy")
+	errBrokerRetry = errors.New("read failed, try again")
+)
+
+// readOne reads id under the device lock. errBrokerBusy: a job holds the device, nothing was sent.
+// errBrokerRetry: the read failed. nil: stored (or nothing to store).
+func (r *brokerHostReader) readOne(ctx context.Context, id model.DeviceID) error {
+	release, err := r.enter(ctx, id, "broker read")
+	if err != nil {
+		var busy devlock.BusyError
+		if errors.As(err, &busy) {
+			return errBrokerBusy
+		}
+		r.log.Debug("broker host: device not available", "device", id, "err", err)
+		return errBrokerRetry
+	}
+	defer release()
+	rctx, cancel := context.WithTimeout(ctx, brokerHostTimeout)
+	defer cancel()
+	if err := r.read(rctx, id); err != nil {
+		if ctx.Err() == nil {
+			r.next[id] = r.now().Add(brokerHostRetry)
+			r.log.Debug("broker host: read failed", "device", id, "err", err)
+		}
+		return errBrokerRetry
+	}
+	r.next[id] = r.now().Add(brokerHostEvery)
+	return nil
+}
+
+// setsBrokerTarget reports whether a command line sets MqttHost or MqttPort (also inside a Backlog).
+// Only a command with a value changes anything; a bare "MqttHost" only reads.
+func setsBrokerTarget(cmd string) bool {
+	cmd = strings.TrimSpace(cmd)
+	if len(cmd) >= 7 && strings.EqualFold(cmd[:7], "backlog") {
+		cmd = cmd[7:]
+	}
+	for _, part := range strings.FieldsFunc(cmd, func(r rune) bool { return r == ';' }) {
+		f := strings.Fields(part)
+		if len(f) >= 2 && (strings.EqualFold(f[0], "MqttHost") || strings.EqualFold(f[0], "MqttPort")) {
+			return true
+		}
+	}
+	return false
+}
+
+// bootWatch asks for a broker read after every restart the health tracker records. Why here: the
+// tracker stores each restart it notices (INFO3 over MQTT, an uptime drop over HTTP) through this
+// interface, and the broker host is the one thing a restart may have changed (a restored config, an
+// MqttHost typed on the device). Nothing in internal/restore or internal/transport is involved.
+type bootWatch struct {
+	store.StabilityStore
+	onBoot func(model.DeviceID)
+}
+
+func (w bootWatch) AppendBoot(ctx context.Context, b model.DeviceBoot) error {
+	err := w.StabilityStore.AppendBoot(ctx, b)
+	if err == nil {
+		w.onBoot(b.DeviceID)
+	}
+	return err
+}
+
+// brokerHTTPUp says whether h shows a device that answered the HTTP health poll lately.
+func brokerHTTPUp(h model.Health, now time.Time) bool {
+	return h.State == model.HealthOnline && !h.SeenHTTP.IsZero() && now.Sub(h.SeenHTTP) < brokerHostHTTPFresh
+}
