@@ -279,7 +279,8 @@ func TestDescribeNamesTheDeviceAfterItsDeviceNameAndResolvesTheTopic(t *testing.
 // page can show an Ethernet card instead.
 func TestReadNetTakesTheEthernetAddressWhenWifiHasNone(t *testing.T) {
 	p, st, id, _, _ := raceSetup(t)
-	p.Client = override{Client: p.Client, reply: map[string]string{"Status 5": status5Eth, "Status 11": status11Net}}
+	eth := strings.Replace(status5Eth, "08:D1:F9:2B:E9:70", "AA:BB:CC:00:00:01", 1) // the stored device's MAC: ReadNet checks it
+	p.Client = override{Client: p.Client, reply: map[string]string{"Status 5": eth, "Status 11": status11Net}}
 	p.Now = func() time.Time { return time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC) }
 	if err := p.ReadNet(context.Background(), id); err != nil {
 		t.Fatal(err)

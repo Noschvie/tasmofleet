@@ -52,12 +52,16 @@ type fakeMQTT struct {
 	err   error
 	reply string
 	down  bool
+	onDo  func() // called after a command was recorded, before it answers
 }
 
 func (m *fakeMQTT) do(c string, loose bool) (json.RawMessage, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.sent = append(m.sent, c)
+	if m.onDo != nil {
+		m.onDo()
+	}
 	if loose {
 		m.loose = append(m.loose, c)
 	}
@@ -94,6 +98,7 @@ type facts struct {
 	snapshotted int
 	healthNewer bool
 	lwtOffline  bool
+	unanswered  *Memory
 }
 
 func (f *facts) HTTPState(id model.DeviceID) HTTPState {
@@ -115,6 +120,11 @@ func (f *facts) FactsFor(_ context.Context, d model.Device) (Facts, error) {
 	now := time.Now()
 	m := MQTTFacts{BusConnected: true, Ours: d.MQTT == model.MQTTOurs, Topic: d.Topic, TopicExclusive: true,
 		OurFullTopic: "", LWTOnline: !f.lwtOffline, OthersGroupUnread: f.othersUnrd}
+	if f.unanswered != nil {
+		if _, since, ok := f.unanswered.HTTPFailure(d.ID); ok {
+			m.ReadsUnansweredSince = since
+		}
+	}
 	if f.groupKnown {
 		m.GroupTopic, m.GroupTopicReadAt, m.LastProbeAt = "tasmotas", now, now.Add(-time.Hour)
 	}
@@ -138,6 +148,7 @@ func newRig(t *testing.T) *rig {
 		f:    &facts{mem: mem, groupKnown: true}}
 	g.r = NewRouter(Options{HTTP: g.http, Devices: g.devs, Facts: g.f, Memory: mem})
 	g.r.SetMQTT(g.mq)
+	g.f.unanswered = g.r.unanswered
 	return g
 }
 

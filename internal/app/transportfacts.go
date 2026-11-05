@@ -34,6 +34,9 @@ type TransportFacts struct {
 	Devices factsDevices
 	Health  factsHealth
 	Memory  HTTPMemory // nil: no failure is ever known
+	// Unanswered is the router's memory of devices that left a read over MQTT unanswered (the kind is
+	// not used); nil: none.
+	Unanswered HTTPMemory
 	// BusConnected, FullTopic (MQTT_FULLTOPIC) and FirmwareBaseURL (FIRMWARE_BASE_URL) are read per
 	// call: the settings page changes them live.
 	BusConnected    func() bool
@@ -95,6 +98,12 @@ func (s *TransportFacts) factsFor(_ context.Context, d model.Device, all []model
 	now := s.Now()
 
 	probe := lastProbe(d)
+	var unanswered time.Time
+	if s.Unanswered != nil {
+		if _, since, ok := s.Unanswered.HTTPFailure(id); ok {
+			unanswered = since
+		}
+	}
 	return transport.Facts{
 		Now:  now,
 		HTTP: s.httpState(id, h, now),
@@ -104,7 +113,7 @@ func (s *TransportFacts) factsFor(_ context.Context, d model.Device, all []model
 			OthersGroupUnread: othersGroupUnread(d, all, func(id model.DeviceID) bool { return s.Health.Get(id).LWT == "Offline" }),
 			FullTopic:         d.FullTopic, OurFullTopic: s.FullTopic(),
 			GroupTopic: d.GroupTopic, GroupTopicReadAt: d.GroupTopicReadAt, LastProbeAt: probe,
-			LWTOnline: h.LWT == "Online",
+			LWTOnline: h.LWT == "Online", ReadsUnansweredSince: unanswered,
 		},
 		Password:        s.password(d),
 		FWReach:         d.FWReach,

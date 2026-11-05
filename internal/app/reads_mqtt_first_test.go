@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -158,17 +157,28 @@ func TestNetFactsReadGoesOverMQTT(t *testing.T) {
 	g.wantOnlyMQTT(t, "network facts", "Status 5", "Status 11")
 }
 
-// Why: a published read that gets no answer is an unknown outcome; the settings read reports it and
-// HTTP is not asked for the same value behind its back.
-func TestPublishedReadThatTimesOutIsNotRepeatedOverHTTP(t *testing.T) {
+// Why (review of PR 626): a read MQTT published and the device never answered (SetOption4 1 devices
+// answer on a topic TasmoFleet does not decode) is asked once over HTTP, so the Settings tab keeps
+// working; the device is then read over HTTP for a while instead of costing 8 s per key.
+func TestUnansweredMQTTReadIsAskedOnceOverHTTPAndTheDeviceIsMarked(t *testing.T) {
 	g := newReadsRig(t)
 	g.mqttErr = fmt.Errorf("mqtt: no answer to Status 3: %w", tasmota.ErrTimeout)
 	m := settings.New(settings.Options{Devices: g, Client: g.router})
-	_, err := m.ReadKeys(t.Context(), g.dev.ID, []string{"TelePeriod"})
-	if !errors.Is(err, tasmota.ErrTimeout) {
-		t.Fatalf("err=%v, want the timeout", err)
+	if _, err := m.ReadKeys(t.Context(), g.dev.ID, []string{"TelePeriod"}); err != nil {
+		t.Fatal(err)
 	}
-	if h, _ := g.sent(); len(h) != 0 {
-		t.Fatalf("HTTP was used after a published read: %v", h)
+	h, mq := g.sent()
+	if len(h) != 1 || len(mq) != 1 {
+		t.Fatalf("http=%v mqtt=%v, want one of each", h, mq)
+	}
+	// the facts carry the mark to Choose: with HTTP working, the next reads are not published
+	tf := newFacts([]model.Device{g.dev}, fakeFactsHealth{g.dev.ID: {LWT: "Online"}}, nil)
+	tf.Unanswered = g.router.UnansweredReads()
+	f, err := tf.Facts(t.Context(), g.dev.ID)
+	if err != nil || f.MQTT.ReadsUnansweredSince.IsZero() {
+		t.Fatalf("the facts do not see the mark: %+v %v", f.MQTT, err)
+	}
+	if p := transport.Choose(f); p.Commands != transport.HTTP {
+		t.Fatalf("reads = %s (%s), want HTTP while the mark is fresh", p.Commands, p.Reason(transport.ActCommands))
 	}
 }

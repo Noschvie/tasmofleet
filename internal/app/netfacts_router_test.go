@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/transport"
 )
 
@@ -57,5 +58,47 @@ func TestReachedOnlyOverMQTTMeansHTTPFails(t *testing.T) {
 	f.MQTT.LWTOnline = false
 	if reachedOnlyOverMQTT(f) {
 		t.Error("MQTT unusable: nothing travels over it")
+	}
+}
+
+// Why: the console's "this can cut the device off" question (web/console.go, web/policyfix.go) is fed
+// by runtime.onlyOverMQTT; if it stopped using the HTTP-failing rule, every live device on our broker
+// would be asked about, or none would.
+func TestOnlyOverMQTTFollowsHTTPFailing(t *testing.T) {
+	d := model.Device{ID: 1, MQTT: model.MQTTOurs, Topic: "plug"}
+	a := &runtime{facts: newFacts([]model.Device{d}, fakeFactsHealth{1: {LWT: "Online"}}, fakeMemory{})}
+	if a.onlyOverMQTT(context.Background(), 1) {
+		t.Error("HTTP not failing: the device is not reached over MQTT only")
+	}
+	a.facts.Memory = fakeMemory{kind: transport.HTTPFailUnreachable, since: factsNow.Add(-time.Minute), ok: true}
+	if !a.onlyOverMQTT(context.Background(), 1) {
+		t.Error("HTTP failing and MQTT usable: MQTT is the only way")
+	}
+}
+
+// Why: a different device on the topic (or the address) must not get its network facts stored on this
+// one; over MQTT the answer comes from whoever listens on the topic.
+func TestReadNetRefusesAnAnswerFromAnotherDevice(t *testing.T) {
+	p, st, id, _, _ := raceSetup(t)
+	other := strings.Replace(status5Net, "AA:BB:CC:00:00:01", "AA:BB:CC:00:00:99", 1)
+	other = strings.Replace(other, "aa:bb:cc:00:00:01", "aa:bb:cc:00:00:99", 1)
+	p.Reads = override{Client: p.Client, reply: map[string]string{"Status 5": other, "Status 11": status11Net}}
+	if err := p.ReadNet(context.Background(), id); err == nil {
+		t.Fatal("the facts of another device were accepted")
+	}
+	if d, _ := st.GetDevice(context.Background(), id); d.Net.IP != "" {
+		t.Errorf("stored %+v", d.Net)
+	}
+}
+
+// Why: the Prober's background reads must go through the router; with the raw client they would stay
+// HTTP only and the network facts of a device HTTP cannot reach would never arrive.
+func TestServicesWireTheBackgroundReadsToTheRouter(t *testing.T) {
+	svc := importServices(t)
+	if svc.Prober.Reads != svc.Client {
+		t.Error("Prober.Reads is not the router")
+	}
+	if svc.Prober.Client == svc.Client {
+		t.Error("identity probes must keep the raw HTTP client")
 	}
 }

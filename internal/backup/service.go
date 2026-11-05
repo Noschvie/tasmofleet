@@ -284,7 +284,8 @@ func (m *Manager) backup(ctx context.Context, owner, dev model.Device, note stri
 	}
 	target := tasmota.TargetFor(dev)
 
-	dmp, err := m.o.Client.DownloadConfig(ctx, target)
+	dctx, dumpVia := transport.WithTrace(ctx) // the transport that carried the dump
+	dmp, err := m.o.Client.DownloadConfig(dctx, target)
 	if err != nil {
 		return nil, "", fmt.Errorf("backup: download config: %w", err)
 	}
@@ -292,7 +293,7 @@ func (m *Manager) backup(ctx context.Context, owner, dev model.Device, note stri
 		return nil, "", errEmptyDump
 	}
 
-	snap, failed, fwVersion, err := m.snapshot(ctx, target)
+	snap, failed, fwVersion, err := m.snapshot(onDumpPath(ctx, dumpVia), target)
 	if err != nil {
 		return nil, "", err
 	}
@@ -403,6 +404,20 @@ func (m *Manager) freeTimestamp(dir, base string) time.Time {
 		}
 		t = t.Add(time.Second)
 	}
+}
+
+// onDumpPath pins the status snapshot of a backup run to the transport that carried its dump, so one
+// run never mixes HTTP and MQTT. Why: since #456 A reads go MQTT first, which would read the snapshot
+// over MQTT after a dump over HTTP; backups keep their order until stage 2 (457-C1) decides them. A
+// context that is pinned already (an update or a restore job) keeps its path.
+func onDumpPath(ctx context.Context, dump *transport.Trace) context.Context {
+	if _, pinned := transport.PathFrom(ctx); pinned {
+		return ctx
+	}
+	if dump.Via() == "mqtt" {
+		return transport.WithPath(ctx, transport.MQTT)
+	}
+	return transport.WithPath(ctx, transport.HTTP)
 }
 
 // snapshot queries the status commands one by one. A failing command is

@@ -3,6 +3,7 @@ package transport
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // Why (#456 A): a device on TasmoFleet's broker that is online answers reads over MQTT, so a device
@@ -19,6 +20,11 @@ func TestReadsGoOverMQTTFirst(t *testing.T) {
 		{"on our broker and live, HTTP ok: MQTT", func(f *Facts) {}, MQTT, HTTP, "MQTT first"},
 		{"on our broker and live, HTTP unknown: MQTT", func(f *Facts) { f.HTTP = HTTPState{} }, MQTT, HTTP, "MQTT first"},
 		{"on our broker and live, HTTP failing: MQTT, and says why", func(f *Facts) { *f = httpDown(*f) }, MQTT, MQTT, "cannot reach the device over HTTP"},
+		// Why (review of PR 626): a device whose MQTT reads went unanswered is read over HTTP while HTTP
+		// works; when HTTP fails, MQTT is all there is.
+		{"MQTT reads unanswered, HTTP ok: HTTP", func(f *Facts) { f.MQTT.ReadsUnansweredSince = t0.Add(-time.Minute) }, HTTP, HTTP, "got no answer"},
+		{"MQTT reads unanswered, HTTP unknown: HTTP", func(f *Facts) { f.HTTP = HTTPState{}; f.MQTT.ReadsUnansweredSince = t0.Add(-time.Minute) }, HTTP, HTTP, "got no answer"},
+		{"MQTT reads unanswered, HTTP failing: MQTT", func(f *Facts) { *f = httpDown(*f); f.MQTT.ReadsUnansweredSince = t0.Add(-time.Minute) }, MQTT, MQTT, "cannot reach the device over HTTP"},
 		{"LWT not online: HTTP (a publish would vanish)", func(f *Facts) { f.MQTT.LWTOnline = false }, HTTP, HTTP, "HTTP"},
 		{"other broker: HTTP", func(f *Facts) { f.MQTT.Ours = false }, HTTP, HTTP, "HTTP"},
 		{"MQTT off for the device (no topic): HTTP", func(f *Facts) { f.MQTT.Topic = "" }, HTTP, HTTP, "HTTP"},
@@ -64,7 +70,7 @@ func TestReadsOfADeviceWithoutMQTT(t *testing.T) {
 // not the old "HTTP first" order.
 func TestReadsReasonSaysWhatTheRouterDoes(t *testing.T) {
 	got := Choose(base()).Reason(ActCommands)
-	for _, want := range []string{"over MQTT first", "online on TasmoFleet's broker", "over HTTP only when nothing could be published"} {
+	for _, want := range []string{"over MQTT first", "online on TasmoFleet's broker", "over HTTP once if the device does not answer"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("reason %q lacks %q", got, want)
 		}

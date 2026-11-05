@@ -1,10 +1,12 @@
 package transport
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/mqttcmd"
@@ -52,36 +54,121 @@ func TestReadUsesHTTPWhenMQTTIsNotUsable(t *testing.T) {
 	}
 }
 
-func TestReadFailsOverToHTTPOnlyWhenNothingWasPublished(t *testing.T) {
-	// Why (#456 A, D4 turned round): an MQTT error proves "never left" only when the channel refused
-	// the command or could not publish it. A published read that got no answer has an unknown
-	// outcome for that read: it is reported as it is and never sent a second time over HTTP.
+func TestReadFailsOverToHTTPOnceWhenMQTTGaveNoAnswer(t *testing.T) {
+	// Why (#456 A, review of PR 626): reads change nothing on the device, so a read that MQTT
+	// published and the device never answered (SetOption4 1 devices answer on a topic we do not decode,
+	// a broker restart, a dropped QoS 0 publish) is asked once over HTTP instead of failing for good.
+	// Only a timeout counts as "no answer"; an answer we cannot use is an answer and is not repeated.
 	for _, tc := range []struct {
-		name      string
-		err       error
-		failover  bool
-		wantIsErr error
+		name     string
+		err      error
+		failover bool
+		marked   bool
 	}{
-		{"refused by the channel", fmt.Errorf("%w: Status 0 is never sent", mqttcmd.ErrRefused), true, nil},
-		{"could not publish", fmt.Errorf("%w: Status 2 not sent", tasmota.ErrUnreachable), true, nil},
-		{"published, no answer", fmt.Errorf("mqtt: no answer to Status 2: %w", tasmota.ErrTimeout), false, tasmota.ErrTimeout},
-		{"published, device went offline", fmt.Errorf("mqtt: offline before it answered (outcome unknown): %w", tasmota.ErrTimeout), false, tasmota.ErrTimeout},
-		{"published, reply unusable", fmt.Errorf("%w: reply", tasmota.ErrBadResponse), false, tasmota.ErrBadResponse},
+		{"refused by the channel", fmt.Errorf("%w: Status 0 is never sent", mqttcmd.ErrRefused), true, false},
+		{"could not publish", fmt.Errorf("%w: Status 2 not sent", tasmota.ErrUnreachable), true, false},
+		{"published, no answer", fmt.Errorf("mqtt: no answer to Status 2: %w", tasmota.ErrTimeout), true, true},
+		{"published, device went offline", fmt.Errorf("mqtt: offline before it answered (outcome unknown): %w", tasmota.ErrTimeout), true, true},
+		{"published, reply unusable", fmt.Errorf("%w: reply", tasmota.ErrBadResponse), false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			g := newRig(t)
 			g.mq.err = tc.err
-			raw, err := g.r.Command(t.Context(), g.target(), "Status 2")
+			ctx, tr := WithTrace(t.Context())
+			raw, err := g.r.Command(ctx, g.target(), "Status 2")
 			if tc.failover {
 				if err != nil || string(raw) != `{"HTTP":"yes"}` || g.http.n() != 1 || g.mq.n() != 1 {
 					t.Fatalf("raw=%s err=%v http=%d mqtt=%d", raw, err, g.http.n(), g.mq.n())
 				}
-				return
+			} else if !errors.Is(err, tasmota.ErrBadResponse) || g.http.n() != 0 || g.mq.n() != 1 {
+				t.Fatalf("err=%v http=%d mqtt=%d: an answer we cannot use is not asked again", err, g.http.n(), g.mq.n())
 			}
-			if !errors.Is(err, tc.wantIsErr) || g.http.n() != 0 || g.mq.n() != 1 {
-				t.Fatalf("err=%v http=%d mqtt=%d: a published read must not be sent again", err, g.http.n(), g.mq.n())
+			if _, _, marked := g.r.unanswered.HTTPFailure(7); marked != tc.marked {
+				t.Errorf("device marked as leaving MQTT reads unanswered = %v, want %v", marked, tc.marked)
+			}
+			if tc.marked && tr.Via() != "http+mqtt" {
+				t.Errorf("via = %s: both transports carried the read", tr.Via())
 			}
 		})
+	}
+}
+
+func TestNextReadAfterAnUnansweredOneIsNotPublished(t *testing.T) {
+	// Why: a device that leaves MQTT reads unanswered would cost 8 s (16 s with the late-reply hold)
+	// per read; the mark sends its reads over HTTP for 10 minutes while HTTP works.
+	g := newRig(t)
+	g.mq.err = fmt.Errorf("mqtt: no answer: %w", tasmota.ErrTimeout)
+	if _, err := g.r.Command(t.Context(), g.target(), "Status 2"); err != nil {
+		t.Fatal(err)
+	}
+	g.mq.err = nil
+	if raw, err := g.r.Command(t.Context(), g.target(), "Status 3"); err != nil || string(raw) != `{"HTTP":"yes"}` || g.mq.n() != 1 || g.http.n() != 2 {
+		t.Fatalf("raw=%s err=%v mqtt=%d http=%d", raw, err, g.mq.n(), g.http.n())
+	}
+	// the mark runs out: MQTT is tried again, and an answer clears it
+	now := time.Now()
+	g.r.unanswered = NewMemory(DefaultFailFor, func() time.Time { return now })
+	g.f.unanswered = g.r.unanswered
+	g.r.unanswered.Fail(7, HTTPFailUnreachable)
+	now = now.Add(DefaultFailFor + time.Second)
+	if raw, err := g.r.Command(t.Context(), g.target(), "Status 3"); err != nil || string(raw) != `{"MQTT":"yes"}` || g.mq.n() != 2 {
+		t.Fatalf("after the mark ran out: raw=%s err=%v mqtt=%d", raw, err, g.mq.n())
+	}
+}
+
+func TestAnAnsweredMQTTReadClearsTheMark(t *testing.T) {
+	g := newRig(t)
+	g.r.unanswered.Fail(7, HTTPFailUnreachable)
+	g.f.unanswered = nil // facts do not see the mark: MQTT is tried and answers
+	if _, err := g.r.Command(t.Context(), g.target(), "Status 2"); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, marked := g.r.unanswered.HTTPFailure(7); marked {
+		t.Error("an answered read must clear the mark")
+	}
+}
+
+func TestUnansweredReadIsNotSentOverHTTPWhenTheCallerGaveUp(t *testing.T) {
+	// Why: a read the caller no longer waits for must not start another request on the device.
+	g := newRig(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	g.mq.err = fmt.Errorf("mqtt: sent and not answered before the caller gave up: %w: %w", tasmota.ErrTimeout, context.Canceled)
+	g.mq.onDo = cancel
+	if _, err := g.r.Command(ctx, g.target(), "Status 2"); !errors.Is(err, tasmota.ErrTimeout) || g.http.n() != 0 {
+		t.Fatalf("err=%v http=%d", err, g.http.n())
+	}
+}
+
+func TestUnansweredReadIsNotSentOverHTTPWhenHTTPIsFailing(t *testing.T) {
+	// Why: with HTTP known to fail there is nothing to fall back to; the caller sees the timeout.
+	g := newRig(t)
+	g.mem.Fail(7, HTTPFailUnreachable)
+	g.mq.err = fmt.Errorf("mqtt: no answer: %w", tasmota.ErrTimeout)
+	if _, err := g.r.Command(t.Context(), g.target(), "Status 2"); !errors.Is(err, tasmota.ErrTimeout) || g.http.n() != 0 {
+		t.Fatalf("err=%v http=%d", err, g.http.n())
+	}
+	if _, _, marked := g.r.unanswered.HTTPFailure(7); marked {
+		t.Error("a device marked while HTTP fails would be read over a failing HTTP afterwards")
+	}
+}
+
+func TestMarkedDeviceIsStillReadOverMQTTWhenHTTPFails(t *testing.T) {
+	g := newRig(t)
+	g.r.unanswered.Fail(7, HTTPFailUnreachable)
+	g.mem.Fail(7, HTTPFailUnreachable)
+	if _, err := g.r.Command(t.Context(), g.target(), "Status 2"); err != nil || g.mq.n() != 1 || g.http.n() != 0 {
+		t.Fatalf("err=%v mqtt=%d http=%d", err, g.mq.n(), g.http.n())
+	}
+}
+
+func TestRepliesMQTTCannotMatchAreReadOverHTTPFirst(t *testing.T) {
+	// Why: State, a bare Gpio, Gpios and Modules answer with keys the channel does not match; one
+	// console State would otherwise mark the device and move all its reads to HTTP for 10 minutes.
+	for _, c := range []string{"State", "Gpio", "Gpios", "Modules"} {
+		g := newRig(t)
+		if _, err := g.r.Command(WithConsole(t.Context()), g.target(), c); err != nil || g.mq.n() != 0 || g.http.n() != 1 {
+			t.Errorf("%s: err=%v mqtt=%d http=%d", c, err, g.mq.n(), g.http.n())
+		}
 	}
 }
 
@@ -123,12 +210,42 @@ func TestJobCommandsAreNeverMQTTFirst(t *testing.T) {
 }
 
 func TestStatus0IsNeverPublishedByTheRouter(t *testing.T) {
-	// Why (CLAUDE.md safety rule 2): the real channel refuses Status 0; the router must treat that as
-	// "nothing published" and not turn it into an error for a console read.
+	// Why (CLAUDE.md safety rule 2): Status 0 is not a read (cmdpolicy asks a person to confirm it), so
+	// it never takes the MQTT-first path; a Status 0 a person confirmed in the console goes as a write
+	// over HTTP, and nothing is published.
 	g := newRig(t)
-	g.mq.err = fmt.Errorf("%w: Status 0 is never sent", mqttcmd.ErrRefused)
-	if _, err := g.r.Command(WithConsole(t.Context()), g.target(), "Status 0"); err != nil || g.http.n() != 1 {
-		t.Fatalf("err=%v http=%d", err, g.http.n())
+	if _, err := g.r.Command(WithConsole(t.Context()), g.target(), "Status 0"); err != nil || g.mq.n() != 0 || g.http.n() != 1 {
+		t.Fatalf("err=%v mqtt=%d http=%d", err, g.mq.n(), g.http.n())
+	}
+}
+
+type brokenFacts struct{ inner *facts }
+
+func (b brokenFacts) HTTPState(id model.DeviceID) HTTPState { return b.inner.HTTPState(id) }
+func (b brokenFacts) FactsFor(context.Context, model.Device) (Facts, error) {
+	return Facts{}, errors.New("inventory unavailable")
+}
+
+func TestReadWithoutFactsNeverPublishes(t *testing.T) {
+	// Why: without facts the router cannot check that the topic is exclusive, the FullTopic matches and
+	// the device is online on our broker. A read then takes the established HTTP path and publishes
+	// nothing, also when HTTP proves it sent nothing (fail closed).
+	for _, tc := range []struct {
+		name    string
+		httpErr error
+	}{
+		{"HTTP answers", nil},
+		{"HTTP did not send", tasmota.ErrForbiddenAddr},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			g := newRig(t)
+			g.r.o.Facts = brokenFacts{g.f}
+			g.http.err = tc.httpErr
+			_, err := g.r.Command(t.Context(), g.target(), "Status 2")
+			if !errors.Is(err, tc.httpErr) || (tc.httpErr == nil && err != nil) || g.mq.n() != 0 || g.http.n() != 1 {
+				t.Fatalf("err=%v mqtt=%d http=%d", err, g.mq.n(), g.http.n())
+			}
+		})
 	}
 }
 

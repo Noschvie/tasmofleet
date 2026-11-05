@@ -177,15 +177,19 @@ func noPath(parts ...string) string {
 }
 
 // chooseCommands: reads go over MQTT first (#456) whenever the device is on TasmoFleet's broker and
-// live there, whatever HTTP's state is. Only a device MQTT cannot serve is read over HTTP, and when
+// live there, whatever HTTP's state is, unless MQTT reads of the device just went unanswered and HTTP
+// works. Only a device MQTT cannot serve is read over HTTP, and when
 // HTTP is failing too there is no path.
 func chooseCommands(f Facts) (Path, string) {
 	why := mqttBlocker(f, false)
 	switch {
 	case why == "" && httpFailing(f):
 		return MQTT, "over MQTT, because " + httpFailText(f.HTTP)
+	case why == "" && !f.MQTT.ReadsUnansweredSince.IsZero():
+		return HTTP, "over the device's HTTP API, because a read over MQTT got no answer from the device (since " +
+			f.MQTT.ReadsUnansweredSince.UTC().Format("15:04 UTC") + "); MQTT is tried again after a few minutes"
 	case why == "":
-		return MQTT, "over MQTT first (the device is online on TasmoFleet's broker); over HTTP only when nothing could be published"
+		return MQTT, "over MQTT first (the device is online on TasmoFleet's broker); over HTTP once if the device does not answer or nothing could be published"
 	case !httpFailing(f):
 		return HTTP, "over the device's HTTP API, because MQTT is not usable: " + why
 	}

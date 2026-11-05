@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -503,6 +504,11 @@ func (p *Prober) ReadNet(ctx context.Context, id model.DeviceID) error {
 	net, err := rp.status5(ctx, t, &out)
 	if err != nil {
 		return err
+	}
+	if d.MAC != "" && out.mac != "" && !strings.EqualFold(d.MAC, out.mac) && !slices.ContainsFunc(d.MACs, func(m string) bool { return strings.EqualFold(m, out.mac) }) {
+		// An answer over MQTT comes from whoever listens on the topic (and over HTTP from whoever holds
+		// the address): facts of another device must not be stored on this one.
+		return fmt.Errorf("status 5: the answer is from another device than the stored one")
 	}
 	net = p.withStoredWifi(d.Net, net) // kept when Status 11 gives none
 	if !net.Wired {

@@ -17,7 +17,7 @@ var mqttPrefixes = [3]string{"cmnd", "stat", "tele"}
 // is the HTTP client it wraps (also in the CLI, which never calls this).
 func (a *runtime) setupTransport() {
 	facts := &TransportFacts{
-		Devices: a.svc.Store, Health: a.tracker, Memory: a.svc.Router.Memory(),
+		Devices: a.svc.Store, Health: a.tracker, Memory: a.svc.Router.Memory(), Unanswered: a.svc.Router.UnansweredReads(),
 		BusConnected:    a.bus.Connected,
 		FullTopic:       func() string { return a.svc.Sys.Snapshot().MQTTFullTopic },
 		FirmwareBaseURL: func() string { return a.svc.Sys.Snapshot().FWBaseURL },

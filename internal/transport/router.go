@@ -102,6 +102,8 @@ type Router struct {
 	o    Options
 	http tasmota.Client // the raw client, recording what HTTP tells about the device
 	mqtt atomic.Pointer[mqttHolder]
+	// unanswered remembers (10 minutes) the devices that left a read published over MQTT unanswered.
+	unanswered *Memory
 }
 
 type mqttHolder struct{ d MQTTDoer }
@@ -120,7 +122,7 @@ func NewRouter(o Options) *Router {
 	if o.Log == nil {
 		o.Log = slog.New(slog.DiscardHandler)
 	}
-	return &Router{o: o, http: &observer{c: o.HTTP, mem: o.Memory}}
+	return &Router{o: o, http: &observer{c: o.HTTP, mem: o.Memory}, unanswered: NewMemory(DefaultFailFor, time.Now)}
 }
 
 // SetMQTT attaches the command channel, once the broker connection exists. nil detaches it.
@@ -138,6 +140,10 @@ func (r *Router) SetFacts(f DeviceFacts) { r.o.Facts = f }
 
 // Memory is the router's record of failing HTTP calls (app.HTTPMemory).
 func (r *Router) Memory() *Memory { return r.o.Memory }
+
+// UnansweredReads is the router's memory of devices that left a read over MQTT unanswered: the facts
+// read it (MQTTFacts.ReadsUnansweredSince).
+func (r *Router) UnansweredReads() *Memory { return r.unanswered }
 
 // HTTPOnly is the raw HTTP client with the router's memory attached: what it learns (a refused
 // connection, an answer) is remembered, but it never routes to MQTT. The health poll, the prober
@@ -323,12 +329,18 @@ func (r *Router) Command(ctx context.Context, t tasmota.Target, cmnd string) (js
 // read sends a read (Status N, settings reads, read-only console commands) MQTT first (#456) when the
 // device is on our broker and live there (Paths.Commands), else over HTTP as before.
 //
-// HTTP is tried after MQTT only when the MQTT attempt provably published nothing (notPublished: the
-// channel refused the command, the bus was down, the device was offline by its LWT, the snapshot
-// changed). A read that was published and got no usable answer has an unknown outcome for that read:
-// the caller sees the MQTT error (a timeout, tasmota.ErrTimeout) and nothing is sent a second time.
+// A read changes nothing on the device, so HTTP may be asked once after MQTT in two cases: MQTT
+// provably published nothing (notPublished: the channel refused the command, the bus was down, the
+// device was offline by its LWT, the snapshot changed), or MQTT published and the device never
+// answered (tasmota.ErrTimeout) while the caller still waits and HTTP is not known to fail. The second
+// case marks the device (devices with SetOption4 1 answer on a topic TasmoFleet does not decode), so its
+// next reads go over HTTP for a while; an answer over MQTT clears the mark. Never back to MQTT within
+// one call. An answer we cannot use (ErrBadResponse, a device error) is an answer and is returned.
 func (r *Router) read(ctx context.Context, t tasmota.Target, cmnd string, cls cmdClass) (json.RawMessage, error) {
 	id := t.DeviceID()
+	if mqttCannotMatch(cmnd) {
+		return r.httpFirst(ctx, t, cmnd, cls)
+	}
 	d, err := r.o.Devices.GetDevice(ctx, id)
 	if err != nil {
 		return r.httpFirst(ctx, t, cmnd, cls)
@@ -346,11 +358,33 @@ func (r *Router) read(ctx context.Context, t tasmota.Target, cmnd string, cls cm
 		return raw, r.explain(err, f, p, cls)
 	}
 	raw, err := r.sendMQTT(ctx, d, cmnd, cls)
-	if err == nil || !notPublished(err) {
-		return raw, err
+	switch {
+	case err == nil:
+		r.unanswered.Clear(id)
+		return raw, nil
+	case notPublished(err):
+		r.o.Log.Info("transport: MQTT did not publish the read, using HTTP", "device", int64(id))
+		return r.httpCommand(ctx, t, cmnd)
+	case errors.Is(err, tasmota.ErrTimeout) && ctx.Err() == nil && r.o.Facts.HTTPState(id).State != HTTPFailing:
+		r.unanswered.Fail(id, HTTPFailUnreachable)
+		r.o.Log.Info("transport: MQTT read got no answer, asking over HTTP once", "device", int64(id))
+		return r.httpCommand(ctx, t, cmnd)
 	}
-	r.o.Log.Info("transport: MQTT did not publish the read, using HTTP", "device", int64(id))
-	return r.httpCommand(ctx, t, cmnd)
+	return raw, err
+}
+
+// mqttCannotMatch reports reads whose replies the command channel does not match (State answers with
+// its own keys, a bare Gpio only when GPIO1 is set, Gpios and Modules in several parts): they would
+// time out over MQTT and wrongly mark the device, so they stay HTTP first.
+func mqttCannotMatch(cmnd string) bool {
+	name, args, _ := strings.Cut(strings.TrimSpace(cmnd), " ")
+	switch strings.ToLower(name) {
+	case "state", "gpios", "modules":
+		return true
+	case "gpio":
+		return strings.TrimSpace(args) == ""
+	}
+	return false
 }
 
 // httpFirst sends over HTTP and fails over to MQTT only when the error proves that nothing was
