@@ -2,11 +2,14 @@ package app
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/secretbox"
+	"github.com/nofuturekid/tasmofleet/internal/store"
 	"github.com/nofuturekid/tasmofleet/internal/transport"
 )
 
@@ -77,18 +80,62 @@ func TestOnlyOverMQTTFollowsHTTPFailing(t *testing.T) {
 }
 
 // Why: a different device on the topic (or the address) must not get its network facts stored on this
-// one; over MQTT the answer comes from whoever listens on the topic.
-func TestReadNetRefusesAnAnswerFromAnotherDevice(t *testing.T) {
-	p, st, id, _, _ := raceSetup(t)
-	other := strings.Replace(status5Net, "AA:BB:CC:00:00:01", "AA:BB:CC:00:00:99", 1)
-	other = strings.Replace(other, "aa:bb:cc:00:00:01", "aa:bb:cc:00:00:99", 1)
-	p.Reads = override{Client: p.Client, reply: map[string]string{"Status 5": other, "Status 11": status11Net}}
-	if err := p.ReadNet(context.Background(), id); err == nil {
-		t.Fatal("the facts of another device were accepted")
+// one; over MQTT the answer comes from whoever listens on the topic. The rule is a refresh's (checkMAC,
+// #65): the answer names one of the stored MACs. Tasmota always reports its MAC in Status 5, so an
+// answer without one proves nothing and is refused; a device stored without a MAC has nothing to compare.
+func TestReadNetStoresOnlyAnAnswerOfTheStoredDevice(t *testing.T) {
+	const wifi, eth = "aa:bb:cc:00:00:01", "aa:bb:cc:00:00:02"
+	withEth := strings.Replace(status5Net, `"Mac":"AA:BB:CC:00:00:01"`, `"Mac":"AA:BB:CC:00:00:01","Ethernet":{"Mac":"AA:BB:CC:00:00:02"}`, 1)
+	for _, tc := range []struct {
+		name    string
+		stored  []string // the device's MACs, primary first; none: stored without a MAC
+		status5 string
+		stores  bool
+	}{
+		{"the stored MAC", []string{wifi}, status5Net, true},
+		{"another device's MAC", []string{wifi}, strings.Replace(status5Net, "AA:BB:CC:00:00:01", "AA:BB:CC:00:00:99", 1), false},
+		{"no MAC in the answer", []string{wifi}, strings.Replace(status5Net, `,"Mac":"AA:BB:CC:00:00:01"`, "", 1), false},
+		{"the Ethernet MAC is the stored one", []string{eth}, withEth, true},
+		{"stored without a MAC: nothing to compare", nil, status5Net, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p, st, id := readNetRig(t, tc.status5, tc.stored...)
+			err := p.ReadNet(t.Context(), id)
+			d, gerr := st.GetDevice(t.Context(), id)
+			if gerr != nil {
+				t.Fatal(gerr)
+			}
+			if stored := d.Net.IP != ""; (err == nil) != tc.stores || stored != tc.stores {
+				t.Fatalf("err=%v Net=%+v, want stored=%v", err, d.Net, tc.stores)
+			}
+		})
 	}
-	if d, _ := st.GetDevice(context.Background(), id); d.Net.IP != "" {
-		t.Errorf("stored %+v", d.Net)
+}
+
+// readNetRig stores one device with the given MACs (none: a device stored without a MAC) and returns a
+// prober whose background reads answer Status 5 with status5 and Status 11 with status11Net.
+func readNetRig(t *testing.T, status5 string, macs ...string) (*Prober, *store.SQLite, model.DeviceID) {
+	t.Helper()
+	dir := t.TempDir()
+	box, err := secretbox.LoadOrCreate(dir)
+	if err != nil {
+		t.Fatal(err)
 	}
+	st, err := store.Open(filepath.Join(dir, "t.db"), box)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() }) // temp DB
+	d := model.Device{Name: "plug", Address: "192.0.2.10"}
+	if len(macs) > 0 {
+		d.MAC, d.MACs = macs[0], macs
+	}
+	id, err := st.CreateDevice(t.Context(), d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reads := override{reply: map[string]string{"Status 5": status5, "Status 11": status11Net}}
+	return &Prober{Reads: reads, Devices: st, Gap: time.Millisecond}, st, id
 }
 
 // Why: the Prober's background reads must go through the router; with the raw client they would stay

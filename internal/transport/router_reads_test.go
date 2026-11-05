@@ -173,13 +173,18 @@ func TestRepliesMQTTCannotMatchAreReadOverHTTPFirst(t *testing.T) {
 }
 
 func TestFailoverReadIsSentOnceOverHTTPAndNotBackToMQTT(t *testing.T) {
-	// Why: the fall back to HTTP after a refusal must not bounce to MQTT again when HTTP did not send
-	// either (that would publish the read a second time).
-	g := newRig(t)
-	g.mq.err = fmt.Errorf("%w: refused", mqttcmd.ErrRefused)
-	g.http.err = tasmota.ErrForbiddenAddr
-	if _, err := g.r.Command(t.Context(), g.target(), "Status 2"); !errors.Is(err, tasmota.ErrForbiddenAddr) || g.mq.n() != 1 || g.http.n() != 1 {
-		t.Fatalf("err=%v mqtt=%d http=%d", err, g.mq.n(), g.http.n())
+	// Why: the fall back to HTTP after a refusal or an unanswered read must not bounce to MQTT again when
+	// HTTP did not send either (that would publish the read a second time).
+	for _, mqttErr := range []error{
+		fmt.Errorf("%w: refused", mqttcmd.ErrRefused),
+		fmt.Errorf("mqtt: no answer to Status 2: %w", tasmota.ErrTimeout),
+	} {
+		g := newRig(t)
+		g.mq.err = mqttErr
+		g.http.err = tasmota.ErrForbiddenAddr
+		if _, err := g.r.Command(t.Context(), g.target(), "Status 2"); !errors.Is(err, tasmota.ErrForbiddenAddr) || g.mq.n() != 1 || g.http.n() != 1 {
+			t.Fatalf("%v: err=%v mqtt=%d http=%d", mqttErr, err, g.mq.n(), g.http.n())
+		}
 	}
 }
 
@@ -260,12 +265,16 @@ func TestReadOfAHTTPOnlyDeviceDoesNotAskForFacts(t *testing.T) {
 }
 
 func TestReadExplainsWhyMQTTWasNotUsedWhenBothFail(t *testing.T) {
-	g := newRig(t)
-	g.mem.Fail(7, HTTPFailUnreachable)
-	g.http.err = tasmota.ErrUnreachable
-	g.f.lwtOffline = true
-	_, err := g.r.Command(t.Context(), g.target(), "Status 2")
-	if err == nil || !strings.Contains(err.Error(), "not online on MQTT") {
-		t.Fatalf("err=%v", err)
+	// Why: the console shows this error; it says once why MQTT was not used, also when HTTP sent
+	// nothing (a second explanation would name a second, different HTTP failure).
+	for _, httpErr := range []error{tasmota.ErrUnreachable, tasmota.ErrForbiddenAddr} {
+		g := newRig(t)
+		g.mem.Fail(7, HTTPFailUnreachable)
+		g.http.err = httpErr
+		g.f.lwtOffline = true
+		_, err := g.r.Command(t.Context(), g.target(), "Status 2")
+		if !errors.Is(err, httpErr) || strings.Count(err.Error(), "not online on MQTT") != 1 || g.http.n() != 1 || g.mq.n() != 0 {
+			t.Fatalf("err=%v http=%d mqtt=%d", err, g.http.n(), g.mq.n())
+		}
 	}
 }

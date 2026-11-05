@@ -490,8 +490,9 @@ func TestAPIRefusedFailsOverOnlyForReadsOrAKnownRefusal(t *testing.T) {
 	}
 	g = newRig(t)
 	g.http.err = tasmota.ErrHTTPAPIRefused
-	if _, err := g.r.Command(t.Context(), g.target(), "Status 2"); err != nil || g.mq.n() != 1 {
-		t.Fatalf("read: err=%v mqtt=%d", err, g.mq.n())
+	g.r.unanswered.Fail(7, HTTPFailUnreachable) // reads go MQTT first since #456; marked, this one starts on HTTP
+	if _, err := g.r.Command(t.Context(), g.target(), "Status 2"); err != nil || g.http.n() != 1 || g.mq.n() != 1 {
+		t.Fatalf("read: err=%v http=%d mqtt=%d", err, g.http.n(), g.mq.n())
 	}
 	g = newRig(t)
 	g.mem.Fail(7, HTTPFailAPIRefused)

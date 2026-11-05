@@ -353,9 +353,12 @@ func (r *Router) read(ctx context.Context, t tasmota.Target, cmnd string, cls cm
 		return r.httpFirst(ctx, t, cmnd, cls)
 	}
 	p := Choose(f)
-	if p.Commands != MQTT {
-		raw, err := r.httpFirst(ctx, t, cmnd, cls)
+	if p.Commands == None { // HTTP fails and MQTT is not usable: HTTP once with the reason, as before #456
+		raw, err := r.httpCommand(ctx, t, cmnd)
 		return raw, r.explain(err, f, p, cls)
+	}
+	if p.Commands != MQTT { // httpFirst explains its own failover; a second explain would repeat the reason
+		return r.httpFirst(ctx, t, cmnd, cls)
 	}
 	raw, err := r.sendMQTT(ctx, d, cmnd, cls)
 	switch {
