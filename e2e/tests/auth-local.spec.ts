@@ -72,6 +72,21 @@ test("Sign out after the session is gone signs out instead of answering 403", { 
   await expect(page.getByLabel("Username")).toBeVisible();
 });
 
+// Why (#508): signing out without a session must not let another site sign a person out. Its form post
+// never carries the session cookie (SameSite=Lax), so the server sees no session, but the cookie-clearing
+// answer would still end the valid session in this browser. The origin check refuses it.
+test("a page on another site cannot sign you out", { tag: "@core" }, async ({ page, context }) => {
+  await signInBreakglass(page);
+  const evil = "http://localhost/evil.html"; // another site than 127.0.0.1, answered by the route below
+  await page.route(evil, (route) => route.fulfill({ contentType: "text/html", body: `<form method="post" action="${app.url}/logout"><button>Win</button></form>` }));
+  await page.goto(evil);
+  await page.getByRole("button", { name: "Win" }).click();
+  await expect(page.getByText("missing or invalid CSRF token")).toBeVisible();
+  expect((await context.cookies(app.url)).map((c) => c.name)).toContain("tasmofleet");
+  await page.goto(app.url + "/devices");
+  await expect(page).toHaveURL(/\/devices$/);
+});
+
 // UX review #2: the account pages are part of the app: navigation, sign-out, the same
 // layout. Only the sign-in and the forced first password change stay centred.
 test("account pages carry the app shell", async ({ page }) => {

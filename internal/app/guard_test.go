@@ -369,7 +369,7 @@ func TestGuardUnsafeLogoutWithoutSession(t *testing.T) {
 		req := httptest.NewRequest(method, path, strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		rec := httptest.NewRecorder()
-		guardUnsafe(s, csrf.Middleware, next).ServeHTTP(rec, req)
+		guardUnsafe(s, http.NewCrossOriginProtection(), csrf.Middleware, next).ServeHTTP(rec, req)
 		return rec.Code
 	}
 	expired := sessionFn{}                       // no token can exist
@@ -436,7 +436,7 @@ func TestGuardUnsafeLogoutExemptionIsExact(t *testing.T) {
 		req := httptest.NewRequest(c.method, c.target, strings.NewReader("csrf=old"))
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		rec := httptest.NewRecorder()
-		guardUnsafe(c.s, csrf.Middleware, next).ServeHTTP(rec, req)
+		guardUnsafe(c.s, http.NewCrossOriginProtection(), csrf.Middleware, next).ServeHTTP(rec, req)
 		if rec.Code != 403 || reached {
 			t.Errorf("%s: %d reached=%v, want 403 from the full chain", c.name, rec.Code, reached)
 		}
@@ -447,9 +447,48 @@ func TestGuardUnsafeLogoutExemptionIsExact(t *testing.T) {
 		s := sessionFn{}
 		csrf, _ := httpx.NewCSRF(s)
 		rec := httptest.NewRecorder()
-		guardUnsafe(s, csrf.Middleware, next).ServeHTTP(rec, httptest.NewRequest(m, "/logout", nil))
+		guardUnsafe(s, http.NewCrossOriginProtection(), csrf.Middleware, next).ServeHTTP(rec, httptest.NewRequest(m, "/logout", nil))
 		if rec.Code != 204 {
 			t.Errorf("%s /logout: %d", m, rec.Code)
+		}
+	}
+}
+
+// Why (#508): the exemption skips the token, never the origin check. A form that
+// another site posts to /logout never carries the session cookie (SameSite=Lax),
+// so it always looks like a request without a session, and the cookie-clearing
+// answer would still sign that browser out of its valid session. The person's
+// own tab is same-origin and still signs out.
+func TestGuardUnsafeLogoutKeepsTheOriginCheck(t *testing.T) {
+	cases := []struct {
+		name    string
+		header  map[string]string
+		reached bool
+	}{
+		{"another site", map[string]string{"Sec-Fetch-Site": "cross-site", "Origin": "http://evil.example"}, false},
+		{"a sibling subdomain", map[string]string{"Sec-Fetch-Site": "same-site"}, false},
+		{"another origin, browser without Sec-Fetch-Site", map[string]string{"Origin": "http://evil.example"}, false},
+		{"the person's own tab", map[string]string{"Sec-Fetch-Site": "same-origin", "Origin": "http://example.com"}, true},
+		{"own origin, browser without Sec-Fetch-Site", map[string]string{"Origin": "http://example.com"}, true},
+		{"no browser (neither header)", nil, true},
+	}
+	for _, c := range cases {
+		reached := false
+		next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { reached = true; w.WriteHeader(http.StatusNoContent) })
+		s := sessionFn{} // no session: the request the exemption is for
+		csrf, err := httpx.NewCSRF(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest(http.MethodPost, "/logout", strings.NewReader("csrf=old")) // Host: example.com
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		for k, v := range c.header {
+			req.Header.Set(k, v)
+		}
+		rec := httptest.NewRecorder()
+		guardUnsafe(s, http.NewCrossOriginProtection(), csrf.Middleware, next).ServeHTTP(rec, req)
+		if reached != c.reached || (!c.reached && rec.Code != http.StatusForbidden) {
+			t.Errorf("%s: %d reached=%v, want reached=%v", c.name, rec.Code, reached, c.reached)
 		}
 	}
 }

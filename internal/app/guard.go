@@ -82,16 +82,19 @@ type sessionTokens interface {
 }
 
 // guardUnsafe chains guardBodies and the CSRF middleware around next, with one
-// exception (#508): POST /logout without a valid session goes straight to next.
-// An expired session has no CSRF token, so the chain would answer 403 and the
-// cookie would never be cleared. Without a session there is nothing for a forged
-// sign-out to end, and only this one exact route is exempt; with a valid session
-// (header principals included) sign-out keeps its CSRF check. The body is capped
-// like everywhere else.
-func guardUnsafe(a sessionTokens, csrf func(http.Handler) http.Handler, next http.Handler) http.Handler {
+// exception (#508): a same-origin POST /logout without a valid session goes
+// straight to next. An expired session has no CSRF token, so the chain would
+// answer 403 and the cookie would never be cleared. Only the token check is
+// skipped, the origin check (cop, the one of the CSRF middleware) stays: a form
+// that another site posts never carries the session cookie (SameSite=Lax), so
+// it always looks signed out, but the cookie-clearing answer would still end a
+// valid session in that browser. Only this one exact route is exempt; with a
+// valid session (header principals included) sign-out keeps its CSRF check.
+// The body is capped like everywhere else.
+func guardUnsafe(a sessionTokens, cop *http.CrossOriginProtection, csrf func(http.Handler) http.Handler, next http.Handler) http.Handler {
 	guarded := guardBodies(a, csrf(next))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if isPlainLogout(r) {
+		if isPlainLogout(r) && cop.Check(r) == nil {
 			if _, err := a.Principal(r); errors.Is(err, auth.ErrUnauthenticated) {
 				r.Body = http.MaxBytesReader(w, r.Body, maxFormBody)
 				next.ServeHTTP(w, r)

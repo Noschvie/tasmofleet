@@ -645,8 +645,20 @@ func (a *runtime) handler() (http.Handler, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The sign-out exemption (#508) skips only the token: it keeps the origin
+	// check of csrf, with the same trusted origins.
+	cop := http.NewCrossOriginProtection()
+	for _, o := range origins {
+		u, err := url.Parse(o)
+		if err != nil {
+			return nil, err
+		}
+		if err := cop.AddTrustedOrigin(u.Scheme + "://" + u.Host); err != nil {
+			return nil, err
+		}
+	}
 	h := a.countRequests(mux)
-	h = guardUnsafe(a.authSvc, csrf.Middleware, h)
+	h = guardUnsafe(a.authSvc, cop, csrf.Middleware, h)
 	h = a.authSvc.Middleware(h)
 	h = sec(h)
 	h = httpx.AccessLog(a.log, h)
