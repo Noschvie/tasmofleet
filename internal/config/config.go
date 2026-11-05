@@ -180,7 +180,7 @@ type Config struct {
 	NotifyBackup        bool   `env:"NOTIFY_BACKUP" ui:"true" default:"true"`
 	NotifySnapshot      bool   `env:"NOTIFY_SNAPSHOT" ui:"true" default:"true"`
 	NotifyWebhook       bool   `env:"NOTIFY_WEBHOOK" ui:"true" default:"false"`
-	NotifyWebhookFormat string `env:"NOTIFY_WEBHOOK_FORMAT" ui:"true" default:"json"` // json | homeassistant
+	NotifyWebhookFormat string `env:"NOTIFY_WEBHOOK_FORMAT" ui:"true" default:"json"` // json | homeassistant | ntfy | gotify
 	NotifyWebhookURL    string `env:"NOTIFY_WEBHOOK_URL" ui:"true"`
 	NotifyWebhookAuth   string `env:"NOTIFY_WEBHOOK_AUTH" ui:"true" default:"none"` // none | header
 	NotifyWebhookHeader string `env:"NOTIFY_WEBHOOK_HEADER" ui:"true" default:"Authorization"`

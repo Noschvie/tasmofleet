@@ -68,7 +68,11 @@ func (h *handler) sysNotifyOf(values map[string]string) sysNotify {
 	if n == nil {
 		return sysNotify{}
 	}
-	out := sysNotify{On: true, Preview: notify.WebhookJSON(notify.Sample(n.Config()), true)}
+	cfg := n.Config()
+	if f := values["NOTIFY_WEBHOOK_FORMAT"]; f != "" {
+		cfg.NotifyWebhookFormat = f // the preview shows what the saved format sends
+	}
+	out := sysNotify{On: true, Preview: notify.WebhookPreview(cfg, notify.Sample(cfg))}
 	out.Webhook = notifyChannelView(values["NOTIFY_WEBHOOK"] == "true" && values["NOTIFY_WEBHOOK_URL"] != "",
 		"Turn it on and enter a URL.", n.Status(notify.Webhook))
 	out.Email = notifyChannelView(values["NOTIFY_SMTP"] == "true" && values["NOTIFY_SMTP_HOST"] != "",
@@ -181,7 +185,7 @@ func (h *handler) sysNotifyAnswer(w http.ResponseWriter, r *http.Request, ch not
 func sysEnumLabel(key, value string) string {
 	labels := map[string]map[string]string{
 		"NOTIFY_UPDATE_WHEN":    {config.NotifyWhenAny: "Any result", config.NotifyWhenProblems: "Failed or partial only"},
-		"NOTIFY_WEBHOOK_FORMAT": {config.NotifyFormatJSON: "Generic JSON", config.NotifyFormatHomeAssistant: "Home Assistant"},
+		"NOTIFY_WEBHOOK_FORMAT": {config.NotifyFormatJSON: "Generic JSON", config.NotifyFormatHomeAssistant: "Home Assistant", config.NotifyFormatNtfy: "ntfy", config.NotifyFormatGotify: "Gotify"},
 		"NOTIFY_WEBHOOK_AUTH":   {config.NotifyAuthNone: "None", config.NotifyAuthHeader: "Secret header"},
 		"NOTIFY_SMTP_SECURITY":  {config.NotifySecStartTLS: "STARTTLS", config.NotifySecTLS: "TLS", config.NotifySecNone: "None"},
 	}
@@ -193,7 +197,7 @@ func sysEnumLabel(key, value string) string {
 
 // sysSegmentedEnum says whether a choice is drawn as segments (two or three short choices).
 func sysSegmentedEnum(key string) bool {
-	return key == "NOTIFY_UPDATE_WHEN" || key == "NOTIFY_WEBHOOK_FORMAT" || key == "NOTIFY_WEBHOOK_AUTH"
+	return key == "NOTIFY_UPDATE_WHEN" || key == "NOTIFY_WEBHOOK_AUTH"
 }
 
 // sysEnumOptions are the segments of a choice setting.

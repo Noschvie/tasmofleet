@@ -6,6 +6,14 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Upgrade notes
+
+- Webhook notifications: if you send to ntfy (or Gotify), open Settings, Notifications and set the webhook Format to ntfy (or Gotify). Until then the webhook keeps sending JSON, which ntfy shows as raw text (#469, thanks @t4nki)
+
+### Added
+
+- Notifications: the webhook Format now offers ntfy and Gotify next to Generic JSON and Home Assistant. ntfy gets a plain-text message with a title, a link to the TasmoFleet page (when PUBLIC_URL is set) and a priority that stands out for failed or partial results; Gotify gets title, message, priority and the link as the click action. The Message card previews what the saved format sends (#469, thanks @t4nki)
+
 ### Added
 
 - Dashboard: a "No backup" tile counts the devices that have no backup yet, the same number as the device list's "No backup" chip, and opens that list. It is blue, not amber: a device that never answered has no backup either, so the number is not a failure count. The dashboard now also refreshes when a backup is taken or deleted (#438, thanks @Noschvie)

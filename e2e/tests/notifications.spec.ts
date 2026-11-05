@@ -147,7 +147,7 @@ test("Send test is not usable while its channel's switch is off", { tag: "@core"
 test("webhook: save, the secret is not shown again, Send test reaches the receiver", { tag: "@core" }, async ({ page }) => {
   await open(page);
   await page.locator("[data-key='NOTIFY_WEBHOOK'] .swtrack").click();
-  await page.getByLabel("Home Assistant").check();
+  await page.locator("select[name='v.NOTIFY_WEBHOOK_FORMAT']").selectOption("homeassistant");
   await page.locator("input[name='v.NOTIFY_WEBHOOK_URL']").fill(`http://127.0.0.1:${hook.port}/api/webhook/tf-notify-9c1f`);
   await page.getByLabel("Secret header").check();
   await page.locator("input[name='v.NOTIFY_WEBHOOK_SECRET']").fill(secret);
@@ -182,6 +182,35 @@ test("webhook: a refusal is shown as the receiver's answer", async ({ page }) =>
   await expect(res).toHaveText("Webhook test: failed: HTTP 404");
   await expect(res).toHaveAttribute("role", "alert");
   await expect(res).not.toContainText("tf-notify-9c1f");
+});
+
+// Why (#469): ntfy shows a plain-text body and a Title header; JSON there would show raw braces. The
+// Format is a select, "Send test" uses the unsaved choice, and the Message card previews the saved one.
+test("webhook: ntfy format sends plain text with a title; the preview follows the saved format", { tag: "@core" }, async ({ page }) => {
+  await open(page);
+  const keepStatus = hook.status; // the next test relies on the receiver still answering 404
+  hook.status = 200;
+  hook.seen.length = 0;
+  const format = page.locator("select[name='v.NOTIFY_WEBHOOK_FORMAT']");
+  await expect(format.locator("option")).toHaveText(["Generic JSON", "Home Assistant", "ntfy", "Gotify"]);
+  await expect(page.locator("#card-notify-message pre")).toContainText("Content-Type: application/json");
+  await format.selectOption("ntfy");
+  await sendTest(page, "#card-notify-webhook");
+  await expect(page.locator("#card-notify-webhook .sys-test-res")).toHaveText("Webhook test: sent, HTTP 200");
+  expect(hook.seen).toHaveLength(1);
+  expect(hook.seen[0].headers["title"]).toBe("TasmoFleet test notification");
+  expect(hook.seen[0].headers["content-type"]).toContain("text/plain");
+  expect(hook.seen[0].body).toContain("This is a test message");
+  expect(hook.seen[0].headers["authorization"]).toBe(secret);
+  await page.getByRole("button", { name: "Save settings" }).click();
+  await expect(page.getByText("Saved.")).toBeVisible();
+  await expect(page.locator("#card-notify-message pre")).toContainText("Title: Update job #41: 11 ok, 1 failed");
+  await expect(page.locator("#card-notify-message pre")).not.toContainText(secret);
+  await shoot(page, "b-ntfy");
+  await format.selectOption("homeassistant"); // leave the saved state as the other tests expect
+  await page.getByRole("button", { name: "Save settings" }).click();
+  await expect(page.getByText("Saved.")).toBeVisible();
+  hook.status = keepStatus;
 });
 
 // Why: e-mail has its own settings, a status and a test; the password is write-only like the others.

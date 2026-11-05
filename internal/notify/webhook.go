@@ -71,11 +71,17 @@ var errRedirectElsewhere = errors.New("redirected to another host or to plain ht
 // success, the reason on failure. retry says a second attempt may help (a network error or a
 // server error), not a refusal such as 404.
 func sendWebhook(ctx context.Context, cl *http.Client, c config.Config, ev Event) (detail string, retry bool, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.NotifyWebhookURL, bytes.NewReader([]byte(WebhookJSON(ev, false))))
+	wr, err := buildWebhook(c, ev)
+	if err != nil {
+		return "", false, err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.NotifyWebhookURL, bytes.NewReader(wr.body))
 	if err != nil {
 		return "", false, errors.New("the webhook address is not valid")
 	}
-	req.Header.Set("Content-Type", "application/json")
+	for _, h := range wr.headers {
+		req.Header.Set(h[0], h[1])
+	}
 	req.Header.Set("User-Agent", "TasmoFleet")
 	if c.NotifyWebhookAuth == config.NotifyAuthHeader && c.NotifyWebhookSecret != "" {
 		req.Header.Set(c.NotifyWebhookHeader, c.NotifyWebhookSecret)

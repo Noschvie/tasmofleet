@@ -1671,9 +1671,16 @@ Package `notify` tells a person about events they did not watch (#249). Events: 
 the failed devices), `snapshot.failed` (scheduled database snapshot), and `test`. Settings
 (`NOTIFY_*`, Settings page, tab Notifications) select the events and configure two channels:
 
-- **Webhook:** POST of the JSON body `{event, result, title, text, url, time}`; the Home Assistant
-  preset sends the same body (its webhook trigger exposes it as `trigger.json`). Optional secret
-  header. Ten seconds per attempt, one retry on a network error, 5xx or 429, never on 4xx, no proxy
+- **Webhook:** POST to the address as typed, in one of four formats (`NOTIFY_WEBHOOK_FORMAT`, #469):
+  `json` is the body `{event, result, title, text, url, time}`; `homeassistant` sends the same body
+  (its webhook trigger exposes it as `trigger.json`); `ntfy` sends the text as a plain-text body
+  with the `Title` header (RFC 2047 encoded when not ASCII, line breaks replaced by spaces),
+  `Click` only when `PUBLIC_URL` gives a link, and `Priority` 4 for failed or partial results,
+  3 otherwise; `gotify` sends `{title, message, priority}` as JSON (priority 8 for failed or
+  partial, 5 otherwise) with `extras["client::notification"].click.url` when there is a link
+  (the token goes in the secret header `X-Gotify-Key`). An unknown format is refused, not sent as
+  JSON. The settings page previews the saved format (request line, headers except the secret
+  one, body). Optional secret header. Ten seconds per attempt, one retry on a network error, 5xx or 429, never on 4xx, no proxy
   from the environment, redirects only to the same host. The address is never part of a status or log text.
 - **E-mail:** `net/smtp` with STARTTLS (never skipped when chosen), implicit TLS or none; PLAIN or
   LOGIN login; quoted-printable UTF-8 text with the title as subject.

@@ -33,6 +33,9 @@ func TestNotifySettingsAreValidatedOnlyWhileTheChannelIsOn(t *testing.T) {
 		{"smtp ok with a named sender and two recipients", func(c *Config) {
 			c.NotifySMTP, c.NotifySMTPHost, c.NotifySMTPFrom, c.NotifySMTPTo = true, "mail", "TasmoFleet <a@b.c>", "x@y.z, u@v.w"
 		}, ""},
+		{"format ntfy", func(c *Config) { c.NotifyWebhookFormat = NotifyFormatNtfy }, ""},
+		{"format gotify", func(c *Config) { c.NotifyWebhookFormat = NotifyFormatGotify }, ""},
+		{"format shoutrrr is not offered", func(c *Config) { c.NotifyWebhookFormat = "shoutrrr" }, "NOTIFY_WEBHOOK_FORMAT"},
 		{"unknown security", func(c *Config) { c.NotifySMTPSecurity = "ssl3" }, "NOTIFY_SMTP_SECURITY"},
 	}
 	for _, tc := range cases {

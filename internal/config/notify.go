@@ -15,6 +15,8 @@ const (
 
 	NotifyFormatJSON          = "json"
 	NotifyFormatHomeAssistant = "homeassistant"
+	NotifyFormatNtfy          = "ntfy"
+	NotifyFormatGotify        = "gotify"
 
 	NotifyAuthNone   = "none"
 	NotifyAuthHeader = "header"
@@ -30,7 +32,7 @@ func NotifyChoices(key string) []string {
 	case "NOTIFY_UPDATE_WHEN":
 		return []string{NotifyWhenAny, NotifyWhenProblems}
 	case "NOTIFY_WEBHOOK_FORMAT":
-		return []string{NotifyFormatJSON, NotifyFormatHomeAssistant}
+		return []string{NotifyFormatJSON, NotifyFormatHomeAssistant, NotifyFormatNtfy, NotifyFormatGotify}
 	case "NOTIFY_WEBHOOK_AUTH":
 		return []string{NotifyAuthNone, NotifyAuthHeader}
 	case "NOTIFY_SMTP_SECURITY":

@@ -281,3 +281,30 @@ func TestNotificationTestRefusesAChannelWhoseSwitchIsOff(t *testing.T) {
 		})
 	}
 }
+
+// Why (#469): four formats are too many for segments; the Format is a select, and the Message
+// card shows the request of the format that is saved (what the next event really sends), not a
+// JSON body that ntfy would never get.
+func TestNotificationFormatIsASelectAndThePreviewFollowsIt(t *testing.T) {
+	e, svc := notifyEnv(t, &fakeNotify{})
+	_, page := e.do(t, "GET", "/settings/system?tab=notifications", "admin", nil)
+	m := regexp.MustCompile(`(?s)<select[^>]*name="v.NOTIFY_WEBHOOK_FORMAT".*?</select>`).FindString(page)
+	if m == "" {
+		t.Fatalf("Format is not a select:\n%s", page)
+	}
+	for _, label := range []string{"Generic JSON", "Home Assistant", "ntfy", "Gotify"} {
+		if !strings.Contains(m, ">"+label+"</option>") {
+			t.Errorf("select lacks %q: %s", label, m)
+		}
+	}
+	if !strings.Contains(page, "Content-Type: application/json") {
+		t.Errorf("default preview should show the JSON request")
+	}
+	if _, err := svc.Apply(t.Context(), sysconfig.Request{Actor: "admin", Values: map[string]string{"NOTIFY_WEBHOOK_FORMAT": "ntfy"}}); err != nil {
+		t.Fatal(err)
+	}
+	_, page = e.do(t, "GET", "/settings/system?tab=notifications", "admin", nil)
+	if !strings.Contains(page, "Title: Update job #41") || strings.Contains(page, `"event": "update.finished"`) {
+		t.Errorf("preview does not follow the saved ntfy format:\n%s", page)
+	}
+}
