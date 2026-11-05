@@ -80,6 +80,7 @@ type simDevice struct {
 	mu             sync.Mutex
 	backlog        []string // queued Backlog commands (cmd.go)
 	backlogRunning bool
+	backlogDue     time.Time // backlog_timer: the next queued command runs after it
 	phase          Phase
 	phaseCh        chan struct{}
 	history        []PhaseChange

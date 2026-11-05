@@ -400,8 +400,10 @@ func (f *Fixer) Verify(ctx context.Context, d model.Device, lines []string) (map
 	}
 	// Over HTTP the reply to a Backlog comes before the device has run it: the first read can show
 	// the old value of every line but the first (#559). A mismatch is therefore read again a few
-	// times before it counts; the last read wins. A value the device really refuses costs
-	// settleReads seconds, no more.
+	// times before it counts; the last read wins. The queue only moves while we wait (every command
+	// the device handles pushes its timer back by SetOption34), so the first wait grows with the
+	// number of settings that differ. A value the device really refuses costs about
+	// settleReads seconds plus a quarter second per differing setting, no more.
 	for settle := 0; ; settle++ {
 		var got map[string]string
 		for i := 0; ; i++ {
@@ -417,7 +419,7 @@ func (f *Fixer) Verify(ctx context.Context, d model.Device, lines []string) (map
 			}
 		}
 		var bad []string
-		stale := false // a value differs (rather than being absent): the queue may not have run yet
+		stale := 0 // values that differ (not absent): the queue may not have run them yet
 		for _, l := range parsed {
 			have, ok := got[l.key]
 			switch {
@@ -425,26 +427,33 @@ func (f *Fixer) Verify(ctx context.Context, d model.Device, lines []string) (map
 				bad = append(bad, l.key+" is not reported by the device")
 			case !equal(have, l.value):
 				bad = append(bad, fmt.Sprintf("%s is %s, expected %s", l.key, have, l.value))
-				stale = true
+				stale++
 			}
 		}
 		if len(bad) == 0 {
 			return got, nil
 		}
-		if !stale || settle >= settleReads {
+		if stale == 0 || settle >= settleReads {
 			return got, errors.New("after applying: " + strings.Join(bad, "; "))
 		}
-		if err := f.wait(ctx, settleWait); err != nil {
+		pause := settleWait
+		if settle == 0 {
+			pause = max(pause, time.Duration(stale+1)*backlogLineWait)
+		}
+		if err := f.wait(ctx, pause); err != nil {
 			return got, err
 		}
 	}
 }
 
-// settleReads and settleWait bound the wait for a Backlog to run: Tasmota queues at most 30
-// entries and runs one per 200 ms (SetOption34), so a few seconds cover any plan; a chunk is 8.
+// settleReads and settleWait bound the wait for a Backlog to run. Tasmota has no cap on the queue
+// (only 12.x had 30 entries), a plan can hold up to MaxRules (100) lines, and the device runs one
+// per SetOption34 delay (200 ms by default, 255 ms at most; backlogLineWait) once it is left
+// alone: each read pushes the queue back, so the first wait covers every line still wrong.
 const (
-	settleReads = 6
-	settleWait  = time.Second
+	settleReads     = 6
+	settleWait      = time.Second
+	backlogLineWait = 250 * time.Millisecond
 )
 
 func (f *Fixer) wait(ctx context.Context, d time.Duration) error {

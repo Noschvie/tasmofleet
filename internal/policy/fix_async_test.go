@@ -3,6 +3,7 @@ package policy
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -24,6 +25,7 @@ type asyncDevice struct {
 	flash     map[string]string // what survives a power cycle
 	queue     []string
 	refuse    map[string]bool
+	lineTime  time.Duration // > 0: a Wait runs only as many queued lines as fit in it (one per lineTime); 0: all
 	waited    time.Duration
 	waits     int
 	reads     int
@@ -86,10 +88,14 @@ func (d *asyncDevice) wait(_ context.Context, w time.Duration) error {
 	defer d.mu.Unlock()
 	d.waits++
 	d.waited += w
-	for _, l := range d.queue {
+	n := len(d.queue)
+	if d.lineTime > 0 {
+		n = min(n, int(w/d.lineTime))
+	}
+	for _, l := range d.queue[:n] {
 		d.run(l)
 	}
-	d.queue = nil
+	d.queue = d.queue[n:]
 	return nil
 }
 
@@ -163,5 +169,45 @@ func TestApplySaveRunsAfterTheQueuedLines(t *testing.T) {
 	}
 	if d.runtime["SaveData"] != "0" {
 		t.Fatalf("the save must keep the SaveData value: %v", d.runtime)
+	}
+}
+
+// Why (#559 review): the queue only moves while Verify waits (every command the device handles
+// pushes its timer back), one line per 200 ms, and a plan can hold up to 100 lines. A fixed
+// six seconds would fail a plan of ~30 lines that the device applies fine; the first wait has to
+// grow with the number of lines still wrong.
+func TestVerifyWaitsForALongBacklog(t *testing.T) {
+	d := newAsyncDevice("1")
+	d.lineTime = 200 * time.Millisecond
+	var lines []string
+	for i := 0; i < 40; i++ {
+		k := fmt.Sprintf("SetOption%d", i)
+		d.runtime[k] = "0"
+		lines = append(lines, k+" 1")
+	}
+	f := d.fixer()
+	if err := f.Apply(context.Background(), model.Device{ID: 1}, lines); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Verify(context.Background(), model.Device{ID: 1}, lines); err != nil {
+		t.Fatalf("the device applies all 40 lines, Verify must wait long enough: %v", err)
+	}
+	if d.reads > 3 {
+		t.Fatalf("the first wait must fit the queue, %d reads", d.reads)
+	}
+}
+
+// Why (#559 review): a key the device does not report at all will not appear by waiting; only
+// a value that differs may still be on its way.
+func TestVerifyDoesNotRetryAbsentKeys(t *testing.T) {
+	d := newAsyncDevice("1")
+	r := &fakeRead{vals: map[string]string{}}
+	w := 0
+	f := &Fixer{Client: d, Reader: r, Wait: func(context.Context, time.Duration) error { w++; return nil }}
+	if _, err := f.Verify(context.Background(), model.Device{ID: 1}, []string{"PowerOnState 3"}); err == nil || !strings.Contains(err.Error(), "not reported") {
+		t.Fatalf("err %v", err)
+	}
+	if len(r.calls) != 1 || w != 0 {
+		t.Fatalf("%d reads, %d waits: an absent key is not retried", len(r.calls), w)
 	}
 }

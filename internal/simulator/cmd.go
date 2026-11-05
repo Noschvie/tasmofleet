@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // outMsg is an MQTT message a command produces.
@@ -82,6 +83,7 @@ func (d *simDevice) execLocked(cmd string) ([]byte, []outMsg) {
 		return []byte(`{"WARNING":"Enter command cmnd="}`), nil
 	}
 	name, base, idx, hasIdx, data := splitCmd(cmd)
+	d.backlogDue = time.Now().Add(d.dur(backlogDelaySec)) // every handled command pushes the queue back
 	result := func(b []byte) ([]byte, []outMsg) {
 		return b, []outMsg{{topic: "stat/" + d.topic + "/RESULT", payload: string(b)}}
 	}
@@ -162,11 +164,7 @@ func (d *simDevice) execLocked(cmd string) ([]byte, []outMsg) {
 				segs = append(segs, seg)
 			}
 		}
-		delay := backlogDelaySec
-		if hasIdx && idx&1 == 0 {
-			delay = 0
-		}
-		d.queueBacklogLocked(segs, delay)
+		d.queueBacklogLocked(segs, hasIdx && idx&1 == 0)
 		return mergeObjects(), nil
 	}
 	_ = name
@@ -339,33 +337,43 @@ func (d *simDevice) readSettingLocked(base string) []byte {
 const backlogDelaySec = 0.2
 
 // queueBacklogLocked appends commands to the device's backlog and starts the runner if it is
-// idle. The first command runs at once (Tasmota sets backlog_timer to now), the following ones
-// one delay apart.
-func (d *simDevice) queueBacklogLocked(segs []string, delaySec float64) {
+// idle. The first command runs at once (Tasmota sets backlog_timer to now). Like Tasmota, every
+// command the device handles pushes the timer back by one delay (support_command.ino
+// ExecuteCommand), so the queue only moves while the device is left alone; Backlog0 and
+// Backlog2 run without a delay and ignore the timer.
+func (d *simDevice) queueBacklogLocked(segs []string, nodelay bool) {
 	d.backlog = append(d.backlog, segs...)
 	if d.backlogRunning {
 		return
 	}
 	d.backlogRunning = true
-	if !d.spawn(func() { d.runBacklog(delaySec) }) {
+	d.backlogDue = time.Now()
+	if !d.spawn(func() { d.runBacklog(nodelay) }) {
 		d.backlogRunning = false
 		d.backlog = nil
 	}
 }
 
-func (d *simDevice) runBacklog(delaySec float64) {
+func (d *simDevice) runBacklog(nodelay bool) {
 	for {
 		d.mu.Lock()
+		if wait := time.Until(d.backlogDue); wait > 0 && !nodelay {
+			d.mu.Unlock()
+			if !d.sleepFor(wait) {
+				return
+			}
+			continue
+		}
 		seg := d.backlog[0]
 		d.backlog = d.backlog[1:]
-		_, out := d.execLocked(seg)
+		_, out := d.execLocked(seg) // pushes the timer back like any command
 		more := len(d.backlog) > 0
 		if !more {
 			d.backlogRunning = false
 		}
 		d.mu.Unlock()
 		d.publishAll(out)
-		if !more || !d.sleep(delaySec) {
+		if !more {
 			return
 		}
 	}
