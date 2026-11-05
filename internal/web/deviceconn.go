@@ -17,7 +17,8 @@ import (
 // device's MQTT password, the firmware server) and which way each action takes, or why none.
 // Every sentence comes from package transport (Choose and its explainers); this file only
 // capitalises, orders and tones them, so the card, the disabled buttons and the errors of the
-// router say the same thing.
+// router say the same thing. The one exception is the "Other broker" hint of the MQTT row
+// (otherBrokerRow): web only, it never changes a path or a reason.
 
 // reasonOffline is blockReason's sentence for a device that stopped answering.
 const reasonOffline = "The device is offline."
@@ -339,7 +340,7 @@ func mqttRow(f transport.Facts) pathRow {
 // MQTT is off), the device names a broker host that is not ours, and nothing was heard from it on
 // our broker. Web only: the transport verdict (SAFETY) is unchanged.
 func (h *handler) otherBrokerRow(d model.Device, heard bool) (pathRow, bool) {
-	if h.d.MQTT == nil || h.d.MQTT() == "disabled" || h.d.MQTTBroker == nil || d.MQTTHost == "" || heard {
+	if h.d.MQTT == nil || h.d.MQTT() == "disabled" || h.d.MQTTBroker == nil || d.MQTT == model.MQTTNone || d.MQTTHost == "" || heard {
 		return pathRow{}, false
 	}
 	port := d.MQTTPort

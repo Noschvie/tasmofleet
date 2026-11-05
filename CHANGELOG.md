@@ -8,7 +8,7 @@ always upgrade automatically.
 
 ### Changed
 
-- Device page: the MQTT broker no longer appears as a row of the Connection card (Wi-Fi or Ethernet). The "How TasmoFleet reaches it" card names the device's broker only when it is a different one than TasmoFleet's ("Other broker", with the address the device reports to), because such a device does not show up live. Nothing is shown when MQTT is switched off in TasmoFleet, when the device reports to TasmoFleet's broker under another name or address, or when the device has no broker (#441, thanks @Noschvie)
+- Device page: the MQTT broker no longer appears as a row of the Connection card (Wi-Fi or Ethernet). The "How TasmoFleet reaches this device" card names the device's broker only when it is a different one than TasmoFleet's ("Other broker", with the address the device reports to), because such a device does not show up live. Nothing is shown when MQTT is switched off in TasmoFleet, when the device reports to TasmoFleet's broker under another name or address, or when the device has no broker (#441, thanks @Noschvie)
 
 ### Fixed
 

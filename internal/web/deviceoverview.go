@@ -178,7 +178,8 @@ type reach struct {
 	HTTPBad  bool   // HTTP is known to fail
 }
 
-// reachOf words the channels; the Reachability tile and nothing else reads it. HTTP is the state
+// reachOf words the channels; the Reachability tile reads it, and so does the "Other broker" hint
+// (its MQTTOn: is anything heard on our broker). HTTP is the state
 // the connection card shows; a SeenHTTP of days ago must not read as "Reachable" (#416).
 func reachOf(d model.Device, hl model.Health, hs transport.HTTPState, now time.Time) reach {
 	r := reach{MQTTOn: d.MQTT == model.MQTTOurs || hl.LWT != "" || !hl.SeenMQTT.IsZero(), HTTPWord: "Not polled yet"}

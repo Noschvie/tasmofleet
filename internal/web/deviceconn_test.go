@@ -287,6 +287,7 @@ func TestOtherBrokerHintOnlyOnARealMismatch(t *testing.T) {
 		{"same broker by another name", other, "connected", true, false, false},
 		{"heard on our broker", other, "connected", false, true, false},
 		{"device has no MQTT host", model.Device{}, "connected", false, false, false},
+		{"MQTT off on the device (SetOption3 0) with a stored host", model.Device{MQTT: model.MQTTNone, MQTTHost: "mqtt.other.internal", MQTTPort: 1884}, "connected", false, false, false},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -341,8 +342,8 @@ func TestOverviewPageShowsTheOtherBrokerHint(t *testing.T) {
 			if got := strings.Contains(body, "Other broker"); got != tc.want {
 				t.Fatalf("Other broker shown = %v, want %v", got, tc.want)
 			}
-			if strings.Contains(body, "mqtt.other.internal:1883</") && !tc.want {
-				t.Fatal("the broker leaked into the page without a mismatch")
+			if strings.Contains(body, "<dt>MQTT broker</dt>") {
+				t.Fatal("the Connection card lists the MQTT broker again")
 			}
 		})
 	}
