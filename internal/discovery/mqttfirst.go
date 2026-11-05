@@ -298,7 +298,7 @@ func (m *Manager) handleTopic(ctx context.Context, msg mqttbus.Message) {
 		if !msg.Retained {
 			s.live = true
 		}
-	case mqttbus.KindSensor, mqttbus.KindResult, mqttbus.KindPower, mqttbus.KindDiscovery, mqttbus.KindUpgrade, mqttbus.KindFile:
+	case mqttbus.KindSensor, mqttbus.KindResult, mqttbus.KindPower, mqttbus.KindDiscovery, mqttbus.KindUpgrade, mqttbus.KindFile, mqttbus.KindCommand:
 		// not queued for the topic side (HandleMQTT, handleMessage)
 	}
 	online := s.online()

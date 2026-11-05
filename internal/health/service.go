@@ -677,7 +677,7 @@ func (s *Service) handle(m mqttbus.Message, live bool) {
 		if m.Suffix == "INFO3" {
 			boot = s.noteInfo3(ds, m.Payload, now)
 		}
-	case mqttbus.KindStatus, mqttbus.KindDiscovery, mqttbus.KindUpgrade, mqttbus.KindFile:
+	case mqttbus.KindStatus, mqttbus.KindDiscovery, mqttbus.KindUpgrade, mqttbus.KindFile, mqttbus.KindCommand:
 		// A sign of life only; nothing to merge.
 	}
 	tr, changed := s.evaluate(ds, now, model.SourceMQTT, "mqtt "+string(m.Kind))

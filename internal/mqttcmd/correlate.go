@@ -58,6 +58,9 @@ type request struct {
 	backlog []*request
 }
 
+// typed is the command name as Tasmota derives the SetOption4 topic from it: without its index.
+func (r *request) typed() string { return strings.TrimRight(r.name, "0123456789") }
+
 // baseOf is the lower-case command name without its index. It resolves Tasmota's synonyms the
 // way cmdpolicy does, so SO19 and SetOption19 are the same command.
 func baseOf(name string) string {
@@ -168,7 +171,23 @@ func (r *request) match(m mqttbus.Message, loose bool) (v verdict, ok bool) {
 		}
 		return verdict{}, false
 	}
-	if m.Kind != mqttbus.KindResult {
+	// A device with SetOption4 1 answers on stat/<t>/<COMMAND> instead of RESULT (#632). Tasmota names the
+	// topic after the command as typed (upper case, index cut off: SO19 is SO), or COMMAND for an unknown one
+	// (support_command.ino:517). Such a reply is read like a RESULT, but only on the topic of this command:
+	// a rule's own stat topic or another poller's command never answers it.
+	onCommand := m.Kind == mqttbus.KindCommand
+	switch {
+	case m.Kind == mqttbus.KindResult:
+	case onCommand:
+		if !strings.EqualFold(m.Suffix, r.typed()) && m.Suffix != "COMMAND" {
+			return verdict{}, false
+		}
+	case m.Kind == mqttbus.KindPower:
+		// Power with SetOption4 1 and SetOption90 1: the JSON {"POWER1":"ON"} alone, on stat/<t>/POWER1.
+		if r.base != "power" || !keyNames(m.Suffix, r.name, r.base) {
+			return verdict{}, false
+		}
+	default:
 		return verdict{}, false
 	}
 	keys, values, isObj := topLevel(m.Payload)
@@ -192,6 +211,9 @@ func (r *request) match(m mqttbus.Message, loose bool) (v verdict, ok bool) {
 			return verdict{err: tasmota.ErrUnknownCommand}, true
 		}
 		return verdict{err: tasmota.ErrCommandError}, true
+	}
+	if onCommand && !strings.EqualFold(m.Suffix, r.typed()) {
+		return verdict{}, false // stat/<t>/COMMAND carries nothing but a failed command
 	}
 	if r.status != "" {
 		return verdict{}, false // a Status answers on STATUSn; any other RESULT is noise

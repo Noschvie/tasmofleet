@@ -55,6 +55,10 @@ const (
 	KindUpgrade   Kind = "upgrade" // stat/<topic>/UPGRADE {"Upgrade":"Successful. Restarting"|"Failed ..."}
 	KindInfo      Kind = "info"    // tele/<topic>/INFO1..3, published once per boot
 	KindFile      Kind = "file"    // stat/<topic>/FILEDOWNLOAD and FILEUPLOAD (file transfer over MQTT, #79)
+	// KindCommand is stat/<topic>/<COMMAND>, the reply of a device with SetOption4 1 (#632): Suffix is the
+	// command name as Tasmota publishes it, upper case without its index ("SETOPTION", "TELEPERIOD", "COMMAND" for an unknown command).
+	// Never cached as retained: such a message is never an answer.
+	KindCommand Kind = "command"
 )
 
 // Message is one decoded MQTT message.
@@ -265,7 +269,7 @@ func (b *bus) dispatch(_ paho.Client, m paho.Message) {
 	// Tasmota publishes its LWT retained, but the broker clears the flag for
 	// subscribers that were connected when it arrived. A late consumer must still
 	// replay the latest LWT, so every LWT is cached, whatever the flag says (#161).
-	cacheIt := msg.Retained || kind == KindLWT
+	cacheIt := (msg.Retained && kind != KindCommand) || kind == KindLWT
 	known := false
 	if cacheIt && len(msg.Payload) > 0 && b.known != nil {
 		known = b.known(msg) // outside the lock: may consult the inventory index

@@ -29,6 +29,12 @@ type simRig struct {
 // reached by the real HTTP client.
 func newSimRig(t *testing.T, faults ...simulator.Fault) *simRig {
 	t.Helper()
+	return newSimRigWith(t, nil, faults...)
+}
+
+// newSimRigWith is newSimRig for a device that starts with the given settings (lower-case keys).
+func newSimRigWith(t *testing.T, settings map[string]string, faults ...simulator.Fault) *simRig {
+	t.Helper()
 	br, err := simulator.StartBroker()
 	if err != nil {
 		t.Fatal(err)
@@ -41,7 +47,7 @@ func newSimRig(t *testing.T, faults ...simulator.Fault) *simRig {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = fleet.Close() }) // test teardown
-	dev, err := fleet.Add(ctx, simulator.DeviceSpec{Name: "sim-plug", Profile: simulator.ProfileESP32, Version: "15.1.0", MQTTPassword: simMQTTPassword, Faults: faults})
+	dev, err := fleet.Add(ctx, simulator.DeviceSpec{Name: "sim-plug", Profile: simulator.ProfileESP32, Version: "15.1.0", MQTTPassword: simMQTTPassword, Faults: faults, Settings: settings})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,5 +172,25 @@ func TestSimWrongPasswordMarksItBad(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "not-the-one") {
 		t.Fatal("the error carries the password")
+	}
+}
+
+// Why (#632): a device with SetOption4 1 answers on stat/<t>/<COMMAND>. Before the fix such a read
+// waited the full 8 s on MQTT, was repeated over HTTP and the device was read over HTTP for ten
+// minutes. The read must be answered over MQTT, once, with no HTTP request behind it.
+func TestSimSetOption4DeviceIsReadOverMQTTWithoutTimeoutOrHTTPFallback(t *testing.T) {
+	g := newSimRigWith(t, map[string]string{"setoption4": "1"})
+	before := len(g.dev.Commands())
+	ctx, tr := WithTrace(t.Context())
+	start := time.Now()
+	raw, err := g.r.Command(ctx, g.target(), "TelePeriod")
+	if err != nil || !strings.Contains(string(raw), "TelePeriod") || tr.Via() != "mqtt" {
+		t.Fatalf("read: %s, %v, via %s", raw, err, tr.Via())
+	}
+	if d := time.Since(start); d > 3*time.Second {
+		t.Errorf("the read took %v, it waited for the reply timeout", d)
+	}
+	if n := len(g.dev.Commands()) - before; n != 1 {
+		t.Errorf("the device received %d commands, want the one MQTT read: %v", n, g.dev.Commands())
 	}
 }

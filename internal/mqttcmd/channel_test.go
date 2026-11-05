@@ -722,6 +722,121 @@ func TestPowerTopicAnswersAPowerCommand(t *testing.T) {
 	}
 }
 
+// Why (#632): with SetOption4 1 a device answers a command on stat/<t>/<COMMAND> and not on RESULT;
+// Tasmota upper-cases the name and cuts the index (SO19 is SO). Before the fix none of these
+// replies was decoded, so every read of such a device ran into the 8 s timeout.
+func TestSetOption4RepliesOnTheCommandTopicAreAnswers(t *testing.T) {
+	for _, tc := range []struct{ cmd, suffix, payload string }{
+		{"TelePeriod", "TELEPERIOD", `{"TelePeriod":300}`},
+		{"teleperiod 60", "TELEPERIOD", `{"TelePeriod":60}`},
+		{"SetOption19", "SETOPTION", `{"SetOption19":"OFF"}`},
+		{"SO19 1", "SO", `{"SetOption19":"ON"}`},
+		{"Power2 ON", "POWER", `{"POWER2":"ON"}`}, // only through the Power topic rule below
+		{"Hostname", "HOSTNAME", `{"Hostname":"plug"}`},
+	} {
+		t.Run(tc.cmd, func(t *testing.T) {
+			b := &fakeBus{}
+			b.onPub = func(b *fakeBus, p pub) {
+				if tc.suffix == "POWER" {
+					return
+				}
+				b.emit(mqttbus.KindCommand, p.topic, tc.suffix, tc.payload, false)
+			}
+			if tc.suffix == "POWER" {
+				// SetOption4 1 and SetOption90 1: the JSON alone on stat/<t>/POWER2
+				b.onPub = func(b *fakeBus, p pub) { b.emit(mqttbus.KindPower, p.topic, "POWER2", tc.payload, false) }
+			}
+			got, err := newChan(b).Do(t.Context(), plug(), tc.cmd)
+			if err != nil || string(got) != tc.payload {
+				t.Fatalf("%s, %v", got, err)
+			}
+		})
+	}
+}
+
+// Why (#632): matching a stat/<t>/<COMMAND> reply by topic alone would let any rule-published
+// topic or periodic message confirm a write that never ran. The reply must be on the pending
+// command's own topic AND carry its key; a different command's topic, a retained message and
+// the shared COMMAND topic (failed commands only) never answer it.
+func TestSetOption4RepliesOfOtherCommandsDoNotAnswer(t *testing.T) {
+	for _, tc := range []struct {
+		name, cmd, suffix, payload string
+		retained                   bool
+	}{
+		{"right key on another command's topic", "TelePeriod", "SETOPTION", `{"TelePeriod":60}`, false},
+		{"own topic, another command's key", "TelePeriod", "TELEPERIOD", `{"Hostname":"plug"}`, false},
+		{"a rule's own topic", "TelePeriod", "MYRULE", `{"TelePeriod":60}`, false},
+		{"a longer name is not the same command", "SetOption19", "SETOPTION1", `{"SetOption19":"ON"}`, false},
+		{"our failure on a rule's topic", "Hostname", "MYRULE", `{"Command":"Unknown","Input":"HOSTNAME"}`, false},
+		{"retained", "TelePeriod", "TELEPERIOD", `{"TelePeriod":60}`, true},
+		{"COMMAND carries failures only", "TelePeriod", "COMMAND", `{"TelePeriod":60}`, false},
+		{"another poller's failed command", "TelePeriod", "COMMAND", `{"Command":"Unknown","Input":"HOSTNAME"}`, false},
+		{"not an object", "TelePeriod", "TELEPERIOD", `60`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			b := &fakeBus{}
+			b.onPub = func(b *fakeBus, p pub) { b.emit(mqttbus.KindCommand, p.topic, tc.suffix, tc.payload, tc.retained) }
+			if _, err := newChan(b).Do(t.Context(), plug(), tc.cmd); !errors.Is(err, tasmota.ErrTimeout) {
+				t.Fatalf("err = %v, want a timeout: the message is not the answer", err)
+			}
+		})
+	}
+	// A plain stat/<t>/POWER2 payload that is not a relay state (a rule's JSON) does not confirm Power1 either.
+	b := &fakeBus{}
+	b.onPub = func(b *fakeBus, p pub) { b.emit(mqttbus.KindPower, p.topic, "POWER2", `{"POWER2":"ON"}`, false) }
+	if _, err := newChan(b).Do(t.Context(), plug(), "Power1 ON"); !errors.Is(err, tasmota.ErrTimeout) {
+		t.Fatalf("POWER2 answered Power1: %v", err)
+	}
+	// The same for a command that is not Power: stat/<t>/POWER JSON never answers it.
+	b = &fakeBus{}
+	b.onPub = func(b *fakeBus, p pub) { b.emit(mqttbus.KindPower, p.topic, "POWER", `{"TelePeriod":60}`, false) }
+	if _, err := newChan(b).Do(t.Context(), plug(), "TelePeriod"); !errors.Is(err, tasmota.ErrTimeout) {
+		t.Fatalf("a POWER topic answered TelePeriod: %v", err)
+	}
+}
+
+// Why (#632): a command that fails is published under SetOption4 1 on its own name (Error) or on
+// COMMAND (Unknown, support_command.ino:498-517); both must end the wait with the right error, and
+// only for the command that was sent.
+func TestSetOption4FailuresAreMappedForOurCommandOnly(t *testing.T) {
+	b := &fakeBus{}
+	b.onPub = func(b *fakeBus, p pub) {
+		b.emit(mqttbus.KindCommand, p.topic, "COMMAND", `{"Command":"Unknown","Input":"SOMETHINGELSE 1"}`, false)
+		b.emit(mqttbus.KindCommand, p.topic, "COMMAND", `{"Command":"Unknown","Input":"HOSTNAME"}`, false)
+	}
+	if _, err := newChan(b).Do(t.Context(), plug(), "Hostname"); !errors.Is(err, tasmota.ErrUnknownCommand) {
+		t.Fatalf("err = %v, want ErrUnknownCommand", err)
+	}
+	b2 := &fakeBus{}
+	b2.onPub = func(b *fakeBus, p pub) {
+		b.emit(mqttbus.KindCommand, p.topic, "SETOPTION", `{"Command":"Error","Input":"SETOPTION999 1"}`, false)
+	}
+	if _, err := newChan(b2).Do(t.Context(), plug(), "SetOption999 1"); !errors.Is(err, tasmota.ErrCommandError) {
+		t.Fatalf("err = %v, want ErrCommandError", err)
+	}
+}
+
+// Why (#632): a Backlog of a SetOption4 1 device is answered by one stat/<t>/<COMMAND> per queued
+// command, each on its own name; the merged reply must hold all of them, as it does for RESULT.
+func TestSetOption4BacklogCollectsOneReplyPerQueuedCommand(t *testing.T) {
+	b := &fakeBus{}
+	b.onPub = func(b *fakeBus, p pub) {
+		go func() {
+			b.emit(mqttbus.KindCommand, p.topic, "TELEPERIOD", `{"TelePeriod":60}`, false)
+			b.emit(mqttbus.KindStatus, p.topic, "STATUS5", `{"StatusNET":{"IPAddress":"192.0.2.9"}}`, false)
+			b.emit(mqttbus.KindCommand, p.topic, "HOSTNAME", `{"Hostname":"plug"}`, false)
+		}()
+	}
+	got, err := newChan(b).Do(t.Context(), plug(), "Backlog TelePeriod 60; Status 5; Hostname plug")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var m map[string]json.RawMessage
+	if json.Unmarshal(got, &m) != nil || string(m["TelePeriod"]) != "60" || string(m["Hostname"]) != `"plug"` || m["StatusNET"] == nil {
+		t.Fatalf("merged = %s", got)
+	}
+}
+
 // Why: on shutdown a command in flight must not hold the process for its whole reply wait.
 func TestCloseWakesACommandInFlight(t *testing.T) {
 	b := &fakeBus{}

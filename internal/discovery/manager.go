@@ -258,7 +258,7 @@ func (m *Manager) HandleMQTT(msg mqttbus.Message) {
 		if msg.Suffix != "STATUS5" {
 			return
 		}
-	case mqttbus.KindSensor, mqttbus.KindResult, mqttbus.KindPower, mqttbus.KindUpgrade, mqttbus.KindFile:
+	case mqttbus.KindSensor, mqttbus.KindResult, mqttbus.KindPower, mqttbus.KindUpgrade, mqttbus.KindFile, mqttbus.KindCommand:
 		return // nothing discovery needs
 	}
 	key := string(msg.Kind) + "/" + msg.Suffix + "/" + msg.Topic

@@ -160,3 +160,45 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 		time.Sleep(20 * time.Millisecond)
 	}
 }
+
+// Why (#632): the real chain for a device with SetOption4 1 (broker, bus, simulator): every kind of
+// command is answered at once, not after the reply timeout, and the device that switches the option
+// off is answered on RESULT again from the same command on. A RESULT device is the control.
+func TestSetOption4DeviceAnswersEveryReadAtOnce(t *testing.T) {
+	for _, so4 := range []string{"1", "0"} {
+		t.Run("SetOption4 "+so4, func(t *testing.T) {
+			e := newSimEnv(t, simulator.DeviceSpec{Settings: map[string]string{"setoption4": so4}})
+			e.waitConnected(t)
+			ch := New(e.bus, Options{Gap: 5 * time.Millisecond, ReplyWait: 4 * time.Second})
+			t.Cleanup(ch.Close)
+			start := time.Now()
+			for cmd, want := range map[string]string{
+				"TelePeriod": "TelePeriod", "SetOption19": "SetOption19", "Power1": "POWER", "Status 2": "StatusFWR",
+				"Backlog Hostname; TelePeriod": "TelePeriod",
+			} {
+				raw, err := ch.Do(t.Context(), e.dvc, cmd)
+				if err != nil || !strings.Contains(string(raw), want) {
+					t.Fatalf("%s: %s, %v", cmd, raw, err)
+				}
+			}
+			if _, err := ch.Do(t.Context(), e.dvc, "NoSuchCommand"); !errors.Is(err, tasmota.ErrUnknownCommand) {
+				t.Fatalf("an unknown command: %v", err)
+			}
+			if d := time.Since(start); d > 3*time.Second {
+				t.Errorf("the reads took %v: one of them waited for the reply timeout", d)
+			}
+		})
+	}
+}
+
+// Why (#632): SetOption4 is switched over MQTT itself (the Settings page offers it); the answer to
+// that command comes on the topic of the NEW setting, as on a real device, and later reads follow.
+func TestSwitchingSetOption4OverMQTTKeepsTheChannelWorking(t *testing.T) {
+	e := newSimEnv(t, simulator.DeviceSpec{})
+	e.waitConnected(t)
+	for _, cmd := range []string{"SetOption4 1", "TelePeriod", "SetOption4 0", "TelePeriod"} {
+		if raw, err := e.ch.Do(t.Context(), e.dvc, cmd); err != nil {
+			t.Fatalf("%s: %s, %v", cmd, raw, err)
+		}
+	}
+}

@@ -77,7 +77,39 @@ func (d *simDevice) execMQTT(cmd string, topicLen int, group bool) ([]byte, []ou
 	return d.execLocked(cmd)
 }
 
+// execLocked runs cmd and names the MQTT topics of its replies the way the device's SetOption4 says.
 func (d *simDevice) execLocked(cmd string) ([]byte, []outMsg) {
+	body, out := d.runLocked(cmd)
+	if d.get("setoption4") != "1" {
+		return body, out
+	}
+	// SetOption4 1 (xdrv_02_9_mqtt.ino:940-947, support_command.ino:517): the reply of a command goes to
+	// stat/<topic>/<COMMAND> in upper case without the index (SO19 is SO), COMMAND when the command is
+	// unknown, instead of stat/<topic>/RESULT. STATUSn, POWER, UPGRADE and FILE* keep their topics.
+	name, _, _ := strings.Cut(strings.TrimSpace(cmd), " ")
+	suffix := strings.ToUpper(strings.TrimRight(name, "0123456789"))
+	for i, m := range out {
+		if m.topic != "stat/"+d.topic+"/RESULT" {
+			continue
+		}
+		s := suffix
+		if strings.HasPrefix(m.payload, `{"Command":"Unknown"`) {
+			s = "COMMAND"
+		}
+		if suffix == "POWER" {
+			// MqttPublishPowerState names the topic after the relay that changed (POWER2), not after the command.
+			if k, _, ok := strings.Cut(strings.TrimPrefix(m.payload, `{"`), `"`); ok && strings.HasPrefix(k, "POWER") {
+				s = k
+			}
+		}
+		if s != "" {
+			out[i].topic = "stat/" + d.topic + "/" + s
+		}
+	}
+	return body, out
+}
+
+func (d *simDevice) runLocked(cmd string) ([]byte, []outMsg) {
 	cmd = strings.TrimSpace(cmd)
 	if cmd == "" {
 		return []byte(`{"WARNING":"Enter command cmnd="}`), nil

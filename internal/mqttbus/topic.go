@@ -16,6 +16,10 @@ var (
 	statusSuffix    = regexp.MustCompile(`^STATUS[0-9]{0,2}$`) // Status 0..13
 	powerSuffix     = regexp.MustCompile(`^POWER[0-9]{0,2}$`)  // POWER, POWER1..32
 	infoSuffix      = regexp.MustCompile(`^INFO[1-3]$`)
+	// Tasmota publishes a command's reply under SetOption4 1 on the command name in upper case, without its
+	// index (support_command.ino:517, xdrv_02_9_mqtt.ino:940-947): the name never ends in a digit, which keeps STATUS123 and
+	// POWER100 undecoded. A command name is at most 19 characters (CMDSZ 20).
+	commandSuffix = regexp.MustCompile(`^[A-Z]([A-Z0-9]{0,30}[A-Z])?$`)
 	// Tasmota writes the MAC in discovery topics as 12 upper-case hex digits.
 	// Only that canonical form is decoded, so case variants of one MAC cannot
 	// become several cache keys or reservations.
@@ -139,6 +143,8 @@ func (c TopicCodec) Decode(t string) (kind Kind, topic, suffix string, ok bool) 
 			return KindStatus, topic, suffix, true
 		case powerSuffix.MatchString(suffix):
 			return KindPower, topic, suffix, true
+		case commandSuffix.MatchString(suffix):
+			return KindCommand, topic, suffix, true // SetOption4 1: the reply of a command (#632)
 		}
 	}
 	return "", "", "", false
