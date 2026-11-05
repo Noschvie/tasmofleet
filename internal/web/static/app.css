@@ -9930,16 +9930,12 @@ nav.crumbs a {
   color: var(--color-danger-fg);
 }
 
-/* new update: steps 1-3 beside the sticky plan; the preview (step 4) beside "What happens" */
+/* update preview (step 4): the devices beside the sticky "What happens" */
 .upd-split {
   display: flex;
   flex-wrap: wrap;
   gap: 14px;
   align-items: flex-start;
-}
-/* New update (#419): the picker form is only the wrapper of the column stacks */
-.upd-form {
-  display: block;
 }
 .upd-pick,
 .upd-prev {
@@ -10014,9 +10010,10 @@ nav.crumbs a {
   font-size: 13px;
   overflow-wrap: anywhere;
 }
-/* phone: the name gets a line of its own width and the chip and version drop under it when they do not
-   fit beside it, instead of squeezing a normal name into a 4 rem column */
-@media (max-width: 44.99rem) {
+/* below 75rem (phone, and the half-width card of two balanced stacks): the name gets a line of its
+   own width and the chip and version drop under it when they do not fit beside it, instead of
+   squeezing a normal name into a 4 rem column */
+@media (max-width: 74.99rem) {
   .upd-pick-row {
     flex-wrap: wrap;
   }
@@ -10120,7 +10117,6 @@ nav.crumbs a {
 .upd-split .ucard.upd-aside {
   position: sticky;
   top: 110px;
-  flex: 1 1 280px;
   max-width: 100%;
 }
 .ucard.upd-aside > h2 {
@@ -10295,12 +10291,6 @@ html:has(dialog#dlg-txn:modal) body {
   min-width: 220px;
   padding: 0 8px;
 }
-/* label + control rows of the Options card share one label column and one control width */
-.upd-opts .upd-opt:has(select, input:not([type="checkbox"])) {
-  display: grid;
-  grid-template-columns: 9.5rem minmax(0, 20rem);
-  gap: var(--sp-10);
-}
 .upd-opts .upd-opt select,
 .upd-opts .upd-opt input:not([type="checkbox"]):not([type="radio"]):not([type="file"]) {
   width: 100%;
@@ -10320,16 +10310,19 @@ html:has(dialog#dlg-txn:modal) body {
   grid-column: 1 / -1;
 }
 .cstack .upd-opts .upd-opt:has(select, input:not([type="checkbox"])) {
+  display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--sp-4);
 }
-@media (max-width: 44.99rem) {
+/* below 75rem the stacks are one or two balanced columns, so the card is half the page or less */
+@media (max-width: 74.99rem) {
   .cstack .upd-opts {
     grid-template-columns: minmax(0, 1fr);
   }
 }
-/* Devices in the wide stack: two columns of rows, the names are short */
-@media (min-width: 45rem) {
+/* Devices in the wide stack: two columns of rows, the names are short; only from 75rem, where the
+   wide stack spans two columns */
+@media (min-width: 75rem) {
   .cstack .upd-pick-list {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -10706,6 +10699,9 @@ dialog.fw-notes-dlg .fw-dlg-body {
   grid-column: 1;
   font: 500 12.5px var(--font-mono);
   overflow-wrap: anywhere;
+}
+.fw-c-v time {
+  white-space: nowrap;
 }
 .fw-c-v {
   grid-column: 1;

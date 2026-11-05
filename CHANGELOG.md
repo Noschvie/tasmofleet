@@ -9,7 +9,7 @@ always upgrade automatically.
 ### Changed
 
 - Device pages follow the card-width rule: Activity is one full-width card with its entries in two columns (three on a large screen), and Replace device puts the form in the wide stack and "What comes along" and "What happens" beside it; on the preview "Copied to the new device" sits under the form and "Not copied" and the start step beside it. The four always-copied options are now only shown on the first Replace page, and the preview no longer lists the files option (the Files row and the confirmation text still name the files); nothing about what Replace does or confirms changed (#419)
-- New update, Firmware and release pages: the cards now follow the Dashboard's content width in column stacks instead of leaving half the page empty. Devices and Options sit side by side in two columns, the Plan no longer sticks while you scroll, cached firmware files take two lines with a short checksum, and the custom firmware drop zone is a card of its own (#419).
+- New update, Firmware and release pages: the cards now follow the Dashboard's content width in column stacks instead of leaving half the page empty. The Devices and Options cards each have two inner columns, the Plan no longer sticks while you scroll, cached firmware files take two lines with a short checksum, and the custom firmware drop zone is a card of its own (#419).
 
 ## 0.28.0 "Cape Byron" (2026-11-05)
 

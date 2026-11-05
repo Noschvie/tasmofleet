@@ -126,3 +126,36 @@ test("the open log stays on its device while the page refreshes itself", async (
   await expect(page.locator("#log-h")).toHaveText(`Log · ${name}`);
   await expect(page.locator(".upd-row[aria-current=true] .upd-row-name")).toHaveText(name);
 });
+
+// Why (#419-U review): between 45rem and 75rem the card stacks are two balanced columns, so the Devices
+// card is only half the page wide there; a second column of rows squeezed the names to a letter per
+// line. Two columns of rows only where the wide stack spans two columns (from 75rem).
+for (const width of [800, 1024]) {
+  test(`the update picker keeps device names readable at ${width} px`, async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.setViewportSize({ width, height: 900 });
+    await page.setExtraHTTPHeaders(admin);
+    await page.goto(app.url + "/updates/new");
+    // the longest row: a device whose login failed carries the reason beside its chip and version
+    await expect(async () => {
+      await page.reload();
+      await expect(page.locator(".upd-pick-why", { hasText: "Login to the device failed" })).toBeVisible();
+    }).toPass({ timeout: 60_000 });
+    const squeezed = await page
+      .locator(".upd-pick-name")
+      .evaluateAll((els) => els.filter((e) => e.getBoundingClientRect().width < 96).map((e) => e.textContent?.trim()));
+    expect(squeezed, "device names narrower than 6rem").toEqual([]);
+  });
+}
+
+// Why (#419-U review): the update preview splits the free width 3:2 between the devices and "What
+// happens" (flex 2 1 300px); the New update page's plan rule must not reach it and shrink it to 1 part.
+test("the update preview keeps What happens at two parts of the width", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.setExtraHTTPHeaders(admin);
+  await pickForUpdate(page, app.url, ["esp32-dimmer"]);
+  await page.getByRole("button", { name: "Review update" }).click();
+  const what = page.locator(".upd-what");
+  await expect(what).toBeVisible();
+  expect(await what.evaluate((e) => getComputedStyle(e).flexGrow)).toBe("2");
+});

@@ -296,126 +296,126 @@ templ txnBody(p txnPage) {
 	}
 }
 
-// updateNewPage is /updates/new: 1 · Devices, 2 · Release, 3 · Options and the Plan aside; the
-// form posts to the preview (step 4). Without JavaScript the plan shows the server's selection.
+// updateNewPage is /updates/new: 1 · Devices and 3 · Options in the wide stack, 2 · Release and the
+// Plan in the narrow one; the form posts to the preview (step 4). Without JavaScript the plan shows the server's selection.
 templ updateNewPage(f updateForm, csrf string) {
 	@ui.PageHeader("New firmware update", "Pick devices and a release, check the plan, then start.")
 	if f.Error != "" {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: f.Error, Alert: true})
 	}
-	<form id="picker" class="upd-form" method="post" action={ templ.SafeURL(f.Base + "/updates/preview") }>
+	<form id="picker" method="post" action={ templ.SafeURL(f.Base + "/updates/preview") }>
 		<input type="hidden" name="csrf" value={ csrf }/>
 		@ui.CardStacks(3) {
 			@ui.CardStack(2) {
-			<section class={ ui.StackRank(1), "ulist", "upd-pick" } aria-labelledby="dev-h">
-				<div class="ulist-head">
-					<h2 id="dev-h">1 · Devices</h2>
-					<span class="upd-head-r">
-						<span class="upd-n" data-select-n>{ strconv.Itoa(f.SelectedN()) } selected</span>
-						if len(f.Options) > 0 {
-							<details class="umenu upd-quick">
-								<summary class="btn btn-link btn-sm">Select</summary>
-								<div class="menu-panel" role="group" aria-label="Quick selection">
-									<button type="submit" class="menu-item" form="pick-form" name="select" value="all" data-pick="all" data-picker="picker">All that can be updated</button>
-									if f.Release != "" {
-										<button type="submit" class="menu-item" form="pick-form" name="select" value="update" data-pick="update" data-picker="picker">All with an update to { f.Release }</button>
-									}
-									for _, fam := range f.Families {
-										<button type="submit" class="menu-item" form="pick-form" name="select" value={ "family:" + fam.Family } data-pick={ "family:" + fam.Family } data-picker="picker">All { chipNameOf(fam.Family) } ({ strconv.Itoa(fam.Count) })</button>
-									}
-									<button type="submit" class="menu-item" form="pick-form" name="select" value="none" data-pick="none" data-picker="picker">None</button>
-								</div>
-							</details>
-						}
-					</span>
-				</div>
-				if len(f.Options) == 0 {
-					<p class="upd-none">No devices.</p>
-				} else {
-					<div class="upd-pick-list">
-						for _, o := range f.Options {
-							<label
-								class="upd-pick-row"
-								data-family={ string(o.Device.Identity.Family) }
-								data-file={ o.File }
-								if o.Update {
-									data-update="1"
-								}
-								if o.Blocked != "" {
-									title={ "Not selectable: " + o.Blocked }
-								}
-							>
-								<input type="checkbox" name="id" value={ strconv.FormatInt(int64(o.Device.ID), 10) } aria-label={ "Select " + o.Device.Name } checked?={ o.Selected } disabled?={ o.Blocked != "" }/>
-								<span class={ "upd-dot", "t-" + string(o.Dot) } aria-hidden="true"></span>
-								<span class="upd-pick-name">{ o.Device.Name }</span>
-								if o.Blocked != "" && o.Blocked != o.Status {
-									<small class="upd-pick-why">{ o.Blocked }</small>
-								}
-								<small class="upd-pick-fw">{ o.ChipVersion() }</small>
-							</label>
-						}
+				<section class={ ui.StackRank(1), "ulist", "upd-pick" } aria-labelledby="dev-h">
+					<div class="ulist-head">
+						<h2 id="dev-h">1 · Devices</h2>
+						<span class="upd-head-r">
+							<span class="upd-n" data-select-n>{ strconv.Itoa(f.SelectedN()) } selected</span>
+							if len(f.Options) > 0 {
+								<details class="umenu upd-quick">
+									<summary class="btn btn-link btn-sm">Select</summary>
+									<div class="menu-panel" role="group" aria-label="Quick selection">
+										<button type="submit" class="menu-item" form="pick-form" name="select" value="all" data-pick="all" data-picker="picker">All that can be updated</button>
+										if f.Release != "" {
+											<button type="submit" class="menu-item" form="pick-form" name="select" value="update" data-pick="update" data-picker="picker">All with an update to { f.Release }</button>
+										}
+										for _, fam := range f.Families {
+											<button type="submit" class="menu-item" form="pick-form" name="select" value={ "family:" + fam.Family } data-pick={ "family:" + fam.Family } data-picker="picker">All { chipNameOf(fam.Family) } ({ strconv.Itoa(fam.Count) })</button>
+										}
+										<button type="submit" class="menu-item" form="pick-form" name="select" value="none" data-pick="none" data-picker="picker">None</button>
+									</div>
+								</details>
+							}
+						</span>
 					</div>
-				}
-			</section>
-			<section class={ ui.StackRank(3), "ucard", "upd-opts" } aria-labelledby="opt-h">
-				<h2 id="opt-h">3 · Options</h2>
-				<input type="hidden" name="backup_shown" value="1"/>
-				<label class="upd-opt"><input type="checkbox" name="backup" value="1" checked?={ !f.SkipBackup }/>Back up each device before flashing</label>
-				<label class="upd-opt">
-					Policy
-					<select name="policy">
-						for _, o := range f.PolicyOpts() {
-							<option value={ o.Value } title={ o.Text } selected?={ o.Checked }>{ o.Label }</option>
-						}
-					</select>
-				</label>
-				<label class="upd-opt">
-					Delivery
-					<select name="delivery">
-						for _, o := range f.DeliveryOpts() {
-							<option value={ o.Value } selected?={ o.Checked }>{ o.Label }</option>
-						}
-					</select>
-				</label>
-				<label class="upd-opt">
-					Variant override
-					<input name="variant" value={ f.Variant } placeholder="keep the detected variant"/>
-				</label>
-			</section>
+					if len(f.Options) == 0 {
+						<p class="upd-none">No devices.</p>
+					} else {
+						<div class="upd-pick-list">
+							for _, o := range f.Options {
+								<label
+									class="upd-pick-row"
+									data-family={ string(o.Device.Identity.Family) }
+									data-file={ o.File }
+									if o.Update {
+										data-update="1"
+									}
+									if o.Blocked != "" {
+										title={ "Not selectable: " + o.Blocked }
+									}
+								>
+									<input type="checkbox" name="id" value={ strconv.FormatInt(int64(o.Device.ID), 10) } aria-label={ "Select " + o.Device.Name } checked?={ o.Selected } disabled?={ o.Blocked != "" }/>
+									<span class={ "upd-dot", "t-" + string(o.Dot) } aria-hidden="true"></span>
+									<span class="upd-pick-name">{ o.Device.Name }</span>
+									if o.Blocked != "" && o.Blocked != o.Status {
+										<small class="upd-pick-why">{ o.Blocked }</small>
+									}
+									<small class="upd-pick-fw">{ o.ChipVersion() }</small>
+								</label>
+							}
+						</div>
+					}
+				</section>
+				<section class={ ui.StackRank(3), "ucard", "upd-opts" } aria-labelledby="opt-h">
+					<h2 id="opt-h">3 · Options</h2>
+					<input type="hidden" name="backup_shown" value="1"/>
+					<label class="upd-opt"><input type="checkbox" name="backup" value="1" checked?={ !f.SkipBackup }/>Back up each device before flashing</label>
+					<label class="upd-opt">
+						Policy
+						<select name="policy">
+							for _, o := range f.PolicyOpts() {
+								<option value={ o.Value } title={ o.Text } selected?={ o.Checked }>{ o.Label }</option>
+							}
+						</select>
+					</label>
+					<label class="upd-opt">
+						Delivery
+						<select name="delivery">
+							for _, o := range f.DeliveryOpts() {
+								<option value={ o.Value } selected?={ o.Checked }>{ o.Label }</option>
+							}
+						</select>
+					</label>
+					<label class="upd-opt">
+						Variant override
+						<input name="variant" value={ f.Variant } placeholder="keep the detected variant"/>
+					</label>
+				</section>
 			}
 			@ui.CardStack(1) {
-			<section class={ ui.StackRank(2), "ucard", "upd-rel" } aria-labelledby="rel-h">
-				<h2 id="rel-h">2 · Release</h2>
-				for _, o := range f.RelOpts {
-					@relOption(o)
-				}
-				if len(f.OlderRels) > 0 {
-					<details class="upd-older">
-						<summary class="btn btn-link btn-sm">Older releases ({ strconv.Itoa(len(f.OlderRels)) })</summary>
-						for _, o := range f.OlderRels {
-							@relOption(o)
-						}
-					</details>
-				}
-				if len(f.RelOpts) == 0 {
-					<p class="upd-none">No release is known yet. Open Firmware to check for releases.</p>
-				}
-			</section>
-		<section class={ ui.StackRank(4), "ucard", "upd-aside" } aria-labelledby="plan-h">
-			<h2 id="plan-h">Plan</h2>
-			<dl class="upd-facts">
-				<dt>Devices</dt><dd data-plan-devices>{ strconv.Itoa(f.SelectedN()) }</dd>
-				<dt>Firmware files</dt><dd data-plan-files>{ strconv.Itoa(f.FileCount()) }</dd>
-				<dt>Estimated time</dt><dd data-plan-est data-parallel={ strconv.Itoa(f.Parallel) } data-per-device={ strconv.Itoa(int(updatePerDevice.Seconds())) }>{ updateEstimate(f.SelectedN(), f.Parallel) }</dd>
-			</dl>
-			<ol class="upd-steps">
-				<li data-plan-backup hidden?={ f.SkipBackup }>Back up each device</li>
-				<li>Upload firmware, { strconv.Itoa(f.Parallel) } at a time</li>
-				<li>Wait for each device to come back and confirm the version</li>
-			</ol>
-			<p class="upd-hint" role="status" data-push-hint hidden></p>
-			<button type="submit" class="btn btn-primary btn-tall">Review update</button>
-			</section>
+				<section class={ ui.StackRank(2), "ucard", "upd-rel" } aria-labelledby="rel-h">
+					<h2 id="rel-h">2 · Release</h2>
+					for _, o := range f.RelOpts {
+						@relOption(o)
+					}
+					if len(f.OlderRels) > 0 {
+						<details class="upd-older">
+							<summary class="btn btn-link btn-sm">Older releases ({ strconv.Itoa(len(f.OlderRels)) })</summary>
+							for _, o := range f.OlderRels {
+								@relOption(o)
+							}
+						</details>
+					}
+					if len(f.RelOpts) == 0 {
+						<p class="upd-none">No release is known yet. Open Firmware to check for releases.</p>
+					}
+				</section>
+				<section class={ ui.StackRank(4), "ucard", "upd-aside" } aria-labelledby="plan-h">
+					<h2 id="plan-h">Plan</h2>
+					<dl class="upd-facts">
+						<dt>Devices</dt><dd data-plan-devices>{ strconv.Itoa(f.SelectedN()) }</dd>
+						<dt>Firmware files</dt><dd data-plan-files>{ strconv.Itoa(f.FileCount()) }</dd>
+						<dt>Estimated time</dt><dd data-plan-est data-parallel={ strconv.Itoa(f.Parallel) } data-per-device={ strconv.Itoa(int(updatePerDevice.Seconds())) }>{ updateEstimate(f.SelectedN(), f.Parallel) }</dd>
+					</dl>
+					<ol class="upd-steps">
+						<li data-plan-backup hidden?={ f.SkipBackup }>Back up each device</li>
+						<li>Upload firmware, { strconv.Itoa(f.Parallel) } at a time</li>
+						<li>Wait for each device to come back and confirm the version</li>
+					</ol>
+					<p class="upd-hint" role="status" data-push-hint hidden></p>
+					<button type="submit" class="btn btn-primary btn-tall">Review update</button>
+				</section>
 			}
 		}
 	</form>

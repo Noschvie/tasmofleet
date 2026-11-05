@@ -12,7 +12,7 @@ import (
 
 // The firmware page (design v2 screen "firmware", WP P5): the releases as cards with the older
 // ones behind a toggle, the selected release with its notes and the files this fleet needs,
-// the cached files with the drop zone for custom firmware. Selection, the older list, the full
+// the cached files, and the drop zone for custom firmware in a card of its own. Selection, the older list, the full
 // notes and the upload form are query parameters, so every state works without JavaScript.
 
 // fwURL is the firmware page with the given query values (empty ones left out).
@@ -95,7 +95,7 @@ templ firmwareContent(v view, p firmwarePage) {
 					@fwReleaseCard(v, p, *sel)
 				}
 				if p.ShowUpload && v.IsAdmin && p.CanUpload {
-					<section class="ucard fw-upload-card" id="upload" aria-labelledby="fw-up-h">
+					<section class={ ui.StackRank(5), "ucard", "fw-upload-card" } id="upload" aria-labelledby="fw-up-h">
 						<h2 id="fw-up-h">Upload custom firmware</h2>
 						@fwUploadForm(v, false)
 					</section>
@@ -539,7 +539,7 @@ templ fwInlines(ins []firmware.Inline) {
 	}
 }
 
-// fwCache is the list of cached files with the drop zone for custom firmware.
+// fwCache is the list of cached files.
 templ fwCache(v view, p firmwarePage) {
 	<section class={ ui.StackRank(3), "ulist", "fw-cache" } id="cache" aria-labelledby="fw-cache-h">
 		<div class="ulist-head">
