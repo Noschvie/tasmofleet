@@ -7160,7 +7160,58 @@ body.page-auth main {
 }
 /* user list: one wrapping row per user (who, badges, source, last sign-in, menu) */
 .users-list {
-  margin-bottom: var(--sp-12);
+  margin-bottom: 0;
+}
+.users-list .urow:last-child {
+  border-bottom: 0;
+}
+/* #419-S: Users in column stacks. The Roles and Safeguards cards sit in the narrow stack. */
+.roles-list,
+.safe-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-10);
+  font-size: var(--fs-body);
+}
+.roles-list li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--sp-10);
+  align-items: baseline;
+}
+.roles-n {
+  color: var(--color-text-2);
+  font-size: var(--fs-meta);
+}
+.safe-list {
+  padding-left: var(--sp-18);
+  list-style: disc;
+  gap: var(--sp-6);
+}
+.cstack .ucard.users-roles,
+.cstack .ucard.users-safe,
+.cstack .ucard.wn-you,
+.cstack .ucard.wn-jump {
+  padding: var(--sp-14) var(--sp-16);
+  gap: var(--sp-10);
+}
+/* one line per user in the wide stack (who, role, source, last seen, menu) */
+@media (min-width: 45rem) {
+  .cstack .users-list .urow {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) 90px minmax(0, 100px) minmax(0, 1.6fr) auto;
+    align-items: center;
+    column-gap: var(--sp-12);
+  }
+}
+/* two half columns (tablet): the list takes the full row, a half column squeezes the names */
+@media (min-width: 45rem) and (max-width: 74.99rem) {
+  .cstacks .users-list {
+    column-span: all;
+  }
 }
 .urow {
   display: flex;
@@ -7430,6 +7481,31 @@ form.useradd:has(input[name="otp"][value="1"]:checked) .useradd-pw {
 }
 .about-links {
   margin: 0;
+}
+/* #419-S: the version card sits in the narrow stack, the licence line in a card of its own */
+.about-proj {
+  padding: var(--sp-14) var(--sp-16);
+}
+.about-proj h2 {
+  margin: 0 0 var(--sp-8);
+  font: 600 14px var(--font-sans);
+  letter-spacing: normal;
+}
+.cstack .about-version {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "name" "build" "meta" "actions";
+}
+.cstack .about-version .about-actions {
+  justify-content: flex-start;
+  margin-top: var(--sp-14);
+}
+/* two half columns (tablet): the components take the full row, so the cards above them leave no gap
+   below the shorter column */
+@media (min-width: 45rem) and (max-width: 74.99rem) {
+  .cstacks .about-comps {
+    column-span: all;
+    margin-top: var(--sp-16);
+  }
 }
 @media (max-width: 44.99rem) {
   .about-version {
@@ -14496,6 +14572,61 @@ button.pol-chip-x {
 .wn-sec ul ul {
   padding-left: var(--sp-16);
 }
+/* #419-S: the releases fill the wide stack; the narrow stack (running version, jump list) stays in
+   view from 75rem, below the sticky header */
+.wn-rel {
+  scroll-margin-top: 110px;
+}
+.wn-you-sub {
+  margin: 0;
+  color: var(--color-text-2);
+}
+.wn-jump-l {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-6) var(--sp-12);
+  font: 500 13px var(--font-mono);
+}
+.wn-older {
+  margin-top: var(--sp-6);
+}
+.wn-older > summary {
+  cursor: pointer;
+  color: var(--color-text-2);
+  font-size: var(--fs-meta);
+  margin-bottom: var(--sp-8);
+}
+@media (min-width: 75rem) {
+  .wn-stacks .cstacks > .cstack:last-child {
+    position: sticky;
+    top: 110px;
+  }
+}
+/* two half columns (tablet) would set 0.28.0 beside 0.11.x and put the running version after the
+   last release: one column, the narrow stack's cards first */
+@media (max-width: 74.99rem) {
+  .wn-stacks .cstacks {
+    display: flex;
+    flex-direction: column;
+    columns: auto;
+    gap: var(--sp-16);
+  }
+  .wn-stacks .cstack > * {
+    margin: 0;
+  }
+  .wn-stacks .wn-you {
+    order: 1;
+  }
+  .wn-stacks .wn-jump {
+    order: 2;
+  }
+  .wn-stacks .wn-rel {
+    order: 3;
+  }
+}
 
 /* ==== page: release (/firmware/releases/{version}, N6): notes, files aside, "Changes since" ==== */
 .rel-title {
@@ -15524,98 +15655,5 @@ details.devcard > summary {
     display: table-cell;
     padding: 3px var(--sp-6);
     text-align: left;
-  }
-}
-
-/* ==== #419-S: System pages in column stacks (Users, About, What's new) ==== */
-.users-list {
-  margin-bottom: 0;
-}
-.users-list .urow:last-child {
-  border-bottom: 0;
-}
-.roles-list,
-.safe-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-10);
-  font-size: var(--fs-body);
-}
-.roles-list li {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: var(--sp-10);
-  align-items: baseline;
-}
-.roles-n {
-  color: var(--color-text-2);
-  font-size: var(--fs-meta);
-}
-.safe-list {
-  padding-left: var(--sp-18);
-  list-style: disc;
-  gap: var(--sp-6);
-}
-.cstack .ucard.users-roles,
-.cstack .ucard.users-safe,
-.cstack .ucard.wn-you,
-.cstack .ucard.wn-jump {
-  padding: var(--sp-14) var(--sp-16);
-  gap: var(--sp-10);
-}
-/* Users: one line per user in the wide stack (who, role, source, last seen, menu) */
-@media (min-width: 45rem) {
-  .cstack .users-list .urow {
-    display: grid;
-    grid-template-columns: minmax(0, 1.5fr) 90px minmax(0, 100px) minmax(0, 1.6fr) auto;
-    align-items: center;
-    column-gap: var(--sp-12);
-  }
-}
-/* About: the version card in the narrow stack stacks its parts */
-.about-proj {
-  padding: var(--sp-14) var(--sp-16);
-}
-.about-proj h2 {
-  margin: 0 0 var(--sp-8);
-  font: 600 14px var(--font-sans);
-  letter-spacing: normal;
-}
-.cstack .about-version {
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-areas: "name" "build" "meta" "actions";
-}
-.cstack .about-version .about-actions {
-  justify-content: flex-start;
-  margin-top: var(--sp-14);
-}
-/* What's new: the release cards fill the wide stack; the narrow stack stays in view from 75rem */
-.wn-you-sub {
-  margin: 0;
-  color: var(--color-text-2);
-}
-.wn-jump-l {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-6) var(--sp-12);
-  font: 500 13px var(--font-mono);
-}
-@media (min-width: 75rem) {
-  .wn-stacks .cstacks > .cstack:last-child {
-    position: sticky;
-    top: var(--sp-16);
-  }
-}
-/* About on a tablet (two balanced columns): the components take the full row, so the version and
-   licence cards above them do not leave a gap below the shorter column */
-@media (min-width: 45rem) and (max-width: 74.99rem) {
-  .cstacks .about-comps {
-    column-span: all;
   }
 }

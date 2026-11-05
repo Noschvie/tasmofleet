@@ -1,6 +1,10 @@
 package web
 
-import "github.com/nofuturekid/tasmofleet/internal/web/ui"
+import (
+	"strconv"
+
+	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+)
 
 // What's new (design v2 screen "whatsnew", N5): this binary's changelog, newest first, with the
 // installed release and the releases new since the user's last visit marked.
@@ -89,10 +93,20 @@ templ whatsNewPage(p whatsNewView) {
 			<section class="ucard wn-jump r2" aria-labelledby="wn-jump-h">
 				<h2 id="wn-jump-h">Jump to a release</h2>
 				<ul class="wn-jump-l">
-					for _, r := range p.Releases {
+					for _, r := range jumpNewest(p.Releases) {
 						<li><a href={ templ.SafeURL("#v" + r.Version) }>{ r.Version }</a></li>
 					}
 				</ul>
+				if older := jumpOlder(p.Releases); len(older) > 0 {
+					<details class="wn-older">
+						<summary>Older releases ({ strconv.Itoa(len(older)) })</summary>
+						<ul class="wn-jump-l">
+							for _, r := range older {
+								<li><a href={ templ.SafeURL("#v" + r.Version) }>{ r.Version }</a></li>
+							}
+						</ul>
+					</details>
+				}
 			</section>
 		}
 		}

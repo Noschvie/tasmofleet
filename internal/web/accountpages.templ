@@ -341,7 +341,7 @@ templ usersPage(v usersView) {
 				</span>
 				<span class="urow-meta">{ u.Source }</span>
 				if u.LastAt != "" {
-					<span class="urow-meta"><time datetime={ u.LastAt } if u.LastDay { data-ts="day" }>{ u.Last }</time>{ " · " + u.Sessions }</span>
+					<span class="urow-meta"><time datetime={ u.LastAt } if u.LastDay { data-ts={ ui.StampDay.Key } }>{ u.Last }</time>{ " · " + u.Sessions }</span>
 				} else {
 					<span class="urow-meta">{ u.Last + " · " + u.Sessions }</span>
 				}

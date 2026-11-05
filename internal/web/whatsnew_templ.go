@@ -8,7 +8,11 @@ package web
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import "github.com/nofuturekid/tasmofleet/internal/web/ui"
+import (
+	"strconv"
+
+	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+)
 
 // What's new (design v2 screen "whatsnew", N5): this binary's changelog, newest first, with the
 // installed release and the releases new since the user's last visit marked.
@@ -77,7 +81,7 @@ func whatsNewPage(p whatsNewView) templ.Component {
 					var templ_7745c5c3_Var4 string
 					templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.ResolveAttributeValue("v" + r.Version)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 15, Col: 51}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 19, Col: 51}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var4)
 					if templ_7745c5c3_Err != nil {
@@ -90,7 +94,7 @@ func whatsNewPage(p whatsNewView) templ.Component {
 					var templ_7745c5c3_Var5 string
 					templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.ResolveAttributeValue("wn-h-" + r.Version)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 15, Col: 91}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 19, Col: 91}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var5)
 					if templ_7745c5c3_Err != nil {
@@ -103,7 +107,7 @@ func whatsNewPage(p whatsNewView) templ.Component {
 					var templ_7745c5c3_Var6 string
 					templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.ResolveAttributeValue("wn-h-" + r.Version)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 17, Col: 47}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 21, Col: 47}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var6)
 					if templ_7745c5c3_Err != nil {
@@ -116,7 +120,7 @@ func whatsNewPage(p whatsNewView) templ.Component {
 					var templ_7745c5c3_Var7 string
 					templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(r.Version)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 17, Col: 61}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 21, Col: 61}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 					if templ_7745c5c3_Err != nil {
@@ -134,7 +138,7 @@ func whatsNewPage(p whatsNewView) templ.Component {
 						var templ_7745c5c3_Var8 string
 						templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(r.Name)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 19, Col: 40}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 23, Col: 40}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 						if templ_7745c5c3_Err != nil {
@@ -153,7 +157,7 @@ func whatsNewPage(p whatsNewView) templ.Component {
 						var templ_7745c5c3_Var9 string
 						templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.ResolveAttributeValue(r.Date)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 22, Col: 43}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 26, Col: 43}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var9)
 						if templ_7745c5c3_Err != nil {
@@ -166,7 +170,7 @@ func whatsNewPage(p whatsNewView) templ.Component {
 						var templ_7745c5c3_Var10 string
 						templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(isoDay(r.Date))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 22, Col: 62}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 26, Col: 62}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 						if templ_7745c5c3_Err != nil {
@@ -303,7 +307,7 @@ func whatsNewPage(p whatsNewView) templ.Component {
 				var templ_7745c5c3_Var12 string
 				templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(p.Installed)
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 68, Col: 46}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 72, Col: 46}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 				if templ_7745c5c3_Err != nil {
@@ -326,7 +330,7 @@ func whatsNewPage(p whatsNewView) templ.Component {
 						var templ_7745c5c3_Var13 string
 						templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(c.Name)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 72, Col: 18}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 76, Col: 18}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
 						if templ_7745c5c3_Err != nil {
@@ -341,7 +345,7 @@ func whatsNewPage(p whatsNewView) templ.Component {
 						var templ_7745c5c3_Var14 string
 						templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(" · ")
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 75, Col: 15}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 79, Col: 15}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 						if templ_7745c5c3_Err != nil {
@@ -356,7 +360,7 @@ func whatsNewPage(p whatsNewView) templ.Component {
 						var templ_7745c5c3_Var15 string
 						templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(isoDay(c.Date))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 78, Col: 23}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 82, Col: 23}
 						}
 						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 						if templ_7745c5c3_Err != nil {
@@ -380,7 +384,7 @@ func whatsNewPage(p whatsNewView) templ.Component {
 					var templ_7745c5c3_Var16 templ.SafeURL
 					templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(p.Base + "/about"))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 84, Col: 63}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 88, Col: 63}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 					if templ_7745c5c3_Err != nil {
@@ -398,7 +402,7 @@ func whatsNewPage(p whatsNewView) templ.Component {
 				var templ_7745c5c3_Var17 templ.SafeURL
 				templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(sourceURL + "/blob/main/CHANGELOG.md"))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 86, Col: 82}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 90, Col: 82}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 				if templ_7745c5c3_Err != nil {
@@ -408,7 +412,7 @@ func whatsNewPage(p whatsNewView) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				for _, r := range p.Releases {
+				for _, r := range jumpNewest(p.Releases) {
 					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 40, "<li><a href=\"")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
@@ -416,7 +420,7 @@ func whatsNewPage(p whatsNewView) templ.Component {
 					var templ_7745c5c3_Var18 templ.SafeURL
 					templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("#v" + r.Version))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 93, Col: 51}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 97, Col: 51}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 					if templ_7745c5c3_Err != nil {
@@ -429,7 +433,7 @@ func whatsNewPage(p whatsNewView) templ.Component {
 					var templ_7745c5c3_Var19 string
 					templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(r.Version)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 93, Col: 65}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 97, Col: 65}
 					}
 					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 					if templ_7745c5c3_Err != nil {
@@ -440,7 +444,66 @@ func whatsNewPage(p whatsNewView) templ.Component {
 						return templ_7745c5c3_Err
 					}
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "</ul></section>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 43, "</ul>")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				if older := jumpOlder(p.Releases); len(older) > 0 {
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "<details class=\"wn-older\"><summary>Older releases (")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					var templ_7745c5c3_Var20 string
+					templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(strconv.Itoa(len(older)))
+					if templ_7745c5c3_Err != nil {
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 102, Col: 57}
+					}
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 45, ")</summary><ul class=\"wn-jump-l\">")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+					for _, r := range older {
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 46, "<li><a href=\"")
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						var templ_7745c5c3_Var21 templ.SafeURL
+						templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL("#v" + r.Version))
+						if templ_7745c5c3_Err != nil {
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 105, Col: 53}
+						}
+						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 47, "\">")
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						var templ_7745c5c3_Var22 string
+						templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(r.Version)
+						if templ_7745c5c3_Err != nil {
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `web/whatsnew.templ`, Line: 105, Col: 67}
+						}
+						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 48, "</a></li>")
+						if templ_7745c5c3_Err != nil {
+							return templ_7745c5c3_Err
+						}
+					}
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 49, "</ul></details>")
+					if templ_7745c5c3_Err != nil {
+						return templ_7745c5c3_Err
+					}
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 50, "</section>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -456,7 +519,7 @@ func whatsNewPage(p whatsNewView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 44, "</div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "</div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

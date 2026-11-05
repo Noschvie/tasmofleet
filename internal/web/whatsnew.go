@@ -26,6 +26,14 @@ type whatsNewView struct {
 	IsAdmin   bool   // About is an admin page: the others get no link
 }
 
+// jumpNewLimit is how many releases the jump list shows before "Older releases": the sticky narrow
+// stack must stay reachable as the changelog grows.
+const jumpNewLimit = 12
+
+func jumpNewest(r []whatsNewRelease) []whatsNewRelease { return r[:min(len(r), jumpNewLimit)] }
+
+func jumpOlder(r []whatsNewRelease) []whatsNewRelease { return r[min(len(r), jumpNewLimit):] }
+
 // current is the installed release's entry (nil for a build that is no release, such as "dev").
 func (p whatsNewView) current() *whatsNewRelease {
 	for i := range p.Releases {

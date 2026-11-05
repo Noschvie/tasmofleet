@@ -47,3 +47,39 @@ test("About leads to What's new", async ({ page }) => {
   await expect(page).toHaveURL(/\/whats-new$/);
   await expect(page.locator(".crumbs")).toContainText("About");
 });
+
+// Why (#419-S): below 1200 px the stacks are two half columns, which set 0.28.0 beside 0.11.x and put
+// "You are on" after the last release. The page is one column there, the running version first.
+for (const width of [768, 1024]) {
+  test(`What's new is one column with the running version first at ${width}px`, async ({ page }) => {
+    await page.setExtraHTTPHeaders({ "X-authentik-username": "olivia", "X-authentik-groups": "ops" });
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(app.url + "/whats-new");
+    const m = await page.evaluate(() => ({
+      you: document.querySelector(".wn-you")!.getBoundingClientRect().top,
+      tops: [...document.querySelectorAll(".wn-rel")].map((e) => e.getBoundingClientRect().top),
+    }));
+    expect(m.tops.length).toBeGreaterThan(2);
+    for (let i = 1; i < m.tops.length; i++) expect(m.tops[i], `release ${i} lies below release ${i - 1}`).toBeGreaterThan(m.tops[i - 1]);
+    expect(m.you).toBeLessThan(m.tops[0]);
+  });
+}
+
+// Why: a jump to a release scrolls it under the sticky header, and the sticky narrow stack starts
+// under that header too: neither may be hidden by it.
+test("a jump to an older release and the sticky stack stay below the header", async ({ page }) => {
+  await page.setExtraHTTPHeaders({ "X-authentik-username": "olivia", "X-authentik-groups": "ops" });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.goto(app.url + "/whats-new");
+  const target = page.locator(".wn-jump a").nth(5);
+  const id = (await target.getAttribute("href"))!;
+  await target.click();
+  await page.waitForTimeout(500);
+  const m = await page.evaluate((sel) => ({
+    header: document.querySelector("header.top")!.getBoundingClientRect().bottom,
+    target: document.getElementById(sel.slice(1))!.getBoundingClientRect().top,
+    you: document.querySelector(".wn-you")!.getBoundingClientRect().top,
+  }), id);
+  expect(m.target, "the release is under the header").toBeGreaterThanOrEqual(m.header);
+  expect(m.you, "the sticky stack is under the header").toBeGreaterThanOrEqual(m.header);
+});

@@ -62,7 +62,7 @@ for (const width of [1280, 1920]) {
 test.describe("without a scrollbar strip", () => {
   for (const width of [1280, 1920]) {
     test(`both bars end exactly at the window's inner width (${width}px)`, async ({ page }) => {
-      await page.setViewportSize({ width, height: 760 });
+      await page.setViewportSize({ width, height: 600 });
       await page.goto(app.url + "/styleguide");
       await expect(page.locator("footer.sb")).toBeVisible();
       await page.evaluate(() => { document.documentElement.style.scrollbarWidth = "none"; }); // CSSOM, the CSP forbids <style>

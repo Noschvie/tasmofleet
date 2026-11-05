@@ -139,3 +139,22 @@ test("OIDC admin sees everyone, steps up, manages a local account and ends an SS
   await expect(page.getByRole("heading", { name: "Devices", exact: true })).toBeVisible(); // the admin is still in
   await ctx.close();
 });
+
+// Why (#419-S): between 720 and 1199 px the stacks are two half columns, and a one-line user row
+// squeezed into a half column left names one letter wide. The list must take the full row there.
+for (const width of [768, 1024]) {
+  test(`the user list takes the full content width at ${width}px`, async ({ page }) => {
+    await loginAs("admin");
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(app.url + "/");
+    await page.getByRole("link", { name: /Sign in with SSO/ }).or(page.getByRole("button", { name: /Sign in with SSO/ })).first().click({ timeout: 3000 }).catch(() => {}); // only when the login page shows
+    await expect(page.locator("summary.um-btn").getByText("adam")).toBeVisible();
+    await page.goto(app.url + "/users");
+    await expect(page.locator(".users-list")).toBeVisible();
+    const w = await page.evaluate(() => ({
+      list: document.querySelector(".users-list")!.getBoundingClientRect().width,
+      stacks: document.querySelector(".cstacks")!.getBoundingClientRect().width,
+    }));
+    expect(w.list).toBe(w.stacks);
+  });
+}

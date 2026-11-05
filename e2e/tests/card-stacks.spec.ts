@@ -39,6 +39,8 @@ const pages: [string, string, number][] = [
   ...tabs.map((t): [string, string, number] => [`settings tab ${t}`, `/settings/system?tab=${t}`, 17]),
   ["about", "/about", 17],
   ["dashboard", "/", 17],
+  ["users", "/users", 17],
+  ["whats new", "/whats-new", 17],
   ["new policy rule", "/policy/rules/new", 25],
 ];
 
@@ -48,7 +50,7 @@ for (const width of [1280, 1000, 600, 375]) {
       await page.setExtraHTTPHeaders(adam);
       await page.setViewportSize({ width, height: 900 });
       await page.goto(app.url + path);
-      await expect(page.locator(".scard:visible, .about-card:visible, .devcard:visible, .ulist:visible").first()).toBeVisible();
+      await expect(page.locator(".scard:visible, .about-card:visible, .devcard:visible, .ulist:visible, .wn-rel:visible").first()).toBeVisible();
       expect(await cardStackGaps(page, maxGap)).toEqual([]);
     });
   }

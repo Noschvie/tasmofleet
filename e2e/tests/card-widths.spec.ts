@@ -122,7 +122,7 @@ for (const [name, path] of pages) {
     if (m.span < m.area * 0.95) found.push(span(name));
     else {
       // decision 9: on a large screen too the page fills the capped content width (1576 px at 1920),
-      // so a max-width below it (the Settings 1240 px cap) shows here and nowhere at 1280
+      // so a max-width below it (a fixed max-width) shows here and nowhere at 1280
       await page.setViewportSize({ width: 1920, height: 900 });
       await page.goto(app.url + path());
       await page.waitForTimeout(800);
