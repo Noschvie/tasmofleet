@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"github.com/nofuturekid/tasmofleet/internal/policy"
 	"log/slog"
 	"time"
 
@@ -72,7 +73,7 @@ func (r *netFactsReader) pass(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		if !d.Net.ReadAt.IsZero() || d.Identity.Variant == "minimal" || !r.online(d.ID) {
+		if !d.Net.ReadAt.IsZero() || policy.LimitedFirmware(d.Identity.Variant) || !r.online(d.ID) {
 			continue
 		}
 		if next, ok := r.failed[d.ID]; ok && r.now().Before(next) {

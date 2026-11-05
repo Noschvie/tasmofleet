@@ -631,7 +631,7 @@ func TestRulePageNamesTheFirmwareOfANotJudgedDevice(t *testing.T) {
 	e, mem := ruleEnvWith(t, rp)
 	id := ruleSeed(t, e, mem, url.Values{"family": {}, "tag": {}, "tags_extra": {""}, "except": {}})
 	_, body := e.do(t, "GET", "/policy/rules/"+id, "admin", nil)
-	if !strings.Contains(body, "runs safeboot firmware; read again once it runs regular firmware") || strings.Contains(body, "no backup yet") {
+	if !strings.Contains(body, "runs safeboot firmware; checked again about once an hour") || strings.Contains(body, "no backup yet") {
 		t.Errorf("the shed row must name the firmware instead of waiting for a backup:\n%s", section(t, body, "dc-devs"))
 	}
 }

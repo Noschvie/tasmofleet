@@ -126,10 +126,10 @@ templ policyDevTable(p devView) {
 templ policyDevUnjudged(p devView) {
 	if len(p.Backup)+len(p.Live)+len(p.Firmware) > 0 {
 		<details class="fold" id="unjudged" open?={ p.Show == "unknown" }>
-			<summary>{ plural(len(p.Backup)+len(p.Live)+len(p.Firmware), "device") } cannot be judged<span class="meta">no backup or recent reading</span></summary>
+			<summary>{ plural(len(p.Backup)+len(p.Live)+len(p.Firmware), "device") } cannot be judged<span class="meta">{ p.unjudgedMeta() }</span></summary>
 			if len(p.Firmware) > 0 {
 				<div class="pol-dev-fold">
-					<p class="pol-none">These run safeboot or minimal firmware, which does not know the rule settings. Nothing is sent to them; they are read again as soon as they report regular firmware.</p>
+					<p class="pol-none">These run safeboot or minimal firmware, which does not know the rule settings, so they are not asked for them. They are checked again about once an hour and read as soon as they run regular firmware.</p>
 					<div class="chips">
 						for _, c := range p.Firmware {
 							<a class="tag mono" href={ templ.SafeURL(p.Base + "/devices/" + devStr(c.ID)) } title={ c.Why }>{ c.Name }</a>

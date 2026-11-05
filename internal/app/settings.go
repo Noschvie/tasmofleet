@@ -27,7 +27,7 @@ import (
 // A POLICY_RULES value that is still in the environment is imported once.
 func (a *runtime) setupSettings() error {
 	a.settings = settings.New(settings.Options{Devices: a.svc.Store, Client: a.svc.Client, Audit: a.svc.Audit})
-	rep := &policyReporter{devices: a.svc.Store, backups: a.backups, reader: a.settings, audit: a.svc.Audit}
+	rep := &policyReporter{devices: fwDevices{a.svc.Store, a.fw}, backups: a.backups, reader: a.settings, audit: a.svc.Audit}
 	a.policyLive = rep
 	a.rules = newRulesService(a.svc, rep.Preview, rep.setRules)
 	rules, err := a.rules.Active(a.bgContext)
@@ -40,7 +40,7 @@ func (a *runtime) setupSettings() error {
 	a.importLegacyPolicy()
 	a.policy = rep
 	a.fixer = &policy.Fixer{Client: a.svc.Client, Reader: a.settings, Stop: a.bgContext}
-	a.templates = templates.New(templates.Options{Devices: a.svc.Store, Client: a.svc.Client, Backups: a.backups, Settings: a.settings,
+	a.templates = templates.New(templates.Options{Devices: fwDevices{a.svc.Store, a.fw}, Client: a.svc.Client, Backups: a.backups, Settings: a.settings,
 		Health: func(id model.DeviceID) model.Health {
 			if a.tracker == nil {
 				return model.Health{}
@@ -273,7 +273,7 @@ func (p *policyReporter) ReadValue(ctx context.Context, actor string, id model.D
 		case i < 0:
 			return "", web.ValueSource{}, &web.ValueRefusedError{Reason: "unknown device"}
 		case policy.LimitedFirmware(devs[i].Identity.Variant):
-			return "", web.ValueSource{}, &web.ValueRefusedError{Reason: "the device " + policy.FirmwareNote(devs[i]) + " and does not know this command; it is read again once it runs regular firmware"}
+			return "", web.ValueSource{}, &web.ValueRefusedError{Reason: "the device " + policy.FirmwareNote(devs[i]) + ", which does not know this command; try again once it runs regular firmware (TasmoFleet checks about once an hour)"}
 		}
 	}
 	cctx, cancel := context.WithTimeout(ctx, liveTimeout)

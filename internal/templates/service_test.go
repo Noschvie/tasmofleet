@@ -405,3 +405,32 @@ func TestLimitedFirmwareIsNeverReadAndIsNotJudged(t *testing.T) {
 		t.Errorf("a device on regular firmware is read again: cmds %v, not judged %d", f.cmds, len(ov.NotJudged))
 	}
 }
+
+// Why (#560): a preview that includes a device on safeboot must say so and name safeboot, and send
+// nothing to it; the refusal is the one the plan gives, not a generic "could not be read".
+func TestPreviewRefusesSafebootByName(t *testing.T) {
+	f := newFleet()
+	ref := f.add("a", "NOUS A1T", 21)
+	f.add("b", "NOUS A1T", 22)
+	safe := f.add("safe", "NOUS A1T", 21)
+	f.devs[safe-1].Identity.Variant = "safeboot"
+	m := newManager(f, nil)
+	pv, err := m.Preview(context.Background(), Request{Group: policy.GroupKey{Name: "NOUS A1T", Family: model.ChipESP8266}, Reference: ref, Devices: []model.DeviceID{ref, 2, safe}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, x := range pv.Excluded {
+		if x.Device.ID == safe {
+			found = x.Refusal == policy.RefuseSafeboot && strings.Contains(x.Why, "safeboot")
+		}
+	}
+	if !found {
+		t.Errorf("excluded %+v: the safeboot device must be refused by name", pv.Excluded)
+	}
+	for _, c := range f.cmds {
+		if strings.HasPrefix(c, fmt.Sprintf("%d ", safe)) {
+			t.Errorf("sent to the safeboot device: %q", c)
+		}
+	}
+}

@@ -117,7 +117,7 @@ func notJudgedReason(v DeviceView, r *reading) string {
 	var why string
 	switch {
 	case policy.LimitedFirmware(v.Reading.Variant):
-		why = "The device runs " + v.Reading.Variant + " firmware, which does not know the template; it is read again once it runs regular firmware."
+		why = "The device runs " + v.Reading.Variant + " firmware, which does not know the template. It is checked again about once an hour."
 	case v.Family == model.ChipUnknown:
 		why = "The chip family is not known yet."
 	case r == nil:
@@ -330,6 +330,10 @@ func (m *Manager) Preview(ctx context.Context, req Request) (Preview, error) {
 		if id == req.Reference {
 			v = refView
 		} else if v, err = m.fresh(ctx, d); err != nil {
+			if r, why := policy.RefuseFirmware(d.Identity.Variant); r != policy.RefuseNone && errors.Is(err, errLimitedFirmware) {
+				pv.Excluded = append(pv.Excluded, Excluded{Device: v, Why: why, Refusal: r}) // nothing was sent (#560)
+				continue
+			}
 			pv.Excluded = append(pv.Excluded, Excluded{Device: v, Why: "could not be read: " + err.Error(), Refusal: policy.RefuseNotLive})
 			continue
 		}

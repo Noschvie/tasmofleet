@@ -127,6 +127,7 @@ type runtime struct {
 	notifiedBatches sync.Map           // transactions whose "update finished" message was sent
 	mqttKnown       *knownIndex
 	tracker         *health.Service
+	fw              *firmwareState // the firmware each device runs right now, for read suppression (#558)
 	backups         *backup.Manager
 	settings        *settings.Manager
 	policy          web.PolicyService
@@ -179,9 +180,10 @@ func (a *runtime) run(ctx context.Context) error {
 		StaleAfter: staleAfter(cfg.TelePeriod), PollInterval: cfg.PollInterval,
 	})
 	a.goBG("health", func() error { return a.tracker.Run(bg) })
+	a.fw = newFirmwareState(a.tracker.Minimal)
 	a.setupTransport()
 	// Network facts are read in the background, never as part of first contact or a refresh.
-	nf := newNetFactsReader(a.svc.Inventory.List,
+	nf := newNetFactsReader(a.fw.list(a.svc.Inventory.List),
 		func(id model.DeviceID) bool { return a.tracker.Get(id).State == model.HealthOnline },
 		a.svc.Prober.ReadNet, a.log)
 	a.svc.Prober.ReadNetLater = nf.later
@@ -190,9 +192,14 @@ func (a *runtime) run(ctx context.Context) error {
 	mid := newMQTTIdentity(a.bus, a.mqttCmd, a.svc.Inventory.List, a.svc.Store, a.svc.Audit,
 		func(id model.DeviceID) { a.svc.Prober.announce(id) }, a.log)
 	mid.known = a.mqttKnown.Known
+	mid.fw = a.fw
 	mid.spawn = func(f func()) { a.goBG("mqtt-identity-ask", func() error { f(); return nil }) } // waited for at shutdown
 	a.svc.Prober.MQTT = mid                                                                      // "Refresh identity" over MQTT for devices HTTP cannot reach (#91)
 	a.goBG("mqtt-identity", func() error { mid.run(bg); return nil })
+	// A device on safeboot or minimal firmware is looked at again about once an hour, so it is read again once it left that firmware (#558).
+	rc := newFWRecheck(a.fw.list(a.svc.Inventory.List), a.tracker.Get,
+		func(ctx context.Context, id model.DeviceID) error { return a.svc.Prober.Refresh(ctx, id, "") }, a.log)
+	a.goBG("fw-recheck", func() error { rc.run(bg); return nil })
 
 	if err := a.setupBackups(bg); err != nil {
 		return err
@@ -416,7 +423,7 @@ func (a *runtime) setupBackups(ctx context.Context) error {
 	cfg := a.cfg
 	dec := a.dec
 	m, err := backup.New(backup.Options{
-		DataDir: cfg.DataDir, Devices: a.svc.Store, Store: a.svc.Store, Client: a.svc.Client, Decoder: dec,
+		DataDir: cfg.DataDir, Devices: fwDevices{a.svc.Store, a.fw}, Store: a.svc.Store, Client: a.svc.Client, Decoder: dec,
 		Keep: cfg.BackupKeep, MaxAge: cfg.BackupMaxAge, Audit: a.svc.Audit, Events: a.svc.Hub, Log: a.log,
 	})
 	if err != nil {

@@ -67,6 +67,7 @@ type mqttIdentity struct {
 	now      func() time.Time
 	log      *slog.Logger
 	grace    time.Duration
+	fw       *firmwareState // optional: the firmware an INFO1 names (#558)
 
 	// known, if set, limits the topic table to inventory devices (mqttKnown.Known): a flood of
 	// topics on the broker must not fill it.
@@ -178,6 +179,11 @@ func (m *mqttIdentity) handle(ctx context.Context, msg mqttbus.Message) {
 	d, ok := m.deviceOf(ctx, msg.Topic)
 	if ok && msg.Suffix == "INFO1" && !msg.Retained {
 		m.applyGroupTopic(ctx, d, msg.Payload) // #239: whatever the identity rules below say
+		if m.fw != nil {
+			if variant, known := info1Build(msg.Payload); known { // #558: a device that boots into safeboot, or leaves it
+				m.fw.set(d.ID, variant, m.now())
+			}
+		}
 	}
 	if !ok || !d.Identity.DetectedAt.IsZero() {
 		return // not ours, or HTTP has identified it: that identity is the one we keep

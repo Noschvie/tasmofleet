@@ -32,10 +32,11 @@ func readSyn(t *testing.T, name string) []byte {
 // diffBackups serves stored backups by ID and a canned live snapshot.
 type diffBackups struct {
 	fakeBackups
-	files map[model.BackupID][]byte
-	live  []byte
-	mu    sync.Mutex
-	liveN int
+	files   map[model.BackupID][]byte
+	live    []byte
+	liveErr error
+	mu      sync.Mutex
+	liveN   int
 }
 
 func (f *diffBackups) Open(_ context.Context, id model.BackupID) ([]byte, model.Backup, error) {
@@ -51,7 +52,7 @@ func (f *diffBackups) LiveSnapshot(context.Context, model.DeviceID) ([]byte, err
 	f.mu.Lock()
 	f.liveN++
 	f.mu.Unlock()
-	return f.live, nil
+	return f.live, f.liveErr
 }
 
 type fakeRestore struct {
@@ -674,5 +675,20 @@ func TestFilesLineStaysWhileLaterStepsRun(t *testing.T) {
 	_, body := e.do(t, "GET", "/restores/1/status", "admin", nil)
 	if !strings.Contains(body, "3 files written (3 flash writes)") || strings.Contains(body, "No files in this backup") {
 		t.Errorf("files line lost:\n%s", body)
+	}
+}
+
+// Why (#558): a device on safeboot or minimal firmware is not queried for the drift view. That is
+// not a failed read: the page says why, with no Retry button and no gateway error, because trying
+// again changes nothing until the device runs regular firmware.
+func TestDriftNamesLimitedFirmwareWithoutRetry(t *testing.T) {
+	e, bk, _ := newDiffEnv(t)
+	bk.liveErr = &backup.LimitedFirmwareError{Variant: "safeboot"}
+	resp, body := e.do(t, "GET", "/devices/1/drift", "operator", nil)
+	if resp.StatusCode != 200 || !strings.Contains(body, "runs safeboot firmware") || strings.Contains(body, "could not be read") {
+		t.Fatalf("%d\n%s", resp.StatusCode, body)
+	}
+	if strings.Contains(strings.ToLower(body), "retry") || strings.Contains(strings.ToLower(body), "try again") {
+		t.Error("no retry offer for a device that cannot answer")
 	}
 }

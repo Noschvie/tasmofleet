@@ -510,6 +510,18 @@ func refuse(p ApplyPlan, r Refusal, format string, a ...any) ApplyPlan {
 	return p
 }
 
+// RefuseFirmware is the refusal for a device on the minimal firmware or the safeboot image, and its
+// reason (the variant is model.Identity.Variant); RefuseNone for any other.
+func RefuseFirmware(variant string) (Refusal, string) {
+	switch variant {
+	case variantMinimal:
+		return RefuseMinimal, "the minimal firmware cannot change the template"
+	case variantSafeboot:
+		return RefuseSafeboot, "the device runs the safeboot image, which does not know the Template command"
+	}
+	return RefuseNone, ""
+}
+
 // PlanApply decides whether the reference template may be applied to dev, and builds the command.
 // The checks run in the order that makes the later ones meaningful: a device on another family is
 // refused before its array length is looked at.
@@ -559,11 +571,8 @@ func PlanApply(ref Reference, dev TemplateDevice, opts PlanOptions) ApplyPlan {
 			return refuse(p, RefuseArch, "ARCH %s does not belong to chip family %s", a, dev.Family)
 		}
 	}
-	switch dev.Variant {
-	case variantMinimal:
-		return refuse(p, RefuseMinimal, "the minimal firmware cannot change the template")
-	case variantSafeboot:
-		return refuse(p, RefuseSafeboot, "the device runs the safeboot image, which does not know the Template command")
+	if r, why := RefuseFirmware(dev.Variant); r != RefuseNone {
+		return refuse(p, r, "%s", why)
 	}
 	if redPinAssigned(dev.Family, diff) && (dev.Hardware == "" || dev.Hardware != ref.Device.Hardware) {
 		return refuse(p, RefuseRedPin, "the change assigns a pin that is dangerous on some hardware (flash or PSRAM) and the device's hardware (%q) is not known to equal the reference's (%q)", dev.Hardware, ref.Device.Hardware)

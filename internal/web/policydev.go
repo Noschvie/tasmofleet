@@ -220,3 +220,15 @@ func (h *handler) devFill(p *devView, rep PolicyReport) {
 		sort.SliceStable(l, func(i, j int) bool { return strings.ToLower(l[i].Name) < strings.ToLower(l[j].Name) })
 	}
 }
+
+// unjudgedMeta is the grey note of the "cannot be judged" fold: what is missing, and for the devices
+// on safeboot or minimal firmware, that the firmware is the reason (#558).
+func (p devView) unjudgedMeta() string {
+	switch {
+	case len(p.Firmware) == 0:
+		return "no backup or recent reading"
+	case len(p.Backup)+len(p.Live) == 0:
+		return "safeboot or minimal firmware"
+	}
+	return "no backup or recent reading, or safeboot or minimal firmware"
+}

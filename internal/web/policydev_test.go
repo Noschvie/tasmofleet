@@ -195,7 +195,7 @@ func TestPolicyDeviationsNamesFirmwareThatCannotBeJudged(t *testing.T) {
 	rep.Devices[3].Identity.Variant = "minimal"  // cellar
 	body := devPage(t, "admin", "", rep)
 	fold := body[strings.Index(body, `id="unjudged"`):]
-	if !strings.Contains(fold, "run safeboot or minimal firmware") || !strings.Contains(fold, "read again as soon as they report regular firmware") {
+	if !strings.Contains(fold, "run safeboot or minimal firmware") || !strings.Contains(fold, "checked again about once an hour") {
 		t.Errorf("the reason is missing:\n%s", fold)
 	}
 	for _, c := range []string{`title="runs safeboot firmware"`, `title="runs minimal firmware"`} {

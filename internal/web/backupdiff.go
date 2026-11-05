@@ -226,6 +226,12 @@ func (h *handler) drift(w http.ResponseWriter, r *http.Request) {
 	}
 	if fresh {
 		cur, err := live.LiveSnapshot(r.Context(), d.ID)
+		var limited *backup.LimitedFirmwareError
+		if errors.As(err, &limited) { // safeboot or minimal firmware: not a failed read, and a retry would change nothing (#558)
+			p.Error = limited.UserReason()
+			show(http.StatusOK)
+			return
+		}
 		if err != nil {
 			p.Error = "The device could not be read: " + errText(err)
 			p.Retry = true
