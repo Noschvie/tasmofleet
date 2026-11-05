@@ -18,7 +18,7 @@ runs out, add more. Facts below are taken from Wikipedia; a detail that could no
 7. **Cordouan** (assigned to 0.27): mouth of the Gironde, France. Completed in 1611 (Louis de Foix); UNESCO World Heritage Site since 2021.
 8. **Cape Byron** (assigned to 0.28): New South Wales, Australia. Lit in 1901 on the easternmost point of the Australian mainland.
 9. **Portland Head** (assigned to 0.29): Cape Elizabeth, Maine, USA. First lit in 1791; the first lighthouse built by the US government.
-10. **Eddystone**: Eddystone Rocks off Cornwall, England. The first tower was lit in 1698; the current tower, designed by James Douglass, in 1882.
+10. **Eddystone** (assigned to 0.30): Eddystone Rocks off Cornwall, England. The first tower was lit in 1698; the current tower, designed by James Douglass, in 1882.
 11. **Cape Spear**: near St. John's, Newfoundland, Canada. Lit in 1836; the oldest surviving lighthouse in Newfoundland.
 12. **Fastnet**: off County Cork, Ireland. The current tower entered service in 1904; at 54 m the tallest lighthouse in Ireland, nicknamed "Ireland's Teardrop".
 13. **Dondra Head**: southern Sri Lanka. Lit in 1890; at 49 m the tallest lighthouse in Sri Lanka.
