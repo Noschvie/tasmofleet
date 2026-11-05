@@ -43,7 +43,7 @@ const (
 
 // holdBanner is the refusal at the top of the delete page.
 func holdBanner(h *deviceHold) ui.BannerData {
-	b := ui.BannerData{Tone: ui.ToneWarn, Title: "This device can’t be deleted right now", Text: h.Text}
+	b := ui.BannerData{Tone: ui.ToneWarn, Title: "This device can’t be deleted right now.", Text: " " + h.Text}
 	if h.Href != "" {
 		b.Action = &ui.Btn{Label: h.LinkText, Href: h.Href}
 	}
