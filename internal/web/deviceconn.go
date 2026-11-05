@@ -345,10 +345,12 @@ const silentOnOurBroker = 2 * time.Hour
 // on our broker (any more); one that does not answer HTTP may simply be switched off, so it keeps
 // whatever it had.
 //
-// Known limit (accepted, #580): the health tracker counts a retained "Online" LWT replayed at
-// startup as a message, so right after a TasmoFleet restart a device that moved away still
-// reads as heard, and the hint takes up to silentOnOurBroker to appear. Telling the replay
-// apart would need a change in package health.
+// Known limits (accepted, #580): the health tracker counts a retained "Online" LWT as a message
+// whenever the broker replays it, at startup and after every reconnect (clean session), so then
+// a device that moved away still reads as heard and the hint takes up to silentOnOurBroker to
+// appear; telling the replay apart would need a change in package health. A device on our
+// broker that sends nothing for longer (TelePeriod 0) and names it by an address the matcher
+// cannot resolve to ours (a Docker service name, a second interface) gets the hint too.
 func heardOnOurBroker(d model.Device, hl model.Health, httpOK bool, now time.Time) bool {
 	if !hl.SeenMQTT.IsZero() && now.Sub(hl.SeenMQTT) < silentOnOurBroker {
 		return true
@@ -363,9 +365,10 @@ func heardOnOurBroker(d model.Device, hl model.Health, httpOK bool, now time.Tim
 // (#441): it will not show up live. It answers only when TasmoFleet has a broker (the live MQTT
 // switch is not "disabled": the matcher in Deps.MQTTBroker is never nil and matches nothing once
 // MQTT is off), the device names a broker host that is not ours, and it is not on our broker
-// (heardOnOurBroker). Web only: the transport verdict (SAFETY) is unchanged.
+// (heardOnOurBroker; silence there counts only while TasmoFleet is connected to its broker, since
+// an outage of our own silences every device). Web only: the transport verdict (SAFETY) is unchanged.
 func (h *handler) otherBrokerRow(d model.Device, hl model.Health, httpOK bool, now time.Time) (pathRow, bool) {
-	if h.d.MQTT == nil || h.d.MQTT() == "disabled" || h.d.MQTTBroker == nil || d.MQTT == model.MQTTNone || d.MQTTHost == "" || heardOnOurBroker(d, hl, httpOK, now) {
+	if h.d.MQTT == nil || h.d.MQTT() == "disabled" || h.d.MQTTBroker == nil || d.MQTT == model.MQTTNone || d.MQTTHost == "" || heardOnOurBroker(d, hl, httpOK && h.d.MQTT() == "connected", now) {
 		return pathRow{}, false
 	}
 	port := d.MQTTPort

@@ -287,6 +287,16 @@ func TestOtherBrokerHintOnlyOnARealMismatch(t *testing.T) {
 		{"MQTT switched off at runtime", other, "disabled", false, model.Health{}, true, false},
 		{"same broker by another name", other, "connected", true, model.Health{}, true, false},
 		{"device has no MQTT host", model.Device{}, "connected", false, model.Health{}, true, false},
+		{"MQTT off on the device (SetOption3 0) with a stored host", model.Device{MQTT: model.MQTTNone, MQTTHost: "mqtt.other.internal", MQTTPort: 1884}, "connected", false, model.Health{}, true, false},
+		// Absolute times, so a changed window fails here: it must cover the slowest TelePeriod
+		// (3600 s) and end by the 2 hours the CHANGELOG names. Silence counts only while TasmoFleet
+		// is connected to its broker: during our own outage every device is silent.
+		{"TelePeriod 3600: last message 90 minutes ago", model.Device{MQTT: model.MQTTOurs, MQTTHost: other.MQTTHost, MQTTPort: 1884},
+			"connected", false, model.Health{SeenMQTT: now0.Add(-90 * time.Minute), LWT: "Online"}, true, false},
+		{"silent just over 2 hours, answers HTTP", model.Device{MQTT: model.MQTTOurs, MQTTHost: other.MQTTHost, MQTTPort: 1884},
+			"connected", false, model.Health{SeenMQTT: now0.Add(-125 * time.Minute), LWT: "Online"}, true, true},
+		{"was on our broker, silent for days, but our connection is down", model.Device{MQTT: model.MQTTOurs, MQTTHost: other.MQTTHost, MQTTPort: 1884},
+			"disconnected", false, model.Health{SeenMQTT: now0.Add(-72 * time.Hour), LWT: "Online"}, true, false},
 		// #580: "heard" is a recency, not a flag. The stored "ours" state and a retained LWT
 		// outlive a broker move, so only fresh traffic on our broker silences the hint.
 		{"never heard, HTTP-only device", other, "connected", false, model.Health{}, true, true},
@@ -342,7 +352,7 @@ func TestOverviewPageShowsTheOtherBrokerHint(t *testing.T) {
 	}{{"mismatch", "connected", true}, {"MQTT off", "disabled", false}} {
 		t.Run(tc.name, func(t *testing.T) {
 			e := setupWith(t, func(d *Deps) {
-				d.Inventory.(*fakeInv).devs[1] = model.Device{ID: 1, Name: "kitchen", Address: "10.0.0.1", MQTTHost: "mqtt.other.internal", MQTTPort: 1883,
+				d.Inventory.(*fakeInv).devs[1] = model.Device{ID: 1, Name: "kitchen", Address: "10.0.0.1", MQTT: model.MQTTOurs, MQTTHost: "mqtt.other.internal", MQTTPort: 1883,
 					Identity: model.Identity{Family: model.ChipESP8266, Version: "16.0.0", Variant: "tasmota"}}
 				d.MQTT = func() string { return tc.mqtt }
 				d.MQTTBroker = fakeBroker{}
@@ -353,6 +363,12 @@ func TestOverviewPageShowsTheOtherBrokerHint(t *testing.T) {
 			_, body := e.do(t, "GET", "/devices/1", "admin", nil)
 			if got := strings.Contains(body, "Other broker"); got != tc.want {
 				t.Fatalf("Other broker shown = %v, want %v", got, tc.want)
+			}
+			if got := strings.Contains(body, "MQTT on another broker"); got != tc.want {
+				t.Fatalf("tile names the other broker = %v, want %v", got, tc.want)
+			}
+			if got := strings.Contains(body, "This device does not report to TasmoFleet"); got != tc.want {
+				t.Fatalf("sensor note names the other broker = %v, want %v", got, tc.want)
 			}
 			if strings.Contains(body, "<dt>MQTT broker</dt>") {
 				t.Fatal("the Connection card lists the MQTT broker again")
