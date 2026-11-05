@@ -86,6 +86,14 @@ func (h *handler) dashboard(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	if s.HasBackups && h.d.BackupFleet != nil && h.d.SysConfig != nil {
+		s.BackupPage, s.Now = true, h.d.Clock.Now()
+		if run, ok, err := h.d.BackupFleet.LastRun(r.Context()); err != nil {
+			h.log.Warn("dashboard: last backup run", "err", err)
+		} else if ok {
+			s.BackupRun = &run
+		}
+	}
 	var txs []txView
 	if h.d.Jobs != nil {
 		// Enough jobs to cover the last few transactions, however many devices each has.
@@ -182,9 +190,20 @@ func dashTiles(base string, s fleetSummary) []ui.StatTileData {
 		tiles = append(tiles, pol)
 	}
 	if s.HasBackups {
-		// Accent, never warn: a device that never answered also has no backup, and the tile does
-		// not tell it from a failed one (#438; the skipped-is-not-failed rule is #409).
-		tiles = append(tiles, ui.StatTileData{Tone: ui.ToneAccent, Label: "No backup", Value: itoa(s.NoBackup), Hint: "never backed up", Href: chip(chipNoBackup)})
+		// Accent, warn only when the last scheduled run really failed for a device: a device that never
+		// answered also has no backup, and a skipped one is not a failure (#438, #409).
+		tile := ui.StatTileData{Tone: ui.ToneAccent, Label: "No backup", Value: itoa(s.NoBackup), Hint: "never backed up", Href: chip(chipNoBackup)}
+		if s.BackupPage {
+			tile.Href = base + fleetPath + "?filter=" + fleetNone
+		}
+		if r := s.BackupRun; r != nil {
+			tile.Hint = "Last run " + ui.StampDayText(s.Now, r.StartedAt)
+			if r.Failed > 0 {
+				tile.Hint += " · " + itoa(r.Failed) + " failed"
+				tile.Tone = ui.ToneWarn
+			}
+		}
+		tiles = append(tiles, tile)
 	}
 	if s.HasDiscovery {
 		hint := "None waiting"

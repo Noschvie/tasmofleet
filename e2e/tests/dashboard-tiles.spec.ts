@@ -80,7 +80,7 @@ for (const tile of tiles) {
   });
 }
 
-// #438: the "No backup" tile counts what the list's No backup chip shows, links to it, and follows
+// #438, #409: the "No backup" tile counts what the Backups page's No backup filter shows, links to it, and follows
 // a backup that is taken while the dashboard is open (no reload).
 test("the No backup tile opens the chip and drops when a backup is taken, without a reload", async ({
   page,
@@ -92,7 +92,7 @@ test("the No backup tile opens the chip and drops when a backup is taken, withou
   await page.goto(app.url + "/");
   const tile = page.locator("a.stat-tile").filter({ hasText: "No backup" });
   await expect(tile.locator(".stat-value")).toHaveText(String(total));
-  await expect(tile).toHaveAttribute("href", /\/devices\?chip=nobackup$/);
+  await expect(tile).toHaveAttribute("href", /\/devices\/backups\?filter=none$/);
 
   await page.getByRole("link", { name: "Devices", exact: true }).first().click();
   await page.getByRole("link", { name: "plug-4m", exact: true }).click();
@@ -122,6 +122,6 @@ test("the No backup tile opens the chip and drops when a backup is taken, withou
   expect(heard, "the dashboard heard the backup event").toBeGreaterThan(0);
 
   await tile.click();
-  await expect(page).toHaveURL(/\/devices\?chip=nobackup/);
-  await expect(page.locator("table[data-table=devices] tbody tr[data-id]")).toHaveCount(total - 1);
+  await expect(page).toHaveURL(/\/devices\/backups\?filter=none/);
+  await expect(page.locator(".bk-table tbody tr")).toHaveCount(total - 1);
 });

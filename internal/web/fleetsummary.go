@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"strconv"
+	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/discovery"
 	"github.com/nofuturekid/tasmofleet/internal/firmware"
@@ -94,6 +95,11 @@ type fleetSummary struct {
 	// known. Only the dashboard sets them (#438).
 	HasBackups bool
 	NoBackup   int
+	// BackupPage: Devices -> Backups exists, so the tile links there; BackupRun is the last scheduled
+	// run (nil without one) and Now the time its hint is worded against (#409).
+	BackupPage bool
+	BackupRun  *model.BackupRun
+	Now        time.Time
 }
 
 // fleetFacts reads the cached feed and the policy report. Neither talks to a

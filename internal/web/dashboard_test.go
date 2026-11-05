@@ -453,3 +453,37 @@ func TestDashboardNoBackupTileMatchesTheChip(t *testing.T) {
 		t.Error("tile shown without a backup service that reports usage")
 	}
 }
+
+// Why (#409, MOCK-409 decision 2): once the Backups page exists the tile opens it narrowed to the
+// devices without a backup, says when the last scheduled run was, and turns warn only when that run
+// really failed for some device. Skipped devices (offline, never answered) stay calm, as promised to
+// the reporter of #438; without a stored run it keeps the old hint.
+func TestDashboardNoBackupTileLinksToTheBackupsPage(t *testing.T) {
+	tile := func(run *model.BackupRun) (href, tone, hint string) {
+		t.Helper()
+		e, _, _, _ := sysEnvFull(t, true, func(d *Deps) {
+			d.Backups = usageBackups{Service: d.Backups, usage: []store.BackupUsage{{Device: 1, Runs: 2}, {Device: 2}}}
+			d.BackupFleet = &fakeFleet{run: run}
+		})
+		_, body := e.do(t, "GET", "/", "admin", nil)
+		tiles := strings.ReplaceAll(between(body, `<div class="stat-grid">`, `<svg class="health-bar"`), "</span> <span", "</span><span")
+		m := regexp.MustCompile(`<a class="stat-tile" href="([^"]*)"><span class="stat-label"><span class="sdot-dot (\S+)" aria-hidden="true"></span>No backup</span><span class="stat-value">(\d+)</span><span class="stat-hint">([^<]*)</span></a>`).FindStringSubmatch(tiles)
+		if m == nil {
+			t.Fatalf("no No backup tile in %s", tiles)
+		}
+		return m[1], m[2], m[4]
+	}
+	now := time.Now()
+	href, tone, hint := tile(&model.BackupRun{StartedAt: now, FinishedAt: now, Completed: true, OK: 3, Failed: 2, Skipped: 1, Tried: 5})
+	if href != "/tf/devices/backups?filter=none" || !strings.HasPrefix(hint, "Last run ") || !strings.HasSuffix(hint, " · 2 failed") || !strings.Contains(tone, "warn") {
+		t.Errorf("failed run: href %q tone %q hint %q", href, tone, hint)
+	}
+	_, tone, hint = tile(&model.BackupRun{StartedAt: now, FinishedAt: now, Completed: true, OK: 3, Skipped: 4, Tried: 3})
+	if strings.Contains(hint, "failed") || !strings.HasPrefix(hint, "Last run ") || strings.Contains(tone, "warn") || !strings.Contains(tone, "accent") {
+		t.Errorf("skipped only must stay accent: tone %q hint %q", tone, hint)
+	}
+	_, tone, hint = tile(nil)
+	if hint != "never backed up" || !strings.Contains(tone, "accent") {
+		t.Errorf("no run yet: tone %q hint %q", tone, hint)
+	}
+}
