@@ -18,6 +18,7 @@ import (
 	goruntime "runtime"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -145,9 +146,9 @@ type runtime struct {
 	authSvc         *auth.Service
 	pages           *web.Pages // sign-in and account pages; Handler attaches the app shell
 	fwUp            atomic.Bool
-	fwSource        string // where releases come from, for the firmware page (sourceText)
-	fwFeed          string // its short name
-	bgWG            sync.WaitGroup
+	fwSource        string         // where releases come from, for the firmware page (sourceText)
+	fwFeed          string         // its short name
+	bgWG            sync.WaitGroup // every goBG task; run waits for it on every exit path, before the store closes
 	bgContext       context.Context
 	restartAsks     *restartAsks      // restarts TasmoFleet asked for: not a fault (#325)
 	brokerHost      *brokerHostReader // re-reads the stored broker host (#598)
@@ -159,7 +160,14 @@ type runtime struct {
 func (a *runtime) run(ctx context.Context) error {
 	cfg, svc := a.cfg, a.svc
 	bg, cancelBG := context.WithCancel(ctx)
-	defer cancelBG()
+	// Every exit path, the early error returns included, stops the background tasks and waits for
+	// them before Run closes the store: health, MQTT and identity goroutines still read and write it.
+	// The normal path below does the same before it drains the notifications; a second Wait returns
+	// at once. Tasks started with goBG must not be started once this Wait has begun.
+	defer func() {
+		cancelBG()
+		a.bgWG.Wait()
+	}()
 	a.bgContext = bg
 	a.restartAsks = newRestartAsks(time.Now)
 	a.backupRun = newScheduledRun(svc.Hub)
@@ -241,8 +249,15 @@ func (a *runtime) run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// Server.Shutdown does not cancel the contexts of requests in flight, and an event stream
+	// (SSE) only ends with its request context: without this an open browser tab would hold the
+	// stop for the whole grace period and make it fail (#497). Only event streams are cut at
+	// stop; every other request keeps the grace period (a Settings save sends one command per
+	// field on its request context and must not be stopped half way).
+	streamCtx, stopStreams := context.WithCancel(context.WithoutCancel(ctx))
+	defer stopStreams()
 	ui := &http.Server{
-		Addr: cfg.Listen, Handler: handler, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, IdleTimeout: 2 * time.Minute,
+		Addr: cfg.Listen, Handler: endStreamsOnStop(streamCtx, handler), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, IdleTimeout: 2 * time.Minute,
 		TLSConfig: tlsCfg,
 	}
 	uiLn, err := listen(ctx, cfg.Listen)
@@ -288,6 +303,7 @@ func (a *runtime) run(ctx context.Context) error {
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownGrace)
 	defer cancel()
+	stopStreams()
 	err = ui.Shutdown(shutdownCtx)
 	if fw != nil {
 		err = errors.Join(err, fw.Shutdown(shutdownCtx))
@@ -296,6 +312,21 @@ func (a *runtime) run(ctx context.Context) error {
 	a.bgWG.Wait()
 	a.drainNotifications()
 	return errors.Join(runErr, err)
+}
+
+// endStreamsOnStop cancels the context of every event stream (Accept: text/event-stream, what
+// EventSource sends) once stop is done; other requests are left alone.
+func endStreamsOnStop(stop context.Context, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.Header.Get("Accept"), "text/event-stream") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		ctx, cancel := context.WithCancel(r.Context())
+		defer cancel()
+		defer context.AfterFunc(stop, cancel)()
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 // healthDeps is what the health tracker is built from. Its restart history goes through bootWatch, so
