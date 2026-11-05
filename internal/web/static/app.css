@@ -15713,8 +15713,9 @@ details.devcard > summary {
    browser's. The script is deferred, so the browser can draw a frame before it runs: the unpainted time is
    hidden (it keeps its width, so nothing moves) until time.js has handled it and set data-painted, also where
    it keeps the server's text. If time.js never runs, the animation shows the server's text after one second;
-   without JavaScript noscript.css shows it at once. */
-time[data-ts]:not([data-painted]) {
+   without JavaScript noscript.css shows it at once. A data-ts="title" time only gets a title, its text is never
+   rewritten, so it is never hidden. */
+time[data-ts]:not([data-painted]):not([data-ts="title"]) {
   visibility: hidden;
   animation: tf-time-reveal 0s linear 1s forwards;
 }

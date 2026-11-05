@@ -204,7 +204,7 @@ async function browserPage(
 
 test(
   "switching the Online and All chips never draws a time in the server's format",
-  { tag: "@core" },
+  { tag: "@full" },
   async ({ browser }) => {
     const { ctx, page } = await browserPage(browser);
     await installProbe(page);
@@ -355,5 +355,27 @@ test("when time.js never loads, the server's text shows after a moment", async (
   expect(await t.textContent()).toBe(
     iso.slice(0, 10) + " " + iso.slice(11, 19),
   );
+  await ctx.close();
+});
+
+// A data-ts="title" time only gets a title; time.js never rewrites its text, so hiding it until painted would
+// only make the server's (final) text invisible for no reason. An ordinary unpainted time is hidden.
+test("a title-only time is never hidden, an unpainted time is", async ({
+  browser,
+}) => {
+  const { ctx, page } = await browserPage(browser);
+  await page.goto(app.url + "/audit");
+  const seen = await page.evaluate(() => {
+    const mk = (key: string) => {
+      const el = document.createElement("time");
+      el.setAttribute("datetime", "2026-03-04T22:15:09Z");
+      el.setAttribute("data-ts", key);
+      el.textContent = "SERVER-TEXT";
+      document.body.appendChild(el);
+      return el.checkVisibility({ visibilityProperty: true });
+    };
+    return { title: mk("title"), datetime: mk("datetime-s") };
+  });
+  expect(seen).toEqual({ title: true, datetime: false });
   await ctx.close();
 });

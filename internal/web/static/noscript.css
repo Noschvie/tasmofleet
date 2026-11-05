@@ -1,6 +1,6 @@
-/* Loaded from <noscript> only: without JavaScript nothing rewrites the times, so the server's text shows at
+/* Loaded from <noscript> only (same selector as app.css, so it wins by order, not by specificity): without JavaScript nothing rewrites the times, so the server's text shows at
    once (app.css hides an unpainted <time data-ts> until time.js has run; #635). */
-time[data-ts]:not([data-painted]) {
+time[data-ts]:not([data-painted]):not([data-ts="title"]) {
   visibility: visible;
   animation: none;
 }
