@@ -98,8 +98,9 @@ const exempt: Exempt[] = [
 
 // Not measured: the narrow single-form and confirmation pages other than device edit (device delete,
 // ui.ConfirmPage, add user), sign-in and first-run setup, error pages, states that need data the devenv
-// fleet does not have (an empty fleet, a drift view without a snapshot), the phone and tablet widths
-// (card-stacks.spec.ts guards the stacks there) and pages of other roles.
+// fleet does not have (an empty fleet, the Replace preview, which needs a spare board of the same chip
+// family and is added with the #419 device-pages conversion), Drift (a table without a card), the phone
+// and tablet widths (card-stacks.spec.ts guards the stacks there) and pages of other roles.
 const tabs = ["general", "network", "mqtt", "discovery", "backups", "notifications", "firmware", "signin", "advanced"];
 // [name, path]: path is a function where it depends on the seeded fleet
 const pages: [string, () => string][] = [
