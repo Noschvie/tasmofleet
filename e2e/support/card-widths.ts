@@ -79,13 +79,16 @@ export async function measureCards(page: Page): Promise<PageWidth> {
         rg.selectNodeContents(n);
         for (const q of rg.getClientRects()) if (q.width > 0) ink = Math.max(ink, q.right);
       }
-      // a list in columns: a container whose visible children are equally wide and start at two or more left edges
+      // a list in columns: a container whose visible children are equally wide and sit in two or more
+      // columns and two or more rows (one row of equal cells is a table row, not a list in columns)
       const multi = [...c.querySelectorAll("*")].some((e) => {
         const kids = [...e.children].filter(vis);
         if (kids.length < 4) return false;
         const rects = kids.map((k) => k.getBoundingClientRect());
         const w0 = rects[0].width;
-        return rects.every((q) => Math.abs(q.width - w0) <= 2) && new Set(rects.map((q) => Math.round(q.left))).size >= 2;
+        const cols = new Set(rects.map((q) => Math.round(q.left))).size;
+        const rows = new Set(rects.map((q) => Math.round(q.top))).size;
+        return rects.every((q) => Math.abs(q.width - w0) <= 2) && cols >= 2 && rows >= 2;
       });
       // max-content: how wide the card wants to be when nothing stretches it
       const old = [el.style.width, el.style.maxWidth, el.style.justifySelf, el.style.alignSelf];

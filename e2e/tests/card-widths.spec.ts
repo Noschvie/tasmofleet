@@ -41,10 +41,10 @@ test.beforeAll(async ({ browser }) => {
     await p.goto(app.url + "/devices");
     const hrefOf = async (n: string) => (await p.getByRole("link", { name: n, exact: true }).first().getAttribute("href"))!.replace(app.url, "");
     lamp = await hrefOf("lamp-1m");
-    // a backup, so the Backups and Drift pages have content
+    // a backup, so the Backups page has content
     await p.goto(app.url + lamp);
     await p.getByRole("button", { name: "Back up", exact: true }).click();
-    await expect(p.getByText(/backed up|Backup (taken|saved)/i).first()).toBeVisible({ timeout: 15_000 }).catch(() => p.waitForTimeout(3000));
+    await expect(p.getByText(/backed up|Backup (taken|saved)/i).first()).toBeVisible({ timeout: 30_000 });
     await p.goto(app.url + "/transactions");
     txn = (await p.locator("a[href*='/transactions/']").first().getAttribute("href"))!.replace(app.url, "");
   } finally {
@@ -56,9 +56,10 @@ test.afterAll(async () => {
   await env?.stop();
 });
 
-type Exempt = { page: string; rule: "use" | "span"; card?: string; borderline?: boolean };
+type Exempt = { page: string; rule: "use" | "span" | "cap"; card?: string; borderline?: boolean };
 const use = (page: string, card: string, borderline = false): Exempt => ({ page, rule: "use", card, borderline });
 const span = (page: string): Exempt => ({ page, rule: "span" });
+const cap = (page: string): Exempt => ({ page, rule: "cap" }); // spans 1204 px at 1280 but not the 1576 px at 1920
 
 const exempt: Exempt[] = [
   // Deliberate exceptions. The card is wide for a reason the rule does not know.
@@ -66,6 +67,7 @@ const exempt: Exempt[] = [
   use("device settings", "devform-foot"), // the save bar under the settings columns: one line
   use("system settings advanced", "sys-danger"), // the "Reset all settings" strip: one line
   span("policy io"), // import/export stays a narrow card
+  use("policy rule", "History of this rule"), // a collapsed <details>: one line until opened
   use("transactions", "History", true), // 61 % today (#419 decision): a hair under the line must not fail the guard
 
   // Single-form and confirmation pages stay narrow (decision of 2026-11-05).
@@ -74,11 +76,18 @@ const exempt: Exempt[] = [
   // #419-U: Updates and Firmware pages, not converted yet. WP-419U deletes this block.
   span("firmware"),
 
-  // #419-S: System pages, not converted yet. WP-419S deletes this block.
+  // #419-S: System pages and Settings tabs, not converted yet. WP-419S deletes this block.
   use("users", "Users"),
   use("about", "Version"),
   span("whats new"),
-  span("system settings general"), // the Settings 1240 px cap (decision 9) leaves two narrow stacks
+  cap("system settings network"), // the Settings 1240 px cap (decision 9), visible at 1920 only
+  cap("system settings mqtt"),
+  cap("system settings backups"),
+  cap("system settings notifications"),
+  cap("system settings firmware"),
+  cap("system settings signin"),
+  cap("system snapshots"),
+  span("system settings general"), // two cards in the three-column Settings grid: the third column stays empty
   span("system settings discovery"),
 
   // #419-D: device pages, not converted yet. WP-419D deletes this block.
@@ -87,6 +96,10 @@ const exempt: Exempt[] = [
 ];
 
 
+// Not measured: the narrow single-form and confirmation pages other than device edit (device delete,
+// ui.ConfirmPage, add user), sign-in and first-run setup, error pages, states that need data the devenv
+// fleet does not have (an empty fleet, a drift view without a snapshot), the phone and tablet widths
+// (card-stacks.spec.ts guards the stacks there) and pages of other roles.
 const tabs = ["general", "network", "mqtt", "discovery", "backups", "notifications", "firmware", "signin", "advanced"];
 // [name, path]: path is a function where it depends on the seeded fleet
 const pages: [string, () => string][] = [
@@ -99,12 +112,16 @@ const pages: [string, () => string][] = [
   ["policy rule new", () => "/policy/rules/new"],
   ["policy history", () => "/policy/history"],
   ["policy io", () => "/policy/io"],
+  ["policy rule", () => "/policy/rules/r1"],
+  ["policy templates", () => "/policy/templates"],
+  ["policy deviations", () => "/policy/deviations"],
   ["updates new", () => "/updates/new"],
   ["transactions", () => "/transactions"],
   ["transaction detail", () => txn],
   ["firmware", () => "/firmware"],
   ["firmware release", () => `/firmware/releases/${env.vars.DEVENV_FW_VERSION}`],
   ...tabs.map((t): [string, () => string] => [`system settings ${t}`, () => `/settings/system?tab=${t}`]),
+  ["system snapshots", () => "/settings/system/snapshots"],
   ["audit", () => "/audit?since=all"],
   ["users", () => "/users"],
   ["about", () => "/about"],
@@ -121,8 +138,21 @@ for (const [name, path] of pages) {
     const m = await measureCards(page);
     expect(m.cards.length, "the page has cards").toBeGreaterThan(0);
     const found: Exempt[] = [];
+    let capSpan = "";
     for (const c of m.cards) if (c.fullWidth && c.usePct < 60) found.push(use(name, c.card));
     if (m.span < m.area * 0.95) found.push(span(name));
+    else {
+      // decision 9: on a large screen too the page fills the capped content width (1576 px at 1920),
+      // so a max-width below it (the Settings 1240 px cap) shows here and nowhere at 1280
+      await page.setViewportSize({ width: 1920, height: 900 });
+      await page.goto(app.url + path());
+      await page.waitForTimeout(800);
+      const w = await measureCards(page);
+      if (w.span < w.area * 0.95) {
+        found.push(cap(name));
+        capSpan = `page spans ${w.span} of ${w.area} px at 1920`;
+      }
+    }
     const key = (e: Exempt) => `${e.page}|${e.rule}|${e.card ?? ""}`;
     if (REPORT) {
       console.log("FINDINGS", name, JSON.stringify({ area: m.area, left: m.left, span: m.span, found: found.map(key), cards: m.cards.map((c) => `${c.card} ${c.width}px ${c.usePct}%${c.multiColumn ? " (columns)" : ""}`) }));
@@ -131,9 +161,14 @@ for (const [name, path] of pages) {
     const exempted = new Set(exempt.filter((e) => e.page === name).map(key));
     const unlisted = found.filter((e) => !exempted.has(key(e)));
     expect(
-      unlisted.map((e) => (e.rule === "span" ? `page spans ${m.span} of ${m.area} px` : `card "${e.card}" is full width but uses under 60 %`)),
+      unlisted.map((e) => (e.rule === "span" ? `page spans ${m.span} of ${m.area} px` : e.rule === "cap" ? capSpan : `card "${e.card}" is full width but uses under 60 %`)),
       `${name}: breaks the card-width rule; convert it or add a reason to the exemption list`,
     ).toEqual([]);
+    // a borderline entry may pass or fail the 60 % line, but not fall far below it
+    for (const e of exempt.filter((x) => x.page === name && x.borderline)) {
+      const c = m.cards.find((x) => x.card === e.card);
+      expect(c?.usePct ?? 100, `${name}: "${e.card}" is borderline, not allowed under 50 %`).toBeGreaterThanOrEqual(50);
+    }
     const borderline = new Set(exempt.filter((e) => e.page === name && e.borderline).map(key));
     const stale = [...exempted].filter((k) => !borderline.has(k) && !found.some((e) => key(e) === k));
     expect(stale, `${name}: exemption entries that no longer apply; delete them`).toEqual([]);
@@ -156,6 +191,15 @@ test.describe("card use metric", () => {
     expect(m.cards[0]).toMatchObject({ fullWidth: true, multiColumn: true });
     expect(m.cards[0].maxContentPct, "max-content is one column").toBeLessThan(60);
     expect(m.cards[0].usePct).toBeGreaterThanOrEqual(60);
+  });
+  test("one row of equal cells is not a list in columns", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.setContent(`<style>body{margin:0;background:#fff} main{display:block;padding:0} .card{border:1px solid #888;border-radius:10px;padding:16px;background:#fafafa}
+      .row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}</style>
+      <main><div class="card"><h2>Summary</h2><div class="row"><span>Size</span><span>Date</span><span>Hash</span><span>Used</span></div></div></main>`);
+    const m = await measureCards(page);
+    expect(m.cards[0]).toMatchObject({ fullWidth: true, multiColumn: false });
+    expect(m.cards[0].usePct, "four short words stretched across the card use little of it").toBeLessThan(60);
   });
   test("a list in one column in a full-width card is unused width", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
