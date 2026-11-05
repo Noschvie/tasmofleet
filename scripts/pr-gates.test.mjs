@@ -23,7 +23,12 @@ import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseDiff } from "./diff-parse.mjs";
-import { parseProfile, changedLines, check } from "./diff-cover.mjs";
+import {
+  parseProfile,
+  parseCompiled,
+  changedLines,
+  check,
+} from "./diff-cover.mjs";
 import { planRevert, verdict, optOut, topLevelFuncs } from "./revert-check.mjs";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -66,8 +71,9 @@ test("parseDiff: added line ranges, new and deleted files, and a removed line th
 });
 
 test("parseProfile keeps the highest count of a block that several test binaries report", () => {
+  // the binary that ran the block comes first: a later "0" for the same block must not hide it
   const p = parseProfile(
-    "mode: set\nm/x/a.go:1.1,3.2 1 0\nm/x/a.go:1.1,3.2 1 1\nm/x/a.go:5.1,6.2 1 0\n",
+    "mode: set\nm/x/a.go:1.1,3.2 1 1\nm/x/a.go:1.1,3.2 1 0\nm/x/a.go:5.1,6.2 1 0\n",
     "m",
   );
   assert.deepEqual(
@@ -104,6 +110,24 @@ test("check: an else branch that never ran fails its line although the if body e
 test("check: a changed file the profile does not know is uncovered, not silently fine", () => {
   const r = check(new Map([["x/new.go", [1]]]), new Map());
   assert.equal(r.uncovered.length, 1);
+});
+
+test("check: a compiled file without any block holds no statement (doc.go, types and constants) and is not checked", () => {
+  // internal/transport/facts.go and internal/cmdpolicy/doc.go are such files: a new field or a comment
+  // there has nothing to execute, and diff coverage has no opt-out, so flagging it would block the PR
+  const compiled = parseCompiled("m/x/doc.go\nm/x/a.go\n", "m");
+  const r = check(
+    new Map([
+      ["x/doc.go", [3, 4]],
+      ["x/tagged.go", [5]], // not compiled (a build tag): nothing proves a test ran it
+    ]),
+    parseProfile("mode: set\nm/x/a.go:1.1,3.2 1 1\n", "m"),
+    compiled,
+  );
+  assert.deepEqual(r.uncovered, [
+    "x/tagged.go:5 (no test binary compiled this file: a build tag?)",
+  ]);
+  assert.equal(r.ignored, 2);
 });
 
 test("changedLines: only non-test Go files directly in a SAFETY directory", () => {
@@ -204,6 +228,36 @@ test("verdict: failing test or build failure passes; all green fails; a test tha
   assert.equal(verdict(plan, ev({ Action: "pass" }), "m").status, "error"); // "no tests to run"
 });
 
+test("verdict: a selected test that skipped (no decoder, quarantine) proves nothing: an error, never 'passes either way'", () => {
+  const plan = { prod: [], runs: [{ dir: "p", names: ["TestA", "TestB"] }] };
+  const ev = (...e) => e.map((x) => ({ Package: "m/p", ...x }));
+  const v = verdict(
+    plan,
+    ev(
+      { Test: "TestA", Action: "skip" },
+      { Test: "TestB", Action: "pass" },
+      { Action: "pass" },
+    ),
+    "m",
+  );
+  assert.equal(v.status, "error");
+  assert.deepEqual(v.runs[0].skipped, ["TestA"]);
+  assert.deepEqual(v.runs[0].passed, ["TestB"]);
+  // another changed test that fails without the change still decides it
+  assert.equal(
+    verdict(
+      plan,
+      ev(
+        { Test: "TestA", Action: "skip" },
+        { Test: "TestB", Action: "fail" },
+        { Action: "fail" },
+      ),
+      "m",
+    ).status,
+    "ok",
+  );
+});
+
 test("optOut: label, or a marker with a reason; the template's comment and a bare marker do not count", () => {
   assert.equal(
     optOut({ labels: [{ name: "no-revert-check" }], body: "" }).source,
@@ -220,6 +274,11 @@ test("optOut: label, or a marker with a reason; the template's comment and a bar
   assert.equal(optOut({ body: "revert-check: skip" }), null);
   assert.equal(
     optOut({ body: "<!-- write revert-check: skip - <reason> -->" }),
+    null,
+  );
+  // the marker on a line of its own inside a template comment does not count either
+  assert.equal(
+    optOut({ body: "<!--\nrevert-check: skip - template example\n-->" }),
     null,
   );
   assert.equal(optOut({ body: "", labels: [] }), null);
@@ -378,6 +437,38 @@ test("diff-cover checks an untracked new file, and ignores a package outside SAF
   assert.match(out(r2), /no line of a SAFETY package changed/);
 });
 
+test("diff-cover passes a file of types and constants, and fails a file no test binary compiles", () => {
+  const root = toy();
+  put(
+    root,
+    "internal/ota/kinds.go",
+    'package ota\n\n// Kind of a job.\ntype Kind string\n\n// Kinds.\nconst (\n\tKindA Kind = "a"\n)\n',
+  );
+  let r = run(root, "tools/diff-cover.sh");
+  assert.equal(r.status, 0, out(r));
+  put(
+    root,
+    "internal/ota/never.go",
+    "//go:build tasmofleet_never\n\npackage ota\n\nfunc Never() int {\n\treturn 1\n}\n",
+  );
+  r = run(root, "tools/diff-cover.sh");
+  assert.equal(r.status, 1, out(r));
+  assert.match(out(r), /internal\/ota\/never\.go:6 \(no test binary compiled/);
+  assert.doesNotMatch(out(r), /kinds\.go/);
+});
+
+test("diff-cover counts the tests tagged integration (the ota engine is exercised by them)", () => {
+  const root = toy();
+  put(root, "internal/ota/ota.go", FIXED);
+  put(
+    root,
+    "internal/ota/below_integration_test.go",
+    '//go:build integration\n\npackage ota\n\nimport "testing"\n\nfunc TestClampBelowIntegration(t *testing.T) {\n\tif Clamp(-3, 5) != 0 {\n\t\tt.Fatal("below zero")\n\t}\n}\n',
+  );
+  const r = run(root, "tools/diff-cover.sh");
+  assert.equal(r.status, 0, out(r));
+});
+
 test("revert check passes for a fix whose test fails without it, and leaves the checkout alone", () => {
   const root = toy();
   put(root, "internal/ota/ota.go", FIXED);
@@ -399,6 +490,10 @@ func TestClampBelowZero(t *testing.T) {
   const r = run(root, "tools/revert-check.sh");
   assert.equal(r.status, 0, out(r));
   assert.match(out(r), /FAILS without the change: TestClampBelowZero/);
+  assert.match(
+    out(r),
+    /revert check passed: the changed tests fail without the production changes/,
+  );
   assert.equal(
     git(root, "status", "--short") +
       readFileSync(join(root, "internal/ota/ota.go"), "utf8"),
@@ -425,6 +520,46 @@ func TestClampInRange(t *testing.T) {
   assert.equal(r.status, 1, out(r));
   assert.match(out(r), /passes either way:\s+TestClampInRange/);
   assert.match(out(r), /revert-check: skip - <reason>/);
+});
+
+test("revert check reports a changed test that skips as skipped (it tests nothing), not as passing either way", () => {
+  const root = toy();
+  put(root, "internal/ota/ota.go", FIXED);
+  put(
+    root,
+    "internal/ota/ota_test.go",
+    OTA_TEST +
+      `
+func TestClampBelowZero(t *testing.T) {
+    t.Skip("DECODER_PATH not set")
+}
+`,
+  );
+  const r = run(root, "tools/revert-check.sh");
+  assert.equal(r.status, 2, out(r));
+  assert.match(out(r), /SKIPPED, tests nothing:\s+TestClampBelowZero/);
+  assert.doesNotMatch(out(r), /passes either way/);
+});
+
+test("revert check puts a renamed and fixed production file back under its old name (a move is a delete and an add)", () => {
+  const root = toy();
+  git(root, "mv", "internal/ota/ota.go", "internal/ota/clamp.go");
+  put(root, "internal/ota/clamp.go", FIXED);
+  put(
+    root,
+    "internal/ota/ota_test.go",
+    OTA_TEST +
+      `
+func TestClampBelowZero(t *testing.T) {
+    if Clamp(-3, 5) != 0 {
+        t.Fatal("below zero")
+    }
+}
+`,
+  );
+  const r = run(root, "tools/revert-check.sh");
+  assert.equal(r.status, 0, out(r));
+  assert.match(out(r), /FAILS without the change: TestClampBelowZero/);
 });
 
 test("revert check: the opt-out is stated in the output; a feature that does not build without it passes", () => {
@@ -464,6 +599,8 @@ func TestClampInRange(t *testing.T) {
   const r2 = run(root, "tools/revert-check.sh");
   assert.equal(r2.status, 0, out(r2));
   assert.match(out(r2), /fails \(build error, panic or timeout\)/);
+  // a reviewer must see that no test failed: the pass proves only that the tests use the new API
+  assert.match(out(r2), /passed only because the tests do not build/);
 });
 
 test("revert check has nothing to do for production-only or test-only changes", () => {

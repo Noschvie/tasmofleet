@@ -51,7 +51,7 @@ E2E_ARGS  ?=
 CHANGED_BASE ?= origin/main
 export CHANGED_BASE
 
-.PHONY: quick integration-guard shards-check-changed catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check release-pr-check changelog-title migration-guard migration-append-only changelog-notes clean tools
+.PHONY: quick integration-guard shards-check-changed catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race diff-cover revert-check test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check release-pr-check changelog-title migration-guard migration-append-only changelog-notes clean tools
 
 # golangci-lint runs staticcheck with its defaults (.golangci.yml), so check does not run it a second time;
 # the staticcheck target stays for single runs and CI. go vet stays: golangci-lint skips generated files,

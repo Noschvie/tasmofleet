@@ -201,7 +201,7 @@ for every line you added or changed in a non-test Go file of a SAFETY package th
 declarations and braces carry no code and are not checked. `make revert-check` copies the tree to a scratch directory, puts the production
 `.go` files you changed back to the merge base (files you added are removed, deleted ones restored), keeps the tests, and runs the tests you added or
 changed (the whole package when you changed a helper, a table or an import). At least one of them must fail, or the package must stop building
-(a feature whose tests use new API); a selected test that never ran is an error. The output lists every test that fails and every one that passes
+(a feature whose tests use new API); a selected test that never ran or skipped (no decoder, a quarantine) is an error. The output lists every test that fails and every one that passes
 either way. A PR that changes production code without any test is not stopped by it (diff coverage covers the SAFETY packages). **Opt-out** for a pure
 refactor or a feature where nothing should fail: a line `revert-check: skip - <reason>` in the PR body, or the label `no-revert-check`;
 the job reads both from the API when it runs, so after adding it re-run the job. The gate prints "SKIPPED" and the reason; locally
@@ -391,7 +391,7 @@ again before the fast-forward push; there is no other merge path. Never merge th
 button: the only method enabled there is rebase, and GitHub's rebase commits are unsigned, so
 the ruleset rejects them.
 `pr.yml` runs the FAST tier on every PR: a `changes` job detects docs-only PRs (heavy jobs
-skipped) PRs that touch a `SAFETY` package (race and diff coverage added), Go code (revert check added), and the final `required`
+skipped), PRs that touch a `SAFETY` package (race and diff coverage added) or Go code (revert check added), and the final `required`
 job passes only when every job that had to run passed; a skip counts only when the PR did
 not ask for that job; the link check, the migration guard and the release section guard must always succeed. No approvals are required (single maintainer). Release tags are still pushed
 directly, on a green commit of `main`.

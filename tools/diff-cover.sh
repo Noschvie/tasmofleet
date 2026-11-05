@@ -23,4 +23,8 @@ echo "diff-cover: changed SAFETY packages:" $pkgs
 list=$(for p in $pkgs; do echo "./$p"; done)
 # shellcheck disable=SC2086
 $NICE $GO test -tags=integration -count=1 -covermode=set -coverprofile="$tmp/cover.out" $list
-node scripts/diff-cover.mjs check --diff "$tmp/diff" --profile "$tmp/cover.out" --module "$($GO list -m)" --dirs "$dirs"
+# The files those test binaries compiled: one of them without a block in the profile holds no statement (a doc.go,
+# a file of types and constants); a changed file missing here (a build tag) stays uncovered.
+# shellcheck disable=SC2016,SC2086
+$GO list -tags=integration -f '{{$p := .ImportPath}}{{range .GoFiles}}{{$p}}/{{.}}{{"\n"}}{{end}}{{range .CgoFiles}}{{$p}}/{{.}}{{"\n"}}{{end}}' $list >"$tmp/compiled"
+node scripts/diff-cover.mjs check --diff "$tmp/diff" --profile "$tmp/cover.out" --compiled "$tmp/compiled" --module "$($GO list -m)" --dirs "$dirs"

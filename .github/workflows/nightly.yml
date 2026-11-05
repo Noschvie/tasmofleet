@@ -37,6 +37,10 @@ env:
 jobs:
   checks:
     name: checks
+    # pull-requests: read only because _checks.yml's revert-check job asks for it (see there); it does not run here.
+    permissions:
+      contents: read
+      pull-requests: read
     uses: ./.github/workflows/_checks.yml
     with:
       e2e: all

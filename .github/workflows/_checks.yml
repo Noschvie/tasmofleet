@@ -224,6 +224,8 @@ jobs:
   # The tests the PR adds or changes fail with its production Go changes reverted (make revert-check, #555).
   # A pure refactor or feature opts out with the label no-revert-check or a "revert-check: skip - <reason>" line
   # in the PR body; the script reads both from the API when it runs, so a re-run after the edit sees it.
+  # Every caller of this workflow grants pull-requests: read, not only pr.yml: GitHub refuses to start a run whose
+  # called workflow asks for more than its caller grants, even for a job that would be skipped.
   revert-check:
     name: revert check (tests fail without the change)
     if: inputs.revert_check

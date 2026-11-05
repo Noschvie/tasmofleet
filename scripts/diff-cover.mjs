@@ -4,13 +4,15 @@
 //
 //   node scripts/diff-cover.mjs packages --diff <file> --dirs <dir,dir,...>
 //        the SAFETY directories that have changed production lines, one per line
-//   node scripts/diff-cover.mjs check --diff <file> --profile <file> --module <path> --dirs <dir,...>
-//        exit 1 and one "file:line" per uncovered changed line
+//   node scripts/diff-cover.mjs check --diff <file> --profile <file> --compiled <file> --module <path> --dirs <dir,...>
+//        exit 1 and one "file:line" per uncovered changed line; --compiled lists the files the test binaries
+//        compiled ("go list" of the changed packages, import path + "/" + file, one per line)
 //
 // A changed line that no coverage block contains (comment, blank line, declaration, brace) has nothing to
 // execute and is not checked. A line is uncovered when a block that never ran starts on it, or when every
-// block that contains it never ran. A file the profile does not mention at all (build tag, no test binary
-// built it) counts as uncovered, because nothing proves a test ran it.
+// block that contains it never ran. A compiled file the profile does not mention holds no statement at all
+// (only declarations and comments, like a doc.go) and is not checked either. A file that was not compiled
+// (a build tag) counts as uncovered, because nothing proves a test ran it.
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import {
@@ -62,17 +64,32 @@ export function parseProfile(text, modulePath) {
   return files;
 }
 
+// `go list` output (import path + "/" + file per line) -> Set of module-relative paths, like the profile's.
+export function parseCompiled(text, modulePath) {
+  const prefix = modulePath + "/";
+  return new Set(
+    text
+      .split("\n")
+      .filter(Boolean)
+      .map((l) => (l.startsWith(prefix) ? l.slice(prefix.length) : l)),
+  );
+}
+
 // -> { uncovered: ["file:line"], checked: n, ignored: n }
-export function check(changed, profile) {
+export function check(changed, profile, compiled = new Set()) {
   const uncovered = [];
   let checked = 0;
   let ignored = 0;
   for (const [file, lines] of changed) {
     const blocks = profile.get(file);
+    if (!blocks && compiled.has(file)) {
+      ignored += lines.length; // compiled, but not one statement: declarations and comments only
+      continue;
+    }
     for (const l of lines) {
       if (!blocks) {
         uncovered.push(
-          `${file}:${l} (the coverprofile has no block of this file)`,
+          `${file}:${l} (no test binary compiled this file: a build tag?)`,
         );
         continue;
       }
@@ -113,7 +130,14 @@ function main(argv) {
       readFileSync(arg(rest, "--profile"), "utf8"),
       arg(rest, "--module"),
     );
-    const r = check(changed, profile);
+    const r = check(
+      changed,
+      profile,
+      parseCompiled(
+        readFileSync(arg(rest, "--compiled"), "utf8"),
+        arg(rest, "--module"),
+      ),
+    );
     console.log(
       `diff coverage: ${r.checked} changed executable line(s) checked in ${changed.size} file(s), ${r.ignored} changed line(s) without code (comments, declarations, braces) ignored`,
     );

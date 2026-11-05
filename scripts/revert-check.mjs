@@ -12,7 +12,8 @@
 // Rule (stated in the gate's output): at least one added or changed test has to fail with the production
 // changes reverted. A build failure counts as a failure: the tests use something the PR added, which is
 // what a feature does. Not every changed test must fail, because a regression pin may pass either way;
-// the output lists the ones that did. A selected test that never ran is an error, not a pass.
+// the output lists the ones that did. A selected test that never ran is an error, not a pass; one that skipped
+// (t.Skip: no decoder, a quarantine) ran no assertion and counts the same.
 import { readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import {
@@ -89,28 +90,41 @@ export function verdict(plan, events, modulePath) {
         ["pass", "fail", "skip"].includes(e.Action),
     );
     const failed = top.filter((e) => e.Action === "fail").map((e) => e.Test);
-    const ran = new Set(top.map((e) => e.Test));
+    // A skipped test ran no assertion: it proves nothing either way, so it does not count as run.
+    const skippedTests = top
+      .filter((e) => e.Action === "skip")
+      .map((e) => e.Test);
+    const ran = new Set(
+      top.filter((e) => e.Action !== "skip").map((e) => e.Test),
+    );
     const pkgFailed = evs.some((e) => !e.Test && e.Action === "fail");
     // The package failed without a failing test: it did not build (or panicked / timed out).
     const buildFailed = pkgFailed && failed.length === 0;
     const wanted = run.names ?? [...ran];
+    const skipped =
+      buildFailed || !run.names
+        ? []
+        : run.names.filter((n) => skippedTests.includes(n));
     const notRun = buildFailed
       ? []
       : run.names
-        ? run.names.filter((n) => !ran.has(n))
+        ? run.names.filter((n) => !ran.has(n) && !skipped.includes(n))
         : ran.size === 0
-          ? ["(no test at all)"]
+          ? ["(no test ran)"]
           : [];
     return {
       dir: run.dir,
       failed,
       passed: wanted.filter((n) => ran.has(n) && !failed.includes(n)),
       buildFailed,
+      skipped,
       notRun,
     };
   });
   const anyFail = runs.some((r) => r.failed.length > 0 || r.buildFailed);
-  const anyNotRun = runs.some((r) => r.notRun.length > 0);
+  const anyNotRun = runs.some(
+    (r) => r.notRun.length > 0 || r.skipped.length > 0,
+  );
   const status = anyFail ? "ok" : anyNotRun ? "error" : "fail";
   return { status, runs };
 }
@@ -181,17 +195,22 @@ function main(argv) {
         );
       for (const t of r.failed) console.log(`  FAILS without the change: ${t}`);
       for (const t of r.passed) console.log(`  passes either way:        ${t}`);
+      for (const t of r.skipped)
+        console.log(`  SKIPPED, tests nothing:   ${t}`);
       for (const t of r.notRun) console.log(`  DID NOT RUN:              ${t}`);
     }
     if (v.status === "ok") {
+      // A build failure alone shows that the tests use what the PR added, not that a test notices the change.
       console.log(
-        "revert check passed: the changed tests fail without the production changes",
+        v.runs.some((r) => r.failed.length > 0)
+          ? "revert check passed: the changed tests fail without the production changes"
+          : "revert check passed only because the tests do not build without the production changes (they use new API); no test was seen failing",
       );
       return 0;
     }
     if (v.status === "error") {
       console.log(
-        "revert check could not decide: a selected test did not run (a build tag, or the test was renamed). Fix that, or opt out with the PR-body line 'revert-check: skip - <reason>'.",
+        "revert check could not decide: a selected test did not run or skipped (a build tag, a t.Skip such as a missing decoder or a quarantine, or the test was renamed). Fix that, or opt out with the PR-body line 'revert-check: skip - <reason>'.",
       );
       return 2;
     }
