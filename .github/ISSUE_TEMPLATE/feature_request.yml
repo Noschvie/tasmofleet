@@ -1,0 +1,32 @@
+name: Feature request
+description: Suggest an improvement. Agreed ideas become issues; unsure ideas are better started in Discussions.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For open-ended ideas, [Discussions (Ideas)](https://github.com/nofuturekid/tasmofleet/discussions/categories/ideas) is the better start.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What would you like TasmoFleet to do?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Other ways you considered or work around it today.
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: Your setup if relevant (device types, how many, Unraid / Docker / Home Assistant app), links, mockups.

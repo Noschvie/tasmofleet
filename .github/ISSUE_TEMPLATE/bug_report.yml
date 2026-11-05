@@ -1,0 +1,71 @@
+name: Bug report
+description: Something in TasmoFleet does not work as expected.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. For questions or help with your setup, please use
+        [Discussions](https://github.com/nofuturekid/tasmofleet/discussions/categories/q-a).
+        Security problems go to the [private advisory form](https://github.com/nofuturekid/tasmofleet/security/advisories/new), not here.
+  - type: input
+    id: version
+    attributes:
+      label: TasmoFleet version
+      description: Shown in the page header and on the About page, for example `0.27.3`. An `edge` build reads like `0.27.3+edge (0123456789ab)`.
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How TasmoFleet runs
+      options:
+        - Unraid Community Applications template
+        - Docker / Compose
+        - Home Assistant app
+        - Other (describe below)
+    validations:
+      required: true
+  - type: dropdown
+    id: transport
+    attributes:
+      label: Transport
+      description: How TasmoFleet talks to the affected device.
+      options:
+        - HTTP only
+        - MQTT
+        - Both
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: device
+    attributes:
+      label: Affected device(s)
+      description: Chip family (ESP8266, ESP32, ESP32-S3, ...), Tasmota version and build (tasmota, tasmota32, minimal, safeboot, ...), and the module or template if relevant. Leave empty if no device is involved.
+      placeholder: "ESP32-C3, Tasmota 15.0.1 (tasmota32c3), Shelly Plus 1"
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. See ...
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Container or app log, and the device console if relevant. Remove passwords, tokens, MQTT credentials and addresses you do not want to share.
+      render: shell
+  - type: textarea
+    id: context
+    attributes:
+      label: Anything else
+      description: Screenshots, browser, how often it happens.
