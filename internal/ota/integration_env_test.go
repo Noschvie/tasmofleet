@@ -560,13 +560,6 @@ func (l *jobLog) peakBusy() int {
 	return peak
 }
 
-// storeDevices adapts the store to devicecmd.DeviceGetter.
-type storeDevices struct{ st *store.SQLite }
-
-func (s storeDevices) Get(ctx context.Context, id model.DeviceID) (model.Device, error) {
-	return s.st.GetDevice(ctx, id)
-}
-
 // auditLog records audit events in memory.
 type auditLog struct {
 	mu  sync.Mutex

@@ -564,9 +564,6 @@ func (e *Engine) previewDevice(ctx context.Context, d model.Device, r Request) P
 	it.Filename = p.sel.Filename
 	it.Delivery, it.DeliveryNote, it.ViaSafeboot = p.delivery, p.fallback, p.viaSafeboot
 	e.choosePath(ctx, d, r, p, &it)
-	if it.Decision == decisionRefuse {
-		return it
-	}
 	return it
 }
 

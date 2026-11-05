@@ -172,9 +172,8 @@ func TestSetOption0OffOverridesTheCapture(t *testing.T) {
 	eq(t, "ESP32 with SetOption0 forced off", d.Power(), false)
 }
 
-// Why: only a device with a light driver reports Dimmer/Color/CT in Status 11;
-// the engine uses that to restore lights and leave plain relays alone, so a
-// plain simulated device must not inherit the light state of a lamp capture.
+// Why: only a device with a light driver reports Dimmer/Color/CT in Status 11,
+// so a plain simulated device must not inherit the light state of a lamp capture.
 func TestOnlyLightsReportLightState(t *testing.T) {
 	t.Parallel()
 	f := newTestFleet(t, "", Extra{})

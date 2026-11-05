@@ -77,7 +77,7 @@ compliant" for the policy, a console or bulk command, a power toggle, a restart,
 settings edit. Each of these is recorded in the audit log.
 
 **TasmoFleet leaves the power state alone.** It does not read or switch relays around a firmware
-update. A device that loses its relay state when it reboots (the ESP8266 two-step update, an ESP32)
+update. A device that loses its relay state when it reboots (a light driver that switches itself off after the boot, an ESP32 without `SetOption0 1`)
 comes back as its own settings say. To have it come back as it was, set `SetOption0 1` (save
 the relay state), `PowerOnState 3` (keep the last state) and `SaveData 1` on the device; a policy
 rule can do that for the fleet (the "Restore power after an outage" template covers `PowerOnState 3`).

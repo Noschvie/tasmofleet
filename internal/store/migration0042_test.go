@@ -47,6 +47,9 @@ func TestMigration0042EndsPowerRestoreJobsAndDropsTheSetting(t *testing.T) {
 		 VALUES (10, 1, 1, 'restore_power', 'final', '15.0.0', 'tasmota', 1, 'adam', 1, 1700000000000)`,
 		`INSERT INTO ota_jobs (id, batch_id, device_id, state, stage, target_release, target_variant, created_by, created_at, updated_at)
 		 VALUES (11, 1, 2, 'failed', 'final', '15.0.0', 'tasmota', 'adam', 1, 1700000000000)`,
+		`INSERT INTO devices (id, name, address, mac, created_at, updated_at) VALUES (3, 'strip', '10.0.0.3', '', 1, 1)`,
+		`INSERT INTO ota_jobs (id, batch_id, device_id, state, stage, target_release, target_variant, created_by, created_at, updated_at)
+		 VALUES (12, 1, 3, 'await_reboot', 'final', '15.0.0', 'tasmota', 'adam', 1, 1700000000000)`,
 		`INSERT INTO system_settings (key, value, updated_by, updated_at) VALUES ('OTA_POWER_MAX_AGE', '30m', 'adam', 1)`,
 		`INSERT INTO system_settings (key, value, updated_by, updated_at) VALUES ('OTA_PARALLEL', '4', 'adam', 1)`,
 	} {
@@ -78,6 +81,10 @@ func TestMigration0042EndsPowerRestoreJobsAndDropsTheSetting(t *testing.T) {
 	}
 	if evs, _ := s.JobEvents(ctx, 11); len(evs) != 0 {
 		t.Errorf("an unrelated job got events: %+v", evs)
+	}
+	// A job that is really running keeps running: only restore_power is ended.
+	if run, _ := s.GetJob(ctx, 12); run.State != model.JobAwaitReboot {
+		t.Errorf("a running job of another device changed to %q", run.State)
 	}
 	// The device is free again: a new active job must not hit ota_jobs_one_active.
 	if _, err := db.ExecContext(ctx, `INSERT INTO ota_jobs (batch_id, device_id, state, stage, target_release, target_variant, created_by, created_at, updated_at)

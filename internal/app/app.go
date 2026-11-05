@@ -204,7 +204,7 @@ func (a *runtime) run(ctx context.Context) error {
 		return err
 	}
 	a.fwReach = newFWReachLearner(a.svc.Store, a.svc.Audit, clock.Real{}, a.log) // before OTA and restore: both report to it
-	a.setupDeviceCmd()                                                           // before the OTA engine: it switches relays back on through it
+	a.setupDeviceCmd()                                                           // before the OTA engine: its "Send command" jobs run through it
 	a.startFWRecheck(bg)                                                         // needs a.fwHolds, set by setupDeviceCmd
 	if err := a.setupSettings(); err != nil {                                    // before the OTA engine: it runs the policy jobs through the applier built here
 		return err
