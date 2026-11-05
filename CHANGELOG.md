@@ -6,6 +6,8 @@ always upgrade automatically.
 
 ## Unreleased
 
+## 0.30.1 "Eddystone" (2026-11-05)
+
 ### Fixed
 
 - Times no longer show in the server's format for a moment while a page loads, for example when switching the Online and All chips on Devices (#635, thanks @Noschvie)
