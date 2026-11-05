@@ -210,9 +210,9 @@ SAFETY package, catalogue, image paths). Every gate runs through the Makefile.
 
 | File                                         | Trigger                                    | Runs                                                                                                                                    |
 | -------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `pr.yml`                                     | `pull_request`                             | FAST: `changes`, `checks`, `mutation` (SAFETY PRs), link check, migration guard, image build check, **`required`**                      |
+| `pr.yml`                                     | `pull_request`                             | FAST: `changes`, `checks`, `mutation` (SAFETY PRs), link check, migration and release section guards, image build check, **`required`** |
 | `main.yml`                                   | push to `main`                             | lint, unit and integration tests, build (no e2e; saves the Go caches), `:edge` image and HA app image, then `ghcr-cleanup`              |
-| `release.yml`                                | tag `v*`                                   | `guards` (incl. green `required` + `main.yml` of the SHA), then `publish` (image), `release`, `pages`; no checks. Dispatch = dry run   |
+| `release.yml`                                | tag `v*`                                   | `guards` (incl. green `required` + `main.yml` of the SHA), then `publish` (image), `release`, `pages`; no checks. Dispatch = dry run    |
 | `nightly.yml`                                | cron 22:37 UTC, `workflow_dispatch`        | FULL: `checks` (e2e all, `-count=1`, catalogue), `race`, `quarantine`, `ha-app`, `ghcr-cleanup`                                         |
 | `weekly.yml`                                 | cron Sunday 21:13 UTC, `workflow_dispatch` | the full `mutation` run (all MUTATION packages) and its gate                                                                            |
 | `_checks.yml`, `_mutation.yml`, `_image.yml` | `workflow_call` only                       | the shared jobs; the caller's `with:` says which (inputs `e2e`, `e2e_shards`, `testflags`, `safety_race`, `catalogue`, `scope`, `mode`) |
@@ -234,12 +234,13 @@ SAFETY package, catalogue, image paths). Every gate runs through the Makefile.
   that main's go test cache holds their results for the PRs and tags (the nightly runs `-count=1` and stores none); the
   e2e caches are refreshed by the nightly. The `:edge` image and the HA app image follow.
 - **RELEASE** (`release.yml`, tags `vX.Y.Z`): no tests of its own (#554). `main` moves only by a fast-forward push of a
-  green PR head, so the tagged commit has already passed the FAST tier twice (`required` on its PR, `main.yml` on `main`);
-  running it a third time on identical code only delayed the image. Job `guards` fails at once, with the reason, when the
+  green PR head, so the tagged commit has already passed the FAST tier on its PR (`required`) and lint, unit and integration
+  tests and the build on `main` (`main.yml`); running them again on identical code only delayed the image. Job `guards` fails at once, with the reason, when the
   tag is not on `main`, has no `CHANGELOG.md` section, is a patch tag that changes a migration, edits a migration of the previous tag,
   or when its commit lacks a successful `required` check run of `pr.yml` or a successful `main.yml` run (`tools/release-green.sh`;
-  only `ghcr-cleanup` may fail there; a commit that only changes paths `main.yml` ignores has no run: tag a later one). Tag only
-  after `main.yml` has finished on the commit. The race tests of every `SAFETY` package run in the nightly FULL on the same
+  only `ghcr-cleanup` may fail there). Only the head of a push to `main` gets a `main.yml` run, and a push that changes only
+  paths `main.yml` ignores gets none: tag the head of the push that carried the release commit, only after `main.yml` has
+  finished on it. The race tests of every `SAFETY` package run in the nightly FULL on the same
   `main`. Then the image is published (job `publish` calling `_image.yml` with `mode: release`, the only way to push a tag
   image), then the GitHub release is made, then the demo site is deployed, each only after the one before succeeded.
   `workflow_dispatch` with a `sha` is a dry run of the green-commit check alone: it never publishes, releases or deploys.
@@ -261,8 +262,8 @@ SAFETY package, catalogue, image paths). Every gate runs through the Makefile.
   with retries, and never block a PR or a release. Fix or delete each one within about two weeks; the fixing
   change removes the tag and closes the issue.
 
-Docs-only PRs skip the checks; the link check (`tools/check-doc-links.py`) and the migration guard (`make migration-append-only`)
-run on every PR and gate the merge. The list of docs
+Docs-only PRs skip the checks; the link check (`tools/check-doc-links.py`), the migration guard (`make migration-append-only`)
+and the release section guard (`make release-pr-check`) run on every PR and gate the merge. The list of docs
 that are safe to ignore (and the ones a test reads, which are not) is in the header of `.github/workflows/pr.yml`.
 Third-party actions are pinned to a full commit SHA with the version in a comment (`uses: owner/repo@<sha> # vX.Y.Z`);
 Renovate keeps both current. Reusable workflows take their secrets by name (`secrets:`), never `secrets: inherit`.
@@ -307,10 +308,13 @@ Renovate keeps both current. Reusable workflows take their secrets by name (`sec
   the tag is set; the tag build fails when that section is missing
   (`make changelog-check TAG=vX.Y.Z`).
 - **The release commit rides in the merge train** (#556): it is the last commit of the release's train (or of
-  the single PR when there is no train), so one `required` run on its tip, one fast-forward and one `main.yml` run
-  cover the release. A separate release PR only when the release has nothing else to merge. When a PR's tip adds a new
+  the single PR when there is no train), followed only by the release's demo-media refresh (`make demo-media`) when there
+  is one, so one `required` run on its tip, one fast-forward and one `main.yml` run cover the release. A separate release
+  PR only when the release has nothing else to merge. When a PR's tip adds a new
   `## X.Y.Z` section, its CI runs the tag's guards (`make release-pr-check BASE=origin/main`: `changelog-check` and
-  `migration-guard`); run it locally before pushing a train. Then wait for `main.yml` on the pushed head and set the tag.
+  `migration-guard`); run it locally before pushing a train. The demo-media refresh must be in that same push: the
+  template's tag-pinned media URLs need it in the tagged tree, and a docs-only push of its own gets no `main.yml` run, so
+  a tag on it is refused. Then wait for `main.yml` on the pushed head and set the tag on that head.
 - **Release names**: every minor release is named after a lighthouse. The release commit takes the next
   free name from `docs/release-names.md` and marks it assigned there; the heading is
   `## 0.21.0 "Name" (YYYY-MM-DD)`. Patch releases repeat their minor's name. Tags stay `vX.Y.Z`. The
@@ -374,7 +378,7 @@ the ruleset rejects them.
 `pr.yml` runs the FAST tier on every PR: a `changes` job detects docs-only PRs (heavy jobs
 skipped) and PRs that touch a `SAFETY` package (safety jobs added), and the final `required`
 job passes only when every job that had to run passed; a skip counts only when the PR did
-not ask for that job; the link check and the migration guard must always succeed. No approvals are required (single maintainer). Release tags are still pushed
+not ask for that job; the link check, the migration guard and the release section guard must always succeed. No approvals are required (single maintainer). Release tags are still pushed
 directly, on a green commit of `main`.
 
 **UI changes:** the agent makes screenshot pairs per screen (mockup and build where a mockup exists,

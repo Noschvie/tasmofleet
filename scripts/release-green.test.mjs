@@ -59,6 +59,8 @@ function run(fx) {
       ],
     },
     run: { path: ".github/workflows/pr.yml" },
+    // What a real tag run finds: the tag push itself is a push run of release.yml on the same commit, newer and
+    // still running; only the main.yml run may count.
     runs: {
       workflow_runs: [
         {
@@ -67,11 +69,21 @@ function run(fx) {
           status: "completed",
           created_at: "2026-11-05T10:10:00Z",
         },
+        {
+          id: 11,
+          path: ".github/workflows/release.yml",
+          status: "in_progress",
+          created_at: "2026-11-05T10:20:00Z",
+        },
       ],
     },
+    // A real main.yml run skips the jobs it does not ask _checks.yml for (no e2e, no safety race, no catalogue).
     jobs: {
       jobs: [
         { name: "checks / lint", conclusion: "success" },
+        { name: "checks / safety race tests", conclusion: "skipped" },
+        { name: "checks / e2e none (1/1)", conclusion: "skipped" },
+        { name: "checks / Tasmota command catalogue", conclusion: "skipped" },
         { name: "image / build image (edge)", conclusion: "success" },
         { name: "ghcr-cleanup / prune", conclusion: "success" },
       ],
@@ -164,4 +176,77 @@ test("a failed job of main.yml is refused, but ghcr-cleanup may fail", () => {
     },
   });
   assert.equal(ok.status, 0, ok.stderr);
+});
+
+// A re-run of "required" is a newer check run on the same commit, like branch protection sees it: the newest attempt
+// decides, whichever order the API lists them in.
+test("the newest attempt of required decides", () => {
+  const attempt = (started_at, conclusion, job) => ({
+    started_at,
+    status: "completed",
+    conclusion,
+    html_url: `https://github.com/o/r/actions/runs/7/job/${job}`,
+  });
+  const fixed = run({
+    checks: {
+      check_runs: [
+        attempt("2026-11-05T10:00:00Z", "failure", 1),
+        attempt("2026-11-05T10:05:00Z", "success", 2),
+      ],
+    },
+  });
+  assert.equal(fixed.status, 0, fixed.stderr);
+  const broken = run({
+    checks: {
+      check_runs: [
+        attempt("2026-11-05T10:05:00Z", "failure", 2),
+        attempt("2026-11-05T10:00:00Z", "success", 1),
+      ],
+    },
+  });
+  assert.notEqual(broken.status, 0);
+  assert.match(broken.stderr, /concluded failure/);
+});
+
+test("a required that was cancelled or is still running is refused", () => {
+  const check = (status, conclusion) =>
+    run({
+      checks: {
+        check_runs: [
+          {
+            started_at: "2026-11-05T10:00:00Z",
+            status,
+            conclusion,
+            html_url: "https://github.com/o/r/actions/runs/7/job/1",
+          },
+        ],
+      },
+    });
+  const cancelled = check("completed", "cancelled");
+  assert.notEqual(cancelled.status, 0);
+  assert.match(cancelled.stderr, /concluded cancelled/);
+  const running = check("in_progress", null);
+  assert.notEqual(running.status, 0);
+  assert.match(running.stderr, /in_progress, not finished/);
+});
+
+// A main.yml that cannot start (a workflow file error) completes as startup_failure without a single job, so no job
+// failed in it either; it checked nothing and must not count as green.
+test("a main.yml run that ran no jobs is refused", () => {
+  const r = run({
+    runs: {
+      workflow_runs: [
+        {
+          id: 9,
+          path: ".github/workflows/main.yml",
+          status: "completed",
+          conclusion: "startup_failure",
+          created_at: "2026-11-05T10:10:00Z",
+        },
+      ],
+    },
+    jobs: { jobs: [] },
+  });
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /ran no jobs \(it concluded startup_failure\)/);
 });

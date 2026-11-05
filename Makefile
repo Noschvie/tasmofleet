@@ -413,14 +413,18 @@ changelog-check:
 	grep -Eq "^## $$(printf '%s' "$$v" | sed 's/[.]/[.]/g')( \"[^\"]+\")?( \(.*\))?$$" CHANGELOG.md || { \
 		echo "CHANGELOG.md has no section '## $$v' for tag $(TAG): move \"Unreleased\" into it before tagging" >&2; exit 1; }
 
-# The release commit rides in the merge train (CLAUDE.md "Releases", #556): when HEAD adds a new
-# "## X.Y.Z ..." section to CHANGELOG.md since BASE, run the tag guards for that tag now, so the tag run
+# The release commit rides in the merge train (CLAUDE.md "Releases", #556): when CHANGELOG.md has a
+# "## X.Y.Z ..." section that BASE does not have, run the tag guards for that tag now, so the tag run
 # finds nothing new. pr.yml runs it on every PR; the maintainer can run it before pushing a train.
-# Nothing to check (no new section) passes.
+# Nothing to check (no new section) passes. A section BASE already has is not checked again: an edit of an
+# old heading (a date, a name) must not run the patch guard of a release that shipped long ago.
 release-pr-check:
 	@test -n "$(BASE)" || { echo "usage: make release-pr-check BASE=<base commit>" >&2; exit 2; }
+	@git rev-parse -q --verify "$(BASE)^{commit}" >/dev/null || { echo "release-pr-check: BASE $(BASE) is not a commit" >&2; exit 2; }
 	@set -e; \
-	versions=$$(git diff -U0 "$(BASE)...HEAD" -- CHANGELOG.md | sed -nE 's/^\+## ([0-9]+\.[0-9]+\.[0-9]+[^ ]*).*/\1/p'); \
+	sections() { sed -nE 's/^## ([0-9]+\.[0-9]+\.[0-9]+[^ ]*).*/\1/p'; }; \
+	old=$$(git show "$(BASE):CHANGELOG.md" | sections); \
+	versions=; for v in $$(sections < CHANGELOG.md); do printf '%s\n' "$$old" | grep -qxF "$$v" || versions="$$versions $$v"; done; \
 	[ -n "$$versions" ] || { echo "release-pr-check: no new release section in CHANGELOG.md"; exit 0; }; \
 	for v in $$versions; do \
 		echo "release-pr-check: new section $$v, checking tag v$$v"; \
