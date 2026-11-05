@@ -8,11 +8,12 @@ always upgrade automatically.
 
 ### Upgrade notes
 
+- Migration 0043 adds the tables `backup_runs` and `backup_run_items`: the last scheduled backup run is stored, so the status bar, the dashboard and Devices, Backups show it after a restart. It starts empty (#409).
 - Migration 0044 adds the column `since_at` to `backup_run_items` (when a skipped device went offline). Earlier run records keep their text and show no time (#409).
 
 ### Added
 
-- Devices, Backups: one page for how the fleet is backed up (#409). It shows the last scheduled run with the failed and the skipped devices apart, one row per device (newest backup, runs, files, result of the last run) with filters for No backup, Older than, Failed last run and Skipped, the storage totals and what the next run prunes, the schedule, and the backups of deleted devices. Admins can back up the selected devices, or every device that a scheduled run would try ("Back up all now"): the next page lists the devices it leaves out with the reason, and it also leaves out devices that are offline right now or whose web password was refused; operators see the page read-only. Devices has a new sub-navigation entry between Policy and Add.
+- Devices, Backups: one page for how the fleet is backed up (#409). It shows the last scheduled run with the failed and the skipped devices apart, one row per device (newest backup, runs, files, result of the last run) with filters for No backup, Older than, Failed last run and Skipped, the storage totals and what the next run prunes, the schedule, and the backups of deleted devices. Admins can back up the selected devices, or every device that a scheduled run would try ("Back up all now"): the next page lists the devices it leaves out with the reason, and it also leaves out devices that are offline right now or whose web password was refused; operators see the page without the run buttons and the schedule form (they can open backups and devices, and keep or release the backups of deleted devices). Devices has a new sub-navigation entry between Policy and Add.
 
 ### Changed
 

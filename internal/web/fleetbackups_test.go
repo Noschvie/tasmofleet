@@ -436,6 +436,9 @@ func TestOperatorSeesNoDownloadOrDeleteOnDeletedDevicesBackups(t *testing.T) {
 			t.Errorf("operator page offers %q", bad)
 		}
 	}
+	if strings.Contains(op, "Download one to restore") || !strings.Contains(op, "admins download or delete them") {
+		t.Error("the operators' text promises a Download they do not have")
+	}
 	if !strings.Contains(op, `formaction="/tf/backups/70/keep"`) {
 		t.Error("Keep stays for operators")
 	}
@@ -482,7 +485,15 @@ func TestTableCellsCarryATitleForCutOffText(t *testing.T) {
 	if !strings.Contains(devs, `class="bk-rsn" title="No answer within 30 s"`) {
 		t.Error("a failure reason is not in a title")
 	}
-	if !regexp.MustCompile(`<td data-label="Newest backup"[^>]* title="[^"]+ ago`).MatchString(devs) && !regexp.MustCompile(`<td data-label="Newest backup"[^>]*title=`).MatchString(devs) {
-		t.Error("the newest backup's age has no title")
+	// the times carry a title on their own <time>, which time.js writes in the reader's zone (a title
+	// in the server's zone would disagree with the text next to it)
+	if !regexp.MustCompile(`<td data-label="Newest backup"[^>]*><time [^>]*data-ts="day"[^>]* title="`).MatchString(devs) {
+		t.Error("the newest backup's time has no title for time.js")
+	}
+	if !regexp.MustCompile(`Offline since <time [^>]*data-ts="day"[^>]* title="`).MatchString(devs) {
+		t.Error("the offline time has no title for time.js")
+	}
+	if strings.Contains(devs, `<td data-label="Newest backup" class="nowrap s" title=`) {
+		t.Error("a title on the cell would show the server's zone")
 	}
 }

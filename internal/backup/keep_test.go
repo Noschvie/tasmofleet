@@ -306,7 +306,7 @@ type usageBackups struct {
 
 func (u usageBackups) BackupUsage(context.Context) ([]store.BackupUsage, error) { return u.rows, nil }
 
-// Why (N9): Settings -> Backups reads the storage summary through the manager.
+// Why (N9): Devices -> Backups reads the storage summary through the manager.
 // A store that cannot aggregate must fail loud: an empty answer would read as
 // "no backups at all", which is false and hides the disk usage.
 func TestUsagePassesTheStoreAggregateOrFailsLoud(t *testing.T) {

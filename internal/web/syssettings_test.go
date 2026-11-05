@@ -281,7 +281,7 @@ func TestBackupsPageStorageSummary(t *testing.T) {
 }
 
 // Why (N2/N9): a device deleted with "keep the backups" leaves backups no device page lists;
-// Settings -> Backups is their only home. Each run appears once (not once per file), with the
+// Devices -> Backups is their only home. Each run appears once (not once per file), with the
 // device's name escaped and its MAC, and the same Download / Keep / Delete as on a device.
 func TestBackupsPageListsOrphansWithTheirActions(t *testing.T) {
 	e, _, _, _ := storageEnv(t)
@@ -310,7 +310,7 @@ func TestBackupsPageListsOrphansWithTheirActions(t *testing.T) {
 
 // Why (N9): deleting a backup of a deleted device used to send the admin to
 // /devices/0/backups, a page that does not exist. Both the no-JS confirmation (its Cancel and
-// trail) and the delete itself must lead back to Settings -> Backups, with the notice.
+// trail) and the delete itself must lead back to Devices -> Backups, with the notice.
 func TestOrphanDeleteGoesBackToTheBackupsPage(t *testing.T) {
 	e, sb, _, _ := storageEnv(t)
 	_, body := e.do(t, "GET", "/backups/70/delete", "admin", nil)

@@ -179,7 +179,7 @@ func (h *handler) bulkLeftOut(r *http.Request, sv *bulkScopeView) error {
 			if row.DeviceID == id && row.SkipReason != "" && !slices.Contains(sv.LeftIDs, id) {
 				sv.LeftIDs = append(sv.LeftIDs, id)
 				w := newWhy(h.d.Clock.Now(), row.SkipReason, row.SkipSince)
-				sv.Left = append(sv.Left, leftItem{Name: row.Name, Reason: w.Reason, Since: w.Since, SinceText: w.SinceText})
+				sv.Left = append(sv.Left, leftItem{Name: row.Name, Reason: w.Reason, Since: w.Since, SinceText: w.SinceText, SinceFull: w.SinceFull})
 			}
 		}
 	}

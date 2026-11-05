@@ -140,7 +140,11 @@ templ sysCardView(p sysPage, c sysCard) {
 					if len(p.Storage.Orphans) == 0 {
 						<p class="ufield-help">No backups of deleted devices.</p>
 					} else {
-						<p class="ufield-help">Kept when their device was deleted. Download one to restore it on a device by hand.</p>
+						if p.Fleet != nil && !p.Fleet.Admin {
+							<p class="ufield-help">Kept when their device was deleted. You can keep or release them; admins download or delete them.</p>
+						} else {
+							<p class="ufield-help">Kept when their device was deleted. Download one to restore it on a device by hand.</p>
+						}
 						@sysOrphans(p, *p.Storage)
 					}
 				}

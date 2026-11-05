@@ -96,7 +96,9 @@ func TestSnapshotRoutesAreAdminOnly(t *testing.T) {
 }
 
 // Why: a stolen session must not be enough to take the secrets out. Without a fresh
-// confirmation nothing is made or sent; the page asks for the password instead.
+// confirmation nothing is made or sent; the page asks for the password instead. The dialog sits on
+// the Snapshots page (the Download button's route /settings/system/snapshot belongs to it), not over an
+// empty Settings page whose tab sections are all hidden.
 func TestSnapshotDownloadNeedsStepUp(t *testing.T) {
 	s := snapSetup(t, false)
 	r, body := s.do(t, "POST", "/settings/system/snapshot", "admin", url.Values{"csrf": {"tok"}, "include_key": {"1"}})
@@ -107,6 +109,9 @@ func TestSnapshotDownloadNeedsStepUp(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("dialog lacks %q", want)
 		}
+	}
+	if !strings.Contains(body, `id="card-stored"`) || strings.Contains(body, `data-sys-tab="general"`) {
+		t.Error("the page behind the confirmation is not the Snapshots page")
 	}
 	if left, _ := filepath.Glob(filepath.Join(s.dir, ".snapshot-*")); len(left) != 0 {
 		t.Fatalf("no copy may be made before the confirmation: %v", left)

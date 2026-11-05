@@ -596,6 +596,7 @@ type leftItem struct {
 	Name, Reason string
 	Since        time.Time // the skip reason's time (offline since), zero for none
 	SinceText    string
+	SinceFull    string
 }
 
 // registerUnavailable answers the pages of a switched-off feature with an

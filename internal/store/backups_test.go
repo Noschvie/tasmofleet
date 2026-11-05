@@ -14,7 +14,7 @@ import (
 
 // Why (N2): deleting a device must not take its backups with it unless the
 // user says so. The store keeps them with device_id NULL, still naming the
-// device and MAC they were taken for, so Settings -> Backups can list them and
+// device and MAC they were taken for, so Devices -> Backups can list them and
 // a replacement can be restored from them.
 func TestDeleteDeviceKeepsBackupsAsOrphans(t *testing.T) {
 	s, _, _ := newStore(t)

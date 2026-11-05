@@ -7,7 +7,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/model"
 )
 
-// Why (N9): Settings -> Backups answers "how much space do the backups take and
+// Why (N9): Devices -> Backups answers "how much space do the backups take and
 // which devices have none" from one query. The counts must match what the
 // device's Backups tab shows (one backup per run, the decoded copy is not a
 // backup of its own), the size must be what is on disk (every file), a device

@@ -37,25 +37,17 @@ type whyText struct {
 	Reason    string
 	Since     time.Time
 	SinceText string // the fallback text of Since
+	SinceFull string // the fallback title of Since; time.js shows the full date in the reader's zone
 }
 
-// Plain is the reason as one text, for a title attribute.
-func (w whyText) Plain() string {
-	if w.Since.IsZero() {
-		return w.Reason
-	}
-	return w.Reason + " since " + ui.StampText(w.Since, ui.StampDateTime)
-}
-
-// NewestTitle is the full date of a device's newest backup with its age.
-func (r fleetRow) NewestTitle() string {
-	return ui.StampText(r.Newest, ui.StampDateTimeSec) + " (" + r.Ago + ")"
-}
+// Plain is the reason alone, for the title of a cell that cuts it off; the time inside has its own
+// title that time.js writes in the reader's zone.
+func (w whyText) Plain() string { return w.Reason }
 
 func newWhy(now time.Time, reason string, since time.Time) whyText {
 	w := whyText{Reason: fleetSentence(reason), Since: since}
 	if !since.IsZero() {
-		w.SinceText = ui.StampDayText(now, since)
+		w.SinceText, w.SinceFull = ui.StampDayText(now, since), ui.StampText(since, ui.StampTitle)
 	}
 	return w
 }

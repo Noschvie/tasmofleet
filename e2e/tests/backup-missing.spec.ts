@@ -5,7 +5,7 @@ import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from
 
 // Why (#205): a user who deletes a backup directory by hand is left with rows that point
 // nowhere. The lists must say so, offer nothing that can only fail, and let an admin remove
-// the entry. Both places: a device's Backups tab and Settings -> Backups (deleted devices).
+// the entry. Both places: a device's Backups tab and Devices -> Backups (deleted devices).
 let app: App;
 let env: Devenv;
 test.beforeAll(async () => {

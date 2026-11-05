@@ -33,10 +33,11 @@ type SnapshotService interface {
 // snapPath is the System -> Snapshots page; the stored snapshots' downloads and deletes live below it.
 const snapPath = sysPath + "/snapshots"
 
-// onSnapshots says whether the request is for the Snapshots page or something below it, so the shared
-// settings handlers answer with that page (its save, its step-up) and not with the Settings page.
+// onSnapshots says whether the request is for the Snapshots page, something below it, or the download its
+// Download button posts to (/settings/system/snapshot), so the shared settings handlers answer with that
+// page (its save, its step-up) and not with the Settings page.
 func onSnapshots(r *http.Request) bool {
-	return r.URL.Path == snapPath || strings.HasPrefix(r.URL.Path, snapPath+"/")
+	return r.URL.Path == snapPath || strings.HasPrefix(r.URL.Path, snapPath+"/") || r.URL.Path == sysPath+"/snapshot"
 }
 
 func (h *handler) registerSnapshots(route func(string, func(http.Handler) http.Handler, http.HandlerFunc), adm func(http.Handler) http.Handler) {

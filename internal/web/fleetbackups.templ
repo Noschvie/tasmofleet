@@ -170,7 +170,7 @@ templ fleetWhy(w whyText) {
 	if w.Since.IsZero() {
 		{ w.Reason }
 	} else {
-		{ w.Reason + " since " }<time { ui.StampAttrs(w.Since, ui.StampDay)... }>{ w.SinceText }</time>
+		{ w.Reason + " since " }<time { ui.StampAttrs(w.Since, ui.StampDay)... } title={ w.SinceFull }>{ w.SinceText }</time>
 	}
 }
 
@@ -254,11 +254,11 @@ templ fleetRowView(v fleetView, r fleetRow) {
 			<td data-label="Select" class="sel"><label class="hit"><input type="checkbox" form="picker" name="id" value={ strconv.FormatInt(int64(r.ID), 10) } aria-label={ "Select " + r.Name }/></label></td>
 		}
 		<td data-label="Device" class="wrap p1 dv-name"><a href={ templ.SafeURL(r.DeviceHref) }>{ r.Name }</a></td>
-		<td data-label="Newest backup" class="nowrap s" if !r.Newest.IsZero() { title={ r.NewestTitle() } }>
+		<td data-label="Newest backup" class="nowrap s">
 			if r.Newest.IsZero() {
 				@ui.Badge(ui.ToneAccent, "No backup")
 			} else {
-				<time { ui.StampAttrs(r.Newest, ui.StampDay)... }>{ ui.StampDayText(v.Now, r.Newest) }</time>
+				<time { ui.StampAttrs(r.Newest, ui.StampDay)... } title={ ui.StampText(r.Newest, ui.StampTitle) }>{ ui.StampDayText(v.Now, r.Newest) }</time>
 				<span class="muted">{ " · " + r.Ago }</span>
 			}
 		</td>
