@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -79,9 +77,8 @@ func (a *runtime) setupOTA() {
 	}
 	cfgM := ota.DefaultConfig()
 	cfgM.RestoreOtaURL = a.cfg.OTARestoreURL
-	cfgM.PowerRestoreMaxAge = a.cfg.OTAPowerMaxAge
 	a.engine = ota.NewEngine(
-		ota.Options{Machine: cfgM, MaxParallel: a.cfg.OTAParallel, Power: a.deviceCmd, Audit: a.svc.Audit, Policy: a.policyApplier(), Templates: a.templateApplier(),
+		ota.Options{Machine: cfgM, MaxParallel: a.cfg.OTAParallel, Audit: a.svc.Audit, Policy: a.policyApplier(), Templates: a.templateApplier(),
 			Commands: a.deviceCmd, Principals: principalResolver{local: a.svc.Store, dir: a.svc.Store}, Paths: a.updatePaths(),
 			HoldFlashing: a.holdFlashing},
 		a.svc.Store, a.svc.Store, ota.NewDeviceAPI(a.svc.Client), a.cache, a.backups, clock.Real{}, jobNotifier{rt: a},
@@ -93,7 +90,6 @@ func (a *runtime) setupOTA() {
 	if a.bus != nil {
 		h := a.startOTAHints(a.svc.Store.ListDevices, a.engine)
 		a.bus.Subscribe([]mqttbus.Kind{mqttbus.KindUpgrade}, h.onUpgradeReport)
-		a.bus.Subscribe([]mqttbus.Kind{mqttbus.KindPower}, h.onPowerReport)
 	}
 }
 
@@ -107,32 +103,20 @@ const otaTopicRefresh = 15 * time.Second
 const (
 	hintDropQueueFull    = "ota_hint_queue_full"    // an UPGRADE hint found the queue full
 	hintDropUnknownTopic = "ota_hint_unknown_topic" // the topic is no device of the inventory
-	hintDropInvalidRelay = "ota_hint_invalid_relay" // POWER0, POWER33, POWERx: no relay the engine knows
 )
 
-// hintTarget is what the MQTT reports are handed to: the OTA engine. at is when the broker
-// delivered the report.
+// hintTarget is what the MQTT reports are handed to: the OTA engine.
 type hintTarget interface {
 	Hint(id model.DeviceID, report string)
-	PowerReport(id model.DeviceID, relay int, on bool, at time.Time)
 }
 
-// otaHint is one MQTT report of a known device waiting for the worker: relay 0 is an UPGRADE
-// report with text, relay >= 1 is that relay switched OFF, received at at.
+// otaHint is one UPGRADE report of a known device, with its text, waiting for the worker.
 type otaHint struct {
-	id    model.DeviceID
-	text  string
-	relay int
-	at    time.Time
+	id   model.DeviceID
+	text string
 }
 
-// offKey identifies a relay whose OFF report is waiting.
-type offKey struct {
-	id    model.DeviceID
-	relay int
-}
-
-// otaHints carries the UPGRADE and POWER OFF reports from the bus goroutine to the engine
+// otaHints carries the UPGRADE reports from the bus goroutine to the engine
 // (#507). The bus handler must not block, so the reports wait for one worker that hands them
 // over in arrival order.
 //
@@ -144,15 +128,9 @@ type offKey struct {
 // when it arrives: no report depends on a database read that could fail or time out. A report of
 // any other topic is dropped and counted.
 //
-// The two reports are not equally expendable. An UPGRADE report only ends a wait early (the
-// job still stops at its deadline), so the UPGRADE reports wait in a bounded queue and one
-// that does not fit is dropped and counted. A POWER OFF report is how the engine learns that
-// somebody switched a relay off during an update; without it the power restore switches that
-// relay back ON. It is therefore never dropped: a relay's OFF report that is already waiting
-// stands for every later one (the state is the same), so the OFF reports are coalesced per
-// device and relay instead of queued. They are bounded by the devices times their relays
-// (model.MaxRelays), not by the number of reports. Everything here lives in memory: a restart
-// loses the reports that are waiting.
+// An UPGRADE report only ends a wait early (the job still stops at its deadline), so the reports
+// wait in a bounded queue and one that does not fit is dropped and counted. Everything here
+// lives in memory: a restart loses the reports that are waiting.
 type otaHints struct {
 	list    func(ctx context.Context) ([]model.Device, error) // the inventory; nil: devices are set by hand
 	target  hintTarget
@@ -160,15 +138,13 @@ type otaHints struct {
 	wake    chan struct{} // capacity 1: the worker has something to take
 	every   time.Duration // how often run reads the inventory again
 
-	mu       sync.Mutex
-	ids      map[string]model.DeviceID // the topics of the inventory
-	pending  []otaHint                 // arrival order
-	offs     map[offKey]struct{}       // the OFF reports in pending
-	upgrades int                       // the UPGRADE reports in pending
+	mu      sync.Mutex
+	ids     map[string]model.DeviceID // the topics of the inventory
+	pending []otaHint                 // arrival order
 }
 
 func newOTAHints(target hintTarget, dropped func(reason string)) *otaHints {
-	return &otaHints{target: target, dropped: dropped, wake: make(chan struct{}, 1), every: otaTopicRefresh, ids: map[string]model.DeviceID{}, offs: map[offKey]struct{}{}}
+	return &otaHints{target: target, dropped: dropped, wake: make(chan struct{}, 1), every: otaTopicRefresh, ids: map[string]model.DeviceID{}}
 }
 
 // startOTAHints reads the inventory and starts the worker as a background task, so that shutdown
@@ -210,8 +186,8 @@ func (h *otaHints) refreshTopics(ctx context.Context) {
 	h.setDevices(devs...)
 }
 
-// offer queues the report of the device that publishes under topic, or coalesces (OFF) or drops
-// (UPGRADE, unknown topic) it as described on otaHints.
+// offer queues the report of the device that publishes under topic, or drops it (queue full,
+// unknown topic) as described on otaHints.
 func (h *otaHints) offer(topic string, m otaHint) {
 	h.mu.Lock()
 	id, known := h.ids[topic]
@@ -221,20 +197,10 @@ func (h *otaHints) offer(topic string, m otaHint) {
 		return
 	}
 	m.id = id
-	if m.relay > 0 {
-		k := offKey{id, m.relay}
-		if _, waiting := h.offs[k]; waiting {
-			h.mu.Unlock()
-			return
-		}
-		h.offs[k] = struct{}{}
-	} else {
-		if h.upgrades >= otaHintQueue {
-			h.mu.Unlock()
-			h.dropped(hintDropQueueFull)
-			return
-		}
-		h.upgrades++
+	if len(h.pending) >= otaHintQueue {
+		h.mu.Unlock()
+		h.dropped(hintDropQueueFull)
+		return
 	}
 	h.pending = append(h.pending, m)
 	h.mu.Unlock()
@@ -254,11 +220,6 @@ func (h *otaHints) next() (otaHint, bool) {
 	m := h.pending[0]
 	h.pending[0] = otaHint{}
 	h.pending = h.pending[1:]
-	if m.relay > 0 {
-		delete(h.offs, offKey{m.id, m.relay}) // a report that comes now is a new one
-	} else {
-		h.upgrades--
-	}
 	return m, true
 }
 
@@ -286,10 +247,6 @@ func (h *otaHints) run(ctx context.Context) {
 }
 
 func (h *otaHints) deliver(m otaHint) {
-	if m.relay > 0 {
-		h.target.PowerReport(m.id, m.relay, false, m.at)
-		return
-	}
 	h.target.Hint(m.id, m.text)
 }
 
@@ -312,37 +269,6 @@ func upgradeReportText(payload []byte) (string, bool) {
 		return "", false
 	}
 	return *v.Upgrade, true
-}
-
-// onPowerReport forwards non-retained stat/<topic>/POWER[n] to the engine so
-// that a relay somebody switches off during an update is not switched back on
-// by the power restore. The engine ignores ON reports and devices without a job.
-func (h *otaHints) onPowerReport(m mqttbus.Message) {
-	if m.Retained {
-		return
-	}
-	if strings.ToUpper(strings.TrimSpace(string(m.Payload))) != "OFF" {
-		return
-	}
-	relay, ok := powerRelay(m.Suffix)
-	if !ok {
-		h.dropped(hintDropInvalidRelay)
-		return
-	}
-	h.offer(m.Topic, otaHint{relay: relay, at: m.At})
-}
-
-// powerRelay maps the topic suffix POWER (relay 1) or POWERn to n.
-func powerRelay(suffix string) (int, bool) {
-	rest, ok := strings.CutPrefix(suffix, "POWER")
-	if !ok {
-		return 0, false
-	}
-	if rest == "" {
-		return 1, true
-	}
-	n, err := strconv.Atoi(rest)
-	return n, err == nil && n >= 1 && n <= model.MaxRelays // the engine ignores any other relay
 }
 
 // updatePaths is the chooser of the engine; nil (HTTP for every update) while the transport facts do not exist.

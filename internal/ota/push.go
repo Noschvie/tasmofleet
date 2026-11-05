@@ -13,7 +13,7 @@ import (
 // Push delivery (backlog F-9): instead of OtaUrl and Upgrade 1 the engine
 // uploads the image to the device's /u2 endpoint, like the web UI's "Upgrade
 // by file upload". The state machine is unchanged: the set_ota_url step only
-// runs Guard (and the second relay reading), and upgrade_issued uploads.
+// runs Guard, and upgrade_issued uploads.
 // Every rule of Upgrade 1 holds: Guard runs right before the upload, a lost
 // reply is never answered with a second upload (the engine probes), and the
 // device's OtaUrl is never touched, so there is nothing to restore.

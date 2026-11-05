@@ -11,7 +11,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/audit"
 	"github.com/nofuturekid/tasmofleet/internal/backup"
@@ -35,34 +34,6 @@ type DeviceAPI interface {
 	// Upgrade sends "Upgrade 1" and returns the URL echoed in the reply
 	// ("Version X from <url>"); the engine compares it with the URL it set.
 	Upgrade(ctx context.Context, d model.Device) (echoURL string, err error)
-	// ReadPower returns the relays that are ON (Status 11 POWER, POWER1..n).
-	// It is read-only and needs normal firmware (minimal has no Status 11).
-	ReadPower(ctx context.Context, d model.Device) (PowerReading, error)
-	// ReadMAC returns the device's MAC (Status 5): the restore only acts on
-	// the device it read the relays from.
-	ReadMAC(ctx context.Context, d model.Device) (string, error)
-	// RestrictedRelays returns the relays that must never be restored:
-	// PulseTime, Interlock and shutter relays (bare, read-only queries). all
-	// are the device's relays. An unexpected reply shape is an error, never
-	// "no restriction".
-	RestrictedRelays(ctx context.Context, d model.Device, all model.RelaySet) (model.RelaySet, error)
-}
-
-// PowerReading is one reading of the relays. Unknown relays answered with
-// something other than ON or OFF; they are never restored.
-type PowerReading struct {
-	On, Unknown model.RelaySet
-	// Light is the relay that is the device's light channel (the highest
-	// POWERn of a device whose Status 11 has Dimmer, Color or CT); All is
-	// every relay the reading mentions.
-	Light, All model.RelaySet
-}
-
-// PowerSwitch switches one relay. devicecmd.Service implements it: the
-// command goes through cmdpolicy as an operator-level Power command and is
-// recorded in the audit log, exactly like a click in the UI.
-type PowerSwitch interface {
-	Power(ctx context.Context, actor string, id model.DeviceID, relay int, action string) (state string, err error)
 }
 
 // Backups is what the engine needs for the pre-OTA backup.
@@ -106,10 +77,6 @@ type Notifier interface {
 type Options struct {
 	Machine     Config
 	MaxParallel int // fleet-wide concurrent jobs past "queued", default 2
-	// Power switches relays back on after the update (job state
-	// restore_power). nil means the engine cannot restore: jobs that would
-	// need it say so in LastError instead of leaving the devices silently off.
-	Power PowerSwitch
 	// Audit records "transaction.retry" and the policy fixes; nil = not recorded.
 	Audit audit.Recorder
 	// Policy runs "Make compliant" jobs; nil makes them fail with a clear message.
@@ -211,7 +178,6 @@ type Engine struct {
 	jobs    store.JobStore
 	devices store.DeviceStore
 	api     DeviceAPI
-	power   PowerSwitch
 	audit   audit.Recorder
 	fw      Firmware
 	backups Backups
@@ -229,9 +195,6 @@ type Engine struct {
 	workers map[model.JobID]chan Event // inbox of each running worker
 	fixing  map[model.JobID]bool       // running policy jobs, which cannot be cancelled
 	byDev   map[model.DeviceID]model.JobID
-	// lostOff holds the relays reported OFF while the job's inbox was full (#534): the report is
-	// recorded here instead of dropped and handed to the worker first thing in next.
-	lostOff map[model.JobID]model.RelaySet
 	wake    chan struct{}
 }
 
@@ -248,18 +211,17 @@ func NewEngine(o Options, jobs store.JobStore, devices store.DeviceStore, api De
 		n = nopNotifier{}
 	}
 	return &Engine{
-		opts: o, power: o.Power, audit: o.Audit, jobs: jobs, devices: devices, api: api, fw: fw, backups: b, clk: clk, notify: n,
+		opts: o, audit: o.Audit, jobs: jobs, devices: devices, api: api, fw: fw, backups: b, clk: clk, notify: n,
 		sel: fwselectFuncs{}, paths: o.Paths, safebootPush: safebootPushEnabled, log: slog.Default().With("component", "ota"),
-		workers: map[model.JobID]chan Event{}, fixing: map[model.JobID]bool{}, byDev: map[model.DeviceID]model.JobID{}, lostOff: map[model.JobID]model.RelaySet{}, wake: make(chan struct{}, 1),
+		workers: map[model.JobID]chan Event{}, fixing: map[model.JobID]bool{}, byDev: map[model.DeviceID]model.JobID{}, wake: make(chan struct{}, 1),
 	}
 }
 
 // Tuning is the part of the engine configuration that can change while the
 // engine runs (the settings page). Changes apply to jobs from their next step.
 type Tuning struct {
-	MaxParallel        int
-	RestoreOtaURL      bool
-	PowerRestoreMaxAge time.Duration
+	MaxParallel   int
+	RestoreOtaURL bool
 }
 
 // SetTuning replaces the tunable settings. MaxParallel < 1 is ignored.
@@ -281,7 +243,7 @@ func (e *Engine) maxParallel() int {
 func (e *Engine) machine() Config {
 	cfg := e.opts.Machine
 	if t := e.tune.Load(); t != nil {
-		cfg.RestoreOtaURL, cfg.PowerRestoreMaxAge = t.RestoreOtaURL, t.PowerRestoreMaxAge
+		cfg.RestoreOtaURL = t.RestoreOtaURL
 	}
 	return cfg
 }
@@ -311,11 +273,6 @@ type Request struct {
 	Language   string
 	Policy     model.UpdatePolicy
 	SkipBackup bool
-	// SkipPowerRestore turns off the default: relays that are ON before the
-	// update are switched back on afterwards.
-	SkipPowerRestore bool
-	// RestoreRelays also restores plain relays (default: lights only).
-	RestoreRelays bool
 	// OriginalOtaURL is set by retries: the OtaUrl to put back at the end,
 	// taken from the job being retried. A failed update leaves the device
 	// with tasmofleet's own URL, which a fresh preflight would otherwise
@@ -341,19 +298,6 @@ type PreviewItem struct {
 	// ViaSafeboot: the push goes through safeboot (the device restarts into it, the image is
 	// uploaded there). Only with Delivery push.
 	ViaSafeboot bool
-	// PowerRestore lists the relays that are ON now and would be switched
-	// back on after the update, e.g. "1, 3"; empty when nothing would be
-	// switched (all OFF, restore turned off, or the state is unreadable).
-	PowerRestore string
-	// PowerSkipped lists relays that are ON but never restored (PulseTime,
-	// Interlock, shutter relay); PowerUnreadable means Status 11 failed, in
-	// which case the job itself would stop in preflight unless the restore is
-	// turned off.
-	PowerSkipped    string
-	PowerUnreadable bool
-	// PowerRelaysKept lists relays that are ON but not restored because
-	// relays are only restored on request (they keep their state).
-	PowerRelaysKept string
 	// Path is how the update would reach the device (transport.Choose) and PathText the sentence why;
 	// both empty without a path chooser. Transport is what the job would store.
 	Path      transport.Path
@@ -374,14 +318,9 @@ const (
 
 // Time budgets of actions that are not single device commands. Plan may
 // download a firmware image into the cache; a backup is several requests.
-// maxRestoreRelay is the highest relay the power service can switch
-// (devicecmd offers relays 1 to 8, like cmdpolicy's operator class).
-const maxRestoreRelay = 8
-
 const (
 	planTimeoutFactor   = 10
 	backupTimeoutFactor = 4
-	powerTimeoutFactor  = 4 // read, switch each missing relay, verify
 )
 
 // refusalError marks a decision that must not be retried (policy, selection,
@@ -628,66 +567,7 @@ func (e *Engine) previewDevice(ctx context.Context, d model.Device, r Request) P
 	if it.Decision == decisionRefuse {
 		return it
 	}
-	if !r.SkipPowerRestore && !isIntermediate(ident.Variant) {
-		e.previewPower(ctx, d, r.RestoreRelays, &it)
-	}
 	return it
-}
-
-// previewPower reports what the restore would do for a device: the light
-// channels (and, on request, relays) that are ON now and would be switched on
-// again, relays that are ON but skipped, or that the state is unreadable (the
-// job would stop in preflight).
-func (e *Engine) previewPower(ctx context.Context, d model.Device, restoreRelays bool, it *PreviewItem) {
-	ctx, cancel := context.WithTimeout(ctx, 2*e.opts.Machine.CommandTimeout)
-	defer cancel()
-	p, err := e.readPowerPlan(ctx, d, restoreRelays)
-	if err != nil {
-		it.PowerUnreadable = true
-		return
-	}
-	it.PowerRestore = (p.on &^ p.skipped &^ p.ignored).String()
-	it.PowerSkipped = ((p.on & p.skipped) | p.unclear).String()
-	it.PowerRelaysKept = (p.on & p.ignored &^ p.skipped).String()
-}
-
-// powerPlan is the preflight reading sorted into what is restored and why the
-// rest is not.
-type powerPlan struct {
-	on      model.RelaySet // ON now
-	skipped model.RelaySet // ON but restricted (PulseTime, Interlock, shutter, beyond relay 8)
-	unclear model.RelaySet // neither ON nor OFF
-	ignored model.RelaySet // plain relays when only lights are restored
-}
-
-// readPowerPlan reads the relays that are ON and, only when there are any,
-// which of them are not restorable. Without restoreRelays only the light
-// channel is a candidate: relays keep their state across an update on this
-// fleet, so restoring one would more likely override someone than help.
-func (e *Engine) readPowerPlan(ctx context.Context, d model.Device, restoreRelays bool) (powerPlan, error) {
-	var p powerPlan
-	r, err := e.api.ReadPower(ctx, d)
-	if err != nil {
-		return p, err
-	}
-	p.on, p.unclear = r.On, r.Unknown
-	if p.on == 0 && r.Unknown == 0 {
-		return p, nil
-	}
-	restricted, err := e.api.RestrictedRelays(ctx, d, r.All)
-	if err != nil {
-		return powerPlan{}, err
-	}
-	for _, n := range p.on.List() {
-		if n > maxRestoreRelay {
-			p.skipped = p.skipped.Add(n)
-		}
-	}
-	p.skipped |= p.on & restricted
-	if !restoreRelays {
-		p.ignored = p.on &^ r.Light
-	}
-	return p, nil
 }
 
 // Submit validates and persists a batch; jobs start as queued. It is
@@ -768,7 +648,7 @@ func (e *Engine) submit(ctx context.Context, actor string, reqs []Request, retry
 	jobs := make([]model.Job, 0, len(rest))
 	for _, r := range rest {
 		c := choiceFor(r)
-		j := model.Job{DeviceID: r.DeviceID, State: model.JobQueued, Policy: c.Policy, SkipBackup: r.SkipBackup, SkipPowerRestore: r.SkipPowerRestore, RestoreRelays: r.RestoreRelays,
+		j := model.Job{DeviceID: r.DeviceID, State: model.JobQueued, Policy: c.Policy, SkipBackup: r.SkipBackup,
 			TargetRelease: r.Release, TargetBuild: r.Build, TargetCustom: r.Custom, Delivery: delivery[r.DeviceID], ViaSafeboot: viaSafeboot[r.DeviceID], OriginalOtaURL: r.OriginalOtaURL, CreatedBy: actor, CreatedAt: now, UpdatedAt: now}
 		if r.AllowVariantChange {
 			j.TargetVariant = r.Variant
@@ -802,7 +682,7 @@ func (e *Engine) submit(ctx context.Context, actor string, reqs []Request, retry
 var activeStates = []model.JobState{
 	model.JobQueued, model.JobPreflight, model.JobBackup, model.JobSetOtaURL,
 	model.JobSafebootSwitch, model.JobSafebootRecover,
-	model.JobUpgradeIssued, model.JobAwaitReboot, model.JobVerify, model.JobRestoreOtaURL, model.JobRestorePower, model.JobApplying,
+	model.JobUpgradeIssued, model.JobAwaitReboot, model.JobVerify, model.JobRestoreOtaURL, model.JobApplying,
 }
 
 // Cancel requests cancellation. Jobs past ActUpgrade cannot stop the device
@@ -986,7 +866,6 @@ func (e *Engine) startWorker(ctx context.Context, wg *sync.WaitGroup, j model.Jo
 			delete(e.workers, j.ID)
 			delete(e.fixing, j.ID)
 			delete(e.byDev, j.DeviceID)
-			delete(e.lostOff, j.ID)
 			e.mu.Unlock()
 			e.signal()
 		}()
@@ -1054,9 +933,6 @@ func (e *Engine) work(ctx context.Context, j model.Job, ev Event, inbox <-chan E
 // next waits for the next event: an inbox event (cancel) or the result of
 // the pending action after its delay.
 func (e *Engine) next(ctx context.Context, j model.Job, pending []Action, inbox <-chan Event) (Event, bool, bool) {
-	if ev, ok := e.takeLostOff(j.ID); ok {
-		return ev, false, true
-	}
 	select {
 	case ev := <-inbox:
 		return ev, false, true
@@ -1136,7 +1012,7 @@ func (e *Engine) exec(ctx context.Context, j model.Job, a Action) Event {
 			return Event{Kind: EvProbeOffline, Err: msg}
 		case ActBackup:
 			return Event{Kind: EvBackupFailed, Err: msg}
-		case ActProbeIdentity, ActPlan, ActSetOtaURL, ActUpgrade, ActSafebootSwitch, ActSafebootBack, ActRestoreOtaURL, ActRestorePower, ActNotify:
+		case ActProbeIdentity, ActPlan, ActSetOtaURL, ActUpgrade, ActSafebootSwitch, ActSafebootBack, ActRestoreOtaURL, ActNotify:
 		}
 		return Event{Kind: EvCommandFailed, Err: msg}
 	}
@@ -1146,8 +1022,6 @@ func (e *Engine) exec(ctx context.Context, j model.Job, a Action) Event {
 		timeout *= planTimeoutFactor
 	case ActBackup:
 		timeout *= backupTimeoutFactor
-	case ActRestorePower:
-		timeout *= powerTimeoutFactor
 	case ActProbeIdentity, ActSetOtaURL, ActUpgrade, ActSafebootSwitch, ActSafebootBack, ActProbe, ActRestoreOtaURL, ActNotify:
 	}
 	if a.Kind == ActUpgrade && j.Delivery == model.DeliveryPush {
@@ -1183,34 +1057,7 @@ func (e *Engine) exec(ctx context.Context, j model.Job, a Action) Event {
 			// The language the person chose in the preview (D10), for a device that cannot tell it.
 			ident.Language, ident.LanguageKnown = j.IdentityBefore.Language, true
 		}
-		ev := Event{Kind: EvIdentity, Identity: ident, OtaURL: otaURL, Uptime: up}
-		// The relay state is read once, before the first OtaUrl/Upgrade: it
-		// is what the restore step brings back. Minimal/safeboot have no
-		// Status 11, and their relays are not switched anyway.
-		switch {
-		case j.State == model.JobPreflight && !j.SkipPowerRestore && !isIntermediate(ident.Variant):
-			p, err := e.readPowerPlan(cctx, d, j.RestoreRelays)
-			if err != nil {
-				return Event{Kind: EvCommandFailed, Err: "relay state unreadable (" + err.Error() +
-					"); start the update with \"do not switch relays back on\" to skip the power restore"}
-			}
-			ev.Power, ev.PowerExcluded, ev.PowerUnknown, ev.PowerIgnored, ev.PowerRead = p.on, p.skipped, p.unclear, p.ignored, true
-		case j.State == model.JobVerify && j.Stage == model.StageFinal && powerPending(j) && !isIntermediate(ident.Variant):
-			// First reading after the final boot: relays that are ON were
-			// kept by the device itself and are never touched.
-			// A light shows its old state for a moment and then switches
-			// itself off (observed on the fleet), so the reading must have
-			// settled; it gets its own budget for the waits between readings.
-			mctx, mcancel := context.WithTimeout(ctx, cfg.CommandTimeout) // its own budget, not what is left of the probe's
-			ev.PowerDeny = e.deviceMismatch(mctx, d)
-			mcancel()
-			sctx, scancel := context.WithTimeout(ctx, cfg.CommandTimeout+powerSettleReads*cfg.ProbeInterval)
-			r, err := e.readPowerSettled(sctx, d)
-			scancel()
-			ev.Power, ev.PowerUnknown = r.On, r.Unknown
-			ev.PowerRead, ev.PowerUnreadable = err == nil, err != nil
-		}
-		return ev
+		return Event{Kind: EvIdentity, Identity: ident, OtaURL: otaURL, Uptime: up}
 	case ActPlan:
 		p, err := e.planFor(cctx, d, j.IdentityBefore, planChoice(j), j.TargetCustom, j.Delivery)
 		if err != nil {
@@ -1245,12 +1092,6 @@ func (e *Engine) exec(ctx context.Context, j model.Job, a Action) Event {
 			return failEvent(err)
 		}
 		ev := Event{Kind: EvCommandOK}
-		if firstFullStage(j) && powerPending(j) {
-			// Second reading, right before the first Upgrade: only relays
-			// that are ON in both readings stay candidates.
-			r, err := e.api.ReadPower(cctx, d)
-			ev.Power, ev.PowerRead, ev.PowerUnreadable = r.On, err == nil, err != nil
-		}
 		if j.Delivery == model.DeliveryPush {
 			// No OtaUrl: the image is uploaded in the next step. Check now that
 			// it can be read, so a damaged cache file fails the job cleanly.
@@ -1315,179 +1156,9 @@ func (e *Engine) exec(ctx context.Context, j model.Job, a Action) Event {
 			return Event{Kind: EvCommandFailed, Err: err.Error()}
 		}
 		return Event{Kind: EvCommandOK}
-	case ActRestorePower:
-		if err := e.restorePower(cctx, j, d); err != nil {
-			return Event{Kind: EvCommandFailed, Err: err.Error()}
-		}
-		return Event{Kind: EvCommandOK}
 	case ActNotify:
 	}
 	return Event{}
-}
-
-// relaysUpTo is the set of relays 1..n.
-func relaysUpTo(n int) model.RelaySet {
-	var s model.RelaySet
-	for i := 1; i <= n; i++ {
-		s = s.Add(i)
-	}
-	return s
-}
-
-// powerPending reports whether the job still has relays to restore.
-func powerPending(j model.Job) bool { return powerToRestore(j) }
-
-// restorePower switches back on exactly the relays that were ON before the
-// update and are OFF now. One pass, no retry loop: it reads first (so it is
-// idempotent for a resumed job and leaves relays alone that are ON already),
-// sends Power<n> ON for the missing ones and verifies with one more read. A
-// relay that is OFF after that stays OFF and the job says so; sending the
-// command again could override someone who switched it off in between.
-// Relays that were OFF are never switched, also when they are ON now.
-func (e *Engine) restorePower(ctx context.Context, j model.Job, d model.Device) error {
-	if e.power == nil {
-		return errors.New("no power switch configured")
-	}
-	// Defensive: the machine only emits this action with something to
-	// restore; if it ever did not, switch nothing.
-	if j.SkipPowerRestore || j.PowerOn == 0 {
-		return nil
-	}
-	if beyond := j.PowerOn &^ relaysUpTo(maxRestoreRelay); beyond != 0 {
-		return fmt.Errorf("relays %s are beyond relay %d, not switched", beyond.String(), maxRestoreRelay)
-	}
-	r, err := e.api.ReadPower(ctx, d)
-	if err != nil {
-		return fmt.Errorf("read: %w", err)
-	}
-	if extra := r.On &^ j.PowerOn; extra != 0 {
-		e.log.Info("ota: relays ON after the update that were OFF before; left alone",
-			"job", j.ID, "device", d.ID, "relays", extra.String())
-	}
-	unclear := j.PowerOn & r.Unknown
-	missing := j.PowerOn &^ r.On &^ unclear
-	var failed []string
-	if unclear != 0 {
-		failed = append(failed, "relays "+unclear.String()+" answer neither ON nor OFF, not switched")
-	}
-	actor := fmt.Sprintf("tasmofleet (OTA restore for job %d, requested by %s)", j.ID, j.CreatedBy)
-	for _, rl := range missing.List() {
-		if _, err := e.power.Power(ctx, actor, d.ID, rl, "ON"); err != nil {
-			failed = append(failed, fmt.Sprintf("relay %d: %v", rl, err))
-		}
-	}
-	if len(failed) > 0 {
-		return errors.New(strings.Join(failed, "; "))
-	}
-	if missing == 0 {
-		return nil
-	}
-	after, err := e.api.ReadPower(ctx, d)
-	if err != nil {
-		return fmt.Errorf("verify: %w", err)
-	}
-	if left := missing &^ after.On; left != 0 {
-		return fmt.Errorf("relays %s still OFF", left.String())
-	}
-	return nil
-}
-
-// powerSettleReads bounds how many readings it takes to see two equal ones.
-const powerSettleReads = 6
-
-// readPowerSettled reads the relays until two consecutive readings, one
-// ProbeInterval apart, are equal. A state that keeps changing is not a state
-// to act on: it is reported as an error and nothing is restored. The result
-// carries every relay that was ON in ANY of the readings: a relay that was
-// ON after the boot was kept by the device, even if somebody switched it off
-// a moment later, and must not be switched on again.
-func (e *Engine) readPowerSettled(ctx context.Context, d model.Device) (PowerReading, error) {
-	prev, err := e.api.ReadPower(ctx, d)
-	if err != nil {
-		return PowerReading{}, err
-	}
-	seenOn := prev.On
-	for i := 1; i < powerSettleReads; i++ {
-		select {
-		case <-e.clk.After(e.opts.Machine.ProbeInterval):
-		case <-ctx.Done():
-			return PowerReading{}, ctx.Err()
-		}
-		cur, err := e.api.ReadPower(ctx, d)
-		if err != nil {
-			return PowerReading{}, err
-		}
-		seenOn |= cur.On
-		if cur == prev {
-			cur.On = seenOn
-			return cur, nil
-		}
-		prev = cur
-	}
-	return PowerReading{}, fmt.Errorf("relay state still changing after %d readings", powerSettleReads)
-}
-
-// deviceMismatch checks, before anything is switched, that the device that
-// answers is the one the relays were read from: the same MAC as in the
-// inventory. It returns the reason not to restore, or "" when the device is
-// confirmed. A MAC that cannot be read or is not in the inventory is no
-// confirmation.
-func (e *Engine) deviceMismatch(ctx context.Context, d model.Device) string {
-	if d.MAC == "" {
-		return "the inventory has no MAC address to confirm the device"
-	}
-	mac, err := e.api.ReadMAC(ctx, d)
-	if err != nil {
-		return "the MAC address could not be read to confirm the device"
-	}
-	if !d.HasMAC(strings.ToLower(strings.ReplaceAll(mac, "-", ":"))) {
-		return "the device now reports another MAC address than the inventory"
-	}
-	return ""
-}
-
-// takeLostOff hands over the relays whose OFF report found the inbox full, as an event that
-// counts whenever it is processed (see Event.PowerLost).
-func (e *Engine) takeLostOff(id model.JobID) (Event, bool) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	lost, ok := e.lostOff[id]
-	if !ok {
-		return Event{}, false
-	}
-	delete(e.lostOff, id)
-	return Event{Kind: EvPowerReport, Power: lost, PowerLost: true}, true
-}
-
-// PowerReport tells the engine that someone switched relay off while the
-// device could still be switched by a person (MQTT stat/<t>/POWERn OFF, not
-// retained). at is when the broker delivered the report (the zero time: now);
-// the job decides by that time, not by when the worker gets to it, whether the
-// report falls into the window in which it can be a user's action. If the job
-// planned to switch that relay back on afterwards, it will not. A report for a
-// device without a job is ignored. One that finds the job's inbox full (the
-// worker is busy with an action) is never dropped: the relay is recorded and
-// the worker takes it before anything else (#534). Dropping it would let the
-// restore switch the relay back on.
-func (e *Engine) PowerReport(deviceID model.DeviceID, relay int, on bool, at time.Time) {
-	if on {
-		return
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	id, ok := e.byDev[deviceID]
-	if !ok {
-		return
-	}
-	if at.IsZero() {
-		at = e.clk.Now()
-	}
-	select {
-	case e.workers[id] <- Event{Kind: EvPowerReport, Power: model.RelaySet(0).Add(relay), At: at}:
-	default:
-		e.lostOff[id] = e.lostOff[id].Add(relay)
-		e.log.Debug("ota power report recorded without its time, worker busy", "device", deviceID, "relay", relay)
-	}
 }
 
 func failEvent(err error) Event {
@@ -1508,7 +1179,7 @@ type RetryResult struct {
 
 // SubmitRetry creates a NEW batch for the failed and cancelled devices of
 // batchID (all of them, or only deviceIDs), linked to it (Batch.RetryOf).
-// Release, variant choice, policy and options (backup, power restore) are
+// Release, variant choice, policy and options (backup) are
 // the original's; everything else is planned afresh from the device's
 // current state, with a fresh preflight and guard: a device that crashed
 // mid-flash and now runs minimal, or that is already at the target, is
@@ -1633,7 +1304,7 @@ func (e *Engine) submitRetry(ctx context.Context, actor string, batchID model.Ba
 // it was chosen (or forced by minimal) and approved the first time.
 func retryRequest(j model.Job) Request {
 	r := Request{DeviceID: j.DeviceID, Release: j.TargetRelease, Custom: j.TargetCustom, Delivery: j.Delivery, Policy: j.Policy, SkipBackup: j.SkipBackup,
-		SkipPowerRestore: j.SkipPowerRestore, RestoreRelays: j.RestoreRelays, OriginalOtaURL: j.OriginalOtaURL}
+		OriginalOtaURL: j.OriginalOtaURL}
 	if j.TargetVariant != "" && j.TargetVariant != j.IdentityBefore.Variant {
 		r.Variant, r.AllowVariantChange = j.TargetVariant, true
 	}

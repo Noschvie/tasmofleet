@@ -14,27 +14,24 @@ import (
 
 const jobCols = `id, batch_id, device_id, state, stage, plan, policy, skip_backup, attempt, target_release, target_variant, target_build, target_custom,
 	target_artifact, minimal_artifact, identity_before, original_ota_url, uptime_before, seen_offline, cancel_requested,
-	auto_continue_seen, skip_power_restore, power_on, power_read_at, power_note, restore_relays, power_cutoff, deadline_at, last_error, created_by, created_at, updated_at, kind, commands, created_kind, delivery, batch_parallel, reply_timeout_ms, via_safeboot, recovery_step, transport, mqtt_upload`
+	auto_continue_seen, deadline_at, last_error, created_by, created_at, updated_at, kind, commands, created_kind, delivery, batch_parallel, reply_timeout_ms, via_safeboot, recovery_step, transport, mqtt_upload`
 
 func scanJob(r scanner) (model.Job, error) {
 	var j model.Job
 	var state, stage, plan, policy, ident, kind, delivery string
-	var skip, seen, cancel, autoCont, skipPower, restoreRel, viaSafeboot, mqttUpload int
+	var skip, seen, cancel, autoCont, viaSafeboot, mqttUpload int
 	var transport string
-	var power uint32
-	var deadline, created, updated, powerAt, cutoff, replyMS int64
+	var deadline, created, updated, replyMS int64
 	err := r.Scan(&j.ID, &j.BatchID, &j.DeviceID, &state, &stage, &plan, &policy, &skip, &j.Attempt, &j.TargetRelease,
 		&j.TargetVariant, &j.TargetBuild, &j.TargetCustom, &j.TargetArtifact, &j.MinimalArtifact, &ident, &j.OriginalOtaURL, &j.UptimeBefore, &seen, &cancel,
-		&autoCont, &skipPower, &power, &powerAt, &j.PowerNote, &restoreRel, &cutoff, &deadline, &j.LastError, &j.CreatedBy, &created, &updated, &kind, &j.Commands, &j.CreatedKind, &delivery, &j.BatchParallel, &replyMS, &viaSafeboot, &j.RecoveryStep, &transport, &mqttUpload)
+		&autoCont, &deadline, &j.LastError, &j.CreatedBy, &created, &updated, &kind, &j.Commands, &j.CreatedKind, &delivery, &j.BatchParallel, &replyMS, &viaSafeboot, &j.RecoveryStep, &transport, &mqttUpload)
 	if err != nil {
 		return model.Job{}, err
 	}
 	if err := json.Unmarshal([]byte(ident), &j.IdentityBefore); err != nil {
 		return model.Job{}, fmt.Errorf("store: job %d identity: %w", j.ID, err)
 	}
-	j.PowerOn, j.PowerReadAt = model.RelaySet(power), fromMS(powerAt)
-	j.RestoreRelays, j.PowerCutoff = restoreRel != 0, fromMS(cutoff)
-	j.AutoContinueSeen, j.SkipPowerRestore = autoCont != 0, skipPower != 0
+	j.AutoContinueSeen = autoCont != 0
 	j.Delivery, j.ViaSafeboot = model.Delivery(delivery), viaSafeboot != 0
 	j.Transport, j.MQTTUpload = model.Transport(transport), mqttUpload != 0
 	j.ReplyTimeout = time.Duration(replyMS) * time.Millisecond
@@ -92,11 +89,11 @@ func (s *SQLite) createBatch(ctx context.Context, createdBy string, retryOf mode
 		}
 		res, err := tx.ExecContext(ctx, `INSERT INTO ota_jobs (batch_id, device_id, state, stage, plan, policy, skip_backup, attempt,
 			target_release, target_variant, target_build, target_custom, target_artifact, minimal_artifact, identity_before, original_ota_url, uptime_before,
-			seen_offline, cancel_requested, auto_continue_seen, skip_power_restore, power_on, power_read_at, power_note, restore_relays, power_cutoff, deadline_at, last_error, created_by, created_at, updated_at, kind, commands, created_kind, delivery, batch_parallel, reply_timeout_ms, via_safeboot, recovery_step, transport, mqtt_upload)
-			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			seen_offline, cancel_requested, auto_continue_seen, deadline_at, last_error, created_by, created_at, updated_at, kind, commands, created_kind, delivery, batch_parallel, reply_timeout_ms, via_safeboot, recovery_step, transport, mqtt_upload)
+			VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			bid, j.DeviceID, string(j.State), string(j.Stage), string(j.Plan), string(j.Policy), b2i(j.SkipBackup), j.Attempt,
 			j.TargetRelease, j.TargetVariant, j.TargetBuild, j.TargetCustom, j.TargetArtifact, j.MinimalArtifact, string(ident), j.OriginalOtaURL, j.UptimeBefore,
-			b2i(j.SeenOffline), b2i(j.CancelRequested), b2i(j.AutoContinueSeen), b2i(j.SkipPowerRestore), uint32(j.PowerOn), toMS(j.PowerReadAt), j.PowerNote, b2i(j.RestoreRelays), toMS(j.PowerCutoff),
+			b2i(j.SeenOffline), b2i(j.CancelRequested), b2i(j.AutoContinueSeen),
 			toMS(j.DeadlineAt), j.LastError, createdBy, now, now, kindOf(j), j.Commands, j.CreatedKind, string(j.Delivery), j.BatchParallel, j.ReplyTimeout.Milliseconds(), b2i(j.ViaSafeboot), j.RecoveryStep, string(j.Transport), b2i(j.MQTTUpload))
 		if err != nil {
 			return 0, nil, fmt.Errorf("device %d: %w", j.DeviceID, mapErr(err))
@@ -191,10 +188,10 @@ func (s *SQLite) SaveTransition(ctx context.Context, j model.Job, ev model.JobEv
 	now := s.now()
 	res, err := tx.ExecContext(ctx, `UPDATE ota_jobs SET state=?, stage=?, plan=?, policy=?, skip_backup=?, attempt=?, target_release=?,
 		target_variant=?, target_artifact=?, minimal_artifact=?, identity_before=?, original_ota_url=?, uptime_before=?, seen_offline=?,
-		cancel_requested=?, auto_continue_seen=?, skip_power_restore=?, power_on=?, power_read_at=?, power_note=?, restore_relays=?, power_cutoff=?, deadline_at=?, last_error=?, recovery_step=?, transport=?, updated_at=? WHERE id=? AND state=?`,
+		cancel_requested=?, auto_continue_seen=?, deadline_at=?, last_error=?, recovery_step=?, transport=?, updated_at=? WHERE id=? AND state=?`,
 		string(j.State), string(j.Stage), string(j.Plan), string(j.Policy), b2i(j.SkipBackup), j.Attempt, j.TargetRelease,
 		j.TargetVariant, j.TargetArtifact, j.MinimalArtifact, string(ident), j.OriginalOtaURL, j.UptimeBefore, b2i(j.SeenOffline),
-		b2i(j.CancelRequested), b2i(j.AutoContinueSeen), b2i(j.SkipPowerRestore), uint32(j.PowerOn), toMS(j.PowerReadAt), j.PowerNote, b2i(j.RestoreRelays), toMS(j.PowerCutoff), toMS(j.DeadlineAt), j.LastError, j.RecoveryStep, string(j.Transport), toMS(now), j.ID, string(ev.From))
+		b2i(j.CancelRequested), b2i(j.AutoContinueSeen), toMS(j.DeadlineAt), j.LastError, j.RecoveryStep, string(j.Transport), toMS(now), j.ID, string(ev.From))
 	if err != nil {
 		return mapErr(err)
 	}

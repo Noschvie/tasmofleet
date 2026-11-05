@@ -111,7 +111,7 @@ func jobBadge(j model.Job) (string, ui.Tone) {
 		return "Rebooting", ui.ToneAccent
 	case model.JobVerify:
 		return "Verifying", ui.ToneAccent
-	case model.JobRestoreOtaURL, model.JobRestorePower:
+	case model.JobRestoreOtaURL:
 		return "Restoring", ui.ToneAccent
 	case model.JobApplying:
 		return "Applying", ui.ToneAccent

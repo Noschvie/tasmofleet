@@ -286,73 +286,23 @@ func TestTransactionsPageUnderBasePathWithoutRedirect(t *testing.T) {
 	}
 }
 
-// Why: the power restore is on by default and the operator must see before
-// starting what it would do per device, including the cases where it cannot
-// (unreadable state stops the update; PulseTime/Interlock relays are left),
-// and the opt-out must reach the engine and survive the preview round trip.
-func TestPreviewShowsPowerRestoreAndOptOut(t *testing.T) {
+// Why (#551): TasmoFleet no longer switches relays back on after an update, so the update dialog
+// must not offer a "Power after update" choice and the preview must not announce a restore. A form
+// field of that name left over from a page loaded before the upgrade must not break the request.
+func TestUpdateDialogHasNoPowerChoice(t *testing.T) {
 	e, o, _, _ := setupOTA(t)
-	o.items[1] = ota.PreviewItem{DeviceID: 1, Decision: "upgrade", Plan: model.PlanStaged, Filename: "tasmota.bin.gz", PowerRestore: "1, 3", PowerSkipped: "2"}
-	o.items[2] = ota.PreviewItem{DeviceID: 2, Decision: "upgrade", Plan: model.PlanDirect, Filename: "tasmota32.bin", PowerUnreadable: true}
-	form := url.Values{"id": {"1", "2"}, "release": {"16.1.0"}, "policy": {"only-newer"}}
-	_, body := e.do(t, "POST", "/updates/preview", "operator", form)
-	for _, want := range []string{"relay 1, 3 on again", "relay 2 left alone", "relay state unreadable"} {
-		if !strings.Contains(strings.ToLower(body), want) {
-			t.Fatalf("preview lacks %q: %s", want, body)
-		}
+	o.items[1] = ota.PreviewItem{DeviceID: 1, Decision: "upgrade", Plan: model.PlanStaged, Filename: "tasmota.bin.gz"}
+	_, picker := e.do(t, "GET", "/updates/new?id=1", "operator", nil)
+	if !strings.Contains(picker, "Policy") || strings.Contains(strings.ToLower(picker), "power after update") || strings.Contains(picker, "power_after") {
+		t.Fatalf("the picker offers a power choice or lost its options: %s", picker)
 	}
-	if !strings.Contains(body, `name="power_after" value=""`) || o.previewReqs[0].SkipPowerRestore {
-		t.Fatal("the default must restore lights and carry no opt-out")
+	form := url.Values{"id": {"1"}, "release": {"16.1.0"}, "policy": {"only-newer"}, "power_after": {"leave"}}
+	resp, body := e.do(t, "POST", "/updates/preview", "operator", form)
+	if resp.StatusCode != 200 {
+		t.Fatalf("an old power_after field broke the preview: %d %s", resp.StatusCode, body)
 	}
-	form.Set("power_after", "leave")
-	_, body = e.do(t, "POST", "/updates/preview", "operator", form)
-	if !strings.Contains(body, `name="power_after" value="leave"`) || !o.previewReqs[0].SkipPowerRestore {
-		t.Fatalf("opt-out lost: %+v", o.previewReqs)
-	}
-}
-
-// Why: relays keep their state across an update on this fleet, so restoring
-// them is an explicit choice; the preview must say which relays are left and
-// the choice must reach the engine and survive the preview round trip.
-func TestPreviewRelaysOnlyOnRequest(t *testing.T) {
-	e, o, _, _ := setupOTA(t)
-	o.items[1] = ota.PreviewItem{DeviceID: 1, Decision: "upgrade", Plan: model.PlanDirect, Filename: "tasmota.bin.gz", PowerRestore: "2", PowerRelaysKept: "1"}
-	form := url.Values{"id": {"1"}, "release": {"16.1.0"}, "policy": {"only-newer"}}
-	_, body := e.do(t, "POST", "/updates/preview", "operator", form)
-	if !strings.Contains(strings.ToLower(body), "relay 1 not restored (relays keep their state)") {
-		t.Fatalf("default preview: %s", body)
-	}
-	if o.previewReqs[0].RestoreRelays {
-		t.Fatal("relays must not be restored unless asked")
-	}
-	form.Set("power_after", "lights-relays")
-	_, body = e.do(t, "POST", "/updates/preview", "operator", form)
-	if !o.previewReqs[0].RestoreRelays || o.previewReqs[0].SkipPowerRestore || !strings.Contains(body, `name="power_after" value="lights-relays"`) {
-		t.Fatalf("opt-in lost: %+v", o.previewReqs)
-	}
-}
-
-// Why: with two checkboxes "restore relays" together with "skip the restore"
-// was postable and meaningless. One select makes that impossible: every value
-// maps to exactly one valid engine combination and anything else is refused.
-func TestPowerAfterMapsToValidEngineOptions(t *testing.T) {
-	cases := []struct {
-		in          string
-		skip, relay bool
-		bad         bool
-	}{
-		{"", false, false, false}, {"lights", false, false, false},
-		{"lights-relays", false, true, false}, {"leave", true, false, false},
-		{"relays", false, false, true}, {"leave,lights-relays", false, false, true},
-	}
-	for _, c := range cases {
-		skip, relay, err := powerAfter(c.in)
-		if (err != nil) != c.bad || skip != c.skip || relay != c.relay {
-			t.Errorf("powerAfter(%q) = %v %v %v", c.in, skip, relay, err)
-		}
-		if skip && relay {
-			t.Errorf("powerAfter(%q) produced the invalid combination", c.in)
-		}
+	if strings.Contains(strings.ToLower(body), "relay") || strings.Contains(body, "power_after") {
+		t.Fatalf("the preview talks about relays or carries the old field: %s", body)
 	}
 }
 

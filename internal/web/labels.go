@@ -21,7 +21,7 @@ var labels = map[string]string{
 	// OTA job states
 	"queued": "Queued", "preflight": "Checking", "backup": "Backing up",
 	"set_ota_url": "Preparing", "upgrade_issued": "Flashing", "await_reboot": "Rebooting", "safeboot_switch": "Restarting into safeboot", "safeboot_recover": "Switching back",
-	"applying": "Applying", "apply": "Sending the commands", "done": "Done", "verify": "Verifying", "restore_ota_url": "Cleaning up", "restore_power": "Restoring power",
+	"applying": "Applying", "apply": "Sending the commands", "done": "Done", "verify": "Verifying", "restore_ota_url": "Cleaning up",
 	"succeeded": "Succeeded", "failed": "Failed", "cancelled": "Cancelled",
 	// OTA stages
 	"final": "Final image", "minimal": "Minimal image",
@@ -64,7 +64,7 @@ var tones = map[string]string{
 	"queued": "neutral", "cancelled": "neutral", "unknown": "neutral",
 	"done": "ok", "sending": "info", "waiting": "info", "verifying": "info",
 	"applying": "info", "preflight": "info", "backup": "info", "set_ota_url": "info", "upgrade_issued": "info", "safeboot_switch": "info", "safeboot_recover": "info",
-	"await_reboot": "info", "verify": "info", "restore_ota_url": "info", "restore_power": "info", "new": "info",
+	"await_reboot": "info", "verify": "info", "restore_ota_url": "info", "new": "info",
 }
 
 // tone returns the badge tone of a value (neutral when not listed).
@@ -87,8 +87,8 @@ func asString(v any) string {
 const jobSteps = 8
 
 // jobStep places a job on the progress bar: check, backup, minimal image
-// (staged ESP8266 only), reboot, final image, verify, restore power
-// settings, done. It never goes backwards along either flow, so the bar of a
+// (staged ESP8266 only), reboot, final image, verify, restore settings,
+// done. It never goes backwards along either flow, so the bar of a
 // running update only ever grows. Failed and cancelled jobs show no progress
 // (the step they stopped at is not recorded on the job).
 func jobStep(state model.JobState, stage model.Stage) (int, string) {
@@ -118,8 +118,6 @@ func jobStep(state model.JobState, stage model.Stage) (int, string) {
 		return 6, "Verifying the new version"
 	case model.JobRestoreOtaURL:
 		return 7, "Restoring settings"
-	case model.JobRestorePower:
-		return 7, "Restoring the relay state"
 	case model.JobApplying:
 		return 0, "Applying"
 	case model.JobSucceeded:

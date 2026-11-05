@@ -346,9 +346,6 @@ func (c Config) validateOperational(bad func(key, msg string)) {
 	case c.TelePeriod < time.Second:
 		bad("TELEPERIOD", "must be at least 1s")
 	}
-	if c.OTAPowerMaxAge < 0 {
-		bad("OTA_POWER_MAX_AGE", "must not be negative")
-	}
 	if c.BackupMaxAge < 0 {
 		bad("BACKUP_MAX_AGE", "must not be negative")
 	}

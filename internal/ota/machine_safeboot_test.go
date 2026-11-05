@@ -57,8 +57,8 @@ func TestSafebootSwitchRows(t *testing.T) {
 		{name: "safeboot_switch/command_ok", in: sw, ev: Event{Kind: EvCommandOK}, state: model.JobSafebootSwitch, actions: probe,
 			check: func(t *testing.T, j model.Job, as []Action) {
 				wantDelay(t, as, 5*time.Second)
-				if !j.PowerCutoff.Equal(t0) {
-					t.Errorf("PowerCutoff %v: from here on MQTT reports are the device's boot announcements", j.PowerCutoff)
+				if !j.UpdatedAt.Equal(t0) {
+					t.Errorf("UpdatedAt %v: the request went out now", j.UpdatedAt)
 				}
 			}},
 		// A lost reply may hide a restart: probe, never re-send.
@@ -68,9 +68,6 @@ func TestSafebootSwitchRows(t *testing.T) {
 			state: model.JobFailed, actions: []ActionKind{ActNotify}, check: func(t *testing.T, j model.Job, _ []Action) {
 				wantErrContains(t, j, "not touched")
 				wantErrContains(t, j, "no safeboot partition")
-				if strings.Contains(j.LastError, "relays") {
-					t.Errorf("the device never restarted but the note says relays are lost: %q", j.LastError)
-				}
 			}},
 		{name: "safeboot_switch/command_failed/certain and cancelled", in: cancelled, ev: Event{Kind: EvCommandFailed, NotFlashed: true, Err: "cancelled by the user"},
 			state: model.JobCancelled, actions: []ActionKind{ActNotify}},
@@ -160,11 +157,9 @@ func TestSafebootUploadRows(t *testing.T) {
 func TestSafebootRecoverRows(t *testing.T) {
 	rec := sbJob(model.JobSafebootRecover)
 	rec.Attempt, rec.LastError = 1, "upload refused, nothing was flashed: Not enough space"
-	rec.PowerOn = 1
 	rec.RecoveryStep = 2 // the switch back was sent
 	probing := rec
 	probing.RecoveryStep = 1 // entered, nothing sent yet
-	rec.PowerReadAt = t0
 	cancelled := rec
 	cancelled.CancelRequested = true
 	probe := []ActionKind{ActProbe}
@@ -215,7 +210,6 @@ func TestSafebootRecoverRows(t *testing.T) {
 			check: func(t *testing.T, j model.Job, _ []Action) {
 				wantErrContains(t, j, "Upload into safeboot failed; the device was switched back to 15.6.0")
 				wantErrContains(t, j, "Not enough space")
-				wantErrContains(t, j, "relays 1 were ON") // the restart switched the relays off; the job says so
 			}},
 		{name: "safeboot_recover/probe_online/old firmware and cancelled", in: cancelled, ev: Event{Kind: EvProbeOnline, Identity: sbESP32("15.6.0", "tasmota32")}, state: model.JobCancelled, actions: end,
 			check: func(t *testing.T, j model.Job, _ []Action) { wantErrContains(t, j, "switched back to 15.6.0") }},
@@ -289,7 +283,7 @@ func TestSafebootDeviceActionsHaveOneDoor(t *testing.T) {
 							if !first {
 								t.Errorf("%s/%s (step %d): recovery request sent on %s -> %s", st, ev.Kind, step, in.State, out.State)
 							}
-						case ActProbeIdentity, ActPlan, ActBackup, ActSetOtaURL, ActProbe, ActRestoreOtaURL, ActRestorePower, ActNotify:
+						case ActProbeIdentity, ActPlan, ActBackup, ActSetOtaURL, ActProbe, ActRestoreOtaURL, ActNotify:
 							// not device actions of the push into safeboot
 						case ActUpgrade:
 							if in.State != model.JobSafebootSwitch || ev.Kind != EvProbeOnline || ev.Identity.Variant != variantSafeboot {

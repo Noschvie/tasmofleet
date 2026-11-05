@@ -32,12 +32,11 @@ func TestPreviewCountsRefusedApartFromSkipped(t *testing.T) {
 }
 
 // Why: a row says what happens to its device and nothing else. An updated device shows its
-// versions and file; a device that is not updated shows why, and never a version, a file or a
-// power restore line (the preview once printed a restore line for a device it would not touch).
+// versions and file; a device that is not updated shows why, and never a version or a file.
 func TestPreviewRowsShowWhatHappensAndNothingElse(t *testing.T) {
 	e, o, _, _ := setupOTA(t)
-	o.items[1] = ota.PreviewItem{DeviceID: 1, Decision: "upgrade", Plan: model.PlanDirect, Filename: "tasmota.bin.gz", PowerRestore: "1"}
-	o.items[2] = ota.PreviewItem{DeviceID: 2, Decision: "refuse", Reason: "unknown hardware", PowerRestore: "1"}
+	o.items[1] = ota.PreviewItem{DeviceID: 1, Decision: "upgrade", Plan: model.PlanDirect, Filename: "tasmota.bin.gz"}
+	o.items[2] = ota.PreviewItem{DeviceID: 2, Decision: "refuse", Reason: "unknown hardware"}
 	form := url.Values{"id": {"1", "2"}, "release": {"16.1.0"}, "policy": {"only-newer"}}
 	_, body := e.do(t, "POST", "/updates/preview", "operator", form)
 	rows := strings.Split(body, `<div class="upd-prow">`)[1:]
@@ -45,8 +44,8 @@ func TestPreviewRowsShowWhatHappensAndNothingElse(t *testing.T) {
 		t.Fatalf("want 2 rows, got %d: %s", len(rows), body)
 	}
 	up, refused := rows[0], rows[1]
-	if !strings.Contains(up, "upd-prow-file") || !strings.Contains(up, "→ <b>16.1.0</b>") || !strings.Contains(strings.ToLower(up), "relay 1 on again") {
-		t.Errorf("an updated device shows its versions, file and power restore: %s", up)
+	if !strings.Contains(up, "upd-prow-file") || !strings.Contains(up, "→ <b>16.1.0</b>") {
+		t.Errorf("an updated device shows its versions and file: %s", up)
 	}
 	if strings.Contains(up, "upd-prow-why") {
 		t.Errorf("an updated device has no reason line: %s", up)
@@ -54,9 +53,6 @@ func TestPreviewRowsShowWhatHappensAndNothingElse(t *testing.T) {
 	refused, _, _ = strings.Cut(refused, "</section>")
 	if !strings.Contains(refused, "upd-prow-why") || strings.Contains(refused, "upd-prow-file") || strings.Contains(refused, "upd-prow-ver") {
 		t.Errorf("a refused device shows its reason only: %s", refused)
-	}
-	if strings.Contains(strings.ToLower(refused), "on again") {
-		t.Errorf("a device that is not updated has no power restore: %s", refused)
 	}
 }
 

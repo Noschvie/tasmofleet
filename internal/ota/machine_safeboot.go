@@ -23,7 +23,7 @@ import (
 //     not bring the old firmware back, the job fails and tells the user where to finish by hand.
 
 // toSafebootRecover enters the one recovery attempt. reason is why the push failed and ends in
-// LastError. The device was restarted on purpose by now, so the relay note of fail() applies.
+// LastError.
 func toSafebootRecover(j model.Job, now time.Time, cfg Config, reason, addr string) (model.Job, []Action) {
 	if j.Attempt == 0 {
 		j.Attempt = 1
@@ -39,12 +39,8 @@ func toSafebootRecover(j model.Job, now time.Time, cfg Config, reason, addr stri
 	return j, []Action{{Kind: ActProbe}}
 }
 
-// afterSwitchSent notes that the device may be restarting by now: MQTT "switched off" reports
-// from here on are the device announcing its boot state.
+// afterSwitchSent notes that the switch request went out: the job's last change is now.
 func afterSwitchSent(j model.Job, now time.Time) model.Job {
-	if j.PowerCutoff.IsZero() {
-		j.PowerCutoff = now
-	}
 	j.UpdatedAt = now
 	return j
 }
@@ -88,7 +84,7 @@ func stepSafebootSwitch(j model.Job, ev Event, now time.Time, cfg Config) (model
 		// Never seen as safeboot: it may still be switching, or never did. The switch back is
 		// harmless on a device that runs the app.
 		return toSafebootRecover(j, now, cfg, "the device did not answer as safeboot in time", ev.Addr)
-	case EvStart, EvResume, EvIdentity, EvPlanned, EvBackupDone, EvBackupFailed, EvUpgradeReport, EvPowerReport, EvCancel:
+	case EvStart, EvResume, EvIdentity, EvPlanned, EvBackupDone, EvBackupFailed, EvUpgradeReport, EvCancel:
 		// not in the transition table: the job stays unchanged
 	}
 	return j, nil
@@ -164,7 +160,7 @@ func stepSafebootRecover(j model.Job, ev Event, now time.Time, cfg Config) (mode
 			return endRecovery(fail(j, now, manualSafeboot(j.LastError, ev.Addr)))
 		}
 		return endRecovery(fail(j, now, unknownSafeboot(j.LastError, ev.Addr, "the device did not answer")))
-	case EvStart, EvResume, EvIdentity, EvPlanned, EvGuardRefused, EvBackupDone, EvBackupFailed, EvUpgradeReport, EvPowerReport, EvCancel:
+	case EvStart, EvResume, EvIdentity, EvPlanned, EvGuardRefused, EvBackupDone, EvBackupFailed, EvUpgradeReport, EvCancel:
 		// not in the transition table: the job stays unchanged
 	}
 	return j, nil

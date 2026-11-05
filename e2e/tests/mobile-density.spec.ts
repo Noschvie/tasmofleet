@@ -357,9 +357,8 @@ test("update: the sticky plan keeps Review update reachable", async ({ page }) =
   await page.goto(app.url + "/updates/new");
   await page.evaluate(() => window.scrollTo(0, 300));
   await expect(page.getByRole("button", { name: "Review update" })).toBeInViewport();
-  // one select replaces the two power checkboxes
   await expect(page.getByLabel("Variant override")).toBeVisible();
-  await expect(page.getByLabel("Power after update")).toBeVisible();
+  await expect(page.getByLabel("Power after update")).toHaveCount(0); // #551
 });
 
 // UX review #3 and #4: one vocabulary (Transaction, prefetch, Users) and no raw markdown

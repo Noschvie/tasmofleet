@@ -41,7 +41,7 @@ func sbHarness(t *testing.T, fd *fakeDevice, layout tasmota.UpLayout, layoutErr 
 	t.Helper()
 	h, pa, pf := pushHarness(t, fd)
 	api := &sbAPI{pushAPI: pa, layout: layout, layoutErr: layoutErr}
-	e := NewEngine(Options{Machine: testCfg(), MaxParallel: 2, Power: h.power}, h.st, h.st, api, pf, h.backups, h.clk, nil)
+	e := NewEngine(Options{Machine: testCfg(), MaxParallel: 2}, h.st, h.st, api, pf, h.backups, h.clk, nil)
 	e.sel = h.sel
 	e.safebootPush = open
 	h.sel.esp32Direct = true

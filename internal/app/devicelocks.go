@@ -30,7 +30,7 @@ type deviceGuard struct {
 
 var activeStates = []model.JobState{
 	model.JobQueued, model.JobPreflight, model.JobBackup, model.JobSetOtaURL, model.JobSafebootSwitch, model.JobSafebootRecover, model.JobUpgradeIssued,
-	model.JobAwaitReboot, model.JobVerify, model.JobRestoreOtaURL, model.JobRestorePower, model.JobApplying,
+	model.JobAwaitReboot, model.JobVerify, model.JobRestoreOtaURL, model.JobApplying,
 }
 
 // enter takes the device lock for owner and refuses while an OTA job is

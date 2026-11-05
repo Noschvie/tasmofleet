@@ -154,8 +154,8 @@ func (a *runtime) applyLiveSettings(e sysconfig.Event) {
 	if changed("BACKUP_KEEP", "BACKUP_MAX_AGE") && a.backups != nil {
 		a.backups.SetRetention(c.BackupKeep, c.BackupMaxAge)
 	}
-	if changed("OTA_PARALLEL", "OTA_RESTORE_OTAURL", "OTA_POWER_MAX_AGE") && a.engine != nil {
-		a.engine.SetTuning(ota.Tuning{MaxParallel: c.OTAParallel, RestoreOtaURL: c.OTARestoreURL, PowerRestoreMaxAge: c.OTAPowerMaxAge})
+	if changed("OTA_PARALLEL", "OTA_RESTORE_OTAURL") && a.engine != nil {
+		a.engine.SetTuning(ota.Tuning{MaxParallel: c.OTAParallel, RestoreOtaURL: c.OTARestoreURL})
 	}
 	if changed("POLL_INTERVAL", "TELEPERIOD") && a.tracker != nil {
 		a.tracker.SetIntervals(staleAfter(c.TelePeriod), c.PollInterval)

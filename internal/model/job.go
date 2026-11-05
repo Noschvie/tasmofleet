@@ -1,7 +1,6 @@
 package model
 
 import (
-	"strconv"
 	"strings"
 	"time"
 )
@@ -41,7 +40,6 @@ const (
 	JobSafebootRecover JobState = "safeboot_recover"
 	JobVerify          JobState = "verify"          // device back, checking version/variant/family
 	JobRestoreOtaURL   JobState = "restore_ota_url" // putting the original OtaUrl back
-	JobRestorePower    JobState = "restore_power"   // switching the relays that were ON before the update back on
 	JobApplying        JobState = "applying"        // policy job: commands are being sent and saved (JobVerify then reads them back)
 	JobSucceeded       JobState = "succeeded"
 	JobFailed          JobState = "failed"
@@ -190,14 +188,6 @@ type Job struct {
 
 	Policy     UpdatePolicy
 	SkipBackup bool // set only by explicit user choice
-	// SkipPowerRestore turns the power restore after the update off. The
-	// default (false) is to switch back on the relays that were ON before.
-	SkipPowerRestore bool
-	// RestoreRelays also restores plain relays. Off by default: on this fleet
-	// relays keep their state across an update, so a relay that is OFF after
-	// the boot was most likely switched off by someone, and switching it back
-	// ON would override them. Only light channels are restored by default.
-	RestoreRelays bool
 
 	// Delivery is how the image reaches the device: empty is the default pull
 	// (the device downloads it from tasmofleet's firmware server after OtaUrl and
@@ -238,25 +228,8 @@ type Job struct {
 
 	IdentityBefore Identity // detected in preflight
 	OriginalOtaURL string   // restored at the end
-	// PowerOn is the set of relays that were ON in preflight (empty when
-	// the state could not be read, e.g. the device already ran minimal).
-	// Only these are ever switched, and only after the final image is verified.
-	PowerOn RelaySet
-	// PowerReadAt is when PowerOn was last read from the device (preflight,
-	// refreshed by the read right before the first Upgrade). The restore
-	// refuses to act on a state that is older than the configured maximum.
-	PowerReadAt time.Time
-	// PowerCutoff is when the device first went offline for the update. An
-	// MQTT "switched off" report counts only if it was received between
-	// PowerReadAt and PowerCutoff; later ones are the device's boot
-	// announcements.
-	PowerCutoff time.Time
-	// PowerNote collects why relays are not restored (switched off by
-	// someone, PulseTime/Interlock/shutter relays, state too old); it is
-	// added to LastError when the job ends.
-	PowerNote    string
-	UptimeBefore int64 // UptimeSec right before Upgrade; reboot proof is a smaller value later
-	SeenOffline  bool  // device dropped off after Upgrade
+	UptimeBefore   int64    // UptimeSec right before Upgrade; reboot proof is a smaller value later
+	SeenOffline    bool     // device dropped off after Upgrade
 	// CancelRequested: the user cancelled while the device was flashing; the
 	// job ends as cancelled after the current stage instead of continuing.
 	CancelRequested bool
@@ -270,46 +243,6 @@ type Job struct {
 	CreatedBy  string
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
-}
-
-// MaxRelays is the number of relays a RelaySet can hold.
-const MaxRelays = 32
-
-// RelaySet is a set of relay numbers (1 = POWER/POWER1, 2 = POWER2, ...).
-// It is a plain integer so that Job stays comparable.
-type RelaySet uint32
-
-// Add returns the set with relay n (1..MaxRelays) added; other n are ignored.
-func (s RelaySet) Add(n int) RelaySet {
-	if n < 1 || n > MaxRelays {
-		return s
-	}
-	return s | 1<<(n-1)
-}
-
-// Has reports whether relay n is in the set.
-func (s RelaySet) Has(n int) bool {
-	return n >= 1 && n <= MaxRelays && s&(1<<(n-1)) != 0
-}
-
-// String lists the relays like "1, 3".
-func (s RelaySet) String() string {
-	var parts []string
-	for _, n := range s.List() {
-		parts = append(parts, strconv.Itoa(n))
-	}
-	return strings.Join(parts, ", ")
-}
-
-// List returns the relays in ascending order.
-func (s RelaySet) List() []int {
-	var out []int
-	for n := 1; n <= MaxRelays; n++ {
-		if s.Has(n) {
-			out = append(out, n)
-		}
-	}
-	return out
 }
 
 // JobEvent is one persisted transition, for the job history view and audit.

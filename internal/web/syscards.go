@@ -85,7 +85,7 @@ var sysLayout = []sysTabDef{
 	{"firmware", "Firmware & updates", []int{2, 1}, []sysCardDef{
 		{ID: "source", Title: "Firmware source", Stack: 0, Keys: []string{"FIRMWARE_BASE_URL", "FIRMWARE_SOURCES", "FIRMWARE_REFRESH_INTERVAL", "FIRMWARE_KEEP_RELEASES"}},
 		{ID: "crosscheck", Title: "Cross-check", Stack: 1, Keys: []string{"FIRMWARE_ALLOW_SINGLE_SOURCE"}},
-		{ID: "ota", Title: "Updates (OTA)", Stack: 1, Keys: []string{"OTA_PARALLEL", "OTA_POWER_MAX_AGE", "OTA_RESTORE_OTAURL"}},
+		{ID: "ota", Title: "Updates (OTA)", Stack: 1, Keys: []string{"OTA_PARALLEL", "OTA_RESTORE_OTAURL"}},
 	}},
 	{"signin", "Sign-in", []int{ui.SpanAll, 2, 1}, []sysCardDef{
 		{ID: "mode", Title: "Sign-in mode", Stack: 0, StepUp: true, Keys: []string{"AUTH_MODE"}},
@@ -325,7 +325,6 @@ var sysCopies = map[string]sysCopy{
 	"FIRMWARE_ALLOW_SINGLE_SOURCE": {Help: "Off is recommended.", Width: "full", Info: "Off: a firmware file must be offered by two sources with the same checksum. On: one source is enough. Shown in the warning colour while on."},
 
 	"OTA_PARALLEL":       {Help: "Fleet-wide.", Width: "xs"},
-	"OTA_POWER_MAX_AGE":  {Label: "Relay state max age", Help: "Older states stay off.", Width: "xs", Info: "A relay state read before an update may switch relays back on only while it is younger than this."},
 	"OTA_RESTORE_OTAURL": {Help: "Device gets its previous update address back.", Width: "full"},
 
 	"AUTH_MODE":           {Width: "full"},

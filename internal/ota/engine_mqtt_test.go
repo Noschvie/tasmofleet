@@ -86,7 +86,7 @@ func newPathHarness(t *testing.T, fp *fakePaths) (*harness, *pathSpy) {
 	t.Helper()
 	h := newHarness(t, 2, plugDevice())
 	spy := &pathSpy{fakeAPI: h.api}
-	h.e = NewEngine(Options{Machine: testCfg(), MaxParallel: 2, Power: h.power, Paths: fp}, h.st, h.st, spy, h.fw, h.backups, h.clk, nil)
+	h.e = NewEngine(Options{Machine: testCfg(), MaxParallel: 2, Paths: fp}, h.st, h.st, spy, h.fw, h.backups, h.clk, nil)
 	h.e.sel = h.sel
 	return h, spy
 }
@@ -144,7 +144,7 @@ func TestResumedJobKeepsItsTransport(t *testing.T) {
 	id := submitOne(t, h, Request{DeviceID: 1, Release: "16.0.0", SkipBackup: true})
 	spy.seen = nil
 	// "restart": a new engine without any chooser runs the stored job
-	h.e = NewEngine(Options{Machine: testCfg(), MaxParallel: 2, Power: h.power}, h.st, h.st, spy, h.fw, h.backups, h.clk, nil)
+	h.e = NewEngine(Options{Machine: testCfg(), MaxParallel: 2}, h.st, h.st, spy, h.fw, h.backups, h.clk, nil)
 	h.e.sel = h.sel
 	h.run(t, h.e)
 	if j := h.job(t, id); j.State != model.JobSucceeded || j.Transport != model.TransportMQTT {

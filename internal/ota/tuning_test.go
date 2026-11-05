@@ -2,7 +2,6 @@ package ota
 
 import (
 	"testing"
-	"time"
 )
 
 // Why: the update settings can change on the settings page while jobs run. The
@@ -12,8 +11,8 @@ func TestSetTuningChangesTheEngineLive(t *testing.T) {
 	if e.maxParallel() != 2 || !e.machine().RestoreOtaURL {
 		t.Fatalf("start values: %d %v", e.maxParallel(), e.machine().RestoreOtaURL)
 	}
-	e.SetTuning(Tuning{MaxParallel: 5, RestoreOtaURL: false, PowerRestoreMaxAge: 3 * time.Minute})
-	if e.maxParallel() != 5 || e.machine().RestoreOtaURL || e.machine().PowerRestoreMaxAge != 3*time.Minute {
+	e.SetTuning(Tuning{MaxParallel: 5, RestoreOtaURL: false})
+	if e.maxParallel() != 5 || e.machine().RestoreOtaURL {
 		t.Fatalf("after SetTuning: %d %+v", e.maxParallel(), e.machine())
 	}
 	if e.machine().CommandTimeout != DefaultConfig().CommandTimeout {

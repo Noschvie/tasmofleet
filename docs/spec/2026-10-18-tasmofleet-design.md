@@ -975,7 +975,7 @@ failed"; none of them touches firmware, so the Guard and the states below concer
 
 `queued`, `preflight`, `backup`, `set_ota_url`, `safeboot_switch` and `safeboot_recover` (push into
 safeboot only, below), `upgrade_issued`, `await_reboot`, `verify`,
-`restore_ota_url`, `restore_power`, terminal `succeeded`, `failed`, `cancelled`. `Stage` is `minimal` or
+`restore_ota_url`, terminal `succeeded`, `failed`, `cancelled`. `Stage` is `minimal` or
 `final`; staged jobs pass through `set_ota_url -> ... -> verify` twice.
 
 ### 9.3 Transition table
@@ -1060,30 +1060,15 @@ Refinements (implemented in `machine.go`, tests per row):
 - Approved additions (WP4b): `Engine.Hint(deviceID, report)` feeds MQTT
   `stat/<t>/UPGRADE` reports; `Engine.CancelBatch(batchID)`.
 
-**Power restore** (`restore_power`, after `restore_ota_url`; opt-out per batch with
-`SkipPowerRestore`). **By default only light channels are restored** (a device whose
-Status 11 has Dimmer/Color/CT; its channel is the last POWERn). Plain relays are restored
-only with the per-batch opt-in `RestoreRelays` (default off, warned in the UI). A relay
-or light that is ON in **any** settled post-boot reading counts as kept and is never
-switched. Zero or missing input never starts a restore (`TestStepNoRestoreOnZeroOrMissingInput`).
-
-- Relay states are read three times: in preflight (Status 11), right before the first
-  `Upgrade`, and after the final boot. Only relays that were ON in both pre-update
-  readings are candidates. A non-retained MQTT `POWER OFF` before the reboot removes a
-  candidate.
-- The post-boot reading must be settled: two equal readings one probe interval apart,
-  at most 6 tries. If any candidate is still ON, the device kept its state and nothing
-  is switched. Otherwise the missing relays are switched ON once (`Power<n> ON` via
-  devicecmd, audited as "tasmofleet (OTA restore for job N, requested by X)") and
-  verified once.
-- **The engine never switches a relay OFF** and never touches relays the user
-  switched. It fails closed on any uncertainty: unreadable or ambiguous readings,
-  partially kept state, relays with PulseTime/Interlock/shutter roles or above 8, a MAC
-  mismatch after the boot, or readings older than `OTA_POWER_MAX_AGE` (default 20 min).
-  Then the job still succeeds, and `LastError` notes why nothing was restored.
-- Lights restore power only, not dimmer/colour/CT. Observations behind this design
-  (relays keep state through minimal; lights come up ON then go OFF; ESP32 keeps state
-  only with SetOption0 1) are in `docs/research/tasmota-minimal-and-ota.md`.
+**No power restore** (#551, 0.28.0). The engine never reads or switches relays around an update:
+no `Power<n>` command, no Status 11 for relays, no PulseTime/Interlock/ShutterRelay reads, no
+`restore_power` state, no "Power after update" choice. What a device does with its relays after
+the reboot is its own setting: `SetOption0 1` (save the relay state), `PowerOnState 3` (keep the
+last state) and `SaveData 1`. The README says so ("What TasmoFleet changes on your devices"), the
+Policy rule template "Restore power after an outage" sets `PowerOnState 3`. Migration 0042 ended
+jobs that were waiting in `restore_power` as `succeeded` (with a job event) and deleted the stored
+`OTA_POWER_MAX_AGE`; the power columns of `ota_jobs` (0007, 0008) stay unused. The research notes
+in `docs/research/tasmota-minimal-and-ota.md` keep the observations that led to the old design.
 
 Resume (process start): non-terminal jobs get `resume`.
 
@@ -1958,7 +1943,7 @@ Two tiers:
 | `AUTH_MODE` (`local`, `oidc`), `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_SCOPES`, `OIDC_GROUPS_CLAIM`, `OIDC_USERNAME_CLAIM`, `OIDC_NAME_CLAIM`, `OIDC_DISPLAY_NAME`, `ADMIN_GROUPS`, `OPERATOR_GROUPS` | `local`, …, `openid,profile,email`, `groups`, `preferred_username`, `name`, `Single sign-on` | restart; step-up for all but the button name and scopes (2026-10-20); environment locks |
 | `DEVICE_NETWORKS` | — (no device is contacted until set) | live |
 | `FIRMWARE_BASE_URL`, `FIRMWARE_SOURCES`, `FIRMWARE_ALLOW_SINGLE_SOURCE`, `FIRMWARE_REFRESH_INTERVAL`                                                                                                    | —, `github,ota.tasmota.com`, `false`, `6h` | restart (the firmware cache, the device-facing listener and the OTA routes are built at start) |
-| `OTA_PARALLEL`, `OTA_RESTORE_OTAURL`, `OTA_POWER_MAX_AGE`                                                                                                                                               | `2`, `true`, `20m` | live |
+| `OTA_PARALLEL`, `OTA_RESTORE_OTAURL`                                                                                                                                                                    | `2`, `true` | live |
 | `BACKUP_KEEP`, `BACKUP_MAX_AGE`, `BACKUP_INTERVAL`                                                                                                                                                      | `10`, `720h`, `0s` (manual) | live |
 | `POLL_INTERVAL`, `TELEPERIOD`                                                                                                                                                                           | `5m`, `300s` | live |
 | `MQTT_URL`, `MQTT_USER`, `MQTT_PASSWORD`, `MQTT_FULLTOPIC`                                                                                                                                              | —, —, —, `%prefix%/%topic%/` | live (the broker connection is switched in place) |

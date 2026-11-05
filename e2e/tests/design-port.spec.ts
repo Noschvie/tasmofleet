@@ -216,9 +216,11 @@ test("updates/new: every update option is visible without unfolding, desktop and
   for (const [w, h] of [[1280, 900], [375, 812]]) {
     await page.setViewportSize({ width: w, height: h });
     await page.goto(app.url + "/updates/new");
-    for (const name of ["backup", "policy", "power_after", "delivery", "variant"]) {
+    for (const name of ["backup", "policy", "delivery", "variant"]) {
       await expect(page.locator(`.upd-opts [name=${name}]`), `${name} at ${w}`).toBeVisible();
     }
+    // #551: TasmoFleet leaves the power state alone, so there is no power choice
+    await expect(page.locator(".upd-opts [name=power_after]")).toHaveCount(0);
     await expect(page.locator(".upd-opts details")).toHaveCount(0);
   }
 });

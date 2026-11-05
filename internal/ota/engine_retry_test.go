@@ -51,7 +51,7 @@ func TestRetryCreatesLinkedBatchWithTheSameOptions(t *testing.T) {
 	h := newHarness(t, 2, failingDevices(1)...)
 	aud := &auditRec{}
 	h.e.audit = aud
-	orig := runFailed(t, h, Request{DeviceID: 1, Release: "16.0.0", Policy: model.PolicyReinstall, SkipBackup: true, SkipPowerRestore: true, RestoreRelays: true})
+	orig := runFailed(t, h, Request{DeviceID: 1, Release: "16.0.0", Policy: model.PolicyReinstall, SkipBackup: true})
 	if j := h.job(t, 1); j.State != model.JobFailed {
 		t.Fatalf("original job %s", j.State)
 	}
@@ -76,7 +76,7 @@ func TestRetryCreatesLinkedBatchWithTheSameOptions(t *testing.T) {
 	if j.OriginalOtaURL != origURL {
 		t.Fatalf("the retry must restore the original's OtaUrl %q, not what the failed update left: %q", origURL, j.OriginalOtaURL)
 	}
-	if j.TargetRelease != "16.0.0" || j.Policy != model.PolicyReinstall || !j.SkipBackup || !j.SkipPowerRestore || !j.RestoreRelays || j.CreatedBy != "bob" {
+	if j.TargetRelease != "16.0.0" || j.Policy != model.PolicyReinstall || !j.SkipBackup || j.CreatedBy != "bob" {
 		t.Fatalf("retry job lost the original's options: %+v", j)
 	}
 	h.run(t, h.e)

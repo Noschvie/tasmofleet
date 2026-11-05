@@ -38,7 +38,7 @@ func TestLabelFallbackHumanisesUnknownValues(t *testing.T) {
 // to the raw name.
 func TestEveryJobStateHasLabelAndTone(t *testing.T) {
 	for _, s := range []model.JobState{model.JobQueued, model.JobPreflight, model.JobBackup, model.JobSetOtaURL,
-		model.JobUpgradeIssued, model.JobAwaitReboot, model.JobVerify, model.JobRestoreOtaURL, model.JobRestorePower,
+		model.JobUpgradeIssued, model.JobAwaitReboot, model.JobVerify, model.JobRestoreOtaURL,
 		model.JobSucceeded, model.JobFailed, model.JobCancelled} {
 		if _, ok := labels[string(s)]; !ok {
 			t.Errorf("job state %q has no label", s)

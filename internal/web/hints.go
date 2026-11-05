@@ -29,7 +29,6 @@ var hints = map[string]string{
 	"applying":         "Applying: sending the policy commands and saving them to the device once.",
 	"verify":           "Verifying: checking that the device runs the new firmware.",
 	"restore_ota_url":  "Cleaning up: putting the device's original update address back.",
-	"restore_power":    "Restoring power: relays that were on go back on.",
 	"succeeded":        "Succeeded: the device runs the target firmware.",
 	"failed":           "Failed: the update did not finish; the device keeps its old state.",
 	"cancelled":        "Cancelled: stopped before it finished.",

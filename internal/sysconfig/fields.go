@@ -101,8 +101,6 @@ var fields = []Field{
 	{Key: "OTA_PARALLEL", Group: GroupOTA, Label: "Updates in parallel", Apply: Live, Help: "Fleet-wide number of devices updated at the same time."},
 	{Key: "OTA_RESTORE_OTAURL", Bool: true, Group: GroupOTA, Label: "Restore original OtaUrl", Apply: Live,
 		Help: "After an update the device gets its own previous update address back, not the address of this server."},
-	{Key: "OTA_POWER_MAX_AGE", Group: GroupOTA, Label: "Relay state maximum age", Apply: Live,
-		Help: "A relay state read before an update may switch relays back on only while it is younger than this."},
 
 	{Key: "BACKUP_KEEP", Group: GroupBackup, Label: "Backups kept per device", Apply: Live,
 		Help: "Lowering it can delete restore points."},

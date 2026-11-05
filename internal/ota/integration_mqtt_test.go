@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/devicecmd"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/mqttbus"
 	"github.com/nofuturekid/tasmofleet/internal/mqttcmd"
@@ -134,7 +133,6 @@ func newItMQTT(t *testing.T) *itMQTT {
 	api := NewDeviceAPI(router)
 	api.(*deviceAPI).gap = 5 * time.Millisecond
 	e.api = &guardedAPI{DeviceAPI: api, env: e}
-	e.power = devicecmd.New(devicecmd.Options{Devices: storeDevices{e.st}, Client: router, Audit: e.audits, MQTT: ch})
 	e.paths = itPaths{m.facts}
 	unsub := bus.Subscribe([]mqttbus.Kind{mqttbus.KindUpgrade}, func(msg mqttbus.Message) {
 		var p struct{ Upgrade string }
@@ -189,18 +187,15 @@ func (m *itMQTT) wantTransport(dev model.DeviceID) model.Job {
 	return j
 }
 
-// Staged ESP8266 over MQTT end to end with the power restore: both Upgrades and every probe go through
-// the broker (the device answers nothing over HTTP), the minimal window is bridged by the LWT, and the
-// light comes back on. The language build cannot be read over MQTT, so the person chose it (D10).
-func TestITMQTTStagedESP8266WithPowerRestore(t *testing.T) {
+// Staged ESP8266 over MQTT end to end: both Upgrades and every probe go through
+// the broker (the device answers nothing over HTTP), the minimal window is bridged by the LWT. The language build cannot be read over MQTT, so the person chose it (D10).
+func TestITMQTTStagedESP8266(t *testing.T) {
 	m := newItMQTT(t)
 	dev := m.addMQTT(simulator.DeviceSpec{Profile: simulator.ProfileESP8266_1M, Light: true})
-	m.setRelays(dev, true)
 	orig := m.ctrl[dev].OtaURL()
 	eng := m.start(2)
 	m.submit(eng, Request{DeviceID: dev, Language: "en"})
 	j := m.expectSuccess(dev, orig, 2, model.PlanStaged)
-	m.wantRelays(dev, true)
 	if j.Transport != model.TransportMQTT {
 		t.Fatalf("job transport = %q, the job must say it went over MQTT", j.Transport)
 	}
@@ -315,7 +310,7 @@ func TestITMQTTJobTransportSurvivesEngineRestart(t *testing.T) {
 
 // Why (H1): over MQTT the language cannot be read after the flash, so the verify step must not hold the
 // person's choice (DE) against the "unknown" it reads back. Staged and direct both end Succeeded, the
-// German file was flashed, and the light is back on.
+// German file was flashed.
 func TestITMQTTLanguageChoiceDoesNotFailTheVerify(t *testing.T) {
 	t.Parallel() // the parent too, see newItEnv
 	for _, tc := range []struct {
@@ -327,7 +322,6 @@ func TestITMQTTLanguageChoiceDoesNotFailTheVerify(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			m := newItMQTT(t)
 			dev := m.addMQTT(simulator.DeviceSpec{Profile: tc.profile, Light: true})
-			m.setRelays(dev, true)
 			orig := m.ctrl[dev].OtaURL()
 			eng := m.start(2)
 			m.submit(eng, Request{DeviceID: dev, Language: "de"})
@@ -339,7 +333,6 @@ func TestITMQTTLanguageChoiceDoesNotFailTheVerify(t *testing.T) {
 			if !flashed {
 				t.Fatalf("the German file was never set as OtaUrl: %v", m.ctrl[dev].Commands())
 			}
-			m.wantRelays(dev, true)
 			if d, _ := m.st.GetDevice(context.Background(), dev); d.Identity.Version != itRelease {
 				t.Fatalf("inventory shows %q, want the verified %s", d.Identity.Version, itRelease)
 			}

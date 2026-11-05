@@ -268,19 +268,6 @@ type fakeDevice struct {
 	// drops off again and comes back on the final image.
 	autoContinue int
 	then         *model.Identity
-	// power is the set of relays that are ON; flashClearsPower models the
-	// two-step ESP8266 path and ESP32, which lose the relay state on flashing.
-	power            model.RelaySet
-	flashClearsPower bool
-	bootPower        model.RelaySet // relays ON after such a flash
-	restricted       model.RelaySet // PulseTime/Interlock/shutter relays
-	unclear          model.RelaySet // relays whose Status 11 value is neither ON nor OFF
-	light            model.RelaySet // the light channel(s): restored by default; other relays only on request
-	mac              string         // MAC the device reports; testMAC when empty
-	macErr           error
-	reads            int         // ReadPower calls
-	onRead           func(n int) // called after the nth ReadPower, outside the lock
-	readPowerErr     error
 }
 
 // step advances the fake device by one probe; it reports false while the
@@ -350,41 +337,6 @@ func (a *fakeAPI) Probe(_ context.Context, d model.Device) (model.Identity, int6
 	return fd.ident, up, nil
 }
 
-func (a *fakeAPI) ReadPower(_ context.Context, d model.Device) (PowerReading, error) {
-	a.mu.Lock()
-	fd := a.dev(d.ID)
-	if fd.readPowerErr != nil {
-		a.mu.Unlock()
-		return PowerReading{}, fd.readPowerErr
-	}
-	fd.reads++
-	n, p, hook := fd.reads, PowerReading{On: fd.power &^ fd.unclear, Unknown: fd.unclear, Light: fd.light, All: fd.power | fd.unclear | fd.restricted | fd.light}, fd.onRead
-	a.mu.Unlock()
-	if hook != nil {
-		hook(n)
-	}
-	return p, nil
-}
-
-func (a *fakeAPI) ReadMAC(_ context.Context, d model.Device) (string, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	fd := a.dev(d.ID)
-	if fd.macErr != nil {
-		return "", fd.macErr
-	}
-	if fd.mac != "" {
-		return fd.mac, nil
-	}
-	return testMAC, nil
-}
-
-func (a *fakeAPI) RestrictedRelays(_ context.Context, d model.Device, _ model.RelaySet) (model.RelaySet, error) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.dev(d.ID).restricted, nil
-}
-
 func (a *fakeAPI) SetOtaURL(_ context.Context, d model.Device, u string) error {
 	a.rec.add("set_ota_url %d %s", d.ID, u)
 	a.mu.Lock()
@@ -421,9 +373,6 @@ func (a *fakeAPI) Upgrade(_ context.Context, d model.Device) (string, error) {
 		}
 		fd.offline = 2
 		fd.uptime = 0
-		if fd.flashClearsPower {
-			fd.power = fd.bootPower
-		}
 	}
 	if fd.upgradeErr {
 		return "", errors.New("timeout")
@@ -538,37 +487,7 @@ func (s *fakeSel) Guard(_ model.Identity, a model.Artifact, u string, _ fwselect
 
 // ---- harness ----
 
-// fakePower is the PowerSwitch: it switches the fake device and logs the call.
-type fakePower struct {
-	rec  *recorder
-	api  *fakeAPI
-	fail map[int]bool // relays whose command fails
-	// ignore: the command succeeds but the relay stays OFF
-	ignore map[int]bool
-	// ignoreOnce: the first command for the relay is lost, the second works
-	ignoreOnce map[int]bool
-}
-
-func (p *fakePower) Power(_ context.Context, actor string, id model.DeviceID, relay int, action string) (string, error) {
-	p.rec.add("power %d relay %d %s by %s", id, relay, action, actor)
-	if p.fail[relay] {
-		return "", errors.New("power command failed")
-	}
-	if p.ignoreOnce[relay] {
-		delete(p.ignoreOnce, relay)
-		return action, nil
-	}
-	if !p.ignore[relay] {
-		p.api.mu.Lock()
-		fd := p.api.dev(id)
-		fd.power = fd.power.Add(relay)
-		p.api.mu.Unlock()
-	}
-	return action, nil
-}
-
 type harness struct {
-	power   *fakePower
 	backups *fakeBackups
 	rec     *recorder
 	clk     *instantClock
@@ -592,7 +511,6 @@ func newHarness(t *testing.T, maxParallel int, devs ...*fakeDevice) *harness {
 		h.st.devices[id] = model.Device{ID: id, Name: fmt.Sprintf("plug-%d", id), Address: "192.0.2.1", MAC: testMAC}
 		h.api.devs[id] = d
 	}
-	h.power = &fakePower{rec: rec, api: h.api}
 	h.backups = &fakeBackups{rec: rec}
 	h.hold = func(id model.DeviceID) { rec.add("hold %d", id) }
 	h.e = h.newEngine(maxParallel)
@@ -600,7 +518,7 @@ func newHarness(t *testing.T, maxParallel int, devs ...*fakeDevice) *harness {
 }
 
 func (h *harness) newEngine(maxParallel int) *Engine {
-	e := NewEngine(Options{Machine: testCfg(), MaxParallel: maxParallel, Power: h.power, HoldFlashing: h.hold}, h.st, h.st, h.api, h.fw, h.backups, h.clk, nil)
+	e := NewEngine(Options{Machine: testCfg(), MaxParallel: maxParallel, HoldFlashing: h.hold}, h.st, h.st, h.api, h.fw, h.backups, h.clk, nil)
 	e.sel = h.sel
 	return e
 }

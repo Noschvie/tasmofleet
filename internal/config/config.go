@@ -114,12 +114,9 @@ type Config struct {
 	TelePeriod   time.Duration `env:"TELEPERIOD" ui:"true" default:"300s"`
 	PollInterval time.Duration `env:"POLL_INTERVAL" ui:"true" default:"5m"`
 
-	OTAParallel   int  `env:"OTA_PARALLEL" ui:"true" default:"2"`
-	OTARestoreURL bool `env:"OTA_RESTORE_OTAURL" ui:"true" default:"true"`
-	// OTAPowerMaxAge is how old the relay state read before an update may be
-	// when the restore would switch relays back on; older, nothing is switched.
-	OTAPowerMaxAge time.Duration `env:"OTA_POWER_MAX_AGE" ui:"true" default:"20m"`
-	FWSources      []string      `env:"FIRMWARE_SOURCES" ui:"true" default:"github,ota.tasmota.com"`
+	OTAParallel   int      `env:"OTA_PARALLEL" ui:"true" default:"2"`
+	OTARestoreURL bool     `env:"OTA_RESTORE_OTAURL" ui:"true" default:"true"`
+	FWSources     []string `env:"FIRMWARE_SOURCES" ui:"true" default:"github,ota.tasmota.com"`
 	// FWRefreshInterval is how often the upstream index is refreshed in the
 	// background (after the refresh at start); 0 = only at start.
 	FWRefreshInterval time.Duration `env:"FIRMWARE_REFRESH_INTERVAL" ui:"true" default:"6h"`

@@ -142,7 +142,7 @@ func TestStoredValueBeatsDefault(t *testing.T) {
 func TestLegacyEnvironmentValuesAreImportedOnce(t *testing.T) {
 	st := newMem()
 	st.rows["BACKUP_KEEP"] = store.SystemSetting{Key: "BACKUP_KEEP", Value: "4"}
-	env := []string{"TASMOFLEET_OTA_PARALLEL=5", "TASMOFLEET_BACKUP_KEEP=99", "TASMOFLEET_OTA_POWER_MAX_AGE=nonsense", "TASMOFLEET_MQTT_URL=tcp://bob:hunter2@broker.lan:1883"}
+	env := []string{"TASMOFLEET_OTA_PARALLEL=5", "TASMOFLEET_BACKUP_KEEP=99", "TASMOFLEET_BACKUP_MAX_AGE=nonsense", "TASMOFLEET_MQTT_URL=tcp://bob:hunter2@broker.lan:1883"}
 	s, aud := newSvc(t, st, env...)
 	c := s.Snapshot()
 	if c.OTAParallel != 5 {
@@ -154,7 +154,7 @@ func TestLegacyEnvironmentValuesAreImportedOnce(t *testing.T) {
 	if st.rows["OTA_PARALLEL"].Value != "5" || st.rows["OTA_PARALLEL"].UpdatedBy != "env-import" {
 		t.Fatalf("not persisted: %+v", st.rows["OTA_PARALLEL"])
 	}
-	if _, ok := st.rows["OTA_POWER_MAX_AGE"]; ok || s.Skipped()["OTA_POWER_MAX_AGE"] == "" {
+	if _, ok := st.rows["BACKUP_MAX_AGE"]; ok || s.Skipped()["BACKUP_MAX_AGE"] == "" {
 		t.Fatalf("an invalid value must be reported and not stored: skipped %v", s.Skipped())
 	}
 	// Credentials in a legacy URL move to the sealed password field.

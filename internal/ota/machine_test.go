@@ -23,14 +23,13 @@ const (
 
 func testCfg() Config {
 	return Config{
-		CommandTimeout:     30 * time.Second,
-		UpgradeAccept:      3 * time.Minute,
-		RebootWindow:       8 * time.Minute,
-		ProbeInterval:      5 * time.Second,
-		MaxAttempts:        2,
-		SafebootWindow:     2 * time.Minute,
-		RestoreOtaURL:      true,
-		PowerRestoreMaxAge: 20 * time.Minute,
+		CommandTimeout: 30 * time.Second,
+		UpgradeAccept:  3 * time.Minute,
+		RebootWindow:   8 * time.Minute,
+		ProbeInterval:  5 * time.Second,
+		MaxAttempts:    2,
+		SafebootWindow: 2 * time.Minute,
+		RestoreOtaURL:  true,
 	}
 }
 
@@ -315,16 +314,12 @@ func TestStepUpgradeIssued(t *testing.T) {
 			// The device answered "Upload Failed" (office-monitor-thomas,
 			// 2026-10-24: "Not enough space"): nothing was flashed and the
 			// device keeps running, so waiting for a reboot that cannot come
-			// only blocks the slot. The relays were never touched, so the
-			// failure carries no "not restored" note.
-			name: "upgrade_issued/command_failed/upload refused", in: withPower(ui, 1), ev: Event{Kind: EvCommandFailed, Err: "upload: tasmota: device refused the upload: Not enough space", NotFlashed: true},
+			// only blocks the slot.
+			name: "upgrade_issued/command_failed/upload refused", in: ui, ev: Event{Kind: EvCommandFailed, Err: "upload: tasmota: device refused the upload: Not enough space", NotFlashed: true},
 			state: model.JobFailed, actions: []ActionKind{ActNotify},
 			check: func(t *testing.T, j model.Job, _ []Action) {
 				wantErrContains(t, j, "nothing was flashed")
 				wantErrContains(t, j, "Not enough space")
-				if strings.Contains(j.LastError, "not restored") {
-					t.Fatalf("refusal claims relays were left off: %q", j.LastError)
-				}
 			},
 		},
 		{
@@ -895,14 +890,10 @@ func TestStepResume(t *testing.T) {
 		{model.JobUpgradeIssued, []ActionKind{ActProbe}, 8 * time.Minute},
 		{model.JobAwaitReboot, []ActionKind{ActProbe}, 8 * time.Minute},
 		{model.JobRestoreOtaURL, []ActionKind{ActRestoreOtaURL}, 30 * time.Second},
-		{model.JobRestorePower, []ActionKind{ActRestorePower}, 30 * time.Second},
 	}
 	for _, c := range cases {
 		t.Run(string(c.state)+"/resume", func(t *testing.T) {
 			in := job(c.state, model.StageMinimal)
-			if c.state == model.JobRestorePower {
-				in.PowerOn, in.PowerReadAt = 1, t0 // something recent to restore
-			}
 			got, as := Step(in, Event{Kind: EvResume}, t0, testCfg())
 			if got.State != c.state {
 				t.Fatalf("resume changed state to %s", got.State)
@@ -932,12 +923,12 @@ func TestStepResume(t *testing.T) {
 var (
 	allStates = []model.JobState{
 		model.JobQueued, model.JobPreflight, model.JobBackup, model.JobSetOtaURL, model.JobUpgradeIssued,
-		model.JobAwaitReboot, model.JobVerify, model.JobRestoreOtaURL, model.JobRestorePower,
+		model.JobAwaitReboot, model.JobVerify, model.JobRestoreOtaURL,
 		model.JobSucceeded, model.JobFailed, model.JobCancelled,
 	}
 	allEvents = []EventKind{
 		EvStart, EvResume, EvIdentity, EvPlanned, EvCommandOK, EvCommandFailed, EvGuardRefused,
-		EvProbeOnline, EvProbeOffline, EvTimeout, EvBackupDone, EvBackupFailed, EvUpgradeReport, EvPowerReport, EvCancel,
+		EvProbeOnline, EvProbeOffline, EvTimeout, EvBackupDone, EvBackupFailed, EvUpgradeReport, EvCancel,
 	}
 )
 
@@ -945,14 +936,13 @@ var (
 // besides resume and cancel which are covered by their own tests.
 var handled = map[model.JobState][]EventKind{
 	model.JobQueued:        {EvStart},
-	model.JobPreflight:     {EvIdentity, EvPlanned, EvGuardRefused, EvCommandFailed, EvTimeout, EvPowerReport},
-	model.JobBackup:        {EvBackupDone, EvBackupFailed, EvPowerReport},
-	model.JobSetOtaURL:     {EvCommandOK, EvCommandFailed, EvTimeout, EvGuardRefused, EvPowerReport},
-	model.JobUpgradeIssued: {EvCommandOK, EvCommandFailed, EvProbeOffline, EvProbeOnline, EvUpgradeReport, EvTimeout, EvGuardRefused, EvPowerReport},
+	model.JobPreflight:     {EvIdentity, EvPlanned, EvGuardRefused, EvCommandFailed, EvTimeout},
+	model.JobBackup:        {EvBackupDone, EvBackupFailed},
+	model.JobSetOtaURL:     {EvCommandOK, EvCommandFailed, EvTimeout, EvGuardRefused},
+	model.JobUpgradeIssued: {EvCommandOK, EvCommandFailed, EvProbeOffline, EvProbeOnline, EvUpgradeReport, EvTimeout, EvGuardRefused},
 	model.JobAwaitReboot:   {EvProbeOffline, EvProbeOnline, EvTimeout},
 	model.JobVerify:        {EvIdentity, EvCommandFailed, EvTimeout},
 	model.JobRestoreOtaURL: {EvCommandOK, EvCommandFailed, EvTimeout},
-	model.JobRestorePower:  {EvCommandOK, EvCommandFailed, EvTimeout},
 }
 
 func isHandled(s model.JobState, k EventKind) bool {
@@ -971,7 +961,7 @@ func isHandled(s model.JobState, k EventKind) bool {
 // something to (wrongly) copy into the job.
 func fullEvent(k EventKind) Event {
 	return Event{Kind: k, Identity: finalIdent(), OtaURL: "http://x/y.bin.gz", Uptime: 1, Err: "Failed x",
-		Skip: true, Power: 5, Plan: model.PlanDirect, TargetVariant: "lite", TargetArtifact: 99, MinimalArtifact: 98}
+		Skip: true, Plan: model.PlanDirect, TargetVariant: "lite", TargetArtifact: 99, MinimalArtifact: 98}
 }
 
 // Unknown (state, event) pairs must not move a job: a stray or late event
@@ -986,7 +976,6 @@ func TestStepUnknownPairsLeaveJobUnchanged(t *testing.T) {
 				continue
 			}
 			in := job(s, model.StageMinimal)
-			in.PowerOn, in.PowerReadAt = 5, t0 // so that a wrongly accepted power report would show
 			got, as := Step(in, fullEvent(k), t0, testCfg())
 			if !reflect.DeepEqual(got, in) || len(as) != 0 {
 				t.Errorf("%s/%s changed the job or produced actions %v", s, k, kinds(as))
@@ -994,7 +983,7 @@ func TestStepUnknownPairsLeaveJobUnchanged(t *testing.T) {
 		}
 	}
 	// Cancel during restore is too late to matter.
-	for _, st := range []model.JobState{model.JobRestoreOtaURL, model.JobRestorePower} {
+	for _, st := range []model.JobState{model.JobRestoreOtaURL} {
 		in := job(st, model.StageFinal)
 		if got, as := Step(in, Event{Kind: EvCancel}, t0, testCfg()); !reflect.DeepEqual(got, in) || len(as) != 0 {
 			t.Errorf("%s/cancel changed the job", st)
@@ -1027,10 +1016,10 @@ func TestStepHandledPairsNeverStall(t *testing.T) {
 		for _, k := range evs {
 			in := job(s, model.StageMinimal)
 			got, as := Step(in, fullEvent(k), t0, testCfg())
-			if reflect.DeepEqual(got, in) && len(as) == 0 && k != EvUpgradeReport && k != EvPowerReport {
+			if reflect.DeepEqual(got, in) && len(as) == 0 && k != EvUpgradeReport {
 				t.Errorf("%s/%s neither changed the job nor scheduled an action", s, k)
 			}
-			if !got.State.Terminal() && len(as) == 0 && k != EvPowerReport && got.State != model.JobUpgradeIssued && got.State != model.JobAwaitReboot && got.State != model.JobVerify {
+			if !got.State.Terminal() && len(as) == 0 && got.State != model.JobUpgradeIssued && got.State != model.JobAwaitReboot && got.State != model.JobVerify {
 				t.Errorf("%s/%s -> %s has no follow-up action", s, k, got.State)
 			}
 		}

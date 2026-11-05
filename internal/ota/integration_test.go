@@ -48,8 +48,24 @@ func (e *itEnv) expectSuccessNote(dev model.DeviceID, orig string, upgrades int,
 	if got := c.OtaURL(); got != orig {
 		e.t.Fatalf("OtaUrl after the update is %q, want the original %q", got, orig)
 	}
+	e.assertNoPowerCommands(dev)
 	e.assertNoViolations()
 	return j
+}
+
+// assertNoPowerCommands says what #551 decided: TasmoFleet never touches the relays around an
+// update, neither to switch them nor to read what a restore would need (PulseTime, Interlock,
+// ShutterRelay). A device that keeps its own power state is the user's setting to make.
+func (e *itEnv) assertNoPowerCommands(dev model.DeviceID) {
+	e.t.Helper()
+	for _, c := range e.ctrl[dev].Commands() {
+		l := strings.ToLower(c)
+		for _, p := range []string{"power", "pulsetime", "interlock", "shutterrelay"} {
+			if strings.HasPrefix(l, p) {
+				e.t.Fatalf("an update sent %q to the device: TasmoFleet must not read or switch relays\ncmds %v", c, e.ctrl[dev].Commands())
+			}
+		}
+	}
 }
 
 // The staged 1 MB ESP8266 flow end to end: two hops via minimal, one Upgrade

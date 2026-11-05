@@ -67,10 +67,6 @@ type updateForm struct {
 	Policy     string
 	Variant    string
 	SkipBackup bool
-	// PowerAfter is the "Power after update" choice: powerLights (default),
-	// powerLightsRelays or powerLeave. One value instead of two flags, so the
-	// combination "restore relays but skip the restore" cannot be posted.
-	PowerAfter string
 	// Delivery is the "Delivery" choice: empty (every device downloads the
 	// image, default) or "push" (push where possible: tasmofleet uploads it
 	// to each ESP32 that can take it, the others download).
@@ -106,21 +102,13 @@ func (f updateForm) FileCount() int {
 	return len(files)
 }
 
-// PolicyOpts, PowerOpts and DeliveryOpts are the choices of the Options section, the current one
+// PolicyOpts and DeliveryOpts are the choices of the Options section, the current one
 // checked.
 func (f updateForm) PolicyOpts() []ui.Option {
 	return checked(f.Policy, string(model.PolicyOnlyNewer), []ui.Option{
 		{Value: string(model.PolicyOnlyNewer), Label: "Only newer", Text: "Devices already at or above the release are left alone."},
 		{Value: string(model.PolicyReinstall), Label: "Reinstall", Text: "Flash the release even if the device already runs it."},
 		{Value: string(model.PolicyAllowDowngrade), Label: "Allow downgrade", Text: "Also install an older release than the one on the device."},
-	})
-}
-
-func (f updateForm) PowerOpts() []ui.Option {
-	return checked(f.PowerAfter, powerLights, []ui.Option{
-		{Value: powerLights, Label: "Restore lights"},
-		{Value: powerLightsRelays, Label: "Restore lights and relays"},
-		{Value: powerLeave, Label: "Leave as is"},
 	})
 }
 
@@ -145,30 +133,6 @@ func checked(v, def string, opts []ui.Option) []ui.Option {
 		}
 	}
 	return opts
-}
-
-// The values of the "Power after update" select.
-const (
-	powerLights       = "lights"
-	powerLightsRelays = "lights-relays"
-	powerLeave        = "leave"
-)
-
-// SkipPowerRestore: leave the power state as the update finds it.
-func (f updateForm) SkipPowerRestore() bool { return f.PowerAfter == powerLeave }
-
-// powerAfter maps the select value to the engine options. Empty means the
-// default (lights only).
-func powerAfter(v string) (skip, relays bool, err error) {
-	switch v {
-	case "", powerLights:
-		return false, false, nil
-	case powerLightsRelays:
-		return false, true, nil
-	case powerLeave:
-		return true, false, nil
-	}
-	return false, false, errors.New("unknown power setting")
 }
 
 // formDevices returns the devices of the posted/queried "id" values.
@@ -361,7 +325,7 @@ func (f *updateForm) formChoices(r *http.Request) {
 	if v := r.PostFormValue("policy"); v != "" {
 		f.Policy = v
 	}
-	f.Variant, f.PowerAfter, f.Delivery = r.PostFormValue("variant"), r.PostFormValue("power_after"), r.PostFormValue("delivery")
+	f.Variant, f.Delivery = r.PostFormValue("variant"), r.PostFormValue("delivery")
 	f.SkipBackup = skipBackup(r)
 }
 
@@ -399,10 +363,6 @@ func (h *handler) requests(r *http.Request, ids []model.DeviceID) ([]ota.Request
 		custom = key
 	}
 	variant := strings.TrimSpace(r.PostFormValue("variant"))
-	skipPower, restoreRelays, err := powerAfter(r.PostFormValue("power_after"))
-	if err != nil {
-		return nil, err
-	}
 	delivery := model.Delivery(r.PostFormValue("delivery"))
 	if delivery != model.DeliveryPull && delivery != model.DeliveryPush {
 		return nil, errors.New("unknown delivery")
@@ -424,7 +384,6 @@ func (h *handler) requests(r *http.Request, ids []model.DeviceID) ([]ota.Request
 		}
 		q := ota.Request{DeviceID: id, Release: release, Custom: custom, Delivery: delivery, Variant: variant, AllowVariantChange: variant != "",
 			Policy: policy, SkipBackup: skipBackup(r),
-			SkipPowerRestore: skipPower, RestoreRelays: restoreRelays,
 			// The chip build of a device that has two (ESP32-S2) is chosen per device in the preview; the engine
 			// refuses a build that does not belong to the device.
 			Build: strings.TrimSpace(r.PostFormValue("build_" + strconv.FormatInt(int64(id), 10))),
@@ -528,7 +487,6 @@ type previewRow struct {
 	Note     string
 	From, To string // the version now and after the update
 	Size     int64  // the file's size, 0 unknown
-	SkipPwr  bool   // the restore is turned off for this update
 	Push     bool   // "push where possible" was chosen: the row says its delivery
 	// BuildOptions are the builds to choose from when the device is refused only because its chip has
 	// two builds (ESP32-S2); Build is the one the user chose (the row then goes ahead).
@@ -625,28 +583,6 @@ func (r previewRow) Tone() ui.Tone {
 		return ui.ToneDanger
 	}
 	return ui.ToneNeutral
-}
-
-// PowerText says what the power restore would do for a device that is updated, "" when there is
-// nothing worth a line (nothing is ON, or the restore is off for the whole update).
-func (r previewRow) PowerText() string {
-	if !r.Go || r.SkipPwr {
-		return ""
-	}
-	var out []string
-	switch {
-	case r.Item.PowerUnreadable:
-		out = append(out, "Relay state unreadable: the update would stop; turn the restore off to update anyway.")
-	case r.Item.PowerRestore != "":
-		out = append(out, "Relay "+r.Item.PowerRestore+" on again if the update loses its state.")
-	}
-	if r.Item.PowerSkipped != "" {
-		out = append(out, "Relay "+r.Item.PowerSkipped+" left alone (PulseTime, Interlock, shutter or unclear state).")
-	}
-	if r.Item.PowerRestore != "" && r.Item.PowerRelaysKept != "" {
-		out = append(out, "Relay "+r.Item.PowerRelaysKept+" not restored (relays keep their state).")
-	}
-	return strings.Join(out, " ")
 }
 
 // Upgrades is the number of devices the update would start on.
@@ -793,8 +729,8 @@ func (h *handler) updatePreview(w http.ResponseWriter, r *http.Request) {
 	}
 	p := previewPage{Form: updateForm{
 		Release: strings.TrimSpace(r.PostFormValue("release")), Policy: string(reqs[0].Policy), Variant: r.PostFormValue("variant"),
-		SkipBackup: skipBackup(r), PowerAfter: r.PostFormValue("power_after"),
-		Delivery: r.PostFormValue("delivery"),
+		SkipBackup: skipBackup(r),
+		Delivery:   r.PostFormValue("delivery"),
 	}}
 	p.ReleaseText = "Tasmota " + reqs[0].Release
 	if reqs[0].Custom != "" {
@@ -811,7 +747,7 @@ func (h *handler) updatePreview(w http.ResponseWriter, r *http.Request) {
 		d, _ := h.d.Inventory.Get(r.Context(), it.DeviceID) // a vanished device shows as an empty name
 		q := byID[it.DeviceID]
 		row := previewRow{Device: d, Item: it, Go: it.Decision != "refuse" && it.Decision != "skip",
-			From: d.Identity.Version, To: q.Release, SkipPwr: q.SkipPowerRestore, Push: q.Delivery == model.DeliveryPush}
+			From: d.Identity.Version, To: q.Release, Push: q.Delivery == model.DeliveryPush}
 		if it.BuildChoice {
 			row.BuildOptions = buildOptionsFor(d.Identity)
 		}

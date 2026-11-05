@@ -435,12 +435,8 @@ func TestJobRoundTripAndSaveTransition(t *testing.T) {
 	j.OriginalOtaURL = "http://ota.example/x.bin"
 	j.UptimeBefore = 1234
 	j.SeenOffline, j.CancelRequested, j.SkipBackup = true, true, true
-	// Both must survive a restart: a forgotten auto-continue sighting or a
-	// forgotten relay state would re-wait or leave the device switched off.
-	j.AutoContinueSeen, j.SkipPowerRestore = true, true
-	j.PowerOn = model.RelaySet(0).Add(1).Add(3)
-	j.PowerReadAt, j.PowerNote = ms(1_700_000_123_000), "relay 2: PulseTime"
-	j.RestoreRelays, j.PowerCutoff = true, ms(1_700_000_456_000)
+	// A forgotten auto-continue sighting would make the job wait for it again after a restart.
+	j.AutoContinueSeen = true
 	j.DeadlineAt = ms(1_700_000_999_000)
 	j.LastError = "boom"
 	ev := model.JobEvent{JobID: j.ID, At: ms(1_700_000_000_000), From: model.JobQueued, To: model.JobPreflight, Event: "start", Detail: "d"}

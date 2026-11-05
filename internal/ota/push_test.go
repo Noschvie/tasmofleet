@@ -209,7 +209,7 @@ func pushHarness(t *testing.T, fds ...*fakeDevice) (*harness, *pushAPI, pushFW) 
 	h := newHarness(t, 2, fds...)
 	pa := &pushAPI{fakeAPI: h.api}
 	pf := pushFW{fakeFW: h.fw, rec: h.rec}
-	e := NewEngine(Options{Machine: testCfg(), MaxParallel: 2, Power: h.power}, h.st, h.st, pa, pf, h.backups, h.clk, nil)
+	e := NewEngine(Options{Machine: testCfg(), MaxParallel: 2}, h.st, h.st, pa, pf, h.backups, h.clk, nil)
 	e.sel = h.sel
 	h.e = e
 	return h, pa, pf
@@ -505,7 +505,7 @@ func TestEnginePushUncertainErrorIsProbed(t *testing.T) {
 func TestEnginePushDamagedCacheFileFailsBeforeUpload(t *testing.T) {
 	h, pa, pf := pushHarness(t, esp32Device())
 	pf.openErr = errors.New("content does not match the cached artifact")
-	h.e = NewEngine(Options{Machine: testCfg(), MaxParallel: 2, Power: h.power}, h.st, h.st, pa, pf, h.backups, h.clk, nil)
+	h.e = NewEngine(Options{Machine: testCfg(), MaxParallel: 2}, h.st, h.st, pa, pf, h.backups, h.clk, nil)
 	h.e.sel = h.sel
 	id := submitOne(t, h, Request{DeviceID: 1, Release: "16.0.0", Delivery: model.DeliveryPush})
 	h.run(t, h.e)

@@ -88,9 +88,9 @@ func TestBackupCheckboxDecidesTheBackup(t *testing.T) {
 // second look does not mean picking everything again.
 func TestPreviewChangeKeepsTheChoice(t *testing.T) {
 	e, _, _, _ := setupOTA(t)
-	form := url.Values{"id": {"2"}, "release": {"16.0.0"}, "policy": {"reinstall"}, "power_after": {"leave"}, "skip_backup": {"1"}}
+	form := url.Values{"id": {"2"}, "release": {"16.0.0"}, "policy": {"reinstall"}, "skip_backup": {"1"}}
 	_, body := e.do(t, "POST", "/updates/new", "operator", form)
-	for _, want := range []string{`aria-label="Select attic" checked`, `value="16.0.0" checked`, `value="reinstall" title="Flash the release even if the device already runs it." selected`, `value="leave" selected`} {
+	for _, want := range []string{`aria-label="Select attic" checked`, `value="16.0.0" checked`, `value="reinstall" title="Flash the release even if the device already runs it." selected`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the picker lost %q", want)
 		}

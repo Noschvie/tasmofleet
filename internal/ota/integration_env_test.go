@@ -29,7 +29,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/devicecmd"
 	"github.com/nofuturekid/tasmofleet/internal/firmware"
 	"github.com/nofuturekid/tasmofleet/internal/fwselect"
 	"github.com/nofuturekid/tasmofleet/internal/model"
@@ -182,7 +181,6 @@ type itEnv struct {
 	fwSrv      *httptest.Server
 	fwHandler  atomic.Value // http.Handler
 	machine    Config
-	power      devicecmd.Service // the real power service, as the app wires it
 	audits     *auditLog
 	override   sync.Map // upstream file name -> []byte served instead of the generated image
 	// beforeUpgrade runs right before the Upgrade command is sent.
@@ -337,7 +335,6 @@ func newItEnvMQTT(t *testing.T, mqttURL string) *itEnv {
 		Logger:          quiet,
 	})
 	e.audits = &auditLog{}
-	e.power = devicecmd.New(devicecmd.Options{Devices: storeDevices{e.st}, Client: client, Audit: e.audits})
 	api := NewDeviceAPI(client)
 	api.(*deviceAPI).gap = 5 * time.Millisecond
 	e.api = &guardedAPI{DeviceAPI: api, env: e}
@@ -377,7 +374,7 @@ func (e *itEnv) addDevice(spec simulator.DeviceSpec) model.DeviceID {
 }
 
 func (e *itEnv) newEngine(maxParallel int) *Engine {
-	eng := NewEngine(Options{Machine: e.machine, MaxParallel: maxParallel, Power: e.power, Paths: e.paths}, e.st, e.st, e.api, e.cache, e.backups, e.clk, e.log)
+	eng := NewEngine(Options{Machine: e.machine, MaxParallel: maxParallel, Paths: e.paths}, e.st, e.st, e.api, e.cache, e.backups, e.clk, e.log)
 	e.engine.Store(eng)
 	eng.safebootPush = e.safebootPush // the gate of the push into safeboot, set by the test before start
 	return eng
@@ -580,17 +577,4 @@ func (a *auditLog) Record(_ context.Context, ev model.AuditEvent) {
 	a.mu.Lock()
 	a.evs = append(a.evs, ev)
 	a.mu.Unlock()
-}
-
-// powerAudits returns the recorded power switchings of a device.
-func (a *auditLog) powerAudits(dev model.DeviceID) []model.AuditEvent {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	var out []model.AuditEvent
-	for _, ev := range a.evs {
-		if ev.Action == "device.power" && ev.Target == fmt.Sprintf("device:%d", dev) {
-			out = append(out, ev)
-		}
-	}
-	return out
 }

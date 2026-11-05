@@ -15,7 +15,6 @@ package ota
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -45,42 +44,15 @@ const (
 	EvBackupFailed  EventKind = "backup_failed"  // Err filled; fails the job unless SkipBackup
 	EvUpgradeReport EventKind = "upgrade_report" // MQTT stat/<t>/UPGRADE seen (Err = "Failed ..." or "" for Successful); hint only
 	EvCancel        EventKind = "cancel"         // user cancel
-	EvPowerReport   EventKind = "power_report"   // a relay was reported OFF by someone else (MQTT); Power = those relays
 )
 
 // Event is the input to Step.
 type Event struct {
 	Kind     EventKind
 	Identity model.Identity
-	// Power is the relay state read with the preflight identity (EvIdentity
-	// only; empty when it could not be read).
-	Power model.RelaySet
-	// PowerExcluded: relays that are ON but must not be restored (PulseTime,
-	// Interlock, shutter relay, beyond the addressable range); EvIdentity in
-	// preflight only.
-	PowerExcluded model.RelaySet
-	// PowerIgnored: relays that are ON but not candidates because only light
-	// channels are restored by default; dropped without a note.
-	PowerIgnored model.RelaySet
-	// At is when an EvPowerReport was received.
-	At time.Time
-	// PowerLost marks an EvPowerReport that was recorded without its time because the job's
-	// inbox was full (#534). It counts whenever it is processed, outside the reporting window
-	// too: a relay somebody switched off must never be switched back on, and the price is that a
-	// boot announcement recorded the same way also cancels that relay's restore.
-	PowerLost bool
-	// PowerRead says Power is the relay state read for this event: EvIdentity
-	// in verify (right after the final boot) and EvCommandOK in set_ota_url
-	// (right before the first Upgrade). PowerUnreadable says that read failed.
-	PowerRead, PowerUnreadable bool
-	// PowerUnknown: relays that answered neither ON nor OFF in that reading.
-	// PowerDeny: a reason why the device after the boot cannot be trusted to
-	// be the one the relays were read from (MAC); no restore then.
-	PowerUnknown model.RelaySet
-	PowerDeny    string
-	OtaURL       string // EvIdentity: current OtaUrl of the device; EvPlanned: URL to set
-	Uptime       int64
-	Err          string
+	OtaURL   string // EvIdentity: current OtaUrl of the device; EvPlanned: URL to set
+	Uptime   int64
+	Err      string
 	// NotFlashed (EvCommandFailed in upgrade_issued): the device certainly
 	// flashed nothing, it refused the upload. The job ends at once.
 	NotFlashed bool
@@ -111,8 +83,7 @@ const (
 	ActSafebootBack   ActionKind = "safeboot_back"   // GET /u4?u4=ota&api= once: the one recovery attempt
 	ActProbe          ActionKind = "probe"           // Status 2 + Status 11 (+Upgrade probe on Unknown)
 	ActRestoreOtaURL  ActionKind = "restore_ota_url"
-	ActRestorePower   ActionKind = "restore_power" // switch the relays that were ON back on (read, switch, verify)
-	ActNotify         ActionKind = "notify"        // publish job update (SSE, audit, metrics)
+	ActNotify         ActionKind = "notify" // publish job update (SSE, audit, metrics)
 )
 
 // Action is one requested side effect.
@@ -136,23 +107,18 @@ type Config struct {
 	// to safeboot, about 11 s back to the app (#30). The window leaves a wide margin.
 	SafebootWindow time.Duration
 	RestoreOtaURL  bool // put the original OtaUrl back after success
-	// PowerRestoreMaxAge is how old the relay state (read in preflight,
-	// refreshed right before the first Upgrade) may be when the restore
-	// would run. Older than that, nobody expects the load to come back on.
-	PowerRestoreMaxAge time.Duration
 }
 
 // DefaultConfig returns the documented defaults.
 func DefaultConfig() Config {
 	return Config{
-		CommandTimeout:     30 * time.Second,
-		UpgradeAccept:      3 * time.Minute,
-		RebootWindow:       8 * time.Minute,
-		ProbeInterval:      5 * time.Second,
-		MaxAttempts:        2,
-		SafebootWindow:     2 * time.Minute,
-		RestoreOtaURL:      true,
-		PowerRestoreMaxAge: 20 * time.Minute,
+		CommandTimeout: 30 * time.Second,
+		UpgradeAccept:  3 * time.Minute,
+		RebootWindow:   8 * time.Minute,
+		ProbeInterval:  5 * time.Second,
+		MaxAttempts:    2,
+		SafebootWindow: 2 * time.Minute,
+		RestoreOtaURL:  true,
 	}
 }
 
@@ -175,8 +141,6 @@ const (
 	ErrTextUnexpected      = "unexpected firmware after upgrade"
 	ErrTextRestoreFailed   = "could not restore OtaUrl"
 	ErrTextSafebootFailed  = "Upload into safeboot failed"
-	ErrTextPowerFailed     = "could not restore power state"
-	ErrTextPowerUnreadable = "relay state unreadable"
 )
 
 // Step is the transition function. It must be total: every (state, event)
@@ -190,8 +154,6 @@ func Step(j model.Job, ev Event, now time.Time, cfg Config) (model.Job, []Action
 		return resume(j, now, cfg)
 	case EvCancel:
 		return cancel(j, now)
-	case EvPowerReport:
-		return powerReport(j, ev, now)
 	case EvStart, EvIdentity, EvPlanned, EvCommandOK, EvCommandFailed, EvGuardRefused, EvProbeOnline, EvProbeOffline, EvTimeout, EvBackupDone, EvBackupFailed, EvUpgradeReport:
 		// handled per state below
 	}
@@ -216,8 +178,6 @@ func Step(j model.Job, ev Event, now time.Time, cfg Config) (model.Job, []Action
 		return stepVerify(j, ev, now, cfg)
 	case model.JobRestoreOtaURL:
 		return stepRestore(j, ev, now, cfg)
-	case model.JobRestorePower:
-		return stepRestorePower(j, ev, now)
 	case model.JobApplying, model.JobSucceeded, model.JobFailed, model.JobCancelled:
 		// not in the transition table: policy jobs never reach the machine
 	}
@@ -237,11 +197,6 @@ func to(j model.Job, s model.JobState, now time.Time) model.Job {
 }
 
 func fail(j model.Job, now time.Time, reason string) (model.Job, []Action) {
-	if j.Attempt > 0 && powerToRestore(j) {
-		// The device was told to flash: its relays may be OFF now and this
-		// job will not bring them back.
-		reason = joinNotes(reason, "relays "+j.PowerOn.String()+" were ON before the update and are not restored")
-	}
 	j = to(j, model.JobFailed, now)
 	j.LastError = reason
 	return j, notify()
@@ -249,9 +204,6 @@ func fail(j model.Job, now time.Time, reason string) (model.Job, []Action) {
 
 // cancelled ends a job whose cancel request waited for the stage to finish.
 func cancelled(j model.Job, now time.Time, reason string) (model.Job, []Action) {
-	if j.Attempt > 0 && powerToRestore(j) {
-		reason = joinNotes(reason, "relays "+j.PowerOn.String()+" were ON before the update and are not restored")
-	}
 	j = to(j, model.JobCancelled, now)
 	j.LastError = reason
 	return j, notify()
@@ -316,16 +268,6 @@ func resume(j model.Job, now time.Time, cfg Config) (model.Job, []Action) {
 	case model.JobRestoreOtaURL:
 		j.DeadlineAt = now.Add(cfg.CommandTimeout)
 		return j, []Action{{Kind: ActRestoreOtaURL, URL: j.OriginalOtaURL}}
-	case model.JobRestorePower:
-		// A restart can take hours; nobody expects a load to come back on
-		// then (and the user may have switched it off since).
-		if !powerToRestore(j) || powerStale(j, now, cfg) {
-			return afterOtaURL(j, now, cfg) // nothing to restore, or too old: done
-		}
-		// Idempotent: the action reads the relays first and only switches
-		// those that are not ON yet.
-		j.DeadlineAt = now.Add(cfg.CommandTimeout)
-		return j, []Action{{Kind: ActRestorePower}}
 	case model.JobQueued, model.JobApplying, model.JobSucceeded, model.JobFailed, model.JobCancelled:
 		// not in the transition table: the job stays unchanged
 	}
@@ -343,7 +285,7 @@ func cancel(j model.Job, now time.Time) (model.Job, []Action) {
 		j.CancelRequested = true
 		j.UpdatedAt = now
 		return j, nil
-	case model.JobRestoreOtaURL, model.JobRestorePower, model.JobApplying, model.JobSucceeded, model.JobFailed, model.JobCancelled:
+	case model.JobRestoreOtaURL, model.JobApplying, model.JobSucceeded, model.JobFailed, model.JobCancelled:
 		// not in the transition table: the job stays unchanged
 	}
 	return j, nil
@@ -366,13 +308,6 @@ func stepPreflight(j model.Job, ev Event, now time.Time, cfg Config) (model.Job,
 			j.OriginalOtaURL = ev.OtaURL
 		}
 		j.UptimeBefore = ev.Uptime
-		j.PowerOn, j.PowerReadAt = 0, now
-		if ev.PowerRead { // a reading that was not taken restores nothing
-			j.PowerOn = ev.Power &^ ev.PowerExcluded &^ ev.PowerIgnored
-		}
-		if skipped := ev.Power&ev.PowerExcluded&^ev.PowerIgnored | ev.PowerUnknown; skipped != 0 && !j.SkipPowerRestore {
-			j = powerNote(j, "relays "+skipped.String()+" are ON or unclear but not restored: PulseTime, Interlock, shutter relay, beyond relay 8 or a state that is neither ON nor OFF")
-		}
 		j.UpdatedAt = now
 		j.DeadlineAt = now.Add(cfg.CommandTimeout)
 		return j, []Action{{Kind: ActPlan}}
@@ -401,7 +336,7 @@ func stepPreflight(j model.Job, ev Event, now time.Time, cfg Config) (model.Job,
 		return fail(j, now, withErr("preflight failed", ev.Err))
 	case EvTimeout:
 		return fail(j, now, "preflight timed out")
-	case EvStart, EvResume, EvCommandOK, EvProbeOnline, EvProbeOffline, EvBackupDone, EvBackupFailed, EvUpgradeReport, EvPowerReport, EvCancel:
+	case EvStart, EvResume, EvCommandOK, EvProbeOnline, EvProbeOffline, EvBackupDone, EvBackupFailed, EvUpgradeReport, EvCancel:
 		// not in the transition table: the job stays unchanged
 	}
 	return j, nil
@@ -413,7 +348,7 @@ func stepBackup(j model.Job, ev Event, now time.Time, cfg Config) (model.Job, []
 		return toSetOtaURL(j, now, cfg)
 	case EvBackupFailed:
 		return fail(j, now, withErr("backup failed", ev.Err))
-	case EvStart, EvResume, EvIdentity, EvPlanned, EvCommandOK, EvCommandFailed, EvGuardRefused, EvProbeOnline, EvProbeOffline, EvTimeout, EvUpgradeReport, EvPowerReport, EvCancel:
+	case EvStart, EvResume, EvIdentity, EvPlanned, EvCommandOK, EvCommandFailed, EvGuardRefused, EvProbeOnline, EvProbeOffline, EvTimeout, EvUpgradeReport, EvCancel:
 		// not in the transition table: the job stays unchanged
 	}
 	return j, nil
@@ -422,7 +357,6 @@ func stepBackup(j model.Job, ev Event, now time.Time, cfg Config) (model.Job, []
 func stepSetOtaURL(j model.Job, ev Event, now time.Time, cfg Config) (model.Job, []Action) {
 	switch ev.Kind {
 	case EvCommandOK:
-		j = checkPowerBeforeUpgrade(j, ev, now)
 		if j.ViaSafeboot {
 			// Nothing was sent to the device yet: Guard ran, the image was read.
 			j = to(j, model.JobSafebootSwitch, now)
@@ -441,7 +375,7 @@ func stepSetOtaURL(j model.Job, ev Event, now time.Time, cfg Config) (model.Job,
 		return fail(j, now, "OtaUrl timed out")
 	case EvGuardRefused:
 		return fail(j, now, withErr("guard refused", ev.Err))
-	case EvStart, EvResume, EvIdentity, EvPlanned, EvProbeOnline, EvProbeOffline, EvBackupDone, EvBackupFailed, EvUpgradeReport, EvPowerReport, EvCancel:
+	case EvStart, EvResume, EvIdentity, EvPlanned, EvProbeOnline, EvProbeOffline, EvBackupDone, EvBackupFailed, EvUpgradeReport, EvCancel:
 		// not in the transition table: the job stays unchanged
 	}
 	return j, nil
@@ -476,7 +410,7 @@ func stepUpgradeIssued(j model.Job, ev Event, now time.Time, cfg Config) (model.
 		}
 		if ev.NotFlashed {
 			// The device refused the image and keeps running: no reboot
-			// will come, and the relays were never touched.
+			// will come.
 			j = to(j, model.JobFailed, now)
 			j.LastError = withErr("upload refused, nothing was flashed", ev.Err)
 			return j, notify()
@@ -486,9 +420,6 @@ func stepUpgradeIssued(j model.Job, ev Event, now time.Time, cfg Config) (model.
 	case EvProbeOffline:
 		j = to(j, model.JobAwaitReboot, now)
 		j.SeenOffline = true
-		if j.PowerCutoff.IsZero() {
-			j.PowerCutoff = now // from here on the device announces its boot state, not a user's action
-		}
 		j.DeadlineAt = now.Add(cfg.RebootWindow)
 		return j, probeLater(cfg)
 	case EvProbeOnline:
@@ -525,7 +456,7 @@ func stepUpgradeIssued(j model.Job, ev Event, now time.Time, cfg Config) (model.
 		}
 		// Upgrade was not sent.
 		return fail(j, now, withErr("guard refused", ev.Err))
-	case EvStart, EvResume, EvIdentity, EvPlanned, EvBackupDone, EvBackupFailed, EvPowerReport, EvCancel:
+	case EvStart, EvResume, EvIdentity, EvPlanned, EvBackupDone, EvBackupFailed, EvCancel:
 		// not in the transition table: the job stays unchanged
 	}
 	return j, nil
@@ -601,7 +532,7 @@ func stepAwaitReboot(j model.Job, ev Event, now time.Time, cfg Config) (model.Jo
 			return retry(j, now, cfg, ErrTextNoEffect)
 		}
 		return failNotBack(j, now, ErrTextNotBack, ev.Addr)
-	case EvStart, EvResume, EvIdentity, EvPlanned, EvCommandOK, EvCommandFailed, EvGuardRefused, EvBackupDone, EvBackupFailed, EvUpgradeReport, EvPowerReport, EvCancel:
+	case EvStart, EvResume, EvIdentity, EvPlanned, EvCommandOK, EvCommandFailed, EvGuardRefused, EvBackupDone, EvBackupFailed, EvUpgradeReport, EvCancel:
 		// not in the transition table: the job stays unchanged
 	}
 	return j, nil
@@ -654,7 +585,7 @@ func stepVerify(j model.Job, ev Event, now time.Time, cfg Config) (model.Job, []
 		return j, probeLater(cfg)
 	case EvIdentity:
 		// decided below
-	case EvStart, EvResume, EvPlanned, EvCommandOK, EvGuardRefused, EvProbeOnline, EvProbeOffline, EvBackupDone, EvBackupFailed, EvUpgradeReport, EvPowerReport, EvCancel:
+	case EvStart, EvResume, EvPlanned, EvCommandOK, EvGuardRefused, EvProbeOnline, EvProbeOffline, EvBackupDone, EvBackupFailed, EvUpgradeReport, EvCancel:
 		return j, nil // not in the transition table: the job stays unchanged
 	}
 	id := ev.Identity
@@ -697,9 +628,6 @@ func stepVerify(j model.Job, ev Event, now time.Time, cfg Config) (model.Job, []
 func minimalReached(j model.Job, ev Event, now time.Time, cfg Config) (model.Job, []Action) {
 	if j.CancelRequested {
 		j = to(j, model.JobCancelled, now)
-		if powerToRestore(j) {
-			j.LastError = "relays " + j.PowerOn.String() + " were ON before the update and are not restored"
-		}
 		return j, notify()
 	}
 	j.Stage = model.StageFinal
@@ -740,192 +668,30 @@ func notTaken(j model.Job, ev Event, now time.Time, cfg Config) (model.Job, []Ac
 
 func finalReached(j model.Job, ev Event, now time.Time, cfg Config) (model.Job, []Action) {
 	j.LastError = ""
-	j = judgePowerAfterBoot(j, ev)
 	if !cfg.RestoreOtaURL || j.CancelRequested || j.OriginalOtaURL == "" || ev.OtaURL == j.OriginalOtaURL {
-		return afterOtaURL(j, now, cfg)
+		return afterOtaURL(j, now)
 	}
 	j = to(j, model.JobRestoreOtaURL, now)
 	j.DeadlineAt = now.Add(cfg.CommandTimeout)
 	return j, []Action{{Kind: ActRestoreOtaURL, URL: j.OriginalOtaURL}}
 }
 
-// powerToRestore reports whether any relay was ON before the update and the
-// restore was not switched off. Relays that were OFF are never touched, so
-// without an ON relay there is nothing to do.
-func powerToRestore(j model.Job) bool { return !j.SkipPowerRestore && j.PowerOn != 0 }
-
-// powerNote appends a reason why relays are not restored; it ends up in
-// LastError of the finished job.
-func powerNote(j model.Job, note string) model.Job {
-	j.PowerNote = joinNotes(j.PowerNote, note)
-	return j
-}
-
-// withPowerNote is LastError plus the collected power notes.
-func withPowerNote(j model.Job) model.Job {
-	if j.PowerNote != "" {
-		j.LastError = joinNotes(j.LastError, j.PowerNote)
-		j.PowerNote = ""
-	}
-	return j
-}
-
-// firstFullStage reports whether the stage that starts now still runs on
-// the device's own full firmware, so Status 11 answers: the minimal stage
-// of a staged update, or the only stage of a direct one.
-func firstFullStage(j model.Job) bool {
-	if isIntermediate(j.IdentityBefore.Variant) {
-		return false
-	}
-	return (j.Plan == model.PlanStaged && j.Stage == model.StageMinimal) ||
-		(j.Plan == model.PlanDirect && j.Stage == model.StageFinal)
-}
-
-// checkPowerBeforeUpgrade applies the second relay reading, taken right
-// before the first Upgrade: only relays that are ON in both readings stay
-// candidates. Someone who switched a relay off between preflight and now
-// (backup, a slow Wi-Fi) must not see it switched on again.
-func checkPowerBeforeUpgrade(j model.Job, ev Event, now time.Time) model.Job {
-	if !powerToRestore(j) {
-		return j
-	}
-	switch {
-	case ev.PowerUnreadable:
-		j.PowerOn = 0
-		j = powerNote(j, "power not restored: "+ErrTextPowerUnreadable+" right before the update")
-	case !ev.PowerRead:
-		if firstFullStage(j) { // the reading that must be taken here is missing: never assume it
-			j.PowerOn = 0
-			j = powerNote(j, "power not restored: the relay state was not read right before the update")
-		}
-	case ev.PowerRead:
-		if gone := j.PowerOn &^ ev.Power; gone != 0 {
-			j = powerNote(j, "relays "+gone.String()+" were not ON right before the update (switched off or state unclear) and are left alone")
-		}
-		j.PowerOn &= ev.Power
-		j.PowerReadAt = now
-	}
-	return j
-}
-
-// powerReport handles "someone switched relay r off" (MQTT). It counts if
-// it was received after the state was read and before the device went offline
-// for the update: that is the window in which a person or an automation can
-// have acted. Reports from before the reading are old news, later ones are
-// the device announcing its boot state. The time of reception decides, not the
-// state the job happens to be in when the report is processed.
-func powerReport(j model.Job, ev Event, now time.Time) (model.Job, []Action) {
-	if j.State.Terminal() || j.State == model.JobQueued {
-		return j, nil
-	}
-	if !ev.PowerLost && (ev.At.Before(j.PowerReadAt) || (!j.PowerCutoff.IsZero() && ev.At.After(j.PowerCutoff))) {
-		return j, nil
-	}
-	gone := j.PowerOn & ev.Power
-	if gone == 0 {
-		return j, nil
-	}
-	j.PowerOn &^= gone
-	j.UpdatedAt = now
-	if ev.PowerLost {
-		return powerNote(j, "relays "+gone.String()+" were reported off while the update was busy and are left off"), nil
-	}
-	return powerNote(j, "relays "+gone.String()+" were switched off during the update and are left off"), nil
-}
-
-// judgePowerAfterBoot decides from the first reading after the final boot
-// whether the device kept its relay state itself (RTC memory on an ESP8266
-// without the minimal hop, SetOption0 1): relays that are ON then were kept,
-// never touched, and nothing is restored. Only when none of the relays that
-// were ON is ON now was the state lost, and only then is a restore due.
-func judgePowerAfterBoot(j model.Job, ev Event) model.Job {
-	if !powerToRestore(j) {
-		return j
-	}
-	switch {
-	case ev.PowerUnreadable:
-		j.PowerOn = 0
-		return powerNote(j, "power not restored: "+ErrTextPowerUnreadable+" after the update")
-	case ev.PowerDeny != "":
-		j.PowerOn = 0
-		return powerNote(j, "power not restored: "+ev.PowerDeny)
-	case !ev.PowerRead:
-		j.PowerOn = 0
-		return powerNote(j, "power not restored: relay state after the update was not read")
-	case j.PowerOn&ev.Power != 0:
-		j.PowerOn = 0 // the device kept its state
-		return j
-	}
-	if unclear := j.PowerOn & ev.PowerUnknown; unclear != 0 {
-		j.PowerOn &^= unclear
-		j = powerNote(j, "relays "+unclear.String()+" answered neither ON nor OFF after the update and are not restored")
-	}
-	return j
-}
-
-// powerStale reports whether the relay state is too old to act on.
-func powerStale(j model.Job, now time.Time, cfg Config) bool {
-	// No maximum age configured, no reading time recorded: nothing is known
-	// about how old the state is, so it counts as too old.
-	if cfg.PowerRestoreMaxAge <= 0 || j.PowerReadAt.IsZero() {
-		return true
-	}
-	return now.Sub(j.PowerReadAt) > cfg.PowerRestoreMaxAge
-}
-
-// powerAge words the age of the relay state for the job note.
-func powerAge(j model.Job, now time.Time) string {
-	if j.PowerReadAt.IsZero() {
-		return "unknown age"
-	}
-	return fmt.Sprintf("%d min", int(now.Sub(j.PowerReadAt).Minutes()))
-}
-
-// afterOtaURL is the step after the OtaUrl is dealt with: the power restore
-// when there is something to restore and the state is recent enough, else
-// done. It also runs when the user cancelled during the last stage: the
-// device flashed the final image, and leaving its lights off helps nobody.
-func afterOtaURL(j model.Job, now time.Time, cfg Config) (model.Job, []Action) {
-	if powerToRestore(j) && powerStale(j, now, cfg) {
-		j = powerNote(j, fmt.Sprintf("power not restored: the relay state of %s is too old (%s, maximum %d min)",
-			j.PowerOn, powerAge(j, now), int(cfg.PowerRestoreMaxAge.Minutes())))
-		j.PowerOn = 0
-	}
-	if powerToRestore(j) {
-		j = to(j, model.JobRestorePower, now)
-		j.DeadlineAt = now.Add(cfg.CommandTimeout)
-		return j, []Action{{Kind: ActRestorePower}}
-	}
+// afterOtaURL is the step after the OtaUrl is dealt with: the job is done. It also runs when the
+// user cancelled during the last stage: the device flashed the final image. TasmoFleet never touches
+// the relays (#551).
+func afterOtaURL(j model.Job, now time.Time) (model.Job, []Action) {
 	j = to(j, model.JobSucceeded, now)
-	j = withPowerNote(j)
 	return j, notify()
 }
 
 func stepRestore(j model.Job, ev Event, now time.Time, cfg Config) (model.Job, []Action) {
 	switch ev.Kind {
 	case EvCommandOK:
-		return afterOtaURL(j, now, cfg)
+		return afterOtaURL(j, now)
 	case EvCommandFailed, EvTimeout:
 		j.LastError = withErr(ErrTextRestoreFailed, ev.Err)
-		return afterOtaURL(j, now, cfg)
-	case EvStart, EvResume, EvIdentity, EvPlanned, EvGuardRefused, EvProbeOnline, EvProbeOffline, EvBackupDone, EvBackupFailed, EvUpgradeReport, EvPowerReport, EvCancel:
-		// not in the transition table: the job stays unchanged
-	}
-	return j, nil
-}
-
-// stepRestorePower ends the job. A failure to switch a relay back on does
-// not undo the update: the job succeeds and says what is left to do.
-func stepRestorePower(j model.Job, ev Event, now time.Time) (model.Job, []Action) {
-	switch ev.Kind {
-	case EvCommandOK:
-		j = to(j, model.JobSucceeded, now)
-		return withPowerNote(j), notify()
-	case EvCommandFailed, EvTimeout:
-		j = to(j, model.JobSucceeded, now)
-		j.LastError = joinNotes(j.LastError, withErr(ErrTextPowerFailed, ev.Err))
-		return withPowerNote(j), notify()
-	case EvStart, EvResume, EvIdentity, EvPlanned, EvGuardRefused, EvProbeOnline, EvProbeOffline, EvBackupDone, EvBackupFailed, EvUpgradeReport, EvPowerReport, EvCancel:
+		return afterOtaURL(j, now)
+	case EvStart, EvResume, EvIdentity, EvPlanned, EvGuardRefused, EvProbeOnline, EvProbeOffline, EvBackupDone, EvBackupFailed, EvUpgradeReport, EvCancel:
 		// not in the transition table: the job stays unchanged
 	}
 	return j, nil

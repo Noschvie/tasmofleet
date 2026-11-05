@@ -206,12 +206,11 @@ func TestRetryTakesTheLocksOfTheRetriedDevices(t *testing.T) {
 	}
 }
 
-// Why: while a job switches relays back on (restore_power) the device is
-// still being written by the OTA job; every non-terminal state must count as
-// active, or a console command could slip in between.
+// Why: while a job is running the device is still being written by it;
+// every non-terminal state must count as active, or a console command could slip in between.
 func TestEveryRunningJobStateExcludesOtherWriters(t *testing.T) {
 	for _, s := range []model.JobState{model.JobQueued, model.JobPreflight, model.JobBackup, model.JobSetOtaURL, model.JobUpgradeIssued,
-		model.JobAwaitReboot, model.JobVerify, model.JobRestoreOtaURL, model.JobRestorePower} {
+		model.JobAwaitReboot, model.JobVerify, model.JobRestoreOtaURL} {
 		found := false
 		for _, a := range activeStates {
 			found = found || a == s
