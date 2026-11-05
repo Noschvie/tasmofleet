@@ -10,7 +10,9 @@
 # mutation gate of the changed mutation packages. Target: "required" green in <= 5 min.
 # Docs-only PRs skip all of that. The relative Markdown link check runs on every PR and gates
 # the merge: a PR that deletes or renames a linked file breaks links without touching Markdown.
-# The migration append-only guard (#595) runs on every PR too and gates the merge.
+# The migration append-only guard (#595) runs on every PR too and gates the merge. So does the release
+# guard (#556): a PR whose tip adds a new "## X.Y.Z" section to CHANGELOG.md is the release commit of a
+# merge train and runs the tag's CHANGELOG and migration guards (make release-pr-check) before the tag exists.
 # The job "required" is the single status check for branch protection; it always runs.
 #
 # No paths filter on the trigger: "changes" decides, and "required" always reports.
@@ -136,6 +138,21 @@ jobs:
           fetch-depth: 0 # the guard compares with the latest release tag
       - run: make migration-append-only
 
+  # The release commit rides in the merge train (#556): when the tip adds a new "## X.Y.Z" section to CHANGELOG.md,
+  # the guards of the tag run here (make release-pr-check: changelog-check and migration-guard), so the tag run finds
+  # no surprise. No new section: passes at once. Part of "required".
+  release-section:
+    name: release section guards
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the diff with the base, and the tags migration-guard compares with
+      - env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: make release-pr-check BASE="$BASE"
+
   # Build only, nothing is pushed: proves the Dockerfile and the Home Assistant app image still
   # build. Not part of "required". The job grants what the called workflow asks for; a fork's
   # token stays read-only whatever is asked, and no secret is passed.
@@ -155,11 +172,11 @@ jobs:
   # reusable workflows: each is green only when every job inside it that was asked for
   # (by the inputs above) ran and succeeded. A skip counts only when this PR did not ask
   # for that job: everything for a docs-only PR, mutation when no SAFETY package changed. The link
-  # check and the migration guard always run and must succeed.
+  # check, the migration guard and the release section guard always run and must succeed.
   # Any other result (failure, cancelled, or a skip caused by a failed dependency) fails it.
   required:
     name: required
-    needs: [changes, checks, mutation, links, migrations]
+    needs: [changes, checks, mutation, links, migrations, release-section]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -173,8 +190,9 @@ jobs:
           MUTATION: ${{ needs.mutation.result }}
           LINKS: ${{ needs.links.result }}
           MIGRATIONS: ${{ needs.migrations.result }}
+          RELEASE_SECTION: ${{ needs.release-section.result }}
         run: |
-          echo "changes=$CHANGES code=$CODE safety=$SAFETY | checks: $CHECKS | mutation: $MUTATION | links: $LINKS | migrations: $MIGRATIONS"
+          echo "changes=$CHANGES code=$CODE safety=$SAFETY | checks: $CHECKS | mutation: $MUTATION | links: $LINKS | migrations: $MIGRATIONS | release section: $RELEASE_SECTION"
           [ "$CHANGES" = success ] || exit 1
           docs=false; [ "$CODE" = false ] && docs=true
           check() { # check <skip allowed> <result>
@@ -187,3 +205,4 @@ jobs:
           check "$m" "$MUTATION"
           check false "$LINKS"
           check false "$MIGRATIONS"
+          check false "$RELEASE_SECTION"

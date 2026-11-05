@@ -51,7 +51,7 @@ E2E_ARGS  ?=
 CHANGED_BASE ?= origin/main
 export CHANGED_BASE
 
-.PHONY: quick integration-guard shards-check-changed catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check changelog-title migration-guard migration-append-only changelog-notes clean tools
+.PHONY: quick integration-guard shards-check-changed catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check release-pr-check changelog-title migration-guard migration-append-only changelog-notes clean tools
 
 # golangci-lint runs staticcheck with its defaults (.golangci.yml), so check does not run it a second time;
 # the staticcheck target stays for single runs and CI. go vet stays: golangci-lint skips generated files,
@@ -412,6 +412,21 @@ changelog-check:
 	@v='$(TAG)'; v=$${v#v}; \
 	grep -Eq "^## $$(printf '%s' "$$v" | sed 's/[.]/[.]/g')( \"[^\"]+\")?( \(.*\))?$$" CHANGELOG.md || { \
 		echo "CHANGELOG.md has no section '## $$v' for tag $(TAG): move \"Unreleased\" into it before tagging" >&2; exit 1; }
+
+# The release commit rides in the merge train (CLAUDE.md "Releases", #556): when HEAD adds a new
+# "## X.Y.Z ..." section to CHANGELOG.md since BASE, run the tag guards for that tag now, so the tag run
+# finds nothing new. pr.yml runs it on every PR; the maintainer can run it before pushing a train.
+# Nothing to check (no new section) passes.
+release-pr-check:
+	@test -n "$(BASE)" || { echo "usage: make release-pr-check BASE=<base commit>" >&2; exit 2; }
+	@set -e; \
+	versions=$$(git diff -U0 "$(BASE)...HEAD" -- CHANGELOG.md | sed -nE 's/^\+## ([0-9]+\.[0-9]+\.[0-9]+[^ ]*).*/\1/p'); \
+	[ -n "$$versions" ] || { echo "release-pr-check: no new release section in CHANGELOG.md"; exit 0; }; \
+	for v in $$versions; do \
+		echo "release-pr-check: new section $$v, checking tag v$$v"; \
+		$(MAKE) --no-print-directory changelog-check TAG="v$$v"; \
+		$(MAKE) --no-print-directory migration-guard TAG="v$$v"; \
+	done
 
 # Prints the GitHub release title for TAG: TasmoFleet X.Y.Z "Name" when the CHANGELOG
 # heading carries a name, TasmoFleet X.Y.Z otherwise.

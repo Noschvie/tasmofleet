@@ -6,7 +6,7 @@ minor release. Tags stay `vX.Y.Z`; the name appears only in the `CHANGELOG.md` h
 (`## 0.21.0 "Tower of Hercules" (YYYY-MM-DD)`), the GitHub release title and announcements
 (`TasmoFleet X.Y.Z "Name"`).
 
-At the release PR, take the next unassigned name and mark it "assigned to X.Y" here. When the list
+In the release commit, take the next unassigned name and mark it "assigned to X.Y" here. When the list
 runs out, add more. Facts below are taken from Wikipedia; a detail that could not be checked is left out.
 
 1. **Tower of Hercules** (assigned to 0.21): A Coruna, Spain. A Roman tower, the only fully preserved Roman lighthouse still used for signalling; UNESCO World Heritage Site since 2009.
