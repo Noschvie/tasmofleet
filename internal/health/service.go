@@ -104,6 +104,7 @@ type devState struct {
 	mqttSeen   bool // a message on our broker matched this device
 	lwt        string
 	lastMQTT   time.Time
+	lastLive   time.Time // lastMQTT without replays: only what the device sent while we listened (LiveMQTT)
 	lastHTTP   time.Time
 	fails      int
 	authFailed bool
@@ -190,6 +191,19 @@ func (s *Service) All() map[model.DeviceID]model.Health {
 		out[id] = cloneHealth(ds.h)
 	}
 	return out
+}
+
+// LiveMQTT is when the device last sent something on our broker while we listened, the zero time
+// when it has not since this process started. Unlike Health.SeenMQTT it ignores the retained LWT
+// the broker replays at startup and after every reconnect, and an LWT "Offline": a retained
+// "Online" outlives a device that moved to another broker, so it is no proof the device is here (#597).
+func (s *Service) LiveMQTT(id model.DeviceID) time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if ds, ok := s.devs[id]; ok {
+		return ds.lastLive
+	}
+	return time.Time{}
 }
 
 // Minimal reports whether the last successful poll found minimal firmware
@@ -349,7 +363,7 @@ func (s *Service) reload(ctx context.Context, now time.Time) {
 	var replay []mqttbus.Message
 	defer func() {
 		for _, m := range replay {
-			s.onMessage(m)
+			s.handle(m, false) // a remembered LWT, not new traffic
 		}
 	}()
 	s.mu.Lock()
@@ -545,7 +559,11 @@ type stateDoc struct {
 }
 
 // onMessage runs on the bus goroutine: memory updates only, no I/O.
-func (s *Service) onMessage(m mqttbus.Message) {
+func (s *Service) onMessage(m mqttbus.Message) { s.handle(m, !m.Retained) }
+
+// handle applies a message. live is false for what was only remembered or replayed: a retained
+// message, or an LWT taken from the cache on a reload.
+func (s *Service) handle(m mqttbus.Message, live bool) {
 	if m.Retained && m.Kind != mqttbus.KindLWT {
 		return // a retained telemetry message says nothing about now
 	}
@@ -568,6 +586,9 @@ func (s *Service) onMessage(m mqttbus.Message) {
 	// clear the failures.
 	if m.Kind != mqttbus.KindLWT || !strings.EqualFold(strings.TrimSpace(string(m.Payload)), "offline") {
 		ds.lastMQTT = now
+		if live {
+			ds.lastLive = now
+		}
 		ds.fails = 0 // the device is demonstrably alive
 		ds.authFailed = false
 	}

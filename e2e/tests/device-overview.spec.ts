@@ -201,8 +201,8 @@ const shapes: { device: string; check: (page: Page) => Promise<void> }[] = [
   {
     device: "ov-http-only", // mockup 7
     check: async (page) => {
-      // The HTTP-only simulator keeps the MqttHost of its capture, a broker that is not the devenv's
-      // (#580): the tile names it instead of "MQTT not configured" (that wording stays for a device
+      // The HTTP-only simulator has an MqttHost of its own, a broker that is not the devenv's and that
+      // no device is heard on (#580, #597): the tile names it instead of "MQTT not configured" (that wording stays for a device
       // without a broker host; unit-tested in TestReachTileNamesTheOtherBroker).
       await expect(page.locator("[data-tile=reach]")).toContainText("MQTT on another broker");
     },

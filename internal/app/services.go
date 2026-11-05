@@ -185,7 +185,7 @@ func openServices(cfg config.Config, log *slog.Logger, version string, importLeg
 	})
 	return &Services{
 		Broker: broker, Cfg: cfg, Sys: sys, Networks: nets, Log: log, Store: st, Audit: rec, Hub: hub, Metrics: reg, Std: std, Client: router, HTTP: client, Router: router, Inventory: inv,
-		Prober: &Prober{Client: client, Devices: st, Broker: broker, Hub: hub, Audit: rec},
+		Prober: &Prober{Client: client, Devices: st, Broker: configuredBroker{broker}, Hub: hub, Audit: rec},
 	}, nil
 }
 
@@ -234,9 +234,27 @@ func redactURLs(v string) string {
 // liveBroker is the broker matcher of the current MQTT_URL.
 type liveBroker struct {
 	p atomic.Pointer[mqttbus.BrokerMatcher]
+	// aliases are the broker hosts that devices are heard on (#597); set once the health tracker exists.
+	aliases atomic.Pointer[brokerAliases]
 }
 
 func (b *liveBroker) set(rawURL string) { b.p.Store(mqttbus.NewBrokerMatcher(rawURL, nil)) }
 
-// Same reports whether a device configured for host:port talks to our broker.
-func (b *liveBroker) Same(host string, port int) bool { return b.p.Load().Same(host, port) }
+// Same reports whether a device configured for host:port talks to our broker: by name or address
+// (the matcher), or because devices configured the same way are heard on it (brokerAliases). No
+// broker configured means nothing matches, whatever was heard. Only what is shown uses it (the
+// "Other broker" hint, the device list); the Prober classifies with configuredBroker.
+func (b *liveBroker) Same(host string, port int) bool {
+	m := b.p.Load()
+	return m.Same(host, port) || m.Configured() && b.aliases.Load().has(host, port)
+}
+
+// configuredBroker is the Prober's view of liveBroker: the matcher alone, without aliases (#597).
+// What the Prober decides is stored, the store never turns "ours" back into "other", and devicecmd
+// sends Power over MQTT, without a fallback, to every device stored as ours. An alias is evidence
+// about other devices and can be wrong for a while (a device that moved away is evidence for its new
+// host until its last message here is aliasEvidenceWindow old), so it must not make a device ours for
+// good. A device that really is on our broker becomes ours by its own messages (onMQTTSeen).
+type configuredBroker struct{ b *liveBroker }
+
+func (c configuredBroker) Same(host string, port int) bool { return c.b.p.Load().Same(host, port) }

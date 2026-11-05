@@ -96,7 +96,10 @@ func overviewDevices() []simulator.DeviceSpec {
 		{Name: "ov-ethernet-rack", Profile: simulator.ProfileESP32, Relays: 4, Wired: true},
 		{Name: "ov-climate", Profile: simulator.ProfileESP32C3, NoRelay: true, Sensors: map[string]map[string]float64{
 			"BME280": {"Temperature": 12.4, "Humidity": 71, "Pressure": 1012}, "BH1750": {"Illuminance": 3400}}},
-		{Name: "ov-http-only", Profile: simulator.ProfileESP8266_4M, Faults: []simulator.Fault{{Kind: simulator.FaultHTTPOnly}}},
+		// Its own broker host: the other simulators keep the capture's MqttHost and are heard on the
+		// devenv broker, which makes that host an alias of ours (#597); this one must stay a real other broker.
+		{Name: "ov-http-only", Profile: simulator.ProfileESP8266_4M, Faults: []simulator.Fault{{Kind: simulator.FaultHTTPOnly}},
+			Settings: map[string]string{"mqtthost": "other-broker.example.internal"}},
 		{Name: "ov-offline", Profile: simulator.ProfileESP8266_1M},
 	}
 }

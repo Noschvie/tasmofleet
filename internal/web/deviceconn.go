@@ -350,7 +350,8 @@ const silentOnOurBroker = 2 * time.Hour
 // a device that moved away still reads as heard and the hint takes up to silentOnOurBroker to
 // appear; telling the replay apart would need a change in package health. A device on our
 // broker that sends nothing for longer (TelePeriod 0) and names it by an address the matcher
-// cannot resolve to ours (a Docker service name, a second interface) gets the hint too.
+// cannot resolve to ours (a Docker service name, a second interface) gets the hint too, unless
+// another device configured the same way is heard on our broker (broker aliases, #597).
 func heardOnOurBroker(d model.Device, hl model.Health, httpOK bool, now time.Time) bool {
 	if !hl.SeenMQTT.IsZero() && now.Sub(hl.SeenMQTT) < silentOnOurBroker {
 		return true

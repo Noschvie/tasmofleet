@@ -187,6 +187,7 @@ func (a *runtime) run(ctx context.Context) error {
 		StaleAfter: staleAfter(cfg.TelePeriod), PollInterval: cfg.PollInterval,
 	})
 	a.goBG("health", func() error { return a.tracker.Run(bg) })
+	svc.Broker.aliases.Store(newBrokerAliases(svc.Store.ListDevices, a.tracker.LiveMQTT, time.Now))
 	a.fw = newFirmwareState(minimalSeenAt(a.tracker))
 	a.setupTransport()
 	// Network facts are read in the background, never as part of first contact or a refresh.

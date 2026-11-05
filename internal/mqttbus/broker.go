@@ -73,6 +73,15 @@ func NewBrokerMatcher(brokerURL string, lookup LookupFunc) *BrokerMatcher {
 
 func normHost(h string) string { return strings.TrimSuffix(strings.ToLower(strings.TrimSpace(h)), ".") }
 
+// HostKey is the comparable form of a broker host and port (port 0 = Tasmota default 1883): the
+// host lower-cased without a trailing dot, so two spellings of one name get one key.
+func HostKey(host string, port int) string {
+	if port == 0 {
+		port = defaultPort
+	}
+	return net.JoinHostPort(normHost(host), strconv.Itoa(port))
+}
+
 // Configured reports whether a broker is configured.
 func (m *BrokerMatcher) Configured() bool { return m != nil }
 

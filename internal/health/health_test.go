@@ -1269,3 +1269,48 @@ func TestAPasswordRefusalCountsAsAnAnswerForLastSeen(t *testing.T) {
 		t.Error("last_seen_at passed = zero for a device that refused the password, want the time it answered")
 	}
 }
+
+// LiveMQTT is the evidence that a device is on OUR broker right now (#597): only messages the
+// device sent while we were subscribed count. A retained "Online" LWT outlives a broker move and
+// is replayed to us at startup and after every reconnect, so it must never read as contact, or a
+// device that moved away would make its new broker look like an alias of ours.
+func TestLiveMQTTIgnoresRetainedReplaysAndReloadReplays(t *testing.T) {
+	h := newHarness(t, true, Options{}, mqttDev(1, "a"), mqttDev(2, "b"))
+	h.listen()
+	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Online", true) // replay at startup or reconnect
+	h.bus.emit(mqttbus.KindLWT, "b", "LWT", "Online", false)
+	if !h.svc.LiveMQTT(1).IsZero() {
+		t.Fatal("a retained LWT replay counted as live traffic")
+	}
+	want := h.clk.Now()
+	if got := h.svc.LiveMQTT(2); !got.Equal(want) {
+		t.Fatalf("live LWT at %v, want %v", got, want)
+	}
+	// A reload re-applies the remembered LWT of a topic to a device not heard yet (#105), here one
+	// added after its LWT arrived; that is not new traffic either.
+	h.bus.emit(mqttbus.KindLWT, "c", "LWT", "Online", false) // no device has topic c yet: only remembered
+	h.advance(time.Hour)
+	h.st.foreignCommit(mqttDev(3, "c"))
+	h.svc.reload(h.ctx, h.clk.Now())
+	if h.svc.Get(3).LWT != "Online" {
+		t.Fatal("the reload did not replay the remembered LWT, so the next check proves nothing")
+	}
+	if !h.svc.LiveMQTT(3).IsZero() {
+		t.Fatal("the reload replay counted as live traffic")
+	}
+	if got := h.svc.LiveMQTT(2); !got.Equal(want) {
+		t.Fatalf("reload moved the live time to %v, want %v", got, want)
+	}
+	// A broker-made "Offline" is no contact from the device.
+	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Offline", false)
+	if !h.svc.LiveMQTT(1).IsZero() {
+		t.Fatal("LWT Offline counted as live traffic")
+	}
+	h.bus.emit(mqttbus.KindState, "a", "STATE", `{"UptimeSec":5}`, false)
+	if got := h.svc.LiveMQTT(1); !got.Equal(h.clk.Now()) {
+		t.Fatalf("live STATE at %v, want %v", got, h.clk.Now())
+	}
+	if !h.svc.LiveMQTT(99).IsZero() {
+		t.Fatal("unknown device has live traffic")
+	}
+}
