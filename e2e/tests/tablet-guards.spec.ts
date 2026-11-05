@@ -1,0 +1,82 @@
+import { test, expect } from "../support/fixtures";
+import { cardStackGaps, expectLayout } from "../support/layout";
+import { pageList } from "../support/page-list";
+import { realisticDevenvArgs, realisticPolicyRules, seedRealisticData } from "../support/seed";
+import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
+
+// #592: three #419 conversions (#588, #591) broke between 720 and 1199 px, where the card stacks
+// become two half-width columns, and no test saw it: the card-width guard measures 1280/1920 and
+// card-stacks covers only some pages. This runs the layout guards (overlap, a word broken across
+// lines, cut-off cells, text over text) and the card-stack gap check on every page the card-width
+// guard lists, at the two tablet widths, light theme (FULL tier).
+const adam = { "X-authentik-username": "adam", "X-authentik-groups": "adm" };
+let app: App;
+let env: Devenv;
+let lamp = "";
+let txn = "";
+
+test.beforeAll(async ({ browser }) => {
+  test.setTimeout(300_000);
+  env = await startDevenv(realisticDevenvArgs);
+  const fwPort = await freePort();
+  app = await startApp({
+    env: {
+      TASMOFLEET_AUTH_MODE: "header",
+      TASMOFLEET_TRUSTED_PROXIES: "127.0.0.1/32",
+      TASMOFLEET_ADMIN_GROUPS: "adm",
+      TASMOFLEET_MQTT_URL: env.vars.TASMOFLEET_MQTT_URL,
+      TASMOFLEET_POLL_INTERVAL: "5s",
+      TASMOFLEET_FIRMWARE_UPSTREAM_OVERRIDE: env.vars.DEVENV_UPSTREAM_GITHUB_URL,
+      TASMOFLEET_POLICY_RULES: realisticPolicyRules,
+      TASMOFLEET_FIRMWARE_LISTEN: `127.0.0.1:${fwPort}`,
+      TASMOFLEET_FIRMWARE_BASE_URL: `http://127.0.0.1:${fwPort}`,
+    },
+  });
+  app.cli(["import", "tasmoadmin", writeTasmoAdminDir(env.devices)]);
+  const p = await browser.newPage({ extraHTTPHeaders: adam });
+  try {
+    await seedRealisticData(p, app, env);
+    await p.goto(app.url + "/devices");
+    lamp = (await p.getByRole("link", { name: "lamp-1m", exact: true }).first().getAttribute("href"))!.replace(app.url, "");
+    await p.goto(app.url + lamp);
+    await p.getByRole("button", { name: "Back up", exact: true }).click();
+    await expect(p.getByText(/backed up|Backup (taken|saved)/i).first()).toBeVisible({ timeout: 30_000 });
+    await p.goto(app.url + "/transactions");
+    txn = (await p.locator("a[href*='/transactions/']").first().getAttribute("href"))!.replace(app.url, "");
+  } finally {
+    await p.close();
+  }
+});
+test.afterAll(async () => {
+  await app?.stop();
+  await env?.stop();
+});
+
+const pages = pageList({ lamp: () => lamp, txn: () => txn, fwVersion: () => env.vars.DEVENV_FW_VERSION });
+
+// Known failures, tracked in #633: each is fixed in its own change, which deletes its entry here. A
+// fixme case is reported as skipped, never silently passed.
+const fixme: Record<string, number[]> = {
+  "devices backups": [768, 1024], // table cells cut off
+  "system settings mqtt": [768], // "Reset to default" overlaps the Port label (#630 changes this form)
+  "system settings notifications": [768], // the webhook example <pre> breaks the word "failed"
+  "policy rule": [768, 1024], // 36 px gap above the history card
+  "whats new": [768, 1024], // collapsed "Older releases" 8 px tall; badge over the title in 0.17.0
+};
+
+for (const width of [768, 1024]) {
+  for (const [name, path] of pages) {
+    test(`${name}: layout guards and card stacks at ${width}px`, async ({ page }) => {
+      test.fixme(fixme[name]?.includes(width) ?? false, "#633");
+      await page.setExtraHTTPHeaders(adam);
+      await page.setViewportSize({ width, height: 900 });
+      await page.emulateMedia({ colorScheme: "light" });
+      const resp = await page.goto(app.url + path());
+      expect(resp?.status(), `GET ${path()}`).toBeLessThan(400);
+      await page.waitForTimeout(800);
+      await expectLayout(page, `${name} ${width}px`);
+      // the policy pages keep their own card gap (--card-gap, 20 to 24 px), see card-stacks.spec.ts
+      expect(await cardStackGaps(page, name.startsWith("policy") ? 25 : 17), `${name}: card stacks`).toEqual([]);
+    });
+  }
+}

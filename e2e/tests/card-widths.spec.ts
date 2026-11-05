@@ -1,5 +1,6 @@
 import { test, expect } from "../support/fixtures";
 import { measureCards } from "../support/card-widths";
+import { pageList } from "../support/page-list";
 import { realisticDevenvArgs, realisticPolicyRules, seedRealisticData } from "../support/seed";
 import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
@@ -79,34 +80,7 @@ const exempt: Exempt[] = [
 // fleet does not have (an empty fleet, the Replace preview, which needs a spare board of the same chip
 // family and an old device that no longer answers: replace.spec.ts measures it), Drift (a table without a card), the phone
 // and tablet widths (card-stacks.spec.ts guards the stacks there) and pages of other roles.
-const tabs = ["general", "network", "mqtt", "discovery", "notifications", "firmware", "signin", "advanced"];
-// [name, path]: path is a function where it depends on the seeded fleet
-const pages: [string, () => string][] = [
-  ["dashboard", () => "/"],
-  ["devices list", () => "/devices"],
-  ["device overview", () => lamp],
-  ...["settings", "console", "backups", "replace", "edit", "history"].map((t): [string, () => string] => [`device ${t}`, () => `${lamp}/${t}`]),
-  ["add devices", () => "/devices/new"],
-  ["policy overview", () => "/policy"],
-  ["policy rule new", () => "/policy/rules/new"],
-  ["policy history", () => "/policy/history"],
-  ["policy io", () => "/policy/io"],
-  ["policy rule", () => "/policy/rules/r1"],
-  ["policy templates", () => "/policy/templates"],
-  ["policy deviations", () => "/policy/deviations"],
-  ["updates new", () => "/updates/new"],
-  ["transactions", () => "/transactions"],
-  ["transaction detail", () => txn],
-  ["firmware", () => "/firmware"],
-  ["firmware release", () => `/firmware/releases/${env.vars.DEVENV_FW_VERSION}`],
-  ...tabs.map((t): [string, () => string] => [`system settings ${t}`, () => `/settings/system?tab=${t}`]),
-  ["system snapshots", () => "/settings/system/snapshots"],
-  ["devices backups", () => "/devices/backups"],
-  ["audit", () => "/audit?since=all"],
-  ["users", () => "/users"],
-  ["about", () => "/about"],
-  ["whats new", () => "/whats-new"],
-];
+const pages = pageList({ lamp: () => lamp, txn: () => txn, fwVersion: () => env.vars.DEVENV_FW_VERSION });
 
 for (const [name, path] of pages) {
   test(`${name}: cards follow their content at 1280px`, async ({ page }) => {
