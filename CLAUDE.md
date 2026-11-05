@@ -212,7 +212,7 @@ SAFETY package, catalogue, image paths). Every gate runs through the Makefile.
 | -------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
 | `pr.yml`                                     | `pull_request`                             | FAST: `changes`, `checks`, `mutation` (SAFETY PRs), link check, migration guard, image build check, **`required`**                      |
 | `main.yml`                                   | push to `main`                             | lint, unit and integration tests, build (no e2e; saves the Go caches), `:edge` image and HA app image, then `ghcr-cleanup`              |
-| `release.yml`                                | tag `v*`                                   | `guards`, `checks` with safety race of all SAFETY packages, then `publish` (image), `release`, `pages`                                  |
+| `release.yml`                                | tag `v*`                                   | `guards` (incl. green `required` + `main.yml` of the SHA), then `publish` (image), `release`, `pages`; no checks. Dispatch = dry run   |
 | `nightly.yml`                                | cron 22:37 UTC, `workflow_dispatch`        | FULL: `checks` (e2e all, `-count=1`, catalogue), `race`, `quarantine`, `ha-app`, `ghcr-cleanup`                                         |
 | `weekly.yml`                                 | cron Sunday 21:13 UTC, `workflow_dispatch` | the full `mutation` run (all MUTATION packages) and its gate                                                                            |
 | `_checks.yml`, `_mutation.yml`, `_image.yml` | `workflow_call` only                       | the shared jobs; the caller's `with:` says which (inputs `e2e`, `e2e_shards`, `testflags`, `safety_race`, `catalogue`, `scope`, `mode`) |
@@ -233,11 +233,16 @@ SAFETY package, catalogue, image paths). Every gate runs through the Makefile.
   fast-forward push of a PR head that was green, so the e2e shards would repeat the PR (#478). The tests run, cacheable, so
   that main's go test cache holds their results for the PRs and tags (the nightly runs `-count=1` and stores none); the
   e2e caches are refreshed by the nightly. The `:edge` image and the HA app image follow.
-- **RELEASE** (`release.yml`, tags `vX.Y.Z`): the FAST tier plus, always, the race tests of the
-  `SAFETY` packages (a tag has no PR base, so every one of them runs), and no mutation. A tag without its `CHANGELOG.md`
-  section, a patch tag that changes a migration, a tag whose tree edits a migration of the previous tag, or a tag on a commit that is not on `main` fails at once (job `guards`). The image is published (job
-  `publish` calling `_image.yml` with `mode: release`, the only way to push a tag image), then the GitHub release is made, then
-  the demo site is deployed, each only after the one before succeeded.
+- **RELEASE** (`release.yml`, tags `vX.Y.Z`): no tests of its own (#554). `main` moves only by a fast-forward push of a
+  green PR head, so the tagged commit has already passed the FAST tier twice (`required` on its PR, `main.yml` on `main`);
+  running it a third time on identical code only delayed the image. Job `guards` fails at once, with the reason, when the
+  tag is not on `main`, has no `CHANGELOG.md` section, is a patch tag that changes a migration, edits a migration of the previous tag,
+  or when its commit lacks a successful `required` check run of `pr.yml` or a successful `main.yml` run (`tools/release-green.sh`;
+  only `ghcr-cleanup` may fail there; a commit that only changes paths `main.yml` ignores has no run: tag a later one). Tag only
+  after `main.yml` has finished on the commit. The race tests of every `SAFETY` package run in the nightly FULL on the same
+  `main`. Then the image is published (job `publish` calling `_image.yml` with `mode: release`, the only way to push a tag
+  image), then the GitHub release is made, then the demo site is deployed, each only after the one before succeeded.
+  `workflow_dispatch` with a `sha` is a dry run of the green-commit check alone: it never publishes, releases or deploys.
 - **FULL** (`nightly.yml`: cron on `main`, manual dispatch): additionally every e2e test in three shards plus the MQTT job, every
   unit test with the race detector (two shards: the slowest packages listed in `tools/race.sh`, all others; `make shards-check` fails when a package is in no shard), the command catalogue check, uncached test runs, and the Home Assistant app in a real Supervisor (`tools/ha-app-devcontainer-test.sh`). It blocks no release; when it fails on the schedule, the job `nightly-failure-issue` opens an issue "Nightly FULL failed on main (date)" (labels `ci`, `flaky`) with the failed jobs, the tests their logs name and the commits on `main` since the last green night, or comments on the one that is still open. GitHub starts the scheduled run 5 to 8 hours after its cron time, so the cron is set to land in the early morning. A manual run never opens an issue and only previews the registry cleanup. Layout and visual regressions and race outside the safety packages are caught here, so the nightly FULL is the place to look for them; a
   failure is fixed through an issue, not by holding a release.
@@ -313,8 +318,8 @@ Renovate keeps both current. Reusable workflows take their secrets by name (`sec
   report by someone else that led to a change, is credited at the end of that change's
   CHANGELOG line as `(#N, thanks @handle)`. Do not credit the maintainer's own work.
 - Tags are signed (`git tag -s vX.Y.Z`) and only set on a green commit of `main`. The tag
-  runs the RELEASE tier (`release.yml`: FAST plus race tests of the safety packages, no mutation), and the
-  image, the GitHub release and the demo site follow only when it passed.
+  run (`release.yml`) checks that the commit is green already (`required` and `main.yml`, see RELEASE tier; no tests are repeated), and the
+  image, the GitHub release and the demo site follow only when that passed.
 - **Announce every release** in the one pinned Announcements discussion "TasmoFleet releases" (#315),
   after the tag run has published the image and the GitHub release. Edit its body (`updateDiscussion`):
   the "Current release" section shows `TasmoFleet X.Y.Z "Name"`, the image tags

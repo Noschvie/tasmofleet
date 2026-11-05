@@ -1,29 +1,35 @@
 # Release: a tag vX.Y.Z (signed, set on a green commit of main; CLAUDE.md "Releases").
 #
-#   guards -+
-#           +--> publish --> release --> pages
-#   checks -+
+#   guards --> publish --> release --> pages
 #
 # guards   the tagged commit is on main, the CHANGELOG.md section for the tag exists and a patch
 #          tag changes no migration, so a bad tag fails in seconds (the image build checks the
 #          section again). It also fails when a migration shipped in the previous tag was modified, renamed or
-#          deleted (`make migration-append-only`, #595).
-# checks   the RELEASE tier: the FAST tier (lint, unit and integration tests, build, the @core e2e
-#          tests in two shards and the MQTT job; a tag restores the Go caches main.yml saved, test results included,
-#          and saves none) plus the race tests of EVERY
-#          SAFETY package (a tag has no PR base to diff against). No mutation: every PR that
-#          changes a SAFETY package already passed it, and the nightly runs all of it.
-# publish  the image to ghcr.io and Docker Hub (_image.yml, mode release), only when guards and
-#          checks succeeded. The only job that can push a tag image: _image.yml refuses mode
-#          release for anything but a tag push.
+#          deleted (`make migration-append-only`, #595). And it fails, with the reason, unless the
+#          tagged commit already has a successful "required" check of pr.yml and a successful main.yml
+#          run (tools/release-green.sh, #554): main only moves by a fast-forward push of a green PR
+#          head, so the tag run does not run the FAST tier again on identical code. The race tests of
+#          the SAFETY packages stay in the nightly FULL tier (same main).
+# publish  the image to ghcr.io and Docker Hub (_image.yml, mode release), only when guards succeeded.
+#          The only job that can push a tag image: _image.yml refuses mode release for anything but a
+#          tag push.
 # release  the GitHub release, its notes the CHANGELOG.md section, only when publish succeeded.
 # pages    the static demo, only when the release was made.
-# A tag whose guards or checks fail publishes no image, no release and no pages.
+# A tag whose guards fail publishes no image, no release and no pages.
+#
+# workflow_dispatch is a dry run: it runs ONLY the check for "required" and main.yml on `sha` (default:
+# the head of the ref) and never publishes, releases or deploys anything, whatever the result.
 name: release
 
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: "Dry run: the commit whose green required and main.yml run to verify (default: the head of the ref). Publishes nothing."
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -41,11 +47,16 @@ jobs:
     name: changelog and migration guards
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read # the main.yml run of the tagged commit
+      checks: read # its "required" check run
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # migration-guard compares with the previous tag
-      - env:
+      - if: github.event_name == 'push'
+        env:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
@@ -59,21 +70,18 @@ jobs:
           make migration-guard TAG="$TAG" REV="$GITHUB_SHA"
           # No release ever edits, renames or deletes a migration shipped in the previous tag (#595).
           make migration-append-only TAG="$TAG" REV="$GITHUB_SHA"
-
-  checks:
-    name: checks
-    uses: ./.github/workflows/_checks.yml
-    with:
-      e2e: core
-      e2e_shards: '["1/2","2/2"]'
-      safety_race: true
+      # The commit was checked as a pull request and on main already (#554); a dry run checks the commit of its input.
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ inputs.sha || github.sha }}
+        run: tools/release-green.sh "$SHA"
 
   # Explicit status checks on every job below: the implicit success() also looks at the
   # skipped ancestors of a job (the first release workflow lost its publish job to that).
   publish:
     name: publish image
-    needs: [guards, checks]
-    if: ${{ !cancelled() && needs.guards.result == 'success' && needs.checks.result == 'success' }}
+    needs: guards
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.guards.result == 'success' }}
     permissions:
       contents: read
       packages: write
@@ -88,7 +96,7 @@ jobs:
   release:
     name: GitHub release
     needs: publish
-    if: ${{ !cancelled() && needs.publish.result == 'success' }}
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.publish.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
@@ -109,7 +117,7 @@ jobs:
   pages:
     name: demo site
     needs: release
-    if: ${{ !cancelled() && needs.release.result == 'success' }}
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.release.result == 'success' }}
     permissions:
       contents: read
       pages: write

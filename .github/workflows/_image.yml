@@ -1,7 +1,7 @@
 # Container image for tasmofleet, published to ghcr.io/<owner>/tasmofleet (reusable; never
 # triggered on its own). The caller names the kind of build with `mode`, and the workflow refuses
 # a mode that does not match the ref it runs for:
-#  - release (release.yml, tag vX.Y.Z, only after the RELEASE tier passed): fails unless
+#  - release (release.yml, tag vX.Y.Z, only after the guards passed, #554): fails unless
 #    CHANGELOG.md has a "## X.Y.Z" section, then builds and pushes :X.Y.Z and :latest (a
 #    pre-release tag vX.Y.Z-suffix pushes only :X.Y.Z-suffix). Nothing else can publish a tag image.
 #  - edge (main.yml, push to main): build and push :edge.
