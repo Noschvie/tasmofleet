@@ -6,6 +6,8 @@ always upgrade automatically.
 
 ## Unreleased
 
+## 0.27.4 "Cordouan" (2026-11-05)
+
 ### Fixed
 
 - Make compliant no longer reports settings as failed that the device applied, and no longer loses settings at the next power cut. Tasmota runs a `Backlog` from a queue, one line per `SetOption34` delay (200 ms by default), and over HTTP it answers before the queue has run. The read-back right after the send therefore saw the old value of every line but the first ("SetOption0 is 0, expected 1; SaveData is 0, expected 1") on devices that had applied all of them, and "Retry failed" passed only because the values were already set. A value that differs is now read again, first after a quarter second per differing setting, then up to five more times a second apart (the last read counts, so a value the device really refuses still fails, after about six seconds plus a quarter second per differing setting). The save that follows the changes (sent when the change has no `SaveData` of its own and does not restart the device) was a plain command, which Tasmota runs at once, before the queued lines: they ran after the save, so they were not written to flash and were lost at the next power cut on a device with `SaveData 0` (a `Restart 1` saves first). It is now queued behind the lines (`Backlog SaveData <value>`). The simulator now runs a Backlog like Tasmota (#559)
