@@ -65,7 +65,7 @@ for (const z of zones) {
   });
 }
 
-// An HTMX or SSE swap brings server text again; time.js must repaint it (htmx:afterSettle).
+// An HTMX or SSE swap brings server text again; time.js must repaint it (htmx:afterSwap).
 test("a swapped-in timestamp is repainted in the browser's zone", async ({ browser }) => {
   const ctx = await browser.newContext(zones[0]);
   const page = await ctx.newPage();

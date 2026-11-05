@@ -61,7 +61,10 @@
     return SPECS[key] ? fmt(key, SPECS[key]).format(d) : "";
   }
   function paint(root) {
-    (root || document).querySelectorAll("time[data-ts]").forEach(function (el) {
+    root = root || document;
+    var els = Array.prototype.slice.call(root.querySelectorAll("time[data-ts]"));
+    if (root.matches && root.matches("time[data-ts]")) els.push(root); // a swapped <time> itself
+    els.forEach(function (el) {
       var key = el.getAttribute("data-ts");
       var d = new Date(el.getAttribute("datetime"));
       if (isNaN(d.getTime())) return; // keep the server's text
@@ -92,7 +95,17 @@
   } else {
     paint();
   }
-  document.body.addEventListener("htmx:afterSettle", function () { paint(); });
+  // A swap brings the server's fallback text again. Repaint it as soon as htmx has put the content in
+  // (afterSwap, and oobAfterSwap for out-of-band parts), in the same task and so before the browser draws a
+  // frame: htmx:afterSettle comes ~20 ms later, and the fallback was visible in between (#594). The
+  // event's target is the swapped element (the new content, or the target of an innerHTML swap); only that
+  // is painted, as the live device list swaps single cells many times a second.
+  function paintSwapped(e) {
+    var t = e.target;
+    paint(t instanceof Element && t.isConnected ? t : document);
+  }
+  document.body.addEventListener("htmx:afterSwap", paintSwapped);
+  document.body.addEventListener("htmx:oobAfterSwap", paintSwapped);
   // "Today" turns into "Yesterday" at the browser's midnight, and a hidden tab's timers sleep:
   // repaint at the next midnight and when the tab comes back.
   function untilMidnight() {
