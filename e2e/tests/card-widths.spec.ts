@@ -1,6 +1,6 @@
 import { test, expect } from "../support/fixtures";
 import { measureCards } from "../support/card-widths";
-import { pageList } from "../support/page-list";
+import { pageList, settled } from "../support/page-list";
 import { realisticDevenvArgs, realisticPolicyRules, seedRealisticData } from "../support/seed";
 import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
@@ -46,6 +46,12 @@ test.beforeAll(async ({ browser }) => {
     await p.goto(app.url + lamp);
     await p.getByRole("button", { name: "Back up", exact: true }).click();
     await expect(p.getByText(/backed up|Backup (taken|saved)/i).first()).toBeVisible({ timeout: 30_000 });
+    // the policy judges devices from live reads. Since reads go over MQTT first (#456), none had arrived
+    // when the deviations page was measured (empty state), and the background reads are spread over ten
+    // minutes: run the live check once, as a person would, and measure the page with its verdict
+    await p.goto(app.url + "/policy/deviations");
+    await p.getByRole("button", { name: "Run now" }).click();
+    await expect(p.locator("#deviations [data-dev-group]").first()).toBeVisible({ timeout: 60_000 });
     await p.goto(app.url + "/transactions");
     txn = (await p.locator("a[href*='/transactions/']").first().getAttribute("href"))!.replace(app.url, "");
   } finally {
@@ -88,6 +94,7 @@ for (const [name, path] of pages) {
     await page.setViewportSize({ width: 1280, height: 900 });
     const resp = await page.goto(app.url + path());
     expect(resp?.status(), `GET ${path()}`).toBeLessThan(400);
+    await settled(page);
     await page.waitForTimeout(800);
     const m = await measureCards(page);
     expect(m.cards.length, "the page has cards").toBeGreaterThan(0);
@@ -100,6 +107,7 @@ for (const [name, path] of pages) {
       // so a max-width below it (a fixed max-width) shows here and nowhere at 1280
       await page.setViewportSize({ width: 1920, height: 900 });
       await page.goto(app.url + path());
+      await settled(page);
       await page.waitForTimeout(800);
       const w = await measureCards(page);
       if (w.span < w.area * 0.95) {

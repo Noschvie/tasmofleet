@@ -1,6 +1,6 @@
 import { test, expect } from "../support/fixtures";
 import { cardStackGaps, expectLayout } from "../support/layout";
-import { pageList } from "../support/page-list";
+import { pageList, settled } from "../support/page-list";
 import { realisticDevenvArgs, realisticPolicyRules, seedRealisticData } from "../support/seed";
 import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
@@ -41,6 +41,12 @@ test.beforeAll(async ({ browser }) => {
     await p.goto(app.url + lamp);
     await p.getByRole("button", { name: "Back up", exact: true }).click();
     await expect(p.getByText(/backed up|Backup (taken|saved)/i).first()).toBeVisible({ timeout: 30_000 });
+    // the policy judges devices from live reads. Since reads go over MQTT first (#456), none had arrived
+    // when the deviations page was checked (empty state), and the background reads are spread over ten
+    // minutes: run the live check once, as a person would, and check the page with its verdict
+    await p.goto(app.url + "/policy/deviations");
+    await p.getByRole("button", { name: "Run now" }).click();
+    await expect(p.locator("#deviations [data-dev-group]").first()).toBeVisible({ timeout: 60_000 });
     await p.goto(app.url + "/transactions");
     txn = (await p.locator("a[href*='/transactions/']").first().getAttribute("href"))!.replace(app.url, "");
   } finally {
@@ -62,6 +68,7 @@ for (const width of [768, 1024]) {
       await page.emulateMedia({ colorScheme: "light" });
       const resp = await page.goto(app.url + path());
       expect(resp?.status(), `GET ${path()}`).toBeLessThan(400);
+      await settled(page);
       await page.waitForTimeout(800);
       await expectLayout(page, `${name} ${width}px`);
       // the policy pages keep their own card gap (--card-gap, 20 to 24 px), see card-stacks.spec.ts
