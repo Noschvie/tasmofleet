@@ -99,6 +99,7 @@ type fleetView struct {
 	Filter      string
 	Sort, Dir   string
 	AllIDs      []model.DeviceID // the devices a run started now would try
+	SkippedIDs  []model.DeviceID // the ones it would leave out
 	SkippedNow  int
 	OldDays     int
 	Runs, Kept  int
@@ -251,6 +252,7 @@ func (h *handler) fleetOf(r *http.Request, admin bool) (*fleetView, error) {
 		}
 		if row.Skip {
 			fv.SkippedNow++
+			fv.SkippedIDs = append(fv.SkippedIDs, o.DeviceID)
 		} else {
 			fv.AllIDs = append(fv.AllIDs, o.DeviceID)
 		}

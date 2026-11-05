@@ -39,6 +39,9 @@ templ fleetBackupsPage(p sysPage) {
 			for _, id := range p.Fleet.AllIDs {
 				<input type="hidden" name="id" value={ strconv.FormatInt(int64(id), 10) }/>
 			}
+			for _, id := range p.Fleet.SkippedIDs {
+				<input type="hidden" name="left" value={ strconv.FormatInt(int64(id), 10) }/>
+			}
 		</form>
 	}
 	if p.Storage != nil && len(p.Storage.Orphans) > 0 {

@@ -12570,12 +12570,7 @@ input:focus-visible + .swtrack {
 }
 
 /* ==== page: System settings, Backups storage and Reset (design v2, W5 / N9) ==== */
-/* Storage: heading, four totals, the largest devices; values from the prototype's backups tab */
-.sys-storage {
-  display: flex;
-  flex-direction: column;
-  gap: var(--sp-12);
-}
+/* Storage: the four totals and the lists below them (Devices, Backups, #409) */
 .sys-sums {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
@@ -12604,50 +12599,16 @@ a.sys-sum:hover {
   font: 600 22px/1.2 var(--font-sans);
   font-variant-numeric: tabular-nums;
 }
-.sys-store,
 .sys-orphans {
   background: var(--color-surface);
   border: var(--hair-w) solid var(--color-border);
   border-radius: var(--r-card);
   overflow: hidden;
 }
-.sys-store-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 80px 80px 110px;
-  gap: var(--sp-10);
-  align-items: center;
-  height: 40px;
-  padding: 0 var(--sp-14);
-  border-top: var(--hair-w) solid var(--color-border);
-  font-size: 13px;
-  color: var(--color-text);
-  text-decoration: none;
-}
-a.sys-store-row:hover {
-  background: var(--color-surface-2);
-}
-.sys-store-row.sys-store-head {
-  height: auto;
-  padding: var(--sp-8) var(--sp-14);
-  border-top: 0;
-  background: var(--color-surface-2);
-  font: 500 12px var(--font-sans);
-  color: var(--color-text-2);
-}
 .sys-store-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.sys-store-last {
-  color: var(--color-text-2);
-  white-space: nowrap;
-}
-.sys-store-foot {
-  padding: var(--sp-8) var(--sp-14);
-  border-top: var(--hair-w) solid var(--color-border);
-  font-size: 12.5px;
-  color: var(--color-text-2);
 }
 /* backups of deleted devices: one row per run, the device backups' actions on the right */
 .sys-orphan {
@@ -12690,26 +12651,6 @@ a.sys-store-row:hover {
   font-size: 12.5px;
   color: var(--color-text-2);
 }
-/* phone: the prototype's four fixed columns leave the device name no width; the last
-   backup moves under the name */
-@media (max-width: 44.99rem) {
-  .sys-store-row {
-    grid-template-columns: minmax(0, 1fr) 56px 72px;
-    grid-template-rows: auto auto;
-    height: auto;
-    padding: var(--sp-8) var(--sp-14);
-    row-gap: 0;
-  }
-  .sys-store-row > .sys-store-last {
-    grid-column: 1;
-    grid-row: 2;
-    font-size: 12px;
-  }
-  .sys-store-head > :last-child {
-    display: none;
-  }
-}
-
 /* ==== page: Devices → Backups (#409) ==== */
 /* The page uses the Dashboard's content width: the Settings pages' 1240px cap on .syspage .cstacks is lifted here. */
 .syspage.bk-page .cstacks {

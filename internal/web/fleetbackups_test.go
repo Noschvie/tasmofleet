@@ -319,3 +319,46 @@ func TestStatusBarBackupLinksToPageAndSaysSkipped(t *testing.T) {
 		}
 	}
 }
+
+// Why (#409): "Back up all now" leaves skipped devices out, and the person must see which ones and why
+// before starting: a device that is not backed up must never be a surprise. The scope page lists
+// them (count, names, reasons) and keeps listing them when a row is removed.
+func TestBackUpAllScopePageListsTheDevicesLeftOut(t *testing.T) {
+	fleet := &fakeFleet{rows: []model.BackupDeviceRow{
+		{DeviceID: 1, Name: "kitchen"},
+		{DeviceID: 2, Name: "attic", SkipReason: "offline since 2 Nov"},
+	}}
+	fbk := &fakeBackupBatch{}
+	e := setupWith(t, func(d *Deps) { d.BackupBatch = fbk; d.BackupFleet = fleet })
+	_, body := e.do(t, "POST", "/devices/bulk/backup", "admin", bulkForm("id", "1", "left", "2"))
+	for _, want := range []string{"Left out: 1", "attic", "offline since 2 Nov", `name="left" value="2"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("scope page lacks %q", want)
+		}
+	}
+	// "x" on a row posts the page again: the left-out list stays
+	_, again := e.do(t, "POST", "/devices/bulk/backup", "admin", bulkForm("id", "1", "left", "2", "drop", "1"))
+	if !strings.Contains(again, "Left out: 1") {
+		t.Error("the left-out list is gone after a row was removed")
+	}
+	// an id that is not a skipped device of the fleet is not listed as one
+	_, other := e.do(t, "POST", "/devices/bulk/backup", "admin", bulkForm("id", "1", "left", "1"))
+	if strings.Contains(other, "Left out") {
+		t.Error("a device that would be tried is not left out")
+	}
+	if len(fbk.ids) != 0 {
+		t.Error("the scope page submits nothing")
+	}
+}
+
+// Why: the Back up all now form carries the skipped ids as "left" so the scope page can name them.
+func TestBackUpAllFormCarriesTheLeftOutIDs(t *testing.T) {
+	e := fleetEnv(t, fleetFixture(time.Now()))
+	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
+	form := regexp.MustCompile(`(?s)<form id="bk-all".*?</form>`).FindString(body)
+	for _, id := range []string{"2", "4"} {
+		if !strings.Contains(form, `name="left" value="`+id+`"`) {
+			t.Errorf("skipped device %s is not posted as left out", id)
+		}
+	}
+}

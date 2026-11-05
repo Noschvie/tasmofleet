@@ -66,6 +66,10 @@ type bulkScopeView struct {
 	// Back up
 	Label string
 	Keep  bool
+	// Left are the devices "Back up all now" left out (skipped by the fleet rule) with their reason;
+	// LeftIDs are posted back so the list survives a removed row (#409).
+	Left    []leftItem
+	LeftIDs []model.DeviceID
 	// Restart
 	Parallel int
 	// Power on / off
@@ -137,12 +141,48 @@ func (h *handler) bulkScope(r *http.Request, kind bulkKind, self, run string) (b
 		sv.Rows = append(sv.Rows, row)
 	}
 	sv.RunN = len(ready)
+	if kind == bulkBackup {
+		if err := h.bulkLeftOut(r, &sv); err != nil {
+			return sv, nil, err
+		}
+	}
 	if len(sv.Rows) == 0 {
 		sv.Error = "Select the devices in the device list first."
 	} else if sv.RunN == 0 {
 		sv.Error = "None of the devices is online."
 	}
 	return sv, ready, nil
+}
+
+// bulkLeftOut names the devices a "Back up all now" left out: the posted `left` ids that the fleet
+// overview says a run would skip, with the reason. Other ids are ignored, so the list can only say
+// what the fleet rule says.
+func (h *handler) bulkLeftOut(r *http.Request, sv *bulkScopeView) error {
+	if h.d.BackupFleet == nil {
+		return nil
+	}
+	var want []model.DeviceID
+	for _, v := range r.PostForm["left"] {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
+			want = append(want, model.DeviceID(n))
+		}
+	}
+	if len(want) == 0 {
+		return nil
+	}
+	rows, err := h.d.BackupFleet.Overview(r.Context())
+	if err != nil {
+		return err
+	}
+	for _, id := range want {
+		for _, row := range rows {
+			if row.DeviceID == id && row.SkipReason != "" && !slices.Contains(sv.LeftIDs, id) {
+				sv.LeftIDs = append(sv.LeftIDs, id)
+				sv.Left = append(sv.Left, leftItem{Name: row.Name, Reason: fleetSentence(row.SkipReason)})
+			}
+		}
+	}
+	return nil
 }
 
 // firstVisit reports whether the scope page is opened from the bar: its form always posts

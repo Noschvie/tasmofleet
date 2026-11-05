@@ -2,6 +2,7 @@ package web
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
@@ -42,6 +43,20 @@ templ bulkScopePage(v bulkScopeView) {
 			}
 			if v.SkipN > 0 {
 				<p class="bk-skipnote">{ v.SkipNote() }</p>
+			}
+			if len(v.Left) > 0 {
+				<p class="bk-skipnote">
+					{ "Left out: " + strconv.Itoa(len(v.Left)) + " (not tried by a fleet run) " }
+					for i, l := range v.Left {
+						if i > 0 {
+							{ "; " }
+						}
+						<b>{ l.Name }</b>{ ", " + strings.ToLower(l.Reason[:1]) + l.Reason[1:] }
+					}
+				</p>
+				for _, id := range v.LeftIDs {
+					<input type="hidden" name="left" value={ strconv.FormatInt(int64(id), 10) }/>
+				}
 			}
 		</section>
 		<aside class="bk-aside" aria-label="Options">
