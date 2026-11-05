@@ -31,7 +31,7 @@ func TestDecode(t *testing.T) {
 		{"SO4 unknown command", "", def, "stat/a/COMMAND", KindCommand, "a", "COMMAND", true},
 		{"SO4 name with digits inside", "", def, "stat/a/I2CSCAN", KindCommand, "a", "I2CSCAN", true},
 		{"SO4 reply with a custom layout", "home/%prefix%/%topic%/", def, "home/stat/dev1/HOSTNAME", KindCommand, "dev1", "HOSTNAME", true},
-		{"lower case suffix is not Tasmota's", "", def, "stat/a/switch1", "", "", "", false},
+		{"lower case suffix is not Tasmota's", "", def, "stat/a/teleperiod", "", "", "", false},
 		{"suffix with a dash is not a command", "", def, "stat/a/my-rule", "", "", "", false},
 		{"suffix starting with a digit", "", def, "stat/a/1ABC", "", "", "", false},
 		{"Tasmota cuts the index, so no command topic ends in a digit", "", def, "stat/a/TELEPERIOD60", "", "", "", false},

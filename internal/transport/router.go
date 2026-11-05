@@ -333,7 +333,7 @@ func (r *Router) Command(ctx context.Context, t tasmota.Target, cmnd string) (js
 // provably published nothing (notPublished: the channel refused the command, the bus was down, the
 // device was offline by its LWT, the snapshot changed), or MQTT published and the device never
 // answered (tasmota.ErrTimeout) while the caller still waits and HTTP is not known to fail. The second
-// case marks the device (devices with SetOption4 1 answer on a topic TasmoFleet does not decode), so its
+// case marks the device (its replies are not where TasmoFleet listens), so its
 // next reads go over HTTP for a while; an answer over MQTT clears the mark. Never back to MQTT within
 // one call. An answer we cannot use (ErrBadResponse, a device error) is an answer and is returned.
 func (r *Router) read(ctx context.Context, t tasmota.Target, cmnd string, cls cmdClass) (json.RawMessage, error) {

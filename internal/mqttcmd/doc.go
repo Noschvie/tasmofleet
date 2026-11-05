@@ -19,6 +19,9 @@
 //   - Retained messages are never answers. A reply is accepted only when it is the one the command
 //     produces: STATUSn for "Status n", else a RESULT whose top-level keys name the command (or
 //     {"Command":"Unknown"|"Error"} for that command). Button presses and other pollers are ignored.
+//     A device with SetOption4 1 publishes that reply on stat/<t>/<COMMAND> instead of RESULT (the
+//     name in upper case without its index, COMMAND for an unknown command, POWERn for a relay): it
+//     is accepted only on the pending command's own name, with the same key rules (#632).
 //   - A Backlog has no merged reply (Tasmota v16 publishes nothing for the Backlog itself and one
 //     RESULT per queued command): each queued command is collected on its own.
 //   - A device whose last LWT is Offline is not published to (ErrUnreachable: nothing was sent).

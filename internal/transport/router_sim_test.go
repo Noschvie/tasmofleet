@@ -175,6 +175,26 @@ func TestSimWrongPasswordMarksItBad(t *testing.T) {
 	}
 }
 
+// Why (#632, #605): a write goes over MQTT when HTTP does not reach the device, and a published write
+// is never sent again over HTTP. A device with SetOption4 1 confirms it on stat/<t>/<COMMAND>; missed,
+// the write that worked would end as an unknown outcome after the full reply wait.
+func TestSimSetOption4DeviceTakesAWriteOverMQTT(t *testing.T) {
+	g := newSimRigWith(t, map[string]string{"setoption4": "1"}, simulator.Fault{Kind: simulator.FaultHTTPUnreachable})
+	before := len(g.dev.Commands())
+	ctx, tr := WithTrace(t.Context())
+	start := time.Now()
+	raw, err := g.r.Command(ctx, g.target(), "TelePeriod 60")
+	if err != nil || !strings.Contains(string(raw), `"TelePeriod":60`) || tr.Via() != "mqtt" {
+		t.Fatalf("write: %s, %v, via %s", raw, err, tr.Via())
+	}
+	if d := time.Since(start); d > 3*time.Second {
+		t.Errorf("the write took %v, it waited for the reply timeout", d)
+	}
+	if n := len(g.dev.Commands()) - before; n != 1 {
+		t.Errorf("TelePeriod 60 reached the device %d times, want once: %v", n, g.dev.Commands())
+	}
+}
+
 // Why (#632): a device with SetOption4 1 answers on stat/<t>/<COMMAND>. Before the fix such a read
 // waited the full 8 s on MQTT, was repeated over HTTP and the device was read over HTTP for ten
 // minutes. The read must be answered over MQTT, once, with no HTTP request behind it.

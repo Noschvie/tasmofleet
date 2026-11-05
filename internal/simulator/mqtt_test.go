@@ -41,6 +41,36 @@ func TestMQTTBasics(t *testing.T) {
 	c.waitFor(t, `stat/livingroom-readinglamp/STATUS2={"StatusFWR"`)
 }
 
+// Why (#632): a device with SetOption4 1 publishes a command's reply on stat/<t>/<COMMAND> (upper
+// case, index cut), an unknown command on COMMAND and a relay on stat/<t>/POWERn, never on RESULT
+// (Tasmota support_command.ino:517, xdrv_02_9_mqtt.ino:947). The SetOption4 tests of mqttcmd and
+// transport read such a device through this simulator: if it answered on RESULT they would pass
+// without testing anything. Switched off over MQTT, the reply comes on RESULT again.
+func TestMQTTSetOption4RepliesOnTheCommandTopic(t *testing.T) {
+	t.Parallel()
+	b, c, f := newBrokerFleet(t, Extra{})
+	add(t, f, DeviceSpec{Name: "so4-plug", Profile: ProfileESP8266_1M, Relays: 2, Settings: map[string]string{"setoption4": "1"}})
+	c.waitFor(t, "[R]tele/so4-plug/LWT=Online")
+	for _, tc := range []struct{ cmd, payload, want string }{
+		{"TelePeriod", "60", `stat/so4-plug/TELEPERIOD={"TelePeriod":60}`},
+		{"SetOption19", "", `stat/so4-plug/SETOPTION={"SetOption19":`},
+		{"NoSuchCommand", "", `stat/so4-plug/COMMAND={"Command":"Unknown"`},
+		{"Power2", "ON", `stat/so4-plug/POWER2={"POWER2":"ON"}`}, // named after the relay, not the command
+	} {
+		if err := b.Publish("cmnd/so4-plug/"+tc.cmd, []byte(tc.payload), false); err != nil {
+			t.Fatal(err)
+		}
+		c.waitFor(t, tc.want)
+	}
+	if n := c.count("stat/so4-plug/RESULT="); n != 0 {
+		t.Fatalf("%d replies on RESULT while SetOption4 is 1", n)
+	}
+	if err := b.Publish("cmnd/so4-plug/SetOption4", []byte("0"), false); err != nil {
+		t.Fatal(err)
+	}
+	c.waitFor(t, `stat/so4-plug/RESULT={"SetOption4":"OFF"}`)
+}
+
 // Why (#272): a real device is subscribed to its cmnd topics before it announces itself, so a
 // controller that sends a command the moment the device shows up is answered. The simulator
 // used to fire its SUBSCRIBEs without waiting for the SUBACKs (and the tests raced them).

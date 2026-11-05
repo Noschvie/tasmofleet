@@ -265,6 +265,23 @@ func TestEmptyLiveLWTClearsTheCache(t *testing.T) {
 	checkAccounting(t, b.retained)
 }
 
+// Why (#632): a retained stat/<t>/<NAME> is never a command's answer (mqttcmd drops retained
+// messages) and nothing else reads that kind, yet a device or a rule can retain any number of
+// such names. Cached, they would take the slots of the device's reservation that its LWT needs
+// (#161) and be replayed to every late subscriber for nothing.
+func TestRetainedCommandTopicsAreNotCached(t *testing.T) {
+	b, _ := newBoundsBus(t, knownSet{"plug": true}.fn)
+	b.dispatch(nil, retainedMsg("stat/plug/TELEPERIOD", `{"TelePeriod":60}`))
+	b.dispatch(nil, retainedMsg("stat/plug/COMMAND", `{"Command":"Unknown","Input":"X"}`))
+	if n := b.retained.len(); n != 0 {
+		t.Fatalf("%d retained command topics cached", n)
+	}
+	c, _ := subscribeAll(b, KindCommand)
+	if got := c.snapshot(); len(got) != 0 {
+		t.Fatalf("replayed to a late subscriber: %+v", got)
+	}
+}
+
 // Only the LWT is cached when live: STATE/RESULT say something about now, a
 // replay would present old telemetry as fresh.
 func TestLiveNonLWTIsNotCached(t *testing.T) {
