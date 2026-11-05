@@ -20,7 +20,8 @@ func severityOptions(sev string) []ui.Option {
 func rulePath(base, id string) string { return base + rulesPath + "/" + id }
 
 // ruleShowHref is the devices card's filter link of a saved rule (the link works without
-// JavaScript; with it the editor swaps the card, see ruleDevChip).
+// JavaScript; with it the editor swaps the card, see ruleDevChip). A draft has no page to link
+// to: its "Show all" is a submit button of the rule form (see ruleDevicesCard).
 func ruleShowHref(v ruleDevicesView, show string, all bool) string {
 	q := ""
 	if show != "" {
@@ -463,7 +464,9 @@ templ ruleDevicesCard(v ruleDevicesView) {
 					</table>
 				}
 				if !v.All && v.Shown > len(v.Rows) {
-					if v.Edit {
+					if v.Draft {
+						<p class="devcard-note"><button type="submit" class="btn btn-link" form="rule-form" formaction={ ruleShowPost(v, v.Show, true) } hx-post={ ruleShowPost(v, v.Show, true) } hx-include="#rule-form" hx-target="#rule-devices" hx-swap="outerHTML">Show all { itoa(v.Shown) }</button></p>
+					} else if v.Edit {
 						<p class="devcard-note"><a href={ templ.SafeURL(ruleShowHref(v, v.Show, true)) } hx-post={ ruleShowPost(v, v.Show, true) } hx-include="#rule-form" hx-target="#rule-devices" hx-swap="outerHTML">Show all { itoa(v.Shown) }</a></p>
 					} else {
 						<p class="devcard-note"><a href={ templ.SafeURL(ruleShowHref(v, v.Show, true)) }>Show all { itoa(v.Shown) }</a></p>

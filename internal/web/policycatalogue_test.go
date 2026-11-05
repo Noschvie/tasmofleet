@@ -163,7 +163,7 @@ func TestFeatureCheckNamesOnlyDevicesWhoseBuildLacksIt(t *testing.T) {
 func TestCatalogueValueProblemsWarnAndTheRuleIsStillSaved(t *testing.T) {
 	e, mem, _ := rulesEnv(t, "")
 	for want, warn := range map[string]string{"1": "1 is below the minimum of 2.", "9999": "9999 is above the maximum of 3600.", "2.5": "2.5 is not a whole number.", "abc": "Enter a number."} {
-		_, body := e.do(t, "POST", "/policy/rules/preview", "admin", ruleForm(url.Values{"id": {"new"}, "command": {"BlinkTime"}, "want": {want}}))
+		_, body := e.do(t, "POST", "/policy/rules/preview", "admin", ruleForm(url.Values{"id": {"new"}, "command": {"BlinkTime"}, "want": {want}}), "HX-Request", "true")
 		if !strings.Contains(body, `id="want-check"`) || !strings.Contains(body, warn) || !strings.Contains(body, "tone-warn") || !strings.Contains(body, "You can still save") {
 			t.Errorf("preview of %q lacks the warning %q:\n%s", want, warn, body)
 		}
@@ -172,12 +172,12 @@ func TestCatalogueValueProblemsWarnAndTheRuleIsStillSaved(t *testing.T) {
 	if len(ruleIDs(t, mem)) != 4 {
 		t.Fatalf("every value must be saved, got %d rules", len(ruleIDs(t, mem)))
 	}
-	_, body := e.do(t, "POST", "/policy/rules/preview", "admin", ruleForm(url.Values{"id": {"new"}, "command": {"BlinkTime"}, "want": {"10"}}))
+	_, body := e.do(t, "POST", "/policy/rules/preview", "admin", ruleForm(url.Values{"id": {"new"}, "command": {"BlinkTime"}, "want": {"10"}}), "HX-Request", "true")
 	if strings.Contains(body, "tone-warn") {
 		t.Error("an in-range value has no warning")
 	}
 	// Latitude takes decimals
-	_, body = e.do(t, "POST", "/policy/rules/preview", "admin", ruleForm(url.Values{"id": {"new"}, "command": {"Latitude"}, "want": {"52.52"}}))
+	_, body = e.do(t, "POST", "/policy/rules/preview", "admin", ruleForm(url.Values{"id": {"new"}, "command": {"Latitude"}, "want": {"52.52"}}), "HX-Request", "true")
 	if strings.Contains(body, "not a whole number") {
 		t.Error("a decimal command takes decimals")
 	}
@@ -221,7 +221,7 @@ func TestNotJudgedNoteNamesTheMissingCommand(t *testing.T) {
 func TestPreviewKeepsTitleTrailAndNoticeInStepWithTheDraft(t *testing.T) {
 	e, _, _ := rulesEnv(t, "")
 	f := ruleForm(url.Values{"id": {"new"}, "origin": {"command"}, "name": {"Power lock"}, "command": {"PowerLock"}, "want": {"0"}})
-	r, body := e.do(t, "POST", "/policy/rules/preview", "admin", f)
+	r, body := e.do(t, "POST", "/policy/rules/preview", "admin", f, "HX-Request", "true")
 	if r.StatusCode != 200 {
 		t.Fatalf("%d", r.StatusCode)
 	}
@@ -231,7 +231,7 @@ func TestPreviewKeepsTitleTrailAndNoticeInStepWithTheDraft(t *testing.T) {
 		}
 	}
 	f.Set("origin", "template:flash")
-	_, body = e.do(t, "POST", "/policy/rules/preview", "admin", f)
+	_, body = e.do(t, "POST", "/policy/rules/preview", "admin", f, "HX-Request", "true")
 	if strings.Contains(body, `id="rule-source"`) {
 		t.Error("a draft that did not start from a command keeps the notice it has")
 	}

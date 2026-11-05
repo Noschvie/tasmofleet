@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/url"
 	"strings"
 	"sync"
@@ -28,6 +29,7 @@ type rulePolicy struct {
 	readSrc ValueSource
 	readErr error
 	variant map[model.DeviceID]string // Identity.Variant per device (#558)
+	more    int                       // extra devices (no value), to exceed the rows the devices card lists
 }
 
 func (p *rulePolicy) devices() []model.Device {
@@ -39,11 +41,15 @@ func (p *rulePolicy) devices() []model.Device {
 }
 
 func (p *rulePolicy) baseDevices() []model.Device {
-	return []model.Device{
+	devs := []model.Device{
 		{ID: 1, Name: "kitchen", Identity: model.Identity{Family: model.ChipESP8266}},
 		{ID: 2, Name: "attic", Identity: model.Identity{Family: model.ChipESP32}},
 		{ID: 3, Name: "shed", Identity: model.Identity{Family: model.ChipESP8266}},
 	}
+	for i := range p.more {
+		devs = append(devs, model.Device{ID: model.DeviceID(100 + i), Name: fmt.Sprintf("extra-%02d", i), Identity: model.Identity{Family: model.ChipESP8266}})
+	}
+	return devs
 }
 
 func (p *rulePolicy) Report(_ context.Context, _ string, live bool) (PolicyReport, error) {
@@ -422,7 +428,7 @@ func TestRulePreviewJudgesTheDraftFromCachedValuesOnly(t *testing.T) {
 	f := ruleForm(url.Values{"want": {"1"}, "family": {}, "tag": {}, "tags_extra": {""}, "except": {}})
 	f.Set("id", id)
 	rp.live, rp.reads = 0, nil
-	r, body := e.do(t, "POST", "/policy/rules/preview?show=deviate", "admin", f)
+	r, body := e.do(t, "POST", "/policy/rules/preview?show=deviate", "admin", f, "HX-Request", "true")
 	if r.StatusCode != 200 || !strings.Contains(body, `id="rule-devices"`) {
 		t.Fatalf("preview: %d\n%s", r.StatusCode, body)
 	}
@@ -438,7 +444,7 @@ func TestRulePreviewJudgesTheDraftFromCachedValuesOnly(t *testing.T) {
 	}
 	// an incomplete draft says what is missing instead of failing
 	f.Set("want", "")
-	_, body = e.do(t, "POST", "/policy/rules/preview", "admin", f)
+	_, body = e.do(t, "POST", "/policy/rules/preview", "admin", f, "HX-Request", "true")
 	if !strings.Contains(body, "Enter a command and an expected value") {
 		t.Errorf("incomplete draft:\n%s", body)
 	}
@@ -633,5 +639,106 @@ func TestRulePageNamesTheFirmwareOfANotJudgedDevice(t *testing.T) {
 	_, body := e.do(t, "GET", "/policy/rules/"+id, "admin", nil)
 	if !strings.Contains(body, "runs safeboot firmware; checked again about once an hour") || strings.Contains(body, "no backup yet") {
 		t.Errorf("the shed row must name the firmware instead of waiting for a backup:\n%s", section(t, body, "dc-devs"))
+	}
+}
+
+// Why (#512): the rule pages must work without JavaScript, and a person must not lose the rule
+// they are writing. "Show all" under the devices card of an unsaved draft used to be a link to
+// /policy/rules/new?all=1, which dropped the draft and answered a plain-text 400.
+func TestRuleDraftShowAllWithoutJavaScriptKeepsTheDraftAndListsEveryDevice(t *testing.T) {
+	rp := defaultRP()
+	rp.more = ruleRows
+	e, mem := ruleEnvWith(t, rp)
+	f := ruleForm(url.Values{"name": {"My unsaved draft"}, "want": {"7"}, "family": {}, "tag": {}, "tags_extra": {""}, "except": {}})
+	_, card := e.do(t, "POST", "/policy/rules/preview", "admin", f, "HX-Request", "true") // the card as the draft's page shows it
+	// the control is a submit button of the rule form, not a link to a GET that cannot carry the draft
+	btn := between(card, `<button type="submit" class="btn btn-link" form="rule-form"`, "</button>")
+	action := between(btn, `formaction="`, `"`)
+	if action == "" || !strings.Contains(btn, "Show all ") || strings.Contains(card, "new?all=1") {
+		t.Fatalf("draft Show all is not a form submit button:\n%.2000s", card)
+	}
+	action = strings.ReplaceAll(strings.TrimPrefix(action, "/tf"), "&amp;", "&")
+	r, body := e.do(t, "POST", action, "admin", f) // no HX-Request header: a browser without JavaScript
+	if r.StatusCode != 200 || !strings.Contains(body, "<html") {
+		t.Fatalf("show all without htmx: %d, want the whole page:\n%.2000s", r.StatusCode, body)
+	}
+	if !strings.Contains(body, `value="My unsaved draft"`) || !strings.Contains(body, `value="7"`) {
+		t.Errorf("the draft was lost:\n%.2000s", body)
+	}
+	if want := rp.more + 3; strings.Count(body, `href="/tf/devices/`) < want {
+		t.Errorf("show all lists %d device links, want at least %d", strings.Count(body, `href="/tf/devices/`), want)
+	}
+	if strings.Contains(body, "Show all ") {
+		t.Error("everything is listed: the Show all control must be gone")
+	}
+	if len(mem.vs) != 0 {
+		t.Error("show all stored a version")
+	}
+}
+
+// Why (#512): Go error text never reaches the browser; an unknown query field on the New rule
+// page gets the error page, not a bare text/plain answer.
+func TestRuleNewUnknownQueryFieldAnswersWithTheErrorPage(t *testing.T) {
+	e, _ := ruleEnvWith(t, defaultRP())
+	for _, p := range []string{"/policy/rules/new?all=1", "/policy/rules/duplicate?x=1"} {
+		r, body := e.do(t, "GET", p, "admin", nil)
+		if strings.Contains(body, "unknown form field") || !strings.Contains(r.Header.Get("Content-Type"), "text/html") || !strings.Contains(body, "<html") {
+			t.Errorf("%s: %d %q, want the HTML error page:\n%s", p, r.StatusCode, r.Header.Get("Content-Type"), body)
+		}
+	}
+}
+
+// Why (#512 review): without JavaScript, Show all draws the draft again from the posted form. A draft
+// whose Enabled switch is off (a duplicate of a disabled rule starts so) must stay off, or the next
+// Save switches the rule on although nobody asked for it.
+func TestRuleDraftShowAllWithoutJavaScriptKeepsTheEnabledSwitch(t *testing.T) {
+	rp := defaultRP()
+	rp.more = ruleRows
+	e, mem := ruleEnvWith(t, rp)
+	for _, c := range []struct {
+		state []string
+		on    bool
+	}{
+		{[]string{"disabled"}, false},           // the box is not ticked: only the hidden field is sent
+		{[]string{"disabled", "enabled"}, true}, // ticked: the last one wins
+	} {
+		f := ruleForm(url.Values{"want": {"7"}, "family": {}, "tag": {}, "tags_extra": {""}, "except": {}, "state": c.state})
+		r, body := e.do(t, "POST", "/policy/rules/preview?show=all&all=1", "admin", f) // no HX-Request: a browser without JavaScript
+		if r.StatusCode != 200 || !strings.Contains(body, "<html") {
+			t.Fatalf("state %v: %d, want the whole page", c.state, r.StatusCode)
+		}
+		if on := strings.Contains(between(body, `type="checkbox" name="state" value="enabled"`, ">"), "checked"); on != c.on {
+			t.Errorf("state %v: the Enabled switch is on=%v after Show all, want %v", c.state, on, c.on)
+		}
+		// a switched-off draft still shows what it would judge: every device, nothing left to show
+		if n := strings.Count(body, `href="/tf/devices/`); n < rp.more+3 || strings.Contains(body, "Show all ") {
+			t.Errorf("state %v: %d device links (want at least %d), Show all left: %v", c.state, n, rp.more+3, strings.Contains(body, "Show all "))
+		}
+	}
+	if len(mem.vs) != 0 {
+		t.Error("show all stored a version")
+	}
+}
+
+// Why (#512 review): a draft drawn again (Show all without JavaScript, a refused save) must still say
+// where it came from and that nothing is saved yet; the form carries only the origin.
+func TestRuleDraftRedrawnKeepsItsSourceLine(t *testing.T) {
+	rp := defaultRP()
+	rp.more = ruleRows
+	e, _ := ruleEnvWith(t, rp)
+	for origin, want := range map[string]string{
+		"template:timezone": "Started from the template “Local timezone”. Nothing is saved until you press Save rule.",
+		"command":           "A new rule for SaveData. Nothing is saved until you press Save rule.",
+	} {
+		f := ruleForm(url.Values{"want": {"7"}, "origin": {origin}, "family": {}, "tag": {}, "tags_extra": {""}, "except": {}})
+		_, body := e.do(t, "POST", "/policy/rules/preview?show=all&all=1", "admin", f) // Show all, no HX-Request
+		if !strings.Contains(body, want) {
+			t.Errorf("%s: Show all lost the source line %q", origin, want)
+		}
+		f.Set("want", "") // a refused save: the expected value is missing
+		_, body = e.do(t, "POST", "/policy/rules/save", "admin", f)
+		if !strings.Contains(body, want) {
+			t.Errorf("%s: a refused save lost the source line %q", origin, want)
+		}
 	}
 }

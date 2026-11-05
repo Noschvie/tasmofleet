@@ -320,11 +320,15 @@ func (h *handler) rulePageRender(w http.ResponseWriter, r *http.Request, status 
 		return
 	}
 	draft := o.ID == "new"
+	if draft && o.Draft != nil && o.Source == "" {
+		o.Source = h.draftSource(r, *o.Draft, src.Specs) // the form carries only the origin
+	}
 	pos := len(src.Specs)
 	var spec sysconfig.RuleSpec
 	switch {
 	case draft && o.Draft != nil:
 		spec = o.Draft.Spec
+		spec.Disabled = draftDisabled(*o.Draft, src.Specs) // the form's switch, also off (Show all, a refused save)
 	case draft:
 		spec = *o.Spec
 	default:
@@ -400,6 +404,35 @@ func (h *handler) rulePageRender(w http.ResponseWriter, r *http.Request, status 
 		p.History = h.ruleHistoryRows(r.Context(), o.ID, key, src.Version)
 	}
 	h.show(w, r, status, "policyrule", v, rulePageTempl(p))
+}
+
+// draftSource is the line that says where a draft came from, rebuilt from the origin the form
+// carries when the draft is drawn again (Show all without JavaScript, a refused save). The wording
+// is that of the page that started the draft; a copy from a device names the device only.
+func (h *handler) draftSource(r *http.Request, d ruleDraft, saved []sysconfig.RuleSpec) string {
+	const tail = ". Nothing is saved until you press Save rule."
+	kind, ref, _ := strings.Cut(d.Origin, ":")
+	switch kind {
+	case "template":
+		for _, t := range policyTemplates(h.brokerHost()) {
+			if t.ID == ref {
+				return "Started from the template “" + t.Title + "”" + tail
+			}
+		}
+	case "command":
+		return "A new rule for " + d.Spec.Command + tail
+	case "duplicate":
+		if n := indexOfRule(saved, ref); n >= 0 {
+			return "A copy of " + ruleName(saved[n]) + tail
+		}
+	case "copy":
+		if id, err := strconv.ParseInt(ref, 10, 64); err == nil {
+			if dev, ok := h.deviceByID(r, model.DeviceID(id)); ok {
+				return "Copied from " + dev.Name + tail
+			}
+		}
+	}
+	return ""
 }
 
 // ruleKV is the rule as read-only rows (operators).
@@ -608,7 +641,7 @@ func (h *handler) ruleNew(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	for k, vs := range q {
 		if (k != "q" && k != "template" && k != "command") || len(vs) != 1 {
-			http.Error(w, "unknown form field", http.StatusBadRequest)
+			h.notFound(w, r)
 			return
 		}
 	}
@@ -664,7 +697,7 @@ func (h *handler) ruleDuplicate(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	for k, vs := range q {
 		if k != "id" || len(vs) != 1 {
-			http.Error(w, "unknown form field", http.StatusBadRequest)
+			h.notFound(w, r)
 			return
 		}
 	}

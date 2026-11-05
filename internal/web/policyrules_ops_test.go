@@ -435,7 +435,7 @@ func TestPolicyPageFormsCarryTheVersion(t *testing.T) {
 // must be escaped like the page, never markup.
 func TestPolicyPreviewFragmentEscapes(t *testing.T) {
 	e, _, _ := rulesEnv(t, "")
-	_, body := e.do(t, "POST", "/policy/rules/preview", "admin", ruleForm(url.Values{"command": {"Hostname"}, "want": {`<img src=x onerror=alert(1)>`}}))
+	_, body := e.do(t, "POST", "/policy/rules/preview", "admin", ruleForm(url.Values{"command": {"Hostname"}, "want": {`<img src=x onerror=alert(1)>`}}), "HX-Request", "true")
 	if strings.Contains(body, "<img") {
 		t.Fatalf("unescaped value in the fragment:\n%s", body)
 	}

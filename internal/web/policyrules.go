@@ -414,6 +414,12 @@ func (h *handler) rulesPreview(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
+	if r.Header.Get("HX-Request") == "" {
+		// No JavaScript: the "Show all" button of the devices card posts the form here. The browser
+		// needs the whole page, with the draft as typed (nothing is stored).
+		h.rulePageRender(w, r, http.StatusOK, ruleOpts{ID: d.ID, Draft: &d, Origin: d.Origin})
+		return
+	}
 	h.ruleDevicesPreview(w, r, d, st)
 }
 

@@ -61,7 +61,7 @@ func TestRulePreviewAlsoSwapsTilesTitleLineAndSummary(t *testing.T) {
 	id := ruleSeed(t, e, mem, url.Values{"family": {}, "tag": {}, "tags_extra": {""}, "except": {}})
 	f := ruleForm(url.Values{"want": {"1"}, "family": {"esp8266"}, "tag": {}, "tags_extra": {""}, "except": {"shed", "attic"}})
 	f.Set("id", id)
-	_, body := e.do(t, "POST", "/policy/rules/preview", "admin", f)
+	_, body := e.do(t, "POST", "/policy/rules/preview", "admin", f, "HX-Request", "true")
 	for _, w := range []string{
 		`id="rule-tiles"`, `data-tile="applies"`, `id="rule-line"`, `SaveData = 1`, `id="scope-summary"`,
 		`hx-swap-oob="true"`, "2 exceptions",

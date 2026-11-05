@@ -263,7 +263,7 @@ func TestPolicyRulesPreviewStoresNothing(t *testing.T) {
 		"unfinished":   ruleForm(url.Values{"command": {""}, "want": {""}}),
 		"invalid want": ruleForm(url.Values{"want": {"abc"}}),
 	} {
-		r, body := e.do(t, "POST", "/policy/rules/preview", "admin", f)
+		r, body := e.do(t, "POST", "/policy/rules/preview", "admin", f, "HX-Request", "true")
 		if r.StatusCode != 200 || strings.Contains(body, "<html") || !strings.Contains(body, `id="rule-devices"`) {
 			t.Errorf("%s: preview %d, want the devices card fragment:\n%s", name, r.StatusCode, body)
 		}
@@ -271,7 +271,7 @@ func TestPolicyRulesPreviewStoresNothing(t *testing.T) {
 	if len(mem.vs) != before {
 		t.Fatal("a preview must not store a version")
 	}
-	if r, _ := e.do(t, "POST", "/policy/rules/preview", "admin", ruleForm(url.Values{"id": {"r9z9z9"}})); r.StatusCode != 404 {
+	if r, _ := e.do(t, "POST", "/policy/rules/preview", "admin", ruleForm(url.Values{"id": {"r9z9z9"}}), "HX-Request", "true"); r.StatusCode != 404 {
 		t.Errorf("preview of an unknown rule: %d", r.StatusCode)
 	}
 }
