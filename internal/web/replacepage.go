@@ -141,7 +141,6 @@ func (h *handler) renderReplace(w http.ResponseWriter, r *http.Request, status i
 			for _, f := range pv.Files.Files {
 				rv.Files.Names = append(rv.Files.Names, fileRowView{Name: f.Name(), PrivateKey: f.PrivateKey})
 			}
-			rv.Checks = append(rv.Checks[:3:3], "Copy the files of its filesystem (autoexec.be, Berry scripts, display.ini, Zigbee data, TLS key)", rv.Checks[3])
 		} else if pv.Files.Why != "" {
 			key := "Files"
 			if nFiles > 0 {

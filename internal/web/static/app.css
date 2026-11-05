@@ -9021,6 +9021,19 @@ tr.is-saved > td {
 .dev-act li:first-child {
   border-top: 0;
 }
+/* Activity page (#419-D): the entries flow through as many columns as fit (2 at 1280, 3 at 1920),
+   newest first down each column; the overview's box stays one column */
+.devcard.cw-act .dev-act {
+  display: block;
+  column-width: 24rem;
+  column-gap: var(--sp-24, 24px);
+}
+.devcard.cw-act .dev-act li {
+  break-inside: avoid;
+}
+.devcard.cw-act .dev-act li:first-child {
+  border-top: var(--hair-w) solid var(--color-border);
+}
 .dev-act-at {
   flex: none;
   min-width: 9.5em;
@@ -13248,9 +13261,8 @@ main.bare {
   margin-bottom: 2px;
 }
 
-/* Replace device: one 820 px card */
+/* Replace device (#419-D): the form card fills the wide stack, the side cards are the narrow one */
 .rp-card {
-  max-width: 820px;
   display: flex;
   flex-direction: column;
   gap: var(--sp-16);
@@ -13339,12 +13351,38 @@ main.bare {
 .rp-backup[open] .ufield {
   margin-top: var(--sp-8);
 }
-.rp-preview {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+.rp-side {
+  display: flex;
+  flex-direction: column;
+  padding: var(--sp-14) var(--sp-16);
+  gap: var(--sp-10);
+}
+.rp-side h2 {
+  margin: 0;
+  font: 600 15px var(--font-sans);
+  letter-spacing: normal;
+}
+.rp-side .banner {
+  margin: 0;
+}
+.rp-side .rp-start {
   gap: var(--sp-12);
 }
+.rp-steps {
+  margin: 0;
+  padding-left: var(--sp-18);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  font-size: var(--fs-body);
+}
+.rp-old-note {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--color-text-2);
+}
 .rp-box {
+  background: var(--color-surface);
   border: var(--hair-w) solid var(--color-border);
   border-radius: 9px;
   overflow: hidden;

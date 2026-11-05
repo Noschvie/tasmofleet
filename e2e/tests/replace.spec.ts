@@ -1,4 +1,5 @@
 import { test, expect } from "../support/fixtures";
+import { measureCards } from "../support/card-widths";
 import { App, Devenv, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
 // Backups (delete, delete older than) and "Replace device" against two
@@ -122,6 +123,12 @@ test("replace device: refused while the old one answers, then done with a new bo
   await page.goto(app.url + "/devices/1/replace");
   await pickNewDevice(page, host, port);
   await expect(page.getByText("Copied to the new device")).toBeVisible();
+  // #419-D: the preview page follows the card-width rule too (the card-widths guard cannot show it:
+  // it needs a spare board of the old device's chip family and an old device that no longer answers)
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const m = await measureCards(page);
+  expect(m.span, "the preview spans the content width").toBeGreaterThanOrEqual(m.area * 0.95);
+  expect(m.cards.filter((c) => c.fullWidth && c.usePct < 60).map((c) => c.card), "full-width cards under 60 %").toEqual([]);
   await expect(page.locator("label", { hasText: /I understand/ })).toContainText(/backed up first/);
   await page.getByRole("button", { name: "Start replacement…" }).click();
   await expect(page.getByText("Tick the box to confirm.")).toBeVisible();

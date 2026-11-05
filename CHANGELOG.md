@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Changed
+
+- Device pages follow the card-width rule: Activity is one full-width card with its entries in two columns (three on a large screen), and Replace device puts the form in the wide stack and "What comes along" and "What happens" beside it; on the preview "Copied to the new device" sits under the form and "Not copied" and the start step beside it. The four always-copied options are now only shown on the first Replace page, and the preview no longer lists the files option (the Files row and the confirmation text still name the files); nothing about what Replace does or confirms changed (#419)
+
 ## 0.28.0 "Cape Byron" (2026-11-05)
 
 ### Upgrade notes

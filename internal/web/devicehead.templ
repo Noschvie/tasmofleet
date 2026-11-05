@@ -373,7 +373,7 @@ templ devActList(rows []devActRow, base string) {
 // the newest few).
 templ deviceHistoryPage(p historyView) {
 	@deviceHeader(p.Tabs)
-	<section class="devcard" aria-labelledby="dc-hist">
+	<section class="devcard cw-act" aria-labelledby="dc-hist">
 		<div class="devcard-head">
 			<h2 id="dc-hist">Activity</h2>
 			<a class="btn btn-link" href={ templ.SafeURL(p.Base + devPath(p.Tabs.ID, "")) }>Back to the overview</a>

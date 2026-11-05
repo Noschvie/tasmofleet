@@ -89,17 +89,12 @@ const exempt: Exempt[] = [
   cap("system snapshots"),
   span("system settings general"), // two cards in the three-column Settings grid: the third column stays empty
   span("system settings discovery"),
-
-  // #419-D: device pages, not converted yet. WP-419D deletes this block.
-  use("device history", "Activity"),
-  span("device replace"),
 ];
-
 
 // Not measured: the narrow single-form and confirmation pages other than device edit (device delete,
 // ui.ConfirmPage, add user), sign-in and first-run setup, error pages, states that need data the devenv
 // fleet does not have (an empty fleet, the Replace preview, which needs a spare board of the same chip
-// family and is added with the #419 device-pages conversion), Drift (a table without a card), the phone
+// family and an old device that no longer answers: replace.spec.ts measures it), Drift (a table without a card), the phone
 // and tablet widths (card-stacks.spec.ts guards the stacks there) and pages of other roles.
 const tabs = ["general", "network", "mqtt", "discovery", "backups", "notifications", "firmware", "signin", "advanced"];
 // [name, path]: path is a function where it depends on the seeded fleet

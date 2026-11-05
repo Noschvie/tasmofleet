@@ -7,7 +7,45 @@ import "github.com/nofuturekid/tasmofleet/internal/web/ui"
 // acknowledgement, which posts the replacement.
 templ replaceTab(v replaceView) {
 	@v.Head
-	<section class="rp-card" aria-labelledby="rp-h">
+	@ui.CardStacks(3) {
+		@ui.CardStack(2) {
+			@replaceFormCard(v)
+			if v.Preview {
+				@replaceCopiedBox(v)
+			}
+		}
+		@ui.CardStack(1) {
+			if v.Preview {
+				@replaceNotCopiedBox(v)
+				@replaceStartCard(v)
+			} else {
+				<section class={ "ucard", "rp-side", ui.StackRank(2) } aria-labelledby="rc-h">
+					<h2 id="rc-h">What comes along</h2>
+					<div class="rp-checks" title="The whole configuration dump is restored, so these always come along.">
+						for _, c := range v.Checks {
+							<label class="ucheck"><input type="checkbox" checked disabled/><span>{ c }</span></label>
+						}
+						<span class="sr-only">The whole configuration dump is restored, so these always come along.</span>
+					</div>
+				</section>
+				<section class={ "ucard", "rp-side", ui.StackRank(3) } aria-labelledby="rh-h">
+					<h2 id="rh-h">What happens</h2>
+					<ol class="rp-steps">
+						<li>The new device is backed up first.</li>
+						<li>It receives the configuration of the chosen backup and restarts.</li>
+						<li>{ v.Device.Name } then stands for it: its tags, notes and history stay with the name.</li>
+						<li>The old credentials come back on the new device.</li>
+					</ol>
+					<p class="rp-old-note">The old device must stay switched off from now on: the new one carries the same hostname, MQTT topic and (if static) IP address.</p>
+				</section>
+			}
+		}
+	}
+}
+
+// replaceFormCard is the card with the choice of the new device (a GET form to the preview).
+templ replaceFormCard(v replaceView) {
+	<section class={ "rp-card", ui.StackRank(1) } aria-labelledby="rp-h">
 		<div>
 			<h2 id="rp-h">Move this configuration onto a new device</h2>
 			<p class="rp-lead">Use this when hardware dies. The new device gets this device's name, topic, rules, timers and backups; history stays with the name.</p>
@@ -41,66 +79,67 @@ templ replaceTab(v replaceView) {
 					@replaceAddress(v, true)
 				}
 			</div>
-			<div class="rp-checks" title="The whole configuration dump is restored, so these always come along.">
-				for _, c := range v.Checks {
-					<label class="ucheck"><input type="checkbox" checked disabled/><span>{ c }</span></label>
-				}
-				<span class="sr-only">The whole configuration dump is restored, so these always come along.</span>
-			</div>
-			if !v.Preview {
-				<div class="rp-acts">
-					@replaceBackupChoice(v)
+			<div class="rp-acts">
+				@replaceBackupChoice(v)
+				if !v.Preview {
 					<button type="submit" class="btn">Preview what’s copied</button>
-				</div>
-			} else {
-				<div class="rp-acts">
-					@replaceBackupChoice(v)
+				} else {
 					<button type="submit" class="btn btn-sm">Preview again</button>
-				</div>
-			}
-		</form>
-		if v.Preview {
-			<div class="rp-preview">
-				<section class="rp-box">
-					<div class="rp-box-h">Copied to the new device</div>
-					for i, x := range v.Copied {
-						if v.Files != nil && i == v.Files.At {
-							@replaceFilesRow(v.Files)
-						}
-						<div class="rp-kv"><span>{ x.Key }</span><span class={ templ.KV("mono", x.Mono) }>@ui.Soft(x.Value)</span></div>
-					}
-					if v.Files != nil && v.Files.At >= len(v.Copied) {
-						@replaceFilesRow(v.Files)
-					}
-				</section>
-				<section class="rp-box">
-					<div class="rp-box-h">Not copied</div>
-					for _, x := range v.NotCopied {
-						<div class="rp-skip"><span>{ x.Key }</span><span>{ x.Value }</span></div>
-					}
-				</section>
+				}
 			</div>
-			for _, w := range v.Warnings {
-				@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: w})
+		</form>
+	</section>
+}
+
+// replaceCopiedBox lists what the replacement writes to the new device.
+templ replaceCopiedBox(v replaceView) {
+	<section class={ "rp-box", ui.StackRank(2) }>
+		<div class="rp-box-h">Copied to the new device</div>
+		for i, x := range v.Copied {
+			if v.Files != nil && i == v.Files.At {
+				@replaceFilesRow(v.Files)
 			}
-			<form method="post" action={ templ.SafeURL(v.StartHref) } class="rp-start">
-				<input type="hidden" name="csrf" value={ v.CSRF }/>
-				for _, f := range v.Hidden {
-					<input type="hidden" name={ f.Key } value={ f.Value }/>
-				}
-				<label class={ "ucheck", templ.KV("is-invalid", v.Missing) }>
-					<input type="checkbox" name="confirm" value="1" if v.Missing { aria-invalid="true" aria-describedby="rp-ack-err" }/>
-					<span>{ v.Ack }</span>
-				</label>
-				if v.Missing {
-					<p class="ufield-err" id="rp-ack-err" role="alert">{ needConfirm }</p>
-				}
-				<div class="rp-acts">
-					<a class="btn" href={ templ.SafeURL(v.CancelHref) }>Cancel</a>
-					<button type="submit" class="btn btn-primary">Start replacement…</button>
-				</div>
-			</form>
+			<div class="rp-kv"><span>{ x.Key }</span><span class={ templ.KV("mono", x.Mono) }>@ui.Soft(x.Value)</span></div>
 		}
+		if v.Files != nil && v.Files.At >= len(v.Copied) {
+			@replaceFilesRow(v.Files)
+		}
+	</section>
+}
+
+templ replaceNotCopiedBox(v replaceView) {
+	<section class={ "rp-box", ui.StackRank(3) }>
+		<div class="rp-box-h">Not copied</div>
+		for _, x := range v.NotCopied {
+			<div class="rp-skip"><span>{ x.Key }</span><span>{ x.Value }</span></div>
+		}
+	</section>
+}
+
+// replaceStartCard is the warnings and the one acknowledgement that posts the replacement.
+templ replaceStartCard(v replaceView) {
+	<section class={ "ucard", "rp-side", ui.StackRank(4) } aria-labelledby="rs-h">
+		<h2 id="rs-h">Start the replacement</h2>
+		for _, w := range v.Warnings {
+			@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: w})
+		}
+		<form method="post" action={ templ.SafeURL(v.StartHref) } class="rp-start">
+			<input type="hidden" name="csrf" value={ v.CSRF }/>
+			for _, f := range v.Hidden {
+				<input type="hidden" name={ f.Key } value={ f.Value }/>
+			}
+			<label class={ "ucheck", templ.KV("is-invalid", v.Missing) }>
+				<input type="checkbox" name="confirm" value="1" if v.Missing { aria-invalid="true" aria-describedby="rp-ack-err" }/>
+				<span>{ v.Ack }</span>
+			</label>
+			if v.Missing {
+				<p class="ufield-err" id="rp-ack-err" role="alert">{ needConfirm }</p>
+			}
+			<div class="rp-acts">
+				<a class="btn" href={ templ.SafeURL(v.CancelHref) }>Cancel</a>
+				<button type="submit" class="btn btn-primary">Start replacement…</button>
+			</div>
+		</form>
 	</section>
 }
 
