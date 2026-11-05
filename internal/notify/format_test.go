@@ -6,6 +6,7 @@ import (
 	"mime"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 
@@ -230,5 +231,118 @@ func TestWebhookPreviewFollowsFormat(t *testing.T) {
 	c.NotifyWebhookAuth, c.NotifyWebhookHeader, c.NotifyWebhookSecret, c.NotifyWebhookFormat = config.NotifyAuthHeader, "X-Token", "s3cret", config.NotifyFormatNtfy
 	if p := WebhookPreview(c, ev); strings.Contains(p, "s3cret") || strings.Contains(p, "X-Token") {
 		t.Errorf("preview shows the secret header:\n%s", p)
+	}
+}
+
+// wireRequest is a request as it arrived at the receiver: every header except the ones the HTTP
+// client and the sender add on their own, and the body.
+type wireRequest struct {
+	headers []string // "Name: value", sorted
+	body    string
+}
+
+// wireOf sends ev through the real Emit path and records what reached the receiver.
+func wireOf(t *testing.T, c config.Config, ev Event) wireRequest {
+	t.Helper()
+	var w wireRequest
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		w.body = string(b)
+		for k, v := range r.Header {
+			switch k {
+			case "User-Agent", "Content-Length", "Accept-Encoding":
+				continue
+			}
+			w.headers = append(w.headers, k+": "+strings.Join(v, ","))
+		}
+	}))
+	defer srv.Close()
+	c.NotifyWebhook, c.NotifyWebhookURL = true, srv.URL+"/hook"
+	d := newDispatcher(&c, nil)
+	d.Emit(ev)
+	d.Wait()
+	sort.Strings(w.headers)
+	return w
+}
+
+// previewOf splits WebhookPreview into the same shape; the JSON body is compacted because the
+// preview indents it.
+func previewOf(t *testing.T, c config.Config) wireRequest {
+	t.Helper()
+	head, body, _ := strings.Cut(WebhookPreview(c, Sample(c)), "\n\n")
+	lines := strings.Split(head, "\n")
+	if lines[0] != "POST <webhook URL>" {
+		t.Fatalf("first preview line = %q", lines[0])
+	}
+	p := wireRequest{headers: lines[1:], body: body}
+	sort.Strings(p.headers)
+	var cb strings.Builder
+	if json.Valid([]byte(body)) {
+		var v any
+		_ = json.Unmarshal([]byte(body), &v) // valid, checked above
+		out, _ := json.Marshal(v)
+		cb.Write(out)
+		p.body = cb.String()
+	}
+	return p
+}
+
+func compactJSON(s string) string {
+	var v any
+	if json.Unmarshal([]byte(s), &v) != nil {
+		return s
+	}
+	out, _ := json.Marshal(v)
+	return string(out)
+}
+
+// Why (#579): the Message card says what is sent. For every format and with or without
+// PUBLIC_URL, the preview must equal what the receiver gets for the same event. It built its
+// own link before, so ntfy and Gotify previews promised a click link that was never sent.
+func TestPreviewEqualsTheRequestAWebhookSends(t *testing.T) {
+	for _, f := range []string{config.NotifyFormatJSON, config.NotifyFormatHomeAssistant, config.NotifyFormatNtfy, config.NotifyFormatGotify} {
+		for _, public := range []string{"http://tasmofleet.local", ""} {
+			c := baseConfig()
+			c.NotifyWebhookFormat, c.PublicURL = f, public
+			real := UpdateFinished(c, 41, 11, 1, 0, "16.1.0", sampleAt)
+			got, want := wireOf(t, c, real), previewOf(t, c)
+			if strings.Join(got.headers, "\n") != strings.Join(want.headers, "\n") {
+				t.Errorf("%s PUBLIC_URL=%q: headers differ\nsent:    %q\npreview: %q", f, public, got.headers, want.headers)
+			}
+			if compactJSON(got.body) != want.body {
+				t.Errorf("%s PUBLIC_URL=%q: body differs\nsent:    %s\npreview: %s", f, public, got.body, want.body)
+			}
+		}
+	}
+}
+
+// Why (#579): without PUBLIC_URL a real message has no link, so no format's preview may show one.
+func TestPreviewShowsNoLinkWithoutPublicURL(t *testing.T) {
+	for _, f := range []string{config.NotifyFormatJSON, config.NotifyFormatHomeAssistant, config.NotifyFormatNtfy, config.NotifyFormatGotify} {
+		c := baseConfig()
+		c.NotifyWebhookFormat, c.PublicURL = f, ""
+		p := WebhookPreview(c, Sample(c))
+		for _, bad := range []string{"Click:", "click", "http://", "transactions/41"} {
+			if strings.Contains(p, bad) {
+				t.Errorf("%s preview without PUBLIC_URL contains %q:\n%s", f, bad, p)
+			}
+		}
+	}
+}
+
+// Why (#579): with PUBLIC_URL the link is shown the way each format sends it.
+func TestPreviewShowsTheLinkWithPublicURL(t *testing.T) {
+	const link = "http://tasmofleet.local/transactions/41"
+	for f, want := range map[string]string{
+		config.NotifyFormatJSON:          `"url": "` + link + `"`,
+		config.NotifyFormatHomeAssistant: `"url": "` + link + `"`,
+		config.NotifyFormatNtfy:          "Click: " + link,
+		config.NotifyFormatGotify:        `"url": "` + link + `"`,
+	} {
+		c := baseConfig()
+		c.NotifyWebhookFormat = f
+		if p := WebhookPreview(c, Sample(c)); !strings.Contains(p, want) {
+			t.Errorf("%s preview lacks %q:\n%s", f, want, p)
+		}
 	}
 }

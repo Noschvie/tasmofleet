@@ -308,3 +308,23 @@ func TestNotificationFormatIsASelectAndThePreviewFollowsIt(t *testing.T) {
 		t.Errorf("preview does not follow the saved ntfy format:\n%s", page)
 	}
 }
+
+// Why (#579): the card shows the whole request (request line, headers, body), so its caption must
+// not call it "Webhook body", and an ntfy preview must not show a Click link while PUBLIC_URL is
+// unset, because then no link is sent.
+func TestMessagePreviewCaptionNamesTheRequestAndHasNoLinkWithoutPublicURL(t *testing.T) {
+	e, svc := notifyEnv(t, &fakeNotify{})
+	if _, err := svc.Apply(t.Context(), sysconfig.Request{Actor: "admin", Values: map[string]string{"NOTIFY_WEBHOOK_FORMAT": "ntfy"}}); err != nil {
+		t.Fatal(err)
+	}
+	_, page := e.do(t, "GET", "/settings/system?tab=notifications", "admin", nil)
+	if strings.Contains(page, "Webhook body.") || !strings.Contains(page, "The whole webhook request") {
+		t.Errorf("caption does not name the whole request")
+	}
+	if !strings.Contains(page, "Title: Update job #41") {
+		t.Fatalf("no ntfy preview on the page")
+	}
+	if strings.Contains(page, "Click:") {
+		t.Errorf("preview shows a Click link although PUBLIC_URL is unset")
+	}
+}

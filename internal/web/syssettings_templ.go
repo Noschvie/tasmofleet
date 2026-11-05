@@ -846,7 +846,7 @@ func sysCardView(p sysPage, c sysCard) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "</pre><small class=\"ufield-help\">Webhook body. The e-mail uses the title as subject, text and link as body.</small></div></div>")
+						templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "</pre><small class=\"ufield-help\">The whole webhook request: request line, headers and body (the secret header is not shown). The e-mail uses the title as subject, text and link as body.</small></div></div>")
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}

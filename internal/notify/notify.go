@@ -1,7 +1,9 @@
 // Package notify tells a person about things that happen without them watching: an update
 // transaction that finished, a scheduled device backup run with failures, a failed database
-// snapshot (#249). Two channels exist, a webhook (JSON POST; Home Assistant is the same body) and
-// SMTP e-mail. Both are off until switched on on the Settings page, Notifications tab.
+// snapshot (#249). Two channels exist, a webhook and SMTP e-mail. The webhook has four formats:
+// generic JSON and Home Assistant (the same JSON body), ntfy (plain text body, Title, Click and
+// X-Priority headers) and Gotify (JSON for POST /message). Both channels are off until switched on on the Settings
+// page, Notifications tab.
 //
 // Delivery never blocks the code that raised the event and never fails it: Emit sends in the
 // background, records the outcome per channel in memory (it starts empty after a restart) and
@@ -167,14 +169,14 @@ func TestEvent(c config.Config, at time.Time) Event {
 		URL:  Link(c, "/settings/system?tab=notifications"), Time: at, Context: "test"}
 }
 
-// Sample is the example the Message card on the settings page shows.
+// sampleAt is the time of the example message.
+var sampleAt = time.Date(2026, 10, 31, 3, 12, 7, 0, time.FixedZone("", 3600))
+
+// Sample is the example the Message card on the settings page shows. It is built by the same
+// constructor as a real finished update, so its link is there exactly when a real message would
+// carry one (PUBLIC_URL set): the preview must not promise a link that is never sent (#579).
 func Sample(c config.Config) Event {
-	at := time.Date(2026, 10, 31, 3, 12, 7, 0, time.FixedZone("", 3600))
-	ev := UpdateFinished(c, 41, 11, 1, 0, "16.1.0", at)
-	if ev.URL == "" {
-		ev.URL = "http://tasmofleet.local/transactions/41"
-	}
-	return ev
+	return UpdateFinished(c, 41, 11, 1, 0, "16.1.0", sampleAt)
 }
 
 func plural(n int, word string) string {
