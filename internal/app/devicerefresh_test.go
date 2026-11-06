@@ -17,6 +17,8 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/policy"
 	"github.com/nofuturekid/tasmofleet/internal/settings"
 	"github.com/nofuturekid/tasmofleet/internal/simulator"
+	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
 	"github.com/nofuturekid/tasmofleet/internal/tasmota"
 	"github.com/nofuturekid/tasmofleet/internal/templates"
 )
@@ -98,9 +100,9 @@ func TestBrokerCommandReadsOnlyTheBroker(t *testing.T) {
 	}
 }
 
-// Why: the schedule is low-rate and spread: the data is read every six hours and the identity every day
-// per device, and a fleet is visited one device per pass, never in one burst (200 devices at once would
-// be thousands of requests in a second).
+// Why: the schedule is low-rate and spread: the data and the identity are read once a day per device (the
+// broker every six hours), and a fleet is visited one device per pass, never in one burst (200 devices at
+// once would be thousands of requests in a second).
 func TestScheduleSpreadsTheFleetAndKeepsItsIntervals(t *testing.T) {
 	g := newRefreshRig(1, 2, 3)
 	var seen []model.DeviceID
@@ -116,30 +118,24 @@ func TestScheduleSpreadsTheFleetAndKeepsItsIntervals(t *testing.T) {
 	if !slices.Equal(seen, []model.DeviceID{1, 2, 3}) {
 		t.Fatalf("three passes visited %v, want every device once", seen)
 	}
-	g.advance(6*time.Hour - time.Minute)
-	g.r.pass(t.Context())
-	if _, _, d := g.takeAll(); len(d) != 0 {
-		t.Fatalf("data read again before six hours: %v", d)
-	}
-	g.advance(2 * time.Minute)
+	g.advance(24*time.Hour - time.Minute) // the broker is due again (every six hours), the rest not yet
 	var dataN, identN int
 	for i := 0; i < 3; i++ {
 		g.r.pass(t.Context())
 		_, ident, d := g.takeAll()
 		dataN, identN = dataN+len(d), identN+len(ident)
 	}
-	if dataN != 3 || identN != 0 {
-		t.Fatalf("after six hours: %d data reads (want 3), %d identity reads (want 0, due after a day)", dataN, identN)
+	if dataN != 0 || identN != 0 {
+		t.Fatalf("before a day had passed: %d data and %d identity reads, want none", dataN, identN)
 	}
-	g.advance(24 * time.Hour)
-	identN = 0
+	g.advance(2 * time.Minute)
 	for i := 0; i < 3; i++ {
 		g.r.pass(t.Context())
-		_, ident, _ := g.takeAll()
-		identN += len(ident)
+		_, ident, d := g.takeAll()
+		dataN, identN = dataN+len(d), identN+len(ident)
 	}
-	if identN != 3 {
-		t.Fatalf("after a day: %d identity reads, want 3", identN)
+	if dataN != 3 || identN != 3 {
+		t.Fatalf("after a day: %d data and %d identity reads, want 3 and 3", dataN, identN)
 	}
 }
 
@@ -406,5 +402,190 @@ func TestScheduledIdentityRefreshRenamesNothing(t *testing.T) {
 	}
 	if d, _ := st.GetDevice(t.Context(), id); d.Name == desc.Name {
 		t.Fatal("an explicit refresh did not rename either: the test proves nothing")
+	}
+}
+
+// Why: a device that is still flapping announces every boot, and the read must wait until it settled after
+// the last one, not run in the middle of the next boot. A broker command in between (MqttHost typed while it
+// was booting) must not drop the restart's refresh either.
+func TestRestartReadWaitsForTheLastAnnouncementAndKeepsItsRefresh(t *testing.T) {
+	g := newRefreshRig(1)
+	g.r.next[1], g.r.dataNext[1], g.r.identityNext[1] = g.clock.Add(time.Hour), g.clock.Add(time.Hour), g.clock.Add(time.Hour)
+	g.r.wantRestart(1)
+	g.advance(15 * time.Second)
+	g.r.want(1)
+	g.advance(10 * time.Second) // settled after the first announcement, not after the second
+	g.r.pass(t.Context())
+	if b, i, d := g.takeAll(); len(b)+len(i)+len(d) != 0 {
+		t.Fatalf("read %v %v %v 10 s after the last announcement", b, i, d)
+	}
+	g.advance(brokerHostSettle)
+	g.r.pass(t.Context())
+	if b, i, d := g.takeAll(); len(b) != 1 || len(i) != 1 || len(d) != 1 {
+		t.Fatalf("broker %v, identity %v, data %v once settled, want one each", b, i, d)
+	}
+}
+
+// Why: a device in a boot loop (the stability page calls three restarts in an hour one) announces every boot,
+// and a full refresh after each would send it some 35 requests per boot where the broker re-read of #598 sent
+// two: a crashing device, often an ESP8266 low on heap, would be read to death. Its reads mostly fail (it
+// reboots in the middle), and a failed read must not bring them back every ten minutes either. A restart reads
+// the identity and the data only if no restart read them in the last hour, the rest is read once when that
+// hour is over, and the broker is still read after every restart.
+func TestBootLoopIsReadInFullOnceAnHour(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{"reads succeed", nil},
+		{"reads fail, the device reboots in the middle", errors.New("timeout")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			g := newRefreshRig(1)
+			far := g.clock.Add(48 * time.Hour)
+			g.r.next[1], g.r.dataNext[1], g.r.identityNext[1] = far, far, far // nothing periodic due
+			var ident, data int
+			g.r.readIdentity = func(context.Context, model.DeviceID) error { ident++; return tc.err }
+			g.r.readData = func(context.Context, model.Device) error { data++; return tc.err }
+			broker := 0
+			for range 26 { // a restart every seven minutes for three hours
+				g.r.wantRestart(1)
+				for range 14 {
+					g.advance(30 * time.Second)
+					g.r.pass(t.Context())
+					broker += len(g.take())
+				}
+			}
+			if broker != 26 || ident != 4 || data != 4 {
+				t.Fatalf("three hours of restarts every seven minutes read the broker %d, the identity %d and the data %d times, want 26, 4, 4 (the first restart, then once an hour)", broker, ident, data)
+			}
+			g.advance(2 * time.Hour) // a restart after a quiet spell is read in full at once
+			g.r.wantRestart(1)
+			g.advance(brokerHostSettle)
+			g.r.pass(t.Context())
+			if ident != 5 || data != 5 {
+				t.Fatalf("a restart after a quiet spell: %d identity and %d data reads, want 5 and 5", ident, data)
+			}
+		})
+	}
+}
+
+// Why: a refused identity refresh is an answer, not a failure: another device answers at the stored address
+// (its MAC is not the entry's), and the prober logs and audits each refusal. Retried every ten minutes like a
+// probe that got no answer, it would write 144 audit rows a day for such a device. A refusal is asked again at
+// the regular interval; a probe without an answer is retried after the retry delay.
+func TestRefusedIdentityIsNotRetriedLikeAFailure(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		err   error
+		again time.Duration // when the identity is probed again
+	}{
+		{"refused", &RefreshRefusedError{Reported: "02:00:00:00:00:99", Reason: refusedOther}, 24 * time.Hour},
+		{"no answer", tasmota.ErrTimeout, 10 * time.Minute},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			g := newRefreshRig(1)
+			var probes []time.Time
+			g.r.readIdentity = func(context.Context, model.DeviceID) error {
+				probes = append(probes, g.clock)
+				return tc.err
+			}
+			for range 25 * 60 {
+				g.r.pass(t.Context())
+				g.advance(time.Minute)
+			}
+			if len(probes) < 2 {
+				t.Fatalf("probed %d times in 25 hours", len(probes))
+			}
+			if gap := probes[1].Sub(probes[0]); gap < tc.again || gap > tc.again+time.Minute {
+				t.Fatalf("probed again after %v, want %v", gap, tc.again)
+			}
+		})
+	}
+}
+
+// Why: a device a job holds gets nothing, and must not cost the others their turn: when only its data was
+// due, nothing was sent to it, so the pass goes on to the next device. Otherwise a device held through a long
+// update batch would stop the schedule of every device listed after it.
+func TestBusyDeviceDoesNotStopTheScheduleOfTheOthers(t *testing.T) {
+	g := newRefreshRig(1, 2)
+	far := g.clock.Add(time.Hour)
+	for _, id := range []model.DeviceID{1, 2} {
+		g.r.next[id], g.r.identityNext[id] = far, far // only the data is due
+	}
+	g.busy[1] = true
+	g.r.pass(t.Context())
+	if _, _, d := g.takeAll(); !slices.Equal(d, []model.DeviceID{2}) {
+		t.Fatalf("data read %v in the pass where device 1 is held, want [2]", d)
+	}
+}
+
+// Why: the data read takes 10 to 30 s per device, and a person who saves the Settings tab meanwhile must not be
+// refused as busy: the read only tries the device lock (a job that holds it keeps the read away) and gives it
+// back before it sends anything.
+func TestDataReadLeavesTheDeviceLockFree(t *testing.T) {
+	g := newRefreshRig(1)
+	locks := devlock.New()
+	g.r.enter = func(_ context.Context, id model.DeviceID, owner string) (func(), error) {
+		release, holder, ok := locks.TryAcquire(id, owner)
+		if !ok {
+			return nil, devlock.BusyError{Holder: holder}
+		}
+		return release, nil
+	}
+	saved := false
+	g.r.readData = func(_ context.Context, d model.Device) error {
+		release, _, ok := locks.TryAcquire(d.ID, "settings") // a save of the Settings tab while the read runs
+		if ok {
+			release()
+		}
+		saved = ok
+		return nil
+	}
+	g.r.pass(t.Context())
+	if !saved {
+		t.Fatal("a save during the data read was refused as busy: the read holds the device lock")
+	}
+}
+
+// Why: Pause on the policy page and an interval of 0 switch the background policy reads off ("pause or resume
+// the background reads", spec 6.4 routes); an admin uses them to stop TasmoFleet asking the fleet for those
+// values. The data read keeps to them like the policy poller does. The Settings values and the template
+// reading are not policy reads and are still read.
+func TestPausedPolicyLiveCheckIsNotReadInTheBackground(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		paused, zero bool
+		read         bool
+	}{
+		{"running", false, false, true},
+		{"paused on the policy page", true, false, false},
+		{"interval 0", false, true, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := liveRuntime(t)
+			if tc.zero {
+				if _, err := a.svc.Sys.Apply(t.Context(), sysconfig.Request{Actor: "admin", Values: map[string]string{"POLICY_LIVE_INTERVAL": "0s"}}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			lp, err := sysconfig.NewLivePause(t.Context(), &memSettings{rows: map[string]store.SystemSetting{}}, nopAudit{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := lp.Set(t.Context(), "admin", tc.paused, nil); err != nil {
+				t.Fatal(err)
+			}
+			a.livePause = lp
+			reader := &countingReader{}
+			a.policyLive = &policyReporter{reader: reader, now: time.Now}
+			a.policyLive.setRules([]policy.Rule{{ID: "r1", Command: "SaveData", Want: "0"}})
+			if err := a.refreshData(t.Context(), model.Device{ID: 1}); err != nil {
+				t.Fatal(err)
+			}
+			if got := reader.calls > 0; got != tc.read {
+				t.Fatalf("policy values read: %v, want %v", got, tc.read)
+			}
+		})
 	}
 }
