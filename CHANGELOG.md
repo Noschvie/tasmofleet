@@ -17,7 +17,7 @@ always upgrade automatically.
 ### Fixed
 
 - Policy: "Show all" under the devices of a rule draft works on the first click right after typing, instead of the form's own preview putting the short list back (#660)
-- Health: devices whose retained last will says Offline are no longer all polled on the first tick after a start (the polls are spread over one poll interval), a will that arrives live (a reboot, an OTA) is polled one interval later instead of while the device restarts, and the first poll after a replayed will no longer writes an "Online" history row per device. A device on MQTT with quiet telemetry and the HTTP API off stays Online instead of going Stale and back every 30 minutes, and the back-off cap no longer undercuts a POLL_INTERVAL longer than 30 minutes (#652)
+- Health: devices whose retained last will says Offline are no longer all polled on the first tick after a start (the polls are spread over one poll interval), a will that arrives live (a reboot, an OTA) is polled one interval later instead of while the device restarts, and the first poll after a replayed will no longer writes an "Online" history row per device. A device on MQTT whose telemetry is quiet is polled every POLL_INTERVAL like a device without MQTT, so it stays Online instead of going Stale and back every 11 minutes (HTTP API on) or 30 minutes (HTTP API off) while POLL_INTERVAL stays below the stale threshold (as with the defaults), and the back-off cap no longer undercuts a POLL_INTERVAL longer than 30 minutes (#652)
 
 ## 0.32.0 "Fastnet" (2026-11-06)
 

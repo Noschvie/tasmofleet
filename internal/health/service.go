@@ -691,6 +691,7 @@ func (s *Service) handle(m mqttbus.Message, live bool) {
 		switch {
 		case strings.EqualFold(ds.lwt, "online"):
 			ds.lwt = "Online"
+			ds.willReplayed = false // the device is back: there is no baseline left for a poll to take
 		case strings.EqualFold(ds.lwt, "offline"):
 			ds.lwt = "Offline"
 			if !wasOffline {
@@ -699,7 +700,10 @@ func (s *Service) handle(m mqttbus.Message, live bool) {
 				// while it restarts, so the first poll waits one interval. A replayed will (start, reconnect)
 				// is spread over one interval, so that a start does not poll every such device on the first
 				// tick and let the dead ones hold the poll slots until their connect timeout.
-				ds.lastPolled, ds.willReplayed = time.Time{}, !live
+				// Only a will replayed before anything was known of the device makes the first poll a baseline:
+				// its own change from unknown is not stored either (persist). A replay that takes a known device
+				// offline (after our reconnect, on a new topic) is stored, so the poll's answer is stored too.
+				ds.lastPolled, ds.willReplayed = time.Time{}, !live && ds.h.State == model.HealthUnknown
 				if live {
 					ds.nextPoll = now.Add(s.jitter(s.pollInterval()))
 				} else {

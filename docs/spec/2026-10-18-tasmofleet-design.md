@@ -1170,12 +1170,18 @@ Submit.
 - The HTTP poll uses `Status 11` (cheap; uptime, Wi-Fi, power) and falls back to the `Upgrade`
   probe when the reply is Unknown (minimal firmware, shown as "minimal" in the UI).
 - Poll scheduling: HTTP-only devices every `POLL_INTERVAL` (5 min) with ±20 % jitter. MQTT
-  devices only when stale, except a device whose last will is `Offline`, which is polled like an
-  HTTP-only device (#619): the retained will outlives a device that left our broker unclean (a power
-  cut while switching broker, a restored config for another broker) or has MQTT switched off. A new
-  will (one that follows `Online`) makes the device offline at once and is checked at the next tick;
-  the broker's replay of the same will after a reconnect changes nothing. Offline devices back off
-  exponentially up to 30 min. At most 4 polls in flight.
+  devices only while their telemetry is silent (nothing within `StaleAfter`), and then like an HTTP-only
+  device: an HTTP answer or a refused API keeps such a device online but does not stop its polls (#652),
+  so it stays online while `POLL_INTERVAL` (+20 %) is shorter than `StaleAfter`. A device whose last will
+  is `Offline` is polled like an HTTP-only device too (#619): the retained will outlives a device that left
+  our broker unclean (a power cut while switching broker, a restored config for another broker) or has MQTT
+  switched off. A new will (one that follows `Online`) makes the device offline at once and is checked one
+  poll interval later (with the jitter), not while the device reboots (#652); the broker's replay of the
+  same will after a reconnect changes nothing. Any other replayed will (at start, after a reconnect, for a
+  device added later) is checked at a random point within one poll interval, so a start does not poll all of
+  them on the first tick; when nothing was known of the device before that will, its first background poll is
+  the device's baseline, like a first observation, and writes no history row (#652). Offline devices back off
+  exponentially up to 30 min, or `POLL_INTERVAL` when that is longer. At most 4 polls in flight.
 - HTTP probe (#456): a device that is fine on MQTT is not polled, so its HTTP fact (`Health.SeenHTTP`)
   only ages. `Service.ProbeHTTP(id)` asks for one deliberate `Status 11` instead, run by the next tick: when
   the device page is opened, and when the broker re-read (#598) is due for a device whose HTTP fact is not
@@ -1197,7 +1203,8 @@ Submit.
   (`Health.Since`); a device kept offline by its last will says in the offline banner what HTTP showed until the
   next background poll, whose answer or refusal makes it online (#619): with MQTT off as well, a device whose
   API is off is online and has no path. `Health.APIOff()` is the one rule for tile, card, list and gates. A
-  refused poll waits like a failing one (up to 30 min). For a device whose last will is `Offline`, only its own MQTT
+  refused poll waits like a failing one (up to 30 min, or `POLL_INTERVAL` when that is longer), except for a device on our
+  broker whose telemetry is silent: its refusals are what keeps it online, so it is asked at the normal interval (#652). For a device whose last will is `Offline`, only its own MQTT
   messages and what the background poll reaches (an answer or a refusal) count as `LastSeen`: a probe contact
   does not move "Offline since". An online device whose API is off
   and which no MQTT path can serve has no path for backup, update, restore and changes: scheduled backups skip it
