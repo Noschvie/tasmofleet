@@ -8,7 +8,7 @@ always upgrade automatically.
 
 ### Changed
 
-- Docker Hub credentials are only available to jobs on main and v* tags through the `dockerhub` environment (#693)
+- Reverted #693: environment secrets did not reach the reusable workflows; Docker Hub credentials are repository secrets again.
 
 ## 0.34.1 "Split Rock" (2026-11-06)
 

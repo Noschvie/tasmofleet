@@ -282,7 +282,6 @@ and the release section guard (`make release-pr-check`) run on every PR and gate
 that are safe to ignore (and the ones a test reads, which are not) is in the header of `.github/workflows/pr.yml`.
 Third-party actions are pinned to a full commit SHA with the version in a comment (`uses: owner/repo@<sha> # vX.Y.Z`);
 Renovate keeps both current. Reusable workflows take their secrets by name (`secrets:`), never `secrets: inherit`.
-Docker Hub credentials (`DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN`) are secrets of the `dockerhub` environment (deployment policy: branch `main`, tags `v*`), not repository secrets. The jobs in `_image.yml` and `ghcr-cleanup.yml` set `environment: dockerhub` themselves (a caller job cannot) and read the secrets from it; callers pass nothing. Other refs run without the environment, so without the secrets; on `main` and `v*` tags of the upstream repo missing credentials fail the job.
 
 ## Commits
 

@@ -67,6 +67,9 @@ jobs:
     uses: ./.github/workflows/_image.yml
     with:
       mode: edge
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
   # The Home Assistant app image, built and tested apart from :edge (#522): red on its own, never stops the push.
   ha-app:
@@ -86,3 +89,6 @@ jobs:
     uses: ./.github/workflows/ghcr-cleanup.yml
     with:
       dry-run: false
+    secrets:
+      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}

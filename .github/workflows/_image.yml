@@ -8,8 +8,8 @@
 #  - check (pr.yml, pull requests that touch the Dockerfile, the module files or the HA app):
 #    build only, nothing is pushed (proves the Dockerfile still works).
 # ghcr authentication is the workflow's GITHUB_TOKEN (packages: write, granted by the caller). When the
-# secrets DOCKERHUB_USERNAME and DOCKERHUB_TOKEN exist (the `dockerhub` environment, only on main and v* tags), the same build is also pushed under the
-# same tags to docker.io/<DOCKERHUB_USERNAME>/tasmofleet (no rebuild); without them (forks, pull requests, check)
+# secrets DOCKERHUB_USERNAME and DOCKERHUB_TOKEN are passed, the same build is also pushed under the
+# same tags to docker.io/<DOCKERHUB_USERNAME>/tasmofleet (no rebuild); without them (forks, check)
 # that part is skipped.
 # The image is a multi-arch manifest (linux/amd64 and linux/arm64) under every tag. The Go binary is
 # cross-compiled on the amd64 runner (no emulation); the arm64 image carries the unofficial
@@ -30,6 +30,12 @@ on:
         description: "release, edge or check (see above)"
         type: string
         required: true
+    secrets:
+      DOCKERHUB_USERNAME:
+        description: Docker Hub copy of the pushed tags; without it only ghcr is pushed
+        required: false
+      DOCKERHUB_TOKEN:
+        required: false
 
 permissions:
   contents: read
@@ -39,10 +45,6 @@ jobs:
     name: build image (${{ inputs.mode }})
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    # Docker Hub credentials live only in the `dockerhub` environment (#693), whose deployment policy
-    # allows main and v* tags. Every other ref (pull requests, a dispatch from a branch) runs without
-    # the environment and so without the secrets. A caller job cannot set `environment`, so it is set here.
-    environment: ${{ (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) && 'dockerhub' || '' }}
     permissions:
       contents: read
       packages: write
@@ -60,7 +62,6 @@ jobs:
           OWNER: ${{ github.repository_owner }}
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-          REQUIRE_DOCKERHUB: ${{ github.repository == 'hellwand/tasmofleet' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
         run: |
           set -eu
           image="ghcr.io/$(echo "$OWNER" | tr 'A-Z' 'a-z')/tasmofleet"
@@ -105,9 +106,6 @@ jobs:
             dhimage="docker.io/$(echo "$DOCKERHUB_USERNAME" | tr 'A-Z' 'a-z')/tasmofleet"
             tags="$tags,$(echo "$tags" | sed "s|$image|$dhimage|g")"
             dockerhub=true
-          elif [ "$push" = true ] && [ "$REQUIRE_DOCKERHUB" = true ]; then
-            echo "::error::DOCKERHUB_USERNAME/DOCKERHUB_TOKEN are missing in the dockerhub environment; refusing to publish to ghcr only (#693)" >&2
-            exit 1
           fi
           echo "building $tags (version $version, push $push, dockerhub $dockerhub)"
           {
