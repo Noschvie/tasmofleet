@@ -42,6 +42,7 @@ Numbers are cited from code comments ("CLAUDE.md safety rule N"); full text, wit
 
 | Working on                                                 | Read                                                         |
 | ---------------------------------------------------------- | ------------------------------------------------------------ |
+| Before risky work, or after a mistake (known traps)        | [pitfalls](docs/pitfalls.md)                                 |
 | Which package owns what, where code goes, templ            | [architecture](docs/dev/architecture.md)                     |
 | Firmware, OTA, device commands, credentials, auth          | [safety-rules](docs/dev/safety-rules.md)                     |
 | Tests, the gates before a push, revert check, diff coverage, mutation | [testing](docs/dev/testing.md)                    |
