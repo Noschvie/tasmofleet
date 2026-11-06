@@ -8983,7 +8983,8 @@ body:has(.dv-list .bulkbar:not([hidden])) {
   font: 600 var(--fs-stat) / 1 var(--font-sans);
   font-variant-numeric: tabular-nums;
   letter-spacing: -0.02em;
-  color: var(--t, var(--color-text));
+  /* the text variant of the tone, not the fill: the fill misses WCAG AA on the surface (#513) */
+  color: var(--t-fg, var(--color-text));
   overflow-wrap: anywhere;
 }
 .dev-tile-s {

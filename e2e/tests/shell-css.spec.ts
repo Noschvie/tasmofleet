@@ -226,6 +226,43 @@ for (const scheme of ["light", "dark"] as const) {
   });
 }
 
+// Why (#513): the device overview and Policy header coloured the stat value with the tone's fill
+// (`--t`): amber 2.19:1 and grey 2.62:1 on the light surface, below even the 3:1 of large text.
+// The number carries the device's state, so every tone must be readable in both themes. 4.5:1 is
+// asked (not only 3:1) because a phone tile is 20 px, which is not large text.
+for (const scheme of ["light", "dark"] as const) {
+  test(`stat tile values meet 4.5:1 for every tone (${scheme})`, async ({
+    page,
+  }) => {
+    await open(page, "/about", 1280, scheme);
+    const tones = ["", "t-ok", "t-warn", "t-danger", "t-neutral", "t-accent"];
+    await mount(
+      page,
+      `<div class="dev-tiles">${tones
+        .map(
+          (t) =>
+            `<div class="dev-tile"><div class="dev-tile-l">L</div><div class="dev-tile-v ${t}">12</div></div>`,
+        )
+        .join("")}</div>`,
+    );
+    const m = await page.evaluate(() =>
+      [...document.querySelectorAll("#sandbox .dev-tile")].map((tile) => ({
+        tone: tile.querySelector(".dev-tile-v")!.className,
+        fg: getComputedStyle(tile.querySelector(".dev-tile-v")!).color,
+        bg: getComputedStyle(tile).backgroundColor,
+      })),
+    );
+    expect(m).toHaveLength(tones.length);
+    for (const x of m) {
+      const ratio = await contrast(page, x.fg, x.bg);
+      expect(
+        ratio,
+        `${scheme} ${x.tone}: ${x.fg} on ${x.bg} is ${ratio.toFixed(2)}:1`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+}
+
 // Why: the select-all box sat 3-5px left of the row boxes.
 test("the select-all box is on the row boxes' vertical line", async ({
   page,
