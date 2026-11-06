@@ -58,6 +58,18 @@ func ImportTasmoAdmin(ctx context.Context, svc *Services, opts ImportOptions, ou
 	for _, e := range plan.Errors {
 		_, _ = fmt.Fprintf(out, "warning: %v\n", &e)
 	}
+	if n := plan.ErrorsOmitted; n > 0 { // like the web plan: no rejected line goes unmentioned
+		what := "lines"
+		if n == 1 {
+			what = "line"
+		}
+		_, _ = fmt.Fprintf(out, "warning: devices.csv: %d more %s with errors, not listed one by one\n", n, what)
+	}
+	for _, r := range plan.Rows {
+		for _, n := range r.Notes {
+			_, _ = fmt.Fprintf(out, "warning: devices.csv line %d: %s\n", r.Line, n)
+		}
+	}
 	for _, w := range plan.Warnings {
 		_, _ = fmt.Fprintf(out, "warning: %s\n", w)
 	}

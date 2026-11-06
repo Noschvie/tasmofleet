@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -105,6 +106,33 @@ type Config struct {
 // (column 1); several relay names are joined with "-" like TasmoAdmin does.
 // Notes records the TasmoAdmin id.
 func ParseDevices(r io.Reader, key []byte) ([]model.Device, []error, error) {
+	rows, errs, err := ParseRows(r, key)
+	if err != nil {
+		return nil, nil, err
+	}
+	devs := make([]model.Device, len(rows))
+	for i, row := range rows {
+		devs[i] = row.Device
+	}
+	return devs, errs, nil
+}
+
+// Row is a device read from devices.csv with the line its record starts on, so that a caller can
+// tie the problems of a line (RowError.Line) to the device they belong to.
+type Row struct {
+	Device model.Device
+	Line   int
+}
+
+// NonFatal tells the problems of a record that is still imported (a bad port, a password that
+// cannot be decrypted): the device is returned next to the error. Every other problem rejects
+// the record.
+func NonFatal(err error) bool {
+	return errors.Is(err, ErrBadPort) || errors.Is(err, ErrEncryptedNoKey) || errors.Is(err, ErrDecrypt)
+}
+
+// ParseRows is ParseDevices with the line of every device.
+func ParseRows(r io.Reader, key []byte) ([]Row, []error, error) {
 	gcm, err := newGCM(key)
 	if err != nil {
 		return nil, nil, err
@@ -119,7 +147,7 @@ func ParseDevices(r io.Reader, key []byte) ([]model.Device, []error, error) {
 	raw = bytes.TrimPrefix(raw, []byte("\xef\xbb\xbf"))
 
 	var (
-		devs []model.Device
+		devs []Row
 		errs []error
 	)
 	for _, rec := range splitRecords(string(raw)) {
@@ -131,10 +159,10 @@ func ParseDevices(r io.Reader, key []byte) ([]model.Device, []error, error) {
 		for _, e := range rowErrs {
 			errs = append(errs, &RowError{Line: rec.line, ID: rec.field(colID), Err: e})
 		}
-		if errors.Is(errors.Join(rowErrs...), ErrNoAddress) {
-			continue
+		if slices.ContainsFunc(rowErrs, func(e error) bool { return !NonFatal(e) }) {
+			continue // NonFatal is the one rule: a record is kept exactly when all its problems are non-fatal
 		}
-		devs = append(devs, d)
+		devs = append(devs, Row{Device: d, Line: rec.line})
 	}
 	return devs, errs, nil
 }
@@ -263,10 +291,6 @@ func splitRecords(s string) []record {
 	line := 1
 	i := 0
 	for i < len(s) {
-		if len(recs) >= maxRecords {
-			recs = append(recs, record{line: line, err: ErrTooManyRecords})
-			break
-		}
 		start := line
 		var fields []string
 		var cur strings.Builder
@@ -319,6 +343,16 @@ func splitRecords(s string) []record {
 			}
 			i++
 		}
+		fields = append(fields, cur.String())
+		if !inQuotes && !bad && len(fields) == 1 && fields[0] == "" && !wasQuoted {
+			continue // blank line: it is no record, so it does not count against the cap
+		}
+		// the cap is checked once a record is certain, not at the top of the loop: a blank line
+		// after exactly maxRecords records is no 1001st record (#661)
+		if len(recs) >= maxRecords {
+			recs = append(recs, record{line: start, err: ErrTooManyRecords})
+			break
+		}
 		if inQuotes {
 			recs = append(recs, record{line: start, err: ErrMalformedRow})
 			break
@@ -326,10 +360,6 @@ func splitRecords(s string) []record {
 		if bad {
 			recs = append(recs, record{line: start, err: ErrRecordTooBig})
 			continue
-		}
-		fields = append(fields, cur.String())
-		if len(fields) == 1 && fields[0] == "" && !wasQuoted {
-			continue // blank line
 		}
 		recs = append(recs, record{line: start, fields: fields})
 	}

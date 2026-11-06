@@ -3,6 +3,7 @@ package app
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/nofuturekid/tasmofleet/internal/config"
+	"github.com/nofuturekid/tasmofleet/internal/importer"
 	"github.com/nofuturekid/tasmofleet/internal/simulator"
 )
 
@@ -136,5 +138,34 @@ func TestCLIDryRunPrintsThePlanTheWebWouldShow(t *testing.T) {
 	}
 	if len(plan.Rows) != 2 || plan.Rows[1].Action != "skip" {
 		t.Fatalf("rows: %+v", plan.Rows)
+	}
+}
+
+// Why (#661): the CLI is the import's other face. A problem that keeps its row (an unusable port, an
+// encrypted password without the key file) is a note on that row now, not a plan error, so the CLI must
+// print the notes itself: they are its only word that the passwords were not imported. And it must say how
+// many rejected lines it leaves out, as the web plan does ("N more lines with errors"), or they vanish.
+func TestCLIPrintsTheNotesAndCountsTheUnlistedLines(t *testing.T) {
+	dir := t.TempDir()
+	enc := "enc:v1:" + base64.StdEncoding.EncodeToString(make([]byte, 40))
+	csv := `1,"a",127.0.0.1,,,bulb_1,1,1,0,0,1,99999,"a",0,a,0` + "\n" +
+		`2,"b",127.0.0.2,admin,` + enc + `,bulb_1,1,1,0,0,1,80,"b",0,b,0` + "\n" +
+		strings.Repeat("no-address\n", importer.MaxReportedErrors+2)
+	if err := os.WriteFile(filepath.Join(dir, "devices.csv"), []byte(csv), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	svc := importServices(t)
+	var out bytes.Buffer
+	if _, err := ImportTasmoAdmin(context.Background(), svc, ImportOptions{Dir: dir, DryRun: true}, &out); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"warning: devices.csv line 1: unusable port, using 80\n",
+		"warning: devices.csv line 2: password is encrypted but no key was given\n",
+		"warning: devices.csv: 2 more lines with errors, not listed one by one\n",
+	} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("CLI output lacks %q:\n%s", want, out.String())
+		}
 	}
 }

@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/url"
@@ -305,8 +306,34 @@ func TestImportPlanCountsOnlyRejectedLinesAsSkipped(t *testing.T) {
 	if !strings.Contains(body, ">1 create</span>") || !strings.Contains(body, ">0 reject</span>") {
 		t.Errorf("a warning on a planned row is not a rejected row: %s", body)
 	}
-	if !strings.Contains(body, "unusable port") {
+	if !strings.Contains(body, "Unusable port") {
 		t.Errorf("the warning must still be shown: %s", body)
+	}
+}
+
+// Why (#661): the plan counts lines and a problem that keeps its row is a note on that row. 1000
+// rows with two non-fatal problems each (a port that cannot be used, an encrypted password
+// without the key file) showed "Reject - 1950 more lines with errors" next to "0 reject": the
+// page counted problems, and called warnings rejections.
+func TestImportPlanCountsLinesAndNotesProblemsOnTheKeptRows(t *testing.T) {
+	e, _ := importEnv(t)
+	enc := "enc:v1:" + base64.StdEncoding.EncodeToString(make([]byte, 40))
+	var csv strings.Builder
+	for i := range 1000 {
+		fmt.Fprintf(&csv, "%d,\"d%d\",10.%d.%d.1,admin,%s,bulb_1,1,1,0,0,1,99999,\"d%d\",0,t%d,0\n", i, i, i/250, i%250, enc, i, i)
+	}
+	c, body := e.upload(t, "admin", part{"devices_csv", "devices.csv", "text/csv", csv.String()})
+	if c != 200 || !strings.Contains(body, ">1000 create</span>") || !strings.Contains(body, ">0 reject</span>") {
+		t.Fatalf("%d: counts: %.1500s", c, body)
+	}
+	if strings.Contains(body, "more lines with errors") || strings.Contains(body, ">Reject<") {
+		t.Error("a kept row is not a rejection: the plan has a Reject row for warnings")
+	}
+	if n := strings.Count(body, "Unusable port, using 80"); n != 1000 {
+		t.Errorf("%d rows carry the port note, want 1000", n)
+	}
+	if n := strings.Count(body, "no key was given"); n != 1000 {
+		t.Errorf("%d rows carry the key note, want 1000", n)
 	}
 }
 

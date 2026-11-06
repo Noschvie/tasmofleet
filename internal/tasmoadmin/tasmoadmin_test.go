@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -299,5 +300,23 @@ func TestParseDevicesBoundsRecordsAndFields(t *testing.T) {
 	_, errs, err = ParseDevices(strings.NewReader(long), nil)
 	if err != nil || len(errs) != 2 || !errors.Is(errs[0], ErrRecordTooBig) || !errors.Is(errs[1], ErrRecordTooBig) {
 		t.Fatalf("fields: err=%v errs=%v", err, errs)
+	}
+}
+
+// Why (#661): the cap counts records. A blank line after exactly maxRecords records is not a
+// record, so a file that ends in blank lines is not "too many records"; a real 1001st record still is.
+func TestParseDevicesBlankLineAfterTheCap(t *testing.T) {
+	row := func(i int) string { return fmt.Sprintf("%d,\"d%d\",10.0.%d.%d\n", i, i, i/250, i%250+1) }
+	var b strings.Builder
+	for i := 0; i < maxRecords; i++ {
+		b.WriteString(row(i))
+	}
+	devs, errs, err := ParseDevices(strings.NewReader(b.String()+"\n\r\n"), nil)
+	if err != nil || len(errs) != 0 || len(devs) != maxRecords {
+		t.Fatalf("1000 rows and blank lines: %d devices, errors %v, %v", len(devs), errs, err)
+	}
+	_, errs, _ = ParseDevices(strings.NewReader(b.String()+"\n"+row(maxRecords)), nil)
+	if !errors.Is(errors.Join(errs...), ErrTooManyRecords) {
+		t.Fatalf("a 1001st record must still be refused: %v", errs)
 	}
 }

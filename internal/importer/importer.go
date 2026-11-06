@@ -56,13 +56,14 @@ var (
 // decrypted passwords, so a Plan must stay in memory: it has no String and
 // logs only counts.
 type Plan struct {
-	Rows   []Row
-	Errors []tasmoadmin.RowError // at most MaxReportedErrors
-	// ErrorsOmitted counts row errors beyond MaxReportedErrors.
+	Rows []Row
+	// Errors lists the lines that gave no row, one entry per line, at most MaxReportedErrors.
+	// A problem that does not reject its row (bad port, undecryptable password) is a note on
+	// that Row instead.
+	Errors []tasmoadmin.RowError
+	// ErrorsOmitted counts the rejected lines beyond MaxReportedErrors (lines, not problems).
 	ErrorsOmitted int
-	// Rejected counts CSV lines that produced no row at all. A row that only
-	// carries a warning (bad port, undecryptable password) is planned and not
-	// rejected, and a line with several errors counts once.
+	// Rejected counts CSV lines that produced no row at all, each line once.
 	Rejected int
 	Warnings []string // MyConfig.json problems
 	Hint     string   // where TasmoAdmin served firmware from
@@ -79,6 +80,8 @@ type Row struct {
 	Device model.Device
 	Action string // ActionCreate, ActionMerge or ActionSkip
 	Reason string
+	Line   int      // the line of devices.csv the device starts on
+	Notes  []string // problems that did not reject the row, e.g. an encrypted password without the key
 }
 
 // HasPassword tells the UI whether a password was imported without exposing it.
@@ -184,34 +187,37 @@ func (im *Importer) Plan(ctx context.Context, devicesCSV, myConfig, keyFile io.R
 	if err != nil {
 		return plan, fmt.Errorf("devices.csv: %w", err)
 	}
-	devs, rowErrs, err := tasmoadmin.ParseDevices(bytes.NewReader(raw), key)
+	parsed, rowErrs, err := tasmoadmin.ParseRows(bytes.NewReader(raw), key)
 	if err != nil {
 		return plan, err // the message never carries the key
 	}
 	// A row counts once against the limit: a kept device (also one with a non-fatal problem such
-	// as an encrypted password without the key file, which is in devs and in rowErrs) or a
-	// rejected row, never both and never once per problem.
+	// as an encrypted password without the key file, which is in parsed and in rowErrs) or a
+	// rejected line, never both and never once per problem. The page and the report count lines
+	// the same way: a line is kept with notes or rejected with one error.
 	rejected := map[int]bool{}
+	notes := map[int][]string{}
 	for _, e := range rowErrs {
-		var line *tasmoadmin.RowError
-		if errors.As(e, &line) && !errors.Is(e, tasmoadmin.ErrBadPort) && !errors.Is(e, tasmoadmin.ErrEncryptedNoKey) && !errors.Is(e, tasmoadmin.ErrDecrypt) {
-			rejected[line.Line] = true
+		var re *tasmoadmin.RowError
+		if !errors.As(e, &re) {
+			re = &tasmoadmin.RowError{Err: e}
 		}
-	}
-	if len(devs)+len(rejected) > MaxRows || errors.Is(errors.Join(rowErrs...), tasmoadmin.ErrTooManyRecords) {
-		return plan, fmt.Errorf("%w: more than %d rows (limit %d)", ErrTooMany, MaxRows, MaxRows)
-	}
-	for _, e := range rowErrs {
+		if tasmoadmin.NonFatal(re.Err) {
+			notes[re.Line] = append(notes[re.Line], strings.TrimPrefix(re.Err.Error(), "tasmoadmin: "))
+			continue
+		}
+		if rejected[re.Line] {
+			continue
+		}
+		rejected[re.Line] = true
 		if len(plan.Errors) >= MaxReportedErrors {
 			plan.ErrorsOmitted++
 			continue
 		}
-		var re *tasmoadmin.RowError
-		if errors.As(e, &re) {
-			plan.Errors = append(plan.Errors, *re)
-		} else {
-			plan.Errors = append(plan.Errors, tasmoadmin.RowError{Err: e})
-		}
+		plan.Errors = append(plan.Errors, *re)
+	}
+	if len(parsed)+len(rejected) > MaxRows || errors.Is(errors.Join(rowErrs...), tasmoadmin.ErrTooManyRecords) {
+		return plan, fmt.Errorf("%w: more than %d rows (limit %d)", ErrTooMany, MaxRows, MaxRows)
 	}
 	plan.Rejected = len(rejected)
 	if myConfig != nil {
@@ -243,7 +249,15 @@ func (im *Importer) Plan(ctx context.Context, devicesCSV, myConfig, keyFile io.R
 			}
 		}
 	}
+	devs := make([]model.Device, len(parsed))
+	for i, p := range parsed {
+		devs[i] = p.Device
+	}
 	plan.Rows = classify(devs, existing, refuse)
+	for i := range plan.Rows {
+		plan.Rows[i].Line = parsed[i].Line
+		plan.Rows[i].Notes = notes[parsed[i].Line]
+	}
 	return plan, nil
 }
 

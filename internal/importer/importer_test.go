@@ -19,7 +19,6 @@ import (
 
 	"github.com/nofuturekid/tasmofleet/internal/inventory"
 	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/tasmoadmin"
 	"github.com/nofuturekid/tasmofleet/internal/tasmota"
 )
 
@@ -162,8 +161,14 @@ func TestPlanCountsEveryRowOnceAgainstTheRowLimit(t *testing.T) {
 		if len(p.Rows) != c.rows || p.Rejected != 0 {
 			t.Errorf("%s: rows=%d rejected=%d, want %d rows and none rejected", name, len(p.Rows), p.Rejected, c.rows)
 		}
-		if len(p.Errors) != MaxReportedErrors || p.ErrorsOmitted == 0 || !slices.ContainsFunc(p.Errors, func(e tasmoadmin.RowError) bool { return errors.Is(e.Err, tasmoadmin.ErrEncryptedNoKey) }) {
-			t.Errorf("%s: the per-row notes must name the missing key: %d notes, %d omitted", name, len(p.Errors), p.ErrorsOmitted)
+		// the problems are notes on the kept rows; no line was rejected, so no error is listed or omitted
+		if len(p.Errors) != 0 || p.ErrorsOmitted != 0 {
+			t.Errorf("%s: %d errors and %d omitted for rows that are all kept", name, len(p.Errors), p.ErrorsOmitted)
+		}
+		for _, r := range p.Rows {
+			if !slices.ContainsFunc(r.Notes, func(n string) bool { return strings.Contains(n, "no key was given") }) || (c.badPort && len(r.Notes) != 2) || r.Line == 0 {
+				t.Fatalf("%s: row %s notes %q line %d: the note must name the missing key (and the port)", name, r.Device.Name, r.Notes, r.Line)
+			}
 		}
 	}
 	// a file that really has more than MaxRows rows is still refused, and says so
@@ -385,5 +390,66 @@ func TestProbeProblemNamesTheHTTPAPIOff(t *testing.T) {
 	got := probeProblem(fmt.Errorf("probe: %w", tasmota.ErrHTTPAPIRefused))
 	if got != tasmota.APIOffName+". "+tasmota.APIOffFix {
 		t.Errorf("got %q", got)
+	}
+}
+
+// Why (#661): the plan page counts lines. Rejected lines beyond the cap are counted per line, not
+// per problem, and a line is listed once.
+func TestPlanCountsRejectedLinesNotProblems(t *testing.T) {
+	im := New(Options{Inventory: &fakeInv{}})
+	p, err := im.Plan(context.Background(), rd(strings.Repeat("x\n", 300)+csvHead), nil, nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Rejected != 300 || len(p.Errors) != MaxReportedErrors || p.ErrorsOmitted != 300-MaxReportedErrors {
+		t.Fatalf("rejected=%d errors=%d omitted=%d", p.Rejected, len(p.Errors), p.ErrorsOmitted)
+	}
+}
+
+// Why (#661): a blank line after exactly MaxRows rows is no row 1001.
+func TestPlanAcceptsBlankLinesAfterTheLastAllowedRow(t *testing.T) {
+	im := New(Options{Inventory: &fakeInv{}})
+	if _, err := im.Plan(context.Background(), rd(encRows(t, MaxRows, false)+"\n\n"), nil, nil, false); err != nil {
+		t.Fatalf("1000 rows and a blank line: %v", err)
+	}
+}
+
+// Why (#661): a note belongs to the row of its own line, and the line is the one the person finds in
+// devices.csv: a port note shown on the wrong device, or a line number counted without the blank and
+// rejected lines before it, sends them to fix the wrong row. A password the key cannot decrypt keeps its
+// row like a bad port does (the device is imported without it): a note, never also a rejected line.
+func TestPlanTiesEachProblemToItsOwnRowAndLine(t *testing.T) {
+	key, other := make([]byte, 32), make([]byte, 32)
+	_, _ = rand.Read(key)
+	_, _ = rand.Read(other)
+	csv := "x\n" + // line 1: no address, rejected
+		"\n" + // line 2: blank, no record
+		`1,"a",172.31.13.11,,,bulb_1,1,1,0,0,1,99999,"a",0,a,0` + "\n" + // line 3: unusable port
+		`2,"b",172.31.13.12,admin,` + encCell(t, other, "pw") + `,bulb_1,1,1,0,0,1,80,"b",0,b,0` + "\n" + // line 4: another key
+		`3,"c",172.31.13.13,admin,` + encCell(t, key, "pw") + `,bulb_1,1,1,0,0,1,80,"c",0,c,0` + "\n" // line 5: fine
+	im := New(Options{Inventory: &fakeInv{}})
+	p, err := im.Plan(context.Background(), rd(csv), nil, rd(base64.StdEncoding.EncodeToString(key)), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Rejected != 1 || len(p.Errors) != 1 || p.Errors[0].Line != 1 || p.ErrorsOmitted != 0 {
+		t.Fatalf("rejected=%d errors=%+v omitted=%d, want line 1 alone", p.Rejected, p.Errors, p.ErrorsOmitted)
+	}
+	want := map[string]struct {
+		line int
+		note string // "" for none
+	}{"a": {3, "unusable port"}, "b": {4, "cannot be decrypted"}, "c": {5, ""}}
+	if len(p.Rows) != len(want) {
+		t.Fatalf("%d rows, want %d", len(p.Rows), len(want))
+	}
+	for _, r := range p.Rows {
+		w := want[r.Device.Name]
+		okNote := len(r.Notes) == 0
+		if w.note != "" {
+			okNote = len(r.Notes) == 1 && strings.Contains(r.Notes[0], w.note)
+		}
+		if r.Line != w.line || !okNote {
+			t.Errorf("row %s: line %d notes %q, want line %d and the note %q", r.Device.Name, r.Line, r.Notes, w.line, w.note)
+		}
 	}
 }

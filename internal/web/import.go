@@ -22,7 +22,6 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/importer"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/netaddr"
-	"github.com/nofuturekid/tasmofleet/internal/tasmoadmin"
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
 
@@ -201,7 +200,9 @@ type importReportView struct {
 }
 
 // planView turns an importer plan into the page's rows: Create, Merge, or Reject for a row the
-// import refuses and for a line of devices.csv that gave no row at all.
+// import refuses and for a line of devices.csv that gave no row at all. The counts are lines. A
+// problem that does not reject a row (an unusable port, a password that cannot be read) is a note
+// on that row, not a rejection and not a count of its own.
 func planView(plan importer.Plan) *importPlanView {
 	v := &importPlanView{Warnings: plan.Warnings, Hint: plan.Hint, Probe: plan.Probe}
 	for _, row := range plan.Rows {
@@ -220,25 +221,19 @@ func planView(plan importer.Plan) *importPlanView {
 		if r.Why == "" {
 			r.Why = "New device"
 		}
+		for _, n := range row.Notes {
+			r.Why += " · " + capitalize(n)
+		}
 		v.Rows = append(v.Rows, r)
 	}
 	for _, e := range plan.Errors {
-		if rowWarning(e.Err) { // the row is planned anyway (port 80, no password): a warning, not a rejection
-			v.Warnings = append(v.Warnings, e.Error())
-			continue
-		}
-		v.Rows = append(v.Rows, importRow{Label: "Reject", Tone: ui.ToneDanger, Name: fmt.Sprintf("devices.csv line %d", e.Line), Why: capitalize(e.Err.Error())})
+		v.Rows = append(v.Rows, importRow{Label: "Reject", Tone: ui.ToneDanger, Name: fmt.Sprintf("devices.csv line %d", e.Line), Why: capitalize(strings.TrimPrefix(e.Err.Error(), "tasmoadmin: "))})
 	}
 	v.Reject += plan.Rejected
 	if plan.ErrorsOmitted > 0 {
 		v.Rows = append(v.Rows, importRow{Label: "Reject", Tone: ui.ToneDanger, Name: plural(plan.ErrorsOmitted, "more line") + " with errors", Why: "Not listed one by one."})
 	}
 	return v
-}
-
-// rowWarning tells the errors of a line that is still imported (the importer's rule).
-func rowWarning(err error) bool {
-	return errors.Is(err, tasmoadmin.ErrBadPort) || errors.Is(err, tasmoadmin.ErrEncryptedNoKey) || errors.Is(err, tasmoadmin.ErrDecrypt)
 }
 
 // reportView is the result after Apply: one sentence with the counts, a row per device.
