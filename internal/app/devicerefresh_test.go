@@ -732,6 +732,98 @@ func TestAnotherDeviceInTheDataReadIsNotRetriedAtEveryPass(t *testing.T) {
 	}
 }
 
+// Why: a broker read that finds another device at the address is an answer, not a failure, like a refused
+// identity refresh: asked again at the regular interval, also when a restart asked for the read. Retried like a
+// read that got no answer, the device at the address would get a Status 5 every ten minutes, and after every
+// restart announcement one every two minutes for half an hour.
+func TestAnotherDeviceInTheBrokerReadIsAskedAgainAtTheRegularInterval(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		restart bool
+	}{
+		{"periodic", false},
+		{"asked for by a restart", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			g := newRefreshRig(1)
+			far := g.clock.Add(48 * time.Hour)
+			g.r.identityNext[1], g.r.dataNext[1] = far, far
+			if tc.restart {
+				g.r.next[1] = far
+				g.r.wantRestart(1)
+			}
+			var reads []time.Time
+			g.r.read = func(context.Context, model.DeviceID) error {
+				reads = append(reads, g.clock)
+				return errAnotherDevice
+			}
+			for range 7 * 120 { // seven hours of passes
+				g.advance(brokerHostTick)
+				g.r.pass(t.Context())
+			}
+			if len(reads) != 2 || reads[1].Sub(reads[0]) < brokerHostEvery {
+				t.Fatalf("broker read %d times (%v), want twice, %v apart: another device is not a failure", len(reads), reads, brokerHostEvery)
+			}
+		})
+	}
+}
+
+// Why: the MAC check of the background reads must not refuse a healthy device, or its broker, Settings values,
+// policy values and template reading would quietly stop being refreshed: a board on Ethernet reports its Wi-Fi
+// and its Ethernet MAC, and the entry may know either or both. It must refuse what cannot be shown to be this
+// device: another MAC, and minimal firmware, which reports none (the rule of a refresh, checkMAC). An entry
+// without a MAC has nothing to compare.
+func TestVerifyAddressAcceptsEveryMACOfTheStoredSetAndNothingElse(t *testing.T) {
+	fleet, err := simulator.NewFleet(simulator.FleetOptions{FixturesDir: "../../testdata/fixtures"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = fleet.Close() })
+	wired, err := fleet.Add(t.Context(), simulator.DeviceSpec{Name: "wired", Profile: simulator.ProfileESP32, Wired: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	minimal, err := fleet.Add(t.Context(), simulator.DeviceSpec{Name: "minimal", Profile: simulator.ProfileESP8266Min})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := &Prober{Client: tasmota.NewHTTPClient(tasmota.Options{AllowedNetworks: loopbackNets()}), Gap: time.Millisecond}
+	at := func(sim simulator.Device, macs ...string) model.Device {
+		host, port := splitAddr(t, sim.Addr())
+		d := model.Device{ID: 1, Address: host, Port: port, MACs: macs}
+		if len(macs) > 0 {
+			d.MAC = macs[0]
+		}
+		return d
+	}
+	desc, err := p.Describe(t.Context(), at(wired))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(desc.MACs) != 2 {
+		t.Fatalf("the wired board reports %v, want its Wi-Fi and its Ethernet MAC", desc.MACs)
+	}
+	wifi, eth := desc.MACs[0], desc.MACs[1]
+	for _, tc := range []struct {
+		name string
+		d    model.Device
+		want error
+	}{
+		{"the Wi-Fi MAC stored", at(wired, wifi), nil},
+		{"only the Ethernet MAC stored", at(wired, eth), nil},
+		{"both stored", at(wired, wifi, eth), nil},
+		{"no MAC stored", at(wired), nil},
+		{"another MAC stored", at(wired, "02:00:00:00:00:99"), errAnotherDevice},
+		{"minimal firmware, which reports no MAC", at(minimal, wifi), errAnotherDevice},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := p.VerifyAddress(t.Context(), tc.d); !errors.Is(err, tc.want) {
+				t.Fatalf("VerifyAddress = %v, want %v", err, tc.want)
+			}
+		})
+	}
+}
+
 // noBackups: a template overview without any stored backup.
 type noBackups struct{}
 

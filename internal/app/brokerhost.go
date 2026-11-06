@@ -330,7 +330,8 @@ func (r *brokerHostReader) isDue(m map[model.DeviceID]time.Time, id model.Device
 // visit reads what the schedule or a restart asks for from one device: the broker and the identity under
 // the device lock, then the data (see the top of the file). errBrokerBusy: a job holds the device, nothing
 // was sent. errBrokerRetry: the broker read failed (nothing else is tried then: the device does not
-// answer). nil: done, or the identity or data read failed, which then waits for its own retry.
+// answer). nil: done, another device answers at the address (nothing more was read), or the identity or data
+// read failed, which then waits for its own retry.
 func (r *brokerHostReader) visit(ctx context.Context, d model.Device, what visitWhat) error {
 	id := d.ID
 	if what.broker || what.identity {
@@ -348,7 +349,8 @@ func (r *brokerHostReader) visit(ctx context.Context, d model.Device, what visit
 	return nil
 }
 
-// readLocked reads the broker and the identity of id under the device lock.
+// readLocked reads the broker and the identity of id under the device lock. refused: another device answers at
+// the address (the broker read or the identity refresh found a MAC outside the stored set, or none).
 func (r *brokerHostReader) readLocked(ctx context.Context, id model.DeviceID, what visitWhat) (refused bool, err error) {
 	release, err := r.enter(ctx, id, "broker read")
 	if err != nil {
@@ -367,9 +369,12 @@ func (r *brokerHostReader) readLocked(ctx context.Context, id model.DeviceID, wh
 		if err != nil {
 			switch {
 			case ctx.Err() != nil:
-			case errors.Is(err, errAnotherDevice): // not this device: nothing was stored, asked again at the regular interval
+			case errors.Is(err, errAnotherDevice): // not this device: nothing was stored. An answer, not a failure (like a refused
+				// identity): nothing more is read in this visit, and it is asked again at the regular interval, also when a
+				// restart or a command asked for the read
 				r.next[id] = r.now().Add(brokerHostEvery)
 				r.log.Debug("broker host: another device answers at the address", "device", id)
+				return true, nil
 			default:
 				r.next[id] = r.now().Add(brokerHostRetry)
 				r.log.Debug("broker host: read failed", "device", id, "err", err)
