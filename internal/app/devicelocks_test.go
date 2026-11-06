@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
+	"github.com/nofuturekid/tasmofleet/internal/clock"
 	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
 	"github.com/nofuturekid/tasmofleet/internal/devlock"
 	"github.com/nofuturekid/tasmofleet/internal/model"
@@ -310,5 +312,76 @@ func TestPersonWaitForTheBackgroundReadIsBounded(t *testing.T) {
 	}
 	if d := time.Since(start); d < time.Second || d > 15*time.Second {
 		t.Fatalf("waited %v, want a few seconds", d)
+	}
+}
+
+// Why (#670): the reader lets go of the device after its read and takes the lock again at once for the check
+// before its data read ("data read", a database query long). A person who waited for the read and polls in that
+// moment must not be refused by it: it is the same background visit, not somebody else's operation.
+func TestPersonWaitsThroughTheReadersOwnCheck(t *testing.T) {
+	locks := devlock.New()
+	g := deviceGuard{locks: locks, jobs: fakeActiveJobs{active: map[model.DeviceID]bool{}}}
+	release, _, _ := locks.TryAcquire(1, backgroundRead)
+	time.AfterFunc(40*time.Millisecond, func() { // between two polls of the person (every 25 ms)
+		release()
+		if rel, _, ok := locks.TryAcquire(1, backgroundData); ok {
+			time.AfterFunc(60*time.Millisecond, rel)
+		}
+	})
+	if _, err := (lockedDeviceCmd{DeviceCmd: &countingCmd{}, g: g}).Power(context.Background(), "u", 1, 1, "ON"); err != nil {
+		t.Fatalf("refused by the reader's own check: %v", err)
+	}
+}
+
+// creatingJobs records the devices of the jobs a batch creates.
+type creatingJobs struct {
+	fakeActiveJobs
+	created []model.DeviceID
+}
+
+func (c *creatingJobs) CreateBatch(_ context.Context, _ string, jobs []model.Job) (model.BatchID, []model.JobID, error) {
+	for _, j := range jobs {
+		c.created = append(c.created, j.DeviceID)
+	}
+	return 1, nil, nil
+}
+
+// Why (#670, the nightly failure): a bulk command left a device out ("Left out: ...: Another operation on this
+// device is running (broker read)") when the background read held it at that moment. It waits for the read, so
+// that device is in the batch; a device an operation somebody chose holds is still left out at once.
+func TestBulkCommandWaitsForTheBackgroundRead(t *testing.T) {
+	locks := devlock.New()
+	jobs := &creatingJobs{fakeActiveJobs: fakeActiveJobs{active: map[model.DeviceID]bool{}}}
+	bulk := lockedCommandBatch{e: ota.NewEngine(ota.Options{}, jobs, nil, nil, nil, nil, clock.Real{}, nil), g: deviceGuard{locks: locks, jobs: jobs}}
+	read, _, _ := locks.TryAcquire(2, backgroundRead)
+	time.AfterFunc(100*time.Millisecond, read)
+	held, _, _ := locks.TryAcquire(3, "restore")
+	defer held()
+	var reqs []ota.PolicyRequest
+	for _, id := range []model.DeviceID{1, 2, 3} {
+		reqs = append(reqs, ota.PolicyRequest{DeviceID: id, Commands: []string{"Status 2"}})
+	}
+	start := time.Now()
+	_, left, err := bulk.Submit(context.Background(), "u", reqs)
+	if err != nil || len(left) != 1 || left[0].DeviceID != 3 || !slices.Equal(jobs.created, []model.DeviceID{1, 2}) {
+		t.Fatalf("err %v, left out %v, created %v; want 1 and 2 in the batch, 3 left out", err, left, jobs.created)
+	}
+	if d := time.Since(start); d > 3*time.Second {
+		t.Fatalf("took %v: it waited for the restore too", d)
+	}
+}
+
+// A person who gives up (the request is gone) stops waiting for the background read at once.
+func TestPersonWaitForTheBackgroundReadEndsWithTheRequest(t *testing.T) {
+	t.Parallel()
+	locks := devlock.New()
+	release, _, _ := locks.TryAcquire(1, backgroundRead)
+	defer release()
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err := lockedDeviceCmd{DeviceCmd: &countingCmd{}, g: deviceGuard{locks: locks, jobs: fakeActiveJobs{}}}.Power(ctx, "u", 1, 1, "ON")
+	if !errors.Is(err, devlock.ErrBusy) || time.Since(start) > time.Second {
+		t.Fatalf("err %v after %v, want busy soon after the request ended", err, time.Since(start))
 	}
 }

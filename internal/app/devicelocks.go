@@ -27,6 +27,10 @@ type deviceGuard struct {
 	// holds is the set of devices on which a typed firmware command has just started an update (#347); nil
 	// holds nothing. Update starts are refused for those until they have restarted.
 	holds *devlock.FirmwareHolds
+	// tryOnly: never wait for the background read (acquire), refuse at once. For what TasmoFleet starts on its
+	// own (backupGuard: a scheduled backup, the background read itself, the HTTP probe a device page asks for
+	// while it renders): only a person's operation waits (#670).
+	tryOnly bool
 }
 
 var activeStates = []model.JobState{
@@ -34,22 +38,34 @@ var activeStates = []model.JobState{
 	model.JobAwaitReboot, model.JobVerify, model.JobRestoreOtaURL, model.JobApplying,
 }
 
-// backgroundRead is the lock owner of the reader that keeps the stored broker host and identity current
-// (brokerhost.go). backgroundGrace is how long a person's operation waits for it instead of being refused.
+// The lock owners of TasmoFleet's own background work on a device: backgroundRead is the reader that keeps the
+// stored broker host and identity current (brokerhost.go), backgroundData its check before the data read and
+// backgroundProbe the check before an HTTP probe (both take the lock and give it back at once).
+// backgroundGrace is how long a person's operation waits for them instead of being refused.
 // Why: the read is not the person's competitor but a short background visit (about two seconds on a
 // responsive device; it is bounded by its own timeouts), and it started without their knowing. A refusal
 // "Another operation on this device is running (broker read)" asks them to retry something they did not
-// start, and a bulk run or an update loses that device (or all of them) for it. Every other holder is an
-// operation somebody chose, which can run for minutes: it still refuses at once.
-const backgroundRead = "broker read"
+// start, and a bulk run or an update loses that device (or all of them) for it. The reader takes the lock
+// again for its data check right after the read, so a person who waited must wait through that too. Every
+// other holder is an operation somebody chose, which can run for minutes: it still refuses at once.
+const (
+	backgroundRead  = "broker read"
+	backgroundData  = "data read"
+	backgroundProbe = "http probe"
+)
 
 var backgroundGrace = 5 * time.Second
 
+// backgroundHolder says whether holder is TasmoFleet's own background work on the device.
+func backgroundHolder(holder string) bool {
+	return holder == backgroundRead || holder == backgroundData || holder == backgroundProbe
+}
+
 // acquire is TryAcquire for a person's operation: it waits up to backgroundGrace for the background
-// read to let go of the device, never for any other holder.
+// work to let go of the device, never for any other holder (and never with tryOnly).
 func (g deviceGuard) acquire(ctx context.Context, id model.DeviceID, owner string) (release func(), holder string, ok bool) {
 	release, holder, ok = g.locks.TryAcquire(id, owner)
-	if ok || holder != backgroundRead {
+	if ok || g.tryOnly || !backgroundHolder(holder) {
 		return release, holder, ok
 	}
 	deadline := time.NewTimer(backgroundGrace)
@@ -63,7 +79,7 @@ func (g deviceGuard) acquire(ctx context.Context, id model.DeviceID, owner strin
 		case <-deadline.C:
 			return nil, holder, false
 		case <-tick.C:
-			if release, holder, ok = g.locks.TryAcquire(id, owner); ok || holder != backgroundRead {
+			if release, holder, ok = g.locks.TryAcquire(id, owner); ok || !backgroundHolder(holder) {
 				return release, holder, ok
 			}
 		}

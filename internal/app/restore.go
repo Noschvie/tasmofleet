@@ -29,6 +29,7 @@ func (a *runtime) setupRestore() error {
 		Devices: a.svc.Store, Backups: a.backups, Files: a.backups, Store: a.svc.Store, Client: a.svc.Client,
 		Uploader: a.svc.Router, PathFor: a.restorePath, BrokerPassword: func() string { return a.svc.Sys.Snapshot().MQTTPassword }, Audit: a.svc.Audit, Log: a.log, Context: a.bgContext,
 		Locks: a.deviceLocks(), Jobs: a.svc.Store,
+		Acquire:  deviceGuard{locks: a.deviceLocks()}.acquire, // a person's operation: waits for the background read (#670)
 		Hardware: a.svc.Store, Describe: a.svc.Prober.Describe,
 	})
 	if err != nil {

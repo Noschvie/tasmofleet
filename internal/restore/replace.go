@@ -411,7 +411,7 @@ func (m *Manager) StartReplace(ctx context.Context, actor string, req ReplaceReq
 	if !m.replaceOn() {
 		return Job{}, ErrReplaceOff
 	}
-	release, holder, ok := m.o.Locks.TryAcquire(req.Device, "replace")
+	release, holder, ok := m.acquire(ctx, req.Device, "replace")
 	if !ok {
 		return Job{}, fmt.Errorf("%w (%s)", ErrBusy, holder)
 	}

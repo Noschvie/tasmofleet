@@ -1684,7 +1684,9 @@ exists twice on the day they go back runs once, at its first occurrence.
   restart read them in the last hour: the further restarts of a device in a boot loop read only the broker, and the
   identity and the data are read once when the hour is over (a failed read is not retried before), so about once an
   hour. The broker and the identity are read under the
-  device lock; the data is read without it, after trying it (a device a job holds is skipped and visited again
+  device lock (an operation a person starts on the device meanwhile, restore and Replace device included, waits up to
+  5 s for it and for the reader's momentary lock checks instead of being refused as busy; what TasmoFleet starts on
+  its own, a scheduled backup or the HTTP probe a device page asks for, is refused at once, #670); the data is read without it, after trying it (a device a job holds is skipped and visited again
   at the next pass), so a person's save is not refused as busy while a read runs; the settings save counter keeps a
   read that a save overtook out of `Last`. Identity fails closed: the broker read and the data read first check, with one `Status 5`, that the device at the stored address reports a MAC of the stored set (`Prober.VerifyAddress`, the rule of `ReadNet`; a device stored without a MAC has nothing to compare, minimal firmware reports none and is refused), and read nothing else from another device. Such a refusal is quiet (the identity refresh audits it) and is asked again after 6 h, also when a restart or a command asked for the read; a refused identity refresh holds the data read back for a day. Offline devices, devices the HTTP poll has not reached lately and devices
   on minimal or safeboot firmware are skipped; a failed read is retried after 10 minutes, a refused identity refresh

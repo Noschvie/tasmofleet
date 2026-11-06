@@ -838,6 +838,32 @@ func TestRestoreExcludesOtherWritersOnTheDevice(t *testing.T) {
 	}
 }
 
+// Why (#670): the app hands the restore the lock taking of a person's operations, which waits a few seconds for
+// TasmoFleet's own background read of the device instead of refusing ("Another operation on this device is
+// running (broker read)"). A restore and a Replace device must take the device lock through it, so the
+// decision is the given Acquire's.
+func TestRestoreAndReplaceTakeTheLockThroughTheGivenAcquire(t *testing.T) {
+	var owners []string
+	stillHeld := func(_ context.Context, _ model.DeviceID, owner string) (func(), string, bool) {
+		owners = append(owners, owner)
+		return nil, "broker read", false
+	}
+	e := newFlow(t, "15.6.0")
+	a := e.dumpBackup(t, e.dumpA)
+	e.m.o.Acquire = stillHeld
+	if _, err := e.m.Start(t.Context(), "alice", a.ID); !errors.Is(err, ErrBusy) || !strings.Contains(err.Error(), "broker read") {
+		t.Fatalf("restore: %v, want refused by the given Acquire", err)
+	}
+	r := newReplaceFlow(t, "15.6.0", "15.6.0", simulator.ProfileESP8266_4M)
+	r.m.o.Acquire = stillHeld
+	if _, err := r.m.StartReplace(t.Context(), "alice", r.req(0), StartOptions{AllowUnknownFamily: true}); !errors.Is(err, ErrBusy) || !strings.Contains(err.Error(), "broker read") {
+		t.Fatalf("replace: %v, want refused by the given Acquire", err)
+	}
+	if strings.Join(owners, ",") != "restore,replace" {
+		t.Fatalf("the given Acquire was asked for %v, want restore, replace", owners)
+	}
+}
+
 type fakeJobs []model.Job
 
 func (f fakeJobs) ActiveJobs(context.Context) ([]model.Job, error) { return f, nil }

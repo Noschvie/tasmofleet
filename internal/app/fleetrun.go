@@ -53,8 +53,11 @@ const (
 // backupGuard is what a scheduled backup must not run into: the device guard (its lock and a running
 // transaction) and a firmware update typed in the console, sent as a bulk command or found running by an
 // update job, which keeps the device flashing after its job ended (#347). The hold is checked with the
-// lock held, as lockedOTA.Submit does.
+// lock held, as lockedOTA.Submit does. What uses it is started by TasmoFleet itself (a scheduled backup, the
+// background read, the HTTP probe a device page asks for while it renders): it never waits for the background
+// read (tryOnly, #670).
 func backupGuard(g deviceGuard) func(ctx context.Context, id model.DeviceID, owner string) (func(), error) {
+	g.tryOnly = true
 	return func(ctx context.Context, id model.DeviceID, owner string) (func(), error) {
 		release, err := g.enter(ctx, id, owner)
 		if err != nil {

@@ -585,6 +585,16 @@ func TestBrokerReaderIsGuardedLikeABackup(t *testing.T) {
 	if !slices.Equal(asked, []model.DeviceID{3}) {
 		t.Errorf("probes asked for %v, want only the free device 3", asked)
 	}
+
+	// Why (#670): only a person's operation waits for the background read. Opening a device page asks for this
+	// probe while the page renders: it must not hang for seconds because the reader is on that device.
+	rel4, _, _ := a.deviceLocks().TryAcquire(4, backgroundRead)
+	defer rel4()
+	start := time.Now()
+	a.probeHTTP(4)
+	if d := time.Since(start); d > time.Second || slices.Contains(asked, 4) {
+		t.Errorf("probe of a device the background read holds: took %v, asked %v; want refused at once", d, asked)
+	}
 }
 
 // Why: the probe keeps its own reading (#598 made only the re-read strict): it has proved regular firmware

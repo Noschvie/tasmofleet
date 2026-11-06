@@ -401,7 +401,7 @@ func (r *brokerHostReader) readLocked(ctx context.Context, id model.DeviceID, wh
 // readDataOf reads the data of d if nothing holds the device and reports whether it did. The lock is only
 // taken and given back (the check), not kept during the read.
 func (r *brokerHostReader) readDataOf(ctx context.Context, d model.Device) bool {
-	release, err := r.enter(ctx, d.ID, "data read")
+	release, err := r.enter(ctx, d.ID, backgroundData)
 	if err != nil {
 		delete(r.dataNext, d.ID) // held by a job (or not available): due again at the next visit
 		return false
@@ -541,7 +541,7 @@ func (a *runtime) probeHTTP(id model.DeviceID) {
 // in the console that is still flashing it. Taking and releasing the lock is the check; the probe itself runs
 // later and holds nothing.
 func (a *runtime) probeAllowed(id model.DeviceID) bool {
-	release, err := a.brokerReadGuard()(a.bgContext, id, "http probe")
+	release, err := a.brokerReadGuard()(a.bgContext, id, backgroundProbe)
 	if err != nil {
 		return false
 	}

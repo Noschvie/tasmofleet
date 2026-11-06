@@ -164,6 +164,10 @@ type Options struct {
 	// Locks is the per-device operation lock shared with OTA, settings and
 	// console; default: a private set.
 	Locks *devlock.Locks
+	// Acquire takes a device's lock for a restore or a replace; nil: Locks.TryAcquire. The app passes the one
+	// its other operations on behalf of a person use: it waits a few seconds for TasmoFleet's own background
+	// read of the device instead of refusing at once (#670).
+	Acquire func(ctx context.Context, id model.DeviceID, owner string) (release func(), holder string, ok bool)
 	// Jobs lists active OTA jobs (store.JobStore); optional.
 	Jobs ActiveJobs
 	// BrokerPassword is TasmoFleet's live broker password, which a device in broker mode uses as its
@@ -241,6 +245,14 @@ func New(o Options) (*Manager, error) {
 // Wait blocks until all background restores have finished (shutdown, tests).
 func (m *Manager) Wait() { m.wg.Wait() }
 
+// acquire takes the device lock for owner: through Options.Acquire when set, else Locks.TryAcquire.
+func (m *Manager) acquire(ctx context.Context, id model.DeviceID, owner string) (release func(), holder string, ok bool) {
+	if m.o.Acquire != nil {
+		return m.o.Acquire(ctx, id, owner)
+	}
+	return m.o.Locks.TryAcquire(id, owner)
+}
+
 func resolveHost(ctx context.Context, host string) ([]netip.Addr, error) {
 	if a, err := netip.ParseAddr(host); err == nil {
 		return []netip.Addr{a.Unmap()}, nil
@@ -297,7 +309,7 @@ func (m *Manager) StartWith(ctx context.Context, actor string, bid model.BackupI
 		dev.Address = distinct(ips)[0].String() // from here on the name is never used again
 	}
 
-	release, holder, ok := m.o.Locks.TryAcquire(dev.ID, "restore")
+	release, holder, ok := m.acquire(ctx, dev.ID, "restore")
 	if !ok {
 		return Job{}, fmt.Errorf("%w (%s)", ErrBusy, holder)
 	}
