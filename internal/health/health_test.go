@@ -933,6 +933,7 @@ func TestOfflineLWTDeviceGetsNoSnapshotFetch(t *testing.T) {
 	h := newHarness(t, true, Options{}, mqttDev(1, "a"))
 	h.listen()
 	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Offline", true)
+	h.advance(DefaultPollInterval) // a replayed will is polled somewhere within one interval, not at once (#652)
 	h.step()
 	h.step()
 	if n := len(h.cl.commands()); n != 1 {

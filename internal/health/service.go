@@ -134,6 +134,10 @@ type devState struct {
 	// view asked for never moves such a device between online and offline (#456); a new will clears lastPolled.
 	lastPolled time.Time
 	pollGone   bool
+	// willReplayed: the Offline will came from the broker's replay (a retained message at start or after a
+	// reconnect), not from the device going away while we listened (#652). The first background poll that follows
+	// is the device's baseline for this run, like a first observation: it writes no history row.
+	willReplayed bool
 
 	nextPoll time.Time
 	polling  bool
@@ -514,15 +518,15 @@ func (s *Service) fresh(ds *devState, now time.Time) bool {
 }
 
 // pollEligible: HTTP-only devices are always polled; MQTT devices only
-// while their telemetry is silent. A device whose last will says Offline is polled too (#619): the
+// while their telemetry is silent (what the poll itself learns does not count as telemetry). A device whose last will says Offline is polled too (#619): the
 // retained will outlives a device that moved to another broker. It is polled at the normal interval
 // while it answers and backs off like any failing device (up to 30 minutes) while it does not.
 func (s *Service) pollEligible(ds *devState, now time.Time) bool {
 	if !s.mqttMode(ds) || ds.lwt == "Offline" {
 		return true
 	}
-	if s.fresh(ds, now) {
-		return false
+	if !ds.lastMQTT.IsZero() && now.Sub(ds.lastMQTT) < s.staleAfter() {
+		return false // telemetry only: an HTTP answer or a refusal must not stop the polls that keep the device fresh (#652)
 	}
 	// Silent, or never heard since start and the grace period is over.
 	return !s.lastObs(ds).IsZero() || now.Sub(s.started) >= s.staleAfter()
@@ -690,8 +694,17 @@ func (s *Service) handle(m mqttbus.Message, live bool) {
 		case strings.EqualFold(ds.lwt, "offline"):
 			ds.lwt = "Offline"
 			if !wasOffline {
-				// A new will is newer than any earlier poll answer: forget it and ask again now.
-				ds.lastPolled, ds.nextPoll = time.Time{}, time.Time{}
+				// A new will is newer than any earlier poll answer: forget it and ask again. Not at once
+				// (#652): a live will is usually a reboot or an OTA, and a poll now would only hit the device
+				// while it restarts, so the first poll waits one interval. A replayed will (start, reconnect)
+				// is spread over one interval, so that a start does not poll every such device on the first
+				// tick and let the dead ones hold the poll slots until their connect timeout.
+				ds.lastPolled, ds.willReplayed = time.Time{}, !live
+				if live {
+					ds.nextPoll = now.Add(s.jitter(s.pollInterval()))
+				} else {
+					ds.nextPoll = now.Add(time.Duration(s.d.Rand() * float64(s.pollInterval())))
+				}
 			}
 		}
 	case mqttbus.KindState, mqttbus.KindResult:
@@ -905,6 +918,7 @@ func (s *Service) poll(ctx context.Context, id model.DeviceID, reach bool) {
 		return
 	}
 	ds.polling = false
+	silent := !reach && s.mqttMode(ds) && ds.lwt != "Offline" && s.pollEligible(ds, now)
 	detail := "http poll ok"
 	switch {
 	case err == nil:
@@ -922,11 +936,8 @@ func (s *Service) poll(ctx context.Context, id model.DeviceID, reach bool) {
 			ds.probeAfter = now.Add(probeOKGap)
 			break
 		}
-		ds.nextPoll = now
 		ds.snapAfter = now.Add(snapshotRetry)
-		if !s.mqttMode(ds) || ds.lwt == "Offline" {
-			ds.nextPoll = now.Add(s.jitter(s.pollInterval()))
-		}
+		ds.nextPoll = now.Add(s.jitter(s.pollInterval()))
 	case errors.Is(err, tasmota.ErrHTTPAPIRefused):
 		// The device answered: its web page is up and only its HTTP API is off (SetOption128 0, #447). That is
 		// contact, not a failure, for a poll and a probe alike: it never counts toward offline. authFailed
@@ -947,7 +958,15 @@ func (s *Service) poll(ctx context.Context, id model.DeviceID, reach bool) {
 		ds.lastPolled, ds.pollGone = now, false
 		// Polled again like a failing device (up to every 30 minutes), not every interval: the refusal does not
 		// change by itself, and the page's probe gives fresh information on demand.
-		ds.nextPoll = now.Add(min(s.jitter(maxBackoff), maxBackoff))
+		// A device on our broker whose telemetry is silent (the poll was due for that) is Online only while its
+		// contact is fresh: backing off to 30 minutes would let it go Stale and back after every refusal (#652),
+		// so it is asked at the normal interval, which is quick for a refusal. A snapshot read of a device that
+		// is fresh anyway waits as long as a failing one.
+		delay := max(min(s.jitter(maxBackoff), maxBackoff), s.jitter(s.pollInterval()))
+		if silent {
+			delay = s.jitter(s.pollInterval())
+		}
+		ds.nextPoll = now.Add(delay)
 		ds.snapAfter = ds.nextPoll
 	case reach:
 		ds.probeAfter = now.Add(probeFailGap)
@@ -975,6 +994,12 @@ func (s *Service) poll(ctx context.Context, id model.DeviceID, reach bool) {
 	tr, changed := s.evaluate(ds, now, model.SourceHTTP, detail)
 	if !changed {
 		s.publish(ds)
+	}
+	if !reach && ds.willReplayed {
+		// The first background poll after a replayed will is the baseline of this run (#652): what it finds
+		// is not a change, so a start does not write one "Online" row per device the will called offline.
+		ds.willReplayed = false
+		tr.from = model.HealthUnknown
 	}
 	s.mu.Unlock()
 	if changed {
@@ -1045,14 +1070,12 @@ func errKind(err error) string {
 // backoff is the poll delay after fails consecutive failures: the normal
 // interval until the device counts as offline, then doubling up to 30 min.
 func (s *Service) backoff(fails int) time.Duration {
+	limit := max(maxBackoff, s.pollInterval()) // the cap never undercuts a longer POLL_INTERVAL (#652)
 	d := s.pollInterval()
-	for n := s.o.OfflineAfter; n <= fails && d < maxBackoff; n++ {
+	for n := s.o.OfflineAfter; n <= fails && d < limit; n++ {
 		d *= 2
 	}
-	if d > maxBackoff {
-		d = maxBackoff
-	}
-	return d
+	return min(d, limit)
 }
 
 // jitter spreads d by +-20 % so that polls do not synchronise.

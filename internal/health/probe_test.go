@@ -295,6 +295,7 @@ func TestRetainedOfflineWillDeviceThatAnswersHTTPComesBack(t *testing.T) {
 	h := newHarness(t, true, Options{}, mqttDev(1, "a"))
 	h.listen()
 	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Offline", true)
+	h.advance(DefaultPollInterval) // a replayed will is polled somewhere within one interval, not at once (#652)
 	h.want(1, model.HealthOffline)
 	h.step()
 	g := h.svc.Get(1)
@@ -368,6 +369,7 @@ func TestRetainedOfflineWillDeviceWithHTTPAPIOffIsOnlineWithoutAPath(t *testing.
 		h := newHarness(t, true, Options{}, mqttDev(1, "a"))
 		h.listen()
 		h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Offline", true)
+		h.advance(DefaultPollInterval) // a replayed will is polled somewhere within one interval, not at once (#652)
 		tc.before(h)
 		refuseAll(h)
 		h.step()
@@ -386,7 +388,8 @@ func TestProbeLeavesTheStateOfADeviceItsWillReportsOffline(t *testing.T) {
 	h := newHarness(t, true, Options{}, mqttDev(1, "a"))
 	h.listen()
 	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Offline", true)
-	h.step() // the background poll reaches it: online
+	h.advance(DefaultPollInterval) // a replayed will is polled somewhere within one interval, not at once (#652)
+	h.step()                       // the background poll reaches it: online
 	failAll(h, errDown)
 	for range DefaultOfflineAfter {
 		h.advance(6 * time.Minute)
@@ -407,6 +410,7 @@ func TestProbeLeavesTheStateOfADeviceItsWillReportsOffline(t *testing.T) {
 	h = newHarness(t, true, Options{}, mqttDev(1, "a"))
 	h.listen()
 	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Offline", true)
+	h.advance(DefaultPollInterval) // a replayed will is polled somewhere within one interval, not at once (#652)
 	h.step()
 	h.want(1, model.HealthOnline)
 	holdPolls(h.svc, 1)
@@ -426,6 +430,7 @@ func TestCredentialRefusalsAreNoSilenceForADeviceItsWillReportsOffline(t *testin
 	h := newHarness(t, true, Options{}, mqttDev(1, "a"))
 	h.listen()
 	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Offline", true)
+	h.advance(DefaultPollInterval) // a replayed will is polled somewhere within one interval, not at once (#652)
 	h.step()
 	failAll(h, tasmota.ErrAuth)
 	for range DefaultOfflineAfter {
@@ -447,6 +452,7 @@ func TestReplayedOfflineWillDoesNotUndoAPollAnswer(t *testing.T) {
 	h := newHarness(t, true, Options{}, mqttDev(1, "a"))
 	h.listen()
 	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Offline", true)
+	h.advance(DefaultPollInterval) // a replayed will is polled somewhere within one interval, not at once (#652)
 	h.step()
 	h.want(1, model.HealthOnline)
 	h.cl.reset()
@@ -460,11 +466,13 @@ func TestReplayedOfflineWillDoesNotUndoAPollAnswer(t *testing.T) {
 }
 
 // Why (#619): an HTTP answer from before the device's new, real last will says nothing about now. A fresh
-// Offline will makes the device offline again and is checked at once.
+// Offline will makes the device offline again and is checked, one poll interval later (#652: right after a
+// live will the device is usually still rebooting).
 func TestNewOfflineWillOverridesAnEarlierPollAnswer(t *testing.T) {
 	h := newHarness(t, true, Options{}, mqttDev(1, "a"))
 	h.listen()
 	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Offline", true)
+	h.advance(DefaultPollInterval) // a replayed will is polled somewhere within one interval, not at once (#652)
 	h.step()
 	h.want(1, model.HealthOnline)
 	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Online", false)
@@ -475,9 +483,10 @@ func TestNewOfflineWillOverridesAnEarlierPollAnswer(t *testing.T) {
 	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Offline", false)
 	h.want(1, model.HealthOffline)
 	h.cl.reset()
+	h.advance(DefaultPollInterval * 13 / 10) // past the jitter
 	h.step()
 	if n := len(h.cl.commands()); n != 1 {
-		t.Fatalf("a fresh will was not checked at once: %v", h.cl.commands())
+		t.Fatalf("a fresh will was not checked after one interval: %v", h.cl.commands())
 	}
 }
 
