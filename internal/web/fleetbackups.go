@@ -13,6 +13,7 @@ import (
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/restore"
+	"github.com/nofuturekid/tasmofleet/internal/schedule"
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
 
@@ -29,6 +30,9 @@ type BackupFleet interface {
 	Overview(ctx context.Context) ([]model.BackupDeviceRow, error)
 	// PruneNext lists the backup runs the next backup would delete.
 	PruneNext(ctx context.Context) ([]model.Backup, error)
+	// LastMissed is when a scheduled run was last skipped because TasmoFleet was down at its time
+	// (#601); zero when that never happened.
+	LastMissed(ctx context.Context) (time.Time, error)
 }
 
 // whyText is why a device was skipped, failed or left out: the reason as a sentence, and when the
@@ -70,7 +74,7 @@ const (
 	fleetSkipped = "skipped"
 )
 
-// fleetMinOld is the least age that makes a backup "older than": max(this, 2 x the interval).
+// fleetMinOld is the least age that makes a backup "older than": max(this, 2 x the longest gap between runs).
 const fleetMinOld = 7 * 24 * time.Hour
 
 type fleetChip struct {
@@ -113,7 +117,11 @@ type fleetView struct {
 	Admin       bool
 	Now         time.Time
 	Run         *model.BackupRun
-	Scheduled   bool // BACKUP_INTERVAL is on
+	Scheduled   bool      // a backup schedule is set (BACKUP_DAYS has a weekday)
+	Zone        string    // the server's time zone as the clock shows it ("CET"), for the note that times are on its clock
+	Plan        string    // the schedule in words, "Mon, Wed, Fri at 03:00"; empty when off
+	Next        time.Time // the next scheduled run; zero when off
+	Missed      time.Time // when the newest skipped run was noticed, when that is newer than the last run; else zero
 	Failed      []model.BackupRunItem
 	Skipped     []model.BackupRunItem
 	Chips       []fleetChip
@@ -135,18 +143,45 @@ type fleetView struct {
 	PruneMore   int
 }
 
-// fleetInterval is the effective BACKUP_INTERVAL; zero is "manual only".
-func (h *handler) fleetInterval() time.Duration {
+// fleetSchedule is the effective backup schedule (BACKUP_DAYS, BACKUP_TIME); no weekday is "manual only".
+func (h *handler) fleetSchedule() schedule.Schedule {
 	if h.d.SysConfig == nil {
-		return 0
+		return schedule.Schedule{}
 	}
+	var days, clock string
 	for _, st := range h.d.SysConfig.State() {
-		if st.Key == "BACKUP_INTERVAL" {
-			d, _ := time.ParseDuration(st.Value)
-			return max(d, 0)
+		switch st.Key {
+		case "BACKUP_DAYS":
+			days = st.Value
+		case "BACKUP_TIME":
+			clock = st.Value
 		}
 	}
-	return 0
+	s, err := schedule.New(days, clock)
+	if err != nil {
+		return schedule.Schedule{} // validation keeps this from being stored
+	}
+	return s
+}
+
+var dayFull = map[string]string{"mon": "Monday", "tue": "Tuesday", "wed": "Wednesday", "thu": "Thursday", "fri": "Friday", "sat": "Saturday", "sun": "Sunday"}
+
+// dayLabels are the short weekday names; the chips show them.
+var dayLabels = map[string]string{"mon": "Mon", "tue": "Tue", "wed": "Wed", "thu": "Thu", "fri": "Fri", "sat": "Sat", "sun": "Sun"}
+
+// schedulePlan words a schedule: "every day at 03:00", "Mon, Wed, Fri at 03:00"; empty when off.
+func schedulePlan(s schedule.Schedule) string {
+	if s.Off() {
+		return ""
+	}
+	days := strings.Split(s.Days.String(), ",")
+	if len(days) == 7 {
+		return "every day at " + s.Clock()
+	}
+	for i, d := range days {
+		days[i] = dayLabels[d]
+	}
+	return strings.Join(days, ", ") + " at " + s.Clock()
 }
 
 // backupsRender draws Devices -> Backups: only the Backups part of the settings layout, with the
@@ -205,9 +240,11 @@ func (h *handler) fleetOf(r *http.Request, admin bool) (*fleetView, error) {
 	if !slices.Contains([]string{fleetNone, fleetOld, fleetFailed, fleetSkipped}, fv.Filter) {
 		fv.Filter = fleetAll
 	}
-	interval := h.fleetInterval()
-	fv.Scheduled = interval > 0
-	oldAfter := max(fleetMinOld, 2*interval)
+	sched := h.fleetSchedule()
+	fv.Scheduled = !sched.Off()
+	fv.Plan, fv.Next = schedulePlan(sched), sched.Next(fv.Now)
+	fv.Zone, _ = fv.Now.Zone()
+	oldAfter := max(fleetMinOld, 2*sched.LongestGap())
 	fv.OldDays = int(oldAfter.Hours() / 24)
 	for _, st := range h.d.SysConfig.State() {
 		if st.Key == "BACKUP_KEEP" {
@@ -229,6 +266,13 @@ func (h *handler) fleetOf(r *http.Request, admin bool) (*fleetView, error) {
 			case model.BackupOutcomeOK:
 			}
 		}
+	}
+	missed, err := h.d.BackupFleet.LastMissed(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if fv.Scheduled && !missed.IsZero() && (fv.Run == nil || missed.After(fv.Run.StartedAt)) {
+		fv.Missed = missed
 	}
 	over, err := h.d.BackupFleet.Overview(ctx)
 	if err != nil {

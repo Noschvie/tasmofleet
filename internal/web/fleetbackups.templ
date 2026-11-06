@@ -87,11 +87,13 @@ templ fleetLastRun(p sysPage, c sysCard) {
 			case v.Run == nil && !v.Scheduled:
 				@fleetNoSchedule(*v)
 			case v.Run == nil:
+				@fleetMissed(*v)
 				<p class="ufield-help">No scheduled run has finished yet.</p>
 			case !v.Scheduled:
 				@fleetNoSchedule(*v)
 				@fleetRunLists(p, *v)
 			default:
+				@fleetMissed(*v)
 				@fleetRunSums(*v)
 				@fleetRunLists(p, *v)
 		}
@@ -100,9 +102,22 @@ templ fleetLastRun(p sysPage, c sysCard) {
 
 func fleetLastNote(v fleetView) string {
 	if !v.Scheduled {
-		return "Turn the schedule on under Schedule, next to this card."
+		return "Choose the backup days under Schedule, next to this card."
 	}
-	return "The last scheduled run. Manual runs are on the Transactions page."
+	return "The last scheduled run, " + v.Plan + ". Manual runs are on the Transactions page."
+}
+
+// fleetMissed says that the newest scheduled time was skipped because TasmoFleet was down (#601).
+templ fleetMissed(v fleetView) {
+	if !v.Missed.IsZero() {
+		<div class="sys-status">
+			<span class="sys-status-dot t-warn" aria-hidden="true"></span>
+			<div class="sys-status-text">
+				<b>A scheduled run was skipped</b>
+				<span>TasmoFleet was not running at the scheduled time and was back more than 60 minutes late, so the run was not made up. Noticed <time { ui.StampAttrs(v.Missed, ui.StampDay)... }>{ ui.StampDayText(v.Now, v.Missed) }</time>. The next run is as scheduled.</span>
+			</div>
+		</div>
+	}
 }
 
 templ fleetNoSchedule(v fleetView) {
@@ -358,8 +373,10 @@ templ fleetScheduleReadOnly(p sysPage, c sysCard) {
 
 func fleetScheduleLabel(row sysRow) string {
 	switch row.Key {
-	case "BACKUP_INTERVAL":
-		return "Interval"
+	case "BACKUP_DAYS":
+		return "Days"
+	case "BACKUP_TIME":
+		return "Time"
 	case "BACKUP_KEEP":
 		return "Kept per device"
 	case "BACKUP_MAX_AGE":
@@ -369,8 +386,27 @@ func fleetScheduleLabel(row sysRow) string {
 }
 
 func fleetScheduleValue(row sysRow) string {
-	if row.Key == "BACKUP_INTERVAL" && (row.Value == "" || row.Value == "0" || row.Value == "0s") {
-		return "Off: manual only"
+	switch row.Key {
+	case "BACKUP_DAYS":
+		if row.Value == "" {
+			return "None: manual only"
+		}
+		days := strings.Split(row.Value, ",")
+		for i, d := range days {
+			days[i] = dayLabels[d]
+		}
+		return strings.Join(days, ", ")
 	}
 	return row.Value
+}
+
+// fleetScheduleNote is what the schedule form cannot say by itself: whose clock the time is on and when
+// the next run is.
+templ fleetScheduleNote(v fleetView) {
+	<p class="ufield-help">
+		Times are on the server's clock ({ v.Zone }).
+		if v.Scheduled {
+			{ " Next run " }<time { ui.StampAttrs(v.Next, ui.StampDay)... }>{ ui.StampDayText(v.Now, v.Next) }</time>.
+		}
+	</p>
 }

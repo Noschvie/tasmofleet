@@ -13,6 +13,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/metrics"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/notify"
+	"github.com/nofuturekid/tasmofleet/internal/schedule"
 	"github.com/nofuturekid/tasmofleet/internal/store"
 )
 
@@ -183,8 +184,22 @@ func (a *runtime) prune(ctx context.Context) {
 	}
 }
 
-// backupAll is the scheduled run (BACKUP_INTERVAL); the rules are in scheduledBackup.
+// backupAll is the scheduled run (BACKUP_DAYS, BACKUP_TIME); the rules are in scheduledBackup.
 func (a *runtime) backupAll(ctx context.Context) { a.scheduledBackup().Run(ctx) }
+
+// backupSchedule wires the schedule loop to the settings, the run record and the notifier.
+func (a *runtime) backupSchedule() *backupSchedule {
+	b := &backupSchedule{
+		log: a.log, store: a.svc.Store, now: time.Now, run: a.backupAll,
+		schedule: func() schedule.Schedule { return a.svc.Sys.Snapshot().BackupSchedule() },
+	}
+	if a.notifier != nil {
+		b.missed = func(slot, at time.Time) {
+			a.notifier.Emit(notify.BackupMissed(a.notifier.Config(), slot, at))
+		}
+	}
+	return b
+}
 
 // scheduledBackup wires the scheduled run to the store, the tracker, the guard and the backup manager.
 func (a *runtime) scheduledBackup() *scheduledBackup {

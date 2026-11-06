@@ -138,9 +138,13 @@ type Config struct {
 	BackupKeep int `env:"BACKUP_KEEP" ui:"true" default:"10"`
 	// BackupMaxAge: backups younger than this are never pruned, however many
 	// newer ones exist (so repeated manual runs cannot evict the restore points).
-	BackupMaxAge   time.Duration `env:"BACKUP_MAX_AGE" ui:"true" default:"720h"`
-	BackupSchedule time.Duration `env:"BACKUP_INTERVAL" ui:"true" default:"0s"`              // 0 = manual only
-	DecoderPath    string        `env:"DECODER_PATH" default:"/usr/local/bin/decode-config"` // empty disables
+	BackupMaxAge time.Duration `env:"BACKUP_MAX_AGE" ui:"true" default:"720h"`
+	// BackupDays and BackupTime are the scheduled device backup (#601): the weekdays (mon..sun) and the
+	// time of day (HH:MM) on the server's clock (TZ). No weekday = manual only. It replaced
+	// BACKUP_INTERVAL; Config.BackupSchedule turns the two into a schedule.Schedule.
+	BackupDays  []string `env:"BACKUP_DAYS" ui:"true"`
+	BackupTime  string   `env:"BACKUP_TIME" ui:"true" default:"03:00"`
+	DecoderPath string   `env:"DECODER_PATH" default:"/usr/local/bin/decode-config"` // empty disables
 
 	// SnapshotSchedule is how often TasmoFleet writes a consistent copy of its own database to
 	// <DATA_DIR>/snapshots (0 = off); SnapshotKeep is how many copies stay (the oldest go first).

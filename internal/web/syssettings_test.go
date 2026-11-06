@@ -41,9 +41,6 @@ func TestSystemSettingsEveryFieldHasOnePlace(t *testing.T) {
 		if len(st.Choices) > 0 {
 			n = min(n, 1) // one checkbox per choice
 		}
-		if st.Key == "BACKUP_INTERVAL" {
-			n = strings.Count(body, name) // the interval input; the schedule switch is sw.BACKUP_INTERVAL
-		}
 		if n != 1 {
 			t.Errorf("%s: %d inputs on the page, want exactly 1", st.Key, n)
 		}

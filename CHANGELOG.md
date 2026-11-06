@@ -6,6 +6,11 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Upgrade notes
+
+- Migration 0045 (data only): a stored backup interval that is not zero becomes every day at 03:00 (`BACKUP_DAYS` all seven days, `BACKUP_TIME` 03:00) and the interval row is deleted; a stored 0 (manual only) and no stored interval stay manual only. Nothing to do: look at Devices, Backups, Schedule, and choose other days or another time if 03:00 does not suit you. The migration also stores a marker so that the first start after the upgrade does not run a backup (#601, #612).
+- `TASMOFLEET_BACKUP_INTERVAL` no longer exists. It is not in the Unraid Community Applications template, so a template install has nothing to change. Where you still set it (Compose, `docker run`, an env file) it is ignored and TasmoFleet logs a warning at start; delete it. It had only been read once, on the first start that saw it, and the migration has already carried the stored value over (#601).
+
 ### Added
 
 - Notifications: browser notifications while a TasmoFleet tab is open. The events of the webhook and e-mail channels (a finished update, a failed scheduled backup or snapshot, as far as Settings, Notifications selects them) also show to admins as desktop notifications. Each browser opts in itself, with "Enable browser notifications" on that tab (the permission is asked for only after the click; the choice stays in the browser, nothing is stored on the server), and with several tabs open one notification comes per event. The card says so when the browser blocks notifications or the page is not HTTPS or localhost, where browsers do not offer them. No service worker: nothing shows while no tab is open (#540)
@@ -13,11 +18,18 @@ always upgrade automatically.
 ### Changed
 
 - Spec: the operator role reads the redacted values in config diffs (backup comparison and Drift tab); only free-text settings (rules, scripts, Berry code, `mems`, `rf_code`) show just that they changed. The code and the restore security notes already worked this way; a handler test now pins it (#501)
+- Scheduled device backups run on chosen weekdays at a time of day, set on Devices, Backups under Schedule (weekday chips and a time, on the server's clock, `TZ`), instead of every so many hours. No day ticked is manual only. The time stays the same on the wall clock when the clocks change (#601).
+- TasmoFleet does not run a fleet-wide backup when it starts, and saving the schedule does not run one either. Until now every start (a container restart, an update, a Home Assistant app restart) and every change of the interval backed up all devices at once, even minutes after the last run (#612, #601).
+- A scheduled run that TasmoFleet missed because it was not running starts late when it is back within 60 minutes of the scheduled time. After that it is skipped and a notification is sent (the existing "Scheduled device backup failed" setting), and Devices, Backups says so under Last run (#601).
 
 ### Fixed
 
 - Policy: "Show all" under the devices of a rule draft works on the first click right after typing, instead of the form's own preview putting the short list back (#660)
 - Health: devices whose retained last will says Offline are no longer all polled on the first tick after a start (the polls are spread over one poll interval), a will that arrives live (a reboot, an OTA) is polled one interval later instead of while the device restarts, and the first poll after a replayed will no longer writes an "Online" history row per device. A device on MQTT whose telemetry is quiet is polled every POLL_INTERVAL like a device without MQTT, so it stays Online instead of going Stale and back every 11 minutes (HTTP API on) or 30 minutes (HTTP API off) while POLL_INTERVAL stays below the stale threshold (as with the defaults), and the back-off cap no longer undercuts a POLL_INTERVAL longer than 30 minutes (#652)
+
+### Breaking
+
+- The setting and variable `BACKUP_INTERVAL` is removed without an alias; use `BACKUP_DAYS` and `BACKUP_TIME` (Devices, Backups). See the upgrade notes above for what happens to an existing interval (#601).
 
 ## 0.32.0 "Fastnet" (2026-11-06)
 

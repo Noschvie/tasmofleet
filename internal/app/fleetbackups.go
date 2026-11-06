@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/backup"
 	"github.com/nofuturekid/tasmofleet/internal/model"
@@ -16,6 +17,7 @@ type fleetStore interface {
 	LastBackupRun(ctx context.Context) (model.BackupRun, bool, error)
 	DevicesSeen(ctx context.Context) (map[model.DeviceID]store.DeviceSeen, error)
 	NewestRuns(ctx context.Context) (map[model.DeviceID]store.NewestRun, error)
+	BackupRunTimes(ctx context.Context) (settled, missed time.Time, err error)
 }
 
 // fleetBackups is web.BackupFleet (#409): the last scheduled run, one row per device and what the
@@ -34,6 +36,11 @@ var _ web.BackupFleet = (*fleetBackups)(nil)
 
 func (f *fleetBackups) LastRun(ctx context.Context) (model.BackupRun, bool, error) {
 	return f.store.LastBackupRun(ctx)
+}
+
+func (f *fleetBackups) LastMissed(ctx context.Context) (time.Time, error) {
+	_, missed, err := f.store.BackupRunTimes(ctx)
+	return missed, err
 }
 
 // Overview has one row per device, in device order, from four reads and no device request: the

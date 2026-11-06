@@ -74,7 +74,7 @@ var sysLayout = []sysTabDef{
 		{ID: "lastrun", Title: "Last run", Stack: 0, Phone: 1},
 		{ID: "devices", Title: "Devices", Stack: 0, Phone: 3},
 		{ID: "storage", Title: "Storage", Note: "Read-only. Not part of the form.", Stack: 1, Phone: 2},
-		{ID: "schedule", Title: "Schedule", Note: "Device backups on a timer, and how many to keep.", Stack: 1, Phone: 4, Keys: []string{"BACKUP_INTERVAL", "BACKUP_KEEP", "BACKUP_MAX_AGE"}},
+		{ID: "schedule", Title: "Schedule", Note: "Device backups on chosen days at a time of day, and how many to keep.", Stack: 1, Phone: 4, Keys: []string{"BACKUP_DAYS", "BACKUP_TIME", "BACKUP_KEEP", "BACKUP_MAX_AGE"}},
 		{ID: "orphans", Title: "Backups of deleted devices", Stack: 1, Phone: 5},
 		{ID: "unreferenced", Title: "Unreferenced files", Stack: 1, Phone: 6},
 	}},
@@ -321,7 +321,8 @@ var sysCopies = map[string]sysCopy{
 	"DISCOVERY_SCAN_INTERVAL": {Help: "At least 1h.", Width: "xs", Dep: "DISCOVERY_SCAN"},
 	"DISCOVERY_SCAN_CIDRS":    {Help: "Inside the device networks, max /22 each.", Width: "full", Dep: "DISCOVERY_SCAN", Info: "Each CIDR must lie inside the device networks and hold at most 1024 addresses (/22)."},
 
-	"BACKUP_INTERVAL":   {Label: "Interval", Help: "e.g. 24h.", Width: "xs"},
+	"BACKUP_DAYS":       {Label: "Days", Help: "None ticked = manual only.", Width: "full"},
+	"BACKUP_TIME":       {Label: "Time", Help: "On the server's clock (TZ).", Width: "full", Info: "Time of day on the server's clock (TZ). A run missed while TasmoFleet was down starts late within 60 minutes; after that it is skipped and a notification is sent. Saving the schedule never starts a run."},
 	"BACKUP_KEEP":       {Label: "Kept per device", Help: "Lowering it can delete restore points.", Width: "xs"},
 	"SNAPSHOT_INTERVAL": {Label: "Interval", Help: "e.g. 24h.", Width: "xs"},
 	"SNAPSHOT_KEEP":     {Label: "Snapshots kept", Help: "The oldest are deleted first.", Width: "xs", Dep: "SNAPSHOT_INTERVAL"},

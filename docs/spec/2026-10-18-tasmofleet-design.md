@@ -1483,7 +1483,7 @@ shows the decoded secrets. The diff/drift view redacts keys matching
   per batch).
 - Manual backups have a cooldown of 1 minute per device (HTTP 429 "Try again in ..."); deleting the last backup of a device ends it.
   Every backup reads the device config over its single-threaded web server, so repeated
-  clicks must not hammer an ESP8266. Pre-OTA and scheduled backups are not limited. Optional periodic schedule `BACKUP_INTERVAL` (default off).
+  clicks must not hammer an ESP8266. Pre-OTA and scheduled backups are not limited. Optional schedule on chosen weekdays at a time of day (`BACKUP_DAYS`, `BACKUP_TIME`; default off, §12.6).
 - Retention (`backup.Prunable`, the one rule pruning and the "Pruned at next run" label share): per
   device the newest `BACKUP_KEEP` (10) runs stay, plus every run younger than `BACKUP_MAX_AGE` (30 days,
   `720h`, so repeated manual runs cannot evict the restore points), plus runs pinned with Keep (an
@@ -1577,7 +1577,7 @@ shows the decoded secrets. The diff/drift view redacts keys matching
 
 ### 12.5 Fleet runs: tried, failed, skipped (#409)
 
-A scheduled run (`BACKUP_INTERVAL`) records what it did per device; the record is stored
+A scheduled run (`BACKUP_DAYS`, `BACKUP_TIME`) records what it did per device; the record is stored
 (`backup_runs`, `backup_run_items`) so the status bar, the dashboard and the Devices, Backups page
 show the last run after a restart. Outcomes per device: `ok`, `failed`, `skipped`. **Tried = ok + failed.**
 A skipped device was not tried; skipped devices are counted apart, never colour the status bar and
@@ -1603,7 +1603,32 @@ a zero time, so "never answered" stays true for a device that was only judged of
 The run takes the device guard (owner `backup`) for each device while it backs it up. The notification lists the failed devices only. The run record is pruned with `AUDIT_RETENTION`; a
 device's item keeps its name when the device is deleted. Model: `model.BackupRun`, `BackupRunItem`,
 `BackupOutcome`, `BackupDeviceRow`; the web layer reads them through `web.BackupFleet` (`LastRun`,
-`Overview`, `PruneNext`; `Overview` does no device I/O).
+`Overview`, `PruneNext`, `LastMissed`; `Overview` does no device I/O).
+
+### 12.6 The backup schedule (#601, #612)
+
+The scheduled run happens on chosen weekdays (`BACKUP_DAYS`, `mon`..`sun`; none = manual only) at a
+time of day (`BACKUP_TIME`, `HH:MM`) on the server's clock (`TZ`). The pure rule lives in
+`internal/schedule` and is shared by the timed jobs (the scheduled scan uses it later, #326): the next
+and the previous run on the wall clock, so 03:00 stays 03:00 across daylight saving changes. A time
+of day that does not exist on the day the clocks go forward (02:30) runs shifted (03:30); one that
+exists twice on the day they go back runs once, at its first occurrence.
+
+- **No run at start, none on a settings change.** The schedule asks `schedule.Plan` what is due, given
+  the newest thing that settled a scheduled time (`BackupRunTimes`: the start of the newest completed
+  row of `backup_runs`). A run settles it; so does a skip (trigger `missed`); so does a change of the
+  schedule or the migration that created it (trigger `rescheduled`, written by the loop when
+  `BACKUP_DAYS` or `BACKUP_TIME` change, and by migration 0045). A restart settles nothing.
+  A schedule with no such row at all begins now instead of making up the past.
+- **A missed run** (TasmoFleet was down at the time) starts late when TasmoFleet is back within 60
+  minutes of it. After that it is skipped: one `missed` marker, one notification (the scheduled-backup
+  event `backup.scheduled_failed` under `NOTIFY_BACKUP`, text "Scheduled backup skipped"), and Devices,
+  Backups says so under Last run until a newer run. After a long downtime only the newest time of day
+  counts; there is never one run per missed day. A run cut short by a shutdown settles nothing and is
+  started again within the 60 minutes.
+- The per-device rules of §12.5 are unchanged: the scheduler only starts the run.
+- `BACKUP_INTERVAL` is gone (no alias). Migration 0045 turns a stored non-zero interval into every day
+  at 03:00 and deletes the row; a stored 0 stays manual only.
 
 ## 13. Device page, console and settings (M2)
 
@@ -2075,7 +2100,7 @@ Two tiers:
 | `DEVICE_NETWORKS`                                                                                                                                                                                                          | — (no device is contacted until set)                                                         | live                                                                                           |
 | `FIRMWARE_BASE_URL`, `FIRMWARE_SOURCES`, `FIRMWARE_ALLOW_SINGLE_SOURCE`, `FIRMWARE_REFRESH_INTERVAL`                                                                                                                       | —, `github,ota.tasmota.com`, `false`, `6h`                                                   | restart (the firmware cache, the device-facing listener and the OTA routes are built at start) |
 | `OTA_PARALLEL`, `OTA_RESTORE_OTAURL`                                                                                                                                                                                       | `2`, `true`                                                                                  | live                                                                                           |
-| `BACKUP_KEEP`, `BACKUP_MAX_AGE`, `BACKUP_INTERVAL`                                                                                                                                                                         | `10`, `720h`, `0s` (manual)                                                                  | live                                                                                           |
+| `BACKUP_KEEP`, `BACKUP_MAX_AGE`, `BACKUP_DAYS`, `BACKUP_TIME`                                                                                                                                                              | `10`, `720h`, none (manual), `03:00`                                                         | live                                                                                           |
 | `POLL_INTERVAL`, `TELEPERIOD`                                                                                                                                                                                              | `5m`, `300s`                                                                                 | live                                                                                           |
 | `MQTT_URL`, `MQTT_USER`, `MQTT_PASSWORD`, `MQTT_FULLTOPIC`                                                                                                                                                                 | —, —, —, `%prefix%/%topic%/`                                                                 | live (the broker connection is switched in place)                                              |
 | `DEVICE_DEFAULT_PASSWORD` (secret; prefill for add device / accept proposal, user `admin`)                                                                                                                                 | —                                                                                            | live                                                                                           |

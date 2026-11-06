@@ -158,21 +158,6 @@ func TestSettingsDependentFieldsHaveNoIndentedBlock(t *testing.T) {
 	}
 }
 
-// Why (#336): with scheduled backups off the stored 0 means "manual only"; showing "0s" in the
-// dimmed Interval reads as a value. It is empty with a 24h placeholder; saving off still stores 0.
-func TestSystemSettingsBackupIntervalIsEmptyWhileTheScheduleIsOff(t *testing.T) {
-	e, svc, _, _ := sysEnvFull(t, true, func(d *Deps) { d.BackupFleet = &fakeFleet{} })
-	_, page := e.do(t, "GET", "/devices/backups", "admin", nil)
-	m := regexp.MustCompile(`<input[^>]*name="v\.BACKUP_INTERVAL"[^>]*>`).FindString(page)
-	if m == "" || strings.Contains(m, `value="0s"`) || !strings.Contains(m, `placeholder="24h"`) {
-		t.Errorf("interval input while off: %s", m)
-	}
-	r, _ := e.do(t, "POST", "/settings/system", "admin", url.Values{"csrf": {"tok"}, "swm.BACKUP_INTERVAL": {"1"}, "v.BACKUP_INTERVAL": {""}})
-	if r.StatusCode != 303 || svc.Snapshot().BackupSchedule != 0 {
-		t.Errorf("off with an empty interval must store 0: %d, %v", r.StatusCode, svc.Snapshot().BackupSchedule)
-	}
-}
-
 // Why: the staggered grid came from "Reset ... on save" being its own grid cell next to the field.
 // The reset control now belongs to the field that owns it, so no field can push another around.
 func TestSystemSettingsResetControlIsInsideItsOwnField(t *testing.T) {
@@ -361,33 +346,69 @@ func TestSystemSettingsOffersASectionPickerForPhones(t *testing.T) {
 	}
 }
 
-// Why: "0s" for "manual only" was cryptic. The interval is behind a switch: off stores 0 (manual
-// only), on needs a real interval. The setting itself is unchanged (BACKUP_INTERVAL).
-func TestSystemSettingsBackupScheduleSwitchIsAViewOfTheInterval(t *testing.T) {
-	post := func(t *testing.T, form url.Values) (*env, *sysconfig.Service, int, string) {
+// Why (#601): the schedule is weekdays and a time of day. Ticking Monday and Wednesday and picking
+// 04:30 stores exactly that; unticking every day is a real choice (manual only) and must be saved, not
+// ignored; a time that is no time of day is a field error and writes nothing.
+func TestSystemSettingsBackupDaysAndTimeAreSaved(t *testing.T) {
+	post := func(t *testing.T, form url.Values) (*sysconfig.Service, int, string) {
 		t.Helper()
 		e, svc, _, _ := sysEnvFull(t, true, func(d *Deps) { d.BackupFleet = &fakeFleet{} })
 		form.Set("csrf", "tok")
-		form.Set("swm.BACKUP_INTERVAL", "1")
 		r, body := e.do(t, "POST", "/devices/backups", "admin", form)
-		return e, svc, r.StatusCode, body
+		return svc, r.StatusCode, body
 	}
-	_, svc, code, _ := post(t, url.Values{"v.BACKUP_INTERVAL": {"6h"}, "sw.BACKUP_INTERVAL": {"1"}})
-	if code != 303 || svc.Snapshot().BackupSchedule.Hours() != 6 {
-		t.Fatalf("on with 6h: %d, %v", code, svc.Snapshot().BackupSchedule)
+	svc, code, _ := post(t, url.Values{"m.BACKUP_DAYS": {"1"}, "v.BACKUP_DAYS": {"mon", "wed"}, "v.BACKUP_TIME": {"04:30"}})
+	if sc := svc.Snapshot().BackupSchedule(); code != 303 || sc.Days.String() != "mon,wed" || sc.Clock() != "04:30" {
+		t.Fatalf("mon+wed at 04:30: %d, %+v", code, sc)
 	}
-	_, svc, code, _ = post(t, url.Values{"v.BACKUP_INTERVAL": {"6h"}})
-	if code != 303 || svc.Snapshot().BackupSchedule != 0 {
-		t.Fatalf("switch off must store 0 (manual only): %d, %v", code, svc.Snapshot().BackupSchedule)
+	svc, code, _ = post(t, url.Values{"m.BACKUP_DAYS": {"1"}, "v.BACKUP_TIME": {"04:30"}})
+	if code != 303 || !svc.Snapshot().BackupSchedule().Off() {
+		t.Fatalf("no day ticked is manual only: %d, %+v", code, svc.Snapshot().BackupSchedule())
 	}
-	_, _, code, body := post(t, url.Values{"v.BACKUP_INTERVAL": {"0"}, "sw.BACKUP_INTERVAL": {"1"}})
-	if code != 422 || !strings.Contains(body, "how often") {
-		t.Fatalf("on with no interval is a field error: %d", code)
+	svc, code, body := post(t, url.Values{"m.BACKUP_DAYS": {"1"}, "v.BACKUP_DAYS": {"mon"}, "v.BACKUP_TIME": {"25:00"}})
+	if code != 422 || !strings.Contains(body, "HH:MM") || !svc.Snapshot().BackupSchedule().Off() {
+		t.Fatalf("a time that does not exist: %d, schedule %+v; want a field error and nothing stored", code, svc.Snapshot().BackupSchedule())
 	}
-	e := fleetEnv(t, &fakeFleet{})
+	if _, code, _ := post(t, url.Values{"m.BACKUP_DAYS": {"1"}, "v.BACKUP_DAYS": {"mon", "someday"}}); code != 422 {
+		t.Errorf("an unknown weekday: %d, want 422", code)
+	}
+}
+
+// Why (#601, accessible, no JavaScript): the weekday chips are real checkboxes in a labelled group,
+// Monday first, one per day, with the full day name for screen readers; the time is a time input
+// holding the stored value; and the page says whose clock the time is on.
+func TestBackupScheduleControlsAreChipsAndATimeInput(t *testing.T) {
+	e := fleetEnv(t, &fakeFleet{}, "TASMOFLEET_BACKUP_TIME=04:30")
 	_, page := e.do(t, "GET", "/devices/backups", "admin", nil)
-	if !strings.Contains(page, `name="sw.BACKUP_INTERVAL"`) || !strings.Contains(page, `data-depends="sw.BACKUP_INTERVAL"`) {
-		t.Error("the schedule switch and its dependent interval are missing")
+	card := cardOf(t, page, "schedule")
+	if !strings.Contains(card, `role="group" aria-label="Backup days"`) || !strings.Contains(card, `name="m.BACKUP_DAYS" value="1"`) {
+		t.Errorf("the days are not a labelled checkbox group: %s", card)
+	}
+	last := -1
+	for _, d := range []string{"mon", "tue", "wed", "thu", "fri", "sat", "sun"} {
+		box := `name="v.BACKUP_DAYS" value="` + d + `" checked`
+		i := strings.Index(card, box)
+		if i < 0 {
+			t.Errorf("%s is not ticked for a schedule on every day", d)
+			continue
+		}
+		if i < last {
+			t.Errorf("%s is out of week order", d)
+		}
+		last = i
+	}
+	for _, want := range []string{">Mon<", "sr-only\">", "Monday", `type="time" name="v.BACKUP_TIME"`, `value="04:30"`, "Times are on the server&#39;s clock"} {
+		if !strings.Contains(card, want) && !strings.Contains(card, strings.ReplaceAll(want, "&#39;", "'")) {
+			t.Errorf("schedule card lacks %q", want)
+		}
+	}
+	if strings.Contains(page, `name="sw.BACKUP`) || strings.Contains(page, `name="v.BACKUP_INTERVAL"`) {
+		t.Error("the interval and its switch are gone")
+	}
+	// A manual-only schedule shows no ticked day.
+	_, off := fleetEnvManual(t, &fakeFleet{}).do(t, "GET", "/devices/backups", "admin", nil)
+	if strings.Contains(cardOf(t, off, "schedule"), `name="v.BACKUP_DAYS" value="mon" checked`) {
+		t.Error("manual only must show no ticked day")
 	}
 }
 
@@ -422,7 +443,7 @@ func TestSystemSettingsFirmwareSourcesAreCheckboxes(t *testing.T) {
 func TestSystemSettingsSSOTestAcceptsTheWholeForm(t *testing.T) {
 	e, _, _, _ := sysEnv(t, true)
 	r, body := e.do(t, "POST", "/settings/system/sso-test", "admin", url.Values{"csrf": {"tok"}, "v.OIDC_ISSUER": {"https://idp.example/"},
-		"mqtt.host": {"broker.lan"}, "mqtt.port": {"1883"}, "swm.BACKUP_INTERVAL": {"1"}, "sw.BACKUP_INTERVAL": {"1"}, "v.BACKUP_INTERVAL": {"24h"}})
+		"mqtt.host": {"broker.lan"}, "mqtt.port": {"1883"}, "swm.SNAPSHOT_INTERVAL": {"1"}, "sw.SNAPSHOT_INTERVAL": {"1"}, "v.SNAPSHOT_INTERVAL": {"24h"}})
 	if r.StatusCode != 200 || !strings.Contains(body, "discovery OK") {
 		t.Fatalf("status %d", r.StatusCode)
 	}

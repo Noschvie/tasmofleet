@@ -32,6 +32,10 @@ func (c *countingFleetStore) DevicesSeen(context.Context) (map[model.DeviceID]st
 	c.calls["seen"]++
 	return c.seen, nil
 }
+func (c *countingFleetStore) BackupRunTimes(context.Context) (time.Time, time.Time, error) {
+	c.calls["times"]++
+	return time.Time{}, time.Time{}, nil
+}
 func (c *countingFleetStore) NewestRuns(context.Context) (map[model.DeviceID]store.NewestRun, error) {
 	c.calls["newest"]++
 	return c.newest, nil

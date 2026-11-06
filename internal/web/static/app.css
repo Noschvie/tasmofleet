@@ -12047,6 +12047,9 @@ dialog.fw-notes-dlg .fw-dlg-body {
 .sf.w-xs input:not([type="checkbox"]):not([type="radio"]) {
   max-width: 120px;
 }
+.sf input[type="time"] {
+  max-width: 140px; /* a time of day needs no more, whatever the field's width */
+}
 .sf input:not([type="checkbox"]):not([type="radio"]),
 .sf select,
 .sf textarea {
@@ -15799,4 +15802,39 @@ time[data-ts]:not([data-painted]):not([data-ts="title"]) {
   to {
     visibility: visible;
   }
+}
+
+/* weekday chips of the backup schedule (#601): the checkbox stays in the page for keyboard and
+   screen readers and covers the label; the chip is the label. Selected = the accent tint. */
+.cks.chips {
+  gap: var(--sp-8);
+}
+.ucheck.chip {
+  position: relative;
+  min-width: 3rem;
+  min-height: var(--ctl);
+  justify-content: center;
+  padding: 0 var(--sp-12);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.ucheck.chip input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.ucheck.chip:has(input:checked) {
+  background: var(--color-accent-bg);
+  border-color: var(--color-accent);
+  color: var(--color-accent-fg);
+  font-weight: 600;
+}
+.ucheck.chip:has(input:focus-visible) {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }

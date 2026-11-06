@@ -19,6 +19,7 @@ import (
 	"slices"
 
 	"github.com/nofuturekid/tasmofleet/internal/config"
+	"github.com/nofuturekid/tasmofleet/internal/schedule"
 )
 
 // Mode says how a change takes effect.
@@ -106,8 +107,10 @@ var fields = []Field{
 		Help: "Lowering it can delete restore points."},
 	{Key: "BACKUP_MAX_AGE", Group: GroupBackup, Label: "Never prune backups younger than", Apply: Live,
 		Help: "Protects restore points from repeated manual runs, e.g. 720h."},
-	{Key: "BACKUP_INTERVAL", Group: GroupBackup, Label: "Scheduled backup interval", Apply: Live,
-		Help: "How often all devices are backed up, e.g. 24h. 0 = manual only."},
+	{Key: "BACKUP_DAYS", Group: GroupBackup, Label: "Scheduled backup days", Apply: Live, Choices: schedule.DayNames(),
+		Help: "The weekdays all devices are backed up. None = manual only."},
+	{Key: "BACKUP_TIME", Group: GroupBackup, Label: "Scheduled backup time", Apply: Live,
+		Help: "Time of day, HH:MM, on the server's clock (TZ). A run missed while TasmoFleet was down starts late within 60 minutes, else it is skipped."},
 
 	{Key: "SNAPSHOT_INTERVAL", Group: GroupSnapshot, Label: "Scheduled snapshot interval", Apply: Live,
 		Help: "How often TasmoFleet writes a consistent copy of its own database to the snapshots folder of the data directory, e.g. 24h. At least 1h. 0 = off."},

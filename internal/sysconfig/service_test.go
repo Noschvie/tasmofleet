@@ -132,7 +132,7 @@ func TestStoredValueBeatsDefault(t *testing.T) {
 	for _, f := range s.State() {
 		sources[f.Key] = f.Source
 	}
-	if sources["BACKUP_KEEP"] != SourceStored || sources["BACKUP_INTERVAL"] != SourceDefault {
+	if sources["BACKUP_KEEP"] != SourceStored || sources["BACKUP_TIME"] != SourceDefault {
 		t.Fatalf("sources %v", sources)
 	}
 }
@@ -253,12 +253,12 @@ func TestInvalidValuesAreRejectedWithFieldErrors(t *testing.T) {
 	st := newMem()
 	s, _ := newSvc(t, st)
 	_, err := s.Apply(context.Background(), Request{Actor: "a", StepUp: stepped,
-		Values: map[string]string{"OTA_PARALLEL": "0", "BACKUP_KEEP": "5", "BACKUP_INTERVAL": "5s"}})
+		Values: map[string]string{"OTA_PARALLEL": "0", "BACKUP_KEEP": "5", "BACKUP_TIME": "25:61"}})
 	var ve *ValidationError
 	if !errors.As(err, &ve) {
 		t.Fatalf("err = %v", err)
 	}
-	if ve.Fields["OTA_PARALLEL"] == "" || ve.Fields["BACKUP_INTERVAL"] == "" || ve.Fields["BACKUP_KEEP"] != "" {
+	if ve.Fields["OTA_PARALLEL"] == "" || ve.Fields["BACKUP_TIME"] == "" || ve.Fields["BACKUP_KEEP"] != "" {
 		t.Fatalf("fields = %v", ve.Fields)
 	}
 	if len(st.userRows()) != 0 {
@@ -306,24 +306,24 @@ func TestLiveChangeNotifiesSubscribersAndRestartChangesAreFlagged(t *testing.T) 
 	var got []Event
 	unsub := s.Subscribe(func(e Event) { got = append(got, e) })
 	ctx := context.Background()
-	res, err := s.Apply(ctx, Request{Actor: "a", Values: map[string]string{"BACKUP_INTERVAL": "6h", "FIRMWARE_REFRESH_INTERVAL": "12h"}})
+	res, err := s.Apply(ctx, Request{Actor: "a", Values: map[string]string{"BACKUP_TIME": "06:00", "FIRMWARE_REFRESH_INTERVAL": "12h"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 1 || got[0].New.BackupSchedule != 6*time.Hour || got[0].Old.BackupSchedule != 0 {
+	if len(got) != 1 || got[0].New.BackupTime != "06:00" || got[0].Old.BackupTime != "03:00" {
 		t.Fatalf("events %+v", got)
 	}
-	if !contains(got[0].Keys, "BACKUP_INTERVAL") {
+	if !contains(got[0].Keys, "BACKUP_TIME") {
 		t.Fatalf("keys %v", got[0].Keys)
 	}
-	if !contains(res.Live, "BACKUP_INTERVAL") || !contains(res.RestartRequired, "FIRMWARE_REFRESH_INTERVAL") || contains(res.RestartRequired, "BACKUP_INTERVAL") {
+	if !contains(res.Live, "BACKUP_TIME") || !contains(res.RestartRequired, "FIRMWARE_REFRESH_INTERVAL") || contains(res.RestartRequired, "BACKUP_TIME") {
 		t.Fatalf("result %+v", res)
 	}
 	pending := map[string]bool{}
 	for _, f := range s.State() {
 		pending[f.Key] = f.PendingRestart
 	}
-	if !pending["FIRMWARE_REFRESH_INTERVAL"] || pending["BACKUP_INTERVAL"] {
+	if !pending["FIRMWARE_REFRESH_INTERVAL"] || pending["BACKUP_TIME"] {
 		t.Fatalf("pending %v", pending)
 	}
 	// Setting it back to the value of the running process clears the flag.
@@ -336,7 +336,7 @@ func TestLiveChangeNotifiesSubscribersAndRestartChangesAreFlagged(t *testing.T) 
 		}
 	}
 	unsub()
-	if _, err := s.Apply(ctx, Request{Actor: "a", Values: map[string]string{"BACKUP_INTERVAL": "12h"}}); err != nil {
+	if _, err := s.Apply(ctx, Request{Actor: "a", Values: map[string]string{"BACKUP_TIME": "12:00"}}); err != nil {
 		t.Fatal(err)
 	}
 	if len(got) != 2 { // the OTA_PARALLEL round trip notified once more, then unsubscribed
@@ -617,5 +617,33 @@ func TestMetricsTokenEmptyEnvironmentLeavesItToThePage(t *testing.T) {
 	s, _ := newSvc(t, st, "TASMOFLEET_METRICS_TOKEN=")
 	if got := s.Snapshot().MetricsToken; got != "fake-stored-token" {
 		t.Fatalf("stored token expected, got %q", got)
+	}
+}
+
+// Why (#601): the backup days are the whole schedule; a typo must be refused with the field named,
+// not stored as a schedule that silently never runs, and a valid list must reach the schedule loop
+// as a change of exactly the days and time keys (the loop reschedules on those, nothing else).
+func TestBackupDaysAreValidatedAndAnnounced(t *testing.T) {
+	st := newMem()
+	s, _ := newSvc(t, st)
+	_, err := s.Apply(context.Background(), Request{Actor: "a", Values: map[string]string{"BACKUP_DAYS": "mon,someday"}})
+	var ve *ValidationError
+	if !errors.As(err, &ve) || ve.Fields["BACKUP_DAYS"] == "" {
+		t.Fatalf("an unknown weekday must be refused with a field error: %v", err)
+	}
+	if len(st.userRows()) != 0 {
+		t.Fatalf("a refused save wrote %v", st.rows)
+	}
+	var got []Event
+	s.Subscribe(func(e Event) { got = append(got, e) })
+	if _, err := s.Apply(context.Background(), Request{Actor: "a", Values: map[string]string{"BACKUP_DAYS": "sat,mon", "BACKUP_TIME": "04:30"}}); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || !contains(got[0].Keys, "BACKUP_DAYS") || !contains(got[0].Keys, "BACKUP_TIME") {
+		t.Fatalf("events %+v", got)
+	}
+	sched := s.Snapshot().BackupSchedule()
+	if sched.Off() || sched.Days.String() != "mon,sat" || sched.Clock() != "04:30" {
+		t.Fatalf("schedule %+v", sched)
 	}
 }

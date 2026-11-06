@@ -6,6 +6,9 @@ import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from
 // uses the Dashboard's width, and an operator sees it without anything that starts a fleet run.
 let app: App;
 let env: Devenv;
+// A scheduled run never starts at TasmoFleet start (#601), so the one the last test waits for is
+// scheduled two minutes ahead, every day, on the clock the app runs on.
+const soon = new Date(Date.now() + 2 * 60_000).toTimeString().slice(0, 5);
 test.beforeAll(async () => {
   test.setTimeout(120_000);
   env = await startDevenv();
@@ -17,7 +20,8 @@ test.beforeAll(async () => {
       TASMOFLEET_ADMIN_GROUPS: "adm",
       TASMOFLEET_OPERATOR_GROUPS: "ops",
       TASMOFLEET_POLL_INTERVAL: "5s",
-      TASMOFLEET_BACKUP_INTERVAL: "1m", // the least the schedule accepts
+      TASMOFLEET_BACKUP_DAYS: "mon,tue,wed,thu,fri,sat,sun",
+      TASMOFLEET_BACKUP_TIME: soon,
       TASMOFLEET_FIRMWARE_UPSTREAM_OVERRIDE: env.vars.DEVENV_UPSTREAM_URL,
       TASMOFLEET_FIRMWARE_LISTEN: `127.0.0.1:${fwPort}`,
       TASMOFLEET_FIRMWARE_BASE_URL: `http://127.0.0.1:${fwPort}`,
@@ -108,12 +112,12 @@ test("an operator sees the page read-only", async ({ page }) => {
 });
 
 test("after a scheduled run the status bar links to the page and the last run is listed", async ({ page }) => {
-  test.setTimeout(150_000);
+  test.setTimeout(240_000);
   await page.setExtraHTTPHeaders(admin);
   await expect(async () => {
     await page.goto(app.url + "/devices/backups");
     await expect(page.locator("#card-lastrun")).toContainText("Backed up", { timeout: 2000 });
-  }).toPass({ timeout: 120_000 });
+  }).toPass({ timeout: 200_000 });
   await page.goto(app.url + "/");
   const item = page.locator(".sb-wide a.sb-i, footer .sb-wide a.sb-i").filter({ hasText: "Backup" }).first();
   await expect(item).toHaveAttribute("href", /\/devices\/backups$/);

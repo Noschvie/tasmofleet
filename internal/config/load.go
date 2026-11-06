@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/nofuturekid/tasmofleet/internal/schedule"
 )
 
 // Prefix is prepended to every key in the environment and the file.
@@ -129,6 +131,9 @@ func Load(environ []string) (Config, error) {
 		if _, set := env[key]; set {
 			c.Warnings = append(c.Warnings, Prefix+key+" is set but no longer exists and is ignored (removed 2026-10-19: the direct admin listener is gone; use a local admin on the login page and `tasmofleet user passwd`)")
 		}
+	}
+	if v, set := env["BACKUP_INTERVAL"]; set {
+		c.Warnings = append(c.Warnings, Prefix+"BACKUP_INTERVAL is set ("+v+") but no longer exists and is ignored (removed in 0.33: device backups run on chosen weekdays at a time of day, set on Devices, Backups; an interval stored in the database became daily 03:00). Delete it.")
 	}
 	return c, c.validate()
 }
@@ -349,8 +354,11 @@ func (c Config) validateOperational(bad func(key, msg string)) {
 	if c.BackupMaxAge < 0 {
 		bad("BACKUP_MAX_AGE", "must not be negative")
 	}
-	if c.BackupSchedule != 0 && c.BackupSchedule < time.Minute {
-		bad("BACKUP_INTERVAL", "must be 0 (manual only) or at least 1m")
+	if _, err := schedule.ParseDays(strings.Join(c.BackupDays, ",")); err != nil {
+		bad("BACKUP_DAYS", err.Error())
+	}
+	if _, _, err := schedule.ParseClock(c.BackupTime); err != nil {
+		bad("BACKUP_TIME", err.Error())
 	}
 	if c.SnapshotSchedule != 0 && c.SnapshotSchedule < time.Hour {
 		bad("SNAPSHOT_INTERVAL", "must be 0 (off) or at least 1h")

@@ -25,7 +25,7 @@ type BackupTrigger string
 // Backup triggers.
 const (
 	TriggerManual    BackupTrigger = "manual"    // the Back up button
-	TriggerScheduled BackupTrigger = "scheduled" // BACKUP_INTERVAL
+	TriggerScheduled BackupTrigger = "scheduled" // BACKUP_DAYS, BACKUP_TIME
 	TriggerUpdate    BackupTrigger = "update"    // before an update; TriggerRef is the target release
 	TriggerRestore   BackupTrigger = "restore"   // before (and after) a restore
 	TriggerReplace   BackupTrigger = "replace"   // "Replace device"

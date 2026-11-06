@@ -310,3 +310,27 @@ func TestBrowserHookGetsSelectedEventsOnceWithoutAnyChannel(t *testing.T) {
 		t.Errorf("paths = %q, %q: a click on the notification must open the page the message links to", got[0].Path, got[1].Path)
 	}
 }
+
+// Why (#601): a skipped scheduled backup is a scheduled backup that did not happen, so it travels
+// as the existing scheduled-backup event under the existing setting; it must say which time was
+// skipped and where to look, and switching scheduled-backup notifications off must silence it.
+func TestBackupMissedIsTheScheduledBackupEventWithTheSkippedTime(t *testing.T) {
+	c := baseConfig()
+	slot := time.Date(2026, 11, 3, 3, 0, 0, 0, time.UTC)
+	ev := BackupMissed(c, slot, slot.Add(2*time.Hour))
+	if ev.Name != EventBackupFailed || !Selected(c, ev) {
+		t.Fatalf("event %q selected=%v; want the scheduled-backup event, on by default", ev.Name, Selected(c, ev))
+	}
+	for _, want := range []string{"Tue 3 Nov 03:00", "05:00", "60 minutes"} {
+		if !strings.Contains(ev.Text, want) {
+			t.Errorf("text %q lacks %q", ev.Text, want)
+		}
+	}
+	if !strings.HasSuffix(ev.URL, "/devices/backups") || ev.Path != "/devices/backups" {
+		t.Errorf("link %q, path %q: both should open the Backups page", ev.URL, ev.Path)
+	}
+	c.NotifyBackup = false
+	if Selected(c, ev) {
+		t.Error("with scheduled-backup notifications off the skipped run must stay silent")
+	}
+}

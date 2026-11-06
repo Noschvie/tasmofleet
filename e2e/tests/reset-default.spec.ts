@@ -3,7 +3,7 @@ import { App, startApp } from "../support/stack";
 
 // #623: "Reset to default" shows, right after the click and before Save, the value Save will store,
 // says it is the default, and a reset that changes what a switch shows changes that switch at once.
-// A schedule's interval has no Reset: its default (0s) is "off", which the schedule switch does.
+// The backup days and a snapshot interval have no Reset: their default is "off", which unticking the days or the schedule switch does.
 let app: App;
 test.beforeAll(async () => {
   test.setTimeout(120_000);
@@ -22,16 +22,16 @@ test("Devices, Backups: a reset shows the default at once, the schedule stays on
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/devices/backups");
   // a schedule that is on, with a kept count and a protection age that differ from their defaults
-  await field(page, "BACKUP_SCHEDULE").locator(".swtrack").click();
+  await page.locator("input[name='v.BACKUP_DAYS'][value='mon']").check();
   await page.locator("input[name='v.BACKUP_KEEP']").fill("5");
   await page.locator("input[name='v.BACKUP_MAX_AGE']").fill("48h");
   await page.getByRole("button", { name: "Save settings" }).click();
   await page.goto(app.url + "/devices/backups");
-  const sw = page.locator("input[name='sw.BACKUP_INTERVAL']");
+  const sw = page.locator("input[name='v.BACKUP_DAYS'][value='mon']");
   await expect(sw).toBeChecked();
-  await expect(page.locator("input[name='v.BACKUP_INTERVAL']")).toHaveValue("24h");
-  // the interval has no Reset: its default would be "off", which is the switch's job
-  await expect(page.locator("input[name='clear.BACKUP_INTERVAL']")).toHaveCount(0);
+  await expect(page.locator("input[name='v.BACKUP_TIME']")).toHaveValue("03:00");
+  // the days have no Reset: their default would be "no day", which unticking them does
+  await expect(page.locator("input[name='clear.BACKUP_DAYS']")).toHaveCount(0);
 
   for (const [key, was, def] of [["BACKUP_KEEP", "5", "10"], ["BACKUP_MAX_AGE", "48h", "720h"]]) {
     const input = page.locator(`input[name='v.${key}']`);
@@ -43,7 +43,7 @@ test("Devices, Backups: a reset shows the default at once, the schedule stays on
     await expect(reset(page, key).locator(".srst-on")).toBeVisible();
     await expect(reset(page, key)).toContainText("Default");
     await expect(page.locator("[data-sbar-state]")).toContainText("Unsaved changes");
-    await expect(sw).toBeChecked(); // the schedule is untouched
+    await expect(sw).toBeChecked(); // the schedule days are untouched
     // changing one's mind brings the old value back
     await reset(page, key).click();
     await expect(input).toHaveValue(was);
@@ -58,7 +58,7 @@ test("Devices, Backups: a reset shows the default at once, the schedule stays on
   await page.goto(app.url + "/devices/backups");
   await expect(page.locator("input[name='v.BACKUP_KEEP']")).toHaveValue("10");
   await expect(page.locator("input[name='v.BACKUP_MAX_AGE']")).toHaveValue("720h");
-  await expect(page.locator("input[name='sw.BACKUP_INTERVAL']")).toBeChecked();
+  await expect(page.locator("input[name='v.BACKUP_DAYS'][value='mon']")).toBeChecked();
 });
 
 test("System, Snapshots: the snapshot interval has no Reset either while the schedule is on", async ({ page }) => {

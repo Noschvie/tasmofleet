@@ -718,9 +718,9 @@ func (h *handler) sysSSOTest(w http.ResponseWriter, r *http.Request) {
 // composeMQTTURL turns them into MQTT_URL, the stored value.
 var mqttPartKeys = []string{"mqtt.host", "mqtt.port", "mqtt.tls"}
 
-// scheduleIntervals are the settings that sit behind a schedule switch on the Backups tab: the
-// device backup interval and the database snapshot interval.
-var scheduleIntervals = []string{"BACKUP_INTERVAL", "SNAPSHOT_INTERVAL"}
+// scheduleIntervals are the settings that sit behind a schedule switch: the database snapshot interval.
+// (The device backup schedule has no switch: no weekday ticked is manual only, #601.)
+var scheduleIntervals = []string{"SNAPSHOT_INTERVAL"}
 
 // scheduleKeys are the schedule switches of the Backups tab: swm.* says the switch was on the
 // page (an unticked box sends nothing), sw.* is its state. They are a view of the interval settings.
@@ -946,7 +946,7 @@ func sysSecretHint(row sysRow) string {
 }
 
 func sysPlaceholder(row sysRow) string {
-	if row.Key == "BACKUP_INTERVAL" || row.Key == "SNAPSHOT_INTERVAL" {
+	if row.Key == "SNAPSHOT_INTERVAL" {
 		return "24h"
 	}
 	if row.Key == "DEVICE_NETWORKS" {
@@ -985,9 +985,10 @@ func sysIntervalShown(row sysRow) sysRow {
 // default (a secret that is stored always does). A stored value equal to the default has nothing to reset.
 //
 // A schedule's interval offers none (#623): its default 0s means off, which is what the schedule
-// switch already does, and a Reset next to a switch that still says On contradicts it.
+// switch already does, and a Reset next to a switch that still says On contradicts it. The backup
+// days offer none either: their default is no day, which unticking the chips already does.
 func sysCanReset(row sysRow) bool {
-	if row.Key == "BACKUP_INTERVAL" || row.Key == "SNAPSHOT_INTERVAL" {
+	if row.Key == "BACKUP_DAYS" || row.Key == "SNAPSHOT_INTERVAL" {
 		return false
 	}
 	return row.Source == "stored" && (row.Secret || row.Value != sysDefault(row))

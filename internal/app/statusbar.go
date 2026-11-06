@@ -96,7 +96,7 @@ func (w *brokerWatch) Run(ctx context.Context, every time.Duration) error {
 	}
 }
 
-// scheduledRun is the scheduled backup run (BACKUP_INTERVAL): the one in progress and the last
+// scheduledRun is the scheduled backup run (BACKUP_DAYS, BACKUP_TIME): the one in progress and the last
 // one that finished. The last one is also stored (model.BackupRun); Restore reads it back at start.
 type scheduledRun struct {
 	hub *events.Hub

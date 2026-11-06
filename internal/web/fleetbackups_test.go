@@ -22,9 +22,10 @@ import (
 
 // fakeFleet is the BackupFleet the Backups page reads.
 type fakeFleet struct {
-	run   *model.BackupRun
-	rows  []model.BackupDeviceRow
-	prune []model.Backup
+	run    *model.BackupRun
+	rows   []model.BackupDeviceRow
+	prune  []model.Backup
+	missed time.Time // when a scheduled run was last skipped; zero = never
 }
 
 func (f *fakeFleet) LastRun(context.Context) (model.BackupRun, bool, error) {
@@ -33,6 +34,7 @@ func (f *fakeFleet) LastRun(context.Context) (model.BackupRun, bool, error) {
 	}
 	return *f.run, true, nil
 }
+func (f *fakeFleet) LastMissed(context.Context) (time.Time, error)             { return f.missed, nil }
 func (f *fakeFleet) Overview(context.Context) ([]model.BackupDeviceRow, error) { return f.rows, nil }
 func (f *fakeFleet) PruneNext(context.Context) ([]model.Backup, error)         { return f.prune, nil }
 
@@ -63,9 +65,17 @@ func fleetFixture(now time.Time) *fakeFleet {
 	}
 }
 
+// fleetEnv is the Backups page with a schedule on every day at 03:00.
 func fleetEnv(t *testing.T, fleet *fakeFleet, extraEnv ...string) *env {
 	t.Helper()
-	e, _, _, _ := sysEnvFull(t, true, func(d *Deps) { d.BackupFleet = fleet }, append([]string{"TASMOFLEET_BACKUP_INTERVAL=24h"}, extraEnv...)...)
+	e, _, _, _ := sysEnvFull(t, true, func(d *Deps) { d.BackupFleet = fleet }, append([]string{"TASMOFLEET_BACKUP_DAYS=mon,tue,wed,thu,fri,sat,sun"}, extraEnv...)...)
+	return e
+}
+
+// fleetEnvManual is the Backups page with no weekday chosen: manual only.
+func fleetEnvManual(t *testing.T, fleet *fakeFleet) *env {
+	t.Helper()
+	e, _, _, _ := sysEnvFull(t, true, func(d *Deps) { d.BackupFleet = fleet })
 	return e
 }
 
@@ -116,7 +126,7 @@ func TestFleetBackupsPageAdmin(t *testing.T) {
 	if n := len(rowCount.FindAllString(devs, -1)); n != 7 { // header + 6 devices
 		t.Errorf("table has %d rows, want 7 (header and 6 devices)", n)
 	}
-	for _, want := range []string{`name="v.BACKUP_KEEP"`, `name="v.BACKUP_INTERVAL"`, `name="v.BACKUP_MAX_AGE"`, "Save settings", "data-sys-bar"} {
+	for _, want := range []string{`name="v.BACKUP_KEEP"`, `name="v.BACKUP_DAYS" value="mon"`, `name="v.BACKUP_TIME"`, `name="v.BACKUP_MAX_AGE"`, "Save settings", "data-sys-bar"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("schedule lacks %q", want)
 		}
@@ -193,7 +203,7 @@ func TestFleetBackupsBackUpAllPostsOnlyDevicesThatWouldBeTried(t *testing.T) {
 // last stored run was, and the schedule switch is off.
 func TestFleetBackupsNoSchedule(t *testing.T) {
 	now := time.Now()
-	e := fleetEnv(t, fleetFixture(now), "TASMOFLEET_BACKUP_INTERVAL=0")
+	e := fleetEnvManual(t, fleetFixture(now))
 	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
 	last := cardOf(t, body, "lastrun")
 	for _, want := range []string{"No schedule", "Last scheduled run", "2 backed up", "1 failed", "2 skipped"} {
@@ -467,7 +477,7 @@ func TestRowMenuShowsReplaceToAdminsOnly(t *testing.T) {
 // Why (mockup 1c): with the schedule off the page still lists the last stored run's failed and skipped
 // devices under the "No schedule" note, as the mockup shows; they are not hidden with the sums.
 func TestNoScheduleStillListsTheLastRunsFailedAndSkippedDevices(t *testing.T) {
-	e := fleetEnv(t, fleetFixture(time.Now()), "TASMOFLEET_BACKUP_INTERVAL=0")
+	e := fleetEnvManual(t, fleetFixture(time.Now()))
 	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
 	last := cardOf(t, body, "lastrun")
 	for _, want := range []string{"No schedule", "Failed (1)", "cellar", "No answer within 30 s", "Skipped (2)", "balcony", "Never answered"} {
@@ -508,5 +518,67 @@ func TestTableCellsCarryATitleForCutOffText(t *testing.T) {
 	}
 	if strings.Contains(devs, `<td data-label="Newest backup" class="nowrap s" title=`) {
 		t.Error("a title on the cell would show the server's zone")
+	}
+}
+
+// Why (#601): the person must be able to see, on the page and not only in a notification they may
+// have switched off, that a scheduled run was skipped because TasmoFleet was down. The note shows
+// only while it is the newest event: a later real run, or no schedule at all, removes it.
+func TestFleetBackupsSaysWhenAScheduledRunWasSkipped(t *testing.T) {
+	now := time.Now()
+	fleet := fleetFixture(now)
+	fleet.missed = now.Add(-time.Hour) // after the fixture's last run, 6 h ago
+	_, body := fleetEnv(t, fleet).do(t, "GET", "/devices/backups", "admin", nil)
+	last := cardOf(t, body, "lastrun")
+	for _, want := range []string{"A scheduled run was skipped", "60 minutes late", "The next run is as scheduled"} {
+		if !strings.Contains(last, want) {
+			t.Errorf("Last run lacks %q: %s", want, last)
+		}
+	}
+	older := fleetFixture(now)
+	older.missed = now.Add(-30 * time.Hour) // before the last run: that run is the news
+	if _, body := fleetEnv(t, older).do(t, "GET", "/devices/backups", "admin", nil); strings.Contains(cardOf(t, body, "lastrun"), "was skipped") {
+		t.Error("a skip older than the last run must not be shown")
+	}
+	if _, body := fleetEnvManual(t, fleet).do(t, "GET", "/devices/backups", "admin", nil); strings.Contains(cardOf(t, body, "lastrun"), "was skipped") {
+		t.Error("with no schedule there is no skipped run to show")
+	}
+}
+
+// Why (#601): the Last run card names the schedule it follows and the Schedule card the next run, so
+// "when does it run?" is answered without opening a form; an operator, who cannot change it, reads
+// the days and the time as text.
+func TestFleetBackupsNamesTheScheduleAndTheNextRun(t *testing.T) {
+	e := fleetEnv(t, fleetFixture(time.Now()), "TASMOFLEET_BACKUP_DAYS=mon,wed,fri", "TASMOFLEET_BACKUP_TIME=04:30")
+	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
+	if last := cardOf(t, body, "lastrun"); !strings.Contains(last, "Mon, Wed, Fri at 04:30") {
+		t.Errorf("Last run does not name the schedule: %s", last)
+	}
+	if sched := cardOf(t, body, "schedule"); !strings.Contains(sched, "Next run") {
+		t.Errorf("Schedule card lacks the next run: %s", sched)
+	}
+	_, op := e.do(t, "GET", "/devices/backups", "operator", nil)
+	sched := cardOf(t, op, "schedule")
+	for _, want := range []string{"Mon, Wed, Fri", "04:30", "Read-only for operators"} {
+		if !strings.Contains(sched, want) {
+			t.Errorf("operator Schedule lacks %q: %s", want, sched)
+		}
+	}
+	if strings.Contains(sched, `name="v.BACKUP`) {
+		t.Error("an operator must get no schedule fields")
+	}
+}
+
+// Why (#601): "older than" was twice the interval. With weekdays it is twice the longest wait between
+// two runs: a weekly schedule must not call a six-day-old backup old, and a daily one keeps the floor of a week.
+func TestFleetBackupsOldThresholdFollowsTheLongestWait(t *testing.T) {
+	for _, c := range []struct{ days, want string }{
+		{"mon", "Older than 14 days"},
+		{"mon,tue,wed,thu,fri,sat,sun", "Older than 7 days"},
+	} {
+		_, body := fleetEnv(t, fleetFixture(time.Now()), "TASMOFLEET_BACKUP_DAYS="+c.days).do(t, "GET", "/devices/backups", "admin", nil)
+		if !strings.Contains(body, c.want) {
+			t.Errorf("%s: want %q on the page", c.days, c.want)
+		}
 	}
 }

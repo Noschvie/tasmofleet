@@ -14,15 +14,22 @@ const (
 	BackupOutcomeSkipped BackupOutcome = "skipped"
 )
 
-// BackupRunTrigger says who started a fleet run. Only scheduled runs are recorded.
+// BackupRunTrigger says who started a fleet run, or what a marker row records. Only scheduled runs
+// are recorded as runs; the other two are markers without items that settle a scheduled time (#601).
 type BackupRunTrigger string
 
 // Backup run triggers.
 const (
 	BackupRunScheduled BackupRunTrigger = "scheduled"
+	// BackupRunMissed: the scheduled time passed while TasmoFleet was down and was too long ago to
+	// start late; the run was skipped (StartedAt is when that was noticed).
+	BackupRunMissed BackupRunTrigger = "missed"
+	// BackupRunRescheduled: the schedule was changed (or created by a migration) at StartedAt; a
+	// time of day that had passed before is not run late.
+	BackupRunRescheduled BackupRunTrigger = "rescheduled"
 )
 
-// BackupRun is one fleet-wide backup run (the schedule, BACKUP_INTERVAL) with its per-device
+// BackupRun is one fleet-wide backup run (the schedule, BACKUP_DAYS and BACKUP_TIME) with its per-device
 // items. Tried = OK + Failed; Skipped devices are counted apart.
 type BackupRun struct {
 	ID         int64

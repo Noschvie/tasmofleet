@@ -79,12 +79,12 @@ func TestScheduleFollowsTheSettingsPageLive(t *testing.T) {
 	defer cancel()
 	done := make(chan struct{})
 	go func() {
-		a.everyLive(ctx, func() time.Duration { return time.Duration(every.Load()) }, []string{"BACKUP_INTERVAL"}, false, func(context.Context) { runs.Add(1) })
+		a.everyLive(ctx, func() time.Duration { return time.Duration(every.Load()) }, []string{"SNAPSHOT_INTERVAL"}, false, func(context.Context) { runs.Add(1) })
 		close(done)
 	}()
 	apply := func(v string) {
 		t.Helper()
-		if _, err := a.svc.Sys.Apply(ctx, sysconfig.Request{Actor: "a", Values: map[string]string{"BACKUP_INTERVAL": v}}); err != nil {
+		if _, err := a.svc.Sys.Apply(ctx, sysconfig.Request{Actor: "a", Values: map[string]string{"SNAPSHOT_INTERVAL": v}}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -93,7 +93,7 @@ func TestScheduleFollowsTheSettingsPageLive(t *testing.T) {
 		t.Fatal("a schedule that is off must not run")
 	}
 	every.Store(int64(20 * time.Millisecond))
-	apply("2m") // the page saved a new interval
+	apply("2h") // the page saved a new interval
 	waitFor(t, func() bool { return runs.Load() >= 3 }, "the schedule must start and tick after the change")
 	every.Store(0)
 	apply("0s")

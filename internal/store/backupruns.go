@@ -14,8 +14,13 @@ import (
 type BackupRunStore interface {
 	// SaveBackupRun stores a run and its items in one transaction and returns the run's id.
 	SaveBackupRun(ctx context.Context, r model.BackupRun) (int64, error)
-	// LastBackupRun is the newest run that was completed (a run cut short is history only).
+	// LastBackupRun is the newest scheduled run that was completed (a run cut short is history only;
+	// the missed and rescheduled markers are no runs).
 	LastBackupRun(ctx context.Context) (model.BackupRun, bool, error)
+	// BackupRunTimes says when the newest completed row of any kind started (a scheduled run or a
+	// marker: what settled a scheduled time) and when the newest missed-run marker was written.
+	// Zero when there is none.
+	BackupRunTimes(ctx context.Context) (settled, missed time.Time, err error)
 	// PruneBackupRuns deletes the runs started before the given time, with their items.
 	PruneBackupRuns(ctx context.Context, before time.Time) (int64, error)
 	// DevicesSeen maps every device that was ever heard to its persisted last_seen_at and health
@@ -64,7 +69,7 @@ func (s *SQLite) LastBackupRun(ctx context.Context) (model.BackupRun, bool, erro
 	var started, finished int64
 	var completed int
 	err := s.db.QueryRowContext(ctx, `SELECT id, trigger, started_at, finished_at, completed, tried, ok, failed, skipped
-		FROM backup_runs WHERE completed <> 0 ORDER BY started_at DESC, id DESC LIMIT 1`).
+		FROM backup_runs WHERE completed <> 0 AND trigger = 'scheduled' ORDER BY started_at DESC, id DESC LIMIT 1`).
 		Scan(&r.ID, &trig, &started, &finished, &completed, &r.Tried, &r.OK, &r.Failed, &r.Skipped)
 	if errors.Is(err, sql.ErrNoRows) {
 		return model.BackupRun{}, false, nil
@@ -96,6 +101,17 @@ func (s *SQLite) LastBackupRun(ctx context.Context) (model.BackupRun, bool, erro
 		r.Items = append(r.Items, it)
 	}
 	return r, true, rows.Err()
+}
+
+func (s *SQLite) BackupRunTimes(ctx context.Context) (settled, missed time.Time, err error) {
+	var a, b int64
+	err = s.db.QueryRowContext(ctx, `SELECT
+		COALESCE((SELECT MAX(started_at) FROM backup_runs WHERE completed <> 0), 0),
+		COALESCE((SELECT MAX(started_at) FROM backup_runs WHERE trigger = 'missed'), 0)`).Scan(&a, &b)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	return fromMS(a), fromMS(b), nil
 }
 
 func (s *SQLite) PruneBackupRuns(ctx context.Context, before time.Time) (int64, error) {

@@ -156,6 +156,21 @@ func BackupFailed(c config.Config, total int, failed []string, at time.Time) Eve
 		URL: Link(c, "/devices"), Path: "/devices", Time: at, Context: "scheduled backup"}
 }
 
+// BackupMissed is the event of a scheduled backup run that did not happen: TasmoFleet was not
+// running at the scheduled time and noticed too late to start it (#601). It is a scheduled backup
+// that did not complete, so it follows the same setting and name as BackupFailed. Times are on the
+// server's clock, as the schedule is.
+func BackupMissed(c config.Config, slot, at time.Time) Event {
+	return Event{Name: EventBackupFailed, Result: ResultFailed,
+		Title: "Scheduled backup skipped",
+		Text: fmt.Sprintf("The scheduled backup of %s was skipped: TasmoFleet was not running then and was back at %s, more than %d minutes late. The next one runs as scheduled.",
+			slot.Format("Mon 2 Jan 15:04"), at.Format("Mon 2 Jan 15:04"), int(MissedGrace/time.Minute)),
+		URL: Link(c, "/devices/backups"), Path: "/devices/backups", Time: at, Context: "scheduled backup"}
+}
+
+// MissedGrace is how late a scheduled backup still starts; the text of BackupMissed names it.
+const MissedGrace = 60 * time.Minute
+
 // SnapshotFailed is the event of a failed scheduled database snapshot.
 func SnapshotFailed(c config.Config, reason string, at time.Time) Event {
 	return Event{Name: EventSnapshotFailed, Result: ResultFailed, Title: "Database snapshot failed",

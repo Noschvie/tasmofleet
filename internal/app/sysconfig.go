@@ -74,7 +74,9 @@ func (a *runtime) setupSysConfigLive() {
 	sys := a.svc.Sys
 	sys.Subscribe(a.applyLiveSettings)
 	a.goBG("backup-schedule", func() error {
-		a.everyLive(a.bgContext, func() time.Duration { return sys.Snapshot().BackupSchedule }, []string{"BACKUP_INTERVAL"}, true, a.backupAll)
+		changed, unsub := a.watch("BACKUP_DAYS", "BACKUP_TIME")
+		defer unsub()
+		a.backupSchedule().loop(a.bgContext, changed)
 		return nil
 	})
 	a.goBG("snapshot-schedule", func() error {

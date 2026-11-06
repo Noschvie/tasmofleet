@@ -76,7 +76,7 @@ func TestConcurrentSavesNotifySubscribersInOrder(t *testing.T) {
 		}
 		time.Sleep(time.Millisecond)
 		mu.Lock()
-		last = e.New.BackupSchedule.String()
+		last = e.New.BackupTime
 		mu.Unlock()
 		active.Add(-1)
 	})
@@ -85,7 +85,7 @@ func TestConcurrentSavesNotifySubscribersInOrder(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			_, _ = s.Apply(context.Background(), Request{Actor: "a", Values: map[string]string{"BACKUP_INTERVAL": fmt.Sprintf("%dh", i+1)}})
+			_, _ = s.Apply(context.Background(), Request{Actor: "a", Values: map[string]string{"BACKUP_TIME": fmt.Sprintf("%02d:00", i)}})
 		}()
 	}
 	wg.Wait()
@@ -94,8 +94,8 @@ func TestConcurrentSavesNotifySubscribersInOrder(t *testing.T) {
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if last != s.Snapshot().BackupSchedule.String() {
-		t.Fatalf("last event %s, final state %s", last, s.Snapshot().BackupSchedule)
+	if last != s.Snapshot().BackupTime {
+		t.Fatalf("last event %s, final state %s", last, s.Snapshot().BackupTime)
 	}
 }
 

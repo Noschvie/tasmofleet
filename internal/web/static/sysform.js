@@ -139,7 +139,7 @@
     });
   }
   // The interval fields that sit behind a schedule switch (sw.<KEY> next to v.<KEY>).
-  var schedules = ["v.BACKUP_INTERVAL", "v.SNAPSHOT_INTERVAL"];
+  var schedules = ["v.SNAPSHOT_INTERVAL"];
   function valueOf(c) {
     if (c.type === "checkbox" || c.type === "radio") {
       return c.checked ? "1" : "0";

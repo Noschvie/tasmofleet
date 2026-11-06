@@ -354,3 +354,31 @@ func TestEmptyEnvironmentValueDoesNotShadowFile(t *testing.T) {
 		t.Fatalf("file value must apply: level %q, locked %v", c.LogLevel, c.Locked["LOG_LEVEL"])
 	}
 }
+
+// Why (#601): BACKUP_INTERVAL was removed without an alias. An operator who still has it set must be
+// told at start that it does nothing any more (the schedule is on the Backups page now), and the
+// server must start: it is not worth locking anyone out of their data for a stale variable.
+func TestRemovedBackupIntervalWarnsButDoesNotFail(t *testing.T) {
+	c, err := Load(base(t.TempDir(), "TASMOFLEET_BACKUP_INTERVAL=6h"))
+	if err != nil {
+		t.Fatalf("a removed variable must not stop the start: %v", err)
+	}
+	if len(c.Warnings) != 1 || !strings.Contains(c.Warnings[0], "TASMOFLEET_BACKUP_INTERVAL") || !strings.Contains(c.Warnings[0], "ignored") {
+		t.Fatalf("warnings = %v", c.Warnings)
+	}
+	if !c.BackupSchedule().Off() {
+		t.Error("the removed interval must not turn a schedule on")
+	}
+}
+
+// Why (#601): a fresh install must be manual only (no run nobody asked for), and the time of day must
+// default to the night.
+func TestBackupScheduleDefaultsToManualOnlyAt3(t *testing.T) {
+	c, err := Load(base(t.TempDir()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := c.BackupSchedule(); !s.Off() || s.Clock() != "03:00" {
+		t.Fatalf("default schedule %+v", s)
+	}
+}

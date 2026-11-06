@@ -177,18 +177,15 @@ test("a freshly loaded page reports no unsaved changes on any tab", async ({ pag
   }
 });
 
-// Why (#337): switching "Scheduled backups" on proposes 24h; switching it off again must leave
-// nothing changed (off saves 0 whatever the interval field holds), not a dirty Backups tab.
-test("scheduled backups on and off again leaves the tab clean", async ({ page }) => {
+// Why (#601): ticking a backup day makes the Backups tab dirty, unticking it again leaves it clean.
+test("a backup day ticked and unticked again leaves the tab clean", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/devices/backups");
   const bar = page.locator("[data-sys-bar]");
-  const interval = page.locator("input[name='v.BACKUP_INTERVAL']");
-  await page.locator("[data-key='BACKUP_SCHEDULE'] .swtrack").click();
-  await expect(interval).toHaveValue("24h");
+  const mon = page.locator("input[name='v.BACKUP_DAYS'][value='mon']");
+  await mon.check();
   await expect(bar).toContainText("Unsaved changes:");
-  await page.locator("[data-key='BACKUP_SCHEDULE'] .swtrack").click();
-  await expect(interval).toHaveValue("");
+  await mon.uncheck();
   await expect(bar).toContainText("No unsaved changes");
 });
 
@@ -213,22 +210,30 @@ test("backups: schedule fields side by side, label and icon together, narrow car
   expect((await page.locator("#card-devices").boundingBox())!.x, "the device table keeps the wide column").toBeLessThan(a.x);
 });
 
-// Why: the backup interval showed "0s" for manual only. The switch is a view of the same
-// setting: off stores 0, on keeps the interval.
-test("backup schedule switch dims the interval and stores 0 when off", async ({ page }) => {
+// Why (#601): the schedule is weekday chips and a time of day. The default is manual only (no chip
+// on); ticked days and the time save and come back; unticking every day saves manual only again.
+test("backup days and time save, and no day ticked is manual only", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/devices/backups");
-  const sw = page.locator("input[name='sw.BACKUP_INTERVAL']");
-  await expect(sw).not.toBeChecked(); // default: manual only
-  await page.locator("[data-key='BACKUP_SCHEDULE'] .swtrack").click();
-  await expect(page.locator("input[name='v.BACKUP_INTERVAL']")).toHaveValue("24h");
+  const day = (d: string) => page.locator(`input[name='v.BACKUP_DAYS'][value='${d}']`);
+  await expect(day("mon")).not.toBeChecked(); // default: manual only
+  await day("mon").check();
+  await day("wed").check();
+  await page.locator("input[name='v.BACKUP_TIME']").fill("04:30");
   await page.getByRole("button", { name: "Save settings" }).click();
   await expect(page.getByText("Saved.")).toBeVisible();
-  await expect(sw).toBeChecked();
-  await page.locator("[data-key='BACKUP_SCHEDULE'] .swtrack").click();
+  await expect(day("mon")).toBeChecked();
+  await expect(day("tue")).not.toBeChecked();
+  await expect(day("wed")).toBeChecked();
+  await expect(page.locator("input[name='v.BACKUP_TIME']")).toHaveValue("04:30");
+  await expect(page.locator("#card-lastrun")).toContainText("Mon, Wed at 04:30");
+  await day("mon").uncheck();
+  await day("wed").uncheck();
   await page.getByRole("button", { name: "Save settings" }).click();
   await expect(page.getByText("Saved.")).toBeVisible();
-  await expect(sw).not.toBeChecked();
+  await expect(day("mon")).not.toBeChecked();
+  await expect(day("wed")).not.toBeChecked();
+  await expect(page.locator("#card-lastrun")).toContainText("No schedule");
 });
 
 // Why: on a phone eight tabs scroll sideways; a picker replaces the strip, the cards lose their

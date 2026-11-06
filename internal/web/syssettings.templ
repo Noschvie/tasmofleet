@@ -192,6 +192,9 @@ templ sysCardView(p sysPage, c sysCard) {
 							@sysTestRow("Test discovery", p.Base+sysPath+"/sso-test?tab=signin", "SSO check", p.SSOResult, "Saves nothing.", "")
 						}
 					}
+					if c.ID == "schedule" && p.Fleet != nil {
+						@fleetScheduleNote(*p.Fleet)
+					}
 					if c.ID == "snapshots" && p.DB != nil {
 						@sysSnapshotStatus(*p.DB)
 					}
@@ -261,8 +264,6 @@ templ sysRowView(p sysPage, row sysRow) {
 			@sysLocked(row)
 		case row.Key == "MQTT_URL" && p.MQTT.Legacy == "":
 			@sysBroker(p, row)
-		case row.Key == "BACKUP_INTERVAL":
-			@sysSchedule(row, "BACKUP_SCHEDULE", "Scheduled backups", "Off: manual only.")
 		case row.Key == "SNAPSHOT_INTERVAL":
 			@sysSchedule(row, "SNAPSHOT_SCHEDULE", "Scheduled snapshots", "Besides the download, on a timer.")
 		case row.Bool:
@@ -308,6 +309,8 @@ templ sysInput(row sysRow) {
 				@ui.RadioCards(row.Label, row.InputName(), sysAuthOptions(row.Posted))
 			case sysSegmentedEnum(row.Key):
 				@ui.Segmented(row.Label, row.InputName(), sysEnumOptions(row))
+			case row.Key == "BACKUP_DAYS":
+				@sysDayChips(row)
 			case len(row.Choices) > 0:
 				<div class="cks" role="group" aria-label={ row.Label }>
 					<input type="hidden" name={ "m." + row.Key } value="1"/>
@@ -315,6 +318,8 @@ templ sysInput(row sysRow) {
 						<label class="ucheck"><input type="checkbox" name={ row.InputName() } value={ c } checked?={ slices.Contains(sysChecked(row), c) }/><span>{ c }</span></label>
 					}
 				</div>
+			case row.Key == "BACKUP_TIME":
+				<input type="time" name={ row.InputName() } id={ ui.SettingControlID(row.Key) } class="mono" value={ row.Posted } step="60" required { sysDescribe(row)... }/>
 			case row.Secret:
 				<input type="password" name={ row.InputName() } id={ ui.SettingControlID(row.Key) } class="mono" autocomplete="new-password" maxlength={ sysSecretMax(row) } placeholder={ sysSecretHint(row) } { sysDescribe(row)... }/>
 			case len(row.Enum) > 0:
@@ -337,6 +342,17 @@ templ sysSwitch(row sysRow) {
 		<input type="hidden" name={ "b." + row.Key } value="1"/>
 		<label class="swhit"><input type="checkbox" role="switch" id={ ui.SettingControlID(row.Key) } name={ row.InputName() } value="true" checked?={ row.Posted == "true" } { sysDescribe(row)... }/><span class="swtrack" aria-hidden="true"></span></label>
 	}
+}
+
+// sysDayChips is the weekday choice of the backup schedule: one chip per day, Monday first. The chips are
+// plain checkboxes in a group, so they work without JavaScript and by keyboard; none ticked is manual only.
+templ sysDayChips(row sysRow) {
+	<div class="cks chips" role="group" aria-label="Backup days">
+		<input type="hidden" name={ "m." + row.Key } value="1"/>
+		for _, c := range row.Choices {
+			<label class="ucheck chip"><input type="checkbox" name={ row.InputName() } value={ c } checked?={ slices.Contains(sysChecked(row), c) }/><span>{ dayLabels[c] }<span class="sr-only">{ " " + dayFull[c] }</span></span></label>
+		}
+	</div>
 }
 
 // sysSchedule is an interval behind a schedule switch: off stores 0 (manual only, or no

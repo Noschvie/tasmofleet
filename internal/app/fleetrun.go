@@ -18,7 +18,7 @@ type runStore interface {
 	SaveBackupRun(ctx context.Context, r model.BackupRun) (int64, error)
 }
 
-// scheduledBackup is one scheduled run over the fleet (BACKUP_INTERVAL, #409). It decides per
+// scheduledBackup is one scheduled run over the fleet (BACKUP_DAYS and BACKUP_TIME, #409, #601). It decides per
 // device whether to try it: a device that cannot answer (never heard, offline) or that somebody
 // else is working on is skipped, not failed, so only real failures colour the bar or notify.
 type scheduledBackup struct {

@@ -10,12 +10,13 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
 )
 
-// Why (#623): the Reset control is "reset to default on save". For the schedule intervals the
+// Why (#623): the Reset control is "reset to default on save". For the snapshot interval the
 // default is 0s = off, which is what the schedule switch already does; a Reset on the interval
-// would switch the schedule off while the switch still showed On. Both intervals therefore offer
-// no Reset at all (the switch is the one control), whatever is stored.
+// would switch the schedule off while the switch still showed On. The backup days work the same
+// way (the default is no day, which unticking the chips does). Neither offers a Reset at all,
+// whatever is stored.
 func TestScheduleIntervalsOfferNoReset(t *testing.T) {
-	for _, key := range []string{"BACKUP_INTERVAL", "SNAPSHOT_INTERVAL"} {
+	for _, key := range []string{"BACKUP_DAYS", "SNAPSHOT_INTERVAL"} {
 		row := sysRow{FieldState: sysconfig.FieldState{Field: sysconfig.Field{Key: key}, Value: "6h", Source: "stored"}}
 		if sysCanReset(row) {
 			t.Errorf("%s: a schedule interval must not offer a reset", key)
@@ -34,7 +35,7 @@ func TestScheduleIntervalsOfferNoReset(t *testing.T) {
 func TestResetControlCarriesTheDefault(t *testing.T) {
 	e, _, _, _ := sysEnvFull(t, true, func(d *Deps) { d.BackupFleet = &fakeFleet{} })
 	e.do(t, "POST", "/devices/backups", "admin", url.Values{"csrf": {"tok"},
-		"swm.BACKUP_INTERVAL": {"1"}, "sw.BACKUP_INTERVAL": {"1"}, "v.BACKUP_INTERVAL": {"6h"},
+		"m.BACKUP_DAYS": {"1"}, "v.BACKUP_DAYS": {"mon", "wed"}, "v.BACKUP_TIME": {"04:30"},
 		"v.BACKUP_KEEP": {"4"}, "v.BACKUP_MAX_AGE": {"48h"}})
 	_, page := e.do(t, "GET", "/devices/backups", "admin", nil)
 	for _, key := range []string{"BACKUP_KEEP", "BACKUP_MAX_AGE"} {
@@ -44,8 +45,11 @@ func TestResetControlCarriesTheDefault(t *testing.T) {
 			t.Errorf("%s: reset control lacks its default, want %s in %s", key, want, f)
 		}
 	}
-	if strings.Contains(page, `name="clear.BACKUP_INTERVAL"`) {
-		t.Error("the interval of a schedule that is on must not offer a reset")
+	if strings.Contains(page, `name="clear.BACKUP_DAYS"`) {
+		t.Error("the backup days must not offer a reset: unticking them is the reset")
+	}
+	if f := fieldHTML(t, page, "BACKUP_TIME"); !strings.Contains(f, `name="clear.BACKUP_TIME" value="1" data-default="03:00"`) {
+		t.Errorf("a stored time that differs from 03:00 offers its reset with the default: %s", f)
 	}
 }
 
@@ -54,10 +58,10 @@ func TestResetControlCarriesTheDefault(t *testing.T) {
 func TestResetOnSaveStoresTheDefault(t *testing.T) {
 	e, svc, _, _ := sysEnvFull(t, true, func(d *Deps) { d.BackupFleet = &fakeFleet{} })
 	e.do(t, "POST", "/devices/backups", "admin", url.Values{"csrf": {"tok"},
-		"swm.BACKUP_INTERVAL": {"1"}, "sw.BACKUP_INTERVAL": {"1"}, "v.BACKUP_INTERVAL": {"6h"},
+		"m.BACKUP_DAYS": {"1"}, "v.BACKUP_DAYS": {"mon", "wed"}, "v.BACKUP_TIME": {"04:30"},
 		"v.BACKUP_KEEP": {"4"}, "v.BACKUP_MAX_AGE": {"48h"}})
 	r, _ := e.do(t, "POST", "/devices/backups", "admin", url.Values{"csrf": {"tok"},
-		"swm.BACKUP_INTERVAL": {"1"}, "sw.BACKUP_INTERVAL": {"1"}, "v.BACKUP_INTERVAL": {"6h"},
+		"m.BACKUP_DAYS": {"1"}, "v.BACKUP_DAYS": {"mon", "wed"}, "v.BACKUP_TIME": {"04:30"},
 		"v.BACKUP_KEEP": {"4"}, "v.BACKUP_MAX_AGE": {"48h"}, "clear.BACKUP_KEEP": {"1"}, "clear.BACKUP_MAX_AGE": {"1"}})
 	if r.StatusCode != 303 {
 		t.Fatalf("save: %d", r.StatusCode)
@@ -66,8 +70,8 @@ func TestResetOnSaveStoresTheDefault(t *testing.T) {
 	if s.BackupKeep != 10 || s.BackupMaxAge != 720*time.Hour {
 		t.Errorf("keep=%d maxage=%v, want the defaults 10 and 720h", s.BackupKeep, s.BackupMaxAge)
 	}
-	if s.BackupSchedule != 6*time.Hour {
-		t.Errorf("resetting other fields must leave the schedule on: %v", s.BackupSchedule)
+	if sc := s.BackupSchedule(); sc.Days.String() != "mon,wed" || sc.Clock() != "04:30" {
+		t.Errorf("resetting other fields must leave the schedule as it was: %+v", sc)
 	}
 }
 

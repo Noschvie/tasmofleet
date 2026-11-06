@@ -150,7 +150,7 @@ func TestSystemSettingsPageShowsOperationalFieldsAndReadOnlySettings(t *testing.
 
 func TestSystemSettingsSaveAppliesAndAudits(t *testing.T) {
 	e, svc, mem, _ := sysEnv(t, true)
-	r, _ := e.do(t, "POST", "/settings/system", "admin", url.Values{"csrf": {"tok"}, "v.BACKUP_KEEP": {"4"}, "v.BACKUP_INTERVAL": {"6h"}, "v.MQTT_PASSWORD": {""}})
+	r, _ := e.do(t, "POST", "/settings/system", "admin", url.Values{"csrf": {"tok"}, "v.BACKUP_KEEP": {"4"}, "v.BACKUP_TIME": {"06:00"}, "v.MQTT_PASSWORD": {""}})
 	if r.StatusCode != 303 {
 		t.Fatalf("status %d", r.StatusCode)
 	}
@@ -296,7 +296,7 @@ func TestSystemSettingsSSOTest(t *testing.T) {
 func TestSystemSettingsMQTTTestIgnoresTheRestOfTheForm(t *testing.T) {
 	e, svc, _, _ := sysEnv(t, true)
 	keep := svc.Snapshot().BackupKeep
-	r, body := e.do(t, "POST", "/settings/system/mqtt-test", "admin", url.Values{"csrf": {"tok"}, "v.MQTT_URL": {""}, "v.BACKUP_KEEP": {"2"}, "clear.BACKUP_INTERVAL": {"1"}})
+	r, body := e.do(t, "POST", "/settings/system/mqtt-test", "admin", url.Values{"csrf": {"tok"}, "v.MQTT_URL": {""}, "v.BACKUP_KEEP": {"2"}, "clear.BACKUP_TIME": {"1"}})
 	if r.StatusCode != 200 || !strings.Contains(body, "connected") {
 		t.Fatalf("status %d", r.StatusCode)
 	}
