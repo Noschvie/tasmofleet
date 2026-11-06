@@ -210,6 +210,56 @@ func TestRuleBodiesOnlyForAdmins(t *testing.T) {
 	}
 }
 
+// Why (#501, spec 15.3 operator row): what an operator may read in a config diff is a contract, so a later
+// change to either side must fail here. Operators see the redacted values of ordinary settings; only free text
+// (rules, scripts, Berry, mems, rf_code) shows no more than that it changed, and a credential is never shown to
+// anyone. Admins read the free text. The same holds on the backup comparison and on the Drift tab.
+func TestOperatorDiffShowsValuesExceptFreeTextAndCredentials(t *testing.T) {
+	e, bk, _ := newDiffEnv(t)
+	bk.files[3] = []byte(`{"tele_period":300,"friendlyname":["Lamp OLDNAME"],"mqtt_password":"FAKE-SECRET-old","rules":["on power1#state do mem1 RULEBODY_OLD endon"],"mems":["MEMBODY_OLD"],"rf_code":["RFBODY_OLD"]}`)
+	bk.files[6] = []byte(`{"tele_period":600,"friendlyname":["Lamp NEWNAME"],"mqtt_password":"FAKE-SECRET-new","rules":["on power1#state do mem1 RULEBODY_NEW endon"],"mems":["MEMBODY_NEW"],"rf_code":["RFBODY_NEW"]}`)
+	bk.files[5] = []byte(`{"Status6":{"StatusMQT":{"MqttHost":"old.invalid","MqttPassword":"FAKE-SECRET-live"}},"Status1":{"StatusPRM":{"Restart":"OLDSTATE"}},"rules":["RULEBODY_OLD"]}`)
+	bk.live = []byte(`{"Status6":{"StatusMQT":{"MqttHost":"new.invalid","MqttPassword":"FAKE-SECRET-live2"}},"Status1":{"StatusPRM":{"Restart":"NEWSTATE"}},"rules":["RULEBODY_NEW"]}`)
+	driftMu.Lock()
+	clear(driftLast)
+	driftMu.Unlock()
+	for _, c := range []struct {
+		page   string
+		shown  []string // ordinary values, an operator reads them
+		hidden []string // free text (operators) and credentials (everyone)
+	}{
+		{"/devices/1/backups/diff?a=3&b=6", []string{"tele_period", "300", "600", "Lamp OLDNAME", "Lamp NEWNAME"}, []string{"RULEBODY", "MEMBODY", "RFBODY", "FAKE-SECRET"}},
+		{"/devices/1/drift", []string{"old.invalid", "new.invalid", "OLDSTATE", "NEWSTATE"}, []string{"RULEBODY", "FAKE-SECRET"}},
+	} {
+		resp, body := e.do(t, "GET", c.page, "operator", nil)
+		if resp.StatusCode != 200 {
+			t.Fatalf("%s: %d", c.page, resp.StatusCode)
+		}
+		for _, w := range c.shown {
+			if !strings.Contains(body, w) {
+				t.Errorf("%s: an operator must see the ordinary value %q:\n%s", c.page, w, body)
+			}
+		}
+		for _, w := range c.hidden {
+			if strings.Contains(body, w) {
+				t.Errorf("%s: an operator must not see %q", c.page, w)
+			}
+		}
+		if !strings.Contains(body, "secret value changed") {
+			t.Errorf("%s: a changed credential is still listed as changed", c.page)
+		}
+	}
+	_, ad := e.do(t, "GET", "/devices/1/backups/diff?a=3&b=6", "admin", nil)
+	for _, w := range []string{"RULEBODY_NEW", "MEMBODY_NEW", "RFBODY_NEW"} {
+		if !strings.Contains(ad, w) {
+			t.Errorf("an admin reads the free text %q", w)
+		}
+	}
+	if strings.Contains(ad, "FAKE-SECRET") {
+		t.Error("an admin never sees a credential either")
+	}
+}
+
 // Why: a backup ID from another device in the URL must not be comparable
 // through this device's page, and values are HTML-escaped.
 func TestDiffRejectsForeignAndNonDecodedBackups(t *testing.T) {
