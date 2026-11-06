@@ -122,8 +122,11 @@ means nothing stops you: you have to know it. The full working rules are in
 - **Happened:** #694 moved the Docker Hub secrets into an environment that the
   reusable workflows set themselves. The secrets arrived empty and `main` went red.
   It was reverted in #696 and done right in #693.
-- **Rule:** an environment's secrets do not reach a called workflow on their own.
-  Test that in a probe repository before the change reaches `main`.
+- **Rule:** an environment's secrets do not reach a called workflow on their own:
+  the job in the called workflow sets `environment:` AND the caller still passes
+  each secret by name (the callee declares it under `workflow_call.secrets`). Delete
+  same-named repository secrets, a value passed by name wins over the environment's.
+  Test that in a probe repository before the change reaches `main`. Pattern: `docs/dev/ci-tiers.md`.
 - **Enforced:** not enforced, convention. The fail-loud check on missing credentials
   on `main` and `v*` tags is what made the failure visible.
 

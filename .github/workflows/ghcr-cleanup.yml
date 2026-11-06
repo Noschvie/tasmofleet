@@ -38,6 +38,11 @@ jobs:
   cleanup:
     name: prune images
     runs-on: ubuntu-24.04
+    # Docker Hub credentials live only in the `dockerhub` environment (#693), whose deployment policy
+    # allows main and v* tags. Every other ref (pull requests, a dispatch from a branch) runs without
+    # the environment and so without the secrets. A caller job cannot set `environment`, so it is set here.
+    # The caller must still pass the secrets by name: that is what unlocks the environment secret here.
+    environment: ${{ (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) && 'dockerhub' || '' }}
     timeout-minutes: 10
     # Two callers can overlap (the :edge build and the nightly); the deletes are idempotent, but run one at a time.
     concurrency:
@@ -77,9 +82,14 @@ jobs:
         env:
           DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          REQUIRE_DOCKERHUB: ${{ github.repository == 'hellwand/tasmofleet' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) }}
         run: |
           set -eu
           if [ -z "$DOCKERHUB_USERNAME" ] || [ -z "$DOCKERHUB_TOKEN" ]; then
+            if [ "$REQUIRE_DOCKERHUB" = true ]; then
+              echo "::error::DOCKERHUB_USERNAME/DOCKERHUB_TOKEN are missing in the dockerhub environment (#693)" >&2
+              exit 1
+            fi
             echo "Docker Hub is not configured, skipping"
             exit 0
           fi
