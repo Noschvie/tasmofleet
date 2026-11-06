@@ -5,7 +5,7 @@ backups with restore, a settings policy with compliance view, safe bulk firmware
 state and fleet-wide commands. One Go binary with an embedded SQLite database.
 
 **Source, docs and issues: [github.com/nofuturekid/tasmofleet](https://github.com/nofuturekid/tasmofleet)**
-· [Try the demo](https://nofuturekid.github.io/tasmofleet/) (the real UI with a simulated fleet)
+· [Website](https://nofuturekid.github.io/tasmofleet/) · [Try the demo](https://nofuturekid.github.io/tasmofleet/demo/) (the real UI with a simulated fleet)
 
 TasmoFleet is an independent project, not affiliated with Tasmota or its maintainers.
 

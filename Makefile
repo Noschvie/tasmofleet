@@ -51,7 +51,7 @@ E2E_ARGS  ?=
 CHANGED_BASE ?= origin/main
 export CHANGED_BASE
 
-.PHONY: quick integration-guard shards-check-changed catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race diff-cover revert-check test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check release-pr-check changelog-title migration-guard migration-append-only changelog-notes clean tools
+.PHONY: quick integration-guard shards-check-changed catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo pages demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race diff-cover revert-check test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check release-pr-check changelog-title migration-guard migration-append-only changelog-notes clean tools
 
 # golangci-lint runs staticcheck with its defaults (.golangci.yml), so check does not run it a second time;
 # the staticcheck target stays for single runs and CI. go vet stays: golangci-lint skips generated files,
@@ -329,6 +329,16 @@ visual-parity:
 # static HTML into dist/demo (not committed; the pages workflow builds and publishes it).
 demo: build
 	cd e2e && nice -n 10 npx playwright test --project=demo --workers=1 -g "static demo site"
+
+# The GitHub Pages artifact (pages.yml): the website in site/ at the root and the demo in demo/. Fails
+# when site/index.html is missing, so the root can never be published empty.
+pages: demo
+	test -f site/index.html || { echo "pages: site/index.html is missing" >&2; exit 1; }
+	rm -rf dist/pages
+	mkdir -p dist/pages
+	cp -R site/. dist/pages/
+	cp -R dist/demo dist/pages/demo
+	touch dist/pages/.nojekyll
 
 # The README media in docs/media: screenshots of the same fleet and the update animation
 # (demo.webp, recorded with Playwright, converted with ffmpeg). Run after a visible UI change and commit the files.

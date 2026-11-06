@@ -1,4 +1,5 @@
-# The static demo on GitHub Pages (https://nofuturekid.github.io/tasmofleet/): `make demo` runs
+# GitHub Pages: the website (site/) at https://nofuturekid.github.io/tasmofleet/ and the static demo
+# under /demo/. `make pages` assembles dist/pages; its demo part comes from `make demo`, which runs
 # the real binaries against tasmofleet-devenv with the design fixture fleet (60 simulated
 # devices, documentation addresses only) and saves the pages an admin reaches as static HTML
 # (e2e/tests/demo-site.spec.ts). Called by release.yml after the GitHub release was made, and by hand;
@@ -17,7 +18,7 @@ env:
 
 jobs:
   build:
-    name: build the static demo
+    name: build the website and the demo
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     container:
@@ -41,13 +42,13 @@ jobs:
           key: npm-${{ hashFiles('e2e/package-lock.json') }}
       - name: install e2e dependencies
         run: make e2e-deps
-      - name: build the demo
+      - name: build the website and the demo
         env:
           CI: "true"
-        run: make demo
+        run: make pages
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          path: dist/demo
+          path: dist/pages
 
   deploy:
     name: deploy to GitHub Pages

@@ -10,6 +10,10 @@ always upgrade automatically.
 
 - Website: a project page in `site/` (static HTML and CSS, light and dark, with the real UI screenshots, the features, install per platform and links), for GitHub Pages at the root with the demo next to it (#566)
 
+### Changed
+
+- The GitHub Pages site now serves the website at https://nofuturekid.github.io/tasmofleet/ and the static demo moved to https://nofuturekid.github.io/tasmofleet/demo/. Links to the old demo address land on the website, whose demo link leads on (Fixes #566).
+
 ## 0.34.0 "Split Rock" (2026-11-06)
 
 ### Upgrade notes
