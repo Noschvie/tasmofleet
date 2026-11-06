@@ -6,6 +6,12 @@ always upgrade automatically.
 
 ## Unreleased
 
+## 0.34.1 "Split Rock" (2026-11-06)
+
+### Upgrade notes
+
+- The repository moved to github.com/hellwand/tasmofleet. Docker Hub users (Unraid included) change nothing. ghcr.io users: switch the image to `ghcr.io/hellwand/tasmofleet`; this release is also published once more under the old name `ghcr.io/nofuturekid/tasmofleet` so you see this note, later releases are not. No database migration.
+
 ### Added
 
 - Website: a project page in `site/` (static HTML and CSS, light and dark, with the real UI screenshots, the features, install per platform and links), for GitHub Pages at the root with the demo next to it (#566)
