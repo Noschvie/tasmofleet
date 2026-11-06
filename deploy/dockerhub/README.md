@@ -4,8 +4,8 @@ A self-hosted fleet manager for [Tasmota](https://tasmota.github.io/) devices: c
 backups with restore, a settings policy with compliance view, safe bulk firmware updates, live
 state and fleet-wide commands. One Go binary with an embedded SQLite database.
 
-**Source, docs and issues: [github.com/nofuturekid/tasmofleet](https://github.com/nofuturekid/tasmofleet)**
-· [Website](https://nofuturekid.github.io/tasmofleet/) · [Try the demo](https://nofuturekid.github.io/tasmofleet/demo/) (the real UI with a simulated fleet)
+**Source, docs and issues: [github.com/hellwand/tasmofleet](https://github.com/hellwand/tasmofleet)**
+· [Website](https://hellwand.github.io/tasmofleet/) · [Try the demo](https://hellwand.github.io/tasmofleet/demo/) (the real UI with a simulated fleet)
 
 TasmoFleet is an independent project, not affiliated with Tasmota or its maintainers.
 
@@ -45,17 +45,17 @@ self-signed certificate and follow the setup.
   mount, `chown -R 65532:65532` the directory first.
 
 Docker Compose, Unraid and all settings:
-[Quick start](https://github.com/nofuturekid/tasmofleet#quick-start-docker) and
-[configuration](https://github.com/nofuturekid/tasmofleet/blob/main/docs/configuration.md).
+[Quick start](https://github.com/hellwand/tasmofleet#quick-start-docker) and
+[configuration](https://github.com/hellwand/tasmofleet/blob/main/docs/configuration.md).
 
 ## Tags
 
 - `latest`: the newest release
-- `X.Y.Z`: a release ([changelog](https://github.com/nofuturekid/tasmofleet/blob/main/CHANGELOG.md))
+- `X.Y.Z`: a release ([changelog](https://github.com/hellwand/tasmofleet/blob/main/CHANGELOG.md))
 - `edge`: the current `main`, not for production
 
-The same images are on `ghcr.io/nofuturekid/tasmofleet`. Every tag is a multi-arch image: linux/amd64 and linux/arm64 (Raspberry Pi 4/5). Both include the backup decoder (decode-config, LGPL-3.0); on arm64 it is an unofficial build of upstream v16.0.0 plus tasmota/decode-config#127, from [nofuturekid/tasmota-decode-config](https://github.com/nofuturekid/tasmota-decode-config/releases/tag/v16.0.0-arm64), until upstream ships aarch64.
+The same images are on `ghcr.io/hellwand/tasmofleet`. Every tag is a multi-arch image: linux/amd64 and linux/arm64 (Raspberry Pi 4/5). Both include the backup decoder (decode-config, LGPL-3.0); on arm64 it is an unofficial build of upstream v16.0.0 plus tasmota/decode-config#127, from [nofuturekid/tasmota-decode-config](https://github.com/nofuturekid/tasmota-decode-config/releases/tag/v16.0.0-arm64), until upstream ships aarch64.
 
 ## License
 
-[AGPL-3.0-or-later](https://github.com/nofuturekid/tasmofleet/blob/main/LICENSE)
+[AGPL-3.0-or-later](https://github.com/hellwand/tasmofleet/blob/main/LICENSE)

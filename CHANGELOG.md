@@ -12,7 +12,7 @@ always upgrade automatically.
 
 ### Changed
 
-- The GitHub Pages site now serves the website at https://nofuturekid.github.io/tasmofleet/ and the static demo moved to https://nofuturekid.github.io/tasmofleet/demo/. Links to the old demo address land on the website, whose demo link leads on (Fixes #566).
+- The GitHub Pages site now serves the website at https://hellwand.github.io/tasmofleet/ and the static demo moved to https://hellwand.github.io/tasmofleet/demo/. Links to the old demo address land on the website, whose demo link leads on (Fixes #566).
 
 ## 0.34.0 "Split Rock" (2026-11-06)
 

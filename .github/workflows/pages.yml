@@ -1,4 +1,4 @@
-# GitHub Pages: the website (site/) at https://nofuturekid.github.io/tasmofleet/ and the static demo
+# GitHub Pages: the website (site/) at https://hellwand.github.io/tasmofleet/ and the static demo
 # under /demo/. `make pages` assembles dist/pages; its demo part comes from `make demo`, which runs
 # the real binaries against tasmofleet-devenv with the design fixture fleet (60 simulated
 # devices, documentation addresses only) and saves the pages an admin reaches as static HTML
