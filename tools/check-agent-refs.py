@@ -6,7 +6,7 @@ make target and doc they name in backticks (and every package line of a fenced a
 map) must exist, so the guide cannot drift away from the repository unnoticed.
 Checked: `make <target>` against the Makefile; path-like words (a first segment that is a
 top-level entry of the repository, or a file name with a known extension) against the file
-tree, globs allowed, bare file names anywhere in the tree. Words with placeholders
+tree, globs allowed, bare file names anywhere in the tree. URLs, `#anchor` and `:line` suffixes are ignored. Words with placeholders
 (<x>, $x, NNNN, X.Y.Z) and the generated files in GENERATED are skipped.
 Usage: tools/check-agent-refs.py [root]
 """
@@ -78,7 +78,9 @@ def check_words(doc, text):
             if re.fullmatch(r"[a-z][a-z0-9-]*", t) and t not in targets:
                 bad.append(f"{doc}: make target `{t}` is not in the Makefile")
             continue
-        w = re.sub(r":\d+$", "", w.rstrip("."))
+        if "://" in w:  # a URL, not a repo path
+            continue
+        w = re.sub(r":\d+$", "", w.split("#", 1)[0].rstrip("."))  # anchor and line number are not part of the path
         if path_like(w) and not exists(w):
             bad.append(f"{doc}: `{w}` does not exist")
 

@@ -2,7 +2,6 @@
 
 Part of the working guide: start at [CLAUDE.md](../../CLAUDE.md).
 
-
 | Gate                                                                      | Command                                                                       |
 | ------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | FAST tier, everything but e2e (run before every commit)                   | `make check`                                                                  |

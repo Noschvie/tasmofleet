@@ -25,7 +25,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/tasmota"
 )
 
-// ---- fakes (consumer-side, per CLAUDE.md) ----
+// ---- fakes (consumer-side, per docs/dev/architecture.md) ----
 
 type fakeInv struct {
 	mu   sync.Mutex

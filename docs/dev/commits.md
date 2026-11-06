@@ -2,7 +2,6 @@
 
 Part of the working guide: start at [CLAUDE.md](../../CLAUDE.md).
 
-
 - Commits are signed; `main` requires signed commits (branch protection). **Never** disable signing
   (`--no-gpg-sign`, `-c commit.gpgsign=false`). If signing fails, stop and report it.
 - Write the message with a quoted heredoc, never `-m "..."` with backticks or `$(...)`:

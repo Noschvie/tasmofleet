@@ -10,9 +10,9 @@ please open an issue before larger changes to agree on the approach.
   The version is shown in the page header (and on the About page); it is the first thing to
   quote. A build from the `edge` image reads like `0.15.2+edge (0123456789ab)`.
 - **Pull requests:** one topic per PR, against `main`. CI (`.github/workflows/pr.yml`)
-  must be green. Run `make check` locally first; for UI changes also `make e2e`.
+  must be green. Run `make check` locally first; for UI changes also `make e2e-core` and the affected e2e specs.
 - **Rules:** [CLAUDE.md](CLAUDE.md) is the working guide for humans and AI agents
-  alike (a short router; details in [docs/dev](docs/dev/testing.md)): test first (tests say why the behaviour matters), no network in tests (use
+  alike (a short router; details in [docs/dev](docs/dev/ground-rules.md)): test first (tests say why the behaviour matters), no network in tests (use
   the Tasmota simulator), package boundaries, safety rules that must never regress,
   and the changelog rule (add your line under "Unreleased" in
   [CHANGELOG.md](CHANGELOG.md); changes that come from an outside PR or report are

@@ -93,3 +93,16 @@ test("placeholders are not references", () => {
   );
   assert.equal(code, 0, out);
 });
+
+test("an #anchor after a path is not part of the file name", () => {
+  const ok = run(repo("See `docs/dev/testing.md#tiers`.\n"));
+  assert.equal(ok.code, 0, ok.out);
+  const bad = run(repo("See `docs/dev/gone.md#tiers`.\n"));
+  assert.equal(bad.code, 1);
+  assert.match(bad.out, /`docs\/dev\/gone\.md` does not exist/);
+});
+
+test("a URL is not a repo path", () => {
+  const { code, out } = run(repo("Forum: `https://example.org/topic/x.md`.\n"));
+  assert.equal(code, 0, out);
+});

@@ -25,6 +25,7 @@ skipped), PRs that touch a `SAFETY` package (race and diff coverage added) or Go
 job passes only when every job that had to run passed; a skip counts only when the PR did
 not ask for that job; the link check, the migration guard and the release section guard must always succeed, and so must the image build check when the PR touches what the image reads (Dockerfile, module files, the HA app folder); the HA app image is built next to it (`_ha-app.yml`) and never gates the merge. No approvals are required (single maintainer). Release tags are still pushed
 directly, on a green commit of `main`.
+
 ## Branches and worktrees
 
 After a pull request is merged into `main`, its branch is deleted on origin and the

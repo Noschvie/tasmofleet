@@ -2,7 +2,6 @@
 
 Part of the working guide: start at [CLAUDE.md](../../CLAUDE.md).
 
-
 ## CHANGELOG and versions
 
 - **SemVer** from v0.1.0: new features or visible behaviour -> minor (`0.x.0`); bug fixes

@@ -20,4 +20,3 @@ must upgrade cleanly.
   logs/HTML, chip-family guard, secrets only to their bound target). Step-up only for
   local account management and auth/SSO changes (not for restore, 2026-10-20). Reviews: fix High/Medium,
   document Low/Info as residual risk, no review loops.
-

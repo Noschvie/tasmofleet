@@ -2,7 +2,6 @@
 
 Part of the working guide: start at [CLAUDE.md](../../CLAUDE.md).
 
-
 `internal/simulator` replays real captures from `testdata/fixtures/devices/` and models
 the OTA state machine documented in `docs/research/tasmota-minimal-and-ota.md`
 (pending, downloading, reboot gap, minimal firmware with its 5 commands, settings not

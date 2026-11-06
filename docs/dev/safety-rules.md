@@ -2,7 +2,6 @@
 
 Part of the working guide: start at [CLAUDE.md](../../CLAUDE.md).
 
-
 1. `fwselect.Guard` runs immediately before every `OtaUrl` and `Upgrade`. It refuses on
    unknown hardware, chip-family mismatch (device vs artifact header vs file name), safeboot
    images, and variant changes without explicit user choice. Never bypass it, never "guess".
