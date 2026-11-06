@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Changed
+
+- Docker Hub credentials are only available to jobs on main and v* tags through the `dockerhub` environment (#693)
+
 ## 0.34.1 "Split Rock" (2026-11-06)
 
 ### Upgrade notes

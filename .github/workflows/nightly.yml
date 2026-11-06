@@ -141,9 +141,6 @@ jobs:
     uses: ./.github/workflows/ghcr-cleanup.yml
     with:
       dry-run: ${{ github.event_name != 'schedule' }}
-    secrets:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
   # The nightly blocks no release, so its failure must not go unseen: one open issue
   # "Nightly FULL failed ..." (labels ci, flaky) collects the runs; a later failing night

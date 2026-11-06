@@ -88,9 +88,6 @@ jobs:
     uses: ./.github/workflows/_image.yml
     with:
       mode: release
-    secrets:
-      DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
-      DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
   # A GitHub release per tag, its notes the CHANGELOG.md section, once the image is out.
   release:
