@@ -30,6 +30,7 @@ always upgrade automatically.
 ### Breaking
 
 - The setting and variable `BACKUP_INTERVAL` is removed without an alias; use `BACKUP_DAYS` and `BACKUP_TIME` (Devices, Backups). See the upgrade notes above for what happens to an existing interval (#601).
+- A settings file written by `tasmofleet settings export` before this version holds `BACKUP_INTERVAL`, and `tasmofleet settings import` refuses the whole file for it (`setting is not editable here`). Delete that line before you import the file, then choose the days on Devices, Backups (#601).
 
 ## 0.32.0 "Fastnet" (2026-11-06)
 

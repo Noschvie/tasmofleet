@@ -175,10 +175,13 @@ func TestMissedRunLaterThan60MinutesIsSkippedWithOneNotification(t *testing.T) {
 	if want := time.Date(2026, 11, 4, 3, 0, 0, 0, e.loc); !next.Equal(want) {
 		t.Errorf("next look %v, want %v", next, want)
 	}
-	// Restart after restart: the skip is remembered.
+	// Restart after restart: the skip is remembered by the database (the marker), not by the
+	// memory of the process that sent the notification. Each restart is a new process.
 	for i := 0; i < 3; i++ {
+		restarted := *e.s
+		restarted.floor = time.Time{}
 		e.at(2026, 11, 3, 4+i, 30)
-		e.s.step(context.Background())
+		restarted.step(context.Background())
 	}
 	if len(e.missed) != 1 || e.runs(t) != 0 {
 		t.Errorf("after restarts: %d notifications, %d backups; want 1 and 0", len(e.missed), e.runs(t))
@@ -192,6 +195,30 @@ func TestMissedRunLaterThan60MinutesIsSkippedWithOneNotification(t *testing.T) {
 	e.s.step(context.Background())
 	if e.runs(t) != 1 {
 		t.Errorf("the day after a skip: %d backups, want 1", e.runs(t))
+	}
+}
+
+// Why (#601, review of #668): the run record follows the audit retention (24 h at least), which can be
+// shorter than the wait between two scheduled days. A process that started after Friday's run and
+// lives past the prune of that row must still run on Monday: an empty record read as "this schedule
+// never ran" would skip Monday's backup without a run, a skip marker or a notification.
+func TestRetentionPruningBetweenRunsDoesNotDropTheNextRun(t *testing.T) {
+	e := newSchedEnv(t, "mon,wed,fri", "03:00")
+	e.dev(t, "plug", e.clock, model.Health{State: model.HealthOnline})
+	e.ranAt(t, time.Date(2026, 11, 6, 3, 0, 4, 0, e.loc)) // Friday's run
+	// A restart on Saturday (an update): the row is still there.
+	restarted := *e.s
+	restarted.floor = time.Time{}
+	e.at(2026, 11, 7, 10, 0)
+	restarted.step(context.Background())
+	// AUDIT_RETENTION 48h: the daily retention run on Sunday deletes Friday's row.
+	if n, err := e.st.PruneBackupRuns(context.Background(), time.Date(2026, 11, 6, 4, 0, 0, 0, e.loc)); err != nil || n != 1 {
+		t.Fatalf("pruned %d runs (%v), want Friday's", n, err)
+	}
+	e.at(2026, 11, 9, 3, 0) // Monday 03:00, the same process
+	restarted.step(context.Background())
+	if e.runs(t) != 1 || len(e.missed) != 0 {
+		t.Fatalf("Monday 03:00: %d backups, %d notifications; want the scheduled run", e.runs(t), len(e.missed))
 	}
 }
 

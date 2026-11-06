@@ -37,8 +37,10 @@ type backupSchedule struct {
 	run func(ctx context.Context)
 	// missed tells the person that the run of slot was skipped (nil: nobody is told).
 	missed func(slot, at time.Time)
-	// floor is the newest time this process settled itself. The database is the memory across
-	// restarts; the floor keeps a failed write from starting the same run again at once.
+	// floor is the newest settled time this process knows: what it settled itself and what it read
+	// from the database. The database is the memory across restarts; the floor keeps a failed write
+	// from starting the same run again at once, and keeps a row the audit retention pruned between
+	// two scheduled days from reading as a schedule that never ran.
 	floor time.Time
 }
 
@@ -58,11 +60,14 @@ func (b *backupSchedule) step(ctx context.Context) time.Time {
 	}
 	if b.floor.After(settled) {
 		settled = b.floor
+	} else {
+		b.floor = settled // the retention may prune that row before the next scheduled time
 	}
 	if settled.IsZero() {
-		// The record has no run, skip or schedule change at all: nothing says this schedule ever
-		// existed (it came from the environment, or the record was pruned after a long time). It
-		// begins now; it does not make up a time of day that passed before anybody could know.
+		// Neither the record nor this process knows a run, skip or schedule change: nothing says
+		// this schedule ever existed (it came from the environment, or the record was pruned while
+		// TasmoFleet was down). It begins now; it does not make up a time of day that passed before
+		// anybody could know.
 		b.reschedule(ctx)
 		return s.Next(now)
 	}

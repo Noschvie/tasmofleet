@@ -582,3 +582,21 @@ func TestFleetBackupsOldThresholdFollowsTheLongestWait(t *testing.T) {
 		}
 	}
 }
+
+// Why (#601, review of #668): "Wed, MON" from the environment is a valid schedule and the page must show
+// it as one: both chips ticked (else the next save of the page posts no day and turns the schedule off)
+// and the days named for an operator.
+func TestFleetBackupsShowsDaysGivenInAnyCase(t *testing.T) {
+	e := fleetEnv(t, fleetFixture(time.Now()), "TASMOFLEET_BACKUP_DAYS=Wed, MON")
+	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
+	sched := cardOf(t, body, "schedule")
+	for _, d := range []string{"mon", "wed"} {
+		if !strings.Contains(sched, `value="`+d+`" checked`) {
+			t.Errorf("the %s chip is not ticked: %s", d, sched)
+		}
+	}
+	_, op := e.do(t, "GET", "/devices/backups", "operator", nil)
+	if sched := cardOf(t, op, "schedule"); !strings.Contains(sched, "Mon, Wed") {
+		t.Errorf("an operator does not read the days: %s", sched)
+	}
+}

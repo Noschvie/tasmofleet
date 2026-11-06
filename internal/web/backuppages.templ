@@ -4,6 +4,15 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
 
+// backupsEmptyText is the text of the empty Backups tab: the action, and when the schedule backs the
+// device up, or that it does not (#601).
+func backupsEmptyText(p backupsView) string {
+	if p.Schedule == "" {
+		return "Take one now to get a restore point. Scheduled backups are off."
+	}
+	return "Take one now to get a restore point. Scheduled backups run " + p.Schedule + " once the device answers."
+}
+
 // backupsTab is the Backups tab (design v2 screen "device", tab "backups"). The rows sit in a
 // GET form: Compare sends the two ticked ids to the comparison, Delete selected sends the ticked
 // ids to their confirmation page. Keep and Retry are buttons of the two POST forms after the
@@ -12,7 +21,7 @@ templ backupsTab(p backupsView) {
 	@p.Head
 	<div class="bk-page">
 		if len(p.Rows) == 0 {
-			@ui.Empty("No backups yet", "Take one now to get a restore point. Scheduled backups run every night at 03:00 once the device answers.") {
+			@ui.Empty("No backups yet", backupsEmptyText(p)) {
 				if p.CanBackup {
 					<button type="submit" form="bk-now" class="btn btn-primary" disabled?={ p.Blocked != "" } if p.Blocked != "" { title={ p.Blocked } }>Back up now</button>
 				}

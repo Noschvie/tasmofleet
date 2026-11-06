@@ -382,3 +382,17 @@ func TestBackupScheduleDefaultsToManualOnlyAt3(t *testing.T) {
 		t.Fatalf("default schedule %+v", s)
 	}
 }
+
+// Why (#601, review of #668): the weekday parser takes any case and order ("Wed, MON" from the
+// environment or a settings file), but the Backups page ticks its chips and words the days by the
+// stored names. Stored as typed, the chips showed unticked and the next save of the page posted no
+// day and turned the schedule off. Every path that stores a value goes through Set.
+func TestBackupDaysAreKeptInTheirCanonicalForm(t *testing.T) {
+	var c Config
+	if err := Set(&c, "BACKUP_DAYS", " Wed, MON,mon"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := Format(c, "BACKUP_DAYS"); got != "mon,wed" {
+		t.Fatalf("stored as %q, want mon,wed (lower case, week order, once each)", got)
+	}
+}

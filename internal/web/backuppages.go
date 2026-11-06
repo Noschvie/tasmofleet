@@ -31,7 +31,8 @@ type backupsView struct {
 	CanRetention bool   // admins: "Change retention" opens Devices, Backups
 	Total        string // "9 backups · 36.3 KiB"
 
-	CanBackup bool // Back up now and Retry (operators and admins)
+	CanBackup bool   // Back up now and Retry (operators and admins)
+	Schedule  string // the backup schedule in words ("every day at 03:00"), empty when off: the empty tab names it (#601)
 	// RestoreBlocked is why Restore… is disabled for every row (no path to the device), "" when it may be used.
 	RestoreBlocked string
 	Blocked        string // why Back up now cannot be used right now
@@ -192,7 +193,7 @@ func (h *handler) backupsPage(w http.ResponseWriter, r *http.Request) {
 	_, canKeep := h.backupKeeper()
 	p := backupsView{Base: v.Base, CSRF: v.CSRF, DeviceID: d.ID, Head: deviceHeader(tabs),
 		CanRetention: v.IsAdmin && v.Features.SysConfig, CanBackup: true, Blocked: tabs.BackupWhy, RestoreBlocked: tabs.RestoreWhy,
-		CanKeep: canKeep, CanDelete: canDelete && v.IsAdmin}
+		CanKeep: canKeep, CanDelete: canDelete && v.IsAdmin, Schedule: schedulePlan(h.fleetSchedule())}
 	ret, hasRet, err := h.backupRetention(r.Context(), d.ID)
 	if err != nil {
 		h.log.WarnContext(r.Context(), "backups: retention", "err", err) // only the labels go

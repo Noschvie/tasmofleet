@@ -293,6 +293,21 @@ func TestEmptyBackupsTabOffersTheActionNotTheControls(t *testing.T) {
 	}
 }
 
+// Why (#601, review of #668): the empty Backups tab said "Scheduled backups run every night at 03:00",
+// true for one schedule only (and the default is manual only). It names the schedule the device is
+// backed up on, or says that there is none, so nobody waits for a backup that never comes.
+func TestEmptyBackupsTabNamesTheSchedule(t *testing.T) {
+	_, body := setup(t).do(t, "GET", "/devices/1/backups", "admin", nil)
+	if !strings.Contains(body, "Scheduled backups are off.") || strings.Contains(body, "every night") {
+		t.Errorf("without a schedule the tab must say so:\n%s", body)
+	}
+	e, _, _, _ := sysEnvFull(t, true, nil, "TASMOFLEET_BACKUP_DAYS=mon,wed", "TASMOFLEET_BACKUP_TIME=04:30")
+	_, body = e.do(t, "GET", "/devices/1/backups", "admin", nil)
+	if want := "Scheduled backups run Mon, Wed at 04:30 once the device answers."; !strings.Contains(body, want) {
+		t.Errorf("lacks %q:\n%s", want, body)
+	}
+}
+
 // Why: Back up now on the empty tab reloads the page to show the new backup; a
 // failure stays under the button in a sentence.
 func TestBackupFromTheEmptyTab(t *testing.T) {
