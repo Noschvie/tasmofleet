@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"net/url"
 	"strings"
 	"testing"
@@ -74,8 +75,11 @@ func TestRelaySwitchAndRestartRefuseADeviceWhoseHTTPAPIIsOff(t *testing.T) {
 	if sw := sliceBetween(page, `class="devrelay-sw"`, "</button>"); !strings.Contains(sw, "disabled") || !strings.Contains(sw, "HTTP API off") {
 		t.Errorf("the relay switch is not disabled with the reason: %s", sw)
 	}
-	if rb := sliceBetween(page, `type="button"`+"\n", ">Restart<"); rb != "" && !strings.Contains(rb, "disabled") {
-		t.Errorf("Restart is not disabled: %s", rb)
+	// the header's Restart: the tag of the button that ends in ">Restart</button>"
+	if i := strings.Index(page, ">Restart</button>"); i < 0 {
+		t.Error("the header has no Restart button")
+	} else if rb := page[strings.LastIndex(page[:i], "<button"):i]; !strings.Contains(rb, "disabled") || !strings.Contains(rb, "HTTP API off") {
+		t.Errorf("Restart is not disabled with the reason: %s", rb)
 	}
 	// device 2 has reads over MQTT but no write path: also refused for a change
 	r, body = e.do(t, "POST", "/devices/2/power/1", "operator", url.Values{"csrf": {"tok"}})
@@ -137,6 +141,9 @@ func TestConsoleAndSettingsPostsRefuseADeviceWhoseHTTPAPIIsOff(t *testing.T) {
 	e, _ = apiOffActionsEnv(t, func(d *Deps) { d.Settings = fs })
 	r, body = e.do(t, "POST", "/devices/1/settings", "admin", baseForm("TelePeriod", "60"))
 	mustRefuse(t, "settings", r.StatusCode, body)
+	// settings change the device: a way to read is not enough
+	r, body = e.do(t, "POST", "/devices/2/settings", "admin", baseForm("TelePeriod", "60"))
+	mustRefuse(t, "settings without a write path", r.StatusCode, body)
 	if len(fs.applyIn) != 0 {
 		t.Fatalf("settings were applied: %v", fs.applyIn)
 	}
@@ -213,15 +220,18 @@ func TestRetryOfABackupOrCommandTransactionRefusesADeviceWhoseHTTPAPIIsOff(t *te
 		"policy":  {ID: 1, BatchID: 7, DeviceID: 1, Kind: model.KindPolicy, Commands: "SetOption1 1", State: model.JobFailed},
 	} {
 		job.CreatedAt = time.Now()
-		e, o := retryEnvWith(t, []model.Job{job}, map[model.DeviceID]transport.Facts{1: httpOnlyFacts()})
-		r, body := e.do(t, "POST", "/transactions/7/retry", "admin", url.Values{"csrf": {"tok"}})
-		mustRefuse(t, name+" retry", r.StatusCode, body)
-		if len(o.retryCalls) != 0 {
-			t.Fatalf("%s: the retry was started", name)
-		}
-		_, form := e.do(t, "GET", "/transactions/7/retry", "admin", nil)
-		if !strings.Contains(form, "HTTP API off (SetOption128 0)") {
-			t.Errorf("%s: the retry page does not say why: %s", name, form)
+		// without any way, and with only a way to read: a backup and a write need their own way
+		for facts, f := range map[string]transport.Facts{"no path": httpOnlyFacts(), "reads only": readsOnlyFacts()} {
+			e, o := retryEnvWith(t, []model.Job{job}, map[model.DeviceID]transport.Facts{1: f})
+			r, body := e.do(t, "POST", "/transactions/7/retry", "admin", url.Values{"csrf": {"tok"}})
+			mustRefuse(t, name+" retry, "+facts, r.StatusCode, body)
+			if len(o.retryCalls) != 0 {
+				t.Fatalf("%s, %s: the retry was started", name, facts)
+			}
+			_, form := e.do(t, "GET", "/transactions/7/retry", "admin", nil)
+			if !strings.Contains(form, "HTTP API off (SetOption128 0)") {
+				t.Errorf("%s, %s: the retry page does not say why: %s", name, facts, form)
+			}
 		}
 	}
 	// a read command, to a device that can read
@@ -252,42 +262,66 @@ func retryEnvWith(t *testing.T, jobs []model.Job, f map[model.DeviceID]transport
 // Why: Make compliant works on cached values and would send the commands blind. The plan shows the device as
 // blocked with the reason, and Apply sends nothing for it.
 func TestMakeCompliantLeavesADeviceWhoseHTTPAPIIsOffOut(t *testing.T) {
-	fix := &fakeFix{}
-	e := setupWith(t, func(d *Deps) {
-		d.Policy = &fakePolicy{rep: fixReport()}
-		d.PolicyFix = fix
-		facts1(map[model.DeviceID]transport.Facts{1: httpOnlyFacts()})(d)
-	})
-	e.health[1] = refusedHealth(1)
-	body := previewFor(t, e, url.Values{"only": {"1"}})
-	if !strings.Contains(body, "HTTP API off (SetOption128 0)") {
-		t.Fatalf("the plan does not block the device: %s", body)
-	}
-	r, out := e.do(t, "POST", "/policy/fix/apply", "admin", url.Values{"csrf": {"tok"}, "digest": {digestRe.FindStringSubmatch(body)[1]}, "device": {"1"}})
-	mustRefuse(t, "Make compliant apply", r.StatusCode, out)
-	if len(fix.reqs) != 0 {
-		t.Fatalf("commands were submitted: %+v", fix.reqs)
+	// without any way, and with only a way to read: Make compliant writes
+	for facts, f := range map[string]transport.Facts{"no path": httpOnlyFacts(), "reads only": readsOnlyFacts()} {
+		fix := &fakeFix{}
+		e := setupWith(t, func(d *Deps) {
+			d.Policy = &fakePolicy{rep: fixReport()}
+			d.PolicyFix = fix
+			facts1(map[model.DeviceID]transport.Facts{1: f})(d)
+		})
+		e.health[1] = refusedHealth(1)
+		body := previewFor(t, e, url.Values{"only": {"1"}})
+		if !strings.Contains(body, "HTTP API off (SetOption128 0)") {
+			t.Fatalf("%s: the plan does not block the device: %s", facts, body)
+		}
+		r, out := e.do(t, "POST", "/policy/fix/apply", "admin", url.Values{"csrf": {"tok"}, "digest": {digestRe.FindStringSubmatch(body)[1]}, "device": {"1"}})
+		mustRefuse(t, "Make compliant apply, "+facts, r.StatusCode, out)
+		if len(fix.reqs) != 0 {
+			t.Fatalf("%s: commands were submitted: %+v", facts, fix.reqs)
+		}
 	}
 }
 
-// Why: applying a GPIO template backs the device up and writes to it: refused as a whole, before any device is
-// read or sent anything, when a chosen device (or the reference) has no way.
+// Why: applying a GPIO template reads the reference, then backs each chosen device up and writes to it: refused as a
+// whole, before any device is read or sent anything, when a chosen device has no way to be backed up and written, or
+// the reference no way to be read. A reference MQTT reads is fine.
 func TestGPIOTemplateApplyRefusesADeviceWhoseHTTPAPIIsOff(t *testing.T) {
-	f := gtFixture()
-	e := setupWith(t, func(d *Deps) {
-		d.Policy = &fakePolicy{rep: fleetReport()}
-		d.Templates = f
-		facts1(map[model.DeviceID]transport.Facts{12: httpOnlyFacts()})(d)
-	})
-	e.health[12] = refusedHealth(12)
-	form := url.Values{"csrf": {"tok"}, "family": {"esp8266"}, "name": {"Gosund SP111"}, "ref": {"10"}, "how": {"most-common"}, "pick": {"12"}, "digest": {"abc123"}, "confirm": {"1"}}
-	r, body := e.do(t, "POST", "/policy/templates/apply", "admin", form)
-	mustRefuse(t, "GPIO template apply", r.StatusCode, body)
-	if f.gotApply != nil {
-		t.Fatal("the template was applied")
-	}
-	if r, _ := e.do(t, "POST", "/policy/templates/preview", "admin", form); r.StatusCode != 409 || f.gotPrev != nil {
-		t.Fatalf("preview: %d, read %v", r.StatusCode, f.gotPrev)
+	noBackup := mqttFacts(time.Now(), model.MQTTPasswordNone) // written over MQTT, but no MQTT password to back it up first
+	noBackup.HTTP = transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailAPIRefused, Since: time.Now()}
+	for _, c := range []struct {
+		name    string
+		id      model.DeviceID // the device whose HTTP API is off: 10 is the reference, 12 the chosen device
+		facts   transport.Facts
+		refused bool
+	}{
+		{"a chosen device without any way", 12, httpOnlyFacts(), true},
+		{"a chosen device that cannot be backed up first", 12, noBackup, true},
+		{"a reference that cannot be read", 10, httpOnlyFacts(), true},
+		{"a reference read over MQTT", 10, readsOnlyFacts(), false},
+	} {
+		f := gtFixture()
+		e := setupWith(t, func(d *Deps) {
+			d.Policy = &fakePolicy{rep: fleetReport()}
+			d.Templates = f
+			facts1(map[model.DeviceID]transport.Facts{c.id: c.facts})(d)
+		})
+		e.health[c.id] = refusedHealth(c.id)
+		form := url.Values{"csrf": {"tok"}, "family": {"esp8266"}, "name": {"Gosund SP111"}, "ref": {"10"}, "how": {"most-common"}, "pick": {"12"}, "digest": {"abc123"}, "confirm": {"1"}}
+		r, body := e.do(t, "POST", "/policy/templates/apply", "admin", form)
+		if !c.refused {
+			if f.gotApply == nil {
+				t.Errorf("%s: not applied (%d)", c.name, r.StatusCode)
+			}
+			continue
+		}
+		mustRefuse(t, c.name, r.StatusCode, body)
+		if f.gotApply != nil {
+			t.Fatalf("%s: the template was applied", c.name)
+		}
+		if r, _ := e.do(t, "POST", "/policy/templates/preview", "admin", form); r.StatusCode != 409 || f.gotPrev != nil {
+			t.Fatalf("%s: preview %d, read %v", c.name, r.StatusCode, f.gotPrev)
+		}
 	}
 }
 
@@ -311,32 +345,107 @@ func TestEveryRefusalSaysTheSameThing(t *testing.T) {
 	}
 }
 
-// Why: the update gate judges the actual request. An ESP32 on our broker that cannot download (no firmware
-// server) can only be updated by the experimental upload over MQTT, which a push request may use: it is not
-// refused up front, the engine decides. The same device asked to pull has no way and is refused.
-func TestUpdateGateConsidersTheRequestedDelivery(t *testing.T) {
-	f := mqttFacts(time.Now(), model.MQTTPasswordOwn)
-	f.HTTP = transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailAPIRefused, Since: time.Now()}
-	f.FirmwareBaseURL = false
-	if p := transport.Choose(f); p.Update != transport.None {
-		t.Fatalf("fixture: a bare request has path %v", p.Update)
+// Why (#645 review): the update gate asks what the OTA engine will ask. The upload over MQTT is not offered (#262 was
+// not shipped: no update request allows it, and the engine refuses that path), so an ESP32 on our broker that cannot
+// reach the firmware server has no way to be updated while its HTTP API is off, whatever delivery is asked for. The
+// gate refuses it up front with the one reason; letting it through would only get the engine's refusal, which tells
+// the person to allow an upload no page offers. A device that can download over MQTT is not refused, pull or push.
+func TestUpdateGateRefusesADeviceOnlyTheUnofferedUploadOverMQTTCouldUpdate(t *testing.T) {
+	now := time.Now()
+	noFW := mqttFacts(now, model.MQTTPasswordOwn)
+	noFW.HTTP = transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailAPIRefused, Since: now}
+	noFW.FWReach = model.FWReach{State: model.FWReachNo, At: now.Add(-time.Hour)}
+	if p := transport.Choose(noFW); p.Update != transport.None {
+		t.Fatalf("fixture: the device has update path %v", p.Update)
 	}
+	upload := noFW
+	upload.Request = transport.Request{Delivery: model.DeliveryPush, AllowMQTTUpload: true, MQTTUploadFit: transport.MQTTFit{OK: true}}
+	if p := transport.Choose(upload); p.Update != transport.PushMQTT {
+		t.Fatalf("fixture: only the upload over MQTT could update it, got %v", p.Update)
+	}
+	download := mqttFacts(now, model.MQTTPasswordOwn) // reaches the firmware server as far as anyone knows
+	download.HTTP = noFW.HTTP
 	o := &fakeOTA{items: map[model.DeviceID]ota.PreviewItem{}}
 	e := setupWith(t, func(d *Deps) {
 		d.OTA, d.Jobs, d.Firmware, d.Batches, d.BuildMemory = o, &fakeJobs{}, &fakeFW{}, fakeBatches{}, nil
-		facts1(map[model.DeviceID]transport.Facts{2: f})(d)
+		facts1(map[model.DeviceID]transport.Facts{1: download, 2: noFW})(d)
 	})
-	e.health[2] = refusedHealth(2)
+	e.health[1], e.health[2] = refusedHealth(1), refusedHealth(2)
 	_, picker := e.do(t, "GET", "/updates/new", "operator", nil)
-	if strings.Contains(picker, "HTTP API off (SetOption128 0)") {
-		t.Errorf("the picker greys out a device the upload over MQTT could update: %s", sliceBetween(picker, "HTTP API off", "</"))
+	row := func(id string) string { // the picker's label of one device
+		i := strings.Index(picker, `name="id" value="`+id+`"`)
+		if i < 0 {
+			return ""
+		}
+		return picker[strings.LastIndex(picker[:i], "<label"):i] + sliceBetween(picker[i:], "", "</label>")
 	}
-	form := url.Values{"csrf": {"tok"}, "id": {"2"}, "release": {"16.1.0"}, "policy": {"only-newer"}, "skip_backup": {"1"}}
-	if r, body := e.do(t, "POST", "/updates", "operator", form); r.StatusCode != 409 || !strings.Contains(body, "HTTP API off") {
-		t.Errorf("pull: %d %s", r.StatusCode, body)
+	if r := row("2"); !strings.Contains(r, "HTTP API off (SetOption128 0)") || !strings.Contains(r, "disabled") {
+		t.Errorf("the picker does not grey out device 2 with the reason: %s", r)
 	}
-	form.Set("delivery", "push")
-	if _, body := e.do(t, "POST", "/updates", "operator", form); strings.Contains(body, "HTTP API off") {
-		t.Errorf("push: refused by the gate: %s", body)
+	if r := row("1"); r == "" || strings.Contains(r, "HTTP API off") {
+		t.Errorf("the picker greys out device 1, which downloads over MQTT: %s", r)
+	}
+	for _, delivery := range []string{"", "pull", "push"} {
+		form := url.Values{"csrf": {"tok"}, "id": {"2"}, "release": {"16.1.0"}, "policy": {"only-newer"}, "skip_backup": {"1"}, "delivery": {delivery}}
+		if r, body := e.do(t, "POST", "/updates/preview", "operator", form); r.StatusCode != 422 || !strings.Contains(body, "SetOption128 1") {
+			t.Errorf("preview, delivery %q: %d, want 422 with the reason and the fix", delivery, r.StatusCode)
+		}
+		if r, body := e.do(t, "POST", "/updates", "operator", form); r.StatusCode != 409 || !strings.Contains(body, "HTTP API off (SetOption128 0)") {
+			t.Errorf("submit, delivery %q: %d, want 409 with the reason", delivery, r.StatusCode)
+		}
+		form.Set("id", "1")
+		if _, body := e.do(t, "POST", "/updates", "operator", form); strings.Contains(body, "HTTP API off") {
+			t.Errorf("delivery %q: a device that downloads over MQTT was refused by the gate", delivery)
+		}
+	}
+	for _, q := range o.submitReqs {
+		if q.DeviceID == 2 {
+			t.Fatalf("device 2 was submitted: %+v", q)
+		}
+	}
+}
+
+// Why (#645 review): the Drift tab compares the newest backup with a live read. A device whose HTTP API is off and
+// which nothing else reads is not asked: the read would only fail, with the client's own wording; the tab says why
+// instead. A device MQTT reads is compared as before.
+func TestDriftDoesNotReadADeviceWhoseHTTPAPIIsOff(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		facts transport.Facts
+		read  bool
+	}{{"no path", httpOnlyFacts(), false}, {"read over MQTT", readsOnlyFacts(), true}} {
+		bk := &diffBackups{files: map[model.BackupID][]byte{2: []byte(`{"Status1":{"StatusPRM":{"Uptime":"1T00:00:00"}}}`)},
+			live: []byte(`{"Status1":{"StatusPRM":{"Uptime":"9T00:00:00"}}}`)}
+		bk.list = []model.Backup{{ID: 2, DeviceID: 1, Kind: model.BackupSnapshot, TakenAt: time.Now().Add(-time.Hour), Version: "16.0.0"}}
+		e := setupWith(t, func(d *Deps) {
+			d.Backups = bk
+			facts1(map[model.DeviceID]transport.Facts{1: c.facts})(d)
+		})
+		e.health[1] = refusedHealth(1)
+		r, body := e.do(t, "GET", "/devices/1/drift", "operator", nil)
+		if c.read {
+			if r.StatusCode != 200 || bk.liveN != 1 {
+				t.Errorf("%s: %d, %d reads, want the comparison", c.name, r.StatusCode, bk.liveN)
+			}
+			continue
+		}
+		mustRefuse(t, "drift, "+c.name, r.StatusCode, body)
+		if bk.liveN != 0 || strings.Contains(body, "likely refuses") {
+			t.Errorf("%s: the device was read (%d)", c.name, bk.liveN)
+		}
+	}
+}
+
+// Why (#645 review): Copy from a device reads one setting live and falls back to the newest backup. When the live
+// read meets a device whose HTTP API is off and no backup has the value, the page says so in the one wording with the
+// fix, not with the client's "likely refuses HTTP API commands".
+func TestCopyFromADeviceNamesTheHTTPAPIOffInTheOneWording(t *testing.T) {
+	rp := defaultRP()
+	rp.readErr = fmt.Errorf("the device did not answer: %w", fmt.Errorf("%w: set SetOption128 1 on kitchen", tasmota.ErrHTTPAPIRefused))
+	e, _ := ruleEnvWith(t, rp)
+	r, body := e.do(t, "POST", "/policy/rules/new/copy", "admin", url.Values{"csrf": {"tok"}, "device": {"1"}, "command": {"Timezone"}})
+	got := sliceBetween(body, "Could not read", "</")
+	if r.StatusCode != 422 || !strings.Contains(got, apiOffName) || !strings.Contains(got, "SetOption128 1") || strings.Contains(body, "likely refuses") {
+		t.Errorf("%d: %q", r.StatusCode, got)
 	}
 }

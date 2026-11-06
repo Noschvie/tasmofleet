@@ -579,17 +579,18 @@ func TestAPIOffSkipUsesTheTrackersFindingNotTheRoutersMemory(t *testing.T) {
 }
 
 // apiOffRuntime: device 1 is HTTP only, device 2 is on our broker with its own reads over MQTT but a strict
-// write rule that fails (another device's GroupTopic is unread), device 3 on our broker and fully served.
+// write rule that fails: device 3, also on our broker, has a GroupTopic nobody has read yet.
 func apiOffRuntime() (*runtime, map[model.DeviceID]model.Health) {
 	id := model.Identity{Family: model.ChipESP8266, Version: "16.0.0", Variant: "tasmota", FreeKB: 700}
 	httpOnly := model.Device{ID: 1, Name: "plug", Identity: id}
 	onBroker := model.Device{ID: 2, Name: "mqtt-plug", Identity: id, MQTT: model.MQTTOurs, Topic: "mqtt-plug", FullTopic: "%prefix%/%topic%/",
 		GroupTopic: "tasmotas", GroupTopicReadAt: factsNow, MQTTPasswordMode: model.MQTTPasswordOwn}
+	unread := model.Device{ID: 3, Name: "other-plug", Identity: id, MQTT: model.MQTTOurs, Topic: "other-plug", FullTopic: "%prefix%/%topic%/"}
 	refused := model.Health{State: model.HealthOnline, HTTPRefusedAt: factsNow}
 	h2 := refused
 	h2.LWT = "Online"
-	hs := map[model.DeviceID]model.Health{1: refused, 2: h2}
-	return &runtime{svc: &Services{}, facts: newFacts([]model.Device{httpOnly, onBroker}, fakeFactsHealth(hs), nil)}, hs
+	hs := map[model.DeviceID]model.Health{1: refused, 2: h2, 3: {State: model.HealthOnline, LWT: "Online"}}
+	return &runtime{svc: &Services{}, facts: newFacts([]model.Device{httpOnly, onBroker, unread}, fakeFactsHealth(hs), nil)}, hs
 }
 
 // Why (#645): the silent policy read every ten minutes is skipped (no read, no error) for a device whose HTTP API is
@@ -597,6 +598,9 @@ func apiOffRuntime() (*runtime, map[model.DeviceID]model.Health) {
 func TestPolicyReadSkipsADeviceWhoseHTTPAPIIsOffAndNothingElseReads(t *testing.T) {
 	a, hs := apiOffRuntime()
 	ctx := context.Background()
+	if f, err := a.facts.Facts(ctx, 2); err != nil || transport.Choose(f).Commands != transport.MQTT || transport.Choose(f).Writes != transport.None {
+		t.Fatalf("fixture: device 2 must be read over MQTT and have no write path (%v)", err)
+	}
 	if !a.readSkipped(ctx, 1, hs[1]) {
 		t.Error("an HTTP-only device with its API off is read")
 	}

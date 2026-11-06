@@ -12,6 +12,7 @@ import (
 
 	"github.com/nofuturekid/tasmofleet/internal/backup"
 	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/transport"
 )
 
 // LiveSnapshotter reads the Status snapshot of a device without storing it
@@ -206,6 +207,12 @@ func (h *handler) drift(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.StoredAt, p.StoredBy = stored.TakenAt, backupTriggerText(stored.Trigger, stored.TriggerRef)
+	// A device whose HTTP API is off and which nothing else reads is not asked: the read would only fail (#645).
+	if why := h.apiOffBlock(r.Context(), d.ID, transport.ActCommands); why != "" {
+		p.Error = why
+		show(http.StatusConflict)
+		return
+	}
 	now := h.d.Clock.Now()
 	key := driftKey{h, d.ID}
 	read, fresh := reserveDrift(key, now)

@@ -197,28 +197,6 @@ func (h *handler) apiOffBlockCommand(ctx context.Context, id model.DeviceID, cmd
 	return h.apiOffBlock(ctx, id, commandAction(cmd))
 }
 
-// apiOffBlockUpdate is apiOffBlock for an update, decided on the request instead of the bare device: a device whose
-// HTTP API is off is refused only when no way of the request reaches it. The delivery is the one asked for (the picker,
-// which has not asked yet, passes DeliveryPush: the way with the most options), and the experimental upload over MQTT counts as a way, with a
-// 1-byte image as the question "could any image go this way" (the card's Upload row asks the same). Whether a
-// real image fits and the upload is offered is the OTA engine's decision, which refuses with its own reason.
-func (h *handler) apiOffBlockUpdate(ctx context.Context, id model.DeviceID, delivery model.Delivery) string {
-	if h.d.Health == nil || !h.d.Health.Get(id).APIOff() {
-		return ""
-	}
-	f, _, ok := h.transportOf(ctx, id)
-	if !ok {
-		return ""
-	}
-	fits, need, room, why := fwselect.MQTTUploadFits(f.Identity, fwselect.UpLayoutUnknown, 1)
-	f.Request = transport.Request{Delivery: delivery, AllowMQTTUpload: true,
-		MQTTUploadFit: transport.MQTTFit{OK: fits, NeedKB: need, RoomKB: room, Reason: why}}
-	if transport.Choose(f).Update != transport.None {
-		return ""
-	}
-	return reasonAPIOff
-}
-
 // refuseAPIOff answers a page that cannot be used because the device's HTTP API is off and nothing else reaches
 // it: a message page with the reason, status 409, before anything is sent.
 func (h *handler) refuseAPIOff(w http.ResponseWriter, r *http.Request, title, active, nothing, why string) {

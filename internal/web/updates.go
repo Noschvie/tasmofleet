@@ -242,7 +242,7 @@ func (h *handler) updateFormData(r *http.Request, selected []model.DeviceID, mod
 		d := row.Device
 		blocked := blockedReason(d, row.Health.State)
 		if blocked == "" && row.Health.APIOff() {
-			blocked = h.apiOffBlockUpdate(r.Context(), d.ID, model.DeliveryPush) // online, but its HTTP API is off and MQTT cannot update it (#447)
+			blocked = h.apiOffBlock(r.Context(), d.ID, transport.ActUpdate) // online, but its HTTP API is off and MQTT cannot update it (#447)
 		}
 		if blocked == "" && busy[d.ID] {
 			blocked = "In a running transaction"
@@ -701,7 +701,7 @@ func (h *handler) updatePreview(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	apiOff := h.updateAPIOff(r.Context(), ids, model.Delivery(r.PostFormValue("delivery")))
+	apiOff := h.updateAPIOff(r.Context(), ids)
 	redo := func(msg string) {
 		f, err := h.updateFormData(r, ids, "", deviceFilter{})
 		if err != nil {
@@ -814,11 +814,14 @@ func (h *handler) updatePreview(w http.ResponseWriter, r *http.Request) {
 }
 
 // updateAPIOff names the selected devices whose HTTP API is off and which nothing else can update (#447), with
-// the reason; "" when none. They are refused before anything starts, as the picker already greys them out.
-func (h *handler) updateAPIOff(ctx context.Context, ids []model.DeviceID, delivery model.Delivery) string {
+// the reason; "" when none. They are refused before anything starts, as the picker already greys them out. The
+// delivery asked for does not change that: with the API off only a download started over MQTT can update a device,
+// for pull and push alike, because the upload over MQTT is not offered (#262 was not shipped: no request allows it,
+// and the engine refuses that path).
+func (h *handler) updateAPIOff(ctx context.Context, ids []model.DeviceID) string {
 	var b strings.Builder
 	for _, id := range ids {
-		if why := h.apiOffBlockUpdate(ctx, id, delivery); why != "" {
+		if why := h.apiOffBlock(ctx, id, transport.ActUpdate); why != "" {
 			d, _ := h.d.Inventory.Get(ctx, id) // a vanished device shows as an empty name
 			fmt.Fprintf(&b, "%s: %s ", d.Name, why)
 		}
@@ -832,7 +835,7 @@ func (h *handler) updateSubmit(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	if apiOff := h.updateAPIOff(r.Context(), h.formIDs(r), model.Delivery(r.PostFormValue("delivery"))); apiOff != "" {
+	if apiOff := h.updateAPIOff(r.Context(), h.formIDs(r)); apiOff != "" {
 		h.message(w, r, http.StatusConflict, h.view(r, "Update refused", "updates", "Nothing was started. "+apiOff))
 		return
 	}

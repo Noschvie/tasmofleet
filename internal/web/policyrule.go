@@ -14,6 +14,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/policy"
 	"github.com/nofuturekid/tasmofleet/internal/settings"
 	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
+	"github.com/nofuturekid/tasmofleet/internal/tasmota"
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
 
@@ -737,6 +738,9 @@ func (h *handler) ruleCopy(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case errors.As(err, &refused):
 		fail(http.StatusUnprocessableEntity, upperFirst(refused.Reason)+".")
+		return
+	case errors.Is(err, tasmota.ErrHTTPAPIRefused):
+		fail(http.StatusUnprocessableEntity, "Could not read "+cmd+" from "+dev.Name+": "+reasonAPIOff) // the one wording (#645)
 		return
 	case err != nil:
 		fail(http.StatusUnprocessableEntity, "Could not read "+cmd+" from "+dev.Name+": "+sentence(err.Error()))
