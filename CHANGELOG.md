@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Added
+
+- Notifications: browser notifications while a TasmoFleet tab is open. The events of the webhook and e-mail channels (a finished update, a failed scheduled backup or snapshot, as far as Settings, Notifications selects them) also show to admins as desktop notifications. Each browser opts in itself, with "Enable browser notifications" on that tab (the permission is asked for only after the click; the choice stays in the browser, nothing is stored on the server), and with several tabs open one notification comes per event. The card says so when the browser blocks notifications or the page is not HTTPS or localhost, where browsers do not offer them. No service worker: nothing shows while no tab is open (#540)
+
 ### Changed
 
 - Spec: the operator role reads the redacted values in config diffs (backup comparison and Drift tab); only free-text settings (rules, scripts, Berry code, `mems`, `rf_code`) show just that they changed. The code and the restore security notes already worked this way; a handler test now pins it (#501)
@@ -13,8 +17,6 @@ always upgrade automatically.
 ### Fixed
 
 - Policy: "Show all" under the devices of a rule draft works on the first click right after typing, instead of the form's own preview putting the short list back (#660)
-### Added
-- Notifications: browser notifications while a TasmoFleet tab is open. The events of the webhook and e-mail channels (a finished update, a failed scheduled backup or snapshot, as far as Settings, Notifications selects them) also show as desktop notifications. Each browser opts in itself, with "Enable browser notifications" on that tab (the permission is asked for only after the click; the choice stays in the browser, nothing is stored on the server), and with several tabs open one notification comes per event. The card says so when the browser blocks notifications or the page is not HTTPS or localhost, where browsers do not offer them. No service worker: nothing shows while no tab is open (#540)
 
 ## 0.32.0 "Fastnet" (2026-11-06)
 

@@ -334,7 +334,7 @@ func TestStreamCarriesNoticesAsJSONWithBasePath(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	req, _ := http.NewRequestWithContext(ctx, "GET", e.srv.URL+"/tf/events", nil)
-	req.Header.Set("X-Test-Role", "operator")
+	req.Header.Set("X-Test-Role", "admin") // notices are for admins (TestNoticesReachAdminsOnly)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)

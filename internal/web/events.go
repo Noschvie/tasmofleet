@@ -12,6 +12,7 @@ import (
 
 	"github.com/a-h/templ"
 
+	"github.com/nofuturekid/tasmofleet/internal/auth"
 	"github.com/nofuturekid/tasmofleet/internal/events"
 	"github.com/nofuturekid/tasmofleet/internal/httpx"
 	"github.com/nofuturekid/tasmofleet/internal/model"
@@ -69,6 +70,22 @@ const sseRetry = 4 * time.Second
 func (h *handler) events(w http.ResponseWriter, r *http.Request) {
 	user := actor(r)
 	base := httpx.BasePath(r.Context())
+	// Browser notifications (#540) are for admins: only they can turn them on (Settings is theirs),
+	// and a failed snapshot is theirs to see. A page without live data asks for the notices alone
+	// (?only=notice, notify.js), so a tab on such a page shows them too.
+	p, _ := auth.FromContext(r.Context())
+	admin := p.Role >= model.RoleAdmin
+	topics := []events.Topic{events.TopicHealth, events.TopicDevice, events.TopicJob, events.TopicBackup, events.TopicBroker}
+	if r.URL.Query().Get("only") == "notice" {
+		if !admin {
+			http.Error(w, "browser notifications are for admins", http.StatusForbidden)
+			return
+		}
+		topics = nil
+	}
+	if admin {
+		topics = append(topics, events.TopicNotice)
+	}
 	if !h.acquireStream(user) {
 		http.Error(w, "too many open event streams", http.StatusTooManyRequests)
 		return
@@ -89,7 +106,7 @@ func (h *handler) events(w http.ResponseWriter, r *http.Request) {
 	if err := rc.Flush(); err != nil {
 		return
 	}
-	ch, cancel := h.d.Hub.Subscribe(events.TopicHealth, events.TopicDevice, events.TopicJob, events.TopicBackup, events.TopicBroker, events.TopicNotice)
+	ch, cancel := h.d.Hub.Subscribe(topics...)
 	defer cancel()
 	// The page was built from what the hub had published up to "since" (view.EventSeq). Anything
 	// published after that and before this subscription is lost to this stream, and so is
@@ -125,9 +142,11 @@ func (h *handler) events(w http.ResponseWriter, r *http.Request) {
 			if checker != nil {
 				// A detached context: the principal cached in the request's
 				// context is the one from connect time.
-				if _, err := checker.Principal(r.Clone(httpx.Detach(r.Context()))); err != nil {
+				again, err := checker.Principal(r.Clone(httpx.Detach(r.Context())))
+				if err != nil {
 					return
 				}
+				admin = again.Role >= model.RoleAdmin // a demoted admin hears no more notices
 			}
 			if _, err := fmt.Fprint(w, ": ping\n\n"); err != nil {
 				return
@@ -135,6 +154,9 @@ func (h *handler) events(w http.ResponseWriter, r *http.Request) {
 		case ev, ok := <-ch:
 			if !ok {
 				return
+			}
+			if _, notice := ev.Payload.(events.Notice); notice && !admin {
+				continue
 			}
 			var buf bytes.Buffer
 			h.encodeEvent(&buf, ev, base)

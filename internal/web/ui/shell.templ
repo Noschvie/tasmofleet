@@ -56,8 +56,13 @@ templ Shell(d ShellData, content templ.Component) {
 					@connBanners()
 				}
 			</header>
-			if d.Live {
+			// Browser notifications (#540, admins only): a live page hears them on its stream, a page
+			// without one names the stream notify.js opens for the notices alone.
+			if d.IsAdmin && d.Live {
 				<span hidden data-bn-sink sse-swap="notice"></span>
+			}
+			if d.IsAdmin && !d.Live {
+				<span hidden data-bn-events={ d.Base + "/events?only=notice" }></span>
 			}
 			@NavDrawer(d)
 			<main id="main">

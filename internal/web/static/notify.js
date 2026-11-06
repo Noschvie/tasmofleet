@@ -1,14 +1,16 @@
 // Browser notifications (#540): while a TasmoFleet tab is open, a finished update and a failed
 // scheduled backup or snapshot show as desktop notifications. The server sends the same events
 // as for the webhook and e-mail ("notice" on the page's event stream, only the ones the person's
-// event settings ask for); this file shows them with the Notification API. Opt-in per browser:
-// the permission is asked for only after a click on "Enable browser notifications" in Settings,
-// Notifications, and the choice lives in this browser's localStorage, not in the database. No
-// service worker (Web Push is a separate issue): nothing shows while no tab is open.
+// event settings ask for, to admins only); this file shows them with the Notification API. Opt-in
+// per browser: the permission is asked for only after a click on "Enable browser notifications"
+// in Settings, Notifications, and the choice lives in this browser's localStorage, not in the
+// database. No service worker (Web Push is a separate issue): nothing shows while no tab is open.
 //
-// With several tabs open, every tab hears the event. One tab (the one that holds a Web Lock) shows
-// it; the others pass what they heard on to it over a BroadcastChannel, so the notification still
-// comes if the leader's own stream is down. The event id and the notification tag fold repeats.
+// With several tabs open, every tab with live data hears the event. One tab (the one that holds a
+// Web Lock) shows it; the others pass what they heard on to it over a BroadcastChannel, so the
+// notification still comes if the leader's own stream is down. On a page without live data the
+// leader opens a stream of the notices alone (follow). The event id and the notification tag fold
+// repeats.
 (function (root) {
   "use strict";
 
@@ -36,13 +38,21 @@
       "Not available on this connection",
       "Browsers allow notifications only on a secure page: open TasmoFleet over HTTPS (or as localhost).",
     ],
-    unsupported: ["neutral", "Not supported", "This browser has no notification support."],
+    unsupported: [
+      "neutral",
+      "Not supported",
+      "This browser has no notification support.",
+    ],
     denied: [
       "danger",
       "Blocked by this browser",
       "Allow notifications for this site in the browser's site settings, then reload this page.",
     ],
-    off: ["neutral", "Off in this browser", "Enable them to get a desktop notification while a TasmoFleet tab is open."],
+    off: [
+      "neutral",
+      "Off in this browser",
+      "Enable them to get a desktop notification while a TasmoFleet tab is open.",
+    ],
     enabled: [
       "ok",
       "On in this browser",
@@ -53,7 +63,13 @@
   // toNotification: the event the server sent -> {id, title, options}, or null when it lacks what
   // a notification needs. tag folds a repeat of the same event into one notification.
   function toNotification(raw) {
-    if (!raw || typeof raw.id !== "string" || raw.id === "" || typeof raw.title !== "string" || raw.title === "") {
+    if (
+      !raw ||
+      typeof raw.id !== "string" ||
+      raw.id === "" ||
+      typeof raw.title !== "string" ||
+      raw.title === ""
+    ) {
       return null;
     }
     var problem = raw.result === "failed" || raw.result === "partial";
@@ -84,7 +100,12 @@
     };
   }
 
-  var api = { stateOf: stateOf, toNotification: toNotification, newSeen: newSeen, TEXT: TEXT };
+  var api = {
+    stateOf: stateOf,
+    toNotification: toNotification,
+    newSeen: newSeen,
+    TEXT: TEXT,
+  };
   if (typeof module === "object" && module.exports) {
     module.exports = api;
   }
@@ -142,10 +163,12 @@
   if (!leader) {
     root.navigator.locks.request(LOCK, function () {
       leader = true;
+      follow();
       return new Promise(function () {}); // held until this tab closes
     });
   }
   var seen = newSeen(100);
+  var own = null; // the leader's stream of the notices alone, on a page without live data
   var channel = null;
   try {
     channel = new root.BroadcastChannel(CHANNEL);
@@ -164,15 +187,10 @@
     show(n.title, n.options);
   }
 
-  document.addEventListener("htmx:sseBeforeMessage", function (e) {
-    var t = e.target;
-    if (!(t instanceof Element) || !t.matches("[data-bn-sink]")) {
-      return;
-    }
-    e.preventDefault();
+  function hear(data) {
     var raw = null;
     try {
-      raw = JSON.parse(e.detail.data);
+      raw = JSON.parse(data);
     } catch (err) {
       return;
     }
@@ -180,14 +198,49 @@
       channel.postMessage(raw);
     }
     receive(raw);
+  }
+
+  document.addEventListener("htmx:sseBeforeMessage", function (e) {
+    var t = e.target;
+    if (!(t instanceof Element) || !t.matches("[data-bn-sink]")) {
+      return;
+    }
+    e.preventDefault();
+    hear(e.detail.data);
   });
+
+  // A page without live data (Settings, say) has no event stream. While notifications are on, its
+  // leader opens one for the notices alone, so they also come while only such tabs are open.
+  function follow() {
+    var src = document.querySelector("[data-bn-events]");
+    var want = leader && src !== null && state() === "enabled";
+    if (want && !own) {
+      var es = new root.EventSource(src.getAttribute("data-bn-events"));
+      es.addEventListener("notice", function (e) {
+        hear(e.data);
+      });
+      es.onerror = function () {
+        // refused (an error status, a proxy while TasmoFleet restarts): the browser gives up on
+        // such a stream, so try again later
+        if (own === es && es.readyState === 2) {
+          own = null;
+          root.setTimeout(follow, 30000);
+        }
+      };
+      own = es;
+    } else if (!want && own) {
+      own.close();
+      own = null;
+    }
+  }
 
   // The Settings card.
   function render() {
     var s = state();
     document.querySelectorAll("[data-bn]").forEach(function (card) {
       var t = TEXT[s];
-      card.querySelector("[data-bn-dot]").className = "sys-status-dot t-" + t[0];
+      card.querySelector("[data-bn-dot]").className =
+        "sys-status-dot t-" + t[0];
       card.querySelector("[data-bn-title]").textContent = t[1];
       card.querySelector("[data-bn-text]").textContent = t[2];
       card.setAttribute("data-bn-state", s);
@@ -196,9 +249,15 @@
       card.querySelector("[data-bn-disable]").hidden = s !== "enabled";
     });
   }
+  // refresh follows a change of the state: the card, and the stream of a page without live data.
+  function refresh() {
+    render();
+    follow();
+  }
 
   document.addEventListener("click", function (e) {
-    var b = e.target instanceof Element ? e.target.closest("[data-bn] button") : null;
+    var b =
+      e.target instanceof Element ? e.target.closest("[data-bn] button") : null;
     if (!b) {
       return;
     }
@@ -208,7 +267,7 @@
         if (p === "granted") {
           setOptedIn(true);
         }
-        render();
+        refresh();
       };
       var r = root.Notification.requestPermission(done); // old browsers take a callback, new ones return a promise
       if (r && typeof r.then === "function") {
@@ -216,24 +275,29 @@
       }
     } else if (b.hasAttribute("data-bn-disable")) {
       setOptedIn(false);
-      render();
+      refresh();
     } else if (b.hasAttribute("data-bn-test")) {
-      show("TasmoFleet test notification", { body: "If you can read this, browser notifications work.", tag: "tasmofleet-test" });
+      show("TasmoFleet test notification", {
+        body: "If you can read this, browser notifications work.",
+        tag: "tasmofleet-test",
+      });
     }
   });
 
   document.addEventListener("htmx:afterSettle", render); // the card came back from a swap
-  root.addEventListener("storage", render); // another tab turned it on or off
+  root.addEventListener("storage", refresh); // another tab turned it on or off
   try {
-    root.navigator.permissions.query({ name: "notifications" }).then(function (p) {
-      p.onchange = render;
-    });
+    root.navigator.permissions
+      .query({ name: "notifications" })
+      .then(function (p) {
+        p.onchange = refresh;
+      });
   } catch (e) {
     // no Permissions API: the card reads the state when the page loads
   }
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", render);
+    document.addEventListener("DOMContentLoaded", refresh);
   } else {
-    render();
+    refresh();
   }
 })(typeof window !== "undefined" ? window : this);

@@ -1775,7 +1775,7 @@ Package `notify` tells a person about events they did not watch (#249). Events: 
 (one per update transaction, sent by the job callback when the last job of the transaction ends; result
 `ok`, `partial`, `failed` or `cancelled`), `backup.scheduled_failed` (one per scheduled run, naming
 the failed devices), `snapshot.failed` (scheduled database snapshot), and `test`. Settings
-(`NOTIFY_*`, Settings page, tab Notifications) select the events and configure two channels:
+(`NOTIFY_*`, Settings page, tab Notifications) select the events and configure two server-side channels, plus the browser (below):
 
 - **Webhook:** POST to the address as typed, in one of four formats (`NOTIFY_WEBHOOK_FORMAT`, #469):
   `json` is the body `{event, result, title, text, url, time}`; `homeassistant` sends the same body
@@ -1790,6 +1790,20 @@ the failed devices), `snapshot.failed` (scheduled database snapshot), and `test`
   from the environment, redirects only to the same host. The address is never part of a status or log text.
 - **E-mail:** `net/smtp` with STARTTLS (never skipped when chosen), implicit TLS or none; PLAIN or
   LOGIN login; quoted-printable UTF-8 text with the title as subject.
+- **Browser (#540):** a desktop notification while a TasmoFleet tab is open, for admins only (the opt-in
+  sits on the admin Settings page). `notify.Options.Browser` is called once by `Dispatcher.Emit` for every event
+  the settings select, whether or not a channel is on, never for `test`; the app publishes it as
+  `events.TopicNotice` with an `events.Notice` payload (id, name, result, title, text, path; the id is the start
+  time plus a counter, equal in every stream). The event stream sends it as the SSE event `notice` (one JSON
+  line, path below the base path) and only on streams of admins; the role is re-checked at every session
+  re-check like the other admin-only streams. `notify.js` shows it with the Notification API. The opt-in is per
+  browser (localStorage; the permission is requested only after a click on "Enable browser notifications"),
+  nothing is stored on the server. One notification per event across tabs: the tab holding a Web Lock shows it,
+  the others forward what they heard over a BroadcastChannel, and the event id and the notification tag fold
+  repeats. On pages without live data the leader tab opens `/events?only=notice` while notifications are on
+  (an operator asking for it gets 403), so at most one extra stream per browser. The card says when the browser
+  blocks notifications or the page is not a secure context (HTTPS or localhost). No service worker: nothing
+  shows while no tab is open (Web Push is #541).
 
 Delivery runs in the background and never fails the caller. The last delivery and the last test per
 channel are kept in memory (empty after a restart). The two secrets are write-only and stored with
