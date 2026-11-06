@@ -334,8 +334,12 @@ func (r *brokerHostReader) isDue(m map[model.DeviceID]time.Time, id model.Device
 func (r *brokerHostReader) visit(ctx context.Context, d model.Device, what visitWhat) error {
 	id := d.ID
 	if what.broker || what.identity {
-		if err := r.readLocked(ctx, id, what); err != nil {
+		refused, err := r.readLocked(ctx, id, what)
+		if err != nil {
 			return err
+		}
+		if refused {
+			return nil // another device answers at the address: nothing is read for this device from it
 		}
 	}
 	if what.data && r.readData != nil && !r.readDataOf(ctx, d) && !what.broker && !what.identity {
@@ -345,15 +349,15 @@ func (r *brokerHostReader) visit(ctx context.Context, d model.Device, what visit
 }
 
 // readLocked reads the broker and the identity of id under the device lock.
-func (r *brokerHostReader) readLocked(ctx context.Context, id model.DeviceID, what visitWhat) error {
+func (r *brokerHostReader) readLocked(ctx context.Context, id model.DeviceID, what visitWhat) (refused bool, err error) {
 	release, err := r.enter(ctx, id, "broker read")
 	if err != nil {
 		var busy devlock.BusyError
 		if errors.As(err, &busy) {
-			return errBrokerBusy
+			return false, errBrokerBusy
 		}
 		r.log.Debug("broker host: device not available", "device", id, "err", err)
-		return errBrokerRetry
+		return false, errBrokerRetry
 	}
 	defer release()
 	if what.broker {
@@ -361,11 +365,16 @@ func (r *brokerHostReader) readLocked(ctx context.Context, id model.DeviceID, wh
 		err := r.read(rctx, id)
 		cancel()
 		if err != nil {
-			if ctx.Err() == nil {
+			switch {
+			case ctx.Err() != nil:
+			case errors.Is(err, errAnotherDevice): // not this device: nothing was stored, asked again at the regular interval
+				r.next[id] = r.now().Add(brokerHostEvery)
+				r.log.Debug("broker host: another device answers at the address", "device", id)
+			default:
 				r.next[id] = r.now().Add(brokerHostRetry)
 				r.log.Debug("broker host: read failed", "device", id, "err", err)
 			}
-			return errBrokerRetry
+			return false, errBrokerRetry
 		}
 		r.next[id] = r.now().Add(brokerHostEvery)
 	}
@@ -373,13 +382,15 @@ func (r *brokerHostReader) readLocked(ctx context.Context, id model.DeviceID, wh
 		ictx, cancel := context.WithTimeout(ctx, identityTimeout)
 		err := r.readIdentity(ictx, id)
 		cancel()
-		var refused *RefreshRefusedError
-		if errors.As(err, &refused) {
-			err = nil // an answer, not a failure: another device answers at the address (logged and audited by the prober); asked again at the regular interval
+		var ref *RefreshRefusedError
+		if errors.As(err, &ref) {
+			refused = true
+			err = nil                                   // an answer, not a failure: another device answers at the address (logged and audited by the prober); asked again at the regular interval
+			r.dataNext[id] = r.now().Add(identityEvery) // and nothing is read for this device from that address until the identity matches again
 		}
 		r.finished(ctx, r.identityNext, id, identityEvery, err, "identity")
 	}
-	return nil
+	return refused, nil
 }
 
 // readDataOf reads the data of d if nothing holds the device and reports whether it did. The lock is only
@@ -394,6 +405,11 @@ func (r *brokerHostReader) readDataOf(ctx context.Context, d model.Device) bool 
 	dctx, cancel := context.WithTimeout(ctx, dataTimeout)
 	err = r.readData(dctx, d)
 	cancel()
+	if errors.Is(err, errAnotherDevice) { // the caches stay as they are; asked again at the broker's interval
+		r.dataNext[d.ID] = r.now().Add(brokerHostEvery)
+		r.log.Debug("device refresh: another device answers at the address", "device", d.ID)
+		return true
+	}
 	r.finished(ctx, r.dataNext, d.ID, dataEvery, err, "data")
 	return true
 }
@@ -469,6 +485,9 @@ func (a *runtime) wireDeviceRefresh(r *brokerHostReader) {
 // check is off, policyReadsOff), and the GPIO template reading. The first part that fails ends the read:
 // the device does not answer, and the retry reads all.
 func (a *runtime) refreshData(ctx context.Context, d model.Device) error {
+	if err := a.svc.Prober.VerifyAddress(ctx, d); err != nil { // fail closed: only the stored device fills these caches
+		return err
+	}
 	if a.settings != nil {
 		if _, err := a.settings.Read(ctx, d.ID); err != nil {
 			return err

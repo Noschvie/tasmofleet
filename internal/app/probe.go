@@ -522,6 +522,33 @@ func (p *Prober) ReadNet(ctx context.Context, id model.DeviceID) error {
 	return nil
 }
 
+// errAnotherDevice: the device that answers at the stored address is not the stored one (its MAC is not in
+// the stored set), or cannot prove it is (no MAC in the answer).
+var errAnotherDevice = errors.New("another device answers at the stored address")
+
+// VerifyAddress says, with one Status 5, whether the device answering at the stored address is the stored
+// one, by the rule of ReadNet and the refresh (a MAC of the stored set). The background reads (#600) call
+// it before they read anything that is stored on, or shown for, the device: an address a DHCP lease handed
+// to another device must not fill this device's broker, Settings values, policy values or template reading.
+// A device stored without a MAC has nothing to compare (first contact). Silent: the refresh audits a refusal,
+// this check runs often. Any other error (not reachable, a timeout) is the read's own failure.
+func (p *Prober) VerifyAddress(ctx context.Context, d model.Device) error {
+	if d.MAC == "" {
+		return nil
+	}
+	var out probed
+	if _, err := p.status5(ctx, tasmota.TargetFor(d), &out); err != nil {
+		if errors.Is(err, tasmota.ErrUnknownCommand) {
+			return errAnotherDevice // minimal firmware reports no MAC: it cannot show it is the stored device
+		}
+		return err
+	}
+	if !d.HasMAC(out.mac) && !d.HasMAC(out.ethMAC) {
+		return errAnotherDevice
+	}
+	return nil
+}
+
 // ReadBroker re-reads the broker a stored device is configured for (Status 6, and SetOption3 when a
 // host is set; never Status 0, one command at a time) and stores host, port and capability when they
 // differ from what is stored (#598). Why: the host is otherwise only stored by a probe, so a device
@@ -537,6 +564,9 @@ func (p *Prober) ReadBroker(ctx context.Context, id model.DeviceID) error {
 	}
 	if d.Identity.Variant == "minimal" || d.Identity.Variant == "safeboot" {
 		return nil
+	}
+	if err := p.VerifyAddress(ctx, d); err != nil { // the host of another device is not this device's
+		return err
 	}
 	c, host, port, err := p.readMQTT(ctx, tasmota.TargetFor(d), true)
 	if errors.Is(err, errNoMQTTAnswer) {

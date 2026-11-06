@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"reflect"
 	"slices"
 	"strings"
 	"sync/atomic"
@@ -243,7 +244,7 @@ func TestRefreshFillsThePageCachesAndNeverSendsStatus0(t *testing.T) {
 	rep := &policyReporter{devices: fakeLister{dev}, reader: set, now: time.Now}
 	rep.setRules([]policy.Rule{{ID: "r1", Command: "PowerOnState", Want: "3"}})
 	tpl := templates.New(templates.Options{Devices: tplDevices{dev}, Client: cl})
-	a := &runtime{settings: set, policyLive: rep, templates: tpl}
+	a := &runtime{svc: &Services{Prober: &Prober{Client: cl, Gap: time.Millisecond}}, settings: set, policyLive: rep, templates: tpl}
 	if _, ok := set.Last(1); ok {
 		t.Fatal("the Settings cache was filled before the refresh")
 	}
@@ -564,6 +565,7 @@ func TestPausedPolicyLiveCheckIsNotReadInTheBackground(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			a := liveRuntime(t)
+			a.svc.Prober = &Prober{} // the device has no MAC: nothing to verify
 			if tc.zero {
 				if _, err := a.svc.Sys.Apply(t.Context(), sysconfig.Request{Actor: "admin", Values: map[string]string{"POLICY_LIVE_INTERVAL": "0s"}}); err != nil {
 					t.Fatal(err)
@@ -588,4 +590,152 @@ func TestPausedPolicyLiveCheckIsNotReadInTheBackground(t *testing.T) {
 			}
 		})
 	}
+}
+
+// anotherDevice is a simulator device that the inventory knows under the MAC of a different device: the
+// address a DHCP lease handed over, or an entry whose address was typed wrong.
+type anotherDevice struct {
+	sim       simulator.Device
+	cl        tasmota.Client
+	p         *Prober
+	st        *store.SQLite
+	id        model.DeviceID
+	stored    model.Device
+	setCaches *settings.Manager
+}
+
+func newAnotherDevice(t *testing.T) anotherDevice {
+	t.Helper()
+	fleet, err := simulator.NewFleet(simulator.FleetOptions{FixturesDir: "../../testdata/fixtures"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = fleet.Close() })
+	sim, err := fleet.Add(t.Context(), simulator.DeviceSpec{Name: "plug", Profile: simulator.ProfileESP8266_4M})
+	if err != nil {
+		t.Fatal(err)
+	}
+	host, port := splitAddr(t, sim.Addr())
+	cl := tasmota.NewHTTPClient(tasmota.Options{AllowedNetworks: loopbackNets()})
+	st := openBrokerStore(t)
+	p := &Prober{Client: cl, Gap: time.Millisecond, Broker: fixedBroker{host: "broker.example"}, Devices: st}
+	desc, err := p.Describe(t.Context(), model.Device{Address: host, Port: port})
+	if err != nil {
+		t.Fatal(err)
+	}
+	desc.MAC, desc.MACs = "02:00:00:00:00:99", nil // not the MAC the device at the address reports
+	desc.MQTTHost, desc.MQTTPort = "stored-broker.example", 1883
+	id, err := st.CreateDevice(t.Context(), desc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, _ := st.GetDevice(t.Context(), id)
+	return anotherDevice{sim: sim, cl: cl, p: p, st: st, id: id, stored: stored, setCaches: settings.New(settings.Options{Devices: st, Client: cl})}
+}
+
+// Why: a device that answers at the address of another entry must not fill that entry. The data read checks
+// the MAC first (one Status 5, the rule of ReadNet) and sends nothing else when it does not match: no Settings
+// values, policy values or template reading of a stranger under this device's name.
+func TestDataReadFailsClosedForAnotherDevice(t *testing.T) {
+	o := newAnotherDevice(t)
+	rep := &policyReporter{devices: fakeLister{o.stored}, reader: o.setCaches, now: time.Now}
+	rep.setRules([]policy.Rule{{ID: "r1", Command: "PowerOnState", Want: "3"}})
+	tpl := templates.New(templates.Options{Devices: tplDevices{o.stored}, Client: o.cl, Backups: noBackups{}})
+	a := &runtime{svc: &Services{Prober: o.p}, settings: o.setCaches, policyLive: rep, templates: tpl}
+	before := len(o.sim.Commands())
+	if err := a.refreshData(t.Context(), o.stored); !errors.Is(err, errAnotherDevice) {
+		t.Fatalf("refreshData = %v, want errAnotherDevice", err)
+	}
+	if _, ok := o.setCaches.Last(o.id); ok {
+		t.Fatal("the Settings cache was filled from another device")
+	}
+	if len(rep.vals.get(o.id)) != 0 {
+		t.Fatal("the policy values were filled from another device")
+	}
+	for _, gv := range func() []templates.GroupView {
+		ov, _ := tpl.Overview(t.Context(), nil, false)
+		return append(ov.Groups, ov.BuiltIn...)
+	}() {
+		for _, v := range gv.Devices {
+			if v.Source == templates.SourceLive {
+				t.Fatal("the template reading was filled from another device")
+			}
+		}
+	}
+	if cmds := o.sim.Commands()[before:]; len(cmds) != 1 || cmds[0] != "Status 5" {
+		t.Fatalf("the other device received %v, want only the MAC check", cmds)
+	}
+}
+
+// Why: the broker host is stored on the entry; the host of another device must not become this device's.
+func TestBrokerReadFailsClosedForAnotherDevice(t *testing.T) {
+	o := newAnotherDevice(t)
+	if err := o.p.ReadBroker(t.Context(), o.id); !errors.Is(err, errAnotherDevice) {
+		t.Fatalf("ReadBroker = %v, want errAnotherDevice", err)
+	}
+	if d, _ := o.st.GetDevice(t.Context(), o.id); d.MQTTHost != "stored-broker.example" {
+		t.Fatalf("the broker host became %q from another device", d.MQTTHost)
+	}
+}
+
+// Why: the scheduled identity refresh stores IP, hostname, network facts, firmware, broker, group topic and
+// relay names; none of it may come from an answer whose MAC is not the stored one.
+func TestScheduledIdentityRefreshStoresNothingFromAnotherDevice(t *testing.T) {
+	o := newAnotherDevice(t)
+	var refused *RefreshRefusedError
+	if err := o.p.RefreshFacts(t.Context(), o.id); !errors.As(err, &refused) {
+		t.Fatalf("RefreshFacts = %v, want a refusal", err)
+	}
+	after, _ := o.st.GetDevice(t.Context(), o.id)
+	if !reflect.DeepEqual(after.Net, o.stored.Net) || after.Identity != o.stored.Identity || after.MQTTHost != o.stored.MQTTHost ||
+		after.GroupTopic != o.stored.GroupTopic || !slices.Equal(after.RelayNames, o.stored.RelayNames) || after.MAC != o.stored.MAC {
+		t.Fatalf("facts of another device were stored: %+v", after)
+	}
+}
+
+// Why: after a refused identity refresh nothing is read from that address for the device until a check
+// matches again: the data read is not started in the same visit and not for a day, and the refusal does not
+// make the broker read retry every ten minutes either.
+func TestRefusedIdentityHoldsBackTheDataRead(t *testing.T) {
+	g := newRefreshRig(1)
+	g.r.readIdentity = func(context.Context, model.DeviceID) error { return &RefreshRefusedError{Reason: refusedOther} }
+	g.r.pass(t.Context())
+	if _, _, d := g.takeAll(); len(d) != 0 {
+		t.Fatalf("data read in the visit whose identity refresh was refused: %v", d)
+	}
+	g.advance(23 * time.Hour)
+	g.r.pass(t.Context())
+	if _, _, d := g.takeAll(); len(d) != 0 {
+		t.Fatalf("data read before a day had passed: %v", d)
+	}
+}
+
+// Why: a data read that finds another device at the address leaves the caches alone and is asked again at
+// the broker's interval, not at every pass.
+func TestAnotherDeviceInTheDataReadIsNotRetriedAtEveryPass(t *testing.T) {
+	g := newRefreshRig(1)
+	n := 0
+	g.r.readData = func(context.Context, model.Device) error { n++; return errAnotherDevice }
+	for range 5 {
+		g.r.pass(t.Context())
+		g.advance(brokerHostTick)
+	}
+	g.advance(brokerHostRetry + time.Minute)
+	g.r.pass(t.Context())
+	if n != 1 {
+		t.Fatalf("%d data reads within the retry delay of a failure, want 1: another device is not a failure", n)
+	}
+	g.advance(brokerHostEvery)
+	g.r.pass(t.Context())
+	if n != 2 {
+		t.Fatalf("%d data reads after the broker interval, want 2", n)
+	}
+}
+
+// noBackups: a template overview without any stored backup.
+type noBackups struct{}
+
+func (noBackups) List(context.Context, model.DeviceID) ([]model.Backup, error) { return nil, nil }
+func (noBackups) Open(context.Context, model.BackupID) ([]byte, model.Backup, error) {
+	return nil, model.Backup{}, errors.New("no backups")
 }
