@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
@@ -322,5 +323,48 @@ func TestStatusBarBackupShowsWhenTheRunStarted(t *testing.T) {
 	bar := barOf(body)
 	if !strings.Contains(bar, `datetime="2026-10-31T03:00:00Z"`) || strings.Contains(bar, "03:40") {
 		t.Errorf("bar does not show the start of the run: %s", bar)
+	}
+}
+
+// Why (#540): the browser shows a notification from this event, so the stream must carry it as
+// one JSON line, with the link below the base path (the page may sit behind a prefix), and a
+// reader of the stream must see it as exactly one event.
+func TestStreamCarriesNoticesAsJSONWithBasePath(t *testing.T) {
+	e := setup(t)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, "GET", e.srv.URL+"/tf/events", nil)
+	req.Header.Set("X-Test-Role", "operator")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		e.hub.Publish(events.Event{Topic: events.TopicNotice, Payload: events.Notice{ID: "7-1", Name: "backup.scheduled_failed", Result: "failed",
+			Title: "Scheduled backup: 1 of 3 devices failed", Text: "Failed: a\nline", Path: "/devices"}})
+	}()
+	buf := make([]byte, 4096)
+	var got string
+	for !strings.Contains(got, "\n\n") || !strings.Contains(got, "event: notice") {
+		n, err := resp.Body.Read(buf)
+		got += string(buf[:n])
+		if err != nil {
+			t.Fatalf("stream ended without a notice: %v (%q)", err, got)
+		}
+	}
+	var notice parsedSSE
+	for _, ev := range parseEventSource(got) {
+		if ev.name == "notice" {
+			notice = ev
+		}
+	}
+	var m map[string]string
+	if err := json.Unmarshal([]byte(notice.data), &m); err != nil {
+		t.Fatalf("notice data is not one JSON object: %q: %v", notice.data, err)
+	}
+	if m["id"] != "7-1" || m["title"] != "Scheduled backup: 1 of 3 devices failed" || m["text"] != "Failed: a\nline" || m["path"] != "/tf/devices" {
+		t.Errorf("notice = %v", m)
 	}
 }

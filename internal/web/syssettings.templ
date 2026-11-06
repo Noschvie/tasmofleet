@@ -174,7 +174,7 @@ templ sysCardView(p sysPage, c sysCard) {
 				}
 			}
 		default:
-			if len(c.Rows) > 0 || c.ID == "mqttdiscovery" || c.ID == "notify-message" {
+			if len(c.Rows) > 0 || c.ID == "mqttdiscovery" || c.ID == "notify-message" || c.ID == "notify-browser" {
 				@ui.SettingsCard(ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Note: c.Note, NoteHTML: sysCardNote(p, c), Class: ui.StackRank(c.Phone), Depends: c.Depends, Badges: sysCardBadges(c)}) {
 					if c.ID == "mqttdiscovery" {
 						@sysDiscoveryCard(p)
@@ -209,6 +209,9 @@ templ sysCardView(p sysPage, c sysCard) {
 					if c.ID == "broker" && p.MQTT.Legacy == "" {
 						@sysTestRow("Test connection", p.Base+sysPath+"/mqtt-test?tab=mqtt", "MQTT connection test", p.MQTTResult, "Saves nothing.", "")
 					}
+					if c.ID == "notify-browser" {
+						@sysBrowserNotify()
+					}
 					if c.ID == "notify-message" {
 						<div class="sf w-full">
 							<div class="sf-main">
@@ -228,6 +231,26 @@ templ sysCardView(p sysPage, c sysCard) {
 				}
 			}
 	}
+}
+
+// sysBrowserNotify is the browser-notification control (#540). The state is the browser's, so the
+// server draws a neutral frame and notify.js fills in the status and shows the buttons that fit.
+// Without scripts the frame stays as it is.
+templ sysBrowserNotify() {
+	<div class="sf w-full" data-bn>
+		<div class="sys-status">
+			<span class="sys-status-dot t-neutral" aria-hidden="true" data-bn-dot></span>
+			<div class="sys-status-text">
+				<b data-bn-title>Needs JavaScript</b>
+				<span data-bn-text>Browser notifications are set up on this page with scripts on.</span>
+			</div>
+		</div>
+		<div class="sys-test">
+			<button type="button" class="btn" data-bn-enable hidden>Enable browser notifications</button>
+			<button type="button" class="btn" data-bn-test hidden>Send test</button>
+			<button type="button" class="btn" data-bn-disable hidden>Turn off</button>
+		</div>
+	</div>
 }
 
 // sysRowView draws one setting in the control its kind calls for, then the settings that depend

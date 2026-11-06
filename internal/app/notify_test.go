@@ -12,7 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nofuturekid/tasmofleet/internal/events"
 	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/notify"
 	"github.com/nofuturekid/tasmofleet/internal/snapshot"
 	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
 )
@@ -161,4 +163,38 @@ func TestScheduledBackupRunWithAFailureSendsOneMessageNamingTheDevice(t *testing
 func TestNotifyHooksAreNoOpsWithoutADispatcher(t *testing.T) {
 	a := &runtime{}
 	a.notifyBatchDone(model.Job{BatchID: 1, State: model.JobFailed})
+}
+
+// Why (#540): every open tab gets the same event from the hub and has to tell that two events
+// are different ones and that one event is the same in all tabs. The id must differ between
+// events, and the hub must carry what the person's event settings allow, nothing else.
+func TestBrowserNoticesReachTheHubWithUniqueIDs(t *testing.T) {
+	a, svc, _ := notifyRuntime(t, map[string]string{"NOTIFY_SNAPSHOT": "false"})
+	ch, cancel := svc.Hub.Subscribe(events.TopicNotice)
+	defer cancel()
+	cfg := a.notifier.Config()
+	a.notifier.Emit(notify.BackupFailed(cfg, 3, []string{"a"}, time.Now()))
+	a.notifier.Emit(notify.BackupFailed(cfg, 3, []string{"a"}, time.Now()))
+	a.notifier.Emit(notify.SnapshotFailed(cfg, "disk full", time.Now())) // switched off
+	var ids []string
+	for range 2 {
+		select {
+		case ev := <-ch:
+			n, ok := ev.Payload.(events.Notice)
+			if !ok || n.Name != notify.EventBackupFailed || n.Path != "/devices" {
+				t.Fatalf("notice = %+v", ev.Payload)
+			}
+			ids = append(ids, n.ID)
+		case <-time.After(2 * time.Second):
+			t.Fatal("no notice on the hub")
+		}
+	}
+	if ids[0] == ids[1] || ids[0] == "" {
+		t.Errorf("ids %q: two events must not share one", ids)
+	}
+	select {
+	case ev := <-ch:
+		t.Fatalf("a switched-off event reached the hub: %+v", ev.Payload)
+	case <-time.After(100 * time.Millisecond):
+	}
 }

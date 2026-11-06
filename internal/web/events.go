@@ -3,6 +3,7 @@ package web
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -88,7 +89,7 @@ func (h *handler) events(w http.ResponseWriter, r *http.Request) {
 	if err := rc.Flush(); err != nil {
 		return
 	}
-	ch, cancel := h.d.Hub.Subscribe(events.TopicHealth, events.TopicDevice, events.TopicJob, events.TopicBackup, events.TopicBroker)
+	ch, cancel := h.d.Hub.Subscribe(events.TopicHealth, events.TopicDevice, events.TopicJob, events.TopicBackup, events.TopicBroker, events.TopicNotice)
 	defer cancel()
 	// The page was built from what the hub had published up to "since" (view.EventSeq). Anything
 	// published after that and before this subscription is lost to this stream, and so is
@@ -207,7 +208,22 @@ func (h *handler) encodeEvent(buf *bytes.Buffer, ev events.Event, base string) {
 		writeSSE(buf, "backup", "")
 	case events.BrokerState:
 		writeSSE(buf, "broker", "")
+	case events.Notice:
+		// One JSON line; notify.js shows it as a desktop notification. The path gets the base path
+		// here, where it is known.
+		if b, err := json.Marshal(map[string]string{"id": p.ID, "name": p.Name, "result": p.Result, "title": p.Title, "text": p.Text,
+			"path": noticePath(base, p.Path)}); err == nil {
+			writeSSE(buf, "notice", string(b))
+		}
 	}
+}
+
+// noticePath is the page a notification opens: below the base path, or empty.
+func noticePath(base, path string) string {
+	if path == "" {
+		return ""
+	}
+	return strings.TrimRight(base, "/") + path
 }
 
 // powerSig is the relay states of a health as one comparable string.

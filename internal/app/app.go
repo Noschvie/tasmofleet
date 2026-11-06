@@ -126,6 +126,8 @@ type runtime struct {
 	snapshots       *snapshot.Manager  // copies of TasmoFleet's own database (download, schedule)
 	notifier        *notify.Dispatcher // webhook and e-mail notifications (#249); nil in tests that do not need it
 	notifiedBatches sync.Map           // transactions whose "update finished" message was sent
+	noticeSeq       atomic.Uint64      // browser notifications published so far (#540)
+	noticeBoot      int64              // start time of the process, the first part of a notice id (#540)
 	mqttKnown       *knownIndex
 	tracker         *health.Service
 	fw              *firmwareState // the firmware each device runs right now, for read suppression (#558)

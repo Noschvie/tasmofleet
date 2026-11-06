@@ -2,8 +2,10 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/nofuturekid/tasmofleet/internal/events"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/notify"
 	"github.com/nofuturekid/tasmofleet/internal/store"
@@ -12,7 +14,20 @@ import (
 // setupNotify builds the dispatcher of the notifications (#249). It reads the effective settings
 // at the moment of each event, so a change on the Settings page applies at once.
 func (a *runtime) setupNotify() {
-	a.notifier = notify.New(notify.Options{Config: a.svc.Sys.Snapshot, Log: a.log})
+	a.noticeBoot = time.Now().UnixNano()
+	a.notifier = notify.New(notify.Options{Config: a.svc.Sys.Snapshot, Log: a.log, Browser: a.publishNotice})
+}
+
+// publishNotice hands an event the settings ask for to the open browser tabs (#540). The id is
+// the start time plus a counter: unique across restarts, equal in every tab, because the hub
+// sends one event to every stream.
+func (a *runtime) publishNotice(ev notify.Event) {
+	if a.svc.Hub == nil {
+		return
+	}
+	n := a.noticeSeq.Add(1)
+	a.svc.Hub.Publish(events.Event{Topic: events.TopicNotice, Payload: events.Notice{
+		ID: fmt.Sprintf("%x-%d", a.noticeBoot, n), Name: ev.Name, Result: ev.Result, Title: ev.Title, Text: ev.Text, Path: ev.Path}})
 }
 
 // notifyBatchDone sends the "update finished" event when j was the last unfinished job of its

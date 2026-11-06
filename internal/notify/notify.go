@@ -51,6 +51,7 @@ type Event struct {
 	Title   string
 	Text    string
 	URL     string // absolute link to the page that shows more; empty without PUBLIC_URL
+	Path    string // the same page as a path below the base path; the browser notification opens it
 	Time    time.Time
 	Context string // short words for the status line, e.g. "update job #41 (partial)"
 }
@@ -131,7 +132,7 @@ func UpdateFinished(c config.Config, batch int64, ok, failed, cancelled int, tar
 	}
 	return Event{Name: EventUpdateFinished, Result: res,
 		Title: fmt.Sprintf("Update job #%d: %s", batch, strings.Join(parts, ", ")), Text: text,
-		URL: Link(c, fmt.Sprintf("/transactions/%d", batch)), Time: at,
+		URL: Link(c, fmt.Sprintf("/transactions/%d", batch)), Path: fmt.Sprintf("/transactions/%d", batch), Time: at,
 		Context: fmt.Sprintf("update job #%d (%s)", batch, res)}
 }
 
@@ -152,14 +153,14 @@ func BackupFailed(c config.Config, total int, failed []string, at time.Time) Eve
 	}
 	return Event{Name: EventBackupFailed, Result: ResultFailed,
 		Title: fmt.Sprintf("Scheduled backup: %d of %d devices failed", len(failed), total), Text: text,
-		URL: Link(c, "/devices"), Time: at, Context: "scheduled backup"}
+		URL: Link(c, "/devices"), Path: "/devices", Time: at, Context: "scheduled backup"}
 }
 
 // SnapshotFailed is the event of a failed scheduled database snapshot.
 func SnapshotFailed(c config.Config, reason string, at time.Time) Event {
 	return Event{Name: EventSnapshotFailed, Result: ResultFailed, Title: "Database snapshot failed",
 		Text: "The scheduled snapshot of the TasmoFleet database could not be written: " + reason,
-		URL:  Link(c, "/settings/system/snapshots"), Time: at, Context: "database snapshot"}
+		URL:  Link(c, "/settings/system/snapshots"), Path: "/settings/system/snapshots", Time: at, Context: "database snapshot"}
 }
 
 // TestEvent is the message of the "Send test" buttons.

@@ -283,3 +283,30 @@ func TestSnapshotFailedLinksToTheSnapshotsPage(t *testing.T) {
 		t.Errorf("snapshot failure links to %q", ev.URL)
 	}
 }
+
+// Why (#540): the browser tabs get the events the person chose, once, even when no webhook or
+// e-mail is switched on (the browser is its own opt-in, per browser). The test event of the
+// "Send test" buttons is meant for one channel and must never pop up in every open tab.
+func TestBrowserHookGetsSelectedEventsOnceWithoutAnyChannel(t *testing.T) {
+	c := baseConfig()
+	c.NotifyUpdateWhen = config.NotifyWhenProblems
+	c.NotifySnapshot = false
+	var got []Event
+	o := Options{Config: func() config.Config { return c }, Now: func() time.Time { return t0 }, Browser: func(ev Event) { got = append(got, ev) }}
+	o.Log = slog.New(slog.NewTextHandler(io.Discard, nil))
+	d := New(o)
+	d.Emit(UpdateFinished(c, 1, 5, 0, 0, "1", t0))             // ok, the person wants problems only
+	d.Emit(UpdateFinished(c, 2, 4, 1, 0, "1", t0))             // partial
+	d.Emit(BackupFailed(c, 3, []string{"a"}, t0))              // on
+	d.Emit(SnapshotFailed(c, "disk full", t0))                 // switched off
+	if _, err := d.Test(t.Context(), Webhook, c); err != nil { // no URL: fails, but must not reach the browser
+		t.Fatal(err)
+	}
+	d.Wait()
+	if len(got) != 2 || got[0].Name != EventUpdateFinished || got[1].Name != EventBackupFailed {
+		t.Fatalf("browser hook got %+v, want the partial update and the backup failure", got)
+	}
+	if got[0].Path != "/transactions/2" || got[1].Path != "/devices" {
+		t.Errorf("paths = %q, %q: a click on the notification must open the page the message links to", got[0].Path, got[1].Path)
+	}
+}

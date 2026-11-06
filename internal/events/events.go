@@ -20,12 +20,20 @@ const (
 	TopicDevice Topic = "device" // payload model.Device (inventory change)
 	TopicBackup Topic = "backup" // payload model.Backup
 	TopicBroker Topic = "broker" // payload BrokerState (the status bar)
+	TopicNotice Topic = "notice" // payload Notice (browser notifications, #540)
 )
 
 // BrokerState is the payload of TopicBroker: the MQTT broker connection changed (it came up, went
 // down, was turned on or off, or another broker was configured). The status bar re-reads the
 // state; the payload carries nothing the page needs.
 type BrokerState struct{ Connected bool }
+
+// Notice is the payload of TopicNotice: one thing worth a desktop notification in an open tab (a
+// finished update, a failed scheduled backup or snapshot). ID is unique per notice and the same in
+// every tab, so tabs can tell they got the same one. Path is below the base path; may be empty.
+type Notice struct {
+	ID, Name, Result, Title, Text, Path string
+}
 
 // Event is one published item.
 type Event struct {

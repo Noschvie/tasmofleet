@@ -32,6 +32,9 @@ type Options struct {
 	Now    func() time.Time
 	// RetryDelay is the pause before the one retry; 0 means 2 s.
 	RetryDelay time.Duration
+	// Browser, if set, hears of every event the settings ask for, once, whether or not a channel
+	// is switched on: the open browser tabs show it (#540). It must not block.
+	Browser func(Event)
 	// TLS overrides the TLS settings of the SMTP sender (tests only).
 	TLS *tls.Config
 }
@@ -64,12 +67,15 @@ func New(o Options) *Dispatcher {
 // Config is the effective configuration now.
 func (d *Dispatcher) Config() config.Config { return d.o.Config() }
 
-// Emit sends ev to every enabled channel if the settings ask for the event. It returns at once;
+// Emit sends ev to every enabled channel, and hands it to the browser tabs, if the settings ask for the event. It returns at once;
 // the outcome is recorded per channel. Safe to call from any goroutine.
 func (d *Dispatcher) Emit(ev Event) {
 	c := d.o.Config()
 	if !Selected(c, ev) {
 		return
+	}
+	if d.o.Browser != nil {
+		d.o.Browser(ev)
 	}
 	for _, ch := range Enabled(c) {
 		d.wg.Add(1)

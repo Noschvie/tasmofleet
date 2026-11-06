@@ -104,18 +104,19 @@ async function shoot(page: Page, state: string) {
 // the short Events card next to the tall Webhook card. On a phone it is one column.
 test("the cards stack per column without gaps; one column on a phone", { tag: "@core" }, async ({ page }) => {
   await open(page);
-  await expect(page.locator("#sec-notifications .cstacks .scard h2")).toHaveText(["Events", "Message", "Webhook", "E-mail (SMTP)"]);
+  await expect(page.locator("#sec-notifications .cstacks .scard h2")).toHaveText(["Events", "Browser", "Message", "Webhook", "E-mail (SMTP)"]);
   const box = async (id: string) => (await page.locator(id).boundingBox())!;
-  const events = await box("#card-notify-events"), message = await box("#card-notify-message");
+  const events = await box("#card-notify-events"), browser = await box("#card-notify-browser"), message = await box("#card-notify-message");
   const webhook = await box("#card-notify-webhook"), email = await box("#card-notify-email");
-  expect(message.y - (events.y + events.height), "Message sits right under Events").toBeLessThan(24);
+  expect(browser.y - (events.y + events.height), "Browser sits right under Events").toBeLessThan(24);
+  expect(message.y - (browser.y + browser.height), "Message sits right under Browser").toBeLessThan(24);
   expect(email.y - (webhook.y + webhook.height), "E-mail sits right under Webhook").toBeLessThan(24);
   expect(webhook.x, "Webhook is the wide column to the right").toBeGreaterThan(events.x + events.width - 1);
   expect(webhook.width).toBeGreaterThan(events.width * 1.5);
   await shoot(page, "a-empty");
 
   await page.setViewportSize({ width: 375, height: 812 });
-  const xs = await Promise.all(["#card-notify-events", "#card-notify-webhook", "#card-notify-message", "#card-notify-email"].map(async (id) => (await box(id)).x));
+  const xs = await Promise.all(["#card-notify-events", "#card-notify-browser", "#card-notify-webhook", "#card-notify-message", "#card-notify-email"].map(async (id) => (await box(id)).x));
   expect(new Set(xs.map((x) => Math.round(x))).size, "one column").toBe(1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });

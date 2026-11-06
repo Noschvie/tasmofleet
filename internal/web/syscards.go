@@ -79,12 +79,13 @@ var sysLayout = []sysTabDef{
 		{ID: "unreferenced", Title: "Unreferenced files", Stack: 1, Phone: 6},
 	}},
 	{"notifications", "Notifications", []int{1, 2}, []sysCardDef{
-		{ID: "notify-events", Title: "Events", Note: "What is sent. Both channels get the same events.", Stack: 0, Phone: 1,
+		{ID: "notify-events", Title: "Events", Note: "What is sent. Every channel gets the same events.", Stack: 0, Phone: 1,
 			Keys: []string{"NOTIFY_UPDATE", "NOTIFY_UPDATE_WHEN", "NOTIFY_BACKUP", "NOTIFY_SNAPSHOT"}},
-		{ID: "notify-message", Title: "Message", Note: "Read-only preview.", Stack: 0, Phone: 3},
-		{ID: "notify-webhook", Title: "Webhook", Note: "Home Assistant, ntfy, Gotify, anything that takes a POST.", Stack: 1, Phone: 2,
+		{ID: "notify-browser", Title: "Browser", Note: "Desktop notifications while a TasmoFleet tab is open. Set per browser; nothing is stored on the server.", Stack: 0, Phone: 2},
+		{ID: "notify-message", Title: "Message", Note: "Read-only preview.", Stack: 0, Phone: 4},
+		{ID: "notify-webhook", Title: "Webhook", Note: "Home Assistant, ntfy, Gotify, anything that takes a POST.", Stack: 1, Phone: 3,
 			Keys: []string{"NOTIFY_WEBHOOK", "NOTIFY_WEBHOOK_FORMAT", "NOTIFY_WEBHOOK_URL", "NOTIFY_WEBHOOK_AUTH", "NOTIFY_WEBHOOK_HEADER", "NOTIFY_WEBHOOK_SECRET"}},
-		{ID: "notify-email", Title: "E-mail (SMTP)", Note: "SMTP with STARTTLS, TLS or none. No provider APIs in this version.", Stack: 1, Phone: 4,
+		{ID: "notify-email", Title: "E-mail (SMTP)", Note: "SMTP with STARTTLS, TLS or none. No provider APIs in this version.", Stack: 1, Phone: 5,
 			Keys: []string{"NOTIFY_SMTP", "NOTIFY_SMTP_HOST", "NOTIFY_SMTP_PORT", "NOTIFY_SMTP_SECURITY", "NOTIFY_SMTP_USER", "NOTIFY_SMTP_PASSWORD", "NOTIFY_SMTP_FROM", "NOTIFY_SMTP_TO"}},
 	}},
 	{"firmware", "Firmware & updates", []int{2, 1}, []sysCardDef{
