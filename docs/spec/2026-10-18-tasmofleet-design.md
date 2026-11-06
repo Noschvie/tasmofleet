@@ -169,7 +169,7 @@ everything.
 | `changelog`, `netaddr`, `web/ui`   | What's new page parser; address formatting; templ components                                                  | see package docs                                                                                                                                                                                                                                                                              |                                        |
 | `notify`                           | webhook and SMTP notifications (§14.5, #249)                                                                  | `Dispatcher.Emit`, `Dispatcher.Test`, `Selected`                                                                                                                                                                                                                                              | config                                 |
 
-Boundaries are enforced in `.golangci.yml` (depguard) and listed in `CLAUDE.md`.
+Boundaries are enforced in `.golangci.yml` (depguard) and listed in `docs/dev/architecture.md`.
 
 ### 3.3 Dependencies
 
@@ -2317,7 +2317,7 @@ component, device, job, batch, request_id, remote, user`. No secrets (redactor),
   `<version>` (X.Y.Z) and `latest`. Built and published by GitHub Actions.
 - **Unraid**: `deploy/unraid/tasmofleet.xml` (br0, fixed IP, `/data` ->
   a host data directory, env vars, WebUI link to `PUBLIC_URL`). Unraid users take the Community
-  Applications template, see CLAUDE.md "Releases".
+  Applications template, see docs/dev/releasing.md.
 - **Traefik**: example dynamic config in `deploy/traefik/tasmofleet.yml` (router on
   `websecure`, service `http://172.31.12.61:8080`). No forward-auth middleware in OIDC mode;
   an Authentik outpost middleware in header mode.
@@ -2382,7 +2382,7 @@ changed, a revert check for Go changes (the changed tests fail without the produ
 tests, no e2e). `release.yml` runs on tags: the FAST tier plus the race tests of every `SAFETY` package, and publishes the
 image, the GitHub release and the demo site only after it passed. `nightly.yml` runs the FULL tier (every e2e test,
 race on all packages, uncached tests, full mutation, the Home Assistant app in a Supervisor) and failure-reports.
-Details: CLAUDE.md "Test tiers in CI".
+Details: docs/dev/ci-tiers.md.
 
 ---
 

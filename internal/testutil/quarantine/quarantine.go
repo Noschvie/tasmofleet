@@ -2,7 +2,7 @@
 // is skipped in every run except the nightly quarantine job in nightly.yml, which
 // sets TASMOFLEET_QUARANTINE=1 and retries. Each quarantined test names its
 // GitHub issue (label "flaky"); it is fixed or deleted within about two weeks
-// (CLAUDE.md "Running the gates").
+// (docs/dev/ci-tiers.md "Quarantine").
 package quarantine
 
 import (

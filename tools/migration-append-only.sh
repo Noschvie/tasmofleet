@@ -1,5 +1,5 @@
 #!/bin/sh
-# Migrations are append-only (CLAUDE.md): fails when a file under internal/store/migrations/ that
+# Migrations are append-only (docs/dev/commits.md): fails when a file under internal/store/migrations/ that
 # exists at the baseline release tag is modified, renamed, deleted or replaced; only additions pass.
 # A database records only its schema version, so an edited shipped file would leave existing
 # installations silently on the old schema (#595). Needs no manual release step: the baseline is

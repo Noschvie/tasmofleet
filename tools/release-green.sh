@@ -4,7 +4,7 @@
 #   1. a successful check run "required" of pr.yml (the one status branch protection demands), and
 #   2. a successful main.yml run (push to main) whose jobs all succeeded; only ghcr-cleanup (registry
 #      housekeeping after the image) and ha-app (the Home Assistant app image, #522) may fail without holding a release.
-# Main moves only by a fast-forward push of a PR head (CLAUDE.md "Pull requests and the protected main"),
+# Main moves only by a fast-forward push of a PR head (docs/dev/pull-requests.md),
 # so the SHA of the tagged commit is the PR head and both are found under it.
 #
 # usage: tools/release-green.sh SHA        env: GITHUB_REPOSITORY, GH_TOKEN (checks: read, actions: read)

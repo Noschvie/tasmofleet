@@ -1,4 +1,4 @@
-# Every quality gate has a target. CI runs exactly these targets (tiers: CLAUDE.md "Running the gates").
+# Every quality gate has a target. CI runs exactly these targets (tiers: docs/dev/ci-tiers.md, gates: docs/dev/testing.md).
 #   make check     FAST tier, run before every commit (templ, fmt, vet, lint, unit and integration
 #                  tests from the go test cache, vuln, build; lint includes staticcheck)
 #   make quick     inner loop between two edits: only the packages changed since origin/main and
@@ -35,7 +35,7 @@ BIN       := bin
 # fails the gate, so add the entry together with the tests.
 MUTATION := ./internal/fwselect:90 ./internal/ota:85 ./internal/policy:85 ./internal/cmdpolicy:90 ./internal/mqttcmd:85 ./internal/transport:90 ./internal/tasmota:85 ./internal/restore:80
 
-# Safety-critical packages (CLAUDE.md "Safety rules": guard, OTA engine, device client and
+# Safety-critical packages (docs/dev/safety-rules.md: guard, OTA engine, device client and
 # credentials, accounts, trusted proxies) plus the mutation packages. A pull request that changes
 # one of them runs their race tests and the diff coverage gate (make safety BASE=<ref>) in the FAST
 # tier; pr.yml reads this list.
@@ -51,12 +51,12 @@ E2E_ARGS  ?=
 CHANGED_BASE ?= origin/main
 export CHANGED_BASE
 
-.PHONY: quick integration-guard shards-check-changed catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo pages demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race diff-cover revert-check test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check release-pr-check changelog-title migration-guard migration-append-only changelog-notes clean tools
+.PHONY: agent-refs quick integration-guard shards-check-changed catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo pages demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race diff-cover revert-check test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check release-pr-check changelog-title migration-guard migration-append-only changelog-notes clean tools
 
 # golangci-lint runs staticcheck with its defaults (.golangci.yml), so check does not run it a second time;
 # the staticcheck target stays for single runs and CI. go vet stays: golangci-lint skips generated files,
 # and go vet is the only check left for the *_templ.go files.
-check: templ-check fmt-check vet lint test scripts-test shards-check-changed migration-append-only integration vuln build
+check: templ-check fmt-check vet lint test scripts-test agent-refs shards-check-changed migration-append-only integration vuln build
 
 # Unit tests of the registry cleanup's version selection (pure, no registry access). The glob is
 # expanded by the shell: since Node 21 `node --test scripts/` no longer takes a directory (#477).
@@ -68,6 +68,10 @@ scripts-test:
 	left=$$(ls -A "$$d"); rm -rf "$$d"; \
 	if [ -n "$$left" ]; then echo "scripts-test left temp files behind: $$left" >&2; exit 1; fi; \
 	exit $$rc
+
+# CLAUDE.md and docs/dev name files, make targets and docs; fails when one of them does not exist (#526). The CI link job runs it too.
+agent-refs:
+	python3 -I tools/check-agent-refs.py .
 
 # CI splits the FULL tier's race run (tools/race.sh, RACE_SHARD=i/2) and mutation run
 # (MUTATION_SHARD=i/MUTATION_CI_SHARDS, tools/mutation-shard.sh) into shards. Fails when a package
@@ -252,7 +256,7 @@ e2e-deps:
 # Playwright against the real binary + tasmofleet-devenv (simulators, broker, mock IdP).
 # e2e is the whole behaviour suite (FULL tier), e2e-core the tests tagged @core (FAST tier, every
 # PR), e2e-quarantine the tests tagged @quarantine with retries (nightly only). Tag a test with
-# test("title", { tag: "@core" }, ...); see CLAUDE.md "Running the gates" for what belongs in core.
+# test("title", { tag: "@core" }, ...); see docs/dev/ci-tiers.md for what belongs in core.
 # Two Playwright runs, always both, and the target fails if either failed: the "chromium" project
 # (E2E_ARGS, e.g. --shard) and the "mqtt" project (one worker, never sharded; E2E_MQTT_ARGS). CI runs them
 # in separate jobs (#474): the chromium shards set E2E_MQTT=0, the "mqtt" job E2E_CHROMIUM=0.
@@ -436,7 +440,7 @@ changelog-check:
 	grep -Eq "^## $$(printf '%s' "$$v" | sed 's/[.]/[.]/g')( \"[^\"]+\")?( \(.*\))?$$" CHANGELOG.md || { \
 		echo "CHANGELOG.md has no section '## $$v' for tag $(TAG): move \"Unreleased\" into it before tagging" >&2; exit 1; }
 
-# The release commit rides in the merge train (CLAUDE.md "Releases", #556): when CHANGELOG.md has a
+# The release commit rides in the merge train (docs/dev/releasing.md, #556): when CHANGELOG.md has a
 # "## X.Y.Z ..." section that BASE does not have, run the tag guards for that tag now, so the tag run
 # finds nothing new. pr.yml runs it on every PR; the maintainer can run it before pushing a train.
 # Nothing to check (no new section) passes. A section BASE already has is not checked again: an edit of an

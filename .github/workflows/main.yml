@@ -1,7 +1,7 @@
 # Push to main: refreshes main's Go caches and publishes :edge. It runs lint, the unit and
 # the integration tests and the build, but no e2e test: the pushed commit is the head of a
 # pull request that was green, because main only moves forward by a fast-forward push of that
-# head (CLAUDE.md "Pull requests and the protected main"), so the e2e shards would only repeat
+# head (docs/dev/pull-requests.md), so the e2e shards would only repeat
 # the PR (#478).
 #
 # Why these tests still run: pull requests and tags do not save Go caches (#476), they restore

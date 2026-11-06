@@ -1,4 +1,4 @@
-# Pull requests: the FAST tier. One workflow per trigger (CLAUDE.md "Test tiers in CI"):
+# Pull requests: the FAST tier. One workflow per trigger (docs/dev/ci-tiers.md):
 # pr.yml (this), main.yml (push to main), release.yml (tags), nightly.yml and weekly.yml (cron). The jobs
 # they share are the reusable workflows _checks.yml, _mutation.yml (weekly only), _image.yml and _ha-app.yml; the file
 # a run comes from says which tier it is, nothing is computed at run time except which
@@ -74,7 +74,7 @@ jobs:
           image=false
           for f in $files; do
             case "$f" in
-              docs/research/*|docs/runbooks/*|docs/design/*|site/*|README.md|ROADMAP.md|CONTRIBUTING.md|SECURITY.md|CLAUDE.md|NOTICE|LICENSE) ;;
+              docs/research/*|docs/runbooks/*|docs/design/*|site/*|README.md|ROADMAP.md|CONTRIBUTING.md|SECURITY.md|CLAUDE.md|docs/dev/*|NOTICE|LICENSE) ;;
               *) code=true ;;
             esac
             case "$f" in *.go) gocode=true ;; esac
@@ -130,6 +130,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: python3 -I tools/check-doc-links.py .
+      # The agent guide (CLAUDE.md, docs/dev) names only files, make targets and docs that exist (#526).
+      - run: python3 -I tools/check-agent-refs.py .
 
   # Migrations are append-only (#595): no file that exists at the latest release tag may be modified, renamed or
   # deleted. Runs on every PR (a docs-only PR cannot touch them, the check is a second) and is part of "required".

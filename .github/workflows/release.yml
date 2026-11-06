@@ -1,4 +1,4 @@
-# Release: a tag vX.Y.Z (signed, set on a green commit of main; CLAUDE.md "Releases").
+# Release: a tag vX.Y.Z (signed, set on a green commit of main; docs/dev/releasing.md).
 #
 #   guards --> publish --> release --> pages
 #
@@ -60,7 +60,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          # Tags are set on a commit of main (CLAUDE.md "Releases"); a v* tag anywhere else must not publish.
+          # Tags are set on a commit of main (docs/dev/releasing.md); a v* tag anywhere else must not publish.
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main || {
             echo "tag $TAG points to $GITHUB_SHA, which is not on main" >&2
             exit 1

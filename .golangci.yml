@@ -25,7 +25,7 @@ linters:
     - misspell
     - unconvert
     - forbidigo
-    - depguard # package boundaries, see CLAUDE.md "Package boundaries"
+    - depguard # package boundaries, see docs/dev/architecture.md "Package boundaries"
   settings:
     exhaustive:
       default-signifies-exhaustive: false
