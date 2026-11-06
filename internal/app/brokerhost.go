@@ -369,7 +369,7 @@ func (r *brokerHostReader) readLocked(ctx context.Context, id model.DeviceID, wh
 		if err != nil {
 			switch {
 			case ctx.Err() != nil:
-			case errors.Is(err, errAnotherDevice): // not this device: nothing was stored. An answer, not a failure (like a refused
+			case notStoredDevice(err): // not this device: nothing was stored. An answer, not a failure (like a refused
 				// identity): nothing more is read in this visit, and it is asked again at the regular interval, also when a
 				// restart or a command asked for the read
 				r.next[id] = r.now().Add(brokerHostEvery)
@@ -410,7 +410,7 @@ func (r *brokerHostReader) readDataOf(ctx context.Context, d model.Device) bool 
 	dctx, cancel := context.WithTimeout(ctx, dataTimeout)
 	err = r.readData(dctx, d)
 	cancel()
-	if errors.Is(err, errAnotherDevice) { // the caches stay as they are; asked again at the broker's interval
+	if notStoredDevice(err) { // the caches stay as they are; asked again at the broker's interval
 		r.dataNext[d.ID] = r.now().Add(brokerHostEvery)
 		r.log.Debug("device refresh: another device answers at the address", "device", d.ID)
 		return true

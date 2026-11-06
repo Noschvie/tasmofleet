@@ -41,10 +41,12 @@ func (m *Manager) Last(id model.DeviceID) (Snapshot, bool) {
 	return Snapshot{Values: maps.Clone(s.Values), At: s.At}, true
 }
 
-// forget drops what was remembered of a device: after a write the old values are wrong, and showing
+// Forget drops what was remembered of a device: after a write the old values are wrong, and showing
 // them as "last known" would be worse than showing nothing. A read under way started before the write:
-// counting the write keeps its values out of last and its later readers off it (readShared).
-func (m *Manager) forget(id model.DeviceID) {
+// counting the write keeps its values out of last and its later readers off it (readShared). Apply
+// calls it; so must every other writer of device settings (the console, Make compliant), else a read
+// that started before their write is remembered as current.
+func (m *Manager) Forget(id model.DeviceID) {
 	m.mu.Lock()
 	delete(m.last, id)
 	m.gen[id]++
@@ -66,10 +68,7 @@ func (m *Manager) readShared(ctx context.Context, id model.DeviceID, keys []stri
 		f = &flight{done: make(chan struct{}), gen: m.gen[id]}
 		m.flights[id] = f
 		go func() {
-			if prev != nil {
-				<-prev.done // bounded: every read ends within ReadTimeout
-			}
-			vals, err := m.readKeys(context.WithoutCancel(ctx), id, keys)
+			vals, err := m.detachedRead(ctx, id, keys, prev)
 			m.mu.Lock()
 			f.vals, f.err = vals, err
 			if err == nil && f.gen == m.gen[id] {
@@ -92,4 +91,35 @@ func (m *Manager) readShared(ctx context.Context, id model.DeviceID, keys []stri
 		return nil, f.err
 	}
 	return maps.Clone(f.vals), nil
+}
+
+// detachedRead is the read of a shared flight: it outlives the request that started it (the callers
+// that joined still want the values), but not TasmoFleet's stop signal. It waits for prev, the read
+// of the device from before a write (the device answers one read at a time), then reads, and then asks
+// whether the device that answered is the stored one: values of another device are never returned.
+func (m *Manager) detachedRead(ctx context.Context, id model.DeviceID, keys []string, prev *flight) (map[string]string, error) {
+	ctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
+	defer cancel()
+	defer context.AfterFunc(m.o.Stop, cancel)()
+	if prev != nil {
+		select {
+		case <-prev.done: // bounded: every read ends within ReadTimeout
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+	vals, err := m.readKeys(ctx, id, keys)
+	if err != nil || m.o.Verify == nil {
+		return vals, err
+	}
+	d, err := m.o.Devices.GetDevice(ctx, id)
+	if err == nil {
+		vctx, vcancel := context.WithTimeout(ctx, m.o.ReadTimeout)
+		err = m.o.Verify(vctx, d)
+		vcancel()
+	}
+	if err != nil {
+		return nil, err
+	}
+	return vals, nil
 }

@@ -26,8 +26,11 @@ import (
 // are the ones managed on the policy page; saved rules reach the report live.
 // A POLICY_RULES value that is still in the environment is imported once.
 func (a *runtime) setupSettings() error {
-	a.settings = settings.New(settings.Options{Devices: a.svc.Store, Client: a.svc.Client, Audit: a.svc.Audit})
-	rep := &policyReporter{devices: fwDevices{a.svc.Store, a.fw}, backups: a.backups, reader: a.settings, audit: a.svc.Audit, skip: a.apiOffRead}
+	// Stop and Verify: the shared read ends with TasmoFleet, and nothing from another device answering at the
+	// stored address is remembered (#662); the policy poller below asks the same question of its reads. Both read
+	// through the router (svc.Client), so the MAC is asked that way too (VerifyRead, not VerifyAddress's HTTP).
+	a.settings = settings.New(settings.Options{Devices: a.svc.Store, Client: a.svc.Client, Audit: a.svc.Audit, Stop: a.bgContext, Verify: a.svc.Prober.VerifyRead})
+	rep := &policyReporter{devices: fwDevices{a.svc.Store, a.fw}, backups: a.backups, reader: a.settings, audit: a.svc.Audit, skip: a.apiOffRead, verify: a.svc.Prober.VerifyRead}
 	a.policyLive = rep
 	a.rules = newRulesService(a.svc, rep.Preview, rep.setRules)
 	rules, err := a.rules.Active(a.bgContext)
@@ -102,6 +105,10 @@ type policyReporter struct {
 	now     func() time.Time
 	// skip says the on-demand check leaves a device alone: its HTTP API is off and nothing else reads it (#659); nil reads all.
 	skip func(model.DeviceID) bool
+
+	// verify (may be nil) says whether the device that answered is the stored one; a read of another device is
+	// not cached (#662).
+	verify func(ctx context.Context, d model.Device) error
 
 	vals liveStore
 
@@ -407,6 +414,13 @@ func (p *policyReporter) readDevice(ctx context.Context, d model.Device) bool {
 	cctx, cancel := context.WithTimeout(ctx, liveTimeout)
 	defer cancel()
 	v, err := p.reader.ReadKeys(cctx, id, cmds)
+	if p.verify != nil && len(v) > 0 {
+		// the same rule as ReadNet's; asked after the reads, which it covers. Its own variable: a read that
+		// failed half way stays a failure (false: read again soon) when the device then shows its MAC.
+		if verr := p.verify(cctx, d); verr != nil {
+			return false
+		}
+	}
 	if len(v) > 0 {
 		p.vals.put(id, v, p.clock())
 	}

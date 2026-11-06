@@ -23,6 +23,7 @@ func (a *runtime) policyApplier() ota.PolicyApplier {
 
 func (p policyApplier) Apply(ctx context.Context, d model.Device, lines []string) error {
 	err := p.a.fixer.Apply(ctx, d, lines)
+	p.a.settingsWritten(d.ID) // whatever was sent: a read that started before it holds the old values (#662)
 	if err == nil && p.a.brokerHost != nil && slices.ContainsFunc(lines, setsBrokerTarget) {
 		p.a.brokerHost.later(d.ID) // the device moved to another broker (#598)
 	}

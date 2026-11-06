@@ -26,6 +26,10 @@ import (
 var (
 	ErrUnknownField = errors.New("settings: unknown field")
 	ErrNotQueryable = errors.New("settings: command cannot be read")
+	// ErrNoMAC is what Options.Verify returns for a device that answers without a MAC: minimal firmware
+	// (an update in progress) knows no Status 5, so it cannot show that it is the stored device. Its
+	// values are not remembered; the pages say why instead of "could not be read".
+	ErrNoMAC = errors.New("settings: the device answers without a MAC (minimal firmware)")
 )
 
 // ValidationError lists every rejected field of one Apply call. When it is
@@ -86,6 +90,13 @@ type Options struct {
 	Audit       audit.Recorder   // optional
 	ReadTimeout time.Duration    // whole Read, default 60 s
 	Now         func() time.Time // default time.Now; stamps what Read remembers
+	// Stop (may be nil) is done when TasmoFleet is stopping. The shared read runs detached from the
+	// request that started it; this is what still ends it (a container is killed a few seconds after
+	// the stop signal, and a read sends one request after the other for up to ReadTimeout).
+	Stop context.Context
+	// Verify (may be nil) says whether the device that answered is the stored one: an error keeps the
+	// values of a shared read out of the remembered ones (app: Prober.VerifyAddress, the rule of ReadNet).
+	Verify func(ctx context.Context, d model.Device) error
 }
 
 // Manager implements Service.
@@ -106,6 +117,9 @@ func New(o Options) *Manager {
 	}
 	if o.Now == nil {
 		o.Now = time.Now
+	}
+	if o.Stop == nil {
+		o.Stop = context.Background()
 	}
 	return &Manager{o: o, last: map[model.DeviceID]Snapshot{}, flights: map[model.DeviceID]*flight{}, gen: map[model.DeviceID]uint64{}}
 }
@@ -392,7 +406,7 @@ func (m *Manager) Apply(ctx context.Context, actor string, id model.DeviceID, ch
 		return nil, err
 	}
 	t := tasmota.TargetFor(d)
-	defer m.forget(id) // whatever was sent, the remembered values no longer describe the device
+	defer m.Forget(id) // whatever was sent, the remembered values no longer describe the device
 	results := make([]Result, 0, len(todo))
 	for i, f := range todo {
 		cmd := f.Command(changes[f.Key])

@@ -523,8 +523,16 @@ func (p *Prober) ReadNet(ctx context.Context, id model.DeviceID) error {
 }
 
 // errAnotherDevice: the device that answers at the stored address is not the stored one (its MAC is not in
-// the stored set), or cannot prove it is (no MAC in the answer).
+// the stored set), or the answer has no MAC at all. Minimal firmware, which knows no Status 5, is
+// settings.ErrNoMAC.
 var errAnotherDevice = errors.New("another device answers at the stored address")
+
+// notStoredDevice says err is VerifyAddress's refusal: another device answers (errAnotherDevice), or the
+// answer shows no MAC at all, so it cannot be told (settings.ErrNoMAC, minimal firmware). Neither is a
+// failure of the read: nothing was stored, and the device is asked again at the regular interval.
+func notStoredDevice(err error) bool {
+	return errors.Is(err, errAnotherDevice) || errors.Is(err, settings.ErrNoMAC)
+}
 
 // VerifyAddress says, with one Status 5, whether the device answering at the stored address is the stored
 // one, by the rule of ReadNet and the refresh (a MAC of the stored set). The background reads (#600) call
@@ -539,7 +547,7 @@ func (p *Prober) VerifyAddress(ctx context.Context, d model.Device) error {
 	var out probed
 	if _, err := p.status5(ctx, tasmota.TargetFor(d), &out); err != nil {
 		if errors.Is(err, tasmota.ErrUnknownCommand) {
-			return errAnotherDevice // minimal firmware reports no MAC: it cannot show it is the stored device
+			return settings.ErrNoMAC // minimal firmware reports no MAC: it cannot show it is the stored device
 		}
 		return err
 	}
@@ -547,6 +555,20 @@ func (p *Prober) VerifyAddress(ctx context.Context, d model.Device) error {
 		return errAnotherDevice
 	}
 	return nil
+}
+
+// VerifyRead is VerifyAddress through Reads (the router: MQTT first for a device on our broker, #456), the
+// way the reads it vouches for went: the Settings service and the policy poller read through the router, so
+// their check must too, like ReadNet's. Over HTTP it would vouch for whoever holds the address while the
+// values came from the device on the topic, and it refused every read of a device whose HTTP API is off
+// (#662). ReadBroker reads over HTTP and keeps VerifyAddress.
+func (p *Prober) VerifyRead(ctx context.Context, d model.Device) error {
+	if p.Reads == nil {
+		return p.VerifyAddress(ctx, d)
+	}
+	c := *p
+	c.Client = p.Reads
+	return c.VerifyAddress(ctx, d)
 }
 
 // ReadBroker re-reads the broker a stored device is configured for (Status 6, and SetOption3 when a

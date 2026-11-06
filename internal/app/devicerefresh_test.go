@@ -2,15 +2,19 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
 	"github.com/nofuturekid/tasmofleet/internal/devlock"
 	"github.com/nofuturekid/tasmofleet/internal/health"
 	"github.com/nofuturekid/tasmofleet/internal/inventory"
@@ -710,25 +714,29 @@ func TestRefusedIdentityHoldsBackTheDataRead(t *testing.T) {
 	}
 }
 
-// Why: a data read that finds another device at the address leaves the caches alone and is asked again at
-// the broker's interval, not at every pass.
+// Why: a data read that finds another device at the address, or a device that cannot show its MAC (minimal
+// firmware, #662), leaves the caches alone and is asked again at the broker's interval, not at every pass.
 func TestAnotherDeviceInTheDataReadIsNotRetriedAtEveryPass(t *testing.T) {
-	g := newRefreshRig(1)
-	n := 0
-	g.r.readData = func(context.Context, model.Device) error { n++; return errAnotherDevice }
-	for range 5 {
-		g.r.pass(t.Context())
-		g.advance(brokerHostTick)
-	}
-	g.advance(brokerHostRetry + time.Minute)
-	g.r.pass(t.Context())
-	if n != 1 {
-		t.Fatalf("%d data reads within the retry delay of a failure, want 1: another device is not a failure", n)
-	}
-	g.advance(brokerHostEvery)
-	g.r.pass(t.Context())
-	if n != 2 {
-		t.Fatalf("%d data reads after the broker interval, want 2", n)
+	for name, refusal := range map[string]error{"another MAC": errAnotherDevice, "no MAC (minimal firmware)": settings.ErrNoMAC} {
+		t.Run(name, func(t *testing.T) {
+			g := newRefreshRig(1)
+			n := 0
+			g.r.readData = func(context.Context, model.Device) error { n++; return refusal }
+			for range 5 {
+				g.r.pass(t.Context())
+				g.advance(brokerHostTick)
+			}
+			g.advance(brokerHostRetry + time.Minute)
+			g.r.pass(t.Context())
+			if n != 1 {
+				t.Fatalf("%d data reads within the retry delay of a failure, want 1: this is not a failure", n)
+			}
+			g.advance(brokerHostEvery)
+			g.r.pass(t.Context())
+			if n != 2 {
+				t.Fatalf("%d data reads after the broker interval, want 2", n)
+			}
+		})
 	}
 }
 
@@ -744,27 +752,29 @@ func TestAnotherDeviceInTheBrokerReadIsAskedAgainAtTheRegularInterval(t *testing
 		{"periodic", false},
 		{"asked for by a restart", true},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			g := newRefreshRig(1)
-			far := g.clock.Add(48 * time.Hour)
-			g.r.identityNext[1], g.r.dataNext[1] = far, far
-			if tc.restart {
-				g.r.next[1] = far
-				g.r.wantRestart(1)
-			}
-			var reads []time.Time
-			g.r.read = func(context.Context, model.DeviceID) error {
-				reads = append(reads, g.clock)
-				return errAnotherDevice
-			}
-			for range 7 * 120 { // seven hours of passes
-				g.advance(brokerHostTick)
-				g.r.pass(t.Context())
-			}
-			if len(reads) != 2 || reads[1].Sub(reads[0]) < brokerHostEvery {
-				t.Fatalf("broker read %d times (%v), want twice, %v apart: another device is not a failure", len(reads), reads, brokerHostEvery)
-			}
-		})
+		for name, refusal := range map[string]error{"another MAC": errAnotherDevice, "no MAC (minimal firmware)": settings.ErrNoMAC} {
+			t.Run(tc.name+", "+name, func(t *testing.T) {
+				g := newRefreshRig(1)
+				far := g.clock.Add(48 * time.Hour)
+				g.r.identityNext[1], g.r.dataNext[1] = far, far
+				if tc.restart {
+					g.r.next[1] = far
+					g.r.wantRestart(1)
+				}
+				var reads []time.Time
+				g.r.read = func(context.Context, model.DeviceID) error {
+					reads = append(reads, g.clock)
+					return refusal
+				}
+				for range 7 * 120 { // seven hours of passes
+					g.advance(brokerHostTick)
+					g.r.pass(t.Context())
+				}
+				if len(reads) != 2 || reads[1].Sub(reads[0]) < brokerHostEvery {
+					t.Fatalf("broker read %d times (%v), want twice, %v apart: another device is not a failure", len(reads), reads, brokerHostEvery)
+				}
+			})
+		}
 	}
 }
 
@@ -814,7 +824,7 @@ func TestVerifyAddressAcceptsEveryMACOfTheStoredSetAndNothingElse(t *testing.T) 
 		{"both stored", at(wired, wifi, eth), nil},
 		{"no MAC stored", at(wired), nil},
 		{"another MAC stored", at(wired, "02:00:00:00:00:99"), errAnotherDevice},
-		{"minimal firmware, which reports no MAC", at(minimal, wifi), errAnotherDevice},
+		{"minimal firmware, which reports no MAC", at(minimal, wifi), settings.ErrNoMAC},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if err := p.VerifyAddress(t.Context(), tc.d); !errors.Is(err, tc.want) {
@@ -830,4 +840,305 @@ type noBackups struct{}
 func (noBackups) List(context.Context, model.DeviceID) ([]model.Backup, error) { return nil, nil }
 func (noBackups) Open(context.Context, model.BackupID) ([]byte, model.Backup, error) {
 	return nil, model.Backup{}, errors.New("no backups")
+}
+
+// swapClient answers like the device behind it until it has answered one Status 5; from then on the
+// address belongs to another device (a DHCP lease handed over between two reads).
+type swapClient struct {
+	tasmota.Client
+	status5 atomic.Int32
+}
+
+func (s *swapClient) Command(ctx context.Context, t tasmota.Target, cmnd string) (json.RawMessage, error) {
+	raw, err := s.Client.Command(ctx, t, cmnd)
+	if err == nil && cmnd == "Status 5" && s.status5.Add(1) > 1 {
+		return json.RawMessage(regexp.MustCompile(`(?i)"Mac":\s*"[0-9a-f:]+"`).ReplaceAll(raw, []byte(`"Mac":"02:00:00:00:00:99"`))), nil
+	}
+	return raw, err
+}
+
+// storedDevice is a simulator device stored under its own MAC, with its address answered through swap.
+func storedDevice(t *testing.T) (o anotherDevice, swap *swapClient) {
+	t.Helper()
+	o = newAnotherDevice(t)
+	desc, err := o.p.Describe(t.Context(), model.Device{Address: o.stored.Address, Port: o.stored.Port})
+	if err != nil || desc.MAC == "" {
+		t.Fatalf("describe: %v (MAC %q)", err, desc.MAC)
+	}
+	if err := o.st.DeleteDevice(t.Context(), o.id); err != nil {
+		t.Fatal(err)
+	}
+	if o.id, err = o.st.CreateDevice(t.Context(), desc); err != nil {
+		t.Fatal(err)
+	}
+	o.stored, _ = o.st.GetDevice(t.Context(), o.id)
+	swap = &swapClient{Client: o.cl}
+	o.p = &Prober{Client: swap, Gap: time.Millisecond, Broker: fixedBroker{host: "broker.example"}, Devices: o.st}
+	return o, swap
+}
+
+// Why (#662): the MAC check before the data read (#658) is one request ahead of the reads. An address
+// that changes hands after it must still not fill the Settings cache: the service asks again once it has
+// the values, and nothing is remembered from an answer whose MAC is not the stored one.
+func TestSettingsValuesFromAnAddressThatChangedHandsAreNotRemembered(t *testing.T) {
+	o, _ := storedDevice(t)
+	set := settings.New(settings.Options{Devices: o.st, Client: o.cl, Verify: o.p.VerifyAddress})
+	a := &runtime{svc: &Services{Prober: o.p}, settings: set}
+	if err := a.refreshData(t.Context(), o.stored); !errors.Is(err, errAnotherDevice) {
+		t.Fatalf("refreshData = %v, want errAnotherDevice", err)
+	}
+	if snap, ok := set.Last(o.id); ok {
+		t.Fatalf("the Settings cache holds %d values of another device", len(snap.Values))
+	}
+}
+
+// Why (#662): the Settings tab's own read (a page open) had no MAC check at all.
+func TestAPageReadOfAnotherDeviceIsRefusedAndNotRemembered(t *testing.T) {
+	o := newAnotherDevice(t)
+	set := settings.New(settings.Options{Devices: o.st, Client: o.cl, Verify: o.p.VerifyAddress})
+	if _, err := set.Read(t.Context(), o.id); !errors.Is(err, errAnotherDevice) {
+		t.Fatalf("Read = %v, want errAnotherDevice", err)
+	}
+	if _, ok := set.Last(o.id); ok {
+		t.Fatal("the values of another device are remembered as the last known ones")
+	}
+}
+
+// Why (#662): the policy poller and the on-demand check cache what they read as the device's values and
+// judge it by them; another device's answers must not be among them.
+func TestPolicyValuesOfAnotherDeviceAreNotCached(t *testing.T) {
+	o := newAnotherDevice(t)
+	rep := &policyReporter{devices: fakeLister{o.stored}, reader: o.setCaches, verify: o.p.VerifyAddress, now: time.Now}
+	rep.setRules([]policy.Rule{{ID: "r1", Command: "PowerOnState", Want: "3"}})
+	if rep.readDevice(t.Context(), o.stored) {
+		t.Fatal("a read of another device is reported as successful")
+	}
+	if len(rep.vals.get(o.id)) != 0 {
+		t.Fatalf("the policy values hold %v of another device", rep.vals.get(o.id))
+	}
+	// the stored device's own answers still arrive: the same rig with its MAC
+	own, _ := storedDevice(t)
+	rep = &policyReporter{devices: fakeLister{own.stored}, reader: own.setCaches, verify: own.p.VerifyAddress, now: time.Now}
+	rep.setRules([]policy.Rule{{ID: "r1", Command: "PowerOnState", Want: "3"}})
+	rep.reader = settings.New(settings.Options{Devices: own.st, Client: own.cl})
+	if !rep.readDevice(t.Context(), own.stored) || len(rep.vals.get(own.id)) == 0 {
+		t.Fatalf("the stored device's values were not cached: %v", rep.vals.get(own.id))
+	}
+}
+
+// Why (#662): a console write changes device settings without Apply. It must forget what the Settings
+// service remembers (and count the write, so a read under way is not remembered): a command that only
+// queries, or acts without changing a setting, must not, or every Status in the console would wipe the
+// last-known values.
+func TestConsoleWritesForgetTheRememberedSettingsAndQueriesDoNot(t *testing.T) {
+	o := newAnotherDevice(t)
+	set := settings.New(settings.Options{Devices: o.st, Client: o.cl})
+	a := &runtime{settings: set}
+	h := holdingCmd{Service: errCmd{}, onWrite: a.settingsWritten}
+	admin := model.Principal{Role: model.RoleAdmin}
+	for _, c := range []struct {
+		cmd    string
+		forget bool
+	}{
+		{"Topic", false},
+		{"Status 5", false},
+		{"Power1 toggle", false},
+		{"Restart 1", false},
+		{"FriendlyName1 Lamp", true},
+		{"Backlog SetOption4 1; Topic x", true},
+	} {
+		if _, err := set.Read(t.Context(), o.id); err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := set.Last(o.id); !ok {
+			t.Fatal("the read did not remember anything")
+		}
+		_, _ = h.Run(t.Context(), admin, o.id, c.cmd)
+		if _, ok := set.Last(o.id); ok == c.forget {
+			t.Errorf("%q: values remembered after it = %v, want %v", c.cmd, ok, !c.forget)
+		}
+	}
+	// a command the policy refused never reached the device
+	if _, err := set.Read(t.Context(), o.id); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = holdingCmd{Service: errCmd{err: cmdpolicy.ErrForbidden}, onWrite: a.settingsWritten}.Run(t.Context(), admin, o.id, "FriendlyName1 Lamp")
+	if _, ok := set.Last(o.id); !ok {
+		t.Error("a refused command made the service forget")
+	}
+}
+
+// Why (#662): Make compliant writes settings through the fixer, not through Apply; a failed run may
+// have sent part of its lines. Either way what was remembered no longer describes the device.
+func TestMakeCompliantForgetsTheRememberedSettings(t *testing.T) {
+	o := newAnotherDevice(t)
+	set := settings.New(settings.Options{Devices: o.st, Client: o.cl})
+	a := &runtime{settings: set, fixer: &policy.Fixer{Client: o.cl, Reader: set}, policyLive: &policyReporter{now: time.Now}}
+	if _, err := set.Read(t.Context(), o.id); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.policyApplier().Apply(t.Context(), o.stored, []string{"FriendlyName1 Lamp"}); err != nil {
+		t.Logf("apply: %v (the run may fail; the values must be forgotten either way)", err)
+	}
+	if _, ok := set.Last(o.id); ok {
+		t.Error("Make compliant left the remembered values in place")
+	}
+}
+
+// Why (#662): the MAC check after the policy read must not swallow the read's own error. A device that
+// answered some commands and then timed out was read only in part; when it shows the stored MAC right
+// after, the poller must still hear "failed" and read it again soon (and the data refresh must still say
+// "policy values not read"), not wait for the next regular round with half the values.
+func TestAPolicyReadThatFailedHalfWayStaysAFailure(t *testing.T) {
+	rep := &policyReporter{reader: partialReader{"PowerOnState": "3"}, verify: func(context.Context, model.Device) error { return nil }, now: time.Now}
+	rep.setRules([]policy.Rule{{ID: "r1", Command: "PowerOnState", Want: "3"}, {ID: "r2", Command: "LedState", Want: "1"}})
+	if rep.readDevice(t.Context(), model.Device{ID: 7}) {
+		t.Fatal("a read that failed half way is reported as complete")
+	}
+	if got := rep.vals.get(7); len(got) != 1 { // a dead device keeps what it answered
+		t.Fatalf("cached %v, want the one value the device answered", got)
+	}
+}
+
+// partialReader answers its values and then fails, like a device that stops answering half way.
+type partialReader map[string]string
+
+func (r partialReader) ReadKeys(context.Context, model.DeviceID, []string) (map[string]string, error) {
+	out := map[string]string{}
+	for k, v := range r {
+		out[k] = v
+	}
+	return out, tasmota.ErrTimeout
+}
+
+// overMQTT stands in for the router's MQTT route to one device: it answers what the device answers on its
+// topic (Status 5 with mac), or, once held, nothing until the request's context ends.
+type overMQTT struct {
+	mu      sync.Mutex
+	mac     string
+	held    bool
+	waiting chan struct{} // closed when the first held command waits
+	once    sync.Once
+}
+
+func (m *overMQTT) set(mac string, held bool) {
+	m.mu.Lock()
+	m.mac, m.held = mac, held
+	m.mu.Unlock()
+}
+
+func (m *overMQTT) Command(ctx context.Context, _ tasmota.Target, cmnd string) (json.RawMessage, error) {
+	m.mu.Lock()
+	mac, held := m.mac, m.held
+	m.mu.Unlock()
+	if held {
+		m.once.Do(func() { close(m.waiting) })
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	switch cmnd {
+	case "Status 5":
+		return json.RawMessage(`{"StatusNET":{"Mac":"` + mac + `"}}`), nil
+	case "Topic":
+		return json.RawMessage(`{"Topic":"plug"}`), nil
+	case "Status": // PowerOnState is read from here, never bare
+		return json.RawMessage(`{"Status":{"Topic":"plug","PowerOnState":3,"SaveData":1}}`), nil
+	case "FriendlyName1 Lamp":
+		return json.RawMessage(`{"FriendlyName1":"Lamp"}`), nil
+	}
+	return nil, tasmota.ErrUnknownCommand
+}
+
+func (*overMQTT) DownloadConfig(context.Context, tasmota.Target) ([]byte, error) {
+	return nil, errors.New("not over MQTT")
+}
+
+func (*overMQTT) RootPage(context.Context, tasmota.Target) (tasmota.RootInfo, error) {
+	return tasmota.RootInfo{}, errors.New("not over MQTT")
+}
+
+// Why (#662): the wiring is where these protections silently disappear: the tests above build the Settings
+// service, the policy poller and the console by hand, so a line missing in setupSettings or setupDeviceCmd
+// passes them all. The shared read must end with TasmoFleet's stop signal, both MAC checks must go the way the
+// reads go (the router: MQTT for a device whose HTTP API is off; asked over HTTP they refused every read of
+// such a device, and vouched for the address while the values came from the topic), and a console write must
+// make the service forget.
+func TestRuntimeWiresTheLastKnownValues(t *testing.T) {
+	svc := importServices(t)
+	fleet, err := simulator.NewFleet(simulator.FleetOptions{FixturesDir: "../../testdata/fixtures"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = fleet.Close() })
+	sim, err := fleet.Add(t.Context(), simulator.DeviceSpec{Name: "plug", Profile: simulator.ProfileESP8266_4M})
+	if err != nil {
+		t.Fatal(err)
+	}
+	host, port := splitAddr(t, sim.Addr())
+	desc, err := svc.Prober.Describe(t.Context(), model.Device{Address: host, Port: port})
+	if err != nil || desc.MAC == "" {
+		t.Fatalf("describe: %v (MAC %q)", err, desc.MAC)
+	}
+	id, err := svc.Store.CreateDevice(t.Context(), desc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, _ := svc.Store.GetDevice(t.Context(), id)
+	ctl, _ := simulator.Control(sim)
+	ctl.AddFault(simulator.Fault{Kind: simulator.FaultHTTPAPIOff}) // from here on only MQTT reads the device
+	mqtt := &overMQTT{mac: desc.MAC, waiting: make(chan struct{})}
+	svc.Client, svc.Prober.Reads = mqtt, mqtt // production gives both the router; here its MQTT route
+	bg, stop := context.WithCancel(context.Background())
+	a := &runtime{svc: svc, cfg: svc.Cfg, log: svc.Log, bgContext: bg, fw: newFirmwareState(nil)}
+	t.Cleanup(func() { stop(); a.bgWG.Wait() })
+	a.setupDeviceCmd()
+	if err := a.setupSettings(); err != nil {
+		t.Fatal(err)
+	}
+	a.policyLive.setRules([]policy.Rule{{ID: "r1", Command: "PowerOnState", Want: "3"}})
+
+	if _, err := a.settings.Read(t.Context(), id); err != nil {
+		t.Fatalf("the stored device, read over MQTT with its HTTP API off: %v", err)
+	}
+	if _, ok := a.settings.Last(id); !ok {
+		t.Fatal("its values are not remembered")
+	}
+	if !a.policyLive.readDevice(t.Context(), d) || len(a.policyLive.vals.get(id)) == 0 {
+		t.Fatal("the policy poller refused the stored device, read over MQTT")
+	}
+	if _, err := a.deviceCmd.Run(t.Context(), model.Principal{Role: model.RoleAdmin}, id, "FriendlyName1 Lamp"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := a.settings.Last(id); ok {
+		t.Error("a console write left the remembered values in place")
+	}
+
+	mqtt.set("02:00:00:00:00:99", false) // another device listens on the topic
+	if _, err := a.settings.Read(t.Context(), id); !errors.Is(err, errAnotherDevice) {
+		t.Fatalf("Read of another device = %v, want errAnotherDevice", err)
+	}
+	if _, ok := a.settings.Last(id); ok {
+		t.Error("the values of another device are remembered")
+	}
+	if a.policyLive.readDevice(t.Context(), d) {
+		t.Error("the policy poller took the answers of another device")
+	}
+
+	mqtt.set(desc.MAC, true) // the device stops answering: the read waits for its context
+	done := make(chan error, 1)
+	go func() { _, err := a.settings.Read(context.Background(), id); done <- err }()
+	select {
+	case <-mqtt.waiting:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the read did not start")
+	}
+	stop()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("the read after the stop signal = %v, want context.Canceled", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the read outlived TasmoFleet's stop signal")
+	}
 }

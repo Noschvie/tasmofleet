@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"strings"
 	"sync"
@@ -136,6 +137,17 @@ func TestSettingsReadFailureShowsNoForm(t *testing.T) {
 	e := withSettings(t, &fakeSettings{readErr: tasmota.ErrUnreachable})
 	resp, body := e.do(t, "GET", "/devices/1/settings/form", "admin", nil)
 	if resp.StatusCode != 502 || !strings.Contains(body, "unreachable") || strings.Contains(body, "<form class=\"stack\"") {
+		t.Fatalf("status %d body %s", resp.StatusCode, body)
+	}
+}
+
+// Why (#662): a device on minimal firmware (an update is in progress) cannot show its MAC, so its read is
+// refused. The tab must say what is going on and when it will work, not "could not be read".
+func TestSettingsReadOfMinimalFirmwareSaysSo(t *testing.T) {
+	e := withSettings(t, &fakeSettings{readErr: fmt.Errorf("verify: %w", settings.ErrNoMAC)})
+	resp, body := e.do(t, "GET", "/devices/1/settings/form", "admin", nil)
+	want := "The device runs minimal firmware (an update is in progress); its settings can be read after the update."
+	if resp.StatusCode != 502 || !strings.Contains(body, want) || strings.Contains(body, "The device could not be read") {
 		t.Fatalf("status %d body %s", resp.StatusCode, body)
 	}
 }

@@ -37,6 +37,8 @@ type holdingCmd struct {
 	asks *restartAsks
 	// onBroker is told of a device that was sent MqttHost or MqttPort and answered (#598); nil: nobody.
 	onBroker func(model.DeviceID)
+	// onWrite is told of every command that may have changed a setting of a device (#662); nil: nobody.
+	onWrite func(model.DeviceID)
 }
 
 func (c holdingCmd) Run(ctx context.Context, p model.Principal, id model.DeviceID, cmd string) (json.RawMessage, error) {
@@ -47,6 +49,9 @@ func (c holdingCmd) Run(ctx context.Context, p model.Principal, id model.DeviceI
 	if c.asks != nil && !neverSent(err) && cmdpolicy.RestartsDevice(cmd) {
 		c.asks.Note(id)
 	}
+	if c.onWrite != nil && !neverSent(err) && writesSettings(cmd) {
+		c.onWrite(id)
+	}
 	if c.onBroker != nil && err == nil && setsBrokerTarget(cmd) {
 		c.onBroker(id)
 	}
@@ -54,6 +59,21 @@ func (c holdingCmd) Run(ctx context.Context, p model.Principal, id model.DeviceI
 		startHold(c.holds, c.uptime, id)
 	}
 	return raw, err
+}
+
+// writesSettings reports whether cmd may change a setting of the device: the console's admin class (queries
+// and the harmless actions Power and Restart change none). A line the policy refuses was never sent.
+func writesSettings(cmd string) bool {
+	v, err := cmdpolicy.Classify(cmd)
+	return err == nil && v.Class == cmdpolicy.ClassAdmin
+}
+
+// settingsWritten tells the Settings service that a writer other than its own Apply sent to the device (the
+// console, Make compliant): a read that started before the write is not remembered as current (#662).
+func (a *runtime) settingsWritten(id model.DeviceID) {
+	if a.settings != nil {
+		a.settings.Forget(id)
+	}
 }
 
 // startHold holds id for update starts from now, with the uptime the health tracker has cached for it as the

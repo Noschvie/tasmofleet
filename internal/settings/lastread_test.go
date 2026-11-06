@@ -338,3 +338,120 @@ func TestReadersAfterAWriteShareOneNewRead(t *testing.T) {
 		t.Errorf("%d reads started after the write, want 1 that both readers share", n)
 	}
 }
+
+// Why (#662): the console and Make compliant write device settings without Apply. They tell the
+// service with Forget; a read that started before such a write must not be remembered as current,
+// the same as for Apply.
+func TestAReadUnderWayDuringAnotherWritersWriteIsNotRemembered(t *testing.T) {
+	c := newWriteRace()
+	m := New(Options{Devices: fakeDevices{}, Client: c})
+	before := startRead(m)
+	waitFor(t, c.held, "the read to be under way")
+	c.mu.Lock()
+	c.replies["FriendlyName1"] = `{"FriendlyName1":"Lamp"}` // the console wrote it
+	c.mu.Unlock()
+	m.Forget(1)
+	close(c.gate)
+	if v := waitFor(t, before, "the read that started before the write"); v["FriendlyName1"] != "Old" {
+		t.Fatalf("the read under way got %q; the test needs it to have read before the write", v["FriendlyName1"])
+	}
+	if s, ok := m.Last(1); ok {
+		t.Errorf("Last = %q: a read that started before a console write is remembered as the newest values", s.Values["FriendlyName1"])
+	}
+}
+
+// Why (#662): the detached read outlives the request that started it, but TasmoFleet stopping must end
+// it: it kept sending to the device for up to ReadTimeout (60 s) after the stop, ten requests in three
+// seconds on a device that answers, while a container is killed a few seconds after the signal.
+func TestTheDetachedReadStopsWithTheStopSignal(t *testing.T) {
+	c := newWriteRace() // the first query is answered, every later one waits for the gate: a slow device
+	stop, stopNow := context.WithCancel(context.Background())
+	defer stopNow()
+	m := New(Options{Devices: fakeDevices{}, Client: c, Stop: stop, ReadTimeout: time.Minute})
+	done := make(chan error, 1)
+	go func() {
+		_, err := m.Read(context.Background(), 1)
+		done <- err
+	}()
+	waitFor(t, c.held, "the read to be under way")
+	stopNow()
+	if err := waitFor(t, done, "the read to end with the stop signal"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Read after the stop signal = %v, want context.Canceled", err)
+	}
+	if s, ok := m.Last(1); ok {
+		t.Errorf("a read that was stopped is remembered: %v", s.Values)
+	}
+}
+
+// Why (#662): a read that waits for the one from before a write must not outlive the stop signal either,
+// even when that older read does not end with it (a request stuck past its cancellation): the wait itself
+// ends with the signal.
+func TestAReadWaitingForTheOldOneStopsWithTheStopSignal(t *testing.T) {
+	c := &deafClient{gate: make(chan struct{}), started: make(chan struct{})}
+	defer close(c.gate) // lets the older read end after the test
+	stop, stopNow := context.WithCancel(context.Background())
+	defer stopNow()
+	m := New(Options{Devices: fakeDevices{}, Client: c, Stop: stop})
+	go func() { _, _ = m.Read(context.Background(), 1) }() // its result does not matter: it never ends in time
+	waitFor(t, c.started, "the first read to be under way")
+	m.Forget(1) // the second read must wait for the first
+	second := make(chan error, 1)
+	go func() { _, err := m.Read(context.Background(), 1); second <- err }()
+	waiting := func() bool { // the second flight is registered: it waits on the first
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		f := m.flights[1]
+		return f != nil && f.gen == m.gen[1]
+	}
+	for end := time.Now().Add(5 * time.Second); !waiting(); time.Sleep(time.Millisecond) {
+		if time.Now().After(end) {
+			t.Fatal("timed out waiting for the second read to wait on the first")
+		}
+	}
+	stopNow()
+	if err := waitFor(t, second, "the waiting read to end"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("the waiting read = %v, want context.Canceled", err)
+	}
+}
+
+// deafClient is a device whose request ends only at the gate, whatever its context says.
+type deafClient struct {
+	fakeClient
+	gate    chan struct{}
+	started chan struct{}
+	once    sync.Once
+}
+
+func (d *deafClient) Command(ctx context.Context, t tasmota.Target, cmnd string) (json.RawMessage, error) {
+	d.once.Do(func() { close(d.started) })
+	<-d.gate
+	return d.fakeClient.Command(ctx, t, cmnd)
+}
+
+// Why (#662): another device answering at the stored address must not fill this device's last-known
+// values. The service asks Verify after the reads; a refusal keeps the values out and reaches the caller.
+func TestValuesOfAnotherDeviceAreNotRemembered(t *testing.T) {
+	c := &fakeClient{replies: map[string]string{"Topic": `{"Topic":"stranger"}`}}
+	errOther := errors.New("another device answers at the stored address")
+	var other atomic.Bool
+	other.Store(true)
+	m := New(Options{Devices: fakeDevices{}, Client: c, Verify: func(context.Context, model.Device) error {
+		if other.Load() {
+			return errOther
+		}
+		return nil
+	}})
+	if _, err := m.Read(context.Background(), 1); !errors.Is(err, errOther) {
+		t.Fatalf("Read = %v, want the refusal", err)
+	}
+	if s, ok := m.Last(1); ok {
+		t.Fatalf("values of another device were remembered: %v", s.Values)
+	}
+	other.Store(false)
+	if _, err := m.Read(context.Background(), 1); err != nil {
+		t.Fatal(err)
+	}
+	if s, ok := m.Last(1); !ok || s.Values["Topic"] != "stranger" {
+		t.Fatalf("the stored device's values must be remembered: %v %v", s, ok)
+	}
+}

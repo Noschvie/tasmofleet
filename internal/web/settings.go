@@ -165,6 +165,8 @@ func (h *handler) policyWants(r *http.Request, id model.DeviceID) map[string]str
 // readErrorText keeps device output out of the page.
 func readErrorText(err error) string {
 	switch {
+	case errors.Is(err, settings.ErrNoMAC):
+		return "The device runs minimal firmware (an update is in progress); its settings can be read after the update."
 	case errors.Is(err, tasmota.ErrAuth):
 		return "The device refused the stored credentials."
 	case errors.Is(err, tasmota.ErrHTTPAPIRefused):

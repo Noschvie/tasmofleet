@@ -252,3 +252,34 @@ test("a command that no Tasmota version of the fleet has is refused with the ver
   await page.getByRole("button", { name: "Save rule" }).click();
   await expect(page.locator("#err-command")).toContainText("NoSuchCmdAnywhere is not a command in any Tasmota version in your fleet (16.0.0, 14.4.1, 13.4.0).");
 });
+
+// Why (#662): a device that was flashed to minimal firmware (an update in progress) answers no Status 5, so its
+// reads cannot be tied to the stored MAC and are refused. The Settings tab must say what is going on, not
+// "The device could not be read". The entry is given a MAC like a device that was probed before the update.
+test("the Settings tab of a device on minimal firmware says so", async ({ page }) => {
+  const { DatabaseSync } = await import("node:sqlite");
+  const db = new DatabaseSync(join(app.dataDir, "tasmofleet.db"));
+  try {
+    db.exec("PRAGMA busy_timeout=5000");
+    db.prepare("UPDATE devices SET mac = ? WHERE name = ?").run("02:00:00:00:00:77", "lamp-minimal");
+  } finally {
+    db.close();
+  }
+  await page.setExtraHTTPHeaders(admin);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(app.url + "/devices");
+  const href = await page.getByRole("link", { name: "lamp-minimal", exact: true }).first().getAttribute("href");
+  await page.goto(app.url + href + "/settings");
+  const msg = page.locator("#settings-view");
+  await expect(msg).toContainText("The device runs minimal firmware (an update is in progress); its settings can be read after the update.");
+  await expect(msg).not.toContainText("The device could not be read");
+  const dir = process.env.UI_SHOTS_DIR;
+  if (dir) {
+    for (const w of [1280, 375]) {
+      await page.setViewportSize({ width: w, height: 800 });
+      await page.emulateMedia({ colorScheme: "light" });
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.screenshot({ path: `${dir}/settings-minimal-${w}-light.png` });
+    }
+  }
+});
