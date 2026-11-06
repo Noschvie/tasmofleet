@@ -31,7 +31,7 @@ type HTTPFailKind string
 const (
 	HTTPFailUnreachable HTTPFailKind = "unreachable"      // no answer or refused connection
 	HTTPFailOutside     HTTPFailKind = "outside_networks" // address outside DEVICE_NETWORKS
-	HTTPFailAPIRefused  HTTPFailKind = "api_refused"      // SetOption128 on
+	HTTPFailAPIRefused  HTTPFailKind = "api_refused"      // HTTP API off (SetOption128 0): /cm refused, the main page answers
 	HTTPFailAuth        HTTPFailKind = "auth_failed"      // web password refused
 )
 

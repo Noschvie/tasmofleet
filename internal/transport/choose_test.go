@@ -451,6 +451,17 @@ func TestAPIOffReasonsUseTheOneWordingAndTheFix(t *testing.T) {
 	if r := p.Reason(ActCommands); p.Commands != MQTT || strings.Contains(r, tasmota.APIOffFix) || !strings.Contains(r, tasmota.APIOffName) {
 		t.Errorf("reads over MQTT: %s %q", p.Commands, r)
 	}
+	// a device HTTP cannot reach at all gets no SetOption128 advice: turning the API on would not help it
+	f = httpDown(base())
+	f.MQTT.Ours = false
+	for _, r := range Choose(f).Reasons {
+		if r.Path != None {
+			t.Fatalf("fixture: %s has a path (%s)", r.Action, r.Path)
+		}
+		if strings.Contains(r.Text, tasmota.APIOffFix) {
+			t.Errorf("%s of an unreachable device advises the API fix: %q", r.Action, r.Text)
+		}
+	}
 }
 
 // Why: the spec's example sentence for the case where nothing works.

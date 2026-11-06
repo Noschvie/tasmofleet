@@ -11,6 +11,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/fwselect"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/nofuturekid/tasmofleet/internal/tasmota"
 	"github.com/nofuturekid/tasmofleet/internal/transport"
 )
 
@@ -342,6 +343,34 @@ func TestMQTTPathAcceptsTheBackupOnlyWhenItHasAPath(t *testing.T) {
 	}
 	if err := submit(withBackup(transport.None, "no path"), true); err != nil {
 		t.Fatalf("without the backup the same device is accepted: %v", err)
+	}
+}
+
+// Why (#659 review): with the device's HTTP API off the chooser ends a "no path" with the fix, a sentence of its own
+// that ends in a period. The way out of the update ("or turn off Back up each device") must follow it as a clause, not
+// glued behind the period (".; or turn off"). The chooser's own sentence is used, not a stand-in.
+func TestMQTTPathBackupRefusalReadsAfterTheAPIOffFix(t *testing.T) {
+	now := time.Now()
+	f := transport.Facts{
+		Now: now, FirmwareBaseURL: true,
+		HTTP: transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailAPIRefused, Since: now.Add(-time.Hour)},
+		MQTT: transport.MQTTFacts{BusConnected: true, Ours: true, Topic: "kitchen", TopicExclusive: true, GroupTopic: "tasmotas",
+			GroupTopicReadAt: now.Add(-time.Hour), LastProbeAt: now.Add(-time.Hour), LWTOnline: true},
+		Password: transport.Password{Mode: model.MQTTPasswordNone},
+	}
+	ps := transport.Choose(f)
+	if ps.Update != transport.DownloadMQTT || ps.Backup != transport.None {
+		t.Fatalf("fixture: MQTT must carry the update but not the backup (no MQTT password): update %s, backup %s", ps.Update, ps.Backup)
+	}
+	h, _ := newPathHarness(t, &fakePaths{paths: ps})
+	_, err := h.e.Submit(context.Background(), "alice", []Request{{DeviceID: 1, Release: "16.0.0"}})
+	var re *RefusedError
+	if !errors.As(err, &re) {
+		t.Fatalf("a backup without a path must refuse the update: %v", err)
+	}
+	r := re.Refused[0].Reason
+	if strings.Contains(r, ".;") || !strings.Contains(r, strings.TrimSuffix(tasmota.APIOffFix, ".")+`; or turn off "Back up each device"`) {
+		t.Errorf("reason %q", r)
 	}
 }
 

@@ -495,6 +495,20 @@ func TestAnUnlistableRootGivesNoArchiveAndStillASuccessfulRun(t *testing.T) {
 	}
 }
 
+// Why (#659 review): when the device refuses its HTTP API before any file is listed, the run note says so in the one
+// wording, not "the device did not answer" (it did: its main page is up). ErrHTTPAPIRefused wraps ErrUnreachable.
+func TestFilesNoteNamesTheHTTPAPIOffBeforeAnyListing(t *testing.T) {
+	e := newFilesEnv(t, esp32(nil), nil)
+	e.flaky.infoErr = fmt.Errorf("fs info: %w", tasmota.ErrHTTPAPIRefused)
+	got, err := e.m.Backup(t.Context(), "alice", 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := dumpNote(t, got); !strings.Contains(n, NoteFilesPrefix+tasmota.APIOffName) || strings.Contains(n, "did not answer") {
+		t.Errorf("dump note %q", n)
+	}
+}
+
 func TestFilesNeedHTTPIsSaidNotFailed(t *testing.T) {
 	// Why: a device reached over MQTT only cannot hand over files; the person must see "needs HTTP"
 	// rather than a failed backup.

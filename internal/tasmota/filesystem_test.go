@@ -719,6 +719,10 @@ func TestDownloadFile_NoReplyIsToldApart(t *testing.T) {
 		if !errors.Is(err, ErrHTTPAPIRefused) || errors.Is(err, ErrFileNotFound) {
 			t.Errorf("err = %v", err)
 		}
+		// the text reaches the backup's file notes and the logs: the one wording, with the fix (#659)
+		if !strings.Contains(err.Error(), APIOffName) || !strings.Contains(err.Error(), APIOffFix) {
+			t.Errorf("the refusal must name the cause and tell the fix: %v", err)
+		}
 	})
 	t.Run("link dropped: nothing answers", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { closeConn(w) }))

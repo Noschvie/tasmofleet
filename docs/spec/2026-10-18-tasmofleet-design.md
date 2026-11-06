@@ -1209,7 +1209,7 @@ Submit.
   messages and what the background poll reaches (an answer or a refusal) count as `LastSeen`: a probe contact
   does not move "Offline since". An online device whose API is off
   and which no MQTT path can serve has no path for backup, update, restore and changes: scheduled backups skip it
-  (reason "HTTP API off (SetOption128 0)"), and updates, bulk actions, manual Back up, relay switches, Restart, Refresh identity, Console and Settings posts, transaction retries (backup, command, Make compliant), Make compliant, GPIO template apply and the Drift tab's live read refuse it up front with that reason (#645); the background policy read skips it silently.
+  (reason "HTTP API off (SetOption128 0)"), and updates, bulk actions, manual Back up, relay switches, Restart, Refresh identity, Console and Settings posts, transaction retries (backup, command, Make compliant), Make compliant, GPIO template apply and the Drift tab's live read refuse it up front with that reason (#645); the background policy read skips it silently, and so do the on-demand policy check, the GPIO templates refresh and the group-topic reader, which do not count it as a failed read and read it again once the API answers (#659).
 - MQTT messages update `LastSeen`, power state and RSSI immediately and push SSE events.
 - A software restart publishes LWT `Offline` about 2 s after the command and before every OTA reboot
   (Tasmota's PubSubClient closes the socket without a DISCONNECT packet, so the broker fires the will;
