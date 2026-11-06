@@ -6,6 +6,8 @@ always upgrade automatically.
 
 ## Unreleased
 
+## 0.33.0 "Dondra Head" (2026-11-06)
+
 ### Upgrade notes
 
 - Migration 0045 (data only): a stored backup interval that is not zero becomes every day at 03:00 (`BACKUP_DAYS` all seven days, `BACKUP_TIME` 03:00) and the interval row is deleted; a stored 0 (manual only) and no stored interval stay manual only. Nothing to do: look at Devices, Backups, Schedule, and choose other days or another time if 03:00 does not suit you. The migration also stores a marker so that the first start after the upgrade does not run a backup (#601, #612).

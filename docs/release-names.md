@@ -21,7 +21,7 @@ runs out, add more. Facts below are taken from Wikipedia; a detail that could no
 10. **Eddystone** (assigned to 0.30): Eddystone Rocks off Cornwall, England. The first tower was lit in 1698; the current tower, designed by James Douglass, in 1882.
 11. **Cape Spear** (assigned to 0.31): near St. John's, Newfoundland, Canada. Lit in 1836; the oldest surviving lighthouse in Newfoundland.
 12. **Fastnet** (assigned to 0.32): off County Cork, Ireland. The current tower entered service in 1904; at 54 m the tallest lighthouse in Ireland, nicknamed "Ireland's Teardrop".
-13. **Dondra Head**: southern Sri Lanka. Lit in 1890; at 49 m the tallest lighthouse in Sri Lanka.
+13. **Dondra Head** (assigned to 0.33): southern Sri Lanka. Lit in 1890; at 49 m the tallest lighthouse in Sri Lanka.
 14. **Split Rock**: Lake Superior, Minnesota, USA. Lit in 1910, built after the 1905 Mataafa Storm.
 15. **Bishop Rock**: Isles of Scilly, England. First lit in 1858 and rebuilt in 1887; Guinness lists it as the world's smallest island with a building on it.
 16. **Fisgard**: Colwood, British Columbia, Canada. First lit in 1860; the first lighthouse on Canada's west coast.
