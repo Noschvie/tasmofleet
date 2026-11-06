@@ -815,3 +815,25 @@ func TestCheckUploadPath(t *testing.T) {
 		}
 	}
 }
+
+// Why (#659): when the plain file manager page (the flash selection before a listing) gets no answer while the main
+// page answers, the device refuses its HTTP API; the error carries the one wording and the fix, which reach the
+// backup's file notes and the logs.
+func TestListFilesNamesTheHTTPAPIOffWhenThePlainPageGetsNoAnswer(t *testing.T) {
+	closeConn := func(w http.ResponseWriter) {
+		c, _, _ := http.NewResponseController(w).Hijack()
+		_ = c.Close()
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/ufsd" {
+			closeConn(w)
+			return
+		}
+		_, _ = w.Write([]byte("<html></html>"))
+	}))
+	defer srv.Close()
+	_, err := newClient(Options{}).(FileSystem).ListFiles(ctxS(t), target(t, srv, 1, "", ""), "/")
+	if !errors.Is(err, ErrHTTPAPIRefused) || !strings.Contains(err.Error(), APIOffName) || !strings.Contains(err.Error(), APIOffFix) {
+		t.Errorf("err = %v", err)
+	}
+}

@@ -535,13 +535,19 @@ func TestRestartRefusalSaysNothingWasSent(t *testing.T) {
 	}
 }
 
-// Why (#659): Restart's aria-describedby named the "Back up:" note, which only exists when Back up has a reason of
-// its own; an id that is not on the page describes nothing. Every id a described-by names must exist.
+// Why (#659): Restart's aria-describedby named the "Back up:" note, a sentence about another button (and an id that
+// is not always on the page). Restart says why through its title; no described-by may name the Back up note. Every
+// id a described-by names must exist.
 func TestEveryDescribedByNamesAnElementOnThePage(t *testing.T) {
 	e, _ := apiOffActionsEnv(t, nil)
 	e.health[1] = refusedHealth(1)
 	for _, path := range []string{"/devices/1", "/devices/2"} {
 		_, page := e.do(t, "GET", path, "admin", nil)
+		if i := strings.Index(page, ">Restart</button>"); i < 0 {
+			t.Fatalf("%s: no Restart button", path)
+		} else if rb := page[strings.LastIndex(page[:i], "<button"):i]; strings.Contains(rb, "aria-describedby") {
+			t.Errorf("%s: Restart is described by another element: %s", path, rb)
+		}
 		for rest := page; ; {
 			i := strings.Index(rest, `aria-describedby="`)
 			if i < 0 {
