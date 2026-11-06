@@ -1631,6 +1631,26 @@ exists twice on the day they go back runs once, at its first occurrence.
 - `BACKUP_INTERVAL` is gone (no alias). Migration 0045 turns a stored non-zero interval into every day
   at 03:00 and deletes the row; a stored 0 stays manual only.
 
+### 12.7 The snapshot schedule (#602)
+
+The scheduled database snapshot (System, Snapshots) uses the same rules as the backup schedule: weekdays
+(`SNAPSHOT_DAYS`, none = off) at a time of day (`SNAPSHOT_TIME`, default `03:00`) on the server's clock,
+`internal/schedule` for the next run and the DST rules, and the same loop (`scheduleLoop` in `internal/app`)
+with the same decisions: no snapshot at start or on a settings change, late within 60 minutes, else skipped
+with one notification. The skip is the snapshot failure event `snapshot.failed` under `NOTIFY_SNAPSHOT` (title
+"Scheduled database snapshot skipped", link to System, Snapshots).
+
+- **The record** is the table `snapshot_runs` (migration 0046: `trigger`, `started_at`), not the snapshot
+  files: `SNAPSHOT_KEEP` prunes files, an admin deletes them, and a failed attempt leaves none. A row is
+  written for each scheduled attempt (`scheduled`, taken or failed: a failing disk is tried at the next
+  scheduled time, not in a loop), each skip (`missed`) and each change of the schedule or the migration that
+  created it (`rescheduled`). The newest row of any trigger settles the scheduled times up to it. The rows are
+  pruned with `AUDIT_RETENTION`; the loop keeps the newest settled time in memory so that the prune cannot
+  make a schedule forget it ran. An attempt cut short by a shutdown is not recorded.
+- `SNAPSHOT_INTERVAL` is gone (no alias). Migration 0046 turns a stored non-zero interval into every day at
+  03:00, stores a `rescheduled` marker (so the first start after the update takes no snapshot), and deletes the
+  row; a stored 0 stays off.
+
 ## 13. Device page, console and settings (M2)
 
 - **Device list with live state**: health, version, variant, family, IP, uptime, RSSI, power

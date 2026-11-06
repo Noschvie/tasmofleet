@@ -396,3 +396,48 @@ func TestBackupDaysAreKeptInTheirCanonicalForm(t *testing.T) {
 		t.Fatalf("stored as %q, want mon,wed (lower case, week order, once each)", got)
 	}
 }
+
+// Why (#602): SNAPSHOT_INTERVAL was removed without an alias. A stale variable is told at start
+// that it does nothing any more, and must not turn a schedule on or stop the server.
+func TestRemovedSnapshotIntervalWarnsButDoesNotFail(t *testing.T) {
+	c, err := Load(base(t.TempDir(), "TASMOFLEET_SNAPSHOT_INTERVAL=24h"))
+	if err != nil {
+		t.Fatalf("a removed variable must not stop the start: %v", err)
+	}
+	if len(c.Warnings) != 1 || !strings.Contains(c.Warnings[0], "TASMOFLEET_SNAPSHOT_INTERVAL") || !strings.Contains(c.Warnings[0], "ignored") {
+		t.Fatalf("warnings = %v", c.Warnings)
+	}
+	if !c.SnapshotSchedule().Off() {
+		t.Error("the removed interval must not turn a schedule on")
+	}
+}
+
+// Why (#602): snapshots are off on a fresh install (a copy of the database nobody asked for), and
+// the time of day defaults to the night, as the device backups'.
+func TestSnapshotScheduleDefaultsToOffAt3(t *testing.T) {
+	c, err := Load(base(t.TempDir()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := c.SnapshotSchedule(); !s.Off() || s.Clock() != "03:00" {
+		t.Fatalf("default schedule %+v", s)
+	}
+}
+
+// Why (#602): the same as for BACKUP_DAYS: a list typed as "Wed, MON" is stored canonically, or the
+// page would show its chips unticked and the next save would turn the snapshots off.
+func TestSnapshotDaysAreKeptInTheirCanonicalForm(t *testing.T) {
+	var c Config
+	if err := Set(&c, "SNAPSHOT_DAYS", " Wed, MON,mon"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := Format(c, "SNAPSHOT_DAYS"); got != "mon,wed" {
+		t.Fatalf("stored as %q, want mon,wed (lower case, week order, once each)", got)
+	}
+	if err := Set(&c, "SNAPSHOT_TIME", "04:30"); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.SnapshotSchedule().Days.String(); got != "mon,wed" {
+		t.Fatalf("schedule days %q", got)
+	}
+}

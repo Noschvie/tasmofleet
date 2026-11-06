@@ -770,6 +770,10 @@ func (a *runtime) webDeps(guard web.Guard, rows []web.KV) web.Deps {
 	deps.BackupFleet = a.fleetBackups()
 	if a.snapshots != nil {
 		deps.Snapshots = a.snapshots
+		deps.SnapshotMissed = func(ctx context.Context) (time.Time, error) {
+			_, missed, err := a.svc.Store.SnapshotRunTimes(ctx)
+			return missed, err
+		}
 	}
 	deps.MQTTOnly = a.onlyOverMQTT
 	if a.templates != nil {

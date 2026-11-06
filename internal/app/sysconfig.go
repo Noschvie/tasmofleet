@@ -69,7 +69,7 @@ func (a *runtime) everyLive(ctx context.Context, interval func() time.Duration, 
 }
 
 // setupSysConfigLive wires the settings that follow the system settings page
-// without a restart: the backup schedule, the scheduled network scan.
+// without a restart: the backup and snapshot schedules, the scheduled network scan.
 func (a *runtime) setupSysConfigLive() {
 	sys := a.svc.Sys
 	sys.Subscribe(a.applyLiveSettings)
@@ -80,7 +80,9 @@ func (a *runtime) setupSysConfigLive() {
 		return nil
 	})
 	a.goBG("snapshot-schedule", func() error {
-		a.everyLive(a.bgContext, a.snapshotWait, []string{"SNAPSHOT_INTERVAL"}, true, a.scheduledSnapshot)
+		changed, unsub := a.watch("SNAPSHOT_DAYS", "SNAPSHOT_TIME")
+		defer unsub()
+		a.snapshotSchedule().loop(a.bgContext, changed)
 		return nil
 	})
 	a.goBG("discovery-scan-schedule", func() error {

@@ -53,13 +53,13 @@ func notifyRuntime(t *testing.T, extra map[string]string) (*runtime, *Services, 
 // Why: the person is told when the protection they switched on is not working. A snapshot that
 // cannot be written must reach the webhook, a good one must stay silent.
 func TestFailedScheduledSnapshotIsNotifiedAndASuccessIsNot(t *testing.T) {
-	a, svc, sent := notifyRuntime(t, map[string]string{"SNAPSHOT_INTERVAL": "24h"})
+	a, svc, sent := notifyRuntime(t, map[string]string{"SNAPSHOT_DAYS": everyDay})
 	a.snapshots = snapshot.New(svc.Store, svc.Cfg.DataDir)
 	a.scheduledSnapshot(t.Context())
 	if got := sent(); len(got) != 0 {
 		t.Fatalf("a good snapshot sent %v", got)
 	}
-	// A file where the snapshot folder should be makes the next one fail; reset the schedule's "due".
+	// A file where the snapshot folder should be makes the next one fail; start a fresh manager.
 	if err := os.RemoveAll(filepath.Join(svc.Cfg.DataDir, snapshot.DirName)); err != nil {
 		t.Fatal(err)
 	}

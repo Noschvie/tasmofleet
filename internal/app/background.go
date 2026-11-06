@@ -165,6 +165,9 @@ func (a *runtime) prune(ctx context.Context) {
 	if _, err := a.svc.Store.PruneBackupRuns(ctx, now.Add(-a.svc.Sys.Snapshot().AuditKeep)); err != nil {
 		a.log.Warn("prune backup runs", "err", err)
 	}
+	if _, err := a.svc.Store.PruneSnapshotRuns(ctx, now.Add(-a.svc.Sys.Snapshot().AuditKeep)); err != nil {
+		a.log.Warn("prune snapshot runs", "err", err)
+	}
 	// Transactions and their logs follow the audit retention (one setting for "how long the
 	// history is kept"); running ones are never pruned (store.PruneJobs).
 	if n, err := a.svc.Store.PruneJobs(ctx, now.Add(-a.svc.Sys.Snapshot().AuditKeep)); err != nil {
@@ -188,9 +191,9 @@ func (a *runtime) prune(ctx context.Context) {
 func (a *runtime) backupAll(ctx context.Context) { a.scheduledBackup().Run(ctx) }
 
 // backupSchedule wires the schedule loop to the settings, the run record and the notifier.
-func (a *runtime) backupSchedule() *backupSchedule {
-	b := &backupSchedule{
-		log: a.log, store: a.svc.Store, now: time.Now, run: a.backupAll,
+func (a *runtime) backupSchedule() *scheduleLoop {
+	b := &scheduleLoop{
+		name: "backup", log: a.log, store: a.svc.Store, now: time.Now, run: a.backupAll,
 		schedule: func() schedule.Schedule { return a.svc.Sys.Snapshot().BackupSchedule() },
 	}
 	if a.notifier != nil {

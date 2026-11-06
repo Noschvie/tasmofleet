@@ -7,22 +7,65 @@ import (
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/notify"
+	"github.com/nofuturekid/tasmofleet/internal/schedule"
 	"github.com/nofuturekid/tasmofleet/internal/snapshot"
+	"github.com/nofuturekid/tasmofleet/internal/store"
 )
 
-// scheduledSnapshot writes one snapshot of TasmoFleet's own database when one is due
-// (SNAPSHOT_INTERVAL), prunes to SNAPSHOT_KEEP and audits the outcome as "system". A failure is
-// logged and audited with its reason; the stored snapshots stay as they were and the next round
-// tries again. "Due" keeps a restart from taking an extra snapshot and pushing the daily ones out
-// of the retention.
+// snapshotRuns adapts the snapshot run record (snapshot_runs, migration 0046) to the record the
+// schedule loop reads, so a snapshot schedule is the loop of the fleet backup and not a second copy.
+type snapshotRuns struct{ st *store.SQLite }
+
+func (r snapshotRuns) BackupRunTimes(ctx context.Context) (settled, missed time.Time, err error) {
+	return r.st.SnapshotRunTimes(ctx)
+}
+
+// SaveBackupRun stores one of the loop's markers; the loop writes nothing else.
+func (r snapshotRuns) SaveBackupRun(ctx context.Context, run model.BackupRun) (int64, error) {
+	trigger := store.SnapshotRunRescheduled
+	if run.Trigger == model.BackupRunMissed {
+		trigger = store.SnapshotRunMissed
+	}
+	return 0, r.st.SaveSnapshotRun(ctx, trigger, run.StartedAt)
+}
+
+// snapshotSchedule wires the schedule loop to the settings (SNAPSHOT_DAYS, SNAPSHOT_TIME), the run
+// record and the notifier (#602). Like the fleet backup it never runs because TasmoFleet started or
+// because the settings were saved; a run that was due while TasmoFleet was down starts within the
+// grace, else it is skipped and the person is told.
+func (a *runtime) snapshotSchedule() *scheduleLoop {
+	b := &scheduleLoop{
+		name: "snapshot", log: a.log, store: snapshotRuns{a.svc.Store}, now: time.Now, run: a.scheduledSnapshot,
+		schedule: func() schedule.Schedule { return a.svc.Sys.Snapshot().SnapshotSchedule() },
+	}
+	if a.notifier != nil {
+		b.missed = func(slot, at time.Time) {
+			a.notifier.Emit(notify.SnapshotMissed(a.notifier.Config(), slot, at))
+		}
+	}
+	return b
+}
+
+// scheduledSnapshot writes one snapshot of TasmoFleet's own database (the schedule says it is
+// time), prunes to SNAPSHOT_KEEP and audits the outcome as "system". A failure is logged and
+// audited with its reason; the stored snapshots stay as they were. The attempt is recorded either
+// way (snapshot_runs): a failing disk is tried at the next scheduled time, not in a loop.
 func (a *runtime) scheduledSnapshot(ctx context.Context) {
 	if a.snapshots == nil {
 		return
 	}
 	c := a.svc.Sys.Snapshot()
-	if c.SnapshotSchedule <= 0 || !a.snapshots.Due(c.SnapshotSchedule) {
-		return
-	}
+	defer func() {
+		if ctx.Err() != nil {
+			return // cut short by a shutdown: not handled, the next start may still run it
+		}
+		// One row, not cut by a shutdown that comes now.
+		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		if err := a.svc.Store.SaveSnapshotRun(sctx, store.SnapshotRunScheduled, time.Now()); err != nil {
+			a.log.Warn("snapshot schedule: storing the run", "err", err)
+		}
+	}()
 	res, err := a.snapshots.Run(ctx, c.SnapshotKeep)
 	ev := model.AuditEvent{Actor: "system", Action: "snapshot.scheduled", Target: "database", Result: "ok"}
 	switch {
@@ -44,17 +87,6 @@ func (a *runtime) scheduledSnapshot(ctx context.Context) {
 		ev.Detail = auditJSON(map[string]any{"file": res.Info.Name, "bytes": res.Info.Size, "pruned": res.Pruned})
 	}
 	a.svc.Audit.Record(ctx, ev)
-}
-
-// snapshotWait is how long the schedule sleeps before it looks again: until the next snapshot is
-// due, counted from the newest stored one (so a restart does not move the schedule), at least a
-// minute so an overdue or failing run cannot spin.
-func (a *runtime) snapshotWait() time.Duration {
-	every := a.svc.Sys.Snapshot().SnapshotSchedule
-	if every <= 0 || a.snapshots == nil {
-		return every
-	}
-	return max(time.Until(a.snapshots.NextRun(every)), time.Minute)
 }
 
 func auditJSON(m map[string]any) string {

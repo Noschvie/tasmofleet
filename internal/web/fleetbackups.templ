@@ -3,6 +3,7 @@ package web
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
@@ -403,10 +404,16 @@ func fleetScheduleValue(row sysRow) string {
 // fleetScheduleNote is what the schedule form cannot say by itself: whose clock the time is on and when
 // the next run is.
 templ fleetScheduleNote(v fleetView) {
+	@sysScheduleNote(v.Zone, v.Scheduled, v.Now, v.Next)
+}
+
+// sysScheduleNote is the note under a schedule form (Backups and Snapshots): the clock the time is on and,
+// while a schedule is set, when it runs next.
+templ sysScheduleNote(zone string, on bool, now, next time.Time) {
 	<p class="ufield-help">
-		Times are on the server's clock ({ v.Zone }).
-		if v.Scheduled {
-			{ " Next run " }<time { ui.StampAttrs(v.Next, ui.StampDay)... }>{ ui.StampDayText(v.Now, v.Next) }</time>.
+		Times are on the server's clock ({ zone }).
+		if on {
+			{ " Next run " }<time { ui.StampAttrs(next, ui.StampDay)... }>{ ui.StampDayText(now, next) }</time>.
 		}
 	</p>
 }

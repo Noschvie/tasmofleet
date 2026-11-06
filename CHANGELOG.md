@@ -6,6 +6,17 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Upgrade notes
+
+- Migration 0046 (adds the table `snapshot_runs`; data otherwise): a stored snapshot interval that is not zero becomes every day at 03:00 (`SNAPSHOT_DAYS` all seven days, `SNAPSHOT_TIME` 03:00) and the interval row is deleted; a stored 0 (off) and no stored interval stay off. Nothing to do: look at System, Snapshots, Schedule, and choose other days or another time if 03:00 does not suit you. The migration also stores a marker so that the first start after the upgrade does not take a snapshot (#602, #601).
+- `TASMOFLEET_SNAPSHOT_INTERVAL` no longer exists. It is not in the Unraid Community Applications template, so a template install has nothing to change. Where you still set it (Compose, `docker run`, an env file) it is ignored and TasmoFleet logs a warning at start; delete it (#602).
+
+### Changed
+
+- Scheduled database snapshots are taken on chosen weekdays at a time of day, set on System, Snapshots under Schedule (weekday chips and a time, on the server's clock, `TZ`), instead of every so many hours. No day ticked is off. The time stays the same on the wall clock when the clocks change (#602).
+- TasmoFleet does not take a scheduled snapshot when it starts, and saving the schedule does not take one either. Until now every start and every change of the interval took one at once, even minutes after the last (#602).
+- A scheduled snapshot that TasmoFleet missed because it was not running is taken late when it is back within 60 minutes of the scheduled time. After that it is skipped and a notification is sent (the existing "Database snapshot failed" setting, linking to System, Snapshots), and the Schedule card says so until a newer snapshot exists (#602).
+
 ### Fixed
 
 - Reachability: the leftovers of a device whose HTTP API is off (SetOption128 0) and which MQTT cannot serve. `Upgrade <url>` and `WebGetConfig <url>` typed in the console or sent in bulk are refused up front for such a device, by the router's own rule that jobs never go over MQTT, instead of failing with the refusal. Refresh identity is disabled when the refusal is found while the page is open, and enabled again when it ends, without a reload. The GPIO templates refresh, the policy check and the group-topic reader leave such a device alone like an offline one, without an error. One wording everywhere: restore, Replace, the update retry, the import report, the backup history, job notes and logs say "HTTP API off (SetOption128 0)" with the fix. A "no path" for an update no longer advises an upload over MQTT, which no page offers. Cosmetic: Restart's disabled state no longer points at the "Back up:" note, its refusal page is titled "Restart not sent", a refused relay switch shows the reason once, and the text no longer breaks inside "(SetOption128 0)" on a phone (#659)
@@ -13,6 +24,11 @@ always upgrade automatically.
 - UI: the values of the stat tiles on the device overview and in the Policy header are drawn in the tone's text colour instead of its fill, so amber and grey values meet WCAG AA (4.5:1) on the light surface and the dark one; the design system now states the contrast target (#513)
 - Import from TasmoAdmin: the plan counts lines and shows a problem that keeps its row (an unusable port, an encrypted password without the key file) as a note on that row. Before, a `devices.csv` with 1000 such rows showed "0 reject" next to a red row "Reject · 1950 more lines with errors", because it counted problems and called warnings rejections. A blank line after exactly 1000 rows is no longer refused as "more than 1000 rows". `tasmofleet import` prints the notes with their line and says how many rejected lines it does not list one by one (#661)
 - Last known values: a console command that changes a setting and Make compliant now count as writes, so a read that started before them is no longer shown as the current values on the Settings tab. The background read of a device's values stops when TasmoFleet stops (it kept sending to the device for up to a minute), and values another device answered (a MAC other than the stored one, at the stored address or on the device's MQTT topic) are no longer remembered for the Settings tab or the policy check; the read fails instead The Settings tab of a device on minimal firmware (an update in progress), which cannot show its MAC, says so instead of "could not be read" (#662)
+
+### Breaking
+
+- The setting and variable `SNAPSHOT_INTERVAL` is removed without an alias; use `SNAPSHOT_DAYS` and `SNAPSHOT_TIME` (System, Snapshots). See the upgrade notes above for what happens to an existing interval (#602).
+- A settings file written by `tasmofleet settings export` before this version holds `SNAPSHOT_INTERVAL`, and `tasmofleet settings import` refuses the whole file for it (`setting is not editable here`). Delete that line before you import the file, then choose the days on System, Snapshots (#602).
 
 ## 0.33.0 "Dondra Head" (2026-11-06)
 

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { test, expect } from "../support/fixtures";
 import { App, startApp } from "../support/stack";
+import { scheduleSnapshotSoon } from "../support/snapshot-schedule";
 
 // System, Snapshots: the database download, the stored snapshots and the snapshot schedule (issues #301, #410).
 // A local admin (break-glass login) confirms with the password; a proxy-header admin, who has no
@@ -77,23 +78,25 @@ test("download: the key choice survives the password step-up", { tag: "@core" },
   expect(readFileSync((await withKey.path())!).includes("secret.key")).toBe(true);
 });
 
-// Why: the schedule is off until switched on; switching it on takes a snapshot at once (like the
-// other schedules), it is listed with Download and Delete, and the card says when it ran.
-test("schedule: switch on, a snapshot appears, it can be downloaded and deleted", async ({ page }) => {
+// Why (#602): the schedule is off until days are ticked; saving it takes no snapshot (only the chosen
+// time does), then the snapshot is listed with Download and Delete, and the card says when it ran.
+test("schedule: tick the days and a time, a snapshot appears at that time, it can be downloaded and deleted", async ({ page }) => {
+  test.setTimeout(180_000); // the snapshot is taken at its scheduled time, up to 80 s after the save
   await signIn(page);
   await page.goto(app.url + "/settings/system/snapshots");
   await expect(page.locator("#card-stored")).toContainText("No snapshots yet.");
-  await expect(page.locator("input[name='sw.SNAPSHOT_INTERVAL']")).not.toBeChecked();
+  await expect(page.locator("input[name='v.SNAPSHOT_DAYS'][value='mon']")).not.toBeChecked();
+  await expect(page.locator("input[name='v.SNAPSHOT_TIME']")).toHaveValue("03:00");
+  await expect(page.locator("#card-snapshots")).toContainText("Times are on the server's clock");
 
-  await page.locator("[data-key='SNAPSHOT_SCHEDULE'] .swtrack").click();
-  await expect(page.locator("input[name='v.SNAPSHOT_INTERVAL']")).toHaveValue("24h");
-  await page.getByRole("button", { name: "Save settings" }).click();
-  await expect(page.getByText("Saved.")).toBeVisible();
+  await scheduleSnapshotSoon(page, app.url);
+  await expect(page.locator("#card-snapshots")).toContainText("Next run");
+  await expect(page.locator("#card-stored")).toContainText("No snapshots yet."); // saving took none
 
   await expect(async () => {
     await page.goto(app.url + "/settings/system/snapshots");
     await expect(page.locator("#card-stored .sys-orphan")).toHaveCount(1);
-  }).toPass({ timeout: 20_000 });
+  }).toPass({ timeout: 120_000 });
   await expect(page.locator("#card-snapshots")).toContainText("Last snapshot");
   await expect(page.locator("#card-stored .sys-orphan")).toContainText("Latest");
 

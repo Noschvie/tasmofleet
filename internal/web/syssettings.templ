@@ -264,8 +264,6 @@ templ sysRowView(p sysPage, row sysRow) {
 			@sysLocked(row)
 		case row.Key == "MQTT_URL" && p.MQTT.Legacy == "":
 			@sysBroker(p, row)
-		case row.Key == "SNAPSHOT_INTERVAL":
-			@sysSchedule(row, "SNAPSHOT_SCHEDULE", "Scheduled snapshots", "Besides the download, on a timer.")
 		case row.Bool:
 			@sysSwitch(row)
 		default:
@@ -310,7 +308,9 @@ templ sysInput(row sysRow) {
 			case sysSegmentedEnum(row.Key):
 				@ui.Segmented(row.Label, row.InputName(), sysEnumOptions(row))
 			case row.Key == "BACKUP_DAYS":
-				@sysDayChips(row)
+				@sysDayChips(row, "Backup days")
+			case row.Key == "SNAPSHOT_DAYS":
+				@sysDayChips(row, "Snapshot days")
 			case len(row.Choices) > 0:
 				<div class="cks" role="group" aria-label={ row.Label }>
 					<input type="hidden" name={ "m." + row.Key } value="1"/>
@@ -318,7 +318,7 @@ templ sysInput(row sysRow) {
 						<label class="ucheck"><input type="checkbox" name={ row.InputName() } value={ c } checked?={ slices.Contains(sysChecked(row), c) }/><span>{ c }</span></label>
 					}
 				</div>
-			case row.Key == "BACKUP_TIME":
+			case row.Key == "BACKUP_TIME" || row.Key == "SNAPSHOT_TIME":
 				<input type="time" name={ row.InputName() } id={ ui.SettingControlID(row.Key) } class="mono" value={ row.Posted } step="60" required { sysDescribe(row)... }/>
 			case row.Secret:
 				<input type="password" name={ row.InputName() } id={ ui.SettingControlID(row.Key) } class="mono" autocomplete="new-password" maxlength={ sysSecretMax(row) } placeholder={ sysSecretHint(row) } { sysDescribe(row)... }/>
@@ -344,26 +344,15 @@ templ sysSwitch(row sysRow) {
 	}
 }
 
-// sysDayChips is the weekday choice of the backup schedule: one chip per day, Monday first. The chips are
-// plain checkboxes in a group, so they work without JavaScript and by keyboard; none ticked is manual only.
-templ sysDayChips(row sysRow) {
-	<div class="cks chips" role="group" aria-label="Backup days">
+// sysDayChips is the weekday choice of a schedule (label: the group's name for a screen reader): one chip
+// per day, Monday first. The chips are plain checkboxes in a group, so they work without JavaScript and by
+// keyboard; none ticked is manual only (backups) or off (snapshots).
+templ sysDayChips(row sysRow, label string) {
+	<div class="cks chips" role="group" aria-label={ label }>
 		<input type="hidden" name={ "m." + row.Key } value="1"/>
 		for _, c := range row.Choices {
 			<label class="ucheck chip"><input type="checkbox" name={ row.InputName() } value={ c } checked?={ slices.Contains(sysChecked(row), c) }/><span>{ dayLabels[c] }<span class="sr-only">{ " " + dayFull[c] }</span></span></label>
 		}
-	</div>
-}
-
-// sysSchedule is an interval behind a schedule switch: off stores 0 (manual only, or no
-// snapshots). The switch is a view of the setting, composed by composeSchedule.
-templ sysSchedule(row sysRow, id, label, help string) {
-	@ui.SettingField(ui.SettingFieldData{Key: id, Label: label, Width: "full", Help: help, Switch: true}) {
-		<input type="hidden" name={ "swm." + row.Key } value="1"/>
-		<label class="swhit"><input type="checkbox" role="switch" id={ ui.SettingControlID(id) } name={ "sw." + row.Key } value="1" checked?={ sysScheduleOn(row) } aria-describedby={ ui.SettingHelpID(id) }/><span class="swtrack" aria-hidden="true"></span></label>
-	}
-	<div class="dep" data-depends={ "sw." + row.Key }>
-		@sysInput(sysIntervalShown(row))
 	</div>
 }
 
@@ -527,10 +516,23 @@ templ sysUnreferencedFiles(st sysStorage) {
 	</div>
 }
 
-// sysSnapshotStatus is the last scheduled snapshot under the snapshot schedule: green when it
-// worked, red with the day of the failure when it did not. Nothing while the schedule is off.
+// sysSnapshotStatus is the schedule's note and the last scheduled snapshot under it: green when it
+// worked, red with the day of the failure when it did not, a warning when a time was skipped because
+// TasmoFleet was down. No status while the schedule is off.
 templ sysSnapshotStatus(db sysDB) {
+	<div class="sf w-full">
+		@sysScheduleNote(db.Zone, db.On, db.Now, db.Status.Next)
+	</div>
 	if db.On {
+		if !db.Missed.IsZero() {
+			<div class="sys-status">
+				<span class="sys-status-dot t-warn" aria-hidden="true"></span>
+				<div class="sys-status-text">
+					<b>A scheduled snapshot was skipped</b>
+					<span>TasmoFleet was not running at the scheduled time and was back more than 60 minutes late, so the snapshot was not made up. Noticed <time { ui.StampAttrs(db.Missed, ui.StampDay)... }>{ ui.StampDayText(db.Now, db.Missed) }</time>. The next one is as scheduled.</span>
+				</div>
+			</div>
+		}
 		switch db.Status.State {
 			case "fail":
 				<div class="sys-status st-fail">
@@ -543,9 +545,6 @@ templ sysSnapshotStatus(db sysDB) {
 							} else {
 								No good snapshot yet
 							}
-							if !db.Status.Next.IsZero() {
-								{ " · next attempt " }<time { ui.StampAttrs(db.Status.Next, ui.StampStore)... }>{ storeDate(time.Now(), db.Status.Next) }</time>
-							}
 						</span>
 					</div>
 				</div>
@@ -554,12 +553,7 @@ templ sysSnapshotStatus(db sysDB) {
 					<span class="sys-status-dot t-ok" aria-hidden="true"></span>
 					<div class="sys-status-text">
 						<b>Last snapshot <time { ui.StampAttrs(db.Status.Taken, ui.StampStore)... }>{ storeDate(time.Now(), db.Status.Taken) }</time></b>
-						<span>
-							if !db.Status.Next.IsZero() {
-								Next <time { ui.StampAttrs(db.Status.Next, ui.StampStore)... }>{ storeDate(time.Now(), db.Status.Next) }</time>{ " · " }
-							}
-							{ strconv.Itoa(db.Status.Count) + " of " + strconv.Itoa(db.Kept) + " kept" }
-						</span>
+						<span>{ strconv.Itoa(db.Status.Count) + " of " + strconv.Itoa(db.Kept) + " kept" }</span>
 					</div>
 				</div>
 			default:
@@ -567,7 +561,7 @@ templ sysSnapshotStatus(db sysDB) {
 					<span class="sys-status-dot t-neutral" aria-hidden="true"></span>
 					<div class="sys-status-text">
 						<b>No snapshot taken yet</b>
-						<span>The first one is taken as soon as the schedule is saved.</span>
+						<span>The first one is taken at the next scheduled time.</span>
 					</div>
 				</div>
 		}
@@ -628,7 +622,7 @@ templ sysStoredBlock(db sysDB) {
 	if db.ListErr != "" {
 		<div class="error" role="alert">{ db.ListErr }</div>
 	} else if len(db.Files) == 0 {
-		<p class="ufield-help">No snapshots yet. Turn on the schedule on the right, or download one now. Downloads are not kept on the server.</p>
+		<p class="ufield-help">No snapshots yet. Choose days on the schedule on the right, or download one now. Downloads are not kept on the server.</p>
 	} else {
 		<div class="sys-orphans">
 			for _, f := range db.Files {

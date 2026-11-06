@@ -146,10 +146,13 @@ type Config struct {
 	BackupTime  string   `env:"BACKUP_TIME" ui:"true" default:"03:00"`
 	DecoderPath string   `env:"DECODER_PATH" default:"/usr/local/bin/decode-config"` // empty disables
 
-	// SnapshotSchedule is how often TasmoFleet writes a consistent copy of its own database to
-	// <DATA_DIR>/snapshots (0 = off); SnapshotKeep is how many copies stay (the oldest go first).
-	SnapshotSchedule time.Duration `env:"SNAPSHOT_INTERVAL" ui:"true" default:"0s"`
-	SnapshotKeep     int           `env:"SNAPSHOT_KEEP" ui:"true" default:"7"`
+	// SnapshotDays and SnapshotTime are when TasmoFleet writes a consistent copy of its own database
+	// to <DATA_DIR>/snapshots (#602): the weekdays (mon..sun) and the time of day (HH:MM) on the server's
+	// clock (TZ). No weekday = off. It replaced SNAPSHOT_INTERVAL; Config.SnapshotSchedule turns the two
+	// into a schedule.Schedule. SnapshotKeep is how many copies stay (the oldest go first).
+	SnapshotDays []string `env:"SNAPSHOT_DAYS" ui:"true"`
+	SnapshotTime string   `env:"SNAPSHOT_TIME" ui:"true" default:"03:00"`
+	SnapshotKeep int      `env:"SNAPSHOT_KEEP" ui:"true" default:"7"`
 
 	// Discovery. MQTT discovery listens to Tasmota discovery messages (needs MQTT).
 	// The scheduled scan probes DiscoveryScanCIDRs (inside DEVICE_NETWORKS) every

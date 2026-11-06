@@ -171,6 +171,17 @@ func BackupMissed(c config.Config, slot, at time.Time) Event {
 // MissedGrace is how late a scheduled backup still starts; the text of BackupMissed names it.
 const MissedGrace = 60 * time.Minute
 
+// SnapshotMissed is the event of a scheduled database snapshot that did not happen: TasmoFleet was
+// not running at its time and was back too late to take it. It is the snapshot failure event, so
+// the same setting (NOTIFY_SNAPSHOT) governs it (#602).
+func SnapshotMissed(c config.Config, slot, at time.Time) Event {
+	return Event{Name: EventSnapshotFailed, Result: ResultFailed,
+		Title: "Scheduled database snapshot skipped",
+		Text: fmt.Sprintf("The scheduled snapshot of the TasmoFleet database of %s was skipped: TasmoFleet was not running then and was back at %s, more than %d minutes late. The next one is taken as scheduled.",
+			slot.Format("Mon 2 Jan 15:04"), at.Format("Mon 2 Jan 15:04"), int(MissedGrace/time.Minute)),
+		URL: Link(c, "/settings/system/snapshots"), Path: "/settings/system/snapshots", Time: at, Context: "database snapshot"}
+}
+
 // SnapshotFailed is the event of a failed scheduled database snapshot.
 func SnapshotFailed(c config.Config, reason string, at time.Time) Event {
 	return Event{Name: EventSnapshotFailed, Result: ResultFailed, Title: "Database snapshot failed",

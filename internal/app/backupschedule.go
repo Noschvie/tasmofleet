@@ -21,19 +21,21 @@ type backupTimes interface {
 	SaveBackupRun(ctx context.Context, r model.BackupRun) (int64, error)
 }
 
-// backupSchedule runs the fleet backup on the weekdays and the time of day of the settings (#601).
+// scheduleLoop runs a timed job on the weekdays and the time of day of the settings: the fleet backup
+// (#601) and the database snapshot (#602, over snapshotRuns). name says which in the log.
 //
 // It never starts a run because it started or because the settings were saved: it asks
 // schedule.Plan what is due, given what the database says settled the latest scheduled time. A run
 // settles it, so does a skip, and so does a change of the schedule (reschedule): saving the page at
 // 10:20 with a time of 10:00 must not back up the fleet. A restart settles nothing, which is the
 // point: a run that was due while TasmoFleet was down still starts within the grace.
-type backupSchedule struct {
+type scheduleLoop struct {
+	name     string
 	log      *slog.Logger
 	schedule func() schedule.Schedule
 	store    backupTimes
 	now      func() time.Time
-	// run is the fleet backup (scheduledBackup.Run).
+	// run is the job (scheduledBackup.Run, scheduledSnapshot).
 	run func(ctx context.Context)
 	// missed tells the person that the run of slot was skipped (nil: nobody is told).
 	missed func(slot, at time.Time)
@@ -46,7 +48,7 @@ type backupSchedule struct {
 
 // step looks at the schedule once and does what is due. It returns when to look again (zero:
 // only after a change of the settings, because nothing is scheduled).
-func (b *backupSchedule) step(ctx context.Context) time.Time {
+func (b *scheduleLoop) step(ctx context.Context) time.Time {
 	s := b.schedule()
 	if s.Off() {
 		return time.Time{}
@@ -55,7 +57,7 @@ func (b *backupSchedule) step(ctx context.Context) time.Time {
 	settled, _, err := b.store.BackupRunTimes(ctx)
 	if err != nil {
 		// Without the history a run could be repeated, so nothing runs; try again shortly.
-		b.log.Warn("backup schedule: read the run record", "err", err)
+		b.log.Warn(b.name+" schedule: read the run record", "err", err)
 		return now.Add(time.Minute)
 	}
 	if b.floor.After(settled) {
@@ -77,12 +79,12 @@ func (b *backupSchedule) step(ctx context.Context) time.Time {
 	case schedule.Run:
 		b.floor = now
 		if late := now.Sub(d.Slot); late > time.Minute {
-			b.log.Info("backup schedule: starting a run late", "scheduled", d.Slot, "late", late.Round(time.Second))
+			b.log.Info(b.name+" schedule: starting a run late", "scheduled", d.Slot, "late", late.Round(time.Second))
 		}
 		b.run(ctx)
 	case schedule.Missed:
 		b.floor = now
-		b.log.Warn("backup schedule: a scheduled run was missed and is skipped", "scheduled", d.Slot, "now", now)
+		b.log.Warn(b.name+" schedule: a scheduled run was missed and is skipped", "scheduled", d.Slot, "now", now)
 		b.mark(ctx, model.BackupRunMissed, now)
 		if b.missed != nil {
 			b.missed(d.Slot, now)
@@ -95,25 +97,25 @@ func (b *backupSchedule) step(ctx context.Context) time.Time {
 }
 
 // reschedule records that the schedule was changed: every time of day before now is settled.
-func (b *backupSchedule) reschedule(ctx context.Context) {
+func (b *scheduleLoop) reschedule(ctx context.Context) {
 	now := b.now()
 	b.floor = now
 	b.mark(ctx, model.BackupRunRescheduled, now)
 }
 
 // mark stores a marker row (no devices) that settles the scheduled times up to at.
-func (b *backupSchedule) mark(ctx context.Context, trigger model.BackupRunTrigger, at time.Time) {
+func (b *scheduleLoop) mark(ctx context.Context, trigger model.BackupRunTrigger, at time.Time) {
 	// Writing the marker is not cut by a shutdown: it is one row.
 	sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
 	if _, err := b.store.SaveBackupRun(sctx, model.BackupRun{Trigger: trigger, StartedAt: at, FinishedAt: at, Completed: true}); err != nil {
-		b.log.Warn("backup schedule: storing the marker", "marker", string(trigger), "err", err)
+		b.log.Warn(b.name+" schedule: storing the marker", "marker", string(trigger), "err", err)
 	}
 }
 
 // loop runs until ctx ends: look, do what is due, sleep until the next scheduled time or until the
 // settings change.
-func (b *backupSchedule) loop(ctx context.Context, changed <-chan struct{}) {
+func (b *scheduleLoop) loop(ctx context.Context, changed <-chan struct{}) {
 	for {
 		next := b.step(ctx)
 		var timer *time.Timer

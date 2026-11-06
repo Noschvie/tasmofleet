@@ -279,7 +279,7 @@ func TestSnapshotsPageShowsDownloadStoredScheduleAndRestore(t *testing.T) {
 		`name="include_key" value="1"`, `id="db-dl" data-no-busy method="post" action="/tf/settings/system/snapshot"`,
 		"The file holds secrets. Keep it like a password.", "There is no restore button on purpose.",
 		`id="card-stored"`, "Stored snapshots", `id="card-restore"`,
-		`id="card-snapshots"`, "<h2>Schedule</h2>", `name="sw.SNAPSHOT_INTERVAL"`, `name="v.SNAPSHOT_KEEP"`,
+		`id="card-snapshots"`, "<h2>Schedule</h2>", `name="v.SNAPSHOT_DAYS"`, `aria-label="Snapshot days"`, `type="time" name="v.SNAPSHOT_TIME"`, `name="v.SNAPSHOT_KEEP"`,
 		`action="/tf/settings/system/snapshots"`, `data-sys-bar`, `data-dlg-action="/tf/settings/system/snapshots/`, "Latest", "schema 39",
 	} {
 		if !strings.Contains(body, want) {
@@ -290,7 +290,7 @@ func TestSnapshotsPageShowsDownloadStoredScheduleAndRestore(t *testing.T) {
 		t.Error("the key must be off by default")
 	}
 	_, backups := s.do(t, "GET", "/devices/backups", "admin", nil)
-	for _, gone := range []string{`id="card-database"`, `id="db-dl"`, "Download snapshot", "SNAPSHOT_INTERVAL", "Snapshot schedule", "There is no restore button"} {
+	for _, gone := range []string{`id="card-database"`, `id="db-dl"`, "Download snapshot", "SNAPSHOT_DAYS", "Snapshot schedule", "There is no restore button"} {
 		if strings.Contains(backups, gone) {
 			t.Errorf("the Backups page still holds the snapshot part: %q", gone)
 		}
@@ -319,7 +319,7 @@ func TestSnapshotsPageReportsAFailedScheduledSnapshot(t *testing.T) {
 	dir := t.TempDir()
 	mgr := snapshot.New(failSource{}, dir)
 	e, svc, _, _ := sysEnvFull(t, true, func(d *Deps) { d.Snapshots = mgr })
-	if _, err := svc.Apply(t.Context(), sysconfig.Request{Actor: "admin", Values: map[string]string{"SNAPSHOT_INTERVAL": "24h"}}); err != nil {
+	if _, err := svc.Apply(t.Context(), sysconfig.Request{Actor: "admin", Values: map[string]string{"SNAPSHOT_DAYS": "mon,tue,wed,thu,fri,sat,sun"}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := mgr.Run(t.Context(), 7); err == nil {
@@ -339,33 +339,70 @@ func (failSource) VacuumInto(context.Context, string) error {
 	return &os.PathError{Op: "write", Path: "x", Err: errors.New("no space left on device")}
 }
 
-// Why: the switch is a view of SNAPSHOT_INTERVAL like the device schedule's. Off stores 0 (no
-// snapshots), on without an interval is refused at the field, on with one stores it; the
-// minimum protects the disk from a snapshot a minute.
-func TestSnapshotScheduleSwitchIsComposedIntoTheInterval(t *testing.T) {
+// Why (#602): the schedule is saved as the days and the time of day, like the device backups'. Ticking
+// no day is off (the form posts only the marker), a time that is no time of day is refused at its field,
+// and SNAPSHOT_INTERVAL, removed without an alias, is an unknown form key: nothing is written.
+func TestSnapshotScheduleIsSavedAsDaysAndTime(t *testing.T) {
 	s := snapSetup(t, true)
 	post := func(f url.Values) (int, string) {
 		f.Set("csrf", "tok")
 		r, b := s.do(t, "POST", "/settings/system/snapshots", "admin", f)
 		return r.StatusCode, b
 	}
-	if code, body := post(url.Values{"swm.SNAPSHOT_INTERVAL": {"1"}, "sw.SNAPSHOT_INTERVAL": {"1"}, "v.SNAPSHOT_INTERVAL": {""}}); code != 422 || !strings.Contains(body, "enter how often") {
-		t.Fatalf("on without an interval: %d", code)
+	if code, _ := post(url.Values{"m.SNAPSHOT_DAYS": {"1"}, "v.SNAPSHOT_DAYS": {"wed", "mon"}, "v.SNAPSHOT_TIME": {"04:30"}, "v.SNAPSHOT_KEEP": {"5"}}); code != 303 {
+		t.Fatalf("days and time: %d", code)
 	}
-	if code, _ := post(url.Values{"swm.SNAPSHOT_INTERVAL": {"1"}, "sw.SNAPSHOT_INTERVAL": {"1"}, "v.SNAPSHOT_INTERVAL": {"1m"}}); code != 422 {
-		t.Fatalf("one minute: %d", code)
+	if c := s.svc.Snapshot(); c.SnapshotSchedule().Days.String() != "mon,wed" || c.SnapshotSchedule().Clock() != "04:30" || c.SnapshotKeep != 5 {
+		t.Fatalf("stored %v at %s, keep %d", c.SnapshotSchedule().Days, c.SnapshotSchedule().Clock(), c.SnapshotKeep)
 	}
-	if code, _ := post(url.Values{"swm.SNAPSHOT_INTERVAL": {"1"}, "sw.SNAPSHOT_INTERVAL": {"1"}, "v.SNAPSHOT_INTERVAL": {"24h"}, "v.SNAPSHOT_KEEP": {"5"}}); code != 303 {
-		t.Fatalf("on with 24h: %d", code)
+	if code, body := post(url.Values{"m.SNAPSHOT_DAYS": {"1"}, "v.SNAPSHOT_TIME": {"24:00"}}); code != 422 || !strings.Contains(body, "SNAPSHOT_TIME") && !strings.Contains(body, "24:00") {
+		t.Fatalf("a time that does not exist: %d", code)
 	}
-	if c := s.svc.Snapshot(); c.SnapshotSchedule.Hours() != 24 || c.SnapshotKeep != 5 {
-		t.Fatalf("stored %v / %d", c.SnapshotSchedule, c.SnapshotKeep)
+	if code, _ := post(url.Values{"m.SNAPSHOT_DAYS": {"1"}, "v.SNAPSHOT_TIME": {"04:30"}}); code != 303 || !s.svc.Snapshot().SnapshotSchedule().Off() {
+		t.Fatalf("no day ticked must be off: %d", code)
 	}
-	if code, _ := post(url.Values{"swm.SNAPSHOT_INTERVAL": {"1"}, "v.SNAPSHOT_INTERVAL": {"24h"}}); code != 303 || s.svc.Snapshot().SnapshotSchedule != 0 {
-		t.Fatalf("switch off must store 0: %d %v", code, s.svc.Snapshot().SnapshotSchedule)
+	if code, _ := post(url.Values{"v.SNAPSHOT_INTERVAL": {"24h"}}); code != 400 {
+		t.Fatalf("the removed SNAPSHOT_INTERVAL: %d, want 400", code)
 	}
 	if code, _ := post(url.Values{"v.SNAPSHOT_KEEP": {"0"}}); code != 422 {
 		t.Fatalf("keep 0: %d", code)
+	}
+}
+
+// Why (#602): the page says what the schedule form cannot: whose clock the time is on and when the
+// next snapshot is taken; and when a time was skipped because TasmoFleet was down it says so, until a
+// newer snapshot exists. Off, it shows none of this (nothing is scheduled to skip).
+func TestSnapshotsPageShowsTheNextRunAndASkippedSnapshot(t *testing.T) {
+	missed := time.Now().Add(-time.Hour)
+	dir := t.TempDir()
+	mgr := snapshot.New(snapSource{}, dir)
+	e, svc, _, _ := sysEnvFull(t, true, func(d *Deps) {
+		d.Snapshots, d.BackupFleet = mgr, &fakeFleet{}
+		d.SnapshotMissed = func(context.Context) (time.Time, error) { return missed, nil }
+	})
+	page := func() string {
+		_, body := e.do(t, "GET", "/settings/system/snapshots", "admin", nil)
+		return cardOf(t, body, "snapshots")
+	}
+	if card := page(); strings.Contains(card, "A scheduled snapshot was skipped") || strings.Contains(card, "Next run") {
+		t.Errorf("a schedule that is off shows a skip or a next run: %s", card)
+	}
+	if _, err := svc.Apply(t.Context(), sysconfig.Request{Actor: "admin", Values: map[string]string{"SNAPSHOT_DAYS": "mon,tue,wed,thu,fri,sat,sun", "SNAPSHOT_TIME": "03:00"}}); err != nil {
+		t.Fatal(err)
+	}
+	card := page()
+	for _, want := range []string{"A scheduled snapshot was skipped", "more than 60 minutes late", "Times are on the server", "Next run"} {
+		if !strings.Contains(card, want) && !strings.Contains(card, strings.ReplaceAll(want, "'", "&#39;")) {
+			t.Errorf("schedule card lacks %q", want)
+		}
+	}
+	// A snapshot taken after the skip makes the warning stale.
+	if _, err := mgr.Run(t.Context(), 7); err != nil {
+		t.Fatal(err)
+	}
+	missed = time.Now().Add(-2 * time.Hour)
+	if card := page(); strings.Contains(card, "A scheduled snapshot was skipped") {
+		t.Errorf("the skip is older than the newest snapshot but is still shown: %s", card)
 	}
 }
 

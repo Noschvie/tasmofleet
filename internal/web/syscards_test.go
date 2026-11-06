@@ -438,12 +438,11 @@ func TestSystemSettingsFirmwareSourcesAreCheckboxes(t *testing.T) {
 	}
 }
 
-// Why: the SSO test button posts the whole form, which now carries the broker parts and the
-// schedule switch as well. Before, the form's own extra fields made the SSO test answer 400.
+// Why: the SSO test button posts the whole form, which now carries the broker parts as well. Before, the form's own extra fields made the SSO test answer 400.
 func TestSystemSettingsSSOTestAcceptsTheWholeForm(t *testing.T) {
 	e, _, _, _ := sysEnv(t, true)
 	r, body := e.do(t, "POST", "/settings/system/sso-test", "admin", url.Values{"csrf": {"tok"}, "v.OIDC_ISSUER": {"https://idp.example/"},
-		"mqtt.host": {"broker.lan"}, "mqtt.port": {"1883"}, "swm.SNAPSHOT_INTERVAL": {"1"}, "sw.SNAPSHOT_INTERVAL": {"1"}, "v.SNAPSHOT_INTERVAL": {"24h"}})
+		"mqtt.host": {"broker.lan"}, "mqtt.port": {"1883"}})
 	if r.StatusCode != 200 || !strings.Contains(body, "discovery OK") {
 		t.Fatalf("status %d", r.StatusCode)
 	}

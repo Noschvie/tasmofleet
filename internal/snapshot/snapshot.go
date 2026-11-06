@@ -186,27 +186,6 @@ func (m *Manager) prune(keep int, protect string) (int, error) {
 	return n, nil
 }
 
-// NextRun is when the next scheduled snapshot is due: one interval after the later of the newest
-// stored snapshot and the last failed attempt (so a failing disk is retried once per interval, not
-// in a loop). Without either it is now.
-func (m *Manager) NextRun(every time.Duration) time.Time {
-	st := m.Status()
-	base := st.LastGood
-	if st.Failed && st.Attempted.After(base) {
-		base = st.Attempted
-	}
-	if base.IsZero() {
-		return m.now()
-	}
-	return base.Add(every)
-}
-
-// Due says whether a scheduled snapshot is due now (a minute early counts, so the timer that fires
-// one interval after the last run does).
-func (m *Manager) Due(every time.Duration) bool {
-	return !m.now().Add(time.Minute).Before(m.NextRun(every))
-}
-
 // Status is the scheduled snapshots' last attempt and the newest stored snapshot.
 func (m *Manager) Status() Status {
 	m.mu.Lock()

@@ -79,12 +79,12 @@ func TestScheduleFollowsTheSettingsPageLive(t *testing.T) {
 	defer cancel()
 	done := make(chan struct{})
 	go func() {
-		a.everyLive(ctx, func() time.Duration { return time.Duration(every.Load()) }, []string{"SNAPSHOT_INTERVAL"}, false, func(context.Context) { runs.Add(1) })
+		a.everyLive(ctx, func() time.Duration { return time.Duration(every.Load()) }, []string{"POLICY_LIVE_INTERVAL"}, false, func(context.Context) { runs.Add(1) })
 		close(done)
 	}()
 	apply := func(v string) {
 		t.Helper()
-		if _, err := a.svc.Sys.Apply(ctx, sysconfig.Request{Actor: "a", Values: map[string]string{"SNAPSHOT_INTERVAL": v}}); err != nil {
+		if _, err := a.svc.Sys.Apply(ctx, sysconfig.Request{Actor: "a", Values: map[string]string{"POLICY_LIVE_INTERVAL": v}}); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -179,7 +179,7 @@ a consistent snapshot of the database, made with SQLite `VACUUM INTO` while Tasm
 file holds every user's password hash and the encrypted device, broker and OIDC secrets; the key
 that decrypts them, `secret.key`, is a separate file and is only included (as a `.tar`) when you
 tick the box. Device backups (`.dmp`) and the firmware cache are not part of it. The same page can
-keep scheduled snapshots in `/data/snapshots` (`tasmofleet-YYYYMMDD-HHMMZ.db`, UTC; `SNAPSHOT_INTERVAL`, `SNAPSHOT_KEEP`; off by default).
+keep scheduled snapshots in `/data/snapshots` (`tasmofleet-YYYYMMDD-HHMMZ.db`, UTC; `SNAPSHOT_DAYS`, `SNAPSHOT_TIME`, `SNAPSHOT_KEEP`; off by default).
 They sit on the same disk as the database, so they protect against a bad upgrade or a deleted row,
 not against a dead disk: keep a copy elsewhere.
 

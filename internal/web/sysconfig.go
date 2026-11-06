@@ -495,10 +495,6 @@ func (h *handler) sysSave(w http.ResponseWriter, r *http.Request) {
 	if v, ok := values["FIRMWARE_SOURCES"]; ok {
 		values["FIRMWARE_SOURCES"] = keepSourceOrder(v, h.storedValue("FIRMWARE_SOURCES"))
 	}
-	if err := composeSchedule(values, clear, extra); err != nil {
-		h.sysOutcome(w, r, shown(), err, nil)
-		return
-	}
 	_, err := h.d.SysConfig.Apply(r.Context(), sysconfig.Request{
 		Actor: actor(r), Values: values, Clear: clear, Reuse: reuse, StepUp: h.sysStepUp(r), Audit: h.d.Recorder,
 	})
@@ -718,53 +714,9 @@ func (h *handler) sysSSOTest(w http.ResponseWriter, r *http.Request) {
 // composeMQTTURL turns them into MQTT_URL, the stored value.
 var mqttPartKeys = []string{"mqtt.host", "mqtt.port", "mqtt.tls"}
 
-// scheduleIntervals are the settings that sit behind a schedule switch: the database snapshot interval.
-// (The device backup schedule has no switch: no weekday ticked is manual only, #601.)
-var scheduleIntervals = []string{"SNAPSHOT_INTERVAL"}
-
-// scheduleKeys are the schedule switches of the Backups tab: swm.* says the switch was on the
-// page (an unticked box sends nothing), sw.* is its state. They are a view of the interval settings.
-var scheduleKeys = func() []string {
-	var out []string
-	for _, k := range scheduleIntervals {
-		out = append(out, "swm."+k, "sw."+k)
-	}
-	return out
-}()
-
-// sysFormExtras are the form fields that are no setting: the broker parts and the schedule switches.
+// sysFormExtras are the form fields that are no setting: the broker parts.
 // Every button that posts the whole form must accept them.
-var sysFormExtras = append(slices.Clone(mqttPartKeys), scheduleKeys...)
-
-// composeSchedule turns each schedule switch into its interval setting: off is 0 (manual only /
-// no snapshots), on needs a real interval. A reset to the default wins over the switch.
-func composeSchedule(values map[string]string, clear []string, extra map[string]string) error {
-	var bad map[string]string
-	for _, key := range scheduleIntervals {
-		marked := extra["swm."+key] == "1"
-		on := extra["sw."+key] == "1"
-		delete(extra, "swm."+key)
-		delete(extra, "sw."+key)
-		if !marked || slices.Contains(clear, key) {
-			continue
-		}
-		if !on {
-			values[key] = "0"
-			continue
-		}
-		switch values[key] {
-		case "", "0", "0s":
-			if bad == nil {
-				bad = map[string]string{}
-			}
-			bad[key] = "enter how often, for example 24h"
-		}
-	}
-	if bad != nil {
-		return &sysconfig.ValidationError{Fields: bad}
-	}
-	return nil
-}
+var sysFormExtras = slices.Clone(mqttPartKeys)
 
 // composeMQTTURL replaces the posted broker parts with the MQTT_URL they
 // compose (config.JoinMQTTURL). A form without mqtt.host is left alone (the
@@ -946,9 +898,6 @@ func sysSecretHint(row sysRow) string {
 }
 
 func sysPlaceholder(row sysRow) string {
-	if row.Key == "SNAPSHOT_INTERVAL" {
-		return "24h"
-	}
 	if row.Key == "DEVICE_NETWORKS" {
 		return "192.168.1.0/24"
 	}
@@ -971,24 +920,12 @@ func sysNotice(row sysRow) string {
 	return ""
 }
 
-// sysIntervalShown is the backup interval as the field shows it: while the schedule is off the
-// stored 0 (manual only) is not a value to read, so the field is empty and its placeholder
-// proposes one. Saving with the switch off still stores 0 (composeSchedule).
-func sysIntervalShown(row sysRow) sysRow {
-	if !sysScheduleOn(row) {
-		row.Posted = ""
-	}
-	return row
-}
-
 // sysCanReset says whether "Reset to default" is offered: a stored value that differs from the
 // default (a secret that is stored always does). A stored value equal to the default has nothing to reset.
 //
-// A schedule's interval offers none (#623): its default 0s means off, which is what the schedule
-// switch already does, and a Reset next to a switch that still says On contradicts it. The backup
-// days offer none either: their default is no day, which unticking the chips already does.
+// The days of a schedule offer none: their default is no day, which unticking the chips already does.
 func sysCanReset(row sysRow) bool {
-	if row.Key == "BACKUP_DAYS" || row.Key == "SNAPSHOT_INTERVAL" {
+	if row.Key == "BACKUP_DAYS" || row.Key == "SNAPSHOT_DAYS" {
 		return false
 	}
 	return row.Source == "stored" && (row.Secret || row.Value != sysDefault(row))

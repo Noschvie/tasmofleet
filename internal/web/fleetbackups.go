@@ -145,15 +145,20 @@ type fleetView struct {
 
 // fleetSchedule is the effective backup schedule (BACKUP_DAYS, BACKUP_TIME); no weekday is "manual only".
 func (h *handler) fleetSchedule() schedule.Schedule {
+	return h.scheduleOf("BACKUP_DAYS", "BACKUP_TIME")
+}
+
+// scheduleOf is the effective schedule of a pair of settings (weekdays, time of day); no weekday is off.
+func (h *handler) scheduleOf(daysKey, timeKey string) schedule.Schedule {
 	if h.d.SysConfig == nil {
 		return schedule.Schedule{}
 	}
 	var days, clock string
 	for _, st := range h.d.SysConfig.State() {
 		switch st.Key {
-		case "BACKUP_DAYS":
+		case daysKey:
 			days = st.Value
-		case "BACKUP_TIME":
+		case timeKey:
 			clock = st.Value
 		}
 	}

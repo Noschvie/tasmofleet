@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { BrowserContext, Page } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
 import { App, startApp } from "../support/stack";
+import { scheduleSnapshotSoon } from "../support/snapshot-schedule";
 
 // Settings, Notifications, Browser card (issue #540): desktop notifications while a TasmoFleet tab
 // is open. The event is a real one: a scheduled database snapshot that cannot be written (a file
@@ -91,15 +92,15 @@ const openCard = async (page: Page, a: App = app) => {
   await expect(card(page)).toBeVisible();
 };
 
-// failSnapshot makes the first scheduled snapshot fail (a file where the snapshot folder belongs),
-// from a new tab of the context on the Snapshots page, a page without live data.
+// failSnapshot makes the next scheduled snapshot fail (a file where the snapshot folder belongs). A
+// snapshot never runs because the schedule was saved (#602), so the schedule is saved with a time 20 to
+// 80 seconds ahead; the snapshot fails then, from a new tab of the context on the Snapshots page, a page
+// without live data. Callers wait for the event up to eventWait.
+const eventWait = 120_000;
 async function failSnapshot(context: BrowserContext, a: App = app) {
   writeFileSync(join(a.dataDir, "snapshots"), "in the way");
   const settings = await context.newPage();
-  await settings.goto(a.url + "/settings/system/snapshots");
-  await settings.locator("[data-key='SNAPSHOT_SCHEDULE'] .swtrack").click();
-  await settings.getByRole("button", { name: "Save settings" }).click();
-  await expect(settings.getByText("Saved.")).toBeVisible();
+  await scheduleSnapshotSoon(settings, a.url);
 }
 
 // Why: one event must give one notification, however many tabs are open: the person would
@@ -109,6 +110,7 @@ test(
   "one notification per event across several open tabs",
   { tag: "@core" },
   async ({ page, context }) => {
+    test.setTimeout(240_000); // the snapshot is taken at its scheduled time, up to 80 s after the save (#602)
     await context.grantPermissions(["notifications"]);
     const shown = await record(context);
     await signIn(page);
@@ -129,7 +131,7 @@ test(
     await failSnapshot(context);
 
     await expect
-      .poll(() => shown.length, { timeout: 20_000 })
+      .poll(() => shown.length, { timeout: eventWait })
       .toBeGreaterThan(0);
     await page.waitForTimeout(1500); // a second copy would arrive within this
     expect(shown).toHaveLength(1);
@@ -146,6 +148,7 @@ test(
   "with only pages without live data open, the event still shows once",
   { tag: "@core" },
   async ({ page, context }) => {
+    test.setTimeout(240_000); // the snapshot is taken at its scheduled time, up to 80 s after the save (#602)
     const a = await newApp();
     try {
       await context.grantPermissions(["notifications"]);
@@ -166,7 +169,7 @@ test(
       await failSnapshot(context, a);
 
       await expect
-        .poll(() => shown.length, { timeout: 20_000 })
+        .poll(() => shown.length, { timeout: eventWait })
         .toBeGreaterThan(0);
       await page.waitForTimeout(1500); // a second copy would arrive within this
       expect(shown).toHaveLength(1);
@@ -185,6 +188,7 @@ test("nothing is shown before the opt-in, and Turn off stops it again", async ({
   context,
   browser,
 }) => {
+    test.setTimeout(240_000); // the snapshot is taken at its scheduled time, up to 80 s after the save (#602)
   const a = await newApp();
   try {
     await context.grantPermissions(["notifications"]); // granted for the site, but the person has not opted in here
@@ -226,7 +230,7 @@ test("nothing is shown before the opt-in, and Turn off stops it again", async ({
       await expect(on.locator("html")).toHaveAttribute("data-live", "live");
 
       await failSnapshot(context, a);
-      await expect.poll(() => control.length, { timeout: 20_000 }).toBe(1);
+      await expect.poll(() => control.length, { timeout: eventWait }).toBe(1);
       await page.waitForTimeout(1500); // the turned-off browser had the same time to show it
       expect(shown).toHaveLength(1);
     } finally {

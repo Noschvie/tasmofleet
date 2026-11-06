@@ -293,28 +293,6 @@ func TestOpenAndDeleteRefuseNamesOutsideTheSnapshotsFolder(t *testing.T) {
 	}
 }
 
-// A restart must not take an extra snapshot of its own accord, or a container that restarts
-// often would push the daily copies out of the retention.
-func TestDueWaitsForTheInterval(t *testing.T) {
-	dir := t.TempDir()
-	m := New(fakeSrc{}, dir)
-	if !m.Due(24 * time.Hour) {
-		t.Fatal("nothing stored: due")
-	}
-	at(m, "2026-10-29 03:00")
-	if _, err := m.Run(context.Background(), 7); err != nil {
-		t.Fatal(err)
-	}
-	at(m, "2026-10-29 12:00")
-	if m.Due(24 * time.Hour) {
-		t.Fatal("9 hours old, interval 24h: not due")
-	}
-	at(m, "2026-10-30 03:00")
-	if !m.Due(24 * time.Hour) {
-		t.Fatal("24 hours old: due")
-	}
-}
-
 func TestCleanTempRemovesLeftovers(t *testing.T) {
 	dir := t.TempDir()
 	m := New(fakeSrc{}, dir)
@@ -398,39 +376,3 @@ func TestPruneNeverDeletesTheFileJustWritten(t *testing.T) {
 		t.Fatalf("the snapshot just written was pruned: %v", err)
 	}
 }
-
-// Why: after a restart the next run counts from the newest stored snapshot (not from the start of
-// the process), so the card's "Next" is right; an overdue schedule runs at once; a failing disk is
-// retried one interval after the failure, not in a loop.
-func TestNextRunCountsFromTheLastSnapshotOrFailure(t *testing.T) {
-	dir := t.TempDir()
-	m := New(fakeSrc{}, dir)
-	at(m, "2026-10-29 03:00")
-	if !m.NextRun(24 * time.Hour).Equal(m.now()) {
-		t.Fatal("nothing stored: now")
-	}
-	if _, err := m.Run(context.Background(), 7); err != nil {
-		t.Fatal(err)
-	}
-	fresh := New(fakeSrc{}, dir) // a restarted process: no memory of the run
-	at(fresh, "2026-10-29 20:00")
-	want := time.Date(2026, 10, 30, 3, 0, 0, 0, time.UTC)
-	if got := fresh.NextRun(24 * time.Hour); !got.Equal(want) || fresh.Due(24*time.Hour) {
-		t.Fatalf("next %v, want %v (not due yet)", got, want)
-	}
-	at(fresh, "2026-11-02 12:00")
-	if !fresh.Due(24 * time.Hour) {
-		t.Fatal("overdue after the restart: runs at once")
-	}
-	fresh.src = failSrc{}
-	if _, err := fresh.Run(context.Background(), 7); err == nil {
-		t.Fatal("expected failure")
-	}
-	if got, want := fresh.NextRun(24*time.Hour), time.Date(2026, 11, 3, 12, 0, 0, 0, time.UTC); !got.Equal(want) || fresh.Due(24*time.Hour) {
-		t.Fatalf("after a failure the retry is one interval later: %v", got)
-	}
-}
-
-type failSrc struct{}
-
-func (failSrc) VacuumInto(context.Context, string) error { return errors.New("disk full") }

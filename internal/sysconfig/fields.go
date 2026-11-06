@@ -112,8 +112,10 @@ var fields = []Field{
 	{Key: "BACKUP_TIME", Group: GroupBackup, Label: "Scheduled backup time", Apply: Live,
 		Help: "Time of day, HH:MM, on the server's clock (TZ). A run missed while TasmoFleet was down starts late within 60 minutes, else it is skipped."},
 
-	{Key: "SNAPSHOT_INTERVAL", Group: GroupSnapshot, Label: "Scheduled snapshot interval", Apply: Live,
-		Help: "How often TasmoFleet writes a consistent copy of its own database to the snapshots folder of the data directory, e.g. 24h. At least 1h. 0 = off."},
+	{Key: "SNAPSHOT_DAYS", Group: GroupSnapshot, Label: "Scheduled snapshot days", Apply: Live, Choices: schedule.DayNames(),
+		Help: "The weekdays TasmoFleet writes a consistent copy of its own database to the snapshots folder of the data directory. None = off."},
+	{Key: "SNAPSHOT_TIME", Group: GroupSnapshot, Label: "Scheduled snapshot time", Apply: Live,
+		Help: "Time of day, HH:MM, on the server's clock (TZ). A snapshot missed while TasmoFleet was down is taken late within 60 minutes, else it is skipped."},
 	{Key: "SNAPSHOT_KEEP", Group: GroupSnapshot, Label: "Snapshots kept", Apply: Live,
 		Help: "How many scheduled snapshots stay; the oldest are deleted first."},
 

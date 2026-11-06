@@ -334,3 +334,27 @@ func TestBackupMissedIsTheScheduledBackupEventWithTheSkippedTime(t *testing.T) {
 		t.Error("with scheduled-backup notifications off the skipped run must stay silent")
 	}
 }
+
+// Why (#602): a skipped scheduled snapshot is a snapshot that did not happen, so it travels as the
+// existing snapshot failure event under the existing setting, names the skipped time, and opens
+// System, Snapshots (where the schedule and the skip are shown).
+func TestSnapshotMissedIsTheSnapshotFailureEventWithTheSkippedTime(t *testing.T) {
+	c := baseConfig()
+	slot := time.Date(2026, 11, 3, 3, 0, 0, 0, time.UTC)
+	ev := SnapshotMissed(c, slot, slot.Add(2*time.Hour))
+	if ev.Name != EventSnapshotFailed || !Selected(c, ev) {
+		t.Fatalf("event %q selected=%v; want the snapshot failure event, on by default", ev.Name, Selected(c, ev))
+	}
+	for _, want := range []string{"Tue 3 Nov 03:00", "05:00", "60 minutes", "skipped"} {
+		if !strings.Contains(ev.Text, want) {
+			t.Errorf("text %q lacks %q", ev.Text, want)
+		}
+	}
+	if !strings.HasSuffix(ev.URL, "/settings/system/snapshots") || ev.Path != "/settings/system/snapshots" {
+		t.Errorf("link %q, path %q: both should open the Snapshots page", ev.URL, ev.Path)
+	}
+	c.NotifySnapshot = false
+	if Selected(c, ev) {
+		t.Error("with snapshot notifications off the skipped snapshot must stay silent")
+	}
+}

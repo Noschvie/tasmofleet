@@ -138,18 +138,9 @@
       );
     });
   }
-  // The interval fields that sit behind a schedule switch (sw.<KEY> next to v.<KEY>).
-  var schedules = ["v.SNAPSHOT_INTERVAL"];
   function valueOf(c) {
     if (c.type === "checkbox" || c.type === "radio") {
       return c.checked ? "1" : "0";
-    }
-    if (schedules.indexOf(c.name) >= 0) {
-      // Saved as 0 while the schedule switch is off, whatever the field holds.
-      var sw = form.elements["sw." + c.name.slice(2)];
-      if (sw && !sw.checked) {
-        return "0";
-      }
     }
     return c.value;
   }

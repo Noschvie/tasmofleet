@@ -10,16 +10,15 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
 )
 
-// Why (#623): the Reset control is "reset to default on save". For the snapshot interval the
-// default is 0s = off, which is what the schedule switch already does; a Reset on the interval
-// would switch the schedule off while the switch still showed On. The backup days work the same
-// way (the default is no day, which unticking the chips does). Neither offers a Reset at all,
+// Why (#623, #602): the Reset control is "reset to default on save". The default of the days of a
+// schedule is no day, which unticking the chips already does; offering a Reset next to chips that
+// still show days contradicts them. Neither the backup nor the snapshot days offer one at all,
 // whatever is stored.
-func TestScheduleIntervalsOfferNoReset(t *testing.T) {
-	for _, key := range []string{"BACKUP_DAYS", "SNAPSHOT_INTERVAL"} {
-		row := sysRow{FieldState: sysconfig.FieldState{Field: sysconfig.Field{Key: key}, Value: "6h", Source: "stored"}}
+func TestScheduleDaysOfferNoReset(t *testing.T) {
+	for _, key := range []string{"BACKUP_DAYS", "SNAPSHOT_DAYS"} {
+		row := sysRow{FieldState: sysconfig.FieldState{Field: sysconfig.Field{Key: key}, Value: "mon,wed", Source: "stored"}}
 		if sysCanReset(row) {
-			t.Errorf("%s: a schedule interval must not offer a reset", key)
+			t.Errorf("%s: the days of a schedule must not offer a reset", key)
 		}
 	}
 	// the rule is about the schedules only: another stored duration keeps its reset

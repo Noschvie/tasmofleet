@@ -135,6 +135,9 @@ func Load(environ []string) (Config, error) {
 	if v, set := env["BACKUP_INTERVAL"]; set {
 		c.Warnings = append(c.Warnings, Prefix+"BACKUP_INTERVAL is set ("+v+") but no longer exists and is ignored (removed in 0.33: device backups run on chosen weekdays at a time of day, set on Devices, Backups; an interval stored in the database became daily 03:00). Delete it.")
 	}
+	if v, set := env["SNAPSHOT_INTERVAL"]; set {
+		c.Warnings = append(c.Warnings, Prefix+"SNAPSHOT_INTERVAL is set ("+v+") but no longer exists and is ignored (removed in 0.34: database snapshots run on chosen weekdays at a time of day, set on System, Snapshots; an interval stored in the database became daily 03:00). Delete it.")
+	}
 	return c, c.validate()
 }
 
@@ -360,8 +363,11 @@ func (c Config) validateOperational(bad func(key, msg string)) {
 	if _, _, err := schedule.ParseClock(c.BackupTime); err != nil {
 		bad("BACKUP_TIME", err.Error())
 	}
-	if c.SnapshotSchedule != 0 && c.SnapshotSchedule < time.Hour {
-		bad("SNAPSHOT_INTERVAL", "must be 0 (off) or at least 1h")
+	if _, err := schedule.ParseDays(strings.Join(c.SnapshotDays, ",")); err != nil {
+		bad("SNAPSHOT_DAYS", err.Error())
+	}
+	if _, _, err := schedule.ParseClock(c.SnapshotTime); err != nil {
+		bad("SNAPSHOT_TIME", err.Error())
 	}
 	if c.SnapshotKeep < 1 {
 		bad("SNAPSHOT_KEEP", "must be >= 1")

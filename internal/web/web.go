@@ -149,17 +149,20 @@ type Deps struct {
 	// device is reached and which actions are available (#261). Nil hides the card and leaves
 	// every action to the general reason.
 	Transport    transport.FactsSource
-	Pages        *Pages             // optional: the account pages of package auth join the app shell
-	Settings     SettingsService    // optional (M2-2): per-device settings editor
-	Policy       PolicyService      // optional (M2-2): nil hides the policy view
-	PolicyFix    PolicyFix          // optional: "Make compliant" on the policy page
-	CommandBatch PolicyFix          // optional: "Send command" to several devices (admin)
-	BackupBatch  BackupBatch        // optional: "Back up" several devices (admin)
-	Restore      RestoreService     // optional: nil without backups (M2-5)
-	SysConfig    SysConfigService   // optional: system settings page
-	Snapshots    SnapshotService    // optional: the System -> Snapshots page (needs SysConfig)
-	Notify       NotifyService      // optional: status lines and test buttons of the Notifications tab (needs SysConfig)
-	PolicyRules  PolicyRulesService // the policy rules; required whenever Policy is set
+	Pages        *Pages           // optional: the account pages of package auth join the app shell
+	Settings     SettingsService  // optional (M2-2): per-device settings editor
+	Policy       PolicyService    // optional (M2-2): nil hides the policy view
+	PolicyFix    PolicyFix        // optional: "Make compliant" on the policy page
+	CommandBatch PolicyFix        // optional: "Send command" to several devices (admin)
+	BackupBatch  BackupBatch      // optional: "Back up" several devices (admin)
+	Restore      RestoreService   // optional: nil without backups (M2-5)
+	SysConfig    SysConfigService // optional: system settings page
+	Snapshots    SnapshotService  // optional: the System -> Snapshots page (needs SysConfig)
+	// SnapshotMissed is when a scheduled snapshot was last skipped because TasmoFleet was down at its time
+	// (zero: never); optional, without it the page cannot say so.
+	SnapshotMissed func(ctx context.Context) (time.Time, error)
+	Notify         NotifyService      // optional: status lines and test buttons of the Notifications tab (needs SysConfig)
+	PolicyRules    PolicyRulesService // the policy rules; required whenever Policy is set
 	// PolicyLivePause is optional: Pause / Resume of the automatic policy live check.
 	PolicyLivePause PolicyLivePause
 	Setup           SetupService         // optional: first-run setup

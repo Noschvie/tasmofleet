@@ -3,7 +3,7 @@ import { App, startApp } from "../support/stack";
 
 // #623: "Reset to default" shows, right after the click and before Save, the value Save will store,
 // says it is the default, and a reset that changes what a switch shows changes that switch at once.
-// The backup days and a snapshot interval have no Reset: their default is "off", which unticking the days or the schedule switch does.
+// The backup and snapshot days have no Reset: their default is no day, which unticking the days does.
 let app: App;
 test.beforeAll(async () => {
   test.setTimeout(120_000);
@@ -61,14 +61,14 @@ test("Devices, Backups: a reset shows the default at once, the schedule stays on
   await expect(page.locator("input[name='v.BACKUP_DAYS'][value='mon']")).toBeChecked();
 });
 
-test("System, Snapshots: the snapshot interval has no Reset either while the schedule is on", async ({ page }) => {
+test("System, Snapshots: the snapshot days have no Reset", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/settings/system/snapshots");
-  await field(page, "SNAPSHOT_SCHEDULE").locator(".swtrack").click();
+  await page.locator("input[name='v.SNAPSHOT_DAYS'][value='mon']").check();
   await page.getByRole("button", { name: "Save settings" }).click();
   await page.goto(app.url + "/settings/system/snapshots");
-  await expect(page.locator("input[name='sw.SNAPSHOT_INTERVAL']")).toBeChecked();
-  await expect(page.locator("input[name='clear.SNAPSHOT_INTERVAL']")).toHaveCount(0);
+  await expect(page.locator("input[name='v.SNAPSHOT_DAYS'][value='mon']")).toBeChecked();
+  await expect(page.locator("input[name='clear.SNAPSHOT_DAYS']")).toHaveCount(0);
 });
 
 // A reset that changes what a switch shows updates the switch at once (METRICS_DEVICE_LABELS is off by default).

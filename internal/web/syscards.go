@@ -3,7 +3,6 @@ package web
 import (
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/config"
 	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
@@ -108,7 +107,7 @@ var sysLayout = []sysTabDef{
 	{sysSnapshotsSlug, "Snapshots", []int{2, 1}, []sysCardDef{
 		{ID: "download", Title: "Download a snapshot", Stack: 0, Phone: 1},
 		{ID: "stored", Title: "Stored snapshots", Stack: 0, Phone: 3},
-		{ID: "snapshots", Title: "Schedule", Stack: 1, Phone: 2, Keys: []string{"SNAPSHOT_INTERVAL", "SNAPSHOT_KEEP"}},
+		{ID: "snapshots", Title: "Schedule", Stack: 1, Phone: 2, Keys: []string{"SNAPSHOT_DAYS", "SNAPSHOT_TIME", "SNAPSHOT_KEEP"}},
 		{ID: "restore", Title: "Restore", Note: "By hand, with the container stopped.", Stack: 1, Phone: 4},
 	}},
 }
@@ -321,12 +320,13 @@ var sysCopies = map[string]sysCopy{
 	"DISCOVERY_SCAN_INTERVAL": {Help: "At least 1h.", Width: "xs", Dep: "DISCOVERY_SCAN"},
 	"DISCOVERY_SCAN_CIDRS":    {Help: "Inside the device networks, max /22 each.", Width: "full", Dep: "DISCOVERY_SCAN", Info: "Each CIDR must lie inside the device networks and hold at most 1024 addresses (/22)."},
 
-	"BACKUP_DAYS":       {Label: "Days", Help: "None ticked = manual only.", Width: "full"},
-	"BACKUP_TIME":       {Label: "Time", Help: "On the server's clock (TZ).", Width: "full", Info: "Time of day on the server's clock (TZ). A run missed while TasmoFleet was down starts late within 60 minutes; after that it is skipped and a notification is sent. Saving the schedule never starts a run."},
-	"BACKUP_KEEP":       {Label: "Kept per device", Help: "Lowering it can delete restore points.", Width: "xs"},
-	"SNAPSHOT_INTERVAL": {Label: "Interval", Help: "e.g. 24h.", Width: "xs"},
-	"SNAPSHOT_KEEP":     {Label: "Snapshots kept", Help: "The oldest are deleted first.", Width: "xs", Dep: "SNAPSHOT_INTERVAL"},
-	"BACKUP_MAX_AGE":    {Label: "Never prune younger than", Help: "e.g. 720h.", Width: "xs", Info: "Protects restore points from repeated manual runs: a backup younger than this is never pruned, even above the per-device count."},
+	"BACKUP_DAYS":    {Label: "Days", Help: "None ticked = manual only.", Width: "full"},
+	"BACKUP_TIME":    {Label: "Time", Help: "On the server's clock (TZ).", Width: "full", Info: "Time of day on the server's clock (TZ). A run missed while TasmoFleet was down starts late within 60 minutes; after that it is skipped and a notification is sent. Saving the schedule never starts a run."},
+	"BACKUP_KEEP":    {Label: "Kept per device", Help: "Lowering it can delete restore points.", Width: "xs"},
+	"SNAPSHOT_DAYS":  {Label: "Days", Help: "None ticked = off.", Width: "full"},
+	"SNAPSHOT_TIME":  {Label: "Time", Help: "On the server's clock (TZ).", Width: "full", Info: "Time of day on the server's clock (TZ). A snapshot missed while TasmoFleet was down is taken late within 60 minutes; after that it is skipped and a notification is sent. Saving the schedule never takes one."},
+	"SNAPSHOT_KEEP":  {Label: "Snapshots kept", Help: "The oldest are deleted first.", Width: "xs"},
+	"BACKUP_MAX_AGE": {Label: "Never prune younger than", Help: "e.g. 720h.", Width: "xs", Info: "Protects restore points from repeated manual runs: a backup younger than this is never pruned, even above the per-device count."},
 
 	"FIRMWARE_BASE_URL":            {Help: "Plain http:// address devices fetch firmware from.", Width: "full", Info: "Devices download firmware from this address, e.g. the container address. Required for updates."},
 	"FIRMWARE_SOURCES":             {Help: "Two sources = cross-check.", Width: "full"},
@@ -372,19 +372,6 @@ func sysLabel(r sysRow) string {
 	return r.Label
 }
 
-// sysScheduleOn says whether the backup schedule switch is on: the interval is not zero. An
-// interval the server rejected stays on, so the error is shown next to the switch that caused it.
-func sysScheduleOn(r sysRow) bool {
-	if r.Err != "" {
-		return true
-	}
-	if r.Posted == "0" || r.Posted == "" {
-		return false
-	}
-	d, err := time.ParseDuration(r.Posted)
-	return err != nil || d != 0
-}
-
 // sysChecked lists the choices of a list setting that are on.
 func sysChecked(r sysRow) []string {
 	return strings.Split(r.Posted, ",")
@@ -403,12 +390,8 @@ func sysCardBadges(c sysCard) []ui.SettingsBadge {
 	return out
 }
 
-// sysDependsOn is the control a dependent setting follows: the switch of a schedule (the interval
-// field itself is no switch), else the setting's own on/off control.
+// sysDependsOn is the control a dependent setting follows: the setting's own on/off control.
 func sysDependsOn(key string) string {
-	if slices.Contains(scheduleIntervals, key) {
-		return "sw." + key
-	}
 	if key == "NOTIFY_WEBHOOK_AUTH" {
 		return "v." + key + "=" + config.NotifyAuthHeader // a choice, not a switch: the header fields follow "Secret header"
 	}

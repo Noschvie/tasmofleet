@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { Page } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
 import { App, freePort, startApp } from "../support/stack";
+import { scheduleSnapshotSoon } from "../support/snapshot-schedule";
 
 // Settings, Notifications tab (issue #249): events, a webhook, e-mail, a message preview, a status
 // line and a "Send test" button per channel. The receivers here are local listeners; nothing leaves
@@ -239,20 +240,18 @@ test("e-mail: Send test delivers one message and the password stays write-only",
 // cannot be written (a file is in the way of its folder) is the one failure this spec can cause for real; the
 // webhook answers 404 and the status line must say so.
 test("a failed snapshot is delivered, and the failed delivery shows in the status line", async ({ page }) => {
+  test.setTimeout(180_000); // the snapshot is taken at its scheduled time, up to 80 s after the save (#602)
   hook.seen.length = 0;
   await page.setExtraHTTPHeaders(admin);
-  await page.goto(app.url + "/settings/system/snapshots");
-  await page.locator("[data-key='SNAPSHOT_SCHEDULE'] .swtrack").click();
-  // A directory under the name of the snapshot about to be written (this minute and the next two): renaming a
+  // A directory under the name of the snapshot about to be written (this minute and the next three): renaming a
   // file onto a directory fails for every user, root included, and the settings page keeps listing fine.
   const stamp = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/^(\d{8})T(\d{4}).*$/, "$1-$2Z");
-  for (let i = 0; i < 3; i++) mkdirSync(join(app.dataDir, "snapshots", `tasmofleet-${stamp(new Date(Date.now() + i * 60_000))}.db`), { recursive: true });
-  await page.getByRole("button", { name: "Save settings" }).click();
-  await page.waitForURL(/ok=saved/); // the save is done before the next page is opened
+  for (let i = 0; i < 4; i++) mkdirSync(join(app.dataDir, "snapshots", `tasmofleet-${stamp(new Date(Date.now() + i * 60_000))}.db`), { recursive: true });
+  await scheduleSnapshotSoon(page, app.url); // saving never runs one; the next scheduled time does
   await expect(async () => {
     await page.goto(app.url + "/settings/system?tab=notifications");
     await expect(page.locator("#card-notify-webhook .sys-status")).toContainText("Last delivery failed");
-  }).toPass({ timeout: 20_000 });
+  }).toPass({ timeout: 120_000 });
   expect(JSON.parse(hook.seen[0].body)).toMatchObject({ event: "snapshot.failed", result: "failed", title: "Database snapshot failed" });
   await expect(page.locator("#card-notify-webhook .sys-status")).toContainText("HTTP 404");
   await expect(page.locator("#card-notify-email .sys-status")).toContainText("Last delivery OK"); // the mail went through

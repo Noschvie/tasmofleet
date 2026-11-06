@@ -26,7 +26,7 @@ func berlinZone(t *testing.T) *time.Location {
 // schedEnv is the schedule loop on a real store and the real scheduled run, with a clock the test moves.
 type schedEnv struct {
 	*fleetEnv
-	s      *backupSchedule
+	s      *scheduleLoop
 	loc    *time.Location
 	clock  time.Time
 	sched  schedule.Schedule
@@ -45,7 +45,7 @@ func newSchedEnv(t *testing.T, days, clock string) *schedEnv {
 	e.sched = sc
 	e.at(2026, 11, 3, 9, 0)
 	e.b.now = func() time.Time { return e.clock }
-	e.s = &backupSchedule{
+	e.s = &scheduleLoop{
 		log: e.b.log, store: e.st, now: func() time.Time { return e.clock },
 		schedule: func() schedule.Schedule { return e.sched },
 		run:      e.b.Run,

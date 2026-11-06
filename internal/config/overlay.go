@@ -90,8 +90,11 @@ func Set(c *Config, key, value string) error {
 	if err := setField(f, strings.TrimSpace(value)); err != nil {
 		return &KeyError{Key: key, Err: err}
 	}
-	if key == "BACKUP_DAYS" {
+	switch key {
+	case "BACKUP_DAYS":
 		c.BackupDays = canonicalDays(c.BackupDays)
+	case "SNAPSHOT_DAYS":
+		c.SnapshotDays = canonicalDays(c.SnapshotDays)
 	}
 	return nil
 }

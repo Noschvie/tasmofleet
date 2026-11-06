@@ -261,8 +261,11 @@ type sysDB struct {
 	Dir           string // the snapshots folder, as the server sees it
 	DataDir       string // the data directory
 	Files         []sysSnapshot
-	Kept          int // SNAPSHOT_KEEP
-	On            bool
+	Kept          int       // SNAPSHOT_KEEP
+	On            bool      // a schedule is set (SNAPSHOT_DAYS has a weekday)
+	Now           time.Time // the page's clock, for "today" and "tomorrow"
+	Zone          string    // the server's time zone as the clock shows it ("CET"), for the note that times are on its clock
+	Missed        time.Time // when the newest skipped snapshot was noticed, when that is newer than the last good one; else zero
 	Status        sysSnapStatus
 	CanDelete     bool
 	ListErr       string // the snapshot folder cannot be listed: shown instead of the list (#399)
@@ -284,7 +287,7 @@ type sysSnapStatus struct {
 	State   string
 	Taken   time.Time // the last good snapshot
 	Attempt time.Time // the last failed attempt
-	Next    time.Time // the next run; zero when it cannot be told
+	Next    time.Time // the next scheduled run; zero when off
 	File    string
 	Reason  string
 	Count   int
@@ -320,8 +323,9 @@ func (h *handler) sysDBOf(r *http.Request, base string) (*sysDB, error) {
 		db.Hint = "A consistent copy of the live database, made while TasmoFleet runs. You are asked to confirm that the file holds secrets."
 	}
 	db.Kept, _ = strconv.Atoi(h.storedValue("SNAPSHOT_KEEP"))
-	every, _ := time.ParseDuration(h.storedValue("SNAPSHOT_INTERVAL"))
-	db.On = every > 0
+	sched := h.scheduleOf("SNAPSHOT_DAYS", "SNAPSHOT_TIME")
+	db.On, db.Now = !sched.Off(), h.d.Clock.Now()
+	db.Zone, _ = db.Now.Zone()
 	for i, in := range list {
 		db.Files = append(db.Files, sysSnapshot{
 			Name: in.Name, Size: humanBytes(in.Size), Taken: in.Taken, Schema: in.Schema, Latest: i == 0,
@@ -331,20 +335,23 @@ func (h *handler) sysDBOf(r *http.Request, base string) (*sysDB, error) {
 	}
 	st := s.Status()
 	db.Status = sysSnapStatus{State: "none", Taken: st.LastGood, Count: len(list)}
+	if db.On {
+		db.Status.Next = sched.Next(db.Now)
+	}
 	switch {
 	case st.Failed:
 		db.Status.State, db.Status.Attempt, db.Status.File, db.Status.Reason = "fail", st.Attempted, st.File, st.Reason
-		if every > 0 {
-			db.Status.Next = st.Attempted.Add(every)
-		}
 	case !st.LastGood.IsZero():
 		db.Status.State = "ok"
-		if every > 0 {
-			db.Status.Next = st.LastGood.Add(every)
-		}
 	}
-	if db.Status.Next.Before(h.d.Clock.Now()) {
-		db.Status.Next = time.Time{} // overdue: the schedule is about to run, no time to promise
+	if db.On && h.d.SnapshotMissed != nil {
+		missed, err := h.d.SnapshotMissed(r.Context())
+		if err != nil {
+			return nil, err
+		}
+		if !missed.IsZero() && missed.After(st.LastGood) {
+			db.Missed = missed
+		}
 	}
 	return db, nil
 }
