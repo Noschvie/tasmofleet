@@ -184,7 +184,7 @@ installs behave as described above.
 - **It does not change**: absolute times in the UI are shown in the browser's time zone.
 
 ```sh
-docker run -d --name tasmofleet -p 8443:8080 -p 80:80 -e TZ=Europe/Berlin -v tasmofleet-data:/data ghcr.io/nofuturekid/tasmofleet:latest
+docker run -d --name tasmofleet -p 8443:8080 -p 80:80 -e TZ=Europe/Berlin -v tasmofleet-data:/data ghcr.io/hellwand/tasmofleet:latest
 ```
 
 The same image is also on Docker Hub as `nofuturekid/tasmofleet`. It is published for linux/amd64 and linux/arm64; both include the backup decoder (the arm64 one is an unofficial build of upstream v16.0.0, see the README).

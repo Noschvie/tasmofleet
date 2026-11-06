@@ -5,7 +5,7 @@ The short version is in the [README](../README.md#quick-start-docker); this page
 ## Images and architectures
 
 The image is published to two registries under the same tags (`latest`, `X.Y.Z` and `edge`, the
-current `main`): `nofuturekid/tasmofleet` on Docker Hub and `ghcr.io/nofuturekid/tasmofleet`. Use
+current `main`): `nofuturekid/tasmofleet` on Docker Hub and `ghcr.io/hellwand/tasmofleet`. Use
 either name; to pull from ghcr.io instead, put `ghcr.io/` in front of the image name.
 
 Every tag is a multi-arch image: `linux/amd64` and `linux/arm64` (Raspberry Pi 4/5 and other 64-bit

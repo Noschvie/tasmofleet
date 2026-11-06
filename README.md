@@ -10,26 +10,26 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/nofuturekid/tasmofleet/releases"><img alt="Release" src="https://img.shields.io/github/v/release/nofuturekid/tasmofleet?sort=semver"></a>
+  <a href="https://github.com/hellwand/tasmofleet/releases"><img alt="Release" src="https://img.shields.io/github/v/release/hellwand/tasmofleet?sort=semver"></a>
   <a href="https://hub.docker.com/r/nofuturekid/tasmofleet"><img alt="Docker Hub pulls" src="https://img.shields.io/docker/pulls/nofuturekid/tasmofleet?logo=docker&logoColor=white"></a>
-  <a href="LICENSE"><img alt="License: AGPL-3.0-or-later" src="https://img.shields.io/github/license/nofuturekid/tasmofleet"></a>
-  <a href="https://github.com/nofuturekid/tasmofleet/actions/workflows/main.yml"><img alt="CI" src="https://github.com/nofuturekid/tasmofleet/actions/workflows/main.yml/badge.svg?branch=main"></a>
+  <a href="LICENSE"><img alt="License: AGPL-3.0-or-later" src="https://img.shields.io/github/license/hellwand/tasmofleet"></a>
+  <a href="https://github.com/hellwand/tasmofleet/actions/workflows/main.yml"><img alt="CI" src="https://github.com/hellwand/tasmofleet/actions/workflows/main.yml/badge.svg?branch=main"></a>
 </p>
 
 <p align="center">
-  <a href="https://nofuturekid.github.io/tasmofleet/">Website</a> ·
-  <a href="https://nofuturekid.github.io/tasmofleet/demo/">Live demo</a> ·
+  <a href="https://hellwand.github.io/tasmofleet/">Website</a> ·
+  <a href="https://hellwand.github.io/tasmofleet/demo/">Live demo</a> ·
   <a href="#quick-start-docker">Install</a> ·
   <a href="#documentation">Docs</a> ·
-  <a href="https://github.com/nofuturekid/tasmofleet/releases">Release notes</a> ·
-  <a href="https://github.com/nofuturekid/tasmofleet/discussions">Discussions</a>
+  <a href="https://github.com/hellwand/tasmofleet/releases">Release notes</a> ·
+  <a href="https://github.com/hellwand/tasmofleet/discussions">Discussions</a>
 </p>
 
 ![The TasmoFleet dashboard: fleet state, what needs attention, recent transactions](docs/media/dashboard.png)
 
 TasmoFleet is a self-hosted fleet manager for [Tasmota](https://tasmota.github.io/) devices, one Go
 binary with an embedded SQLite database. All screenshots show simulated devices; the
-**[live demo](https://nofuturekid.github.io/tasmofleet/demo/)** is the real UI with a simulated fleet of 60
+**[live demo](https://hellwand.github.io/tasmofleet/demo/)** is the real UI with a simulated fleet of 60
 devices, saved as static pages (actions are disabled).
 
 ## Why TasmoFleet
@@ -130,8 +130,8 @@ possible. How to take, schedule and restore them:
 **Pre-1.0, single maintainer.** It runs a home fleet of a few dozen devices every day, but breaking
 changes are to be expected before 1.0: read the [CHANGELOG](CHANGELOG.md) before updating. Your data
 is migrated forward; configuration and routes may change. Questions and ideas are welcome in
-[Discussions](https://github.com/nofuturekid/tasmofleet/discussions), bug reports in the
-[issues](https://github.com/nofuturekid/tasmofleet/issues).
+[Discussions](https://github.com/hellwand/tasmofleet/discussions), bug reports in the
+[issues](https://github.com/hellwand/tasmofleet/issues).
 
 ## How it is built (AI disclosure)
 
