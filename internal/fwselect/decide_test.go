@@ -3,7 +3,7 @@ package fwselect
 import (
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // TestDecide: the update policy is one table-tested function (TasmoAdmin

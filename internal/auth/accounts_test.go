@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/secretbox"
-	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/secretbox"
+	"github.com/hellwand/tasmofleet/internal/store"
 )
 
 func newAccounts(t *testing.T) (*Accounts, *fakeUsers, *fakeSessions, *fakeCookies, *fakeClock) {

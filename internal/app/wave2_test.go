@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/config"
-	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
+	"github.com/hellwand/tasmofleet/internal/config"
+	"github.com/hellwand/tasmofleet/internal/sysconfig"
 )
 
 // Why (N19): the /metrics master switch must take effect on the running

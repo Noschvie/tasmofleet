@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // errBadSize: Plan needs the real size of the target image.

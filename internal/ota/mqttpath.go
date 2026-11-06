@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/nofuturekid/tasmofleet/internal/fwselect"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/transport"
+	"github.com/hellwand/tasmofleet/internal/fwselect"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
 // UpdatePaths chooses how an update reaches a device (transport.Choose over the device's facts). The

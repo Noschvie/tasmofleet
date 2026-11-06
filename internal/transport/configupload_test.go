@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/mqttcmd"
-	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/mqttcmd"
+	"github.com/hellwand/tasmofleet/internal/tasmota"
 )
 
 // upMQTT is the command channel with FileUpload: it records what the router hands it.

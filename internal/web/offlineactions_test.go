@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // Why (#93): "can this device be reached now" is the health tracker's answer, which already

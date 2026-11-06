@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/tasmotacmd"
+	"github.com/hellwand/tasmofleet/internal/tasmotacmd"
 )
 
 // The fixture is real Tasmota v16.0.0 source cut down to one case per behaviour; every case below

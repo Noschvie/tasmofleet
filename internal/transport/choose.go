@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/tasmota"
 )
 
 // fwReachTTL is how long a "no" stays true (D11): the network may have changed since.

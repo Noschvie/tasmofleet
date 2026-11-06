@@ -25,8 +25,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/app"
-	"github.com/nofuturekid/tasmofleet/internal/config"
+	"github.com/hellwand/tasmofleet/internal/app"
+	"github.com/hellwand/tasmofleet/internal/config"
 )
 
 // version is set by the build (-ldflags "-X main.version=...").

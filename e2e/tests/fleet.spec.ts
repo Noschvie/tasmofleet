@@ -284,7 +284,7 @@ test("ESP32-S2: refused until a build is chosen, then previewed and started", { 
   await expect(page.locator("body")).not.toContainText("remembered from your last update");
 });
 
-// Quarantined: https://github.com/nofuturekid/tasmofleet/issues/20
+// Quarantined: https://github.com/hellwand/tasmofleet/issues/20
 test("update batch: preview, staged ESP8266 and direct ESP32 succeed, unknown chip is refused", { tag: "@core" }, async ({ page, request }) => {
   test.setTimeout(240_000);
   const addr = env.devices["lamp-1m"].addr;

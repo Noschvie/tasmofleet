@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/ota"
-	"github.com/nofuturekid/tasmofleet/internal/policy"
-	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/ota"
+	"github.com/hellwand/tasmofleet/internal/policy"
+	"github.com/hellwand/tasmofleet/internal/tasmota"
 )
 
 var t0 = time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)

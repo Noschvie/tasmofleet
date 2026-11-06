@@ -7,7 +7,7 @@ import (
 	"mime"
 	"strings"
 
-	"github.com/nofuturekid/tasmofleet/internal/config"
+	"github.com/hellwand/tasmofleet/internal/config"
 )
 
 // webhookRequest is what a webhook format puts on the wire: headers (in the order the preview

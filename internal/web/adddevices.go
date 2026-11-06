@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nofuturekid/tasmofleet/internal/discovery"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/netaddr"
+	"github.com/hellwand/tasmofleet/internal/discovery"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/netaddr"
 )
 
 // The Add page (#410): one page with four boxes, one per way to add devices: Discovered and

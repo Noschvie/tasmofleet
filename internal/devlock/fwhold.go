@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // FirmwareHolds remembers the devices on which a person has just started a firmware update with a typed

@@ -8,7 +8,7 @@ package web
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import "github.com/nofuturekid/tasmofleet/internal/web/ui"
+import "github.com/hellwand/tasmofleet/internal/web/ui"
 
 // pathsCard is the card of #261: how TasmoFleet reaches the device and which way each action
 // takes. It sits under Identity and Connection, is never dimmed (it explains an offline device).

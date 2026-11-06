@@ -65,4 +65,4 @@ peer address.
 
 Set the application's icon (Admin -> Applications -> tasmofleet -> Icon) to
 `assets/branding/icon-512.png` from this repository (upload the file, or use
-`https://raw.githubusercontent.com/nofuturekid/tasmofleet/main/assets/branding/icon-512.png`).
+`https://raw.githubusercontent.com/hellwand/tasmofleet/main/assets/branding/icon-512.png`).

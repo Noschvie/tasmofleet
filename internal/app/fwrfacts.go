@@ -6,11 +6,11 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/fwselect"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/store"
-	"github.com/nofuturekid/tasmofleet/internal/tasmota"
-	"github.com/nofuturekid/tasmofleet/internal/transport"
+	"github.com/hellwand/tasmofleet/internal/fwselect"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
 // Status 2 facts for devices identified before 0.22.0 (#417). The StatusFWR facts (core, SDK, CPU

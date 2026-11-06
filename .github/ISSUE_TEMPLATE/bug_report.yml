@@ -6,8 +6,8 @@ body:
     attributes:
       value: |
         Thanks for reporting. For questions or help with your setup, please use
-        [Discussions](https://github.com/nofuturekid/tasmofleet/discussions/categories/q-a).
-        Security problems go to the [private advisory form](https://github.com/nofuturekid/tasmofleet/security/advisories/new), not here.
+        [Discussions](https://github.com/hellwand/tasmofleet/discussions/categories/q-a).
+        Security problems go to the [private advisory form](https://github.com/hellwand/tasmofleet/security/advisories/new), not here.
   - type: input
     id: version
     attributes:

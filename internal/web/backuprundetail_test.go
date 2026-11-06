@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/backup"
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/backup"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 func TestRunDetailSaysTheFilesReasonOnce(t *testing.T) {

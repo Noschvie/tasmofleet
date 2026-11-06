@@ -2,7 +2,7 @@ package web
 
 import (
 	"context"
-	"github.com/nofuturekid/tasmofleet/internal/inventory"
+	"github.com/hellwand/tasmofleet/internal/inventory"
 	"net/netip"
 	"net/url"
 	"strings"
@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/discovery"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
+	"github.com/hellwand/tasmofleet/internal/discovery"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/sysconfig"
 )
 
 type fakeDiscovery struct {

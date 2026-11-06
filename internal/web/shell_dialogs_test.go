@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // Why: "Cancel" next to "Cancel transaction" is ambiguous (which one cancels the

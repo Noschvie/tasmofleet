@@ -14,12 +14,12 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/nofuturekid/tasmofleet/internal/clock"
-	"github.com/nofuturekid/tasmofleet/internal/events"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/mqttbus"
-	"github.com/nofuturekid/tasmofleet/internal/store"
-	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/clock"
+	"github.com/hellwand/tasmofleet/internal/events"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/mqttbus"
+	"github.com/hellwand/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/tasmota"
 )
 
 // Defaults, see spec "Health model".

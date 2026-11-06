@@ -93,7 +93,7 @@ placeholders).
 | Observability | Prometheus scrapes `/metrics`; blackbox probes `/healthz`. A log collector (e.g. Loki via Alloy) reads Docker JSON logs, so tasmofleet logs JSON to stdout. tasmofleet ships `deploy/grafana/tasmofleet.json`                                                                                                                                           |
 | Notifications | optional, later: mail, or a Home Assistant webhook (§14.5)                                                                                                                                                                                                                                                                                              |
 | Fleet policy  | PowerOnState 0, SetOption0 0 (`save_state`), SaveData 0, Timezone 99 with DST rules, NTP from DHCP. Exception: ESP32 lamps use SetOption0 1. M2 policy view flags drift (§14.4)                                                                                                                                                                         |
-| CI            | GitHub Actions on GitHub-hosted runners. Images go to `ghcr.io/nofuturekid/tasmofleet` and `docker.io/nofuturekid/tasmofleet` (same tags)                                                                                                                                                                                                               |
+| CI            | GitHub Actions on GitHub-hosted runners. Images go to `ghcr.io/hellwand/tasmofleet` and `docker.io/nofuturekid/tasmofleet` (same tags)                                                                                                                                                                                                               |
 
 Example environment for this deployment: `deploy/unraid/tasmofleet.env.example`.
 
@@ -2312,7 +2312,7 @@ component, device, job, batch, request_id, remote, user`. No secrets (redactor),
   `io.hass.type`, `io.hass.version` and `io.hass.arch` labels (the Supervisor's `/data` belongs to root, which
   the non-root user cannot write). `docker build` without `--target` still produces the standard image.
   CI builds it and runs `tools/ha-app-smoke.sh` on every image build; it is not published yet (#444).
-- **Registry**: `ghcr.io/nofuturekid/tasmofleet` and, when the repository's Docker Hub secrets are set,
+- **Registry**: `ghcr.io/hellwand/tasmofleet` and, when the repository's Docker Hub secrets are set,
   `docker.io/nofuturekid/tasmofleet` (overview text `deploy/dockerhub/README.md`), with the same tags
   `<version>` (X.Y.Z) and `latest`. Built and published by GitHub Actions.
 - **Unraid**: `deploy/unraid/tasmofleet.xml` (br0, fixed IP, `/data` ->
@@ -2423,7 +2423,7 @@ on a real fleet.
   Exit criterion: TasmoAdmin can be retired.
 
 **M3**: Home Assistant add-on with ingress auth, public GitHub repository
-(`github.com/nofuturekid/tasmofleet`, the module path already matches), GHCR image,
+(`github.com/hellwand/tasmofleet`, the module path already matches), GHCR image,
 `.github/workflows` copy, fixtures re-checked for publication.
 
 ---

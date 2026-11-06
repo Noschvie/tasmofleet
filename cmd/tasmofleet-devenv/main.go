@@ -29,8 +29,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/simulator"
-	"github.com/nofuturekid/tasmofleet/internal/testutil/oidcmock"
+	"github.com/hellwand/tasmofleet/internal/simulator"
+	"github.com/hellwand/tasmofleet/internal/testutil/oidcmock"
 )
 
 // loginUsers are the accounts the mock IdP can log in as, with the Authentik

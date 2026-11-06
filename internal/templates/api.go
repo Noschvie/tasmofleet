@@ -11,8 +11,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/policy"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/policy"
 )
 
 // Source says where a device's Module and Template readings come from.

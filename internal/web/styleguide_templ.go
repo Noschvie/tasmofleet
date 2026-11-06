@@ -8,7 +8,7 @@ package web
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import "github.com/nofuturekid/tasmofleet/internal/web/ui"
+import "github.com/hellwand/tasmofleet/internal/web/ui"
 
 // sgView is the style guide's data: the shell data (for the user menu and the drawer shown in
 // the flow), the base path and the CSRF token of the sample forms.

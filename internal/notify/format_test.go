@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/config"
+	"github.com/hellwand/tasmofleet/internal/config"
 )
 
 type seen struct {

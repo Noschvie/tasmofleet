@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/backup"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/store"
-	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
+	"github.com/hellwand/tasmofleet/internal/backup"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/sysconfig"
 )
 
 // Why: the tabs place every field by a table (sysPlace). A setting that no tab draws can never

@@ -6,8 +6,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/nofuturekid/tasmofleet/internal/fwselect"
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/fwselect"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // Position is where a device's running version stands against a release.

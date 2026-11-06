@@ -3,7 +3,7 @@ package store
 import (
 	"context"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // NewestRun is the newest backup run of a device as the Backups page needs it: the settings dump's

@@ -23,7 +23,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/secretbox"
+	"github.com/hellwand/tasmofleet/internal/secretbox"
 )
 
 // DirName is the folder of the stored snapshots inside the data directory.

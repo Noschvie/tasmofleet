@@ -7,12 +7,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/clock"
-	"github.com/nofuturekid/tasmofleet/internal/events"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/mqttbus"
-	"github.com/nofuturekid/tasmofleet/internal/ota"
-	"github.com/nofuturekid/tasmofleet/internal/transport"
+	"github.com/hellwand/tasmofleet/internal/clock"
+	"github.com/hellwand/tasmofleet/internal/events"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/mqttbus"
+	"github.com/hellwand/tasmofleet/internal/ota"
+	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
 // jobNotifier turns persisted job transitions into SSE events and metrics.

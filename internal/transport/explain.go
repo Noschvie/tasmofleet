@@ -1,6 +1,6 @@
 package transport
 
-import "github.com/nofuturekid/tasmofleet/internal/model"
+import "github.com/hellwand/tasmofleet/internal/model"
 
 // The explanations the device page shows next to the decision. They expose the sentences Choose
 // builds from, so the UI never words a reason a second time.

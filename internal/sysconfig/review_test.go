@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/store"
 )
 
 // Regression tests for the security review of the system settings. Principle:

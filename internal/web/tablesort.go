@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/auth"
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/auth"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // Server-side column sorting. A sortable header is a plain link

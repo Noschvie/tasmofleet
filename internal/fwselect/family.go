@@ -3,7 +3,7 @@ package fwselect
 import (
 	"strings"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 type hardwareEntry struct {

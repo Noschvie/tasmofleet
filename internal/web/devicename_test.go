@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/store"
 )
 
 // fakeNames keeps "Keep" in the fake inventory's devices, with the store's rule: only for the name

@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/firmware"
-	"github.com/nofuturekid/tasmofleet/internal/fwselect"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+	"github.com/hellwand/tasmofleet/internal/firmware"
+	"github.com/hellwand/tasmofleet/internal/fwselect"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // The wording and view helpers of the Updates pages (design v2, WP P4): transaction ids, titles,

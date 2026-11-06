@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/firmware"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+	"github.com/hellwand/tasmofleet/internal/firmware"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // The release page (design v2 screens "release" and "release-v-since", N6): the full notes of one

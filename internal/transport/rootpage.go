@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/mqttcmd"
-	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/mqttcmd"
+	"github.com/hellwand/tasmofleet/internal/tasmota"
 )
 
 // ErrNoInfo is the RootPage error over MQTT when no INFO1 was seen since the device's last boot: a

@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/events"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/secretbox"
-	"github.com/nofuturekid/tasmofleet/internal/simulator"
-	"github.com/nofuturekid/tasmofleet/internal/store"
-	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/events"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/secretbox"
+	"github.com/hellwand/tasmofleet/internal/simulator"
+	"github.com/hellwand/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/tasmota"
 )
 
 // edits runs a function (the "admin") at the first command of a probe, i.e.

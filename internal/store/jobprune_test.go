@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // batchOf creates a batch with one job per device and moves every job to state, stamped at.

@@ -5,9 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/events"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/mqttbus"
+	"github.com/hellwand/tasmofleet/internal/events"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/mqttbus"
 )
 
 // knownIndex answers mqttbus.Options.Known from an in-memory copy of the

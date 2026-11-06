@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/notify"
-	"github.com/nofuturekid/tasmofleet/internal/schedule"
-	"github.com/nofuturekid/tasmofleet/internal/snapshot"
-	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/notify"
+	"github.com/hellwand/tasmofleet/internal/schedule"
+	"github.com/hellwand/tasmofleet/internal/snapshot"
+	"github.com/hellwand/tasmofleet/internal/store"
 )
 
 // snapshotRuns adapts the snapshot run record (snapshot_runs, migration 0046) to the record the

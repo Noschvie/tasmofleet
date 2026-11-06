@@ -3,7 +3,7 @@ package transport
 import (
 	"fmt"
 
-	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/tasmota"
 )
 
 // Path is one way to do one thing with a device.

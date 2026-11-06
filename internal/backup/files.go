@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/tasmota"
-	"github.com/nofuturekid/tasmofleet/internal/transport"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
 // Limits of the files step (spec 12.1). A file over a limit is listed in the

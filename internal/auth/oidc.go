@@ -16,8 +16,8 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 
-	"github.com/nofuturekid/tasmofleet/internal/httpx"
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/httpx"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // flow is the state of one login attempt, kept in a short-lived HttpOnly

@@ -20,9 +20,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/nofuturekid/tasmofleet/internal/fwselect"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/fwselect"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/store"
 )
 
 // Sources of artifacts that do not come from an upstream. A custom release

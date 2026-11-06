@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // HardwareStore changes the hardware an inventory entry stands for. These are

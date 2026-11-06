@@ -13,10 +13,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/auth"
-	"github.com/nofuturekid/tasmofleet/internal/httpx"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/snapshot"
+	"github.com/hellwand/tasmofleet/internal/auth"
+	"github.com/hellwand/tasmofleet/internal/httpx"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/snapshot"
 )
 
 // SnapshotService is the database snapshots of System -> Snapshots (*snapshot.Manager implements

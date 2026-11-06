@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/nofuturekid/tasmofleet/internal/auth"
-	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
-	"github.com/nofuturekid/tasmofleet/internal/devlock"
-	"github.com/nofuturekid/tasmofleet/internal/firmware"
-	"github.com/nofuturekid/tasmofleet/internal/fwselect"
+	"github.com/hellwand/tasmofleet/internal/auth"
+	"github.com/hellwand/tasmofleet/internal/cmdpolicy"
+	"github.com/hellwand/tasmofleet/internal/devlock"
+	"github.com/hellwand/tasmofleet/internal/firmware"
+	"github.com/hellwand/tasmofleet/internal/fwselect"
 	"net/http"
 	"slices"
 	"sort"
@@ -16,11 +16,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/ota"
-	"github.com/nofuturekid/tasmofleet/internal/store"
-	"github.com/nofuturekid/tasmofleet/internal/transport"
-	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/ota"
+	"github.com/hellwand/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/transport"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // updateOption is one row of the device picker. Blocked says why a device

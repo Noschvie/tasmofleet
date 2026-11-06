@@ -8,7 +8,7 @@ package web
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import "github.com/nofuturekid/tasmofleet/internal/web/ui"
+import "github.com/hellwand/tasmofleet/internal/web/ui"
 
 // policyPage is GET /policy: tiles, tabs and the rule table. A rule opens on its own page
 // (/policy/rules/{id}); the table only reorders, duplicates, enables, disables and deletes.

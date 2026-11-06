@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // "Changes since" (design v2, N6): the release page can list every release

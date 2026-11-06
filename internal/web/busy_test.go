@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/devlock"
+	"github.com/hellwand/tasmofleet/internal/devlock"
 )
 
 // A device held by another operation is a conflict the user can resolve by

@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/config"
-	"github.com/nofuturekid/tasmofleet/internal/importer"
-	"github.com/nofuturekid/tasmofleet/internal/simulator"
+	"github.com/hellwand/tasmofleet/internal/config"
+	"github.com/hellwand/tasmofleet/internal/importer"
+	"github.com/hellwand/tasmofleet/internal/simulator"
 )
 
 func importServices(t *testing.T) *Services {

@@ -14,7 +14,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nofuturekid/tasmofleet/internal/auth"
+	"github.com/hellwand/tasmofleet/internal/auth"
 )
 
 // Table column preferences.

@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 const testPassword = "Zq7-distinctive-PW-9x!"

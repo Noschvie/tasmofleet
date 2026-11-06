@@ -25,7 +25,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // Guard and selection errors. Every refusal wraps one of these so the UI and

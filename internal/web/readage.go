@@ -3,7 +3,7 @@ package web
 import (
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/settings"
+	"github.com/hellwand/tasmofleet/internal/settings"
 )
 
 // staleAfter is how old a remembered reading may get before a page marks it as stale (#599). The

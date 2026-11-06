@@ -9,7 +9,7 @@ import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
 import (
-	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // backupsEmptyText is the text of the empty Backups tab: the action, and when the schedule backs the

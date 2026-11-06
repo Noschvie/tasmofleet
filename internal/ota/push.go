@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/tasmota"
 )
 
 // Push delivery (backlog F-9): instead of OtaUrl and Upgrade 1 the engine

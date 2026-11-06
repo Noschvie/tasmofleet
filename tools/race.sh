@@ -15,7 +15,7 @@
 set -eu
 export CGO_ENABLED=1
 GO=${GO:-go}
-mod=github.com/nofuturekid/tasmofleet
+mod=github.com/hellwand/tasmofleet
 HEAVY="$mod/internal/store $mod/internal/discovery $mod/cmd/tasmofleet $mod/internal/auth"
 
 # shard_pkgs <i>: the packages of ./... in shard i of 2.

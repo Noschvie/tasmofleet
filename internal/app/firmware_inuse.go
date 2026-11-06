@@ -3,7 +3,7 @@ package app
 import (
 	"context"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // activeJobLister is the part of the job store the firmware cache needs.

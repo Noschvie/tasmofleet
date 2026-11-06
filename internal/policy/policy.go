@@ -10,7 +10,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // Rule is one expected setting.

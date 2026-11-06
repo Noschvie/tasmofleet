@@ -8,13 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/backup"
-	"github.com/nofuturekid/tasmofleet/internal/health"
-	"github.com/nofuturekid/tasmofleet/internal/metrics"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/notify"
-	"github.com/nofuturekid/tasmofleet/internal/schedule"
-	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/backup"
+	"github.com/hellwand/tasmofleet/internal/health"
+	"github.com/hellwand/tasmofleet/internal/metrics"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/notify"
+	"github.com/hellwand/tasmofleet/internal/schedule"
+	"github.com/hellwand/tasmofleet/internal/store"
 )
 
 const (

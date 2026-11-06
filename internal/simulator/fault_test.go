@@ -259,7 +259,7 @@ func TestListenersBindLoopbackByDefault(t *testing.T) {
 // production binary.
 func TestNotInProductionBinary(t *testing.T) {
 	t.Parallel()
-	out, err := exec.CommandContext(context.Background(), "go", "list", "-deps", "github.com/nofuturekid/tasmofleet/cmd/tasmofleet").CombinedOutput()
+	out, err := exec.CommandContext(context.Background(), "go", "list", "-deps", "github.com/hellwand/tasmofleet/cmd/tasmofleet").CombinedOutput()
 	if err != nil {
 		t.Fatalf("go list: %v\n%s", err, out)
 	}

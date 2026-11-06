@@ -8,7 +8,7 @@ package web
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import "github.com/nofuturekid/tasmofleet/internal/web/ui"
+import "github.com/hellwand/tasmofleet/internal/web/ui"
 
 // noticePage is the result of an action that has no page of its own: a refusal, "nothing
 // to do", a started transaction. Kept without a prototype screen (plan 3.3): the page header,

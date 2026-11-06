@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/notify"
-	"github.com/nofuturekid/tasmofleet/internal/schedule"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/notify"
+	"github.com/hellwand/tasmofleet/internal/schedule"
 )
 
 // backupGrace is how late a scheduled run still starts: a run whose time passed while TasmoFleet

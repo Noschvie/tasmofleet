@@ -17,12 +17,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/auth"
-	"github.com/nofuturekid/tasmofleet/internal/httpx"
-	"github.com/nofuturekid/tasmofleet/internal/importer"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/netaddr"
-	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+	"github.com/hellwand/tasmofleet/internal/auth"
+	"github.com/hellwand/tasmofleet/internal/httpx"
+	"github.com/hellwand/tasmofleet/internal/importer"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/netaddr"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // ImportService is the TasmoAdmin importer (package importer).

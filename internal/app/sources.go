@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/nofuturekid/tasmofleet/internal/firmware"
+	"github.com/hellwand/tasmofleet/internal/firmware"
 )
 
 // overrideSource is the single upstream used by FIRMWARE_UPSTREAM_OVERRIDE

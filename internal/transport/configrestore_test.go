@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/tasmota"
 )
 
 func (h *fsHTTP) RestoreConfig(_ context.Context, _ tasmota.Target, dump []byte) error {

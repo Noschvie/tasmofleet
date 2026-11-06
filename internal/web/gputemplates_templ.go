@@ -8,7 +8,7 @@ package web
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import "github.com/nofuturekid/tasmofleet/internal/web/ui"
+import "github.com/hellwand/tasmofleet/internal/web/ui"
 
 // policyTemplatesPage is GET /policy/templates: the summary bar, the groups as cards in two column
 // stacks, and the folds (Not judged, Built-in modules, Used by one device). Mockup: gpio-templates-mockup/1 and 1b.

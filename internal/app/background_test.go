@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/health"
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/health"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // Why: Tasmota names the only relay of a single-relay device "POWER" and the

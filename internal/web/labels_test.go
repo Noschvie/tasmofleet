@@ -3,7 +3,7 @@ package web
 import (
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // Why: the UI must never show raw enum names such as "auth_failed" (a

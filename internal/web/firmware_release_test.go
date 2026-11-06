@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/firmware"
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/firmware"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // feedFW is a firmware cache whose in-memory feed is cached (nil = not loaded) and that counts

@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/policy"
-	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/policy"
+	"github.com/hellwand/tasmofleet/internal/sysconfig"
 )
 
 // Why: the editor's live preview must tell how many devices a rule would flag

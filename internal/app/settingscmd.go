@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
+	"github.com/hellwand/tasmofleet/internal/sysconfig"
 )
 
 // SettingsFile is the format of `tasmofleet settings export|import`: the

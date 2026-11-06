@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/tasmotacmd"
+	"github.com/hellwand/tasmofleet/internal/cmdpolicy"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/tasmotacmd"
 )
 
 // Tests for the GPIO template comparison (#327). The rules protect hardware: a template written to

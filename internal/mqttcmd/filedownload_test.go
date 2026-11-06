@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/mqttbus"
-	"github.com/nofuturekid/tasmofleet/internal/simulator"
-	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/mqttbus"
+	"github.com/hellwand/tasmofleet/internal/simulator"
+	"github.com/hellwand/tasmofleet/internal/tasmota"
 )
 
 const dlPassword = "s3cret-mqtt-pw"

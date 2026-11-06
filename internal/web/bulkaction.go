@@ -7,10 +7,10 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/nofuturekid/tasmofleet/internal/auth"
-	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/ota"
+	"github.com/hellwand/tasmofleet/internal/auth"
+	"github.com/hellwand/tasmofleet/internal/cmdpolicy"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/ota"
 )
 
 // Bulk "Back up" and "Restart": the devices selected in the list are the scope

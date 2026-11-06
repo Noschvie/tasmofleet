@@ -8,8 +8,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/store"
 )
 
 // Why (#466): a job whose row vanished (the device was deleted) is not a fault of the engine. The

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // Reasons a command cannot be a fleet policy rule. They are shown to the person

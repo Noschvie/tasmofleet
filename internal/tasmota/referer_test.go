@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/simulator"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/simulator"
 )
 
 // Why: Tasmota's default (SetOption128 0) refuses every request without a

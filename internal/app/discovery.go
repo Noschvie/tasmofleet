@@ -5,9 +5,9 @@ import (
 	"errors"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/discovery"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/discovery"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/tasmota"
 )
 
 // scanConcurrency and scanTimeout are the spec limits of the HTTP autoscan.

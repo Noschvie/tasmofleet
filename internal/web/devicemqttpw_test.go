@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // fakeMQTTPW is store.SetMQTTPassword on the fake inventory: it records the calls and, like the

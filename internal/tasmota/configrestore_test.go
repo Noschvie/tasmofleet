@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/simulator"
+	"github.com/hellwand/tasmofleet/internal/simulator"
 )
 
 func restorer(t *testing.T) ConfigRestorer {

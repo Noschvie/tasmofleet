@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/firmware"
+	"github.com/hellwand/tasmofleet/internal/firmware"
 )
 
 // Why: firmware is flashed onto the whole fleet, so no download may travel over plain

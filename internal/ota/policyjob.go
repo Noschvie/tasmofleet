@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/store"
-	"github.com/nofuturekid/tasmofleet/internal/transport"
+	"github.com/hellwand/tasmofleet/internal/cmdpolicy"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
 // "Make compliant" runs as a transaction: one job per device, shown and

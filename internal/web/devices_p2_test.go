@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/events"
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/events"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // Why (design v2, P2): "Unknown" means the device never answered; "Offline" means it answered

@@ -3,7 +3,7 @@ package ota
 import (
 	"errors"
 
-	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/store"
 )
 
 // persistFailed logs a job transition (or event) that could not be stored; the caller stops the

@@ -152,7 +152,7 @@ func TestUITextSaysTasmoFleet(t *testing.T) {
 			}
 		}
 	}
-	if !productName.MatchString("data from tasmofleet. The") || productName.MatchString("TASMOFLEET_PUBLIC_URL /tasmofleet tasmofleet.db github.com/nofuturekid/tasmofleet") {
+	if !productName.MatchString("data from tasmofleet. The") || productName.MatchString("TASMOFLEET_PUBLIC_URL /tasmofleet tasmofleet.db github.com/hellwand/tasmofleet") {
 		t.Fatal("the check itself is wrong")
 	}
 }

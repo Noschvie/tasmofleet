@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nofuturekid/tasmofleet/internal/tasmotacmd"
+	"github.com/hellwand/tasmofleet/internal/tasmotacmd"
 )
 
 // Template, Module and the per-pin Gpio overrides, as Tasmota 16.0.0 does them (plan-0270-gpio.md

@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/secretbox"
-	"github.com/nofuturekid/tasmofleet/internal/snapshot"
-	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
+	"github.com/hellwand/tasmofleet/internal/secretbox"
+	"github.com/hellwand/tasmofleet/internal/snapshot"
+	"github.com/hellwand/tasmofleet/internal/sysconfig"
 )
 
 const fakeKey = "fake-secret-key-0123456789abcdef"

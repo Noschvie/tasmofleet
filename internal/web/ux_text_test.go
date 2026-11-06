@@ -3,7 +3,7 @@ package web
 import (
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // Why: "1 deviation(s)" read like unfinished text; the UI says "1 deviation", "2 deviations".

@@ -12,14 +12,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/audit"
-	"github.com/nofuturekid/tasmofleet/internal/backup"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/policy"
-	"github.com/nofuturekid/tasmofleet/internal/settings"
-	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
-	"github.com/nofuturekid/tasmofleet/internal/templates"
-	"github.com/nofuturekid/tasmofleet/internal/web"
+	"github.com/hellwand/tasmofleet/internal/audit"
+	"github.com/hellwand/tasmofleet/internal/backup"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/policy"
+	"github.com/hellwand/tasmofleet/internal/settings"
+	"github.com/hellwand/tasmofleet/internal/sysconfig"
+	"github.com/hellwand/tasmofleet/internal/templates"
+	"github.com/hellwand/tasmofleet/internal/web"
 )
 
 // setupSettings builds the settings service and the policy report. The rules

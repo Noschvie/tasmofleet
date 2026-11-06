@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/nofuturekid/tasmofleet/internal/devlock"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/restore"
-	"github.com/nofuturekid/tasmofleet/internal/transport"
+	"github.com/hellwand/tasmofleet/internal/devlock"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/restore"
+	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
 // setupRestore builds the restore service. A restore over HTTP is the device's own restore upload

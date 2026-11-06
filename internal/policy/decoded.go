@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/nofuturekid/tasmofleet/internal/settings"
+	"github.com/hellwand/tasmofleet/internal/settings"
 )
 
 // decodedKeys maps a policy command to its place in the JSON that

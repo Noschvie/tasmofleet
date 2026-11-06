@@ -3,7 +3,7 @@ package mqttcmd
 import (
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/mqttbus"
+	"github.com/hellwand/tasmofleet/internal/mqttbus"
 )
 
 // maxInfoBytes bounds what is kept per INFO message (a real one is a few hundred bytes).

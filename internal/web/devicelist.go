@@ -8,8 +8,8 @@ import (
 
 	"github.com/a-h/templ"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // The device list renders through the ui components of design v2 (port package F5): the table

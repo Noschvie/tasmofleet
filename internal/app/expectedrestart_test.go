@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
-	"github.com/nofuturekid/tasmofleet/internal/devicecmd"
-	"github.com/nofuturekid/tasmofleet/internal/devlock"
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/cmdpolicy"
+	"github.com/hellwand/tasmofleet/internal/devicecmd"
+	"github.com/hellwand/tasmofleet/internal/devlock"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // Why: an update restarts the device twice and a retry again; if those count towards the boot loop

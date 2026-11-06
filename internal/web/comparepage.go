@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/backup"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+	"github.com/hellwand/tasmofleet/internal/backup"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // The backup comparison (design v2 screen "compare", WP P10): two backups of one device, the

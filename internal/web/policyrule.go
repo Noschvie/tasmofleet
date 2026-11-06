@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/policy"
-	"github.com/nofuturekid/tasmofleet/internal/settings"
-	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
-	"github.com/nofuturekid/tasmofleet/internal/tasmota"
-	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/policy"
+	"github.com/hellwand/tasmofleet/internal/settings"
+	"github.com/hellwand/tasmofleet/internal/sysconfig"
+	"github.com/hellwand/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // The rule page (GET /policy/rules/{id}) and the New rule page (GET /policy/rules/new). Both end

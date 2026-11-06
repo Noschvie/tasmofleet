@@ -8,8 +8,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/store"
 )
 
 // fakeTemplates is a device pair of Template readings: what the device has now and what it has after

@@ -5,7 +5,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // idS2Real is an ESP32-S2 as Detect reads it from a device: the shared image

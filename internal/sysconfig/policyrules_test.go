@@ -8,8 +8,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/policy"
-	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/policy"
+	"github.com/hellwand/tasmofleet/internal/store"
 )
 
 type memRules struct {

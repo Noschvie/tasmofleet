@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nofuturekid/tasmofleet/internal/httpx"
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/httpx"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // MQTTPasswords stores how a device's MqttPassword is found (D6 of the 0.20.0 plan; store.SQLite).

@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/events"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/notify"
-	"github.com/nofuturekid/tasmofleet/internal/snapshot"
-	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
+	"github.com/hellwand/tasmofleet/internal/events"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/notify"
+	"github.com/hellwand/tasmofleet/internal/snapshot"
+	"github.com/hellwand/tasmofleet/internal/sysconfig"
 )
 
 // notifyRuntime is a runtime whose webhook is on and points at a local receiver that records

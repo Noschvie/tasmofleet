@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/auth"
-	"github.com/nofuturekid/tasmofleet/internal/changelog"
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/auth"
+	"github.com/hellwand/tasmofleet/internal/changelog"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // Why: news.seen decides the avatar dot. A client may only store a release this binary knows:

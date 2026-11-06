@@ -8,7 +8,7 @@ package web
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import "github.com/nofuturekid/tasmofleet/internal/web/ui"
+import "github.com/hellwand/tasmofleet/internal/web/ui"
 
 // policyHistoryPage is GET /policy/history: the versions by day (quick saves folded into one
 // entry, expandable without JavaScript) and what the picked version changed.

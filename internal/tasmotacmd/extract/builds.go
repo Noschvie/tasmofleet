@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/nofuturekid/tasmofleet/internal/tasmotacmd"
+	"github.com/hellwand/tasmofleet/internal/tasmotacmd"
 )
 
 // Which USE_ defines do the stock builds have? The answer is read from the three configuration

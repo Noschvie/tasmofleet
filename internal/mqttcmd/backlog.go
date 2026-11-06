@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/mqttbus"
-	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/mqttbus"
+	"github.com/hellwand/tasmofleet/internal/tasmota"
 )
 
 // collectBacklog gathers one reply per queued command. Tasmota v16 publishes nothing for the

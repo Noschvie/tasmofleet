@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/auth"
-	"github.com/nofuturekid/tasmofleet/internal/importer"
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/auth"
+	"github.com/hellwand/tasmofleet/internal/importer"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // stepGuard models the step-up (used by the system settings and restore

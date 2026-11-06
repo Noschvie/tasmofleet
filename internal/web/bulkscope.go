@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/transport"
-	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/transport"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // The bulk action pages of design v2 (WP P7, prototype screen "bulk"): one scope page for every

@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // --- restarts and Wi-Fi samples (#325) ---

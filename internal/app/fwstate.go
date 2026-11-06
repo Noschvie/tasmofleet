@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/policy"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/policy"
 )
 
 // firmwareState is what TasmoFleet has seen of the firmware a device runs right now, in memory

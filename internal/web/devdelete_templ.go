@@ -8,7 +8,7 @@ package web
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import "github.com/nofuturekid/tasmofleet/internal/web/ui"
+import "github.com/hellwand/tasmofleet/internal/web/ui"
 
 // deviceDeletePage is the delete page of a device (design v2 screen "devdelete", N2): the device's
 // backups, the choice to keep or delete them, the one acknowledgement and the Delete button. It

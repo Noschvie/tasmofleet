@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/testutil/oidcmock"
+	"github.com/hellwand/tasmofleet/internal/testutil/oidcmock"
 )
 
 // beginOIDCStepUp posts the step-up start and follows the IdP redirect; it

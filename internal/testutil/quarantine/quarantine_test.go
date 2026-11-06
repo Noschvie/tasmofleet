@@ -15,7 +15,7 @@ func TestSkipsUnlessEnabled(t *testing.T) {
 			t.Setenv(Env, tc.env)
 			skipped := true
 			t.Run("inner", func(t *testing.T) {
-				Test(t, "https://github.com/nofuturekid/tasmofleet/issues/0")
+				Test(t, "https://github.com/hellwand/tasmofleet/issues/0")
 				skipped = false
 			})
 			if skipped != tc.skip {

@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/store"
 )
 
 // Why: #130 asks for the device's real hostname in the New devices list; each of the three ways

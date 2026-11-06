@@ -3,14 +3,14 @@ package web
 import (
 	"context"
 	"errors"
-	"github.com/nofuturekid/tasmofleet/internal/devlock"
+	"github.com/hellwand/tasmofleet/internal/devlock"
 	"net/http"
 	"strings"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/settings"
-	"github.com/nofuturekid/tasmofleet/internal/tasmota"
-	"github.com/nofuturekid/tasmofleet/internal/transport"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/settings"
+	"github.com/hellwand/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
 // SettingsService is the part of settings.Service the UI uses.

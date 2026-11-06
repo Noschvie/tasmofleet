@@ -11,7 +11,7 @@ import templruntime "github.com/a-h/templ/runtime"
 import (
 	"strconv"
 
-	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // The Add page (#410): the header and four boxes, no tabs. The CSS is the "Add devices" block of

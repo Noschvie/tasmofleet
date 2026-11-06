@@ -3,7 +3,7 @@ package config
 import (
 	"strings"
 
-	"github.com/nofuturekid/tasmofleet/internal/schedule"
+	"github.com/hellwand/tasmofleet/internal/schedule"
 )
 
 // BackupSchedule is the scheduled device backup as a schedule (#601). A value that does not parse

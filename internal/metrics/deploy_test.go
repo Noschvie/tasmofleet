@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/config"
+	"github.com/hellwand/tasmofleet/internal/config"
 )
 
 // The deploy/ files are examples that people copy; these tests keep them

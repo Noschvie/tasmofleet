@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/schedule"
-	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/schedule"
+	"github.com/hellwand/tasmofleet/internal/sysconfig"
 )
 
 func berlinZone(t *testing.T) *time.Location {

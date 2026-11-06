@@ -7,16 +7,16 @@
 -->
 <Container version="2">
   <Name>tasmofleet</Name>
-  <Repository>ghcr.io/nofuturekid/tasmofleet:latest</Repository>
-  <Registry>https://github.com/nofuturekid/tasmofleet/pkgs/container/tasmofleet</Registry>
+  <Repository>ghcr.io/hellwand/tasmofleet:latest</Repository>
+  <Registry>https://github.com/hellwand/tasmofleet/pkgs/container/tasmofleet</Registry>
   <Network>br0</Network>
   <MyIP></MyIP>
   <Shell>sh</Shell>
   <Privileged>false</Privileged>
-  <Support>https://github.com/nofuturekid/tasmofleet/issues</Support>
-  <Project>https://github.com/nofuturekid/tasmofleet</Project>
-  <Icon>https://raw.githubusercontent.com/nofuturekid/tasmofleet/main/assets/branding/icon-512.png</Icon>
-  <Overview>Tasmota fleet manager: inventory, health, safe OTA updates and backups for Tasmota devices. Serves firmware to devices on plain HTTP port 80 of its own IP; the UI on port 8080 belongs behind a reverse proxy. Ports are not variables: the UI is always container port 8080, the firmware server port 80. Every variable is described in docs/configuration.md (https://github.com/nofuturekid/tasmofleet/blob/main/docs/configuration.md). Only bootstrap settings are variables here; device networks, MQTT, firmware, backups, discovery, policy and single sign-on are configured on the System settings page after the first sign-in. Emergency access (IdP down): sign in with a local admin on the normal login page; reset its password with `tasmofleet user passwd`.</Overview>
+  <Support>https://github.com/hellwand/tasmofleet/issues</Support>
+  <Project>https://github.com/hellwand/tasmofleet</Project>
+  <Icon>https://raw.githubusercontent.com/hellwand/tasmofleet/main/assets/branding/icon-512.png</Icon>
+  <Overview>Tasmota fleet manager: inventory, health, safe OTA updates and backups for Tasmota devices. Serves firmware to devices on plain HTTP port 80 of its own IP; the UI on port 8080 belongs behind a reverse proxy. Ports are not variables: the UI is always container port 8080, the firmware server port 80. Every variable is described in docs/configuration.md (https://github.com/hellwand/tasmofleet/blob/main/docs/configuration.md). Only bootstrap settings are variables here; device networks, MQTT, firmware, backups, discovery, policy and single sign-on are configured on the System settings page after the first sign-in. Emergency access (IdP down): sign in with a local admin on the normal login page; reset its password with `tasmofleet user passwd`.</Overview>
   <Category>HomeAutomation: Tools:</Category>
   <WebUI>[PUBLIC_URL]</WebUI>
   <ExtraParams>--restart=unless-stopped --health-start-period=10s</ExtraParams>

@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // Why (#466): a delete that cascades under a running job leaves the engine's goroutine holding a

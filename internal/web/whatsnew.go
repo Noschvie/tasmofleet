@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/auth"
-	"github.com/nofuturekid/tasmofleet/internal/changelog"
-	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+	"github.com/hellwand/tasmofleet/internal/auth"
+	"github.com/hellwand/tasmofleet/internal/changelog"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // prefNewsSeen is the user preference holding the newest release the user has seen on What's new

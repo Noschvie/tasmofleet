@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/changelog"
-	"github.com/nofuturekid/tasmofleet/internal/config"
+	"github.com/hellwand/tasmofleet/internal/changelog"
+	"github.com/hellwand/tasmofleet/internal/config"
 )
 
 // Why (#124): the UI and the startup log show Version through DisplayVersion; reverting that

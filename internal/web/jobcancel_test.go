@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // Why (GHSA-fmj9-3vh6-rq53): the admin-only kinds (GPIO template transactions, kinds this build does

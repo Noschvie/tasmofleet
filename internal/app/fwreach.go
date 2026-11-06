@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/audit"
-	"github.com/nofuturekid/tasmofleet/internal/clock"
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/audit"
+	"github.com/hellwand/tasmofleet/internal/clock"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // FW reach sources, as audited in device.fwreach.

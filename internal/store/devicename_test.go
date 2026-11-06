@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // Why (#125): a name typed by hand is never overwritten, so the page has to be able to show the

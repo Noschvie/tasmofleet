@@ -63,7 +63,7 @@ func TestAppPortsMatchTheProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := string(b)
-	for _, want := range []string{"\n  8080/tcp: 8080\n", "\n  80/tcp: 8081\n", `webui: "https://[HOST]:[PORT:8080]"`, "\nimage: ghcr.io/nofuturekid/tasmofleet-ha\n"} {
+	for _, want := range []string{"\n  8080/tcp: 8080\n", "\n  80/tcp: 8081\n", `webui: "https://[HOST]:[PORT:8080]"`, "\nimage: ghcr.io/hellwand/tasmofleet-ha\n"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("config.yaml lacks %q", strings.TrimSpace(want))
 		}

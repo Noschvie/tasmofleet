@@ -7,7 +7,7 @@ import (
 	"math/rand/v2"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/clock"
+	"github.com/hellwand/tasmofleet/internal/clock"
 )
 
 const (

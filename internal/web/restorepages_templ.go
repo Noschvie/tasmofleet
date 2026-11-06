@@ -8,7 +8,7 @@ package web
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import "github.com/nofuturekid/tasmofleet/internal/web/ui"
+import "github.com/hellwand/tasmofleet/internal/web/ui"
 
 // restoreConfirm is the confirmation of a restore (design v2 screen "restore"): what will
 // change, the three things that happen, the risks that apply and the one acknowledgement.

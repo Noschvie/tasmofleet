@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 const jobCols = `id, batch_id, device_id, state, stage, plan, policy, skip_backup, attempt, target_release, target_variant, target_build, target_custom,

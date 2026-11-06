@@ -1,6 +1,6 @@
 package policy
 
-import "github.com/nofuturekid/tasmofleet/internal/model"
+import "github.com/hellwand/tasmofleet/internal/model"
 
 // Firmware variants that answer almost every command with "Unknown": the ESP32 safeboot image
 // and the ESP8266 minimal firmware (docs/research/tasmota-minimal-and-ota.md).

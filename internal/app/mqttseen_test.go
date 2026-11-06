@@ -9,10 +9,10 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/inventory"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/secretbox"
-	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/inventory"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/secretbox"
+	"github.com/hellwand/tasmofleet/internal/store"
 )
 
 // racingStore runs hook once, right after the first device read: the moment an

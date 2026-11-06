@@ -10,9 +10,9 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/nofuturekid/tasmofleet/internal/httpx"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/httpx"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/store"
 )
 
 // Setup step 1 (design v2, N12): "Create the first admin account". At first

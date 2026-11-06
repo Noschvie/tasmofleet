@@ -6,7 +6,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/nofuturekid/tasmofleet/internal/tasmotacmd"
+	"github.com/hellwand/tasmofleet/internal/tasmotacmd"
 )
 
 // miniTemplate is cut down from tasmota_template.h: the enum with an ESP32-only member in the

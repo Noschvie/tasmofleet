@@ -3,7 +3,7 @@ package fwselect
 import (
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // TestFamilyFromHardware has one row per §6.1 entry. The chip family is the

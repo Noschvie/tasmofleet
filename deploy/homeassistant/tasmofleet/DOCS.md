@@ -48,7 +48,7 @@ Settings live in TasmoFleet's own database (System settings page), not in this a
 The option is only used on the first start. **After your first sign-in, clear the option**: it stays in
 this app's configuration and therefore in every Home Assistant backup of the app. Everything else is set in
 TasmoFleet itself. The full variable reference is in
-[docs/configuration.md](https://github.com/nofuturekid/tasmofleet/blob/main/docs/configuration.md#home-assistant-app).
+[docs/configuration.md](https://github.com/hellwand/tasmofleet/blob/main/docs/configuration.md#home-assistant-app).
 
 ## Data and backups
 
@@ -68,4 +68,4 @@ unofficial build of the upstream tool there; raw backups and restore work either
 
 ## Support
 
-Issues and questions: <https://github.com/nofuturekid/tasmofleet/issues>.
+Issues and questions: <https://github.com/hellwand/tasmofleet/issues>.

@@ -3,8 +3,8 @@ package app
 import (
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/devicecmd"
-	"github.com/nofuturekid/tasmofleet/internal/devlock"
+	"github.com/hellwand/tasmofleet/internal/devicecmd"
+	"github.com/hellwand/tasmofleet/internal/devlock"
 )
 
 // setupDeviceCmd builds the power toggle and console service. MQTT is used

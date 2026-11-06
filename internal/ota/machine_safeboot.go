@@ -3,7 +3,7 @@ package ota
 import (
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // Push into safeboot (#30). An ESP32 with the safeboot layout has one app partition, so a full

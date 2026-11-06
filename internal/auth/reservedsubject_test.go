@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/testutil/oidcmock"
+	"github.com/hellwand/tasmofleet/internal/testutil/oidcmock"
 )
 
 // Why (#380): "local:<name>" is the subject of a local account, and the audit log, the Users page and

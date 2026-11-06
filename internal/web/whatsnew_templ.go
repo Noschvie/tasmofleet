@@ -11,7 +11,7 @@ import templruntime "github.com/a-h/templ/runtime"
 import (
 	"strconv"
 
-	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // What's new (design v2 screen "whatsnew", N5): this binary's changelog, newest first, with the

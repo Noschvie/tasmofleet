@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 func dev(id model.DeviceID, name string, fam model.ChipFamily, tags ...string) model.Device {

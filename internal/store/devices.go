@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 const deviceCols = `id, name, address, port, mac, topic, full_topic, tags, notes, http_user, http_password,

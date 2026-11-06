@@ -3,7 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
-	"github.com/nofuturekid/tasmofleet/internal/simulator"
+	"github.com/hellwand/tasmofleet/internal/simulator"
 	"io"
 	"net/http"
 	"net/http/httptest"

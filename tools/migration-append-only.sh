@@ -23,7 +23,7 @@ rev=${2:-}
 dir=internal/store/migrations/
 base=$(git tag --list --merged "${rev:-HEAD}" --sort=-v:refname 'v[0-9]*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -vxF -- "$exclude" | head -n 1 || true)
 if [ -z "$base" ]; then
-	echo "migration guard: no release tag vX.Y.Z in the history of ${rev:-HEAD} (shallow clone or no tags? git fetch --tags [--unshallow] https://github.com/nofuturekid/tasmofleet)" >&2
+	echo "migration guard: no release tag vX.Y.Z in the history of ${rev:-HEAD} (shallow clone or no tags? git fetch --tags [--unshallow] https://github.com/hellwand/tasmofleet)" >&2
 	exit 1
 fi
 # --diff-filter=a: every change but an addition fails (M, D, R, and T: a file replaced by a symlink).

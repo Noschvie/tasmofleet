@@ -17,7 +17,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // Errors. Row problems are wrapped in *RowError; match with errors.Is.

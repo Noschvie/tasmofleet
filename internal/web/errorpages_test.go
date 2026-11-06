@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/auth"
+	"github.com/hellwand/tasmofleet/internal/auth"
 )
 
 // Why: Go's plain "404 page not found" has no app shell and no way back; a mistyped or

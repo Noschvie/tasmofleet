@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/config"
+	"github.com/hellwand/tasmofleet/internal/config"
 )
 
 // Why (review F3): the About page lists the configuration; an MQTT URL with

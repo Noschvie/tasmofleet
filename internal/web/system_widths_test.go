@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/auth"
-	"github.com/nofuturekid/tasmofleet/internal/changelog"
-	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+	"github.com/hellwand/tasmofleet/internal/auth"
+	"github.com/hellwand/tasmofleet/internal/changelog"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // #419-S: the System pages fill the content width with column stacks (the card-width rule,

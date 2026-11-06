@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/config"
-	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
+	"github.com/hellwand/tasmofleet/internal/config"
+	"github.com/hellwand/tasmofleet/internal/sysconfig"
 )
 
 // Why (#623, #602): the Reset control is "reset to default on save". The default of the days of a

@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/simulator"
+	"github.com/hellwand/tasmofleet/internal/simulator"
 )
 
 func bootSwitcher(t *testing.T, o Options) BootSwitcher {

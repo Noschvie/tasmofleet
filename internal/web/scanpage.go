@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/discovery"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/netaddr"
-	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
-	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+	"github.com/hellwand/tasmofleet/internal/discovery"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/netaddr"
+	"github.com/hellwand/tasmofleet/internal/sysconfig"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // The network scan results page (/discovery/scan, /discovery/scan/{id}): the ranges field with Scan

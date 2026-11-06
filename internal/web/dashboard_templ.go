@@ -8,7 +8,7 @@ package web
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import "github.com/nofuturekid/tasmofleet/internal/web/ui"
+import "github.com/hellwand/tasmofleet/internal/web/ui"
 
 // dashboardPage is the dashboard (design v2 screen "dashboard" and its "empty" state, WP P1).
 // The body below the header reloads itself from the event stream (TestDashboardIsLive): hx-select

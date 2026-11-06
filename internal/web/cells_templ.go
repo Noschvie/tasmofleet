@@ -12,9 +12,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/stability"
-	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/stability"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // The live cells of the device list: the table rows, the phone cards' parts and the event

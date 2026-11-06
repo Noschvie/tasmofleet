@@ -5,7 +5,7 @@ was 8443 in the zero-configuration TLS mode), and `TASMOFLEET_TLS_SELF_SIGNED` i
 follows the mode). Installs that were saved with an explicit `TASMOFLEET_LISTEN` keep working
 unchanged; installs that relied on the old automatic `:8443` do not. Find yours below.
 
-Background: [#152](https://github.com/nofuturekid/tasmofleet/issues/152). The full variable
+Background: [#152](https://github.com/hellwand/tasmofleet/issues/152). The full variable
 reference is [configuration.md](configuration.md).
 
 ## What happens if you do nothing
@@ -56,7 +56,7 @@ them a self-signed certificate. The port never changes with the mode.
 
 Backups were stored as `backups/<device-id>/<stamp>-<kind>.<ext>`. From 0.18 they are named after the
 device (hostname, else inventory name): `backups/<hostname>/<stamp>_<hostname>.dmp`, `.snapshot.json`
-and `.decoded.json`. Background: [#129](https://github.com/nofuturekid/tasmofleet/issues/129).
+and `.decoded.json`. Background: [#129](https://github.com/hellwand/tasmofleet/issues/129).
 
 **You do not have to do anything.** At every start tasmofleet moves the old files:
 

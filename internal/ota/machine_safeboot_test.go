@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // The push into safeboot (#30) restarts a device on purpose. These rows pin the rules that keep a

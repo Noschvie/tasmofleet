@@ -7,13 +7,13 @@ name: TasmoFleet
 version: "dev"
 slug: tasmofleet
 description: Tasmota fleet manager and safe over-the-air updater
-url: https://github.com/nofuturekid/tasmofleet
+url: https://github.com/hellwand/tasmofleet
 arch:
   - amd64
   - aarch64
 # The root variant of the image (Dockerfile target "ha"): /data of an app belongs to root, which
 # the standard image's non-root user cannot write. One multi-arch name, the tag is `version`.
-image: ghcr.io/nofuturekid/tasmofleet-ha
+image: ghcr.io/hellwand/tasmofleet-ha
 # Not stable until ingress and the Supervisor integration are in (#443, #444).
 stage: experimental
 # The direct UI port (local sign-in, self-signed TLS) is the only way in until ingress (#443), so it

@@ -16,7 +16,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // Errors.

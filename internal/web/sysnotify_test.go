@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/config"
-	"github.com/nofuturekid/tasmofleet/internal/notify"
-	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
+	"github.com/hellwand/tasmofleet/internal/config"
+	"github.com/hellwand/tasmofleet/internal/notify"
+	"github.com/hellwand/tasmofleet/internal/sysconfig"
 )
 
 // fakeNotify records what the test button sends.

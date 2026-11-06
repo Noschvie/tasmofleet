@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/nofuturekid/tasmofleet/internal/inventory"
+	"github.com/hellwand/tasmofleet/internal/inventory"
 )
 
 // candidate is a device claim from the network, already sanitised. Nothing in

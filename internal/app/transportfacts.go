@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/fwselect"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/transport"
+	"github.com/hellwand/tasmofleet/internal/fwselect"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
 // httpFreshFor is how long a successful HTTP call counts as "HTTP works" (D2).

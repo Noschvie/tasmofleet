@@ -12,9 +12,9 @@ import (
 
 	"github.com/a-h/templ"
 
-	"github.com/nofuturekid/tasmofleet/internal/auth"
-	"github.com/nofuturekid/tasmofleet/internal/httpx"
-	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+	"github.com/hellwand/tasmofleet/internal/auth"
+	"github.com/hellwand/tasmofleet/internal/httpx"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // Pages renders the pages of package auth in the UI's look (design v2, WP P9): sign-in, the

@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/config"
+	"github.com/hellwand/tasmofleet/internal/config"
 )
 
 // sendSMTP delivers ev as one e-mail. The whole conversation is bounded by sendTimeout. It

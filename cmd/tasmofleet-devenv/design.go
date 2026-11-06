@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/simulator"
+	"github.com/hellwand/tasmofleet/internal/simulator"
 )
 
 // designFixture is the part of testdata/design/v2-fixture.json the devenv

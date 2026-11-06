@@ -23,11 +23,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/audit"
-	"github.com/nofuturekid/tasmofleet/internal/inventory"
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/tasmoadmin"
-	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/audit"
+	"github.com/hellwand/tasmofleet/internal/inventory"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/tasmoadmin"
+	"github.com/hellwand/tasmofleet/internal/tasmota"
 )
 
 // Action values of Row.Action.

@@ -6,9 +6,9 @@ import (
 	"slices"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/ota"
-	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
-	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/ota"
+	"github.com/hellwand/tasmofleet/internal/sysconfig"
+	"github.com/hellwand/tasmofleet/internal/tasmota"
 )
 
 // watch returns a channel that receives (without blocking the sender) whenever

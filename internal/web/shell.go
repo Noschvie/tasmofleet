@@ -9,7 +9,7 @@ import (
 
 	"github.com/a-h/templ"
 
-	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // prefTheme is the user preference holding the theme choice (D11): "light" or "dark"; no row

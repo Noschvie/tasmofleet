@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // UpsertExisting is Upsert for a device the caller already matched: it never

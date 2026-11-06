@@ -3,7 +3,7 @@
 ## Reporting a vulnerability
 
 Please report vulnerabilities **privately** through GitHub:
-[Report a vulnerability](https://github.com/nofuturekid/tasmofleet/security/advisories/new)
+[Report a vulnerability](https://github.com/hellwand/tasmofleet/security/advisories/new)
 (Security tab, "Report a vulnerability"). Do not open a public issue.
 
 Include the version, how to reproduce it and the impact you see. This is a

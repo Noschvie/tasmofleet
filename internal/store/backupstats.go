@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // BackupUsage is the backup storage of one device (design v2 N9, Settings ->

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // Why (design v2, F5): a phone shows the device list as cards, a wider screen as the table. The

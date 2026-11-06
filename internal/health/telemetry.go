@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // MaxChannels bounds the ENERGY channels kept per device. Payloads are

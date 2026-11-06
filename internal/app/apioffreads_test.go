@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/policy"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/policy"
 )
 
 // #659: the silent fleet reads leave a device alone like an offline one when its HTTP API is off and MQTT cannot

@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/simulator"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/simulator"
 )
 
 // ESP32-S2 has two upstream builds behind one image tag (#85, #88). Without the user's explicit

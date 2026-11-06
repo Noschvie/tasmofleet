@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
+	"github.com/hellwand/tasmofleet/internal/sysconfig"
 )
 
 // Why: automated setups drive the settings with a file. It must round-trip, never

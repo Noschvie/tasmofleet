@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/config"
+	"github.com/hellwand/tasmofleet/internal/config"
 )
 
 // Attempt is one delivery or test and how it went. Detail is safe to show: the HTTP status or

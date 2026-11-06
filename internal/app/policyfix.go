@@ -4,8 +4,8 @@ import (
 	"context"
 	"slices"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/ota"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/ota"
 )
 
 // policyApplier is what the OTA engine uses to run a "Make compliant" job: the

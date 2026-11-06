@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // Why: two restores racing on one device would overwrite each other's

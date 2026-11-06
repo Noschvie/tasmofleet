@@ -18,8 +18,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
-	"github.com/nofuturekid/tasmofleet/internal/netaddr"
+	"github.com/hellwand/tasmofleet/internal/cmdpolicy"
+	"github.com/hellwand/tasmofleet/internal/netaddr"
 )
 
 // Timeout classes (spec §5).

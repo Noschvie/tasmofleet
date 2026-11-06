@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nofuturekid/tasmofleet/internal/audit"
+	"github.com/hellwand/tasmofleet/internal/audit"
 )
 
 // Change is one differing setting between two JSON documents. Path is

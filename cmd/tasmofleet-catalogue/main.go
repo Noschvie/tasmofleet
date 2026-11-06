@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/nofuturekid/tasmofleet/internal/tasmotacmd/extract"
+	"github.com/hellwand/tasmofleet/internal/tasmotacmd/extract"
 )
 
 func main() {

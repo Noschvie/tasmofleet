@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // Helpers of the live cells (cells.templ).

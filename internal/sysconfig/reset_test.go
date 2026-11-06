@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/store"
 )
 
 // resetRows seeds stored settings next to the internal rows that share the table.

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/store"
 )
 
 func fieldState(s *Service, key string) FieldState {

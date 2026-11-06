@@ -14,6 +14,7 @@ always upgrade automatically.
 
 - The GitHub Pages site now serves the website at https://hellwand.github.io/tasmofleet/ and the static demo moved to https://hellwand.github.io/tasmofleet/demo/. Links to the old demo address land on the website, whose demo link leads on (Fixes #566).
 - The README is a landing page (pitch, features, install in a few lines, links to the website and demo). Installation details, backing up, what TasmoFleet changes on devices and development moved to `docs/` (#565)
+- The repository moved to the hellwand organization. The ghcr image is now `ghcr.io/hellwand/tasmofleet`; the old `ghcr.io/nofuturekid/tasmofleet` keeps its existing tags but gets no new ones, so change the image name if you pull from ghcr. The Docker Hub image `nofuturekid/tasmofleet` is unchanged, so Unraid users change nothing (#690)
 
 ## 0.34.0 "Split Rock" (2026-11-06)
 

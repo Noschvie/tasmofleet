@@ -4,9 +4,9 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nofuturekid/tasmofleet/internal/config"
-	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
-	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+	"github.com/hellwand/tasmofleet/internal/config"
+	"github.com/hellwand/tasmofleet/internal/sysconfig"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // The Settings page is nine tabs; each tab is a grid of cards, each card names the settings it

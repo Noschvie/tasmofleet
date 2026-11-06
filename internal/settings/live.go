@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
+	"github.com/hellwand/tasmofleet/internal/cmdpolicy"
 )
 
 // LiveReadable reports whether a setting can be read from a device without

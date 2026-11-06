@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/simulator"
+	"github.com/hellwand/tasmofleet/internal/simulator"
 )
 
 // fsSim starts one simulated device and a client for it. The FileSystem

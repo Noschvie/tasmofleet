@@ -353,7 +353,7 @@ async function crawl(
     );
     s = s.replace(
       /(<body\b[^>]*>)/,
-      `$1\n<div class="demo-banner" role="note">Static demo &mdash; actions are disabled. <a href="https://github.com/nofuturekid/tasmofleet">Source and install</a></div>`,
+      `$1\n<div class="demo-banner" role="note">Static demo &mdash; actions are disabled. <a href="https://github.com/hellwand/tasmofleet">Source and install</a></div>`,
     );
     // a device's own pages show its bare IP (the simulator's Status 5) next to host:port
     s = addr(s, /^\/devices\/\d+/.test(key) ? /127\.0\.0\.1:(\d{2,5})/.exec(html)?.[1] : undefined);

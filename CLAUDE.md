@@ -303,7 +303,7 @@ Renovate keeps both current. Reusable workflows take their secrets by name (`sec
   model that actually wrote the change (e.g. `Claude Sonnet 5.5` for a Sonnet subagent).
   No session links or other URLs to chat sessions.
 - Commit only your own files. `make check` must pass before each commit.
-- Repository: `https://github.com/nofuturekid/tasmofleet` (HTTPS remotes).
+- Repository: `https://github.com/hellwand/tasmofleet` (HTTPS remotes).
 - No secrets in the repository, not even in tests: use obviously fake values.
 - **Migrations are append-only since tag v0.0.1.** Never edit a merged file in
   `internal/store/migrations/`; add `NNNN_name.sql`. `make migration-append-only` (part of `make check`, job
@@ -368,7 +368,7 @@ Renovate keeps both current. Reusable workflows take their secrets by name (`sec
     is regenerated on Squid's schedule and can carry an old template revision for days (#423: the 0.24.0
     template still linked two screenshots that the 0.25.0 media refresh had removed). From the next
     release on, the template's screenshots link tag-pinned URLs
-    (`https://raw.githubusercontent.com/nofuturekid/tasmofleet/v<X.Y.Z>/docs/media/...`), so later
+    (`https://raw.githubusercontent.com/hellwand/tasmofleet/v<X.Y.Z>/docs/media/...`), so later
     media changes cannot break an old feed entry. `docs/media/transaction.png` and
     `docs/media/device-dark.png` stay on `main` for the 0.24.0 revision even though no doc links them.
 

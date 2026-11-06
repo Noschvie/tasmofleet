@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/config"
+	"github.com/hellwand/tasmofleet/internal/config"
 )
 
 var t0 = time.Date(2026, 10, 31, 3, 12, 7, 0, time.UTC)

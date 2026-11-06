@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/netaddr"
-	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/netaddr"
+	"github.com/hellwand/tasmofleet/internal/tasmota"
 )
 
 // UpLayout reads the upload layout from GET /up (read-only). The device client must be the

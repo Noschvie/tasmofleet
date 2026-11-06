@@ -1,4 +1,4 @@
-module github.com/nofuturekid/tasmofleet
+module github.com/hellwand/tasmofleet
 
 go 1.27
 

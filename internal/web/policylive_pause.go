@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/nofuturekid/tasmofleet/internal/audit"
-	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
+	"github.com/hellwand/tasmofleet/internal/audit"
+	"github.com/hellwand/tasmofleet/internal/sysconfig"
 )
 
 // PolicyLivePause is the pause of the automatic policy live check (design v2,

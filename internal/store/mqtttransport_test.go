@@ -7,8 +7,8 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/secretbox"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/secretbox"
 )
 
 // Why: live databases hold devices, finished and queued jobs and restores. After the upgrade they

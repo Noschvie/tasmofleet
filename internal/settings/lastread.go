@@ -5,7 +5,7 @@ import (
 	"maps"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // StaleAfter is how old a remembered reading may be before the pages mark it as stale instead of

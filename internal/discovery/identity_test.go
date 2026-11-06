@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // fakeResolver answers LookupNetIP from a table; no real DNS in tests.

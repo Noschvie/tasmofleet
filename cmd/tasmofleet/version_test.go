@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/changelog"
+	"github.com/hellwand/tasmofleet/internal/changelog"
 )
 
 // Why (#124): `tasmofleet version` is what people paste into bug reports; it must say the same

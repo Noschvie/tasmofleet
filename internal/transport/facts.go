@@ -10,7 +10,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // HTTPStateKind is whether tasmofleet's HTTP API calls to the device work.

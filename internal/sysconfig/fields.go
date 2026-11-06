@@ -18,8 +18,8 @@ package sysconfig
 import (
 	"slices"
 
-	"github.com/nofuturekid/tasmofleet/internal/config"
-	"github.com/nofuturekid/tasmofleet/internal/schedule"
+	"github.com/hellwand/tasmofleet/internal/config"
+	"github.com/hellwand/tasmofleet/internal/schedule"
 )
 
 // Mode says how a change takes effect.

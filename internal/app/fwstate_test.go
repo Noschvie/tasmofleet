@@ -2,16 +2,16 @@ package app
 
 import (
 	"context"
-	"github.com/nofuturekid/tasmofleet/internal/devlock"
+	"github.com/hellwand/tasmofleet/internal/devlock"
 	"log/slog"
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/mqttbus"
-	"github.com/nofuturekid/tasmofleet/internal/policy"
-	"github.com/nofuturekid/tasmofleet/internal/simulator"
-	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/mqttbus"
+	"github.com/hellwand/tasmofleet/internal/policy"
+	"github.com/hellwand/tasmofleet/internal/simulator"
+	"github.com/hellwand/tasmofleet/internal/store"
 )
 
 // Why (#558): the reporter's device announces "16.0.0(safeboot)single-core". The tag decides, not

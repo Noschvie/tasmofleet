@@ -9,7 +9,7 @@ import (
 
 	"github.com/a-h/templ"
 
-	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
+	"github.com/hellwand/tasmofleet/internal/sysconfig"
 )
 
 // SetupService backs the first-run setup. Optional: without it there is no setup page.

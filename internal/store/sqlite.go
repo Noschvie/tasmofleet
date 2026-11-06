@@ -20,7 +20,7 @@ import (
 	"modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
 
-	"github.com/nofuturekid/tasmofleet/internal/secretbox"
+	"github.com/hellwand/tasmofleet/internal/secretbox"
 )
 
 // Migrations are applied in lexical file order; PRAGMA user_version holds

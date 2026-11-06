@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/store"
 )
 
 // FoldWindow is the longest gap between two saves of the same actor that still

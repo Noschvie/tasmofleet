@@ -3,8 +3,8 @@ package app
 import (
 	"context"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/transport"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
 // webFacts is what the web UI reads: the router's own transport facts (so the device page shows what

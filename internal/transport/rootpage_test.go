@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/mqttcmd"
-	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/mqttcmd"
+	"github.com/hellwand/tasmofleet/internal/tasmota"
 )
 
 // infoMQTT is the fake channel with the INFO1 cache of the real one.

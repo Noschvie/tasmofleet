@@ -17,7 +17,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
+	"github.com/hellwand/tasmofleet/internal/cmdpolicy"
 )
 
 // Kind selects the form control of a field.

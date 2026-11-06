@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // Why: a string sort puts 15.10.0 before 15.9.0; fleets are updated by version.

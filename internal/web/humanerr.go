@@ -3,8 +3,8 @@ package web
 import (
 	"errors"
 
-	"github.com/nofuturekid/tasmofleet/internal/backup"
-	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/backup"
+	"github.com/hellwand/tasmofleet/internal/tasmota"
 )
 
 // deviceProblem is the sentence for a failed call to a device. Go error chains

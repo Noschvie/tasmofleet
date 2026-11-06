@@ -3,7 +3,7 @@ package changelog
 import (
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/firmware"
+	"github.com/hellwand/tasmofleet/internal/firmware"
 )
 
 const sample = `# Changelog

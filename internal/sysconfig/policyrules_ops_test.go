@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/policy"
+	"github.com/hellwand/tasmofleet/internal/policy"
 )
 
 func seedRules(t *testing.T, r *Rules, specs ...RuleSpec) int64 {

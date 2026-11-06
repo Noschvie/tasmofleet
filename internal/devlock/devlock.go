@@ -9,7 +9,7 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // Locks is a set of per-device locks. The zero value is not usable; use New.

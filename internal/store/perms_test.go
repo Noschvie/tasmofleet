@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/secretbox"
+	"github.com/hellwand/tasmofleet/internal/secretbox"
 )
 
 func modeOf(t *testing.T, p string) os.FileMode {

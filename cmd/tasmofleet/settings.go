@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/nofuturekid/tasmofleet/internal/app"
+	"github.com/hellwand/tasmofleet/internal/app"
 )
 
 const settingsUsage = `usage:

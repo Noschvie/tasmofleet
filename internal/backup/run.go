@@ -7,8 +7,8 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/tasmota"
 )
 
 // Run says why a backup is taken and how it is stored. Callers attach it to

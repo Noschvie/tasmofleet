@@ -7,8 +7,8 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"github.com/nofuturekid/tasmofleet/internal/httpx"
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/httpx"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // OIDC step-up: an OIDC admin proves presence again by authenticating at the

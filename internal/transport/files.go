@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/tasmota"
 )
 
 // ErrFilesNeedHTTP: the file system of a device cannot be reached over MQTT (Tasmota has no file

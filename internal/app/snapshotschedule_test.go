@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/snapshot"
-	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/snapshot"
+	"github.com/hellwand/tasmofleet/internal/store"
 )
 
 // snapSched is the snapshot schedule on a real store and the real scheduled snapshot, with a clock

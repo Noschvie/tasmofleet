@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/auth"
+	"github.com/hellwand/tasmofleet/internal/auth"
 )
 
 // Why: the sign-in, forced-change and denial pages are rendered outside the app

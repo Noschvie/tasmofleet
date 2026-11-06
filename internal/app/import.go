@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"unicode"
 
-	"github.com/nofuturekid/tasmofleet/internal/importer"
+	"github.com/hellwand/tasmofleet/internal/importer"
 )
 
 // ImportOptions control ImportTasmoAdmin.

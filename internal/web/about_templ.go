@@ -11,7 +11,7 @@ import templruntime "github.com/a-h/templ/runtime"
 import (
 	"strconv"
 
-	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // aboutView is the About page (design v2 screen "about", the templ pilot of WP F3): the version
@@ -39,7 +39,7 @@ type aboutSetting struct {
 }
 
 const (
-	sourceURL  = "https://github.com/nofuturekid/tasmofleet"
+	sourceURL  = "https://github.com/hellwand/tasmofleet"
 	licenceURL = sourceURL + "/blob/main/LICENSE"
 )
 

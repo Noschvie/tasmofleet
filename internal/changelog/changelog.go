@@ -10,8 +10,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/nofuturekid/tasmofleet"
-	"github.com/nofuturekid/tasmofleet/internal/firmware"
+	"github.com/hellwand/tasmofleet"
+	"github.com/hellwand/tasmofleet/internal/firmware"
 )
 
 // Unreleased is the version heading of changes not yet in a release.

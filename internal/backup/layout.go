@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // File layout (0.18): <DataDir>/backups/<dir>/<stamp>_<host>.<kind>, where

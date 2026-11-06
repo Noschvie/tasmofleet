@@ -5,7 +5,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        For open-ended ideas, [Discussions (Ideas)](https://github.com/nofuturekid/tasmofleet/discussions/categories/ideas) is the better start.
+        For open-ended ideas, [Discussions (Ideas)](https://github.com/hellwand/tasmofleet/discussions/categories/ideas) is the better start.
   - type: textarea
     id: problem
     attributes:

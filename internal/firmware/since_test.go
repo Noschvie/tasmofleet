@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 func devOn(v string) model.Device { return model.Device{Identity: model.Identity{Version: v}} }

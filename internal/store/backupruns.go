@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // BackupRunStore is implemented by *SQLite next to BackupStore: the record of the scheduled

@@ -8,7 +8,7 @@ package web
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import "github.com/nofuturekid/tasmofleet/internal/web/ui"
+import "github.com/hellwand/tasmofleet/internal/web/ui"
 
 // replaceTab is the Replace device tab (design v2 screen "device", tab "replace"). The choice
 // of the new device is a GET form to the preview; the preview adds what moves and the one

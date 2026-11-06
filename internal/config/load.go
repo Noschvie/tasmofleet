@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/schedule"
+	"github.com/hellwand/tasmofleet/internal/schedule"
 )
 
 // Prefix is prepended to every key in the environment and the file.

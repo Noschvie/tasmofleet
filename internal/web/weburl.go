@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nofuturekid/tasmofleet/internal/netaddr"
+	"github.com/hellwand/tasmofleet/internal/netaddr"
 )
 
 // deviceLink is where the "open the device's own web page" link points and

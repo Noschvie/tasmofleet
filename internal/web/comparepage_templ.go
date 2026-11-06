@@ -8,7 +8,7 @@ package web
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-import "github.com/nofuturekid/tasmofleet/internal/web/ui"
+import "github.com/hellwand/tasmofleet/internal/web/ui"
 
 // comparePage is the comparison (design v2 screen "compare"). The controls are one GET form;
 // form.js submits it when a control changes, the Compare button does without JavaScript.

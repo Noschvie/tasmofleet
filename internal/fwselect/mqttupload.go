@@ -3,7 +3,7 @@ package fwselect
 import (
 	"fmt"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // UpLayoutHint is what an HTTP read of the device's /up page showed about its flash layout (#30).

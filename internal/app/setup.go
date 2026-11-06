@@ -6,7 +6,7 @@ import (
 	"net/netip"
 	"slices"
 
-	"github.com/nofuturekid/tasmofleet/internal/sysconfig"
+	"github.com/hellwand/tasmofleet/internal/sysconfig"
 )
 
 // setupService backs the first-run setup page.

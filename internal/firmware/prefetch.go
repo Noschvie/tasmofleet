@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/clock"
+	"github.com/hellwand/tasmofleet/internal/clock"
 )
 
 // Item states of a prefetch run.

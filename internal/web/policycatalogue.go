@@ -8,10 +8,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
-	"github.com/nofuturekid/tasmofleet/internal/settings"
-	"github.com/nofuturekid/tasmofleet/internal/tasmotacmd"
-	"github.com/nofuturekid/tasmofleet/internal/web/ui"
+	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/settings"
+	"github.com/hellwand/tasmofleet/internal/tasmotacmd"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // The command field of the rule editor learns from the Tasmota command catalogues (#269): what to

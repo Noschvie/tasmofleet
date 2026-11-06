@@ -46,7 +46,7 @@ linters:
         model-is-a-leaf:
           files: ["**/internal/model/*.go"]
           deny:
-            - pkg: github.com/nofuturekid/tasmofleet/internal
+            - pkg: github.com/hellwand/tasmofleet/internal
               desc: model imports only the standard library
         pure-decision-packages:
           files:
@@ -88,9 +88,9 @@ linters:
               "!**/internal/simulator/**",
             ]
           deny:
-            - pkg: github.com/nofuturekid/tasmofleet/internal/testutil
+            - pkg: github.com/hellwand/tasmofleet/internal/testutil
               desc: test helpers stay out of production code
-            - pkg: github.com/nofuturekid/tasmofleet/internal/simulator
+            - pkg: github.com/hellwand/tasmofleet/internal/simulator
               desc: the simulator stays out of production code
             - pkg: github.com/mochi-mqtt/server/v2
               desc: the embedded broker is for tests and devenv only

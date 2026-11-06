@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/model"
 )
 
 // ErrProposalLimit is returned by UpsertProposal when the table already holds
