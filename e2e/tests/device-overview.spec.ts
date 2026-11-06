@@ -292,6 +292,41 @@ test("a device with its HTTP API off is not shown as offline", { tag: "@core" },
   }
 });
 
+// #659: the live refresh never swaps the Identity card, so Refresh identity followed the state at page load only.
+// It now follows the live state both ways: disabled with the reason once the refusal is found, enabled again when the
+// live region stops saying so (the API answers), without a reload.
+test("Refresh identity follows the live refusal both ways, without a reload", { tag: "@core" }, async ({ page }) => {
+  await openDevice(page, "ov-api-flip");
+  await page.evaluate(() => ((window as unknown as { __kept: number }).__kept = 1));
+  const refresh = page.getByRole("button", { name: "Refresh identity" });
+  await expect(refresh).toBeEnabled();
+  await control("/device/ov-api-flip/api-off");
+  await expect(page.locator("[data-tile=reach]")).toContainText("HTTP API off", { timeout: 60_000 });
+  await expect(refresh).toBeDisabled();
+  await expect(refresh).toHaveAttribute("title", /HTTP API off \(SetOption128 0\)\. Turn the device's HTTP API on/);
+  // The API coming back is found by the health tracker only minutes later (a refused device is polled slowly), so the
+  // way back is driven by the live region itself: what the server renders into it when it no longer says "off".
+  const setReason = (reason: string | null) =>
+    page.evaluate((r) => {
+      const live = document.getElementById("devlive")!;
+      if (r === null) live.removeAttribute("data-reads-off");
+      else live.setAttribute("data-reads-off", r);
+      document.dispatchEvent(new Event("htmx:afterSettle", { bubbles: true }));
+    }, reason);
+  const reason = (await page.locator("#devlive").getAttribute("data-reads-off"))!;
+  expect(reason).toContain("HTTP API off (SetOption128 0)");
+  await expect(async () => {
+    // a live refresh may put the real attribute back between two steps: try again
+    await setReason(null);
+    await expect(refresh).toBeEnabled({ timeout: 1000 });
+  }).toPass({ timeout: 15_000 });
+  await expect(refresh).not.toHaveAttribute("title", /.+/);
+  await expect(refresh).not.toHaveAttribute("data-refused", /.*/);
+  await setReason(reason);
+  await expect(refresh).toBeDisabled();
+  expect(await page.evaluate(() => (window as unknown as { __kept: number }).__kept)).toBe(1); // same document: no reload
+});
+
 // The refusal is contact, not a failure: the header must not turn Offline after the polls that follow (the 3rd failed
 // poll used to flip it), and the Back up button names the reason.
 test("a device with its HTTP API off stays Online after more polls", { tag: "@full" }, async ({ page }) => {

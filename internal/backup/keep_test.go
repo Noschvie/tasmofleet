@@ -181,6 +181,15 @@ func TestAttemptReasonNeverEchoesTheError(t *testing.T) {
 	}
 }
 
+// Why (#659): a device whose HTTP API is off did answer; the history must say what the tile and the buttons say
+// (name and fix), not "The device did not answer". ErrHTTPAPIRefused wraps ErrUnreachable, so the order of the cases matters.
+func TestAttemptReasonNamesTheHTTPAPIOff(t *testing.T) {
+	r := AttemptReason(fmt.Errorf("backup: download config: %w", tasmota.ErrHTTPAPIRefused))
+	if r != tasmota.APIOffName+". "+tasmota.APIOffFix {
+		t.Errorf("got %q", r)
+	}
+}
+
 // Why: a bulk backup with "Keep these backups" and a label must store the
 // whole run kept and labelled, and the list must be able to say what started
 // each backup ("Automatic, before update to 14.3.0").

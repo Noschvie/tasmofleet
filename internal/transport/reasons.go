@@ -1,6 +1,10 @@
 package transport
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/nofuturekid/tasmofleet/internal/tasmota"
+)
 
 // Path is one way to do one thing with a device.
 type Path string
@@ -30,6 +34,10 @@ const (
 	ActBackup   Action = "backup"
 	ActRestore  Action = "restore"
 	ActUpdate   Action = "update"
+	// ActJob is not answered by Choose: a command that starts a firmware upgrade or a restore (Upgrade or
+	// WebGetConfig with an argument) is never sent over MQTT (the router's job rule), so it needs HTTP and
+	// has no path while HTTP fails.
+	ActJob Action = "job"
 )
 
 // Reason is one English sentence for one action, shown verbatim in the UI and in errors.
@@ -68,7 +76,7 @@ func (f HTTPState) failText() string {
 	case HTTPFailOutside:
 		return "the device's address is outside DEVICE_NETWORKS"
 	case HTTPFailAPIRefused:
-		return "the device refuses the web API (SetOption128)"
+		return tasmota.APIOffName
 	case HTTPFailAuth:
 		return "the device refused the web password"
 	case HTTPFailUnreachable:

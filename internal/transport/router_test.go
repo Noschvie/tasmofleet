@@ -297,6 +297,43 @@ func TestUpgradeAndRestoreCommandsOnlyGoOverMQTTPinned(t *testing.T) {
 	}
 }
 
+// Why (#659): the console and bulk gates ask CommandAction what a command needs, and must agree with what the
+// router does with it: a command the gate calls a job is never published over MQTT, one it calls a write is (when
+// HTTP fails and MQTT is usable). A second copy of the rule in the web layer let `Upgrade <url>` through the console
+// of a device only MQTT could write to, where it failed with the refusal.
+func TestCommandActionIsWhatTheRouterDoes(t *testing.T) {
+	for _, c := range []struct {
+		cmd  string
+		want Action
+	}{
+		{"Upgrade 1", ActJob},
+		{"upgrade http://x/y", ActJob},
+		{"WebGetConfig http://x/y", ActJob},
+		{"Backlog Upgrade 1", ActJob},
+		{"Backlog OtaUrl http://x/y; Upgrade 1", ActJob},
+		{"Upgrade", ActWrites}, // the bare probe starts nothing
+		{"OtaUrl http://x/y", ActWrites},
+		{"Power1 ON", ActWrites},
+		{"Status 2", ActCommands},
+		{"TelePeriod", ActCommands},
+		{"NoSuchCommand 1", ActWrites}, // not classified: counts as a write
+	} {
+		if got := CommandAction(c.cmd); got != c.want {
+			t.Errorf("CommandAction(%q) = %s, want %s", c.cmd, got, c.want)
+			continue
+		}
+		g := newRig(t)
+		g.mem.Fail(7, HTTPFailAPIRefused)
+		g.http.err = tasmota.ErrHTTPAPIRefused
+		_, _ = g.r.Command(t.Context(), g.target(), c.cmd)
+		if published := g.mq.n() > 0; published && c.want == ActJob {
+			t.Errorf("%q is a job but the router published it over MQTT", c.cmd)
+		} else if !published && c.want == ActWrites && c.cmd == "Power1 ON" {
+			t.Errorf("%q is a write MQTT can carry but the router did not publish it", c.cmd)
+		}
+	}
+}
+
 func TestSecretReplyIsScrubbedOverMQTT(t *testing.T) {
 	// Why (#274): WebPassword and MqttPassword echo the new password in their RESULT; over MQTT it
 	// travels on stat/<t>/RESULT and must be masked before anything stores or shows it.

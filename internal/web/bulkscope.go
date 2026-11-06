@@ -124,7 +124,7 @@ func (h *handler) bulkScope(r *http.Request, kind bulkKind, self, run string) (b
 	}
 	act := bulkAction(kind)
 	if cmd := r.PostFormValue("command"); kind == bulkCmd && strings.TrimSpace(cmd) != "" {
-		act = commandAction(cmd) // a read needs only a way to read, not the strict rule of writes
+		act = transport.CommandAction(cmd) // a read needs only a way to read, not the strict rule of writes
 	} else if kind == bulkCmd {
 		act = transport.ActCommands // no command typed yet: the scope page does not judge by the write rule
 	}

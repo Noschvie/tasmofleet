@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Fixed
+
+- Reachability: the leftovers of a device whose HTTP API is off (SetOption128 0) and which MQTT cannot serve (#659). `Upgrade <url>` and `WebGetConfig <url>` typed in the console or sent in bulk are refused up front for such a device, by the router's own rule that jobs never go over MQTT, instead of failing with the refusal. Refresh identity is disabled when the refusal is found while the page is open, and enabled again when it ends, without a reload. The GPIO templates refresh, the policy check and the group-topic reader leave such a device alone like an offline one, without an error. One wording everywhere: restore, Replace, the update retry, the import report, the backup history, job notes and logs say "HTTP API off (SetOption128 0)" with the fix. A "no path" for an update no longer advises an upload over MQTT, which no page offers. Cosmetic: Restart's disabled state no longer points at the "Back up:" note, its refusal page is titled "Restart not sent", a refused relay switch shows the reason once, and the text no longer breaks inside "(SetOption128 0)" on a phone
+
 ## 0.33.0 "Dondra Head" (2026-11-06)
 
 ### Upgrade notes

@@ -56,8 +56,9 @@ func TestClientNamesTheRefererRefusal(t *testing.T) {
 	if !errors.Is(err, ErrHTTPAPIRefused) || !errors.Is(err, ErrUnreachable) {
 		t.Fatalf("Command: want ErrHTTPAPIRefused wrapping ErrUnreachable, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "SetOption128 1") {
-		t.Errorf("the message must tell the fix: %v", err)
+	// the text reaches job notes and logs: the one wording of the tile and the buttons, with the fix (#659)
+	if !strings.Contains(err.Error(), APIOffName) || !strings.Contains(err.Error(), APIOffFix) || strings.Contains(err.Error(), "likely refuses") {
+		t.Errorf("the message must name the cause and tell the fix: %v", err)
 	}
 }
 

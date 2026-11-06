@@ -83,7 +83,7 @@ templ deviceHead(t deviceTabs, attrs templ.Attributes) {
 				}
 			</div>
 			if t.backupNote() != "" {
-				<p class="devcard-note" id="devhd-why">Back up: { t.backupNote() }</p>
+				<p class="devcard-note" id="devhd-why">Back up: @keepTogether(t.backupNote())</p>
 			}
 		</div>
 		<div class="devhd-acts">
@@ -97,7 +97,6 @@ templ deviceHead(t deviceTabs, attrs templ.Attributes) {
 						disabled
 						title={ t.writesAPIOff() }
 						aria-disabled="true"
-						aria-describedby="devhd-why"
 					>Restart</button>
 				} else {
 					@ui.Button(ui.Btn{Label: "Restart", Href: t.Base + devPath(t.ID, "/restart"), Dialog: "dlg-restart"})
@@ -218,6 +217,18 @@ templ deviceLiveParts(p deviceOverview) {
 	@deviceOffSlot(p.Tabs, templ.Attributes{"hx-swap-oob": "true"})
 }
 
+// keepTogether writes s with the "(SetOption128 N)" of the HTTP API wording kept on one line: at phone width
+// the text must not break inside it (#659).
+templ keepTogether(s string) {
+	for _, part := range keepParts(s) {
+		if part.Keep {
+			<span class="nowrap">{ part.Text }</span>
+		} else {
+			{ part.Text }
+		}
+	}
+}
+
 // liveRegion is the tile row and the relay box. It asks for itself again when this device
 // changes state or finishes a command (devstate-N, devjob-N), when its readings arrive
 // (power-N, uptime-N, at most every 10 s) and when the stream was missed (resync, #160).
@@ -226,6 +237,9 @@ templ liveRegion(l liveView) {
 		id="devlive"
 		class="devlive"
 		data-off?={ l.Off }
+		if l.ReadsOff != "" {
+			data-reads-off={ l.ReadsOff }
+		}
 		hx-get={ l.Base + devPath(l.ID, "/live") + "?act=" + l.ActSig }
 		hx-trigger={ "sse:devstate-" + devID(l.ID) + " throttle:2s, sse:devjob-" + devID(l.ID) + " throttle:2s, sse:power-" + devID(l.ID) + " throttle:10s, sse:uptime-" + devID(l.ID) + " throttle:10s, sse:resync" }
 		hx-swap="outerHTML"
@@ -326,10 +340,10 @@ templ relayBoxView(l liveView) {
 			}
 		</div>
 		if l.Box.Why != "" {
-			<p class="devcard-note" id="dev-relays-why">Switching is disabled: { l.Box.Why }</p>
+			<p class="devcard-note" id="dev-relays-why">Switching is disabled: @keepTogether(l.Box.Why)</p>
 		}
 		if l.Box.Err != "" {
-			<p class="error" role="alert">{ l.Box.Err }</p>
+			<p class="error" role="alert">@keepTogether(l.Box.Err)</p>
 		}
 	</section>
 }

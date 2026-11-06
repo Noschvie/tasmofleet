@@ -581,6 +581,8 @@ func (a *runtime) apiOffNoPath(ctx context.Context, id model.DeviceID, h model.H
 		return p.Restore == transport.None
 	case transport.ActUpdate:
 		return p.Update == transport.None
+	case transport.ActJob: // never sent over MQTT: no path while the HTTP API is off
+		return true
 	}
 	return false
 }

@@ -562,6 +562,7 @@ func (h *handler) overviewOf(r *http.Request, v view, d model.Device, just *rela
 	off := p.Tabs.offline() // an update silences the device on purpose: that is not "offline"
 	p.Live = liveView{ActSig: p.Activity.Sig, ID: d.ID, Base: v.Base, CSRF: v.CSRF, Off: off, Tiles: tilesOf(in),
 		Box: relayBoxOf(hl, tele, d.RelayNames, h.d.DeviceCmd != nil && !off && p.Updating == nil && p.Tabs.writesAPIOff() == "")}
+	p.Live.ReadsOff = p.Tabs.readsAPIOff()
 	if p.Live.Box != nil {
 		p.Live.Box.Why = p.Tabs.writesAPIOff()
 	}
@@ -628,7 +629,7 @@ func (h *handler) powerLive(w http.ResponseWriter, r *http.Request, d model.Devi
 		h.fail(w, r, err)
 		return
 	}
-	if p.Live.Box != nil {
+	if p.Live.Box != nil && failure != p.Live.Box.Why { // the note already says it: once is enough
 		p.Live.Box.Err = failure
 	}
 	h.component(w, r, http.StatusOK, deviceLiveParts(p))

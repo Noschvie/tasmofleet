@@ -57,6 +57,15 @@ func (a *runtime) policyReadSkipped(id model.DeviceID) bool {
 	return a.readSkipped(a.bgContext, id, a.tracker.Get(id))
 }
 
+// apiOffRead says the device's HTTP API is off and nothing else (MQTT) can read it: a silent fleet read leaves it
+// alone like an offline device, no error (#659). False when the health or the facts are not known.
+func (a *runtime) apiOffRead(id model.DeviceID) bool {
+	if a.tracker == nil {
+		return false
+	}
+	return a.apiOffNoPath(a.bgContext, id, a.tracker.Get(id), transport.ActCommands)
+}
+
 // readSkipped is policyReadSkipped for a device whose health is known.
 func (a *runtime) readSkipped(ctx context.Context, id model.DeviceID, h model.Health) bool {
 	return h.State == model.HealthOffline || a.apiOffNoPath(ctx, id, h, transport.ActCommands)

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/tasmota"
 )
 
 var t0 = time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
@@ -403,36 +404,52 @@ func TestUpdatePushOverMQTT(t *testing.T) {
 	})
 }
 
-// Why: a pull request that ends in None tells the person how the experimental upload would
-// rescue it, but only when it really would.
-func TestNoneHintsAtMQTTUpload(t *testing.T) {
-	const hint = "choose Push where possible and allow upload over MQTT (experimental)"
+// Why (#659): no page offers the upload over MQTT (#262 was not shipped), so a None must not advise "choose Push
+// where possible and allow upload over MQTT": it would send the person looking for a checkbox that does not exist,
+// even where the upload would have rescued the update.
+func TestNoneDoesNotAdviseAnUploadNoPageOffers(t *testing.T) {
 	f := httpDown(base())
 	f.FWReach = model.FWReach{State: model.FWReachNo, At: t0.Add(-time.Hour)}
 	f.Request.MQTTUploadFit = MQTTFit{OK: true}
-	p := Choose(f)
-	if p.Update != None || !strings.HasSuffix(p.Reason(ActUpdate), hint) {
-		t.Fatalf("pull: %s %q", p.Update, p.Reason(ActUpdate))
-	}
-	// push without the checkbox says the same
-	g := push(f, PushHTTP, false)
-	if r := Choose(g).Reason(ActUpdate); !strings.HasSuffix(r, hint) {
-		t.Errorf("push without checkbox: %q", r)
-	}
-	// does not fit: no hint, it would not help
-	f.Request.MQTTUploadFit = MQTTFit{OK: false, NeedKB: 3000, RoomKB: 1000}
-	if r := Choose(f).Reason(ActUpdate); strings.Contains(r, hint) {
-		t.Errorf("hint although the image does not fit: %q", r)
-	}
-	// no password: no hint
-	f.Request.MQTTUploadFit = MQTTFit{OK: true}
-	f.Password = Password{}
-	if r := Choose(f).Reason(ActUpdate); strings.Contains(r, hint) {
-		t.Errorf("hint without password: %q", r)
+	for name, g := range map[string]Facts{"pull": f, "push without checkbox": push(f, PushHTTP, false)} {
+		p := Choose(g)
+		if p.Update != None {
+			t.Fatalf("%s: got %s, want none", name, p.Update)
+		}
+		if r := p.Reason(ActUpdate); strings.Contains(r, "allow upload over MQTT") || strings.Contains(r, "choose Push") {
+			t.Errorf("%s: advises a path that does not exist: %q", name, r)
+		}
 	}
 	// with the checkbox ticked and the upload possible there is no None at all
 	if p := Choose(push(httpDown(base()), PushHTTP, true)); p.Update != PushMQTT {
 		t.Fatalf("got %s", p.Update)
+	}
+}
+
+// Why (#659): restore, Replace and the update retry show Choose's sentences as they are. For a device whose HTTP API
+// is off they must say what the tile and the buttons say (HTTP API off (SetOption128 0)) and how to fix it, not a
+// second wording ("refuses the web API (SetOption128)") without the fix. An action that still has a way (reads over
+// MQTT) carries no fix: nothing is wrong with it.
+func TestAPIOffReasonsUseTheOneWordingAndTheFix(t *testing.T) {
+	f := base()
+	f.HTTP = HTTPState{State: HTTPFailing, Kind: HTTPFailAPIRefused, Since: t0.Add(-time.Hour)}
+	f.MQTT.Ours = false // MQTT cannot serve it
+	p := Choose(f)
+	for _, a := range []Action{ActCommands, ActWrites, ActBackup, ActRestore, ActUpdate} {
+		r := p.Reason(a)
+		if !strings.Contains(r, tasmota.APIOffName) || !strings.HasSuffix(r, tasmota.APIOffFix) || strings.Contains(r, "refuses the web API") {
+			t.Errorf("%s: %q", a, r)
+		}
+		if strings.Count(r, tasmota.APIOffFix) != 1 {
+			t.Errorf("%s says the fix more than once: %q", a, r)
+		}
+	}
+	// reads still have a way over MQTT: the sentence names the cause and does not repeat the fix
+	f = base()
+	f.HTTP = HTTPState{State: HTTPFailing, Kind: HTTPFailAPIRefused, Since: t0.Add(-time.Hour)}
+	p = Choose(f)
+	if r := p.Reason(ActCommands); p.Commands != MQTT || strings.Contains(r, tasmota.APIOffFix) || !strings.Contains(r, tasmota.APIOffName) {
+		t.Errorf("reads over MQTT: %s %q", p.Commands, r)
 	}
 }
 

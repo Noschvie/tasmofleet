@@ -104,6 +104,9 @@ func overviewDevices() []simulator.DeviceSpec {
 		// An HTTP-only plug whose HTTP API the tests switch off at run time (POST /device/ov-api-off/api-off, #447).
 		{Name: "ov-api-off", Profile: simulator.ProfileESP8266_4M, Faults: []simulator.Fault{{Kind: simulator.FaultHTTPOnly}},
 			Settings: map[string]string{"mqtthost": "other-broker.example.internal"}},
+		// The same, for the test of Refresh identity that follows the live refusal (POST /device/ov-api-flip/api-off, #659).
+		{Name: "ov-api-flip", Profile: simulator.ProfileESP8266_4M, Faults: []simulator.Fault{{Kind: simulator.FaultHTTPOnly}},
+			Settings: map[string]string{"mqtthost": "other-broker.example.internal"}},
 	}
 }
 

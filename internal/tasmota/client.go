@@ -333,8 +333,7 @@ func setReferer(req *http.Request, t Target) {
 // it cannot interfere with the OTA engine's own probe-after-loss logic.
 func (c *httpClient) mapCommandNoReply(parent context.Context, t Target, cmnd string, err error) error {
 	if errors.Is(err, io.EOF) && parent.Err() == nil && !isOTACommand(cmnd) && c.rootAnswers(parent, t) {
-		return &deviceError{ErrHTTPAPIRefused, t.redact("set SetOption128 1 on " + t.display() +
-			" (console, or Configure Other > HTTP API), or add it by its own IP or hostname")}
+		return &deviceError{ErrHTTPAPIRefused, APIOffFix}
 	}
 	return c.mapErr(parent, t, err)
 }

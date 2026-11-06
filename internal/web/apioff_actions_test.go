@@ -2,11 +2,13 @@ package web
 
 import (
 	"fmt"
+	"html"
 	"net/url"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/nofuturekid/tasmofleet/internal/backup"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/ota"
 	"github.com/nofuturekid/tasmofleet/internal/tasmota"
@@ -67,7 +69,7 @@ func TestRelaySwitchAndRestartRefuseADeviceWhoseHTTPAPIIsOff(t *testing.T) {
 		t.Fatalf("a command was sent: powers %v, runs %v", cmd.powers, cmd.runs)
 	}
 	_, page := e.do(t, "GET", "/devices/1", "admin", nil)
-	for _, want := range []string{"Switching is disabled: HTTP API off (SetOption128 0)", `id="dev-relays-why"`} {
+	for _, want := range []string{`Switching is disabled: HTTP API off <span class="nowrap">(SetOption128 0)</span>`, `id="dev-relays-why"`} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the device page lacks %q", want)
 		}
@@ -333,7 +335,9 @@ func TestEveryRefusalSaysTheSameThing(t *testing.T) {
 	_, ok := deviceProblem(err)
 	h := &handler{}
 	_, probe, _ := h.probeProblem(nil, err)
-	msgs := map[string]string{"power": power, "settings": readErrorText(err), "humanerr": func() string { m, _ := deviceProblem(err); return m }(), "deviceedit": probe}
+	f := writesOverMQTTFacts()
+	f.MQTT.Ours = false // nothing but HTTP: every action has no path, and the restore/replace/retry pages show Choose's sentences
+	msgs := map[string]string{"restore, replace, retry": transport.Choose(f).Reason(transport.ActRestore), "backup history": backup.AttemptReason(err), "power": power, "settings": readErrorText(err), "humanerr": func() string { m, _ := deviceProblem(err); return m }(), "deviceedit": probe}
 	_ = ok
 	for name, m := range msgs {
 		if !strings.Contains(m, apiOffName) || !strings.Contains(m, apiOffFix) || strings.Contains(m, "likely refuses") {
@@ -447,5 +451,124 @@ func TestCopyFromADeviceNamesTheHTTPAPIOffInTheOneWording(t *testing.T) {
 	got := sliceBetween(body, "Could not read", "</")
 	if r.StatusCode != 422 || !strings.Contains(got, apiOffName) || !strings.Contains(got, "SetOption128 1") || strings.Contains(body, "likely refuses") {
 		t.Errorf("%d: %q", r.StatusCode, got)
+	}
+}
+
+// writesOverMQTTFacts: HTTP API off, on our broker, live there, GroupTopic known: reads AND writes go over MQTT.
+func writesOverMQTTFacts() transport.Facts {
+	f := mqttFacts(time.Now(), model.MQTTPasswordOwn)
+	f.HTTP = transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailAPIRefused, Since: time.Now()}
+	return f
+}
+
+// Why (#659): `Upgrade <url>` and `WebGetConfig <url>` start a job, which the router never sends over MQTT. For a
+// device whose HTTP API is off but which MQTT can write to, the console and bulk gates let them through (a write has
+// a path) and the job failed with the refusal afterwards. Plain writes and reads still go. The rule is the router's
+// own (transport.CommandAction), so Backlog forms are caught too and the bare `Upgrade` probe is not a job.
+func TestJobCommandsAreRefusedForADeviceOnlyMQTTCanWriteTo(t *testing.T) {
+	fb := &fakeBatch{}
+	e, cmd := apiOffActionsEnv(t, func(d *Deps) {
+		d.CommandBatch = fb
+		d.Transport = fakeFacts{f: map[model.DeviceID]transport.Facts{1: httpOnlyFacts(), 2: writesOverMQTTFacts()}}
+	})
+	for _, c := range []string{"Upgrade http://x/y", "WebGetConfig http://x/y", "Backlog OtaUrl http://x/y; Upgrade 1"} {
+		r, body := e.do(t, "POST", "/devices/2/console", "admin", consoleForm(c))
+		mustRefuse(t, "console "+c, r.StatusCode, body)
+		_, body = e.do(t, "POST", "/devices/bulk/command", "admin", bulkForm("id", "2", "command", c))
+		if strings.Contains(body, "Send to 1 device") || !strings.Contains(body, "HTTP API off") {
+			t.Errorf("bulk %q was offered for a device the job cannot reach: %s", c, body)
+		}
+	}
+	if len(cmd.runs) != 0 {
+		t.Fatalf("a job command was sent: %v", cmd.runs)
+	}
+	// a plain write and a read still go over MQTT; the bare Upgrade is the probe, not a job
+	for _, c := range []string{"Power1 ON", "Status 2"} {
+		if r, body := e.do(t, "POST", "/devices/2/console", "admin", consoleForm(c)); r.StatusCode != 200 {
+			t.Errorf("%s was refused: %d %s", c, r.StatusCode, body)
+		}
+	}
+	_, body := e.do(t, "POST", "/devices/bulk/command", "admin", bulkForm("id", "2", "command", "Power1 ON"))
+	if !strings.Contains(body, "Send to 1 device") {
+		t.Errorf("a write MQTT carries was refused in bulk: %s", body)
+	}
+}
+
+// Why (#659): the live refresh never swaps the Identity card, so a refusal found after the page loaded left Refresh
+// identity enabled, and live.js kept a refused button disabled after the API came back. The live region now carries
+// the reason (data-reads-off) while the device cannot be read, and live.js follows it both ways.
+func TestLiveRegionCarriesTheReasonRefreshIdentityIsDisabled(t *testing.T) {
+	e, _ := apiOffActionsEnv(t, nil)
+	_, body := e.do(t, "GET", "/devices/1/live", "admin", nil, "HX-Request", "true")
+	if !strings.Contains(body, `data-reads-off="`+html.EscapeString(apiOffName+". "+apiOffFix)+`"`) {
+		t.Errorf("a device nothing can read has no reason on its live region: %s", sliceBetween(body, `id="devlive"`, ">"))
+	}
+	_, body = e.do(t, "GET", "/devices/2/live", "admin", nil, "HX-Request", "true") // reads go over MQTT
+	if strings.Contains(sliceBetween(body, `id="devlive"`, ">"), "data-reads-off") {
+		t.Errorf("a device MQTT can read is marked: %s", sliceBetween(body, `id="devlive"`, ">"))
+	}
+	e.health[1] = model.Health{DeviceID: 1, State: model.HealthOnline, LastSeen: time.Now(), SeenHTTP: time.Now()}
+	_, body = e.do(t, "GET", "/devices/1/live", "admin", nil, "HX-Request", "true")
+	if strings.Contains(sliceBetween(body, `id="devlive"`, ">"), "data-reads-off") {
+		t.Errorf("the API is back but the region still says it is off: %s", sliceBetween(body, `id="devlive"`, ">"))
+	}
+}
+
+// Why (#659): a refused relay POST named the reason in the note under the switches and again in the alert below it.
+func TestRefusedRelayPostShowsTheReasonOnce(t *testing.T) {
+	e, _ := apiOffActionsEnv(t, nil)
+	_, body := e.do(t, "POST", "/devices/1/power/1", "operator", url.Values{"csrf": {"tok"}, "action": {"TOGGLE"}, "back": {"device"}}, "HX-Request", "true")
+	box := sliceBetween(body, `id="dc-relays"`, "</section>")
+	// the switches' tooltips carry it too; as text it is the note, and the alert below must not say it again
+	if !strings.Contains(box, `id="dev-relays-why"`) || strings.Contains(box, `role="alert"`) {
+		t.Errorf("the reason is not in the note alone: %s", box)
+	}
+}
+
+// Why (#659): nothing was tried, so the refusal page must not be titled "Restart failed".
+func TestRestartRefusalSaysNothingWasSent(t *testing.T) {
+	e, cmd := apiOffActionsEnv(t, nil)
+	r, body := e.do(t, "POST", "/devices/1/restart", "admin", url.Values{"csrf": {"tok"}})
+	mustRefuse(t, "restart", r.StatusCode, body)
+	if !strings.Contains(body, "Restart not sent") || strings.Contains(body, "Restart failed") || len(cmd.runs) != 0 {
+		t.Errorf("title: %s", sliceBetween(body, "<title>", "</title>"))
+	}
+}
+
+// Why (#659): Restart's aria-describedby named the "Back up:" note, which only exists when Back up has a reason of
+// its own; an id that is not on the page describes nothing. Every id a described-by names must exist.
+func TestEveryDescribedByNamesAnElementOnThePage(t *testing.T) {
+	e, _ := apiOffActionsEnv(t, nil)
+	e.health[1] = refusedHealth(1)
+	for _, path := range []string{"/devices/1", "/devices/2"} {
+		_, page := e.do(t, "GET", path, "admin", nil)
+		for rest := page; ; {
+			i := strings.Index(rest, `aria-describedby="`)
+			if i < 0 {
+				break
+			}
+			rest = rest[i+len(`aria-describedby="`):]
+			id := rest[:strings.Index(rest, `"`)]
+			if !strings.Contains(page, `id="`+id+`"`) {
+				t.Errorf("%s: aria-describedby=%q names nothing", path, id)
+			}
+		}
+	}
+}
+
+// Why (#659): at 375 px the text broke inside "(SetOption128 0)". The reasons shown as text keep it on one line.
+func TestTheSetOptionTextIsKeptTogether(t *testing.T) {
+	e, _ := apiOffActionsEnv(t, nil)
+	_, page := e.do(t, "GET", "/devices/1", "admin", nil)
+	for _, where := range []string{`id="dev-relays-why"`, `id="devhd-why"`} {
+		if note := sliceBetween(page, where, "</p>"); !strings.Contains(note, `<span class="nowrap">(SetOption128 0)</span>`) || !strings.Contains(note, `<span class="nowrap">(SetOption128 1)</span>`) {
+			t.Errorf("%s breaks inside the parenthesis: %s", where, note)
+		}
+	}
+	if got := keepParts("a (SetOption128 0) b"); len(got) != 3 || !got[1].Keep || got[1].Text != "(SetOption128 0)" || got[0].Text != "a " || got[2].Text != " b" {
+		t.Errorf("keepParts: %v", got)
+	}
+	if got := keepParts("plain"); len(got) != 1 || got[0].Keep {
+		t.Errorf("keepParts of plain text: %v", got)
 	}
 }

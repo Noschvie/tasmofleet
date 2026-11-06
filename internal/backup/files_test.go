@@ -441,6 +441,23 @@ func TestADeviceThatStopsAnsweringIsNotAskedAgainForEveryFile(t *testing.T) {
 	}
 }
 
+// Why (#659): the note of the files that were not read says the device refuses its HTTP API, in the one wording, not
+// that it "did not answer" (it did: its main page is up).
+func TestFilesNoteNamesTheHTTPAPIOff(t *testing.T) {
+	files := map[string]simulator.FSFile{"/f0": {Data: []byte("x")}, "/f1": {Data: []byte("x")}, "/f2": {Data: []byte("x")}}
+	e := newFilesEnv(t, esp32(files), nil)
+	e.flaky.getErr = map[string]error{"/f1": tasmota.ErrHTTPAPIRefused}
+	got, err := e.m.Backup(t.Context(), "alice", 7)
+	if err != nil {
+		t.Fatalf("run failed: %v", err)
+	}
+	d, _ := kindOf(got, model.BackupConfigDump)
+	a, _ := e.m.OpenFilesArchive(t.Context(), d.ID)
+	if r := skippedReasons(a.Manifest)["/f2"]; r != "not read: "+tasmota.APIOffName {
+		t.Errorf("reason %q", r)
+	}
+}
+
 func TestSkippedNamesKeepTheEntriesAndAreRecorded(t *testing.T) {
 	// Why (finding from #412): ListFiles returns the valid entries together with *SkippedNamesError.
 	// Treating that as a failure would drop every file of the folder for one odd name.

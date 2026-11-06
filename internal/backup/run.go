@@ -77,6 +77,8 @@ func AttemptReason(err error) string {
 		return ur.UserReason()
 	case errors.Is(err, tasmota.ErrAuth):
 		return "HTTP 401: the device rejected the web password"
+	case errors.Is(err, tasmota.ErrHTTPAPIRefused): // before ErrUnreachable, which it wraps
+		return tasmota.APIOffName + ". " + tasmota.APIOffFix
 	case errors.Is(err, tasmota.ErrUnreachable):
 		return "The device did not answer"
 	case errors.Is(err, tasmota.ErrTimeout):

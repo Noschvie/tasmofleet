@@ -202,7 +202,7 @@ func (h *handler) deviceRestart(w http.ResponseWriter, r *http.Request) {
 	}
 	limitBody(w, r)
 	if why := h.apiOffBlockCommand(r.Context(), d.ID, "Restart 1"); why != "" {
-		h.refuseAPIOff(w, r, "Restart failed", "devices", "", why)
+		h.refuseAPIOff(w, r, "Restart not sent", "devices", "Nothing was sent. ", why)
 		return
 	}
 	p, _ := auth.FromContext(r.Context())

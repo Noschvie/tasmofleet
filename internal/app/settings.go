@@ -27,7 +27,7 @@ import (
 // A POLICY_RULES value that is still in the environment is imported once.
 func (a *runtime) setupSettings() error {
 	a.settings = settings.New(settings.Options{Devices: a.svc.Store, Client: a.svc.Client, Audit: a.svc.Audit})
-	rep := &policyReporter{devices: fwDevices{a.svc.Store, a.fw}, backups: a.backups, reader: a.settings, audit: a.svc.Audit}
+	rep := &policyReporter{devices: fwDevices{a.svc.Store, a.fw}, backups: a.backups, reader: a.settings, audit: a.svc.Audit, skip: a.apiOffRead}
 	a.policyLive = rep
 	a.rules = newRulesService(a.svc, rep.Preview, rep.setRules)
 	rules, err := a.rules.Active(a.bgContext)
@@ -46,7 +46,7 @@ func (a *runtime) setupSettings() error {
 				return model.Health{}
 			}
 			return a.tracker.Get(id)
-		}, Log: a.log})
+		}, Skip: a.apiOffRead, Log: a.log})
 	if a.livePause, err = sysconfig.NewLivePause(a.bgContext, a.svc.Store, a.svc.Audit); err != nil {
 		return err
 	}
@@ -100,6 +100,8 @@ type policyReporter struct {
 	reader  keyReader
 	audit   audit.Recorder // optional
 	now     func() time.Time
+	// skip says the on-demand check leaves a device alone: its HTTP API is off and nothing else reads it (#659); nil reads all.
+	skip func(model.DeviceID) bool
 
 	vals liveStore
 
@@ -352,6 +354,9 @@ func (p *policyReporter) refresh(ctx context.Context, actor string, devs []model
 	var fresh []model.Device
 	if !throttled {
 		for _, d := range devs {
+			if p.skip != nil && p.skip(d.ID) {
+				continue
+			}
 			if at := p.vals.newest(d.ID); at.IsZero() || t.Sub(at) >= liveDeviceCooldown {
 				fresh = append(fresh, d)
 			}

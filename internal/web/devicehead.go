@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -253,4 +254,29 @@ func healthMore(source model.HealthSource, detail string) string {
 		return " · " + d
 	}
 	return ""
+}
+
+// keepPart is a piece of a sentence for keepTogether.
+type keepPart struct {
+	Text string
+	Keep bool // the "(SetOption128 N)" of the HTTP API wording
+}
+
+var setOptionParen = regexp.MustCompile(`\(SetOption128 [01]\)`)
+
+// keepParts cuts s around each "(SetOption128 0)" / "(SetOption128 1)".
+func keepParts(s string) []keepPart {
+	var out []keepPart
+	last := 0
+	for _, m := range setOptionParen.FindAllStringIndex(s, -1) {
+		if m[0] > last {
+			out = append(out, keepPart{Text: s[last:m[0]]})
+		}
+		out = append(out, keepPart{Text: s[m[0]:m[1]], Keep: true})
+		last = m[1]
+	}
+	if last < len(s) {
+		out = append(out, keepPart{Text: s[last:]})
+	}
+	return out
 }

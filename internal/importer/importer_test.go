@@ -20,6 +20,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/inventory"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/tasmoadmin"
+	"github.com/nofuturekid/tasmofleet/internal/tasmota"
 )
 
 type fakeInv struct {
@@ -375,5 +376,14 @@ func TestPlanSkipsAddressesTheInventoryRefuses(t *testing.T) {
 	rep, _ := im.Apply(context.Background(), "admin", p)
 	if rep.Created != 1 || rep.Skipped != 1 || len(inv.upserts) != 1 {
 		t.Fatalf("apply wrote the refused row: %+v", rep)
+	}
+}
+
+// Why (#659): the import report names a device whose HTTP API is off in the one wording (name and fix) that the tile,
+// the buttons and the refusals use, not a text of its own that says only half of it.
+func TestProbeProblemNamesTheHTTPAPIOff(t *testing.T) {
+	got := probeProblem(fmt.Errorf("probe: %w", tasmota.ErrHTTPAPIRefused))
+	if got != tasmota.APIOffName+". "+tasmota.APIOffFix {
+		t.Errorf("got %q", got)
 	}
 }

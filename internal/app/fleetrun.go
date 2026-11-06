@@ -10,6 +10,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/devlock"
 	"github.com/nofuturekid/tasmofleet/internal/model"
 	"github.com/nofuturekid/tasmofleet/internal/store"
+	"github.com/nofuturekid/tasmofleet/internal/tasmota"
 )
 
 // runStore is what a scheduled run reads and writes (*store.SQLite).
@@ -46,7 +47,7 @@ const (
 	skipBusy    = "another operation was running"
 	// skipAPIOff: online, but its HTTP API is off (SetOption128 0) and MQTT cannot carry a backup, so a run could
 	// only fail (#447). Skipped like an offline device: no failure, no notification.
-	skipAPIOff = "HTTP API off (SetOption128 0)"
+	skipAPIOff = tasmota.APIOffName
 )
 
 // backupGuard is what a scheduled backup must not run into: the device guard (its lock and a running

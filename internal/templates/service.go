@@ -50,8 +50,10 @@ type Options struct {
 	Engine   Submitter // nil: Apply returns ErrNoEngine
 	// Health returns the health of a device (offline devices are not read and carry "offline since").
 	Health func(model.DeviceID) model.Health
-	Now    func() time.Time
-	Log    *slog.Logger
+	// Skip says a device is left alone like an offline one (its HTTP API is off and nothing else reads it, #659); optional.
+	Skip func(model.DeviceID) bool
+	Now  func() time.Time
+	Log  *slog.Logger
 }
 
 const (
@@ -211,7 +213,7 @@ func (m *Manager) refresh(ctx context.Context, devs []model.Device) bool {
 	sem := make(chan struct{}, liveParallel)
 	var wg sync.WaitGroup
 	for _, d := range devs {
-		if m.o.Health != nil && m.o.Health(d.ID).State == model.HealthOffline {
+		if m.o.Health != nil && m.o.Health(d.ID).State == model.HealthOffline || m.o.Skip != nil && m.o.Skip(d.ID) {
 			continue
 		}
 		sem <- struct{}{}
@@ -249,6 +251,9 @@ func (m *Manager) readInto(ctx context.Context, d model.Device) (reading, error)
 // Refresh reads one device live into the cache, so the next page shows the reading without a click (the
 // background refresh, #600). Safeboot and minimal firmware are left alone (nothing is sent).
 func (m *Manager) Refresh(ctx context.Context, d model.Device) error {
+	if m.o.Skip != nil && m.o.Skip(d.ID) {
+		return nil
+	}
 	if _, err := m.readInto(ctx, d); err != nil && !errors.Is(err, errLimitedFirmware) {
 		return err
 	}

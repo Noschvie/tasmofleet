@@ -46,9 +46,12 @@ type liveView struct {
 	Base string
 	CSRF string
 	// Off dims the region: the device does not answer, what shows is its last reported state.
-	Off   bool
-	Tiles []tile
-	Box   *relayBox // nil: the device has no relays
+	Off bool
+	// ReadsOff is the reason Refresh identity is disabled (the device's HTTP API is off and nothing else reads
+	// it), "" otherwise. The live refresh never swaps the Identity card, so live.js follows this (#659).
+	ReadsOff string
+	Tiles    []tile
+	Box      *relayBox // nil: the device has no relays
 	// Sensors replaces the relay box on a device without relays
 	Sensors *sensorBox
 	// ActSig is devActivity.Sig of the same answer: the next refresh sends it back.

@@ -48,7 +48,7 @@ templ pathList(id string, rows []pathRow, c pathCard, attrs templ.Attributes) {
 					<div>@ui.Badge(r.Tone, r.Value)</div>
 					if r.Sub != "" {
 						<p class="devcard-note">
-							{ r.Sub }
+							@keepTogether(r.Sub)
 							if !r.Since.IsZero() {
 								{ " Since " }
 								<time data-visual-mask { ui.StampAttrs(r.Since, ui.StampDay)... }>{ r.SinceText }</time>.

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/tasmota"
 )
 
 // fwReachTTL is how long a "no" stays true (D11): the network may have changed since.
@@ -63,6 +64,14 @@ func Choose(f Facts) Paths {
 	p.Reasons = append(p.Reasons, Reason{ActRestore, p.Restore, t})
 	p.Update, t = chooseUpdate(f)
 	p.Reasons = append(p.Reasons, Reason{ActUpdate, p.Update, t})
+	if httpFailing(f) && f.HTTP.Kind == HTTPFailAPIRefused {
+		// An action that has no way left because the device's HTTP API is off says how to get it back.
+		for i, r := range p.Reasons {
+			if r.Path == None {
+				p.Reasons[i].Text += ". " + tasmota.APIOffFix
+			}
+		}
+	}
 	return p
 }
 
@@ -277,14 +286,6 @@ func chooseUpdate(f Facts) (Path, string) {
 		}
 	}
 	text := noPath(parts...)
-	if !push || !f.Request.AllowMQTTUpload {
-		// Would the experimental upload have worked? Then say how to ask for it.
-		probe := f
-		probe.Request.Delivery, probe.Request.AllowMQTTUpload = model.DeliveryPush, true
-		if p, _ := chooseUpdate(probe); p == PushMQTT {
-			text += "; choose Push where possible and allow upload over MQTT (experimental)"
-		}
-	}
 	return None, text
 }
 

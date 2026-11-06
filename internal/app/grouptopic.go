@@ -52,6 +52,7 @@ type groupTopicReader struct {
 		UpdateGroupTopicFromMQTT(ctx context.Context, id model.DeviceID, g store.ProbeGuard, topic, groupTopic string) error
 	}
 	health    func(model.DeviceID) model.Health
+	skip      func(model.DeviceID) bool // the HTTP API is off and MQTT cannot read the device (#659): left alone like an offline one; nil reads all
 	now       func() time.Time
 	log       *slog.Logger
 	tried     map[model.DeviceID]groupTry
@@ -109,7 +110,7 @@ func (r *groupTopicReader) tick(ctx context.Context) {
 		}
 		wanting = true
 		h := r.health(d.ID)
-		if h.State == model.HealthOffline {
+		if h.State == model.HealthOffline || r.skip != nil && r.skip(d.ID) {
 			continue
 		}
 		up := h.State == model.HealthOnline

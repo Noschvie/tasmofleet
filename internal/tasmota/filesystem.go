@@ -498,14 +498,14 @@ func (c *httpClient) ufsNoReply(parent context.Context, t Target, query url.Valu
 	}
 	if _, has := query["download"]; !has {
 		// The request that got no answer was the plain page itself.
-		return &deviceError{ErrHTTPAPIRefused, t.redact("set SetOption128 1 on " + t.display() + " (console, or Configure Other > HTTP API)")}
+		return &deviceError{ErrHTTPAPIRefused, APIOffFix}
 	}
 	pctx, cancel := context.WithTimeout(parent, c.timeout(followUpTimeout))
 	defer cancel()
 	probe, err := c.ufsRequest(pctx, t, url.Values{"dir": {"2"}})
 	if err != nil {
 		if errors.Is(err, io.EOF) {
-			return &deviceError{ErrHTTPAPIRefused, t.redact("set SetOption128 1 on " + t.display() + " (console, or Configure Other > HTTP API)")}
+			return &deviceError{ErrHTTPAPIRefused, APIOffFix}
 		}
 		return c.mapErr(parent, t, err)
 	}

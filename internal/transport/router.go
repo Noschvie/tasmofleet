@@ -272,6 +272,20 @@ func classifyCommand(cmnd string) cmdClass {
 	return c
 }
 
+// CommandAction is the action a free-form command needs, by the router's own classification (classifyCommand,
+// which Command uses): ActJob for a command that starts a job, ActWrites for anything that is not a read (a
+// command the policy does not classify counts as a write), else ActCommands. The console and bulk gates use
+// it, so they refuse what the router would not send over MQTT.
+func CommandAction(cmnd string) Action {
+	switch cls := classifyCommand(cmnd); {
+	case cls.job:
+		return ActJob
+	case cls.write:
+		return ActWrites
+	}
+	return ActCommands
+}
+
 // startsJob reports an Upgrade or WebGetConfig with an argument, alone or in a Backlog. The bare
 // Upgrade is the probe the engine sends and changes nothing. OtaUrl is a setting and only
 // prepares an upgrade.

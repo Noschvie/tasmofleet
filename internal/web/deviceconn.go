@@ -11,6 +11,7 @@ import (
 	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
 	"github.com/nofuturekid/tasmofleet/internal/fwselect"
 	"github.com/nofuturekid/tasmofleet/internal/model"
+	"github.com/nofuturekid/tasmofleet/internal/tasmota"
 	"github.com/nofuturekid/tasmofleet/internal/transport"
 	"github.com/nofuturekid/tasmofleet/internal/web/ui"
 )
@@ -29,8 +30,8 @@ const reasonOffline = "The device is offline."
 // Back up note, the banner and the refusals of the actions. A refusal only happens when the device is reached by an
 // address other than its own IP or hostname (TasmoFleet sends a matching Referer), so that is a fix too.
 const (
-	apiOffName   = "HTTP API off (SetOption128 0)"
-	apiOffFix    = "Turn the device's HTTP API on (SetOption128 1) or add the device by its own IP or hostname."
+	apiOffName   = tasmota.APIOffName
+	apiOffFix    = tasmota.APIOffFix
 	reasonAPIOff = apiOffName + ". " + apiOffFix
 )
 
@@ -148,7 +149,7 @@ func (h *handler) transportOf(ctx context.Context, id model.DeviceID) (transport
 	return f, transport.Choose(f), true
 }
 
-// pathFor is the path an action takes in paths.
+// pathFor is the path an action takes in paths. A job (transport.ActJob) has none: it is never sent over MQTT.
 func pathFor(p transport.Paths, a transport.Action) transport.Path {
 	switch a {
 	case transport.ActCommands:
@@ -161,6 +162,7 @@ func pathFor(p transport.Paths, a transport.Action) transport.Path {
 		return p.Restore
 	case transport.ActUpdate:
 		return p.Update
+	case transport.ActJob: // never sent over MQTT, and Choose has no HTTP-only answer
 	}
 	return transport.None
 }
@@ -179,22 +181,13 @@ func (h *handler) apiOffBlock(ctx context.Context, id model.DeviceID, a transpor
 	return reasonAPIOff
 }
 
-// commandAction is the path a free-form command needs: the router's own rule, a command that is not classified as a
-// read counts as a write (transport.classifyCommand).
-func commandAction(cmd string) transport.Action {
-	if v, err := cmdpolicy.Classify(cmd); err == nil && v.Class == cmdpolicy.ClassRead {
-		return transport.ActCommands
-	}
-	return transport.ActWrites
-}
-
 // apiOffBlockCommand is apiOffBlock for a command typed by a person or stored in a transaction. A command the
 // policy does not accept is left to the service, which refuses it without touching the device.
 func (h *handler) apiOffBlockCommand(ctx context.Context, id model.DeviceID, cmd string) string {
 	if _, err := cmdpolicy.Classify(cmd); err != nil {
 		return ""
 	}
-	return h.apiOffBlock(ctx, id, commandAction(cmd))
+	return h.apiOffBlock(ctx, id, transport.CommandAction(cmd))
 }
 
 // refuseAPIOff answers a page that cannot be used because the device's HTTP API is off and nothing else reaches

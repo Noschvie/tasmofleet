@@ -43,7 +43,15 @@ var (
 	// the main page is not Referer-guarded. It is an ErrUnreachable for every
 	// caller that handles unreachable devices. Never returned for OtaUrl,
 	// Upgrade or uploads (the OTA engine probes after those itself).
-	ErrHTTPAPIRefused = fmt.Errorf("%w: the device likely refuses HTTP API commands (SetOption128 0)", ErrUnreachable)
+	ErrHTTPAPIRefused = fmt.Errorf("%w: %s", ErrUnreachable, APIOffName)
+)
+
+// How a device with its HTTP API switched off is named everywhere (#447, #659): the tile, the card, the refusals, job
+// notes, logs and the backup history. A refusal only happens when the device is reached by an address other than
+// its own IP or hostname (TasmoFleet sends a matching Referer), so adding it by that is a fix too.
+const (
+	APIOffName = "HTTP API off (SetOption128 0)"
+	APIOffFix  = "Turn the device's HTTP API on (SetOption128 1) or add the device by its own IP or hostname."
 )
 
 // Target is an opaque, inventory-derived HTTP endpoint of one device.

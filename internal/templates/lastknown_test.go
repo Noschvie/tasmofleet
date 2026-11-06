@@ -2,6 +2,8 @@ package templates
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -217,5 +219,30 @@ func TestAnAbandonedPreviewMarksNoDeviceFailed(t *testing.T) {
 	ov, _ := m.Overview(context.Background(), nil, false)
 	if ov.ReadFailed != 0 {
 		t.Errorf("%d devices shown as failed after an abandoned preview", ov.ReadFailed)
+	}
+}
+
+// Why (#659): a device whose HTTP API is off and which MQTT cannot read is left alone by the template refresh like an
+// offline one: nothing is sent, and it is not reported as a failed read (it was not tried), in the tab's refresh
+// and in the background refresh of one device.
+func TestRefreshLeavesADeviceNothingCanReadAlone(t *testing.T) {
+	f := newFleet()
+	a := f.add("a", "NOUS A1T", 21)
+	b := f.add("b", "NOUS A1T", 21)
+	now := t0
+	m := New(Options{Devices: f, Client: f, Backups: f, Settings: f, Now: func() time.Time { return now },
+		Skip: func(id model.DeviceID) bool { return id == a }})
+	ov, _ := m.Overview(context.Background(), nil, true)
+	for _, c := range f.cmds {
+		if strings.HasPrefix(c, fmt.Sprintf("%d ", a)) {
+			t.Fatalf("the device was asked: %v", f.cmds)
+		}
+	}
+	if ov.ReadFailed != 0 || deviceOf(t, ov, b).Source != SourceLive {
+		t.Errorf("failed %d, b: %+v", ov.ReadFailed, deviceOf(t, ov, b))
+	}
+	n := len(f.cmds)
+	if err := m.Refresh(context.Background(), model.Device{ID: a}); err != nil || len(f.cmds) != n {
+		t.Fatalf("the background refresh asked the device: %v, %v", err, f.cmds[n:])
 	}
 }

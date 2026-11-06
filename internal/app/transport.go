@@ -29,6 +29,7 @@ func (a *runtime) setupTransport() {
 	a.svc.Router.SetFacts(facts)
 	a.svc.Router.SetMQTT(a.mqttCmd)
 	gr := newGroupTopicReader(a.fw.list(a.svc.Inventory.List), a.tracker.Get, a.svc.Client, a.svc.Store, a.log)
+	gr.skip = a.apiOffRead
 	a.goBG("group-topic", func() error { gr.run(a.bgContext); return nil })
 	// Status 2 facts of devices identified before they were stored (#417).
 	fr := newFWRFactsReader(a.svc.Inventory.List, a.tracker.Get, a.svc.Client, a.svc.Store, a.svc.Prober.announce, a.log)

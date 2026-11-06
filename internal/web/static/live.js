@@ -134,11 +134,25 @@
       el.classList.toggle("is-dim", off);
       el.setAttribute("aria-disabled", off ? "true" : "false");
     });
+    // The live region says why Refresh identity cannot work (the device's HTTP API is off and nothing else
+    // reads it, #659): the Identity card is not swapped, so the button follows that reason both ways.
+    var refused = live.getAttribute("data-reads-off") || "";
     document
       .querySelectorAll("#identity [data-needs-device]")
       .forEach(function (b) {
         // a Refresh identity in flight is disabled by htmx and enabled again by htmx
-        if (!b.classList.contains("htmx-request") && !b.hasAttribute("data-refused")) {
+        if (b.classList.contains("htmx-request")) {
+          return;
+        }
+        if (refused) {
+          b.setAttribute("data-refused", "");
+          b.title = refused;
+          b.disabled = true;
+        } else {
+          if (b.hasAttribute("data-refused")) {
+            b.removeAttribute("data-refused");
+            b.removeAttribute("title");
+          }
           b.disabled = off;
         }
       });

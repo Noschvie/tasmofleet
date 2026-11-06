@@ -124,6 +124,7 @@ const (
 	whyFailed     = "could not be read"
 	whyList       = "folder could not be listed"
 	whyDeviceGone = "not read: the device did not answer"
+	whyAPIOff     = "not read: " + tasmota.APIOffName
 	whyTimeout    = "not read: the device took too long to answer"
 	whyAuth       = "not read: the device rejected the web password"
 	whyOutside    = "not read: the device address is outside the configured device networks"
@@ -137,6 +138,8 @@ func reasonOf(err error) string {
 		return "they need HTTP"
 	case errors.Is(err, tasmota.ErrAuth):
 		return "the device rejected the web password"
+	case errors.Is(err, tasmota.ErrHTTPAPIRefused): // before ErrUnreachable, which it wraps
+		return tasmota.APIOffName
 	case errors.Is(err, tasmota.ErrUnreachable):
 		return "the device did not answer"
 	case errors.Is(err, tasmota.ErrTimeout):
@@ -295,6 +298,8 @@ func (w *walker) noteDead(err error) {
 		w.dead = whyOutside
 	case errors.Is(err, tasmota.ErrAuth):
 		w.dead = whyAuth
+	case errors.Is(err, tasmota.ErrHTTPAPIRefused):
+		w.dead = whyAPIOff
 	case errors.Is(err, tasmota.ErrUnreachable):
 		w.dead = whyDeviceGone
 	case errors.Is(err, tasmota.ErrTimeout):
