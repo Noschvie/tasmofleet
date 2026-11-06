@@ -553,6 +553,9 @@ func (h *handler) ruleDevicesPreview(w http.ResponseWriter, r *http.Request, d r
 		http.Error(w, "bad request", http.StatusBadRequest)
 		return
 	}
+	if !r.URL.Query().Has("show") {
+		all = all || d.ShowAll // the form's own preview: it keeps what "Show all" asked for (#660)
+	}
 	pos := len(st.Specs)
 	spec := d.Spec
 	if d.ID != "new" {

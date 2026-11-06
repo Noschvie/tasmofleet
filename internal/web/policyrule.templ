@@ -401,9 +401,9 @@ templ scopeTagPill(t scopeTag) {
 // JavaScript) that the editor also turns into a swap; a draft has no page to link to.
 templ ruleDevChip(v ruleDevicesView, show, label string, n int) {
 	if v.Draft {
-		<button type="button" class="dv-chip" hx-post={ ruleShowPost(v, show, false) } hx-include="#rule-form" hx-target="#rule-devices" hx-swap="outerHTML" aria-current?={ v.Show == show }>{ label }<span class="dv-n">{ itoa(n) }</span></button>
+		<button type="button" class="dv-chip" hx-post={ ruleShowPost(v, show, false) } hx-include="#rule-form" hx-sync="#rule-form:replace" hx-target="#rule-devices" hx-swap="outerHTML" aria-current?={ v.Show == show }>{ label }<span class="dv-n">{ itoa(n) }</span></button>
 	} else if v.Edit {
-		<a class="dv-chip" href={ templ.SafeURL(ruleShowHref(v, show, false)) } hx-post={ ruleShowPost(v, show, false) } hx-include="#rule-form" hx-target="#rule-devices" hx-swap="outerHTML" aria-current?={ v.Show == show }>{ label }<span class="dv-n">{ itoa(n) }</span></a>
+		<a class="dv-chip" href={ templ.SafeURL(ruleShowHref(v, show, false)) } hx-post={ ruleShowPost(v, show, false) } hx-include="#rule-form" hx-sync="#rule-form:replace" hx-target="#rule-devices" hx-swap="outerHTML" aria-current?={ v.Show == show }>{ label }<span class="dv-n">{ itoa(n) }</span></a>
 	} else {
 		<a class="dv-chip" href={ templ.SafeURL(ruleShowHref(v, show, false)) } aria-current?={ v.Show == show }>{ label }<span class="dv-n">{ itoa(n) }</span></a>
 	}
@@ -419,6 +419,10 @@ templ ruleDevicesCard(v ruleDevicesView) {
 				<span class="devcard-note">updates as you edit</span>
 			}
 		</div>
+		if v.All && (v.Draft || v.Edit) {
+			// The form's own previews (change, debounced input) carry no ?all=1: this field tells them the whole list is wanted (#660).
+			<input type="hidden" name="show_all" value="1" form="rule-form"/>
+		}
 		switch {
 			case v.Stat.Hint != "":
 				<p class="devcard-note">{ v.Stat.Hint }</p>
@@ -465,9 +469,9 @@ templ ruleDevicesCard(v ruleDevicesView) {
 				}
 				if !v.All && v.Shown > len(v.Rows) {
 					if v.Draft {
-						<p class="devcard-note"><button type="submit" class="btn btn-link" form="rule-form" formaction={ ruleShowPost(v, v.Show, true) } hx-post={ ruleShowPost(v, v.Show, true) } hx-include="#rule-form" hx-target="#rule-devices" hx-swap="outerHTML">Show all { itoa(v.Shown) }</button></p>
+						<p class="devcard-note"><button type="submit" class="btn btn-link" form="rule-form" formaction={ ruleShowPost(v, v.Show, true) } hx-post={ ruleShowPost(v, v.Show, true) } hx-include="#rule-form" hx-sync="#rule-form:replace" hx-target="#rule-devices" hx-swap="outerHTML">Show all { itoa(v.Shown) }</button></p>
 					} else if v.Edit {
-						<p class="devcard-note"><a href={ templ.SafeURL(ruleShowHref(v, v.Show, true)) } hx-post={ ruleShowPost(v, v.Show, true) } hx-include="#rule-form" hx-target="#rule-devices" hx-swap="outerHTML">Show all { itoa(v.Shown) }</a></p>
+						<p class="devcard-note"><a href={ templ.SafeURL(ruleShowHref(v, v.Show, true)) } hx-post={ ruleShowPost(v, v.Show, true) } hx-include="#rule-form" hx-sync="#rule-form:replace" hx-target="#rule-devices" hx-swap="outerHTML">Show all { itoa(v.Shown) }</a></p>
 					} else {
 						<p class="devcard-note"><a href={ templ.SafeURL(ruleShowHref(v, v.Show, true)) }>Show all { itoa(v.Shown) }</a></p>
 					}

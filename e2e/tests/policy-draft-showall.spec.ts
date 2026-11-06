@@ -44,3 +44,25 @@ test("Show all on an unsaved rule draft works without JavaScript and keeps the d
   await expect(page.getByRole("button", { name: /^Show all/ })).toHaveCount(0);
   await ctx.close();
 });
+
+// #660: with JavaScript, the form's own previews (the change that blurring the field fires, and the debounced
+// input one) answer after the "Show all" click and put the short list back, so the first click after typing did
+// nothing. Show all must win, and stay: a preview that follows keeps the whole list.
+test("Show all on a rule draft right after typing shows all devices on the first click", async ({ browser }) => {
+  const ctx = await browser.newContext({ extraHTTPHeaders: admin });
+  const page = await ctx.newPage();
+  await page.goto(app.url + "/policy/rules/new?template=timezone");
+  const rows = page.locator("#rule-devices tbody tr");
+  await expect(rows.first()).toBeVisible();
+  const shown = await rows.count();
+  const showAll = page.getByRole("button", { name: /^Show all \d+$/ });
+  await expect(showAll).toBeVisible();
+  await page.getByLabel("Name", { exact: true }).fill("Typed just before the click");
+  await showAll.click(); // no pause: the previews of the typing are still on their way
+  await expect(showAll).toHaveCount(0);
+  await expect.poll(() => rows.count()).toBeGreaterThan(shown);
+  const all = await rows.count();
+  await page.waitForTimeout(1000); // past the debounced input preview and any late answer
+  expect(await rows.count()).toBe(all);
+  await ctx.close();
+});

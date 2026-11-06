@@ -676,6 +676,38 @@ func TestRuleDraftShowAllWithoutJavaScriptKeepsTheDraftAndListsEveryDevice(t *te
 	}
 }
 
+// Why (#660): the form's own previews (the change that blurring a field fires, the debounced input) carry no
+// ?all=1, so a late one put the short list back over "Show all". The card of the whole list therefore carries a
+// field in the form that says so, and such a preview keeps the whole list. A filter chip still sets its own list.
+func TestRuleDraftPreviewKeepsShowAll(t *testing.T) {
+	rp := defaultRP()
+	rp.more = ruleRows
+	e, _ := ruleEnvWith(t, rp)
+	base := url.Values{"want": {"7"}, "family": {}, "tag": {}, "tags_extra": {""}, "except": {}}
+	links := func(path string, f url.Values) (int, string) {
+		_, body := e.do(t, "POST", path, "admin", ruleForm(f), "HX-Request", "true")
+		return strings.Count(body, `href="/tf/devices/`), body
+	}
+	short, body := links("/policy/rules/preview", base)
+	if short > ruleRows || strings.Contains(body, `name="show_all"`) {
+		t.Fatalf("the short list lists %d devices or already carries show_all", short)
+	}
+	all, body := links("/policy/rules/preview?show=all&all=1", base)
+	if all <= short || !strings.Contains(body, `name="show_all" value="1" form="rule-form"`) {
+		t.Fatalf("Show all: %d device links (short list %d), field missing:\n%.1500s", all, short, body)
+	}
+	withField := url.Values{"show_all": {"1"}}
+	for k, v := range base {
+		withField[k] = v
+	}
+	if n, _ := links("/policy/rules/preview", withField); n != all {
+		t.Errorf("a form preview after Show all lists %d devices, want all %d", n, all)
+	}
+	if n, _ := links("/policy/rules/preview?show=all", withField); n > ruleRows {
+		t.Errorf("a filter chip lists %d devices, want its own short list", n)
+	}
+}
+
 // Why (#512): Go error text never reaches the browser; an unknown query field on the New rule
 // page gets the error page, not a bare text/plain answer.
 func TestRuleNewUnknownQueryFieldAnswersWithTheErrorPage(t *testing.T) {

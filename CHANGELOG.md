@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Fixed
+
+- Policy: "Show all" under the devices of a rule draft works on the first click right after typing, instead of the form's own preview putting the short list back (#660)
+
 ## 0.32.0 "Fastnet" (2026-11-06)
 
 ### Added

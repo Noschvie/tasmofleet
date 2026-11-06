@@ -294,6 +294,7 @@ type ruleDraft struct {
 	Spec       sysconfig.RuleSpec
 	ChangeNote string
 	State      string // "enabled", "disabled" or "" (keep the rule's state)
+	ShowAll    bool   // the devices card lists every device (#660); only the preview reads it
 }
 
 func uniq(list []string) []string {
@@ -306,7 +307,7 @@ func uniq(list []string) []string {
 	return out
 }
 
-var draftSingle = []string{"csrf", "id", "origin", "version", "name", "command", "want", "severity", "tags_extra", "except_extra", "note", "change_note"}
+var draftSingle = []string{"csrf", "id", "origin", "version", "name", "command", "want", "severity", "tags_extra", "except_extra", "note", "change_note", "show_all"}
 
 // draftForm reads the editor form (save and preview). The Enabled switch is a checkbox after a
 // hidden "state=disabled": a ticked box sends both and the last one wins.
@@ -315,7 +316,7 @@ func (h *handler) draftForm(w http.ResponseWriter, r *http.Request) (ruleDraft, 
 	if !ok {
 		return ruleDraft{}, false
 	}
-	d := ruleDraft{ID: f.Get("id"), Origin: f.Get("origin"), ChangeNote: strings.TrimSpace(f.Get("change_note"))}
+	d := ruleDraft{ID: f.Get("id"), Origin: f.Get("origin"), ChangeNote: strings.TrimSpace(f.Get("change_note")), ShowAll: f.Get("show_all") == "1"}
 	switch {
 	case d.ID != "new" && !policy.RuleIDRe.MatchString(d.ID):
 		http.Error(w, "bad request", http.StatusBadRequest)
