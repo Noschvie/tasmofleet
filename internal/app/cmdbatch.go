@@ -100,7 +100,7 @@ func (l lockedCommandBatch) Submit(ctx context.Context, actor string, reqs []ota
 			continue
 		}
 		seen[r.DeviceID] = true
-		release, holder, ok := l.g.locks.TryAcquire(r.DeviceID, "command")
+		release, holder, ok := l.g.acquire(ctx, r.DeviceID, "command")
 		if !ok {
 			skipped = append(skipped, ota.Refusal{DeviceID: r.DeviceID, Reason: devlock.BusyError{Holder: holder}.Error()})
 			continue
@@ -139,7 +139,7 @@ func (l lockedBackupBatch) Submit(ctx context.Context, actor string, ids []model
 			continue
 		}
 		seen[id] = true
-		release, holder, ok := l.g.locks.TryAcquire(id, "backup")
+		release, holder, ok := l.g.acquire(ctx, id, "backup")
 		if !ok {
 			skipped = append(skipped, ota.Refusal{DeviceID: id, Reason: devlock.BusyError{Holder: holder}.Error()})
 			continue

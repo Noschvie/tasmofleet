@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
 	"github.com/nofuturekid/tasmofleet/internal/devlock"
@@ -254,5 +255,60 @@ func TestActiveTemplateJobBlocksWritersAsTemplate(t *testing.T) {
 	_, err := (lockedDeviceCmd{DeviceCmd: &countingCmd{}, g: g}).Power(context.Background(), "u", 1, 1, "TOGGLE")
 	if busyHolderOf(t, err) != "template" {
 		t.Fatalf("holder = %v", err)
+	}
+}
+
+// Why (#670): the background reader holds a device for about two seconds, right after a start for every
+// device in turn. A person who sends a console command, switches, saves settings or starts a bulk run or an update
+// in those seconds must not be told that "another operation (broker read)" is running: they did not start it and
+// cannot tell when it ends. They wait for it. Any other holder is a choice somebody made and can run for
+// minutes, so it still refuses at once (TestWritersExcludeEachOther).
+func TestPersonWaitsForTheBackgroundRead(t *testing.T) {
+	ctx := context.Background()
+	locks := devlock.New()
+	g := deviceGuard{locks: locks, jobs: fakeActiveJobs{active: map[model.DeviceID]bool{}}}
+	cmd, set, up := &countingCmd{}, &countingSettings{}, &countingOTA{}
+	lc, ls, lo := lockedDeviceCmd{DeviceCmd: cmd, g: g}, lockedSettings{SettingsService: set, g: g}, lockedOTA{OTA: up, g: g}
+
+	readEnds := func() {
+		release, _, ok := locks.TryAcquire(1, "broker read")
+		if !ok {
+			t.Fatal("setup")
+		}
+		time.AfterFunc(100*time.Millisecond, release)
+	}
+	readEnds()
+	if _, err := lc.Power(ctx, "u", 1, 1, "ON"); err != nil {
+		t.Fatalf("power refused during the background read: %v", err)
+	}
+	readEnds()
+	if _, err := lc.Run(ctx, model.Principal{}, 1, "Status 2"); err != nil {
+		t.Fatalf("console refused during the background read: %v", err)
+	}
+	readEnds()
+	if _, err := ls.Apply(ctx, "u", 1, map[string]string{"TelePeriod": "60"}); err != nil {
+		t.Fatalf("settings refused during the background read: %v", err)
+	}
+	readEnds()
+	if _, err := lo.Submit(ctx, "u", []ota.Request{{DeviceID: 1}}); err != nil || up.submits != 1 {
+		t.Fatalf("update refused during the background read: %v", err)
+	}
+}
+
+// A background read that does not end (a device that answers nothing holds it for its whole timeout) does not hold
+// a person up for that long: after the grace they are refused with the holder named, as for any busy device.
+func TestPersonWaitForTheBackgroundReadIsBounded(t *testing.T) {
+	t.Parallel()
+	locks := devlock.New()
+	g := deviceGuard{locks: locks, jobs: fakeActiveJobs{active: map[model.DeviceID]bool{}}}
+	release, _, _ := locks.TryAcquire(1, "broker read")
+	defer release()
+	start := time.Now()
+	_, err := lockedDeviceCmd{DeviceCmd: &countingCmd{}, g: g}.Power(context.Background(), "u", 1, 1, "ON")
+	if busyHolderOf(t, err) != "broker read" {
+		t.Fatalf("want a refusal naming the read, got %v", err)
+	}
+	if d := time.Since(start); d < time.Second || d > 15*time.Second {
+		t.Fatalf("waited %v, want a few seconds", d)
 	}
 }

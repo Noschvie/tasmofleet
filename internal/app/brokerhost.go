@@ -352,7 +352,7 @@ func (r *brokerHostReader) visit(ctx context.Context, d model.Device, what visit
 // readLocked reads the broker and the identity of id under the device lock. refused: another device answers at
 // the address (the broker read or the identity refresh found a MAC outside the stored set, or none).
 func (r *brokerHostReader) readLocked(ctx context.Context, id model.DeviceID, what visitWhat) (refused bool, err error) {
-	release, err := r.enter(ctx, id, "broker read")
+	release, err := r.enter(ctx, id, backgroundRead)
 	if err != nil {
 		var busy devlock.BusyError
 		if errors.As(err, &busy) {

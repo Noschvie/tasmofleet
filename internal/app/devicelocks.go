@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/cmdpolicy"
 	"github.com/nofuturekid/tasmofleet/internal/devlock"
@@ -33,10 +34,46 @@ var activeStates = []model.JobState{
 	model.JobAwaitReboot, model.JobVerify, model.JobRestoreOtaURL, model.JobApplying,
 }
 
+// backgroundRead is the lock owner of the reader that keeps the stored broker host and identity current
+// (brokerhost.go). backgroundGrace is how long a person's operation waits for it instead of being refused.
+// Why: the read is not the person's competitor but a short background visit (about two seconds on a
+// responsive device; it is bounded by its own timeouts), and it started without their knowing. A refusal
+// "Another operation on this device is running (broker read)" asks them to retry something they did not
+// start, and a bulk run or an update loses that device (or all of them) for it. Every other holder is an
+// operation somebody chose, which can run for minutes: it still refuses at once.
+const backgroundRead = "broker read"
+
+var backgroundGrace = 5 * time.Second
+
+// acquire is TryAcquire for a person's operation: it waits up to backgroundGrace for the background
+// read to let go of the device, never for any other holder.
+func (g deviceGuard) acquire(ctx context.Context, id model.DeviceID, owner string) (release func(), holder string, ok bool) {
+	release, holder, ok = g.locks.TryAcquire(id, owner)
+	if ok || holder != backgroundRead {
+		return release, holder, ok
+	}
+	deadline := time.NewTimer(backgroundGrace)
+	defer deadline.Stop()
+	tick := time.NewTicker(25 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, holder, false
+		case <-deadline.C:
+			return nil, holder, false
+		case <-tick.C:
+			if release, holder, ok = g.locks.TryAcquire(id, owner); ok || holder != backgroundRead {
+				return release, holder, ok
+			}
+		}
+	}
+}
+
 // enter takes the device lock for owner and refuses while an OTA job is
 // active for the device. The caller must call the returned release.
 func (g deviceGuard) enter(ctx context.Context, id model.DeviceID, owner string) (func(), error) {
-	release, holder, ok := g.locks.TryAcquire(id, owner)
+	release, holder, ok := g.acquire(ctx, id, owner)
 	if !ok {
 		return nil, devlock.BusyError{Holder: holder}
 	}
@@ -175,7 +212,7 @@ func (l lockedOTA) Submit(ctx context.Context, actor string, reqs []ota.Request)
 			continue // the engine refuses duplicates itself
 		}
 		seen[r.DeviceID] = true
-		release, holder, ok := l.g.locks.TryAcquire(r.DeviceID, "ota")
+		release, holder, ok := l.g.acquire(ctx, r.DeviceID, "ota")
 		if !ok {
 			return 0, devlock.BusyError{Holder: holder}
 		}
@@ -221,7 +258,7 @@ func (l lockedOTA) SubmitRetry(ctx context.Context, actor string, batch model.Ba
 		if (len(want) > 0 && !want[j.DeviceID]) || (j.State != model.JobFailed && j.State != model.JobCancelled) {
 			continue // the engine refuses what is not retryable
 		}
-		release, holder, ok := l.g.locks.TryAcquire(j.DeviceID, "ota")
+		release, holder, ok := l.g.acquire(ctx, j.DeviceID, "ota")
 		if !ok {
 			return ota.RetryResult{}, devlock.BusyError{Holder: holder}
 		}
@@ -257,7 +294,7 @@ func (l lockedPolicyFix) Submit(ctx context.Context, actor string, reqs []ota.Po
 			continue
 		}
 		seen[r.DeviceID] = true
-		release, holder, ok := l.g.locks.TryAcquire(r.DeviceID, "policy")
+		release, holder, ok := l.g.acquire(ctx, r.DeviceID, "policy")
 		if !ok {
 			skipped = append(skipped, ota.Refusal{DeviceID: r.DeviceID, Reason: devlock.BusyError{Holder: holder}.Error()})
 			continue
