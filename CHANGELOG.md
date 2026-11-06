@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Added
+
+- Website: a project page in `site/` (static HTML and CSS, light and dark, with the real UI screenshots, the features, install per platform and links), for GitHub Pages at the root with the demo next to it (#566)
+
 ## 0.34.0 "Split Rock" (2026-11-06)
 
 ### Upgrade notes

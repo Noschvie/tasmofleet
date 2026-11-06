@@ -19,6 +19,7 @@
 # The job "required" is the single status check for branch protection; it always runs.
 #
 # No paths filter on the trigger: "changes" decides, and "required" always reports.
+# site/ (the GitHub Pages project page) is static HTML and CSS that no test reads.
 # Docs that are NOT safe to ignore, because a test or the build reads them: CHANGELOG.md
 # (embedded by internal/changelog, TestEmbeddedChangelog), docs/security
 # (cmdpolicy test reads command-policy.md), docs/configuration.md (configdoc_test checks it
@@ -73,7 +74,7 @@ jobs:
           image=false
           for f in $files; do
             case "$f" in
-              docs/research/*|docs/runbooks/*|docs/design/*|README.md|ROADMAP.md|CONTRIBUTING.md|SECURITY.md|CLAUDE.md|NOTICE|LICENSE) ;;
+              docs/research/*|docs/runbooks/*|docs/design/*|site/*|README.md|ROADMAP.md|CONTRIBUTING.md|SECURITY.md|CLAUDE.md|NOTICE|LICENSE) ;;
               *) code=true ;;
             esac
             case "$f" in *.go) gocode=true ;; esac

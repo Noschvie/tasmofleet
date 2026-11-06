@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TasmoFleet: a fleet manager for Tasmota devices</title>
+<meta name="description" content="A self-hosted fleet manager for Tasmota devices: configuration backups with restore, a settings policy with compliance view, safe bulk firmware updates, in one Go binary.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preload" href="assets/geist-latin.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top">
+  <div class="wrap bar">
+    <a class="brand" href="./">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="assets/wordmark-dark.svg">
+        <img src="assets/wordmark.svg" alt="TasmoFleet" width="150" height="32">
+      </picture>
+    </a>
+    <nav aria-label="Main">
+      <a href="#features">Features</a>
+      <a href="#install">Install</a>
+      <a href="#links">Links</a>
+      <a href="demo/">Demo</a>
+      <a href="https://github.com/nofuturekid/tasmofleet">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+  <section class="hero">
+    <div class="wrap">
+      <p class="eyebrow">Self-hosted, open source, one Go binary</p>
+      <h1>Run your Tasmota fleet from one place.</h1>
+      <p class="lead">TasmoFleet backs up every device, checks it against your settings policy and updates firmware in bulk, with a safety guard in front of every update. Your devices, your server, no cloud.</p>
+      <p class="cta">
+        <a class="btn primary" href="demo/">Try the demo</a>
+        <a class="btn" href="#install">Install</a>
+      </p>
+      <p class="note">The demo is the real UI with a simulated fleet of 60 devices, saved as static pages (actions are disabled).</p>
+      <figure class="shot hero-shot">
+        <img src="assets/dashboard.png" width="1280" height="860" alt="The TasmoFleet dashboard in the dark theme: fleet state, a list of devices that need attention and recent transactions">
+      </figure>
+    </div>
+  </section>
+
+  <section id="screens" aria-labelledby="screens-h">
+    <div class="wrap">
+      <h2 id="screens-h">The real interface</h2>
+      <p class="sub">Screenshots of TasmoFleet running against simulated devices.</p>
+      <div class="grid2">
+        <figure class="shot">
+          <img src="assets/devices.png" loading="lazy" width="1280" height="860" alt="The device list with status, MQTT and HTTP state, firmware version, chip, address, uptime and a power switch per device">
+          <figcaption>Device list: filter by state, chip or tag.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="assets/policy-editor.png" loading="lazy" width="1280" height="860" alt="The policy rule editor suggesting Tasmota commands from the command catalogue">
+          <figcaption>Policy rules with command suggestions.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="assets/device-settings.png" loading="lazy" width="1280" height="860" alt="The Settings tab of one device in the dark theme, with curated settings read from the device">
+          <figcaption>Curated settings, read from the device.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="assets/demo.webp" loading="lazy" width="960" height="570" alt="Animation: four devices are picked for a firmware update, reviewed, started, and each device's progress is shown">
+          <figcaption>A firmware update of four devices.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="features" aria-labelledby="features-h">
+    <div class="wrap">
+      <h2 id="features-h">What it does</h2>
+      <ul class="cards">
+        <li>
+          <h3>Backups with diff and restore</h3>
+          <p>The raw <code>.dmp</code> plus decoded JSON, scheduled and taken before every update. Compare two backups side by side and restore onto the same or a replacement device.</p>
+        </li>
+        <li>
+          <h3>Policy and compliance</h3>
+          <p>Rules such as <code>PowerOnState 0</code> or <code>TelePeriod 300</code> per chip family, tag or device. See the drift per device and use "Make compliant" as one transaction.</p>
+        </li>
+        <li>
+          <h3>Safe bulk firmware updates</h3>
+          <p>Updates run on the server as a persisted job per device, with bounded parallelism. Closing the browser does not stop one. A guard refuses unknown hardware and images of the wrong chip family before every <code>OtaUrl</code> and <code>Upgrade</code>.</p>
+        </li>
+        <li>
+          <h3>Live state over MQTT</h3>
+          <p>Optional. Online state, power and telemetry arrive as they happen. Without MQTT every feature works over HTTP polling.</p>
+        </li>
+        <li>
+          <h3>Notifications</h3>
+          <p>Webhook, e-mail and browser notifications for finished updates and failed scheduled backups or snapshots.</p>
+        </li>
+        <li>
+          <h3>Sign-in and roles</h3>
+          <p>OIDC single sign-on, trusted forward-auth headers or local accounts, with admin and operator roles and an audit log of every change.</p>
+        </li>
+        <li>
+          <h3>Bulk actions with logs</h3>
+          <p>Updates, commands, backups and policy fixes on many devices run as one transaction with a log per device, cancel and retry.</p>
+        </li>
+        <li>
+          <h3>Import from TasmoAdmin</h3>
+          <p>Bring over <code>devices.csv</code> and <code>MyConfig.json</code> in the UI or with <code>tasmofleet import tasmoadmin</code>.</p>
+        </li>
+        <li>
+          <h3>Metrics and a tidy UI</h3>
+          <p>Prometheus metrics with an example Grafana dashboard, light and dark theme, a phone layout, and support for a reverse proxy under a base path.</p>
+        </li>
+      </ul>
+      <p class="sub">Background work only reads from your devices. A device is changed only when someone starts an action, and each action is audited.</p>
+    </div>
+  </section>
+
+  <section id="install" aria-labelledby="install-h">
+    <div class="wrap">
+      <h2 id="install-h">Install</h2>
+      <p class="sub">The image is <code>nofuturekid/tasmofleet</code> on Docker Hub and <code>ghcr.io/nofuturekid/tasmofleet</code>, for <code>linux/amd64</code> and <code>linux/arm64</code>.</p>
+      <div class="grid2 install">
+        <article class="card">
+          <h3>Docker</h3>
+          <pre><code>docker run -d --name tasmofleet \
+  -p 8443:8080 -p 80:80 \
+  -e TZ=Europe/Berlin \
+  -v tasmofleet-data:/data \
+  nofuturekid/tasmofleet:latest
+docker logs tasmofleet 2&gt;&amp;1 \
+  | grep -o '/setup/account?token=[^"]*'</code></pre>
+          <p>Open <code>https://&lt;host&gt;:8443</code> followed by the printed setup path, accept the self-signed certificate and set the admin password. Port 80 serves firmware to your devices.</p>
+        </article>
+        <article class="card">
+          <h3>Docker Compose</h3>
+          <pre><code>services:
+  tasmofleet:
+    image: nofuturekid/tasmofleet:latest
+    container_name: tasmofleet
+    restart: unless-stopped
+    ports:
+      - "8443:8080" # UI (HTTPS)
+      - "80:80"     # firmware for devices
+    environment:
+      TZ: "Europe/Berlin"
+    volumes:
+      - tasmofleet-data:/data
+volumes:
+  tasmofleet-data:</code></pre>
+          <p>The setup link is in <code>docker compose logs tasmofleet</code>.</p>
+        </article>
+        <article class="card">
+          <h3>Unraid</h3>
+          <p>Install TasmoFleet from Community Applications. The template runs the image on the <code>bridge</code> network with the port mappings as the only place for ports. A template for a reverse-proxy setup with its own IP is in the repository.</p>
+          <p><a href="https://github.com/nofuturekid/tasmofleet/blob/main/deploy/unraid/tasmofleet.xml">Unraid template on GitHub</a></p>
+        </article>
+        <article class="card">
+          <h3>Home Assistant app <span class="tag">experimental</span></h3>
+          <p>Not published yet. A first version exists in the repository (ports only, no sidebar entry, no Home Assistant sign-in) and is for testing, not for daily use.</p>
+          <p><a href="https://github.com/nofuturekid/tasmofleet/blob/main/deploy/homeassistant/tasmofleet/DOCS.md">Read what works today</a></p>
+        </article>
+      </div>
+      <p class="sub">Set the URL your devices use for firmware (for example <code>http://&lt;host-ip&gt;</code>) on the System settings page; until then firmware updates are off. Details, bind mounts and every setting are in the <a href="https://github.com/nofuturekid/tasmofleet#quick-start-docker">README</a> and <a href="https://github.com/nofuturekid/tasmofleet/blob/main/docs/configuration.md">configuration docs</a>.</p>
+    </div>
+  </section>
+
+  <section id="links" aria-labelledby="links-h">
+    <div class="wrap">
+      <h2 id="links-h">Status and links</h2>
+      <p class="sub"><strong>Pre-1.0, single maintainer.</strong> It runs a home fleet of a few dozen devices every day, but breaking changes are to be expected before 1.0: read the changelog before updating.</p>
+      <ul class="links">
+        <li><a href="demo/">Live demo</a><span>simulated fleet, static pages</span></li>
+        <li><a href="https://github.com/nofuturekid/tasmofleet/releases">Releases</a><span>release notes and downloads</span></li>
+        <li><a href="https://github.com/nofuturekid/tasmofleet/blob/main/CHANGELOG.md">Changelog</a><span>every change, breaking ones marked</span></li>
+        <li><a href="https://github.com/nofuturekid/tasmofleet/discussions">Discussions</a><span>questions and ideas</span></li>
+        <li><a href="https://github.com/nofuturekid/tasmofleet/tree/main/docs">Documentation</a><span>design, security notes, runbooks</span></li>
+        <li><a href="https://github.com/nofuturekid/tasmofleet">GitHub repository</a><span>source and issues</span></li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>TasmoFleet is licensed under the <a href="https://github.com/nofuturekid/tasmofleet/blob/main/LICENSE">GNU Affero General Public License v3.0 or later</a>.</p>
+    <p>TasmoFleet is an independent project and is not affiliated with, endorsed by or sponsored by Tasmota or its maintainers. "Tasmota" is the name of the firmware this tool manages.</p>
+    <p>Built with <a href="https://claude.com/claude-code">Claude Code</a>; the maintainer sets direction, reviews and tests on a real fleet. Font: Geist, <a href="assets/geist-OFL.txt">SIL OFL 1.1</a>.</p>
+  </div>
+</footer>
+</body>
+</html>
