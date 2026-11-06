@@ -1653,7 +1653,7 @@ device's item keeps its name when the device is deleted. Model: `model.BackupRun
   hour. The broker and the identity are read under the
   device lock; the data is read without it, after trying it (a device a job holds is skipped and visited again
   at the next pass), so a person's save is not refused as busy while a read runs; the settings save counter keeps a
-  read that a save overtook out of `Last`. Offline devices, devices the HTTP poll has not reached lately and devices
+  read that a save overtook out of `Last`. Identity fails closed: the broker read and the data read first check, with one `Status 5`, that the device at the stored address reports a MAC of the stored set (`Prober.VerifyAddress`, the rule of `ReadNet`; a device stored without a MAC has nothing to compare), and read nothing else from another device; a refused identity refresh holds the data read back for a day. Offline devices, devices the HTTP poll has not reached lately and devices
   on minimal or safeboot firmware are skipped; a failed read is retried after 10 minutes, a refused identity refresh
   (another MAC answers at the address; audited) at the regular interval. Never `Status 0`; a visit sends its requests
   one after the other. The policy poller (system setting `PolicyLiveInterval`) and the MQTT updates keep feeding the
