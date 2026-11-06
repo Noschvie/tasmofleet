@@ -6,6 +6,10 @@ always upgrade automatically.
 
 ## Unreleased
 
+### Added
+
+- docs/pitfalls.md: one rule per mistake that already happened, with where it is enforced (#525)
+
 ### Changed
 
 - Reverted #693: environment secrets did not reach the reusable workflows; Docker Hub credentials are repository secrets again.
