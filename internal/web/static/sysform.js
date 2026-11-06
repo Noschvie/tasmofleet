@@ -231,30 +231,7 @@
     });
   }
 
-  function changed(e) {
-    // Switching a schedule on with no interval fills a sensible one.
-    var t = e.target;
-    var isSwitch =
-      t instanceof HTMLInputElement &&
-      schedules.indexOf("v." + t.name.slice(3)) >= 0 &&
-      t.name.slice(0, 3) === "sw.";
-    if (isSwitch && t.checked) {
-      var iv = form.elements["v." + t.name.slice(3)];
-      if (iv && (iv.value === "" || iv.value === "0" || iv.value === "0s")) {
-        iv.setAttribute("data-before", iv.value); // what switching off puts back
-        iv.value = "24h";
-      }
-    }
-    // Switching off again takes back the proposed 24h, so on and off leaves nothing changed.
-    if (isSwitch && !t.checked) {
-      var pv = form.elements["v." + t.name.slice(3)];
-      if (pv && pv.hasAttribute("data-before") && pv.value === "24h") {
-        pv.value = pv.getAttribute("data-before");
-      }
-      if (pv) {
-        pv.removeAttribute("data-before");
-      }
-    }
+  function changed() {
     depends();
     brokerKeep();
     refresh();
