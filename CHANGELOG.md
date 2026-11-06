@@ -6,6 +6,8 @@ always upgrade automatically.
 
 ## Unreleased
 
+## 0.32.0 "Fastnet" (2026-11-06)
+
 ### Added
 
 - Device data stays current on its own: once a day per online device (spread over the fleet, one device at a time) and after a restart (once, 20 seconds after it settled; a device in a boot loop about once an hour), TasmoFleet reads the Settings values, the values the policy rules check and the GPIO template reading, so the Settings tab and Policy → GPIO templates show them without a click, and it probes the identity again over HTTP after a restart and every 24 hours (without renaming anything: names and topics change only on Refresh identity). Offline and busy devices are skipped, the policy values are not read while the live check is paused, and `Status 0` is never sent (#600)
