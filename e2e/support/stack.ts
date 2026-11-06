@@ -101,6 +101,7 @@ export async function startApp(opts: AppOptions = {}): Promise<App> {
   const dataDir = opts.dataDir ?? mkdtempSync(join(tmpdir(), "tasmofleet-e2e-"));
   const env: Record<string, string> = {
     PATH: process.env.PATH ?? "",
+    ...(process.env.TZ ? { TZ: process.env.TZ } : {}),
     TASMOFLEET_DATA_DIR: dataDir,
     TASMOFLEET_CONFIG_FILE: "/dev/null",
     TASMOFLEET_LISTEN: `127.0.0.1:${port}`,

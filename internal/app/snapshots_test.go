@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nofuturekid/tasmofleet/internal/snapshot"
 	"github.com/nofuturekid/tasmofleet/internal/store"
@@ -37,12 +38,16 @@ func snapshotAudit(t *testing.T, svc *Services) []string {
 
 // Why: when the schedule says it is time, a real snapshot of the real database lands in the data
 // directory, the audit log says so, and the attempt is recorded in snapshot_runs: that record is what
-// keeps the same time of day from being taken twice (the schedule tests) across a restart.
+// keeps the same time of day from being taken twice (the schedule tests) across a restart. It is
+// recorded at the time the schedule started it, the clock the schedule decides by (a row stamped with
+// another clock settles the wrong times), and as a run, not a skip, or the page would say "skipped"
+// after every good snapshot.
 func TestScheduledSnapshotIsWrittenAuditedAndRecorded(t *testing.T) {
 	a, svc := snapshotRuntime(t, everyDay, "7")
-	a.scheduledSnapshot(t.Context())
-	if settled, _, err := svc.Store.SnapshotRunTimes(t.Context()); err != nil || settled.IsZero() {
-		t.Fatalf("the run was not recorded: %v %v", settled, err)
+	started := time.Date(2026, 11, 3, 3, 0, 0, 0, time.UTC)
+	a.scheduledSnapshot(t.Context(), started)
+	if settled, missed, err := svc.Store.SnapshotRunTimes(t.Context()); err != nil || !settled.Equal(started) || !missed.IsZero() {
+		t.Fatalf("recorded: settled %v, missed %v (%v); want the start of the attempt and no skip", settled, missed, err)
 	}
 	list, err := a.snapshots.List()
 	if err != nil || len(list) != 1 || list[0].Schema == 0 {
@@ -64,7 +69,7 @@ func TestScheduledSnapshotFailureIsAuditedWithItsReason(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(svc.Cfg.DataDir, snapshot.DirName), []byte("in the way"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	a.scheduledSnapshot(t.Context())
+	a.scheduledSnapshot(t.Context(), time.Now())
 	st := a.snapshots.Status()
 	if !st.Failed || st.Reason == "" || !strings.HasPrefix(st.File, "tasmofleet-") {
 		t.Fatalf("status: %+v", st)

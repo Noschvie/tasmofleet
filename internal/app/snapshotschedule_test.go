@@ -218,7 +218,8 @@ func TestPruningNeitherRepeatsNorLosesAScheduledSnapshot(t *testing.T) {
 
 // Why (#602): a snapshot that cannot be written settles its time of day like a good one. The person
 // is told once (the failure notification); the schedule does not try again every minute against a
-// disk that is full, and does not take a late "make-up" snapshot after the next look either.
+// disk that is full, and does not take a late "make-up" snapshot after the next look either, not even
+// after a restart within the 60 minutes: the attempt is in the run record, not only in memory.
 func TestFailedScheduledSnapshotSettlesItsTimeAndIsNotRetriedInALoop(t *testing.T) {
 	e := newSnapSched(t, everyDay, "03:00")
 	e.ran(t, time.Date(2026, 11, 2, 3, 0, 4, 0, e.loc))
@@ -229,6 +230,9 @@ func TestFailedScheduledSnapshotSettlesItsTimeAndIsNotRetriedInALoop(t *testing.
 	for range 3 {
 		e.step(t)
 	}
+	restarted := e.a.snapshotSchedule() // a new process 20 minutes later: nothing in memory
+	restarted.now = func() time.Time { return time.Date(2026, 11, 3, 3, 20, 0, 0, e.loc) }
+	restarted.step(t.Context())
 	got := e.sent()
 	if len(got) != 1 || !strings.Contains(got[0], `"event":"snapshot.failed"`) || strings.Contains(got[0], "skipped") {
 		t.Fatalf("sent %v, want exactly one failure message", got)
@@ -245,8 +249,28 @@ func TestSnapshotCutByShutdownIsNotRecordedAsHandled(t *testing.T) {
 	a, svc := snapshotRuntime(t, everyDay, "7")
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	a.scheduledSnapshot(ctx)
+	a.scheduledSnapshot(ctx, time.Now())
 	if settled, _, err := svc.Store.SnapshotRunTimes(t.Context()); err != nil || !settled.IsZero() {
 		t.Fatalf("a run cut by shutdown was recorded: %v %v", settled, err)
+	}
+}
+
+// Why (#602): the run record follows the audit retention like the backup runs, so the daily retention
+// run keeps it from growing for ever; a row inside the retention stays.
+func TestRetentionPrunesSnapshotRuns(t *testing.T) {
+	_, svc := snapshotRuntime(t, everyDay, "7")
+	old, recent := time.Now().Add(-48*time.Hour), time.Now().Add(-time.Hour)
+	for _, at := range []time.Time{old, recent} {
+		if err := svc.Store.SaveSnapshotRun(t.Context(), store.SnapshotRunScheduled, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	a := &runtime{svc: &Services{Sys: auditKeepSys(t, 24*time.Hour), Store: svc.Store}, log: svc.Log}
+	a.prune(t.Context())
+	if n, err := svc.Store.PruneSnapshotRuns(t.Context(), old.Add(time.Minute)); err != nil || n != 0 {
+		t.Errorf("%d rows older than the audit retention are still stored (%v)", n, err)
+	}
+	if settled, _, err := svc.Store.SnapshotRunTimes(t.Context()); err != nil || !settled.Equal(recent.Truncate(time.Millisecond)) {
+		t.Errorf("the row inside the retention is gone: settled %v (%v)", settled, err)
 	}
 }

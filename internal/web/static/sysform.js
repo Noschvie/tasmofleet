@@ -2,7 +2,7 @@
 //  - shows one tab at a time without a page load, so edits on another tab are not lost,
 //  - tracks unsaved changes per tab (save bar, dot in the tab strip, leave warning),
 //  - dims settings and cards whose switch or sign-in mode is off (data-depends),
-//  - runs the phone section picker and the backup schedule switch.
+//  - runs the phone section picker.
 // Without this file the tabs are links (a page load per tab) and everything is enabled.
 (function () {
   "use strict";

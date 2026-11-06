@@ -35,9 +35,12 @@ func (r snapshotRuns) SaveBackupRun(ctx context.Context, run model.BackupRun) (i
 // grace, else it is skipped and the person is told.
 func (a *runtime) snapshotSchedule() *scheduleLoop {
 	b := &scheduleLoop{
-		name: "snapshot", log: a.log, store: snapshotRuns{a.svc.Store}, now: time.Now, run: a.scheduledSnapshot,
+		name: "snapshot", log: a.log, store: snapshotRuns{a.svc.Store}, now: time.Now,
 		schedule: func() schedule.Schedule { return a.svc.Sys.Snapshot().SnapshotSchedule() },
 	}
+	// The attempt is recorded at the loop's clock, as a backup run records its start: the record is
+	// what settles the time of day, and it must be on the clock the schedule decides by.
+	b.run = func(ctx context.Context) { a.scheduledSnapshot(ctx, b.now()) }
 	if a.notifier != nil {
 		b.missed = func(slot, at time.Time) {
 			a.notifier.Emit(notify.SnapshotMissed(a.notifier.Config(), slot, at))
@@ -49,8 +52,9 @@ func (a *runtime) snapshotSchedule() *scheduleLoop {
 // scheduledSnapshot writes one snapshot of TasmoFleet's own database (the schedule says it is
 // time), prunes to SNAPSHOT_KEEP and audits the outcome as "system". A failure is logged and
 // audited with its reason; the stored snapshots stay as they were. The attempt is recorded either
-// way (snapshot_runs): a failing disk is tried at the next scheduled time, not in a loop.
-func (a *runtime) scheduledSnapshot(ctx context.Context) {
+// way (snapshot_runs, at started, when the schedule started it): a failing disk is tried at the next
+// scheduled time, not in a loop.
+func (a *runtime) scheduledSnapshot(ctx context.Context, started time.Time) {
 	if a.snapshots == nil {
 		return
 	}
@@ -62,7 +66,7 @@ func (a *runtime) scheduledSnapshot(ctx context.Context) {
 		// One row, not cut by a shutdown that comes now.
 		sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 		defer cancel()
-		if err := a.svc.Store.SaveSnapshotRun(sctx, store.SnapshotRunScheduled, time.Now()); err != nil {
+		if err := a.svc.Store.SaveSnapshotRun(sctx, store.SnapshotRunScheduled, started); err != nil {
 			a.log.Warn("snapshot schedule: storing the run", "err", err)
 		}
 	}()

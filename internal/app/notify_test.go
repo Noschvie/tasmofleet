@@ -55,7 +55,7 @@ func notifyRuntime(t *testing.T, extra map[string]string) (*runtime, *Services, 
 func TestFailedScheduledSnapshotIsNotifiedAndASuccessIsNot(t *testing.T) {
 	a, svc, sent := notifyRuntime(t, map[string]string{"SNAPSHOT_DAYS": everyDay})
 	a.snapshots = snapshot.New(svc.Store, svc.Cfg.DataDir)
-	a.scheduledSnapshot(t.Context())
+	a.scheduledSnapshot(t.Context(), time.Now())
 	if got := sent(); len(got) != 0 {
 		t.Fatalf("a good snapshot sent %v", got)
 	}
@@ -67,7 +67,7 @@ func TestFailedScheduledSnapshotIsNotifiedAndASuccessIsNot(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.snapshots = snapshot.New(svc.Store, svc.Cfg.DataDir)
-	a.scheduledSnapshot(t.Context())
+	a.scheduledSnapshot(t.Context(), time.Now())
 	got := sent()
 	if len(got) != 1 || !strings.Contains(got[0], `"event":"snapshot.failed"`) {
 		t.Fatalf("a failed snapshot sent %v, want one snapshot.failed", got)

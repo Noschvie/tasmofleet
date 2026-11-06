@@ -146,7 +146,6 @@ test(
 // still show, once. Here the leader sits on Settings and the event is set off on Snapshots.
 test(
   "with only pages without live data open, the event still shows once",
-  { tag: "@core" },
   async ({ page, context }) => {
     test.setTimeout(240_000); // the snapshot is taken at its scheduled time, up to 80 s after the save (#602)
     const a = await newApp();
