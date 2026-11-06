@@ -258,6 +258,13 @@ func TestOperatorDiffShowsValuesExceptFreeTextAndCredentials(t *testing.T) {
 	if strings.Contains(ad, "FAKE-SECRET") {
 		t.Error("an admin never sees a credential either")
 	}
+	driftMu.Lock()
+	clear(driftLast) // a fresh read, not the operator's cached one
+	driftMu.Unlock()
+	_, ad = e.do(t, "GET", "/devices/1/drift", "admin", nil)
+	if !strings.Contains(ad, "RULEBODY_NEW") || strings.Contains(ad, "FAKE-SECRET") {
+		t.Errorf("on the Drift tab an admin reads the free text and never a credential:\n%s", ad)
+	}
 }
 
 // Why: a backup ID from another device in the URL must not be comparable
