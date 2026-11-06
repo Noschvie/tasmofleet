@@ -5,95 +5,62 @@
   </picture>
 </p>
 
-# TasmoFleet
+<p align="center">
+  <strong>Back up, check and update your Tasmota devices from one place, on your own server.</strong>
+</p>
 
-A self-hosted fleet manager for [Tasmota](https://tasmota.github.io/) devices: configuration
-backups with restore, a settings policy with compliance view, safe bulk firmware updates, live state
-and fleet-wide commands in one Go binary with an embedded SQLite database.
+<p align="center">
+  <a href="https://github.com/nofuturekid/tasmofleet/releases"><img alt="Release" src="https://img.shields.io/github/v/release/nofuturekid/tasmofleet?sort=semver"></a>
+  <a href="https://hub.docker.com/r/nofuturekid/tasmofleet"><img alt="Docker Hub pulls" src="https://img.shields.io/docker/pulls/nofuturekid/tasmofleet?logo=docker&logoColor=white"></a>
+  <a href="LICENSE"><img alt="License: AGPL-3.0-or-later" src="https://img.shields.io/github/license/nofuturekid/tasmofleet"></a>
+  <a href="https://github.com/nofuturekid/tasmofleet/actions/workflows/main.yml"><img alt="CI" src="https://github.com/nofuturekid/tasmofleet/actions/workflows/main.yml/badge.svg?branch=main"></a>
+</p>
 
-[![CI](https://github.com/nofuturekid/tasmofleet/actions/workflows/main.yml/badge.svg?branch=main)](https://github.com/nofuturekid/tasmofleet/actions/workflows/main.yml)
-[![Release](https://img.shields.io/github/v/release/nofuturekid/tasmofleet?sort=semver)](https://github.com/nofuturekid/tasmofleet/releases)
-[![License: AGPL-3.0-or-later](https://img.shields.io/github/license/nofuturekid/tasmofleet)](LICENSE)
-[![Docker Hub pulls](https://img.shields.io/docker/pulls/nofuturekid/tasmofleet?logo=docker&logoColor=white)](https://hub.docker.com/r/nofuturekid/tasmofleet)
-[![Image: ghcr.io](https://img.shields.io/badge/image-ghcr.io%2Fnofuturekid%2Ftasmofleet-blue?logo=docker&logoColor=white)](https://github.com/nofuturekid/tasmofleet/pkgs/container/tasmofleet)
+<p align="center">
+  <a href="https://nofuturekid.github.io/tasmofleet/">Website</a> ·
+  <a href="https://nofuturekid.github.io/tasmofleet/demo/">Live demo</a> ·
+  <a href="#quick-start-docker">Install</a> ·
+  <a href="#documentation">Docs</a> ·
+  <a href="https://github.com/nofuturekid/tasmofleet/releases">Release notes</a> ·
+  <a href="https://github.com/nofuturekid/tasmofleet/discussions">Discussions</a>
+</p>
+
+![The TasmoFleet dashboard: fleet state, what needs attention, recent transactions](docs/media/dashboard.png)
+
+TasmoFleet is a self-hosted fleet manager for [Tasmota](https://tasmota.github.io/) devices, one Go
+binary with an embedded SQLite database. All screenshots show simulated devices; the
+**[live demo](https://nofuturekid.github.io/tasmofleet/demo/)** is the real UI with a simulated fleet of 60
+devices, saved as static pages (actions are disabled).
+
+## Why TasmoFleet
+
+Built on a home fleet of a few dozen devices, as an alternative to
+[TasmoAdmin](https://github.com/TasmoAdmin/TasmoAdmin) (it imports its device list).
+
+- **Backups with diff and restore**: the raw `.dmp` plus decoded JSON, scheduled and before every
+  update, compared side by side, restored onto the same or a replacement device.
+- **Policy and compliance**: rules such as `PowerOnState 0` or `TelePeriod 300` per chip family, tag
+  or device, a drift view per device, and "Make compliant" as one transaction.
+- **Safe bulk firmware updates**: persisted server-side jobs (closing the browser does not stop
+  them), bounded parallelism, and a guard before every `OtaUrl` and `Upgrade` that refuses unknown
+  hardware, a chip-family mismatch, safeboot images and a variant change you did not choose.
+- **MQTT, optional**: live state and pages that update without reloading; without MQTT every
+  feature works over HTTP polling.
+- **Notifications** by webhook (for example Home Assistant) or email when an update finishes or a
+  scheduled backup or snapshot fails.
+- **Sign-in** with OIDC single sign-on, trusted forward-auth headers or local accounts; roles and an
+  audit log of every change.
+- **Nothing changes on a device on its own**: background work only reads. See
+  [what TasmoFleet changes on your devices](docs/device-changes.md).
+
+Also: discovery via MQTT or HTTP scan, Prometheus metrics, light and dark theme, phone layout,
+import from TasmoAdmin.
+
+| Device list                                                                   | Policy rule editor                                                                                 |
+| ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| ![Device list with status, firmware and chip columns](docs/media/devices.png) | ![Policy rule editor suggesting commands from the Tasmota catalogue](docs/media/policy-editor.png) |
 
 ![A firmware update of four devices: pick them, review, start, watch each device's progress](docs/media/demo.webp)
-
-**[Try the demo](https://nofuturekid.github.io/tasmofleet/)**: the real UI with a simulated fleet
-of 60 devices, saved as static pages (actions are disabled).
-
-TasmoFleet is an independent project and is not affiliated with, endorsed by or sponsored
-by Tasmota or its maintainers. "Tasmota" is the name of the firmware this tool manages; the
-TasmoFleet logo is original and unrelated to the Tasmota logo.
-
-## Why
-
-TasmoFleet is an alternative to [TasmoAdmin](https://github.com/TasmoAdmin/TasmoAdmin),
-built on a home fleet of a few dozen devices. What it does differently:
-
-- **Backups with diff and restore**: the raw `.dmp` plus decoded JSON (with
-  [decode-config](https://github.com/tasmota/decode-config), bundled in the image), scheduled
-  and before every update, compared side by side, restored onto the same or a replacement device.
-- **Policy and compliance**: rules such as `PowerOnState 0` or `TelePeriod 300` per chip family,
-  tag or device, a drift view per device, and "make compliant" as a transaction.
-- **Updates run on the server**, as a persisted job per device (backup, OTA URL, upgrade,
-  wait for the reboot, verify), with bounded parallelism. Closing the browser does not stop an
-  update, and an update interrupted by a restart resumes. TasmoAdmin drives updates from the
-  open browser tab.
-- **A safety guard before every `OtaUrl` and `Upgrade`**: it refuses unknown hardware, an image
-  whose chip family does not match the device (checked against the image header and the file
-  name), safeboot images, and a variant change you did not choose explicitly. 1 MB ESP8266
-  devices go through `tasmota-minimal` first.
-- **Live state over MQTT** (optional): online state, power and telemetry arrive as they happen
-  and the pages update without reloading. Without MQTT every feature works over HTTP polling.
-- **Bulk actions as transactions with logs**: updates, commands, backups and policy fixes on
-  many devices run as one transaction, with a log per device, cancel and retry of the failed ones.
-- **Sign-in** with OIDC single sign-on, trusted forward-auth headers, or local accounts; roles
-  (admin, operator) and an audit log of every change.
-- **Import from TasmoAdmin**: `devices.csv` and `MyConfig.json`, in the UI or with
-  `tasmofleet import tasmoadmin`.
-
-## Features
-
-- **Inventory and discovery**: devices found via MQTT announcements or an HTTP scan of your
-  device networks are proposed, not added silently; address changes are detected.
-- **Firmware** from upstream (GitHub releases, ota.tasmota.com) or your own uploads, cached,
-  checked by its image header and served to devices over plain HTTP from a separate port.
-- **Device pages**: overview, power control, console with a command policy, settings, backups,
-  drift, state and transaction history.
-- **Prometheus metrics** and an example Grafana dashboard ([deploy/](deploy/)).
-- Light and dark theme, phone layout, works behind a reverse proxy under a base path.
-- Automation stays in Home Assistant (or wherever you run it): TasmoFleet manages devices, it
-  does not switch them on schedules.
-
-### What TasmoFleet changes on your devices
-
-Nothing on its own. Everything TasmoFleet does in the background only reads: status polling
-(single `Status N` queries, never `Status 0`), the policy live check, scheduled backups (config
-download and status snapshot), and discovery (MQTT announcements, HTTP scan).
-
-A device is only changed when someone starts an action in the UI: a firmware update, "make
-compliant" for the policy, a console or bulk command, a power toggle, a restart, a restore or a
-settings edit. Each of these is recorded in the audit log.
-
-**TasmoFleet leaves the power state alone.** It does not read or switch relays around a firmware
-update. A device that loses its relay state when it reboots (a light driver that switches itself off after the boot, an ESP32 without `SetOption0 1`)
-comes back as its own settings say. To have it come back as it was, set `SetOption0 1` (save
-the relay state), `PowerOnState 3` (keep the last state) and `SaveData 1` on the device; a policy
-rule can do that for the fleet (the "Restore power after an outage" template covers `PowerOnState 3`).
-
-There is no read-only mode or view-only role yet: both roles can change devices. Admins can do
-everything; operators can run updates, backups, power toggles, restarts and the allowlisted
-commands, but cannot edit the inventory, restore backups, manage firmware, edit or fix policy,
-edit settings or manage users.
-
-| Dashboard (dark)                                                                         | Device list                                                                                        |
-| ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| ![Dashboard with fleet state, attention list and transactions](docs/media/dashboard.png) | ![Device list with status, firmware and chip columns](docs/media/devices.png)                      |
-| **Device Settings tab (dark)**                                                           | **Policy rule editor with command suggestions**                                                    |
-| ![Curated device settings read from the device](docs/media/device-settings.png)          | ![Policy rule editor suggesting commands from the Tasmota catalogue](docs/media/policy-editor.png) |
-
-All screenshots show simulated devices.
 
 ## Quick start (Docker)
 
@@ -106,30 +73,11 @@ docker run -d --name tasmofleet \
 docker logs tasmofleet 2>&1 | grep -o '/setup/account?token=[^"]*'
 ```
 
-The image is published to two registries under the same tags (`latest`, `X.Y.Z` and `edge`, the
-current `main`): `nofuturekid/tasmofleet` on Docker Hub and `ghcr.io/nofuturekid/tasmofleet`. Use
-either name; to pull from ghcr.io instead, put `ghcr.io/` in front of the image name.
-
-Every tag is a multi-arch image: `linux/amd64` and `linux/arm64` (Raspberry Pi 4/5 and other 64-bit
-ARM boards). Docker picks the right one. Both include the backup decoder
-([decode-config](https://github.com/tasmota/decode-config), LGPL-3.0, run as a separate program). On
-arm64 it is an unofficial build of exactly upstream v16.0.0 plus the merged aarch64 workflow change
-([tasmota/decode-config#127](https://github.com/tasmota/decode-config/pull/127)), made in
-[nofuturekid/tasmota-decode-config](https://github.com/nofuturekid/tasmota-decode-config/releases/tag/v16.0.0-arm64);
-the Dockerfile switches to upstream's asset once a release ships aarch64. 32-bit ARM is not built.
-
-The UI always listens on container port 8080; `8443:8080` maps container port 8080 to host port 8443, which you can choose freely. Upgrading
-from 0.16 or older with a `-p 8443:8443` mapping? Read [Upgrading to 0.17](docs/upgrading.md) first.
-
 Open `https://<host>:8443` followed by the printed `/setup/account?token=...` path, accept the
-self-signed certificate, set the admin password and follow the setup. The link is valid until
-the admin has a password; each start prints a fresh one until then.
+self-signed certificate, set the admin password and follow the setup. Port 80 serves firmware to
+the devices over plain HTTP; set the URL they use on the System settings page.
 
-Port 80 serves firmware to the devices (they fetch it over plain HTTP); it can be any port the
-devices can reach. Set the URL the devices use (e.g. `http://<host-ip>`) on the System settings
-page; until then firmware updates are off.
-
-The same with Docker Compose:
+With Docker Compose:
 
 ```yaml
 services:
@@ -141,114 +89,64 @@ services:
       - "8443:8080" # UI (HTTPS, self-signed; container port is always 8080)
       - "80:80" # firmware for the devices (plain HTTP)
     environment:
-      TZ: "Europe/Berlin" # local time instead of UTC (logs, times the app formats)
+      TZ: "Europe/Berlin"
     volumes:
       - tasmofleet-data:/data
 volumes:
   tasmofleet-data:
 ```
 
-The container runs as UID 65532. A named volume (as above) works out of the box. For a bind
-mount (`-v /srv/tasmofleet:/data`) make the directory writable for that user first, otherwise
-Docker creates it as root and TasmoFleet refuses to start with `data dir /data is not writable`:
+The setup link is then in `docker compose logs tasmofleet`. Images are on Docker Hub and
+`ghcr.io`, for amd64 and arm64. Bind mounts, registries, architectures and upgrading:
+[docs/installation.md](docs/installation.md).
 
-```sh
-mkdir -p /srv/tasmofleet && chown -R 65532:65532 /srv/tasmofleet
-```
+**Unraid**: install **TasmoFleet** from Community Applications (search for it in the Apps tab).
+A manual template is in [deploy/unraid/tasmofleet.xml](deploy/unraid/tasmofleet.xml).
 
-Alternatively set an explicit `user: "<uid>:<gid>"` in Compose (or `--user`) that owns the
-directory. Set `TZ` (e.g. `Europe/Berlin`) to get local time instead of UTC
-([what it changes](docs/configuration.md#time-zone)).
-
-With Compose, the setup link is in `docker compose logs tasmofleet`.
-
-**Unraid**: a template is in [deploy/unraid/tasmofleet.xml](deploy/unraid/tasmofleet.xml) (copy
-it to `/boot/config/plugins/dockerMan/templates-user/`); it runs plain HTTP behind a reverse
-proxy with its own IP on `br0` (UI on port 8080, firmware on port 80 of that IP). The Community
-Applications template uses the `bridge` network instead, with the port mappings as the only
-place for ports. Upgrading an existing install: [docs/upgrading.md](docs/upgrading.md).
+**Home Assistant app**: experimental and not published yet (no sidebar entry, no Home Assistant
+sign-in). The app and its documentation are in
+[deploy/homeassistant/tasmofleet](deploy/homeassistant/tasmofleet/DOCS.md).
 
 ## Backing up TasmoFleet
 
 Back up the whole data directory (the `/data` volume): it holds the database and the device
-configuration backups (`.dmp`). Before every database migration TasmoFleet writes a copy next
-to the database, `<db>.pre-<N>` (the newest three are kept), so an upgrade can be undone.
-
-**System, Snapshots** (admins only, after a password confirmation, or a sign-in at your identity provider; a proxy-header sign-in ticks a checkbox instead) downloads
-a consistent snapshot of the database, made with SQLite `VACUUM INTO` while TasmoFleet runs. The
-file holds every user's password hash and the encrypted device, broker and OIDC secrets; the key
-that decrypts them, `secret.key`, is a separate file and is only included (as a `.tar`) when you
-tick the box. Device backups (`.dmp`) and the firmware cache are not part of it. The same page can
-keep scheduled snapshots in `/data/snapshots` (`tasmofleet-YYYYMMDD-HHMMZ.db`, UTC; `SNAPSHOT_DAYS`, `SNAPSHOT_TIME`, `SNAPSHOT_KEEP`; off by default).
-They sit on the same disk as the database, so they protect against a bad upgrade or a deleted row,
-not against a dead disk: keep a copy elsewhere.
-
-To restore (there is no restore button on purpose):
-
-1. Stop the container.
-2. Replace `/data/tasmofleet.db` with the snapshot (or a `tasmofleet.db.pre-<N>` copy) and delete
-   `tasmofleet.db-wal` and `tasmofleet.db-shm` next to it. From a `.tar`, unpack `tasmofleet.db`
-   and `secret.key` into `/data`.
-3. Make sure `/data/secret.key` is the one from the same time, then start the container. A
-   snapshot from an older version is migrated at start; one from a newer version is refused.
-
-## Configuration
-
-The environment only holds bootstrap settings (listeners, data directory, trusted proxies,
-sign-in mode); everything else, single sign-on included, is set in the UI and stored in the
-database. A value set in the environment locks its field in the UI.
-
-- **Every environment variable** (purpose, default, bootstrap/lock/legacy, secrets and `_FILE`, how TLS is
-  chosen, the time zone): [docs/configuration.md](docs/configuration.md). An example env file:
-  [deploy/unraid/tasmofleet.env.example](deploy/unraid/tasmofleet.env.example)
-- Reverse proxy, OIDC (Authentik), Prometheus, Grafana and Unraid examples: [deploy/](deploy/).
-  Behind a reverse proxy, set `TASMOFLEET_TRUSTED_PROXIES` and `TASMOFLEET_PUBLIC_URL`: the
-  same container port 8080 then serves plain HTTP.
-- Lost passwords and emergency access: [docs/runbooks/emergency-access.md](docs/runbooks/emergency-access.md)
-
-## Status
-
-**Pre-1.0, single maintainer.** It runs a home fleet of a few dozen devices every
-day, but breaking changes are to be expected before 1.0: read the [CHANGELOG.md](CHANGELOG.md) before updating.
-Your data is migrated forward; configuration and routes may change. Questions and ideas are
-welcome in [Discussions](https://github.com/nofuturekid/tasmofleet/discussions), bug reports in
-the [issues](https://github.com/nofuturekid/tasmofleet/issues).
+backups. System, Snapshots downloads a consistent database snapshot, and scheduled snapshots are
+possible. How to take, schedule and restore them:
+[docs/backing-up.md](docs/backing-up.md).
 
 ## Documentation
 
-- Design and behaviour: [docs/spec/2026-10-18-tasmofleet-design.md](docs/spec/2026-10-18-tasmofleet-design.md)
-- Security notes per feature: [docs/security/](docs/security/)
-- Research (Tasmota OTA behaviour, TasmoAdmin lessons): [docs/research/](docs/research/)
-- Roadmap: [ROADMAP.md](ROADMAP.md)
+- [Installing](docs/installation.md), [upgrading](docs/upgrading.md), [configuration](docs/configuration.md)
+  (every environment variable, TLS, time zone, Home Assistant app)
+- [Backing up TasmoFleet](docs/backing-up.md) and [emergency access](docs/runbooks/emergency-access.md)
+- [What TasmoFleet changes on your devices](docs/device-changes.md), including the two roles
+- Reverse proxy, OIDC (Authentik), Prometheus, Grafana and Unraid examples: [deploy/](deploy/)
+- Design and behaviour: [spec](docs/spec/2026-10-18-tasmofleet-design.md); security notes per
+  feature: [docs/security/](docs/security/); research: [docs/research/](docs/research/)
+- [CHANGELOG](CHANGELOG.md), [ROADMAP](ROADMAP.md), [development](docs/development.md)
 
-## Development
+## Status
 
-```sh
-make check   # templ, fmt, vet, golangci-lint (incl. staticcheck), unit and integration tests, govulncheck, build
-make quick   # between two edits: the packages changed since origin/main and their importers only
-make ci      # everything CI runs: check plus race, mutation and e2e tests
-make demo    # the static demo (dist/demo); make demo-media renews docs/media
-```
-
-Building the image yourself: a plain `docker build` has no git history, so it reports
-`<last release>+dev`. Pass the version to get the release and the commit:
-`docker build --build-arg VERSION=$(git describe --tags) -t tasmofleet .` (for example
-`v0.15.2-3-gabc1234`). `make image` does this.
-
-Requires Go 1.27. The e2e tests need Node.js (`make e2e-deps`, then
-`npx playwright install chromium` once). See [CONTRIBUTING.md](CONTRIBUTING.md) and
-[CLAUDE.md](CLAUDE.md) (rules for AI agents and humans).
+**Pre-1.0, single maintainer.** It runs a home fleet of a few dozen devices every day, but breaking
+changes are to be expected before 1.0: read the [CHANGELOG](CHANGELOG.md) before updating. Your data
+is migrated forward; configuration and routes may change. Questions and ideas are welcome in
+[Discussions](https://github.com/nofuturekid/tasmofleet/discussions), bug reports in the
+[issues](https://github.com/nofuturekid/tasmofleet/issues).
 
 ## How it is built (AI disclosure)
 
-TasmoFleet is built with [Claude Code](https://claude.com/claude-code): most code, tests and
-docs were written by it. The maintainer sets direction, reviews the changes and tests them on a
-real fleet of Tasmota devices. The safety-critical parts (firmware selection, the OTA state
-machine) run under mutation testing in addition to unit, integration and Playwright tests
-against a device simulator.
+TasmoFleet is built with [Claude Code](https://claude.com/claude-code): most code, tests and docs
+were written by it. The maintainer sets direction, reviews the changes and tests them on a real
+fleet of Tasmota devices. The safety-critical parts (firmware selection, the OTA state machine) run
+under mutation testing in addition to unit, integration and Playwright tests against a device
+simulator.
+
+TasmoFleet is an independent project and is not affiliated with, endorsed by or sponsored by
+Tasmota or its maintainers. "Tasmota" is the name of the firmware this tool manages; the TasmoFleet
+logo is original and unrelated to the Tasmota logo.
 
 ## License
 
-[GNU Affero General Public License v3.0 or later](LICENSE) (`AGPL-3.0-or-later`). If you
-run a modified version as a network service, you must offer its source to its users; the
-About page links to the source code. Third-party notices are in [NOTICE](NOTICE).
+[GNU Affero General Public License v3.0 or later](LICENSE) (`AGPL-3.0-or-later`). If you run a
+modified version as a network service, you must offer its source to its users; the About page links
+to the source code. Third-party notices are in [NOTICE](NOTICE).
