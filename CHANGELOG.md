@@ -6,6 +6,8 @@ always upgrade automatically.
 
 ## Unreleased
 
+## 0.34.0 "Split Rock" (2026-11-06)
+
 ### Upgrade notes
 
 - Migration 0046 (adds the table `snapshot_runs`; data otherwise): a stored snapshot interval that is not zero becomes every day at 03:00 (`SNAPSHOT_DAYS` all seven days, `SNAPSHOT_TIME` 03:00) and the interval row is deleted; a stored 0 (off) and no stored interval stay off. Nothing to do: look at System, Snapshots, Schedule, and choose other days or another time if 03:00 does not suit you. The migration also stores a marker so that the first start after the upgrade does not take a snapshot (#602, #601).
