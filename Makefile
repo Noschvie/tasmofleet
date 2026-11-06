@@ -51,12 +51,12 @@ E2E_ARGS  ?=
 CHANGED_BASE ?= origin/main
 export CHANGED_BASE
 
-.PHONY: agent-refs quick integration-guard shards-check-changed catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo pages demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race diff-cover revert-check test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check release-pr-check changelog-title migration-guard migration-append-only changelog-notes clean tools
+.PHONY: agent-refs quick integration-guard shards-check-changed catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo pages demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race diff-cover revert-check test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check changelog-assemble changelog-fragments-check changelog-fragment-gate release-pr-check changelog-title migration-guard migration-append-only changelog-notes clean tools
 
 # golangci-lint runs staticcheck with its defaults (.golangci.yml), so check does not run it a second time;
 # the staticcheck target stays for single runs and CI. go vet stays: golangci-lint skips generated files,
 # and go vet is the only check left for the *_templ.go files.
-check: templ-check fmt-check vet lint test scripts-test agent-refs shards-check-changed migration-append-only integration vuln build
+check: templ-check fmt-check vet lint test scripts-test agent-refs shards-check-changed migration-append-only changelog-fragments-check integration vuln build
 
 # Unit tests of the registry cleanup's version selection (pure, no registry access). The glob is
 # expanded by the shell: since Node 21 `node --test scripts/` no longer takes a directory (#477).
@@ -438,7 +438,7 @@ changelog-check:
 	@test -n "$(TAG)" || { echo "usage: make changelog-check TAG=vX.Y.Z" >&2; exit 2; }
 	@v='$(TAG)'; v=$${v#v}; \
 	grep -Eq "^## $$(printf '%s' "$$v" | sed 's/[.]/[.]/g')( \"[^\"]+\")?( \(.*\))?$$" CHANGELOG.md || { \
-		echo "CHANGELOG.md has no section '## $$v' for tag $(TAG): move \"Unreleased\" into it before tagging" >&2; exit 1; }
+		echo "CHANGELOG.md has no section '## $$v' for tag $(TAG): run make changelog-assemble first (CLAUDE.md \"Releases\")" >&2; exit 1; }
 
 # The release commit rides in the merge train (docs/dev/releasing.md, #556): when CHANGELOG.md has a
 # "## X.Y.Z ..." section that BASE does not have, run the tag guards for that tag now, so the tag run
@@ -458,6 +458,23 @@ release-pr-check:
 		$(MAKE) --no-print-directory changelog-check TAG="v$$v"; \
 		$(MAKE) --no-print-directory migration-guard TAG="v$$v"; \
 	done
+
+# Changelog fragments (#527): every change adds changes/unreleased/<issue>-<slug>.md instead of editing
+# CHANGELOG.md. The release commit assembles them into the new section and deletes them. NAME defaults to the
+# name of the same minor's section (patch); a new minor needs it. DATE defaults to today (Europe/Berlin).
+# CL_VERSION, not VERSION: VERSION is the build variable above and always set.
+changelog-assemble:
+	@test -n "$(CL_VERSION)" || { echo 'usage: make changelog-assemble CL_VERSION=X.Y.Z [NAME="..."] [DATE=YYYY-MM-DD]' >&2; exit 2; }
+	node scripts/changelog-assemble.mjs assemble --version "$(CL_VERSION)" $(if $(NAME),--name "$(NAME)") $(if $(DATE),--date "$(DATE)")
+
+# Validates every fragment in changes/unreleased/.
+changelog-fragments-check:
+	@node scripts/changelog-assemble.mjs check
+
+# PR gate (pr.yml; CODE=false for docs-only PRs checks only validity): a PR that changes code adds a fragment, is the release commit, or opts out in its body (PR_BODY).
+changelog-fragment-gate:
+	@test -n "$(BASE)" || { echo "usage: make changelog-fragment-gate BASE=<base commit> [CODE=false]" >&2; exit 2; }
+	@node scripts/changelog-assemble.mjs gate --base "$(BASE)" --code "$(or $(CODE),true)"
 
 # Prints the GitHub release title for TAG: TasmoFleet X.Y.Z "Name" when the CHANGELOG
 # heading carries a name, TasmoFleet X.Y.Z otherwise.

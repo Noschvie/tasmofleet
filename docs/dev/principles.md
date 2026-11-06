@@ -7,7 +7,7 @@ Part of the working guide: start at [CLAUDE.md](../../CLAUDE.md).
 tasmofleet has no stable external API before 1.0 (maintainer's rule).
 Don't add or keep compatibility layers: no redirects for moved routes, no deprecated
 config/env aliases, no old CLI command names, no API compat layers. Breaking changes are
-fine. Record each one in `CHANGELOG.md` (section "Unreleased", then the release).
+fine. Record each one in a changelog fragment (section Breaking, `changes/unreleased/`, then the release).
 **The only exception is user data:** migrations stay append-only, and the live database
 must upgrade cleanly.
 

@@ -12,7 +12,7 @@ Fixes #
 ## Checklist
 
 - [ ] `make check` passes (UI changes: `make e2e` too)
-- [ ] CHANGELOG line under "Unreleased" (outside contributors: `(#N, thanks @handle)`), or no user-visible change
+- [ ] changelog fragment `changes/unreleased/<issue>-<slug>.md` (outside contributors: `(#N, thanks @handle)`), or `changelog: skip - <reason>` for no user-visible change
 - [ ] UI changes are listed below, with the reason
 
 ## UI changes

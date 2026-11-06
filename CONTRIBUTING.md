@@ -14,8 +14,8 @@ please open an issue before larger changes to agree on the approach.
 - **Rules:** [CLAUDE.md](CLAUDE.md) is the working guide for humans and AI agents
   alike (a short router; details in [docs/dev](docs/dev/ground-rules.md)): test first (tests say why the behaviour matters), no network in tests (use
   the Tasmota simulator), package boundaries, safety rules that must never regress,
-  and the changelog rule (add your line under "Unreleased" in
-  [CHANGELOG.md](CHANGELOG.md); changes that come from an outside PR or report are
+  and the changelog rule (add a fragment file under
+  [changes/unreleased/](changes/README.md), not a line in CHANGELOG.md; changes that come from an outside PR or report are
   credited as `(#N, thanks @handle)`).
 - **AI-assisted contributions** are welcome; say so in the PR and make sure you
   have read and tested what you submit.

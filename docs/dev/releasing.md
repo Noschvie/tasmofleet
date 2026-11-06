@@ -7,14 +7,26 @@ Part of the working guide: start at [CLAUDE.md](../../CLAUDE.md).
 - **SemVer** from v0.1.0: new features or visible behaviour -> minor (`0.x.0`); bug fixes
   and small changes only -> patch (`0.x.y`). Breaking changes are allowed before 1.0 but
   must be listed in `CHANGELOG.md`.
-- `CHANGELOG.md` has one section per version with the subsections Added, Changed, Fixed,
-  Breaking and Security (empty ones omitted). Every merge adds its lines under
-  "Unreleased". The release commit moves them into a new "## X.Y.Z "Name" (date)" section BEFORE
-  the tag is set; the tag build fails when that section is missing
-  (`make changelog-check TAG=vX.Y.Z`).
+- `CHANGELOG.md` has one section per version with the subsections Upgrade notes, Added, Changed, Fixed,
+  Removed, Breaking and Security (in that order, empty ones omitted). **A change never edits `CHANGELOG.md`**
+  (#527): it adds a fragment `changes/unreleased/<issue>-<slug>.md`, so parallel PRs do not conflict there.
+  Format (see `changes/README.md`): front matter `section: Fixed` (one of the sections above), then the line
+  exactly as it should read, credits inside it. Several fragments per issue are fine; the file name only orders
+  the lines. A line must not start with `- `.
+- **The changelog fragment gate** (`pr.yml`, part of `required`): every PR validates its fragments; a PR that
+  changes more than docs must add a fragment, or be the release commit, or carry `changelog: skip - <reason>`
+  on a line of its PR body (nothing user-visible; the placeholder `<reason>` does not count). Renovate PRs
+  (`renovate[bot]`) are exempt. The gate also fails on a `## Unreleased` section in `CHANGELOG.md`.
+- **The release commit assembles**: `make changelog-assemble CL_VERSION=X.Y.Z [NAME="Name"] [DATE=YYYY-MM-DD]`
+  writes `## X.Y.Z "Name" (date)` above the newest section and deletes the fragments, BEFORE the tag is set;
+  `changes/unreleased/` must be empty in the release commit (the gate fails otherwise). NAME is required for a
+  new minor (next free name in `docs/release-names.md`) and defaults to the minor's name for a patch; DATE
+  defaults to today (Europe/Berlin). It is `CL_VERSION` because `VERSION` is the build variable. The tag build
+  fails when the section is missing (`make changelog-check TAG=vX.Y.Z`). The What's new page reads only the
+  assembled file; pending fragments are not shown.
 - **Credit outside contributors**: every merged PR by someone else, and every issue or
   report by someone else that led to a change, is credited at the end of that change's
-  CHANGELOG line as `(#N, thanks @handle)`. Do not credit the maintainer's own work.
+  CHANGELOG line (inside its fragment) as `(#N, thanks @handle)`. Do not credit the maintainer's own work.
 
 ## Release process
 

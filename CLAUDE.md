@@ -23,7 +23,7 @@ make target or doc that does not exist. There is no second copy of these rules (
 | **Commits are signed**, never disable signing; message via quoted heredoc; `Co-Authored-By` trailer naming the real model; no session links; no secrets in the repo; `make check` before each commit. | ruleset `main` (signed commits); `make check`. [commits](docs/dev/commits.md) |
 | **Migrations are append-only** since v0.0.1: never edit a merged file in `internal/store/migrations/`, add `NNNN_name.sql`. Patch releases never touch a migration.     | `make migration-append-only`, `make migration-guard` (tag job `guards`)      |
 | **Every change goes through a PR** against `main`, merged fast-forward only by the maintainer after `required` is green; never the GitHub merge button.                   | ruleset `main`, CI job `required`. [pull-requests](docs/dev/pull-requests.md) |
-| **CHANGELOG line** under "Unreleased" for every change; outside contributors credited as `(#N, thanks @handle)`. | convention (`make changelog-check` only checks the version heading at release; #527 changes this). [releasing](docs/dev/releasing.md) |
+| **Changelog fragment** `changes/unreleased/<issue>-<slug>.md` for every change, never an edit of `CHANGELOG.md`; outside contributors credited as `(#N, thanks @handle)` in the line. | changelog fragment gate (`pr.yml`, `make changelog-fragment-gate`); credits are convention. [releasing](docs/dev/releasing.md) |
 | **UI changes:** screenshot pairs per screen kept outside the repo, never committed or embedded; "tests pass" is not acceptance for UI. Gate: `make e2e-core` plus the affected e2e specs. | convention (coordinator review). [ui-review](docs/dev/ui-review.md) |
 
 ## Safety rules that must never regress

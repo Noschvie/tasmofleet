@@ -4,17 +4,6 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
-## Unreleased
-
-### Added
-
-- docs/pitfalls.md: one rule per mistake that already happened, with where it is enforced (#525)
-
-### Changed
-
-- CLAUDE.md is a short router with the enforcing command per rule; the details moved to docs/dev, and `make agent-refs` fails when they name something that does not exist (#526)
-- Reverted #693: environment secrets did not reach the reusable workflows; Docker Hub credentials are repository secrets again.
-
 ## 0.34.1 "Split Rock" (2026-11-06)
 
 ### Upgrade notes

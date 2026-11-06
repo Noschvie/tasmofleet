@@ -28,6 +28,7 @@ on:
       - "SECURITY.md"
       - "CLAUDE.md"
       - "docs/**"
+      - "changes/**"
       - "e2e/**"
       - "design/**"
       - "testdata/**"
