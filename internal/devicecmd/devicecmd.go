@@ -61,10 +61,15 @@ type Options struct {
 	Client  tasmota.Client
 	Audit   audit.Recorder
 	// MQTT is optional. It is used for Power only when the device's MQTT
-	// capability is MQTTOurs and the connection is usable. The command channel
-	// serialises per device and waits for the reply (8 s by default).
-	MQTT  mqttcmd.Doer
-	Clock clock.Clock
+	// capability is MQTTOurs, the connection is usable and WritesOverMQTT
+	// says so. The command channel serialises per device and waits for the
+	// reply (8 s by default).
+	MQTT mqttcmd.Doer
+	// WritesOverMQTT reports whether a change of d goes over MQTT: the write
+	// rule of every other change (transport.Choose's writes path, #605),
+	// injected by the app. Nil: a switch is never published.
+	WritesOverMQTT func(ctx context.Context, d model.Device) bool
+	Clock          clock.Clock
 	// Health is optional; see PowerObserver.
 	Health PowerObserver
 }
@@ -114,11 +119,21 @@ func (s *service) Power(ctx context.Context, actor string, id model.DeviceID, re
 	}
 	via := "http"
 	var state string
-	if s.useMQTT(d) {
+	mqttFirst := s.useMQTT(ctx, d)
+	if mqttFirst {
 		via = "mqtt"
 		state, err = s.powerMQTT(ctx, d, relay, action)
-	} else {
-		state, err = s.powerHTTP(ctx, d, relay, action)
+	}
+	if !mqttFirst || transport.NotPublished(err) { // nothing was published: HTTP once, never after a publish
+		hctx := ctx
+		if mqttFirst {
+			// Pinned: the client is the router, whose own write rule could publish the switch after all; the channel
+			// just refused it, and the audit must name the transport that carried it.
+			hctx = transport.WithPath(ctx, transport.HTTP)
+		}
+		hctx, tr := transport.WithTrace(hctx)
+		state, err = s.powerHTTP(hctx, d, relay, action)
+		via = tr.Via() // the router may still carry an unpinned switch over MQTT (its facts changed since useMQTT)
 		if err == nil && s.o.Health != nil {
 			s.o.Health.NotePower(id, relay, state)
 		}
@@ -128,8 +143,9 @@ func (s *service) Power(ctx context.Context, actor string, id model.DeviceID, re
 	return state, err
 }
 
-func (s *service) useMQTT(d model.Device) bool {
-	return s.o.MQTT != nil && d.MQTT == model.MQTTOurs && d.Topic != "" && s.o.MQTT.Connected()
+func (s *service) useMQTT(ctx context.Context, d model.Device) bool {
+	return s.o.MQTT != nil && d.MQTT == model.MQTTOurs && d.Topic != "" && s.o.MQTT.Connected() &&
+		s.o.WritesOverMQTT != nil && s.o.WritesOverMQTT(ctx, d)
 }
 
 func (s *service) powerHTTP(ctx context.Context, d model.Device, relay int, action string) (string, error) {

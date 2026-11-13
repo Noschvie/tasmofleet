@@ -251,22 +251,27 @@ func TestBulkRunPassesOptions(t *testing.T) {
 }
 
 // Why (D13): a bulk command runs as jobs that carry no person's consent, so a change that can cut off a
-// device reached over MQTT only is refused in the preview, before anything is queued; the same command
-// goes through when no selected device is MQTT-only.
+// device known to be reached over MQTT only (HTTP failing) is refused in the preview, before anything is queued.
+// The same command goes through when no selected device is known to be: a device whose HTTP is merely not proven
+// usable (MQTTOnly, the console's hint; the normal state of a device live on MQTT) is left to the router, which
+// asks HTTP right before the change and refuses it there if HTTP is silent (#605 review, round 3).
 func TestBulkCommandRefusesACutOffChangeForMQTTOnlyDevices(t *testing.T) {
 	fb := &fakeBatch{}
 	only := true
 	e := setupWith(t, func(d *Deps) {
 		d.DeviceCmd, d.CommandBatch = &fakeCmd{}, fb
-		d.MQTTOnly = func(context.Context, ...model.DeviceID) bool { return only }
+		d.MQTTOnly = func(context.Context, ...model.DeviceID) bool { return true }
+		d.KnownMQTTOnly = func(context.Context, ...model.DeviceID) bool { return only }
 	})
 	_, body := e.do(t, "POST", "/devices/bulk/command", "admin", bulkForm("id", "1", "command", "Topic other"))
 	if !strings.Contains(body, "can cut a device off") || strings.Contains(body, `name="token"`) || len(fb.reqs) != 0 {
 		t.Fatalf("preview: %.300s", body)
 	}
 	only = false
-	if _, body = e.do(t, "POST", "/devices/bulk/command", "admin", bulkForm("id", "1", "command", "Topic other")); !strings.Contains(body, `name="token"`) {
-		t.Fatalf("a device reached over HTTP: %.300s", body)
+	for _, cmd := range []string{"Topic other", "MqttHost broker2"} {
+		if _, body = e.do(t, "POST", "/devices/bulk/command", "admin", bulkForm("id", "1", "command", cmd)); !strings.Contains(body, `name="token"`) {
+			t.Fatalf("%q, HTTP not known to fail: %.300s", cmd, body)
+		}
 	}
 }
 

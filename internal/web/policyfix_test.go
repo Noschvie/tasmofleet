@@ -443,9 +443,10 @@ func TestPolicyFixPickForAPairNotInTheReportIsIgnored(t *testing.T) {
 	}
 }
 
-// Why (D13): Make compliant never confirms a change that can cut off a device reached over MQTT only,
-// so the preview does not promise it: the command leaves the plan and shows as skipped with the reason,
-// while a device reached over HTTP keeps it.
+// Why (D13): Make compliant never confirms a change that can cut off a device known to be reached over MQTT only
+// (HTTP failing), so the preview does not promise it: the command leaves the plan and shows as skipped with the
+// reason. A device whose HTTP is merely not proven usable (MQTTOnly, the console's hint) keeps it, or a broker move
+// (#598) would skip every device live on MQTT; the router decides per device at the send (#605 review, round 3).
 func TestPolicyFixPreviewSkipsCutOffLinesOfMQTTOnlyDevices(t *testing.T) {
 	topic := policy.Rule{ID: "r2", Command: "Topic", Want: "other"}
 	rep := fixReport()
@@ -455,7 +456,8 @@ func TestPolicyFixPreviewSkipsCutOffLinesOfMQTTOnlyDevices(t *testing.T) {
 	only := true
 	e := setupWith(t, func(d *Deps) {
 		d.Policy, d.PolicyFix = &fakePolicy{rep: rep}, &fakeFix{}
-		d.MQTTOnly = func(context.Context, ...model.DeviceID) bool { return only }
+		d.MQTTOnly = func(context.Context, ...model.DeviceID) bool { return true }
+		d.KnownMQTTOnly = func(context.Context, ...model.DeviceID) bool { return only }
 	})
 	body := previewFor(t, e, url.Values{"device": {"1"}})
 	if strings.Contains(body, cmdHTML("Topic other")) || !strings.Contains(body, "reached over MQTT only (use the console)") || !strings.Contains(body, cmdHTML("PowerOnState 0")) {
@@ -463,6 +465,6 @@ func TestPolicyFixPreviewSkipsCutOffLinesOfMQTTOnlyDevices(t *testing.T) {
 	}
 	only = false
 	if body = previewFor(t, e, url.Values{"device": {"1"}}); !strings.Contains(body, cmdHTML("Topic other")) {
-		t.Fatalf("over HTTP the command stays:\n%s", body)
+		t.Fatalf("HTTP not known to fail: the command stays:\n%s", body)
 	}
 }

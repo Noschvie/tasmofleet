@@ -15,14 +15,23 @@ const mask = "***"
 var secretKeyParts = []string{"password", "passwd", "pwd", "token", "secret", "apikey", "mqttuser", "ssid"}
 
 var (
-	reUserinfo = regexp.MustCompile(`(?i)\b([a-z][a-z0-9+.\-]*://)[^\s/@:]+:[^\s/@]+@`)
-	reBare     = regexp.MustCompile(`[^\s/@:\[\]]+:[^\s/@\[\]]+@`) // user:pass@host without a scheme
-	reBracket  = regexp.MustCompile(`\[[^\]\s:@]+:[^\]\s@]+@`)     // WebSend [user:pass@host]
+	reUserinfo = regexp.MustCompile(`(?i)\b([a-z][a-z0-9+.\-]*://)[^\s/@]+@`)         // any userinfo: user:pass, a token, :pass
+	reBare     = regexp.MustCompile(`[^\s/@:\[\]]+:[^\s/@\[\]]+@`)                    // user:pass@host without a scheme
+	reBracket  = regexp.MustCompile(`\[[^\]\s:@]+:[^\]\s@]+@`)                        // WebSend [user:pass@host]
+	reBrLogin  = regexp.MustCompile(`(\[[^\]\s,@\[{"]*,)[^\]\s:@\[{"]+:[^\]\s]+(\])`) // WebSend [host:port,user:pass]
 	reKeyVal   = regexp.MustCompile(`(?i)\b(password|passwd|pwd|token|secret|api_?key)(\s*[=:]\s*)[^\s&"',;]+`)
 )
 
+// secretKeyNames are reply keys that hold a key under a name no part rule can catch without masking harmless
+// settings too ("key" would hit DzKeyIdx): ZbConfig's Zigbee network key (KeyL, KeyH) and MI32Key's BLE bind
+// keys (MIKeys). Matched exactly.
+var secretKeyNames = map[string]bool{"keyl": true, "keyh": true, "mikeys": true}
+
 func secretKey(k string) bool {
 	k = strings.ToLower(strings.NewReplacer("_", "", "-", "").Replace(k))
+	if secretKeyNames[k] {
+		return true
+	}
 	for _, p := range secretKeyParts {
 		if strings.Contains(k, p) {
 			return true
@@ -35,6 +44,7 @@ func secretKey(k string) bool {
 func scrubText(s string) string {
 	s = reUserinfo.ReplaceAllString(s, "${1}"+mask+"@")
 	s = reBracket.ReplaceAllString(s, "["+mask+"@")
+	s = reBrLogin.ReplaceAllString(s, "${1}"+mask+"${2}")
 	s = reBare.ReplaceAllString(s, mask+"@")
 	return reKeyVal.ReplaceAllString(s, "${1}${2}"+mask)
 }

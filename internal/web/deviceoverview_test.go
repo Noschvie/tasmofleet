@@ -928,3 +928,12 @@ func TestOfflineBannerSaysWhatTheProbeFound(t *testing.T) {
 		})
 	}
 }
+
+// Why (#605): the card's HTTP row explains the order while HTTP has not been checked lately. Since changes go over
+// MQTT first too, it must not tell the person that changes try HTTP first, and it names what changes need more.
+func TestHTTPRowSaysChangesGoOverMQTTFirst(t *testing.T) {
+	sub := httpRow(transport.Facts{HTTP: transport.HTTPState{}, Now: now0}).Sub
+	if strings.Contains(sub, "changes try HTTP first") || !strings.Contains(sub, "Reads and changes go over MQTT first") || !strings.Contains(sub, "group topic read") {
+		t.Fatalf("sub = %q", sub)
+	}
+}

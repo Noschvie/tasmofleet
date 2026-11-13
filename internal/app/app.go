@@ -776,6 +776,7 @@ func (a *runtime) webDeps(guard web.Guard, rows []web.KV) web.Deps {
 		}
 	}
 	deps.MQTTOnly = a.onlyOverMQTT
+	deps.KnownMQTTOnly = a.knownOnlyOverMQTT
 	if a.templates != nil {
 		deps.Templates = a.templates
 	}

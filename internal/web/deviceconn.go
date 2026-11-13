@@ -397,7 +397,7 @@ func httpRow(f transport.Facts) pathRow {
 	case transport.HTTPOK:
 		r.Value, r.Tone, r.Sub = httpWord(f.HTTP), ui.ToneOK, "TasmoFleet's last HTTP call to the device succeeded."
 	case transport.HTTPUnknown:
-		r.Value, r.Tone, r.Sub = httpWord(f.HTTP), ui.ToneNeutral, "Reads go over MQTT first for a device live on TasmoFleet's broker, over HTTP otherwise; changes try HTTP first. TasmoFleet checks HTTP when this page opens or a task needs it."
+		r.Value, r.Tone, r.Sub = httpWord(f.HTTP), ui.ToneNeutral, "Reads and changes go over MQTT first for a device live on TasmoFleet's broker (changes also need its group topic read), over HTTP otherwise. TasmoFleet checks HTTP when this page opens or a task needs it."
 	}
 	return r
 }

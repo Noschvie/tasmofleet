@@ -122,9 +122,13 @@ type Deps struct {
 	Prober      Prober
 	DeviceNames DeviceNames // optional: "Keep" on the device-name notice (#125)
 	BuildMemory BuildMemory // optional: the update preview preselects the chip build chosen last time (#186)
-	// MQTTOnly, if set, says tasmofleet reaches the device over MQTT only (HTTP fails). A console or
+	// MQTTOnly, if set, says tasmofleet reaches the device over MQTT only (HTTP is not known to work). A console or
 	// bulk command that can cut such a device off then names that consequence on its confirmation.
 	MQTTOnly func(ctx context.Context, ids ...model.DeviceID) bool
+	// KnownMQTTOnly, if set, says HTTP is known to fail for the device and MQTT reaches it. The bulk preview and Make
+	// compliant's plan refuse a change that can cut such a device off up front; for any other device the router
+	// decides at the send (it asks HTTP right before the change and refuses it, unconfirmed, where HTTP is silent).
+	KnownMQTTOnly func(ctx context.Context, ids ...model.DeviceID) bool
 	// Templates serves the "GPIO templates" tab of the Policy page (#327); nil hides the tab.
 	Templates     templates.Service
 	FWReach       FWReachForgetter // optional: "Forget" on what the device reaches (D11)

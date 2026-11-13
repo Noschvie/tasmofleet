@@ -119,7 +119,7 @@ func PolicyReadable(name string) (ok bool, why string) {
 		return false, reasonBadName
 	}
 	base := rawBase(name)
-	if _, syn := synonyms[base]; syn {
+	if base == "so" {
 		return false, reasonSynonym
 	}
 	if strings.HasPrefix(base, "setoption") {

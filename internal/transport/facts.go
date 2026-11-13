@@ -65,11 +65,16 @@ type MQTTFacts struct {
 	GroupTopicReadAt time.Time
 	LastProbeAt      time.Time
 	LWTOnline        bool // last will says Online
-	// ReadsUnansweredSince is when a read published over MQTT first went unanswered by this device
-	// (zero: no recent one; the router's memory forgets it after 10 minutes or at the next answer).
-	// With HTTP working, reads of such a device go over HTTP (its replies are not where TasmoFleet
-	// listens).
+	// ReadsUnansweredSince is when a read or a write published over MQTT first went unanswered by this
+	// device (zero: no recent one; the router's memory forgets it after 10 minutes or at the next answer
+	// over MQTT). With HTTP working, commands of such a device go over HTTP (its replies are not where
+	// TasmoFleet listens).
 	ReadsUnansweredSince time.Time
+	// ConnChangedSince is when TasmoFleet sent a change of the device's MQTT connection while HTTP answered, over
+	// either transport (zero: none recently; the router's memory forgets it 10 minutes after the last such change, or
+	// at the device's next answer over MQTT on a path that still uses MQTT then: a pinned job, HTTP failing). The device restarts and may not come back to the broker, its last will still Online (a clean
+	// disconnect), so its commands go over HTTP while HTTP works.
+	ConnChangedSince time.Time
 }
 
 // Password is the state of the device's MqttPassword, which only transfers need (FileDownload,

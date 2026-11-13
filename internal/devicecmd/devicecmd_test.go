@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"net/netip"
 	"slices"
@@ -58,6 +59,7 @@ type fakeBus struct {
 	answer    func(topic, command, payload string) *mqttbus.Message
 	handlers  []func(mqttbus.Message)
 	retained  []mqttbus.Message
+	fail      error // Command returns it: the publish did not go out
 }
 
 func (b *fakeBus) CommandTopic(topic, command string) string { return "cmnd/" + topic + "/" + command }
@@ -76,6 +78,9 @@ func (b *fakeBus) Subscribe(_ []mqttbus.Kind, h func(mqttbus.Message)) func() {
 }
 
 func (b *fakeBus) Command(_ context.Context, topic, command, payload string) error {
+	if b.fail != nil {
+		return b.fail
+	}
 	b.mu.Lock()
 	b.published = append(b.published, topic+" "+command+" "+payload)
 	hs := slices.Clone(b.handlers)
@@ -97,6 +102,7 @@ func (b *fakeBus) pubs() []string {
 }
 
 type env struct {
+	strict atomic.Bool // what the injected write rule answers (Options.WritesOverMQTT); true unless a test says otherwise
 	svc    Service
 	rec    *recorder
 	sim    simulator.Device
@@ -123,12 +129,16 @@ func setup(t *testing.T, spec simulator.DeviceSpec, mqtt model.MQTTCapability, b
 		HTTPUser: spec.User, HTTPPassword: spec.Password}
 	client := tasmota.NewHTTPClient(tasmota.Options{AllowedNetworks: []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8")}})
 	rec := &recorder{}
+	e := &env{rec: rec, sim: sim, dev: dev, bus: bus, devs: devices{7: dev}, client: client}
+	e.strict.Store(true)
 	o := Options{Devices: devices{7: dev}, Client: client, Audit: rec}
 	if bus != nil {
 		// The real command channel on a scripted bus: what Power sends and accepts is decided there.
 		o.MQTT = mqttcmd.New(bus, mqttcmd.Options{Gap: time.Millisecond, ReplyWait: 60 * time.Millisecond})
+		o.WritesOverMQTT = func(context.Context, model.Device) bool { return e.strict.Load() }
 	}
-	return &env{svc: New(o), rec: rec, sim: sim, dev: dev, bus: bus, devs: devices{7: dev}, client: client}
+	e.svc = New(o)
+	return e
 }
 
 var plug = simulator.DeviceSpec{Name: "plug", Profile: simulator.ProfileESP8266_4M}
@@ -628,11 +638,17 @@ func (refusingHTTP) Command(context.Context, tasmota.Target, string) (json.RawMe
 	return nil, tasmota.ErrForbiddenAddr
 }
 
-type stubFacts struct{ mem *transport.Memory }
+type stubFacts struct {
+	mem    *transport.Memory
+	httpOK bool // a fresh HTTP answer is on record; without it and without a failure the state is unknown
+}
 
 func (f stubFacts) HTTPState(id model.DeviceID) transport.HTTPState {
 	if k, since, ok := f.mem.HTTPFailure(id); ok {
 		return transport.HTTPState{State: transport.HTTPFailing, Kind: k, Since: since}
+	}
+	if f.httpOK {
+		return transport.HTTPState{State: transport.HTTPOK}
 	}
 	return transport.HTTPState{}
 }
@@ -657,7 +673,7 @@ func (stubMQTT) Connected() bool { return true }
 func TestRunOverMQTTIsAuditedAndScrubbed(t *testing.T) {
 	dev := model.Device{ID: 7, Address: "192.0.2.7", Topic: "plug", MQTT: model.MQTTOurs}
 	mem := transport.NewMemory(time.Minute, time.Now)
-	r := transport.NewRouter(transport.Options{HTTP: refusingHTTP{}, Devices: routerDevices{devices{7: dev}}, Facts: stubFacts{mem}, Memory: mem})
+	r := transport.NewRouter(transport.Options{HTTP: refusingHTTP{}, Devices: routerDevices{devices{7: dev}}, Facts: stubFacts{mem: mem}, Memory: mem})
 	r.SetMQTT(stubMQTT{reply: `{"WebPassword":"hunter2"}`})
 	rec := &recorder{}
 	svc := New(Options{Devices: devices{7: dev}, Client: r, Audit: rec})
@@ -688,7 +704,7 @@ func TestRunBareMqttUserGoesOverMQTTAndIsMasked(t *testing.T) {
 	dev := model.Device{ID: 7, Address: "192.0.2.7", Topic: "plug", MQTT: model.MQTTOurs}
 	mem := transport.NewMemory(time.Minute, time.Now)
 	var httpCalls atomic.Int32
-	r := transport.NewRouter(transport.Options{HTTP: countingHTTP{n: &httpCalls}, Devices: routerDevices{devices{7: dev}}, Facts: stubFacts{mem}, Memory: mem})
+	r := transport.NewRouter(transport.Options{HTTP: countingHTTP{n: &httpCalls}, Devices: routerDevices{devices{7: dev}}, Facts: stubFacts{mem: mem}, Memory: mem})
 	r.SetMQTT(stubMQTT{reply: `{"MqttUser":"bob"}`})
 	rec := &recorder{}
 	svc := New(Options{Devices: devices{7: dev}, Client: r, Audit: rec})
@@ -706,4 +722,222 @@ type routerDevices struct{ devices }
 
 func (d routerDevices) GetDevice(ctx context.Context, id model.DeviceID) (model.Device, error) {
 	return d.Get(ctx, id)
+}
+
+// answerPower makes the scripted bus answer a Power command the way Tasmota does.
+func answerPower(bus *fakeBus) {
+	bus.answer = func(topic, _, _ string) *mqttbus.Message {
+		return &mqttbus.Message{Kind: mqttbus.KindResult, Topic: topic, Suffix: "RESULT", Payload: []byte(`{"POWER":"ON"}`)}
+	}
+}
+
+// Why (#605): the switch follows the write rule of every other change (transport.Choose's writes path, injected
+// by the app): a device on our broker whose GroupTopic has not been read might share its topic with others, and
+// a switch published there would switch them too. It is switched over HTTP instead, and the audit says so.
+func TestPowerFollowsTheStrictWriteRule(t *testing.T) {
+	bus := &fakeBus{connected: true}
+	answerPower(bus)
+	e := setup(t, plug, model.MQTTOurs, bus)
+	e.strict.Store(false) // e.g. the device's GroupTopic is unread
+	if _, err := e.svc.Power(context.Background(), "x", 7, 1, "ON"); err != nil {
+		t.Fatal(err)
+	}
+	if got := bus.pubs(); len(got) != 0 {
+		t.Fatalf("published %v to a topic the write rule does not allow", got)
+	}
+	if !slices.Contains(e.sim.Commands(), "Power1 ON") {
+		t.Fatalf("HTTP not used: %v", e.sim.Commands())
+	}
+	if ev := e.rec.all(); len(ev) != 1 || !strings.Contains(ev[0].Detail, `"via":"http"`) {
+		t.Fatalf("audit = %+v", ev)
+	}
+	e.strict.Store(true)
+	if _, err := e.svc.Power(context.Background(), "x", 7, 1, "ON"); err != nil || len(bus.pubs()) != 1 {
+		t.Fatalf("allowed: err=%v published %v", err, bus.pubs())
+	}
+}
+
+// Why (#605): without the write rule the service cannot tell whether the topic is the device's own, so it never
+// publishes a switch (fail closed): HTTP does the job.
+func TestPowerWithoutTheWriteRuleNeverPublishes(t *testing.T) {
+	bus := &fakeBus{connected: true}
+	answerPower(bus)
+	e := setup(t, plug, model.MQTTOurs, nil)
+	svc := New(Options{Devices: e.devs, Client: e.client, Audit: e.rec, MQTT: mqttcmd.New(bus, mqttcmd.Options{Gap: time.Millisecond, ReplyWait: 60 * time.Millisecond})})
+	if _, err := svc.Power(context.Background(), "x", 7, 1, "ON"); err != nil {
+		t.Fatal(err)
+	}
+	if got := bus.pubs(); len(got) != 0 || !slices.Contains(e.sim.Commands(), "Power1 ON") {
+		t.Fatalf("published %v, HTTP saw %v", got, e.sim.Commands())
+	}
+}
+
+// Why (#605, D4): a switch MQTT provably did not publish (the publish failed, the channel refused it) changed
+// nothing, so it is sent once over HTTP; one that was published and not confirmed is never resent
+// (TestPowerOverMQTTUnconfirmedDoesNotRetryOverHTTP).
+func TestPowerMQTTDidNotPublishIsSentOverHTTP(t *testing.T) {
+	bus := &fakeBus{connected: true, fail: errors.New("broker refused the publish")}
+	e := setup(t, plug, model.MQTTOurs, bus)
+	state, err := e.svc.Power(context.Background(), "x", 7, 1, "ON")
+	if err != nil || state != "ON" {
+		t.Fatalf("state %q err %v", state, err)
+	}
+	if got := e.sim.Commands(); !slices.Equal(got, []string{"Power1 ON"}) {
+		t.Fatalf("HTTP saw %v, want the one switch", got)
+	}
+	if ev := e.rec.all(); len(ev) != 1 || !strings.Contains(ev[0].Detail, `"via":"http"`) {
+		t.Fatalf("audit = %+v", ev)
+	}
+}
+
+// Why (#605, T9): a console write to a device usable on our broker under the strict rule goes over MQTT first
+// while HTTP works too, and the audit names the transport that carried it.
+func TestRunOfAStrictlyUsableDeviceGoesOverMQTTAndIsAudited(t *testing.T) {
+	dev := model.Device{ID: 7, Address: "192.0.2.7", Topic: "plug", MQTT: model.MQTTOurs}
+	mem := transport.NewMemory(time.Minute, time.Now)
+	var httpCalls atomic.Int32
+	r := transport.NewRouter(transport.Options{HTTP: countingHTTP{n: &httpCalls}, Devices: routerDevices{devices{7: dev}}, Facts: stubFacts{mem: mem}, Memory: mem})
+	r.SetMQTT(stubMQTT{reply: `{"TelePeriod":60}`})
+	rec := &recorder{}
+	svc := New(Options{Devices: devices{7: dev}, Client: r, Audit: rec})
+	if _, err := svc.Run(t.Context(), admin(), 7, "TelePeriod 60"); err != nil {
+		t.Fatal(err)
+	}
+	if n := httpCalls.Load(); n != 0 {
+		t.Fatalf("HTTP got %d calls, want none", n)
+	}
+	if ev := rec.all(); len(ev) != 1 || !strings.Contains(ev[0].Detail, `"via":"mqtt"`) {
+		t.Fatalf("audit = %+v", ev)
+	}
+}
+
+// powerHTTPCount answers a switch like the device and counts what reached it.
+type powerHTTPCount struct {
+	tasmota.Client
+	n *atomic.Int32
+}
+
+func (h powerHTTPCount) Command(context.Context, tasmota.Target, string) (json.RawMessage, error) {
+	h.n.Add(1)
+	return json.RawMessage(`{"POWER":"ON"}`), nil
+}
+
+// refuseOnceMQTT is the command channel shared by the power toggle and the router: its first call publishes
+// nothing (the bus dropped it), every later one is answered.
+type refuseOnceMQTT struct{ n atomic.Int32 }
+
+func (m *refuseOnceMQTT) Do(context.Context, model.Device, string) (json.RawMessage, error) {
+	if m.n.Add(1) == 1 {
+		return nil, fmt.Errorf("%w: the bus dropped the publish, nothing was sent", tasmota.ErrUnreachable)
+	}
+	return json.RawMessage(`{"POWER":"ON"}`), nil
+}
+func (m *refuseOnceMQTT) DoLoose(ctx context.Context, d model.Device, c string) (json.RawMessage, error) {
+	return m.Do(ctx, d, c)
+}
+func (*refuseOnceMQTT) Connected() bool { return true }
+
+// Why (#605 review, T2/T9): the switch the channel did not publish goes over HTTP once. In the app the client is
+// the router, whose own write rule would publish it over MQTT after all: a second MQTT attempt in the same call,
+// audited as "http". The fallback is pinned to HTTP, so the switch reaches the device once over HTTP and the
+// audit names that transport.
+func TestPowerFallbackThroughTheRouterStaysOnHTTP(t *testing.T) {
+	dev := model.Device{ID: 7, Address: "192.0.2.7", Topic: "plug", MQTT: model.MQTTOurs}
+	mem := transport.NewMemory(time.Minute, time.Now)
+	var httpCalls atomic.Int32
+	mq := &refuseOnceMQTT{}
+	r := transport.NewRouter(transport.Options{HTTP: powerHTTPCount{n: &httpCalls}, Devices: routerDevices{devices{7: dev}}, Facts: stubFacts{mem: mem}, Memory: mem})
+	r.SetMQTT(mq)
+	rec := &recorder{}
+	svc := New(Options{Devices: devices{7: dev}, Client: r, Audit: rec, MQTT: mq,
+		WritesOverMQTT: func(context.Context, model.Device) bool { return true }})
+	if state, err := svc.Power(t.Context(), "x", 7, 1, "ON"); err != nil || state != "ON" {
+		t.Fatalf("state %q err %v", state, err)
+	}
+	if m, h := mq.n.Load(), httpCalls.Load(); m != 1 || h != 1 {
+		t.Fatalf("mqtt=%d http=%d, want the refused attempt and one switch over HTTP", m, h)
+	}
+	if ev := rec.all(); len(ev) != 1 || !strings.Contains(ev[0].Detail, `"via":"http"`) {
+		t.Fatalf("audit = %+v", ev)
+	}
+}
+
+// Why (#605 review, T9): the toggle asked the write rule before it switched; when the facts change in between, the
+// router carries the switch on the path its own snapshot allows. The audit must name the transport that carried
+// it, not the one the toggle expected.
+func TestPowerAuditNamesTheTransportTheRouterUsed(t *testing.T) {
+	dev := model.Device{ID: 7, Address: "192.0.2.7", Topic: "plug", MQTT: model.MQTTOurs}
+	mem := transport.NewMemory(time.Minute, time.Now)
+	var httpCalls atomic.Int32
+	r := transport.NewRouter(transport.Options{HTTP: powerHTTPCount{n: &httpCalls}, Devices: routerDevices{devices{7: dev}}, Facts: stubFacts{mem: mem}, Memory: mem})
+	r.SetMQTT(stubMQTT{reply: `{"POWER":"ON"}`})
+	rec := &recorder{}
+	svc := New(Options{Devices: devices{7: dev}, Client: r, Audit: rec, MQTT: stubMQTT{reply: `{"POWER":"ON"}`},
+		WritesOverMQTT: func(context.Context, model.Device) bool { return false }}) // the toggle's snapshot said HTTP
+	if _, err := svc.Power(t.Context(), "x", 7, 1, "ON"); err != nil {
+		t.Fatal(err)
+	}
+	if h := httpCalls.Load(); h != 0 {
+		t.Fatalf("http=%d, fixture: the router's facts allow MQTT", h)
+	}
+	if ev := rec.all(); len(ev) != 1 || !strings.Contains(ev[0].Detail, `"via":"mqtt"`) {
+		t.Fatalf("audit = %+v", ev)
+	}
+}
+
+// countingMQTT answers every command and counts what was published.
+type countingMQTT struct{ n atomic.Int32 }
+
+func (m *countingMQTT) Do(context.Context, model.Device, string) (json.RawMessage, error) {
+	m.n.Add(1)
+	return json.RawMessage(`{"Done":"yes"}`), nil
+}
+func (m *countingMQTT) DoLoose(ctx context.Context, d model.Device, c string) (json.RawMessage, error) {
+	return m.Do(ctx, d, c)
+}
+func (*countingMQTT) Connected() bool { return true }
+
+// Why (#605, the product owner's transport rule of 2026-11-14): a console or bulk command (both run here) goes over
+// MQTT first while HTTP works, whatever it carries: a secret is no reason for HTTP (HTTP to a Tasmota is plain text
+// too), and a change of the MQTT connection needs no question while HTTP stays for the next command (the router
+// checks that with one Status 11 right before it, the only HTTP call). The audit names the transport and still never
+// shows a secret.
+func TestRunSendsWhatTheAuditHidesOverMQTTFirstAndStillHidesIt(t *testing.T) {
+	cutsMQTTConnection := map[string]bool{"MqttPassword hunter2": true, "MqttHost broker2": true, "Topic newtopic": true}
+	for _, cmd := range []string{
+		"WebPassword hunter2",
+		"Password1 hunter2",
+		"MqttPassword hunter2",
+		"MqttHost broker2",
+		"Topic newtopic",
+		"OtaUrl http://u:hunter2@h/f",
+		"Dimmer 50",
+		"Backlog Power 1; WebPassword hunter2",
+		"BLEPair A4C138AABBCC 123456",
+		"Sendmail [smtp.example.com:587:alice:hunter2:*:bob:Hi] body",
+		"TelePeriod 60",
+		"Restart 1",
+	} {
+		dev := model.Device{ID: 7, Address: "192.0.2.7", Topic: "plug", MQTT: model.MQTTOurs}
+		mem := transport.NewMemory(time.Minute, time.Now)
+		var httpCalls atomic.Int32
+		mq := &countingMQTT{}
+		r := transport.NewRouter(transport.Options{HTTP: countingHTTP{n: &httpCalls}, Devices: routerDevices{devices{7: dev}}, Facts: stubFacts{mem: mem, httpOK: true}, Memory: mem})
+		r.SetMQTT(mq)
+		rec := &recorder{}
+		svc := New(Options{Devices: devices{7: dev}, Client: r, Audit: rec})
+		if _, err := svc.Run(t.Context(), admin(), 7, cmd); err != nil {
+			t.Fatalf("%q: %v", cmd, err)
+		}
+		probes := int32(0)
+		if cutsMQTTConnection[cmd] {
+			probes = 1
+		}
+		if m, h := mq.n.Load(), httpCalls.Load(); m != 1 || h != probes {
+			t.Errorf("%q: mqtt=%d http=%d, want one publish over MQTT after %d HTTP probe(s)", cmd, m, h, probes)
+		}
+		if ev := rec.all(); len(ev) != 1 || !strings.Contains(ev[0].Detail, `"via":"mqtt"`) || strings.Contains(ev[0].Detail, "hunter2") {
+			t.Errorf("%q: audit = %+v, want via=mqtt and no secret", cmd, ev)
+		}
+	}
 }

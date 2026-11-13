@@ -16,7 +16,7 @@ const docsSpecs = /styleguide-docs\.spec\.ts$/;
 const demoSpecs = /demo-site\.spec\.ts$/;
 // The specs of the MQTT transport start their own small fleet and wait for health polls and group-topic
 // reads, which a loaded machine delays: they run on their own, one at a time (make e2e runs them after the chromium project, in a separate invocation).
-const mqttSpecs = /(mqtt-transport|restore-mqtt)\.spec\.ts$/;
+const mqttSpecs = /(mqtt-transport|restore-mqtt|writes-mqtt-first)\.spec\.ts$/;
 const renderLikeTheReferences = {
   ...devices["Desktop Chrome"],
   deviceScaleFactor: 1,

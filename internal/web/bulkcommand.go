@@ -70,7 +70,7 @@ func (h *handler) bulkCommandPage(w http.ResponseWriter, r *http.Request) {
 		h.showBulkScope(w, r, sv)
 		return
 	}
-	if _, cut := h.confirmation(r.Context(), cmd, v, ready...); cut {
+	if h.d.KnownMQTTOnly != nil && cmdpolicy.CutsMQTTOff(cmd) && h.d.KnownMQTTOnly(r.Context(), ready...) {
 		// The consent of a confirmation is for one device and one person's eyes on it; a transaction of
 		// jobs carries none, so the router would refuse the send anyway. Say so before anything is queued.
 		sv.CommandError = "This command can cut a device off that TasmoFleet reaches over MQTT only. Use the console of each device, which asks to confirm."
@@ -141,9 +141,9 @@ func (h *handler) bulkCommandPage(w http.ResponseWriter, r *http.Request) {
 }
 
 // safeInput is the command box's text after a redraw: only a command without a secret comes
-// back into the page (cmdpolicy.Redacted leaves it unchanged).
+// back into the page (cmdpolicy.ShownInFull: the audit log shows it as typed, nothing hidden).
 func safeInput(cmd string) string {
-	if cmdpolicy.Redacted(cmd) != cmd {
+	if !cmdpolicy.ShownInFull(cmd) {
 		return ""
 	}
 	return cmd

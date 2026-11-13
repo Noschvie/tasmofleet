@@ -7,7 +7,6 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/hellwand/tasmofleet/internal/auth"
@@ -130,8 +129,9 @@ func (h *handler) renderConsole(w http.ResponseWriter, r *http.Request, status i
 	data.Tabs = h.tabsOf(r, v, d, "console")
 	since := r.FormValue("since")
 	now := h.d.Clock.Now()
+	f, paths, pathsOK := h.transportOf(r.Context(), d.ID)
 	c := ui.ConsoleData{
-		Title:  "Console · HTTP · " + data.Tabs.Address,
+		Title:  "Console · " + consoleVia(f, paths, pathsOK) + " · " + data.Tabs.Address,
 		Action: v.Base + devPath(d.ID, "/console"), CSRF: v.CSRF, Input: data.Input,
 		ClearHref:  v.Base + devPath(d.ID, "/console?since="+strconv.FormatInt(now.Unix(), 10)),
 		HistoryAdd: data.HistoryAdd,
@@ -149,7 +149,25 @@ func (h *handler) consolePage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if h.d.ProbeHTTP != nil {
+		// A change of the MQTT connection asks first unless HTTP answered lately (app.reachedOnlyOverMQTT), and a
+		// device fine on MQTT is not polled over HTTP: opening the console is a moment to check, as on the device page.
+		h.d.ProbeHTTP(d.ID)
+	}
 	h.renderConsole(w, r, http.StatusOK, d, consoleData{})
+}
+
+// consoleVia names the transports the console's commands take, for its title: MQTT when reads or changes go over
+// MQTT and HTTP is failing, "MQTT + HTTP" when they go MQTT first while HTTP works (HTTP carries what MQTT cannot),
+// else HTTP (#605).
+func consoleVia(f transport.Facts, p transport.Paths, ok bool) string {
+	switch {
+	case !ok || (p.Commands != transport.MQTT && p.Writes != transport.MQTT):
+		return "HTTP"
+	case f.HTTP.State == transport.HTTPFailing:
+		return "MQTT"
+	}
+	return "MQTT + HTTP"
 }
 
 // consoleError maps service errors to a status and a sentence. Device output
@@ -279,6 +297,18 @@ func (h *handler) consoleSend(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	raw, err := h.d.DeviceCmd.Run(ctx, p, d.ID, cmd)
+	if errors.Is(err, transport.ErrCutOff) && p.Role >= model.RoleAdmin {
+		// The question above follows HTTP's answer on record; the router asked HTTP right now and got none (HTTP
+		// stopped since). A silence is not remembered, so a resend would skip the question again: ask here.
+		if v, cerr := cmdpolicy.Classify(cmd); cerr == nil {
+			if canon, cerr := cmdpolicy.Canonical(cmd); cerr == nil {
+				data.Confirm, data.Consequence = true, cmdpolicy.WithMQTTOnly(cmd, v).Confirm
+				data.Token = h.cmds.putCutOff(h.d.Clock.Now(), h.bindingOf(r), canon, []model.DeviceID{d.ID})
+				h.renderConsole(w, r, http.StatusOK, d, data)
+				return
+			}
+		}
+	}
 	if !errors.Is(err, cmdpolicy.ErrInvalid) && !errors.Is(err, cmdpolicy.ErrForbidden) && !errors.Is(err, cmdpolicy.ErrRole) && !errors.Is(err, transport.ErrCutOff) {
 		data.HistoryAdd = historyText(cmd) // a device that failed to answer is worth a retry; a refusal is not
 	}
@@ -296,12 +326,12 @@ func (h *handler) consoleSend(w http.ResponseWriter, r *http.Request) {
 }
 
 // historyText is the form of cmd the browser may keep in its command history, or "" for none. It
-// is the same rule the audit log uses (cmdpolicy.Redacted): a command whose logged form differs
-// from what was sent holds, or may hold, a secret and is not kept. A line that already shows the
+// is the same rule the audit log uses (cmdpolicy.ShownInFull): a command whose logged form hides
+// or masks anything holds, or may hold, a secret and is not kept. A line that already shows the
 // mask is a redacted one (the bulk result page only has those).
 func historyText(cmd string) string {
 	canon, err := cmdpolicy.Canonical(cmd)
-	if err != nil || canon == "" || cmdpolicy.Redacted(cmd) != canon || strings.Contains(canon, "***") {
+	if err != nil || canon == "" || !cmdpolicy.ShownInFull(cmd) {
 		return ""
 	}
 	return canon

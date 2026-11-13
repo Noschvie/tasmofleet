@@ -565,8 +565,10 @@ func TestWritesNeedKnownGroupTopicReadsDoNot(t *testing.T) {
 	if !strings.Contains(p.Reason(ActWrites), "refresh the device's identity") {
 		t.Errorf("writes reason %q", p.Reason(ActWrites))
 	}
-	if Choose(base()).Writes != HTTP {
-		t.Error("writes use HTTP while it works")
+	f = base()
+	f.MQTT.GroupTopic = ""
+	if Choose(f).Writes != HTTP {
+		t.Error("with an unread GroupTopic, writes use HTTP while it works")
 	}
 }
 
@@ -654,7 +656,9 @@ func TestOthersGroupUnread(t *testing.T) {
 	if got := Choose(f).Reason(ActWrites); !strings.Contains(got, "1 other device's group topic has not been read yet; refresh its identity") {
 		t.Errorf("singular: %q", got)
 	}
-	if Choose(base()).Writes != HTTP {
-		t.Error("HTTP is unaffected")
+	f = base()
+	f.MQTT.OthersGroupUnread = 2
+	if Choose(f).Writes != HTTP {
+		t.Error("HTTP is unaffected: writes use it while it works")
 	}
 }

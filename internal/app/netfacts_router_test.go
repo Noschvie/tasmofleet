@@ -40,9 +40,11 @@ func TestReadNetReadsThroughTheRouterNotTheRawHTTPClient(t *testing.T) {
 
 // Why: before #456 a "Commands == MQTT" answer meant "HTTP is failing, so MQTT is all there is", which
 // is what makes the console ask before a change that can cut the device off (cmdpolicy.WithMQTTOnly).
-// Reads now go MQTT first for every live device on our broker; that must not make every such device
-// look cut off.
-func TestReachedOnlyOverMQTTMeansHTTPFails(t *testing.T) {
+// Reads now go MQTT first for every live device on our broker; that alone must not make a device look cut off.
+// What counts is whether HTTP is known to work (#605 review): only a fresh answer does. Unknown (nothing polls
+// the HTTP of a device live on MQTT, a timeout is never recorded as a failure) is not usable, so the console asks
+// exactly where the router would refuse the change without a confirmation.
+func TestReachedOnlyOverMQTTMeansHTTPIsNotKnownToWork(t *testing.T) {
 	f := transport.Facts{
 		HTTP: transport.HTTPState{State: transport.HTTPOK},
 		MQTT: transport.MQTTFacts{BusConnected: true, Ours: true, Topic: "plug", TopicExclusive: true, LWTOnline: true},
@@ -51,8 +53,8 @@ func TestReachedOnlyOverMQTTMeansHTTPFails(t *testing.T) {
 		t.Error("HTTP works: the device is not reached over MQTT only")
 	}
 	f.HTTP = transport.HTTPState{}
-	if reachedOnlyOverMQTT(f) {
-		t.Error("HTTP unknown is not failing")
+	if !reachedOnlyOverMQTT(f) {
+		t.Error("HTTP unknown and MQTT usable: HTTP is not known to reach the device, so the console must ask")
 	}
 	f.HTTP = transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailUnreachable}
 	if !reachedOnlyOverMQTT(f) {
@@ -65,17 +67,46 @@ func TestReachedOnlyOverMQTTMeansHTTPFails(t *testing.T) {
 }
 
 // Why: the console's "this can cut the device off" question (web/console.go, web/policyfix.go) is fed
-// by runtime.onlyOverMQTT; if it stopped using the HTTP-failing rule, every live device on our broker
-// would be asked about, or none would.
-func TestOnlyOverMQTTFollowsHTTPFailing(t *testing.T) {
+// by runtime.onlyOverMQTT with the device's real facts. A device whose HTTP answered lately is not asked
+// about; one whose HTTP is unknown or failing is, as the router then refuses the change without a confirmation.
+func TestOnlyOverMQTTFollowsWhetherHTTPIsKnownToWork(t *testing.T) {
 	d := model.Device{ID: 1, MQTT: model.MQTTOurs, Topic: "plug"}
-	a := &runtime{facts: newFacts([]model.Device{d}, fakeFactsHealth{1: {LWT: "Online"}}, fakeMemory{})}
+	a := &runtime{facts: newFacts([]model.Device{d}, fakeFactsHealth{1: {LWT: "Online", SeenHTTP: factsNow.Add(-time.Minute)}}, fakeMemory{})}
 	if a.onlyOverMQTT(context.Background(), 1) {
-		t.Error("HTTP not failing: the device is not reached over MQTT only")
+		t.Error("HTTP answered a minute ago: the device is not reached over MQTT only")
+	}
+	a.facts = newFacts([]model.Device{d}, fakeFactsHealth{1: {LWT: "Online"}}, fakeMemory{})
+	if !a.onlyOverMQTT(context.Background(), 1) {
+		t.Error("HTTP never answered and MQTT usable: HTTP is not known to reach the device")
 	}
 	a.facts.Memory = fakeMemory{kind: transport.HTTPFailUnreachable, since: factsNow.Add(-time.Minute), ok: true}
 	if !a.onlyOverMQTT(context.Background(), 1) {
 		t.Error("HTTP failing and MQTT usable: MQTT is the only way")
+	}
+}
+
+// Why (#605 review, round 3): the bulk preview and Make compliant's plan refuse a change of the MQTT connection up
+// front only for a device known to be reached over MQTT only (HTTP failing), as before #605. "Not proven usable" is
+// the normal state of every device live on MQTT; refusing there would stop MqttHost or a broker move for the whole
+// fleet although HTTP may well answer. Those sends carry no consent, and the router asks HTTP per device right
+// before the change and refuses it where HTTP is silent, so nothing is lost by not refusing up front.
+func TestKnownOnlyOverMQTTMeansHTTPIsFailing(t *testing.T) {
+	d := model.Device{ID: 1, MQTT: model.MQTTOurs, Topic: "plug"}
+	a := &runtime{facts: newFacts([]model.Device{d}, fakeFactsHealth{1: {LWT: "Online"}}, fakeMemory{})}
+	if a.knownOnlyOverMQTT(context.Background(), 1) {
+		t.Error("HTTP unknown and MQTT usable: not known to be reached over MQTT only, the bulk preview must not refuse")
+	}
+	a.facts = newFacts([]model.Device{d}, fakeFactsHealth{1: {LWT: "Online", SeenHTTP: factsNow.Add(-time.Minute)}}, fakeMemory{})
+	if a.knownOnlyOverMQTT(context.Background(), 1) {
+		t.Error("HTTP answered a minute ago: not reached over MQTT only")
+	}
+	a.facts.Memory = fakeMemory{kind: transport.HTTPFailUnreachable, since: factsNow.Add(-time.Minute), ok: true}
+	if !a.knownOnlyOverMQTT(context.Background(), 1) {
+		t.Error("HTTP failing and MQTT usable: MQTT is the only way")
+	}
+	a.facts = newFacts([]model.Device{d}, fakeFactsHealth{1: {LWT: "Offline"}}, fakeMemory{kind: transport.HTTPFailUnreachable, since: factsNow.Add(-time.Minute), ok: true})
+	if a.knownOnlyOverMQTT(context.Background(), 1) {
+		t.Error("MQTT unusable: nothing travels over it")
 	}
 }
 

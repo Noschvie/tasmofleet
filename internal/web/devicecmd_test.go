@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -305,6 +306,49 @@ func TestConsoleMQTTOnlyDeviceAsksBeforeACutOffChange(t *testing.T) {
 	}
 }
 
+// Why (#605 review, round 3): the console's question follows the answer on record (MQTTOnly), but the router asks
+// HTTP right before a change of the MQTT connection and refuses it when HTTP has gone silent since (the person's own
+// WebServer 0 a minute ago). A timeout is not remembered as a failure, so a plain error would leave the person at a
+// dead end: every resend would skip the question and be refused again. The refusal turns into the confirmation
+// instead, and only its token carries the consent that lets the router publish.
+func TestConsoleAsksWhenTheRouterRefusesACutOffChange(t *testing.T) {
+	f := &fakeCmd{reply: `{"MqttHost":"broker2"}`, runErr: fmt.Errorf("%w: changing MqttHost can cut TasmoFleet off from it", transport.ErrCutOff)}
+	e := setupWith(t, func(d *Deps) {
+		d.DeviceCmd = f
+		d.MQTTOnly = func(context.Context, ...model.DeviceID) bool { return false } // HTTP answered lately
+	})
+	resp, body := e.do(t, "POST", "/devices/1/console", "admin", consoleForm("MqttHost broker2"))
+	if resp.StatusCode != 200 || !strings.Contains(body, "reached over MQTT only") || len(f.ran()) != 1 || f.consent[0] {
+		t.Fatalf("refused send: status %d, ran %v, consent %v: %s", resp.StatusCode, f.ran(), f.consent, body)
+	}
+	f.runErr = nil
+	resp, body = e.do(t, "POST", "/devices/1/console", "admin", url.Values{"token": {confirmToken(t, body)}})
+	if resp.StatusCode != 200 || len(f.ran()) != 2 || !f.consent[1] {
+		t.Fatalf("confirmed send: status %d, ran %v, consent %v: %s", resp.StatusCode, f.ran(), f.consent, body)
+	}
+}
+
+// Why (#605 review): the console asks before a change of the MQTT connection unless HTTP answered lately, and a
+// device that is live on MQTT is not polled over HTTP. Opening the console asks for one HTTP probe, as the device
+// page does, so a device whose HTTP works is not asked about only because nobody had checked; a sent command does
+// not ask again.
+func TestOpeningTheConsoleAsksForOneHTTPProbe(t *testing.T) {
+	var asked []model.DeviceID
+	f := &fakeCmd{reply: `{"TelePeriod":120}`}
+	e := setupWith(t, func(d *Deps) {
+		d.DeviceCmd = f
+		d.ProbeHTTP = func(id model.DeviceID) { asked = append(asked, id) }
+	})
+	e.do(t, "GET", "/devices/1/console", "admin", nil)
+	if len(asked) != 1 || asked[0] != 1 {
+		t.Fatalf("probe asked for %v", asked)
+	}
+	e.do(t, "POST", "/devices/1/console", "admin", consoleForm("TelePeriod 120"))
+	if len(asked) != 1 {
+		t.Fatalf("sending a command asked for another probe: %v", asked)
+	}
+}
+
 // Why (audit rows 6-9): formerly refused commands are sent for an admin, and
 // the destructive ones ask exactly once, naming the consequence. Nothing is
 // sent before the confirmation and the confirmation needs no retyping.
@@ -431,20 +475,26 @@ func TestConsoleMalformedIsRefused(t *testing.T) {
 
 // Why (audit row 8): credential commands are the admin's to send, but the
 // typed value is shown nowhere: not on the confirmation page, not in the reply
-// page, not in any attribute, and the command is held on the server.
+// page, not in any attribute, and the command is held on the server. A BLE bind key, the Zigbee network key and
+// the Wi-Fi login WiFiTest tries are such values too (#605 follow-up).
 func TestConsoleCredentialCommandsAreConfirmedAndRedacted(t *testing.T) {
-	for _, c := range []string{"MqttPassword hunter2", "WebPassword hunter2", "Password1 hunter2", "SSId1 hunter2", "Backlog WebPassword hunter2"} {
+	const bindKey, zbKey = "00112233445566778899AABBCCDDEEFF", "0F0D0B0907050301"
+	leaks := func(body string) bool {
+		return strings.Contains(body, "hunter2") || strings.Contains(body, bindKey) || strings.Contains(body, zbKey)
+	}
+	for _, c := range []string{"MqttPassword hunter2", "WebPassword hunter2", "Password1 hunter2", "SSId1 hunter2", "Backlog WebPassword hunter2",
+		"MI32Key " + bindKey + "A4C138AABBCC", "MI32Keys1 A4C138AABBCC=" + bindKey, `ZbConfig {"KeyL":"0x` + zbKey + `L"}`, "WiFiTest3 MyNet+hunter2"} {
 		f := &fakeCmd{reply: `{}`}
 		e := cmdEnv(t, f)
 		resp, body := e.do(t, "POST", "/devices/1/console", "admin", consoleForm(c))
-		if resp.StatusCode != 200 || !strings.Contains(body, "Confirm sending") || strings.Contains(body, "hunter2") {
+		if resp.StatusCode != 200 || !strings.Contains(body, "Confirm sending") || leaks(body) {
 			t.Fatalf("%q: confirmation page: %d %s", c, resp.StatusCode, body)
 		}
 		if len(f.ran()) != 0 {
 			t.Fatalf("%q: sent before the confirmation", c)
 		}
 		resp, body = e.do(t, "POST", "/devices/1/console", "admin", url.Values{"token": {confirmToken(t, body)}})
-		if resp.StatusCode != 200 || strings.Contains(body, "hunter2") {
+		if resp.StatusCode != 200 || leaks(body) {
 			t.Errorf("%q: result page: %d %s", c, resp.StatusCode, body)
 		}
 		if got := f.ran(); len(got) != 1 || !strings.HasSuffix(got[0], c) {
@@ -774,6 +824,32 @@ func TestHistoryTextKeepsOnlyCommandsWithoutSecret(t *testing.T) {
 	} {
 		if got := historyText(cmd); got != want {
 			t.Errorf("historyText(%q) = %q, want %q", cmd, got, want)
+		}
+	}
+}
+
+// Why (#605): the console's title names the way its commands take. Since reads (#456) and changes (#605) go over
+// MQTT first for a device on TasmoFleet's broker, "HTTP" there would be wrong: such a device says MQTT, plus HTTP
+// while HTTP works (a command MQTT cannot carry goes there); a device MQTT cannot
+// reach, or one without a transport decision, says HTTP.
+func TestConsoleTitleNamesTheTransports(t *testing.T) {
+	ok := transport.Facts{HTTP: transport.HTTPState{State: transport.HTTPOK}}
+	failing := transport.Facts{HTTP: transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailUnreachable}}
+	for _, tc := range []struct {
+		name string
+		f    transport.Facts
+		p    transport.Paths
+		ok   bool
+		want string
+	}{
+		{"reads and changes over MQTT first, HTTP works", ok, transport.Paths{Commands: transport.MQTT, Writes: transport.MQTT}, true, "MQTT + HTTP"},
+		{"reads over MQTT, changes over HTTP", ok, transport.Paths{Commands: transport.MQTT, Writes: transport.HTTP}, true, "MQTT + HTTP"},
+		{"HTTP failing, MQTT carries everything", failing, transport.Paths{Commands: transport.MQTT, Writes: transport.MQTT}, true, "MQTT"},
+		{"not on our broker", ok, transport.Paths{Commands: transport.HTTP, Writes: transport.HTTP}, true, "HTTP"},
+		{"no transport decision", transport.Facts{}, transport.Paths{}, false, "HTTP"},
+	} {
+		if got := consoleVia(tc.f, tc.p, tc.ok); got != tc.want {
+			t.Errorf("%s: %q, want %q", tc.name, got, tc.want)
 		}
 	}
 }

@@ -39,8 +39,10 @@ func (p Paths) Reason(a Action) string {
 // Choose decides, from facts alone, how each action reaches the device. It is pure: no clock, no
 // I/O (Facts.Now is the clock). The order is fixed (spec §5.x):
 //
-//   - Commands (reads): MQTT when usable (#456), else HTTP unless HTTP is failing.
-//   - Writes: HTTP unless HTTP is failing and MQTT is usable (strict).
+//   - Commands (reads): MQTT when usable (#456), unless MQTT commands went unanswered or the device's MQTT
+//     connection was just changed while HTTP works; else HTTP unless HTTP is failing.
+//   - Writes: MQTT when usable under the strict rule (#605), with the same two exceptions; else HTTP unless
+//     HTTP is failing.
 //   - Backup: HTTP unless failing; else MQTT FileDownload (usable, password set and not refused).
 //   - Restore: HTTP (the web UI's restore upload) unless HTTP is failing; else MQTT FileUpload Type 2.
 //   - Update, pull: download over HTTP, else download started over MQTT.
@@ -48,9 +50,8 @@ func (p Paths) Reason(a Action) string {
 //     upload over MQTT (only with the experimental checkbox, a fitting image and a usable
 //     password), else the download over MQTT.
 //
-// Writes, transfers and updates keep HTTP first: it is the established path with synchronous
-// replies, and MQTT is what makes devices HTTP cannot reach manageable (#45). Reads go MQTT
-// first since #456.
+// Transfers and updates keep HTTP first: it is the established path, and MQTT is what makes devices
+// HTTP cannot reach manageable (#45). Reads go MQTT first since #456, writes since #605.
 func Choose(f Facts) Paths {
 	var p Paths
 	var t string
@@ -186,16 +187,18 @@ func noPath(parts ...string) string {
 }
 
 // chooseCommands: reads go over MQTT first (#456) whenever the device is on TasmoFleet's broker and
-// live there, whatever HTTP's state is, unless MQTT reads of the device just went unanswered and HTTP
-// works. Only a device MQTT cannot serve is read over HTTP, and when
+// live there, whatever HTTP's state is, unless MQTT commands of the device just went unanswered or its MQTT
+// connection was just changed, and HTTP works. Only a device MQTT cannot serve is read over HTTP, and when
 // HTTP is failing too there is no path.
 func chooseCommands(f Facts) (Path, string) {
 	why := mqttBlocker(f, false)
 	switch {
 	case why == "" && httpFailing(f):
 		return MQTT, "over MQTT, because " + httpFailText(f.HTTP)
+	case why == "" && !f.MQTT.ConnChangedSince.IsZero():
+		return HTTP, "over the device's HTTP API, because " + connChangedText(f.MQTT)
 	case why == "" && !f.MQTT.ReadsUnansweredSince.IsZero():
-		return HTTP, "over the device's HTTP API, because a read over MQTT got no answer from the device (since " +
+		return HTTP, "over the device's HTTP API, because a command over MQTT got no answer from the device (since " +
 			f.MQTT.ReadsUnansweredSince.UTC().Format("15:04 UTC") + "); MQTT is tried again after a few minutes"
 	case why == "":
 		return MQTT, "over MQTT first (the device is online on TasmoFleet's broker); over HTTP once if the device does not answer or nothing could be published"
@@ -205,14 +208,30 @@ func chooseCommands(f Facts) (Path, string) {
 	return None, noPath(httpFailText(f.HTTP), "MQTT is not usable: "+why)
 }
 
+// chooseWrites: changes go over MQTT first (#605) when the device is usable there under the strict rule (its own
+// GroupTopic read, no other device's unread), unless MQTT commands of the device just went unanswered or its MQTT
+// connection was just changed, and HTTP works.
+// Otherwise HTTP, and when HTTP is failing too there is no path. What a change carries (a password, the MQTT
+// connection, a GPIO template) is no reason for HTTP; the router sends a change over HTTP only when MQTT published
+// nothing, as for a command the channel refuses because it runs other commands. The sentence says so, since it
+// stands for every change.
 func chooseWrites(f Facts) (Path, string) {
-	if !httpFailing(f) {
-		return HTTP, "over the device's HTTP API"
+	why := mqttBlocker(f, true)
+	switch {
+	case why == "" && httpFailing(f):
+		return MQTT, "over MQTT, because " + httpFailText(f.HTTP)
+	case why == "" && !f.MQTT.ConnChangedSince.IsZero():
+		return HTTP, "over the device's HTTP API, the switches too, because " + connChangedText(f.MQTT)
+	case why == "" && !f.MQTT.ReadsUnansweredSince.IsZero():
+		return HTTP, "over the device's HTTP API, the switches too, because a command over MQTT got no answer from the device (since " +
+			f.MQTT.ReadsUnansweredSince.UTC().Format("15:04 UTC") + "); MQTT is tried again after a few minutes"
+	case why == "":
+		return MQTT, "over MQTT first (the device is online on TasmoFleet's broker and its topic is its own); over HTTP if nothing could be published, " +
+			"as for a command that runs other commands (Json, If, WebSend, a rule text), which MQTT does not carry"
+	case !httpFailing(f):
+		return HTTP, "over the device's HTTP API, the switches too, because changing the device over MQTT is not possible: " + why
 	}
-	if why := mqttBlocker(f, true); why != "" {
-		return None, noPath(httpFailText(f.HTTP), "changing the device over MQTT is not possible: "+why)
-	}
-	return MQTT, "over MQTT, because " + httpFailText(f.HTTP)
+	return None, noPath(httpFailText(f.HTTP), "changing the device over MQTT is not possible: "+why)
 }
 
 func chooseBackup(f Facts) (Path, string) {
@@ -302,6 +321,12 @@ func uploadBlocker(f Facts) string {
 		return f.Request.MQTTUploadFit.Reason
 	}
 	return passwordBlocker(f, "upload firmware")
+}
+
+// connChangedText says why HTTP carries the commands after a change of the device's MQTT connection.
+func connChangedText(m MQTTFacts) string {
+	return "TasmoFleet changed the device's MQTT connection (at " + m.ConnChangedSince.UTC().Format("15:04 UTC") +
+		") and the device may not be back on the broker; MQTT is tried again after a few minutes"
 }
 
 func othersUnreadText(n int) string {

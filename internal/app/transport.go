@@ -18,6 +18,7 @@ var mqttPrefixes = [3]string{"cmnd", "stat", "tele"}
 func (a *runtime) setupTransport() {
 	facts := &TransportFacts{
 		Devices: a.svc.Store, Health: a.tracker, Memory: a.svc.Router.Memory(), Unanswered: a.svc.Router.UnansweredReads(),
+		ConnChanged:     a.svc.Router.MQTTConnChanged(),
 		BusConnected:    a.bus.Connected,
 		FullTopic:       func() string { return a.svc.Sys.Snapshot().MQTTFullTopic },
 		FirmwareBaseURL: func() string { return a.svc.Sys.Snapshot().FWBaseURL },
@@ -41,10 +42,23 @@ var (
 	_ transport.MQTTDownloader = (*mqttcmd.Channel)(nil) // the router asserts this at run time: a changed signature must not silently turn backups off
 )
 
-// onlyOverMQTT reports whether commands to any of the devices travel over MQTT because HTTP fails: a
-// change of its MQTT identity can then cut it off for good (cmdpolicy.WithMQTTOnly). The inventory is
-// listed once for all of them.
+// onlyOverMQTT reports whether any of the devices is reached over MQTT while HTTP is not known to work: a
+// change of its MQTT identity can then cut it off for good (cmdpolicy.WithMQTTOnly). The console's question.
 func (a *runtime) onlyOverMQTT(ctx context.Context, ids ...model.DeviceID) bool {
+	return a.anyDevice(ctx, reachedOnlyOverMQTT, ids)
+}
+
+// knownOnlyOverMQTT reports whether any of the devices is known to be reached over MQTT only: HTTP fails and
+// MQTT works. The bulk preview and Make compliant's plan refuse a change of the MQTT connection up front only
+// there; elsewhere the router asks HTTP right before the change (#605).
+func (a *runtime) knownOnlyOverMQTT(ctx context.Context, ids ...model.DeviceID) bool {
+	return a.anyDevice(ctx, func(f transport.Facts) bool {
+		return f.HTTP.State == transport.HTTPFailing && transport.MQTTBlocker(f, false) == ""
+	}, ids)
+}
+
+// anyDevice reports whether is holds for the facts of any of the devices. The inventory is listed once for all.
+func (a *runtime) anyDevice(ctx context.Context, is func(transport.Facts) bool, ids []model.DeviceID) bool {
 	all, err := a.facts.Devices.ListDevices(ctx)
 	if err != nil {
 		return false
@@ -58,15 +72,18 @@ func (a *runtime) onlyOverMQTT(ctx context.Context, ids ...model.DeviceID) bool 
 			continue
 		}
 		f, err := a.facts.factsFor(ctx, d, all)
-		if err == nil && reachedOnlyOverMQTT(f) {
+		if err == nil && is(f) {
 			return true
 		}
 	}
 	return false
 }
 
-// reachedOnlyOverMQTT is true when HTTP fails and MQTT works. Not "Choose(f).Commands == MQTT": reads
+// reachedOnlyOverMQTT is true when HTTP is not known to work (failing, or no fresh answer: not HTTPOK) and
+// MQTT works: then the router would refuse a change of the MQTT connection without the person's confirmation
+// unless HTTP answers its probe, so the console asks up front. HTTP silent since its last answer is caught by the
+// router's probe, and the console asks then (web.consoleSend on ErrCutOff). Not "Choose(f).Commands == MQTT": reads
 // go MQTT first for every live device on our broker (#456), which says nothing about HTTP.
 func reachedOnlyOverMQTT(f transport.Facts) bool {
-	return f.HTTP.State == transport.HTTPFailing && transport.MQTTBlocker(f, false) == ""
+	return f.HTTP.State != transport.HTTPOK && transport.MQTTBlocker(f, false) == ""
 }

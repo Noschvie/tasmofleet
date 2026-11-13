@@ -99,6 +99,8 @@ type facts struct {
 	healthNewer bool
 	lwtOffline  bool
 	unanswered  *Memory
+	connChanged *Memory
+	httpOK      bool // a fresh HTTP success is on record (HTTPOK); without it and without a failure: unknown
 }
 
 func (f *facts) HTTPState(id model.DeviceID) HTTPState {
@@ -112,6 +114,9 @@ func (f *facts) memState(id model.DeviceID) HTTPState {
 	if kind, since, ok := f.mem.HTTPFailure(id); ok {
 		return HTTPState{State: HTTPFailing, Kind: kind, Since: since}
 	}
+	if f.httpOK {
+		return HTTPState{State: HTTPOK}
+	}
 	return HTTPState{}
 }
 
@@ -123,6 +128,11 @@ func (f *facts) FactsFor(_ context.Context, d model.Device) (Facts, error) {
 	if f.unanswered != nil {
 		if _, since, ok := f.unanswered.HTTPFailure(d.ID); ok {
 			m.ReadsUnansweredSince = since
+		}
+	}
+	if f.connChanged != nil {
+		if _, since, ok := f.connChanged.HTTPFailure(d.ID); ok {
+			m.ConnChangedSince = since
 		}
 	}
 	if f.groupKnown {
@@ -149,6 +159,7 @@ func newRig(t *testing.T) *rig {
 	g.r = NewRouter(Options{HTTP: g.http, Devices: g.devs, Facts: g.f, Memory: mem})
 	g.r.SetMQTT(g.mq)
 	g.f.unanswered = g.r.unanswered
+	g.f.connChanged = g.r.MQTTConnChanged()
 	return g
 }
 
@@ -173,7 +184,9 @@ func TestFailsOverToMQTTOnlyWhenNothingWasSent(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			g := newRig(t)
 			g.http.err = tc.err
-			// a write: reads go MQTT first since #456, so only writes still start on HTTP
+			// a write that starts on HTTP: reads go MQTT first since #456, writes since #605 unless the device's
+			// MQTT reads went unanswered
+			g.r.unanswered.Fail(7, HTTPFailUnreachable)
 			raw, err := g.r.Command(t.Context(), g.target(), "Power1 ON")
 			if tc.failover {
 				if err != nil || string(raw) != `{"MQTT":"yes"}` || g.mq.n() != 1 || g.http.n() != 1 {
@@ -196,6 +209,8 @@ func TestRefusedConnectionIsOneMQTTSend(t *testing.T) {
 	cl := tasmota.NewHTTPClient(tasmota.Options{AllowedNetworks: loopback()})
 	g.r = NewRouter(Options{HTTP: cl, Devices: g.devs, Facts: g.f, Memory: g.mem})
 	g.r.SetMQTT(g.mq)
+	g.f.unanswered = g.r.unanswered
+	g.r.unanswered.Fail(7, HTTPFailUnreachable) // the write starts on HTTP (#605: else it would go MQTT first)
 	ctx, tr := WithTrace(t.Context())
 	if _, err := g.r.Command(ctx, g.target(), "Power1 ON"); err != nil {
 		t.Fatal(err)
@@ -501,17 +516,21 @@ func TestMQTTBlockerMatchesChoose(t *testing.T) {
 func TestACutOffWriteNeedsAConfirmationOverMQTT(t *testing.T) {
 	// Why (D13): a new topic, host or login published to a device that only MQTT reaches can cut it off
 	// for good. The console's confirmation carries the consent; nothing else does, and a refusal
-	// publishes nothing, over the routed path and after a failover alike.
+	// publishes nothing, over the routed path and after a failover alike. The failover is that of a
+	// write that starts on HTTP (Make compliant, interim until #606): a routed write goes MQTT first
+	// while HTTP is not known to fail, and needs no consent there (#605).
 	for _, name := range []string{"routed", "failover"} {
 		t.Run(name, func(t *testing.T) {
 			g := newRig(t)
+			base := t.Context()
 			if name == "routed" {
 				g.mem.Fail(7, HTTPFailUnreachable)
 			} else {
 				g.http.err = tasmota.ErrForbiddenAddr
+				base = WithHTTPFirstWrites(base)
 			}
 			for _, c := range []string{"Topic other", "Backlog Power ON; MqttHost 10.0.0.9", "SetOption3 0", "Prefix1 x"} {
-				ctx, tr := WithTrace(t.Context())
+				ctx, tr := WithTrace(base)
 				_, err := g.r.Command(ctx, g.target(), c)
 				if !errors.Is(err, ErrCutOff) || g.mq.n() != 0 || tr.Via() != "none" {
 					t.Fatalf("%q: err=%v mqtt=%d via=%s, want a refusal that published nothing", c, err, g.mq.n(), tr.Via())
@@ -532,10 +551,18 @@ func TestACutOffWriteNeedsAConfirmationOverMQTT(t *testing.T) {
 }
 
 func TestOverHTTPACutOffWriteIsSentAsAlways(t *testing.T) {
-	// Why: the consent only concerns the MQTT path; a device HTTP reaches takes the change.
+	// Why: the consent only concerns a device reached over MQTT only; a device whose HTTP answers takes the change
+	// without a question. Since #605 it goes over MQTT first after HTTP answered one Status 11 (HTTP stays for the
+	// next command if MQTT loses the device); a device that is not on our broker takes it over HTTP as always.
 	g := newRig(t)
+	g.f.httpOK = true
+	if _, err := g.r.Command(t.Context(), g.target(), "Topic other"); err != nil || g.http.n() != 1 || g.http.calls[0] != "Status 11" || g.mq.n() != 1 {
+		t.Fatalf("on our broker: err=%v http=%v mqtt=%d", err, g.http.calls, g.mq.n())
+	}
+	g = newRig(t)
+	g.devs.d.MQTT = model.MQTTOtherBroker
 	if _, err := g.r.Command(t.Context(), g.target(), "Topic other"); err != nil || g.http.n() != 1 || g.mq.n() != 0 {
-		t.Fatalf("err=%v http=%d mqtt=%d", err, g.http.n(), g.mq.n())
+		t.Fatalf("not on our broker: err=%v http=%d mqtt=%d", err, g.http.n(), g.mq.n())
 	}
 }
 
@@ -546,6 +573,7 @@ func TestAPIRefusedFailsOverOnlyForReadsOrAKnownRefusal(t *testing.T) {
 	// already knows to refuse the API.
 	g := newRig(t)
 	g.http.err = tasmota.ErrHTTPAPIRefused
+	g.r.unanswered.Fail(7, HTTPFailUnreachable) // the write starts on HTTP (#605: else it would go MQTT first)
 	if _, err := g.r.Command(t.Context(), g.target(), "Power1 TOGGLE"); !errors.Is(err, tasmota.ErrHTTPAPIRefused) || g.mq.n() != 0 {
 		t.Fatalf("first-try write: err=%v mqtt=%d", err, g.mq.n())
 	}

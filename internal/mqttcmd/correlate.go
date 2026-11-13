@@ -26,13 +26,16 @@ var fileCommands = map[string]bool{"filedownload": true, "fileupload": true, "up
 
 // executors are commands that run other commands, or publish messages that do: Json (CmndJson ->
 // Backlog0, so {"Status":0} is a Status 0), Publish and Publish2 (to the device's own cmnd topic),
-// Rule and RuleTimer (DO Status 0), WebSend and WebQuery (to any host, a device included), Br
-// (Berry), Script and UfsRun (runs a script file). Status 0 is never sent, so a command that can send it on our behalf is
+// Rule and RuleTimer (DO Status 0), If (runs its command block; Tasmota builds it with rules alone),
+// WebSend and WebQuery (to any host, a device included), DevGroupSend (128=<command> runs on the group,
+// this device included) and LoRaCommand (on another device), Br (Berry), Script and UfsRun (runs a
+// script file). Status 0 is never sent, so a command that can send it on our behalf is
 // never published either, alone or inside a Backlog. The console and bulk keep them for devices
 // reached over HTTP (cmdpolicy asks an admin to confirm there); over MQTT there is no such path.
 var executors = map[string]bool{
 	"json": true, "publish": true, "publish2": true, "rule": true, "ruletimer": true,
 	"websend": true, "webquery": true, "br": true, "script": true, "ufsrun": true,
+	"if": true, "devgroupsend": true, "loracommand": true,
 }
 
 // ruleSwitch reports a Rule command that only reads or switches a rule ("Rule1", "Rule1 1",
@@ -92,6 +95,11 @@ func parseRequest(cmd string) (*request, error) {
 		return nil, refuse("%s carries the device's MQTT password; file transfers have their own API", r.name)
 	case executors[r.base] && !ruleSwitch(r):
 		return nil, refuse("%s can run other commands (Status 0 among them), so it is not sent over MQTT", r.name)
+	case r.base == "template" && strings.Contains(strings.ToLower(r.args), "cmnd"):
+		// Tasmota runs a template's CMND as a Backlog when it applies the template, and its JSON parser takes the
+		// key in any case. Matched on the text, not on parsed JSON, so a spelling the parser would still accept
+		// fails closed.
+		return nil, refuse("%s with CMND runs other commands (Status 0 among them), so it is not sent over MQTT", r.name)
 	case r.base == "backlog":
 		if idx == "2" || idx == "3" {
 			return nil, refuse("%s publishes no results, so nothing could be matched", r.name)

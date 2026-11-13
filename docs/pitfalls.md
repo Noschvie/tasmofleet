@@ -202,6 +202,37 @@ means nothing stops you: you have to know it. The full working rules are in
 - **Enforced:** the `lint` job runs the check targets; adding a target to it is
   convention.
 
+## Devices and transport
+
+### A second MQTT path that skipped the router's checks (#605)
+
+- **Happened:** the power toggle published `Power<n>` over MQTT by itself whenever the device was on our
+  broker and the bus was up. It never asked whether the topic was the device's own (exclusive, its GroupTopic
+  read), which every other change over MQTT has to pass, so a switch could reach the devices of a shared topic.
+- **Rule:** a call that talks to the command channel itself asks the router's write rule (`transport.Choose`'s
+  writes path, injected by the app), never a copy of it; a write MQTT published and nobody answered is never
+  resent, and only a write MQTT provably did not publish goes over HTTP.
+- **Enforced:** `TestPowerAsksTheRoutersWriteRule`, `TestPowerFollowsTheStrictWriteRule`,
+  `TestRouterWritesFollowChoose` (claims T2, T3 and T11 of `docs/security/mqtt-transport.md`); otherwise convention.
+
+### "HTTP not known to fail" read as "HTTP works" (#605 review)
+
+- **Happened:** a first version of #605 published a change of the MQTT connection (MqttHost, Topic, ...) without
+  the lockout question whenever HTTP was not failing. The HTTP state of a device live on MQTT is normally unknown:
+  nothing polls its HTTP, a failure is forgotten after 10 minutes and a timeout is never recorded as one, so a
+  firewalled device would have been taken off the broker with no HTTP to reach it again. The next version trusted
+  a fresh answer on record (15 minutes) instead: the person's own `WebServer 0` sent over MQTT a minute later
+  closes HTTP, and a following `MqttHost` would have gone out without a question all the same.
+- **Rule:** a decision that relies on HTTP as the way back asks HTTP itself right before (the router's
+  `Status 11`); neither unknown nor an answer on record counts. A fresh answer on record (`HTTPOK`) is only the
+  console's hint whether to ask up front; when the router refuses after all, the console asks then. Up-front
+  refusals that would block the whole fleet (bulk preview, Make compliant's plan) use "known to fail" instead and
+  leave the rest to the router.
+- **Enforced:** `TestACutOffWriteGoesWithoutAQuestionOnlyWhileHTTPIsProvenUsable`,
+  `TestACutOffWriteAfterHTTPClosedIsRefusedDespiteAnAnswerOnRecord`, `TestConsoleAsksWhenTheRouterRefusesACutOffChange`,
+  `TestReachedOnlyOverMQTTMeansHTTPIsNotKnownToWork`, `TestKnownOnlyOverMQTTMeansHTTPIsFailing` (claims T8 and T10 of
+  `docs/security/mqtt-transport.md`).
+
 ## Tests
 
 ### A test that depended on the time of day (#340)

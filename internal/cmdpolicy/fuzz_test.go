@@ -30,6 +30,7 @@ func FuzzPolicy(f *testing.F) {
 		"SetOption19 1", "SO19", "MqttPassword x", "Rule1 ON x DO y ENDON", "Publish a b", "WebSend [h] Power ON",
 		"Wifi 0", "WebServer off", "SaveData", "FriendlyName1 Küche", "", "   ", "\x00", "\xff\xfe",
 		strings.Repeat("a", 300), "Power ON\u202eNO", "Power\u200b ON", "Rule1 password=hunter2",
+		"MqttTLS 1", "mqtttls7 0", "SetOption0103 1", "Backlog Power ON; MqttTLSFingerprint 0",
 	} {
 		f.Add(s)
 	}

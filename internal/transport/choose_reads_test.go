@@ -8,7 +8,7 @@ import (
 
 // Why (#456 A): a device on TasmoFleet's broker that is online answers reads over MQTT, so a device
 // HTTP cannot reach (or a tile that has not been polled lately) never decides the read path. Writes
-// keep their order (HTTP unless failing) until stage 2.
+// follow the stricter rule of #605 (choose_writes_test.go): the same, plus a read GroupTopic.
 func TestReadsGoOverMQTTFirst(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -17,14 +17,18 @@ func TestReadsGoOverMQTTFirst(t *testing.T) {
 		write Path
 		note  string // substring of the reads reason
 	}{
-		{"on our broker and live, HTTP ok: MQTT", func(f *Facts) {}, MQTT, HTTP, "MQTT first"},
-		{"on our broker and live, HTTP unknown: MQTT", func(f *Facts) { f.HTTP = HTTPState{} }, MQTT, HTTP, "MQTT first"},
+		{"on our broker and live, HTTP ok: MQTT", func(f *Facts) {}, MQTT, MQTT, "MQTT first"},
+		{"on our broker and live, HTTP unknown: MQTT", func(f *Facts) { f.HTTP = HTTPState{} }, MQTT, MQTT, "MQTT first"},
 		{"on our broker and live, HTTP failing: MQTT, and says why", func(f *Facts) { *f = httpDown(*f) }, MQTT, MQTT, "cannot reach the device over HTTP"},
 		// Why (review of PR 626): a device whose MQTT reads went unanswered is read over HTTP while HTTP
 		// works; when HTTP fails, MQTT is all there is.
 		{"MQTT reads unanswered, HTTP ok: HTTP", func(f *Facts) { f.MQTT.ReadsUnansweredSince = t0.Add(-time.Minute) }, HTTP, HTTP, "got no answer"},
 		{"MQTT reads unanswered, HTTP unknown: HTTP", func(f *Facts) { f.HTTP = HTTPState{}; f.MQTT.ReadsUnansweredSince = t0.Add(-time.Minute) }, HTTP, HTTP, "got no answer"},
 		{"MQTT reads unanswered, HTTP failing: MQTT", func(f *Facts) { *f = httpDown(*f); f.MQTT.ReadsUnansweredSince = t0.Add(-time.Minute) }, MQTT, MQTT, "cannot reach the device over HTTP"},
+		// Why (#605 review, round 4): after TasmoFleet changed the device's MQTT connection over MQTT it may not
+		// rejoin the broker while its last will stays Online; HTTP, proven right before, carries the next reads.
+		{"MQTT connection just changed, HTTP ok: HTTP, and says why", func(f *Facts) { f.MQTT.ConnChangedSince = t0.Add(-time.Minute) }, HTTP, HTTP, "changed the device's MQTT connection"},
+		{"MQTT connection just changed, HTTP failing: MQTT", func(f *Facts) { *f = httpDown(*f); f.MQTT.ConnChangedSince = t0.Add(-time.Minute) }, MQTT, MQTT, "cannot reach the device over HTTP"},
 		{"LWT not online: HTTP (a publish would vanish)", func(f *Facts) { f.MQTT.LWTOnline = false }, HTTP, HTTP, "HTTP"},
 		{"other broker: HTTP", func(f *Facts) { f.MQTT.Ours = false }, HTTP, HTTP, "HTTP"},
 		{"MQTT off for the device (no topic): HTTP", func(f *Facts) { f.MQTT.Topic = "" }, HTTP, HTTP, "HTTP"},

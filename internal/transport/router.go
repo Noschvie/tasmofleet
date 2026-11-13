@@ -23,7 +23,8 @@ import (
 const DefaultFailFor = 10 * time.Minute
 
 // ErrCutOff is returned for a write over MQTT that can cut the device off (a new topic, broker or login)
-// when no person confirmed it (WithCutOffConsent). Nothing was published.
+// while HTTP is not usable (failing, or not proven to answer), when no person confirmed it (WithCutOffConsent).
+// Nothing was published.
 var ErrCutOff = errors.New("not sent")
 
 // DeviceGetter reads one inventory device.
@@ -94,16 +95,21 @@ type Options struct {
 	Log    *slog.Logger
 }
 
-// Router implements tasmota.Client over two transports (D1). HTTP stays first; MQTT carries a call
-// when HTTP is known to fail (Choose) or when the HTTP request provably never left (D4). Calls
-// without a device (Target ID 0: scans, MAC verifiers) and passes of Uploader and BootSwitcher go
-// to HTTP untouched.
+// Router implements tasmota.Client over two transports (D1). Reads (#456) and writes (#605) of a device
+// usable on our broker go over MQTT first; everything else, and those when MQTT cannot carry them, over
+// HTTP, with MQTT carrying a call when HTTP is known to fail (Choose) or when the HTTP request provably
+// never left (D4). Calls without a device (Target ID 0: scans, MAC verifiers) and passes of Uploader and
+// BootSwitcher go to HTTP untouched.
 type Router struct {
 	o    Options
 	http tasmota.Client // the raw client, recording what HTTP tells about the device
 	mqtt atomic.Pointer[mqttHolder]
-	// unanswered remembers (10 minutes) the devices that left a read published over MQTT unanswered.
+	// unanswered remembers (10 minutes) the devices that left a read or a write published over MQTT unanswered.
 	unanswered *Memory
+	// connChanged remembers (10 minutes, or until the device answers over MQTT) the devices whose MQTT connection
+	// the router changed while HTTP answered, over either transport: HTTP carries their next commands
+	// (MQTTFacts.ConnChangedSince).
+	connChanged *Memory
 }
 
 type mqttHolder struct{ d MQTTDoer }
@@ -122,7 +128,8 @@ func NewRouter(o Options) *Router {
 	if o.Log == nil {
 		o.Log = slog.New(slog.DiscardHandler)
 	}
-	return &Router{o: o, http: &observer{c: o.HTTP, mem: o.Memory}, unanswered: NewMemory(DefaultFailFor, time.Now)}
+	return &Router{o: o, http: &observer{c: o.HTTP, mem: o.Memory}, unanswered: NewMemory(DefaultFailFor, time.Now),
+		connChanged: NewMemory(DefaultFailFor, time.Now)}
 }
 
 // SetMQTT attaches the command channel, once the broker connection exists. nil detaches it.
@@ -145,6 +152,10 @@ func (r *Router) Memory() *Memory { return r.o.Memory }
 // read it (MQTTFacts.ReadsUnansweredSince).
 func (r *Router) UnansweredReads() *Memory { return r.unanswered }
 
+// MQTTConnChanged is the router's memory of devices whose MQTT connection it just changed over MQTT while HTTP
+// answered: the facts read it (MQTTFacts.ConnChangedSince). The failure kind it records means nothing.
+func (r *Router) MQTTConnChanged() *Memory { return r.connChanged }
+
 // HTTPOnly is the raw HTTP client with the router's memory attached: what it learns (a refused
 // connection, an answer) is remembered, but it never routes to MQTT. The health poll, the prober
 // and the discovery scan use it, because they measure or verify HTTP.
@@ -166,6 +177,7 @@ const (
 	keyTrace
 	keyLoose
 	keyConsent
+	keyHTTPFirstWrites
 )
 
 // WithPath pins the transport of every call made with ctx (D5): a job that chose its path (OTA,
@@ -183,19 +195,35 @@ func PathFrom(ctx context.Context) (Path, bool) {
 	return p, ok
 }
 
-// WithConsole marks calls typed by a person: over MQTT a reply with other keys than the command's
-// name (Template, Gpios) is accepted as the answer (mqttcmd DoLoose).
+// WithConsole marks calls typed by a person (devicecmd.Run: the console and bulk commands): over MQTT a reply
+// with other keys than the command's name (Template, Gpios) is accepted as the answer (mqttcmd DoLoose).
 func WithConsole(ctx context.Context) context.Context { return context.WithValue(ctx, keyLoose, true) }
+
+func typedByAPerson(ctx context.Context) bool { loose, _ := ctx.Value(keyLoose).(bool); return loose }
 
 // WithCutOffConsent marks calls a person confirmed after being told that the device is reached over MQTT
 // only and that the change can cut TasmoFleet off from it (the console's confirmation). Without it the
-// router publishes no such write over MQTT. Make compliant and bulk commands never carry it.
+// router publishes no such write over MQTT unless HTTP answers the router's own Status 11 right before (an answer
+// on record does not count): then a device that MQTT loses after the change is still reached over HTTP, so nothing
+// asks (#605). Make compliant and bulk commands never carry it.
 func WithCutOffConsent(ctx context.Context) context.Context {
 	return context.WithValue(ctx, keyConsent, true)
 }
 
 // HasCutOffConsent reports whether ctx carries WithCutOffConsent.
 func HasCutOffConsent(ctx context.Context) bool { c, _ := ctx.Value(keyConsent).(bool); return c }
+
+// WithHTTPFirstWrites keeps the writes made with ctx in the order before #605: over HTTP unless HTTP is known
+// to fail. Make compliant carries it (app/policyfix.go) until it moves to MQTT first in its own change (#606).
+// Reads are not affected.
+func WithHTTPFirstWrites(ctx context.Context) context.Context {
+	return context.WithValue(ctx, keyHTTPFirstWrites, true)
+}
+
+func httpFirstWrites(ctx context.Context) bool {
+	m, _ := ctx.Value(keyHTTPFirstWrites).(bool)
+	return m
+}
 
 // Trace records which transports carried the calls made under its context, for the audit "via".
 type Trace struct {
@@ -227,6 +255,13 @@ func (t *Trace) note(p Path) {
 	case HTTP, DownloadHTTP, DownloadMQTT, PushHTTP, PushSafeboot, PushMQTT:
 		t.http = true
 	}
+}
+
+// onlyHTTP reports whether HTTP, and nothing else, carried the calls recorded so far.
+func (t *Trace) onlyHTTP() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.http && !t.mqtt
 }
 
 // Via is the audit value of "via": "http", "mqtt", or "http+mqtt" when a job used both; "none" when
@@ -328,7 +363,7 @@ func (r *Router) Command(ctx context.Context, t tasmota.Target, cmnd string) (js
 		return r.read(ctx, t, cmnd, cls)
 	}
 	if r.o.Facts.HTTPState(id).State != HTTPFailing {
-		return r.httpFirst(ctx, t, cmnd, cls)
+		return r.write(ctx, t, cmnd, cls)
 	}
 	// HTTP is known to fail: ask the facts which way works.
 	d, f, p, err := r.decide(ctx, id)
@@ -390,6 +425,98 @@ func (r *Router) read(ctx context.Context, t tasmota.Target, cmnd string, cls cm
 		return r.httpCommand(ctx, t, cmnd)
 	}
 	return raw, err
+}
+
+// write sends a write while HTTP is not known to fail: MQTT first (#605) when Choose says so (the device is
+// usable on our broker under the strict rule and its MQTT reads are not going unanswered), else HTTP first
+// (httpFirst, with its failover when HTTP provably sent nothing). HTTP is used only when MQTT cannot carry a write
+// (the product owner's rule of 2026-11-14): what a write carries is no reason. A secret crosses the broker as it
+// crosses the network to the device's HTTP API, in plain text on a usual Tasmota (docs/security/mqtt-transport.md);
+// its reply is masked as before (sendMQTT). A change of the device's MQTT connection (cmdpolicy.CutOffName) is
+// published without a question only while HTTP is usable, so that a device MQTT loses after the change is reached
+// over HTTP for the next command: proven by one harmless HTTP question asked right before (httpAnswers), never by
+// an answer on record (that is only the console's hint, app.reachedOnlyOverMQTT). Without that answer it needs the
+// person's confirmation (WithCutOffConsent), else ErrCutOff and nothing is sent. Once such a change was published
+// after that answer, or HTTP carried it (overHTTP), the device is marked (connChanged): Tasmota restarts after it with
+// a clean disconnect, so its last will stays Online even when it cannot rejoin the broker, and HTTP carries its next
+// commands while HTTP works (Choose), until it answers over MQTT or the mark expires. The one exception to MQTT first
+// is Make compliant (WithHTTPFirstWrites), until #606.
+//
+// A write over MQTT is sent over HTTP once only when MQTT provably published nothing (notPublished: the channel
+// refused the command because it cannot carry it, such as one that runs other commands or a Backlog2; the bus was
+// down; the device was offline by its LWT; the snapshot changed), never back to MQTT within the call. A write MQTT
+// published and nobody confirmed (tasmota.ErrTimeout) may have run: it is an unknown outcome, returned as such and
+// never sent again; while the caller still waits and HTTP is not known to fail, it marks the device like an
+// unanswered read (unanswered), so its next commands go over HTTP for a while.
+func (r *Router) write(ctx context.Context, t tasmota.Target, cmnd string, cls cmdClass) (json.RawMessage, error) {
+	id := t.DeviceID()
+	d, err := r.o.Devices.GetDevice(ctx, id)
+	onBroker := err == nil && d.MQTT == model.MQTTOurs && d.Topic != ""
+	if httpFirstWrites(ctx) || !onBroker {
+		// Not on our broker: no need to gather the inventory's facts.
+		return r.overHTTP(ctx, id, onBroker, cmnd, func(ctx context.Context) (json.RawMessage, error) { return r.httpFirst(ctx, t, cmnd, cls) })
+	}
+	f, err := r.o.Facts.FactsFor(ctx, d)
+	// No judgement possible: the established path. The facts may know of an HTTP failure the cheap check did not
+	// see; httpFirst then decides as it always did.
+	if err != nil || Choose(f).Writes != MQTT || httpFailing(f) {
+		return r.overHTTP(ctx, id, true, cmnd, func(ctx context.Context) (json.RawMessage, error) { return r.httpFirst(ctx, t, cmnd, cls) })
+	}
+	// Only an answer right now proves HTTP for a change of the MQTT connection: a fresh answer on record may predate
+	// the person's own WebServer 0 or SetOption128 0 sent over MQTT a minute ago.
+	usable := false
+	if !HasCutOffConsent(ctx) && cmdpolicy.CutsMQTTOff(cmnd) {
+		usable = r.httpAnswers(ctx, t)
+	}
+	raw, err := r.publish(ctx, d, cmnd, cls, usable)
+	if usable && (err == nil || errors.Is(err, tasmota.ErrTimeout)) {
+		r.markConnChanged(id) // published, answered or not: HTTP carries the next commands while it works
+	}
+	switch {
+	case err != nil && notPublished(err):
+		r.o.Log.Info("transport: MQTT did not publish the write, using HTTP", "device", int64(id))
+		return r.overHTTP(ctx, id, true, cmnd, func(ctx context.Context) (json.RawMessage, error) { return r.httpCommand(ctx, t, cmnd) })
+	case errors.Is(err, tasmota.ErrTimeout) && ctx.Err() == nil:
+		// Never sent again (it may have run), but the device's replies are not where TasmoFleet listens, as after an
+		// unanswered read: its next commands go over HTTP for a while, not into the void. HTTP is not failing here
+		// (the facts said so above).
+		r.unanswered.Fail(id, HTTPFailUnreachable)
+		r.o.Log.Info("transport: MQTT write got no answer, the device's next commands go over HTTP for a while", "device", int64(id))
+	}
+	return raw, err
+}
+
+// overHTTP sends a write over HTTP (send) and marks the device (connChanged) when the write changes its MQTT
+// connection, the device is on our broker and HTTP carried it (an answer, or a timeout: it may have run). The mark
+// is set whichever transport carried such a change, because the device may not rejoin the broker after it either way;
+// a change that reached the device only over MQTT (httpFirst's failover) or not at all sets none. Fail extends a mark
+// that is already set, so a second corrective change keeps HTTP for another 10 minutes.
+func (r *Router) overHTTP(ctx context.Context, id model.DeviceID, onBroker bool, cmnd string, send func(context.Context) (json.RawMessage, error)) (json.RawMessage, error) {
+	if !onBroker || !cmdpolicy.CutsMQTTOff(cmnd) {
+		return send(ctx)
+	}
+	tctx, tr := WithTrace(ctx)
+	raw, err := send(tctx)
+	if tr.onlyHTTP() && (err == nil || errors.Is(err, tasmota.ErrTimeout)) {
+		r.markConnChanged(id)
+	}
+	return raw, err
+}
+
+// markConnChanged marks a device whose MQTT connection a write just changed: HTTP carries its next commands while
+// HTTP works (the product owner's rule), until it answers over MQTT or 10 minutes pass.
+func (r *Router) markConnChanged(id model.DeviceID) {
+	r.connChanged.Fail(id, HTTPFailUnreachable)
+	r.o.Log.Info("transport: the device's MQTT connection was changed, its next commands go over HTTP for a while", "device", int64(id))
+}
+
+// httpAnswers asks the device one harmless question over HTTP (Status 11, the health poll's) and reports whether it
+// answered: the proof that HTTP is usable right now, which an answer on record is not. It goes through the observer,
+// so the memory learns what HTTP showed, but not through httpCommand: it carries nothing of the write, and the trace
+// (the audit's "via") names only the transport that carried the change.
+func (r *Router) httpAnswers(ctx context.Context, t tasmota.Target) bool {
+	_, err := r.http.Command(ctx, t, "Status 11")
+	return err == nil
 }
 
 // MQTTCannotMatch reports reads whose replies the command channel does not match (State answers with
@@ -501,15 +628,23 @@ func (r *Router) pinnedMQTT(ctx context.Context, id model.DeviceID, cmnd string,
 	return r.sendMQTT(ctx, d, cmnd, cls)
 }
 
-// sendMQTT publishes the command for the device snapshot d. The device is read once more right
-// before the send: a topic or broker change since the snapshot (an edit, a refresh) must not
-// send to the old topic.
+// sendMQTT publishes the command for the device snapshot d, for a caller that does not know HTTP to work: a
+// change that can cut the device off from MQTT needs the person's consent (WithCutOffConsent).
 func (r *Router) sendMQTT(ctx context.Context, d model.Device, cmnd string, cls cmdClass) (json.RawMessage, error) {
+	return r.publish(ctx, d, cmnd, cls, false)
+}
+
+// publish publishes the command for the device snapshot d. httpWorks: HTTP answered the router's probe right before,
+// so a change of the device's MQTT connection cannot lock it out and is published without the consent. The device is
+// read once more right before the send: a topic or broker change since the snapshot (an edit, a refresh) must not
+// send to the old topic. An answer to anything but such a change proves the device is on the broker and clears
+// the mark of a recent one.
+func (r *Router) publish(ctx context.Context, d model.Device, cmnd string, cls cmdClass, httpWorks bool) (json.RawMessage, error) {
 	m := r.mqttDoer()
 	if m == nil {
 		return nil, fmt.Errorf("%w: MQTT is not connected", tasmota.ErrUnreachable)
 	}
-	if cls.write {
+	if cls.write && !httpWorks {
 		if name := cmdpolicy.CutOffName(cmnd); name != "" {
 			if !HasCutOffConsent(ctx) {
 				noteTrace(ctx, None)
@@ -525,7 +660,7 @@ func (r *Router) sendMQTT(ctx context.Context, d model.Device, cmnd string, cls 
 		return nil, fmt.Errorf("%w: the device's MQTT settings changed while the command was prepared; nothing was sent", tasmota.ErrUnreachable)
 	}
 	var raw json.RawMessage
-	if loose, _ := ctx.Value(keyLoose).(bool); loose {
+	if typedByAPerson(ctx) {
 		raw, err = m.DoLoose(ctx, d, cmnd)
 	} else {
 		raw, err = m.Do(ctx, d, cmnd)
@@ -535,6 +670,9 @@ func (r *Router) sendMQTT(ctx context.Context, d model.Device, cmnd string, cls 
 	}
 	if err != nil {
 		return nil, err
+	}
+	if !cmdpolicy.CutsMQTTOff(cmnd) {
+		r.connChanged.Clear(d.ID)
 	}
 	if cls.redact {
 		raw = cmdpolicy.ScrubReply(raw) // the reply of a secret-setting command echoes the secret
@@ -546,6 +684,11 @@ func (r *Router) sendMQTT(ctx context.Context, d model.Device, cmnd string, cls 
 func notPublished(err error) bool {
 	return !errors.Is(err, tasmota.ErrTimeout) && (errors.Is(err, tasmota.ErrUnreachable) || errors.Is(err, mqttcmd.ErrRefused))
 }
+
+// NotPublished reports an error of the command channel that proves nothing was published (a refusal, a bus
+// that was down, a device offline by its LWT): the same command may then be sent over HTTP once. A timeout is
+// an unknown outcome and never counts. The power toggle, which calls the channel itself, uses it.
+func NotPublished(err error) bool { return err != nil && notPublished(err) }
 
 // ---- the rest of tasmota.Client
 

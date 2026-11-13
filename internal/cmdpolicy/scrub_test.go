@@ -22,6 +22,7 @@ func TestScrubReply(t *testing.T) {
 		{"url userinfo", `{"Url":"http://bob:hunter2@example.org/x"}`, `{"Url":"http://***@example.org/x"}`},
 		{"query secret", `{"Rule1":"ON x DO WebSend http://h/cm?user=a&password=hunter2 ENDON"}`, `{"Rule1":"ON x DO WebSend http://h/cm?user=a&password=*** ENDON"}`},
 		{"websend bracket form", `{"Rule1":"WebSend [bob:hunter2@10.0.0.1:80] Power ON"}`, `{"Rule1":"WebSend [***@10.0.0.1:80] Power ON"}`},
+		{"websend login after the host", `{"Rule1":"WebSend [h:80,bob:hunter2] Power ON"}`, `{"Rule1":"WebSend [h:80,***] Power ON"}`},
 		{"token equals", `{"x":"auth token=abc123 done"}`, `{"x":"auth token=*** done"}`},
 		{"userinfo without a scheme", `{"MqttHost":"alice:hunter2@broker"}`, `{"MqttHost":"***@broker"}`},
 		{"ssid is not shown", `{"Wifi":{"SSId":"Home","RSSI":70}}`, `{"Wifi":{"SSId":"***","RSSI":70}}`},
@@ -30,6 +31,11 @@ func TestScrubReply(t *testing.T) {
 		{"not json", `plain password=hunter2 text`, `plain password=*** text`},
 		{"not json userinfo", `ftp://u:p@h/f`, `ftp://***@h/f`},
 		{"escaped quote in value", `{"a":"say \"hi\" token=zzz"}`, `{"a":"say \"hi\" token=***"}`},
+		// #605 review: ZbConfig answers with the Zigbee network key, MI32Key with the BLE bind keys. Matched by the exact
+		// key: the part "key" alone would also mask harmless settings such as DzKeyIdx.
+		{"zigbee network key", `{"ZbConfig":{"Channel":11,"KeyL":"0x0F0D0B0907050301L","KeyH":"0x0D0C0A0806040200L"}}`, `{"ZbConfig":{"Channel":11,"KeyL":"***","KeyH":"***"}}`},
+		{"ble bind keys", `{"MIKeys":{"A4C138AABBCC":"00112233445566778899AABBCCDDEEFF"}}`, `{"MIKeys":"***"}`},
+		{"a name with key in it stays", `{"DzKeyIdx1":5,"KeyLx":1}`, `{"DzKeyIdx1":5,"KeyLx":1}`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

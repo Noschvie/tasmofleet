@@ -131,6 +131,13 @@ func TestClassify(t *testing.T) {
 		{"IfxToken x", ClassAdmin, true, true, "InfluxDB token"},
 		{"TLSKey1 x", ClassAdmin, true, true, "MQTT client key"},
 		{"LoRaWanAppKey1 00", ClassAdmin, true, true, "LoRaWAN app key"},
+		{"RgxPassword x", ClassAdmin, true, true, "the ESP32 range extender's Wi-Fi password"},
+		{"RgxSSId net", ClassAdmin, true, true, "the range extender's Wi-Fi name, redacted like SSId"},
+		{"MI32Key 00112233445566778899AABBCCDDEEFFA4C138AABBCC", ClassAdmin, true, true, "a BLE sensor's bind key and MAC"},
+		{"MI32Keys1 A4C138AABBCC=00112233445566778899AABBCCDDEEFF", ClassAdmin, true, true, "BLE bind keys by MAC"},
+		{`ZbConfig {"Channel":11,"PanID":"0x1A63","KeyL":"0x0F0D0B0907050301L","KeyH":"0x0D0C0A0806040200L"}`, ClassAdmin, true, true, "the Zigbee network key"},
+		{"ZbConfig", ClassAdmin, true, false, "the bare form asks nothing, but its reply holds the network key"},
+		{"WiFiTest3 MyNet+hunter2", ClassAdmin, true, true, "a Wi-Fi name and password to test"},
 		{"MqttPassword", ClassAdmin, true, false, "the bare form asks nothing but stays redacted"},
 		{"Backlog Power ON; Reset 1", ClassAdmin, false, true, "a Reset inside a Backlog asks like a Reset alone"},
 		{"Backlog WebPassword x", ClassAdmin, true, true, "a secret inside a Backlog is redacted and asks"},
@@ -370,6 +377,33 @@ func TestClassMinRole(t *testing.T) {
 	for _, c := range []Class{ClassForbidden, Class(0), Class(42)} {
 		if _, ok := c.MinRole(); ok {
 			t.Errorf("%v must have no role that may send it", c)
+		}
+	}
+}
+
+// Why (#605 review): ShownInFull is the one fail-closed rule for "may hold a secret" that the console history,
+// bulk's input echo and the transport's console route share with the audit log: a command whose logged form
+// (Redacted) hides or masks anything is treated as secret, whatever its name. A denylist of secret names missed a
+// new one in every round; this cannot, since an unknown command's arguments are hidden. A Backlog is judged part
+// by part, so its spelling (no blank after ';') does not count as hiding.
+func TestShownInFull(t *testing.T) {
+	for _, c := range []string{
+		"TelePeriod 60", "Power1 ON", "SetOption19 1", "Restart 1", "Status 2", "Power",
+		"Backlog PowerOnState 2; SaveData 1", "Backlog PowerOnState 2;SaveData 1", "  TelePeriod   60  ",
+	} {
+		if !ShownInFull(c) {
+			t.Errorf("%q: not shown in full (Redacted %q)", c, Redacted(c))
+		}
+	}
+	for _, c := range []string{
+		"If (1==1) WebPassword hunter2", "If (1==1) Status 0", "BLEPair A4C138AABBCC 123456",
+		"Backlog Power 1; If (1==1) MI32Key 00112233445566778899AABBCCDDEEFFA4C138AABBCC",
+		"Sendmail [smtp.example.com:587:alice:hunter2:*:bob:Hi] body", "WebPassword x", "Backlog Power 1; WebPassword x",
+		"OtaUrl http://u:p@h/fw.bin", "PowerDelta 10", "Status ***", "", "Power1\nON", "Backlog Power 1; Status 1 ***",
+		"Backlog Power 1; Po-wer 1", // the audit logs a malformed part as rejected
+	} {
+		if ShownInFull(c) {
+			t.Errorf("%q: shown in full, but the audit logs %q", c, Redacted(c))
 		}
 	}
 }
@@ -666,6 +700,27 @@ func TestMQTTOnlyNamesTheCutOffConsequence(t *testing.T) {
 	// the secret and the cut-off consequence both stay
 	if _, v, _ := Prepare("MqttPassword p", model.RoleAdmin, PrepareOpts{MQTTOnly: true}); !strings.Contains(v.Confirm, "lock tasmofleet out") || !v.Redact {
 		t.Errorf("the credential consequence was lost: %+v", v)
+	}
+}
+
+// Why (#605 follow-up): a BLE sensor's bind key and the Zigbee network key are secrets, so the console asks before
+// it sends them, but they are no login and no Wi-Fi name. The confirmation must name what the change does to this
+// device (a wrong bind key stops it reading that sensor; a changed ZbConfig saves and restarts the device and can
+// drop the paired Zigbee devices), or the person confirms a consequence that is not the one at hand.
+func TestKeyCommandsNameTheirOwnConsequence(t *testing.T) {
+	for _, tc := range []struct{ cmd, want string }{
+		{"MI32Key 00112233445566778899AABBCCDDEEFFA4C138AABBCC", "bind key"},
+		{"MI32Keys1 A4C138AABBCC=00112233445566778899AABBCCDDEEFF", "bind key"},
+		{`ZbConfig {"KeyL":"0x0F0D0B0907050301L","KeyH":"0x0D0C0A0806040200L"}`, "restarts the device"},
+		{`Backlog Power ON; ZbConfig {"KeyL":"0x0F0D0B0907050301L"}`, "Zigbee"},
+	} {
+		v, err := Classify(tc.cmd)
+		if err != nil || !v.Redact || !strings.Contains(v.Confirm, tc.want) || strings.Contains(v.Confirm, "login") {
+			t.Errorf("%q: confirm %q, redact %v, err %v; want a confirmation naming %q and no login", tc.cmd, v.Confirm, v.Redact, err, tc.want)
+		}
+	}
+	if v, _ := Classify("WiFiTest3 MyNet+hunter2"); !strings.Contains(v.Confirm, "Wi-Fi name") {
+		t.Errorf("WiFiTest sets a Wi-Fi name and password: confirm %q", v.Confirm)
 	}
 }
 

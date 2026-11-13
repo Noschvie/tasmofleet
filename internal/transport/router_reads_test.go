@@ -24,14 +24,6 @@ func TestReadGoesOverMQTTFirstEvenWhenHTTPWorks(t *testing.T) {
 	}
 }
 
-func TestWritesKeepTheHTTPFirstOrder(t *testing.T) {
-	// Why: stage 1 changes reads only; a write has no synchronous MQTT reply to rely on yet (stage 2).
-	g := newRig(t)
-	if _, err := g.r.Command(t.Context(), g.target(), "Power1 ON"); err != nil || g.http.n() != 1 || g.mq.n() != 0 {
-		t.Fatalf("err=%v http=%d mqtt=%d", err, g.http.n(), g.mq.n())
-	}
-}
-
 func TestReadUsesHTTPWhenMQTTIsNotUsable(t *testing.T) {
 	// Why: a device off our broker, offline on MQTT or without a topic is read the way it always was.
 	for _, tc := range []struct {
@@ -215,12 +207,17 @@ func TestJobCommandsAreNeverMQTTFirst(t *testing.T) {
 }
 
 func TestStatus0IsNeverPublishedByTheRouter(t *testing.T) {
-	// Why (CLAUDE.md safety rule 2): Status 0 is not a read (cmdpolicy asks a person to confirm it), so
-	// it never takes the MQTT-first path; a Status 0 a person confirmed in the console goes as a write
-	// over HTTP, and nothing is published.
-	g := newRig(t)
-	if _, err := g.r.Command(WithConsole(t.Context()), g.target(), "Status 0"); err != nil || g.mq.n() != 0 || g.http.n() != 1 {
-		t.Fatalf("err=%v mqtt=%d http=%d", err, g.mq.n(), g.http.n())
+	// Why (CLAUDE.md safety rule 2): Status 0 is not a read (cmdpolicy asks a person to confirm it). Since #605
+	// writes go over MQTT first, so a Status 0 a person confirmed in the console reaches the real command
+	// channel, which refuses it (T1) before anything is published; it then goes once over HTTP, as before.
+	g := newSimRig(t)
+	before := len(g.dev.Commands())
+	ctx, tr := WithTrace(WithConsole(t.Context()))
+	if _, err := g.r.Command(ctx, g.target(), "Status 0"); err != nil || tr.Via() != "http" {
+		t.Fatalf("err=%v via=%s, want one send over HTTP and nothing published", err, tr.Via())
+	}
+	if got := g.dev.Commands()[before:]; len(got) != 1 {
+		t.Fatalf("the device received %v, want the one Status 0 over HTTP", got)
 	}
 }
 

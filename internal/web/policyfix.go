@@ -233,12 +233,12 @@ func (h *handler) fixRows(ctx context.Context, rep PolicyReport, sel fixSel) []f
 		}
 		row := fixRow{Device: d, Options: options[d.ID], Pairs: included[d.ID]}
 		p := plans[d.ID]
-		onlyMQTT := h.d.MQTTOnly != nil && h.d.MQTTOnly(ctx, d.ID)
+		onlyMQTT := h.d.KnownMQTTOnly != nil && h.d.KnownMQTTOnly(ctx, d.ID)
 		need := 0 // characters the plan's text values add to the settings text area
 		for _, c := range p.Commands {
 			if onlyMQTT && cmdpolicy.CutsMQTTOff(c.Text) {
-				// Make compliant never confirms a change that can cut off a device reached over MQTT only
-				// (the router would refuse it); the plan says so instead of promising it.
+				// Make compliant never confirms a change that can cut off a device known to be reached over MQTT
+				// only (HTTP failing: the router would refuse it); the plan says so instead of promising it.
 				p.Skipped = append(p.Skipped, policy.FixSkip{Command: c.Command, Reason: "reached over MQTT only (use the console)"})
 				continue
 			}

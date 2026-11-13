@@ -15,6 +15,12 @@ claims stay below, struck through in words, so a reviewer sees what changed and 
   the exact text that is judged and sent. Callers never send their original string.
   The one exception to "one command" is `Backlog`: it may hold ASCII `;`, and every
   part is judged on its own like a command sent alone.
+- A name is read as the device reads it (`cmdpolicy.ResolveName`, built from the pinned Tasmota catalogues of
+  `internal/tasmotacmd`): any letter case, the digits at its end as the index, read as a number (`SetOption0103` is
+  `SetOption103`), and every SetOption synonym as its SetOption whatever index is typed (`SO19` is `SetOption19`,
+  `MqttTLS` is `SetOption103`, `MqttTLSFingerprint` is `SetOption132`). `Classify`, `CutsMQTTOff` and `CutOffName`
+  judge that name, so a rule written for a SetOption holds for every spelling the device runs as it; the verdict's
+  `Name` stays as typed.
 - Classes: **read** and **operator** (operator role), **admin** (admin role only). The
   zero class and `forbidden` are never sendable; `forbidden` exists only for malformed
   lines. There is **no allowlist**; the only commands no role sends are `FileDownload`, `FileUpload`
@@ -41,9 +47,9 @@ claims stay below, struck through in words, so a reviewer sees what changed and 
 | ID  | Claim | Tests |
 | --- | ----- | ----- |
 | P1  | A line that could make the device run a second command or hides what is sent (`;` outside a `Backlog`, look-alike semicolons, `%3B`, control, invisible, bidirectional and non-UTF-8 characters, over-long lines, bad names) is malformed: `ErrInvalid`, never sent. The same checks apply to every part of a `Backlog`. | `TestClassifyRejectsInjection`, `FuzzPolicy` |
-| P2  | **Superseded 2026-10-21 (admins may do everything).** Was: command executors (`Backlog`, `Json`, `Rule`, `RuleTimer`, `If`, `Event`, `Publish`, `Publish2`, `WebSend`, `WebQuery`, `WebGetConfig`, `UfsRun`, `Script`, `Br`, `SendMail`, `Var`, `Mem`, `DevGroupSend`, `Telnet`, `LoRaCommand`, `SetOption85` with an argument, `Timer`, `Timers`, `Subscribe`, `Unsubscribe`, `PublishRetain`) forbidden for every role. Now they are plain admin commands. Only a `Backlog` is looked into, so a `Reset` inside it asks like a `Reset` alone; the other executors are not inspected. | `TestClassify`, `TestBacklogInheritsConfirmations` |
+| P2  | **Superseded 2026-10-21 (admins may do everything).** Was: command executors (`Backlog`, `Json`, `Rule`, `RuleTimer`, `If`, `Event`, `Publish`, `Publish2`, `WebSend`, `WebQuery`, `WebGetConfig`, `UfsRun`, `Script`, `Br`, `SendMail`, `Var`, `Mem`, `DevGroupSend`, `Telnet`, `LoRaCommand`, `SetOption85` with an argument, `Timer`, `Timers`, `Subscribe`, `Unsubscribe`, `PublishRetain`) forbidden for every role. Now they are plain admin commands. Only a `Backlog` is looked into, so a `Reset` inside it asks like a `Reset` alone; the other executors are not inspected. Over MQTT the command channel refuses those that can run a command on TasmoFleet's behalf (`Json`, `Publish`, `Publish2`, `Rule` with a rule text, `RuleTimer`, `If`, `WebSend`, `WebQuery`, `DevGroupSend`, `LoRaCommand`, `Br`, `Script`, `UfsRun`, and a `Template` with a `CMND` key: mqtt-transport T1); they go over HTTP. | `TestClassify`, `TestBacklogInheritsConfirmations` |
 | P3  | **Superseded 2026-10-21.** Was: `Reset`, `WifiConfig`, `Upgrade`, `Upload`, `OtaUrl`, `Restart` other than `Restart 1`, `Wifi` off, `WebServer` other than the bare query and `2`, `IPAddress<n>`, `Ethernet`, `Ap` and `Status 0` forbidden. Now each of them is an admin command with one confirmation naming the consequence (`Confirm`); `Status 0` is allowed with a warning on that step. | `TestClassify`, `TestBoundaries`, `FuzzPolicy`, `TestEveryFixtureCommandIsClassified` |
-| P4  | **Superseded 2026-10-21.** Was: credential commands forbidden in the console. Now `Password<n>`, `WebPassword`, `MqttPassword`, `SSId<n>`, `TmToken`, `IfxPassword`, `IfxToken`, `IfxUser`, `TLSKey<n>` and `LoRaWanAppKey<n>` are admin commands with a confirmation; the verdict is marked `Redact`, and their arguments never reach any log (L1). | `TestClassify`, `TestConsoleCredentialCommandsAreConfirmedAndRedacted` |
+| P4  | **Superseded 2026-10-21.** Was: credential commands forbidden in the console. Now `Password<n>`, `WebPassword`, `MqttPassword`, `SSId<n>`, `TmToken`, `IfxPassword`, `IfxToken`, `IfxUser`, `TLSKey<n>`, `LoRaWanAppKey<n>`, `RgxPassword`, `RgxSSId`, `WiFiTest<n>` (a Wi-Fi name and password to try), the BLE bind keys of `MI32Key` and `MI32Keys<n>` and the Zigbee network key of `ZbConfig` are admin commands with a confirmation (the keys' confirmation names their own consequence, not a login: a sensor that can no longer be read; a restart and dropped Zigbee devices); the verdict is marked `Redact` (a bare `ZbConfig` too: its reply shows the key) and their arguments never reach any log (L1). The console history and bulk's input echo keep only what L1 shows in full (`ShownInFull`). How they travel is the transport's rule, not this one's: a secret is no reason for HTTP, so they go over MQTT first like every other write of a device usable there (mqtt-transport T11), with their replies masked (L2). | `TestClassify`, `TestKeyCommandsNameTheirOwnConsequence`, `TestConsoleCredentialCommandsAreConfirmedAndRedacted`, `TestShownInFull`, `TestWritesGoOverMQTTFirstWhateverTheyCarry`, `TestRunSendsWhatTheAuditHidesOverMQTTFirstAndStillHidesIt` |
 | P8  | **Superseded 2026-10-21.** Was: an allowlist; unknown names (`Sensor13`, `SetSensor`, driver and Zigbee commands) were refused with `ErrUnknown`. Now a name nobody listed is an admin command; an operator is refused it with `ErrRole`. | `TestAnyNameIsAdminOnly` |
 | P5  | An operator can send only read and operator class commands: `Status 1..11`, queries without arguments, `Power<1..8> ON/OFF/TOGGLE` (also the numeric forms `0`, `1`, `2`, which mean the same), `Restart 1`. `Power0`, relays above 8, bare `SaveData` (writes flash), `MqttUser`, every unlisted name and every confirmed command need admin. | `TestAuthorize`, `TestClassify`, `FuzzPolicy`, `TestRunPowerVariantsPerRole`, `TestBareMqttUserStaysAdminOnly`, `TestBareReportsRouteLikeReadsButKeepTheirVerdicts`, `TestRunRefusesBeforeNetworkIO` |
 | P6  | The role check happens in `devicecmd.Run`, before any network I/O, for every caller; roles below operator, above admin or unknown get nothing. Refusals are audited (`command.rejected`). | `TestRunRefusesBeforeNetworkIO`, `FuzzPolicy` |
@@ -111,10 +117,13 @@ device writes it (`ON` and `OFF` read as `1` and `0`).
 ## Known gap: executors over HTTP
 
 Commands that run other commands (`Json`, `Publish`, `Publish2`, `Rule` with a rule text, `WebSend`, `WebQuery`,
-`Br`, `Script`, `UfsRun`) need no confirmation of their own for an admin over HTTP, so `Json {"Status":0}` or a
-`Rule` that does `Status 0` reaches a device that way. The classification is by command name; making the policy
-unwrap them is out of scope. Over MQTT the channel refuses all of them (docs/security/mqtt-transport.md, T1).
+`Br`, `Script`, `UfsRun`, a `Template` with a `CMND` key) need no confirmation of their own for an admin over HTTP,
+so `Json {"Status":0}` or a `Rule` that does `Status 0` reaches a device that way. The classification is by command
+name; making the policy unwrap them is out of scope. Over MQTT the channel refuses all of them
+(docs/security/mqtt-transport.md, T1).
 
 `TLSKey<n>` (the mutual-TLS client key of the MQTT connection) is a plain command in the list of settings that can
-cut off a device reached over MQTT only (`cmdpolicy.CutOffName`): over MQTT it needs the console's confirmation,
-and Make compliant skips it there.
+cut off a device reached over MQTT only (`cmdpolicy.CutOffName`; `MqttTLS` and `MqttTLSFingerprint` count as
+`SetOption103` and `SetOption132`): over MQTT it needs the console's confirmation unless HTTP answers the router's
+`Status 11` right before (mqtt-transport T10), and Make compliant skips it for a device known to be reached over MQTT
+only.

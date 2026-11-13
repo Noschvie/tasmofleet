@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/tasmotacmd"
 )
 
 // Class is the authority a command needs.
@@ -96,12 +98,16 @@ var DefaultOperator = []string{
 	"State", "Time", "Uptime", "Restart 1",
 }
 
-// secretNames carry credentials or network names in their arguments. Admins
-// may send them (after a confirmation); their arguments are never logged.
+// secretNames carry credentials, keys or network names in their arguments. Admins
+// may send them (after a confirmation); their arguments are never logged, and their
+// replies are masked (ScrubReply). MI32Key and MI32Keys set
+// BLE sensor bind keys, ZbConfig the Zigbee network key (its reply shows the key, also
+// when sent bare), WiFiTest tries and may store a Wi-Fi name and password ("ssid+pw").
 var secretNames = map[string]bool{
 	"password": true, "webpassword": true, "mqttpassword": true, "ssid": true,
 	"tmtoken": true, "ifxpassword": true, "ifxtoken": true, "ifxuser": true,
-	"tlskey": true, "lorawanappkey": true,
+	"tlskey": true, "lorawanappkey": true, "rgxpassword": true, "rgxssid": true,
+	"mi32key": true, "mi32keys": true, "zbconfig": true, "wifitest": true,
 }
 
 // Consequences shown on the confirmation step.
@@ -114,6 +120,8 @@ const (
 	whyCutOff   = "Changing the address or network settings can leave the device unreachable at the address tasmofleet uses."
 	whyModule   = "Changing the module or template changes the pin mapping; the device may restart or stop working until it is corrected."
 	whyCredCmd  = "Changing a login or the Wi-Fi name can lock tasmofleet out or take the device off the network; tasmofleet does not store the new value."
+	whyBindKey  = "This sets or removes a BLE sensor's bind key; with a wrong key the device can no longer read that sensor. tasmofleet does not store the new value."
+	whyZigbee   = "A changed Zigbee network setting saves and restarts the device, and a new network key or channel can drop the paired Zigbee devices; tasmofleet does not store the new value."
 	whyRestart  = "Restart other than 1 halts the device or erases settings; it may stay down until power is cycled."
 	whyMQTTOnly = "this device is reached over MQTT only; this change can cut TasmoFleet off from it"
 	whyFile     = "TasmoFleet's own code handles file transfers; the command carries the device's MQTT password."
@@ -192,9 +200,6 @@ var loggedArgs = func() map[string]bool {
 	return m
 }()
 
-// synonyms maps Tasmota's short names to the command they stand for.
-var synonyms = map[string]string{"so": "setoption"}
-
 // semicolonLookalikes would be read as a command separator by a human or by
 // a normalising intermediary even though the device ignores them.
 var semicolonLookalikes = map[rune]bool{
@@ -210,9 +215,9 @@ func invalid(why string) (Verdict, error) {
 // parsed is one split command line.
 type parsed struct {
 	name string // as typed, e.g. "Power1"
-	base string // lower case without trailing digits, e.g. "power"
+	base string // as the device runs it (ResolveName): lower case without the index, e.g. "power", "setoption"
 	idx  int
-	has  bool   // name ended in digits
+	has  bool   // an index was typed, or a SetOption synonym implies one
 	args string // trimmed
 }
 
@@ -238,26 +243,80 @@ func parse(cmd string) (parsed, string) {
 	if len(name) > maxNameLen || !validName(name) {
 		return parsed{}, "bad command name"
 	}
-	p := parsed{name: name, args: strings.TrimSpace(args)}
-	p.base = strings.ToLower(name)
-	end := len(p.base)
-	for end > 0 && p.base[end-1] >= '0' && p.base[end-1] <= '9' {
-		end--
+	n, ok := ResolveName(name) // as the device runs it: SO19 is SetOption19, MqttTLS is SetOption103
+	if !ok {
+		return parsed{}, "bad command index"
 	}
-	if end == 0 {
-		return parsed{}, "bad command name"
+	return parsed{name: name, base: n.Base, idx: n.Index, has: n.Indexed, args: strings.TrimSpace(args)}, ""
+}
+
+// Name is a command name as the device runs it.
+type Name struct {
+	Base    string // lower case, without the index: "power", "setoption", "mqtthost"
+	Index   int    // the index the device's handler gets; 0 when none was typed or implied
+	Indexed bool   // an index was typed ("Power1", "SetOption0103") or is implied by a synonym (MqttTLS is SetOption103)
+}
+
+// ResolveName reads a command name (no arguments) the way Tasmota does (CommandHandler, support_command.ino 16.0.0
+// lines 410-425; DecodeCommand, support.ino lines 1166-1192): any letter case; the digits at its end are the index,
+// read with atoi (SetOption0103 is SetOption103); and a SetOption synonym of a command table runs the SetOption's
+// handler with the SetOption's number, whatever index was typed (MqttTLS, MqttTLS1 and MQTTTLS7 are SetOption103;
+// SO19 is SetOption19). The synonyms come from the pinned Tasmota catalogues (internal/tasmotacmd). It is the one
+// reading of a name: Classify, CutsMQTTOff and CutOffName use it, so a rule keyed on the SetOption also holds for
+// every spelling the device runs as that SetOption. ok is false for a name the policy does not accept (letters, then
+// digits, at most 40 characters, an index that fits an int).
+func ResolveName(name string) (Name, bool) {
+	if len(name) > maxNameLen || !validName(name) {
+		return Name{}, false
 	}
-	if end < len(p.base) {
-		n, err := strconv.Atoi(p.base[end:])
+	base := strings.ToLower(name)
+	end := len(strings.TrimRight(base, "0123456789"))
+	n := Name{Base: base[:end]}
+	if end < len(base) {
+		idx, err := strconv.Atoi(base[end:])
 		if err != nil {
-			return parsed{}, "bad command index"
+			return Name{}, false
 		}
-		p.idx, p.has, p.base = n, true, p.base[:end]
+		n.Index, n.Indexed = idx, true
 	}
-	if canon, ok := synonyms[p.base]; ok {
-		p.base = canon // SO19 is SetOption19
+	if s, ok := setOptionNames()[n.Base]; ok {
+		n.Base = "setoption"
+		if s != takesIndex { // a synonym of one SetOption: the device ignores the typed index
+			n.Index, n.Indexed = s, true
+		}
 	}
-	return p, ""
+	return n, true
+}
+
+// takesIndex marks the names that take the SetOption's number as their index (SetOption, SO).
+const takesIndex = -1
+
+// setOptionNames maps the lower-case names the device runs as SetOption to the SetOption's number, or takesIndex.
+var setOptionNames = sync.OnceValue(func() map[string]int { return setOptionTable(tasmotacmd.Pinned()) })
+
+// setOptionTable is setOptionNames from the catalogues set. It panics on a damaged embedded catalogue (tasmotacmd's
+// tests catch that): a catalogue that cannot be read must never read as "no synonyms".
+func setOptionTable(set *tasmotacmd.Set, err error) map[string]int {
+	if err != nil {
+		panic("cmdpolicy: the embedded Tasmota catalogues: " + err.Error())
+	}
+	out := map[string]int{}
+	for _, v := range set.Versions() {
+		cat, _, _ := set.For(v)
+		for _, c := range cat.Commands {
+			switch {
+			case c.Handler == "CmndSetoption":
+				out[strings.ToLower(c.Command)] = takesIndex
+			case strings.HasPrefix(c.SynonymOf, "SetOption"):
+				s, err := strconv.Atoi(strings.TrimPrefix(c.SynonymOf, "SetOption"))
+				if err != nil {
+					panic("cmdpolicy: catalogue " + v + ": " + c.Command + " is a synonym of " + c.SynonymOf)
+				}
+				out[strings.ToLower(c.Command)] = s
+			}
+		}
+	}
+	return out
 }
 
 // unsafeText says why s may not be part of a command line, or "". Only a space is allowed as white space;
@@ -449,6 +508,14 @@ func confirmFor(p parsed) string {
 	case "module", "template":
 		if p.args != "" {
 			return whyModule
+		}
+	case "mi32key", "mi32keys": // secret keys, but no login: their own consequence
+		if p.args != "" {
+			return whyBindKey
+		}
+	case "zbconfig":
+		if p.args != "" {
+			return whyZigbee
 		}
 	default:
 		if secretNames[p.base] && p.args != "" {
@@ -647,6 +714,31 @@ func Redacted(cmd string) string {
 	}
 	p.args = scrubText(p.args)
 	return p.canonical()
+}
+
+// ShownInFull reports whether Redacted shows cmd exactly as it is sent: it parses, nothing is hidden or masked,
+// and a Backlog shows every part unchanged (judged part by part, so "Backlog A;B" counts as shown). It is the
+// fail-closed rule for "may hold a secret" of what a person types: the console history and bulk's input echo
+// keep only such commands. Since Redacted is an allowlist, a command it does not know counts as secret. It
+// decides no transport: a secret is no reason for HTTP (#605).
+func ShownInFull(cmd string) bool {
+	p, bad := parse(cmd)
+	if bad != "" {
+		return false
+	}
+	if p.base != "backlog" || p.args == "" {
+		c := p.canonical()
+		return Redacted(cmd) == c && !strings.Contains(c, mask)
+	}
+	if _, bad := classify(p); bad != "" {
+		return false
+	}
+	for _, part := range strings.Split(p.args, ";") {
+		if part = strings.TrimSpace(part); part != "" && !ShownInFull(part) {
+			return false
+		}
+	}
+	return true
 }
 
 // Canonical is the exact text that is classified and, if allowed, sent: the
