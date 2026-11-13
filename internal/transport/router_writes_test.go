@@ -310,26 +310,6 @@ func TestACredentialInTheTextLeavesTheReplyAsSent(t *testing.T) {
 	}
 }
 
-// Why (#605, interim until #606): Make compliant keeps today's order (HTTP unless it fails) through the marker
-// app/policyfix.go sets; it moves to MQTT first in its own change. Without the marker the same write goes MQTT first.
-func TestHTTPFirstWritesMarkerKeepsTodaysOrder(t *testing.T) {
-	g := newRig(t)
-	ctx := WithHTTPFirstWrites(t.Context())
-	if _, err := g.r.Command(ctx, g.target(), "Backlog PowerOnState 2"); err != nil || g.http.n() != 1 || g.mq.n() != 0 {
-		t.Fatalf("marked: err=%v http=%d mqtt=%d", err, g.http.n(), g.mq.n())
-	}
-	if _, err := g.r.Command(ctx, g.target(), "PowerOnState"); err != nil || g.mq.n() != 1 {
-		t.Fatalf("a read under the marker still goes MQTT first: err=%v mqtt=%d", err, g.mq.n())
-	}
-	if _, err := g.r.Command(t.Context(), g.target(), "Backlog PowerOnState 2"); err != nil || g.http.n() != 1 || g.mq.n() != 2 {
-		t.Fatalf("unmarked: err=%v http=%d mqtt=%d", err, g.http.n(), g.mq.n())
-	}
-	g.mem.Fail(7, HTTPFailUnreachable) // HTTP failing: MQTT carries it, as before
-	if _, err := g.r.Command(ctx, g.target(), "Backlog PowerOnState 2"); err != nil || g.http.n() != 1 || g.mq.n() != 3 {
-		t.Fatalf("marked, HTTP failing: err=%v http=%d mqtt=%d", err, g.http.n(), g.mq.n())
-	}
-}
-
 // Why (#605, review #279): a write to a topic that might be shared would change several devices, and a device
 // whose MQTT reads go unanswered would leave every write an unknown outcome. Both keep HTTP while it works.
 func TestWritesThatMQTTMustNotCarryFirstGoOverHTTP(t *testing.T) {
@@ -496,11 +476,12 @@ func TestAChangeOfTheMQTTConnectionThatHTTPCarriedMarksTheDevice(t *testing.T) {
 		t.Error("a change of the MQTT connection HTTP carried did not mark the device")
 	}
 
-	// Make compliant (until #606), HTTP timing out: the change may have run.
+	// A write that starts on HTTP (the device's MQTT reads went unanswered), HTTP timing out: the change may have run.
 	g = newRig(t)
+	g.r.unanswered.Fail(7, HTTPFailUnreachable)
 	g.http.err = fmt.Errorf("http: %w", tasmota.ErrTimeout)
-	if _, err := g.r.Command(WithHTTPFirstWrites(t.Context()), g.target(), "Topic newtopic"); !errors.Is(err, tasmota.ErrTimeout) || g.mq.n() != 0 {
-		t.Fatalf("Make compliant's Topic: err=%v mqtt=%d", err, g.mq.n())
+	if _, err := g.r.Command(t.Context(), g.target(), "Topic newtopic"); !errors.Is(err, tasmota.ErrTimeout) || g.mq.n() != 0 {
+		t.Fatalf("Topic over HTTP first: err=%v mqtt=%d", err, g.mq.n())
 	}
 	if _, _, marked := g.r.MQTTConnChanged().HTTPFailure(7); !marked {
 		t.Error("a change of the MQTT connection that timed out over HTTP did not mark the device")
@@ -512,8 +493,9 @@ func TestAChangeOfTheMQTTConnectionThatHTTPCarriedMarksTheDevice(t *testing.T) {
 		err error
 	}{{"Topic newtopic", tasmota.ErrForbiddenAddr}, {"TelePeriod 60", nil}} {
 		g = newRig(t)
+		g.r.unanswered.Fail(7, HTTPFailUnreachable) // the write starts on HTTP
 		g.http.err = tc.err
-		_, _ = g.r.Command(WithHTTPFirstWrites(t.Context()), g.target(), tc.cmd) // only the mark is asked here
+		_, _ = g.r.Command(t.Context(), g.target(), tc.cmd) // only the mark is asked here
 		if _, _, marked := g.r.MQTTConnChanged().HTTPFailure(7); marked {
 			t.Errorf("%q, HTTP %v: marked, want no mark", tc.cmd, tc.err)
 		}

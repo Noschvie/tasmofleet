@@ -517,8 +517,8 @@ func TestACutOffWriteNeedsAConfirmationOverMQTT(t *testing.T) {
 	// Why (D13): a new topic, host or login published to a device that only MQTT reaches can cut it off
 	// for good. The console's confirmation carries the consent; nothing else does, and a refusal
 	// publishes nothing, over the routed path and after a failover alike. The failover is that of a
-	// write that starts on HTTP (Make compliant, interim until #606): a routed write goes MQTT first
-	// while HTTP is not known to fail, and needs no consent there (#605).
+	// write that starts on HTTP (the device's MQTT reads go unanswered): a routed write goes MQTT first
+	// while HTTP is not known to fail, and needs no consent there while HTTP answers right before (#605).
 	for _, name := range []string{"routed", "failover"} {
 		t.Run(name, func(t *testing.T) {
 			g := newRig(t)
@@ -527,7 +527,7 @@ func TestACutOffWriteNeedsAConfirmationOverMQTT(t *testing.T) {
 				g.mem.Fail(7, HTTPFailUnreachable)
 			} else {
 				g.http.err = tasmota.ErrForbiddenAddr
-				base = WithHTTPFirstWrites(base)
+				g.r.unanswered.Fail(7, HTTPFailUnreachable) // the write starts on HTTP
 			}
 			for _, c := range []string{"Topic other", "Backlog Power ON; MqttHost 10.0.0.9", "SetOption3 0", "Prefix1 x"} {
 				ctx, tr := WithTrace(base)

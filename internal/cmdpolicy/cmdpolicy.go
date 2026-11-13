@@ -78,8 +78,12 @@ var (
 // RejectedText replaces a malformed command in logs and history.
 const RejectedText = "[rejected: malformed command]"
 
+// MaxCommandLen is the longest command line, a whole Backlog included, that cmdpolicy reads (Template has a limit of
+// its own). The MQTT channel publishes only what cmdpolicy reads, so whoever builds a Backlog for it (Make
+// compliant's chunks) stays within this.
+const MaxCommandLen = 255
+
 const (
-	maxCommandLen = 255
 	// maxTemplateLen is the limit of the Template command (a classic ESP32 template is 250-300 bytes).
 	// Tasmota 16.0.0 takes less than MQTT_MAX_PACKET_SIZE (1200) bytes: HandleHttpCommand
 	// (xdrv_01_9_webserver.ino) for /cm, MqttDataHandler (xdrv_02_9_mqtt.ino, data_len) for MQTT, where
@@ -229,7 +233,7 @@ func parse(cmd string) (parsed, string) {
 	if cmd == "" {
 		return parsed{}, "empty"
 	}
-	if len(cmd) > maxCommandLen && (len(cmd) > maxTemplateLen || !isTemplateCommand(cmd)) {
+	if len(cmd) > MaxCommandLen && (len(cmd) > maxTemplateLen || !isTemplateCommand(cmd)) {
 		return parsed{}, "too long"
 	}
 	// Backlog is the one command whose arguments legitimately hold ';'. Each

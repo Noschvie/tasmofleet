@@ -19,6 +19,8 @@ const MaxRules = 100
 var (
 	commandRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]{0,31}$`)
 	wantRe    = regexp.MustCompile(`^[A-Za-z0-9.,:+_/ -]{1,64}$`)
+	// zeroPaddedRe is a number with a leading 0, which Tasmota reads as octal in a SetOption's value.
+	zeroPaddedRe = regexp.MustCompile(`^0[0-9]+$`)
 	// RuleIDRe is the format of a rule id: "r" plus 1 to 15 lowercase letters or digits.
 	RuleIDRe = regexp.MustCompile(`^r[a-z0-9]{1,15}$`)
 )
@@ -156,6 +158,14 @@ func ParseRules(data []byte, allowed func(command string) bool) ([]Rule, error) 
 // bare name, and its set form must be sendable by an admin without a
 // confirmation (cmdpolicy), because Make compliant sends it unasked.
 func commandProblem(command, want string) error {
+	if name := deviceName(command); name != command {
+		return fmt.Errorf("write the setting as %s", name)
+	}
+	// Tasmota reads a SetOption's value with strtol base 0, so "08" is octal there; CommandText refuses such a
+	// line, and a rule whose line can never be built is refused here for its value, not left to be skipped (#606).
+	if setOptionRe.MatchString(command) && zeroPaddedRe.MatchString(canon(want)) {
+		return errors.New("write the value as a plain decimal (8, not 08)")
+	}
 	if canon, curated := settings.Curated(command); curated {
 		f, isField := settings.Lookup(canon)
 		switch {

@@ -3,6 +3,7 @@ package policy
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/hellwand/tasmofleet/internal/cmdpolicy"
@@ -55,9 +56,12 @@ func (p FixPlan) Lines() []string {
 	return out
 }
 
-var setOptionRe = regexp.MustCompile(`^SetOption[0-9]{1,3}$`)
+// A SetOption's index and value are plain decimals. Tasmota reads the index with atoi (SetOption003 is SetOption3,
+// which deviceName names) and the value with strtol base 0, so a leading 0 in the value is octal there ("08" is 0)
+// while Atoi reads 8 (#606).
+var setOptionRe = regexp.MustCompile(`^SetOption(0|[1-9][0-9]{0,2})$`)
 
-var setOptionValueRe = regexp.MustCompile(`^[0-9]{1,5}$`)
+var setOptionValueRe = regexp.MustCompile(`^(0|[1-9][0-9]{0,4})$`)
 
 // CommandText is the command that sets a rule's setting to want. The settings
 // the editor knows are set with the editor's validation; a SetOption takes a
@@ -66,8 +70,8 @@ var setOptionValueRe = regexp.MustCompile(`^[0-9]{1,5}$`)
 // nothing that asks in the console is ever sent from a rule.
 func CommandText(command, want string) (string, error) {
 	want = canon(want)
-	if canonName, curated := settings.Curated(command); curated && canonName != command {
-		return "", fmt.Errorf("%s: write the setting as %s", command, canonName)
+	if name := deviceName(command); name != command {
+		return "", fmt.Errorf("%s: write the setting as %s", command, name)
 	}
 	if f, ok := settings.Lookup(command); ok {
 		if f.Secret {
@@ -87,6 +91,38 @@ func CommandText(command, want string) (string, error) {
 		return command + " " + want, nil
 	}
 	return genericText(command, want)
+}
+
+// deviceName is the name of the setting Tasmota runs for command when policy knows that setting, command itself
+// otherwise. The name is read by cmdpolicy.ResolveName, the one reading of a command name that the router's cut-off
+// check uses too: any letter case, the digits at its end as the index (Topic1 is Topic, SetOption003 is
+// SetOption3), and a SetOption synonym of the pinned catalogues as its SetOption (MqttTLS is SetOption103). A rule
+// or a line must use the name returned: under any other spelling it would pass as a generic rule, without the
+// setting's validation and without what policy knows about it (settings.RestartsDevice), so Make compliant would
+// send a line that restarts the device, or cuts it off from MQTT, among the first chunks with a save after it
+// (#606). FriendlyName1 and NtpServer2 are settings of their own; their names are left alone.
+func deviceName(command string) string {
+	n, ok := cmdpolicy.ResolveName(command)
+	if !ok {
+		return command // not a command name: refused further on
+	}
+	typed := strings.TrimRight(command, "0123456789")
+	if n.Base == "setoption" {
+		// SetOption003 and MqttTLS (a synonym of one SetOption, Indexed without a typed index) name the SetOption
+		// they run; SO19 is left to cmdpolicy.PolicyReadable, which asks for the full name, and a SetOption without
+		// a number is refused further on.
+		if t, _ := cmdpolicy.ResolveName(typed); n.Indexed && (t.Indexed || strings.EqualFold(typed, "SetOption")) {
+			return "SetOption" + strconv.Itoa(n.Index)
+		}
+		return command
+	}
+	if name, ok := settings.Curated(command); ok {
+		return name
+	}
+	if name, ok := settings.Curated(typed); ok {
+		return name
+	}
+	return command
 }
 
 // genericText is the set command of a generic rule.
@@ -167,12 +203,15 @@ func dropCommand(cs []FixCommand, command string) []FixCommand {
 // that restarts the device goes last (it would cut off whatever followed, and
 // the restart saves everything), and SaveData goes right before those: its
 // handler writes all settings to flash, so anything after it would stay in
-// memory only. The rest keeps the rules' order.
+// memory only. The rest keeps the rules' order. A restart is judged by the
+// value the device gets (the one in Text, as Apply judges it), not the rule's
+// spelling of it: SetOption103 "ON" is sent as "SetOption103 1" and restarts.
 func OrderCommands(cs []FixCommand) []FixCommand {
 	var plain, save, restart []FixCommand
 	for _, c := range cs {
+		_, sent, _ := strings.Cut(c.Text, " ")
 		switch {
-		case settings.RestartsDevice(c.Command, c.Want):
+		case settings.RestartsDevice(c.Command, sent):
 			restart = append(restart, c)
 		case strings.EqualFold(c.Command, "SaveData"):
 			save = append(save, c)

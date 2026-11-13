@@ -29,10 +29,15 @@ type Reader interface {
 }
 
 // Backlog limits: Tasmota queues at most 30 entries and a long line risks
-// being cut; small chunks keep every request well inside both.
+// being cut; small chunks keep every request well inside both. A chunk goes
+// over MQTT first, and the MQTT channel publishes only a line cmdpolicy reads:
+// "Backlog " and the lines joined by "; " stay within cmdpolicy.MaxCommandLen
+// (pack counts each line with its "; ", one more than the joined text holds).
+// A longer Backlog would go over HTTP although MQTT can carry it, and the
+// router could not see a change of the MQTT connection in it (#606).
 const (
 	maxChunkCommands = 8
-	maxChunkBytes    = 300
+	maxChunkBytes    = cmdpolicy.MaxCommandLen - len("Backlog ") + len("; ")
 )
 
 // Fixer applies a plan's commands to one device and checks the result.
@@ -106,7 +111,7 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 		}
 	}
 	t := tasmota.TargetFor(d)
-	// The chunks are those of always. Only when the router refuses one (ErrCutOff: a line that can cut off a
+	// The chunks fit what the MQTT channel takes (maxChunkBytes). Only when the router refuses one (ErrCutOff: a line that can cut off a
 	// device reached over MQTT only, and Make compliant never has a person's consent) is it known that
 	// nothing of it was sent: the lines that are not the cut-off ones go again, the others are skipped.
 	var skipped []fixLine
@@ -135,7 +140,7 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 			}
 			if len(others) == len(chunk) {
 				failed = chunk
-				return fmt.Errorf("sending %s: %w", strings.Join(texts, "; "), err) // refused, but not for a cut-off line: do not loop
+				return fmt.Errorf("sending %s: %w", keyNames(chunk), err) // refused, but not for a cut-off line: do not loop
 			}
 			for _, c := range chunks(others) {
 				if err := send(c); err != nil {
@@ -147,7 +152,7 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 			applied = append(applied, chunk...)
 		default:
 			failed = chunk
-			return fmt.Errorf("sending %s: %w", strings.Join(texts, "; "), err)
+			return fmt.Errorf("sending %s: %w", keyNames(chunk), err) // names only: a value (MqttUser) stays out of the job and the audit
 		}
 		return nil
 	}
@@ -357,6 +362,9 @@ func (e *SkippedError) AppliedAny() bool { return e.Applied > 0 }
 // CommandsReady() = BACKLOG_EMPTY, support_tasmota.ino:1336), so every command
 // queued by the same Backlog runs before restart_flag = 2 takes effect, and a
 // second restarting command in the run still executes.
+// A tail with a line that changes the MQTT connection never joins a plain run (#606): the router proves HTTP for
+// such a change with one Status 11 right before the Backlog that carries it (T10), so a plain line that closes
+// HTTP (SetOption128 0) must have run before that question, not after it in the same Backlog.
 func chunks(lines []fixLine) [][]fixLine {
 	cut := len(lines)
 	for i, l := range lines {
@@ -366,7 +374,8 @@ func chunks(lines []fixLine) [][]fixLine {
 		}
 	}
 	plain, tail := pack(lines[:cut]), pack(lines[cut:])
-	if len(plain) > 0 && len(tail) == 1 {
+	cutsOff := slices.ContainsFunc(lines[cut:], func(l fixLine) bool { return cmdpolicy.CutsMQTTOff(l.text) })
+	if len(plain) > 0 && len(tail) == 1 && !cutsOff {
 		if merged := pack(append(append([]fixLine{}, plain[len(plain)-1]...), tail[0]...)); len(merged) == 1 {
 			return append(plain[:len(plain)-1], merged[0])
 		}

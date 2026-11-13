@@ -177,7 +177,6 @@ const (
 	keyTrace
 	keyLoose
 	keyConsent
-	keyHTTPFirstWrites
 )
 
 // WithPath pins the transport of every call made with ctx (D5): a job that chose its path (OTA,
@@ -212,18 +211,6 @@ func WithCutOffConsent(ctx context.Context) context.Context {
 
 // HasCutOffConsent reports whether ctx carries WithCutOffConsent.
 func HasCutOffConsent(ctx context.Context) bool { c, _ := ctx.Value(keyConsent).(bool); return c }
-
-// WithHTTPFirstWrites keeps the writes made with ctx in the order before #605: over HTTP unless HTTP is known
-// to fail. Make compliant carries it (app/policyfix.go) until it moves to MQTT first in its own change (#606).
-// Reads are not affected.
-func WithHTTPFirstWrites(ctx context.Context) context.Context {
-	return context.WithValue(ctx, keyHTTPFirstWrites, true)
-}
-
-func httpFirstWrites(ctx context.Context) bool {
-	m, _ := ctx.Value(keyHTTPFirstWrites).(bool)
-	return m
-}
 
 // Trace records which transports carried the calls made under its context, for the audit "via".
 type Trace struct {
@@ -439,8 +426,8 @@ func (r *Router) read(ctx context.Context, t tasmota.Target, cmnd string, cls cm
 // person's confirmation (WithCutOffConsent), else ErrCutOff and nothing is sent. Once such a change was published
 // after that answer, or HTTP carried it (overHTTP), the device is marked (connChanged): Tasmota restarts after it with
 // a clean disconnect, so its last will stays Online even when it cannot rejoin the broker, and HTTP carries its next
-// commands while HTTP works (Choose), until it answers over MQTT or the mark expires. The one exception to MQTT first
-// is Make compliant (WithHTTPFirstWrites), until #606.
+// commands while HTTP works (Choose), until it answers over MQTT or the mark expires. Make compliant follows the same
+// rule (#606).
 //
 // A write over MQTT is sent over HTTP once only when MQTT provably published nothing (notPublished: the channel
 // refused the command because it cannot carry it, such as one that runs other commands or a Backlog2; the bus was
@@ -452,7 +439,7 @@ func (r *Router) write(ctx context.Context, t tasmota.Target, cmnd string, cls c
 	id := t.DeviceID()
 	d, err := r.o.Devices.GetDevice(ctx, id)
 	onBroker := err == nil && d.MQTT == model.MQTTOurs && d.Topic != ""
-	if httpFirstWrites(ctx) || !onBroker {
+	if !onBroker {
 		// Not on our broker: no need to gather the inventory's facts.
 		return r.overHTTP(ctx, id, onBroker, cmnd, func(ctx context.Context) (json.RawMessage, error) { return r.httpFirst(ctx, t, cmnd, cls) })
 	}

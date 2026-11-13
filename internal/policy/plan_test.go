@@ -98,6 +98,9 @@ func TestOrderCommandsPutsRestartingSetOptionsLast(t *testing.T) {
 		{Command: "SetOption68", Want: "1"}, {Command: "SaveData", Want: "0"},
 		{Command: "SetOption55", Want: "1"}, {Command: "SetOption55", Want: "0"}, {Command: "PowerOnState", Want: "0"},
 	}
+	for i := range cs {
+		cs[i].Text = cs[i].Command + " " + cs[i].Want // the line PlanFix builds: the restart is judged by what is sent
+	}
 	var got []string
 	for _, c := range OrderCommands(cs) {
 		got = append(got, c.Command+" "+c.Want)

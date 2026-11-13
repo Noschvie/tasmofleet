@@ -69,9 +69,9 @@ func (m *writesMQTT) DoLoose(ctx context.Context, d model.Device, c string) (jso
 }
 func (m *writesMQTT) Connected() bool { return true }
 
-// Why (#605, interim until #606): Make compliant keeps HTTP first while HTTP works; it moves to MQTT first in its
-// own change. Through the real router, a device every other write reaches over MQTT first gets the fix over HTTP.
-func TestMakeCompliantKeepsHTTPFirstUntilItsOwnChange(t *testing.T) {
+// Why (#606): Make compliant follows the write path of every other change; nothing holds it on HTTP first any
+// more. Through the real router, a device every other write reaches over MQTT first gets the fix over MQTT too.
+func TestMakeCompliantFollowsTheWritePathOfEveryOtherChange(t *testing.T) {
 	d := writesDevice()
 	facts := newFacts([]model.Device{d}, fakeFactsHealth{1: {LWT: "Online", SeenHTTP: factsNow}}, fakeMemory{})
 	httpc, mq := &writesHTTP{}, &writesMQTT{}
@@ -86,8 +86,8 @@ func TestMakeCompliantKeepsHTTPFirstUntilItsOwnChange(t *testing.T) {
 	if err := (policyApplier{a: rt}).Apply(t.Context(), d, []string{"SaveData 1"}); err != nil { // a SaveData line saves by itself: no read first
 		t.Fatal(err)
 	}
-	if mq.n != 1 || httpc.n == 0 {
-		t.Fatalf("Make compliant: mqtt=%d http=%d, want every line over HTTP", mq.n, httpc.n)
+	if mq.n != 2 || httpc.n != 0 {
+		t.Fatalf("Make compliant: mqtt=%d http=%d, want its one Backlog over MQTT and nothing over HTTP", mq.n-1, httpc.n)
 	}
 }
 
