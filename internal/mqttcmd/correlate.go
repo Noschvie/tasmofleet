@@ -103,10 +103,9 @@ func parseRequest(cmd string) (*request, error) {
 		return nil, refuse("%s carries the device's MQTT password; file transfers have their own API", r.name)
 	case executors[r.base] && !ruleSwitch(r):
 		return nil, refuse("%s can run other commands (Status 0 among them), so it is not sent over MQTT", r.name)
-	case r.base == "template" && strings.Contains(strings.ToLower(r.args), "cmnd"):
-		// Tasmota runs a template's CMND as a Backlog when it applies the template, and its JSON parser takes the
-		// key in any case. Matched on the text, not on parsed JSON, so a spelling the parser would still accept
-		// fails closed.
+	case cmdpolicy.TemplateRunsCommands(cmd):
+		// Tasmota runs a template's CMND as a Backlog when it applies the template. cmdpolicy's rule, the one that
+		// also masks such a Template in the audit and the log.
 		return nil, refuse("%s with CMND runs other commands (Status 0 among them), so it is not sent over MQTT", r.name)
 	case r.base == "backlog":
 		if idx == "2" || idx == "3" {

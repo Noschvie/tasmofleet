@@ -69,6 +69,11 @@ type Options struct {
 	// rule of every other change (transport.Choose's writes path, #605),
 	// injected by the app. Nil: a switch is never published.
 	WritesOverMQTT func(ctx context.Context, d model.Device) bool
+	// NoteUnanswered is told of a switch published over MQTT that got no answer (err is the channel's
+	// timeout): the router's mark for an unanswered write in the app (transport.Router.NoteUnansweredWrite,
+	// #842), so WritesOverMQTT sends the next switch over HTTP for a while instead of into the void. The app
+	// sets it in setupDeviceCmd; nil: no mark.
+	NoteUnanswered func(ctx context.Context, id model.DeviceID, err error)
 	Clock          clock.Clock
 	// Health is optional; see PowerObserver.
 	Health PowerObserver
@@ -178,9 +183,13 @@ func powerState(raw json.RawMessage, relay int) (string, error) {
 
 // powerMQTT goes through the command channel: one command per device at a time, the reply is the
 // RESULT that names the relay, and a button press or a retained report is never taken for it.
+// A switch nobody answered marks the device like any other write (NoteUnanswered, #842).
 func (s *service) powerMQTT(ctx context.Context, d model.Device, relay int, action string) (string, error) {
 	raw, err := s.o.MQTT.Do(ctx, d, fmt.Sprintf("Power%d %s", relay, action))
 	if errors.Is(err, tasmota.ErrTimeout) {
+		if s.o.NoteUnanswered != nil {
+			s.o.NoteUnanswered(ctx, d.ID, err)
+		}
 		return "", fmt.Errorf("%w (relay %d)", ErrUnconfirmed, relay)
 	}
 	if err != nil {

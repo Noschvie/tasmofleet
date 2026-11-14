@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hellwand/tasmofleet/internal/cmdpolicy"
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/mqttbus"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
@@ -1063,6 +1064,48 @@ func TestCommandsThatRunOtherCommandsAreRefused(t *testing.T) {
 		}
 		if s := b.sent(); len(s) != 0 {
 			t.Errorf("%q published %v", cmd, s)
+		}
+	}
+}
+
+// Why: Tasmota's CmndBacklog (support_command.ino 15.1.0 lines 534-542) joins ';' pieces again while their '{' and
+// '}' counts differ, so these run as ONE Template whose CMND (after the ';') the device runs as commands. Split on
+// every ';' the channel saw a Template without CMND and published an executor; a Backlog the device would split
+// differently is never published.
+func TestABacklogTheDeviceSplitsDifferentlyIsRefused(t *testing.T) {
+	for _, cmd := range []string{
+		`Backlog Template {"NAME":"x; Time 1","GPIO":[0],"FLAG":0,"BASE":18,"CMND":"Module 0|WebPassword hunter2"}`,
+		`Backlog Template {"NAME":"x","GPIO":[0],"FLAG":0,"BASE":18,"a":"; Time x","CMND":"WebPassword hunter2"}`,
+		`Backlog Template {"NAME":"x","GPIO":[0],"FLAG":0,"BASE":18,"a":"; Module 0","CMND":"WebPassword hunter2"}`,
+		`Backlog Template {"NAME":"x","GPIO":[0],"FLAG":0,"BASE":18,"a":"; Power1 ON; Uptime x","CMND":"WebPassword hunter2"}`,
+		`Backlog Template {"NAME":"x","GPIO":[0],"FLAG":0,"BASE":18,"a":"; Time x","CMND":"Module 0|MqttHost evil"}`,
+	} {
+		b := &fakeBus{}
+		if _, err := newChan(b).Do(t.Context(), plug(), cmd); !errors.Is(err, ErrRefused) || !Refuses(cmd) {
+			t.Errorf("%q: err = %v, Refuses = %v, want refused", cmd, err, Refuses(cmd))
+		}
+		if s := b.sent(); len(s) != 0 {
+			t.Errorf("%q published %v", cmd, s)
+		}
+	}
+}
+
+// Why: a Template with a CMND key is refused by the channel and masked in the audit, the log and the console
+// history for the same reason (the device runs its text as commands). Both must read the key the same way, or one
+// such Template crosses the broker while its secret is masked, or is refused while its secret is shown in clear.
+func TestTheChannelRefusesATemplateExactlyWhenThePolicyMasksIt(t *testing.T) {
+	for _, cmd := range []string{
+		`Template {"NAME":"x","GPIO":[0],"FLAG":0,"BASE":18,"CMND":"Power1 ON"}`,
+		`Template {"NAME":"x","GPIO":[0],"FLAG":0,"BASE":18,"cmnd":"Power1 ON"}`,
+		`Template {"NAME":"x","GPIO":[0],"FLAG":0,"BASE":18,"CmNd":"Power1 ON"}`,
+		`Template {"NAME":"cmnd","GPIO":[0],"FLAG":0,"BASE":18}`,
+		`Template {"NAME":"x","GPIO":[0],"FLAG":0,"BASE":18}`,
+		`Backlog Power1 ON; Template {"NAME":"x","GPIO":[0],"FLAG":0,"BASE":18,"CMND":"Power1 ON"}`,
+		`Backlog Power1 ON; Template {"NAME":"x","GPIO":[0],"FLAG":0,"BASE":18,"CmNd":"Power1 ON"}`,
+		`Backlog Power1 ON; Template {"NAME":"x","GPIO":[0],"FLAG":0,"BASE":18}`,
+	} {
+		if Refuses(cmd) == cmdpolicy.ShownInFull(cmd) {
+			t.Errorf("%q: Refuses=%v ShownInFull=%v, want the channel to refuse exactly what the policy masks", cmd, Refuses(cmd), cmdpolicy.ShownInFull(cmd))
 		}
 	}
 }

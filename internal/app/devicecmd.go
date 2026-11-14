@@ -18,6 +18,7 @@ func (a *runtime) setupDeviceCmd() {
 	if a.mqttCmd != nil {
 		o.MQTT = a.mqttCmd
 		o.WritesOverMQTT = a.writesOverMQTT
+		o.NoteUnanswered = a.svc.Router.NoteUnansweredWrite // the mark writesOverMQTT reads through the facts (#842)
 	}
 	a.fwHolds = devlock.NewFirmwareHolds(time.Now, firmwareHoldTimeout)
 	a.deviceCmd = holdingCmd{Service: devicecmd.New(o), holds: a.fwHolds, uptime: a.cachedUptime, asks: a.restartAsks, onBroker: a.brokerHost.later, onWrite: a.settingsWritten}

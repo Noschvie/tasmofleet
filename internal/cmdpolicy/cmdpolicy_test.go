@@ -408,6 +408,67 @@ func TestShownInFull(t *testing.T) {
 	}
 }
 
+// Why (#843): a Template whose JSON has a CMND key runs that text as commands when the device applies it, so it
+// carries a secret as well as the admin command inside it (the MQTT channel refuses it as an executor for that
+// reason). Shown in full it put "WebPassword hunter2" into the audit, the log and the console history, and the
+// console named no route for it (ConfirmsRoute follows ShownInFull). The key counts in any case, as on the device;
+// a Template without it stays readable.
+func TestATemplateWithCMNDIsMaskedLikeTheCommandItCarries(t *testing.T) {
+	for _, c := range []string{
+		`Template {"NAME":"x","GPIO":[0],"FLAG":0,"BASE":18,"CMND":"WebPassword hunter2"}`,
+		`Template {"NAME":"x","GPIO":[0],"FLAG":0,"BASE":18,"cmnd":"WebPassword hunter2"}`,
+		`Template {"NAME":"x","GPIO":[0],"FLAG":0,"BASE":18,"CmNd":"WebPassword hunter2"}`,
+		`Backlog Power1 ON; Template {"NAME":"x","GPIO":[0],"FLAG":0,"BASE":18,"CMND":"WebPassword hunter2"}`,
+	} {
+		if ShownInFull(c) {
+			t.Errorf("%q: shown in full", c)
+		}
+		if got := Redacted(c); strings.Contains(got, "hunter2") || !strings.Contains(got, "Template ***") {
+			t.Errorf("Redacted(%q) = %q, want the Template masked", c, got)
+		}
+	}
+	plain := `Template {"NAME":"x","GPIO":[0],"FLAG":0,"BASE":18}`
+	if !ShownInFull(plain) {
+		t.Errorf("%q: a Template without CMND must stay readable (Redacted %q)", plain, Redacted(plain))
+	}
+}
+
+// unbalancedBacklogs hold a ';' inside a Template's JSON. Tasmota's CmndBacklog (support_command.ino 15.1.0 lines
+// 534-542, "Ignore semicolon between brackets {}") joins the ';' pieces again while the counts of '{' and '}' differ,
+// so the device runs ONE Template, with the CMND after the ';', and runs that CMND (support.ino 1935-1945: with
+// "Module 0" in it, or on a user module). Split on every ';' TasmoFleet saw a Template without CMND plus a harmless
+// second part (Time, Module, Power, Uptime are shown in full).
+var unbalancedBacklogs = []string{
+	`Backlog Template {"NAME":"x; Time 1","GPIO":[0],"FLAG":0,"BASE":18,"CMND":"Module 0|WebPassword hunter2"}`,
+	`Backlog Template {"NAME":"x","GPIO":[0],"FLAG":0,"BASE":18,"a":"; Time x","CMND":"WebPassword hunter2"}`,
+	`Backlog Template {"NAME":"x","GPIO":[0],"FLAG":0,"BASE":18,"a":"; Module 0","CMND":"WebPassword hunter2"}`,
+	`Backlog Template {"NAME":"x","GPIO":[0],"FLAG":0,"BASE":18,"a":"; Power1 ON; Uptime x","CMND":"WebPassword hunter2"}`,
+	`Backlog Template {"NAME":"x","GPIO":[0],"FLAG":0,"BASE":18,"a":"; Time x","CMND":"Module 0|MqttHost evil"}`,
+}
+
+// Why: TasmoFleet must split a Backlog exactly as the device does, or what it judges, masks and routes is not what
+// runs. A Backlog whose ';' pieces the device would join (a part with unbalanced braces) is refused as malformed:
+// nothing of it reaches the audit, the log or the console history (safety rule 4), and the MQTT channel, which
+// classifies first, refuses it as well. Before, the password inside the CMND was shown in full.
+func TestABacklogPartWithUnbalancedBracesIsRefused(t *testing.T) {
+	for _, c := range unbalancedBacklogs {
+		if _, err := Classify(c); !errors.Is(err, ErrInvalid) {
+			t.Errorf("Classify(%q) = %v, want ErrInvalid", c, err)
+		}
+		if got := Redacted(c); strings.Contains(got, "hunter2") || strings.Contains(got, "evil") {
+			t.Errorf("Redacted(%q) = %q, shows what the device runs", c, got)
+		}
+		if ShownInFull(c) {
+			t.Errorf("%q: shown in full", c)
+		}
+	}
+	// The device joins nothing when every piece is balanced, so such a Backlog stays as it was.
+	ok := `Backlog Power1 ON; Template {"NAME":"x","GPIO":[0],"FLAG":0,"BASE":18}`
+	if _, err := Classify(ok); err != nil || !ShownInFull(ok) {
+		t.Errorf("%q: err=%v shown=%v, want a balanced Backlog accepted and shown", ok, err, ShownInFull(ok))
+	}
+}
+
 // TestRedactedForLog: the text that reaches the audit log and the console
 // history for a secret-bearing command has the value removed.
 func TestRedactedForLog(t *testing.T) {

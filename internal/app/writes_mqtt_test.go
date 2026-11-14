@@ -3,11 +3,17 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 	"time"
 
+	"github.com/hellwand/tasmofleet/internal/devicecmd"
+	"github.com/hellwand/tasmofleet/internal/health"
 	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/mqttbus"
+	"github.com/hellwand/tasmofleet/internal/mqttcmd"
 	"github.com/hellwand/tasmofleet/internal/policy"
+	"github.com/hellwand/tasmofleet/internal/simulator"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
 	"github.com/hellwand/tasmofleet/internal/transport"
 )
@@ -68,6 +74,73 @@ func (m *writesMQTT) DoLoose(ctx context.Context, d model.Device, c string) (jso
 	return m.Do(ctx, d, c)
 }
 func (m *writesMQTT) Connected() bool { return true }
+
+type powerHTTP struct{ n int }
+
+func (h *powerHTTP) Command(context.Context, tasmota.Target, string) (json.RawMessage, error) {
+	h.n++
+	return json.RawMessage(`{"POWER":"ON"}`), nil
+}
+func (h *powerHTTP) DownloadConfig(context.Context, tasmota.Target) ([]byte, error) { return nil, nil }
+func (h *powerHTTP) RootPage(context.Context, tasmota.Target) (tasmota.RootInfo, error) {
+	return tasmota.RootInfo{}, nil
+}
+
+// Why (#842): the power toggle publishes through the command channel itself, not through the router. A switch nobody
+// answered over MQTT must mark the device as any write through the router does: otherwise, with the last will still
+// Online (a device whose replies do not reach TasmoFleet), every next switch is published into the void and ends as
+// "unconfirmed" until some other read or write happens to time out. Built by setupDeviceCmd, as the app builds it (a
+// real command channel on a broker where nobody answers, the router, the real facts reading the router's mark), so a
+// wiring that loses the mark fails here: the next switch must go over HTTP.
+func TestAToggleThatTimesOutOverMQTTSendsTheNextToggleOverHTTP(t *testing.T) {
+	svc := importServices(t)
+	want := writesDevice()
+	want.ID = 0
+	id, err := svc.Store.CreateDevice(t.Context(), want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, err := svc.Store.GetDevice(t.Context(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	br, err := simulator.StartBroker()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = br.Close() }) // test teardown
+	bus, err := mqttbus.Connect(t.Context(), mqttbus.Options{BrokerURL: br.URL(), ClientID: "toggle-test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for deadline := time.Now().Add(10 * time.Second); !bus.Connected(); time.Sleep(5 * time.Millisecond) {
+		if time.Now().After(deadline) {
+			t.Fatal("bus never connected")
+		}
+	}
+	ch := mqttcmd.New(bus, mqttcmd.Options{Gap: 5 * time.Millisecond, ReplyWait: 200 * time.Millisecond}) // no device answers
+	t.Cleanup(ch.Close)
+
+	httpc := &powerHTTP{}
+	router := transport.NewRouter(transport.Options{HTTP: httpc, Devices: svc.Store})
+	facts := newFacts([]model.Device{d}, fakeFactsHealth{id: {LWT: "Online"}}, fakeMemory{})
+	facts.Unanswered = router.UnansweredReads()
+	router.SetFacts(facts)
+	router.SetMQTT(ch)
+	svc.Client, svc.Router = router, router
+	bg, stop := context.WithCancel(context.Background())
+	a := &runtime{svc: svc, cfg: svc.Cfg, log: svc.Log, bgContext: bg, fw: newFirmwareState(nil), facts: facts, mqttCmd: ch,
+		tracker: health.New(health.Deps{}, health.Options{}), restartAsks: newRestartAsks(time.Now)}
+	t.Cleanup(func() { stop(); a.bgWG.Wait() })
+	a.setupDeviceCmd()
+
+	if _, err := a.deviceCmd.Power(t.Context(), "x", id, 1, "TOGGLE"); !errors.Is(err, devicecmd.ErrUnconfirmed) || httpc.n != 0 {
+		t.Fatalf("first toggle: err=%v http=%d, want one unanswered publish over MQTT", err, httpc.n)
+	}
+	if state, err := a.deviceCmd.Power(t.Context(), "x", id, 1, "TOGGLE"); err != nil || state != "ON" || httpc.n != 1 {
+		t.Fatalf("second toggle: state=%q err=%v http=%d, want it over HTTP, not published into the void again", state, err, httpc.n)
+	}
+}
 
 // Why (#606): Make compliant follows the write path of every other change; nothing holds it on HTTP first any
 // more. Through the real router, a device every other write reaches over MQTT first gets the fix over MQTT too.

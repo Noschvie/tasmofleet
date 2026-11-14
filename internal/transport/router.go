@@ -582,18 +582,25 @@ func (r *Router) write(ctx context.Context, t tasmota.Target, cmnd string, cls c
 	if usable && (err == nil || errors.Is(err, tasmota.ErrTimeout)) {
 		r.markConnChanged(id) // published, answered or not: HTTP carries the next commands while it works
 	}
-	switch {
-	case err != nil && notPublished(err):
+	if err != nil && notPublished(err) {
 		r.o.Log.Info("transport: MQTT did not publish the write, using HTTP", "device", int64(id))
 		return r.overHTTP(ctx, id, true, cmnd, func(ctx context.Context) (json.RawMessage, error) { return r.httpCommand(ctx, t, cmnd) })
-	case errors.Is(err, tasmota.ErrTimeout) && ctx.Err() == nil:
-		// Never sent again (it may have run), but the device's replies are not where TasmoFleet listens, as after an
-		// unanswered read: its next commands go over HTTP for a while, not into the void. HTTP is not failing here
-		// (the facts said so above).
-		r.unanswered.Fail(id, HTTPFailUnreachable)
-		r.o.Log.Info("transport: MQTT write got no answer, the device's next commands go over HTTP for a while", "device", int64(id))
 	}
+	r.NoteUnansweredWrite(ctx, id, err) // never sent again (it may have run)
 	return raw, err
+}
+
+// NoteUnansweredWrite marks device id when a write published over MQTT got no answer (err is tasmota.ErrTimeout)
+// while the caller still waits and HTTP is not known to fail: the device's replies are not where TasmoFleet listens,
+// as after an unanswered read, so its next commands go over HTTP for a while (MQTTFacts.ReadsUnansweredSince, 10
+// minutes), not into the void. The write itself is never sent again. write uses it, and so does the power toggle,
+// which publishes through the command channel itself (devicecmd, #842): one rule for every write.
+func (r *Router) NoteUnansweredWrite(ctx context.Context, id model.DeviceID, err error) {
+	if !errors.Is(err, tasmota.ErrTimeout) || ctx.Err() != nil || r.o.Facts == nil || r.o.Facts.HTTPState(id).State == HTTPFailing {
+		return
+	}
+	r.unanswered.Fail(id, HTTPFailUnreachable)
+	r.o.Log.Info("transport: MQTT write got no answer, the device's next commands go over HTTP for a while", "device", int64(id))
 }
 
 // writeOverMQTT is write's decision for a device whose HTTP is not known to fail: the device snapshot, whether it is

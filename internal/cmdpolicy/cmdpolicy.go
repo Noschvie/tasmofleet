@@ -536,6 +536,13 @@ func classifyBacklog(p parsed, v Verdict) (Verdict, string) {
 	v.Class, v.Reason = ClassAdmin, "changes device state"
 	seen := map[string]bool{}
 	for _, part := range strings.Split(p.args, ";") {
+		// Tasmota's CmndBacklog (support_command.ino 15.1.0 lines 534-542) joins a piece with the next one while
+		// their '{' and '}' counts differ, so a ';' inside a Template's JSON hides its CMND from a split on every
+		// ';'. Refused: when every piece is balanced the device joins nothing, so each Backlog accepted here splits
+		// the same way in TasmoFleet (Redacted, ShownInFull, the MQTT channel, the router) and on the device.
+		if strings.Count(part, "{") != strings.Count(part, "}") {
+			return v, "a Backlog part with unbalanced braces"
+		}
 		part = stripBacklogPrefix(part)
 		if part == "" {
 			continue
@@ -716,8 +723,21 @@ func Redacted(cmd string) string {
 	if c := v.Class; c != ClassRead && c != ClassOperator && !loggedArgs[p.base] {
 		return p.name + " ***"
 	}
+	if TemplateRunsCommands(cmd) { // it can carry any command and its secret (WebPassword ...)
+		return p.name + " ***"
+	}
 	p.args = scrubText(p.args)
 	return p.canonical()
+}
+
+// TemplateRunsCommands reports a Template (one command, not a Backlog) whose arguments hold "cmnd" in any letter
+// case: a CMND key the device runs as a Backlog when it applies the template (support.ino 15.1.0 1935-1945).
+// Tasmota's JSON parser compares keys without case and does not unescape them, so the test on the text catches
+// every spelling of the key, and fails closed for "cmnd" anywhere else. It is the one rule for such a Template:
+// Redacted masks it, and the MQTT channel refuses it as a command that runs other commands.
+func TemplateRunsCommands(cmd string) bool {
+	p, bad := parse(cmd)
+	return bad == "" && p.base == "template" && strings.Contains(strings.ToLower(p.args), "cmnd")
 }
 
 // ShownInFull reports whether Redacted shows cmd exactly as it is sent: it parses, nothing is hidden or masked,
