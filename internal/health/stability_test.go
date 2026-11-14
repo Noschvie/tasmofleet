@@ -11,6 +11,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/mqttbus"
 	"github.com/hellwand/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/tasmota"
 )
 
 // fakeStability keeps what the tracker stores.
@@ -334,5 +335,44 @@ func TestUptimeBeforeIsNotReusedForTheNextRestart(t *testing.T) {
 	got := fs.all()
 	if len(got) != 2 || got[0].UptimeBefore != 4000*time.Second || got[1].UptimeBefore != 0 {
 		t.Fatalf("restarts %+v, want 4000 s then unknown", got)
+	}
+}
+
+// Why (#839): the restart check's Status 1 goes through Reads, the router, which asks a device on TasmoFleet's broker
+// over MQTT. A web password the device refuses only stops reads over HTTP: if a refused HTTP poll between two tries of
+// the check stopped the check as well, the restart would lose its reason, although MQTT can read it.
+func TestARefusedWebPasswordDoesNotStopTheRestartCheckThroughTheRouter(t *testing.T) {
+	h, _, fs := stabilityHarness(t, true, mqttDev(1, "plug"))
+	failAll(h, tasmota.ErrAuth) // the stored web password is stale: HTTP refuses every request
+	var mu sync.Mutex
+	tries := 0
+	reads := &fakeClient{t: t, handler: func(_, c string) (json.RawMessage, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if tries++; tries < bootCheckTries {
+			return nil, tasmota.ErrTimeout // unanswered: the check is tried again later
+		}
+		return json.RawMessage(`{"StatusPRM":{"RestartReason":"Power On","BootCount":5}}`), nil
+	}}
+	h.svc.d.Reads = reads
+	h.listen()
+	h.bus.emit(mqttbus.KindState, "plug", "STATE", `{"UptimeSec":7200,"Wifi":{"Signal":-60}}`, false)
+	h.step() // the check's first try
+	h.advance(h.svc.StaleAfter() + time.Minute)
+	h.step() // its second try; the telemetry is silent now
+	h.step() // so an HTTP poll keeps the device fresh, and its password is refused
+	h.svc.mu.Lock()
+	refused := h.svc.devs[1].authFailed
+	h.svc.mu.Unlock()
+	if !refused {
+		t.Fatal("precondition: the device's web password was not refused")
+	}
+	h.advance(bootCheckRetry + time.Minute)
+	h.step() // the last try is due
+	if got := reads.commands(); len(got) != bootCheckTries {
+		t.Fatalf("asked through the router: %v, want the restart check's Status 1 %d times", got, bootCheckTries)
+	}
+	if got := fs.all(); len(got) != 1 || got[0].Reason != "Power On" || got[0].BootCount != 5 {
+		t.Fatalf("restarts stored: %+v, want the one read through the router", got)
 	}
 }

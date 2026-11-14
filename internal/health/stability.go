@@ -29,7 +29,7 @@ const (
 	// An HTTP poll and an MQTT STATE of the same moment can arrive out of order, a few seconds apart.
 	uptimeDropSlack = 30
 	// bootCheckRetry spaces the retries of a failed "Status 1"; after bootCheckTries failures it is dropped
-	// (a device on minimal firmware, or one TasmoFleet cannot reach over HTTP, never answers).
+	// (a device on minimal firmware, or one that neither MQTT nor HTTP reaches, never answers).
 	bootCheckRetry = 5 * time.Minute
 	bootCheckTries = 3
 	// bootSameWindow: two sightings of a restart (INFO3 and the uptime drop) closer than this are one.
@@ -122,7 +122,9 @@ func (s *Service) bootChecksDue(now time.Time, budget int) []model.DeviceID {
 		if budget == 0 {
 			break
 		}
-		if ds.check == "" || ds.polling || ds.authFailed || now.Before(ds.checkAfter) || s.d.Stability == nil || s.d.Client == nil {
+		// A refused web password stops the check only when it reads over HTTP: through Reads (the router, MQTT first,
+		// #839) a device live on the broker answers it whatever password is stored.
+		if ds.check == "" || ds.polling || (ds.authFailed && s.d.Reads == nil) || now.Before(ds.checkAfter) || s.d.Stability == nil || s.restartReads() == nil {
 			continue
 		}
 		ds.polling = true
@@ -132,7 +134,7 @@ func (s *Service) bootChecksDue(now time.Time, budget int) []model.DeviceID {
 	return due
 }
 
-// checkBoot reads "Status 1" of a device flagged by noteUptime and records its restart.
+// checkBoot reads "Status 1" of a device flagged by noteUptime and records its restart, through Reads (the router).
 func (s *Service) checkBoot(ctx context.Context, id model.DeviceID) {
 	defer func() {
 		s.mu.Lock()
@@ -189,7 +191,7 @@ func (s *Service) checkBoot(ctx context.Context, id model.DeviceID) {
 	}
 	pctx, cancel := context.WithTimeout(ctx, pollTimeout)
 	defer cancel()
-	raw, err := s.d.Client.Command(pctx, tasmota.TargetFor(dev), "Status 1")
+	raw, err := s.restartReads().Command(pctx, tasmota.TargetFor(dev), "Status 1")
 	var env struct {
 		StatusPRM struct {
 			RestartReason string `json:"RestartReason"`
@@ -230,6 +232,15 @@ func (s *Service) checkBoot(ctx context.Context, id model.DeviceID) {
 	if err := s.d.Stability.AppendBoot(ctx, b); err != nil {
 		slog.Warn("health: storing a restart failed", "device", id, "err", err)
 	}
+}
+
+// restartReads is the client of the restart check's Status 1: Reads, the router (the restart reason is a read like
+// any other: MQTT first, #839, HTTP when MQTT cannot), or Client without one.
+func (s *Service) restartReads() tasmota.Client {
+	if s.d.Reads != nil {
+		return s.d.Reads
+	}
+	return s.d.Client
 }
 
 func (s *Service) retryCheck(id model.DeviceID, kind string) {

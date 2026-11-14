@@ -532,6 +532,16 @@ func (p *Prober) ReadNet(ctx context.Context, id model.DeviceID) error {
 // settings.ErrNoMAC.
 var errAnotherDevice = errors.New("another device answers at the stored address")
 
+// errAnotherDeviceOnTopic is errAnotherDevice where the check was answered over MQTT only (verifyAndPin): another
+// device listens on the stored topic, not on the address. It is errors.Is errAnotherDevice for every caller; the
+// broker reader logs it louder, since the device's commands over MQTT reach that topic.
+var errAnotherDeviceOnTopic error = anotherOnTopic{}
+
+type anotherOnTopic struct{}
+
+func (anotherOnTopic) Error() string        { return "another device answers on the stored topic" }
+func (anotherOnTopic) Is(target error) bool { return target == errAnotherDevice }
+
 // notStoredDevice says err is VerifyAddress's refusal: another device answers (errAnotherDevice), or the
 // answer shows no MAC at all, so it cannot be told (settings.ErrNoMAC, minimal firmware). Neither is a
 // failure of the read: nothing was stored, and the device is asked again at the regular interval.
@@ -569,8 +579,8 @@ func (p *Prober) VerifyAddress(ctx context.Context, d model.Device) error {
 // left to the router can go different ways. Every caller follows one of two forms, which are the only two ways in:
 //   - the check after the reads (VerifyRead): the caller records its reads in a transport.WithTrace and hands that
 //     trace over; the check is asked pinned to each transport that answered the reads;
-//   - the check before the reads (verifyAndPin, the data refresh; ReadNet, whose Status 5 is its check): the check is
-//     routed, and the reads are pinned to the transport that answered it (pinTo).
+//   - the check before the reads (verifyAndPin: the data refresh and the broker read; ReadNet, whose Status 5 is its
+//     check): the check is routed, and the reads are pinned to the transport that answered it (pinTo).
 
 // VerifyRead is VerifyAddress after reads through Reads (the router: MQTT first for a device on our broker, #456),
 // for the values those reads returned: the Settings service and the policy poller read through the router, so
@@ -580,8 +590,8 @@ func (p *Prober) VerifyAddress(ctx context.Context, d model.Device) error {
 // answered them (no fallback), so it is answered where they were (#810); a read answered over both is checked over
 // both. A transport that carried a read but answered none (MQTT published it, nobody answered, the read went on
 // over HTTP) gave no value and is not asked. Through the router a trace in which nothing was answered refuses: its
-// reads were made with another context, or brought nothing to vouch for. ReadBroker reads over HTTP and keeps
-// VerifyAddress.
+// reads were made with another context, or brought nothing to vouch for. ReadBroker asks its check before its reads
+// (verifyAndPin, #839).
 //
 // Inside a data refresh whose first check the stored device answered over MQTT (pinnedToMQTTCheck) the checks after
 // reads answered over MQTT only are not asked again (#676): every read of that refresh is pinned to MQTT, so it
@@ -621,7 +631,8 @@ func (p *Prober) VerifyRead(ctx context.Context, d model.Device, read *transport
 // transport the check went over, so every read made with it is one the check vouched for (#676, #810): after an
 // answer over MQTT, MQTT for the topic (pinnedToMQTTCheck: no read falls back to HTTP, where another device may hold
 // the address, and the checks after MQTT reads are not asked again); otherwise HTTP for the address, where the checks
-// after the reads are asked again (#662). A device without a stored MAC sends nothing here: HTTP.
+// after the reads are asked again (#662). A device without a stored MAC sends nothing here: HTTP. Another MAC in an
+// answer over MQTT only is errAnotherDeviceOnTopic.
 func (p *Prober) verifyAndPin(ctx context.Context, d model.Device) (context.Context, error) {
 	c := *p
 	if p.Reads != nil {
@@ -629,6 +640,9 @@ func (p *Prober) verifyAndPin(ctx context.Context, d model.Device) (context.Cont
 	}
 	tctx, trace := transport.WithTrace(ctx)
 	if err := c.VerifyAddress(tctx, d); err != nil {
+		if errors.Is(err, errAnotherDevice) && slices.Equal(trace.Answered(), []transport.Path{transport.MQTT}) {
+			return ctx, errAnotherDeviceOnTopic
+		}
 		return ctx, err
 	}
 	pctx := pinTo(ctx, trace)
@@ -665,6 +679,13 @@ func pinnedToMQTTCheck(ctx context.Context) context.Context {
 // image answer neither command: nothing is read, and nothing is stored when the device answers like
 // them while its stored identity still says regular firmware (an update outside a job). A read that
 // fails half way stores nothing either (readMQTT strict).
+//
+// It reads through Reads, the router, like every other background read (#839): MQTT first for a device usable on
+// TasmoFleet's broker, HTTP when MQTT is not usable or does not answer. The check comes first (verifyAndPin: routed,
+// the reads pinned to the transport that answered it, #810), so the broker of another device is never stored on
+// this one: over HTTP that is whoever holds the address, over MQTT whoever listens on the topic. A device that moved
+// to another broker after a clean disconnect keeps a retained "Online" will on ours; its check goes unanswered over
+// MQTT, the router asks HTTP once, and the reads follow the check there.
 func (p *Prober) ReadBroker(ctx context.Context, id model.DeviceID) error {
 	d, err := p.Devices.GetDevice(ctx, id)
 	if err != nil {
@@ -673,10 +694,15 @@ func (p *Prober) ReadBroker(ctx context.Context, id model.DeviceID) error {
 	if d.Identity.Variant == "minimal" || d.Identity.Variant == "safeboot" {
 		return nil
 	}
-	if err := p.VerifyAddress(ctx, d); err != nil { // the host of another device is not this device's
+	ctx, err = p.verifyAndPin(ctx, d) // the host of another device is not this device's
+	if err != nil {
 		return err
 	}
-	c, host, port, err := p.readMQTT(ctx, tasmota.TargetFor(d), true)
+	rp := *p // the same prober, reading through the router where the check was answered
+	if p.Reads != nil {
+		rp.Client = p.Reads
+	}
+	c, host, port, err := rp.readMQTT(ctx, tasmota.TargetFor(d), true)
 	if errors.Is(err, errNoMQTTAnswer) {
 		return nil // nothing about the broker in the answer: the stored one stays
 	}

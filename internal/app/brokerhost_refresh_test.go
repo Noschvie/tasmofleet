@@ -188,7 +188,7 @@ func liveTemplate(t *testing.T, tpl *templates.Manager) bool {
 // Why (#676): a device whose HTTP API is off but that MQTT serves showed stale or no last-known values for as
 // long as the API stayed off: the background refresh never visited it. The pass must refresh the three caches the
 // pages read from (the Settings tab's last-known values, the policy values, the GPIO template reading) over MQTT,
-// and touch nothing that is HTTP: no broker read (Status 6, HTTP by design), no identity probe (Status 2, 4), no
+// and nothing else: no broker read (Status 6: it waits for HTTP, #839), no identity probe (Status 2, 4: HTTP), no
 // request over HTTP at all, and never Status 0.
 func TestPassRefreshesTheDataOfADeviceWhoseHTTPAPIIsOff(t *testing.T) {
 	g := newAPIOffRig(t, apiOffOpts{ours: true, lwtOnline: true})
@@ -206,7 +206,7 @@ func TestPassRefreshesTheDataOfADeviceWhoseHTTPAPIIsOff(t *testing.T) {
 	cmds := g.sent()
 	for _, c := range []string{"Status 0", "Status 6", "Status 2", "Status 4"} {
 		if n := countCmd(cmds, c); n != 0 {
-			t.Errorf("%d x %q reached the device: the visit is data only (the broker and the identity are HTTP reads)", n, c)
+			t.Errorf("%d x %q reached the device: the visit is data only (the broker and the identity wait for HTTP)", n, c)
 		}
 	}
 	if n := g.http.all.Load(); n != 0 {

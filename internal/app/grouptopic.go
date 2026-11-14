@@ -18,8 +18,8 @@ import (
 // other device has the topic as its GroupTopic. One device with an unread GroupTopic therefore blocks
 // MQTT writes for every MQTT-routed device (transport.MQTTFacts.OthersGroupUnread), and the reader
 // closes that gap without a person doing anything: shortly after start and after a device is adopted,
-// one Status 1 per tick, through the router. The router sends it over HTTP while HTTP works and over
-// the MQTT command channel when it does not (a read is allowed there with an unknown GroupTopic).
+// one Status 1 per tick, through the router. The router reads it over MQTT first (#456, #839; a read is allowed
+// there with an unknown GroupTopic) and over HTTP when MQTT cannot serve the device.
 // Status 1 is individual and read-only, never Status 0; one read per tick on the whole process. A
 // device that gave no usable answer is asked again after groupTopicBackoff[n]: soon at first (right
 // after start it may not be known as ours on the broker yet), then rarely.

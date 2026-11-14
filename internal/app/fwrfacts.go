@@ -20,7 +20,7 @@ import (
 // not read yet" for good. This reader fills those gaps: devices with identity_at set and no facts,
 // one Status 2 per tick on the whole process (so at most one per second on the bus, like the
 // background identity ask), one per device per ten minutes, only while the device is online. The
-// router sends it over HTTP while HTTP works and over the MQTT command channel when it does not.
+// router reads it over MQTT first (#456, #839) and over HTTP when MQTT cannot serve the device.
 // It is a read (never Status 0) and it writes through store.UpdateFWRFacts, which touches the facts
 // column only: the identity fields stay as the probe left them.
 const (

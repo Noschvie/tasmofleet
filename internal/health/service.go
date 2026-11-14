@@ -68,6 +68,10 @@ type Deps struct {
 	Clock  clock.Clock    // default clock.Real
 	Hub    *events.Hub    // optional; receives TopicHealth events
 	Rand   func() float64 // optional, [0,1); jitter source for tests
+	// Reads, if set, carries the reads that do not measure HTTP (Client, the raw HTTP client, does: the polls and the
+	// probes): the Status 1 of a restart check (#839). It is the router, which asks a device usable on TasmoFleet's
+	// broker over MQTT first. Nil: Client.
+	Reads tasmota.Client
 	// Stability is optional: with it the tracker stores the restarts it notices and an hourly Wi-Fi
 	// sample (#325).
 	Stability store.StabilityStore
