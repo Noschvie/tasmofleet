@@ -129,6 +129,11 @@ type Deps struct {
 	// compliant's plan refuse a change that can cut such a device off up front; for any other device the router
 	// decides at the send (it asks HTTP right before the change and refuses it, unconfirmed, where HTTP is silent).
 	KnownMQTTOnly func(ctx context.Context, ids ...model.DeviceID) bool
+	// TypedRoutes, if set, returns the transport the router sends cmd over now to each of ids when a person typed it
+	// (transport.Router.TypedRoute, the send's own decision), and whether TasmoFleet's broker URL uses TLS. The
+	// confirmation of a command whose arguments the audit hides (transport.ConfirmsRoute) names that transport, and
+	// the send carries it (transport.WithRoute, #826). Nil: HTTP for every device (a router without MQTT).
+	TypedRoutes func(ctx context.Context, cmd string, ids ...model.DeviceID) (routes map[model.DeviceID]transport.Path, brokerTLS bool)
 	// Templates serves the "GPIO templates" tab of the Policy page (#327); nil hides the tab.
 	Templates     templates.Service
 	FWReach       FWReachForgetter // optional: "Forget" on what the device reaches (D11)

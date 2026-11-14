@@ -100,6 +100,10 @@ func withoutLines(lines, skipped []string) []string {
 type PolicyRequest struct {
 	DeviceID model.DeviceID
 	Commands []string
+	// Route: the transport the bulk preview named for this device, for a command whose arguments the audit hides
+	// (transport.ConfirmsRoute, #826): transport.MQTT, or empty or transport.HTTP for HTTP. The job keeps MQTT as its
+	// Transport and its send keeps to that route (transport.WithRoute); a retry keeps the route of the job it retries.
+	Route transport.Path
 }
 
 // ErrNothingToFix: SubmitPolicy was left with no device to work on.
@@ -157,9 +161,13 @@ func (e *Engine) submitPolicy(ctx context.Context, actor string, kind model.JobK
 			skipped = append(skipped, Refusal{r.DeviceID, busyText(act[0])})
 			continue
 		}
-		jobs = append(jobs, model.Job{DeviceID: r.DeviceID, Kind: kind, Commands: strings.Join(r.Commands, "\n"),
+		j := model.Job{DeviceID: r.DeviceID, Kind: kind, Commands: strings.Join(r.Commands, "\n"),
 			State: model.JobQueued, Stage: model.StageFinal, CreatedBy: actor, CreatedKind: actorKind(ctx), CreatedAt: now, UpdatedAt: now,
-			BatchParallel: opts.Parallel, ReplyTimeout: opts.ReplyTimeout})
+			BatchParallel: opts.Parallel, ReplyTimeout: opts.ReplyTimeout}
+		if r.Route == transport.MQTT && kind == model.KindCommand {
+			j.Transport = model.TransportMQTT
+		}
+		jobs = append(jobs, j)
 	}
 	if len(jobs) == 0 {
 		return 0, skipped, ErrNothingToFix
@@ -193,6 +201,9 @@ func (e *Engine) retryPolicy(ctx context.Context, actor string, batchID model.Ba
 			return res, fmt.Errorf("ota: retry batch %d: it mixes policy, command, backup and update jobs", batchID)
 		}
 		reqs[i] = PolicyRequest{DeviceID: j.DeviceID, Commands: strings.Split(j.Commands, "\n")}
+		if j.Transport == model.TransportMQTT {
+			reqs[i].Route = transport.MQTT // the route its preview named (#826); the router refuses it if that changed
+		}
 	}
 	// refuse before creating anything
 	var ref []Refusal

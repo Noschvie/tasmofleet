@@ -1066,3 +1066,24 @@ func TestCommandsThatRunOtherCommandsAreRefused(t *testing.T) {
 		}
 	}
 }
+
+// Why (#826): the console's confirmation names the transport a command takes, and names HTTP for a command the channel
+// never publishes; Refuses must say exactly what Do does, or the confirmation names HTTP for a command that crosses
+// the broker, or the broker for one that never reaches it.
+func TestRefusesSaysWhatDoPublishes(t *testing.T) {
+	for _, cmd := range []string{
+		`Json {"Status":0}`, `If (1==1) WebPassword hunter2`, `Rule1 ON System#Boot DO Status 0 ENDON`, `FileDownload 1`,
+		`Backlog2 Power ON`, `Status 0`, `Backlog Power ON; Json {"Status":0}`, `Power ON;Status 0`,
+		`WebPassword hunter2`, `BLEPair A4C138AABBCC 123456`, `PowerDelta 10`, `Backlog Power 1; WebPassword hunter2`, `Status 2`,
+	} {
+		b := &fakeBus{}
+		c := newChan(b)
+		ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+		_, err := c.DoLoose(ctx, plug(), cmd)
+		cancel()
+		published := len(b.sent()) > 0
+		if Refuses(cmd) != !published || published == errors.Is(err, ErrRefused) {
+			t.Errorf("%q: Refuses=%v, published=%v err=%v", cmd, Refuses(cmd), published, err)
+		}
+	}
+}

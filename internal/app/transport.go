@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/hellwand/tasmofleet/internal/config"
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/mqttcmd"
 	"github.com/hellwand/tasmofleet/internal/transport"
@@ -86,4 +87,21 @@ func (a *runtime) anyDevice(ctx context.Context, is func(transport.Facts) bool, 
 // go MQTT first for every live device on our broker (#456), which says nothing about HTTP.
 func reachedOnlyOverMQTT(f transport.Facts) bool {
 	return f.HTTP.State != transport.HTTPOK && transport.MQTTBlocker(f, false) == ""
+}
+
+// typedRoutes is web.Deps.TypedRoutes (#826): the transport the router sends the typed command cmd over now to each of
+// ids (transport.Router.TypedRoute, the send's own decision), and whether the live broker URL uses TLS.
+func (a *runtime) typedRoutes(ctx context.Context, cmd string, ids ...model.DeviceID) (map[model.DeviceID]transport.Path, bool) {
+	out := make(map[model.DeviceID]transport.Path, len(ids))
+	for _, id := range ids {
+		out[id] = a.svc.Router.TypedRoute(ctx, id, cmd)
+	}
+	return out, brokerUsesTLS(a.svc.Sys.Snapshot().MQTTURL)
+}
+
+// brokerUsesTLS reads the scheme of the broker URL (ssl://, tls:// or mqtts://): TasmoFleet's leg to the broker is
+// encrypted then. A URL that cannot be read counts as plain, the stricter of the two sentences.
+func brokerUsesTLS(raw string) bool {
+	b, err := config.SplitMQTTURL(raw)
+	return err == nil && b.TLS
 }

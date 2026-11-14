@@ -58,7 +58,15 @@ test("console over MQTT on a device HTTP cannot reach", { tag: "@core" }, async 
   // A command that runs other commands could send Status 0 on our behalf: not over MQTT.
   await box.fill('Json {"Status":0}');
   await page.getByRole("button", { name: "Send" }).click();
-  // Json is routine for an admin (no confirmation screen): the refusal is the device error text.
+  // Json hides its arguments, so its confirmation names the transport (#826): HTTP, the one the router tries while
+  // the group topics are unread (then MQTT refuses it, and nothing is sent: no confirmation). Either way the answer is
+  // the error text.
+  const json = page.locator("section.devconfirm");
+  await expect(json.or(page.getByRole("alert")).first()).toBeVisible();
+  if (await json.isVisible()) {
+    await expect(json).toContainText("The command goes to the device over HTTP, unencrypted.");
+    await json.getByRole("button", { name: "Confirm and send" }).click();
+  }
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page.getByText("StatusMEM")).toHaveCount(0); // what a Status 0 reply would have shown
 
@@ -66,6 +74,36 @@ test("console over MQTT on a device HTTP cannot reach", { tag: "@core" }, async 
   await box.fill("Topic somewhere-else");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("reached over MQTT only")).toBeVisible();
+});
+
+test("a console command whose arguments the audit hides names its transport before it is sent", { tag: "@core" }, async ({ page }) => {
+  test.setTimeout(180_000);
+  await page.setExtraHTTPHeaders(admin);
+  await page.goto(app.url + "/devices");
+  await page.getByRole("link", { name: "mq-esp32", exact: true }).click();
+  const devURL = page.url();
+  // Changes go over MQTT once the group topics are read (the strict rule); until then the route is not MQTT.
+  await expect(async () => {
+    await page.goto(devURL);
+    await expect(page.locator("#devpaths-actions")).toContainText(/changing\s*MQTT/, { timeout: 2_000 });
+  }).toPass({ timeout: 120_000, intervals: [3_000] });
+  await page.goto(devURL + "/console");
+  const box = page.getByRole("textbox", { name: "Command" });
+  const confirm = page.locator("section.devconfirm");
+  // #826: the devenv's broker URL is tcp://, so the plain sentence; Cancel sends nothing.
+  await box.fill("PulseTime1 10");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(confirm).toContainText("The command goes to the device over the MQTT broker, unencrypted; the broker also delivers it to every client subscribed to this device's commands (a broker ACL prevents that).");
+  await confirm.getByRole("link", { name: "Cancel" }).click();
+  await expect(confirm).toHaveCount(0);
+  await expect(page.getByRole("log", { name: "Console output" }).getByText("PulseTime1")).toHaveCount(0);
+  // Confirmed: it goes over MQTT, and the audit says so.
+  await box.fill("PulseTime1 10");
+  await page.getByRole("button", { name: "Send" }).click();
+  await confirm.getByRole("button", { name: "Confirm and send" }).click();
+  await expect(confirm).toHaveCount(0);
+  await page.goto(app.url + "/audit");
+  await expect(page.locator("table.audittable tr.detail-row", { hasText: "PulseTime1" }).filter({ hasText: /via\W+mqtt/ }).first()).toBeAttached();
 });
 
 test("Make compliant over MQTT", { tag: "@core" }, async ({ page }) => {

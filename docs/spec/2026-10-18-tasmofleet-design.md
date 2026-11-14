@@ -999,6 +999,20 @@ HTTP. Rules:
   console)"), the job succeeds for the rest and verifies only what was sent, and the preview lists them as skipped
   for devices known to be reached over MQTT only.
   The settings page reports the refusal per field.
+- A **console or bulk write whose arguments the audit hides** (`transport.ConfirmsRoute`: a change, not
+  `cmdpolicy.ShownInFull`) names its transport in its confirmation before anything is sent (#826, the product
+  owner's rule of 2026-11-14: the route stays MQTT first, the confirmation is honest about it). The console and the
+  bulk preview ask `Router.TypedRoute`, which takes `Command`'s own steps with the same inputs (the cheap HTTP state,
+  `writeOverMQTT`, `decide`); a job command is HTTP, and one the MQTT channel never publishes HTTP, or `None` (sent
+  nowhere: no sentence, a "Not sent" bulk row, left out of the run) while the device's HTTP is known to fail. Over MQTT the
+  sentence says the command is unencrypted (with a TLS broker URL: encrypted from TasmoFleet to the broker) and that
+  the broker delivers it to every client subscribed to the device's commands unless an ACL prevents that; over HTTP
+  that it is unencrypted. The console asks for every such command; the bulk preview has one row per transport with
+  how many devices. The confirmed send carries the route (`transport.WithRoute`), which `httpCommand` and `publish`
+  check: another transport, the failover after HTTP sent nothing and the move to HTTP after MQTT published nothing
+  included, sends nothing (`ErrRouteChanged`, audit `via` "none"), and the console asks again. The console and the
+  bulk run compare the sentences right before the send; a command job keeps MQTT as `Job.Transport` (HTTP otherwise)
+  and a retry keeps the job's route.
 - **Make compliant** (#606) follows the write path like any other write: `policy.Fixer.Apply` sends its Backlog
   chunks (at most 8 lines, and a Backlog no longer than `cmdpolicy.MaxCommandLen`, 255 bytes, which the MQTT
   channel takes; the restarting lines last) and then the one `Backlog SaveData <current>` through the router, so

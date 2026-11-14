@@ -177,6 +177,7 @@ const (
 	keyTrace
 	keyLoose
 	keyConsent
+	keyRoute
 )
 
 // WithPath pins the transport of every call made with ctx (D5): a job that chose its path (OTA,
@@ -211,6 +212,86 @@ func WithCutOffConsent(ctx context.Context) context.Context {
 
 // HasCutOffConsent reports whether ctx carries WithCutOffConsent.
 func HasCutOffConsent(ctx context.Context) bool { c, _ := ctx.Value(keyConsent).(bool); return c }
+
+// ErrRouteChanged is returned, before anything is sent, for a call whose context names the transport its confirmation
+// announced (WithRoute) when the router would take the other one (#826): the facts changed since the confirmation,
+// or HTTP proved it sent nothing and the router would fail over to MQTT, or MQTT published nothing and the router
+// would go on over HTTP. The caller asks the person again with what holds now.
+var ErrRouteChanged = errors.New("not sent")
+
+// WithRoute marks the calls made with ctx as announced to go over p (HTTP or MQTT): the console's confirmation or the
+// bulk preview named that transport for a command whose arguments the audit hides (ConfirmsRoute, #826). The router
+// then sends such a call only over p, never as a failover over the other transport; anything else is ErrRouteChanged
+// with nothing sent. Any other p (None: TypedRoute said it goes nowhere; empty) lets nothing through: fail closed.
+// A command the channel never publishes is refused for MQTT as the channel refuses it (publish), whatever p says.
+func WithRoute(ctx context.Context, p Path) context.Context {
+	return context.WithValue(ctx, keyRoute, p)
+}
+
+// RouteFrom returns the transport announced for the calls made with ctx (WithRoute).
+func RouteFrom(ctx context.Context) (Path, bool) {
+	p, ok := ctx.Value(keyRoute).(Path)
+	return p, ok
+}
+
+// ConfirmsRoute reports a command whose confirmation names the transport it takes when a person types it (the
+// console, a bulk command; #826): a change of the device whose arguments the audit log does not show in full
+// (cmdpolicy.ShownInFull), because it may carry a secret. That secret crosses the network in plain text either way:
+// over HTTP, or over the MQTT broker, which also delivers it to every client subscribed to the device's commands.
+// A command that is never sent (malformed, a file transfer: cmdpolicy.ClassForbidden) takes no transport to name;
+// it is refused at once.
+func ConfirmsRoute(cmnd string) bool {
+	if v, err := cmdpolicy.Classify(cmnd); err != nil || v.Class == cmdpolicy.ClassForbidden {
+		return false
+	}
+	return classifyCommand(cmnd).write && !cmdpolicy.ShownInFull(cmnd)
+}
+
+// TypedRoute is the transport Command sends the change cmnd over now when a person typed it for device id: MQTT or
+// HTTP, or None when it is sent nowhere. It takes the steps of Command with the same inputs (the cheap HTTP state, the
+// device snapshot, its facts and Choose; writeOverMQTT and decide are the router's own), so the console's confirmation
+// and the bulk preview name the route the send takes. A command that starts a job is HTTP. One the MQTT channel never
+// publishes (mqttcmd.Refuses: it runs other commands, a file transfer) never crosses the broker: HTTP, or None while
+// HTTP is known to fail and Command would try MQTT, which refuses it. With the route announced (WithRoute) the send
+// keeps to it or sends nothing.
+func (r *Router) TypedRoute(ctx context.Context, id model.DeviceID, cmnd string) Path {
+	cls := classifyCommand(cmnd)
+	if id == 0 || r.mqttDoer() == nil || r.o.Facts == nil || cls.job || !cls.write {
+		return HTTP
+	}
+	refused := mqttcmd.Refuses(cmnd)
+	if r.o.Facts.HTTPState(id).State != HTTPFailing {
+		if _, _, mqtt := r.writeOverMQTT(ctx, id); mqtt && !refused {
+			return MQTT
+		}
+		return HTTP // write goes on over HTTP after the channel refused
+	}
+	if _, _, p, err := r.decide(ctx, id); err == nil && p.Writes == MQTT {
+		if refused {
+			return None
+		}
+		return MQTT
+	}
+	return HTTP
+}
+
+// offRoute refuses a send over p when ctx announced the other transport (WithRoute, #826). Nothing was sent.
+func offRoute(ctx context.Context, p Path) error {
+	a, ok := RouteFrom(ctx)
+	if !ok || a == p {
+		return nil
+	}
+	noteTrace(ctx, None)
+	return fmt.Errorf("%w: the way to the device changed since the confirmation (it would go over %s now, the confirmation said %s); confirm again",
+		ErrRouteChanged, pathName(p), pathName(a))
+}
+
+func pathName(p Path) string {
+	if p == MQTT || p == HTTP {
+		return strings.ToUpper(string(p))
+	}
+	return "no transport"
+}
 
 // Trace records which transports carried the calls made under its context, for the audit "via", and which of
 // them returned a reply (Answered, for the identity check that vouches for those replies, #810).
@@ -487,17 +568,9 @@ func (r *Router) read(ctx context.Context, t tasmota.Target, cmnd string, cls cm
 // unanswered read (unanswered), so its next commands go over HTTP for a while.
 func (r *Router) write(ctx context.Context, t tasmota.Target, cmnd string, cls cmdClass) (json.RawMessage, error) {
 	id := t.DeviceID()
-	d, err := r.o.Devices.GetDevice(ctx, id)
-	onBroker := err == nil && d.MQTT == model.MQTTOurs && d.Topic != ""
-	if !onBroker {
-		// Not on our broker: no need to gather the inventory's facts.
+	d, onBroker, mqtt := r.writeOverMQTT(ctx, id)
+	if !mqtt {
 		return r.overHTTP(ctx, id, onBroker, cmnd, func(ctx context.Context) (json.RawMessage, error) { return r.httpFirst(ctx, t, cmnd, cls) })
-	}
-	f, err := r.o.Facts.FactsFor(ctx, d)
-	// No judgement possible: the established path. The facts may know of an HTTP failure the cheap check did not
-	// see; httpFirst then decides as it always did.
-	if err != nil || Choose(f).Writes != MQTT || httpFailing(f) {
-		return r.overHTTP(ctx, id, true, cmnd, func(ctx context.Context) (json.RawMessage, error) { return r.httpFirst(ctx, t, cmnd, cls) })
 	}
 	// Only an answer right now proves HTTP for a change of the MQTT connection: a fresh answer on record may predate
 	// the person's own WebServer 0 or SetOption128 0 sent over MQTT a minute ago.
@@ -521,6 +594,20 @@ func (r *Router) write(ctx context.Context, t tasmota.Target, cmnd string, cls c
 		r.o.Log.Info("transport: MQTT write got no answer, the device's next commands go over HTTP for a while", "device", int64(id))
 	}
 	return raw, err
+}
+
+// writeOverMQTT is write's decision for a device whose HTTP is not known to fail: the device snapshot, whether it is
+// on our broker, and whether the write goes MQTT first. Not on our broker needs no facts. Without facts no judgement
+// is possible and the established path (HTTP first) is taken; the facts may also know of an HTTP failure the cheap
+// check did not see, and httpFirst then decides as it always did. TypedRoute asks the same (#826).
+func (r *Router) writeOverMQTT(ctx context.Context, id model.DeviceID) (d model.Device, onBroker, mqtt bool) {
+	d, err := r.o.Devices.GetDevice(ctx, id)
+	onBroker = err == nil && d.MQTT == model.MQTTOurs && d.Topic != ""
+	if !onBroker {
+		return d, false, false
+	}
+	f, err := r.o.Facts.FactsFor(ctx, d)
+	return d, true, err == nil && Choose(f).Writes == MQTT && !httpFailing(f)
 }
 
 // overHTTP sends a write over HTTP (send) and marks the device (connChanged) when the write changes its MQTT
@@ -636,6 +723,9 @@ func (r *Router) decide(ctx context.Context, id model.DeviceID) (model.Device, F
 }
 
 func (r *Router) httpCommand(ctx context.Context, t tasmota.Target, cmnd string) (json.RawMessage, error) {
+	if err := offRoute(ctx, HTTP); err != nil {
+		return nil, err // announced over MQTT (#826): also MQTT's "published nothing" never moves it to HTTP
+	}
 	raw, err := r.http.Command(ctx, t, cmnd)
 	if tasmota.NotSent(err) {
 		noteTrace(ctx, None)
@@ -681,6 +771,16 @@ func (r *Router) publish(ctx context.Context, d model.Device, cmnd string, cls c
 	m := r.mqttDoer()
 	if m == nil {
 		return nil, fmt.Errorf("%w: MQTT is not connected", tasmota.ErrUnreachable)
+	}
+	// Announced over HTTP (#826): checked here, where every path publishes (routed, the failover after HTTP sent
+	// nothing, pinned). A command the channel never publishes is refused as the channel would refuse it, so write
+	// goes on over HTTP as it does for every such command; anything else would cross the broker unannounced.
+	if a, ok := RouteFrom(ctx); ok && a != MQTT && mqttcmd.Refuses(cmnd) {
+		noteTrace(ctx, None) // nothing sent; an HTTP send that follows (route HTTP) notes HTTP, which outranks this
+		return nil, fmt.Errorf("%w: MQTT does not carry this command", mqttcmd.ErrRefused)
+	}
+	if err := offRoute(ctx, MQTT); err != nil {
+		return nil, err
 	}
 	if cls.write && !httpWorks {
 		if name := cmdpolicy.CutOffName(cmnd); name != "" {

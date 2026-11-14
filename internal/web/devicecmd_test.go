@@ -30,7 +30,10 @@ type fakeCmd struct {
 	powerErr error
 	reply    string
 	runErr   error
-	consent  []bool // per Run: the call carried the cut-off consent
+	consent  []bool           // per Run: the call carried the cut-off consent
+	routes   []transport.Path // per Run: the route the confirmation announced, "" for none (#826)
+	// runErrs, if set, is returned by the Runs in turn (then nil), before runErr
+	runErrs []error
 }
 
 func (f *fakeCmd) Power(_ context.Context, actor string, id model.DeviceID, relay int, action string) (string, error) {
@@ -51,6 +54,16 @@ func (f *fakeCmd) Run(ctx context.Context, p model.Principal, id model.DeviceID,
 	}
 	f.runs = append(f.runs, p.Subject+"|"+id64(id)+"|"+cmd)
 	f.consent = append(f.consent, transport.HasCutOffConsent(ctx))
+	route, _ := transport.RouteFrom(ctx)
+	f.routes = append(f.routes, route)
+	if len(f.runErrs) > 0 {
+		err := f.runErrs[0]
+		f.runErrs = f.runErrs[1:]
+		if err != nil {
+			return nil, err
+		}
+		return json.RawMessage(f.reply), nil
+	}
 	if f.runErr != nil {
 		return nil, f.runErr
 	}
@@ -317,7 +330,12 @@ func TestConsoleAsksWhenTheRouterRefusesACutOffChange(t *testing.T) {
 		d.DeviceCmd = f
 		d.MQTTOnly = func(context.Context, ...model.DeviceID) bool { return false } // HTTP answered lately
 	})
-	resp, body := e.do(t, "POST", "/devices/1/console", "admin", consoleForm("MqttHost broker2"))
+	// MqttHost hides its argument (a user:pass@host may be in it): the first screen names its transport (#826)
+	_, body := e.do(t, "POST", "/devices/1/console", "admin", consoleForm("MqttHost broker2"))
+	if strings.Contains(body, "reached over MQTT only") || len(f.ran()) != 0 {
+		t.Fatalf("HTTP answered lately: no cut-off question yet: ran %v: %s", f.ran(), body)
+	}
+	resp, body := e.do(t, "POST", "/devices/1/console", "admin", url.Values{"token": {confirmToken(t, body)}})
 	if resp.StatusCode != 200 || !strings.Contains(body, "reached over MQTT only") || len(f.ran()) != 1 || f.consent[0] {
 		t.Fatalf("refused send: status %d, ran %v, consent %v: %s", resp.StatusCode, f.ran(), f.consent, body)
 	}
@@ -601,12 +619,16 @@ func readSSE(t *testing.T, e *env, marker string, pub func()) string {
 	return got
 }
 
-// Why (audit row 6): "admins may do everything": a command nobody listed is sent,
-// without a second screen, and the operator is still refused.
+// Why (audit row 6): "admins may do everything": a command nobody listed is sent, and the operator is still
+// refused. Its arguments are hidden (they may be a secret), so its one screen names the transport first (#826).
 func TestConsoleUnknownCommandIsSentForAdmin(t *testing.T) {
 	f := &fakeCmd{reply: `{"Sensor13":"ok"}`}
 	e := cmdEnv(t, f)
-	resp, body := e.do(t, "POST", "/devices/1/console", "admin", consoleForm("Sensor13 1"))
+	_, body := e.do(t, "POST", "/devices/1/console", "admin", consoleForm("Sensor13 1"))
+	if !strings.Contains(body, "Confirm sending") || !strings.Contains(body, "over HTTP, unencrypted") || len(f.ran()) != 0 {
+		t.Fatalf("ran %v: want the transport named first: %s", f.ran(), body)
+	}
+	resp, body := e.do(t, "POST", "/devices/1/console", "admin", url.Values{"token": {confirmToken(t, body)}})
 	if resp.StatusCode != 200 || strings.Contains(body, "Confirm sending") || len(f.ran()) != 1 {
 		t.Fatalf("status %d ran %v: %s", resp.StatusCode, f.ran(), body)
 	}

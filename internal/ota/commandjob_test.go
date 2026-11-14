@@ -10,6 +10,7 @@ import (
 
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
 // fakeRunner records what the engine sent and as whom.
@@ -19,13 +20,18 @@ type fakeRunner struct {
 	roles []model.Role
 	err   error
 	reply string
+	route map[model.DeviceID]transport.Path // the route the send carried (transport.WithRoute, #826), "" for none
 }
 
-func (f *fakeRunner) Run(_ context.Context, p model.Principal, id model.DeviceID, cmd string) (json.RawMessage, error) {
+func (f *fakeRunner) Run(ctx context.Context, p model.Principal, id model.DeviceID, cmd string) (json.RawMessage, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sent = append(f.sent, p.Subject+"|"+string(rune('0'+id))+"|"+cmd)
 	f.roles = append(f.roles, p.Role)
+	if f.route == nil {
+		f.route = map[model.DeviceID]transport.Path{}
+	}
+	f.route[id], _ = transport.RouteFrom(ctx)
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -265,5 +271,38 @@ func TestBulkRestartGoesThroughTheCommandRunnerAsTheAdmin(t *testing.T) {
 	}
 	if len(aud.evs) == 0 || aud.evs[0].Action != "command.bulk.start" {
 		t.Fatalf("audit %+v", aud.evs)
+	}
+}
+
+// Why (#826): a bulk preview names the transport of a command whose arguments the audit hides for each device, and the
+// person confirms that; each device's send keeps to its route (the router refuses another), also when the job runs
+// later. A retry keeps the route of the job it retries: that is what the person confirmed for that device. A command
+// the audit shows in full carries no route.
+func TestCommandJobKeepsTheRouteOfItsPreview(t *testing.T) {
+	h, run, _, _ := commandHarness(t, 2)
+	run.err = errors.New("boom")
+	orig, _, err := h.e.SubmitCommand(as("local"), "alice", []PolicyRequest{
+		{DeviceID: 1, Commands: []string{"PowerDelta 10"}, Route: transport.HTTP}, {DeviceID: 2, Commands: []string{"PowerDelta 10"}, Route: transport.MQTT}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.run(t, h.e)
+	if len(run.sent) != 2 || run.route[1] != transport.HTTP || run.route[2] != transport.MQTT {
+		t.Fatalf("sent %v routes %v, want HTTP for 1 and MQTT for 2", run.sent, run.route)
+	}
+	run.err = nil
+	if _, err := h.e.SubmitRetry(as("local"), "alice", orig, nil); err != nil {
+		t.Fatal(err)
+	}
+	h.run(t, h.e)
+	if len(run.sent) != 4 || run.route[1] != transport.HTTP || run.route[2] != transport.MQTT {
+		t.Fatalf("retry: sent %v routes %v, want the same routes", run.sent, run.route)
+	}
+	if _, _, err := h.e.SubmitCommand(as("local"), "alice", []PolicyRequest{{DeviceID: 1, Commands: []string{"TelePeriod 60"}, Route: transport.MQTT}}); err != nil {
+		t.Fatal(err)
+	}
+	h.run(t, h.e)
+	if len(run.sent) != 5 || run.route[1] != "" {
+		t.Fatalf("shown in full: sent %v route %q, want none", run.sent, run.route[1])
 	}
 }

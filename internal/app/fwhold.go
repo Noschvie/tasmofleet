@@ -95,10 +95,11 @@ func (a *runtime) cachedUptime(id model.DeviceID) int64 { return a.tracker.Get(i
 func (a *runtime) holdFlashing(id model.DeviceID) { startHold(a.fwHolds, a.cachedUptime, id) }
 
 // neverSent reports whether err says the command certainly did not leave TasmoFleet: a policy refusal, a
-// busy device, a vanished inventory entry, a refused cut-off.
+// busy device, a vanished inventory entry, a refused cut-off, a command whose route changed since its confirmation (#826).
 func neverSent(err error) bool {
 	return err != nil && (errors.Is(err, cmdpolicy.ErrInvalid) || errors.Is(err, cmdpolicy.ErrForbidden) || errors.Is(err, cmdpolicy.ErrRole) ||
-		errors.Is(err, cmdpolicy.ErrUpdateJob) || errors.Is(err, devlock.ErrBusy) || errors.Is(err, store.ErrNotFound) || errors.Is(err, transport.ErrCutOff))
+		errors.Is(err, cmdpolicy.ErrUpdateJob) || errors.Is(err, devlock.ErrBusy) || errors.Is(err, store.ErrNotFound) || errors.Is(err, transport.ErrCutOff) ||
+		errors.Is(err, transport.ErrRouteChanged))
 }
 
 // observeFirmwareHolds feeds the health tracker's reports to holds until ctx is done: a restarted device

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
 // "Send command" runs as a transaction too: one job per device, shown and
@@ -122,6 +123,15 @@ func (e *Engine) workCommand(ctx context.Context, j model.Job) {
 		wait = j.ReplyTimeout // bulk "Wait up to 5 s for each response"
 	}
 	sctx, cancel := context.WithTimeout(ctx, wait)
+	if cmd := strings.TrimSpace(j.Commands); transport.ConfirmsRoute(cmd) {
+		// The preview named the transport for this device and the person confirmed (#826): MQTT, kept as the job's
+		// Transport, or HTTP. The router sends it only over that route, or not at all (ErrRouteChanged).
+		route := transport.HTTP
+		if j.Transport == model.TransportMQTT {
+			route = transport.MQTT
+		}
+		sctx = transport.WithRoute(sctx, route)
+	}
 	raw, err := e.opts.Commands.Run(sctx, p, j.DeviceID, strings.TrimSpace(j.Commands))
 	cancel()
 	if ctx.Err() != nil {

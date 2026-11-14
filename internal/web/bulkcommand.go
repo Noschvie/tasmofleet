@@ -12,6 +12,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/auth"
 	"github.com/hellwand/tasmofleet/internal/cmdpolicy"
 	"github.com/hellwand/tasmofleet/internal/ota"
+	"github.com/hellwand/tasmofleet/internal/transport"
 	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
@@ -115,11 +116,15 @@ func (h *handler) bulkCommandPage(w http.ResponseWriter, r *http.Request) {
 		restart = true
 		consequence = "Each device is offline for a few seconds while it reboots, and its health shows offline until it reports again."
 	}
+	// A command whose arguments the audit hides names the transport it takes, per transport with how many devices
+	// (#826); each device's send keeps to the transport named for it.
+	routes, routeRows, notice := h.bulkRoute(r.Context(), canon, ready...)
 	verb := "Send to " + plural(len(ready), "device")
 	if restart {
 		verb = "Restart " + plural(len(ready), "device")
 	}
-	fields := []ui.KVRow{{Key: "token", Value: h.cmds.put(h.d.Clock.Now(), h.bindingOf(r), canon, ready)}}
+	token := h.cmds.add(h.d.Clock.Now(), pendingCmd{binding: h.bindingOf(r), cmd: canon, ids: ready, routes: routes, notice: notice})
+	fields := []ui.KVRow{{Key: "token", Value: token}}
 	for _, o := range []string{"wait", "serial"} {
 		if r.PostFormValue(o) == "1" {
 			fields = append(fields, ui.KVRow{Key: o, Value: "1"})
@@ -134,7 +139,7 @@ func (h *handler) bulkCommandPage(w http.ResponseWriter, r *http.Request) {
 		Title: sv.Title(), Heading: "Send " + shown + " to " + plural(len(ready), "device") + "?",
 		Text:    "Devices that are not online are left out. The result page lists the answer of every device.",
 		Warning: consequence,
-		Facts:   append([]ui.KVRow{{Key: "Command", Value: shown, Mono: true}, {Key: "Devices", Value: devicesFact}}, heldRows...),
+		Facts:   append(append([]ui.KVRow{{Key: "Command", Value: shown, Mono: true}, {Key: "Devices", Value: devicesFact}}, routeRows...), heldRows...),
 		Action:  view.Base + "/devices/bulk/command/run", CSRF: view.CSRF, Fields: fields,
 		Verb: verb, Danger: consequence != "", CancelHref: view.Base + "/devices", CancelLabel: "Cancel",
 	}))
@@ -173,9 +178,24 @@ func (h *handler) bulkCommandRun(w http.ResponseWriter, r *http.Request) {
 		h.message(w, r, status, h.view(r, "Command not sent", "devices", msg))
 		return
 	}
+	// The transport the preview named for each device, and its sentences, must still hold (#826); if the way to any
+	// device or the broker URL changed, nothing is queued. The router refuses a send whose route changes after this.
+	if routes, _, notice := h.bulkRoute(r.Context(), pc.cmd, pc.ids...); !sameRoutes(routes, pc.routes) || notice != pc.notice {
+		h.message(w, r, http.StatusConflict, h.view(r, "Command not sent", "devices",
+			"The way to the devices changed since the preview (HTTP or MQTT, or the broker), so the command would not go the way it said. Nothing was sent. Start again from the device list."))
+		return
+	}
 	reqs := make([]ota.PolicyRequest, 0, len(pc.ids))
 	for _, id := range pc.ids {
-		reqs = append(reqs, ota.PolicyRequest{DeviceID: id, Commands: []string{pc.cmd}})
+		if pc.routes != nil && pc.routes[id] == transport.None {
+			continue // the preview said it is not sent to this device (#826)
+		}
+		reqs = append(reqs, ota.PolicyRequest{DeviceID: id, Commands: []string{pc.cmd}, Route: pc.routes[id]})
+	}
+	if len(reqs) == 0 {
+		h.message(w, r, http.StatusConflict, h.view(r, "Command not sent", "devices",
+			"MQTT does not carry this command and the chosen devices' HTTP is not reachable. Nothing was sent."))
+		return
 	}
 	ctx := ota.WithBatchOptions(ota.WithActorKind(r.Context(), p.Method), opts)
 	batch, skipped, err := h.d.CommandBatch.Submit(ctx, actor(r), reqs)

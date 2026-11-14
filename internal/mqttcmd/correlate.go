@@ -78,6 +78,14 @@ func refuse(format string, a ...any) error {
 	return fmt.Errorf("%w: %s", ErrRefused, fmt.Sprintf(format, a...))
 }
 
+// Refuses reports a command the channel never publishes, whatever the device: the refusals of parseRequest (a
+// malformed line, a file transfer, a command that runs other commands, Backlog2 and Backlog3, a Status other than 1
+// to 13). The transport names HTTP for such a command in a person's confirmation (#826): it never crosses the broker.
+func Refuses(cmd string) bool {
+	_, err := parseRequest(cmd)
+	return err != nil
+}
+
 // parseRequest checks cmd with cmdpolicy's grammar and returns what to publish and how to
 // recognise the answer. Status 0 and everything that is not a plain Status 1..13 is refused, in
 // every spelling and inside a Backlog.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/devicecmd"
 	"github.com/hellwand/tasmofleet/internal/devlock"
 	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
 // Why: an update restarts the device twice and a retry again; if those count towards the boot loop
@@ -83,6 +85,7 @@ func TestHoldingCmdNotesOnlyRestartsThatWereSent(t *testing.T) {
 		{"reply lost, may have reached it", "Restart 1", errors.New("timeout"), true},
 		{"refused by the policy", "Restart 1", cmdpolicy.ErrForbidden, false},
 		{"device busy", "Restart 1", devlock.BusyError{Holder: "ota"}, false},
+		{"route changed, nothing sent (#826)", "Restart 99", fmt.Errorf("%w: x", transport.ErrRouteChanged), false},
 		{"power switch", "Power1 ON", nil, false},
 		{"restart 2 halts", "Restart 2", nil, false},
 	} {

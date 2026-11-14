@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hellwand/tasmofleet/internal/auth"
@@ -182,8 +183,8 @@ func consoleError(err error) (int, string) {
 		return http.StatusForbidden, "This command needs the admin role."
 	case errors.Is(err, cmdpolicy.ErrUpdateJob):
 		return http.StatusConflict, updateJobHoldsText
-	case errors.Is(err, transport.ErrCutOff):
-		return http.StatusConflict, err.Error() // names the command, never its arguments
+	case errors.Is(err, transport.ErrCutOff), errors.Is(err, transport.ErrRouteChanged):
+		return http.StatusConflict, err.Error() // names the command or the route, never its arguments
 	}
 	status, msg := deviceErrorText(err)
 	if msg == "" {
@@ -224,6 +225,36 @@ func (h *handler) confirmation(ctx context.Context, cmd string, v cmdpolicy.Verd
 		return v, false
 	}
 	return cmdpolicy.WithMQTTOnly(cmd, v), true
+}
+
+// askConsole shows the console's confirmation of cmd when it needs one, with status, and reports whether it did: the
+// consequence of a destructive or lock-out command (with the cut-off of a device reached over MQTT only; cutOff: the
+// router just found HTTP silent, so that consequence is named whatever is on record), and the transport a command
+// whose arguments the audit hides takes (#826). The token keeps the cut-off consent and the route for the send. When
+// it does not ask, routes is the route a send without a confirmation must carry (one that goes nowhere), or nil.
+func (h *handler) askConsole(w http.ResponseWriter, r *http.Request, d model.Device, data consoleData, cmd string, status int, cutOff bool) (bool, map[model.DeviceID]transport.Path) {
+	ctx := r.Context()
+	v0, err := cmdpolicy.Classify(cmd)
+	if err != nil {
+		return false, nil
+	}
+	canon, err := cmdpolicy.Canonical(cmd)
+	if err != nil {
+		return false, nil
+	}
+	v, cut := h.confirmation(ctx, cmd, v0, d.ID)
+	if cutOff {
+		v, cut = cmdpolicy.WithMQTTOnly(cmd, v0), true
+	}
+	routes, notice := h.consoleRoute(ctx, canon, d.ID)
+	if v.Confirm == "" && notice == "" {
+		return false, routes
+	}
+	data.Confirm, data.Consequence = true, strings.TrimSpace(v.Confirm+" "+notice)
+	data.Token = h.cmds.add(h.d.Clock.Now(), pendingCmd{binding: h.bindingOf(r), cmd: canon, ids: []model.DeviceID{d.ID}, cutOff: cut,
+		routes: routes, notice: notice})
+	h.renderConsole(w, r, status, d, data)
+	return true, nil
 }
 
 func (h *handler) consoleSend(w http.ResponseWriter, r *http.Request) {
@@ -277,39 +308,50 @@ func (h *handler) consoleSend(w http.ResponseWriter, r *http.Request) {
 		if pc.cutOff {
 			ctx = transport.WithCutOffConsent(ctx) // the person was told, and confirmed
 		}
+		if pc.routes != nil {
+			// The sentence the person confirmed must still be the one that holds (the route, the broker URL);
+			// otherwise nothing is sent and the console asks again (#826). The router keeps to the route after this.
+			if _, notice := h.consoleRoute(ctx, cmd, d.ID); notice != pc.notice {
+				data.Error = "Not sent: the way to the device changed since the confirmation. Confirm again."
+				if asked, _ := h.askConsole(w, r, d, data, cmd, http.StatusConflict, false); !asked {
+					h.renderConsole(w, r, http.StatusConflict, d, data) // it goes nowhere now: say so, send nothing
+				}
+				return
+			}
+			ctx = transport.WithRoute(ctx, pc.routes[d.ID])
+		}
 	} else if why := h.apiOffBlockCommand(ctx, d.ID, cmd); why != "" {
 		// Refused before the confirmation: a device whose HTTP API is off and which nothing else reaches would only fail.
 		data.Error = why
 		h.renderConsole(w, r, http.StatusConflict, d, data)
 		return
-	} else if v0, err := cmdpolicy.Classify(cmd); err == nil && p.Role >= model.RoleAdmin {
-		v, cut := h.confirmation(ctx, cmd, v0, d.ID)
-		canon, err := cmdpolicy.Canonical(cmd)
-		if err == nil && v.Confirm != "" {
-			data.Confirm, data.Consequence = true, v.Confirm
-			if cut {
-				data.Token = h.cmds.putCutOff(h.d.Clock.Now(), h.bindingOf(r), canon, []model.DeviceID{d.ID})
-			} else {
-				data.Token = h.cmds.put(h.d.Clock.Now(), h.bindingOf(r), canon, []model.DeviceID{d.ID})
-			}
-			h.renderConsole(w, r, http.StatusOK, d, data)
+	} else if p.Role >= model.RoleAdmin {
+		asked, routes := h.askConsole(w, r, d, data, cmd, http.StatusOK, false)
+		if asked {
 			return
+		}
+		if routes != nil {
+			ctx = transport.WithRoute(ctx, routes[d.ID]) // it goes nowhere (#826): nothing may go anywhere unannounced
 		}
 	}
 	raw, err := h.d.DeviceCmd.Run(ctx, p, d.ID, cmd)
-	if errors.Is(err, transport.ErrCutOff) && p.Role >= model.RoleAdmin {
+	switch {
+	case errors.Is(err, transport.ErrCutOff) && p.Role >= model.RoleAdmin:
 		// The question above follows HTTP's answer on record; the router asked HTTP right now and got none (HTTP
 		// stopped since). A silence is not remembered, so a resend would skip the question again: ask here.
-		if v, cerr := cmdpolicy.Classify(cmd); cerr == nil {
-			if canon, cerr := cmdpolicy.Canonical(cmd); cerr == nil {
-				data.Confirm, data.Consequence = true, cmdpolicy.WithMQTTOnly(cmd, v).Confirm
-				data.Token = h.cmds.putCutOff(h.d.Clock.Now(), h.bindingOf(r), canon, []model.DeviceID{d.ID})
-				h.renderConsole(w, r, http.StatusOK, d, data)
-				return
-			}
+		if asked, _ := h.askConsole(w, r, d, data, cmd, http.StatusOK, true); asked {
+			return
+		}
+	case errors.Is(err, transport.ErrRouteChanged) && p.Role >= model.RoleAdmin:
+		// The router would take another transport than the confirmation named (#826): nothing was sent; ask again
+		// with the route that holds now.
+		data.Error = err.Error()
+		if asked, _ := h.askConsole(w, r, d, data, cmd, http.StatusConflict, false); asked {
+			return
 		}
 	}
-	if !errors.Is(err, cmdpolicy.ErrInvalid) && !errors.Is(err, cmdpolicy.ErrForbidden) && !errors.Is(err, cmdpolicy.ErrRole) && !errors.Is(err, transport.ErrCutOff) {
+	if !errors.Is(err, cmdpolicy.ErrInvalid) && !errors.Is(err, cmdpolicy.ErrForbidden) && !errors.Is(err, cmdpolicy.ErrRole) && !errors.Is(err, transport.ErrCutOff) &&
+		!errors.Is(err, transport.ErrRouteChanged) {
 		data.HistoryAdd = historyText(cmd) // a device that failed to answer is worth a retry; a refusal is not
 	}
 	status := http.StatusOK

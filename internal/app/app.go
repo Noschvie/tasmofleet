@@ -782,6 +782,7 @@ func (a *runtime) webDeps(guard web.Guard, rows []web.KV) web.Deps {
 	}
 	if a.facts != nil {
 		deps.Transport = webFacts{a.facts} // the router\'s own view: the card shows what the router decides
+		deps.TypedRoutes = a.typedRoutes
 	}
 	deps.DefaultDevicePassword = func() string { return a.svc.Sys.Snapshot().DeviceDefaultPassword }
 	deps.CRWarnPercent = func() int { return a.svc.Sys.Snapshot().CRWarnPercent }
