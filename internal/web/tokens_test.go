@@ -141,8 +141,9 @@ func TestTokensEqualThePrototype(t *testing.T) {
 	pd := cssDecls(t, proto, `[data-theme="dark"]{`)
 	light := lightTokens(t, css)
 	dark := cssDecls(t, css, darkHeader)
-	// tokens of ours that the prototype writes inline instead of as a token
-	extra := map[string]bool{"--color-grip-hover": true}
+	// tokens of ours that the prototype writes inline instead of as a token, and the one documented
+	// deviation (design-system.md "Deviations from the prototype" 13: --color-control-border, WCAG 1.4.11, #829)
+	extra := map[string]bool{"--color-grip-hover": true, "--color-control-border": true}
 
 	for name, want := range pl {
 		if name == "color-scheme" {

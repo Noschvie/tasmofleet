@@ -158,6 +158,7 @@
   --color-surface-3: #e5e8ec;
   --color-border: #dfe3e7;
   --color-border-strong: #c2c9d0;
+  --color-control-border: #808a94;
   --color-text: #13171c;
   --color-text-2: #48535e;
   --color-text-3: #5c6772;
@@ -202,6 +203,7 @@
     --color-surface-3: #242a31;
     --color-border: #262c33;
     --color-border-strong: #3a424b;
+    --color-control-border: #68737f;
     --color-text: #e4e7ea;
     --color-text-2: #a9b2bb;
     --color-text-3: #939da7;
@@ -242,6 +244,7 @@
   --color-surface-3: #242a31;
   --color-border: #262c33;
   --color-border-strong: #3a424b;
+  --color-control-border: #68737f;
   --color-text: #e4e7ea;
   --color-text-2: #a9b2bb;
   --color-text-3: #939da7;
@@ -501,7 +504,7 @@ button,
   height: var(--ctl);
   padding: 0 var(--ctl-pad);
   border-radius: var(--r-control);
-  border: var(--hair-w) solid var(--color-border-strong);
+  border: var(--hair-w) solid var(--color-control-border);
   background: var(--color-surface);
   color: var(--color-text);
   cursor: pointer;
@@ -668,7 +671,7 @@ textarea {
   font-size: var(--fs-body);
   color: var(--color-text);
   background: var(--color-surface);
-  border: var(--hair-w) solid var(--color-border-strong);
+  border: var(--hair-w) solid var(--color-control-border);
   border-radius: var(--r-control);
   height: var(--ctl);
   padding: 0 10px;
@@ -2305,7 +2308,7 @@ body:has(details[open] > .rowmenu-body, details[open] > .menu)
     gap: var(--sp-8);
     height: var(--ctl-sm);
     padding: 0 var(--ctl-pad-sm);
-    border: var(--hair-w) solid var(--color-border-strong);
+    border: var(--hair-w) solid var(--color-control-border);
     border-radius: var(--r-control);
     background: var(--color-surface);
     color: var(--color-text);
@@ -4432,7 +4435,7 @@ input[type="file"]::file-selector-button {
   height: var(--ctl-sm);
   margin-right: var(--sp-12);
   padding: 0 var(--ctl-pad-sm);
-  border: var(--hair-w) solid var(--color-border-strong);
+  border: var(--hair-w) solid var(--color-control-border);
   border-radius: var(--r-control);
   background: var(--color-surface);
   color: var(--color-text);
@@ -5536,7 +5539,7 @@ html[data-live="offline"] .conn-banner.conn-off {
   height: var(--ctl);
   padding: 0 var(--sp-12);
   border-radius: var(--r-control);
-  border: var(--hair-w) solid var(--color-border-strong);
+  border: var(--hair-w) solid var(--color-control-border);
   background: var(--color-surface);
   color: var(--color-text);
   font: 500 13px var(--font-sans);
@@ -5548,7 +5551,7 @@ html[data-live="offline"] .conn-banner.conn-off {
 .btn:hover,
 .btn:active {
   background: var(--color-surface-2);
-  border-color: var(--color-border-strong);
+  border-color: var(--color-control-border);
   color: var(--color-text);
 }
 .btn.btn-primary {
@@ -8255,7 +8258,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
     height: 44px;
     padding: 0 6px;
     border-radius: 8px;
-    border: var(--hair-w) solid var(--color-border-strong);
+    border: var(--hair-w) solid var(--color-control-border);
     background: var(--color-surface);
     color: var(--color-text);
     font-size: 12.5px;
@@ -8297,7 +8300,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
   min-width: 0;
   height: var(--ctl);
   padding: 0 10px;
-  border: var(--hair-w) solid var(--color-border-strong);
+  border: var(--hair-w) solid var(--color-control-border);
   border-radius: 7px;
   background: var(--color-surface);
   color: var(--color-text);
@@ -8367,7 +8370,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
   height: var(--ctl);
   margin: 0;
   padding: 0 2px 0 11px;
-  border: var(--hair-w) solid var(--color-border-strong);
+  border: var(--hair-w) solid var(--color-control-border);
   border-radius: 999px;
   background: var(--color-surface);
   color: var(--color-text-2);
@@ -8412,7 +8415,7 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
   min-height: 0;
   margin: 0;
   padding: 0 8px;
-  border: var(--hair-w) solid var(--color-border-strong);
+  border: var(--hair-w) solid var(--color-control-border);
   border-radius: 7px;
   background-color: var(--color-surface);
   background-image: none;
@@ -10322,7 +10325,7 @@ nav.crumbs a {
 .upd-opt input:not([type="checkbox"]) {
   height: var(--ctl);
   padding: 0 8px;
-  border: var(--hair-w) solid var(--color-border-strong);
+  border: var(--hair-w) solid var(--color-control-border);
   border-radius: var(--r-control);
   background: var(--color-surface);
   color: var(--color-text);
