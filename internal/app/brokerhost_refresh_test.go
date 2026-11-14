@@ -239,8 +239,12 @@ func TestAVisitAsksStatus5OncePerTransportOverMQTT(t *testing.T) {
 func TestAPageCheckIsNeverSharedWithAnotherRead(t *testing.T) {
 	g := newAPIOffRig(t, apiOffOpts{ours: true, lwtOnline: true})
 	d, _ := g.st.GetDevice(t.Context(), 1)
+	rctx, read := transport.WithTrace(t.Context()) // a page's read, over MQTT like every read of this device
+	if _, err := g.pr.Reads.Command(rctx, tasmota.TargetFor(d), "Status 3"); err != nil {
+		t.Fatal(err)
+	}
 	for range 2 {
-		if err := g.pr.VerifyRead(t.Context(), d); err != nil {
+		if err := g.pr.VerifyRead(t.Context(), d, read); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -344,8 +348,9 @@ func TestDataOnlyVisitKeepsTheDataInterval(t *testing.T) {
 // checks read through the router as production wires them, must still refuse and remember nothing.
 func TestSharedCheckDoesNotCoverAnAddressThatChangedHandsOverHTTP(t *testing.T) {
 	o, swap := storedDevice(t)
-	o.p.Reads = swap // the router, answering over HTTP: nothing in the trace says MQTT
-	set := settings.New(settings.Options{Devices: o.st, Client: o.cl, Verify: o.p.VerifyRead})
+	// routers without MQTT, as production wires them: the reads and the checks go over HTTP and the traces say so
+	o.p.Reads = transport.NewRouter(transport.Options{HTTP: swap, Devices: o.st})
+	set := settings.New(settings.Options{Devices: o.st, Client: transport.NewRouter(transport.Options{HTTP: o.cl, Devices: o.st}), Verify: o.p.VerifyRead})
 	a := &runtime{svc: &Services{Prober: o.p}, settings: set}
 	if err := a.refreshData(t.Context(), o.stored); !errors.Is(err, errAnotherDevice) {
 		t.Fatalf("refreshData = %v, want errAnotherDevice", err)

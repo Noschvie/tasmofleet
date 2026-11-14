@@ -12,6 +12,7 @@ import (
 
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
 // gateClient answers like fakeClient but holds every command until the gate is opened, which is a
@@ -435,7 +436,7 @@ func TestValuesOfAnotherDeviceAreNotRemembered(t *testing.T) {
 	errOther := errors.New("another device answers at the stored address")
 	var other atomic.Bool
 	other.Store(true)
-	m := New(Options{Devices: fakeDevices{}, Client: c, Verify: func(context.Context, model.Device) error {
+	m := New(Options{Devices: fakeDevices{}, Client: c, Verify: func(context.Context, model.Device, *transport.Trace) error {
 		if other.Load() {
 			return errOther
 		}

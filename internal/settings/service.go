@@ -106,8 +106,9 @@ type Options struct {
 	// the stop signal, and a read sends one request after the other for up to ReadTimeout).
 	Stop context.Context
 	// Verify (may be nil) says whether the device that answered is the stored one: an error keeps the
-	// values of a shared read out of the remembered ones (app: Prober.VerifyAddress, the rule of ReadNet).
-	Verify func(ctx context.Context, d model.Device) error
+	// values of a shared read out of the remembered ones (app: Prober.VerifyRead, the rule of ReadNet). read
+	// is the trace of the reads it vouches for: the check is asked over the transports they used (#810).
+	Verify func(ctx context.Context, d model.Device, read *transport.Trace) error
 }
 
 // Manager implements Service.

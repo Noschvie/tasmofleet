@@ -85,6 +85,41 @@ func TestReadFailsOverToHTTPOnceWhenMQTTGaveNoAnswer(t *testing.T) {
 	}
 }
 
+func TestATraceListsOnlyTheTransportsThatAnswered(t *testing.T) {
+	// Why (#810): the identity check after a read vouches for the transports the read's values came from. A read
+	// MQTT published and nobody answered brought no value over MQTT (the read went on over HTTP), so asking the
+	// check there too would wait out a second timeout and refuse a read the stored device answered at its address.
+	// Via keeps counting that call: for the audit a write left unanswered may have run.
+	for _, tc := range []struct {
+		name     string
+		err      error
+		via      string
+		answered []Path
+	}{
+		{"answered over MQTT", nil, "mqtt", []Path{MQTT}},
+		{"published, no answer", fmt.Errorf("mqtt: no answer to Status 2: %w", tasmota.ErrTimeout), "http+mqtt", []Path{HTTP}},
+		{"could not publish", fmt.Errorf("%w: Status 2 not sent", tasmota.ErrUnreachable), "http", []Path{HTTP}},
+		{"published, reply unusable", fmt.Errorf("%w: reply", tasmota.ErrBadResponse), "mqtt", []Path{MQTT}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			g := newRig(t)
+			g.mq.err = tc.err
+			ctx, tr := WithTrace(t.Context())
+			_, _ = g.r.Command(ctx, g.target(), "Status 2") // the outcome is not the point: the trace is
+			if tr.Via() != tc.via || fmt.Sprint(tr.Answered()) != fmt.Sprint(tc.answered) {
+				t.Errorf("via=%s answered=%v, want via=%s answered=%v", tr.Via(), tr.Answered(), tc.via, tc.answered)
+			}
+		})
+	}
+	empty, none := &Trace{}, (*Trace)(nil)
+	if a := empty.Answered(); len(a) != 0 {
+		t.Errorf("a trace that recorded nothing answered over %v", a)
+	}
+	if a := none.Answered(); len(a) != 0 { // like Via, safe on no trace at all
+		t.Errorf("no trace answered over %v", a)
+	}
+}
+
 func TestNextReadAfterAnUnansweredOneIsNotPublished(t *testing.T) {
 	// Why: a device that leaves MQTT reads unanswered would cost 8 s (16 s with the late-reply hold)
 	// per read; the mark sends its reads over HTTP for 10 minutes while HTTP works.

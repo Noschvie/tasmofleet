@@ -212,12 +212,16 @@ func WithCutOffConsent(ctx context.Context) context.Context {
 // HasCutOffConsent reports whether ctx carries WithCutOffConsent.
 func HasCutOffConsent(ctx context.Context) bool { c, _ := ctx.Value(keyConsent).(bool); return c }
 
-// Trace records which transports carried the calls made under its context, for the audit "via".
+// Trace records which transports carried the calls made under its context, for the audit "via", and which of
+// them returned a reply (Answered, for the identity check that vouches for those replies, #810).
 type Trace struct {
 	parent     *Trace // a trace opened inside another one reports to it too
 	mu         sync.Mutex
 	http, mqtt bool
 	refused    bool // a call was stopped before anything was sent
+	// answered: a command over that transport got a reply from a device (a value, or an answer it could not
+	// use); a call that timed out or was given up got none, although it counts for Via.
+	answeredHTTP, answeredMQTT bool
 }
 
 // WithTrace returns a context whose calls are recorded in the returned Trace.
@@ -276,6 +280,52 @@ func (t *Trace) Via() string {
 func noteTrace(ctx context.Context, p Path) {
 	if t, _ := ctx.Value(keyTrace).(*Trace); t != nil {
 		t.note(p)
+	}
+}
+
+// Answered lists the transports over which a command made under the trace got a reply, HTTP before MQTT: the
+// transports the values of a read can have come from. Unlike Via it leaves out a call that was sent and got no
+// answer (a timeout, a caller that gave up): an MQTT read nobody answered brought no value, and the read went on
+// over HTTP. Empty: nothing was answered, or nothing was recorded (no router carried the calls). File transfers
+// are not counted.
+func (t *Trace) Answered() []Path {
+	if t == nil {
+		return nil
+	}
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	var out []Path
+	if t.answeredHTTP {
+		out = append(out, HTTP)
+	}
+	if t.answeredMQTT {
+		out = append(out, MQTT)
+	}
+	return out
+}
+
+func (t *Trace) noteAnswer(mqtt bool) {
+	if t == nil {
+		return
+	}
+	t.parent.noteAnswer(mqtt)
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if mqtt {
+		t.answeredMQTT = true
+	} else {
+		t.answeredHTTP = true
+	}
+}
+
+// noteAnswer records that a command sent over p (HTTP or MQTT) got a reply: anything but a timeout or a caller
+// that gave up (an answer that could not be used is still an answer from whoever is there).
+func noteAnswer(ctx context.Context, p Path, err error) {
+	if err != nil && (errors.Is(err, tasmota.ErrTimeout) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
+		return
+	}
+	if t, _ := ctx.Value(keyTrace).(*Trace); t != nil {
+		t.noteAnswer(p == MQTT)
 	}
 }
 
@@ -591,6 +641,7 @@ func (r *Router) httpCommand(ctx context.Context, t tasmota.Target, cmnd string)
 		noteTrace(ctx, None)
 	} else {
 		noteTrace(ctx, HTTP)
+		noteAnswer(ctx, HTTP, err)
 	}
 	return raw, err
 }
@@ -653,7 +704,8 @@ func (r *Router) publish(ctx context.Context, d model.Device, cmnd string, cls c
 		raw, err = m.Do(ctx, d, cmnd)
 	}
 	if err == nil || !notPublished(err) {
-		noteTrace(ctx, MQTT)
+		noteTrace(ctx, MQTT) // also a call nobody answered: for the audit an unanswered write may have run
+		noteAnswer(ctx, MQTT, err)
 	}
 	if err != nil {
 		return nil, err

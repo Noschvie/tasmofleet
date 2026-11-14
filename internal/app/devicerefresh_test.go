@@ -26,6 +26,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/sysconfig"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
 	"github.com/hellwand/tasmofleet/internal/templates"
+	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
 // refreshRig is a brokerRig whose identity and data reads are recorded too (#600).
@@ -882,7 +883,7 @@ func storedDevice(t *testing.T) (o anotherDevice, swap *swapClient) {
 // the values, and nothing is remembered from an answer whose MAC is not the stored one.
 func TestSettingsValuesFromAnAddressThatChangedHandsAreNotRemembered(t *testing.T) {
 	o, _ := storedDevice(t)
-	set := settings.New(settings.Options{Devices: o.st, Client: o.cl, Verify: o.p.VerifyAddress})
+	set := settings.New(settings.Options{Devices: o.st, Client: o.cl, Verify: o.p.VerifyRead})
 	a := &runtime{svc: &Services{Prober: o.p}, settings: set}
 	if err := a.refreshData(t.Context(), o.stored); !errors.Is(err, errAnotherDevice) {
 		t.Fatalf("refreshData = %v, want errAnotherDevice", err)
@@ -895,7 +896,7 @@ func TestSettingsValuesFromAnAddressThatChangedHandsAreNotRemembered(t *testing.
 // Why (#662): the Settings tab's own read (a page open) had no MAC check at all.
 func TestAPageReadOfAnotherDeviceIsRefusedAndNotRemembered(t *testing.T) {
 	o := newAnotherDevice(t)
-	set := settings.New(settings.Options{Devices: o.st, Client: o.cl, Verify: o.p.VerifyAddress})
+	set := settings.New(settings.Options{Devices: o.st, Client: o.cl, Verify: o.p.VerifyRead})
 	if _, err := set.Read(t.Context(), o.id); !errors.Is(err, errAnotherDevice) {
 		t.Fatalf("Read = %v, want errAnotherDevice", err)
 	}
@@ -908,7 +909,7 @@ func TestAPageReadOfAnotherDeviceIsRefusedAndNotRemembered(t *testing.T) {
 // judge it by them; another device's answers must not be among them.
 func TestPolicyValuesOfAnotherDeviceAreNotCached(t *testing.T) {
 	o := newAnotherDevice(t)
-	rep := &policyReporter{devices: fakeLister{o.stored}, reader: o.setCaches, verify: o.p.VerifyAddress, now: time.Now}
+	rep := &policyReporter{devices: fakeLister{o.stored}, reader: o.setCaches, verify: o.p.VerifyRead, now: time.Now}
 	rep.setRules([]policy.Rule{{ID: "r1", Command: "PowerOnState", Want: "3"}})
 	if rep.readDevice(t.Context(), o.stored) {
 		t.Fatal("a read of another device is reported as successful")
@@ -918,7 +919,7 @@ func TestPolicyValuesOfAnotherDeviceAreNotCached(t *testing.T) {
 	}
 	// the stored device's own answers still arrive: the same rig with its MAC
 	own, _ := storedDevice(t)
-	rep = &policyReporter{devices: fakeLister{own.stored}, reader: own.setCaches, verify: own.p.VerifyAddress, now: time.Now}
+	rep = &policyReporter{devices: fakeLister{own.stored}, reader: own.setCaches, verify: own.p.VerifyRead, now: time.Now}
 	rep.setRules([]policy.Rule{{ID: "r1", Command: "PowerOnState", Want: "3"}})
 	rep.reader = settings.New(settings.Options{Devices: own.st, Client: own.cl})
 	if !rep.readDevice(t.Context(), own.stored) || len(rep.vals.get(own.id)) == 0 {
@@ -990,7 +991,7 @@ func TestMakeCompliantForgetsTheRememberedSettings(t *testing.T) {
 // after, the poller must still hear "failed" and read it again soon (and the data refresh must still say
 // "policy values not read"), not wait for the next regular round with half the values.
 func TestAPolicyReadThatFailedHalfWayStaysAFailure(t *testing.T) {
-	rep := &policyReporter{reader: partialReader{"PowerOnState": "3"}, verify: func(context.Context, model.Device) error { return nil }, now: time.Now}
+	rep := &policyReporter{reader: partialReader{"PowerOnState": "3"}, verify: func(context.Context, model.Device, *transport.Trace) error { return nil }, now: time.Now}
 	rep.setRules([]policy.Rule{{ID: "r1", Command: "PowerOnState", Want: "3"}, {ID: "r2", Command: "LedState", Want: "1"}})
 	if rep.readDevice(t.Context(), model.Device{ID: 7}) {
 		t.Fatal("a read that failed half way is reported as complete")
@@ -1087,7 +1088,9 @@ func TestRuntimeWiresTheLastKnownValues(t *testing.T) {
 	ctl, _ := simulator.Control(sim)
 	ctl.AddFault(simulator.Fault{Kind: simulator.FaultHTTPAPIOff}) // from here on only MQTT reads the device
 	mqtt := &overMQTT{mac: desc.MAC, waiting: make(chan struct{})}
-	svc.Client, svc.Prober.Reads = mqtt, mqtt // production gives both the router; here its MQTT route
+	// production gives both the router; here one whose only route is mqtt, so the traces record the reads
+	router := transport.NewRouter(transport.Options{HTTP: mqtt, Devices: svc.Store})
+	svc.Client, svc.Prober.Reads = router, router
 	bg, stop := context.WithCancel(context.Background())
 	a := &runtime{svc: svc, cfg: svc.Cfg, log: svc.Log, bgContext: bg, fw: newFirmwareState(nil)}
 	t.Cleanup(func() { stop(); a.bgWG.Wait() })

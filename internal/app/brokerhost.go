@@ -523,19 +523,11 @@ func (a *runtime) readsOverMQTT(ctx context.Context, d model.Device) bool {
 // check is off, policyReadsOff), and the GPIO template reading. The first part that fails ends the read:
 // the device does not answer, and the retry reads all.
 func (a *runtime) refreshData(ctx context.Context, d model.Device) error {
-	// Through the router (VerifyRead): over HTTP the check would refuse every device whose HTTP API is off (#676).
-	// The rest of the refresh goes over the transport this check went over, so the check vouches for every read:
-	// over MQTT for the topic (pinnedToMQTTCheck: no read falls back to HTTP, where another device may hold the
-	// address, and the checks after the reads are not asked again), otherwise for the address, over HTTP, with every
-	// check after the reads asked again there (#662). A device without a stored MAC sends nothing here: HTTP.
-	tctx, trace := transport.WithTrace(ctx)
-	if err := a.svc.Prober.VerifyRead(tctx, d); err != nil { // fail closed: only the stored device fills these caches
+	// Through the router: over HTTP the check would refuse every device whose HTTP API is off (#676). The rest of
+	// the refresh goes over the transport this check went over, so the check vouches for every read (verifyAndPin).
+	ctx, err := a.svc.Prober.verifyAndPin(ctx, d)
+	if err != nil { // fail closed: only the stored device fills these caches
 		return err
-	}
-	if trace.Via() == "mqtt" {
-		ctx = pinnedToMQTTCheck(ctx)
-	} else {
-		ctx = transport.WithPath(ctx, transport.HTTP)
 	}
 	if a.settings != nil {
 		if _, err := a.settings.Read(ctx, d.ID); err != nil {

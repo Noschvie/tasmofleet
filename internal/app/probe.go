@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -503,7 +504,8 @@ func (p *Prober) ReadNet(ctx context.Context, id model.DeviceID) error {
 		rp = &c
 	}
 	var out probed
-	net, err := rp.status5(ctx, t, &out)
+	tctx, check := transport.WithTrace(ctx)
+	net, err := rp.status5(tctx, t, &out) // the check, and the read of the facts it vouches for
 	if err != nil {
 		return err
 	}
@@ -516,7 +518,7 @@ func (p *Prober) ReadNet(ctx context.Context, id model.DeviceID) error {
 	}
 	net = p.withStoredWifi(d.Net, net) // kept when Status 11 gives none
 	if !net.Wired {
-		rp.status11(ctx, t, &net)
+		rp.status11(pinTo(ctx, check), t, &net) // where Status 5 was answered, never past it (#810)
 	}
 	if err := p.Devices.UpdateNet(ctx, id, store.ProbeGuard{Address: d.Address, Port: d.Port, MAC: d.MAC}, net); err != nil {
 		return err
@@ -560,27 +562,89 @@ func (p *Prober) VerifyAddress(ctx context.Context, d model.Device) error {
 	return nil
 }
 
-// VerifyRead is VerifyAddress through Reads (the router: MQTT first for a device on our broker, #456), the
-// way the reads it vouches for went: the Settings service and the policy poller read through the router, so
-// their check must too, like ReadNet's. Over HTTP it would vouch for whoever holds the address while the
-// values came from the device on the topic, and it refused every read of a device whose HTTP API is off
-// (#662). ReadBroker reads over HTTP and keeps VerifyAddress.
+// A check vouches for the transport its read used, and for no other (#810): over HTTP the answer comes from whoever
+// holds the stored address, over MQTT from whoever listens on the stored topic, and a DHCP lease handed to another
+// device makes the two different devices. The reads that go through the router may fall back from MQTT to HTTP (MQTT
+// published nothing, or nobody answered), and a check routed on its own may fall back too, so a read and its check
+// left to the router can go different ways. Every caller follows one of two forms, which are the only two ways in:
+//   - the check after the reads (VerifyRead): the caller records its reads in a transport.WithTrace and hands that
+//     trace over; the check is asked pinned to each transport that answered the reads;
+//   - the check before the reads (verifyAndPin, the data refresh; ReadNet, whose Status 5 is its check): the check is
+//     routed, and the reads are pinned to the transport that answered it (pinTo).
+
+// VerifyRead is VerifyAddress after reads through Reads (the router: MQTT first for a device on our broker, #456),
+// for the values those reads returned: the Settings service and the policy poller read through the router, so
+// their check must go the way their reads went, like ReadNet's. Over HTTP alone it would vouch for whoever holds the
+// address while the values came from the device on the topic, and it refused every read of a device whose HTTP API
+// is off (#662). read is the trace of the reads it vouches for: the check is asked pinned to each transport that
+// answered them (no fallback), so it is answered where they were (#810); a read answered over both is checked over
+// both. A transport that carried a read but answered none (MQTT published it, nobody answered, the read went on
+// over HTTP) gave no value and is not asked. Through the router a trace in which nothing was answered refuses: its
+// reads were made with another context, or brought nothing to vouch for. ReadBroker reads over HTTP and keeps
+// VerifyAddress.
 //
 // Inside a data refresh whose first check the stored device answered over MQTT (pinnedToMQTTCheck) the checks after
-// the reads are not asked again (#676): every read of that refresh is pinned to MQTT, so it reached the topic the
-// first check vouched for, and the refresh asked the same question up to three times (before the reads, after the
-// Settings read, after the policy read). Over HTTP every check stays: the answer comes from whoever holds the
-// address, and a lease handed to another device between two reads is what the checks after the reads are for (#662).
-func (p *Prober) VerifyRead(ctx context.Context, d model.Device) error {
+// reads answered over MQTT only are not asked again (#676): every read of that refresh is pinned to MQTT, so it
+// reached the topic the first check vouched for, and the refresh asked the same question up to three times (before the
+// reads, after the Settings read, after the policy read). Over HTTP every check stays: the answer comes from whoever
+// holds the address, and a lease handed to another device between two reads is what the checks after the reads are
+// for (#662).
+func (p *Prober) VerifyRead(ctx context.Context, d model.Device, read *transport.Trace) error {
+	if read == nil {
+		return errors.New("identity check: no trace of the read it vouches for") // a caller's mistake: fail closed
+	}
 	if p.Reads == nil {
+		// no router: the reads went to the address by this prober's client, which records nothing ("http")
+		if read.Via() != "http" {
+			return errors.New("identity check: the read went over MQTT and this prober has no router to ask there")
+		}
 		return p.VerifyAddress(ctx, d)
 	}
-	if checked, _ := ctx.Value(mqttCheckedKey{}).(bool); checked {
+	paths := read.Answered()
+	if len(paths) == 0 {
+		return errors.New("identity check: the trace holds no read it could vouch for") // a caller's mistake: fail closed
+	}
+	if checked, _ := ctx.Value(mqttCheckedKey{}).(bool); checked && slices.Equal(paths, []transport.Path{transport.MQTT}) {
 		return nil
 	}
 	c := *p
 	c.Client = p.Reads
-	return c.VerifyAddress(ctx, d)
+	for _, path := range paths {
+		if err := c.VerifyAddress(transport.WithPath(ctx, path), d); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// verifyAndPin asks the check before the reads, through Reads like VerifyRead, and returns ctx pinned to the
+// transport the check went over, so every read made with it is one the check vouched for (#676, #810): after an
+// answer over MQTT, MQTT for the topic (pinnedToMQTTCheck: no read falls back to HTTP, where another device may hold
+// the address, and the checks after MQTT reads are not asked again); otherwise HTTP for the address, where the checks
+// after the reads are asked again (#662). A device without a stored MAC sends nothing here: HTTP.
+func (p *Prober) verifyAndPin(ctx context.Context, d model.Device) (context.Context, error) {
+	c := *p
+	if p.Reads != nil {
+		c.Client = p.Reads
+	}
+	tctx, trace := transport.WithTrace(ctx)
+	if err := c.VerifyAddress(tctx, d); err != nil {
+		return ctx, err
+	}
+	pctx := pinTo(ctx, trace)
+	if pin, _ := transport.PathFrom(pctx); pin == transport.MQTT {
+		return pinnedToMQTTCheck(pctx), nil
+	}
+	return pctx, nil
+}
+
+// pinTo returns ctx pinned to the transport that answered the check recorded in check: MQTT when only MQTT
+// answered it, otherwise HTTP (an answer at the address, or nothing recorded: a prober without a router).
+func pinTo(ctx context.Context, check *transport.Trace) context.Context {
+	if slices.Equal(check.Answered(), []transport.Path{transport.MQTT}) {
+		return transport.WithPath(ctx, transport.MQTT)
+	}
+	return transport.WithPath(ctx, transport.HTTP)
 }
 
 type mqttCheckedKey struct{}

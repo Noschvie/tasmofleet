@@ -109,7 +109,7 @@ type policyReporter struct {
 
 	// verify (may be nil) says whether the device that answered is the stored one; a read of another device is
 	// not cached (#662).
-	verify func(ctx context.Context, d model.Device) error
+	verify func(ctx context.Context, d model.Device, read *transport.Trace) error
 
 	vals liveStore
 
@@ -424,11 +424,13 @@ func (p *policyReporter) readDevice(ctx context.Context, d model.Device) bool {
 	}
 	cctx, cancel := context.WithTimeout(ctx, liveTimeout)
 	defer cancel()
-	v, err := p.reader.ReadKeys(cctx, id, cmds)
+	rctx, read := transport.WithTrace(cctx)
+	v, err := p.reader.ReadKeys(rctx, id, cmds)
 	if p.verify != nil && len(v) > 0 {
-		// the same rule as ReadNet's; asked after the reads, which it covers. Its own variable: a read that
-		// failed half way stays a failure (false: read again soon) when the device then shows its MAC.
-		if verr := p.verify(cctx, d); verr != nil {
+		// the same rule as ReadNet's; asked after the reads, which it covers, over the transports they used (#810).
+		// Its own variable: a read that failed half way stays a failure (false: read again soon) when the device then
+		// shows its MAC.
+		if verr := p.verify(cctx, d, read); verr != nil {
 			return false
 		}
 	}
