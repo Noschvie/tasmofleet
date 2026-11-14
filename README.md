@@ -125,6 +125,14 @@ possible. How to take, schedule and restore them:
   feature: [docs/security/](docs/security/); research: [docs/research/](docs/research/)
 - [CHANGELOG](CHANGELOG.md), [ROADMAP](ROADMAP.md), [development](docs/development.md)
 
+## Community projects
+
+Unofficial projects by other people. They are not maintained or endorsed by TasmoFleet.
+
+- [tasmofleet-keycloak-theme](https://github.com/Noschvie/tasmofleet-keycloak-theme): a Keycloak
+  login theme in the TasmoFleet look (light and dark), for people who use Keycloak as their OIDC
+  provider. AGPL-3.0-or-later.
+
 ## Status
 
 **Pre-1.0, single maintainer.** It runs a home fleet of a few dozen devices every day, but breaking
