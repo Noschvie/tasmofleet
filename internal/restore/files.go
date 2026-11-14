@@ -16,6 +16,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/store"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
 // The files step of a restore and a replace (#324): the files of the backup's files archive go
@@ -49,7 +50,8 @@ type FilesPlan struct {
 	// they are on the device.
 	NotStored []backup.ManifestSkip
 	// Why says, when files exist in the backup but this restore will not write them, the reason
-	// ("files need HTTP", "the device has no file system", a damaged archive). Empty: they are written.
+	// ("files need HTTP, and the device's HTTP API does not answer", "the device has no file system", a damaged
+	// archive). Empty: they are written.
 	Why string
 	// Note says why the backup holds no files at all (its run note); empty when it has files or
 	// predates the files step.
@@ -188,10 +190,34 @@ func (pr *progress) lost(name string) {
 	pr.p.Lost = append(pr.p.Lost, name)
 }
 
+// filesVia says how the files of a restore travel: over HTTP, always (Tasmota has no file transfer over MQTT:
+// FileUpload takes firmware and settings only, docs/security/mqtt-transport.md). For a restore whose settings go over
+// MQTT (#607) an HTTP that cannot be used leaves the files out with the reason instead of failing the run; noHTTP says
+// why HTTP cannot even be asked. sameHost is the HTTP identity check (unauthenticated first) that comes before the
+// first file call of such a restore, so the stored web password goes only to a host that reports this device's MAC.
+type filesVia struct {
+	settingsOverMQTT bool
+	noHTTP           string
+	sameHost         func(context.Context) error
+}
+
+// filesGate is the Router's check whether file calls for a device go out at all (transport.Router.FilesUsable).
+type filesGate interface {
+	FilesUsable(t tasmota.Target) error
+}
+
+// Why the files of a restore over MQTT are not written; fixed sentences (error text can carry device URLs).
+const (
+	whyFilesNoAddress = "files need HTTP, and the device's address does not resolve to one IP, so only the settings are restored"
+	whyFilesNoHTTP    = "files need HTTP, and the device's HTTP API does not answer, so only the settings are restored"
+	whyFilesOtherHost = "files need HTTP, and the device at its address is not this device, so only the settings are restored"
+)
+
 // planFiles decides what the restore of backup id does with the backup's files. t is the device
 // (bare for replacement hardware), version reads its firmware (asked only when needed). A device that cannot be asked is an
-// error (the caller must not guess); everything else that stops the files is a reason in Why.
-func (m *Manager) planFiles(ctx context.Context, id model.BackupID, t tasmota.Target, version func(context.Context) (string, error), viaMQTT bool) (FilesPlan, error) {
+// error (the caller must not guess), except for a restore whose settings go over MQTT, which then leaves the files out;
+// everything else that stops the files is a reason in Why.
+func (m *Manager) planFiles(ctx context.Context, id model.BackupID, t tasmota.Target, version func(context.Context) (string, error), via filesVia) (FilesPlan, error) {
 	if m.o.Files == nil {
 		return FilesPlan{}, nil
 	}
@@ -217,8 +243,8 @@ func (m *Manager) planFiles(ctx context.Context, id model.BackupID, t tasmota.Ta
 	if len(plan.Files) == 0 {
 		return plan, nil
 	}
-	if viaMQTT {
-		plan.Why = "files need HTTP, and this restore goes over MQTT, so only the settings are restored"
+	if via.noHTTP != "" {
+		plan.Why = via.noHTTP
 		return plan, nil
 	}
 	fs, ok := m.o.Client.(tasmota.FileSystem)
@@ -226,8 +252,27 @@ func (m *Manager) planFiles(ctx context.Context, id model.BackupID, t tasmota.Ta
 		plan.Why = "TasmoFleet has no file access to the device, so only the settings are restored"
 		return plan, nil
 	}
+	if via.sameHost != nil {
+		if g, ok := m.o.Client.(filesGate); ok && g.FilesUsable(t) != nil {
+			plan.Why = whyFilesNoHTTP // known to fail: asking would only wait for a timeout
+			return plan, nil          //nolint:nilerr // the gate says HTTP is known to fail: the files are left out with the reason
+		}
+		if err := via.sameHost(ctx); err != nil {
+			m.o.Log.Info("restore: files left out, the HTTP identity check failed", "component", "restore", "other_host", errors.Is(err, ErrIdentity))
+			plan.Why = whyFilesNoHTTP
+			if errors.Is(err, ErrIdentity) {
+				plan.Why = whyFilesOtherHost
+			}
+			return plan, nil //nolint:nilerr // over MQTT a failed HTTP check leaves the files out with the reason; the settings go on
+		}
+	}
 	info, err := fs.FSInfo(ctx, t)
 	if err != nil {
+		if via.settingsOverMQTT || errors.Is(err, transport.ErrFilesNeedHTTP) {
+			m.o.Log.Info("restore: files left out, HTTP does not answer", "component", "restore", "err", err)
+			plan.Why = whyFilesNoHTTP
+			return plan, nil
+		}
 		return FilesPlan{}, fmt.Errorf("reading the device's file system: %w", err)
 	}
 	v, err := version(ctx)
@@ -548,7 +593,7 @@ func plural(n int, one, many string) string {
 // write. confirmed is the number of files the confirmation page promised (StartOptions.ConfirmedFiles):
 // files are written only when the page showed exactly this plan. fo is never nil on success; a
 // non-nil error is the failure text that ends the job.
-func (m *Manager) filesStep(ctx context.Context, j *Job, t tasmota.Target, version func(context.Context) (string, error), viaMQTT bool, identity func() error, confirmed int) (*filesOutcome, error) {
+func (m *Manager) filesStep(ctx context.Context, j *Job, t tasmota.Target, version func(context.Context) (string, error), via filesVia, identity func() error, confirmed int) (*filesOutcome, error) {
 	if confirmed == 0 {
 		// A settings-only restore never asks the device about its files: that check must not be able
 		// to fail it. Only the stored backup is read, to say what is left out.
@@ -557,7 +602,7 @@ func (m *Manager) filesStep(ctx context.Context, j *Job, t tasmota.Target, versi
 		m.track(j.ID, FilesPlan{NotStored: out.plan.NotStored}).setSummary(out.summary)
 		return out, nil
 	}
-	plan, err := m.planFiles(ctx, j.BackupID, t, version, viaMQTT)
+	plan, err := m.planFiles(ctx, j.BackupID, t, version, via)
 	if err != nil {
 		return nil, &failedFiles{failFilesNone + err.Error()}
 	}
@@ -575,6 +620,16 @@ func (m *Manager) filesStep(ctx context.Context, j *Job, t tasmota.Target, versi
 	m.step(ctx, j, store.RestoreFiles, "checking the device before writing files")
 	// The address may have changed hands since Start: the files of this device must never go to another one.
 	if err := identity(); err != nil {
+		if via.settingsOverMQTT {
+			// The settings reach the device by its topic; only the files would have gone to the address.
+			plan.Why = whyFilesNoHTTP
+			if errors.Is(err, ErrIdentity) {
+				plan.Why = whyFilesOtherHost
+			}
+			out := &filesOutcome{plan: plan, summary: notWrittenSummary(plan)}
+			m.track(j.ID, FilesPlan{NotStored: plan.NotStored}).setSummary(out.summary)
+			return out, nil
+		}
 		return nil, &failedFiles{failFilesNone + err.Error()}
 	}
 	return m.writeFiles(ctx, j, t, plan)
@@ -640,7 +695,7 @@ func (m *Manager) dumpFiles(ctx context.Context, dumps []model.Backup) map[model
 		case rf.Archive != nil:
 			out[b.ID] = plural(len(rf.Manifest.Files), "file", "files")
 		case rf.Note == "they need HTTP":
-			out[b.ID] = "no files (went over MQTT)"
+			out[b.ID] = "no files (HTTP did not answer)"
 		case rf.Note != "":
 			out[b.ID] = "no files (" + rf.Note + ")"
 		}

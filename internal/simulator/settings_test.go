@@ -301,6 +301,25 @@ func TestSleepAndLedStateReplyLikeV16(t *testing.T) {
 	}
 }
 
+// Why (#607): a restore over MQTT compares the backup's prefixes, client ID and TLS fingerprints with the device's before it uploads; a
+// simulator that did not answer them would make every such comparison fail closed, so no test could show a restore
+// that leaves the MQTT connection alone. Tasmota v16 answers a bare Prefix with all three (ResponseCmndAll) and
+// MqttClient with the stored, unexpanded text, MqttFingerprint<n> with 20 hex bytes separated by blanks.
+func TestPrefixAndMqttClientReplyLikeV16(t *testing.T) {
+	t.Parallel()
+	d := newSettingsDevice(t)
+	for cmnd, want := range map[string]string{
+		"Prefix":           `{"Prefix1":"cmnd","Prefix2":"stat","Prefix3":"tele"}`,
+		"Prefix2":          `{"Prefix2":"stat"}`,
+		"MqttClient":       `{"MqttClient":"DVES_%06X"}`,
+		"MqttFingerprint2": `{"MqttFingerprint2":"DA 39 A3 EE 5E 6B 4B 0D 32 55 BF EF 95 60 18 90 AF D8 07 09"}`,
+	} {
+		if got := cm(t, d, cmnd); got != want {
+			t.Errorf("%s -> %s, want %s", cmnd, got, want)
+		}
+	}
+}
+
 // Why: Latitude/Longitude (xdrv_09_timers.ino) store (int)(float32 * 1000000) and answer
 // (float32)n / 1000000 with six decimals as an unquoted number, so a typed value does not read
 // back as typed. A simulator that echoed the input would hide that from every policy test.

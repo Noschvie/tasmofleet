@@ -20,6 +20,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/store"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
 // Errors returned by PreviewReplace and StartReplace (besides the ones of
@@ -73,7 +74,7 @@ type ReplacePreview struct {
 	Carries Carries
 	// Files is what the replacement does with the backup's files (#324).
 	Files FilesPlan
-	// DumpFiles says per dump what it holds of the device's files ("6 files", "no files (went over MQTT)").
+	// DumpFiles says per dump what it holds of the device's files ("6 files", "no files (HTTP did not answer)").
 	DumpFiles map[model.BackupID]string
 	// Major and Family need the admin's tick (StartOptions), Detail says why.
 	Major, Family bool
@@ -240,7 +241,7 @@ func (m *Manager) describeCandidate(ctx context.Context, ip netip.Addr, port int
 		return d, fmt.Errorf("%w: %w", ErrCandidateUnusable, err)
 	}
 	d.Address, d.Port = ip.String(), port
-	if normMAC(d.MAC) == "" || d.Identity.Family == model.ChipUnknown || d.Identity.Version == "" {
+	if transport.NormMAC(d.MAC) == "" || d.Identity.Family == model.ChipUnknown || d.Identity.Version == "" {
 		return d, ErrCandidateUnusable
 	}
 	return d, nil
@@ -304,8 +305,8 @@ func (m *Manager) checkOldSilent(ctx context.Context, p *replacePlan) error {
 		mac, err := m.liveMAC(ctx, probe)
 		switch {
 		case err == nil:
-			if !slices.ContainsFunc(oldMACs, func(s string) bool { return normMAC(s) != "" }) ||
-				slices.ContainsFunc(oldMACs, func(s string) bool { return normMAC(s) == mac }) {
+			if !slices.ContainsFunc(oldMACs, func(s string) bool { return transport.NormMAC(s) != "" }) ||
+				slices.ContainsFunc(oldMACs, func(s string) bool { return transport.NormMAC(s) == mac }) {
 				return ErrOldReachable
 			}
 		case silent(err):
@@ -431,7 +432,7 @@ func (m *Manager) StartReplace(ctx context.Context, actor string, req ReplaceReq
 	if need := (OverrideError{Major: p.need.Major && !opt.AllowMajorChange, Family: p.need.Family && !opt.AllowUnknownFamily, Detail: p.need.Detail}); need.Major || need.Family {
 		return Job{}, &need
 	}
-	mac := normMAC(p.cand.MAC)
+	mac := transport.NormMAC(p.cand.MAC)
 	if !m.claim(mac) {
 		return Job{}, ErrBusy
 	}
@@ -525,12 +526,12 @@ func (m *Manager) runReplace(ctx context.Context, j Job, p *replacePlan, confirm
 
 	stillThere := func() error {
 		// The address may have changed hands since the preview (DHCP).
-		if got, err := m.liveMAC(ctx, bare); err != nil || got != normMAC(p.cand.MAC) {
+		if got, err := m.liveMAC(ctx, bare); err != nil || got != transport.NormMAC(p.cand.MAC) {
 			return errors.New("the device at the address is no longer the replacement device you chose")
 		}
 		return nil
 	}
-	fo, ferr := m.filesStep(ctx, &j, target, func(context.Context) (string, error) { return p.cand.Identity.Version, nil }, false, stillThere, confirmedFiles)
+	fo, ferr := m.filesStep(ctx, &j, target, func(context.Context) (string, error) { return p.cand.Identity.Version, nil }, filesVia{}, stillThere, confirmedFiles)
 	if ferr != nil {
 		var ff *failedFiles
 		text := failFilesNone + ferr.Error()
@@ -630,7 +631,7 @@ func (m *Manager) seen(ctx context.Context, ep model.Device) (mac string, boots 
 			return "", 0, 0, err
 		}
 		up, err := m.uptime(ctx, tasmota.TargetFor(t))
-		return normMAC(s.StatusNET.Mac), n, up, err
+		return transport.NormMAC(s.StatusNET.Mac), n, up, err
 	}
 	return "", 0, 0, lastErr
 }
@@ -651,7 +652,7 @@ func (m *Manager) waitReplaced(ctx context.Context, p *replacePlan, before int, 
 	if p.oldIP.IsValid() && (p.oldIP.String() != here.Address || portOf(p.old.Port) != portOf(here.Port)) {
 		others = append(others, creds(p.oldIP.String(), p.old.Port))
 	}
-	want := normMAC(p.cand.MAC)
+	want := transport.NormMAC(p.cand.MAC)
 	deadline := m.o.Clock.Now().Add(m.o.RebootTimeout)
 	for {
 		select {
@@ -678,7 +679,7 @@ func (m *Manager) waitReplaced(ctx context.Context, p *replacePlan, before int, 
 // Its file system is read without credentials, like everything else on a device not yet in the inventory.
 func (m *Manager) replaceFilesPlan(ctx context.Context, p *replacePlan) FilesPlan {
 	t := tasmota.TargetFor(model.Device{Address: p.cand.Address, Port: p.cand.Port})
-	plan, err := m.planFiles(ctx, p.b.ID, t, func(context.Context) (string, error) { return p.cand.Identity.Version, nil }, false)
+	plan, err := m.planFiles(ctx, p.b.ID, t, func(context.Context) (string, error) { return p.cand.Identity.Version, nil }, filesVia{})
 	if err != nil {
 		return FilesPlan{Files: plan.Files, Why: "the replacement device's file system could not be read right now, so the files are not copied (only the settings)"}
 	}

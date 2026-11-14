@@ -150,6 +150,18 @@ func (d *simDevice) settingFrom(kv map[string]string, key string) string {
 		return num(`"MqttUser":"([^"]*)"`, "")
 	case "mqttpassword":
 		return ""
+	case "prefix1":
+		return "cmnd" // SUB_PREFIX (my_user_config.h)
+	case "prefix2":
+		return "stat" // PUB_PREFIX
+	case "prefix3":
+		return "tele" // PUB_PREFIX2
+	case "mqttclient":
+		return "DVES_%06X" // MQTT_CLIENT_ID
+	case "mqttfingerprint1":
+		return "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00" // MQTT_FINGERPRINT1 (learn)
+	case "mqttfingerprint2":
+		return "DA 39 A3 EE 5E 6B 4B 0D 32 55 BF EF 95 60 18 90 AF D8 07 09" // MQTT_FINGERPRINT2 (sha1 of "")
 	case "ntpserver1":
 		return "pool.ntp.org"
 	case "ntpserver2":
@@ -386,6 +398,38 @@ func (d *simDevice) settingCmdLocked(base string, idx int, hasIdx bool, data str
 		} else {
 			body = []byte(`{"` + names[base] + `":` + jsonString(d.get(base)) + `}`)
 		}
+	case "prefix":
+		// Tasmota CmndPrefix (xdrv_02_9_mqtt.ino, 16.0.0 lines 1987-2001): without an index all three prefixes are
+		// answered (ResponseCmndAll), with index 1..3 the one. Only queries are simulated: the simulated device keeps
+		// cmnd/stat/tele on the broker, so a write is answered as an unknown command instead of pretending to move it.
+		if data != "" || (hasIdx && (idx < 1 || idx > 3)) {
+			return nil, false
+		}
+		if !hasIdx {
+			body = []byte(`{"Prefix1":` + jsonString(d.get("prefix1")) + `,"Prefix2":` + jsonString(d.get("prefix2")) +
+				`,"Prefix3":` + jsonString(d.get("prefix3")) + `}`)
+			break
+		}
+		n := strconv.Itoa(idx)
+		body = []byte(`{"Prefix` + n + `":` + jsonString(d.get("prefix"+n)) + `}`)
+	case "mqttclient":
+		// Tasmota CmndMqttClient (xdrv_02_9_mqtt.ino, 16.0.0 lines 1964-1970) answers the stored text, the
+		// unexpanded client ID ("DVES_%06X"). Query only, like Prefix.
+		if data != "" {
+			return nil, false
+		}
+		body = []byte(`{"MqttClient":` + jsonString(d.get("mqttclient")) + `}`)
+	case "mqttfingerprint":
+		// Tasmota CmndMqttFingerprint (xdrv_02_9_mqtt.ino, 16.0.0 lines 1859-1876, builds with USE_MQTT_TLS): index
+		// 1..2 (bare is 1), answered as 20 hex bytes separated by blanks (ToHex_P). Query only, like Prefix.
+		if !hasIdx {
+			idx = 1
+		}
+		if data != "" || idx < 1 || idx > 2 {
+			return nil, false
+		}
+		n := strconv.Itoa(idx)
+		body = []byte(`{"MqttFingerprint` + n + `":` + jsonString(d.get("mqttfingerprint"+n)) + `}`)
 	case "mqttpassword":
 		if data != "" {
 			d.set("mqttpassword", data)

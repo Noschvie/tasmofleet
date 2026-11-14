@@ -40,7 +40,8 @@ func (a *runtime) setupRestore() error {
 func (a *runtime) restoreOptions() restore.Options {
 	return restore.Options{
 		Devices: a.svc.Store, Backups: a.backups, Files: a.backups, Store: a.svc.Store, Client: a.restoreClient(a.svc.Client),
-		Uploader: a.restoreUploader(a.svc.Router), PathFor: a.restorePath, BrokerPassword: func() string { return a.svc.Sys.Snapshot().MQTTPassword }, Audit: a.svc.Audit, Log: a.log, Context: a.bgContext,
+		Uploader: a.restoreUploader(a.svc.Router), PathFor: a.restorePath, MarkMQTTConnChanged: a.markMQTTConnChanged,
+		BrokerPassword: func() string { return a.svc.Sys.Snapshot().MQTTPassword }, Audit: a.svc.Audit, Log: a.log, Context: a.bgContext,
 		Locks: a.deviceLocks(), Jobs: a.svc.Store,
 		Acquire:  deviceGuard{locks: a.deviceLocks()}.acquire, // a person's operation: waits for the background read (#670)
 		Hardware: a.restoreHardware(a.svc.Store), Describe: a.svc.Prober.Describe,
@@ -59,6 +60,15 @@ func (a *runtime) restorePath(ctx context.Context, d model.Device) (transport.Pa
 	}
 	p := transport.Choose(f)
 	return p.Restore, p.Reason(transport.ActRestore)
+}
+
+// markMQTTConnChanged marks a device whose MQTT connection a restore over MQTT just changed while HTTP answered: the
+// router then sends its next commands over HTTP while HTTP works (#607, as after such a write, #605 T10).
+func (a *runtime) markMQTTConnChanged(id model.DeviceID) {
+	if a.svc.Router == nil {
+		return
+	}
+	a.svc.Router.MQTTConnChanged().Fail(id, transport.HTTPFailUnreachable)
 }
 
 // deviceLocks is the per-device operation lock set. Restore uses it now; OTA,

@@ -835,10 +835,11 @@ func mqttSettingsChanged(now, d model.Device) bool {
 	return now.Topic != d.Topic || now.GroupTopic != d.GroupTopic || now.FullTopic != d.FullTopic || now.MQTT != d.MQTT
 }
 
-// DownloadConfig reads the settings dump over HTTP (/dl), or over MQTT (FileDownload, #257) when
-// HTTP is known to fail, the device is usable over MQTT and its MqttPassword is set and not refused
-// (Choose: Paths.Backup). A job that pinned its path is never rerouted. A transfer that started over
-// MQTT never falls back to HTTP: the caller sees its error.
+// DownloadConfig reads the settings dump over MQTT first (FileDownload, #257, #607) when the device is usable there
+// for a transfer (Choose: Paths.Backup), also while HTTP works; else over HTTP (/dl). A job that pinned its path is
+// never rerouted. A transfer that published anything over MQTT never moves to HTTP (the caller sees its error); one
+// that provably published nothing goes over HTTP once while HTTP is not failing, as a write does (T2). An HTTP
+// request that provably never left gives MQTT the same chance (D4).
 func (r *Router) DownloadConfig(ctx context.Context, t tasmota.Target) ([]byte, error) {
 	id := t.DeviceID()
 	if id == 0 {
@@ -850,31 +851,52 @@ func (r *Router) DownloadConfig(ctx context.Context, t tasmota.Target) ([]byte, 
 		}
 		return r.pinnedDownload(ctx, id)
 	}
-	if r.mqttDoer() == nil || r.o.Facts.HTTPState(id).State != HTTPFailing {
-		raw, err := r.httpDownload(ctx, t)
-		if err == nil || !tasmota.NotSent(err) || r.mqttDoer() == nil {
-			return raw, err
-		}
-		// HTTP proved that nothing was sent: the same chance for MQTT as a command gets (D4).
-		d, f, p, derr := r.decide(ctx, id)
-		if derr != nil {
-			return nil, err
-		}
-		if p.Backup == MQTT {
-			r.o.Log.Info("transport: HTTP did not send, backing up over MQTT", "device", int64(d.ID))
-			return r.mqttDownload(ctx, d)
-		}
-		return nil, r.explainBackup(err, f, p)
+	if r.mqttDoer() == nil {
+		return r.httpDownload(ctx, t)
 	}
 	d, f, p, err := r.decide(ctx, id)
 	if err != nil {
-		return r.httpDownload(ctx, t)
+		return r.httpDownload(ctx, t) // no judgement possible: the established path
 	}
 	if p.Backup == MQTT {
+		data, err := r.mqttDownload(ctx, d)
+		if errors.Is(err, tasmota.ErrTimeout) && ctx.Err() == nil && !httpFailing(f) {
+			// Never moved to HTTP within this run (the FileDownload published), but the device's answers are not where
+			// TasmoFleet listens, as after an unanswered read or write: its next actions go over HTTP for a while.
+			r.unanswered.Fail(id, HTTPFailUnreachable)
+			r.o.Log.Info("transport: MQTT backup got no answer, the device's next actions go over HTTP for a while", "device", int64(id))
+		}
+		if err == nil || !downloadPublishedNothing(err) || httpFailing(f) {
+			return data, err
+		}
+		r.o.Log.Info("transport: MQTT did not publish the backup, using HTTP", "device", int64(d.ID))
+		return r.httpDownload(ctx, t)
+	}
+	raw, err := r.httpDownload(ctx, t)
+	if err == nil || !tasmota.NotSent(err) {
+		return raw, r.explainBackup(err, f, p)
+	}
+	// HTTP proved that nothing was sent: the same chance for MQTT as a command gets (D4).
+	d, f, p, derr := r.decide(ctx, id)
+	if derr != nil {
+		return nil, err
+	}
+	if p.Backup == MQTT {
+		r.o.Log.Info("transport: HTTP did not send, backing up over MQTT", "device", int64(d.ID))
 		return r.mqttDownload(ctx, d)
 	}
-	raw, herr := r.httpDownload(ctx, t)
-	return raw, r.explainBackup(herr, f, p)
+	return nil, r.explainBackup(err, f, p)
+}
+
+// downloadPublishedNothing reports a backup over MQTT that provably put nothing on the broker: refused before the
+// first message, or MQTT not reachable. Anything a FileDownload published (mqttcmd.ErrPublished, an attempted
+// refusal, a timeout) does not count.
+func downloadPublishedNothing(err error) bool {
+	var b *BackupBlockedError
+	if errors.As(err, &b) && b.Attempted {
+		return false
+	}
+	return notPublished(err) && !errors.Is(err, mqttcmd.ErrPublished)
 }
 
 func (r *Router) httpDownload(ctx context.Context, t tasmota.Target) ([]byte, error) {
@@ -941,7 +963,7 @@ func (r *Router) mqttDownload(ctx context.Context, d model.Device) ([]byte, erro
 		return nil, &BackupBlockedError{Err: fmt.Errorf("%w: a backup over MQTT is not possible", tasmota.ErrUnreachable), Reason: "a backup over MQTT is not possible: " + why}
 	}
 	data, err := dl.Download(ctx, now, pw)
-	if err == nil || !notPublished(err) {
+	if err == nil || !notPublished(err) || errors.Is(err, mqttcmd.ErrPublished) {
 		noteTrace(ctx, MQTT)
 	}
 	if errors.Is(err, mqttcmd.ErrRefused) { // nothing was sent: say why, in our own words, never the error text

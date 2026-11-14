@@ -19,6 +19,7 @@ type dumpPathRig struct {
 	mu         sync.Mutex
 	dev        model.Device
 	httpFails  bool // HTTP is known to fail: the dump goes over MQTT (FileDownload)
+	noPassword bool // no MQTT password: MQTT cannot carry the dump, HTTP (/dl) does
 	http, mqtt []string
 }
 
@@ -86,24 +87,33 @@ func (f *dumpPathFacts) FactsFor(_ context.Context, d model.Device) (transport.F
 	return transport.Facts{Now: now, HTTP: f.HTTPState(d.ID), MQTT: transport.MQTTFacts{
 		BusConnected: true, Ours: true, Topic: d.Topic, TopicExclusive: true, LWTOnline: true,
 		GroupTopic: "tasmotas", GroupTopicReadAt: now, LastProbeAt: now.Add(-time.Hour),
-	}, Password: transport.Password{Mode: model.MQTTPasswordOwn}}, nil
+	}, Password: f.password()}, nil
 }
 
-// Why: a backup run never mixes transports. Since reads go MQTT first (#456 A), the status snapshot
+func (f *dumpPathFacts) password() transport.Password {
+	if f.noPassword {
+		return transport.Password{Mode: model.MQTTPasswordNone}
+	}
+	return transport.Password{Mode: model.MQTTPasswordOwn}
+}
+
+// Why: the dump and the snapshot of a backup run never mix transports. Since reads go MQTT first (#456 A), the status snapshot
 // would be read over MQTT right after a dump over HTTP (and the audit "via" would say http+mqtt);
-// backups keep their order until stage 2 (457-C1). The snapshot follows the dump: HTTP after an HTTP
-// dump, MQTT after a dump that HTTP could not carry.
+// the snapshot follows the dump: HTTP after an HTTP dump (MQTT cannot carry it: no password), MQTT after a dump
+// over MQTT, first (#607) or because HTTP fails.
 func TestBackupSnapshotFollowsTheTransportOfTheDump(t *testing.T) {
 	for _, tc := range []struct {
-		name      string
-		httpFails bool
-		wantHTTP  bool
+		name       string
+		httpFails  bool
+		noPassword bool
+		wantHTTP   bool
 	}{
-		{"dump over HTTP: snapshot over HTTP", false, true},
-		{"dump over MQTT: snapshot over MQTT", true, false},
+		{"dump over HTTP: snapshot over HTTP", false, true, true},
+		{"dump over MQTT first: snapshot over MQTT", false, false, false},
+		{"dump over MQTT, HTTP fails: snapshot over MQTT", true, false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			g := &dumpPathRig{httpFails: tc.httpFails, dev: model.Device{
+			g := &dumpPathRig{httpFails: tc.httpFails, noPassword: tc.noPassword, dev: model.Device{
 				ID: 7, Name: "kitchen", Address: "172.31.13.28", Topic: "kitchen", MQTT: model.MQTTOurs,
 				MQTTPasswordMode: model.MQTTPasswordOwn, MQTTPassword: "fake-mqtt-pass",
 			}}

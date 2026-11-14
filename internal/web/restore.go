@@ -44,7 +44,7 @@ type confirmPage struct {
 	Refused     bool   // the live checks refuse this restore: no form
 	NeedMajor   bool   // the backup is from another firmware major version
 	NeedFamily  bool   // the chip family of the backup could not be checked
-	NeedLockout bool   // a restore over MQTT that changes the device's MQTT settings
+	NeedLockout bool   // a restore over MQTT that changes the device's MQTT settings while its HTTP API does not answer
 	MACUnknown  bool   // the inventory has no MAC: the one the device reports is recorded
 	LiveMAC     string // that MAC, shown and confirmed
 	LiveAddr    string

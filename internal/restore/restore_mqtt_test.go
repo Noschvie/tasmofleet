@@ -38,31 +38,55 @@ func (u *fakeUploader) UploadConfig(ctx context.Context, t tasmota.Target, dump 
 	u.e.cl.mu.Unlock()
 	if u.apply {
 		u.e.sim.SetConfigDump(dump)
-		if _, err := u.e.cl.Client.Command(ctx, t, "Restart 1"); err != nil {
+		// FileUpload reaches the device by its topic, not its address: the simulator stands for it.
+		if _, err := u.e.cl.Client.Command(ctx, u.e.target(), "Restart 1"); err != nil {
 			return err
 		}
 	}
 	return u.err
 }
 
-// idGuard fails every command whose target has no device ID: the Router sends such a call over raw
-// HTTP (scans and address checks), so a restore over MQTT must never make one.
-type idGuard struct{ *hookClient }
+// idGuard is the Router as a restore over MQTT sees it. A call pinned to HTTP goes to the device's HTTP API (the
+// files and the HTTP check of #607 ask it on purpose); every other call must carry a device ID, since the Router sends
+// a call without one over raw HTTP (scans and address checks) and a restore over MQTT must never make one by accident.
+// The flowEnv knobs make HTTP or MQTT silent.
+type idGuard struct {
+	*hookClient
+	e *flowEnv
+}
 
 func (g idGuard) Command(ctx context.Context, t tasmota.Target, c string) (json.RawMessage, error) {
+	if pin, _ := transport.PathFrom(ctx); pin == transport.HTTP {
+		if g.e.httpDown.Load() {
+			return nil, fmt.Errorf("%w: test: the device's HTTP API does not answer", tasmota.ErrUnreachable)
+		}
+		if mac, _ := g.e.httpMAC.Load().(string); mac != "" && c == "Status 5" {
+			return json.RawMessage(`{"StatusNET":{"Mac":"` + mac + `"}}`), nil
+		}
+		return g.hookClient.Command(ctx, t, c)
+	}
 	if t.DeviceID() == 0 {
 		return nil, errors.New("call without a device ID would go over raw HTTP: " + c)
 	}
-	return g.hookClient.Command(ctx, t, c)
+	if g.e.mqttDown.Load() {
+		return nil, fmt.Errorf("%w: test: the device is offline on MQTT", tasmota.ErrUnreachable)
+	}
+	// Over MQTT the Router finds the device by its ID (its topic), never by the address the target carries.
+	return g.hookClient.Command(ctx, g.e.target(), c)
 }
 
 // mqttManager is a restore service without a firmware base URL whose restores go over MQTT.
 func (e *flowEnv) mqttManager(t *testing.T, u *fakeUploader, path transport.Path) *Manager {
 	t.Helper()
 	m, err := New(Options{
-		Devices: e.st, Backups: e.hb, Store: e.st, Client: idGuard{e.cl}, Files: e.bk, Uploader: u,
+		Devices: e.st, Backups: e.hb, Store: e.st, Client: idGuard{e.cl, e}, Files: e.bk, Uploader: u,
 		PathFor: func(context.Context, model.Device) (transport.Path, string) {
 			return path, "over MQTT (FileUpload), because HTTP fails"
+		},
+		MarkMQTTConnChanged: func(id model.DeviceID) {
+			e.connMu.Lock()
+			defer e.connMu.Unlock()
+			e.connMarks = append(e.connMarks, id)
 		},
 		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), Hardware: e.st,
 		PollInterval: 20 * time.Millisecond, RebootTimeout: 3 * time.Second, Context: t.Context(),
@@ -72,6 +96,12 @@ func (e *flowEnv) mqttManager(t *testing.T, u *fakeUploader, path transport.Path
 	}
 	e.m = m
 	return m
+}
+
+func (e *flowEnv) marks() []model.DeviceID {
+	e.connMu.Lock()
+	defer e.connMu.Unlock()
+	return append([]model.DeviceID(nil), e.connMarks...)
 }
 
 func (e *flowEnv) cmdLog() []string {
@@ -278,13 +308,15 @@ func (d topicDecoder) Decode(_ context.Context, dmp []byte) ([]byte, error) {
 	return []byte(fmt.Sprintf(`{"header":{"data":{"hardware":"ESP82xx"}},"cfg_crc":%d,"tele_period":%d,"mqtt_topic":%q%s}`, dmp[0], dmp[1], d.topic, extra)), nil
 }
 
-// Why (H1): a restore over MQTT whose backup changes the topic (or the broker, user, password)
-// can cut TasmoFleet off from a device it reaches only over MQTT. It is refused unless the admin
-// accepts that risk; the same backup over HTTP, where the device stays reachable, is not.
+// Why (H1, #607): a restore over MQTT whose backup changes the topic (or the broker, user, password)
+// can cut TasmoFleet off from a device it reaches only over MQTT, that is while its HTTP API does not
+// answer. It is refused unless the admin accepts that risk; the same backup over HTTP, where the device
+// stays reachable, is not.
 func TestRestoreOverMQTTRefusesABackupThatChangesTheMQTTSettings(t *testing.T) {
 	e := newFlowWith(t, "15.6.0", topicDecoder{topic: "some-other-topic"})
 	a := e.dumpBackup(t, e.dumpA)
 	e.sim.SetConfigDump(e.dumpB)
+	e.httpDown.Store(true)
 	m := e.mqttManager(t, &fakeUploader{e: e, apply: true}, transport.MQTT)
 	_, err := m.Start(t.Context(), "alice", a.ID)
 	var need *OverrideError
@@ -304,6 +336,10 @@ func TestRestoreOverMQTTRefusesABackupThatChangesTheMQTTSettings(t *testing.T) {
 	}
 	if done := e.finish(t, job.ID); done.State != store.RestoreDone {
 		t.Fatalf("job: %+v", done)
+	}
+	// Why (T10): a change the person confirmed on a device HTTP did not reach marks nothing: MQTT may be the only way.
+	if got := e.marks(); len(got) != 0 {
+		t.Errorf("marked %v after a confirmed restore without HTTP", got)
 	}
 }
 
@@ -325,6 +361,7 @@ func TestRestoreOverHTTPAcceptsABackupWithAnotherTopic(t *testing.T) {
 func TestRestoreOverMQTTWithoutADecodedTwinNeedsTheLockoutConfirmation(t *testing.T) {
 	e := newFlowWith(t, "15.6.0", failingDecoder{})
 	a := e.dumpBackup(t, e.dumpA)
+	e.httpDown.Store(true)
 	m := e.mqttManager(t, &fakeUploader{e: e, apply: true}, transport.MQTT)
 	_, err := m.Start(t.Context(), "alice", a.ID)
 	var need *OverrideError

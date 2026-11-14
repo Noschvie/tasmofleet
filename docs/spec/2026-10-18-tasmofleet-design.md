@@ -480,15 +480,15 @@ The consumer (the router) computes Facts and calls Choose from the same device s
 re-checks the topic at send time (`mqttcmd`), so an edit between the decision and the publish cannot redirect
 a message.
 
-Order (reads MQTT first since #456, writes since #605; transfers and updates HTTP first: the established path,
-while MQTT makes devices HTTP cannot reach manageable, #45). HTTP "not failing" means ok or unknown.
+Order (reads MQTT first since #456, writes since #605, backups and restores since #607; updates HTTP first: the
+established path, while MQTT makes devices HTTP cannot reach manageable, #45). HTTP "not failing" means ok or unknown.
 
 | Action                      | Rule                                                                                                                                                                                                                                                                                           |
 | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Commands (reads)            | MQTT when MQTT is usable (on our broker, topic exclusive, FullTopic matches, last will Online; an unknown own GroupTopic is fine), whatever HTTP's state, except that a device whose MQTT read or write just went unanswered (`ReadsUnansweredSince`, 10 min) or whose MQTT connection the router just changed (`ConnChangedSince`, 6.6) is read over HTTP while HTTP is not failing; else HTTP when HTTP is not failing; else None. The router sends a read over HTTP once after MQTT when nothing was published, or when it was published and not answered (timeout) while the caller still waits and HTTP is not failing (that marks the device); never back to MQTT within a call, never a second HTTP request. State, a bare Gpio, Gpios and Modules stay HTTP first (their replies do not match the channel's rules). |
 | Writes                      | MQTT when MQTT is usable with a known own GroupTopic and no other device's unread (the strict rule), whatever HTTP's state, except that a device whose MQTT read or write just went unanswered or whose MQTT connection was just changed is changed over HTTP while HTTP is not failing; else HTTP when HTTP is not failing; else None. What a write carries (a secret, a change of the MQTT connection, a template) is no reason for HTTP (6.6), and Make compliant follows the same rule (#606). A write MQTT did not publish goes over HTTP once; one MQTT published and nobody answered is an unknown outcome, never resent (it marks the device like an unanswered read). The power toggle asks the same rule (#605). |
-| Backup                      | HTTP `/dl`; MQTT FileDownload when HTTP is failing and MQTT is usable with a password that is set and not refused; else None                                                                                                                                                                   |
-| Restore                     | HTTP restore upload (`GET /rs` + `POST /u2`) when HTTP is not failing; else MQTT FileUpload Type 2 (usable, password usable); else None (#430: the firmware server plays no part)                                                                                                              |
+| Backup                      | MQTT FileDownload when MQTT is usable under the strict rule with a password that is set and not refused, whatever HTTP's state (#607), with the two exceptions of writes (MQTT commands just unanswered, MQTT connection just changed: HTTP while HTTP is not failing); else HTTP `/dl` when HTTP is not failing; else None. The router sends the backup over HTTP once when the FileDownload published nothing; one that published anything never goes on over HTTP. The files archive goes over HTTP whatever carried the dump (12.1). |
+| Restore                     | MQTT FileUpload Type 2 under the backup's rule (#607); else the HTTP restore upload (`GET /rs` + `POST /u2`) when HTTP is not failing; else None (#430: the firmware server plays no part). The files of the backup go over HTTP either way (12.4). |
 | Update, pull                | DownloadHTTP (HTTP not failing, base URL set, FWReach not "no"); else DownloadMQTT (usable, FWReach not "no"); else None                                                                                                                                                                       |
 | Update, push where possible | HTTP not failing: the engine's decision (PushHTTP, PushSafeboot, or its fallback to DownloadHTTP, kept with its note). HTTP failing and MQTT usable: PushMQTT when the per-transaction "experimental" checkbox is set, the image fits and the password is usable; else DownloadMQTT; else None |
 
@@ -1041,7 +1041,7 @@ HTTP. Rules:
   HTTP: its silence is the restart, and the read-back decides). Its lines never carry a secret: policy rules
   refuse secret settings and URLs with a login (a policy is stored and shown in the clear), and `Apply` refuses
   any stored line that is not a rule's canonical command.
-- `DownloadConfig` and `RootPage` stay HTTP (the MQTT backup and identity come with their own work).
+- `DownloadConfig` goes MQTT first under Choose's backup path (#607, 5.x); `RootPage` stays HTTP.
 
 Background GroupTopic read (`internal/app/grouptopic.go`): shortly after start and after a device is
 adopted, one `Status 1` per two seconds (through the router: HTTP while it works, else the MQTT channel) for
@@ -1207,6 +1207,7 @@ The path of an update is chosen once, in the preview, which is also the prefligh
 - `stat/<t>/UPGRADE` `Failed ... connection failed` ends the stage without a second `Upgrade 1` (`ErrTextFWUnreachable`); the application records FWReach=no.
 - The job does not store the identity it probes (it is not an HTTP probe), so the device's GroupTopic read stays fresh for the writes of the job.
 - MQTT timings: reply 8 s, connection failure about 66 s after `Upgrade 1`, RebootWindow unchanged. The pre-OTA backup needs the MQTT backup (#257); without it the job fails at the backup unless the backup is switched off.
+- The pre-OTA backup of an update over HTTP is not pinned to HTTP (#607): it is a backup like any other and goes over MQTT first when the device is usable there (5.x); every other call of the job stays on the job's path.
 
 ### 9.4b Scheduled start (#603)
 
@@ -1570,8 +1571,10 @@ No migration, no store contract change and no new dependency.
    that cannot be written or indexed is logged and noted as `files_error` in the audit detail; the run
    still succeeds. Without an archive the run says why in the last sentence of the dump's
    note, `files not backed up: no filesystem | firmware older than 14.6.0 | they need HTTP | <failure>`
-   (MQTT cannot carry files: `transport.Router` forwards file calls to HTTP only, `ErrFilesNeedHTTP` for
-   a call pinned to MQTT, and a run whose calls so far all went over MQTT does not try). No migration:
+   (MQTT cannot carry files: `transport.Router` forwards file calls to HTTP only, also under a pin to MQTT, and
+   answers `ErrFilesNeedHTTP` without a request while the device's HTTP is known to fail: "they need HTTP"). After a
+   dump over MQTT (#607) the files are read only when the host at the device's address answers `Status 5` over HTTP
+   with one of the device's MACs ("the device at its address is not this device" otherwise). No migration:
    `backups.kind` is free text, and a run is still all rows with one `TakenAt`, so retention, Keep, delete
    and the orphan handling cover the archive unchanged. Order inside a run: dump, snapshot, `UfsType`,
    `UfsList` per folder (name order), one `GET /ufsd` per file.
@@ -1610,8 +1613,9 @@ other irregularity ends with `FileDownload 0` and an error, with no retry. `Erro
 password and a minimal firmware echoes it back as `{"Command":"Unknown"}`. The password per device is
 set on the edit form (admin; mode not set / broker / own; write-only, blank keeps, saving clears the
 refused mark) and stored sealed (D6). `transport.Router.DownloadConfig` uses it when `Paths.Backup` is
-MQTT (or pinned to it): own mode sends the sealed value, broker mode the live `MQTT_PASSWORD`; `Error 1` writes
-`mqtt_password_bad_at`; a started transfer never falls back to HTTP; a backup MQTT cannot carry fails with a
+MQTT (MQTT first since #607, or pinned to it): own mode sends the sealed value, broker mode the live `MQTT_PASSWORD`;
+`Error 1` writes `mqtt_password_bad_at`; a started transfer never falls back to HTTP (only one that provably
+published nothing goes over HTTP once, while HTTP is not failing); a backup neither transport can carry fails with a
 `BackupBlockedError` whose reason reaches the device page and the backup history.
 
 ### 12.2 decode-config integration
@@ -1667,9 +1671,14 @@ shows the decoded secrets. The diff/drift view redacts keys matching
   0.26.0 the HTTP restore sent `WebGetConfig` with a one-time token on the firmware listener; no
   official build has `WebGetConfig`, so that never worked and is gone (no token, no `/restore/` route,
   no `FIRMWARE_BASE_URL` needed).
-- Restore over MQTT (0.20.0, D8/D12): `transport.Choose` decides per restore (`Paths.Restore`): HTTP
-  (restore upload) while HTTP is not failing, else MQTT (FileUpload Type 2) for a device on our broker
-  with a usable MQTT password; otherwise the restore is refused with the reason. `restore.New` needs one
+- Restore over MQTT (0.20.0, D8/D12; MQTT first since #607): `transport.Choose` decides per restore
+  (`Paths.Restore`): MQTT (FileUpload Type 2) for a device usable on our broker for a transfer (the strict rule, a
+  usable MQTT password), also while HTTP works; else HTTP (restore upload) while HTTP is not failing; otherwise the
+  restore is refused with the reason. A backup that changes the device's MQTT connection (any setting a write counts
+  as a cut-off: topics, prefixes, broker, login, client ID, TLS and fingerprints, MQTT off), or cannot be compared, asks
+  the lockout question only while the device's HTTP API does not answer `Status 5` with its MAC, at the start and
+  right before the upload; after such an upload the device's next commands go over HTTP for a while, and the wait for
+  the restart also asks HTTP when the old topic is silent (restore.md R28, R36). `restore.New` needs one
   of the two (`ErrNotConfigured` when neither exists); Replace device needs the HTTP restore upload. The
   order is the same on both paths: safety backup (through the same path), identity (Status 5), the boot
   count (`Status 1`), then the upload. Over MQTT the device applies the dump only after the MD5 matched,
@@ -1684,9 +1693,12 @@ shows the decoded secrets. The diff/drift view redacts keys matching
   so the one restart of the settings restore already loads `autoexec.be` and the Berry scripts. A new step
   ("Write the files", job state `files`, step 2 of 5) sits between the safety backup and the upload; a
   backup without files, or a restore that cannot write them, passes it at once. Rules:
-  - HTTP only: Tasmota has no file transfer over MQTT. A restore routed over MQTT, a device without a flash
-    file system and firmware older than 14.6.0 put back the settings only; the confirmation page says so
-    before the person confirms (`restore.Assessment.Files.Why`), and so does the finished job.
+  - HTTP only: Tasmota has no file transfer over MQTT. A restore routed over MQTT writes the files over HTTP
+    too (#607), to the address resolved at the start, after the identity was checked there over HTTP; when HTTP
+    cannot be used (no single address, HTTP known to fail or silent, another MAC) it puts back the settings only.
+    A device without a flash file system and firmware older than 14.6.0 put back the settings only; the
+    confirmation page says so before the person confirms (`restore.Assessment.Files.Why`), and so does the
+    finished job.
     A damaged or missing archive is the same: settings only, said on the page. The device is asked
     (`UfsType`, `Ufs`, `Status 2`) only for a backup that has files.
   - Nothing on the device is deleted. Only files in the archive are written; files the device has and the
@@ -1709,7 +1721,7 @@ shows the decoded secrets. The diff/drift view redacts keys matching
     repeated in a loop, and the job counts them (put-backs included) in its summary.
   - The confirmation is bound to the plan it showed: the form carries the number of files written first
     (`files`, `StartOptions.ConfirmedFiles`); files are written only when the plan at run time has exactly
-    that many, so a page that showed no files (or MQTT) can never become a restore that writes files.
+    that many, so a page that showed no files can never become a restore that writes files.
   - A folder that does not exist on the device (a fresh replacement has no `/lib`) is provable only by the
     upload's GET (`ErrFolderNotFound`; a listing answers "Done" for it): the file is skipped with
     "folder missing on the device; create it in the device's file manager", the restore goes on. No

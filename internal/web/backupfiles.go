@@ -64,7 +64,7 @@ func filesWhyText(reason string) string {
 	case reason == "no filesystem":
 		return "settings only: this build has no filesystem"
 	case reason == "they need HTTP":
-		return "files not backed up: they need HTTP, this run went over MQTT"
+		return "files not backed up: they need HTTP, and HTTP did not answer during this run"
 	case strings.HasPrefix(reason, "firmware older than "):
 		return "settings only: " + reason + " has no file access"
 	}

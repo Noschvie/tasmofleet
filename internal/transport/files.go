@@ -8,36 +8,36 @@ import (
 	"github.com/hellwand/tasmofleet/internal/tasmota"
 )
 
-// ErrFilesNeedHTTP: the file system of a device cannot be reached over MQTT (Tasmota has no file
-// transfer there), and the call was pinned to MQTT. Nothing was sent.
+// ErrFilesNeedHTTP: the file system of a device can only be reached over HTTP (Tasmota has no file transfer over
+// MQTT: FileUpload takes only firmware and settings, FileDownload only settings), and the device's HTTP is known to
+// fail. Nothing was sent.
 var ErrFilesNeedHTTP = errors.New("files need HTTP")
-
-// MQTTOnly reports whether every call recorded in ctx's Trace so far went over MQTT, i.e. the device
-// is reached over MQTT only. False without a Trace or before any call.
-func MQTTOnly(ctx context.Context) bool {
-	t, _ := ctx.Value(keyTrace).(*Trace)
-	if t == nil {
-		return false
-	}
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	return t.mqtt && !t.http
-}
 
 var _ tasmota.FileSystem = (*Router)(nil)
 
 // fsHTTP returns the observed HTTP client as a FileSystem, or the error that says why it is none.
-// Files travel over HTTP only: a call pinned to MQTT is refused before anything is sent.
-func (r *Router) fsHTTP(ctx context.Context) (tasmota.FileSystem, error) {
-	if p, ok := PathFrom(ctx); ok && p == MQTT {
-		noteTrace(ctx, None)
-		return nil, ErrFilesNeedHTTP
+// Files travel over HTTP only, also for a backup or restore pinned to MQTT (#607): the pin keeps the dump on its
+// transport, and the files have no other. While the device's HTTP is known to fail nothing is sent (each call would
+// only wait for a timeout): ErrFilesNeedHTTP.
+func (r *Router) fsHTTP(ctx context.Context, t tasmota.Target) (tasmota.FileSystem, error) {
+	if err := r.FilesUsable(t); err != nil {
+		if errors.Is(err, ErrFilesNeedHTTP) {
+			noteTrace(ctx, None)
+		}
+		return nil, err
 	}
-	fs, ok := r.http.(tasmota.FileSystem)
-	if !ok {
-		return nil, fmt.Errorf("%w: the HTTP client has no file system access", tasmota.ErrNotImplemented)
+	return r.http.(tasmota.FileSystem), nil
+}
+
+// FilesUsable is the file calls' gate on its own: ErrFilesNeedHTTP while the HTTP of t's device is known to fail, an
+// ErrNotImplemented error when the HTTP client has no file access, nil otherwise. It sends nothing. The files of a
+// transfer over MQTT ask it before their identity question over HTTP (#607), which would be asked for nothing.
+func (r *Router) FilesUsable(t tasmota.Target) error {
+	if id := t.DeviceID(); id != 0 && r.o.Facts != nil && r.o.Facts.HTTPState(id).State == HTTPFailing {
+		return ErrFilesNeedHTTP
 	}
-	return fs, nil
+	_, err := r.http.(*observer).fs() // NewRouter, the only constructor, wraps the HTTP client in an observer
+	return err
 }
 
 func traceHTTP(ctx context.Context, err error) {
@@ -50,7 +50,7 @@ func traceHTTP(ctx context.Context, err error) {
 
 // FSInfo implements tasmota.FileSystem over HTTP.
 func (r *Router) FSInfo(ctx context.Context, t tasmota.Target) (tasmota.FSInfo, error) {
-	fs, err := r.fsHTTP(ctx)
+	fs, err := r.fsHTTP(ctx, t)
 	if err != nil {
 		return tasmota.FSInfo{}, err
 	}
@@ -61,7 +61,7 @@ func (r *Router) FSInfo(ctx context.Context, t tasmota.Target) (tasmota.FSInfo, 
 
 // ListFiles implements tasmota.FileSystem over HTTP.
 func (r *Router) ListFiles(ctx context.Context, t tasmota.Target, dir string) ([]tasmota.FileEntry, error) {
-	fs, err := r.fsHTTP(ctx)
+	fs, err := r.fsHTTP(ctx, t)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +72,7 @@ func (r *Router) ListFiles(ctx context.Context, t tasmota.Target, dir string) ([
 
 // DownloadFile implements tasmota.FileSystem over HTTP.
 func (r *Router) DownloadFile(ctx context.Context, t tasmota.Target, path string, max int64) ([]byte, error) {
-	fs, err := r.fsHTTP(ctx)
+	fs, err := r.fsHTTP(ctx, t)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +83,7 @@ func (r *Router) DownloadFile(ctx context.Context, t tasmota.Target, path string
 
 // UploadFile implements tasmota.FileSystem over HTTP.
 func (r *Router) UploadFile(ctx context.Context, t tasmota.Target, path string, data []byte) error {
-	fs, err := r.fsHTTP(ctx)
+	fs, err := r.fsHTTP(ctx, t)
 	if err != nil {
 		return err
 	}

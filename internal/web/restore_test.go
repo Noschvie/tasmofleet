@@ -551,13 +551,35 @@ func TestRestoreConfirmNamesTheMQTTLockout(t *testing.T) {
 			t.Errorf("missing %q", want)
 		}
 	}
-	if !strings.Contains(body, "which TasmoFleet reaches only over MQTT, and TasmoFleet may lose it") {
+	if !strings.Contains(body, "so TasmoFleet reaches it only over MQTT and may lose it") {
 		t.Error("the acknowledgement must name the risk")
 	}
 	rs.opts = nil
 	e.do(t, "POST", "/backups/1/restore", "admin", url.Values{"confirm": {"1"}, "lockout_ok": {"1"}})
 	if len(rs.opts) != 1 || !rs.opts[0].AllowMQTTLockout {
 		t.Errorf("options %+v", rs.opts)
+	}
+}
+
+// Why (#607, the product owner's rule of 2026-11-14): a restore goes over MQTT first, and the configuration it carries
+// holds the Wi-Fi, MQTT and web passwords. The page says what that means before the confirmation: the broker delivers
+// it to every client subscribed to the device's topics unless an ACL prevents that, and the files, which MQTT cannot
+// carry, go over plain HTTP. The lockout acknowledgement says that HTTP does not answer, since it is asked only then.
+func TestRestoreConfirmOverMQTTSaysWhatCrossesTheBroker(t *testing.T) {
+	e, _, rs := newDiffEnv(t)
+	a := filesAssess()
+	a.ViaMQTT, a.PathNote = true, "over MQTT first (FileUpload)"
+	rs.assess = a
+	_, body := e.do(t, "GET", "/backups/1/restore", "admin", nil)
+	for _, want := range []string{"travels over your MQTT broker", "every client subscribed to this device", "broker ACL", "Its files go over plain HTTP", "Files written first"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %q", want)
+		}
+	}
+	rs.assess = restore.Assessment{ViaMQTT: true, PathNote: "over MQTT (FileUpload)", Lockout: true, Detail: "this backup changes Topic; the device's HTTP API does not answer, so TasmoFleet reaches the device only over MQTT and may lose it"}
+	_, body = e.do(t, "GET", "/backups/1/restore", "admin", nil)
+	if !strings.Contains(body, "whose HTTP API does not answer") || strings.Contains(body, "Its files go over plain HTTP") {
+		t.Errorf("the acknowledgement must say that HTTP does not answer, and no file goes over HTTP without files:\n%s", body)
 	}
 }
 
@@ -597,10 +619,10 @@ func TestRestoreConfirmShowsTheFilesThatAreWrittenFirst(t *testing.T) {
 func TestRestoreConfirmSaysWhenTheFilesAreNotRestored(t *testing.T) {
 	e, _, rs := newDiffEnv(t)
 	a := filesAssess()
-	a.Files.Why = "files need HTTP, and this restore goes over MQTT, so only the settings are restored"
+	a.Files.Why = "files need HTTP, and the device's HTTP API does not answer, so only the settings are restored"
 	rs.assess = a
 	_, body := e.do(t, "GET", "/backups/1/restore", "admin", nil)
-	if !strings.Contains(body, "Files need HTTP, and this restore goes over MQTT") || !strings.Contains(body, "not restored") {
+	if !strings.Contains(body, "Files need HTTP, and the device&#39;s HTTP API does not answer") || !strings.Contains(body, "not restored") {
 		t.Errorf("the reason is missing:\n%s", body)
 	}
 	if strings.Contains(body, "are written (files of the same name") || strings.Contains(body, "Files written first") {
@@ -690,7 +712,7 @@ func TestRestoreConfirmationIsBoundToTheShownFilePlan(t *testing.T) {
 		t.Errorf("options: %+v", rs.opts)
 	}
 	a := filesAssess()
-	a.Files.Why = "files need HTTP, and this restore goes over MQTT, so only the settings are restored"
+	a.Files.Why = "files need HTTP, and the device's HTTP API does not answer, so only the settings are restored"
 	rs.assess = a
 	_, body = e.do(t, "GET", "/backups/1/restore", "admin", nil)
 	if !strings.Contains(body, `name="files" value="0"`) {

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 	"time"
 
 	"github.com/hellwand/tasmofleet/internal/model"
@@ -117,18 +116,14 @@ func (r *Router) UploadConfig(ctx context.Context, t tasmota.Target, dump []byte
 	return err
 }
 
-func normMAC(s string) string {
-	return strings.NewReplacer(":", "", "-", "", ".", "").Replace(strings.ToLower(strings.TrimSpace(s)))
-}
-
 // macAmong reports whether mac is one of set (separators and case do not matter); an empty mac never matches.
 func macAmong(mac string, set []string) bool {
-	n := normMAC(mac)
+	n := NormMAC(mac)
 	if n == "" {
 		return false
 	}
 	for _, m := range set {
-		if normMAC(m) == n {
+		if NormMAC(m) == n {
 			return true
 		}
 	}

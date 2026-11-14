@@ -509,7 +509,7 @@ func (v fleetView) AriaSort(col string) string {
 
 // FootNote is the line under the table.
 func (v fleetView) FootNote() string {
-	return fmt.Sprintf("%d of %d devices. Files: counted from the newest backup · Settings only (no file system on the device) · Needs HTTP (the run went over MQTT).", len(v.Rows), v.Total)
+	return fmt.Sprintf("%d of %d devices. Files: counted from the newest backup · Settings only (no file system on the device) · Needs HTTP (HTTP did not answer during the run).", len(v.Rows), v.Total)
 }
 
 // AllTitle explains what "Back up all now" leaves out.

@@ -56,3 +56,43 @@ test("a change and a switch of a device on TasmoFleet's broker go over MQTT firs
   await expect(detail("TelePeriod 130").filter({ hasText: /via\W+http/ })).toHaveCount(0);
   await expect(detail('"relay"').filter({ hasText: /via\W+mqtt/ }).first()).toBeAttached();
 });
+
+// #607: backups and restores go over MQTT first too, while HTTP works, once the device's MQTT password is known (a
+// transfer carries it). The restored backup cannot be compared with the device's MQTT settings here (no decoder), which
+// over MQTT is a possible change of the MQTT connection: HTTP answers, so no lockout question is asked.
+test("a backup and a restore of a device on TasmoFleet's broker go over MQTT first while HTTP works", { tag: "@core" }, async ({ page }) => {
+  test.setTimeout(300_000);
+  // lamp-1m has no MqttPassword, and a transfer over MQTT needs one: set it on the simulator directly, the way a person
+  // would have configured the device, so TasmoFleet's own MQTT memory is not touched.
+  const set = await page.request.get(`http://${env.devices["lamp-1m"].addr}/cm?cmnd=${encodeURIComponent("MqttPassword devenv-fake-mqtt-password")}`);
+  expect(set.ok()).toBeTruthy();
+  await page.setExtraHTTPHeaders(admin);
+  await page.goto(app.url + "/devices/1/edit");
+  await page.getByLabel("MQTT password source").selectOption("own");
+  await page.getByLabel("Own MQTT password").fill("devenv-fake-mqtt-password");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  // MQTT first, not MQTT because HTTP fails (the simulator may restart after the password change): wait for that.
+  await expect(async () => {
+    await page.goto(app.url + "/devices/1");
+    await expect(page.locator("#devpaths-actions")).toContainText(/MQTT first \(FileDownload/, { timeout: 2_000 });
+  }).toPass({ timeout: 120_000, intervals: [3_000] });
+  await expect(page.locator("#devpaths-actions")).toContainText(/MQTT first \(FileUpload/);
+  await page.getByRole("button", { name: "Back up", exact: true }).click();
+  await expect(page.getByText("Backup taken.")).toBeVisible({ timeout: 30_000 });
+
+  await page.goto(app.url + "/devices/1/backups");
+  await page.getByRole("link", { name: "Restore…" }).first().click();
+  await expect(page.locator(".rs-path")).toContainText("MQTT first");
+  await expect(page.locator(".rs-cred")).toContainText("broker ACL");
+  await expect(page.locator('input[name="lockout_ok"]')).toHaveCount(0);
+  await page.getByLabel(/I understand/).check();
+  await page.getByRole("button", { name: "Restore and restart" }).click();
+  await expect(page).toHaveURL(/\/restores\/\d+$/);
+  await expect(page.locator("#restore-status")).toContainText("Restore finished.", { timeout: 180_000 });
+  await expect(page.locator("#restore-status")).toContainText("uploaded over MQTT");
+
+  await page.goto(app.url + "/audit");
+  const detail = (re: RegExp) => page.locator("table.audittable tr.detail-row").filter({ hasText: re });
+  // the dump and its snapshot over MQTT; the files step asks HTTP (Tasmota has no file transfer over MQTT): "http+mqtt"
+  await expect(detail(/trigger\W+manual/).filter({ hasText: /via\W+(http\+)?mqtt/ })).toHaveCount(1);
+});

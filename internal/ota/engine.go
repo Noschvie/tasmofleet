@@ -1057,7 +1057,12 @@ func (e *Engine) apply(ctx context.Context, j model.Job, ev Event) (model.Job, [
 
 // exec performs one action and turns its result into an event.
 func (e *Engine) exec(ctx context.Context, j model.Job, a Action) Event {
-	ctx = pinned(ctx, j) // every call below, also the ones with their own timeout, stays on the job's path
+	if a.Kind != ActBackup || j.Transport == model.TransportMQTT {
+		// Every call below, also the ones with their own timeout, stays on the job's path. The backup of an update
+		// over HTTP is a backup like any other (#607): it goes over MQTT first when the device is usable there, and
+		// the router never moves it to the other transport once it published. Over MQTT HTTP is not usable for it.
+		ctx = pinned(ctx, j)
+	}
 	cfg := e.machine()
 	d, err := e.devices.GetDevice(ctx, j.DeviceID)
 	if err != nil {

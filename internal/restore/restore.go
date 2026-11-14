@@ -1,9 +1,10 @@
 // Package restore puts a stored config dump (.dmp) back onto a device.
 //
-// Two ways reach the device (spec §12.4). Over HTTP tasmofleet does what the web UI's "Restore
-// configuration" does: GET /rs, then the multipart POST of the dump to /u2 (#430; official builds
-// have no WebGetConfig, so the device cannot fetch the dump itself). Over MQTT (a device HTTP
-// cannot reach) it pushes the dump with FileUpload Type 2. Neither needs the firmware listener.
+// Two ways reach the device (spec §12.4). Over MQTT first (#607: a device usable on TasmoFleet's broker for a
+// transfer) it pushes the dump with FileUpload Type 2. Otherwise over HTTP it does what the web UI's "Restore
+// configuration" does: GET /rs, then the multipart POST of the dump to /u2 (#430; official builds have no
+// WebGetConfig, so the device cannot fetch the dump itself). The files of a backup go over HTTP either way (Tasmota
+// has no file transfer over MQTT). Neither needs the firmware listener.
 //
 // A restore is: automatic backup of the current config, identity check, the upload, wait for the
 // restart, fresh backup, diff against the restored backup.
@@ -49,7 +50,7 @@ type OverrideError struct {
 	Major  bool // firmware major version differs
 	Family bool // chip family of the backup could not be checked
 	// Lockout: a restore over MQTT whose backup changes the device's MQTT settings (or cannot be
-	// compared), which could cut TasmoFleet off from a device it reaches only over MQTT.
+	// compared) while the device's HTTP API does not answer, which could cut TasmoFleet off from it.
 	Lockout bool
 	// MAC is set when the device has no stored MAC and the admin has not yet
 	// confirmed the one it reports (StartOptions.ExpectMAC).
@@ -63,14 +64,14 @@ func (e *OverrideError) Error() string { return "restore: confirmation needed: "
 type StartOptions struct {
 	AllowMajorChange   bool
 	AllowUnknownFamily bool
-	AllowMQTTLockout   bool // accept the MQTT lockout risk (restore over MQTT only)
+	AllowMQTTLockout   bool // accept the MQTT lockout risk (restore over MQTT while HTTP does not answer)
 	// ExpectMAC is the MAC the admin saw and confirmed for a device that has
 	// no stored MAC (trust on first use). The live MAC must still be this one
 	// when the restore starts, or it is refused.
 	ExpectMAC string
 	// ConfirmedFiles is the number of files the confirmation page said the restore writes first. Files
-	// are written only when the plan at run time has exactly that many (a page that showed none, or
-	// an MQTT restore, cannot become a restore that writes files); 0 restores the settings only.
+	// are written only when the plan at run time has exactly that many (a page that showed none cannot
+	// become a restore that writes files); 0 restores the settings only.
 	ConfirmedFiles int
 }
 
@@ -78,7 +79,7 @@ type StartOptions struct {
 type Assessment struct {
 	Major   bool   // firmware major version differs
 	Family  bool   // chip family of the backup could not be checked
-	Lockout bool   // a restore over MQTT whose backup changes the device's MQTT settings
+	Lockout bool   // a restore over MQTT whose backup changes the device's MQTT settings while HTTP does not answer
 	Detail  string // sentence naming them
 	// MACUnknown is true when the inventory holds no MAC for the device: the
 	// start reads the live MAC and stores it.
@@ -170,6 +171,10 @@ type Options struct {
 	Acquire func(ctx context.Context, id model.DeviceID, owner string) (release func(), holder string, ok bool)
 	// Jobs lists active OTA jobs (store.JobStore); optional.
 	Jobs ActiveJobs
+	// MarkMQTTConnChanged marks a device whose MQTT connection a restore over MQTT just changed while its HTTP API
+	// answered (the Router's MQTTConnChanged memory): its next commands go over HTTP while it may not be back on the
+	// broker, as after such a change by a write (#605 T10, #607). Optional.
+	MarkMQTTConnChanged func(id model.DeviceID)
 	// BrokerPassword is TasmoFleet's live broker password, which a device in broker mode uses as its
 	// MqttPassword; the restore compares it with the backup's. Optional.
 	BrokerPassword func() string
@@ -307,6 +312,8 @@ func (m *Manager) StartWith(ctx context.Context, actor string, bid model.BackupI
 			return Job{}, ErrNoAddress
 		}
 		dev.Address = distinct(ips)[0].String() // from here on the name is never used again
+	} else {
+		dev.Address = m.httpAddress(ctx, dev.Address) // the files and the HTTP check (#607); "" when HTTP cannot be asked
 	}
 
 	release, holder, ok := m.acquire(ctx, dev.ID, "restore")
@@ -322,7 +329,8 @@ func (m *Manager) StartWith(ctx context.Context, actor string, bid model.BackupI
 	if err := m.noActiveOTA(ctx, dev.ID); err != nil {
 		return Job{}, err
 	}
-	if err := m.preflight(ctx, actor, &dev, b, opt, true); err != nil {
+	var connRisk string
+	if err := m.preflight(ctx, actor, &dev, b, opt, true, &connRisk); err != nil {
 		return Job{}, err
 	}
 
@@ -347,7 +355,7 @@ func (m *Manager) StartWith(ctx context.Context, actor string, bid model.BackupI
 	go func() {
 		defer m.wg.Done()
 		defer release()
-		m.run(m.o.Context, job, dev, dmp, b.TakenAt, opt.ConfirmedFiles)
+		m.run(m.o.Context, job, dev, dmp, b.TakenAt, runOptions{confirmedFiles: opt.ConfirmedFiles, connRisk: connRisk, lockoutOK: opt.AllowMQTTLockout})
 	}()
 	return job, nil
 }
@@ -372,6 +380,20 @@ func (m *Manager) route(ctx context.Context, dev model.Device) (transport.Path, 
 		return transport.HTTP, why, nil
 	}
 	return transport.None, why, fmt.Errorf("%w: %s", ErrNoPath, why)
+}
+
+// httpAddress resolves the address of a device a restore reaches over MQTT, for the calls that need HTTP (the files,
+// the check that HTTP answers): the one IP, or "" when it does not resolve to exactly one (R14: such calls are then not
+// made, as an HTTP restore would be refused).
+func (m *Manager) httpAddress(ctx context.Context, addr string) string {
+	if addr == "" {
+		return ""
+	}
+	ips, err := m.o.Resolve(ctx, addr)
+	if err != nil || len(distinct(ips)) != 1 {
+		return ""
+	}
+	return distinct(ips)[0].String()
 }
 
 func distinct(in []netip.Addr) []netip.Addr {

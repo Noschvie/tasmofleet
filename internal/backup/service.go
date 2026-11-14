@@ -198,7 +198,7 @@ func (m *Manager) finishBackup(ctx context.Context, actor string, owner, dev mod
 	if run.Label != "" {
 		note = strings.TrimSuffix(strings.TrimSpace(run.Label+"; "+note), ";")
 	}
-	ctx, tr := transport.WithTrace(ctx) // which transport carried the dump, for the audit entry
+	ctx, tr := transport.WithTrace(ctx) // which transports the run used (the dump and its snapshot; HTTP for the files), for the audit entry
 	var filesErr string
 	out, version, err := m.backup(ctx, owner, dev, note, run, &filesErr)
 	detail := map[string]any{"files": len(out), "firmware": version, "trigger": run.Trigger, "via": tr.Via()}
@@ -309,7 +309,7 @@ func (m *Manager) backup(ctx context.Context, owner, dev model.Device, note stri
 
 	// Files are best effort: the dump stays authoritative, so nothing here fails the run (only
 	// shutdown does). Without an archive the reason is the last sentence of the dump note.
-	fr, err := m.filesStep(ctx, target, fwVersion, m.o.Clock.Now())
+	fr, err := m.filesStep(ctx, dev, target, fwVersion, m.o.Clock.Now(), dumpVia.Via() == "mqtt")
 	if err != nil {
 		return nil, fwVersion, err
 	}
@@ -406,10 +406,11 @@ func (m *Manager) freeTimestamp(dir, base string) time.Time {
 	}
 }
 
-// onDumpPath pins the status snapshot of a backup run to the transport that carried its dump, so one
-// run never mixes HTTP and MQTT. Why: since #456 A reads go MQTT first, which would read the snapshot
-// over MQTT after a dump over HTTP; backups keep their order until stage 2 (457-C1) decides them. A
-// context that is pinned already (an update or a restore job) keeps its path.
+// onDumpPath pins the status snapshot of a backup run to the transport that carried its dump, so the dump and its
+// snapshot never mix HTTP and MQTT: the dump goes MQTT first since #607, and HTTP only when MQTT cannot carry it,
+// so a snapshot over the other transport would describe a device the dump's transport did not see. The files of the
+// run go over HTTP whatever carried the dump (filesStep). A context that is pinned already (an update or a restore
+// job) keeps its path.
 func onDumpPath(ctx context.Context, dump *transport.Trace) context.Context {
 	if _, pinned := transport.PathFrom(ctx); pinned {
 		return ctx

@@ -149,16 +149,6 @@ func TestPinnedBackupPaths(t *testing.T) {
 	}
 }
 
-func TestWorkingHTTPIsUsedForBackupsAsBefore(t *testing.T) {
-	// Why: MQTT is the fallback; a device HTTP reaches is backed up over /dl, and a target without a
-	// device never uses MQTT.
-	g := newDLRig(t)
-	g.mem.Clear(7)
-	if got, err := g.r.DownloadConfig(t.Context(), g.target()); err != nil || string(got) != "HTTPDUMP" || len(g.dl.pws) != 0 {
-		t.Fatalf("%q %v %v", got, err, g.dl.pws)
-	}
-}
-
 func TestBackupDoesNotSendWhenTheTopicChangedUnderIt(t *testing.T) {
 	// Why: facts and send look at one snapshot; an edit in between must not publish the password to the old topic.
 	g := newDLRig(t)
@@ -171,10 +161,11 @@ func TestBackupDoesNotSendWhenTheTopicChangedUnderIt(t *testing.T) {
 func TestHTTPThatNeverSentFailsOverToAMQTTBackup(t *testing.T) {
 	// Why (D4): a proof of "nothing left" (here: an address outside the device networks) gives MQTT the
 	// same chance a command gets; an unknown outcome (timeout) does not, a backup is read-only but the
-	// rule stays one rule.
+	// rule stays one rule. HTTP goes first here because the device's MQTT commands went unanswered (#607).
 	for err, want := range map[error]int{tasmota.ErrForbiddenAddr: 1, tasmota.ErrTimeout: 0} {
 		g := newDLRig(t)
 		g.mem.Clear(7)
+		g.r.unanswered.Fail(7, HTTPFailUnreachable)
 		g.http.err = err
 		_, _ = g.r.DownloadConfig(t.Context(), g.target())
 		if len(g.dl.pws) != want {

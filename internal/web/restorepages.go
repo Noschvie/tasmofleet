@@ -134,7 +134,13 @@ func restoreConfirmOf(v view, p confirmPage) restoreConfirmView {
 	c.Path = sentence(p.PathNote)
 	c.Cred = "Old credentials come back: the Wi-Fi, MQTT and web passwords in the backup replace the current ones. The upload is plain HTTP on your device network."
 	if p.ViaMQTT {
-		c.Cred = "Old credentials come back: the Wi-Fi, MQTT and web passwords in the backup replace the current ones. The configuration travels over your MQTT broker."
+		// #607: MQTT first. The broker hands the configuration to every subscriber of the device's topics; the files
+		// have no way over MQTT and go over HTTP.
+		c.Cred = "Old credentials come back: the Wi-Fi, MQTT and web passwords in the backup replace the current ones. The configuration travels over your MQTT broker, " +
+			"which also delivers it to every client subscribed to this device's topics unless a broker ACL prevents that."
+		if p.Files.Restores() {
+			c.Cred += " Its files go over plain HTTP on your device network."
+		}
 	}
 	if p.Detail != "" {
 		c.Risks = append(c.Risks, sentence(p.Detail))
@@ -200,7 +206,7 @@ func restoreConfirmOf(v view, p confirmPage) restoreConfirmView {
 		ack += "; that the backup is from another firmware major version"
 	}
 	if p.NeedLockout {
-		ack += "; that this restore changes the MQTT settings of " + p.Device.Name + ", which TasmoFleet reaches only over MQTT, and TasmoFleet may lose it"
+		ack += "; that this restore changes the MQTT settings of " + p.Device.Name + ", whose HTTP API does not answer, so TasmoFleet reaches it only over MQTT and may lose it"
 	}
 	if p.NeedFamily {
 		ack += "; and I confirm that the backup belongs to the same chip family as " + p.Device.Name

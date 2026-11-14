@@ -34,12 +34,21 @@ func (m *Manager) fail(ctx context.Context, j *Job, why string) {
 	m.record(ctx, j.Actor, "restore.finish", j.ID, j.DeviceID, "error: "+why, "")
 }
 
+// runOptions is what the start decided for the run of one job.
+type runOptions struct {
+	confirmedFiles int // the files the confirmation page promised (StartOptions.ConfirmedFiles)
+	// connRisk: a restore over MQTT whose backup changes the device's MQTT connection, or cannot be compared (the
+	// sentence of mqttLockout); "" otherwise and over HTTP.
+	connRisk  string
+	lockoutOK bool // the admin accepted that risk (StartOptions.AllowMQTTLockout)
+}
+
 // run is the whole restore of one job. Order matters: the safety backup comes
 // first and a failure there stops everything, because without it a bad
 // restore cannot be undone. source is the TakenAt of the chosen backup: the
 // retention that follows the safety backup (and the verification backup) must
 // not delete the restore point, or a failed restore could not be retried.
-func (m *Manager) run(ctx context.Context, j Job, dev model.Device, dmp []byte, source time.Time, confirmedFiles int) {
+func (m *Manager) run(ctx context.Context, j Job, dev model.Device, dmp []byte, source time.Time, ro runOptions) {
 	target := tasmota.TargetFor(dev)
 	ctx = backup.WithRun(ctx, backup.Run{Trigger: model.TriggerRestore, Protect: []time.Time{source}})
 	if j.Transport == model.TransportMQTT {
@@ -60,20 +69,60 @@ func (m *Manager) run(ctx context.Context, j Job, dev model.Device, dmp []byte, 
 		}
 	}
 
-	viaMQTT := j.Transport == model.TransportMQTT
-	fo, err := m.filesStep(ctx, &j, target, func(c context.Context) (string, error) { return m.liveVersion(c, dev) }, viaMQTT,
-		func() error { return m.checkIdentity(ctx, dev) }, confirmedFiles)
+	via := m.filesRoute(j, dev)
+	// The files go over HTTP, to the device's address: the identity is checked there, whatever carries the settings.
+	identity := func() error { return m.checkIdentity(ctx, dev) }
+	if via.settingsOverMQTT {
+		identity = func() error { return m.checkIdentity(transport.WithPath(ctx, transport.HTTP), dev) }
+	}
+	fo, err := m.filesStep(ctx, &j, target, func(c context.Context) (string, error) { return m.liveVersion(c, dev) }, via,
+		identity, ro.confirmedFiles)
 	if err != nil {
 		m.failFiles(ctx, &j, err)
 		return
 	}
-	m.send(ctx, &j, dev, target, dmp, fo)
+	m.send(ctx, &j, dev, target, dmp, fo, ro)
+}
+
+// filesRoute is how the files of job j reach dev: over HTTP always; for a restore whose settings go over MQTT an HTTP
+// that cannot be used leaves the files out instead of failing the run.
+func (m *Manager) filesRoute(j Job, dev model.Device) filesVia {
+	if j.Transport != model.TransportMQTT {
+		return filesVia{}
+	}
+	v := filesVia{settingsOverMQTT: true}
+	if dev.Address == "" {
+		v.noHTTP = whyFilesNoAddress
+		return v
+	}
+	v.sameHost = func(ctx context.Context) error { return m.checkIdentity(transport.WithPath(ctx, transport.HTTP), dev) }
+	return v
+}
+
+// httpReaches reports whether the device's HTTP API answers right now as this device (Status 5 with one of its MACs):
+// the proof that a restore over MQTT which changes the device's MQTT connection cannot cut TasmoFleet off from it
+// (#607; an answer on record is no proof, docs/pitfalls.md). dev.Address is the one IP (httpAddress); without one HTTP
+// cannot be asked.
+func (m *Manager) httpReaches(ctx context.Context, dev model.Device) bool {
+	if dev.Address == "" {
+		return false
+	}
+	return m.checkIdentity(transport.WithPath(ctx, transport.HTTP), dev) == nil
 }
 
 // send is the upload half of a restore: identity, the boot count before, the upload (the HTTP restore upload, or FileUpload over MQTT), wait for the restart. Over both
 // paths a refused or aborted upload leaves the device unchanged: over HTTP the device answers its
 // "Failed" page and keeps running, over MQTT it applies the dump only after the MD5 matched.
-func (m *Manager) send(ctx context.Context, j *Job, dev model.Device, target tasmota.Target, dmp []byte, fo *filesOutcome) {
+//
+// A restore over MQTT that changes the device's MQTT connection (ro.connRisk) went ahead without the admin's
+// acceptance only because HTTP answered at the start; HTTP must still answer right before the upload, or nothing is
+// uploaded. HTTP is asked right before the upload also when the admin accepted the risk. After such an upload with HTTP
+// answering right before it the device is marked (MarkMQTTConnChanged), and the wait for the restart asks HTTP
+// whenever the MQTT topic is silent: the device comes back under the restored connection, which may not be the topic
+// TasmoFleet still knows. Without that proof (an accepted lockout while HTTP is silent, or the host at the address is
+// another device) the wait never asks HTTP: Status 1 and 11 carry the stored web credentials, which must not reach a
+// host that was not shown to be this device.
+func (m *Manager) send(ctx context.Context, j *Job, dev model.Device, target tasmota.Target, dmp []byte, fo *filesOutcome, ro runOptions) {
 	viaMQTT := j.Transport == model.TransportMQTT
 	if viaMQTT {
 		m.step(ctx, j, store.RestoreSending, "uploading the configuration over MQTT")
@@ -86,6 +135,16 @@ func (m *Manager) send(ctx context.Context, j *Job, dev model.Device, target tas
 		m.fail(ctx, j, fo.afterFiles(failUnchanged+err.Error()))
 		return
 	}
+	changesConn := viaMQTT && ro.connRisk != ""
+	httpProved := false
+	if changesConn {
+		// Asked also when the admin accepted the risk: HTTP that answers again by now still marks the device below.
+		if httpProved = m.httpReaches(ctx, dev); !httpProved && !ro.lockoutOK {
+			m.fail(ctx, j, fo.afterFiles(failUnchanged+"the device's HTTP API stopped answering before the upload, and "+ro.connRisk+
+				", so TasmoFleet could lose the device; start the restore again to confirm that risk"))
+			return
+		}
+	}
 	before, err := m.bootCount(ctx, target)
 	if err != nil {
 		m.fail(ctx, j, fo.afterFiles(failUnreachable+err.Error()))
@@ -93,7 +152,11 @@ func (m *Manager) send(ctx context.Context, j *Job, dev model.Device, target tas
 	}
 	began := m.o.Clock.Now()
 	if viaMQTT {
-		if err := m.o.Uploader.UploadConfig(ctx, target, dmp, transport.BindingOf(dev)); err != nil {
+		err := m.o.Uploader.UploadConfig(ctx, target, dmp, transport.BindingOf(dev))
+		if httpProved && (err == nil || errors.Is(err, mqttcmd.ErrOutcomeUnknown)) && m.o.MarkMQTTConnChanged != nil {
+			m.o.MarkMQTTConnChanged(dev.ID) // the device may not be back on the broker: HTTP carries its next commands
+		}
+		if err != nil {
 			// A lost "Done" is an unknown outcome: the device may have applied the dump and be
 			// restarting. Look at the device instead of failing; the upload is never repeated.
 			if !errors.Is(err, mqttcmd.ErrOutcomeUnknown) {
@@ -113,11 +176,16 @@ func (m *Manager) send(ctx context.Context, j *Job, dev model.Device, target tas
 		m.o.Log.Warn("restore: upload outcome unknown, checking the device", "component", "restore", "job", j.ID, "err", err)
 	}
 	m.step(ctx, j, store.RestoreWaiting, "waiting for the restart")
-	if err := m.waitBoot(ctx, target, before, began); err != nil {
+	var alt context.Context // the other transport the restart may show on
+	if httpProved {
+		alt = transport.WithPath(ctx, transport.HTTP)
+	}
+	proved, err := m.waitBoot(ctx, alt, target, before, began)
+	if err != nil {
 		m.fail(ctx, j, err.Error())
 		return
 	}
-	m.finish(ctx, *j, dev, dmp, fo)
+	m.finish(proved, *j, dev, dmp, fo)
 }
 
 // bootCount reads Status 1 (a fresh answer from the device, not the INFO3 of an earlier boot).
@@ -143,21 +211,36 @@ func (m *Manager) bootCount(ctx context.Context, t tasmota.Target) (int, error) 
 // The firmware counts the boot at 10 s of uptime, so the count rises a few polls after the device
 // answers again. While the device restarts the poll fails (LWT Offline, refused or timed out);
 // that just means "not yet" until the deadline.
-func (m *Manager) waitBoot(ctx context.Context, t tasmota.Target, before int, began time.Time) error {
+//
+// alt, when set, is the other transport a poll tries when ctx's gets no answer (#607: after a restore over MQTT that
+// changed the device's MQTT connection, the device comes back under the restored one, so the old topic stays silent
+// although it restarted). The result is the context of the transport that proved the restart: the verification runs
+// on it.
+func (m *Manager) waitBoot(ctx, alt context.Context, t tasmota.Target, before int, began time.Time) (context.Context, error) {
 	deadline := m.o.Clock.Now().Add(m.o.RebootTimeout)
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return nil, ctx.Err()
 		case <-m.o.Clock.After(m.o.PollInterval):
 		}
-		if n, err := m.bootCount(ctx, t); err == nil && n > before {
-			if up, uerr := m.uptime(ctx, t); uerr == nil && time.Duration(up)*time.Second <= m.o.Clock.Now().Sub(began)+2*time.Second {
-				return nil
+		for _, c := range []context.Context{ctx, alt} {
+			if c == nil {
+				continue
 			}
+			n, err := m.bootCount(c, t)
+			if err != nil {
+				continue // no answer on this transport: the next one may have it
+			}
+			if n > before {
+				if up, uerr := m.uptime(c, t); uerr == nil && time.Duration(up)*time.Second <= m.o.Clock.Now().Sub(began)+2*time.Second {
+					return c, nil
+				}
+			}
+			break // an answer: the device is not back yet, whatever the other transport would say
 		}
 		if m.o.Clock.Now().After(deadline) {
-			return errors.New("the device did not restart in time (its boot count did not change); the configuration may or may not have been applied")
+			return nil, errors.New("the device did not restart in time (its boot count did not change); the configuration may or may not have been applied")
 		}
 	}
 }
@@ -282,11 +365,6 @@ func (m *Manager) decodedOf(ctx context.Context, dump model.BackupID) ([]byte, e
 	return nil, nil
 }
 
-// normMAC lowers a MAC and removes separators; "" stays "".
-func normMAC(s string) string {
-	return strings.NewReplacer(":", "", "-", "", ".", "").Replace(strings.ToLower(strings.TrimSpace(s)))
-}
-
 // colonMAC writes a normalised MAC (12 hex digits) the way the inventory stores
 // it, lower case with colons; anything else is returned as it is.
 func colonMAC(n string) string {
@@ -296,55 +374,17 @@ func colonMAC(n string) string {
 	return n[0:2] + ":" + n[2:4] + ":" + n[4:6] + ":" + n[6:8] + ":" + n[8:10] + ":" + n[10:12]
 }
 
-// liveMAC reads Status 5. It asks without credentials first, so a host that
-// is not the device never sees the stored password; a device with a web
-// password answers 401 to that, and only then the stored credentials are
-// used (the same host is about to receive them with every command anyway).
+// liveMAC reads the MAC the device reports (transport.AskMAC: over MQTT by its topic; over HTTP without the stored
+// credentials first, so a host that is not the device never sees the stored password unless it asks for one).
 func (m *Manager) liveMAC(ctx context.Context, dev model.Device) (string, error) {
-	if pin, ok := transport.PathFrom(ctx); ok && pin == transport.MQTT {
-		// Over MQTT there is no address to leak a password to, and the router needs the device ID
-		// in the target to find its topic (a target without it is a raw HTTP call).
-		raw, err := m.o.Client.Command(ctx, tasmota.TargetFor(dev), "Status 5")
-		if err != nil {
-			return "", err
-		}
-		return macOf(raw)
-	}
-	var lastErr error
-	for _, withCreds := range []bool{false, true} {
-		t := model.Device{Address: dev.Address, Port: dev.Port}
-		if withCreds {
-			t = dev
-		}
-		raw, err := m.o.Client.Command(ctx, tasmota.TargetFor(t), "Status 5")
-		if errors.Is(err, tasmota.ErrAuth) {
-			lastErr = err
-			continue
-		}
-		if err != nil {
-			return "", err
-		}
-		return macOf(raw)
-	}
-	return "", lastErr
-}
-
-// macOf reads the MAC out of a Status 5 reply.
-func macOf(raw json.RawMessage) (string, error) {
-	var s struct {
-		StatusNET struct{ Mac string }
-	}
-	if err := json.Unmarshal(raw, &s); err != nil || s.StatusNET.Mac == "" {
-		return "", tasmota.ErrBadResponse
-	}
-	return normMAC(s.StatusNET.Mac), nil
+	return transport.AskMAC(ctx, m.o.Client, dev)
 }
 
 // checkIdentity refuses unless the host at the address reports the MAC the
 // inventory holds. A device without a stored MAC cannot be checked and is
 // refused (probe it first).
 func (m *Manager) checkIdentity(ctx context.Context, dev model.Device) error {
-	want := normMAC(dev.MAC)
+	want := transport.NormMAC(dev.MAC)
 	if want == "" {
 		return fmt.Errorf("%w: the inventory has no MAC for this device (probe it first)", ErrIdentity)
 	}
@@ -352,7 +392,7 @@ func (m *Manager) checkIdentity(ctx context.Context, dev model.Device) error {
 	if err != nil {
 		return fmt.Errorf("device not reachable: %w", err)
 	}
-	if got != want && !slices.ContainsFunc(dev.MACs, func(m string) bool { return normMAC(m) == got }) {
+	if got != want && !slices.ContainsFunc(dev.MACs, func(m string) bool { return transport.NormMAC(m) == got }) {
 		return ErrIdentity // not the MAC of any interface of the stored device
 	}
 	return nil
@@ -386,8 +426,11 @@ func major(v string) (int, bool) {
 // this dump may be applied. It runs before any state is changed. With adopt,
 // a device without a stored MAC gets the live one stored (the start of a
 // restore); without it (the read-only assessment) that step is skipped.
-func (m *Manager) preflight(ctx context.Context, actor string, dev *model.Device, b model.Backup, opt StartOptions, adopt bool) error {
-	if normMAC(dev.MAC) == "" {
+//
+// connRisk, when set, receives the restore's MQTT connection risk (mqttLockout's sentence, "" when none or over
+// HTTP), which the run needs whether or not it was asked about.
+func (m *Manager) preflight(ctx context.Context, actor string, dev *model.Device, b model.Backup, opt StartOptions, adopt bool, connRisk *string) error {
+	if transport.NormMAC(dev.MAC) == "" {
 		if err := m.adoptMAC(ctx, actor, dev, adopt, opt.ExpectMAC); err != nil {
 			return err
 		}
@@ -425,10 +468,16 @@ func (m *Manager) preflight(ctx context.Context, actor string, dev *model.Device
 	case (fam == familyESP8266) != (dev.Identity.Family == model.ChipESP8266):
 		return ErrFamilyMismatch
 	}
-	if pin, ok := transport.PathFrom(ctx); ok && pin == transport.MQTT && !opt.AllowMQTTLockout {
-		if risk := m.mqttLockout(ctx, *dev, b); risk != "" {
+	if pin, ok := transport.PathFrom(ctx); ok && pin == transport.MQTT {
+		// Over MQTT a backup that changes the MQTT connection can cut TasmoFleet off, unless HTTP answers right now
+		// (#607): then HTTP stays the way back, and nothing asks.
+		risk := m.mqttLockout(ctx, *dev, b)
+		if connRisk != nil {
+			*connRisk = risk
+		}
+		if risk != "" && !opt.AllowMQTTLockout && !m.httpReaches(ctx, *dev) {
 			need.Lockout = true
-			why = append(why, risk)
+			why = append(why, risk+lockoutTail)
 		}
 	}
 	if need.Major || need.Family || need.Lockout {
@@ -456,10 +505,10 @@ func (m *Manager) adoptMAC(ctx context.Context, actor string, dev *model.Device,
 	}
 	// Trust on first use: the identity that gets recorded is exactly the one
 	// the admin was shown and confirmed, not whatever answers now.
-	if normMAC(expect) == "" {
+	if transport.NormMAC(expect) == "" {
 		return &OverrideError{MAC: mac, Detail: fmt.Sprintf("the device at %s reports MAC %s; confirm it as the identity of %s", dev.Address, mac, dev.Name)}
 	}
-	if normMAC(expect) != normMAC(mac) {
+	if transport.NormMAC(expect) != transport.NormMAC(mac) {
 		return fmt.Errorf("%w: the device at the address no longer reports the MAC you confirmed", ErrIdentity)
 	}
 	if err := m.o.Hardware.AdoptMAC(ctx, dev.ID, mac); err != nil {
@@ -499,11 +548,17 @@ func (m *Manager) Assess(ctx context.Context, bid model.BackupID) (Assessment, e
 			return Assessment{}, ErrNoAddress
 		}
 		dev.Address = distinct(ips)[0].String()
+	} else {
+		dev.Address = m.httpAddress(ctx, dev.Address)
 	}
-	a := Assessment{MACUnknown: normMAC(dev.MAC) == "", ViaMQTT: path == transport.MQTT, PathNote: note}
-	err = m.preflight(ctx, "", &dev, b, StartOptions{}, false)
+	a := Assessment{MACUnknown: transport.NormMAC(dev.MAC) == "", ViaMQTT: path == transport.MQTT, PathNote: note}
+	err = m.preflight(ctx, "", &dev, b, StartOptions{}, false, nil)
 	if err == nil || errors.As(err, new(*OverrideError)) {
-		a.Files = m.assessFiles(ctx, b, dev, path == transport.MQTT)
+		via := filesVia{}
+		if path == transport.MQTT {
+			via = m.filesRoute(Job{Transport: model.TransportMQTT}, dev)
+		}
+		a.Files = m.assessFiles(ctx, b, dev, via)
 	}
 	if a.MACUnknown {
 		a.LiveMAC, a.Address, a.Chip = dev.MAC, dev.Address, string(dev.Identity.Family)
@@ -556,8 +611,8 @@ func (m *Manager) backupFamily(ctx context.Context, b model.Backup) (family, err
 
 // assessFiles is the files part of the assessment. A device that cannot be asked now is not a
 // refusal: the page says the files could not be checked, the run asks again and fails loudly.
-func (m *Manager) assessFiles(ctx context.Context, b model.Backup, dev model.Device, viaMQTT bool) FilesPlan {
-	plan, err := m.planFiles(ctx, b.ID, tasmota.TargetFor(dev), func(c context.Context) (string, error) { return m.liveVersion(c, dev) }, viaMQTT)
+func (m *Manager) assessFiles(ctx context.Context, b model.Backup, dev model.Device, via filesVia) FilesPlan {
+	plan, err := m.planFiles(ctx, b.ID, tasmota.TargetFor(dev), func(c context.Context) (string, error) { return m.liveVersion(c, dev) }, via)
 	if err != nil {
 		m.o.Log.Warn("restore: assess files", "component", "restore", "err", err)
 		return FilesPlan{Files: plan.Files, Why: "the device's file system could not be read right now, so the files could not be checked"}

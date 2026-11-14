@@ -314,6 +314,15 @@ type flowEnv struct {
 	dumpB  []byte
 	device model.Device
 	fleet  simulator.Fleet
+
+	// The MQTT rig (mqttManager): httpDown makes every call pinned to HTTP fail as a silent device does, mqttDown
+	// every call pinned to MQTT as a device whose last will says Offline; httpMAC, when set, is the MAC the host at
+	// the device's address reports over HTTP. connMarks records the devices the restore marked as having a changed
+	// MQTT connection (Options.MarkMQTTConnChanged).
+	httpDown, mqttDown atomic.Bool
+	httpMAC            atomic.Value
+	connMu             sync.Mutex
+	connMarks          []model.DeviceID
 }
 
 func dumpWith(b0, b1 byte) []byte {

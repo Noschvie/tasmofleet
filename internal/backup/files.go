@@ -356,19 +356,30 @@ func notBacked(reason string) filesResult { return filesResult{runNote: NoteFile
 
 // filesStep reads the device's flash files (best effort: only a cancelled
 // context is an error). The caller holds the device lock; the client takes
-// its own per-device lock for every call.
-func (m *Manager) filesStep(ctx context.Context, t tasmota.Target, fwVersion string, at time.Time) (filesResult, error) {
+// its own per-device lock for every call. The files travel over HTTP whatever
+// carried the dump (Tasmota has no file transfer over MQTT); after a dump over
+// MQTT (dumpOverMQTT, #607) they are read only from a host that reports dev's
+// MAC, since HTTP finds the device by its address and the broker by its topic.
+func (m *Manager) filesStep(ctx context.Context, dev model.Device, t tasmota.Target, fwVersion string, at time.Time, dumpOverMQTT bool) (filesResult, error) {
 	fs, ok := m.o.Client.(tasmota.FileSystem)
 	if !ok {
 		return filesResult{}, nil // a client without file access (tests with fake devices)
-	}
-	if transport.MQTTOnly(ctx) {
-		return notBacked("they need HTTP"), nil
 	}
 	// The walk ends a few seconds before the caller's deadline (the pre-OTA backup has 30 s for
 	// everything), so a stalling device costs the files, never the dump.
 	wctx, cancel := walkContext(ctx)
 	defer cancel()
+	if dumpOverMQTT {
+		// The identity comes before the first request that carries the stored web password (FSInfo does).
+		if g, ok := m.o.Client.(filesGate); ok {
+			if err := g.FilesUsable(t); err != nil {
+				return notBacked(reasonOf(err)), nil
+			}
+		}
+		if why, err := m.sameDeviceOverHTTP(ctx, wctx, dev, t); why != "" || err != nil {
+			return notBacked(why), err
+		}
+	}
 	info, err := fs.FSInfo(wctx, t)
 	if err != nil {
 		if cerr := ctx.Err(); cerr != nil {
@@ -414,6 +425,39 @@ func (m *Manager) filesStep(ctx context.Context, t tasmota.Target, fwVersion str
 	}
 	m.o.Log.Debug("backup: files read", "component", "backup", "device", int64(t.DeviceID()), "stored", len(w.man.Files), "skipped", len(w.man.Skipped), "bytes", w.total)
 	return res, nil
+}
+
+// filesGate is the Router's check whether file calls for a device go out at all (transport.Router.FilesUsable).
+type filesGate interface {
+	FilesUsable(t tasmota.Target) error
+}
+
+// sameDeviceOverHTTP asks the host at the device's address for its MAC (transport.AskMAC: Status 5 over HTTP, without
+// the stored web credentials unless the host asks for them) and says why its files must not be stored with the dump,
+// "" when it is this device: one of dev's MACs. Only a cancelled run is an error.
+func (m *Manager) sameDeviceOverHTTP(ctx, wctx context.Context, dev model.Device, t tasmota.Target) (string, error) {
+	got, err := transport.AskMAC(transport.WithPath(wctx, transport.HTTP), m.o.Client, dev)
+	if err != nil {
+		if cerr := ctx.Err(); cerr != nil {
+			return "", cerr
+		}
+		if errors.Is(err, tasmota.ErrBadResponse) {
+			return "the device at its address did not report its MAC", nil
+		}
+		why := reasonOf(err)
+		if wctx.Err() != nil {
+			why = strings.TrimPrefix(whyTimeLimit, "not read: ")
+		}
+		m.o.Log.Info("backup: files not read", "component", "backup", "device", int64(t.DeviceID()), "reason", why)
+		return why, nil
+	}
+	for _, mac := range append([]string{dev.MAC}, dev.MACs...) {
+		if mac != "" && transport.NormMAC(mac) == got {
+			return "", nil
+		}
+	}
+	m.o.Log.Warn("backup: the host at the device's address reports another MAC; its files are not stored", "component", "backup", "device", int64(t.DeviceID()))
+	return "the device at its address is not this device", nil
 }
 
 // walkMargin is how long before the caller's deadline the files walk ends, so the dump and the

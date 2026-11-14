@@ -185,12 +185,14 @@ func TestDamagedArchiveIsShownInTheFoldNotAsAPageError(t *testing.T) {
 }
 
 // Why: the row's detail line says why a run has no files, in words a person understands, and the
-// fixed note of the dump stays out of the Notes text.
+// fixed note of the dump stays out of the Notes text. Since #607 a run over MQTT reads its files over
+// HTTP, so "they need HTTP" means HTTP did not answer, not that the run went over MQTT.
 func TestRowDetailSaysWhyThereAreNoFiles(t *testing.T) {
 	for _, tc := range []struct{ note, want string }{
 		{"no filesystem", "settings only: this build has no filesystem"},
 		{"firmware older than 14.6.0", "settings only: firmware older than 14.6.0 has no file access"},
-		{"they need HTTP", "files not backed up: they need HTTP, this run went over MQTT"},
+		{"they need HTTP", "files not backed up: they need HTTP, and HTTP did not answer during this run"},
+		{"the device at its address is not this device", "files not backed up: the device at its address is not this device"},
 		{"the device did not answer", "files not backed up: the device did not answer"},
 	} {
 		list := []model.Backup{dump(1, t0, "Nightly; "+backup.NoteFilesPrefix+tc.note)}

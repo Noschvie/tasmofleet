@@ -70,26 +70,6 @@ func TestFileSystemCallsGoToHTTPAndAreTraced(t *testing.T) {
 	}
 }
 
-func TestFileSystemRefusesAPinnedMQTTPath(t *testing.T) {
-	// Why (#324): a job pinned to MQTT (the device is only reachable that way) must not silently
-	// reach for HTTP; the caller gets a distinct error and nothing is sent.
-	r, h, tg, _ := newFSRig(t)
-	ctx := WithPath(t.Context(), MQTT)
-	for name, err := range map[string]error{
-		"info":   func() error { _, e := r.FSInfo(ctx, tg); return e }(),
-		"list":   func() error { _, e := r.ListFiles(ctx, tg, "/"); return e }(),
-		"get":    func() error { _, e := r.DownloadFile(ctx, tg, "/a", 1); return e }(),
-		"upload": r.UploadFile(ctx, tg, "/a", nil),
-	} {
-		if !errors.Is(err, ErrFilesNeedHTTP) {
-			t.Errorf("%s: %v, want ErrFilesNeedHTTP", name, err)
-		}
-	}
-	if len(h.fsCalls) != 0 {
-		t.Errorf("HTTP was reached: %v", h.fsCalls)
-	}
-}
-
 func TestFileSystemFailureFeedsTheHTTPMemory(t *testing.T) {
 	// Why: an unreachable device found by a file call is as much evidence as one found by a command.
 	r, h, tg, mem := newFSRig(t)
@@ -107,25 +87,5 @@ func TestFileSystemWithoutHTTPSupportSaysNotImplemented(t *testing.T) {
 	r := NewRouter(Options{HTTP: &fakeHTTP{}, Devices: &fakeDevices{}, Memory: mem})
 	if _, err := r.FSInfo(t.Context(), tasmota.TargetFor(model.Device{ID: 7, Address: "192.0.2.7"})); !errors.Is(err, tasmota.ErrNotImplemented) {
 		t.Fatalf("got %v", err)
-	}
-}
-
-func TestMQTTOnlyReadsTheTrace(t *testing.T) {
-	// Why (#324): a backup whose dump came over MQTT must say "files need HTTP" instead of
-	// trying HTTP, which is known to fail.
-	ctx, tr := WithTrace(t.Context())
-	if MQTTOnly(ctx) {
-		t.Error("nothing recorded yet")
-	}
-	tr.note(MQTT)
-	if !MQTTOnly(ctx) {
-		t.Error("only MQTT carried calls")
-	}
-	tr.note(HTTP)
-	if MQTTOnly(ctx) {
-		t.Error("HTTP carried a call too")
-	}
-	if MQTTOnly(t.Context()) {
-		t.Error("no trace at all")
 	}
 }

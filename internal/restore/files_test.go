@@ -313,12 +313,14 @@ func TestDeviceWithoutAFileSystemRestoresSettingsOnly(t *testing.T) {
 	}
 }
 
-// Why: files cannot travel over MQTT. A restore routed over MQTT puts the settings back, writes no
-// file, and the confirmation page says so before the person confirms.
-func TestRestoreOverMQTTPutsBackSettingsOnlyAndSaysSo(t *testing.T) {
+// Why: files cannot travel over MQTT. A restore routed over MQTT while the device's HTTP is known to fail
+// (the Router answers ErrFilesNeedHTTP) puts the settings back, writes no file, and the confirmation page
+// says so before the person confirms; the run does not fail on the files (#607).
+func TestRestoreOverMQTTWhileHTTPFailsPutsBackSettingsOnlyAndSaysSo(t *testing.T) {
 	e, a := filesFlow(t)
 	u := &fakeUploader{e: e, apply: true}
 	m := e.mqttManager(t, u, transport.MQTT)
+	e.cl.fsInfoErr = transport.ErrFilesNeedHTTP
 	as, err := m.Assess(t.Context(), a.ID)
 	if err != nil {
 		t.Fatal(err)

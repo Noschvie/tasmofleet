@@ -43,15 +43,17 @@ func (p Paths) Reason(a Action) string {
 //     connection was just changed while HTTP works; else HTTP unless HTTP is failing.
 //   - Writes: MQTT when usable under the strict rule (#605), with the same two exceptions; else HTTP unless
 //     HTTP is failing.
-//   - Backup: HTTP unless failing; else MQTT FileDownload (usable, password set and not refused).
-//   - Restore: HTTP (the web UI's restore upload) unless HTTP is failing; else MQTT FileUpload Type 2.
+//   - Backup: MQTT FileDownload first when usable for a transfer (strict rule, password set and not refused; #607),
+//     with the same two exceptions as writes; else HTTP (/dl) unless HTTP is failing.
+//   - Restore: MQTT FileUpload Type 2 first under the backup's rule (#607); else HTTP (the web UI's restore upload)
+//     unless HTTP is failing.
 //   - Update, pull: download over HTTP, else download started over MQTT.
 //   - Update, push where possible: today's HTTP decision while HTTP works; with HTTP failing the
 //     upload over MQTT (only with the experimental checkbox, a fitting image and a usable
 //     password), else the download over MQTT.
 //
-// Transfers and updates keep HTTP first: it is the established path, and MQTT is what makes devices
-// HTTP cannot reach manageable (#45). Reads go MQTT first since #456, writes since #605.
+// Updates keep HTTP first: it is the established path, and MQTT is what makes devices HTTP cannot reach manageable
+// (#45). Reads go MQTT first since #456, writes since #605, backups and restores since #607.
 func Choose(f Facts) Paths {
 	var p Paths
 	var t string
@@ -234,27 +236,49 @@ func chooseWrites(f Facts) (Path, string) {
 	return None, noPath(httpFailText(f.HTTP), "changing the device over MQTT is not possible: "+why)
 }
 
+// chooseBackup: a backup goes over MQTT first (#607, the product owner's rule of 2026-11-14) whenever the device is
+// usable there for a transfer (transferBlocker: the strict rule of writes and a usable MQTT password), with the two
+// exceptions of writes: MQTT commands of the device just went unanswered, or its MQTT connection was just changed,
+// and HTTP works. Otherwise HTTP (/dl), and when HTTP is failing too there is no path. The files archive needs HTTP
+// whatever carries the dump (Tasmota has no file transfer over MQTT); the router sends the dump over HTTP only when
+// MQTT published nothing.
 func chooseBackup(f Facts) (Path, string) {
-	if !httpFailing(f) {
-		return HTTP, "over the device's HTTP API (/dl)"
+	why := transferBlocker(f, "back up")
+	switch {
+	case why == "" && httpFailing(f):
+		return MQTT, "over MQTT (FileDownload), because " + httpFailText(f.HTTP)
+	case why == "" && !f.MQTT.ConnChangedSince.IsZero():
+		return HTTP, "over the device's HTTP API (/dl), because " + connChangedText(f.MQTT)
+	case why == "" && !f.MQTT.ReadsUnansweredSince.IsZero():
+		return HTTP, "over the device's HTTP API (/dl), because " + unansweredText(f.MQTT)
+	case why == "":
+		return MQTT, "over MQTT first (FileDownload; the device is online on TasmoFleet's broker and its topic is its own), " +
+			"the files archive over HTTP when HTTP answers; over HTTP if nothing could be published"
+	case !httpFailing(f):
+		return HTTP, "over the device's HTTP API (/dl), because a backup over MQTT is not possible: " + why
 	}
-	if why := transferBlocker(f, "back up"); why != "" {
-		return None, noPath(httpFailText(f.HTTP), "a backup over MQTT is not possible: "+why)
-	}
-	return MQTT, "over MQTT (FileDownload), because " + httpFailText(f.HTTP)
+	return None, noPath(httpFailText(f.HTTP), "a backup over MQTT is not possible: "+why)
 }
 
-// chooseRestore is the backup's rule: the restore upload goes over HTTP unless HTTP is failing
-// (#430: TasmoFleet pushes the dump with the web UI's restore upload, so the firmware server plays
-// no part); else FileUpload over MQTT.
+// chooseRestore is the backup's rule (#607): the dump goes over MQTT first (FileUpload Type 2) when the device is
+// usable there for a transfer, else with the web UI's restore upload over HTTP (#430: the firmware server plays no
+// part). A restore never moves to the other transport once it chose one; its files go over HTTP when HTTP answers.
 func chooseRestore(f Facts) (Path, string) {
-	if !httpFailing(f) {
-		return HTTP, "over the device's HTTP API (restore upload)"
+	why := transferBlocker(f, "restore")
+	switch {
+	case why == "" && httpFailing(f):
+		return MQTT, "over MQTT (FileUpload), because " + httpFailText(f.HTTP)
+	case why == "" && !f.MQTT.ConnChangedSince.IsZero():
+		return HTTP, "over the device's HTTP API (restore upload), because " + connChangedText(f.MQTT)
+	case why == "" && !f.MQTT.ReadsUnansweredSince.IsZero():
+		return HTTP, "over the device's HTTP API (restore upload), because " + unansweredText(f.MQTT)
+	case why == "":
+		return MQTT, "over MQTT first (FileUpload; the device is online on TasmoFleet's broker and its topic is its own), " +
+			"the backup's files over HTTP when HTTP answers; a backup that changes the device's MQTT connection asks first only when HTTP does not answer"
+	case !httpFailing(f):
+		return HTTP, "over the device's HTTP API (restore upload), because a restore over MQTT is not possible: " + why
 	}
-	if why := transferBlocker(f, "restore"); why != "" {
-		return None, noPath(httpFailText(f.HTTP), "a restore over MQTT is not possible: "+why)
-	}
-	return MQTT, "over MQTT (FileUpload), because " + httpFailText(f.HTTP)
+	return None, noPath(httpFailText(f.HTTP), "a restore over MQTT is not possible: "+why)
 }
 
 func chooseUpdate(f Facts) (Path, string) {
@@ -327,6 +351,12 @@ func uploadBlocker(f Facts) string {
 func connChangedText(m MQTTFacts) string {
 	return "TasmoFleet changed the device's MQTT connection (at " + m.ConnChangedSince.UTC().Format("15:04 UTC") +
 		") and the device may not be back on the broker; MQTT is tried again after a few minutes"
+}
+
+// unansweredText says why HTTP carries an action while the device's MQTT commands go unanswered.
+func unansweredText(m MQTTFacts) string {
+	return "a command over MQTT got no answer from the device (since " + m.ReadsUnansweredSince.UTC().Format("15:04 UTC") +
+		"); MQTT is tried again after a few minutes"
 }
 
 func othersUnreadText(n int) string {
