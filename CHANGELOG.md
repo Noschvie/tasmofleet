@@ -4,6 +4,13 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## 0.36.2 "Fisgard" (2026-11-14)
+
+### Fixed
+
+- Devices list: every column keeps the width you give it, in pixels, at every window width. A double-click on a column edge makes that one column as wide as its content and leaves every other column alone, a drag or an arrow key changes only the column it acts on, and the last data column can now be made narrower too. A window wider than the table leaves the room left over empty before Power and the row menu instead of stretching every column; a saved layout wider than the window now scrolls sideways instead of being squeezed, so no column is cut below its content (#828)
+- Devices list: the row menu column has a fixed width, as wide as its button; it no longer takes the room the other columns need, has no resize handle and is not part of the saved layout. A layout saved by an earlier version comes back without a reset, with no column narrower than its content wherever the window holds them (#828)
+
 ## 0.36.1 "Fisgard" (2026-11-14)
 
 ### Fixed
