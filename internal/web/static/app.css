@@ -5987,7 +5987,7 @@ html[data-live="offline"] .conn-banner.conn-off {
   width: 38px;
   height: 22px;
   border-radius: 11px;
-  background: var(--color-border-strong);
+  background: var(--color-control-border);
 }
 .utoggle .sw::after,
 .pwr .sw::after {
@@ -8912,7 +8912,7 @@ body:has(.dv-list .bulkbar:not([hidden])) {
   width: 30px;
   height: 18px;
   border-radius: 9px;
-  background: var(--color-border-strong);
+  background: var(--color-control-border);
 }
 .devsw::after {
   content: "";
@@ -14203,7 +14203,7 @@ a.pol-tpl {
   align-items: center;
   gap: 6px;
   padding: 5px 11px;
-  border: var(--hair-w) solid var(--color-border-strong);
+  border: var(--hair-w) solid var(--color-control-border);
   border-radius: 999px;
   background: var(--color-surface);
   color: var(--color-text-2);

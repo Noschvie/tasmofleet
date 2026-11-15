@@ -446,8 +446,10 @@ The structure deviations S1-S7 are listed with their reasons in the plan (sectio
     reserves the status bar plus one `--sp-16` gap, so a page ends one gap above the bar (#773).
 13. `--color-control-border` is not in the prototype. Text inputs, selects, the file picker button, the default
     (outlined) buttons, the filter chips (`label.chip`, `.ucheck.chip`), the clickable chips (`.dv-chip`,
-    `.add-chip`), the switch track in its off state (`.swtrack`) and the segment controls (`.seg`, `.useg`,
-    frame and inner dividers) use it instead of `--color-border-strong`, because the prototype's border is 1.67:1
+    `.add-chip`), the policy pills (`.pol-pill`), the switch track in its off state (`.swtrack`, border),
+    the filled switch tracks in their off state (`.pwr .sw`, `.utoggle .sw`, `.devsw`: the fill marks the
+    control, the white knob keeps 3.5:1 or more on it) and the segment controls (`.seg`, `.useg`, frame and
+    inner dividers) use it instead of `--color-border-strong`, because the prototype's border is 1.67:1
     (light) and 1.75:1 (dark) against the card surface, below the 3:1 that WCAG 2.2 SC 1.4.11 (Non-text
     Contrast) asks for the boundary of a UI component. The new values give 3.51:1 / 3.69:1 on the card surface
     and stay at 3.1:1 or more on the page and inset surfaces (light 3.22 on `--color-bg`, 3.13 on
