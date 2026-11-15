@@ -56,6 +56,10 @@ func (h *handler) renderAdd(w http.ResponseWriter, r *http.Request, status int, 
 	switch r.URL.Query().Get("ok") {
 	case "accepted":
 		v.Flash = "Device added."
+		// "Add selected" carries how many it added; one device keeps the singular notice.
+		if n, err := strconv.Atoi(r.URL.Query().Get("n")); err == nil && n > 1 {
+			v.Flash = plural(n, "device") + " added."
+		}
 	case "moved":
 		v.Flash = "Address updated."
 	case "dismissed":

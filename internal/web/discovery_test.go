@@ -30,6 +30,7 @@ type fakeDiscovery struct {
 	confirmed []string
 	passwords []string // discovery.DevicePassword of each AcceptVersion
 	unident   []discovery.Unidentified
+	consume   bool // Accept takes the proposal off the list, like the service (the second try finds nothing)
 
 	dismissVersions, undismissVersions []string // the version each Dismiss and Undismiss carried
 }
@@ -58,6 +59,9 @@ func (f *fakeDiscovery) StartScan(_ context.Context, _ string, c []netip.Prefix)
 }
 func (f *fakeDiscovery) CancelScan(context.Context, string, discovery.ScanID) error { return nil }
 func (f *fakeDiscovery) Accept(_ context.Context, _ string, id int64) (model.DeviceID, error) {
+	if f.consume && !f.take(id) {
+		return 0, discovery.ErrNotFound
+	}
 	f.accepted = append(f.accepted, id)
 	return 5, nil
 }
@@ -73,6 +77,18 @@ func (f *fakeDiscovery) AcceptVersion(ctx context.Context, actor string, id int6
 	f.passwords = append(f.passwords, discovery.DevicePassword(ctx))
 	return f.Accept(ctx, actor, id)
 }
+
+// take removes proposal id from the list and says whether it was there.
+func (f *fakeDiscovery) take(id int64) bool {
+	for i, p := range f.props {
+		if p.ID == id {
+			f.props = append(f.props[:i:i], f.props[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
+
 func (f *fakeDiscovery) Dismiss(_ context.Context, _ string, id int64, version string) error {
 	f.dismissed, f.dismissVersions = append(f.dismissed, id), append(f.dismissVersions, version)
 	return nil

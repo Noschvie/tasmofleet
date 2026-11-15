@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -606,6 +607,59 @@ func TestDiscoveredSelectionAddsAndIgnores(t *testing.T) {
 		if r, _ := e.do(t, "POST", path, "operator", url.Values{"id": {"1:v1"}}); r.StatusCode != 403 {
 			t.Errorf("%s as operator: %d", path, r.StatusCode)
 		}
+	}
+}
+
+// postedTwice builds the form the browser sends: the New devices list draws every row
+// twice (table row and phone card), both with a ticked box in the same form, and
+// select.js ticks both, so every ticked id is posted twice by design (#836).
+func postedTwice(t *testing.T, ids ...string) url.Values {
+	t.Helper()
+	return url.Values{"id": append(slices.Clone(ids), ids...)}
+}
+
+func discoveryProposal(id int64, name string) discovery.Proposal {
+	return discovery.Proposal{ID: id, Version: fmt.Sprintf("v%d", id), Kind: discovery.KindNew, Via: "scan", SeenAt: time.Now(), Device: model.Device{Name: name, Address: fmt.Sprintf("10.0.0.%d", 50+id), MAC: fmt.Sprintf("aa:bb:cc:dd:ee:%02d", id)}}
+}
+
+// Why: a device must be added once and reported once. The second copy of a posted id
+// found the proposal already taken, so the page answered 409 "N added, N not: #1 is no
+// longer listed" for devices that were in fact all added (#836). The fake takes an
+// accepted proposal off the list like the service does.
+func TestDiscoveredAddSelectedCountsAPostedIDOnce(t *testing.T) {
+	e, fd := setupDiscovery(t)
+	fd.consume = true
+	fd.props = append(fd.props, discoveryProposal(7, "porch"), discoveryProposal(8, "shed"))
+	r, body := e.do(t, "POST", "/discovery/proposals/accept", "admin", postedTwice(t, "1:v1", "7:v7"))
+	if r.StatusCode != 303 || !slices.Equal(fd.accepted, []int64{1, 7}) {
+		t.Fatalf("add selected with every id twice: %d accepted %v (want 303, [1 7]): %s", r.StatusCode, fd.accepted, body)
+	}
+	// The result says how many were added: after a bulk add of N devices a singular
+	// "Device added." would be misleading (#836).
+	loc := r.Header.Get("Location")
+	if !strings.Contains(loc, "ok=accepted") || !strings.Contains(loc, "n=2") {
+		t.Fatalf("redirect %q does not carry the added count (want ok=accepted and n=2)", loc)
+	}
+	_, page := e.do(t, "GET", strings.TrimPrefix(loc, "/tf"), "admin", nil)
+	if !strings.Contains(page, "2 devices added.") {
+		t.Errorf("result page after adding two devices lacks %q: %s", "2 devices added.", page)
+	}
+	// A real failure is still named, once, next to the devices that were added.
+	r, body = e.do(t, "POST", "/discovery/proposals/accept", "admin", postedTwice(t, "8:v8", "9:v9"))
+	if r.StatusCode != 409 || !strings.Contains(body, "1 device added, 1 not: #9 is no longer listed.") {
+		t.Fatalf("one real failure among repeated ids: %d %s", r.StatusCode, body)
+	}
+}
+
+// Why: a dismissed proposal stays on the list (hidden), so a repeated Dismiss succeeds
+// again and writes a second audit entry; the second copy of a posted id must not run
+// (#836). Only the dedupe keeps the log and the "N ignored" count honest.
+func TestDiscoveredIgnoreSelectedDismissesAPostedIDOnce(t *testing.T) {
+	e, fd := setupDiscovery(t)
+	fd.props = append(fd.props, discoveryProposal(7, "porch"))
+	r, _ := e.do(t, "POST", "/discovery/proposals/dismiss", "admin", postedTwice(t, "1:v1", "7:v7"))
+	if r.StatusCode != 303 || !slices.Equal(fd.dismissed, []int64{1, 7}) {
+		t.Fatalf("ignore selected with every id twice: %d dismissed %v (want 303, [1 7])", r.StatusCode, fd.dismissed)
 	}
 }
 

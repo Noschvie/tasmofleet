@@ -701,12 +701,16 @@ func (h *handler) discoveryAccept(w http.ResponseWriter, r *http.Request) {
 }
 
 // selectedProposals reads the ticked rows of the New devices table: "id" values of the form
-// "<id>:<version>", so an accept still applies only what the admin saw.
+// "<id>:<version>", so an accept still applies only what the admin saw. The table and the phone
+// cards both carry a box for every row, so the browser posts each ticked id twice (#836): a
+// repeated id counts once, the first copy wins.
 func selectedProposals(r *http.Request) (ids []int64, versions []string) {
 	_ = r.ParseForm() // a broken body just means nothing is selected
+	seen := map[int64]bool{}
 	for _, raw := range r.PostForm["id"] {
 		idText, version, _ := strings.Cut(raw, ":")
-		if id, err := strconv.ParseInt(idText, 10, 64); err == nil && id > 0 {
+		if id, err := strconv.ParseInt(idText, 10, 64); err == nil && id > 0 && !seen[id] {
+			seen[id] = true
 			ids, versions = append(ids, id), append(versions, version)
 		}
 	}
@@ -751,7 +755,9 @@ func (h *handler) discoveryAcceptSelected(w http.ResponseWriter, r *http.Request
 		added++
 	}
 	if len(failed) == 0 {
-		redirect(w, r, discBack(r, "accepted"))
+		// discBack always ends in "ok=accepted", so "&n=" starts a new parameter; the count lets
+		// the notice say how many devices were added.
+		redirect(w, r, discBack(r, "accepted")+"&n="+strconv.Itoa(added))
 		return
 	}
 	p := h.discoveryData(r)

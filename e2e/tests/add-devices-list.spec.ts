@@ -141,6 +141,11 @@ test("Add selected still adds the ticked rows after filtering and sorting", asyn
   await page.getByRole("checkbox", { name: "Select Workshop lamp" }).check();
   await page.getByRole("checkbox", { name: "Select Balcony plug" }).check();
   await page.getByRole("button", { name: /^Add 2 selected$/ }).click();
+  // The page posts every ticked id twice (table row and phone card). Both added devices are
+  // reported as added, not as failures (#836): a redirect with the notice, no error banner.
+  await expect(page).toHaveURL(/ok=accepted/);
+  await expect(page.locator("#toasts")).toContainText("2 devices added.");
+  await expect(page.getByRole("alert")).toHaveCount(0);
   await page.goto(app.url + "/devices");
   await expect(page.getByText("Workshop lamp").first()).toBeVisible();
   await expect(page.getByText("Balcony plug").first()).toBeVisible();
