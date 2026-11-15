@@ -1882,7 +1882,8 @@ with one notification. The skip is the snapshot failure event `snapshot.failed` 
   uptime drop seen in STATE) makes all three due once the device has settled (20 s); further announcements of
   the same restart move that time back and stay one refresh. A restart reads the identity and the data only if no
   restart read them in the last hour: the further restarts of a device in a boot loop read only the broker, and the
-  identity and the data are read once when the hour is over (a failed read is not retried before), so about once an
+  identity and the data are read once when the hour is over (a failed read is not retried before, except the retry of a
+  failed regular refresh, which keeps its 10-minute retry time once, #817), so about once an
   hour. The broker and the identity are read under the
   device lock (an operation a person starts on the device meanwhile, restore and Replace device included, waits up to
   5 s for it and for the reader's momentary lock checks instead of being refused as busy; what TasmoFleet starts on

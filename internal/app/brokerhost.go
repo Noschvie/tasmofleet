@@ -149,6 +149,20 @@ type brokerHostReader struct {
 	// end of the hour ran (restartRefreshEvery); restartLeft: a restart left that read to the end of the hour.
 	restartRead map[model.DeviceID]time.Time
 	restartLeft map[model.DeviceID]bool
+	// retryAt: when a regular-interval read of the identity or the data that failed is tried again (#817);
+	// requested leaves such a time alone, once. inRestartRead: the visit running is a restart's read (also the one
+	// left to the end of the hour), whose failures are not recorded there. retrying: the last read of that kind
+	// failed, so the next one is a retry, whose failure is not recorded either. A boot loop is therefore read in
+	// full once an hour, not every ten minutes.
+	retryAt       map[retryKey]time.Time
+	retrying      map[retryKey]bool
+	inRestartRead bool
+}
+
+// retryKey names the identity or the data schedule of one device.
+type retryKey struct {
+	id       model.DeviceID
+	identity bool
 }
 
 // brokerWant is a read somebody asked for. restart: the device restarted, so its identity and data are
@@ -165,7 +179,7 @@ func newBrokerHostReader(list func(context.Context) ([]model.Device, error), // 
 	return &brokerHostReader{list: list, httpUp: httpUp, read: read, enter: enter, now: time.Now, log: log,
 		kick: make(chan model.DeviceID, brokerHostQueue), kickRestart: make(chan model.DeviceID, brokerHostQueue),
 		dataNext: map[model.DeviceID]time.Time{}, identityNext: map[model.DeviceID]time.Time{}, pending: map[model.DeviceID]brokerWant{}, next: map[model.DeviceID]time.Time{}, probeNext: map[model.DeviceID]time.Time{},
-		recheckNext: map[model.DeviceID]time.Time{}, restartRead: map[model.DeviceID]time.Time{}, restartLeft: map[model.DeviceID]bool{}}
+		recheckNext: map[model.DeviceID]time.Time{}, restartRead: map[model.DeviceID]time.Time{}, restartLeft: map[model.DeviceID]bool{}, retryAt: map[retryKey]time.Time{}, retrying: map[retryKey]bool{}}
 }
 
 // later asks for a read of id soon and returns at once.
@@ -261,7 +275,10 @@ func (r *brokerHostReader) pass(ctx context.Context) {
 			ask(d)
 		default:
 			what := r.requested(id, w, now)
-			switch err := r.visit(ctx, d, what); {
+			r.inRestartRead = true
+			err := r.visit(ctx, d, what)
+			r.inRestartRead = false
+			switch {
 			case err == nil:
 				delete(r.pending, id)
 				if what.identity || what.data {
@@ -296,7 +313,9 @@ func (r *brokerHostReader) pass(ctx context.Context) {
 			}
 			what = visitWhat{data: true} // the broker and the identity wait for HTTP (readable)
 		}
+		r.inRestartRead = r.restartLeft[d.ID] // the read a restart left to the end of the hour is the restart's read
 		err := r.visit(ctx, d, what)
+		r.inRestartRead = false
 		if err == nil && r.restartLeft[d.ID] && (what.identity || what.data) {
 			r.restartRead[d.ID] = now // the read a restart left to the end of the hour: the next hour starts here
 			delete(r.restartLeft, d.ID)
@@ -352,8 +371,10 @@ func (r *brokerHostReader) recheckTopics(ctx context.Context, devs []model.Devic
 
 // requested says what a visit somebody asked for reads: the broker, and after a restart the identity and the
 // data too, unless a restart read them less than restartRefreshEvery ago. Then they are read once when that
-// hour is over, and not before (a failed read is not retried every ten minutes either): a device that keeps
-// restarting is read in full about once an hour, not after every boot.
+// hour is over, and not before (a failed restart read is not retried every ten minutes either): a device that keeps
+// restarting is read in full about once an hour, not after every boot. The exception is the retry of a failed
+// scheduled refresh (#817): it was not caused by a restart, often by this very one (the device restarted while it
+// was read), and moving it to the end of the hour would leave the values stale for most of that hour.
 func (r *brokerHostReader) requested(id model.DeviceID, w brokerWant, now time.Time) visitWhat {
 	what := visitWhat{broker: true}
 	if !w.restart {
@@ -361,7 +382,16 @@ func (r *brokerHostReader) requested(id model.DeviceID, w brokerWant, now time.T
 	}
 	if last, ok := r.restartRead[id]; ok && now.Sub(last) < restartRefreshEvery {
 		at := last.Add(restartRefreshEvery)
-		r.identityNext[id], r.dataNext[id], r.restartLeft[id] = at, at, true
+		for _, m := range []struct {
+			next     map[model.DeviceID]time.Time
+			identity bool
+		}{{r.identityNext, true}, {r.dataNext, false}} {
+			if retry, ok := r.retryAt[retryKey{id, m.identity}]; ok && retry.Equal(m.next[id]) && retry.After(now) && !retry.After(at) {
+				continue // a failed scheduled read waits for its retry, which comes before the end of the hour
+			}
+			m.next[id] = at
+		}
+		r.restartLeft[id] = true
 		return what
 	}
 	what.identity, what.data = true, true
@@ -484,7 +514,7 @@ func (r *brokerHostReader) readLocked(ctx context.Context, id model.DeviceID, wh
 			err = nil                                   // an answer, not a failure: another device answers at the address (logged and audited by the prober); asked again at the regular interval
 			r.dataNext[id] = r.now().Add(identityEvery) // and nothing is read for this device from that address until the identity matches again
 		}
-		r.finished(ctx, r.identityNext, id, identityEvery, err, "identity")
+		r.finished(ctx, r.identityNext, retryKey{id, true}, identityEvery, err, "identity")
 	}
 	return refused, nil
 }
@@ -515,18 +545,28 @@ func (r *brokerHostReader) readDataOf(ctx context.Context, d model.Device) bool 
 		}
 		return true
 	}
-	r.finished(ctx, r.dataNext, d.ID, dataEvery, err, "data")
+	r.finished(ctx, r.dataNext, retryKey{d.ID, false}, dataEvery, err, "data")
 	return true
 }
 
 // finished schedules the next read of kind after one that ended with err: the regular interval, or the
-// retry delay when it failed. A failure caused by shutdown is not counted.
-func (r *brokerHostReader) finished(ctx context.Context, m map[model.DeviceID]time.Time, id model.DeviceID, every time.Duration, err error, kind string) {
+// retry delay when it failed. A failure caused by shutdown is not counted. The retry time of a failed
+// regular-interval read is remembered (retryAt) so that a restart read within the hour leaves it alone (#817). The
+// failure of a restart's read and of a retry is not: otherwise the retries would chain through a boot loop.
+func (r *brokerHostReader) finished(ctx context.Context, m map[model.DeviceID]time.Time, k retryKey, every time.Duration, err error, kind string) {
+	id := k.id
+	again := r.retrying[k] // this read was a retry
+	delete(r.retrying, k)
+	delete(r.retryAt, k)
 	switch {
 	case err == nil:
 		m[id] = r.now().Add(every)
 	case ctx.Err() == nil:
 		m[id] = r.now().Add(brokerHostRetry)
+		r.retrying[k] = true
+		if !r.inRestartRead && !again {
+			r.retryAt[k] = m[id]
+		}
 		r.log.Debug("device refresh: read failed", "kind", kind, "device", id, "err", err)
 	}
 }

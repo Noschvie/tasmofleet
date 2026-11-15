@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"reflect"
 	"regexp"
@@ -473,6 +474,82 @@ func TestBootLoopIsReadInFullOnceAnHour(t *testing.T) {
 				t.Fatalf("a restart after a quiet spell: %d identity and %d data reads, want 5 and 5", ident, data)
 			}
 		})
+	}
+}
+
+// Why (#817): the retry that a restart read leaves alone belongs to a failed regular-interval read, once. A boot
+// loop whose restarts come further apart than the retry delay (10 minutes) has its restart reads fail again and
+// again; if the retry of such a failure, or of the read left to the end of the hour, were protected too, the
+// retries would chain and the device would be read in full about every ten minutes instead of once an hour, the
+// load the boot-loop protection exists to prevent.
+func TestBootLoopWithSlowRestartsIsStillReadOnceAnHour(t *testing.T) {
+	for _, tc := range []struct{ every, most int }{ // minutes between restarts, longer than brokerHostRetry; reads of each kind
+		{11, 4}, {13, 4}, {17, 5}, // the same counts as before #817 (at 17 minutes a restart lands just after an hour ends)
+	} {
+		every := tc.every
+		t.Run(fmt.Sprintf("every %d minutes", every), func(t *testing.T) {
+			g := newRefreshRig(1)
+			far := g.clock.Add(48 * time.Hour)
+			g.r.next[1], g.r.dataNext[1], g.r.identityNext[1] = far, far, far
+			var ident, data int
+			g.r.readIdentity = func(context.Context, model.DeviceID) error { ident++; return errors.New("timeout") }
+			g.r.readData = func(context.Context, model.Device) error { data++; return errors.New("timeout") }
+			for minute := 0; minute < 180; minute++ { // three hours, a pass every 30 seconds
+				if minute%every == 0 {
+					g.r.wantRestart(1)
+				}
+				for range 2 {
+					g.advance(30 * time.Second)
+					g.r.pass(t.Context())
+					g.take()
+				}
+			}
+			if ident > tc.most || data > tc.most {
+				t.Fatalf("a boot loop restarting every %d minutes read the identity %d and the data %d times in three hours, want at most %d each (about once an hour)", every, ident, data, tc.most)
+			}
+		})
+	}
+}
+
+// Why (#817): a read that a restart left to the end of the hour, and the restart's own read, are the boot-loop
+// protection itself: their failure must not earn the protected retry. A boot-loop device whose reads fail right
+// after each boot (the device is still starting) and work later is the realistic mix, and with it neither
+// "every failure is retried" nor "every failure is left alone" shows up: the always-failing and always-working
+// tests above pass either way. Without the restart-read flag, a failed restart read is retried ten minutes
+// later and the read left to the end of the hour is read again after a second restart, about twice as often as
+// once an hour.
+func TestBootLoopWithMixedOutcomesIsStillReadOnceAnHour(t *testing.T) {
+	g := newRefreshRig(1)
+	far := g.clock.Add(48 * time.Hour)
+	g.r.next[1], g.r.dataNext[1], g.r.identityNext[1] = far, far, far
+	var lastBoot time.Time
+	starting := func() bool { return g.clock.Sub(lastBoot) < 2*time.Minute } // the device is still booting
+	var ident, data int
+	g.r.readIdentity = func(context.Context, model.DeviceID) error {
+		ident++
+		if starting() {
+			return errors.New("timeout")
+		}
+		return nil
+	}
+	g.r.readData = func(context.Context, model.Device) error {
+		data++
+		if starting() {
+			return errors.New("timeout")
+		}
+		return nil
+	}
+	for range 52 { // a restart every seven minutes for six hours
+		lastBoot = g.clock
+		g.r.wantRestart(1)
+		for range 14 {
+			g.advance(30 * time.Second)
+			g.r.pass(t.Context())
+			g.take()
+		}
+	}
+	if ident > 7 || data > 7 {
+		t.Fatalf("a boot loop with failing reads right after each boot read the identity %d and the data %d times in six hours, want at most 7 each (about once an hour)", ident, data)
 	}
 }
 
@@ -1143,5 +1220,61 @@ func TestRuntimeWiresTheLastKnownValues(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("the read outlived TasmoFleet's stop signal")
+	}
+}
+
+// Why (#817): a periodic refresh that failed (the device restarted while it ran) is tried again after the retry
+// delay. The restart read that follows leaves the identity and the data alone when a restart read them in the last
+// hour (boot-loop protection), and that rule moved the next read to the end of that hour, over the retry time: the
+// data of a device that had just restarted stayed stale for 49 minutes instead of 10. The protection is about
+// restart reads: it must not push a scheduled retry later, and it must not read anything itself.
+func TestRestartReadKeepsTheRetryOfAFailedPeriodicRefresh(t *testing.T) {
+	for _, kind := range []string{"data", "identity"} {
+		t.Run(kind, func(t *testing.T) {
+			g := newRefreshRig(1)
+			far := g.clock.Add(48 * time.Hour)
+			g.r.next[1], g.r.dataNext[1], g.r.identityNext[1] = far, far, far
+			if kind == "data" {
+				g.r.dataNext[1] = g.clock // the periodic data read is due
+			} else {
+				g.r.identityNext[1] = g.clock
+			}
+			g.r.restartRead[1] = g.clock.Add(-12 * time.Minute) // an earlier restart read: within the hour
+			var reads int
+			failing := true
+			read := func() error {
+				reads++
+				if failing {
+					return errors.New("device restarted while it was read")
+				}
+				return nil
+			}
+			g.r.readData = func(context.Context, model.Device) error { return read() }
+			g.r.readIdentity = func(context.Context, model.DeviceID) error { return read() }
+
+			g.r.pass(t.Context()) // the periodic read fails
+			failedAt := g.clock
+			if reads != 1 {
+				t.Fatalf("the periodic %s read ran %d times, want 1", kind, reads)
+			}
+			failing = false
+			g.advance(time.Minute)
+			g.r.wantRestart(1) // the device is back: the restart read follows
+			g.advance(brokerHostSettle)
+			g.r.pass(t.Context())
+			if reads != 1 {
+				t.Fatalf("the restart read within the hour read the %s itself (%d reads): boot-loop protection is gone", kind, reads)
+			}
+			g.advance(failedAt.Add(brokerHostRetry).Sub(g.clock) - time.Second)
+			g.r.pass(t.Context())
+			if reads != 1 {
+				t.Fatalf("the %s was read before the retry delay was over", kind)
+			}
+			g.advance(2 * time.Second)
+			g.r.pass(t.Context())
+			if reads != 2 {
+				t.Fatalf("%d reads of the %s after the retry delay, want the failed one read again (2 in all)", reads, kind)
+			}
+		})
 	}
 }
