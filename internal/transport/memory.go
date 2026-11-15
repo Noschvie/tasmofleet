@@ -90,20 +90,23 @@ func failKind(err error) (kind HTTPFailKind, failing, answered bool) {
 	return "", false, true
 }
 
-// observer wraps the raw HTTP client and tells the memory what each call showed. It routes nothing.
+// observer wraps the raw HTTP client and tells the memory what each call showed, except the polls a restarting device
+// leaves unanswered (WithRestarting). It routes nothing.
 type observer struct {
 	c   tasmota.Client
 	mem *Memory
 }
 
-func (o *observer) see(t tasmota.Target, err error) {
+func (o *observer) see(ctx context.Context, t tasmota.Target, err error) {
 	id := t.DeviceID()
 	if id == 0 {
 		return // an address check says nothing about an inventory device
 	}
 	kind, failing, answered := failKind(err)
+	// A poll a restarting device leaves unanswered says nothing about its HTTP API (#854); any other failure does.
+	explained := restarting(ctx) && kind == HTTPFailUnreachable
 	switch {
-	case failing:
+	case failing && !explained:
 		o.mem.Fail(id, kind)
 	case answered:
 		o.mem.Clear(id)
@@ -112,18 +115,18 @@ func (o *observer) see(t tasmota.Target, err error) {
 
 func (o *observer) Command(ctx context.Context, t tasmota.Target, cmnd string) (json.RawMessage, error) {
 	raw, err := o.c.Command(ctx, t, cmnd)
-	o.see(t, err)
+	o.see(ctx, t, err)
 	return raw, err
 }
 
 func (o *observer) DownloadConfig(ctx context.Context, t tasmota.Target) ([]byte, error) {
 	b, err := o.c.DownloadConfig(ctx, t)
-	o.see(t, err)
+	o.see(ctx, t, err)
 	return b, err
 }
 
 func (o *observer) RootPage(ctx context.Context, t tasmota.Target) (tasmota.RootInfo, error) {
 	ri, err := o.c.RootPage(ctx, t)
-	o.see(t, err)
+	o.see(ctx, t, err)
 	return ri, err
 }

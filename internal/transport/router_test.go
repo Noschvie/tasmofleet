@@ -489,6 +489,43 @@ func TestObserverRemembersWhatHTTPShows(t *testing.T) {
 	}
 }
 
+// Why (#854): a device that restarts answers nothing for a few seconds, which says nothing about its HTTP API. A poll
+// made while it is known to restart (a restore's wait, WithRestarting) that fails must not mark HTTP failing for ten
+// minutes, or the backups after the restart leave the files out; its answer still clears a failure, and the same
+// failure without the mark is remembered as before.
+func TestAPollWhileTheDeviceRestartsIsNoHTTPFailure(t *testing.T) {
+	g := newRig(t)
+	h := g.r.HTTPOnly()
+	poll := WithRestarting(t.Context())
+	g.http.err = tasmota.ErrUnreachable
+	_, _ = h.Command(poll, g.target(), "Status 1")
+	if k, _, ok := g.mem.HTTPFailure(7); ok {
+		t.Fatalf("a poll of a restarting device marked HTTP failing (%s)", k)
+	}
+	_, _ = h.Command(t.Context(), g.target(), "Status 1")
+	if _, _, ok := g.mem.HTTPFailure(7); !ok {
+		t.Fatal("the same failure outside a restart must be remembered")
+	}
+	g.http.err = nil
+	_, _ = h.Command(poll, g.target(), "Status 1")
+	if _, _, ok := g.mem.HTTPFailure(7); ok {
+		t.Error("an answer to a poll of a restarting device must clear the failure")
+	}
+}
+
+// Why (#854): only a poll left unanswered is explained by the restart. A refused web password during the wait is an
+// answer of the device (or the host at its address), which a restart does not explain: it must be remembered as
+// before, or the next HTTP call sends the stored credentials again although HTTP said they are wrong.
+func TestARefusalWhileTheDeviceRestartsIsStillAnHTTPFailure(t *testing.T) {
+	g := newRig(t)
+	h := g.r.HTTPOnly()
+	g.http.err = tasmota.ErrAuth
+	_, _ = h.Command(WithRestarting(t.Context()), g.target(), "Status 1")
+	if k, _, ok := g.mem.HTTPFailure(7); !ok || k != HTTPFailAuth {
+		t.Fatalf("a refused password during the restart: remembered %v (%q), want %q", ok, k, HTTPFailAuth)
+	}
+}
+
 func TestUploadAndBootSwitchPassThroughToHTTPOnly(t *testing.T) {
 	// Why (D1, D4): uploads and the safeboot switch are HTTP only and never fail over.
 	g := newRig(t)

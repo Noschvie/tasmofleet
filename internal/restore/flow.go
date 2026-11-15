@@ -215,7 +215,8 @@ func (m *Manager) bootCount(ctx context.Context, t tasmota.Target) (int, error) 
 // alt, when set, is the other transport a poll tries when ctx's gets no answer (#607: after a restore over MQTT that
 // changed the device's MQTT connection, the device comes back under the restored one, so the old topic stays silent
 // although it restarted). The result is the context of the transport that proved the restart: the verification runs
-// on it.
+// on it, without the polls' transport.WithRestarting: an HTTP poll the restarting device leaves unanswered says nothing
+// about its HTTP API, but the check backup's HTTP calls do (#854).
 func (m *Manager) waitBoot(ctx, alt context.Context, t tasmota.Target, before int, began time.Time) (context.Context, error) {
 	deadline := m.o.Clock.Now().Add(m.o.RebootTimeout)
 	for {
@@ -228,12 +229,14 @@ func (m *Manager) waitBoot(ctx, alt context.Context, t tasmota.Target, before in
 			if c == nil {
 				continue
 			}
-			n, err := m.bootCount(c, t)
+			// The device restarts: a poll it leaves unanswered must not mark its HTTP failing (#854).
+			poll := transport.WithRestarting(c)
+			n, err := m.bootCount(poll, t)
 			if err != nil {
 				continue // no answer on this transport: the next one may have it
 			}
 			if n > before {
-				if up, uerr := m.uptime(c, t); uerr == nil && time.Duration(up)*time.Second <= m.o.Clock.Now().Sub(began)+2*time.Second {
+				if up, uerr := m.uptime(poll, t); uerr == nil && time.Duration(up)*time.Second <= m.o.Clock.Now().Sub(began)+2*time.Second {
 					return c, nil
 				}
 			}

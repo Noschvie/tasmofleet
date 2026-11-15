@@ -41,6 +41,7 @@ var connCutOffs = map[string]string{ //nolint:gosec // G101: names of settings a
 // decodedConn is what mqttLockout reads of the decoded backup; nil is a field the backup does not hold.
 type decodedConn struct {
 	Topic     *string         `json:"mqtt_topic"`
+	Hostname  *string         `json:"hostname"`
 	FullTopic *string         `json:"mqtt_fulltopic"`
 	GrpTopic  *string         `json:"mqtt_grptopic"`
 	Host      *string         `json:"mqtt_host"`
@@ -82,7 +83,9 @@ func (m *Manager) mqttLockout(ctx context.Context, dev model.Device, b model.Bac
 	c := connCompare{m: m, ctx: ctx, dev: dev}
 	// A field the backup does not hold is not compared; one the device side does not know is not either,
 	// except those TasmoFleet reads from the device.
-	c.add("Topic", d.Topic != nil && *d.Topic != dev.Topic)
+	if d.Topic != nil {
+		c.topic(*d.Topic, d.Hostname)
+	}
 	c.add("FullTopic", d.FullTopic != nil && fullTopic(*d.FullTopic) != fullTopic(dev.FullTopic))
 	c.add("GroupTopic", d.GrpTopic != nil && dev.GroupTopic != "" && *d.GrpTopic != dev.GroupTopic)
 	// The broker comes from the inventory (Status 6); a device known only from the broker (app.onMQTTSeen) may have none
@@ -207,6 +210,35 @@ func (c *connCompare) text(name, cmd, backup string) {
 	c.known(name, ok, live != backup)
 }
 
+// topic compares the backup's Topic setting with the device's, raw against raw like MqttClient (#844): a decoded backup
+// holds the setting with its placeholders ("tasmota_%06X"), the inventory the topic the device runs under, and the
+// device answers Topic with the setting (CmndTopic, xdrv_02_9_mqtt.ino 16.0.0 line 2093). The same setting resolves to
+// the same topic on the same device (the restore checked its MAC), except through %hostname%, which the device fills
+// from its Hostname setting at boot: with it in the topic, the backup's Hostname is compared with the device's too.
+func (c *connCompare) topic(backup string, hostname *string) {
+	c.text("Topic", "Topic", backup)
+	if !strings.Contains(backup, "%hostname%") {
+		return
+	}
+	const name = "Hostname (in the Topic)"
+	if hostname == nil {
+		c.unread = append(c.unread, name)
+		return
+	}
+	live, ok := c.liveText("Hostname", "Hostname")
+	c.known(name, ok, bootHostname(live) != bootHostname(*hostname))
+}
+
+// bootHostname is the Hostname setting a device runs with after a restart: one with a '%' becomes WIFI_HOSTNAME
+// (tasmota.ino 16.0.0 lines 701-704; CmndHostname does the same, support_command.ino lines 2545-2547), so every such
+// value is the same one.
+func bootHostname(s string) string {
+	if strings.Contains(s, "%") {
+		return "%"
+	}
+	return s
+}
+
 // defaultPrefixes are Tasmota's SUB_PREFIX, PUB_PREFIX and PUB_PREFIX2 (my_user_config.h), which an empty prefix in a
 // decoded backup stands for.
 var defaultPrefixes = [3]string{"cmnd", "stat", "tele"}
@@ -241,28 +273,46 @@ func (c *connCompare) prefixes(backup []string) {
 	}
 }
 
-// option compares a bit of the backup's flags with the device's SetOption<n> ("ON"/"OFF", or 1/0).
+// option compares a bit of the backup's flags with the device's SetOption<n>, read as a number from the SetOption words
+// of Status 3. The answer to SetOption<n> itself is the device's StateText1 or StateText2 (CmndSetoptionBase answers
+// GetStateText, support_command.ino 16.0.0 lines 1849-1853), "AUS" and "AN" on a device with German texts: a word that
+// cannot be read as on or off (#845).
 func (c *connCompare) option(name string, n, backup int) {
-	cmd := "SetOption" + strconv.Itoa(n)
-	r, ok := c.live(cmd)
+	on, ok := c.setOption(n)
+	c.known(name, ok, on != (backup != 0))
+}
+
+// setOption reads the bit SetOption n from Status 3, whose SetOption array holds flag, param, flag3, flag4, flag5 and
+// flag6 in hex (support_command.ino 16.0.0 lines 1012-1028); SetoptionDecode (lines 1614-1643) places the options in
+// them. ok is false for an answer that does not hold the bit, and for SetOption32-49, which are numbers, not bits.
+func (c *connCompare) setOption(n int) (on, ok bool) {
+	word, bit, ok := setOptionWord(n)
 	if !ok {
-		c.unread = append(c.unread, name)
-		return
+		return false, false
 	}
-	var on bool
-	var s string
-	var num int
-	switch raw := r[cmd]; {
-	case json.Unmarshal(raw, &s) == nil && strings.EqualFold(s, "on"):
-		on = true
-	case json.Unmarshal(raw, &s) == nil && strings.EqualFold(s, "off"):
-	case json.Unmarshal(raw, &num) == nil && (num == 0 || num == 1):
-		on = num == 1
-	default:
-		c.unread = append(c.unread, name)
-		return
+	r, ok := c.live("Status 3")
+	if !ok {
+		return false, false
 	}
-	c.add(name, on != (backup != 0))
+	var log struct{ SetOption []string }
+	if json.Unmarshal(r["StatusLOG"], &log) != nil || len(log.SetOption) <= word {
+		return false, false
+	}
+	v, err := strconv.ParseUint(log.SetOption[word], 16, 32)
+	if err != nil {
+		return false, false
+	}
+	return v>>bit&1 == 1, true
+}
+
+// setOptionWord is the place of the bit SetOption n in Status 3's SetOption array (SetoptionDecode).
+func setOptionWord(n int) (word, bit int, ok bool) {
+	for _, r := range [...]struct{ first, last, word int }{{0, 31, 0}, {50, 81, 2}, {82, 113, 3}, {114, 145, 4}, {146, 177, 5}} {
+		if n >= r.first && n <= r.last {
+			return r.word, n - r.first, true
+		}
+	}
+	return 0, 0, false
 }
 
 // fingerprint compares the backup's MqttFingerprint<n> (decode-config writes 20 "0x.." bytes) with the device's

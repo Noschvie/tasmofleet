@@ -178,6 +178,7 @@ const (
 	keyLoose
 	keyConsent
 	keyRoute
+	keyRestarting
 )
 
 // WithPath pins the transport of every call made with ctx (D5): a job that chose its path (OTA,
@@ -194,6 +195,18 @@ func PathFrom(ctx context.Context) (Path, bool) {
 	p, ok := ctx.Value(keyPath).(Path)
 	return p, ok
 }
+
+// WithRestarting marks the calls made with ctx as polls of a device that is restarting (a restore's wait for the
+// restart after its upload, #854). A device does not answer while it restarts, which says nothing about its HTTP API:
+// an HTTP call made with ctx that is left unanswered (HTTPFailUnreachable) is not remembered as an HTTP failure
+// (Memory), which would keep file calls and routed commands off HTTP for ten minutes, so the check backup right after a
+// restore over MQTT left the device's files out. Any other failure is an answer a restart does not explain (a refused
+// password, a refused API, an outside address) and is remembered as before; an answer still clears a failure.
+func WithRestarting(ctx context.Context) context.Context {
+	return context.WithValue(ctx, keyRestarting, true)
+}
+
+func restarting(ctx context.Context) bool { r, _ := ctx.Value(keyRestarting).(bool); return r }
 
 // WithConsole marks calls typed by a person (devicecmd.Run: the console and bulk commands): over MQTT a reply
 // with other keys than the command's name (Template, Gpios) is accepted as the answer (mqttcmd DoLoose).

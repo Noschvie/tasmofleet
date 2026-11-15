@@ -110,7 +110,7 @@ func (o *observer) FSInfo(ctx context.Context, t tasmota.Target) (tasmota.FSInfo
 		return tasmota.FSInfo{}, err
 	}
 	i, err := fs.FSInfo(ctx, t)
-	o.see(t, err)
+	o.see(ctx, t, err)
 	return i, err
 }
 
@@ -120,7 +120,7 @@ func (o *observer) ListFiles(ctx context.Context, t tasmota.Target, dir string) 
 		return nil, err
 	}
 	e, err := fs.ListFiles(ctx, t, dir)
-	o.see(t, err)
+	o.see(ctx, t, err)
 	return e, err
 }
 
@@ -130,7 +130,7 @@ func (o *observer) DownloadFile(ctx context.Context, t tasmota.Target, path stri
 		return nil, err
 	}
 	b, err := fs.DownloadFile(ctx, t, path, max)
-	o.see(t, err)
+	o.see(ctx, t, err)
 	return b, err
 }
 
@@ -140,7 +140,7 @@ func (o *observer) UploadFile(ctx context.Context, t tasmota.Target, path string
 		return err
 	}
 	err = fs.UploadFile(ctx, t, path, data)
-	o.see(t, err)
+	o.see(ctx, t, err)
 	return err
 }
 
@@ -173,6 +173,6 @@ func (o *observer) RestoreConfig(ctx context.Context, t tasmota.Target, dump []b
 		return fmt.Errorf("%w: %w: the HTTP client cannot restore a configuration", tasmota.ErrNotSent, tasmota.ErrNotImplemented)
 	}
 	err := cr.RestoreConfig(ctx, t, dump)
-	o.see(t, err)
+	o.see(ctx, t, err)
 	return err
 }

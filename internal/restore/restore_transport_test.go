@@ -702,9 +702,10 @@ func (c replyClient) Command(_ context.Context, _ tasmota.Target, cmnd string) (
 	return json.RawMessage(r), nil
 }
 
-// Why (R28, fail closed): the restore reads the device's MQTT settings the way Tasmota answers them (SetOptions as
-// ON/OFF or 0/1, an empty prefix as the default, fingerprints as 20 hex bytes) and counts every answer it cannot read as
-// "not reported", never as equal: a garbled answer must not let a connection change through without the question.
+// Why (R28, fail closed): the restore reads the device's MQTT settings the way Tasmota answers them (an empty prefix as
+// the default, fingerprints as 20 hex bytes; SetOptions: TestSetOptionsAreReadAsNumbersWhateverTheDevicesStateText) and
+// counts every answer it cannot read as "not reported", never as equal: a garbled answer must not let a connection
+// change through without the question.
 func TestTheDevicesMQTTSettingsAreReadAsTasmotaAnswersThem(t *testing.T) {
 	fp := func(b string) string { return strings.TrimSpace(strings.Repeat(b+" ", 20)) }
 	for name, tc := range map[string]struct {
@@ -725,13 +726,6 @@ func TestTheDevicesMQTTSettingsAreReadAsTasmotaAnswersThem(t *testing.T) {
 			run: func(c *connCompare) { n, ok := c.liveNumber("MqttPort"); c.known("MqttPort", ok, n != 8883) }, diff: []string{"MqttPort"}},
 		"port not a number": {replies: map[string]string{"MqttPort": `{"MqttPort":"1883"}`},
 			run: func(c *connCompare) { n, ok := c.liveNumber("MqttPort"); c.known("MqttPort", ok, n != 1883) }, unread: []string{"MqttPort"}},
-		"option as a number, equal": {replies: map[string]string{"SetOption103": `{"SetOption103":1}`},
-			run: func(c *connCompare) { c.option("TLS", 103, 1) }},
-		"option as a number, other": {replies: map[string]string{"SetOption103": `{"SetOption103":0}`},
-			run: func(c *connCompare) { c.option("TLS", 103, 1) }, diff: []string{"TLS"}},
-		"option garbled": {replies: map[string]string{"SetOption103": `{"SetOption103":"maybe"}`},
-			run: func(c *connCompare) { c.option("TLS", 103, 1) }, unread: []string{"TLS"}},
-		"option not answered": {run: func(c *connCompare) { c.option("TLS", 103, 1) }, unread: []string{"TLS"}},
 		"fingerprint of the backup not 20 bytes": {replies: map[string]string{"MqttFingerprint1": `{"MqttFingerprint1":"` + fp("00") + `"}`},
 			run: func(c *connCompare) { c.fingerprint(1, json.RawMessage(`["0x00"]`)) }, unread: []string{"MqttFingerprint1"}},
 		"fingerprint of the backup not a list": {run: func(c *connCompare) { c.fingerprint(1, json.RawMessage(`"00"`)) }, unread: []string{"MqttFingerprint1"}},
@@ -768,5 +762,262 @@ func TestTheFilesOfAnMQTTRestoreAskNothingWhileHTTPIsKnownToFail(t *testing.T) {
 	}
 	if got := w.requests(); len(got) != 0 {
 		t.Errorf("HTTP was asked %v", got)
+	}
+}
+
+// observedHTTP is idGuard whose calls pinned to HTTP pass the router's HTTP observer, which remembers failing HTTP calls
+// (transport.Memory) as in production. While the device restarts (restarting, set by restartUploader), its HTTP API
+// does not answer the wait's Status 1; at the second such poll the device is back on both transports (MQTT answers the
+// next poll first, as on the live test of 0.37.0).
+type observedHTTP struct {
+	idGuard
+	obs        tasmota.Client
+	restarting *atomic.Bool
+	polls      *atomic.Int32 // the wait's HTTP polls left unanswered
+}
+
+func (o observedHTTP) Command(ctx context.Context, t tasmota.Target, c string) (json.RawMessage, error) {
+	if pin, _ := transport.PathFrom(ctx); pin != transport.HTTP {
+		return o.idGuard.Command(ctx, t, c)
+	}
+	raw, err := o.obs.Command(ctx, t, c)
+	if o.restarting.Load() && c == "Status 1" && o.polls.Add(1) == 2 {
+		o.restarting.Store(false)
+		o.e.mqttDown.Store(false)
+		o.e.httpDown.Store(false)
+	}
+	return raw, err
+}
+
+// restartUploader uploads, then makes the device silent on both transports while it restarts.
+type restartUploader struct {
+	*fakeUploader
+	restarting *atomic.Bool
+}
+
+func (u restartUploader) UploadConfig(ctx context.Context, t tasmota.Target, dump []byte, bind transport.UploadBinding) error {
+	err := u.fakeUploader.UploadConfig(ctx, t, dump, bind)
+	u.e.mqttDown.Store(true)
+	u.e.httpDown.Store(true)
+	u.restarting.Store(true)
+	return err
+}
+
+// Why (#854, the live test of 0.37.0): after a restore over MQTT that changed the MQTT connection while HTTP answered,
+// the wait for the restart also asks HTTP, and the restarting device leaves those polls unanswered. Remembered as HTTP
+// failures, they kept the device's HTTP "failing" for ten minutes: the check backup right after the restore and every
+// manual backup in that window left the files out ("files not backed up: they need HTTP"), and the restore could not
+// compare the files it had written. A device that restarts says nothing about its HTTP API, so those polls must not
+// mark it; the router's real observer and memory decide here.
+func TestTheWaitForTheRestartDoesNotMarkHTTPFailing(t *testing.T) {
+	e := newFlowWith(t, "15.6.0", topicDecoder{topic: "some-other-topic"})
+	a := e.dumpBackup(t, e.dumpA)
+	e.sim.SetConfigDump(e.dumpB)
+	var restarting atomic.Bool
+	var polls atomic.Int32
+	u := restartUploader{fakeUploader: &fakeUploader{e: e, apply: true}, restarting: &restarting}
+	m := e.mqttManager(t, u.fakeUploader, transport.MQTT)
+	m.o.Uploader = u
+	g := idGuard{e.cl, e}
+	router := transport.NewRouter(transport.Options{HTTP: g, Devices: e.st})
+	m.o.Client = observedHTTP{idGuard: g, obs: router.HTTPOnly(), restarting: &restarting, polls: &polls}
+	job, err := m.Start(t.Context(), "alice", a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done := e.finish(t, job.ID); done.State != store.RestoreDone || !done.Verified {
+		t.Fatalf("job: %+v: the device restarted with the backup", done)
+	}
+	if n := polls.Load(); n < 2 {
+		t.Fatalf("%d HTTP polls went unanswered during the restart; the case needs two", n)
+	}
+	if kind, since, failing := router.Memory().HTTPFailure(e.dev); failing {
+		t.Errorf("HTTP is remembered as failing (%s since %v) after polls the restarting device left unanswered", kind, since)
+	}
+}
+
+// status3 is the Status 3 answer of kitchen-spotlight (testdata/fixtures/devices, Tasmota 16.0.0) with the SetOption
+// words flag4 and flag5 given: SetOption103 is bit 21 of flag4, SetOption132 bit 18 of flag5.
+func status3(flag4, flag5 string) string {
+	return `{"StatusLOG":{"SerialLog":2,"WebLog":2,"MqttLog":0,"SysLog":0,"LogHost":"","LogPort":514,"SSId":["IoT","HOME"],` +
+		`"TelePeriod":300,"Resolution":"558180C0","SetOption":["40208008","2805C80001000600003C5A0A192800000000","000000A8","` +
+		flag4 + `","` + flag5 + `","00000000"]}}`
+}
+
+// Why (#845, R28): Tasmota answers SetOption<n> with the device's own StateText1 or StateText2 (GetStateText), so a device
+// with German texts says "AUS" and "AN". Read from that answer, SetOption103 and SetOption132 of such a device were never
+// reported, and every restore over MQTT asked the lockout question while HTTP was silent, or marked the device while it
+// answered, for a backup with the device's own TLS settings. The restore reads them as numbers from Status 3 instead,
+// which no StateText changes; an answer without the bit is still "not reported", never equal (fail closed).
+func TestSetOptionsAreReadAsNumbersWhateverTheDevicesStateText(t *testing.T) {
+	german := func(tls, fp string, status string) map[string]string {
+		return map[string]string{"SetOption103": `{"SetOption103":"` + tls + `"}`, "SetOption132": `{"SetOption132":"` + fp + `"}`,
+			"Status 3": status}
+	}
+	both := func(c *connCompare, tls, fp int) {
+		c.option("SetOption103 (MQTT TLS)", 103, tls)
+		c.option("SetOption132 (TLS fingerprint)", 132, fp)
+	}
+	for name, tc := range map[string]struct {
+		replies map[string]string
+		run     func(*connCompare)
+		diff    []string
+		unread  []string
+	}{
+		"AUS, the backup's own": {replies: german("AUS", "AUS", status3("00006000", "00004000")),
+			run: func(c *connCompare) { both(c, 0, 0) }},
+		"AN, the backup's own": {replies: german("AN", "AN", status3("00206000", "00044000")),
+			run: func(c *connCompare) { both(c, 1, 1) }},
+		"AUS, the backup turns them on": {replies: german("AUS", "AUS", status3("00006000", "00004000")),
+			run: func(c *connCompare) { both(c, 1, 1) }, diff: []string{"SetOption103 (MQTT TLS)", "SetOption132 (TLS fingerprint)"}},
+		"AN, the backup turns TLS off": {replies: german("AN", "AUS", status3("00206000", "00004000")),
+			run: func(c *connCompare) { both(c, 0, 0) }, diff: []string{"SetOption103 (MQTT TLS)"}},
+		"Status 3 not answered": {replies: german("AUS", "AUS", ""),
+			run: func(c *connCompare) { both(c, 0, 0) }, unread: []string{"SetOption103 (MQTT TLS)", "SetOption132 (TLS fingerprint)"}},
+		"Status 3 without the SetOption words": {replies: german("AUS", "AUS", `{"StatusLOG":{"TelePeriod":300}}`),
+			run: func(c *connCompare) { both(c, 0, 0) }, unread: []string{"SetOption103 (MQTT TLS)", "SetOption132 (TLS fingerprint)"}},
+		"Status 3 with a garbled word": {replies: german("AUS", "AUS", status3("0000600G", "00004000")),
+			run: func(c *connCompare) { both(c, 0, 0) }, unread: []string{"SetOption103 (MQTT TLS)"}},
+		"Status 3 not JSON": {replies: german("AUS", "AUS", `not json`),
+			run: func(c *connCompare) { both(c, 0, 0) }, unread: []string{"SetOption103 (MQTT TLS)", "SetOption132 (TLS fingerprint)"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			c := &connCompare{m: &Manager{o: Options{Client: replyClient{replies: tc.replies}}}, ctx: t.Context(), dev: model.Device{ID: 1}}
+			tc.run(c)
+			if !slices.Equal(c.diff, tc.diff) || !slices.Equal(c.unread, tc.unread) {
+				t.Fatalf("changes %v, not reported %v; want %v, %v", c.diff, c.unread, tc.diff, tc.unread)
+			}
+		})
+	}
+}
+
+// Why (#845): the SetOption words of Status 3 place each bit option as the firmware's SetoptionDecode does; a wrong word
+// or bit compares another option with the backup. kitchen-spotlight's real answer has SetOption3, 15, 21, 30, 53, 55,
+// 57, 95, 96 and 128 on; SetOption32-49 are numbers, not bits, and there is no SetOption178.
+func TestEachSetOptionIsReadFromItsWordOfStatus3(t *testing.T) {
+	on := map[int]bool{3: true, 15: true, 21: true, 30: true, 53: true, 55: true, 57: true, 95: true, 96: true, 128: true}
+	for n := range 180 {
+		c := &connCompare{m: &Manager{o: Options{Client: replyClient{replies: map[string]string{"Status 3": status3("00006000", "00004000")}}}},
+			ctx: t.Context(), dev: model.Device{ID: 1}}
+		c.option("x", n, 0) // the backup has it off: a change exactly when the device has it on
+		switch {
+		case n >= 32 && n <= 49 || n > 177:
+			if len(c.unread) != 1 {
+				t.Errorf("SetOption%d read as a bit: changes %v", n, c.diff)
+			}
+		case len(c.unread) != 0 || (len(c.diff) == 1) != on[n]:
+			t.Errorf("SetOption%d: changes %v, not reported %v; want on %v", n, c.diff, c.unread, on[n])
+		}
+	}
+}
+
+// answering is the device on its topic with its own answers to some commands (a reply "" leaves it unanswered); every
+// other call goes to the idGuard.
+type answering struct {
+	idGuard
+	replies map[string]string
+}
+
+func (a answering) Command(ctx context.Context, t tasmota.Target, c string) (json.RawMessage, error) {
+	if r, ok := a.replies[c]; ok {
+		if r == "" {
+			return nil, fmt.Errorf("%w: test: the device left %s unanswered", tasmota.ErrTimeout, c)
+		}
+		return json.RawMessage(r), nil
+	}
+	return a.idGuard.Command(ctx, t, c)
+}
+
+// Why (#844, R28): a decoded backup holds the Topic setting with its placeholders ("tasmota_%06X", Tasmota's default),
+// the inventory the topic the device runs under ("tasmota_32D74B"). Compared with each other, every restore over MQTT
+// of a device that keeps a placeholder topic counted as a change of the topic: a false lockout question while HTTP was
+// silent, a mark while it answered. The device answers Topic with its setting, so the backup's setting is compared with
+// the device's, raw against raw like MqttClient, and the same setting on the same device is the same topic. Only
+// %hostname% depends on another setting, the Hostname, which a restore writes too: with it in the topic both Hostnames
+// are compared, every value with a '%' as the one the firmware puts in its place at boot. A side that cannot be read is
+// "not reported", never equal (fail closed).
+func TestAPlaceholderTopicIsComparedRawWithTheDevicesTopic(t *testing.T) {
+	const (
+		changesTopic    = "this backup changes Topic"
+		changesHostname = "this backup changes Hostname (in the Topic)"
+		tail            = ", so the backup's MQTT settings cannot be compared with the device's"
+	)
+	for name, tc := range map[string]struct {
+		topic, hostname string            // the backup's Topic and Hostname settings (hostname "": none)
+		device          map[string]string // the device's answers
+		want            string            // the whole sentence
+	}{
+		"the same placeholder": {topic: "tasmota_%06X", hostname: "%s-%04d",
+			device: map[string]string{"Topic": `{"Topic":"tasmota_%06X"}`}},
+		"another placeholder": {topic: "plug_%06X",
+			device: map[string]string{"Topic": `{"Topic":"tasmota_%06X"}`}, want: changesTopic},
+		"no placeholder, the device's own": {topic: "kitchen-spotlight",
+			device: map[string]string{"Topic": `{"Topic":"kitchen-spotlight"}`}},
+		"%hostname% with the same Hostname": {topic: "%hostname%", hostname: "kitchen-spotlight",
+			device: map[string]string{"Topic": `{"Topic":"%hostname%"}`, "Hostname": `{"Hostname":"kitchen-spotlight"}`}},
+		"%hostname% with another Hostname": {topic: "%hostname%", hostname: "hall-spotlight",
+			device: map[string]string{"Topic": `{"Topic":"%hostname%"}`, "Hostname": `{"Hostname":"kitchen-spotlight"}`}, want: changesHostname},
+		"%hostname%, both Hostnames with a %": {topic: "dev_%hostname%", hostname: "lamp-%06X",
+			device: map[string]string{"Topic": `{"Topic":"dev_%hostname%"}`, "Hostname": `{"Hostname":"%s-%04d"}`}},
+		"%hostname%, a % only in the backup's Hostname": {topic: "%hostname%", hostname: "%s-%04d",
+			device: map[string]string{"Topic": `{"Topic":"%hostname%"}`, "Hostname": `{"Hostname":"kitchen-spotlight"}`}, want: changesHostname},
+		"%hostname% without Hostname in the backup": {topic: "%hostname%",
+			device: map[string]string{"Topic": `{"Topic":"%hostname%"}`, "Hostname": `{"Hostname":"kitchen-spotlight"}`},
+			want:   "the device did not report its Hostname (in the Topic)" + tail},
+		"%hostname%, Hostname not answered": {topic: "%hostname%", hostname: "kitchen-spotlight",
+			device: map[string]string{"Topic": `{"Topic":"%hostname%"}`, "Hostname": ""},
+			want:   "the device did not report its Hostname (in the Topic)" + tail},
+		"Topic not answered": {topic: "tasmota_%06X",
+			device: map[string]string{"Topic": ""}, want: "the device did not report its Topic" + tail},
+	} {
+		t.Run(name, func(t *testing.T) {
+			extra := fmt.Sprintf(`,"mqtt_topic":%q`, tc.topic)
+			if tc.hostname != "" {
+				extra += fmt.Sprintf(`,"hostname":%q`, tc.hostname)
+			}
+			e := newFlowWith(t, "15.6.0", connDecoder{extra: extra})
+			a := e.dumpBackup(t, e.dumpA)
+			m := e.mqttManager(t, &fakeUploader{e: e}, transport.MQTT)
+			m.o.Client = answering{idGuard: idGuard{e.cl, e}, replies: tc.device}
+			dev, err := e.st.GetDevice(t.Context(), e.dev)
+			if err != nil {
+				t.Fatal(err)
+			}
+			dev.Topic = "tasmota_32D74B" // the resolved topic, as the inventory holds it
+			if got := m.mqttLockout(transport.WithPath(t.Context(), transport.MQTT), dev, a); got != tc.want {
+				t.Fatalf("%q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// Why (#844): the whole restore of a device whose backup keeps Tasmota's default topic, while HTTP is silent: the
+// device answers Topic with the same setting, so its own topic is no change of the MQTT connection, no lockout question
+// comes and the device is not marked.
+func TestARestoreOfADeviceWithAPlaceholderTopicAsksNothing(t *testing.T) {
+	e := newFlowWith(t, "15.6.0", connDecoder{extra: `,"mqtt_topic":"tasmota_%06X"`})
+	dev, err := e.st.GetDevice(t.Context(), e.dev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mac := strings.ToUpper(transport.NormMAC(dev.MAC))
+	dev.Topic = "tasmota_" + mac[6:]
+	if err := e.st.UpdateDevice(t.Context(), dev); err != nil {
+		t.Fatal(err)
+	}
+	a := e.dumpBackup(t, e.dumpA)
+	e.sim.SetConfigDump(e.dumpB)
+	e.httpDown.Store(true)
+	m := e.mqttManager(t, &fakeUploader{e: e, apply: true}, transport.MQTT)
+	m.o.Client = answering{idGuard: idGuard{e.cl, e}, replies: map[string]string{"Topic": `{"Topic":"tasmota_%06X"}`}}
+	job, err := m.Start(t.Context(), "alice", a.ID)
+	if err != nil {
+		t.Fatalf("the device's own topic asked: %v", err)
+	}
+	if done := e.finish(t, job.ID); done.State != store.RestoreDone {
+		t.Fatalf("job: %+v", done)
+	}
+	if got := e.marks(); len(got) != 0 {
+		t.Errorf("marked %v for a restore that keeps the device's topic", got)
 	}
 }
