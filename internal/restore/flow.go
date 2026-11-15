@@ -324,8 +324,13 @@ func (m *Manager) verifySettings(ctx context.Context, j Job, dmp []byte, fresh [
 		return "restored; the device's configuration dump is identical to the backup", true, 0, nil
 	}
 	want, err := m.decodedOf(ctx, j.BackupID)
-	if err != nil || want == nil || freshDec == nil {
-		return "restored; the dumps differ in bytes and no decoded backup is available to compare (decoder missing)", false, 0, nil //nolint:nilerr // not having a decoded twin is a result, not a failure
+	if err != nil {
+		// The copy may exist: saying it is missing would send the person to look for the wrong cause.
+		m.o.Log.Warn("restore: reading the decoded copy of the restored backup", "component", "restore", "job", j.ID, "err", err)
+		return "restored; the dumps differ in bytes and the decoded copy of the backup being restored could not be read", false, 0, nil //nolint:nilerr // logged; an unreadable copy is a result of the check, not a failed restore
+	}
+	if want == nil || freshDec == nil {
+		return noDecodedCopyText(want == nil, freshDec == nil), false, 0, nil
 	}
 	diff, err := backup.Diff(want, freshDec)
 	if err != nil {
@@ -344,6 +349,20 @@ func (m *Manager) verifySettings(ctx context.Context, j Job, dmp []byte, fresh [
 		paths = append(paths, c.Path)
 	}
 	return fmt.Sprintf("restored, but %d setting(s) differ from the backup: %s", len(diff), strings.Join(paths, ", ")), false, len(diff), nil
+}
+
+// noDecodedCopyText says which of the two backups it compared lacks the decoded copy the comparison needs, so the person
+// looks at the right one: the backup that was restored (an old one, taken without the decoder) or the check backup taken
+// after the restore (the decoder did not run now), or both (#855).
+func noDecodedCopyText(restoredLacks, checkLacks bool) string {
+	const lead = "restored; the dumps differ in bytes and cannot be compared: "
+	switch {
+	case restoredLacks && checkLacks:
+		return lead + "neither the backup being restored nor the check backup taken after the restore has a decoded copy"
+	case restoredLacks:
+		return lead + "the backup being restored has no decoded copy"
+	}
+	return lead + "the check backup taken after the restore has no decoded copy"
 }
 
 // decodedOf returns the decoded twin (same device and run) of a dump backup.
@@ -386,7 +405,7 @@ func (m *Manager) liveMAC(ctx context.Context, dev model.Device) (string, error)
 func (m *Manager) checkIdentity(ctx context.Context, dev model.Device) error {
 	want := transport.NormMAC(dev.MAC)
 	if want == "" {
-		return fmt.Errorf("%w: the inventory has no MAC for this device (probe it first)", ErrIdentity)
+		return fmt.Errorf("%w: %s", ErrIdentity, backup.NoMACWhy)
 	}
 	got, err := m.liveMAC(ctx, dev)
 	if err != nil {
@@ -492,7 +511,7 @@ func (m *Manager) preflight(ctx context.Context, actor string, dev *model.Device
 // address is not this device.
 func (m *Manager) adoptMAC(ctx context.Context, actor string, dev *model.Device, record bool, expect string) error {
 	if m.o.Hardware == nil {
-		return fmt.Errorf("%w: the inventory has no MAC for this device (probe it first)", ErrIdentity)
+		return fmt.Errorf("%w: %s", ErrIdentity, backup.NoMACWhy)
 	}
 	mac, err := m.liveMAC(ctx, *dev)
 	if err != nil {

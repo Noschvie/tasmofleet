@@ -45,12 +45,13 @@ func AskMAC(ctx context.Context, c tasmota.Client, dev model.Device) (string, er
 	return "", lastErr
 }
 
-// macOf reads the MAC out of a Status 5 reply.
+// macOf reads the MAC out of a Status 5 reply. A MAC that normalises to "" (missing, or only separators) is a bad
+// answer: the empty MAC must never match an inventory entry that normalises to "" as well.
 func macOf(raw json.RawMessage) (string, error) {
 	var s struct {
 		StatusNET struct{ Mac string }
 	}
-	if err := json.Unmarshal(raw, &s); err != nil || s.StatusNET.Mac == "" {
+	if err := json.Unmarshal(raw, &s); err != nil || NormMAC(s.StatusNET.Mac) == "" {
 		return "", tasmota.ErrBadResponse
 	}
 	return NormMAC(s.StatusNET.Mac), nil

@@ -614,6 +614,39 @@ func TestRestoreConfirmShowsTheFilesThatAreWrittenFirst(t *testing.T) {
 	}
 }
 
+// Why (#855): the confirmation says "The 1 file are written" for a backup with one file: the
+// person reads the sentence they are about to agree to, and a grammar slip in it reads as a template
+// nobody looked at. The verb follows the count in the step text and in the acknowledgement alike.
+func TestRestoreConfirmUsesTheRightVerbForOneFile(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		files []restore.PlannedFile
+		want  []string
+		not   []string
+	}{
+		{"one file", []restore.PlannedFile{{Path: "/autoexec.be", Size: 1200}},
+			[]string{"The 1 file is written to the device", "its 1 file is written"}, []string{"1 file are", "1 files"}},
+		{"two files", []restore.PlannedFile{{Path: "/autoexec.be", Size: 1}, {Path: "/x.be", Size: 1}},
+			[]string{"The 2 files are written to the device", "its 2 files are written"}, []string{"2 files is", "2 file "}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e, _, rs := newDiffEnv(t)
+			rs.assess = restore.Assessment{Files: restore.FilesPlan{Files: tc.files, Bytes: 1200}}
+			_, body := e.do(t, "GET", "/backups/1/restore", "admin", nil)
+			for _, want := range tc.want {
+				if !strings.Contains(body, want) {
+					t.Errorf("missing %q", want)
+				}
+			}
+			for _, not := range tc.not {
+				if strings.Contains(body, not) {
+					t.Errorf("must not contain %q", not)
+				}
+			}
+		})
+	}
+}
+
 // Why (#324): a restore that cannot write the files (MQTT, no file system) must say so on the
 // page before the confirmation and must not word the acknowledgement as if files were written.
 func TestRestoreConfirmSaysWhenTheFilesAreNotRestored(t *testing.T) {

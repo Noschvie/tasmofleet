@@ -198,12 +198,19 @@ func (m *Manager) finishBackup(ctx context.Context, actor string, owner, dev mod
 	if run.Label != "" {
 		note = strings.TrimSuffix(strings.TrimSpace(run.Label+"; "+note), ";")
 	}
-	ctx, tr := transport.WithTrace(ctx) // which transports the run used (the dump and its snapshot; HTTP for the files), for the audit entry
-	var filesErr string
-	out, version, err := m.backup(ctx, owner, dev, note, run, &filesErr)
-	detail := map[string]any{"files": len(out), "firmware": version, "trigger": run.Trigger, "via": tr.Via()}
-	if filesErr != "" {
-		detail["files_error"] = filesErr // the files archive could not be written or indexed; the run succeeded
+	ctx, tr := transport.WithTrace(ctx) // which transports the run used, for the audit entry
+	var rep runReport
+	out, version, err := m.backup(ctx, owner, dev, note, run, &rep)
+	via := rep.via // the transport of the dump and its snapshot; the HTTP calls beside a dump over MQTT are listed apart
+	if via == "" {
+		via = tr.Via()
+	}
+	detail := map[string]any{"files": len(out), "firmware": version, "trigger": run.Trigger, "via": via}
+	if len(rep.httpSide) > 0 {
+		detail["http_side"] = rep.httpSide // the files cannot come over MQTT: the MAC check, the file system and the files go over HTTP
+	}
+	if rep.filesErr != "" {
+		detail["files_error"] = rep.filesErr // the files archive could not be written or indexed; the run succeeded
 	}
 	if run.Keep {
 		detail["kept"] = true
@@ -270,6 +277,13 @@ func (m *Manager) recordAttempt(ctx context.Context, id model.DeviceID, run Run,
 	}
 }
 
+// runReport is what a backup run tells its caller besides the rows, for the audit entry.
+type runReport struct {
+	filesErr string   // the files archive could not be written or indexed; the run succeeded
+	via      string   // the transport of the dump and its status snapshot ("" when the run ended before the dump)
+	httpSide []string // the HTTP calls made beside a dump over MQTT (the files cannot come over MQTT)
+}
+
 // filesLost records that the files archive could not be stored. The run goes on: the archive is
 // best effort, and the dump is stored already. The reason is a fixed word, never the error text.
 func (m *Manager) filesLost(id model.DeviceID, warn *string, step string, err error) {
@@ -277,14 +291,16 @@ func (m *Manager) filesLost(id model.DeviceID, warn *string, step string, err er
 	m.o.Log.Error("backup: files archive not stored", "component", "backup", "device", int64(id), "step", step, "err", err)
 }
 
-func (m *Manager) backup(ctx context.Context, owner, dev model.Device, note string, run Run, filesErr *string) ([]model.Backup, string, error) {
+func (m *Manager) backup(ctx context.Context, owner, dev model.Device, note string, run Run, rep *runReport) ([]model.Backup, string, error) {
 	id := owner.ID
 	if v := dev.Identity.Variant; v == "safeboot" || v == "minimal" { // answers none of the snapshot commands (#558)
 		return nil, "", &LimitedFirmwareError{Variant: v}
 	}
 	target := tasmota.TargetFor(dev)
 
-	dctx, dumpVia := transport.WithTrace(ctx) // the transport that carried the dump
+	cctx, coreVia := transport.WithTrace(ctx) // the dump and its snapshot, apart from the files that go over HTTP whatever carried the dump
+	defer func() { rep.via = coreVia.Via() }()
+	dctx, dumpVia := transport.WithTrace(cctx) // the transport that carried the dump
 	dmp, err := m.o.Client.DownloadConfig(dctx, target)
 	if err != nil {
 		return nil, "", fmt.Errorf("backup: download config: %w", err)
@@ -293,7 +309,7 @@ func (m *Manager) backup(ctx context.Context, owner, dev model.Device, note stri
 		return nil, "", errEmptyDump
 	}
 
-	snap, failed, fwVersion, err := m.snapshot(onDumpPath(ctx, dumpVia), target)
+	snap, failed, fwVersion, err := m.snapshot(onDumpPath(cctx, dumpVia), target)
 	if err != nil {
 		return nil, "", err
 	}
@@ -309,7 +325,12 @@ func (m *Manager) backup(ctx context.Context, owner, dev model.Device, note stri
 
 	// Files are best effort: the dump stays authoritative, so nothing here fails the run (only
 	// shutdown does). Without an archive the reason is the last sentence of the dump note.
-	fr, err := m.filesStep(ctx, dev, target, fwVersion, m.o.Clock.Now(), dumpVia.Via() == "mqtt")
+	overMQTT := dumpVia.Via() == "mqtt"
+	var side *[]string // beside a dump over MQTT the HTTP calls of the files step are listed; after one over HTTP they are part of "via"
+	if overMQTT {
+		side = &rep.httpSide
+	}
+	fr, err := m.filesStep(ctx, dev, target, fwVersion, m.o.Clock.Now(), overMQTT, side)
 	if err != nil {
 		return nil, fwVersion, err
 	}
@@ -349,7 +370,7 @@ func (m *Manager) backup(ctx context.Context, owner, dev model.Device, note stri
 		name := fileName(taken.Format(stampLayout), base, f.kind)
 		if err := m.writeAtomic(dir, name, f.data); err != nil {
 			if f.kind == model.BackupFiles { // best effort: the dump is stored already
-				m.filesLost(id, filesErr, "write", err)
+				m.filesLost(id, &rep.filesErr, "write", err)
 				continue
 			}
 			return nil, fwVersion, m.abandonRun(ctx, id, stored, fmt.Errorf("backup: write %s: %w", f.kind, err))
@@ -365,7 +386,7 @@ func (m *Manager) backup(ctx context.Context, owner, dev model.Device, note stri
 		if err != nil {
 			_ = os.Remove(filepath.Join(dir, name)) // unindexed file would never be pruned
 			if f.kind == model.BackupFiles {
-				m.filesLost(id, filesErr, "index", err)
+				m.filesLost(id, &rep.filesErr, "index", err)
 				continue
 			}
 			return nil, fwVersion, m.abandonRun(ctx, id, stored, fmt.Errorf("backup: index %s: %w", f.kind, err))

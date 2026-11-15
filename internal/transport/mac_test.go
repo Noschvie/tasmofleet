@@ -95,3 +95,15 @@ func TestFilesUsableSaysWhenNoFileCallCouldGo(t *testing.T) {
 		t.Fatalf("%v", err)
 	}
 }
+
+// Why (the security check of #865): a Status 5 whose MAC is only separators (":", "-", ".") names no device. It must be
+// a bad answer like a missing MAC, never the empty MAC, which an inventory entry that normalises to "" would match and
+// so let a host that is not the device pass the identity check of a backup or a restore.
+func TestAMACMadeOnlyOfSeparatorsIsNoAnswer(t *testing.T) {
+	for _, mac := range []string{":", "-", ".", " : "} {
+		raw := json.RawMessage(`{"StatusNET":{"Mac":"` + mac + `"}}`)
+		if got, err := macOf(raw); !errors.Is(err, tasmota.ErrBadResponse) {
+			t.Errorf("macOf(%s) = %q, %v; want ErrBadResponse", raw, got, err)
+		}
+	}
+}

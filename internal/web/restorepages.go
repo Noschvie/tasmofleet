@@ -92,6 +92,14 @@ func fileWhy(name string) string {
 // filesPlural words "6 files".
 func filesPlural(n int) string { return plural(n, "file") }
 
+// filesAre words "1 file is" and "6 files are": a sentence that goes on with a verb after the count.
+func filesAre(n int, verb string) string {
+	if n == 1 {
+		return filesPlural(n) + " is " + verb
+	}
+	return filesPlural(n) + " are " + verb
+}
+
 // backupSub is the line under the restore title: device, backup date, trigger, firmware, size.
 func backupSub(name string, b model.Backup, files int) string {
 	parts := []string{name, "backup from " + shortDate(b.TakenAt)}
@@ -188,11 +196,11 @@ func restoreConfirmOf(v view, p confirmPage) restoreConfirmView {
 			card.Foot = "Files first, then the settings, one restart. Files of the same name are replaced. Nothing on the device is deleted: files that are not in the backup stay as they are."
 			c.StepsText = []string{
 				"TasmoFleet backs up the current state first, with its files, so you can undo this (a file that backup cannot hold is not overwritten, and files the device did not have before stay on it after a rollback).",
-				fmt.Sprintf("The %s are written to the device's filesystem.", filesPlural(n)),
+				fmt.Sprintf("The %s to the device's filesystem.", filesAre(n, "written")),
 				"The backup is uploaded and the device restarts (relays switch off for a few seconds).",
 				"Settings and files are read back and compared with the backup.",
 			}
-			ack = "I understand that " + p.Device.Name + " restarts, its configuration is replaced by this backup, its " + filesPlural(n) + " are written (files of the same name are replaced) and the old credentials (Wi-Fi, MQTT, web password) come back"
+			ack = "I understand that " + p.Device.Name + " restarts, its configuration is replaced by this backup, its " + filesAre(n, "written") + " (files of the same name are replaced) and the old credentials (Wi-Fi, MQTT, web password) come back"
 		} else {
 			card.Title = "Files in this backup (" + stored + "): not restored"
 			card.Foot = "Nothing on the device is deleted or changed."

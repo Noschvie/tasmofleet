@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -36,6 +37,10 @@ const ManifestName = ".tasmofleet-manifest.json"
 // NoteFilesPrefix starts the sentence a run's dump note carries when the run
 // has no files archive; the rest says why. See FilesNoteOf.
 const NoteFilesPrefix = "files not backed up: "
+
+// NoMACWhy is what a backup or a restore says about a device whose inventory entry holds no MAC: nothing can show that
+// the host at its address is the device, so nothing is stored from it or sent to it (#846).
+const NoMACWhy = "the inventory has no MAC for this device (probe it first)"
 
 // ErrNoFilesArchive: the run has no files archive (see RunFiles.Note for why).
 var ErrNoFilesArchive = errors.New("backup: the run has no files archive")
@@ -356,11 +361,16 @@ func notBacked(reason string) filesResult { return filesResult{runNote: NoteFile
 
 // filesStep reads the device's flash files (best effort: only a cancelled
 // context is an error). The caller holds the device lock; the client takes
-// its own per-device lock for every call. The files travel over HTTP whatever
-// carried the dump (Tasmota has no file transfer over MQTT); after a dump over
-// MQTT (dumpOverMQTT, #607) they are read only from a host that reports dev's
-// MAC, since HTTP finds the device by its address and the broker by its topic.
-func (m *Manager) filesStep(ctx context.Context, dev model.Device, t tasmota.Target, fwVersion string, at time.Time, dumpOverMQTT bool) (filesResult, error) {
+// its own per-device lock for every call. The listing and the files travel over
+// HTTP whatever carried the dump (Tasmota has no file transfer over MQTT); after
+// a dump over MQTT (dumpOverMQTT, #607) they are read only from a host that
+// reports dev's MAC, since HTTP finds the device by its address and the broker
+// by its topic. The file system itself (UfsType, UfsSize, UfsFree) is asked on
+// the dump's path first: over MQTT the answer comes from the device on its topic,
+// so a device without a file system is asked nothing over HTTP (#855).
+//
+// side collects the HTTP calls made beside a dump over MQTT, by name, for the audit entry of the run (nil: not collected).
+func (m *Manager) filesStep(ctx context.Context, dev model.Device, t tasmota.Target, fwVersion string, at time.Time, dumpOverMQTT bool, side *[]string) (filesResult, error) {
 	fs, ok := m.o.Client.(tasmota.FileSystem)
 	if !ok {
 		return filesResult{}, nil // a client without file access (tests with fake devices)
@@ -369,39 +379,66 @@ func (m *Manager) filesStep(ctx context.Context, dev model.Device, t tasmota.Tar
 	// everything), so a stalling device costs the files, never the dump.
 	wctx, cancel := walkContext(ctx)
 	defer cancel()
+	var info tasmota.FSInfo
+	known := false // info came over MQTT
 	if dumpOverMQTT {
-		// The identity comes before the first request that carries the stored web password (FSInfo does).
+		// The device on its topic says whether it has a file system at all: no web password, no identity question.
+		i, err := tasmota.ReadFSInfo(transport.WithPath(wctx, transport.MQTT), m.o.Client, t)
+		switch {
+		case err == nil:
+			if why := filesUnsupported(fwVersion, i); why != "" {
+				return notBacked(why), nil
+			}
+			info, known = i, true
+		case ctx.Err() != nil:
+			return filesResult{}, ctx.Err()
+		default: // asked over HTTP below, after the identity question, as a read MQTT left unanswered (T2)
+			m.o.Log.Info("backup: file system not read over MQTT", "component", "backup", "device", int64(t.DeviceID()), "reason", reasonOf(err))
+		}
+		// The identity comes before the first request that carries the stored web password. Without a MAC in the
+		// inventory there is no identity to ask for, whatever HTTP's state (#846): that is what the person can fix.
+		if !hasMAC(dev) {
+			return notBacked(NoMACWhy), nil
+		}
 		if g, ok := m.o.Client.(filesGate); ok {
 			if err := g.FilesUsable(t); err != nil {
 				return notBacked(reasonOf(err)), nil
 			}
 		}
-		if why, err := m.sameDeviceOverHTTP(ctx, wctx, dev, t); why != "" || err != nil {
+		mctx, mtr := transport.WithTrace(wctx)
+		why, err := m.sameDeviceOverHTTP(ctx, mctx, dev, t)
+		sideCall(side, "mac check", mtr)
+		if why != "" || err != nil {
 			return notBacked(why), err
 		}
 	}
-	info, err := fs.FSInfo(wctx, t)
-	if err != nil {
-		if cerr := ctx.Err(); cerr != nil {
-			return filesResult{}, cerr
+	if !known {
+		ictx, itr := transport.WithTrace(wctx)
+		i, err := fs.FSInfo(ictx, t)
+		sideCall(side, "file system", itr)
+		if err != nil {
+			if cerr := ctx.Err(); cerr != nil {
+				return filesResult{}, cerr
+			}
+			why := reasonOf(err)
+			if wctx.Err() != nil {
+				why = strings.TrimPrefix(whyTimeLimit, "not read: ")
+			}
+			m.o.Log.Info("backup: files not read", "component", "backup", "device", int64(t.DeviceID()), "reason", why)
+			return notBacked(why), nil
 		}
-		why := reasonOf(err)
-		if wctx.Err() != nil {
-			why = strings.TrimPrefix(whyTimeLimit, "not read: ")
+		if why := filesUnsupported(fwVersion, i); why != "" {
+			return notBacked(why), nil
 		}
-		m.o.Log.Info("backup: files not read", "component", "backup", "device", int64(t.DeviceID()), "reason", why)
-		return notBacked(why), nil
-	}
-	if !tasmota.FilesSupported(fwVersion, info) {
-		if !info.HasFlash() {
-			return notBacked("no filesystem"), nil
-		}
-		return notBacked("firmware older than " + tasmota.MinFilesFirmware), nil
+		info = i
 	}
 
-	w := &walker{parent: ctx, ctx: wctx, fs: fs, t: t, data: map[string][]byte{},
+	fctx, ftr := transport.WithTrace(wctx)
+	w := &walker{parent: ctx, ctx: fctx, fs: fs, t: t, data: map[string][]byte{},
 		man: Manifest{FSType: info.Type, FSSizeKB: info.SizeKB, FSFreeKB: info.FreeKB, Files: []ManifestFile{}, Skipped: []ManifestSkip{}}}
-	if err := w.dir("/", 0); err != nil {
+	err := w.dir("/", 0)
+	sideCall(side, "files", ftr)
+	if err != nil {
 		return filesResult{}, err
 	}
 	if w.rootErr != nil {
@@ -432,6 +469,40 @@ type filesGate interface {
 	FilesUsable(t tasmota.Target) error
 }
 
+// devMACs is every MAC the inventory holds for dev, normalised (transport.NormMAC); entries that normalise to "" are
+// left out. It is the one list the host at dev's address is compared with, so "has a MAC" and "is this MAC" agree.
+func devMACs(dev model.Device) []string {
+	var out []string
+	for _, m := range append([]string{dev.MAC}, dev.MACs...) {
+		if n := transport.NormMAC(m); n != "" {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// hasMAC reports whether the inventory holds a MAC for dev, the only thing the host at its address can be compared with.
+func hasMAC(dev model.Device) bool { return len(devMACs(dev)) > 0 }
+
+// sideCall lists name among the HTTP calls beside a dump over MQTT when the calls made under tr were sent. A call the
+// router stopped before it sent anything (HTTP known to fail) is not listed.
+func sideCall(side *[]string, name string, tr *transport.Trace) {
+	if side != nil && tr.Via() != "none" {
+		*side = append(*side, name)
+	}
+}
+
+// filesUnsupported says why the files of a device with info on firmware fwVersion are not read, "" when they are.
+func filesUnsupported(fwVersion string, info tasmota.FSInfo) string {
+	switch {
+	case tasmota.FilesSupported(fwVersion, info):
+		return ""
+	case !info.HasFlash():
+		return "no filesystem"
+	}
+	return "firmware older than " + tasmota.MinFilesFirmware
+}
+
 // sameDeviceOverHTTP asks the host at the device's address for its MAC (transport.AskMAC: Status 5 over HTTP, without
 // the stored web credentials unless the host asks for them) and says why its files must not be stored with the dump,
 // "" when it is this device: one of dev's MACs. Only a cancelled run is an error.
@@ -451,10 +522,8 @@ func (m *Manager) sameDeviceOverHTTP(ctx, wctx context.Context, dev model.Device
 		m.o.Log.Info("backup: files not read", "component", "backup", "device", int64(t.DeviceID()), "reason", why)
 		return why, nil
 	}
-	for _, mac := range append([]string{dev.MAC}, dev.MACs...) {
-		if mac != "" && transport.NormMAC(mac) == got {
-			return "", nil
-		}
+	if slices.Contains(devMACs(dev), got) {
+		return "", nil
 	}
 	m.o.Log.Warn("backup: the host at the device's address reports another MAC; its files are not stored", "component", "backup", "device", int64(t.DeviceID()))
 	return "the device at its address is not this device", nil

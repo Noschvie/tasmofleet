@@ -3,6 +3,7 @@ package ota
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -113,15 +114,39 @@ func (e *Engine) workBackup(ctx context.Context, j model.Job) {
 		e.finishCommand(ctx, j, "", err.Error())
 		return
 	}
-	note := "backup taken"
-	if len(bs) > 1 {
-		note = strconv.Itoa(len(bs)) + " backup files taken"
-	}
-	switch tr.Via() { // the page of the job says which way the dump came
+	e.finishCommand(ctx, j, backupNote(bs, tr.Via()), "")
+}
+
+// backupPartNames are the parts of one backup in the order the result lists them.
+var backupPartNames = []struct {
+	kind model.BackupKind
+	name string
+}{
+	{model.BackupConfigDump, "config"},
+	{model.BackupSnapshot, "status"},
+	{model.BackupDecoded, "decoded"},
+	{model.BackupFiles, "files"},
+}
+
+// backupNote words the result of one device's backup (#838): one backup with its parts named, never
+// the number of stored files, which reads like several backups. Every page that shows a backup job
+// shows this text. via is the audit "via" of the run: the page of the job says which way the dump came.
+func backupNote(bs []model.Backup, via string) string {
+	note := "Backup taken"
+	switch via {
 	case "mqtt", "http+mqtt":
 		note += " over MQTT"
 	case "http":
 		note += " over HTTP"
 	}
-	e.finishCommand(ctx, j, note, "")
+	var parts []string
+	for _, p := range backupPartNames {
+		if slices.ContainsFunc(bs, func(b model.Backup) bool { return b.Kind == p.kind }) {
+			parts = append(parts, p.name)
+		}
+	}
+	if len(parts) > 0 {
+		note += " (" + strings.Join(parts, ", ") + ")"
+	}
+	return note
 }

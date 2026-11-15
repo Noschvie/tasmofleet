@@ -93,6 +93,8 @@ type filesEnv struct {
 	*env
 	flaky *flakyFS
 	logs  *bytes.Buffer
+	// overMQTT lists the Ufs commands the device was asked on its topic (newMQTTFilesEnvSpec).
+	overMQTT *[]string
 }
 
 // newFilesEnv backs up a simulated device through the real HTTP client, so listing, the /ufsd
@@ -900,10 +902,20 @@ func TestAddressRefusedCountsAsTheDeviceBeingGone(t *testing.T) {
 	}
 }
 
-// mqttDevice is the command channel of a device that is only reachable over MQTT.
-type mqttDevice struct{ dump []byte }
+// mqttDevice is the command channel of a device that is only reachable over MQTT. With dev set, the device's own
+// answers to the Ufs commands come back (the simulated device asked directly, as the device would answer on its topic;
+// "Unknown" is tasmota.ErrUnknownCommand there as over MQTT), and asked records them.
+type mqttDevice struct {
+	dump  []byte
+	dev   tasmota.Client
+	asked *[]string
+}
 
-func (m mqttDevice) Do(context.Context, model.Device, string) (json.RawMessage, error) {
+func (m mqttDevice) Do(ctx context.Context, d model.Device, c string) (json.RawMessage, error) {
+	if m.dev != nil && strings.HasPrefix(c, "Ufs") {
+		*m.asked = append(*m.asked, c)
+		return m.dev.Command(ctx, tasmota.TargetFor(model.Device{Address: d.Address, Port: d.Port}), c)
+	}
 	return json.RawMessage(`{"Status":{}}`), nil
 }
 func (m mqttDevice) DoLoose(ctx context.Context, d model.Device, c string) (json.RawMessage, error) {
@@ -969,7 +981,7 @@ func TestBackupOverMQTTThroughTheRealRouterSendsNoFileCallToHTTP(t *testing.T) {
 	// (each call would wait for a timeout) and must say "they need HTTP". Real Router, real trace.
 	mem := transport.NewMemory(transport.DefaultFailFor, time.Now)
 	mem.Fail(7, transport.HTTPFailUnreachable)
-	dev := model.Device{ID: 7, Name: "plug", Address: "192.0.2.7", Topic: "plug", MQTT: model.MQTTOurs,
+	dev := model.Device{ID: 7, Name: "plug", Address: "192.0.2.7", Topic: "plug", MQTT: model.MQTTOurs, MAC: "AA:BB:CC:DD:EE:01",
 		MQTTPasswordMode: model.MQTTPasswordOwn, MQTTPassword: "pw", Identity: model.Identity{Version: "16.0.0"}}
 	spy := &httpSpy{}
 	rt := transport.NewRouter(transport.Options{HTTP: spy, Devices: devs{dev}, Facts: mqttFacts{mem}, Memory: mem})

@@ -265,6 +265,20 @@ func checkEntryName(n string) error {
 }
 
 func (c *httpClient) FSInfo(ctx context.Context, t Target) (FSInfo, error) {
+	return ReadFSInfo(ctx, c, t)
+}
+
+// Commander sends one Tasmota command and returns the raw JSON object: the part of a client ReadFSInfo needs, so the
+// HTTP client and the transport router (over either transport) can both ask it.
+type Commander interface {
+	Command(ctx context.Context, t Target, cmnd string) (json.RawMessage, error)
+}
+
+// ReadFSInfo asks UfsType and, for a flash file system, UfsSize and UfsFree through c. A device that does not know the
+// commands (no file system in the build: Tasmota answers {"Command":"Unknown"}, over HTTP and MQTT alike) yields Type
+// FSNone, nil. The three are plain commands that answer under their own key, so they travel over MQTT as well as HTTP;
+// the listing and the file contents do not (FileSystem).
+func ReadFSInfo(ctx context.Context, c Commander, t Target) (FSInfo, error) {
 	raw, err := c.Command(ctx, t, "UfsType")
 	if err != nil {
 		if errors.Is(err, ErrUnknownCommand) {
@@ -298,16 +312,16 @@ func (c *httpClient) FSInfo(ctx context.Context, t Target) (FSInfo, error) {
 	if !info.HasFlash() {
 		return FSInfo{Type: FSNone, HasSD: info.HasSD}, nil
 	}
-	if info.SizeKB, err = c.ufsKB(ctx, t, "UfsSize", flash); err != nil {
+	if info.SizeKB, err = ufsKB(ctx, c, t, "UfsSize", flash); err != nil {
 		return FSInfo{}, err
 	}
-	if info.FreeKB, err = c.ufsKB(ctx, t, "UfsFree", flash); err != nil {
+	if info.FreeKB, err = ufsKB(ctx, c, t, "UfsFree", flash); err != nil {
 		return FSInfo{}, err
 	}
 	return info, nil
 }
 
-func (c *httpClient) ufsKB(ctx context.Context, t Target, cmnd string, idx int) (int, error) {
+func ufsKB(ctx context.Context, c Commander, t Target, cmnd string, idx int) (int, error) {
 	raw, err := c.Command(ctx, t, cmnd)
 	if err != nil {
 		return 0, err

@@ -129,7 +129,9 @@ func TestBackupSnapshotFollowsTheTransportOfTheDump(t *testing.T) {
 			if tc.wantHTTP && (len(g.http) != want || len(g.mqtt) != 0) {
 				t.Fatalf("http=%v mqtt=%v: the run mixed transports", g.http, g.mqtt)
 			}
-			if !tc.wantHTTP && (len(g.mqtt) != want || len(g.http) != 0) {
+			// After a dump over MQTT the files step asks the device on its topic whether it has a file system (#855):
+			// that question follows the dump too.
+			if !tc.wantHTTP && (len(g.mqtt) != want+1 || g.mqtt[want] != "UfsType" || len(g.http) != 0) {
 				t.Fatalf("http=%v mqtt=%v: the run mixed transports", g.http, g.mqtt)
 			}
 		})
