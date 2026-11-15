@@ -426,6 +426,10 @@ func mqttRow(f transport.Facts) pathRow {
 	switch strict, reads := transport.MQTTUnusable(f, true), transport.MQTTUnusable(f, false); {
 	case strict == "":
 		r.Value, r.Tone, r.Sub = "On our broker", ui.ToneOK, join(topic, "Last will online")
+	case reads == "" && !f.MQTT.TopicTakenSince.IsZero():
+		// #852: not "Reading only": the reads go over HTTP while HTTP works too. The sentence (strict's first blocker,
+		// the taken topic, since reads passed) names the topic itself.
+		r.Value, r.Tone, r.Sub = "Topic taken by another device", ui.ToneWarn, sentence(strict)
 	case reads == "":
 		r.Value, r.Tone = "Reading only", ui.ToneWarn
 		r.Sub = join(topic, "Changing the device over MQTT needs more: "+strict+".")

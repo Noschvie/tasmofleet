@@ -49,6 +49,7 @@ var httpReadsAllowed = map[string]string{
 	"internal/app/services.go openServices: raw client of the router":        "The identity probe",
 	"internal/app/services.go openServices: HTTP client of its own":          "The identity probe",
 	"internal/app/probe.go Prober.probe: the prober's HTTP client":           "The identity probe",
+	"internal/app/probe.go Prober.probeFacts: the prober's HTTP client":      "The identity probe",
 	"internal/app/probe.go Prober.refresh: the prober's HTTP client":         "The identity probe",
 	"internal/app/probe.go Prober.Describe: the prober's HTTP client":        "The identity probe",
 	"internal/app/probe.go Prober.cmd: the prober's HTTP client":             "The identity probe",

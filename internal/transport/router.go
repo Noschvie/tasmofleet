@@ -110,6 +110,9 @@ type Router struct {
 	// the router changed while HTTP answered, over either transport: HTTP carries their next commands
 	// (MQTTFacts.ConnChangedSince).
 	connChanged *Memory
+	// topicTaken remembers the devices on whose MQTT topic another device answered a MAC check (#852), until the
+	// topic is the device's own again (TopicMarks): the facts read it (MQTTFacts.TopicTakenSince).
+	topicTaken *TopicMarks
 }
 
 type mqttHolder struct{ d MQTTDoer }
@@ -129,7 +132,7 @@ func NewRouter(o Options) *Router {
 		o.Log = slog.New(slog.DiscardHandler)
 	}
 	return &Router{o: o, http: &observer{c: o.HTTP, mem: o.Memory}, unanswered: NewMemory(DefaultFailFor, time.Now),
-		connChanged: NewMemory(DefaultFailFor, time.Now)}
+		connChanged: NewMemory(DefaultFailFor, time.Now), topicTaken: NewTopicMarks(time.Now)}
 }
 
 // SetMQTT attaches the command channel, once the broker connection exists. nil detaches it.
@@ -155,6 +158,12 @@ func (r *Router) UnansweredReads() *Memory { return r.unanswered }
 // MQTTConnChanged is the router's memory of devices whose MQTT connection it just changed over MQTT while HTTP
 // answered: the facts read it (MQTTFacts.ConnChangedSince). The failure kind it records means nothing.
 func (r *Router) MQTTConnChanged() *Memory { return r.connChanged }
+
+// TopicTaken is the router's memory of devices on whose MQTT topic another device answered a MAC check (#852): the
+// identity checks of the background reads and of the identity probe set and clear it, the restore's check before its
+// upload sets it, the facts read it
+// (MQTTFacts.TopicTakenSince).
+func (r *Router) TopicTaken() *TopicMarks { return r.topicTaken }
 
 // HTTPOnly is the raw HTTP client with the router's memory attached: what it learns (a refused
 // connection, an answer) is remembered, but it never routes to MQTT. The health poll, the prober

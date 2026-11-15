@@ -100,6 +100,7 @@ type facts struct {
 	lwtOffline  bool
 	unanswered  *Memory
 	connChanged *Memory
+	topicTaken  *TopicMarks
 	httpOK      bool // a fresh HTTP success is on record (HTTPOK); without it and without a failure: unknown
 }
 
@@ -135,6 +136,9 @@ func (f *facts) FactsFor(_ context.Context, d model.Device) (Facts, error) {
 			m.ConnChangedSince = since
 		}
 	}
+	if f.topicTaken != nil {
+		m.TopicTakenSince = f.topicTaken.Since(d.ID, d.Topic)
+	}
 	if f.groupKnown {
 		m.GroupTopic, m.GroupTopicReadAt, m.LastProbeAt = "tasmotas", now, now.Add(-time.Hour)
 	}
@@ -160,6 +164,7 @@ func newRig(t *testing.T) *rig {
 	g.r.SetMQTT(g.mq)
 	g.f.unanswered = g.r.unanswered
 	g.f.connChanged = g.r.MQTTConnChanged()
+	g.f.topicTaken = g.r.TopicTaken()
 	return g
 }
 

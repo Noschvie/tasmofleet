@@ -105,8 +105,11 @@ claim below or shows a residual risk worse than stated.
   hostname/IP on the device page, and (as in R5) a false version or hardware for a device no
   HTTP probe identified; a false MAC in the `Status 5` answer can only make the refresh refuse.
   Bounds: only an answer on the device's own `stat/<topic>/STATUSn` within 10 s of our question
-  counts (retained ones never); MQTT binds no MAC, changes neither name nor topic, never replaces
-  an HTTP identity, never sets `identity_at`, and minimal/safeboot answers are refused. Nothing
+  counts (retained ones never); MQTT binds no MAC, never changes the topic, never replaces an HTTP
+  identity, never sets `identity_at`, and minimal/safeboot answers are refused. The DeviceName does
+  follow the answer (`refreshNameMQTT`, under the rule of an HTTP refresh, #125), as it does in the
+  identity probe's facts read over MQTT after a check on the topic (#851); a false one shows as the
+  "Name on the device" notice, or renames a device whose name TasmoFleet filled in itself. Nothing
   flashed depends on it (the OTA engine probes over HTTP and `Guard` checks that). Low.
 
 ## Recommendation (operations)

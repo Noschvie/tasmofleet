@@ -100,6 +100,9 @@ func (r *Router) UploadConfig(ctx context.Context, t tasmota.Target, dump []byte
 		}
 	}
 	if !same {
+		// This check heard every reply on the topic: another device answers there (#852). The router holds the
+		// device off the topic, so its writes, backups and restores do not go there either (Choose, strict).
+		r.topicTaken.Mark(d.ID, d.Topic)
 		noteTrace(ctx, MQTT)
 		return fmt.Errorf("%w: the device on this topic is not %s any more (or a second device answers on it); nothing was uploaded", ErrIdentityChanged, bind.Name)
 	}
@@ -139,10 +142,49 @@ type MQTTMultiReader interface {
 	DoAll(ctx context.Context, d model.Device, cmd string, window time.Duration) ([]json.RawMessage, error)
 }
 
-// statusFive asks Status 5 and returns every reply that came within identityWindow of the first.
+// TopicStatus5 asks Status 5 on the device's stored topic and returns every reply that came within identityWindow of
+// the first (statusFive), with the device snapshot whose topic it asked (#852). It is the check that may end a
+// TopicTaken mark: a check that hears one reply hears whichever of two devices on the topic answers first, so only a
+// check that hears every reply can show that the device is alone there again, the rule UploadConfig follows before a
+// restore. A read: the conditions of a read over MQTT (MQTTBlocker, not strict, so a marked topic can still be asked),
+// never HTTP, no fallback. A channel that cannot hear every reply (no MQTTMultiReader) is refused: one reply would
+// always look like a device alone on its topic.
+func (r *Router) TopicStatus5(ctx context.Context, id model.DeviceID) (model.Device, []json.RawMessage, error) {
+	m := r.mqttDoer()
+	if m == nil {
+		return model.Device{}, nil, fmt.Errorf("%w: MQTT is not connected", tasmota.ErrUnreachable)
+	}
+	if _, ok := m.(MQTTMultiReader); !ok {
+		return model.Device{}, nil, fmt.Errorf("%w: this MQTT channel cannot hear every reply on a topic", tasmota.ErrNotImplemented)
+	}
+	d, f, _, err := r.decide(ctx, id)
+	if err != nil {
+		return d, nil, err // without facts nothing shows the topic is usable: nothing is asked (fail closed)
+	}
+	if why := MQTTBlocker(f, false); why != "" {
+		return d, nil, fmt.Errorf("%w: not usable over MQTT: %s", tasmota.ErrUnreachable, why)
+	}
+	if err := offRoute(ctx, MQTT); err != nil {
+		return d, nil, err
+	}
+	replies, err := r.statusFive(ctx, m, d)
+	if err == nil || !notPublished(err) {
+		noteTrace(ctx, MQTT)
+		noteAnswer(ctx, MQTT, err)
+	}
+	return d, replies, err
+}
+
+// statusFive asks Status 5 and returns every reply that came within identityWindow of the first. A window cut short
+// (ctx ended before it was over) is an error: the channel then returns the replies heard so far without one, and a
+// second device that answers later in the window would go unheard.
 func (r *Router) statusFive(ctx context.Context, m MQTTDoer, d model.Device) ([]json.RawMessage, error) {
 	if mr, ok := m.(MQTTMultiReader); ok {
-		return mr.DoAll(ctx, d, "Status 5", identityWindow)
+		replies, err := mr.DoAll(ctx, d, "Status 5", identityWindow)
+		if err == nil && ctx.Err() != nil {
+			return nil, fmt.Errorf("%w: the reply window was cut short: %w", tasmota.ErrTimeout, ctx.Err())
+		}
+		return replies, err
 	}
 	raw, err := m.Do(ctx, d, "Status 5")
 	if err != nil {

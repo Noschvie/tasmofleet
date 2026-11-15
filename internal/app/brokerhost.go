@@ -129,6 +129,11 @@ type brokerHostReader struct {
 	// transport.Choose: Commands is MQTT); nil: never. Only then is a device whose HTTP API is off visited for
 	// its data alone (#676).
 	readsOverMQTT func(context.Context, model.Device) bool
+	// topicMarked says whether the router holds d off its MQTT topic because another device answers there (#852,
+	// Prober.topicMarked); recheckTopic asks that topic again and hears every reply (Prober.recheckMarked):
+	// anotherOnTopic while another device still answers, nil otherwise. Either nil: not done.
+	topicMarked  func(model.Device) bool
+	recheckTopic func(context.Context, model.Device) error
 
 	kick        chan model.DeviceID
 	kickRestart chan model.DeviceID
@@ -138,6 +143,8 @@ type brokerHostReader struct {
 	dataNext, identityNext map[model.DeviceID]time.Time
 	// probeNext: when a device may be asked for an HTTP probe again; absent: now.
 	probeNext map[model.DeviceID]time.Time
+	// recheckNext: when the topic of a marked device is asked again (recheckTopics); absent: due.
+	recheckNext map[model.DeviceID]time.Time
 	// restartRead: when a restart last read the identity and the data of a device, or the read it left to the
 	// end of the hour ran (restartRefreshEvery); restartLeft: a restart left that read to the end of the hour.
 	restartRead map[model.DeviceID]time.Time
@@ -158,7 +165,7 @@ func newBrokerHostReader(list func(context.Context) ([]model.Device, error), // 
 	return &brokerHostReader{list: list, httpUp: httpUp, read: read, enter: enter, now: time.Now, log: log,
 		kick: make(chan model.DeviceID, brokerHostQueue), kickRestart: make(chan model.DeviceID, brokerHostQueue),
 		dataNext: map[model.DeviceID]time.Time{}, identityNext: map[model.DeviceID]time.Time{}, pending: map[model.DeviceID]brokerWant{}, next: map[model.DeviceID]time.Time{}, probeNext: map[model.DeviceID]time.Time{},
-		restartRead: map[model.DeviceID]time.Time{}, restartLeft: map[model.DeviceID]bool{}}
+		recheckNext: map[model.DeviceID]time.Time{}, restartRead: map[model.DeviceID]time.Time{}, restartLeft: map[model.DeviceID]bool{}}
 }
 
 // later asks for a read of id soon and returns at once.
@@ -213,9 +220,10 @@ func (r *brokerHostReader) request(id model.DeviceID, restart bool) {
 	r.pending[id] = brokerWant{due: now.Add(brokerHostSettle), until: now.Add(brokerHostPendingFor), restart: restart || r.pending[id].restart}
 }
 
-// pass reads the devices somebody asked for whose time has come, then at most one online device
-// whose periodic read is due. Both only for a device the read can reach (readable): a requested read
-// waits for that, without sending anything, until it is given up.
+// pass asks the topics of the marked devices that are due again (recheckTopics), then reads the devices somebody
+// asked for whose time has come, then at most one online device whose periodic read is due. Both reads only for a
+// device the read can reach (readable): a requested read waits for that, without sending anything, until it is given
+// up.
 func (r *brokerHostReader) pass(ctx context.Context) {
 	now := r.now()
 	devs, err := r.list(ctx)
@@ -227,6 +235,7 @@ func (r *brokerHostReader) pass(ctx context.Context) {
 	for _, d := range devs {
 		listed[d.ID] = d
 	}
+	r.recheckTopics(ctx, devs, now)
 	probed := false // one probe request per pass: not the whole fleet at once
 	ask := func(d model.Device) {
 		if probed || r.wantHTTP == nil || policy.LimitedFirmware(d.Identity.Variant) {
@@ -298,6 +307,49 @@ func (r *brokerHostReader) pass(ctx context.Context) {
 	}
 }
 
+// recheckTopics asks the topic of every listed device the router holds off it (#852) again once its own schedule is
+// due, every brokerHostRetry, and warns while another device still answers there. Why a schedule of its own, apart from
+// readable, dataOverMQTT and the read schedules: the mark sends the device's reads over HTTP, so the visits that ask
+// the topic on their way may never come. The broker read waits for HTTP (readable), and the data refresh of a device
+// HTTP does not reach waits for its reads to go over MQTT (dataOverMQTT), which the mark itself prevents: a device
+// reached over MQTT whose HTTP times out (HTTP state unknown, never failing) stayed held off its topic until TasmoFleet
+// restarted. The check is the one that alone may end a mark (Prober.recheckTopic: Status 5, every reply on the stored
+// topic within the identity window); nothing else is sent. The device lock is only tried, as for the data read: a
+// device a job holds is asked at the next pass.
+func (r *brokerHostReader) recheckTopics(ctx context.Context, devs []model.Device, now time.Time) {
+	if r.topicMarked == nil || r.recheckTopic == nil {
+		return
+	}
+	for _, d := range devs {
+		if ctx.Err() != nil {
+			return
+		}
+		if !r.topicMarked(d) {
+			delete(r.recheckNext, d.ID) // a new mark is asked about at the next pass
+			continue
+		}
+		if !r.isDue(r.recheckNext, d.ID, now) {
+			continue
+		}
+		release, err := r.enter(ctx, d.ID, backgroundData)
+		if err != nil {
+			continue // held by a job or a typed firmware update: asked at the next pass, nothing was sent
+		}
+		release()
+		r.recheckNext[d.ID] = now.Add(brokerHostRetry)
+		cctx, cancel := context.WithTimeout(ctx, brokerHostTimeout)
+		err = r.recheckTopic(cctx, d)
+		cancel()
+		var on anotherOnTopic
+		switch {
+		case errors.As(err, &on):
+			r.log.Warn("topic check: "+topicTakenLog, "device", d.ID, "topic", on.topic)
+		case err != nil && ctx.Err() == nil:
+			r.log.Debug("topic check: failed; the mark stays", "device", d.ID, "err", err)
+		}
+	}
+}
+
 // requested says what a visit somebody asked for reads: the broker, and after a restart the identity and the
 // data too, unless a restart read them less than restartRefreshEvery ago. Then they are read once when that
 // hour is over, and not before (a failed read is not retried every ten minutes either): a device that keeps
@@ -335,6 +387,9 @@ func (r *brokerHostReader) readable(d model.Device) bool {
 func (r *brokerHostReader) dataOverMQTT(ctx context.Context, d model.Device, what visitWhat) bool {
 	return what.data && r.readData != nil && r.readsOverMQTT != nil && d.MAC != "" && !policy.LimitedFirmware(d.Identity.Variant) && r.readsOverMQTT(ctx, d)
 }
+
+// topicTakenLog is the warning of a check that found another device on the device's MQTT topic (#852).
+const topicTakenLog = "another device answers on the device's MQTT topic; until only this device answers there, its writes never go to the topic and its reads go over HTTP while HTTP works"
 
 var (
 	errBrokerBusy  = errors.New("device busy")
@@ -399,10 +454,14 @@ func (r *brokerHostReader) readLocked(ctx context.Context, id model.DeviceID, wh
 				// identity): nothing more is read in this visit, and it is asked again at the regular interval, also when a
 				// restart or a command asked for the read
 				r.next[id] = r.now().Add(brokerHostEvery)
-				if errors.Is(err, errAnotherDeviceOnTopic) {
+				var on anotherOnTopic
+				if errors.As(err, &on) {
 					// the check went over MQTT first (#839): another device listens on this device's topic, where its
-					// commands over MQTT go. Not a lease handed on, which the address case usually is: louder
-					r.log.Warn("broker host: another device answers on the topic", "device", id)
+					// commands over MQTT went. Not a lease handed on, which the address case usually is: louder. The
+					// router holds the device off the topic now (#852); the topic is asked again soon, so the mark ends
+					// soon after the topic is fixed
+					r.next[id] = r.now().Add(brokerHostRetry)
+					r.log.Warn("broker host: "+topicTakenLog, "device", id, "topic", on.topic)
 				} else {
 					r.log.Debug("broker host: another device answers at the address", "device", id)
 				}
@@ -444,7 +503,16 @@ func (r *brokerHostReader) readDataOf(ctx context.Context, d model.Device) bool 
 	cancel()
 	if notStoredDevice(err) { // the caches stay as they are; asked again at the broker's interval
 		r.dataNext[d.ID] = r.now().Add(brokerHostEvery)
-		r.log.Debug("device refresh: another device answers at the address", "device", d.ID)
+		var on anotherOnTopic
+		if errors.As(err, &on) {
+			// the data refresh is the only background visit of a device whose HTTP API is off: the one place its
+			// taken topic shows (#852). It comes back soon like the broker read; the mark itself is asked about on its
+			// own schedule (recheckTopics), which the mark cannot hold off
+			r.dataNext[d.ID] = r.now().Add(brokerHostRetry)
+			r.log.Warn("device refresh: "+topicTakenLog, "device", d.ID, "topic", on.topic)
+		} else {
+			r.log.Debug("device refresh: another device answers at the address", "device", d.ID)
+		}
 		return true
 	}
 	r.finished(ctx, r.dataNext, d.ID, dataEvery, err, "data")
@@ -511,11 +579,13 @@ func (a *runtime) startBrokerHost(ctx context.Context) {
 	a.goBG("broker-host", func() error { a.brokerHost.run(ctx); return nil })
 }
 
-// wireDeviceRefresh gives the reader the identity probe and the data read (#600).
+// wireDeviceRefresh gives the reader the identity probe and the data read (#600), and the check of a taken topic (#852).
 func (a *runtime) wireDeviceRefresh(r *brokerHostReader) {
 	r.readIdentity = a.svc.Prober.RefreshFacts
 	r.readData = a.refreshData
 	r.readsOverMQTT = a.readsOverMQTT
+	r.topicMarked = a.svc.Prober.topicMarked
+	r.recheckTopic = a.svc.Prober.recheckMarked
 }
 
 // readsOverMQTT says whether the router reads d over MQTT: transport.Choose over the device's facts, the same

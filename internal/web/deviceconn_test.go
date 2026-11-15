@@ -376,3 +376,28 @@ func TestOverviewPageShowsTheOtherBrokerHint(t *testing.T) {
 		})
 	}
 }
+
+// Why (#852, third review): while another device answers on a device's MQTT topic, the router sends its reads over HTTP
+// while HTTP works and nothing that changes the device to that topic. The connection card's MQTT row said "Reading only"
+// with "Topic kitchen · Changing the device over MQTT needs more: ...", which names the topic twice and claims MQTT
+// still carries the reads. The row must say the topic is taken, warn, and give the router's sentence once.
+func TestTheMQTTRowSaysWhenAnotherDeviceAnswersOnTheTopic(t *testing.T) {
+	now := time.Now()
+	f := mqttFacts(now, model.MQTTPasswordOwn)
+	f.HTTP = transport.HTTPState{State: transport.HTTPOK}
+	f.MQTT.TopicTakenSince = now.Add(-time.Hour)
+	r := mqttRow(f)
+	if r.Value != "Topic taken by another device" || r.Tone != ui.ToneWarn {
+		t.Errorf("MQTT row = %q (%v), want %q with the warn tone", r.Value, r.Tone, "Topic taken by another device")
+	}
+	if want := sentence(transport.MQTTUnusable(f, true)); r.Sub != want {
+		t.Errorf("sub = %q, want the router's sentence %q", r.Sub, want)
+	}
+	if n := strings.Count(r.Sub, "kitchen"); n != 1 {
+		t.Errorf("sub %q names the topic %d times, want once", r.Sub, n)
+	}
+	f.MQTT.TopicTakenSince = time.Time{}
+	if r := mqttRow(f); r.Value != "On our broker" {
+		t.Errorf("MQTT row without the mark = %q, want %q", r.Value, "On our broker")
+	}
+}

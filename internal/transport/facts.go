@@ -75,6 +75,10 @@ type MQTTFacts struct {
 	// at the device's next answer over MQTT on a path that still uses MQTT then: a pinned job, HTTP failing). The device restarts and may not come back to the broker, its last will still Online (a clean
 	// disconnect), so its commands go over HTTP while HTTP works.
 	ConnChangedSince time.Time
+	// TopicTakenSince is when a MAC check answered over MQTT alone found another device on this device's topic
+	// (#852; zero: none, see TopicMarks for how the mark ends). That device would answer the reads and run the
+	// writes too: reads go over HTTP while HTTP works, and writes and transfers never cross the broker.
+	TopicTakenSince time.Time
 }
 
 // Password is the state of the device's MqttPassword, which only transfers need (FileDownload,

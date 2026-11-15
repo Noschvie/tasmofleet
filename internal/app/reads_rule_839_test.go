@@ -67,6 +67,16 @@ func (m brokerMQTT) DoLoose(ctx context.Context, d model.Device, cmd string) (js
 	return m.Do(ctx, d, cmd)
 }
 
+// DoAll hears every reply within the window, as the production channel does (transport.MQTTMultiReader): one device
+// listens on the topic, so one reply.
+func (m brokerMQTT) DoAll(ctx context.Context, d model.Device, cmd string, _ time.Duration) ([]json.RawMessage, error) {
+	raw, err := m.Do(ctx, d, cmd)
+	if err != nil {
+		return nil, err
+	}
+	return []json.RawMessage{raw}, nil
+}
+
 // brokerHTTP is the device at the stored address.
 type brokerHTTP struct {
 	tasmota.Client
@@ -90,11 +100,19 @@ func brokerReadOverRouter(t *testing.T, onTopic, atAddr *brokerAnswers, lwt stri
 		t.Fatal(err)
 	}
 	router := transport.NewRouter(transport.Options{HTTP: brokerHTTP{dev: atAddr}, Devices: st})
-	router.SetFacts(&TransportFacts{Devices: st, Health: fakeFactsHealth{id: {LWT: lwt}}, Memory: router.Memory(), Unanswered: router.UnansweredReads(),
-		BusConnected: func() bool { return true }, FullTopic: func() string { return "%prefix%/%topic%/" }, FirmwareBaseURL: func() string { return "" },
-		BrokerPassword: func() string { return "" }, Now: time.Now})
+	router.SetFacts(routerFacts(st, router, id, lwt))
 	router.SetMQTT(brokerMQTT{dev: onTopic})
-	return &Prober{Client: router.HTTPOnly(), Reads: router, Devices: st, Gap: time.Millisecond, Broker: fixedBroker{host: "mqtt.home"}}, st, id
+	return &Prober{Client: router.HTTPOnly(), Reads: router, Devices: st, Gap: time.Millisecond, Broker: fixedBroker{host: "mqtt.home"},
+		Topics: router.TopicTaken()}, st, id
+}
+
+// routerFacts are the facts of brokerReadOverRouter's router as the app wires them (its memories, its topic marks):
+// a runtime given them decides as the router does (runtime.readsOverMQTT).
+func routerFacts(st *store.SQLite, router *transport.Router, id model.DeviceID, lwt string) *TransportFacts {
+	return &TransportFacts{Devices: st, Health: fakeFactsHealth{id: {LWT: lwt}}, Memory: router.Memory(), Unanswered: router.UnansweredReads(),
+		TopicTaken:   router.TopicTaken(),
+		BusConnected: func() bool { return true }, FullTopic: func() string { return "%prefix%/%topic%/" }, FirmwareBaseURL: func() string { return "" },
+		BrokerPassword: func() string { return "" }, Now: time.Now}
 }
 
 // Why (#839): the background broker read asked Status 5, Status 6 and SetOption3 over HTTP although the device was
@@ -303,9 +321,10 @@ func TestTheBrokerReadOfADeviceThatLeftTheBrokerGoesOnOverHTTP(t *testing.T) {
 	})
 }
 
-// Why (#839): the broker read's check goes MQTT first, so a foreign MAC in its answer now usually means another device
-// listens on this device's topic, where its commands over MQTT go: that must be visible in the log (Warn, naming the
-// topic). Another device at the address is mostly a DHCP lease handed on and stays a Debug line.
+// Why (#839, #852): the broker read's check goes MQTT first, so a foreign MAC in its answer now usually means another
+// device listens on this device's topic, where its commands over MQTT go: that must be visible in the log (Warn, naming
+// the topic, so the person knows which topic to fix). Another device at the address is mostly a DHCP lease handed on and
+// stays a Debug line.
 func TestTheBrokerReaderWarnsOfAnotherDeviceOnTheTopic(t *testing.T) {
 	visit := func(t *testing.T, onTopic, atAddr *brokerAnswers, lwt string) string {
 		t.Helper()
@@ -321,7 +340,7 @@ func TestTheBrokerReaderWarnsOfAnotherDeviceOnTheTopic(t *testing.T) {
 	}
 	t.Run("on the topic", func(t *testing.T) {
 		log := visit(t, &brokerAnswers{mac: otherMAC, host: "elsewhere.example"}, &brokerAnswers{mac: storedMAC}, "Online")
-		if !strings.Contains(log, "level=WARN") || !strings.Contains(log, "another device answers on the topic") {
+		if !strings.Contains(log, "level=WARN") || !strings.Contains(log, "another device answers on the device's MQTT topic") || !strings.Contains(log, "topic=plug") {
 			t.Errorf("log %q, want a warning that names the topic", log)
 		}
 	})

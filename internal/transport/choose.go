@@ -140,6 +140,8 @@ func mqttBlocker(f Facts, strict bool) string {
 		return "the device's topic is the default group topic, which many devices listen on"
 	case !m.TopicExclusive:
 		return "another device listens on this topic (its Topic or GroupTopic)"
+	case strict && !m.TopicTakenSince.IsZero(): // #852: a write or a transfer there would reach that device too
+		return topicTakenText(m)
 	case fullTopic(m.FullTopic) != fullTopic(m.OurFullTopic):
 		return "the device's FullTopic differs from TasmoFleet's MQTT_FULLTOPIC"
 	case m.GroupTopic != "" && m.GroupTopic == m.Topic: // even a stale value: it only ever adds a refusal
@@ -189,14 +191,17 @@ func noPath(parts ...string) string {
 }
 
 // chooseCommands: reads go over MQTT first (#456) whenever the device is on TasmoFleet's broker and
-// live there, whatever HTTP's state is, unless MQTT commands of the device just went unanswered or its MQTT
-// connection was just changed, and HTTP works. Only a device MQTT cannot serve is read over HTTP, and when
-// HTTP is failing too there is no path.
+// live there, whatever HTTP's state is, unless another device answers on its topic (#852), MQTT commands of the
+// device just went unanswered or its MQTT connection was just changed, and HTTP works. Only a device MQTT cannot
+// serve is read over HTTP, and when HTTP is failing too there is no path. Writes and transfers never go to a topic
+// another device answers on (mqttBlocker, strict).
 func chooseCommands(f Facts) (Path, string) {
 	why := mqttBlocker(f, false)
 	switch {
 	case why == "" && httpFailing(f):
 		return MQTT, "over MQTT, because " + httpFailText(f.HTTP)
+	case why == "" && !f.MQTT.TopicTakenSince.IsZero():
+		return HTTP, "over the device's HTTP API, because " + topicTakenText(f.MQTT)
 	case why == "" && !f.MQTT.ConnChangedSince.IsZero():
 		return HTTP, "over the device's HTTP API, because " + connChangedText(f.MQTT)
 	case why == "" && !f.MQTT.ReadsUnansweredSince.IsZero():
@@ -351,6 +356,12 @@ func uploadBlocker(f Facts) string {
 func connChangedText(m MQTTFacts) string {
 	return "TasmoFleet changed the device's MQTT connection (at " + m.ConnChangedSince.UTC().Format("15:04 UTC") +
 		") and the device may not be back on the broker; MQTT is tried again after a few minutes"
+}
+
+// topicTakenText says why the device's commands do not go to its MQTT topic while another device answers there (#852).
+func topicTakenText(m MQTTFacts) string {
+	return "another device answers on the device's MQTT topic " + m.Topic + " (since " + m.TopicTakenSince.UTC().Format("2006-01-02 15:04 UTC") +
+		"), so a command there would reach it too; MQTT is used again once only this device answers there"
 }
 
 // unansweredText says why HTTP carries an action while the device's MQTT commands go unanswered.

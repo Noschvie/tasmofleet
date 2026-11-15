@@ -19,6 +19,11 @@ type HTTPMemory interface {
 	HTTPFailure(id model.DeviceID) (kind transport.HTTPFailKind, since time.Time, ok bool)
 }
 
+// topicMarks is the part of transport.TopicMarks the facts read.
+type topicMarks interface {
+	Since(id model.DeviceID, topic string) time.Time
+}
+
 type factsDevices interface {
 	GetDevice(ctx context.Context, id model.DeviceID) (model.Device, error)
 	ListDevices(ctx context.Context) ([]model.Device, error)
@@ -40,6 +45,9 @@ type TransportFacts struct {
 	// ConnChanged is the router's memory of devices whose MQTT connection it just changed over MQTT while HTTP
 	// answered (the kind is not used); nil: none.
 	ConnChanged HTTPMemory
+	// TopicTaken is the router's memory of devices on whose MQTT topic another device answered a MAC check (#852,
+	// transport.TopicMarks); nil: none.
+	TopicTaken topicMarks
 	// BusConnected, FullTopic (MQTT_FULLTOPIC) and FirmwareBaseURL (FIRMWARE_BASE_URL) are read per
 	// call: the settings page changes them live.
 	BusConnected    func() bool
@@ -113,6 +121,10 @@ func (s *TransportFacts) factsFor(_ context.Context, d model.Device, all []model
 			connChanged = since
 		}
 	}
+	var topicTaken time.Time
+	if s.TopicTaken != nil && d.Topic != "" {
+		topicTaken = s.TopicTaken.Since(id, d.Topic)
+	}
 	return transport.Facts{
 		Now:  now,
 		HTTP: s.httpState(id, h, now),
@@ -123,6 +135,7 @@ func (s *TransportFacts) factsFor(_ context.Context, d model.Device, all []model
 			FullTopic:         d.FullTopic, OurFullTopic: s.FullTopic(),
 			GroupTopic: d.GroupTopic, GroupTopicReadAt: d.GroupTopicReadAt, LastProbeAt: probe,
 			LWTOnline: h.LWT == "Online", ReadsUnansweredSince: unanswered, ConnChangedSince: connChanged,
+			TopicTakenSince: topicTaken,
 		},
 		Password:        s.password(d),
 		FWReach:         d.FWReach,

@@ -107,6 +107,7 @@ func newUpRig(t *testing.T, pw Password) *upRig {
 	mk := &marked{}
 	g.r = NewRouter(Options{HTTP: g.http, Devices: g.devs, Facts: pwFacts{g.f, pw}, Memory: g.mem, Marker: mk})
 	g.r.SetMQTT(up)
+	g.f.topicTaken = g.r.TopicTaken() // the facts read the marks of the router under test, as newRig wires its own
 	return &upRig{rig: g, up: up, mk: mk}
 }
 
@@ -225,5 +226,49 @@ func TestUploadConfigIsBoundToTheCheckedDevice(t *testing.T) {
 	err := g.r.UploadConfig(t.Context(), g.target(), make([]byte, 100), g.bind())
 	if err == nil || !strings.Contains(err.Error(), "plug is not") && !strings.Contains(err.Error(), "not plug any more") {
 		t.Errorf("error should say the device is not plug any more: %v", err)
+	}
+}
+
+// Why (#852, third review): the restore's Status 5 hears every reply on the topic, the strongest check of the topic
+// there is. When it finds another device there (another MAC, or a second reply) it refused the upload but left the
+// device's writes, backups and restores going to that topic, where the other device would run them. It must mark the
+// device like every other check that finds another device on its topic, so Choose sends nothing that changes a device
+// there any more; a refusal for any other reason (the stored topic changed) says nothing about the topic and marks
+// nothing.
+func TestAnUploadThatHearsAnotherDeviceMarksTheTopic(t *testing.T) {
+	for name, c := range map[string]struct {
+		change func(g *upRig)
+		marked bool
+	}{
+		"another device answers":           {func(g *upRig) { g.up.mac = "11:22:33:44:55:66" }, true},
+		"a second device answers as well":  {func(g *upRig) { g.up.extraMAC = rigMAC }, true},
+		"a second device with another MAC": {func(g *upRig) { g.up.extraMAC = "11:22:33:44:55:66" }, true},
+		"the stored MAC changed":           {func(g *upRig) { g.devs.d.MAC = "aa:bb:cc:dd:ee:99" }, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			g := newUpRig(t, Password{Mode: model.MQTTPasswordOwn})
+			writes := func() Path {
+				t.Helper()
+				f, err := g.r.o.Facts.FactsFor(t.Context(), g.devs.d)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return Choose(f).Writes
+			}
+			if got := writes(); got != MQTT {
+				t.Fatalf("writes go over %s before the restore, want MQTT: the test does not show the case it is about", got)
+			}
+			bind := g.bind()
+			c.change(g)
+			if err := g.r.UploadConfig(t.Context(), g.target(), make([]byte, 100), bind); !errors.Is(err, ErrIdentityChanged) {
+				t.Fatalf("UploadConfig = %v, want ErrIdentityChanged", err)
+			}
+			if got := !g.r.TopicTaken().Since(g.devs.d.ID, g.devs.d.Topic).IsZero(); got != c.marked {
+				t.Fatalf("topic marked = %v, want %v", got, c.marked)
+			}
+			if got := writes(); c.marked && got == MQTT {
+				t.Errorf("writes go over MQTT after the restore heard another device on the topic")
+			}
+		})
 	}
 }

@@ -20,6 +20,7 @@ func (a *runtime) setupTransport() {
 	facts := &TransportFacts{
 		Devices: a.svc.Store, Health: a.tracker, Memory: a.svc.Router.Memory(), Unanswered: a.svc.Router.UnansweredReads(),
 		ConnChanged:     a.svc.Router.MQTTConnChanged(),
+		TopicTaken:      a.svc.Router.TopicTaken(),
 		BusConnected:    a.bus.Connected,
 		FullTopic:       func() string { return a.svc.Sys.Snapshot().MQTTFullTopic },
 		FirmwareBaseURL: func() string { return a.svc.Sys.Snapshot().FWBaseURL },
@@ -29,6 +30,7 @@ func (a *runtime) setupTransport() {
 	}
 	a.facts = facts
 	a.svc.Router.SetFacts(facts)
+	a.svc.Prober.ReadsOverMQTT = a.readsOverMQTT // the identity probe's facts follow the router's read rule (#851)
 	a.svc.Router.SetMQTT(a.mqttCmd)
 	gr := newGroupTopicReader(a.fw.list(a.svc.Inventory.List), a.tracker.Get, a.svc.Client, a.svc.Store, a.log)
 	gr.skip = a.apiOffRead
