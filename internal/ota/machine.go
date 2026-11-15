@@ -611,6 +611,55 @@ func looksOld(j model.Job, id model.Identity) bool {
 	return id.Version == j.IdentityBefore.Version && id.Variant == j.IdentityBefore.Variant
 }
 
+// Notes the engine stores on the event of an identity read that sent a job back to waiting (verify to
+// await_reboot): what the device ran. The job log words the lines of that leg by them (#825).
+const (
+	// NoteRunsLoaderPrefix starts the note of a device that runs the intermediate image of Tasmota's own
+	// fallback (the ESP8266 minimal firmware, the ESP32 safeboot image), followed by the variant and " image".
+	NoteRunsLoaderPrefix = "device runs the "
+	// NoteStillOldPrefix starts the note of a device that still runs the old image of its stage, followed by its
+	// version and, when known, its variant and language (see RunningNote).
+	NoteStillOldPrefix = "device still runs "
+)
+
+// RunningNote is the note of an identity read that sent a verifying job back to waiting. loader is the machine's
+// own decision, not a guess from the variant: true only for the read that made the job wait for Tasmota's own
+// fallback to continue (verify's one auto-continue transition). Every other read that sends verify back to
+// waiting is the old image of its stage (notTaken), also when that image is the minimal firmware of a staged
+// update's final stage: that device is downloading the final image, it is not on a loader leg (#825).
+//
+// The note names what the device reported: the loader image, or version, variant and, when it was read, language
+// of the firmware it still runs, so an update to the same version in another build does not read as a no-op.
+// It is cut short; no secret is in it.
+func RunningNote(id model.Identity, loader bool) string {
+	if loader && isIntermediate(id.Variant) {
+		return NoteRunsLoaderPrefix + id.Variant + " image"
+	}
+	v := cutNote(id.Version, 40)
+	if id.Variant != "" {
+		if v == "" {
+			v = "unknown"
+		}
+		v += " " + cutNote(id.Variant, 20)
+		if id.LanguageKnown {
+			lang := id.Language
+			if lang == "" {
+				lang = "EN"
+			}
+			v += " " + cutNote(lang, 8)
+		}
+	}
+	return strings.TrimSpace(NoteStillOldPrefix + v)
+}
+
+func cutNote(s string, n int) string {
+	s = strings.Join(strings.Fields(s), "_") // one word: the view splits the note into version, variant, language
+	if len(s) > n {
+		return s[:n]
+	}
+	return s
+}
+
 func isIntermediate(variant string) bool {
 	return variant == variantMinimal || variant == variantSafeboot
 }

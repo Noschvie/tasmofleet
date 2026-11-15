@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/hellwand/tasmofleet/internal/model"
@@ -43,6 +44,7 @@ var auditLabels = map[string]string{
 	"firmware.custom.upload": "Upload firmware", "firmware.custom.use": "Use uploaded firmware",
 	"backup.bulk.start": "Start backups", "command.bulk.start": "Start command run",
 	"import.tasmoadmin": "TasmoAdmin import", "transaction.retry": "Retry transaction", "transaction.start": "Start update",
+	"transaction.scheduled_start": "Scheduled start", "transaction.cancel": "Cancel transaction",
 }
 
 // auditLabel is the readable name of an action; an unknown key becomes
@@ -337,8 +339,41 @@ func summaryOK(e model.AuditEvent, d map[string]any) (string, bool) {
 	case "transaction.start":
 		n, _ := dInt(d, "devices")
 		return join(count(n, "device", "devices"), dStr(d, "release")), true
+	case "transaction.scheduled_start":
+		late, _ := dInt(d, "late_seconds")
+		out := join(dStr(d, "device"), plannedSummary(d))
+		if late >= 60 {
+			out = join(out, fmt.Sprintf("%d min late", late/60))
+		}
+		return out, true
+	case "transaction.cancel":
+		n, _ := dInt(d, "devices")
+		running, _ := dInt(d, "running")
+		out := join(count(n, "device", "devices"), plannedSummary(d))
+		if _, one := d["job"]; one {
+			// One job of the transaction, not the whole transaction: say which device.
+			dev := dStr(d, "device")
+			if dev == "" {
+				dev = "#" + dStr(d, "device_id")
+			}
+			out = join("1 device of the transaction: "+dev, plannedSummary(d))
+		}
+		if running > 0 {
+			out = join(out, fmt.Sprintf("%d running, stops after its step", running))
+		}
+		return out, true
 	}
 	return "", false
+}
+
+// plannedSummary words the planned start of a scheduled update's entry: "planned Sat, Nov 7 at 03:00"; "" when
+// the entry has none (an update that was not planned).
+func plannedSummary(d map[string]any) string {
+	t, err := time.Parse(time.RFC3339, dStr(d, "planned_start"))
+	if err != nil {
+		return ""
+	}
+	return "planned " + plannedAt(t)
 }
 
 func roleText(role string) string {

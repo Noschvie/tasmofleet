@@ -162,6 +162,10 @@
     });
   }
 
+  // the instant "Plan again…" preselected and the date and time it wrote into the fields (see chosen)
+  var presetAt = null;
+  var presetFields = [];
+
   // the chosen start in this zone: a Date, null for nothing usable, or "now"
   function chosen() {
     if (!radioAt.checked) return "now";
@@ -173,6 +177,15 @@
       var dv = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateField.value);
       var tv = /^(\d{2}):(\d{2})$/.exec(timeField.value);
       if (!dv || !tv) return null;
+      // while the fields still hold what the preset wrote, the preset is the answer: the wall clock of the night
+      // the clocks go back is ambiguous, and parsing it picks the earlier of its two hours, which would plan
+      // the update an hour before the plan it repeats
+      if (
+        presetAt &&
+        dateField.value === presetFields[0] &&
+        timeField.value === presetFields[1]
+      )
+        return presetAt;
       return new Date(+dv[1], +dv[2] - 1, +dv[3], +tv[1], +tv[2], 0, 0);
     }
     var d = new Date(pick.value);
@@ -271,6 +284,44 @@
     update(false);
   });
   if (tz) tz.textContent = zoneSentence();
+  // "Plan again…" preselects the time of the plan: the server sends the instant, and the fields show it in this
+  // zone (the server can only write its own zone's clock into them). A time that is not ahead is left alone.
+  var preset = new Date(when.getAttribute("data-preset") || NaN);
+  if (!isNaN(preset) && preset > new Date()) {
+    dateField.value =
+      preset.getFullYear() +
+      "-" +
+      two(preset.getMonth() + 1) +
+      "-" +
+      two(preset.getDate());
+    timeField.value = two(preset.getHours()) + ":" + two(preset.getMinutes());
+    presetAt = preset;
+    presetFields = [dateField.value, timeField.value];
+  }
+  // A recheck (a language, a build, Change, Forget) posts its own form, which has no part of this card. It must
+  // carry the person's current choice, or the page comes back on "Start now" with the button armed to start at
+  // once, or on the time the server preset, not the one the person moved to. Without this file the form keeps
+  // what the server wrote into it (the preset of "Plan again…") and nothing else.
+  var recheck = document.getElementById("recheck");
+  function carry(name, value) {
+    var f = recheck.querySelector('input[type="hidden"][name="' + name + '"]');
+    if (value === null) {
+      if (f) f.parentNode.removeChild(f);
+      return;
+    }
+    if (!f) {
+      f = document.createElement("input");
+      f.type = "hidden";
+      f.name = name;
+      recheck.appendChild(f);
+    }
+    f.value = value;
+  }
+  if (recheck)
+    recheck.addEventListener("submit", function () {
+      carry("when", radioAt.checked ? "at" : null);
+      carry("start_at", radioAt.checked && hidden.value ? hidden.value : null);
+    });
   refreshPicks();
   update(true);
 })();

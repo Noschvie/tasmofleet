@@ -738,6 +738,14 @@ templ updatePreviewPage(p previewPage, csrf string) {
 	</form>
 	<form id="recheck" method="post" action={ templ.SafeURL(p.Base + "/updates/preview") }>
 		@previewFields(p, csrf, p.Picked, false)
+		if p.When.At {
+			// "Plan again…" opened on the time choice; a recheck (a language, a build) must keep it, or the page
+			// would come back on "Start now" with the main button armed to flash at once (#825).
+			<input type="hidden" name="when" value="at"/>
+			if p.When.Preset() != "" {
+				<input type="hidden" name="start_at" value={ p.When.Preset() }/>
+			}
+		}
 	</form>
 }
 
@@ -745,7 +753,11 @@ templ updatePreviewPage(p previewPage, csrf string) {
 // and the fields of Other time. Its inputs belong to the form "start", so they travel with Start update.
 // static/updatestart.js recomputes the picks in the browser's zone and keeps the plan's "Starts" row in step.
 templ whenCard(w whenState) {
-	<section class="ucard upd-when" aria-labelledby="when-h">
+	<section class="ucard upd-when" aria-labelledby="when-h"
+		if w.Preset() != "" {
+			data-preset={ w.Preset() }
+		}
+	>
 		<h2 id="when-h">5 · When</h2>
 		<fieldset class="rcards">
 			<legend class="sr-only">When does the update start?</legend>

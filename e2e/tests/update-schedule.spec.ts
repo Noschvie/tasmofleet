@@ -108,14 +108,19 @@ test("a plan is listed, shown as planned, cancelled, and planned again", { tag: 
   await expect(hist.locator(".bdg")).toHaveText("Cancelled");
   await expect(hist).toContainText("was due");
 
-  // Plan again opens the preview with the same device and release, and starts now unless a time is chosen
+  // Plan again opens the preview with the same device and release and the time choice of the plan, never on
+  // "Start now": its main button would start the update at once (#825)
   await page.goto(app.url + txn);
   await page.getByRole("button", { name: "Plan again…" }).click();
   await expect(page.getByRole("heading", { name: "5 · When" })).toBeVisible();
-  await expect(page.getByLabel("Start now")).toBeChecked();
+  await expect(page.getByLabel("Start now")).not.toBeChecked();
+  await expect(page.getByLabel("Start at a chosen time")).toBeChecked();
+  await expect(page.getByLabel("Other time")).toBeChecked();
+  await expect(page.getByLabel("Time", { exact: true })).toHaveValue("03:00"); // the plan's 03:00, in the browser's zone
   await expect(page.locator("input[name=release]").first()).toHaveValue("16.1.0");
   await expect(page.locator("form#start input[name=id]")).toHaveValue(/\d+/);
-  await expect(page.locator("button[form=start]")).toHaveText("Start update");
+  await expect(page.locator("button[form=start]")).toHaveText("Schedule update");
+  await expect(page.locator("[data-starts]")).toContainText(/\w{3}, \w{3} \d+ at 03:00 · in \d+/);
 });
 
 // Why (#592): the nightly layout guards open pages by GET at 768 and 1024 px; the plan's pages exist only after

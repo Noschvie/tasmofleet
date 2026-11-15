@@ -706,7 +706,11 @@ func (h *handler) updatePreview(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	h.showPreview(w, r, parseStart(nil, h.d.Clock.Now()), http.StatusOK)
+	when := parseStart(nil, h.d.Clock.Now())
+	if r.PostFormValue("when") == "at" {
+		when = planAgainStart(r.PostForm, h.d.Clock.Now()) // "Plan again…": the time choice of the plan
+	}
+	h.showPreview(w, r, when, http.StatusOK)
 }
 
 // showPreview answers with the preview of the posted devices and options (r is parsed). when is the state of
@@ -1002,7 +1006,15 @@ func (h *handler) jobViews(r *http.Request, f store.JobFilter) ([]jobView, bool,
 		}
 		if evs, err := h.d.Jobs.JobEvents(r.Context(), j.ID); err == nil {
 			for i, e := range evs {
-				v.Log = append(v.Log, logLine{At: e.At, Text: eventText(e, j, h.pr, eventStageMinimal(evs, i, j)), Err: errEvents[e.Event] || e.To == model.JobFailed})
+				loader := eventLoader(evs, i)
+				text := eventText(e, j, h.pr, eventStageMinimal(evs, i, j) || loader == "minimal")
+				if t, ok := loaderText(e); ok && loader == "safeboot" {
+					text = t
+				}
+				if t, ok := oldImageLegText(e, j, eventStageMinimal(evs, i, j)); ok && loader == legOldImage {
+					text = t
+				}
+				v.Log = append(v.Log, logLine{At: e.At, Text: text, Err: errEvents[e.Event] || e.To == model.JobFailed})
 				switch {
 				case e.Event == "start_due":
 					v.StartedAt = e.At
@@ -1521,6 +1533,14 @@ func (h *handler) transactionsPage(w http.ResponseWriter, r *http.Request) {
 		never[j.Job.ID] = j.NeverRan
 	}
 	items := groupTransactionsBy(raw, func(j model.Job) bool { return never[j.ID] })
+	// A planned update that began is dated by the start it really had, not by the time it was planned for: after
+	// a restart or a busy device it began later (#825).
+	began := map[model.BatchID]time.Time{}
+	for _, j := range jobs {
+		if b := began[j.Job.BatchID]; !j.StartedAt.IsZero() && (b.IsZero() || j.StartedAt.Before(b)) {
+			began[j.Job.BatchID] = j.StartedAt
+		}
+	}
 	sort.SliceStable(items, func(a, b int) bool { return items[a].ID > items[b].ID }) // newest first
 	// The plans that still wait for their start have their own section above the history (#604).
 	sched, shown, err := h.scheduledRows(r, filter.DeviceID, p.Base, now, items)
@@ -1543,8 +1563,14 @@ func (h *handler) transactionsPage(w http.ResponseWriter, r *http.Request) {
 		row := txHistRow{ID: txID(t.ID), Title: t.Title, Devices: plural(t.Total, "device"), Result: res, Tone: tone,
 			By: h.pr.Text(t.By), When: ui.StampDayText(now, t.Started), At: t.Started.Format(time.RFC3339), Href: href}
 		if !t.StartAt.IsZero() {
-			// A planned update is dated by its planned start, not by the day somebody planned it.
-			row.Due, row.When, row.At = t.StartAt, ui.StampDayText(now, t.StartAt), t.StartAt.Format(time.RFC3339)
+			// A planned update is dated by its planned start, not by the day somebody planned it; once it began, by
+			// the moment it began. A batch with a plan that never began ("was due") keeps the planned time, which
+			// is what that label says; the real start would read "was due" at the wrong hour.
+			at := t.StartAt
+			if b := began[t.ID]; !b.IsZero() && t.NotStarted+t.Early == 0 {
+				at = b
+			}
+			row.Due, row.When, row.At = at, ui.StampDayText(now, at), at.Format(time.RFC3339)
 			if t.NotStarted+t.Early > 0 {
 				row.WhenLabel = "was due "
 			} else {

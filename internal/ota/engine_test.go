@@ -88,6 +88,7 @@ type fakeStore struct {
 	maxBusy int  // most jobs past queued at the same time
 	reverse bool // ActiveJobs newest first, to prove the engine sorts
 	started []model.JobID
+	onGet   func() // called first in GetJob, outside the store's lock
 }
 
 func newFakeStore(rec *recorder) *fakeStore {
@@ -123,6 +124,9 @@ func (s *fakeStore) put(j model.Job) model.JobID {
 }
 
 func (s *fakeStore) GetJob(_ context.Context, id model.JobID) (model.Job, error) {
+	if s.onGet != nil {
+		s.onGet()
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	j, ok := s.jobs[id]
@@ -420,10 +424,15 @@ type fakeBackups struct {
 	rec  *recorder
 	hook func()        // runs inside Backup
 	runs *[]backup.Run // optional: what each backup was told about itself
+	// actors optionally collects who each backup was booked to (the audit entry and log line of a backup name it).
+	actors *[]string
 }
 
-func (b fakeBackups) Backup(ctx context.Context, _ string, id model.DeviceID) ([]model.Backup, error) {
+func (b fakeBackups) Backup(ctx context.Context, actor string, id model.DeviceID) ([]model.Backup, error) {
 	b.rec.add("backup %d", id)
+	if b.actors != nil {
+		*b.actors = append(*b.actors, actor)
+	}
 	if b.runs != nil {
 		*b.runs = append(*b.runs, backup.RunFrom(ctx))
 	}

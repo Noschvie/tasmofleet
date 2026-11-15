@@ -78,7 +78,8 @@ type Notifier interface {
 type Options struct {
 	Machine     Config
 	MaxParallel int // fleet-wide concurrent jobs past "queued", default 2
-	// Audit records "transaction.retry" and the policy fixes; nil = not recorded.
+	// Audit records "transaction.retry", "transaction.scheduled_start", "transaction.cancel" and the policy fixes; nil =
+	// not recorded.
 	Audit audit.Recorder
 	// Policy runs "Make compliant" jobs; nil makes them fail with a clear message.
 	Policy PolicyApplier
@@ -727,41 +728,126 @@ func busyText(j model.Job) string {
 }
 
 // Cancel requests cancellation. A scheduled job ends at once and never starts. Jobs past ActUpgrade cannot stop the device
-// flashing; they are marked cancelled only once the device is reachable again.
+// flashing; they are marked cancelled only once the device is reachable again. Every accepted cancel is audited
+// naming who asked for it (#824).
 func (e *Engine) Cancel(ctx context.Context, actor string, id model.JobID) error {
+	c, err := e.cancel(ctx, actor, id)
+	if err != nil {
+		return err
+	}
+	if c.batch == 0 && e.audit != nil {
+		// A running job was cancelled without a read (cancel holds e.mu): its transaction and device are only for
+		// the audit entry, so they are read here, after the lock is released.
+		if j, err := e.jobs.GetJob(ctx, id); err == nil {
+			c.batch, c.device = j.BatchID, j.DeviceID
+		}
+	}
+	if c.device != 0 && e.audit != nil {
+		if d, err := e.devices.GetDevice(ctx, c.device); err == nil {
+			c.deviceName = d.Name
+		}
+	}
+	e.auditCancel(ctx, actor, []cancelDone{c}, 0)
+	return nil
+}
+
+// cancelDone is what one accepted cancel did, for the audit entry.
+type cancelDone struct {
+	job        model.JobID
+	batch      model.BatchID // 0 until read: a running job is cancelled without a read, Cancel reads it for the audit
+	waiting    bool          // the job had not started: it ended at once and never runs
+	planned    time.Time     // the planned start of a scheduled job
+	scheduled  bool
+	device     model.DeviceID // the job's device; 0 until read, like batch
+	deviceName string         // read by Cancel for the audit entry only
+}
+
+// cancel is Cancel without the audit entry.
+func (e *Engine) cancel(ctx context.Context, actor string, id model.JobID) (cancelDone, error) {
 	ev := Event{Kind: EvCancel, Err: "cancelled by " + actor}
+	c := cancelDone{job: id}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if inbox, ok := e.workers[id]; ok {
 		if e.fixing[id] {
-			return fmt.Errorf("%w: job %d is changing settings on the device", ErrNotCancellable, id)
+			return c, fmt.Errorf("%w: job %d is changing settings on the device", ErrNotCancellable, id)
 		}
 		select {
 		case inbox <- ev:
-			return nil
+			return c, nil // no read here: e.mu is held, and the pool has one connection (Cancel reads the batch for the audit)
 		default:
-			return fmt.Errorf("ota: job %d is busy, try again", id)
+			return c, fmt.Errorf("ota: job %d is busy, try again", id)
 		}
 	}
 	j, err := e.jobs.GetJob(ctx, id)
 	if err != nil {
-		return fmt.Errorf("ota: cancel: %w", err)
+		return c, fmt.Errorf("ota: cancel: %w", err)
 	}
 	if j.State.Terminal() {
-		return fmt.Errorf("%w: job %d is %s", ErrNotActive, id, j.State)
+		return c, fmt.Errorf("%w: job %d is %s", ErrNotActive, id, j.State)
 	}
-	if _, _, ok := e.apply(ctx, j, ev); !ok {
-		return fmt.Errorf("ota: cancel job %d: could not persist", id)
+	c.batch, c.device = j.BatchID, j.DeviceID
+	c.scheduled, c.planned = j.State == model.JobScheduled, j.StartAt
+	next, _, ok := e.apply(ctx, j, ev)
+	if !ok {
+		return c, fmt.Errorf("ota: cancel job %d: could not persist", id)
 	}
+	c.waiting = next.State == model.JobCancelled
 	delete(e.refusedStarts, id)
-	return nil
+	return c, nil
+}
+
+// auditCancel records one entry for the cancels one request made: who asked, which transaction, how many jobs
+// ended at once (waiting: scheduled, queued, or before the first change on the device) and how many are
+// running and will stop after their current step. A cancel nobody can tell apart from the plan it ended would
+// leave the audit log with a start and no end (#824). batch is the transaction a whole-batch cancel named (0 for
+// the cancel of one job, whose transaction is read from the job when that was possible): a request that was
+// about a transaction is recorded against it, even when its first job could not be read.
+func (e *Engine) auditCancel(ctx context.Context, actor string, done []cancelDone, batch model.BatchID) {
+	if e.audit == nil || len(done) == 0 {
+		return
+	}
+	detail := map[string]any{"devices": len(done)}
+	var waiting, planned int
+	var at time.Time
+	for _, c := range done {
+		if c.waiting {
+			waiting++
+		}
+		if c.scheduled {
+			planned++
+			if at.IsZero() || c.planned.Before(at) {
+				at = c.planned
+			}
+		}
+	}
+	detail["waiting"], detail["running"] = waiting, len(done)-waiting
+	if planned > 0 {
+		detail["planned"], detail["planned_start"] = planned, at.UTC().Format(time.RFC3339)
+	}
+	if batch == 0 && len(done) == 1 && done[0].device != 0 {
+		// One job of a transaction: the entry names which one, or it would read as the whole transaction stopped.
+		detail["job"], detail["device_id"] = done[0].job, done[0].device
+		if done[0].deviceName != "" {
+			detail["device"] = done[0].deviceName
+		}
+	}
+	b, _ := json.Marshal(detail) // a map of numbers and plain strings always encodes
+	target := "job:" + strconv.FormatInt(int64(done[0].job), 10)
+	if batch == 0 {
+		batch = done[0].batch
+	}
+	if batch != 0 {
+		target = "transaction:" + strconv.FormatInt(int64(batch), 10)
+	}
+	e.audit.Record(ctx, model.AuditEvent{Actor: actor, Action: "transaction.cancel", Target: target, Detail: string(b), Result: "ok"})
 }
 
 // CancelBatch cancels every active job of the batch as Cancel does for one
 // job (spec 9.6). Finished jobs are left alone. It returns ErrNotActive
 // when nothing in the batch is active and store.ErrNotFound for an unknown
 // batch; if some jobs could not be cancelled the others still are, and the
-// errors are joined.
+// errors are joined. The cancels of one batch are one audit entry.
 func (e *Engine) CancelBatch(ctx context.Context, actor string, id model.BatchID) error {
 	all, err := e.jobs.ListJobs(ctx, store.JobFilter{BatchID: id})
 	if err != nil {
@@ -771,24 +857,25 @@ func (e *Engine) CancelBatch(ctx context.Context, actor string, id model.BatchID
 		return fmt.Errorf("ota: cancel batch %d: %w", id, store.ErrNotFound)
 	}
 	var errs []error
-	n := 0
+	var done []cancelDone
 	for _, j := range all {
 		if j.State.Terminal() {
 			continue
 		}
-		switch err := e.Cancel(ctx, actor, j.ID); {
+		switch c, err := e.cancel(ctx, actor, j.ID); {
 		case err == nil:
-			n++
+			done = append(done, c)
 		case errors.Is(err, ErrNotActive):
 			// finished between the listing and the cancel
 		default:
 			errs = append(errs, err)
 		}
 	}
+	e.auditCancel(ctx, actor, done, id)
 	if len(errs) > 0 {
 		return errors.Join(errs...)
 	}
-	if n == 0 {
+	if len(done) == 0 {
 		return fmt.Errorf("%w: batch %d has no active job", ErrNotActive, id)
 	}
 	return nil
@@ -1045,6 +1132,11 @@ func (e *Engine) apply(ctx context.Context, j model.Job, ev Event) (model.Job, [
 	if detail == "" && (next.LastError != j.LastError || next.State.Terminal()) {
 		detail = next.LastError
 	}
+	if detail == "" && ev.Kind == EvIdentity && j.State == model.JobVerify && next.State == model.JobAwaitReboot {
+		// The read said "not the new version": the log must say what the device runs, or the same words describe
+		// a device that is on the loader of Tasmota's own two-step update and one that never restarted (#825).
+		detail = RunningNote(ev.Identity, !j.AutoContinueSeen && next.AutoContinueSeen)
+	}
 	jev := model.JobEvent{JobID: j.ID, At: now, From: j.State, To: next.State, Event: string(ev.Kind), Detail: detail}
 	if err := e.jobs.SaveTransition(ctx, next, jev); err != nil {
 		e.persistFailed("ota transition not persisted; job stops here and resumes from the stored state", err,
@@ -1142,7 +1234,7 @@ func (e *Engine) exec(ctx context.Context, j model.Job, a Action) Event {
 		ev.MinimalArtifact = p.minimal.ID
 		return ev
 	case ActBackup:
-		if _, err := e.backups.Backup(backup.WithRun(cctx, backup.Run{Trigger: model.TriggerUpdate, Ref: j.TargetRelease}), j.CreatedBy, j.DeviceID); err != nil {
+		if _, err := e.backups.Backup(backup.WithRun(cctx, backup.Run{Trigger: model.TriggerUpdate, Ref: j.TargetRelease}), stepActor(j), j.DeviceID); err != nil {
 			return Event{Kind: EvBackupFailed, Err: err.Error()}
 		}
 		return Event{Kind: EvBackupDone}

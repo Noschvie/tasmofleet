@@ -205,6 +205,59 @@ for (const width of [768, 1024]) {
   });
 }
 
+// Why (fail safe: nothing may start earlier than chosen): a recheck (a language or build choice, Change, Forget)
+// posts a form of its own. The time the person chose must survive it, and a plan must never come back as "Start
+// now" with the main button armed to flash at once.
+test.describe("a recheck of the preview", () => {
+  test.use({ timezoneId: "Asia/Kolkata", locale: "en-US" });
+
+  test("keeps the chosen time, and keeps Start now when that was the choice", async ({ page }) => {
+    await preview(page);
+    await page.getByLabel("Start at a chosen time").check();
+    await page.getByText("Other time").click();
+    await dateField(page).fill("2999-01-02");
+    await timeField(page).fill("04:15");
+    await expect(page.locator("input[name=start_at]")).toHaveValue("2999-01-02T04:15:00+05:30");
+    await page.evaluate(() => (document.getElementById("recheck") as HTMLFormElement).requestSubmit());
+    await expect(page.getByLabel("Start at a chosen time")).toBeChecked();
+    await expect(dateField(page)).toHaveValue("2999-01-02");
+    await expect(timeField(page)).toHaveValue("04:15");
+    await expect(goButton(page)).toHaveText("Schedule update");
+
+    await page.getByLabel("Start now").check();
+    await page.evaluate(() => (document.getElementById("recheck") as HTMLFormElement).requestSubmit());
+    await expect(page.getByLabel("Start now")).toBeChecked();
+    await expect(goButton(page)).toHaveText("Start update");
+  });
+});
+
+// Why (fail safe: nothing may start earlier than chosen): on the night the clocks go back the wall clock 02:30
+// happens twice, and parsing the date and time fields picks the earlier. A plan for the second 02:30 that
+// "Plan again…" preselects must be planned for that instant when the person presses the button, not for the
+// one an hour before it.
+test.describe("in a browser where the clocks go back", () => {
+  test.use({ timezoneId: "Europe/Berlin", locale: "en-US" });
+
+  test("a preselected time of the repeated hour keeps its instant", async ({ page }) => {
+    await page.clock.install({ time: new Date("2026-10-20T12:00:00Z") });
+    const second = "2026-10-25T02:30:00+01:00"; // 01:30 UTC: the second 02:30 of that night
+    await page.route("**/updates/preview", async (route) => {
+      const resp = await route.fetch();
+      const body = (await resp.text()).replace('aria-labelledby="when-h"', `aria-labelledby="when-h" data-preset="${second}"`);
+      await route.fulfill({ response: resp, body });
+    });
+    await preview(page);
+    await page.getByLabel("Start at a chosen time").check();
+    await page.getByText("Other time").click();
+    await expect(dateField(page)).toHaveValue("2026-10-25");
+    await expect(timeField(page)).toHaveValue("02:30");
+    await expect(page.locator("input[name=start_at]")).toHaveValue(second);
+    // typing something else is read as the wall clock again
+    await timeField(page).fill("03:30");
+    await expect(page.locator("input[name=start_at]")).toHaveValue("2026-10-25T03:30:00+01:00");
+  });
+});
+
 // Why: without JavaScript nothing recomputes the picks or reads the zone, so the page must say the fields
 // are read in the server's zone, and the server must still refuse a time in the past.
 test.describe("without JavaScript", () => {

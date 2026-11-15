@@ -244,15 +244,16 @@ func TestNotStartedTransactionPage(t *testing.T) {
 	if strings.Contains(body, "Retry failed") || strings.Contains(body, "/transactions/8/retry") || strings.Contains(body, "Log ·") {
 		t.Errorf("a batch that never started offers a Retry or a log: %s", text)
 	}
-	// Plan again opens the preview with the same devices and the same release, and no start time
+	// Plan again opens the preview with the same devices and the same release, and the time choice of the plan
+	// (never the default "Start now": see TestPlanAgainOpensOnTheTimeChoiceOfThePlan)
 	form := between(body, `<form method="post" action="/tf/updates/preview"`, `</form>`)
 	for _, want := range []string{`name="id" value="1"`, `name="id" value="2"`, `name="release" value="16.1.0"`, `name="skip_backup" value="1"`, `Plan again…`} {
 		if !strings.Contains(form, want) {
 			t.Errorf("Plan again lacks %q in: %s", want, form)
 		}
 	}
-	if strings.Contains(form, "start_at") || strings.Contains(form, `name="when"`) {
-		t.Errorf("Plan again carries the old start time: %s", form)
+	if !strings.Contains(form, `name="when" value="at"`) || !strings.Contains(form, `name="start_at" value="2026-11-05T03:00:00Z"`) {
+		t.Errorf("Plan again does not carry the time choice of the plan: %s", form)
 	}
 	// the retry itself is refused too: it would start the update at once
 	resp, rbody := e.do(t, "POST", "/transactions/8/retry", "admin", url.Values{})

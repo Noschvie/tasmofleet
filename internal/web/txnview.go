@@ -282,7 +282,7 @@ type txHistRow struct {
 	ID, Title, Devices, Result, By, When, At, Href string
 	Tone                                           ui.Tone
 	// A planned update's "when" (#604): WhenLabel ("was due ") is written before the time and Suffix ("· scheduled")
-	// after it; Due, when set, is the planned start, shown instead of the creation time.
+	// after it; Due, when set, is the time shown instead of the creation time: the planned start, or the real one once the update began.
 	WhenLabel, Suffix string
 	Due               time.Time
 }

@@ -132,6 +132,26 @@ func parseStart(form url.Values, now time.Time) whenState {
 	return w
 }
 
+// planAgainStart reads the time choice that "Plan again…" posts to the preview: "Start at a chosen time", and the
+// planned time as "Other time" when it is still ahead. A time that has passed (a plan that was not started, or
+// cancelled after its time) leaves the choice at "a chosen time" with no time picked and no complaint: the
+// person has not chosen anything wrong yet. Nothing here ever selects "Start now", and nothing starts without
+// the person pressing the button of the preview.
+func planAgainStart(form url.Values, now time.Time) whenState {
+	w := whenState{Now: now, At: true, Mode: startsUnset}
+	t, err := time.Parse(time.RFC3339, strings.TrimSpace(form.Get("start_at")))
+	if err != nil || !t.After(now) {
+		return w
+	}
+	if t.Truncate(time.Minute) != t {
+		t = t.Truncate(time.Minute).Add(time.Minute) // the time fields hold whole minutes; a rounding must never move the start earlier
+	}
+	t = t.In(now.Location())
+	w.Mode, w.Start, w.Picked = startsSet, t, pickCustom
+	w.Date, w.Time = t.Format("2006-01-02"), t.Format("15:04")
+	return w
+}
+
 // ButtonText is the label of the button that starts the update.
 func (w whenState) ButtonText() string {
 	if w.At {
@@ -182,6 +202,16 @@ func (w whenState) LateMinutes() int { return int(schedule.LateStart / time.Minu
 
 // ShowRule: the rule is only true for a timed start.
 func (w whenState) ShowRule() bool { return w.Mode == startsSet }
+
+// Preset is the instant that "Plan again…" preselected, for updatestart.js: it writes it into the date and time
+// fields in the browser's zone, where the server can only write the wall clock of its own. "" when nothing
+// was preselected.
+func (w whenState) Preset() string {
+	if w.Start.IsZero() || w.Picked != pickCustom {
+		return ""
+	}
+	return w.Start.Format(time.RFC3339)
+}
 
 // Invalid marks the fields of a time the server refused.
 func (w whenState) Invalid() bool { return w.Err != "" }

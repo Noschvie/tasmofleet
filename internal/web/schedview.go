@@ -161,11 +161,18 @@ func (h *handler) txnSchedOf(r *http.Request, b batchPage, first model.Job, who,
 }
 
 // planAgain is the form of "Plan again…": the update preview with the same devices and the same release and
-// options, and no start time.
+// options, and the time choice of the plan: "Start at a chosen time", with the planned time when it still lies
+// ahead. It never opens on "Start now": the main button of the preview would then start the update at once,
+// which nobody who planned it for later meant (#825). The time is only a preselection; the update is planned
+// when the person presses the button.
 func planAgain(jobs []jobView) *checkAgain {
 	a := &checkAgain{Action: "/updates/preview"}
 	add := func(k, v string) { a.Fields = append(a.Fields, ui.KVRow{Key: k, Value: v}) }
 	first := jobs[0].Job
+	add("when", "at")
+	if !first.StartAt.IsZero() {
+		add("start_at", first.StartAt.Format(time.RFC3339))
+	}
 	for _, j := range jobs {
 		add("id", strconv.FormatInt(int64(j.Job.DeviceID), 10))
 	}

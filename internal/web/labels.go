@@ -7,6 +7,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/ota"
 )
 
 // labels is the one place where machine values (health states, job states,
@@ -219,6 +220,93 @@ func eventText(e model.JobEvent, j model.Job, pr *principalDir, minimal bool) st
 	return strings.TrimSpace(label(e.Event) + " " + e.Detail)
 }
 
+// loaderOf is the intermediate image ("safeboot", "minimal") that the note of an identity event says the device runs.
+func loaderOf(detail string) (string, bool) {
+	rest, ok := strings.CutPrefix(detail, ota.NoteRunsLoaderPrefix)
+	if !ok {
+		return "", false
+	}
+	v, ok := strings.CutSuffix(rest, " image")
+	return v, ok && v != ""
+}
+
+// stillRunsText words the rest of a "device still runs" note: the version, then the variant and the language when
+// the engine read them. The firmware the device had is named with all of them, because an update to the same
+// version in another build or language is a real update, and "still runs 16.0.0" on an update to 16.0.0 would
+// contradict the target. The minimal or safeboot image of a staged update's final stage is no firmware it had.
+func stillRunsText(rest string) string {
+	f := strings.Fields(rest)
+	if len(f) < 2 {
+		return rest
+	}
+	if f[1] == "minimal" || f[1] == "safeboot" {
+		return strings.Join(f, " ")
+	}
+	return "the firmware it had (" + strings.Join(f, " ") + ")"
+}
+
+// legOldImage is what eventLoader returns for the leg of a device that went quiet to download the image and
+// answered again on the old one (see eventLoader).
+const legOldImage = "old"
+
+// eventLoader is the intermediate image the device was restarting into, or answering as, at evs[i]: the
+// identity read that ends the leg (the next one) said the device runs it. Tasmota's own fallback goes through
+// that image (the ESP8266 minimal firmware, the ESP32 safeboot image of a single-partition layout), so one
+// Upgrade makes two restarts. Without this the first restart read "Rebooting into 16.0.0..." as well as the
+// second, and the log repeated itself after one command (#825). "" for every event that is not a restart or
+// answer of such a leg.
+//
+// legOldImage is the other source of the repeat: Tasmota keeps its web server up while it downloads and, after
+// the download, answers on the old image for several seconds before it restarts. The probe that goes quiet
+// during the download is therefore a download, not a reboot, and the device's answer after it is the old
+// image, which the identity read that ends the leg says ("the device still runs <version>").
+func eventLoader(evs []model.JobEvent, i int) string {
+	if e := evs[i]; e.Event != "probe_offline" && e.Event != "probe_online" {
+		return ""
+	}
+	for _, n := range evs[i+1:] {
+		if n.Event != "identity" {
+			continue
+		}
+		if n.From == model.JobVerify && n.To == model.JobAwaitReboot {
+			if v, ok := loaderOf(n.Detail); ok {
+				return v
+			}
+			if v, ok := strings.CutPrefix(n.Detail, ota.NoteStillOldPrefix); ok && v != "" {
+				return legOldImage
+			}
+			return ""
+		}
+		return ""
+	}
+	return ""
+}
+
+// oldImageLegText words the events of a leg that eventLoader called legOldImage: the quiet probe is the
+// download (the same words as the download step), and the answer after it is only "answers again".
+func oldImageLegText(e model.JobEvent, j model.Job, minimal bool) (string, bool) {
+	switch {
+	case e.Event == "probe_offline" && e.To == model.JobAwaitReboot:
+		e.To = model.JobUpgradeIssued
+		return silentText(e, j, minimal)
+	case e.Event == "probe_online" && e.To == model.JobVerify:
+		return "Device answers again", true
+	}
+	return "", false
+}
+
+// loaderText words a restart or an answer of the leg into the safeboot image, which the event itself cannot
+// say. (The minimal image has its own words, used through eventText's minimal flag.)
+func loaderText(e model.JobEvent) (string, bool) {
+	switch {
+	case e.Event == "probe_offline" && e.To == model.JobAwaitReboot:
+		return "Rebooting into the safeboot image...", true
+	case e.Event == "probe_online" && e.To == model.JobVerify:
+		return "Waiting for the safeboot image to answer...", true
+	}
+	return "", false
+}
+
 // eventStageMinimal reports whether evs[i] happened during the minimal stage of
 // a staged update. The events carry no stage, but the engine switches stages in
 // exactly one place (the verify of the minimal image ends in set_ota_url), so
@@ -295,6 +383,14 @@ func outcomeText(e model.JobEvent, j model.Job) (string, bool) {
 	case model.JobRestoreOtaURL:
 		return "New version verified, restoring the device's OtaUrl", true
 	case model.JobAwaitReboot:
+		// What the device ran is on the event (the engine stores it): without it the same words said both "on the
+		// loader of Tasmota's own two-step update" and "never restarted" (#825).
+		if v, ok := loaderOf(e.Detail); ok {
+			return "Not on the new version yet: the device runs the " + v + " image, which continues the update by itself", true
+		}
+		if v, ok := strings.CutPrefix(e.Detail, ota.NoteStillOldPrefix); ok && v != "" {
+			return "Not on the new version yet: the device still runs " + stillRunsText(v), true
+		}
 		return "Not on the new version yet", true
 	case model.JobSucceeded:
 		t := "Update verified"

@@ -555,8 +555,19 @@ func (h *handler) component(w http.ResponseWriter, r *http.Request, status int, 
 	_, _ = w.Write(applyTablePrefsSorted(buf.Bytes(), prefs, pageSorts(r, prefs, sortPath(r)))) // a failed write means the client went away
 }
 
-// fail logs err and answers 500 without leaking its text.
+// statusClientClosed is the status written for a request the client cancelled (nginx's 499).
+const statusClientClosed = 499
+
+// fail logs err and answers 500 without leaking its text. A request the client cancelled (the person left the
+// page while it loaded, or the browser dropped it) is not a failure of the handler: its work stopped because
+// nobody waits for the answer, so it is logged at debug level only (#825). The request's own context must be
+// the cancelled one: a cancellation from anywhere else is still a defect worth an error line.
 func (h *handler) fail(w http.ResponseWriter, r *http.Request, err error) {
+	if errors.Is(err, context.Canceled) && errors.Is(r.Context().Err(), context.Canceled) {
+		h.log.DebugContext(r.Context(), "web request cancelled by the client", "path", r.URL.Path)
+		w.WriteHeader(statusClientClosed) // nobody reads it: the client is gone, and it is not a 5xx for the metrics
+		return
+	}
 	h.log.ErrorContext(r.Context(), "web handler failed", "path", r.URL.Path, "err", err)
 	http.Error(w, "internal error", http.StatusInternalServerError)
 }

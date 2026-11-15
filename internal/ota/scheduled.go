@@ -2,7 +2,9 @@ package ota
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/hellwand/tasmofleet/internal/model"
@@ -89,7 +91,37 @@ func (e *Engine) startScheduled(ctx context.Context, j model.Job, now time.Time)
 	}
 	late := now.Sub(j.StartAt).Round(time.Second)
 	got := e.applyScheduled(ctx, j, Event{Kind: EvStartDue, Err: fmt.Sprintf("planned for %s, started %s after it", WhenText(j.StartAt), late)})
+	if got.State == model.JobQueued {
+		e.auditScheduledStart(ctx, got, d.Name, late)
+	}
 	return got, retryIfWaiting(got, now)
+}
+
+// SchedulerActor is who the audit log and the backup of an update name for what TasmoFleet's own scheduler does:
+// the person planned the update, but the start and every step after it are not their action (#824).
+const SchedulerActor = "system"
+
+// stepActor is who a step of the job's run is booked to. A job started at once is its creator's action; a
+// planned one starts by itself, so its steps are the scheduler's.
+func stepActor(j model.Job) string {
+	if j.StartAt.IsZero() {
+		return j.CreatedBy
+	}
+	return SchedulerActor
+}
+
+// auditScheduledStart records that a planned update started, as the scheduler, with the time that was planned
+// and how late it began (#824). The person who planned it is in the entry of the plan ("transaction.start").
+func (e *Engine) auditScheduledStart(ctx context.Context, j model.Job, device string, late time.Duration) {
+	if e.audit == nil {
+		return
+	}
+	detail, _ := json.Marshal(map[string]any{ // plain strings and numbers always encode
+		"device": device, "device_id": j.DeviceID, "release": j.TargetRelease,
+		"planned_start": j.StartAt.UTC().Format(time.RFC3339), "late_seconds": int64(late / time.Second),
+	})
+	e.audit.Record(ctx, model.AuditEvent{Actor: SchedulerActor, Action: "transaction.scheduled_start",
+		Target: "transaction:" + strconv.FormatInt(int64(j.BatchID), 10), Detail: string(detail), Result: "ok"})
 }
 
 // retryIfWaiting is when to look at j again: soon when it still waits although it was due (its job could
