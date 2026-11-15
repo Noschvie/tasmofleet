@@ -13,6 +13,9 @@ templ bulkScopePage(v bulkScopeView) {
 	if v.Error != "" {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: v.Error, Alert: true})
 	}
+	if v.ACLText != "" {
+		@ui.BrokerACLNotice(v.ACLText)
+	}
 	<form method="post" action={ templ.SafeURL(v.Run) } class="bk-grid">
 		<input type="hidden" name="csrf" value={ v.CSRF }/>
 		<input type="hidden" name="opts" value="1"/>

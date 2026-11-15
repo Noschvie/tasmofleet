@@ -114,4 +114,4 @@ claim below or shows a residual risk worse than stated.
 Configure **broker ACLs** so each Tasmota device can only publish under its own topic,
 and only tasmofleet/Home Assistant can read everything. That removes M1's ability to
 spoof other devices (R1, R2) at the source. Mosquitto: one user per device, or pattern ACLs
-with `%u`/`%c`. Until then, treat MQTT as untrusted input; tasmofleet does.
+with `%u`/`%c` (a tested rule set: [broker ACL guide](../mqtt-broker-acl.md)). Until then, treat MQTT as untrusted input; tasmofleet does.

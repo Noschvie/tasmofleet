@@ -22,6 +22,7 @@ Part of the working guide: start at [CLAUDE.md](../../CLAUDE.md).
 | e2e (Playwright), all but quarantined                                     | `make e2e-deps` once, `npx playwright install chromium` once, then `make e2e` |
 | quarantined tests (nightly only)                                          | `make test-quarantine` / `make e2e-quarantine`                                |
 | vulnerabilities                                                           | `make vuln`                                                                   |
+| the broker ACL guide against a real Mosquitto (must be installed)         | `make mqtt-acl-check`                                                         |
 
 Tools are pinned in `tools/go.mod` and run via `go tool -modfile=tools/go.mod <tool>`.
 Run a single package's tests with `go test ./internal/fwselect/ -run TestGuard -v`.

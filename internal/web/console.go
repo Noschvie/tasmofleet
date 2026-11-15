@@ -39,9 +39,11 @@ type consoleData struct {
 	// which is kept on the server (its arguments may be a secret).
 	Confirm     bool
 	Consequence string
-	Token       string
-	Reply       string
-	Error       string
+	// ACLNotice shows the broker ACL notice on the confirmation: the command goes over MQTT (#840).
+	ACLNotice bool
+	Token     string
+	Reply     string
+	Error     string
 	// HistoryAdd is the command the browser may keep for Arrow Up, set after the policy let it
 	// through (see historyText).
 	HistoryAdd string
@@ -251,6 +253,7 @@ func (h *handler) askConsole(w http.ResponseWriter, r *http.Request, d model.Dev
 		return false, routes
 	}
 	data.Confirm, data.Consequence = true, strings.TrimSpace(v.Confirm+" "+notice)
+	data.ACLNotice = routes[d.ID] == transport.MQTT
 	data.Token = h.cmds.add(h.d.Clock.Now(), pendingCmd{binding: h.bindingOf(r), cmd: canon, ids: []model.DeviceID{d.ID}, cutOff: cut,
 		routes: routes, notice: notice})
 	h.renderConsole(w, r, status, d, data)

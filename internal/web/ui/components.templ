@@ -227,6 +227,22 @@ templ Banner(b BannerData) {
 	</div>
 }
 
+// BrokerACLNotice is the big, red, bold notice that, without an access control list on the broker, every MQTT
+// client can read what TasmoFleet sends through it: commands, passwords and configuration dumps (#840). It stays
+// on the pages where MQTT settings and MQTT-carried secrets appear and has no way to be closed: it is not a
+// state of TasmoFleet that goes away, it is a property of the broker TasmoFleet cannot see. Text is the one sentence
+// that says what this page puts on the broker; the lead and the link are the same everywhere.
+templ BrokerACLNotice(text string) {
+	<div class="banner tone-danger acl-warning" role="note" data-acl-warning>
+		<span class="banner-dot"></span>
+		<div class="banner-text">
+			<b class="acl-lead">{ BrokerACLLead }</b>
+			<span class="acl-text">{ text }</span>
+		</div>
+		<a class="banner-btn" href={ templ.SafeURL(BrokerACLDocURL) } target="_blank" rel="noopener noreferrer">Set up the ACL<span class="sr-only"> (opens in a new tab)</span></a>
+	</div>
+}
+
 // ErrorSummary is the form's banner when the server rejected a field: what to fix, and that
 // nothing was saved.
 templ ErrorSummary(lead string) {
@@ -559,6 +575,9 @@ templ ConfirmPage(c ConfirmData) {
 		<p class="udlg-body">{ c.Text }</p>
 		if c.Warning != "" {
 			@Banner(BannerData{Tone: ToneDanger, Text: c.Warning, Alert: true})
+		}
+		if c.ACLText != "" {
+			@BrokerACLNotice(c.ACLText)
 		}
 		if len(c.Facts) > 0 {
 			@KV(c.Facts)

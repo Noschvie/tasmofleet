@@ -56,6 +56,7 @@ func TestComponentsEscapeEveryText(t *testing.T) {
 		"RowMenu":          RowMenu(h, []MenuItem{{Label: h, Href: "/x"}, {Label: h, Disabled: true, Why: h}}, false),
 		"Banner":           Banner(BannerData{Tone: ToneWarn, Title: h, Text: h, Action: &Btn{Label: h}}),
 		"ErrorSum":         ErrorSummary(h),
+		"BrokerACLNotice":  BrokerACLNotice(h),
 		"Toast":            ToastStatic(ToastData{Tone: ToneDanger, Text: h, Action: h}),
 		"Field":            Field(FieldData{Label: h, Name: "n", Value: h, Placeholder: h, Error: h}),
 		"Select":           SelectField(h, "n", []Option{{Value: h, Label: h}}),
@@ -321,5 +322,25 @@ func TestComplianceBarSegmentsAndText(t *testing.T) {
 	}
 	if strings.Contains(comp(t, ComplianceBar(0, 0, 0)), "<rect") {
 		t.Error("a rule that applies to no device draws no segment")
+	}
+}
+
+// Why (#840): the broker ACL notice is a warning about a property of the broker that TasmoFleet cannot see, so it has
+// nothing that closes it, says the lead the same way everywhere, and leads to the guide in a new tab without leaking
+// the opener.
+func TestBrokerACLNoticeHasNoWayToCloseAndLinksTheGuide(t *testing.T) {
+	got := comp(t, BrokerACLNotice("Text of this page."))
+	for _, want := range []string{
+		`class="banner tone-danger acl-warning"`, BrokerACLLead, "Text of this page.",
+		`href="` + BrokerACLDocURL + `" target="_blank" rel="noopener noreferrer"`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in %s", want, got)
+		}
+	}
+	for _, bad := range []string{"<button", "dismiss", "Dismiss", "close"} {
+		if strings.Contains(got, bad) {
+			t.Errorf("the notice has %q: it must not be closable", bad)
+		}
 	}
 }

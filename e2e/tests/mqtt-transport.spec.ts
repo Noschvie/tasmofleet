@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
 import { quickPick } from "../support/updates";
 import { expectNoOverflow } from "../support/layout";
+import { aclShots } from "../support/aclshots";
 import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
 // Console and "Make compliant" over MQTT (0.20.0, #79, #256): mq-esp32 is a simulated
@@ -93,7 +94,11 @@ test("a console command whose arguments the audit hides names its transport befo
   // #826: the devenv's broker URL is tcp://, so the plain sentence; Cancel sends nothing.
   await box.fill("PulseTime1 10");
   await page.getByRole("button", { name: "Send" }).click();
-  await expect(confirm).toContainText("The command goes to the device over the MQTT broker, unencrypted; the broker also delivers it to every client subscribed to this device's commands (a broker ACL prevents that).");
+  await aclShots(page, "console-confirm");
+  await expect(confirm).toContainText("The command goes to the device over the MQTT broker, unencrypted; the broker also delivers it to every client subscribed to this device's commands, and without a broker ACL that is every client of the broker.");
+  // #840: and the confirmation shows the broker ACL notice, big and red
+  await expect(confirm.locator("[data-acl-warning]")).toBeVisible();
+  await expect(confirm.locator("[data-acl-warning] .acl-lead")).toContainText("Without a broker ACL, every client of your MQTT broker can read your commands, passwords and device backups.");
   await confirm.getByRole("link", { name: "Cancel" }).click();
   await expect(confirm).toHaveCount(0);
   await expect(page.getByRole("log", { name: "Console output" }).getByText("PulseTime1")).toHaveCount(0);

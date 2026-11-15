@@ -51,7 +51,7 @@ E2E_ARGS  ?=
 CHANGED_BASE ?= origin/main
 export CHANGED_BASE
 
-.PHONY: agent-refs quick integration-guard shards-check-changed catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo pages demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race diff-cover revert-check test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check changelog-assemble changelog-fragments-check changelog-fragment-gate release-pr-check changelog-title migration-guard migration-append-only changelog-notes clean tools
+.PHONY: agent-refs quick integration-guard shards-check-changed catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo pages demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race diff-cover revert-check mqtt-acl-check test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check changelog-assemble changelog-fragments-check changelog-fragment-gate release-pr-check changelog-title migration-guard migration-append-only changelog-notes clean tools
 
 # golangci-lint runs staticcheck with its defaults (.golangci.yml), so check does not run it a second time;
 # the staticcheck target stays for single runs and CI. go vet stays: golangci-lint skips generated files,
@@ -157,6 +157,11 @@ diff-cover:
 # label no-revert-check or a "revert-check: skip - <reason>" line in the PR body; locally REVERT_CHECK_SKIP="<reason>".
 revert-check:
 	@GO="$(GO)" NICE="$(NICE)" BASE="$(or $(BASE),$(CHANGED_BASE))" tools/revert-check.sh
+
+# The ACL blocks of docs/mqtt-broker-acl.md against a real, throwaway Mosquitto (#840). Needs mosquitto installed, so it
+# is not part of check; run it after a change to the page's ACL.
+mqtt-acl-check:
+	@tools/mqtt-acl-check.sh docs/mqtt-broker-acl.md
 
 # What a PR that changes a SAFETY package runs (CI too). The mutation gate is no longer part of it (#555):
 # "make mutation-changed BASE=<ref>" stays for a local, optional look at the changed lines.

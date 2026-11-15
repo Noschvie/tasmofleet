@@ -61,6 +61,7 @@ templ styleguidePage(v sgView) {
 			@ui.Banner(ui.BannerData{Tone: ui.ToneAccent, Title: "Tasmota 14.3.0 is available.", Text: "Released 6 Oct 2026 · 19 devices can update.", Action: &ui.Btn{Label: "Release notes"}})
 			@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Title: "3 devices still run Tasmota 13.4.0.", Text: "That release no longer gets security fixes.", Action: &ui.Btn{Label: "Plan update"}})
 			@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Title: "Couldn't save MQTT settings.", Text: "The broker refused the username or password.", Action: &ui.Btn{Label: "Retry"}, Alert: true})
+			@ui.BrokerACLNotice("TasmoFleet sends commands, passwords and whole configuration backups through this broker. Unless it has an ACL, every client of the broker can read them.")
 		</section>
 		<section class="ucard sg-sec" id="sg-toasts" aria-labelledby="sg-toasts-h">
 			<h2 id="sg-toasts-h">{ sgTitle("toasts") }</h2>

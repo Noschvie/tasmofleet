@@ -1,4 +1,5 @@
 import { test, expect } from "../support/fixtures";
+import { aclShots } from "../support/aclshots";
 import { App, Devenv, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
 const admin = { "X-authentik-username": "adam", "X-authentik-groups": "adm" };
@@ -55,7 +56,10 @@ test.describe("restore over MQTT", () => {
     await expect(page.getByRole("heading", { name: "Restore backup" })).toBeVisible();
     // the page names the path, and it is not the HTTP download
     await expect(page.locator(".rs-path")).toContainText("MQTT");
+    await aclShots(page, "restore-confirm");
     await expect(page.locator(".rs-cred")).toContainText("MQTT broker");
+    // #840: the confirmation of a restore over MQTT shows the broker ACL notice
+    await expect(page.locator("[data-acl-warning]")).toBeVisible();
     await page.getByLabel(/I understand/).check();
     await page.getByRole("button", { name: "Restore and restart" }).click();
     await expect(page).toHaveURL(/\/restores\/\d+$/);

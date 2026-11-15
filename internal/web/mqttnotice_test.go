@@ -19,8 +19,8 @@ import (
 // and the broker delivers it to every subscriber of the device's commands unless an ACL prevents that; with a TLS
 // broker URL only TasmoFleet's leg to the broker is encrypted; over HTTP it is unencrypted too.
 const (
-	sayMQTTPlain = "The command goes to the device over the MQTT broker, unencrypted; the broker also delivers it to every client subscribed to this device's commands (a broker ACL prevents that)."
-	sayMQTTTLS   = "The command goes to the device over the MQTT broker, encrypted from TasmoFleet to the broker; the broker also delivers it to every client subscribed to this device's commands (a broker ACL prevents that)."
+	sayMQTTPlain = "The command goes to the device over the MQTT broker, unencrypted; the broker also delivers it to every client subscribed to this device's commands, and without a broker ACL that is every client of the broker."
+	sayMQTTTLS   = "The command goes to the device over the MQTT broker, encrypted from TasmoFleet to the broker; the broker also delivers it to every client subscribed to this device's commands, and without a broker ACL that is every client of the broker."
 	sayHTTP      = "The command goes to the device over HTTP, unencrypted."
 )
 
@@ -248,7 +248,7 @@ func TestBulkPreviewNamesTheTransportPerDevice(t *testing.T) {
 	e := setupWith(t, func(d *Deps) { d.DeviceCmd = &fakeCmd{}; d.CommandBatch = fb; d.TypedRoutes = rs.routes })
 	e.health[2] = model.Health{DeviceID: 2, State: model.HealthOnline, LastSeen: time.Now()}
 	resp, body := e.do(t, "POST", "/devices/bulk/command", "admin", bulkForm("id", "1", "id", "2", "command", "PowerDelta 10"))
-	wantMQTT := "1 of 2 devices. The command goes over the MQTT broker, encrypted from TasmoFleet to the broker; the broker also delivers it to every client subscribed to each device's commands (a broker ACL prevents that)."
+	wantMQTT := "1 of 2 devices. The command goes over the MQTT broker, encrypted from TasmoFleet to the broker; the broker also delivers it to every client subscribed to each device's commands, and without a broker ACL that is every client of the broker."
 	wantHTTP := "1 of 2 devices. The command goes over HTTP, unencrypted."
 	if resp.StatusCode != 200 || !strings.Contains(body, "<dt>Over MQTT</dt>") || !strings.Contains(body, page(wantMQTT)) ||
 		!strings.Contains(body, "<dt>Over HTTP</dt>") || !strings.Contains(body, page(wantHTTP)) || len(fb.reqs) != 0 {

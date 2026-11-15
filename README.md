@@ -107,6 +107,16 @@ A manual template is in [deploy/unraid/tasmofleet.xml](deploy/unraid/tasmofleet.
 sign-in). The app and its documentation are in
 [deploy/homeassistant/tasmofleet](deploy/homeassistant/tasmofleet/DOCS.md).
 
+## MQTT and the broker ACL
+
+> [!CAUTION]
+> **Set up an ACL on your MQTT broker before you use TasmoFleet's MQTT features.** MQTT is the first way TasmoFleet
+> talks to a device that is online on its broker (reads, changes, backups and restores). The broker hands every command,
+> every password in it and the complete configuration dump of every backed-up or restored device to **every client
+> that may subscribe to the device's topics**: Home Assistant, Node-RED, MQTT Explorer, other devices. Without an ACL
+> that is every client of the broker. A ready, tested rule set is in the [broker ACL guide](docs/mqtt-broker-acl.md);
+> note that the Mosquitto app of Home Assistant currently does not enforce an `acl_file` (the guide says what to do).
+
 ## Backing up TasmoFleet
 
 Back up the whole data directory (the `/data` volume): it holds the database and the device
@@ -118,6 +128,7 @@ possible. How to take, schedule and restore them:
 
 - [Installing](docs/installation.md), [upgrading](docs/upgrading.md), [configuration](docs/configuration.md)
   (every environment variable, TLS, time zone, Home Assistant app)
+- [Broker ACL guide](docs/mqtt-broker-acl.md): who may read what on your MQTT broker (read this before MQTT)
 - [Backing up TasmoFleet](docs/backing-up.md) and [emergency access](docs/runbooks/emergency-access.md)
 - [What TasmoFleet changes on your devices](docs/device-changes.md), including the two roles
 - Reverse proxy, OIDC (Authentik), Prometheus, Grafana and Unraid examples: [deploy/](deploy/)

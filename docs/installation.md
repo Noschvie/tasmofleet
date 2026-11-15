@@ -65,3 +65,16 @@ it to `/boot/config/plugins/dockerMan/templates-user/`); it runs plain HTTP behi
 proxy with its own IP on `br0` (UI on port 8080, firmware on port 80 of that IP). The Community
 Applications template uses the `bridge` network instead, with the port mappings as the only
 place for ports. Upgrading an existing install: [docs/upgrading.md](upgrading.md).
+
+## MQTT broker (optional)
+
+TasmoFleet works without MQTT. With a broker, live state and every operation on a device that is online there go over
+MQTT first (System, MQTT).
+
+> [!CAUTION]
+> **Set up an ACL on your MQTT broker before you use TasmoFleet's MQTT features.** MQTT is the first way TasmoFleet
+> talks to a device that is online on its broker (reads, changes, backups and restores). The broker hands every command,
+> every password in it and the complete configuration dump of every backed-up or restored device to **every client
+> that may subscribe to the device's topics**: Home Assistant, Node-RED, MQTT Explorer, other devices. Without an ACL
+> that is every client of the broker. A ready, tested rule set is in the [broker ACL guide](mqtt-broker-acl.md);
+> note that the Mosquitto app of Home Assistant currently does not enforce an `acl_file` (the guide says what to do).

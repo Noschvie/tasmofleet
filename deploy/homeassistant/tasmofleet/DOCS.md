@@ -39,6 +39,13 @@ Settings live in TasmoFleet's own database (System settings page), not in this a
 - **MQTT** (optional): enter your broker (for example the Mosquitto app) by hand. It is not looked up
   automatically yet.
 
+> [!CAUTION]
+> **Without an ACL on the broker, every MQTT client can read the commands, passwords and device backups TasmoFleet
+> sends through it.** Read the
+> [broker ACL guide](https://github.com/hellwand/tasmofleet/blob/main/docs/mqtt-broker-acl.md) before you enter a
+> broker. The Mosquitto app of Home Assistant does not enforce an `acl_file` in its version 7.1.3, so with it the
+> guide's rules do nothing yet.
+
 ## Configuration
 
 | Option                   | Use                                                                                             |
