@@ -4,6 +4,35 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## 0.38.0 "Cape Reinga" (2026-11-15)
+
+### Added
+
+- System → MQTT has a checkbox "This broker has an ACL: clients read only their own topics (hides the ACL notice)", for admins. It hides the red broker ACL notice everywhere (console, bulk command and restore confirmations, the device's Back up button, Back up all now, the backup pages) for the broker it was given for: host, port and user. Change any of them and the notice returns. The notice now also says where to confirm (#880)
+
+### Changed
+
+- Text inputs, selects and default buttons have a darker border that meets the 3:1 contrast of WCAG 1.4.11, in the light and the dark theme (#829, #858, thanks @Noschvie)
+- A backup's result says "Backup taken over MQTT (config, status, decoded, files)": one backup per device with its parts named, instead of a count of stored files ("3 backup files taken") that read like three backups; the bulk result and the transaction page show it (#838)
+- The identity probe reads the device's MQTT broker, OTA URL, GroupTopic, DeviceName and relay names over MQTT first once a Status 5 on the device's topic reports its MAC; the firmware and hardware identity (Status 2, Status 4, the main page) and the MAC check of the address stay on HTTP (#851)
+- The red broker ACL notice now also stands by the places that start a backup over MQTT, which carries every secret of the device through the broker: the device's Back up button (when its backup goes over MQTT) and "Back up all now" on Devices → Backups (once, not on the schedule card). It shows while a broker is configured. The notice by a device's MQTT password field no longer shows when no broker is configured (#853)
+- Filter chips, clickable chips, policy pills, switches in their off state and segment controls use the same darker boundary as inputs and selects, so the Devices toolbar no longer looks uneven and these controls meet the 3:1 contrast of WCAG 1.4.11 (#860, #866, thanks @Noschvie)
+
+### Fixed
+
+- A background refresh of a device's settings or identity that failed because the device restarted is tried again after about ten minutes, as intended; the restart read that follows no longer pushes the retry to the end of the hour (#817)
+- A planned update that starts is now in the audit log as a start by the system, with the time it was planned for and how late it began, and its backup is booked to the system instead of the person who planned it; every cancel of an update or any other transaction, planned or not, is audited naming who cancelled (#824)
+- Small display faults of planned updates: "Plan again…" opens the preview on the time choice of the plan, never on "Start now", and a recheck keeps the time you chose, History shows the real start of an update that began late, the run log no longer reads one firmware download and one restart as two reboots (the download of the image, the short answer of the old firmware before the restart, the loader image of a two-step update and the final download of a staged update are worded for what they are, and a "Not on the new version yet" line names what the device runs, with its build and language), and a request the browser cancelled is no longer logged as an error (#825)
+- Add devices: "Add selected" no longer answers 409 with every device it just added listed again as "no longer listed", and "Ignore selected" no longer ignores each device twice; a ticked device is now handled once, and the notice after "Add selected" says how many devices were added (#836)
+- A restore over MQTT of a device whose topic holds placeholders (Tasmota's default tasmota_%06X, %hostname% and the others) compares the backup's topic setting with the one the device reports, placeholders and all (and the hostname when the topic holds %hostname%), so its own topic no longer counts as a change of the MQTT connection (#844)
+- A restore over MQTT reads the device's TLS settings (SetOption103, SetOption132) also on a device with its own StateText words such as AUS/AN, so it no longer asks a lockout question or marks the device for a backup with the device's own settings (#845)
+- A backup over MQTT of a device with no MAC in the inventory says "the inventory has no MAC for this device (probe it first)", as the restore does, instead of "the device at its address is not this device", and asks nothing over HTTP then, also while HTTP is known to fail; a host that reports a MAC made only of separators is never taken for the device by the MAC check of a backup or a restore (#846)
+- When another device answers on a device's MQTT topic, TasmoFleet now stops sending the device's commands there: its reads go over HTTP while HTTP works, and changes, backups and restores never go to that topic, until the device answers alone on its topic again (TasmoFleet asks the topic every 10 minutes until it is free, with a check that hears every reply; Refresh identity asks too) or its topic changes. A restore over MQTT that hears another device on the topic marks it the same way, and the device page's MQTT row then says "Topic taken by another device". The log warns about it with the topic's name, also from the data refresh, which wrongly said "another device answers at the address" at debug level (#852)
+- After a restore over MQTT that changed the MQTT connection, the check backup and the backups of the next ten minutes keep the device's files again: the HTTP polls the restarting device leaves unanswered no longer mark its HTTP as failing (#854)
+- Four backup and restore texts that were wrong or misleading: a backup over MQTT asks the device on its topic whether it has a file system, so a device without one says "no filesystem" and is asked nothing over HTTP (it was said to need HTTP for its files when HTTP was down), a restore that cannot compare the settings names which backup lacks the decoded copy (or that the copy could not be read) instead of "decoder missing", the restore confirmation says "The 1 file is written", and the audit entry of a backup names the transport of the dump ("mqtt") and lists the HTTP calls beside it (MAC check, files) apart (#855)
+- The project page and the README no longer show screenshots of an old version: the pictures are now built from the same demo run that publishes the live demo, in every release, instead of being committed copies (#859)
+- The command suggestion list on New rule (Any command, Copy from a device) no longer floats over the Continue button below it: a click on Continue used to pick a suggestion and replace the typed command instead of continuing; the list now sits in the card above the button (#867, thanks @Noschvie)
+
 ## 0.37.0 "Kullen" (2026-11-15)
 
 ### Upgrade notes
