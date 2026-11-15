@@ -105,6 +105,9 @@ type Config struct {
 	MQTTUser      string `env:"MQTT_USER" ui:"true"`
 	MQTTPassword  string `env:"MQTT_PASSWORD" ui:"true" secret:"true"`
 	MQTTFullTopic string `env:"MQTT_FULLTOPIC" ui:"true" default:"%prefix%/%topic%/"`
+	// MQTTACLConfirmed is the broker (host:port and user, see web.aclBinding) an admin said has an ACL (#880); the broker
+	// ACL notice stays away only while it is still that broker. Written by the checkbox on System, MQTT, not by hand.
+	MQTTACLConfirmed string `env:"MQTT_ACL_CONFIRMED" ui:"true"`
 
 	// DeviceDefaultPassword is the fleet's usual Tasmota web password. It only
 	// prefills the forms that add a device (manual add, accepting a proposal);

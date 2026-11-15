@@ -34,6 +34,9 @@ func TestSystemSettingsEveryFieldHasOnePlace(t *testing.T) {
 		if st.Key == "MQTT_URL" {
 			name = `name="mqtt.host"` // N18: the URL is edited as host, port and TLS
 		}
+		if st.Key == "MQTT_ACL_CONFIRMED" {
+			name = `name="mqtt.acl"` // a checkbox bound to the broker in use (#880)
+		}
 		n := strings.Count(body, name)
 		if st.Key == "AUTH_MODE" || st.Key == "LOG_LEVEL" || sysSegmentedEnum(st.Key) {
 			n = min(n, 1) // radio inputs: one per choice

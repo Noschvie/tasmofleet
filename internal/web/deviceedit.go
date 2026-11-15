@@ -38,6 +38,8 @@ type deviceForm struct {
 	MQTTRefused     bool // the device answered Error 1 to the stored password
 	// MQTTRetype: an own password was typed but the page is shown again, so it must be typed again.
 	MQTTRetype bool
+	// ACLText is the broker ACL notice's sentence by the password field; empty without a configured broker or after the confirmation (#853, #880).
+	ACLText string
 }
 
 // unverifiedMove is the stronger confirmation for sending a stored password to
@@ -54,6 +56,9 @@ func (h *handler) renderForm(w http.ResponseWriter, r *http.Request, status int,
 	f.HasMQTTPassword = f.Device.MQTTPasswordMode == model.MQTTPasswordOwn && f.Device.MQTTPassword != ""
 	f.MQTTRefused = !f.Device.MQTTPasswordBadAt.IsZero()
 	f.MQTTSection = h.d.MQTTPasswords != nil
+	if h.brokerACLOpen() {
+		f.ACLText = aclTextDevicePassword
+	}
 	f.Device.HTTPPassword, f.Device.MQTTPassword = "", "" // never rendered
 	f.TagsText = strings.Join(f.Device.Tags, ", ")
 	v := h.view(r, "Edit "+f.Stored, "devices", nil)

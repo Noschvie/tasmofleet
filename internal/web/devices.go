@@ -336,6 +336,8 @@ type deviceTabs struct {
 	OfflineHTTP string
 	// APIOff: the device's HTTP API is off (model.Health.APIOff); an action without a path then says so (#447)
 	APIOff bool
+	// ACLText is the broker ACL notice's sentence by the Back up button: this device's backup goes over MQTT, whether or not Back up is usable right now (#853)
+	ACLText string
 }
 
 // tabsFor builds the device tabs for the viewer. Settings and Console are

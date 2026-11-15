@@ -2,6 +2,7 @@ import { mkdirSync } from "node:fs";
 import type { Page } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
 import { expectNoOverflow } from "../support/layout";
+import { aclShots } from "../support/aclshots";
 import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
 // #840: the broker ACL notice is big, red and bold on the pages where MQTT settings and MQTT-carried secrets appear.
@@ -133,4 +134,65 @@ test("the notice stays off other pages", async ({ page }) => {
     const shown = await page.locator("[data-acl-warning]:visible").count();
     expect(shown, path).toBe(0);
   }
+});
+
+// #853: a backup over MQTT carries every secret of the device through the broker, so the notice also stands, once, by
+// "Back up all now" on Devices, Backups while a broker is configured (not repeated on the schedule card). A device that
+// is not on the broker is backed up over HTTP: its Back up button has no notice (the device with the notice over MQTT
+// is in mqtt-transport.spec.ts).
+test("the notice stands by Back up all now only, not on the schedule or by an HTTP device's Back up", async ({ page }) => {
+  await page.setExtraHTTPHeaders(adam);
+  await page.goto(app.url + "/devices/backups");
+  const devices = page.locator("#card-devices");
+  const schedule = page.locator("#card-schedule");
+  await expect(devices.getByRole("button", { name: "Back up all now" })).toBeVisible();
+  await expect(devices.locator("[data-acl-warning]")).toHaveCount(1);
+  await expect(schedule.locator("[data-acl-warning]")).toHaveCount(0);
+  await expect(page.locator("[data-acl-warning]")).toHaveCount(1);
+  await expectLoudNotice(page);
+  // it stands above the device table, by the buttons
+  const noticeBox = await devices.locator("[data-acl-warning]").boundingBox();
+  const tableBox = await devices.locator("table").boundingBox();
+  expect(noticeBox!.y + noticeBox!.height).toBeLessThanOrEqual(tableBox!.y);
+  for (const width of [1280, 768, 375]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await expectNoOverflow(page, `Backups page at ${width}`);
+  }
+  await aclShots(page, "fleet-backups");
+
+  await page.goto(app.url + "/devices/1");
+  await expect(page.getByRole("button", { name: "Back up", exact: true })).toBeVisible();
+  await expect(page.locator("[data-acl-warning]")).toHaveCount(0);
+});
+
+// #880: nothing in TasmoFleet can see an ACL, so an admin says that the broker has one (System, MQTT). The notice then
+// goes away everywhere, for this broker only. Shots of the notice with its second line, and of the pages after.
+test("an admin's confirmation hides the notice; the second line points to it", async ({ page }) => {
+  await page.setExtraHTTPHeaders(adam);
+  await page.goto(app.url + "/devices/backups");
+  await expect(page.locator("[data-acl-warning]")).toHaveCount(1);
+  await expect(page.locator("[data-acl-warning] .acl-confirm")).toContainText("Confirm it under System");
+  await aclShots(page, "backups-open");
+  await page.goto(app.url + "/settings/system?tab=mqtt");
+  await expect(page.locator("[data-acl-warning]")).toHaveCount(1);
+  await expect(page.locator("[data-acl-warning] .acl-confirm")).toHaveCount(0);
+  await aclShots(page, "system-mqtt-open");
+  await page.getByLabel("This broker has an ACL", { exact: false }).check();
+  await page.getByRole("button", { name: "Save settings" }).click();
+  await page.goto(app.url + "/settings/system?tab=mqtt");
+  await expect(page.getByLabel("This broker has an ACL", { exact: false })).toBeChecked();
+  await expect(page.locator("[data-acl-warning]")).toHaveCount(0);
+  await aclShots(page, "system-mqtt-confirmed");
+  await page.goto(app.url + "/devices/backups");
+  await expect(page.getByRole("button", { name: "Back up all now" })).toBeVisible();
+  await expect(page.locator("[data-acl-warning]")).toHaveCount(0);
+  await aclShots(page, "backups-confirmed");
+  // another broker host: the confirmation no longer applies
+  await page.goto(app.url + "/settings/system?tab=mqtt");
+  const host = page.locator('input[name="mqtt.host"]');
+  const old = await host.inputValue();
+  await host.fill("other-" + old);
+  await page.getByRole("button", { name: "Save settings" }).click();
+  await page.goto(app.url + "/devices/backups");
+  await expect(page.locator("[data-acl-warning]")).toHaveCount(1);
 });

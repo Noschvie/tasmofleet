@@ -342,9 +342,11 @@ templ editPage(f deviceForm, base, csrf string) {
 // mqttPasswordFields is the MQTT password section of the edit form. The value is write-only: it is
 // never rendered, and an empty field keeps the stored one.
 templ mqttPasswordFields(f deviceForm) {
-	<div class="ufield-wide">
-		@ui.BrokerACLNotice(aclTextDevicePassword)
-	</div>
+	if f.ACLText != "" {
+		<div class="ufield-wide">
+			@ui.BrokerACLNotice(f.ACLText)
+		</div>
+	}
 	<label class="ufield">
 		<span class="ufield-label">MQTT password source</span>
 		<select name="mqtt_password_mode">

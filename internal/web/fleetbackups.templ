@@ -215,6 +215,9 @@ templ fleetDevices(p sysPage, c sysCard) {
 			}
 		</div>
 		<div class="sbody sbody-plain">
+			if v.ACLText != "" {
+				@ui.BrokerACLNotice(v.ACLText)
+			}
 			<div class="dv-tools bk-tools">
 				<div class="dv-chips">
 					for _, ch := range v.Chips {

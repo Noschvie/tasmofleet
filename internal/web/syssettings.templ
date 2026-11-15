@@ -51,8 +51,8 @@ templ sysSettingsPage(p sysPage) {
 		<input type="hidden" name="csrf" value={ p.CSRF }/>
 		for _, tab := range p.Tabs {
 			<div class="sys-tab" id={ "sec-" + tab.Slug } data-sys-tab={ tab.Slug } hidden?={ tab.Slug != p.Active }>
-				if tab.Slug == "mqtt" {
-					@ui.BrokerACLNotice(aclTextBroker)
+				if tab.Slug == "mqtt" && !p.MQTT.ACLConfirmed {
+					@ui.BrokerACLNoticeHere(aclTextBroker)
 				}
 				@ui.CardStacks(3) {
 					for si, span := range tab.Spans {
@@ -267,6 +267,8 @@ templ sysRowView(p sysPage, row sysRow) {
 			@sysLocked(row)
 		case row.Key == "MQTT_URL" && p.MQTT.Legacy == "":
 			@sysBroker(p, row)
+		case row.Key == "MQTT_ACL_CONFIRMED":
+			@sysACLConfirm(p, row)
 		case row.Bool:
 			@sysSwitch(row)
 		default:
@@ -392,6 +394,20 @@ templ sysBroker(p sysPage, row sysRow) {
 	</div>
 	if p.MQTT.HasPassword {
 		<label class="ucheck sopt bkeep" data-broker-keep data-stored-host={ p.MQTT.StoredHost } data-stored-port={ p.MQTT.StoredPort }><input type="checkbox" name="reuse.MQTT_PASSWORD" value="1" checked?={ p.MQTT.KeepTicked }/><span>Broker changed: keep the stored password for the new broker</span></label>
+	}
+}
+
+// sysACLConfirm is the admin's confirmation that the broker has an ACL (#880), drawn like the keep-password option.
+// It is bound to the broker in use when saved: a changed host, port or user brings the notice back.
+templ sysACLConfirm(p sysPage, row sysRow) {
+	if p.MQTT.ACLReady {
+		<input type="hidden" name="mqtt.acl.seen" value="1"/>
+		<label class="ucheck sopt"><input type="checkbox" name="mqtt.acl" value="1" checked?={ p.MQTT.ACLConfirmed }/><span>This broker has an ACL: clients read only their own topics (hides the ACL notice)</span></label>
+	} else {
+		<small class="ufield-help">Save a valid broker first: the confirmation that it has an ACL is given for a broker host and port.</small>
+	}
+	if row.Err != "" {
+		<small class="ufield-err">{ row.Err }</small>
 	}
 }
 

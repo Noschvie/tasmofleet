@@ -233,11 +233,24 @@ templ Banner(b BannerData) {
 // state of TasmoFleet that goes away, it is a property of the broker TasmoFleet cannot see. Text is the one sentence
 // that says what this page puts on the broker; the lead and the link are the same everywhere.
 templ BrokerACLNotice(text string) {
+	@brokerACL(text, true)
+}
+
+// BrokerACLNoticeHere is the notice on the pages where the broker is set up (System, MQTT and the setup): they are the
+// place the second line of BrokerACLNotice points to, so they do not repeat it (#880).
+templ BrokerACLNoticeHere(text string) {
+	@brokerACL(text, false)
+}
+
+templ brokerACL(text string, confirm bool) {
 	<div class="banner tone-danger acl-warning" role="note" data-acl-warning>
 		<span class="banner-dot"></span>
 		<div class="banner-text">
 			<b class="acl-lead">{ BrokerACLLead }</b>
 			<span class="acl-text">{ text }</span>
+			if confirm {
+				<span class="acl-confirm">{ BrokerACLConfirm }</span>
+			}
 		</div>
 		<a class="banner-btn" href={ templ.SafeURL(BrokerACLDocURL) } target="_blank" rel="noopener noreferrer">Set up the ACL<span class="sr-only"> (opens in a new tab)</span></a>
 	</div>

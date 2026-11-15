@@ -60,7 +60,7 @@ var sysLayout = []sysTabDef{
 		{ID: "credentials", Title: "Default device credentials", Note: "Prefilled for new devices.", Stack: 2, Keys: []string{"DEVICE_DEFAULT_PASSWORD"}},
 	}},
 	{"mqtt", "MQTT", []int{2, 1}, []sysCardDef{
-		{ID: "broker", Title: "Broker", Note: "Changes apply at once. An empty host turns MQTT off.", Stack: 0, Keys: []string{"MQTT_URL", "MQTT_USER", "MQTT_PASSWORD"}},
+		{ID: "broker", Title: "Broker", Note: "Changes apply at once. An empty host turns MQTT off.", Stack: 0, Keys: []string{"MQTT_URL", "MQTT_USER", "MQTT_PASSWORD", "MQTT_ACL_CONFIRMED"}},
 		{ID: "topics", Title: "Topics", Stack: 1, Keys: []string{"MQTT_FULLTOPIC"}},
 	}},
 	{"discovery", "Discovery", []int{1, 2}, []sysCardDef{
@@ -310,10 +310,11 @@ var sysCopies = map[string]sysCopy{
 	"TELEPERIOD":              {Label: "Telemetry period", Help: "Stale after 2× + 1 min.", Width: "xs", Info: "Expected telemetry period. A device counts as stale after twice this period plus a minute."},
 	"DEVICE_DEFAULT_PASSWORD": {Help: "Write-only. Prefills new devices.", Width: "half", Info: "Prefilled as the web password when you add a device or accept a discovered one (user admin). Each device keeps its own copy; you can still change it per device."},
 
-	"MQTT_URL":       {Label: "Host", Width: "full"},
-	"MQTT_USER":      {Help: "Empty if the broker needs no login.", Width: "half"},
-	"MQTT_PASSWORD":  {Help: "Write-only. Empty keeps it.", Width: "half"},
-	"MQTT_FULLTOPIC": {Help: "Must contain %prefix% and %topic% once each.", Width: "full", Info: "Discovery listens on tasmota/discovery/+/config."},
+	"MQTT_URL":           {Label: "Host", Width: "full"},
+	"MQTT_USER":          {Help: "Empty if the broker needs no login.", Width: "half"},
+	"MQTT_PASSWORD":      {Help: "Write-only. Empty keeps it.", Width: "half"},
+	"MQTT_ACL_CONFIRMED": {Help: "Clients read only their own topics.", Width: "full"},
+	"MQTT_FULLTOPIC":     {Help: "Must contain %prefix% and %topic% once each.", Width: "full", Info: "Discovery listens on tasmota/discovery/+/config."},
 
 	"DISCOVERY_MQTT":          {Help: "Needs MQTT. Finds are proposals.", Width: "full", Info: "A discovered device is never added on its own: an admin accepts it on the Discovered page."},
 	"DISCOVERY_SCAN":          {Label: "Scheduled network scan", Help: "Probes the networks below on a schedule.", Width: "full"},

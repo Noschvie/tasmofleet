@@ -16,6 +16,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/restore"
 	"github.com/hellwand/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/sysconfig"
 )
 
 const syn = "../backup/testdata/synthetic/"
@@ -133,6 +134,12 @@ func newDiffEnv(t *testing.T) (*env, *diffBackups, *fakeRestore) {
 
 func newDiffEnvStep(t *testing.T) (*env, *diffBackups, *fakeRestore, *atomic.Bool) {
 	t.Helper()
+	return newDiffEnvWith(t, aclBrokerService(t))
+}
+
+// newDiffEnvWith is newDiffEnvStep with the settings service the caller holds (the broker ACL tests change it).
+func newDiffEnvWith(t *testing.T, svc *sysconfig.Service) (*env, *diffBackups, *fakeRestore, *atomic.Bool) {
+	t.Helper()
 	base, sec := readSyn(t, "decoded.json"), readSyn(t, "decoded-secrets.json")
 	t0 := time.Date(2026, 10, 18, 10, 0, 0, 0, time.UTC)
 	bk := &diffBackups{files: map[model.BackupID][]byte{}}
@@ -154,6 +161,7 @@ func newDiffEnvStep(t *testing.T) (*env, *diffBackups, *fakeRestore, *atomic.Boo
 	e := setupWith(t, func(d *Deps) {
 		d.Backups = bk
 		d.Restore = rs
+		d.SysConfig = svc
 		d.Guard = stepGuard{fakeGuard: fakeGuard{}, stepped: stepped}
 	})
 	return e, bk, rs, stepped

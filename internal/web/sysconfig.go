@@ -76,6 +76,8 @@ type sysMQTT struct {
 	KeepTicked             bool   // the keep option was ticked in the save that is shown again
 	HasPassword            bool   // a password is stored: the broker row offers to keep it for a changed broker
 	TLS                    bool
+	ACLConfirmed           bool   // an admin confirmed that this broker has an ACL (#880)
+	ACLReady               bool   // the stored broker can carry the confirmation (it splits into host and port); else the box is not offered
 	Legacy                 string // why the parts cannot hold the stored URL; empty when they can
 }
 
@@ -153,6 +155,8 @@ func (h *handler) sysData(r *http.Request, posted map[string]string, errs map[st
 	}
 	p.Notify = h.sysNotifyOf(saved)
 	p.MQTT.HasPassword = hasMQTTPassword
+	p.MQTT.ACLConfirmed = h.aclConfirmed()
+	p.MQTT.ACLReady = aclBinding(h.mqttSettings()) != ""
 	p.MQTT.KeepTicked = posted["reuse.MQTT_PASSWORD"] == "1"
 	p.Tabs = sysTabsOf(rows)
 	p.Discovery = h.sysDiscoveryOf(r, discoveryOn)
@@ -483,6 +487,7 @@ func (h *handler) sysSave(w http.ResponseWriter, r *http.Request) {
 			reuse = append(reuse, strings.TrimPrefix(k, "reuse."))
 		}
 	}
+	aclTicked, aclOnPage := extra["mqtt.acl"] == "1" && !slices.Contains(clear, "MQTT_URL"), extra["mqtt.acl.seen"] == "1"
 	if slices.Contains(clear, "MQTT_URL") {
 		// A reset to the default wins over the broker fields, which the form always posts.
 		for _, k := range mqttPartKeys {
@@ -491,6 +496,9 @@ func (h *handler) sysSave(w http.ResponseWriter, r *http.Request) {
 	} else if err := composeMQTTURL(values, extra, h.storedMQTTURL()); err != nil {
 		h.sysOutcome(w, r, shown(), err, nil)
 		return
+	}
+	if aclOnPage && !slices.Contains(clear, "MQTT_ACL_CONFIRMED") {
+		values["MQTT_ACL_CONFIRMED"] = h.aclConfirmation(aclTicked, values)
 	}
 	if v, ok := values["FIRMWARE_SOURCES"]; ok {
 		values["FIRMWARE_SOURCES"] = keepSourceOrder(v, h.storedValue("FIRMWARE_SOURCES"))
@@ -732,7 +740,7 @@ var mqttPartKeys = []string{"mqtt.host", "mqtt.port", "mqtt.tls"}
 
 // sysFormExtras are the form fields that are no setting: the broker parts.
 // Every button that posts the whole form must accept them.
-var sysFormExtras = slices.Clone(mqttPartKeys)
+var sysFormExtras = append(slices.Clone(mqttPartKeys), "mqtt.acl", "mqtt.acl.seen")
 
 // composeMQTTURL replaces the posted broker parts with the MQTT_URL they
 // compose (config.JoinMQTTURL). A form without mqtt.host is left alone (the
@@ -824,6 +832,28 @@ func (h *handler) storedValue(key string) string {
 		}
 	}
 	return ""
+}
+
+// aclConfirmation is the value of MQTT_ACL_CONFIRMED for a save of the MQTT tab (#880): the checkbox binds the
+// confirmation to the broker in use, and only when this very save leaves host, port and user as they are. A save that
+// changes one of them stores no confirmation: the notice returns, and it does not come back by itself if the old
+// broker is entered again later.
+func (h *handler) aclConfirmation(ticked bool, values map[string]string) string {
+	if !ticked || h.d.SysConfig == nil {
+		return ""
+	}
+	cur := h.mqttSettings()
+	next := cur
+	if u, ok := values["MQTT_URL"]; ok {
+		next.MQTTURL = u
+	}
+	if u, ok := values["MQTT_USER"]; ok {
+		next.MQTTUser = u
+	}
+	if aclBinding(next) != aclBinding(cur) {
+		return ""
+	}
+	return aclBinding(cur)
 }
 
 // storedMQTTURL is the current MQTT_URL from the settings service.

@@ -70,9 +70,7 @@ func (h *handler) bulkBackup(w http.ResponseWriter, r *http.Request) {
 	// "Keep these backups" and "Label" (N1); a form without them takes plain backups.
 	opt := ota.BackupOptions{Keep: r.PostFormValue("keep") == "1", Label: r.PostFormValue("label")}
 	sv.Keep, sv.Label = opt.Keep, opt.Label
-	if h.d.SysConfig != nil && h.storedMQTTURL() != "" {
-		sv.ACLText = aclTextBackup
-	}
+	sv.ACLText = h.backupACLText()
 	if r.PostFormValue("run") != "1" || dropping(r) || sv.Error != "" {
 		h.showBulkScope(w, r, sv)
 		return

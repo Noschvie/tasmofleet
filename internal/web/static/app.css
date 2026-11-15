@@ -8961,6 +8961,11 @@ body:has(.dv-list .bulkbar:not([hidden])) {
 .devhd ~ .banner {
   margin: 0 0 var(--sp-12);
 }
+/* the broker ACL notice by the Back up button (#853): its own full row under the name and the buttons */
+.devhd-acl {
+  flex: 1 1 100%;
+  min-width: 0;
+}
 
 .devcard {
   break-inside: avoid;
@@ -16257,6 +16262,11 @@ a[aria-busy="true"]::after {
 }
 .banner.acl-warning .acl-text {
   display: block;
+  font-weight: 600;
+}
+.banner.acl-warning .acl-confirm {
+  display: block;
+  margin-top: var(--sp-6);
   font-weight: 600;
 }
 .banner.acl-warning .banner-btn {

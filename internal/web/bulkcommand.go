@@ -141,7 +141,7 @@ func (h *handler) bulkCommandPage(w http.ResponseWriter, r *http.Request) {
 		Warning: consequence,
 		Facts:   append(append([]ui.KVRow{{Key: "Command", Value: shown, Mono: true}, {Key: "Devices", Value: devicesFact}}, routeRows...), heldRows...),
 		Action:  view.Base + "/devices/bulk/command/run", CSRF: view.CSRF, Fields: fields,
-		Verb: verb, Danger: consequence != "", CancelHref: view.Base + "/devices", CancelLabel: "Cancel", ACLText: aclTextFor(routes, aclTextConsole),
+		Verb: verb, Danger: consequence != "", CancelHref: view.Base + "/devices", CancelLabel: "Cancel", ACLText: h.aclTextFor(routes, aclTextConsole),
 	}))
 }
 

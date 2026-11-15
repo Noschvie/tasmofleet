@@ -302,6 +302,43 @@ test("connection card explains paths", async ({ page }) => {
   await expect(page.locator("[data-via-mqtt]").first()).toBeVisible();
 });
 
+// #853: this device's backup goes over MQTT (its HTTP port refuses everything), so the notice stands by its Back up
+// button, in the header of every tab of the device, once the device has the MQTT password a backup needs.
+test("the broker ACL notice stands by Back up when the backup goes over MQTT", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.setExtraHTTPHeaders(admin);
+  await page.goto(app.url + "/devices/1/edit");
+  await page.getByLabel("MQTT password source").selectOption("own");
+  await page.getByLabel("Own MQTT password").fill("devenv-fake-mqtt-password");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(async () => {
+    await page.goto(app.url + "/devices/1");
+    await expect(page.getByRole("button", { name: "Back up", exact: true })).toBeEnabled({ timeout: 2_000 });
+  }).toPass({ timeout: 90_000, intervals: [3_000] });
+  const notice = page.locator("#devhd [data-acl-warning]");
+  await expect(notice).toHaveCount(1);
+  await expect(notice).toContainText("every password in it");
+  // the notice is under the Back up button, not beside it, and nothing runs off the page
+  const buttonBox = await page.getByRole("button", { name: "Back up", exact: true }).boundingBox();
+  const noticeBox = await notice.boundingBox();
+  expect(noticeBox!.y).toBeGreaterThanOrEqual(buttonBox!.y + buttonBox!.height);
+  await aclShots(page, "device-back-up");
+  for (const width of [1280, 768, 375]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await expectNoOverflow(page, `device header at ${width}`);
+  }
+  await page.goto(app.url + "/devices/1/backups");
+  await expect(page.locator("#devhd [data-acl-warning]")).toHaveCount(1);
+  // #880: the admin's confirmation that the broker has an ACL takes the notice from the header
+  await page.goto(app.url + "/settings/system?tab=mqtt");
+  await page.getByLabel("This broker has an ACL", { exact: false }).check();
+  await page.getByRole("button", { name: "Save settings" }).click();
+  await page.goto(app.url + "/devices/1");
+  await expect(page.getByRole("button", { name: "Back up", exact: true })).toBeVisible();
+  await expect(page.locator("[data-acl-warning]")).toHaveCount(0);
+  await aclShots(page, "device-back-up-confirmed");
+});
+
 test("disabled actions carry the reason", async ({ page }) => {
   await openDevicePage(page, admin);
   await page.locator("#devpaths-actions-sum").click();

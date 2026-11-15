@@ -131,6 +131,8 @@ var fields = []Field{
 	{Key: "MQTT_USER", Group: GroupMQTT, Label: "User", Apply: Live, Help: "Leave empty if the broker needs no login."},
 	{Key: "MQTT_PASSWORD", Group: GroupMQTT, Label: "Password", Apply: Live, Secret: true,
 		Help: "Write-only. Leave empty to keep the stored password."},
+	{Key: "MQTT_ACL_CONFIRMED", Group: GroupMQTT, Label: "This broker has an ACL", Apply: Live,
+		Help: "Hides the broker ACL notice for this broker, host, port and user. A change of any of them brings the notice back."},
 	{Key: "MQTT_FULLTOPIC", Group: GroupMQTT, Label: "Full topic pattern", Apply: Live, Help: "Must contain %prefix% and %topic% once each."},
 
 	{Key: "DISCOVERY_MQTT", Bool: true, Group: GroupDiscovery, Label: "Discover devices from MQTT", Apply: Live, Help: "Needs MQTT. Finds are proposals; an admin accepts them."},

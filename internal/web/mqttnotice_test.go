@@ -62,7 +62,7 @@ func (s *routeStub) set(tls bool, overMQTT ...model.DeviceID) {
 func noticeEnv(t *testing.T, rs *routeStub) (*env, *fakeCmd) {
 	t.Helper()
 	f := &fakeCmd{reply: `{"Done":"yes"}`}
-	return setupWith(t, func(d *Deps) { d.DeviceCmd = f; d.TypedRoutes = rs.routes }), f
+	return setupWith(t, func(d *Deps) { d.DeviceCmd = f; d.TypedRoutes = rs.routes; d.SysConfig = aclBrokerService(t) }), f
 }
 
 // The page escapes the apostrophe of "device's".

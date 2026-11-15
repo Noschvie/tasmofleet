@@ -253,7 +253,7 @@ func (h *handler) askConsole(w http.ResponseWriter, r *http.Request, d model.Dev
 		return false, routes
 	}
 	data.Confirm, data.Consequence = true, strings.TrimSpace(v.Confirm+" "+notice)
-	data.ACLNotice = routes[d.ID] == transport.MQTT
+	data.ACLNotice = routes[d.ID] == transport.MQTT && h.brokerACLOpen()
 	data.Token = h.cmds.add(h.d.Clock.Now(), pendingCmd{binding: h.bindingOf(r), cmd: canon, ids: []model.DeviceID{d.ID}, cutOff: cut,
 		routes: routes, notice: notice})
 	h.renderConsole(w, r, status, d, data)

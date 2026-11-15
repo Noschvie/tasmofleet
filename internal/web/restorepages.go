@@ -228,7 +228,9 @@ func restoreConfirmOf(v view, p confirmPage) restoreConfirmView {
 func (h *handler) renderConfirm(w http.ResponseWriter, r *http.Request, status int, p confirmPage) {
 	v := h.view(r, "Restore backup", "devices", nil)
 	v.Crumbs = []ui.Crumb{{Label: "Devices", Path: "/devices"}, {Label: p.Device.Name, Path: fmt.Sprintf("/devices/%d", p.Device.ID)}, {Label: "Restore"}}
-	h.show(w, r, status, "restore_confirm", v, restoreConfirm(restoreConfirmOf(v, p)))
+	c := restoreConfirmOf(v, p)
+	c.ACLNotice = c.ACLNotice && h.brokerACLOpen()
+	h.show(w, r, status, "restore_confirm", v, restoreConfirm(c))
 }
 
 // restoreStepView is one step of the progress list.
