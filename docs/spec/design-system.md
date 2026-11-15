@@ -444,11 +444,14 @@ The structure deviations S1-S7 are listed with their reasons in the plan (sectio
     pixel reference and are checked by their handler tests, e2e specs and the layout guards.
 12. `main` has no 120 px bottom padding (the prototype's, from before the status bar). The body
     reserves the status bar plus one `--sp-16` gap, so a page ends one gap above the bar (#773).
-13. `--color-control-border` is not in the prototype. Text inputs, selects, the file picker button and the default
-    (outlined) buttons use it instead of `--color-border-strong`, because the prototype's border is 1.67:1
+13. `--color-control-border` is not in the prototype. Text inputs, selects, the file picker button, the default
+    (outlined) buttons, the filter chips (`label.chip`, `.ucheck.chip`), the clickable chips (`.dv-chip`,
+    `.add-chip`), the switch track in its off state (`.swtrack`) and the segment controls (`.seg`, `.useg`,
+    frame and inner dividers) use it instead of `--color-border-strong`, because the prototype's border is 1.67:1
     (light) and 1.75:1 (dark) against the card surface, below the 3:1 that WCAG 2.2 SC 1.4.11 (Non-text
     Contrast) asks for the boundary of a UI component. The new values give 3.51:1 / 3.69:1 on the card surface
     and stay at 3.1:1 or more on the page and inset surfaces (light 3.22 on `--color-bg`, 3.13 on
     `--color-surface-2`; dark 3.95 on `--color-bg`, 3.44 on `--color-surface-2`). `--color-border-strong` is
-    unchanged and still draws dividers, card edges and other decoration. `design/v2` is not edited, so
-    `make visual` reports these controls as a known difference (#829).
+    unchanged and still draws dividers, card edges, dialog and menu panels, dashed drop zones and other
+    decoration. `design/v2` is not edited, so `make visual` reports these controls as a known difference
+    (#829, #860).
