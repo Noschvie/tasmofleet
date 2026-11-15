@@ -4,7 +4,7 @@
 make check   # templ, fmt, vet, golangci-lint (incl. staticcheck), unit and integration tests, govulncheck, build
 make quick   # between two edits: the packages changed since origin/main and their importers only
 make ci      # everything CI runs: check plus race, mutation and e2e tests
-make demo    # the static demo (dist/demo); make demo-media renews docs/media
+make demo    # the static demo (dist/demo); make demo-media the website's pictures (dist/media); make pages the whole Pages artifact
 ```
 
 Building the image yourself: a plain `docker build` has no git history, so it reports

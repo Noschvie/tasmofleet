@@ -16,14 +16,16 @@ import { isMedia, pageAdmin } from "../support/seed";
 import { pickForUpdate, startUpdate, txnState } from "../support/updates";
 import { startVisualStack, type VisualStack } from "../support/visual-stack";
 
-// make demo / make demo-media: the static demo published on GitHub Pages and the README media
-// (docs/media). Not part of CI's e2e: it renders the design fixture fleet (60 simulated devices),
+// make demo / make demo-media: the static demo published on GitHub Pages and the website's media
+// (the screenshots and the animation that make pages copies next to the demo, #859; the README links
+// those published images). Not part of CI's e2e: it renders the design fixture fleet (60 simulated devices),
 // saves every page an admin can reach with plain links as static HTML and takes the screenshots and
-// the animation of the README. Only simulator and fixture values reach the output; the address
+// the animation of the website. Only simulator and fixture values reach the output; the address
 // rewrite below replaces the loopback ports and private fixture ranges with documentation ranges.
 
 const out = process.env.DEMO_OUT ?? join(root, "dist/demo");
-const media = join(root, "docs/media");
+// The pictures are build output (never committed): make demo-media sets DEMO_MEDIA_OUT, make pages publishes them.
+const media = process.env.DEMO_MEDIA_OUT ?? join(root, "dist/media");
 const demoAssets = join(root, "tools/demo");
 const maxPages = 450;
 
@@ -69,7 +71,7 @@ test("static demo site", async ({ browser }) => {
   }
 });
 
-test("README animation", async ({ browser }) => {
+test("update animation", async ({ browser }) => {
   test.setTimeout(20 * 60_000);
   const stack = await startVisualStack("fleet", browser, true);
   const videoDir = join(root, "e2e/test-results/demo-video");
@@ -151,7 +153,7 @@ async function setTheme(
 }
 
 /**
- * screenshots takes the README's pictures from the static site just written, so they carry its
+ * screenshots takes the website's pictures from the static site just written, so they carry its
  * documentation addresses instead of the simulator's loopback ports. The demo banner is hidden.
  */
 async function screenshots(page: Page, stack: VisualStack): Promise<void> {
@@ -192,6 +194,9 @@ async function liveShots(page: Page, stack: VisualStack, d2: string): Promise<vo
   const theme = (t: string) => page.evaluate((v) => document.documentElement.setAttribute("data-theme", v), t);
   await page.goto(stack.app.url + `/devices/${d2}/settings`);
   await expect(page.getByText("Reading the settings from the device")).toBeHidden({ timeout: 60_000 });
+  // Since #599 the form's age line fetches the form a second time ("Refreshing from the device..."); a picture
+  // taken before that finishes shows the transient line, and the request is still in flight when the test ends.
+  await expect(page.getByText("Refreshing from the device")).toBeHidden({ timeout: 60_000 });
   await theme("dark");
   await page.waitForTimeout(800);
   await page.screenshot({ path: join(media, "device-settings.png") });
@@ -420,7 +425,7 @@ function addressRewriter(): (s: string, ownPort?: string) => string {
     if (!loop.has(port)) loop.set(port, `${isMedia ? "192.168.1" : "192.0.2"}.${10 + loop.size}`);
     return loop.get(port)!;
   };
-  // The README pictures (DEMO_MEDIA) show one ordinary home network (192.168.1.x, home.lan) instead of the
+  // The website pictures (DEMO_MEDIA) show one ordinary home network (192.168.1.x, home.lan) instead of the
   // documentation ranges; short addresses keep the device list's Address column from truncating. A bare
   // 127.0.0.1 away from a device's own pages is a device's former address (Address changed on the
   // dashboard), so each one gets an address of its own.

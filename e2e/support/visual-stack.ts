@@ -59,7 +59,7 @@ async function startFleet(browser: Browser, mutating: boolean): Promise<VisualSt
   let fixturePath = designFixturePath;
   let mediaDir = "";
   if (isMedia) {
-    // the README pictures show a cleaned-up copy of the fleet, written next to the run
+    // the website pictures show a cleaned-up copy of the fleet, written next to the run
     fx = mediaFixture(fx);
     mediaDir = mkdtempSync(join(tmpdir(), "tasmofleet-media-"));
     fixturePath = join(mediaDir, "media-fixture.json");

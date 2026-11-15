@@ -2,8 +2,10 @@
 # under /demo/. `make pages` assembles dist/pages; its demo part comes from `make demo`, which runs
 # the real binaries against tasmofleet-devenv with the design fixture fleet (60 simulated
 # devices, documentation addresses only) and saves the pages an admin reaches as static HTML
-# (e2e/tests/demo-site.spec.ts). Called by release.yml after the GitHub release was made, and by hand;
-# the output is never committed.
+# (e2e/tests/demo-site.spec.ts). The website's screenshots and the update animation (assets/, which the
+# README links too) come from `make demo-media`, the same spec with DEMO_MEDIA=1, so they always show the
+# UI of the commit that is published (#859). Called by release.yml after the GitHub release was made, and
+# by hand; the output is never committed.
 name: pages
 
 on:
@@ -25,8 +27,9 @@ jobs:
       # Browsers in this image match @playwright/test in e2e/package.json; bump both together (as in _checks.yml).
       image: mcr.microsoft.com/playwright:v1.65.0-noble@sha256:9beb546099e11f52d62e505537914870e01a67e0e6b00ae41da4775324e73dbe
     steps:
-      - name: install make (not in the Playwright image)
-        run: apt-get update -qq && apt-get install -y -qq --no-install-recommends make >/dev/null
+      # ffmpeg converts the update animation's video to the website's demo.webp (make demo-media, libwebp).
+      - name: install make and ffmpeg (not in the Playwright image)
+        run: apt-get update -qq && apt-get install -y -qq --no-install-recommends make ffmpeg >/dev/null
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: trust the workspace
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"

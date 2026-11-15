@@ -362,8 +362,9 @@ means nothing stops you: you have to know it. The full working rules are in
 - **Happened:** the 0.25.0 media refresh removed two images that the 0.24.0 Unraid
   template, still carried by the Community Applications feed, linked. The listing
   showed broken images for days.
-- **Rule:** media linked from any published template revision is never deleted from
-  `main`; templates link tag-pinned URLs.
+- **Rule:** media linked from any published template revision is never deleted or
+  renamed; templates link tag-pinned URLs or the Pages pictures (since #859 the
+  pictures are build output of `make pages`, see `docs/dev/releasing.md`).
 - **Enforced:** not enforced, convention.
 
 ### An empty variable stopped the container (#148)

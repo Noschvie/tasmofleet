@@ -25,7 +25,7 @@
   <a href="https://github.com/hellwand/tasmofleet/discussions">Discussions</a>
 </p>
 
-![The TasmoFleet dashboard: fleet state, what needs attention, recent transactions](docs/media/dashboard.png)
+![The TasmoFleet dashboard: fleet state, what needs attention, recent transactions](https://hellwand.github.io/tasmofleet/assets/dashboard.png)
 
 TasmoFleet is a self-hosted fleet manager for [Tasmota](https://tasmota.github.io/) devices, one Go
 binary with an embedded SQLite database. All screenshots show simulated devices; the
@@ -58,9 +58,9 @@ import from TasmoAdmin.
 
 | Device list                                                                   | Policy rule editor                                                                                 |
 | ----------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| ![Device list with status, firmware and chip columns](docs/media/devices.png) | ![Policy rule editor suggesting commands from the Tasmota catalogue](docs/media/policy-editor.png) |
+| ![Device list with status, firmware and chip columns](https://hellwand.github.io/tasmofleet/assets/devices.png) | ![Policy rule editor suggesting commands from the Tasmota catalogue](https://hellwand.github.io/tasmofleet/assets/policy-editor.png) |
 
-![A firmware update of four devices: pick them, review, start, watch each device's progress](docs/media/demo.webp)
+![A firmware update of four devices: pick them, review, start, watch each device's progress](https://hellwand.github.io/tasmofleet/assets/demo.webp)
 
 ## Quick start (Docker)
 

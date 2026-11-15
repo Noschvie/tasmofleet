@@ -28,16 +28,37 @@ Part of the working guide: start at [CLAUDE.md](../../CLAUDE.md).
   report by someone else that led to a change, is credited at the end of that change's
   CHANGELOG line (inside its fragment) as `(#N, thanks @handle)`. Do not credit the maintainer's own work.
 
+## Screenshots and the update animation
+
+The website's pictures are build output, never committed (#859): a committed copy only changes when somebody
+remembers to renew it, and the project page showed the UI of 0.28.0 next to a demo of 0.37.0.
+
+- `make pages` (`pages.yml`, run by `release.yml` after the GitHub release and by hand) runs `make demo` (the
+  published demo, documentation addresses) and `make demo-media` (the Playwright run of
+  `e2e/tests/demo-site.spec.ts` with `DEMO_MEDIA=1`: the cleaned-up fleet, four screenshots and a video, which
+  `ffmpeg` converts to the animation) from the tagged commit. The pictures land in `dist/pages/assets/`:
+  `dashboard.png`, `devices.png`, `device-settings.png`, `policy-editor.png`, `demo.webp`. So the website, the demo
+  and the pictures always show the UI of the release that was published, and `site/assets` keeps only fonts, the
+  wordmarks and the favicon. `scripts/pages-check.mjs` fails `make pages` when `site/index.html` links a file the
+  artifact lacks, and `make scripts-test` fails when a picture is committed under `site/`.
+- **The README links those published files** (`https://hellwand.github.io/tasmofleet/assets/<name>`) instead of
+  keeping copies in a media folder. Why not a release step that refreshes such a folder behind a guard: a guard cannot
+  tell whether a change was visible, so it would either refuse every release or pass a stale copy, and the refresh
+  had to ride in the release's push. The price: the README's pictures show the latest release, not `main`, and they
+  need Pages to be deployed (the first deployment of a new picture name is the release that adds it).
+- Preview: `make demo-media` writes the pictures to `dist/media` (needs `ffmpeg` and the e2e dependencies); `make
+  pages` is the whole artifact in `dist/pages`. `site/index.html` opened straight from the source tree shows no
+  pictures.
+
 ## Release process
 
 - **The release commit rides in the merge train** (#556): it is the last commit of the release's train (or of
-  the single PR when there is no train), followed only by the release's demo-media refresh (`make demo-media`) when there
-  is one, so one `required` run on its tip, one fast-forward and one `main.yml` run cover the release. A separate release
-  PR only when the release has nothing else to merge. When a PR's tip adds a new
+  the single PR when there is no train), so one `required` run on its tip, one fast-forward and one `main.yml` run cover
+  the release. A separate release PR only when the release has nothing else to merge. When a PR's tip adds a new
   `## X.Y.Z` section, its CI runs the tag's guards (`make release-pr-check BASE=origin/main`: `changelog-check` and
-  `migration-guard`); run it locally before pushing a train. The demo-media refresh must be in that same push: the
-  template's tag-pinned media URLs need it in the tagged tree, and a docs-only push of its own gets no `main.yml` run, so
-  a tag on it is refused. Then wait for `main.yml` on the pushed head and set the tag on that head.
+  `migration-guard`); run it locally before pushing a train. There is no media refresh step: the screenshots are
+  build output (see "Screenshots and the update animation" above). Then wait for `main.yml` on the pushed head and
+  set the tag on that head.
 - **Release names**: every minor release is named after a lighthouse. The release commit takes the next
   free name from `docs/release-names.md` and marks it assigned there; the heading is
   `## 0.21.0 "Name" (YYYY-MM-DD)`. Patch releases repeat their minor's name. Tags stay `vX.Y.Z`. The
@@ -73,10 +94,11 @@ Part of the working guide: start at [CLAUDE.md](../../CLAUDE.md).
     in the same moment the image becomes `:latest`. An existing install keeps its saved template, so such a
     release must also keep existing installs working without edits, or say exactly what to change, at the
     top of the CHANGELOG section, the announcement, the template `<Changes>` and the forum post.
-  - **Media linked from any published CA template revision is never deleted from `main`.** The CA feed
-    is regenerated on Squid's schedule and can carry an old template revision for days (#423: the 0.24.0
-    template still linked two screenshots that the 0.25.0 media refresh had removed). From the next
-    release on, the template's screenshots link tag-pinned URLs
-    (`https://raw.githubusercontent.com/hellwand/tasmofleet/v<X.Y.Z>/docs/media/...`), so later
-    media changes cannot break an old feed entry. `docs/media/transaction.png` and
-    `docs/media/device-dark.png` stay on `main` for the 0.24.0 revision even though no doc links them.
+  - **The template's screenshots link the Pages pictures** (`https://hellwand.github.io/tasmofleet/assets/<name>`,
+    the names in "Screenshots and the update animation"), never a tag: until 0.37.0 each release pinned them to
+    `v<X.Y.Z>/docs/media/`, which no longer exists from 0.38.0 on. The 0.38.0 release switches the four
+    `<Screenshot>` lines once (dashboard, devices, device-settings, policy-editor). They are the same files the README shows, so they always show the latest release. Never rename or remove
+    one of those names: a published template revision links it (#423: a media refresh removed two images that a
+    published revision still linked, and the listing showed broken images for days). The older revisions link
+    tag-pinned `raw.githubusercontent.com/hellwand/tasmofleet/v<X.Y.Z>/docs/media/...` URLs, which tags keep
+    forever, so removing that folder from `main` (#859) breaks none of them.

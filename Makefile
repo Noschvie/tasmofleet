@@ -339,23 +339,32 @@ visual-parity:
 demo: build
 	cd e2e && nice -n 10 npx playwright test --project=demo --workers=1 -g "static demo site"
 
-# The GitHub Pages artifact (pages.yml): the website in site/ at the root and the demo in demo/. Fails
-# when site/index.html is missing, so the root can never be published empty.
-pages: demo
+# The GitHub Pages artifact (pages.yml): the website in site/ at the root, the demo in demo/ and the
+# website's pictures in assets/ (the screenshots and the update animation of demo-media, so they show the
+# UI of the build that is published, #859). Fails when site/index.html is missing, so the root can never be
+# published empty, and when the page links a file the artifact lacks (scripts/pages-check.mjs).
+pages: demo demo-media
 	test -f site/index.html || { echo "pages: site/index.html is missing" >&2; exit 1; }
 	rm -rf dist/pages
 	mkdir -p dist/pages
 	cp -R site/. dist/pages/
 	cp -R dist/demo dist/pages/demo
+	cp -R dist/media/. dist/pages/assets/
 	touch dist/pages/.nojekyll
+	node scripts/pages-check.mjs dist/pages
 
-# The README media in docs/media: screenshots of the same fleet and the update animation
-# (demo.webp, recorded with Playwright, converted with ffmpeg). Run after a visible UI change and commit the files.
+# The website's pictures in dist/media (not committed; make pages publishes them as assets/, the README
+# links the published files): screenshots of the cleaned-up fleet (DEMO_MEDIA) taken from a static demo
+# of their own (dist/media-site, never published: the published demo uses documentation addresses) and
+# the update animation (demo.webp, recorded with Playwright, converted with ffmpeg).
 demo-media: build
-	cd e2e && DEMO_MEDIA=1 nice -n 10 npx playwright test --project=demo --workers=2
+	@command -v ffmpeg >/dev/null || { echo "demo-media: ffmpeg is not installed (the update animation is converted with it)" >&2; exit 1; }
+	rm -rf dist/media dist/media-site
+	mkdir -p dist/media
+	cd e2e && DEMO_MEDIA=1 DEMO_OUT="$(CURDIR)/dist/media-site" DEMO_MEDIA_OUT="$(CURDIR)/dist/media" nice -n 10 npx playwright test --project=demo --workers=2
 	nice -n 10 ffmpeg -loglevel error -y -i e2e/test-results/demo.webm \
-	  -vf "fps=8,scale=960:-1:flags=lanczos" -c:v libwebp_anim -lossless 0 -q:v 60 -compression_level 6 -loop 0 docs/media/demo.webp
-	@ls -l docs/media
+	  -vf "fps=8,scale=960:-1:flags=lanczos" -c:v libwebp_anim -lossless 0 -q:v 60 -compression_level 6 -loop 0 dist/media/demo.webp
+	@ls -l dist/media
 
 vuln:
 	$(NICE) $(TOOL) govulncheck ./...
