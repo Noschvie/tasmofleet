@@ -207,6 +207,76 @@ test(
   },
 );
 
+test(
+  "a person can click Continue while the command suggestion list is open (#867)",
+  { tag: "@core" },
+  async ({ page }) => {
+    // Why: the suggestion list opens a moment after the last keystroke and used to float over the
+    // Continue button of the form it belongs to. A click on Continue then landed on the list: it
+    // picked a suggestion (replacing the typed command) and the form was not sent. Playwright
+    // reported this as ".cmd-sug-f intercepts pointer events" (#860, #867). Here the list is
+    // open first, then the pointer goes to where the button is, as a person's does; there is no
+    // actionability retry that could hide the overlap.
+    await page.setExtraHTTPHeaders(admin);
+    for (const [width, height] of [
+      [1280, 900],
+      [375, 800],
+    ]) {
+      await page.setViewportSize({ width, height });
+      for (const [field, err] of [
+        ["any-command", "err-any-command"],
+        ["copy-command", "err-copy"],
+      ]) {
+        await page.goto(app.url + "/policy/rules/new");
+        await page
+          .locator("#copy-device")
+          .selectOption({ label: "plug-4m-http" });
+        await page.locator("#" + field).fill("Status0");
+        await expect(page.locator(`#${field} + .cmd-sug`)).toBeVisible();
+        const button = page
+          .locator("form")
+          .filter({ has: page.locator("#" + field) })
+          .getByRole("button", { name: "Continue" });
+        await button.scrollIntoViewIfNeeded();
+        const at = (await button.boundingBox())!;
+        await page.mouse.click(at.x + at.width / 2, at.y + at.height / 2);
+        await expect(page.locator("#" + err)).toHaveText(
+          "Status commands are never sent automatically.",
+        );
+        await expect(page.locator("#" + field)).toHaveValue("Status0");
+      }
+    }
+  },
+);
+
+test(
+  "the command suggestion list never stays open but invisible after a click on the field's label (#867)",
+  { tag: "@core" },
+  async ({ page }) => {
+    // Why: while the list is open a press outside the field hides it but keeps its space, so a
+    // click on the button below still lands. A click on the field's own label hands the focus back
+    // to the field; the list must not stay hidden then, because it would still take the keys and
+    // Enter would silently replace the typed command with a suggestion the person cannot see.
+    await page.setExtraHTTPHeaders(admin);
+    for (const field of ["any-command", "copy-command"]) {
+      await page.goto(app.url + "/policy/rules/new");
+      await page
+        .locator("#copy-device")
+        .selectOption({ label: "plug-4m-http" });
+      const input = page.locator("#" + field);
+      await input.fill("Pow");
+      const list = page.locator(`#${field} + .cmd-sug`);
+      await expect(list).toBeVisible();
+      await page.locator(`label[for="${field}"]`).click();
+      await input.pressSequentially("e");
+      // The state a person sees: a list that takes the keys is a list they can see.
+      await expect(list).toBeVisible();
+      await expect(input).toHaveAttribute("aria-expanded", "true");
+      await expect(list).not.toHaveClass(/cmd-sug-held/);
+    }
+  },
+);
+
 test("an operator sees the rule read-only and cannot open New rule", async ({
   page,
 }) => {

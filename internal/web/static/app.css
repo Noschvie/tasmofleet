@@ -15355,6 +15355,22 @@ details.devcard > summary {
 .cmd-sug[hidden] {
   display: none;
 }
+/* In the page flow (data-cmd-flow): above a submit button the floating list covered it (#867) */
+.cmd-sug-flow {
+  position: static;
+  z-index: auto;
+  width: auto;
+  max-height: 320px;
+  overflow-y: auto;
+}
+/* The footer with the key hint stays at the bottom of the scrolling list */
+.cmd-sug-flow .cmd-sug-f {
+  position: sticky;
+  bottom: 0;
+}
+.cmd-sug-held {
+  visibility: hidden;
+}
 .cmd-idx {
   display: flex;
   align-items: stretch;

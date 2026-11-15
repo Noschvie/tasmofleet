@@ -353,11 +353,16 @@
 // which asks for the value control of that command. For a command with an index range the field is
 // a name and a number box; the hidden "command" input is kept in step here, before htmx reads it.
 // Without this file the field is a plain text input and the server checks what is saved.
+// A field with data-cmd-flow sits right above a submit button (New rule: Any command, Copy from a
+// device, #867): its list is part of the page flow instead of floating, so it never covers the
+// button, and it stays in place until a press that started outside it is over, so the button
+// does not move away between mousedown and mouseup.
 (function () {
   "use strict";
   var timer = null;
   var pending = null;
   var seq = 0;
+  var pressed = false;
 
   function boxFor(input) {
     var box = input.nextElementSibling;
@@ -365,7 +370,7 @@
       return box;
     }
     box = document.createElement("div");
-    box.className = "cmd-sug";
+    box.className = input.hasAttribute("data-cmd-flow") ? "cmd-sug cmd-sug-flow" : "cmd-sug";
     box.id = "cmd-sug-" + ++seq;
     box.setAttribute("role", "listbox");
     box.setAttribute("aria-label", "Command suggestions");
@@ -385,8 +390,28 @@
   function close(input) {
     var box = boxFor(input);
     box.hidden = true;
+    box.classList.remove("cmd-sug-held");
     input.setAttribute("aria-expanded", "false");
     input.removeAttribute("aria-activedescendant");
+  }
+
+  // A flow list stays in the layout, only invisible, while the pointer is down: the press that took
+  // the focus away may be on the button below it, and the click needs the button where it was.
+  function hold(input) {
+    boxFor(input).classList.add("cmd-sug-held");
+    input.setAttribute("aria-expanded", "false");
+    input.removeAttribute("aria-activedescendant");
+    document.addEventListener(
+      "mouseup",
+      function () {
+        // Always leave the held state: if the focus came back (a click on the label), the next
+        // keystroke opens the list again, and a hidden list that still takes keys never stays.
+        setTimeout(function () {
+          close(input);
+        }, 0);
+      },
+      { once: true, capture: true },
+    );
   }
 
   function activate(input, box, n) {
@@ -444,6 +469,7 @@
         }
         box.innerHTML = html;
         box.hidden = false;
+        box.classList.remove("cmd-sug-held");
         input.setAttribute("aria-expanded", "true");
         activate(input, box, 0);
       })
@@ -498,10 +524,41 @@
     }
   });
 
+  document.addEventListener(
+    "mousedown",
+    function (e) {
+      pressed = e.button === 0;
+    },
+    true,
+  );
+  document.addEventListener(
+    "mouseup",
+    function () {
+      pressed = false;
+    },
+    true,
+  );
+
+  // A release outside the window (or a context menu) sends no mouseup to the page.
+  window.addEventListener("blur", function () {
+    pressed = false;
+  });
+  document.addEventListener(
+    "contextmenu",
+    function () {
+      pressed = false;
+    },
+    true,
+  );
+
   document.addEventListener("focusout", function (e) {
     var t = e.target;
     if (t && t.hasAttribute && t.hasAttribute("data-cmd-suggest")) {
-      close(t);
+      if (pressed && !boxFor(t).hidden && t.hasAttribute("data-cmd-flow")) {
+        hold(t);
+      } else {
+        close(t);
+      }
     }
   });
 
