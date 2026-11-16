@@ -268,5 +268,14 @@
     "Image": "release-tasmota",
     "Variant": "tasmota",
     "SingleCore": false
+  },
+  {
+    "Version": "16.0.0(safeboot)",
+    "Hardware": "ESP32-C3",
+    "Source": "#584, self-compiled safeboot: SRC arendst/Tasmota@63c3861 tasmota/include/tasmota_configurations_ESP32.h:36 (CODE_IMAGE_STR \"safeboot\") and tasmota.ino image_name \"(\" TASMOTA_SHA_SHORT CODE_IMAGE_STR \")\" with the empty TASMOTA_SHA_SHORT of a self-compiled build (bare shape: FIELD #52)",
+    "Semver": "16.0.0",
+    "Image": "safeboot",
+    "Variant": "safeboot",
+    "SingleCore": false
   }
 ]

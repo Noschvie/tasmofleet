@@ -310,7 +310,7 @@ data directory (TasmoAdmin lesson A4).
   the intermediate image of that family is `ErrFamilyMismatch`; a job never reads the main page
   after its preflight; (3) only outside such a job, without an INFO1 (a device found stuck in
   minimal, the first add, the preflight of a device that already runs minimal): `GET /` with the
-  minimal/safeboot heading or the image tag `release-minimal`/`safeboot`. Minimal has no
+  minimal/safeboot heading or the image tag `release-minimal`/`release-safeboot` (a self-compiled build's bare `safeboot` counts, a bare `minimal` does not: §6.2, #584). Minimal has no
   `Status 5`, so path 2 trusts that the device at the job's address is still the one it started
   on; `hardwareChanged` and `fwselect.Guard` stay the checks before every flash. The bare `Upgrade` reply
   (`1 or >X to upgrade`) is identical on normal firmware (OBS, all fixtures). It only
@@ -574,7 +574,11 @@ version, image name and `GetCodeCores()`), e.g. `16.0.0(release-tasmota)`, `16.0
 `testdata/fixtures/firmware-versions.json` lists every shape with its source.
 `Identity.Image` keeps the raw tag. A self-compiled build reports the bare environment name
 (`16.0.0(tasmota32)`, no prefix): the variant stays `unknown`, so OTA never replaces a custom build
-without an explicit choice; the UI shows the reported name as "tasmota32 (self-compiled)". The variant is normalised:
+without an explicit choice; the UI shows the reported name as "tasmota32 (self-compiled)". The one exception is the bare
+tag `safeboot` (#584): it names no family and no variant to keep, so it is the same identity as `release-safeboot`
+(never `Known()` without stored hardware, `ErrVariantChoiceNeeded` in `Select`, `ErrFamilyMismatch` on an ESP8266).
+A bare `minimal` stays unknown (it would prove the ESP8266 family from a custom tag). One helper (`fwselect.imageOfTag`)
+owns this rule for the main page and INFO1 and for Status 2 alike. The variant is normalised:
 
 The image tag is the build's `CODE_IMAGE_STR` (SRC, arendst/Tasmota `63c3861`; every row with its source line is in
 `testdata/fixtures/firmware-versions.json`), not the upstream file name (#85). The chip always comes from
@@ -596,7 +600,8 @@ The image tag is the build's `CODE_IMAGE_STR` (SRC, arendst/Tasmota `63c3861`; e
 |                                                                                | esp8266                     | `ErrFamilyMismatch`                                                     |
 | `solo1` (with suffix `single-core`)                                            | esp32 single core           | `tasmota` + `SingleCore` -> `tasmota32solo1.bin`                        |
 | `safeboot`                                                                     | any esp32 chip              | `safeboot` (device sits in safeboot; treated like minimal)              |
-| anything else, file names (`tasmota32c3`, `tasmota32-webcam`), bare tags (#52) |                             | `unknown` -> refuse updates until the user chooses a variant explicitly |
+| bare `safeboot` (self-compiled, #584)                                         | any esp32 chip              | `safeboot`, like the prefixed tag; `ErrFamilyMismatch` on an esp8266    |
+| anything else, file names (`tasmota32c3`, `tasmota32-webcam`), other bare tags (#52) |                             | `unknown` -> refuse updates until the user chooses a variant explicitly |
 
 History and limits (SRC):
 

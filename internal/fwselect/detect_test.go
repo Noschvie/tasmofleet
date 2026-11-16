@@ -162,6 +162,16 @@ func TestDetectImageTags(t *testing.T) {
 		{"tag without sha", "16.0.0(tasmota)", "ESP8266EX", "", "unknown", "", model.ChipESP8266, false, "16.0.0", nil},
 		{"self-compiled esp32", "16.0.0(tasmota32)", "ESP32-D0WD-V3", "", "unknown", "", model.ChipESP32, false, "16.0.0", nil},
 		{"self-compiled s3", "16.0.0(tasmota32)", "ESP32-S3", "", "unknown", "", model.ChipESP32S3, false, "16.0.0", nil},
+		// The one bare tag that is trusted (#584): a self-compiled safeboot names no family and no
+		// variant to keep, so nothing is replaced behind the owner's back. Every other bare tag
+		// above (and bare minimal below) stays unknown. Same identity as the official release-safeboot.
+		{"self-compiled safeboot", "16.0.0(safeboot)", "ESP32-D0WD", "", "safeboot", "", model.ChipESP32, false, "16.0.0", nil},
+		{"self-compiled safeboot c3", "16.0.0(safeboot)", "ESP32-C3", "", "safeboot", "", model.ChipESP32C3, false, "16.0.0", nil},
+		{"self-compiled safeboot single core", "16.0.0(safeboot)single-core", "ESP32-S0WD", "", "safeboot", "", model.ChipESP32, true, "16.0.0", nil},
+		{"self-compiled safeboot on esp8266", "16.0.0(safeboot)", "ESP8266EX", "", "", "", "", false, "", ErrFamilyMismatch},
+		{"self-compiled minimal stays unknown", "16.0.0(minimal)", "ESP8266EX", "", "unknown", "", model.ChipESP8266, false, "16.0.0", nil},
+		{"self-compiled minimal on esp32 stays unknown", "16.0.0(minimal)", "ESP32-D0WD", "", "unknown", "", model.ChipESP32, false, "16.0.0", nil},
+		{"self-compiled safeboot with a prefix-like dash", "16.0.0(safeboot-test)", "ESP32-D0WD", "", "unknown", "", model.ChipESP32, false, "16.0.0", nil},
 		// Unknown hardware is not an error but never Known().
 		{"unknown hardware", "16.0.0(release-tasmota32)", "ESP32-S31", "", "tasmota", "", model.ChipUnknown, false, "16.0.0", nil},
 		{"unknown hardware esp8266 tag", "16.0.0(release-sensors)", "ESP32-S31", "", "sensors", "", model.ChipUnknown, false, "16.0.0", nil},
@@ -368,6 +378,32 @@ func TestDetectMinimal(t *testing.T) {
 		{"image without sha prefix", Inputs{Status2: unknown,
 			Upgrade: &UpgradeProbe{Version: "16.0.0"},
 			Root:    &RootInfo{Image: "minimal"}},
+			"", "", "", "", ErrUnknownHardware},
+		// #584: a self-compiled safeboot reports the bare tag. It is the one bare image that is
+		// trusted: it proves no family and keeps no variant, so a device left in it can be finished.
+		{"self-compiled safeboot", Inputs{Status2: unknown,
+			Upgrade: &UpgradeProbe{Version: "16.0.0"},
+			Root:    &RootInfo{Version: "16.0.0", Image: "safeboot", Minimal: true}},
+			model.ChipUnknown, "safeboot", "16.0.0", "", nil},
+		{"self-compiled safeboot, version from the page only", Inputs{Status2: unknown,
+			Root: &RootInfo{Version: "16.0.0", Image: "safeboot", Minimal: true}},
+			model.ChipUnknown, "safeboot", "16.0.0", "", nil},
+		{"self-compiled safeboot, probe and page disagree", Inputs{Status2: unknown,
+			Upgrade: &UpgradeProbe{Version: "16.0.0"},
+			Root:    &RootInfo{Version: "15.0.0", Image: "safeboot", Minimal: true}},
+			"", "", "", "", errBadVersion},
+		// Bare minimal would prove the ESP8266 family from a custom tag: still a guess.
+		{"bare full-firmware tags stay unknown", Inputs{Status2: unknown,
+			Upgrade: &UpgradeProbe{Version: "16.0.0"},
+			Root:    &RootInfo{Image: "tasmota32"}},
+			"", "", "", "", ErrUnknownHardware},
+		{"bare solo1 stays unknown", Inputs{Status2: unknown,
+			Upgrade: &UpgradeProbe{Version: "16.0.0"},
+			Root:    &RootInfo{Image: "solo1"}},
+			"", "", "", "", ErrUnknownHardware},
+		{"safeboot with a dash suffix is no safeboot", Inputs{Status2: unknown,
+			Upgrade: &UpgradeProbe{Version: "16.0.0"},
+			Root:    &RootInfo{Image: "safeboot-test"}},
 			"", "", "", "", ErrUnknownHardware},
 	}
 	for _, tt := range tests {
@@ -612,6 +648,8 @@ func TestAnINFO1ImageThatDoesNotFitTheJobFamilyIsRefused(t *testing.T) {
 	up := &UpgradeProbe{Version: "16.0.0"}
 	minimal := &RootInfo{Version: "16.0.0", Image: "release-minimal", Minimal: true}
 	safeboot := &RootInfo{Version: "16.0.0", Image: "release-safeboot", Minimal: true}
+	bareSafeboot := &RootInfo{Version: "16.0.0", Image: "safeboot", Minimal: true}
+	bareMinimal := &RootInfo{Version: "16.0.0", Image: "minimal", Minimal: true}
 	tests := []struct {
 		name    string
 		root    *RootInfo
@@ -624,6 +662,12 @@ func TestAnINFO1ImageThatDoesNotFitTheJobFamilyIsRefused(t *testing.T) {
 		{"safeboot on an esp8266 job", safeboot, model.ChipESP8266, "", ErrFamilyMismatch},
 		{"minimal on an esp8266 job", minimal, model.ChipESP8266, "minimal", nil},
 		{"safeboot on an esp32-c6 job", safeboot, model.ChipESP32C6, "safeboot", nil},
+		// #584: the bare tag of a self-compiled safeboot passes where the official one passes, and is
+		// refused where it is refused; a bare minimal proves nothing and stops the job.
+		{"bare safeboot on an esp32-c6 job", bareSafeboot, model.ChipESP32C6, "safeboot", nil},
+		{"bare safeboot on an esp8266 job", bareSafeboot, model.ChipESP8266, "", ErrFamilyMismatch},
+		{"bare safeboot outside a job", bareSafeboot, model.ChipUnknown, "safeboot", nil},
+		{"bare minimal on an esp8266 job", bareMinimal, model.ChipESP8266, "", ErrUnknownHardware},
 		{"minimal outside a job", minimal, model.ChipUnknown, "minimal", nil},
 		{"safeboot outside a job", safeboot, model.ChipUnknown, "safeboot", nil},
 	}

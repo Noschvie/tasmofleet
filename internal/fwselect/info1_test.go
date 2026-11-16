@@ -2,6 +2,7 @@ package fwselect
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/hellwand/tasmofleet/internal/model"
@@ -76,5 +77,72 @@ func TestDetectInfo1Rejects(t *testing.T) {
 		if _, err := DetectInfo1(payload, model.Identity{}); err == nil {
 			t.Errorf("%s: no error", name)
 		}
+	}
+}
+
+// Why (#584): a device left in a self-compiled safeboot must be named the same way over INFO1 as
+// over the main page, or a rescue job stops on one transport where it would pass on the other. The
+// bare tag is trusted for safeboot only (it names no family and no variant to keep); every other
+// bare tag stays a custom build whose variant is never guessed (spec 6.2, #52).
+func TestDetectInfo1BareSafebootTag(t *testing.T) {
+	esp32 := model.Identity{Family: model.ChipESP32, Hardware: "ESP32-D0WD-V3"}
+	solo := model.Identity{Family: model.ChipESP32, Hardware: "ESP32-S0WD", SingleCore: true}
+	esp8266 := model.Identity{Family: model.ChipESP8266, Hardware: "ESP8266EX"}
+	tests := []struct {
+		name, version string
+		base          model.Identity
+		wantVariant   string
+		wantErr       error
+	}{
+		{"safeboot on an esp32", "16.0.0(safeboot)", esp32, "safeboot", nil},
+		{"safeboot on a single-core esp32", "16.0.0(safeboot)single-core", solo, "safeboot", nil},
+		{"safeboot without hardware", "16.0.0(safeboot)", model.Identity{}, "safeboot", nil},
+		{"safeboot on an esp8266 is another device", "16.0.0(safeboot)", esp8266, "", ErrFamilyMismatch},
+		{"official safeboot for comparison", "16.0.0(release-safeboot)", esp32, "safeboot", nil},
+		// No other bare tag is loosened: a custom full build is never replaced without a choice.
+		{"bare tasmota32 on an esp32", "16.0.0(tasmota32)", esp32, "unknown", nil},
+		{"bare solo1 on a single-core esp32", "16.0.0(solo1)single-core", solo, "unknown", nil},
+		{"bare minimal on an esp8266", "16.0.0(minimal)", esp8266, "unknown", nil},
+		{"bare minimal on an esp32", "16.0.0(minimal)", esp32, "unknown", nil},
+		{"bare tasmota on an esp8266", "16.0.0(tasmota)", esp8266, "unknown", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := DetectInfo1(info1(tt.version), tt.base)
+			wantErr(t, err, tt.wantErr)
+			if tt.wantErr != nil {
+				return
+			}
+			if got.Variant != tt.wantVariant || got.Version != "16.0.0" {
+				t.Errorf("variant %q version %q, want %q 16.0.0", got.Variant, got.Version, tt.wantVariant)
+			}
+			_, rest, _ := strings.Cut(tt.version, "(")
+			wantImage, _, _ := strings.Cut(rest, ")")
+			if got.Image != wantImage {
+				t.Errorf("image %q, want the raw tag %q", got.Image, wantImage)
+			}
+		})
+	}
+}
+
+// Why (#584, safety rule 1): naming a bare safeboot must not make it updatable. Without stored
+// hardware it is never Known() (Guard refuses it), and with hardware Select still demands an
+// explicit variant choice, exactly as for the official release-safeboot.
+func TestBareSafebootIsNeverKnownAndNeedsAChoice(t *testing.T) {
+	alone, err := DetectInfo1(info1("16.0.0(safeboot)"), model.Identity{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if alone.Known() || alone.Family != model.ChipUnknown {
+		t.Errorf("bare safeboot from INFO1 alone is usable for updates: %+v", alone)
+	}
+	// The stored identity from before: hardware and a known language, as Select needs them.
+	idESP32Stored := model.Identity{Family: model.ChipESP32, Hardware: "ESP32-D0WD-V3", LanguageKnown: true}
+	onChip, err := DetectInfo1(info1("16.0.0(safeboot)"), idESP32Stored)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Select(onChip, Choice{Release: rel}); !errors.Is(err, ErrVariantChoiceNeeded) {
+		t.Errorf("Select on a bare safeboot without a choice: err = %v, want ErrVariantChoiceNeeded", err)
 	}
 }

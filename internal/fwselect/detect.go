@@ -151,7 +151,7 @@ func detectMinimal(in Inputs) (model.Identity, error) {
 	if in.Root == nil {
 		return detectInJob(in)
 	}
-	_, image, ok := strings.Cut(in.Root.Image, "-")
+	image, ok := imageOfTag(in.Root.Image)
 	var fam model.ChipFamily
 	switch {
 	case ok && image == variantMinimal:
@@ -312,12 +312,29 @@ var ambiguousChips = map[model.ChipFamily]bool{
 	model.ChipESP32P4: true,
 }
 
+// imageOfTag splits a raw image tag into the image name and says whether the name may be trusted.
+// An official tag is "<sha-or-release>-<image>": the name is what follows the first dash. A
+// self-compiled build reports the bare environment name, which names nothing we can rely on (spec
+// 6.2, #52): it is not trusted, so a custom full build is never replaced without a variant choice
+// and no chip is inferred from it (bare "minimal" would prove the ESP8266). The one exception is
+// the bare tag "safeboot" (#584): it names no family and no variant to keep, so it is the same
+// identity as "release-safeboot". Do not add a second bare tag here without its own issue.
+func imageOfTag(tag string) (image string, trusted bool) {
+	if _, image, ok := strings.Cut(tag, "-"); ok {
+		return image, true
+	}
+	if tag == variantSafeboot {
+		return tag, true
+	}
+	return "", false
+}
+
 // variantFromTag applies the §6.2 table to a raw image tag
 // ("<sha-or-release>-<image>"). ok is false when the image cannot run on
 // the detected hardware. With unknown hardware there is nothing to check
 // against; the identity is unusable for updates anyway.
 func variantFromTag(tag string, fam model.ChipFamily, single bool) (string, bool) {
-	_, image, found := strings.Cut(tag, "-")
+	image, found := imageOfTag(tag)
 	if !found {
 		// A self-compiled build reports a bare tag ("16.0.0(tasmota32)"). It stays unknown on
 		// purpose: we never overwrite a custom build without an explicit variant choice.
