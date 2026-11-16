@@ -40,6 +40,7 @@ mqtt/samples/<type>.txt      first sample per topic per message type
 mqtt/synthetic-no-discovery.txt  SYNTHETIC (fake values): devices without tasmota/discovery (LWT, INFO1..3, STATE, STATUS5 incl. Ethernet)
 profiles/<name>/             SYNTHETIC: `profile.json` = a real capture (`base`) plus text replacements, read by internal/simulator (most have a README)
 localized-root/              SYNTHETIC main pages (GET /) of localized web UI builds, de_DE and fr_FR (section 9)
+vendor-footer/               real main page footers of vendor-modified builds (section 10)
 firmware-headers/            first 32 bytes of the v16.0.0 release images (chip ids; see its README)
 firmware-upstream/           real ota.tasmota.com listings and a reduced GitHub releases reply for internal/firmware (see its README)
 tasmoadmin/                  SYNTHETIC TasmoAdmin sample data (devices.csv, MyConfig.json) for the import
@@ -180,3 +181,12 @@ with the strings the language build translates replaced by the values of `tasmot
 commit a281cec): `lang`, `D_NOSCRIPT`, `D_TOGGLE`, `D_CONFIGURATION`, `D_INFORMATION`, `D_FIRMWARE_UPGRADE`, `D_CONSOLE`, `D_CONFIRM_RESTART`,
 `D_RESTART`, and `D_BY` in the footer (`... (release-tasmota) von Theo Arends` / `... par Theo Arends`, the footer a French user reported in #468).
 The footer layout is `HTTP_END` in `xdrv_01_9_webserver.ino`. Replace them with real captures when a user provides one.
+
+## 10. Vendor footers, 2026-11-16 (#872)
+
+`vendor-footer/mediarath-14.3.0-de.html` is **real**: the footer `<div>` of the main page of a NOUS A1T sold with a MediaRath build
+(German 14.3.0), as the reporter pasted it in #872, verbatim (only the wrapping code quotes of the comment removed). The vendor changed
+`HTTP_END`: the footer reads `Tasmota 14.3.0 von Theo Arends` without the `(<image>)` stock Tasmota prints, and adds a second line
+`Flashed by www.mediarath.de` (a public vendor link, kept). Only the footer was posted: the tests put it into the **synthetic**
+`localized-root/de_DE.html` or into a bare page shell with `<html lang="de">`, and the Status 2 `Version` `14.3.0(tasmota-NOUS_A1T_DE)`
+they use is the one named in the issue (the raw reply was not posted). Whether the real page carries `<html lang="de">` was not checked.

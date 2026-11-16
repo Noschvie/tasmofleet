@@ -24,6 +24,7 @@ type fixtureClient struct {
 	minimal bool // Status 2..11 answer Unknown, like minimal firmware
 	errs    map[string]error
 	replies map[string]string
+	root    []byte // main page served instead of the fixture's root.html
 	sent    []string
 }
 
@@ -71,6 +72,9 @@ func (c *fixtureClient) RootPage(_ context.Context, _ tasmota.Target) (tasmota.R
 	c.sent = append(c.sent, "GET /")
 	if err := c.errs["GET /"]; err != nil {
 		return tasmota.RootInfo{}, err
+	}
+	if c.root != nil {
+		return tasmota.ParseRootPage(c.root)
 	}
 	return tasmota.ParseRootPage(c.fixture("root.html"))
 }
@@ -284,5 +288,84 @@ func TestDeviceAPIRealDetectOnFixtures(t *testing.T) {
 				t.Fatalf("identity %+v uptime %d", id, up)
 			}
 		})
+	}
+}
+
+// vendorFooterPage is the real footer of a MediaRath build (#872, reporter's page source) in a
+// SYNTHETIC page shell with the <html lang="de"> of a stock German build (testdata/fixtures README).
+func vendorFooterPage(t *testing.T) []byte {
+	t.Helper()
+	footer, err := os.ReadFile("../../testdata/fixtures/vendor-footer/mediarath-14.3.0-de.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return []byte(`<!DOCTYPE html><html lang="de" class=""><head><title>Prusa Plug Main Menu</title></head><body>` + string(footer) + `</body></html>`)
+}
+
+// readOnlyCommands are the queries ProbeIdentity may send; anything else (OtaUrl <url>, Upgrade 1)
+// would change the device.
+var readOnlyCommands = map[string]bool{"Status 2": true, "Status 4": true, "Status 11": true, "Upgrade": true, "GET /": true, "OtaUrl": true}
+
+// #872: a NOUS A1T on a vendor build (Status 2 "14.3.0(tasmota-NOUS_A1T_DE)", SYNTHETIC: the version
+// is the one in the issue, the raw reply was not posted) whose main page footer has no image was
+// refused before the variant was looked at ("root page: ... no Tasmota footer"), so even the Variant
+// override could not help. Why it matters: the device must reach the variant decision, and that
+// decision must still refuse until the person chooses a variant (CLAUDE.md safety rule 1): the
+// custom image is never guessed to be a stock one.
+func TestProbeIdentityVendorFooterRefusesWithoutVariantChoice(t *testing.T) {
+	c := &fixtureClient{
+		t: t, dir: "../../testdata/fixtures/devices/prusa-plug", root: vendorFooterPage(t),
+		replies: map[string]string{"Status 2": `{"StatusFWR":{"Version":"14.3.0(tasmota-NOUS_A1T_DE)","BuildDateTime":"2026-10-16T07:29:08","Boot":31,"Core":"2.7.8","SDK":"2.2.2-dev(38a443e)","CpuFrequency":80,"Hardware":"ESP8266EX","CR":"359/699"}}`},
+	}
+	a := NewDeviceAPI(c).(*deviceAPI)
+	a.gap = 0
+	id, _, _, err := a.ProbeIdentity(context.Background(), cabinetDevice)
+	if err != nil {
+		t.Fatalf("probe of a full-firmware device with a vendor footer: %v", err)
+	}
+	if id.Family != model.ChipESP8266 || id.Version != "14.3.0" || id.Variant != "unknown" || !id.LanguageKnown || id.Language != "DE" {
+		t.Fatalf("identity %+v, want esp8266 14.3.0, variant unknown, language DE read from the page", id)
+	}
+	for _, cmd := range c.sent {
+		if !readOnlyCommands[cmd] {
+			t.Fatalf("the probe sent %q", cmd)
+		}
+	}
+
+	if _, err := fwselect.Select(id, fwselect.Choice{Release: "16.0.0"}); !errors.Is(err, fwselect.ErrVariantChange) {
+		t.Fatalf("select without a variant choice: %v, want ErrVariantChange", err)
+	}
+	chosen := fwselect.Choice{Release: "16.0.0", Variant: "tasmota", AllowVariantChange: true}
+	sel, err := fwselect.Select(id, chosen)
+	if err != nil || sel.Filename != "tasmota-DE.bin.gz" {
+		t.Fatalf("select with variant tasmota: %+v, %v, want tasmota-DE.bin.gz", sel, err)
+	}
+	art := model.Artifact{Release: "16.0.0", Filename: "tasmota-DE.bin.gz", Family: model.ChipESP8266, Variant: "tasmota", Language: "DE"}
+	const otaURL = "http://fleet.example:8080/fw/16.0.0/tasmota-DE.bin.gz"
+	if err := fwselect.Guard(id, art, otaURL, fwselect.Choice{Release: "16.0.0"}); !errors.Is(err, fwselect.ErrVariantChange) {
+		t.Fatalf("guard without a variant choice: %v, want ErrVariantChange", err)
+	}
+	if err := fwselect.Guard(id, art, otaURL, chosen); err != nil {
+		t.Fatalf("guard with variant tasmota: %v", err)
+	}
+}
+
+// Why: on minimal firmware the footer image is the only proof of the chip family (Status 2 is
+// Unknown there). Reading a footer without an image (#872) must never let such a device be
+// identified: the probe must end in ErrUnknownHardware, and nothing that changes the device is sent.
+func TestProbeIdentityMinimalPageWithoutImageIsRefused(t *testing.T) {
+	page := `<!DOCTYPE html><html lang="en" class=""><body><div style='text-align:center;'><h3>MINIMAL firmware<br>please upgrade</h3></div>` +
+		`<div style='text-align:right;font-size:11px;'><hr><a href='https://github.com/arendst/Tasmota' target='_blank' style='color:#aaa;'>Tasmota 16.0.0 by Theo Arends</a></div></body></html>`
+	c := &fixtureClient{t: t, dir: cabinet, minimal: true, root: []byte(page)}
+	a := NewDeviceAPI(c).(*deviceAPI)
+	a.gap = 0
+	_, _, _, err := a.ProbeIdentity(context.Background(), cabinetDevice)
+	if !errors.Is(err, fwselect.ErrUnknownHardware) {
+		t.Fatalf("minimal page without image: %v, want ErrUnknownHardware", err)
+	}
+	for _, cmd := range c.sent {
+		if !readOnlyCommands[cmd] {
+			t.Fatalf("the probe sent %q", cmd)
+		}
 	}
 }

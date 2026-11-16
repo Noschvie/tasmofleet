@@ -192,8 +192,10 @@ var (
 	// rootFooter is Tasmota's "Tasmota <version> (<image>) <D_BY> Theo Arends". D_BY ("by") is
 	// translated by every language build (#468), so the word between the image and the credit is
 	// not matched: anything short and markup-free will do. A language that sets it to a blank
-	// leaves nothing at all.
-	rootFooter = regexp.MustCompile(`Tasmota (\S+) \(([^)<>]*)\) [^<>]{0,40}?Theo Arends`)
+	// leaves nothing at all. A vendor build may change HTTP_END and leave the "(<image>)" out
+	// (#872: "Tasmota 14.3.0 von Theo Arends"); the image is then "", never guessed. Full firmware
+	// takes its image from Status 2, and fwselect refuses minimal or safeboot without one.
+	rootFooter = regexp.MustCompile(`Tasmota (\S+)(?: \(([^)<>]*)\))? [^<>]{0,40}?Theo Arends`)
 	rootLang   = regexp.MustCompile(`(?is)<html[^>]*\slang\s*=\s*["']([^"']*)["']`)
 	rootTitle  = regexp.MustCompile(`(?is)<title>(.*?)</title>`)
 )

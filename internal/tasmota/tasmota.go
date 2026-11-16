@@ -96,7 +96,7 @@ type Client interface {
 // RootInfo is parsed from the device's main page.
 type RootInfo struct {
 	Version string // "16.0.0" from "Tasmota 16.0.0 (release-minimal) by Theo Arends"
-	Image   string // "release-minimal"
+	Image   string // "release-minimal"; "" when a vendor footer leaves the image out (#872)
 	Lang    string // <html lang="..">, e.g. "en", "de"
 	// LangKnown: the page carried a lang attribute, so Lang ("en" = English build) is read
 	// from the device and not assumed. Only an HTTP main page can set it (D10).

@@ -93,18 +93,65 @@ func TestParseRootPage_LocalizedMinimalAndSafeboot(t *testing.T) {
 	}
 }
 
-// Why: dropping the English "by" must not turn any page that mentions Tasmota into a Tasmota
-// device. Identity decides which firmware is flashed, so the rest of the footer stays strict:
-// version and image in the fixed shape, the credit close behind them, no markup in between.
+// #872: a vendor build (MediaRath, a German 14.3.0 on a NOUS A1T) changed Tasmota's HTTP_END: its
+// footer drops the "(<image>)" and adds a "Flashed by" line. The device was refused before any
+// variant decision ("no Tasmota footer on main page"), and the language the page carries was lost
+// with it. Why it matters: on full firmware the page is read only for the language build; the
+// image and variant come from Status 2. A footer that keeps Tasmota's credit must still be read,
+// with the image left empty (never guessed), and nothing after the credit may change the result.
+func TestParseRootPage_VendorFooterWithoutImage(t *testing.T) {
+	footer, err := os.ReadFile(filepath.Join("..", "..", "testdata", "fixtures", "vendor-footer", "mediarath-14.3.0-de.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := ParseRootPage(footer)
+	if err != nil {
+		t.Fatalf("real vendor footer: %v", err)
+	}
+	if got.Version != "14.3.0" || got.Image != "" || got.LangKnown || got.Minimal {
+		t.Errorf("real vendor footer alone: %+v", got)
+	}
+
+	// The same footer in place of the stock one on a German main page: the language is read.
+	page, err := os.ReadFile(filepath.Join("..", "..", "testdata", "fixtures", "localized-root", "de_DE.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const stock = `<div style='text-align:right;font-size:11px;'><hr><a href='https://github.com/arendst/Tasmota' target='_blank' style='color:#aaa;'>Tasmota 16.0.0 (release-tasmota) von Theo Arends</a></div></div>`
+	if strings.Count(string(page), stock) != 1 {
+		t.Fatal("de_DE.html no longer carries the stock footer this test replaces")
+	}
+	got, err = ParseRootPage([]byte(strings.Replace(string(page), stock, string(footer), 1)))
+	if err != nil {
+		t.Fatalf("German page with the vendor footer: %v", err)
+	}
+	if got.Version != "14.3.0" || got.Image != "" || got.Lang != "de" || !got.LangKnown || got.Minimal {
+		t.Errorf("German page with the vendor footer: %+v", got)
+	}
+}
+
+// Why: dropping the English "by" (and, #872, accepting a footer without the image) must not turn
+// any page that mentions Tasmota into a Tasmota device. The credit stays strict: "Theo Arends"
+// close behind the version, no markup in between, nothing in front of the version. The footer
+// image is trusted only on minimal and safeboot firmware, where fwselect refuses an empty one, so
+// a footer without it is read with Image "" instead of being refused.
 func TestParseRootPage_RefusesPagesThatAreNotTheTasmotaFooter(t *testing.T) {
+	for _, page := range []string{"Tasmota 15.1.0 by Theo Arends", "Tasmota 15.1.0 release-tasmota by Theo Arends"} {
+		got, err := ParseRootPage([]byte(page))
+		if err != nil || got.Version != "15.1.0" || got.Image != "" {
+			t.Errorf("footer without image in parentheses %q: %+v, %v", page, got, err)
+		}
+	}
 	for name, page := range map[string]string{
-		"markup between image and credit": "Tasmota 15.1.0 (release-tasmota) <b>hello</b> Theo Arends",
-		"credit far from the image":       "Tasmota 15.1.0 (release-tasmota) " + strings.Repeat("blah ", 20) + "Theo Arends",
-		"no image in parentheses":         "Tasmota 15.1.0 release-tasmota by Theo Arends",
-		"no credit":                       "Tasmota 15.1.0 (release-tasmota) by someone else",
-		"other project":                   "Sonoff 15.1.0 (release-tasmota) by Theo Arends",
-		"credit before the version":       "Theo Arends Tasmota 15.1.0 (release-tasmota)",
-		"41 characters before the credit": "Tasmota 15.1.0 (release-tasmota) " + strings.Repeat("x", 41) + "Theo Arends",
+		"markup between image and credit":   "Tasmota 15.1.0 (release-tasmota) <b>hello</b> Theo Arends",
+		"markup between version and credit": "Tasmota 15.1.0 <b>hello</b> Theo Arends",
+		"markup in the image":               "Tasmota 15.1.0 (release-<b>tasmota</b>) by Theo Arends",
+		"credit far from the image":         "Tasmota 15.1.0 (release-tasmota) " + strings.Repeat("blah ", 20) + "Theo Arends",
+		"credit far from the version":       "Tasmota 15.1.0 " + strings.Repeat("blah ", 20) + "Theo Arends",
+		"no credit":                         "Tasmota 15.1.0 (release-tasmota) by someone else",
+		"other project":                     "Sonoff 15.1.0 (release-tasmota) by Theo Arends",
+		"credit before the version":         "Theo Arends Tasmota 15.1.0 (release-tasmota)",
+		"41 characters before the credit":   "Tasmota 15.1.0 (release-tasmota) " + strings.Repeat("x", 41) + "Theo Arends",
 	} {
 		if _, err := ParseRootPage([]byte(page)); !errors.Is(err, ErrBadResponse) {
 			t.Errorf("%s: err = %v, want ErrBadResponse", name, err)
@@ -160,6 +207,14 @@ func TestParseRootPage_FooterGapIsExactly40(t *testing.T) {
 	}
 	if _, err := ParseRootPage([]byte(page(41))); !errors.Is(err, ErrBadResponse) {
 		t.Errorf("41 characters: err = %v, want ErrBadResponse", err)
+	}
+	// The same bound behind the version when a vendor footer has no image (#872).
+	noImage := func(n int) string { return "Tasmota 15.1.0 " + strings.Repeat("x", n) + "Theo Arends" }
+	if _, err := ParseRootPage([]byte(noImage(40))); err != nil {
+		t.Errorf("40 characters without image: %v", err)
+	}
+	if _, err := ParseRootPage([]byte(noImage(41))); !errors.Is(err, ErrBadResponse) {
+		t.Errorf("41 characters without image: err = %v, want ErrBadResponse", err)
 	}
 }
 
