@@ -255,9 +255,9 @@ func (m *probeTopic) asked() []string {
 // probeAddress records what the identity probe asks the device at the address, the main page included.
 type probeAddress struct {
 	tasmota.Client
-	mu     sync.Mutex
-	got    []string
-	onRoot func() // runs when the main page is asked, the last read of the identity
+	mu      sync.Mutex
+	got     []string
+	onIdent func() // runs after Status 4, the last read of the identity of full firmware (#686: no page)
 }
 
 func (h *probeAddress) note(c string) {
@@ -267,13 +267,14 @@ func (h *probeAddress) note(c string) {
 }
 func (h *probeAddress) Command(ctx context.Context, t tasmota.Target, c string) (json.RawMessage, error) {
 	h.note(c)
-	return h.Client.Command(ctx, t, c)
+	raw, err := h.Client.Command(ctx, t, c)
+	if c == "Status 4" && h.onIdent != nil {
+		h.onIdent()
+	}
+	return raw, err
 }
 func (h *probeAddress) RootPage(ctx context.Context, t tasmota.Target) (tasmota.RootInfo, error) {
 	h.note("main page")
-	if h.onRoot != nil {
-		h.onRoot()
-	}
 	return h.Client.RootPage(ctx, t)
 }
 func (h *probeAddress) asked() []string {
@@ -318,14 +319,14 @@ func probeOverRouter(t *testing.T, onTopic *probeTopic, lwt string) (*Prober, *p
 
 // Why (#851, the product owner's transport rule): MQTT carries every read it can for a device usable on TasmoFleet's
 // broker; HTTP only what MQTT technically cannot. The identity probe sent all of its reads to the address. Its MAC check
-// of the address (without credentials first), Status 2, Status 4 and the main page stay there: the page exists only
-// over HTTP, the check vouches for it, and Status 2 and 4 make the identity with it that firmware is selected and
-// guarded by (identity source #87; over MQTT is #682). Its facts (where the device reports over MQTT, the OTA URL and
+// of the address (without credentials first), Status 2 and Status 4 stay there: the check vouches for them, and they
+// make the identity that firmware is selected and guarded by (identity source #87; over MQTT is #682). No main page is
+// read for full firmware (#686: the language is the locale ID of Status 4). Its facts (where the device reports over MQTT, the OTA URL and
 // GroupTopic of Status 1, the Status object) go over MQTT once a Status 5 on the topic shows a stored MAC, since a check
 // vouches only for the transport its read used (#810). Without that (MQTT not usable, another device on the topic, MQTT
 // silent) they are read at the address as before, and another device on the topic marks it (#852).
 func TestTheIdentityProbeReadsItsFactsOverMQTTOnceTheTopicShowsTheStoredMAC(t *testing.T) {
-	identityAtAddress := []string{"Status 5", "Status 2", "Status 4", "main page"}
+	identityAtAddress := []string{"Status 5", "Status 2", "Status 4"}
 	factsAtAddress := append(slices.Clone(identityAtAddress), "Status 6", "SetOption3", "Status 1", "Status")
 	for _, c := range []struct {
 		name        string
@@ -799,7 +800,7 @@ func TestTheIdentityProbeOverMQTTKeepsTheStoredTopic(t *testing.T) {
 // topic, where the other device was just heard, stayed unmarked and the device's writes went there.
 func TestTheIdentityProbeMarksTheStoredTopic(t *testing.T) {
 	p, addr, id, get := probeOverRouter(t, &probeTopic{mac: otherMAC}, "Online")
-	addr.onRoot = func() {
+	addr.onIdent = func() {
 		d := get(id)
 		d.Topic = "plug-new"
 		if err := p.Devices.(interface {

@@ -1,6 +1,9 @@
 package fwselect
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // Language is one language build of upstream Tasmota. The release file is
 // tasmota-<Suffix>.bin.gz (tasmota32-<Suffix>.bin on a dual-core ESP32); the build itself writes
@@ -17,11 +20,12 @@ type Language struct {
 // MY_LANGUAGE of each [env:tasmota-XX] in platformio_tasmota_env.ini, checked against
 // arendst/Tasmota development on 2026-11-02). The order is the order people see.
 //
-// pt_BR.h and pt_PT.h both write "pt": the page cannot tell BR from PT. Status 4 can: Tasmota
-// writes the locale ID of the build as the first entry of Features (support_features.ino,
-// ResponseAppendFeatures; "0416" for pt_BR, "0816" for pt_PT). languageFromHTML uses it when, and
-// only when, two builds share a page code. A new upstream language is added here, with its row in
-// the test.
+// The language of a device comes from its locale ID (#686): Tasmota writes LANGUAGE_LCID of the build
+// as the first entry of Features in Status 4 (support_features.ino, ResponseAppendFeatures), over HTTP
+// and over MQTT alike, and every build has its own (languageFromLCID). The HTML column is only read
+// for minimal and safeboot firmware, which answer no Status 4 and are identified from their main page
+// when nothing else names them; pt_BR.h and pt_PT.h both write "pt" there, so the page cannot tell BR
+// from PT. A new upstream language is added here, with its row in the test.
 var languages = []Language{
 	{"AF", "af", "Afrikaans", "0436"},
 	{"AD", "ca", "Catalan", "0403"},
@@ -56,13 +60,37 @@ var languages = []Language{
 // (LanguageEnglish), in display order.
 func Languages() []Language { return append([]Language(nil), languages...) }
 
+// lcidEnglish is LANGUAGE_LCID of en_GB.h (2057), the plain English build. It has no row in
+// languages because its release file has no suffix.
+const lcidEnglish = 0x0809
+
+// languageFromLCID maps the locale ID of Status 4 to the upstream suffix of the build: "" is the
+// English build. Locale IDs are compared by value, so "0809" and a zero-padded "00000809" are the
+// same build. ok is false when the value names no build of the table (a self-compiled build with
+// another MY_LANGUAGE, a feature bitmap where a locale was expected, text that is not hex): the
+// language then stays unread and the person is asked, never guessed (D10).
+func languageFromLCID(lcid string) (suffix string, ok bool) {
+	v, err := strconv.ParseUint(lcid, 16, 32)
+	if err != nil {
+		return "", false
+	}
+	if v == lcidEnglish {
+		return "", true
+	}
+	for _, e := range languages {
+		if w, err := strconv.ParseUint(e.LCID, 16, 32); err == nil && w == v {
+			return e.Suffix, true
+		}
+	}
+	return "", false
+}
+
 // languageFromHTML maps the <html lang> of a device main page to the upstream suffix of its
-// build: "" is the English build. lcid is the locale ID from Status 4 ("" if not read); it only
-// decides between builds that write the same page code. ok is false when this does not name one
-// build: an empty or unlisted code (a custom build, a language added upstream after this table),
-// and a code two builds share without a locale of one of them. Nothing is guessed (D10); the
-// caller asks the person.
-func languageFromHTML(lang, lcid string) (suffix string, ok bool) {
+// build: "" is the English build. Only the main page of minimal and safeboot firmware is read
+// for it (those builds answer no Status 4). ok is false when this does not name one build: an
+// empty or unlisted code (a custom build, a language added upstream after this table), and a code
+// two builds share ("pt"). Nothing is guessed (D10); the caller asks the person.
+func languageFromHTML(lang string) (suffix string, ok bool) {
 	l := strings.ToLower(strings.TrimSpace(lang))
 	if l == "en" {
 		return "", true
@@ -75,11 +103,6 @@ func languageFromHTML(lang, lcid string) (suffix string, ok bool) {
 	}
 	if len(same) == 1 {
 		return same[0].Suffix, true
-	}
-	for _, e := range same {
-		if e.LCID == lcid {
-			return e.Suffix, true
-		}
 	}
 	return "", false
 }

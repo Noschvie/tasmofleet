@@ -295,18 +295,29 @@ data directory (TasmoAdmin lesson A4).
   Status object only: DeviceName and the resolved Topic), one at a time, ≥200 ms apart.
 - Minimal firmware (SRC): only `Upgrade`, `Upload`, `OtaUrl`, `SerialLog`, `Restart`
   exist; everything else is Unknown. The running version comes from bare `Upgrade`
-  (`{"Upgrade":"1 or >16.0.0 to upgrade"}`). The image name and the language build come from
+  (`{"Upgrade":"1 or >16.0.0 to upgrade"}`). The image name comes from the INFO1 both keep
+  publishing on the first MQTT connection after boot (`"Version":"16.0.0(release-minimal)"`) or from
   `GET /`: footer `Tasmota 16.0.0 (release-minimal) by Theo Arends`, `<html lang="..">`,
   and the heading `MINIMAL firmware<br>please upgrade` (`RootPage`). On ESP32 the
   safeboot partition shows a "Safeboot" page with the same command table.
-- **Minimal detection rule**: a device runs minimal (or ESP32 safeboot) only if
-  `Status 2` answers `{"Command":"Unknown"}` **and** `GET /` shows the minimal/safeboot
-  heading or the image tag `release-minimal`/`safeboot`. The bare `Upgrade` reply
+- **Minimal detection rule** (#686): a device runs minimal (or ESP32 safeboot) only if
+  `Status 2` answers `{"Command":"Unknown"}` **and** one of these names the image, in this order:
+  (1) the INFO1 the device sent since its last boot, read through the router for a stored device
+  usable over MQTT (`transport.Router.Info1Root`, a passive read of the broker; its version must
+  match the bare `Upgrade` reply); (2) inside TasmoFleet's own update job, the chip family the job
+  read at its preflight (`fwselect.Inputs.JobFamily`): minimal on an ESP8266, safeboot on the ESP32
+  line, the version from the bare `Upgrade` reply, the image left empty; an INFO1 image that is not
+  the intermediate image of that family is `ErrFamilyMismatch`; a job never reads the main page
+  after its preflight; (3) only outside such a job, without an INFO1 (a device found stuck in
+  minimal, the first add, the preflight of a device that already runs minimal): `GET /` with the
+  minimal/safeboot heading or the image tag `release-minimal`/`safeboot`. Minimal has no
+  `Status 5`, so path 2 trusts that the device at the job's address is still the one it started
+  on; `hardwareChanged` and `fwselect.Guard` stay the checks before every flash. The bare `Upgrade` reply
   (`1 or >X to upgrade`) is identical on normal firmware (OBS, all fixtures). It only
   supplies the version (`tasmota.UpgradeProbe.Idle`, `fwselect.UpgradeProbe.Version`)
   and never proves minimal on its own.
-- **Identity source (#87).** The HTTP probe is the primary source (its `Status 2`, `Status 4` or bare `Upgrade`
-  and `GET /`, asked at the address its `Status 5` checked; the probe's reads after the identity are no identity
+- **Identity source (#87).** The HTTP probe is the primary source (its `Status 2`, `Status 4` or bare `Upgrade`,
+  asked at the address its `Status 5` checked, and on minimal firmware the image source of the minimal detection rule; the probe's reads after the identity are no identity
   source and go over MQTT first since #851). For a device on our broker
   (`mqtt_capability = ours`) whose identity no HTTP probe has stored (`identity_at` unset: HTTP
   unreachable, refused, or not yet tried) MQTT is a second source, one that never replaces the
@@ -333,10 +344,10 @@ data directory (TasmoAdmin lesson A4).
   before it plans and `Guard` runs on that identity. A retained INFO1 may describe the last
   boot only; a device on a stale one is corrected by its next boot or its HTTP probe.
 - **Refresh identity (#91, #65).** `Prober.Refresh(ctx, id, actor)` re-reads and stores every
-  identity field (where each read goes, #851: `Status 5` without credentials first, `Status 2`, `Status 4` and `GET /`
-  at the address, the identity source of #87; `Status 6`, `SetOption3`, `Status 1` and plain `Status` over MQTT first,
+  identity field (where each read goes, #851: `Status 5` without credentials first, `Status 2`, `Status 4` (or the bare
+  `Upgrade` and the image source of the minimal detection rule) at the address, the identity source of #87; `Status 6`, `SetOption3`, `Status 1` and plain `Status` over MQTT first,
   pinned, once a `Status 5` on the device's topic shows a stored MAC and the router reads the device over MQTT, else at
-  the address; docs/security/mqtt-transport.md, "What still uses HTTP"): firmware, build, chip, hardware and flash (Status 2/4, `GET /`), the network
+  the address; docs/security/mqtt-transport.md, "What still uses HTTP"): firmware, build, chip, hardware, language and flash (Status 2/4), the network
   facts of Status 5 (hostname, IP, gateway, subnet mask, DNS servers; Wi-Fi from Status 11 follows
   in the background), MQTT broker (Status 6, SetOption3), the OTA URL (one read-only `Status 1`, best
   effort, never the `OtaUrl` command; credentials in the URL are stripped before it is stored, a value
@@ -604,16 +615,19 @@ tag's chips do not include the Hardware family (e.g. `webcam` on an ESP32-C3), `
 returns `ErrFamilyMismatch`. This must never happen, so if it does, stop.
 
 Language builds (`tasmota-DE.bin.gz`, `tasmota32-DE.bin`) keep the image tag `tasmota` /
-`tasmota32`. The language is read from `<html lang>` on `GET /` (`de` -> `DE`, `en` ->
-empty), and Detect takes it from `RootInfo`.
+`tasmota32`. The language is read from the locale ID that `Status 4` reports as the first entry of
+`Features` (`LANGUAGE_LCID`, `support_features.ino` `ResponseAppendFeatures`; `0407` -> `DE`, `0809`, the
+en_GB build, -> empty), compared by value with the table in `internal/fwselect/language.go` (#686). The
+main page of full firmware is not read.
 
-**Language is known only from the web page.** Tasmota prints the language build in `<html lang>` of the
-main page and nowhere else: not in `Status 2`, not in `INFO1`. `Identity.LanguageKnown` is true only when
-the identity was detected with a `RootInfo` whose `LangKnown` is set (`tasmota.ParseRootPage` sets it when
-the page carries a non-empty `lang` attribute, so every HTTP probe does). An identity read over MQTT, or
-stored before 0.20.0, keeps whatever language it had and `LanguageKnown` false; an empty `Language` is then
-no proof of the English build (D10). `mqttidentity` and the MQTT identify keep both fields of the stored
-identity, they never set them.
+**Language is known only from the locale ID.** Every upstream language build has its own `LANGUAGE_LCID`,
+so the locale alone names the build, over HTTP and over MQTT alike; `Status 2` and `INFO1` carry none.
+`Identity.LanguageKnown` is true only when `Status 4` was read and its locale names a build of the table. A
+locale of no build (a self-compiled `MY_LANGUAGE`), a `Features` list of another shape, or no `Status 4`
+leaves it false; an empty `Language` is then no proof of the English build (D10). Minimal and safeboot
+firmware answer no `Status 4`: their language is the `<html lang>` of their main page when the fallback of
+the minimal detection rule reads it (`pt` names no build there), and unknown otherwise. `mqttidentity` and
+the MQTT identify keep both fields of the stored identity, they never set them.
 
 ### 6.3 Flash from `Status 4`
 
@@ -1209,7 +1223,7 @@ written.
 
 The path of an update is chosen once, in the preview, which is also the preflight of Submit: `transport.Choose` over the device's facts (spec "Transport and path choice") gives `Paths.Update`. `None` refuses the device with the chooser's sentence. A download over MQTT stores `Job.Transport = mqtt`; every device call of the job then runs under `transport.WithPath` (HTTP or MQTT, never rerouted, no failover), also after a restart. Over MQTT:
 
-- The Router builds `RootPage` from the INFO1 seen after the device's latest LWT Online (version, image tag, minimal/safeboot); none gives `ErrBadResponse` (`transport.ErrNoInfo`), so minimal firmware is never recognised on a guess. Firmware that answered Status 2 needs the page only for its language, so a missing INFO1 is tolerated there. The language is never known (`LangKnown=false`): the preview asks for it where a language build exists (`Request.Language`, kept as the language of the job's `IdentityBefore`).
+- The Router builds `RootPage` from the INFO1 seen after the device's latest LWT Online (version, image tag, minimal/safeboot); none gives `ErrBadResponse` (`transport.ErrNoInfo`), so minimal firmware is never recognised on a guess. Since #686 only minimal and safeboot firmware need it (firmware that answered Status 2 reads no page), and after the preflight a job reads the INFO1 alone (`Router.Info1Root`, whatever path it pinned) and goes on from its own chip family without one. The language comes from the `Status 4` locale over MQTT too; where that names no build the preview asks for it (`Request.Language`, kept as the language of the job's `IdentityBefore`).
 - `stat/<t>/UPGRADE` `Failed ... connection failed` ends the stage without a second `Upgrade 1` (`ErrTextFWUnreachable`); the application records FWReach=no.
 - The job does not store the identity it probes (it is not an HTTP probe), so the device's GroupTopic read stays fresh for the writes of the job.
 - MQTT timings: reply 8 s, connection failure about 66 s after `Upgrade 1`, RebootWindow unchanged. The pre-OTA backup needs the MQTT backup (#257); without it the job fails at the backup unless the backup is switched off.

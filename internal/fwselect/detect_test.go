@@ -91,7 +91,7 @@ func status2(version, hw string) []byte {
 func TestDetectImageTags(t *testing.T) {
 	tests := []struct {
 		name, version, hw string
-		lang              string
+		lcid              string // the locale ID of Status 4 ("": no Status 4)
 		wantVariant       string
 		wantLang          string
 		wantFamily        model.ChipFamily
@@ -99,7 +99,7 @@ func TestDetectImageTags(t *testing.T) {
 		wantSemver        string
 		wantErr           error
 	}{
-		{"esp8266 tasmota", "16.0.0(release-tasmota)", "ESP8266EX", "en", "tasmota", "", model.ChipESP8266, false, "16.0.0", nil},
+		{"esp8266 tasmota", "16.0.0(release-tasmota)", "ESP8266EX", "0809", "tasmota", "", model.ChipESP8266, false, "16.0.0", nil},
 		{"esp8266 dev build", "16.0.0.3(85cff52-tasmota)", "ESP8266EX", "", "tasmota", "", model.ChipESP8266, false, "16.0.0.3", nil},
 		{"esp8266 minimal", "16.0.0(release-minimal)", "ESP8285N08", "", "minimal", "", model.ChipESP8266, false, "16.0.0", nil},
 		{"esp8266 lite", "16.0.0(release-lite)", "ESP8266EX", "", "lite", "", model.ChipESP8266, false, "16.0.0", nil},
@@ -109,16 +109,16 @@ func TestDetectImageTags(t *testing.T) {
 		{"esp8266 ir", "16.0.0(release-ir)", "ESP8266EX", "", "ir", "", model.ChipESP8266, false, "16.0.0", nil},
 		{"esp8266 zbbridge", "16.0.0(release-zbbridge)", "ESP8266EX", "", "zbbridge", "", model.ChipESP8266, false, "16.0.0", nil},
 		{"esp8266 zigbee", "16.0.0(release-zigbee)", "ESP8266EX", "", "zigbee", "", model.ChipESP8266, false, "16.0.0", nil},
-		{"esp8266 german", "16.0.0(release-tasmota)", "ESP8266EX", "de", "tasmota", "DE", model.ChipESP8266, false, "16.0.0", nil},
-		{"esp8266 lang upper", "16.0.0(release-tasmota)", "ESP8266EX", "FR", "tasmota", "FR", model.ChipESP8266, false, "16.0.0", nil},
-		{"esp8266 lang EN upper", "16.0.0(release-tasmota)", "ESP8266EX", "EN", "tasmota", "", model.ChipESP8266, false, "16.0.0", nil},
+		{"esp8266 german", "16.0.0(release-tasmota)", "ESP8266EX", "0407", "tasmota", "DE", model.ChipESP8266, false, "16.0.0", nil},
+		{"esp8266 french", "16.0.0(release-tasmota)", "ESP8266EX", "040C", "tasmota", "FR", model.ChipESP8266, false, "16.0.0", nil},
+		{"esp8266 english", "16.0.0(release-tasmota)", "ESP8266EX", "0809", "tasmota", "", model.ChipESP8266, false, "16.0.0", nil},
 		{"esp8266 4M", "16.0.0(release-tasmota-4M)", "ESP8266EX", "", "4M", "", model.ChipESP8266, false, "16.0.0", nil},
 		// ESP32: every FIRMWARE_TASMOTA32 build except solo1 reports "tasmota32"
 		// (tasmota_configurations_ESP32.h:576; the chip envs set no CODE_IMAGE_STR), so the chip
 		// comes from Hardware (#85). Before, every official S2/S3/C* /P4 device was refused as a
 		// family mismatch and vanished from the fleet.
 		{"esp32 tasmota32", "16.0.0(release-tasmota32)", "ESP32-D0WD-V3", "", "tasmota", "", model.ChipESP32, false, "16.0.0", nil},
-		{"esp32 german", "16.0.0(release-tasmota32)", "ESP32-D0WD-V3", "de", "tasmota", "DE", model.ChipESP32, false, "16.0.0", nil},
+		{"esp32 german", "16.0.0(release-tasmota32)", "ESP32-D0WD-V3", "0407", "tasmota", "DE", model.ChipESP32, false, "16.0.0", nil},
 		{"s3", "16.0.0(release-tasmota32)", "ESP32-S3", "", "tasmota", "", model.ChipESP32S3, false, "16.0.0", nil},
 		{"c2", "16.0.0(release-tasmota32)", "ESP32-C2", "", "tasmota", "", model.ChipESP32C2, false, "16.0.0", nil},
 		{"c3", "16.0.0(release-tasmota32)", "ESP32-C3", "", "tasmota", "", model.ChipESP32C3, false, "16.0.0", nil},
@@ -197,7 +197,11 @@ func TestDetectImageTags(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			id, err := Detect(Inputs{Status2: status2(tt.version, tt.hw), Root: &RootInfo{Lang: tt.lang}})
+			in := Inputs{Status2: status2(tt.version, tt.hw)}
+			if tt.lcid != "" {
+				in.Status4 = []byte(`{"StatusMEM":{"FlashSize":4096,"ProgramFlashSize":4096,"Free":1408,"Features":["` + tt.lcid + `"]}}`)
+			}
+			id, err := Detect(in)
 			wantErr(t, err, tt.wantErr)
 			if tt.wantErr != nil {
 				if id != (model.Identity{}) {
@@ -249,14 +253,13 @@ func TestDetectUnparseableVersion(t *testing.T) {
 		t.Run(v, func(t *testing.T) {
 			id, err := Detect(Inputs{
 				Status2: status2(v, "ESP32-D0WD-V3"),
-				Status4: []byte(`{"StatusMEM":{"FlashSize":4096,"ProgramFlashSize":4096,"Free":1408}}`),
-				Root:    &RootInfo{Lang: "de"},
+				Status4: []byte(`{"StatusMEM":{"FlashSize":4096,"ProgramFlashSize":4096,"Free":1408,"Features":["0407"]}}`),
 			})
 			if err != nil {
 				t.Fatalf("an unparseable version must not abort the identity probe: %v", err)
 			}
 			want := model.Identity{
-				Family: model.ChipESP32, Hardware: "ESP32-D0WD-V3", Variant: variantUnknown, Language: "DE",
+				Family: model.ChipESP32, Hardware: "ESP32-D0WD-V3", Variant: variantUnknown, Language: "DE", LanguageKnown: true,
 				FlashSizeKB: 4096, ProgramFlashSizeKB: 4096, FreeKB: 1408,
 				// the raw string stays for the Identity card, which shows what the device sent (#289)
 				FWR: model.FWRFacts{Version: v},
@@ -512,8 +515,8 @@ func TestDetectThenSelect(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.version+" on "+tt.hw, func(t *testing.T) {
-			// A main page read over HTTP makes the language a fact (D10); without it Select refuses.
-			id, err := Detect(Inputs{Status2: status2(tt.version, tt.hw), Root: &RootInfo{Lang: "en", LangKnown: true}})
+			// The English locale in Status 4 makes the language a fact (D10); without it Select refuses.
+			id, err := Detect(Inputs{Status2: status2(tt.version, tt.hw), Status4: status4With(t, "0809")})
 			if err != nil {
 				t.Fatalf("Detect: %v", err)
 			}
@@ -526,29 +529,110 @@ func TestDetectThenSelect(t *testing.T) {
 	}
 }
 
-// Only a main page read from the device makes the language a fact (D10). An identity from Status 2
-// alone (MQTT) has an empty Language that must not be mistaken for the English build.
+// Only a locale ID in Status 4 that names a build makes the language a fact (D10, #686). An identity
+// from Status 2 alone (an INFO1, a STATE) has an empty Language that must not be mistaken for the
+// English build, and a main page does not make it known any more.
 func TestDetectLanguageKnown(t *testing.T) {
 	s2 := status2("16.0.0(release-tasmota)", "ESP8266EX")
 	tests := []struct {
 		name     string
+		status4  []byte
 		root     *RootInfo
 		lang     string
 		wantKnow bool
 	}{
-		{"http page, german", &RootInfo{Lang: "de", LangKnown: true}, "DE", true},
-		{"http page, english", &RootInfo{Lang: "en", LangKnown: true}, "", true},
-		{"root passed but language not read", &RootInfo{Lang: "", LangKnown: false}, "", false},
-		{"no root page at all", nil, "", false},
+		{"german locale", []byte(`{"StatusMEM":{"Free":1,"Features":["0407"]}}`), nil, "DE", true},
+		{"english locale", []byte(`{"StatusMEM":{"Free":1,"Features":["0809"]}}`), nil, "", true},
+		{"no status 4, german page", nil, &RootInfo{Lang: "de", LangKnown: true}, "", false},
+		{"nothing at all", nil, nil, "", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			id, err := Detect(Inputs{Status2: s2, Root: tt.root})
+			id, err := Detect(Inputs{Status2: s2, Status4: tt.status4, Root: tt.root})
 			if err != nil {
 				t.Fatal(err)
 			}
 			if id.Language != tt.lang || id.LanguageKnown != tt.wantKnow {
 				t.Errorf("language %q known %v, want %q known %v", id.Language, id.LanguageKnown, tt.lang, tt.wantKnow)
+			}
+		})
+	}
+}
+
+// Why (#686, path 2): an update job through minimal (ESP8266) or safeboot (ESP32) must not need the
+// main page, an HTML page for people that changes with the firmware. The job read the chip at its
+// preflight, so Status 2 Unknown plus the version of the bare Upgrade reply is enough to name the
+// intermediate image of that chip. Nothing is guessed beyond that: the image stays empty, safeboot
+// keeps the family unknown (it does not report the chip), and without a job family, or without a
+// version the Upgrade reply names, the device stays unknown hardware as before.
+func TestAnUpdateJobKnowsMinimalAndSafebootWithoutThePage(t *testing.T) {
+	unknown := readFixture(t, "devices/bedroom-cabinet/unknown-foobar.json")
+	up := &UpgradeProbe{Version: "16.0.0"}
+	tests := []struct {
+		name       string
+		in         Inputs
+		wantFamily model.ChipFamily
+		wantVar    string
+		wantErr    error
+	}{
+		{"esp8266 job: minimal", Inputs{Status2: unknown, Upgrade: up, JobFamily: model.ChipESP8266}, model.ChipESP8266, "minimal", nil},
+		{"esp8266 job, status 2 not answered: minimal", Inputs{Upgrade: up, JobFamily: model.ChipESP8266}, model.ChipESP8266, "minimal", nil},
+		{"esp32 job: safeboot", Inputs{Status2: unknown, Upgrade: up, JobFamily: model.ChipESP32}, model.ChipUnknown, "safeboot", nil},
+		{"esp32-c3 job: safeboot", Inputs{Status2: unknown, Upgrade: up, JobFamily: model.ChipESP32C3}, model.ChipUnknown, "safeboot", nil},
+		{"esp32-s3 job: safeboot", Inputs{Status2: unknown, Upgrade: up, JobFamily: model.ChipESP32S3}, model.ChipUnknown, "safeboot", nil},
+		{"no job", Inputs{Status2: unknown, Upgrade: up}, "", "", ErrUnknownHardware},
+		{"job without an upgrade reply", Inputs{Status2: unknown, JobFamily: model.ChipESP8266}, "", "", ErrUnknownHardware},
+		{"job, upgrade reply names no version", Inputs{Status2: unknown, Upgrade: &UpgradeProbe{}, JobFamily: model.ChipESP8266}, "", "", ErrUnknownHardware},
+		{"job, upgrade reply is not a version", Inputs{Status2: unknown, Upgrade: &UpgradeProbe{Version: "1 or >16"}, JobFamily: model.ChipESP32}, "", "", ErrUnknownHardware},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			id, err := Detect(tt.in)
+			wantErr(t, err, tt.wantErr)
+			if tt.wantErr != nil {
+				if id != (model.Identity{}) {
+					t.Fatalf("identity must be empty on error, got %+v", id)
+				}
+				return
+			}
+			want := model.Identity{Family: tt.wantFamily, Version: "16.0.0", Variant: tt.wantVar}
+			if id != want {
+				t.Fatalf("identity %+v, want %+v (no image, no language, no hardware guessed)", id, want)
+			}
+		})
+	}
+}
+
+// Why (#686): inside an update job the image an INFO1 (or a page) names must be the intermediate image
+// of the job's chip: a minimal image on an ESP32 job or a safeboot image on an ESP8266 job means another
+// device answers for this one, or a forged INFO1, and the job must stop rather than flash on it. It
+// fails closed whatever transport delivered the image. Outside a job the image alone decides, as before.
+func TestAnINFO1ImageThatDoesNotFitTheJobFamilyIsRefused(t *testing.T) {
+	unknown := readFixture(t, "devices/bedroom-cabinet/unknown-foobar.json")
+	up := &UpgradeProbe{Version: "16.0.0"}
+	minimal := &RootInfo{Version: "16.0.0", Image: "release-minimal", Minimal: true}
+	safeboot := &RootInfo{Version: "16.0.0", Image: "release-safeboot", Minimal: true}
+	tests := []struct {
+		name    string
+		root    *RootInfo
+		job     model.ChipFamily
+		wantVar string
+		wantErr error
+	}{
+		{"minimal on an esp32 job", minimal, model.ChipESP32, "", ErrFamilyMismatch},
+		{"minimal on an esp32-c3 job", minimal, model.ChipESP32C3, "", ErrFamilyMismatch},
+		{"safeboot on an esp8266 job", safeboot, model.ChipESP8266, "", ErrFamilyMismatch},
+		{"minimal on an esp8266 job", minimal, model.ChipESP8266, "minimal", nil},
+		{"safeboot on an esp32-c6 job", safeboot, model.ChipESP32C6, "safeboot", nil},
+		{"minimal outside a job", minimal, model.ChipUnknown, "minimal", nil},
+		{"safeboot outside a job", safeboot, model.ChipUnknown, "safeboot", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			id, err := Detect(Inputs{Status2: unknown, Upgrade: up, Root: tt.root, JobFamily: tt.job})
+			wantErr(t, err, tt.wantErr)
+			if id.Variant != tt.wantVar {
+				t.Fatalf("variant %q, want %q", id.Variant, tt.wantVar)
 			}
 		})
 	}

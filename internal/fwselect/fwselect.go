@@ -40,8 +40,8 @@ var (
 	ErrBadImage         = errors.New("fwselect: not an ESP firmware image")
 	ErrNotImplemented   = errors.New("fwselect: not implemented")
 
-	// ErrLanguageUnknown: the language build of the device was never read from its web page
-	// (MQTT-only devices), so Select will not pick a file without an explicit Choice.Language.
+	// ErrLanguageUnknown: the language build of the device was never read (no Status 4 whose locale ID
+	// names a build, #686), so Select will not pick a file without an explicit Choice.Language.
 	// "EN" is an allowed explicit choice. Never guess: a German device must not get the English build.
 	ErrLanguageUnknown = errors.New("fwselect: language build never read from the device, choose a language")
 
@@ -59,21 +59,27 @@ const LanguageEnglish = "EN"
 
 // Inputs are the raw device answers Detect works from. Status2/Status4 are
 // the JSON replies of "Status 2" and "Status 4" (Status2 may be
-// {"Command":"Unknown"} on minimal firmware, Status4 then empty). Upgrade is
-// the parsed bare "Upgrade" reply and Root the parsed main page; both are
-// required for minimal firmware and Root is always used for the language.
+// {"Command":"Unknown"} on minimal firmware, Status4 then empty). The language
+// build comes from the locale ID in Status 4 (#686). Upgrade is the parsed bare
+// "Upgrade" reply and Root the image source of minimal and safeboot firmware
+// (an INFO1 or the main page); Root is not read for any other firmware.
+// JobFamily is the chip family an update job read at its preflight
+// (ChipUnknown outside a job): with it, minimal and safeboot are named without
+// Root, and a Root image that is not the intermediate image of that family is
+// ErrFamilyMismatch.
 type Inputs struct {
-	Status2 []byte
-	Status4 []byte
-	Upgrade *UpgradeProbe
-	Root    *RootInfo
+	Status2   []byte
+	Status4   []byte
+	Upgrade   *UpgradeProbe
+	Root      *RootInfo
+	JobFamily model.ChipFamily
 }
 
 // UpgradeProbe carries the version from a bare "Upgrade" reply
 // ("1 or >X to upgrade"). Normal firmware answers the same way, so the probe
 // never proves minimal firmware on its own: Detect treats a device as minimal
-// only when Status 2 is {"Command":"Unknown"} and Root says minimal/safeboot
-// (heading or image tag "release-minimal"/"safeboot").
+// only when Status 2 is {"Command":"Unknown"} and Root's image tag says
+// minimal/safeboot, or, without Root, inside an update job (Inputs.JobFamily).
 type UpgradeProbe struct {
 	Version string
 }
@@ -82,9 +88,9 @@ type UpgradeProbe struct {
 type RootInfo struct {
 	Version string
 	Image   string // e.g. "release-minimal"
-	Lang    string // <html lang>, e.g. "en", "de"
-	// LangKnown: Lang was read from a device main page (HTTP). Without it the language build is
-	// unknown, because only the web page shows it (D10); an empty Lang is then no proof of English.
+	Lang    string // <html lang>, e.g. "en", "de"; read for minimal and safeboot firmware only
+	// LangKnown: Lang was read from a device main page (HTTP). Without it (an INFO1) the language
+	// build of minimal or safeboot firmware is unknown (D10); an empty Lang is then no proof of English.
 	LangKnown bool
 	Minimal   bool
 }

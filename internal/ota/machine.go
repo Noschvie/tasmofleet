@@ -718,8 +718,9 @@ func stepVerify(j model.Job, ev Event, now time.Time, cfg Config) (model.Job, []
 	want := fwselect.DetectedVariant(fwselect.Selection{Family: j.IdentityBefore.Family, Variant: j.TargetVariant})
 	if id.Version == j.TargetRelease && id.Variant == want &&
 		(id.Language == j.IdentityBefore.Language || !id.LanguageKnown) && id.Family == j.IdentityBefore.Family {
-		// A probe over MQTT cannot see the language build (LanguageKnown false): the person's choice or the
-		// stored language stays the reference then, and only a language that was read can contradict it.
+		// A probe whose Status 4 names no known build (LanguageKnown false, #686) has no language: the person's
+		// choice or the stored language stays the reference then, and only a language that was read can
+		// contradict it.
 		return finalReached(j, ev, now, cfg)
 	}
 	return notTaken(j, ev, now, cfg)

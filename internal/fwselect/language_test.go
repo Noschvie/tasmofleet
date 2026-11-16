@@ -3,6 +3,7 @@ package fwselect
 import (
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -62,78 +63,49 @@ func status4With(t *testing.T, lcid string) []byte {
 	return []byte(strings.Replace(string(raw), `"Features":["0809",`, `"Features":["`+lcid+`",`, 1))
 }
 
-// Why (#509): the page says the ISO code, the release file has its own suffix. Upper-casing the
-// code asked for tasmota-CS.bin.gz (no such file: the Czech device could not be updated) and
-// took tasmota-PT for a Brazilian device (it came back in European Portuguese). Every upstream
-// language file must lead to the file of its own build, from a device page to the file name, on
-// both chip lines. The one code two builds share ("pt") is told apart by the locale ID in
-// Status 4; without it the device must not lead anywhere, so the person is asked.
-func TestEveryUpstreamLanguageLeadsToItsOwnBuild(t *testing.T) {
-	ambiguous := map[string]bool{}
-	for _, u := range upstreamLanguages {
-		for _, v := range upstreamLanguages {
-			if u.File != v.File && u.HTML == v.HTML {
-				ambiguous[u.HTML] = true
-			}
-		}
-	}
-	if !ambiguous["pt"] || len(ambiguous) != 1 {
-		t.Fatalf("test data: only pt is shared by two builds, got %v", ambiguous)
-	}
+// Why (#686, #509): the language build decides the file a device gets, and a German device must not
+// come back in English. Status 4 carries the build's locale ID over HTTP and over MQTT alike, and every
+// upstream build has its own, so it alone names the build: no main page is read for it (the page is
+// HTML for people and may change with the firmware, #616). Every upstream language file must lead from
+// its locale to the file of its own build, on both chip lines, with the locale written the way current
+// firmware prints it ("%04X") and zero-padded to eight digits. The page has no say: a page that names
+// another language (or none) does not change what the locale says.
+func TestTheLanguageBuildComesFromTheStatus4LocaleIDAlone(t *testing.T) {
 	for _, u := range upstreamLanguages {
 		t.Run(u.File, func(t *testing.T) {
-			root := &RootInfo{Lang: u.HTML, LangKnown: true}
 			dash := ""
 			if u.Suffix != "" {
 				dash = "-" + u.Suffix
 			}
-			for _, hw := range []struct{ image, hardware, file string }{
-				{"release-tasmota", "ESP8266EX", "tasmota" + dash + ".bin.gz"},
-				{"release-tasmota32", "ESP32-D0WD-V3", "tasmota32" + dash + ".bin"},
-			} {
-				s2 := status2("16.0.0("+hw.image+")", hw.hardware)
-				// With the device's own Status 4 every build is known and leads to its own file.
-				id, err := Detect(Inputs{Status2: s2, Status4: status4With(t, u.LCID), Root: root})
-				wantErr(t, err, nil)
-				if !id.LanguageKnown || id.Language != u.Suffix {
-					t.Fatalf("%s: <html lang=%q> with locale %s read as %q known %v, want %q", hw.hardware, u.HTML, u.LCID, id.Language, id.LanguageKnown, u.Suffix)
-				}
-				sel, err := Select(id, Choice{Release: "16.0.0"})
-				wantErr(t, err, nil)
-				if sel.Filename != hw.file {
-					t.Fatalf("%s: <html lang=%q> selects %q, want %q", hw.hardware, u.HTML, sel.Filename, hw.file)
-				}
-				// Without Status 4 only the page is left: everything but "pt" is still known.
-				id, err = Detect(Inputs{Status2: s2, Root: root})
-				wantErr(t, err, nil)
-				if !ambiguous[u.HTML] {
-					if !id.LanguageKnown || id.Language != u.Suffix {
-						t.Fatalf("%s: <html lang=%q> alone read as %q known %v, want %q", hw.hardware, u.HTML, id.Language, id.LanguageKnown, u.Suffix)
+			for _, lcid := range []string{u.LCID, "0000" + u.LCID, strings.ToLower(u.LCID)} {
+				for _, root := range []*RootInfo{nil, {Lang: "xx", LangKnown: true}, {Lang: "en", LangKnown: true}} {
+					for _, hw := range []struct{ image, hardware, file string }{
+						{"release-tasmota", "ESP8266EX", "tasmota" + dash + ".bin.gz"},
+						{"release-tasmota32", "ESP32-D0WD-V3", "tasmota32" + dash + ".bin"},
+					} {
+						id, err := Detect(Inputs{Status2: status2("16.0.0("+hw.image+")", hw.hardware), Status4: status4With(t, lcid), Root: root})
+						wantErr(t, err, nil)
+						if !id.LanguageKnown || id.Language != u.Suffix {
+							t.Fatalf("%s: locale %s (page %+v) read as %q known %v, want %q", hw.hardware, lcid, root, id.Language, id.LanguageKnown, u.Suffix)
+						}
+						sel, err := Select(id, Choice{Release: "16.0.0"})
+						wantErr(t, err, nil)
+						if sel.Filename != hw.file {
+							t.Fatalf("%s: locale %s selects %q, want %q", hw.hardware, lcid, sel.Filename, hw.file)
+						}
 					}
-					continue
-				}
-				if id.LanguageKnown || id.Language != "" {
-					t.Fatalf("%s: language %q known %v, want unknown: the page of tasmota-BR and tasmota-PT is the same", hw.hardware, id.Language, id.LanguageKnown)
-				}
-				if _, err := Select(id, Choice{Release: "16.0.0"}); !errors.Is(err, ErrLanguageUnknown) {
-					t.Fatalf("%s: Select without a choice = %v, want ErrLanguageUnknown", hw.hardware, err)
-				}
-				// The person's answer is what picks the file.
-				sel, err = Select(id, Choice{Release: "16.0.0", Language: u.Suffix, AllowVariantChange: true})
-				wantErr(t, err, nil)
-				if sel.Filename != hw.file {
-					t.Fatalf("%s: chosen file %q, want %q", hw.hardware, sel.Filename, hw.file)
 				}
 			}
 		})
 	}
 }
 
-// Why (#509): "pt" is only settled by a locale ID that belongs to a Portuguese build. A Status 4
-// without Features, with another locale, or in a shape we do not know must leave the device
-// unread and asked, never turn into BR or PT; and an odd Features must not cost the device its
-// identity (Status 4 is also where the flash sizes come from).
-func TestPortuguesePageNeedsALocaleOfAPortugueseBuild(t *testing.T) {
+// Why (D10, #686): a locale ID that names no build of the table (a self-compiled build with another
+// MY_LANGUAGE, a Features list in a shape we do not know) must leave the device's language unread, so
+// the person is asked; a main page that says German must not fill it in, because the page is no longer
+// a source of the language. An odd Features must not cost the device its identity either (Status 4 is
+// also where the flash sizes come from). Without Status 4 at all the language is unread too.
+func TestAnUnknownLocaleIDLeavesTheLanguageUnreadWhateverThePageSays(t *testing.T) {
 	s2 := status2("16.0.0(release-tasmota)", "ESP8266EX")
 	mem := func(features string) []byte {
 		return []byte(`{"StatusMEM":{"ProgramSize":651,"Free":352,"ProgramFlashSize":1024,"FlashSize":1024` + features + `}}`)
@@ -141,70 +113,67 @@ func TestPortuguesePageNeedsALocaleOfAPortugueseBuild(t *testing.T) {
 	tests := []struct {
 		name   string
 		status []byte
-		want   string
-		known  bool
 	}{
-		{"brazil", mem(`,"Features":["0416","8F9AC787"]`), "BR", true},
-		{"portugal", mem(`,"Features":["0816","8F9AC787"]`), "PT", true},
-		{"no Features", mem(``), "", false},
-		{"empty Features", mem(`,"Features":[]`), "", false},
-		{"empty locale", mem(`,"Features":[""]`), "", false},
-		{"english locale", mem(`,"Features":["0809","8F9AC787"]`), "", false},
-		{"czech locale with a pt page", mem(`,"Features":["0405"]`), "", false},
-		{"not hex", mem(`,"Features":["ZZZZ"]`), "", false},
-		{"locale only in a later entry", mem(`,"Features":["8F9AC787","0416"]`), "", false},
-		{"Features is a number", mem(`,"Features":5`), "", false},
-		{"Features holds numbers", mem(`,"Features":[1046]`), "", false},
-		{"Features is null", mem(`,"Features":null`), "", false},
+		{"a locale of no build", mem(`,"Features":["ABCD","8F9AC787"]`)},
+		{"no Features", mem(``)},
+		{"empty Features", mem(`,"Features":[]`)},
+		{"empty locale", mem(`,"Features":[""]`)},
+		{"not hex", mem(`,"Features":["ZZZZ"]`)},
+		{"a feature bitmap first", mem(`,"Features":["8F9AC787","0407"]`)},
+		{"signed", mem(`,"Features":["+0407"]`)},
+		{"hex prefix", mem(`,"Features":["0x0407"]`)},
+		{"longer than 32 bits", mem(`,"Features":["100000407"]`)},
+		{"Features is a number", mem(`,"Features":5`)},
+		{"Features holds numbers", mem(`,"Features":[1031]`)},
+		{"Features is null", mem(`,"Features":null`)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			id, err := Detect(Inputs{Status2: s2, Status4: tt.status, Root: &RootInfo{Lang: "pt", LangKnown: true}})
+			id, err := Detect(Inputs{Status2: s2, Status4: tt.status, Root: &RootInfo{Lang: "de", LangKnown: true}})
 			wantErr(t, err, nil)
-			if id.Language != tt.want || id.LanguageKnown != tt.known {
-				t.Fatalf("language %q known %v, want %q known %v", id.Language, id.LanguageKnown, tt.want, tt.known)
+			if id.Language != "" || id.LanguageKnown {
+				t.Fatalf("language %q known %v, want unread", id.Language, id.LanguageKnown)
 			}
 			if id.FlashSizeKB != 1024 || id.FreeKB != 352 {
 				t.Fatalf("the flash numbers of Status 4 were lost: %+v", id)
 			}
+			if _, err := Select(id, Choice{Release: "16.0.0"}); !errors.Is(err, ErrLanguageUnknown) {
+				t.Fatalf("Select without a choice = %v, want ErrLanguageUnknown", err)
+			}
 		})
 	}
-}
-
-// The locale only settles a page code that two builds write. For every other build the page is
-// enough, as before, whatever Status 4 says; and a locale cannot turn a page that is not
-// Portuguese into a Portuguese build.
-func TestLocaleIDDoesNotOverrideAClearPage(t *testing.T) {
-	s2 := status2("16.0.0(release-tasmota)", "ESP8266EX")
-	for _, tt := range []struct{ lang, lcid, want string }{
-		{"de", "0416", "DE"},
-		{"cs", "0816", "CZ"},
-		{"en", "0416", ""},
-	} {
-		id, err := Detect(Inputs{Status2: s2, Status4: status4With(t, tt.lcid), Root: &RootInfo{Lang: tt.lang, LangKnown: true}})
-		wantErr(t, err, nil)
-		if !id.LanguageKnown || id.Language != tt.want {
-			t.Errorf("<html lang=%q> with locale %s read as %q known %v, want %q", tt.lang, tt.lcid, id.Language, id.LanguageKnown, tt.want)
-		}
-	}
-	// Not read from a device page (MQTT-only): the locale alone is no language, the person is asked.
-	id, err := Detect(Inputs{Status2: s2, Status4: status4With(t, "0416"), Root: &RootInfo{Lang: "pt"}})
+	id, err := Detect(Inputs{Status2: s2, Root: &RootInfo{Lang: "de", LangKnown: true}})
 	wantErr(t, err, nil)
-	if id.LanguageKnown {
-		t.Errorf("a page that was not read made the language known: %q", id.Language)
+	if id.LanguageKnown || id.Language != "" {
+		t.Fatalf("without Status 4 the page made the language %q known %v", id.Language, id.LanguageKnown)
 	}
 }
 
-// Why (D10, #509): a code that is not in the table is not a language build. A custom build or a
-// language upstream adds later must be asked for, never turned into a file name that was made up
-// from the code. The old upper-casing gave "ZH-HANT-TW" or "XX" here.
+// Why (#686): the locale ID alone names the build, so no two builds may share one, and none may share
+// the English build's 0809 (it has no row of its own: its file has no suffix). Locales are compared by
+// value, so the check is by value too.
+func TestEveryLocaleIDNamesOneBuild(t *testing.T) {
+	seen := map[uint64]string{lcidEnglish: "English"}
+	for _, l := range languages {
+		v, err := strconv.ParseUint(l.LCID, 16, 32)
+		if err != nil {
+			t.Fatalf("%s: locale %q is not hex", l.Suffix, l.LCID)
+		}
+		if other, ok := seen[v]; ok {
+			t.Fatalf("%s and %s share the locale %s", l.Suffix, other, l.LCID)
+		}
+		seen[v] = l.Suffix
+	}
+}
+
+// Why (D10, #509): on the main page of minimal and safeboot firmware (the only page still read for a
+// language), a code that is not in the table is not a language build. A custom build or a language
+// upstream adds later must be asked for, never turned into a file name that was made up from the code.
+// "pt" is written by two builds and names neither without the locale, which that firmware cannot report.
 func TestUnlistedHTMLLanguageIsUnknownNotGuessed(t *testing.T) {
-	for _, lang := range []string{"xx", "zh-Hant", "en-GB", "pt-BR", "deu", "d", "tasmota-DE", "xé", "   "} {
-		root := &RootInfo{Lang: lang, LangKnown: true}
-		id, err := Detect(Inputs{Status2: status2("16.0.0(release-tasmota)", "ESP8266EX"), Root: root})
-		wantErr(t, err, nil)
-		if id.LanguageKnown || id.Language != "" {
-			t.Errorf("<html lang=%q> read as %q known %v, want unknown", lang, id.Language, id.LanguageKnown)
+	for _, lang := range []string{"xx", "zh-Hant", "en-GB", "pt-BR", "pt", "deu", "d", "tasmota-DE", "xé", "   "} {
+		if got, ok := languageFromRoot(&RootInfo{Lang: lang, LangKnown: true}); ok || got != "" {
+			t.Errorf("<html lang=%q> read as %q known %v, want unknown", lang, got, ok)
 		}
 	}
 }
@@ -212,7 +181,7 @@ func TestUnlistedHTMLLanguageIsUnknownNotGuessed(t *testing.T) {
 // Case and blanks around the code do not matter: "DE" or " de " is German.
 func TestHTMLLanguageIgnoresCaseAndBlanks(t *testing.T) {
 	for in, want := range map[string]string{"DE": "DE", " de ": "DE", "Zh-hant-tw": "TW", "EN": "", " en": ""} {
-		got, ok := languageFromHTML(in, "")
+		got, ok := languageFromHTML(in)
 		if !ok || got != want {
 			t.Errorf("languageFromHTML(%q) = %q, %v, want %q, true", in, got, ok, want)
 		}
@@ -259,7 +228,7 @@ func TestLanguageChoiceListsEveryUpstreamBuildOnce(t *testing.T) {
 func TestLanguagesReturnsACopy(t *testing.T) {
 	l := Languages()
 	l[0].HTML, l[0].Suffix = "de", "XX"
-	if got, ok := languageFromHTML("de", ""); !ok || got != "DE" {
+	if got, ok := languageFromHTML("de"); !ok || got != "DE" {
 		t.Fatalf("languageFromHTML(de) = %q, %v after the copy was edited", got, ok)
 	}
 	if again := Languages(); again[0].Suffix == "XX" {

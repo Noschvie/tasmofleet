@@ -48,13 +48,13 @@ func (a *deviceAPI) cmd(ctx context.Context, t tasmota.Target, c string) (json.R
 
 var unknownStatus2 = json.RawMessage(`{"Command":"Unknown","Input":"STATUS 2"}`)
 
-// firmwareInputs collects the answers Detect needs. Minimal firmware
-// (ESP8266) and safeboot (ESP32) answer Status 2 with Unknown; then the bare
-// Upgrade probe gives the version and the root page the image and
-// language. withRoot fetches the root page for normal firmware too (the
-// language build is only visible there).
-func (a *deviceAPI) firmwareInputs(ctx context.Context, t tasmota.Target, withRoot bool) (fwselect.Inputs, bool, error) {
-	var in fwselect.Inputs
+// firmwareInputs collects the answers Detect needs. Full firmware is named by Status 2 (and Status 4,
+// which ProbeIdentity adds for the language, #686): no main page. Minimal firmware (ESP8266) and safeboot
+// (ESP32) answer Status 2 with Unknown; then the bare Upgrade probe gives the version and intermediateRoot
+// the image, when anything can name it. jobFamily is the chip family the update job read at its preflight
+// (ChipUnknown outside a job and at the preflight itself).
+func (a *deviceAPI) firmwareInputs(ctx context.Context, t tasmota.Target, jobFamily model.ChipFamily) (fwselect.Inputs, bool, error) {
+	in := fwselect.Inputs{JobFamily: jobFamily}
 	raw, err := a.cmd(ctx, t, "Status 2")
 	unknown := errors.Is(err, tasmota.ErrUnknownCommand)
 	if err != nil && !unknown {
@@ -67,35 +67,61 @@ func (a *deviceAPI) firmwareInputs(ctx context.Context, t tasmota.Target, withRo
 			return in, false, fmt.Errorf("status 2: %w", perr)
 		}
 	}
-	if unknown {
-		if len(raw) == 0 {
-			raw = unknownStatus2
-		}
-		up, err := a.cmd(ctx, t, "Upgrade")
-		if err != nil {
-			return in, true, fmt.Errorf("upgrade probe: %w", err)
-		}
-		p, err := tasmota.ParseUpgradeProbe(up)
-		if err != nil {
-			return in, true, fmt.Errorf("upgrade probe: %w", err)
-		}
-		in.Upgrade = &fwselect.UpgradeProbe{Version: p.Version}
-	}
 	in.Status2 = raw
-	if unknown || withRoot {
-		ri, err := a.c.RootPage(ctx, t)
-		if err != nil && !unknown && errors.Is(err, transport.ErrNoInfo) {
-			// Over MQTT the page is built from INFO1, which a device sends once per boot. Firmware that
-			// answered Status 2 needs the page only for its language, which stays unknown (D10); minimal
-			// firmware needs it for its image, so there the missing INFO1 stops the probe.
-			return in, unknown, nil
-		}
-		if err != nil {
-			return in, unknown, fmt.Errorf("root page: %w", err)
-		}
-		in.Root = &fwselect.RootInfo{Version: ri.Version, Image: ri.Image, Lang: ri.Lang, LangKnown: ri.LangKnown, Minimal: ri.Minimal}
+	if !unknown {
+		return in, false, nil
 	}
-	return in, unknown, nil
+	if len(raw) == 0 {
+		in.Status2 = unknownStatus2
+	}
+	up, err := a.cmd(ctx, t, "Upgrade")
+	if err != nil {
+		return in, true, fmt.Errorf("upgrade probe: %w", err)
+	}
+	p, err := tasmota.ParseUpgradeProbe(up)
+	if err != nil {
+		return in, true, fmt.Errorf("upgrade probe: %w", err)
+	}
+	in.Upgrade = &fwselect.UpgradeProbe{Version: p.Version}
+	if in.Root, err = a.intermediateRoot(ctx, t, jobFamily); err != nil {
+		return in, true, err
+	}
+	return in, true, nil
+}
+
+// info1Reader is the router's INFO1-only read (transport.Router.Info1Root): the image of minimal or
+// safeboot firmware from the INFO1 it published since its last boot, without a request to the device.
+type info1Reader interface {
+	Info1Root(ctx context.Context, t tasmota.Target) (tasmota.RootInfo, error)
+}
+
+// intermediateRoot names the image of firmware that answered Status 2 with Unknown (#686).
+//
+// Inside an update job (jobFamily known) the main page is never read: the device's INFO1 since its last
+// boot names the image when MQTT carries it, and Detect checks that image against the job's family; without
+// a usable INFO1 Root stays nil, and Detect names the intermediate image of the job's family itself (the
+// job expects it). Outside a job (the preview, a retry's look, the preflight of a device found on minimal)
+// the router's RootPage reads INFO1 first and the main page only without one (the fallback, path 3); a
+// job's pin keeps its meaning there.
+func (a *deviceAPI) intermediateRoot(ctx context.Context, t tasmota.Target, jobFamily model.ChipFamily) (*fwselect.RootInfo, error) {
+	var ri tasmota.RootInfo
+	var err error
+	if jobFamily != model.ChipUnknown {
+		r, ok := a.c.(info1Reader)
+		if !ok {
+			return nil, nil
+		}
+		ri, err = r.Info1Root(ctx, t)
+		if errors.Is(err, transport.ErrNoInfo) || errors.Is(err, tasmota.ErrUnreachable) {
+			return nil, nil // no INFO1 this job can vouch for: the job's own family names the image
+		}
+	} else {
+		ri, err = a.c.RootPage(ctx, t)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("root page: %w", err)
+	}
+	return &fwselect.RootInfo{Version: ri.Version, Image: ri.Image, Lang: ri.Lang, LangKnown: ri.LangKnown, Minimal: ri.Minimal}, nil
 }
 
 func (a *deviceAPI) uptime(ctx context.Context, t tasmota.Target) (int64, error) {
@@ -110,11 +136,11 @@ func (a *deviceAPI) uptime(ctx context.Context, t tasmota.Target) (int64, error)
 	return sts.UptimeSec, nil
 }
 
-// ProbeIdentity runs Status 2 (Upgrade probe + root page on minimal),
-// Status 4 and Status 11 (normal firmware only), the root page and OtaUrl.
-func (a *deviceAPI) ProbeIdentity(ctx context.Context, d model.Device) (model.Identity, string, int64, error) {
+// ProbeIdentity runs Status 2 (Upgrade probe and the image source on minimal, see firmwareInputs),
+// Status 4 and Status 11 (normal firmware only) and OtaUrl.
+func (a *deviceAPI) ProbeIdentity(ctx context.Context, d model.Device, jobFamily model.ChipFamily) (model.Identity, string, int64, error) {
 	t := tasmota.TargetFor(d)
-	in, minimal, err := a.firmwareInputs(ctx, t, true)
+	in, minimal, err := a.firmwareInputs(ctx, t, jobFamily)
 	if err != nil {
 		return model.Identity{}, "", 0, err
 	}
@@ -151,9 +177,9 @@ func (a *deviceAPI) ProbeIdentity(ctx context.Context, d model.Device) (model.Id
 // Probe is the liveness check while waiting: Status 2 (with the minimal
 // fallback) and Status 11. Any answer means online; an identity Detect
 // cannot build is returned empty, which the machine never reads as change.
-func (a *deviceAPI) Probe(ctx context.Context, d model.Device) (model.Identity, int64, error) {
+func (a *deviceAPI) Probe(ctx context.Context, d model.Device, jobFamily model.ChipFamily) (model.Identity, int64, error) {
 	t := tasmota.TargetFor(d)
-	in, minimal, err := a.firmwareInputs(ctx, t, false)
+	in, minimal, err := a.firmwareInputs(ctx, t, jobFamily)
 	if err != nil {
 		return model.Identity{}, 0, err
 	}

@@ -592,7 +592,7 @@ func TestStepVerify(t *testing.T) {
 			},
 		},
 		{
-			// Why (H1): over MQTT the language cannot be read, so the probe says "unknown" and the job's reference
+			// Why (H1): a probe that cannot read the language (no Status 4 locale of a known build) says "unknown", and the job's reference
 			// (the person's choice) must not make a successful flash look like "not taken".
 			name: "verify/identity/stage final, language chosen, probe cannot read it", in: func() model.Job {
 				j := vFinal

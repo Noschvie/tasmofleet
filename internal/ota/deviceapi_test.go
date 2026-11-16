@@ -7,12 +7,14 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/hellwand/tasmofleet/internal/fwselect"
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
 // fixtureClient answers commands from the captured device fixtures and
@@ -93,32 +95,49 @@ func newTestAPI(c *fixtureClient, got *fwselect.Inputs, detectErr error) *device
 
 var cabinetDevice = model.Device{ID: 5, Address: "192.0.2.5", Identity: model.Identity{FlashSizeKB: 1024, ProgramFlashSizeKB: 1024, FreeKB: 352}}
 
-func TestDeviceAPIProbeIdentityNormalFirmware(t *testing.T) {
+// Why (#686): the main page is HTML for people that changes with the firmware; full firmware is named by
+// Status 2 and its language build by the locale ID in Status 4, so the identity probe of the update preview
+// (and of a job) reads no page at all. Individual queries in a fixed order; never Status 0 (spliced replies
+// on low-heap ESP8266) and no Upgrade probe on normal firmware.
+func TestTheUpdatePreviewOfFullFirmwareReadsNoMainPage(t *testing.T) {
+	for _, fam := range []model.ChipFamily{model.ChipUnknown, model.ChipESP8266} {
+		c := &fixtureClient{t: t, dir: cabinet}
+		var in fwselect.Inputs
+		id, otaURL, up, err := newTestAPI(c, &in, nil).ProbeIdentity(context.Background(), cabinetDevice, fam)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := []string{"Status 2", "Status 4", "Status 11", "OtaUrl"}
+		if !reflect.DeepEqual(c.sent, want) {
+			t.Fatalf("job family %q: sent %v, want %v", fam, c.sent, want)
+		}
+		if !strings.Contains(string(in.Status2), "StatusFWR") || !strings.Contains(string(in.Status4), "StatusMEM") || in.Upgrade != nil || in.Root != nil {
+			t.Fatalf("detect inputs %+v", in)
+		}
+		if up != 4235 || otaURL != "http://tasmoadmin.example.internal:80/data/firmwares/tasmota-minimal.bin.gz" || id.Version != "16.0.0" {
+			t.Fatalf("uptime %d otaURL %q id %+v", up, otaURL, id)
+		}
+	}
+	// With the real Detect the language is the locale of Status 4: a German build is German without a page.
 	c := &fixtureClient{t: t, dir: cabinet}
-	var in fwselect.Inputs
-	id, otaURL, up, err := newTestAPI(c, &in, nil).ProbeIdentity(context.Background(), cabinetDevice)
-	if err != nil {
-		t.Fatal(err)
+	c.replies = map[string]string{"Status 4": strings.Replace(string(c.fixture("status-4.json")), `"Features":["0809",`, `"Features":["0407",`, 1)}
+	a := NewDeviceAPI(c).(*deviceAPI)
+	a.gap = 0
+	id, _, _, err := a.ProbeIdentity(context.Background(), cabinetDevice, model.ChipUnknown)
+	if err != nil || !id.LanguageKnown || id.Language != "DE" {
+		t.Fatalf("identity %+v, err %v, want the German build read from Status 4", id, err)
 	}
-	// Individual queries in a fixed order; never Status 0 (spliced replies
-	// on low-heap ESP8266) and no Upgrade probe on normal firmware.
-	want := []string{"Status 2", "GET /", "Status 4", "Status 11", "OtaUrl"}
-	if !reflect.DeepEqual(c.sent, want) {
-		t.Fatalf("sent %v, want %v", c.sent, want)
-	}
-	if !strings.Contains(string(in.Status2), "StatusFWR") || !strings.Contains(string(in.Status4), "StatusMEM") || in.Upgrade != nil {
-		t.Fatalf("detect inputs %+v", in)
-	}
-	if in.Root == nil || in.Root.Lang != "en" || !in.Root.LangKnown || in.Root.Image != "release-tasmota" {
-		t.Fatalf("root info %+v", in.Root)
-	}
-	if up != 4235 || otaURL != "http://tasmoadmin.example.internal:80/data/firmwares/tasmota-minimal.bin.gz" || id.Version != "16.0.0" {
-		t.Fatalf("uptime %d otaURL %q id %+v", up, otaURL, id)
+	for _, cmd := range c.sent {
+		if cmd == "GET /" {
+			t.Fatalf("the main page was read: %v", c.sent)
+		}
 	}
 }
 
 // Minimal firmware knows only five commands: Status 2 is Unknown, the
-// version comes from the bare Upgrade probe, image and language from GET /.
+// version comes from the bare Upgrade probe. Outside a job (the preview, a
+// retry's look) nothing else names the image, so the client's main page is read
+// (the router reads an INFO1 first there, #686: path 3 of the fallback).
 // Flash data cannot be read there, so the last known values stay.
 func TestDeviceAPIProbeIdentityMinimal(t *testing.T) {
 	for _, viaErr := range []bool{false, true} {
@@ -127,7 +146,7 @@ func TestDeviceAPIProbeIdentityMinimal(t *testing.T) {
 			c.errs = map[string]error{"Status 2": tasmota.ErrUnknownCommand}
 		}
 		var in fwselect.Inputs
-		id, _, up, err := newTestAPI(c, &in, nil).ProbeIdentity(context.Background(), cabinetDevice)
+		id, _, up, err := newTestAPI(c, &in, nil).ProbeIdentity(context.Background(), cabinetDevice, model.ChipUnknown)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -145,28 +164,34 @@ func TestDeviceAPIProbeIdentityMinimal(t *testing.T) {
 }
 
 func TestDeviceAPIProbeIdentityErrors(t *testing.T) {
-	for _, cmd := range []string{"Status 2", "GET /", "Status 4", "Status 11", "OtaUrl"} {
+	for _, cmd := range []string{"Status 2", "Status 4", "Status 11", "OtaUrl"} {
 		c := &fixtureClient{t: t, dir: cabinet, errs: map[string]error{cmd: tasmota.ErrUnreachable}}
 		var in fwselect.Inputs
-		if _, _, _, err := newTestAPI(c, &in, nil).ProbeIdentity(context.Background(), cabinetDevice); !errors.Is(err, tasmota.ErrUnreachable) {
+		if _, _, _, err := newTestAPI(c, &in, nil).ProbeIdentity(context.Background(), cabinetDevice, model.ChipUnknown); !errors.Is(err, tasmota.ErrUnreachable) {
 			t.Errorf("%s failing: err %v", cmd, err)
 		}
 	}
+	// Minimal firmware outside a job needs the page; without it the probe fails.
+	c0 := &fixtureClient{t: t, dir: cabinet, minimal: true, errs: map[string]error{"GET /": tasmota.ErrUnreachable}}
+	var in0 fwselect.Inputs
+	if _, _, _, err := newTestAPI(c0, &in0, nil).ProbeIdentity(context.Background(), cabinetDevice, model.ChipUnknown); !errors.Is(err, tasmota.ErrUnreachable) {
+		t.Errorf("main page of minimal firmware failing: err %v", err)
+	}
 	c := &fixtureClient{t: t, dir: cabinet}
 	var in fwselect.Inputs
-	if _, _, _, err := newTestAPI(c, &in, fwselect.ErrFamilyMismatch).ProbeIdentity(context.Background(), cabinetDevice); !errors.Is(err, fwselect.ErrFamilyMismatch) {
+	if _, _, _, err := newTestAPI(c, &in, fwselect.ErrFamilyMismatch).ProbeIdentity(context.Background(), cabinetDevice, model.ChipUnknown); !errors.Is(err, fwselect.ErrFamilyMismatch) {
 		t.Errorf("detect error not returned: %v", err)
 	}
 	c = &fixtureClient{t: t, dir: cabinet, replies: map[string]string{"Status 2": `{"StatusFWR":`}}
-	if _, _, _, err := newTestAPI(c, &in, nil).ProbeIdentity(context.Background(), cabinetDevice); err == nil {
+	if _, _, _, err := newTestAPI(c, &in, nil).ProbeIdentity(context.Background(), cabinetDevice, model.ChipUnknown); err == nil {
 		t.Error("broken Status 2 accepted")
 	}
 	c = &fixtureClient{t: t, dir: cabinet, minimal: true, errs: map[string]error{"Upgrade": tasmota.ErrTimeout}}
-	if _, _, _, err := newTestAPI(c, &in, nil).ProbeIdentity(context.Background(), cabinetDevice); !errors.Is(err, tasmota.ErrTimeout) {
+	if _, _, _, err := newTestAPI(c, &in, nil).ProbeIdentity(context.Background(), cabinetDevice, model.ChipUnknown); !errors.Is(err, tasmota.ErrTimeout) {
 		t.Errorf("upgrade probe error: %v", err)
 	}
 	c = &fixtureClient{t: t, dir: cabinet, minimal: true, replies: map[string]string{"Upgrade": `{"Upgrade":"what"}`}}
-	if _, _, _, err := newTestAPI(c, &in, nil).ProbeIdentity(context.Background(), cabinetDevice); err == nil {
+	if _, _, _, err := newTestAPI(c, &in, nil).ProbeIdentity(context.Background(), cabinetDevice, model.ChipUnknown); err == nil {
 		t.Error("unparsable upgrade probe accepted")
 	}
 }
@@ -176,7 +201,7 @@ func TestDeviceAPIProbeIdentityErrors(t *testing.T) {
 func TestDeviceAPIProbe(t *testing.T) {
 	c := &fixtureClient{t: t, dir: cabinet}
 	var in fwselect.Inputs
-	id, up, err := newTestAPI(c, &in, errors.New("no language")).Probe(context.Background(), cabinetDevice)
+	id, up, err := newTestAPI(c, &in, errors.New("no language")).Probe(context.Background(), cabinetDevice, model.ChipUnknown)
 	if err != nil || up != 4235 || id != (model.Identity{}) {
 		t.Fatalf("id %+v up %d err %v", id, up, err)
 	}
@@ -184,7 +209,7 @@ func TestDeviceAPIProbe(t *testing.T) {
 		t.Fatalf("sent %v, want %v", c.sent, want)
 	}
 	c = &fixtureClient{t: t, dir: cabinet, minimal: true}
-	id, up, err = newTestAPI(c, &in, nil).Probe(context.Background(), cabinetDevice)
+	id, up, err = newTestAPI(c, &in, nil).Probe(context.Background(), cabinetDevice, model.ChipUnknown)
 	if err != nil || up != 0 || id.Version != "16.0.0" {
 		t.Fatalf("minimal: id %+v up %d err %v", id, up, err)
 	}
@@ -192,11 +217,11 @@ func TestDeviceAPIProbe(t *testing.T) {
 		t.Fatalf("sent %v, want %v", c.sent, want)
 	}
 	c = &fixtureClient{t: t, dir: cabinet, errs: map[string]error{"Status 2": tasmota.ErrUnreachable}}
-	if _, _, err := newTestAPI(c, &in, nil).Probe(context.Background(), cabinetDevice); !errors.Is(err, tasmota.ErrUnreachable) {
+	if _, _, err := newTestAPI(c, &in, nil).Probe(context.Background(), cabinetDevice, model.ChipUnknown); !errors.Is(err, tasmota.ErrUnreachable) {
 		t.Fatalf("offline device: err %v", err)
 	}
 	c = &fixtureClient{t: t, dir: cabinet, errs: map[string]error{"Status 11": tasmota.ErrTimeout}}
-	if _, _, err := newTestAPI(c, &in, nil).Probe(context.Background(), cabinetDevice); !errors.Is(err, tasmota.ErrTimeout) {
+	if _, _, err := newTestAPI(c, &in, nil).Probe(context.Background(), cabinetDevice, model.ChipUnknown); !errors.Is(err, tasmota.ErrTimeout) {
 		t.Fatalf("status 11 failing: err %v", err)
 	}
 }
@@ -280,7 +305,7 @@ func TestDeviceAPIRealDetectOnFixtures(t *testing.T) {
 		t.Run(filepath.Base(dir), func(t *testing.T) {
 			a := NewDeviceAPI(&fixtureClient{t: t, dir: dir}).(*deviceAPI)
 			a.gap = 0
-			id, _, up, err := a.ProbeIdentity(context.Background(), cabinetDevice)
+			id, _, up, err := a.ProbeIdentity(context.Background(), cabinetDevice, model.ChipUnknown)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -311,23 +336,25 @@ var readOnlyCommands = map[string]bool{"Status 2": true, "Status 4": true, "Stat
 // refused before the variant was looked at ("root page: ... no Tasmota footer"), so even the Variant
 // override could not help. Why it matters: the device must reach the variant decision, and that
 // decision must still refuse until the person chooses a variant (CLAUDE.md safety rule 1): the
-// custom image is never guessed to be a stock one.
+// custom image is never guessed to be a stock one. Since #686 the page of full firmware is not read
+// at all; the German build is told by the locale in Status 4 (SYNTHETIC: 0407 in the capture's reply).
 func TestProbeIdentityVendorFooterRefusesWithoutVariantChoice(t *testing.T) {
 	c := &fixtureClient{
 		t: t, dir: "../../testdata/fixtures/devices/prusa-plug", root: vendorFooterPage(t),
 		replies: map[string]string{"Status 2": `{"StatusFWR":{"Version":"14.3.0(tasmota-NOUS_A1T_DE)","BuildDateTime":"2026-10-16T07:29:08","Boot":31,"Core":"2.7.8","SDK":"2.2.2-dev(38a443e)","CpuFrequency":80,"Hardware":"ESP8266EX","CR":"359/699"}}`},
 	}
+	c.replies["Status 4"] = strings.Replace(string(c.fixture("status-4.json")), `"Features":["0809",`, `"Features":["0407",`, 1)
 	a := NewDeviceAPI(c).(*deviceAPI)
 	a.gap = 0
-	id, _, _, err := a.ProbeIdentity(context.Background(), cabinetDevice)
+	id, _, _, err := a.ProbeIdentity(context.Background(), cabinetDevice, model.ChipUnknown)
 	if err != nil {
 		t.Fatalf("probe of a full-firmware device with a vendor footer: %v", err)
 	}
 	if id.Family != model.ChipESP8266 || id.Version != "14.3.0" || id.Variant != "unknown" || !id.LanguageKnown || id.Language != "DE" {
-		t.Fatalf("identity %+v, want esp8266 14.3.0, variant unknown, language DE read from the page", id)
+		t.Fatalf("identity %+v, want esp8266 14.3.0, variant unknown, language DE read from Status 4", id)
 	}
 	for _, cmd := range c.sent {
-		if !readOnlyCommands[cmd] {
+		if !readOnlyCommands[cmd] || cmd == "GET /" {
 			t.Fatalf("the probe sent %q", cmd)
 		}
 	}
@@ -359,7 +386,7 @@ func TestProbeIdentityMinimalPageWithoutImageIsRefused(t *testing.T) {
 	c := &fixtureClient{t: t, dir: cabinet, minimal: true, root: []byte(page)}
 	a := NewDeviceAPI(c).(*deviceAPI)
 	a.gap = 0
-	_, _, _, err := a.ProbeIdentity(context.Background(), cabinetDevice)
+	_, _, _, err := a.ProbeIdentity(context.Background(), cabinetDevice, model.ChipUnknown)
 	if !errors.Is(err, fwselect.ErrUnknownHardware) {
 		t.Fatalf("minimal page without image: %v, want ErrUnknownHardware", err)
 	}
@@ -367,5 +394,107 @@ func TestProbeIdentityMinimalPageWithoutImageIsRefused(t *testing.T) {
 		if !readOnlyCommands[cmd] {
 			t.Fatalf("the probe sent %q", cmd)
 		}
+	}
+}
+
+// errRefused marks a test row that only needs a refusal, of any kind.
+var errRefused = errors.New("refused")
+
+// info1Client is a fixture client that also offers the router's INFO1-only read (transport.Router.Info1Root).
+type info1Client struct {
+	*fixtureClient
+	info1 tasmota.RootInfo
+	err   error
+}
+
+func (c *info1Client) Info1Root(context.Context, tasmota.Target) (tasmota.RootInfo, error) {
+	c.sent = append(c.sent, "INFO1")
+	return c.info1, c.err
+}
+
+// Why (#686): an update job through minimal (ESP8266) or safeboot (ESP32) must not read the main page, an
+// HTML page for people that changes with the firmware: the job read the chip at its preflight, so the bare
+// Upgrade reply names the version and the job's family the intermediate image. Neither the liveness probe of
+// every poll nor the identity probe of the verify reads the page, and the identity is the one the machine
+// needs to go on (minimal: ESP8266, safeboot: family unknown, as before).
+func TestAJobThroughMinimalOrSafebootReadsNoMainPage(t *testing.T) {
+	for _, tc := range []struct {
+		fam     model.ChipFamily
+		variant string
+		family  model.ChipFamily
+	}{
+		{model.ChipESP8266, "minimal", model.ChipESP8266},
+		{model.ChipESP32, "safeboot", model.ChipUnknown},
+		{model.ChipESP32C3, "safeboot", model.ChipUnknown},
+	} {
+		for _, withRouter := range []bool{false, true} {
+			fc := &fixtureClient{t: t, dir: cabinet, minimal: true}
+			var c tasmota.Client = fc
+			if withRouter {
+				c = &info1Client{fixtureClient: fc, err: transport.ErrNoInfo} // MQTT carries the device but sent no INFO1 since its boot
+			}
+			a := NewDeviceAPI(c).(*deviceAPI)
+			a.gap = 0
+			id, up, err := a.Probe(context.Background(), cabinetDevice, tc.fam)
+			if err != nil || up != 0 || id.Variant != tc.variant || id.Family != tc.family || id.Version != "16.0.0" || id.Image != "" {
+				t.Fatalf("%s probe: id %+v up %d err %v", tc.fam, id, up, err)
+			}
+			id, _, _, err = a.ProbeIdentity(context.Background(), cabinetDevice, tc.fam)
+			if err != nil || id.Variant != tc.variant || id.Family != tc.family {
+				t.Fatalf("%s identity probe: id %+v err %v", tc.fam, id, err)
+			}
+			for _, cmd := range fc.sent {
+				if cmd == "GET /" {
+					t.Fatalf("%s job read the main page: %v", tc.fam, fc.sent)
+				}
+			}
+		}
+	}
+}
+
+// Why (#686, MQTT first): inside a job the INFO1 a device usable over MQTT published since its last boot names
+// the image, and it must be the intermediate image of the job's chip, on every transport: a safeboot INFO1 on an
+// ESP8266 job (another device on the topic, a forged INFO1) stops the job instead of passing as minimal. An
+// INFO1 the router cannot vouch for (MQTT down or not usable) leaves the job to its own family; any other
+// failure of the read fails the probe rather than being guessed around. The page is never read.
+func TestAJobTakesTheImageFromTheINFO1AndRefusesOneOfAnotherChip(t *testing.T) {
+	minimal := tasmota.RootInfo{Version: "16.0.0", Image: "release-minimal", Minimal: true}
+	safeboot := tasmota.RootInfo{Version: "16.0.0", Image: "release-safeboot", Minimal: true}
+	for _, tc := range []struct {
+		name    string
+		info1   tasmota.RootInfo
+		err     error
+		fam     model.ChipFamily
+		image   string
+		wantErr error // nil: accepted; errRefused: refused, whatever the kind
+	}{
+		{"minimal INFO1 on an esp8266 job", minimal, nil, model.ChipESP8266, "release-minimal", nil},
+		{"safeboot INFO1 on an esp32 job", safeboot, nil, model.ChipESP32, "release-safeboot", nil},
+		{"safeboot INFO1 on an esp8266 job", safeboot, nil, model.ChipESP8266, "", fwselect.ErrFamilyMismatch},
+		{"minimal INFO1 on an esp32-s3 job", minimal, nil, model.ChipESP32S3, "", fwselect.ErrFamilyMismatch},
+		{"INFO1 of another version than the Upgrade reply", tasmota.RootInfo{Version: "15.0.0", Image: "release-minimal"}, nil, model.ChipESP8266, "", errRefused},
+		{"MQTT not usable", tasmota.RootInfo{}, tasmota.ErrUnreachable, model.ChipESP8266, "", nil},
+		{"INFO1 unreadable", tasmota.RootInfo{}, tasmota.ErrBadResponse, model.ChipESP8266, "", tasmota.ErrBadResponse},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fc := &fixtureClient{t: t, dir: cabinet, minimal: true}
+			a := NewDeviceAPI(&info1Client{fixtureClient: fc, info1: tc.info1, err: tc.err}).(*deviceAPI)
+			a.gap = 0
+			id, _, _, err := a.ProbeIdentity(context.Background(), cabinetDevice, tc.fam)
+			switch {
+			case tc.wantErr == nil && err != nil:
+				t.Fatalf("err %v", err)
+			case tc.wantErr != nil && err == nil:
+				t.Fatalf("identity %+v accepted, want an error", id)
+			case tc.wantErr != nil && !errors.Is(tc.wantErr, errRefused) && !errors.Is(err, tc.wantErr):
+				t.Fatalf("err %v, want %v", err, tc.wantErr)
+			}
+			if err == nil && id.Image != tc.image {
+				t.Fatalf("image %q, want %q", id.Image, tc.image)
+			}
+			if !slices.Contains(fc.sent, "INFO1") || slices.Contains(fc.sent, "GET /") {
+				t.Fatalf("sent %v: the job must ask the INFO1 and never the page", fc.sent)
+			}
+		})
 	}
 }

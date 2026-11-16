@@ -158,9 +158,11 @@ func (p *Prober) cmd(ctx context.Context, t tasmota.Target, c string) (json.RawM
 // refusal.
 //
 // Which reads go where (#851): the MAC check of the address (Status 5, without credentials first), Status 2, Status 4
-// or the bare Upgrade and the main page stay at the address. The page exists only over HTTP, the Status 5 vouches for
-// it and for the credentials, and Status 2 and Status 4 make the identity with it that fwselect selects and guards
-// firmware by: its source stays the HTTP probe (spec "Identity source", #87; identity over MQTT is #682). The facts
+// or the bare Upgrade stay at the address. The Status 5 vouches for them and for the credentials, and Status 2 and
+// Status 4 make the identity that fwselect selects and guards firmware by: its source stays the HTTP probe (spec
+// "Identity source", #87; identity over MQTT is #682). The language is the locale ID of Status 4 (#686); no main
+// page is read for full firmware. Minimal and safeboot firmware are named by their INFO1 since the last boot
+// through the router when the device is usable over MQTT, and by the main page at the address otherwise. The facts
 // after it (probeFacts: Status 6, SetOption3, Status 1, the Status object) go over MQTT first when the router reads the
 // device over MQTT (ReadsOverMQTT) and a stored device answers a Status 5 on its topic with a stored MAC (checkTopic),
 // pinned there; otherwise, and when MQTT stops answering them, they are read at the address as before.
@@ -227,17 +229,21 @@ func (p *Prober) probe(ctx context.Context, d model.Device, verify func(probed) 
 		if probe, err := tasmota.ParseUpgradeProbe(up); err == nil {
 			in.Upgrade = &fwselect.UpgradeProbe{Version: probe.Version}
 		}
-	}
-	if err := p.pause(ctx); err != nil {
-		return out, err
-	}
-	root, err := p.Client.RootPage(ctx, t)
-	if err != nil {
-		if out.minimal {
+		// Only minimal and safeboot firmware need a source for their image (#686); full firmware is named by
+		// Status 2 and its language by the Status 4 locale. The router reads a stored device's INFO1 since its
+		// last boot first, when the device is usable over MQTT, and the main page only without one (and for an
+		// address that is no stored device yet). A prober without a router (the command line) reads the page.
+		if err := p.pause(ctx); err != nil {
+			return out, err
+		}
+		pages := p.Client
+		if p.Reads != nil {
+			pages = p.Reads
+		}
+		root, err := pages.RootPage(ctx, t)
+		if err != nil {
 			return out, fmt.Errorf("main page: %w", err)
 		}
-		// The language only comes from the page; the identity is usable without it.
-	} else {
 		in.Root = &fwselect.RootInfo{Version: root.Version, Image: root.Image, Lang: root.Lang, LangKnown: root.LangKnown, Minimal: root.Minimal}
 	}
 	if out.identity, err = fwselect.Detect(in); err != nil {

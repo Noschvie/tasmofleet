@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -44,9 +45,69 @@ func TestDescribeFillsIdentityWithoutStatus0(t *testing.T) {
 	if got.MQTT == model.MQTTUnknown {
 		t.Fatal("MQTT capability must be probed")
 	}
-	// The language comes from the main page this probe read, so it is a fact (D10).
+	// The language comes from the locale ID of the Status 4 this probe read, so it is a fact (D10, #686).
 	if !got.Identity.LanguageKnown {
 		t.Error("an HTTP probe must mark the language as read")
+	}
+}
+
+// pageCounter counts the main page reads of the client it wraps; root, when set, answers them instead.
+type pageCounter struct {
+	tasmota.Client
+	mu    sync.Mutex
+	pages int
+	root  *tasmota.RootInfo
+}
+
+func (c *pageCounter) RootPage(ctx context.Context, t tasmota.Target) (tasmota.RootInfo, error) {
+	c.mu.Lock()
+	c.pages++
+	c.mu.Unlock()
+	if c.root != nil {
+		return *c.root, nil
+	}
+	return c.Client.RootPage(ctx, t)
+}
+
+func (c *pageCounter) n() int { c.mu.Lock(); defer c.mu.Unlock(); return c.pages }
+
+// Why (#686): the main page is HTML for people and may change between firmware versions (#616). Full
+// firmware is named by Status 2 and its language build by the locale ID of Status 4, so the identity
+// probe (adding a device, Refresh identity, the background refresh) reads no page at all, and a German
+// build is still German.
+func TestTheIdentityProbeOfFullFirmwareReadsNoMainPage(t *testing.T) {
+	p, d := probeFixture(t, simulator.DeviceSpec{Name: "plug", Profile: simulator.ProfileESP8266_4M, Locale: "0407"})
+	pages := &pageCounter{Client: p.Client}
+	p.Client = pages
+	got, err := p.Describe(context.Background(), d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pages.n() != 0 {
+		t.Fatalf("the identity probe of full firmware read the main page %d times", pages.n())
+	}
+	if !got.Identity.LanguageKnown || got.Identity.Language != "DE" || got.Identity.Family != model.ChipESP8266 {
+		t.Fatalf("identity %+v, want the German build of an ESP8266", got.Identity)
+	}
+}
+
+// Why (#686, MQTT first): minimal firmware still needs a source for its image, and the router names it from
+// the INFO1 the device published since its last boot when MQTT carries it; only without one does it read the
+// page. So the prober asks the router (its Reads) for it, not its own HTTP client.
+func TestTheIdentityProbeAsksTheRouterForTheImageOfMinimalFirmware(t *testing.T) {
+	p, d := probeFixture(t, simulator.DeviceSpec{Name: "m", Profile: simulator.ProfileESP8266Min})
+	direct := &pageCounter{Client: p.Client}
+	router := &pageCounter{Client: p.Client, root: &tasmota.RootInfo{Version: "16.0.0", Image: "release-minimal", Minimal: true}}
+	p.Client, p.Reads = direct, router
+	got, err := p.Describe(context.Background(), d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if direct.n() != 0 || router.n() != 1 {
+		t.Fatalf("page reads: prober's HTTP client %d, router %d; want the router once", direct.n(), router.n())
+	}
+	if got.Identity.Variant != "minimal" || got.Identity.Family != model.ChipESP8266 || got.Identity.Image != "release-minimal" {
+		t.Fatalf("identity %+v", got.Identity)
 	}
 }
 

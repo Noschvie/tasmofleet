@@ -28,9 +28,12 @@ import (
 type DeviceAPI interface {
 	// ProbeIdentity runs Status 2 (and the bare Upgrade probe if Status 2 is
 	// unknown), Status 4, Status 11 and OtaUrl sequentially (never Status 0).
-	ProbeIdentity(ctx context.Context, d model.Device) (ident model.Identity, otaURL string, uptime int64, err error)
-	// Probe is the cheap liveness/version check used while waiting.
-	Probe(ctx context.Context, d model.Device) (ident model.Identity, uptime int64, err error)
+	// jobFamily is the chip family the job read at its preflight (j.IdentityBefore.Family),
+	// ChipUnknown outside a job: with it, minimal and safeboot firmware are named without
+	// the main page (#686).
+	ProbeIdentity(ctx context.Context, d model.Device, jobFamily model.ChipFamily) (ident model.Identity, otaURL string, uptime int64, err error)
+	// Probe is the cheap liveness/version check used while waiting; jobFamily as for ProbeIdentity.
+	Probe(ctx context.Context, d model.Device, jobFamily model.ChipFamily) (ident model.Identity, uptime int64, err error)
 	SetOtaURL(ctx context.Context, d model.Device, url string) error
 	// Upgrade sends "Upgrade 1" and returns the URL echoed in the reply
 	// ("Version X from <url>"); the engine compares it with the URL it set.
@@ -552,7 +555,7 @@ func (e *Engine) previewDevice(ctx context.Context, d model.Device, r Request) P
 		return it
 	}
 	pctx, cancel := context.WithTimeout(ctx, e.opts.Machine.CommandTimeout)
-	ident, _, _, err := e.api.ProbeIdentity(pctx, d)
+	ident, _, _, err := e.api.ProbeIdentity(pctx, d, model.ChipUnknown)
 	cancel()
 	if err != nil {
 		it.Reason = "probe failed: " + err.Error()
@@ -1184,7 +1187,7 @@ func (e *Engine) exec(ctx context.Context, j model.Job, a Action) Event {
 
 	switch a.Kind {
 	case ActProbeIdentity:
-		ident, otaURL, up, err := e.api.ProbeIdentity(cctx, d)
+		ident, otaURL, up, err := e.api.ProbeIdentity(cctx, d, j.IdentityBefore.Family)
 		if err != nil {
 			return Event{Kind: EvCommandFailed, Err: err.Error()}
 		}
@@ -1192,7 +1195,9 @@ func (e *Engine) exec(ctx context.Context, j model.Job, a Action) Event {
 		// identities away from it) and makes the device's GroupTopic read look stale to the transport's write
 		// rule, so a job must not move it for a device that has one (a mixed batch would block the MQTT jobs'
 		// OtaUrl writes). Only a device that never had one gets it, and only from an HTTP job. A job over MQTT
-		// writes what it verified (version, image) and keeps the language fields as the MQTT refresh does.
+		// writes what it verified (version, image) and keeps the stored language fields as the MQTT refresh does
+		// (the identity source rule, #87); the language it read from the Status 4 locale (#686) still decides
+		// the job's own checks through ident. Which source may store it is #682.
 		stored := ident
 		stored.DetectedAt = d.Identity.DetectedAt
 		switch {
@@ -1298,7 +1303,7 @@ func (e *Engine) exec(ctx context.Context, j model.Job, a Action) Event {
 	case ActSafebootBack:
 		return e.switchBoot(cctx, d, tasmota.BootApp)
 	case ActProbe:
-		ident, up, err := e.api.Probe(cctx, d)
+		ident, up, err := e.api.Probe(cctx, d, j.IdentityBefore.Family)
 		if err != nil {
 			return Event{Kind: EvProbeOffline, Err: err.Error()}
 		}
@@ -1422,7 +1427,7 @@ func (e *Engine) submitRetry(ctx context.Context, actor string, batchID model.Ba
 			// (the default tasmota build if the job never got that far), the
 			// same choice the update dialog makes for such devices.
 			pctx, cancel := context.WithTimeout(ctx, e.opts.Machine.CommandTimeout)
-			ident, _, _, perr := e.api.ProbeIdentity(pctx, d)
+			ident, _, _, perr := e.api.ProbeIdentity(pctx, d, model.ChipUnknown)
 			cancel()
 			if perr == nil && isIntermediate(ident.Variant) {
 				r.Variant, r.AllowVariantChange = j.TargetVariant, true

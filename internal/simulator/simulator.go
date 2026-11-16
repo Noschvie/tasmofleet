@@ -123,6 +123,10 @@ type DeviceSpec struct {
 	// partition with almost no free space is what an ESP32 with the safeboot layout looks like to
 	// an image upload (#30).
 	FreeKB int
+	// Locale overrides the locale ID Status 4 reports as the first entry of Features ("" = as
+	// captured, 0809: the English build). The language build of a device is read from it (#686);
+	// it does not follow the image a test flashes.
+	Locale string
 	// MQTTPassword is the device's MqttPassword, which FileDownload and FileUpload
 	// compare their "Password" with (Error 1 on a mismatch).
 	MQTTPassword string

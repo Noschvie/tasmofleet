@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/mqttcmd"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
 )
@@ -80,5 +81,71 @@ func TestRootPagePathSelection(t *testing.T) {
 	ri, err := g.r.RootPage(t.Context(), g.target())
 	if err != nil || ri.Version != "15.1.0" {
 		t.Fatalf("unpinned, HTTP failing: %+v %v", ri, err)
+	}
+}
+
+// Why (#686, MQTT first): minimal and safeboot firmware are named by the INFO1 they publish on the first
+// connection after boot, a passive observation on the broker; the main page is an HTML page for people
+// that changes with the firmware. A stored device usable over MQTT that sent one since its last boot is
+// read from it without any HTTP request, even while HTTP works. Without one the page is still read over
+// HTTP (the fallback, path 3), and an address with no stored device (the first add) has no topic.
+func TestTheMainPageOutsideAJobIsTheINFO1SinceTheLastBoot(t *testing.T) {
+	g, _ := rootRig(t, `{"Info1":{"Module":"Sonoff Basic","Version":"16.0.0(release-minimal)"}}`)
+	ri, err := g.r.RootPage(t.Context(), g.target())
+	if err != nil || ri.Version != "16.0.0" || ri.Image != "release-minimal" || ri.LangKnown {
+		t.Fatalf("unpinned with an INFO1: %+v %v", ri, err)
+	}
+	if g.http.n() != 0 {
+		t.Fatalf("the main page was read over HTTP although an INFO1 since the last boot names the image")
+	}
+
+	g, _ = rootRig(t, "")
+	if _, err := g.r.RootPage(t.Context(), g.target()); err != nil {
+		t.Fatalf("unpinned without an INFO1: %v", err)
+	}
+	if g.http.n() != 1 {
+		t.Fatalf("without an INFO1 the page must be read over HTTP, %d requests", g.http.n())
+	}
+
+	g, _ = rootRig(t, `{"Info1":{"Version":"16.0.0(release-minimal)"}}`)
+	if _, err := g.r.RootPage(t.Context(), tasmota.TargetFor(model.Device{Address: "192.0.2.7"})); err != nil || g.http.n() != 1 {
+		t.Fatalf("an address without a stored device: http %d, err %v", g.http.n(), err)
+	}
+
+	// An INFO1 on a topic that is not usable over MQTT (here: the device is on another broker) is no proof
+	// that it came from this device: the page is read.
+	g, _ = rootRig(t, `{"Info1":{"Version":"16.0.0(release-minimal)"}}`)
+	g.devs.d.MQTT = model.MQTTOtherBroker
+	if _, err := g.r.RootPage(t.Context(), g.target()); err != nil || g.http.n() != 1 {
+		t.Fatalf("a device not usable over MQTT: http %d, err %v", g.http.n(), err)
+	}
+}
+
+// Why (#686): an update job reads minimal and safeboot firmware from the INFO1 alone, whatever path it
+// pinned: an HTTP pin keeps meaning the main page for RootPage (D5), so the job has its own call that never
+// reaches the device, never falls back to the page, and refuses an INFO1 it cannot vouch for (a device not
+// usable over MQTT) as unreachable, so the job goes on from what it knows itself.
+func TestInfo1RootNeverReadsThePage(t *testing.T) {
+	g, _ := rootRig(t, `{"Info1":{"Version":"16.0.0(release-safeboot)"}}`)
+	ri, err := g.r.Info1Root(WithPath(t.Context(), HTTP), g.target())
+	if err != nil || ri.Image != "release-safeboot" || ri.Version != "16.0.0" {
+		t.Fatalf("pinned HTTP: %+v %v", ri, err)
+	}
+	if ri, err := g.r.RootPage(WithPath(t.Context(), HTTP), g.target()); err != nil || ri.Image != "" || g.http.n() != 1 {
+		t.Fatalf("RootPage pinned to HTTP must still read the page: %+v %v http %d", ri, err, g.http.n())
+	}
+
+	g, _ = rootRig(t, "")
+	if _, err := g.r.Info1Root(t.Context(), g.target()); !errors.Is(err, ErrNoInfo) || g.http.n() != 0 {
+		t.Fatalf("no INFO1: err %v, http %d, want ErrNoInfo and no HTTP", err, g.http.n())
+	}
+	if _, err := g.r.Info1Root(t.Context(), tasmota.TargetFor(model.Device{Address: "192.0.2.7"})); !errors.Is(err, ErrNoInfo) || g.http.n() != 0 {
+		t.Fatalf("no stored device: err %v, http %d", err, g.http.n())
+	}
+
+	g, _ = rootRig(t, `{"Info1":{"Version":"16.0.0(release-minimal)"}}`)
+	g.devs.d.MQTT = model.MQTTOtherBroker
+	if _, err := g.r.Info1Root(t.Context(), g.target()); !errors.Is(err, tasmota.ErrUnreachable) || g.http.n() != 0 {
+		t.Fatalf("not usable over MQTT: err %v, http %d", err, g.http.n())
 	}
 }

@@ -300,18 +300,20 @@ type fakeAPI struct {
 	devs     map[model.DeviceID]*fakeDevice
 	onUpdate func(model.DeviceID) // called inside Upgrade
 	onSet    func(model.DeviceID, string)
-	onIdent  func() // called first in ProbeIdentity, outside the lock
+	onIdent  func()   // called first in ProbeIdentity, outside the lock
+	jobFams  []string // "<action> <device> <job family>" of every ProbeIdentity and Probe
 }
 
 func (a *fakeAPI) dev(id model.DeviceID) *fakeDevice { return a.devs[id] }
 
-func (a *fakeAPI) ProbeIdentity(_ context.Context, d model.Device) (model.Identity, string, int64, error) {
+func (a *fakeAPI) ProbeIdentity(_ context.Context, d model.Device, jobFamily model.ChipFamily) (model.Identity, string, int64, error) {
 	a.rec.add("probe_identity %d", d.ID)
 	if a.onIdent != nil {
 		a.onIdent()
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.jobFams = append(a.jobFams, fmt.Sprintf("probe_identity %d %s", d.ID, jobFamily))
 	fd := a.dev(d.ID)
 	if !fd.step() {
 		return model.Identity{}, "", 0, errors.New("unreachable")
@@ -326,10 +328,11 @@ func (a *fakeAPI) ProbeIdentity(_ context.Context, d model.Device) (model.Identi
 	return fd.ident, fd.otaURL, up, nil
 }
 
-func (a *fakeAPI) Probe(_ context.Context, d model.Device) (model.Identity, int64, error) {
+func (a *fakeAPI) Probe(_ context.Context, d model.Device, jobFamily model.ChipFamily) (model.Identity, int64, error) {
 	a.rec.add("probe %d", d.ID)
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	a.jobFams = append(a.jobFams, fmt.Sprintf("probe %d %s", d.ID, jobFamily))
 	fd := a.dev(d.ID)
 	if !fd.step() {
 		return model.Identity{}, 0, errors.New("unreachable")
@@ -668,6 +671,45 @@ func TestEngineStagedUpdate(t *testing.T) {
 	evs, _ := h.st.JobEvents(context.Background(), id)
 	if len(evs) == 0 || evs[len(evs)-1].To != model.JobSucceeded {
 		t.Fatalf("job events not recorded: %+v", evs)
+	}
+}
+
+// Why (#686): the job names minimal and safeboot firmware from the chip family it read at its preflight, not
+// from the main page, so every probe after the preflight must carry that family. The preview and the preflight
+// itself know no family yet (the device may already be stuck on minimal: it is read as before), and a family
+// that reached them would make an unread device look like an expected intermediate image.
+func TestTheJobPassesItsPreflightFamilyToEveryProbeAfterThePreflight(t *testing.T) {
+	h := newHarness(t, 1, plugDevice())
+	if _, err := h.e.Preview(context.Background(), []Request{{DeviceID: 1, Release: "16.0.0"}}); err != nil {
+		t.Fatal(err)
+	}
+	id := submitOne(t, h, Request{DeviceID: 1, Release: "16.0.0"})
+	h.run(t, h.e)
+	if j := h.job(t, id); j.State != model.JobSucceeded {
+		t.Fatalf("job %s %q", j.State, j.LastError)
+	}
+	h.api.mu.Lock()
+	got := append([]string(nil), h.api.jobFams...)
+	h.api.mu.Unlock()
+	// The preview (and Submit's own preview) and the preflight probe without a family.
+	var unknown, withFamily int
+	sawFamily := false
+	for _, e := range got {
+		switch {
+		case strings.HasSuffix(e, " 1 "):
+			if sawFamily {
+				t.Fatalf("a probe after the preflight went without the job's family: %v", got)
+			}
+			unknown++
+		case strings.HasSuffix(e, " 1 esp8266"):
+			sawFamily = true
+			withFamily++
+		default:
+			t.Fatalf("probe with an unexpected family %q: %v", e, got)
+		}
+	}
+	if unknown == 0 || withFamily < 2 {
+		t.Fatalf("probes %v: want the preview and preflight without a family, every later probe with esp8266", got)
 	}
 }
 

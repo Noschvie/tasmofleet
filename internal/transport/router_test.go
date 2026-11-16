@@ -40,6 +40,9 @@ func (h *fakeHTTP) DownloadConfig(context.Context, tasmota.Target) ([]byte, erro
 	return h.dump, h.err
 }
 func (h *fakeHTTP) RootPage(context.Context, tasmota.Target) (tasmota.RootInfo, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.calls = append(h.calls, "GET /")
 	return tasmota.RootInfo{}, h.err
 }
 func (h *fakeHTTP) n() int { h.mu.Lock(); defer h.mu.Unlock(); return len(h.calls) }

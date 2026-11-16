@@ -62,7 +62,6 @@ func detect(in Inputs) (model.Identity, error) {
 	if err != nil {
 		return model.Identity{}, err
 	}
-	lcid := ""
 	if len(in.Status4) > 0 {
 		var s4 status4Reply
 		if err := json.Unmarshal(in.Status4, &s4); err != nil {
@@ -73,9 +72,10 @@ func detect(in Inputs) (model.Identity, error) {
 			return model.Identity{}, errors.New("fwselect: Status 4 reply has no valid StatusMEM")
 		}
 		id.FlashSizeKB, id.ProgramFlashSizeKB, id.FreeKB = m.FlashSize, m.ProgramFlashSize, m.Free
-		lcid = localeID(m.Features)
+		// The language build is the locale ID alone (#686): the main page is not read for it, so a
+		// page that says otherwise cannot change it, and without Status 4 the language stays unread.
+		id.Language, id.LanguageKnown = languageFromLCID(localeID(m.Features))
 	}
-	id.Language, id.LanguageKnown = languageFromRoot(in.Root, lcid)
 	return id, nil
 }
 
@@ -140,13 +140,16 @@ func DetectInfo1(payload []byte, base model.Identity) (model.Identity, error) {
 
 // detectMinimal handles firmware that answers Status 2 with Unknown:
 // minimal (ESP8266 only, so the image proves the family) and safeboot (the
-// chip is not reported, so the family stays unknown). The version comes from
-// the bare Upgrade reply and/or the main page footer; they must agree.
+// chip is not reported, so the family stays unknown). The image comes from
+// Root (an INFO1 since the device's last boot, or the main page footer); the
+// version from the bare Upgrade reply and/or Root; they must agree.
 // RootInfo.Minimal is not enough on its own: the heading is set for minimal
-// and for safeboot alike, so the footer image tag decides.
+// and for safeboot alike, so the image tag decides. Without Root only an
+// update job can name the image (detectInJob). Inside a job the image must be
+// the intermediate image of the job's chip family, whatever told it.
 func detectMinimal(in Inputs) (model.Identity, error) {
 	if in.Root == nil {
-		return model.Identity{}, fmt.Errorf("fwselect: Status 2 unavailable and no main page: %w", ErrUnknownHardware)
+		return detectInJob(in)
 	}
 	_, image, ok := strings.Cut(in.Root.Image, "-")
 	var fam model.ChipFamily
@@ -157,6 +160,9 @@ func detectMinimal(in Inputs) (model.Identity, error) {
 		fam = model.ChipUnknown
 	default:
 		return model.Identity{}, fmt.Errorf("fwselect: Status 2 unavailable on image %q: %w", in.Root.Image, ErrUnknownHardware)
+	}
+	if !intermediateOf(image, in.JobFamily) {
+		return model.Identity{}, fmt.Errorf("fwselect: image %q is not the intermediate image of the job's chip family %q: %w", in.Root.Image, in.JobFamily, ErrFamilyMismatch)
 	}
 	version := in.Root.Version
 	if in.Upgrade != nil && in.Upgrade.Version != "" {
@@ -169,7 +175,7 @@ func detectMinimal(in Inputs) (model.Identity, error) {
 		return model.Identity{}, fmt.Errorf("%w: %q", errBadVersion, version)
 	}
 	// Minimal firmware answers no Status 4, so a page code two builds share stays unknown.
-	lang, known := languageFromRoot(in.Root, "")
+	lang, known := languageFromRoot(in.Root)
 	return model.Identity{
 		Family:        fam,
 		Version:       version,
@@ -178,6 +184,45 @@ func detectMinimal(in Inputs) (model.Identity, error) {
 		Language:      lang,
 		LanguageKnown: known,
 	}, nil
+}
+
+// intermediateOf reports whether image ("minimal" or "safeboot") is the intermediate image of an
+// update job on chip family job: minimal exists only for the ESP8266, safeboot only for the ESP32
+// line. Outside a job (ChipUnknown) there is nothing to check against.
+func intermediateOf(image string, job model.ChipFamily) bool {
+	switch {
+	case job == model.ChipUnknown:
+		return true
+	case image == variantMinimal:
+		return job == model.ChipESP8266
+	default:
+		return job.IsESP32()
+	}
+}
+
+// detectInJob names minimal or safeboot firmware without its image (#686, path 2): inside
+// TasmoFleet's own update job, whose preflight read the chip family, Status 2 Unknown is the
+// intermediate image of that family (minimal on an ESP8266, safeboot on the ESP32 line). The
+// version must come from the bare Upgrade reply; nothing else is filled in, and the image stays
+// empty rather than guessed. Minimal has no Status 5, so the MAC cannot be checked here: the job
+// trusts that the device at its address is still the one it started on, and hardwareChanged and
+// Guard stay the checks before every flash. Outside a job (JobFamily unknown) this is
+// ErrUnknownHardware, as before.
+func detectInJob(in Inputs) (model.Identity, error) {
+	var id model.Identity
+	switch {
+	case in.JobFamily == model.ChipESP8266:
+		id.Family, id.Variant = model.ChipESP8266, variantMinimal
+	case in.JobFamily.IsESP32():
+		id.Family, id.Variant = model.ChipUnknown, variantSafeboot // safeboot does not report the chip
+	default:
+		return model.Identity{}, fmt.Errorf("fwselect: Status 2 unavailable, no INFO1 or main page and no update job: %w", ErrUnknownHardware)
+	}
+	if in.Upgrade == nil || !isNumericVersion(in.Upgrade.Version) {
+		return model.Identity{}, fmt.Errorf("fwselect: Status 2 unavailable and the Upgrade reply names no version: %w", ErrUnknownHardware)
+	}
+	id.Version = in.Upgrade.Version
+	return id, nil
 }
 
 // coresSingle is what GetCodeCores() appends for CORE32SOLO1 builds
@@ -309,17 +354,18 @@ func variantFromTag(tag string, fam model.ChipFamily, single bool) (string, bool
 }
 
 // languageFromRoot maps <html lang> to the upstream language suffix ("" is the plain English
-// build) and says whether that is a fact. The code is looked up in the language table
-// (language.go), never derived from the spelling: Tasmota writes the ISO code, the release files
-// use their own suffixes (#509). lcid is the locale ID of Status 4, which tells the two Portuguese
-// builds apart. A code the table does not name ("pt" without a Portuguese locale, an unlisted one)
-// leaves the language unread, like an MQTT-only device: an empty Language is then no proof of
-// English. The language is also only known when it came from a device main page.
-func languageFromRoot(r *RootInfo, lcid string) (suffix string, known bool) {
+// build) and says whether that is a fact. Only minimal and safeboot firmware are read this way:
+// they answer no Status 4, so their main page (path 3 of #686: no INFO1, no job that knows the chip) is the only place
+// that names the build. The code is looked up in the language table (language.go), never derived
+// from the spelling: Tasmota writes the ISO code, the release files use their own suffixes (#509).
+// A code the table does not name ("pt", which two builds write, an unlisted one) leaves the
+// language unread: an empty Language is then no proof of English. The language is also only known
+// when it came from a device main page (an INFO1 carries none).
+func languageFromRoot(r *RootInfo) (suffix string, known bool) {
 	if r == nil {
 		return "", false
 	}
-	suffix, ok := languageFromHTML(r.Lang, lcid)
+	suffix, ok := languageFromHTML(r.Lang)
 	return suffix, r.LangKnown && ok
 }
 

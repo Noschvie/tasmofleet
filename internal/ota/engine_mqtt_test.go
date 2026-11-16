@@ -52,13 +52,13 @@ func (s *pathSpy) note(ctx context.Context, what string) {
 	}
 }
 
-func (s *pathSpy) ProbeIdentity(ctx context.Context, d model.Device) (model.Identity, string, int64, error) {
+func (s *pathSpy) ProbeIdentity(ctx context.Context, d model.Device, jobFamily model.ChipFamily) (model.Identity, string, int64, error) {
 	s.note(ctx, "probe_identity")
-	return s.fakeAPI.ProbeIdentity(ctx, d)
+	return s.fakeAPI.ProbeIdentity(ctx, d, jobFamily)
 }
-func (s *pathSpy) Probe(ctx context.Context, d model.Device) (model.Identity, int64, error) {
+func (s *pathSpy) Probe(ctx context.Context, d model.Device, jobFamily model.ChipFamily) (model.Identity, int64, error) {
 	s.note(ctx, "probe")
-	return s.fakeAPI.Probe(ctx, d)
+	return s.fakeAPI.Probe(ctx, d, jobFamily)
 }
 func (s *pathSpy) SetOtaURL(ctx context.Context, d model.Device, u string) error {
 	s.note(ctx, "set_ota_url")

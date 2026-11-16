@@ -99,7 +99,18 @@ claim below or shows a residual risk worse than stated.
   refuses minimal/safeboot images in a Status 2 answer. A Status 2 answer counts only within
   30 s after our question. Nothing flashed depends on it: the OTA engine probes the device
   over HTTP before it plans, and `Guard` checks that identity. The first HTTP probe replaces
-  whatever MQTT said. Broker ACLs (below) close it at the source.
+  whatever MQTT said. Broker ACLs (below) close it at the source. Since #686 one more read
+  trusts an INFO1: a device whose address answers `Status 2` with Unknown (minimal or safeboot
+  firmware, which have no `Status 4` and no `Status 5`) is named by the INFO1 seen on its topic
+  since its last boot, when the device is usable over MQTT, before its main page is read. Bounds:
+  the INFO1's version must equal the version of the address's bare `Upgrade` reply (the job's
+  probes require that reply; the identity probe compares when it names one), and inside an update
+  job an image that is not the intermediate image of the chip family the job read at its
+  preflight stops the job (`ErrFamilyMismatch`). Outside a job a forged INFO1 with the right
+  version can name minimal (ESP8266) for a device in ESP32 safeboot or the reverse; `Guard`
+  checks the stored family against the artifact's header and file name, not against the chip
+  itself, so this is the same trust as an update pinned to MQTT, which reads its INFO1 the
+  same way. Broker ACLs close it at the source.
 - **R6, spoofed refresh answers (#91).** "Refresh identity" of a device on our broker that HTTP
   cannot reach asks `Status 5` and `Status 2` over MQTT. M2 can answer first. Effect: false
   hostname/IP on the device page, and (as in R5) a false version or hardware for a device no

@@ -188,7 +188,8 @@ func (m *itMQTT) wantTransport(dev model.DeviceID) model.Job {
 }
 
 // Staged ESP8266 over MQTT end to end: both Upgrades and every probe go through
-// the broker (the device answers nothing over HTTP), the minimal window is bridged by the LWT. The language build cannot be read over MQTT, so the person chose it (D10).
+// the broker (the device answers nothing over HTTP), the minimal window is bridged by the LWT. The language build
+// is the locale ID of the Status 4 read over MQTT (#686); the request's "en" changes nothing.
 func TestITMQTTStagedESP8266(t *testing.T) {
 	m := newItMQTT(t)
 	dev := m.addMQTT(simulator.DeviceSpec{Profile: simulator.ProfileESP8266_1M, Light: true})
@@ -201,11 +202,12 @@ func TestITMQTTStagedESP8266(t *testing.T) {
 	}
 }
 
-// Why: without the person's language choice Select refuses (never guess DE vs EN), and the preview says
-// the choice is what is missing instead of a bare refusal.
+// Why: a device whose locale ID names no build (a self-compiled MY_LANGUAGE) has no language TasmoFleet can
+// read, over MQTT or HTTP (#686). Without the person's language choice Select refuses (never guess DE vs EN),
+// and the preview says the choice is what is missing instead of a bare refusal.
 func TestITMQTTLanguageChoiceRequired(t *testing.T) {
 	m := newItMQTT(t)
-	dev := m.addMQTT(simulator.DeviceSpec{Profile: simulator.ProfileESP8266_4M})
+	dev := m.addMQTT(simulator.DeviceSpec{Profile: simulator.ProfileESP8266_4M, Locale: "ABCD"})
 	eng := m.start(2)
 	items, err := eng.Preview(context.Background(), []Request{{DeviceID: dev, Release: itRelease}})
 	if err != nil || len(items) != 1 {
@@ -308,9 +310,9 @@ func TestITMQTTJobTransportSurvivesEngineRestart(t *testing.T) {
 	m.expectSuccess(dev, orig, 1, model.PlanDirect)
 }
 
-// Why (H1): over MQTT the language cannot be read after the flash, so the verify step must not hold the
-// person's choice (DE) against the "unknown" it reads back. Staged and direct both end Succeeded, the
-// German file was flashed.
+// Why (H1): a device whose locale names no build has no language to read after the flash either, so the
+// verify step must not hold the person's choice (DE) against the "unknown" it reads back. Staged and direct
+// both end Succeeded, the German file was flashed.
 func TestITMQTTLanguageChoiceDoesNotFailTheVerify(t *testing.T) {
 	t.Parallel() // the parent too, see newItEnv
 	for _, tc := range []struct {
@@ -321,7 +323,7 @@ func TestITMQTTLanguageChoiceDoesNotFailTheVerify(t *testing.T) {
 	}{{"staged", simulator.ProfileESP8266_1M, 2, model.PlanStaged}, {"direct", simulator.ProfileESP8266_4M, 1, model.PlanDirect}} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := newItMQTT(t)
-			dev := m.addMQTT(simulator.DeviceSpec{Profile: tc.profile, Light: true})
+			dev := m.addMQTT(simulator.DeviceSpec{Profile: tc.profile, Light: true, Locale: "ABCD"})
 			orig := m.ctrl[dev].OtaURL()
 			eng := m.start(2)
 			m.submit(eng, Request{DeviceID: dev, Language: "de"})

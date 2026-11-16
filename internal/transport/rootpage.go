@@ -22,9 +22,9 @@ type infoSource interface {
 	Info(topic string) (mqttcmd.Info, bool)
 }
 
-// mqttRootPage builds the RootInfo of a device that only MQTT reaches from its INFO1 (D9): version
-// and image tag ("16.0.0(release-minimal)"). Nothing else is known without the web page: LangKnown is
-// false (the language build is shown only there), and the title is not part of INFO1.
+// mqttRootPage builds the RootInfo of a device from its INFO1 (D9): version and image tag
+// ("16.0.0(release-minimal)"). Nothing else is known without the web page: LangKnown is false (INFO1
+// names no language; full firmware reports it in Status 4, #686), and the title is not part of INFO1.
 func (r *Router) mqttRootPage(d model.Device) (tasmota.RootInfo, error) {
 	src, ok := r.mqttDoer().(infoSource)
 	if !ok {
@@ -55,8 +55,14 @@ func rootFromInfo1(payload []byte) (tasmota.RootInfo, error) {
 	}, nil
 }
 
-// RootPage reads the main page over HTTP; for a job that pinned MQTT, or a device whose HTTP is known
-// to fail, it is built from INFO1 instead (mqttRootPage).
+// RootPage is the main page of a device as far as identity needs it. Since #686 only minimal and safeboot
+// firmware need it (their image; the language comes from Status 4), and its callers are those paths: the
+// identity probe and the update preview of a device that answers Status 2 with Unknown. A job that pinned
+// HTTP reads the page over HTTP and one that pinned MQTT builds it from INFO1 (D5, pins keep their
+// meaning). Unpinned, a stored device usable over MQTT that sent an INFO1 since its last boot is read from
+// that INFO1 first (MQTT first, #686): nothing is sent to the device. Without one, the page is read over
+// HTTP, unless HTTP is known to fail, when only INFO1 can tell (mqttRootPage). An address without a
+// stored device (the first add) has no topic and is read over HTTP.
 func (r *Router) RootPage(ctx context.Context, t tasmota.Target) (tasmota.RootInfo, error) {
 	id := t.DeviceID()
 	if id == 0 {
@@ -68,13 +74,32 @@ func (r *Router) RootPage(ctx context.Context, t tasmota.Target) (tasmota.RootIn
 		}
 		return r.pinnedRootPage(ctx, id)
 	}
-	if r.mqttDoer() != nil && r.o.Facts.HTTPState(id).State == HTTPFailing {
+	if r.mqttDoer() == nil {
+		return r.http.RootPage(ctx, t)
+	}
+	if ri, err := r.pinnedRootPage(ctx, id); err == nil {
+		return ri, nil
+	}
+	if r.o.Facts.HTTPState(id).State == HTTPFailing {
 		d, _, p, err := r.decide(ctx, id)
 		if err == nil && p.Commands == MQTT {
 			return r.mqttRootPage(d)
 		}
 	}
 	return r.http.RootPage(ctx, t)
+}
+
+// Info1Root is the main page as far as the device's INFO1 since its last boot tells it (version and image,
+// no language), for a stored device usable over MQTT (MQTTBlocker), whatever ctx pins: it only reads the
+// INFO1 cache of the MQTT channel, sends nothing to the device and never touches HTTP. An update job reads
+// minimal and safeboot firmware this way (#686) instead of the main page. ErrNoInfo without an INFO1 (or
+// without a stored device), ErrUnreachable when MQTT is not connected or not usable for the device.
+func (r *Router) Info1Root(ctx context.Context, t tasmota.Target) (tasmota.RootInfo, error) {
+	id := t.DeviceID()
+	if id == 0 {
+		return tasmota.RootInfo{}, ErrNoInfo
+	}
+	return r.pinnedRootPage(ctx, id)
 }
 
 func (r *Router) pinnedRootPage(ctx context.Context, id model.DeviceID) (tasmota.RootInfo, error) {
