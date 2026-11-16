@@ -568,10 +568,10 @@ func (m *Manager) verifyFiles(ctx context.Context, fresh []model.Backup, fc *fil
 		slices.Sort(diff)
 		slices.Sort(unread)
 		if len(diff) == 0 && len(unread) == 0 {
-			parts = append(parts, fmt.Sprintf("the %s match the backup", plural(len(fc.want), "file", "files")))
+			parts = append(parts, fmt.Sprintf("the %s %s the backup", plural(len(fc.want), "file", "files"), verb(len(fc.want), "matches", "match")))
 		}
 		if len(diff) > 0 {
-			parts = append(parts, fmt.Sprintf("%s differ from the backup: %s", plural(len(diff), "file", "files"), strings.Join(diff, ", ")))
+			parts = append(parts, fmt.Sprintf("%s %s from the backup: %s", plural(len(diff), "file", "files"), verb(len(diff), "differs", "differ"), strings.Join(diff, ", ")))
 			ok = false
 		}
 		if len(unread) > 0 {
@@ -580,6 +580,14 @@ func (m *Manager) verifyFiles(ctx context.Context, fresh []model.Backup, fc *fil
 		}
 	}
 	return strings.Join(parts, "; "), ok
+}
+
+// verb is the form of a verb that agrees with the number it follows: "1 file matches", "3 files match".
+func verb(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
 
 func plural(n int, one, many string) string {

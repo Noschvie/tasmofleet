@@ -680,7 +680,7 @@ func TestVerificationSeparatesDifferingFromUnreadableFiles(t *testing.T) {
 	}
 	done := e.finish(t, e.startFiles(t, a.ID, 3).ID)
 	_, rest := SplitDetail(done.Detail)
-	if done.State != store.RestoreDone || done.Verified || !strings.Contains(rest, "1 file differ from the backup: autoexec.be") || !strings.Contains(rest, "1 file could not be read back to compare: lib/a.be") {
+	if done.State != store.RestoreDone || done.Verified || !strings.Contains(rest, "1 file differs from the backup: autoexec.be") || !strings.Contains(rest, "1 file could not be read back to compare: lib/a.be") {
 		t.Errorf("job %+v", done)
 	}
 }
@@ -817,5 +817,40 @@ func TestReplacePreviewSaysFilesAreNotCopiedWhenTheFileSystemCannotBeRead(t *tes
 	}
 	if pv.Files.Restores() || !strings.Contains(pv.Files.Why, "not copied") || strings.Contains(pv.Files.Why, "checked again") {
 		t.Errorf("files plan: %+v", pv.Files)
+	}
+}
+
+// freshArchive is a FileArchives whose files archive lists the given paths with the given hashes.
+type freshArchive struct {
+	FileArchives
+	files map[string]string
+}
+
+func (f freshArchive) OpenFilesArchive(context.Context, model.BackupID) (*backup.FilesArchive, error) {
+	arc := &backup.FilesArchive{}
+	for p, sum := range f.files {
+		arc.Manifest.Files = append(arc.Manifest.Files, backup.ManifestFile{Path: p, SHA256: sum})
+	}
+	return arc, nil
+}
+
+// Why (#882): the result of a restore is a sentence a person reads; "the 1 file match the backup"
+// and "1 file differ" read like a typo and make the whole result look unreliable. The verb agrees
+// with the number, for one file as for three.
+func TestFileCompareAgreesWithOneFile(t *testing.T) {
+	fresh := []model.Backup{{ID: 9, Kind: model.BackupFiles}}
+	m := &Manager{o: Options{Files: freshArchive{files: map[string]string{"/x.be": "aa"}}}}
+	got, ok := m.verifyFiles(t.Context(), fresh, &filesCheck{want: map[string]string{"/x.be": "aa"}})
+	if !ok || got != "the 1 file matches the backup" {
+		t.Errorf("one matching file: %q ok=%v", got, ok)
+	}
+	got, ok = m.verifyFiles(t.Context(), fresh, &filesCheck{want: map[string]string{"/x.be": "bb"}})
+	if ok || got != "1 file differs from the backup: x.be" {
+		t.Errorf("one differing file: %q ok=%v", got, ok)
+	}
+	m = &Manager{o: Options{Files: freshArchive{files: map[string]string{"/x.be": "aa", "/y.be": "aa"}}}}
+	got, _ = m.verifyFiles(t.Context(), fresh, &filesCheck{want: map[string]string{"/x.be": "aa", "/y.be": "aa"}})
+	if got != "the 2 files match the backup" {
+		t.Errorf("two files: %q", got)
 	}
 }

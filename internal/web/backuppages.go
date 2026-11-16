@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"path"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/backup"
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/transport"
 	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
@@ -264,6 +266,41 @@ func withAttempts(rows []backupRow, attempts []model.BackupAttempt) []backupRow 
 	return rows
 }
 
+// backupTraced takes the backup of one device from the device page and says which way it went: the
+// request's context records the transport that carried the run, as the engine's backup job does, so
+// both name the same path for the same kind of run (#882).
+func (h *handler) backupTraced(r *http.Request, id model.DeviceID) ([]model.Backup, string, error) {
+	ctx, tr := transport.WithTrace(r.Context())
+	bs, err := h.d.Backups.Backup(ctx, actor(r), id)
+	return bs, tr.Via(), err
+}
+
+// backupTakenQuery is the query of the redirect after a backup: the flash key plus what the run
+// holds and how it travelled, as short codes. The page that shows the flash words them again with
+// backup.Note, which only ever prints its own fixed words, so a link cannot carry a sentence.
+func backupTakenQuery(ok string, bs []model.Backup, via string) string {
+	q := url.Values{"ok": {ok}}
+	kinds := make([]string, 0, len(bs))
+	for _, k := range backup.KindsOf(bs) {
+		kinds = append(kinds, string(k))
+	}
+	if len(kinds) > 0 {
+		q.Set("parts", strings.Join(kinds, ","))
+		q.Set("via", via)
+	}
+	return q.Encode()
+}
+
+// backupTakenText is the flash after a backup on the device page (#882): the same sentence the bulk
+// result and the transaction page give (#838). A link without parts reads as the plain sentence.
+func backupTakenText(q url.Values) string {
+	var kinds []model.BackupKind
+	for _, k := range strings.Split(q.Get("parts"), ",") {
+		kinds = append(kinds, model.BackupKind(k))
+	}
+	return backup.Note(kinds, q.Get("via")) + "."
+}
+
 // backupsNotice is the notice after an action that came back to the tab.
 func backupsNotice(r *http.Request) string {
 	q := r.URL.Query()
@@ -275,7 +312,7 @@ func backupsNotice(r *http.Request) string {
 		}
 		return plural(n, "backup") + " deleted."
 	case "backed-up":
-		return "Backup taken."
+		return backupTakenText(q)
 	case "kept":
 		return "Backup kept: the retention never prunes it."
 	case "released":

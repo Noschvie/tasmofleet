@@ -313,11 +313,11 @@ func TestEmptyBackupsTabNamesTheSchedule(t *testing.T) {
 func TestBackupFromTheEmptyTab(t *testing.T) {
 	e := setup(t)
 	resp, _ := e.do(t, "POST", "/devices/1/backup", "admin", url.Values{"csrf": {"tok"}, "from": {"tab"}}, "HX-Request", "true")
-	if resp.Header.Get("HX-Redirect") != "/tf/devices/1/backups?ok=backed-up" {
+	if resp.Header.Get("HX-Redirect") != "/tf/devices/1/backups?ok=backed-up&parts=dmp&via=http" {
 		t.Fatalf("redirect %q", resp.Header.Get("HX-Redirect"))
 	}
-	_, page := e.do(t, "GET", "/devices/1/backups?ok=backed-up", "admin", nil)
-	if !strings.Contains(page, "Backup taken.") {
+	_, page := e.do(t, "GET", "/devices/1/backups?ok=backed-up&parts=dmp&via=http", "admin", nil)
+	if !strings.Contains(page, "Backup taken over HTTP (config).") {
 		t.Errorf("no confirmation after the reload:\n%s", page)
 	}
 	e2 := setup(t)

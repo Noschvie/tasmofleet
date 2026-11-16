@@ -20,6 +20,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -419,8 +420,16 @@ var flashes = map[string]string{
 	"added":     "Device added.",
 	"deleted":   "Device deleted.",
 	"restarted": "Restart sent. The device is back in a few seconds.",
-	// the header's Back up; the Backups tab's own button says "Backup taken." in its list (ok=backed-up)
-	"backup-taken": "Backup taken.",
+}
+
+// flashOf is the flash a redirect asked for. The header's Back up (ok=backup-taken) words what the
+// backup held and how it travelled (backupTakenText); the Backups tab's own button does the same
+// in its list (ok=backed-up, backupsNotice).
+func flashOf(q url.Values) string {
+	if q.Get("ok") == "backup-taken" {
+		return backupTakenText(q)
+	}
+	return flashes[q.Get("ok")]
 }
 
 // eventSeq is the hub's event number now. A handler that reads its data before it builds its view
@@ -438,7 +447,7 @@ func (h *handler) view(r *http.Request, title, nav string, data any) view {
 	v := view{
 		Title: title, Nav: nav, Base: httpx.BasePath(r.Context()), CSRF: h.d.Guard.CSRFToken(r),
 		User: p, IsAdmin: p.Role >= model.RoleAdmin, RoleName: roleName(p.Role),
-		Flash: flashes[r.URL.Query().Get("ok")], Data: data, Path: r.URL.Path,
+		Flash: flashOf(r.URL.Query()), Data: data, Path: r.URL.Path,
 	}
 	if p.Method != auth.ModeLocal {
 		// A name an SSO or proxy user chose replaces the one the identity provider sends in the header

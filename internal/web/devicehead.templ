@@ -406,7 +406,11 @@ templ devActList(rows []devActRow, base string) {
 				} else if j := r.Job; j != nil {
 					<span class="dev-act-what"><a href={ templ.SafeURL(base + "/transactions/" + strconv.FormatInt(int64(j.BatchID), 10)) }>Transaction #{ strconv.FormatInt(int64(j.BatchID), 10) }</a> @ui.Badge(uiTone(j.State), label(j.State))</span>
 					<span class="dev-act-more">
-						{ j.Target() }
+						if r.Note != "" {
+							{ r.Note }
+						} else {
+							{ j.Target() }
+						}
 						if j.LastError != "" {
 							· <span class="reason" title={ tip(j.LastError) }>{ humanReason(j.LastError) }</span>
 						}

@@ -48,7 +48,7 @@ test.describe("restore over MQTT", () => {
     await expect(async () => {
       await page.goto(mqApp.url + devicePath);
       await page.getByRole("button", { name: "Back up", exact: true }).click();
-      await expect(page.getByText("Backup taken.")).toBeVisible({ timeout: 5_000 });
+      await expect(page.getByText(/Backup taken over MQTT/)).toBeVisible({ timeout: 5_000 });
     }).toPass({ timeout: 180_000, intervals: [5_000] });
 
     await page.goto(mqApp.url + devicePath + "/backups");

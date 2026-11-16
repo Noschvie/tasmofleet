@@ -140,8 +140,8 @@ test("device pages: one header with the tabs on every tab; Back up returns to it
   }
   await page.goto(deviceURL + "/console");
   await page.getByRole("button", { name: "Back up", exact: true }).click();
-  await expect(page).toHaveURL(/\/console\?ok=backup-taken$/, { timeout: 30_000 });
-  await expect(page.getByText("Backup taken.").first()).toBeVisible();
+  await expect(page).toHaveURL(/\/console\?ok=backup-taken/, { timeout: 30_000 });
+  await expect(page.getByText(/Backup taken/).first()).toBeVisible();
 });
 
 // Why (QA v0.9.0, F4): "if a component is not on the style guide, it is not part of the design system".

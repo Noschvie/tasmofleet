@@ -570,16 +570,16 @@ func TestDeleteRedirectsHTMX(t *testing.T) {
 func TestBackupNowListsNewBackup(t *testing.T) {
 	e := setup(t)
 	resp, _ := e.do(t, "POST", "/devices/1/backup", "operator", url.Values{"back": {"/console"}})
-	if resp.StatusCode != 303 || e.bk.taken != 1 || resp.Header.Get("Location") != "/tf/devices/1/console?ok=backup-taken" {
+	if resp.StatusCode != 303 || e.bk.taken != 1 || resp.Header.Get("Location") != "/tf/devices/1/console?ok=backup-taken&parts=dmp&via=http" {
 		t.Fatalf("got %d taken=%d to %q", resp.StatusCode, e.bk.taken, resp.Header.Get("Location"))
 	}
 	e2 := setup(t)
 	resp, _ = e2.do(t, "POST", "/devices/1/backup", "operator", url.Values{"back": {"//evil.example/x"}})
-	if loc := resp.Header.Get("Location"); loc != "/tf/devices/1?ok=backup-taken" {
+	if loc := resp.Header.Get("Location"); loc != "/tf/devices/1?ok=backup-taken&parts=dmp&via=http" {
 		t.Fatalf("an unknown tab must lead to the overview, got %q", loc)
 	}
-	_, body := e2.do(t, "GET", "/devices/1?ok=backup-taken", "operator", nil)
-	if !strings.Contains(body, "Backup taken.") {
+	_, body := e2.do(t, "GET", "/devices/1?ok=backup-taken&parts=dmp&via=http", "operator", nil)
+	if !strings.Contains(body, "Backup taken over HTTP (config).") {
 		t.Fatal("the result is not shown after the redirect")
 	}
 	e3 := setup(t)

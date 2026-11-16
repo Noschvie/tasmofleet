@@ -255,7 +255,7 @@ test("backup over MQTT", async ({ page }) => {
   await expect(async () => {
     await page.goto(app.url + devicePath);
     await backUp.click();
-    await expect(page.getByText("Backup taken.")).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByText(/Backup taken over MQTT/)).toBeVisible({ timeout: 5_000 });
   }).toPass({ timeout: 300_000, intervals: [6_000] });
 
   await page.goto(app.url + devicePath + "/backups");

@@ -78,7 +78,7 @@ test("a backup and a restore of a device on TasmoFleet's broker go over MQTT fir
   }).toPass({ timeout: 120_000, intervals: [3_000] });
   await expect(page.locator("#devpaths-actions")).toContainText(/MQTT first \(FileUpload/);
   await page.getByRole("button", { name: "Back up", exact: true }).click();
-  await expect(page.getByText("Backup taken.")).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByText(/Backup taken over MQTT/)).toBeVisible({ timeout: 30_000 });
 
   await page.goto(app.url + "/devices/1/backups");
   await page.getByRole("link", { name: "Restore…" }).first().click();

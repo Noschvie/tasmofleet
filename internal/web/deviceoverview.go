@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"net"
@@ -492,6 +493,25 @@ func (h *handler) devActRows(r *http.Request, id model.DeviceID, limit int) ([]d
 	return rows, jobs, nil
 }
 
+// withBackupNotes gives the rows of succeeded backup jobs the note the job ended with, the same text the
+// bulk result and the transaction page show (#882). Only the rows that are shown are read (the overview's
+// ten, or one page of the history), and only backup jobs, so a device without backups costs no read.
+// A job whose events cannot be read keeps the row as it was.
+func (h *handler) withBackupNotes(ctx context.Context, rows []devActRow) {
+	if h.d.Jobs == nil {
+		return
+	}
+	for i := range rows {
+		j := rows[i].Job
+		if j == nil || !j.IsBackup() || j.State != model.JobSucceeded {
+			continue
+		}
+		if evs, err := h.d.Jobs.JobEvents(ctx, j.ID); err == nil && len(evs) > 0 {
+			rows[i].Note = evs[len(evs)-1].Detail
+		}
+	}
+}
+
 // telemetryOf is the device's cached telemetry (empty when the tracker has none).
 func (h *handler) telemetryOf(id model.DeviceID) health.Telemetry {
 	if tl, ok := h.d.Health.(interface {
@@ -521,6 +541,7 @@ func (h *handler) overviewOf(r *http.Request, v view, d model.Device, just *rela
 	if err != nil {
 		return p, err
 	}
+	h.withBackupNotes(ctx, rows)
 	p.Activity = devActivity{Base: v.Base, Rows: rows, All: v.Base + devPath(d.ID, "/history"), Sig: activitySig(rows)}
 	for _, j := range jobs {
 		if holdsDevice(j) {
@@ -680,6 +701,7 @@ func (h *handler) stateHistory(w http.ResponseWriter, r *http.Request) {
 	if hi := min(lo+size, len(all)); lo < hi {
 		p.Rows = all[lo:hi]
 	}
+	h.withBackupNotes(r.Context(), p.Rows)
 	h.headPage(w, r, http.StatusOK, "device-history", v, d, deviceHistoryPage(p))
 }
 

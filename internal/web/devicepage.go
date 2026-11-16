@@ -123,7 +123,7 @@ func activitySig(rows []devActRow) string {
 			b.WriteString("|e|" + string(e.From) + "|" + string(e.To) + "|" + string(e.Source) + "|" + e.Detail)
 		}
 		if j := r.Job; j != nil {
-			b.WriteString("|j|" + strconv.FormatInt(int64(j.ID), 10) + "|" + strconv.FormatInt(int64(j.BatchID), 10) + "|" + string(j.State) + "|" + j.LastError + "|" + j.Target())
+			b.WriteString("|j|" + strconv.FormatInt(int64(j.ID), 10) + "|" + strconv.FormatInt(int64(j.BatchID), 10) + "|" + string(j.State) + "|" + j.LastError + "|" + j.Target() + "|" + r.Note)
 		}
 		b.WriteByte('\n')
 	}
@@ -136,6 +136,9 @@ type devActRow struct {
 	At    time.Time
 	Event *store.HealthEvent
 	Job   *model.Job
+	// Note is what a succeeded backup job says about itself (#882: the way it travelled and what it
+	// holds), read from the job's last event when the row is shown; empty for every other row.
+	Note string
 }
 
 // connCard is the Connection card: how TasmoFleet reaches the device and how the device is

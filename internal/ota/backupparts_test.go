@@ -46,9 +46,8 @@ func jobNote(t *testing.T, h *harness) string {
 // Why (#838): one backup of one device is one thing, however many files it is stored as. The result
 // used to count the stored files ("3 backup files taken over HTTP"), which looked like three backups
 // after "Back up all now" on 20 devices. The note names the parts of the one backup instead, in a
-// fixed order, so the same run reads the same on the bulk result and the transaction page (both show
-// this note; the device page answers its own Back up with a fixed "Backup taken." that never counted
-// files), and no number is left to misread.
+// fixed order (backup.Note), so the same run reads the same on the bulk result, the transaction page
+// and the device page's own Back up (#882), and no number is left to misread.
 func TestBulkBackupNoteNamesThePartsOfOneBackupNotAFileCount(t *testing.T) {
 	cfg, snap, dec, files := model.BackupConfigDump, model.BackupSnapshot, model.BackupDecoded, model.BackupFiles
 	for _, tc := range []struct {
