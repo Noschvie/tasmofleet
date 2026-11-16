@@ -544,7 +544,7 @@ func rebooted(j model.Job, ev Event) bool {
 	}
 	before := j.IdentityBefore
 	// Only a device that answers Status 2 with Unknown is named minimal or safeboot, so switching into one
-	// proves a restart even when the job names it without an image (#686: no main page in a job).
+	// proves a restart on its own, whatever image it names.
 	if isIntermediate(id.Variant) && id.Variant != before.Variant {
 		return true
 	}

@@ -88,8 +88,9 @@ func (r *Router) RootPage(ctx context.Context, t tasmota.Target) (tasmota.RootIn
 
 // Info1Root is the main page as far as the device's INFO1 since its last boot tells it (version and image,
 // no language), for a stored device usable over MQTT (MQTTBlocker), whatever ctx pins: it only reads the
-// INFO1 cache of the MQTT channel, sends nothing to the device and never touches HTTP. An update job reads
-// minimal and safeboot firmware this way (#686) instead of the main page. ErrNoInfo without an INFO1 (or
+// INFO1 cache of the MQTT channel, sends nothing to the device and never touches HTTP. An update job pinned to
+// MQTT reads minimal and safeboot firmware this way (#686) instead of the main page; one pinned to HTTP does not
+// (#918, a check counts only for the transport it was read over). ErrNoInfo without an INFO1 (or
 // without a stored device), ErrUnreachable when MQTT is not connected or not usable for the device.
 func (r *Router) Info1Root(ctx context.Context, t tasmota.Target) (tasmota.RootInfo, error) {
 	id := t.DeviceID()

@@ -97,25 +97,24 @@ type info1Reader interface {
 
 // intermediateRoot names the image of firmware that answered Status 2 with Unknown (#686).
 //
-// Inside an update job (jobFamily known) the main page is never read: the device's INFO1 since its last
-// boot names the image when MQTT carries it, and Detect checks that image against the job's family; without
-// a usable INFO1 Root stays nil, and Detect names the intermediate image of the job's family itself (the
-// job expects it). Outside a job (the preview, a retry's look, the preflight of a device found on minimal)
-// the router's RootPage reads INFO1 first and the main page only without one (the fallback, path 3); a
-// job's pin keeps its meaning there.
+// Inside an update job (jobFamily known) pinned to MQTT the device's INFO1 since its last boot names the image,
+// and Detect checks that image against the job's family; the main page is not read then. A job pinned to HTTP
+// never takes the INFO1: it comes from the topic, while the job's Status 2, Upgrade and upload go to the
+// address, and a check counts only for the transport it was read over (#810), so another chip at the address
+// (an IP swap) would pass on the INFO1 of the job's device. Such a job, and an MQTT job without a usable INFO1,
+// reads the main page over its pin (D5) as the independent proof of the image (#918): Guard checks the job's
+// preflight identity, not this one, so only this image can catch another chip that answers after a restart.
+// Outside a job (the preview, a retry's look, the preflight of a device found on minimal) the router's
+// RootPage reads INFO1 first and the main page only without one (the fallback, path 3).
 func (a *deviceAPI) intermediateRoot(ctx context.Context, t tasmota.Target, jobFamily model.ChipFamily) (*fwselect.RootInfo, error) {
 	var ri tasmota.RootInfo
-	var err error
-	if jobFamily != model.ChipUnknown {
-		r, ok := a.c.(info1Reader)
-		if !ok {
-			return nil, nil
+	err := transport.ErrNoInfo
+	if pin, _ := transport.PathFrom(ctx); pin == transport.MQTT && jobFamily != model.ChipUnknown {
+		if r, ok := a.c.(info1Reader); ok {
+			ri, err = r.Info1Root(ctx, t)
 		}
-		ri, err = r.Info1Root(ctx, t)
-		if errors.Is(err, transport.ErrNoInfo) || errors.Is(err, tasmota.ErrUnreachable) {
-			return nil, nil // no INFO1 this job can vouch for: the job's own family names the image
-		}
-	} else {
+	}
+	if errors.Is(err, transport.ErrNoInfo) || errors.Is(err, tasmota.ErrUnreachable) {
 		ri, err = a.c.RootPage(ctx, t)
 	}
 	if err != nil {

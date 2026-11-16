@@ -26,11 +26,12 @@ func (p *pagesRead) RootPage(ctx context.Context, t tasmota.Target) (tasmota.Roo
 	return p.Client.RootPage(ctx, t)
 }
 
-// Why (#686): a German 1 MB ESP8266 is updated through minimal over HTTP without a single main page read. The
-// preflight reads the language from the Status 4 locale and the chip from Status 2; the minimal hop is named by
-// the job's own family and the bare Upgrade reply; and the final image is the German build the preflight chose,
-// although the minimal firmware in between reports no language at all.
-func TestITStagedGermanESP8266ReadsNoMainPage(t *testing.T) {
+// Why (#686, #918): a German 1 MB ESP8266 is updated through minimal over HTTP. The preflight reads the language
+// from the Status 4 locale and the chip from Status 2, no main page; only the minimal hop, which has no INFO1
+// over HTTP, reads the page as the proof that the device at the address runs the job's minimal (#918); and the
+// final image is the German build the preflight chose, although the minimal firmware in between reports no
+// language at all.
+func TestITStagedGermanESP8266TakesItsLanguageFromStatus4(t *testing.T) {
 	e := newItEnv(t)
 	pages := &pagesRead{Client: tasmota.NewHTTPClient(tasmota.Options{
 		AllowedNetworks: []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8")},
@@ -54,7 +55,7 @@ func TestITStagedGermanESP8266ReadsNoMainPage(t *testing.T) {
 	if !flashed {
 		t.Fatalf("the German file was never set as OtaUrl: %v", e.ctrl[dev].Commands())
 	}
-	if n := pages.n.Load(); n != 0 {
-		t.Fatalf("the update read the main page %d times", n)
+	if pages.n.Load() == 0 {
+		t.Fatal("the minimal hop never read the main page: nothing proved the image at the address (#918)")
 	}
 }

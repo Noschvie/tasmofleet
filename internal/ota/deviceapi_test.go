@@ -412,12 +412,13 @@ func (c *info1Client) Info1Root(context.Context, tasmota.Target) (tasmota.RootIn
 	return c.info1, c.err
 }
 
-// Why (#686): an update job through minimal (ESP8266) or safeboot (ESP32) must not read the main page, an
-// HTML page for people that changes with the firmware: the job read the chip at its preflight, so the bare
-// Upgrade reply names the version and the job's family the intermediate image. Neither the liveness probe of
-// every poll nor the identity probe of the verify reads the page, and the identity is the one the machine
-// needs to go on (minimal: ESP8266, safeboot: family unknown, as before).
-func TestAJobThroughMinimalOrSafebootReadsNoMainPage(t *testing.T) {
+// Why (#686, #918): an update job through minimal (ESP8266) or safeboot (ESP32) gets the version from the bare
+// Upgrade reply. Without an INFO1 the job can vouch for, the main page names the image (the proof that the
+// device at the address runs the job's intermediate image, see
+// TestAJobStepWithoutINFO1ReadsThePageAndRefusesAnotherChipAtTheAddress), in the liveness probe of every poll
+// as in the identity probe of the verify, and the identity is the one the machine needs to go on (minimal:
+// ESP8266, safeboot: family unknown, as before).
+func TestAJobThroughMinimalOrSafebootWithoutINFO1NamesTheImageFromThePage(t *testing.T) {
 	for _, tc := range []struct {
 		fam     model.ChipFamily
 		variant string
@@ -428,7 +429,7 @@ func TestAJobThroughMinimalOrSafebootReadsNoMainPage(t *testing.T) {
 		{model.ChipESP32C3, "safeboot", model.ChipUnknown},
 	} {
 		for _, withRouter := range []bool{false, true} {
-			fc := &fixtureClient{t: t, dir: cabinet, minimal: true}
+			fc := &fixtureClient{t: t, dir: cabinet, minimal: true, root: intermediatePage("release-" + tc.variant)}
 			var c tasmota.Client = fc
 			if withRouter {
 				c = &info1Client{fixtureClient: fc, err: transport.ErrNoInfo} // MQTT carries the device but sent no INFO1 since its boot
@@ -436,17 +437,12 @@ func TestAJobThroughMinimalOrSafebootReadsNoMainPage(t *testing.T) {
 			a := NewDeviceAPI(c).(*deviceAPI)
 			a.gap = 0
 			id, up, err := a.Probe(context.Background(), cabinetDevice, tc.fam)
-			if err != nil || up != 0 || id.Variant != tc.variant || id.Family != tc.family || id.Version != "16.0.0" || id.Image != "" {
+			if err != nil || up != 0 || id.Variant != tc.variant || id.Family != tc.family || id.Version != "16.0.0" || id.Image != "release-"+tc.variant {
 				t.Fatalf("%s probe: id %+v up %d err %v", tc.fam, id, up, err)
 			}
 			id, _, _, err = a.ProbeIdentity(context.Background(), cabinetDevice, tc.fam)
 			if err != nil || id.Variant != tc.variant || id.Family != tc.family {
 				t.Fatalf("%s identity probe: id %+v err %v", tc.fam, id, err)
-			}
-			for _, cmd := range fc.sent {
-				if cmd == "GET /" {
-					t.Fatalf("%s job read the main page: %v", tc.fam, fc.sent)
-				}
 			}
 		}
 	}
@@ -454,9 +450,10 @@ func TestAJobThroughMinimalOrSafebootReadsNoMainPage(t *testing.T) {
 
 // Why (#686, MQTT first): inside a job the INFO1 a device usable over MQTT published since its last boot names
 // the image, and it must be the intermediate image of the job's chip, on every transport: a safeboot INFO1 on an
-// ESP8266 job (another device on the topic, a forged INFO1) stops the job instead of passing as minimal. An
-// INFO1 the router cannot vouch for (MQTT down or not usable) leaves the job to its own family; any other
-// failure of the read fails the probe rather than being guessed around. The page is never read.
+// ESP8266 job (another device on the topic, a forged INFO1) stops the job instead of passing as minimal. Any
+// failure of the read other than a missing or unusable INFO1 (which falls back to the page, #918) fails the
+// probe rather than being guessed around. With an INFO1 the page is never read. Only a job pinned to MQTT takes
+// the INFO1 (see TestAJobStepWithoutINFO1ReadsThePageAndRefusesAnotherChipAtTheAddress for one pinned to HTTP).
 func TestAJobTakesTheImageFromTheINFO1AndRefusesOneOfAnotherChip(t *testing.T) {
 	minimal := tasmota.RootInfo{Version: "16.0.0", Image: "release-minimal", Minimal: true}
 	safeboot := tasmota.RootInfo{Version: "16.0.0", Image: "release-safeboot", Minimal: true}
@@ -473,14 +470,13 @@ func TestAJobTakesTheImageFromTheINFO1AndRefusesOneOfAnotherChip(t *testing.T) {
 		{"safeboot INFO1 on an esp8266 job", safeboot, nil, model.ChipESP8266, "", fwselect.ErrFamilyMismatch},
 		{"minimal INFO1 on an esp32-s3 job", minimal, nil, model.ChipESP32S3, "", fwselect.ErrFamilyMismatch},
 		{"INFO1 of another version than the Upgrade reply", tasmota.RootInfo{Version: "15.0.0", Image: "release-minimal"}, nil, model.ChipESP8266, "", errRefused},
-		{"MQTT not usable", tasmota.RootInfo{}, tasmota.ErrUnreachable, model.ChipESP8266, "", nil},
 		{"INFO1 unreadable", tasmota.RootInfo{}, tasmota.ErrBadResponse, model.ChipESP8266, "", tasmota.ErrBadResponse},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fc := &fixtureClient{t: t, dir: cabinet, minimal: true}
 			a := NewDeviceAPI(&info1Client{fixtureClient: fc, info1: tc.info1, err: tc.err}).(*deviceAPI)
 			a.gap = 0
-			id, _, _, err := a.ProbeIdentity(context.Background(), cabinetDevice, tc.fam)
+			id, _, _, err := a.ProbeIdentity(transport.WithPath(context.Background(), transport.MQTT), cabinetDevice, tc.fam)
 			switch {
 			case tc.wantErr == nil && err != nil:
 				t.Fatalf("err %v", err)
@@ -496,5 +492,83 @@ func TestAJobTakesTheImageFromTheINFO1AndRefusesOneOfAnotherChip(t *testing.T) {
 				t.Fatalf("sent %v: the job must ask the INFO1 and never the page", fc.sent)
 			}
 		})
+	}
+}
+
+// intermediatePage is the main page of minimal or safeboot firmware whose footer names image.
+func intermediatePage(image string) []byte {
+	return []byte(`<!DOCTYPE html><html lang="en" class=""><body><div style='text-align:center;'><h3>MINIMAL firmware<br>please upgrade</h3></div>` +
+		`<div style='text-align:right;font-size:11px;'><hr><a href='https://github.com/arendst/Tasmota' target='_blank' style='color:#aaa;'>Tasmota 16.0.0 (` +
+		image + `) by Theo Arends</a></div></body></html>`)
+}
+
+// Why (#918): fwselect.Guard never sees the device as it answers during the job. It checks the artifact
+// against the identity of the preflight (Engine.stageArtifact passes j.IdentityBefore), so it cannot refuse
+// another chip that shows up at the job's address while the device restarts (an IP swap); and
+// hardwareChanged ignores an identity whose family is unknown, which safeboot's always is. When the device
+// published no INFO1 the job can vouch for (HTTP only, MQTT down, no INFO1 since its boot), its main page is
+// the only independent proof of the image at the address: an ESP8266 on minimal must not pass as the
+// safeboot of an ESP32 job (the job would upload an ESP32 image into it), nor an ESP32 in safeboot as the
+// minimal of an ESP8266 job. A job pinned to HTTP reads the page even when the INFO1 on the topic names the
+// job's own image (#810, a check counts only for the transport it was read over): its Status 2, Upgrade and
+// upload go to the address, so after an IP swap the INFO1 of the job's device (say an ESP32 in safeboot under
+// its new address) must not vouch for an ESP8266 on minimal that answers at the old one. Only a job pinned to
+// MQTT takes the INFO1 instead of the page (#686, MQTT first).
+func TestAJobStepWithoutINFO1ReadsThePageAndRefusesAnotherChipAtTheAddress(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		page    string // image in the main page's footer
+		fam     model.ChipFamily
+		wantErr error
+	}{
+		{"esp8266 minimal at the address of an esp32 job", "release-minimal", model.ChipESP32, fwselect.ErrFamilyMismatch},
+		{"esp8266 minimal at the address of an esp32-c3 job", "release-minimal", model.ChipESP32C3, fwselect.ErrFamilyMismatch},
+		{"esp32 safeboot at the address of an esp8266 job", "release-safeboot", model.ChipESP8266, fwselect.ErrFamilyMismatch},
+		{"the job's own safeboot", "release-safeboot", model.ChipESP32, nil},
+		{"the job's own minimal", "release-minimal", model.ChipESP8266, nil},
+	} {
+		own := tasmota.RootInfo{Version: "16.0.0", Image: "release-safeboot", Minimal: true} // the job's own intermediate image
+		if tc.fam == model.ChipESP8266 {
+			own.Image = "release-minimal"
+		}
+		for _, v := range []struct {
+			name     string
+			info1    bool // the client offers the router's INFO1 read
+			info1Err error
+			ctx      context.Context
+		}{
+			{"HTTP only", false, nil, context.Background()},
+			// An MQTT job without a usable INFO1 asks RootPage over its pin (the router fails it over MQTT,
+			// this fixture answers it with the page): never the job's family alone.
+			{"INFO1: " + transport.ErrNoInfo.Error(), true, transport.ErrNoInfo, transport.WithPath(context.Background(), transport.MQTT)},
+			{"INFO1: " + tasmota.ErrUnreachable.Error(), true, tasmota.ErrUnreachable, transport.WithPath(context.Background(), transport.MQTT)},
+			{"INFO1 names the job's image, HTTP pin", true, nil, transport.WithPath(context.Background(), transport.HTTP)},
+		} {
+			t.Run(tc.name+", "+v.name, func(t *testing.T) {
+				fc := &fixtureClient{t: t, dir: cabinet, minimal: true, root: intermediatePage(tc.page)}
+				var c tasmota.Client = fc
+				if v.info1 {
+					c = &info1Client{fixtureClient: fc, info1: own, err: v.info1Err}
+				}
+				a := NewDeviceAPI(c).(*deviceAPI)
+				a.gap = 0
+				id, _, _, err := a.ProbeIdentity(v.ctx, cabinetDevice, tc.fam)
+				if tc.wantErr != nil {
+					if !errors.Is(err, tc.wantErr) {
+						t.Fatalf("identity %+v, err %v: another chip at the address must be refused with %v", id, err, tc.wantErr)
+					}
+				} else if err != nil || id.Image != tc.page {
+					t.Fatalf("identity %+v, err %v: want the image %q from the page", id, err, tc.page)
+				}
+				if !slices.Contains(fc.sent, "GET /") {
+					t.Fatalf("sent %v: without an INFO1 the job can vouch for, the page is the image proof", fc.sent)
+				}
+				for _, cmd := range fc.sent {
+					if !readOnlyCommands[cmd] && cmd != "INFO1" {
+						t.Fatalf("the probe sent %q", cmd)
+					}
+				}
+			})
+		}
 	}
 }

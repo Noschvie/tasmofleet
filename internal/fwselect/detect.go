@@ -204,10 +204,12 @@ func intermediateOf(image string, job model.ChipFamily) bool {
 // TasmoFleet's own update job, whose preflight read the chip family, Status 2 Unknown is the
 // intermediate image of that family (minimal on an ESP8266, safeboot on the ESP32 line). The
 // version must come from the bare Upgrade reply; nothing else is filled in, and the image stays
-// empty rather than guessed. Minimal has no Status 5, so the MAC cannot be checked here: the job
-// trusts that the device at its address is still the one it started on, and hardwareChanged and
-// Guard stay the checks before every flash. Outside a job (JobFamily unknown) this is
-// ErrUnknownHardware, as before.
+// empty rather than guessed. Minimal has no Status 5, so the MAC cannot be checked here, and nothing
+// here proves that the device at the job's address is still the one it started on: Guard checks the
+// job's preflight identity, not this one, and hardwareChanged ignores the unknown family of safeboot.
+// The OTA device API therefore never comes here inside a job since #918: without an INFO1 it reads
+// the main page, whose image detectMinimal checks against the job's family. Outside a job (JobFamily
+// unknown) this is ErrUnknownHardware, as before.
 func detectInJob(in Inputs) (model.Identity, error) {
 	var id model.Identity
 	switch {

@@ -304,15 +304,20 @@ data directory (TasmoAdmin lesson A4).
   `Status 2` answers `{"Command":"Unknown"}` **and** one of these names the image, in this order:
   (1) the INFO1 the device sent since its last boot, read through the router for a stored device
   usable over MQTT (`transport.Router.Info1Root`, a passive read of the broker; its version must
-  match the bare `Upgrade` reply); (2) inside TasmoFleet's own update job, the chip family the job
-  read at its preflight (`fwselect.Inputs.JobFamily`): minimal on an ESP8266, safeboot on the ESP32
-  line, the version from the bare `Upgrade` reply, the image left empty; an INFO1 image that is not
-  the intermediate image of that family is `ErrFamilyMismatch`; a job never reads the main page
-  after its preflight; (3) only outside such a job, without an INFO1 (a device found stuck in
-  minimal, the first add, the preflight of a device that already runs minimal): `GET /` with the
-  minimal/safeboot heading or the image tag `release-minimal`/`release-safeboot` (a self-compiled build's bare `safeboot` counts, a bare `minimal` does not: §6.2, #584). Minimal has no
-  `Status 5`, so path 2 trusts that the device at the job's address is still the one it started
-  on; `hardwareChanged` and `fwselect.Guard` stay the checks before every flash. The bare `Upgrade` reply
+  match the bare `Upgrade` reply), inside TasmoFleet's own update job only when the job is pinned to
+  MQTT: the INFO1 comes from the topic, while an HTTP job's `Status 2`, `Upgrade` and upload go to
+  the address, and a check counts only for the transport it was read over (#810); (2) inside such a
+  job pinned to HTTP, or pinned to MQTT without such an INFO1 (MQTT down, no INFO1 since the boot),
+  the main page at the job's address, over the path the job pinned (#918; over MQTT that is the
+  INFO1 again, so the step fails); (3) outside such a job, without an INFO1 (a device found
+  stuck in minimal, the first add, the preflight of a device that already runs minimal): `GET /`
+  with the minimal/safeboot heading or the image tag `release-minimal`/`release-safeboot` (a self-compiled build's bare `safeboot` counts, a bare `minimal` does not: §6.2, #584). Inside a job
+  (`fwselect.Inputs.JobFamily`, the chip family the job read at its preflight) the image, from the
+  INFO1 or the page, must be the intermediate image of that family (minimal on an ESP8266,
+  safeboot on the ESP32 line), otherwise `ErrFamilyMismatch`. Minimal has no `Status 5`, and
+  `fwselect.Guard` checks the job's preflight identity, not the one the device answers with during
+  the job (`hardwareChanged` ignores the unknown family of safeboot), so this image is the only
+  proof that another chip has not taken the job's address during a restart. The bare `Upgrade` reply
   (`1 or >X to upgrade`) is identical on normal firmware (OBS, all fixtures). It only
   supplies the version (`tasmota.UpgradeProbe.Idle`, `fwselect.UpgradeProbe.Version`)
   and never proves minimal on its own.
@@ -1261,7 +1266,7 @@ written.
 
 The path of an update is chosen once, in the preview, which is also the preflight of Submit: `transport.Choose` over the device's facts (spec "Transport and path choice") gives `Paths.Update`. `None` refuses the device with the chooser's sentence. A download over MQTT stores `Job.Transport = mqtt`; every device call of the job then runs under `transport.WithPath` (HTTP or MQTT, never rerouted, no failover), also after a restart. Over MQTT:
 
-- The Router builds `RootPage` from the INFO1 seen after the device's latest LWT Online (version, image tag, minimal/safeboot); none gives `ErrBadResponse` (`transport.ErrNoInfo`), so minimal firmware is never recognised on a guess. Since #686 only minimal and safeboot firmware need it (firmware that answered Status 2 reads no page), and after the preflight a job reads the INFO1 alone (`Router.Info1Root`, whatever path it pinned) and goes on from its own chip family without one. While another device answers on the topic (T19, #852) no INFO1 is read: outside a job the page at the address is, and a job goes on from its own chip family. The language comes from the `Status 4` locale over MQTT too; where that names no build the preview asks for it (`Request.Language`, kept as the language of the job's `IdentityBefore`).
+- The Router builds `RootPage` from the INFO1 seen after the device's latest LWT Online (version, image tag, minimal/safeboot); none gives `ErrBadResponse` (`transport.ErrNoInfo`), so minimal firmware is never recognised on a guess. Since #686 only minimal and safeboot firmware need it (firmware that answered Status 2 reads no page), and after the preflight a job pinned to MQTT reads the INFO1 (`Router.Info1Root`); a job without one (also while another device answers on the topic, T19, #852, when no INFO1 is read) reads the main page over its path, which fails on an MQTT pin, and never goes on from its own chip family alone (#918). A job pinned to HTTP reads the page at the address, never the INFO1 (#810). Outside a job the page at the address is read while the topic is taken. The language comes from the `Status 4` locale over MQTT too; where that names no build the preview asks for it (`Request.Language`, kept as the language of the job's `IdentityBefore`).
 - `stat/<t>/UPGRADE` `Failed ... connection failed` ends the stage without a second `Upgrade 1` (`ErrTextFWUnreachable`); the application records FWReach=no.
 - The job does not store the identity it probes (it is not an HTTP probe), so the device's GroupTopic read stays fresh for the writes of the job.
 - MQTT timings: reply 8 s, connection failure about 66 s after `Upgrade 1`, RebootWindow unchanged. The pre-OTA backup needs the MQTT backup (#257); without it the job fails at the backup unless the backup is switched off.
