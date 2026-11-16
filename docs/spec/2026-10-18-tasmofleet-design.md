@@ -779,6 +779,22 @@ Refuses, with a typed error, unless **all** hold:
 7. Variant/language equal the detected ones, or `AllowVariantChange` is set -> else
    `ErrVariantChange`. Exception: the minimal stage artifact for esp8266.
 8. URL length ≤ 100 characters (Tasmota settings text pool) -> else `ErrFilenameMismatch`.
+9. Settings-migration stop (#892): a device running a version below `MigrationFloor` (10.0.0.3) gets no
+   artifact whose release is above `StepRelease` (16.0.0) -> else `ErrSettingsMigration`. Tasmota removed every
+   `SettingsDelta` step below 10.0.0.3 after 16.0.0, for every chip family, so such a device must take 16.0.0 first.
+   Before that, the older stop of Tasmota's migration path: a device below `PathFloor` (8.1.0) gets no artifact
+   whose release is above `PathStep` (8.5.1) -> else `ErrMigrationPath`. Since 9.2.0.6 no release migrates such a
+   settings block (CHANGELOG `[9.2.0.6]`; RELEASENOTES of v16.0.0: "removes support for direct migration from
+   versions before v8.1.0"); `SettingsDelta` of 16.0.0 resets it with `SettingsDefault()` and keeps only Wi-Fi
+   and the MQTT connection (`settings.ino`, "Although no direct upgrade is supported try to make a viable
+   environment"). 16.0.0 is therefore no step for it; the index has no 8.5.1, so only an uploaded official
+   8.5.1 image serves it. The check uses the artifact's release (every stage, every caller) and fails closed on
+   a version it cannot read. `Decide` runs the same function, so the preview refuses before it fetches the newer
+   file. A device stopped by `ErrSettingsMigration` counts under "Needs a choice", and the preview offers one
+   action, a preview of 16.0.0 for exactly those devices with the same policy, variant, delivery, backup and
+   time. That is an ordinary one-release update, so every batch keeps one release. A device stopped by
+   `ErrMigrationPath` is refused and offered no step. The firmware index keeps 16.0.0 after it left the newest
+   releases: the archive directories `release-16.0.0/` of ota.tasmota.com and the GitHub tag `v16.0.0`.
 
 The engine also checks that the `Upgrade 1` reply `Version X from <url>` echoes exactly
 the URL it set. If not (another tool changed OtaUrl in between), the job fails. The device has accepted
@@ -849,8 +865,8 @@ dual-OTA device (#263).
 
 | Name              | Kind              | Index                                                                                                                                     | Download hosts (allowlist)                                                                              |
 | ----------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `github`          | `github-releases` | `GET https://api.github.com/repos/arendst/Tasmota/releases?per_page=10` (JSON, machine-readable)                                          | `api.github.com`, `github.com`, `objects.githubusercontent.com`, `release-assets.githubusercontent.com` |
-| `ota.tasmota.com` | `ota-tasmota`     | HTML listing of `/tasmota/release/` and `/tasmota32/release/` (only `href` file names are parsed; version from the release notes heading) | `ota.tasmota.com` (http allowed)                                                                        |
+| `github`          | `github-releases` | `GET https://api.github.com/repos/arendst/Tasmota/releases?per_page=10` (JSON, machine-readable); plus `GET .../releases/tags/v16.0.0` when that list lacks the step release 16.0.0 (#892) | `api.github.com`, `github.com`, `objects.githubusercontent.com`, `release-assets.githubusercontent.com` |
+| `ota.tasmota.com` | `ota-tasmota`     | HTML listing of `/tasmota/release/` and `/tasmota32/release/` (only `href` file names are parsed; version from the release notes heading); plus `/tasmota/release-16.0.0/` and `/tasmota32/release-16.0.0/` when the release directory no longer lists 16.0.0 (#892) | `ota.tasmota.com` (http allowed)                                                                        |
 
 `FIRMWARE_SOURCES` (System settings, applied at the next restart) orders them. A file only one source offers is refused unless `FIRMWARE_ALLOW_SINGLE_SOURCE` is on. GitHub is the primary index because it is JSON. If both
 sources are enabled, every download is fetched from both and the SHA-256 must match

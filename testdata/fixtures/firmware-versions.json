@@ -205,5 +205,68 @@
     "Image": "release-sensors",
     "Variant": "sensors",
     "SingleCore": false
+  },
+  {
+    "Version": "5.14.0",
+    "Hardware": "",
+    "Source": "#892, settings-migration stop: SRC: arendst/Tasmota v5.14.0 sonoff/sonoff.ino:1324 (Status 2 Version is my_version alone: no image tag, no Hardware)",
+    "Semver": "",
+    "Image": "",
+    "Variant": "unknown",
+    "SingleCore": false
+  },
+  {
+    "Version": "6.7.1(sonoff)",
+    "Hardware": "",
+    "Source": "#892, settings-migration stop: SRC: arendst/Tasmota v6.7.1 sonoff/support_command.ino:365 (Version %s%s, no Hardware), sonoff/sonoff.ino:1493 + :74 (image from kCodeImage, \"sonoff\" for CODE_IMAGE 0)",
+    "Semver": "6.7.1",
+    "Image": "sonoff",
+    "Variant": "unknown",
+    "SingleCore": false
+  },
+  {
+    "Version": "7.2.0(tasmota)",
+    "Hardware": "ESP8266EX",
+    "Source": "#892, settings-migration stop: SRC: arendst/Tasmota v7.2.0 tasmota/support_command.ino:381-383 (Version %s%s and Hardware), tasmota/tasmota.ino:206 + :71 (bare image from kCodeImage, no release- prefix)",
+    "Semver": "7.2.0",
+    "Image": "tasmota",
+    "Variant": "unknown",
+    "SingleCore": false
+  },
+  {
+    "Version": "8.5.1(release-tasmota)",
+    "Hardware": "ESP8266EX",
+    "Source": "#892, settings-migration stop: SRC: arendst/Tasmota v8.5.1 tasmota/support_command.ino:444, tasmota/tasmota.ino:229-230 (official builds get the release- prefix before compiling)",
+    "Semver": "8.5.1",
+    "Image": "release-tasmota",
+    "Variant": "tasmota",
+    "SingleCore": false
+  },
+  {
+    "Version": "9.5.0(release-tasmota)",
+    "Hardware": "ESP8266EX",
+    "Source": "#892, settings-migration stop: SRC: arendst/Tasmota v9.5.0 tasmota/support_command.ino:510-515, tasmota/tasmota.ino:371",
+    "Semver": "9.5.0",
+    "Image": "release-tasmota",
+    "Variant": "tasmota",
+    "SingleCore": false
+  },
+  {
+    "Version": "9.5.0(release-tasmota32)",
+    "Hardware": "ESP32-D0WDQ6",
+    "Source": "#892, settings-migration stop: SRC: arendst/Tasmota v9.5.0 tasmota/support_command.ino:510-515, tasmota/tasmota.ino:371 (CODE_IMAGE_STR tasmota32)",
+    "Semver": "9.5.0",
+    "Image": "release-tasmota32",
+    "Variant": "tasmota",
+    "SingleCore": false
+  },
+  {
+    "Version": "10.0.0(release-tasmota)",
+    "Hardware": "ESP8266EX",
+    "Source": "#892, settings-migration stop: SRC: arendst/Tasmota v10.0.0 tasmota/support_command.ino:513, tasmota/tasmota.ino:398",
+    "Semver": "10.0.0",
+    "Image": "release-tasmota",
+    "Variant": "tasmota",
+    "SingleCore": false
   }
 ]

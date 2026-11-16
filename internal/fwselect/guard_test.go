@@ -1,6 +1,8 @@
 package fwselect
 
 import (
+	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -251,4 +253,110 @@ func TestGuardRule8URLLength(t *testing.T) {
 		{name: "101 characters", id: idESP8266, a: artTasmota, c: keepChoice, url: long, want: ErrFilenameMismatch},
 		{name: "very long", id: idESP8266, a: artTasmota, c: keepChoice, url: "http://" + strings.Repeat("a", 500) + "/fw/16.0.0/tasmota.bin.gz", want: ErrFilenameMismatch},
 	})
+}
+
+// genIdentity is the identity Detect reads from one Status 2 shape of testdata/fixtures/firmware-versions.json
+// (the old generations are SRC rows, read from the Tasmota source at their tag). The language counts as read,
+// as on a device reached over HTTP, so that only the version decides.
+func genIdentity(t *testing.T, version, hw string) model.Identity {
+	t.Helper()
+	var forms []struct{ Version, Hardware string }
+	if err := json.Unmarshal(readFixture(t, "firmware-versions.json"), &forms); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(forms, func(f struct{ Version, Hardware string }) bool { return f.Version == version && f.Hardware == hw }) {
+		t.Fatalf("%s on %q is not a row of firmware-versions.json", version, hw)
+	}
+	id, err := Detect(Inputs{Status2: status2(version, hw)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id.LanguageKnown = true
+	return id
+}
+
+func withVersion(id model.Identity, v string) model.Identity { id.Version = v; return id }
+
+// artAt is an artifact of another release than rel, with the firmware server URL that goes with it.
+func artAt(release string, a model.Artifact) (model.Artifact, string) {
+	a.Release = release
+	return a, "http://10.0.0.5/fw/" + release + "/" + a.Filename
+}
+
+// Rule 9 (#892): Tasmota after 16.0.0 dropped every SettingsDelta step below 10.0.0.3 (arendst/Tasmota
+// 05dbdf048, 179264f48, 099f97d4c; the issue comment checked it against the tree), for every chip family. A
+// device older than that which is flashed past 16.0.0 boots with a settings block nobody migrates: its
+// configuration is lost or misread. So it may go to 16.0.0 at most, and from there on as usual. One row per
+// Tasmota generation, and the boundary rows (exactly 10.0.0.3, exactly 16.0.0, 16.0.0.1) keep the comparison
+// honest.
+func TestGuardRule9SettingsMigration(t *testing.T) {
+	v5 := genIdentity(t, "5.14.0", "")
+	v6 := genIdentity(t, "6.7.1(sonoff)", "")
+	v7 := genIdentity(t, "7.2.0(tasmota)", "ESP8266EX")
+	v8 := genIdentity(t, "8.5.1(release-tasmota)", "ESP8266EX")
+	v9 := genIdentity(t, "9.5.0(release-tasmota)", "ESP8266EX")
+	v9esp32 := genIdentity(t, "9.5.0(release-tasmota32)", "ESP32-D0WDQ6")
+	v10 := genIdentity(t, "10.0.0(release-tasmota)", "ESP8266EX")
+	c3 := withVersion(idC3, "9.5.0.2") // the ESP32-C3 memmove step of 9.5.0.2 is one of the removed ones
+	min9 := withVersion(idMinimal, "9.5.0")
+	floor := withVersion(idESP8266, MigrationFloor)
+	current := withVersion(idESP8266, "16.0.0")
+
+	to := func(release string, a model.Artifact) (model.Artifact, string, Choice) {
+		a, u := artAt(release, a)
+		return a, u, Choice{Release: release}
+	}
+	var tests []guardCase
+	add := func(name string, id model.Identity, release string, a model.Artifact, variant string, want error) {
+		a, u, c := to(release, a)
+		if variant != "" {
+			c.Variant, c.AllowVariantChange = variant, true
+		}
+		tests = append(tests, guardCase{name: name, id: id, a: a, url: u, c: c, want: want})
+	}
+	// Below 7.x Status 2 carries no Hardware: these stay refused as unknown hardware, whatever the target.
+	add("5.14 to 16.1", v5, "16.1.0", artTasmota, "", ErrUnknownHardware)
+	add("5.14 to 16.0", v5, "16.0.0", artTasmota, "", ErrUnknownHardware)
+	add("6.7.1 to 16.1", v6, "16.1.0", artTasmota, "", ErrUnknownHardware)
+	add("6.7.1 to 16.0", v6, "16.0.0", artTasmota, "", ErrUnknownHardware)
+	// 7.2 reports a bare image tag: only with an explicit variant. 16.0.0 is no step for it: Tasmota stopped
+	// migrating firmware older than 8.1.0 in 9.2.0.6, and 16.0.0 resets such a settings block to its defaults
+	// (keeping only Wi-Fi and MQTT), so module, template, rules and names would be lost. Tasmota's migration
+	// path takes it to 8.5.1 first, which only an uploaded image can be.
+	add("7.2 bare tag to 16.1 with variant", v7, "16.1.0", artTasmota, "tasmota", ErrMigrationPath)
+	add("7.2 bare tag to 16.0 with variant", v7, "16.0.0", artTasmota, "tasmota", ErrMigrationPath)
+	add("7.2 bare tag to 8.5.0.1, past the path step", v7, "8.5.0.1", artTasmota, "tasmota", nil)
+	add("7.2 bare tag to 8.5.1.1, past the path step", v7, "8.5.1.1", artTasmota, "tasmota", ErrMigrationPath)
+	add("7.2 bare tag to a custom 8.5.1 with variant", v7, PathStep, artTasmota, "tasmota", nil)
+	add("8.0.0 to 16.0, below the path floor", withVersion(v8, "8.0.0"), "16.0.0", artTasmota, "", ErrMigrationPath)
+	add("exactly 8.1.0 to 16.0", withVersion(v8, PathFloor), "16.0.0", artTasmota, "", nil)
+	add("exactly 8.1.0 to 16.1", withVersion(v8, PathFloor), "16.1.0", artTasmota, "", ErrSettingsMigration)
+	add("8.5.1 to 16.1", v8, "16.1.0", artTasmota, "", ErrSettingsMigration)
+	add("8.5.1 to 16.0.0.1", v8, "16.0.0.1", artTasmota, "", ErrSettingsMigration)
+	add("8.5.1 to 16.0", v8, "16.0.0", artTasmota, "", nil)
+	add("9.5 to 16.1", v9, "16.1.0", artTasmota, "", ErrSettingsMigration)
+	add("9.5 to 16.0", v9, "16.0.0", artTasmota, "", nil)
+	add("9.5 to 15.3, not past the step", v9, "15.3.0", artTasmota, "", nil)
+	// Staged ESP8266 step: the minimal stage and the final stage both carry the step release.
+	add("9.5 minimal stage of 16.0", v9, "16.0.0", artMinimal, "", nil)
+	add("9.5 minimal stage of 16.1", v9, "16.1.0", artMinimal, "", ErrSettingsMigration)
+	add("9.5 esp32 to 16.1", v9esp32, "16.1.0", artESP32, "", ErrSettingsMigration)
+	add("9.5 esp32 to 16.0", v9esp32, "16.0.0", artESP32, "", nil)
+	add("9.5.0.2 c3 to 16.1", c3, "16.1.0", artC3, "", ErrSettingsMigration)
+	add("9.5.0.2 c3 to 16.0", c3, "16.0.0", artC3, "", nil)
+	add("minimal 9.5 to 16.1", min9, "16.1.0", artTasmota, "tasmota", ErrSettingsMigration)
+	add("minimal 9.5 to 16.0", min9, "16.0.0", artTasmota, "tasmota", nil)
+	// 10.0.0 is below the floor too: its settings version is 0x0A000000, older than the oldest kept step.
+	add("10.0.0 to 16.1", v10, "16.1.0", artTasmota, "", ErrSettingsMigration)
+	add("10.0.0 to 16.0", v10, "16.0.0", artTasmota, "", nil)
+	add("exactly 10.0.0.3 to 16.1", floor, "16.1.0", artTasmota, "", nil)
+	add("16.0 to 16.1", current, "16.1.0", artTasmota, "", nil)
+	runGuard(t, tests)
+
+	// Fail closed: a version the comparison cannot read is never taken as new enough.
+	bad := withVersion(idESP8266, "x9")
+	a, u := artAt("16.1.0", artTasmota)
+	if err := Guard(bad, a, u, Choice{Release: "16.1.0"}); err == nil {
+		t.Fatal("Guard let an unreadable device version through to 16.1.0")
+	}
 }

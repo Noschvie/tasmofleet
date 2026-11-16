@@ -15,7 +15,9 @@
 //   - Guard: the hard safety check run immediately before every OtaUrl/Upgrade.
 //     Refuses unless device family == artifact family == file-name family, the
 //     artifact is not a safeboot image, the identity is known, and the variant
-//     equals the device variant unless the user explicitly chose another.
+//     equals the device variant unless the user explicitly chose another,
+//     and a device older than MigrationFloor never gets a release newer than
+//     StepRelease (settings migration, #892).
 //   - Plan: direct vs staged (minimal first). Staged only for ESP8266 when the
 //     target image does not fit into the free OTA space; never decided by
 //     model name.
@@ -58,6 +60,33 @@ var (
 	// choice is made. A change of a keepable variant or language stays a plain ErrVariantChange: that
 	// refusal needs no override.
 	ErrVariantChoiceNeeded = fmt.Errorf("fwselect: the running firmware is custom or unrecognised, choose a variant: %w", ErrVariantChange)
+
+	// ErrSettingsMigration: the device runs firmware older than MigrationFloor and the target is newer
+	// than StepRelease, the last Tasmota release that still migrates such a settings block (#892). The
+	// device must take StepRelease first; nothing newer is ever sent to it directly.
+	ErrSettingsMigration = errors.New("fwselect: Tasmota after " + StepRelease + " no longer migrates the settings of firmware older than " + MigrationFloor + ", update to " + StepRelease + " first")
+
+	// ErrMigrationPath: the device runs firmware older than PathFloor and the target is newer than
+	// PathStep (#892). StepRelease does not migrate it either, so it does not wrap ErrSettingsMigration
+	// and no step is offered: TasmoFleet's index has no PathStep, the person takes it by hand.
+	ErrMigrationPath = errors.New("fwselect: Tasmota after " + PathStep + " no longer migrates the settings of firmware older than " + PathFloor + ", update to " + PathStep + " by hand first (Tasmota's migration path)")
+)
+
+// StepRelease and MigrationFloor are the settings-migration stop (#892). Tasmota removed every
+// SettingsDelta step below 10.0.0.3 after 16.0.0 (arendst/Tasmota 05dbdf048, 179264f48, 099f97d4c),
+// for every chip family. A device below MigrationFloor that is updated past StepRelease keeps a settings
+// block nobody migrates, so it may go to StepRelease at most; from there the next update is ordinary.
+//
+// PathFloor and PathStep are the older stop of Tasmota's migration path (7.2.0 -> 8.5.1 -> ...): since
+// 9.2.0.6 no release migrates firmware older than 8.1.0 (CHANGELOG [9.2.0.6]; RELEASENOTES of v16.0.0,
+// "removes support for direct migration from versions before v8.1.0"). SettingsDelta of 16.0.0 resets such a
+// block with SettingsDefault and keeps only Wi-Fi and the MQTT connection (settings.ino, "Although no direct
+// upgrade is supported try to make a viable environment"), so such a device may go to PathStep at most.
+const (
+	StepRelease    = "16.0.0"
+	MigrationFloor = "10.0.0.3"
+	PathStep       = "8.5.1"
+	PathFloor      = "8.1.0"
 )
 
 // LanguageEnglish in Choice.Language explicitly selects the English build.
@@ -151,7 +180,10 @@ const (
 
 // Decide applies the update policy to the current and target versions.
 // A device running minimal firmware is always "upgrade" (it must leave
-// minimal). Versions compare numerically per dotted field.
+// minimal). Versions compare numerically per dotted field. A target the
+// settings-migration stop forbids is refused with ErrSettingsMigration before
+// the policy, so a preview refuses it before any file is fetched (Guard is
+// still the binding check).
 func Decide(id model.Identity, c Choice) (Decision, error) {
 	return decide(id, c)
 }

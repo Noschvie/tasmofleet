@@ -4,7 +4,9 @@ Part of the working guide: start at [CLAUDE.md](../../CLAUDE.md).
 
 1. `fwselect.Guard` runs immediately before every `OtaUrl` and `Upgrade`. It refuses on
    unknown hardware, chip-family mismatch (device vs artifact header vs file name), safeboot
-   images, and variant changes without explicit user choice. Never bypass it, never "guess".
+   images, variant changes without explicit user choice, a release after 16.0.0 for a device
+   below 10.0.0.3, and a release after 8.5.1 for a device below 8.1.0 (settings migration, #892).
+   Never bypass it, never "guess".
    Guard covers what TasmoFleet sends on its own (update jobs, restore, Make compliant). An
    `Upgrade`/`OtaUrl` typed in the console or sent as a bulk command is the person's
    responsibility after the confirmation (`cmdpolicy.whyFirmware`); the one hard rule there is

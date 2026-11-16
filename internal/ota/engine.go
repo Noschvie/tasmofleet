@@ -341,6 +341,10 @@ type PreviewItem struct {
 	LanguageChoice   bool
 	LanguageDeclared bool
 	Language         string
+	// StepRelease is set when the refusal is fwselect.ErrSettingsMigration (#892) for an upstream release: the
+	// device runs firmware too old for the target, and this release (fwselect.StepRelease) is the step the person
+	// may choose for it instead. Empty for every other row and for a custom image.
+	StepRelease string
 }
 
 const (
@@ -586,6 +590,9 @@ func (e *Engine) previewDevice(ctx context.Context, d model.Device, r Request) P
 		}
 		it.VariantChoice = errors.Is(err, fwselect.ErrVariantChoiceNeeded)
 		it.LanguageChoice = errors.Is(err, fwselect.ErrLanguageUnknown)
+		if r.Custom == "" && errors.Is(err, fwselect.ErrSettingsMigration) {
+			it.StepRelease = fwselect.StepRelease
+		}
 		return it
 	}
 	it.Decision = string(p.decision)

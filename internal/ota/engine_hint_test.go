@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/hellwand/tasmofleet/internal/fwselect"
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/store"
 )
@@ -244,5 +245,68 @@ func TestDirectESP8266JobRecordsTheMinimalArtifact(t *testing.T) {
 	j := h.job(t, id)
 	if j.Plan != model.PlanDirect || j.TargetArtifact == 0 || j.MinimalArtifact == 0 || j.MinimalArtifact == j.TargetArtifact {
 		t.Fatalf("plan %s target %d minimal %d", j.Plan, j.TargetArtifact, j.MinimalArtifact)
+	}
+}
+
+// realDecide is the fake selector with fwselect's own Decide, so the preview meets the real
+// settings-migration stop (#892) while everything else stays fake.
+type realDecide struct{ *fakeSel }
+
+func (realDecide) Decide(id model.Identity, c fwselect.Choice) (fwselect.Decision, error) {
+	return fwselect.Decide(id, c)
+}
+
+// Why (#892): a device older than 10.0.0.3 must not be flashed past 16.0.0, because later releases no longer
+// migrate its settings. The preview must say so and offer 16.0.0 as the step (the page turns StepRelease into
+// the choice), and it must refuse before it fetches the newer file that will never be sent. A custom image is
+// refused the same way, but the upstream step is not offered for it (the request would mix custom and upstream).
+func TestPreviewOffersTheSettingsMigrationStep(t *testing.T) {
+	old := plugDevice()
+	old.ident.Version = "9.5.0"
+	h := newHarness(t, 2, old, plugDevice())
+	h.e.sel = realDecide{h.sel}
+	rec := &ensureRecorder{Firmware: h.e.fw}
+	h.e.fw = rec
+	items, err := h.e.Preview(context.Background(), []Request{{DeviceID: 1, Release: "16.1.0"}, {DeviceID: 2, Release: "16.1.0"}, {DeviceID: 1, Release: "16.1.0", Custom: "abc"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	it := items[0]
+	if it.Decision != decisionRefuse || it.StepRelease != fwselect.StepRelease || !strings.Contains(it.Reason, "no longer migrates") {
+		t.Errorf("old device: %+v, want a refusal that offers %s", it, fwselect.StepRelease)
+	}
+	if items[1].StepRelease != "" || items[1].Decision != "upgrade" {
+		t.Errorf("current device: %+v, want a plain upgrade without a step", items[1])
+	}
+	if c := items[2]; c.Decision != decisionRefuse || c.StepRelease != "" {
+		t.Errorf("custom image on the old device: %+v, want a refusal without the upstream step", c)
+	}
+	for _, n := range rec.names {
+		if n != "tasmota.bin.gz" && n != "tasmota-minimal.bin.gz" {
+			t.Fatalf("unexpected fetch %q", n)
+		}
+	}
+	if len(rec.names) != 2 { // only the current device's target and minimal image
+		t.Errorf("Ensure calls %v: the refused device must not fetch anything", rec.names)
+	}
+}
+
+// Why (#892): 16.0.0 is no step for firmware older than 8.1.0. Tasmota stopped migrating it in 9.2.0.6, and
+// 16.0.0 resets such a settings block to its defaults (only Wi-Fi and MQTT survive), so offering 16.0.0 would
+// lead the person to wipe module, template, rules and names. A 7.2.0 device is refused with Tasmota's migration
+// path and offered no step, for 16.1.0 and for 16.0.0 alike.
+func TestPreviewOffersNoStepBelowTheMigrationPath(t *testing.T) {
+	old := plugDevice()
+	old.ident.Version = "7.2.0"
+	h := newHarness(t, 1, old)
+	h.e.sel = realDecide{h.sel}
+	items, err := h.e.Preview(context.Background(), []Request{{DeviceID: 1, Release: "16.1.0"}, {DeviceID: 1, Release: fwselect.StepRelease}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, it := range items {
+		if it.Decision != decisionRefuse || it.StepRelease != "" || !strings.Contains(it.Reason, "migration path") {
+			t.Errorf("7.2.0 device: %+v, want a refusal with the migration path and no step", it)
+		}
 	}
 }

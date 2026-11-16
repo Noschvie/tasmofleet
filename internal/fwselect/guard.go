@@ -10,7 +10,7 @@ import (
 // maxOtaURLLen is the size of Tasmota's OtaUrl settings text (§7.5 rule 8).
 const maxOtaURLLen = 100
 
-// guard implements the eight rules of §7.5. Each refusal wraps exactly one
+// guard implements the nine rules of §7.5. Each refusal wraps exactly one
 // sentinel error; the rule numbers below follow the spec.
 func guard(id model.Identity, a model.Artifact, otaURL string, c Choice) error {
 	// Rule 1: known identity, and an identity consistent with its hardware.
@@ -68,6 +68,11 @@ func guard(id model.Identity, a model.Artifact, otaURL string, c Choice) error {
 	}
 	if a.Filename != sel.Filename && a.Filename != sel.Minimal {
 		return fmt.Errorf("guard: artifact %q, selected %q: %w", a.Filename, sel.Filename, ErrVariantChange)
+	}
+	// Rule 9: a device older than MigrationFloor gets nothing newer than StepRelease (#892). The release
+	// checked is the artifact's, the file that is really sent, for every stage and every caller.
+	if err := migrationStop(id, a.Release); err != nil {
+		return fmt.Errorf("guard: %w", err)
 	}
 	return nil
 }

@@ -914,3 +914,108 @@ func preselected(body string) bool {
 	}
 	return regexp.MustCompile(`<input[^>]* checked[ >/]`).MatchString(body)
 }
+
+// formFields are the hidden fields of the form with the given id on a page, as the browser would post them.
+func formFields(t *testing.T, body, id string) url.Values {
+	t.Helper()
+	i := strings.Index(body, `<form id="`+id+`"`)
+	if i < 0 {
+		t.Fatalf("no form %q: %s", id, body)
+	}
+	form, _, _ := strings.Cut(body[i:], "</form>")
+	post := url.Values{}
+	for _, m := range hiddenField.FindAllStringSubmatch(form, -1) {
+		post.Add(m[1], m[2])
+	}
+	return post
+}
+
+// Why (#892): a device older than 10.0.0.3 must not get a release after 16.0.0 (its settings are no longer
+// migrated), so the preview says why and offers one way forward: a preview of 16.0.0 for exactly those devices,
+// with every other choice of the person kept (policy, delivery, backup, the time of a plan). It is an ordinary
+// one-release preview, so Decide and Guard check 16.0.0 like any release the person picks, and the main batch
+// never mixes two releases: its Start carries none of the step devices.
+func TestPreviewOffersTheSettingsMigrationStepAsItsOwnPreview(t *testing.T) {
+	e, o, _, _ := setupOTAAt(t, fixedClock{friday})
+	old := model.Identity{LanguageKnown: true, Hardware: "ESP8266EX", Family: model.ChipESP8266, Version: "9.5.0", Variant: "tasmota", Image: "release-tasmota"}
+	e.inv.devs[4] = model.Device{ID: 4, Name: "old-plug", Address: "10.0.0.4", Identity: old}
+	old.Version = "8.5.1"
+	e.inv.devs[5] = model.Device{ID: 5, Name: "old-lamp", Address: "10.0.0.5", Identity: old}
+	for _, id := range []model.DeviceID{4, 5} {
+		o.items[id] = ota.PreviewItem{DeviceID: id, Decision: "refuse", StepRelease: fwselect.StepRelease,
+			Reason: "policy: runs 9.5.0, target 16.1.0: " + fwselect.ErrSettingsMigration.Error()}
+	}
+	planned := time.Date(2026, 11, 8, 3, 30, 0, 0, zoneCET)
+	form := url.Values{"id": {"4", "1", "5"}, "release": {"16.1.0"}, "policy": {"only-newer"}, "delivery": {"push"},
+		"skip_backup": {"1"}, "when": {"at"}, "start_at": {planned.Format(time.RFC3339)}}
+	_, body := e.do(t, "POST", "/updates/preview", "operator", form)
+	for _, want := range []string{"This firmware is older than 10.0.0.3", "Needs a choice</dt><dd class=\"upd-warn\">2 devices",
+		`form="step">Preview Tasmota 16.0.0 for these 2 devices</button>`, "<b>Tasmota 16.1.0</b>"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("preview lacks %q: %s", want, body)
+		}
+	}
+	if strings.Contains(body, "<dt>Refused</dt>") {
+		t.Fatalf("a device that is offered the step counts as refused: %s", body)
+	}
+
+	// The main batch keeps one release: its Start carries device 1 only.
+	if start := formFields(t, body, "start"); !slices.Equal(start["id"], []string{"1"}) || start.Get("release") != "16.1.0" {
+		t.Fatalf("the main batch's Start carries %v with %q", start["id"], start.Get("release"))
+	}
+	// The action carries the step devices, the step release and the person's other choices, nothing else.
+	step := formFields(t, body, "step")
+	want := url.Values{"id": {"4", "5"}, "release": {fwselect.StepRelease}, "policy": {"only-newer"}, "delivery": {"push"},
+		"skip_backup": {"1"}, "when": {"at"}, "start_at": {planned.Format(time.RFC3339)}}
+	for k, v := range want {
+		if !slices.Equal(step[k], v) {
+			t.Fatalf("step form %s = %v, want %v (form %v)", k, step[k], v, step)
+		}
+	}
+	if !strings.Contains(body, `<form id="step" method="post" action="/tf/updates/preview">`) {
+		t.Fatalf("the step action does not open a preview: %s", body)
+	}
+
+	// Posted, it is an ordinary preview of 16.0.0 for those devices, still planned for the chosen time.
+	delete(o.items, 4)
+	delete(o.items, 5)
+	_, body = e.do(t, "POST", "/updates/preview", "operator", step)
+	if len(o.previewReqs) != 2 {
+		t.Fatalf("previewed %+v", o.previewReqs)
+	}
+	for _, q := range o.previewReqs {
+		if q.Release != fwselect.StepRelease || q.DeviceID == 1 || q.Delivery != model.DeliveryPush || !q.SkipBackup || q.Policy != model.PolicyOnlyNewer {
+			t.Fatalf("the step preview asked for %+v", q)
+		}
+	}
+	if !strings.Contains(body, "<b>Tasmota 16.0.0</b>") || goButton(t, body) != "Schedule update" {
+		t.Fatalf("the step preview lost its target or its plan: %s", body)
+	}
+
+	// One device: the action says so.
+	o.items[4] = ota.PreviewItem{DeviceID: 4, Decision: "refuse", StepRelease: fwselect.StepRelease, Reason: fwselect.ErrSettingsMigration.Error()}
+	_, body = e.do(t, "POST", "/updates/preview", "operator", url.Values{"id": {"4", "1"}, "release": {"16.1.0"}, "policy": {"only-newer"}})
+	if !strings.Contains(body, `form="step">Preview Tasmota 16.0.0 for this device</button>`) {
+		t.Fatalf("one step device: %s", body)
+	}
+
+	// Only step devices: nothing starts from this page, the aside points at the step, and it does not claim
+	// that no device can be updated (the step can update them).
+	o.items[5] = ota.PreviewItem{DeviceID: 5, Decision: "refuse", StepRelease: fwselect.StepRelease, Reason: fwselect.ErrSettingsMigration.Error()}
+	_, body = e.do(t, "POST", "/updates/preview", "operator", url.Values{"id": {"4", "5"}, "release": {"16.1.0"}, "policy": {"only-newer"}})
+	if !strings.Contains(body, "These devices take Tasmota 16.0.0 first: preview it above.") || strings.Contains(body, `form="start" data-go`) ||
+		strings.Contains(body, "No device can be updated") {
+		t.Fatalf("a page with only step devices: %s", body)
+	}
+
+	// Below 8.1.0 there is no step (16.0.0 would reset the settings): the device is refused with Tasmota's
+	// migration path, and no 16.0.0 preview is offered for it.
+	o.items[6] = ota.PreviewItem{DeviceID: 6, Decision: "refuse", Reason: "policy: runs 7.2.0, target 16.1.0: " + fwselect.ErrMigrationPath.Error()}
+	old.Version = "7.2.0"
+	e.inv.devs[6] = model.Device{ID: 6, Name: "older-plug", Address: "10.0.0.6", Identity: old}
+	_, body = e.do(t, "POST", "/updates/preview", "operator", url.Values{"id": {"6", "1"}, "release": {"16.1.0"}, "policy": {"only-newer"}})
+	if !strings.Contains(body, "This firmware is older than 8.1.0") || !strings.Contains(body, "<dt>Refused</dt><dd class=\"upd-bad\">1 device") ||
+		strings.Contains(body, `form="step"`) || strings.Contains(body, "Needs a choice") {
+		t.Fatalf("a device below the migration path: %s", body)
+	}
+}

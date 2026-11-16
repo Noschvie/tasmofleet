@@ -514,6 +514,10 @@ type previewRow struct {
 	Language       string
 }
 
+// StepOffered: the device is refused only because its firmware is too old for the release (#892); the step
+// release (Item.StepRelease) is offered for it as a preview of its own.
+func (r previewRow) StepOffered() bool { return !r.Go && r.Item.StepRelease != "" }
+
 // languageOptions are the upstream language builds a person can say a device runs: English, then
 // the builds of the fwselect language table, the one list the detection uses too (#509).
 var languageOptions = func() []struct{ Value, Label string } {
@@ -625,7 +629,7 @@ func (p previewPage) Upgrades() int {
 func (p previewPage) Refused() int {
 	n := 0
 	for _, r := range p.Rows {
-		if r.Item.Decision == "refuse" && len(r.BuildOptions) == 0 && !r.LanguageChoice {
+		if r.Item.Decision == "refuse" && len(r.BuildOptions) == 0 && !r.LanguageChoice && !r.StepOffered() {
 			n++
 		}
 	}
@@ -643,6 +647,26 @@ func (p previewPage) ChoosingLanguages() int {
 	return n
 }
 
+// StepIDs are the devices that are offered the settings-migration step (#892): the action "Preview Tasmota
+// 16.0.0" opens an ordinary preview of the step release for exactly these devices.
+func (p previewPage) StepIDs() []string {
+	var ids []string
+	for _, r := range p.Rows {
+		if r.StepOffered() {
+			ids = append(ids, strconv.FormatInt(int64(r.Device.ID), 10))
+		}
+	}
+	return ids
+}
+
+// StepActionText is the label of the step action.
+func (p previewPage) StepActionText() string {
+	if n := len(p.StepIDs()); n != 1 {
+		return "Preview Tasmota " + fwselect.StepRelease + " for these " + strconv.Itoa(n) + " devices"
+	}
+	return "Preview Tasmota " + fwselect.StepRelease + " for this device"
+}
+
 // ChoosingBuilds counts the devices that wait for the user to choose a chip build.
 func (p previewPage) ChoosingBuilds() int {
 	n := 0
@@ -656,7 +680,7 @@ func (p previewPage) ChoosingBuilds() int {
 
 // Skips counts the devices that need nothing (already at the target); a refused device is not one of them.
 func (p previewPage) Skips() int {
-	return len(p.Rows) - p.Upgrades() - p.Refused() - p.ChoosingBuilds() - p.ChoosingLanguages()
+	return len(p.Rows) - p.Upgrades() - p.Refused() - p.ChoosingBuilds() - p.ChoosingLanguages() - len(p.StepIDs())
 }
 
 type previewPage struct {

@@ -3,6 +3,7 @@ package web
 import (
 	"strconv"
 
+	"github.com/hellwand/tasmofleet/internal/fwselect"
 	"github.com/hellwand/tasmofleet/internal/model"
 
 	"github.com/hellwand/tasmofleet/internal/web/ui"
@@ -589,7 +590,7 @@ templ updatePreviewPage(p previewPage, csrf string) {
 							<span class="upd-prow-file" title={ r.Item.Filename }>{ r.FileText() }</span>
 						} else {
 							<span class="upd-prow-dec">
-								if len(r.BuildOptions) > 0 || r.LanguageChoice {
+								if len(r.BuildOptions) > 0 || r.LanguageChoice || r.StepOffered() {
 									@ui.Badge(ui.ToneWarn, "Needs a choice")
 								} else {
 									@ui.Badge(r.Tone(), label(r.Item.Decision))
@@ -649,6 +650,14 @@ templ updatePreviewPage(p previewPage, csrf string) {
 					</div>
 				}
 			</div>
+			if len(p.StepIDs()) > 0 {
+				// The settings-migration step (#892) is a preview of its own: one release per batch, checked like any
+				// release the person picks.
+				<div class="upd-prev-foot">
+					<p class="upd-hint">Devices older than { fwselect.MigrationFloor } take Tasmota { fwselect.StepRelease } first, in an update of their own.</p>
+					<button type="submit" class="btn" form="step">{ p.StepActionText() }</button>
+				</div>
+			}
 			if p.ChoosingBuilds() > 0 || p.ChoosingLanguages() > 0 {
 				<div class="upd-prev-foot">
 					if p.ChoosingLanguages() == 0 {
@@ -683,8 +692,8 @@ templ updatePreviewPage(p previewPage, csrf string) {
 				if p.Refused() > 0 {
 					<dt>Refused</dt><dd class="upd-bad">{ plural(p.Refused(), "device") }</dd>
 				}
-				if p.ChoosingBuilds()+p.ChoosingLanguages() > 0 {
-					<dt>Needs a choice</dt><dd class="upd-warn">{ plural(p.ChoosingBuilds()+p.ChoosingLanguages(), "device") }</dd>
+				if p.ChoosingBuilds()+p.ChoosingLanguages()+len(p.StepIDs()) > 0 {
+					<dt>Needs a choice</dt><dd class="upd-warn">{ plural(p.ChoosingBuilds()+p.ChoosingLanguages()+len(p.StepIDs()), "device") }</dd>
 				}
 				if p.Skips() > 0 {
 					<dt>Skipped</dt><dd>{ plural(p.Skips(), "device") }</dd>
@@ -715,7 +724,9 @@ templ updatePreviewPage(p previewPage, csrf string) {
 					<button type="submit" class="btn btn-primary btn-tall" form="start" data-go>{ p.When.ButtonText() }</button>
 				}
 			</div>
-			if len(p.IDs) == 0 && p.ChoosingBuilds()+p.ChoosingLanguages() > 0 {
+			if len(p.IDs) == 0 && p.ChoosingBuilds()+p.ChoosingLanguages() == 0 && len(p.StepIDs()) > 0 {
+				<p class="upd-hint">These devices take Tasmota { fwselect.StepRelease } first: preview it above.</p>
+			} else if len(p.IDs) == 0 && p.ChoosingBuilds()+p.ChoosingLanguages() > 0 {
 				if p.ChoosingLanguages() == 0 {
 					<p class="upd-hint">Choose a build above, then recheck.</p>
 				} else {
@@ -747,6 +758,11 @@ templ updatePreviewPage(p previewPage, csrf string) {
 			}
 		}
 	</form>
+	if len(p.StepIDs()) > 0 {
+		<form id="step" method="post" action={ templ.SafeURL(p.Base + "/updates/preview") }>
+			@stepFields(p, csrf)
+		</form>
+	}
 }
 
 // whenCard is "5 · When" of the preview: Start now (the default) or Start at a chosen time with the quick picks
@@ -811,6 +827,29 @@ templ previewFields(p previewPage, csrf string, ids []string, start bool) {
 		}
 		if l := p.Languages[id]; l != "" {
 			<input type="hidden" name={ "language_" + id } value={ l }/>
+		}
+	}
+}
+
+// stepFields open the preview of the settings-migration step (#892): the step devices only, the step release, and
+// the person's other choices (policy, variant, backup, delivery, the time of a plan). Builds and languages are not
+// carried: those rows were refused before either was asked, and the step preview asks anew.
+templ stepFields(p previewPage, csrf string) {
+	<input type="hidden" name="csrf" value={ csrf }/>
+	for _, id := range p.StepIDs() {
+		<input type="hidden" name="id" value={ id }/>
+	}
+	<input type="hidden" name="release" value={ fwselect.StepRelease }/>
+	<input type="hidden" name="policy" value={ p.Form.Policy }/>
+	<input type="hidden" name="variant" value={ p.Form.Variant }/>
+	if p.Form.SkipBackup {
+		<input type="hidden" name="skip_backup" value="1"/>
+	}
+	<input type="hidden" name="delivery" value={ p.Form.Delivery }/>
+	if p.When.At {
+		<input type="hidden" name="when" value="at"/>
+		if p.When.Preset() != "" {
+			<input type="hidden" name="start_at" value={ p.When.Preset() }/>
 		}
 	}
 }

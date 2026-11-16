@@ -6,6 +6,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/hellwand/tasmofleet/internal/fwselect"
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/ota"
 )
@@ -424,6 +425,8 @@ func knownReason(s string) (string, bool) {
 	l := strings.ToLower(s)
 	for _, r := range []struct{ contains, text string }{
 		{"unknown hardware", "Unknown hardware, not updatable"},
+		{"migration path", "This firmware is older than " + fwselect.PathFloor + ": Tasmota after " + fwselect.PathStep + " no longer migrates its settings; update it to " + fwselect.PathStep + " by hand first (Tasmota's migration path)"},
+		{"no longer migrates", "This firmware is older than " + fwselect.MigrationFloor + ": Tasmota after " + fwselect.StepRelease + " no longer migrates its settings, so it must be updated to " + fwselect.StepRelease + " first"},
 		{"authentication needed", "The device asked for a login, the stored credentials are missing or wrong"},
 		{"credentials rejected", "The device rejected the stored credentials"},
 		{"family mismatch", "The firmware does not fit this chip family"},

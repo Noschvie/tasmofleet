@@ -7,10 +7,13 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/hellwand/tasmofleet/internal/fwselect"
 )
 
 const (
@@ -124,7 +127,8 @@ type ghRelease struct {
 }
 
 func (c *cache) fetchGitHub(ctx context.Context, s Source) (srcIndex, map[string]relMeta, error) {
-	b, err := c.getSmall(ctx, s, strings.TrimSuffix(s.BaseURL, "/")+"/releases?per_page=10")
+	base := strings.TrimSuffix(s.BaseURL, "/")
+	b, err := c.getSmall(ctx, s, base+"/releases?per_page=10")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -135,30 +139,49 @@ func (c *cache) fetchGitHub(ctx context.Context, s Source) (srcIndex, map[string
 	idx := srcIndex{}
 	meta := map[string]relMeta{}
 	for _, r := range rels {
-		// Only stable releases: an rc must never show up in the update dialog.
-		if r.Draft || r.Prerelease {
-			continue
+		addGHRelease(idx, meta, r)
+	}
+	// The settings-migration step (#892) must stay in the index after it left the newest releases. A failure
+	// leaves it out, and Ensure then fails loud for it (not in the index, or offered by one source only).
+	if _, ok := idx[fwselect.StepRelease]; !ok {
+		var r ghRelease
+		b, err := c.getSmall(ctx, s, base+"/releases/tags/v"+fwselect.StepRelease)
+		if err == nil {
+			err = json.Unmarshal(b, &r)
 		}
-		ver := strings.TrimPrefix(r.Tag, "v")
-		if !validRelease(ver) {
-			continue
-		}
-		m := relMeta{}
-		m.Notes, m.Truncated = TruncateNotes(r.Body)
-		m.URL, _ = SafeLink(r.HTMLURL) // empty when missing or unsafe
-		m.Published, _ = time.Parse(time.RFC3339, r.Published)
-		meta[ver] = m
-		for _, a := range r.Assets {
-			if _, err := parseName(a.Name); err != nil {
-				continue // maps, factory images, anything that is no OTA candidate
-			}
-			if idx[ver] == nil {
-				idx[ver] = map[string]string{}
-			}
-			idx[ver][a.Name] = a.URL
+		if err != nil {
+			c.log.Warn("firmware: step release not read", "source", s.Name, "release", fwselect.StepRelease, "err", err)
+		} else if strings.TrimPrefix(r.Tag, "v") == fwselect.StepRelease {
+			addGHRelease(idx, meta, r)
 		}
 	}
 	return idx, meta, nil
+}
+
+// addGHRelease adds the OTA files and the metadata of one GitHub release to the index.
+func addGHRelease(idx srcIndex, meta map[string]relMeta, r ghRelease) {
+	// Only stable releases: an rc must never show up in the update dialog.
+	if r.Draft || r.Prerelease {
+		return
+	}
+	ver := strings.TrimPrefix(r.Tag, "v")
+	if !validRelease(ver) {
+		return
+	}
+	m := relMeta{}
+	m.Notes, m.Truncated = TruncateNotes(r.Body)
+	m.URL, _ = SafeLink(r.HTMLURL) // empty when missing or unsafe
+	m.Published, _ = time.Parse(time.RFC3339, r.Published)
+	meta[ver] = m
+	for _, a := range r.Assets {
+		if _, err := parseName(a.Name); err != nil {
+			continue // maps, factory images, anything that is no OTA candidate
+		}
+		if idx[ver] == nil {
+			idx[ver] = map[string]string{}
+		}
+		idx[ver][a.Name] = a.URL
+	}
 }
 
 var (
@@ -168,33 +191,60 @@ var (
 	versionRe = regexp.MustCompile(`v?(\d+\.\d+\.\d+)`)
 )
 
-// otaDirs are the two release directories of ota.tasmota.com (spec 7.1).
-var otaDirs = []string{"/tasmota/release/", "/tasmota32/release/"}
+// otaDirs are the two release directories of ota.tasmota.com (spec 7.1), and otaStepDirs their archive
+// directories of the settings-migration step release (fwselect.StepRelease, #892), in the same order.
+var (
+	otaDirs     = []string{"/tasmota/release/", "/tasmota32/release/"}
+	otaStepDirs = []string{"/tasmota/release-" + fwselect.StepRelease + "/", "/tasmota32/release-" + fwselect.StepRelease + "/"}
+)
 
 func (c *cache) fetchOTA(ctx context.Context, s Source) (srcIndex, error) {
 	idx := srcIndex{}
-	for _, dir := range otaDirs {
-		b, err := c.getSmall(ctx, s, strings.TrimSuffix(s.BaseURL, "/")+dir)
+	for i, dir := range otaDirs {
+		ver, err := c.readOTADir(ctx, s, dir, idx)
 		if err != nil {
 			return nil, err
 		}
-		ver, files, err := parseOTAListing(string(b))
-		if err != nil {
-			return nil, fmt.Errorf("firmware: %s%s: %w", s.Name, dir, err)
+		if ver == fwselect.StepRelease {
+			continue // the release directory still is the step release
 		}
-		for _, f := range files {
-			// The directory is fixed by the file family, so a name listed in
-			// the wrong directory cannot make us fetch from an odd place.
-			if strings.HasPrefix(f, "tasmota32") != (dir == otaDirs[1]) {
-				continue
-			}
-			if idx[ver] == nil {
-				idx[ver] = map[string]string{}
-			}
-			idx[ver][f] = strings.TrimSuffix(s.BaseURL, "/") + dir + f
+		// After the next release only the archive directory keeps the step. A failure there leaves it out
+		// (Ensure then fails loud for it) and never costs the source its current release.
+		step := otaStepDirs[i]
+		if ver, err := c.readOTADir(ctx, s, step, idx); err != nil || ver != fwselect.StepRelease {
+			c.log.Warn("firmware: step release not read", "source", s.Name, "dir", step, "listed", ver, "err", err)
 		}
 	}
 	return idx, nil
+}
+
+// readOTADir adds the files of one ota.tasmota.com directory to idx and returns the release it lists. The
+// files of a directory whose path ends in release-<version>/ are added only when it lists that version.
+func (c *cache) readOTADir(ctx context.Context, s Source, dir string, idx srcIndex) (string, error) {
+	b, err := c.getSmall(ctx, s, strings.TrimSuffix(s.BaseURL, "/")+dir)
+	if err != nil {
+		return "", err
+	}
+	ver, files, err := parseOTAListing(string(b))
+	if err != nil {
+		return "", fmt.Errorf("firmware: %s%s: %w", s.Name, dir, err)
+	}
+	if want, pinned := strings.CutPrefix(path.Base(dir), "release-"); pinned && want != ver {
+		return ver, nil
+	}
+	esp32Dir := strings.HasPrefix(dir, "/tasmota32/")
+	for _, f := range files {
+		// The directory is fixed by the file family, so a name listed in
+		// the wrong directory cannot make us fetch from an odd place.
+		if strings.HasPrefix(f, "tasmota32") != esp32Dir {
+			continue
+		}
+		if idx[ver] == nil {
+			idx[ver] = map[string]string{}
+		}
+		idx[ver][f] = strings.TrimSuffix(s.BaseURL, "/") + dir + f
+	}
+	return ver, nil
 }
 
 // parseOTAListing extracts the version (first x.y.z in a heading or title)
