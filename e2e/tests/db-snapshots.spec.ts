@@ -140,3 +140,31 @@ test("header admin: confirm with the checkbox, then the download starts", async 
   // #538: the answer was the file, not a page, so nothing may stay busy (form data-no-busy)
   await expect(page.getByRole("button", { name: "Download", exact: true })).toBeEnabled();
 });
+
+// Why (#921): an admin about to upgrade must be able to take a snapshot now, without touching the
+// schedule. One click stores it in the same folder under the same name pattern, the page comes back
+// saying so with the new file on top as the latest, and the button is not a download: nothing leaves
+// the server, so no password is asked.
+test("create snapshot now: one click stores it and the list shows it as the latest", async ({ page }) => {
+  await signIn(page);
+  await page.goto(app.url + "/settings/system/snapshots");
+  const stored = page.locator("#card-stored");
+  await expect(stored.locator(".sys-orphan")).toHaveCount(0);
+  await expect(stored).toContainText("Written to ");
+  await stored.getByRole("button", { name: "Create snapshot now" }).click();
+  await expect(page.getByText("Snapshot created.")).toBeVisible();
+  await expect(page.locator("dialog#stepup")).toBeHidden();
+  const row = stored.locator(".sys-orphan");
+  await expect(row).toHaveCount(1);
+  await expect(row).toContainText("Latest");
+  await expect(row.locator(".sys-store-name")).toHaveText(/^tasmofleet-\d{8}-\d{4}Z\.db$/);
+  await expect(stored.getByRole("button", { name: "Create snapshot now" })).toBeEnabled();
+  await page.goto(app.url + "/audit");
+  await expect(page.locator("table.audittable").getByText("Database snapshot created").first()).toBeVisible();
+
+  // leave the folder as the other tests expect it
+  await page.goto(app.url + "/settings/system/snapshots");
+  await page.locator("#card-stored .sys-orphan").getByRole("link", { name: "Delete" }).click();
+  await page.locator("dialog#dlg-bkdel").getByRole("button", { name: "Delete snapshot" }).click();
+  await expect(page.getByText("Snapshot deleted.")).toBeVisible();
+});

@@ -47,6 +47,9 @@ func (h *handler) registerSnapshots(route func(string, func(http.Handler) http.H
 	route("GET "+snapPath, adm, h.sysPage)
 	route("POST "+snapPath, adm, h.sysSave)
 	route("POST "+snapPath+"/stepup", adm, h.sysStepUpPost)
+	if h.d.SnapshotNow != nil {
+		route("POST "+snapPath+"/create", adm, h.snapCreate)
+	}
 	route("POST "+sysPath+"/snapshot", adm, h.snapDownload)
 	route("GET "+snapPath+"/{name}/download", adm, h.snapStoredDownload)
 	route("POST "+snapPath+"/{name}/download", adm, h.snapStoredDownload) // the confirmation of a proxy-header sign-in
@@ -137,6 +140,56 @@ func (h *handler) snapDownload(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, ex.Name, ex.Taken, ex.File)
 }
 
+// snapCreate takes a snapshot now (#921) and stores it like a scheduled one. Nothing leaves the server, so
+// it needs no step-up; it is the admin's click, audited as such. A failed copy deletes nothing (package
+// snapshot), and the audit is written on a context the request's end does not cancel, so a tab closed
+// during the copy still leaves its trace.
+func (h *handler) snapCreate(w http.ResponseWriter, r *http.Request) {
+	limitBody(w, r)
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	for k := range r.PostForm {
+		if k != "csrf" {
+			http.Error(w, "bad request", http.StatusBadRequest)
+			return
+		}
+	}
+	res, err := h.d.SnapshotNow(r.Context())
+	actx := context.WithoutCancel(r.Context())
+	if err != nil {
+		reason := snapshot.ReasonOf(err)
+		h.snapAuditCtx(actx, r, "snapshot.create", "failed: "+reason, map[string]any{})
+		if r.Context().Err() != nil {
+			h.fail(w, r, err) // the person left: nobody reads an answer
+			return
+		}
+		p := h.sysData(r, nil, nil)
+		p.Error = "The snapshot could not be created: " + reason + ". Nothing was deleted."
+		h.sysRender(w, r, http.StatusInternalServerError, p)
+		return
+	}
+	detail := map[string]any{"file": res.Info.Name, "bytes": res.Info.Size, "pruned": res.Pruned}
+	if res.PruneErr != nil {
+		reason := snapshot.ReasonOf(res.PruneErr)
+		h.snapAuditCtx(actx, r, "snapshot.create", "ok, prune failed: "+reason, detail)
+		// The snapshot is good; only the retention is behind.
+		p := h.sysData(r, nil, nil)
+		db, err := h.sysDBOf(r, p.Base)
+		if err != nil {
+			h.fail(w, r, err)
+			return
+		}
+		db.Warn = "The snapshot " + res.Info.Name + " was created, but old snapshots could not be deleted (" + reason + "). More snapshots than you keep stay until that works."
+		p.DB = db
+		h.sysRender(w, r, http.StatusOK, p)
+		return
+	}
+	h.snapAuditCtx(actx, r, "snapshot.create", "ok", detail)
+	redirect(w, r, snapPath+"?ok=snapshot-created")
+}
+
 // snapStoredDownload sends a stored snapshot. The name is looked up in the snapshots folder; it
 // is never used as a path (package snapshot).
 func (h *handler) snapStoredDownload(w http.ResponseWriter, r *http.Request) {
@@ -225,8 +278,13 @@ func snapHeaders(w http.ResponseWriter, name, ctype string) {
 	w.Header().Set("Cache-Control", "no-store")
 }
 
-// snapAudit records a download or delete. Nothing of the file's content, and no key, is in it.
+// snapAudit records a download, delete or create. Nothing of the file's content, and no key, is in it.
 func (h *handler) snapAudit(r *http.Request, action, result string, detail map[string]any) {
+	h.snapAuditCtx(r.Context(), r, action, result, detail)
+}
+
+// snapAuditCtx is snapAudit on ctx, for an action that must be recorded although the request is over.
+func (h *handler) snapAuditCtx(ctx context.Context, r *http.Request, action, result string, detail map[string]any) {
 	if h.d.Recorder == nil {
 		return
 	}
@@ -238,10 +296,20 @@ func (h *handler) snapAudit(r *http.Request, action, result string, detail map[s
 	if b, err := json.Marshal(detail); err == nil {
 		d = string(b)
 	}
-	h.d.Recorder.Record(r.Context(), model.AuditEvent{
+	h.d.Recorder.Record(ctx, model.AuditEvent{
 		At: h.d.Clock.Now(), Actor: actor(r), Action: action, Target: "database", Detail: d, Result: result,
 		RemoteAddr: httpx.ClientIP(r.Context()).String(),
 	})
+}
+
+// sysCreateHelp is the line next to "Create snapshot now": it says where the file goes and that it
+// counts toward the retention, because one click can delete the oldest snapshot beyond it.
+func sysCreateHelp(db sysDB) string {
+	kept := "the number you keep"
+	if db.Kept > 0 {
+		kept = "the " + strconv.Itoa(db.Kept) + " kept"
+	}
+	return "Written to " + db.Dir + " like a scheduled one; it counts toward " + kept + ", and the oldest beyond that is deleted. A second one in the same minute replaces the first."
 }
 
 func snapReason(err error) string {
@@ -269,6 +337,8 @@ type sysDB struct {
 	Status        sysSnapStatus
 	CanDelete     bool
 	ListErr       string // the snapshot folder cannot be listed: shown instead of the list (#399)
+	CanCreate     bool   // "Create snapshot now" is wired (#921)
+	Warn          string // a snapshot was created but the retention failed: shown as a warning above the page
 }
 
 // sysSnapshot is one stored snapshot.
@@ -297,7 +367,7 @@ type sysSnapStatus struct {
 func (h *handler) sysDBOf(r *http.Request, base string) (*sysDB, error) {
 	s := h.d.Snapshots
 	list, err := s.List()
-	db := &sysDB{Dir: s.Dir(), DataDir: filepath.Dir(s.Dir()), CanDelete: true}
+	db := &sysDB{Dir: s.Dir(), DataDir: filepath.Dir(s.Dir()), CanDelete: true, CanCreate: h.d.SnapshotNow != nil}
 	if err != nil {
 		// A broken snapshot folder must not take the whole Settings page down: the card says what is
 		// wrong, and the scheduled snapshots fail with the same reason (#399).

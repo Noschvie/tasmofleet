@@ -36,7 +36,7 @@ var auditLabels = map[string]string{
 	"device.delete": "Delete device", "device.upsert": "Device seen", "settings.set": "Device setting",
 	"policy.live": "Policy check", "policy.live.pause": "Pause policy check", "policy.live.resume": "Resume policy check", "policy.fix.start": "Make compliant", "policy.fix": "Make compliant (device)", "policy.rules.save": "Save policy rules", "policy.rules.revert": "Revert policy rules",
 	"sysconfig.update": "System settings", "sysconfig.reset": "Settings reset", "sysconfig.mqtt_test": "MQTT test", "sysconfig.sso_test": "SSO check", "account.sessions.end": "End sessions", "sysconfig.env_import": "Settings from environment",
-	"snapshot.download": "Database snapshot download", "snapshot.scheduled": "Database snapshot", "snapshot.delete": "Database snapshot deleted",
+	"snapshot.download": "Database snapshot download", "snapshot.scheduled": "Database snapshot", "snapshot.delete": "Database snapshot deleted", "snapshot.create": "Database snapshot created",
 	"restore.start": "Restore", "restore.finish": "Restore finished", "restore.download": "Restore download",
 	"discovery.scan_start": "Network scan", "discovery.scan_end": "Network scan finished", "discovery.scan_cancel": "Network scan cancelled",
 	"discovery.scan_refused": "Network scan refused", "discovery.accept": "Accept discovered device",
@@ -251,7 +251,7 @@ func summaryOK(e model.AuditEvent, d map[string]any) (string, bool) {
 		return settingKeys(d, "changes"), true
 	case "sysconfig.env_import":
 		return settingKeys(d, "keys"), true
-	case "snapshot.download", "snapshot.scheduled", "snapshot.delete":
+	case "snapshot.download", "snapshot.scheduled", "snapshot.delete", "snapshot.create":
 		if dStr(d, "with_key") == "true" {
 			return join(dStr(d, "file"), "with secret.key"), true
 		}

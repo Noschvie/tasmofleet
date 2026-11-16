@@ -323,6 +323,9 @@ func (h *handler) snapshotsRender(w http.ResponseWriter, r *http.Request, status
 	if r.URL.Query().Get("ok") == "snapshot-deleted" {
 		v.Flash = "Snapshot deleted."
 	}
+	if r.URL.Query().Get("ok") == "snapshot-created" {
+		v.Flash = "Snapshot created."
+	}
 	if p.DB == nil {
 		db, err := h.sysDBOf(r, p.Base)
 		if err != nil {

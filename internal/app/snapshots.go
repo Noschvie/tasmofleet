@@ -102,6 +102,15 @@ func (a *runtime) scheduledSnapshot(ctx context.Context, started time.Time) {
 	a.svc.Audit.Record(ctx, ev)
 }
 
+// snapshotNow is the person's "Create snapshot now" (#921): the scheduled snapshot's copy, name and
+// retention (SNAPSHOT_KEEP is read here, from the same effective settings the schedule reads, not
+// from the page), with no snapshot_runs row: a row of any trigger settles a scheduled time, so a
+// manual one could make the loop skip a snapshot that is still due. The web layer audits it as the
+// person who clicked.
+func (a *runtime) snapshotNow(ctx context.Context) (snapshot.RunResult, error) {
+	return a.snapshots.TakeNow(ctx, a.svc.Sys.Snapshot().SnapshotKeep)
+}
+
 func auditJSON(m map[string]any) string {
 	b, err := json.Marshal(m)
 	if err != nil {

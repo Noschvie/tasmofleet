@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/secretbox"
 	"github.com/hellwand/tasmofleet/internal/snapshot"
 	"github.com/hellwand/tasmofleet/internal/sysconfig"
@@ -47,7 +49,10 @@ func snapSetup(t *testing.T, stepped bool) *snapEnv {
 	}
 	mgr := snapshot.New(snapSource{}, dir)
 	aud := &fakeAudit{}
-	e, svc, _, st := sysEnvFull(t, stepped, func(d *Deps) { d.Snapshots, d.Recorder, d.BackupFleet = mgr, aud, &fakeFleet{} })
+	e, svc, _, st := sysEnvFull(t, stepped, func(d *Deps) {
+		d.Snapshots, d.Recorder, d.BackupFleet = mgr, aud, &fakeFleet{}
+		d.SnapshotNow = func(ctx context.Context) (snapshot.RunResult, error) { return mgr.TakeNow(ctx, 3) }
+	})
 	return &snapEnv{env: e, svc: svc, mgr: mgr, dir: dir, audit: aud, stepped: st}
 }
 
@@ -80,6 +85,7 @@ func TestSnapshotRoutesAreAdminOnly(t *testing.T) {
 			{"GET", "/settings/system/snapshots/" + name + "/download"},
 			{"GET", "/settings/system/snapshots/" + name + "/delete"},
 			{"POST", "/settings/system/snapshots/" + name + "/delete"},
+			{"POST", "/settings/system/snapshots/create"},
 		} {
 			r, body := s.do(t, c.method, c.path, role, url.Values{"csrf": {"tok"}})
 			if c.method == "GET" {
@@ -91,7 +97,7 @@ func TestSnapshotRoutesAreAdminOnly(t *testing.T) {
 		}
 	}
 	if l, _ := s.mgr.List(); len(l) != 1 {
-		t.Fatal("a refused delete must delete nothing")
+		t.Fatal("a refused delete must delete nothing, and a refused create must create nothing")
 	}
 }
 
@@ -608,5 +614,243 @@ func TestPagesSurviveAFileWhereTheSnapshotFolderBelongs(t *testing.T) {
 	_, body := s.do(t, "GET", "/settings/system/snapshots", "admin", nil)
 	if !strings.Contains(body, "not a directory") {
 		t.Error("the failed attempt's reason is not on the page")
+	}
+}
+
+// flipSource is a database that can run out of room between two requests.
+type flipSource struct{ full atomic.Bool }
+
+func (f *flipSource) VacuumInto(ctx context.Context, dst string) error {
+	if f.full.Load() {
+		return failSource{}.VacuumInto(ctx, dst)
+	}
+	return snapSource{}.VacuumInto(ctx, dst)
+}
+
+// snapNowEnv is a Snapshots page whose "Create snapshot now" runs the real manager with the given keep.
+func snapNowEnv(t *testing.T, src snapshot.Source, keep int, mut ...func(*Deps)) (*env, *snapshot.Manager, *fakeAudit, *sysconfig.Service) {
+	t.Helper()
+	mgr := snapshot.New(src, t.TempDir())
+	aud := &fakeAudit{}
+	e, svc, _, _ := sysEnvFull(t, true, func(d *Deps) {
+		d.Snapshots, d.Recorder, d.BackupFleet = mgr, aud, &fakeFleet{}
+		d.SnapshotNow = func(ctx context.Context) (snapshot.RunResult, error) { return mgr.TakeNow(ctx, keep) }
+		for _, m := range mut {
+			m(d)
+		}
+	})
+	return e, mgr, aud, svc
+}
+
+func lastAudit(t *testing.T, a *fakeAudit, action string) model.AuditEvent {
+	t.Helper()
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for i := len(a.events) - 1; i >= 0; i-- {
+		if a.events[i].Action == action {
+			return a.events[i]
+		}
+	}
+	t.Fatalf("no %s in the audit: %v", action, a.events)
+	return model.AuditEvent{}
+}
+
+// Why (#921): an admin who wants a snapshot before an upgrade must not have to wait for the schedule or
+// edit it. One click stores a file like the scheduled ones, the page that comes back says so and lists
+// it as the latest, and the audit log says who made it (a person, not "system").
+func TestCreateSnapshotNowStoresListsAndAudits(t *testing.T) {
+	e, mgr, aud, _ := snapNowEnv(t, snapSource{}, 7)
+	_, before := e.do(t, "GET", "/settings/system/snapshots", "admin", nil)
+	if !strings.Contains(before, `name="csrf"`) || !strings.Contains(before, `action="/tf/settings/system/snapshots/create"`) || !strings.Contains(before, "Create snapshot now") {
+		t.Fatal("the page has no Create snapshot now button")
+	}
+	if !strings.Contains(before, "No snapshots yet.") || !strings.Contains(before, "Create one now") {
+		t.Error("the empty list does not point at the button")
+	}
+	r, _ := e.do(t, "POST", "/settings/system/snapshots/create", "admin", url.Values{"csrf": {"tok"}})
+	if r.StatusCode != 303 || r.Header.Get("Location") != "/tf/settings/system/snapshots?ok=snapshot-created" {
+		t.Fatalf("create: %d %v", r.StatusCode, r.Header)
+	}
+	list, _ := mgr.List()
+	if len(list) != 1 || list[0].Schema != 39 {
+		t.Fatalf("stored: %v", list)
+	}
+	_, page := e.do(t, "GET", "/settings/system/snapshots?ok=snapshot-created", "admin", nil)
+	for _, want := range []string{"Snapshot created.", list[0].Name, "Latest"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+	ev := lastAudit(t, aud, "snapshot.create")
+	if ev.Result != "ok" || ev.Actor != "test:admin" || ev.Target != "database" || !strings.Contains(ev.Detail, list[0].Name) || !strings.Contains(ev.Detail, `"pruned":0`) {
+		t.Fatalf("audit %+v", ev)
+	}
+}
+
+// Why (#921): a full disk must be told on the page, with the reason, and must not cost a stored
+// snapshot (retention only runs after a good copy). It is the person's click that failed, not the
+// schedule: the schedule's "last scheduled snapshot failed" card must not appear because of it.
+func TestCreateSnapshotNowFailureIsShownAndDeletesNothing(t *testing.T) {
+	src := &flipSource{}
+	e, mgr, aud, _ := snapNowEnv(t, src, 1)
+	if _, err := mgr.Run(t.Context(), 1); err != nil {
+		t.Fatal(err)
+	}
+	old, _ := mgr.List()
+	src.full.Store(true)
+	r, body := e.do(t, "POST", "/settings/system/snapshots/create", "admin", url.Values{"csrf": {"tok"}})
+	if r.StatusCode != 500 {
+		t.Fatalf("status %d, want the page with the error", r.StatusCode)
+	}
+	for _, want := range []string{"The snapshot could not be created", "no space left on device", "Nothing was deleted.", old[0].Name} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+	if strings.Contains(body, "The last scheduled snapshot failed.") || strings.Contains(body, "Snapshot created.") {
+		t.Error("a failed manual snapshot is shown as a scheduled failure, or as a success")
+	}
+	if l, _ := mgr.List(); len(l) != 1 || l[0].Name != old[0].Name {
+		t.Fatalf("stored after the failure: %v", l)
+	}
+	if ev := lastAudit(t, aud, "snapshot.create"); ev.Result != "failed: no space left on device" {
+		t.Fatalf("audit %+v", ev)
+	}
+}
+
+// Why (#921): when the snapshot is written but an old one cannot be deleted, the person has a good
+// snapshot and a retention that is behind. The page must not call that a failure, and must name the
+// file and the reason so the stuck delete can be found.
+func TestCreateSnapshotNowSaysWhenPruningFailed(t *testing.T) {
+	e, _, aud, _ := snapNowEnv(t, snapSource{}, 7, func(d *Deps) {
+		d.SnapshotNow = func(context.Context) (snapshot.RunResult, error) {
+			return snapshot.RunResult{Info: snapshot.Info{Name: "tasmofleet-20261116-1000Z.db", Size: 10}, PruneErr: errors.New("read-only file system")}, nil
+		}
+	})
+	r, body := e.do(t, "POST", "/settings/system/snapshots/create", "admin", url.Values{"csrf": {"tok"}})
+	if r.StatusCode != 200 {
+		t.Fatalf("status %d", r.StatusCode)
+	}
+	for _, want := range []string{"tasmofleet-20261116-1000Z.db", "was created", "old snapshots could not be deleted", "read-only file system"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+	if ev := lastAudit(t, aud, "snapshot.create"); ev.Result != "ok, prune failed: read-only file system" {
+		t.Fatalf("audit %+v", ev)
+	}
+}
+
+// Why (#921): the create form posts the CSRF token and nothing else; a stray field is a client we do
+// not know, and nothing is made for it.
+func TestCreateSnapshotNowRejectsUnknownFormKeys(t *testing.T) {
+	e, mgr, _, _ := snapNowEnv(t, snapSource{}, 7)
+	r, _ := e.do(t, "POST", "/settings/system/snapshots/create", "admin", url.Values{"csrf": {"tok"}, "keep": {"1"}})
+	if r.StatusCode != 400 {
+		t.Fatalf("status %d", r.StatusCode)
+	}
+	if l, _ := mgr.List(); len(l) != 0 {
+		t.Fatalf("a refused request stored %v", l)
+	}
+}
+
+// Why (#921): the Snapshots card says "last scheduled snapshot failed" and the skipped notice says a
+// scheduled run was missed. A manual snapshot must not erase the first (the schedule is still
+// broken), but it does end the second: a fresh snapshot exists, which is what the notice warned
+// about being without.
+func TestManualSnapshotKeepsAScheduledFailureAndEndsTheSkippedNotice(t *testing.T) {
+	src := &flipSource{}
+	missed := time.Now().Add(-time.Hour)
+	e, mgr, _, svc := snapNowEnv(t, src, 7, func(d *Deps) {
+		d.SnapshotMissed = func(context.Context) (time.Time, error) { return missed, nil }
+	})
+	if _, err := svc.Apply(t.Context(), sysconfig.Request{Actor: "admin", Values: map[string]string{"SNAPSHOT_DAYS": "mon,tue,wed,thu,fri,sat,sun"}}); err != nil {
+		t.Fatal(err)
+	}
+	src.full.Store(true)
+	if _, err := mgr.Run(t.Context(), 7); err == nil {
+		t.Fatal("expected the scheduled failure")
+	}
+	src.full.Store(false)
+	_, page := e.do(t, "GET", "/settings/system/snapshots", "admin", nil)
+	if !strings.Contains(page, "A scheduled snapshot was skipped") || !strings.Contains(page, "The last scheduled snapshot failed.") {
+		t.Fatal("setup: the page shows neither the skip nor the failure")
+	}
+	if r, _ := e.do(t, "POST", "/settings/system/snapshots/create", "admin", url.Values{"csrf": {"tok"}}); r.StatusCode != 303 {
+		t.Fatalf("create: %d", r.StatusCode)
+	}
+	_, page = e.do(t, "GET", "/settings/system/snapshots?ok=snapshot-created", "admin", nil)
+	if strings.Contains(page, "A scheduled snapshot was skipped") {
+		t.Error("the skipped notice stays although a newer snapshot exists")
+	}
+	if !strings.Contains(page, "The last scheduled snapshot failed.") {
+		t.Error("a manual snapshot hid the scheduled failure")
+	}
+}
+
+// ctxAudit remembers whether the context an event was recorded with was already cancelled.
+type ctxAudit struct {
+	*fakeAudit
+	cancelled atomic.Bool
+}
+
+func (c *ctxAudit) Record(ctx context.Context, e model.AuditEvent) {
+	if ctx.Err() != nil {
+		c.cancelled.Store(true)
+	}
+	c.fakeAudit.Record(ctx, e)
+}
+
+// Why (#921): a person who closes the tab while the copy runs must still find the attempt in the audit
+// log, which has to be written on a context the closed request no longer cancels; and a copy aborted
+// with the request stores nothing.
+func TestCreateSnapshotNowAuditsAnAbortedRequest(t *testing.T) {
+	started := make(chan struct{})
+	rec := &ctxAudit{fakeAudit: &fakeAudit{}}
+	e, mgr, _, _ := snapNowEnv(t, snapSource{}, 7, func(d *Deps) {
+		d.Recorder = rec
+		d.SnapshotNow = func(ctx context.Context) (snapshot.RunResult, error) {
+			close(started)
+			<-ctx.Done()
+			return snapshot.RunResult{}, ctx.Err()
+		}
+	})
+	ctx, cancel := context.WithCancel(t.Context())
+	req, err := http.NewRequestWithContext(ctx, "POST", e.srv.URL+"/tf/settings/system/snapshots/create", strings.NewReader(url.Values{"csrf": {"tok"}}.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("X-Test-Role", "admin")
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if resp, err := http.DefaultClient.Do(req); err == nil {
+			resp.Body.Close() //nolint:errcheck // the test cancelled the request
+		}
+	}()
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the create handler never ran")
+	}
+	cancel()
+	<-done
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		rec.mu.Lock()
+		n := len(rec.events)
+		rec.mu.Unlock()
+		if n > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	ev := lastAudit(t, rec.fakeAudit, "snapshot.create")
+	if !strings.HasPrefix(ev.Result, "failed: ") || rec.cancelled.Load() {
+		t.Fatalf("audit %+v (recorded on a cancelled context: %v)", ev, rec.cancelled.Load())
+	}
+	if l, _ := mgr.List(); len(l) != 0 {
+		t.Fatalf("an aborted request stored %v", l)
 	}
 }

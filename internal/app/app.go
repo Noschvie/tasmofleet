@@ -781,6 +781,7 @@ func (a *runtime) webDeps(guard web.Guard, rows []web.KV) web.Deps {
 	deps.BackupFleet = a.fleetBackups()
 	if a.snapshots != nil {
 		deps.Snapshots = a.snapshots
+		deps.SnapshotNow = a.snapshotNow
 		deps.SnapshotMissed = func(ctx context.Context) (time.Time, error) {
 			_, missed, err := a.svc.Store.SnapshotRunTimes(ctx)
 			return missed, err

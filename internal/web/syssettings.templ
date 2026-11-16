@@ -89,6 +89,9 @@ templ snapshotsPage(p sysPage) {
 	if p.Error != "" {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: p.Error, Alert: true})
 	}
+	if p.DB != nil && p.DB.Warn != "" {
+		@ui.Banner(ui.BannerData{Tone: ui.ToneWarn, Text: p.DB.Warn, Alert: true})
+	}
 	<div class="syswrap">
 		<form id="sysform" class="syspage" data-keep-draft="snapshots" method="post" action={ templ.SafeURL(p.Base + snapPath) }>
 			<input type="hidden" name="csrf" value={ p.CSRF }/>
@@ -113,6 +116,11 @@ templ snapshotsPage(p sysPage) {
 	<form id="db-dl" data-no-busy method="post" action={ templ.SafeURL(p.Base + sysPath + "/snapshot") }>
 		<input type="hidden" name="csrf" value={ p.CSRF }/>
 	</form>
+	if p.DB.CanCreate {
+		<form id="db-snap" method="post" action={ templ.SafeURL(p.Base + snapPath + "/create") }>
+			<input type="hidden" name="csrf" value={ p.CSRF }/>
+		</form>
+	}
 	if len(p.DB.Files) > 0 {
 		@backupDeleteDialog(backupsView{CSRF: p.CSRF})
 	}
@@ -692,10 +700,24 @@ templ sysSnapshotScheduleNote(href string) {
 
 // sysStoredBlock is the stored snapshots with Download and Delete.
 templ sysStoredBlock(db sysDB) {
+	if db.CanCreate && db.ListErr == "" {
+		<div class="sys-test">
+			<button type="submit" form="db-snap" class="btn" id="btn-snap">Create snapshot now</button>
+			<span class="sys-test-help">{ sysCreateHelp(db) }</span>
+		</div>
+	}
 	if db.ListErr != "" {
 		<div class="error" role="alert">{ db.ListErr }</div>
 	} else if len(db.Files) == 0 {
-		<p class="ufield-help">No snapshots yet. Choose days on the schedule on the right, or download one now. Downloads are not kept on the server.</p>
+		<p class="ufield-help">
+			No snapshots yet.
+			if db.CanCreate {
+				Create one now with the button above, or choose days on the schedule on the right.
+			} else {
+				Choose days on the schedule on the right.
+			}
+			Downloads are not kept on the server.
+		</p>
 	} else {
 		<div class="sys-orphans">
 			for _, f := range db.Files {

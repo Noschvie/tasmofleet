@@ -88,3 +88,34 @@ func TestScheduledSnapshotIsOffByDefault(t *testing.T) {
 		t.Fatalf("defaults: %+v / %d / %q", c.SnapshotSchedule(), c.SnapshotKeep, c.SnapshotTime)
 	}
 }
+
+// Why (#921): a manual snapshot is a stored snapshot like the scheduled ones, so it obeys the
+// SNAPSHOT_KEEP the person set (read from the effective settings, not a number the page passes), and
+// it leaves the schedule alone: a snapshot_runs row of any trigger settles a scheduled time, so a
+// click that wrote one could make the loop skip the snapshot that is still due.
+func TestManualSnapshotUsesKeepAndDoesNotSettleTheSchedule(t *testing.T) {
+	a, svc := snapshotRuntime(t, everyDay, "2")
+	dir := filepath.Join(svc.Cfg.DataDir, snapshot.DirName)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{"tasmofleet-20200101-0300Z.db", "tasmofleet-20200102-0300Z.db", "tasmofleet-20200103-0300Z.db"} {
+		if err := os.WriteFile(filepath.Join(dir, n), []byte("old"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res, err := a.snapshotNow(t.Context())
+	if err != nil || res.PruneErr != nil {
+		t.Fatalf("snapshotNow: %v / %v", err, res.PruneErr)
+	}
+	list, err := a.snapshots.List()
+	if err != nil || len(list) != 2 || list[0].Name != res.Info.Name || list[1].Name != "tasmofleet-20200103-0300Z.db" || list[0].Schema == 0 {
+		t.Fatalf("stored %v (%v): want the new real snapshot and the newest old one (SNAPSHOT_KEEP=2)", list, err)
+	}
+	if settled, missed, err := svc.Store.SnapshotRunTimes(t.Context()); err != nil || !settled.IsZero() || !missed.IsZero() {
+		t.Fatalf("snapshot_runs: settled %v, missed %v (%v); a manual snapshot must write no row", settled, missed, err)
+	}
+	if st := a.snapshots.Status(); st.Failed || !st.Attempted.IsZero() {
+		t.Fatalf("status %+v: the schedule has not run", st)
+	}
+}

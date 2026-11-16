@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -374,5 +375,78 @@ func TestPruneNeverDeletesTheFileJustWritten(t *testing.T) {
 	}
 	if _, _, err := m.Open(res.Info.Name); err != nil {
 		t.Fatalf("the snapshot just written was pruned: %v", err)
+	}
+}
+
+// Why (#921): "Create snapshot now" must store a file exactly like a scheduled one (same folder, same
+// name, same retention, so a manual snapshot counts toward SNAPSHOT_KEEP), but the card's "last
+// scheduled snapshot failed" describes the schedule only. A manual run that rewrote that status would
+// hide a real scheduled failure behind a success the person caused by hand.
+func TestTakeNowStoresLikeTheScheduleAndLeavesTheScheduleStatus(t *testing.T) {
+	m := New(fakeSrc{}, t.TempDir())
+	for _, ts := range []string{"2026-10-25 03:00", "2026-10-26 03:00", "2026-10-27 03:00"} {
+		at(m, ts)
+		if _, err := m.Run(context.Background(), 100); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The scheduled run of the 28th fails.
+	good := m.src
+	m.src = fakeSrc{err: &os.PathError{Op: "write", Path: "x", Err: errors.New("no space left on device")}}
+	at(m, "2026-10-28 03:00")
+	if _, err := m.Run(context.Background(), 2); err == nil {
+		t.Fatal("expected the scheduled failure")
+	}
+	before := m.Status()
+	// The person creates one by hand once the disk has room again.
+	m.src = good
+	at(m, "2026-10-28 09:41")
+	res, err := m.TakeNow(context.Background(), 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Info.Name != "tasmofleet-20261028-0941Z.db" || res.Pruned != 2 || res.PruneErr != nil {
+		t.Fatalf("result %+v: want the file named for the clock, two older ones pruned", res)
+	}
+	var names []string
+	list, _ := m.List()
+	for _, l := range list {
+		names = append(names, l.Name)
+	}
+	if want := []string{"tasmofleet-20261028-0941Z.db", "tasmofleet-20261027-0300Z.db"}; !slices.Equal(names, want) {
+		t.Fatalf("stored %v, want %v (the newest SNAPSHOT_KEEP, the new file among them)", names, want)
+	}
+	info, err := os.Stat(filepath.Join(m.Dir(), res.Info.Name))
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("the file is written like a scheduled one (0600): %v %v", info, err)
+	}
+	st := m.Status()
+	if !st.Failed || st.Reason != "no space left on device" || st.File != "tasmofleet-20261028-0300Z.db" || !st.Attempted.Equal(before.Attempted) {
+		t.Fatalf("status %+v: a manual run must leave the scheduled failure as it was (%+v)", st, before)
+	}
+	if left, _ := filepath.Glob(filepath.Join(m.Dir(), ".snapshot-*")); len(left) != 0 {
+		t.Fatalf("scratch left: %v", left)
+	}
+}
+
+// Why (#921): the other direction. A manual copy that fails (full disk) must not turn a healthy
+// schedule into "the last scheduled snapshot failed", and it deletes nothing: retention only ever runs
+// after a good copy.
+func TestTakeNowFailureIsReturnedLeavesTheScheduleStatusAndDeletesNothing(t *testing.T) {
+	m := New(fakeSrc{}, t.TempDir())
+	at(m, "2026-10-29 03:00")
+	if _, err := m.Run(context.Background(), 1); err != nil {
+		t.Fatal(err)
+	}
+	m.src = fakeSrc{err: &os.PathError{Op: "write", Path: "x", Err: errors.New("no space left on device")}}
+	at(m, "2026-10-29 10:00")
+	if _, err := m.TakeNow(context.Background(), 1); err == nil {
+		t.Fatal("expected the failure")
+	}
+	if st := m.Status(); st.Failed || st.File != "tasmofleet-20261029-0300Z.db" {
+		t.Fatalf("status %+v: a manual failure is not a scheduled failure", st)
+	}
+	if list, _ := m.List(); len(list) != 1 || list[0].Name != "tasmofleet-20261029-0300Z.db" {
+		t.Fatalf("stored after the failure: %v", list)
 	}
 }

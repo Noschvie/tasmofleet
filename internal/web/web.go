@@ -41,6 +41,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/inventory"
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/ota"
+	"github.com/hellwand/tasmofleet/internal/snapshot"
 	"github.com/hellwand/tasmofleet/internal/store"
 	"github.com/hellwand/tasmofleet/internal/templates"
 	"github.com/hellwand/tasmofleet/internal/transport"
@@ -173,6 +174,11 @@ type Deps struct {
 	SnapshotMissed func(ctx context.Context) (time.Time, error)
 	Notify         NotifyService      // optional: status lines and test buttons of the Notifications tab (needs SysConfig)
 	PolicyRules    PolicyRulesService // the policy rules; required whenever Policy is set
+
+	// SnapshotNow takes a snapshot on request ("Create snapshot now", #921): the scheduled snapshot's copy,
+	// name and retention, without a record of a scheduled run. Optional: without it the button is absent.
+	SnapshotNow func(ctx context.Context) (snapshot.RunResult, error)
+
 	// PolicyLivePause is optional: Pause / Resume of the automatic policy live check.
 	PolicyLivePause PolicyLivePause
 	Setup           SetupService         // optional: first-run setup

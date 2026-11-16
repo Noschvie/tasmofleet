@@ -121,17 +121,36 @@ type RunResult struct {
 func (m *Manager) Run(ctx context.Context, keep int) (RunResult, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	name := nameFor(m.now())
-	info, err := m.take(ctx, name)
+	name, res, err := m.takeAndPrune(ctx, keep)
 	st := Status{Attempted: m.now(), File: name}
 	if err != nil {
 		st.Failed, st.Reason = true, ReasonOf(err)
-		m.last = st
-		return RunResult{}, err
 	}
 	m.last = st
+	return res, err
+}
+
+// TakeNow takes a snapshot on request (the person's "Create snapshot now"): the same copy, the same
+// name and the same retention as a scheduled run, so it counts toward keep. Unlike Run it does not
+// touch Status, which describes the schedule only: a manual failure is not a scheduled failure, and a
+// manual success must not hide one.
+func (m *Manager) TakeNow(ctx context.Context, keep int) (RunResult, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	_, res, err := m.takeAndPrune(ctx, keep)
+	return res, err
+}
+
+// takeAndPrune is the body of Run and TakeNow, called with m.mu held: it writes the snapshot named for the
+// clock and prunes to keep with the new file protected. It returns the name it tried to write.
+func (m *Manager) takeAndPrune(ctx context.Context, keep int) (string, RunResult, error) {
+	name := nameFor(m.now())
+	info, err := m.take(ctx, name)
+	if err != nil {
+		return name, RunResult{}, err
+	}
 	pruned, perr := m.prune(keep, name)
-	return RunResult{Info: info, Pruned: pruned, PruneErr: perr}, nil
+	return name, RunResult{Info: info, Pruned: pruned, PruneErr: perr}, nil
 }
 
 // take writes the copy next to its final name and renames it into place, so a half-written
