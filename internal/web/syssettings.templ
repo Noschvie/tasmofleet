@@ -143,19 +143,27 @@ templ sysCardView(p sysPage, c sysCard) {
 					if len(p.Storage.Orphans) == 0 {
 						<p class="ufield-help">No backups of deleted devices.</p>
 					} else {
-						if p.Fleet != nil && !p.Fleet.Admin {
-							<p class="ufield-help">Kept when their device was deleted. You can keep or release them; admins download or delete them.</p>
-						} else {
-							<p class="ufield-help">Kept when their device was deleted. Download one to restore it on a device by hand.</p>
-						}
-						@sysOrphans(p, *p.Storage)
+						<p class="ufield-help"><b>{ orphanSummary(*p.Storage) + "." }</b>
+							if p.Fleet != nil && !p.Fleet.Admin {
+								{ " Kept when their device was deleted. You can keep or release them; admins download or delete them." }
+							} else {
+								{ " Kept when their device was deleted. Download one to restore it on a device by hand." }
+							}
+						</p>
+						<details class="fold">
+							<summary>Backups <span class="meta">{ strconv.Itoa(len(p.Storage.Orphans)) }</span></summary>
+							@sysOrphans(p, *p.Storage)
+						</details>
 					}
 				}
 			}
 		case "unreferenced":
 			if p.Storage != nil && len(p.Storage.Unreferenced) > 0 {
 				@ui.SettingsCard(ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Note: "Files in old backup folders that no backup entry points to. TasmoFleet leaves them alone; you can remove them by hand.", Class: ui.StackRank(c.Phone), Plain: true}) {
-					@sysUnreferencedFiles(*p.Storage)
+					<details class="fold">
+						<summary>Files <span class="meta">{ strconv.Itoa(len(p.Storage.Unreferenced)) }</span></summary>
+						@sysUnreferencedFiles(*p.Storage)
+					</details>
 				}
 			}
 		case "download":
@@ -178,7 +186,7 @@ templ sysCardView(p sysPage, c sysCard) {
 			}
 		default:
 			if len(c.Rows) > 0 || c.ID == "mqttdiscovery" || c.ID == "notify-message" || c.ID == "notify-browser" {
-				@ui.SettingsCard(ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Note: c.Note, NoteHTML: sysCardNote(p, c), Class: ui.StackRank(c.Phone), Depends: c.Depends, Badges: sysCardBadges(c)}) {
+				@ui.SettingsCard(sysCardData(p, c)) {
 					if c.ID == "mqttdiscovery" {
 						@sysDiscoveryCard(p)
 					}
@@ -194,9 +202,6 @@ templ sysCardView(p sysPage, c sysCard) {
 						if c.ID == "idp" && row.Key == "OIDC_ISSUER" {
 							@sysTestRow("Test discovery", p.Base+sysPath+"/sso-test?tab=signin", "SSO check", p.SSOResult, "Saves nothing.", "")
 						}
-					}
-					if c.ID == "schedule" && p.Fleet != nil {
-						@fleetScheduleNote(*p.Fleet)
 					}
 					if c.ID == "snapshots" && p.DB != nil {
 						@sysSnapshotStatus(*p.DB)

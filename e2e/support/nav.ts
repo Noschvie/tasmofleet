@@ -23,3 +23,9 @@ export async function signOut(page: Page): Promise<void> {
   await openAccountMenu(page);
   await page.locator("details.usermenu:not([data-static])").getByRole("button", { name: "Sign out" }).click();
 }
+
+/** openSchedule opens the fold around the schedule fields of Devices, Backups: the fields are folded away until a row has a problem (#684). */
+export async function openSchedule(page: Page): Promise<void> {
+  const fold = page.locator("#card-schedule details.fold");
+  if ((await fold.getAttribute("open")) === null) await fold.locator("summary").click();
+}

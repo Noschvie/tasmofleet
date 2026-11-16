@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hellwand/tasmofleet/internal/backup"
 	"github.com/hellwand/tasmofleet/internal/config"
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/secretbox"
@@ -106,13 +107,14 @@ func TestFleetBackupsPageAdmin(t *testing.T) {
 		t.Fatalf("status %d", r.StatusCode)
 	}
 	last := cardOf(t, body, "lastrun")
-	for _, want := range []string{"Last run", "Backed up", "Failed", "Skipped", "cellar", "No answer within 30 s", "balcony", "Offline since <time", "Never answered", `href="/tf/devices/3/backups"`} {
+	for _, want := range []string{"Last run", "Backed up", "Failed", "Skipped", "cellar", "No answer within 30 s", `href="/tf/devices/3/backups"`} {
 		if !strings.Contains(last, want) {
 			t.Errorf("Last run lacks %q", want)
 		}
 	}
 	devs := cardOf(t, body, "devices")
-	for _, want := range []string{"Back up selected", "Back up all now", `aria-label="Select attic"`, "Settings only", "Needs HTTP", "Not in a run yet", "12 files"} {
+	// the skipped devices and their reasons are in the table (#684: Last run only links them)
+	for _, want := range []string{"Back up selected", `aria-label="Select attic"`, "Settings only", "Needs HTTP", "Not in a run yet", "12 files", "balcony", "Offline since <time", "Never answered"} {
 		if !strings.Contains(devs, want) {
 			t.Errorf("Devices card lacks %q", want)
 		}
@@ -474,13 +476,13 @@ func TestRowMenuShowsReplaceToAdminsOnly(t *testing.T) {
 	}
 }
 
-// Why (mockup 1c): with the schedule off the page still lists the last stored run's failed and skipped
-// devices under the "No schedule" note, as the mockup shows; they are not hidden with the sums.
+// Why (mockup 1c): with the schedule off the page still lists the last stored run's failed devices and
+// links its skipped ones under the "No schedule" note, as the mockup shows; they are not hidden with the sums.
 func TestNoScheduleStillListsTheLastRunsFailedAndSkippedDevices(t *testing.T) {
 	e := fleetEnvManual(t, fleetFixture(time.Now()))
 	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
 	last := cardOf(t, body, "lastrun")
-	for _, want := range []string{"No schedule", "Failed (1)", "cellar", "No answer within 30 s", "Skipped (2)", "balcony", "Never answered"} {
+	for _, want := range []string{"No schedule", "Failed (1)", "cellar", "No answer within 30 s", "show the 2 skipped"} {
 		if !strings.Contains(last, want) {
 			t.Errorf("no-schedule Last run lacks %q", want)
 		}
@@ -598,5 +600,210 @@ func TestFleetBackupsShowsDaysGivenInAnyCase(t *testing.T) {
 	_, op := e.do(t, "GET", "/devices/backups", "operator", nil)
 	if sched := cardOf(t, op, "schedule"); !strings.Contains(sched, "Mon, Wed") {
 		t.Errorf("an operator does not read the days: %s", sched)
+	}
+}
+
+// manyFailed is the fixture's fleet after a bad night: five devices failed in the last scheduled run
+// (cellar from the fixture, then lobby, mudroom, nook and office).
+func manyFailed(now time.Time) *fakeFleet {
+	fleet := fleetFixture(now)
+	at := fleet.run.StartedAt
+	for i, name := range []string{"lobby", "mudroom", "nook", "office"} {
+		id := model.DeviceID(10 + i)
+		fleet.run.Items = append(fleet.run.Items, model.BackupRunItem{DeviceID: id, DeviceName: name, Outcome: model.BackupOutcomeFailed, Reason: "no answer within 30 s", At: at})
+		fleet.rows = append(fleet.rows, model.BackupDeviceRow{DeviceID: id, Name: name, Runs: 1, LastOutcome: model.BackupOutcomeFailed, LastReason: "no answer within 30 s", LastAt: at})
+	}
+	fleet.run.Failed = 5
+	return fleet
+}
+
+// Why (#684): the table below already lists every failed device with its reason and the "Failed last
+// run" chip filters it. A Last run card that names all of them again grows by one row per failure and
+// pushes the table down, on a night when many devices fail (a broker or a switch down) the page is
+// at its longest exactly when the person needs it. The card names the first three, which need action
+// first, and links the chip for the rest.
+func TestLastRunNamesThreeFailedDevicesAndLinksTheRest(t *testing.T) {
+	e := fleetEnv(t, manyFailed(time.Now()))
+	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
+	last := cardOf(t, body, "lastrun")
+	for _, want := range []string{"cellar", "lobby", "mudroom", "and 2 more devices", "Show all 5 failed", `href="/tf/devices/backups?filter=failed#card-devices"`} {
+		if !strings.Contains(last, want) {
+			t.Errorf("Last run lacks %q: %s", want, last)
+		}
+	}
+	for _, not := range []string{"nook", "office"} {
+		if strings.Contains(last, not) {
+			t.Errorf("Last run names %q, the fourth and fifth failure belong behind the link", not)
+		}
+	}
+	// the devices the card leaves out are in the table it links to
+	if devs := cardOf(t, body, "devices"); !strings.Contains(devs, "nook") || !strings.Contains(devs, "office") {
+		t.Error("the table does not hold the failures the card leaves out")
+	}
+	// up to three there is nothing to link: no "and 0 more"
+	_, body = fleetEnv(t, fleetFixture(time.Now())).do(t, "GET", "/devices/backups", "admin", nil)
+	if last := cardOf(t, body, "lastrun"); strings.Contains(last, "more device") || strings.Contains(last, "Show all") {
+		t.Errorf("one failed device is listed in full, without a link for the rest: %s", last)
+	}
+}
+
+// Why (#684): skipped devices are not failures (#409 decision) and are as visible in the table, by the
+// "Skipped" chip, as anywhere. Listing each of them in Last run only repeats the table; one line with
+// the count links the chip.
+func TestLastRunSkippedDevicesAreOneLinkedLineNotAList(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		env  *env
+	}{{"scheduled", fleetEnv(t, fleetFixture(time.Now()))}, {"no schedule", fleetEnvManual(t, fleetFixture(time.Now()))}} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, body := tc.env.do(t, "GET", "/devices/backups", "admin", nil)
+			last := cardOf(t, body, "lastrun")
+			for _, want := range []string{"show the 2 skipped", `href="/tf/devices/backups?filter=skipped#card-devices"`, "not failures"} {
+				if !strings.Contains(last, want) {
+					t.Errorf("Last run lacks %q: %s", want, last)
+				}
+			}
+			for _, not := range []string{"balcony", "garage", "Skipped (2)"} {
+				if strings.Contains(last, not) {
+					t.Errorf("Last run still lists skipped devices (%q)", not)
+				}
+			}
+		})
+	}
+}
+
+// Why (#684): the schedule form is five fields that are set once; open all the time it is the longest
+// card of the side column and pushes everything below it away. It shows a line with what is set and
+// the fields sit in a fold (the app's details.fold). A fold that hides a field with an error would make
+// a refused save look ignored, so a row with a problem renders it open.
+func TestScheduleFieldsSitInAFoldThatOpensOnAnError(t *testing.T) {
+	e := fleetEnv(t, fleetFixture(time.Now()))
+	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
+	sched := cardOf(t, body, "schedule")
+	fold := regexp.MustCompile(`<details class="fold"( open)?><summary>Change the schedule`).FindStringSubmatch(sched)
+	if fold == nil {
+		t.Fatalf("the schedule fields are not in a fold with a summary: %s", sched)
+	}
+	if fold[1] != "" {
+		t.Error("the fold is open without a problem")
+	}
+	if strings.Index(sched, "Every day at 03:00") > strings.Index(sched, "<details") || !strings.Contains(sched, "Next run") {
+		t.Errorf("the summary line (the days and time, the next run) does not come before the fold: %s", sched)
+	}
+	if !strings.Contains(sched[strings.Index(sched, "<details"):], `name="v.BACKUP_KEEP"`) {
+		t.Error("the fields are not inside the fold")
+	}
+	// a refused value opens the fold, with the error beside the field
+	_, body = e.do(t, "POST", "/devices/backups", "admin", url.Values{"csrf": {"tok"}, "v.BACKUP_KEEP": {"nope"}})
+	sched = cardOf(t, body, "schedule")
+	if !regexp.MustCompile(`<details class="fold" open><summary>Change the schedule`).MatchString(sched) {
+		t.Errorf("a refused value leaves the field in a closed fold: %s", sched)
+	}
+	if !strings.Contains(sched, `data-key="BACKUP_KEEP"`) || !strings.Contains(sched, "ufield-err") && !strings.Contains(sched, "aria-invalid") {
+		t.Errorf("the error is not shown by its field: %s", sched)
+	}
+	// a save that fails on a setting this page does not show is no reason to open the fold
+	_, body = e.do(t, "POST", "/devices/backups", "admin", url.Values{"csrf": {"tok"}, "v.LOG_LEVEL": {"nope"}})
+	if sched = cardOf(t, body, "schedule"); strings.Contains(sched, `<details class="fold" open>`) {
+		t.Error("the fold opens although no schedule field has a problem")
+	}
+}
+
+// Why (#684): the long list comes last. Everything above the device table is short (the last run, the
+// totals, one line each for the deleted devices' backups, the unreferenced files and the schedule), so on a phone nothing
+// hides behind 60 table rows. Devices therefore carries the highest phone rank of the page; a card that
+// is ranked after it would be at the bottom of the table again.
+func TestBackupsPageRanksTheDeviceTableLastOnAPhone(t *testing.T) {
+	e, _, _, _ := storageEnv(t)
+	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
+	rank := func(id string) int {
+		m := regexp.MustCompile(`<section class="scard r(\d)"[^>]*id="card-` + id + `"`).FindStringSubmatch(body)
+		if m == nil {
+			m = regexp.MustCompile(`<section class="scard[^"]*\br(\d)\b[^"]*" id="card-` + id + `"`).FindStringSubmatch(body)
+		}
+		if m == nil {
+			t.Fatalf("card %s has no phone rank", id)
+		}
+		return int(m[1][0] - '0')
+	}
+	devs := rank("devices")
+	for _, id := range []string{"lastrun", "storage", "orphans", "schedule"} {
+		if r := rank(id); r >= devs {
+			t.Errorf("card %s has phone rank %d, the device table %d: the table must come last", id, r, devs)
+		}
+	}
+	if rank("lastrun") != 1 {
+		t.Error("the last run is not the first card on a phone")
+	}
+}
+
+// Why (#684): Back up all now acts on the whole fleet, not on the table. With the table last on a phone,
+// a button inside its card would sit far down the page, so it is in the page header, where it stays at
+// the top on every width. Back up selected stays by the table and the selection it uses.
+func TestBackUpAllNowIsInThePageHeader(t *testing.T) {
+	e := fleetEnv(t, fleetFixture(time.Now()))
+	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
+	head := body[strings.Index(body, `class="pghead"`):strings.Index(body, `class="syswrap"`)]
+	if !strings.Contains(head, `form="bk-all"`) || !strings.Contains(head, "Back up all now") {
+		t.Errorf("Back up all now is not in the page header: %s", head)
+	}
+	devs := cardOf(t, body, "devices")
+	if strings.Contains(devs, "Back up all now") || !strings.Contains(devs, "Back up selected") {
+		t.Error("the Devices card holds Back up all now, or lost Back up selected")
+	}
+	// an operator starts nothing
+	_, body = e.do(t, "GET", "/devices/backups", "operator", nil)
+	if strings.Contains(body, "Back up all now") {
+		t.Error("an operator sees Back up all now")
+	}
+}
+
+// Why (#684): one line per row keeps the table to its length of rows. A device name or a reason that
+// wraps makes a row two or three lines high; they are cut to the cell and their full text is the
+// cell's title (the layout guard accepts a cut-off cell only with a title).
+func TestTableNameAndReasonCellsCarryTheirFullTextAsTitle(t *testing.T) {
+	fleet := fleetFixture(time.Now())
+	fleet.rows[2].Name = "a-device-name-that-is-longer-than-its-column"
+	e := fleetEnv(t, fleet)
+	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
+	devs := cardOf(t, body, "devices")
+	if !strings.Contains(devs, `class="wrap p1 dv-name" title="a-device-name-that-is-longer-than-its-column"`) {
+		t.Errorf("the name cell has no title with the full name: %s", devs)
+	}
+	if !strings.Contains(devs, `<td data-label="Last result" class="wrap s" title="No answer within 30 s">`) {
+		t.Error("the result cell of a failed device has no title with its reason")
+	}
+}
+
+// Why (#684): the lists of the side column (the devices the next run prunes, the backups of deleted
+// devices, the unreferenced files) are as long as the fleet's history. Each card says in one line what it
+// holds, and the list is in a fold with its count, so the column stays short; the entries are still on
+// the page (a fold only hides them), with their own Keep, Download and Delete.
+func TestSideColumnListsAreFoldedBehindOneLine(t *testing.T) {
+	_, sb, _, _ := storageEnv(t)
+	f := []backup.UnreferencedFile{{Path: "backups/85/20261027T104345Z-dmp.dmp", Size: 2048, ModTime: time.Date(2026, 10, 27, 10, 43, 45, 0, time.UTC)}}
+	fleet := fleetFixture(time.Now())
+	e, _, _, _ := sysEnvWithDeps(t, func(d *Deps) { d.Backups = &unrefStorage{storageBackups: sb, files: f}; d.BackupFleet = fleet })
+	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
+	for _, c := range []struct{ card, fold, entry string }{
+		{"storage", `<details class="fold"><summary>Devices <span class="meta">1</span>`, "attic"},
+		{"orphans", `<details class="fold"><summary>Backups <span class="meta">`, "garage"},
+		{"unreferenced", `<details class="fold"><summary>Files <span class="meta">1</span>`, "20261027T104345Z-dmp.dmp"},
+	} {
+		card := cardOf(t, body, c.card)
+		at := strings.Index(card, c.fold)
+		if at < 0 {
+			t.Errorf("%s: the list is not in a fold (want %s): %s", c.card, c.fold, card)
+			continue
+		}
+		if !strings.Contains(card[at:], c.entry) {
+			t.Errorf("%s: %q is not inside the fold", c.card, c.entry)
+		}
+		if strings.Contains(card[:at], c.entry) {
+			t.Errorf("%s: %q is listed above the fold too", c.card, c.entry)
+		}
+	}
+	if o := cardOf(t, body, "orphans"); !strings.Contains(o, "<b>2 backups · 1 kept.</b>") {
+		t.Errorf("the deleted devices' card has no summary line with the count and the kept ones: %s", o)
 	}
 }

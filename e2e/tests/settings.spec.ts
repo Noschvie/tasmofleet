@@ -121,6 +121,7 @@ test("devices backups: totals, and a deleted device's kept backup is listed and 
   await page.goto(app.url + "/devices/backups");
   await expect(sum("Backups"), "the kept backup still counts").toHaveText(/^[1-9]\d*$/);
   await expect(page.getByText("No backups of deleted devices.")).toHaveCount(0);
+  await page.locator("#card-orphans details.fold > summary").click(); // the list is folded (#684)
   const orphan = page.locator(".sys-orphan", { hasText: "lamp-1m" });
   await expect(orphan).toHaveCount(1);
   await expect(orphan.getByRole("link", { name: "Download" })).toBeVisible();

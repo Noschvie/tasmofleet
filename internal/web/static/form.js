@@ -90,12 +90,32 @@
           } else {
             f.value = d[name];
           }
+          // a restored value inside a closed fold would be hidden (the Backups schedule, #684)
+          var el = f.closest ? f : f[0]; // several fields of one name come as a list
+          var fold = el && el.closest ? el.closest("details") : null;
+          if (fold) {
+            fold.open = true;
+          }
         });
       } catch (e) {
         /* storage unavailable or bad draft: nothing to restore */
       }
     });
   }
+  // A field that fails its constraint (a time left empty) inside a closed fold cannot be focused, so the
+  // browser would refuse the save without showing why. The fold opens around it. "invalid" does not
+  // bubble, hence the capture phase.
+  document.addEventListener(
+    "invalid",
+    function (e) {
+      var fold =
+        e.target instanceof Element ? e.target.closest("details") : null;
+      if (fold && !fold.open) {
+        fold.open = true;
+      }
+    },
+    true,
+  );
   document.addEventListener("submit", function (e) {
     var form = e.target;
     if (

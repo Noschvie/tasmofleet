@@ -68,14 +68,15 @@ var sysLayout = []sysTabDef{
 		{ID: "scan", Title: "Network scan", Stack: 1, Keys: []string{"DISCOVERY_SCAN", "DISCOVERY_SCAN_INTERVAL", "DISCOVERY_SCAN_CIDRS"}},
 	}},
 	// Backups is the Devices -> Backups page, not a tab of the Settings page (sysRender splits it off, like
-	// Snapshots). The entry stays in its place: sysAdvanced is an index into this list.
+	// Snapshots). The entry stays in its place: sysAdvanced is an index into this list. The device table
+	// is the one long list of the page, so on a phone it comes last and every short card sits above it (#684).
 	{sysBackupsSlug, "Backups", []int{2, 1}, []sysCardDef{
 		{ID: "lastrun", Title: "Last run", Stack: 0, Phone: 1},
-		{ID: "devices", Title: "Devices", Stack: 0, Phone: 3},
-		{ID: "storage", Title: "Storage", Note: "Read-only. Not part of the form.", Stack: 1, Phone: 2},
-		{ID: "schedule", Title: "Schedule", Note: "Device backups on chosen days at a time of day, and how many to keep.", Stack: 1, Phone: 4, Keys: []string{"BACKUP_DAYS", "BACKUP_TIME", "BACKUP_KEEP", "BACKUP_MAX_AGE"}},
-		{ID: "orphans", Title: "Backups of deleted devices", Stack: 1, Phone: 5},
-		{ID: "unreferenced", Title: "Unreferenced files", Stack: 1, Phone: 6},
+		{ID: "devices", Title: "Devices", Stack: 0, Phone: 6},
+		{ID: "storage", Title: "Storage", Note: "Totals of every backup, deleted devices' included.", Stack: 1, Phone: 2},
+		{ID: "orphans", Title: "Backups of deleted devices", Stack: 1, Phone: 3},
+		{ID: "unreferenced", Title: "Unreferenced files", Stack: 1, Phone: 4},
+		{ID: "schedule", Title: "Schedule", Note: "Device backups on chosen days at a time of day, and how many to keep.", Stack: 1, Phone: 5, Keys: []string{"BACKUP_DAYS", "BACKUP_TIME", "BACKUP_KEEP", "BACKUP_MAX_AGE"}},
 	}},
 	{"notifications", "Notifications", []int{1, 2}, []sysCardDef{
 		{ID: "notify-events", Title: "Events", Note: "What is sent. Every channel gets the same events.", Stack: 0, Phone: 1,
@@ -250,6 +251,14 @@ func sysRestartAll(rows []sysRow) bool {
 		}
 	}
 	return n > 0
+}
+
+// sysCardData is the frame every settings card shares: header, notes, badges and its phone place. A card
+// that draws its rows differently (the Backups schedule, with its fold) still uses it, so the frame is
+// not copied.
+func sysCardData(p sysPage, c sysCard) ui.SettingsCardData {
+	return ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Note: c.Note, NoteHTML: sysCardNote(p, c),
+		Class: ui.StackRank(c.Phone), Depends: c.Depends, Badges: sysCardBadges(c)}
 }
 
 // hasProblem is a row with an error or a stored secret that must be entered again: the page opens

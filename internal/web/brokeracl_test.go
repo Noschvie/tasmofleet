@@ -285,6 +285,9 @@ func TestDeviceBackUpNoticeStaysWhileAJobHoldsTheDevice(t *testing.T) {
 	}
 }
 
+// Why (#684, #853): the notice says that a backup travels over the broker. It belongs where a backup is started
+// and stands once: Back up all now moved from the Devices card to the page header (the table is last on a
+// phone), and the notice moved with it, right below the header, above the cards. It is not repeated in a card.
 func TestFleetBackupsPageCarriesTheBrokerACLWarningOnceByBackUpAll(t *testing.T) {
 	for _, role := range []string{"admin", "operator"} {
 		t.Run(role, func(t *testing.T) {
@@ -293,16 +296,19 @@ func TestFleetBackupsPageCarriesTheBrokerACLWarningOnceByBackUpAll(t *testing.T)
 			if n := countACL(t, body); n != 1 {
 				t.Fatalf("the Backups page has %d ACL notices, want 1 (by Back up all now; the same words twice on one page read as noise)", n)
 			}
-			if n := strings.Count(cardOf(t, body, "schedule"), "data-acl-warning"); n != 0 {
-				t.Errorf("the Schedule card repeats the notice %d times, it stands once by Back up all now", n)
+			for _, card := range []string{"schedule", "devices", "lastrun"} {
+				if n := strings.Count(cardOf(t, body, card), "data-acl-warning"); n != 0 {
+					t.Errorf("the %s card holds %d ACL notices, the notice stands once below the page header", card, n)
+				}
 			}
-			if n := strings.Count(cardOf(t, body, "devices"), "data-acl-warning"); n != 1 {
-				t.Errorf("the Devices card has %d ACL notices, want 1", n)
+			head, notice, wrap := strings.Index(body, `class="pghead"`), strings.Index(body, "data-acl-warning"), strings.Index(body, `class="syswrap"`)
+			if head < 0 || notice < head || notice > wrap {
+				t.Fatalf("the notice (%d) is not between the page header (%d) and the card stacks (%d)", notice, head, wrap)
 			}
 			if role == "admin" {
-				devs := cardOf(t, body, "devices")
-				if strings.Index(devs, "data-acl-warning") > strings.Index(devs, "<table") {
-					t.Error("the notice comes after the device table, not by the Back up all now button above it")
+				btn := strings.Index(body, "Back up all now")
+				if btn < head || btn > notice || !strings.Contains(body[btn:notice], "</div>") {
+					t.Errorf("the notice (%d) does not follow the page header that holds Back up all now (%d), outside its action row", notice, btn)
 				}
 			}
 		})

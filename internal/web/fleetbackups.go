@@ -409,6 +409,10 @@ func fleetFilesBadge(note string) string {
 	return note
 }
 
+// fleetFailedShown is how many failed devices of the last run the Last run card names; the table below lists
+// every one, and the card links the filter for the rest (#684).
+const fleetFailedShown = 3
+
 // fleetPruneShown is how many devices "Pruned at the next run" names; the rest is a count.
 const fleetPruneShown = 3
 
@@ -454,6 +458,50 @@ func (h *handler) fleetPrune(ctx context.Context, base string) (rows []fleetPrun
 		rows = rows[:fleetPruneShown]
 	}
 	return rows, runs, more, nil
+}
+
+// ChipHref is the page with the device table filtered by a chip, scrolled to the table.
+func (v fleetView) ChipHref(filter string) string {
+	return v.Base + fleetPath + "?filter=" + filter + "#card-devices"
+}
+
+// ResultTitle is the full text of the Last result cell of a failed or skipped device, for the cell that cuts
+// it to one line; empty when the cell holds nothing that can be cut.
+func (r fleetRow) ResultTitle() string {
+	if r.Outcome == model.BackupOutcomeFailed || r.Outcome == model.BackupOutcomeSkipped {
+		return r.Why.Plain()
+	}
+	return ""
+}
+
+// fleetScheduleLine is the retention under the schedule's days and time: what is kept per device, and how
+// old a backup must be before pruning may take it.
+func fleetScheduleLine(c sysCard) string {
+	var keep, age string
+	for _, row := range c.Rows {
+		switch row.Key {
+		case "BACKUP_KEEP":
+			keep = row.Value
+		case "BACKUP_MAX_AGE":
+			age = fleetScheduleValue(row)
+		}
+	}
+	return keep + " kept per device · never pruned younger than " + age + "."
+}
+
+// orphanSummary counts the backups of deleted devices and how many of them are kept.
+func orphanSummary(st sysStorage) string {
+	kept := 0
+	for _, o := range st.Orphans {
+		if o.Kept {
+			kept++
+		}
+	}
+	s := plural(len(st.Orphans), "backup")
+	if kept > 0 {
+		s += fmt.Sprintf(" · %d kept", kept)
+	}
+	return s
 }
 
 // LastLine is the one line of the no-schedule state: the last stored run in words.

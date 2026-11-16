@@ -1,5 +1,6 @@
 import { test, expect } from "../support/fixtures";
 import { App, startApp } from "../support/stack";
+import { openSchedule } from "../support/nav";
 
 // #623: "Reset to default" shows, right after the click and before Save, the value Save will store,
 // says it is the default, and a reset that changes what a switch shows changes that switch at once.
@@ -21,12 +22,14 @@ const reset = (page: import("@playwright/test").Page, key: string) => field(page
 test("Devices, Backups: a reset shows the default at once, the schedule stays on, Save stores it", { tag: "@core" }, async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/devices/backups");
+  await openSchedule(page);
   // a schedule that is on, with a kept count and a protection age that differ from their defaults
   await page.locator("input[name='v.BACKUP_DAYS'][value='mon']").check();
   await page.locator("input[name='v.BACKUP_KEEP']").fill("5");
   await page.locator("input[name='v.BACKUP_MAX_AGE']").fill("48h");
   await page.getByRole("button", { name: "Save settings" }).click();
   await page.goto(app.url + "/devices/backups");
+  await openSchedule(page);
   const sw = page.locator("input[name='v.BACKUP_DAYS'][value='mon']");
   await expect(sw).toBeChecked();
   await expect(page.locator("input[name='v.BACKUP_TIME']")).toHaveValue("03:00");
@@ -172,10 +175,12 @@ test("a narrow row wraps only while its reset is ticked; the box is named by its
 }) => {
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/devices/backups");
+  await openSchedule(page);
   await page.locator("input[name='v.BACKUP_KEEP']").fill("5");
   await page.locator("input[name='v.BACKUP_MAX_AGE']").fill("48h");
   await page.getByRole("button", { name: "Save settings" }).click();
   await page.goto(app.url + "/devices/backups");
+  await openSchedule(page);
   const wrap = (key: string) =>
     field(page, key)
       .locator(".lrow")

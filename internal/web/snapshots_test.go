@@ -352,15 +352,18 @@ func TestStoredSnapshotsExampleNameNeverBreaksAcrossLines(t *testing.T) {
 
 // Why (#410, maintainer decision; #409 mockup): "Backups of deleted devices" sits in the narrow column
 // under the schedule, below the storage totals; the wide column holds the last run and the device table.
-func TestDeletedDeviceBackupsSitUnderTheDeviceBackupSchedule(t *testing.T) {
+// Since #684 (mockup approved 2026-11-13, "the long list comes last") the document order of the narrow
+// column is storage, deleted devices, schedule, which is also its phone order; the schedule is no longer
+// above the deleted devices on a phone, because every card that is short must sit above the long table.
+func TestDeletedDeviceBackupsSitUnderTheStorageTotalsAboveTheSchedule(t *testing.T) {
 	e, _, _, _ := storageEnv(t)
 	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
 	sched, orph := strings.Index(body, `id="card-schedule"`), strings.Index(body, `id="card-orphans"`)
 	narrow := strings.Index(body, `<div class="cstack">`)
 	wide, devs := strings.Index(body, `id="card-lastrun"`), strings.Index(body, `id="card-devices"`)
 	stor := strings.Index(body, `id="card-storage"`)
-	if wide >= devs || devs >= narrow || narrow >= stor || stor >= sched || sched >= orph {
-		t.Errorf("order storage %d, narrow stack %d, schedule %d, deleted devices %d", stor, narrow, sched, orph)
+	if wide >= devs || devs >= narrow || narrow >= stor || stor >= orph || orph >= sched {
+		t.Errorf("order storage %d, narrow stack %d, deleted devices %d, schedule %d", stor, narrow, orph, sched)
 	}
 }
 

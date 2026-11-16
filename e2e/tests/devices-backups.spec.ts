@@ -1,4 +1,5 @@
 import { test, expect } from "../support/fixtures";
+import { openSchedule } from "../support/nav";
 import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
 // Why (#409): Devices -> Backups is the one page that says how the fleet is backed up: the last
@@ -92,12 +93,87 @@ test("Back up all now leads to the bulk backup page with the devices it would tr
 test("the schedule saves on this page and the row menu shows what the role may do", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/devices/backups");
+  await openSchedule(page);
   await page.locator("input[name='v.BACKUP_KEEP']").fill("5");
   await page.getByRole("button", { name: "Save settings" }).click();
   await expect(page).toHaveURL(/\/devices\/backups\?ok=saved/);
   await expect(page.locator("input[name='v.BACKUP_KEEP']")).toHaveValue("5");
   await page.locator(".bk-table tbody tr").first().locator("summary").click();
   await expect(page.locator(".bk-table tbody tr").first().getByRole("menuitem", { name: "Open backups" })).toBeVisible();
+});
+
+// Why (#684): the device table is the one long list of the page. On a phone every other card is short and
+// sits above it, so the schedule and the deleted devices' backups are not 60 rows down.
+test("on a phone every card ends above the device table", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto(app.url + "/devices/backups");
+  const table = (await page.locator("#card-devices").boundingBox())!;
+  for (const id of ["lastrun", "storage", "orphans", "schedule"]) {
+    const box = (await page.locator("#card-" + id).boundingBox())!;
+    expect(box.y + box.height, `#card-${id} ends above the device table`).toBeLessThanOrEqual(table.y + 1);
+  }
+});
+
+// Why (#684): a device name that wraps makes its row two lines high, and a table of 60 rows grows by every
+// one of them. At desktop width a row is one line; the full name is the title of its cell.
+test("a long device name keeps its row as high as the others and stays readable in its title", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(app.url + "/devices/backups");
+  const rows = page.locator(".bk-table tbody tr");
+  const normal = (await rows.nth(1).boundingBox())!.height;
+  const long = "a-very-long-device-name-with-no-room-in-the-column-" + "x".repeat(60);
+  await rows.first().locator("td.dv-name").evaluate((td, name) => {
+    td.setAttribute("title", name);
+    td.querySelector("a")!.textContent = name;
+  }, long);
+  const tall = (await rows.first().boundingBox())!.height;
+  expect(tall, "the row of the long name is as high as another row").toBeLessThanOrEqual(normal + 1);
+  await expect(rows.first().locator("td.dv-name")).toHaveAttribute("title", long);
+});
+
+// Why (#684, #633): a title shows only for a mouse or the keyboard, so on a touch tablet a cut name or failure
+// reason could not be read at all. Below desktop width the name wraps inside its cell instead of being cut.
+test("a long device name wraps on a tablet instead of being cut", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  await page.setViewportSize({ width: 768, height: 1000 });
+  await page.goto(app.url + "/devices/backups");
+  const rows = page.locator(".bk-table tbody tr");
+  const normal = (await rows.nth(1).boundingBox())!.height;
+  const long = "a-very-long-device-name-with-no-room-in-the-column-" + "x".repeat(60);
+  await rows.first().locator("td.dv-name a").evaluate((a, name) => {
+    a.textContent = name;
+  }, long);
+  expect((await rows.first().boundingBox())!.height, "the long name takes more lines").toBeGreaterThan(normal + 1);
+  const cell = rows.first().locator("td.dv-name");
+  const [sw, cw] = await cell.evaluate((td) => [td.scrollWidth, td.clientWidth]);
+  expect(sw, "the name is not cut off at its cell").toBeLessThanOrEqual(cw);
+});
+
+// Why (#684): the schedule fields sit in a fold. A draft that comes back after a step-up (?restore=1) must
+// not come back hidden in it, and a field that fails its constraint in a closed fold must not make the save
+// look dead: the browser cannot focus a hidden field, so the fold opens around it.
+test("the schedule fold opens around a restored draft and around an invalid field", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  await page.goto(app.url + "/devices/backups");
+  const fold = page.locator("#card-schedule details.fold");
+  await expect(fold).not.toHaveAttribute("open", "");
+  await page.evaluate(() => sessionStorage.setItem("tf-draft:backups", JSON.stringify({ "v.BACKUP_KEEP": "6" })));
+  await page.goto(app.url + "/devices/backups?restore=1");
+  await expect(fold).toHaveAttribute("open", "");
+  await expect(page.locator("input[name='v.BACKUP_KEEP']")).toHaveValue("6");
+  // without ?restore=1 the draft is dropped and the fold stays closed
+  await page.goto(app.url + "/devices/backups");
+  await expect(fold).not.toHaveAttribute("open", "");
+  // an empty time of day is refused by the browser: close the fold, press Save, and it opens
+  await openSchedule(page);
+  await page.locator("input[name='v.BACKUP_TIME']").fill("");
+  await fold.locator("summary").click();
+  await expect(fold).not.toHaveAttribute("open", "");
+  await page.getByRole("button", { name: "Save settings" }).click();
+  await expect(fold).toHaveAttribute("open", "");
+  await expect(page).toHaveURL(/\/devices\/backups$/);
 });
 
 test("an operator sees the page read-only", async ({ page }) => {

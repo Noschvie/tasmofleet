@@ -137,23 +137,25 @@ test("the notice stays off other pages", async ({ page }) => {
 });
 
 // #853: a backup over MQTT carries every secret of the device through the broker, so the notice also stands, once, by
-// "Back up all now" on Devices, Backups while a broker is configured (not repeated on the schedule card). A device that
-// is not on the broker is backed up over HTTP: its Back up button has no notice (the device with the notice over MQTT
-// is in mqtt-transport.spec.ts).
-test("the notice stands by Back up all now only, not on the schedule or by an HTTP device's Back up", async ({ page }) => {
+// "Back up all now" on Devices, Backups while a broker is configured (not repeated on a card). Since #684 the button is
+// in the page header and the notice is right below it, above the cards. A device that is not on the broker is backed up
+// over HTTP: its Back up button has no notice (the device with the notice over MQTT is in mqtt-transport.spec.ts).
+test("the notice stands by Back up all now only, not on a card or by an HTTP device's Back up", async ({ page }) => {
   await page.setExtraHTTPHeaders(adam);
   await page.goto(app.url + "/devices/backups");
-  const devices = page.locator("#card-devices");
-  const schedule = page.locator("#card-schedule");
-  await expect(devices.getByRole("button", { name: "Back up all now" })).toBeVisible();
-  await expect(devices.locator("[data-acl-warning]")).toHaveCount(1);
-  await expect(schedule.locator("[data-acl-warning]")).toHaveCount(0);
+  const head = page.locator(".pghead");
+  const button = head.getByRole("button", { name: "Back up all now" });
+  await expect(button).toBeVisible();
+  await expect(page.locator("#card-devices").getByRole("button", { name: "Back up all now" })).toHaveCount(0);
+  await expect(page.locator(".syspage [data-acl-warning]")).toHaveCount(0);
   await expect(page.locator("[data-acl-warning]")).toHaveCount(1);
   await expectLoudNotice(page);
-  // it stands above the device table, by the buttons
-  const noticeBox = await devices.locator("[data-acl-warning]").boundingBox();
-  const tableBox = await devices.locator("table").boundingBox();
-  expect(noticeBox!.y + noticeBox!.height).toBeLessThanOrEqual(tableBox!.y);
+  // it stands below the button and above the first card
+  const buttonBox = await button.boundingBox();
+  const noticeBox = await page.locator("[data-acl-warning]").boundingBox();
+  const cardBox = await page.locator("#card-lastrun").boundingBox();
+  expect(buttonBox!.y + buttonBox!.height).toBeLessThanOrEqual(noticeBox!.y);
+  expect(noticeBox!.y + noticeBox!.height).toBeLessThanOrEqual(cardBox!.y);
   for (const width of [1280, 768, 375]) {
     await page.setViewportSize({ width, height: 1000 });
     await expectNoOverflow(page, `Backups page at ${width}`);

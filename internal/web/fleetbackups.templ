@@ -1,6 +1,7 @@
 package web
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -10,11 +11,20 @@ import (
 )
 
 // fleetBackupsPage is Devices -> Backups (#409): the last scheduled run, the device table, the storage
-// totals, the schedule form and the backups of deleted devices. The schedule is the backups entry of
+// totals, the schedule form and the backups of deleted devices. The device table is the one long list, so
+// every other card is short and it comes last on a phone (#684). Back up all now acts on the whole fleet,
+// not on the table: it is in the page header, and the broker notice (#853) stands once below it. The schedule is the backups entry of
 // sysLayout, saved through the same form machinery as the Settings page, with the page's own save bar.
 // An operator sees the same cards read-only: nothing on it starts a fleet run or changes a setting.
 templ fleetBackupsPage(p sysPage) {
-	@ui.PageHeader("Backups", "Device backups for the whole fleet")
+	@ui.PageHeader("Backups", "Device backups for the whole fleet") {
+		if p.Fleet.Admin {
+			<button type="submit" form="bk-all" class="btn btn-primary" title={ p.Fleet.AllTitle() }>Back up all now</button>
+		}
+	}
+	if p.Fleet.ACLText != "" {
+		@ui.BrokerACLNotice(p.Fleet.ACLText)
+	}
 	if p.Error != "" {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: p.Error, Alert: true})
 	}
@@ -66,10 +76,13 @@ templ fleetStacks(p sysPage) {
 				@ui.CardStack(span) {
 					for _, c := range tab.Cards {
 						if c.Stack == si {
-							if c.ID == "schedule" && !p.Fleet.Admin {
-								@fleetScheduleReadOnly(p, c)
-							} else {
-								@sysCardView(p, c)
+							switch {
+								case c.ID == "schedule" && p.Fleet.Admin:
+									@fleetSchedule(p, c)
+								case c.ID == "schedule":
+									@fleetScheduleReadOnly(p, c)
+								default:
+									@sysCardView(p, c)
 							}
 						}
 					}
@@ -134,6 +147,15 @@ templ fleetNoSchedule(v fleetView) {
 	</div>
 }
 
+// fleetRunSum is a count of the last run; it links the table filtered to it while there is something to see.
+templ fleetRunSum(label string, n int, href string) {
+	if n > 0 {
+		@sysSumLink(label, strconv.Itoa(n), href)
+	} else {
+		@sysSum(label, "0")
+	}
+}
+
 templ fleetRunSums(v fleetView) {
 	<div class="sys-sums">
 		<div class="sys-sum">
@@ -141,20 +163,24 @@ templ fleetRunSums(v fleetView) {
 			<div class="sys-sum-value"><span class="sys-sum-sm"><time { ui.StampAttrs(v.Run.StartedAt, ui.StampDay)... }>{ ui.StampDayText(v.Now, v.Run.StartedAt) }</time></span></div>
 		</div>
 		@sysSum("Backed up", strconv.Itoa(v.Run.OK))
-		@sysSum("Failed", strconv.Itoa(v.Run.Failed))
-		@sysSum("Skipped", strconv.Itoa(v.Run.Skipped))
+		@fleetRunSum("Failed", v.Run.Failed, v.ChipHref(fleetFailed))
+		@fleetRunSum("Skipped", v.Run.Skipped, v.ChipHref(fleetSkipped))
 	</div>
 }
 
+// fleetRunLists names the first fleetFailedShown failed devices and links the table for the rest; skipped
+// devices are one line with a link. The table lists every one of them with its reason, so a longer list
+// here would only repeat it and push the table down (#684).
 templ fleetRunLists(p sysPage, v fleetView) {
 	if len(v.Failed) > 0 {
 		<h3 class="sys-subhead">{ "Failed (" + strconv.Itoa(len(v.Failed)) + ")" }</h3>
-		@fleetRunItems(p, v.Failed, ui.ToneDanger, "Failed")
+		@fleetRunItems(p, v.Failed[:min(len(v.Failed), fleetFailedShown)], ui.ToneDanger, "Failed")
+		if len(v.Failed) > fleetFailedShown {
+			<p class="cnote">{ "and " + plural(len(v.Failed)-fleetFailedShown, "more device") + " · " }<a href={ templ.SafeURL(v.ChipHref(fleetFailed)) }>{ "Show all " + strconv.Itoa(len(v.Failed)) + " failed" }</a></p>
+		}
 	}
 	if len(v.Skipped) > 0 {
-		<h3 class="sys-subhead">{ "Skipped (" + strconv.Itoa(len(v.Skipped)) + ")" }</h3>
-		@fleetRunItems(p, v.Skipped, ui.ToneNeutral, "Skipped")
-		<p class="cnote">Skipped devices are not counted as failed and are not in the notification.</p>
+		<p class="cnote">Skipped devices are not failures and are not in the notification: <a href={ templ.SafeURL(v.ChipHref(fleetSkipped)) }>{ "show the " + strconv.Itoa(len(v.Skipped)) + " skipped" }</a>.</p>
 	}
 }
 
@@ -210,14 +236,10 @@ templ fleetDevices(p sysPage, c sysCard) {
 			if v.Admin {
 				<div class="cbd">
 					<button type="submit" form="picker" class="btn" data-needs-selection disabled>Back up selected<span data-select-suffix></span></button>
-					<button type="submit" form="bk-all" class="btn btn-primary" title={ v.AllTitle() }>Back up all now</button>
 				</div>
 			}
 		</div>
 		<div class="sbody sbody-plain">
-			if v.ACLText != "" {
-				@ui.BrokerACLNotice(v.ACLText)
-			}
 			<div class="dv-tools bk-tools">
 				<div class="dv-chips">
 					for _, ch := range v.Chips {
@@ -272,7 +294,7 @@ templ fleetRowView(v fleetView, r fleetRow) {
 		if v.Admin {
 			<td data-label="Select" class="sel"><label class="hit"><input type="checkbox" form="picker" name="id" value={ strconv.FormatInt(int64(r.ID), 10) } aria-label={ "Select " + r.Name }/></label></td>
 		}
-		<td data-label="Device" class="wrap p1 dv-name"><a href={ templ.SafeURL(r.DeviceHref) }>@ui.Soft(r.Name)</a></td>
+		<td data-label="Device" class="wrap p1 dv-name" title={ r.Name }><a href={ templ.SafeURL(r.DeviceHref) }>@ui.Soft(r.Name)</a></td>
 		<td data-label="Newest backup" class="bk-new s">
 			if r.Newest.IsZero() {
 				@ui.Badge(ui.ToneAccent, "No backup")
@@ -291,14 +313,14 @@ templ fleetRowView(v fleetView, r fleetRow) {
 		<td data-label="Files" class="nowrap s">
 			switch {
 				case r.Files != "":
-					<span title="The files of the device are stored with the backup">{ r.Files }</span>
+					<span class="bk-files-ok" title="The files of the device are stored with the backup">{ r.Files }</span>
 				case r.FilesBadge != "":
 					<span class="bdg t-neutral" title={ fleetSentence(r.FilesWhy) }>{ r.FilesBadge }</span>
 				default:
 					<span class="muted">-</span>
 			}
 		</td>
-		<td data-label="Last result" class="wrap s">
+		<td data-label="Last result" class="wrap s" if r.ResultTitle() != "" { title={ r.ResultTitle() } }>
 			switch r.Outcome {
 				case model.BackupOutcomeOK:
 					@ui.Badge(ui.ToneOK, "OK")
@@ -345,20 +367,53 @@ templ fleetStorage(p sysPage, c sysCard) {
 			<p class="cnote">Nothing: no device is at its limit of { v.Keep } backups.</p>
 		} else {
 			<p class="cnote">A device at its limit of { v.Keep } loses its oldest backup when the next one is taken. Kept backups are never pruned.</p>
-			<div class="sys-orphans">
-				for _, pr := range v.Prune {
-					<div class="sys-orphan">
-						<div class="sys-orphan-main">
-							<div class="sys-orphan-title"><a href={ templ.SafeURL(pr.Href) } class="sys-store-name">{ pr.Name }</a></div>
-							<div class="sys-orphan-detail">{ plural(pr.Runs, "backup") + " · oldest " }<time { ui.StampAttrs(pr.Oldest, ui.StampShort)... }>{ ui.StampText(pr.Oldest, ui.StampShort) }</time>{ " · " + pr.Size }</div>
+			<details class="fold">
+				<summary>Devices <span class="meta">{ strconv.Itoa(len(v.Prune) + v.PruneMore) }</span></summary>
+				<div class="sys-orphans">
+					for _, pr := range v.Prune {
+						<div class="sys-orphan">
+							<div class="sys-orphan-main">
+								<div class="sys-orphan-title"><a href={ templ.SafeURL(pr.Href) } class="sys-store-name">{ pr.Name }</a></div>
+								<div class="sys-orphan-detail">{ plural(pr.Runs, "backup") + " · oldest " }<time { ui.StampAttrs(pr.Oldest, ui.StampShort)... }>{ ui.StampText(pr.Oldest, ui.StampShort) }</time>{ " · " + pr.Size }</div>
+							</div>
 						</div>
-					</div>
+					}
+				</div>
+				if v.PruneMore > 0 {
+					<p class="cnote">{ "and " + plural(v.PruneMore, "more device") }</p>
+				}
+			</details>
+		}
+	}
+}
+
+// fleetSchedule is the Schedule card of an admin: a line with what is set, the fields in a fold. It is the
+// same card as every settings card (sysCardData), with the fold added around its rows; the fold is open
+// while a row has a problem, so an error or a secret to enter again is never hidden in it (#684).
+templ fleetSchedule(p sysPage, c sysCard) {
+	@ui.SettingsCard(sysCardData(p, c)) {
+		<div class="sys-status">
+			<span class={ "sys-status-dot", templ.KV("t-ok", p.Fleet.Scheduled), templ.KV("t-neutral", !p.Fleet.Scheduled) } aria-hidden="true"></span>
+			<div class="sys-status-text">
+				if p.Fleet.Scheduled {
+					<b>{ fleetSentence(p.Fleet.Plan) }</b>
+				} else {
+					<b>No schedule: manual only</b>
+				}
+				<span>{ fleetScheduleLine(c) }</span>
+			</div>
+		</div>
+		<div class="sf w-full">
+			@fleetScheduleNote(*p.Fleet)
+		</div>
+		<details class="fold" open?={ slices.ContainsFunc(c.Rows, sysRow.hasProblem) }>
+			<summary>Change the schedule <span class="meta">Days, time, retention</span></summary>
+			<div class="sbody">
+				for _, row := range c.Rows {
+					@sysRowView(p, row)
 				}
 			</div>
-			if v.PruneMore > 0 {
-				<p class="cnote">{ "and " + plural(v.PruneMore, "more device") }</p>
-			}
-		}
+		</details>
 	}
 }
 

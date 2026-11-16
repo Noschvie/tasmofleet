@@ -13016,10 +13016,10 @@ a.sys-sum:hover {
   width: 40px;
 }
 .bk-table .bk-c-dev {
-  width: 20%;
+  width: 24%;
 }
 .bk-table .bk-c-new {
-  width: 22%;
+  width: 24%;
 }
 .bk-table .bk-c-runs {
   width: 52px;
@@ -13043,6 +13043,19 @@ a.sys-sum:hover {
 .bk-table td.dv-name {
   overflow-wrap: anywhere;
 }
+/* from desktop width up a row is one line (#684): the name and the reason of a failed or skipped run are cut
+   at their cell, their cells carry the full text as a title. On a phone they wrap in the stacked row, on a
+   tablet they keep the #633 wrapping: a title shows only for a mouse or the keyboard, so a cut reason would
+   be unreadable on touch. */
+@media (min-width: 75rem) {
+  .bk-table td.dv-name {
+    white-space: nowrap;
+    overflow-wrap: normal;
+  }
+  .bk-table td .bk-rsn {
+    white-space: nowrap;
+  }
+}
 .bk-table td.bk-new .muted {
   display: inline-block;
 }
@@ -13062,16 +13075,23 @@ a.sys-sum:hover {
   .bk-u {
     display: inline;
   }
+  /* the normal case is left out on a phone (the files are stored with the backup): a row is name and menu,
+     then one line; "Settings only" and "Needs HTTP" stay, and the device's Backups tab has the count (#684) */
+  .bk-table td .bk-files-ok,
+  .bk-table td.s:has(> .bk-files-ok:only-child) {
+    display: none;
+  }
 }
 /* Storage totals: two by two in the side column */
 #card-storage .sys-sums {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
-/* wide content (>= 1700 px viewport): the result text stays on one line */
-@media (min-width: 106rem) {
-  .bk-table td .bk-rsn {
-    white-space: nowrap;
-  }
+/* a fold inside a card takes the card's whole width and ends it: no extra space below */
+.sbody > details.fold {
+  grid-column: 1 / -1;
+}
+.scard .sbody > details.fold:last-child {
+  margin-bottom: 0;
 }
 
 /* ==== page: Audit log (design v2, WP P8) ==== */

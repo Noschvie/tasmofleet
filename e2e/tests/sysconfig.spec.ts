@@ -1,5 +1,6 @@
 import { test, expect } from "../support/fixtures";
 import { App, startApp } from "../support/stack";
+import { openSchedule } from "../support/nav";
 
 // System settings page and the policy rule editor. The device networks and
 // OIDC_CLIENT_ID are set by the environment (locked); everything else is stored in
@@ -223,6 +224,7 @@ test("reset settings: one confirmation, then the step-up, then the defaults", as
 
   // a stored value to reset
   await page.goto(app.url + "/devices/backups");
+  await openSchedule(page);
   await page.locator("input[name='v.BACKUP_KEEP']").fill("4");
   await page.getByRole("button", { name: "Save settings" }).click();
   await expect(page.getByText("Saved.")).toBeVisible();

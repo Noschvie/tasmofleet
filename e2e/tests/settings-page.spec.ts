@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { test, expect } from "../support/fixtures";
 import { App, startApp } from "../support/stack";
+import { openSchedule } from "../support/nav";
 
 // The Settings page (issue #275): eight tabs in one form, a card grid, info popovers, one save bar.
 // Header authentication: header principals cannot confirm, so only settings without a step-up are
@@ -181,6 +182,7 @@ test("a freshly loaded page reports no unsaved changes on any tab", async ({ pag
 test("a backup day ticked and unticked again leaves the tab clean", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/devices/backups");
+  await openSchedule(page);
   const bar = page.locator("[data-sys-bar]");
   const mon = page.locator("input[name='v.BACKUP_DAYS'][value='mon']");
   await mon.check();
@@ -190,12 +192,13 @@ test("a backup day ticked and unticked again leaves the tab clean", async ({ pag
 });
 
 // Why (#336, #338): "Kept per device" and "Never prune younger than" sit side by side as small
-// inputs; the label stays on one line with its info icon right behind it, and the schedule card and
-// the deleted devices' card (#410: under the schedule, in the narrow column) stack without a gap.
+// inputs; the label stays on one line with its info icon right behind it, and the deleted devices' card
+// and the schedule card (#410, #684: the schedule is the last card of the narrow column) stack without a gap.
 test("backups: schedule fields side by side, label and icon together, narrow cards without a gap", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(app.url + "/devices/backups");
+  await openSchedule(page);
   const keep = page.locator("[data-key='BACKUP_KEEP']");
   const prune = page.locator("[data-key='BACKUP_MAX_AGE']");
   const k = (await keep.boundingBox())!, p = (await prune.boundingBox())!;
@@ -204,7 +207,7 @@ test("backups: schedule fields side by side, label and icon together, narrow car
   const lbl = (await prune.locator(".lbl").boundingBox())!, info = (await prune.locator(".uinfo").boundingBox())!;
   expect(lbl.height).toBeLessThan(24);
   expect(info.x - (lbl.x + lbl.width)).toBeLessThan(12);
-  const a = (await page.locator("#card-schedule").boundingBox())!, b = (await page.locator("#card-orphans").boundingBox())!;
+  const a = (await page.locator("#card-orphans").boundingBox())!, b = (await page.locator("#card-schedule").boundingBox())!;
   expect(b.y - (a.y + a.height)).toBeLessThan(24);
   expect(Math.abs(b.x - a.x), "same column").toBeLessThan(2);
   expect((await page.locator("#card-devices").boundingBox())!.x, "the device table keeps the wide column").toBeLessThan(a.x);
@@ -215,6 +218,7 @@ test("backups: schedule fields side by side, label and icon together, narrow car
 test("backup days and time save, and no day ticked is manual only", async ({ page }) => {
   await page.setExtraHTTPHeaders(admin);
   await page.goto(app.url + "/devices/backups");
+  await openSchedule(page);
   const day = (d: string) => page.locator(`input[name='v.BACKUP_DAYS'][value='${d}']`);
   await expect(day("mon")).not.toBeChecked(); // default: manual only
   await day("mon").check();
@@ -227,6 +231,7 @@ test("backup days and time save, and no day ticked is manual only", async ({ pag
   await expect(day("wed")).toBeChecked();
   await expect(page.locator("input[name='v.BACKUP_TIME']")).toHaveValue("04:30");
   await expect(page.locator("#card-lastrun")).toContainText("Mon, Wed at 04:30");
+  await openSchedule(page); // the page loaded again after the save, the fold is closed
   await day("mon").uncheck();
   await day("wed").uncheck();
   await page.getByRole("button", { name: "Save settings" }).click();
