@@ -247,3 +247,53 @@ func TestBackupRetryPageHasItsOwnText(t *testing.T) {
 		t.Error("the failure reason must stay visible on a phone (class keep)")
 	}
 }
+
+// Why (#881): the transaction engine runs backups, commands and the policy fix; only an update needs a
+// firmware file. Without FIRMWARE_BASE_URL (OTA set, Firmware nil) a bulk backup must start and reach its
+// result page and the transaction pages must exist, while nothing may offer or accept an update: the
+// bar button, the wizard and its posts, "New update" and the nav's Firmware entry stay off, and the
+// wizard URL explains what to configure instead of starting a job that always fails.
+func TestTransactionsRunWithoutFirmwareButNoUpdateStarts(t *testing.T) {
+	fbk, fo := &fakeBackupBatch{}, &fakeOTA{}
+	e := setupWith(t, func(d *Deps) {
+		d.DeviceCmd, d.CommandBatch, d.BackupBatch = &fakeCmd{}, &fakeBatch{}, fbk
+		now := time.Now()
+		d.OTA, d.Batches = fo, fakeBatches{}
+		d.Jobs = &fakeJobs{jobs: []model.Job{{ID: 1, BatchID: 21, DeviceID: 1, Kind: model.KindBackup, State: model.JobSucceeded, CreatedAt: now, UpdatedAt: now}}}
+	})
+	resp, _ := e.do(t, "POST", "/devices/bulk/backup", "admin", bulkForm("id", "1", "run", "1"))
+	if resp.StatusCode != http.StatusSeeOther || len(fbk.ids) != 1 {
+		t.Fatalf("Back up without a firmware base URL: %d %v, want 303 and one submitted backup", resp.StatusCode, fbk.ids)
+	}
+	if r, _ := e.do(t, "GET", "/devices/bulk/result/21?id=1", "admin", nil); r.StatusCode != 200 {
+		t.Errorf("the bulk result page of the backup: %d", r.StatusCode)
+	}
+	for _, path := range []string{"/transactions", "/transactions/21", "/transactions/21/retry"} {
+		if r, _ := e.do(t, "GET", path, "admin", nil); r.StatusCode != 200 {
+			t.Errorf("%s: %d, the transaction pages exist without firmware", path, r.StatusCode)
+		}
+	}
+	_, list := e.do(t, "GET", "/transactions", "admin", nil)
+	if strings.Contains(list, "New update") {
+		t.Error("the transactions list offers New update without firmware")
+	}
+	_, devs := e.do(t, "GET", "/devices", "admin", nil)
+	if !strings.Contains(devs, `href="/tf/transactions">Transactions</a>`) {
+		t.Error("the nav has no Transactions entry: the result of a bulk backup could not be found again")
+	}
+	if strings.Contains(devs, "Update firmware") || !strings.Contains(devs, `formaction="/tf/devices/bulk/backup"`) {
+		t.Error("the bulk bar must offer Back up and no Update firmware")
+	}
+	resp, body := e.do(t, "GET", "/updates/new", "admin", nil)
+	if resp.StatusCode != 404 || !strings.Contains(body, "Updates are switched off") {
+		t.Errorf("/updates/new: %d, want the switched-off explanation", resp.StatusCode)
+	}
+	for _, c := range []struct{ method, path string }{{"POST", "/updates/new"}, {"POST", "/updates/preview"}, {"POST", "/updates"}} {
+		if r, _ := e.do(t, c.method, c.path, "admin", bulkForm("id", "1", "release", "v16.0.0")); r.StatusCode == 200 || r.StatusCode == http.StatusSeeOther {
+			t.Errorf("%s %s answers %d: an update must not start without firmware", c.method, c.path, r.StatusCode)
+		}
+	}
+	if len(fo.previewReqs) != 0 || len(fo.submitReqs) != 0 {
+		t.Errorf("the engine was asked to plan or start an update: %v %v", fo.previewReqs, fo.submitReqs)
+	}
+}

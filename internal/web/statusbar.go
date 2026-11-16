@@ -48,7 +48,7 @@ func (h *handler) statusBar(ctx context.Context, base string, live bool) ui.Stat
 	if live {
 		sb.Fragment = base + "/statusbar"
 	}
-	if h.d.OTA != nil { // the transaction pages exist only with updates
+	if h.d.OTA != nil { // the transaction pages exist with the engine
 		sb.JobsHref = base + "/transactions"
 	}
 	if h.d.MQTTStatus != nil {

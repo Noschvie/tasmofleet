@@ -1513,7 +1513,7 @@ func (t txView) Summary() string {
 
 func (h *handler) transactionsPage(w http.ResponseWriter, r *http.Request) {
 	filter := store.JobFilter{Limit: 500}
-	p := txListView{Base: httpBase(r), CanStart: h.d.OTA != nil}
+	p := txListView{Base: httpBase(r), CanStart: h.d.Firmware != nil && h.d.OTA != nil}
 	p.Self = p.Base + "/transactions"
 	if raw := r.URL.Query().Get("device"); raw != "" { // the device page's "All transactions"
 		id, err := strconv.ParseInt(raw, 10, 64)

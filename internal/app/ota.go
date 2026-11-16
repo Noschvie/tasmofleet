@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -72,11 +73,28 @@ func (u updatePaths) UpdatePath(ctx context.Context, d model.Device, q ota.PathQ
 // newOTAEngine is ota.NewEngine; a test swaps it to see what setupOTA hands the engine (#676).
 var newOTAEngine = ota.NewEngine
 
-// setupOTA builds the OTA engine. It needs the firmware cache, which exists
-// only with FIRMWARE_BASE_URL; without it OTA is disabled and the UI hides it.
+// errFirmwareOff is why a job that needs a firmware file ends without one.
+var errFirmwareOff = errors.New("firmware updates are switched off: no firmware base URL is set")
+
+// firmwareOff is the engine's firmware while there is no cache (no FIRMWARE_BASE_URL, #881). The engine
+// runs every transaction (backup, command, policy, template, update), and only the update needs a file:
+// Ensure fails for it, so planning stops before fwselect.Guard and no OtaUrl or Upgrade is ever sent.
+// It implements neither CustomFirmware nor FirmwareFiles, so an uploaded image and a push upload are refused too.
+type firmwareOff struct{}
+
+func (firmwareOff) Ensure(context.Context, string, string) (model.Artifact, error) {
+	return model.Artifact{}, errFirmwareOff
+}
+
+func (firmwareOff) URLFor(model.Artifact) string { return "" } // unreachable: every URLFor follows a successful Ensure
+
+// setupOTA builds the transaction engine. It does not need the firmware cache, which exists only with
+// FIRMWARE_BASE_URL: bulk backup, Send command, Restart and Make compliant are transactions too and need
+// no firmware (#881). Without the cache the engine gets firmwareOff, and the web layer shows no update.
 func (a *runtime) setupOTA() {
-	if a.cache == nil {
-		return
+	var fw ota.Firmware = firmwareOff{}
+	if a.cache != nil {
+		fw = a.cache
 	}
 	cfgM := ota.DefaultConfig()
 	cfgM.RestoreOtaURL = a.cfg.OTARestoreURL
@@ -84,7 +102,7 @@ func (a *runtime) setupOTA() {
 		ota.Options{Machine: cfgM, MaxParallel: a.cfg.OTAParallel, Audit: a.svc.Audit, Policy: a.policyApplier(), Templates: a.templateApplier(),
 			Commands: a.deviceCmd, Principals: principalResolver{local: a.svc.Store, dir: a.svc.Store}, Paths: a.updatePaths(),
 			HoldFlashing: a.holdFlashing, StartCheck: a.otaStartCheck()},
-		a.svc.Store, a.svc.Store, a.otaDeviceAPI(), a.cache, a.backups, clock.Real{}, jobNotifier{rt: a},
+		a.svc.Store, a.svc.Store, a.otaDeviceAPI(), fw, a.backups, clock.Real{}, jobNotifier{rt: a},
 	)
 	if a.templates != nil {
 		a.templates.SetEngine(a.engine)

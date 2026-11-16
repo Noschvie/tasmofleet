@@ -29,7 +29,7 @@ func render(t *testing.T, d ShellData) string {
 func admin() ShellData {
 	return ShellData{
 		Title: "Devices", Nav: "devices", CSRF: "tok", UserName: "ada", UserMethod: "local", RoleName: "admin", IsAdmin: true,
-		Updates: true, Firmware: true, Policy: true, Discovery: true, SysConfig: true, Snapshots: true, Backups: true,
+		Transactions: true, Firmware: true, Policy: true, Discovery: true, SysConfig: true, Snapshots: true, Backups: true,
 	}
 }
 
@@ -110,6 +110,13 @@ func TestMenuFollowsRoleAndFeatures(t *testing.T) {
 	bare := ShellData{Title: "x", Nav: "dashboard", UserName: "o", UserMethod: "header", RoleName: "operator"}
 	if got, want := labels(bare.Groups()), "Dashboard[Overview;]Devices[List;Add;]System[Audit log;Users;About;Styleguide;]"; got != want {
 		t.Errorf("deployment without services\n got %s\nwant %s", got, want)
+	}
+	// Transactions run without a firmware cache (backups, commands): their page stays in the menu, so the
+	// result of a bulk backup can be found again (#881).
+	tx := bare
+	tx.Transactions = true
+	if got, want := labels(tx.Groups()), "Dashboard[Overview;]Devices[List;Add;]Updates[Transactions;]System[Audit log;Users;About;Styleguide;]"; got != want {
+		t.Errorf("transactions without firmware\n got %s\nwant %s", got, want)
 	}
 	fw := bare
 	fw.Firmware = true

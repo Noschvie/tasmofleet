@@ -916,6 +916,16 @@ same directory, SRC) also resolves. It also serves, for uploaded firmware, `/c/<
 `http://` (validated). There is no auto-detection: in ipvlan/bridge setups the right
 address is only known to the operator.
 
+Without `FIRMWARE_BASE_URL` there is no firmware cache and no firmware server, but the transaction engine
+still runs (#881): bulk backup, Send command, bulk Restart, Make compliant and Apply template are
+transactions that need no firmware file. The engine then gets a firmware that refuses every file (`firmwareOff`
+in `app/ota.go`), so an update is refused at planning, before `fwselect.Guard`, and no `OtaUrl` or `Upgrade`
+can be sent. The UI follows: the transaction pages exist (`web.Deps.OTA`), the update wizard, its posts, the
+Firmware pages and the "Update firmware" buttons need `web.Deps.Firmware` too, and `/updates/new` explains
+what to configure. The URL is read at start-up, so a change applies after a restart; update jobs left over
+from a run with the URL are resumed by the engine and end failed with the reason ("firmware updates are
+switched off") when they need a file.
+
 ### 8.4 Variant list for the UI
 
 The update dialog offers, per device, only files of the device's family that exist in

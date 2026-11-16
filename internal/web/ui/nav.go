@@ -102,7 +102,7 @@ func (d ShellData) Groups() []NavGroupData {
 		}),
 	}
 	if g := build("updates", "Updates", []entry{
-		{"transactions", "Transactions", "/transactions", d.Updates, false},
+		{"transactions", "Transactions", "/transactions", d.Transactions, false},
 		{"firmware", "Firmware", "/firmware", d.Firmware, false},
 	}); len(g.Items) > 0 {
 		out = append(out, g)

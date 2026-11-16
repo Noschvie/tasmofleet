@@ -138,7 +138,7 @@ func (h *handler) dashboard(w http.ResponseWriter, r *http.Request) {
 	d.Props = dashProposals(v.Base, props, devs)
 	now := h.d.Clock.Now()
 	d.Items = dashAttention(v.Base, now, rows, facts, h.channelWindow())
-	d.TxnCard = v.Features.Updates || len(txs) > 0
+	d.TxnCard = v.Features.Transactions || len(txs) > 0
 	if len(txs) > 0 {
 		c := dashTxnCard(v.Base, txs[0])
 		d.Card = &c

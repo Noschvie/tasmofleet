@@ -146,11 +146,11 @@ type Deps struct {
 	Recorder  audit.Recorder
 	Jobs      JobLister        // optional
 	Batches   store.BatchStore // optional: batch info and retries of a batch
-	OTA       OTA              // optional: nil without FIRMWARE_BASE_URL
+	OTA       OTA              // optional: the transaction engine; it runs backups and commands without a firmware cache too
 	DeviceCmd DeviceCmd        // optional: power toggle and console
-	Firmware  firmware.Cache
-	Import    ImportService // optional: TasmoAdmin web import
-	Discovery Discovery     // optional
+	Firmware  firmware.Cache   // optional: nil without FIRMWARE_BASE_URL; updates need it and OTA
+	Import    ImportService    // optional: TasmoAdmin web import
+	Discovery Discovery        // optional
 	Artifacts ArtifactLister
 	Hub       *events.Hub
 	Clock     clock.Clock
@@ -317,10 +317,6 @@ func Handler(d Deps) (http.Handler, error) {
 	}
 	if d.OTA != nil {
 		route("GET /transactions", op, h.transactionsPage)
-		route("GET /updates/new", op, h.updateForm)
-		route("POST /updates/new", op, h.updateForm) // the device list's bulk bar: the selection as a form post
-		route("POST /updates/preview", op, h.updatePreview)
-		route("POST /updates", op, h.updateSubmit)
 		route("GET /transactions/{batch}", op, h.batchPage)
 		route("GET /transactions/{batch}/live", op, h.batchLive)
 		route("GET /transactions/{batch}/cancel", op, h.batchCancelConfirm)
@@ -329,6 +325,12 @@ func Handler(d Deps) (http.Handler, error) {
 		route("POST /transactions/{batch}/retry", op, h.batchRetry)
 		route("GET /jobs/{id}/cancel", op, h.jobCancelConfirm)
 		route("POST /jobs/{id}/cancel", op, h.jobCancel)
+		if d.Firmware != nil { // starting an update needs a firmware file; without one the pages explain (registerUnavailable)
+			route("GET /updates/new", op, h.updateForm)
+			route("POST /updates/new", op, h.updateForm) // the device list's bulk bar: the selection as a form post
+			route("POST /updates/preview", op, h.updatePreview)
+			route("POST /updates", op, h.updateSubmit)
+		}
 	}
 	if d.Firmware != nil {
 		route("GET /firmware", op, h.firmwarePage)
@@ -401,7 +403,7 @@ type view struct {
 	NewDevices int
 	Version    string // the running version, as About prints it (shell header)
 	News       int    // releases new since the user last opened What's new (N5, avatar dot)
-	Features   struct{ Updates, Firmware, Policy, Settings, Import, Discovery, DeviceCmd, SysConfig, Snapshots, Backups, BulkCommand, BulkBackup, BulkRestart bool }
+	Features   struct{ Updates, Transactions, Firmware, Policy, Settings, Import, Discovery, DeviceCmd, SysConfig, Snapshots, Backups, BulkCommand, BulkBackup, BulkRestart bool }
 	Banner     string // a standing notice for admins, e.g. no device networks yet
 	Static     bool   // style guide only: partials render their open variant (data-static)
 	// SortPath is the page URL the sort links of its tables return to when the
@@ -448,7 +450,8 @@ func (h *handler) view(r *http.Request, title, nav string, data any) view {
 	if h.d.Hub != nil {
 		v.EventSeq = h.d.Hub.Seq()
 	}
-	v.Features.Updates = h.d.OTA != nil
+	v.Features.Transactions = h.d.OTA != nil
+	v.Features.Updates = h.d.OTA != nil && h.d.Firmware != nil // an update needs a firmware file; the transactions do not
 	v.Features.Firmware = h.d.Firmware != nil
 	v.Features.Policy = h.d.Policy != nil
 	v.Features.Settings = h.d.Settings != nil
@@ -644,6 +647,8 @@ func (h *handler) registerUnavailable(route func(string, func(http.Handler) http
 	const noOTA = "Firmware updates are switched off because no firmware base URL is set. Devices fetch firmware from TasmoFleet over plain http, so they need an address to reach it at."
 	if h.d.OTA == nil {
 		route("GET /transactions", op, explain("Updates are switched off", noOTA, "FIRMWARE_BASE_URL"))
+	}
+	if h.d.OTA == nil || h.d.Firmware == nil {
 		route("GET /updates/new", op, explain("Updates are switched off", noOTA, "FIRMWARE_BASE_URL"))
 	}
 	if h.d.Firmware == nil {
