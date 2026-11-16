@@ -318,7 +318,7 @@ func backupsNotice(r *http.Request) string {
 	case "released":
 		return "Backup released: the retention may prune it again."
 	}
-	return ""
+	return bulkNotice(q)
 }
 
 // restoreTone is the badge tone of a restore job state.

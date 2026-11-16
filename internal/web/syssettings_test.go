@@ -289,7 +289,7 @@ func TestBackupsPageListsOrphansWithTheirActions(t *testing.T) {
 	if strings.Contains(body, "<b>plug</b>") || !strings.Contains(body, "garage &lt;b&gt;plug&lt;/b&gt;") {
 		t.Fatal("the deleted device's name must be escaped")
 	}
-	if n := strings.Count(body, `class="sys-orphan"`); n != 2 {
+	if n := strings.Count(cardOf(t, body, "orphans"), `class="bk-row"`); n != 2 {
 		t.Errorf("%d orphan rows, want 2 runs (dump and snapshot of one run are one row)", n)
 	}
 	for _, want := range []string{
@@ -486,14 +486,14 @@ func (u *unrefStorage) Unreferenced(context.Context) ([]backup.UnreferencedFile,
 
 // Why (#205): files in old backup folders that no backup entry points to used to be
 // invisible, which looked like a half-finished migration. Settings -> Backups lists them
-// (read-only: no delete or keep control, TasmoFleet never touches them) and says so; with
-// none, the section does not exist.
+// (without the bulk delete of #622 the list is read-only: no delete or keep control, and it says
+// so); with none, the section does not exist.
 func TestSettingsBackupsListsUnreferencedFilesReadOnly(t *testing.T) {
 	_, sb, _, _ := storageEnv(t)
 	f := []backup.UnreferencedFile{{Path: "backups/85/20261027T104345Z-dmp.dmp", Size: 2048, ModTime: time.Date(2026, 10, 27, 10, 43, 45, 0, time.UTC)}}
 	e, _, _, _ := sysEnvWithDeps(t, func(d *Deps) { d.Backups = &unrefStorage{storageBackups: sb, files: f}; d.BackupFleet = &fakeFleet{} })
 	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
-	for _, want := range []string{"Unreferenced files", "backups/85/20261027T104345Z-dmp.dmp", "2.0 KiB", "you can remove them by hand"} {
+	for _, want := range []string{"Unreferenced files", "backups/85/20261027T104345Z-dmp.dmp", "2.0 KiB", "admins can delete them"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("section lacks %q", want)
 		}

@@ -59,9 +59,18 @@ templ fleetBackupsPage(p sysPage) {
 		<form id="bk-orph" method="post" action={ templ.SafeURL(p.Base + fleetPath) }>
 			<input type="hidden" name="csrf" value={ p.CSRF }/>
 		</form>
+		if p.Storage.CanBulk {
+			<form id="bk-orph-sel" method="get" action={ templ.SafeURL(p.Base + orphansDeletePath) }></form>
+		}
 		if p.Storage.CanDelete {
 			@backupDeleteDialog(backupsView{CSRF: p.CSRF})
 		}
+	}
+	if p.Fleet.CanBulk && len(p.Fleet.PruneNow) > 0 {
+		@fleetPruneDialog(p)
+	}
+	if p.Fleet.CanBulk && p.Storage != nil && len(p.Storage.Unreferenced) > 0 {
+		@fleetUnrefDialog(p)
 	}
 	if p.NeedStepUp {
 		@ui.StepUp(p.StepUp)
@@ -227,7 +236,7 @@ func fleetSentence(s string) string {
 // fleetDevices is the main table card: filter chips, one row per device, the run buttons.
 templ fleetDevices(p sysPage, c sysCard) {
 	{{ v := p.Fleet }}
-	<section class={ "scard", ui.StackRank(c.Phone) } id={ "card-" + c.ID }>
+	<section class={ "scard", ui.StackRank(c.Phone) } id={ "card-" + c.ID } data-select-scope>
 		<div class="sch">
 			<div>
 				<h2>{ c.Title }</h2>
@@ -366,25 +375,85 @@ templ fleetStorage(p sysPage, c sysCard) {
 		if v.PruneRuns == 0 {
 			<p class="cnote">Nothing: no device is at its limit of { v.Keep } backups.</p>
 		} else {
-			<p class="cnote">A device at its limit of { v.Keep } loses its oldest backup when the next one is taken. Kept backups are never pruned.</p>
+			<div class="bk-bar">
+				<div class="bk-retention">
+					{ plural(v.PruneRuns, "backup") + " of " + plural(len(v.Prune), "device") + " · " + v.PruneSize + " beyond the limit of " + v.Keep + ". Each device loses its oldest backups when its next one is taken. Kept backups are never pruned." }
+				</div>
+				if v.CanBulk && len(v.PruneNow) > 0 {
+					<a class="btn" href={ templ.SafeURL(v.Base + pruneNowPath) } data-dialog="dlg-fprune">Prune now…</a>
+				}
+			</div>
 			<details class="fold">
-				<summary>Devices <span class="meta">{ strconv.Itoa(len(v.Prune) + v.PruneMore) }</span></summary>
+				<summary>Devices <span class="meta">{ strconv.Itoa(len(v.Prune)) }</span></summary>
 				<div class="sys-orphans">
 					for _, pr := range v.Prune {
 						<div class="sys-orphan">
 							<div class="sys-orphan-main">
-								<div class="sys-orphan-title"><a href={ templ.SafeURL(pr.Href) } class="sys-store-name">{ pr.Name }</a></div>
+								<div class="sys-orphan-title">
+									<a href={ templ.SafeURL(pr.Href) } class="sys-store-name">{ pr.Name }</a>
+									if pr.LeftOut != "" {
+										<span class="bdg t-neutral" title={ "Prune now leaves it alone: " + pr.LeftOut }>Left out</span>
+									}
+								</div>
 								<div class="sys-orphan-detail">{ plural(pr.Runs, "backup") + " · oldest " }<time { ui.StampAttrs(pr.Oldest, ui.StampShort)... }>{ ui.StampText(pr.Oldest, ui.StampShort) }</time>{ " · " + pr.Size }</div>
 							</div>
 						</div>
 					}
 				</div>
-				if v.PruneMore > 0 {
-					<p class="cnote">{ "and " + plural(v.PruneMore, "more device") }</p>
-				}
 			</details>
 		}
 	}
+}
+
+// fleetPruneDialog is Prune now: the runs the Storage list takes (the devices that took part), deleted now. It
+// posts their ids; the server cuts them to what is still allowed. The page twin is the link's address.
+templ fleetPruneDialog(p sysPage) {
+	{{ v := p.Fleet }}
+	<dialog id="dlg-fprune" class="udlg" aria-labelledby="dlg-fprune-h">
+		<form method="post" action={ templ.SafeURL(p.Base + pruneNowPath) } class="udlg-in">
+			<input type="hidden" name="csrf" value={ p.CSRF }/>
+			<input type="hidden" name="confirm" value="1"/>
+			for _, run := range v.PruneNow {
+				<input type="hidden" name="id" value={ strconv.FormatInt(int64(run.ID), 10) }/>
+			}
+			<h2 id="dlg-fprune-h">Prune { plural(len(v.PruneNow), "backup") } now?</h2>
+			<p class="udlg-body"><b>{ plural(len(v.PruneNow), "backup") + " of " + plural(v.PruneNowDevices, "device") + ", " + v.PruneNowSize + " in all" }</b>, are deleted now instead of at their next backup. { pruneNowRules } { pruneLeftOutText(v.PruneLeftOut) } This cannot be undone; the audit log lists every backup.</p>
+			<div class="udlg-changes">
+				for _, run := range v.PruneNow {
+					<div><span>{ run.Name }</span><span class="mono"><time { ui.StampAttrs(run.Taken, ui.StampShort)... }>{ ui.StampText(run.Taken, ui.StampShort) }</time>{ " · " + humanBytes(run.Bytes) }</span></div>
+				}
+			</div>
+			<div class="udlg-foot">
+				<button type="button" class="btn" data-close>Cancel</button>
+				<button type="submit" class="btn btn-danger-solid">Prune { plural(len(v.PruneNow), "backup") }</button>
+			</div>
+		</form>
+	</dialog>
+}
+
+// fleetUnrefDialog is Delete all for the unreferenced files: it posts every path listed now.
+templ fleetUnrefDialog(p sysPage) {
+	{{ st := p.Storage }}
+	<dialog id="dlg-unref" class="udlg" aria-labelledby="dlg-unref-h">
+		<form method="post" action={ templ.SafeURL(p.Base + unrefDeletePath) } class="udlg-in">
+			<input type="hidden" name="csrf" value={ p.CSRF }/>
+			<input type="hidden" name="confirm" value="1"/>
+			for _, f := range st.Unreferenced {
+				<input type="hidden" name="path" value={ f.Path }/>
+			}
+			<h2 id="dlg-unref-h">Delete { plural(len(st.Unreferenced), "unreferenced file") }?</h2>
+			<p class="udlg-body"><b>{ plural(len(st.Unreferenced), "file") + ", " + st.UnrefSize + " in all" }</b>, in old backup folders that no backup entry points to. No backup and no restore point uses them. This cannot be undone; the audit log lists every file.</p>
+			<div class="udlg-changes">
+				for _, f := range st.Unreferenced {
+					<div><span class="mono">{ f.Path }</span><span class="mono">{ f.Size }</span></div>
+				}
+			</div>
+			<div class="udlg-foot">
+				<button type="button" class="btn" data-close>Cancel</button>
+				<button type="submit" class="btn btn-danger-solid">Delete { plural(len(st.Unreferenced), "file") }</button>
+			</div>
+		</form>
+	</dialog>
 }
 
 // fleetSchedule is the Schedule card of an admin: a line with what is set, the fields in a fold. It is the

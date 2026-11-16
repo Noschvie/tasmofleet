@@ -11,8 +11,12 @@
 (function () {
   "use strict";
 
+  // A [data-select-scope] is a selection of its own inside a larger form: the backups of deleted
+  // devices sit in the settings form of Devices, Backups, next to the device table, and the two
+  // must not count each other's boxes. A list inside a scope belongs to it, whatever form wraps it.
   function picker(el) {
     return (
+      el.closest("[data-select-scope]") ||
       el.closest("form") ||
       document.getElementById(el.getAttribute("data-picker") || "")
     );

@@ -156,3 +156,31 @@ func (s *SQLite) FailActiveRestores(ctx context.Context, reason string, byState 
 	c, err := rowsDeleted(s.db.ExecContext(ctx, `UPDATE restore_jobs SET state=?, detail=?, updated_at=? WHERE state NOT IN ('done','failed')`, RestoreFailed, reason, now))
 	return n + c, err
 }
+
+// ActiveRestoreStore is implemented by *SQLite next to RestoreStore. It lets the backup service
+// ask which stored backups an unfinished restore or replace reads from (bulk deletes keep them).
+type ActiveRestoreStore interface {
+	// ActiveRestoreBackups lists the source backup (the dump row) of every unfinished restore or
+	// replace job, each once, in no particular order. Terminal jobs name nothing: the list ends
+	// with the job.
+	ActiveRestoreBackups(ctx context.Context) ([]model.BackupID, error)
+}
+
+var _ ActiveRestoreStore = (*SQLite)(nil)
+
+func (s *SQLite) ActiveRestoreBackups(ctx context.Context) ([]model.BackupID, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT DISTINCT backup_id FROM restore_jobs WHERE state NOT IN ('done','failed')`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close() //nolint:errcheck // rows.Err below reports iteration problems
+	var out []model.BackupID
+	for rows.Next() {
+		var id model.BackupID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}

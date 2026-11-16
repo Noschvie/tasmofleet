@@ -28,11 +28,27 @@ type BackupFleet interface {
 	// of stored files in that archive; FilesNote says why the newest run has none ("settings only: no
 	// file system", "files need HTTP") and is empty otherwise.
 	Overview(ctx context.Context) ([]model.BackupDeviceRow, error)
-	// PruneNext lists the backup runs the next backup would delete.
-	PruneNext(ctx context.Context) ([]model.Backup, error)
+	// PrunePlan says, per device, what Prune now would remove (#622): the runs the retention lists
+	// minus the newest run and the runs a restore uses, and whether the device is left out.
+	PrunePlan(ctx context.Context) ([]PruneDevice, error)
 	// LastMissed is when a scheduled run was last skipped because TasmoFleet was down at its time
 	// (#601); zero when that never happened.
 	LastMissed(ctx context.Context) (time.Time, error)
+}
+
+// PruneDevice is what Prune now does with one device. The rule for one device (never its newest
+// run, never one a restore uses) is backup.PruneNowSet; the one fleet rule, LeftOut, is the
+// implementer's.
+type PruneDevice struct {
+	Device model.DeviceID
+	Name   string
+	// Files are the files of the runs Prune now removes from the device (never empty).
+	Files []model.Backup
+	// Held counts the runs the retention lists that Prune now keeps (newest, used by a restore).
+	Held int
+	// LeftOut is why Prune now leaves the device alone ("its last run did not back it up"); empty
+	// when it takes part.
+	LeftOut string
 }
 
 // whyText is why a device was skipped, failed or left out: the reason as a sentence, and when the
@@ -109,6 +125,15 @@ type fleetPrune struct {
 	Runs       int
 	Oldest     time.Time
 	Size       string
+	LeftOut    string // why Prune now leaves it alone; empty: it takes part
+}
+
+// fleetPruneRun is one backup run Prune now removes: the id is the run's dump row, what the form posts.
+type fleetPruneRun struct {
+	ID    model.BackupID
+	Name  string
+	Taken time.Time
+	Bytes int64
 }
 
 // fleetView is everything the Backups page shows beyond the settings form.
@@ -139,9 +164,16 @@ type fleetView struct {
 	Without     int
 	WithoutHref string
 	Keep        string // BACKUP_KEEP as shown, for the prune note
-	PruneRuns   int
+	PruneRuns   int    // runs the retention lists for the next backups, left-out devices included
 	Prune       []fleetPrune
-	PruneMore   int
+	PruneSize   string
+	// What Prune now takes (#622): the listed runs of the devices that take part.
+	PruneNow        []fleetPruneRun
+	PruneNowDevices int
+	PruneNowSize    string
+	PruneLeftOut    []string // the names of the devices left out
+	PruneHeld       int      // runs kept back by the never-the-newest and restore rules
+	CanBulk         bool     // admin and the backup service can run the bulk actions
 }
 
 // fleetSchedule is the effective backup schedule (BACKUP_DAYS, BACKUP_TIME); no weekday is "manual only".
@@ -214,7 +246,8 @@ func (h *handler) backupsRender(w http.ResponseWriter, r *http.Request, status i
 	}
 	if st := p.Storage; st != nil {
 		fv.Runs, fv.Kept, fv.Size = st.Runs, st.Kept, st.Size // the totals include the backups of deleted devices
-		if !v.IsAdmin {                                       // an operator may look and keep, never delete
+		st.CanBulk = fv.CanBulk
+		if !v.IsAdmin { // an operator may look and keep, never delete
 			st.CanDelete = false
 			for i := range st.Orphans {
 				st.Orphans[i].DeleteText, st.Orphans[i].Download = "", "" // both routes are admin-only
@@ -236,6 +269,7 @@ func (h *handler) registerFleetBackups(route func(string, func(http.Handler) htt
 	route("GET "+fleetPath, op, h.fleetBackupsPage)
 	route("POST "+fleetPath, adm, h.sysSave)
 	route("POST "+fleetPath+"/stepup", adm, h.sysStepUpPost)
+	h.registerFleetBulk(route, adm)
 }
 
 // fleetOf reads the last run and the per-device overview and arranges them for the page.
@@ -391,8 +425,9 @@ func (h *handler) fleetOf(r *http.Request, admin bool) (*fleetView, error) {
 	fv.Chips = []fleetChip{chip(fleetAll, "All", len(all)), chip(fleetNone, "No backup", count[fleetNone]),
 		chip(fleetOld, "Older than "+plural(fv.OldDays, "day"), count[fleetOld]),
 		chip(fleetFailed, "Failed last run", count[fleetFailed]), chip(fleetSkipped, "Skipped", count[fleetSkipped])}
-	fv.Prune, fv.PruneRuns, fv.PruneMore, err = h.fleetPrune(ctx, base)
-	if err != nil {
+	_, bulk := h.d.Backups.(BackupBulk)
+	fv.CanBulk = admin && bulk
+	if err := h.fleetPrune(ctx, base, fv); err != nil {
 		return nil, err
 	}
 	return fv, nil
@@ -413,51 +448,65 @@ func fleetFilesBadge(note string) string {
 // every one, and the card links the filter for the rest (#684).
 const fleetFailedShown = 3
 
-// fleetPruneShown is how many devices "Pruned at the next run" names; the rest is a count.
-const fleetPruneShown = 3
+// pruneRunsOf groups a device's files into the runs Prune now removes, oldest first. The id is the
+// run's dump row (or its first file when the run has no dump): the confirmation posts it, and the
+// POST works the same list out again to see what is still allowed.
+func pruneRunsOf(d PruneDevice) []fleetPruneRun {
+	var out []fleetPruneRun
+	at := map[time.Time]int{}
+	for _, b := range d.Files {
+		i, ok := at[b.TakenAt]
+		if !ok {
+			i = len(out)
+			at[b.TakenAt] = i
+			out = append(out, fleetPruneRun{ID: b.ID, Name: d.Name, Taken: b.TakenAt})
+		} else if b.Kind == model.BackupConfigDump {
+			out[i].ID = b.ID
+		}
+		out[i].Bytes += b.Size
+	}
+	slices.SortFunc(out, func(a, b fleetPruneRun) int { return a.Taken.Compare(b.Taken) })
+	return out
+}
 
-// fleetPrune groups what the next backups delete by device: runs, the oldest and the size.
-func (h *handler) fleetPrune(ctx context.Context, base string) (rows []fleetPrune, runs, more int, err error) {
-	list, err := h.d.BackupFleet.PruneNext(ctx)
+// fleetPrune fills the Storage card's prune list and Prune now's confirmation from the plan: per
+// device the runs, the oldest and the size; the runs Prune now takes; the devices it leaves out.
+func (h *handler) fleetPrune(ctx context.Context, base string, fv *fleetView) error {
+	plan, err := h.d.BackupFleet.PrunePlan(ctx)
 	if err != nil {
-		return nil, 0, 0, err
+		return err
 	}
-	type key struct {
-		dev model.DeviceID
-		at  time.Time
-	}
-	seen := map[key]bool{}
-	byDev := map[model.DeviceID]*fleetPrune{}
-	var order []model.DeviceID
-	sizes := map[model.DeviceID]int64{}
-	for _, b := range list {
-		k := key{b.DeviceID, b.TakenAt}
-		fp := byDev[b.DeviceID]
-		if fp == nil {
-			fp = &fleetPrune{Name: b.DeviceName, Href: fmt.Sprintf("%s/devices/%d/backups", base, b.DeviceID), Oldest: b.TakenAt}
-			byDev[b.DeviceID] = fp
-			order = append(order, b.DeviceID)
+	var all, now int64
+	for _, d := range plan {
+		runs := pruneRunsOf(d)
+		fp := fleetPrune{Name: d.Name, Href: fmt.Sprintf("%s/devices/%d/backups", base, d.Device), Runs: len(runs), Oldest: runs[0].Taken, LeftOut: d.LeftOut}
+		var size int64
+		for _, r := range runs {
+			size += r.Bytes
 		}
-		if !seen[k] {
-			seen[k] = true
-			fp.Runs++
-			runs++
+		fp.Size = humanBytes(size)
+		fv.Prune = append(fv.Prune, fp)
+		fv.PruneRuns += len(runs)
+		fv.PruneHeld += d.Held
+		all += size
+		if d.LeftOut != "" {
+			fv.PruneLeftOut = append(fv.PruneLeftOut, d.Name)
+			continue
 		}
-		if b.TakenAt.Before(fp.Oldest) {
-			fp.Oldest = b.TakenAt
+		fv.PruneNow = append(fv.PruneNow, runs...)
+		fv.PruneNowDevices++
+		now += size
+	}
+	slices.SortStableFunc(fv.Prune, func(a, b fleetPrune) int { return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)) })
+	slices.SortStableFunc(fv.PruneNow, func(a, b fleetPruneRun) int {
+		if c := strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)); c != 0 {
+			return c
 		}
-		sizes[b.DeviceID] += b.Size
-	}
-	for _, id := range order {
-		byDev[id].Size = humanBytes(sizes[id])
-		rows = append(rows, *byDev[id])
-	}
-	slices.SortStableFunc(rows, func(a, b fleetPrune) int { return strings.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name)) })
-	if len(rows) > fleetPruneShown {
-		more = len(rows) - fleetPruneShown
-		rows = rows[:fleetPruneShown]
-	}
-	return rows, runs, more, nil
+		return a.Taken.Compare(b.Taken)
+	})
+	slices.Sort(fv.PruneLeftOut)
+	fv.PruneSize, fv.PruneNowSize = humanBytes(all), humanBytes(now)
+	return nil
 }
 
 // ChipHref is the page with the device table filtered by a chip, scrolled to the table.
@@ -489,7 +538,7 @@ func fleetScheduleLine(c sysCard) string {
 	return keep + " kept per device · never pruned younger than " + age + "."
 }
 
-// orphanSummary counts the backups of deleted devices and how many of them are kept.
+// orphanSummary counts the backups of deleted devices, how many of them are kept and what they take.
 func orphanSummary(st sysStorage) string {
 	kept := 0
 	for _, o := range st.Orphans {
@@ -497,11 +546,55 @@ func orphanSummary(st sysStorage) string {
 			kept++
 		}
 	}
-	s := plural(len(st.Orphans), "backup")
+	s := plural(len(st.Orphans), "backup") + " · " + st.OrphanSize
 	if kept > 0 {
 		s += fmt.Sprintf(" · %d kept", kept)
 	}
 	return s
+}
+
+// orphanGroup is the backups of one deleted device (name and MAC), newest first.
+type orphanGroup struct {
+	MAC  string
+	Runs []sysOrphan
+}
+
+// OrphanGroups groups the runs by deleted device, in the order of each device's newest run.
+func (st sysStorage) OrphanGroups() []orphanGroup {
+	var out []orphanGroup
+	at := map[[2]string]int{}
+	for _, o := range st.Orphans {
+		k := [2]string{o.Name, o.MAC}
+		i, ok := at[k]
+		if !ok {
+			i = len(out)
+			at[k] = i
+			out = append(out, orphanGroup{MAC: o.MAC})
+		}
+		out[i].Runs = append(out[i].Runs, o)
+	}
+	return out
+}
+
+// Selectable counts the runs a bulk delete may take: every run that is not kept.
+func (st sysStorage) Selectable() int {
+	n := 0
+	for _, o := range st.Orphans {
+		if !o.Kept {
+			n++
+		}
+	}
+	return n
+}
+
+// SelectAllText labels the box above the list; it says what a kept run does to the count.
+func (st sysStorage) SelectAllText() string {
+	n, kept := st.Selectable(), len(st.Orphans)-st.Selectable()
+	s := fmt.Sprintf("Select all that can go (%d", n)
+	if kept > 0 {
+		s += fmt.Sprintf("; %d kept stay", kept)
+	}
+	return s + ")"
 }
 
 // LastLine is the one line of the no-schedule state: the last stored run in words.

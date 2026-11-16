@@ -73,8 +73,9 @@ and `.decoded.json`. Background: [#129](https://github.com/hellwand/tasmofleet/i
   ("backup layout", `files_missing`), marked "File missing" in the backup lists and can be deleted
   there.
 - A file in an old `backups/<number>/` folder that no index entry points to (for example after
-  restoring an older database) is never moved or deleted. It is counted in the start-up log line
-  (`unindexed`), logged as a warning and listed under Devices → Backups → Unreferenced files.
+  restoring an older database) is never moved, and never deleted by TasmoFleet by itself. It is counted
+  in the start-up log line (`unindexed`), logged as a warning and listed under Devices → Backups →
+  Unreferenced files, where an admin can delete them all with one confirmation.
 - Two devices with the same hostname get `<hostname>` and `<hostname>_<device-id>`.
 - If a device's hostname changes later, new backups go to the new folder; old ones stay put and
   remain listed and restorable.

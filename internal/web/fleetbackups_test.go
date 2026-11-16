@@ -25,7 +25,7 @@ import (
 type fakeFleet struct {
 	run    *model.BackupRun
 	rows   []model.BackupDeviceRow
-	prune  []model.Backup
+	prune  []PruneDevice
 	missed time.Time // when a scheduled run was last skipped; zero = never
 }
 
@@ -37,7 +37,7 @@ func (f *fakeFleet) LastRun(context.Context) (model.BackupRun, bool, error) {
 }
 func (f *fakeFleet) LastMissed(context.Context) (time.Time, error)             { return f.missed, nil }
 func (f *fakeFleet) Overview(context.Context) ([]model.BackupDeviceRow, error) { return f.rows, nil }
-func (f *fakeFleet) PruneNext(context.Context) ([]model.Backup, error)         { return f.prune, nil }
+func (f *fakeFleet) PrunePlan(context.Context) ([]PruneDevice, error)          { return f.prune, nil }
 
 // fleetFixture is the fleet of the mockup in small: three backed up (one of them old), one that never
 // was, one failed and two skipped in the last scheduled run.
@@ -62,7 +62,7 @@ func fleetFixture(now time.Time) *fakeFleet {
 			{DeviceID: 5, Name: "kitchen", NewestAt: at, Runs: 3, Bytes: 1024, FilesNote: "files need HTTP", LastOutcome: model.BackupOutcomeOK, LastAt: at},
 			{DeviceID: 6, Name: "porch", Runs: 0}, // added after the run, never backed up
 		},
-		prune: []model.Backup{{ID: 1, DeviceID: 1, DeviceName: "attic", Size: 100, TakenAt: old}},
+		prune: []PruneDevice{{Device: 1, Name: "attic", Files: []model.Backup{{ID: 1, DeviceID: 1, DeviceName: "attic", Kind: model.BackupConfigDump, Size: 100, TakenAt: old}}}},
 	}
 }
 
@@ -88,7 +88,7 @@ func cardOf(t *testing.T, body, id string) string {
 		t.Fatalf("no card %q in the page", id)
 	}
 	rest := body[i:]
-	if j := strings.Index(rest[1:], "<section"); j >= 0 {
+	if j := strings.Index(rest[1:], `<section class="scard`); j >= 0 { // the next card, not a list inside this one
 		rest = rest[:j+1]
 	}
 	return rest
@@ -803,7 +803,7 @@ func TestSideColumnListsAreFoldedBehindOneLine(t *testing.T) {
 			t.Errorf("%s: %q is listed above the fold too", c.card, c.entry)
 		}
 	}
-	if o := cardOf(t, body, "orphans"); !strings.Contains(o, "<b>2 backups · 1 kept.</b>") {
+	if o := cardOf(t, body, "orphans"); !strings.Contains(o, "<b>2 backups · 2.1 KiB · 1 kept.</b>") {
 		t.Errorf("the deleted devices' card has no summary line with the count and the kept ones: %s", o)
 	}
 }

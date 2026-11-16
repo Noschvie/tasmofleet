@@ -139,19 +139,21 @@ templ sysCardView(p sysPage, c sysCard) {
 			}
 		case "orphans":
 			if p.Storage != nil {
-				@ui.SettingsCard(ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Note: "Own list with its own delete action, outside the settings form.", Class: ui.StackRank(c.Phone), Plain: true}) {
+				@ui.SettingsCard(ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Class: ui.StackRank(c.Phone), Plain: true}) {
 					if len(p.Storage.Orphans) == 0 {
 						<p class="ufield-help">No backups of deleted devices.</p>
 					} else {
-						<p class="ufield-help"><b>{ orphanSummary(*p.Storage) + "." }</b>
-							if p.Fleet != nil && !p.Fleet.Admin {
-								{ " Kept when their device was deleted. You can keep or release them; admins download or delete them." }
-							} else {
-								{ " Kept when their device was deleted. Download one to restore it on a device by hand." }
-							}
-						</p>
+						<div class="bk-bar">
+							<div class="bk-retention"><b>{ orphanSummary(*p.Storage) + "." }</b>
+								if p.Fleet != nil && !p.Fleet.Admin {
+									{ " Kept when their device was deleted. You can keep or release them; admins download or delete them." }
+								} else {
+									{ " Kept when their device was deleted. Download one to restore it on a device by hand." }
+								}
+							</div>
+						</div>
 						<details class="fold">
-							<summary>Backups <span class="meta">{ strconv.Itoa(len(p.Storage.Orphans)) }</span></summary>
+							<summary>Backups <span class="meta">{ strconv.Itoa(len(p.Storage.Orphans)) + " · " + p.Storage.OrphanSize }</span></summary>
 							@sysOrphans(p, *p.Storage)
 						</details>
 					}
@@ -159,7 +161,18 @@ templ sysCardView(p sysPage, c sysCard) {
 			}
 		case "unreferenced":
 			if p.Storage != nil && len(p.Storage.Unreferenced) > 0 {
-				@ui.SettingsCard(ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Note: "Files in old backup folders that no backup entry points to. TasmoFleet leaves them alone; you can remove them by hand.", Class: ui.StackRank(c.Phone), Plain: true}) {
+				@ui.SettingsCard(ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Class: ui.StackRank(c.Phone), Plain: true}) {
+					<div class="bk-bar">
+						<div class="bk-retention">
+							{ plural(len(p.Storage.Unreferenced), "file") + " · " + p.Storage.UnrefSize + " in old backup folders that no backup entry points to. No backup and no restore point uses them." }
+							if !p.Storage.CanBulk {
+								{ " TasmoFleet leaves them alone; admins can delete them." }
+							}
+						</div>
+						if p.Storage.CanBulk {
+							<a class="btn" href={ templ.SafeURL(p.Base + unrefDeletePath) } data-dialog="dlg-unref">Delete all…</a>
+						}
+					</div>
 					<details class="fold">
 						<summary>Files <span class="meta">{ strconv.Itoa(len(p.Storage.Unreferenced)) }</span></summary>
 						@sysUnreferencedFiles(*p.Storage)
@@ -465,64 +478,99 @@ templ sysSum(label, value string) {
 	</div>
 }
 
-// sysOrphans lists the backups of deleted devices (kept when the device was deleted, N2):
-// Download, Keep and Delete as on a device's Backups tab. The Keep buttons submit the
-// bk-orph form outside the settings form; Delete opens the shared delete dialog.
+// sysOrphans lists the backups of deleted devices (kept when the device was deleted, N2) per device, as a
+// device's Backups tab lists its own: Download, Keep and Delete per run. An admin also gets a box per run
+// that a bulk delete may take and the selection bar of the tab (#622): "Delete selected" opens the page that
+// names count and size. The Keep buttons submit the bk-orph form outside the settings form, the boxes and
+// the bar belong to bk-orph-sel; the list is its own selection (data-select-scope), apart from the device table.
 templ sysOrphans(p sysPage, st sysStorage) {
-	<div class="sys-orphans">
-		for _, o := range st.Orphans {
-			<div class="sys-orphan">
-				<div class="sys-orphan-main">
-					<div class="sys-orphan-title">
-						<span class="sys-store-name">{ orphanName(o) }</span>
-						if o.Kept {
-							@ui.Badge(ui.ToneAccent, "Kept")
-						}
-						if o.Missing {
-							@ui.Badge(ui.ToneDanger, "File missing")
-						}
-					</div>
-					<div class="sys-orphan-detail">
-						if o.MAC != "" {
-							<span class="mono">{ o.MAC }</span>{ " · " }
-						}
-						<time { ui.StampAttrs(o.Taken, ui.StampShort)... }>{ ui.StampText(o.Taken, ui.StampShort) }</time>{ " · " + o.Size }
-					</div>
-				</div>
-				<div class="bk-acts">
-					if st.CanKeep {
-						if o.Kept {
-							<button type="submit" form="bk-orph" formaction={ templ.SafeURL(p.Base + "/backups/" + bkStr(o.ID) + "/keep") } name="kept" value="0" class="btn bk-keep is-kept" aria-pressed="true" title="Kept: the retention never prunes it. Click to release it.">
-								<span class="bk-pin" aria-hidden="true"></span>Kept
-							</button>
-						} else {
-							<button type="submit" form="bk-orph" formaction={ templ.SafeURL(p.Base + "/backups/" + bkStr(o.ID) + "/keep") } name="kept" value="1" class="btn bk-keep" aria-pressed="false" title="Keep this backup: the retention never prunes it.">
-								<span class="bk-pin" aria-hidden="true"></span>Keep
-							</button>
-						}
-					}
-					if o.Download != "" {
-						<a class="btn" href={ templ.SafeURL(o.Download) }>Download</a>
-					}
-					if o.DeleteText != "" {
-						<a
-							class="btn btn-danger bk-del"
-							href={ templ.SafeURL(p.Base + "/backups/" + bkStr(o.ID) + "/delete") }
-							data-dialog="dlg-bkdel"
-							data-dlg-title="Delete this backup?"
-							data-dlg-text={ o.DeleteText } data-dlg-at={ ui.StampISO(o.Taken) } data-dlg-ts={ ui.StampDateTimeSec.Key } data-dlg-shown={ ui.StampText(o.Taken, ui.StampDateTimeSec) }
-							data-dlg-action={ p.Base + "/backups/" + bkStr(o.ID) + "/delete" }
-							data-dlg-verb="Delete backup"
-						>Delete</a>
-					}
-				</div>
+	<div data-select-scope?={ st.CanBulk }>
+		if st.CanBulk {
+			if n := st.Selectable(); n > 0 {
+				<label class="ucheck bk-orph-tools" data-select-all-row hidden><input type="checkbox" data-select-all/><span>{ st.SelectAllText() }</span></label>
+			}
+			<div class="bk-selbar" data-bulkbar hidden role="region" aria-label="Selected backups">
+				<span class="bk-selcount"><span data-bar-count>0</span> selected</span>
+				<button type="submit" form="bk-orph-sel" class="btn btn-sm bk-seldel">Delete selected…</button>
 			</div>
+			<noscript>
+				<div class="bk-selbar" role="region" aria-label="Selected backups">
+					<span class="bk-selcount">Tick the backups to delete</span>
+					<button type="submit" form="bk-orph-sel" class="btn btn-sm bk-seldel">Delete selected…</button>
+				</div>
+			</noscript>
+		}
+		for _, g := range st.OrphanGroups() {
+			<h3 class="sys-subhead">{ orphanName(g.Runs[0]) }
+				if g.MAC != "" {
+					<span class="mono bk-mac">{ g.MAC }</span>
+				}
+			</h3>
+			<section class="bk-list" aria-label={ "Backups of " + orphanName(g.Runs[0]) }>
+				for _, o := range g.Runs {
+					@sysOrphanRow(p, st, o)
+				}
+			</section>
 		}
 	</div>
 }
 
+// sysOrphanRow is one run of a deleted device.
+templ sysOrphanRow(p sysPage, st sysStorage, o sysOrphan) {
+	<div class="bk-row">
+		if st.CanBulk {
+			<label class="bk-check" if o.Kept { title="Kept: release it to delete it" }>
+				if o.Kept {
+					<input type="checkbox" disabled aria-label={ "Kept backup of " + orphanName(o) + ", " + shortDate(o.Taken) + ": release it to delete it" }/>
+				} else {
+					<input type="checkbox" form="bk-orph-sel" name="id" value={ bkStr(o.ID) } aria-label={ "Select the backup of " + orphanName(o) + ", " + shortDate(o.Taken) }/>
+				}
+			</label>
+		}
+		<div class="bk-main">
+			<div class="bk-title">
+				<time { ui.StampAttrs(o.Taken, ui.StampShort)... }>{ ui.StampText(o.Taken, ui.StampShort) }</time>
+				if o.Kept {
+					@ui.Badge(ui.ToneAccent, "Kept")
+				}
+				if o.Missing {
+					@ui.Badge(ui.ToneDanger, "File missing")
+				}
+			</div>
+			<div class="bk-detail">{ o.Size }</div>
+		</div>
+		<div class="bk-acts">
+			if st.CanKeep {
+				if o.Kept {
+					<button type="submit" form="bk-orph" formaction={ templ.SafeURL(p.Base + "/backups/" + bkStr(o.ID) + "/keep") } name="kept" value="0" class="btn bk-keep is-kept" aria-pressed="true" title="Kept: the retention never prunes it and a bulk delete leaves it. Click to release it.">
+						<span class="bk-pin" aria-hidden="true"></span>Kept
+					</button>
+				} else {
+					<button type="submit" form="bk-orph" formaction={ templ.SafeURL(p.Base + "/backups/" + bkStr(o.ID) + "/keep") } name="kept" value="1" class="btn bk-keep" aria-pressed="false" title="Keep this backup: the retention never prunes it.">
+						<span class="bk-pin" aria-hidden="true"></span>Keep
+					</button>
+				}
+			}
+			if o.Download != "" {
+				<a class="btn" href={ templ.SafeURL(o.Download) }>Download</a>
+			}
+			if o.DeleteText != "" {
+				<a
+					class="btn btn-danger bk-del"
+					href={ templ.SafeURL(p.Base + "/backups/" + bkStr(o.ID) + "/delete") }
+					data-dialog="dlg-bkdel"
+					data-dlg-title="Delete this backup?"
+					data-dlg-text={ o.DeleteText } data-dlg-at={ ui.StampISO(o.Taken) } data-dlg-ts={ ui.StampDateTimeSec.Key } data-dlg-shown={ ui.StampText(o.Taken, ui.StampDateTimeSec) }
+					data-dlg-action={ p.Base + "/backups/" + bkStr(o.ID) + "/delete" }
+					data-dlg-verb="Delete backup"
+				>Delete</a>
+			}
+		</div>
+	</div>
+}
+
 // sysUnreferencedFiles lists files in old backup folders that no backup entry points to
-// (#205). Read-only on purpose: TasmoFleet never deletes or moves them.
+// (#205). TasmoFleet never moves them; an admin deletes them all at once (#622).
 templ sysUnreferencedFiles(st sysStorage) {
 	<div class="sys-orphans">
 		for _, f := range st.Unreferenced {

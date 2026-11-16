@@ -20,16 +20,18 @@ type fleetStore interface {
 	BackupRunTimes(ctx context.Context) (settled, missed time.Time, err error)
 }
 
-// fleetBackups is web.BackupFleet (#409): the last scheduled run, one row per device and what the
-// next prune removes.
+// fleetBackups is web.BackupFleet (#409): the last scheduled run, one row per device and what Prune
+// now removes.
 type fleetBackups struct {
 	store  fleetStore
 	health func() map[model.DeviceID]model.Health
 	// apiOffSkip: see scheduledBackup; nil tries every device.
 	apiOffSkip func(ctx context.Context, id model.DeviceID, h model.Health) string
 	// files reads the manifest of a run (disk, no device I/O); *backup.Manager.RunFiles.
-	files     func(ctx context.Context, id model.BackupID) (backup.RunFiles, error)
-	pruneNext func(ctx context.Context, id model.DeviceID) ([]model.Backup, error)
+	files func(ctx context.Context, id model.BackupID) (backup.RunFiles, error)
+	// prunePlan is what Prune now removes from one device and the runs it keeps back: the one rule
+	// of backup.PruneNowSet (newest run, runs a restore uses); *backup.Manager.PruneNowPlan.
+	prunePlan func(ctx context.Context, id model.DeviceID) ([]model.Backup, []backup.Held, error)
 }
 
 var _ web.BackupFleet = (*fleetBackups)(nil)
@@ -126,22 +128,46 @@ func filesNoteText(reason string) string {
 	return backup.NoteFilesPrefix + reason
 }
 
-// PruneNext lists, over all devices, the backups the next backup of each deletes.
-func (f *fleetBackups) PruneNext(ctx context.Context) ([]model.Backup, error) {
+// leftOutText is why Prune now leaves a device alone: the retention prunes only after a successful
+// backup, so a device whose last scheduled run failed or was skipped keeps its backups until it is
+// backed up again; thinning it now would take the backups of exactly the devices that get no new ones.
+const leftOutText = "its last run did not back it up"
+
+// PrunePlan lists, over all devices, what Prune now removes. The rule for one device (never the
+// newest run, never a run a restore uses) is backup.PruneNowSet and is not repeated here; this adds
+// the one fleet rule, the left-out devices, which the page shows with a badge and the POST skips.
+func (f *fleetBackups) PrunePlan(ctx context.Context) ([]web.PruneDevice, error) {
 	usage, err := f.store.BackupUsage(ctx)
 	if err != nil {
 		return nil, err
 	}
-	var out []model.Backup
+	run, _, err := f.store.LastBackupRun(ctx)
+	if err != nil {
+		return nil, err
+	}
+	lastRun := map[model.DeviceID]model.BackupOutcome{}
+	for _, it := range run.Items {
+		if it.DeviceID != 0 {
+			lastRun[it.DeviceID] = it.Outcome
+		}
+	}
+	var out []web.PruneDevice
 	for _, u := range usage {
 		if u.Device == 0 || u.Runs == 0 {
 			continue
 		}
-		list, err := f.pruneNext(ctx, u.Device)
+		files, held, err := f.prunePlan(ctx, u.Device)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, list...)
+		if len(files) == 0 {
+			continue
+		}
+		d := web.PruneDevice{Device: u.Device, Name: u.Name, Files: files, Held: len(held)}
+		if o := lastRun[u.Device]; o == model.BackupOutcomeFailed || o == model.BackupOutcomeSkipped {
+			d.LeftOut = leftOutText
+		}
+		out = append(out, d)
 	}
 	return out, nil
 }
@@ -153,10 +179,10 @@ func (a *runtime) fleetBackups() *fleetBackups {
 		health = a.tracker.All
 	}
 	f := &fleetBackups{store: a.svc.Store, health: health, apiOffSkip: a.apiOffSkip}
-	f.pruneNext = func(context.Context, model.DeviceID) ([]model.Backup, error) { return nil, nil }
+	f.prunePlan = func(context.Context, model.DeviceID) ([]model.Backup, []backup.Held, error) { return nil, nil, nil }
 	f.files = func(context.Context, model.BackupID) (backup.RunFiles, error) { return backup.RunFiles{}, nil }
 	if a.backups != nil {
-		f.pruneNext = a.backups.PrunedAtNextRun
+		f.prunePlan = a.backups.PruneNowPlan
 		f.files = a.backups.RunFiles
 	}
 	return f

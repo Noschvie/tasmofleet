@@ -195,22 +195,29 @@ func (m *Manager) publishDeleted(device model.DeviceID) {
 // already gone is fine; any other failure stops with the rows still indexed,
 // so nothing is left on disk without an index entry.
 func (m *Manager) removeFiles(ctx context.Context, files []model.Backup) error {
+	_, err := m.removeFilesN(ctx, files)
+	return err
+}
+
+// removeFilesN is removeFiles that also says how many files went: the first n of files are
+// removed (file and row) when it stops at an error.
+func (m *Manager) removeFilesN(ctx context.Context, files []model.Backup) (int, error) {
 	var removed []string
 	defer func() { m.removeEmptyDirs(removed...) }()
 	for _, b := range files {
 		full, ok := m.safePath(b.Path)
 		if !ok {
-			return fmt.Errorf("backup: refusing stored path %q", b.Path)
+			return len(removed), fmt.Errorf("backup: refusing stored path %q", b.Path)
 		}
 		if err := os.Remove(full); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("backup: remove %s: %w", b.Kind, err)
+			return len(removed), fmt.Errorf("backup: remove %s: %w", b.Kind, err)
 		}
 		if err := m.o.Store.DeleteBackup(ctx, b.ID); err != nil && !errors.Is(err, store.ErrNotFound) {
-			return err
+			return len(removed), err
 		}
 		removed = append(removed, b.Path)
 	}
-	return nil
+	return len(removed), nil
 }
 
 func (m *Manager) auditDelete(ctx context.Context, actor, action, target string, d Deletion, taken, before time.Time, err error) {

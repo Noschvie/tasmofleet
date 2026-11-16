@@ -134,9 +134,12 @@ type sysStorage struct {
 	Runs, Kept   int
 	Size         string
 	Orphans      []sysOrphan
-	Unreferenced []sysUnreferenced // files no backup entry references (#205); read-only
+	Unreferenced []sysUnreferenced // files no backup entry references (#205)
+	UnrefSize    string            // their total size
+	OrphanSize   string            // the size of every file of the deleted devices' backups
 	CanKeep      bool              // the Keep route exists
 	CanDelete    bool              // the Delete route exists
+	CanBulk      bool              // the bulk cleanup exists and the viewer is an admin (#622)
 }
 
 // sysOrphan is one backup run of a deleted device (N2: deleted with backups=keep).
@@ -145,6 +148,7 @@ type sysOrphan struct {
 	Name, MAC  string
 	Taken      time.Time
 	Size       string
+	Bytes      int64 // every file of the run: what a bulk delete frees
 	Kept       bool
 	Missing    bool // the file was deleted by hand: no Download, the row can be deleted
 	Download   string
@@ -154,6 +158,7 @@ type sysOrphan struct {
 // sysUnreferenced is one file of the "Unreferenced files" section.
 type sysUnreferenced struct {
 	Path, Size string
+	Bytes      int64
 	Modified   time.Time
 }
 
@@ -187,11 +192,19 @@ func (h *handler) sysStorageOf(r *http.Request, base string) (*sysStorage, error
 		if err != nil {
 			return nil, err
 		}
+		var size int64
 		for _, f := range files {
-			st.Unreferenced = append(st.Unreferenced, sysUnreferenced{Path: f.Path, Size: humanBytes(f.Size), Modified: f.ModTime})
+			size += f.Size
+			st.Unreferenced = append(st.Unreferenced, sysUnreferenced{Path: f.Path, Size: humanBytes(f.Size), Bytes: f.Size, Modified: f.ModTime})
 		}
+		st.UnrefSize = humanBytes(size)
 	}
 	st.Orphans = orphanRuns(orphans, base, canDelete, h.fileMissing)
+	var orphanBytes int64
+	for _, o := range st.Orphans {
+		orphanBytes += o.Bytes
+	}
+	st.OrphanSize = humanBytes(orphanBytes)
 	return st, nil
 }
 
@@ -201,7 +214,13 @@ func orphanRuns(list []model.Backup, base string, canDelete bool, missing func(m
 	type owner struct{ mac, name string }
 	var order []owner
 	byOwner := map[owner][]model.Backup{}
+	type runKey struct {
+		o owner
+		t time.Time
+	}
+	bytes := map[runKey]int64{} // every file of a run, decoded copy and files archive included
 	for _, b := range list {
+		bytes[runKey{owner{b.DeviceMAC, b.DeviceName}, b.TakenAt}] += b.Size
 		o := owner{b.DeviceMAC, b.DeviceName}
 		if _, seen := byOwner[o]; !seen {
 			order = append(order, o)
@@ -213,7 +232,7 @@ func orphanRuns(list []model.Backup, base string, canDelete bool, missing func(m
 		for _, run := range backupRuns(byOwner[o]) {
 			b := run.Backup
 			row := sysOrphan{ID: b.ID, Name: b.DeviceName, MAC: b.DeviceMAC, Taken: b.TakenAt, Size: humanBytes(b.Size),
-				Kept: b.Kept, Download: fmt.Sprintf("%s/backups/%d", base, b.ID)}
+				Bytes: bytes[runKey{o, b.TakenAt}], Kept: b.Kept, Download: fmt.Sprintf("%s/backups/%d", base, b.ID)}
 			if missing(b) {
 				row.Missing, row.Download = true, ""
 			}

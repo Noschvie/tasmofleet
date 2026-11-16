@@ -1,0 +1,4 @@
+---
+section: Added
+---
+Devices, Backups cleans up in bulk (#622). Backups of deleted devices can be ticked and deleted together, with a Select all that leaves the kept ones out; the unreferenced files have a Delete all; and Prune now in the Storage card deletes at once what the "Pruned at the next run" list shows, instead of at each device's next backup. Each action asks once, naming the count and the size, and writes one audit entry that lists every backup or file. Prune now never takes the newest backup of a device (with a retention of 1 the list used to include it), a kept backup, or a backup an unfinished restore is using, and it leaves out devices whose last scheduled run failed or was skipped, because they get no new backups to replace the old ones. Only admins see the controls; operators see the counts.

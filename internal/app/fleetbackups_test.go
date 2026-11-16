@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -119,5 +120,93 @@ func TestFleetOverviewSaysWhenAFilesArchiveCannotBeRead(t *testing.T) {
 	}
 	if rows[0].Files != 0 || rows[0].FilesNote != "files archive could not be read" {
 		t.Errorf("row = %+v, want no count and the note", rows[0])
+	}
+}
+
+// Why (#622): the retention prunes only after a successful backup, so a device whose last scheduled
+// run failed or was skipped keeps its backups until it is backed up again; Prune now would thin
+// exactly the devices that get no new ones. The plan marks them left out (the page shows a badge,
+// the POST skips them) and passes everything else, the held runs included, through unchanged: the
+// never-the-newest and restore rules are backup.PruneNowSet's, not repeated here.
+func TestPrunePlanLeavesOutDevicesWhoseLastRunFailedOrWasSkipped(t *testing.T) {
+	now := time.Date(2026, 11, 5, 12, 0, 0, 0, time.Local)
+	st := &countingFleetStore{calls: map[string]int{}, hasRn: true,
+		usage: []store.BackupUsage{
+			{Device: 0, Runs: 3},
+			{Device: 1, Name: "ok", Runs: 5}, {Device: 2, Name: "failed", Runs: 5}, {Device: 3, Name: "skipped", Runs: 5},
+			{Device: 4, Name: "new", Runs: 5}, {Device: 5, Name: "nothing", Runs: 1}, {Device: 6, Name: "empty"},
+		},
+		run: model.BackupRun{Items: []model.BackupRunItem{
+			{DeviceID: 1, Outcome: model.BackupOutcomeOK}, {DeviceID: 2, Outcome: model.BackupOutcomeFailed}, {DeviceID: 3, Outcome: model.BackupOutcomeSkipped},
+		}},
+	}
+	asked := map[model.DeviceID]bool{}
+	f := &fleetBackups{store: st,
+		prunePlan: func(_ context.Context, id model.DeviceID) ([]model.Backup, []backup.Held, error) {
+			asked[id] = true
+			if id == 5 {
+				return nil, []backup.Held{{TakenAt: now, Why: backup.HeldNewest}}, nil // only the newest run was listed
+			}
+			return []model.Backup{{ID: model.BackupID(id), DeviceID: id, TakenAt: now.Add(-48 * time.Hour)}}, []backup.Held{{TakenAt: now, Why: backup.HeldNewest}}, nil
+		}}
+	plan, err := f.PrunePlan(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	left := map[model.DeviceID]string{}
+	for _, d := range plan {
+		left[d.Device] = d.LeftOut
+		if len(d.Files) != 1 || d.Held != 1 {
+			t.Errorf("device %d: files %d, held %d: the per-device rule's answer must pass through", d.Device, len(d.Files), d.Held)
+		}
+	}
+	if len(plan) != 4 || left[1] != "" || left[4] != "" || left[2] == "" || left[3] == "" {
+		t.Errorf("plan %+v: want devices 1 and 4 taking part, 2 (failed) and 3 (skipped) left out, 5 (nothing to prune) not listed", left)
+	}
+	if asked[0] || asked[6] {
+		t.Error("the deleted devices' row and a device without backups must not be planned")
+	}
+}
+
+// Why (#494, #622): Prune now must fail closed when it cannot tell which backups a restore is
+// using. The guard is the restore_jobs table, read through the real store; a refactor that wires
+// the manager to a store without it, or drops PruneNowPlan from the page, would silently let Prune
+// now take the run an unfinished restore reads. With a real store, a running restore's run is held
+// and the newest run is held, so only the run between them is offered.
+func TestPrunePlanIsWiredToTheRestoreGuardOfTheRealStore(t *testing.T) {
+	a, svc, _ := notifyRuntime(t, nil)
+	a.backupRun = newScheduledRun(nil)
+	if err := a.setupBackups(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	a.backups.SetRetention(1, 0)
+	ctx := t.Context()
+	dev, err := svc.Store.CreateDevice(ctx, model.Device{Name: "plug", Address: "127.0.0.1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	day := time.Date(2026, 10, 1, 3, 0, 0, 0, time.UTC)
+	var dumps []model.BackupID
+	for i := range 3 {
+		id, err := svc.Store.PutBackup(ctx, model.Backup{DeviceID: dev, DeviceName: "plug", Kind: model.BackupConfigDump, TakenAt: day.Add(time.Duration(i) * time.Hour),
+			Path: "backups/plug/" + string(rune('a'+i)) + ".dmp", Size: 10, SHA256: "x"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		dumps = append(dumps, id)
+	}
+	if _, err := svc.Store.CreateRestore(ctx, store.RestoreJob{DeviceID: dev, BackupID: dumps[0], Actor: "x"}); err != nil {
+		t.Fatal(err)
+	}
+
+	plan, err := a.fleetBackups().PrunePlan(ctx)
+	if errors.Is(err, backup.ErrNoRestoreGuard) {
+		t.Fatal("Prune now is not wired to the restore jobs: it would refuse every time")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan) != 1 || len(plan[0].Files) != 1 || plan[0].Files[0].ID != dumps[1] || plan[0].Held != 2 {
+		t.Errorf("plan %+v, want only the middle run offered: the oldest is a running restore's, the newest stays", plan)
 	}
 }

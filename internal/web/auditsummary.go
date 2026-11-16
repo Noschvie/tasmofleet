@@ -30,6 +30,7 @@ var auditLabels = map[string]string{
 	"account.create": "Create user", "account.role": "Change user role", "account.disable": "Disable user",
 	"account.enable": "Enable user", "account.password": "Reset password", "account.delete": "Delete user",
 	"backup.create": "Backup", "backup.download": "Backup download",
+	"backup.prune_now": "Prune backups now", "backup.delete_orphans": "Delete backups of deleted devices", "backup.delete_unreferenced": "Delete unreferenced files",
 	"command.send": "Console command", "command.rejected": "Console command refused",
 	"device.power": "Power", "device.create": "Add device", "device.update": "Edit device",
 	"device.delete": "Delete device", "device.upsert": "Device seen", "settings.set": "Device setting",
@@ -200,6 +201,12 @@ func summaryOK(e model.AuditEvent, d map[string]any) (string, bool) {
 		return join(count(n, "file", "files"), dStr(d, "firmware")), true
 	case "backup.download":
 		return label(dStr(d, "kind")), true
+	case "backup.prune_now", "backup.delete_orphans":
+		n, _ := dInt(d, "runs")
+		return count(n, "backup", "backups"), true
+	case "backup.delete_unreferenced":
+		n, _ := dInt(d, "files")
+		return count(n, "file", "files"), true
 	case "command.send", "command.rejected":
 		return dStr(d, "command"), true
 	case "device.power":
