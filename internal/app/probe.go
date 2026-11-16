@@ -226,9 +226,13 @@ func (p *Prober) probe(ctx context.Context, d model.Device, verify func(probed) 
 		if err != nil {
 			return out, fmt.Errorf("upgrade probe: %w", err)
 		}
-		if probe, err := tasmota.ParseUpgradeProbe(up); err == nil {
-			in.Upgrade = &fwselect.UpgradeProbe{Version: probe.Version}
+		// The bare Upgrade reply's version is what ties the image source below to this device (R5), so an
+		// unreadable reply fails the probe, as it fails deviceAPI.firmwareInputs.
+		probe, err := tasmota.ParseUpgradeProbe(up)
+		if err != nil {
+			return out, fmt.Errorf("upgrade probe: %w", err)
 		}
+		in.Upgrade = &fwselect.UpgradeProbe{Version: probe.Version}
 		// Only minimal and safeboot firmware need a source for their image (#686); full firmware is named by
 		// Status 2 and its language by the Status 4 locale. The router reads a stored device's INFO1 since its
 		// last boot first, when the device is usable over MQTT, and the main page only without one (and for an

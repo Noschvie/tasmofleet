@@ -149,3 +149,21 @@ func TestInfo1RootNeverReadsThePage(t *testing.T) {
 		t.Fatalf("not usable over MQTT: err %v, http %d", err, g.http.n())
 	}
 }
+
+// Why (#852, T19): while another device answers on this device's topic, an INFO1 on that topic may be the
+// other device's. Its image names the family (minimal means ESP8266, safeboot an ESP32-line chip), which
+// picks the firmware outside a job and fails a job inside one, so it is no proof for this device: outside a
+// job the page at the address is read, and a job's INFO1-only read is unreachable, so the job goes on from
+// its own family.
+func TestAnINFO1OnATakenTopicNamesNothing(t *testing.T) {
+	g, _ := rootRig(t, `{"Info1":{"Module":"Sonoff Basic","Version":"16.0.0(release-minimal)"}}`)
+	g.f.httpOK = true
+	g.r.TopicTaken().Mark(g.devs.d.ID, g.devs.d.Topic)
+	ri, err := g.r.RootPage(t.Context(), g.target())
+	if err != nil || ri.Image == "release-minimal" || g.http.n() != 1 {
+		t.Fatalf("unpinned on a taken topic: %+v %v, http %d; want the page at the address", ri, err, g.http.n())
+	}
+	if _, err := g.r.Info1Root(t.Context(), g.target()); !errors.Is(err, tasmota.ErrUnreachable) || g.http.n() != 1 {
+		t.Fatalf("Info1Root on a taken topic: err %v, http %d; want ErrUnreachable and no HTTP", err, g.http.n())
+	}
+}

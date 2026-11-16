@@ -111,6 +111,20 @@ func TestTheIdentityProbeAsksTheRouterForTheImageOfMinimalFirmware(t *testing.T)
 	}
 }
 
+// Why (#686, R5): the image of minimal firmware may now come from the INFO1 on its topic instead of the page
+// at its address, and only the version of the address's bare Upgrade reply ties that INFO1 to this device.
+// A reply the probe cannot read ties nothing, so the probe fails like the update preview does
+// (deviceAPI.firmwareInputs) instead of naming the family from the topic alone.
+func TestTheIdentityProbeOfMinimalFirmwareNeedsAReadableUpgradeReply(t *testing.T) {
+	p, d := probeFixture(t, simulator.DeviceSpec{Name: "m", Profile: simulator.ProfileESP8266Min})
+	p.Client = override{Client: p.Client, reply: map[string]string{"Upgrade": `{"Upgrade":"x"}`}}
+	p.Reads = &pageCounter{Client: p.Client, root: &tasmota.RootInfo{Version: "16.0.0", Image: "release-minimal", Minimal: true}}
+	got, err := p.Describe(context.Background(), d)
+	if err == nil || !strings.Contains(err.Error(), "upgrade probe") {
+		t.Fatalf("err = %v, identity %+v; want an upgrade-probe error and no identity", err, got.Identity)
+	}
+}
+
 // Why: minimal firmware only answers a few commands; the probe has to take
 // version and family from Upgrade and the main page instead of failing.
 func TestDescribeMinimalFirmware(t *testing.T) {

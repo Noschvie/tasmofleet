@@ -144,7 +144,7 @@ test("Make compliant over MQTT", { tag: "@core" }, async ({ page }) => {
 });
 
 // Update over MQTT (0.20.0, #79, #259). The devices answer nothing over HTTP, so the preview probes
-// them over MQTT; the language build cannot be read there, so the person says it; the update runs the
+// them over MQTT; the language build is the locale ID of the Status 4 read there (#686); the update runs the
 // same engine with the job pinned to MQTT. The backup before flashing runs over MQTT too (#257), so each
 // device gets its MQTT password first (the devenv devices have the same one, the broker takes any).
 // The devices take the DeviceName they report, so the picker is addressed by device id: the import
@@ -191,15 +191,10 @@ test("update over MQTT (staged ESP8266) from the preview", { tag: "@core" }, asy
   test.setTimeout(420_000);
   await page.setExtraHTTPHeaders(admin);
   const row = await reviewMQTTUpdate(page, "mq-esp8266-1m");
-  // Nothing is guessed: the language build is the person's choice, and without it nothing starts.
-  await expect(row).toContainText("Language build of this device");
-  await expect(row.locator("select")).toHaveValue("");
-  await expect(page.getByRole("button", { name: "Start update", exact: true })).toHaveCount(0);
-  await row.locator("select").selectOption("EN");
-  await page.getByRole("button", { name: "Recheck" }).click();
-  const again = page.locator(".upd-prow");
-  await expect(again).toContainText("Over MQTT");
-  await expect(again).toContainText("Staged: minimal firmware first");
+  // The language build is read over MQTT too (the Status 4 locale, #686): no choice is asked.
+  await expect(row.locator("select")).toHaveCount(0);
+  await expect(row).toContainText("Over MQTT");
+  await expect(row).toContainText("Staged: minimal firmware first");
   await page.getByRole("button", { name: "Start update", exact: true }).click();
   await expect(page).toHaveURL(/\/transactions\/\d+$/);
   await expect(page.locator(".upd-row").getByText("Done", { exact: true })).toBeVisible({ timeout: 300_000 });
@@ -210,9 +205,7 @@ test("update over MQTT (staged ESP8266) from the preview", { tag: "@core" }, asy
 test("fw-blocked device shows no download path", async ({ page }) => {
   test.setTimeout(420_000);
   await page.setExtraHTTPHeaders(admin);
-  const row = await reviewMQTTUpdate(page, "mq-fw-blocked");
-  await row.locator("select").selectOption("EN");
-  await page.getByRole("button", { name: "Recheck" }).click();
+  await reviewMQTTUpdate(page, "mq-fw-blocked");
   await page.getByRole("button", { name: "Start update", exact: true }).click();
   await expect(page).toHaveURL(/\/transactions\/\d+$/);
   await expect(page.locator(".upd-row")).toContainText(/Failed|Done/, { timeout: 200_000 }).catch(async (e) => {
@@ -222,20 +215,19 @@ test("fw-blocked device shows no download path", async ({ page }) => {
   await pickById(page, "mq-fw-blocked");
   await page.locator("label.upd-relopt", { hasText: "Tasmota 16.1.0" }).click();
   await page.getByRole("button", { name: "Review update" }).click();
-  const blocked = page.locator(".upd-prow");
-  await blocked.locator("select").selectOption("EN"); // the language is asked first, the path is judged after it
-  await page.getByRole("button", { name: "Recheck" }).click();
   await expect(page.locator(".upd-prow")).toContainText("no path");
   await expect(page.getByRole("button", { name: "Start update", exact: true })).toHaveCount(0);
 });
 
-// FULL: the same device without a language choice is not guessed.
+// FULL: a device whose language build cannot be read (mq-esp32 reports a locale of no upstream build) is
+// not guessed.
 test("language choice required", async ({ page }) => {
   test.setTimeout(240_000);
   await page.setExtraHTTPHeaders(admin);
   const row = await reviewMQTTUpdate(page, "mq-esp32");
   // An ESP32 with the dual-core tasmota32 build has language builds too; whichever the row shows, it
   // must be a choice and not a pre-filled value.
+  await expect(row).toContainText("Language build of this device");
   await expect(row.locator("select")).toHaveValue("");
 });
 

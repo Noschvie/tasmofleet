@@ -4311,7 +4311,7 @@ func updatePreviewPage(p previewPage, csrf string) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 377, "\">The language build of this device cannot be read over MQTT, and the wrong one would change the device's language.</span> ")
+					templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 377, "\">The device does not report a language build TasmoFleet knows, and the wrong one would change the device's language.</span> ")
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}

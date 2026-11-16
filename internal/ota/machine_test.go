@@ -349,6 +349,15 @@ func TestStepUpgradeIssued(t *testing.T) {
 			state: model.JobVerify, actions: []ActionKind{ActProbeIdentity},
 		},
 		{
+			// Why (#686 path 2): inside a job, minimal firmware is named from the job's family without the
+			// main page, so its identity carries no image. A same-version staged update (a language or
+			// variant change) without an uptime proof must still count as rebooted, or the job waits for
+			// its timeout and a push job fails with "did not start the upgrade" on a device left on minimal.
+			name: "upgrade_issued/probe_online/same version, now minimal without image", in: ui,
+			ev:    online(model.Identity{Family: model.ChipESP8266, Version: "15.6.0", Variant: "minimal"}, 0),
+			state: model.JobVerify, actions: []ActionKind{ActProbeIdentity},
+		},
+		{
 			name: "upgrade_issued/probe_online/final stage left minimal", in: finalStaged, ev: online(finalIdent(), 0),
 			state: model.JobVerify, actions: []ActionKind{ActProbeIdentity},
 		},

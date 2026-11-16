@@ -176,13 +176,14 @@ const MQTTPassword = "devenv-fake-mqtt-password" //nolint:gosec // G101: a fake 
 // mqttTransportDevices are the devices of the MQTT transport (0.20.0, #79): TasmoFleet reaches them only
 // over the broker. A staged ESP8266 1 MB; an ESP32 and an ESP32 with two app partitions that cannot reach
 // the firmware server either (the dual one can only be updated by Type 1 file upload); a 1 MB device that
-// reaches neither.
+// reaches neither. The ESP32 reports a locale of no upstream build (a self-compiled language, #686), so its
+// language build cannot be read and the update preview asks for it.
 func mqttTransportDevices() []simulator.DeviceSpec {
 	noHTTP := simulator.Fault{Kind: simulator.FaultHTTPUnreachable}
 	noFW := simulator.Fault{Kind: simulator.FaultFWUnreachable}
 	return []simulator.DeviceSpec{
 		{Name: "mq-esp8266-1m", Profile: simulator.ProfileESP8266_1M, MQTTPassword: MQTTPassword, Faults: []simulator.Fault{noHTTP}},
-		{Name: "mq-esp32", Profile: simulator.ProfileESP32, MQTTPassword: MQTTPassword, Faults: []simulator.Fault{noHTTP}},
+		{Name: "mq-esp32", Profile: simulator.ProfileESP32, MQTTPassword: MQTTPassword, Faults: []simulator.Fault{noHTTP}, Locale: "ABCD"},
 		{Name: "mq-fw-blocked", Profile: simulator.ProfileESP8266_1M, MQTTPassword: MQTTPassword, Faults: []simulator.Fault{noHTTP, noFW}},
 		{Name: "mq-esp32-dual", Profile: simulator.ProfileESP32Dual, MQTTPassword: MQTTPassword, Faults: []simulator.Fault{noHTTP, noFW}},
 	}

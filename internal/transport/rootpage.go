@@ -74,13 +74,10 @@ func (r *Router) RootPage(ctx context.Context, t tasmota.Target) (tasmota.RootIn
 		}
 		return r.pinnedRootPage(ctx, id)
 	}
-	if r.mqttDoer() == nil {
-		return r.http.RootPage(ctx, t)
-	}
 	if ri, err := r.pinnedRootPage(ctx, id); err == nil {
 		return ri, nil
 	}
-	if r.o.Facts.HTTPState(id).State == HTTPFailing {
+	if r.mqttDoer() != nil && r.o.Facts.HTTPState(id).State == HTTPFailing {
 		d, _, p, err := r.decide(ctx, id)
 		if err == nil && p.Commands == MQTT {
 			return r.mqttRootPage(d)
@@ -116,6 +113,10 @@ func (r *Router) pinnedRootPage(ctx context.Context, id model.DeviceID) (tasmota
 	}
 	if why := MQTTBlocker(f, false); why != "" {
 		return tasmota.RootInfo{}, fmt.Errorf("%w: not usable over MQTT: %s", tasmota.ErrUnreachable, why)
+	}
+	// An INFO1 on a topic another device answers on may be that device's (#852): it names nothing here.
+	if !f.MQTT.TopicTakenSince.IsZero() {
+		return tasmota.RootInfo{}, fmt.Errorf("%w: %s", tasmota.ErrUnreachable, topicTakenText(f.MQTT))
 	}
 	return r.mqttRootPage(d)
 }

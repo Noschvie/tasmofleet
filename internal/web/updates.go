@@ -400,7 +400,7 @@ func (h *handler) requests(r *http.Request, ids []model.DeviceID) ([]ota.Request
 			// The chip build of a device that has two (ESP32-S2) is chosen per device in the preview; the engine
 			// refuses a build that does not belong to the device.
 			Build: strings.TrimSpace(r.PostFormValue("build_" + strconv.FormatInt(int64(id), 10))),
-			// The language build of a device that only MQTT reaches cannot be read; the person says it (D10).
+			// The language build of a device that reports none TasmoFleet knows (its Status 4 locale, #686); the person says it (D10).
 			Language: strings.TrimSpace(r.PostFormValue("language_" + strconv.FormatInt(int64(id), 10)))}
 		if q.Variant == "" && (d.Identity.Variant == "minimal" || d.Identity.Variant == "safeboot") {
 			q.Variant, q.AllowVariantChange = "tasmota", true
@@ -508,7 +508,7 @@ type previewRow struct {
 	// Remembered: Build comes from the device's memory (#186), not from the person's pick in this form.
 	// The row shows it with Change and Forget, no radios: what the screen says is what Start takes.
 	Remembered bool
-	// LanguageChoice: the row waits for the language build of the device (it cannot be read over MQTT);
+	// LanguageChoice: the row waits for the language build of the device (its Status 4 locale names none TasmoFleet knows, #686);
 	// Language is the one chosen, "" before the choice.
 	LanguageChoice bool
 	Language       string
