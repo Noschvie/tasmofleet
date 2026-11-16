@@ -1,10 +1,10 @@
 # Mutation shard weights, see tools/mutation-weights.sh. Line: <pkg> <file> <runnable mutants> [seconds per mutant x 100, overriding the package cost]. Counts from a gremlins dry run of 2026-11-16.
-# "cost <pkg> <seconds per mutant x 100>" and the per-file overrides: the earlier ones scaled per package by measured over estimated seconds in the weekly runs 41510561121 (2026-11-02), 42542151416 (2026-11-09), 43309125119 (2026-11-12), and 43783436076 (2026-11-16, shard 4/5 cancelled: restore files.go and lockout.go are set to the rate of replace.go + restore.go, 6.6 s per mutant, until a complete run measures them).
+# "cost <pkg> <seconds per mutant x 100>" and the per-file overrides: the earlier ones scaled per package by measured over estimated seconds in the weekly runs 41510561121 (2026-11-02), 42542151416 (2026-11-09), 43309125119 (2026-11-12), 43783436076 (2026-11-16, shard 4/5 cancelled: restore files.go and lockout.go were set to the rate of replace.go + restore.go, 6.6 s per mutant), and 43864762631 (2026-11-16, manual run of this branch with 8 shards, all complete: policy x1.32, and mqttcmd channel.go, restore files.go, lockout.go and flow.go set to their measured seconds per mutant).
 # "setup <seconds x 100>": what a shard pays once per package it mutates, besides the mutants (test build, coverage run): 22 s, the mean of 29 package runs of 43783436076 (6 to 37 s). See tools/mutation-shard.sh.
 setup 2200
 cost internal/fwselect 56
 cost internal/ota 175
-cost internal/policy 145
+cost internal/policy 191
 cost internal/cmdpolicy 31
 cost internal/mqttcmd 691
 cost internal/transport 80
@@ -34,19 +34,19 @@ internal/ota push.go 18 160
 internal/ota rowgone.go 0
 internal/ota scheduled.go 14
 internal/ota templatejob.go 85
-internal/policy decoded.go 9 215
+internal/policy decoded.go 9 284
 internal/policy firmware.go 2
-internal/policy fix.go 91 122
-internal/policy plan.go 10 174
-internal/policy policy.go 49 174
-internal/policy rules.go 25 174
+internal/policy fix.go 91 161
+internal/policy plan.go 10 230
+internal/policy policy.go 49 230
+internal/policy rules.go 25 230
 internal/policy template.go 115
 internal/cmdpolicy cmdpolicy.go 143 27
 internal/cmdpolicy doc.go 0
 internal/cmdpolicy policyrule.go 6 41
 internal/cmdpolicy scrub.go 26 41
 internal/mqttcmd backlog.go 12 681
-internal/mqttcmd channel.go 36 1579
+internal/mqttcmd channel.go 36 1890
 internal/mqttcmd correlate.go 58 409
 internal/mqttcmd doc.go 0
 internal/mqttcmd filedownload.go 64 989
@@ -73,9 +73,9 @@ internal/tasmota safeboot.go 8 299
 internal/tasmota status.go 0
 internal/tasmota tasmota.go 1 767
 internal/tasmota upload.go 33 331
-internal/restore files.go 101 660
-internal/restore flow.go 119 463
-internal/restore lockout.go 71 660
+internal/restore files.go 101 440
+internal/restore flow.go 119 420
+internal/restore lockout.go 71 730
 internal/restore replace.go 98 620
 internal/restore restore.go 41 598
 internal/restore steps.go 2 620
