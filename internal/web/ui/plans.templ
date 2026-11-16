@@ -40,7 +40,7 @@ templ sbPlansWide(s StatusBar) {
 
 templ sbPlansWideText(p PlanSummary) {
 	<span class="sb-dot idle"></span>
-	<span>
+	<span class="sb-t">
 		<b>{ p.countText() }</b> <span class="sb-sep">·</span> <span class="sb-mut">next</span> <time { StampAttrs(p.Next, StampStart)... }>{ StampText(p.Next, StampStart) }</time>
 	</span>
 }

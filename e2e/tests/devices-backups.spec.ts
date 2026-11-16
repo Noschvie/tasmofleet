@@ -1,4 +1,6 @@
+import { join } from "node:path";
 import { test, expect } from "../support/fixtures";
+import { layoutGuards, guardReport } from "../support/layout";
 import { openSchedule } from "../support/nav";
 import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
@@ -21,6 +23,7 @@ test.beforeAll(async () => {
       TASMOFLEET_ADMIN_GROUPS: "adm",
       TASMOFLEET_OPERATOR_GROUPS: "ops",
       TASMOFLEET_POLL_INTERVAL: "5s",
+      TASMOFLEET_MQTT_URL: env.vars.TASMOFLEET_MQTT_URL, // the status bar's Broker item (#934)
       TASMOFLEET_BACKUP_DAYS: "mon,tue,wed,thu,fri,sat,sun",
       TASMOFLEET_BACKUP_TIME: soon,
       TASMOFLEET_FIRMWARE_UPSTREAM_OVERRIDE: env.vars.DEVENV_UPSTREAM_URL,
@@ -197,4 +200,84 @@ test("after a scheduled run the status bar links to the page and the last run is
   await page.goto(app.url + "/");
   const item = page.locator(".sb-wide a.sb-i, footer .sb-wide a.sb-i").filter({ hasText: "Backup" }).first();
   await expect(item).toHaveAttribute("href", /\/devices\/backups$/);
+});
+
+// Why (#934): the status bar is one nowrap row on every page. While a backup run is in progress it
+// holds the Broker, the running job (progress and "as of" on a page without a stream), the last
+// run's result and the version. When together they are wider than the window, the items must give
+// way inside their own boxes: a Broker host that runs under the job text, or last-run counts that
+// run under the version, are drawn over each other and the next item's background cuts a word in
+// two. Items that shrink must clip (ellipsis), and what identifies an item (its dot and its bold
+// label) must stay visible. The test runs last: the last run is in the bar (the test above waited
+// for it), and it adds a frozen backup job that the engine never touches (it resumes active jobs
+// only at its start). That job stands in for the scheduled run's own item (the in-memory run that
+// the bar adds as a job without a link): sbJobs renders both the same way.
+test("while a backup run is in progress the status bar keeps every item inside its own box (#934)", async ({ page }) => {
+  test.setTimeout(120_000);
+  const { DatabaseSync } = await import("node:sqlite");
+  const db = new DatabaseSync(join(app.dataDir, "tasmofleet.db"));
+  try {
+    db.exec("PRAGMA busy_timeout=5000");
+    const ids = (db.prepare("SELECT id FROM devices ORDER BY id LIMIT 3").all() as { id: number }[]).map((r) => r.id);
+    expect(ids.length, "the imported fleet has three devices").toBe(3);
+    const now = Date.now();
+    db.prepare("INSERT INTO ota_batches (id, created_by, created_at) VALUES (900, 'scheduler', ?)").run(now);
+    const job = db.prepare(
+      `INSERT INTO ota_jobs (batch_id, device_id, kind, state, stage, target_release, target_variant, created_by, created_at, updated_at)
+       VALUES (900, ?, 'backup', ?, 'final', '', '', 'scheduler', ?, ?)`,
+    );
+    ids.forEach((id, i) => job.run(id, i === 0 ? "succeeded" : "backup", now, now));
+  } finally {
+    db.close();
+  }
+  await page.setExtraHTTPHeaders(admin);
+  const bar = async (url: string) => {
+    await page.goto(app.url + url);
+    await expect(page.locator("#sb-wide .sb-jobs")).toContainText("Backup");
+    await expect(page.locator("#sb-wide a.sb-i[href$='/devices/backups']")).toContainText("Backup"); // the last run's item
+    await page.evaluate(() => document.fonts.ready);
+  };
+  // the widest row is the narrowest wide window: 720 px is where the phone layout takes over
+  for (const width of [1280, 1024, 768, 720]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const url of ["/devices/backups", "/devices", "/"]) {
+      await bar(url);
+      const name = `${url} at ${width}px`;
+      const o = await layoutGuards(page, ["o"]);
+      expect(o, guardReport(name, o)).toEqual([]);
+      const problems = await page.evaluate(() => {
+        const row = document.querySelector("#sb-wide")!;
+        const out: string[] = [];
+        // the row ends inside the window: its items give way, they do not push it wider
+        if (row.scrollWidth > row.clientWidth) out.push(`the row is ${row.scrollWidth - row.clientWidth}px wider than the window`);
+        for (const item of row.querySelectorAll(":scope > .sb-i")) {
+          const box = item.getBoundingClientRect();
+          // the dot and the bold label identify the item: they stay inside its box when the rest is cut
+          for (const e of item.querySelectorAll(".sb-dot, b")) {
+            if (e.getBoundingClientRect().right > box.right + 0.5) out.push(`"${(e.textContent ?? "").trim() || "dot"}" ends ${Math.round(e.getBoundingClientRect().right - box.right)}px past its item`);
+          }
+        }
+        return out;
+      });
+      expect(problems, name).toEqual([]);
+    }
+  }
+  // a phone: one line, and the open sheet stays inside the window with its text apart. On the Dashboard:
+  // the Backups table has its own phone finding (a "Failed" badge over its reason), not the bar's
+  await page.setViewportSize({ width: 375, height: 800 });
+  await bar("/");
+  const line = (await page.locator("#sb-narrow summary").boundingBox())!;
+  expect(line.height, "the bar is one 44px line").toBeLessThanOrEqual(45);
+  const lines = await page.locator("#sb-narrow .sb-sum").evaluate((e) => {
+    const r = document.createRange();
+    r.selectNodeContents(e);
+    return new Set([...r.getClientRects()].filter((q) => q.width > 0).map((q) => Math.round(q.top / 8))).size;
+  });
+  expect(lines, "the summary text is one line").toBe(1);
+  await page.locator("#sb-narrow summary").click();
+  const sheet = (await page.locator("#sb-narrow .sb-sheet").boundingBox())!;
+  expect(sheet.x).toBeGreaterThanOrEqual(0);
+  expect(sheet.x + sheet.width).toBeLessThanOrEqual(375);
+  const o = await layoutGuards(page, ["o"]);
+  expect(o, guardReport("the phone sheet", o)).toEqual([]);
 });

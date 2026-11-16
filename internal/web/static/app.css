@@ -4746,6 +4746,7 @@ a.sb-i:hover {
 .sb-grow {
   flex: 1;
   border: 0;
+  padding: 0; /* the spacer gives way to nothing: its padding made the row wider than the window at 768px (#934) */
 }
 .sb-ver {
   font: 400 11.5px var(--font-mono);
@@ -4818,11 +4819,33 @@ a.sb-i:hover {
 .sb-sep {
   color: var(--color-text-3);
 }
-/* the running jobs: one line, the gap stands for the spaces between the words */
+/* the running jobs: one line of inline text (the markup carries the spaces), so an ellipsis can cut it */
 .sb-jobs {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.28em;
+  display: block;
+}
+/* The wide row gives way inside the items' own boxes (#934). When the items together are wider than
+   the window, flex shrinks their boxes below their text; unclipped, the text then runs under the next
+   item and that item's background paints over it. So every item clips what does not fit. Only an item
+   whose text can be cut (.sb-t: Broker host, last run, plans, version; .sb-jobs) shrinks, and its text
+   ends in an ellipsis while the dot and the bold label, which come first, stay. The others (Live,
+   "No jobs running") keep their width: a short item squeezed below its own label says nothing.
+   Phone: the summary line ellipsises and the sheet wraps, they are not in this row. */
+.sb-wide > .sb-i {
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.sb-wide > .sb-i:has(> .sb-t, > .sb-jobs) {
+  flex-shrink: 1;
+}
+.sb-wide .sb-t,
+.sb-wide .sb-jobs {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* a focused link inside a clipping item keeps its ring inside the item */
+.sb-wide .sb-link:focus-visible {
+  outline-offset: -2px;
 }
 
 /* the Live label: one of three, by the stream's state */

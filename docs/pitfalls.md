@@ -319,7 +319,7 @@ means nothing stops you: you have to know it. The full working rules are in
 - **Enforced:** the test for that card; elsewhere convention (UI review checks every
   timestamp).
 
-### Layouts that broke on phones and tablets (#510, #511, #633)
+### Layouts that broke on phones and tablets (#510, #511, #633, #934)
 
 - **Happened:** badges overlapped lists, long dotted names broke mid-label, and whole
   pages broke between 720 and 1199 px, none seen on a desktop check.
@@ -332,6 +332,10 @@ means nothing stops you: you have to know it. The full working rules are in
   column layout wider than the frame at 1290 px, the owner's window (`e2e/support/saved-layout.ts`, used by
   `tablet-guards`, `pinned-overlap`, `columns` and `live-cell-swaps`): the default layout is the one a person
   never has, and the three table defects of 0.36.0 (#805, #806, #811) showed only in a saved one.
+  Guard o also judges the status bar (`footer.sb`, #934): its items are one nowrap row on every page, and
+  when they are wider than the window flex shrinks their boxes below their text, which then runs under the
+  next item. The wide row clips every item (`app.css`, "status bar"); `devices-backups.spec.ts` seeds a
+  running backup and checks the bar from 1280 down to 720 px and on a phone.
 
 ### A tooltip over the next row, and a bubble for a name that fits (#811)
 

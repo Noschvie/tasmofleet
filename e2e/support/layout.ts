@@ -470,7 +470,8 @@ export async function layoutGuards(page: Page, which: GuardId[] = allGuards): Pr
       const own = new Map<Element, DOMRect>(); // box of the element's own direct text
       const lines = new Map<Element, DOMRect[]>(); // and its line boxes: text that wraps leaves room between its lines for other text
       // an open menu or popover floats over the page on purpose
-      const all = [...document.querySelectorAll("main *, dialog[open] *")].filter((e) => visible(e) && !scrolledAway(e) && !inOverlay(e) && !e.closest(".menu-panel, [popover]"));
+      // the status bar (footer.sb, fixed to every page) is judged too: its nowrap items shrink when the row is full (#934)
+      const all = [...document.querySelectorAll("main *, dialog[open] *, footer.sb *")].filter((e) => visible(e) && !scrolledAway(e) && !inOverlay(e) && !e.closest(".menu-panel, [popover]"));
       for (const e of all) {
         const w = document.createTreeWalker(e, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.parentNode === e && n.textContent!.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT) });
         let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
