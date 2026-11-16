@@ -100,8 +100,10 @@ func (h *handler) bulkDone(w http.ResponseWriter, r *http.Request, key string, r
 
 // bulkNotice words the result a bulk action redirected with; "" for any other page state.
 func bulkNotice(q url.Values) string {
-	num := func(k string) int64 { n, _ := strconv.ParseInt(q.Get(k), 10, 64); return max(n, 0) }
-	runs, files, bytes, devs, left := int(num("n")), int(num("f")), num("b"), int(num("d")), int(num("l"))
+	count := func(k string) int { n, _ := strconv.Atoi(q.Get(k)); return max(n, 0) }
+	bytes, _ := strconv.ParseInt(q.Get("b"), 10, 64)
+	bytes = max(bytes, 0)
+	runs, files, devs, left := count("n"), count("f"), count("d"), count("l")
 	var s string
 	switch q.Get("ok") {
 	case "orphans-deleted":

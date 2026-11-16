@@ -197,20 +197,23 @@ func (m *Manager) removeCounted(ctx context.Context, files []model.Backup) ([]mo
 // the first file that cannot be removed; what went before is audited with the error.
 //
 // A restore that starts after the check waits behind the lock of the same device when it takes its
-// safety backup, but it may already have chosen its source row before this ran. What is left of
-// that race is a restore that finds its source gone: it then fails at its first step and changes
-// nothing on the device.
+// safety backup, but it may already have chosen its source row before this ran. The window is from
+// Backups.Open to CreateRestore (the preflight): a restore inside it has read its dump into memory
+// and runs from those bytes. What is left of the race is only that a retry after such a restore
+// failed finds its source gone.
 func (m *Manager) PruneNow(ctx context.Context, actor string, ids []model.BackupID) (BulkResult, error) {
 	rows, gone, err := m.bulkRows(ctx, ids)
 	if err != nil {
 		return BulkResult{}, err
 	}
 	confirmed := map[model.DeviceID]map[time.Time]bool{}
+	names := map[model.DeviceID]string{}
 	var order []model.DeviceID
 	for _, b := range rows {
 		if b.DeviceID == 0 {
 			return BulkResult{}, ErrForeignBackup
 		}
+		names[b.DeviceID] = b.DeviceName
 		if confirmed[b.DeviceID] == nil {
 			confirmed[b.DeviceID] = map[time.Time]bool{}
 			order = append(order, b.DeviceID)
@@ -235,7 +238,7 @@ func (m *Manager) PruneNow(ctx context.Context, actor string, ids []model.Backup
 		}
 		res.Left += len(kept)
 		for _, k := range kept {
-			left = append(left, leftRun{Device: fmt.Sprintf("%d", dev), Taken: stamp(k.TakenAt), Why: k.Why})
+			left = append(left, leftRun{Device: names[dev], Taken: stamp(k.TakenAt), Why: k.Why})
 		}
 		if err != nil {
 			failure = err
@@ -413,8 +416,12 @@ func (m *Manager) DeleteUnreferenced(ctx context.Context, actor string, paths []
 		}
 		seen[p] = true
 		f, listed := scan[p]
-		full, ok := m.safePath(p)
-		if !listed || !ok {
+		if !listed {
+			res.Left++
+			continue
+		}
+		full, ok := m.safePath(f.Path) // the scan's own value, never the posted one
+		if !ok {
 			res.Left++
 			continue
 		}
@@ -424,7 +431,7 @@ func (m *Manager) DeleteUnreferenced(ctx context.Context, actor string, paths []
 		}
 		res.Files++
 		res.Bytes += f.Size
-		removed = append(removed, p)
+		removed = append(removed, f.Path)
 	}
 	m.removeEmptyNumericDirs()
 	m.record(ctx, actor, "backup.delete_unreferenced", "unreferenced", map[string]any{

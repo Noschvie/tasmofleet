@@ -113,7 +113,7 @@ test("devices backups: totals, and a deleted device's kept backup is listed and 
   // The card is always there since the 0.22 Backups tab; with nothing kept it says so and lists nothing.
   await expect(page.getByRole("heading", { name: "Backups of deleted devices" })).toHaveCount(1);
   await expect(page.getByText("No backups of deleted devices.")).toBeVisible();
-  await expect(page.locator(".sys-orphan")).toHaveCount(0);
+  await expect(page.locator("#card-orphans .bk-row")).toHaveCount(0);
 
   const del = await page.request.post(`${app.url}/devices/${id}/delete`, { headers: admin, form: { csrf, backups: "keep", ack: "1" }, maxRedirects: 0 });
   expect(del.status(), "device deleted, backups kept").toBe(303);
@@ -122,7 +122,8 @@ test("devices backups: totals, and a deleted device's kept backup is listed and 
   await expect(sum("Backups"), "the kept backup still counts").toHaveText(/^[1-9]\d*$/);
   await expect(page.getByText("No backups of deleted devices.")).toHaveCount(0);
   await page.locator("#card-orphans details.fold > summary").click(); // the list is folded (#684)
-  const orphan = page.locator(".sys-orphan", { hasText: "lamp-1m" });
+  await expect(page.locator("#card-orphans .sys-subhead", { hasText: "lamp-1m" })).toHaveCount(1); // the rows sit under the deleted device's name (#622)
+  const orphan = page.locator("#card-orphans .bk-row");
   await expect(orphan).toHaveCount(1);
   await expect(orphan.getByRole("link", { name: "Download" })).toBeVisible();
   await expect(page.locator(".bk-table").getByRole("row", { name: /lamp-1m/ })).toHaveCount(0);
@@ -133,5 +134,5 @@ test("devices backups: totals, and a deleted device's kept backup is listed and 
   await dlg.getByRole("button", { name: "Delete backup" }).click();
   await expect(page).toHaveURL(/\/devices\/backups\?ok=deleted/);
   await expect(page.getByText("Backup deleted.")).toBeVisible();
-  await expect(page.locator(".sys-orphan", { hasText: "lamp-1m" })).toHaveCount(0);
+  await expect(page.locator("#card-orphans .bk-row")).toHaveCount(0);
 });

@@ -205,6 +205,38 @@ func TestPruneNowNeverDeletesTheNewestRunWithKeepOne(t *testing.T) {
 	if ev := lastAudit(e); !strings.Contains(ev.Detail, HeldNewest) {
 		t.Errorf("the audit entry must name why the newest run stayed: %s", ev.Detail)
 	}
+	// An admin reads the audit by device name, not by id: the left run is named like the removed ones.
+	name := runs[4].DeviceName
+	if name == "" {
+		t.Fatal("setup: the dump row carries no device name, so the audit check proves nothing")
+	}
+	if ev := lastAudit(e); !strings.Contains(ev.Detail, `"left":[{"device":"`+name+`"`) {
+		t.Errorf("the left run must carry the device name %q, not its id: %s", name, ev.Detail)
+	}
+}
+
+// Why: a failed "Replace device" files a newer run of replacement hardware under the dead device.
+// NewestRun then returns that run, so only the newest-own-run rule keeps the device's real
+// configuration: with a retention of 1 the own run is listed for pruning (the replacement run is
+// counted apart), and without the rule Prune now would leave only the other hardware's dump.
+func TestPruneNowNeverDeletesTheDevicesNewestOwnRun(t *testing.T) {
+	t1 := time.Date(2026, 10, 1, 8, 0, 0, 0, time.UTC)
+	t2 := t1.Add(time.Hour)
+	list := []model.Backup{
+		{ID: 1, DeviceID: 7, Kind: model.BackupConfigDump, TakenAt: t1, Trigger: model.TriggerScheduled},
+		{ID: 2, DeviceID: 7, Kind: model.BackupConfigDump, TakenAt: t2, Trigger: model.TriggerManual, Note: NoteReplacementHardware},
+	}
+	now := t2.Add(time.Hour)
+	if !containsRun(PrunedAtNextRun(list, 1, 0, now), t1) {
+		t.Fatal("setup: with a retention of 1 the own run must be listed for the next pruning, or this test proves nothing")
+	}
+	prune, held := PruneNowSet(list, 1, 0, now, nil)
+	if containsRun(prune, t1) {
+		t.Fatalf("Prune now would remove the device's only own run: %+v", prune)
+	}
+	if len(held) != 1 || !held[0].TakenAt.Equal(t1) || held[0].Why != HeldNewest {
+		t.Errorf("held %+v, want the own run held as the newest", held)
+	}
 }
 
 func containsRun(files []model.Backup, taken time.Time) bool {
