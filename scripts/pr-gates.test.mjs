@@ -29,7 +29,13 @@ import {
   changedLines,
   check,
 } from "./diff-cover.mjs";
-import { planRevert, verdict, optOut, topLevelFuncs } from "./revert-check.mjs";
+import {
+  planRevert,
+  verdict,
+  failedBuildRuns,
+  optOut,
+  topLevelFuncs,
+} from "./revert-check.mjs";
 
 const repo = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -205,7 +211,7 @@ test("planRevert: names the changed tests; a changed helper or import runs the w
   ]); // import
 });
 
-test("verdict: failing test or build failure passes; all green fails; a test that never ran is an error", () => {
+test("verdict: a failing test passes; all green fails; a test that never ran is an error", () => {
   const plan = { prod: [], runs: [{ dir: "p", names: ["TestA"] }] };
   const ev = (...e) => e.map((x) => ({ Package: "m/p", ...x }));
   assert.equal(
@@ -216,7 +222,8 @@ test("verdict: failing test or build failure passes; all green fails; a test tha
     ).status,
     "ok",
   );
-  assert.equal(verdict(plan, ev({ Action: "fail" }), "m").status, "ok"); // does not build without the change
+  // a panic or a timeout without a failing test still counts as failing (a build failure does not: see below)
+  assert.equal(verdict(plan, ev({ Action: "fail" }), "m").status, "ok");
   assert.equal(
     verdict(
       plan,
@@ -255,6 +262,116 @@ test("verdict: a selected test that skipped (no decoder, quarantine) proves noth
       "m",
     ).status,
     "ok",
+  );
+});
+
+// go test -json: a build or setup failure puts FailedBuild on the package event and the compiler's lines on
+// build-output events of that import path; a panic or a timeout sets neither.
+const buildFail = (failedBuild = "m/p [m/p.test]", ...lines) => [
+  ...lines.map((Output) => ({
+    ImportPath: failedBuild,
+    Action: "build-output",
+    Output,
+  })),
+  { Package: "m/p", Action: "fail", FailedBuild: failedBuild },
+];
+const pkgEv = (...e) => e.map((x) => ({ Package: "m/p", ...x }));
+
+test("verdict: a package that does not build is never a pass; it is decided by the API-kept variant (#681)", () => {
+  const plan = { prod: [], runs: [{ dir: "p", names: ["TestA"] }] };
+  const noBuild = buildFail(
+    "m/p [m/p.test]",
+    "./a_test.go:3:7: undefined: X\n",
+  );
+  // variant 2 did not run: inconclusive, whatever happens elsewhere
+  const alone = verdict(plan, noBuild, "m");
+  assert.equal(alone.status, "inconclusive");
+  assert.deepEqual(alone.runs[0].blockers, ["a_test.go"]);
+  // variant 2 builds and the test fails on behaviour: the check passes, and says which variant proved it
+  const fails = verdict(
+    plan,
+    noBuild,
+    "m",
+    pkgEv({ Test: "TestA", Action: "fail" }, { Action: "fail" }),
+  );
+  assert.equal(fails.status, "ok");
+  assert.equal(fails.runs[0].variant, "api");
+  // variant 2 builds and every test passes: it fails the check although the full revert did not build
+  assert.equal(
+    verdict(
+      plan,
+      noBuild,
+      "m",
+      pkgEv({ Test: "TestA", Action: "pass" }, { Action: "pass" }),
+    ).status,
+    "fail",
+  );
+  // variant 2 does not build either: inconclusive, naming the blocking file of THAT build
+  const blocked = verdict(
+    plan,
+    noBuild,
+    "m",
+    buildFail("m/p", "internal/ota/ota.go:9:2: cannot use x\n"),
+  );
+  assert.equal(blocked.status, "inconclusive");
+  assert.deepEqual(blocked.runs[0].blockers, ["internal/ota/ota.go"]);
+  // a test of variant 2 that did not run is an error, as in variant 1
+  assert.equal(
+    verdict(plan, noBuild, "m", pkgEv({ Action: "pass" })).status,
+    "error",
+  );
+});
+
+test("verdict: inconclusive in one package does not hide a behavioural failure in another, nor a pass-either-way one", () => {
+  const plan = {
+    prod: [],
+    runs: [
+      { dir: "p", names: ["TestA"] },
+      { dir: "q", names: ["TestB"] },
+    ],
+  };
+  const q = (...e) => e.map((x) => ({ Package: "m/q", ...x }));
+  const pBuild = buildFail("m/p [m/p.test]", "a_test.go:1:1: x\n");
+  assert.equal(
+    verdict(
+      plan,
+      [...pBuild, ...q({ Test: "TestB", Action: "fail" }, { Action: "fail" })],
+      "m",
+    ).status,
+    "ok",
+  );
+  assert.equal(
+    verdict(
+      plan,
+      [...pBuild, ...q({ Test: "TestB", Action: "pass" }, { Action: "pass" })],
+      "m",
+    ).status,
+    "inconclusive",
+  );
+});
+
+test("failedBuildRuns: only the runs whose package did not build (a run-time failure is not one)", () => {
+  const plan = {
+    prod: [],
+    runs: [
+      { dir: "p", names: ["TestA"] },
+      { dir: "q", names: null },
+    ],
+  };
+  const q = (...e) => e.map((x) => ({ Package: "m/q", ...x }));
+  assert.deepEqual(
+    failedBuildRuns(plan, [...buildFail(), ...q({ Action: "fail" })], "m").map(
+      (r) => r.dir,
+    ),
+    ["p"],
+  );
+  assert.deepEqual(
+    failedBuildRuns(
+      plan,
+      [...pkgEv({ Action: "fail" }), ...q({ Action: "pass" })],
+      "m",
+    ),
+    [],
   );
 });
 
@@ -350,11 +467,11 @@ func TestClampAbove(t *testing.T) {
 
 // A toy repository: main has the package internal/ota (a SAFETY directory) and internal/other; branch "work" is
 // checked out. The gates are the real scripts, copied in.
-function toy() {
+function toy(baseFiles = {}) {
   const root = mkdtempSync(join(tmpdir(), "pr-gates-"));
   roots.push(root);
   git(root, "init", "-q", "-b", "main");
-  put(root, "go.mod", "module example.test/toy\n\ngo 1.21\n");
+  put(root, "go.mod", "module example.test/toy\n\ngo 1.27\n");
   put(root, "internal/ota/ota.go", OTA);
   put(root, "internal/ota/ota_test.go", OTA_TEST);
   put(
@@ -362,6 +479,7 @@ function toy() {
     "internal/other/other.go",
     "package other\n\nfunc One() int { return 1 }\n",
   );
+  for (const [path, text] of Object.entries(baseFiles)) put(root, path, text);
   // the real gates are part of main, so they are not "changes" of the branch
   mkdirSync(join(root, "tools"));
   mkdirSync(join(root, "scripts"));
@@ -371,6 +489,13 @@ function toy() {
     /^(diff-parse|diff-cover|revert-check)\.mjs$/.test(x),
   ))
     copyFileSync(join(repo, "scripts", f), join(root, "scripts", f));
+  // the second variant of the revert check is built from the checkout (#681)
+  mkdirSync(join(root, "cmd/tasmofleet-revertapi"), { recursive: true });
+  for (const f of ["main.go", "rewrite.go"])
+    copyFileSync(
+      join(repo, "cmd/tasmofleet-revertapi", f),
+      join(root, "cmd/tasmofleet-revertapi", f),
+    );
   git(root, "add", "-A");
   git(root, "commit", "-q", "-m", "base");
   git(root, "checkout", "-q", "-b", "work");
@@ -580,7 +705,7 @@ func TestClampBelowZero(t *testing.T) {
   assert.match(out(r), /FAILS without the change: TestClampBelowZero/);
 });
 
-test("revert check: the opt-out is stated in the output; a feature that does not build without it passes", () => {
+test("revert check: the opt-out is stated in the output", () => {
   const root = toy();
   put(root, "internal/ota/ota.go", FIXED);
   put(
@@ -603,22 +728,162 @@ func TestClampInRange(t *testing.T) {
     out(r),
     /revert check SKIPPED \(opt-out: REVERT_CHECK_SKIP\): pure refactor/,
   );
-  git(root, "checkout", "--", ".");
-  put(
-    root,
-    "internal/ota/feature.go",
-    "package ota\n\nfunc Double(n int) int { return 2 * n }\n",
-  );
+});
+
+const DOUBLE = "package ota\n\nfunc Double(n int) int { return 2 * n }\n";
+const testFile = (body) => `package ota\n\nimport (\n\t"testing"\n)\n\n${body}`;
+
+test("revert check: a feature whose test does not build without it is decided on behaviour, with the API kept (#681)", () => {
+  // Why: "does not build" says only that the test uses new API, which every feature test does. The check has to
+  // see a test fail on behaviour, or it proves nothing and every review has to switch the code off by hand.
+  const root = toy();
+  put(root, "internal/ota/feature.go", DOUBLE);
   put(
     root,
     "internal/ota/feature_test.go",
-    'package ota\n\nimport "testing"\n\nfunc TestDouble(t *testing.T) {\n\tif Double(2) != 4 {\n\t\tt.Fatal("double")\n\t}\n}\n',
+    testFile(
+      'func TestDouble(t *testing.T) {\n\tif Double(2) != 4 {\n\t\tt.Fatal("double")\n\t}\n}\n',
+    ),
   );
-  const r2 = run(root, "tools/revert-check.sh");
-  assert.equal(r2.status, 0, out(r2));
-  assert.match(out(r2), /fails \(build error, panic or timeout\)/);
-  // a reviewer must see that no test failed: the pass proves only that the tests use the new API
-  assert.match(out(r2), /passed only because the tests do not build/);
+  const before = git(root, "status", "--short");
+  const r = run(root, "tools/revert-check.sh");
+  assert.equal(r.status, 0, out(r));
+  assert.match(
+    out(r),
+    /the full revert does not build; API kept, behaviour reverted/,
+  );
+  assert.match(out(r), /FAILS without the change: TestDouble/);
+  assert.match(out(r), /fail on behaviour with the API kept/);
+  assert.doesNotMatch(out(r), /only because/);
+  assert.equal(git(root, "status", "--short"), before); // the checkout is never written
+});
+
+test("revert check fails a test that uses new API but passes on the base behaviour too (#681)", () => {
+  // Why: this is the blind spot. The test needs Double to compile, but what it asserts (Clamp above max) is the
+  // old behaviour, so it would pass without the PR. Existing functions must get their BASE body in variant 2:
+  // with a zero body Clamp(9,5) would be 0 and this test would look like a catch.
+  const root = toy();
+  put(root, "internal/ota/ota.go", FIXED);
+  put(root, "internal/ota/feature.go", DOUBLE);
+  put(
+    root,
+    "internal/ota/ota_test.go",
+    OTA_TEST +
+      `
+func TestClampAboveWithNewAPI(t *testing.T) {
+	_ = Double(1)
+	if Clamp(9, 5) != 5 {
+		t.Fatal("above max")
+	}
+}
+`,
+  );
+  const r = run(root, "tools/revert-check.sh");
+  assert.equal(r.status, 1, out(r));
+  assert.match(out(r), /passes either way:\s+TestClampAboveWithNewAPI/);
+  assert.match(out(r), /revert check FAILED/);
+});
+
+test("revert check: a changed constant is put back to its base value in the API-kept variant (#681)", () => {
+  // Why: a changed table or constant is behaviour. If variant 2 kept the head's value, a test of the new value
+  // would pass either way and a real catch would be reported as a miss.
+  const root = toy({
+    "internal/ota/rate.go":
+      "package ota\n\nconst Rate = 2\n\nfunc Scale(n int) int { return n * Rate }\n",
+  });
+  put(
+    root,
+    "internal/ota/rate.go",
+    "package ota\n\nconst Rate = 3\n\nfunc Scale(n int) int { return n * Rate }\n\nfunc Triple(n int) int { return n * Rate }\n",
+  );
+  put(
+    root,
+    "internal/ota/rate_test.go",
+    testFile(
+      'func TestScale(t *testing.T) {\n\t_ = Triple(1)\n\tif Scale(2) != 6 {\n\t\tt.Fatal("rate")\n\t}\n}\n',
+    ),
+  );
+  const r = run(root, "tools/revert-check.sh");
+  assert.equal(r.status, 0, out(r));
+  assert.match(out(r), /FAILS without the change: TestScale/);
+});
+
+test("revert check: base imports, an import the head no longer uses and a renamed helper all still build in the API-kept variant (#681)", () => {
+  // Why: a variant that does not build is worth nothing; the three bookkeeping cases are what breaks it in
+  // real PRs: the base body needs an import the head dropped, the head's import becomes unused, a helper the
+  // base body calls was renamed.
+  const root = toy({
+    "internal/ota/label.go":
+      'package ota\n\nimport "strings"\n\nfunc oldPrefix() string { return "x:" }\n\nfunc Label(s string) string { return oldPrefix() + strings.ToUpper(s) }\n',
+  });
+  put(
+    root,
+    "internal/ota/label.go",
+    'package ota\n\nimport "fmt"\n\nfunc newPrefix() string { return "y:" }\n\nfunc Label(s string) string { return fmt.Sprint(newPrefix(), s) }\n',
+  );
+  put(
+    root,
+    "internal/ota/label_test.go",
+    testFile(
+      'func TestLabel(t *testing.T) {\n\t_ = newPrefix()\n\tif Label("a") != "y:a" {\n\t\tt.Fatal("label")\n\t}\n}\n',
+    ),
+  );
+  const r = run(root, "tools/revert-check.sh");
+  assert.equal(r.status, 0, out(r));
+  assert.match(out(r), /FAILS without the change: TestLabel/);
+});
+
+test("revert check: when even the API-kept variant does not build the result is INCONCLUSIVE, never a pass (#681)", () => {
+  // Why: a changed signature the base body cannot satisfy cannot be rewritten. The reviewer has to be told to
+  // look by hand, the PR must not be blocked, and the line must not read like a pass.
+  const root = toy({
+    "internal/ota/parse.go":
+      "package ota\n\nfunc Parse(s string) int { return len(s) }\n",
+  });
+  put(
+    root,
+    "internal/ota/parse.go",
+    "package ota\n\nfunc Parse(s string) (int, error) { return len(s), nil }\n",
+  );
+  put(
+    root,
+    "internal/ota/parse_test.go",
+    testFile(
+      'func TestParse(t *testing.T) {\n\tn, err := Parse("ab")\n\tif n != 2 || err != nil {\n\t\tt.Fatal("parse")\n\t}\n}\n',
+    ),
+  );
+  const r = run(root, "tools/revert-check.sh");
+  assert.equal(r.status, 0, out(r));
+  assert.match(out(r), /revert check INCONCLUSIVE/);
+  assert.match(out(r), /blocked by: internal\/ota\/parse\.go/);
+  assert.match(out(r), /::warning::revert check INCONCLUSIVE/);
+  assert.doesNotMatch(out(r), /revert check passed/);
+  // the opt-out still ends it
+  const skipped = run(root, "tools/revert-check.sh", {
+    REVERT_CHECK_SKIP: "signature change",
+  });
+  assert.match(out(skipped), /revert check SKIPPED/);
+});
+
+test("revert check: a new generic function with several results gets a zero body that builds (#681)", () => {
+  // Why: the zero body has to be derived from the signature (type parameters, several results); a test of it
+  // must fail on behaviour, not on a broken stub.
+  const root = toy();
+  put(
+    root,
+    "internal/ota/first.go",
+    "package ota\n\nfunc First[K comparable, V any](m map[K]V) (K, V, bool) {\n\tfor k, v := range m {\n\t\treturn k, v, true\n\t}\n\tvar k K\n\tvar v V\n\treturn k, v, false\n}\n",
+  );
+  put(
+    root,
+    "internal/ota/first_test.go",
+    testFile(
+      'func TestFirst(t *testing.T) {\n\tif _, _, ok := First(map[string]int{"a": 1}); !ok {\n\t\tt.Fatal("first")\n\t}\n}\n',
+    ),
+  );
+  const r = run(root, "tools/revert-check.sh");
+  assert.equal(r.status, 0, out(r));
+  assert.match(out(r), /FAILS without the change: TestFirst/);
 });
 
 test("revert check has nothing to do for production-only or test-only changes", () => {

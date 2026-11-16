@@ -7,6 +7,7 @@ Part of the working guide: start at [CLAUDE.md](../../CLAUDE.md).
 ```
 cmd/tasmofleet            CLI: serve, user, sessions, settings, import, healthcheck, version
 cmd/tasmofleet-devenv     simulator fleet + embedded MQTT broker + mock OIDC, for e2e/dev
+cmd/tasmofleet-revertapi   CI tool of the revert check: rewrites a scratch copy to "behaviour reverted, API kept" (stdlib only, not part of the build or the image)
 internal/model            plain domain types (leaf package, stdlib only)
 internal/config           env + file configuration (TASMOFLEET_*)
 internal/store            SQLite (modernc.org/sqlite), embedded migrations, repositories; the ONLY SQL

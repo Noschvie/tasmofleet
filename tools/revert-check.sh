@@ -2,8 +2,10 @@
 # The revert check (#555, make revert-check): the tests this branch adds or changes must FAIL when its
 # production Go changes are reverted. Works in a scratch copy of the tree, never in the checkout: production
 # files are put back to the merge base (files the branch added are removed, deleted ones restored), test files
-# stay, then the changed tests run (go test -json, tags "integration" included). The rule and the opt-out are
-# in scripts/revert-check.mjs.
+# stay, then the changed tests run (go test -json, tags "integration" included). A package that does not build
+# in that tree (its tests use API the branch added) is run again in a second variant, "revert behaviour, keep
+# the API" (cmd/tasmofleet-revertapi, #681); a build failure alone is never a pass. The rule, the verdicts and
+# the opt-out are in scripts/revert-check.mjs.
 #
 # Opt-out for a pure refactor or feature where nothing should fail without the change: the label
 # "no-revert-check" or a line "revert-check: skip - <reason>" in the PR body. In CI the job passes PR_NUMBER and
@@ -79,8 +81,43 @@ while IFS="$(printf '\t')" read -r dir names; do
 	fi
 done <"$tmp/runs"
 cd "$orig"
+
+# Variant 2 (#681): only for the runs whose package did not build. The helper is built from the checkout (not
+# from the scratch copy, whose cmd/ may be reverted when the branch changes the helper) and rewrites the copy
+# in place; the checkout is never written. Everything lives in $tmp, which the EXIT trap removes.
+second=""
+node scripts/revert-check.mjs rebuild "$tmp/plan.json" "$tmp/results.json" --module "$($GO list -m)" >"$tmp/runs2"
+if [ -s "$tmp/runs2" ]; then
+	echo "revert check: $(wc -l <"$tmp/runs2" | tr -d ' ') package(s) do not build with a full revert; second variant: behaviour reverted, API kept"
+	if ! $NICE $GO build -o "$tmp/revertapi" ./cmd/tasmofleet-revertapi; then
+		summary "revert check could not decide: the helper cmd/tasmofleet-revertapi does not build"
+		exit 2
+	fi
+	if ! $NICE "$tmp/revertapi" -head "$orig" -tree "$copy" -paths "$tmp/prod" -tags integration; then
+		summary "revert check could not decide: cmd/tasmofleet-revertapi failed to rewrite the scratch copy (see above)"
+		exit 2
+	fi
+	: >"$tmp/results2.json"
+	cd "$copy"
+	while IFS="$(printf '\t')" read -r dir names; do
+		echo "revert check: go test ./$dir ${names:+-run $names} (API kept)"
+		if [ -n "$names" ]; then
+			$NICE $GO test -json -count=1 -tags=integration -timeout 15m -run "$names" "./$dir" >>"$tmp/results2.json" || true
+		else
+			$NICE $GO test -json -count=1 -tags=integration -timeout 15m "./$dir" >>"$tmp/results2.json" || true
+		fi
+	done <"$tmp/runs2"
+	cd "$orig"
+	second="--second $tmp/results2.json"
+fi
+
 rc=0
-node scripts/revert-check.mjs verdict "$tmp/plan.json" "$tmp/results.json" --module "$($GO list -m)" >"$tmp/verdict" || rc=$?
+# shellcheck disable=SC2086 # $second is empty or two words without spaces
+node scripts/revert-check.mjs verdict "$tmp/plan.json" "$tmp/results.json" --module "$($GO list -m)" $second >"$tmp/verdict" || rc=$?
 cat "$tmp/verdict"
 [ -z "${GITHUB_STEP_SUMMARY:-}" ] || sed 's/^/    /' "$tmp/verdict" >>"$GITHUB_STEP_SUMMARY"
+if [ "$rc" = 3 ]; then # inconclusive: not a pass, but it does not fail the PR
+	echo "::warning::revert check INCONCLUSIVE: no test was seen failing on behaviour; see the job summary and check by hand"
+	rc=0
+fi
 exit $rc

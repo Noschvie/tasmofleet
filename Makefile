@@ -158,7 +158,8 @@ diff-cover:
 	@GO="$(GO)" NICE="$(NICE)" SAFETY="$(SAFETY)" BASE="$(or $(BASE),$(CHANGED_BASE))" tools/diff-cover.sh
 
 # Revert check (#555): the tests this branch adds or changes fail with its production Go changes reverted
-# (tools/revert-check.sh, scratch copy; any Go package). A pure refactor or feature opts out in CI with the
+# (tools/revert-check.sh, scratch copy; any Go package). A package that does not build without the change is run
+# again with the API kept and only the behaviour reverted (#681, cmd/tasmofleet-revertapi); never a pass on a build failure. A pure refactor or feature opts out in CI with the
 # label no-revert-check or a "revert-check: skip - <reason>" line in the PR body; locally REVERT_CHECK_SKIP="<reason>".
 revert-check:
 	@GO="$(GO)" NICE="$(NICE)" BASE="$(or $(BASE),$(CHANGED_BASE))" tools/revert-check.sh

@@ -43,8 +43,18 @@ the packages that have `//go:build integration` test files (found at run time, a
 for every line you added or changed in a non-test Go file of a SAFETY package that no test of that package executes; comments,
 declarations and braces carry no code and are not checked. `make revert-check` copies the tree to a scratch directory, puts the production
 `.go` files you changed back to the merge base (files you added are removed, deleted ones restored), keeps the tests, and runs the tests you added or
-changed (the whole package when you changed a helper, a table or an import). At least one of them must fail, or the package must stop building
-(a feature whose tests use new API); a selected test that never ran or skipped (no decoder, a quarantine) is an error. The output lists every test that fails and every one that passes
+changed (the whole package when you changed a helper, a table or an import). At least one of them must fail on behaviour; a package that does not build
+is never a pass (#681). When the tests use new API (a feature) the full revert does not build, so the package is run again in a second variant,
+"revert behaviour, keep the API" (`cmd/tasmofleet-revertapi`, built from the checkout, rewrites the scratch copy only): the PR's declarations (types, fields,
+signatures, new constants) stay so the tests compile, every function, method, variable and constant that exists in the base gets its base body or value
+back, a new function returns zero values, head's `init` functions are replaced by the base's, imports become the union (an unused one turns blank) and
+declarations only the base has come back unless a test file declares them. The output says which variant each result came from. If even that variant does not build
+(a signature the base body cannot satisfy) the result is **INCONCLUSIVE**: it is not a pass, it does not fail the PR, it shows as a `::warning::` and in the job summary with the
+file that blocks it, and a reviewer has to check by hand (or the PR opts out). Known limits: head's types stay, so behaviour that lives in a type (a struct tag, a new method
+set that satisfies an interface) and head-only variables or constants (a new table) keep the head's behaviour in the second variant, and a test that only checks such things is
+reported as passing either way (opt out for those); a changed `iota` group keeps head's positions; a test that crashes on the zero value a new constructor returns counts as failing;
+a package that panics or times out at run time without a failing test (no build error) still counts as failing, as before; a declaration of the base that a test helper also declares is
+dropped, so the base body then calls the test's version. A selected test that never ran or skipped (no decoder, a quarantine) is an error. The output lists every test that fails and every one that passes
 either way. A PR that changes production code without any test is not stopped by it (diff coverage covers the SAFETY packages). **Opt-out** for a pure
 refactor or a feature where nothing should fail: a line `revert-check: skip - <reason>` in the PR body, or the label `no-revert-check`;
 the job reads both from the API when it runs, so after adding it re-run the job. The gate prints "SKIPPED" and the reason; locally
