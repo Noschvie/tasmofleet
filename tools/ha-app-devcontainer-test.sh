@@ -112,8 +112,12 @@ before=$(keyhash)
 echo "secret.key sha256 before: $before"
 
 step "3. backup, uninstall, install, restore"
-out=$(ha backups new --app local_tasmofleet --name ci-roundtrip 2>&1) || fail "backup failed: $out"
-slug=$(echo "$out" | awk '/^slug:/ {print $2}')
+# --raw-json: the CLI's YAML output quotes a string that YAML would read as a number (a slug like 03148410 or
+# 123456e7), so scraping "slug:" handed the restore a slug with literal quotes: "Backup does not exist" (#833).
+# stderr stays out of the JSON and is only shown on failure.
+out=$(ha backups new --app local_tasmofleet --name ci-roundtrip --raw-json 2>"$work/backup.err") ||
+	fail "backup failed: $out $(cat "$work/backup.err")"
+slug=$(jq -er .data.slug <<<"$out") || fail "no backup slug in: $out"
 [ -n "$slug" ] || fail "no backup slug in: $out"
 ha apps uninstall local_tasmofleet >/dev/null || fail "uninstall failed"
 retry 300 ha apps install local_tasmofleet || fail "second install failed"
@@ -122,7 +126,7 @@ retry 120 readyz || fail "/readyz after reinstall"
 fresh=$(keyhash)
 [ "$fresh" != "$before" ] || fail "a fresh install must create a new secret.key (the restore would prove nothing)"
 ha apps stop local_tasmofleet >/dev/null || true
-ha backups restore "$slug" --app local_tasmofleet >/dev/null || fail "restore failed"
+ha backups restore "$slug" --app local_tasmofleet >/dev/null || fail "restore of backup $slug failed"
 retry 120 ha apps info local_tasmofleet || true
 ha apps start local_tasmofleet >/dev/null 2>&1 || true
 retry 120 readyz || fail "/readyz after restore"
