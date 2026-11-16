@@ -18,6 +18,9 @@ type StatusBar struct {
 	More int
 	// JobsHref is the transactions list; empty when the user cannot open it (no link then).
 	JobsHref string
+	// Plans are the update plans that wait for their start (#707); N 0 shows nothing. Not a running job: they
+	// colour no level and the phone's one line does not mention them.
+	Plans PlanSummary
 	// Backup is the last scheduled backup run; nil before the first run since the start.
 	Backup *StatusBackup
 	// Now is the time the page is built at: "Today 03:00" and "Yesterday 21:10" count from it.

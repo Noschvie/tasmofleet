@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -20,15 +21,16 @@ import (
 // Scheduled updates in Transactions (#604). A job planned for later is in the state model.JobScheduled until
 // its start. It holds its device against other TasmoFleet jobs, but it is neither queued (it waits for no
 // slot) nor running (nothing happens on the device), and it is not in activeJobStates, which the status bar, the
-// About page and the console read: Dashboard and status bar do not show plans before #707.
+// About page and the console read. Transactions lists plans; the Dashboard and the status bar say how many wait
+// and when the next one starts (#707, planSummary), and count nothing as running for it.
 
 // neverRan says from the job alone that it ended without ever starting: its start passed while TasmoFleet was
 // down (NotStarted), or a person cancelled the plan before its start (the engine never starts one earlier, so
 // a cancelled job with UpdatedAt before StartAt never ran). It cannot see a plan cancelled after its start
 // time but before the engine queued it (the device was refused and the engine was retrying inside the
 // late-start window): that cancel is only known by its event. Where the events are at hand (jobViews) the
-// decision is jobView.NeverRan; neverRan is the answer for the callers that have only jobs (the dashboard
-// and the status bar, which say nothing of plans).
+// decision is jobView.NeverRan; neverRan is the answer for the callers that have only jobs (the dashboard's
+// list of transactions).
 func neverRan(j model.Job) bool {
 	if j.NotStarted {
 		return true
@@ -41,6 +43,37 @@ func neverRan(j model.Job) bool {
 // things off while "the device is being updated" it does not count.
 func holdsDevice(j model.Job) bool { return !j.State.Terminal() && j.State != model.JobScheduled }
 
+// planWaits is the one rule for "this transaction is still only a plan": it has jobs that wait for their start
+// and none that began (started: its running and queued jobs). A transaction of which some devices began is a
+// running transaction, not a plan; Transactions, the Dashboard and the status bar all ask here.
+func planWaits(planned, started int) bool { return planned > 0 && started == 0 }
+
+// openJobStates are the states of the jobs that are or will be at work: the active ones and the plans.
+var openJobStates = append(slices.Clone(activeJobStates), model.JobScheduled)
+
+// planSummary says how many plans wait and when the first starts, from the open jobs (openJobStates; the
+// others are not needed: a transaction is a plan by its planned and its running or queued jobs alone). The
+// count is per transaction, like "Scheduled · N" in Transactions, not per device. N is 0 without a plan.
+func planSummary(now time.Time, open []model.Job) ui.PlanSummary {
+	var p ui.PlanSummary
+	for _, t := range groupTransactions(open) {
+		if !planWaits(t.Planned, t.Running+t.Queued) {
+			continue
+		}
+		p.N++
+		if p.Next.IsZero() || t.StartAt.Before(p.Next) {
+			p.Next = t.StartAt
+		}
+	}
+	if p.N > 0 {
+		p.In = planIn(now, p.Next)
+	}
+	return p
+}
+
+// scheduledHref is the Scheduled section of Transactions, where the Dashboard's and the bar's plan lines lead.
+func scheduledHref(base string) string { return base + "/transactions#scheduled" }
+
 // schedCounts are the counts of a transaction that decide how a plan reads.
 type schedCounts struct{ Total, Planned, Running, Queued, NotStarted, Early int }
 
@@ -49,9 +82,7 @@ type schedCounts struct{ Total, Planned, Running, Queued, NotStarted, Early int 
 // because TasmoFleet was down it is Not started (a warning: nobody cancelled it).
 func schedResult(res string, tone ui.Tone, c schedCounts) (string, ui.Tone) {
 	switch {
-	case c.Running+c.Queued > 0:
-		return res, tone
-	case c.Planned > 0:
+	case planWaits(c.Planned, c.Running+c.Queued):
 		return "Scheduled", ui.ToneAccent
 	case c.NotStarted > 0 && c.NotStarted+c.Early == c.Total:
 		return "Not started", ui.ToneWarn
@@ -245,14 +276,14 @@ func (h *handler) scheduledRows(r *http.Request, device model.DeviceID, base str
 	if err != nil {
 		return nil, nil, err
 	}
-	started := map[model.BatchID]bool{}
+	started := map[model.BatchID]int{}
 	for _, t := range items {
-		started[t.ID] = t.Running+t.Queued > 0
+		started[t.ID] = t.Running + t.Queued
 	}
 	var rows []txSchedRow
 	shown := map[model.BatchID]bool{}
 	for _, t := range groupTransactions(jobs) {
-		if started[t.ID] {
+		if !planWaits(t.Planned, started[t.ID]) {
 			continue
 		}
 		shown[t.ID] = true

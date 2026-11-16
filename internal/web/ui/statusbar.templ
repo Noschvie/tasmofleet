@@ -91,6 +91,7 @@ templ sbWide(d ShellData) {
 		</div>
 	}
 	@sbJobs(d.Status)
+	@sbPlansWide(d.Status)
 	if b := d.Status.Backup; b != nil {
 		if b.Href != "" {
 			<a class={ "sb-i", "sb-stale", templ.KV("t-bad", b.none()), templ.KV("t-warn", b.partial()) } href={ templ.SafeURL(b.Href) } title="Devices → Backups: last run, results per device">
@@ -213,6 +214,7 @@ templ sbNarrow(d ShellData) {
 			</div>
 		}
 		@sbSheetJobs(d.Status)
+		@sbPlansSheet(d.Status)
 		if b := d.Status.Backup; b != nil {
 			if b.Href != "" {
 				<a class={ "sb-i", "sb-row", "sb-stale", templ.KV("t-bad", b.none()), templ.KV("t-warn", b.partial()) } href={ templ.SafeURL(b.Href) }>

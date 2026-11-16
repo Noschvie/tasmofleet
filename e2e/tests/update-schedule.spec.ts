@@ -69,6 +69,7 @@ test("a plan is listed, shown as planned, cancelled, and planned again", { tag: 
   await expect(page.getByRole("link", { name: "Retry failed" })).toHaveCount(0);
   await expect(page.locator("#sb-wide")).toContainText("No jobs running"); // a plan is not a running job
   await expect(page.locator("#sb-wide")).not.toContainText(id);
+  await expect(page.locator("#sb-wide")).toContainText(/1 scheduled\s*·\s*next \w{3}, \w{3} \d+ at 03:00 AM/); // #707
 
   // the list
   await page.goto(app.url + "/transactions");
@@ -81,7 +82,13 @@ test("a plan is listed, shown as planned, cancelled, and planned again", { tag: 
   await expect(page.locator(".upd-run")).toHaveCount(0); // not a running transaction
   await expect(page.locator("#sb-wide")).toContainText("No jobs running");
   await page.goto(app.url + "/");
-  await expect(page.locator("main")).not.toContainText(id); // the Dashboard shows plans with #707
+  await expect(page.locator("main")).not.toContainText(id); // a plan is no transaction of the card, only a line above it
+  const line = page.locator(".dash-plans");
+  await expect(line).toContainText(/1 scheduled\s*·\s*next \w{3}, \w{3} \d+ at 03:00 AM\s*·\s*in \d+/);
+  await expect(page.locator("#sb-wide")).toContainText("1 scheduled");
+  await line.getByRole("link", { name: "1 scheduled" }).click(); // leads to the Scheduled section of Transactions (#707)
+  await expect(page).toHaveURL(/\/transactions#scheduled$/);
+  await expect(page.locator("#scheduled")).toBeVisible();
 
   // Cancel asks, and Keep schedule changes nothing
   await page.goto(app.url + "/transactions");
@@ -107,6 +114,12 @@ test("a plan is listed, shown as planned, cancelled, and planned again", { tag: 
   const hist = page.locator("section.upd-hist .upd-hrow", { hasText: id });
   await expect(hist.locator(".bdg")).toHaveText("Cancelled");
   await expect(hist).toContainText("was due");
+
+  // a cancelled plan is gone from the Dashboard and the bar (#707)
+  await expect(page.locator("#sb-wide")).not.toContainText("scheduled");
+  await page.goto(app.url + "/");
+  await expect(page.locator(".dash-plans")).toHaveCount(0);
+  await expect(page.locator("#sb-wide")).not.toContainText("scheduled");
 
   // Plan again opens the preview with the same device and release and the time choice of the plan, never on
   // "Start now": its main button would start the update at once (#825)

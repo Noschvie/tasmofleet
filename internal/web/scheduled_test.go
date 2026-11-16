@@ -1,16 +1,19 @@
 package web
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/store"
 )
 
 // The Transactions pages of a scheduled update (#604, package 2). "Now" is the mockup's Friday 10:21; the
@@ -370,19 +373,156 @@ func TestPolicyFixShowsADeviceWithAPlannedUpdateAsPlanned(t *testing.T) {
 	}
 }
 
-// Why (#604): the Dashboard and the status bar do not list plans in 0.36.0 (#707), and a plan must not appear
-// there as a running transaction either.
-func TestDashboardAndStatusBarSayNothingOfAPlan(t *testing.T) {
-	e := setupWith(t, func(d *Deps) {
-		d.Clock = fixedClock{fri}
-		d.Jobs = &fakeJobs{jobs: []model.Job{schedJob(20, 10, 1, model.JobScheduled, sat)}}
-	})
-	_, body := e.do(t, "GET", "/", "operator", nil)
-	if strings.Contains(body, "TX-0010") || strings.Contains(body, ">Running<") {
-		t.Errorf("the Dashboard shows the plan: %s", between(body, `<h2>Update transactions</h2>`, `</section>`))
+// planFixture is the jobs of the plan tests: two plans (TX-0010 for three devices on Saturday, TX-0011 for one on
+// Sunday), a cancelled plan (TX-0012), and a transaction that began (TX-0013: one device is queued, one still
+// waits), which must not count as a plan although its start is earlier than both.
+func planFixture() []model.Job {
+	cancelled := schedJob(24, 12, 1, model.JobCancelled, sat)
+	cancelled.UpdatedAt = fri.Add(time.Hour)
+	return []model.Job{
+		schedJob(20, 10, 1, model.JobScheduled, sat), schedJob(21, 10, 2, model.JobScheduled, sat), schedJob(22, 10, 3, model.JobScheduled, sat),
+		schedJob(23, 11, 1, model.JobScheduled, sun),
+		cancelled,
+		schedJob(25, 13, 1, model.JobScheduled, fri.Add(30*time.Minute)), schedJob(26, 13, 2, model.JobQueued, fri.Add(30*time.Minute)),
 	}
-	if sb := between(body, `class="sbar`, `</footer>`); strings.Contains(sb, "TX-0010") || strings.Contains(sb, "updating") {
-		t.Errorf("the status bar shows the plan: %s", sb)
+}
+
+// planLine is the plan line of the Dashboard card, as text.
+func planLine(body string) string {
+	return plain(between(body, `<h2>Update transactions</h2>`, `</section>`))
+}
+
+// Why (#707): someone who never opens Transactions must still see that an update starts tonight. The Dashboard
+// and both parts of the status bar (the wide bar and the phone sheet) say how many plans wait and when the next
+// one starts, and link to the Scheduled section. The count is per transaction (as "Scheduled · 2" in
+// Transactions), not per device, and a transaction that began is a running job, not a plan.
+func TestDashboardAndStatusBarShowScheduledPlans(t *testing.T) {
+	e, _, jobs, _ := setupOTAAt(t, fixedClock{fri})
+	jobs.jobs = planFixture()
+	_, body := e.do(t, "GET", "/", "operator", nil)
+	card := planLine(body)
+	if !strings.Contains(card, "2 scheduled") || !strings.Contains(card, "next Sat, Nov 7 at 03:00") || !strings.Contains(card, "in 17 h") {
+		t.Errorf("the Dashboard card does not say two plans and the next start: %s", card)
+	}
+	if strings.Contains(card, "4 scheduled") || strings.Contains(card, "TX-0010") {
+		t.Errorf("the Dashboard counts devices, or lists the plan as a transaction: %s", card)
+	}
+	if !strings.Contains(card, "TX-0013") {
+		t.Errorf("the transaction that began is not a running job on the Dashboard: %s", card)
+	}
+	if !strings.Contains(between(body, `<h2>Update transactions</h2>`, `</section>`), `href="/tf/transactions#scheduled"`) {
+		t.Errorf("the Dashboard line does not link to the Scheduled section")
+	}
+	bar := barOf(body)
+	wide, sheet := between(bar, `id="sb-wide"`, `<details`), between(bar, `<details`, `</details>`)
+	for name, part := range map[string]string{"wide bar": wide, "phone sheet": sheet} {
+		text := plain(part)
+		if !strings.Contains(text, "2 scheduled") || !strings.Contains(text, "Sat, Nov 7 at 03:00") {
+			t.Errorf("%s does not say two plans and the next start: %s", name, text)
+		}
+		if strings.Contains(text, "4 scheduled") {
+			t.Errorf("%s counts devices: %s", name, text)
+		}
+		if !strings.Contains(part, `href="/tf/transactions#scheduled"`) {
+			t.Errorf("%s does not link to the Scheduled section: %s", name, part)
+		}
+	}
+	if !strings.Contains(plain(wide), "Update 0 of 2 devices") {
+		t.Errorf("the running transaction left the bar's jobs: %s", plain(wide))
+	}
+	// the one-line summary of the phone says what runs, not that something is planned
+	if sum := plain(between(bar, `<summary>`, `</summary>`)); strings.Contains(sum, "scheduled") {
+		t.Errorf("the phone line talks of plans: %s", sum)
+	}
+}
+
+// Why (#707): a plan on the Dashboard that no longer exists is worse than none. Once a plan is cancelled, has
+// started, or was not started, nothing of it is left on the Dashboard or in the bar; and without any plan the
+// card's "No transactions yet" is back, so the card never says both.
+func TestPlansLeaveDashboardAndStatusBarWhenCancelledOrStarted(t *testing.T) {
+	notStarted := func(j *model.Job) {
+		j.State, j.NotStarted, j.UpdatedAt = model.JobCancelled, true, sat.Add(2*time.Hour)
+	}
+	for _, c := range []struct {
+		name   string
+		change func(*model.Job)
+	}{
+		{"cancelled", func(j *model.Job) { j.State, j.UpdatedAt = model.JobCancelled, fri.Add(time.Hour) }},
+		{"started", func(j *model.Job) { j.State = model.JobQueued }},
+		{"not started", notStarted},
+		{"failed at the start", func(j *model.Job) { j.State = model.JobFailed }},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			e, _, jobs, _ := setupOTAAt(t, fixedClock{fri})
+			jobs.jobs = []model.Job{schedJob(20, 10, 1, model.JobScheduled, sat)}
+			_, body := e.do(t, "GET", "/", "operator", nil)
+			if !strings.Contains(planLine(body), "1 scheduled") || !strings.Contains(plain(barOf(body)), "1 scheduled") {
+				t.Fatalf("the plan is not shown before it changes: %s", planLine(body))
+			}
+			if strings.Contains(planLine(body), "No transactions yet") {
+				t.Errorf("the card says there are no transactions while a plan waits: %s", planLine(body))
+			}
+			c.change(&jobs.jobs[0])
+			_, body = e.do(t, "GET", "/", "operator", nil)
+			if strings.Contains(planLine(body), "scheduled") || strings.Contains(plain(barOf(body)), "scheduled") {
+				t.Errorf("the plan is still shown after it was %s: %s / %s", c.name, planLine(body), plain(barOf(body)))
+			}
+		})
+	}
+	t.Run("none", func(t *testing.T) {
+		e, _, jobs, _ := setupOTAAt(t, fixedClock{fri})
+		jobs.jobs = nil
+		_, body := e.do(t, "GET", "/", "operator", nil)
+		if !strings.Contains(planLine(body), "No transactions yet") || strings.Contains(planLine(body)+plain(barOf(body)), "scheduled") {
+			t.Errorf("nothing is planned, but: %s / %s", planLine(body), plain(barOf(body)))
+		}
+	})
+}
+
+// Why (#707): a failed read of the plans must not take a page down. The bar already shows nothing for a job it
+// cannot read; the Dashboard drops the line and stays up.
+func TestAFailedPlanReadLeavesTheDashboardAndTheBarUp(t *testing.T) {
+	e, _, jobs, _ := setupOTAAt(t, fixedClock{fri})
+	jobs.jobs = planFixture()
+	if _, body := e.do(t, "GET", "/", "operator", nil); !strings.Contains(planLine(body), "2 scheduled") || !strings.Contains(plain(barOf(body)), "2 scheduled") {
+		t.Fatalf("the plans are not shown while the read works: %s", planLine(body))
+	}
+	jobs.listErr = func(f store.JobFilter) error {
+		if slices.Contains(f.States, model.JobScheduled) {
+			return errors.New("database is locked")
+		}
+		return nil
+	}
+	resp, body := e.do(t, "GET", "/", "operator", nil)
+	if resp.StatusCode != http.StatusOK || strings.Contains(planLine(body), "scheduled") || strings.Contains(plain(barOf(body)), "scheduled") {
+		t.Errorf("status %d, a failed read shows a plan or no page: %s", resp.StatusCode, planLine(body))
+	}
+	if strings.Contains(body, "database is locked") {
+		t.Error("the error text reaches the page")
+	}
+}
+
+// Why (#792, #707): a plan whose start has come waits for its device up to 60 minutes. The Dashboard says "due",
+// not a countdown to a time that has passed; the bar keeps to the start time, which stays right.
+func TestAPlanPastItsStartIsDueOnTheDashboard(t *testing.T) {
+	e, _, jobs, _ := setupOTAAt(t, fixedClock{sat.Add(40 * time.Minute)})
+	jobs.jobs = []model.Job{schedJob(20, 10, 1, model.JobScheduled, sat)}
+	_, body := e.do(t, "GET", "/", "operator", nil)
+	if card := planLine(body); !strings.Contains(card, "1 scheduled") || !strings.Contains(card, "due, waiting for the device") || strings.Contains(card, " in ") {
+		t.Errorf("the Dashboard counts down to a start that has passed: %s", card)
+	}
+	if !strings.Contains(plain(barOf(body)), "Sat, Nov 7 at 03:00") {
+		t.Errorf("the bar lost the start of a plan that is due: %s", plain(barOf(body)))
+	}
+}
+
+// Why (#707): the Dashboard and the bar link to "the Scheduled section", so it needs an address of its own.
+func TestTransactionsScheduledSectionIsALinkTarget(t *testing.T) {
+	e, _, jobs, _ := setupOTAAt(t, fixedClock{fri})
+	jobs.jobs = []model.Job{schedJob(20, 10, 1, model.JobScheduled, sat)}
+	_, body := e.do(t, "GET", "/transactions", "operator", nil)
+	if tag := tagOf(t, body, "upd-sched"); !strings.Contains(tag, `id="scheduled"`) {
+		t.Errorf("the Scheduled section has no id to link to: %q", tag)
 	}
 }
 

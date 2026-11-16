@@ -56,7 +56,10 @@ func (h *handler) statusBar(ctx context.Context, base string, live bool) ui.Stat
 			sb.Broker = &ui.StatusBroker{Host: b.Host, Connected: b.Connected, Since: b.Since}
 		}
 	}
-	sb.Jobs, sb.More = h.statusJobs(ctx, base)
+	sb.Jobs, sb.More, sb.Plans = h.statusJobs(ctx, base)
+	if h.d.OTA != nil {
+		sb.Plans.Href = scheduledHref(base)
+	}
 	if h.d.ScheduledBackup != nil {
 		r := h.d.ScheduledBackup()
 		if r.Running {
@@ -81,18 +84,20 @@ func (h *handler) statusBar(ctx context.Context, base string, live bool) ui.Stat
 }
 
 // statusJobs lists the running transactions, oldest first, at most statusJobsShown of them, and
-// how many more run. A failed read shows no jobs: the bar must never take a page down.
-func (h *handler) statusJobs(ctx context.Context, base string) ([]ui.StatusJob, int) {
+// how many more run, and says how many plans wait (#707). One read serves both: the open jobs, the
+// running ones and the plans. A failed read shows neither: the bar must never take a page down.
+func (h *handler) statusJobs(ctx context.Context, base string) ([]ui.StatusJob, int, ui.PlanSummary) {
 	if h.d.Jobs == nil {
-		return nil, 0
+		return nil, 0, ui.PlanSummary{}
 	}
-	active, err := h.d.Jobs.ListJobs(ctx, store.JobFilter{States: activeJobStates})
-	if err != nil || len(active) == 0 {
-		return nil, 0
+	open, err := h.d.Jobs.ListJobs(ctx, store.JobFilter{States: openJobStates})
+	if err != nil {
+		return nil, 0, ui.PlanSummary{}
 	}
+	plans := planSummary(h.d.Clock.Now(), open)
 	var batches []model.BatchID
-	for _, j := range active {
-		if !slices.Contains(batches, j.BatchID) {
+	for _, j := range open {
+		if j.State != model.JobScheduled && !slices.Contains(batches, j.BatchID) {
 			batches = append(batches, j.BatchID)
 		}
 	}
@@ -113,7 +118,7 @@ func (h *handler) statusJobs(ctx context.Context, base string) ([]ui.StatusJob, 
 		}
 		out = append(out, j)
 	}
-	return out, len(batches) - len(out)
+	return out, len(batches) - len(out), plans
 }
 
 func statusKind(j model.Job) string {

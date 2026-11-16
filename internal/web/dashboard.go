@@ -46,6 +46,7 @@ type dashView struct {
 	TxnCard bool
 	Card    *ui.TxnData
 	Rows    []ui.TxnRowData
+	Plans   ui.PlanSummary // the plans waiting for their start (#707); N 0 shows nothing
 	// Empty: no devices. The page then shows only the empty state, with these ways to add
 	// devices for admins (empty hrefs are not offered).
 	Empty                         bool
@@ -96,6 +97,7 @@ func (h *handler) dashboard(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	var txs []txView
+	var plans ui.PlanSummary
 	if h.d.Jobs != nil {
 		// Enough jobs to cover the last few transactions, however many devices each has.
 		jobs, err := h.d.Jobs.ListJobs(r.Context(), store.JobFilter{Limit: 500})
@@ -104,8 +106,14 @@ func (h *handler) dashboard(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		txs = groupTransactions(jobs)
-		// A plan is listed in Transactions only (#604); the Dashboard shows it with #707.
-		txs = slices.DeleteFunc(txs, func(t txView) bool { return t.Planned > 0 && t.Running+t.Queued == 0 })
+		// A plan is not a transaction of the card: the line above it says how many wait (#707, planSummary).
+		txs = slices.DeleteFunc(txs, func(t txView) bool { return planWaits(t.Planned, t.Running+t.Queued) })
+		// Own read: the list above is capped and says nothing for sure of the plans. A failed read drops the line.
+		if open, err := h.d.Jobs.ListJobs(r.Context(), store.JobFilter{States: openJobStates}); err != nil {
+			h.log.Warn("dashboard: plans", "err", err)
+		} else if plans = planSummary(h.d.Clock.Now(), open); plans.N > 0 {
+			plans.Href = scheduledHref(v.Base)
+		}
 	}
 	var props []discovery.Proposal
 	if s.HasDiscovery {
@@ -138,7 +146,8 @@ func (h *handler) dashboard(w http.ResponseWriter, r *http.Request) {
 	d.Props = dashProposals(v.Base, props, devs)
 	now := h.d.Clock.Now()
 	d.Items = dashAttention(v.Base, now, rows, facts, h.channelWindow())
-	d.TxnCard = v.Features.Transactions || len(txs) > 0
+	d.TxnCard = v.Features.Transactions || len(txs) > 0 || plans.N > 0
+	d.Plans = plans
 	if len(txs) > 0 {
 		c := dashTxnCard(v.Base, txs[0])
 		d.Card = &c

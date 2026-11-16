@@ -1,0 +1,69 @@
+package ui
+
+// PlanLine is the plans line at the top of the Dashboard's "Update transactions" card (#707): "2 scheduled ·
+// next Sat, Nov 7 at 03:00 · in 17 h", linking to the Scheduled section of Transactions. The time is a time
+// element, so the browser shows it in its own zone; it carries a date because a plan can lie weeks ahead.
+templ PlanLine(p PlanSummary) {
+	<p class="dash-plans">
+		@planText(p)
+	</p>
+}
+
+templ planText(p PlanSummary) {
+	if p.Href != "" {
+		<a class="sb-link" href={ templ.SafeURL(p.Href) }>{ p.countText() }</a>
+	} else {
+		<b>{ p.countText() }</b>
+	}
+	<span class="sb-sep">·</span>
+	next <time { StampAttrs(p.Next, StampStart)... }>{ StampText(p.Next, StampStart) }</time>
+	if p.In != "" {
+		<span class="sb-sep">·</span>
+		<span class="dash-plans-in">{ p.In }</span>
+	}
+}
+
+// sbPlansWide is the plans item of the wide bar: after the jobs, before the backup.
+templ sbPlansWide(s StatusBar) {
+	if s.Plans.N > 0 {
+		if s.Plans.Href != "" {
+			<a class="sb-i sb-stale" href={ templ.SafeURL(s.Plans.Href) } title="Transactions: the updates planned for later">
+				@sbPlansWideText(s.Plans)
+			</a>
+		} else {
+			<div class="sb-i sb-stale">
+				@sbPlansWideText(s.Plans)
+			</div>
+		}
+	}
+}
+
+templ sbPlansWideText(p PlanSummary) {
+	<span class="sb-dot idle"></span>
+	<span>
+		<b>{ p.countText() }</b> <span class="sb-sep">·</span> <span class="sb-mut">next</span> <time { StampAttrs(p.Next, StampStart)... }>{ StampText(p.Next, StampStart) }</time>
+	</span>
+}
+
+// sbPlansSheet is the same as a row of the phone sheet, under the jobs.
+templ sbPlansSheet(s StatusBar) {
+	if s.Plans.N > 0 {
+		if s.Plans.Href != "" {
+			<a class="sb-i sb-row sb-stale" href={ templ.SafeURL(s.Plans.Href) }>
+				@sbPlansSheetText(s.Plans)
+			</a>
+		} else {
+			<div class="sb-i sb-row sb-stale">
+				@sbPlansSheetText(s.Plans)
+			</div>
+		}
+	}
+}
+
+templ sbPlansSheetText(p PlanSummary) {
+	<span class="sb-lab">Planned</span>
+	<span class="sb-dot idle"></span>
+	<span class="sb-val">
+		<b>{ p.countText() }</b><br/>next <time { StampAttrs(p.Next, StampStart)... }>{ StampText(p.Next, StampStart) }</time>
+	</span>
+}

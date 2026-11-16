@@ -1325,6 +1325,16 @@ An update job can wait for a start time (0.36.0). The preview chooses it (#604);
   changed. Plan it again to run it." Once, when TasmoFleet is back. It follows `NOTIFY_UPDATE` and is sent
   under `problems` too.
 - Metric: `tasmofleet_ota_jobs_active` counts jobs at work, not jobs waiting for their start.
+- Dashboard and status bar (#707): both say how many plans wait and when the first starts ("2 scheduled · next
+  Sat, Nov 7 at 03:00"), linking to the Scheduled section of Transactions (`/transactions#scheduled`). The count is
+  per transaction, like "Scheduled · N" there, not per device. A transaction is a plan while it has `scheduled`
+  jobs and none that is running or queued (`planWaits`, the one rule Transactions, the Dashboard and the bar share);
+  once some device began it is a running transaction. The line shows a plan from the moment it exists (the
+  engine publishes no job event when one is created, so a page that is already open learns of it at its next job
+  event or reload) until it is cancelled, started, not started or refused; each of these is a job event, which
+  refreshes the Dashboard and the bar. The bar's phone line and its colour level stay as they are: a plan is not a
+  problem and not running. Nothing is stored or cached; every render reads the open jobs. A failed read shows
+  nothing.
 - `Job.NotStarted`: the job ended `cancelled` without starting, because its start had passed by more than
   the late-start window; nothing was sent to the device.
 - Migration 0048 adds `ota_jobs.start_at` (milliseconds, like `deadline_at`; 0 = none) and
@@ -2528,7 +2538,8 @@ page enforces its own permission). Groups and pages:
 
 - **Dashboard** (Overview): six stat tiles (Online, Offline, Unknown, Firmware behind, Policy
   deviations, New devices found; each links to a filtered device list), the fleet health bar,
-  "Needs attention" and the newest update transactions.
+  "Needs attention" and the newest update transactions, with the plans that wait for their start as a line on top
+  of that card (#707).
 - **Devices**: _List_, _Policy_, _Backups_ (#409, 0.29.0: the fleet's backup state on one page, content width like the Dashboard) and _Add_ (admin; since 0.27.0 one page with four boxes: Discovered and
   Network scan in the wide column, Add manually and Import from TasmoAdmin in the narrow one; the full
   result of a scan is its own page, `/discovery/scan/{id}`). The page heading of the list stays "Devices". The device list is a sortable table with filter chips and a search box (`q`, health,

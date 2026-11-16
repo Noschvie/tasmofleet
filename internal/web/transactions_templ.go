@@ -186,7 +186,7 @@ func txList(p txListView) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			if len(p.Scheduled) > 0 {
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<section class=\"ulist upd-sched\" aria-labelledby=\"sched-h\"><div class=\"ulist-head\"><h2 id=\"sched-h\">Scheduled · ")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<section id=\"scheduled\" class=\"ulist upd-sched\" aria-labelledby=\"sched-h\"><div class=\"ulist-head\"><h2 id=\"sched-h\">Scheduled · ")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}

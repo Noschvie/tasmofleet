@@ -46,12 +46,15 @@ templ dashboardPage(d dashView) {
 				if d.TxnCard {
 					@ui.CardStack(1) {
 						@ui.ListCard("Update transactions", "History", d.Base+"/transactions") {
+							if d.Plans.N > 0 {
+								@ui.PlanLine(d.Plans)
+							}
 							if d.Card != nil {
 								@ui.TxnCard(*d.Card)
 								for _, r := range d.Rows {
 									@ui.TxnRow(r)
 								}
-							} else {
+							} else if d.Plans.N == 0 {
 								<p class="dash-none">No transactions yet. Updates you start show up here.</p>
 							}
 						}

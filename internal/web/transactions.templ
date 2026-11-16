@@ -58,7 +58,7 @@ templ txList(p txListView) {
 				</div>
 			}
 			if len(p.Scheduled) > 0 {
-				<section class="ulist upd-sched" aria-labelledby="sched-h">
+				<section id="scheduled" class="ulist upd-sched" aria-labelledby="sched-h">
 					<div class="ulist-head"><h2 id="sched-h">Scheduled · { strconv.Itoa(len(p.Scheduled)) }</h2></div>
 					<div class="upd-hhead upd-shead" aria-hidden="true"><span>ID</span><span>What</span><span>Devices</span><span>Planned start</span><span></span></div>
 					for _, s := range p.Scheduled {
