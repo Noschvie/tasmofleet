@@ -1,18 +1,14 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
 import { layoutGuards, guardReport, hoverTip } from "../support/layout";
-import { App, root, startApp } from "../support/stack";
+import { openScan as openScanOf } from "../support/scan-fixture";
+import { App, startApp } from "../support/stack";
 
 // #811: the result table of Devices -> Add -> Network scan cut Firmware off while the table had room
 // to spare, showed a name bubble over the next row's name, kept an empty selection column when no row
 // could be ticked, and hid known devices behind a line that was no control. A scan only finds devices
 // on port 80, which no e2e stack can serve, so the page is loaded as the real binary serves it
-// (shell, CSS, scripts) and the finished scan's markup is put into it: testdata/scan/*.html, which
-// TestScanResultFixtures (internal/web) keeps equal to what the templates render.
-// SCAN_FIXTURE_DIR points the spec at other markup (a before/after comparison).
-const fixtureDir = process.env.SCAN_FIXTURE_DIR ?? join(root, "testdata/scan");
+// (shell, CSS, scripts) and the finished scan's markup is put into it (support/scan-fixture.ts).
 const adam = { "X-authentik-username": "adam", "X-authentik-groups": "adm" };
 
 let app: App;
@@ -25,18 +21,7 @@ test.afterAll(async () => {
   await app?.stop();
 });
 
-async function openScan(page: Page, fixture: "known" | "mixed", scheme: "light" | "dark" = "light", width = 1280): Promise<void> {
-  await page.setExtraHTTPHeaders(adam);
-  await page.setViewportSize({ width, height: 900 });
-  await page.emulateMedia({ colorScheme: scheme });
-  await page.goto(app.url + "/discovery/scan");
-  const html = readFileSync(join(fixtureDir, fixture + ".html"), "utf8");
-  await page.evaluate((h) => {
-    document.querySelector("#scan")!.outerHTML = h;
-  }, html);
-  await page.evaluate(() => document.fonts.ready);
-  await expect(page.locator(width >= 720 ? ".add-scan-table tbody tr" : ".add-scan-card").first()).toBeVisible();
-}
+const openScan = (page: Page, fixture: "known" | "mixed", scheme: "light" | "dark" = "light", width = 1280) => openScanOf(page, app.url, adam, fixture, scheme, width);
 
 /** cutOffCells lists the cells of the table whose content is wider than the cell. */
 async function cutOffCells(page: Page): Promise<string[]> {

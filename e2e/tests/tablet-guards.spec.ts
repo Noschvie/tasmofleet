@@ -1,8 +1,11 @@
 import { test, expect } from "../support/fixtures";
-import { cardStackGaps, expectLayout } from "../support/layout";
+import { insertProposals } from "../support/discovery-seed";
+import { cardStackGaps, expectLayout, expectTableGuards } from "../support/layout";
 import { pageList, settled } from "../support/page-list";
+import { openSavedLayoutList, ownerWindow } from "../support/saved-layout";
 import { realisticDevenvArgs, realisticPolicyRules, seedRealisticData } from "../support/seed";
 import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
+import { checkTablePage, tablePageCases } from "../support/table-pages";
 
 // #592: three #419 conversions (#588, #591) broke between 720 and 1199 px, where the card stacks
 // become two half-width columns, and no test saw it: the card-width guard measures 1280/1920 and
@@ -33,6 +36,12 @@ test.beforeAll(async ({ browser }) => {
     },
   });
   app.cli(["import", "tasmoadmin", writeTasmoAdminDir(env.devices)]);
+  // proposals for the New devices list of Devices -> Add (a table only a discovery fills)
+  await insertProposals(app, [
+    { mac: "aa:bb:cc:00:01:01", name: "Workshop lamp", topic: "workshop_lamp", host: "workshop-lamp-1a2b", ip: "127.0.0.11", seen: 600 },
+    { mac: "aa:bb:cc:00:01:02", name: "", topic: "attic_fan", host: "tasmota-attic-3c4d", ip: "127.0.0.9", seen: 300 },
+    { mac: "aa:bb:cc:00:01:03", name: "Balcony plug", topic: "balcony_plug", host: "balcony-plug-5e6f", ip: "127.0.0.100", seen: 60 },
+  ]);
   const p = await browser.newPage({ extraHTTPHeaders: adam });
   try {
     await seedRealisticData(p, app, env);
@@ -77,6 +86,33 @@ for (const width of [768, 1024]) {
   }
 }
 
+// #821: every page that shows a table has the table layout guards at the two widths people use. The pages
+// come from support/table-pages.ts, which reads the templates: a table that no page shows fails
+// table-pages.spec.ts. Besides the generic guards (overlap, text over text, cut-off cells with no title)
+// each page runs guard s (a cell is not cut off while another column has room to spare, the Firmware cell
+// of #811) and guard r (no element of one row over the text of another, as loaded and with the pointer
+// on a row and on its titled elements, the bubble of #811). The two policy template pages need the
+// template-shapes fleet and run in policy-templates.spec.ts.
+for (const { page: tp, width } of tablePageCases({ lamp: () => lamp }, "fleet")) {
+  test(`table page ${tp.name}: table guards at ${width}px`, async ({ page }) => {
+    test.setTimeout(600_000); // the pointer pass waits for a bubble per hover
+    await checkTablePage(page, app.url, tp, width);
+  });
+}
+
+// #821: the same guards on the Devices list with a saved layout wider than the frame at the owner's window (1290 px),
+// the case no earlier layout guard ran: the table scrolls, Power, Status and Actions are pinned, the optional columns
+// are shown.
+test(`devices list with a saved layout at ${ownerWindow}px: layout guards and table guards`, async ({ page }) => {
+  test.setTimeout(600_000); // the pointer pass waits for a bubble per hover
+  await page.emulateMedia({ colorScheme: "light" });
+  await openSavedLayoutList(page, app.url, { width: ownerWindow });
+  await page.waitForTimeout(800);
+  await expectLayout(page, `devices list saved layout ${ownerWindow}px`);
+  // Last restart is cut by 2-3 px beside spare room in other columns (#912, tolerated through knownLayoutIssues).
+  await expectTableGuards(page, `devices list saved layout ${ownerWindow}px`);
+});
+
 // #727: a live reload of /devices/table (the page does one right after it connects and again after
 // device events) replaces the whole table. The swapped-in table has no <colgroup> fit yet; tables.js
 // used to fit it only when htmx settled (about 20 ms later), and until then the Power column
@@ -104,12 +140,19 @@ const powerOverActions = () => {
   return { rows: rows.length, offenders: [...new Set(offenders)] };
 };
 
-test("devices list at 1024px: the table is fitted in the task that swaps it in after a live reload", async ({ page }) => {
-  await page.setExtraHTTPHeaders(adam);
-  await page.setViewportSize({ width: 1024, height: 900 });
+// The 1290 px case (#821) is the owner's window with a saved layout wider than the frame: the table scrolls, the
+// pinned columns keep their places, and the swapped-in table must be fitted just as early.
+for (const c of [{ width: 1024, saved: false }, { width: ownerWindow, saved: true }]) {
+test(`devices list at ${c.width}px${c.saved ? " with a saved layout" : ""}: the table is fitted in the task that swaps it in after a live reload`, async ({ page }) => {
   await page.emulateMedia({ colorScheme: "light" });
-  await page.goto(app.url + "/devices");
-  await settled(page);
+  if (c.saved) {
+    await openSavedLayoutList(page, app.url, { width: c.width });
+  } else {
+    await page.setExtraHTTPHeaders(adam);
+    await page.setViewportSize({ width: c.width, height: 900 });
+    await page.goto(app.url + "/devices");
+    await settled(page);
+  }
   await expect(page.locator('table[data-table="devices"] tbody tr').first()).toBeVisible();
   // the probe itself: on a list that has settled nothing overlaps (else it would flag the fit, not the window)
   await expect.poll(async () => (await page.evaluate(powerOverActions)).offenders, { timeout: 15_000 }).toEqual([]);
@@ -134,3 +177,4 @@ test("devices list at 1024px: the table is fitted in the task that swaps it in a
   expect(swapped.rows, "the reloaded list has rows").toBeGreaterThan(10);
   expect(swapped.offenders, "Power buttons overlapping the Actions summary right after the swap").toEqual([]);
 });
+}

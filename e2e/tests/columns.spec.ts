@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { Browser, BrowserContext, Page } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
 import { expectNoOverflow } from "../support/layout";
+import { openSavedLayoutList, ownerShown, ownerLayout, ownerWide, ownerWindow, postPref, savedLayoutUser } from "../support/saved-layout";
 import { realisticDevenvArgs, realisticPolicyRules, seedRealisticData } from "../support/seed";
 import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from "../support/stack";
 
@@ -114,17 +115,6 @@ async function otherBrowser(browser: Browser, headers: Record<string, string>): 
   return { ctx, page: await ctx.newPage() };
 }
 
-/** postPref sends a preference the way the page script does: same origin, token from the page. */
-async function postPref(page: Page, key: string, doc: unknown): Promise<number> {
-  return page.evaluate(
-    async ([k, d]) => {
-      const token = JSON.parse(document.body.getAttribute("hx-headers") ?? "{}")["X-CSRF-Token"];
-      const r = await fetch(`${document.body.getAttribute("data-prefs")}/${k}`, { method: "POST", headers: { "Content-Type": "application/json", "X-CSRF-Token": token }, body: JSON.stringify(d) });
-      return r.status;
-    },
-    [key, doc] as const,
-  );
-}
 async function resetAll(page: Page, path: string, key: string) {
   if (!page.url().startsWith(app.url)) await page.goto(app.url + path);
   expect(await postPref(page, key, {})).toBe(204);
@@ -250,16 +240,6 @@ test("Columns menu hides and shows columns, and Reset to default restores the ta
 // 1 px), and showing a column stored the stretched widths of all the others, so at 1920 px the table
 // scrolled after one more column. The layouts are the maintainer's from the live database: as 0.36.0
 // stored it (no "b"), and as 0.36.0 stored it after showing three more columns at 1920 px.
-const ownerLayout = {
-  w: { actions: 5.7, address: 13.3, family: 9.8, firmware: 9.3, name: 22.8, power: 7.5, reach: 14.2, status: 10.5, uptime: 11.5, wifi: 11.9 },
-  h: ["restart"],
-  o: ["status", "wifi", "reach", "firmware", "family", "address", "uptime", "restart", "otaurl", "grouptopic", "power"],
-};
-const ownerShown = {
-  w: { name: 28.7, status: 13.2, wifi: 15, reach: 17.9, firmware: 11.7, family: 12.4, address: 16.7, uptime: 14.5, restart: 14.7, otaurl: 14.7, grouptopic: 14.7, power: 9.4, actions: 7.2 },
-  v: ["grouptopic", "otaurl"],
-  o: ownerLayout.o,
-};
 /** The device table's frame, its saved size and its header widths, read in one step from a table the
  * script has fitted (a live reload swaps the table at any time; a fitted one has its minimum width). */
 async function deviceFrame(page: Page) {
@@ -322,6 +302,36 @@ test("a layout saved while the table fits its frame still fits it after a reload
     const again = await deviceFrame(page);
     expect(again.scroll).toBeLessThanOrEqual(again.client);
     expect(Math.abs(again.min - after.min), "a second save without a change").toBeLessThanOrEqual(0.5);
+  } finally {
+    await resetAll(page, "/devices", "table.devices");
+  }
+});
+
+// #821: the cases above use windows where the layout fits; the owner's window (1290 px) has a layout that is
+// wider than the frame, as a saved layout with the optional columns shown always is. There the table
+// scrolls by design, a save must still change nothing in view, and the size a page draws is the size the
+// server writes (#805: 1 px too much, then every show added the stretch).
+test("a saved layout wider than the frame, at the owner's window: a hide and show of a column changes no width, in the page or after a reload (#805, #821)", async ({ page }) => {
+  await openSavedLayoutList(page, app.url, { width: ownerWindow, doc: ownerWide });
+  try {
+    const start = await deviceFrame(page);
+    expect(start.scroll, "the layout is wider than the frame").toBeGreaterThan(start.client);
+    // the first save of a 0.36.0 layout converts it; the second must not change it
+    await showColumn(page, "restart", false);
+    await showColumn(page, "restart", true);
+    const inPage = await deviceFrame(page);
+    await page.reload();
+    const after = await deviceFrame(page);
+    expect(Math.abs(after.basew - inPage.basew), "the page and the server give the saved layout the same size").toBeLessThanOrEqual(0.5);
+    expect(after.scroll, "the table scrolls by its own width and not by a pixel more").toBeLessThanOrEqual(Math.ceil(after.min));
+    await showColumn(page, "restart", false);
+    await showColumn(page, "restart", true);
+    await page.reload();
+    const again = await deviceFrame(page);
+    expect(Math.abs(again.min - after.min), "a second hide and show without a change").toBeLessThanOrEqual(0.5);
+    // the widths of the columns that were not touched
+    const w = (f: typeof after) => f.widths.map((x) => Math.round(x));
+    expect(w(again), "no column changed its width").toEqual(w(after));
   } finally {
     await resetAll(page, "/devices", "table.devices");
   }

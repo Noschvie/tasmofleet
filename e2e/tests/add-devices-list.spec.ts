@@ -1,8 +1,7 @@
 import { mkdirSync } from "node:fs";
-import { connect } from "node:net";
-import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
+import { insertProposals, publishRetained } from "../support/discovery-seed";
 import { expectNoOverflow } from "../support/layout";
 import { App, Devenv, startApp, startDevenv } from "../support/stack";
 
@@ -20,23 +19,6 @@ const devices = [
   { mac: "aa:bb:cc:00:01:03", name: "Balcony plug", topic: "balcony_plug", host: "balcony-plug-5e6f", ip: "127.0.0.100", seen: 60 },
 ];
 
-/** publishRetained sends one retained QoS 0 message over a bare MQTT 3.1.1 connection. */
-function publishRetained(url: string, topic: string, payload: string): Promise<void> {
-  const { hostname, port } = new URL(url);
-  const str = (s: string) => Buffer.concat([Buffer.from([s.length >> 8, s.length & 255]), Buffer.from(s)]);
-  const packet = (head: number, body: Buffer) => Buffer.concat([Buffer.from([head, body.length]), body]);
-  return new Promise((ok, fail) => {
-    const sock = connect(Number(port), hostname, () => {
-      sock.write(packet(0x10, Buffer.concat([str("MQTT"), Buffer.from([4, 2, 0, 60]), str("e2e-lwt")])));
-    });
-    sock.once("data", () => {
-      sock.write(packet(0x31, Buffer.concat([str(topic), Buffer.from(payload)])));
-      sock.end(Buffer.from([0xe0, 0]), () => ok());
-    });
-    sock.once("error", fail);
-  });
-}
-
 test.beforeAll(async () => {
   test.setTimeout(120_000);
   env = await startDevenv();
@@ -48,20 +30,7 @@ test.beforeAll(async () => {
       TASMOFLEET_MQTT_URL: env.vars.TASMOFLEET_MQTT_URL,
     },
   });
-  const { DatabaseSync } = await import("node:sqlite");
-  const db = new DatabaseSync(join(app.dataDir, "tasmofleet.db"));
-  try {
-    db.exec("PRAGMA busy_timeout=5000");
-    const now = Date.now();
-    for (const d of devices) {
-      db.prepare(
-        `INSERT INTO discovery_proposals (mac, kind, via, reason, name, address, port, topic, full_topic, existing_id, dismissed, first_seen, seen_at, hostname)
-         VALUES (?, 'new', 'mqtt', '', ?, ?, 80, ?, 'tasmota/%topic%/%prefix%/', 0, 0, ?, ?, ?)`,
-      ).run(d.mac, d.name, d.ip, d.topic, now - 3600_000, now - d.seen * 1000, d.host);
-    }
-  } finally {
-    db.close();
-  }
+  await insertProposals(app, devices);
   for (const t of ["workshop_lamp", "attic_fan", "balcony_plug"]) await publishRetained(env.vars.TASMOFLEET_MQTT_URL, `tele/${t}/LWT`, "Offline");
 });
 test.afterAll(async () => {

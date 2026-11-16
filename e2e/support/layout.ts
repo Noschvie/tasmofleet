@@ -468,26 +468,37 @@ export async function layoutGuards(page: Page, which: GuardId[] = allGuards): Pr
       const holders = [...document.querySelectorAll("main label, main button, main summary, main p, main li, main h1, main h2, main h3, main h4, main dt, main dd, dialog[open] label, dialog[open] p, dialog[open] li")]
         .filter((e) => visible(e) && !scrolledAway(e) && !inOverlay(e));
       const own = new Map<Element, DOMRect>(); // box of the element's own direct text
+      const lines = new Map<Element, DOMRect[]>(); // and its line boxes: text that wraps leaves room between its lines for other text
       // an open menu or popover floats over the page on purpose
       const all = [...document.querySelectorAll("main *, dialog[open] *")].filter((e) => visible(e) && !scrolledAway(e) && !inOverlay(e) && !e.closest(".menu-panel, [popover]"));
       for (const e of all) {
         const w = document.createTreeWalker(e, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.parentNode === e && n.textContent!.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT) });
         let l = Infinity, t = Infinity, r = -Infinity, b = -Infinity;
+        const qs: DOMRect[] = [];
         for (let n = w.nextNode(); n; n = w.nextNode()) {
           const rg = document.createRange();
           rg.selectNodeContents(n);
           for (const q of rg.getClientRects()) {
             if (q.width < 1 || q.height < 1) continue;
+            qs.push(q);
             l = Math.min(l, q.left); t = Math.min(t, q.top); r = Math.max(r, q.right); b = Math.max(b, q.bottom);
           }
         }
         if (l === Infinity || e.matches("textarea, input, select, option, pre, code, script, style")) continue;
         let tr: DOMRect | null = new DOMRect(l, t, r - l, b - t);
+        let ls: (DOMRect | null)[] = qs;
         // text that the element or an ancestor clips (ellipsis) is not drawn outside its box
         for (let p: Element | null = e; p && tr && p !== document.body; p = p.parentElement) {
-          if (getComputedStyle(p).overflowX !== "visible") tr = intersect(tr, rectOf(p));
+          if (getComputedStyle(p).overflowX !== "visible") {
+            const pr = rectOf(p);
+            tr = intersect(tr, pr);
+            ls = ls.map((q) => (q ? intersect(q, pr) : null));
+          }
         }
-        if (tr) own.set(e, tr);
+        if (tr) {
+          own.set(e, tr);
+          lines.set(e, ls.filter((q): q is DOMRect => !!q));
+        }
       }
       for (const e of holders) {
         const cs = getComputedStyle(e);
@@ -508,8 +519,10 @@ export async function layoutGuards(page: Page, which: GuardId[] = allGuards): Pr
         for (let j = i + 1; j < items.length; j++) {
           const [a, ra, fa] = items[i], [b, rb, fb] = items[j];
           if (a.contains(b) || b.contains(a) || a.closest("dialog") !== b.closest("dialog") || fa !== fb) continue;
-          const x = intersect(ra, rb);
-          if (x && x.width > 2 && x.height > 4) add("o", `${describe(a)} overlaps ${describe(b)}`);
+          // box against box first (cheap), then line against line: the union box of a wrapped text covers the lines of its neighbours
+          if (!intersect(ra, rb)) continue;
+          const hit = (lines.get(a) ?? []).some((qa) => (lines.get(b) ?? []).some((qb) => { const x = intersect(qa, qb); return !!x && x.width > 2 && x.height > 4; }));
+          if (hit) add("o", `${describe(a)} overlaps ${describe(b)}`);
         }
       }
     }
@@ -534,8 +547,8 @@ export async function layoutGuards(page: Page, which: GuardId[] = allGuards): Pr
   return (Object.keys(found) as GuardId[]).sort().map((g) => ({ guard: g, what: guardNames[g], offenders: [...new Set(found[g])].slice(0, 12) }));
 }
 
-/** guardReport formats the results of layoutGuards for an assertion message. */
-export function guardReport(name: string, results: GuardResult[]): string {
+/** guardReport formats the results of layoutGuards (and of the table guards s and r) for an assertion message. */
+export function guardReport(name: string, results: { guard: string; what: string; offenders: string[] }[]): string {
   return results.map((r) => `${name}: guard ${r.guard} (${r.what}):\n  - ${r.offenders.join("\n  - ")}`).join("\n");
 }
 
@@ -564,14 +577,45 @@ export async function withFoldsOpen<T>(page: Page, fn: () => Promise<T>): Promis
   }
 }
 
+/** The table guards of #821 (expectTableGuards), which knownLayoutIssues can name beside the guards of layoutGuards. */
+export type TableGuardId = "s" | "r";
+
 /**
  * knownLayoutIssues lists the pages whose guards are tolerated red for a named finding
- * (the visual QA). Keyed by the page name `look()` uses; the value names
- * the findings and the guards they trip. A page in this list is reported as an annotation,
- * not a failure; an entry is removed as soon as its finding is fixed. It is empty: every page
- * must be clean, and there is no blanket switch.
+ * (the visual QA). Keyed by the page name `expectLayout`, `expectTableGuards` and the specs that
+ * name a case use; the value names the findings (an issue reference each) and the guards they trip.
+ * A page in this list is reported as an annotation, not a failure; an entry is removed as soon as its
+ * finding is fixed (the issue's acceptance criteria say so), and a guard that no longer fires for an
+ * entry is reported as an annotation ("clean now"). There is no blanket switch.
  */
-export const knownLayoutIssues: Record<string, { findings: string; guards: GuardId[] }> = {};
+export const knownLayoutIssues: Record<string, { findings: string; guards: (GuardId | TableGuardId)[] }> = {
+  // red on main when the table guards of #821 landed: each finding has its own issue, the guard stays on
+  "devices list 1280px": { findings: "#906 (Address is 14 px too narrow for a 15-character address)", guards: ["s"] },
+  "add devices: discovered 1280px": { findings: "#905 (the IP column cuts a 12-character address)", guards: ["s"] },
+  "policy deviations 375px": { findings: "#907 (a host name breaks inside a label)", guards: ["w"] },
+  "devices list saved layout 1290px": { findings: "#912 (Last restart cuts the date by 2-3 px beside spare room)", guards: ["s"] },
+  "devices list saved layout 1290px bubbles": { findings: "#908 (the OTA URL bubble covers the row above)", guards: ["r"] },
+};
+
+/**
+ * withKnownIssues returns the results that are red for the page `name` after the guards listed for it in
+ * knownLayoutIssues are taken out; a tolerated result and a listed guard of `ran` that did not fire are
+ * annotations of the test, so a tracked state is visible in the report and an entry that is no longer
+ * needed is told.
+ */
+export function withKnownIssues<T extends { guard: string }>(name: string, ran: (GuardId | TableGuardId)[], results: T[]): T[] {
+  const known = knownLayoutIssues[name];
+  if (!known) return results;
+  const tolerated = results.filter((r) => known.guards.includes(r.guard as GuardId));
+  if (tolerated.length) {
+    test.info().annotations.push({ type: "known layout issue", description: `${name}: guards ${tolerated.map((r) => r.guard).join(",")} (finding ${known.findings})` });
+  }
+  const clean = known.guards.filter((g) => ran.includes(g) && !results.some((r) => r.guard === g));
+  if (clean.length) {
+    test.info().annotations.push({ type: "known layout issue is clean", description: `${name}: guards ${clean.join(",")} no longer fire: remove the entry from knownLayoutIssues (finding ${known.findings})` });
+  }
+  return results.filter((r) => !known.guards.includes(r.guard as GuardId));
+}
 
 /**
  * menuFloatProblem opens the <details> menu of the given summary (by script, as overlayProblems
@@ -679,7 +723,7 @@ export async function overlayProblems(page: Page): Promise<GuardResult[]> {
 
 /**
  * expectLayout runs the guards on the page as loaded, again with every fold open, and on every
- * overlay; it fails with a report unless the page is listed in knownLayoutIssues.
+ * overlay; it fails with a report unless the guard is listed for the page in knownLayoutIssues.
  */
 export async function expectLayout(page: Page, name: string): Promise<void> {
   const loaded = await layoutGuards(page, ["a", "b", "c", "d", "e", "f", "w", "o", "i"]);
@@ -691,13 +735,7 @@ export async function expectLayout(page: Page, name: string): Promise<void> {
     if (cur) cur.offenders = [...new Set([...cur.offenders, ...r.offenders])].slice(0, 12);
     else byGuard.set(r.guard, { ...r });
   }
-  const known = knownLayoutIssues[name];
-  const all = [...byGuard.values()];
-  const red = all.filter((r) => !known?.guards.includes(r.guard));
-  const tolerated = all.filter((r) => known?.guards.includes(r.guard));
-  if (tolerated.length) {
-    test.info().annotations.push({ type: "known layout issue", description: `${name}: guards ${tolerated.map((r) => r.guard).join(",")} (finding ${known!.findings})` });
-  }
+  const red = withKnownIssues(name, ["a", "b", "c", "d", "e", "f", "w", "o", "i", "g", "h"], [...byGuard.values()]);
   expect(red.length, guardReport(name, red)).toBe(0);
 }
 
@@ -838,7 +876,7 @@ export interface TipReport {
  * bubble beside its own row may cover that row, never its neighbours (#811). Text of a cell is
  * measured as the text the cell shows (cut to the cell), so a cut-off value's hidden tail is not text.
  */
-export async function hoverTip(page: Page, target: Locator, rowsSel: string, position?: { x: number; y: number }): Promise<TipReport> {
+export async function hoverTip(page: Page, target: Locator, rowsSel: string, position?: { x: number; y: number }, timeout?: number): Promise<TipReport> {
   await page.mouse.move(0, 0);
   // The box is taken before the hover: the first hover moves a title into data-tip, and a selector on
   // title no longer finds the element.
@@ -846,16 +884,19 @@ export async function hoverTip(page: Page, target: Locator, rowsSel: string, pos
   let y = -1;
   for (let attempt = 1; ; attempt++) {
     try {
-      await target.scrollIntoViewIfNeeded();
+      await target.scrollIntoViewIfNeeded({ timeout });
       const box = await target.boundingBox();
       y = box ? box.y + (position?.y ?? box.height / 2) : -1;
-      await target.hover({ position });
+      await target.hover({ position, timeout });
       break;
     } catch (e) {
-      if (attempt >= 4 || !/not attached|detached/i.test(String(e))) throw e;
+      // an element that is replaced is looked up again; one that could not be pointed at within the given
+      // timeout is the caller's to skip, not to wait for three more times
+      if (attempt >= 4 || (timeout !== undefined && /Timeout/.test(String(e))) || !/not attached|detached/i.test(String(e))) throw e;
     }
   }
   await page.waitForTimeout(800);
+  await installRowTexts(page);
   return page.evaluate(
     ([sel, y]) => {
       const tip = document.querySelector<HTMLElement>(".tooltip:not([hidden])");
@@ -874,26 +915,279 @@ export async function hoverTip(page: Page, target: Locator, rowsSel: string, pos
         });
       }
       if (own < 0) return { tip: null, covers: [] as string[] };
+      const texts = (window as unknown as { __tfRowTexts: (rows: Element[]) => Box[][] }).__tfRowTexts(rows);
       rows.forEach((tr, i) => {
         if (i === own) return;
         const name = (tr.querySelector("td")?.textContent ?? "").trim().slice(0, 30) || `row ${i}`;
-        for (const td of tr.querySelectorAll("td")) {
-          const c = td.getBoundingClientRect();
-          const w = document.createTreeWalker(td, NodeFilter.SHOW_TEXT);
-          for (let n = w.nextNode(); n; n = w.nextNode()) {
-            if (!n.textContent?.trim()) continue;
-            const rg = document.createRange();
-            rg.selectNodeContents(n);
-            for (const q of rg.getClientRects()) {
-              const l = Math.max(q.left, c.left), r = Math.min(q.right, c.right);
-              if (q.width < 1 || q.height < 1 || r <= l) continue;
-              if (Math.min(r, t.right) - Math.max(l, t.left) > 1 && Math.min(q.bottom, t.bottom) - Math.max(q.top, t.top) > 1) covers.push(`row ${i} (${name})`);
-            }
-          }
+        for (const q of texts[i]) {
+          if (Math.min(q.right, t.right) - Math.max(q.left, t.left) > 1 && Math.min(q.bottom, t.bottom) - Math.max(q.top, t.top) > 1) covers.push(`row ${i} (${name})`);
         }
       });
       return { tip: { text: tip.textContent ?? "", top: t.top, bottom: t.bottom, left: t.left, right: t.right }, covers: [...new Set(covers)] };
     },
     [rowsSel, y] as const,
   );
+}
+
+// ---------------------------------------------------------------------------
+// Table guards (#821). Run on every table of a page, by tests/tablet-guards.spec.ts.
+//
+// s: a cell whose content is wider than its box, titled or not, while another column of the
+//    same table has at least that much room to spare in every row. The generic guard i skips a
+//    cell that has a title (an ellipsis on purpose), and that let Firmware be cut off beside an
+//    empty gap (#811).
+// r: no element of one row lies over the text of another row, as loaded and with the pointer on a
+//    row and on its titled elements (the bubble of the shared tooltip is such an element, #811).
+// ---------------------------------------------------------------------------
+
+/** A box in viewport pixels, as getBoundingClientRect gives it. */
+interface Box {
+  left: number;
+  right: number;
+  top: number;
+  bottom: number;
+}
+
+/**
+ * rowTexts is the one place that says what "the text of a row" is: the boxes of the text nodes of the
+ * row's cells, cut to their cell (a cut-off value's hidden tail is not text). It runs in the page and is
+ * installed there as window.__tfRowTexts by installRowTexts, so hoverTip and the static row guard measure
+ * the same thing and cannot drift apart.
+ */
+const rowTexts = (rows: Element[]): Box[][] =>
+  rows.map((tr) => {
+    const out: Box[] = [];
+    for (const td of tr.querySelectorAll("td, th")) {
+      const c = td.getBoundingClientRect();
+      const w = document.createTreeWalker(td, NodeFilter.SHOW_TEXT);
+      for (let n = w.nextNode(); n; n = w.nextNode()) {
+        if (!n.textContent?.trim() || (n.parentElement as Element).closest(".sr-only, [hidden], .tip, .tooltip")) continue;
+        const rg = document.createRange();
+        rg.selectNodeContents(n);
+        for (const q of rg.getClientRects()) {
+          const l = Math.max(q.left, c.left), r = Math.min(q.right, c.right);
+          if (q.width < 1 || q.height < 1 || r <= l) continue;
+          out.push({ left: l, right: r, top: q.top, bottom: q.bottom });
+        }
+      }
+    }
+    return out;
+  });
+
+const installRowTexts = (page: Page) => page.evaluate(`window.__tfRowTexts = ${rowTexts.toString()}`);
+
+/**
+ * cutCellProblems is guard s for the tables of the page that are on screen as tables (the phone cards of
+ * the Devices list are not). A cell is cut by `cut` px when its content (its own text, or a box inside it
+ * that clips) is wider than its content box. That is a finding when some other column has at least `cut`
+ * px of room in every row: the room was there, it sat in the wrong column.
+ *
+ * `freeText` names columns (by their header label) whose text is as long as the data makes it, such as the
+ * audit summary: they are not judged. No cell is exempt for being the longest of its row, since that is
+ * the cell most likely to be cut (a name, a firmware string, a URL); a page names its free-text columns
+ * itself, with the reason (TablePage.freeText).
+ */
+export async function cutCellProblems(page: Page, freeText: string[] = []): Promise<string[]> {
+  await page.evaluate(() => document.fonts.ready);
+  return page.evaluate((freeText) => {
+    const out: string[] = [];
+    const px = (v: string) => parseFloat(v) || 0;
+    for (const table of document.querySelectorAll("table")) {
+      if (!table.checkVisibility({ visibilityProperty: true }) || table.closest("dialog:not([open]), [hidden]")) continue;
+      const rows = [...table.tBodies].flatMap((b) => [...b.rows]).filter((tr) => tr.checkVisibility({ visibilityProperty: true }) && tr.getBoundingClientRect().height > 0);
+      if (!rows.length) continue;
+      // a phone card table: every cell is a line of its own, there are no columns to compare
+      const first = rows[0].cells[0];
+      if (!first || getComputedStyle(first).display !== "table-cell") continue;
+      const heads = [...(table.tHead?.rows[0]?.cells ?? [])];
+      const label = (i: number) => (heads[i]?.textContent ?? "").replace(/\s+/g, " ").trim() || `column ${i}`;
+      // per column: the largest cut and the smallest room over the rows
+      const cols = new Map<number, { cut: number; room: number; where: string }>();
+      for (const tr of rows) {
+        let idx = 0;
+        const cells: { i: number; cut: number; room: number; avail: number; text: string }[] = [];
+        for (const td of tr.cells) {
+          const i = idx;
+          idx += td.colSpan;
+          if (td.colSpan > 1 || getComputedStyle(td).display !== "table-cell" || td.getBoundingClientRect().width === 0 || td.hidden) continue;
+          // what a box shows to the right: its text (against its content box: an ellipsis cuts there) and its
+          // controls and media (against its padding box: a 36 px menu button in a narrow cell may use the padding).
+          // Screen-reader text is no content.
+          const extent = (root: Element) => {
+            let text = -Infinity, ctl = -Infinity;
+            const walk = (n: Node) => {
+              if (n.nodeType === Node.TEXT_NODE) {
+                if (!n.textContent?.trim() || (n.parentElement as Element).closest(".sr-only")) return;
+                const rg = document.createRange();
+                rg.selectNodeContents(n);
+                for (const q of rg.getClientRects()) if (q.width > 0 && q.height > 0) text = Math.max(text, q.right);
+              } else if (n instanceof Element) {
+                if (n.closest(".sr-only") || !n.checkVisibility({ visibilityProperty: true })) return;
+                if (n.matches("svg, img, input, select, textarea, button, summary, .badge, .tag")) {
+                  const q = n.getBoundingClientRect();
+                  if (q.width > 0 && q.height > 0) ctl = Math.max(ctl, q.right);
+                  return;
+                }
+                n.childNodes.forEach(walk);
+              }
+            };
+            root.childNodes.forEach(walk);
+            const r = root.getBoundingClientRect();
+            const ccs = getComputedStyle(root);
+            const pad = r.left + root.clientLeft + root.clientWidth;
+            return { text, ctl, contentRight: pad - px(ccs.paddingRight), padRight: pad };
+          };
+          const cutOf = (x: Element) => {
+            const e = extent(x);
+            return Math.max(0, e.text - e.contentRight, e.ctl - e.padRight);
+          };
+          // the room the cell has to spare: how far its content stays short of the box it may use
+          const own = extent(td);
+          const avail = own.contentRight - (td.getBoundingClientRect().left + td.clientLeft + px(getComputedStyle(td).paddingLeft));
+          const room = Math.max(0, Math.min(own.text === -Infinity ? Infinity : own.contentRight - own.text, own.ctl === -Infinity ? Infinity : own.padRight - own.ctl));
+          // a box inside that clips its own content (an ellipsis) cuts it at its own edge
+          let cut = cutOf(td);
+          for (const x of td.querySelectorAll("*")) if (getComputedStyle(x).overflowX !== "visible" && !x.closest(".sr-only")) cut = Math.max(cut, cutOf(x));
+          cells.push({ i, cut, room, avail, text: (td.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 30) });
+        }
+        for (const x of cells) {
+          const c = cols.get(x.i) ?? { cut: 0, room: Infinity, where: "" };
+          if (x.cut > c.cut && !freeText.includes(label(x.i))) {
+            c.cut = x.cut;
+            c.where = `"${x.text}" content ${Math.round(x.avail + x.cut)}px in ${Math.round(x.avail)}px`;
+          }
+          c.room = Math.min(c.room, x.room);
+          cols.set(x.i, c);
+        }
+      }
+      for (const [i, c] of cols) {
+        if (c.cut <= 1.5) continue;
+        const donors = [...cols].filter(([j, d]) => j !== i && d.room >= c.cut && d.room !== Infinity).map(([j, d]) => `${label(j)} ${Math.round(d.room)}px`);
+        if (donors.length) out.push(`${label(i)} is cut off by ${Math.round(c.cut)}px (${c.where}) while ${donors.slice(0, 3).join(", ")} spare`);
+      }
+    }
+    return [...new Set(out)];
+  }, freeText);
+}
+
+/**
+ * rowCoverProblems is guard r as loaded: for every visible table, the elements of a row that lie over the
+ * text of another row (a badge, a switch, a wrapped chip that sticks out of its row), and rows whose boxes
+ * overlap. The pointer part is hoverRowProblems.
+ */
+export async function rowCoverProblems(page: Page): Promise<string[]> {
+  await page.evaluate(() => document.fonts.ready);
+  await installRowTexts(page);
+  return page.evaluate(() => {
+    const out: string[] = [];
+    const rowTexts = (window as unknown as { __tfRowTexts: (rows: Element[]) => Box[][] }).__tfRowTexts;
+    const name = (tr: Element, i: number) => ((tr.querySelector("td")?.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 30) || `row ${i}`);
+    // what an element shows: its box cut to the boxes that clip it (an ellipsis cell)
+    const shown = (e: Element, stop: Element): Box | null => {
+      const r = e.getBoundingClientRect();
+      let b: Box = { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+      for (let p = e.parentElement; p && p !== stop.parentElement; p = p.parentElement) {
+        const cs = getComputedStyle(p);
+        if (cs.overflowX === "visible" && cs.overflowY === "visible") continue;
+        const q = p.getBoundingClientRect();
+        b = { left: Math.max(b.left, q.left), right: Math.min(b.right, q.right), top: Math.max(b.top, q.top), bottom: Math.min(b.bottom, q.bottom) };
+      }
+      return b.right - b.left > 1 && b.bottom - b.top > 1 ? b : null;
+    };
+    for (const table of document.querySelectorAll("table")) {
+      if (!table.checkVisibility({ visibilityProperty: true }) || table.closest("dialog:not([open]), [hidden]")) continue;
+      const rows = [...table.tBodies].flatMap((b) => [...b.rows]).filter((tr) => tr.checkVisibility({ visibilityProperty: true }) && tr.getBoundingClientRect().height > 0);
+      if (rows.length < 2) continue;
+      const texts = rowTexts(rows);
+      const where = `table${table.dataset.table ? `[data-table=${table.dataset.table}]` : table.className ? "." + table.className.trim().split(/\s+/).join(".") : ""}`;
+      // a row and the one below it do not overlap (a tall cell or a negative margin)
+      for (let i = 0; i + 1 < rows.length; i++) {
+        const a = rows[i].getBoundingClientRect(), b = rows[i + 1].getBoundingClientRect();
+        if (a.bottom > b.top + 1 && a.top < b.bottom - 1 && getComputedStyle(rows[i]).display !== "contents") out.push(`${where}: row ${i} (${name(rows[i], i)}) overlaps row ${i + 1} (${name(rows[i + 1], i + 1)}) by ${Math.round(a.bottom - b.top)}px`);
+      }
+      // an element of row i that shows over the text of rows around it
+      rows.forEach((tr, i) => {
+        for (const e of tr.querySelectorAll("td *, th *")) {
+          if (e.closest(".sr-only, [hidden], .tip, .tooltip, details:not([open]) > :not(summary)") || !e.checkVisibility({ visibilityProperty: true })) continue;
+          const b = shown(e, tr);
+          if (!b) continue;
+          for (let j = Math.max(0, i - 2); j <= Math.min(rows.length - 1, i + 2); j++) {
+            if (j === i) continue;
+            for (const t of texts[j]) {
+              const w = Math.min(b.right, t.right) - Math.max(b.left, t.left), h = Math.min(b.bottom, t.bottom) - Math.max(b.top, t.top);
+              if (w > 1 && h > 1) out.push(`${where}: ${e.tagName.toLowerCase()}${typeof e.className === "string" && e.className.trim() ? "." + e.className.trim().split(/\s+/).join(".") : ""} in row ${i} (${name(tr, i)}) lies over the text of row ${j} (${name(rows[j], j)}) by ${Math.round(w)}x${Math.round(h)}`);
+            }
+          }
+        }
+      });
+    }
+    return [...new Set(out)].slice(0, 12);
+  });
+}
+
+/**
+ * hoverRowProblems is guard r with the pointer: on each of the first `rows` rows of every visible table and on
+ * every titled element of those rows (up to `perRow`), the bubble of the shared tooltip covers no other
+ * row's text. It uses hoverTip, the one routine that puts the pointer somewhere and reads the bubble.
+ */
+export async function hoverRowProblems(page: Page, rows = 2, perRow = 8): Promise<string[]> {
+  const tables = page.locator("table:visible");
+  const problems: string[] = [];
+  const n = await tables.count();
+  for (let t = 0; t < n; t++) {
+    const table = tables.nth(t);
+    const tag = `guard-r-${t}`;
+    // a table the guard can name: the hover helper selects the rows of a table by selector
+    const usable = await table.evaluate((e, tag) => {
+      const body = e.tBodies[0];
+      if (!body || body.rows.length < 2 || getComputedStyle(body.rows[0].cells[0] ?? e).display !== "table-cell") return false;
+      e.setAttribute("data-guard-r", tag);
+      return true;
+    }, tag);
+    if (!usable) continue;
+    let hovered = 0;
+    try {
+      const rowsSel = `table[data-guard-r="${tag}"] tbody tr`;
+      const trs = page.locator(rowsSel);
+      for (let i = 0; i < Math.min(rows, await trs.count()); i++) {
+        const targets: Locator[] = [trs.nth(i)];
+        const titled = trs.nth(i).locator("[title], [data-tip]");
+        const m = await titled.count();
+        for (let k = 0; k < m && targets.length <= perRow; k++) targets.push(titled.nth(k));
+        for (const target of targets) {
+          if (!(await target.isVisible())) continue;
+          const what = await target.evaluate((e) => `${e.tagName.toLowerCase()}${typeof e.className === "string" && e.className.trim() ? "." + e.className.trim().split(/\s+/)[0] : ""} in ${(e.closest("td") as HTMLElement | null)?.dataset.label ?? "row"}`);
+          // an element something else covers cannot be pointed at, and shows no bubble: it is skipped, not waited for
+          const r = await hoverTip(page, target, rowsSel, target === targets[0] ? { x: 20, y: 18 } : undefined, 10_000).catch((e) => (/Timeout/.test(String(e)) ? null : Promise.reject(e)));
+          if (!r) {
+            test.info().annotations.push({ type: "hover skipped", description: `table ${t} row ${i} ${what}: could not be pointed at within 10 s` });
+            continue;
+          }
+          hovered++;
+          if (r.covers.length) problems.push(`table ${t} row ${i} ${what}: the bubble "${r.tip?.text.slice(0, 40)}" ${Math.round(r.tip!.top)}-${Math.round(r.tip!.bottom)} covers ${r.covers.join(", ")}`);
+        }
+      }
+      // a pass that pointed at nothing proved nothing
+      if (hovered === 0) problems.push(`table ${t}: no row or titled element could be pointed at, so the bubble was never measured`);
+    } finally {
+      await page.mouse.move(0, 0);
+      await table.evaluate((e) => e.removeAttribute("data-guard-r"));
+    }
+  }
+  return problems;
+}
+
+/**
+ * expectTableGuards runs guards s and r (as loaded and with the pointer) on every table of the page, with
+ * `freeText` the labels of the columns guard s does not judge. A page and guard listed in knownLayoutIssues
+ * is reported as an annotation, as expectLayout does.
+ */
+export async function expectTableGuards(page: Page, name: string, freeText: string[] = []): Promise<void> {
+  const found: { guard: TableGuardId; what: string; offenders: string[] }[] = [];
+  const s = await cutCellProblems(page, freeText);
+  if (s.length) found.push({ guard: "s", what: "a cell is not cut off while another column has room to spare", offenders: s });
+  const r = [...(await rowCoverProblems(page)), ...(await hoverRowProblems(page))];
+  if (r.length) found.push({ guard: "r", what: "no element of one row over the text of another, also with the pointer on a row", offenders: r });
+  const red = withKnownIssues(name, ["s", "r"], found);
+  expect(red.length, guardReport(name, red)).toBe(0);
 }

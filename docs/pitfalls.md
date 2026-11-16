@@ -325,7 +325,13 @@ means nothing stops you: you have to know it. The full working rules are in
   pages broke between 720 and 1199 px, none seen on a desktop check.
 - **Rule:** check 375 px and tablet widths, not only 1280.
 - **Enforced:** layout guards in `e2e/tests/` (`tablet-guards.spec.ts`,
-  `layout-guard-words.spec.ts`, `whats-new-layout.spec.ts`).
+  `layout-guard-words.spec.ts`, `whats-new-layout.spec.ts`). Every page with a table runs the table guards at
+  1280 and 375 px (#821): `e2e/support/table-pages.ts` reads the tables from the templates, and
+  `table-pages.spec.ts` fails for a table that no page of its list shows, so a new table needs an entry in
+  `tablePages` (the page, and the steps that bring the table up). The Devices list also runs with a saved
+  column layout wider than the frame at 1290 px, the owner's window (`e2e/support/saved-layout.ts`, used by
+  `tablet-guards`, `pinned-overlap`, `columns` and `live-cell-swaps`): the default layout is the one a person
+  never has, and the three table defects of 0.36.0 (#805, #806, #811) showed only in a saved one.
 
 ### A tooltip over the next row, and a bubble for a name that fits (#811)
 
@@ -339,8 +345,10 @@ means nothing stops you: you have to know it. The full working rules are in
   `testdata/scan/*.html`, kept equal to the templates by `TestScanResultFixtures`; regenerate with
   `-update-scan-fixtures`) and `e2e/tests/pinned-overlap.spec.ts` for the Devices list (every titled
   element of two rows, the pinned Power, Status and Actions columns included). Both use `hoverTip` in
-  `e2e/support/layout.ts`. The Backups and Transactions tables run the same script but have no guard of
-  their own; a very long explanation (about 100 characters or more) in a dense row is not guarded.
+  `e2e/support/layout.ts`. Every other table gets the same check from guards s (a cell is not cut off while
+  another column has room to spare, titled or not) and r (no element of one row over the text of another, as
+  loaded and with the pointer on a row and its titled elements) in `e2e/support/layout.ts` (#821); a very long
+  explanation (about 100 characters or more) in a dense row is not guarded.
 
 ### A visible browser opened on the maintainer's desktop (2026-11-01)
 

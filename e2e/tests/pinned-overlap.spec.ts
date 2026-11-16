@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
-import { hoverTip } from "../support/layout";
+import { hoverTip, withKnownIssues } from "../support/layout";
+import { openSavedLayoutList, ownerWindow } from "../support/saved-layout";
 import { designAdmin } from "../support/seed";
 import { startVisualStack, type VisualStack } from "../support/visual-stack";
 
@@ -359,6 +360,16 @@ async function withSavedLayout(
   }
 }
 
+// #821: the owner's window. A layout saved by a person, wider than the frame at 1290 px, is not a layout the
+// menu builds in these tests (their windows are 1280 and 1440 px): the shared fixture saves it as a person's
+// layout and the same rule is checked on it.
+test(`a saved layout wider than the frame, ${ownerWindow} px (fixture): no column lies under a pinned column at either end of the scroll`, async ({ page }) => {
+  await openSavedLayoutList(page, stack.app.url, { width: ownerWindow });
+  await page.locator(".pwr").first().waitFor({ state: "attached", timeout: 20_000 });
+  await expect(page.locator("table[data-table=devices]")).toHaveClass(/tfix/);
+  await expect.poll(() => overlaps(page), { timeout: 5_000, message: "a column of the saved layout lies under a pinned column" }).toEqual([]);
+});
+
 // #790: in a saved layout that scrolls, the last column seen whole before the right pins is the one a person
 // most likely widens or narrows to see more. It must follow the pointer and the arrow keys like any other
 // column. An earlier fix for the column under the pins widened this one back to the pins' edge on every
@@ -493,11 +504,8 @@ for (const width of [1280, 1440]) {
 // bubble lay over the next row's text. The rule holds for every table, so it is checked on the Devices
 // list too: with the pointer on any titled element of the first rows, in the scrolling cells and in
 // the pinned columns (status pills, relay switches, row actions), the bubble covers no other row's text.
-test(`Devices list: the bubble of a titled cell or pinned control covers no other row's text`, async ({ page }) => {
-  test.setTimeout(400_000); // about 30 hovers, each waits for its bubble
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await page.setExtraHTTPHeaders(designAdmin);
-  await page.goto(stack.app.url + "/devices");
+/** titledBubbles puts the pointer on every titled element of rows 1 and 2 of the open Devices list and returns the bubbles that cover another row's text. */
+async function titledBubbles(page: Page): Promise<{ hovered: number; bad: string[] }> {
   const rows = page.locator("table[data-table=devices] tbody tr");
   await rows.first().waitFor();
   await page.locator(".pwr").first().waitFor({ state: "attached", timeout: 20_000 });
@@ -510,11 +518,38 @@ test(`Devices list: the bubble of a titled cell or pinned control covers no othe
       const el = titled.nth(i);
       if (!(await el.isVisible())) continue;
       const what = await el.evaluate((e) => `${e.tagName.toLowerCase()}.${String(e.className).trim().split(" ")[0]} in ${(e.closest("td") as HTMLElement | null)?.dataset.label ?? "?"}`);
-      const m = await hoverTip(page, el, "table[data-table=devices] tbody tr");
+      // on a layout that scrolls, an element can sit under a pinned column or outside the frame, where a pointer
+      // cannot reach it: it shows no bubble, so it is skipped (and listed), not waited for
+      const m = await hoverTip(page, el, "table[data-table=devices] tbody tr", undefined, 10_000).catch((e) => (/Timeout/.test(String(e)) ? null : Promise.reject(e)));
+      if (!m) {
+        test.info().annotations.push({ type: "hover skipped", description: `row ${row} ${what}: could not be pointed at within 10 s` });
+        continue;
+      }
       hovered++;
       if (m.covers.length) bad.push(`row ${row} ${what}: bubble "${m.tip?.text.slice(0, 40)}" ${Math.round(m.tip!.top)}-${Math.round(m.tip!.bottom)} covers ${m.covers.join(", ")}`);
     }
   }
+  return { hovered, bad };
+}
+
+test(`Devices list: the bubble of a titled cell or pinned control covers no other row's text`, async ({ page }) => {
+  test.setTimeout(400_000); // about 30 hovers, each waits for its bubble
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.setExtraHTTPHeaders(designAdmin);
+  await page.goto(stack.app.url + "/devices");
+  const { hovered, bad } = await titledBubbles(page);
   expect(hovered, "the rows carry titled elements").toBeGreaterThan(6);
   expect(bad).toEqual([]);
+});
+
+// #821: the same on the saved layout of the owner's window, where the columns beyond the frame scroll in and
+// the pinned ones keep their places.
+test(`Devices list, a saved layout at ${ownerWindow} px (fixture): the bubble of a titled cell or pinned control covers no other row's text`, async ({ page }) => {
+  test.setTimeout(400_000);
+  await openSavedLayoutList(page, stack.app.url, { width: ownerWindow });
+  const { hovered, bad } = await titledBubbles(page);
+  expect(hovered, "the rows carry titled elements").toBeGreaterThan(6);
+  // red on main: the bubble of the two-line OTA URL covers the row above (knownLayoutIssues names the issue)
+  const red = withKnownIssues(`devices list saved layout ${ownerWindow}px bubbles`, ["r"], bad.length ? [{ guard: "r", bad }] : []);
+  expect(red.flatMap((r) => r.bad)).toEqual([]);
 });

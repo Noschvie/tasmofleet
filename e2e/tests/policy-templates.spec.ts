@@ -1,15 +1,16 @@
 import { test, expect } from "../support/fixtures";
 import { App, Devenv, startApp, startDevenv, writeTasmoAdminDir, freePort } from "../support/stack";
+import { checkTablePage, tablePageCases } from "../support/table-pages";
 
 // The GPIO templates tab of the Policy page (#327) against the simulator fleet (devenv -template-shapes):
 // groups, the chosen reference, the preview that needs a tick, and a transaction that applies the
 // reference to the deviating plug and ends with the tab showing Matches.
 let app: App;
 let env: Devenv;
-test.beforeAll(async () => {
-  env = await startDevenv(["-template-shapes"]);
+async function startTemplatesStack(): Promise<{ app: App; env: Devenv }> {
+  const env = await startDevenv(["-template-shapes"]);
   const fwPort = await freePort();
-  app = await startApp({
+  const app = await startApp({
     env: {
       TASMOFLEET_FIRMWARE_LISTEN: `127.0.0.1:${fwPort}`,
       TASMOFLEET_FIRMWARE_BASE_URL: `http://127.0.0.1:${fwPort}`,
@@ -21,6 +22,10 @@ test.beforeAll(async () => {
     },
   });
   expect(app.cli(["import", "tasmoadmin", writeTasmoAdminDir(env.devices)])).toContain("created: tpl-nous-1");
+  return { app, env };
+}
+test.beforeAll(async () => {
+  ({ app, env } = await startTemplatesStack());
 });
 test.afterAll(async () => {
   await app?.stop();
@@ -219,4 +224,26 @@ test("templates tab: a verdict that changes between two reads moves no group and
   expect(await layout(page)).toEqual(before);
   await page.setViewportSize({ width: 800, height: 1000 });
   expect(await layout(page)).toEqual(beforeTablet);
+});
+
+// #821: the pin tables of the groups and the reference table of the preview page get the table layout
+// guards at 1280 and 375 px like every other table (the list of pages is support/table-pages.ts).
+// Why a stack of their own: the tests above apply templates and take a plug offline, so on their stack
+// "Apply reference" ends at "Nothing to apply" (no reference table) once they have run; the preview page
+// is only a table on the fleet as the simulator starts it.
+test.describe("table guards on a fresh stack", () => {
+  let fresh: { app: App; env: Devenv };
+  test.beforeAll(async () => {
+    fresh = await startTemplatesStack();
+  });
+  test.afterAll(async () => {
+    await fresh?.app.stop();
+    await fresh?.env.stop();
+  });
+  for (const { page: tp, width } of tablePageCases({ lamp: () => "" }, "templates")) {
+    test(`table page ${tp.name}: table guards at ${width}px`, async ({ page }) => {
+      test.setTimeout(240_000);
+      await checkTablePage(page, fresh.app.url, tp, width);
+    });
+  }
 });

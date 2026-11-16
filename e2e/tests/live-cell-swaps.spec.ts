@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
+import { openSavedLayoutList, ownerWide, ownerWindow } from "../support/saved-layout";
 import {
   App,
   Devenv,
@@ -185,7 +186,6 @@ test("a live cell swap does not run the document-wide select sync, a list reload
 // (the fit of the pinned columns measured the new table before it had its minimum width, so a second fit
 // at settle put them back): the owner saw a table that "refreshes constantly". A reload brings new values,
 // never a new layout: what the person looks at stays where it is.
-const lena = { "X-authentik-username": "lena", "X-authentik-groups": "adm" };
 // the owner's layout from the issue, with Last restart, OTA URL and Group topic shown, saved as the layout's
 // own pixel widths (b, tenths of a pixel in w): about 1700 px of columns, so at 1300 px the table scrolls
 // inside its frame
@@ -199,45 +199,15 @@ const wideLayout = {
 
 type Frame = { table: number; widths: string; pins: string; left: number; y: number; edges: string };
 
-async function openWideList(page: Page) {
-  await page.setViewportSize({ width: 1300, height: 600 });
-  await page.setExtraHTTPHeaders(lena);
-  await page.goto(app.url + "/devices");
-  await expect(page.locator("#devtable tbody tr").first()).toBeAttached({ timeout: 40_000 });
-  const status = await page.evaluate(async (doc) => {
-    const token = JSON.parse(document.body.getAttribute("hx-headers") ?? "{}")["X-CSRF-Token"];
-    const r = await fetch(`${document.body.getAttribute("data-prefs")}/table.devices`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-CSRF-Token": token },
-      body: JSON.stringify(doc),
-    });
-    return r.status;
-  }, wideLayout);
-  expect(status).toBe(204);
-  await page.goto(app.url + "/devices");
-  await expect(page.locator("#devtable tbody tr").first()).toBeAttached({ timeout: 40_000 });
-  await page.evaluate(() => document.fonts.ready);
-  // the fleet comes online and fills its cells: wait until the header widths stay put
-  let last = "";
-  await expect
-    .poll(
-      async () => {
-        const now = await page.evaluate(() =>
-          [...document.querySelectorAll("#devtable table[data-table=devices] thead th")].map((th) => th.getBoundingClientRect().width.toFixed(1)).join(","),
-        );
-        const same = now === last;
-        last = now;
-        return same;
-      },
-      { timeout: 30_000, intervals: [700] },
-    )
-    .toBe(true);
-  const frame = await page.evaluate(() => {
-    const f = document.querySelector<HTMLElement>("#devtable .tablescroll")!;
-    return { scroll: f.scrollWidth, client: f.clientWidth };
-  });
-  expect(frame.scroll, "the saved layout is wider than the frame").toBeGreaterThan(frame.client + 300);
-}
+// The saved layout is the shared fixture's (support/saved-layout.ts), at two windows: 1300 px with the layout above
+// (current format "b"), and the owner's 1290 px with the document the fixture saves (#821): the table scrolls
+// inside its frame in both, and every case below must hold in both.
+const wideCases = [
+  { width: 1300, doc: wideLayout },
+  { width: ownerWindow, doc: ownerWide },
+];
+type WideCase = (typeof wideCases)[number];
+const openWideList = (page: Page, c: WideCase) => openSavedLayoutList(page, app.url, c);
 
 // Records every frame from now until 300 ms after the next settle of #devtable (after `act`): which table
 // is on the page, the widths of all its header cells and of the pinned ones, the frame's sideways scroll and
@@ -304,80 +274,82 @@ const reload = (page: Page) =>
     window.htmx.trigger("#devtable", "sse:resync");
   });
 
-test("a list reload keeps the sideways scroll and draws the pinned columns at their widths in every frame (#806)", async ({ page }) => {
-  await openWideList(page);
-  // a page that scrolls down too: the list stays where the person is
-  await page.evaluate(() => {
-    document.querySelector<HTMLElement>("#devtable .tablescroll")!.scrollLeft = 200;
-    window.scrollTo(0, 120);
+for (const c of wideCases) {
+  test(`a list reload keeps the sideways scroll and draws the pinned columns at their widths in every frame (#806, ${c.width} px)`, async ({ page }) => {
+    await openWideList(page, c);
+    // a page that scrolls down too: the list stays where the person is
+    await page.evaluate(() => {
+      document.querySelector<HTMLElement>("#devtable .tablescroll")!.scrollLeft = 200;
+      window.scrollTo(0, 120);
+    });
+    const y = await page.evaluate(() => window.scrollY);
+    expect(y, "the page scrolls down at this height").toBeGreaterThan(0);
+    const frames = await framesAcrossReload(page, () => reload(page));
+    const tables = new Set(frames.map((f) => f.table));
+    expect(tables.size, "the reload replaced the table").toBeGreaterThan(1);
+    const swapped = frames.filter((f) => f.table !== frames[0].table);
+    expect(
+      [...new Set(swapped.map((f) => f.left))],
+      "the sideways scroll after the reload (every frame)",
+    ).toEqual([200]);
+    expect([...new Set(swapped.map((f) => f.y))], "the page's vertical scroll after the reload").toEqual([y]);
+    expect([...new Set(frames.map((f) => f.edges))], "the shaded edges, the same in every frame").toHaveLength(1);
+    expect(
+      [...new Set(frames.map((f) => f.widths))],
+      "distinct header widths from before the reload until after it settled",
+    ).toHaveLength(1);
   });
-  const y = await page.evaluate(() => window.scrollY);
-  expect(y, "the page scrolls down at this height").toBeGreaterThan(0);
-  const frames = await framesAcrossReload(page, () => reload(page));
-  const tables = new Set(frames.map((f) => f.table));
-  expect(tables.size, "the reload replaced the table").toBeGreaterThan(1);
-  const swapped = frames.filter((f) => f.table !== frames[0].table);
-  expect(
-    [...new Set(swapped.map((f) => f.left))],
-    "the sideways scroll after the reload (every frame)",
-  ).toEqual([200]);
-  expect([...new Set(swapped.map((f) => f.y))], "the page's vertical scroll after the reload").toEqual([y]);
-  expect([...new Set(frames.map((f) => f.edges))], "the shaded edges, the same in every frame").toHaveLength(1);
-  expect(
-    [...new Set(frames.map((f) => f.widths))],
-    "distinct header widths from before the reload until after it settled",
-  ).toHaveLength(1);
-});
 
-test("the fit of the pinned columns gives the same widths when it runs again (#806)", async ({ page }) => {
-  await openWideList(page);
-  // A swapped-in table has no minimum width yet; the fit sets it. Run twice from that state, the second fit
-  // must find nothing to change: one painted frame per fit with other widths was the flicker.
-  const runs = await page.evaluate(() => {
-    const t = document.querySelector<HTMLTableElement>("#devtable table[data-table=devices]")!;
-    const cols = () => [...t.querySelectorAll(":scope > colgroup > col")].map((c) => c.getAttribute("width")).join(",");
-    const fit = () => document.body.dispatchEvent(new CustomEvent("htmx:afterSettle", { bubbles: true }));
-    t.style.minWidth = "";
-    fit();
-    const once = { cols: cols(), min: t.style.minWidth };
-    fit();
-    return { once, twice: { cols: cols(), min: t.style.minWidth } };
+  test(`the fit of the pinned columns gives the same widths when it runs again (#806, ${c.width} px)`, async ({ page }) => {
+    await openWideList(page, c);
+    // A swapped-in table has no minimum width yet; the fit sets it. Run twice from that state, the second fit
+    // must find nothing to change: one painted frame per fit with other widths was the flicker.
+    const runs = await page.evaluate(() => {
+      const t = document.querySelector<HTMLTableElement>("#devtable table[data-table=devices]")!;
+      const cols = () => [...t.querySelectorAll(":scope > colgroup > col")].map((c) => c.getAttribute("width")).join(",");
+      const fit = () => document.body.dispatchEvent(new CustomEvent("htmx:afterSettle", { bubbles: true }));
+      t.style.minWidth = "";
+      fit();
+      const once = { cols: cols(), min: t.style.minWidth };
+      fit();
+      return { once, twice: { cols: cols(), min: t.style.minWidth } };
+    });
+    expect(runs.twice).toEqual(runs.once);
   });
-  expect(runs.twice).toEqual(runs.once);
-});
 
-test("a list reload during a column drag keeps the sideways scroll and the pinned widths (#806)", async ({ page }) => {
-  await openWideList(page);
-  await page.evaluate(() => {
-    document.querySelector<HTMLElement>("#devtable .tablescroll")!.scrollLeft = 200;
+  test(`a list reload during a column drag keeps the sideways scroll and the pinned widths (#806, ${c.width} px)`, async ({ page }) => {
+    await openWideList(page, c);
+    await page.evaluate(() => {
+      document.querySelector<HTMLElement>("#devtable .tablescroll")!.scrollLeft = 200;
+    });
+    // a handle in plain view: between the pinned groups
+    const box = await page.evaluate(() => {
+      const t = document.querySelector<HTMLTableElement>("#devtable table[data-table=devices]")!;
+      const on = (side: string, th: HTMLTableCellElement) => t.classList.contains(`p${side}${th.cellIndex + 1}`);
+      const ths = [...t.tHead!.rows[0].cells];
+      const left = Math.max(...ths.filter((th) => on("l", th)).map((th) => th.getBoundingClientRect().right));
+      const right = Math.min(...ths.filter((th) => on("r", th)).map((th) => th.getBoundingClientRect().left));
+      const h = ths
+        .filter((th) => !on("l", th) && !on("r", th))
+        .map((th) => th.querySelector(".colhandle"))
+        .map((el) => el && el.getBoundingClientRect())
+        .find((r) => r && r.width > 0 && r.left > left + 20 && r.right < right - 60)!;
+      return { x: h.x + h.width / 2, y: h.y + h.height / 2 };
+    });
+    await page.mouse.move(box.x, box.y);
+    await page.mouse.down();
+    await page.mouse.move(box.x + 30, box.y, { steps: 5 });
+    await expect(page.locator("body")).toHaveClass(/is-resizing/);
+    const left = await page.evaluate(() => document.querySelector<HTMLElement>("#devtable .tablescroll")!.scrollLeft);
+    const frames = await framesAcrossReload(page, () => reload(page));
+    await page.mouse.move(box.x + 40, box.y, { steps: 2 });
+    await page.mouse.up();
+    expect(new Set(frames.map((f) => f.table)).size, "the reload replaced the table").toBeGreaterThan(1);
+    const swapped = frames.filter((f) => f.table !== frames[0].table);
+    expect([...new Set(swapped.map((f) => f.left))], "the sideways scroll after the reload").toEqual([left]);
+    expect([...new Set(frames.map((f) => f.edges))], "the shaded edges, the same in every frame").toHaveLength(1);
+    expect([...new Set(frames.map((f) => f.pins))], "distinct widths of the pinned columns").toHaveLength(1);
+    // the new table is drawn at the widths being dragged, not at the saved ones until the pointer moves again
+    expect([...new Set(frames.map((f) => f.widths))], "distinct header widths, the dragged column's included").toHaveLength(1);
   });
-  // a handle in plain view: between the pinned groups
-  const box = await page.evaluate(() => {
-    const t = document.querySelector<HTMLTableElement>("#devtable table[data-table=devices]")!;
-    const on = (side: string, th: HTMLTableCellElement) => t.classList.contains(`p${side}${th.cellIndex + 1}`);
-    const ths = [...t.tHead!.rows[0].cells];
-    const left = Math.max(...ths.filter((th) => on("l", th)).map((th) => th.getBoundingClientRect().right));
-    const right = Math.min(...ths.filter((th) => on("r", th)).map((th) => th.getBoundingClientRect().left));
-    const h = ths
-      .filter((th) => !on("l", th) && !on("r", th))
-      .map((th) => th.querySelector(".colhandle"))
-      .map((el) => el && el.getBoundingClientRect())
-      .find((r) => r && r.width > 0 && r.left > left + 20 && r.right < right - 60)!;
-    return { x: h.x + h.width / 2, y: h.y + h.height / 2 };
-  });
-  await page.mouse.move(box.x, box.y);
-  await page.mouse.down();
-  await page.mouse.move(box.x + 30, box.y, { steps: 5 });
-  await expect(page.locator("body")).toHaveClass(/is-resizing/);
-  const left = await page.evaluate(() => document.querySelector<HTMLElement>("#devtable .tablescroll")!.scrollLeft);
-  const frames = await framesAcrossReload(page, () => reload(page));
-  await page.mouse.move(box.x + 40, box.y, { steps: 2 });
-  await page.mouse.up();
-  expect(new Set(frames.map((f) => f.table)).size, "the reload replaced the table").toBeGreaterThan(1);
-  const swapped = frames.filter((f) => f.table !== frames[0].table);
-  expect([...new Set(swapped.map((f) => f.left))], "the sideways scroll after the reload").toEqual([left]);
-  expect([...new Set(frames.map((f) => f.edges))], "the shaded edges, the same in every frame").toHaveLength(1);
-  expect([...new Set(frames.map((f) => f.pins))], "distinct widths of the pinned columns").toHaveLength(1);
-  // the new table is drawn at the widths being dragged, not at the saved ones until the pointer moves again
-  expect([...new Set(frames.map((f) => f.widths))], "distinct header widths, the dragged column's included").toHaveLength(1);
-});
+}
