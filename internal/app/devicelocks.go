@@ -212,7 +212,7 @@ func (l lockedOTA) Preview(ctx context.Context, reqs []ota.Request) ([]ota.Previ
 	for i, it := range items {
 		if r, ok := reasons[it.DeviceID]; ok {
 			items[i].Decision, items[i].Reason = "refuse", r
-			items[i].BuildChoice, items[i].LanguageChoice = false, false // a choice cannot lift this refusal
+			items[i].BuildChoice, items[i].LanguageChoice, items[i].VariantChoice = false, false, false // a choice cannot lift this refusal
 		}
 	}
 	return items, nil

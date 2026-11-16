@@ -1411,6 +1411,24 @@ func TestPreviewFlagsABuildChoice(t *testing.T) {
 	}
 }
 
+// Why: a device that runs a vendor build is refused until the person names a variant (safety rule 1);
+// the preview must say it is that kind of refusal, on any chip (an ESP8266 has no build to choose), so
+// the page can point to the variant override. A variant or language change of a build that can be kept
+// needs no override and must not claim one.
+func TestPreviewFlagsAVariantChoice(t *testing.T) {
+	h := newHarness(t, 2, plugDevice(), plugDevice())
+	h.sel.selectErr = fmt.Errorf("select: device runs unknown: %w", fwselect.ErrVariantChoiceNeeded)
+	items, err := h.e.Preview(context.Background(), []Request{{DeviceID: 1, Release: "16.0.0"}})
+	if err != nil || items[0].Decision != decisionRefuse || !items[0].VariantChoice || items[0].BuildChoice {
+		t.Fatalf("items %+v err %v", items, err)
+	}
+	h.sel.selectErr = fwselect.ErrVariantChange
+	items, err = h.e.Preview(context.Background(), []Request{{DeviceID: 2, Release: "16.0.0"}})
+	if err != nil || items[0].Decision != decisionRefuse || items[0].VariantChoice {
+		t.Fatalf("a plain variant change offers the override: %+v err %v", items, err)
+	}
+}
+
 // Why: the build is chosen once, at submit; the job must carry it through planning, the guard
 // re-runs (a restart resumes from the stored job alone) and a retry.
 func TestBuildTravelsWithTheJob(t *testing.T) {

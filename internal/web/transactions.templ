@@ -597,10 +597,10 @@ templ updatePreviewPage(p previewPage, csrf string) {
 							</span>
 							if r.LanguageChoice {
 								<span class="upd-prow-why" title={ r.Item.Reason }>The device does not report a language build TasmoFleet knows, and the wrong one would change the device's language.</span>
+							} else if r.Item.VariantChoice {
+								<span class="upd-prow-why" title={ r.Item.Reason }>{ r.VariantChoiceText() }</span>
 							} else if len(r.BuildOptions) > 0 && r.Build == "" {
 								<span class="upd-prow-why">This chip has two builds that cannot be told apart from the device.</span>
-							} else if len(r.BuildOptions) > 0 {
-								<span class="upd-prow-why" title={ r.Item.Reason }>This device runs a custom or unrecognised firmware, which is only replaced on request: go Back and enter the variant override "tasmota", then choose the build.</span>
 							} else {
 								<span class="upd-prow-why" title={ r.Item.Reason }>{ humanReason(r.Item.Reason) }</span>
 							}

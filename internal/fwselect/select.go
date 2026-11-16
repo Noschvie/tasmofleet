@@ -33,12 +33,19 @@ func selectFile(id model.Identity, c Choice) (Selection, error) {
 	if lang == LanguageEnglish {
 		lang = ""
 	}
-	if c.Variant == "" && !esp8266Variants[id.Variant] && !esp32Variants[id.Variant] {
+	keepable := esp8266Variants[id.Variant] || esp32Variants[id.Variant]
+	if c.Variant == "" && !keepable {
 		// minimal, safeboot, unknown: there is no build to keep.
-		return Selection{}, fmt.Errorf("select: device runs %q, choose a variant: %w", id.Variant, ErrVariantChange)
+		return Selection{}, fmt.Errorf("select: device runs %q: %w", id.Variant, ErrVariantChoiceNeeded)
 	}
 	if (variant != id.Variant || lang != id.Language) && !c.AllowVariantChange {
-		return Selection{}, fmt.Errorf("select: %s/%s -> %s/%s: %w", id.Variant, id.Language, variant, lang, ErrVariantChange)
+		// Same keep rule as above: from a build that cannot be kept (an S2 whose variant a chosen build
+		// only implies, a variant named without the permission) the way out is the explicit variant.
+		cause := ErrVariantChange
+		if !keepable {
+			cause = ErrVariantChoiceNeeded
+		}
+		return Selection{}, fmt.Errorf("select: %s/%s -> %s/%s: %w", id.Variant, id.Language, variant, lang, cause)
 	}
 	if lang != "" && (variant != variantTasmota || !isLanguage(lang)) {
 		return Selection{}, fmt.Errorf("select: variant %q with language %q: %w", variant, lang, ErrNoSuchVariant)

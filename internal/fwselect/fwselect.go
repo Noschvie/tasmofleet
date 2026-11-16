@@ -50,6 +50,14 @@ var (
 	// It is an ErrUnknownHardware, so every caller that refuses on that keeps
 	// refusing; the UI additionally offers BuildOptions.
 	ErrBuildChoiceNeeded = fmt.Errorf("fwselect: this chip has two builds that report the same image name, choose one: %w", ErrUnknownHardware)
+
+	// ErrVariantChoiceNeeded is the ErrVariantChange for a device whose running firmware is not one
+	// TasmoFleet can keep (a custom or vendor build, minimal, safeboot): there is no variant to keep,
+	// so the person has to name one (Choice.Variant with AllowVariantChange). It is an ErrVariantChange,
+	// so every caller that refuses on that keeps refusing; the preview additionally says where the
+	// choice is made. A change of a keepable variant or language stays a plain ErrVariantChange: that
+	// refusal needs no override.
+	ErrVariantChoiceNeeded = fmt.Errorf("fwselect: the running firmware is custom or unrecognised, choose a variant: %w", ErrVariantChange)
 )
 
 // LanguageEnglish in Choice.Language explicitly selects the English build.

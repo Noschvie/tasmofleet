@@ -1,6 +1,7 @@
 package fwselect
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/hellwand/tasmofleet/internal/model"
@@ -332,4 +333,49 @@ func TestGuardLanguageUnknown(t *testing.T) {
 		{name: "unread language, explicit english", id: unread, a: artTasmota, c: Choice{Release: rel, Language: LanguageEnglish}},
 		{name: "unread language, minimal stage", id: unread, a: artMinimal, c: keepChoice, want: ErrLanguageUnknown},
 	})
+}
+
+// TestVariantChoiceNeeded: a device that runs a firmware TasmoFleet cannot keep (a vendor build,
+// minimal, safeboot) is refused until the person names a variant (safety rule 1). The refusal must say
+// so as its own kind, so the preview can tell the person where to make the choice; but a refusal that
+// needs no override (a language or variant change of a build that can be kept) must not claim it, or
+// the page would send people to a field they do not need. Both stay ErrVariantChange.
+func TestVariantChoiceNeeded(t *testing.T) {
+	soloUnknown := model.Identity{Family: model.ChipESP32, Hardware: "ESP32-S0WD", SingleCore: true, Version: "15.0.0", Image: "release-tasmota32", Variant: "unknown", LanguageKnown: true}
+	p4Unknown := ident(model.ChipESP32P4, "ESP32-P4 v1.0", "release-tasmota32", "unknown", "")
+	tests := []struct {
+		name string
+		id   model.Identity
+		c    Choice
+		want bool // ErrVariantChoiceNeeded
+	}{
+		{name: "esp8266 vendor build", id: idUnknownV, c: Choice{Release: rel}, want: true},
+		{name: "esp8266 minimal", id: idMinimal, c: Choice{Release: rel}, want: true},
+		{name: "esp32 safeboot", id: idSafeboot, c: Choice{Release: rel}, want: true},
+		{name: "single-core esp32 reporting tasmota32", id: soloUnknown, c: Choice{Release: rel}, want: true},
+		{name: "p4 reporting tasmota32", id: p4Unknown, c: Choice{Release: rel}, want: true},
+		{name: "variant named but not allowed", id: idMinimal, c: Choice{Release: rel, Variant: "tasmota"}, want: true},
+		{name: "s2 custom bare tag, build chosen, variant only implied", id: idS2Bare, c: buildChoice("s2"), want: true},
+		{name: "s2 custom image, build chosen, variant only implied", id: idS2Custom, c: buildChoice("s2cdc"), want: true},
+		{name: "keepable variant changed without permission", id: idESP8266, c: Choice{Release: rel, Variant: "sensors"}},
+		{name: "keepable language changed without permission", id: idESP8266, c: Choice{Release: rel, Language: "DE"}},
+		{name: "keepable esp32 variant changed without permission", id: idESP32, c: Choice{Release: rel, Variant: "lvgl"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Select(tt.id, tt.c)
+			if !errors.Is(err, ErrVariantChange) {
+				t.Fatalf("err = %v, want a refusal that is an ErrVariantChange", err)
+			}
+			if got := errors.Is(err, ErrVariantChoiceNeeded); got != tt.want {
+				t.Errorf("ErrVariantChoiceNeeded = %v, want %v (err: %v)", got, tt.want, err)
+			}
+		})
+	}
+	// The override the page points to must work: the same devices are not refused with it.
+	for _, id := range []model.Identity{idUnknownV, idMinimal, idSafeboot, soloUnknown} {
+		if _, err := Select(id, Choice{Release: rel, Variant: "tasmota", AllowVariantChange: true}); err != nil {
+			t.Errorf("%s/%s with the explicit variant: %v", id.Family, id.Variant, err)
+		}
+	}
 }

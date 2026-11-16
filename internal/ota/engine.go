@@ -318,6 +318,10 @@ type PreviewItem struct {
 	// BuildChoice is set when the refusal is fwselect.ErrBuildChoiceNeeded (or an S2's variant change): the
 	// user may choose a build (fwselect.BuildOptions of the device) and recheck.
 	BuildChoice bool
+	// VariantChoice is set when the refusal is fwselect.ErrVariantChoiceNeeded: the device runs a custom or
+	// unrecognised firmware that is only replaced on request, and the person names the variant (the
+	// variant override of the update form) before the update can go ahead. Any chip family.
+	VariantChoice bool
 	// Delivery is what the job would use: a push request falls back to the
 	// download for a device that cannot take an upload, and DeliveryNote
 	// says why ("" when the request is kept).
@@ -580,6 +584,7 @@ func (e *Engine) previewDevice(ctx context.Context, d model.Device, r Request) P
 		if errors.Is(err, fwselect.ErrBuildChoiceNeeded) || (ident.Family == model.ChipESP32S2 && errors.Is(err, fwselect.ErrVariantChange)) {
 			it.BuildChoice = true
 		}
+		it.VariantChoice = errors.Is(err, fwselect.ErrVariantChoiceNeeded)
 		it.LanguageChoice = errors.Is(err, fwselect.ErrLanguageUnknown)
 		return it
 	}

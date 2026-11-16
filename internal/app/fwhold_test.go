@@ -49,7 +49,7 @@ type previewOTA struct{ countingOTA }
 func (previewOTA) Preview(_ context.Context, reqs []ota.Request) ([]ota.PreviewItem, error) {
 	var out []ota.PreviewItem
 	for _, r := range reqs {
-		out = append(out, ota.PreviewItem{DeviceID: r.DeviceID, Decision: "upgrade", BuildChoice: true})
+		out = append(out, ota.PreviewItem{DeviceID: r.DeviceID, Decision: "upgrade", BuildChoice: true, LanguageChoice: true, VariantChoice: true})
 	}
 	return out, nil
 }
@@ -69,8 +69,8 @@ func TestUpdateIsRefusedWhileATypedUpgradeStillRuns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if items[0].Decision != "refuse" || !strings.Contains(items[0].Reason, "3 min ago") || !strings.Contains(items[0].Reason, "wait until it has restarted") || items[0].BuildChoice {
-		t.Errorf("held device must be refused with the reason and no build choice: %+v", items[0])
+	if items[0].Decision != "refuse" || !strings.Contains(items[0].Reason, "3 min ago") || !strings.Contains(items[0].Reason, "wait until it has restarted") || items[0].BuildChoice || items[0].LanguageChoice || items[0].VariantChoice {
+		t.Errorf("held device must be refused with the reason and no choice (build, language, variant) that cannot lift it: %+v", items[0])
 	}
 	if items[1].Decision != "upgrade" {
 		t.Errorf("the other device is not affected: %+v", items[1])

@@ -585,7 +585,7 @@ func TestTransactionRowShowsTheChosenBuild(t *testing.T) {
 func TestPreviewOnlyS2NeedsAChoiceNotADeadEnd(t *testing.T) {
 	e, o, _, _ := setupOTA(t)
 	e.inv.devs[4] = model.Device{ID: 4, Name: "s2-board", Address: "10.0.0.4", Identity: model.Identity{LanguageKnown: true, Family: model.ChipESP32S2, Hardware: "ESP32-S2", Version: "16.0.0", Variant: "unknown", Image: "tasmota32"}}
-	o.items[4] = ota.PreviewItem{DeviceID: 4, Decision: "refuse", Reason: "select: variant change", BuildChoice: true}
+	o.items[4] = ota.PreviewItem{DeviceID: 4, Decision: "refuse", Reason: "select: variant change", BuildChoice: true, VariantChoice: true}
 	form := url.Values{"id": {"4"}, "release": {"16.1.0"}, "policy": {"only-newer"}}
 	_, body := e.do(t, "POST", "/updates/preview", "operator", form)
 	if !strings.Contains(body, "Choose a build above, then recheck.") || strings.Contains(body, "No device can be updated") {
@@ -595,6 +595,31 @@ func TestPreviewOnlyS2NeedsAChoiceNotADeadEnd(t *testing.T) {
 	_, body = e.do(t, "POST", "/updates/preview", "operator", form)
 	if !strings.Contains(body, `value="s2" form="recheck" checked`) || !strings.Contains(body, "custom or unrecognised firmware") {
 		t.Fatalf("refused with a build: %s", body)
+	}
+}
+
+// Why (#889): a vendor build on an ESP8266 (tasmota-NOUS_A1T_DE) is refused until the person names a
+// variant (safety rule 1), and the person who hit it (#872) did not know what to do. Every refused
+// unknown variant must name the variant override, as the ESP32-S2 row does, but an ESP8266 has no build
+// to choose: no radios, no "choose the build". A refusal that is not a variant choice keeps its reason.
+func TestPreviewNamesTheVariantChoiceForAnEsp8266(t *testing.T) {
+	e, o, _, _ := setupOTA(t)
+	e.inv.devs[4] = model.Device{ID: 4, Name: "nous-plug", Address: "10.0.0.4", Identity: model.Identity{LanguageKnown: true, Family: model.ChipESP8266, Hardware: "ESP8285", Version: "15.0.0", Variant: "unknown", Image: "NOUS_A1T_DE"}}
+	o.items[4] = ota.PreviewItem{DeviceID: 4, Decision: "refuse", Reason: "select: device runs \"unknown\": fwselect: choose a variant", VariantChoice: true}
+	form := url.Values{"id": {"4"}, "release": {"16.1.0"}, "policy": {"only-newer"}}
+	_, body := e.do(t, "POST", "/updates/preview", "operator", form)
+	for _, want := range []string{"custom or unrecognised firmware", "go Back and enter the variant override", "tasmota"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("preview lacks %q: %s", want, body)
+		}
+	}
+	if strings.Contains(body, "then choose the build") || strings.Contains(body, "Choose the build") {
+		t.Fatalf("an ESP8266 has no build to choose: %s", body)
+	}
+	o.items[4] = ota.PreviewItem{DeviceID: 4, Decision: "refuse", Reason: "select: device runs a firmware nobody expected"}
+	_, body = e.do(t, "POST", "/updates/preview", "operator", form)
+	if strings.Contains(body, "variant override") || !strings.Contains(body, "Device runs a firmware nobody expected") {
+		t.Fatalf("a refusal that is no variant choice must show its own reason: %s", body)
 	}
 }
 

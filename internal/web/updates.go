@@ -529,6 +529,17 @@ func (r previewRow) LanguageName() string {
 	return "language_" + strconv.FormatInt(int64(r.Device.ID), 10)
 }
 
+// VariantChoiceText explains a refusal that only the variant override lifts (fwselect.ErrVariantChoiceNeeded):
+// the device runs a firmware TasmoFleet does not replace unasked. Only a chip with build options also
+// needs the build chosen.
+func (r previewRow) VariantChoiceText() string {
+	t := `This device runs a custom or unrecognised firmware, which is only replaced on request: go Back and enter the variant override "tasmota"`
+	if len(r.BuildOptions) > 0 {
+		t += ", then choose the build"
+	}
+	return t + "."
+}
+
 // PathText says how the update reaches the device when that is not the plain HTTP download: over MQTT,
 // with the reason, or the reason there is no path. "" for the usual HTTP rows.
 func (r previewRow) PathText() string {
