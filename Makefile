@@ -267,18 +267,39 @@ e2e-deps:
 # in separate jobs (#474): the chromium shards set E2E_MQTT=0, the "mqtt" job E2E_CHROMIUM=0.
 E2E_MQTT ?= 1
 E2E_CHROMIUM ?= 1
+# playwright-both takes the arguments of the main pass ($(1)) and, optionally, a shell fragment ($(2)) that runs
+# first and may set $$specs: spec files (relative to e2e/) to run completely in a second pass over the same
+# projects. That pass keeps @quarantine out and passes with no tests: a changed file can belong to another
+# project (visual, docs, demo), and a shard can get none of the files. Both passes run, the target fails if any failed.
 define playwright-both
-	@rc=0; \
+	@rc=0; specs=; $(2) \
 	if [ "$(E2E_CHROMIUM)" = 1 ]; then (cd e2e && npx playwright test --project=chromium $(1) $(E2E_ARGS)) || rc=1; fi; \
 	if [ "$(E2E_MQTT)" = 1 ]; then (cd e2e && npx playwright test --project=mqtt $(1) $(E2E_MQTT_ARGS)) || rc=1; fi; \
+	if [ -n "$$specs" ]; then \
+	  echo "e2e: changed specs, run completely:$$specs"; \
+	  if [ "$(E2E_CHROMIUM)" = 1 ]; then (cd e2e && npx playwright test --project=chromium --grep-invert @quarantine --pass-with-no-tests $$specs $(E2E_ARGS)) || rc=1; fi; \
+	  if [ "$(E2E_MQTT)" = 1 ]; then (cd e2e && npx playwright test --project=mqtt --grep-invert @quarantine --pass-with-no-tests $$specs $(E2E_MQTT_ARGS)) || rc=1; fi; \
+	fi; \
 	exit $$rc
+endef
+
+# With BASE (CI sets it on a PR) the spec files changed since the merge base run completely in a second pass,
+# @core tests included, in file order (#820: a @core test that leaves state behind breaks the next test of its
+# file, #796). A deleted file drops out (-f), a renamed one counts under its new name. This deviates on purpose
+# from tools/changed-files.sh's contract ("no merge base: everything changed", which safety-race follows): the
+# fallback here would be the whole suite or silence, so a BASE without a merge base fails.
+define e2e-changed-specs
+if [ -n "$(BASE)" ]; then \
+  changed=$$(CHANGED_BASE="$(BASE)" tools/changed-files.sh) || { echo "e2e-core: no merge base with BASE=$(BASE), cannot tell which specs changed" >&2; exit 1; }; \
+  for f in $$(echo "$$changed" | sed -n 's#^e2e/\(tests/[^/]*\.spec\.ts\)$$#\1#p'); do [ -f "e2e/$$f" ] && specs="$$specs $$f"; done; \
+fi;
 endef
 
 e2e: build
 	$(call playwright-both,--grep-invert @quarantine)
 
 e2e-core: build
-	$(call playwright-both,--grep @core --grep-invert @quarantine)
+	$(call playwright-both,--grep @core --grep-invert @quarantine,$(e2e-changed-specs))
 
 e2e-quarantine: build
 	cd e2e && npx playwright test --project=chromium --grep @quarantine --retries=2 --pass-with-no-tests $(E2E_ARGS)

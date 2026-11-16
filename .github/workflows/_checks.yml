@@ -136,6 +136,9 @@ jobs:
       - name: install make (not in the Playwright image)
         run: apt-get update -qq && apt-get install -y -qq --no-install-recommends make >/dev/null
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # A PR (base set) needs the merge base to find the e2e specs it changed (#820); the nightly needs no history.
+          fetch-depth: ${{ inputs.base != '' && 0 || 1 }}
       # The job container runs as root on a workspace owned by the runner user;
       # without this git refuses the repository and go build cannot stamp VCS info.
       - name: trust the workspace
@@ -161,15 +164,18 @@ jobs:
           CI: "true"
           TARGET: ${{ inputs.e2e == 'all' && 'e2e' || 'e2e-core' }}
           SHARD: ${{ matrix.shard }}
+          # e2e-core runs the spec files the PR changed completely next to the @core tests (#820); the target
+          # "e2e" runs everything and ignores it.
+          BASE: ${{ inputs.base }}
         run: |
           # One worker per two cores: every worker runs its own app, simulator
           # fleet and browser, and more made layout and timing tests flaky.
           n=$(( $(nproc) / 2 )); [ "$n" -lt 1 ] && n=1
           # The MQTT specs are not sharded: the job "mqtt" runs them once and the shards run none.
           if [ "$SHARD" = mqtt ]; then
-            E2E_WORKERS=$n make "$TARGET" E2E_CHROMIUM=0 E2E_MQTT=1
+            E2E_WORKERS=$n make "$TARGET" BASE="$BASE" E2E_CHROMIUM=0 E2E_MQTT=1
           else
-            E2E_WORKERS=$n make "$TARGET" E2E_ARGS="--shard=$SHARD" E2E_MQTT=0
+            E2E_WORKERS=$n make "$TARGET" BASE="$BASE" E2E_ARGS="--shard=$SHARD" E2E_MQTT=0
           fi
       - name: upload Playwright report on failure
         if: failure()

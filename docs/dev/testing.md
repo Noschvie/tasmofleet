@@ -7,6 +7,7 @@ Part of the working guide: start at [CLAUDE.md](../../CLAUDE.md).
 | FAST tier, everything but e2e (run before every commit)                   | `make check`                                                                  |
 | inner loop between two edits (not a gate)                                 | `make quick`                                                                  |
 | FAST tier, the `@core` e2e tests                                          | `make e2e-core`                                                               |
+| same, plus every e2e spec file you changed, in full (as a PR runs it)     | `make e2e-core BASE=origin/main`                                              |
 | FAST tier, a safety package changed (race + diff coverage + revert check) | `make safety BASE=origin/main`                                                |
 | every changed SAFETY line is executed by a test                           | `make diff-cover BASE=origin/main`                                            |
 | the tests you changed fail without your production change                 | `make revert-check BASE=origin/main`                                          |

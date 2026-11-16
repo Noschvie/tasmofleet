@@ -20,6 +20,8 @@ SAFETY package, catalogue, image paths). Every gate runs through the Makefile.
 
 - **FAST** (`pr.yml`; `required` must be green to merge, target ≤ 5 min):
   lint, unit and integration tests, build, and the `@core` e2e tests in two shards plus the MQTT specs in a job of their own.
+  Every e2e spec file the PR adds or changes (`e2e/tests/*.spec.ts`) runs completely on top of that, `@core` tests included, in file order (#820; see
+  "Changed e2e specs" below).
   When a PR changes a package listed in `SAFETY` (Makefile: fwselect, ota, tasmota, secretbox, auth, httpx,
   policy, cmdpolicy, mqttcmd, transport, restore), the race tests of the changed ones and diff coverage (`make diff-cover`) run too, and are then
   required. Every PR that changes Go code also runs the revert check (`make revert-check`). There is no mutation testing in the PR path (#555);
@@ -67,6 +69,24 @@ SAFETY package, catalogue, image paths). Every gate runs through the Makefile.
   the chip-family and OTA-exclusion refusals in the UI, device writes (console, settings, restore, make
   compliant). Tag with `test("title", { tag: "@core" }, ...)`. Layout, visual and component checks stay in
   FULL. Add a test to core when it guards a safety rule or the main path; keep the core run short.
+- **Changed e2e specs (PR)**: `make e2e-core BASE=<sha>` runs, after the `@core` pass, a second Playwright pass over the
+  spec files that differ from the merge base with `BASE` (`tools/changed-files.sh`: committed, staged, unstaged and untracked), in the
+  projects of the job: the two chromium shards split them with `--shard`, the `mqtt` job runs a changed MQTT spec. `pr.yml` passes the PR
+  base sha through `_checks.yml`, which then checks out the full history; the nightly passes none and runs `make e2e`.
+  A file runs in one worker in file order (no `fullyParallel`), which is what makes order dependence between its tests
+  show up before the merge (#796); different changed files may run in parallel workers. The pass skips `@quarantine` tests and
+  passes when a shard gets none of the files. A deleted spec is not run, a renamed one runs under its new name. Without
+  `BASE` (the local default) only `@core` runs. A `BASE` without a merge base fails the target: `tools/changed-files.sh` then
+  says "everything changed" and `safety-race` runs everything, but here that would be the whole suite or silence (the #820 hole).
+  A changed `visual`, `docs` or `demo` spec runs nothing extra (those projects are not in the PR tier); a change to
+  `e2e/support/` or `e2e/playwright.config.ts` selects no spec. One spec locally: `cd e2e && npx playwright test tests/x.spec.ts`.
+  The second pass lives in the existing e2e jobs inside `checks`, so it is part of `required`. A job that exceeds its
+  `timeout-minutes: 30` fails the PR (split the PR; the limit is not raised). The cost is the changed files' test time on top of
+  the `@core` run. From the test durations of the nightly of 2026-11-16 (sums of test times, not wall time): a PR that changes
+  `add-devices-list.spec.ts` adds about 5 s, one that changes `live-cell-swaps` and `pinned-overlap` about 3.7 min
+  (`pinned-overlap` alone is 203 s and runs in one worker, so a PR that changes it leaves the 5 min target of the tier), one that changes
+  the four MQTT specs about 2.3 min in the `mqtt` job. A PR that touches almost every spec approaches the full suite (the nightly:
+  528 to 694 s per third), roughly 17 to 21 min in two shards, still inside the 30.
 - **Quarantine**: a test that fails without a code cause gets a GitHub issue (label `flaky`, failure evidence)
   and is quarantined: Playwright tag `@quarantine`, or `quarantine.Test(t, "<issue URL>")` from
   `internal/testutil/quarantine` for Go tests. Quarantined tests run only in the `quarantine` job of `nightly.yml`,
