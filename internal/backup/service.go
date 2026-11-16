@@ -205,6 +205,9 @@ func (m *Manager) finishBackup(ctx context.Context, actor string, owner, dev mod
 	if via == "" {
 		via = tr.Via()
 	}
+	if err == nil {
+		Record(ctx, via, rep.files) // the caller words the result from what was measured here, not from its own trace (#926)
+	}
 	detail := map[string]any{"files": len(out), "firmware": version, "trigger": run.Trigger, "via": via}
 	if len(rep.httpSide) > 0 {
 		detail["http_side"] = rep.httpSide // the files cannot come over MQTT: the MAC check, the file system and the files go over HTTP
@@ -282,6 +285,7 @@ type runReport struct {
 	filesErr string   // the files archive could not be written or indexed; the run succeeded
 	via      string   // the transport of the dump and its status snapshot ("" when the run ended before the dump)
 	httpSide []string // the HTTP calls made beside a dump over MQTT (the files cannot come over MQTT)
+	files    string   // the transport of the files archive, set only once the archive is stored ("" otherwise)
 }
 
 // filesLost records that the files archive could not be stored. The run goes on: the archive is
@@ -393,6 +397,9 @@ func (m *Manager) backup(ctx context.Context, owner, dev model.Device, note stri
 		}
 		b.ID = bid
 		stored = append(stored, b)
+		if f.kind == model.BackupFiles {
+			rep.files = fr.via // the archive is stored: the result may name how it came
+		}
 		unlock() // the directory is claimed once a row points into it
 	}
 	return stored, fwVersion, nil

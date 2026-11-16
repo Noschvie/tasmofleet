@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -66,11 +67,17 @@ type routedBackups struct {
 }
 
 func (b routedBackups) Backup(ctx context.Context, _ string, id model.DeviceID) ([]model.Backup, error) {
+	dctx, dump := transport.WithTrace(ctx)
 	if b.r != nil {
-		if _, err := b.r.DownloadConfig(ctx, tasmota.TargetFor(model.Device{ID: id, Address: "192.0.2.1"})); err != nil {
+		if _, err := b.r.DownloadConfig(dctx, tasmota.TargetFor(model.Device{ID: id, Address: "192.0.2.1"})); err != nil {
 			return nil, err
 		}
 	}
+	files := ""
+	if slices.Contains(b.kinds, model.BackupFiles) {
+		files = "http" // the files cannot come over MQTT: the Manager reads them over HTTP whatever carried the dump
+	}
+	backup.Record(ctx, dump.Via(), files)
 	out := make([]model.Backup, 0, len(b.kinds))
 	for i, k := range b.kinds {
 		out = append(out, model.Backup{ID: model.BackupID(i + 1), DeviceID: id, Kind: k})
@@ -114,8 +121,36 @@ func TestBackUpOnTheDevicePageSaysWhatTheBackupHolds(t *testing.T) {
 				t.Fatalf("redirect %q", loc)
 			}
 			_, page := e.do(t, "GET", strings.TrimPrefix(loc, "/tf"), "admin", nil)
-			if want := "Backup taken over MQTT (config, status, decoded, files)."; !strings.Contains(page, want) {
+			if want := "Backup taken over MQTT, files over HTTP (config, status, decoded, files)."; !strings.Contains(page, want) {
 				t.Errorf("the page lacks %q:\n%s", want, page)
+			}
+		})
+	}
+}
+
+// Why (#926, live test of 0.39.0): the toast said "over MQTT" for a run whose dump went over MQTT and
+// whose files were read over HTTP, which hid the one HTTP exception of a backup from the person who
+// pressed the button. Each part names its own transport, from what the run measured. A dump over HTTP
+// has its files over HTTP too: one transport is said once; and a dump over MQTT without a stored files
+// archive says nothing about files, since none travelled.
+func TestBackUpToastNamesTheTransportOfTheDumpAndOfTheFiles(t *testing.T) {
+	cfg, snap := model.BackupConfigDump, model.BackupSnapshot
+	for _, tc := range []struct {
+		name  string
+		r     *transport.Router
+		kinds []model.BackupKind
+		want  string
+	}{
+		{"dump over MQTT, files over HTTP", mqttRouter(), allParts, "Backup taken over MQTT, files over HTTP (config, status, decoded, files)."},
+		{"dump over MQTT, no files stored", mqttRouter(), []model.BackupKind{cfg, snap}, "Backup taken over MQTT (config, status)."},
+		{"dump and files over HTTP", nil, allParts, "Backup taken over HTTP (config, status, decoded, files)."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := setupWith(t, func(d *Deps) { d.Backups = routedBackups{fakeBackups: &fakeBackups{}, r: tc.r, kinds: tc.kinds} })
+			resp, _ := e.do(t, "POST", "/devices/1/backup", "admin", url.Values{"csrf": {"tok"}}, "HX-Request", "true")
+			_, page := e.do(t, "GET", strings.TrimPrefix(resp.Header.Get("HX-Redirect"), "/tf"), "admin", nil)
+			if !strings.Contains(page, tc.want) {
+				t.Errorf("the page lacks %q:\n%s", tc.want, page)
 			}
 		})
 	}
@@ -140,6 +175,7 @@ func TestBackUpFlashNeverEchoesTheQuery(t *testing.T) {
 		"/devices/1?ok=backup-taken&parts=bogus&via=x",
 		"/devices/1/backups?ok=backed-up&parts=%3Cb%3Eowned%3C/b%3E&via=%3Cb%3Eowned%3C/b%3E",
 		"/devices/1?ok=backup-taken&parts=dmp,%3Cb%3Eowned%3C/b%3E,snapshot&via=ftp",
+		"/devices/1?ok=backup-taken&parts=dmp&via=mqtt&files=%3Cb%3Eowned%3C/b%3E",
 	} {
 		_, page := e.do(t, "GET", path, "admin", nil)
 		if strings.Contains(page, "owned") || strings.Contains(page, "bogus") {
@@ -152,6 +188,11 @@ func TestBackUpFlashNeverEchoesTheQuery(t *testing.T) {
 	_, page := e.do(t, "GET", "/devices/1?ok=backup-taken&parts=bogus&via=x", "admin", nil)
 	if !strings.Contains(page, "Backup taken.") {
 		t.Errorf("without a known part the sentence stays plain:\n%s", page)
+	}
+	// a crafted files value next to a known dump transport: the files are not worded
+	_, page = e.do(t, "GET", "/devices/1?ok=backup-taken&parts=dmp&via=mqtt&files=%3Cb%3Eowned%3C/b%3E", "admin", nil)
+	if !strings.Contains(page, "Backup taken over MQTT (config).") {
+		t.Errorf("an unknown files value must be dropped:\n%s", page)
 	}
 	// a known part next to an unknown one and an unknown way: only the known words come through
 	_, page = e.do(t, "GET", "/devices/1?ok=backup-taken&parts=dmp,%3Cb%3Eowned%3C/b%3E,snapshot&via=ftp", "admin", nil)
@@ -166,7 +207,7 @@ func TestBackUpFlashNeverEchoesTheQuery(t *testing.T) {
 // jobs, and leaves every other row as it was.
 func TestActivityShowsTheBackupNote(t *testing.T) {
 	at := time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)
-	note := backup.Note(allParts, "mqtt")
+	note := backup.Note(allParts, "mqtt", "http")
 	jobs := []model.Job{
 		{ID: 2, BatchID: 2, DeviceID: 1, Kind: model.KindBackup, State: model.JobFailed, LastError: "tasmota: unreachable", UpdatedAt: at.Add(time.Hour)},
 		{ID: 1, BatchID: 1, DeviceID: 1, Kind: model.KindBackup, State: model.JobSucceeded, UpdatedAt: at},
@@ -177,7 +218,7 @@ func TestActivityShowsTheBackupNote(t *testing.T) {
 	}}
 	e := setupWith(t, func(d *Deps) { d.Jobs, d.OTA = fj, &fakeOTA{} })
 	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
-	if !strings.Contains(body, "Backup taken over MQTT (config, status, decoded, files)") {
+	if !strings.Contains(body, "Backup taken over MQTT, files over HTTP (config, status, decoded, files)") {
 		t.Errorf("the Activity box lacks the note:\n%s", body)
 	}
 	if strings.Contains(body, "failed detail must stay out") {

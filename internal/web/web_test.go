@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/hellwand/tasmofleet/internal/auth"
+	"github.com/hellwand/tasmofleet/internal/backup"
 	"github.com/hellwand/tasmofleet/internal/events"
 	"github.com/hellwand/tasmofleet/internal/httpx"
 	"github.com/hellwand/tasmofleet/internal/model"
@@ -172,10 +173,11 @@ type fakeBackups struct {
 	failErr error
 }
 
-func (f *fakeBackups) Backup(_ context.Context, _ string, id model.DeviceID) ([]model.Backup, error) {
+func (f *fakeBackups) Backup(ctx context.Context, _ string, id model.DeviceID) ([]model.Backup, error) {
 	if f.failErr != nil {
 		return nil, f.failErr
 	}
+	backup.Record(ctx, "http", "") // what the Manager reports for a run no router carried: the default path, no files
 	f.taken++
 	b := model.Backup{ID: model.BackupID(f.taken), DeviceID: id, Kind: model.BackupConfigDump, TakenAt: time.Now(), Path: "backups/1/x.dmp", Size: 4}
 	f.list = append([]model.Backup{b}, f.list...)

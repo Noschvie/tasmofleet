@@ -8,7 +8,6 @@ import (
 
 	"github.com/hellwand/tasmofleet/internal/backup"
 	"github.com/hellwand/tasmofleet/internal/model"
-	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
 // BackupOptions are the choices of a bulk backup: "Keep these backups" and a
@@ -104,8 +103,8 @@ func (e *Engine) workBackup(ctx context.Context, j model.Job) {
 		e.finishCommand(ctx, j, "", err.Error())
 		return
 	}
-	tctx, tr := transport.WithTrace(ctx)
-	bs, err := e.backups.Backup(backup.WithRun(tctx, backupRun(j.Commands)), j.CreatedBy, j.DeviceID)
+	rctx, rep := backup.WithReport(ctx) // the run says which way the dump and the files came (#926)
+	bs, err := e.backups.Backup(backup.WithRun(rctx, backupRun(j.Commands)), j.CreatedBy, j.DeviceID)
 	if ctx.Err() != nil {
 		return // shutting down: the job runs again
 	}
@@ -113,5 +112,5 @@ func (e *Engine) workBackup(ctx context.Context, j model.Job) {
 		e.finishCommand(ctx, j, "", err.Error())
 		return
 	}
-	e.finishCommand(ctx, j, backup.Note(backup.KindsOf(bs), tr.Via()), "")
+	e.finishCommand(ctx, j, backup.Note(backup.KindsOf(bs), rep.Dump, rep.Files), "")
 }

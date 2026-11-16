@@ -528,13 +528,13 @@ func (h *handler) deviceBackup(w http.ResponseWriter, r *http.Request) {
 		refuse(http.StatusTooManyRequests, wait+".")
 		return
 	}
-	bs, via, err := h.backupTraced(r, d.ID)
+	bs, rep, err := h.backupTraced(r, d.ID)
 	if err != nil {
 		h.backupNotSent(d.ID, err)
 		refuse(http.StatusOK, h.backupProblem(err))
 		return
 	}
-	redirect(w, r, back+"?"+backupTakenQuery("backup-taken", bs, via))
+	redirect(w, r, back+"?"+backupTakenQuery("backup-taken", bs, rep))
 }
 
 // headBack is the tab a header button returns to: one of the device's tabs, never a path the
@@ -620,11 +620,11 @@ func (h *handler) deviceBackupFromTab(w http.ResponseWriter, r *http.Request, d 
 	} else if wait := h.backupWait(d.ID); wait != "" {
 		data.Error = wait + "."
 		status = http.StatusTooManyRequests
-	} else if bs, via, err := h.backupTraced(r, d.ID); err != nil {
+	} else if bs, rep, err := h.backupTraced(r, d.ID); err != nil {
 		h.backupNotSent(d.ID, err)
 		data.Error = h.backupProblem(err)
 	} else {
-		redirect(w, r, fmt.Sprintf("/devices/%d/backups?%s", d.ID, backupTakenQuery("backed-up", bs, via)))
+		redirect(w, r, fmt.Sprintf("/devices/%d/backups?%s", d.ID, backupTakenQuery("backed-up", bs, rep)))
 		return
 	}
 	h.component(w, r, status, listNotice(data))

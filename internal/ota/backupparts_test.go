@@ -2,9 +2,11 @@ package ota
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/hellwand/tasmofleet/internal/backup"
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
 	"github.com/hellwand/tasmofleet/internal/transport"
@@ -18,11 +20,17 @@ type partsBackups struct {
 }
 
 func (b partsBackups) Backup(ctx context.Context, _ string, id model.DeviceID) ([]model.Backup, error) {
+	dctx, dump := transport.WithTrace(ctx)
 	if b.r != nil {
-		if _, err := b.r.DownloadConfig(ctx, tasmota.TargetFor(model.Device{ID: id, Address: "192.0.2.1"})); err != nil {
+		if _, err := b.r.DownloadConfig(dctx, tasmota.TargetFor(model.Device{ID: id, Address: "192.0.2.1"})); err != nil {
 			return nil, err
 		}
 	}
+	files := ""
+	if slices.Contains(b.kinds, model.BackupFiles) {
+		files = "http" // the files cannot come over MQTT: the Manager reads them over HTTP whatever carried the dump
+	}
+	backup.Record(ctx, dump.Via(), files) // what the Manager reports: the dump's way and the files' way
 	out := make([]model.Backup, 0, len(b.kinds))
 	for i, k := range b.kinds {
 		out = append(out, model.Backup{ID: model.BackupID(i + 1), DeviceID: id, Kind: k})
@@ -76,6 +84,9 @@ func TestBulkBackupNoteNamesThePartsOfOneBackupNotAFileCount(t *testing.T) {
 				}
 				h.run(t, h.e)
 				want := "Backup taken over " + strings.ToUpper(via) + " " + tc.want
+				if via == "mqtt" && slices.Contains(tc.kinds, files) { // #926: the files left MQTT, the note says so
+					want = "Backup taken over MQTT, files over HTTP " + tc.want
+				}
 				if got := jobNote(t, h); got != want {
 					t.Errorf("note %q, want %q", got, want)
 				}

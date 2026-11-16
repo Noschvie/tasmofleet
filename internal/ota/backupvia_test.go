@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hellwand/tasmofleet/internal/backup"
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
 	"github.com/hellwand/tasmofleet/internal/transport"
@@ -59,7 +60,9 @@ func (viaFacts) FactsFor(_ context.Context, d model.Device) (transport.Facts, er
 type routedBackups struct{ r *transport.Router }
 
 func (b routedBackups) Backup(ctx context.Context, _ string, id model.DeviceID) ([]model.Backup, error) {
-	_, err := b.r.DownloadConfig(ctx, tasmota.TargetFor(model.Device{ID: id, Address: "192.0.2.1"}))
+	dctx, dump := transport.WithTrace(ctx)
+	_, err := b.r.DownloadConfig(dctx, tasmota.TargetFor(model.Device{ID: id, Address: "192.0.2.1"}))
+	backup.Record(ctx, dump.Via(), "")
 	return []model.Backup{{ID: 1}}, err
 }
 

@@ -355,6 +355,7 @@ type filesResult struct {
 	archive     []byte // nil: no archive
 	archiveNote string // Note of the archive row
 	runNote     string // sentence for the dump note when there is no archive
+	via         string // the transport the files came over (the walk's trace); set with archive
 }
 
 func notBacked(reason string) filesResult { return filesResult{runNote: NoteFilesPrefix + reason} }
@@ -456,7 +457,7 @@ func (m *Manager) filesStep(ctx context.Context, dev model.Device, t tasmota.Tar
 		m.o.Log.Error("backup: building the files archive failed", "component", "backup", "device", int64(t.DeviceID()), "err", err)
 		return notBacked("the archive could not be built"), nil
 	}
-	res := filesResult{archive: arc}
+	res := filesResult{archive: arc, via: ftr.Via()}
 	if n := len(w.man.Skipped); n > 0 {
 		res.archiveNote = fmt.Sprintf("files incomplete: %d %s not stored", n, plural(n, "file", "files"))
 	}

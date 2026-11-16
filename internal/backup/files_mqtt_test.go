@@ -412,3 +412,65 @@ func TestBackupAuditNamesTheDumpsTransportAndListsTheHTTPCallsBesideIt(t *testin
 		}
 	})
 }
+
+// reportOf takes a backup with a Report attached, as the device page and the engine's backup job do, and returns what the
+// run reported with the "via" its audit entry holds.
+func reportOf(t *testing.T, e *filesEnv) (rep Report, auditVia string) {
+	t.Helper()
+	ctx, r := WithReport(t.Context())
+	if _, err := e.m.Backup(ctx, "alice", 7); err != nil {
+		t.Fatal(err)
+	}
+	var d map[string]any
+	if err := json.Unmarshal([]byte(e.audit.ev[len(e.audit.ev)-1].Detail), &d); err != nil {
+		t.Fatal(err)
+	}
+	via, _ := d["via"].(string)
+	return *r, via
+}
+
+// Why (#926): the result of a backup is worded from what the run measured, the same measurement the audit keeps, not from
+// a trace of every call of the run: that trace reads "http+mqtt" for a dump over MQTT whose files came over HTTP, and says
+// nothing about which part used which. The dump's transport is the audit's "via"; the files' transport is reported only
+// when a files archive was stored, because a result that says "files over HTTP" for a run that stored none would be wrong.
+func TestTheRunReportMatchesTheAuditForDumpAndFiles(t *testing.T) {
+	t.Run("MQTT dump with files: the files came over HTTP", func(t *testing.T) {
+		e, _, _ := newMQTTFilesEnvWith(t, "", "")
+		rep, via := reportOf(t, e)
+		if rep.Dump != "mqtt" || rep.Files != "http" || via != rep.Dump {
+			t.Errorf("report %+v, audit via %q; want dump mqtt, files http, the audit's via", rep, via)
+		}
+	})
+	t.Run("MQTT dump on a device without a file system: no files to name", func(t *testing.T) {
+		e, _, _ := newMQTTFilesEnvSpec(t, simulator.DeviceSpec{Profile: simulator.ProfileESP32, NoFS: true}, "", "")
+		if rep, _ := reportOf(t, e); rep.Dump != "mqtt" || rep.Files != "" {
+			t.Errorf("report %+v, want dump mqtt and no files", rep)
+		}
+	})
+	t.Run("MQTT dump, the MAC check refuses the host: the files were asked and not stored", func(t *testing.T) {
+		e, _, _ := newMQTTFilesEnvWith(t, "aa:bb:cc:dd:ee:ff", "")
+		if rep, _ := reportOf(t, e); rep.Dump != "mqtt" || rep.Files != "" {
+			t.Errorf("report %+v, want dump mqtt and no files", rep)
+		}
+	})
+	t.Run("MQTT dump, the archive cannot be indexed: the files were read and lost", func(t *testing.T) {
+		e, _, _ := newMQTTFilesEnvWith(t, "", "")
+		e.m.o.Store = failFilesStore{e.st}
+		if rep, _ := reportOf(t, e); rep.Dump != "mqtt" || rep.Files != "" {
+			t.Errorf("report %+v, want dump mqtt and no files: a lost archive is not a stored one", rep)
+		}
+	})
+	t.Run("HTTP dump with files: both over HTTP", func(t *testing.T) {
+		e := newFilesEnv(t, esp32(map[string]simulator.FSFile{"/a.be": {Data: []byte("a")}}), nil)
+		rep, via := reportOf(t, e)
+		if rep.Dump != "http" || rep.Files != "http" || via != rep.Dump {
+			t.Errorf("report %+v, audit via %q; want http for both", rep, via)
+		}
+	})
+	t.Run("a backup without a Report attached works as before", func(t *testing.T) {
+		e, _, _ := newMQTTFilesEnvWith(t, "", "")
+		if _, err := e.m.Backup(t.Context(), "alice", 7); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
