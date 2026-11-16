@@ -101,6 +101,16 @@ remembers to renew it, and the project page showed the UI of 0.28.0 next to a de
   - Add devices: `/devices/new`
   - System: `/settings/system`
 
+  `make smoke-shots SMOKE_URL=<instance address with its base path> SMOKE_USER=<local admin>` takes the five
+  screenshots (headless, signed in through the local sign-in form, 1280 px wide, one PNG per page in
+  `~/.cache/tasmofleet-smoke/<UTC time>/`, outside the repo; `make e2e-deps` once for Playwright). The password is
+  never an argument: set `TASMOFLEET_SMOKE_PASSWORD` in the environment or pipe it on stdin (the first line). It
+  picks the first online device through the list's own online filter (`SMOKE_DEVICE=<id>` names one), loads pages
+  only, and signs out again. It takes the screenshots; it does not judge them: look at every one. A page that
+  does not answer 200, a bounce to the sign-in page or an instance without the local sign-in stops it with the
+  page's name, and a refused sign-in is not retried (the sign-in limit counts attempts per account). It renders
+  the account's stored theme: set it to Auto (light) before the run.
+
   "Looks at" means: nothing overlaps or is cut off, no empty card or raw template text, the version in the footer is
   the released one. A defect found here is a defect of the release (an issue, a fix release), not a note for later.
   The screenshots stay outside the repo ([ui-review](ui-review.md)); the report names the pages that were checked.

@@ -53,7 +53,7 @@ E2E_ARGS  ?=
 CHANGED_BASE ?= origin/main
 export CHANGED_BASE
 
-.PHONY: agent-refs quick integration-guard shards-check-changed catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo pages demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race diff-cover revert-check mqtt-acl-check test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build dist image changelog-check changelog-assemble changelog-fragments-check changelog-fragment-gate release-pr-check changelog-title migration-guard migration-append-only changelog-notes clean tools
+.PHONY: agent-refs quick integration-guard shards-check-changed catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo pages demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race diff-cover revert-check mqtt-acl-check test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity smoke-shots styleguide-docs vuln build dist image changelog-check changelog-assemble changelog-fragments-check changelog-fragment-gate release-pr-check changelog-title migration-guard migration-append-only changelog-notes clean tools
 
 # golangci-lint runs staticcheck with its defaults (.golangci.yml), so check does not run it a second time;
 # the staticcheck target stays for single runs and CI. go vet stays: golangci-lint skips generated files,
@@ -311,6 +311,15 @@ e2e-core: build
 
 e2e-quarantine: build
 	cd e2e && npx playwright test --project=chromium --grep @quarantine --retries=2 --pass-with-no-tests $(E2E_ARGS)
+
+# The release smoke check's screenshots (#822, docs/dev/releasing.md): signs in to a RUNNING instance and writes one 1280 px
+# PNG per smoke-check page to a directory outside the repository (default ~/.cache/tasmofleet-smoke/<UTC time>).
+#   make smoke-shots SMOKE_URL=https://host/base SMOKE_USER=name [SMOKE_DEVICE=<id>] [SMOKE_OUT=<dir>]
+# Needs the e2e dependencies once (make e2e-deps). The password is never an argument: TASMOFLEET_SMOKE_PASSWORD in the environment, else the first line of stdin.
+# (Not USER: make takes that from the environment, and it would be the login name of the desktop.)
+smoke-shots:
+	@test -n "$(SMOKE_URL)" -a -n "$(SMOKE_USER)" || { echo "usage: make smoke-shots SMOKE_URL=<https://host/base> SMOKE_USER=<name> [SMOKE_DEVICE=<id>] [SMOKE_OUT=<dir>]  (password: TASMOFLEET_SMOKE_PASSWORD or stdin)" >&2; exit 2; }
+	cd e2e && nice node smoke-shots.mjs --url "$(SMOKE_URL)" --user "$(SMOKE_USER)" $(if $(SMOKE_DEVICE),--device "$(SMOKE_DEVICE)") $(if $(SMOKE_OUT),--out "$(SMOKE_OUT)")
 
 # Pixel comparison of our pages against the Claude Design prototype (design/v2/README.md). Not part of CI: the references (PROTO_REF_DIR, ~150 MB) live outside the repository and
 # design/v2/ref-manifest.sha256 pins them. Runs the tool's self-test first, then every reference (or the
