@@ -9,7 +9,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -79,4 +79,55 @@ test("a file with an entry keeps its measured weight, even when it is small", ()
     "internal/cmdpolicy/policyrule.go",
     "internal/cmdpolicy/scrub.go",
   ]);
+});
+
+// A toy module with package a (files a1.go, a2.go) and package b (b1.go), so that the deal is shown with
+// weights we choose for every file. Returns the plan lines of a two-shard deal as { files, load } per shard.
+function toyPlan(weights) {
+  const dir = mkdtempSync(join(tmpdir(), "mutation-shard-toy-"));
+  try {
+    writeFileSync(join(dir, "go.mod"), "module toy\n\ngo 1.22\n");
+    for (const [pkg, file] of [["a", "a1"], ["a", "a2"], ["b", "b1"]]) {
+      mkdirSync(join(dir, pkg), { recursive: true });
+      writeFileSync(join(dir, pkg, `${file}.go`), `package ${pkg}\n\nfunc F${file}() {}\n`);
+    }
+    writeFileSync(join(dir, "weights.txt"), weights);
+    const r = spawnSync(join(root, "tools/mutation-shard.sh"), ["plan", "2"], {
+      cwd: dir,
+      encoding: "utf8",
+      env: { ...process.env, MUTATION_PKGS: "./a ./b", MUTATION_WEIGHTS: join(dir, "weights.txt") },
+    });
+    assert.equal(r.status, 0, r.stderr);
+    return r.stdout
+      .trim()
+      .split("\n")
+      .map((l) => {
+        const m = l.match(/load (\d+) s \(estimate\):(.*)$/);
+        return { load: Number(m[1]), files: m[2].trim().split(/\s+/).filter(Boolean) };
+      });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+test("a shard that does not hold a package yet pays the package's setup, so a package stays together", () => {
+  // Every shard that mutates a package first builds its tests and runs gremlins' coverage run (about
+  // 22 s, #886). A deal that ignores it scatters a package over shards, each of them pays the setup
+  // again, and the plan says 17 minutes for a shard that runs 25 (#886). With a 40 s setup, a1.go
+  // (100 s) opens shard 1 at 140 s and b1.go (70 s) opens shard 2 at 110 s. The last file, a2.go
+  // (60 s), then sees shard 1 at 140 s (it holds package a) and shard 2 at 110 + 40 = 150 s (it would
+  // build package a again): it stays with its package, shard 1 ends at 200 s, shard 2 at 110 s.
+  // Without a setup line the old deal holds: a2.go goes to the lighter shard 2.
+  const cost = ["cost a 100", "cost b 100"];
+  const files = ["a a1.go 100", "a a2.go 60", "b b1.go 70"];
+  const withSetup = toyPlan([...cost, "setup 4000", ...files, ""].join("\n"));
+  assert.deepEqual(withSetup[0].files.sort(), ["a/a1.go", "a/a2.go"]);
+  assert.deepEqual(withSetup[1].files, ["b/b1.go"]);
+  assert.deepEqual(
+    withSetup.map((s) => s.load),
+    [200, 110],
+  );
+  const withoutSetup = toyPlan([...cost, ...files, ""].join("\n"));
+  assert.deepEqual(withoutSetup[0].files, ["a/a1.go"]);
+  assert.deepEqual(withoutSetup[1].files.sort(), ["a/a2.go", "b/b1.go"]);
 });

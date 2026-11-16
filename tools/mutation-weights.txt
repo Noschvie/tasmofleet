@@ -1,75 +1,81 @@
-# Mutation shard weights, see tools/mutation-weights.sh. Line: <pkg> <file> <runnable mutants> [seconds per mutant x 100, overriding the package cost]. Counts from a gremlins dry run of 2026-11-12; the costs are the earlier ones scaled per package by measured over estimated seconds in the weekly runs 41510561121 (2026-11-02), 42542151416 (2026-11-09) and 43309125119 (2026-11-12, first run with these weights).
-cost internal/fwselect 103
-cost internal/ota 179
-cost internal/policy 75
-cost internal/cmdpolicy 30
-cost internal/mqttcmd 514
-cost internal/transport 99
-cost internal/tasmota 315
-cost internal/restore 1298
-internal/fwselect decide.go 10 52
-internal/fwselect detect.go 48 52
-internal/fwselect family.go 15 76
-internal/fwselect fwselect.go 3 76
-internal/fwselect guard.go 32 52
-internal/fwselect image.go 6 52
+# Mutation shard weights, see tools/mutation-weights.sh. Line: <pkg> <file> <runnable mutants> [seconds per mutant x 100, overriding the package cost]. Counts from a gremlins dry run of 2026-11-16.
+# "cost <pkg> <seconds per mutant x 100>" and the per-file overrides: the earlier ones scaled per package by measured over estimated seconds in the weekly runs 41510561121 (2026-11-02), 42542151416 (2026-11-09), 43309125119 (2026-11-12), and 43783436076 (2026-11-16, shard 4/5 cancelled: restore files.go and lockout.go are set to the rate of replace.go + restore.go, 6.6 s per mutant, until a complete run measures them).
+# "setup <seconds x 100>": what a shard pays once per package it mutates, besides the mutants (test build, coverage run): 22 s, the mean of 29 package runs of 43783436076 (6 to 37 s). See tools/mutation-shard.sh.
+setup 2200
+cost internal/fwselect 56
+cost internal/ota 175
+cost internal/policy 145
+cost internal/cmdpolicy 31
+cost internal/mqttcmd 691
+cost internal/transport 80
+cost internal/tasmota 292
+cost internal/restore 1598
+internal/fwselect decide.go 10 28
+internal/fwselect detect.go 48 28
+internal/fwselect family.go 15 41
+internal/fwselect fwselect.go 3 41
+internal/fwselect guard.go 32 28
+internal/fwselect image.go 6 28
 internal/fwselect language.go 4
-internal/fwselect mqttupload.go 12 74
-internal/fwselect plan.go 12 52
-internal/fwselect select.go 45 76
-internal/ota backupjob.go 12 164
-internal/ota batchopts.go 4 126
-internal/ota commandjob.go 19 150
-internal/ota deviceapi.go 31 245
-internal/ota engine.go 154 220
-internal/ota engine_safeboot.go 1 154
-internal/ota machine.go 66 126
-internal/ota machine_safeboot.go 22 245
-internal/ota mqttpath.go 8 248
-internal/ota policyjob.go 48 176
-internal/ota push.go 18 164
+internal/fwselect mqttupload.go 12 40
+internal/fwselect plan.go 12 28
+internal/fwselect select.go 45 41
+internal/ota backupjob.go 15 160
+internal/ota batchopts.go 4 123
+internal/ota commandjob.go 20 147
+internal/ota deviceapi.go 31 239
+internal/ota engine.go 190 215
+internal/ota engine_safeboot.go 1 150
+internal/ota machine.go 81 123
+internal/ota machine_safeboot.go 22 239
+internal/ota mqttpath.go 8 242
+internal/ota policyjob.go 51 172
+internal/ota push.go 18 160
 internal/ota rowgone.go 0
+internal/ota scheduled.go 14
 internal/ota templatejob.go 85
-internal/policy decoded.go 9 111
+internal/policy decoded.go 9 215
 internal/policy firmware.go 2
-internal/policy fix.go 91 63
-internal/policy plan.go 8 90
-internal/policy policy.go 49 90
-internal/policy rules.go 24 90
+internal/policy fix.go 91 122
+internal/policy plan.go 10 174
+internal/policy policy.go 49 174
+internal/policy rules.go 25 174
 internal/policy template.go 115
-internal/cmdpolicy cmdpolicy.go 127 26
+internal/cmdpolicy cmdpolicy.go 143 27
 internal/cmdpolicy doc.go 0
-internal/cmdpolicy policyrule.go 5 39
-internal/cmdpolicy scrub.go 24 39
-internal/mqttcmd backlog.go 12 507
-internal/mqttcmd channel.go 36 1175
-internal/mqttcmd correlate.go 53 304
+internal/cmdpolicy policyrule.go 6 41
+internal/cmdpolicy scrub.go 26 41
+internal/mqttcmd backlog.go 12 681
+internal/mqttcmd channel.go 36 1579
+internal/mqttcmd correlate.go 58 409
 internal/mqttcmd doc.go 0
-internal/mqttcmd filedownload.go 64 736
-internal/mqttcmd info.go 10 432
-internal/mqttcmd upload.go 81 507
-internal/transport choose.go 58 73
-internal/transport configupload.go 18 125
+internal/mqttcmd filedownload.go 64 989
+internal/mqttcmd info.go 10 581
+internal/mqttcmd upload.go 81 681
+internal/transport choose.go 78 59
+internal/transport configupload.go 25 101
 internal/transport explain.go 0
 internal/transport facts.go 0
-internal/transport files.go 11
-internal/transport memory.go 1 108
+internal/transport files.go 13
+internal/transport mac.go 5
+internal/transport memory.go 2 87
 internal/transport reasons.go 0
-internal/transport rootpage.go 15 108
-internal/transport router.go 86 73
-internal/transport topics.go 5 108
-internal/tasmota client.go 57 334
-internal/tasmota configrestore.go 13 269
-internal/tasmota filesystem.go 127 208
-internal/tasmota networks.go 2 323
-internal/tasmota parse.go 28 240
-internal/tasmota safeboot.go 8 323
+internal/transport rootpage.go 15 87
+internal/transport router.go 118 59
+internal/transport topicmarks.go 4
+internal/transport topics.go 5 87
+internal/tasmota client.go 57 309
+internal/tasmota configrestore.go 13 249
+internal/tasmota filesystem.go 127 193
+internal/tasmota networks.go 2 299
+internal/tasmota parse.go 28 222
+internal/tasmota safeboot.go 8 299
 internal/tasmota status.go 0
-internal/tasmota tasmota.go 1 828
-internal/tasmota upload.go 33 357
-internal/restore files.go 97 309
-internal/restore flow.go 107 376
-internal/restore lockout.go 29 376
-internal/restore replace.go 98 504
-internal/restore restore.go 38 486
-internal/restore steps.go 2 504
+internal/tasmota tasmota.go 1 767
+internal/tasmota upload.go 33 331
+internal/restore files.go 101 660
+internal/restore flow.go 119 463
+internal/restore lockout.go 71 660
+internal/restore replace.go 98 620
+internal/restore restore.go 41 598
+internal/restore steps.go 2 620

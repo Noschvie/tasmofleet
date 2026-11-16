@@ -100,6 +100,22 @@ means nothing stops you: you have to know it. The full working rules are in
 - **Enforced:** the condition in `.github/workflows/weekly.yml`;
   `scripts/mutation-shard.test.mjs` for the estimate.
 
+### The weekly mutation shards grew past the job limit again (#886)
+
+- **Happened:** on 2026-11-16 shard 4/5 hit the 30 minute limit again, and the other four took 21 to 28 minutes. The
+  mutant counts had barely changed; the time per mutant had: every mutant reruns its package's tests, and the MQTT
+  transport work added large test files (restore 4.9 to 6.6 s per mutant, mqttcmd channel +17 %, policy 0.5-0.9 to
+  1.2-2.0 s). The cost lines of `tools/mutation-weights.txt` were still those of 2026-11-12. Two more causes: the
+  deal did not know that every shard pays a fixed setup (test build and coverage run, 6 to 37 s, 22 s on average) for
+  each package it touches, so the estimate was about 4 minutes low, and the total work (about 127 min) no longer fitted
+  five shards under 20 min.
+- **Rule:** the weekly mutation run has 8 shards (`MUTATION_CI_SHARDS` in the Makefile; `make shards-check` fails
+  when the matrix or the gate count of `_mutation.yml` differs). The job timeout is not raised: it only moves
+  the cliff. After the test time of a MUTATION package grows, set the `cost` lines from the last weekly run
+  (measured over estimated seconds per package) and compare each shard's duration with `make mutation-plan`;
+  the `setup` line is the per-package fixed cost.
+- **Enforced:** `make shards-check`; `scripts/mutation-shard.test.mjs` for the setup in the deal.
+
 ### Script tests left temp directories in `/tmp` (#552)
 
 - **Happened:** 266 directories after one afternoon of runs. On a tmpfs `/tmp`

@@ -1,4 +1,4 @@
-# Mutation testing in five shards (reusable; never triggered on its own).
+# Mutation testing in eight shards (reusable; never triggered on its own).
 # One ota run alone takes 11 minutes on one runner, so each shard mutates its
 # share of the files of all packages, dealt out by estimated cost
 # (tools/mutation-shard.sh), and uploads the counts; mutation-gate adds them up
@@ -34,7 +34,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: ["1/5", "2/5", "3/5", "4/5", "5/5"] # keep in step with MUTATION_CI_SHARDS (Makefile)
+        shard: ["1/8", "2/8", "3/8", "4/8", "5/8", "6/8", "7/8", "8/8"] # make shards-check fails when this differs from MUTATION_CI_SHARDS (Makefile)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -73,7 +73,7 @@ jobs:
           path: ${{ runner.temp }}/counts
       - env:
           ALL: ${{ inputs.scope == 'all' && '1' || '' }}
-        run: make mutation-sum MUTATION_COUNTS="$RUNNER_TEMP/counts" MUTATION_SHARDS=5 MUTATION_ALL="$ALL"
+        run: make mutation-sum MUTATION_COUNTS="$RUNNER_TEMP/counts" MUTATION_SHARDS=8 MUTATION_ALL="$ALL"
       # The gate's report (written by make mutation-sum next to the counts). Kept when the gate failed, too;
       # nothing to upload when the gate wrote none.
       - if: always()

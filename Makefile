@@ -77,7 +77,7 @@ agent-refs:
 # (MUTATION_SHARD=i/MUTATION_CI_SHARDS, tools/mutation-shard.sh) into shards. Fails when a package
 # is in no race shard, or a file of a MUTATION package is dealt to no (or two) mutation shards.
 # "make mutation-plan" prints the plan with the estimated load per shard.
-MUTATION_CI_SHARDS := 5
+MUTATION_CI_SHARDS := 8
 MUTATION_PKGS := $(foreach e,$(MUTATION),$(firstword $(subst :, ,$(e))))
 export MUTATION_PKGS
 shards-check:
@@ -88,6 +88,11 @@ shards-check:
 	  got=$$(printf "$$got" | grep . | sort); \
 	  [ "$$want" = "$$got" ] || { echo "shards-check: $$p files are not in exactly one of $(MUTATION_CI_SHARDS) mutation shards" >&2; exit 1; }; \
 	done; echo "shards-check: every MUTATION package file is in exactly one of $(MUTATION_CI_SHARDS) mutation shards"
+	@want=$$(i=1; while [ $$i -le $(MUTATION_CI_SHARDS) ]; do echo "$$i/$(MUTATION_CI_SHARDS)"; i=$$((i+1)); done); \
+	got=$$(grep -o '"[0-9]*/[0-9]*"' .github/workflows/_mutation.yml | tr -d '"'); \
+	[ "$$want" = "$$got" ] || { echo "shards-check: the matrix of _mutation.yml is not the shards 1/$(MUTATION_CI_SHARDS) to $(MUTATION_CI_SHARDS)/$(MUTATION_CI_SHARDS): files of a missing shard would never be mutated" >&2; exit 1; }; \
+	grep -q 'MUTATION_SHARDS=$(MUTATION_CI_SHARDS) ' .github/workflows/_mutation.yml || { echo "shards-check: _mutation.yml does not gate on MUTATION_SHARDS=$(MUTATION_CI_SHARDS)" >&2; exit 1; }; \
+	echo "shards-check: _mutation.yml runs and sums exactly the $(MUTATION_CI_SHARDS) mutation shards"
 
 # make check runs shards-check only when it can have changed (#492): after a change to the Makefile, tools/,
 # a go.mod or the package list (tools/shards-check-needed.sh). CI's lint job runs it unconditionally.
