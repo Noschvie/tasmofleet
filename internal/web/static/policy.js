@@ -356,13 +356,16 @@
 // A field with data-cmd-flow sits right above a submit button (New rule: Any command, Copy from a
 // device, #867): its list is part of the page flow instead of floating, so it never covers the
 // button, and it stays in place until a press that started outside it is over, so the button
-// does not move away between mousedown and mouseup.
+// does not move away between mousedown and mouseup (or until the press turns into a native drag,
+// which sends no mouseup, #869).
 (function () {
   "use strict";
   var timer = null;
   var pending = null;
   var seq = 0;
   var pressed = false;
+  // The input whose list is held (invisible, still in the layout) until the press ends.
+  var held = null;
 
   function boxFor(input) {
     var box = input.nextElementSibling;
@@ -398,20 +401,29 @@
   // A flow list stays in the layout, only invisible, while the pointer is down: the press that took
   // the focus away may be on the button below it, and the click needs the button where it was.
   function hold(input) {
+    if (held && held !== input) {
+      close(held);
+    }
+    held = input;
     boxFor(input).classList.add("cmd-sug-held");
     input.setAttribute("aria-expanded", "false");
     input.removeAttribute("aria-activedescendant");
-    document.addEventListener(
-      "mouseup",
-      function () {
-        // Always leave the held state: if the focus came back (a click on the label), the next
-        // keystroke opens the list again, and a hidden list that still takes keys never stays.
-        setTimeout(function () {
-          close(input);
-        }, 0);
-      },
-      { once: true, capture: true },
-    );
+  }
+
+  // The press is over (mouseup, a native drag that sends none, the window losing the pointer, a
+  // context menu): the one place where a press ends. Always leave the held state: if the focus came
+  // back (a click on the label), the next keystroke opens the list again, and a hidden list that still
+  // takes keys never stays. Closing waits a tick so the click that follows mouseup still finds the
+  // button where it was.
+  function release() {
+    pressed = false;
+    var input = held;
+    held = null;
+    if (input) {
+      setTimeout(function () {
+        close(input);
+      }, 0);
+    }
   }
 
   function activate(input, box, n) {
@@ -494,7 +506,9 @@
       return;
     }
     var box = boxFor(t);
-    if (box.hidden) {
+    // An invisible list (closed, or held by a press) takes no keys: Enter would pick a suggestion
+    // the person cannot see (#869).
+    if (box.hidden || box.classList.contains("cmd-sug-held")) {
       return;
     }
     var i = current(box);
@@ -531,25 +545,14 @@
     },
     true,
   );
-  document.addEventListener(
-    "mouseup",
-    function () {
-      pressed = false;
-    },
-    true,
-  );
+  document.addEventListener("mouseup", release, true);
 
-  // A release outside the window (or a context menu) sends no mouseup to the page.
-  window.addEventListener("blur", function () {
-    pressed = false;
-  });
-  document.addEventListener(
-    "contextmenu",
-    function () {
-      pressed = false;
-    },
-    true,
-  );
+  // A press that becomes a native drag (a link, selected text) sends dragstart and dragend but no
+  // mouseup, and it can no longer become a click (#869). A release outside the window or a context
+  // menu sends no mouseup either.
+  document.addEventListener("dragstart", release, true);
+  window.addEventListener("blur", release);
+  document.addEventListener("contextmenu", release, true);
 
   document.addEventListener("focusout", function (e) {
     var t = e.target;

@@ -277,6 +277,104 @@ test(
   },
 );
 
+// Enter in a field with no list open submits its form, which is correct and reloads the page. A test
+// that wants to read the field after Enter keeps the page by refusing the submit.
+async function refuseSubmit(page: Page) {
+  await page.evaluate(() =>
+    document.addEventListener("submit", (e) => e.preventDefault(), true),
+  );
+}
+
+test(
+  "a press that becomes a native drag does not leave an invisible suggestion list taking Enter (#869)",
+  { tag: "@core" },
+  async ({ page }) => {
+    // Why: while the list is open a press outside the field hides it but keeps its space (#867), and
+    // the hold ends on the next mouseup. A press that turns into a native drag (a link, selected text)
+    // sends dragstart and dragend but no mouseup, so the hold never ended: the list stayed invisible,
+    // and once the focus was back in the field Enter silently replaced the typed command with the
+    // first suggestion the person could not see. The stale "pressed" flag also made the next
+    // focusout hold the list again.
+    await page.setExtraHTTPHeaders(admin);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    for (const field of ["any-command", "copy-command"]) {
+      await page.goto(app.url + "/policy/rules/new");
+      await page
+        .locator("#copy-device")
+        .selectOption({ label: "plug-4m-http" });
+      const input = page.locator("#" + field);
+      await input.fill("Pow");
+      const list = page.locator(`#${field} + .cmd-sug`);
+      await expect(list).toBeVisible();
+
+      // A press on a link takes the focus (the list is held), and the pointer then moves far enough
+      // for the browser to start dragging the link.
+      const link = page.locator("header a[href], nav a[href]").first();
+      const at = (await link.boundingBox())!;
+      await page.mouse.move(at.x + at.width / 2, at.y + at.height / 2);
+      await page.mouse.down();
+      await expect(list).toHaveClass(/cmd-sug-held/);
+      await page.mouse.move(at.x + at.width / 2 + 120, at.y + 200, {
+        steps: 12,
+      });
+      await page.mouse.up();
+
+      // The press is over: the list is gone, not just invisible.
+      await expect(list).toBeHidden();
+      await expect(list).not.toHaveClass(/cmd-sug-held/);
+      await expect(input).toHaveAttribute("aria-expanded", "false");
+      await refuseSubmit(page);
+      await input.focus();
+      await input.press("Enter");
+      await expect(input).toHaveValue("Pow");
+
+      // The press did not leave "pressed" behind: leaving the field later closes the list for good
+      // instead of holding it again.
+      await input.pressSequentially("e");
+      await expect(list).toBeVisible();
+      await input.press("Tab");
+      await expect(list).toBeHidden();
+      await expect(list).not.toHaveClass(/cmd-sug-held/);
+    }
+  },
+);
+
+test(
+  "a suggestion list held by a press that is still down takes no keys (#869)",
+  { tag: "@core" },
+  async ({ page }) => {
+    // Why: the held list is invisible but still in the layout, so that a click on the button below
+    // lands where the button was. A list the person cannot see must not act on ArrowDown or Enter:
+    // Enter would replace the typed command with a suggestion they never saw.
+    await page.setExtraHTTPHeaders(admin);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    for (const field of ["any-command", "copy-command"]) {
+      await page.goto(app.url + "/policy/rules/new");
+      await page
+        .locator("#copy-device")
+        .selectOption({ label: "plug-4m-http" });
+      const input = page.locator("#" + field);
+      await input.fill("Pow");
+      const list = page.locator(`#${field} + .cmd-sug`);
+      await expect(list).toBeVisible();
+
+      const heading = (await page
+        .getByRole("heading", { level: 1 })
+        .boundingBox())!;
+      await page.mouse.move(heading.x + 4, heading.y + 4);
+      await page.mouse.down();
+      await expect(list).toHaveClass(/cmd-sug-held/);
+      // The focus comes back to the field while the press is still down.
+      await refuseSubmit(page);
+      await input.focus();
+      await input.press("ArrowDown");
+      await input.press("Enter");
+      await expect(input).toHaveValue("Pow");
+      await page.mouse.up();
+    }
+  },
+);
+
 test("an operator sees the rule read-only and cannot open New rule", async ({
   page,
 }) => {
