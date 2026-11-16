@@ -30,10 +30,12 @@ const (
 	// address-change and conflict proposals about devices we manage.
 	maxNewProposals     = 500
 	maxRelatedProposals = 500
-	proposalTTL         = 30 * 24 * time.Hour
-	pruneEvery          = time.Hour
-	maxQueuedMessages   = 4096
-	maxQueuedBytes      = 8 << 20
+	// ProposalTTL is how long a proposal (open or ignored) lives without a new sighting; the Add
+	// page quotes it at "Show ignored", so the number there cannot drift from the prune.
+	ProposalTTL       = 30 * 24 * time.Hour
+	pruneEvery        = time.Hour
+	maxQueuedMessages = 4096
+	maxQueuedBytes    = 8 << 20
 	// minMessageGap is the shortest time between two evaluations of one MAC
 	// from MQTT. Evaluating a moved device probes its new address, so a
 	// publisher repeating one message must not turn into a probe stream.
@@ -230,7 +232,7 @@ func (m *Manager) Run(ctx context.Context) error {
 }
 
 func (m *Manager) prune(ctx context.Context) {
-	if n, err := m.o.Store.PruneProposals(ctx, m.clk.Now().Add(-proposalTTL)); err != nil {
+	if n, err := m.o.Store.PruneProposals(ctx, m.clk.Now().Add(-ProposalTTL)); err != nil {
 		m.log.Warn("discovery: expire proposals", "err", err)
 	} else if n > 0 {
 		m.log.Info("discovery: expired proposals", "n", n)

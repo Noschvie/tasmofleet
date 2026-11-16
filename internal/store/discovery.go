@@ -84,6 +84,7 @@ func (s *SQLite) UpsertProposal(ctx context.Context, p ProposalRow, maxVisible i
 	cur, err := scanProposal(tx.QueryRowContext(ctx, "SELECT "+proposalCols+" FROM discovery_proposals WHERE mac=?", p.Device.MAC))
 	switch {
 	case err == nil:
+		// The Add page words this rule at "Show ignored" (adddevices.templ, add-ignhelp, #713): change both together.
 		same := cur.Kind == p.Kind && cur.Device.Address == p.Device.Address && cur.Device.Port == p.Device.Port && cur.ExistingID == p.ExistingID &&
 			cur.Device.Name == p.Device.Name && cur.Device.Topic == p.Device.Topic && cur.Device.FullTopic == p.Device.FullTopic
 		dismissed := cur.Dismissed && same

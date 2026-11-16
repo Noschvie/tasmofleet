@@ -35,6 +35,9 @@ type Discovery interface {
 	Scans() []discovery.ScanStatus
 	// Unidentified lists the topics seen on MQTT that are not a proposal (spec 11.3a).
 	Unidentified() []discovery.Unidentified
+	// Explain says why the device behind a MAC, IP address or topic is not offered as new (#713).
+	// It reads only; it sends nothing to a device or the broker.
+	Explain(ctx context.Context, query string) (discovery.Explanation, error)
 }
 
 func (h *handler) registerDiscovery(route func(string, func(http.Handler) http.Handler, http.HandlerFunc), op, adm func(http.Handler) http.Handler) {
@@ -83,6 +86,11 @@ type discView struct {
 	Unverified *unverifiedMove
 	// Unident are the topics MQTT saw that are no proposal yet, with the reason.
 	Unident []moveRow
+	// Why is the answer of the lookup (#713), nil without ?why=; WhyQuery is the text in its field.
+	Why      *whyView
+	WhyQuery string
+	// ProposalDays is the number of days after which an ignored device that was not seen is forgotten.
+	ProposalDays int
 }
 
 // propRow is one discovered device of the New devices table.
@@ -136,7 +144,7 @@ func (h *handler) discoveryOff() bool {
 
 func (h *handler) discoveryData(r *http.Request) discView {
 	q := listParams(r)
-	v := discView{ShowIgn: q.Get("ignored") == "1", Off: h.discoveryOff()}
+	v := discView{ShowIgn: q.Get("ignored") == "1", Off: h.discoveryOff(), ProposalDays: proposalDays()}
 	if h.d.SysConfig != nil {
 		v.Settings = httpBase(r) + sysPath + "?section=discovery"
 	}
@@ -193,6 +201,9 @@ func (h *handler) discoveryData(r *http.Request) discView {
 			addr = u.Hostname
 		}
 		v.Unident = append(v.Unident, moveRow{Name: u.Topic, Seen: u.SeenAt, SeenText: agoWords(now, u.SeenAt) + " · " + state, New: addr, Why: capitalize(u.Reason) + "."})
+	}
+	if text := strings.TrimSpace(r.URL.Query().Get("why")); text != "" && r.Method == http.MethodGet {
+		v.WhyQuery, v.Why = text, h.whyOf(r, base, text, v.Off)
 	}
 	v.State = discState(q)
 	v.Sort, v.Dir = discSort(q)

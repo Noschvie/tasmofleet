@@ -11371,6 +11371,31 @@ dialog.fw-notes-dlg .fw-dlg-body {
   gap: var(--sp-6);
 }
 
+/* Discovered: "Show ignored" help and the lookup "Not listed?" (#713) */
+.add-ignhelp {
+  margin: 0 0 var(--sp-10);
+  font-size: 12.5px;
+  color: var(--color-text-2);
+}
+.add-why {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-8);
+  align-items: center;
+  margin: var(--sp-14) 0;
+}
+.add-why label {
+  flex-basis: 100%;
+  font-size: 12.5px;
+  color: var(--color-text-2);
+}
+/* the id beats the global input rule (width 100 %, font inherit), like #scan input.add-subnet */
+#card-discovered .add-why input.add-why-q {
+  width: 320px;
+  max-width: 100%;
+  font-size: 13px;
+}
+
 /* Discovered: the New devices bar, "Show ignored" (a link drawn as a checkbox) */
 .add-bar {
   display: flex;

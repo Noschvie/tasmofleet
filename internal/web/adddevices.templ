@@ -206,7 +206,7 @@ templ discoveredBody(p discView) {
 			<input type="hidden" name="ignored" value="1"/>
 		}
 		<div class="add-bar">
-			<h3 class="sys-subhead">New devices ({ strconv.Itoa(p.NewCount) })</h3>
+			<h3 class="sys-subhead" id="disc-new">New devices ({ strconv.Itoa(p.NewCount) })</h3>
 			<a class="add-showign" role="checkbox" aria-checked={ ariaBool(p.ShowIgn) } href={ templ.SafeURL(showIgnoredHref(p)) }>
 				<span class="add-box" aria-hidden="true"></span>
 				<span>Show ignored ({ strconv.Itoa(p.Ignored) })</span>
@@ -219,6 +219,10 @@ templ discoveredBody(p discView) {
 				</div>
 			}
 		</div>
+		// The rule is store.UpsertProposal's "same" (an ignored row stays hidden while its content is unchanged); keep the words generic.
+		if p.Ignored > 0 {
+			<p class="add-ignhelp">An ignored device stays hidden while the data it announces stays the same. It comes back when that changes, or when it announces itself after { strconv.Itoa(p.ProposalDays) } days without a sighting.</p>
+		}
 		if len(p.Chips) > 0 && (len(p.Rows) > 0 || p.Filtered) {
 			<div class="add-chips" role="group" aria-label="Filter by state">
 				for _, c := range p.Chips {
@@ -358,6 +362,58 @@ templ discoveredBody(p discView) {
 	if len(p.Unident) > 0 {
 		@unidentSection(p.Unident)
 	}
+	@whyBox(p)
+}
+
+// whyBox is the lookup of #713: for one device that is on the broker but not offered as new, which
+// of the places it is in (the device list, ignored, listed, not identified). It is a GET form, so an
+// answer can be bookmarked and changes nothing.
+templ whyBox(p discView) {
+	<form class="add-why" method="get" action={ templ.SafeURL(p.Base + "/devices/new#why") }>
+		<label for="why-q">Not listed? Look up by IP address, MAC or topic</label>
+		<input id="why-q" class="mono add-why-q" type="search" name="why" value={ p.WhyQuery } maxlength="128" placeholder="192.168.1.20, aa:bb:cc:dd:ee:ff or topic" autocomplete="off" data-visual-mask/>
+		if p.ShowIgn {
+			<input type="hidden" name="ignored" value="1"/>
+		}
+		<button type="submit" class="btn">Look up</button>
+	</form>
+	if p.Why != nil {
+		@whyAnswer(p, *p.Why)
+	}
+}
+
+// whyAnswer is the answer of the lookup: one line per place the device was found, each with its way on.
+templ whyAnswer(p discView, a whyView) {
+	<section class="add-moves" id="why" aria-label="Lookup result">
+		<div class="add-moves-head">
+			<h2>Lookup: <span class="mono" data-visual-mask>{ a.Query }</span></h2>
+			if a.Limit != "" {
+				<div class="add-moves-sub">{ a.Limit }</div>
+			}
+		</div>
+		if a.Message != "" {
+			<div class="add-move"><span class="add-move-why">{ a.Message }</span></div>
+		}
+		for _, l := range a.Lines {
+			if l.RestoreID != 0 {
+				<form class="add-move" method="post" action={ templ.SafeURL(p.Base + "/discovery/proposals/" + strconv.FormatInt(l.RestoreID, 10) + "/undismiss") }>
+					<input type="hidden" name="csrf" value={ p.CSRF }/>
+					<input type="hidden" name="version" value={ l.RestoreVersion }/>
+					<input type="hidden" name="state" value={ p.State }/>
+					<input type="hidden" name="sort" value={ p.Sort }/>
+					<input type="hidden" name="dir" value={ p.Dir }/>
+					if p.ShowIgn {
+						<input type="hidden" name="ignored" value="1"/>
+					}
+					@whyLine(l)
+				</form>
+			} else {
+				<div class="add-move">
+					@whyLine(l)
+				</div>
+			}
+		}
+	</section>
 }
 
 // unidentSection lists the topics MQTT saw that are no proposal yet (spec 11.3a): offline
@@ -385,7 +441,7 @@ templ unidentSection(rows []moveRow) {
 // Apply where the move can be confirmed here. With "Show ignored" the dismissed ones follow, marked
 // and with Restore as their only action; the heading counts only the open ones, like New devices.
 templ moveSection(title, sub string, rows []moveRow, p discView) {
-	<section class="add-moves" aria-label={ title }>
+	<section class="add-moves" id={ anchorID(title) } aria-label={ title }>
 		<div class="add-moves-head">
 			<h2>{ title } ({ strconv.Itoa(openMoves(rows)) })</h2>
 			<div class="add-moves-sub">{ sub }</div>
@@ -849,4 +905,27 @@ templ importRowView(r importRow, badgeClass string) {
 		</span>
 		<span class="add-improw-why">{ r.Why }</span>
 	</div>
+}
+
+// whyLine is one finding of the lookup: the device, what it is, and the way on (Restore, the device
+// page, the list it is in).
+templ whyLine(l whyLineView) {
+	<span class="add-move-name">
+		if l.Href != "" {
+			<a href={ templ.SafeURL(l.Href) }>{ l.Name }</a>
+		} else if l.Topic {
+			<span class="mono" data-visual-mask>{ l.Name }</span>
+		} else {
+			<span>{ l.Name }</span>
+		}
+	</span>
+	<span class="add-move-why"><b>{ l.Lead }</b> { l.Detail }</span>
+	<span class="btn-row add-move-acts">
+		if l.RestoreID != 0 {
+			<button type="submit" class="btn">Restore</button>
+		}
+		if l.Anchor != "" {
+			<a class="btn" href={ templ.SafeURL(l.Anchor) }>Show in list</a>
+		}
+	</span>
 }

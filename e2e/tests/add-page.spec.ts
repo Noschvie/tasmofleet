@@ -124,6 +124,25 @@ test("Discovered: ignore, show ignored, restore, and Add… prefills the manual 
   await expect(box(page, "manual")).toContainText("Prefilled from MQTT discovery");
 });
 
+// Why (#713): a device that is on the broker but not offered as new has to be findable. The lookup of the
+// Discovered box takes an IP address, a MAC or a topic and says where the device is; for something TasmoFleet
+// has never seen it says so, and it asks nothing of devices (the page is a plain GET).
+test("Discovered: the lookup says where a device is and what it has not seen", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(app.url + "/devices/new");
+  const disc = box(page, "discovered");
+  await expect(disc.locator("#why")).toHaveCount(0);
+  await disc.getByLabel(/Not listed\? Look up/).fill("127.0.0.21");
+  await disc.getByRole("button", { name: "Look up" }).click();
+  await expect(page).toHaveURL(/why=127\.0\.0\.21/);
+  await expect(disc.locator("#why")).toContainText("Shed light");
+  await expect(disc.locator("#why")).toContainText("is listed under New devices");
+  await disc.getByLabel(/Not listed\? Look up/).fill("127.0.0.99");
+  await disc.getByRole("button", { name: "Look up" }).click();
+  await expect(disc.locator("#why")).toContainText("has not seen this on MQTT");
+  await expectNoOverflow(page, "Add devices with a lookup");
+});
+
 // Why (#714): Dismiss is offered on an address change and on a conflict, so Restore must be too. Show ignored
 // counts and lists them in their own section (never under New devices) with Restore as the only action.
 test("Discovered: a dismissed address change and conflict are counted, listed and restored", async ({ page }) => {

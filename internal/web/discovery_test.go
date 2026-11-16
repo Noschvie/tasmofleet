@@ -33,6 +33,15 @@ type fakeDiscovery struct {
 	consume   bool // Accept takes the proposal off the list, like the service (the second try finds nothing)
 
 	dismissVersions, undismissVersions []string // the version each Dismiss and Undismiss carried
+
+	explained  []string // the lookup texts of Explain (#713)
+	explainOut discovery.Explanation
+	explainErr error
+}
+
+func (f *fakeDiscovery) Explain(_ context.Context, query string) (discovery.Explanation, error) {
+	f.explained = append(f.explained, query)
+	return f.explainOut, f.explainErr
 }
 
 func (f *fakeDiscovery) Unidentified() []discovery.Unidentified { return f.unident }
