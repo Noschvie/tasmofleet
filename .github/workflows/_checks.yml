@@ -138,7 +138,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # A PR (base set) needs the merge base to find the e2e specs it changed (#820); the nightly needs no history.
-          fetch-depth: ${{ inputs.base != '' && 0 || 1 }}
+          fetch-depth: ${{ inputs.base != '' && '0' || '1' }} # string: a number 0 is falsy in && || and would give 1
       # The job container runs as root on a workspace owned by the runner user;
       # without this git refuses the repository and go build cannot stamp VCS info.
       - name: trust the workspace
