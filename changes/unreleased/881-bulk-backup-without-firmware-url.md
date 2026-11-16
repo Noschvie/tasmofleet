@@ -1,4 +1,0 @@
----
-section: Fixed
----
-Back up all now and Back up selected on the Backups page no longer answer 404 "Device not found" when no firmware base URL is set (#881). The transaction engine now runs without a firmware server, because only an update needs a firmware file; with the engine, Send command, the bulk Restart, Make compliant, Apply template and the Transactions page work without `FIRMWARE_BASE_URL` too, while updates, the Firmware pages and the "Update firmware" buttons stay off and `/updates/new` still says what to configure. An update that was queued or under way when the URL was removed is no longer frozen until it returns: it is resumed and ends failed with the reason "firmware updates are switched off", and a device on the minimal image of a staged update stays there until the URL is back and the update is retried.
