@@ -20,6 +20,15 @@ func (r snapshotRuns) BackupRunTimes(ctx context.Context) (settled, missed time.
 	return r.st.SnapshotRunTimes(ctx)
 }
 
+// GetKV and PutKV pass the loop's stored clock through; the key carries the loop's name.
+func (r snapshotRuns) GetKV(ctx context.Context, key string) (string, bool, error) {
+	return r.st.GetKV(ctx, key)
+}
+
+func (r snapshotRuns) PutKV(ctx context.Context, key, value string) error {
+	return r.st.PutKV(ctx, key, value)
+}
+
 // SaveBackupRun stores one of the loop's markers; the loop writes nothing else.
 func (r snapshotRuns) SaveBackupRun(ctx context.Context, run model.BackupRun) (int64, error) {
 	trigger := store.SnapshotRunRescheduled

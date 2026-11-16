@@ -193,6 +193,23 @@ func atWall(loc *time.Location, wall time.Time) time.Time {
 	return best.In(loc)
 }
 
+// ZoneKey names the clock the schedule is read on: the UTC offsets that at's location has on 1 January
+// and on 1 July of at's year, smallest first ("+3600,+7200" for Berlin, "+0,+0" for UTC). Two zones that
+// show the same clock share a key (Berlin and Paris, "CET" and "Europe/Berlin"), and a switch to summer
+// time does not change it, because a schedule on the wall clock follows that switch on its own. The
+// offsets are all that Next, Prev and Plan compute with; a run record holds instants, so a change of
+// this key is a change of the schedule, not of the record (#884).
+func ZoneKey(at time.Time) string {
+	loc := at.Location()
+	y := at.Year()
+	_, a := time.Date(y, time.January, 1, 12, 0, 0, 0, time.UTC).In(loc).Zone()
+	_, b := time.Date(y, time.July, 1, 12, 0, 0, 0, time.UTC).In(loc).Zone()
+	if b < a {
+		a, b = b, a
+	}
+	return fmt.Sprintf("%+d,%+d", a, b)
+}
+
 // Action is what a timed job does at the moment it looks at its schedule.
 type Action int
 

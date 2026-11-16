@@ -19,6 +19,9 @@ const backupGrace = notify.MissedGrace
 type backupTimes interface {
 	BackupRunTimes(ctx context.Context) (settled, missed time.Time, err error)
 	SaveBackupRun(ctx context.Context, r model.BackupRun) (int64, error)
+	// GetKV and PutKV keep the clock the loop last read its schedule on (zoneKey).
+	GetKV(ctx context.Context, key string) (value string, ok bool, err error)
+	PutKV(ctx context.Context, key, value string) error
 }
 
 // scheduleLoop runs a timed job on the weekdays and the time of day of the settings: the fleet backup
@@ -29,6 +32,12 @@ type backupTimes interface {
 // settles it, so does a skip, and so does a change of the schedule (reschedule): saving the page at
 // 10:20 with a time of 10:00 must not back up the fleet. A restart settles nothing, which is the
 // point: a run that was due while TasmoFleet was down still starts within the grace.
+//
+// A change of the clock the schedule is read on counts as a change of the schedule (#884). The run
+// record holds instants, not the clock that settled them: 03:00 under TZ=CET is 02:00Z, and after a
+// recreate without TZ the same day's slot is 03:00Z, so the settled run looks one hour too early and
+// would read as missed, or, within the grace, as a run to start a second time. The loop keeps the
+// clock it last saw (zoneKey) and settles up to now when that changes, as saving the schedule does.
 type scheduleLoop struct {
 	name     string
 	log      *slog.Logger
@@ -46,6 +55,47 @@ type scheduleLoop struct {
 	floor time.Time
 }
 
+// zoneKey is the name of the row (settings table) that holds the clock this loop last read its
+// schedule on: one row per loop, replaced in place.
+func (b *scheduleLoop) zoneKey() string { return "schedule-zone:" + b.name }
+
+// checkZone settles the schedule when the clock it is read on is not the one the loop last saw. The
+// new clock is stored only after the marker is written, so a failed write is tried again at the next
+// look and the floor (set by reschedule) keeps a run from starting meanwhile. It returns false when
+// the stored clock could not be read: nothing may run then, as with an unreadable run record.
+//
+// The location of a process does not change while it runs, so a change shows only at the first look
+// after a start; checking at every look costs one read and keeps the rule in one place.
+func (b *scheduleLoop) checkZone(ctx context.Context, now time.Time) bool {
+	key := schedule.ZoneKey(now)
+	old, ok, err := b.store.GetKV(ctx, b.zoneKey())
+	if err != nil {
+		b.log.Warn(b.name+" schedule: read the stored time zone", "err", err)
+		return false
+	}
+	if ok && old == key {
+		return true
+	}
+	if ok {
+		// Not the first start: the clock is not the one the run record was settled on.
+		b.log.Info(b.name+" schedule: the clock changed, the schedule starts from now", "was", old, "now", key)
+		if !b.reschedule(ctx) {
+			return true
+		}
+	}
+	b.putZone(ctx, key)
+	return true
+}
+
+// putZone stores the clock the loop reads its schedule on.
+func (b *scheduleLoop) putZone(ctx context.Context, key string) {
+	sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	if err := b.store.PutKV(sctx, b.zoneKey(), key); err != nil {
+		b.log.Warn(b.name+" schedule: storing the time zone", "err", err)
+	}
+}
+
 // step looks at the schedule once and does what is due. It returns when to look again (zero:
 // only after a change of the settings, because nothing is scheduled).
 func (b *scheduleLoop) step(ctx context.Context) time.Time {
@@ -54,6 +104,9 @@ func (b *scheduleLoop) step(ctx context.Context) time.Time {
 		return time.Time{}
 	}
 	now := b.now()
+	if !b.checkZone(ctx, now) {
+		return now.Add(time.Minute)
+	}
 	settled, _, err := b.store.BackupRunTimes(ctx)
 	if err != nil {
 		// Without the history a run could be repeated, so nothing runs; try again shortly.
@@ -97,20 +150,24 @@ func (b *scheduleLoop) step(ctx context.Context) time.Time {
 }
 
 // reschedule records that the schedule was changed: every time of day before now is settled.
-func (b *scheduleLoop) reschedule(ctx context.Context) {
+// It returns whether the marker was stored.
+func (b *scheduleLoop) reschedule(ctx context.Context) bool {
 	now := b.now()
 	b.floor = now
-	b.mark(ctx, model.BackupRunRescheduled, now)
+	return b.mark(ctx, model.BackupRunRescheduled, now)
 }
 
-// mark stores a marker row (no devices) that settles the scheduled times up to at.
-func (b *scheduleLoop) mark(ctx context.Context, trigger model.BackupRunTrigger, at time.Time) {
+// mark stores a marker row (no devices) that settles the scheduled times up to at. It returns
+// whether the row was stored (the failure is logged here).
+func (b *scheduleLoop) mark(ctx context.Context, trigger model.BackupRunTrigger, at time.Time) bool {
 	// Writing the marker is not cut by a shutdown: it is one row.
 	sctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
 	if _, err := b.store.SaveBackupRun(sctx, model.BackupRun{Trigger: trigger, StartedAt: at, FinishedAt: at, Completed: true}); err != nil {
 		b.log.Warn(b.name+" schedule: storing the marker", "marker", string(trigger), "err", err)
+		return false
 	}
+	return true
 }
 
 // loop runs until ctx ends: look, do what is due, sleep until the next scheduled time or until the

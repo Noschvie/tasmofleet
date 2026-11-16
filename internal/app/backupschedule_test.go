@@ -439,3 +439,121 @@ func TestMissedRunNotificationUsesTheScheduledBackupEvent(t *testing.T) {
 		t.Errorf("NOTIFY_BACKUP is off but sent %v", got)
 	}
 }
+
+// zoneChangeEnv is a backup whose 03:00 run happened under Europe/Berlin (02:00Z in November) and
+// was followed by a step under Berlin, so the loop has seen the Berlin clock. The test then moves
+// the clock to UTC, as a container recreated without TZ does (#884).
+func zoneChangeEnv(t *testing.T) *schedEnv {
+	t.Helper()
+	e := newSchedEnv(t, everyDay, "03:00")
+	e.dev(t, "plug", e.clock, model.Health{State: model.HealthOnline})
+	e.ranAt(t, time.Date(2026, 11, 14, 3, 0, 4, 0, e.loc))
+	e.at(2026, 11, 15, 3, 0) // 02:00Z: the run of the day happens under Berlin
+	e.s.step(context.Background())
+	if e.runs(t) != 1 {
+		t.Fatalf("setup: %d runs under Berlin, want 1", e.runs(t))
+	}
+	return e
+}
+
+// Why (#884): the run record stores an instant, not the clock that settled it. The 02:00Z run was
+// settled under TZ=CET; after a recreate without TZ the same day reads 03:00Z, and the settled
+// 02:00Z looks one hour too early. Without a rule for a changed clock the start-up says "a scheduled
+// run was missed" about a run that happened, and tells the person. A change of the clock the
+// schedule is read on is a change of the schedule: nothing runs, nobody is told.
+func TestTimeZoneChangeAfterARunIsNoMissedRun(t *testing.T) {
+	e := zoneChangeEnv(t)
+	e.clock = time.Date(2026, 11, 15, 19, 10, 0, 0, time.UTC) // the start-up of the live container
+	e.s.floor = time.Time{}                                   // a new process
+	next := e.s.step(context.Background())
+	if len(e.missed) != 0 {
+		t.Errorf("a zone change reported the run of %v as missed", e.missed)
+	}
+	if e.runs(t) != 1 {
+		t.Errorf("%d runs after the zone change, want the one that happened", e.runs(t))
+	}
+	if want := time.Date(2026, 11, 16, 3, 0, 0, 0, time.UTC); !next.Equal(want) {
+		t.Errorf("next look %v, want 03:00 on the new clock %v", next, want)
+	}
+	// And the day after runs as usual on the new clock.
+	e.clock = time.Date(2026, 11, 16, 3, 0, 0, 0, time.UTC)
+	e.s.step(context.Background())
+	if e.runs(t) != 2 {
+		t.Errorf("the next scheduled time on the new clock: %d runs, want 2", e.runs(t))
+	}
+}
+
+// Why (#884): the late-start window must not turn the same mismatch into a second backup. The run
+// at 02:00Z is settled; a restart under UTC at 03:30Z reads the slot as 03:00Z, unsettled and within
+// the 60 minutes, and would back the whole fleet up a second time 90 minutes after the first.
+func TestTimeZoneChangeWithinTheGraceStartsNoSecondRun(t *testing.T) {
+	e := zoneChangeEnv(t)
+	e.clock = time.Date(2026, 11, 15, 3, 30, 0, 0, time.UTC)
+	e.s.floor = time.Time{}
+	e.s.step(context.Background())
+	if e.runs(t) != 1 {
+		t.Fatalf("%d runs after the zone change, want 1: the late start repeated the run of the day", e.runs(t))
+	}
+}
+
+// Why (#601): this is the guard for the other side of the rule. The first start after the upgrade
+// has no stored clock; it must store one and not treat that as a change, or the late start after
+// downtime would be eaten. (It passes without the fix on purpose: it pins what the fix must keep.)
+func TestFirstStartWithoutAStoredZoneStillStartsTheLateRun(t *testing.T) {
+	e := newSchedEnv(t, everyDay, "03:00")
+	e.dev(t, "plug", e.clock, model.Health{State: model.HealthOnline})
+	e.ranAt(t, time.Date(2026, 11, 14, 3, 0, 4, 0, e.loc))
+	e.at(2026, 11, 15, 3, 20)
+	e.s.step(context.Background())
+	if e.runs(t) != 1 {
+		t.Fatalf("%d runs 20 minutes late with no stored clock, want the late start", e.runs(t))
+	}
+}
+
+// Why (#884): the clock changes by law twice a year, and a daylight-saving switch is not a changed
+// clock: the schedule is on the wall clock and follows it. A key that changed with the switch would
+// swallow the late start after a restart on the first day of summer time.
+func TestDaylightSavingSwitchIsNotATimeZoneChange(t *testing.T) {
+	e := newSchedEnv(t, everyDay, "03:00")
+	e.dev(t, "plug", e.clock, model.Health{State: model.HealthOnline})
+	e.ranAt(t, time.Date(2026, 3, 27, 3, 0, 4, 0, e.loc))
+	e.at(2026, 3, 27, 10, 0) // winter time: the loop stores its clock
+	e.s.step(context.Background())
+	e.at(2026, 4, 1, 3, 20) // summer time, 20 minutes after an unsettled slot
+	e.s.floor = time.Time{}
+	e.s.step(context.Background())
+	if e.runs(t) != 1 {
+		t.Fatalf("%d runs after the switch to summer time, want the late start", e.runs(t))
+	}
+}
+
+// failingZoneWrite wraps the store so that the clock cannot be stored.
+type failingZoneWrite struct {
+	backupTimes
+	puts int
+}
+
+func (f *failingZoneWrite) PutKV(context.Context, string, string) error {
+	f.puts++
+	return errors.New("disk full")
+}
+
+// Why (#884): the loop stores the new clock only after the marker is written. If that fails, the
+// in-process floor still keeps a run from starting, and the next look tries again instead of
+// forgetting the change.
+func TestUnwritableZoneStillStartsNoRunAndIsTriedAgain(t *testing.T) {
+	e := zoneChangeEnv(t)
+	f := &failingZoneWrite{backupTimes: e.st}
+	e.s.store = f
+	e.clock = time.Date(2026, 11, 15, 3, 30, 0, 0, time.UTC)
+	e.s.floor = time.Time{}
+	e.s.step(context.Background())
+	e.clock = e.clock.Add(time.Minute)
+	e.s.step(context.Background())
+	if e.runs(t) != 1 || len(e.missed) != 0 {
+		t.Errorf("runs %d, notifications %v after an unwritable clock; want 1 and none", e.runs(t), e.missed)
+	}
+	if f.puts < 2 {
+		t.Errorf("the clock was written %d times, want the next look to try again", f.puts)
+	}
+}

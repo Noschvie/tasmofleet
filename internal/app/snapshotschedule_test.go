@@ -274,3 +274,23 @@ func TestRetentionPrunesSnapshotRuns(t *testing.T) {
 		t.Errorf("the row inside the retention is gone: settled %v (%v)", settled, err)
 	}
 }
+
+// Why (#884): the snapshot loop is the backup loop on another record, and it hit the same false
+// "skipped" at the same start-up. The snapshot of 02:00Z was taken under TZ=CET; the container then
+// came back under UTC, where the slot of the day reads 03:00Z. The change of clock must go through
+// the snapshot adapter too (its own stored clock), so nothing is skipped and nobody is told.
+func TestTimeZoneChangeAfterASnapshotIsNoMissedSnapshot(t *testing.T) {
+	e := newSnapSched(t, everyDay, "03:00")
+	e.ran(t, time.Date(2026, 11, 15, 3, 0, 4, 0, e.loc)) // 02:00Z: the snapshot of the day
+	e.at(2026, 11, 15, 10, 0)
+	e.step(t) // under Berlin the loop sees its clock
+	e.now = time.Date(2026, 11, 15, 19, 10, 0, 0, time.UTC)
+	e.s.floor = time.Time{}
+	next := e.step(t)
+	if n := e.taken(t); n != 0 || len(e.sent()) != 0 {
+		t.Fatalf("a zone change took %d snapshots and sent %v; it must do neither", n, e.sent())
+	}
+	if want := time.Date(2026, 11, 16, 3, 0, 0, 0, time.UTC); !next.Equal(want) {
+		t.Errorf("next look %v, want %v", next, want)
+	}
+}

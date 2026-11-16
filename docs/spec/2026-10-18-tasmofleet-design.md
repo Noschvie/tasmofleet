@@ -1845,6 +1845,14 @@ exists twice on the day they go back runs once, at its first occurrence.
   schedule or the migration that created it (trigger `rescheduled`, written by the loop when
   `BACKUP_DAYS` or `BACKUP_TIME` change, and by migration 0045). A restart settles nothing.
   A schedule with no such row at all begins now instead of making up the past.
+- **A change of the clock is a change of the schedule (#884).** The run record holds instants, not the
+  clock that settled them. The loop therefore keeps the clock it read the schedule on (`schedule.ZoneKey`:
+  the UTC offsets of the location on 1 January and 1 July, so a daylight-saving switch and two zones with
+  the same clock do not count) in the `settings` table (`schedule-zone:backup`, `schedule-zone:snapshot`,
+  one row per loop, replaced in place; no migration). When it differs at a look, the loop writes the
+  `rescheduled` marker first and stores the new key after it: no run, no skip, no notification, as after
+  saving the schedule. The first start with no stored key stores it and changes nothing, so the late start
+  after downtime stays. An unreadable key means no run until the next look.
 - **A missed run** (TasmoFleet was down at the time) starts late when TasmoFleet is back within 60
   minutes of it. After that it is skipped: one `missed` marker, one notification (the scheduled-backup
   event `backup.scheduled_failed` under `NOTIFY_BACKUP`, text "Scheduled backup skipped"), and Devices,

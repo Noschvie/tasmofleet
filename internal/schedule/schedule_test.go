@@ -275,3 +275,28 @@ func TestLongestGap(t *testing.T) {
 		}
 	}
 }
+
+// Why (#884): the key says "the schedule is read on another clock". It must differ where the wall
+// clock differs (Berlin and UTC: 03:00 is another instant), must not differ where it does not
+// (Berlin and Paris, or a switch to summer time, which the wall-clock schedule follows on its own),
+// or a harmless restart would swallow a late start.
+func TestZoneKey(t *testing.T) {
+	paris, err := time.LoadLocation("Europe/Paris")
+	if err != nil {
+		t.Fatalf("tzdata: %v", err)
+	}
+	winter := time.Date(2026, 11, 15, 10, 0, 0, 0, berlin(t))
+	summer := time.Date(2026, 7, 15, 10, 0, 0, 0, berlin(t))
+	if ZoneKey(winter) == ZoneKey(time.Date(2026, 11, 15, 10, 0, 0, 0, time.UTC)) {
+		t.Error("Berlin and UTC share a key, but 03:00 is another instant in each")
+	}
+	if ZoneKey(winter) != ZoneKey(time.Date(2026, 11, 15, 10, 0, 0, 0, paris)) {
+		t.Error("Berlin and Paris show the same clock and must share a key")
+	}
+	if ZoneKey(winter) != ZoneKey(summer) {
+		t.Errorf("summer %q and winter %q differ: a daylight-saving switch is not a zone change", ZoneKey(summer), ZoneKey(winter))
+	}
+	if got := ZoneKey(winter); got != "+3600,+7200" {
+		t.Errorf("Berlin key %q, want the offsets +3600,+7200", got)
+	}
+}
