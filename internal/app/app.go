@@ -338,6 +338,14 @@ func (a *runtime) healthDeps() health.Deps {
 		Store: svc.Store, Client: svc.HTTP, Bus: a.bus, Hub: svc.Hub, OnMQTTSeen: a.onMQTTSeen, Expected: a.expectedRestart, // HTTP only: it measures HTTP
 		Reads:     svc.Client, // the router: a restart check's Status 1 is a read, MQTT first (#839)
 		Stability: bootWatch{StabilityStore: svc.Store, onBoot: a.brokerHost.restarted},
+		// The page's probe must not be skipped for an answer older than the failure the router remembers (#919).
+		HTTPFailedSince: func(id model.DeviceID) time.Time {
+			if svc.Router == nil {
+				return time.Time{}
+			}
+			_, since, _ := svc.Router.Memory().HTTPFailure(id)
+			return since
+		},
 	}
 }
 

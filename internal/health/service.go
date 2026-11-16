@@ -84,6 +84,11 @@ type Deps struct {
 	// on our broker matches the device's topic. Inventory uses it to set
 	// Device.MQTT to MQTTOurs (spec 6.4). It runs off the bus goroutine.
 	OnMQTTSeen func(id model.DeviceID, topic string)
+
+	// HTTPFailedSince is optional: since when the router remembers the device's HTTP calls failing (transport.Memory,
+	// what the pages and the routing read), zero while it remembers none. ProbeHTTP counts an answer from before that
+	// failure as stale: it says nothing about HTTP now, and only a probe can show that HTTP works again.
+	HTTPFailedSince func(model.DeviceID) time.Time
 }
 
 var _ Tracker = (*Service)(nil)
@@ -157,6 +162,7 @@ type devState struct {
 
 	wantProbe  bool      // ProbeHTTP asked for one HTTP probe; the next tick runs it
 	probeAfter time.Time // earliest next probe
+	probedAt   time.Time // when the last probe ran, whatever it found (#919)
 
 	hasSnap   bool      // uptime/RSSI/power came in via STATE or Status 11
 	snapAfter time.Time // earliest next snapshot fetch
@@ -399,15 +405,23 @@ func (s *Service) tick(ctx context.Context) {
 // poll, but it is a question about HTTP only: a failure never counts toward offline and the poll
 // schedule does not move. For a device whose last will is Offline it records what HTTP showed (an answer, a
 // refused API, #447) between two background polls, which alone decide that device's state (#619). Asked too soon
-// (an answer within probeFreshFor, a probe within its gap), or for an unknown device, it does nothing.
+// (an answer within probeFreshFor, a probe within its gap), or for an unknown device, it does nothing. An answer from
+// before the HTTP failure the router remembers (Deps.HTTPFailedSince) is not fresh (#919), and neither is the gap
+// after a probe that ran before that failure: the page asks again. A failing probe extends the failure series, so
+// its since stays older than the probe and the gap holds.
 // The request is picked up by the next tick.
 func (s *Service) ProbeHTTP(id model.DeviceID) {
 	now := s.d.Clock.Now()
+	var failedSince time.Time
+	if s.d.HTTPFailedSince != nil {
+		failedSince = s.d.HTTPFailedSince(id)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	ds := s.devs[id]
-	if ds == nil || ds.polling || ds.wantProbe || now.Before(ds.probeAfter) ||
-		!ds.lastHTTP.IsZero() && now.Sub(ds.lastHTTP) < probeFreshFor {
+	if ds == nil || ds.polling || ds.wantProbe ||
+		now.Before(ds.probeAfter) && !failedSince.After(ds.probedAt) ||
+		!ds.lastHTTP.IsZero() && now.Sub(ds.lastHTTP) < probeFreshFor && !failedSince.After(ds.lastHTTP) {
 		return
 	}
 	ds.wantProbe = true
@@ -950,6 +964,9 @@ func (s *Service) poll(ctx context.Context, id model.DeviceID, reach bool) {
 		return
 	}
 	ds.polling = false
+	if reach {
+		ds.probedAt = now
+	}
 	silent := !reach && s.mqttMode(ds) && ds.lwt != "Offline" && s.pollEligible(ds, now)
 	detail := "http poll ok"
 	switch {

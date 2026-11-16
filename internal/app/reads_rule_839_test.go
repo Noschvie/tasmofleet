@@ -353,3 +353,23 @@ func TestTheBrokerReaderWarnsOfAnotherDeviceOnTheTopic(t *testing.T) {
 		}
 	})
 }
+
+// Why (#919): the device page reports HTTP failing from the router's memory, and the probe its opening asks for was
+// skipped while the tracker's last answer was fresh, even when that answer came before the failure. The tracker the
+// app builds (healthDeps) must see the router's memory, or the rule in health.Service.ProbeHTTP has nothing to compare.
+func TestTheTrackerSeesTheRoutersHTTPFailures(t *testing.T) {
+	router := transport.NewRouter(transport.Options{HTTP: &restartReads{}})
+	a := &runtime{svc: &Services{Router: router}}
+	since := a.healthDeps().HTTPFailedSince
+	if since == nil {
+		t.Fatal("the tracker is built without the router's HTTP failures")
+	}
+	if got := since(1); !got.IsZero() {
+		t.Fatalf("a failure since %v for a device whose HTTP never failed", got)
+	}
+	router.Memory().Fail(1, transport.HTTPFailUnreachable)
+	_, want, _ := router.Memory().HTTPFailure(1)
+	if got := since(1); !got.Equal(want) || got.IsZero() {
+		t.Fatalf("failure since %v, want the router's %v", got, want)
+	}
+}

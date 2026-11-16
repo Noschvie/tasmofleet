@@ -152,6 +152,112 @@ func TestProbeHTTPSkipsUnknownDevicesAndFreshFacts(t *testing.T) {
 	}
 }
 
+// Why (#919): the page says "cannot reach the device over HTTP" from the router's memory of a failed call, and the
+// probe its opening asks for is the only HTTP a device fine on MQTT gets. A background read during a short restart
+// (the restart MqttPassword causes) left that failure behind, and the probe was skipped because the tracker's last
+// answer was younger than probeFreshFor though it came before the failure: the page reported HTTP failing for the
+// memory's ten minutes while HTTP worked, and every action went over MQTT "because HTTP fails". An answer from before
+// the remembered failure says nothing about HTTP now; one from after it still makes the probe unnecessary.
+func TestProbeHTTPIsNotSkippedForAnAnswerOlderThanTheRememberedFailure(t *testing.T) {
+	h := newHarness(t, true, Options{}, mqttDev(1, "a"))
+	var failedSince time.Time
+	h.svc.d.HTTPFailedSince = func(id model.DeviceID) time.Time {
+		if id != 1 {
+			t.Fatalf("asked for the failure of device %d", id)
+		}
+		return failedSince
+	}
+	h.listen()
+	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Online", false)
+	h.step() // alive without a STATE yet: one snapshot read over HTTP answers (no probe, so no probe gap)
+	answered := h.svc.Get(1).SeenHTTP
+	if answered.IsZero() || len(h.cl.commands()) != 1 {
+		t.Fatalf("rig: the snapshot read sent %v, SeenHTTP %v", h.cl.commands(), answered)
+	}
+	h.bus.emit(mqttbus.KindState, "a", "STATE", `{"UptimeSec":10}`, false) // fine on MQTT from now on: no polls
+	h.cl.reset()
+
+	// A failure from before the answer: the answer is fresh and newer, no probe.
+	failedSince = answered.Add(-time.Second)
+	h.advance(10 * time.Second)
+	h.svc.ProbeHTTP(1)
+	h.step()
+	if got := h.cl.commands(); len(got) != 0 {
+		t.Fatalf("probe despite an answer newer than the failure: %v", got)
+	}
+
+	// A failure after the answer, still within probeFreshFor of it: the page needs the probe.
+	h.advance(10 * time.Second)
+	failedSince = h.clk.Now()
+	h.advance(5 * time.Second)
+	if h.clk.Now().Sub(answered) >= probeFreshFor {
+		t.Fatal("rig: the answer is no longer fresh, the test would pass without the rule")
+	}
+	h.svc.ProbeHTTP(1)
+	h.step()
+	if got := h.cl.commands(); len(got) != 1 || got[0] != "Status 11" {
+		t.Fatalf("probe after a failure newer than the last answer sent %v, want one Status 11", got)
+	}
+	if g := h.svc.Get(1).SeenHTTP; !g.After(failedSince) {
+		t.Fatalf("SeenHTTP %v is not after the failure %v: the facts would still say HTTP fails", g, failedSince)
+	}
+}
+
+// Why (#919): the probe gap (probeOKGap) must not hide a failure the probe has not seen. A person opens the page (probe
+// OK), saves the MQTT password, the device restarts and a background read meets "connection refused": the router now
+// remembers HTTP failing, and reopening the page within the gap has to probe once more, or it says "HTTP fails" for up
+// to probeOKGap while HTTP works. A probe that fails keeps the memory's failure series (its since stays older than the
+// probe), so the gap holds again: reloading a page for a device that really fails is no probe storm.
+func TestProbeGapYieldsToAFailureNewerThanTheLastProbeButStillHoldsAfterAFailingProbe(t *testing.T) {
+	h := newHarness(t, true, Options{}, mqttDev(1, "a"))
+	var failedSince time.Time
+	h.svc.d.HTTPFailedSince = func(model.DeviceID) time.Time { return failedSince }
+	h.listen()
+	h.bus.emit(mqttbus.KindLWT, "a", "LWT", "Online", false)
+	h.step() // the snapshot read answers over HTTP
+	h.bus.emit(mqttbus.KindState, "a", "STATE", `{"UptimeSec":10}`, false)
+	failedSince = h.svc.Get(1).SeenHTTP.Add(time.Second) // forces the first probe past the fresh answer
+	h.advance(10 * time.Second)
+	h.cl.reset()
+	h.svc.ProbeHTTP(1)
+	h.step()
+	if got := h.cl.commands(); len(got) != 1 {
+		t.Fatalf("rig: the first probe sent %v, want one Status 11", got)
+	}
+
+	// The restart: a failure the router remembers, newer than the probe, inside probeOKGap.
+	h.advance(time.Minute)
+	failedSince = h.clk.Now()
+	h.advance(time.Minute)
+	h.cl.reset()
+	h.svc.ProbeHTTP(1)
+	h.step()
+	if got := h.cl.commands(); len(got) != 1 || got[0] != "Status 11" {
+		t.Fatalf("page opened inside the probe gap after a newer failure sent %v, want one Status 11", got)
+	}
+
+	// HTTP really fails: that probe fails, the memory keeps its old since, and reloads must not probe again.
+	h.cl.reset()
+	failAll(h, tasmota.ErrTimeout)
+	h.advance(time.Minute)
+	failedSince = h.clk.Now()
+	h.advance(time.Second)
+	h.svc.ProbeHTTP(1)
+	h.step()
+	if got := h.cl.commands(); len(got) != 1 {
+		t.Fatalf("rig: the failing probe sent %v, want one Status 11", got)
+	}
+	h.cl.reset()
+	for range 5 {
+		h.advance(5 * time.Second)
+		h.svc.ProbeHTTP(1)
+		h.step()
+	}
+	if got := h.cl.commands(); len(got) != 0 {
+		t.Fatalf("page reloads after a failing probe sent %v, want none (probe storm)", got)
+	}
+}
+
 // Why (#447): a refused HTTP API is an answer. The device's web page is up; only TasmoFleet's commands are
 // refused. Counted as failures, the refusals turned a device that is there "Offline" after three polls (the
 // header, its banner and the device list) while the Reachability tile said "The web page answers". A refusal
