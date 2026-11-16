@@ -315,6 +315,10 @@ type ProbeGuard struct {
 	Address string
 	Port    int
 	MAC     string
+	// Topic, when set, is the MQTT topic a probe over MQTT asked (#682): UpdateProbe then also needs the device to
+	// still have it, since that probe's answers came from whoever listens there. "": not checked (a probe at the
+	// address, and the other writers, which take the topic as their own argument where they need it).
+	Topic string
 }
 
 // ProbeResult holds the fields a probe owns. SetMQTT is false when the probe
@@ -369,8 +373,8 @@ var ErrMACInUse = fmt.Errorf("%w: the MAC belongs to another device", ErrConflic
 // UpdateProbe stores the outcome of a probe without touching any inventory
 // field the user owns (address, credentials, OTA exclusion, notes, a name or
 // topic the user chose, ...), so an edit made during the slow probe is never
-// overwritten. If the device was deleted, moved to another address/port or
-// rebound to another MAC since the probe began, nothing is written and
+// overwritten. If the device was deleted, moved to another address/port,
+// rebound to another MAC or (for a probe over MQTT, g.Topic) given another topic since the probe began, nothing is written and
 // ErrConflict is returned. A device that already reports to our broker keeps
 // "ours" when the probe only finds "other" (messages seen beat name matching).
 func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuard, r ProbeResult) error {
@@ -407,7 +411,7 @@ func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuar
 			WHEN NOT EXISTS (SELECT 1 FROM devices o WHERE o.topic=? AND o.id<>devices.id) THEN ?
 			ELSE topic END,
 		device_topic = CASE WHEN ?='' THEN device_topic ELSE ? END,
-		updated_at=? WHERE id=? AND address=? AND port=? AND mac=?`,
+		updated_at=? WHERE id=? AND address=? AND port=? AND mac=? AND (?='' OR topic=?)`,
 		string(i.Family), i.Hardware, b2i(i.SingleCore), i.Version, i.Image, i.Variant, i.Language,
 		i.FlashSizeKB, i.ProgramFlashSizeKB, i.FreeKB, toMS(i.DetectedAt), b2i(i.LanguageKnown), fwrJSON(i.FWR), fwrJSON(i.FWR),
 		b2i(r.SetMQTT), string(r.MQTT), string(r.MQTT),
@@ -418,7 +422,7 @@ func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuar
 		b2i(r.SetGroupTopic), r.GroupTopic, b2i(r.SetGroupTopic), toMS(s.now()), relayNames, relayNames,
 		r.DeviceName, r.DeviceName, r.NameFrom, r.NameFrom, r.DeviceName, r.DeviceName, r.DeviceName,
 		r.DeviceTopic, r.DeviceTopic, r.DeviceTopic, r.DeviceTopic, r.DeviceTopic, r.DeviceTopic,
-		toMS(s.now()), id, g.Address, g.Port, strings.ToLower(g.MAC))
+		toMS(s.now()), id, g.Address, g.Port, strings.ToLower(g.MAC), g.Topic, g.Topic)
 	if err != nil {
 		return mapErr(err)
 	}
@@ -501,10 +505,11 @@ func (s *SQLite) DismissDeviceName(ctx context.Context, id model.DeviceID, devic
 
 // UpdateIdentityFromMQTT stores the identity fields a device announced over MQTT (INFO1, or the
 // Status 2 reply asked for over MQTT): chip family, hardware, firmware version, image and
-// variant, and nothing else. It writes only while no probe over HTTP has ever identified the
-// device (identity_at = 0) and only for the device that was read (address, port, MAC and MQTT
-// topic unchanged). A probe that stored an identity meanwhile therefore always wins:
-// ErrConflict, nothing written. It never sets identity_at, so the first HTTP probe still runs.
+// variant, and nothing else. It writes only while no probe has ever identified the device
+// (identity_at = 0; the probe sets it at the address or over MQTT after its check, #682) and only
+// for the device that was read (address, port, MAC and MQTT topic unchanged). A probe that stored
+// an identity meanwhile therefore always wins: ErrConflict, nothing written. It never sets
+// identity_at, so the first probe still runs.
 func (s *SQLite) UpdateIdentityFromMQTT(ctx context.Context, id model.DeviceID, g ProbeGuard, topic string, i model.Identity) error {
 	res, err := s.db.ExecContext(ctx, `UPDATE devices SET chip_family=?, hardware=?, single_core=?, fw_version=?, fw_image=?,
 		fw_variant=?, fwr_facts = CASE WHEN ?='' THEN fwr_facts ELSE ? END, updated_at=? WHERE id=? AND address=? AND port=? AND mac=? AND topic=? AND identity_at=0`,

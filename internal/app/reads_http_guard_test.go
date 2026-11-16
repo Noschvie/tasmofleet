@@ -42,13 +42,13 @@ var httpReadsAllowed = map[string]string{
 	// The health poll and probe measure HTTP (the page's and the console's probe and the cut-off proof ask them too).
 	"internal/app/app.go runtime.healthDeps: raw client of the services":  "the health poll",
 	"internal/health/service.go Service.probe: the tracker's HTTP client": "the health poll",
-	// The identity probe (Refresh identity, the background identity refresh, a device's first probe, discovery's
-	// follow-up, the firmware recheck) and its helpers. The helpers read with the client of the prober they are called
+	// The identity probe at the address (a device's first probe, and Refresh identity, the background identity refresh,
+	// discovery's follow-up and the firmware recheck of a device MQTT cannot serve, #682) and its helpers. The helpers read with the client of the prober they are called
 	// on: the background reads (ReadNet, ReadBroker, the checks of VerifyRead and verifyAndPin) copy the prober with the
 	// router as its client.
 	"internal/app/services.go openServices: raw client of the router":        "The identity probe",
 	"internal/app/services.go openServices: HTTP client of its own":          "The identity probe",
-	"internal/app/probe.go Prober.probe: the prober's HTTP client":           "The identity probe",
+	"internal/app/probe.go Prober.probeAddress: the prober's HTTP client":    "The identity probe",
 	"internal/app/probe.go Prober.probeFacts: the prober's HTTP client":      "The identity probe",
 	"internal/app/probe.go Prober.refresh: the prober's HTTP client":         "The identity probe",
 	"internal/app/probe.go Prober.Describe: the prober's HTTP client":        "The identity probe",

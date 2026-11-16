@@ -78,7 +78,8 @@ claim below or shows a residual risk worse than stated.
 
 - **R1, spoofed content.** M2 can publish a false LWT/STATE for a managed device. Health
   may then show a wrong state until the next HTTP poll or genuine message. This cannot be
-  fixed without broker-side authorization. OTA and identity decisions use HTTP only.
+  fixed without broker-side authorization. Identity read over MQTT is bounded by R6 (#682); OTA decisions run
+  `Guard` on the update job's own read.
 - **R2, reservation squatting on a device's own topics** (includes spoofing *within* one
   device's reservation: any publisher can write `tele/<victim>/...`; covered by R1 until
   broker ACLs exist). M2 can fill its victim device's
@@ -111,17 +112,20 @@ claim below or shows a residual risk worse than stated.
   checks the stored family against the artifact's header and file name, not against the chip
   itself, so this is the same trust as an update pinned to MQTT, which reads its INFO1 the
   same way. Broker ACLs close it at the source.
-- **R6, spoofed refresh answers (#91).** "Refresh identity" of a device on our broker that HTTP
-  cannot reach asks `Status 5` and `Status 2` over MQTT. M2 can answer first. Effect: false
-  hostname/IP on the device page, and (as in R5) a false version or hardware for a device no
-  HTTP probe identified; a false MAC in the `Status 5` answer can only make the refresh refuse.
-  Bounds: only an answer on the device's own `stat/<topic>/STATUSn` within 10 s of our question
-  counts (retained ones never); MQTT binds no MAC, never changes the topic, never replaces an HTTP
-  identity, never sets `identity_at`, and minimal/safeboot answers are refused. The DeviceName does
-  follow the answer (`refreshNameMQTT`, under the rule of an HTTP refresh, #125), as it does in the
-  identity probe's facts read over MQTT after a check on the topic (#851); a false one shows as the
-  "Name on the device" notice, or renames a device whose name TasmoFleet filled in itself. Nothing
-  flashed depends on it (the OTA engine probes over HTTP and `Guard` checks that). Low.
+- **R6, spoofed identity answers (#91, #682).** The identity probe of a device the router reads over MQTT (Refresh
+  identity, the background identity refresh, discovery's follow-up) asks `Status 5`, `Status 2`, `Status 4` and its
+  facts on the device's topic (mqtt-transport.md T20). M2 can answer. Bounds: the `Status 5` check hears every reply
+  within 1.5 s and goes on only on exactly one reply with a stored MAC, so M2 answering beside the device marks the
+  topic and the probe goes to the address; M2 answering alone, with a MAC of the stored set, or leaving the `Status 5`
+  to the device and answering a later `Status 2` or `Status 4` first (each read after the check hears one reply), can
+  feed a false version, chip, flash size or language, which the update page selects firmware by. That gives M2 nothing new: a
+  client with write access to `cmnd/<topic>/` can send `OtaUrl` and `Upgrade` to the device directly, and the broker
+  ACL closes both at the source. Only a live answer on the device's own `stat/<topic>/STATUSn` counts (retained ones
+  never); the probe binds no MAC, never takes the topic from an answer, refuses an answer that names a minimal or
+  safeboot image, and the store writes only while the device still has the topic that was asked. The DeviceName
+  follows the answer under the rule of an HTTP refresh (#125); a false one shows as the "Name on the device" notice,
+  or renames a device whose name TasmoFleet filled in itself. `Guard` runs before every flash on the update job's own
+  read. Low with a broker ACL; without one, as low as the direct `Upgrade` it adds nothing to.
 
 ## Recommendation (operations)
 

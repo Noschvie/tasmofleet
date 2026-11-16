@@ -316,11 +316,21 @@ data directory (TasmoAdmin lesson A4).
   (`1 or >X to upgrade`) is identical on normal firmware (OBS, all fixtures). It only
   supplies the version (`tasmota.UpgradeProbe.Idle`, `fwselect.UpgradeProbe.Version`)
   and never proves minimal on its own.
-- **Identity source (#87).** The HTTP probe is the primary source (its `Status 2`, `Status 4` or bare `Upgrade`,
-  asked at the address its `Status 5` checked, and on minimal firmware the image source of the minimal detection rule; the probe's reads after the identity are no identity
-  source and go over MQTT first since #851). For a device on our broker
-  (`mqtt_capability = ours`) whose identity no HTTP probe has stored (`identity_at` unset: HTTP
-  unreachable, refused, or not yet tried) MQTT is a second source, one that never replaces the
+- **Identity source (#87, #682).** The probe is the primary source (`Prober.probe`; docs/security/mqtt-transport.md T20).
+  For a stored device that the router reads over MQTT (Choose) and that has a stored MAC and topic it goes MQTT
+  first, also while HTTP works: `Status 5` on the stored topic, where every reply within 1.5 s is heard
+  (`Router.TopicStatus5`), and only exactly one reply with a stored MAC lets it go on; `Status 2`, `Status 4` (the
+  language is the build's locale ID, #686) and the facts follow, pinned to MQTT, and the store writes the result only
+  while the device still has the topic that was asked (`store.ProbeGuard.Topic`). A second reply or another MAC marks
+  the topic (#852) and, like a check that learnt nothing or a read after it that goes unanswered, sends the whole probe
+  to the address, whose `Status 5` vouches for its `Status 2`, `Status 4` or bare `Upgrade` (and on minimal firmware
+  the image source of the minimal detection rule). An address that is no stored device yet (no topic, no MAC to
+  compare), minimal and safeboot firmware (no `Status 5`) and a device MQTT cannot serve are probed at the address.
+  Threat model (#682): a client with write access to the device's command topic can send `OtaUrl` and `Upgrade` to it
+  anyway, so a forged identity gives it nothing new; the broker ACL protects against it, the check against another
+  device on the same topic. For a device on our broker
+  (`mqtt_capability = ours`) whose identity no probe has stored (`identity_at` unset: not reachable, refused, or
+  not yet tried) MQTT is a second source, one that never replaces the
   first: (1) `tele/<topic>/INFO1`, published at every boot, carries `Version`; it is read with
   the `StatusFWR.Version` grammar (`fwselect.DetectInfo1`). INFO1 has no hardware, so on its own
   it fills the version only (never image or variant, and nothing once the hardware is known) and
@@ -337,17 +347,16 @@ data directory (TasmoAdmin lesson A4).
   starts anew after a reconnect. Only a reply within 30 s of the
   question is taken: anyone on the broker can publish a STATUS2. MQTT writes only the six
   identity fields (family, hardware, single core, version, image, variant) and only while
-  `identity_at` is unset (`store.UpdateIdentityFromMQTT`, compare-and-set; the OTA preflight is an
-  HTTP probe and sets it too); MQTT never sets
-  `identity_at`, so the first HTTP probe still runs and its identity replaces the MQTT one, and
-  a probe that finishes meanwhile always wins. OTA is unchanged: the engine probes over HTTP
+  `identity_at` is unset (`store.UpdateIdentityFromMQTT`, compare-and-set); this reader never sets
+  `identity_at`, so the first probe still runs and its identity replaces the reader's, and
+  a probe that finishes meanwhile always wins. OTA is unchanged: the engine reads the identity
   before it plans and `Guard` runs on that identity. A retained INFO1 may describe the last
-  boot only; a device on a stale one is corrected by its next boot or its HTTP probe.
+  boot only; a device on a stale one is corrected by its next boot or its next probe.
 - **Refresh identity (#91, #65).** `Prober.Refresh(ctx, id, actor)` re-reads and stores every
-  identity field (where each read goes, #851: `Status 5` without credentials first, `Status 2`, `Status 4` (or the bare
-  `Upgrade` and the image source of the minimal detection rule) at the address, the identity source of #87; `Status 6`, `SetOption3`, `Status 1` and plain `Status` over MQTT first,
-  pinned, once a `Status 5` on the device's topic shows a stored MAC and the router reads the device over MQTT, else at
-  the address; docs/security/mqtt-transport.md, "What still uses HTTP"): firmware, build, chip, hardware, language and flash (Status 2/4), the network
+  identity field (where each read goes, #682: over MQTT first after the check that hears every reply on the topic, as
+  in "Identity source" above, else at the address: `Status 5` without credentials first, `Status 2`, `Status 4` (or the
+  bare `Upgrade` and the image source of the minimal detection rule), then `Status 6`, `SetOption3`, `Status 1` and plain
+  `Status`; docs/security/mqtt-transport.md T20 and "What still uses HTTP"): firmware, build, chip, hardware, language and flash (Status 2/4), the network
   facts of Status 5 (hostname, IP, gateway, subnet mask, DNS servers; Wi-Fi from Status 11 follows
   in the background), MQTT broker (Status 6, SetOption3), the OTA URL (one read-only `Status 1`, best
   effort, never the `OtaUrl` command; credentials in the URL are stripped before it is stored, a value
@@ -389,19 +398,17 @@ data directory (TasmoAdmin lesson A4).
   stored one is kept, `device.topic_kept` is audited and the device page says so after the
   refresh (`TopicKeptError`). The retained LWT of the new topic is applied at once by the
   health reload (#105); what health learned on the old topic (its LWT, often the Offline Tasmota
-  sends there on a topic change) is dropped first (#119). _Transport:_ for a device recorded as `ours` whose HTTP probe could not be used
-  (unreachable, timeout, HTTP API refused, address outside the device networks) the refresh
-  goes over MQTT: `Status 5`, MAC rule as above, then `Status 2`, one question at a time per
-  device and one per second on the bus (shared with the #87 reader; if the reader asked the
-  device between the two, the refresh waits 2 s and asks once more), audited
-  (`identity.mqtt_ask`), a live answer on the device's own topic within 10 s. MQTT data stays
-  the weaker source: it writes the identity only while `identity_at` is unset
-  (`UpdateIdentityFromMQTT`), never sets `identity_at`, refuses minimal/safeboot answers, binds
-  no MAC and leaves the topic alone; the network facts are stored (`UpdateNet`). It also reads
-  the DeviceName with the plain `Status` (never Status 0) and stores it with `UpdateProbeName`
-  under the same follow rule as over HTTP; that call never writes the identity (#125). This is
-  accepted and cosmetic: anyone with broker access can change the name of a device whose name was
-  never edited by hand; a hand-set name only gets the notice below.
+  sends there on a topic change) is dropped first (#119). _Transport (#682):_ a device the router reads over MQTT
+  is refreshed over MQTT first, as in "Identity source" above. The MAC rule holds there too: only exactly one reply
+  with a stored MAC to the check that hears every reply lets the refresh read on; a second reply or another MAC marks
+  the topic (#852) and the refresh goes to the address, so with HTTP failing it fails and writes nothing. The language
+  is the `Status 4` locale ID, `identity_at` is set as at the address, no MAC is bound (a device without a stored MAC
+  never takes this path) and the topic the device reports is not taken (mqtt-ingest.md R6). A refresh a person or
+  discovery started that went over MQTT is audited (`identity.mqtt_ask` with the actor, the topic and `via` `mqtt`);
+  the background refresh is not. The DeviceName read there follows the rule of the address; this is accepted and
+  cosmetic: anyone with broker access can change the name of a device whose name was never edited by hand; a
+  hand-set name only gets the notice below. Until 0.39.0 a separate refresh over MQTT ran only when HTTP failed, heard
+  one reply, read no `Status 4` and wrote the identity only while `identity_at` was unset (#91); the probe replaces it.
   Contract change in this step: `web.Prober.Refresh` takes the actor; `store.ProbeResult` gained
   `DeviceName`, `NameFrom`, `DeviceTopic`, `BindMACs` and lost `Topic` (the old repair rule is
   part of the topic rule above).
@@ -1888,9 +1895,9 @@ with one notification. The skip is the snapshot failure event `snapshot.failed` 
 - **Device data refresh** (#600): the data pages draw from stays current without a page open. The broker re-read
   of 6.4 (`brokerHostReader`) is the one scheduler; its periodic reads visit one online device per 30-second pass (a
   restart's refresh runs as soon as it is due, one device after the other), and a visit reads, in that order, what
-  is due: the broker (every 6 h), the identity (every 24 h, `Prober.RefreshFacts`: the HTTP probe
-  of an explicit refresh, but the stored name and topic do not follow the device's DeviceName and topic, no MAC is
-  bound, and only the reads after the identity go over MQTT, #851; the identity over MQTT is #682) and the data (every 24 h): the Settings values
+  is due: the broker (every 6 h), the identity (every 24 h, `Prober.RefreshFacts`: the probe
+  of an explicit refresh, MQTT first after the check that hears every reply on the topic, #682, but the stored name and
+  topic do not follow the device's DeviceName and topic and no MAC is bound) and the data (every 24 h): the Settings values
   (`settings.Manager.Read`, which fills `Last`), the values the policy rules check (`policyReporter.readDevice`) and
   the GPIO template reading (`templates.Manager.Refresh`). A restart the health tracker records (INFO3, or the
   uptime drop seen in STATE) makes all three due once the device has settled (20 s); further announcements of

@@ -100,10 +100,12 @@ func brokerReadOverRouter(t *testing.T, onTopic, atAddr *brokerAnswers, lwt stri
 		t.Fatal(err)
 	}
 	router := transport.NewRouter(transport.Options{HTTP: brokerHTTP{dev: atAddr}, Devices: st})
-	router.SetFacts(routerFacts(st, router, id, lwt))
+	facts := routerFacts(st, router, id, lwt)
+	router.SetFacts(facts)
 	router.SetMQTT(brokerMQTT{dev: onTopic})
+	rt := &runtime{facts: facts}
 	return &Prober{Client: router.HTTPOnly(), Reads: router, Devices: st, Gap: time.Millisecond, Broker: fixedBroker{host: "mqtt.home"},
-		Topics: router.TopicTaken()}, st, id
+		Topics: router.TopicTaken(), ReadsOverMQTT: rt.readsOverMQTT}, st, id
 }
 
 // routerFacts are the facts of brokerReadOverRouter's router as the app wires them (its memories, its topic marks):

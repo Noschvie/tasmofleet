@@ -32,7 +32,8 @@ import (
 // The same reader keeps the rest of a device's data current (#600), in the same visit, so there is one
 // scheduler and one device at a time, not several that happen to meet on a device:
 //
-//   - identity (Prober.RefreshFacts, HTTP: Status 5, 2, 4; never Status 0; it renames nothing) after a restart and every
+//   - identity (Prober.RefreshFacts: Status 5, 2, 4 and the facts, MQTT first after the check that hears every reply on
+//     the topic, #682, else at the address; never Status 0; it renames nothing) after a restart and every
 //     identityEvery, under the device lock like the broker read;
 //   - the Settings values (settings.Manager.Read, which fills the Settings tab's last-known values),
 //     the values the policy rules check (policyReporter.readDevice) and the GPIO template reading
@@ -50,10 +51,10 @@ import (
 // live check is paused or its interval is 0, as for the policy poller.
 //
 // A device whose HTTP API is off (or HTTP blocked) is never "readable" (the HTTP health poll does not reach it), yet MQTT
-// serves it: when its data is due and the router reads it over MQTT, it is visited for the data alone (#676), without
-// the identity probe, which is HTTP (docs/security/mqtt-transport.md, "What still uses HTTP"), and without the broker
-// read, which goes MQTT first like every read (#839) but looks for what only HTTP can show: a device that moved to
-// another broker does not answer on TasmoFleet's, and on it the read could only confirm what its messages show.
+// serves it: when its identity or its data is due, after a restart too, and the router reads it over MQTT, it is
+// visited for those (overMQTT: the data since #676, the identity since #682, whose probe goes MQTT first), without the
+// broker read, which goes MQTT first like every read (#839) but looks for what only HTTP can show: a device that moved
+// to another broker does not answer on TasmoFleet's, and on it the read could only confirm what its messages show.
 //
 // One device at a time on the whole process, and only while nobody else works on the device: the
 // read takes the device lock like any writer and is skipped while a job holds the device or a firmware
@@ -120,14 +121,13 @@ type brokerHostReader struct {
 	enter func(context.Context, model.DeviceID, string) (func(), error)
 	now   func() time.Time
 	log   *slog.Logger
-	// readIdentity re-probes the identity over HTTP (Prober.RefreshFacts); nil: not done.
+	// readIdentity re-probes the identity, MQTT first (Prober.RefreshFacts); nil: not done.
 	readIdentity func(context.Context, model.DeviceID) error
 	// readData fills the caches of the Settings tab, the policy values and the GPIO templates from the
 	// device; nil: not done. It runs without the device lock (see above).
 	readData func(context.Context, model.Device) error
-	// readsOverMQTT says whether the reads of the data part go over MQTT for d (the router's choice,
-	// transport.Choose: Commands is MQTT); nil: never. Only then is a device whose HTTP API is off visited for
-	// its data alone (#676).
+	// readsOverMQTT says whether the reads of d go over MQTT (the router's choice, transport.Choose: Commands is MQTT);
+	// nil: never. Only then is a device whose HTTP API is off visited for its identity and data (overMQTT).
 	readsOverMQTT func(context.Context, model.Device) bool
 	// topicMarked says whether the router holds d off its MQTT topic because another device answers there (#852,
 	// Prober.topicMarked); recheckTopic asks that topic again and hears every reply (Prober.recheckMarked):
@@ -271,10 +271,19 @@ func (r *brokerHostReader) pass(ctx context.Context) {
 		case !ok || now.After(w.until): // deleted, or waited long enough: the periodic read catches up
 			delete(r.pending, id)
 		case now.Before(w.due): // not yet
-		case !r.readable(d): // nothing the read could reach now: HTTP is checked, once the read is due
-			ask(d)
+		case !r.readable(d) && (!w.restart || !r.overMQTT(ctx, d, visitWhat{identity: true, data: true}).any()):
+			ask(d) // nothing the read could reach now: HTTP is checked, once the read is due
 		default:
 			what := r.requested(id, w, now)
+			if !r.readable(d) {
+				// A restart of a device HTTP does not reach: its identity and data go over MQTT (#682, #676), the broker
+				// read waits for HTTP. A restart within the hour leaves them to the end of the hour (requested): nothing
+				// to read now, so the read keeps waiting like any other.
+				ask(d)
+				if what = r.overMQTT(ctx, d, what); !what.any() {
+					break
+				}
+			}
 			r.inRestartRead = true
 			err := r.visit(ctx, d, what)
 			r.inRestartRead = false
@@ -308,10 +317,9 @@ func (r *brokerHostReader) pass(ctx context.Context) {
 		}
 		if !r.readable(d) {
 			ask(d)
-			if !r.dataOverMQTT(ctx, d, what) {
-				continue
+			if what = r.overMQTT(ctx, d, what); !what.any() {
+				continue // the broker waits for HTTP (readable)
 			}
-			what = visitWhat{data: true} // the broker and the identity wait for HTTP (readable)
 		}
 		r.inRestartRead = r.restartLeft[d.ID] // the read a restart left to the end of the hour is the restart's read
 		err := r.visit(ctx, d, what)
@@ -328,9 +336,9 @@ func (r *brokerHostReader) pass(ctx context.Context) {
 
 // recheckTopics asks the topic of every listed device the router holds off it (#852) again once its own schedule is
 // due, every brokerHostRetry, and warns while another device still answers there. Why a schedule of its own, apart from
-// readable, dataOverMQTT and the read schedules: the mark sends the device's reads over HTTP, so the visits that ask
+// readable, overMQTT and the read schedules: the mark sends the device's reads over HTTP, so the visits that ask
 // the topic on their way may never come. The broker read waits for HTTP (readable), and the data refresh of a device
-// HTTP does not reach waits for its reads to go over MQTT (dataOverMQTT), which the mark itself prevents: a device
+// HTTP does not reach waits for its reads to go over MQTT (overMQTT), which the mark itself prevents: a device
 // reached over MQTT whose HTTP times out (HTTP state unknown, never failing) stayed held off its topic until TasmoFleet
 // restarted. The check is the one that alone may end a mark (Prober.recheckTopic: Status 5, every reply on the stored
 // topic within the identity window); nothing else is sent. The device lock is only tried, as for the data read: a
@@ -398,24 +406,28 @@ func (r *brokerHostReader) requested(id model.DeviceID, w brokerWant, now time.T
 	return what
 }
 
-// readable says whether the broker and identity visit can reach d. The identity probe is HTTP, and the broker read,
-// MQTT first since #839, looks for a move off TasmoFleet's broker, which only HTTP can show (a device that left does
-// not answer here), so only a device the HTTP health poll reached lately qualifies: one online over MQTT alone would
-// hold its lock for the whole timeout at every try and refuse the person's writes as busy. And only on regular
-// firmware: minimal and safeboot answer Unknown (#558; the list gives the effective variant).
+// readable says whether the whole visit can reach d. The broker read, MQTT first since #839, looks for a move off
+// TasmoFleet's broker, which only HTTP can show (a device that left does not answer here), so only a device the HTTP
+// health poll reached lately qualifies: one online over MQTT alone would hold its lock for the whole timeout at every
+// try and refuse the person's writes as busy. For such a device the identity and the data go over MQTT (overMQTT). And
+// only on regular firmware: minimal and safeboot answer Unknown (#558; the list gives the effective variant).
 func (r *brokerHostReader) readable(d model.Device) bool {
 	return !policy.LimitedFirmware(d.Identity.Variant) && r.httpUp(d.ID)
 }
 
-// dataOverMQTT says whether d, which readable refuses for the HTTP reason only (regular firmware, the HTTP
-// health poll has not reached it: its API is off, or HTTP is blocked), is visited for its data alone now: the data
-// is due and its reads go over MQTT (#676). Such a device never got its data refreshed otherwise, because an API
-// refusal never moves the HTTP fact readable asks for. The data read holds no lock (readDataOf), so readable's
-// reason for waiting for HTTP does not apply to it; the broker read keeps its gate.
-// A device stored without a MAC is not visited: its refresh has no MQTT check to pin the reads to (refreshData), so
-// they would go over HTTP.
-func (r *brokerHostReader) dataOverMQTT(ctx context.Context, d model.Device, what visitWhat) bool {
-	return what.data && r.readData != nil && r.readsOverMQTT != nil && d.MAC != "" && !policy.LimitedFirmware(d.Identity.Variant) && r.readsOverMQTT(ctx, d)
+// overMQTT narrows what is due for d, which readable refuses for the HTTP reason only (regular firmware, the HTTP
+// health poll has not reached it: its API is off, or HTTP is blocked), to the reads that go over MQTT now: the identity
+// (the probe goes MQTT first, #682) and the data (#676), when the router reads d over MQTT. Such a device never got
+// them refreshed otherwise, because an API refusal never moves the HTTP fact readable asks for. The broker read keeps
+// its gate. A device stored without a MAC is not visited: the probe and the data refresh have no check over MQTT to
+// pin their reads to (probeOverMQTT, refreshData), so they would go over HTTP. The data read holds no lock
+// (readDataOf); the identity read holds the device lock for at most identityTimeout, like over HTTP.
+func (r *brokerHostReader) overMQTT(ctx context.Context, d model.Device, what visitWhat) visitWhat {
+	w := visitWhat{identity: what.identity && r.readIdentity != nil, data: what.data && r.readData != nil}
+	if !w.any() || r.readsOverMQTT == nil || d.MAC == "" || policy.LimitedFirmware(d.Identity.Variant) || !r.readsOverMQTT(ctx, d) {
+		return visitWhat{}
+	}
+	return w
 }
 
 // topicTakenLog is the warning of a check that found another device on the device's MQTT topic (#852).

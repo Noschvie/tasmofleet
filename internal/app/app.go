@@ -216,7 +216,6 @@ func (a *runtime) run(ctx context.Context) error {
 	mid.known = a.mqttKnown.Known
 	mid.fw = a.fw
 	mid.spawn = func(f func()) { a.goBG("mqtt-identity-ask", func() error { f(); return nil }) } // waited for at shutdown
-	a.svc.Prober.MQTT = mid                                                                      // "Refresh identity" over MQTT for devices HTTP cannot reach (#91)
 	a.goBG("mqtt-identity", func() error { mid.run(bg); return nil })
 
 	if err := a.setupBackups(bg); err != nil {

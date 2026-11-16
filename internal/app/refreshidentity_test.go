@@ -11,8 +11,6 @@ import (
 	"time"
 
 	"github.com/hellwand/tasmofleet/internal/model"
-	"github.com/hellwand/tasmofleet/internal/mqttbus"
-	"github.com/hellwand/tasmofleet/internal/mqttcmd"
 	"github.com/hellwand/tasmofleet/internal/secretbox"
 	"github.com/hellwand/tasmofleet/internal/simulator"
 	"github.com/hellwand/tasmofleet/internal/store"
@@ -20,7 +18,7 @@ import (
 )
 
 // "Refresh identity" brings every identity field up to date (#91) and refuses a device that is
-// not the stored one (#65), over HTTP or, for a device only reachable on our broker, over MQTT.
+// not the stored one (#65). The probe over MQTT first is tested in topic_identity_test.go (#682).
 
 // refusal is how the web layer recognises a refused refresh (devices.go refreshProblem).
 type refusal interface{ Refusal() string }
@@ -247,244 +245,11 @@ func TestRefreshRefusesToBindAMACOfAnotherDevice(t *testing.T) {
 	}
 }
 
-// fakeAsker answers Status N over "MQTT" from a table and records what was asked.
-type fakeAsker struct {
-	mu      sync.Mutex
-	replies map[int]string
-	asked   []int
-	err     error
-	busy    map[int]int // answer errMQTTBusy this many times for Status N
-}
-
-func (f *fakeAsker) askStatus(_ context.Context, _ model.Device, n int, _ string) (json.RawMessage, error) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.asked = append(f.asked, n)
-	if f.err != nil {
-		return nil, f.err
-	}
-	if f.busy[n] > 0 {
-		f.busy[n]--
-		return nil, errMQTTBusy
-	}
-	r, ok := f.replies[n]
-	if !ok {
-		return nil, tasmota.ErrTimeout
-	}
-	return json.RawMessage(r), nil
-}
-
 // unreachable is a device client for a device HTTP cannot reach.
 type unreachable struct{ tasmota.Client }
 
 func (unreachable) Command(context.Context, tasmota.Target, string) (json.RawMessage, error) {
 	return nil, tasmota.ErrUnreachable
-}
-
-func mqttOnlySetup(t *testing.T, cap model.MQTTCapability) (*Prober, *store.SQLite, model.DeviceID, *fakeAsker) {
-	t.Helper()
-	p, st, id, _, _ := raceSetup(t)
-	cur, _ := st.GetDevice(context.Background(), id)
-	cur.Topic, cur.MQTT = "plug_a", cap
-	if err := st.UpdateDevice(context.Background(), cur); err != nil {
-		t.Fatal(err)
-	}
-	p.Client = unreachable{}
-	f := &fakeAsker{replies: map[int]string{5: status5Net, 2: status2Payload, 1: `{"StatusPRM":{"GroupTopic":"tasmotas"}}`}}
-	p.MQTT = f
-	p.Audit = &idAudit{}
-	return p, st, id, f
-}
-
-// Why (#91, #79 transport rule): a device on our broker that HTTP cannot reach is refreshed over
-// MQTT: Status 5 (MAC, hostname, IP) first, then Status 2 (firmware, hardware), one at a time,
-// never Status 0. MQTT never sets DetectedAt, so the first HTTP probe still replaces it (#87).
-func TestRefreshOverMQTTWhenHTTPCannotReachTheDevice(t *testing.T) {
-	p, st, id, f := mqttOnlySetup(t, model.MQTTOurs)
-	if err := p.Refresh(context.Background(), id, "admin"); err != nil {
-		t.Fatal(err)
-	}
-	if len(f.asked) != 4 || f.asked[0] != 5 || f.asked[1] != 2 || f.asked[2] != 1 || f.asked[3] != statusObject {
-		t.Fatalf("asked %v, want Status 5, Status 2, Status 1 (GroupTopic), then the plain Status (DeviceName)", f.asked)
-	}
-	got, _ := st.GetDevice(context.Background(), id)
-	// Why (#279): a transfer over MQTT needs a fresh GroupTopic, and HTTP cannot give it for this device.
-	if got.GroupTopic != "tasmotas" || got.GroupTopicReadAt.IsZero() {
-		t.Errorf("GroupTopic %q read at %v: the MQTT refresh did not store it", got.GroupTopic, got.GroupTopicReadAt)
-	}
-	if got.Identity.Version != "16.0.0" || got.Identity.Hardware != "ESP8266EX" || got.Net.Hostname != "plug-1" {
-		t.Fatalf("not refreshed over MQTT: %+v %+v", got.Identity, got.Net)
-	}
-	if !got.Identity.DetectedAt.IsZero() {
-		t.Fatal("MQTT set DetectedAt: the next HTTP probe would no longer replace it")
-	}
-}
-
-// Why (#65 over MQTT): the MAC rule holds on the MQTT path too. Another MAC in the Status 5
-// answer: refused, audited, Status 2 never asked, nothing written.
-func TestRefreshOverMQTTRefusesAnotherMAC(t *testing.T) {
-	p, st, id, f := mqttOnlySetup(t, model.MQTTOurs)
-	f.replies[5] = `{"StatusNET":{"Hostname":"x","IPAddress":"192.0.2.10","Mac":"DE:AD:BE:EF:00:01"}}`
-	if err := p.Refresh(context.Background(), id, "admin"); !isRefusal(err) {
-		t.Fatalf("err = %v, want a refusal", err)
-	}
-	if len(f.asked) != 1 {
-		t.Fatalf("asked %v after the mismatch", f.asked)
-	}
-	if got, _ := st.GetDevice(context.Background(), id); got.Identity.Version != "" || got.Net.Hostname != "" {
-		t.Fatalf("a refused refresh wrote %+v", got)
-	}
-	if _, ok := p.Audit.(*idAudit).find("device.refresh_refused"); !ok {
-		t.Fatal("refusal not audited")
-	}
-}
-
-// Why (#87 review M1, safety rule 1): MQTT is a weaker source than HTTP. A refresh over MQTT
-// never replaces an identity an HTTP probe stored (Guard works on that one), never takes a
-// minimal/safeboot image from an answer (it would switch the update form's variant), and never
-// binds a MAC.
-func TestRefreshOverMQTTNeverOverridesHTTPOrBindsAMAC(t *testing.T) {
-	p, st, id, _ := mqttOnlySetup(t, model.MQTTOurs)
-	cur, _ := st.GetDevice(context.Background(), id)
-	httpID := model.Identity{Family: model.ChipESP8266, Hardware: "ESP8285N08", Version: "15.0.0", Image: "tasmota", Variant: "tasmota", DetectedAt: time.Now()}
-	if err := st.UpdateIdentity(context.Background(), id, httpID); err != nil {
-		t.Fatal(err)
-	}
-	if err := p.Refresh(context.Background(), id, "admin"); err != nil {
-		t.Fatal(err)
-	}
-	if got, _ := st.GetDevice(context.Background(), id); got.Identity.Version != "15.0.0" || got.Identity.Hardware != "ESP8285N08" {
-		t.Fatalf("MQTT replaced the HTTP identity: %+v", got.Identity)
-	}
-
-	p2, st2, id2, f2 := mqttOnlySetup(t, model.MQTTOurs)
-	f2.replies[2] = `{"StatusFWR":{"Version":"16.0.0(release-minimal)","Hardware":"ESP8266EX"}}`
-	if err := p2.Refresh(context.Background(), id2, "admin"); err == nil {
-		t.Fatal("a minimal image in a Status 2 answer was accepted")
-	}
-	if got, _ := st2.GetDevice(context.Background(), id2); got.Identity.Variant != "" {
-		t.Fatalf("variant %q taken from MQTT", got.Identity.Variant)
-	}
-
-	cur.MAC = ""
-	if err := st.UpdateDevice(context.Background(), cur); err != nil {
-		t.Fatal(err)
-	}
-	if err := p.Refresh(context.Background(), id, "admin"); err != nil {
-		t.Fatal(err)
-	}
-	if got, _ := st.GetDevice(context.Background(), id); got.MAC != "" {
-		t.Fatalf("MAC %q bound from an MQTT answer", got.MAC)
-	}
-}
-
-// Why (#79): MQTT is used only for a device on OUR broker; any other device keeps the HTTP
-// error (the page says why it could not be reached), and nothing is published.
-func TestRefreshUsesMQTTOnlyForDevicesOnOurBroker(t *testing.T) {
-	for _, c := range []model.MQTTCapability{model.MQTTOtherBroker, model.MQTTNone, model.MQTTUnknown} {
-		t.Run(string(c), func(t *testing.T) {
-			p, _, id, f := mqttOnlySetup(t, c)
-			if err := p.Refresh(context.Background(), id, "admin"); !errors.Is(err, tasmota.ErrUnreachable) {
-				t.Fatalf("err = %v, want the HTTP error", err)
-			}
-			if len(f.asked) != 0 {
-				t.Fatalf("asked %v over MQTT for a device not on our broker", f.asked)
-			}
-		})
-	}
-	// Our broker, but MQTT cannot answer either: the HTTP error is what the user needs.
-	p, _, id, f := mqttOnlySetup(t, model.MQTTOurs)
-	f.err = errMQTTUnavailable
-	if err := p.Refresh(context.Background(), id, "admin"); !errors.Is(err, tasmota.ErrUnreachable) {
-		t.Fatalf("err = %v, want the HTTP error", err)
-	}
-}
-
-// Why (safety rule 2, #87): the MQTT path asks one Status N at a time per device, keeps one
-// second between questions on the whole bus, takes only a live (not retained) reply on the
-// device's own topic, and audits every question. Run against the simulator and a real broker.
-func TestMQTTAskStatusAgainstASimulatedDevice(t *testing.T) {
-	br, err := simulator.StartBroker()
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = br.Close() }) // test teardown
-	ctx, cancel := context.WithCancel(t.Context())
-	t.Cleanup(cancel)
-	fleet, err := simulator.NewFleet(simulator.FleetOptions{FixturesDir: "../../testdata/fixtures", MQTTURL: br.URL()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = fleet.Close() }) // test teardown
-	dev, err := fleet.Add(ctx, simulator.DeviceSpec{Name: "esp32-plug", Profile: simulator.ProfileESP32, Version: "15.1.0"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	ctl, _ := simulator.Control(dev)
-	d := oursDevice(1, dev.Topic())
-	e := newIDEnv(d)
-	bus, err := mqttbus.Connect(ctx, mqttbus.Options{BrokerURL: br.URL(), ClientID: "tasmofleet-test"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	e.m.bus = bus
-	e.m.cmd = mqttcmd.New(bus, mqttcmd.Options{})
-	e.m.now = time.Now
-	go e.m.run(ctx)
-	deadline := time.Now().Add(5 * time.Second)
-	for !bus.Connected() && time.Now().Before(deadline) {
-		time.Sleep(20 * time.Millisecond)
-	}
-	// Why (#272): Connected() covers TasmoFleet's own subscription only. The simulated device
-	// has to be subscribed to its cmnd topic too, or Status 5 is published into the void.
-	readyCtx, readyCancel := context.WithTimeout(ctx, 10*time.Second)
-	defer readyCancel()
-	if err := ctl.WaitFor(readyCtx, func(c simulator.Controller) bool { return c.MQTTReady() }); err != nil {
-		t.Fatalf("simulated device never subscribed to its command topic: %v", err)
-	}
-	start := time.Now()
-	raw5, err := e.m.askStatus(ctx, d, 5, "admin")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(strings.ToLower(string(raw5)), ctl.MAC()) {
-		t.Fatalf("Status 5 answer %s lacks the MAC %s", raw5, ctl.MAC())
-	}
-	raw2, err := e.m.askStatus(ctx, d, 2, "admin")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(raw2), "StatusFWR") {
-		t.Fatalf("Status 2 answer %s", raw2)
-	}
-	if time.Since(start) < mqttIDGap {
-		t.Fatal("two questions on the bus within one second")
-	}
-	var asked []string
-	for _, c := range dev.Commands() {
-		asked = append(asked, strings.ToUpper(strings.TrimSpace(c)))
-	}
-	if strings.Join(asked, ",") != "STATUS 5,STATUS 2" {
-		t.Fatalf("device received %q", asked)
-	}
-	ev, ok := e.audit.find("identity.mqtt_ask")
-	if !ok || ev.Actor != "admin" {
-		t.Fatalf("question not audited: %+v", e.audit.actions())
-	}
-}
-
-// Why (one command at a time per device): while the background reader waits for its Status 2
-// answer, a refresh does not put a second question to the same device.
-func TestMQTTAskStatusWaitsForNoOtherQuestion(t *testing.T) {
-	d := oursDevice(1, "plug")
-	e := newIDEnv(d)
-	e.m.asking["plug"] = true
-	if _, err := e.m.askStatus(context.Background(), d, 5, "admin"); !errors.Is(err, errMQTTBusy) {
-		t.Fatalf("err = %v, want busy", err)
-	}
-	if len(e.bus.sent()) != 0 {
-		t.Fatalf("sent %v", e.bus.sent())
-	}
 }
 
 // credLog records every command and whether its Target carried the stored credentials.
@@ -657,23 +422,6 @@ func TestRefreshBindsOnlyAValidMAC(t *testing.T) {
 	}
 }
 
-// Why (#96 review L6): between the refresh's Status 5 and Status 2 the background reader may put
-// its own Status 2 question to the device. The refresh waits for its turn once instead of failing.
-func TestRefreshOverMQTTWaitsOnceWhenTheDeviceIsBusy(t *testing.T) {
-	p, st, id, f := mqttOnlySetup(t, model.MQTTOurs)
-	p.busyWait = time.Millisecond
-	f.busy = map[int]int{2: 1}
-	if err := p.Refresh(context.Background(), id, "admin"); err != nil {
-		t.Fatal(err)
-	}
-	if len(f.asked) != 5 || f.asked[2] != 2 {
-		t.Fatalf("asked %v, want 5, 2, 2, 1, plain Status", f.asked)
-	}
-	if got, _ := st.GetDevice(context.Background(), id); got.Identity.Version != "16.0.0" {
-		t.Fatalf("version %q", got.Identity.Version)
-	}
-}
-
 func newTestStore(t *testing.T) *store.SQLite {
 	t.Helper()
 	dir := t.TempDir()
@@ -706,59 +454,5 @@ func TestRefreshReplacesTheDefaultNameTasmofleetFilledIn(t *testing.T) {
 	}
 	if got, _ := st.GetDevice(context.Background(), id); got.Name != "Irrigation Led Ring" {
 		t.Fatalf("Name = %q, want the DeviceName the device reports now", got.Name)
-	}
-}
-
-// statusDeviceNameReply is the plain Status answer of #125 (stat/tasmota_568ED0/STATUS) after the
-// DeviceName was changed on the device.
-const statusDeviceNameReply = `{"Status":{"Module":1,"DeviceName":"Modbus Lüftung Test","FriendlyName":["Tasmota"],"Topic":"tasmota_568ED0","ButtonTopic":"0","Power":"0","PowerLock":"0","PowerOnState":3,"LedState":1,"LedMask":"FFFF","SaveData":1,"SaveState":1,"SwitchTopic":"0","ButtonRetain":0,"SwitchRetain":0,"SensorRetain":0,"PowerRetain":0,"InfoRetain":0,"StateRetain":0,"StatusRetain":0}}`
-
-// Why (#125): a device on our broker that HTTP cannot reach is refreshed over MQTT, and that
-// refresh has to bring the DeviceName along (it only read the identity before, so the name never
-// followed). The plain Status is the Status object only, never Status 0. A name tasmofleet
-// recorded as the device's own follows; one set by hand stays and the page offers the DeviceName.
-func TestRefreshOverMQTTReadsTheDeviceName(t *testing.T) {
-	p, st, id, f := mqttOnlySetup(t, model.MQTTOurs)
-	f.replies[statusObject] = statusDeviceNameReply
-	cur, _ := st.GetDevice(context.Background(), id)
-	// Recorded at an earlier probe: the stored name is the device's own and follows.
-	if err := st.UpdateProbeName(context.Background(), id, store.ProbeGuard{Address: cur.Address, Port: cur.Port, MAC: cur.MAC}, cur.Name, ""); err != nil {
-		t.Fatal(err)
-	}
-	if err := p.Refresh(context.Background(), id, "admin"); err != nil {
-		t.Fatal(err)
-	}
-	got, _ := st.GetDevice(context.Background(), id)
-	if got.Name != "Modbus Lüftung Test" || got.DeviceName != "Modbus Lüftung Test" {
-		t.Fatalf("name %q device name %q", got.Name, got.DeviceName)
-	}
-	if got.Identity.Version != "16.0.0" || !got.Identity.DetectedAt.IsZero() {
-		t.Fatalf("identity %+v: the name read must not change how the identity is stored", got.Identity)
-	}
-
-	// A hand-set name stays; the device's name is recorded for the page to offer.
-	got.Name = "Lüftung Keller"
-	if err := st.UpdateDevice(context.Background(), got); err != nil {
-		t.Fatal(err)
-	}
-	f.replies[statusObject] = strings.Replace(statusDeviceNameReply, "Modbus Lüftung Test", "Modbus Lüftung Büro", 1)
-	if err := p.Refresh(context.Background(), id, "admin"); err != nil {
-		t.Fatal(err)
-	}
-	got, _ = st.GetDevice(context.Background(), id)
-	if got.Name != "Lüftung Keller" || got.DeviceName != "Modbus Lüftung Büro" {
-		t.Fatalf("name %q device name %q, want the hand-set name kept and the device's recorded", got.Name, got.DeviceName)
-	}
-}
-
-// Why (#125): the DeviceName is a nicety. A device that does not answer the plain Status over MQTT
-// still gets its identity refreshed, and the refresh succeeds.
-func TestRefreshOverMQTTWithoutAStatusAnswerStillSucceeds(t *testing.T) {
-	p, st, id, _ := mqttOnlySetup(t, model.MQTTOurs) // no reply for the plain Status: a timeout
-	if err := p.Refresh(context.Background(), id, "admin"); err != nil {
-		t.Fatal(err)
-	}
-	if got, _ := st.GetDevice(context.Background(), id); got.Identity.Version != "16.0.0" || got.DeviceName != "" {
-		t.Fatalf("version %q device name %q", got.Identity.Version, got.DeviceName)
 	}
 }

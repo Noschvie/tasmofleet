@@ -17,6 +17,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/policy"
 	"github.com/hellwand/tasmofleet/internal/settings"
 	"github.com/hellwand/tasmofleet/internal/simulator"
+	"github.com/hellwand/tasmofleet/internal/store"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
 	"github.com/hellwand/tasmofleet/internal/templates"
 	"github.com/hellwand/tasmofleet/internal/transport"
@@ -48,6 +49,8 @@ type apiOffOpts struct {
 	ours      bool   // the device uses TasmoFleet's broker
 	lwtOnline bool
 	variant   string
+	stored    model.Identity // the identity stored before; zero: none but the variant
+	locale    string         // the locale ID the simulated build reports first in Status 4 Features ("" = its fixture's)
 }
 
 type apiOffRig struct {
@@ -75,7 +78,7 @@ func newAPIOffRig(t *testing.T, o apiOffOpts) *apiOffRig {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = fleet.Close() }) // test teardown
-	dev, err := fleet.Add(t.Context(), simulator.DeviceSpec{Name: "api-off", Profile: simulator.ProfileESP32, Version: "15.1.0"})
+	dev, err := fleet.Add(t.Context(), simulator.DeviceSpec{Name: "api-off", Profile: simulator.ProfileESP32, Version: "15.1.0", Locale: o.locale})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,8 +111,12 @@ func newAPIOffRig(t *testing.T, o apiOffOpts) *apiOffRig {
 	if o.ours {
 		capability = model.MQTTOurs
 	}
+	stored := o.stored
+	if stored.Version == "" {
+		stored = model.Identity{Variant: o.variant}
+	}
 	st := &gtStore{now: time.Now, devs: []model.Device{
-		{ID: 1, Name: "api-off", Topic: dev.Topic(), Address: host, Port: port, MQTT: capability, MAC: mac, Identity: model.Identity{Variant: o.variant}},
+		{ID: 1, Name: "api-off", Topic: dev.Topic(), Address: host, Port: port, MQTT: capability, MAC: mac, Identity: stored},
 	}}
 	g := &apiOffRig{st: st, sim: ctl, http: &httpCounter{Client: tasmota.NewHTTPClient(tasmota.Options{AllowedNetworks: loopbackNets(), Timeout: 2 * time.Second})}}
 	router := transport.NewRouter(transport.Options{HTTP: g.http, Devices: st})
@@ -122,7 +129,7 @@ func newAPIOffRig(t *testing.T, o apiOffOpts) *apiOffRig {
 		BrokerPassword: func() string { return "" }, Now: time.Now}
 	router.SetFacts(facts)
 	router.SetMQTT(ch)
-	g.pr = &Prober{Client: router.HTTPOnly(), Reads: router, Gap: time.Millisecond, Devices: nil}
+	g.pr = &Prober{Client: router.HTTPOnly(), Reads: router, Gap: time.Millisecond, Devices: st}
 
 	g.set = settings.New(settings.Options{Devices: st, Client: router, ReadTimeout: 30 * time.Second, Verify: g.pr.VerifyRead})
 	g.rep = &policyReporter{devices: fakeLister(st.devs), reader: g.set, verify: g.pr.VerifyRead, now: time.Now}
@@ -132,6 +139,7 @@ func newAPIOffRig(t *testing.T, o apiOffOpts) *apiOffRig {
 	if o.mqttOff {
 		a.facts = nil
 	}
+	g.pr.ReadsOverMQTT = a.readsOverMQTT // as the app wires it (setupTransport)
 
 	g.clock = time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
 	g.r = newBrokerHostReader(st.list,
@@ -147,6 +155,44 @@ func newAPIOffRig(t *testing.T, o apiOffOpts) *apiOffRig {
 	a.wireDeviceRefresh(g.r) // as the app wires it (startBrokerHost)
 	return g
 }
+
+// UpdateProbe, UpdateNet and UpdateMQTTBroker store what the prober read, under the address, port and MAC of the
+// store's guard (store.ProbeGuard; its topic check is the store's own test).
+func (s *gtStore) UpdateProbe(_ context.Context, id model.DeviceID, g store.ProbeGuard, r store.ProbeResult) error {
+	return s.update(id, g, func(d *model.Device) {
+		d.Identity = r.Identity
+		if r.SetMQTT {
+			d.MQTTHost, d.MQTTPort = r.MQTTHost, r.MQTTPort
+			if d.MQTT != model.MQTTOurs || r.MQTT != model.MQTTOtherBroker { // the store keeps "ours" against "other"
+				d.MQTT = r.MQTT
+			}
+		}
+		if r.SetNet {
+			d.Net = r.Net
+		}
+	})
+}
+func (s *gtStore) UpdateNet(_ context.Context, id model.DeviceID, g store.ProbeGuard, n model.NetFacts) error {
+	return s.update(id, g, func(d *model.Device) { d.Net = n })
+}
+func (s *gtStore) UpdateMQTTBroker(_ context.Context, id model.DeviceID, g store.ProbeGuard, c model.MQTTCapability, host string, port int) error {
+	return s.update(id, g, func(d *model.Device) { d.MQTT, d.MQTTHost, d.MQTTPort = c, host, port })
+}
+func (s *gtStore) update(id model.DeviceID, g store.ProbeGuard, f func(*model.Device)) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.devs {
+		d := &s.devs[i]
+		if d.ID == id && d.Address == g.Address && d.Port == g.Port && d.MAC == g.MAC {
+			f(d)
+			return nil
+		}
+	}
+	return store.ErrConflict
+}
+
+// identityNotDue leaves the identity out of the next visits: a test about the data visit alone (#676).
+func (g *apiOffRig) identityNotDue() { g.r.identityNext[1] = g.clock.Add(10 * identityEvery) }
 
 // sent returns what reached the device, which is only MQTT while its HTTP API is off.
 func (g *apiOffRig) sent() []string { return g.sim.Commands() }
@@ -188,10 +234,11 @@ func liveTemplate(t *testing.T, tpl *templates.Manager) bool {
 // Why (#676): a device whose HTTP API is off but that MQTT serves showed stale or no last-known values for as
 // long as the API stayed off: the background refresh never visited it. The pass must refresh the three caches the
 // pages read from (the Settings tab's last-known values, the policy values, the GPIO template reading) over MQTT,
-// and nothing else: no broker read (Status 6: it waits for HTTP, #839), no identity probe (Status 2, 4: HTTP), no
-// request over HTTP at all, and never Status 0.
+// and nothing else while only the data is due: no broker read (Status 6: it waits for HTTP, #839), no identity probe
+// (Status 2, 4), no request over HTTP at all, and never Status 0.
 func TestPassRefreshesTheDataOfADeviceWhoseHTTPAPIIsOff(t *testing.T) {
 	g := newAPIOffRig(t, apiOffOpts{ours: true, lwtOnline: true})
+	g.identityNotDue() // the identity's visit over MQTT is TestTheBackgroundIdentityRefreshReachesADeviceHTTPDoesNotReach (#682)
 	g.r.pass(t.Context())
 
 	if snap, ok := g.set.Last(1); !ok || len(snap.Values) == 0 {
@@ -206,7 +253,7 @@ func TestPassRefreshesTheDataOfADeviceWhoseHTTPAPIIsOff(t *testing.T) {
 	cmds := g.sent()
 	for _, c := range []string{"Status 0", "Status 6", "Status 2", "Status 4"} {
 		if n := countCmd(cmds, c); n != 0 {
-			t.Errorf("%d x %q reached the device: the visit is data only (the broker and the identity wait for HTTP)", n, c)
+			t.Errorf("%d x %q reached the device: the visit is data only (the identity is not due, the broker waits for HTTP)", n, c)
 		}
 	}
 	if n := g.http.all.Load(); n != 0 {
@@ -220,6 +267,7 @@ func TestPassRefreshesTheDataOfADeviceWhoseHTTPAPIIsOff(t *testing.T) {
 // one is enough. Counted at the device, with all three data parts active. A second visit, a day later, asks again.
 func TestAVisitAsksStatus5OncePerTransportOverMQTT(t *testing.T) {
 	g := newAPIOffRig(t, apiOffOpts{ours: true, lwtOnline: true})
+	g.identityNotDue() // the identity's own check hears every reply on the topic (#682): not the data's question
 	g.r.pass(t.Context())
 	if n := countCmd(g.sent(), "Status 5"); n != 1 {
 		t.Errorf("%d x Status 5 over MQTT in one visit, want 1: %v", n, g.sent())
@@ -259,6 +307,7 @@ func TestAPageCheckIsNeverSharedWithAnotherRead(t *testing.T) {
 // and it must not be repeated at every tick (the broker's interval, like any refused data read).
 func TestAPIOffRefreshOfAnotherDeviceIsRefused(t *testing.T) {
 	g := newAPIOffRig(t, apiOffOpts{ours: true, lwtOnline: true, mac: "02:00:00:00:00:99"})
+	g.identityNotDue() // the identity's check of the topic is TestTheIdentityOverMQTTNeedsExactlyOneReplyWithAStoredMAC
 	g.r.pass(t.Context())
 	if cmds := g.sent(); len(cmds) != 1 || !strings.EqualFold(cmds[0], "Status 5") {
 		t.Fatalf("the device received %v, want only the MAC question", cmds)
@@ -621,4 +670,96 @@ func TestAnMQTTAnswerThatDoesNotVouchIsRefused(t *testing.T) {
 			}
 		})
 	}
+}
+
+// olderIdentity is what an HTTP probe stored before the device's HTTP API was switched off: an older version, another
+// flash size and the English build. The simulated device runs 15.1.0 on 4 MB, a German build when the rig asks for it.
+func olderIdentity() model.Identity {
+	return model.Identity{Family: model.ChipESP32, Hardware: "ESP32-D0WDQ6 v1.0", Version: "14.0.0", Image: "release-tasmota32", Variant: "tasmota",
+		FlashSizeKB: 1024, ProgramFlashSizeKB: 1024, LanguageKnown: true, DetectedAt: time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)}
+}
+
+// wantCurrentIdentity checks that the stored identity is the one the simulated device reports now, read over MQTT
+// alone (no request over HTTP, never Status 0).
+func (g *apiOffRig) wantCurrentIdentity(t *testing.T) {
+	t.Helper()
+	d, err := g.st.GetDevice(t.Context(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := d.Identity; got.Version != "15.1.0" || got.FlashSizeKB != 4096 || got.Language != "DE" || !got.LanguageKnown ||
+		!got.DetectedAt.After(olderIdentity().DetectedAt) {
+		t.Errorf("identity %+v: want 15.1.0, 4096 KB flash and the German build (Status 4 locale ID), read now", got)
+	}
+	cmds := g.sent()
+	if n := countCmd(cmds, "Status 0"); n != 0 {
+		t.Errorf("Status 0 sent: %v", cmds)
+	}
+	for _, c := range []string{"Status 2", "Status 4"} {
+		if n := countCmd(cmds, c); n != 1 {
+			t.Errorf("%d x %q over MQTT, want 1: %v", n, c, cmds)
+		}
+	}
+	if n := g.http.all.Load(); n != 0 {
+		t.Errorf("%d request(s) over HTTP to a device whose HTTP API is off", n)
+	}
+}
+
+// Why (#682, issue: "Done when an API-off device on our broker shows a current identity"): a device probed over HTTP
+// once and then switched to WebServer 0 kept that probe's identity for good: the refresh over MQTT wrote only while no
+// identity was stored and never read Status 4, and the background refresh did not try MQTT at all. Its firmware
+// version, flash size and language stayed what they were, so the update page selected firmware for a device that no
+// longer existed. Both the person's Refresh identity and the background refresh must store all three, over MQTT alone.
+func TestAnAPIOffDeviceKeepsACurrentIdentity(t *testing.T) {
+	for name, refresh := range map[string]func(context.Context, *Prober) error{
+		"Refresh identity":   func(ctx context.Context, p *Prober) error { return p.Refresh(ctx, 1, "admin") },
+		"background refresh": func(ctx context.Context, p *Prober) error { return p.RefreshFacts(ctx, 1) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			g := newAPIOffRig(t, apiOffOpts{ours: true, lwtOnline: true, stored: olderIdentity(), locale: "0407"})
+			if err := refresh(t.Context(), g.pr); err != nil {
+				t.Fatal(err)
+			}
+			g.wantCurrentIdentity(t)
+		})
+	}
+}
+
+// Why (#682, #600): the broker reader visited a device HTTP does not reach for its data alone ("the broker and the
+// identity wait for HTTP"), so the background identity refresh never came for a device whose HTTP API is off, neither
+// every 24 hours nor after a restart (a firmware update outside TasmoFleet restarts the device). Its identity now goes
+// over MQTT like its data; the broker read still waits for HTTP.
+func TestTheBackgroundIdentityRefreshReachesADeviceHTTPDoesNotReach(t *testing.T) {
+	t.Run("its regular visit", func(t *testing.T) {
+		g := newAPIOffRig(t, apiOffOpts{ours: true, lwtOnline: true, stored: olderIdentity(), locale: "0407"})
+		g.r.pass(t.Context())
+		g.wantCurrentIdentity(t)
+		if _, ok := g.set.Last(1); !ok {
+			t.Error("the data was not refreshed in the same visit")
+		}
+		if next := g.r.identityNext[1]; !next.Equal(g.clock.Add(identityEvery)) {
+			t.Errorf("next identity read at %v, want %v: the identity schedule must move on", next, g.clock.Add(identityEvery))
+		}
+	})
+	t.Run("after a restart", func(t *testing.T) {
+		g := newAPIOffRig(t, apiOffOpts{ours: true, lwtOnline: true, stored: olderIdentity(), locale: "0407"})
+		g.r.identityNext[1], g.r.dataNext[1] = g.clock.Add(identityEvery), g.clock.Add(dataEvery) // nothing regular is due
+		g.r.wantRestart(1)
+		g.clock = g.clock.Add(brokerHostSettle)
+		g.r.pass(t.Context())
+		g.wantCurrentIdentity(t)
+		if _, waiting := g.r.pending[1]; waiting {
+			t.Error("the restart's read is still pending after its identity and data were read")
+		}
+	})
+	t.Run("nothing over MQTT: nothing is sent", func(t *testing.T) {
+		g := newAPIOffRig(t, apiOffOpts{ours: true, lwtOnline: false, stored: olderIdentity()})
+		g.r.pass(t.Context())
+		if cmds := g.sent(); len(cmds) != 0 {
+			t.Errorf("sent over MQTT to a device MQTT cannot serve: %v", cmds)
+		}
+		if d, _ := g.st.GetDevice(t.Context(), 1); d.Identity.Version != "14.0.0" {
+			t.Errorf("identity %+v changed", d.Identity)
+		}
+	})
 }

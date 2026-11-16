@@ -71,6 +71,34 @@ func TestUpdateProbeDeviceFactsRespectTheGuard(t *testing.T) {
 	}
 }
 
+// Why (#682): a probe over MQTT took its answers from whoever listens on the topic it asked. If the topic was edited
+// meanwhile, those answers are not this device's any more and must write nothing; a probe at the address (no topic in
+// the guard) is not held back by a topic it did not ask.
+func TestUpdateProbeOverMQTTNeedsTheTopicItAsked(t *testing.T) {
+	s, _, _ := newStore(t)
+	id, err := s.CreateDevice(ctx, model.Device{Name: "plug", Address: "192.0.2.10", MAC: "aa:bb:cc:00:00:01", Topic: "plug-new"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := ProbeResult{Identity: model.Identity{Version: "16.1.0", DetectedAt: time.Now()}}
+	asked := ProbeGuard{Address: "192.0.2.10", MAC: "aa:bb:cc:00:00:01", Topic: "plug"}
+	if err := s.UpdateProbe(ctx, id, asked, res); !errors.Is(err, ErrConflict) {
+		t.Fatalf("err = %v, want ErrConflict for a probe over another topic", err)
+	}
+	if d, _ := s.GetDevice(ctx, id); d.Identity.Version != "" {
+		t.Fatalf("identity %+v written from a topic the device no longer has", d.Identity)
+	}
+	for _, topic := range []string{"plug-new", ""} {
+		g := ProbeGuard{Address: "192.0.2.10", MAC: "aa:bb:cc:00:00:01", Topic: topic}
+		if err := s.UpdateProbe(ctx, id, g, res); err != nil {
+			t.Fatalf("topic %q: %v", topic, err)
+		}
+	}
+	if d, _ := s.GetDevice(ctx, id); d.Identity.Version != "16.1.0" {
+		t.Fatalf("identity %+v not written", d.Identity)
+	}
+}
+
 // Why: the background network read writes subnet and DNS through UpdateNet, not UpdateProbe.
 func TestUpdateNetStoresSubnetAndDNS(t *testing.T) {
 	s, _, _ := newStore(t)

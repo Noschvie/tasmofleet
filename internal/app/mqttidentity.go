@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -32,10 +31,11 @@ import (
 //     The question goes through the MQTT command channel (internal/mqttcmd), which owns the
 //     publish, the reply correlation and the timeout; this file keeps the limits above.
 //
-// The HTTP probe stays the primary path. MQTT only fills a device that no probe has identified
-// (DetectedAt zero; the store refuses the write otherwise) and never sets DetectedAt, so the
-// first HTTP probe still runs and replaces whatever MQTT said. The OTA engine probes over HTTP
-// before it plans, and Guard runs on that identity, unchanged.
+// The probe stays the primary path (Prober.probe: MQTT first after the check that hears every reply on the topic,
+// #682, else the address). This reader only fills a device that no probe has identified (DetectedAt zero; the store
+// refuses the write otherwise) and never sets DetectedAt, so the first probe still runs and replaces whatever it
+// said. Its Status 2 has no MAC check, which is why it never counts as an identity a probe stored. The OTA engine reads
+// the identity again before it plans, and Guard runs on that identity, unchanged.
 const (
 	mqttIDGap     = time.Second      // between two Status 2 questions on the whole bus
 	mqttIDEvery   = 10 * time.Minute // between two questions to one device
@@ -80,7 +80,7 @@ type mqttIdentity struct {
 	asked    map[model.DeviceID]time.Time
 	answered map[model.DeviceID]bool // a Status 2 reply was stored; not asked again until restart
 	info1    map[string][]byte       // INFO1 of a topic whose device was not yet recorded as ours
-	asking   map[string]bool         // topic -> a question (background or refresh) waits for its answer
+	asking   map[string]bool         // topic -> the background question waits for its answer
 
 	spawn func(func()) // runs the background question; tests run it inline
 }
@@ -450,74 +450,6 @@ func notSent(err error) bool {
 	}
 	return errors.Is(err, mqttcmd.ErrRefused) || errors.Is(err, tasmota.ErrUnreachable) ||
 		errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) // still queued
-}
-
-// statusObject asks the plain "Status" (no number) over MQTT.
-const statusObject = -1
-
-var (
-	errMQTTUnavailable = errors.New("mqtt: not connected, or the device is not on our broker")
-	errMQTTBusy        = errors.New("mqtt: a question to this device is still waiting for its answer")
-)
-
-// askStatus asks d one Status n over MQTT for a refresh (#91) and returns the answer. It keeps
-// the limits of the background reader: never Status 0, one question at a time per device,
-// mqttIDGap between two questions on the whole bus (it waits for its turn), and every question
-// audited. The command channel publishes, takes only the live STATUSn on the device's own topic
-// as the answer and times out after its reply wait.
-func (m *mqttIdentity) askStatus(ctx context.Context, d model.Device, n int, actor string) (json.RawMessage, error) {
-	if n == 0 || n < statusObject {
-		return nil, errors.New("mqtt: Status 0 is never sent")
-	}
-	// statusObject is the plain "Status": the Status object only (DeviceName, Topic), as over HTTP.
-	name := "Status " + strconv.Itoa(n)
-	if n == statusObject {
-		name = "Status"
-	}
-	if d.Topic == "" || d.MQTT != model.MQTTOurs || !m.bus.Connected() {
-		return nil, errMQTTUnavailable
-	}
-	now := m.now()
-	m.mu.Lock()
-	if m.asking[d.Topic] {
-		m.mu.Unlock()
-		return nil, errMQTTBusy
-	}
-	turn := now
-	if next := m.lastAsk.Add(mqttIDGap); !m.lastAsk.IsZero() && next.After(turn) {
-		turn = next
-	}
-	m.lastAsk = turn
-	m.asking[d.Topic] = true
-	m.mu.Unlock()
-	defer func() {
-		m.mu.Lock()
-		delete(m.asking, d.Topic)
-		m.mu.Unlock()
-	}()
-	if wait := turn.Sub(now); wait > 0 {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-time.After(wait):
-		}
-	}
-	raw, err := m.cmd.Do(ctx, d, name)
-	if notSent(err) {
-		return nil, fmt.Errorf("mqtt: %s not sent: %w", name, err)
-	}
-	if actor == "" {
-		actor = "system"
-	}
-	why := "refresh identity: HTTP cannot reach the device"
-	m.log.Info("mqtt identity: asked a device over MQTT", "device", d.ID, "topic", d.Topic, "command", name, "reason", why)
-	detail, _ := json.Marshal(map[string]any{"command": name, "via": "mqtt", "reason": why}) // a map of strings cannot fail
-	m.audit.Record(ctx, model.AuditEvent{Actor: actor, Action: "identity.mqtt_ask", Target: "device:" + strconv.FormatInt(int64(d.ID), 10),
-		Detail: string(detail), Result: "ok"})
-	if err != nil {
-		return nil, err
-	}
-	return raw, nil
 }
 
 // keepLanguage carries the language over from the stored identity to one read over MQTT, which cannot

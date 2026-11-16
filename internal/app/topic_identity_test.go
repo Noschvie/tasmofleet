@@ -14,12 +14,14 @@ import (
 
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/simulator"
+	"github.com/hellwand/tasmofleet/internal/store"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
 	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
-// #852: another device on a device's MQTT topic marks the device in the router, and #851: the identity probe reads
-// its facts over MQTT once its topic showed the stored MAC. Both drive the real router as the app wires it.
+// #852: another device on a device's MQTT topic marks the device in the router, and #682: the identity probe reads
+// the device over MQTT first once the check that hears every reply on its topic heard it alone with a stored MAC. Both
+// drive the real router as the app wires it.
 
 // setMAC changes the MAC the device on the topic or at the address reports.
 func (b *brokerAnswers) setMAC(mac string) {
@@ -207,19 +209,42 @@ func TestADataRefreshThatFindsATakenTopicComesBackSoon(t *testing.T) {
 	}
 }
 
-// probeTopic is the device on its MQTT topic as the identity probe's facts reads see it: it reports mac and a broker,
-// GroupTopic, OTA URL and DeviceName that differ from what the device at the address reports, so the stored values
-// show which transport carried them. silent names commands nobody answers.
+// probeTopic is the device on its MQTT topic as the identity probe sees it: it reports mac, an identity (16.1.0, a
+// 4 MB flash, the German build), a broker, GroupTopic, OTA URL and DeviceName that differ from what the device at the
+// address reports, so the stored values show which transport carried them. silent names commands nobody answers;
+// second, when set, is the MAC of a second device that answers every Status 5 on the topic too; noReply: the check that
+// hears every reply hears nothing; onWindow runs inside that check's window, after the replies came. onAsk runs after
+// each answered command.
 type probeTopic struct {
-	mu     sync.Mutex
-	mac    string
-	silent map[string]bool
-	status string // the reply to the plain Status; "" is the device's own, with its topic "plug"
-	got    []string
+	mu       sync.Mutex
+	mac      string
+	second   string
+	noReply  bool
+	silent   map[string]bool
+	status   string // the reply to the plain Status; "" is the device's own, with its topic "plug"
+	status2  string // the reply to Status 2; "" is topicStatus2
+	onAsk    func(cmd string)
+	onWindow func()
+	got      []string
 }
+
+const (
+	topicStatus2         = `{"StatusFWR":{"Version":"16.1.0(release-tasmota)","Hardware":"ESP8266EX"}}`
+	topicStatus2Minimal  = `{"StatusFWR":{"Version":"16.0.0(release-minimal)","Hardware":"ESP8266EX"}}`
+	topicStatus2Safeboot = `{"StatusFWR":{"Version":"16.0.0(release-safeboot)","Hardware":"ESP32-D0WD-V3"}}`
+	topicStatus4         = `{"StatusMEM":{"ProgramFlashSize":4096,"FlashSize":4096,"Free":1500,"Features":["0407","8F9AC787"]}}`
+)
 
 func (m *probeTopic) Connected() bool { return true }
 func (m *probeTopic) Do(_ context.Context, _ model.Device, cmd string) (json.RawMessage, error) {
+	raw, err := m.answer(cmd)
+	if err == nil && m.onAsk != nil {
+		m.onAsk(cmd)
+	}
+	return raw, err
+}
+
+func (m *probeTopic) answer(cmd string) (json.RawMessage, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.got = append(m.got, cmd)
@@ -229,6 +254,13 @@ func (m *probeTopic) Do(_ context.Context, _ model.Device, cmd string) (json.Raw
 	switch cmd {
 	case "Status 5":
 		return mac5(m.mac), nil
+	case "Status 2":
+		if m.status2 != "" {
+			return json.RawMessage(m.status2), nil
+		}
+		return json.RawMessage(topicStatus2), nil
+	case "Status 4":
+		return json.RawMessage(topicStatus4), nil
 	case "Status 6":
 		return json.RawMessage(`{"StatusMQT":{"MqttHost":"mqtt.home","MqttPort":1883}}`), nil
 	case "SetOption3":
@@ -245,6 +277,28 @@ func (m *probeTopic) Do(_ context.Context, _ model.Device, cmd string) (json.Raw
 }
 func (m *probeTopic) DoLoose(ctx context.Context, d model.Device, cmd string) (json.RawMessage, error) {
 	return m.Do(ctx, d, cmd)
+}
+
+// DoAll hears every reply within the window, as the production channel does (transport.MQTTMultiReader).
+func (m *probeTopic) DoAll(ctx context.Context, d model.Device, cmd string, _ time.Duration) ([]json.RawMessage, error) {
+	if m.noReply {
+		m.mu.Lock()
+		m.got = append(m.got, cmd)
+		m.mu.Unlock()
+		return nil, tasmota.ErrTimeout
+	}
+	raw, err := m.Do(ctx, d, cmd)
+	if err != nil {
+		return nil, err
+	}
+	replies := []json.RawMessage{raw}
+	if m.second != "" && cmd == "Status 5" {
+		replies = append(replies, mac5(m.second))
+	}
+	if m.onWindow != nil {
+		m.onWindow() // as the production channel: an ended context returns the replies heard so far, without an error
+	}
+	return replies, nil
 }
 func (m *probeTopic) asked() []string {
 	m.mu.Lock()
@@ -317,36 +371,47 @@ func probeOverRouter(t *testing.T, onTopic *probeTopic, lwt string) (*Prober, *p
 	return p, addr, id, get
 }
 
-// Why (#851, the product owner's transport rule): MQTT carries every read it can for a device usable on TasmoFleet's
-// broker; HTTP only what MQTT technically cannot. The identity probe sent all of its reads to the address. Its MAC check
-// of the address (without credentials first), Status 2 and Status 4 stay there: the check vouches for them, and they
-// make the identity that firmware is selected and guarded by (identity source #87; over MQTT is #682). No main page is
-// read for full firmware (#686: the language is the locale ID of Status 4). Its facts (where the device reports over MQTT, the OTA URL and
-// GroupTopic of Status 1, the Status object) go over MQTT once a Status 5 on the topic shows a stored MAC, since a check
-// vouches only for the transport its read used (#810). Without that (MQTT not usable, another device on the topic, MQTT
-// silent) they are read at the address as before, and another device on the topic marks it (#852).
-func TestTheIdentityProbeReadsItsFactsOverMQTTOnceTheTopicShowsTheStoredMAC(t *testing.T) {
-	identityAtAddress := []string{"Status 5", "Status 2", "Status 4"}
-	factsAtAddress := append(slices.Clone(identityAtAddress), "Status 6", "SetOption3", "Status 1", "Status")
+// Why (#682, the product owner's transport rule): MQTT carries every read it can for a device usable on TasmoFleet's
+// broker, HTTP only what MQTT technically cannot. The identity (Status 2, Status 4) went to the address in every case,
+// so a device whose HTTP API was switched off after its first probe kept the version, chip, flash and language of that
+// probe forever. Now the probe of a stored device on our broker goes over MQTT first, identity and facts, after the
+// check that hears every reply on its topic heard it alone with a stored MAC (the identity selects firmware, so a
+// check that hears whichever device answers first is not enough, #852). Nothing reaches the address then. Without
+// that (MQTT not usable, another device on the topic, MQTT silent on a later read, a Status 2 on the topic that claims
+// a minimal or safeboot image, which answers neither Status 5 nor Status 2 and would change how updates and the broker
+// reader treat the device) the whole probe runs at the address, whose own Status 5 vouches for it, and nothing of the
+// MQTT half is kept: another device on the topic marks it.
+func TestTheIdentityOfADeviceOnOurBrokerIsReadOverMQTTFirst(t *testing.T) {
+	atAddress := []string{"Status 5", "Status 2", "Status 4", "Status 6", "SetOption3", "Status 1", "Status"}
+	onTopic := []string{"Status 5", "Status 2", "Status 4", "Status 6", "SetOption3", "Status 1", "Status"}
 	for _, c := range []struct {
 		name        string
 		topic       *probeTopic
 		lwt         string
 		wantAddress []string
 		wantTopic   []string
-		wantHost    string // the broker host stored: mqtt.home only comes from the topic
+		overMQTT    bool // the stored identity and facts are the topic's
 		marked      bool
 	}{
-		{"the stored device on its topic", &probeTopic{mac: "AA:BB:CC:00:00:01"}, "Online",
-			identityAtAddress, []string{"Status 5", "Status 6", "SetOption3", "Status 1", "Status"}, "mqtt.home", false},
-		{"MQTT not usable", &probeTopic{mac: "AA:BB:CC:00:00:01"}, "Offline", factsAtAddress, nil, "", false},
-		{"another device on the topic", &probeTopic{mac: otherMAC}, "Online", factsAtAddress, []string{"Status 5"}, "", true},
-		{"the topic stops answering", &probeTopic{mac: "AA:BB:CC:00:00:01", silent: map[string]bool{"Status 6": true}}, "Online",
-			factsAtAddress, []string{"Status 5", "Status 6"}, "", false},
+		{"the stored device on its topic", &probeTopic{mac: "AA:BB:CC:00:00:01"}, "Online", nil, onTopic, true, false},
+		{"MQTT not usable", &probeTopic{mac: "AA:BB:CC:00:00:01"}, "Offline", atAddress, nil, false, false},
+		{"another device on the topic", &probeTopic{mac: otherMAC}, "Online", atAddress, []string{"Status 5"}, false, true},
+		{"two devices answer on the topic", &probeTopic{mac: "AA:BB:CC:00:00:01", second: otherMAC}, "Online",
+			atAddress, []string{"Status 5"}, false, true},
+		{"the topic stops answering after the check", &probeTopic{mac: "AA:BB:CC:00:00:01", silent: map[string]bool{"Status 4": true}}, "Online",
+			atAddress, []string{"Status 5", "Status 2", "Status 4"}, false, false},
+		{"the topic stops answering in the facts", &probeTopic{mac: "AA:BB:CC:00:00:01", silent: map[string]bool{"Status 6": true}}, "Online",
+			atAddress, []string{"Status 5", "Status 2", "Status 4", "Status 6"}, false, false},
+		{"the topic claims a minimal image", &probeTopic{mac: "AA:BB:CC:00:00:01", status2: topicStatus2Minimal}, "Online",
+			atAddress, []string{"Status 5", "Status 2", "Status 4"}, false, false},
+		{"the topic claims a safeboot image", &probeTopic{mac: "AA:BB:CC:00:00:01", status2: topicStatus2Safeboot}, "Online",
+			atAddress, []string{"Status 5", "Status 2", "Status 4"}, false, false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			p, addr, id, get := probeOverRouter(t, c.topic, c.lwt)
-			if err := p.RefreshFacts(t.Context(), id); err != nil {
+			au := &idAudit{}
+			p.Audit = au
+			if err := p.Refresh(t.Context(), id, "admin"); err != nil {
 				t.Fatal(err)
 			}
 			if got := addr.asked(); !slices.Equal(got, c.wantAddress) {
@@ -356,20 +421,157 @@ func TestTheIdentityProbeReadsItsFactsOverMQTTOnceTheTopicShowsTheStoredMAC(t *t
 				t.Errorf("asked on the topic: %v, want %v", got, c.wantTopic)
 			}
 			d := get(id)
-			if c.wantHost == "mqtt.home" {
+			if d.Identity.DetectedAt.IsZero() {
+				t.Errorf("identity %+v: a probe stores an identity with its time, over either transport", d.Identity)
+			}
+			if v := d.Identity.Variant; v == "minimal" || v == "safeboot" {
+				t.Errorf("stored variant %q: a minimal or safeboot image answers no Status 5 or Status 2 on its topic, so such an answer is not the device's", v)
+			}
+			fromTopic := d.Identity.Version == "16.1.0" || d.Identity.FlashSizeKB == 4096 || d.Identity.Language == "DE" ||
+				d.MQTTHost == "mqtt.home" || d.GroupTopic == "topicgroup"
+			if c.overMQTT {
+				if d.Identity.Version != "16.1.0" || d.Identity.FlashSizeKB != 4096 || d.Identity.Language != "DE" || !d.Identity.LanguageKnown {
+					t.Errorf("identity %+v: want the version, flash and language (Status 4 locale ID) the device reported on its topic", d.Identity)
+				}
 				if d.MQTTHost != "mqtt.home" || d.GroupTopic != "topicgroup" || d.OTAURL != "http://ota.example/topic.bin" {
 					t.Errorf("stored broker %q, GroupTopic %q, OTA URL %q: want the facts the device reported on its topic", d.MQTTHost, d.GroupTopic, d.OTAURL)
 				}
-			} else if d.MQTTHost == "mqtt.home" || d.GroupTopic == "topicgroup" {
-				t.Errorf("stored broker %q, GroupTopic %q from the topic, want the address's", d.MQTTHost, d.GroupTopic)
-			}
-			if d.Identity.DetectedAt.IsZero() || d.Identity.Version == "" {
-				t.Errorf("identity %+v: the probe must still identify the device over HTTP", d.Identity)
+				if ev, ok := au.find("identity.mqtt_ask"); !ok || ev.Actor != "admin" || !strings.Contains(ev.Detail, `"via":"mqtt"`) {
+					t.Errorf("audit %v: a person's refresh over MQTT names the person and the transport", au.actions())
+				}
+			} else if fromTopic {
+				t.Errorf("stored identity %+v, broker %q, GroupTopic %q: a value of the MQTT half was kept after the probe went to the address",
+					d.Identity, d.MQTTHost, d.GroupTopic)
 			}
 			if got := !p.Topics.Since(id, "plug").IsZero(); got != c.marked {
 				t.Errorf("topic marked = %v, want %v", got, c.marked)
 			}
 		})
+	}
+}
+
+// Why (#682): the audit keeps what a person (or discovery) asked a device over MQTT, as each question of the refresh
+// over MQTT was audited before; the daily background refresh of every device would fill it with the same row.
+func TestOnlyARefreshSomebodyStartedAuditsItsReadsOverMQTT(t *testing.T) {
+	p, _, id, _ := probeOverRouter(t, &probeTopic{mac: "AA:BB:CC:00:00:01"}, "Online")
+	au := &idAudit{}
+	p.Audit = au
+	if err := p.RefreshFacts(t.Context(), id); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := au.find("identity.mqtt_ask"); ok {
+		t.Errorf("audit %v after the background refresh", au.actions())
+	}
+	if err := p.Refresh(t.Context(), id, ""); err != nil {
+		t.Fatal(err)
+	}
+	if ev, ok := au.find("identity.mqtt_ask"); !ok || ev.Actor != "system" {
+		t.Errorf("audit %v after discovery's refresh over MQTT", au.actions())
+	}
+}
+
+// Why (#682, issue point 2): the identity over MQTT is stored only when the check that hears every reply on the
+// topic heard exactly one reply, with a stored MAC. Here HTTP cannot reach the device, so MQTT is the only way: a
+// second reply (a copied config next to the device), another MAC, no reply at all, or a window cut short (the page
+// request ended while the check listened) must store nothing and ask nothing more on the topic, and the first two hold
+// the device off its topic. One reply with the stored MAC is the device alone: it is stored, and a mark from earlier
+// ends. A Status 2 after a passing check that claims a minimal or safeboot image (which answers neither Status 5 nor
+// Status 2, so the answer is not the device's) stores nothing either: stored as minimal, the device would get another
+// update path, the broker reader's limited-firmware rule and no firmware recheck.
+func TestTheIdentityOverMQTTNeedsExactlyOneReplyWithAStoredMAC(t *testing.T) {
+	for _, c := range []struct {
+		name     string
+		topic    *probeTopic
+		cutShort bool // the caller's context ends inside the check's window
+		markedBy bool // the device was held off its topic before
+		stored   bool
+		marked   bool
+		checked  bool // the check found the device alone; a later answer is refused
+	}{
+		{"one reply with the stored MAC", &probeTopic{mac: "AA:BB:CC:00:00:01"}, false, false, true, false, true},
+		{"one reply with the stored MAC ends a mark", &probeTopic{mac: "AA:BB:CC:00:00:01"}, false, true, true, false, true},
+		{"two replies with the stored MAC", &probeTopic{mac: "AA:BB:CC:00:00:01", second: "AA:BB:CC:00:00:01"}, false, false, false, true, false},
+		{"another MAC", &probeTopic{mac: otherMAC}, false, false, false, true, false},
+		{"no reply", &probeTopic{mac: "AA:BB:CC:00:00:01", noReply: true}, false, false, false, false, false},
+		{"no reply keeps a mark", &probeTopic{mac: "AA:BB:CC:00:00:01", noReply: true}, false, true, false, true, false},
+		{"the window was cut short", &probeTopic{mac: "AA:BB:CC:00:00:01"}, true, false, false, false, false},
+		{"Status 2 claims a minimal image", &probeTopic{mac: "AA:BB:CC:00:00:01", status2: topicStatus2Minimal}, false, false, false, false, true},
+		{"Status 2 claims a safeboot image", &probeTopic{mac: "AA:BB:CC:00:00:01", status2: topicStatus2Safeboot}, false, false, false, false, true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			p, addr, id, get := probeOverRouter(t, c.topic, "Online")
+			p.Client = unreachable{}
+			p.Reads.(*transport.Router).Memory().Fail(id, transport.HTTPFailUnreachable) // the router knows HTTP fails
+			if c.markedBy {
+				p.Topics.Mark(id, "plug")
+			}
+			before := get(id).Identity
+			ctx := t.Context()
+			if c.cutShort {
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithCancel(ctx)
+				defer cancel()
+				c.topic.onWindow = cancel // the page request ends while the check listens
+			}
+			err := p.Refresh(ctx, id, "admin")
+			got := get(id).Identity
+			if c.stored {
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got.Version != "16.1.0" || got.DetectedAt.IsZero() {
+					t.Errorf("identity %+v: the device alone on its topic was not identified over MQTT", got)
+				}
+			} else {
+				if err == nil {
+					t.Error("Refresh = nil, want the failure: nothing could vouch for the topic and HTTP cannot reach the device")
+				}
+				if got.Version != before.Version || got.Variant != before.Variant || !got.DetectedAt.Equal(before.DetectedAt) {
+					t.Errorf("identity %+v stored, want %+v kept", got, before)
+				}
+				if asked := c.topic.asked(); !c.checked && slices.Contains(asked, "Status 2") {
+					t.Errorf("asked %v on the topic after the check did not find the device alone", asked)
+				}
+			}
+			if asked := c.topic.asked(); len(asked) == 0 || asked[0] != "Status 5" {
+				t.Errorf("asked %v on the topic: the row never reached the check", asked)
+			} else if c.checked && !slices.Contains(asked, "Status 2") {
+				t.Errorf("asked %v on the topic: the check did not find the device alone, so the row does not show its case", asked)
+			}
+			if got := !p.Topics.Since(id, "plug").IsZero(); got != c.marked {
+				t.Errorf("topic marked = %v, want %v", got, c.marked)
+			}
+			if got := addr.asked(); len(got) != 0 {
+				t.Errorf("the HTTP client of the test asked %v: it must be the unreachable one", got)
+			}
+		})
+	}
+}
+
+// Why (#682): the probe over MQTT took its answers from whoever listens on the topic it asked. A person who edits the
+// topic while the probe reads (or a device moved, rebound or deleted meanwhile) must not get the old topic's answers
+// stored on the device: the store writes only while the device still has the topic the check asked.
+func TestAnIdentityReadOverMQTTIsNotStoredWhenTheTopicChangedMeanwhile(t *testing.T) {
+	topic := &probeTopic{mac: "AA:BB:CC:00:00:01"}
+	p, _, id, get := probeOverRouter(t, topic, "Online")
+	before := get(id).Identity
+	topic.onAsk = func(cmd string) {
+		if cmd != "Status 4" {
+			return
+		}
+		d := get(id)
+		d.Topic = "plug-new"
+		if err := p.Devices.(interface {
+			UpdateDevice(context.Context, model.Device) error
+		}).UpdateDevice(t.Context(), d); err != nil {
+			t.Error(err)
+		}
+	}
+	if err := p.Refresh(t.Context(), id, "admin"); !errors.Is(err, store.ErrConflict) {
+		t.Fatalf("Refresh = %v, want the store's conflict", err)
+	}
+	if got := get(id).Identity; got.Version == "16.1.0" || !got.DetectedAt.Equal(before.DetectedAt) {
+		t.Errorf("identity %+v stored from the topic the device no longer has", got)
 	}
 }
 
@@ -493,71 +695,6 @@ func TestReadNetMarksAnotherDeviceOnTheTopic(t *testing.T) {
 	if got := readOver(t, p, id, onTopic, atAddr); got != "http" {
 		t.Errorf("after ReadNet saw another MAC on the topic the next read went over %s, want HTTP", got)
 	}
-}
-
-// Why (#852, review): Refresh identity over MQTT (HTTP cannot reach the device) is the one check a person can start
-// while HTTP fails. It refuses another device's MAC on the topic; without the mark the router's next write goes over
-// MQTT to that device, the one the person was just told is not theirs. With the mark it has no path.
-func TestARefreshOverMQTTThatFindsAnotherMACMarksTheTopic(t *testing.T) {
-	p, st, id, f := mqttOnlySetup(t, model.MQTTOurs)
-	p.Topics = transport.NewTopicMarks(time.Now)
-	f.replies[5] = `{"StatusNET":{"Hostname":"x","IPAddress":"192.0.2.10","Mac":"DE:AD:BE:EF:00:01"}}`
-	if err := p.Refresh(t.Context(), id, "admin"); !isRefusal(err) {
-		t.Fatalf("err = %v, want a refusal", err)
-	}
-	d, err := st.GetDevice(t.Context(), id)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if p.Topics.Since(id, d.Topic).IsZero() {
-		t.Errorf("topic %q not marked after the refresh over MQTT found another device on it", d.Topic)
-	}
-}
-
-// Why (#852, review): a mark set while HTTP fails (Settings, policy poller, ReadNet, an earlier refresh) can end only on
-// a check that hears every reply on the topic, and for a device whose HTTP API is off the next background one may be a
-// day away. Refresh identity over MQTT is the check a person can start: for a marked device it asks the topic first and
-// hears every reply there, so it ends the mark once the device answers alone on its topic again; while another device
-// still answers there it keeps the mark and reads nothing more from the topic, whose replies may be the other device's.
-func TestARefreshOverMQTTEndsTheMarkOnceTheTopicIsFixed(t *testing.T) {
-	setup := func(t *testing.T) (*Prober, model.DeviceID, *twoOnTopic, *fakeAsker) {
-		t.Helper()
-		onTopic := &brokerAnswers{mac: storedMAC, host: "mqtt.home"}
-		p, st, id := brokerReadOverRouter(t, onTopic, &brokerAnswers{mac: storedMAC, host: "mqtt.home"}, "Online")
-		ch := &twoOnTopic{dev: onTopic}
-		p.Reads.(*transport.Router).SetMQTT(ch)
-		p.Client = unreachable{}
-		f := &fakeAsker{replies: map[int]string{5: string(mac5(storedMAC)), 2: status2Payload, 1: `{"StatusPRM":{"GroupTopic":"tasmotas"}}`}}
-		p.MQTT, p.Audit = f, &idAudit{}
-		d, err := st.GetDevice(t.Context(), id)
-		if err != nil {
-			t.Fatal(err)
-		}
-		p.Topics.Mark(id, d.Topic)
-		return p, id, ch, f
-	}
-	t.Run("the device alone on its topic: the mark ends", func(t *testing.T) {
-		p, id, _, _ := setup(t)
-		if err := p.Refresh(t.Context(), id, "admin"); err != nil {
-			t.Fatal(err)
-		}
-		if !p.Topics.Since(id, "plug").IsZero() {
-			t.Error("the device answered alone on its topic and the person's refresh left it held off the topic")
-		}
-	})
-	t.Run("another device still answers: the mark stays, nothing more is read there", func(t *testing.T) {
-		p, id, ch, f := setup(t)
-		ch.setSecond(otherMAC)
-		if err := p.Refresh(t.Context(), id, "admin"); err == nil || !strings.Contains(err.Error(), errAnotherDeviceOnTopic.Error()) {
-			t.Fatalf("Refresh = %v, want the HTTP failure with the taken topic", err)
-		}
-		if p.Topics.Since(id, "plug").IsZero() {
-			t.Error("the mark ended while another device still answers on the topic")
-		}
-		if len(f.asked) != 0 {
-			t.Errorf("asked %v over MQTT after the topic was found taken: the replies may be the other device's", f.asked)
-		}
-	})
 }
 
 // Why (#852, review): the router asks the device's stored topic, which may differ from the snapshot a caller holds (a
@@ -715,7 +852,7 @@ func (noCollectTopic) DoAll(context.Context, model.Device, string, time.Duration
 // Why (#852, fourth review): for a marked device whose check that hears every reply learnt nothing, the reads fell
 // through to a check that hears one reply. With HTTP failing that went to the topic, where whichever device answers
 // first is heard: the device's own reply let the broker read and the data refresh read from a topic known to be
-// taken, and Refresh identity wrote a Status 2 identity read there. Such a check vouches for nothing on that topic:
+// taken, and Refresh identity wrote a Status 2 identity read there (before #682 it asked one reply there). Such a check vouches for nothing on that topic:
 // nothing is read there until the check that hears every reply finds the device alone.
 func TestAMarkedTopicTheFullCheckLearntNothingOnIsNotRead(t *testing.T) {
 	setup := func(t *testing.T) (*Prober, model.DeviceID, *brokerAnswers) {
@@ -747,16 +884,14 @@ func TestAMarkedTopicTheFullCheckLearntNothingOnIsNotRead(t *testing.T) {
 			t.Error("the mark ended")
 		}
 	})
-	t.Run("Refresh identity over MQTT", func(t *testing.T) {
-		p, id, _ := setup(t)
+	t.Run("Refresh identity", func(t *testing.T) {
+		p, id, onTopic := setup(t)
 		p.Client = unreachable{}
-		f := &fakeAsker{replies: map[int]string{5: string(mac5(storedMAC)), 2: `{"StatusFWR":{"Version":"14.0.0(tasmota)","Hardware":"ESP32-D0WD"}}`}}
-		p.MQTT, p.Audit = f, &idAudit{}
 		if err := p.Refresh(t.Context(), id, "admin"); err == nil {
-			t.Fatal("Refresh = nil: it read a topic held as taken after a check that heard one reply")
+			t.Fatal("Refresh = nil: it read a topic held as taken after a check that learnt nothing")
 		}
-		if slices.Contains(f.asked, 2) {
-			t.Errorf("asked Status %v over MQTT on a topic held as taken", f.asked)
+		if got := onTopic.asked(); len(got) != 0 {
+			t.Errorf("asked %v on a topic held as taken", got)
 		}
 		if d, _ := p.Devices.GetDevice(t.Context(), id); d.Identity.Version != "15.1.0" || d.Identity.Family != "esp8266" {
 			t.Errorf("identity %+v written from the taken topic", d.Identity)
@@ -770,7 +905,7 @@ func TestAMarkedTopicTheFullCheckLearntNothingOnIsNotRead(t *testing.T) {
 // Why (#851 review, R6): a device answers only on its own topic, so over MQTT the topic it reports is always the stored
 // one; only a reply some other client forged on stat/<topic>/ can differ. The identity probe's reads over MQTT took
 // the reported topic and the stored topic followed it, so a forged Status moved the device's later writes and
-// transfers to another topic, a trust path the threat model says MQTT does not have (refreshMQTT keeps the topic too).
+// transfers to another topic, a trust path the threat model says MQTT does not have.
 // The facts over MQTT keep the stored topic.
 func TestTheIdentityProbeOverMQTTKeepsTheStoredTopic(t *testing.T) {
 	onTopic := &probeTopic{mac: "AA:BB:CC:00:00:01", status: `{"Status":{"DeviceName":"x","Topic":"evil"}}`}
@@ -795,24 +930,29 @@ func TestTheIdentityProbeOverMQTTKeepsTheStoredTopic(t *testing.T) {
 	}
 }
 
-// Why (#852, fourth review): the router asks the device's stored topic, which an edit may change while the identity
-// probe reads the address. The probe's check on the topic marked the topic of the refresh's snapshot, so the stored
-// topic, where the other device was just heard, stayed unmarked and the device's writes went there.
+// Why (#852, fourth review): the router asks the device's stored topic, which an edit may change after a refresh read
+// its snapshot. The probe's check on the topic marked the topic of the refresh's snapshot, so the stored topic, where
+// the other device was just heard, stayed unmarked and the device's writes went there.
 func TestTheIdentityProbeMarksTheStoredTopic(t *testing.T) {
-	p, addr, id, get := probeOverRouter(t, &probeTopic{mac: otherMAC}, "Online")
-	addr.onIdent = func() {
-		d := get(id)
-		d.Topic = "plug-new"
+	p, _, id, get := probeOverRouter(t, &probeTopic{mac: otherMAC}, "Online")
+	reads := p.ReadsOverMQTT
+	p.ReadsOverMQTT = func(ctx context.Context, d model.Device) bool { // runs between the refresh's snapshot and its check
+		cur := get(id)
+		cur.Topic = "plug-new"
 		if err := p.Devices.(interface {
 			UpdateDevice(context.Context, model.Device) error
-		}).UpdateDevice(t.Context(), d); err != nil {
+		}).UpdateDevice(t.Context(), cur); err != nil {
 			t.Error(err)
 		}
+		return reads(ctx, d)
 	}
 	if err := p.RefreshFacts(t.Context(), id); err != nil {
 		t.Fatal(err)
 	}
 	if p.Topics.Since(id, "plug-new").IsZero() {
 		t.Error("the stored topic, where another device answered, is not marked")
+	}
+	if !p.Topics.Since(id, "plug").IsZero() {
+		t.Error("the topic of the refresh's snapshot, which nobody asked, is marked")
 	}
 }
