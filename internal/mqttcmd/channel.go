@@ -42,6 +42,11 @@ var (
 	ErrNoPassword      = errors.New("no MQTT password is set for this device")
 )
 
+// ErrWentOffline marks a command whose device published LWT Offline (a restart, a lost connection) while the channel
+// waited for the answer. It always comes with tasmota.ErrTimeout: the outcome is unknown, the command may have run.
+// The page words it apart from a device that stayed silent (#818).
+var ErrWentOffline = errors.New("the device went offline before it answered")
+
 // ErrPublished marks a failed transfer for which at least one command reached the bus (the opening
 // abort, the start, ...), whatever else went wrong: the device may have been touched. Errors that
 // lack it were decided before anything was published.
@@ -317,7 +322,7 @@ func (c *Channel) collect(ctx context.Context, w *waiter, req *request, loose bo
 			}
 			return v.reply, nil
 		case <-w.off:
-			return nil, fmt.Errorf("mqtt: the device went offline before it answered %s (outcome unknown): %w", req.name, tasmota.ErrTimeout)
+			return nil, fmt.Errorf("mqtt: %w (%s, outcome unknown): %w", ErrWentOffline, req.name, tasmota.ErrTimeout)
 		case <-timer.C:
 			return nil, fmt.Errorf("mqtt: no answer to %s: %w", req.name, tasmota.ErrTimeout)
 		case <-ctx.Done():

@@ -38,6 +38,8 @@ func (m fakeMemory) HTTPFailure(model.DeviceID) (transport.HTTPFailKind, time.Ti
 	return m.kind, m.since, m.ok
 }
 
+func (fakeMemory) LastFailure(model.DeviceID) (time.Time, bool) { return time.Time{}, false }
+
 var factsNow = time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
 
 func newFacts(devs []model.Device, h fakeFactsHealth, mem HTTPMemory) *TransportFacts {
@@ -313,5 +315,59 @@ func TestOthersGroupUnreadSkipsBrokerConfirmedOfflineDevices(t *testing.T) {
 		if f.MQTT.TopicExclusive {
 			t.Errorf("LWT %q: the offline device's GroupTopic is a's topic; exclusivity must stay false", tc.lwt)
 		}
+	}
+}
+
+// Why (#818): the router forgets an HTTP failure for routing after ten minutes, but an answer from before that failure
+// is not "Reachable" now: the tile showed it for the rest of the fifteen minutes after the answer. Measured by walking
+// the clock after one failed attempt: no minute after the failure may read OK from an answer that came before it, and
+// an answer that comes after it is believed at once. Unknown is routed like OK, so only the wording changes; the
+// console now asks up front for a change that can cut the device off (reachedOnlyOverMQTT) in the minutes this covers,
+// the stricter side.
+func TestAnExpiredFailureNewerThanTheAnswerIsNotReachable(t *testing.T) {
+	failedAt := factsNow
+	answer := failedAt.Add(-3 * time.Minute) // the last poll, before the failed call
+	now := failedAt
+	mem := transport.NewMemory(transport.DefaultFailFor, func() time.Time { return now })
+	mem.Fail(1, transport.HTTPFailUnreachable)
+	dev := model.Device{ID: 1, Topic: "plug", MQTT: model.MQTTOurs}
+	state := func(h model.Health) (transport.Facts, transport.HTTPState) {
+		f := newFacts([]model.Device{dev}, fakeFactsHealth{1: h}, mem)
+		f.Now = func() time.Time { return now }
+		hs := f.HTTPState(1)
+		facts, err := f.Facts(t.Context(), 1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return facts, hs
+	}
+	routedAway := false
+	for minute := 0; minute <= 40; minute++ {
+		now = failedAt.Add(time.Duration(minute) * time.Minute)
+		facts, hs := state(model.Health{SeenHTTP: answer, LWT: "Online", State: model.HealthOnline})
+		if hs.State == transport.HTTPOK {
+			t.Fatalf("%d min after a failed call, an answer from before it reads Reachable", minute)
+		}
+		if hs.State == transport.HTTPFailing {
+			routedAway = true
+		} else if minute < int(transport.DefaultFailFor/time.Minute) {
+			t.Errorf("%d min: state %v, the routing window is still open", minute, hs.State)
+		}
+		if minute == 12 { // the window the memory has forgotten the failure, the old answer still inside 15 minutes
+			if hs.State != transport.HTTPUnknown {
+				t.Errorf("12 min: state %v, want unknown (not checked lately)", hs.State)
+			}
+			if !reachedOnlyOverMQTT(facts) && transport.MQTTBlocker(facts, false) == "" {
+				t.Error("12 min: unknown HTTP and usable MQTT, the console must ask up front")
+			}
+		}
+	}
+	if !routedAway {
+		t.Error("the routing window never opened")
+	}
+	// an answer after the failure ends it: believed at once, the memory is cleared by it in the router
+	now = failedAt.Add(12 * time.Minute)
+	if _, hs := state(model.Health{SeenHTTP: failedAt.Add(time.Minute), LWT: "Online"}); hs.State != transport.HTTPOK {
+		t.Errorf("an answer after the failed call reads %v, want OK", hs.State)
 	}
 }

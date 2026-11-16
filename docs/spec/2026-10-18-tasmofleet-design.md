@@ -1951,7 +1951,12 @@ with one notification. The skip is the snapshot failure event `snapshot.failed` 
   not fail the readers that joined. A write (`Apply`) forgets the values of that device; a read that was under
   way then is neither remembered nor joined by later readers, who get a read of their own once it has ended. The
   tab is drawn from `Last`, a busy line (`aria-busy`, the #538 pattern) fetches `GET /devices/{id}/settings/form`,
-  and a failed refresh keeps the old values with the reason ("Refresh failed."). GPIO templates: the service's
+  and a failed refresh keeps the old values with the reason ("Refresh failed."). The background refresh of the data
+  (`brokerHostReader`) keeps, in memory only, why its last try failed (#818): a class (`settings.FailReason`, never the
+  error text) with the time of the failure and the time of the next try, which is the reader's own schedule. The
+  Settings line says "Last background refresh failed 12m ago: the device did not answer. Next try 14:05." only while
+  that failure is newer than the values shown; a refresh that works, or fails after the Settings step, ends it, as does
+  a restart of TasmoFleet. GPIO templates: the service's
   existing reading cache is kept past the hour as a `stale` reading (shown, never applied, like a backup) unless a
   backup is newer; the tab's busy line asks `POST /policy/templates/read` (an htmx request answers the page body
   only; reads stay POST with the CSRF token) and says how many devices could not be read. A refresh that started

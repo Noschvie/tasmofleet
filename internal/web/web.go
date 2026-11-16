@@ -218,6 +218,9 @@ type Deps struct {
 	ScheduledBackup func() BackupRunInfo
 	// BackupFleet serves the Devices, Backups page (#409); nil hides what needs it.
 	BackupFleet BackupFleet
+	// RefreshFailure, if set, says why the last background refresh of a device's data failed and when the next try is due
+	// (#818); false once a refresh worked, or when none failed. The Settings tab shows it beside the age of the values.
+	RefreshFailure func(model.DeviceID) (RefreshFailure, bool)
 	// MQTTBroker compares a device's configured broker with ours; nil when
 	// tasmofleet has no broker.
 	MQTTBroker interface {

@@ -43,7 +43,7 @@ func (c *Channel) collectBacklog(ctx context.Context, w *waiter, req *request) (
 			firstC = nil
 			quiet.Reset(c.o.BacklogQuiet)
 		case <-w.off:
-			return nil, fmt.Errorf("mqtt: the device went offline during the Backlog (outcome unknown): %w", tasmota.ErrTimeout)
+			return nil, fmt.Errorf("mqtt: %w (during the Backlog, outcome unknown): %w", ErrWentOffline, tasmota.ErrTimeout)
 		case <-c.done:
 			return nil, c.closedAfterSend("the Backlog")
 		case <-firstC:

@@ -32,6 +32,8 @@ func (m memoryFor) HTTPFailure(id model.DeviceID) (transport.HTTPFailKind, time.
 	return transport.HTTPFailUnreachable, factsNow.Add(-time.Hour), m[id]
 }
 
+func (memoryFor) LastFailure(model.DeviceID) (time.Time, bool) { return time.Time{}, false }
+
 // Why (review H2): the device list asks for the MQTT marker on every render; with 500 devices a
 // Facts read each (GetDevice plus a full ListDevices) cost seconds. Facts are read only for a device
 // whose HTTP is failing, and a fleet without failures (or without the router's memory) reads nothing.

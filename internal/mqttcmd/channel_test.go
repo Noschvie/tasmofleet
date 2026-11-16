@@ -433,6 +433,35 @@ func TestOfflineWhileWaitingIsAnUnknownOutcome(t *testing.T) {
 	}
 }
 
+// Why (#818): the page tells a person "the device went offline before it answered" apart from "the device did
+// not answer". Matching the error text would copy this package's wording into the app, so the cause is a typed
+// error; it still wraps ErrTimeout, because every caller treats the outcome as unknown (not "unreachable").
+func TestOfflineWhileWaitingIsTypedAndStillATimeout(t *testing.T) {
+	for _, cmd := range []string{"Upgrade 1", "Backlog Power 1; Power 2"} {
+		b := &fakeBus{}
+		b.onPub = func(b *fakeBus, p pub) {
+			go func() {
+				time.Sleep(20 * time.Millisecond)
+				b.emit(mqttbus.KindLWT, p.topic, "LWT", "Offline", true)
+			}()
+		}
+		o := fast()
+		o.ReplyWait = 5 * time.Second
+		_, err := New(b, o).Do(t.Context(), plug(), cmd)
+		if !errors.Is(err, ErrWentOffline) {
+			t.Errorf("%q: err = %v, want ErrWentOffline", cmd, err)
+		}
+		if !errors.Is(err, tasmota.ErrTimeout) {
+			t.Errorf("%q: err = %v, want ErrTimeout too: the outcome is unknown", cmd, err)
+		}
+	}
+	// a device that just stays silent is a timeout and nothing more
+	_, err := newChan(&fakeBus{}).Do(t.Context(), plug(), "Restart 1")
+	if errors.Is(err, ErrWentOffline) {
+		t.Errorf("a silent device reads as gone offline: %v", err)
+	}
+}
+
 // Why: Tasmota v16 publishes nothing for the Backlog itself and one RESULT per queued command
 // (docs/research/tasmota-mqtt-transport.md section 4). All replies are collected and merged in
 // order, later keys winning, like the merged /cm reply the callers know.

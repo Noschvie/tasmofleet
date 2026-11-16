@@ -10,6 +10,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/devlock"
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/policy"
+	"github.com/hellwand/tasmofleet/internal/settings"
 	"github.com/hellwand/tasmofleet/internal/store"
 	"github.com/hellwand/tasmofleet/internal/transport"
 )
@@ -157,6 +158,8 @@ type brokerHostReader struct {
 	retryAt       map[retryKey]time.Time
 	retrying      map[retryKey]bool
 	inRestartRead bool
+	// outcomes: why the last background data refresh of a device failed (#818), read by the device page.
+	outcomes *refreshOutcomes
 }
 
 // retryKey names the identity or the data schedule of one device.
@@ -179,7 +182,7 @@ func newBrokerHostReader(list func(context.Context) ([]model.Device, error), // 
 	return &brokerHostReader{list: list, httpUp: httpUp, read: read, enter: enter, now: time.Now, log: log,
 		kick: make(chan model.DeviceID, brokerHostQueue), kickRestart: make(chan model.DeviceID, brokerHostQueue),
 		dataNext: map[model.DeviceID]time.Time{}, identityNext: map[model.DeviceID]time.Time{}, pending: map[model.DeviceID]brokerWant{}, next: map[model.DeviceID]time.Time{}, probeNext: map[model.DeviceID]time.Time{},
-		recheckNext: map[model.DeviceID]time.Time{}, restartRead: map[model.DeviceID]time.Time{}, restartLeft: map[model.DeviceID]bool{}, retryAt: map[retryKey]time.Time{}, retrying: map[retryKey]bool{}}
+		recheckNext: map[model.DeviceID]time.Time{}, restartRead: map[model.DeviceID]time.Time{}, restartLeft: map[model.DeviceID]bool{}, retryAt: map[retryKey]time.Time{}, retrying: map[retryKey]bool{}, outcomes: newRefreshOutcomes()}
 }
 
 // later asks for a read of id soon and returns at once.
@@ -249,6 +252,7 @@ func (r *brokerHostReader) pass(ctx context.Context) {
 	for _, d := range devs {
 		listed[d.ID] = d
 	}
+	r.outcomes.keep(listed)
 	r.recheckTopics(ctx, devs, now)
 	probed := false // one probe request per pass: not the whole fleet at once
 	ask := func(d model.Device) {
@@ -398,6 +402,9 @@ func (r *brokerHostReader) requested(id model.DeviceID, w brokerWant, now time.T
 				continue // a failed scheduled read waits for its retry, which comes before the end of the hour
 			}
 			m.next[id] = at
+			if !m.identity {
+				r.outcomes.moveNext(id, at)
+			}
 		}
 		r.restartLeft[id] = true
 		return what
@@ -525,6 +532,7 @@ func (r *brokerHostReader) readLocked(ctx context.Context, id model.DeviceID, wh
 			refused = true
 			err = nil                                   // an answer, not a failure: another device answers at the address (logged and audited by the prober); asked again at the regular interval
 			r.dataNext[id] = r.now().Add(identityEvery) // and nothing is read for this device from that address until the identity matches again
+			r.outcomes.fail(id, r.now(), r.dataNext[id], settings.FailOtherDevice)
 		}
 		r.finished(ctx, r.identityNext, retryKey{id, true}, identityEvery, err, "identity")
 	}
@@ -537,6 +545,7 @@ func (r *brokerHostReader) readDataOf(ctx context.Context, d model.Device) bool 
 	release, err := r.enter(ctx, d.ID, backgroundData)
 	if err != nil {
 		delete(r.dataNext, d.ID) // held by a job (or not available): due again at the next visit
+		r.outcomes.moveNext(d.ID, time.Time{})
 		return false
 	}
 	release()
@@ -555,10 +564,25 @@ func (r *brokerHostReader) readDataOf(ctx context.Context, d model.Device) bool 
 		} else {
 			r.log.Debug("device refresh: another device answers at the address", "device", d.ID)
 		}
+		r.outcomes.fail(d.ID, r.now(), r.dataNext[d.ID], refreshReason(err))
 		return true
 	}
 	r.finished(ctx, r.dataNext, retryKey{d.ID, false}, dataEvery, err, "data")
+	r.noteData(ctx, d.ID, err)
 	return true
+}
+
+// noteData records how a data read ended for the device page (#818): a read that worked, or one that failed after the
+// Settings values were read, ends the record; a failure starts it, with the time the schedule just set. A shutdown
+// concludes nothing.
+func (r *brokerHostReader) noteData(ctx context.Context, id model.DeviceID, err error) {
+	var later laterStepError
+	switch {
+	case err == nil, errors.As(err, &later):
+		r.outcomes.clear(id)
+	case ctx.Err() == nil:
+		r.outcomes.fail(id, r.now(), r.dataNext[id], refreshReason(err))
+	}
 }
 
 // finished schedules the next read of kind after one that ended with err: the regular interval, or the
@@ -667,10 +691,12 @@ func (a *runtime) refreshData(ctx context.Context, d model.Device) error {
 		}
 	}
 	if a.policyLive != nil && !a.policyReadsOff() && !a.policyLive.readDevice(ctx, d) && !policy.LimitedFirmware(d.Identity.Variant) {
-		return errors.New("policy values not read")
+		return laterStepError{errors.New("policy values not read")}
 	}
 	if a.templates != nil {
-		return a.templates.Refresh(ctx, d)
+		if err := a.templates.Refresh(ctx, d); err != nil {
+			return laterStepError{err}
+		}
 	}
 	return nil
 }

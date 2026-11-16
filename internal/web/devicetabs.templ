@@ -67,6 +67,18 @@ templ settingsBody(p settingsPage, base, csrf string) {
 	</div>
 }
 
+// settingsBackgroundFail says why the last background refresh failed and when the next try is due (#818). The reason is a
+// fixed sentence (failSentences), never the device's own text; the next try is a clock time today, else a date.
+templ settingsBackgroundFail(b *backgroundFail) {
+	<span class="agebar-warn" data-bg-refresh="failed">Last background refresh failed <time title={ stamp(b.At) } { ui.StampAttrs(b.At, ui.StampTitle)... }>{ b.Words }</time>: { b.Why }.
+		if b.NextOn {
+			Next try <time { ui.StampAttrs(b.Next, ui.StampClockOrDay)... }>{ b.Text }</time>.
+		} else if b.Due {
+			The next try is due.
+		}
+	</span>
+}
+
 // settingsAgeLine says how old the shown values are (#599): fresh, being refreshed (busy, and the
 // fresh form is fetched into #settings-view by itself), or still the old ones because the refresh
 // failed. An old reading carries the visible Stale marker, not only a colour.
@@ -77,6 +89,9 @@ templ settingsAgeLine(p settingsPage, a settingsAge, base string) {
 				@ui.Badge(ui.ToneWarn, "Stale")
 			}
 			<span>Read <time title={ stamp(a.At) } { ui.StampAttrs(a.At, ui.StampTitle)... }>{ a.Words }</time>. <span data-guard-note>Refreshing from the device&#8230;</span></span>
+			if a.Background != nil {
+				@settingsBackgroundFail(a.Background)
+			}
 			<noscript><span>This page needs JavaScript to refresh by itself. <a href={ templ.SafeURL(a.RefreshHref) }>Read the device now</a>.</span></noscript>
 			if a.Stale {
 				<span class="agebar-warn">These values may be out of date.</span>
@@ -90,6 +105,9 @@ templ settingsAgeLine(p settingsPage, a settingsAge, base string) {
 			<span><b>Refresh failed.</b> { a.Failed } These are the values read <time title={ stamp(a.At) } { ui.StampAttrs(a.At, ui.StampTitle)... }>{ a.Words }</time>.</span>
 			if a.Stale {
 				<span class="agebar-warn">They may be out of date.</span>
+			}
+			if a.Background != nil {
+				@settingsBackgroundFail(a.Background)
 			}
 			<a href={ templ.SafeURL(base + devPath(p.Device.ID, "/settings")) }>Try again</a>
 		</p>

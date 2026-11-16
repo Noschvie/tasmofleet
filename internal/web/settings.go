@@ -6,11 +6,12 @@ import (
 	"github.com/hellwand/tasmofleet/internal/devlock"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/settings"
-	"github.com/hellwand/tasmofleet/internal/tasmota"
 	"github.com/hellwand/tasmofleet/internal/transport"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 // SettingsService is the part of settings.Service the UI uses.
@@ -59,6 +60,24 @@ type settingsPage struct {
 	Age *settingsAge
 }
 
+// RefreshFailure is the outcome of the last background refresh of a device's data when it failed (#818): when, why (a
+// class, never the error text) and when the next try is due (zero: not known, as when the device is held by a job).
+type RefreshFailure struct {
+	At, Next time.Time
+	Reason   settings.FailReason
+}
+
+// backgroundFail is RefreshFailure as the Settings tab words it.
+type backgroundFail struct {
+	At     time.Time
+	Words  string // "12m ago"
+	Why    string // "the device did not answer"
+	Next   time.Time
+	NextOn bool   // a next try is known and still ahead
+	Due    bool   // a next try is known and its time has come: the reader has not got to the device yet
+	Text   string // the fallback text of Next (a clock time today, else a date)
+}
+
 // settingsAge is the line above the form that says how old the shown values are.
 type settingsAge struct {
 	readAge
@@ -68,6 +87,29 @@ type settingsAge struct {
 	Failed string
 	// RefreshHref is where the fresh form comes from.
 	RefreshHref string
+	// Background: why the last background refresh failed, set only while that failure is newer than the values shown.
+	Background *backgroundFail
+}
+
+// backgroundFailOf is the failure of the last background refresh of id as the line shows it, or nil. It is shown only
+// while it is newer than the values on the page (snapAt): a read that worked after it (a person's, or the next try)
+// makes it disappear by itself, with no state to clear here.
+func (h *handler) backgroundFailOf(id model.DeviceID, snapAt time.Time) *backgroundFail {
+	if h.d.RefreshFailure == nil {
+		return nil
+	}
+	f, ok := h.d.RefreshFailure(id)
+	if !ok || !f.At.After(snapAt) {
+		return nil
+	}
+	now := h.d.Clock.Now()
+	b := &backgroundFail{At: f.At, Words: newReadAge(now, f.At).Words, Why: backgroundFailText(f.Reason), Next: f.Next}
+	if !f.Next.IsZero() {
+		b.Due = !f.Next.After(now)
+		b.NextOn = !b.Due
+		b.Text = ui.StampClockOrDayText(now, f.Next)
+	}
+	return b
 }
 
 // settingsCard says which fields a card of the form holds, in this order, and in which of the
@@ -162,41 +204,33 @@ func (h *handler) policyWants(r *http.Request, id model.DeviceID) map[string]str
 	return out
 }
 
+// failSentences is the one table of the words for a failed read, by class (settings.FailReason): Live is the
+// sentence of a read the person just made, Background the clause after "Last background refresh failed ...: " (#818).
+// Both are written here and never quote the error, so the device's own text cannot reach the page (safety rule 4).
+var failSentences = map[settings.FailReason]struct{ Live, Background string }{
+	settings.FailNoMAC:       {"The device runs minimal firmware (an update is in progress); its settings can be read after the update.", "the device runs minimal firmware (an update is in progress)"},
+	settings.FailAuth:        {"The device refused the stored credentials.", "the device refused the stored credentials"},
+	settings.FailAPIRefused:  {reasonAPIOff, "the device's HTTP API is off"},
+	settings.FailUnreachable: {"The device is unreachable.", "the device was unreachable"},
+	settings.FailWentOffline: {"The device went offline before it answered.", "the device went offline before it answered"},
+	settings.FailTimeout:     {"The device did not answer in time.", "the device did not answer"},
+	settings.FailOtherDevice: {"Another device answers there.", "another device answered where this one was asked, so nothing was read"},
+}
+
 // readErrorText keeps device output out of the page.
 func readErrorText(err error) string {
-	switch {
-	case errors.Is(err, settings.ErrNoMAC):
-		return "The device runs minimal firmware (an update is in progress); its settings can be read after the update."
-	case errors.Is(err, tasmota.ErrAuth):
-		return "The device refused the stored credentials."
-	case errors.Is(err, tasmota.ErrHTTPAPIRefused):
-		return reasonAPIOff
-	case errors.Is(err, tasmota.ErrUnreachable):
-		return "The device is unreachable."
-	case errors.Is(err, tasmota.ErrTimeout):
-		return "The device did not answer in time."
+	if s, ok := failSentences[settings.ClassifyRead(err)]; ok {
+		return s.Live
 	}
 	return "The device could not be read."
 }
 
-// readFailure names why a Settings read failed in a few fixed words for the log. It is a class and
-// never the error text: that text can hold what the device answered (safety rule 4).
-func readFailure(err error) string {
-	switch {
-	case errors.Is(err, settings.ErrNoMAC):
-		return "no-mac"
-	case errors.Is(err, tasmota.ErrAuth):
-		return "auth"
-	case errors.Is(err, tasmota.ErrHTTPAPIRefused):
-		return "http-api-refused"
-	case errors.Is(err, tasmota.ErrUnreachable):
-		return "unreachable"
-	case errors.Is(err, tasmota.ErrTimeout):
-		return "timeout"
-	case errors.Is(err, tasmota.ErrBadResponse):
-		return "bad-response"
+// backgroundFailText is the clause that says why the last background refresh failed.
+func backgroundFailText(r settings.FailReason) string {
+	if s, ok := failSentences[r]; ok {
+		return s.Background
 	}
-	return "other"
+	return "the device could not be read"
 }
 
 // logReadFailure writes the one line that tells the operator which query of which device failed
@@ -207,7 +241,7 @@ func (h *handler) logReadFailure(r *http.Request, id model.DeviceID, err error) 
 	if errors.Is(err, context.Canceled) {
 		return
 	}
-	attrs := []any{"device", id, "reason", readFailure(err)}
+	attrs := []any{"device", id, "reason", string(settings.ClassifyRead(err))}
 	var re *settings.ReadError
 	if errors.As(err, &re) {
 		attrs = append(attrs, "cmd", re.Cmd)
@@ -231,7 +265,7 @@ func (h *handler) settingsTabPage(w http.ResponseWriter, r *http.Request) {
 	}
 	v := h.view(r, "", "", nil)
 	p := settingsPage{Device: d, Groups: buildGroups(snap.Values, snap.Values, nil)}
-	p.Age = &settingsAge{readAge: newReadAge(h.d.Clock.Now(), snap.At), Refreshing: true, RefreshHref: v.Base + devPath(d.ID, "/settings/form")}
+	p.Age = &settingsAge{readAge: newReadAge(h.d.Clock.Now(), snap.At), Refreshing: true, RefreshHref: v.Base + devPath(d.ID, "/settings/form"), Background: h.backgroundFailOf(d.ID, snap.At)}
 	h.renderSettings(w, r, http.StatusOK, p)
 }
 
@@ -262,7 +296,7 @@ func (h *handler) settingsForm(w http.ResponseWriter, r *http.Request) {
 	case known:
 		p.Groups = buildGroups(snap.Values, snap.Values, nil)
 		p.PolicyWant = h.policyWants(r, d.ID)
-		p.Age = &settingsAge{readAge: newReadAge(now, snap.At), Failed: readErrorText(err)}
+		p.Age = &settingsAge{readAge: newReadAge(now, snap.At), Failed: readErrorText(err), Background: h.backgroundFailOf(d.ID, snap.At)}
 	default:
 		// Show nothing editable: a form built from a partial read would make
 		// every missing field look like a change.

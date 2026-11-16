@@ -14,7 +14,8 @@ import (
 // Memory remembers, in memory only, which devices' HTTP calls failed and why. It implements
 // app.HTTPMemory: the facts read it to decide that HTTP is failing, which is what routes commands
 // to MQTT. A failure counts for ttl (D4: 10 minutes) and is cleared by the next HTTP call that
-// gets an answer, a health poll included (the observer sees it too).
+// gets an answer, a health poll included (the observer sees it too). The time of the last failure outlives ttl, until
+// that clear (LastFailure): an answer older than it says nothing about HTTP now (#818).
 type Memory struct {
 	ttl time.Duration
 	now func() time.Time
@@ -27,6 +28,7 @@ type failure struct {
 	kind  HTTPFailKind
 	since time.Time
 	until time.Time
+	last  time.Time // the last failing call; kept after until
 }
 
 // NewMemory returns a memory whose entries last ttl.
@@ -42,11 +44,19 @@ func (m *Memory) HTTPFailure(id model.DeviceID) (HTTPFailKind, time.Time, bool) 
 	if !ok {
 		return "", time.Time{}, false
 	}
-	if !m.now().Before(f.until) {
-		delete(m.m, id)
+	if !m.now().Before(f.until) { // expired: the entry stays for LastFailure until a call is answered
 		return "", time.Time{}, false
 	}
 	return f.kind, f.since, true
+}
+
+// LastFailure is when the last failing HTTP call to id was made, however long ago: it outlives the ttl of HTTPFailure
+// and ends only with Clear (an answer), or a restart. For the states that must not call an older answer fresh.
+func (m *Memory) LastFailure(id model.DeviceID) (time.Time, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	f, ok := m.m[id]
+	return f.last, ok
 }
 
 // Fail records a failing call; "since" keeps the start of an unbroken series.
@@ -58,7 +68,7 @@ func (m *Memory) Fail(id model.DeviceID, kind HTTPFailKind) {
 	if !ok || !now.Before(f.until) {
 		f = failure{since: now}
 	}
-	f.kind, f.until = kind, now.Add(m.ttl)
+	f.kind, f.until, f.last = kind, now.Add(m.ttl), now
 	m.m[id] = f
 }
 

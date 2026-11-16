@@ -762,6 +762,9 @@ func (a *runtime) webDeps(guard web.Guard, rows []web.KV) web.Deps {
 		Jobs: a.svc.Store, Batches: a.svc.Store, Artifacts: a.svc.Store, Prefs: a.svc.Store, Principals: a.svc.Store, Database: a.svc.Store, Hub: a.svc.Hub, Version: DisplayVersion(), DecoderVersion: a.decoder, MQTT: mqttState,
 		Config: rows, Pages: a.pages, FirmwareSource: a.fwSource, FirmwareFeed: a.fwFeed,
 	}
+	if a.brokerHost != nil {
+		deps.RefreshFailure = a.brokerHost.outcomes.Failure // why the last background refresh failed (#818)
+	}
 	deps.MQTTBroker = a.svc.Broker
 	deps.MQTTStatus = func() web.BrokerInfo { // nil-safe: the bar says nothing about a broker that was never started
 		if a.broker == nil {

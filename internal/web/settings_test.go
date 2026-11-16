@@ -15,6 +15,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/policy"
 	"github.com/hellwand/tasmofleet/internal/settings"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
 type fakeSettings struct {
@@ -570,5 +571,111 @@ func TestCancelledSettingsReadIsNotLogged(t *testing.T) {
 	_, logs := logSettingsReads(t, context.Canceled)
 	if strings.Contains(logs, "level=WARN") {
 		t.Errorf("a cancelled read was logged as a failure:\n%s", logs)
+	}
+}
+
+// bgFailEnv is a Settings tab with a remembered reading of 30 minutes ago and a background-refresh outcome.
+func bgFailEnv(t *testing.T, now time.Time, fs *fakeSettings, f *RefreshFailure) *env {
+	t.Helper()
+	fs.last = &settings.Snapshot{Values: map[string]string{"TelePeriod": "300"}, At: now.Add(-30 * time.Minute)}
+	return setupWith(t, func(d *Deps) {
+		d.Settings = fs
+		d.Clock = noonClock{now}
+		if f != nil {
+			d.RefreshFailure = func(model.DeviceID) (RefreshFailure, bool) { return *f, true }
+		}
+	})
+}
+
+// Why (#818): with the data only "Read 30m ago" a person cannot tell a quiet device from one the refresh was
+// refused for. The page names the reason of the last failed background refresh and when the next try is due, in
+// fixed sentences: no answer, device offline and identity refused each read differently, in both states the tab
+// is in (the page drawn from memory, and the form after a failed live read, where both reasons stand side by side).
+func TestSettingsTabNamesWhyTheLastBackgroundRefreshFailed(t *testing.T) {
+	now := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
+	next := time.Date(2026, 11, 16, 13, 45, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		name   string
+		reason settings.FailReason
+		want   string
+	}{
+		{"no answer", settings.FailTimeout, "the device did not answer"},
+		{"device offline", settings.FailWentOffline, "the device went offline before it answered"},
+		{"identity refused", settings.FailOtherDevice, "another device answered where this one was asked, so nothing was read"},
+	} {
+		f := &RefreshFailure{At: now.Add(-12 * time.Minute), Next: next, Reason: tc.reason}
+		fs := &fakeSettings{values: map[string]string{"TelePeriod": "300"}}
+		_, page := bgFailEnv(t, now, fs, f).do(t, "GET", "/devices/1/settings", "admin", nil)
+		for _, want := range []string{"Refreshing from the device", "Last background refresh failed", "12m ago", ": " + tc.want + ".", "Next try", ui.StampClockOrDayText(now, next)} {
+			if !strings.Contains(page, want) {
+				t.Errorf("%s, refreshing: page lacks %q\n%s", tc.name, want, shortDump(page))
+			}
+		}
+		// the live read failed too: its own sentence and the background reason are both on the page
+		fs2 := &fakeSettings{readErr: tasmota.ErrUnreachable}
+		_, form := bgFailEnv(t, now, fs2, f).do(t, "GET", "/devices/1/settings/form", "admin", nil)
+		for _, want := range []string{"Refresh failed.", "The device is unreachable.", "Last background refresh failed", tc.want, "Next try"} {
+			if !strings.Contains(form, want) {
+				t.Errorf("%s, failed: form lacks %q\n%s", tc.name, want, shortDump(form))
+			}
+		}
+	}
+}
+
+// Why (#818): a failure that is older than the values on the page says nothing about them: a person's read or the
+// next try worked after it. Showing it would claim the page is stale for a reason that no longer holds.
+func TestSettingsTabHidesAFailureThatIsOlderThanTheValues(t *testing.T) {
+	now := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
+	f := &RefreshFailure{At: now.Add(-45 * time.Minute), Next: now.Add(time.Hour), Reason: settings.FailTimeout} // the values are from -30m
+	_, page := bgFailEnv(t, now, &fakeSettings{}, f).do(t, "GET", "/devices/1/settings", "admin", nil)
+	if strings.Contains(page, "background refresh") || !strings.Contains(page, "30m ago") {
+		t.Errorf("an older failure is shown or the age line is gone\n%s", shortDump(page))
+	}
+	// nothing wired (the app without the reader): the plain line
+	_, page = bgFailEnv(t, now, &fakeSettings{}, nil).do(t, "GET", "/devices/1/settings", "admin", nil)
+	if strings.Contains(page, "background refresh") {
+		t.Errorf("a failure without a source\n%s", shortDump(page))
+	}
+}
+
+// Why (#818): the next try is the reader's own schedule, so the page never invents one: unknown says nothing, one
+// that has passed says it is due (not an old clock time), and one on another day carries its date, not only a time.
+func TestSettingsTabNextTryFollowsTheSchedule(t *testing.T) {
+	now := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
+	at := now.Add(-12 * time.Minute)
+	for _, tc := range []struct {
+		name string
+		next time.Time
+		want []string
+		not  []string
+	}{
+		{"unknown", time.Time{}, nil, []string{"Next try", "next try"}},
+		{"passed", now.Add(-time.Minute), []string{"The next try is due."}, []string{"Next try"}},
+		{"tomorrow", now.Add(24 * time.Hour), []string{"Next try", "17 Nov, 12:00"}, nil},
+	} {
+		f := &RefreshFailure{At: at, Next: tc.next, Reason: settings.FailTimeout}
+		_, page := bgFailEnv(t, now, &fakeSettings{}, f).do(t, "GET", "/devices/1/settings", "admin", nil)
+		for _, w := range tc.want {
+			if !strings.Contains(page, w) {
+				t.Errorf("%s: page lacks %q\n%s", tc.name, w, shortDump(page))
+			}
+		}
+		for _, w := range tc.not {
+			if strings.Contains(page, w) {
+				t.Errorf("%s: page has %q\n%s", tc.name, w, shortDump(page))
+			}
+		}
+	}
+}
+
+// Why (#818, safety rule 4): the reason is a class with fixed words. What the device answered, which a read error can
+// hold, must reach neither the line of the background failure nor the one of the live failure.
+func TestSettingsTabNeverQuotesTheDeviceInTheFailureLines(t *testing.T) {
+	now := time.Date(2026, 11, 16, 12, 0, 0, 0, time.UTC)
+	f := &RefreshFailure{At: now.Add(-time.Minute), Next: now.Add(time.Hour), Reason: settings.FailOther}
+	fs := &fakeSettings{readErr: fmt.Errorf("device said password=hunter2: %w", tasmota.ErrBadResponse)}
+	_, form := bgFailEnv(t, now, fs, f).do(t, "GET", "/devices/1/settings/form", "admin", nil)
+	if strings.Contains(form, "hunter2") || !strings.Contains(form, "the device could not be read") {
+		t.Errorf("failure lines\n%s", shortDump(form))
 	}
 }

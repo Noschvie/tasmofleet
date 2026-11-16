@@ -17,6 +17,9 @@ const httpFreshFor = 15 * time.Minute
 // when the last calls to a device failed, ok=false when they did not or it was cleared by a success.
 type HTTPMemory interface {
 	HTTPFailure(id model.DeviceID) (kind transport.HTTPFailKind, since time.Time, ok bool)
+	// LastFailure is when the last failing call was made, also after HTTPFailure forgot it; ok=false when no call
+	// failed since the last answer (#818).
+	LastFailure(id model.DeviceID) (at time.Time, ok bool)
 }
 
 // topicMarks is the part of transport.TopicMarks the facts read.
@@ -163,7 +166,8 @@ func (s *TransportFacts) ForUpdate(ctx context.Context, id model.DeviceID, r Upd
 // httpState: a remembered failure wins unless a successful HTTP call came after it began; else the
 // health tracker's finding that the HTTP API is off (Health.APIOff, #447), which outlives the
 // memory's ten minutes, so the router, the page and the gates decide alike; else a success within
-// 15 minutes is ok; else unknown (which Choose treats as "try").
+// 15 minutes is ok unless an HTTP call failed after it (the memory forgets the failure for routing after ten minutes,
+// the time of it stays, #818); else unknown (which Choose treats as "try").
 func (s *TransportFacts) httpState(id model.DeviceID, h model.Health, now time.Time) transport.HTTPState {
 	if s.Memory != nil {
 		if kind, since, ok := s.Memory.HTTPFailure(id); ok && !h.SeenHTTP.After(since) {
@@ -174,6 +178,11 @@ func (s *TransportFacts) httpState(id model.DeviceID, h model.Health, now time.T
 		return transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailAPIRefused, Since: h.HTTPRefusedSince}
 	}
 	if !h.SeenHTTP.IsZero() && now.Sub(h.SeenHTTP) < httpFreshFor {
+		if s.Memory != nil {
+			if last, ok := s.Memory.LastFailure(id); ok && last.After(h.SeenHTTP) {
+				return transport.HTTPState{} // an answer from before a failed attempt: not checked lately, not "reachable"
+			}
+		}
 		return transport.HTTPState{State: transport.HTTPOK}
 	}
 	return transport.HTTPState{}
