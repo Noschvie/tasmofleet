@@ -142,3 +142,28 @@ func TestSubscriptionUpsertByEndpointAndResult(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Why (#611): the Settings list tells two browsers of one admin apart by their name ("Chrome on Android"),
+// so the label must survive a restart of the list, and subscribing again (a new key, another admin) must
+// replace it with the new browser's name, never keep the old one.
+func TestPushLabelIsStoredAndListed(t *testing.T) {
+	s, _, _ := newStore(t)
+	sub := PushSubscription{Endpoint: "https://push.example/a", P256dh: "p", Auth: "a", OwnerMethod: "local", OwnerSubject: "local:alice", Label: "Chrome on Android"}
+	if err := s.SavePushSubscription(ctx, sub); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SavePushSubscription(ctx, PushSubscription{Endpoint: "https://push.example/b", P256dh: "p", Auth: "a", OwnerMethod: "local", OwnerSubject: "local:alice"}); err != nil {
+		t.Fatal(err)
+	}
+	subs, err := s.ListPushSubscriptions(ctx)
+	if err != nil || len(subs) != 2 || subs[0].Label != "Chrome on Android" || subs[1].Label != "" {
+		t.Fatalf("labels %+v %v: want the stored one, and an empty one for a row without", subs, err)
+	}
+	sub.Label = "Firefox on Windows"
+	if err := s.SavePushSubscription(ctx, sub); err != nil {
+		t.Fatal(err)
+	}
+	if subs, _ = s.ListPushSubscriptions(ctx); subs[0].Label != "Firefox on Windows" {
+		t.Fatalf("label after subscribing again: %q", subs[0].Label)
+	}
+}

@@ -288,6 +288,12 @@ func Handler(d Deps) (http.Handler, error) {
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", cacheStatic(http.FileServerFS(static))))
 	mux.HandleFunc("GET /favicon.ico", serveFavicon)
+	if d.Push != nil {
+		// The service worker of Web Push (#611) at the base path, not under /static/: its scope is then the
+		// whole app, start_url of the installed app included. Same file, same caching (revalidated with the
+		// ETag, never immutable: the browser must see a new worker at once).
+		mux.Handle("GET /sw.js", cacheStatic(http.FileServerFS(static)))
+	}
 	if d.Guard == nil {
 		return mux, nil
 	}

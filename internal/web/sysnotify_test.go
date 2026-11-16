@@ -20,6 +20,11 @@ type fakeNotify struct {
 	chans  []notify.Channel
 	result notify.Attempt
 	status notify.Status
+	// Web Push test (#611): the ids tested, and what TestPush answers
+	pushTested []string
+	pushResult notify.Attempt
+	pushErr    error
+	pushDo     func(id string) // what the real dispatcher does besides answering (removing the row, say)
 }
 
 func (f *fakeNotify) Config() config.Config               { return f.cfg }
@@ -27,6 +32,14 @@ func (f *fakeNotify) Status(notify.Channel) notify.Status { return f.status }
 func (f *fakeNotify) Test(_ context.Context, ch notify.Channel, c config.Config) (notify.Attempt, error) {
 	f.tested, f.chans = append(f.tested, c), append(f.chans, ch)
 	return f.result, nil
+}
+
+func (f *fakeNotify) TestPush(_ context.Context, id string) (notify.Attempt, error) {
+	f.pushTested = append(f.pushTested, id)
+	if f.pushDo != nil {
+		f.pushDo(id)
+	}
+	return f.pushResult, f.pushErr
 }
 
 func notifyEnv(t *testing.T, f *fakeNotify) (*env, *sysconfig.Service) {

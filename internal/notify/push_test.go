@@ -447,3 +447,206 @@ func TestSubscribeChecksTheSubscription(t *testing.T) {
 		t.Fatal("public key empty or carrying the private key")
 	}
 }
+
+// ownerRows holds one subscription of an admin on the loopback push service.
+func ownerRows(t *testing.T, ps *pushService, st *fakePushStore, paths ...string) []subscriber {
+	t.Helper()
+	var out []subscriber
+	for _, p := range paths {
+		s := ps.subscriber(t, p, "local", "local:admin")
+		s.add(t, st)
+		out = append(out, s)
+	}
+	return out
+}
+
+// Why (#611): "Send test" must show the person that a push reaches that browser: the test arrives
+// encrypted for the one browser chosen, through the same sender as an event, and its outcome is on the
+// row like an event's. Another subscription must not get it.
+func TestPushTestSendsToOneSubscriptionAndRecordsTheResult(t *testing.T) {
+	c := baseConfig()
+	c.BasePath = "/tf"
+	d, st, ps := pushEnv(t, &c, nil, map[string]bool{"local/local:admin": true}, nil)
+	subs := ownerRows(t, ps, st, "/a", "/b")
+	a, err := d.TestPush(t.Context(), SubscriptionID(subs[0].sub.Endpoint))
+	if err != nil || !a.OK {
+		t.Fatalf("TestPush = %+v, %v", a, err)
+	}
+	reqs, bodies := ps.requests("/a")
+	if len(reqs) != 1 {
+		t.Fatalf("%d pushes to the chosen browser, want 1", len(reqs))
+	}
+	if other, _ := ps.requests("/b"); len(other) != 0 {
+		t.Fatalf("the test went to another browser too: %d", len(other))
+	}
+	var m map[string]string
+	if err := json.Unmarshal(decryptPush(t, subs[0].priv, subs[0].auth, bodies[0]), &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["name"] != EventTest || m["id"] == "" || m["path"] != "/tf/settings/system?tab=notifications" {
+		t.Errorf("payload %v: want the test event with an id and a click target below the base path", m)
+	}
+	if s, _ := st.get(subs[0].sub.Endpoint); !s.LastOKAt.Equal(t0) || s.LastError != "" {
+		t.Errorf("row after the test: %+v, want the delivery recorded", s)
+	}
+	if s, _ := st.get(subs[1].sub.Endpoint); !s.LastOKAt.IsZero() {
+		t.Errorf("another row was marked: %+v", s)
+	}
+}
+
+// Why (W6): a test must not become a way around the owner check. A subscription whose admin was demoted
+// gets nothing, not even when someone presses "Send test" on it, and is removed like at an event.
+func TestPushTestRefusesWhenOwnerIsNoLongerAdminAndRemovesTheRow(t *testing.T) {
+	c := baseConfig()
+	d, st, ps := pushEnv(t, &c, nil, map[string]bool{}, nil)
+	row := ownerRows(t, ps, st, "/a")[0]
+	_, err := d.TestPush(t.Context(), SubscriptionID(row.sub.Endpoint))
+	if !errors.Is(err, ErrPushOwnerGone) {
+		t.Fatalf("TestPush = %v, want ErrPushOwnerGone", err)
+	}
+	if reqs, _ := ps.requests("/a"); len(reqs) != 0 {
+		t.Fatalf("a push went to a former admin's browser")
+	}
+	if _, ok := st.get(row.sub.Endpoint); ok {
+		t.Fatalf("the former admin's subscription was kept")
+	}
+}
+
+// Why: a role that cannot be read is not "no": the row stays (one database hiccup must not wipe it), and
+// nothing is sent (fail closed).
+func TestPushTestKeepsTheRowWhenTheRoleCannotBeRead(t *testing.T) {
+	c := baseConfig()
+	d, st, ps := pushEnv(t, &c, nil, nil, errors.New("database is locked"))
+	row := ownerRows(t, ps, st, "/a")[0]
+	if _, err := d.TestPush(t.Context(), SubscriptionID(row.sub.Endpoint)); err == nil || errors.Is(err, ErrPushOwnerGone) {
+		t.Fatalf("TestPush = %v, want a role error", err)
+	}
+	if reqs, _ := ps.requests("/a"); len(reqs) != 0 {
+		t.Fatalf("a push was sent although the role could not be read")
+	}
+	if _, ok := st.get(row.sub.Endpoint); !ok {
+		t.Fatalf("the row was removed for a failed read")
+	}
+}
+
+// Why: the test is rate-limited like the channel tests (a double click must not send twice), and the
+// gap is the dispatcher's, so a later test passes.
+func TestPushTestTooSoon(t *testing.T) {
+	c := baseConfig()
+	now := t0
+	d, st, ps := pushEnv(t, &c, nil, map[string]bool{"local/local:admin": true}, nil)
+	d.o.Now = func() time.Time { return now }
+	row := ownerRows(t, ps, st, "/a")[0]
+	id := SubscriptionID(row.sub.Endpoint)
+	if _, err := d.TestPush(t.Context(), id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.TestPush(t.Context(), id); !errors.Is(err, ErrTooSoon) {
+		t.Fatalf("second test at once: %v, want ErrTooSoon", err)
+	}
+	if reqs, _ := ps.requests("/a"); len(reqs) != 1 {
+		t.Fatalf("%d pushes, want 1", len(reqs))
+	}
+	now = now.Add(testGap)
+	if _, err := d.TestPush(t.Context(), id); err != nil {
+		t.Fatalf("after the gap: %v", err)
+	}
+}
+
+// Why: a subscription the push service no longer knows must go at once, also when the person found out by
+// pressing "Send test": the answer says so and the row is gone, as at an event (W9).
+func TestPushTestRemovesTheRowOn410(t *testing.T) {
+	c := baseConfig()
+	d, st, ps := pushEnv(t, &c, nil, map[string]bool{"local/local:admin": true}, nil)
+	ps.status["/gone"] = []int{410}
+	row := ownerRows(t, ps, st, "/gone")[0]
+	a, err := d.TestPush(t.Context(), SubscriptionID(row.sub.Endpoint))
+	if err != nil || a.OK || !strings.Contains(a.Detail, "removed") {
+		t.Fatalf("TestPush = %+v, %v, want a failed attempt that says the subscription was removed", a, err)
+	}
+	if _, ok := st.get(row.sub.Endpoint); ok {
+		t.Fatalf("the row was kept after a 410")
+	}
+}
+
+// Why: a refusal of the push service is shown with its reason and recorded on the row, never swallowed, and
+// never carries the endpoint (its path is the browser's capability, W10).
+func TestPushTestReportsARefusalWithoutTheEndpoint(t *testing.T) {
+	c := baseConfig()
+	d, st, ps := pushEnv(t, &c, nil, map[string]bool{"local/local:admin": true}, nil)
+	ps.status["/secret-capability-path"] = []int{400}
+	row := ownerRows(t, ps, st, "/secret-capability-path")[0]
+	a, err := d.TestPush(t.Context(), SubscriptionID(row.sub.Endpoint))
+	if err != nil || a.OK || a.Detail != "HTTP 400" {
+		t.Fatalf("TestPush = %+v, %v", a, err)
+	}
+	if s, _ := st.get(row.sub.Endpoint); s.LastError != "HTTP 400" {
+		t.Errorf("row error %q", s.LastError)
+	}
+}
+
+// Why: a removed or unknown id is "not found", so the page can say so, and it does not use up the gap.
+func TestPushTestUnknownID(t *testing.T) {
+	c := baseConfig()
+	d, st, ps := pushEnv(t, &c, nil, map[string]bool{"local/local:admin": true}, nil)
+	row := ownerRows(t, ps, st, "/a")[0]
+	if _, err := d.TestPush(t.Context(), "nope"); !errors.Is(err, ErrPushNotFound) {
+		t.Fatalf("TestPush(unknown) = %v, want ErrPushNotFound", err)
+	}
+	if _, err := d.TestPush(t.Context(), SubscriptionID(row.sub.Endpoint)); err != nil {
+		t.Fatalf("a refused unknown id used up the rate limit: %v", err)
+	}
+}
+
+// Why: the id is a hash of the endpoint, so a page and a route can name a row without the endpoint's path
+// (the browser's capability). push.js computes the same hash to find "this browser"; this vector is the
+// one scripts/push-js.test.mjs checks, so the two sides cannot drift apart.
+func TestSubscriptionIDIsSHA256OfEndpoint(t *testing.T) {
+	const endpoint = "https://push.example/send/abc123"
+	const want = "qB6dm6Gh1VhQw65vM85YGzBtiCPxGKw9rJkTClwwb6E"
+	if got := SubscriptionID(endpoint); got != want {
+		t.Fatalf("SubscriptionID = %q, want %q", got, want)
+	}
+	if strings.Contains(SubscriptionID(endpoint), "abc123") {
+		t.Fatal("the id carries the endpoint")
+	}
+}
+
+// Why: the list must show who subscribed and how the last push went, and Remove (any admin may, W6's remedy)
+// must delete exactly the named row and say what it removed (the audit names the host).
+func TestPushListAndRemoveByID(t *testing.T) {
+	c := baseConfig()
+	d, st, ps := pushEnv(t, &c, nil, map[string]bool{}, nil)
+	rows := ownerRows(t, ps, st, "/a", "/b")
+	st.subs[rows[0].sub.Endpoint] = store.PushSubscription{Endpoint: rows[0].sub.Endpoint, P256dh: rows[0].sub.P256dh, Auth: rows[0].sub.Auth,
+		OwnerMethod: "oidc", OwnerSubject: "sso-bob", Label: "Firefox on Windows", LastError: "HTTP 500"}
+	list, err := d.o.Push.List(t.Context())
+	if err != nil || len(list) != 2 {
+		t.Fatalf("List = %+v, %v", list, err)
+	}
+	var a PushInfo
+	for _, i := range list {
+		if i.ID == SubscriptionID(rows[0].sub.Endpoint) {
+			a = i
+		}
+		if strings.Contains(i.ID+i.Label+i.Host, "https://") || strings.Contains(i.ID, "/") {
+			t.Errorf("an info carries the endpoint: %+v", i)
+		}
+	}
+	if a.Label != "Firefox on Windows" || a.OwnerSubject != "sso-bob" || a.LastError != "HTTP 500" || a.Host == "" || strings.Contains(a.Host, "/") {
+		t.Errorf("info %+v", a)
+	}
+	gone, ok, err := d.o.Push.Remove(t.Context(), a.ID)
+	if err != nil || !ok || gone.Host != a.Host {
+		t.Fatalf("Remove = %+v, %v, %v", gone, ok, err)
+	}
+	if _, ok := st.get(rows[0].sub.Endpoint); ok {
+		t.Error("the row is still there")
+	}
+	if _, ok := st.get(rows[1].sub.Endpoint); !ok {
+		t.Error("another row was removed")
+	}
+	if _, ok, _ := d.o.Push.Remove(t.Context(), a.ID); ok {
+		t.Error("a second Remove found the row again")
+	}
+}

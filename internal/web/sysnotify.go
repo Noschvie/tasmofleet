@@ -20,6 +20,8 @@ type NotifyService interface {
 	Config() config.Config
 	Status(ch notify.Channel) notify.Status
 	Test(ctx context.Context, ch notify.Channel, c config.Config) (notify.Attempt, error)
+	// TestPush sends the test notification to one Web Push subscription by its id (#611).
+	TestPush(ctx context.Context, id string) (notify.Attempt, error)
 }
 
 // sysChannel is the status line of a channel: a dot, a title and one sentence around a time.
@@ -36,6 +38,7 @@ type sysNotify struct {
 	Preview        string
 	WebhookResult  string // result of a test button pressed without scripts (the page was posted)
 	EmailResult    string
+	Push           sysPushList // the Web Push card (#611); not On without a push channel
 }
 
 // notifyChannelView words the state of a channel: not set up, or its last delivery, or its last

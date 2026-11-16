@@ -4,7 +4,9 @@
 // event settings ask for, to admins only); this file shows them with the Notification API. Opt-in
 // per browser: the permission is asked for only after a click on "Enable browser notifications"
 // in Settings, Notifications, and the choice lives in this browser's localStorage, not in the
-// database. No service worker (Web Push is a separate issue): nothing shows while no tab is open.
+// database. This file shows nothing while no tab is open; Web Push (sw.js, push.js, #611) does. The
+// service worker imports this file and uses toNotification, so a push and an open tab build the same
+// notification with the same tag and the browser folds the two into one.
 //
 // With several tabs open, every tab with live data hears the event. One tab (the one that holds a
 // Web Lock) shows it; the others pass what they heard on to it over a BroadcastChannel, so the
@@ -110,6 +112,8 @@
     module.exports = api;
   }
   if (typeof document === "undefined") {
+    // a service worker (sw.js imports this file): it needs toNotification and nothing of the page code
+    root.tasmofleetNotify = api;
     return;
   }
 

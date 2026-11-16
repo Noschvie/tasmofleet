@@ -2147,8 +2147,8 @@ per failed device with hostname, address and reason, linking to the failed rows 
   the others forward what they heard over a BroadcastChannel, and the event id and the notification tag fold
   repeats. On pages without live data the leader tab opens `/events?only=notice` while notifications are on
   (an operator asking for it gets 403), so at most one extra stream per browser. The card says when the browser
-  blocks notifications or the page is not a secure context (HTTPS or localhost). No service worker yet: the
-  subscription in the browser, the service worker and the Settings card are #611.
+  blocks notifications or the page is not a secure context (HTTPS or localhost). Nothing shows while no tab
+  is open; Web Push (below) does.
 - **Web Push (#610, server side; #541):** every event `Emit` hands to the tabs is also pushed to the browsers admins
   subscribed, through their vendors' push services (Google FCM, Mozilla autopush, Apple, Microsoft), so it shows
   with no tab open. VAPID (RFC 8292): one P-256 key pair made on the first start, the private key sealed with
@@ -2168,11 +2168,29 @@ per failed device with hostname, address and reason, linking to the failed rows 
   read again (the resolver of job creators): not an admin any more (operator, local account gone or disabled)
   removes the row, a failure to read keeps it and skips that push. For single sign-on and header users the role is
   the one recorded at their last sign-in (header users: last request, at most every 10 minutes), so an SSO admin
-  removed at the identity provider keeps receiving pushes until they sign in again; #611's list lets any admin
-  remove any subscription. 404 or 410 removes the row; a network error, 5xx or 429 is retried once; the outcome
+  removed at the identity provider keeps receiving pushes until they sign in again; the Settings list (#611)
+  lets any admin remove any subscription. 404 or 410 removes the row; a network error, 5xx or 429 is retried once; the outcome
   is kept on the row (`last_ok_at`, `last_error`). Same client as the webhook (ten
   seconds, no proxy from the environment, same-host redirects); a log line names the push service's host, never
   the endpoint, whose path is the browser's capability. Details: `docs/security/web-push.md`.
+- **Web Push, in the browser (#611):** the Web Push card of Settings → Notifications (admins). Its first part is
+  this browser's state, which only the browser knows (`push.js`): on a page that is not a secure context (plain
+  HTTP) it says that HTTPS or localhost is needed instead of offering Subscribe; it also says when the browser
+  has no Push API, when an iPhone or iPad has not added the app to the Home Screen, when notifications are
+  blocked, and when this browser holds a subscription the server does not list or made for another key ("Not
+  subscribed any more", with Subscribe again). Subscribe asks the permission in the click, registers the worker
+  and subscribes with `userVisibleOnly`. The second part is the list of every subscribed browser (the server's, so
+  it works without scripts and over plain HTTP): label (browser and system, made from the User-Agent of the
+  subscribing request through a fixed table; `push_subscriptions.label`, migration 0050), owner, push service
+  host, subscribed, last delivery or its `last_error`, with Send test (`POST /settings/system/push/test/{id}`:
+  the same owner check and sender as an event, rate-limited like the channel tests, the result in the row) and
+  Remove (`GET` confirmation page and `POST /settings/system/push/remove/{id}`, any admin, any row; removing
+  this browser's row also drops the subscription the browser holds). A row is named by the SHA-256 of its
+  endpoint (base64url), never the endpoint. Test and remove are audited (`push.test`, `push.remove`) with the
+  push service's host only. The service worker `sw.js` is served at the base path (`/sw.js`, so its scope is
+  the whole app), has no fetch handler, shows a push with `notify.js`'s mapping (the same tag as the open tab, so
+  the browser folds the two into one) and opens only a page of its own origin on a click; it does not handle
+  `pushsubscriptionchange` (no CSRF token): a changed subscription is found on the next visit to Settings.
 
 Delivery runs in the background and never fails the caller. The last delivery and the last test per
 channel are kept in memory (empty after a restart). The two secrets are write-only and stored with

@@ -57,6 +57,9 @@ type Dispatcher struct {
 	mu     sync.Mutex
 	status map[Channel]*Status
 	last   map[Channel]time.Time // last test per channel, for the rate limit
+	// lastPushTest is the time of the last Web Push test (any subscription), for the same rate limit. One
+	// value, overwritten by the next test; a restart clears it.
+	lastPushTest time.Time
 }
 
 // New returns a Dispatcher.
@@ -84,7 +87,7 @@ func (d *Dispatcher) Emit(ev Event) {
 	if !Selected(c, ev) {
 		return
 	}
-	ev.ID = fmt.Sprintf("%x-%d", d.boot, d.seq.Add(1))
+	ev.ID = d.newEventID()
 	if d.o.Browser != nil {
 		d.o.Browser(ev)
 	}
@@ -103,6 +106,9 @@ func (d *Dispatcher) Emit(ev Event) {
 		}()
 	}
 }
+
+// newEventID makes an id that is unique across restarts.
+func (d *Dispatcher) newEventID() string { return fmt.Sprintf("%x-%d", d.boot, d.seq.Add(1)) }
 
 // Wait blocks until the deliveries started so far are done (tests and shutdown).
 func (d *Dispatcher) Wait() { d.wg.Wait() }

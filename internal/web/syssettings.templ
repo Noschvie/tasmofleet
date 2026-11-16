@@ -76,6 +76,9 @@ templ sysSettingsPage(p sysPage) {
 	</div>
 	@ui.Dialog(ui.DialogData{ID: "dlg-reset", Title: "Reset all settings?", Body: sysResetText,
 		Action: p.Base + sysPath + "/reset", CSRF: p.CSRF, Verb: "Reset settings", Danger: true})
+	if len(p.Notify.Push.Rows) > 0 {
+		@backupDeleteDialog(backupsView{CSRF: p.CSRF})
+	}
 	if p.NeedStepUp {
 		@ui.StepUp(p.StepUp)
 	}
@@ -206,7 +209,7 @@ templ sysCardView(p sysPage, c sysCard) {
 				}
 			}
 		default:
-			if len(c.Rows) > 0 || c.ID == "mqttdiscovery" || c.ID == "notify-message" || c.ID == "notify-browser" {
+			if len(c.Rows) > 0 || c.ID == "mqttdiscovery" || c.ID == "notify-message" || c.ID == "notify-browser" || (c.ID == "notify-push" && p.Notify.Push.On) {
 				@ui.SettingsCard(sysCardData(p, c)) {
 					if c.ID == "mqttdiscovery" {
 						@sysDiscoveryCard(p)
@@ -244,11 +247,14 @@ templ sysCardView(p sysPage, c sysCard) {
 					if c.ID == "notify-browser" {
 						@sysBrowserNotify()
 					}
+					if c.ID == "notify-push" {
+						@sysPushBlock(p.Notify.Push)
+					}
 					if c.ID == "notify-message" {
 						<div class="sf w-full">
 							<div class="sf-main">
 								<pre class="sys-pre">{ p.Notify.Preview }</pre>
-								<small class="ufield-help">The whole webhook request: request line, headers and body (the secret header is not shown). The e-mail uses the title as subject and the text as body, with the link when TASMOFLEET_PUBLIC_URL is set.</small>
+								<small class="ufield-help">The whole webhook request: request line, headers and body (the secret header is not shown). The e-mail uses the title as subject and the text as body, with the link when TASMOFLEET_PUBLIC_URL is set. Browser notifications and Web Push show the title and the text; a click opens the page in TasmoFleet.</small>
 							</div>
 						</div>
 					}
@@ -281,6 +287,102 @@ templ sysBrowserNotify() {
 			<button type="button" class="btn" data-bn-enable hidden>Enable browser notifications</button>
 			<button type="button" class="btn" data-bn-test hidden>Send test</button>
 			<button type="button" class="btn" data-bn-disable hidden>Turn off</button>
+		</div>
+	</div>
+}
+
+// sysPushBlock is the Web Push card (#611): this browser's state, drawn by push.js (the state is the
+// browser's), and the list of every subscribed browser, which is the server's and works without scripts.
+// push.js reads the card's data-push-* attributes: the VAPID public key (not a secret), where to subscribe
+// and where the service worker is (sw.js at the base path, so its scope is the whole app).
+templ sysPushBlock(l sysPushList) {
+	<div class="sf w-full" data-push data-push-key={ l.Key } data-push-sw={ l.Base + "/sw.js" } data-push-subscribe={ l.Base + sysPath + "/push/subscription" }>
+		<div class="sys-status">
+			<span class="sys-status-dot t-neutral" aria-hidden="true" data-push-dot></span>
+			<div class="sys-status-text">
+				<b data-push-title>Needs JavaScript</b>
+				<span data-push-text>Subscribing this browser to Web Push is done on this page with scripts on. The list below works without them.</span>
+			</div>
+		</div>
+		<div class="sys-test">
+			<button type="button" class="btn" data-push-subscribe hidden>Subscribe this browser</button>
+			<button type="button" class="btn" data-push-again hidden>Subscribe again</button>
+			<button type="button" class="btn" data-push-test hidden>Send test</button>
+			<span class="sys-test-help" role="status" data-push-result></span>
+		</div>
+	</div>
+	<div class="sf w-full">
+		<div class="lrow"><span class="lbl">Subscribed browsers ({ strconv.Itoa(len(l.Rows)) })</span></div>
+		if l.Err != "" {
+			<div class="error" role="alert">{ l.Err }</div>
+		} else if len(l.Rows) == 0 {
+			<p class="ufield-help">No browser is subscribed yet.</p>
+		} else {
+			<div class="sys-orphans" data-push-list>
+				for _, row := range l.Rows {
+					@sysPushRowView(row)
+				}
+			</div>
+		}
+		<small class="ufield-help">Every subscribed browser gets the events selected under Events, like the webhook and e-mail. Each push is sent encrypted through the push service of the browser's maker (Google, Mozilla, Apple or Microsoft) and carries only the title, the text and the page to open; no device data and no secrets. Any admin can test or remove any browser here.</small>
+	</div>
+}
+
+// sysPushRowView is one subscribed browser: what it is, who subscribed it, its push service and its last
+// delivery, with Send test and Remove. The Send test button posts the form without scripts (the page
+// comes back with the result) and swaps the row with them; Remove opens the shared delete dialog, or the
+// confirmation page without scripts. push.js marks the row of this browser (data-push-id).
+templ sysPushRowView(row sysPushRow) {
+	<div class="sys-orphan" id={ "push-" + row.ID } data-push-id={ row.ID }>
+		<div class="sys-orphan-main">
+			<div class="sys-orphan-title">
+				<span>{ row.Label }</span>
+				<span class="bdg t-accent" data-push-this hidden>This browser</span>
+				if row.LastError != "" {
+					@ui.Badge(ui.ToneDanger, "Last delivery failed")
+				}
+			</div>
+			<div class="sys-orphan-detail">
+				{ row.Owner } · { row.Host } · subscribed <time { ui.StampAttrs(row.Created, ui.StampStore)... }>{ storeDate(time.Now(), row.Created) }</time>
+				if row.LastError != "" {
+					{ " · " + row.LastError + ". The next event tries again." }
+				} else if !row.LastOK.IsZero() {
+					{ " · last delivery " }<time { ui.StampAttrs(row.LastOK, ui.StampStore)... }>{ storeDate(time.Now(), row.LastOK) }</time>
+				} else {
+					{ " · nothing sent yet" }
+				}
+			</div>
+			if row.Result != "" {
+				if testNote("Push test", row.Result).Failed {
+					<div class="sys-test-res t-danger" role="alert">Push test: { row.Result }</div>
+				} else {
+					<div class="sys-test-res t-ok" role="status">Push test: { row.Result }</div>
+				}
+			}
+		</div>
+		<div class="bk-acts">
+			if row.TestURL != "" {
+				<button type="submit" class="btn" data-push-row-test formaction={ templ.SafeURL(row.TestURL) } formnovalidate hx-post={ row.TestURL } hx-params="none" hx-target="closest .sys-orphan" hx-swap="outerHTML">Send test</button>
+			}
+			<a
+				class="btn btn-danger bk-del"
+				href={ templ.SafeURL(row.RemoveURL) }
+				data-dialog="dlg-bkdel"
+				data-dlg-title={ "Remove " + row.Label + "?" }
+				data-dlg-text={ row.RemoveText }
+				data-dlg-action={ row.RemoveURL }
+				data-dlg-verb="Remove"
+			>Remove</a>
+		</div>
+	</div>
+}
+
+// sysPushGone replaces a row whose test removed it (the push service no longer knew the browser, or its
+// admin is no longer one): the reason, in the place of the row.
+templ sysPushGone(msg string) {
+	<div class="sys-orphan">
+		<div class="sys-orphan-main">
+			<div class="sys-test-res t-danger" role="alert">Push test: { msg }</div>
 		</div>
 	</div>
 }

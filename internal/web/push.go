@@ -22,14 +22,19 @@ type PushService interface {
 	// Subscribe checks and stores a subscription (notify.ErrBadSubscription when it is not valid).
 	Subscribe(ctx context.Context, s store.PushSubscription) error
 	Unsubscribe(ctx context.Context, endpoint string) (bool, error)
+	// List is every subscription of every admin, without the endpoint's path (the Settings list, #611).
+	List(ctx context.Context) ([]notify.PushInfo, error)
+	// Remove deletes the subscription with the given id, whoever owns it; false when there is none.
+	Remove(ctx context.Context, id string) (notify.PushInfo, bool, error)
 }
 
 // maxPushRequest bounds the JSON of a subscription (an endpoint of at most 2 KB and two keys).
 const maxPushRequest = 8 << 10
 
 // registerPush adds the server side of Web Push for admins (notifications are theirs, #540): the public
-// key, subscribe and unsubscribe. The service worker and the Settings card use them (#611). The unsafe
-// methods pass the CSRF check like every other request (origin and token).
+// key, subscribe and unsubscribe (push.js, #611), and what the Settings list acts with: removing any
+// subscription (a confirmation page without scripts) and a test push to one. The unsafe methods pass the
+// CSRF check like every other request (origin and token). The test needs the dispatcher as well.
 func (h *handler) registerPush(route func(string, func(http.Handler) http.Handler, http.HandlerFunc), adm func(http.Handler) http.Handler) {
 	if h.d.Push == nil {
 		return
@@ -37,6 +42,11 @@ func (h *handler) registerPush(route func(string, func(http.Handler) http.Handle
 	route("GET "+sysPath+"/push/key", adm, h.pushKey)
 	route("POST "+sysPath+"/push/subscription", adm, h.pushSubscribe)
 	route("DELETE "+sysPath+"/push/subscription", adm, h.pushUnsubscribe)
+	route("GET "+sysPath+"/push/remove/{id}", adm, h.pushRemoveConfirm)
+	route("POST "+sysPath+"/push/remove/{id}", adm, h.pushRemove)
+	if h.d.Notify != nil {
+		route("POST "+sysPath+"/push/test/{id}", adm, h.pushTest)
+	}
 }
 
 func writePushJSON(w http.ResponseWriter, status int, v any) {
@@ -75,7 +85,7 @@ func (h *handler) pushSubscribe(w http.ResponseWriter, r *http.Request) {
 	}
 	p, _ := auth.FromContext(r.Context())
 	err := h.d.Push.Subscribe(r.Context(), store.PushSubscription{Endpoint: req.Endpoint, P256dh: req.Keys.P256dh, Auth: req.Keys.Auth,
-		OwnerMethod: p.Method, OwnerSubject: p.Subject})
+		OwnerMethod: p.Method, OwnerSubject: p.Subject, Label: pushLabel(r.UserAgent())})
 	switch {
 	case errors.Is(err, notify.ErrBadSubscription):
 		h.recordPush(r, "push.subscribe", req.Endpoint, "refused: "+err.Error())
@@ -110,12 +120,17 @@ func (h *handler) pushUnsubscribe(w http.ResponseWriter, r *http.Request) {
 // recordPush audits a subscription change by the push service's host only: the endpoint's path is the
 // browser's capability and never reaches the audit log.
 func (h *handler) recordPush(r *http.Request, action, endpoint, result string) {
-	if h.d.Recorder == nil {
-		return
-	}
 	host := ""
 	if u, err := url.Parse(endpoint); err == nil {
 		host = u.Host
+	}
+	h.recordPushHost(r, action, host, result)
+}
+
+// recordPushHost is recordPush for a subscription known by its push service's host.
+func (h *handler) recordPushHost(r *http.Request, action, host, result string) {
+	if h.d.Recorder == nil {
+		return
 	}
 	h.d.Recorder.Record(r.Context(), model.AuditEvent{At: h.d.Clock.Now(), Actor: actor(r), Action: action, Target: "push:" + host,
 		Result: result, RemoteAddr: httpx.ClientIP(r.Context()).String()})

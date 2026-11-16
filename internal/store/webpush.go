@@ -13,17 +13,19 @@ var ErrUnreadable = errors.New("store: sealed value cannot be opened (another se
 
 // PushSubscription is one browser's Web Push subscription (#610). P256dh and Auth are the browser's keys
 // for the payload encryption, base64url as the browser gives them. The owner is the admin who subscribed
-// (sign-in method and subject). LastOKAt and LastError are the outcome of the last push (zero and empty
+// (sign-in method and subject). Label names the browser and system for the Settings list (#611; empty for a
+// row made before migration 0050). LastOKAt and LastError are the outcome of the last push (zero and empty
 // until then).
 type PushSubscription struct {
 	Endpoint                  string
 	P256dh, Auth              string
 	OwnerMethod, OwnerSubject string
+	Label                     string
 	CreatedAt, LastOKAt       time.Time
 	LastError                 string
 }
 
-// PushStore keeps the VAPID key and the Web Push subscriptions (migration 0049).
+// PushStore keeps the VAPID key and the Web Push subscriptions (migrations 0049 and 0050).
 type PushStore interface {
 	// VAPIDKey returns the opened private key: ErrNotFound when none was made yet, ErrUnreadable when the
 	// stored one cannot be opened.
@@ -32,7 +34,7 @@ type PushStore interface {
 	// for the previous key.
 	ReplaceVAPIDKey(ctx context.Context, key string) error
 	// SavePushSubscription inserts the subscription or replaces the row of the same endpoint (keys, owner,
-	// creation time; the outcome of the last push starts empty again).
+	// label, creation time; the outcome of the last push starts empty again).
 	SavePushSubscription(ctx context.Context, s PushSubscription) error
 	// DeletePushSubscription removes the row of endpoint; false when there was none.
 	DeletePushSubscription(ctx context.Context, endpoint string) (bool, error)
@@ -79,11 +81,11 @@ func (s *SQLite) ReplaceVAPIDKey(ctx context.Context, key string) error {
 }
 
 func (s *SQLite) SavePushSubscription(ctx context.Context, p PushSubscription) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO push_subscriptions (endpoint, p256dh, auth, owner_method, owner_subject, created_at, last_ok_at, last_error)
-		VALUES (?, ?, ?, ?, ?, ?, 0, '')
+	_, err := s.db.ExecContext(ctx, `INSERT INTO push_subscriptions (endpoint, p256dh, auth, owner_method, owner_subject, label, created_at, last_ok_at, last_error)
+		VALUES (?, ?, ?, ?, ?, ?, ?, 0, '')
 		ON CONFLICT(endpoint) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth, owner_method = excluded.owner_method,
-			owner_subject = excluded.owner_subject, created_at = excluded.created_at, last_ok_at = 0, last_error = ''`,
-		p.Endpoint, p.P256dh, p.Auth, p.OwnerMethod, p.OwnerSubject, toMS(s.now()))
+			owner_subject = excluded.owner_subject, label = excluded.label, created_at = excluded.created_at, last_ok_at = 0, last_error = ''`,
+		p.Endpoint, p.P256dh, p.Auth, p.OwnerMethod, p.OwnerSubject, p.Label, toMS(s.now()))
 	return err
 }
 
@@ -97,7 +99,7 @@ func (s *SQLite) DeletePushSubscription(ctx context.Context, endpoint string) (b
 }
 
 func (s *SQLite) ListPushSubscriptions(ctx context.Context) ([]PushSubscription, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT endpoint, p256dh, auth, owner_method, owner_subject, created_at, last_ok_at, last_error
+	rows, err := s.db.QueryContext(ctx, `SELECT endpoint, p256dh, auth, owner_method, owner_subject, label, created_at, last_ok_at, last_error
 		FROM push_subscriptions ORDER BY endpoint`)
 	if err != nil {
 		return nil, err
@@ -107,7 +109,7 @@ func (s *SQLite) ListPushSubscriptions(ctx context.Context) ([]PushSubscription,
 	for rows.Next() {
 		var p PushSubscription
 		var created, ok int64
-		if err := rows.Scan(&p.Endpoint, &p.P256dh, &p.Auth, &p.OwnerMethod, &p.OwnerSubject, &created, &ok, &p.LastError); err != nil {
+		if err := rows.Scan(&p.Endpoint, &p.P256dh, &p.Auth, &p.OwnerMethod, &p.OwnerSubject, &p.Label, &created, &ok, &p.LastError); err != nil {
 			return nil, err
 		}
 		p.CreatedAt, p.LastOKAt = fromMS(created), optMS(ok)

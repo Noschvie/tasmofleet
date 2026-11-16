@@ -154,6 +154,7 @@ func (h *handler) sysData(r *http.Request, posted map[string]string, errs map[st
 		saved[st.Key] = st.Value
 	}
 	p.Notify = h.sysNotifyOf(saved)
+	p.Notify.Push = h.sysPushOf(r, p.Base)
 	p.MQTT.HasPassword = hasMQTTPassword
 	p.MQTT.ACLConfirmed = h.aclConfirmed()
 	p.MQTT.ACLReady = aclBinding(h.mqttSettings()) != ""
@@ -310,8 +311,11 @@ func (h *handler) sysRender(w http.ResponseWriter, r *http.Request, status int, 
 	// Snapshots and Backups have their own places in the menus: the Settings page shows its other tabs.
 	p.Tabs = slices.DeleteFunc(p.Tabs, func(t sysTab) bool { return t.Slug == sysSnapshotsSlug || t.Slug == sysBackupsSlug })
 	v := h.view(r, "Settings", "system", nil)
-	if r.URL.Query().Get("ok") == "reset" {
+	switch r.URL.Query().Get("ok") {
+	case "reset":
 		v.Flash = "All settings are back at their defaults."
+	case "push-removed":
+		v.Flash = "Browser removed. It gets no more pushes."
 	}
 	h.show(w, r, status, "system_settings", v, sysSettingsPage(p))
 }
