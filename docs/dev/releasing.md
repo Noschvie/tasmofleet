@@ -82,6 +82,34 @@ remembers to renew it, and the project page showed the UI of 0.28.0 next to a de
   to the GitHub release and `CHANGELOG.md`. A minor release also adds a short comment (3-5 bullets) so
   watchers get a notification; a patch release only edits the body. No per-release discussions. English,
   no fluff.
+- **Smoke check after the deploy** (the live instance runs the new image): the numbers are not enough (version,
+  schema version, devices online, every page answers 200), because a page can answer 200 and still be broken (0.36.0:
+  layout defects on pages that answered 200 were found by the owner, not by the release: #805, #806, #811). The
+  person or agent releasing also opens these pages in a browser that is signed in, at the owner's viewport (1280 px wide, as in [ui-review](ui-review.md)), takes a
+  screenshot of each and looks at every one:
+  - Devices list: `/devices`
+  - one device: `/devices/<id>` (a device that is online)
+  - Updates: `/transactions`
+  - Add devices: `/devices/new`
+  - System: `/settings/system`
+
+  "Looks at" means: nothing overlaps or is cut off, no empty card or raw template text, the version in the footer is
+  the released one. A defect found here is a defect of the release (an issue, a fix release), not a note for later.
+  The screenshots stay outside the repo ([ui-review](ui-review.md)); the report names the pages that were checked.
+- **The headline feature is exercised end to end before the release counts as done.** The release's headline
+  feature (the one the CHANGELOG section leads with) is run once on the live instance, from the UI to the visible
+  result, not only checked for "the new card is shown" (0.36.0: an update planned for a later time had only run
+  against simulated devices). When that needs a real device, use a test device and say so. A release whose headline
+  feature cannot be exercised that way is not done: the release report says so, names what was not exercised, and
+  the exercise is done on a test device before the next release builds on that feature.
+- **The release is done** when the tag run has published the image and the GitHub release, the deploy and both
+  checks above passed, and the announcement is edited. The report to the maintainer records the result: the
+  version, the pages looked at, the feature that was exercised (what was done, what came out) and anything not
+  exercised.
+- **Close the release's milestone** (`X.Y` for a minor, the minor's milestone for its patches) once the announcement
+  is out and nothing in it is open: move leftover issues to the next milestone, then
+  `gh api -X PATCH repos/hellwand/tasmofleet/milestones/<number> -f state=closed` (0.38.0 stayed open for a day because
+  this step was not written down). Closing it is part of "the release is done".
 - **Unraid users run `:latest` from the Community Applications template**
   ([nofuturekid/unraid-templates](https://github.com/nofuturekid/unraid-templates), `templates/tasmofleet.xml`).
   With every release:
