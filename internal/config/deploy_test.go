@@ -71,56 +71,61 @@ func TestUnraidTemplateHasNoPrefilledNetworkValues(t *testing.T) {
 	}
 }
 
-// Why: whoever pastes the Authentik guide's variable block into the container
+// Why: whoever pastes a provider guide's variable block into the container
 // configuration must get single sign-on from it. Load reads only names that
 // start with TASMOFLEET_ from the environment and drops every other name
 // without a message (#706: the guide printed short names, the reporter's client
 // secret variable was ignored and he could still type the secret on the page).
-func TestAuthentikGuideBlockLoadsAsContainerEnvironment(t *testing.T) {
-	data, err := os.ReadFile("../../deploy/authentik/README.md")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, after, ok := strings.Cut(string(data), "## tasmofleet side")
-	if !ok {
-		t.Fatal(`no "## tasmofleet side" section in the guide`)
-	}
-	_, block, ok := strings.Cut(after, "```\n")
-	if !ok {
-		t.Fatal("no fenced block under the tasmofleet side section")
-	}
-	block, _, ok = strings.Cut(block, "```")
-	if !ok {
-		t.Fatal("the fenced block is not closed")
-	}
-	dir := t.TempDir()
-	secretFile := dir + "/oidc-client-secret"
-	if err := os.WriteFile(secretFile, []byte("fake-secret\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	env := []string{"TASMOFLEET_DATA_DIR=" + dir, "TASMOFLEET_CONFIG_FILE=/dev/null"}
-	for line := range strings.SplitSeq(block, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		if k, _, _ := strings.Cut(line, "="); strings.HasSuffix(k, "_CLIENT_SECRET_FILE") {
-			line = k + "=" + secretFile // the guide's path lives in the container's /data
-		}
-		env = append(env, line)
-	}
-	cfg, err := Load(env)
-	if err != nil {
-		t.Fatalf("the guide's block does not load: %v", err)
-	}
-	if cfg.AuthMode != "oidc" {
-		t.Errorf("AuthMode = %q, want oidc: the block's names are not read from the environment", cfg.AuthMode)
-	}
-	if cfg.OIDCClientSecret != "fake-secret" {
-		t.Errorf("the client secret file was not read")
-	}
-	if !cfg.Locked["OIDC_ISSUER"] || !cfg.Locked["OIDC_CLIENT_SECRET"] {
-		t.Errorf("issuer and client secret must be locked by the environment, got %v", cfg.Locked)
+// Every provider guide has the same block, so each is checked the same way (#722).
+func TestProviderGuideBlocksLoadAsContainerEnvironment(t *testing.T) {
+	for _, guide := range []string{"authentik", "keycloak"} {
+		t.Run(guide, func(t *testing.T) {
+			data, err := os.ReadFile("../../deploy/" + guide + "/README.md")
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, after, ok := strings.Cut(string(data), "## tasmofleet side")
+			if !ok {
+				t.Fatal(`no "## tasmofleet side" section in the guide`)
+			}
+			_, block, ok := strings.Cut(after, "```\n")
+			if !ok {
+				t.Fatal("no fenced block under the tasmofleet side section")
+			}
+			block, _, ok = strings.Cut(block, "```")
+			if !ok {
+				t.Fatal("the fenced block is not closed")
+			}
+			dir := t.TempDir()
+			secretFile := dir + "/oidc-client-secret"
+			if err := os.WriteFile(secretFile, []byte("fake-secret\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			env := []string{"TASMOFLEET_DATA_DIR=" + dir, "TASMOFLEET_CONFIG_FILE=/dev/null"}
+			for line := range strings.SplitSeq(block, "\n") {
+				line = strings.TrimSpace(line)
+				if line == "" || strings.HasPrefix(line, "#") {
+					continue
+				}
+				if k, _, _ := strings.Cut(line, "="); strings.HasSuffix(k, "_CLIENT_SECRET_FILE") {
+					line = k + "=" + secretFile // the guide's path lives in the container's /data
+				}
+				env = append(env, line)
+			}
+			cfg, err := Load(env)
+			if err != nil {
+				t.Fatalf("the guide's block does not load: %v", err)
+			}
+			if cfg.AuthMode != "oidc" {
+				t.Errorf("AuthMode = %q, want oidc: the block's names are not read from the environment", cfg.AuthMode)
+			}
+			if cfg.OIDCClientSecret != "fake-secret" {
+				t.Errorf("the client secret file was not read")
+			}
+			if !cfg.Locked["OIDC_ISSUER"] || !cfg.Locked["OIDC_CLIENT_SECRET"] {
+				t.Errorf("issuer and client secret must be locked by the environment, got %v", cfg.Locked)
+			}
+		})
 	}
 }
 

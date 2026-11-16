@@ -2607,6 +2607,9 @@ component, device, job, batch, request_id, remote, user`. No secrets (redactor),
 - **Authentik**: `deploy/authentik/README.md` lists provider settings (confidential client,
   redirect URI, signing key RS256, grant types authorization_code + refresh_token, scopes,
   groups).
+- **Keycloak**: `deploy/keycloak/README.md`, checked against a running Keycloak (confidential
+  client with PKCE S256, redirect and post-logout URIs, a Group Membership mapper with "Add to ID
+  token" and "Full group path" off, `offline_access`, realm URL as issuer without a slash).
 - **Grafana**: `deploy/grafana/tasmofleet.json`, 2 graphs per row (layout rule).
 - **Data**: back up the data directory like any application data. `secret.key` must be in
   the same backup, or the device passwords cannot be decrypted.

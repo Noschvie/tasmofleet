@@ -131,7 +131,7 @@ possible. How to take, schedule and restore them:
 - [Broker ACL guide](docs/mqtt-broker-acl.md): who may read what on your MQTT broker (read this before MQTT)
 - [Backing up TasmoFleet](docs/backing-up.md) and [emergency access](docs/runbooks/emergency-access.md)
 - [What TasmoFleet changes on your devices](docs/device-changes.md), including the two roles
-- Reverse proxy, OIDC (Authentik), Prometheus, Grafana and Unraid examples: [deploy/](deploy/)
+- Reverse proxy, OIDC ([Authentik](deploy/authentik/README.md), [Keycloak](deploy/keycloak/README.md)), Prometheus, Grafana and Unraid examples: [deploy/](deploy/)
 - Design and behaviour: [spec](docs/spec/2026-10-18-tasmofleet-design.md); security notes per
   feature: [docs/security/](docs/security/); research: [docs/research/](docs/research/)
 - [CHANGELOG](CHANGELOG.md), [ROADMAP](ROADMAP.md), [development](docs/development.md)
