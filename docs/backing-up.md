@@ -29,3 +29,8 @@ To restore (there is no restore button on purpose):
    and `secret.key` into `/data`.
 3. Make sure `/data/secret.key` is the one from the same time, then start the container. A
    snapshot from an older version is migrated at start; one from a newer version is refused.
+
+The Web Push key (the key TasmoFleet signs browser notifications with) is in the database, sealed with
+`secret.key` like the other secrets. Started with another `secret.key`, TasmoFleet cannot open it: it makes a new
+key and drops every Web Push subscription, with a warning in the log, and each browser has to subscribe again.
+Putting the right `secret.key` back afterwards does not bring the old key back.

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/hellwand/tasmofleet/internal/model"
@@ -88,6 +89,67 @@ func TestResolverFailsClosed(t *testing.T) {
 	} {
 		if _, err := r.Current(ctx, tc.method, tc.subject); err == nil {
 			t.Errorf("%s resolved", name)
+		}
+	}
+}
+
+type failingLocal struct{}
+
+func (failingLocal) GetLocalUser(context.Context, string) (store.LocalUser, error) {
+	return store.LocalUser{}, errors.New("database is locked")
+}
+
+type failingDir struct{ fakeDir }
+
+func (failingDir) ListPrincipals(context.Context) ([]store.PrincipalRecord, error) {
+	return nil, errors.New("database is locked")
+}
+
+// Why (#610): a Web Push subscription is removed when its owner is no longer an admin, and kept when the
+// role could not be read. If a store failure counted as "no longer an admin", one database hiccup during
+// an event would delete every subscription; if a refusal counted as a failure, a demoted or deleted admin's
+// browser would keep its row forever.
+func TestPushOwnerCheckTellsAStoreFailureFromARefusal(t *testing.T) {
+	ctx := context.Background()
+	r := principalResolver{
+		local: fakeLocal{"admin": {Username: "admin", Role: model.RoleAdmin}, "op": {Username: "op", Role: model.RoleOperator},
+			"off": {Username: "off", Role: model.RoleAdmin, Disabled: true}},
+		dir: fakeDir{{Subject: "sso-admin", Kind: "sso", Role: "admin"}, {Subject: "sso-op", Kind: "sso", Role: "operator"}, {Subject: "norole", Kind: "sso"}},
+	}
+	for name, tc := range map[string]struct {
+		method, subject string
+		admin           bool
+	}{
+		"local admin":     {"local", "local:admin", true},
+		"sso admin":       {"oidc", "sso-admin", true},
+		"local operator":  {"local", "local:op", false},
+		"sso operator":    {"oidc", "sso-op", false},
+		"disabled":        {"local", "local:off", false},
+		"gone":            {"local", "local:nobody", false},
+		"no role":         {"oidc", "norole", false},
+		"never signed in": {"header", "stranger", false},
+		"other method":    {"header", "sso-admin", false},
+		"unknown method":  {"", "local:admin", false},
+	} {
+		admin, err := r.isAdmin(ctx, tc.method, tc.subject)
+		if err != nil || admin != tc.admin {
+			t.Errorf("%s: admin=%v err=%v, want a definite %v", name, admin, err, tc.admin)
+		}
+	}
+	for name, fr := range map[string]principalResolver{
+		"account store": {local: failingLocal{}, dir: fakeDir{}},
+		"principals":    {local: fakeLocal{}, dir: failingDir{}},
+	} {
+		method, subject := "local", "local:admin"
+		if name == "principals" {
+			method, subject = "oidc", "sso-admin"
+		}
+		if admin, err := fr.isAdmin(ctx, method, subject); err == nil || admin {
+			t.Errorf("%s failing: admin=%v err=%v, want an error (not a definite no)", name, admin, err)
+		}
+		// the OTA engine still fails closed on it
+		if _, err := fr.Current(ctx, method, subject); err == nil {
+			t.Errorf("%s failing: Current resolved", name)
 		}
 	}
 }

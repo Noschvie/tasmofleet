@@ -3,9 +3,11 @@ package notify
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/hellwand/tasmofleet/internal/config"
@@ -35,6 +37,8 @@ type Options struct {
 	// Browser, if set, hears of every event the settings ask for, once, whether or not a channel
 	// is switched on: the open browser tabs show it (#540). It must not block.
 	Browser func(Event)
+	// Push, if set, sends the same events to the browsers admins subscribed for Web Push (#610).
+	Push *Push
 	// TLS overrides the TLS settings of the SMTP sender (tests only).
 	TLS *tls.Config
 }
@@ -44,6 +48,11 @@ type Dispatcher struct {
 	o      Options
 	client *http.Client
 	wg     sync.WaitGroup
+
+	// boot and seq make the event ids: the start time of the process plus a counter, unique across
+	// restarts (#540, #610).
+	boot int64
+	seq  atomic.Uint64
 
 	mu     sync.Mutex
 	status map[Channel]*Status
@@ -61,21 +70,30 @@ func New(o Options) *Dispatcher {
 	if o.RetryDelay == 0 {
 		o.RetryDelay = 2 * time.Second
 	}
-	return &Dispatcher{o: o, client: newWebhookClient(), status: map[Channel]*Status{Webhook: {}, Email: {}}, last: map[Channel]time.Time{}}
+	return &Dispatcher{o: o, client: newWebhookClient(), boot: time.Now().UnixNano(), status: map[Channel]*Status{Webhook: {}, Email: {}}, last: map[Channel]time.Time{}}
 }
 
 // Config is the effective configuration now.
 func (d *Dispatcher) Config() config.Config { return d.o.Config() }
 
-// Emit sends ev to every enabled channel, and hands it to the browser tabs, if the settings ask for the event. It returns at once;
-// the outcome is recorded per channel. Safe to call from any goroutine.
+// Emit sends ev to every enabled channel, and hands it to the browser tabs and the Web Push channel, if the settings ask
+// for the event. It sets ev.ID, the same for the tabs and the pushes. It returns at once; the outcome is recorded per
+// channel (per subscription for Web Push). Safe to call from any goroutine.
 func (d *Dispatcher) Emit(ev Event) {
 	c := d.o.Config()
 	if !Selected(c, ev) {
 		return
 	}
+	ev.ID = fmt.Sprintf("%x-%d", d.boot, d.seq.Add(1))
 	if d.o.Browser != nil {
 		d.o.Browser(ev)
+	}
+	if d.o.Push != nil {
+		d.wg.Add(1)
+		go func() {
+			defer d.wg.Done()
+			d.pushEvent(c, ev)
+		}()
 	}
 	for _, ch := range Enabled(c) {
 		d.wg.Add(1)

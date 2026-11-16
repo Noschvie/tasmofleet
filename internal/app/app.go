@@ -125,9 +125,8 @@ type runtime struct {
 	backupRun       *scheduledRun      // the scheduled backup run the status bar shows
 	snapshots       *snapshot.Manager  // copies of TasmoFleet's own database (download, schedule)
 	notifier        *notify.Dispatcher // webhook and e-mail notifications (#249); nil in tests that do not need it
+	push            *notify.Push       // Web Push (#610); nil when the VAPID key could not be loaded
 	notifiedBatches sync.Map           // transactions whose "update finished" message was sent
-	noticeSeq       atomic.Uint64      // browser notifications published so far (#540)
-	noticeBoot      int64              // start time of the process, the first part of a notice id (#540)
 	mqttKnown       *knownIndex
 	tracker         *health.Service
 	fw              *firmwareState // the firmware each device runs right now, for read suppression (#558)
@@ -180,7 +179,7 @@ func (a *runtime) run(ctx context.Context) error {
 	}
 	a.snapshots = snapshot.New(svc.Store, cfg.DataDir)
 	a.snapshots.CleanTemp() // scratch copies a crash left behind
-	a.setupNotify()
+	a.setupNotify(ctx)
 	if err := a.setupDecoder(bg); err != nil {
 		return err
 	}
@@ -824,6 +823,9 @@ func (a *runtime) webDeps(guard web.Guard, rows []web.KV) web.Deps {
 	deps.SysConfig = a.svc.Sys
 	if a.notifier != nil {
 		deps.Notify = a.notifier
+	}
+	if a.push != nil {
+		deps.Push = a.push
 	}
 	deps.PolicyRules = a.rules
 	deps.PolicyLivePause = a.livePause

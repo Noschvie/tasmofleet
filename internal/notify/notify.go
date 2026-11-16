@@ -52,6 +52,10 @@ const (
 
 // Event is one thing to tell. Title is the e-mail subject, Text and URL its body.
 type Event struct {
+	// ID is set once by Dispatcher.Emit: the start time of the process plus a counter, unique across
+	// restarts. The tab notice and the push of one event carry the same id, so a browser folds them into
+	// one notification (its tag).
+	ID      string
 	Name    string
 	Result  string
 	Title   string

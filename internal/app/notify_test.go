@@ -41,7 +41,7 @@ func notifyRuntime(t *testing.T, extra map[string]string) (*runtime, *Services, 
 		t.Fatal(err)
 	}
 	a := &runtime{svc: svc, cfg: svc.Cfg, log: svc.Log, bgContext: t.Context()}
-	a.setupNotify()
+	a.setupNotify(t.Context())
 	return a, svc, func() []string {
 		a.notifier.Wait()
 		mu.Lock()
@@ -273,5 +273,23 @@ func TestNotStartedTransactionSendsOneNotStartedMessage(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Why (#610): Web Push is on from the first start (the VAPID key is made then), the web routes get the
+// channel, and a restart keeps the key: a new key would silently break every browser's subscription.
+func TestSetupNotifyTurnsWebPushOnWithAKeptKey(t *testing.T) {
+	a, svc, _ := notifyRuntime(t, nil)
+	if a.push == nil || a.push.PublicKey() == "" {
+		t.Fatal("web push is off after the first start")
+	}
+	if a.webDeps(nil, nil).Push == nil {
+		t.Fatal("the web routes do not get the push channel")
+	}
+	first := a.push.PublicKey()
+	again := &runtime{svc: svc, cfg: svc.Cfg, log: svc.Log, bgContext: t.Context()}
+	again.setupNotify(t.Context())
+	if again.push == nil || again.push.PublicKey() != first {
+		t.Fatal("a restart made a new VAPID key")
 	}
 }

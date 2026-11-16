@@ -192,7 +192,9 @@ Deliberately not used: `prometheus/client_golang` (counters and gauges are about
 would add ~15 modules), web frameworks/routers (Go 1.22+ `ServeMux` patterns are enough),
 ORMs and migration libraries (about 60 lines of migrator), config libraries, CLI frameworks.
 Stdlib features used: `net/http.CrossOriginProtection` (CSRF), `crypto/pbkdf2` (password
-hashing), `log/slog`, `embed`, `html/template` (its escaping helpers and `template.HTML` for markup a component already escaped; the pages are templ).
+hashing), `log/slog`, `embed`, `html/template` (its escaping helpers and `template.HTML` for markup a component already escaped; the pages are templ),
+`crypto/ecdh`, `crypto/ecdsa`, `crypto/hkdf` and AES-GCM for Web Push (14.5, #610): the VAPID token (RFC 8292) and the
+payload encryption (RFC 8291) are about 200 lines held to the RFC 8291 test vector, so no Web Push module is added.
 
 ---
 
@@ -231,6 +233,7 @@ Tables (35 migrations, `0001` to `0035`; the files in `internal/store/migrations
 | `discovery_proposals`, `device_macs`                 | discovered devices waiting for an admin (expire after 30 days); the MAC set of a device |                                                                                                                                                                                   |
 | `restore_jobs`, `firmware_custom`, `backup_attempts` | restores; provenance of uploaded firmware; failed backups                               |                                                                                                                                                                                   |
 | `id_high_water`                                      | last id handed out for `devices` and `ota_batches`                                      | migration 0047 (#498): an id is never handed out twice, because the audit log, links and notifications name devices and transactions by id                                        |
+| `push_vapid`, `push_subscriptions`                   | the Web Push VAPID key; one row per subscribed browser                                  | migration 0049 (#610): the private key sealed with secretbox; a subscription is owned by the admin who made it                                                                    |
 
 Timestamps are INTEGER unix milliseconds, UTC. JSON columns (`tags`, `identity_before`,
 `principal`, `detail`) are plain TEXT, encoded and decoded in `store`.
@@ -2135,8 +2138,8 @@ per failed device with hostname, address and reason, linking to the failed rows 
 - **Browser (#540):** a desktop notification while a TasmoFleet tab is open, for admins only (the opt-in
   sits on the admin Settings page). `notify.Options.Browser` is called once by `Dispatcher.Emit` for every event
   the settings select, whether or not a channel is on, never for `test`; the app publishes it as
-  `events.TopicNotice` with an `events.Notice` payload (id, name, result, title, text, path; the id is the start
-  time plus a counter, equal in every stream). The event stream sends it as the SSE event `notice` (one JSON
+  `events.TopicNotice` with an `events.Notice` payload (id, name, result, title, text, path; the id is
+  `Event.ID`, set once by `Emit`: the start time plus a counter, equal in every stream and in the event's Web Push). The event stream sends it as the SSE event `notice` (one JSON
   line, path below the base path) and only on streams of admins; the role is re-checked at every session
   re-check like the other admin-only streams. `notify.js` shows it with the Notification API. The opt-in is per
   browser (localStorage; the permission is requested only after a click on "Enable browser notifications"),
@@ -2144,8 +2147,32 @@ per failed device with hostname, address and reason, linking to the failed rows 
   the others forward what they heard over a BroadcastChannel, and the event id and the notification tag fold
   repeats. On pages without live data the leader tab opens `/events?only=notice` while notifications are on
   (an operator asking for it gets 403), so at most one extra stream per browser. The card says when the browser
-  blocks notifications or the page is not a secure context (HTTPS or localhost). No service worker: nothing
-  shows while no tab is open (Web Push is #541).
+  blocks notifications or the page is not a secure context (HTTPS or localhost). No service worker yet: the
+  subscription in the browser, the service worker and the Settings card are #611.
+- **Web Push (#610, server side; #541):** every event `Emit` hands to the tabs is also pushed to the browsers admins
+  subscribed, through their vendors' push services (Google FCM, Mozilla autopush, Apple, Microsoft), so it shows
+  with no tab open. VAPID (RFC 8292): one P-256 key pair made on the first start, the private key sealed with
+  secretbox in `push_vapid` (never rotated; a key that cannot be opened because `secret.key` was replaced is
+  replaced, which drops every subscription, with a warning). The token's audience is the endpoint's origin, it
+  expires after 12 hours, and its `sub` is the fixed project address (never `PUBLIC_URL` or a mail address, which
+  would tell the vendors an internal name). The payload is `{id, name, result, title, text, path}` (path below the
+  base path), encrypted for the browser (RFC 8291, `aes128gcm`, one record, at most 4096 bytes: a long text is cut
+  at a character and marked). Headers `TTL: 86400`, `Urgency: high` for failed, partial or not started results,
+  else `normal`. Admin routes (CSRF as usual): `GET /settings/system/push/key` (the public key),
+  `POST` and `DELETE /settings/system/push/subscription` (the browser's `PushSubscription.toJSON()`; an https
+  endpoint without credentials, not a `localhost` name or a literal loopback, private, link-local, unspecified,
+  multicast or 100.64.0.0/10 address or one with a zone, at most 2 KB, a P-256 `p256dh` and a 16-byte `auth`; host
+  names are not resolved, so this is a check against mistakes, not an SSRF boundary), audited as `push.subscribe`
+  and `push.unsubscribe` with the push service's host only. A subscription (`push_subscriptions`, one row per
+  endpoint) belongs to the admin who made it; at every event the owner's role is
+  read again (the resolver of job creators): not an admin any more (operator, local account gone or disabled)
+  removes the row, a failure to read keeps it and skips that push. For single sign-on and header users the role is
+  the one recorded at their last sign-in (header users: last request, at most every 10 minutes), so an SSO admin
+  removed at the identity provider keeps receiving pushes until they sign in again; #611's list lets any admin
+  remove any subscription. 404 or 410 removes the row; a network error, 5xx or 429 is retried once; the outcome
+  is kept on the row (`last_ok_at`, `last_error`). Same client as the webhook (ten
+  seconds, no proxy from the environment, same-host redirects); a log line names the push service's host, never
+  the endpoint, whose path is the browser's capability. Details: `docs/security/web-push.md`.
 
 Delivery runs in the background and never fails the caller. The last delivery and the last test per
 channel are kept in memory (empty after a restart). The two secrets are write-only and stored with
