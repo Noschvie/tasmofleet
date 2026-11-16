@@ -1,0 +1,53 @@
+# TasmoFleet as a systemd service for a native install (docs/installation.md, "Native install").
+# Expects the binary at /usr/local/bin/tasmofleet and a system user "tasmofleet"
+# (useradd --system --user-group --home-dir /var/lib/tasmofleet --shell /usr/sbin/nologin tasmofleet):
+# StateDirectory creates the data directory, not the user.
+# Settings: <DATA_DIR>/tasmofleet.env (docs/configuration.md), or Environment= lines in a drop-in
+# (systemctl edit tasmofleet). The setup link of the first start is in journalctl -u tasmofleet.
+[Unit]
+Description=TasmoFleet, the Tasmota fleet manager
+Documentation=https://github.com/hellwand/tasmofleet/blob/main/docs/installation.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=tasmofleet
+Group=tasmofleet
+ExecStart=/usr/local/bin/tasmofleet serve
+# TLS certificate files are re-read on SIGHUP: systemctl reload tasmofleet.
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5s
+
+# Database, secret.key, firmware cache, backups and certificates; only the service user can read it.
+Environment=TASMOFLEET_DATA_DIR=/var/lib/tasmofleet
+StateDirectory=tasmofleet
+StateDirectoryMode=0700
+UMask=0077
+# Not noexec: decode-config (a PyInstaller build) unpacks itself into <DATA_DIR>/tmp and runs from there.
+
+# The firmware server listens on port 80 (TASMOFLEET_FIRMWARE_LISTEN) as a non-root user.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+# AF_NETLINK: the setup page lists the host's addresses.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+
+[Install]
+WantedBy=multi-user.target

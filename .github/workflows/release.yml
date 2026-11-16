@@ -1,6 +1,8 @@
 # Release: a tag vX.Y.Z (signed, set on a green commit of main; docs/dev/releasing.md).
 #
-#   guards --> publish --> release --> pages
+#   guards   --+
+#              +--> publish --> release --> pages
+#   binaries --+
 #
 # guards   the tagged commit is on main, the CHANGELOG.md section for the tag exists and a patch
 #          tag changes no migration, so a bad tag fails in seconds (the image build checks the
@@ -10,15 +12,22 @@
 #          run (tools/release-green.sh, #554): main only moves by a fast-forward push of a green PR
 #          head, so the tag run does not run the FAST tier again on identical code. The race tests of
 #          the SAFETY packages stay in the nightly FULL tier (same main).
-# publish  the image to ghcr.io and Docker Hub (_image.yml, mode release), only when guards succeeded.
-#          The only job that can push a tag image: _image.yml refuses mode release for anything but a
-#          tag push.
-# release  the GitHub release, its notes the CHANGELOG.md section, only when publish succeeded.
+# binaries the native archives (#472): make dist builds static linux/amd64 and linux/arm64 binaries as
+#          tar.gz plus SHA256SUMS (tools/dist.sh). It checks that each binary is a static, stripped ELF of
+#          its architecture, installs the amd64 archive as docs/installation.md says under the runner's
+#          systemd and waits for /healthz, the firmware port and the version, then keeps dist/release
+#          as an artifact for the job release (one day).
+# publish  the image to ghcr.io and Docker Hub (_image.yml, mode release), only when guards and binaries
+#          succeeded, so no image ships without its archives. The only job that can push a tag image:
+#          _image.yml refuses mode release for anything but a tag push.
+# release  the GitHub release, its notes the CHANGELOG.md section and the archives with SHA256SUMS
+#          attached, only when publish and binaries succeeded.
 # pages    the static demo, only when the release was made.
-# A tag whose guards fail publishes no image, no release and no pages.
+# A tag whose guards or binaries fail publishes no image, no release and no pages.
 #
-# workflow_dispatch is a dry run: it runs ONLY the check for "required" and main.yml on `sha` (default:
-# the head of the ref) and never publishes, releases or deploys anything, whatever the result.
+# workflow_dispatch is a dry run: it runs the check for "required" and main.yml on `sha` (default: the head
+# of the ref) and the job binaries on that commit (version 0.0.0-dryrun.<sha>), and never publishes,
+# releases or deploys anything, whatever the result.
 name: release
 
 on:
@@ -76,12 +85,91 @@ jobs:
           SHA: ${{ inputs.sha || github.sha }}
         run: tools/release-green.sh "$SHA"
 
+  # The native archives (#472). Needs no guard, so the dry run builds and tests them too.
+  binaries:
+    name: native binaries
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+      - uses: ./.github/actions/go
+        with:
+          name: test
+          save: "false"
+      - name: build the archives
+        env:
+          EVENT: ${{ github.event_name }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # The version of the image tag (_image.yml): the tag without its v. tools/dist.sh refuses anything else.
+          if [ "$EVENT" = push ]; then version=${TAG#v}; else version=0.0.0-dryrun.$(git rev-parse --short=12 HEAD); fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          make dist VERSION="$version"
+      # arm64 is only cross-built here, never run: check the ELF header, so a wrong GOARCH fails the tag and not a
+      # user. Static (no program interpreter) and stripped, as the archive promises.
+      - name: check the binaries
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          for arch in amd64 arm64; do
+            name=tasmofleet_${VERSION}_linux_${arch}
+            tar -xzf "$GITHUB_WORKSPACE/dist/release/$name.tar.gz"
+            info=$(file -b "$name/tasmofleet")
+            echo "$arch: $info"
+            case $arch in amd64) machine=x86-64 ;; arm64) machine="ARM aarch64" ;; esac
+            case $info in "ELF 64-bit LSB executable, $machine,"*"statically linked"*stripped*) ;; *) echo "$name/tasmofleet is not a static, stripped $machine executable" >&2; exit 1 ;; esac
+            if readelf -l "$name/tasmofleet" | grep -q INTERP; then echo "$name/tasmofleet has a program interpreter" >&2; exit 1; fi
+          done
+      # The native install on a real systemd, as docs/installation.md describes it; the firmware URL makes the
+      # firmware server bind port 80, which proves the unit's CAP_NET_BIND_SERVICE.
+      - name: install and start the amd64 archive under systemd
+        run: |
+          set -euo pipefail
+          d=$RUNNER_TEMP/tasmofleet_${VERSION}_linux_amd64
+          sudo useradd --system --user-group --home-dir /var/lib/tasmofleet --shell /usr/sbin/nologin tasmofleet
+          sudo install -m 0755 "$d/tasmofleet" /usr/local/bin/tasmofleet
+          sudo install -m 0644 "$d/tasmofleet.service" /etc/systemd/system/tasmofleet.service
+          sudo mkdir -p /etc/systemd/system/tasmofleet.service.d
+          printf '[Service]\nEnvironment=TASMOFLEET_FIRMWARE_BASE_URL=http://127.0.0.1\n' | sudo tee /etc/systemd/system/tasmofleet.service.d/smoke.conf
+          sudo systemctl daemon-reload
+          sudo systemctl start tasmofleet
+          got=$(/usr/local/bin/tasmofleet version)
+          [ "$got" = "$VERSION" ] || { echo "tasmofleet version printed '$got', want '$VERSION'" >&2; exit 1; }
+          ok=
+          for _ in $(seq 1 30); do
+            if curl -fsk --max-time 2 https://127.0.0.1:8080/healthz; then ok=1; break; fi
+            sleep 1
+          done
+          [ -n "$ok" ] || { echo "no healthy answer on :8080 within 30 s" >&2; exit 1; }
+          # The firmware server binds right after the UI listener; any HTTP status means it is up.
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 --retry 5 --retry-connrefused --retry-delay 1 http://127.0.0.1:80/ || true)
+          [ "$code" != 000 ] || { echo "nothing answers on the firmware port 80" >&2; exit 1; }
+          [ "$(sudo stat -c '%a %U' /var/lib/tasmofleet)" = "700 tasmofleet" ] || { echo "data dir is not 0700 tasmofleet" >&2; exit 1; }
+          sudo journalctl -u tasmofleet --no-pager | grep -q 'created the initial admin account' || { echo "no setup link in the journal" >&2; exit 1; }
+          systemctl is-active tasmofleet
+      - name: service log
+        if: always()
+        run: |
+          sudo journalctl -u tasmofleet --no-pager | tail -n 50 || true
+          sudo systemctl stop tasmofleet || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-binaries
+          path: dist/release
+          if-no-files-found: error
+          retention-days: 1
+
   # Explicit status checks on every job below: the implicit success() also looks at the
   # skipped ancestors of a job (the first release workflow lost its publish job to that).
   publish:
     name: publish image
-    needs: guards
-    if: ${{ !cancelled() && github.event_name == 'push' && needs.guards.result == 'success' }}
+    needs: [guards, binaries]
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.guards.result == 'success' && needs.binaries.result == 'success' }}
     permissions:
       contents: read
       packages: write
@@ -92,17 +180,21 @@ jobs:
       DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
 
-  # A GitHub release per tag, its notes the CHANGELOG.md section, once the image is out.
+  # A GitHub release per tag, its notes the CHANGELOG.md section and the native archives attached, once the image is out.
   release:
     name: GitHub release
-    needs: publish
-    if: ${{ !cancelled() && github.event_name == 'push' && needs.publish.result == 'success' }}
+    needs: [publish, binaries]
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.publish.result == 'success' && needs.binaries.result == 'success' }}
     runs-on: ubuntu-26.04
     timeout-minutes: 5
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: native-binaries
+          path: dist/release
       - env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
@@ -111,7 +203,9 @@ jobs:
           make -s changelog-notes TAG="$TAG" > notes.md
           title=$(make -s changelog-title TAG="$TAG")
           pre=; case "$TAG" in *-*) pre=--prerelease ;; esac
-          gh release create "$TAG" --verify-tag --title "$title" --notes-file notes.md $pre
+          # The archives and SHA256SUMS of the job binaries (#472); tools/dist.sh writes nothing else there.
+          (cd dist/release && sha256sum -c SHA256SUMS)
+          gh release create "$TAG" --verify-tag --title "$title" --notes-file notes.md $pre dist/release/*
 
   # The static demo of the released version (pages.yml, also run by hand).
   pages:

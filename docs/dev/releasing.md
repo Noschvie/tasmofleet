@@ -74,6 +74,14 @@ remembers to renew it, and the project page showed the UI of 0.28.0 next to a de
   after. Tag signing itself is convention. The tag
   run (`release.yml`) checks that the commit is green already (`required` and `main.yml`, see RELEASE tier; no tests are repeated), and the
   image, the GitHub release and the demo site follow only when that passed.
+- **Native archives** (#472): the tag run also builds static linux/amd64 and linux/arm64 binaries (`make dist
+  VERSION=X.Y.Z`, job `binaries` in `release.yml`: tar.gz with the binary, `LICENSE`, `README.md` and the systemd unit
+  `deploy/systemd/tasmofleet.service`, plus `SHA256SUMS`), tests the amd64 archive under systemd on the runner and
+  attaches them to the GitHub release. `publish` waits for it: a failed archive step publishes no image and no release.
+  The archives do not contain decode-config; the [native install](../installation.md#backup-decoder-for-a-native-install)
+  points users to the Dockerfile's `DECODER_*` pins, so a decoder bump needs no second edit. A change to the unit or to
+  `tools/dist.sh` can be tried before the tag with a dry run (`gh workflow run release.yml --ref <branch>`), which
+  publishes nothing.
 - **Announce every release** in the one pinned Announcements discussion "TasmoFleet releases" (#315),
   after the tag run has published the image and the GitHub release. Edit its body (`updateDiscussion`):
   the "Current release" section shows `TasmoFleet X.Y.Z "Name"`, the image tags

@@ -27,6 +27,8 @@ NICE      ?= nice -n 15
 export GOFLAGS ?= -p=$(JOBS)
 VERSION   ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS   := -s -w -X main.version=$(VERSION)
+# go build flags shared by build and dist (the native release archives).
+BUILDFLAGS := -trimpath
 BIN       := bin
 
 # Packages under mutation testing as <package>:<minimum efficacy %> (share of
@@ -51,7 +53,7 @@ E2E_ARGS  ?=
 CHANGED_BASE ?= origin/main
 export CHANGED_BASE
 
-.PHONY: agent-refs quick integration-guard shards-check-changed catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo pages demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race diff-cover revert-check mqtt-acl-check test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build image changelog-check changelog-assemble changelog-fragments-check changelog-fragment-gate release-pr-check changelog-title migration-guard migration-append-only changelog-notes clean tools
+.PHONY: agent-refs quick integration-guard shards-check-changed catalogue catalogue-src catalogue-check docs-anchors docs-anchors-check demo pages demo-media check ci templ templ-check fmt fmt-check vet staticcheck lint test scripts-test shards-check race integration mutation mutation-changed mutation-sum mutation-plan safety safety-race diff-cover revert-check mqtt-acl-check test-quarantine e2e e2e-core e2e-quarantine e2e-deps visual visual-parity styleguide-docs vuln build dist image changelog-check changelog-assemble changelog-fragments-check changelog-fragment-gate release-pr-check changelog-title migration-guard migration-append-only changelog-notes clean tools
 
 # golangci-lint runs staticcheck with its defaults (.golangci.yml), so check does not run it a second time;
 # the staticcheck target stays for single runs and CI. go vet stays: golangci-lint skips generated files,
@@ -466,8 +468,15 @@ docs-anchors-check:
 	@tmp=$$(mktemp); trap 'rm -f "$$tmp"' EXIT; ($(docs_anchors_gen)) > "$$tmp" && diff -u $(DOCS_ANCHORS) "$$tmp" || { echo "docs-anchors-check: $(DOCS_ANCHORS) differs from the pinned page; run 'make docs-anchors'" >&2; exit 1; }
 
 build:
-	CGO_ENABLED=0 $(NICE) $(GO) build -trimpath -ldflags '$(LDFLAGS)' -o $(BIN)/tasmofleet ./cmd/tasmofleet
-	CGO_ENABLED=0 $(NICE) $(GO) build -trimpath -o $(BIN)/tasmofleet-devenv ./cmd/tasmofleet-devenv
+	CGO_ENABLED=0 $(NICE) $(GO) build $(BUILDFLAGS) -ldflags '$(LDFLAGS)' -o $(BIN)/tasmofleet ./cmd/tasmofleet
+	CGO_ENABLED=0 $(NICE) $(GO) build $(BUILDFLAGS) -o $(BIN)/tasmofleet-devenv ./cmd/tasmofleet-devenv
+
+# Native release archives (#472, tools/dist.sh): static linux/amd64 and linux/arm64 binaries as tar.gz plus
+# SHA256SUMS in DIST. VERSION=X.Y.Z (no v, as the image tag) is required; the default (git describe) is refused.
+# release.yml runs it in the job "binaries" and attaches the files to the GitHub release.
+DIST ?= dist/release
+dist:
+	VERSION='$(VERSION)' LDFLAGS='$(LDFLAGS)' BUILDFLAGS='$(BUILDFLAGS)' GO='$(GO)' DIST='$(DIST)' $(NICE) tools/dist.sh
 
 image:
 	docker build --build-arg VERSION=$(VERSION) -t tasmofleet:$(VERSION) .
