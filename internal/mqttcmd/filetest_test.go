@@ -76,6 +76,32 @@ func TestPasswordTestStartsThenAborts(t *testing.T) {
 	}
 }
 
+// Why (#609): the test ends its download early, and Tasmota answers that abort with one more chunk and a late
+// "Aborted". Only a transfer that ended with a matching MD5 leaves the topic in a known state, so the download
+// after a test must open with FileDownload 0 again, even when the topic was clean before the test; a test that
+// marked it clean would let the next download start into the leftovers of the test.
+func TestThePasswordTestLeavesTheTopicToBeReset(t *testing.T) {
+	e := newDownloadEnv(t)
+	if _, err := e.ch.Download(t.Context(), e.dvc, dlPassword); err != nil { // the topic is clean now
+		t.Fatal(err)
+	}
+	before := len(fileCmds(e))
+	if err := e.ch.TestPassword(t.Context(), e.dvc, dlPassword); err != nil {
+		t.Fatal(err)
+	}
+	cmds := fileCmds(e)
+	if len(cmds) != before+2 || strings.HasSuffix(cmds[before], " 0") {
+		t.Fatalf("commands of the test %q: want the start (the topic was clean) and the abort", cmds[before:])
+	}
+	after := len(cmds)
+	if _, err := e.ch.Download(t.Context(), e.dvc, dlPassword); err != nil {
+		t.Fatal(err)
+	}
+	if cmds = fileCmds(e); len(cmds) <= after || !strings.HasSuffix(cmds[after], " 0") {
+		t.Fatalf("commands of the download after the test %q: want the opening abort first", cmds[after:])
+	}
+}
+
 // Why (#609): a refused password is the result the test exists for (the router marks it). The device
 // allocated nothing, so no abort follows, and the error never holds the password.
 func TestPasswordTestRefusedNeedsNoAbort(t *testing.T) {

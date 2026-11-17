@@ -157,6 +157,7 @@ type transferSpec struct {
 	minSize, maxSize int64  // the sizes the header may announce
 	tooLarge         bool   // a size over maxSize is tasmota.ErrFileTooLarge (a file), not a broken header (a dump)
 	bound            func(size int) time.Duration
+	probe            bool // the password test (TestPassword): end the transfer right after "Started", read nothing
 }
 
 func (c *Channel) transfer(ctx context.Context, d model.Device, spec transferSpec) (data []byte, rerr error) {
@@ -210,12 +211,27 @@ func (c *Channel) transfer(ctx context.Context, d model.Device, spec transferSpe
 		}
 		c.waitAborted(hctx, in)
 	}
-	data, sent, err := c.runTransfer(ctx, hctx, began, d.Topic, spec, in)
+	var sent bool
+	var err error
+	if spec.probe {
+		sent, err = c.startTransfer(hctx, d.Topic, spec, in)
+	} else {
+		data, sent, err = c.runTransfer(ctx, hctx, began, d.Topic, spec, in)
+	}
 	if err != nil {
 		if sent && !deviceReset(err) {
 			c.abort(d.Topic) // the start may have reached the device: leave it idle
 		}
 		return nil, err
+	}
+	if spec.probe {
+		// Accepted. End the download before any "?" asks for data, under its own context, since the caller's may
+		// be spent by now. A probe never marks the topic clean: the next transfer opens with the abort again.
+		c.abort(d.Topic)
+		actx, acancel := context.WithTimeout(context.WithoutCancel(ctx), c.o.ReplyWait)
+		c.waitAborted(actx, in)
+		acancel()
+		return nil, nil
 	}
 	c.mu.Lock()
 	c.fileClean[d.Topic] = true
@@ -234,34 +250,40 @@ func deviceReset(err error) bool {
 	return errors.As(err, &r)
 }
 
-// runTransfer runs one transfer after the opening abort: the start and the header under hctx, the data under
-// spec.bound of the announced size, counted from began. ctx is the caller's.
-func (c *Channel) runTransfer(ctx, hctx context.Context, began time.Time, topic string, spec transferSpec, in chan mqttbus.Message) (data []byte, sent bool, err error) {
+// startTransfer publishes the start under hctx and waits for "Started"; sent says whether the start may have
+// been published. An "Error N" in answer to it, or a minimal firmware's echo, is a deviceResetError.
+func (c *Channel) startTransfer(hctx context.Context, topic string, spec transferSpec, in chan mqttbus.Message) (sent bool, err error) {
 	if err := c.sendFile(hctx, topic, spec.start); err != nil {
 		// A timeout here means the publish was attempted; a refusal or a spent context sent nothing.
-		return nil, errors.Is(err, tasmota.ErrTimeout), err
+		return errors.Is(err, tasmota.ErrTimeout), err
 	}
 	// Anything before "Started" is a leftover of an earlier transfer (an "Aborted", a stray chunk).
 	for {
 		m, err := c.nextFile(hctx, in, "the start")
 		if err != nil {
-			return nil, true, err
+			return true, err
 		}
 		switch {
 		case m.Command != nil:
 			// A firmware without FileDownload (minimal) echoed the command, password included.
-			return nil, true, &deviceResetError{transferErr("the device does not support FileDownload (minimal firmware?)")}
+			return true, &deviceResetError{transferErr("the device does not support FileDownload (minimal firmware?)")}
 		case m.Status == nil:
 			continue
 		case *m.Status == "Started":
+			return true, nil
 		case strings.HasPrefix(*m.Status, "Error"):
 			// Only here, in answer to the start, does Error 3 mean "this type is not in the firmware": the device
 			// refused before it sent anything of the file.
-			return nil, true, startErrorStatus(*m.Status, spec.file != "")
-		default:
-			continue
+			return true, startErrorStatus(*m.Status, spec.file != "")
 		}
-		break
+	}
+}
+
+// runTransfer runs one transfer after the opening abort: the start and the header under hctx, the data under
+// spec.bound of the announced size, counted from began. ctx is the caller's.
+func (c *Channel) runTransfer(ctx, hctx context.Context, began time.Time, topic string, spec transferSpec, in chan mqttbus.Message) (data []byte, sent bool, err error) {
+	if sent, err := c.startTransfer(hctx, topic, spec, in); err != nil {
+		return nil, sent, err
 	}
 
 	fail := func(format string, a ...any) error { return transferErr(format, a...) }
