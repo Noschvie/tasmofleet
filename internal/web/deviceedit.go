@@ -31,6 +31,9 @@ type deviceForm struct {
 	Stored string
 	// MQTTMode is the MQTT password mode shown selected: the stored one, or the one just posted.
 	MQTTMode model.MQTTPasswordMode
+	// MQTTShown is the mode the form first showed, posted back hidden: a select left alone is no change even when
+	// the learner changed the stored mode meanwhile (#609).
+	MQTTShown model.MQTTPasswordMode
 	// MQTTSection says whether the form has the MQTT password section (admin with the store wired).
 	MQTTSection bool
 	// HasMQTTPassword: an own MQTT password is stored (its value is never rendered).
@@ -211,7 +214,7 @@ func (h *handler) deviceEditForm(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	h.renderForm(w, r, http.StatusOK, deviceForm{Device: d, HasPassword: d.HTTPPassword != "", Stored: d.Name, MQTTMode: d.MQTTPasswordMode})
+	h.renderForm(w, r, http.StatusOK, deviceForm{Device: d, HasPassword: d.HTTPPassword != "", Stored: d.Name, MQTTMode: d.MQTTPasswordMode, MQTTShown: d.MQTTPasswordMode})
 }
 
 func (h *handler) deviceUpdate(w http.ResponseWriter, r *http.Request) {
@@ -221,11 +224,12 @@ func (h *handler) deviceUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	limitBody(w, r)
 	d, err := applyForm(r, old) // starts from the stored record, so the password and identity survive
-	form := deviceForm{Device: d, HasPassword: d.HTTPPassword != "", Stored: old.Name, MQTTMode: old.MQTTPasswordMode}
+	form := deviceForm{Device: d, HasPassword: d.HTTPPassword != "", Stored: old.Name, MQTTMode: old.MQTTPasswordMode, MQTTShown: old.MQTTPasswordMode}
 	var mq mqttChange
 	if h.d.MQTTPasswords != nil {
 		var msg string
 		mq, form.MQTTMode, msg = mqttFormChange(r, old)
+		form.MQTTShown = mq.shown
 		form.MQTTRetype = r.PostFormValue(fieldMQTTPassword) != "" // never echoed: a re-render drops it
 		if err == nil && msg != "" {                               // nothing is saved: the other fields stay as typed
 			form.ErrField, form.Error = fieldMQTTPassword, msg

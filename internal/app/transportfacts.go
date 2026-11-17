@@ -8,6 +8,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/fwselect"
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/mqttbus"
+	"github.com/hellwand/tasmofleet/internal/mqttcmd"
 	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
@@ -198,11 +199,18 @@ func (s *TransportFacts) httpState(id model.DeviceID, h model.Health, now time.T
 	return transport.HTTPState{}
 }
 
-// password: a device in broker mode sends MQTT_PASSWORD, so without one it has no usable password.
+// password: the password a transfer would send is model.FilePassword's. A device in broker mode sends
+// MQTT_PASSWORD, so without one it has no usable password; a password the transfer command cannot carry
+// (a quote, a backslash, a control character; one learned from a backup can hold them, #609) is unusable
+// too, said before any transfer instead of as a late refusal. The value never leaves this function.
 func (s *TransportFacts) password(d model.Device) transport.Password {
 	p := transport.Password{Mode: d.MQTTPasswordMode, BadAt: d.MQTTPasswordBadAt}
-	if d.MQTTPasswordMode == model.MQTTPasswordBroker && s.BrokerPassword() == "" {
+	pw, ok := model.FilePassword(d, s.BrokerPassword())
+	switch {
+	case !ok && d.MQTTPasswordMode == model.MQTTPasswordBroker:
 		p.Unusable = "TasmoFleet has no broker password configured"
+	case ok && mqttcmd.CheckFilePassword(pw) != nil:
+		p.Unusable = "the device's MQTT password contains a character that cannot be sent in a file transfer command (a quote, a backslash or a control character)"
 	}
 	return p
 }

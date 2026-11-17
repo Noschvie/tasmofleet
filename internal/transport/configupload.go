@@ -111,7 +111,7 @@ func (r *Router) UploadConfig(ctx context.Context, t tasmota.Target, dump []byte
 		noteTrace(ctx, MQTT)
 	}
 	if errors.Is(err, mqttcmd.ErrPasswordRefused) {
-		r.markPasswordBad(ctx, d.ID)
+		r.markPasswordRefused(ctx, d)
 	}
 	return err
 }

@@ -43,6 +43,7 @@ test("the MQTT password is stored write-only and a blank field keeps it", async 
     "Not set",
     "Same as TasmoFleet's broker password",
     "Own password",
+    "No password",
   ]);
 
   await mode.selectOption("own");

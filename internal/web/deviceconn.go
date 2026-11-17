@@ -528,6 +528,8 @@ func passwordRow(f transport.Facts) pathRow {
 		r.Value, r.Tone, r.Sub = "Same as the broker's", ui.ToneOK, "Back up, restore and upload over MQTT send TasmoFleet's broker password."
 	case p.Mode == model.MQTTPasswordOwn:
 		r.Value, r.Tone, r.Sub = "Set", ui.ToneOK, "Back up, restore and upload over MQTT send the stored password."
+	case p.Mode == model.MQTTPasswordEmpty:
+		r.Value, r.Tone, r.Sub = "No password", ui.ToneOK, "The device has no MQTT password; back up, restore and upload over MQTT send an empty one."
 	default:
 		r.Value, r.Sub = "Not set", "Needed only to back up, restore and upload over MQTT; commands never use it."
 	}

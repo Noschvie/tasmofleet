@@ -616,14 +616,16 @@ func (m *Manager) verifyAt(ctx context.Context, address string, port int, want s
 func hasCredentials(d model.Device) bool { return d.HasCredentials() }
 
 // sameRecord reports whether the inventory-owned fields of a and b are equal.
-// Timestamps, the identity and what the transport code learns (firmware reach, the MQTT password
-// refusal mark) are written by other paths and are ignored: a learning write between the read and
-// the write of an update must not turn it into a conflict.
+// Timestamps, the identity, what the transport code learns (firmware reach) and the MQTT password with
+// its mode, source, dates and marks are written by other paths (SetMQTTPassword, the learner that takes
+// it from a backup, #609; UpdateDevice never writes them) and are ignored: such a write between the read
+// and the write of an update must not turn it into a conflict.
 func sameRecord(a, b model.Device) bool {
-	a.CreatedAt, a.UpdatedAt, a.Identity = time.Time{}, time.Time{}, model.Identity{}
-	b.CreatedAt, b.UpdatedAt, b.Identity = time.Time{}, time.Time{}, model.Identity{}
-	a.FWReach, a.MQTTPasswordBadAt = model.FWReach{}, time.Time{}
-	b.FWReach, b.MQTTPasswordBadAt = model.FWReach{}, time.Time{}
+	for _, d := range []*model.Device{&a, &b} {
+		d.CreatedAt, d.UpdatedAt, d.Identity, d.FWReach = time.Time{}, time.Time{}, model.Identity{}, model.FWReach{}
+		d.MQTTPassword, d.MQTTPasswordMode, d.MQTTPasswordSource = "", model.MQTTPasswordNone, model.MQTTPasswordTyped
+		d.MQTTPasswordBadAt, d.MQTTPasswordSetAt, d.MQTTPasswordOKAt = time.Time{}, time.Time{}, time.Time{}
+	}
 	return reflect.DeepEqual(a, b)
 }
 

@@ -8,6 +8,7 @@ import (
 
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/mqttcmd"
+	"github.com/hellwand/tasmofleet/internal/store"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
 )
 
@@ -151,7 +152,7 @@ func (r *Router) MQTTDownloadFile(ctx context.Context, d model.Device, path stri
 		noteTrace(ctx, None)
 	}
 	if errors.Is(err, mqttcmd.ErrPasswordRefused) {
-		r.markPasswordBad(ctx, c.dev.ID)
+		r.markPasswordRefused(ctx, c.dev)
 	}
 	return b, err
 }
@@ -199,14 +200,25 @@ func (r *Router) mqttFileDevice(ctx context.Context, d model.Device) (mqttFileCa
 	return mqttFileCall{dev: now, pw: pw, dl: dl}, nil
 }
 
-// markPasswordBad records that the device refused its MqttPassword (Error 1), for every transfer that sends it.
-func (r *Router) markPasswordBad(ctx context.Context, id model.DeviceID) {
+// markPasswordRefused records that the device refused the MqttPassword of sent (Error 1), the record whose password
+// went out, for every transfer that sends it (the dump, a file over Type 8, the settings upload, the password test).
+// A password changed meanwhile (the learner, #609, or a save) is left alone. Without a PasswordRefusalMarker the
+// device is marked by ID: too much, never too little. The caller may be cancelled by now; the mark is still written.
+func (r *Router) markPasswordRefused(ctx context.Context, sent model.Device) {
 	if r.o.Marker == nil {
 		return
 	}
-	// The caller may be cancelled by now; the mark must still be written.
-	if err := r.o.Marker.MarkMQTTPasswordBad(context.WithoutCancel(ctx), id, time.Now()); err != nil {
-		r.o.Log.Warn("transport: could not record the refused MQTT password", "device", int64(id), "err", err)
+	ctx = context.WithoutCancel(ctx)
+	var err error
+	if m, ok := r.o.Marker.(PasswordRefusalMarker); ok {
+		if err = m.MarkMQTTPasswordBadFor(ctx, sent.ID, sent.MQTTPasswordSetAt, time.Now()); errors.Is(err, store.ErrNotFound) {
+			return // the password changed since it was sent: the refusal is not about the stored one
+		}
+	} else {
+		err = r.o.Marker.MarkMQTTPasswordBad(ctx, sent.ID, time.Now())
+	}
+	if err != nil {
+		r.o.Log.Warn("transport: could not record the refused MQTT password", "device", int64(sent.ID), "err", err)
 	}
 }
 

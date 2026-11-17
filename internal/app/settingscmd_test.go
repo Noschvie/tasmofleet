@@ -26,7 +26,7 @@ func TestSettingsExportImportRoundTrip(t *testing.T) {
 	if err := ExportSettings(ctx, a, &out); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(out.String(), "fake-cli-secret") || strings.Contains(out.String(), "MQTT_PASSWORD") {
+	if strings.Contains(out.String(), "fake-cli-secret") || strings.Contains(out.String(), `"MQTT_PASSWORD"`) { // the key, quoted: MQTT_PASSWORD_FROM_BACKUPS is no secret
 		t.Fatalf("a secret was exported:\n%s", out.String())
 	}
 

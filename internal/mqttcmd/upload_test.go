@@ -344,7 +344,6 @@ func TestUploadRefusesBeforePublishing(t *testing.T) {
 	}{
 		{"type 3", 3, "x", dlPassword, 4096},
 		{"type 0", 0, "x", dlPassword, 4096},
-		{"no password", 2, "x", "", 4096},
 		{"quote in password", 2, "x", `a"b`, 4096},
 		{"quote in name", 2, `a"b`, dlPassword, 4096},
 		{"empty name", 2, "", dlPassword, 4096},

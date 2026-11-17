@@ -42,6 +42,14 @@ type Device struct {
 	// MQTTPasswordBadAt is when the device answered "Error 1" to a transfer (zero: never or since
 	// cleared); saving the password clears it.
 	MQTTPasswordBadAt time.Time
+	// MQTTPasswordSource is where the stored mode and password came from (#609): typed in the edit
+	// form, or taken from the device's newest decoded backup. MQTTPasswordSetAt is when that fact
+	// was true: the time of the save, or the TakenAt of the backup (zero: never set). The newer
+	// fact wins. MQTTPasswordOKAt is when the device last accepted the password in a password
+	// test (zero: not tested since the last change, or refused since).
+	MQTTPasswordSource MQTTPasswordSource
+	MQTTPasswordSetAt  time.Time
+	MQTTPasswordOKAt   time.Time
 
 	// FWReach is whether the device reaches tasmofleet's firmware server. Written by the
 	// transport code only.
@@ -130,7 +138,51 @@ const (
 	MQTTPasswordNone   MQTTPasswordMode = ""       // not set
 	MQTTPasswordBroker MQTTPasswordMode = "broker" // tasmofleet's MQTT_PASSWORD, resolved at send time
 	MQTTPasswordOwn    MQTTPasswordMode = "own"    // the device's own, stored sealed
+	// MQTTPasswordEmpty: the device's MqttPassword is empty, and a transfer sends Password "" (Tasmota
+	// compares it with strcmp, so an empty one matches an empty setting). Not the same as not set.
+	MQTTPasswordEmpty MQTTPasswordMode = "empty"
 )
+
+// MQTTPasswordSource says where the stored MqttPassword came from (#609).
+type MQTTPasswordSource string
+
+// Password sources.
+const (
+	MQTTPasswordTyped      MQTTPasswordSource = ""       // the edit form (and every password stored before #609)
+	MQTTPasswordFromBackup MQTTPasswordSource = "backup" // the mqtt_pwd of the device's newest decoded backup
+)
+
+// FilePassword is the MqttPassword a file transfer (FileDownload, FileUpload) sends for d, with
+// broker as TasmoFleet's live broker password. ok is false when the mode gives none: not set, an
+// unknown mode, an own mode without a stored value, or broker mode without a broker password. In
+// the empty mode "" is the password and ok is true. It is the one mapping from a mode to a value;
+// the refusal mark (MQTTPasswordBadAt) is the caller's business.
+func FilePassword(d Device, broker string) (string, bool) {
+	switch d.MQTTPasswordMode {
+	case MQTTPasswordEmpty:
+		return "", true
+	case MQTTPasswordOwn:
+		return d.MQTTPassword, d.MQTTPassword != ""
+	case MQTTPasswordBroker:
+		return broker, broker != ""
+	case MQTTPasswordNone:
+	}
+	return "", false
+}
+
+// MQTTPasswordModeFor is the mode that stands for the device password v, the inverse of
+// FilePassword: empty is the empty mode, a value equal to a non-empty broker password is broker
+// mode (no copy is stored, so a later change of the broker password follows), anything else is
+// the device's own.
+func MQTTPasswordModeFor(v, broker string) MQTTPasswordMode {
+	switch {
+	case v == "":
+		return MQTTPasswordEmpty
+	case broker != "" && v == broker:
+		return MQTTPasswordBroker
+	}
+	return MQTTPasswordOwn
+}
 
 // FWReachState says whether a device reaches tasmofleet's firmware server.
 type FWReachState string

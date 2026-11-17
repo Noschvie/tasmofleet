@@ -201,7 +201,8 @@ func (h *handler) templateFacts(r *http.Request, batch model.BatchID) string {
 
 // templateBackup finds the backup the job took before it changed the device: the newest dump of the
 // device taken since the job was created (the engine takes it as the job's first step). Zero when
-// there is none, or backups cannot be listed.
+// there is none, or backups cannot be listed. A backup's time is when the dump was read, in whole
+// seconds, so it is compared with the second the job was created in: a dump read in that second counts.
 func (h *handler) templateBackup(r *http.Request, j model.Job) tmplBackup {
 	if h.d.Backups == nil {
 		return tmplBackup{}
@@ -210,9 +211,10 @@ func (h *handler) templateBackup(r *http.Request, j model.Job) tmplBackup {
 	if err != nil {
 		return tmplBackup{}
 	}
+	since := j.CreatedAt.Truncate(time.Second)
 	var best model.Backup
 	for _, b := range list {
-		if b.Kind == model.BackupConfigDump && !b.TakenAt.Before(j.CreatedAt) && b.TakenAt.After(best.TakenAt) {
+		if b.Kind == model.BackupConfigDump && !b.TakenAt.Before(since) && b.TakenAt.After(best.TakenAt) {
 			best = b
 		}
 	}

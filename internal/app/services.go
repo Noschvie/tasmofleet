@@ -26,6 +26,13 @@ import (
 	"github.com/hellwand/tasmofleet/internal/web"
 )
 
+// The router asserts its Marker to these at run time; without them a test result would not be recorded and a
+// refusal would mark whatever password is stored by then (#609).
+var (
+	_ transport.PasswordOKMarker      = (*store.SQLite)(nil)
+	_ transport.PasswordRefusalMarker = (*store.SQLite)(nil)
+)
+
 // Services are the pieces shared by the server and the CLI: storage, audit,
 // the device client, inventory and the prober.
 type Services struct {

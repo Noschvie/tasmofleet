@@ -104,6 +104,8 @@ func (s *memStore) UpdateDevice(_ context.Context, d model.Device) error {
 	}
 	d.Identity = o.Identity
 	d.FWReach, d.MQTTPasswordBadAt = o.FWReach, o.MQTTPasswordBadAt // like the real UpdateDevice: not its columns
+	d.MQTTPassword, d.MQTTPasswordMode, d.MQTTPasswordSource = o.MQTTPassword, o.MQTTPasswordMode, o.MQTTPasswordSource
+	d.MQTTPasswordSetAt, d.MQTTPasswordOKAt = o.MQTTPasswordSetAt, o.MQTTPasswordOKAt
 	s.devs[d.ID] = d
 	return nil
 }

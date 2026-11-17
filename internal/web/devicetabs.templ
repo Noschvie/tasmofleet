@@ -378,12 +378,14 @@ templ mqttPasswordFields(f deviceForm) {
 			@ui.BrokerACLNotice(f.ACLText, aclHideHref(ctx))
 		</div>
 	}
+	<input type="hidden" name="mqtt_password_mode_shown" value={ string(f.MQTTShown) }/>
 	<label class="ufield">
 		<span class="ufield-label">MQTT password source</span>
 		<select name="mqtt_password_mode">
 			<option value="" selected?={ f.MQTTMode == "" }>Not set</option>
 			<option value="broker" selected?={ f.MQTTMode == "broker" }>Same as TasmoFleet's broker password</option>
 			<option value="own" selected?={ f.MQTTMode == "own" }>Own password</option>
+			<option value="empty" selected?={ f.MQTTMode == "empty" }>No password</option>
 		</select>
 		<span class="ufield-help">Needed only to back up or restore over MQTT (FileDownload, FileUpload). Sent only to this device's topic.</span>
 	</label>

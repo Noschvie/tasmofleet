@@ -380,19 +380,15 @@ func fullTopic(s string) string {
 	return strings.TrimRight(s, "/")
 }
 
-// differsPassword compares the backup's MqttPassword with the one TasmoFleet knows for the device:
-// its own stored one, or the broker password in broker mode. Without either there is nothing to
-// compare against, and the transport refuses such a device anyway.
+// differsPassword compares the backup's MqttPassword with the one TasmoFleet knows for the device, the
+// password its transfers send (model.FilePassword): its own stored one, the broker password in broker mode,
+// or the empty one (#609). Without one there is nothing to compare against, and the transport refuses such a
+// device anyway.
 func differsPassword(backup string, dev model.Device, broker func() string) bool {
-	switch dev.MQTTPasswordMode {
-	case model.MQTTPasswordOwn:
-		return backup != dev.MQTTPassword
-	case model.MQTTPasswordBroker:
-		if broker != nil && broker() != "" {
-			return backup != broker()
-		}
-	case model.MQTTPasswordNone:
-		// nothing to compare against
+	bp := ""
+	if broker != nil {
+		bp = broker()
 	}
-	return false
+	pw, ok := model.FilePassword(dev, bp)
+	return ok && backup != pw
 }

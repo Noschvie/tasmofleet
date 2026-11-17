@@ -21,17 +21,20 @@ type MQTTPasswords interface {
 }
 
 const (
-	fieldMQTTMode     = "mqtt_password_mode"
-	fieldMQTTPassword = "mqtt_password"
-	maxMQTTPassword   = 128
+	fieldMQTTMode      = "mqtt_password_mode"
+	fieldMQTTModeShown = "mqtt_password_mode_shown" // the mode the form showed (hidden)
+	fieldMQTTPassword  = "mqtt_password"
+	maxMQTTPassword    = 128
 )
 
 // mqttChange is what the posted edit form asks for. apply is false when the form carries no mode
-// field or nothing changes; the stored value is then left alone.
+// field or nothing changes; the stored value is then left alone. shown is the mode a re-rendered
+// form posts back as the one it showed.
 type mqttChange struct {
 	mode  model.MQTTPasswordMode
 	plain string
 	apply bool
+	shown model.MQTTPasswordMode
 }
 
 // mqttFormChange reads the MQTT password section of the edit form. The password is write-only:
@@ -40,32 +43,40 @@ type mqttChange struct {
 // mqtt_password field; nothing is stored when it is set.
 func mqttFormChange(r *http.Request, old model.Device) (c mqttChange, mode model.MQTTPasswordMode, errMsg string) {
 	if _, present := r.PostForm[fieldMQTTMode]; !present {
-		return mqttChange{}, old.MQTTPasswordMode, ""
+		return mqttChange{shown: old.MQTTPasswordMode}, old.MQTTPasswordMode, ""
 	}
 	mode = model.MQTTPasswordMode(r.PostFormValue(fieldMQTTMode))
 	pw := r.PostFormValue(fieldMQTTPassword)
+	// The section is touched when the person changed the select from the mode the form showed, typed a password,
+	// or asked to retry the stored one. The learner changes the stored mode without a person (#609), so the
+	// comparison is with the mode shown, not the one stored now; a form without that field compares with the
+	// stored mode. An untouched section writes nothing (no audit, no refusal cleared) and shows the stored mode.
+	shown := old.MQTTPasswordMode
+	if _, present := r.PostForm[fieldMQTTModeShown]; present {
+		shown = model.MQTTPasswordMode(r.PostFormValue(fieldMQTTModeShown))
+	}
+	if mode == shown && (mode != model.MQTTPasswordOwn || pw == "") && r.PostFormValue("retry_mqtt_password") != "1" {
+		return mqttChange{shown: old.MQTTPasswordMode}, old.MQTTPasswordMode, ""
+	}
 	switch mode {
-	case model.MQTTPasswordNone, model.MQTTPasswordBroker:
-		c = mqttChange{mode: mode}
+	case model.MQTTPasswordNone, model.MQTTPasswordBroker, model.MQTTPasswordEmpty:
+		c = mqttChange{mode: mode, shown: shown}
 	case model.MQTTPasswordOwn:
 		switch {
 		case pw != "":
 			if len(pw) > maxMQTTPassword || strings.ContainsAny(pw, "\"\\") || strings.ContainsFunc(pw, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
-				return mqttChange{}, mode, "Use up to 128 characters, without quotes, backslashes or control characters."
+				return mqttChange{shown: shown}, mode, "Use up to 128 characters, without quotes, backslashes or control characters."
 			}
-			c = mqttChange{mode: mode, plain: pw}
+			c = mqttChange{mode: mode, plain: pw, shown: shown}
 		case old.MQTTPasswordMode == model.MQTTPasswordOwn && old.MQTTPassword != "":
-			c = mqttChange{mode: mode, plain: old.MQTTPassword} // blank keeps the stored one
+			c = mqttChange{mode: mode, plain: old.MQTTPassword, shown: shown} // blank keeps the stored one
 		default:
-			return mqttChange{}, mode, "Enter the device's MQTT password."
+			return mqttChange{shown: shown}, mode, "Enter the device's MQTT password."
 		}
 	default:
-		return mqttChange{}, old.MQTTPasswordMode, "Choose where the password comes from."
+		return mqttChange{shown: shown}, old.MQTTPasswordMode, "Choose where the password comes from."
 	}
-	// Only a touched section writes (and clears the refused mark): mode or password changed, or the
-	// person asked to retry the stored one. Unrelated saves leave it, and the audit log, alone.
-	touched := mode != old.MQTTPasswordMode || (mode == model.MQTTPasswordOwn && pw != "") || r.PostFormValue("retry_mqtt_password") == "1"
-	c.apply = touched
+	c.apply = true
 	return c, mode, ""
 }
 

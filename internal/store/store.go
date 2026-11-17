@@ -41,9 +41,10 @@ type DeviceStore interface {
 	// device is ErrNotFound.
 	DeleteDevice(ctx context.Context, id model.DeviceID) error
 	// SetMQTTPassword stores the device's MqttPassword mode and, for mode own, the sealed value;
-	// it clears the bad mark. UpdateDevice never touches these columns.
+	// it clears the bad mark and the test result, and records the save as typed, now. UpdateDevice
+	// never touches these columns.
 	SetMQTTPassword(ctx context.Context, id model.DeviceID, mode model.MQTTPasswordMode, plain string) error
-	// MarkMQTTPasswordBad records that the device refused the password at at.
+	// MarkMQTTPasswordBad records that the device refused the password at at; it ends a passed test.
 	MarkMQTTPasswordBad(ctx context.Context, id model.DeviceID, at time.Time) error
 	// SetFWReach records whether the device reaches the firmware server (zero value: unknown).
 	SetFWReach(ctx context.Context, id model.DeviceID, r model.FWReach) error

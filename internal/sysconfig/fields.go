@@ -134,6 +134,8 @@ var fields = []Field{
 	{Key: "MQTT_ACL_WARNING_HIDDEN", Group: GroupMQTT, Label: "Hide the broker ACL warning", Apply: Live,
 		Help: "Every client of this broker can read device backups, passwords included. The warning comes back when you change the broker."},
 	{Key: "MQTT_FULLTOPIC", Group: GroupMQTT, Label: "Full topic pattern", Apply: Live, Help: "Must contain %prefix% and %topic% once each."},
+	{Key: "MQTT_PASSWORD_FROM_BACKUPS", Bool: true, Group: GroupMQTT, Label: "Take device MQTT passwords from backups", Apply: Live,
+		Help: "On by default. Each device's MqttPassword is read from its newest decoded backup, after every backup; a password typed after that backup stays. Off: nothing more is learned, learned passwords stay."},
 
 	{Key: "DISCOVERY_MQTT", Bool: true, Group: GroupDiscovery, Label: "Discover devices from MQTT", Apply: Live, Help: "Needs MQTT. Finds are proposals; an admin accepts them."},
 	{Key: "DISCOVERY_SCAN", Bool: true, Group: GroupDiscovery, Label: "Scheduled network scan", Apply: Live, Help: "Off by default. Probes the CIDRs below on a schedule."},

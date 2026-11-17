@@ -624,6 +624,21 @@ func devMACs(dev model.Device) []string {
 // hasMAC reports whether the inventory holds a MAC for dev, the only thing the host at its address can be compared with.
 func hasMAC(dev model.Device) bool { return len(devMACs(dev)) > 0 }
 
+// SnapshotShowsDevice reports whether a run's snapshot (the JSON the run stores beside its dump, read over the dump's
+// transport) holds a Status 5 reply whose MAC is one of dev's MACs. A dump over HTTP comes from whatever host answers
+// at the stored address, so only this shows that the run is dev's own. False when Status 5 failed, holds no MAC, or
+// the inventory holds none for dev.
+func SnapshotShowsDevice(snap []byte, dev model.Device) bool {
+	var s struct {
+		Status5 struct{ StatusNET struct{ Mac string } }
+	}
+	if json.Unmarshal(snap, &s) != nil {
+		return false
+	}
+	got := transport.NormMAC(s.Status5.StatusNET.Mac)
+	return got != "" && slices.Contains(devMACs(dev), got)
+}
+
 // sideCall lists name among the HTTP calls beside a dump over MQTT when HTTP carried calls made under tr. A call the
 // router stopped before it sent anything (HTTP known to fail) is not listed, nor are calls that went over MQTT (#924).
 func sideCall(side *[]string, name string, tr *transport.Trace) {

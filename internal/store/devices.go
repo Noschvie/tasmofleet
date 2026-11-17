@@ -17,7 +17,8 @@ const deviceCols = `id, name, address, port, mac, topic, full_topic, tags, notes
 	fw_language, flash_size_kb, program_flash_kb, free_kb, identity_at, created_at, updated_at, mqtt_host, mqtt_port,
 	net_hostname, net_ip, net_gateway, net_ssid, net_bssid, net_channel, net_wired, net_at, device_name, device_name_kept,
 	net_subnet, net_dns, ota_url, relay_names, group_topic, ota_url_read_at, group_topic_read_at,
-	mqtt_password, mqtt_password_mode, mqtt_password_bad_at, fw_reach, fw_reach_at, fw_reach_detail, identity_lang_known, fwr_facts, build_memory`
+	mqtt_password, mqtt_password_mode, mqtt_password_bad_at, fw_reach, fw_reach_at, fw_reach_detail, identity_lang_known, fwr_facts, build_memory,
+	mqtt_password_source, mqtt_password_set_at, mqtt_password_ok_at`
 
 // relayNamesJSON is the stored form of relay names (a JSON array like tags); "" for none.
 func relayNamesJSON(names []string) string {
@@ -40,14 +41,16 @@ func (s *SQLite) scanDevice(r scanner) (model.Device, error) {
 	var identAt, created, updated, netAt int64
 	var otaAt, groupAt sql.NullInt64
 	var sealedMQTT, pwMode, reach, fwr string
-	var badAt, reachAt sql.NullInt64
+	var badAt, reachAt, pwSetAt, pwOKAt sql.NullInt64
 	var buildMemory sql.NullString
+	var pwSource string
 	err := r.Scan(&d.ID, &d.Name, &d.Address, &d.Port, &d.MAC, &d.Topic, &d.FullTopic, &tags, &d.Notes, &d.HTTPUser, &sealed,
 		&excluded, &mqtt, &family, &d.Identity.Hardware, &single, &d.Identity.Version, &d.Identity.Image, &d.Identity.Variant,
 		&d.Identity.Language, &d.Identity.FlashSizeKB, &d.Identity.ProgramFlashSizeKB, &d.Identity.FreeKB, &identAt, &created, &updated, &d.MQTTHost, &d.MQTTPort,
 		&d.Net.Hostname, &d.Net.IP, &d.Net.Gateway, &d.Net.SSID, &d.Net.BSSID, &d.Net.Channel, &wired, &netAt, &d.DeviceName, &d.KeptDeviceName,
 		&d.Net.Subnet, &d.Net.DNS, &d.OTAURL, &relayNames, &d.GroupTopic, &otaAt, &groupAt,
-		&sealedMQTT, &pwMode, &badAt, &reach, &reachAt, &d.FWReach.Detail, &langKnown, &fwr, &buildMemory)
+		&sealedMQTT, &pwMode, &badAt, &reach, &reachAt, &d.FWReach.Detail, &langKnown, &fwr, &buildMemory,
+		&pwSource, &pwSetAt, &pwOKAt)
 	if err != nil {
 		return model.Device{}, err
 	}
@@ -83,6 +86,8 @@ func (s *SQLite) scanDevice(r scanner) (model.Device, error) {
 	}
 	d.MQTTPasswordMode = model.MQTTPasswordMode(pwMode)
 	d.MQTTPasswordBadAt = fromMS(badAt.Int64)
+	d.MQTTPasswordSource = model.MQTTPasswordSource(pwSource)
+	d.MQTTPasswordSetAt, d.MQTTPasswordOKAt = fromMS(pwSetAt.Int64), fromMS(pwOKAt.Int64)
 	d.FWReach.State, d.FWReach.At = model.FWReachState(reach), fromMS(reachAt.Int64)
 	d.Identity.LanguageKnown = langKnown != 0
 	if d.Identity.FWR, err = parseFWR(fwr); err != nil {
@@ -665,35 +670,97 @@ func (s *SQLite) DataVersion(ctx context.Context) (int64, error) {
 	return v, err
 }
 
-// SetMQTTPassword stores how the device's MqttPassword is found (D6) and clears the bad mark. In
-// mode own, plain is sealed like the web password and must not be empty; in the other modes plain
-// is ignored and any stored value is removed, so no stale secret stays at rest.
+// SetMQTTPassword stores how the device's MqttPassword is found (D6), typed by a person, and clears
+// the bad mark and the test result. In mode own, plain is sealed like the web password and must not be
+// empty; in the other modes plain is ignored and any stored value is removed, so no stale secret stays
+// at rest. The save is the newest fact about the password: its time becomes the set time, so only a
+// backup taken after it replaces it (ApplyMQTTPasswordFromBackup).
 func (s *SQLite) SetMQTTPassword(ctx context.Context, id model.DeviceID, mode model.MQTTPasswordMode, plain string) error {
-	sealed := ""
-	switch mode {
-	case model.MQTTPasswordNone, model.MQTTPasswordBroker:
-	case model.MQTTPasswordOwn:
-		if plain == "" {
-			return errors.New("store: an own MQTT password must not be empty")
-		}
-		var err error
-		if sealed, err = s.box.Seal(plain); err != nil {
-			return err
-		}
-	default:
-		return fmt.Errorf("store: unknown MQTT password mode %q", mode)
+	sealed, err := s.sealMQTTPassword(mode, plain)
+	if err != nil {
+		return err
 	}
-	return affected(s.db.ExecContext(ctx, `UPDATE devices SET mqtt_password=?, mqtt_password_mode=?, mqtt_password_bad_at=NULL, updated_at=? WHERE id=?`,
-		sealed, string(mode), toMS(s.now()), id))
+	now := toMS(s.now())
+	return affected(s.db.ExecContext(ctx, `UPDATE devices SET mqtt_password=?, mqtt_password_mode=?, mqtt_password_bad_at=NULL,
+		mqtt_password_source=?, mqtt_password_set_at=?, mqtt_password_ok_at=NULL, updated_at=? WHERE id=?`,
+		sealed, string(mode), string(model.MQTTPasswordTyped), now, now, id))
 }
 
-// MarkMQTTPasswordBad records that the device refused the password ("Error 1") at at.
+// sealMQTTPassword checks the mode and seals plain for mode own ("" for every other mode).
+func (s *SQLite) sealMQTTPassword(mode model.MQTTPasswordMode, plain string) (string, error) {
+	switch mode {
+	case model.MQTTPasswordNone, model.MQTTPasswordBroker, model.MQTTPasswordEmpty:
+		return "", nil
+	case model.MQTTPasswordOwn:
+		if plain == "" {
+			return "", errors.New("store: an own MQTT password must not be empty")
+		}
+		return s.box.Seal(plain)
+	}
+	return "", fmt.Errorf("store: unknown MQTT password mode %q", mode)
+}
+
+// ApplyMQTTPasswordFromBackup stores the mode and password learned from the device's decoded backup taken
+// at takenAt (#609), only when that backup is newer than the stored fact (a typed save or an earlier
+// backup): the check is part of the UPDATE, so a save that lands at the same moment is never overwritten
+// by an older backup. It clears the bad mark and the test result like a save. applied is false when the
+// stored fact is as new or newer, or the device is gone.
+func (s *SQLite) ApplyMQTTPasswordFromBackup(ctx context.Context, id model.DeviceID, mode model.MQTTPasswordMode, plain string, takenAt time.Time) (applied bool, err error) {
+	if takenAt.IsZero() {
+		return false, errors.New("store: a password from a backup needs the backup's time")
+	}
+	if mode == model.MQTTPasswordNone {
+		return false, errors.New("store: a backup always gives a password mode")
+	}
+	sealed, err := s.sealMQTTPassword(mode, plain)
+	if err != nil {
+		return false, err
+	}
+	res, err := s.db.ExecContext(ctx, `UPDATE devices SET mqtt_password=?, mqtt_password_mode=?, mqtt_password_bad_at=NULL,
+		mqtt_password_source=?, mqtt_password_set_at=?, mqtt_password_ok_at=NULL, updated_at=?
+		WHERE id=? AND (mqtt_password_set_at IS NULL OR mqtt_password_set_at < ?)`,
+		sealed, string(mode), string(model.MQTTPasswordFromBackup), toMS(takenAt), toMS(s.now()), id, toMS(takenAt))
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
+// MarkMQTTPasswordBad records that the device refused the password ("Error 1") at at; a test that
+// passed before no longer counts.
 func (s *SQLite) MarkMQTTPasswordBad(ctx context.Context, id model.DeviceID, at time.Time) error {
 	if at.IsZero() {
 		return errors.New("store: the bad mark needs a time")
 	}
-	return affected(s.db.ExecContext(ctx, `UPDATE devices SET mqtt_password_bad_at=?, updated_at=? WHERE id=?`,
+	return affected(s.db.ExecContext(ctx, `UPDATE devices SET mqtt_password_bad_at=?, mqtt_password_ok_at=NULL, updated_at=? WHERE id=?`,
 		nullMS(at), toMS(s.now()), id))
+}
+
+// MarkMQTTPasswordBadFor is MarkMQTTPasswordBad for the password that was sent: tested is its set time
+// (Device.MQTTPasswordSetAt of the record whose password went out). When the password changed since (a save, or
+// the learner took a newer one from a backup), the refusal is about the old one and nothing is written
+// (store.ErrNotFound), like MarkMQTTPasswordOK.
+func (s *SQLite) MarkMQTTPasswordBadFor(ctx context.Context, id model.DeviceID, tested, at time.Time) error {
+	if at.IsZero() {
+		return errors.New("store: the bad mark needs a time")
+	}
+	return affected(s.db.ExecContext(ctx, `UPDATE devices SET mqtt_password_bad_at=?, mqtt_password_ok_at=NULL, updated_at=?
+		WHERE id=? AND COALESCE(mqtt_password_set_at, 0)=?`,
+		nullMS(at), toMS(s.now()), id, toMS(tested)))
+}
+
+// MarkMQTTPasswordOK records that the device accepted the password in a test at at, and clears the bad
+// mark. tested is the set time of the password that was tested (Device.MQTTPasswordSetAt when the test
+// read the device): when the password changed since, the result is about the old one and nothing is
+// written (store.ErrNotFound).
+func (s *SQLite) MarkMQTTPasswordOK(ctx context.Context, id model.DeviceID, tested, at time.Time) error {
+	if at.IsZero() {
+		return errors.New("store: the test result needs a time")
+	}
+	return affected(s.db.ExecContext(ctx, `UPDATE devices SET mqtt_password_ok_at=?, mqtt_password_bad_at=NULL, updated_at=?
+		WHERE id=? AND COALESCE(mqtt_password_set_at, 0)=?`,
+		nullMS(at), toMS(s.now()), id, toMS(tested)))
 }
 
 // SetFWReach records whether the device reaches the firmware server; the zero FWReach resets it

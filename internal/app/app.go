@@ -220,6 +220,7 @@ func (a *runtime) run(ctx context.Context) error {
 	if err := a.setupBackups(bg); err != nil {
 		return err
 	}
+	a.startMQTTPasswordLearner(bg) // reads the backups setupBackups opened; a pass over every device now (#609)
 	if err := a.setupFirmware(); err != nil {
 		return err
 	}

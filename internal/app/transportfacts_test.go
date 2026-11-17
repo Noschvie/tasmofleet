@@ -574,3 +574,24 @@ func TestAnExpiredFailureNewerThanTheAnswerIsNotReachable(t *testing.T) {
 		t.Errorf("an answer after the failed call reads %v, want OK", hs.State)
 	}
 }
+
+// Why (#609): a password learned from a backup is the device's truth, whatever it holds; one that the
+// transfer command cannot carry must be shown as unusable before any transfer, so Choose sends the backup
+// over HTTP with a sentence instead of choosing MQTT and failing late. The sentence never holds the value.
+// The empty mode is a password like any other.
+func TestALearnedPasswordTheCommandCannotCarryIsUnusable(t *testing.T) {
+	d := model.Device{ID: 1, Topic: "t", MQTT: model.MQTTOurs, MQTTPasswordMode: model.MQTTPasswordOwn, MQTTPassword: `pa"ss`,
+		GroupTopic: "g", GroupTopicReadAt: factsNow}
+	f, _ := newFacts([]model.Device{d}, fakeFactsHealth{1: {LWT: "Online"}}, nil).Facts(context.Background(), 1)
+	if f.Password.Unusable == "" || strings.Contains(f.Password.Unusable, `pa"ss`) {
+		t.Fatalf("unusable = %q", f.Password.Unusable)
+	}
+	if p := transport.Choose(f); p.Backup != transport.HTTP || !contains(p.Reason(transport.ActBackup), "cannot be sent") {
+		t.Fatalf("backup = %s, %q", p.Backup, p.Reason(transport.ActBackup))
+	}
+	d.MQTTPasswordMode, d.MQTTPassword = model.MQTTPasswordEmpty, ""
+	f, _ = newFacts([]model.Device{d}, fakeFactsHealth{1: {LWT: "Online"}}, nil).Facts(context.Background(), 1)
+	if p := transport.Choose(f); f.Password.Unusable != "" || p.Backup != transport.MQTT {
+		t.Fatalf("empty mode: %+v, backup %s (%q)", f.Password, p.Backup, p.Reason(transport.ActBackup))
+	}
+}

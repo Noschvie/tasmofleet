@@ -508,11 +508,10 @@ func downloadStart(password string) (string, error) {
 	return `{"Password":"` + password + `","Type":` + strconv.Itoa(downloadType) + `}`, nil
 }
 
-// checkFilePassword refuses a password that cannot be put into the start command verbatim.
+// checkFilePassword refuses a password that cannot be put into the start command verbatim. An empty one
+// is sent as it is: it is the device's password when its MqttPassword is empty (#609); whether a device
+// has a password to send at all is decided by the caller (model.FilePassword).
 func checkFilePassword(password string) error {
-	if password == "" {
-		return fmt.Errorf("%w: no MQTT password is set for this device", ErrRefused)
-	}
 	for _, r := range password {
 		if r == '"' || r == '\\' || r < 0x20 || r == 0x7f {
 			return fmt.Errorf("%w: the MQTT password contains a character that cannot be sent in a file transfer command", ErrRefused)

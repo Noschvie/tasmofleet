@@ -162,19 +162,42 @@ func mqttBlocker(f Facts, strict bool) string {
 	return ""
 }
 
-// passwordBlocker says why a transfer over MQTT cannot carry the device's MqttPassword.
+// passwordBlocker says why a transfer over MQTT cannot carry the device's MqttPassword. Which modes give a
+// password is model.FilePassword's rule alone: the facts source turns a mode that gives none into Unusable.
 func passwordBlocker(f Facts, what string) string {
+	if !f.Password.BadAt.IsZero() && f.Password.Unusable == "" {
+		return "the device refused its MQTT password (since " + f.Password.BadAt.UTC().Format("2006-01-02 15:04 UTC") + "); enter the right one to " + what + " over MQTT"
+	}
+	return passwordMissing(f, what)
+}
+
+// passwordMissing says why the device has no MqttPassword to send, the refusal mark aside.
+func passwordMissing(f Facts, what string) string {
 	switch {
 	case f.Password.Unusable != "":
 		return f.Password.Unusable
-	case !f.Password.BadAt.IsZero():
-		return "the device refused its MQTT password (since " + f.Password.BadAt.UTC().Format("2006-01-02 15:04 UTC") + "); enter the right one to " + what + " over MQTT"
 	case f.Password.Mode == model.MQTTPasswordNone:
 		return "enter the device's MQTT password to " + what + " over MQTT"
-	case f.Password.Mode != model.MQTTPasswordBroker && f.Password.Mode != model.MQTTPasswordOwn:
+	case !knownMode(f.Password.Mode):
 		return "the device's MQTT password mode is not recognised"
 	}
 	return ""
+}
+
+// knownMode reports whether model.FilePassword gives a password for mode at all. It is asked with stand-in
+// values, so the list of modes stays in that one function.
+func knownMode(mode model.MQTTPasswordMode) bool {
+	_, ok := model.FilePassword(model.Device{MQTTPasswordMode: mode, MQTTPassword: "-"}, "-")
+	return ok
+}
+
+// passwordTestBlocker: the password test (#609) follows the strict rule of transfers, since it starts a
+// FileDownload, but ignores the refusal mark: checking a refused password again is what the test is for.
+func passwordTestBlocker(f Facts) string {
+	if s := mqttBlocker(f, true); s != "" {
+		return s
+	}
+	return passwordMissing(f, "test it")
 }
 
 // transferBlocker combines the MQTT and password requirements of a transfer.

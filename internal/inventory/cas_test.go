@@ -109,3 +109,28 @@ func TestUpdateIfIgnoresWhatTheTransportCodeLearns(t *testing.T) {
 		t.Fatalf("update lost the learned state or the change: %+v", got)
 	}
 }
+
+// Why (#609): TasmoFleet takes a device's MqttPassword from its backups in the background, at any moment.
+// An edit, a discovery or an import update that read the record before such a write must still land; the
+// password is not the inventory's field (UpdateDevice never writes it), and a conflict would make the
+// person's save fail for a change they did not make.
+func TestALearnedPasswordIsNoEditConflict(t *testing.T) {
+	m, st, _, _, _ := newSvcV(t)
+	ctx := context.Background()
+	id, _ := m.Create(ctx, "t", dev("lamp", "172.31.13.10"))
+	read, _ := m.Get(ctx, id)
+	st.mu.Lock() // what ApplyMQTTPasswordFromBackup and MarkMQTTPasswordOK do in the real store
+	d := st.devs[id]
+	d.MQTTPassword, d.MQTTPasswordMode, d.MQTTPasswordSource = "devicepw", model.MQTTPasswordOwn, model.MQTTPasswordFromBackup
+	d.MQTTPasswordSetAt, d.MQTTPasswordOKAt = time.Now(), time.Now()
+	st.devs[id] = d
+	st.mu.Unlock()
+	next := read
+	next.Notes = "edited"
+	if err := m.UpdateIf(ctx, "admin", read, next); err != nil {
+		t.Fatalf("a learned password turned the edit into a conflict: %v", err)
+	}
+	if got, _ := m.Get(ctx, id); got.Notes != "edited" || got.MQTTPasswordMode != model.MQTTPasswordOwn {
+		t.Fatalf("the edit or the learned password was lost: %+v", got)
+	}
+}

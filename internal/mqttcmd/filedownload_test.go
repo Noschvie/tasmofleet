@@ -142,17 +142,18 @@ func TestDownloadWrongPasswordIsTypedAndDoesNotLeakIt(t *testing.T) {
 	}
 }
 
-// Why: no password, nothing published (acceptance: "No password set -> unavailable; nothing is
-// published"). Characters the device's parser might read differently are refused, not escaped.
+// Why: characters the device's parser might read differently are refused, not escaped, and nothing
+// is published. (An empty password is the password of a device whose MqttPassword is empty, #609;
+// "no password set" is refused by the router, model.FilePassword.)
 func TestDownloadRefusesUnsendablePasswordsWithoutPublishing(t *testing.T) {
 	b := &fakeBus{}
 	c := newChan(b)
-	for _, pw := range []string{"", `a"b`, `a\b`, "a\nb"} {
+	for _, pw := range []string{`a"b`, `a\b`, "a\nb"} {
 		_, err := c.Download(t.Context(), plug(), pw)
 		if !errors.Is(err, ErrRefused) {
 			t.Errorf("%q: %v", pw, err)
 		}
-		if err != nil && pw != "" && strings.Contains(err.Error(), pw) {
+		if err != nil && strings.Contains(err.Error(), pw) {
 			t.Errorf("error repeats the password: %v", err)
 		}
 	}

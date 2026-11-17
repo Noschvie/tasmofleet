@@ -109,6 +109,10 @@ type Config struct {
 	// (#880, #962); the warning stays away only while it is still that broker. Written by the checkbox on System, MQTT,
 	// not by hand. It was MQTT_ACL_CONFIRMED until 0.41 (migration 0051 moved the stored value).
 	MQTTACLWarningHidden string `env:"MQTT_ACL_WARNING_HIDDEN" ui:"true"`
+	// MQTTPasswordFromBackups: TasmoFleet takes each device's MqttPassword from its newest decoded backup (#609),
+	// after every backup and in a pass over the existing ones at start. Off: nothing is learned any more; what was
+	// learned stays, like a typed password.
+	MQTTPasswordFromBackups bool `env:"MQTT_PASSWORD_FROM_BACKUPS" ui:"true" default:"true"`
 
 	// DeviceDefaultPassword is the fleet's usual Tasmota web password. It only
 	// prefills the forms that add a device (manual add, accepting a proposal);

@@ -260,3 +260,97 @@ func TestNoMQTTSectionWithoutTheStore(t *testing.T) {
 		t.Fatal("section rendered without MQTTPasswords")
 	}
 }
+
+// selectedMode is the value a browser posts for the edit form's mqtt_password_mode: the selected option,
+// or the first one when none is selected.
+func selectedMode(t *testing.T, body string) string {
+	t.Helper()
+	i := strings.Index(body, `name="mqtt_password_mode"`)
+	if i < 0 {
+		t.Fatal("no MQTT password source in the form")
+	}
+	sel := body[i:]
+	sel = sel[:strings.Index(sel, "</select>")]
+	var values []string
+	for _, opt := range strings.Split(sel, "<option")[1:] {
+		v := opt[strings.Index(opt, `value="`)+7:]
+		v = v[:strings.Index(v, `"`)]
+		if strings.Contains(opt[:strings.Index(opt, ">")], "selected") {
+			return v
+		}
+		values = append(values, v)
+	}
+	if len(values) == 0 {
+		t.Fatal("no options")
+	}
+	return values[0]
+}
+
+// Why (#609): TasmoFleet learns the "no password" mode from a device's backup. The edit form must show it,
+// so that saving an unrelated field (the notes) posts the mode back unchanged; before, the form had no such
+// choice, the browser posted its first option ("Not set"), and the save silently undid the learned mode and
+// blocked every transfer over MQTT.
+func TestAnUnrelatedSaveKeepsTheNoPasswordMode(t *testing.T) {
+	d := model.Device{ID: 7, Name: "porch", Address: "10.0.0.7", MQTTPasswordMode: model.MQTTPasswordEmpty}
+	e, pw := mqttEnv(t, d)
+	_, body := e.do(t, "GET", "/devices/7/edit", "admin", nil)
+	mode := selectedMode(t, body)
+	if mode != string(model.MQTTPasswordEmpty) {
+		t.Fatalf("the form shows mode %q for a device without a password", mode)
+	}
+	res, _ := e.do(t, "POST", "/devices/7", "admin", editPost(url.Values{"mqtt_password_mode": {mode}, "notes": {"x"}}))
+	if res.StatusCode != 303 || len(pw.got()) != 0 || e.inv.devs[7].MQTTPasswordMode != model.MQTTPasswordEmpty {
+		t.Fatalf("status %d, calls %+v, mode %q", res.StatusCode, pw.got(), e.inv.devs[7].MQTTPasswordMode)
+	}
+	// Choosing it stores the mode without a password, like broker mode.
+	e, pw = mqttEnv(t, ownDevice())
+	res, _ = e.do(t, "POST", "/devices/7", "admin", editPost(url.Values{"mqtt_password_mode": {"empty"}, "mqtt_password": {"ignored"}}))
+	if c := pw.got(); res.StatusCode != 303 || len(c) != 1 || c[0].mode != model.MQTTPasswordEmpty || c[0].plain != "" {
+		t.Fatalf("status %d, calls %+v", res.StatusCode, c)
+	}
+}
+
+// shownMode is the hidden mode the form showed, which the browser posts back.
+func shownMode(t *testing.T, body string) string {
+	t.Helper()
+	const at = `name="mqtt_password_mode_shown" value="`
+	i := strings.Index(body, at)
+	if i < 0 {
+		t.Fatal("the form does not carry the mode it showed")
+	}
+	v := body[i+len(at):]
+	return v[:strings.Index(v, `"`)]
+}
+
+// Why (#609): the learner stores a device's password from a backup without a person. An edit form opened
+// before that still shows the old mode, and saving an unrelated field posts it back. That is no choice of
+// the person: it must not replace the learned password with "Not set" (dated now, so newer than the backup)
+// nor be audited as the admin's change. A select the person did change still counts, whatever the learner
+// stored meanwhile.
+func TestAStaleFormKeepsALearnedPassword(t *testing.T) {
+	e, pw := mqttEnv(t, model.Device{ID: 7, Name: "porch", Address: "10.0.0.7"})
+	_, body := e.do(t, "GET", "/devices/7/edit", "admin", nil)
+	mode, shown := selectedMode(t, body), shownMode(t, body)
+	if mode != "" || shown != "" {
+		t.Fatalf("the form shows %q (hidden %q) for a device without a password", mode, shown)
+	}
+	e.inv.mu.Lock() // the learner stores the backup's password after the form was opened
+	d := e.inv.devs[7]
+	d.MQTTPasswordMode, d.MQTTPassword = model.MQTTPasswordOwn, "learned-pw-1"
+	e.inv.devs[7] = d
+	e.inv.mu.Unlock()
+	res, _ := e.do(t, "POST", "/devices/7", "admin", editPost(url.Values{"mqtt_password_mode": {mode}, "mqtt_password_mode_shown": {shown}, "notes": {"x"}}))
+	if d := e.inv.devs[7]; res.StatusCode != 303 || len(pw.got()) != 0 || d.MQTTPasswordMode != model.MQTTPasswordOwn || d.MQTTPassword != "learned-pw-1" {
+		t.Fatalf("status %d, calls %+v, stored %q/%q", res.StatusCode, pw.got(), d.MQTTPasswordMode, d.MQTTPassword)
+	}
+	res, _ = e.do(t, "POST", "/devices/7", "admin", editPost(url.Values{"mqtt_password_mode": {"broker"}, "mqtt_password_mode_shown": {shown}}))
+	if c := pw.got(); res.StatusCode != 303 || len(c) != 1 || c[0].mode != model.MQTTPasswordBroker {
+		t.Fatalf("a changed select was not stored: status %d, calls %+v", res.StatusCode, c)
+	}
+	// A form that showed "Own password" (blank field) posted after the learner stored broker mode asks for
+	// nothing: no error for a section the person left alone, and broker mode stays.
+	res, _ = e.do(t, "POST", "/devices/7", "admin", editPost(url.Values{"mqtt_password_mode": {"own"}, "mqtt_password_mode_shown": {"own"}, "notes": {"y"}}))
+	if d := e.inv.devs[7]; res.StatusCode != 303 || len(pw.got()) != 1 || d.MQTTPasswordMode != model.MQTTPasswordBroker {
+		t.Fatalf("status %d, calls %+v, stored %q", res.StatusCode, pw.got(), d.MQTTPasswordMode)
+	}
+}

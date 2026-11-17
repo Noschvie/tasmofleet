@@ -82,6 +82,13 @@ type PasswordMarker interface {
 	MarkMQTTPasswordBad(ctx context.Context, id model.DeviceID, at time.Time) error
 }
 
+// PasswordRefusalMarker records a refusal of the password set at tested only (store.MarkMQTTPasswordBadFor);
+// store.ErrNotFound means it changed since. Options.Marker is asserted to it: since the learner replaces
+// passwords on its own (#609), a refusal of the password that was sent must not mark a newer one.
+type PasswordRefusalMarker interface {
+	MarkMQTTPasswordBadFor(ctx context.Context, id model.DeviceID, tested, at time.Time) error
+}
+
 // Options configure the Router.
 type Options struct {
 	HTTP    tasmota.Client // required: the raw HTTP client
@@ -1004,28 +1011,31 @@ func (r *Router) mqttDownload(ctx context.Context, d model.Device) ([]byte, erro
 		return nil, &BackupBlockedError{Err: fmt.Errorf("%w: %w", tasmota.ErrUnreachable, mqttcmd.ErrRefused), Reason: "a backup over MQTT was refused: " + mqttcmd.Reason(err), Attempted: errors.Is(err, mqttcmd.ErrPublished)}
 	}
 	if errors.Is(err, mqttcmd.ErrPasswordRefused) {
-		r.markPasswordBad(ctx, now.ID)
+		r.markPasswordRefused(ctx, now)
 		return nil, &BackupBlockedError{Err: err, Reason: "the device refused its MQTT password; enter the right one on the device's Edit page to back up over MQTT", Attempted: true}
 	}
 	return data, err
 }
 
-// downloadPassword resolves the device's MqttPassword per mode (D6): its own sealed value, or TasmoFleet's
-// live broker password. why is set when there is none to send or the device refused it before.
+// downloadPassword resolves the device's MqttPassword per mode (D6, model.FilePassword): its own sealed value,
+// TasmoFleet's live broker password, or the empty password (#609). why is set when there is none to send or
+// the device refused it before.
 func (r *Router) downloadPassword(d model.Device) (pw, why string) {
-	switch {
-	case !d.MQTTPasswordBadAt.IsZero():
+	if !d.MQTTPasswordBadAt.IsZero() {
 		return "", "the device refused its MQTT password; enter the right one"
-	case d.MQTTPasswordMode == model.MQTTPasswordOwn && d.MQTTPassword != "":
-		return d.MQTTPassword, ""
-	case d.MQTTPasswordMode == model.MQTTPasswordBroker:
-		if r.o.BrokerPassword != nil {
-			if bp := r.o.BrokerPassword(); bp != "" {
-				return bp, ""
-			}
-		}
+	}
+	if pw, ok := model.FilePassword(d, r.brokerPassword()); ok {
+		return pw, ""
 	}
 	return "", "the device has no usable MQTT password"
+}
+
+// brokerPassword is TasmoFleet's live broker password, "" when none is configured.
+func (r *Router) brokerPassword() string {
+	if r.o.BrokerPassword == nil {
+		return ""
+	}
+	return r.o.BrokerPassword()
 }
 
 // UploadFirmware passes straight to HTTP: an upload never fails over (D4).

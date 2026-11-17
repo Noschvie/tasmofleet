@@ -529,3 +529,12 @@ func TestTheCardNamesTheDeviceWhoseUnreadGroupTopicHoldsTheWritesBack(t *testing
 		t.Fatal("a device name reached the page as markup")
 	}
 }
+
+// Why (#609): a device learned to have no MQTT password must not read "Not set" on its page, which says
+// a password is missing and transfers are blocked; it is a password like the others and transfers send it.
+func TestTheNoPasswordModeIsShownAsAPassword(t *testing.T) {
+	r := passwordRow(transport.Facts{Password: transport.Password{Mode: model.MQTTPasswordEmpty}})
+	if r.Value != "No password" || r.Tone != ui.ToneOK || !strings.Contains(r.Sub, "empty") {
+		t.Fatalf("row = %+v", r)
+	}
+}

@@ -310,6 +310,8 @@ func (m *Manager) backup(ctx context.Context, owner, dev model.Device, note stri
 	cctx, coreVia := transport.WithTrace(ctx) // the dump and its snapshot, apart from the files (filesStep has its own traces)
 	defer func() { rep.via = coreVia.Via() }()
 	dctx, dumpVia := transport.WithTrace(cctx) // the transport that carried the dump
+	// The run's time is when the settings were read, not when its files are stored (#609).
+	readAt := m.o.Clock.Now()
 	dmp, err := m.o.Client.DownloadConfig(dctx, target)
 	if err != nil {
 		m.evidence(onDumpPath(cctx, dumpVia), target, dumpVia, err, rep)
@@ -365,7 +367,7 @@ func (m *Manager) backup(ctx context.Context, owner, dev model.Device, note stri
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fwVersion, fmt.Errorf("backup: %w", err)
 	}
-	taken := m.freeTimestamp(dir, base)
+	taken := m.freeTimestamp(dir, base, readAt)
 
 	files := []outFile{
 		{model.BackupConfigDump, "dmp", dmp, dmpNote, ""},
@@ -430,10 +432,11 @@ func (m *Manager) abandonRun(ctx context.Context, id model.DeviceID, stored []mo
 	return cause
 }
 
-// freeTimestamp returns now (UTC, whole seconds), moved forward until no file
-// of an earlier run in dir carries the same stamp.
-func (m *Manager) freeTimestamp(dir, base string) time.Time {
-	t := m.o.Clock.Now().UTC().Truncate(time.Second)
+// freeTimestamp returns readAt (UTC, whole seconds), moved forward until no file of an earlier run in dir carries
+// the same stamp. readAt is when the run read the device's settings: a password saved after that read is the newer
+// fact, however long the snapshot and the files step took (#609).
+func (m *Manager) freeTimestamp(dir, base string, readAt time.Time) time.Time {
+	t := readAt.UTC().Truncate(time.Second)
 	for {
 		_, err := os.Stat(filepath.Join(dir, fileName(t.Format(stampLayout), base, model.BackupConfigDump)))
 		if err != nil {

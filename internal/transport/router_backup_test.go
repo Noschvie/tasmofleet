@@ -17,15 +17,19 @@ import (
 // dlMQTT is the command channel with FileDownload: it records the passwords it was given.
 type dlMQTT struct {
 	fakeMQTT
-	pws  []string
-	data []byte
-	derr error
+	pws    []string
+	data   []byte
+	derr   error
+	during func() // runs while the device answers, before the result comes back
 }
 
 func (m *dlMQTT) Download(_ context.Context, _ model.Device, pw string) ([]byte, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.pws = append(m.pws, pw)
+	if m.during != nil {
+		m.during()
+	}
 	return m.data, m.derr
 }
 
@@ -107,6 +111,28 @@ func TestBackupWithoutAUsablePasswordPublishesNothingAndSaysWhy(t *testing.T) {
 				t.Fatalf("%v, downloads %v: the reason must be in the error", err, g.dl.pws)
 			}
 		})
+	}
+}
+
+// Why (#609): a backup that sent the old password and got Error 1 after the learner stored a newer one must
+// not mark the newer one, or every later transfer of the device is blocked for a password it never received.
+func TestARefusedBackupMarksOnlyThePasswordItSent(t *testing.T) {
+	g := newDLRig(t)
+	sent := time.Date(2026, 11, 17, 9, 0, 0, 0, time.UTC)
+	g.devs.d.MQTTPasswordSetAt = sent
+	mk := &setAtMarker{devs: g.devs}
+	g.r.o.Marker = mk
+	g.dl.derr = mqttcmd.ErrPasswordRefused
+	g.dl.during = func() {
+		g.devs.mu.Lock()
+		g.devs.d.MQTTPassword, g.devs.d.MQTTPasswordSetAt = "newpw", sent.Add(time.Minute)
+		g.devs.mu.Unlock()
+	}
+	if _, err := g.r.DownloadConfig(t.Context(), g.target()); !errors.Is(err, mqttcmd.ErrPasswordRefused) {
+		t.Fatal(err)
+	}
+	if len(g.dl.pws) != 1 || g.dl.pws[0] != "own-pw-1" || len(mk.ids) != 0 {
+		t.Fatalf("sent %q, the newer password was marked: %v", g.dl.pws, mk.ids)
 	}
 }
 

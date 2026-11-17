@@ -23,6 +23,9 @@ func (m *fileMQTT) DownloadFile(_ context.Context, _ model.Device, pw, path stri
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.files, m.pws = append(m.files, path), append(m.pws, pw)
+	if m.during != nil {
+		m.during()
+	}
 	if m.ferr != nil {
 		return nil, m.ferr
 	}
@@ -113,6 +116,37 @@ func TestARefusedPasswordOnAFileMarksItBad(t *testing.T) {
 	_, err := g.r.MQTTDownloadFile(t.Context(), g.devs.d, "/autoexec.be", 100)
 	if !errors.Is(err, mqttcmd.ErrPasswordRefused) || len(g.marker.ids) != 1 || g.marker.ids[0] != 7 {
 		t.Fatalf("%v, marked %v", err, g.marker.ids)
+	}
+}
+
+// Why (#609, #924): the learner stores a newer password on its own, also while a file of the backup is read with
+// the old one. The device's Error 1 then refuses the password that was sent, not the stored one: marking the new
+// password would hold back every MQTT transfer of the device for a password it never received. A refusal of the
+// password still stored is marked as before.
+func TestARefusedFileReadMarksOnlyThePasswordItSent(t *testing.T) {
+	g, fm := newFileRig(t)
+	sent := time.Date(2026, 11, 17, 9, 0, 0, 0, time.UTC)
+	g.devs.d.MQTTPasswordSetAt = sent
+	mk := &setAtMarker{devs: g.devs}
+	g.r.o.Marker = mk
+	fm.ferr = fmt.Errorf("%w: %w", mqttcmd.ErrPublished, mqttcmd.ErrPasswordRefused)
+	fm.during = func() { // a newer backup was learned while the device answered
+		g.devs.mu.Lock()
+		g.devs.d.MQTTPassword, g.devs.d.MQTTPasswordSetAt = "own-pw-2", sent.Add(time.Minute)
+		g.devs.mu.Unlock()
+	}
+	if _, err := g.r.MQTTDownloadFile(t.Context(), g.devs.d, "/autoexec.be", 100); !errors.Is(err, mqttcmd.ErrPasswordRefused) {
+		t.Fatal(err)
+	}
+	if len(fm.pws) != 1 || fm.pws[0] != "own-pw-1" || len(mk.ids) != 0 {
+		t.Fatalf("sent %q, the newer password was marked: %v", fm.pws, mk.ids)
+	}
+	fm.during = nil
+	if _, err := g.r.MQTTDownloadFile(t.Context(), g.devs.d, "/autoexec.be", 100); !errors.Is(err, mqttcmd.ErrPasswordRefused) {
+		t.Fatal(err)
+	}
+	if len(fm.pws) != 2 || fm.pws[1] != "own-pw-2" || len(mk.ids) != 1 || mk.ids[0] != 7 {
+		t.Fatalf("sent %q, a refusal of the stored password was not marked: %v", fm.pws, mk.ids)
 	}
 }
 

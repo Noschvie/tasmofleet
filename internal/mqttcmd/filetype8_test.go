@@ -138,6 +138,7 @@ func TestType8HeaderOverTheLimitAbortsBeforeAnyData(t *testing.T) {
 // Why: the file name travels inside the start command next to the password; a name the device's JSON parser
 // could read differently (quote, backslash, control character), or one that breaks the path rules of the
 // file calls (a dot file such as the settings, no leading slash), is refused before anything is published.
+// (An empty password is sendable, the one of a device without an MqttPassword, #609: TestAnEmptyPasswordIsSent.)
 func TestType8PathThatCannotBeSentVerbatimPublishesNothing(t *testing.T) {
 	b := &fakeBus{}
 	c := newChan(b)
@@ -145,9 +146,6 @@ func TestType8PathThatCannotBeSentVerbatimPublishesNothing(t *testing.T) {
 		if _, err := c.DownloadFile(t.Context(), plug(), dlPassword, p, 100); !errors.Is(err, ErrRefused) {
 			t.Errorf("%q: %v", p, err)
 		}
-	}
-	if _, err := c.DownloadFile(t.Context(), plug(), "", "/x.be", 100); !errors.Is(err, ErrRefused) {
-		t.Errorf("no password: %v", err)
 	}
 	if _, err := c.DownloadFile(t.Context(), plug(), dlPassword, "/x.be", 0); !errors.Is(err, ErrRefused) {
 		t.Errorf("no room for a byte: %v", err)
