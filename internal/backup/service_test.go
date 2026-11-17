@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/mqttcmd"
 	"github.com/hellwand/tasmofleet/internal/store"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
 	"github.com/hellwand/tasmofleet/internal/transport"
@@ -880,4 +881,153 @@ func TestLiveSnapshotRefusesSafebootAndMinimal(t *testing.T) {
 			t.Errorf("%s: sent %v", variant, e.dev.sent)
 		}
 	}
+}
+
+// errEmptyChunk is what mqttcmd.Download returns, through the router, when the device sends an empty Data
+// message (#887): the transfer published, failed, and is marked as an empty chunk.
+var errEmptyChunk = fmt.Errorf("%w: %w: %w", mqttcmd.ErrPublished, mqttcmd.ErrTransfer, mqttcmd.ErrEmptyData)
+
+// orderedDevice is the fake device that also notes when its dump returned, so a test sees what was sent
+// during the dump and what after it.
+type orderedDevice struct{ *fakeDevice }
+
+func (o orderedDevice) DownloadConfig(ctx context.Context, t tasmota.Target) ([]byte, error) {
+	b, err := o.fakeDevice.DownloadConfig(ctx, t)
+	o.mu.Lock()
+	o.sent = append(o.sent, "<dump returned>")
+	o.mu.Unlock()
+	return b, err
+}
+
+// Why (#887): an empty data chunk means the device could not allocate the memory to build it; the history
+// and the device page must say so, and that a restart usually helps, instead of the generic "did not hand
+// over its configuration" that leaves the person nothing to do.
+func TestEmptyChunkSaysTheDeviceRanShortOfMemory(t *testing.T) {
+	e := newEnv(t, nil)
+	e.dev.dlErr = errEmptyChunk
+	_, err := e.m.Backup(context.Background(), "t", 7)
+	if !errors.Is(err, mqttcmd.ErrEmptyData) {
+		t.Fatalf("the cause must stay in the chain: %v", err)
+	}
+	var ur interface{ UserReason() string }
+	if !errors.As(err, &ur) {
+		t.Fatalf("no sentence for the person (device page flash): %v", err)
+	}
+	if len(e.st.attempts) != 1 {
+		t.Fatalf("attempts %+v", e.st.attempts)
+	}
+	for _, got := range []string{e.st.attempts[0].Reason, ur.UserReason()} {
+		if !strings.Contains(got, "memory") || !strings.Contains(got, "restart") || strings.Contains(got, "did not hand over") {
+			t.Errorf("reason %q does not name the memory shortage and the restart", got)
+		}
+	}
+	// Any other transfer fault keeps the generic sentence: the memory text is only true for the empty chunk.
+	if got := AttemptReason(fmt.Errorf("backup: download config: %w", fmt.Errorf("%w: %w", mqttcmd.ErrPublished, mqttcmd.ErrTransfer))); strings.Contains(got, "memory") {
+		t.Errorf("another transfer fault reads %q", got)
+	}
+}
+
+// Why (#887): a failed backup carries its own evidence, the device's free heap and uptime right after the
+// failure, so a repeat can be judged without a second measurement. It is read with one Status 11 (never
+// Status 0, safety rule 2), only after the dump returned (the transfer released the device), and only when
+// the device answered the dump: a probe of a device that did not answer, or of a dump that was refused
+// before anything was sent, would only add load or ask the wrong transport.
+func TestFailedBackupRecordsHeapAndUptimeOfADeviceThatAnswered(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		err   error
+		probe bool
+	}{
+		{"empty chunk", errEmptyChunk, true},
+		{"other transfer fault", fmt.Errorf("%w: %w", mqttcmd.ErrPublished, mqttcmd.ErrTransfer), true},
+		{"unreadable HTTP answer", fmt.Errorf("%w: HTTP 500", tasmota.ErrBadResponse), true},
+		{"unreachable", tasmota.ErrUnreachable, false},
+		{"transfer timed out", fmt.Errorf("%w: %w: %w", mqttcmd.ErrPublished, mqttcmd.ErrTransfer, tasmota.ErrTimeout), false},
+		{"refused before sending", &transport.BackupBlockedError{Err: tasmota.ErrUnreachable, Reason: "no password"}, false},
+		{"password refused", &transport.BackupBlockedError{Err: fmt.Errorf("%w: %w", mqttcmd.ErrPublished, mqttcmd.ErrTransfer), Reason: "refused", Attempted: true}, false},
+		{"address outside the device networks", tasmota.ErrForbiddenAddr, false},
+		{"web password rejected", tasmota.ErrAuth, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dev := orderedDevice{newFakeDevice(t)}
+			e := newEnv(t, func(o *Options) { o.Client = dev })
+			dev.dlErr = tc.err
+			if _, err := e.m.Backup(context.Background(), "t", 7); err == nil {
+				t.Fatal("the backup must fail")
+			}
+			if len(e.st.attempts) != 1 {
+				t.Fatalf("attempts %+v", e.st.attempts)
+			}
+			a := e.st.attempts[0]
+			want := []string{"<dump returned>"}
+			wantHeap, wantUp := 0, int64(0)
+			if tc.probe {
+				want = append(want, "Status 11")
+				wantHeap, wantUp = 22, 4346 // the kitchen-spotlight fixture
+			}
+			if strings.Join(dev.sent, "|") != strings.Join(want, "|") {
+				t.Fatalf("sent %q, want %q", dev.sent, want)
+			}
+			if a.HeapKB != wantHeap || a.UptimeSec != wantUp {
+				t.Fatalf("heap %d kB, uptime %d s; want %d, %d", a.HeapKB, a.UptimeSec, wantHeap, wantUp)
+			}
+		})
+	}
+}
+
+// Why (#887): the evidence is a single read; when it fails the attempt is still recorded (the failure of the
+// backup is what matters), without numbers, and the device is not asked again.
+func TestFailedEvidenceReadIsNotRetriedAndKeepsTheAttempt(t *testing.T) {
+	for name, cerr := range map[string]error{"no answer": tasmota.ErrTimeout, "error answer": tasmota.ErrCommandError} {
+		t.Run(name, func(t *testing.T) {
+			e := newEnv(t, nil)
+			e.dev.dlErr = errEmptyChunk
+			e.dev.errs = map[string]error{"Status 11": cerr}
+			if _, err := e.m.Backup(context.Background(), "t", 7); err == nil {
+				t.Fatal("the backup must fail")
+			}
+			if len(e.dev.sent) != 1 || e.dev.sent[0] != "Status 11" {
+				t.Fatalf("sent %q, want exactly one Status 11", e.dev.sent)
+			}
+			if len(e.st.attempts) != 1 || e.st.attempts[0].HeapKB != 0 || e.st.attempts[0].UptimeSec != 0 {
+				t.Fatalf("attempts %+v", e.st.attempts)
+			}
+		})
+	}
+	t.Run("unreadable answer", func(t *testing.T) {
+		e := newEnv(t, nil)
+		e.dev.dlErr = errEmptyChunk
+		e.dev.extra = map[string]string{"Status 11": `{"StatusSTS":"garbage"}`}
+		if _, err := e.m.Backup(context.Background(), "t", 7); err == nil {
+			t.Fatal("the backup must fail")
+		}
+		if len(e.dev.sent) != 1 || len(e.st.attempts) != 1 || e.st.attempts[0].HeapKB != 0 || e.st.attempts[0].UptimeSec != 0 {
+			t.Fatalf("sent %q, attempts %+v", e.dev.sent, e.st.attempts)
+		}
+	})
+}
+
+// Why: a run cut short by shutdown is not a failure of the device; it sends no evidence read either.
+func TestCancelledFailedBackupSendsNoEvidenceRead(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	dev := &cancelOnDump{fakeDevice: newFakeDevice(t), cancel: cancel}
+	e := newEnv(t, func(o *Options) { o.Client = dev })
+	dev.dlErr = errEmptyChunk
+	if _, err := e.m.Backup(ctx, "t", 7); err == nil {
+		t.Fatal("the backup must fail")
+	}
+	if len(dev.sent) != 0 || len(e.st.attempts) != 0 {
+		t.Fatalf("sent %q, attempts %+v", dev.sent, e.st.attempts)
+	}
+}
+
+type cancelOnDump struct {
+	*fakeDevice
+	cancel context.CancelFunc
+}
+
+func (c *cancelOnDump) DownloadConfig(ctx context.Context, t tasmota.Target) ([]byte, error) {
+	b, err := c.fakeDevice.DownloadConfig(ctx, t)
+	c.cancel()
+	return b, err
 }

@@ -242,7 +242,7 @@ func TestDownloadFaultsFailClosedAndAbort(t *testing.T) {
 	}{
 		{"md5 mismatch", [][]string{{started, header(5, 100)}, {data(5, body)}, {fmt.Sprintf(`{"Id":5,"Md5":"%s"}`, md5hex([]byte("x")))}}, "MD5"},
 		{"short file (live: stray ? truncates)", [][]string{{started, header(5, 200)}, {data(5, body)}, {fmt.Sprintf(`{"Id":5,"Md5":"%s"}`, good)}}, "100 of 200"},
-		{"empty data (live: stray ? gives an empty chunk)", [][]string{{started, header(5, 100)}, {`{"Id":5,"Data":""}`}}, "empty"},
+		{"empty data (the device could not build the chunk, #887)", [][]string{{started, header(5, 100)}, {`{"Id":5,"Data":""}`}}, "empty"},
 		{"id changes", [][]string{{started, header(5, 100)}, {data(6, body)}}, "another transfer"},
 		{"more data than announced", [][]string{{started, header(5, 50)}, {data(5, body)}}, "more than"},
 		{"size too small", [][]string{{started, header(5, 1)}}, "announced"},
@@ -271,6 +271,60 @@ func TestDownloadFaultsFailClosedAndAbort(t *testing.T) {
 			}
 			if s.aborted.Load() != 2 {
 				t.Fatalf("want the failed transfer ended with FileDownload 0, aborts %d", s.aborted.Load())
+			}
+		})
+	}
+}
+
+// Why (#887): an empty Data message is the one fault with a known cause on the device (it could not
+// allocate the ~4 kB it needs to build the chunk), so the backup can tell the person that the device ran
+// short of memory instead of the generic "did not hand over its configuration". It must stay a transfer
+// failure (no bytes, the transfer ended with FileDownload 0, no retry), and no other fault may carry
+// the mark, or the memory sentence would be shown for faults it does not explain.
+func TestDownloadEmptyDataIsTypedSoTheCauseCanBeNamed(t *testing.T) {
+	body := bytes.Repeat([]byte{0xAB}, 100)
+	cases := []struct {
+		name  string
+		steps [][]string
+		empty bool
+	}{
+		{"empty first chunk", [][]string{{started, header(5, 100)}, {`{"Id":5,"Data":""}`}}, true},
+		{"empty later chunk", [][]string{{started, header(5, 200)}, {data(5, body)}, {`{"Id":5,"Data":""}`}}, true},
+		{"bad base64", [][]string{{started, header(5, 100)}, {`{"Id":5,"Data":"!!!"}`}}, false},
+		{"short file", [][]string{{started, header(5, 200)}, {data(5, body)}, {fmt.Sprintf(`{"Id":5,"Md5":"%s"}`, md5hex(body))}}, false},
+		{"device ended the transfer", [][]string{{started, header(5, 100)}, {`{"FileDownload":"Aborted"}`}}, false},
+		{"no data answer", [][]string{{started, header(5, 100)}}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s, b, got, err := runScript(t, tc.steps, nil)
+			if err == nil || got != nil || !errors.Is(err, ErrTransfer) {
+				t.Fatalf("got %d bytes, %v", len(got), err)
+			}
+			if errors.Is(err, ErrEmptyData) != tc.empty {
+				t.Fatalf("errors.Is(err, ErrEmptyData) = %v, want %v: %v", !tc.empty, tc.empty, err)
+			}
+			if strings.Contains(err.Error(), dlPassword) {
+				t.Fatalf("error leaks the password: %v", err)
+			}
+			if !tc.empty {
+				return
+			}
+			deadline := time.Now().Add(5 * time.Second)
+			for s.aborted.Load() < 2 && time.Now().Before(deadline) {
+				time.Sleep(5 * time.Millisecond)
+			}
+			if s.aborted.Load() != 2 {
+				t.Fatalf("want the failed transfer ended with FileDownload 0, aborts %d", s.aborted.Load())
+			}
+			var starts int
+			for _, p := range b.sent() {
+				if strings.Contains(p.payload, `"Type":2`) {
+					starts++
+				}
+			}
+			if starts != 1 {
+				t.Fatalf("an empty chunk must not be retried: %d starts in %v", starts, b.sent())
 			}
 		})
 	}

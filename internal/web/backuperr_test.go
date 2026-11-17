@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hellwand/tasmofleet/internal/backup"
+	"github.com/hellwand/tasmofleet/internal/mqttcmd"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
 	"github.com/hellwand/tasmofleet/internal/transport"
 )
@@ -56,5 +58,16 @@ func TestRefusedBackupStartsOnlyAShortFloorButAnAttemptedOneTheFullCooldown(t *t
 				t.Fatalf("after the floor: retry allowed = %v, want %v", again, !tc.fullWindow)
 			}
 		})
+	}
+}
+
+// Why (#887): a manual backup that failed on an empty data chunk tells the person on the device page that
+// the device ran short of memory and that a restart usually helps, from the backup package's one sentence.
+func TestBackupProblemNamesTheMemoryShortage(t *testing.T) {
+	h := &handler{}
+	err := fmt.Errorf("backup: download config: %w", &backup.LowMemoryError{Err: fmt.Errorf("%w: %w", mqttcmd.ErrTransfer, mqttcmd.ErrEmptyData)})
+	got := h.backupProblem(err)
+	if !strings.Contains(got, "memory") || !strings.Contains(got, "restart") || strings.Contains(got, "did not hand over") || strings.Contains(got, "mqttcmd") {
+		t.Fatalf("%q", got)
 	}
 }

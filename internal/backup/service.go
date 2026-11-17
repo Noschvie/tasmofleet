@@ -22,6 +22,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/clock"
 	"github.com/hellwand/tasmofleet/internal/events"
 	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/mqttcmd"
 	"github.com/hellwand/tasmofleet/internal/store"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
 	"github.com/hellwand/tasmofleet/internal/transport"
@@ -234,7 +235,7 @@ func (m *Manager) finishBackup(ctx context.Context, actor string, owner, dev mod
 		m.o.Audit.Record(ctx, e)
 	}
 	if err != nil {
-		m.recordAttempt(ctx, id, run, version, dev, err)
+		m.recordFailure(ctx, id, run, version, dev, rep, err)
 		return out, err
 	}
 	m.prune(ctx, id, run.Protect)
@@ -265,16 +266,17 @@ func (m *Manager) LiveSnapshot(ctx context.Context, id model.DeviceID) ([]byte, 
 	return data, err
 }
 
-// recordAttempt stores a failed backup. A run cut short by shutdown is not a
-// failure of the device and is not recorded.
-func (m *Manager) recordAttempt(ctx context.Context, id model.DeviceID, run Run, version string, dev model.Device, err error) {
+// recordFailure stores a failed backup with the evidence the run read (rep). A
+// run cut short by shutdown is not a failure of the device and is not recorded.
+func (m *Manager) recordFailure(ctx context.Context, id model.DeviceID, run Run, version string, dev model.Device, rep runReport, err error) {
 	if ctx.Err() != nil {
 		return
 	}
 	if version == "" {
 		version = dev.Identity.Version
 	}
-	a := model.BackupAttempt{DeviceID: id, At: m.o.Clock.Now().UTC(), Trigger: run.Trigger, TriggerRef: run.Ref, Version: version, Reason: AttemptReason(err)}
+	a := model.BackupAttempt{DeviceID: id, At: m.o.Clock.Now().UTC(), Trigger: run.Trigger, TriggerRef: run.Ref, Version: version, Reason: AttemptReason(err),
+		HeapKB: rep.heapKB, UptimeSec: rep.uptimeSec}
 	if _, aerr := m.o.Store.AddBackupAttempt(ctx, a); aerr != nil {
 		m.o.Log.Warn("backup: record failed attempt", "component", "backup", "device", id, "err", aerr)
 	}
@@ -286,6 +288,9 @@ type runReport struct {
 	via      string   // the transport of the dump and its status snapshot ("" when the run ended before the dump)
 	httpSide []string // the HTTP calls made beside a dump over MQTT (the files cannot come over MQTT)
 	files    string   // the transport of the files archive, set only once the archive is stored ("" otherwise)
+	// heapKB and uptimeSec: the device's free heap and uptime read after a failed dump (evidence), 0 when not read.
+	heapKB    int
+	uptimeSec int64
 }
 
 // filesLost records that the files archive could not be stored. The run goes on: the archive is
@@ -307,6 +312,10 @@ func (m *Manager) backup(ctx context.Context, owner, dev model.Device, note stri
 	dctx, dumpVia := transport.WithTrace(cctx) // the transport that carried the dump
 	dmp, err := m.o.Client.DownloadConfig(dctx, target)
 	if err != nil {
+		m.evidence(onDumpPath(cctx, dumpVia), target, dumpVia, err, rep)
+		if errors.Is(err, mqttcmd.ErrEmptyData) {
+			err = &LowMemoryError{Err: err}
+		}
 		return nil, "", fmt.Errorf("backup: download config: %w", err)
 	}
 	if len(dmp) == 0 {
@@ -447,6 +456,44 @@ func onDumpPath(ctx context.Context, dump *transport.Trace) context.Context {
 		return transport.WithPath(ctx, transport.MQTT)
 	}
 	return transport.WithPath(ctx, transport.HTTP)
+}
+
+// evidence reads the device's free heap and uptime after a failed dump, so the failed attempt carries its own
+// evidence (#887). It sends one Status 11 (never Status 0, safety rule 2), after the dump returned, over the
+// transport that carried the dump, and only when the device answered the dump (dumpAnswered). A failed read
+// leaves the values at 0; it is never retried.
+func (m *Manager) evidence(ctx context.Context, t tasmota.Target, dump *transport.Trace, err error, rep *runReport) {
+	if ctx.Err() != nil || !dumpAnswered(dump, err) {
+		return
+	}
+	raw, cerr := m.o.Client.Command(ctx, t, "Status 11")
+	if cerr != nil {
+		// The error text is left out: a device error can carry its URL, and the URL the web password.
+		m.o.Log.Info("backup: free heap after the failed dump not read", "component", "backup", "device", int64(t.DeviceID()))
+		return
+	}
+	sts, perr := tasmota.ParseStatus11(raw)
+	if perr != nil {
+		return
+	}
+	rep.heapKB, rep.uptimeSec = sts.Heap, sts.UptimeSec
+}
+
+// dumpAnswered reports a failed dump that the device took part in: a file transfer over MQTT that went wrong
+// after the device answered (not one that timed out), or an HTTP answer that could not be used. A dump that was
+// refused before anything was sent, went to no device or got no answer is not one, and neither is a dump whose
+// transport the trace does not name (refused: "none"; both: "http+mqtt").
+func dumpAnswered(dump *transport.Trace, err error) bool {
+	if v := dump.Via(); v != "mqtt" && v != "http" {
+		return false
+	}
+	var blocked *transport.BackupBlockedError
+	switch {
+	case errors.As(err, &blocked), errors.Is(err, tasmota.ErrTimeout), errors.Is(err, tasmota.ErrUnreachable),
+		errors.Is(err, tasmota.ErrForbiddenAddr):
+		return false
+	}
+	return errors.Is(err, mqttcmd.ErrTransfer) || errors.Is(err, tasmota.ErrBadResponse)
 }
 
 // snapshot queries the status commands one by one. A failing command is

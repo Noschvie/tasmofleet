@@ -109,6 +109,31 @@ func TestBackupAttempts(t *testing.T) {
 	}
 }
 
+// Why (#887): a failed attempt keeps the device's free heap and uptime read after the failure, so a repeat
+// carries its own evidence; an attempt without them (not read, or recorded before 0051) reads 0, "not read".
+func TestBackupAttemptKeepsHeapAndUptime(t *testing.T) {
+	s, _, _ := newStore(t)
+	dev := mustDevice(t, s, "a", "10.0.0.1")
+	base := ms(1_700_000_000_000)
+	if _, err := s.AddBackupAttempt(ctx, model.BackupAttempt{DeviceID: dev, At: base, Trigger: model.TriggerScheduled, Reason: "without"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.AddBackupAttempt(ctx, model.BackupAttempt{DeviceID: dev, At: base.Add(time.Hour), Trigger: model.TriggerScheduled, Reason: "with",
+		HeapKB: 17, UptimeSec: 864_000}); err != nil {
+		t.Fatal(err)
+	}
+	l, err := s.ListBackupAttempts(ctx, dev, 0)
+	if err != nil || len(l) != 2 {
+		t.Fatalf("%v %+v", err, l)
+	}
+	if l[0].Reason != "with" || l[0].HeapKB != 17 || l[0].UptimeSec != 864_000 {
+		t.Errorf("evidence lost: %+v", l[0])
+	}
+	if l[1].Reason != "without" || l[1].HeapKB != 0 || l[1].UptimeSec != 0 {
+		t.Errorf("an attempt without evidence must read 0: %+v", l[1])
+	}
+}
+
 // Why (N2): 0022 rebuilds the backups table of every installation. The rows
 // of a v0.10.x database (schema 0020) must survive with their ids (restore
 // jobs refer to them without a foreign key), gain the name and MAC of their

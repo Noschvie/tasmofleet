@@ -43,6 +43,11 @@ var ErrPasswordRefused = errors.New("mqttcmd: the device refused the MQTT passwo
 // message payload: the password travels in it, and a minimal firmware echoes it back.
 var ErrTransfer = errors.New("mqttcmd: file transfer failed")
 
+// ErrEmptyData is a transfer that failed on a data message with an empty Data (#887). It is always
+// wrapped together with ErrTransfer. What the firmware means by it is for the caller to word; this
+// package only reports that it happened.
+var ErrEmptyData = errors.New("mqttcmd: the device sent an empty data message")
+
 func transferErr(format string, a ...any) error {
 	return fmt.Errorf("%w: %s", ErrTransfer, fmt.Sprintf(format, a...))
 }
@@ -235,7 +240,7 @@ func (c *Channel) runDownload(ctx context.Context, topic, start string, in chan 
 			return got.Bytes(), true, nil
 		case m.Data != nil:
 			if *m.Data == "" {
-				return nil, true, fail("the device sent an empty data message")
+				return nil, true, fmt.Errorf("%w: %w", ErrTransfer, ErrEmptyData)
 			}
 			raw, err := base64.StdEncoding.DecodeString(*m.Data)
 			if err != nil {

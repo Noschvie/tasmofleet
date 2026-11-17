@@ -264,8 +264,8 @@ func (s *SQLite) SetBackupsKept(ctx context.Context, ids []model.BackupID, kept 
 
 // AddBackupAttempt records a failed backup.
 func (s *SQLite) AddBackupAttempt(ctx context.Context, a model.BackupAttempt) (int64, error) {
-	res, err := s.db.ExecContext(ctx, "INSERT INTO backup_attempts (device_id, at, kind, ref, fw_version, reason) VALUES (?,?,?,?,?,?)",
-		a.DeviceID, toMS(s.orNow(a.At)), string(a.Trigger), a.TriggerRef, a.Version, a.Reason)
+	res, err := s.db.ExecContext(ctx, "INSERT INTO backup_attempts (device_id, at, kind, ref, fw_version, reason, heap_kb, uptime_sec) VALUES (?,?,?,?,?,?,?,?)",
+		a.DeviceID, toMS(s.orNow(a.At)), string(a.Trigger), a.TriggerRef, a.Version, a.Reason, a.HeapKB, a.UptimeSec)
 	if err != nil {
 		return 0, mapErr(err)
 	}
@@ -278,7 +278,7 @@ func (s *SQLite) ListBackupAttempts(ctx context.Context, device model.DeviceID, 
 	if limit <= 0 {
 		limit = -1
 	}
-	rows, err := s.db.QueryContext(ctx, "SELECT id, device_id, at, kind, ref, fw_version, reason FROM backup_attempts WHERE device_id=? ORDER BY at DESC, id DESC LIMIT ?", device, limit)
+	rows, err := s.db.QueryContext(ctx, "SELECT id, device_id, at, kind, ref, fw_version, reason, heap_kb, uptime_sec FROM backup_attempts WHERE device_id=? ORDER BY at DESC, id DESC LIMIT ?", device, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -288,7 +288,7 @@ func (s *SQLite) ListBackupAttempts(ctx context.Context, device model.DeviceID, 
 		var a model.BackupAttempt
 		var at int64
 		var kind string
-		if err := rows.Scan(&a.ID, &a.DeviceID, &at, &kind, &a.TriggerRef, &a.Version, &a.Reason); err != nil {
+		if err := rows.Scan(&a.ID, &a.DeviceID, &at, &kind, &a.TriggerRef, &a.Version, &a.Reason, &a.HeapKB, &a.UptimeSec); err != nil {
 			return nil, err
 		}
 		a.At, a.Trigger = fromMS(at), model.BackupTrigger(kind)

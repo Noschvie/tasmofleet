@@ -1697,7 +1697,10 @@ first when the state of the topic is unknown (process start or after a bad trans
 command, answered by `Started` and the header `{File,Id,Type,Size}` (no `?` after `Started`), then exactly
 one `?` per Data message until `{Id,Md5}`. Id must stay constant, Size is 2..16 KiB, the received bytes
 must equal Size and hash to the MD5; an empty Data, a timeout (8 s per message, 30 s overall) or any
-other irregularity ends with `FileDownload 0` and an error, with no retry. `Error 1` is the typed
+other irregularity ends with `FileDownload 0` and an error, with no retry. An empty Data is typed
+(`mqttcmd.ErrEmptyData`, #887): the firmware sends it only when it cannot allocate the ~4 kB block it
+needs to build the chunk, so the backup says that the device ran short of contiguous memory and that a
+restart usually helps (`backup.LowMemoryError`). `Error 1` is the typed
 `ErrPasswordRefused`. Messages are never logged and never put into errors: the start command carries the
 password and a minimal firmware echoes it back as `{"Command":"Unknown"}`. The password per device is
 set on the edit form (admin; mode not set / broker / own; write-only, blank keeps, saving clears the
@@ -1746,6 +1749,10 @@ shows the decoded secrets. The diff/drift view redacts keys matching
   operator action; kept runs do not count against `BACKUP_KEEP`). Older runs are deleted after a
   successful new backup, never otherwise. A run is the set of files of one backup. A backup that
   failed stores nothing; the attempt is listed as a "Failed" row with Retry (`backup_attempts`).
+  When the device answered the failed dump (a transfer fault over MQTT that is not a timeout, an unusable
+  HTTP answer), the run reads its free heap and uptime with one `Status 11` over the dump's transport, never
+  retried, and stores them with the attempt (`heap_kb`, `uptime_sec`, 0 = not read, #887); the row shows
+  them as "free heap afterwards N kB · up …".
 - M2 diff view: decoded JSON of two backups, redacted, rendered side by side ("what changed
   since the last backup"). Operators see the redacted values too, except free-text settings (rules, scripts, Berry code, `mems`, `rf_code`), of which they only see that they changed; admins see those as well.
 - M2 restore: admin picks a backup. Over HTTP tasmofleet does what the web UI's "Restore configuration"

@@ -93,6 +93,19 @@ func AttemptReason(err error) string {
 	return "The device did not hand over its configuration"
 }
 
+// LowMemoryError is a dump that failed because the device sent an empty data chunk (mqttcmd.ErrEmptyData,
+// #887). On Tasmota that happens only when the device cannot allocate the ~4 kB block it needs to build the
+// chunk; a restart gives it an unfragmented heap again.
+type LowMemoryError struct{ Err error }
+
+func (e *LowMemoryError) Error() string { return e.Err.Error() }
+func (e *LowMemoryError) Unwrap() error { return e.Err }
+
+// UserReason is the sentence for the backup history and the device page.
+func (e *LowMemoryError) UserReason() string {
+	return "The device ran short of contiguous memory while sending its configuration; a restart usually helps"
+}
+
 // LimitedFirmwareError is why no backup was tried: the device runs the safeboot image or the
 // minimal firmware, which answer none of the snapshot commands (#558).
 type LimitedFirmwareError struct{ Variant string }

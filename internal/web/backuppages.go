@@ -175,7 +175,16 @@ func attemptDetail(a model.BackupAttempt) string {
 	if a.Version != "" {
 		v = a.Version
 	}
-	return strings.Join(append(parts, "Tasmota "+v), " · ")
+	parts = append(parts, "Tasmota "+v)
+	// The device's state read right after the failure (#887); 0 is "not read". The heap is the free heap
+	// afterwards: the failed transfer had released its buffer by then.
+	if a.HeapKB > 0 {
+		parts = append(parts, fmt.Sprintf("free heap afterwards %d kB", a.HeapKB))
+	}
+	if a.UptimeSec > 0 {
+		parts = append(parts, "up "+humanDuration(time.Duration(a.UptimeSec)*time.Second))
+	}
+	return strings.Join(parts, " · ")
 }
 
 func (h *handler) backupsPage(w http.ResponseWriter, r *http.Request) {

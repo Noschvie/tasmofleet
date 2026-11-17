@@ -34,6 +34,9 @@ var httpWays = []struct {
 	{"pinned to HTTP", "", regexp.MustCompile(`\btransport\.WithPath\([^;]*\btransport\.HTTP\)`)},
 	{"the prober's HTTP client", "internal/app", regexp.MustCompile(`\bp\.(Client\.|cmd\(|status5\(|status11\(|readMQTT\(|mqttSwitchedOff\(|VerifyAddress\(|probe\()`)},
 	{"the tracker's HTTP client", "internal/health", regexp.MustCompile(`\bs\.d\.Client\.`)},
+	// onDumpPath pins to HTTP after a dump over HTTP; each use of it is a place of its own, named by the call it is
+	// handed to (snapshot, evidence; "call" in the pattern), so a new consumer of the pin needs its own entry.
+	{"the dump's path", "internal/backup", regexp.MustCompile(`(?:(?P<call>\w+)\(|[=,]\s*|\breturn\s+)onDumpPath\(`)},
 }
 
 // httpReadsAllowed maps every place (file, enclosing function, way) to the words of the case in "What still uses HTTP"
@@ -65,8 +68,11 @@ var httpReadsAllowed = map[string]string{
 	"internal/app/discovery.go runtime.setupDiscovery: raw client of the services": "The discovery scan",
 	// A check vouches for the transport its read used (#810): reads pinned to where their check was answered.
 	"internal/app/probe.go pinTo: pinned to HTTP": "where their check was answered",
-	// The status snapshot of a backup follows the transport of its dump (T14).
-	"internal/backup/service.go onDumpPath: pinned to HTTP": "follows the transport of its dump",
+	// The status snapshot of a backup, and the evidence read after a failed dump (#887), follow the transport of
+	// their dump (T14).
+	"internal/backup/service.go onDumpPath: pinned to HTTP":                   "follows the transport of its dump",
+	"internal/backup/service.go Manager.backup: the dump's path for snapshot": "follows the transport of its dump",
+	"internal/backup/service.go Manager.backup: the dump's path for evidence": "read after a failed dump (#887)",
 	// The files of a backup or restore, and the MAC check before them (T15).
 	"internal/backup/files.go Manager.sameDeviceOverHTTP: pinned to HTTP": "Files of a backup or restore",
 	"internal/restore/flow.go Manager.run: pinned to HTTP":                "a restore keeps the transport it chose",
@@ -157,7 +163,13 @@ func httpPlaces(t *testing.T, path, rel string) []string {
 			if w.scope != "" && !strings.HasPrefix(rel, w.scope+"/") || !w.re.MatchString(code) {
 				continue
 			}
-			out = append(out, rel+" "+enclosing(fset, f, i+1)+": "+w.name)
+			way := w.name
+			if i := w.re.SubexpIndex("call"); i > 0 {
+				if c := w.re.FindStringSubmatch(code)[i]; c != "" {
+					way += " for " + c // the call a pinned context is handed to
+				}
+			}
+			out = append(out, rel+" "+enclosing(fset, f, i+1)+": "+way)
 		}
 	}
 	return out

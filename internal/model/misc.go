@@ -67,6 +67,10 @@ type BackupAttempt struct {
 	TriggerRef string
 	Version    string // firmware version known at the time
 	Reason     string
+	// HeapKB and UptimeSec are the device's free heap (kB) and uptime read right after the failure
+	// (Status 11, #887); 0 means not read (the device did not answer, or the attempt predates it).
+	HeapKB    int
+	UptimeSec int64
 }
 
 // AuditEvent is one append-only audit log row. Every state-changing action
