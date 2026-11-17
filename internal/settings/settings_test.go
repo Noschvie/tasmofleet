@@ -275,6 +275,21 @@ func TestEveryWriteOnlyFieldIsSecretByTheOneRule(t *testing.T) {
 	}
 }
 
+// Why (#809 security check): the other direction. A field the one rule calls secret but that the Settings tab reads,
+// shows and compares would put a secret into the page and the policy that the diff, drift view and console hide, and
+// its bare read answers "***". Only the broker login is such a field on purpose (#606, #816), and it is read from
+// Status 6, never bare. A new readable field with a secret name (a TmChatId, an IfxOrg) must be write-only instead.
+func TestOnlyTheBrokerLoginIsASecretNameTheSettingsTabReads(t *testing.T) {
+	for _, f := range Fields {
+		if !cmdpolicy.SecretName(f.Key) || f.Secret {
+			continue
+		}
+		if _, ok := statusSource[f.Key]; !ok || f.Key != "MqttUser" {
+			t.Errorf("%s is secret by cmdpolicy.SecretName but the Settings tab reads and shows it (status source %v)", f.Key, ok)
+		}
+	}
+}
+
 // Why (#809): MqttUser is secret by the one rule, so the router masks the reply of a bare MqttUser ("***"). The
 // Settings tab and the policy compare the device's login, so they must read it where the router does not mask it,
 // in Status 6 (StatusMQT.MqttUser), never as a bare MqttUser that answers "***" and would count as a changed login.

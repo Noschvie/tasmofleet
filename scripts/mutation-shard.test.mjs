@@ -70,6 +70,7 @@ test("a file with an entry keeps its measured weight, even when it is small", ()
       "internal/cmdpolicy scrub.go 24",
       "internal/cmdpolicy policyrule.go 5",
       "internal/cmdpolicy doc.go 0",
+      "internal/cmdpolicy secret.go 0",
       "",
     ].join("\n"),
   );
@@ -78,6 +79,7 @@ test("a file with an entry keeps its measured weight, even when it is small", ()
     "internal/cmdpolicy/doc.go",
     "internal/cmdpolicy/policyrule.go",
     "internal/cmdpolicy/scrub.go",
+    "internal/cmdpolicy/secret.go",
   ]);
 });
 

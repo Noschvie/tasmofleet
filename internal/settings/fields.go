@@ -486,6 +486,9 @@ func Generic(cmd string) bool {
 // TelePeriod forces a telemetry publish. Status and Status 3 only report.
 // MqttUser is secret by the one rule (cmdpolicy.SecretName, #809), so the router
 // masks the reply of a bare MqttUser; Status 6 reports the login unmasked.
+// Tasmota answers Status 6 only while MQTT is on (SetOption3 1); a device with
+// MQTT off answers {} and its MqttUser reads as not reported, so the form posts
+// no change for it.
 var statusSource = map[string]struct{ cmd, section, field string }{
 	"PowerOnState": {"Status", "Status", "PowerOnState"},
 	"SaveData":     {"Status", "Status", "SaveData"},

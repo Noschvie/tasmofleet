@@ -483,13 +483,23 @@ func startsJob(cmnd string) bool {
 
 // ---- Command
 
-// Command sends one command, over the transport the facts allow.
+// Command sends one command, over the transport the facts allow. The reply of a command cmdpolicy marks Redact
+// (the one secret rule, #809) is masked here, whichever path carried it: a secret setting echoes its value, and a
+// reply that came back over HTTP must read the same as one that came over MQTT (redactguard copies this rule).
 func (r *Router) Command(ctx context.Context, t tasmota.Target, cmnd string) (json.RawMessage, error) {
+	cls := classifyCommand(cmnd)
+	raw, err := r.command(ctx, t, cmnd, cls)
+	if cls.redact {
+		raw = cmdpolicy.ScrubReply(raw)
+	}
+	return raw, err
+}
+
+func (r *Router) command(ctx context.Context, t tasmota.Target, cmnd string, cls cmdClass) (json.RawMessage, error) {
 	id := t.DeviceID()
 	if id == 0 {
 		return r.http.Command(ctx, t, cmnd) // scans and address checks verify HTTP itself
 	}
-	cls := classifyCommand(cmnd)
 	if pin, ok := PathFrom(ctx); ok {
 		if pin == HTTP {
 			return r.httpCommand(ctx, t, cmnd)
@@ -572,7 +582,7 @@ func (r *Router) read(ctx context.Context, t tasmota.Target, cmnd string, cls cm
 // (httpFirst, with its failover when HTTP provably sent nothing). HTTP is used only when MQTT cannot carry a write
 // (the product owner's rule of 2026-11-14): what a write carries is no reason. A secret crosses the broker as it
 // crosses the network to the device's HTTP API, in plain text on a usual Tasmota (docs/security/mqtt-transport.md);
-// its reply is masked as before (sendMQTT). A change of the device's MQTT connection (cmdpolicy.CutOffName) is
+// its reply is masked as on every path (Command). A change of the device's MQTT connection (cmdpolicy.CutOffName) is
 // published without a question only while HTTP is usable, so that a device MQTT loses after the change is reached
 // over HTTP for the next command: proven by one harmless HTTP question asked right before (httpAnswers), never by
 // an answer on record (that is only the console's hint, app.reachedOnlyOverMQTT). Without that answer it needs the
@@ -848,10 +858,7 @@ func (r *Router) publish(ctx context.Context, d model.Device, cmnd string, cls c
 	if !cmdpolicy.CutsMQTTOff(cmnd) {
 		r.connChanged.Clear(d.ID)
 	}
-	if cls.redact {
-		raw = cmdpolicy.ScrubReply(raw) // the reply of a secret-setting command echoes the secret
-	}
-	return raw, nil
+	return raw, nil // Command masks the reply of a secret command
 }
 
 // notPublished: the channel refused the command or could not publish it.

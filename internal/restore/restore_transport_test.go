@@ -431,7 +431,8 @@ func TestAnMQTTSettingTheDeviceDoesNotReportCountsAsAChange(t *testing.T) {
 // read from Status 6, which the router does not mask; the guard plays the router's part. A device that does not
 // answer Status 6 has not reported its login: never equal.
 func TestTheLockoutReadsTheMQTTUserFromStatus6(t *testing.T) {
-	lockout := func(t *testing.T, user func(device string) string, fail bool) (string, []string) {
+	// fail: "timeout" lets Status 6 time out, "no user" answers it without StatusMQT.MqttUser.
+	lockout := func(t *testing.T, user func(device string) string, fail string) (string, []string) {
 		e := newFlow(t, "15.6.0")
 		raw, err := e.cl.Command(t.Context(), e.target(), "Status 6")
 		var s6 struct{ StatusMQT struct{ MqttUser string } }
@@ -442,7 +443,10 @@ func TestTheLockoutReadsTheMQTTUserFromStatus6(t *testing.T) {
 		a := e.dumpBackup(t, e.dumpA)
 		m := e.mqttManager(t, &fakeUploader{e: e}, transport.MQTT)
 		m.o.Client = redactguard.Wrap(t, m.o.Client)
-		if fail {
+		if fail == "no user" {
+			m.o.Client = status6Without{m.o.Client}
+		}
+		if fail == "timeout" {
 			e.cl.failCmd = func(cmnd string) error {
 				if cmnd == "Status 6" {
 					return tasmota.ErrTimeout
@@ -455,19 +459,31 @@ func TestTheLockoutReadsTheMQTTUserFromStatus6(t *testing.T) {
 		got := m.mqttLockout(transport.WithPath(t.Context(), transport.MQTT), dev, a)
 		return got, e.cmdLog()[before:]
 	}
-	got, sent := lockout(t, func(d string) string { return d }, false)
+	got, sent := lockout(t, func(d string) string { return d }, "")
 	if got != "" {
 		t.Errorf("the backup holds the device's own login: %q (sent %v)", got, sent)
 	}
 	if slices.Contains(sent, "MqttUser") {
 		t.Errorf("the bare MqttUser was sent, its reply is masked: %v", sent)
 	}
-	if got, _ := lockout(t, func(string) string { return "someone-else" }, false); !strings.Contains(got, "this backup changes MqttUser") || strings.Contains(got, "someone-else") {
+	if got, _ := lockout(t, func(string) string { return "someone-else" }, ""); !strings.Contains(got, "this backup changes MqttUser") || strings.Contains(got, "someone-else") {
 		t.Errorf("another login: %q", got)
 	}
-	if got, _ := lockout(t, func(d string) string { return d }, true); !strings.Contains(got, "did not report its MqttUser") {
-		t.Errorf("Status 6 unanswered: %q", got)
+	for _, fail := range []string{"timeout", "no user"} {
+		if got, _ := lockout(t, func(d string) string { return d }, fail); !strings.Contains(got, "did not report its MqttUser") {
+			t.Errorf("Status 6 %s: %q", fail, got)
+		}
 	}
+}
+
+// status6Without answers Status 6 without the login, as a firmware might that leaves it out.
+type status6Without struct{ tasmota.Client }
+
+func (c status6Without) Command(ctx context.Context, t tasmota.Target, cmnd string) (json.RawMessage, error) {
+	if cmnd == "Status 6" {
+		return json.RawMessage(`{"StatusMQT":{"MqttHost":"broker.invalid","MqttPort":1883}}`), nil
+	}
+	return c.Client.Command(ctx, t, cmnd)
 }
 
 // Why (#607, R28): connCutOffs is the restore's copy of the write rule's list of settings that change the MQTT

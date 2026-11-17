@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/mqttcmd"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
 )
 
@@ -397,6 +398,52 @@ func TestSecretReplyIsScrubbedOverMQTT(t *testing.T) {
 	raw, err := g.r.Command(t.Context(), g.target(), "WebPassword hunter2")
 	if err != nil || strings.Contains(string(raw), "hunter2") {
 		t.Fatalf("raw=%s err=%v", raw, err)
+	}
+}
+
+// Why (#809 review): the router masks the reply of every command cmdpolicy marks Redact, and TasmoFleet's own reads
+// rely on that one mask (redactguard copies it). Masked only over MQTT, a bare MqttUser, BSSId1 or TmChatId answered
+// the clear value whenever the reply came back over HTTP (no broker, a job pinned to HTTP, a failing MQTT read, an
+// address check), so a comparison or a page built on it saw "***" on one transport and the secret on the other. The
+// Status 6 block is no secret command: the Settings read and the restore's lockout take MqttUser from it, and it must
+// arrive whole on every path.
+func TestASecretReplyIsMaskedWhicheverTransportCarriesIt(t *testing.T) {
+	for _, path := range []struct {
+		name string
+		set  func(*rig) (context.Context, tasmota.Target)
+	}{
+		{"no broker", func(g *rig) (context.Context, tasmota.Target) { g.r.SetMQTT(nil); return t.Context(), g.target() }},
+		{"pinned to HTTP", func(g *rig) (context.Context, tasmota.Target) { return WithPath(t.Context(), HTTP), g.target() }},
+		{"MQTT read failed", func(g *rig) (context.Context, tasmota.Target) {
+			g.mq.err = fmt.Errorf("mqtt: refused: %w", mqttcmd.ErrRefused)
+			return t.Context(), g.target()
+		}},
+		{"address check", func(g *rig) (context.Context, tasmota.Target) {
+			return t.Context(), tasmota.TargetFor(model.Device{Address: "192.0.2.7"})
+		}},
+		{"over MQTT", func(g *rig) (context.Context, tasmota.Target) { return t.Context(), g.target() }},
+	} {
+		for _, tc := range []struct {
+			cmd, reply, secret string
+			masked             bool
+		}{
+			{"MqttUser", `{"MqttUser":"alice"}`, "alice", true},
+			{"BSSId1", `{"BSSId1":"AA:BB:CC:DD:EE:FF"}`, "AA:BB:CC:DD:EE:FF", true},
+			{"TmChatId", `{"TmChatId":"123456789"}`, "123456789", true},
+			{"Status 6", `{"StatusMQT":{"MqttHost":"broker","MqttUser":"alice"}}`, "alice", false},
+		} {
+			g := newRig(t)
+			g.http.reply, g.mq.reply = tc.reply, tc.reply
+			ctx, tg := path.set(g)
+			raw, err := g.r.Command(ctx, tg, tc.cmd)
+			if err != nil {
+				t.Errorf("%s, %q: %v", path.name, tc.cmd, err)
+				continue
+			}
+			if shown := strings.Contains(string(raw), tc.secret); shown == tc.masked {
+				t.Errorf("%s, %q: reply %s, masked %v wanted (mqtt=%d http=%d)", path.name, tc.cmd, raw, tc.masked, g.mq.n(), g.http.n())
+			}
+		}
 	}
 }
 

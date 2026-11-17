@@ -39,7 +39,8 @@ func BackupReadable(command string) bool {
 
 // ValuesFromDecoded extracts the policy-relevant settings from a decoded
 // backup (decode-config JSON). Missing or oddly typed entries are left out.
-// Secrets are never extracted.
+// Secrets are never extracted, except the broker login MqttUser (mqtt_user),
+// which a policy may compare and set (#606, #816, #809).
 func ValuesFromDecoded(raw []byte) map[string]string {
 	var root map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &root); err != nil {

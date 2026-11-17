@@ -45,6 +45,7 @@ internal/cmdpolicy cmdpolicy.go 143 27
 internal/cmdpolicy doc.go 0
 internal/cmdpolicy policyrule.go 6 41
 internal/cmdpolicy scrub.go 26 41
+internal/cmdpolicy secret.go 0
 internal/mqttcmd backlog.go 12 681
 internal/mqttcmd channel.go 36 1890
 internal/mqttcmd correlate.go 58 409

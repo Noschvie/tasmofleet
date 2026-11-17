@@ -1045,7 +1045,8 @@ HTTP. Rules:
   to MQTT; the generic router never starts one on its own.
 - The device is read once, the facts and the choice come from that snapshot, and the device is read again
   right before an MQTT send; a changed topic, group topic, FullTopic or MQTT capability sends nothing.
-- Replies of credential-setting commands are scrubbed on the MQTT path (`cmdpolicy.ScrubReply`).
+- Replies of secret commands (`cmdpolicy` verdict `Redact`) are scrubbed by the router on every path, MQTT and HTTP
+  alike (`cmdpolicy.ScrubReply`, #809).
 - `WithTrace(ctx)` records which transport carried the calls; the audit details of console commands,
   power switches, settings writes and Make compliant carry it as `"via":"http"|"mqtt"` (`"http+mqtt"` when a job used both).
 - A write that can cut off a device reached over MQTT only (HTTP not usable: failing, or silent to the router's

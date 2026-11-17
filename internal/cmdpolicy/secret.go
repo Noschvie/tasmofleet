@@ -9,19 +9,16 @@ import "strings"
 // it as a policy rule, ScrubReply masks the value under such a key, and the backup diff, drift and restore preview
 // show only that such a setting changed.
 //
-// The name is read the way the device reads it (ResolveName: the index at its end, a SetOption synonym as its
-// SetOption) and also as it is written, so a name that ResolveName does not accept (a decode-config key with a
-// character a command cannot have, a long path) is judged by its text and never counts as harmless only because it
-// could not be read. ZbNameKey is SetOption83, a harmless flag, and stays secret by its own name: fail closed.
+// A name is judged by its text, with letter case, '_', '-' and the index at its end ignored, so a decode-config key
+// or a name no command reader accepts is judged too and never counts as harmless only because it could not be read.
+// A SetOption synonym is never less secret than its SetOption, since no SetOption is secret; ZbNameKey (SetOption83, a
+// harmless flag) is secret by its own name: fail closed.
 //
 // TLS fingerprints (MqttFingerprint, TmFingerprint; decode-config mqtt_fingerprint1/2, telegram_fingerprint) are not
 // secret: each is the SHA-1 of a server's public certificate, which that server shows to every client that connects.
 // The diff, drift and restore preview compare them, so a restore that changes the broker's fingerprint can be seen.
 func SecretName(name string) bool {
 	s := strings.ToLower(strings.NewReplacer("_", "", "-", "").Replace(name))
-	if n, ok := ResolveName(s); ok && secretBase(n.Base) {
-		return true
-	}
 	return secretBase(strings.TrimRight(s, "0123456789"))
 }
 
