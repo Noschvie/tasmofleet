@@ -66,9 +66,11 @@ templ fleetBackupsPage(p sysPage) {
 			@backupDeleteDialog(backupsView{CSRF: p.CSRF})
 		}
 	}
-	if p.Fleet.CanBulk && len(p.Fleet.PruneNow) > 0 {
-		@fleetPruneDialog(p)
-	}
+	<div id="bk-prune">
+		if p.Fleet.CanBulk && len(p.Fleet.PruneNow) > 0 {
+			@fleetPruneDialog(p)
+		}
+	</div>
 	if p.Fleet.CanBulk && p.Storage != nil && len(p.Storage.Unreferenced) > 0 {
 		@fleetUnrefDialog(p)
 	}
@@ -233,10 +235,25 @@ func fleetSentence(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
-// fleetDevices is the main table card: filter chips, one row per device, the run buttons.
+// fleetDevices is the main table card: filter chips, one row per device, the run buttons. It is also the
+// live region of the page (#950): on a backup, device or resync event it reloads the page's own address and
+// takes its own insides and, out of band, the cards a run changes (LiveOOB). select.js keeps the ticked rows
+// across the swap and holds it while a menu, a dialog or the Storage fold is open. hx-sync asks again once
+// the request in flight is done, so the last event of a run is never dropped (a throttle would).
 templ fleetDevices(p sysPage, c sysCard) {
 	{{ v := p.Fleet }}
-	<section class={ "scard", ui.StackRank(c.Phone) } id={ "card-" + c.ID } data-select-scope>
+	<section
+		class={ "scard", ui.StackRank(c.Phone) }
+		id={ "card-" + c.ID }
+		data-select-scope
+		data-live-region
+		hx-get={ v.LiveHref() }
+		hx-trigger="sse:backup, sse:device, sse:resync"
+		hx-sync="this:queue last"
+		hx-select={ "#card-" + c.ID + " > *" }
+		hx-select-oob={ v.LiveOOB() }
+		hx-swap="innerHTML"
+	>
 		<div class="sch">
 			<div>
 				<h2>{ c.Title }</h2>

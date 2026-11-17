@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"html"
 	"net/netip"
 	"net/url"
 	"os"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/hellwand/tasmofleet/internal/backup"
 	"github.com/hellwand/tasmofleet/internal/config"
+	"github.com/hellwand/tasmofleet/internal/events"
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/secretbox"
 	"github.com/hellwand/tasmofleet/internal/snapshot"
@@ -829,5 +831,118 @@ func TestSideColumnListsAreFoldedBehindOneLine(t *testing.T) {
 	}
 	if o := cardOf(t, body, "orphans"); !strings.Contains(o, "<b>2 backups · 2.1 KiB · 1 kept.</b>") {
 		t.Errorf("the deleted devices' card has no summary line with the count and the kept ones: %s", o)
+	}
+}
+
+// attrOf is the value of an attribute of a tag, unescaped; "" when the tag has none.
+func attrOf(tag, name string) string {
+	m := regexp.MustCompile(`\s` + regexp.QuoteMeta(name) + `="([^"]*)"`).FindStringSubmatch(tag)
+	if m == nil {
+		return ""
+	}
+	return html.UnescapeString(m[1])
+}
+
+// Why (#950): during a backup run the page must follow the run without a reload. That needs the event
+// stream (so the status bar refreshes too) and a region that reloads the cards a run changes: the
+// Devices card (newest backup, runs, last result), Last run, Storage and the Prune now dialog, which is
+// built from the same plan. The region reloads from the page's own address with the filter and sort the
+// reader chose, never with the notice of a save (?ok=saved would show it again on every refresh), and it
+// must always run once after the last event of a burst: the final "Backed up" of a run comes within
+// 2 s of the one before, and a throttle would drop it. Every id it replaces must be on the page exactly
+// once, also when nothing is to prune, or the swap leaves a stale dialog or logs an error.
+func TestBackupsPageIsLive(t *testing.T) {
+	now := time.Now()
+	for _, role := range []string{"admin", "operator"} {
+		for name, fleet := range map[string]*fakeFleet{"with a prune plan": fleetFixture(now), "nothing to prune": {}} {
+			t.Run(role+" "+name, func(t *testing.T) {
+				e := fleetEnv(t, fleet)
+				_, body := e.do(t, "GET", "/devices/backups?filter=failed&sort=newest&dir=desc&ok=saved", role, nil)
+				if !strings.Contains(body, `sse-connect="/tf/events?since=`) {
+					t.Error("the page opens no event stream")
+				}
+				if !strings.Contains(body, `hx-get="/tf/statusbar"`) {
+					t.Error("the status bar does not refresh itself")
+				}
+				tag := regexp.MustCompile(`<section[^>]*id="card-devices"[^>]*>`).FindString(body)
+				if tag == "" {
+					t.Fatal("no Devices card")
+				}
+				if !strings.Contains(tag, " data-live-region") {
+					t.Errorf("the Devices card is no live region (the ticked rows and the open menus are kept by it): %s", tag)
+				}
+				for _, want := range []string{"sse:backup", "sse:device", "sse:resync"} {
+					if !strings.Contains(attrOf(tag, "hx-trigger"), want) {
+						t.Errorf("the card does not reload on %s: %s", want, tag)
+					}
+				}
+				if strings.Contains(attrOf(tag, "hx-trigger"), "throttle") {
+					t.Errorf("a throttle drops the last event of a run: %s", tag)
+				}
+				if got := attrOf(tag, "hx-sync"); got != "this:queue last" {
+					t.Errorf("hx-sync = %q: the last event of a burst must be asked for once the request in flight ends", got)
+				}
+				if attrOf(tag, "hx-swap") != "innerHTML" {
+					t.Errorf("the card is swapped inside itself, so the region and its ticks stay: %s", tag)
+				}
+				u, err := url.Parse(attrOf(tag, "hx-get"))
+				if err != nil || u.Path != "/tf/devices/backups" {
+					t.Fatalf("hx-get = %q", attrOf(tag, "hx-get"))
+				}
+				q := u.Query()
+				if q.Get("filter") != "failed" || q.Get("sort") != "newest" || q.Get("dir") != "desc" || q.Has("ok") {
+					t.Errorf("hx-get %q must keep filter, sort and dir and drop the save notice", u.RawQuery)
+				}
+				oob := attrOf(tag, "hx-select-oob")
+				for _, id := range []string{"card-lastrun", "card-storage", "bk-prune"} {
+					if !strings.Contains(oob, id) {
+						t.Errorf("hx-select-oob %q lacks %s", oob, id)
+					}
+				}
+				for _, id := range strings.Split(oob, ",") {
+					id = strings.TrimSpace(id)
+					if n := strings.Count(body, ` id="`+id+`"`); n != 1 {
+						t.Errorf("the page has %d elements with id %q, want exactly 1 (it is swapped by id)", n, id)
+					}
+				}
+				for _, bad := range []string{"card-schedule", "card-orphans", "card-unreferenced"} {
+					if strings.Contains(oob, bad) {
+						t.Errorf("%s holds a draft, a fold or a form of its own and is never swapped", bad)
+					}
+				}
+			})
+		}
+	}
+}
+
+// publishingFleet stores a backup while the page is being read: it publishes the event inside Overview.
+type publishingFleet struct {
+	*fakeFleet
+	hub *events.Hub
+}
+
+func (f *publishingFleet) Overview(ctx context.Context) ([]model.BackupDeviceRow, error) {
+	f.hub.Publish(events.Event{Topic: events.TopicBackup})
+	return f.fakeFleet.Overview(ctx)
+}
+
+// Why (#160, #950): a backup stored while the page is being built is not in the page, and its event
+// is gone by the time the stream opens. The page names the sequence number it was built after, taken
+// before the data is read, so the stream says "resync" at once and the cards reload. Taken after the
+// read it would swallow that backup and the page would show an old state until the next event.
+func TestBackupsPageSinceIsTakenBeforeTheDataIsRead(t *testing.T) {
+	pf := &publishingFleet{fakeFleet: fleetFixture(time.Now())}
+	e, _, _, _ := sysEnvFull(t, true, func(d *Deps) { d.BackupFleet = pf }, "TASMOFLEET_BACKUP_DAYS=mon,tue,wed,thu,fri,sat,sun")
+	pf.hub = e.hub
+	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
+	m := regexp.MustCompile(`sse-connect="/tf/events\?since=(\d+)"`).FindStringSubmatch(body)
+	if m == nil {
+		t.Fatal("the page hands no sequence number to its stream")
+	}
+	if m[1] == strconvSeq(e.hub.Seq()) {
+		t.Fatalf("since=%s is the number after the read: the backup stored during the render would be lost", m[1])
+	}
+	if got := readStream(t, e, m[1], nil, "event: resync"); !strings.Contains(got, "event: resync\n") {
+		t.Fatalf("a stream opened with the page's number gets no resync:\n%q", got)
 	}
 }

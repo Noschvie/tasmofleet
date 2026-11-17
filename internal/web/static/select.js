@@ -311,17 +311,29 @@
   window.addEventListener("pageshow", syncAll);
   document.addEventListener("htmx:afterSettle", syncAll);
 
-  // The device list reloads itself on server events. A reload would close the row menu or
-  // dialog the user is in, so it waits until they are done. A selection alone does not block
-  // it: the checked ids are put back after the swap (rows that are gone drop out) and the
+  // The device list (#devtable) and the Devices card of the Backups page (#950) reload themselves on
+  // server events: both are a [data-live-region] whose own insides htmx swaps. A reload would close the
+  // row menu or dialog the user is in, so it waits until they are done. A selection alone does not
+  // block it: the checked ids are put back after the swap (rows that are gone drop out) and the
   // htmx:afterSettle handler above recomputes the bulk bar.
-  var deferred = false;
-  var kept = null;
+  var deferred = new Set(); // regions whose reload was held back
+  var kept = new WeakMap(); // region -> the ids that were ticked when its reload arrived
+  function region(t) {
+    return t instanceof Element && t.hasAttribute("data-live-region");
+  }
+  // open says whether the reader is in the middle of something the reload would close: a menu or a
+  // fold in the region, in what the same reload replaces out of band (hx-select-oob: the Storage
+  // fold of the Backups page), or any dialog.
   function open(t) {
-    return !!(
-      t.querySelector("details[open]") ||
-      document.querySelector("dialog[open]:not([data-static])")
-    );
+    if (t.querySelector("details[open]") || document.querySelector("dialog[open]:not([data-static])")) {
+      return true;
+    }
+    return (t.getAttribute("hx-select-oob") || "")
+      .split(",")
+      .some(function (spec) {
+        var el = document.getElementById(spec.split(":")[0].trim().replace(/^#/, ""));
+        return !!el && !!el.querySelector("details[open]");
+      });
   }
   // A power toggle and a reload of the list race (#463): a reload that was rendered before the
   // toggle finished carries the old relay state, and applying it after the toggle's answer puts
@@ -344,7 +356,7 @@
       return;
     }
     ticks++;
-    if (el.id === "devtable") {
+    if (region(el)) {
       sentAt.set(d.xhr, ticks);
     } else if (el.classList && el.classList.contains("pwr")) {
       toggling++;
@@ -357,48 +369,52 @@
     }
   });
   function flush() {
-    var t = document.getElementById("devtable");
-    if (!deferred || !t || open(t) || toggling > 0) {
+    if (toggling > 0) {
       return;
     }
-    deferred = false;
-    if (window.htmx) {
-      // source: without it htmx sends the request from document.body, and htmx:beforeSend names
-      // body, so staleReload could not tell this request from any other
-      window.htmx.ajax("GET", t.getAttribute("hx-get"), {
-        source: t,
-        target: t,
-        swap: "innerHTML",
-      });
-    }
+    deferred.forEach(function (t) {
+      if (!t.isConnected) {
+        deferred.delete(t); // the page replaced it
+      } else if (!open(t)) {
+        deferred.delete(t);
+        // the region's own trigger (sse:resync) sends the request: htmx:beforeSend then names the
+        // region as its source, so staleReload can tell this request from any other
+        if (window.htmx) {
+          window.htmx.trigger(t, "sse:resync");
+        }
+      }
+    });
   }
   document.addEventListener("htmx:beforeSwap", function (e) {
     var t = e.detail && e.detail.target;
-    if (!t || t.id !== "devtable") {
+    if (!region(t)) {
       return;
     }
     if (open(t) || staleReload(e.detail.xhr)) {
       e.detail.shouldSwap = false;
-      deferred = true;
+      deferred.add(t);
       // a stale reload has nothing to wait for once the toggle is over: ask again at once (an
       // open menu or a running toggle calls flush itself when it ends)
       Promise.resolve().then(flush);
       return;
     }
-    kept = Array.prototype.map.call(
-      t.querySelectorAll('input[name="id"]:checked'),
-      function (b) {
-        return b.value;
-      },
+    kept.set(
+      t,
+      Array.prototype.map.call(
+        t.querySelectorAll('input[name="id"]:checked'),
+        function (b) {
+          return b.value;
+        },
+      ),
     );
   });
   document.addEventListener("htmx:afterSwap", function (e) {
     var t = e.detail && e.detail.target;
-    if (!t || t.id !== "devtable" || !kept) {
+    if (!region(t) || !kept.has(t)) {
       return;
     }
-    var ids = kept;
-    kept = null;
+    var ids = kept.get(t);
+    kept.delete(t);
     t.querySelectorAll('input[name="id"]').forEach(function (b) {
       b.checked = ids.indexOf(b.value) >= 0;
     });
@@ -444,7 +460,7 @@
   // covered by the afterSettle run above.
   document.addEventListener("htmx:afterSwap", function (e) {
     var t = e.target;
-    if (t instanceof Element && (t.id === "devtable" || t.id === "scan" || t.id === "scan-live")) {
+    if (t instanceof Element && (region(t) || t.id === "scan" || t.id === "scan-live")) {
       syncAll();
     }
   });

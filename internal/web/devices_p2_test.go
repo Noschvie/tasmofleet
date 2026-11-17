@@ -210,6 +210,18 @@ func TestDeviceListReloadsAfterTheLastChangeOfABurst(t *testing.T) {
 	}
 }
 
+// Why (#950): select.js keeps the ticked rows across a reload and holds the reload while a row menu or a
+// dialog is open for every element marked data-live-region (the Backups card uses the same code). The
+// device list lost that care the moment its mark went missing, with no error: the tick of a row would
+// vanish on every reload.
+func TestDeviceListIsALiveRegion(t *testing.T) {
+	e := setup(t)
+	_, body := e.do(t, "GET", "/devices", "operator", nil)
+	if tag := between(body, `id="devtable"`, ">"); !strings.Contains(tag, " data-live-region") {
+		t.Errorf("#devtable is no live region: %s", tag)
+	}
+}
+
 // Why: /devices?health=offline (a dashboard link) narrows the list, but no fixed chip stands for
 // it. "All" must not look active then (QA: "All 28" was selected over an empty list); the active
 // filter shows as its own selected chip, and every other chip stays unselected.

@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import type { Locator, Page } from "@playwright/test";
 import { test, expect } from "../support/fixtures";
 import { layoutGuards, guardReport } from "../support/layout";
 import { openSchedule } from "../support/nav";
@@ -239,13 +240,122 @@ test("an operator sees the page read-only", async ({ page }) => {
 test("after a scheduled run the status bar links to the page and the last run is listed", async ({ page }) => {
   test.setTimeout(240_000);
   await page.setExtraHTTPHeaders(admin);
-  await expect(async () => {
-    await page.goto(app.url + "/devices/backups");
-    await expect(page.locator("#card-lastrun")).toContainText("Backed up", { timeout: 2000 });
-  }).toPass({ timeout: 200_000 });
+  // The page is loaded once: the run, started two minutes after the app, shows up on it by itself (#950)
+  await page.goto(app.url + "/devices/backups");
+  await expect(page.locator("#card-lastrun")).toContainText("Backed up", { timeout: 200_000 });
   await page.goto(app.url + "/");
   const item = page.locator(".sb-wide a.sb-i, footer .sb-wide a.sb-i").filter({ hasText: "Backup" }).first();
   await expect(item).toHaveAttribute("href", /\/devices\/backups$/);
+});
+
+// Why (#950): during a backup run the page is the place to watch it: the backup count of a device and the
+// totals of the Storage card must follow a backup that is taken elsewhere, without a reload. A reload would
+// also drop what the reader is doing, so the ticked row stays, the schedule form is not touched (its save
+// bar stays away), and the swap waits while a row menu or the Storage fold is open and comes once it is
+// closed. The tests below use other devices each (a manual backup of a device waits a minute before the next)
+// that has a backup from the scheduled run above.
+function liveRow(page: Page, name: string) {
+  return page.locator(`.bk-table tbody tr:has(td.dv-name[title="${name}"])`);
+}
+async function backedUp(page: Page, n: number): Promise<{ name: string; id: string }> {
+  const row = page.locator(".bk-table tbody tr").filter({ has: page.locator("td[data-label='Last result']", { hasText: /^\s*OK\s*$/ }) }).nth(n);
+  const name = (await row.locator("td.dv-name").getAttribute("title"))!;
+  const id = (await row.locator("input[name=id]").inputValue())!;
+  return { name, id };
+}
+async function backUpElsewhere(page: Page, id: string) {
+  const csrf = await page.locator("input[name=csrf]").first().inputValue();
+  const took = await page.request.post(`${app.url}/devices/${id}/backup`, { headers: admin, form: { csrf }, maxRedirects: 0 });
+  expect(took.status(), "backup taken").toBe(303);
+}
+const runsOf = (row: Locator) => row.locator("td[data-label=Runs]");
+const storageBackups = (page: Page) => page.locator("#card-storage .sys-sum", { has: page.locator(".sys-sum-label", { hasText: /^Backups$/ }) }).locator(".sys-sum-value");
+const liveReload = (page: Page) => page.waitForResponse((r) => r.url().includes("/devices/backups") && r.request().method() === "GET" && r.request().headers()["hx-request"] === "true");
+// A mark inside the Devices card: a swap of the card's insides takes it away, whatever the new content is.
+const markCard = (page: Page) => page.evaluate(() => document.querySelector("#card-devices .sbody")!.insertAdjacentHTML("beforeend", '<i id="swap-mark" hidden></i>'));
+
+test("a backup taken elsewhere shows on the open page without a reload, the ticked row and the schedule stay (#950)", async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.setExtraHTTPHeaders(admin);
+  await page.goto(app.url + "/devices/backups");
+  const consoleErrors: string[] = [];
+  page.on("console", (m) => m.type() === "error" && consoleErrors.push(m.text()));
+  const navigations: string[] = [];
+  page.on("framenavigated", (f) => f === page.mainFrame() && navigations.push(f.url()));
+
+  // two devices at once: the events come within one second, and the page must end with both (a throttle on the
+  // trigger would show the first and drop the last)
+  const target = await backedUp(page, 0);
+  const second = await backedUp(page, 3);
+  const other = page.locator(".bk-table tbody tr").filter({ hasNot: page.locator(`td.dv-name[title="${target.name}"], td.dv-name[title="${second.name}"]`) }).first();
+  const otherID = await other.locator("input[name=id]").inputValue();
+  await other.locator("input[name=id]").check();
+  const runs = async (name: string) => Number((await runsOf(liveRow(page, name)).locator(".mono").innerText()).trim());
+  const before = [await runs(target.name), await runs(second.name)];
+  const totalBefore = Number(await storageBackups(page).innerText());
+
+  await Promise.all([backUpElsewhere(page, target.id), backUpElsewhere(page, second.id)]);
+
+  await expect(runsOf(liveRow(page, target.name)).locator(".mono")).toHaveText(String(before[0] + 1));
+  await expect(runsOf(liveRow(page, second.name)).locator(".mono")).toHaveText(String(before[1] + 1));
+  await expect(storageBackups(page)).toHaveText(String(totalBefore + 2));
+  // the tick survived the swap, and the button that acts on it still counts it
+  await expect(page.locator(`.bk-table input[name=id][value="${otherID}"]`)).toBeChecked();
+  await expect(page.getByRole("button", { name: "Back up selected (1)" })).toBeEnabled();
+  // the schedule form was not swapped: nothing is unsaved
+  await expect(page.locator("form#sysform [data-sys-bar]")).toBeHidden();
+  expect(navigations, "the page was not reloaded").toEqual([]);
+  expect(consoleErrors, "htmx found every id it swaps").toEqual([]);
+});
+
+test("a row menu that is open holds the live update until it is closed (#950)", async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.setExtraHTTPHeaders(admin);
+  await page.goto(app.url + "/devices/backups");
+  const target = await backedUp(page, 1);
+  const row = liveRow(page, target.name);
+  await row.locator("summary").click();
+  await expect(row.locator("details[open]")).toHaveCount(1);
+  await markCard(page);
+
+  const answered = liveReload(page);
+  await backUpElsewhere(page, target.id);
+  await answered; // the reload was asked for and answered: only the swap waits
+  await page.waitForTimeout(500);
+  await expect(row.locator("details[open]"), "the menu was not swapped away").toHaveCount(1);
+  await expect(page.locator("#swap-mark")).toHaveCount(1);
+
+  await row.locator("summary").click(); // closed: the held reload comes, once
+  await expect(page.locator("#swap-mark")).toHaveCount(0);
+});
+
+test("an open Storage fold holds the live update the same way (#950)", async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.setExtraHTTPHeaders(admin);
+  // one kept backup per device and none protected by its age: the first device has more, so the Storage card
+  // lists it for pruning, in a fold
+  await page.goto(app.url + "/devices/backups");
+  await openSchedule(page);
+  await page.locator("input[name='v.BACKUP_KEEP']").fill("1");
+  await page.locator("input[name='v.BACKUP_MAX_AGE']").fill("0h");
+  await page.getByRole("button", { name: "Save settings" }).click();
+  await expect(page).toHaveURL(/\/devices\/backups\?ok=saved/);
+  const fold = page.locator("#card-storage details.fold");
+  await expect(fold).toHaveCount(1);
+  const target = await backedUp(page, 2);
+  await fold.locator("summary").click();
+  await expect(fold).toHaveAttribute("open", "");
+  await markCard(page);
+
+  const answered = liveReload(page);
+  await backUpElsewhere(page, target.id);
+  await answered;
+  await page.waitForTimeout(500);
+  await expect(fold, "the fold was not swapped away").toHaveAttribute("open", "");
+  await expect(page.locator("#swap-mark")).toHaveCount(1);
+
+  await fold.locator("summary").click();
+  await expect(page.locator("#swap-mark")).toHaveCount(0);
 });
 
 // Why (#934): the status bar is one nowrap row on every page. While a backup run is in progress it

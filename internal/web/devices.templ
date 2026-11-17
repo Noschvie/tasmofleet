@@ -186,7 +186,7 @@ templ devicesContent(v view, p devicesPage) {
 // dropped every change within 2 s of the previous one, and a throttle plus a delay on the same
 // event does not help: htmx handles an event once per element, so the delay never ran.
 templ devicesTable(v view, p devicesPage) {
-	<div id="devtable" hx-get={ v.Base + "/devices/table?" + p.Query } hx-trigger="sse:resync, sse:device delay:500ms" hx-swap="innerHTML">
+	<div id="devtable" hx-get={ v.Base + "/devices/table?" + p.Query } hx-trigger="sse:resync, sse:device delay:500ms" hx-swap="innerHTML" data-live-region>
 		@devicesTableBody(v, p)
 	</div>
 }

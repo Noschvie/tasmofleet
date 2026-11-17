@@ -226,7 +226,10 @@ func schedulePlan(s schedule.Schedule) string {
 // fleet read now. An operator sees the same page without anything that starts or changes a run.
 func (h *handler) backupsRender(w http.ResponseWriter, r *http.Request, status int, p sysPage) {
 	p.Tabs = slices.DeleteFunc(p.Tabs, func(t sysTab) bool { return t.Slug != sysBackupsSlug })
+	// view takes the stream's sequence number before the fleet below is read (#160), so a backup stored
+	// while the page is built is told to the browser as a resync. The cards follow a run from the stream (#950).
 	v := h.view(r, "Backups", "backups", nil)
+	v.Live = true
 	v.Flash = backupsNotice(r)
 	if r.URL.Query().Get("ok") == "saved" {
 		v.Flash = "Saved."
@@ -626,6 +629,29 @@ func (v fleetView) SortHref(col string) string {
 		q.Set("filter", v.Filter)
 	}
 	return v.Base + fleetPath + "?" + q.Encode()
+}
+
+// LiveHref is the address the Devices card reloads itself from (#950): this page with the filter and the sort
+// the reader chose. The notice of a save (ok=) is not kept, or every refresh would show it again.
+func (v fleetView) LiveHref() string {
+	q := url.Values{"sort": {v.Sort}, "dir": {v.Dir}}
+	if v.Filter != fleetAll {
+		q.Set("filter", v.Filter)
+	}
+	return v.Base + fleetPath + "?" + q.Encode()
+}
+
+// LiveOOB names what the same reload replaces besides the Devices card: the cards a backup run changes (Last
+// run, Storage), Prune now's dialog, which is built from the same plan as the Storage card, and for an admin
+// the ids Back up all now posts. The schedule, the deleted devices' backups and the unreferenced files hold a
+// draft, an open fold or a form of their own and are never swapped. Each id is on the page once, empty
+// or not, so the swap always finds it.
+func (v fleetView) LiveOOB() string {
+	ids := "card-lastrun,card-storage,bk-prune"
+	if v.Admin {
+		ids += ",bk-all"
+	}
+	return ids
 }
 
 // SortClass and AriaSort mark the sorted column.
