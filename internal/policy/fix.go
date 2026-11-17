@@ -152,7 +152,10 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 			}
 		case restart && readable && (errors.Is(err, tasmota.ErrUnreachable) || errors.Is(err, tasmota.ErrTimeout)):
 			// the device is restarting; the read-back tells whether it applied. Only a chunk with a value the read-back
-			// reads: a secret passes it as set unread, so a chunk of secrets alone would pass with nothing confirming it.
+			// can read goes on to it: a secret passes it as set unread, so a chunk of secrets alone would pass with nothing
+			// read, and fails here as an unknown outcome. The read-back decides about the readable values only: a secret in
+			// the chunk is not confirmed by them, and when a readable value reads back different the job shows drift and
+			// the secret still counts as set.
 			applied = append(applied, chunk...)
 		default:
 			failed = chunk

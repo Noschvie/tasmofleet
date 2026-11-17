@@ -1103,8 +1103,8 @@ HTTP. Rules:
   (a synonym or a zero-padded SetOption is refused), so `cmdpolicy.CutOffName` sees every connection change a run
   holds. A chunk MQTT published and the device did not confirm is an unknown
   outcome: never sent again; the run stops there, the lines sent before it are saved (`saveAfterFailure`) and the
-  job fails saying the step may or may not have reached the device (a restarting chunk is the exception, as over
-  HTTP: its silence is the restart, and the read-back decides). Its lines never carry a secret: policy rules
+  job fails saying the step may or may not have reached the device (a restarting chunk that holds a value the read-back can read is the exception, as over
+  HTTP: its silence is the restart, and the read-back decides; a restarting chunk without one stays an unknown outcome). Its lines never carry a secret: policy rules
   refuse secret settings and URLs with a login (a policy is stored and shown in the clear), and `Apply` refuses
   any stored line that is not a rule's canonical command.
 - `DownloadConfig` goes MQTT first under Choose's backup path (#607, 5.x); `RootPage` stays HTTP.
@@ -1999,9 +1999,11 @@ with one notification. The skip is the snapshot failure event `snapshot.failed` 
   `cmdpolicy.Redacted` keeps the device's value hidden too. A read that fails, a device that cannot be confirmed
   or a value the device does not report fails the job as before (outcome unknown). A secret a rule sets (MqttUser)
   is never read back: it counts as set, neither as a failure nor as drift, and the card says "Set, secret, not read
-  back". It counts as set only when its send was answered or a value read back from the same Backlog confirms
-  it: a restarting Backlog whose send gets no answer (unreachable or timed out) counts as sent only when it holds a
-  value the read-back reads (`settings.ReadsBack`); one of secrets alone fails the job with the send's error. The
+  back". It counts as set when its send was answered. A restarting Backlog whose send gets no answer (unreachable or
+  timed out) goes on to the read-back only when its chunk holds a value the read-back can read (`settings.ReadsBack`);
+  a chunk of secrets alone fails the job with the send's error, as an unknown outcome. The read-back decides about
+  that chunk's readable values only: the secret in it is not confirmed by them, so if such a value reads back
+  different the job shows drift and the secret is still shown as set. The
   policy page's value of it is not refreshed by the read-back: over MQTT the device's own reply to the
   write (`{"MqttUser":…}`, which the live listener stores) updates it; over HTTP the page keeps the value it last
   read until the next read of the device.
