@@ -3,6 +3,7 @@ package restore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/netip"
 	"slices"
 	"strings"
@@ -213,4 +214,68 @@ func TestTheFileSystemQuestionOfAnMQTTRestoreGoesToTheTopicFirst(t *testing.T) {
 			t.Errorf("HTTP was asked %v", got)
 		}
 	})
+	// Firmware before MinFilesFirmware answers UfsList in another shape: the files cannot go back, and the topic's
+	// answer with the version (Status 2, also on the topic) is enough to say so without asking HTTP.
+	t.Run("the topic answers, the firmware is too old for files", func(t *testing.T) {
+		e, a := filesFlow(t)
+		m := e.mqttManager(t, &fakeUploader{e: e, apply: true}, transport.MQTT)
+		f := watchTopicFS(t, e, m, ufsPass)
+		dev, via := planTarget(t, e, m, model.TransportMQTT)
+		old := func(context.Context) (string, error) { return "14.5.0", nil }
+		plan, err := m.planFiles(transport.WithPath(t.Context(), transport.MQTT), a.ID, tasmota.TargetFor(dev), old, via)
+		want := "the device's firmware is older than " + tasmota.MinFilesFirmware + ", so only the settings are restored"
+		if err != nil || plan.Restores() || plan.Why != want {
+			t.Fatalf("plan: %+v, %v", plan, err)
+		}
+		if got := f.requests(); len(got) != 0 {
+			t.Errorf("HTTP was asked %v", got)
+		}
+	})
+	// A version that cannot be read is no reason to guess: the plan ends with the error (the page says the files could
+	// not be checked, the run fails loudly), and HTTP is not asked for it.
+	t.Run("the topic answers, the version cannot be read", func(t *testing.T) {
+		e, a := filesFlow(t)
+		m := e.mqttManager(t, &fakeUploader{e: e, apply: true}, transport.MQTT)
+		f := watchTopicFS(t, e, m, ufsPass)
+		dev, via := planTarget(t, e, m, model.TransportMQTT)
+		_, err := m.planFiles(transport.WithPath(t.Context(), transport.MQTT), a.ID, tasmota.TargetFor(dev), noVersion, via)
+		if !errors.Is(err, errNoVersion) {
+			t.Fatalf("plan: %v", err)
+		}
+		if got := f.requests(); len(got) != 0 {
+			t.Errorf("HTTP was asked %v", got)
+		}
+	})
+	// Guard (passes without #875 too): a restore over HTTP still asks its file system over HTTP, and a version that
+	// cannot be read still ends its plan with the error.
+	t.Run("over HTTP the version cannot be read", func(t *testing.T) {
+		e, a := filesFlow(t)
+		m := e.mqttManager(t, &fakeUploader{e: e, apply: true}, transport.HTTP)
+		f := watchTopicFS(t, e, m, ufsPass)
+		dev, via := planTarget(t, e, m, model.TransportHTTP)
+		_, err := m.planFiles(transport.WithPath(t.Context(), transport.HTTP), a.ID, tasmota.TargetFor(dev), noVersion, via)
+		if !errors.Is(err, errNoVersion) {
+			t.Fatalf("plan: %v", err)
+		}
+		if got := f.onTopic(); len(got) != 0 {
+			t.Errorf("a restore over HTTP asked the topic: %v", got)
+		}
+		if got := f.requests(); !slices.Contains(got, "FSInfo") {
+			t.Errorf("a restore over HTTP must ask its file system over HTTP: %v", got)
+		}
+	})
+}
+
+var errNoVersion = errors.New("test: Status 2 unanswered")
+
+func noVersion(context.Context) (string, error) { return "", errNoVersion }
+
+// planTarget is the stored device and the files route a restore over tr gives it, for calling planFiles directly.
+func planTarget(t *testing.T, e *flowEnv, m *Manager, tr model.Transport) (model.Device, filesVia) {
+	t.Helper()
+	dev, err := e.st.GetDevice(t.Context(), e.dev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dev, m.filesRoute(Job{Transport: tr}, dev)
 }
