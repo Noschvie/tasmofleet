@@ -37,7 +37,13 @@ templ deviceDeletePage(p devDeleteView) {
 					</label>
 					<label class="rcard">
 						<input type="radio" name="backups" value="delete" checked?={ p.Choice == "delete" }/>
-						<span class="rcard-body"><b>Delete the backups too</b><span>All { plural(p.Runs, "backup") } are removed. This can’t be undone.</span></span>
+						<span class="rcard-body"><b>Delete the backups too</b><span>
+							if p.Runs == 1 {
+								The backup is removed. This can’t be undone.
+							} else {
+								All { plural(p.Runs, "backup") } are removed. This can’t be undone.
+							}
+						</span></span>
 					</label>
 				</fieldset>
 				if p.ChoiceErr {

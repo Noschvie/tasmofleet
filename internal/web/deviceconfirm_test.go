@@ -91,9 +91,45 @@ func TestDeletePageListsBackupsAndOffersBothChoices(t *testing.T) {
 	if !strings.Contains(body, "This device has no backups.") || !strings.Contains(body, `<input type="hidden" name="backups" value="delete">`) || strings.Contains(body, `type="radio"`) {
 		t.Errorf("no backups:\n%s", body)
 	}
+	if strings.Contains(body, "is removed. This can") || strings.Contains(body, "are removed. This can") {
+		t.Errorf("no backups: the page states a removal count:\n%s", body)
+	}
 	// The v0.10 dialogs posted no fields; that still deletes (the backups go, as they did).
 	if r, _ := e.do(t, "POST", "/devices/1/delete", "admin", url.Values{}); r.StatusCode != 303 {
 		t.Fatalf("delete: status %d", r.StatusCode)
+	}
+}
+
+// Why (#951): the admin reads the sentence under "Delete the backups too" just before an
+// irreversible delete, so it has to state the count correctly. One backup run (a dump plus its
+// snapshot is ONE run, not two files) must read in the singular, several in the plural; the
+// verb agrees with the count, not only the noun.
+func TestDeletePageNamesASingleBackupInTheSingular(t *testing.T) {
+	e := setup(t)
+	t0 := time.Date(2026, 10, 15, 3, 0, 0, 0, time.UTC)
+	e.bk.list = []model.Backup{ // one run: dump and snapshot taken together
+		{ID: 2, DeviceID: 1, Kind: model.BackupConfigDump, TakenAt: t0, Version: "14.2.0", Size: 4096, Trigger: model.TriggerManual},
+		{ID: 1, DeviceID: 1, Kind: model.BackupSnapshot, TakenAt: t0, Size: 1000},
+	}
+	_, body := e.do(t, "GET", "/devices/1/delete", "admin", nil)
+	for _, want := range []string{"This device still has 1 backup", "The backup is removed. This can’t be undone."} {
+		if !strings.Contains(body, want) {
+			t.Errorf("one backup run: page lacks %q", want)
+		}
+	}
+	for _, bad := range []string{"All 1 backup", "backups are removed"} {
+		if strings.Contains(body, bad) {
+			t.Errorf("one backup run: page still says %q", bad)
+		}
+	}
+	e.bk.list = []model.Backup{
+		{ID: 3, DeviceID: 1, Kind: model.BackupConfigDump, TakenAt: t0.Add(2 * time.Hour), Size: 10},
+		{ID: 2, DeviceID: 1, Kind: model.BackupConfigDump, TakenAt: t0.Add(time.Hour), Size: 10},
+		{ID: 1, DeviceID: 1, Kind: model.BackupConfigDump, TakenAt: t0, Size: 10},
+	}
+	_, body = e.do(t, "GET", "/devices/1/delete", "admin", nil)
+	if !strings.Contains(body, "All 3 backups are removed. This can’t be undone.") || strings.Contains(body, "The backup is removed") {
+		t.Errorf("three backup runs:\n%s", body)
 	}
 }
 

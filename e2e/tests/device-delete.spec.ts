@@ -94,6 +94,7 @@ test("delete from the device header keeps the backups by default", async ({
   await expect(page.locator("h1")).toHaveText(`Delete ${name}?`);
   await expect(page.getByText("This device still has 1 backup")).toBeVisible();
   await expect(page.locator(".dd-row")).toHaveCount(1);
+  await expect(page.getByText("The backup is removed.")).toBeVisible();
   await expect(
     page.getByRole("radio", { name: /Keep the backups/ }),
   ).toBeChecked();
