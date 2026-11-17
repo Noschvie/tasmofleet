@@ -21,7 +21,9 @@ import (
 // Every sentence comes from package transport (Choose and its explainers); this file only
 // capitalises, orders and tones them, so the card, the disabled buttons and the errors of the
 // router say the same thing. The one exception is the "Other broker" hint of the MQTT row
-// (otherBrokerRow): web only, it never changes a path or a reason.
+// (otherBrokerRow): web only, it never changes a path or a reason. The other is the taken-topic sentence (#879): the
+// MQTT row says it, the action rows point to it (topicTakenShort); the buttons' titles and the router's errors keep the
+// whole text.
 
 // reasonOffline is blockReason's sentence for a device that stopped answering.
 const reasonOffline = "The device is offline."
