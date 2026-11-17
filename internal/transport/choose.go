@@ -258,7 +258,8 @@ func chooseBackup(f Facts) (Path, string) {
 		return HTTP, "over the device's HTTP API (/dl), because " + unansweredText(f.MQTT)
 	case why == "":
 		return MQTT, "over MQTT first (FileDownload; the device is online on TasmoFleet's broker and its topic is its own), " +
-			"the files archive over HTTP when HTTP answers; over HTTP if nothing could be published"
+			"the files archive over MQTT too where the firmware sends files (FileDownload Type 8, USE_UFILESYS_MQTT), " +
+			"else over HTTP when HTTP answers; over HTTP if nothing could be published"
 	case !httpFailing(f):
 		return HTTP, "over the device's HTTP API (/dl), because a backup over MQTT is not possible: " + why
 	}

@@ -114,19 +114,20 @@ func (r *Router) UploadFile(ctx context.Context, t tasmota.Target, path string, 
 // device is not usable for a transfer over MQTT (mqttFileDevice). It never moves to HTTP.
 //
 // UfsList lists the device's selected file system (dfsp), which is the SD card while one is mounted; the caller asks
-// only devices without one (tasmota.FSInfo.HasSD). The command is sent as a read: cmdpolicy counts "UfsList /dir" as a
-// write only because it takes an argument, and it changes nothing but the folder the web upload would write to.
+// only devices without one (tasmota.FSInfo.HasSD). The command is sent with the class cmdpolicy gives it, as every
+// other command.
 func (r *Router) MQTTListFiles(ctx context.Context, d model.Device, dir string) ([]tasmota.FileEntry, error) {
 	if dir != "/" {
 		if err := tasmota.CheckFSPath(dir); err != nil {
 			return nil, err
 		}
 	}
-	now, _, err := r.mqttFileDevice(ctx, d)
+	c, err := r.mqttFileDevice(ctx, d)
 	if err != nil {
 		return nil, err
 	}
-	raw, err := r.sendMQTT(ctx, now, "UfsList "+dir, cmdClass{})
+	cmnd := "UfsList " + dir
+	raw, err := r.sendMQTT(ctx, c.dev, cmnd, classifyCommand(cmnd))
 	if err != nil {
 		return nil, err
 	}
@@ -139,54 +140,54 @@ func (r *Router) MQTTListFiles(ctx context.Context, d model.Device, dir string) 
 // is marked like the dump's. It never moves to HTTP: an Error 3 (mqttcmd.ErrNoFileTransfer, the firmware has no file
 // transfer) is the caller's to handle.
 func (r *Router) MQTTDownloadFile(ctx context.Context, d model.Device, path string, max int64) ([]byte, error) {
-	now, pw, err := r.mqttFileDevice(ctx, d)
+	c, err := r.mqttFileDevice(ctx, d)
 	if err != nil {
 		return nil, err
 	}
-	dl, ok := r.mqttDoer().(MQTTFileDownloader)
-	if !ok {
-		noteTrace(ctx, None)
-		return nil, fmt.Errorf("%w: %w: the command channel has no file transfer", ErrFilesNotOverMQTT, tasmota.ErrNotImplemented)
-	}
-	b, err := dl.DownloadFile(ctx, now, pw, path, max)
+	b, err := c.dl.DownloadFile(ctx, c.dev, c.pw, path, max)
 	if err == nil || !notPublished(err) || errors.Is(err, mqttcmd.ErrPublished) {
 		noteTrace(ctx, MQTT)
 	} else {
 		noteTrace(ctx, None)
 	}
 	if errors.Is(err, mqttcmd.ErrPasswordRefused) {
-		r.markPasswordBad(ctx, now.ID)
+		r.markPasswordBad(ctx, c.dev.ID)
 	}
 	return b, err
+}
+
+// mqttFileCall is what a file call over MQTT sends with: the device as read right before, its password, the channel.
+type mqttFileCall struct {
+	dev model.Device
+	pw  string
+	dl  MQTTFileDownloader
 }
 
 // mqttFileDevice is the check before a file call over MQTT: the transfer rule of the dump (transferBlocker: strict
 // MQTT conditions and the password), the device read fresh and compared with the caller's snapshot d, the password
 // resolved from that read (downloadPassword). Any refusal is ErrFilesNotOverMQTT with nothing sent.
-func (r *Router) mqttFileDevice(ctx context.Context, d model.Device) (model.Device, string, error) {
-	refuse := func(why string) (model.Device, string, error) {
+func (r *Router) mqttFileDevice(ctx context.Context, d model.Device) (mqttFileCall, error) {
+	refuse := func(why string) (mqttFileCall, error) {
 		noteTrace(ctx, None)
-		return model.Device{}, "", fmt.Errorf("%w: %s", ErrFilesNotOverMQTT, why)
+		return mqttFileCall{}, fmt.Errorf("%w: %s", ErrFilesNotOverMQTT, why)
 	}
 	if p, ok := PathFrom(ctx); ok && p != MQTT {
 		return refuse("the job is pinned to HTTP")
 	}
-	if r.mqttDoer() == nil || r.o.Facts == nil {
-		return refuse("MQTT is not connected")
-	}
-	if _, ok := r.mqttDoer().(MQTTFileDownloader); !ok {
-		return refuse("the command channel has no file transfer")
+	dl, ok := r.mqttDoer().(MQTTFileDownloader) // a nil doer (MQTT not connected) is no downloader either
+	if !ok || r.o.Facts == nil {
+		return refuse("MQTT is not connected, or its channel has no file transfer")
 	}
 	now, err := r.o.Devices.GetDevice(ctx, d.ID)
 	if err != nil {
-		return model.Device{}, "", err
+		return mqttFileCall{}, err
 	}
 	if mqttSettingsChanged(now, d) {
 		return refuse("the device's MQTT settings changed since the backup began")
 	}
 	f, err := r.o.Facts.FactsFor(ctx, now)
 	if err != nil {
-		return model.Device{}, "", err
+		return mqttFileCall{}, err
 	}
 	if why := transferBlocker(f, "read its files"); why != "" {
 		return refuse(why)
@@ -195,7 +196,7 @@ func (r *Router) mqttFileDevice(ctx context.Context, d model.Device) (model.Devi
 	if why != "" {
 		return refuse(why)
 	}
-	return now, pw, nil
+	return mqttFileCall{dev: now, pw: pw, dl: dl}, nil
 }
 
 // markPasswordBad records that the device refused its MqttPassword (Error 1), for every transfer that sends it.

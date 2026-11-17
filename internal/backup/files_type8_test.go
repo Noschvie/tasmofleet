@@ -3,11 +3,13 @@ package backup
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/mqttcmd"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
 	"github.com/hellwand/tasmofleet/internal/transport"
 )
@@ -228,5 +230,61 @@ func TestAFailureAfterAFileCameOverMQTTNeverMovesTheWalkToHTTP(t *testing.T) {
 		if why != "could not be read" {
 			t.Errorf("%s skipped: %q", p, why)
 		}
+	}
+}
+
+// stockType8Files is a stock firmware's file system as the MQTT walk sees it: the listings answer, and every Type 8
+// start that is published gets Error 3. A file whose path the channel cannot send is refused before anything is
+// published (mqttcmd.Channel.DownloadFile), and refuse lets the router refuse the named path (ErrFilesNotOverMQTT).
+type stockType8Files struct {
+	lists  map[string][]tasmota.FileEntry
+	refuse string
+	starts int
+}
+
+func (s *stockType8Files) ListFiles(_ context.Context, _ tasmota.Target, dir string) ([]tasmota.FileEntry, error) {
+	return s.lists[dir], nil
+}
+
+func (s *stockType8Files) DownloadFile(_ context.Context, _ tasmota.Target, p string, _ int64) ([]byte, error) {
+	if err := tasmota.CheckFSPath(p); err != nil {
+		return nil, fmt.Errorf("%w: the file path cannot be sent in a file transfer command: %w", mqttcmd.ErrRefused, err)
+	}
+	if p == s.refuse {
+		return nil, fmt.Errorf("%w: MQTT is not connected", transport.ErrFilesNotOverMQTT)
+	}
+	s.starts++
+	return nil, fmt.Errorf("%w: %w: %w", mqttcmd.ErrPublished, mqttcmd.ErrTransfer, mqttcmd.ErrNoFileTransfer)
+}
+
+// Why (#924, T2/T3): the fall-back to HTTP after a stock firmware's Error 3 must depend on the first Type 8 start that
+// reached the device, not on the first file the walk counted. When the first counted file is refused before anything
+// is published (a nested path over 49 bytes, a router refusal), every later file would send the MQTT password over
+// the broker only to get Error 3, and the run would store an empty archive "via mqtt" with every file "could not be
+// read", while HTTP, which can read them, is never asked. One published Error 3 is the proof; a second start is not
+// needed.
+func TestTheFallBackAfterError3CountsOnlyStartsThatWerePublished(t *testing.T) {
+	const deep = "/aaaaaaaaaaaaaaaaaaaa"
+	for _, c := range []struct {
+		name, refuse string
+		files        []tasmota.FileEntry // of deep, in the order the walk reaches them
+	}{
+		{"a path the channel cannot send", "",
+			[]tasmota.FileEntry{{Name: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.be", Size: 1}, {Name: "c.be", Size: 1}, {Name: "d.be", Size: 1}}},
+		{"a router refusal of one file", deep + "/c.be",
+			[]tasmota.FileEntry{{Name: "c.be", Size: 1}, {Name: "d.be", Size: 1}, {Name: "e.be", Size: 1}}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			lists := map[string][]tasmota.FileEntry{"/": {{Name: deep[1:], Dir: true}}, deep: c.files}
+			fs := &stockType8Files{lists: lists, refuse: c.refuse}
+			w := newWalker(t.Context(), t.Context(), fs, tasmota.Target{}, tasmota.FSInfo{})
+			w.overMQTT = true
+			if err := w.dir("/", 0); !errors.Is(err, errNoType8) {
+				t.Errorf("walk ended with %v, want errNoType8 (files %d, skipped %+v)", err, len(w.man.Files), w.man.Skipped)
+			}
+			if fs.starts != 1 {
+				t.Errorf("%d Type 8 starts published with the MQTT password, want 1", fs.starts)
+			}
+		})
 	}
 }

@@ -188,7 +188,8 @@ type fileReader interface {
 	DownloadFile(ctx context.Context, t tasmota.Target, path string, max int64) ([]byte, error)
 }
 
-// errNoType8 ends a walk over MQTT whose first file the device refused with Error 3 (mqttcmd.ErrNoFileTransfer).
+// errNoType8 ends a walk over MQTT whose first published file start the device answered with Error 3
+// (mqttcmd.ErrNoFileTransfer).
 var errNoType8 = errors.New("backup: the firmware sends no files over MQTT")
 
 // walker reads the device's file system into a manifest and file contents.
@@ -206,8 +207,11 @@ type walker struct {
 	dead    string // set once the device stopped answering: the reason for everything left
 	// overMQTT: the walk reads over MQTT (#924). It handles a folder's files before its subfolders, so a stock
 	// firmware's Error 3 to the first file ends it after as few listings as possible, and that Error 3 ends the walk
-	// (errNoType8) when no file was read yet.
+	// (errNoType8) when no earlier start was published (started).
 	overMQTT bool
+	// started: a file call of this walk published its start, and the device did not answer it with Error 3. A call
+	// refused before anything was published (a path the channel cannot send, a router refusal) does not count.
+	started bool
 }
 
 func (w *walker) skip(p string, size int64, reason string) {
@@ -307,10 +311,14 @@ func (w *walker) file(p string, e tasmota.FileEntry) error {
 		if cerr := w.parent.Err(); cerr != nil {
 			return cerr
 		}
-		// Error 3 to the first file: the firmware has no file transfer over MQTT and sent nothing of the file. Later it
-		// is that file's failure: files came over MQTT already, and the walk never moves to HTTP (T2/T3).
-		if w.overMQTT && w.reads == 1 && errors.Is(err, mqttcmd.ErrNoFileTransfer) {
+		// Error 3 to the first start that was published: the firmware has no file transfer over MQTT and sent nothing
+		// of the file. After a published start it is that file's failure: the device took Type 8 already, and the
+		// walk never moves to HTTP (T2/T3).
+		if w.overMQTT && !w.started && errors.Is(err, mqttcmd.ErrNoFileTransfer) {
 			return errNoType8
+		}
+		if errors.Is(err, mqttcmd.ErrPublished) {
+			w.started = true
 		}
 		w.noteDead(err)
 		reason := downloadReason(err, w.dead)
@@ -320,6 +328,7 @@ func (w *walker) file(p string, e tasmota.FileEntry) error {
 		w.skip(p, e.Size, reason)
 		return nil
 	}
+	w.started = true
 	if w.total+int64(len(b)) > MaxRunBytes { // the client let more through than asked for
 		w.skip(p, int64(len(b)), whyRunCap)
 		return nil
@@ -559,9 +568,9 @@ func (m mqttFS) DownloadFile(ctx context.Context, _ tasmota.Target, path string,
 // each file (FileDownload Type 8), with no identity question (the topic is the identity, as for the dump) and no HTTP
 // request. done: the result stands (an archive, or why there is none). Otherwise the files go over HTTP, and why
 // says what kept them off MQTT ("" when nothing can be said about the firmware): a device with an SD card (Type 8 and
-// UfsList would reach the card, not the flash), a firmware that answered the first file with Error 3 (nothing of
-// the file was sent), or a router that sent nothing at all (transport.ErrFilesNotOverMQTT). Only a cancelled run is
-// an error.
+// UfsList would reach the card, not the flash), a firmware that answered the first published file start with Error 3
+// (nothing of the file was sent), or a router that sent nothing at all (transport.ErrFilesNotOverMQTT). Only a
+// cancelled run is an error.
 func (m *Manager) filesOverMQTT(ctx, wctx context.Context, dev model.Device, t tasmota.Target, info tasmota.FSInfo, at time.Time) (res filesResult, why string, done bool, err error) {
 	mf, ok := m.o.Client.(mqttFiles)
 	if !ok {

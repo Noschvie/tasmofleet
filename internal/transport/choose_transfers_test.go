@@ -54,13 +54,15 @@ func TestTransfersGoOverMQTTFirstWhileHTTPWorks(t *testing.T) {
 	}
 }
 
-// Why (#607): the device page shows these sentences under "Back up" and "Restore". Over MQTT first they say that
-// the files archive still needs HTTP (Tasmota has no file transfer over MQTT) and that HTTP takes a transfer only
-// when MQTT published nothing; over HTTP they say why MQTT could not take it, so a person sees what to fix.
+// Why (#607, #924): the device page shows these sentences under "Back up" and "Restore". Over MQTT first they say
+// where the files go: a backup's files cross the broker too where the firmware sends files (FileDownload Type 8,
+// USE_UFILESYS_MQTT), and only otherwise over HTTP, so a person on such a build is not told that the scripts and
+// keys stay off the broker; a restore writes its files over HTTP. HTTP takes a transfer only when MQTT published
+// nothing; over HTTP they say why MQTT could not take it, so a person sees what to fix.
 func TestTransferReasonsSayWhatTheRouterDoes(t *testing.T) {
 	p := Choose(base())
 	for a, want := range map[Action][]string{
-		ActBackup:  {"over MQTT first (FileDownload", "files archive over HTTP", "over HTTP if nothing could be published"},
+		ActBackup:  {"over MQTT first (FileDownload", "files archive over MQTT too", "Type 8", "else over HTTP when HTTP answers", "over HTTP if nothing could be published"},
 		ActRestore: {"over MQTT first (FileUpload", "files over HTTP", "MQTT connection"},
 	} {
 		for _, w := range want {
@@ -68,6 +70,9 @@ func TestTransferReasonsSayWhatTheRouterDoes(t *testing.T) {
 				t.Errorf("%s reason %q lacks %q", a, got, w)
 			}
 		}
+	}
+	if got := p.Reason(ActBackup); strings.Contains(got, "the files archive over HTTP when HTTP answers") {
+		t.Errorf("backup reason %q says the files always go over HTTP", got)
 	}
 	f := base()
 	f.Password = Password{}

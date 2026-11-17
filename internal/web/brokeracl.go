@@ -21,8 +21,9 @@ const (
 		"MQTT Explorer, other devices. TLS to the broker does not change that, because the device's own leg is plain. " +
 		"Only an ACL that keeps the other clients away from the devices' commands and backups stops that."
 	// aclTextDevicePassword stands by the device's MQTT password.
-	aclTextDevicePassword = "A backup or restore over MQTT sends this password in its start command and then the device's whole configuration, " +
-		"every password in it included, through the broker. Without an ACL every client of the broker can read both."
+	aclTextDevicePassword = "A backup or restore over MQTT sends this password in the start command of the dump and of every file, then the " +
+		"device's whole configuration, every password in it included, and on a firmware that sends files over MQTT its files, " +
+		"through the broker. Without an ACL every client of the broker can read all of it."
 	// aclTextConsole stands on the confirmation of a console or bulk command that goes over MQTT.
 	aclTextConsole = "This command, with any password in it, goes through the broker. Unless the broker has an ACL, every client of the broker can read it."
 	// aclTextRestore stands on the confirmation of a restore over MQTT.
@@ -30,7 +31,8 @@ const (
 		"Unless the broker has an ACL, every client of the broker can read it."
 	// aclTextBackup stands on the page that starts backups.
 	aclTextBackup = "A backup of a device that is online on the broker travels over MQTT: the device's whole configuration, every password in it, " +
-		"passes through the broker. Unless the broker has an ACL, every client of the broker can read it."
+		"and, on a firmware that sends files over MQTT, its files (Berry scripts with their tokens, the TLS private key) pass through " +
+		"the broker. Unless the broker has an ACL, every client of the broker can read them."
 )
 
 // aclTextFor is text when at least one of the devices' routes is MQTT and the notice applies (brokerACLOpen), and empty

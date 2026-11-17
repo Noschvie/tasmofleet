@@ -325,6 +325,33 @@ func TestFleetBackupsPageCarriesTheBrokerACLWarningOnceByBackUpAll(t *testing.T)
 	}
 }
 
+// Why (#924): on a firmware built with USE_UFILESYS_MQTT a backup over MQTT sends every file through the broker too:
+// Berry scripts with their tokens and the TLS private key, each file after a start command that carries the device's
+// MQTT password. The notices a person decides from must say so; naming only the configuration tells a person on such
+// a build that the scripts and keys stay off the broker.
+func TestTheACLNoticesOfABackupNameTheFilesItSendsOverMQTT(t *testing.T) {
+	e := fleetEnv(t, fleetFixture(time.Now()))
+	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
+	if countACL(t, body) != 1 {
+		t.Fatal("the Backups page has no ACL notice")
+	}
+	for _, w := range []string{"its files", "Berry scripts with their tokens", "TLS private key"} {
+		if !strings.Contains(body, w) {
+			t.Errorf("the Backups page's ACL notice does not say %q", w)
+		}
+	}
+	ed, _ := brokerWithOwnDevice(t)
+	_, page := ed.do(t, "GET", "/devices/7/edit", "admin", nil)
+	if countACL(t, page) != 1 {
+		t.Fatal("the edit form has no ACL notice")
+	}
+	for _, w := range []string{"the start command of the dump and of every file", "its files"} {
+		if !strings.Contains(page, w) {
+			t.Errorf("the MQTT password's ACL notice does not say %q", w)
+		}
+	}
+}
+
 // Why (#853): the notice by the device's MQTT password field says that a backup or restore sends the password and the
 // dump through the broker. Without a configured broker neither goes anywhere, so the notice would only scare.
 func TestDevicePasswordFieldNoticeNeedsAConfiguredBroker(t *testing.T) {

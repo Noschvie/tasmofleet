@@ -120,7 +120,7 @@ func (c *Channel) Download(ctx context.Context, d model.Device, password string)
 // chunk of the announced size, whichever is longer.
 func (c *Channel) DownloadFile(ctx context.Context, d model.Device, password, path string, max int64) ([]byte, error) {
 	if err := tasmota.CheckFSPath(path); err != nil {
-		return nil, fmt.Errorf("%w: the file path cannot be sent in a file transfer command", ErrRefused)
+		return nil, fmt.Errorf("%w: the file path cannot be sent in a file transfer command: %w", ErrRefused, err) // tasmota.ErrBadPath, as over HTTP
 	}
 	if max <= 0 {
 		return nil, fmt.Errorf("%w: no room for the file", ErrRefused)
@@ -283,10 +283,7 @@ func (c *Channel) runTransfer(ctx, hctx context.Context, began time.Time, topic 
 	case spec.tooLarge && int64(size) > spec.maxSize:
 		return nil, true, fmt.Errorf("%w: %w: the device announced %d bytes", ErrTransfer, tasmota.ErrFileTooLarge, size)
 	case int64(size) < spec.minSize || int64(size) > spec.maxSize:
-		if spec.file != "" {
-			return nil, true, fail("the device announced %d bytes", size)
-		}
-		return nil, true, fail("the device announced %d bytes, a settings dump has %d to %d", size, minDumpSize, maxDumpSize)
+		return nil, true, fail("the device announced %d bytes, this transfer takes %d to %d", size, spec.minSize, spec.maxSize)
 	}
 	dctx, cancel := context.WithDeadline(ctx, began.Add(spec.bound(size)))
 	defer cancel()

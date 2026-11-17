@@ -157,6 +157,22 @@ func TestType8PathThatCannotBeSentVerbatimPublishesNothing(t *testing.T) {
 	}
 }
 
+// Why (#924): a path the firmware cannot take is the same refusal over MQTT as over HTTP (tasmota.ErrBadPath), so a
+// backup lists that file as "name not accepted" whichever transport read the files, not as "could not be read".
+func TestType8PathTheFirmwareCannotTakeIsANameRefusalAsOverHTTP(t *testing.T) {
+	b := &fakeBus{}
+	c := newChan(b)
+	for _, p := range []string{"/aaaaaaaaaaaaaaaaaaaa/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.be", "x.be", `/a"b`} {
+		_, err := c.DownloadFile(t.Context(), plug(), dlPassword, p, 100)
+		if !errors.Is(err, ErrRefused) || !errors.Is(err, tasmota.ErrBadPath) {
+			t.Errorf("%q: %v, want a refusal that is tasmota.ErrBadPath", p, err)
+		}
+	}
+	if n := len(b.sent()); n != 0 {
+		t.Fatalf("published %d commands: %v", n, b.sent())
+	}
+}
+
 // Why: a file is far larger than a settings dump, so the dump's 30 s total does not fit it, but a device that
 // answers each "?" slowly (yet within ReplyWait) must still not hold its topic, and the backup the device
 // lock, for minutes: the bound follows the announced size.

@@ -1667,8 +1667,8 @@ No migration, no store contract change and no new dependency.
    `Router.MQTTListFiles` and `FileDownload {"Password":…,"Type":8,"File":"<path>"}` per file through
    `Router.MQTTDownloadFile` (firmware built with `USE_UFILESYS_MQTT`, arendst/Tasmota#25278), under the rule of the
    dump's `FileDownload`, with no identity question and no HTTP request; a folder's files are read before its
-   subfolders. A stock firmware answers the first file with Error 3 (before it sends anything of it): the walk ends
-   there, and the files are read over HTTP as below. A device with an SD card goes there at once (Type 8 and
+   subfolders. A stock firmware answers the first file start that is published with Error 3 (before it sends
+   anything of it; a file refused before anything was published does not count): the walk ends there, and the files are read over HTTP as below. A device with an SD card goes there at once (Type 8 and
    `UfsList` would reach the card). Over HTTP the files are read only when the host at the device's address answers
    `Status 5` over HTTP with one of the device's MACs ("the device at its address is not this device" otherwise);
    when HTTP fails after MQTT could not carry the files the reason names both: `they need HTTP (this firmware sends
