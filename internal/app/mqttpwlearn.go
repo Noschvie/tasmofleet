@@ -16,6 +16,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/store"
 	"github.com/hellwand/tasmofleet/internal/sysconfig"
+	"github.com/hellwand/tasmofleet/internal/web"
 )
 
 // mqttPWStore is what the learner needs of the store (*store.SQLite).
@@ -65,6 +66,10 @@ func (a *runtime) startMQTTPasswordLearner(ctx context.Context) {
 	})
 	ch, unsub := a.svc.Hub.Subscribe(events.TopicBackup) // before the first pass: no backup between them is missed
 	a.goBG("mqtt-password-learner", func() error { defer unsub(); l.run(ctx, ch, kick); return nil })
+	if a.svc.Router != nil { // the card, the bulk set and the tests of the devices' passwords (web.MQTTPasswordFleet)
+		a.pwFleet = &mqttPasswordFleet{learner: l, st: a.svc.Store, tester: a.svc.Router, audit: a.svc.Audit, clk: clock.Real{}, log: a.log, ctx: ctx,
+			spawn: func(f func()) { a.goBG("mqtt-password-tests", func() error { f(); return nil }) }} // waited for at shutdown
+	}
 }
 
 // run is the learner's loop until ctx ends or the hub closes ch.
@@ -119,41 +124,25 @@ func (l *mqttPasswordLearner) all(ctx context.Context) {
 }
 
 // device takes d's MqttPassword from its newest own run, when that run has a decoded file that holds mqtt_pwd as a
-// string and is newer than the stored password. A run of replacement hardware ("Replace device") is not the
-// device's own, nor is a run whose snapshot does not show one of the device's MACs (runIsDevice); a newest run
-// without a decoded file (.dmp only) teaches nothing, and no older run is read instead, since its password may be
-// older than one the device has had since. A backup taken after a refusal that shows
-// the stored password again is written too: the device holds that password, so the newer fact ends the refusal
-// mark (it may have been about a password replaced while it was sent). Errors are logged with the device only: the
-// texts of JSON errors can quote the input.
+// string and is newer than the stored password (newestPassword decides). A run of replacement hardware ("Replace
+// device") is not the device's own, nor is a run whose snapshot does not show one of the device's MACs
+// (runIsDevice); a newest run without a decoded file (.dmp only) teaches nothing, and no older run is read
+// instead, since its password may be older than one the device has had since. A backup taken after a refusal that
+// shows the stored password again is written too: the device holds that password, so the newer fact ends the
+// refusal mark (it may have been about a password replaced while it was sent). Errors are logged with the device
+// only: the texts of JSON errors can quote the input.
 func (l *mqttPasswordLearner) device(ctx context.Context, d model.Device) {
 	if !l.enabled() {
 		return
 	}
-	list, err := l.backups.List(ctx, d.ID)
-	if err != nil {
-		l.log.Warn("mqtt password learner: could not list the device's backups", "device", int64(d.ID))
-		return
-	}
-	takenAt, ok := backup.NewestOwnRun(list)
-	if !ok || (!d.MQTTPasswordSetAt.IsZero() && !takenAt.After(d.MQTTPasswordSetAt)) {
-		return // no backup, or the stored password is as new as the newest backup
-	}
-	i := slices.IndexFunc(list, func(b model.Backup) bool { return b.Kind == model.BackupDecoded && b.TakenAt.Equal(takenAt) })
-	if i < 0 {
-		return
-	}
-	if !l.runIsDevice(ctx, list, takenAt, d) {
-		l.log.Info("mqtt password learner: the backup is not proven to be this device", "device", int64(d.ID))
-		return
-	}
-	data, _, err := l.backups.Open(ctx, list[i].ID)
-	if err != nil {
-		l.log.Warn("mqtt password learner: could not read the decoded backup", "device", int64(d.ID))
-		return
-	}
-	v, ok := mqttPwdOf(data)
-	if !ok {
+	v, takenAt, gap := l.newestPassword(ctx, d)
+	if gap != web.GapNone { // no backup, no decoded copy, no password in it, or the stored one is as new: nothing to learn
+		if gap == web.GapNotProven {
+			l.log.Info("mqtt password learner: the backup is not proven to be this device", "device", int64(d.ID))
+		}
+		if gap == web.GapUnreadable {
+			l.log.Warn("mqtt password learner: could not read the device's backups", "device", int64(d.ID))
+		}
 		return
 	}
 	mode := model.MQTTPasswordModeFor(v, l.broker())
@@ -184,6 +173,67 @@ func (l *mqttPasswordLearner) device(ctx context.Context, d model.Device) {
 		l.audit.Record(ctx, model.AuditEvent{At: l.clk.Now(), Actor: "system", Action: "device.mqtt_password",
 			Target: "device:" + strconv.FormatInt(int64(d.ID), 10), Detail: string(b), Result: "ok"})
 	}
+}
+
+// gapCurrent is newestPassword's answer for a device whose stored password is as new as its newest backup: there is
+// nothing to read or write. It is the learner's own word, not one of the card's reasons.
+const gapCurrent web.PasswordGap = "current"
+
+// newestPassword is the one decision of what d's backups say about its MqttPassword, for the learner and for the
+// card that lists the devices without one (Gaps). gap is web.GapNone when v is the password of the newest own run,
+// taken at takenAt and newer than the stored one; any other gap says why there is none (gapCurrent: the stored one
+// is as new as the backup, so nothing was read). Nothing here logs, and no value leaves except v.
+func (l *mqttPasswordLearner) newestPassword(ctx context.Context, d model.Device) (v string, takenAt time.Time, gap web.PasswordGap) {
+	list, err := l.backups.List(ctx, d.ID)
+	if err != nil {
+		return "", time.Time{}, web.GapUnreadable
+	}
+	takenAt, ok := backup.NewestOwnRun(list)
+	if !ok {
+		return "", time.Time{}, web.GapNoBackup
+	}
+	if !d.MQTTPasswordSetAt.IsZero() && !takenAt.After(d.MQTTPasswordSetAt) {
+		return "", takenAt, gapCurrent // the stored password is as new as the newest backup: nothing to read
+	}
+	i := slices.IndexFunc(list, func(b model.Backup) bool { return b.Kind == model.BackupDecoded && b.TakenAt.Equal(takenAt) })
+	if i < 0 {
+		return "", takenAt, web.GapDmpOnly
+	}
+	if !l.runIsDevice(ctx, list, takenAt, d) {
+		return "", takenAt, web.GapNotProven
+	}
+	data, _, err := l.backups.Open(ctx, list[i].ID)
+	if err != nil {
+		return "", takenAt, web.GapUnreadable
+	}
+	v, ok = mqttPwdOf(data)
+	if !ok {
+		return "", takenAt, web.GapNoField
+	}
+	return v, takenAt, web.GapNone
+}
+
+// Gaps says why each of ids has no MqttPassword from a backup, for the card of the devices without one. A device
+// whose backup does give one is web.GapPending: the learner has not applied it yet (a pass is due, or it is
+// running). It reads the stored backups of those devices only, never a device, and returns codes, never a value.
+func (l *mqttPasswordLearner) Gaps(ctx context.Context, ids []model.DeviceID) map[model.DeviceID]web.PasswordGap {
+	out := make(map[model.DeviceID]web.PasswordGap, len(ids))
+	for _, id := range ids {
+		if !l.enabled() {
+			out[id] = web.GapOff
+			continue
+		}
+		d, err := l.st.GetDevice(ctx, id)
+		if err != nil {
+			continue
+		}
+		_, _, gap := l.newestPassword(ctx, d)
+		if gap == web.GapNone {
+			gap = web.GapPending // a usable password that is not applied yet
+		}
+		out[id] = gap
+	}
+	return out
 }
 
 // runIsDevice reports whether the run of d taken at takenAt shows d's MAC in its snapshot (backup.SnapshotShowsDevice).

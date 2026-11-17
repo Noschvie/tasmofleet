@@ -46,3 +46,21 @@ func (w webFacts) FailingHTTP(ctx context.Context, ids []model.DeviceID) (map[mo
 	}
 	return out, nil
 }
+
+// AllFacts returns the facts of every device from one read of the inventory (web.AllFactsSource): the card of
+// the devices' MQTT passwords needs each device's word, and a read per device would list the inventory N times.
+func (w webFacts) AllFacts(ctx context.Context) (map[model.DeviceID]transport.Facts, error) {
+	all, err := w.Devices.ListDevices(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[model.DeviceID]transport.Facts, len(all))
+	for _, d := range all {
+		f, err := w.factsFor(ctx, d, all)
+		if err != nil {
+			return nil, err
+		}
+		out[d.ID] = f
+	}
+	return out, nil
+}

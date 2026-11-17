@@ -29,6 +29,9 @@ const (
 	// aclTextRestore stands on the confirmation of a restore over MQTT.
 	aclTextRestore = "This restore sends the device's whole configuration, every password in it, through the broker. " +
 		"Unless the broker has an ACL, every client of the broker can read it."
+	// aclTextPasswordTest stands on the page that gives the broker password to several devices and tests each one.
+	aclTextPasswordTest = "Each password test sends the device's start command with its password and, when the device accepts it, the device's " +
+		"settings (every password in them) in one chunk through the broker. Unless the broker has an ACL, every client of the broker can read them."
 	// aclTextBackup stands on the page that starts backups.
 	aclTextBackup = "A backup of a device that is online on the broker travels over MQTT: the device's whole configuration, every password in it, " +
 		"and, on a firmware that sends files over MQTT, its files (Berry scripts with their tokens, the TLS private key) pass through " +

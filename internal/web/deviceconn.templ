@@ -49,11 +49,38 @@ templ pathList(id string, rows []pathRow, c pathCard, attrs templ.Attributes) {
 					if r.Sub != "" {
 						<p class="devcard-note">
 							@keepTogether(r.Sub)
+							if !r.StampAt.IsZero() {
+								{ r.StampLead + " " }<time data-visual-mask { ui.StampAttrs(r.StampAt, ui.StampDay)... }>{ r.StampText }</time>{ r.StampTail }
+							}
+							if r.Enables != "" {
+								{ " " + r.Enables }
+							}
 							if !r.Since.IsZero() {
 								{ " Since " }
 								<time data-visual-mask { ui.StampAttrs(r.Since, ui.StampDay)... }>{ r.SinceText }</time>.
 							}
 						</p>
+					}
+					if a := r.PWActs; a != nil {
+						<div class="pw-acts">
+							if a.Test && a.TestWhy == "" && c.PWTest != "" {
+								<form method="post" action={ templ.SafeURL(c.PWTest) }>
+									<input type="hidden" name="csrf" value={ c.CSRF }/>
+									<button type="submit" class="btn btn-link">{ a.TestLabel }</button>
+								</form>
+							} else if a.Test {
+								<button type="button" class="btn btn-link" disabled aria-describedby="pw-test-why">{ a.TestLabel }</button>
+							}
+							if a.Change && c.PWChange != "" {
+								<a class="btn btn-link" href={ templ.SafeURL(c.PWChange) }>{ a.ChangeLabel }</a>
+							}
+							if a.UseBroker && c.PWBroker != "" {
+								<a class="btn btn-link" href={ templ.SafeURL(c.PWBroker) }>Use the broker password…</a>
+							}
+						</div>
+						if a.Test && a.TestWhy != "" {
+							<p class="devcard-note" id="pw-test-why">{ "Test not possible: " + sentence(a.TestWhy) }</p>
+						}
 					}
 					if r.Forget && c.Forget != "" {
 						<form method="post" action={ templ.SafeURL(c.Forget) }>

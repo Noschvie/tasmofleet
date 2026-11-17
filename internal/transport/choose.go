@@ -191,9 +191,10 @@ func knownMode(mode model.MQTTPasswordMode) bool {
 	return ok
 }
 
-// passwordTestBlocker: the password test (#609) follows the strict rule of transfers, since it starts a
-// FileDownload, but ignores the refusal mark: checking a refused password again is what the test is for.
-func passwordTestBlocker(f Facts) string {
+// PasswordTestBlocker says why the password test (#609) cannot run for the device, "" when it can: it follows the
+// strict rule of transfers, since it starts a FileDownload, but ignores the refusal mark: checking a refused
+// password again is what the test is for. The router and the device page's Test button ask this one function.
+func PasswordTestBlocker(f Facts) string {
 	if s := mqttBlocker(f, true); s != "" {
 		return s
 	}

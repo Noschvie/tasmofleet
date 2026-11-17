@@ -1014,6 +1014,9 @@ func (r *Router) mqttDownload(ctx context.Context, d model.Device) ([]byte, erro
 		r.markPasswordRefused(ctx, now)
 		return nil, &BackupBlockedError{Err: err, Reason: "the device refused its MQTT password; enter the right one on the device's Edit page to back up over MQTT", Attempted: true}
 	}
+	if err == nil {
+		r.markPasswordAccepted(ctx, now)
+	}
 	return data, err
 }
 

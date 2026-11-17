@@ -153,6 +153,8 @@ func (r *Router) MQTTDownloadFile(ctx context.Context, d model.Device, path stri
 	}
 	if errors.Is(err, mqttcmd.ErrPasswordRefused) {
 		r.markPasswordRefused(ctx, c.dev)
+	} else if err == nil {
+		r.markPasswordAccepted(ctx, c.dev)
 	}
 	return b, err
 }
@@ -219,6 +221,27 @@ func (r *Router) markPasswordRefused(ctx context.Context, sent model.Device) {
 	}
 	if err != nil {
 		r.o.Log.Warn("transport: could not record the refused MQTT password", "device", int64(sent.ID), "err", err)
+	}
+}
+
+// markPasswordAccepted records that the device took the MqttPassword of sent in a download that went through (the
+// dump, a file over Type 8): the device checks the password before it starts, so a finished download is a passed
+// test, and the person sees "Works" after the next transfer without pressing Test. A password typed or bulk-set
+// stays "Not tested" otherwise, since the learner ignores a backup that shows the password it already holds. It
+// writes only when there is something to change (no acceptance recorded yet, or a refusal to end), for the password
+// that was sent (its set time): one changed meanwhile is left alone. Uploads do not call it: a restore replaces the
+// device's settings, so the password it was sent with may not be the one the device holds afterwards. A failed
+// write is logged without the value and never fails the transfer.
+func (r *Router) markPasswordAccepted(ctx context.Context, sent model.Device) {
+	if !sent.MQTTPasswordOKAt.IsZero() && sent.MQTTPasswordBadAt.IsZero() {
+		return
+	}
+	m, ok := r.o.Marker.(PasswordOKMarker)
+	if !ok {
+		return
+	}
+	if err := m.MarkMQTTPasswordOK(context.WithoutCancel(ctx), sent.ID, sent.MQTTPasswordSetAt, time.Now()); err != nil && !errors.Is(err, store.ErrNotFound) {
+		r.o.Log.Warn("transport: could not record the accepted MQTT password", "device", int64(sent.ID), "err", err)
 	}
 }
 

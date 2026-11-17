@@ -46,6 +46,7 @@ func (h *handler) registerSysConfig(route func(string, func(http.Handler) http.H
 	route("POST "+sysPath+"/notify-test/{channel}", adm, h.sysNotifyTest)
 	route("GET "+sysPath+"/reset", adm, h.sysResetConfirm)
 	route("POST "+sysPath+"/reset", adm, h.sysReset)
+	h.registerPasswordBulk(route, adm)
 	h.registerSnapshots(route, adm)
 }
 
@@ -109,6 +110,7 @@ type sysPage struct {
 	Storage      *sysStorage // Backups tab: storage summary and orphans (N9); nil without them
 	Resetting    bool        // the step-up dialog is for "Reset settings…"
 	StepUpWhat   string      // what the step-up dialog says it is for, when it is not a settings save
+	PW           *pwCard     // MQTT tab: the devices' passwords (counts, devices without one); nil without the fleet service
 	Fleet        *fleetView  // the Devices, Backups page: the last run and the device table (filled by backupsRender)
 	DB           *sysDB      // the Snapshots page: stored snapshots and the schedule's status; nil without snapshots (filled by snapshotsRender)
 	Notify       sysNotify   // Notifications tab: status lines, test results, the message preview
@@ -162,6 +164,9 @@ func (h *handler) sysData(r *http.Request, posted map[string]string, errs map[st
 	p.MQTT.ACLReady = aclBinding(h.mqttSettings()) != ""
 	p.MQTT.KeepTicked = posted["reuse.MQTT_PASSWORD"] == "1"
 	p.Tabs = sysTabsOf(rows)
+	if !onSnapshots(r) && !onBackups(r) {
+		p.PW = h.passwordCardOf(r.Context(), view{Base: p.Base, CSRF: p.CSRF, IsAdmin: true}) // the Settings pages are admin pages
+	}
 	p.Discovery = h.sysDiscoveryOf(r, discoveryOn)
 	p.Active = r.URL.Query().Get("tab")
 	switch {

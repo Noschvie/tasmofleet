@@ -686,6 +686,41 @@ func (s *SQLite) SetMQTTPassword(ctx context.Context, id model.DeviceID, mode mo
 		sealed, string(mode), string(model.MQTTPasswordTyped), now, now, id))
 }
 
+// SetMQTTPasswordsWhereUnset sets mode (broker or empty: the modes that store no secret) for those of ids whose
+// MqttPassword is still not set, in one transaction, and returns the ids it wrote (#609). The check is part of
+// each UPDATE: a password that a backup taught or a person typed between the confirmation of a bulk action and
+// this call is never overwritten, and an id that is gone or already set is simply not in the result. Like a typed
+// save, the write is the newest fact (source typed, set time now, no test result yet).
+func (s *SQLite) SetMQTTPasswordsWhereUnset(ctx context.Context, ids []model.DeviceID, mode model.MQTTPasswordMode) ([]model.DeviceID, error) {
+	if mode != model.MQTTPasswordBroker && mode != model.MQTTPasswordEmpty {
+		return nil, fmt.Errorf("store: a bulk MQTT password change takes the broker or the empty mode, not %q", mode)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback() //nolint:errcheck // no-op after commit; on failure the original error is returned
+	now := toMS(s.now())
+	var applied []model.DeviceID
+	for _, id := range ids {
+		res, err := tx.ExecContext(ctx, `UPDATE devices SET mqtt_password='', mqtt_password_mode=?, mqtt_password_bad_at=NULL,
+			mqtt_password_source=?, mqtt_password_set_at=?, mqtt_password_ok_at=NULL, updated_at=?
+			WHERE id=? AND mqtt_password_mode=''`, string(mode), string(model.MQTTPasswordTyped), now, now, id)
+		if err != nil {
+			return nil, err
+		}
+		if n, err := res.RowsAffected(); err != nil {
+			return nil, err
+		} else if n > 0 {
+			applied = append(applied, id)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return applied, nil
+}
+
 // sealMQTTPassword checks the mode and seals plain for mode own ("" for every other mode).
 func (s *SQLite) sealMQTTPassword(mode model.MQTTPasswordMode, plain string) (string, error) {
 	switch mode {

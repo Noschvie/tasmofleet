@@ -118,8 +118,9 @@ type runtime struct {
 	deviceCmd       devicecmd.Service
 	fwHolds         *devlock.FirmwareHolds // devices a typed firmware command is still updating (#347)
 	bus             mqttbus.Bus
-	mqttCmd         *mqttcmd.Channel // the one place that sends commands over MQTT (#256)
-	facts           *TransportFacts  // the router's view of a device (transport.Facts)
+	mqttCmd         *mqttcmd.Channel   // the one place that sends commands over MQTT (#256)
+	facts           *TransportFacts    // the router's view of a device (transport.Facts)
+	pwFleet         *mqttPasswordFleet // the devices' MQTT passwords: reasons, bulk set, tests (#609); nil without a router
 	sw              *mqttbus.Switch
 	broker          *brokerWatch       // the broker state the status bar shows (#307)
 	backupRun       *scheduledRun      // the scheduled backup run the status bar shows
@@ -786,6 +787,10 @@ func (a *runtime) webDeps(guard web.Guard, rows []web.KV) web.Deps {
 			_, missed, err := a.svc.Store.SnapshotRunTimes(ctx)
 			return missed, err
 		}
+	}
+	if a.pwFleet != nil {
+		deps.PasswordFleet = a.pwFleet
+		deps.PasswordTest = a.svc.Router
 	}
 	deps.MQTTOnly = a.onlyOverMQTT
 	deps.KnownMQTTOnly = a.knownOnlyOverMQTT

@@ -247,3 +247,59 @@ func TestARefusalMarksOnlyThePasswordThatWasSent(t *testing.T) {
 		t.Fatalf("tested %q, a refusal of the stored password was not marked: %v", g.tm.tested, mk.ids)
 	}
 }
+
+// Why (#609, "tested at their next transfer"): a typed or bulk-set password is "Not tested" until the device
+// accepts it. The learner ignores a backup that shows the password it already holds, so without this a device
+// that backs up over MQTT every night would stay "Not tested" for ever. A download that finishes proves the device
+// took the password (it checks before it starts), so it is recorded for the password that was sent, and not again
+// while it stands; a refused download records nothing.
+func TestAFinishedBackupOverMQTTRecordsThePasswordAsAccepted(t *testing.T) {
+	g := newTestRig(t)
+	set := time.Date(2026, 11, 17, 9, 0, 0, 0, time.UTC)
+	g.devs.d.MQTTPasswordSetAt = set
+	if _, err := g.r.DownloadConfig(t.Context(), g.target()); err != nil {
+		t.Fatal(err)
+	}
+	if len(g.marker.ok) != 1 || g.marker.ok[0] != 7 || !g.marker.tested[0].Equal(set) {
+		t.Fatalf("ok marks %v at %v, want one for the password set at %v", g.marker.ok, g.marker.tested, set)
+	}
+	g.devs.d.MQTTPasswordOKAt = set.Add(time.Hour) // recorded already: no second write
+	if _, err := g.r.DownloadConfig(t.Context(), g.target()); err != nil || len(g.marker.ok) != 1 {
+		t.Fatalf("a second backup wrote again: %v, %v", err, g.marker.ok)
+	}
+	g.devs.d.MQTTPasswordOKAt = time.Time{}
+	g.tm.derr = mqttcmd.ErrPasswordRefused
+	if _, err := g.r.DownloadConfig(t.Context(), g.target()); err == nil || len(g.marker.ok) != 1 {
+		t.Fatalf("a refused backup recorded an acceptance: %v, %v", err, g.marker.ok)
+	}
+}
+
+// Why (#609): the audit and the notice after a test say accepted, refused, blocked or error. Only a refusal
+// ("Error 1") is a statement about the password; a blocked test sent nothing, and a silent or broken transfer says
+// nothing about it. Mixing them up would tell the person to change a password that was never checked.
+func TestThePasswordTestOutcomeSeparatesWhatSaysSomethingAboutThePassword(t *testing.T) {
+	for want, err := range map[string]error{
+		"accepted": nil,
+		"refused":  fmt.Errorf("x: %w", mqttcmd.ErrPasswordRefused),
+		"blocked":  fmt.Errorf("x: %w", &PasswordTestBlockedError{Reason: "r"}),
+		"error":    mqttcmd.ErrTransfer,
+	} {
+		if got := PasswordTestOutcome(err); got != want {
+			t.Errorf("%v: %q, want %q", err, got, want)
+		}
+	}
+}
+
+// Why (#609): a file read over Type 8 is a finished transfer too, and it carries the same password: the device
+// checked it before it sent the file, so it is recorded as accepted like the dump's.
+func TestAFileReadOverMQTTRecordsThePasswordAsAccepted(t *testing.T) {
+	f, _ := newFileRig(t)
+	ok := &okMarker{}
+	f.r.o.Marker = ok
+	if _, err := f.r.MQTTDownloadFile(t.Context(), f.devs.d, "/autoexec.be", 100); err != nil {
+		t.Fatal(err)
+	}
+	if len(ok.ok) != 1 || ok.ok[0] != 7 {
+		t.Fatalf("ok marks %v, want one for device 7", ok.ok)
+	}
+}

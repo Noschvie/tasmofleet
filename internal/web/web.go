@@ -140,6 +140,11 @@ type Deps struct {
 	Templates     templates.Service
 	FWReach       FWReachForgetter // optional: "Forget" on what the device reaches (D11)
 	MQTTPasswords MQTTPasswords    // optional: the MQTT password section of the device edit form (#257)
+	// PasswordTest is optional: the password test behind the device page's Test button (#609). PasswordFleet is
+	// optional too: the card of the devices' passwords on System, MQTT lists the devices without one and sets the
+	// broker password for several. Without them the page has no Test button and the card shows the switch only.
+	PasswordTest  PasswordTester
+	PasswordFleet MQTTPasswordFleet
 	History       HealthHistory
 	// Stability is optional: the restarts and Wi-Fi samples behind the Stability card, the list badge and
 	// the dashboard reasons (#325). Nil shows none of them.
@@ -323,6 +328,7 @@ func Handler(d Deps) (http.Handler, error) {
 		route("POST /devices/{id}/fwreach/forget", adm, h.fwReachForget)
 	}
 	route("POST /devices/{id}/backup", op, h.deviceBackup)
+	h.registerPasswordTest(route, op)
 	route("GET /backups/{id}", adm, h.backupDownload)
 	route("GET /audit", adm, h.auditLog)
 	h.registerBackupDiff(route, op)
@@ -445,6 +451,12 @@ var flashes = map[string]string{
 func flashOf(q url.Values) string {
 	if q.Get("ok") == "backup-taken" {
 		return backupTakenText(q)
+	}
+	switch q.Get("ok") {
+	case "pw-bulk":
+		return pwBulkText(q)
+	case "pw-accepted", "pw-refused":
+		return pwTestFlash(q.Get("ok"))
 	}
 	return flashes[q.Get("ok")]
 }

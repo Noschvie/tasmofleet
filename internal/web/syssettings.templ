@@ -79,6 +79,9 @@ templ sysSettingsPage(p sysPage) {
 	if len(p.Notify.Push.Rows) > 0 {
 		@backupDeleteDialog(backupsView{CSRF: p.CSRF})
 	}
+	if p.PW != nil && p.PW.CanBulk {
+		@pwBrokerDialog(p)
+	}
 	if p.NeedStepUp {
 		@ui.StepUp(p.StepUp)
 	}
@@ -229,6 +232,9 @@ templ sysCardView(p sysPage, c sysCard) {
 					}
 					if c.ID == "snapshots" && p.DB != nil {
 						@sysSnapshotStatus(*p.DB)
+					}
+					if c.ID == "devicepasswords" && p.PW != nil {
+						@sysPasswordsCard(p)
 					}
 					if c.ID == "mode" {
 						<p class="ufield-help">Needs { sysEnvName("PUBLIC_URL") } in the container configuration. The local admin always works as a fallback.</p>
@@ -955,4 +961,114 @@ templ sysContainerTable(rows []sysconfig.Row) {
 			</tbody>
 		</table>
 	</div>
+}
+
+// sysPasswordsCard is what the card of the devices' MQTT passwords shows under its switch (#609): the counts, the
+// devices without a password with the reason and Set…, and the one step for the rest, "Use the broker password for
+// these…". No value is shown, ever: the card knows words, dates and reasons only. The button opens a dialog posted
+// outside the settings form; without scripts its link is the page that asks the same question.
+templ sysPasswordsCard(p sysPage) {
+	{{ c := p.PW }}
+	<div class="sys-sums">
+		@sysSum("On this broker", strconv.Itoa(c.OnBroker))
+		@sysSum("From backups", strconv.Itoa(c.FromBackups))
+		@sysSum("Entered", strconv.Itoa(c.Entered))
+		@sysSum("Not known", strconv.Itoa(c.NotKnown()))
+	</div>
+	if c.Testing > 0 {
+		<div class="sys-status">
+			<span class="sys-status-dot t-neutral" aria-hidden="true"></span>
+			<div class="sys-status-text">
+				<b>{ "Testing " + plural(c.Testing, "device") }</b>
+				<span>Each test takes about a second. The device page shows the result.</span>
+			</div>
+		</div>
+	}
+	if c.Refused > 0 || c.NotTested > 0 {
+		<p class="cnote">{ pwCardNote(c) }</p>
+	}
+	if len(c.Rows) > 0 {
+		<h3 class="sys-subhead">{ "Not known (" + strconv.Itoa(len(c.Rows)) + ")" }</h3>
+		<div class="sys-orphans">
+			for _, row := range c.Rows {
+				<div class="sys-orphan">
+					<div class="sys-orphan-main">
+						<div class="sys-orphan-title">
+							<a href={ templ.SafeURL(row.Href) } class="sys-store-name">{ row.Name }</a>
+							@ui.Badge(row.Tone, row.Word)
+						</div>
+						<div class="sys-orphan-detail">{ row.Reason }</div>
+					</div>
+					<div class="sys-orphan-acts"><a class="btn btn-link" href={ templ.SafeURL(row.SetHref) } aria-label={ "Set the password of " + row.Name }>Set…</a></div>
+				</div>
+			}
+		</div>
+		<div class="sys-test">
+			if c.CanBulk {
+				<a class="btn" href={ templ.SafeURL(c.Base + sysPath + pwBrokerPath) } data-dialog="dlg-pwbroker">{ "Use the broker password for " + plural(len(c.Rows), "device") + "…" }</a>
+			} else {
+				<button type="button" class="btn" disabled aria-describedby="pw-broker-why">Use the broker password…</button>
+				<span class="sys-test-help" id="pw-broker-why">Set the broker password above first: it is what TasmoFleet would send.</span>
+			}
+		</div>
+	}
+	<p class="cnote">Updated after every backup. A password you enter is kept until a newer backup holds a different one.</p>
+}
+
+// pwBrokerFields are the insides of "Use the broker password": the devices, all ticked, and the box for the tests.
+// The boxes are named id like the device pickers', so select.js keeps the count, Select all and the button's number.
+templ pwBrokerFields(d pwBrokerData) {
+	<div class="pw-pick-tools">
+		<label class="ucheck"><input type="checkbox" data-select-all checked/><span>{ "All " + plural(len(d.Rows), "device") + " without a password" }</span></label>
+		<span class="pw-pick-count" data-select-n>{ strconv.Itoa(len(d.Rows)) + " selected" }</span>
+	</div>
+	<div class="pw-pick-list">
+		for _, row := range d.Rows {
+			<label class="pw-pick">
+				<input type="checkbox" name="id" value={ strconv.FormatInt(int64(row.ID), 10) } checked/>
+				<span class="pw-pick-name">{ row.Name }</span>
+				<span class="pw-pick-meta">{ row.Meta }</span>
+			</label>
+		}
+	</div>
+	<label class="ucheck pw-test"><input type="checkbox" name="test" value="1" checked/><span>Test each device afterwards</span></label>
+	<p class="cnote">The test starts a settings download over MQTT and stops it at once: it shows whether the device accepts the password and changes nothing on it. About a second per device, one at a time, in the background.</p>
+}
+
+// pwBrokerDialog is "Use the broker password for these…" for scripts; pwBrokerPage is the same question as a page.
+templ pwBrokerDialog(p sysPage) {
+	{{ d := pwBrokerData{Base: p.Base, CSRF: p.CSRF, Rows: p.PW.Rows} }}
+	<dialog id="dlg-pwbroker" class="udlg udlg-wide" aria-labelledby="dlg-pwbroker-h">
+		<form method="post" action={ templ.SafeURL(p.Base + sysPath + pwBrokerPath) } class="udlg-in">
+			<input type="hidden" name="csrf" value={ p.CSRF }/>
+			<input type="hidden" name="confirm" value="1"/>
+			<h2 id="dlg-pwbroker-h">Use the broker password?</h2>
+			<p class="udlg-body">For every device you tick, TasmoFleet sends its own broker password with backups and restores over MQTT. Untick devices that log in with a password of their own. The password is never shown, and nothing is sent to a device except the test.</p>
+			@pwBrokerFields(d)
+			<div class="udlg-foot">
+				<button type="button" class="btn" data-close>Cancel</button>
+				<button type="submit" class="btn btn-primary">Use the broker password<span data-select-suffix></span></button>
+			</div>
+		</form>
+	</dialog>
+}
+
+templ pwBrokerPage(d pwBrokerData) {
+	@ui.PageHeader("Use the broker password", "")
+	<section class="ucard confirm-card" aria-labelledby="confirm-h">
+		<h2 id="confirm-h">{ "Use the broker password for " + plural(len(d.Rows), "device") }</h2>
+		<p class="udlg-body">For every device you tick, TasmoFleet sends its own broker password with backups and restores over MQTT. Untick devices that log in with a password of their own. The password is never shown, and nothing is sent to a device except the test.</p>
+		if d.ACLText != "" {
+			@ui.BrokerACLNotice(d.ACLText, aclHideHref(ctx))
+		}
+		<form method="post" action={ templ.SafeURL(d.Base + sysPath + pwBrokerPath) } class="udlg-in">
+			<input type="hidden" name="csrf" value={ d.CSRF }/>
+			<input type="hidden" name="confirm" value="1"/>
+			@pwBrokerFields(d)
+			<div class="udlg-foot">
+				<a class="btn" href={ templ.SafeURL(d.Base + sysPath + "?tab=mqtt") }>Cancel</a>
+				<button type="submit" class="btn btn-primary">Use the broker password<span data-select-suffix></span></button>
+			</div>
+		</form>
+	</section>
 }

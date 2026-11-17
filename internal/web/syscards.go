@@ -62,7 +62,7 @@ var sysLayout = []sysTabDef{
 	{"mqtt", "MQTT", []int{2, 1}, []sysCardDef{
 		{ID: "broker", Title: "Broker", Note: "Changes apply at once. An empty host turns MQTT off.", Stack: 0, Keys: []string{"MQTT_URL", "MQTT_USER", "MQTT_PASSWORD", "MQTT_ACL_WARNING_HIDDEN"}},
 		{ID: "topics", Title: "Topics", Stack: 1, Keys: []string{"MQTT_FULLTOPIC"}},
-		{ID: "devicepasswords", Title: "Device MQTT passwords", Note: "Backups and restores over MQTT send each device's own MqttPassword.", Stack: 0, Keys: []string{"MQTT_PASSWORD_FROM_BACKUPS"}},
+		{ID: "devicepasswords", Title: "Device MQTT passwords", Note: "Tasmota starts a backup or restore over MQTT only when the command carries the device's own MqttPassword.", Stack: 0, Keys: []string{"MQTT_PASSWORD_FROM_BACKUPS"}},
 	}},
 	{"discovery", "Discovery", []int{1, 2}, []sysCardDef{
 		{ID: "mqttdiscovery", Title: "MQTT discovery", Stack: 0, Keys: []string{"DISCOVERY_MQTT"}},
@@ -260,7 +260,8 @@ func sysRestartAll(rows []sysRow) bool {
 // not copied.
 func sysCardData(p sysPage, c sysCard) ui.SettingsCardData {
 	return ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Note: c.Note, NoteHTML: sysCardNote(p, c),
-		Class: ui.StackRank(c.Phone), Depends: c.Depends, Badges: sysCardBadges(c)}
+		Class: ui.StackRank(c.Phone), Depends: c.Depends, Badges: sysCardBadges(c),
+		Plain: c.ID == "devicepasswords" && p.PW != nil} // its counts and list stack under the switch like the storage card's
 }
 
 // hasProblem is a row with an error or a stored secret that must be entered again: the page opens
@@ -326,7 +327,7 @@ var sysCopies = map[string]sysCopy{
 	"MQTT_PASSWORD":           {Help: "Write-only. Empty keeps it.", Width: "half"},
 	"MQTT_ACL_WARNING_HIDDEN": {Width: "full"}, // drawn by sysACLHide: its hint is the field's Help, whole
 	"MQTT_FULLTOPIC":          {Help: "Must contain %prefix% and %topic% once each.", Width: "full", Info: "Discovery listens on tasmota/discovery/+/config."},
-	"MQTT_PASSWORD_FROM_BACKUPS": {Label: "Take them from backups", Help: "Read from each device's newest decoded backup.", Width: "full",
+	"MQTT_PASSWORD_FROM_BACKUPS": {Label: "Take device passwords from backups", Help: "Read from each device's newest decoded backup.", Width: "full",
 		Info: "After every backup, and once over the existing backups at start: equal to the broker password means the broker's, empty means no password, anything else is stored sealed. A password typed after the backup stays. The value is never shown or logged."},
 
 	"DISCOVERY_MQTT":          {Help: "Needs MQTT. Finds are proposals.", Width: "full", Info: "A discovered device is never added on its own: an admin accepts it on the Discovered page."},

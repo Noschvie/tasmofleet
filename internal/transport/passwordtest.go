@@ -51,7 +51,7 @@ func (r *Router) TestMQTTPassword(ctx context.Context, id model.DeviceID) error 
 	if err != nil {
 		return err
 	}
-	if why := passwordTestBlocker(f); why != "" {
+	if why := PasswordTestBlocker(f); why != "" {
 		return &PasswordTestBlockedError{Reason: why}
 	}
 	pw, ok := model.FilePassword(d, r.brokerPassword())
@@ -73,4 +73,25 @@ func (r *Router) TestMQTTPassword(ctx context.Context, id model.DeviceID) error 
 		return &PasswordTestBlockedError{Reason: fmt.Sprintf("the test was refused: %s", mqttcmd.Reason(err))}
 	}
 	return err
+}
+
+// PasswordTestBound is how long a caller waits for one password test: the test queues behind a transfer that
+// holds the device's topic, and a request or a background run must not hang for the length of one. The wait for the
+// topic honours the context and sends nothing, so a test that runs out of time while queued sent nothing.
+const PasswordTestBound = 30 * time.Second
+
+// PasswordTestOutcome is the word for the audit entry of a test: accepted, refused (the device answered Error 1),
+// blocked (nothing was sent: the rule of transfers or the missing password said no), or error (the device did not
+// answer or the transfer broke: it says nothing about the password).
+func PasswordTestOutcome(err error) string {
+	var blocked *PasswordTestBlockedError
+	switch {
+	case err == nil:
+		return "accepted"
+	case errors.Is(err, mqttcmd.ErrPasswordRefused):
+		return "refused"
+	case errors.As(err, &blocked):
+		return "blocked"
+	}
+	return "error"
 }

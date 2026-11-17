@@ -246,3 +246,43 @@ func TestTheMigrationDatesTypedPasswords(t *testing.T) {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// Why (#609, "Use the broker password for these…"): the dialog lists the devices that are unset when it opens,
+// and the confirm can come minutes later. A password that a backup taught or a person typed in between is a
+// newer fact about a device; the bulk write must leave it alone (a read-then-write loop would overwrite it), and
+// it must report which devices it really wrote, so the audit and the follow-up tests name only those.
+func TestSetMQTTPasswordsWhereUnsetLeavesAStoredPasswordAlone(t *testing.T) {
+	s, _, _ := newStore(t)
+	at := time.Date(2026, 11, 17, 9, 0, 0, 0, time.UTC)
+	s.now = func() time.Time { return at }
+	unset := mustDevice(t, s, "unset", "10.0.0.1")
+	learned := mustDevice(t, s, "learned", "10.0.0.2")
+	typed := mustDevice(t, s, "typed", "10.0.0.3")
+	if ok, err := s.ApplyMQTTPasswordFromBackup(ctx, learned, model.MQTTPasswordOwn, "taught-pw", at.Add(-time.Hour)); err != nil || !ok {
+		t.Fatalf("learn: %v %v", ok, err)
+	}
+	if err := s.SetMQTTPassword(ctx, typed, model.MQTTPasswordEmpty, ""); err != nil {
+		t.Fatal(err)
+	}
+	s.now = func() time.Time { return at.Add(time.Minute) }
+	applied, err := s.SetMQTTPasswordsWhereUnset(ctx, []model.DeviceID{unset, learned, typed, 9999}, model.MQTTPasswordBroker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(applied) != 1 || applied[0] != unset {
+		t.Fatalf("applied %v, want only the unset device %d", applied, unset)
+	}
+	d, _ := s.GetDevice(ctx, unset)
+	if d.MQTTPasswordMode != model.MQTTPasswordBroker || d.MQTTPasswordSource != model.MQTTPasswordTyped || !d.MQTTPasswordSetAt.Equal(at.Add(time.Minute)) || !d.MQTTPasswordOKAt.IsZero() {
+		t.Fatalf("unset device: %q source %q set %v ok %v", d.MQTTPasswordMode, d.MQTTPasswordSource, d.MQTTPasswordSetAt, d.MQTTPasswordOKAt)
+	}
+	if d, _ = s.GetDevice(ctx, learned); d.MQTTPasswordMode != model.MQTTPasswordOwn || d.MQTTPassword != "taught-pw" || d.MQTTPasswordSource != model.MQTTPasswordFromBackup {
+		t.Fatalf("a learned password was overwritten: %q %q %q", d.MQTTPasswordMode, d.MQTTPassword, d.MQTTPasswordSource)
+	}
+	if d, _ = s.GetDevice(ctx, typed); d.MQTTPasswordMode != model.MQTTPasswordEmpty {
+		t.Fatalf("a typed password was overwritten: %q", d.MQTTPasswordMode)
+	}
+	if _, err := s.SetMQTTPasswordsWhereUnset(ctx, []model.DeviceID{unset}, model.MQTTPasswordOwn); err == nil {
+		t.Fatal("the own mode needs a secret: a bulk write must refuse it")
+	}
+}

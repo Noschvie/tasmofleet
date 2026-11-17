@@ -57,6 +57,11 @@ type pathRow struct {
 	SinceText  string    // its fallback text
 	Experiment bool      // the row carries the "Experimental" badge
 	Forget     bool      // the row carries the Forget button
+	// The password row (#609): Sub is followed by StampLead, the time StampAt (StampText its fallback) and
+	// StampTail, then Enables; PWActs are its buttons.
+	StampLead, StampText, StampTail, Enables string
+	StampAt                                  time.Time
+	PWActs                                   *pwActs
 }
 
 // pathCard is the card; Facts are the connection rows, Actions the per-action rows.
@@ -67,6 +72,9 @@ type pathCard struct {
 	Facts   []pathRow
 	Actions []pathRow
 	Forget  string // action of the Forget form, "" for a viewer who may not use it
+	// The password row's buttons (#609): the Test form's action, the edit form, and the confirmation of "Use the
+	// broker password" for this device. "" where the viewer may not use it.
+	PWTest, PWChange, PWBroker string
 }
 
 // FactsSummary is the line of the closed Connection list: the two states that decide the path.
@@ -336,9 +344,10 @@ func (t deviceTabs) backupDescribedBy() string {
 //
 // The Actions rows show the reason the buttons carry (t), so a device that never answered or is
 // held by an operation reads the same in the card as on its buttons; otherwise the chooser's.
-func pathCardOf(v view, d model.Device, f transport.Facts, p transport.Paths, t deviceTabs) *pathCard {
+func pathCardOf(v view, d model.Device, f transport.Facts, p transport.Paths, t deviceTabs, pw pwView) *pathCard {
 	c := &pathCard{ID: d.ID, Base: v.Base, CSRF: v.CSRF}
-	c.Facts = append(c.Facts, httpRow(f), mqttRow(f), passwordRow(f), fwRow(f), uploadRow(d))
+	c.Facts = append(c.Facts, httpRow(f), mqttRow(f), passwordRow(d, f, pw), fwRow(f), uploadRow(d))
+	c.PWTest, c.PWChange, c.PWBroker = v.Base+devPath(d.ID, pwTestPath), v.Base+devPath(d.ID, "/edit"), v.Base+sysPath+pwBrokerPath+"?id="+strconv.FormatInt(int64(d.ID), 10)
 	if v.IsAdmin && transport.EffectiveFWReach(f) == model.FWReachNo {
 		c.Forget = v.Base + devPath(d.ID, forgetFWReach)
 		for i := range c.Facts {
@@ -513,27 +522,6 @@ func (h *handler) otherBrokerRow(d model.Device, hl model.Health, httpOK bool, n
 	}
 	return pathRow{Key: keyMQTT, Value: "Other broker", Tone: ui.ToneWarn,
 		Sub: sub + ", so its state does not arrive live over MQTT."}, true
-}
-
-func passwordRow(f transport.Facts) pathRow {
-	r := pathRow{Key: "Device MQTT password", Tone: ui.ToneNeutral}
-	p := f.Password
-	switch {
-	case p.Unusable != "":
-		r.Value, r.Tone, r.Sub = "Unusable", ui.ToneWarn, sentence(p.Unusable)
-	case !p.BadAt.IsZero():
-		r.Value, r.Tone, r.Sub = "Refused", ui.ToneDanger, "The device refused it."
-		r.setSince(p.BadAt, f.Now)
-	case p.Mode == model.MQTTPasswordBroker:
-		r.Value, r.Tone, r.Sub = "Same as the broker's", ui.ToneOK, "Back up, restore and upload over MQTT send TasmoFleet's broker password."
-	case p.Mode == model.MQTTPasswordOwn:
-		r.Value, r.Tone, r.Sub = "Set", ui.ToneOK, "Back up, restore and upload over MQTT send the stored password."
-	case p.Mode == model.MQTTPasswordEmpty:
-		r.Value, r.Tone, r.Sub = "No password", ui.ToneOK, "The device has no MQTT password; back up, restore and upload over MQTT send an empty one."
-	default:
-		r.Value, r.Sub = "Not set", "Needed only to back up, restore and upload over MQTT; commands never use it."
-	}
-	return r
 }
 
 func fwRow(f transport.Facts) pathRow {

@@ -598,7 +598,7 @@ func (h *handler) overviewOf(r *http.Request, v view, d model.Device, just *rela
 	p.Ident.Why = p.Tabs.readsAPIOff()
 	p.Conn = connOf(in)
 	if tpOK {
-		p.Paths = pathCardOf(v, d, tf, tp, p.Tabs)
+		p.Paths = pathCardOf(v, d, tf, tp, p.Tabs, h.pwViewOf(ctx, v, d, tf))
 		if shown != tf.HTTP { // the card says what the tile says (shownHTTP)
 			shownFacts := tf
 			shownFacts.HTTP = shown

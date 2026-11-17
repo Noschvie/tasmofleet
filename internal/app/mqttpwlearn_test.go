@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"path/filepath"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/secretbox"
 	"github.com/hellwand/tasmofleet/internal/store"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/web"
 )
 
 // pwBackups is the stored backups as the learner reads them.
@@ -526,5 +528,38 @@ func TestAPasswordSavedWhileABackupRunsIsKept(t *testing.T) {
 	}
 	if ev := g.audit.all(); len(ev) != 0 {
 		t.Fatalf("audited a password the save had replaced: %+v", ev)
+	}
+}
+
+// Why (#609, the card "Not known"): a person who sees devices without a password must be told why each has none,
+// or the list is a riddle. The learner is the one place that knows its rules (no backup, only a .dmp, a snapshot
+// that does not show the device, the switch), so the card asks it instead of keeping a copy of them. The answer
+// holds reason codes only: a password in it would reach the HTML.
+func TestTheLearnerSaysWhyADeviceHasNoPassword(t *testing.T) {
+	g := newPWRig(t)
+	none, dmp, foreign, nofield, usable := g.device(t, "1"), g.device(t, "2"), g.device(t, "3"), g.device(t, "4"), g.device(t, "5")
+	g.bk.add(dmp, pwTaken, "", nil)
+	g.bk.addFrom(foreign, pwTaken, "", []byte(`{"mqtt_pwd":"other-pw-1"}`), "aa:bb:cc:99:99:99")
+	g.bk.add(nofield, pwTaken, "", []byte(`{"mqtt_user":"u"}`))
+	g.bk.add(usable, pwTaken, "", []byte(`{"mqtt_pwd":"secret-pw-1"}`))
+	ids := []model.DeviceID{none, dmp, foreign, nofield, usable}
+	want := map[model.DeviceID]web.PasswordGap{none: web.GapNoBackup, dmp: web.GapDmpOnly, foreign: web.GapNotProven, nofield: web.GapNoField, usable: web.GapPending}
+	got := g.l.Gaps(t.Context(), ids)
+	for id, w := range want {
+		if got[id] != w {
+			t.Errorf("device %d: gap %q, want %q", id, got[id], w)
+		}
+	}
+	if strings.Contains(fmt.Sprint(got), "secret-pw-1") || strings.Contains(fmt.Sprint(got), "other-pw-1") {
+		t.Fatalf("a gap carries a password: %v", got)
+	}
+	g.enabled.Store(false)
+	for id, gap := range g.l.Gaps(t.Context(), ids) {
+		if gap != web.GapOff {
+			t.Errorf("switch off: device %d gap %q, want %q", id, gap, web.GapOff)
+		}
+	}
+	if d := g.get(t, usable); d.MQTTPasswordMode != model.MQTTPasswordNone {
+		t.Fatalf("asking for the reasons wrote a password: %q", d.MQTTPasswordMode)
 	}
 }

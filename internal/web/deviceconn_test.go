@@ -407,7 +407,7 @@ func cardOfFacts(f transport.Facts) (*pathCard, deviceTabs) {
 	p := transport.Choose(f)
 	tab := deviceTabs{Health: model.HealthOnline}
 	tab.applyPaths(p, true)
-	return pathCardOf(view{}, model.Device{ID: 1}, f, p, tab), tab
+	return pathCardOf(view{}, model.Device{ID: 1}, f, p, tab, pwView{}), tab
 }
 
 // subsWith lists the rows of the card (facts and actions) whose sentence contains s.
@@ -530,11 +530,12 @@ func TestTheCardNamesTheDeviceWhoseUnreadGroupTopicHoldsTheWritesBack(t *testing
 	}
 }
 
-// Why (#609): a device learned to have no MQTT password must not read "Not set" on its page, which says
+// Why (#609): a device learned to have no MQTT password must not read "Not set" or "Not known" on its page, which say
 // a password is missing and transfers are blocked; it is a password like the others and transfers send it.
 func TestTheNoPasswordModeIsShownAsAPassword(t *testing.T) {
-	r := passwordRow(transport.Facts{Password: transport.Password{Mode: model.MQTTPasswordEmpty}})
-	if r.Value != "No password" || r.Tone != ui.ToneOK || !strings.Contains(r.Sub, "empty") {
+	f := mqttFacts(time.Now(), model.MQTTPasswordEmpty)
+	r := passwordRow(model.Device{}, f, pwView{})
+	if r.Value == "Not set" || r.Value == "Not known" || r.Tone == ui.ToneWarn || !strings.Contains(r.Sub, "no MQTT password") {
 		t.Fatalf("row = %+v", r)
 	}
 }
