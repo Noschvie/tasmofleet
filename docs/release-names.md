@@ -28,7 +28,7 @@ runs out, add more. Facts below are taken from Wikipedia; a detail that could no
 17. **Kullen** (assigned to 0.37): Kullaberg, Sweden. A lighthouse site since 1563; the current tower was lit around 1900.
 18. **Cape Reinga** (assigned to 0.38): Northland, New Zealand. Lit in 1941; the last manned light built in New Zealand.
 19. **Boston Light** (assigned to 0.39): Little Brewster Island, Massachusetts, USA. First lit in 1716; the first lighthouse built in what is now the United States.
-20. **La Jument**: off Ushant, Brittany, France. Lit in 1911; made famous by Jean Guichard's 1989 photograph of a giant wave.
+20. **La Jument** (assigned to 0.40): off Ushant, Brittany, France. Lit in 1911; made famous by Jean Guichard's 1989 photograph of a giant wave.
 21. **Longstone**: Farne Islands, England. First lit in 1826; Grace Darling and her father rescued survivors of the Forfarshire from here in 1838.
 22. **Cape Otway**: Victoria, Australia. Lit in 1848; the oldest surviving lighthouse on the Australian mainland.
 23. **Les Eclaireurs**: Beagle Channel near Ushuaia, Argentina. In service since 1920; often called the "Lighthouse at the End of the World".

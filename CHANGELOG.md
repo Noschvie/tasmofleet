@@ -4,6 +4,34 @@ All notable changes. Breaking changes are marked **breaking**. tasmofleet has no
 compatibility shims (see CLAUDE.md), so read this before upgrading. Database migrations
 always upgrade automatically.
 
+## 0.40.0 "La Jument" (2026-11-17)
+
+### Upgrade notes
+
+- Migration 0049 adds the tables `push_vapid` (the one VAPID key TasmoFleet signs Web Push with, sealed with `secret.key`, made on the first start) and `push_subscriptions` (one row per subscribed browser), migration 0050 adds the column `label` to `push_subscriptions`. Both start empty. Nothing to do (#610, #611).
+
+### Added
+
+- Web Push, server side: TasmoFleet makes its own VAPID key (sealed at rest with `secret.key`), stores one push subscription per browser for admins and pushes the same events as the browser notifications, encrypted for the browser (RFC 8291), so they can show with no TasmoFleet tab open. A subscription is removed when the push service says it is gone (404, 410) or its owner is no longer an admin (for single sign-on and header users: as recorded at their last sign-in). This is a new outbound HTTPS connection to the browser vendors' push services (#610)
+- Web Push, in the browser: Settings → Notifications has a Web Push card. A browser subscribes with one click (the permission question comes from the button), sends itself a test and unsubscribes again. The card lists every subscribed browser with its owner, push service and last delivery, and any admin can test or remove any of them. Over plain HTTP, where browsers refuse push, the page says that HTTPS or localhost is needed instead of offering the button. Pushes now show with no TasmoFleet tab open. New migration: a label per subscription (#611, #541)
+- Native release archives: every GitHub release now carries static Linux binaries for amd64 and arm64 (`tasmofleet_X.Y.Z_linux_<arch>.tar.gz` with a systemd unit, plus `SHA256SUMS`), for running TasmoFleet without a container. The setup is in the installation guide, "Native install"; decode-config for decoded backups is a separate install there (#472)
+- Devices, Backups cleans up in bulk (#622). Backups of deleted devices can be ticked and deleted together, with a Select all that leaves the kept ones out; the unreferenced files have a Delete all; and Prune now in the Storage card deletes at once what the "Pruned at the next run" list shows, instead of at each device's next backup. Each action asks once, naming the count and the size, and writes one audit entry that lists every backup or file. Prune now never takes the newest backup of a device (with a retention of 1 the list used to include it), a kept backup, or a backup an unfinished restore is using, and it leaves out devices whose last scheduled run failed or was skipped, because they get no new backups to replace the old ones. Only admins see the controls; operators see the counts.
+- The Dashboard and the status bar now say when updates are planned, for example "2 scheduled · next Sat, Nov 7 at 03:00" (counted per planned update, not per device), and link to the Scheduled section of Transactions. A plan that is cancelled or has started disappears from both (#707)
+- Keycloak setup guide next to the Authentik one (`deploy/keycloak/`): client settings, the Group Membership mapper that puts the groups into the ID token, the issuer form without a trailing slash, sign-out and re-check behaviour, checked against a running Keycloak. It links the community login theme `tasmofleet-keycloak-theme`, which is not part of TasmoFleet (#722, thanks @Noschvie)
+- The Settings tab of a device now says why the last background refresh of its data failed, next to how old the values are: "Last background refresh failed 12m ago: the device did not answer. Next try 14:05." (also: the device went offline before it answered, another device answered where this one was asked, minimal firmware, credentials refused, HTTP API off). It shows only while the failure is newer than the values on the page (#818)
+- System, Snapshots has a "Create snapshot now" button: it stores a snapshot in the same folder, with the same name and the same retention as a scheduled one (so it counts toward the number you keep), shows the result and lists the new file, without waiting for the schedule. It does not change the schedule's status (#921, thanks @Noschvie).
+
+### Changed
+
+- Devices, Backups is rearranged so it no longer needs long scrolling. Back up all now moved to the page header, with the broker notice below it. On a phone the device table comes last, after the last run, the storage totals, the backups of deleted devices, the unreferenced files and the schedule. The last run names its first three failed devices and links the rest (and the skipped ones) to the filtered table, the prune list, the deleted devices' backups and the unreferenced files sit in folds, and the schedule fields are folded behind a one-line summary (they open by themselves on an error). A table row is one line on a desktop, a long name or reason is cut with its full text as a tooltip (#684, thanks @Noschvie).
+
+### Fixed
+
+- The Reachability tile no longer reads "HTTP Reachable" from an answer that is older than the last failed HTTP attempt: after the ten minutes in which that failure steers commands to MQTT, it says "Not checked lately" until HTTP answers again, instead of "Reachable" for up to five more minutes (#818)
+- On the New rule page, a command suggestion list that is invisible while a press is still down no longer takes ArrowDown or Enter, and a press that turns into a native drag (a link, selected text) now ends that state: before, Enter could silently replace the typed command with a suggestion nobody could see (#869)
+- The Back up result on the device page, the bulk result, the transaction page and the Activity box no longer say "over MQTT" for a backup whose files were read over HTTP: the text names both, "Backup taken over MQTT, files over HTTP (config, status, decoded, files)", and keeps "over HTTP" or "over MQTT" alone when the whole backup used one transport or stored no files archive (#926).
+- The status bar at the bottom of every page no longer garbles its text when its items together are wider than the window, as on Devices, Backups while a backup run is going: the Broker host, the running job, the last backup run and the version used to run under each other, and the next item's colour cut a word in two. Each item now stays in its own box and ends a text that does not fit in an ellipsis, while its dot and bold label stay; the rows of the phone sheet are unchanged (#934, thanks @Noschvie)
+
 ## 0.39.0 "Boston Light" (2026-11-16)
 
 ### Added
