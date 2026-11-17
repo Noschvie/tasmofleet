@@ -155,17 +155,22 @@ func TestDiffRedactsURLCredentials(t *testing.T) {
 	}
 }
 
-// Why: the secret rule is the spec 12.3 regex plus the audit redaction keys;
-// "pwd" is added because decode-config names Wi-Fi/MQTT passwords sta_pwd and
-// mqtt_pwd, which the spec regex alone would miss.
+// Why: decode-config names its settings in its own spelling, not as commands: sta_pwd and mqtt_pwd hold the Wi-Fi
+// and MQTT passwords, rgx_pwassword is Tasmota's own typo. The diff judges them by the one secret rule
+// (cmdpolicy.SecretName, #809), which must read these spellings; the network names and the broker login are secret
+// too (the console redacts SSId, RgxSSId, BSSId and MqttUser), the broker's address is not.
 func TestSecretKeyRule(t *testing.T) {
-	for _, k := range []string{"sta_pwd", "mqtt_pwd", "web_password", "Password", "passwd", "influxdb_token", "api_key", "client_secret", "zb_precfgkey_h", "http_password", "ssid_password"} {
-		if !secretKey(k) {
+	secret := func(k string) bool {
+		ch, err := Diff([]byte(`{"`+k+`":"A"}`), []byte(`{"`+k+`":"B"}`))
+		return err == nil && len(ch) == 1 && ch[0].Secret && ch[0].Old == "" && ch[0].New == ""
+	}
+	for _, k := range []string{"sta_pwd", "mqtt_pwd", "web_password", "Password", "passwd", "influxdb_token", "api_key", "client_secret", "zb_precfgkey_h", "http_password", "ssid_password", "sta_ssid", "mqtt_user", "wifi_bssid"} {
+		if !secret(k) {
 			t.Errorf("%q should be secret", k)
 		}
 	}
-	for _, k := range []string{"friendlyname", "sta_ssid", "mqtt_host", "tele_period", "mqtt_user"} {
-		if secretKey(k) {
+	for _, k := range []string{"friendlyname", "mqtt_host", "tele_period"} {
+		if secret(k) {
 			t.Errorf("%q should not be secret", k)
 		}
 	}
@@ -356,22 +361,24 @@ func TestHideBodies(t *testing.T) {
 	}
 }
 
-// Why: the explicit list is the primary defence; a decode-config key that the
-// fallback regex would not catch (telegram_chatid, keeloq_master_*) must still
-// be redacted, and the Tasmota typo "pwassword" must be caught by the regex
-// even without the list.
-func TestExplicitSecretFieldsAndFallback(t *testing.T) {
-	for _, k := range SecretFields() {
+// Why: decode-config keys that hold a secret under a name no command shares (telegram_chatid, keeloq_master_*,
+// pn532_*, zb_ext_panid) must still be redacted, and so must a key that only the text of the name gives away
+// (some_auth_blob, cloud_credential): the one rule fails closed on names it does not know.
+func TestDecodedSecretFieldsAndFallback(t *testing.T) {
+	for _, k := range append(decodedSecretFields, "some_auth_blob", "cloud_credential") {
 		changes, err := Diff([]byte(`{"`+k+`":"FAKE-OLD"}`), []byte(`{"`+k+`":"FAKE-NEW"}`))
 		if err != nil || len(changes) != 1 || !changes[0].Secret || changes[0].Old != "" {
 			t.Errorf("%s: %+v %v", k, changes, err)
 		}
 	}
-	for _, k := range []string{"rgx_pwassword", "rgx_pwassword_esp32", "mqtt_fingerprint1", "some_auth_blob", "cloud_credential"} {
-		if !secretKey(k) {
-			t.Errorf("fallback regex misses %q", k)
-		}
-	}
+}
+
+// decodedSecretFields are the decode-config v16 settings that hold a secret (the list the diff kept before #809, the
+// fingerprints left out: they are no secret, see TestDiffAndCommandPolicyAgreeOnEverySecret).
+var decodedSecretFields = []string{
+	"influxdb_token", "keeloq_master_lsb", "keeloq_master_msb", "mqtt_pwd", "pn532_pack", "pn532_password",
+	"rgx_pwassword", "rgx_pwassword_esp32", "sta_pwd", "telegram_chatid", "telegram_token", "web_password",
+	"zb_ext_panid", "zb_precfgkey_h", "zb_precfgkey_l",
 }
 
 // Why: this is the leak test the review asked for. Every secret field of
@@ -392,7 +399,7 @@ func TestDiffAgainstDumpWithEverySecretFieldSet(t *testing.T) {
 	for _, c := range changes {
 		seen[c.Path] = c
 	}
-	for _, f := range SecretFields() {
+	for _, f := range decodedSecretFields {
 		top := false
 		for p := range seen {
 			if p == f || strings.HasPrefix(p, f+"[") {
@@ -409,7 +416,10 @@ func TestDiffAgainstDumpWithEverySecretFieldSet(t *testing.T) {
 	}
 	for _, view := range [][]Change{changes, HideBodies(changes)} {
 		flat := fmtChanges(view)
-		for _, leak := range []string{"FAKE-SECRET", "4242", "4343", "777001", "777002", "0x5ec7", "0x6d6d", "0x7a7a", `"0xaa"`, `"0xbb"`, "ouser", "otapw"} {
+		// The dump gives the fingerprints fake values too ("FAKE-SECRET-tgfp", 0xaa, 0xbb): a TLS fingerprint is no
+		// secret (#809), so it is shown, and only its own value is taken out before the search.
+		flat = strings.ReplaceAll(flat, fakeFingerprint, "")
+		for _, leak := range []string{"FAKE-SECRET", "4242", "4343", "777001", "777002", "0x5ec7", "0x6d6d", "0x7a7a", "ouser", "otapw"} {
 			if strings.Contains(flat, leak) {
 				t.Errorf("diff output contains %q", leak)
 			}

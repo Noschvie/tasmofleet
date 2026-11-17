@@ -67,7 +67,7 @@ func TestClassify(t *testing.T) {
 		{"Sensor13 1", ClassAdmin, false, false, "sensor and driver commands were off the old allowlist"},
 		{"SetSensor1 1", ClassAdmin, false, false, "driver command"},
 		{"ZbSend {}", ClassAdmin, false, false, "Zigbee command"},
-		{"MqttUser x", ClassAdmin, false, false, "was off the allowlist"},
+		{"MqttUser x", ClassAdmin, true, false, "the broker login is secret (#809), but no confirmation: changing it cannot lock out more than MqttHost"},
 		{"Json {\"Status\":0}", ClassAdmin, false, false, "executors are no longer a forbidden class"},
 		{"Rule1 ON System#Boot DO Power ON ENDON", ClassAdmin, false, false, "rules are an admin tool"},
 		{"Rule1 1", ClassAdmin, false, false, "enabling a rule"},
@@ -347,8 +347,9 @@ func TestBareReportsRouteLikeReadsButKeepTheirVerdicts(t *testing.T) {
 		if !ReportsOnly(cmd) {
 			t.Errorf("ReportsOnly(%q) = false, want true: the bare form only reports", cmd)
 		}
-		if v, err := Classify(cmd); err != nil || v.Class != ClassAdmin || v.Confirm != "" || v.Redact {
-			t.Errorf("Classify(%q) = %+v, %v; want a plain admin command", cmd, v, err)
+		// Redact is the one secret rule's (#809): the bare MqttUser is routed like a read and its reply is masked.
+		if v, err := Classify(cmd); err != nil || v.Class != ClassAdmin || v.Confirm != "" || v.Redact != SecretName(cmd) {
+			t.Errorf("Classify(%q) = %+v, %v; want a plain admin command, Redact only when secret", cmd, v, err)
 		}
 		if _, err := Authorize(cmd, model.RoleOperator); !errors.Is(err, ErrRole) {
 			t.Errorf("Authorize(%q, operator) = %v, want ErrRole", cmd, err)

@@ -46,9 +46,11 @@ func TestResolveNameReadsANameAsTheDeviceDoes(t *testing.T) {
 }
 
 // Why: every SetOption synonym of every pinned Tasmota catalogue runs the SetOption's handler on the device, so the
-// policy must judge it exactly like that SetOption: the same class, the same confirmation, the same secrecy, and the
-// same answer to "does it change the MQTT connection". A synonym the policy judged by its own name would slip past a
-// rule written for the SetOption (MqttTLS 1 changed the MQTT connection without the router's HTTP question).
+// policy must judge it exactly like that SetOption: the same class, the same confirmation, at least the same secrecy,
+// and the same answer to "does it change the MQTT connection". A synonym the policy judged by its own name would slip
+// past a rule written for the SetOption (MqttTLS 1 changed the MQTT connection without the router's HTTP question).
+// Secrecy may only be stricter under the synonym's name (#809, fail closed): ZbNameKey is SetOption83, a harmless flag,
+// but its name says key, and the one secret rule judges a name as written too, never less secret than the device's.
 func TestEveryCatalogueSynonymIsJudgedLikeItsSetOption(t *testing.T) {
 	set, err := tasmotacmd.Pinned()
 	if err != nil {
@@ -77,7 +79,7 @@ func TestEveryCatalogueSynonymIsJudgedLikeItsSetOption(t *testing.T) {
 					}
 					a, aerr := Classify(syn)
 					b, berr := Classify(so)
-					if (aerr == nil) != (berr == nil) || a.Class != b.Class || a.Confirm != b.Confirm || a.Redact != b.Redact {
+					if (aerr == nil) != (berr == nil) || a.Class != b.Class || a.Confirm != b.Confirm || b.Redact && !a.Redact {
 						t.Errorf("Classify(%q) = %+v %v, Classify(%q) = %+v %v; want the same verdict", syn, a, aerr, so, b, berr)
 					}
 					if a.Name != spelling {

@@ -5,14 +5,9 @@ import (
 	"encoding/json"
 	"io"
 	"regexp"
-	"strings"
 )
 
 const mask = "***"
-
-// secretKeyParts mark JSON keys whose value is masked (case-insensitive
-// substring, "_" and "-" ignored).
-var secretKeyParts = []string{"password", "passwd", "pwd", "token", "secret", "apikey", "mqttuser", "ssid"}
 
 var (
 	reUserinfo = regexp.MustCompile(`(?i)\b([a-z][a-z0-9+.\-]*://)[^\s/@]+@`)         // any userinfo: user:pass, a token, :pass
@@ -21,24 +16,6 @@ var (
 	reBrLogin  = regexp.MustCompile(`(\[[^\]\s,@\[{"]*,)[^\]\s:@\[{"]+:[^\]\s]+(\])`) // WebSend [host:port,user:pass]
 	reKeyVal   = regexp.MustCompile(`(?i)\b(password|passwd|pwd|token|secret|api_?key)(\s*[=:]\s*)[^\s&"',;]+`)
 )
-
-// secretKeyNames are reply keys that hold a key under a name no part rule can catch without masking harmless
-// settings too ("key" would hit DzKeyIdx): ZbConfig's Zigbee network key (KeyL, KeyH) and MI32Key's BLE bind
-// keys (MIKeys). Matched exactly.
-var secretKeyNames = map[string]bool{"keyl": true, "keyh": true, "mikeys": true}
-
-func secretKey(k string) bool {
-	k = strings.ToLower(strings.NewReplacer("_", "", "-", "").Replace(k))
-	if secretKeyNames[k] {
-		return true
-	}
-	for _, p := range secretKeyParts {
-		if strings.Contains(k, p) {
-			return true
-		}
-	}
-	return false
-}
 
 // scrubText masks credentials that appear inside free text.
 func scrubText(s string) string {
@@ -49,8 +26,8 @@ func scrubText(s string) string {
 	return reKeyVal.ReplaceAllString(s, "${1}${2}"+mask)
 }
 
-// ScrubReply masks credentials in a device reply: values of keys that look
-// like secrets (password, token, MqttUser, ...) and credential patterns inside
+// ScrubReply masks credentials in a device reply: values of keys that SecretName
+// counts as secret (password, token, MqttUser, KeyL, ...) and credential patterns inside
 // strings (URL userinfo, WebSend [user:pass@host], password=...). JSON keeps
 // its key order and number notation. Text that is not JSON is scrubbed as
 // text. A reply is shown or stored only after this.
@@ -136,7 +113,7 @@ func scrubContainer(dec *json.Decoder, out *bytes.Buffer, open json.Delim) error
 			key, _ := kt.(string)
 			writeString(out, key)
 			out.WriteByte(':')
-			masked = secretKey(key)
+			masked = SecretName(key) // the one secret rule (#809): a key the console would redact is masked
 		}
 		if err := scrubValue(dec, out, masked); err != nil {
 			return err

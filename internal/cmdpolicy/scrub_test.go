@@ -31,11 +31,17 @@ func TestScrubReply(t *testing.T) {
 		{"not json", `plain password=hunter2 text`, `plain password=*** text`},
 		{"not json userinfo", `ftp://u:p@h/f`, `ftp://***@h/f`},
 		{"escaped quote in value", `{"a":"say \"hi\" token=zzz"}`, `{"a":"say \"hi\" token=***"}`},
-		// #605 review: ZbConfig answers with the Zigbee network key, MI32Key with the BLE bind keys. Matched by the exact
-		// key: the part "key" alone would also mask harmless settings such as DzKeyIdx.
-		{"zigbee network key", `{"ZbConfig":{"Channel":11,"KeyL":"0x0F0D0B0907050301L","KeyH":"0x0D0C0A0806040200L"}}`, `{"ZbConfig":{"Channel":11,"KeyL":"***","KeyH":"***"}}`},
+		// #605 review: ZbConfig answers with the Zigbee network key, MI32Key with the BLE bind keys. ZbConfig is a secret
+		// command (#809), so its whole reply object is masked; KeyL and KeyH are masked under any other parent too.
+		{"zigbee network key", `{"ZbConfig":{"Channel":11,"KeyL":"0x0F0D0B0907050301L","KeyH":"0x0D0C0A0806040200L"}}`, `{"ZbConfig":"***"}`},
+		{"zigbee key parts", `{"Zb":{"Channel":11,"KeyL":"0x0F0D0B0907050301L","KeyH":"0x0D0C0A0806040200L"}}`, `{"Zb":{"Channel":11,"KeyL":"***","KeyH":"***"}}`},
 		{"ble bind keys", `{"MIKeys":{"A4C138AABBCC":"00112233445566778899AABBCCDDEEFF"}}`, `{"MIKeys":"***"}`},
-		{"a name with key in it stays", `{"DzKeyIdx1":5,"KeyLx":1}`, `{"DzKeyIdx1":5,"KeyLx":1}`},
+		// #809: the reply mask is the one secret rule (SecretName), so a key the console redacts as a command is masked
+		// in every reply: Telegram's chat id, the fixed BSSID, the InfluxDB organisation (IfxUser's setting). Fail
+		// closed: a harmless name with "key" in it (DzKeyIdx) is masked too.
+		{"secrets of the one rule", `{"TmChatId":"123456","BSSId1":"AA:BB:CC:DD:EE:FF","IfxOrg":"home","WCAuth":"hunter2"}`, `{"TmChatId":"***","BSSId1":"***","IfxOrg":"***","WCAuth":"***"}`},
+		{"a name with key in it is masked", `{"DzKeyIdx1":5,"KeyLx":1}`, `{"DzKeyIdx1":"***","KeyLx":"***"}`},
+		{"a fingerprint is no secret", `{"MqttFingerprint1":"DA 39 A3 EE"}`, `{"MqttFingerprint1":"DA 39 A3 EE"}`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

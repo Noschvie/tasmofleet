@@ -365,7 +365,8 @@ func TestReaderPassRefreshesWhatThePagesShow(t *testing.T) {
 	if !slices.Contains(cmds, "Status 2") {
 		t.Fatalf("the identity was not probed: %v", cmds)
 	}
-	if !slices.Contains(cmds, "Status 6") {
+	// One Status 6 is the Settings read's (MqttUser, #809); the broker read asks its own.
+	if countCmd(cmds, "Status 6") < 2 {
 		t.Fatalf("the broker was not read: %v", cmds)
 	}
 }

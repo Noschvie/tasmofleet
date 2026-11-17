@@ -1749,8 +1749,10 @@ of the announced size, whichever is longer.
 holds `/tlskey` (a private key) and Berry scripts that routinely embed tokens, and is handled exactly
 like the `.dmp` (no content viewer; the UI shows names, sizes and "private key" for `/tlskey`). So:
 backup files are 0600, downloads need the admin role and are audited, and the UI never
-shows the decoded secrets. The diff/drift view redacts keys matching
-`(?i)password|passwd|ssid.*pass|token|secret|key`. Backups do not go into logs or metrics.
+shows the decoded secrets. The diff/drift view redacts every setting with a key that the one secret rule
+(`cmdpolicy.SecretName`, #809) names, the same rule that redacts a command in the console: passwords, tokens,
+keys, the network names and the MQTT login. TLS fingerprints are compared: a SHA-1 of a server's public
+certificate is no secret. Backups do not go into logs or metrics.
 
 ### 12.4 Schedules, retention, restore
 

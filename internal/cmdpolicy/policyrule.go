@@ -20,12 +20,6 @@ const (
 	reasonConfirm   = "this command needs a confirmation in the console and cannot be a policy rule"
 )
 
-// secretParts mark a command name that carries a credential or a network name
-// (case-insensitive substring), besides the exact names in secretNames. They
-// mirror the JSON key parts ScrubReply masks, plus "key" for TLSKey and
-// LoRaWanAppKey style names.
-var secretParts = []string{"password", "passwd", "pwd", "token", "secret", "apikey", "mqttuser", "ssid", "key"}
-
 // actingExact are commands whose bare form is not a plain read: it restarts,
 // resets, saves, publishes, switches, scans or runs something. Digits at the
 // end of the name do not matter (Power1, Sensor13, Driver4 are the same
@@ -135,7 +129,7 @@ func PolicyReadable(name string) (ok bool, why string) {
 		}
 	}
 	switch {
-	case secretNames[base] || hasAny(base, secretParts):
+	case SecretName(name):
 		return false, reasonSecret
 	case actingExact[base]:
 		return false, reasonActs
@@ -155,15 +149,6 @@ func PolicyReadable(name string) (ok bool, why string) {
 		}
 	}
 	return true, ""
-}
-
-func hasAny(s string, parts []string) bool {
-	for _, p := range parts {
-		if strings.Contains(s, p) {
-			return true
-		}
-	}
-	return false
 }
 
 // PolicySetText is the command a policy sets for a generic rule: the canonical

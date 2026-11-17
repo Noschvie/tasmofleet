@@ -105,7 +105,7 @@ func (m *Manager) mqttLockout(ctx context.Context, dev model.Device, b model.Bac
 		c.known("MqttPort", ok, *d.Port != port)
 	}
 	if d.User != nil {
-		c.text("MqttUser", "MqttUser", *d.User)
+		c.mqttUser(*d.User)
 	}
 	if d.Pwd != nil {
 		c.add("MqttPassword", differsPassword(*d.Pwd, dev, m.o.BrokerPassword))
@@ -208,6 +208,17 @@ func (c *connCompare) liveNumber(cmd string) (int, bool) {
 func (c *connCompare) text(name, cmd, backup string) {
 	live, ok := c.liveText(cmd, cmd)
 	c.known(name, ok, live != backup)
+}
+
+// mqttUser compares the backup's MqttUser with the login the device reports in Status 6 (StatusMQT.MqttUser). Not the
+// bare MqttUser: it is secret by the one rule (cmdpolicy.SecretName, #809), so the router masks its reply ("***").
+func (c *connCompare) mqttUser(backup string) {
+	r, ok := c.live("Status 6")
+	var s struct{ MqttUser *string }
+	if ok && (json.Unmarshal(r["StatusMQT"], &s) != nil || s.MqttUser == nil) {
+		ok = false
+	}
+	c.known("MqttUser", ok, ok && *s.MqttUser != backup)
 }
 
 // topic compares the backup's Topic setting with the device's, raw against raw like MqttClient (#844): a decoded backup

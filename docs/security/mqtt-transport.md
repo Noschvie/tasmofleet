@@ -55,7 +55,7 @@ works (claim T14). What crosses the broker then:
 - **Restore** (`FileUpload` Type 2): the start `{"Password":...,"Type":2,...}` with the device's MQTT password, the
   whole dump in base64 chunks on `cmnd/<topic>/FileUpload`, its MD5; before it `Status 5` (to every device on the
   topic, `DoAll`), the version and boot count reads, the MQTT settings the restore compares with the backup (R28:
-  `Topic`, `Hostname` when the backup's Topic holds `%hostname%`, `MqttUser`, `MqttClient`, `Prefix`, `Status 3` for
+  `Topic`, `Hostname` when the backup's Topic holds `%hostname%`, `Status 6` for MqttUser (#809), `MqttClient`, `Prefix`, `Status 3` for
   SetOption103 and SetOption132, `MqttFingerprint1/2`, and `MqttHost`/`MqttPort` when the inventory has no broker for
   the device; no password among them);
   and the safety and check backups as above.

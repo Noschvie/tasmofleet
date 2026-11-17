@@ -484,11 +484,14 @@ func Generic(cmd string) bool {
 // statusSource says where a setting is read when its bare query has a side
 // effect: a bare SaveData calls SettingsSaveAll() (a flash write) and a bare
 // TelePeriod forces a telemetry publish. Status and Status 3 only report.
+// MqttUser is secret by the one rule (cmdpolicy.SecretName, #809), so the router
+// masks the reply of a bare MqttUser; Status 6 reports the login unmasked.
 var statusSource = map[string]struct{ cmd, section, field string }{
 	"PowerOnState": {"Status", "Status", "PowerOnState"},
 	"SaveData":     {"Status", "Status", "SaveData"},
 	"SetOption0":   {"Status", "Status", "SaveState"}, // SaveState is flag.save_state, i.e. SetOption0
 	"TelePeriod":   {"Status 3", "StatusLOG", "TelePeriod"},
+	"MqttUser":     {"Status 6", "StatusMQT", "MqttUser"},
 }
 
 // SideEffectQueries are commands that must never be sent bare as a read.

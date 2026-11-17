@@ -46,6 +46,12 @@ func TestMakeCompliantNeverSendsASecret(t *testing.T) {
 		}
 	}
 	for _, l := range makeCompliantLines(t) {
+		// The one exception: the broker login. It is secret by the one rule since #809 (its value never reaches a
+		// log, a reply or a diff), but a fleet policy may set it (#606, the security check of PR #816; #947 reads it
+		// back): the device hands it to the broker on every connect. Every other secret stays refused.
+		if l.key == "MqttUser" && !carriesCredential(t, l.text) {
+			continue
+		}
 		if v, err := cmdpolicy.Classify(l.text); err != nil || v.Redact || carriesCredential(t, l.text) {
 			t.Errorf("a policy can send %q, which cmdpolicy keeps secret", l.text)
 		}

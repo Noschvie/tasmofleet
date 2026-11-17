@@ -64,6 +64,9 @@ type apiOffRig struct {
 	r     *brokerHostReader
 	held  atomic.Bool // a job holds the device
 	clock time.Time
+	// brokerReads counts the broker reads the reader started (Prober.ReadBroker). Status 6 alone does not tell: the
+	// Settings read asks it too, for MqttUser (#809).
+	brokerReads atomic.Int32
 }
 
 func newAPIOffRig(t *testing.T, o apiOffOpts) *apiOffRig {
@@ -144,7 +147,10 @@ func newAPIOffRig(t *testing.T, o apiOffOpts) *apiOffRig {
 	g.clock = time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
 	g.r = newBrokerHostReader(st.list,
 		func(model.DeviceID) bool { return false }, // the HTTP health poll has not reached the device: its API is off
-		g.pr.ReadBroker,
+		func(ctx context.Context, id model.DeviceID) error {
+			g.brokerReads.Add(1)
+			return g.pr.ReadBroker(ctx, id)
+		},
 		func(_ context.Context, _ model.DeviceID, _ string) (func(), error) {
 			if g.held.Load() {
 				return nil, devlock.BusyError{Holder: "restore"}
@@ -234,8 +240,9 @@ func liveTemplate(t *testing.T, tpl *templates.Manager) bool {
 // Why (#676): a device whose HTTP API is off but that MQTT serves showed stale or no last-known values for as
 // long as the API stayed off: the background refresh never visited it. The pass must refresh the three caches the
 // pages read from (the Settings tab's last-known values, the policy values, the GPIO template reading) over MQTT,
-// and nothing else while only the data is due: no broker read (Status 6: it waits for HTTP, #839), no identity probe
-// (Status 2, 4), no request over HTTP at all, and never Status 0.
+// and nothing else while only the data is due: no broker read (it waits for HTTP, #839), no identity probe
+// (Status 2, 4), no request over HTTP at all, and never Status 0. The Settings read asks Status 6 once, for MqttUser
+// (#809: the bare MqttUser's reply is masked); the broker read is told apart by the reader's own count.
 func TestPassRefreshesTheDataOfADeviceWhoseHTTPAPIIsOff(t *testing.T) {
 	g := newAPIOffRig(t, apiOffOpts{ours: true, lwtOnline: true})
 	g.identityNotDue() // the identity's visit over MQTT is TestTheBackgroundIdentityRefreshReachesADeviceHTTPDoesNotReach (#682)
@@ -251,10 +258,16 @@ func TestPassRefreshesTheDataOfADeviceWhoseHTTPAPIIsOff(t *testing.T) {
 		t.Error("the GPIO template reading was not cached")
 	}
 	cmds := g.sent()
-	for _, c := range []string{"Status 0", "Status 6", "Status 2", "Status 4"} {
+	for _, c := range []string{"Status 0", "Status 2", "Status 4"} {
 		if n := countCmd(cmds, c); n != 0 {
 			t.Errorf("%d x %q reached the device: the visit is data only (the identity is not due, the broker waits for HTTP)", n, c)
 		}
+	}
+	if n := g.brokerReads.Load(); n != 0 {
+		t.Errorf("%d broker read(s): the broker waits for HTTP", n)
+	}
+	if n := countCmd(cmds, "Status 6"); n > 1 {
+		t.Errorf("%d x Status 6: only the Settings read's one for MqttUser", n)
 	}
 	if n := g.http.all.Load(); n != 0 {
 		t.Errorf("%d request(s) over HTTP to a device whose HTTP API is off", n)

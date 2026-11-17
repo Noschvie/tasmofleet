@@ -182,10 +182,8 @@ func FuzzPolicyReadable(f *testing.F) {
 		if canon, err := Canonical(name); err != nil || canon != name {
 			t.Fatalf("%q is readable but is not canonical (%q, %v)", name, canon, err)
 		}
-		for _, secret := range secretParts {
-			if strings.Contains(lower, secret) {
-				t.Fatalf("%q contains %q and is readable", name, secret)
-			}
+		if SecretName(name) {
+			t.Fatalf("%q is secret and is readable", name)
 		}
 	})
 }

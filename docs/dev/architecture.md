@@ -45,6 +45,7 @@ internal/app              wiring and lifecycle only
 internal/simulator        Tasmota device simulator (tests and devenv only)
 internal/testutil/oidcmock mock OIDC provider (tests and devenv only)
 internal/testutil/quarantine  quarantine.Test for flaky Go tests
+internal/testutil/redactguard  a client wrapper that masks replies like the router and fails a read that sends a bare secret command (#809)
 internal/discovery, policy   MQTT-first and scan discovery; policy rules and outcomes
 internal/notify              webhook, SMTP and Web Push notifications for finished updates, failed scheduled backups and snapshots (#249, #610; spec 14.5)
 internal/deps            build-tagged file pinning third-party modules in go.mod (maintainer only)

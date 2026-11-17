@@ -217,7 +217,8 @@ func TestWholeSettingsReadGoesOverMQTT(t *testing.T) {
 	if len(h) != 0 {
 		t.Errorf("HTTP was used: %v", h)
 	}
-	if !slices.Contains(mq, "MqttUser") {
-		t.Errorf("MqttUser was not read over MQTT: %v", mq)
+	// MqttUser is read from Status 6 since #809 (its bare reply is masked as a secret).
+	if !slices.Contains(mq, "Status 6") {
+		t.Errorf("MqttUser (Status 6) was not read over MQTT: %v", mq)
 	}
 }

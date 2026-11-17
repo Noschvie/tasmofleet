@@ -103,13 +103,18 @@ var DefaultOperator = []string{
 }
 
 // secretNames carry credentials, keys or network names in their arguments. Admins
-// may send them (after a confirmation); their arguments are never logged, and their
-// replies are masked (ScrubReply). MI32Key and MI32Keys set
+// may send them after a confirmation (confirmFor); they are part of the one secret rule
+// (SecretName), so their arguments are never logged and their replies are masked
+// (ScrubReply). MI32Key and MI32Keys set
 // BLE sensor bind keys, ZbConfig the Zigbee network key (its reply shows the key, also
 // when sent bare), WiFiTest tries and may store a Wi-Fi name and password ("ssid+pw").
+// IfxOrg runs IfxUser's handler (CmndInfluxDbUser) and writes the same setting.
+// This list decides only the confirmation: a name that SecretName catches by a part
+// (MqttUser, TmChatId, WCAuth, DzKeyIdx, ...) is Redact without one, on purpose. Do not
+// merge the two lists: the confirmation names a lock-out that those names do not cause.
 var secretNames = map[string]bool{
 	"password": true, "webpassword": true, "mqttpassword": true, "ssid": true,
-	"tmtoken": true, "ifxpassword": true, "ifxtoken": true, "ifxuser": true,
+	"tmtoken": true, "ifxpassword": true, "ifxtoken": true, "ifxuser": true, "ifxorg": true,
 	"tlskey": true, "lorawanappkey": true, "rgxpassword": true, "rgxssid": true,
 	"mi32key": true, "mi32keys": true, "zbconfig": true, "wifitest": true,
 }
@@ -384,7 +389,7 @@ func Classify(cmd string) (Verdict, error) {
 }
 
 func classify(p parsed) (Verdict, string) {
-	v := Verdict{Name: p.name, Redact: secretNames[p.base]}
+	v := Verdict{Name: p.name, Redact: SecretName(p.name)}
 	switch p.base {
 	case "status":
 		return classifyStatus(p, v), ""

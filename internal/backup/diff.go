@@ -9,14 +9,16 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/hellwand/tasmofleet/internal/audit"
+	"github.com/hellwand/tasmofleet/internal/cmdpolicy"
 )
 
 // Change is one differing setting between two JSON documents. Path is
 // "key.sub[2]". Old and New are the JSON encoding of the scalar ("300",
 // "\"text\"", "null"); the empty string means the key is absent on that side.
 // For a Secret row both are always empty: the UI only says that a secret
-// value changed (spec 12.3). A string value that carries a credential
+// value changed (spec 12.3). A setting is secret when a key on its path is
+// (cmdpolicy.SecretName, the one secret rule the console's redaction uses too,
+// #809). A string value that carries a credential
 // (see scrub) is treated as secret: the row only says it changed. Body marks free text (rules, scripts)
 // that can hold credentials no pattern recognises; HideBodies blanks those
 // values for callers who may not read them and sets Hidden.
@@ -30,58 +32,12 @@ type Change struct {
 	Same bool
 }
 
-// secretRe is the fallback rule: the spec 12.3 expression, widened with the
-// spellings real firmware uses (pwd, Tasmota's own "pwassword" typo,
-// credentials, auth tokens, TLS fingerprints). It is a net under the explicit
-// list below, not the primary defence.
-var secretRe = regexp.MustCompile(`(?i)pass|pwd|pwassword|ssid.*pass|token|secret|key|cred|auth|fingerprint`)
-
-// secretFields are the decode-config v16.0.0 settings that hold secrets or
-// identify a secret, derived from its setting definitions (decoded output of
-// a 15.6 dump has 316 keys; these are the ones that matter). Matched by
-// exact path, so a field is covered even if a future rename slips past
-// secretRe. "_esp32" twins are listed explicitly.
-var secretFields = map[string]bool{
-	"sta_pwd": true, "mqtt_pwd": true, "web_password": true,
-	"rgx_pwassword": true, "rgx_pwassword_esp32": true,
-	"influxdb_token": true, "telegram_token": true, "telegram_chatid": true,
-	"mqtt_fingerprint1": true, "mqtt_fingerprint2": true, "telegram_fingerprint": true,
-	"pn532_password": true, "pn532_pack": true,
-	"zb_precfgkey_h": true, "zb_precfgkey_l": true, "zb_ext_panid": true,
-	"keeloq_master_lsb": true, "keeloq_master_msb": true,
-}
-
-// SecretFields returns the explicit list (for tests and documentation).
-func SecretFields() []string {
-	out := make([]string, 0, len(secretFields))
-	for k := range secretFields {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}
-
 // bodyKeys are free-text settings (ignoring case and index): rules, scripts
 // and Berry code may contain credentials in any shape; mems (Mem1..16) hold
 // the API keys rules use; rf_code holds replayable RF codes.
 var bodyKeys = map[string]bool{"mems": true, "rf_code": true, "rules": true, "rule1": true, "rule2": true, "rule3": true, "script": true, "script_pram": true, "berry": true}
 
 func isBodyKey(k string) bool { return bodyKeys[strings.ToLower(k)] }
-
-// secretKey reports whether the value under a JSON key must never be shown:
-// the fallback rule plus the audit redaction keys (matched ignoring "_" and "-").
-func secretKey(k string) bool {
-	if secretRe.MatchString(k) {
-		return true
-	}
-	nk := strings.NewReplacer("_", "", "-", "").Replace(strings.ToLower(k))
-	for _, rk := range audit.RedactKeys {
-		if strings.Contains(nk, strings.NewReplacer("_", "", "-", "").Replace(rk)) {
-			return true
-		}
-	}
-	return false
-}
 
 // Credential patterns for free-text values, applied in order. They are
 // deliberately greedy: when in doubt the whole value counts as credential. A
@@ -168,7 +124,7 @@ func walk(out map[string]leaf, path string, v any, secret, body bool) {
 			if path != "" {
 				p = path + "." + k
 			}
-			walk(out, p, c, secret || secretFields[p] || secretKey(k), body || isBodyKey(k))
+			walk(out, p, c, secret || cmdpolicy.SecretName(k), body || isBodyKey(k))
 		}
 	case []any:
 		if len(t) == 0 {

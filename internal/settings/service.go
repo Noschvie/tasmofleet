@@ -423,7 +423,7 @@ func (m *Manager) Apply(ctx context.Context, actor string, id model.DeviceID, ch
 	for i, f := range todo {
 		cmd := f.Command(changes[f.Key])
 		shown := cmd
-		if f.Secret {
+		if cmdpolicy.SecretName(f.Key) { // the one secret rule (#809): MqttUser too, as the console logs it
 			shown = f.Key + " ***"
 		}
 		r := Result{Key: f.Key, Command: shown}

@@ -8,8 +8,10 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/hellwand/tasmofleet/internal/cmdpolicy"
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/testutil/redactguard"
 )
 
 // ---- fakes ----
@@ -249,6 +251,57 @@ func TestApplySecretNeverLeaks(t *testing.T) {
 	}
 	if res[1].Command != "MqttPassword ***" {
 		t.Fatalf("command shown as %q", res[1].Command)
+	}
+	// #809: the broker login is secret by the one rule (the console logs "MqttUser ***"), so the Settings tab's result
+	// and audit must not show it in clear either.
+	if res[0].Command != "MqttUser ***" {
+		t.Fatalf("command shown as %q", res[0].Command)
+	}
+	for _, e := range aud.events {
+		if strings.Contains(e.Detail, "MqttUser u") {
+			t.Fatalf("the audit holds the broker login: %s", e.Detail)
+		}
+	}
+}
+
+// Why (#809): Field.Secret makes a field write-only (never read, never in the form). Such a field must also be secret
+// by the one rule, which hides its value in results, logs and the audit; a write-only field the rule did not know
+// would be shown in clear by every other place.
+func TestEveryWriteOnlyFieldIsSecretByTheOneRule(t *testing.T) {
+	for _, f := range Fields {
+		if f.Secret && !cmdpolicy.SecretName(f.Key) {
+			t.Errorf("%s is write-only but not secret by cmdpolicy.SecretName", f.Key)
+		}
+	}
+}
+
+// Why (#809): MqttUser is secret by the one rule, so the router masks the reply of a bare MqttUser ("***"). The
+// Settings tab and the policy compare the device's login, so they must read it where the router does not mask it,
+// in Status 6 (StatusMQT.MqttUser), never as a bare MqttUser that answers "***" and would count as a changed login.
+// The guard plays the router's part.
+func TestReadTakesTheMQTTUserFromStatus6(t *testing.T) {
+	c := &fakeClient{replies: map[string]string{
+		"MqttUser": `{"MqttUser":"alice"}`,
+		"Status 6": `{"StatusMQT":{"MqttHost":"b","MqttUser":"alice"}}`,
+	}}
+	svc := New(Options{Devices: fakeDevices{}, Client: redactguard.Wrap(t, c)})
+	got, err := svc.Read(t.Context(), 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["MqttUser"] != "alice" {
+		t.Errorf("MqttUser = %q, want the device's login", got["MqttUser"])
+	}
+	for _, s := range c.sent {
+		if s == "MqttUser" {
+			t.Errorf("Read sent the bare MqttUser, whose reply the router masks: %v", c.sent)
+		}
+	}
+	// Status 6 that does not answer: the login is unknown, never guessed and never "***".
+	c = &fakeClient{replies: map[string]string{"MqttUser": `{"MqttUser":"alice"}`}, errs: map[string]error{"Status 6": tasmota.ErrUnknownCommand}}
+	svc = New(Options{Devices: fakeDevices{}, Client: redactguard.Wrap(t, c)})
+	if got, err := svc.ReadKeys(t.Context(), 1, []string{"MqttUser"}); err != nil || len(got) != 0 {
+		t.Errorf("without Status 6: %v %v, want MqttUser unknown", got, err)
 	}
 }
 

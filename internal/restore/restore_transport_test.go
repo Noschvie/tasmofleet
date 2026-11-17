@@ -22,6 +22,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/store"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
 	"github.com/hellwand/tasmofleet/internal/tasmotacmd"
+	"github.com/hellwand/tasmofleet/internal/testutil/redactguard"
 	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
@@ -421,6 +422,51 @@ func TestAnMQTTSettingTheDeviceDoesNotReportCountsAsAChange(t *testing.T) {
 				t.Fatalf("%q", got)
 			}
 		})
+	}
+}
+
+// Why (#809): MqttUser is secret by the one rule, so the router masks the reply of a bare MqttUser ("***"). The lockout
+// check compares the backup's login with the device's: read bare, a backup with the device's own login would count as
+// changing it (every restore over MQTT would ask), and one with another login could never be told apart. The login is
+// read from Status 6, which the router does not mask; the guard plays the router's part. A device that does not
+// answer Status 6 has not reported its login: never equal.
+func TestTheLockoutReadsTheMQTTUserFromStatus6(t *testing.T) {
+	lockout := func(t *testing.T, user func(device string) string, fail bool) (string, []string) {
+		e := newFlow(t, "15.6.0")
+		raw, err := e.cl.Command(t.Context(), e.target(), "Status 6")
+		var s6 struct{ StatusMQT struct{ MqttUser string } }
+		if err != nil || json.Unmarshal(raw, &s6) != nil || s6.StatusMQT.MqttUser == "" {
+			t.Fatalf("simulator Status 6: %s %v", raw, err)
+		}
+		e = newFlowWith(t, "15.6.0", connDecoder{extra: `,"mqtt_user":` + strconv.Quote(user(s6.StatusMQT.MqttUser))})
+		a := e.dumpBackup(t, e.dumpA)
+		m := e.mqttManager(t, &fakeUploader{e: e}, transport.MQTT)
+		m.o.Client = redactguard.Wrap(t, m.o.Client)
+		if fail {
+			e.cl.failCmd = func(cmnd string) error {
+				if cmnd == "Status 6" {
+					return tasmota.ErrTimeout
+				}
+				return nil
+			}
+		}
+		dev, _ := e.st.GetDevice(t.Context(), e.dev)
+		before := len(e.cmdLog())
+		got := m.mqttLockout(transport.WithPath(t.Context(), transport.MQTT), dev, a)
+		return got, e.cmdLog()[before:]
+	}
+	got, sent := lockout(t, func(d string) string { return d }, false)
+	if got != "" {
+		t.Errorf("the backup holds the device's own login: %q (sent %v)", got, sent)
+	}
+	if slices.Contains(sent, "MqttUser") {
+		t.Errorf("the bare MqttUser was sent, its reply is masked: %v", sent)
+	}
+	if got, _ := lockout(t, func(string) string { return "someone-else" }, false); !strings.Contains(got, "this backup changes MqttUser") || strings.Contains(got, "someone-else") {
+		t.Errorf("another login: %q", got)
+	}
+	if got, _ := lockout(t, func(d string) string { return d }, true); !strings.Contains(got, "did not report its MqttUser") {
+		t.Errorf("Status 6 unanswered: %q", got)
 	}
 }
 

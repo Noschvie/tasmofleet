@@ -122,6 +122,9 @@ func (f *fakeRestore) List(context.Context, model.DeviceID, int) ([]restore.Job,
 }
 
 // Every secret value of the synthetic dumps; none may reach any page.
+// fakeTelegramFingerprint is telegram_fingerprint of the synthetic secrets dump (decoded-secrets.json).
+const fakeTelegramFingerprint = "FAKE-SECRET-tgfp"
+
 var secretNeedles = []string{
 	"FAKE-SECRET", "synthetic-wifi-pass", "synthetic-mqtt-pass", "synthetic-web-pass", "ouser",
 	"4242", "777001", "0x5ec7", "0x6d6d", "0x7a7a",
@@ -183,8 +186,13 @@ func TestDiffAndDriftPagesNeverRenderSecrets(t *testing.T) {
 			if resp.StatusCode != 200 {
 				t.Fatalf("%s as %s: %d", p, role, resp.StatusCode)
 			}
+			// The synthetic dump gives the Telegram fingerprint a fake value as well; a TLS fingerprint is no secret
+			// (#809: the SHA-1 of a server's public certificate), so the pages show it and the search skips it.
+			if (strings.Contains(p, "diff?") || strings.Contains(p, "/restore")) && !strings.Contains(body, fakeTelegramFingerprint) {
+				t.Errorf("%s as %s does not show the Telegram fingerprint: fingerprints are compared, not hidden", p, role)
+			}
 			for _, n := range secretNeedles {
-				if strings.Contains(body, n) {
+				if strings.Contains(strings.ReplaceAll(body, fakeTelegramFingerprint, ""), n) {
 					t.Errorf("%s as %s leaks %q", p, role, n)
 				}
 			}
