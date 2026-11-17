@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/mqttcmd"
 	"github.com/hellwand/tasmofleet/internal/simulator"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
 	"github.com/hellwand/tasmofleet/internal/transport"
@@ -905,18 +906,64 @@ func TestAddressRefusedCountsAsTheDeviceBeingGone(t *testing.T) {
 // mqttDevice is the command channel of a device that is only reachable over MQTT. With dev set, the device's own
 // answers to the Ufs commands come back (the simulated device asked directly, as the device would answer on its topic;
 // "Unknown" is tasmota.ErrUnknownCommand there as over MQTT), and asked records them.
+//
+// Its FileDownload Type 8 (DownloadFile, #924) answers as the firmware does: type8Stock (the zero value, a stock
+// build without USE_UFILESYS_MQTT) refuses with Error 3 before anything of the file; type8Built reads the file from
+// the simulated device's file system (files: the raw file system, beside the HTTP client the router uses), and the
+// other modes script the remaining answers. sd makes the device report a mounted SD card next to its flash.
 type mqttDevice struct {
 	dump  []byte
 	dev   tasmota.Client
 	asked *[]string
+	type8 type8Mode
+	files tasmota.FileSystem
+	reads *int // Type 8 starts that got past the start (type8Built and type8ThenError3)
+	sd    bool
 }
+
+type type8Mode int
+
+const (
+	type8Stock      type8Mode = iota // Error 3 to the start: no file transfer in this firmware
+	type8Built                       // USE_UFILESYS_MQTT: the file comes over MQTT
+	type8Refused                     // Error 1: the device refused the MQTT password
+	type8ThenError3                  // the first file comes, the next start answers Error 3
+)
 
 func (m mqttDevice) Do(ctx context.Context, d model.Device, c string) (json.RawMessage, error) {
 	if m.dev != nil && strings.HasPrefix(c, "Ufs") {
 		*m.asked = append(*m.asked, c)
+		if m.sd { // UfsType/UfsSize/UfsFree answer [SD card, flash] (xdrv_50 UFSType)
+			switch c {
+			case "UfsType":
+				return json.RawMessage(`{"UfsType":[1,3]}`), nil
+			case "UfsSize":
+				return json.RawMessage(`{"UfsSize":[30000,2048]}`), nil
+			case "UfsFree":
+				return json.RawMessage(`{"UfsFree":[20000,1500]}`), nil
+			}
+		}
 		return m.dev.Command(ctx, tasmota.TargetFor(model.Device{Address: d.Address, Port: d.Port}), c)
 	}
 	return json.RawMessage(`{"Status":{}}`), nil
+}
+
+func (m mqttDevice) DownloadFile(ctx context.Context, d model.Device, _, p string, max int64) ([]byte, error) {
+	if m.asked != nil {
+		*m.asked = append(*m.asked, "FileDownload8 "+p)
+	}
+	n := 0
+	if m.reads != nil {
+		n = *m.reads
+	}
+	switch {
+	case m.type8 == type8Stock, m.type8 == type8ThenError3 && n > 0:
+		return nil, fmt.Errorf("%w: %w: %w", mqttcmd.ErrPublished, mqttcmd.ErrTransfer, mqttcmd.ErrNoFileTransfer)
+	case m.type8 == type8Refused:
+		return nil, fmt.Errorf("%w: %w", mqttcmd.ErrPublished, mqttcmd.ErrPasswordRefused)
+	}
+	*m.reads++
+	return m.files.DownloadFile(ctx, tasmota.TargetFor(model.Device{Address: d.Address, Port: d.Port}), p, max)
 }
 func (m mqttDevice) DoLoose(ctx context.Context, d model.Device, c string) (json.RawMessage, error) {
 	return m.Do(ctx, d, c)

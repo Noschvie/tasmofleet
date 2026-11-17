@@ -7,7 +7,7 @@ import (
 )
 
 // Why (#926): the result said "over MQTT" for a backup whose dump came over MQTT and whose files were
-// read over HTTP (Tasmota has no file transfer over MQTT). That hid the one HTTP exception of a backup
+// read over HTTP (a stock firmware sends no files over MQTT). That hid the one HTTP exception of a backup
 // from the person who pressed the button. The text names the transport of each part, and says one
 // transport once when both used it, so a plain HTTP backup does not read as a mixed one.
 func TestTheResultNamesTheTransportOfTheDumpAndOfTheFiles(t *testing.T) {

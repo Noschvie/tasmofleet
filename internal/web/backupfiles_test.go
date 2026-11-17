@@ -260,3 +260,29 @@ func TestBackupsTabWorksWithoutFilesAPI(t *testing.T) {
 		t.Errorf("%d %s", resp.StatusCode, body)
 	}
 }
+
+// Why (#924): the fold said "read over HTTP" for every archive, also for files a Type 8 firmware sent on its topic;
+// a person checking which way the device's secrets (Berry tokens, the TLS key) travelled would be told the wrong
+// transport. The manifest records the transport of the walk; an archive from before has none and was read over HTTP.
+func TestTheFilesFoldNamesTheTransportThatReadTheFiles(t *testing.T) {
+	for _, tc := range []struct{ via, want string }{
+		{"mqtt", "read over MQTT"},
+		{"http", "read over HTTP"},
+		{"", "read over HTTP"},
+	} {
+		v := buildFilesView(backup.Manifest{FSType: 3, FSSizeKB: 320, FSFreeKB: 108, Via: tc.via}, nil)
+		if !strings.Contains(v.Note, "Flash filesystem (LittleFS, 320 KiB, 108 KiB free), "+tc.want+".") {
+			t.Errorf("via %q: note %q, want %q", tc.via, v.Note, tc.want)
+		}
+	}
+}
+
+// Why (#924): "Needs HTTP" in the fleet table now also stands for a firmware that sends no files over MQTT, whose HTTP
+// then failed for any reason (no MAC in the inventory among them), so the legend must not claim that HTTP did not
+// answer; it says what is certain and where the reason is.
+func TestTheFleetLegendDoesNotClaimWhyHTTPFailed(t *testing.T) {
+	note := fleetView{Total: 2}.FootNote()
+	if strings.Contains(note, "HTTP did not answer") || !strings.Contains(note, "Needs HTTP (MQTT could not carry the files and HTTP did not; the device's Backups tab says why)") {
+		t.Errorf("legend %q", note)
+	}
+}

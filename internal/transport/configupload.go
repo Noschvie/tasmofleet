@@ -110,11 +110,8 @@ func (r *Router) UploadConfig(ctx context.Context, t tasmota.Target, dump []byte
 	if err == nil || !notPublished(err) {
 		noteTrace(ctx, MQTT)
 	}
-	if errors.Is(err, mqttcmd.ErrPasswordRefused) && r.o.Marker != nil {
-		// The caller may be cancelled by now; the mark must still be written.
-		if merr := r.o.Marker.MarkMQTTPasswordBad(context.WithoutCancel(ctx), d.ID, time.Now()); merr != nil {
-			r.o.Log.Warn("transport: could not record the refused MQTT password", "device", int64(d.ID), "err", merr)
-		}
+	if errors.Is(err, mqttcmd.ErrPasswordRefused) {
+		r.markPasswordBad(ctx, d.ID)
 	}
 	return err
 }

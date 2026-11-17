@@ -32,6 +32,10 @@ func newMQTTFilesEnvWith(t *testing.T, mac, pass string) (*filesEnv, *transport.
 	return newMQTTFilesEnvSpec(t, esp32(nil), mac, pass)
 }
 
+// stockNeedsHTTP starts the reason a run gives for its files when the firmware answered the first file over MQTT with
+// Error 3 (the fake channel's default, a stock build without USE_UFILESYS_MQTT, #924) and HTTP then could not carry them.
+const stockNeedsHTTP = "they need HTTP (this firmware sends no files over MQTT), and HTTP could not be used: "
+
 // noStoredMAC is the mac argument of the env helpers for a device whose inventory entry holds no MAC (a device added by
 // topic and not probed yet).
 const noStoredMAC = "none"
@@ -74,7 +78,7 @@ func newMQTTFilesEnvDev(t *testing.T, spec simulator.DeviceSpec, mac, pass strin
 		}
 		seen.Client, seen.fs = o.Client, o.Client.(tasmota.FileSystem)
 		rt := transport.NewRouter(transport.Options{HTTP: seen, Devices: devs{d}, Facts: mqttFacts{mem}, Memory: mem})
-		md := mqttDevice{dump: []byte("MQTT-DUMP"), dev: o.Client, asked: &asked}
+		md := mqttDevice{dump: []byte("MQTT-DUMP"), dev: o.Client, asked: &asked, files: o.Client.(*flakyFS).fs, reads: new(int)}
 		for _, f := range opts {
 			f(&md)
 		}
@@ -147,7 +151,8 @@ func (c *credsSeen) UploadFile(ctx context.Context, t tasmota.Target, p string, 
 }
 
 // Why (#607): a backup over MQTT first must not lose the files archive that a backup over HTTP kept (#324, 0.26.0):
-// Tasmota has no file transfer over MQTT, so after the dump over MQTT the files are read over HTTP while HTTP works.
+// A stock firmware sends no files over MQTT (Error 3 to Type 8, #924), so after the dump over MQTT the files are read
+// over HTTP while HTTP works.
 // The archive holds the device's files, the dump is the one MQTT carried, and the audit names both transports.
 func TestABackupOverMQTTFirstKeepsItsFilesArchive(t *testing.T) {
 	e, _ := newMQTTFilesEnv(t, "")
@@ -185,7 +190,7 @@ func TestFilesOfABackupOverMQTTComeOnlyFromTheSameDevice(t *testing.T) {
 	if _, ok := kindOf(got, model.BackupFiles); ok {
 		t.Fatal("files of another device were stored with this device's dump")
 	}
-	if n := dumpNote(t, got); !strings.Contains(n, NoteFilesPrefix+"the device at its address is not this device") {
+	if n := dumpNote(t, got); !strings.Contains(n, NoteFilesPrefix+stockNeedsHTTP+"the device at its address is not this device") {
 		t.Errorf("dump note %q", n)
 	}
 	if len(e.flaky.downloads) != 0 {
@@ -225,7 +230,7 @@ func TestAHostThatReportsAnEmptyMACIsNotTheDevice(t *testing.T) {
 	if _, ok := kindOf(got, model.BackupFiles); ok {
 		t.Fatal("files of a host that reported no MAC were stored with this device's dump")
 	}
-	if n := dumpNote(t, got); FilesNoteOf(n) != "the device at its address did not report its MAC" {
+	if n := dumpNote(t, got); FilesNoteOf(n) != stockNeedsHTTP+"the device at its address did not report its MAC" {
 		t.Errorf("dump note %q", n)
 	}
 	if got := seen.calls(); len(got) != 0 {
@@ -271,7 +276,7 @@ func TestABackupOverMQTTOfADeviceWithoutAStoredMACSaysSoAndAsksNothingOverHTTP(t
 				t.Fatal("files were stored for a device that cannot be told from the host at its address")
 			}
 			n := dumpNote(t, got)
-			if FilesNoteOf(n) != "the inventory has no MAC for this device (probe it first)" { // the restore's sentence too
+			if FilesNoteOf(n) != stockNeedsHTTP+"the inventory has no MAC for this device (probe it first)" { // the restore's sentence too
 				t.Errorf("dump note %q", n)
 			}
 			if got := http.requests(); len(got) != 0 {
@@ -345,7 +350,7 @@ func TestTheFileSystemQuestionOfABackupOverMQTTNeverFailsOverToHTTP(t *testing.T
 
 // Why (#855): the audit "via" of a backup named "http+mqtt" because the MAC check and UfsType went over HTTP, although
 // the dump (the settings, the part with the secrets) came over MQTT. "via" names the transport of the dump and its
-// status snapshot; the HTTP calls beside it (the files cannot come over MQTT) are listed apart, so the audit still
+// status snapshot; the HTTP calls beside it (files a stock firmware cannot send over MQTT) are listed apart, so the audit still
 // shows every HTTP request of the run without calling the whole backup an HTTP one.
 func TestBackupAuditNamesTheDumpsTransportAndListsTheHTTPCallsBesideIt(t *testing.T) {
 	detailOf := func(t *testing.T, e *filesEnv) map[string]any {
@@ -362,7 +367,7 @@ func TestBackupAuditNamesTheDumpsTransportAndListsTheHTTPCallsBesideIt(t *testin
 		}
 		return d
 	}
-	t.Run("a device with files: the file system over MQTT, the MAC check and the files over HTTP", func(t *testing.T) {
+	t.Run("a stock device with files: the file system over MQTT, the MAC check and the files over HTTP", func(t *testing.T) {
 		e, _, http := newMQTTFilesEnvWith(t, "", "")
 		d := detailOf(t, e)
 		if d["via"] != "mqtt" {
@@ -371,7 +376,8 @@ func TestBackupAuditNamesTheDumpsTransportAndListsTheHTTPCallsBesideIt(t *testin
 		if got, want := fmt.Sprint(d["http_side"]), "[mac check files]"; got != want {
 			t.Errorf("http_side = %v, want %v", got, want)
 		}
-		if got, want := fmt.Sprint(*e.overMQTT), "[UfsType UfsSize UfsFree]"; got != want {
+		// The root listing and the Error 3 to the first file went over MQTT too (#924): no HTTP call, not in http_side.
+		if got, want := fmt.Sprint(*e.overMQTT), "[UfsType UfsSize UfsFree UfsList / FileDownload8 /autoexec.be]"; got != want {
 			t.Errorf("asked over MQTT %s, want %s", got, want)
 		}
 		for _, r := range http.requests() {

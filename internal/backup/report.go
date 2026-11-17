@@ -10,7 +10,7 @@ import "context"
 // about which part used which (#926).
 type Report struct {
 	Dump  string // "mqtt" or "http"; "" until a backup ran through this context
-	Files string // "http" (the files cannot come over MQTT); "" when no files archive was stored
+	Files string // "mqtt" (FileDownload Type 8, #924) or "http"; "" when no files archive was stored
 }
 
 type reportKey struct{}

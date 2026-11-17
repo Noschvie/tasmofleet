@@ -130,6 +130,10 @@ type DeviceSpec struct {
 	// MQTTPassword is the device's MqttPassword, which FileDownload and FileUpload
 	// compare their "Password" with (Error 1 on a mismatch).
 	MQTTPassword string
+	// UfsMQTT is the build option USE_UFILESYS_MQTT (Tasmota arendst/Tasmota#25278, off in the stock
+	// builds): FileDownload Type 8 with "File" sends a file of the file system. Without it Type 8 is
+	// answered with Error 3 once the password matched, as the firmware does.
+	UfsMQTT bool
 	// Energy makes the device publish an ENERGY block in tele/SENSOR, shaped like the
 	// fleet's energy-status.json captures: 0 = no meter, 1 = one meter (a number per
 	// field), n >= 2 = n channels the way Tasmota sends them: Power, ApparentPower,

@@ -16,3 +16,8 @@ dev, _ := fleet.Add(ctx, simulator.DeviceSpec{Name: "plug", Profile: simulator.P
 Fault injection (`simulator.Fault`) covers timeouts, dropped connections, unknown
 commands, auth failures, failed downloads, long reboots and wrong-family firmware. Add a
 fixture or a fault instead of mocking HTTP by hand.
+
+With an MQTT broker (`FleetOptions.MQTTURL`, `simulator.StartBroker`) a device also answers the MQTT file transfer
+(`FileDownload`, `FileUpload`) as `xdrv_02_1_mqtt_file.ino` does, checking `DeviceSpec.MQTTPassword`. `DeviceSpec.UfsMQTT`
+is the build option `USE_UFILESYS_MQTT`: `FileDownload` Type 8 then sends a file of the simulated file system; without
+it Type 8 is answered with Error 3 after the password check, like the stock builds (#924).

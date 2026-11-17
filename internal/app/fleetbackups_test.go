@@ -210,3 +210,18 @@ func TestPrunePlanIsWiredToTheRestoreGuardOfTheRealStore(t *testing.T) {
 		t.Errorf("plan %+v, want only the middle run offered: the oldest is a running restore's, the newest stays", plan)
 	}
 }
+
+// Why (#924): a run whose files MQTT could not carry and HTTP did not either gives a long reason (the firmware and the
+// HTTP failure); the fleet table has one short cell for it, the same "files need HTTP" as a run whose HTTP was known
+// to fail. The device's own backups page shows the whole sentence.
+func TestTheFleetCellShortensTheReasonThatTheFilesNeedHTTP(t *testing.T) {
+	for _, reason := range []string{
+		"they need HTTP",
+		"they need HTTP (this firmware sends no files over MQTT), and HTTP could not be used: the device took too long to answer",
+		"they need HTTP (an SD card is mounted), and HTTP could not be used: HTTP has not answered recently",
+	} {
+		if got := filesNoteText(reason); got != "files need HTTP" {
+			t.Errorf("%q: cell %q", reason, got)
+		}
+	}
+}

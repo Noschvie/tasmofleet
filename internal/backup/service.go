@@ -211,7 +211,7 @@ func (m *Manager) finishBackup(ctx context.Context, actor string, owner, dev mod
 	}
 	detail := map[string]any{"files": len(out), "firmware": version, "trigger": run.Trigger, "via": via}
 	if len(rep.httpSide) > 0 {
-		detail["http_side"] = rep.httpSide // the files cannot come over MQTT: the MAC check, the file system and the files go over HTTP
+		detail["http_side"] = rep.httpSide // files MQTT could not carry: the MAC check, the file system and the files over HTTP
 	}
 	if rep.filesErr != "" {
 		detail["files_error"] = rep.filesErr // the files archive could not be written or indexed; the run succeeded
@@ -286,7 +286,7 @@ func (m *Manager) recordFailure(ctx context.Context, id model.DeviceID, run Run,
 type runReport struct {
 	filesErr string   // the files archive could not be written or indexed; the run succeeded
 	via      string   // the transport of the dump and its status snapshot ("" when the run ended before the dump)
-	httpSide []string // the HTTP calls made beside a dump over MQTT (the files cannot come over MQTT)
+	httpSide []string // the HTTP calls made beside a dump over MQTT (files that MQTT could not carry, #924)
 	files    string   // the transport of the files archive, set only once the archive is stored ("" otherwise)
 	// heapKB and uptimeSec: the device's free heap and uptime read after a failed dump (evidence), 0 when not read.
 	heapKB    int
@@ -307,7 +307,7 @@ func (m *Manager) backup(ctx context.Context, owner, dev model.Device, note stri
 	}
 	target := tasmota.TargetFor(dev)
 
-	cctx, coreVia := transport.WithTrace(ctx) // the dump and its snapshot, apart from the files that go over HTTP whatever carried the dump
+	cctx, coreVia := transport.WithTrace(ctx) // the dump and its snapshot, apart from the files (filesStep has its own traces)
 	defer func() { rep.via = coreVia.Via() }()
 	dctx, dumpVia := transport.WithTrace(cctx) // the transport that carried the dump
 	dmp, err := m.o.Client.DownloadConfig(dctx, target)
@@ -446,7 +446,7 @@ func (m *Manager) freeTimestamp(dir, base string) time.Time {
 // onDumpPath pins the status snapshot of a backup run to the transport that carried its dump, so the dump and its
 // snapshot never mix HTTP and MQTT: the dump goes MQTT first since #607, and HTTP only when MQTT cannot carry it,
 // so a snapshot over the other transport would describe a device the dump's transport did not see. The files of the
-// run go over HTTP whatever carried the dump (filesStep). A context that is pinned already (an update or a restore
+// run take their own way (filesStep: over MQTT after a dump over MQTT where the firmware can, else over HTTP). A context that is pinned already (an update or a restore
 // job) keeps its path.
 func onDumpPath(ctx context.Context, dump *transport.Trace) context.Context {
 	if _, pinned := transport.PathFrom(ctx); pinned {

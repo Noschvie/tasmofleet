@@ -23,7 +23,7 @@ var noteParts = []struct {
 // text: the engine's job result and the device page's own Back up. via is the audit "via" of the run:
 // which way the dump came. files is the way the files archive came ("" when none was stored); it is
 // named only when it differs from via, which is the one case a person would otherwise misread: the
-// dump over MQTT, the files over HTTP, because Tasmota has no file transfer over MQTT (#926).
+// dump over MQTT, the files over HTTP, because a stock firmware sends no files over MQTT (#926, #924).
 //
 // The text is built from fixed words only. A kind, a via or a files that is not known is left out, so
 // a caller may pass values that came from a link without ever showing text a person did not get from

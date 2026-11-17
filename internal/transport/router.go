@@ -999,12 +999,7 @@ func (r *Router) mqttDownload(ctx context.Context, d model.Device) ([]byte, erro
 		return nil, &BackupBlockedError{Err: fmt.Errorf("%w: %w", tasmota.ErrUnreachable, mqttcmd.ErrRefused), Reason: "a backup over MQTT was refused: " + mqttcmd.Reason(err), Attempted: errors.Is(err, mqttcmd.ErrPublished)}
 	}
 	if errors.Is(err, mqttcmd.ErrPasswordRefused) {
-		if r.o.Marker != nil {
-			// The caller may be cancelled by now; the mark must still be written.
-			if merr := r.o.Marker.MarkMQTTPasswordBad(context.WithoutCancel(ctx), now.ID, time.Now()); merr != nil {
-				r.o.Log.Warn("transport: could not record the refused MQTT password", "device", int64(now.ID), "err", merr)
-			}
-		}
+		r.markPasswordBad(ctx, now.ID)
 		return nil, &BackupBlockedError{Err: err, Reason: "the device refused its MQTT password; enter the right one on the device's Edit page to back up over MQTT", Attempted: true}
 	}
 	return data, err

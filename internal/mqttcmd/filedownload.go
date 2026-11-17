@@ -28,6 +28,7 @@ const (
 	// the topic with its length byte, the payload) of this size or more closes its connection.
 	cmndBufferSize = 1200
 	downloadType   = 2 // UPL_SETTINGS
+	fileType       = 8 // UPL_UFSFILE: a file of the file system (USE_UFILESYS_MQTT)
 
 	suffixDownload = "FILEDOWNLOAD"
 	suffixUpload   = "FILEUPLOAD"
@@ -38,6 +39,16 @@ const (
 // ErrPasswordRefused: the device answered "Error 1" to FileDownload. Its MqttPassword differs
 // from the one we hold; the caller marks it bad and stops trying until it is changed.
 var ErrPasswordRefused = errors.New("mqttcmd: the device refused the MQTT password (Error 1)")
+
+// ErrNoFileTransfer: the device answered a file download (Type 8) with Error 3: its firmware was built without
+// USE_UFILESYS_MQTT (the stock builds), so it sends no files over MQTT. It came in answer to the start: nothing of
+// the file was sent. Always wrapped together with ErrTransfer.
+var ErrNoFileTransfer = errors.New("mqttcmd: the firmware sends no files over MQTT (FileDownload Error 3)")
+
+// ErrFileUnavailable: the device answered a file download (Type 8) with Error 2: the file is not there, is a
+// folder, or the device had no memory for its 4 kB read buffer; the firmware does not say which. Always wrapped
+// together with ErrTransfer.
+var ErrFileUnavailable = errors.New("mqttcmd: the device could not open the file (FileDownload Error 2)")
 
 // ErrTransfer is any other failed or irregular file transfer. Nothing it wraps ever contains a
 // message payload: the password travels in it, and a minimal firmware echoes it back.
@@ -91,11 +102,65 @@ func (c *Channel) onFile(m mqttbus.Message) {
 // message until {"Id","Md5"}. Any irregularity aborts with "FileDownload 0"; there is no retry.
 // The topic is held for the whole transfer, so it is one command in flight like any other.
 func (c *Channel) Download(ctx context.Context, d model.Device, password string) (data []byte, rerr error) {
-	if err := checkTopic(d); err != nil {
-		return nil, err
-	}
 	start, err := downloadStart(password)
 	if err != nil {
+		return nil, err
+	}
+	return c.transfer(ctx, d, transferSpec{start: start, minSize: minDumpSize, maxSize: maxDumpSize,
+		bound: func(int) time.Duration { return c.o.FileTotal }})
+}
+
+// DownloadFile fetches one file of d's file system (FileDownload Type 8 with "File", USE_UFILESYS_MQTT,
+// arendst/Tasmota#25278) by the same protocol as Download. The header must name path the way the firmware
+// does (without its leading slash), and a file it announces larger than max is refused with
+// tasmota.ErrFileTooLarge before any data is asked for. A firmware without the option answers the start with
+// Error 3: ErrNoFileTransfer, sent before anything of the file; Error 2 is ErrFileUnavailable (no such file,
+// a folder, or no memory for the 4 kB read buffer). path obeys tasmota.CheckFSPath and max is positive, or
+// nothing is published. The transfer has FileTotal or, for a larger file, ReplyWait plus chunkAllowance per
+// chunk of the announced size, whichever is longer.
+func (c *Channel) DownloadFile(ctx context.Context, d model.Device, password, path string, max int64) ([]byte, error) {
+	if err := tasmota.CheckFSPath(path); err != nil {
+		return nil, fmt.Errorf("%w: the file path cannot be sent in a file transfer command", ErrRefused)
+	}
+	if max <= 0 {
+		return nil, fmt.Errorf("%w: no room for the file", ErrRefused)
+	}
+	if err := checkFilePassword(password); err != nil {
+		return nil, err
+	}
+	// The path passed CheckFSPath: no quote, backslash or control character, so it goes in verbatim.
+	start := `{"Password":"` + password + `","Type":` + strconv.Itoa(fileType) + `,"File":"` + path + `"}`
+	return c.transfer(ctx, d, transferSpec{start: start, file: strings.TrimPrefix(path, "/"), minSize: 0, maxSize: max,
+		tooLarge: true, bound: c.fileBound})
+}
+
+// chunkAllowance is the time one data chunk of a file may take (the "?", the device reading and encoding up to
+// minChunk bytes, the publish back): about 3 kB/s at the least. minChunk is the smaller chunk of the two chips
+// (ResponseSize 4000 on an ESP8266, (4000-21)/4*3-2 bytes), so the count is never too low.
+const (
+	chunkAllowance = time.Second
+	minChunk       = 2982
+)
+
+// fileBound is how long a Type 8 transfer of size bytes may take in all: FileTotal, or ReplyWait plus
+// chunkAllowance per chunk when that is longer. A device that sends slower than that is cut off, so it cannot
+// hold its topic (and the backup the device lock) for long.
+func (c *Channel) fileBound(size int) time.Duration {
+	chunks := (size + minChunk - 1) / minChunk
+	return max(c.o.FileTotal, c.o.ReplyWait+time.Duration(chunks)*chunkAllowance)
+}
+
+// transferSpec is what differs between the download types; the protocol run is the same.
+type transferSpec struct {
+	start            string // the start command's payload (carries the password)
+	file             string // Type 8: the File the header must carry; "" for the settings
+	minSize, maxSize int64  // the sizes the header may announce
+	tooLarge         bool   // a size over maxSize is tasmota.ErrFileTooLarge (a file), not a broken header (a dump)
+	bound            func(size int) time.Duration
+}
+
+func (c *Channel) transfer(ctx context.Context, d model.Device, spec transferSpec) (data []byte, rerr error) {
+	if err := checkTopic(d); err != nil {
 		return nil, err
 	}
 	if !c.bus.Connected() {
@@ -120,7 +185,8 @@ func (c *Channel) Download(ctx context.Context, d model.Device, password string)
 		return nil, fmt.Errorf("%w: the device reported itself offline (LWT), nothing was sent", tasmota.ErrUnreachable)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, c.o.FileTotal)
+	began := time.Now()
+	hctx, cancel := context.WithDeadline(ctx, began.Add(c.o.FileTotal)) // up to the header; the data get spec.bound
 	defer cancel()
 	in := make(chan mqttbus.Message, waitDepth)
 	c.mu.Lock()
@@ -139,12 +205,12 @@ func (c *Channel) Download(ctx context.Context, d model.Device, password string)
 	}()
 
 	if !clean {
-		if err := c.sendFile(ctx, d.Topic, "0"); err != nil {
+		if err := c.sendFile(hctx, d.Topic, "0"); err != nil {
 			return nil, err
 		}
-		c.waitAborted(ctx, in)
+		c.waitAborted(hctx, in)
 	}
-	data, sent, err := c.runDownload(ctx, d.Topic, start, in)
+	data, sent, err := c.runTransfer(ctx, hctx, began, d.Topic, spec, in)
 	if err != nil {
 		if sent && !deviceReset(err) {
 			c.abort(d.Topic) // the start may have reached the device: leave it idle
@@ -168,14 +234,16 @@ func deviceReset(err error) bool {
 	return errors.As(err, &r)
 }
 
-func (c *Channel) runDownload(ctx context.Context, topic, start string, in chan mqttbus.Message) (data []byte, sent bool, err error) {
-	if err := c.sendFile(ctx, topic, start); err != nil {
+// runTransfer runs one transfer after the opening abort: the start and the header under hctx, the data under
+// spec.bound of the announced size, counted from began. ctx is the caller's.
+func (c *Channel) runTransfer(ctx, hctx context.Context, began time.Time, topic string, spec transferSpec, in chan mqttbus.Message) (data []byte, sent bool, err error) {
+	if err := c.sendFile(hctx, topic, spec.start); err != nil {
 		// A timeout here means the publish was attempted; a refusal or a spent context sent nothing.
 		return nil, errors.Is(err, tasmota.ErrTimeout), err
 	}
 	// Anything before "Started" is a leftover of an earlier transfer (an "Aborted", a stray chunk).
 	for {
-		m, err := c.nextFile(ctx, in, "the start")
+		m, err := c.nextFile(hctx, in, "the start")
 		if err != nil {
 			return nil, true, err
 		}
@@ -187,7 +255,9 @@ func (c *Channel) runDownload(ctx context.Context, topic, start string, in chan 
 			continue
 		case *m.Status == "Started":
 		case strings.HasPrefix(*m.Status, "Error"):
-			return nil, true, errorStatus(*m.Status)
+			// Only here, in answer to the start, does Error 3 mean "this type is not in the firmware": the device
+			// refused before it sent anything of the file.
+			return nil, true, startErrorStatus(*m.Status, spec.file != "")
 		default:
 			continue
 		}
@@ -195,7 +265,7 @@ func (c *Channel) runDownload(ctx context.Context, topic, start string, in chan 
 	}
 
 	fail := func(format string, a ...any) error { return transferErr(format, a...) }
-	hdr, err := c.nextFile(ctx, in, "the file header")
+	hdr, err := c.nextFile(hctx, in, "the file header")
 	if err != nil {
 		return nil, true, err
 	}
@@ -205,18 +275,29 @@ func (c *Channel) runDownload(ctx context.Context, topic, start string, in chan 
 	if hdr.File == nil || hdr.ID == nil || hdr.Size == nil {
 		return nil, true, fail("the header after Started is not a file header")
 	}
+	if spec.file != "" && *hdr.File != spec.file { // the firmware names the file without its leading slash
+		return nil, true, fail("the header names another file than the one asked for")
+	}
 	id, size := *hdr.ID, *hdr.Size
-	if size < minDumpSize || size > maxDumpSize {
+	switch {
+	case spec.tooLarge && int64(size) > spec.maxSize:
+		return nil, true, fmt.Errorf("%w: %w: the device announced %d bytes", ErrTransfer, tasmota.ErrFileTooLarge, size)
+	case int64(size) < spec.minSize || int64(size) > spec.maxSize:
+		if spec.file != "" {
+			return nil, true, fail("the device announced %d bytes", size)
+		}
 		return nil, true, fail("the device announced %d bytes, a settings dump has %d to %d", size, minDumpSize, maxDumpSize)
 	}
+	dctx, cancel := context.WithDeadline(ctx, began.Add(spec.bound(size)))
+	defer cancel()
 
 	var got bytes.Buffer
 	sum := md5.New() //nolint:gosec // see import
 	for {
-		if err := c.sendFile(ctx, topic, "?"); err != nil {
+		if err := c.sendFile(dctx, topic, "?"); err != nil {
 			return nil, true, err
 		}
-		m, err := c.nextFile(ctx, in, "a data message")
+		m, err := c.nextFile(dctx, in, "a data message")
 		if err != nil {
 			return nil, true, err
 		}
@@ -257,11 +338,30 @@ func (c *Channel) runDownload(ctx context.Context, topic, start string, in chan 
 	}
 }
 
-// errorStatus maps "Error N" of the start (or a later message) to a typed error.
+// errorStatus maps "Error N" of a message after the start to a typed error.
 func errorStatus(s string) error { return &deviceResetError{errorStatusRaw(s)} }
 
-func errorStatusRaw(s string) error {
+// startErrorStatus maps "Error N" in answer to the start. For a file (Type 8) Error 3 is ErrNoFileTransfer and
+// Error 2 ErrFileUnavailable (MqttFileDownloadValidate); for the settings they keep their generic wording.
+func startErrorStatus(s string, file bool) error {
+	if file {
+		switch statusNumber(s) {
+		case 2:
+			return &deviceResetError{fmt.Errorf("%w: %w", ErrTransfer, ErrFileUnavailable)}
+		case 3:
+			return &deviceResetError{fmt.Errorf("%w: %w", ErrTransfer, ErrNoFileTransfer)}
+		}
+	}
+	return errorStatus(s)
+}
+
+func statusNumber(s string) int {
 	n, _ := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(s, "Error")))
+	return n
+}
+
+func errorStatusRaw(s string) error {
+	n := statusNumber(s)
 	switch n {
 	case 1:
 		return ErrPasswordRefused

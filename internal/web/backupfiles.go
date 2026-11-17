@@ -166,8 +166,12 @@ func buildFilesView(m backup.Manifest, prev *backup.Manifest) *filesView {
 	if n := len(m.Skipped); n > 0 {
 		v.Meta += fmt.Sprintf(" · %d skipped", n)
 	}
-	v.Note = fmt.Sprintf("Flash filesystem (%s, %d KiB, %d KiB free), read over HTTP. Contents are never shown here: Berry scripts often hold tokens. The archive is as secret as the settings dump.",
-		fsTypeName(m.FSType), m.FSSizeKB, m.FSFreeKB)
+	via := "HTTP" // an archive from before #924 has no via: it was read over HTTP
+	if m.Via == "mqtt" {
+		via = "MQTT"
+	}
+	v.Note = fmt.Sprintf("Flash filesystem (%s, %d KiB, %d KiB free), read over %s. Contents are never shown here: Berry scripts often hold tokens. The archive is as secret as the settings dump.",
+		fsTypeName(m.FSType), m.FSSizeKB, m.FSFreeKB, via)
 	return v
 }
 

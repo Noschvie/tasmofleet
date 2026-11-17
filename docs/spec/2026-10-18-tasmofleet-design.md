@@ -519,7 +519,7 @@ established path, while MQTT makes devices HTTP cannot reach manageable, #45). H
 | --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Commands (reads)            | MQTT when MQTT is usable (on our broker, topic exclusive, FullTopic matches, last will Online; an unknown own GroupTopic is fine), whatever HTTP's state, except that a device on whose topic another device answered a MAC check (`TopicTakenSince`, #852, until the topic is its own again), whose MQTT read or write just went unanswered (`ReadsUnansweredSince`, 10 min) or whose MQTT connection the router just changed (`ConnChangedSince`, 6.6) is read over HTTP while HTTP is not failing; else HTTP when HTTP is not failing; else None. The router sends a read over HTTP once after MQTT when nothing was published, or when it was published and not answered (timeout) while the caller still waits and HTTP is not failing (that marks the device); never back to MQTT within a call, never a second HTTP request. State, a bare Gpio, Gpios and Modules stay HTTP first (their replies do not match the channel's rules). |
 | Writes                      | MQTT when MQTT is usable with a known own GroupTopic, no other device's unread and no other device found answering on its topic (the strict rule, #852), whatever HTTP's state, except that a device whose MQTT read or write just went unanswered or whose MQTT connection was just changed is changed over HTTP while HTTP is not failing; else HTTP when HTTP is not failing; else None. What a write carries (a secret, a change of the MQTT connection, a template) is no reason for HTTP (6.6), and Make compliant follows the same rule (#606). A write MQTT did not publish goes over HTTP once; one MQTT published and nobody answered is an unknown outcome, never resent (it marks the device like an unanswered read). The power toggle asks the same rule (#605). |
-| Backup                      | MQTT FileDownload when MQTT is usable under the strict rule with a password that is set and not refused, whatever HTTP's state (#607), with the two exceptions of writes (MQTT commands just unanswered, MQTT connection just changed: HTTP while HTTP is not failing); else HTTP `/dl` when HTTP is not failing; else None. The router sends the backup over HTTP once when the FileDownload published nothing; one that published anything never goes on over HTTP. The files archive goes over HTTP whatever carried the dump (12.1). |
+| Backup                      | MQTT FileDownload when MQTT is usable under the strict rule with a password that is set and not refused, whatever HTTP's state (#607), with the two exceptions of writes (MQTT commands just unanswered, MQTT connection just changed: HTTP while HTTP is not failing); else HTTP `/dl` when HTTP is not failing; else None. The router sends the backup over HTTP once when the FileDownload published nothing; one that published anything never goes on over HTTP. The files archive follows a dump over MQTT where the firmware sends files over MQTT (`FileDownload` Type 8, #924) and the device has no SD card, else it goes over HTTP (12.1). |
 | Restore                     | MQTT FileUpload Type 2 under the backup's rule (#607); else the HTTP restore upload (`GET /rs` + `POST /u2`) when HTTP is not failing; else None (#430: the firmware server plays no part). The files of the backup go over HTTP either way (12.4). |
 | Update, pull                | DownloadHTTP (HTTP not failing, base URL set, FWReach not "no"); else DownloadMQTT (usable, FWReach not "no"); else None                                                                                                                                                                       |
 | Update, push where possible | HTTP not failing: the engine's decision (PushHTTP, PushSafeboot, or its fallback to DownloadHTTP, kept with its note). HTTP failing and MQTT usable: PushMQTT when the per-transaction "experimental" checkbox is set, the image fits and the password is usable; else DownloadMQTT; else None |
@@ -1648,7 +1648,8 @@ No migration, no store contract change and no new dependency.
    not listed by the device and not needed: they travel in the `.dmp`. The first tar entry is
    `.tasmofleet-manifest.json` (`fs_type`, `fs_size_kb`, `fs_free_kb`, `files[]` = stored files with
    `path` (device path, leading slash), `size`, `sha256`, `stored`, `mod_time` (device clock, no zone),
-   `private_key`; `skipped[]` = listed but not stored with `path`, `size`, `reason`); the other entries
+   `private_key`; `skipped[]` = listed but not stored with `path`, `size`, `reason`; `via` = `mqtt` or `http`, the
+   transport of the walk, absent in archives from before #924, which were read over HTTP); the other entries
    are the stored files under their device path without the leading slash, with the device's mtime.
    Limits: 1 MiB per file, 4 MiB stored per run, 100 files read, 100 folders listed, folder depth 4.
    A file over a limit is in `skipped`, not in the tar. Files are best effort: a file that cannot be read,
@@ -1660,10 +1661,18 @@ No migration, no store contract change and no new dependency.
    that cannot be written or indexed is logged and noted as `files_error` in the audit detail; the run
    still succeeds. Without an archive the run says why in the last sentence of the dump's
    note, `files not backed up: no filesystem | firmware older than 14.6.0 | they need HTTP | <failure>`
-   (MQTT cannot carry files: `transport.Router` forwards file calls to HTTP only, also under a pin to MQTT, and
-   answers `ErrFilesNeedHTTP` without a request while the device's HTTP is known to fail: "they need HTTP"). After a
-   dump over MQTT (#607) the files are read only when the host at the device's address answers `Status 5` over HTTP
-   with one of the device's MACs ("the device at its address is not this device" otherwise). No migration:
+   (`transport.Router`'s `tasmota.FileSystem` calls go to HTTP only, also under a pin to MQTT, and answer
+   `ErrFilesNeedHTTP` without a request while the device's HTTP is known to fail: "they need HTTP"). After a dump
+   over MQTT (#607) a device without an SD card is read on its topic first (#924): `UfsList` per folder through
+   `Router.MQTTListFiles` and `FileDownload {"Password":…,"Type":8,"File":"<path>"}` per file through
+   `Router.MQTTDownloadFile` (firmware built with `USE_UFILESYS_MQTT`, arendst/Tasmota#25278), under the rule of the
+   dump's `FileDownload`, with no identity question and no HTTP request; a folder's files are read before its
+   subfolders. A stock firmware answers the first file with Error 3 (before it sends anything of it): the walk ends
+   there, and the files are read over HTTP as below. A device with an SD card goes there at once (Type 8 and
+   `UfsList` would reach the card). Over HTTP the files are read only when the host at the device's address answers
+   `Status 5` over HTTP with one of the device's MACs ("the device at its address is not this device" otherwise);
+   when HTTP fails after MQTT could not carry the files the reason names both: `they need HTTP (this firmware sends
+   no files over MQTT | an SD card is mounted), and HTTP could not be used: <why>`. No migration:
    `backups.kind` is free text, and a run is still all rows with one `TakenAt`, so retention, Keep, delete
    and the orphan handling cover the archive unchanged. Order inside a run: dump, snapshot, `UfsType`,
    `UfsList` per folder (name order), one `GET /ufsd` per file.
@@ -1672,7 +1681,8 @@ No migration, no store contract change and no new dependency.
    summary "n stored · size · m skipped"; keyboard: Enter/Space). Inside: the stored files with their size,
    then the skipped ones with the reason; `Changed` / `New` compare each file's SHA-256 with the manifest of
    the newest earlier run that has an archive (runs without one, or with a damaged one, are skipped; the first
-   run with files has no badges); `tlskey` carries "Private key"; the filesystem line and a sentence that
+   run with files has no badges); `tlskey` carries "Private key"; the filesystem line (which names the transport
+   that read the files, "read over MQTT" or "read over HTTP") and a sentence that
    contents are never shown and the archive is as secret as the settings dump. Admins get "Download files
    (.tar)", the existing audited `GET /backups/{id}` with the archive row's id (`kind: files` in the audit
    detail); operators see names and sizes only. A damaged or missing archive shows "archive damaged" / "archive
@@ -1709,6 +1719,13 @@ MQTT (MQTT first since #607, or pinned to it): own mode sends the sealed value, 
 `Error 1` writes `mqtt_password_bad_at`; a started transfer never falls back to HTTP (only one that provably
 published nothing goes over HTTP once, while HTTP is not failing); a backup neither transport can carry fails with a
 `BackupBlockedError` whose reason reaches the device page and the backup history.
+
+`mqttcmd.DownloadFile` (#924) runs the same protocol for one file of the file system (Type 8 with `File`): the path
+obeys `tasmota.CheckFSPath` or nothing is published; the header's `File` must be the path without its leading slash
+(the firmware's form); a Size over the caller's limit ends the transfer with `FileDownload 0` before the first `?`
+(`tasmota.ErrFileTooLarge`); Error 3 in answer to the start is `ErrNoFileTransfer` (a firmware without
+`USE_UFILESYS_MQTT`), Error 2 `ErrFileUnavailable`; the whole transfer has 30 s or 8 s plus 1 s per 2982-byte chunk
+of the announced size, whichever is longer.
 
 ### 12.2 decode-config integration
 
@@ -1789,7 +1806,8 @@ shows the decoded secrets. The diff/drift view redacts keys matching
   so the one restart of the settings restore already loads `autoexec.be` and the Berry scripts. A new step
   ("Write the files", job state `files`, step 2 of 5) sits between the safety backup and the upload; a
   backup without files, or a restore that cannot write them, passes it at once. Rules:
-  - HTTP only: Tasmota has no file transfer over MQTT. A restore routed over MQTT writes the files over HTTP
+  - HTTP only: the stock firmware has no file transfer over MQTT (Type 8 of `FileUpload` needs `USE_UFILESYS_MQTT`;
+    the restore's upload stays on HTTP, #875). A restore routed over MQTT writes the files over HTTP
     too (#607), to the address resolved at the start, after the identity was checked there over HTTP; when HTTP
     cannot be used (no single address, HTTP known to fail or silent, another MAC) it puts back the settings only.
     A device without a flash file system and firmware older than 14.6.0 put back the settings only; the

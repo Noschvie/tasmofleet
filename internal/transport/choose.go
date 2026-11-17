@@ -244,9 +244,9 @@ func chooseWrites(f Facts) (Path, string) {
 // chooseBackup: a backup goes over MQTT first (#607, the product owner's rule of 2026-11-14) whenever the device is
 // usable there for a transfer (transferBlocker: the strict rule of writes and a usable MQTT password), with the two
 // exceptions of writes: MQTT commands of the device just went unanswered, or its MQTT connection was just changed,
-// and HTTP works. Otherwise HTTP (/dl), and when HTTP is failing too there is no path. The files archive needs HTTP
-// whatever carries the dump (Tasmota has no file transfer over MQTT); the router sends the dump over HTTP only when
-// MQTT published nothing.
+// and HTTP works. Otherwise HTTP (/dl), and when HTTP is failing too there is no path. The files archive follows the
+// dump over MQTT only where the firmware sends files (FileDownload Type 8, #924; the backup decides, not this rule),
+// else it needs HTTP; the router sends the dump over HTTP only when MQTT published nothing.
 func chooseBackup(f Facts) (Path, string) {
 	why := transferBlocker(f, "back up")
 	switch {

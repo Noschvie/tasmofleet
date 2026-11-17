@@ -276,8 +276,8 @@ type Commander interface {
 
 // ReadFSInfo asks UfsType and, for a flash file system, UfsSize and UfsFree through c. A device that does not know the
 // commands (no file system in the build: Tasmota answers {"Command":"Unknown"}, over HTTP and MQTT alike) yields Type
-// FSNone, nil. The three are plain commands that answer under their own key, so they travel over MQTT as well as HTTP;
-// the listing and the file contents do not (FileSystem).
+// FSNone, nil. The three are plain commands that answer under their own key, so they travel over MQTT as well as HTTP.
+// FileSystem's listing and file contents are HTTP; their MQTT counterparts are the router's (#924).
 func ReadFSInfo(ctx context.Context, c Commander, t Target) (FSInfo, error) {
 	raw, err := c.Command(ctx, t, "UfsType")
 	if err != nil {
@@ -381,7 +381,7 @@ func (c *httpClient) ListFiles(ctx context.Context, t Target, dir string) ([]Fil
 	if err != nil {
 		return nil, err
 	}
-	return parseUfsList(raw)
+	return ParseUfsList(raw)
 }
 
 // selectFlash sends GET /ufsd?dir=2 (the page is discarded) inside a held slot.
@@ -395,11 +395,12 @@ func (c *httpClient) selectFlash(rctx, parent context.Context, t Target) error {
 	return nil
 }
 
-// parseUfsList reads {"UfsList":[["name","date",size],...]} and the empty
+// ParseUfsList reads {"UfsList":[["name","date",size],...]} and the empty
 // folder answer {"UfsList":"Done"}. Entries with a name that fails
 // checkEntryName are dropped and reported in a *SkippedNamesError next to the
-// valid entries.
-func parseUfsList(raw json.RawMessage) ([]FileEntry, error) {
+// valid entries. The HTTP client and the router's listing over MQTT (#924) both
+// read the answer here, so one set of name rules applies to both.
+func ParseUfsList(raw json.RawMessage) ([]FileEntry, error) {
 	m, err := decodeObject(raw)
 	if err != nil {
 		return nil, err

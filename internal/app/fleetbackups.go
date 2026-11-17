@@ -120,7 +120,7 @@ func filesNoteText(reason string) string {
 		return ""
 	case reason == "no filesystem":
 		return "settings only: no file system"
-	case reason == "they need HTTP":
+	case reason == "they need HTTP", strings.HasPrefix(reason, "they need HTTP ("): // with why MQTT could not carry them (#924)
 		return "files need HTTP"
 	case strings.HasPrefix(reason, "firmware older than "):
 		return "settings only: " + reason + " has no file access"

@@ -31,6 +31,7 @@ import (
 const (
 	uplTasmota  = 1 // OTA firmware
 	uplSettings = 2 // settings dump
+	uplUfsFile  = 8 // UPL_UFSFILE: a file of the file system (USE_UFILESYS_MQTT, DeviceSpec.UfsMQTT)
 )
 
 const (
@@ -68,6 +69,7 @@ type mqttFile struct {
 	buf            []byte // download: the file; upload: what arrived so far
 	md5            string // upload: the MD5 the sender announced
 	password       *string
+	name           string // file_name of Type 8, with its leading slash (MqttFileUfsName)
 	sum            hash.Hash
 	topicSize      uint32 // length of the topic the command arrived on
 	group          bool   // the command arrived on the group topic
@@ -78,6 +80,7 @@ func (m *mqttFile) reset() { // MqttFilePublish without a buffer
 	m.id, m.size, m.typ = 0, 0, 0
 	m.md5 = ""
 	m.password = nil
+	m.name = ""
 }
 
 func newMD5() hash.Hash { return md5.New() } //nolint:gosec // see import
@@ -428,6 +431,12 @@ func (d *simDevice) fileDownloadLocked(data string) ([]byte, []outMsg) {
 		if v, ok := f.str("PASSWORD"); ok {
 			m.password = &v
 		}
+		if v, ok := f.str("FILE"); ok && d.spec.UfsMQTT { // parsed only under USE_UFILESYS_MQTT
+			if !strings.HasPrefix(v, "/") {
+				v = "/" + v // MqttFileUfsName
+			}
+			m.name = v
+		}
 	}
 	o.validate(d.downloadValidateLocked(o, payload))
 	o.finish()
@@ -447,15 +456,29 @@ func (d *simDevice) downloadValidateLocked(o *fileOut, payload int) uint32 {
 			return 1
 		}
 		m.id = uint8(time.Now().Unix()&0xFE) + 1 // odd id between 1 and 255
-		if m.typ != uplSettings {
+		var name string
+		switch {
+		case m.typ == uplSettings:
+			dump := d.configDump
+			if dump == nil {
+				dump = d.dumpLocked()
+			}
+			m.buf, m.size = bytes.Clone(dump), uint32(len(dump)) //nolint:gosec // G115: a dump is 4096 bytes
+			name = "Config_" + strings.ReplaceAll(d.topic, "-", "_") + "_" + d.version + ".dmp"
+		case m.typ == uplUfsFile && d.spec.UfsMQTT:
+			var f *simFile
+			if d.fs != nil && m.name != "" {
+				f = d.fs.files[m.name] // a folder is not in files: "file not found or unable to allocate buffer"
+			}
+			if f == nil {
+				return 2
+			}
+			m.buf, m.size = bytes.Clone(f.data), uint32(len(f.data)) //nolint:gosec // G115: a file of a few hundred kB at most
+			name = strings.TrimPrefix(m.name, "/")                   // file_name + 1
+		default:
 			return 3
 		}
-		dump := d.configDump
-		if dump == nil {
-			dump = d.dumpLocked()
-		}
-		m.buf, m.size, m.active = bytes.Clone(dump), uint32(len(dump)), true //nolint:gosec // G115: a dump is 4096 bytes
-		name := "Config_" + strings.ReplaceAll(d.topic, "-", "_") + "_" + d.version + ".dmp"
+		m.active = true
 		o.resp = fmt.Sprintf(`{"File":%s,"Id":%d,"Type":%d,"Size":%d}`, jsonString(name), m.id, m.typ, m.size)
 		m.pos = 0
 		m.sum = newMD5()
