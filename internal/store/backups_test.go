@@ -110,7 +110,7 @@ func TestBackupAttempts(t *testing.T) {
 }
 
 // Why (#887): a failed attempt keeps the device's free heap and uptime read after the failure, so a repeat
-// carries its own evidence; an attempt without them (not read, or recorded before 0051) reads 0, "not read".
+// carries its own evidence; an attempt without them (not read, or recorded before 0052) reads 0, "not read".
 func TestBackupAttemptKeepsHeapAndUptime(t *testing.T) {
 	s, _, _ := newStore(t)
 	dev := mustDevice(t, s, "a", "10.0.0.1")
