@@ -51,6 +51,73 @@ func ruleSwitch(r *request) bool {
 	return false
 }
 
+// ReplyKind is how the answer to a command is recognised (Reply).
+type ReplyKind int
+
+const (
+	// Matched: the answer names the command (a key of its name, STATUSn for Status n, or Command Unknown/Error for
+	// it) and the channel takes it.
+	Matched ReplyKind = iota
+	// Unmatchable: a read whose answer the channel cannot match. State answers without a State key (CmndState,
+	// MqttShowState), a bare Gpio under its own key only when GPIO1 is set, Gpios and Modules in several messages
+	// (Tasmota v16.0.0 support_command.ino 1220-1232, 2012-2131, 2154-2180). They go HTTP first
+	// (transport.MQTTCannotMatch), or they would time out and wrongly mark the device.
+	Unmatchable
+	// LightState: a light write whose only answer is the whole light state (ResponseLightState), the message every
+	// light change publishes: another client's Dimmer, a rotary encoder, the end of a Wakeup. That message proves
+	// nothing about the write, and for Channel2, Color2, HSBColor2/3 or Dimmer2/3 it does not even carry the
+	// command's key. The channel confirms such a write with ConfirmRead, published right after it (#813).
+	LightState
+)
+
+// ConfirmRead is the read that confirms a LightState write: its STATUS11 carries the light state (MqttShowState calls
+// ResponseLightState, Tasmota v16.0.0 support_tasmota.ino 887-888) and nothing but a Status 11 publishes it. The
+// channel returns the object inside StatusSTS, so the reply has the light keys at the top as the HTTP reply has. A
+// read-back after a write (#947) can use the same pair: Reply to know which writes need it, ConfirmRead to ask.
+const ConfirmRead = "Status 11"
+
+// Reply is the one rule for how the answer to cmd is recognised, for reads and writes alike (#813). Checked against
+// the pinned Tasmota sources 12.5.0 to 16.0.0 (docs/research/tasmota-mqtt-transport.md section 8).
+func Reply(cmd string) ReplyKind {
+	name, args, _ := strings.Cut(strings.TrimSpace(cmd), " ")
+	args = strings.TrimSpace(args)
+	if args == "?" {
+		// Tasmota reads "?" as no argument (CommandHandler, support_command.ino 460): "Gpio ?" is a bare Gpio, "Dimmer ?"
+		// a read.
+		args = ""
+	}
+	switch strings.ToLower(name) {
+	case "state", "gpios", "modules":
+		return Unmatchable
+	case "gpio":
+		if args == "" {
+			return Unmatchable
+		}
+	}
+	if args == "" || !lightWrite(name) {
+		return Matched
+	}
+	return LightState
+}
+
+// lightWrite reports a light command that, given an argument, ends in LightPreparePower -> ResponseLightState(0) and
+// publishes nothing of its own (v16.0.0 xdrv_04_light.ino: CmndSupportColor 2774 for Color, Color1 and Color2;
+// CmndWhite 2800; CmndChannel 2850; CmndHsbColor 2885; CmndColorTemperature 2965 for CT; CmndDimmer 3068-3077, which
+// takes an index above 4 as 1). An argument the handler rejects gets its own key (Dimmer 150 answers
+// {"Dimmer":50}) or Command Error; the confirmation reads the state either way. Color3 to Color6 store a clock colour
+// and answer under their own key (ResponseCmndIdxChar, 2771), Color0 and Color7 and up get Command Error.
+func lightWrite(name string) bool {
+	switch baseOf(name) {
+	case "channel", "dimmer", "hsbcolor", "white", "ct":
+		return true
+	case "color":
+		idx := name[len(strings.TrimRight(name, "0123456789")):]
+		n, err := strconv.Atoi(idx)
+		return idx == "" || (err == nil && n >= 1 && n <= 2)
+	}
+	return false
+}
+
 // request is one parsed command.
 type request struct {
 	name    string // as sent, "Power1"
@@ -59,6 +126,60 @@ type request struct {
 	status  string // expected suffix for Status: "STATUS" or "STATUS5"; "" for other commands
 	redact  bool   // the reply may echo a credential
 	backlog []*request
+	// light: a LightState write. Only a Command Unknown/Error for it answers it on its own; success is confirmed
+	// by confirm, a Status 11 sent after it (alone), or by the Status 11 appended to its Backlog.
+	light    bool
+	confirm  *request
+	confirms bool // this Status 11 confirms light writes: its reply is the object inside StatusSTS
+}
+
+// confirmation is the Status 11 published to confirm r's light writes (req.confirm, or the part confirmLights appended
+// to a Backlog), nil when r has none.
+func (r *request) confirmation() *request {
+	if r.confirm != nil {
+		return r.confirm
+	}
+	if n := len(r.backlog); n > 0 && r.backlog[n-1].confirms {
+		return r.backlog[n-1]
+	}
+	return nil
+}
+
+// writeResponse reports a message that can be a light write's own response: a RESULT, or with SetOption4 1 the
+// command's stat topic (stat/<t>/DIMMER, or COMMAND for a failed one). Tasmota publishes it before it runs the next MQTT
+// command, so the STATUS11 that confirms the write comes after it; one heard earlier was asked before the write ran. The
+// waiter never gets a retained message (onMessage).
+func (r *request) writeResponse(m mqttbus.Message) bool {
+	if m.Kind == mqttbus.KindCommand {
+		return strings.EqualFold(m.Suffix, r.typed()) || m.Suffix == "COMMAND"
+	}
+	return m.Kind == mqttbus.KindResult
+}
+
+// ownLightState reports the light state a LightState part of a Backlog publishes when it runs (ResponseLightState): a
+// write response that is no Command Unknown/Error and carries a key of the part's command (Dimmer, Channel, under
+// SetOption68 Channel<n>, Color, HSBColor, White, CT) or a POWER key. The part keeps it, so it never answers a later
+// part whose key it carries as well (#813).
+func (r *request) ownLightState(m mqttbus.Message) bool {
+	if !r.light || !r.writeResponse(m) {
+		return false
+	}
+	keys, values, _ := topLevel(m.Payload) // a payload that is no object has no keys
+	if _, failed := values["Command"]; failed {
+		return false
+	}
+	for _, k := range keys {
+		if b := baseOf(k); b == r.base || b == "power" {
+			return true
+		}
+	}
+	return false
+}
+
+// confirmRequest is ConfirmRead as the channel publishes it after a LightState write.
+func confirmRequest() *request {
+	name, args, _ := strings.Cut(ConfirmRead, " ")
+	return &request{name: name, args: args, base: "status", status: "STATUS" + args, confirms: true}
 }
 
 // typed is the command name as Tasmota derives the SetOption4 topic from it: without its index.
@@ -130,6 +251,10 @@ func parseRequest(cmd string) (*request, error) {
 		}
 		r.status = "STATUS" + arg
 	}
+	if Reply(cmd) == LightState {
+		// The confirmation is a Status 11, which carries the Wi-Fi name: its reply is always scrubbed.
+		r.light, r.confirm, r.redact = true, confirmRequest(), true
+	}
 	return r, nil
 }
 
@@ -157,6 +282,31 @@ func parseBacklog(r *request) (*request, error) {
 	if len(r.backlog) == 0 {
 		return nil, refuse("an empty Backlog")
 	}
+	return confirmLights(r)
+}
+
+// confirmLights appends ConfirmRead as the last part of a Backlog that holds a LightState write: each part is collected
+// by its own answer and a light part has none (Reply), while Tasmota runs the parts in order (CmndBacklog), so the
+// trailing STATUS11 shows the state after them. The whole line must stay a line cmdpolicy reads (MaxCommandLen, the
+// same split on the device); a longer one is refused and nothing is published (#813).
+func confirmLights(r *request) (*request, error) {
+	light := false
+	for _, sub := range r.backlog {
+		if sub.light {
+			sub.confirm = nil // confirmed by the Backlog's own last part
+			light = true
+		}
+	}
+	if !light {
+		return r, nil
+	}
+	args := strings.TrimRight(r.args, "; ") + "; " + ConfirmRead
+	if _, err := cmdpolicy.Classify(r.name + " " + args); err != nil || len(r.name)+1+len(args) > cmdpolicy.MaxCommandLen {
+		return nil, refuse("the Backlog has a light command and no room for the %s that would confirm it", ConfirmRead)
+	}
+	r.args = args
+	r.backlog = append(r.backlog, confirmRequest())
+	r.redact = true // the confirmation carries the Wi-Fi name
 	return r, nil
 }
 
@@ -173,11 +323,19 @@ func (r *request) match(m mqttbus.Message, loose bool) (v verdict, ok bool) {
 	if m.Retained {
 		return verdict{}, false
 	}
-	if r.status != "" && m.Kind == mqttbus.KindStatus {
-		if m.Suffix == r.status {
-			return verdict{reply: m.Payload}, true
+	if r.confirm != nil {
+		if v, ok := r.confirm.match(m, false); ok {
+			return v, true // the Status 11 sent after the light write
 		}
-		return verdict{}, false
+	}
+	if r.status != "" && m.Kind == mqttbus.KindStatus {
+		if m.Suffix != r.status {
+			return verdict{}, false
+		}
+		if r.confirms {
+			return verdict{reply: statusSTS(m.Payload)}, true
+		}
+		return verdict{reply: m.Payload}, true
 	}
 	if m.Kind == mqttbus.KindPower && r.base == "power" && (string(m.Payload) == "ON" || string(m.Payload) == "OFF") {
 		// SetOption4 1 devices report a switched relay on stat/<t>/POWERn instead of RESULT.
@@ -253,6 +411,9 @@ func (r *request) match(m mqttbus.Message, loose bool) (v verdict, ok bool) {
 	if r.status != "" {
 		return verdict{}, false // a Status answers on STATUSn; any other RESULT is noise
 	}
+	if r.light {
+		return verdict{}, false // the light state answers every light change; only the confirmation answers this one
+	}
 	if r.base == "template" {
 		// Template answers with the stored template (TemplateJson) and no "Template" key, for the bare read
 		// and for a successful write alike (support_command.ino, CmndTemplate); only the refusal of a write
@@ -302,6 +463,23 @@ func templateShape(values map[string]json.RawMessage) bool {
 	var pins []json.RawMessage
 	raw, ok := values["GPIO"]
 	return ok && json.Unmarshal(raw, &pins) == nil
+}
+
+// statusSTS is the object inside a STATUS11 reply, the device's state with the light keys at the top as in the HTTP
+// reply of a light write. A payload without that object is returned as it came.
+func statusSTS(payload []byte) []byte {
+	_, values, ok := topLevel(payload)
+	if !ok {
+		return payload
+	}
+	inner, has := values["StatusSTS"]
+	if !has {
+		return payload
+	}
+	if _, _, isObj := topLevel(inner); !isObj {
+		return payload
+	}
+	return inner
 }
 
 // matchesAny reports whether m would have answered r in any mode: a late reply to an abandoned request.

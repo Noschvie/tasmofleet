@@ -237,15 +237,27 @@ func (c *Channel) doAll(ctx context.Context, d model.Device, cmd string, loose b
 		return nil, fmt.Errorf("%w: %s not sent: %w", tasmota.ErrUnreachable, req.name, err)
 	}
 	var raw json.RawMessage
-	if req.backlog != nil {
+	switch {
+	case req.backlog != nil:
 		raw, err = c.collectBacklog(ctx, w, req)
-	} else {
+	case req.confirm != nil:
+		if err = c.sendConfirm(ctx, d.Topic, req); err == nil {
+			raw, err = c.collect(ctx, w, req, loose)
+		}
+	default:
 		raw, err = c.collect(ctx, w, req, loose)
 	}
 	if errors.Is(err, tasmota.ErrTimeout) {
 		// The outcome is unknown and the reply may still come. Keep the topic and the listener for a
 		// grace period and drop that reply, or it would answer the next command with the same key.
 		c.holdUntilLate(d.Topic, w, req, release)
+		return nil, err
+	}
+	if cr := req.confirmation(); err != nil && cr != nil {
+		// The write (or a Backlog part) failed on its own after its Status 11 went out: that STATUS11 is still on its way
+		// and would answer the next command that takes one (a light write, a Status 11 read). Keep the topic until it
+		// comes, as for any late reply (#813).
+		c.holdUntilLate(d.Topic, w, cr, release)
 		return nil, err
 	}
 	var more []json.RawMessage
@@ -261,6 +273,23 @@ func (c *Channel) doAll(ctx context.Context, d model.Device, cmd string, loose b
 		raw = cmdpolicy.ScrubReply(raw)
 	}
 	return append([]json.RawMessage{raw}, more...), nil
+}
+
+// sendConfirm publishes the Status 11 that confirms a LightState write (req.confirm, #813), on the same topic, after the
+// Gap, while the topic is still ours. The write is published already, so every failure here is an unknown outcome
+// (ErrTimeout), never "not sent": the caller must not send the write again.
+func (c *Channel) sendConfirm(ctx context.Context, topic string, req *request) error {
+	if err := c.waitTurn(ctx); err != nil {
+		if errors.Is(err, tasmota.ErrUnreachable) { // closed while waiting for the turn
+			return c.closedAfterSend(req.name)
+		}
+		return fmt.Errorf("mqtt: %s was sent and the caller gave up before %s could confirm it (outcome unknown): %w: %w", req.name, ConfirmRead, tasmota.ErrTimeout, err)
+	}
+	if err := c.bus.Command(ctx, topic, req.confirm.name, req.confirm.args); err != nil {
+		// ErrTimeout, whatever the bus's cause: the router reads an error with it as "may have run" (notPublished).
+		return fmt.Errorf("mqtt: %s was sent and the %s that would confirm it was not (outcome unknown): %w: %w", req.name, ConfirmRead, tasmota.ErrTimeout, err)
+	}
+	return nil
 }
 
 // failedReply stands in moreReplies for a further reply that answered the command with a failure.
@@ -326,15 +355,20 @@ func (c *Channel) holdUntilLate(topic string, w *waiter, req *request, release f
 func (c *Channel) collect(ctx context.Context, w *waiter, req *request, loose bool) (json.RawMessage, error) {
 	timer := time.NewTimer(c.o.ReplyWait)
 	defer timer.Stop()
+	heard := req.confirm == nil // a light write: its own response has come (writeResponse)
 	for {
 		select {
 		case m := <-w.ch:
+			heard = heard || req.writeResponse(m)
 			v, ok := req.match(m, loose)
 			if !ok {
 				continue
 			}
 			if v.err != nil {
 				return nil, v.err
+			}
+			if !heard {
+				continue // a STATUS11 ahead of the write's own response shows the state from before the write (#813)
 			}
 			return v.reply, nil
 		case <-w.off:

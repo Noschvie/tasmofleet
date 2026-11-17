@@ -97,6 +97,10 @@ the template), `Timer<n>`.
 - Commands outside the `DecodeCommand` tables (Berry, `Script_SubCmd`, rules, scripts) are not covered.
 - A handler that Tasmota overrides at run time (`Shortcut`, `SetOption` renames not of the three kinds above) is
   read as written.
+- Keys a handler leaves to a shared helper that writes a whole state are not the command's own: the light writes
+  (`Dimmer`, `Color`, `Channel<n>`, `HSBColor`, `White`, `CT` with an argument) answer with `ResponseLightState`, which
+  every light change publishes, so the catalogue's `Channel<n>` key is not what `Channel2 50` publishes (#813;
+  `docs/research/tasmota-mqtt-transport.md` section 8, `mqttcmd.Reply`).
 - `Command`: Unknown and `Command`: Error replies are not listed; every command can produce them. The
   consumer must treat the `Command` key as an answer to whatever it just sent.
 - Source files that appear twice (shutter, webcam, ws2812 variants) give one entry per file; `Lookup` joins

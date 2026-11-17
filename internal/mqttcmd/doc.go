@@ -25,6 +25,15 @@
 //     on stat/<t>/UPGRADE, the topic of its download reports, and a failed Power3 on stat/<t>/POWER: only
 //     the immediate Upgrade reply ("Version X from <url>", "1 or >X to upgrade", "Safeboot") and only the
 //     Command Error answer there, never "Failed ..." or "Successful. Restarting" (#648).
+//   - One rule (Reply) says how an answer is recognised, for reads and writes. A light write (Dimmer, Color,
+//     Channel<n>, HSBColor, White, CT with an argument) is answered only by the light state every light change
+//     publishes, so it is never taken as the answer: the channel publishes ConfirmRead (Status 11) after the write,
+//     on the same topic, still holding it, and only that STATUS11 (or a Command Error/Unknown for the write)
+//     answers, and only after the write's own response; the reply is the object inside StatusSTS, always scrubbed
+//     (it carries the Wi-Fi name). A failure after the write was published is an unknown outcome; a write that
+//     fails on its own after its Status 11 went out keeps the topic until that STATUS11 comes. A Backlog with a
+//     light write gets Status 11 as its last part and needs its STATUS11, and a light part keeps its light state;
+//     one too long for it is refused (#813).
 //   - A Backlog has no merged reply (Tasmota v16 publishes nothing for the Backlog itself and one
 //     RESULT per queued command): each queued command is collected on its own.
 //   - A device whose last LWT is Offline is not published to (ErrUnreachable: nothing was sent).

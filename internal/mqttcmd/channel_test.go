@@ -32,6 +32,8 @@ type fakeBus struct {
 	// longPrefix, if set, replaces "cmnd/" in CommandTopic: a device behind a longer FullTopic.
 	longPrefix string
 	onPub      func(b *fakeBus, p pub)
+	// failAt, if set, makes the failAt-th publish (1-based) fail like a broken connection; it is still counted.
+	failAt int
 }
 
 type fakeSub struct {
@@ -64,7 +66,11 @@ func (b *fakeBus) Command(_ context.Context, topic, command, payload string) err
 	b.mu.Lock()
 	b.cmds = append(b.cmds, p)
 	hook := b.onPub
+	fail := b.failAt != 0 && len(b.cmds) == b.failAt
 	b.mu.Unlock()
+	if fail {
+		return errors.New("fakebus: publish failed")
+	}
 	if hook != nil {
 		hook(b, p)
 	}

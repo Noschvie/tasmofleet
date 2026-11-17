@@ -685,17 +685,9 @@ func (r *Router) httpAnswers(ctx context.Context, t tasmota.Target) bool {
 // MQTTCannotMatch reports reads whose replies the command channel does not match (State answers with
 // its own keys, a bare Gpio only when GPIO1 is set, Gpios and Modules in several parts): they would
 // time out over MQTT and wrongly mark the device, so they stay HTTP first. A caller that pins MQTT
-// leaves them out (the data refresh, #676).
-func MQTTCannotMatch(cmnd string) bool {
-	name, args, _ := strings.Cut(strings.TrimSpace(cmnd), " ")
-	switch strings.ToLower(name) {
-	case "state", "gpios", "modules":
-		return true
-	case "gpio":
-		return strings.TrimSpace(args) == ""
-	}
-	return false
-}
+// leaves them out (the data refresh, #676). The rule is the channel's own (mqttcmd.Reply, #813), the one that also
+// has the channel confirm a light write by a Status 11: such a write is not unmatchable and stays MQTT first.
+func MQTTCannotMatch(cmnd string) bool { return mqttcmd.Reply(cmnd) == mqttcmd.Unmatchable }
 
 // httpFirst sends over HTTP and fails over to MQTT only when the error proves that nothing was
 // sent (D4): a refused connection, an address outside the device networks, a 401 or a device that
