@@ -320,7 +320,9 @@ func TestRestoreOverMQTTWhileHTTPFailsPutsBackSettingsOnlyAndSaysSo(t *testing.T
 	e, a := filesFlow(t)
 	u := &fakeUploader{e: e, apply: true}
 	m := e.mqttManager(t, u, transport.MQTT)
+	// The Router knows the device's HTTP to fail: its gate says so and every file call, FSInfo too, sends nothing.
 	e.cl.fsInfoErr = transport.ErrFilesNeedHTTP
+	m.o.Client = gatedWatch{&credsWatch{idGuard: idGuard{e.cl, e}}}
 	as, err := m.Assess(t.Context(), a.ID)
 	if err != nil {
 		t.Fatal(err)

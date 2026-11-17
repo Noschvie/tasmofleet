@@ -216,7 +216,8 @@ const (
 // planFiles decides what the restore of backup id does with the backup's files. t is the device
 // (bare for replacement hardware), version reads its firmware (asked only when needed). A device that cannot be asked is an
 // error (the caller must not guess), except for a restore whose settings go over MQTT, which then leaves the files out;
-// everything else that stops the files is a reason in Why.
+// everything else that stops the files is a reason in Why. Such a restore asks the file system question on the
+// device's topic first and over HTTP only when the topic leaves it unanswered (#875).
 func (m *Manager) planFiles(ctx context.Context, id model.BackupID, t tasmota.Target, version func(context.Context) (string, error), via filesVia) (FilesPlan, error) {
 	if m.o.Files == nil {
 		return FilesPlan{}, nil
@@ -243,6 +244,29 @@ func (m *Manager) planFiles(ctx context.Context, id model.BackupID, t tasmota.Ta
 	if len(plan.Files) == 0 {
 		return plan, nil
 	}
+	known := false // the device answered the file system question on its topic
+	if via.settingsOverMQTT {
+		// The device on its topic says whether it can hold the files at all (#875, as the backup since #855): no web
+		// password goes with the question, and a device without a file system is asked nothing over HTTP. The files
+		// themselves still go over HTTP, after the HTTP identity check below and again right before the first write.
+		info, err := tasmota.ReadFSInfo(transport.WithPath(ctx, transport.MQTT), m.o.Client, t)
+		switch {
+		case err == nil:
+			why, err := filesUnsupported(ctx, version, info)
+			if err != nil {
+				return FilesPlan{}, err
+			}
+			if why != "" {
+				plan.Why = why
+				return plan, nil
+			}
+			known = true
+		case ctx.Err() != nil:
+			return FilesPlan{}, ctx.Err()
+		default: // asked over HTTP below, after the identity check, as a read MQTT left unanswered (T2)
+			m.o.Log.Info("restore: file system not read over MQTT", "component", "restore", "err", err)
+		}
+	}
 	if via.noHTTP != "" {
 		plan.Why = via.noHTTP
 		return plan, nil
@@ -266,6 +290,9 @@ func (m *Manager) planFiles(ctx context.Context, id model.BackupID, t tasmota.Ta
 			return plan, nil //nolint:nilerr // over MQTT a failed HTTP check leaves the files out with the reason; the settings go on
 		}
 	}
+	if known {
+		return plan, nil
+	}
 	info, err := fs.FSInfo(ctx, t)
 	if err != nil {
 		if via.settingsOverMQTT || errors.Is(err, transport.ErrFilesNeedHTTP) {
@@ -275,18 +302,27 @@ func (m *Manager) planFiles(ctx context.Context, id model.BackupID, t tasmota.Ta
 		}
 		return FilesPlan{}, fmt.Errorf("reading the device's file system: %w", err)
 	}
-	v, err := version(ctx)
+	plan.Why, err = filesUnsupported(ctx, version, info)
 	if err != nil {
-		return FilesPlan{}, fmt.Errorf("reading the device's firmware version: %w", err)
-	}
-	if !tasmota.FilesSupported(v, info) {
-		if !info.HasFlash() {
-			plan.Why = "the device has no flash file system, so only the settings are restored"
-		} else {
-			plan.Why = "the device's firmware is older than " + tasmota.MinFilesFirmware + ", so only the settings are restored"
-		}
+		return FilesPlan{}, err
 	}
 	return plan, nil
+}
+
+// filesUnsupported reads the firmware version and says why a device with file system info cannot take the files of a
+// restore; "" when it can.
+func filesUnsupported(ctx context.Context, version func(context.Context) (string, error), info tasmota.FSInfo) (string, error) {
+	v, err := version(ctx)
+	if err != nil {
+		return "", fmt.Errorf("reading the device's firmware version: %w", err)
+	}
+	switch {
+	case tasmota.FilesSupported(v, info):
+		return "", nil
+	case !info.HasFlash():
+		return "the device has no flash file system, so only the settings are restored", nil
+	}
+	return "the device's firmware is older than " + tasmota.MinFilesFirmware + ", so only the settings are restored", nil
 }
 
 // filesCheck is what the verification compares with the fresh backup: the files the device holds
