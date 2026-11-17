@@ -116,7 +116,7 @@ test("the card counts the fleet, lists the devices without a password and gives 
   await expect(card.locator(".sys-sum").filter({ hasText: "From backups" })).toContainText("1");
   await expect(card.locator(".sys-sum").filter({ hasText: "Not known" })).toContainText("1");
   await expect(card).toContainText("Not known (1)");
-  await expect(card.locator(".sys-orphan").filter({ hasText: "mq-esp8266-1m" })).toContainText("No backup yet");
+  await expect(card.locator(".sys-orphan").filter({ hasText: "mq-esp8266-1m" })).toContainText("TasmoFleet reaches it only over MQTT, so no backup can bring its password");
   await expect(card.getByRole("link", { name: "Set the password of mq-esp8266-1m" })).toBeVisible();
   expect(await page.content()).not.toContain(brokerSecret);
   await aclShots(page, "settings-mqtt");

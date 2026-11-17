@@ -78,6 +78,9 @@ templ pathList(id string, rows []pathRow, c pathCard, attrs templ.Attributes) {
 								<a class="btn btn-link" href={ templ.SafeURL(c.PWBroker) }>Use the broker password…</a>
 							}
 						</div>
+						if a.ACL != "" {
+							@ui.BrokerACLNotice(a.ACL, aclHideHref(ctx))
+						}
 						if a.Test && a.TestWhy != "" {
 							<p class="devcard-note" id="pw-test-why">{ "Test not possible: " + sentence(a.TestWhy) }</p>
 						}

@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"errors"
+	"html"
 	"net/url"
 	"regexp"
 	"slices"
@@ -40,7 +41,9 @@ func TestPasswordRowNamesStateSourceAndWhatItEnables(t *testing.T) {
 		{"tested", pwInput{Ours: true, Mode: model.MQTTPasswordBroker, OKAt: tested}, true, "Works", "ok", []string{"Same as TasmoFleet's broker password", "Tested", "the device accepted it", "back up, restore, read files and upload firmware over MQTT"}, nil},
 		{"from a backup", pwInput{Ours: true, Mode: model.MQTTPasswordOwn, Source: model.MQTTPasswordFromBackup, SetAt: taken}, true, "Works", "ok", []string{"own password, stored encrypted", "taken from the backup of"}, []string{"Tested"}},
 		{"typed, never accepted", pwInput{Ours: true, Mode: model.MQTTPasswordOwn, SetAt: taken}, true, "Not tested", "neutral", []string{"Set", "has not accepted it yet", "press Test"}, []string{"accepted it."}},
-		{"no password", pwInput{Ours: true, Mode: model.MQTTPasswordEmpty, SetAt: taken}, true, "Not tested", "neutral", []string{"no MQTT password"}, nil},
+		{"no password", pwInput{Ours: true, Mode: model.MQTTPasswordEmpty, SetAt: taken}, true, "Not tested", "neutral", []string{"No password (TasmoFleet sends an empty one)"}, []string{"The device has no MQTT password"}},
+		// The mode is TasmoFleet's setting, not a fact about the device, and a refusal under it must not advise the mode already set.
+		{"refused with no password", pwInput{Ours: true, Mode: model.MQTTPasswordEmpty, BadAt: bad}, true, "Refused", "danger", []string{"refused it", "Enter the device's own password."}, []string{"choose No password", "The device has no MQTT password"}},
 		{"unset, backups on", pwInput{Ours: true}, true, "Not known", "warn", []string{"takes the password from a backup", "Needed to back up, restore"}, []string{"Lets TasmoFleet"}},
 		{"unset, backups off", pwInput{Ours: true}, false, "Not set", "neutral", []string{"turned off", "Needed to back up, restore"}, nil},
 	} {
@@ -239,13 +242,13 @@ func TestMQTTCardListsDevicesWithoutUsableBackupWithReason(t *testing.T) {
 			t.Errorf("%s = %q, want %q (sums %v)", label, sums[label], want, sums)
 		}
 	}
-	for _, want := range []string{"Not known (2)", "garage", "shed", GapNoBackup.Text(), GapDmpOnly.Text(), `href="/tf/devices/12/edit"`, `href="/tf/devices/13/edit"`,
+	for _, want := range []string{"Not known (2)", "garage", "shed", mqttOnlyGap, GapDmpOnly.Text(), `href="/tf/devices/12/edit"`, `href="/tf/devices/13/edit"`,
 		"Use the broker password for 2 devices…", `data-dialog="dlg-pwbroker"`, `id="dlg-pwbroker"`, "1 refused"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("the card lacks %q", want)
 		}
 	}
-	for _, not := range []string{"typed-secret-4711", "typed-secret-4716", "fake-stored-pw", "zigbee"} {
+	for _, not := range []string{"typed-secret-4711", "typed-secret-4716", "fake-stored-pw", "zigbee", "read after the next backup"} {
 		if strings.Contains(page, not) {
 			t.Errorf("the page holds %q", not)
 		}
@@ -326,8 +329,18 @@ func TestBulkBrokerPasswordConfirmPageNeedsNoScriptsAndCarriesTheACLNotice(t *te
 	if res.StatusCode != 200 || strings.Count(page, `name="id"`) != 2 || !strings.Contains(page, `name="confirm" value="1"`) || !strings.Contains(page, `name="test" value="1" checked`) {
 		t.Fatalf("status %d:\n%s", res.StatusCode, page)
 	}
-	if n := countACL(t, page); n != 1 || !strings.Contains(page, "password test") {
-		t.Errorf("%d ACL notices, want 1 that names the password test", n)
+	if n := countACL(t, page); n != 1 {
+		t.Errorf("%d ACL notices, want 1", n)
+	}
+	// The test publishes TasmoFleet's own login where a device's own account may read it: the page says so in its body and
+	// in the notice, and no longer says that nothing but the test is sent.
+	text := html.UnescapeString(page)
+	if strings.Count(text, pwBrokerTestWarning) != 2 || strings.Contains(text, "nothing is sent to a device except the test") {
+		t.Errorf("the page must carry the warning in its body and in the ACL notice (%d times):\n%s", strings.Count(text, pwBrokerTestWarning), text)
+	}
+	_, tab := e.do(t, "GET", "/settings/system?tab=mqtt", "admin", nil)
+	if !strings.Contains(html.UnescapeString(tab), pwBrokerTestWarning) || strings.Contains(html.UnescapeString(tab), "nothing is sent to a device except the test") {
+		t.Error("the dialog on System, MQTT does not carry the warning")
 	}
 	if _, one := e.do(t, "GET", "/settings/system/mqtt-passwords/broker?id=13", "admin", nil); strings.Count(one, `name="id"`) != 1 || !strings.Contains(one, `value="13"`) {
 		t.Errorf("?id=13 does not limit the page to that device")
@@ -351,7 +364,7 @@ func TestDevicePageOffersTestAndChangeByRole(t *testing.T) {
 		t.Errorf("admin: Change… missing")
 	}
 	_, unk := e.do(t, "GET", "/devices/12", "admin", nil)
-	for _, want := range []string{"Not known", GapNoBackup.Text(), "Enter…", "Use the broker password…", "/settings/system/mqtt-passwords/broker?id=12"} {
+	for _, want := range []string{"Not known", mqttOnlyGap, "Enter…", "Use the broker password…", "/settings/system/mqtt-passwords/broker?id=12"} {
 		if !strings.Contains(unk, want) {
 			t.Errorf("unset device: page lacks %q", want)
 		}
@@ -364,5 +377,50 @@ func TestDevicePageOffersTestAndChangeByRole(t *testing.T) {
 		if strings.Contains(page, "typed-secret") || strings.Contains(page, "fake-stored-pw") {
 			t.Fatal("a password reached the device page")
 		}
+	}
+}
+
+// mqttOnlyGap is what the card and the device row say of a device without a backup whose HTTP fails (the facts of pwEnv).
+const mqttOnlyGap = "TasmoFleet reaches it only over MQTT, so no backup can bring its password: enter it, or use the broker password."
+
+// Why (#609, mockup B1/B3): the main group the card is for is the MQTT-only devices. For them "It is read after the next
+// backup" promises what cannot happen: the backup over MQTT needs the password first and HTTP fails. The reason must
+// say that, and only for such devices; a device that HTTP reaches still gets the learner's sentence.
+func TestAGapOfAnMQTTOnlyDeviceSaysNoBackupCanBringThePassword(t *testing.T) {
+	failing := mqttFacts(pwNow, model.MQTTPasswordNone)
+	working := failing
+	working.HTTP = transport.HTTPState{State: transport.HTTPOK}
+	if got := gapText(GapNoBackup, failing); got != mqttOnlyGap {
+		t.Errorf("HTTP failing: %q", got)
+	}
+	if got := gapText(GapNoBackup, working); got != GapNoBackup.Text() || !strings.Contains(got, "next backup") {
+		t.Errorf("HTTP working: %q", got)
+	}
+	if got := gapText(GapDmpOnly, failing); got != GapDmpOnly.Text() {
+		t.Errorf("another reason must stay as the learner said it: %q", got)
+	}
+}
+
+// Why (#609, T18): the Test button publishes the FileDownload start with the password and, when the device accepts it,
+// one chunk of the settings dump through the broker. The header's notice follows the backup path, the button a looser
+// rule (a refusal does not block it), so a refused device whose backup goes over HTTP or nowhere showed the button
+// and no notice. The notice must stand by the button exactly where the header's does not, so every page that can
+// start the exposure carries one, and none carries two.
+func TestDeviceTestButtonCarriesTheACLNoticeWhenTheBackupIsNotOverMQTT(t *testing.T) {
+	e, _ := pwEnv(t, &fakePWTester{}, &fakePWFleet{gaps: map[model.DeviceID]PasswordGap{}})
+	_, refused := e.do(t, "GET", "/devices/16", "operator", nil) // refused: the backup is not over MQTT, Test again is pressable
+	if !strings.Contains(refused, `action="/tf/devices/16/mqtt-password/test"`) || !strings.Contains(refused, "Test again") {
+		t.Fatal("the refused device does not offer Test again")
+	}
+	if n := countACL(t, refused); n != 1 || !strings.Contains(html.UnescapeString(refused), aclTextPasswordTest) {
+		t.Errorf("refused device: %d ACL notices, want 1 that names the password test", n)
+	}
+	_, works := e.do(t, "GET", "/devices/11", "operator", nil) // backup over MQTT: the header's notice covers the button
+	if n := countACL(t, works); n != 1 || strings.Contains(html.UnescapeString(works), aclTextPasswordTest) {
+		t.Errorf("device whose backup goes over MQTT: %d ACL notices, want only the Back up one", n)
+	}
+	_, unk := e.do(t, "GET", "/devices/12", "admin", nil) // a Test that is disabled puts nothing on the broker
+	if strings.Contains(html.UnescapeString(unk), aclTextPasswordTest) {
+		t.Error("a disabled Test carries the notice")
 	}
 }

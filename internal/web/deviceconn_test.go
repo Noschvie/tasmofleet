@@ -535,7 +535,7 @@ func TestTheCardNamesTheDeviceWhoseUnreadGroupTopicHoldsTheWritesBack(t *testing
 func TestTheNoPasswordModeIsShownAsAPassword(t *testing.T) {
 	f := mqttFacts(time.Now(), model.MQTTPasswordEmpty)
 	r := passwordRow(model.Device{}, f, pwView{})
-	if r.Value == "Not set" || r.Value == "Not known" || r.Tone == ui.ToneWarn || !strings.Contains(r.Sub, "no MQTT password") {
+	if r.Value == "Not set" || r.Value == "Not known" || r.Tone == ui.ToneWarn || !strings.Contains(r.Sub, "No password (TasmoFleet sends an empty one)") {
 		t.Fatalf("row = %+v", r)
 	}
 }

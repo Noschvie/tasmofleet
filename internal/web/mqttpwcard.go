@@ -112,7 +112,7 @@ func (h *handler) passwordCardOf(ctx context.Context, v view) *pwCard {
 	for _, d := range unset {
 		f := facts[d.ID]
 		st := mqttPasswordState(pwInputOf(d, f), c.LearnOn)
-		row := pwCardRow{ID: d.ID, Name: d.Name, Word: st.Word, Tone: st.Tone, Reason: gaps[d.ID].Text(), Meta: "offline",
+		row := pwCardRow{ID: d.ID, Name: d.Name, Word: st.Word, Tone: st.Tone, Reason: gapText(gaps[d.ID], f), Meta: "offline",
 			Href: v.Base + devPath(d.ID, ""), SetHref: v.Base + devPath(d.ID, "/edit")}
 		if h.d.Health != nil && h.d.Health.Get(d.ID).State == model.HealthOnline {
 			row.Meta = "online"
@@ -179,7 +179,7 @@ func (h *handler) pwBrokerConfirm(w http.ResponseWriter, r *http.Request) {
 	v.Crumbs = []ui.Crumb{{Label: "System", Path: sysPath}, {Label: "Settings", Path: sysPath + "?tab=mqtt"}, {Label: "Use the broker password"}}
 	d := pwBrokerData{Base: v.Base, CSRF: v.CSRF, Rows: rows}
 	if h.brokerACLOpen() {
-		d.ACLText = aclTextPasswordTest
+		d.ACLText = aclTextPasswordTestBulk
 	}
 	h.show(w, r, http.StatusOK, "mqtt_password_broker", v, pwBrokerPage(d))
 }

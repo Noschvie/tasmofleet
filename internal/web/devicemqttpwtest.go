@@ -21,9 +21,12 @@ func (h *handler) registerPasswordTest(route routeFunc, op func(http.Handler) ht
 
 // pwViewOf is what the device page's password row needs besides the facts: the switch, the reason a device has
 // none from a backup (asked only for a device that has none), and which buttons the viewer gets.
-func (h *handler) pwViewOf(ctx context.Context, v view, d model.Device, f transport.Facts) pwView {
+func (h *handler) pwViewOf(ctx context.Context, v view, d model.Device, f transport.Facts, paths transport.Paths) pwView {
 	pw := pwView{LearnOff: !h.learnPasswordsOn(), CanTest: h.d.PasswordTest != nil, CanChange: v.IsAdmin && h.d.MQTTPasswords != nil,
 		CanBroker: v.IsAdmin && h.d.PasswordFleet != nil && h.brokerHasPassword()}
+	if h.brokerACLOpen() && paths.Backup != transport.MQTT {
+		pw.TestACL = aclTextPasswordTest // a backup over MQTT is covered by the header's notice (T18)
+	}
 	if h.d.PasswordFleet != nil && mqttPasswordState(pwInputOf(d, f), !pw.LearnOff).Kind == pwNotKnown {
 		pw.Gap = h.d.PasswordFleet.Gaps(ctx, []model.DeviceID{d.ID})[d.ID]
 	}
@@ -93,5 +96,5 @@ func pwTestFlash(ok string) string {
 	if ok == "pw-accepted" {
 		return "The device accepted its password."
 	}
-	return "The device refused its password. See the Device MQTT row."
+	return "The device refused its password. See the Device MQTT password row."
 }

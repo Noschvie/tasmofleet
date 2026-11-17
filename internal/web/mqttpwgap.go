@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
 // PasswordGap says why a device has no MqttPassword from its backups (#609). It is a reason code and nothing
@@ -43,6 +44,16 @@ func (g PasswordGap) Text() string {
 	case GapNone:
 	}
 	return "TasmoFleet has no password for it."
+}
+
+// gapText is Text with the one fact the learner does not know: a device that TasmoFleet reaches only over MQTT
+// (its HTTP fails) never gets a backup of its own before it has a password, so "read after the next backup" would
+// promise what cannot happen. The device page's row and the card share it.
+func gapText(g PasswordGap, f transport.Facts) string {
+	if g == GapNoBackup && f.HTTP.State == transport.HTTPFailing {
+		return "TasmoFleet reaches it only over MQTT, so no backup can bring its password: enter it, or use the broker password."
+	}
+	return g.Text()
 }
 
 // MQTTPasswordFleet is the fleet side of the device MQTT passwords (#609; package app implements it): why devices

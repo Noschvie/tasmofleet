@@ -77,8 +77,13 @@ func mqttPasswordState(in pwInput, learnOn bool) pwState {
 	src := pwSource(in.Mode)
 	switch {
 	case !in.BadAt.IsZero():
+		// "Choose No password" is advice only where No password is not the mode already set.
+		advice := "Enter the device's own password, or choose No password if its MqttPassword is empty."
+		if in.Mode == model.MQTTPasswordEmpty {
+			advice = "Enter the device's own password."
+		}
 		return pwState{Kind: pwRefused, Word: "Refused", Tone: ui.ToneDanger, Line: src + ". Refused", At: in.BadAt,
-			Tail:    ": the device refused it, so backups and restores over MQTT are off. Enter the device's own password, or choose No password if its MqttPassword is empty.",
+			Tail:    ": the device refused it, so backups and restores over MQTT are off. " + advice,
 			Enables: neededLine}
 	case !in.OKAt.IsZero():
 		return pwState{Kind: pwWorks, Word: "Works", Tone: ui.ToneOK, Line: src + ". Tested", At: in.OKAt, Tail: ": the device accepted it.", Enables: enablesLine}
@@ -101,7 +106,7 @@ func pwSource(mode model.MQTTPasswordMode) string {
 	case model.MQTTPasswordBroker:
 		return "Same as TasmoFleet's broker password"
 	case model.MQTTPasswordEmpty:
-		return "The device has no MQTT password"
+		return "No password (TasmoFleet sends an empty one)"
 	case model.MQTTPasswordOwn:
 		return "The device's own password, stored encrypted"
 	case model.MQTTPasswordNone:
@@ -114,6 +119,7 @@ type pwActs struct {
 	Test        bool
 	TestLabel   string
 	TestWhy     string // why Test is disabled, "" when it can be pressed
+	ACL         string // the broker ACL notice by Test ("" where the header's notice covers it or none applies)
 	Change      bool
 	ChangeLabel string
 	UseBroker   bool // a link to the confirmation of "Use the broker password" for this device
@@ -127,6 +133,10 @@ type pwView struct {
 	CanTest   bool // a tester is wired and the viewer is an operator
 	CanChange bool // the viewer is an admin
 	CanBroker bool // an admin, with a fleet service and a broker password to use
+	// TestACL is the broker ACL notice for the Test button (T18): set where a test would put the password and a
+	// settings chunk on the broker (a broker is configured, the warning is not hidden) and the page's header does
+	// not carry the Back up notice already (the backup does not go over MQTT).
+	TestACL string
 }
 
 // passwordRow is the row "Device MQTT password" of the card: one word, one line, the buttons.
@@ -137,7 +147,7 @@ func passwordRow(d model.Device, f transport.Facts, pw pwView) pathRow {
 		r.StampText = ui.StampDayText(f.Now, st.At)
 	}
 	if st.Kind == pwNotKnown && pw.Gap != GapNone {
-		r.Sub = pw.Gap.Text() // the reason says what the generic line would, and why
+		r.Sub = gapText(pw.Gap, f) // the reason says what the generic line would, and why
 	}
 	var a pwActs
 	if pw.CanTest && st.Kind != pwNotNeeded {
@@ -146,6 +156,9 @@ func passwordRow(d model.Device, f transport.Facts, pw pwView) pathRow {
 			a.TestLabel = "Test again"
 		}
 		a.TestWhy = transport.PasswordTestBlocker(f)
+		if a.TestWhy == "" {
+			a.ACL = pw.TestACL
+		}
 	}
 	if pw.CanChange {
 		a.Change, a.ChangeLabel = true, "Change…"

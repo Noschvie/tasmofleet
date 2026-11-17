@@ -1043,7 +1043,7 @@ templ pwBrokerDialog(p sysPage) {
 			<input type="hidden" name="csrf" value={ p.CSRF }/>
 			<input type="hidden" name="confirm" value="1"/>
 			<h2 id="dlg-pwbroker-h">Use the broker password?</h2>
-			<p class="udlg-body">For every device you tick, TasmoFleet sends its own broker password with backups and restores over MQTT. Untick devices that log in with a password of their own. The password is never shown, and nothing is sent to a device except the test.</p>
+			<p class="udlg-body">For every device you tick, TasmoFleet sends its own broker password with backups and restores over MQTT. Untick devices that log in with a password of their own. The password is never shown. { pwBrokerTestWarning }</p>
 			@pwBrokerFields(d)
 			<div class="udlg-foot">
 				<button type="button" class="btn" data-close>Cancel</button>
@@ -1057,7 +1057,7 @@ templ pwBrokerPage(d pwBrokerData) {
 	@ui.PageHeader("Use the broker password", "")
 	<section class="ucard confirm-card" aria-labelledby="confirm-h">
 		<h2 id="confirm-h">{ "Use the broker password for " + plural(len(d.Rows), "device") }</h2>
-		<p class="udlg-body">For every device you tick, TasmoFleet sends its own broker password with backups and restores over MQTT. Untick devices that log in with a password of their own. The password is never shown, and nothing is sent to a device except the test.</p>
+		<p class="udlg-body">For every device you tick, TasmoFleet sends its own broker password with backups and restores over MQTT. Untick devices that log in with a password of their own. The password is never shown. { pwBrokerTestWarning }</p>
 		if d.ACLText != "" {
 			@ui.BrokerACLNotice(d.ACLText, aclHideHref(ctx))
 		}
