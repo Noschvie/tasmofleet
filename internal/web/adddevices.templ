@@ -370,7 +370,7 @@ templ discoveredBody(p discView) {
 // answer can be bookmarked and changes nothing.
 templ whyBox(p discView) {
 	<form class="add-why" method="get" action={ templ.SafeURL(p.Base + "/devices/new#why") }>
-		<label for="why-q">Not listed? Look up by IP address, MAC or topic</label>
+		<label for="why-q">Not listed? Look it up</label>
 		<input id="why-q" class="mono add-why-q" type="search" name="why" value={ p.WhyQuery } maxlength="128" placeholder="192.168.1.20, aa:bb:cc:dd:ee:ff or topic" autocomplete="off" data-visual-mask/>
 		if p.ShowIgn {
 			<input type="hidden" name="ignored" value="1"/>

@@ -249,7 +249,7 @@ func TestAddPageWithoutALookupShowsNoAnswerAndAsksNothing(t *testing.T) {
 		if len(fd.explained) != 0 || strings.Contains(body, `id="why"`) {
 			t.Fatalf("%s: lookups = %v, answer shown = %v", path, fd.explained, strings.Contains(body, `id="why"`))
 		}
-		if !strings.Contains(body, "Look up by IP address, MAC or topic") {
+		if !strings.Contains(body, "Not listed? Look it up") {
 			t.Errorf("%s: the lookup form is missing", path)
 		}
 	}

@@ -1948,7 +1948,7 @@ func whyBox(p discView) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 162, "\"><label for=\"why-q\">Not listed? Look up by IP address, MAC or topic</label> <input id=\"why-q\" class=\"mono add-why-q\" type=\"search\" name=\"why\" value=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 162, "\"><label for=\"why-q\">Not listed? Look it up</label> <input id=\"why-q\" class=\"mono add-why-q\" type=\"search\" name=\"why\" value=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
