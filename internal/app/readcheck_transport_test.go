@@ -264,9 +264,11 @@ func readNetOverRouter(t *testing.T, mqtt *scriptedMQTT) (*Prober, *store.SQLite
 	}
 	h := &otherWifi{}
 	router := transport.NewRouter(transport.Options{HTTP: h, Devices: st})
-	router.SetFacts(&TransportFacts{Devices: st, Health: fakeFactsHealth{id: {LWT: "Online"}}, Memory: router.Memory(), Unanswered: router.UnansweredReads(),
+	facts := &TransportFacts{Devices: st, Health: fakeFactsHealth{id: {LWT: "Online"}}, Memory: router.Memory(), Unanswered: router.UnansweredReads(),
 		BusConnected: func() bool { return true }, FullTopic: func() string { return "%prefix%/%topic%/" }, FirmwareBaseURL: func() string { return "" },
-		BrokerPassword: func() string { return "" }, Now: time.Now})
+		BrokerPassword: func() string { return "" }, Now: time.Now}
+	router.SetFacts(facts)
 	router.SetMQTT(mqtt)
-	return &Prober{Client: router.HTTPOnly(), Reads: router, Devices: st, Gap: time.Millisecond}, st, id, h
+	rt := &runtime{facts: facts}
+	return &Prober{Client: router.HTTPOnly(), Reads: router, Devices: st, Gap: time.Millisecond, ReadsOverMQTT: rt.readsOverMQTT}, st, id, h
 }

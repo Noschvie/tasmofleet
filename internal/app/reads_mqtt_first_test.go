@@ -79,6 +79,16 @@ func (m *readsMQTT) Do(_ context.Context, _ model.Device, c string) (json.RawMes
 func (m *readsMQTT) DoLoose(ctx context.Context, d model.Device, c string) (json.RawMessage, error) {
 	return m.Do(ctx, d, c)
 }
+
+// DoAll hears every reply within the window, as the production channel does (transport.MQTTMultiReader): one device
+// listens on the topic, so one reply.
+func (m *readsMQTT) DoAll(ctx context.Context, d model.Device, c string, _ time.Duration) ([]json.RawMessage, error) {
+	raw, err := m.Do(ctx, d, c)
+	if err != nil {
+		return nil, err
+	}
+	return []json.RawMessage{raw}, nil
+}
 func (m *readsMQTT) Connected() bool { return true }
 
 type readsFacts readsRig
@@ -151,6 +161,15 @@ func TestNetFactsReadGoesOverMQTT(t *testing.T) {
 	d, _ := st.GetDevice(t.Context(), id)
 	d.MQTT, d.Topic = model.MQTTOurs, "plug"
 	g.dev = d
+	// the stored device is the one the router reads, and the router reads it over MQTT (the rig's facts), so its
+	// Status 5 hears every reply on the topic (#804)
+	if err := st.UpdateDevice(t.Context(), d); err != nil {
+		t.Fatal(err)
+	}
+	p.ReadsOverMQTT = func(ctx context.Context, d model.Device) bool {
+		f, err := (*readsFacts)(g).FactsFor(ctx, d)
+		return err == nil && transport.Choose(f).Commands == transport.MQTT
+	}
 	// the router reads the device from the rig; the prober stores into the real store
 	if err := p.ReadNet(t.Context(), id); err != nil {
 		t.Fatal(err)

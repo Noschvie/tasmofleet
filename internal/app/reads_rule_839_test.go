@@ -27,11 +27,12 @@ import (
 // before #839 through the real router, as the app wires them.
 
 // brokerAnswers answers the broker read (Status 5, Status 6, SetOption3) as a device configured for host:1883 with
-// MQTT switched on, reporting mac, and counts what it was asked.
+// MQTT switched on, reporting mac, and counts what it was asked. down: it cannot be reached (nothing is answered).
 type brokerAnswers struct {
 	mu   sync.Mutex
 	mac  string
 	host string
+	down bool
 	got  []string
 }
 
@@ -39,6 +40,9 @@ func (b *brokerAnswers) answer(cmd string) (json.RawMessage, error) {
 	b.mu.Lock()
 	b.got = append(b.got, cmd)
 	b.mu.Unlock()
+	if b.down {
+		return nil, tasmota.ErrUnreachable
+	}
 	switch cmd {
 	case "Status 5":
 		return mac5(b.mac), nil
@@ -283,6 +287,12 @@ func (m brokerSilentMQTT) Do(_ context.Context, _ model.Device, cmd string) (jso
 }
 func (m brokerSilentMQTT) DoLoose(ctx context.Context, d model.Device, cmd string) (json.RawMessage, error) {
 	return m.Do(ctx, d, cmd)
+}
+
+// DoAll is the production channel's collect-all (transport.MQTTMultiReader): nobody answers in the window either.
+func (m brokerSilentMQTT) DoAll(ctx context.Context, d model.Device, cmd string, _ time.Duration) ([]json.RawMessage, error) {
+	_, err := m.Do(ctx, d, cmd)
+	return nil, err
 }
 
 // Why (#598, #839): the broker read exists to notice a device that moved to another broker outside TasmoFleet. After

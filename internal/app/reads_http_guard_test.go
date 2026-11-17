@@ -68,6 +68,10 @@ var httpReadsAllowed = map[string]string{
 	"internal/app/discovery.go runtime.discoveryOptions: raw client of the services": "The discovery scan",
 	// A check vouches for the transport its read used (#810): reads pinned to where their check was answered.
 	"internal/app/probe.go pinTo: pinned to HTTP": "where their check was answered",
+	// The check before the reads goes to the address alone when the check that hears every reply on the topic learnt
+	// nothing (#804): one reply there vouches for nothing.
+	"internal/app/probe.go Prober.verifyAndPin: pinned to HTTP": "learnt nothing on the topic",
+	"internal/app/probe.go Prober.ReadNet: pinned to HTTP":      "learnt nothing on the topic",
 	// The status snapshot of a backup, and the evidence read after a failed dump (#887), follow the transport of
 	// their dump (T14).
 	"internal/backup/service.go onDumpPath: pinned to HTTP":                   "follows the transport of its dump",

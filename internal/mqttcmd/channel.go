@@ -177,7 +177,9 @@ func (c *Channel) do(ctx context.Context, d model.Device, cmd string, loose bool
 }
 
 // DoAll is Do that keeps the topic and listens for window after the first reply and returns every
-// reply that matched, the first one first. A second reply means two devices answer on the topic.
+// reply that matched, the first one first; a further reply that answered with a failure (Unknown,
+// Error) counts too and comes back as {"Command":"Error"}. A second reply means two devices answer on
+// the topic. A failure as the first reply is the command's error, as for Do, and no list.
 // It is for identity checks (Status 5) right before a transfer; Backlogs are not supported. A window
 // cut short (ctx ends or the channel closes inside it) is an error wrapping tasmota.ErrTimeout and
 // returns no replies: the ones heard so far are not every reply on the topic (#877).
@@ -261,7 +263,10 @@ func (c *Channel) doAll(ctx context.Context, d model.Device, cmd string, loose b
 	return append([]json.RawMessage{raw}, more...), nil
 }
 
-// moreReplies returns the further replies that match req within window. Only a window heard to its end gives a list:
+// failedReply stands in moreReplies for a further reply that answered the command with a failure.
+var failedReply = json.RawMessage(`{"Command":"Error"}`)
+
+// moreReplies returns the further replies that match req within window, a failed one as failedReply. Only a window heard to its end gives a list:
 // when the caller's context ends or the channel closes inside it, a device that would answer later went unheard, so
 // the replies so far are not every reply (#877). That is an error (ErrTimeout: published and answered, outcome of the
 // window unknown, never "not sent") and no list.
@@ -272,8 +277,14 @@ func (c *Channel) moreReplies(ctx context.Context, w *waiter, req *request, loos
 	for {
 		select {
 		case m := <-w.ch:
-			if v, ok := req.match(m, loose); ok && v.err == nil {
-				out = append(out, v.reply)
+			if v, ok := req.match(m, loose); ok {
+				if v.err != nil {
+					// A failure answers too: a second device that does not know the command (minimal firmware answers
+					// Unknown) is still a second device on the topic. Its Input is never passed on (a secret for some).
+					out = append(out, failedReply)
+				} else {
+					out = append(out, v.reply)
+				}
 			}
 		case <-timer.C:
 			return out, nil

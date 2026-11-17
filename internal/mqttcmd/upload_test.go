@@ -750,6 +750,29 @@ func TestDoAllReturnsEveryReplyWithinTheWindow(t *testing.T) {
 	}
 }
 
+// Why (#804 review): a second board on the topic that answers Status 5 with a failure (minimal firmware has MQTT and
+// answers {"Command":"Unknown"}) is a second device there all the same. Dropped from the window, DoAll returned the
+// stored device's reply alone: the identity checks over MQTT (Router.TopicStatus5) vouched for the topic, nothing marked
+// it, and writes and transfers over MQTT kept reaching both boards; a restore went to the shared topic. Every reply
+// that answers the command counts. A failure comes back as a fixed marker, never with its Input, which for a
+// secret-setting command would be the secret.
+func TestDoAllCountsASecondDevicesFailedReply(t *testing.T) {
+	b := &fakeBus{}
+	b.onPub = func(b *fakeBus, p pub) {
+		if p.command == "Status" {
+			b.emit(mqttbus.KindStatus, p.topic, "STATUS5", `{"StatusNET":{"Mac":"AA:AA:AA:AA:AA:01"}}`, false)
+			b.emit(mqttbus.KindResult, p.topic, "RESULT", `{"Command":"Unknown","Input":"STATUS 5"}`, false)
+		}
+	}
+	got, err := newChan(b).DoAll(t.Context(), plug(), "Status 5", 80*time.Millisecond)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("%d replies, %v: the board that answered with a failure went unheard", len(got), err)
+	}
+	if strings.Contains(string(got[1]), "STATUS 5") {
+		t.Errorf("the failed reply came back with its Input: %s", got[1])
+	}
+}
+
 // Why (#877): DoAll is the check that hears every device on a topic. One reply means the device is alone there, which
 // ends a topic mark (transport.Router.TopicStatus5) and lets a restore upload over MQTT (UploadConfig). When the window
 // is cut short (the caller's context ends, the channel closes at shutdown), a second device that would have answered

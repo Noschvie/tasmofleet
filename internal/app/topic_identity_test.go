@@ -862,7 +862,9 @@ func TestAMarkedTopicTheFullCheckLearntNothingOnIsNotRead(t *testing.T) {
 	setup := func(t *testing.T) (*Prober, model.DeviceID, *brokerAnswers) {
 		t.Helper()
 		onTopic := &brokerAnswers{mac: storedMAC, host: "mqtt.home"}
-		p, st, id := brokerReadOverRouter(t, onTopic, &brokerAnswers{mac: storedMAC, host: "http.example"}, "Online")
+		// HTTP fails: the router knows it, and the address really does not answer (since #804 the check goes to the
+		// address on its own when the check that hears every reply learnt nothing)
+		p, st, id := brokerReadOverRouter(t, onTopic, &brokerAnswers{mac: storedMAC, host: "http.example", down: true}, "Online")
 		router := p.Reads.(*transport.Router)
 		router.SetMQTT(noCollectTopic{brokerMQTT{dev: onTopic}})
 		router.Memory().Fail(id, transport.HTTPFailUnreachable)

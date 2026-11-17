@@ -610,6 +610,8 @@ func (p *Prober) status11(ctx context.Context, t tasmota.Target, net *model.NetF
 // ReadNet reads a stored device's network facts (Status 5, then best effort Status 11, one at a
 // time, never Status 0) and stores them. It runs in the background (netFactsReader), never as
 // part of first contact or a refresh. Minimal firmware and the safeboot image answer neither command: nothing is read.
+// Status 5 is its own check: over MQTT it hears every reply on the topic (hearsAll, #804), and when that learns
+// nothing it goes to the address alone; Status 11 follows it where it was answered.
 func (p *Prober) ReadNet(ctx context.Context, id model.DeviceID) error {
 	d, err := p.Devices.GetDevice(ctx, id)
 	if err != nil {
@@ -626,25 +628,47 @@ func (p *Prober) ReadNet(ctx context.Context, id model.DeviceID) error {
 		rp = &c
 	}
 	var out probed
-	tctx, check := transport.WithTrace(ctx)
-	net, err := rp.status5(tctx, t, &out) // the check, and the read of the facts it vouches for
-	if err != nil {
-		return err
-	}
-	if d.MAC != "" && !d.HasMAC(out.mac) && !d.HasMAC(out.ethMAC) {
-		// An answer over MQTT comes from whoever listens on the topic (and over HTTP from whoever holds
-		// the address): facts of another device must not be stored on this one. Tasmota always reports
-		// its MAC in Status 5, so an answer without one is refused too. The rule is a refresh's
-		// (checkMAC, #65): a device stored without a MAC has nothing to compare. Answered on the topic
-		// alone, it is the finding of every other check there: the router marks the device (#852).
-		if slices.Equal(check.Answered(), []transport.Path{transport.MQTT}) {
-			return p.noteTopic(d, errAnotherDevice)
+	var net model.NetFacts
+	at, heard := ctx, false // at: where Status 11 goes, where Status 5 was answered, never past it (#810)
+	if p.hearsAll(ctx, d) {
+		// Status 5 over MQTT is the check and the facts at once, so it hears every reply on the topic (#804): only the
+		// device alone there gives its facts; a second reply or another MAC stores nothing and marks the topic.
+		h, ok, err := p.hearTopicOf(ctx, d)
+		if err != nil {
+			return err
 		}
-		return fmt.Errorf("status 5: the answer is from another device than the stored one")
+		if ok {
+			out, net, at, heard = h.reply, h.net, h.ctx, true
+		} else {
+			ctx = transport.WithPath(ctx, transport.HTTP) // nothing learnt on the topic: only the address can vouch
+		}
+	}
+	if !heard {
+		tctx, check := transport.WithTrace(ctx)
+		net, err = rp.status5(tctx, t, &out) // the check, and the read of the facts it vouches for
+		if err != nil {
+			return err
+		}
+		onTopic := slices.Equal(check.Answered(), []transport.Path{transport.MQTT})
+		if d.MAC != "" && !d.HasMAC(out.mac) && !d.HasMAC(out.ethMAC) {
+			// An answer over MQTT comes from whoever listens on the topic (and over HTTP from whoever holds
+			// the address): facts of another device must not be stored on this one. Tasmota always reports
+			// its MAC in Status 5, so an answer without one is refused too. The rule is a refresh's
+			// (checkMAC, #65): a device stored without a MAC has nothing to compare. Answered on the topic
+			// alone, it is the finding of every other check there: the router marks the device (#852).
+			if onTopic {
+				return p.noteTopic(d, errAnotherDevice)
+			}
+			return fmt.Errorf("status 5: the answer is from another device than the stored one")
+		}
+		if d.MAC != "" && onTopic {
+			return topicUnheard(d.Topic) // one reply on the topic is whichever device answered first (#804)
+		}
+		at = pinTo(ctx, check)
 	}
 	net = p.withStoredWifi(d.Net, net) // kept when Status 11 gives none
 	if !net.Wired {
-		rp.status11(pinTo(ctx, check), t, &net) // where Status 5 was answered, never past it (#810)
+		rp.status11(at, t, &net)
 	}
 	if err := p.Devices.UpdateNet(ctx, id, store.ProbeGuard{Address: d.Address, Port: d.Port, MAC: d.MAC}, net); err != nil {
 		return err
@@ -720,10 +744,12 @@ type topicHeard struct {
 
 // hearTopic asks Status 5 on d's stored topic and hears every reply within the router's identity window
 // (Router.TopicStatus5, the rule of a restore over MQTT, #852): exactly one reply, with one of the stored MACs, shows
-// the device alone on its topic (ok, h.ctx pinned to MQTT) and ends a mark it had there; a second reply or another MAC
-// marks it (errAnotherDeviceOnTopic). Nothing heard, a window cut short, MQTT not usable, or a single reply without a
-// MAC (minimal firmware) is not ok: nothing is known, and a mark stays. It is the identity probe's check over MQTT
-// (probeOverMQTT, #682) and the check that may end a mark (recheckTopic).
+// the device alone on its topic (ok, h.ctx pinned to MQTT) and ends a mark it had there; a second reply (a failed one
+// included), another MAC or a reply without a MAC marks it (errAnotherDeviceOnTopic). Tasmota always reports its MAC in
+// Status 5, so a reply without one is another device, as over HTTP (VerifyAddress); minimal firmware answers Unknown,
+// which is TopicStatus5's error. Nothing heard, a window cut short, MQTT not usable, or a reply that does not parse is
+// not ok: nothing is known, and a mark stays. It is the identity probe's check over MQTT (probeOverMQTT, #682) and the
+// check that may end a mark (recheckTopic).
 func (p *Prober) hearTopic(ctx context.Context, tc topicChecker, d model.Device) (h topicHeard, ok bool, err error) {
 	h.ctx = ctx
 	asked, replies, err := tc.TopicStatus5(ctx, d.ID)
@@ -737,8 +763,8 @@ func (p *Prober) hearTopic(ctx context.Context, tc topicChecker, d model.Device)
 	}
 	if len(replies) == 1 {
 		n, perr := parseStatus5(replies[0], &h.reply)
-		if perr != nil || (h.reply.mac == "" && h.reply.ethMAC == "") {
-			return h, false, nil //nolint:nilerr // a reply without a MAC (minimal firmware) says nothing about the topic
+		if perr != nil {
+			return h, false, nil //nolint:nilerr // a reply that does not parse says nothing about the topic
 		}
 		if asked.HasMAC(h.reply.mac) || asked.HasMAC(h.reply.ethMAC) {
 			if p.Topics != nil {
@@ -754,17 +780,35 @@ func (p *Prober) hearTopic(ctx context.Context, tc topicChecker, d model.Device)
 	return h, true, anotherOnTopic{topic: asked.Topic}
 }
 
-// recheckTopic is the check of a device the router holds off its topic (#852): hearTopic, which alone may end the mark.
-// It returns ctx pinned to MQTT when the device answered alone there (ok), errAnotherDeviceOnTopic while another device
-// still answers, and not ok when nothing was learnt (the mark stays). Only marked devices and the identity probe pay
-// the window.
+// recheckTopic is the check of a device the router holds off its topic (#852), and since #804 of every device the
+// router reads over MQTT before its reads (verifyAndPin): hearTopic, which alone may end the mark. It returns ctx
+// pinned to MQTT when the device answered alone there (ok), errAnotherDeviceOnTopic while another device still
+// answers, and not ok when nothing was learnt (a mark stays).
 func (p *Prober) recheckTopic(ctx context.Context, d model.Device) (context.Context, bool, error) {
+	h, ok, err := p.hearTopicOf(ctx, d)
+	return h.ctx, ok, err
+}
+
+// hearTopicOf is hearTopic through Reads, the router's check (topicChecker). Without it nothing can hear every reply on
+// the topic: nothing is learnt, and a mark stays.
+func (p *Prober) hearTopicOf(ctx context.Context, d model.Device) (topicHeard, bool, error) {
 	tc, ok := p.Reads.(topicChecker)
 	if !ok {
-		return ctx, false, nil // nothing can hear every reply: the mark stays
+		return topicHeard{ctx: ctx}, false, nil
 	}
-	h, ok, err := p.hearTopic(ctx, tc, d)
-	return h.ctx, ok, err
+	return p.hearTopic(ctx, tc, d)
+}
+
+// hearsAll says whether the checks that vouch for d's reads ask its topic with the check that hears every reply
+// (hearTopic) instead of one Status 5 (#804): d has a stored MAC and topic, and the router either holds it off the
+// topic (#852) or reads it over MQTT (ReadsOverMQTT: transport.Choose over the router's own facts, so the prober does
+// not repeat the router's path decision). A check that hears one reply hears whichever of two devices on the topic
+// answers first; this one costs the router's identity window after the first reply.
+func (p *Prober) hearsAll(ctx context.Context, d model.Device) bool {
+	if d.MAC == "" || d.Topic == "" {
+		return false
+	}
+	return p.topicMarked(d) || (p.ReadsOverMQTT != nil && p.ReadsOverMQTT(ctx, d))
 }
 
 // topicUnchecked is the refusal of a read for a device held off its topic (#852) when the check that hears every reply
@@ -772,6 +816,13 @@ func (p *Prober) recheckTopic(ctx context.Context, d model.Device) (context.Cont
 // whichever device answers first, so nothing is read from the topic.
 func topicUnchecked(topic string) error {
 	return fmt.Errorf("%w: the device's MQTT topic %s is held as taken by another device and could not be checked; nothing was read there", tasmota.ErrUnreachable, topic)
+}
+
+// topicUnheard is the refusal of reads over MQTT that only a check hearing one reply vouches for (#804, #878): nothing
+// showed the device alone on its topic (the check that hears every reply learnt nothing, or was not asked), and one
+// reply is whichever device answered first. Nothing read on the topic is used.
+func topicUnheard(topic string) error {
+	return fmt.Errorf("%w: nothing showed the device alone on its MQTT topic %s; nothing read there is used", tasmota.ErrUnreachable, topic)
 }
 
 // recheckMarked is recheckTopic for the broker reader's own schedule of marked devices (#852, recheckTopics): it reads
@@ -848,6 +899,9 @@ func (p *Prober) VerifyAddress(ctx context.Context, d model.Device) error {
 //     trace over; the check is asked pinned to each transport that answered the reads;
 //   - the check before the reads (verifyAndPin: the data refresh and the broker read; ReadNet, whose Status 5 is its
 //     check): the check is routed, and the reads are pinned to the transport that answered it (pinTo).
+//
+// Over MQTT either form asks the check that hears every reply on the topic (hearTopic, #804, #878): one reply there is
+// whichever of two devices on the topic answered first, so it vouches for nothing.
 
 // VerifyRead is VerifyAddress after reads through Reads (the router: MQTT first for a device on our broker, #456),
 // for the values those reads returned: the Settings service and the policy poller read through the router, so
@@ -891,9 +945,11 @@ func (p *Prober) VerifyRead(ctx context.Context, d model.Device, read *transport
 	c := *p
 	c.Client = p.Reads
 	for _, path := range paths {
-		err := c.VerifyAddress(transport.WithPath(ctx, path), d)
+		var err error
 		if path == transport.MQTT {
-			err = p.noteTopic(d, err) // answered on the topic: another MAC there marks it (#852); one reply never clears
+			err = p.verifyOnTopic(ctx, d)
+		} else {
+			err = c.VerifyAddress(transport.WithPath(ctx, path), d)
 		}
 		if err != nil {
 			return err
@@ -902,48 +958,77 @@ func (p *Prober) VerifyRead(ctx context.Context, d model.Device, read *transport
 	return nil
 }
 
+// verifyOnTopic is VerifyRead's check of reads answered over MQTT (#878): the check that hears every reply on the topic
+// (hearTopic), since one reply is whichever of two devices there answered first. A topic held as taken (#852) is not
+// asked at all (a reply there vouches for nothing, #608) and refuses. Otherwise exactly one reply with a stored MAC
+// passes; a second reply, another MAC or none marks the topic and is errAnotherDeviceOnTopic; nothing learnt (no reply,
+// a window cut short, MQTT not usable, a channel that hears one reply) refuses. hearTopic also ends a mark on that one
+// reply: with the refusal above that can only be a mark set while the check listened, and it is the same evidence
+// recheckTopic ends a mark on, so no second rule is needed here.
+func (p *Prober) verifyOnTopic(ctx context.Context, d model.Device) error {
+	if d.MAC == "" {
+		return nil // nothing to compare (first contact), as VerifyAddress
+	}
+	if p.topicMarked(d) {
+		return fmt.Errorf("%w: the device's MQTT topic %s is held as taken by another device; nothing read there is used", tasmota.ErrUnreachable, d.Topic)
+	}
+	_, ok, err := p.hearTopicOf(ctx, d)
+	switch {
+	case err != nil:
+		return err
+	case !ok:
+		return topicUnheard(d.Topic)
+	}
+	return nil
+}
+
 // verifyAndPin asks the check before the reads, through Reads like VerifyRead, and returns ctx pinned to the
 // transport the check went over, so every read made with it is one the check vouched for (#676, #810): after an
 // answer over MQTT, MQTT for the topic (pinnedToMQTTCheck: no read falls back to HTTP, where another device may hold
 // the address, and the checks after MQTT reads are not asked again); otherwise HTTP for the address, where the checks
-// after the reads are asked again (#662). A device without a stored MAC sends nothing here: HTTP. Another MAC in an
-// answer over MQTT only is errAnotherDeviceOnTopic, and the router marks the device (#852) on the stored topic, the
-// one the router asks (withStoredTopic). A marked device's reads go over HTTP, so the routed check would never ask the
-// topic again: for it the check asks the topic first and hears every reply there (recheckTopic), which
-// alone can end the mark, and only when nothing is learnt there does the routed check follow.
+// after the reads are asked again (#662). A device without a stored MAC sends nothing here: HTTP.
+//
+// Only the check that hears every reply on the topic (hearTopic) pins the reads to MQTT (#804): one reply is whichever
+// of two devices there answered first. It is asked for every device the router reads over MQTT or holds off its topic
+// (hearsAll), on the stored topic, the one the router asks (withStoredTopic); a second reply or another MAC marks the
+// device (#852) and is errAnotherDeviceOnTopic, and exactly one reply with a stored MAC ends a mark. When it learns
+// nothing, the check goes to the address alone (pinned to HTTP) and the reads follow it there; for a marked device
+// whose address does not answer either the refusal says the topic could not be checked. Any other device gets the
+// routed check, and an answer to it over MQTT alone vouches for nothing: another MAC marks the device, its own refuses.
 func (p *Prober) verifyAndPin(ctx context.Context, d model.Device) (context.Context, error) {
 	d, err := p.withStoredTopic(ctx, d)
 	if err != nil {
 		return ctx, err
 	}
-	marked := p.topicMarked(d)
-	if marked {
-		if pctx, ok, err := p.recheckTopic(ctx, d); ok {
-			return pctx, err
-		}
-	}
 	c := *p
 	if p.Reads != nil {
 		c.Client = p.Reads
 	}
+	if p.hearsAll(ctx, d) {
+		marked := p.topicMarked(d)
+		if pctx, ok, err := p.recheckTopic(ctx, d); ok {
+			return pctx, err
+		}
+		hctx := transport.WithPath(ctx, transport.HTTP)
+		if err := c.VerifyAddress(hctx, d); err != nil {
+			if marked && !notStoredDevice(err) {
+				return ctx, topicUnchecked(d.Topic)
+			}
+			return ctx, err
+		}
+		return hctx, nil
+	}
 	tctx, trace := transport.WithTrace(ctx)
 	err = c.VerifyAddress(tctx, d)
 	if slices.Equal(trace.Answered(), []transport.Path{transport.MQTT}) {
-		err = p.noteTopic(d, err)
-		if err == nil && marked {
-			// The check that hears every reply learnt nothing and HTTP failed, so the routed check went to the topic
-			// and heard one reply: whichever device answered first. It vouches for nothing there (#852).
-			return ctx, topicUnchecked(d.Topic)
+		if err = p.noteTopic(d, err); err == nil {
+			return ctx, topicUnheard(d.Topic)
 		}
 	}
 	if err != nil {
 		return ctx, err
 	}
-	pctx := pinTo(ctx, trace)
-	if pin, _ := transport.PathFrom(pctx); pin == transport.MQTT {
-		return pinnedToMQTTCheck(pctx), nil
-	}
-	return pctx, nil
+	return pinTo(ctx, trace), nil
 }
 
 // pinTo returns ctx pinned to the transport that answered the check recorded in check: MQTT when only MQTT

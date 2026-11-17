@@ -452,6 +452,16 @@ func (m *scriptedMQTT) DoLoose(ctx context.Context, d model.Device, cmd string) 
 	return m.Do(ctx, d, cmd)
 }
 
+// DoAll hears every reply within the window, as the production channel does (transport.MQTTMultiReader): one device
+// listens on the topic, so one reply.
+func (m *scriptedMQTT) DoAll(ctx context.Context, d model.Device, cmd string, _ time.Duration) ([]json.RawMessage, error) {
+	raw, err := m.Do(ctx, d, cmd)
+	if err != nil {
+		return nil, err
+	}
+	return []json.RawMessage{raw}, nil
+}
+
 // answers answers every command over MQTT as the stored device would (storedAnswer, anything else with an empty
 // object), except fail, which gets err.
 func answers(fail string, err error) func(string) (json.RawMessage, error) {
@@ -522,16 +532,18 @@ func refreshOverScript(t *testing.T, mqtt *scriptedMQTT, httpMAC string) *script
 	st := &gtStore{now: time.Now, devs: []model.Device{d}}
 	g := &scriptRig{http: &atAddress{mac: httpMAC}, d: d}
 	router := transport.NewRouter(transport.Options{HTTP: g.http, Devices: st})
-	router.SetFacts(&TransportFacts{Devices: st, Health: fakeFactsHealth{1: {LWT: "Online"}}, Memory: router.Memory(), Unanswered: router.UnansweredReads(),
+	facts := &TransportFacts{Devices: st, Health: fakeFactsHealth{1: {LWT: "Online"}}, Memory: router.Memory(), Unanswered: router.UnansweredReads(),
 		BusConnected: func() bool { return true }, FullTopic: func() string { return "%prefix%/%topic%/" }, FirmwareBaseURL: func() string { return "" },
-		BrokerPassword: func() string { return "" }, Now: time.Now})
+		BrokerPassword: func() string { return "" }, Now: time.Now}
+	router.SetFacts(facts)
 	router.SetMQTT(mqtt)
 	pr := &Prober{Client: router.HTTPOnly(), Reads: router, Gap: time.Millisecond}
 	g.set = settings.New(settings.Options{Devices: st, Client: router, ReadTimeout: 5 * time.Second, Verify: pr.VerifyRead})
 	g.rep = &policyReporter{devices: fakeLister(st.devs), reader: g.set, verify: pr.VerifyRead, now: time.Now}
 	g.rep.setRules([]policy.Rule{{ID: "r1", Command: "PowerOnState", Want: "3"}})
 	g.tpl = templates.New(templates.Options{Devices: st, Client: router, Backups: noBackups{}})
-	g.a = &runtime{svc: &Services{Prober: pr}, settings: g.set, policyLive: g.rep, templates: g.tpl}
+	g.a = &runtime{svc: &Services{Prober: pr}, settings: g.set, policyLive: g.rep, templates: g.tpl, facts: facts}
+	pr.ReadsOverMQTT = g.a.readsOverMQTT // as the app wires it (setupTransport)
 	return g
 }
 
@@ -654,10 +666,11 @@ func TestAnMQTTAnswerThatDoesNotVouchIsRefused(t *testing.T) {
 		reply func() (json.RawMessage, error)
 		want  error
 	}{
+		// none of these shows the device alone on its topic, so the check goes to the address alone (#804), which is the
+		// other device
 		"no MAC in the answer": {func() (json.RawMessage, error) { return json.RawMessage(`{"StatusNET":{}}`), nil }, errAnotherDevice},
-		"Status 5 unknown":     {func() (json.RawMessage, error) { return nil, tasmota.ErrUnknownCommand }, settings.ErrNoMAC},
-		// the router then asks over HTTP, which is the other device
-		"timeout": {func() (json.RawMessage, error) { return nil, tasmota.ErrTimeout }, errAnotherDevice},
+		"Status 5 unknown":     {func() (json.RawMessage, error) { return nil, tasmota.ErrUnknownCommand }, errAnotherDevice},
+		"timeout":              {func() (json.RawMessage, error) { return nil, tasmota.ErrTimeout }, errAnotherDevice},
 	} {
 		t.Run(name, func(t *testing.T) {
 			mqtt := &scriptedMQTT{status5: func(int) (json.RawMessage, error) { return tc.reply() }}
