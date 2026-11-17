@@ -1,4 +1,0 @@
----
-section: Changed
----
-A firmware update now sends its commands (OtaUrl and Upgrade) over MQTT first whenever the device is online on TasmoFleet's broker and its topic is its own, also while its HTTP works; the device still downloads the firmware from TasmoFleet over HTTP, and the firmware check runs right before each command as before. A push upload and the steps through safeboot stay on HTTP while HTTP works, and Upgrade or OtaUrl typed in the console keep their way. The first line of an update's log now says which path it took ("commands over MQTT, firmware download over HTTP"), and the backup before an update over MQTT may go over HTTP, as every other backup of a device without a usable MQTT password does. A job that keeps MQTT reads nothing on a topic another device was found answering on, so it stores no identity from it; the Settings tab of such a device shows no values read there while its HTTP fails (#608)
