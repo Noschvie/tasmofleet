@@ -296,7 +296,10 @@ func (m *probeTopic) DoAll(ctx context.Context, d model.Device, cmd string, _ ti
 		replies = append(replies, mac5(m.second))
 	}
 	if m.onWindow != nil {
-		m.onWindow() // as the production channel: an ended context returns the replies heard so far, without an error
+		m.onWindow()
+		if ctx.Err() != nil {
+			return nil, tasmota.ErrTimeout // as the production channel (#877): a window cut short is an error, no list
+		}
 	}
 	return replies, nil
 }
@@ -780,16 +783,15 @@ func TestAMarkedTopicIsAskedAgainOnItsOwnSchedule(t *testing.T) {
 }
 
 // cutShortTopic is the channel when the caller's context ends inside the reply window of a check that hears every
-// reply: like mqttcmd.Channel.DoAll it returns the replies heard so far (the device's own, first) and no error.
+// reply: like mqttcmd.Channel.DoAll (#877) it heard the device's own reply first and then returns ErrTimeout, no list.
 type cutShortTopic struct{ brokerMQTT }
 
 func (m cutShortTopic) DoAll(ctx context.Context, d model.Device, cmd string, _ time.Duration) ([]json.RawMessage, error) {
-	raw, err := m.Do(ctx, d, cmd)
-	if err != nil {
+	if _, err := m.Do(ctx, d, cmd); err != nil {
 		return nil, err
 	}
 	<-ctx.Done()
-	return []json.RawMessage{raw}, nil
+	return nil, tasmota.ErrTimeout
 }
 
 // oneReplyTopic is a channel that hears one reply only (no DoAll).
@@ -804,9 +806,10 @@ func (m oneReplyTopic) DoLoose(ctx context.Context, d model.Device, cmd string) 
 }
 
 // Why (#852, fourth review): only a check that heard its whole window may end a mark. A window cut short (the person's
-// Refresh identity runs on the page request, which a reload ends; the reader's check has a budget) returned the
-// device's own reply, which came first, as if it were the only one, and the mark ended although the second device
-// would have answered later; a channel that hears one reply would end it on every check. Either way the device's
+// Refresh identity runs on the page request, which a reload ends; the reader's check has a budget) heard the device's
+// own reply, which came first; taken as the only one, the mark would end although the second device would have
+// answered later, so the channel reports the cut window as an error (#877) and the check learns nothing from it; a
+// channel that hears one reply would end it on every check. Either way the device's
 // writes, power toggles, backups and restores went to the shared topic again.
 func TestOnlyACheckThatHeardItsWholeWindowEndsTheMark(t *testing.T) {
 	for _, c := range []struct {

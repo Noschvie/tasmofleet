@@ -134,7 +134,10 @@ func macAmong(mac string, set []string) bool {
 var identityWindow = 1500 * time.Millisecond
 
 // MQTTMultiReader is what the command channel offers to hear every reply to a command within a
-// window (mqttcmd.Channel.DoAll).
+// window (mqttcmd.Channel.DoAll). A list comes back only for a window heard to its end: a window cut
+// short (the context ends or the channel closes inside it) is an error and no list, since a device
+// that would answer later went unheard (#877). An implementation must keep that rule; statusFive
+// takes every list it returns as every reply on the topic.
 type MQTTMultiReader interface {
 	DoAll(ctx context.Context, d model.Device, cmd string, window time.Duration) ([]json.RawMessage, error)
 }
@@ -173,15 +176,15 @@ func (r *Router) TopicStatus5(ctx context.Context, id model.DeviceID) (model.Dev
 }
 
 // statusFive asks Status 5 and returns every reply that came within identityWindow of the first. A window cut short
-// (ctx ended before it was over) is an error: the channel then returns the replies heard so far without one, and a
-// second device that answers later in the window would go unheard.
+// is the channel's error (MQTTMultiReader); on any error nothing is returned, so no caller reads replies of a window
+// that was not heard to its end.
 func (r *Router) statusFive(ctx context.Context, m MQTTDoer, d model.Device) ([]json.RawMessage, error) {
 	if mr, ok := m.(MQTTMultiReader); ok {
 		replies, err := mr.DoAll(ctx, d, "Status 5", identityWindow)
-		if err == nil && ctx.Err() != nil {
-			return nil, fmt.Errorf("%w: the reply window was cut short: %w", tasmota.ErrTimeout, ctx.Err())
+		if err != nil {
+			return nil, err
 		}
-		return replies, err
+		return replies, nil
 	}
 	raw, err := m.Do(ctx, d, "Status 5")
 	if err != nil {

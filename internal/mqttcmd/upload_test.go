@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -747,4 +748,80 @@ func TestDoAllReturnsEveryReplyWithinTheWindow(t *testing.T) {
 	if _, err := newChan(b).DoAll(t.Context(), plug(), "Backlog Power ON; Status 5", time.Second); !errors.Is(err, ErrRefused) {
 		t.Fatalf("a Backlog: %v", err)
 	}
+}
+
+// Why (#877): DoAll is the check that hears every device on a topic. One reply means the device is alone there, which
+// ends a topic mark (transport.Router.TopicStatus5) and lets a restore upload over MQTT (UploadConfig). When the window
+// is cut short (the caller's context ends, the channel closes at shutdown), a second device that would have answered
+// later in it went unheard, so a list of the replies heard so far is not a full window: read as one, the device's own
+// reply ends the mark or lets the restore go to a shared topic. A cut window is an error and no list. The command was
+// published and answered, so the outcome is unknown (ErrTimeout), never "not sent" (ErrUnreachable): nothing is resent.
+func TestADoAllWindowCutShortIsAnErrorNotAShortList(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		cut  func(*Channel, context.CancelFunc)
+		ctx  bool // the error carries the context's cause
+	}{
+		{"the caller's context ends", func(_ *Channel, cancel context.CancelFunc) { cancel() }, true},
+		{"the channel closes", func(ch *Channel, _ context.CancelFunc) { ch.Close() }, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			b := &fakeBus{}
+			emitted := make(chan struct{})
+			b.onPub = func(b *fakeBus, p pub) {
+				b.emit(mqttbus.KindStatus, p.topic, "STATUS5", `{"StatusNET":{"Mac":"AA:AA:AA:AA:AA:01"}}`, false)
+				close(emitted)
+			}
+			ch := newChan(b)
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			type result struct {
+				got []json.RawMessage
+				err error
+			}
+			done := make(chan result, 1)
+			go func() {
+				got, err := ch.DoAll(ctx, plug(), "Status 5", time.Minute) // a window the test never lets end
+				done <- result{got, err}
+			}()
+			select {
+			case <-emitted:
+			case <-time.After(2 * time.Second):
+				t.Fatal("Status 5 was never published")
+			}
+			waitFirstReplyTaken(t, ch, plug().Topic)
+			c.cut(ch, cancel)
+			select {
+			case r := <-done:
+				if r.got != nil {
+					t.Errorf("DoAll = %d replies after a cut window; want none: a short list reads as one device alone on the topic", len(r.got))
+				}
+				if !errors.Is(r.err, tasmota.ErrTimeout) || errors.Is(r.err, tasmota.ErrUnreachable) {
+					t.Errorf("DoAll err = %v; want ErrTimeout (published, outcome unknown), not ErrUnreachable", r.err)
+				}
+				if c.ctx && !errors.Is(r.err, context.Canceled) {
+					t.Errorf("DoAll err = %v; want the context's cause in it", r.err)
+				}
+			case <-time.After(2 * time.Second):
+				t.Fatal("DoAll did not return after its window was cut short")
+			}
+		})
+	}
+}
+
+// waitFirstReplyTaken waits until the waiter on topic has taken the first reply out of its buffer: DoAll is then inside
+// its window (collect returned, moreReplies listens or is about to).
+func waitFirstReplyTaken(t *testing.T, ch *Channel, topic string) {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		ch.mu.Lock()
+		w := ch.waiters[topic]
+		ch.mu.Unlock()
+		if w != nil && len(w.ch) == 0 {
+			return
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("the first reply was never taken by DoAll")
 }

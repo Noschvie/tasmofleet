@@ -178,7 +178,9 @@ func (c *Channel) do(ctx context.Context, d model.Device, cmd string, loose bool
 
 // DoAll is Do that keeps the topic and listens for window after the first reply and returns every
 // reply that matched, the first one first. A second reply means two devices answer on the topic.
-// It is for identity checks (Status 5) right before a transfer; Backlogs are not supported.
+// It is for identity checks (Status 5) right before a transfer; Backlogs are not supported. A window
+// cut short (ctx ends or the channel closes inside it) is an error wrapping tasmota.ErrTimeout and
+// returns no replies: the ones heard so far are not every reply on the topic (#877).
 func (c *Channel) DoAll(ctx context.Context, d model.Device, cmd string, window time.Duration) ([]json.RawMessage, error) {
 	return c.doAll(ctx, d, cmd, false, window)
 }
@@ -246,12 +248,12 @@ func (c *Channel) doAll(ctx context.Context, d model.Device, cmd string, loose b
 	}
 	var more []json.RawMessage
 	if err == nil && window > 0 {
-		more = c.moreReplies(ctx, w, req, loose, window) // the topic stays ours meanwhile
+		more, err = c.moreReplies(ctx, w, req, loose, window) // the topic stays ours meanwhile
 	}
 	c.setWaiter(d.Topic, nil)
 	release()
 	if err != nil {
-		return nil, err
+		return nil, err // a window cut short included: the replies heard so far are not every reply
 	}
 	if req.redact {
 		raw = cmdpolicy.ScrubReply(raw)
@@ -259,8 +261,11 @@ func (c *Channel) doAll(ctx context.Context, d model.Device, cmd string, loose b
 	return append([]json.RawMessage{raw}, more...), nil
 }
 
-// moreReplies returns the further replies that match req within window.
-func (c *Channel) moreReplies(ctx context.Context, w *waiter, req *request, loose bool, window time.Duration) []json.RawMessage {
+// moreReplies returns the further replies that match req within window. Only a window heard to its end gives a list:
+// when the caller's context ends or the channel closes inside it, a device that would answer later went unheard, so
+// the replies so far are not every reply (#877). That is an error (ErrTimeout: published and answered, outcome of the
+// window unknown, never "not sent") and no list.
+func (c *Channel) moreReplies(ctx context.Context, w *waiter, req *request, loose bool, window time.Duration) ([]json.RawMessage, error) {
 	var out []json.RawMessage
 	timer := time.NewTimer(window)
 	defer timer.Stop()
@@ -271,11 +276,11 @@ func (c *Channel) moreReplies(ctx context.Context, w *waiter, req *request, loos
 				out = append(out, v.reply)
 			}
 		case <-timer.C:
-			return out
+			return out, nil
 		case <-ctx.Done():
-			return out
+			return nil, fmt.Errorf("mqtt: the reply window of %s was cut short before every device on the topic was heard: %w: %w", req.name, tasmota.ErrTimeout, ctx.Err())
 		case <-c.done:
-			return out
+			return nil, c.closedAfterSend(req.name)
 		}
 	}
 }

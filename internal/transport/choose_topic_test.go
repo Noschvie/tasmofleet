@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -208,24 +209,22 @@ func TestTopicStatus5HearsEveryReplyOnTheStoredTopic(t *testing.T) {
 }
 
 // cutShortMQTT is the command channel when the caller's context ends inside the reply window: like
-// mqttcmd.Channel.DoAll it returns the replies heard so far (the device's own, which came first) and no error.
+// mqttcmd.Channel.DoAll (#877) it heard the device's own reply first and then returns ErrTimeout and no list.
 type cutShortMQTT struct{ *upMQTT }
 
 func (m cutShortMQTT) DoAll(ctx context.Context, d model.Device, c string, _ time.Duration) ([]json.RawMessage, error) {
-	raw, err := m.Do(ctx, d, c)
-	if err != nil {
+	if _, err := m.Do(ctx, d, c); err != nil {
 		return nil, err
 	}
 	<-ctx.Done() // the window is not over; a second device would answer later in it
-	return []json.RawMessage{raw}, nil
+	return nil, fmt.Errorf("%w: the reply window was cut short: %w", tasmota.ErrTimeout, ctx.Err())
 }
 
-// Why (#852, fourth review): TopicStatus5 is the only check that may end a topic mark, because it hears every reply
-// in the window. When the caller's context ends inside the window (a person reloads the page during Refresh identity,
-// the reader's budget runs out after a slow first reply) the channel returns the first reply without an error. Taken
-// as a full window, the device's own reply ended the mark although the second device would have answered later, and
-// the device's writes, backups and restores went to the shared topic again. A window cut short heard nothing; the
-// restore's check before its upload follows the same rule.
+// Why (#852, fourth review; #877): TopicStatus5 is the only check that may end a topic mark, because it hears every
+// reply in the window. When the caller's context ends inside the window (a person reloads the page during Refresh
+// identity, the reader's budget runs out after a slow first reply) the channel heard the device's own reply but not
+// the second device that would answer later, and returns an error. Taken as nothing more than a missing answer, the
+// check must hear nothing: no reply comes back, the mark stays, and the restore's check before its upload refuses.
 func TestATopicCheckWhoseWindowWasCutShortHeardNothing(t *testing.T) {
 	g := newUpRig(t, Password{Mode: model.MQTTPasswordOwn})
 	g.r.SetMQTT(cutShortMQTT{g.up})
