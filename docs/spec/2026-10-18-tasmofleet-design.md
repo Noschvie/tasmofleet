@@ -1997,7 +1997,14 @@ with one notification. The skip is the snapshot failure event `snapshot.failed` 
   note), the card marks each value (Verified, Differs with the device's value, Not sent for a line left out) and
   the audit `policy.fix` names the settings that differ (`differs`, names only). A value hidden by
   `cmdpolicy.Redacted` keeps the device's value hidden too. A read that fails, a device that cannot be confirmed
-  or a value the device does not report fails the job as before (outcome unknown).
+  or a value the device does not report fails the job as before (outcome unknown). A secret a rule sets (MqttUser)
+  is never read back: it counts as set, neither as a failure nor as drift, and the card says "Set, secret, not read
+  back". It counts as set only when its send was answered or a value read back from the same Backlog confirms
+  it: a restarting Backlog whose send gets no answer (unreachable or timed out) counts as sent only when it holds a
+  value the read-back reads (`settings.ReadsBack`); one of secrets alone fails the job with the send's error. The
+  policy page's value of it is not refreshed by the read-back: over MQTT the device's own reply to the
+  write (`{"MqttUser":…}`, which the live listener stores) updates it; over HTTP the page keeps the value it last
+  read until the next read of the device.
 - **Last known values** (#599): the Settings tab and the Policy GPIO templates tab draw what was read before at
   once, with its age ("Read 3m ago"), and read the device in the background when they open; the page never
   waits for the device. The values live in memory only (no table, no migration): after a restart the first open

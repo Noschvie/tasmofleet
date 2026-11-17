@@ -96,13 +96,18 @@ const (
 	backlogLineWait = 250 * time.Millisecond
 )
 
+// ReadsBack reports whether ReadBack queries key: never a secret (cmdpolicy.SecretName, #809), never a setting
+// that cannot be read (Queryable). A writer that relies on the read-back to learn whether a write arrived asks this.
+func ReadsBack(key string) bool { return !cmdpolicy.SecretName(key) && Queryable(key) }
+
 // ReadBack reads the written values back and compares each with Matches. Secrets are never queried
 // (cmdpolicy.SecretName, the one rule of #809). When a written value restarts the device, the first read waits
 // restartWait. A read that fails is tried again while the device does not answer (Attempts, unreachableWait); a
 // value that differs is read again until it settles (settleReads); a stop while it settles keeps the last read.
-// The error is the failed read (or the stop before any read answered): then nothing was read back, the checks of
-// the values to read have no state and values is nil. values are what the last read returned; read returns
-// values only from a device it confirmed.
+// The error is the failed read (or the stop before any read answered), and values is nil. When the first read
+// failed, nothing was read back and the checks of the values to read have no state; when a later read (one while a
+// value settles) failed, the checks keep what the last read that answered found, from the confirmed device. values
+// are what the last read returned; read returns values only from a device it confirmed.
 func ReadBack(ctx context.Context, read ReadFunc, wants []Want, o ReadBackOptions) (checks []Check, values map[string]string, err error) {
 	checks = make([]Check, len(wants))
 	skip := make([]bool, len(wants)) // never read: a secret or a setting that cannot be read
@@ -110,18 +115,17 @@ func ReadBack(ctx context.Context, read ReadFunc, wants []Want, o ReadBackOption
 	restarts := false
 	for i, w := range wants {
 		checks[i] = Check{Key: w.Key, Hidden: w.Hidden}
-		switch {
-		case cmdpolicy.SecretName(w.Key):
-			checks[i].State, checks[i].Why, skip[i] = CheckNotReadBack, WhySecret, true
-			continue
-		case !Queryable(w.Key):
+		restarts = restarts || RestartsDevice(w.Key, w.Value) // a secret that is not read restarts the device too
+		if !ReadsBack(w.Key) {
 			checks[i].State, checks[i].Why, skip[i] = CheckNotReadBack, WhyNotReadable, true
+			if cmdpolicy.SecretName(w.Key) {
+				checks[i].Why = WhySecret
+			}
 			continue
 		}
 		if !slices.Contains(keys, w.Key) {
 			keys = append(keys, w.Key)
 		}
-		restarts = restarts || RestartsDevice(w.Key, w.Value)
 	}
 	if len(keys) == 0 {
 		return checks, nil, nil
@@ -312,9 +316,12 @@ func comparable(key, v string) string {
 var timezoneRe = regexp.MustCompile(`^[+-]?[0-9]{1,2}(:[0-9]{1,2})?$`)
 
 // timezoneForm is a Timezone value as Tasmota reports it (support_command.ino 16.0.0, CmndTimezone, lines
-// 2772-2797): 99, or "%+03d:%02d" of the hours (atoi of the value) and the minutes after the ':' (at most 59). A
-// value written as 1 reads back as "+01:00", -5 as "-05:00", and -00:00 as "+00:00". Hours of 15 and more set 99;
-// hours below -13 change nothing, so they keep their own form and never match a report.
+// 2772-2797): 99, or "%+03d:%02d" of the hours and the minutes after the ':' (at most 59). A value written as 1
+// reads back as "+01:00", -5 as "-05:00", and -00:00 as "+00:00". Hours of 15 and more set 99; hours below -13
+// change nothing, so they keep their own form and never match a report. The firmware reads the hours with strtol of
+// base 0 (support_command.ino 16.0.0, line 463), so a zero-padded 08 or 09 hour is octal and sets 0: such a write
+// reads back as "+00:00" (or "+00:30") and shows as differing, which is what the device holds. This form is not
+// modelled here on purpose: a match would call that wrong write verified.
 func timezoneForm(v string) (string, bool) {
 	if !timezoneRe.MatchString(v) {
 		return "", false

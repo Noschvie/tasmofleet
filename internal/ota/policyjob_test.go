@@ -441,3 +441,22 @@ func TestAPolicyJobThatCannotReadBackStillFails(t *testing.T) {
 		t.Fatalf("job %+v, want failed with the reason", j)
 	}
 }
+
+// Why (#947): the pages read what a policy job keeps with its events (the card's checks, the lines left out) through
+// these two functions, so the format has one reader. A plain note (every job without drift, and every job before
+// #947) must stay a note, and a detail that is no such JSON must never be read as checks or skipped lines.
+func TestThePagesReadTheDetailsAPolicyJobKeeps(t *testing.T) {
+	if note, rb := PolicyDoneDetail("applied 1; skipped MqttHost"); note != "applied 1; skipped MqttHost" || rb != nil {
+		t.Errorf("plain note read as %q, %s", note, rb)
+	}
+	detail, _ := json.Marshal(policyDone{Note: "applied 1", ReadBack: json.RawMessage(`[{"key":"X","state":"differs"}]`)})
+	if note, rb := PolicyDoneDetail(string(detail)); note != "applied 1" || string(rb) != `[{"key":"X","state":"differs"}]` {
+		t.Errorf("drift detail read as %q, %s", note, rb)
+	}
+	if got := PolicySkipped(skipDetail("note", []string{"MqttHost a"})); len(got) != 1 || got[0] != "MqttHost a" {
+		t.Errorf("skipped lines read as %v", got)
+	}
+	if got := PolicySkipped("not json"); got != nil {
+		t.Errorf("a plain detail gave skipped lines %v", got)
+	}
+}

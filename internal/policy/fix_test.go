@@ -768,3 +768,82 @@ func TestTheReadBackAfterMakeCompliantChecksTheDeviceIdentity(t *testing.T) {
 		t.Fatal("the read-back did not use the identity-checked read")
 	}
 }
+
+// Why (#947, #809, #606): MqttUser is a curated setting a policy rule may set, and it is secret by name, so it is
+// never read back. Make compliant must count the written secret as set, not fail the job: MqttUser restarts the
+// device, so a failure would make every Retry write it, restart the device and fail again. Nothing is read for it,
+// and drift on another value of the same job still names only that value.
+func TestAWrittenSecretPassesMakeCompliantAsSet(t *testing.T) {
+	if _, err := ParseRules([]byte(`[{"name":"u","command":"MqttUser","want":"bob"}]`), settings.Queryable); err != nil {
+		t.Fatalf("an MqttUser rule must be valid (#606): %v", err)
+	}
+	r := &fakeRead{vals: map[string]string{"MqttUser": "bob"}}
+	if _, err := newFixer(nil, r).Verify(context.Background(), model.Device{}, []string{"MqttUser bob"}); err != nil || len(r.calls) != 0 {
+		t.Fatalf("err %v, reads %v: a written secret is set, never read and never a failure", err, r.calls)
+	}
+	r = &fakeRead{vals: map[string]string{"MqttUser": "bob", "PowerOnState": "3"}}
+	_, err := newFixer(nil, r).Verify(context.Background(), model.Device{}, []string{"MqttUser bob", "PowerOnState 0"})
+	var drift *DriftError
+	if !errors.As(err, &drift) || !slices.Equal(drift.Differing(), []string{"PowerOnState"}) {
+		t.Fatalf("err %v, want drift naming PowerOnState only", err)
+	}
+	for _, keys := range r.calls {
+		if slices.Contains(keys, "MqttUser") {
+			t.Fatalf("reads %v: the secret was read", r.calls)
+		}
+	}
+}
+
+// Why (#947): a restarting chunk whose send gets no answer counts as applied only because the read-back tells
+// whether it arrived. A secret is never read back and passes as set, so a chunk of secrets alone would pass with
+// nothing confirming it: an unreachable device (the dial may have failed, nothing reached it) would end a Make
+// compliant job as a success. Such a send must fail. A chunk that also holds a value the read-back reads stays
+// applied: that value's read shows whether the Backlog arrived.
+func TestARestartingSendWithoutAnswerNeedsAValueToReadBack(t *testing.T) {
+	c := &fakeCmd{err: func(string) error { return tasmota.ErrUnreachable }}
+	r := &fakeRead{}
+	f := newFixer(c, r)
+	err := f.Apply(context.Background(), model.Device{}, []string{"MqttUser bob"})
+	if !errors.Is(err, tasmota.ErrUnreachable) {
+		t.Fatalf("err %v: a secret alone, sent without answer, must fail with the send's error", err)
+	}
+	if strings.Contains(err.Error(), "bob") {
+		t.Fatalf("err %v: the secret's value is in the error", err)
+	}
+
+	c = &fakeCmd{err: func(string) error { return tasmota.ErrTimeout }}
+	r = &fakeRead{vals: map[string]string{"PowerOnState": "0"}}
+	f = newFixer(c, r)
+	lines := []string{"MqttUser bob", "PowerOnState 0"}
+	if err := f.Apply(context.Background(), model.Device{}, lines); err != nil || len(c.sent) != 1 {
+		t.Fatalf("err %v, sent %q: one restarting Backlog with a readable value, its timeout is the restart", err, c.sent)
+	}
+	if _, err := f.Verify(context.Background(), model.Device{}, lines); err != nil || len(r.calls) == 0 || !slices.Contains(r.calls[0], "PowerOnState") {
+		t.Fatalf("err %v, reads %v: PowerOnState must be read back and verified", err, r.calls)
+	}
+}
+
+// Why (#947): only a difference read from the confirmed device is drift. A value that was not read back (a setting
+// that cannot be read, a read that stopped) or a check that holds no state at all says nothing about the outcome:
+// the job must fail with the reason, never pass as verified or as drift. A secret is the one exception (above).
+func TestAValueNotReadBackFailsTheVerdict(t *testing.T) {
+	parsed := []fixLine{{key: "PowerOnState", value: "0", text: "PowerOnState 0"}, {key: "SetOption0", value: "0", text: "SetOption0 0"}}
+	for _, c := range []struct {
+		name   string
+		second settings.Check
+		want   string
+	}{
+		{"not read back", settings.Check{Key: "SetOption0", State: settings.CheckNotReadBack, Why: settings.WhyNotReadable}, "SetOption0 was not read back (" + settings.WhyNotReadable + ")"},
+		{"no state", settings.Check{Key: "SetOption0"}, "SetOption0 was not read back"},
+	} {
+		checks := []settings.Check{{Key: "PowerOnState", State: settings.CheckDiffers, Have: "1"}, c.second}
+		err := readBackVerdict(parsed, checks)
+		var drift *DriftError
+		if err == nil || errors.As(err, &drift) || !strings.Contains(err.Error(), c.want) || !strings.Contains(err.Error(), "PowerOnState is 1, expected 0") {
+			t.Errorf("%s: err %v, want a plain failure naming %q and the difference", c.name, err, c.want)
+		}
+	}
+	if err := readBackVerdict(parsed[:1], []settings.Check{{Key: "PowerOnState", State: settings.CheckVerified}}); err != nil {
+		t.Errorf("a verified value: %v", err)
+	}
+}

@@ -126,6 +126,20 @@ func TestPlanFixConflictingFindingsAreSkipped(t *testing.T) {
 	}
 }
 
+// Why (#947): two spellings of one value are the same value. The rules page calls "Timezone 1" and
+// "Timezone +01:00" redundant (Conflicts, settings.Matches); Make compliant must agree and set it, not drop the
+// device's Timezone as a conflict.
+func TestPlanFixTreatsTwoSpellingsOfOneValueAsTheSame(t *testing.T) {
+	fs := []Finding{
+		{DeviceID: 1, Rule: Rule{Command: "Timezone", Want: "1"}, Have: "+02:00"},
+		{DeviceID: 1, Rule: Rule{Command: "Timezone", Want: "+01:00"}, Have: "+02:00", RuleIndex: 1},
+	}
+	ps := PlanFix(fs, always)
+	if got := lines(t, ps, 1); !reflect.DeepEqual(got, []string{"Timezone 1"}) || len(ps[0].Skipped) != 0 {
+		t.Fatalf("plan %+v, want Timezone set once and nothing skipped", ps[0])
+	}
+}
+
 // Why: with precedence the admin decides by order which of two overlapping
 // rules counts (the overlap is shown as a conflict); Make compliant then sets
 // the higher rule's value and nothing else.

@@ -122,10 +122,11 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 	var send func(chunk []fixLine) error
 	send = func(chunk []fixLine) error {
 		texts := make([]string, len(chunk))
-		restart := false
+		restart, readable := false, false
 		for i, l := range chunk {
 			texts[i] = l.text
 			restart = restart || settings.RestartsDevice(l.key, l.value)
+			readable = readable || settings.ReadsBack(l.key)
 		}
 		_, err := f.Client.Command(ctx, t, "Backlog "+strings.Join(texts, "; "))
 		switch {
@@ -149,8 +150,9 @@ func (f *Fixer) Apply(ctx context.Context, d model.Device, lines []string) error
 					return err
 				}
 			}
-		case restart && (errors.Is(err, tasmota.ErrUnreachable) || errors.Is(err, tasmota.ErrTimeout)):
-			// the device is restarting; the read-back tells whether it applied
+		case restart && readable && (errors.Is(err, tasmota.ErrUnreachable) || errors.Is(err, tasmota.ErrTimeout)):
+			// the device is restarting; the read-back tells whether it applied. Only a chunk with a value the read-back
+			// reads: a secret passes it as set unread, so a chunk of secrets alone would pass with nothing confirming it.
 			applied = append(applied, chunk...)
 		default:
 			failed = chunk
@@ -430,27 +432,49 @@ func (f *Fixer) Verify(ctx context.Context, d model.Device, lines []string) (map
 	if err != nil {
 		return nil, fmt.Errorf("the settings were sent but could not be read back: %w", err)
 	}
+	return got, readBackVerdict(parsed, checks)
+}
+
+// readBackVerdict judges the checks of a read-back: nil when every value is verified, a *DriftError when every
+// value was read and some differ, and a plain error when any value was not read back or not reported (whatever
+// else differs): then the outcome is unknown. A check without a state fails too: nothing passes unread. The one
+// exception is a secret (MqttUser, the one a rule can set): it is never read back (#809), so it counts as set,
+// neither as a failure nor as drift; the card says "Set".
+func readBackVerdict(parsed []fixLine, checks []settings.Check) error {
 	var bad, differ []string
 	for i, c := range checks {
 		switch c.State {
 		case settings.CheckVerified:
+			continue
 		case settings.CheckDiffers:
 			differ = append(differ, differText(parsed[i], c))
-		case settings.CheckNotReported:
-			bad = append(bad, c.Key+" is not reported by the device")
+			continue
 		case settings.CheckNotReadBack:
-			bad = append(bad, c.Key+" was not read back ("+c.Why+")")
-		default: // no state: ReadBack returned without reading it, which it never does without an error
-			bad = append(bad, c.Key+" was not read back")
+			if c.Why == settings.WhySecret {
+				continue
+			}
+		case settings.CheckNotReported: // and a check without a state: nothing passes unread
 		}
+		bad = append(bad, notReadText(c))
 	}
 	switch {
 	case len(bad) > 0:
-		return got, errors.New("after applying: " + strings.Join(append(bad, differ...), "; "))
+		return errors.New("after applying: " + strings.Join(append(bad, differ...), "; "))
 	case len(differ) > 0:
-		return got, &DriftError{Checks: checks, text: "after applying: " + strings.Join(differ, "; ")}
+		return &DriftError{Checks: checks, text: "after applying: " + strings.Join(differ, "; ")}
 	}
-	return got, nil
+	return nil
+}
+
+// notReadText says why a line's value is not known.
+func notReadText(c settings.Check) string {
+	switch {
+	case c.State == settings.CheckNotReported:
+		return c.Key + " is not reported by the device"
+	case c.Why != "":
+		return c.Key + " was not read back (" + c.Why + ")"
+	}
+	return c.Key + " was not read back"
 }
 
 // differText says how a line's value differs, without a value its redacted form hides.

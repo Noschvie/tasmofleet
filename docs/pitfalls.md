@@ -257,7 +257,9 @@ means nothing stops you: you have to know it. The full working rules are in
   every Timezone write as "differs".
 - **Rule:** written and reported values are compared in one place, `settings.Matches`, which brings both sides to
   the firmware's form (ON/OFF, coordinates at four decimals, Timezone as `+HH:MM`); the read-back and the policy's
-  live check both call it. A new form goes there, with the firmware source line, never into one caller.
+  live check both call it. A new form goes there, with the firmware source line, never into one caller. Only a
+  form the firmware reports for the value as written belongs there: a zero-padded `08` or `09` Timezone hour is
+  octal 0 to the firmware (`strtol` base 0), so it sets `+00:00` and must show as differing, not be matched.
 - **Enforced:** `TestMatchesKnowsTheFirmwaresOwnForms`, `TestAWrittenTimezoneIsVerifiedInTheFirmwaresForm`;
   otherwise convention.
 

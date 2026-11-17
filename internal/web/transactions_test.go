@@ -362,6 +362,26 @@ func TestTheMakeCompliantCardMarksEachValue(t *testing.T) {
 	}
 }
 
+// Why (#947, #809): a secret is never read back, so a Make compliant job without drift keeps only its plain note,
+// with no check for its MqttUser line. The card must say the secret was set, never "Verified": nothing confirmed it.
+func TestAMakeCompliantSecretLineSaysSetNotVerified(t *testing.T) {
+	e, _, j, _ := setupOTA(t)
+	now := time.Now()
+	j.jobs = []model.Job{{ID: 1, BatchID: 7, DeviceID: 1, Kind: model.KindPolicy, Commands: "MqttUser bob\nTelePeriod 300", State: model.JobSucceeded, CreatedBy: "adam", CreatedAt: now}}
+	j.events = map[model.JobID][]model.JobEvent{1: {{JobID: 1, At: now, From: model.JobVerify, To: model.JobSucceeded, Event: "done", Detail: "applied 2"}}}
+	_, page := e.do(t, "GET", "/transactions/7", "admin", nil)
+	card := between(between(page, `<main id="main">`, "</main>"), `aria-label="kitchen"`, "</section>")
+	if card == "" {
+		t.Fatalf("card not found: %s", page)
+	}
+	if !strings.Contains(card, `<span class="bdg t-neutral">Set<`) || !strings.Contains(card, "secret, not read back") || strings.Count(card, ">Verified<") != 1 {
+		t.Errorf("the secret line must say Set, the other Verified: %s", card)
+	}
+	if strings.Contains(card, "bob") {
+		t.Errorf("the secret reached the card: %s", card)
+	}
+}
+
 // Why (#947): the done event of a job with drift holds JSON for the card; the job's log must say what it means and
 // never show the JSON. A plain note (every job before #947, and jobs without drift) still reads as before.
 func TestAPlainTextDoneDetailStillShowsItsNote(t *testing.T) {

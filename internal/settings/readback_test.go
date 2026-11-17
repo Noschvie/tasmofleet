@@ -101,6 +101,30 @@ func TestARestartingSettingIsReadBackOnceTheDeviceAnswersAgain(t *testing.T) {
 	}
 }
 
+// Why (#947): a secret is never read, yet writing MqttPassword restarts the device all the same. Written together
+// with a value that is read back, the first read must wait for that restart: a read that meets the reboot only
+// costs an attempt (5 s plus the read's timeout).
+func TestARestartingSecretMakesTheReadBackWaitForTheRestart(t *testing.T) {
+	var waits []time.Duration
+	read := func(context.Context, []string) (map[string]string, error) {
+		if len(waits) == 0 {
+			t.Error("the first read came before the restart's wait")
+		}
+		return map[string]string{"FriendlyName1": "Lamp"}, nil
+	}
+	wants := []Want{{Key: "MqttPassword", Value: "fake-pw-947"}, {Key: "FriendlyName1", Value: "Lamp"}}
+	checks, _, err := ReadBack(t.Context(), read, wants, ReadBackOptions{Wait: func(_ context.Context, w time.Duration) error {
+		waits = append(waits, w)
+		return nil
+	}})
+	if err != nil || checks[1].State != CheckVerified {
+		t.Fatalf("checks %+v, err %v", checks, err)
+	}
+	if len(waits) == 0 || waits[0] != restartWait {
+		t.Fatalf("waits %v, want the restart's wait first", waits)
+	}
+}
+
 // Why (#947, #809, safety rule 4): a secret is written but never read back. Its read would put the secret on the
 // broker and into the page; the tab says it was set and cannot be read back, and neither the result nor the audit
 // holds its value. The guard plays the router and fails on a bare read of a masked command.

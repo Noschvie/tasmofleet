@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/hellwand/tasmofleet/internal/cmdpolicy"
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/ota"
 	"github.com/hellwand/tasmofleet/internal/settings"
@@ -105,7 +106,8 @@ func policyDoneDetail(evs []model.JobEvent) string {
 }
 
 // succeededChange is one line of a succeeded "Make compliant" job. Verify only succeeds when every line it read
-// back reports its value, so a line without a check of its own is verified, unless Apply left it out.
+// back reports its value, so a line without a check of its own is verified, unless Apply left it out or it is a
+// secret, which is never read back (#809): that line was set.
 func succeededChange(line string, checks []settings.Check, skipped []string) fixChange {
 	ch := fixChange{Text: line}
 	for _, s := range skipped {
@@ -122,6 +124,11 @@ func succeededChange(line string, checks []settings.Check, skipped []string) fix
 				return ch
 			}
 		}
+	}
+	if cmdpolicy.SecretName(key) {
+		v, _ := readBackOf(settings.Check{Key: key, State: settings.CheckNotReadBack, Why: settings.WhySecret})
+		ch.Label, ch.Tone, ch.Note = v.Label, v.Tone, v.Note
+		return ch
 	}
 	ch.Label, ch.Tone = "Verified", ui.ToneOK
 	return ch

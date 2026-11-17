@@ -166,7 +166,7 @@ func PlanFix(findings []Finding, live func(model.DeviceID, string) bool) []FixPl
 			continue
 		}
 		if prev, dup := wants[f.DeviceID][key]; dup {
-			if canon(prev) != canon(f.Rule.Want) {
+			if !settings.Matches(f.Rule.Command, prev, f.Rule.Want) { // the comparison of Conflicts' SameWant too
 				p.Commands = dropCommand(p.Commands, f.Rule.Command)
 				skip(SkipConflict)
 			}

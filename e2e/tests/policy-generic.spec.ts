@@ -112,7 +112,8 @@ test("a free command rule: refusals with the reason, then live read, preview and
   await expect(dlg).toContainText("LedState 3");
   await dlg.getByRole("button", { name: /^Run \d+ changes?$/ }).click();
   await expect(page).toHaveURL(/\/transactions\/\d+/);
-  await expect(page.locator(".upd-dev").getByText("Verified", { exact: true }).first()).toBeVisible({ timeout: 60_000 });
+  // the device checked below: the first card to finish says nothing about its job (each read-back asks its identity, #947)
+  await expect(page.locator(".upd-dev", { hasText: "plug-4m-http" }).getByText("Verified", { exact: true })).toBeVisible({ timeout: 60_000 });
   await page.goto(ruleURL + "?show=deviate");
   await expect(page.locator("#rule-devices")).toBeVisible();
   await expect(devRow).toHaveCount(0);
