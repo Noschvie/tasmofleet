@@ -709,6 +709,30 @@ func TestScheduleFieldsSitInAFoldThatOpensOnAnError(t *testing.T) {
 	}
 }
 
+// Why (#949): the Backups page is mostly a status page with one small folded form. A save bar that is
+// always on screen floats over the rows of the device table while nothing is edited, so the page asks
+// sysform.js to show the bar only while there are unsaved changes (data-sbar-auto). The exception is a
+// refused save: the page then shows values that were NOT saved, sysform.js would call them the
+// starting values and hide the bar, and Save would be gone exactly when the person needs it again.
+// Settings and Snapshots are all form, so their bar stays on screen as the #362 tests expect.
+func TestBackupsSaveBarShowsOnlyWhileDirtyButNeverAfterARefusedSave(t *testing.T) {
+	e := fleetEnv(t, fleetFixture(time.Now()))
+	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
+	if !strings.Contains(body, "data-sys-bar data-sbar-auto") {
+		t.Errorf("the Backups save bar does not ask to be hidden while the form is clean: %s", between(body, "data-sys-bar", ">"))
+	}
+	// a refused save re-renders the posted values: the bar stays on screen for that answer
+	_, body = e.do(t, "POST", "/devices/backups", "admin", url.Values{"csrf": {"tok"}, "v.BACKUP_KEEP": {"nope"}})
+	if !strings.Contains(body, "data-sys-bar") || strings.Contains(body, "data-sbar-auto") {
+		t.Errorf("after a refused save the bar must stay visible (no data-sbar-auto): %s", between(body, "data-sys-bar", ">"))
+	}
+	// Settings is all form: its bar stays on screen all the time (#362)
+	_, body = e.do(t, "GET", "/settings/system", "admin", nil)
+	if !strings.Contains(body, "data-sys-bar") || strings.Contains(body, "data-sbar-auto") {
+		t.Error("the Settings save bar must stay on screen all the time")
+	}
+}
+
 // Why (#684): the long list comes last. Everything above the device table is short (the last run, the
 // totals, one line each for the deleted devices' backups, the unreferenced files and the schedule), so on a phone nothing
 // hides behind 60 table rows. Devices therefore carries the highest phone rank of the page; a card that

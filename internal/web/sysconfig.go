@@ -112,6 +112,7 @@ type sysPage struct {
 	Fleet        *fleetView  // the Devices, Backups page: the last run and the device table (filled by backupsRender)
 	DB           *sysDB      // the Snapshots page: stored snapshots and the schedule's status; nil without snapshots (filled by snapshotsRender)
 	Notify       sysNotify   // Notifications tab: status lines, test results, the message preview
+	Posted       bool        // the page shows what was posted, not what is saved: a refused save (the save bar then stays on screen)
 }
 
 // sysStepUp is what the principal can do about a confirmation. Header
@@ -153,6 +154,7 @@ func (h *handler) sysData(r *http.Request, posted map[string]string, errs map[st
 	for _, st := range svc.State() {
 		saved[st.Key] = st.Value
 	}
+	p.Posted = posted != nil
 	p.Notify = h.sysNotifyOf(saved)
 	p.Notify.Push = h.sysPushOf(r, p.Base)
 	p.MQTT.HasPassword = hasMQTTPassword

@@ -178,6 +178,11 @@
       return;
     }
     bar.classList.toggle("is-dirty", dirty.length > 0);
+    if (bar.hasAttribute("data-sbar-auto")) {
+      // a page that is mostly not a form (Devices, Backups): no bar while nothing is changed (#949).
+      // Shown before the text below changes, so a screen reader hears the new state.
+      bar.hidden = dirty.length === 0;
+    }
     bar.querySelector("[data-sbar-state]").textContent = dirty.length
       ? "Unsaved changes:"
       : "No unsaved changes";

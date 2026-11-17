@@ -12636,6 +12636,9 @@ input:focus-visible + .swtrack {
   border-top: var(--hair-w) solid var(--color-border);
   box-shadow: var(--shadow-bar);
 }
+.sbar[hidden] {
+  display: none;
+}
 .sbar-state {
   font-size: 13px;
   color: var(--color-text-3);

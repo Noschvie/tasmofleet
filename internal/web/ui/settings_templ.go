@@ -652,9 +652,17 @@ func SettingField(d SettingFieldData) templ.Component {
 	})
 }
 
+// SaveBarData is what a page tells its save bar.
+type SaveBarData struct {
+	Discard    string // where Discard leads
+	WhileDirty bool   // the bar shows only while the form has unsaved changes (sysform.js), for a page that is mostly not a form
+}
+
 // SaveBar is the page's one save bar: the form's Save and Discard, and the place where sysform.js
-// lists the tabs with unsaved changes. Without script it is just the two buttons.
-func SaveBar(discardHref string) templ.Component {
+// lists the tabs with unsaved changes. Without script it is just the two buttons, always in view.
+// WhileDirty asks sysform.js to hide the bar while nothing is changed (#949); the bar is never
+// rendered hidden, so Save stays reachable without script.
+func SaveBar(d SaveBarData) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -671,11 +679,21 @@ func SaveBar(discardHref string) templ.Component {
 		}
 		ctx = templ.InitializeContext(ctx)
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "<div class=\"sbar\" data-sys-bar><span class=\"sbar-state\" data-sbar-state role=\"status\">No unsaved changes</span> <span class=\"sbar-chips\" data-sbar-chips></span> <span class=\"sbar-sp\"></span>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 51, "<div class=\"sbar\" data-sys-bar")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = Button(Btn{Label: "Discard", Href: discardHref}).Render(ctx, templ_7745c5c3_Buffer)
+		if d.WhileDirty {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 52, " data-sbar-auto")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 53, "><span class=\"sbar-state\" data-sbar-state role=\"status\">No unsaved changes</span> <span class=\"sbar-chips\" data-sbar-chips></span> <span class=\"sbar-sp\"></span>")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = Button(Btn{Label: "Discard", Href: d.Discard}).Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -683,7 +701,7 @@ func SaveBar(discardHref string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 52, "</div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "</div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

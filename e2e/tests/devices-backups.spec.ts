@@ -105,6 +105,49 @@ test("the schedule saves on this page and the row menu shows what the role may d
   await expect(page.locator(".bk-table tbody tr").first().getByRole("menuitem", { name: "Open backups" })).toBeVisible();
 });
 
+// Why (#949): the page is mostly a status page with one small folded form. A save bar that is on screen
+// all the time floats over the last rows of the device table while the page scrolls, with nothing edited.
+// It shows only while the form has unsaved changes, and is gone again when the edit is undone.
+for (const width of [1280, 375]) {
+  test(`the save bar shows only while the schedule has unsaved changes and covers nothing at ${width}px`, async ({ page }) => {
+    await page.setExtraHTTPHeaders(admin);
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto(app.url + "/devices/backups");
+    const bar = page.locator("form#sysform [data-sys-bar]");
+    await expect(bar).toBeHidden();
+    // Scroll the last device row to the bottom of the room above the status bar: that is where a sticky bar
+    // would sit. scrollIntoView would put the row under the status bar, which covers it with or without the bar.
+    const covered = async () =>
+      page.evaluate(() => {
+        const rows = document.querySelectorAll(".bk-table tbody tr");
+        const row = rows[rows.length - 1];
+        const status = document.querySelector("footer.sb")!.getBoundingClientRect();
+        window.scrollBy(0, row.getBoundingClientRect().bottom - (status.top - 4));
+        const r = row.getBoundingClientRect();
+        const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        return { onTop: !!hit && row.contains(hit), tag: hit ? hit.tagName + "." + hit.className : "none", bottom: r.bottom, top: status.top };
+      });
+    const clean = await covered();
+    expect(clean.onTop, `the last row is covered by ${clean.tag} (row bottom ${clean.bottom}, status bar top ${clean.top})`).toBe(true);
+    // ticking a device row belongs to another form: nothing in the schedule is changed
+    await page.locator(".bk-table tbody tr").first().locator("input[type=checkbox]").check();
+    await expect(bar).toBeHidden();
+    await page.locator(".bk-table tbody tr").first().locator("input[type=checkbox]").uncheck();
+    // an edit shows the bar, with Save in reach
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await openSchedule(page);
+    const keep = page.locator("input[name='v.BACKUP_KEEP']");
+    const stored = await keep.inputValue();
+    await keep.fill(String(Number(stored) + 1));
+    await expect(bar).toBeVisible();
+    await expect(bar.locator(".sbar-state")).toHaveText("Unsaved changes:");
+    await expect(page.getByRole("button", { name: "Save settings" })).toBeInViewport();
+    // the old value back: nothing is unsaved any more
+    await keep.fill(stored);
+    await expect(bar).toBeHidden();
+  });
+}
+
 // Why (#684): the device table is the one long list of the page. On a phone every other card is short and
 // sits above it, so the schedule and the deleted devices' backups are not 60 rows down.
 test("on a phone every card ends above the device table", async ({ page }) => {
@@ -166,9 +209,12 @@ test("the schedule fold opens around a restored draft and around an invalid fiel
   await page.goto(app.url + "/devices/backups?restore=1");
   await expect(fold).toHaveAttribute("open", "");
   await expect(page.locator("input[name='v.BACKUP_KEEP']")).toHaveValue("6");
+  // a restored draft is an unsaved change (#949): the save bar is on screen for it
+  await expect(page.locator("form#sysform [data-sys-bar]")).toBeVisible();
   // without ?restore=1 the draft is dropped and the fold stays closed
   await page.goto(app.url + "/devices/backups");
   await expect(fold).not.toHaveAttribute("open", "");
+  await expect(page.locator("form#sysform [data-sys-bar]")).toBeHidden();
   // an empty time of day is refused by the browser: close the fold, press Save, and it opens
   await openSchedule(page);
   await page.locator("input[name='v.BACKUP_TIME']").fill("");

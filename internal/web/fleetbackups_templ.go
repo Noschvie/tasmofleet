@@ -130,7 +130,7 @@ func fleetBackupsPage(p sysPage) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = ui.SaveBar(p.Base+fleetPath).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.SaveBar(ui.SaveBarData{Discard: p.Base + fleetPath, WhileDirty: !p.Posted}).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
