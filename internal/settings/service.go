@@ -69,6 +69,9 @@ type Result struct {
 	Key     string
 	Command string
 	Err     string
+	// ReadBack is what the device reported for the value after the write (#947). Its State is empty when the
+	// write failed or was not sent: nothing was read back.
+	ReadBack Check
 }
 
 // OK reports whether the device accepted the command.
@@ -109,6 +112,8 @@ type Options struct {
 	// values of a shared read out of the remembered ones (app: Prober.VerifyRead, the rule of ReadNet). read
 	// is the trace of the reads it vouches for: the check is asked over the transports they used (#810).
 	Verify func(ctx context.Context, d model.Device, read *transport.Trace) error
+	// Wait (may be nil) pauses between the reads of a read-back (ReadBack); nil waits for real. Tests set it.
+	Wait func(ctx context.Context, d time.Duration) error
 }
 
 // Manager implements Service.
@@ -441,7 +446,35 @@ func (m *Manager) Apply(ctx context.Context, actor string, id model.DeviceID, ch
 			break
 		}
 	}
+	m.readBack(ctx, id, changes, results)
 	return results, nil
+}
+
+// readBack reads every value that was written back from the device (#947) and puts what it found into the results.
+// A secret is never read (ReadBack); a read that fails or that another device may have answered leaves the values
+// "not read back". It is bounded by ReadTimeout as a whole and ends when TasmoFleet stops or the request ends.
+func (m *Manager) readBack(ctx context.Context, id model.DeviceID, changes map[string]string, results []Result) {
+	var wants []Want
+	var at []int
+	for i, r := range results {
+		if r.OK() {
+			wants = append(wants, Want{Key: r.Key, Value: changes[r.Key]})
+			at = append(at, i)
+		}
+	}
+	if len(wants) == 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, m.o.ReadTimeout)
+	defer cancel()
+	defer context.AfterFunc(m.o.Stop, cancel)()
+	checks, err := m.ReadBack(ctx, id, wants)
+	if err != nil {
+		notReadBack(checks, err)
+	}
+	for j, i := range at {
+		results[i].ReadBack = checks[j]
+	}
 }
 
 // Save writes the settings held in RAM to flash with one explicit

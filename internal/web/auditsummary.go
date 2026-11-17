@@ -342,7 +342,18 @@ func summaryOK(e model.AuditEvent, d map[string]any) (string, bool) {
 				cmds = append(cmds, s)
 			}
 		}
-		return join(strings.Join(cmds, "; "), "#"+dStr(d, "transaction")), true
+		var differs []string // the read-back found these values differ (#947): drift, the job still succeeded
+		list, _ = d["differs"].([]any)
+		for _, c := range list {
+			if s, ok := c.(string); ok {
+				differs = append(differs, s)
+			}
+		}
+		drift := ""
+		if len(differs) > 0 {
+			drift = "differs: " + strings.Join(differs, ", ")
+		}
+		return join(strings.Join(cmds, "; "), drift, "#"+dStr(d, "transaction")), true
 	case "transaction.start":
 		n, _ := dInt(d, "devices")
 		return join(count(n, "device", "devices"), dStr(d, "release")), true

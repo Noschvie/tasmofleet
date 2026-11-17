@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/hellwand/tasmofleet/internal/cmdpolicy"
 	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/settings"
 	"github.com/hellwand/tasmofleet/internal/tasmota"
 	"github.com/hellwand/tasmofleet/internal/transport"
 )
@@ -55,6 +57,22 @@ type fakeRead struct {
 	errs    []error // returned one per call before values are served
 	calls   [][]string
 	ctxErrs []error // the state of the context of each call
+	// other (may be nil) is the identity check of ReadVerified: an error says another device answered
+	other    error
+	verified int // calls of ReadVerified
+}
+
+// ReadVerified is ReadKeys plus the identity check: values only from the stored device.
+func (r *fakeRead) ReadVerified(ctx context.Context, id model.DeviceID, keys []string) (map[string]string, error) {
+	r.verified++
+	vals, err := r.ReadKeys(ctx, id, keys)
+	if err != nil {
+		return nil, err
+	}
+	if r.other != nil {
+		return nil, r.other
+	}
+	return vals, nil
 }
 
 func (r *fakeRead) ReadKeys(ctx context.Context, _ model.DeviceID, keys []string) (map[string]string, error) {
@@ -544,14 +562,14 @@ func TestVerifyComparesWithTheDevice(t *testing.T) {
 }
 
 // Why: a device that restarts needs a moment; giving up on the first miss
-// would fail a fix that worked.
+// would fail a fix that worked. The first wait is the restart's own (#947), before any read.
 func TestVerifyRetriesWhileTheDeviceRestarts(t *testing.T) {
 	r := &fakeRead{vals: map[string]string{"Hostname": "plug"}, errs: []error{tasmota.ErrUnreachable, tasmota.ErrUnreachable, nil}}
-	waits := 0
+	var waits []time.Duration
 	f := newFixer(nil, r)
-	f.Wait = func(context.Context, time.Duration) error { waits++; return nil }
-	if _, err := f.Verify(context.Background(), model.Device{}, []string{"Hostname plug"}); err != nil || waits != 2 {
-		t.Fatalf("err %v after %d waits", err, waits)
+	f.Wait = func(_ context.Context, d time.Duration) error { waits = append(waits, d); return nil }
+	if _, err := f.Verify(context.Background(), model.Device{}, []string{"Hostname plug"}); err != nil || len(waits) != 3 {
+		t.Fatalf("err %v after waits %v", err, waits)
 	}
 	r = &fakeRead{errs: []error{tasmota.ErrUnreachable, tasmota.ErrUnreachable, tasmota.ErrUnreachable}}
 	f = newFixer(nil, r)
@@ -686,5 +704,67 @@ func TestSaveDataValueFromTheDeviceIsSentOnlyWhenItIsANumber(t *testing.T) {
 		if err := newFixer(c, &fakeRead{vals: map[string]string{"SaveData": ok}}).Apply(context.Background(), model.Device{}, []string{"PowerOnState 0"}); err != nil || c.sent[len(c.sent)-1] != "Backlog SaveData "+ok {
 			t.Errorf("SaveData %q: err %v, sent %q", ok, err, c.sent)
 		}
+	}
+}
+
+// Why (#947, coordinator's decision of 2026-11-17): a value the confirmed device reports differently after Make
+// compliant is policy drift, shown per value with the device's answer; it does not fail the job. The error carries
+// the check of every line, so the card can say which value is verified and which differs.
+func TestAMakeCompliantMismatchIsDriftNotAFailure(t *testing.T) {
+	lines := []string{"PowerOnState 0", "SetOption0 0"}
+	got, err := newFixer(nil, &fakeRead{vals: map[string]string{"PowerOnState": "0", "SetOption0": "1"}}).Verify(context.Background(), model.Device{}, lines)
+	var drift *DriftError
+	if !errors.As(err, &drift) {
+		t.Fatalf("err %v, want a *DriftError", err)
+	}
+	want := []settings.Check{{Key: "PowerOnState", State: settings.CheckVerified}, {Key: "SetOption0", State: settings.CheckDiffers, Have: "1"}}
+	if !reflect.DeepEqual(drift.Checks, want) {
+		t.Fatalf("checks %+v, want %+v", drift.Checks, want)
+	}
+	if !slices.Equal(drift.Differing(), []string{"SetOption0"}) || got["SetOption0"] != "1" {
+		t.Fatalf("differing %v, values %v", drift.Differing(), got)
+	}
+}
+
+// Why (#947): only a value that was read and differs is drift. A value the device does not report says nothing
+// about the outcome, so the job fails as before, also when another value differs: it must never pass as drift.
+func TestAMismatchWithAValueNotReportedIsAFailureNotDrift(t *testing.T) {
+	lines := []string{"PowerOnState 0", "SetOption0 0"}
+	_, err := newFixer(nil, &fakeRead{vals: map[string]string{"SetOption0": "1"}}).Verify(context.Background(), model.Device{}, lines)
+	var drift *DriftError
+	if err == nil || errors.As(err, &drift) || !strings.Contains(err.Error(), "PowerOnState is not reported") || !strings.Contains(err.Error(), "SetOption0 is 1, expected 0") {
+		t.Fatalf("err %v, want a plain failure naming both", err)
+	}
+}
+
+// Why (#947, safety rule 4): a rule whose value the card and the audit show masked (cmdpolicy.Redacted, here a
+// SysLog level) must not have the device's value shown next to it, in the checks or in the error text.
+func TestAHiddenRuleValueStaysHiddenInTheReadBack(t *testing.T) {
+	_, err := newFixer(nil, &fakeRead{vals: map[string]string{"SysLog": "4"}}).Verify(context.Background(), model.Device{}, []string{"SysLog 2"})
+	var drift *DriftError
+	if !errors.As(err, &drift) {
+		t.Fatalf("err %v, want drift", err)
+	}
+	if c := drift.Checks[0]; c.State != settings.CheckDiffers || !c.Hidden || c.Have != "" {
+		t.Fatalf("check %+v, want differs, hidden, without the device's value", c)
+	}
+	if blob := string(drift.ReadBack()) + err.Error(); strings.Contains(blob, "4") || strings.Contains(blob, "2") {
+		t.Fatalf("a hidden value reached the read-back: %s", blob)
+	}
+}
+
+// Why (#947, #662): the read-back of Make compliant reads from the device that answers at the stored address. After
+// the restart a setting can cause, that can be another device; its values must neither count as verified nor be
+// returned (the app puts them into the policy's live values). The read-back uses the identity-checked read.
+func TestTheReadBackAfterMakeCompliantChecksTheDeviceIdentity(t *testing.T) {
+	r := &fakeRead{vals: map[string]string{"PowerOnState": "0"}, other: errors.New("another device answers at the stored address")}
+	f := newFixer(nil, r)
+	f.VerifyAttempts = 1
+	got, err := f.Verify(context.Background(), model.Device{}, []string{"PowerOnState 0"})
+	if err == nil || got != nil {
+		t.Fatalf("values %v, err %v: another device's answer must fail the read-back and return nothing", got, err)
+	}
+	if r.verified == 0 {
+		t.Fatal("the read-back did not use the identity-checked read")
 	}
 }

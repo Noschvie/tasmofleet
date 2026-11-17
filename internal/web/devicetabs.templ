@@ -130,7 +130,7 @@ templ settingsBodyInner(p settingsPage, base, csrf string) {
 		<section class="devform devform-msg" aria-labelledby="res-h">
 			<h2 id="res-h">Result</h2>
 			<table class="dense" data-table="device_settings">
-				<thead><tr><th>Setting</th><th>Command sent</th><th>Result</th></tr></thead>
+				<thead><tr><th>Setting</th><th>Command sent</th><th>Result</th><th>Read back</th></tr></thead>
 				<tbody>
 					for _, x := range p.Results {
 						<tr>
@@ -141,6 +141,19 @@ templ settingsBodyInner(p settingsPage, base, csrf string) {
 									@ui.Badge(ui.ToneOK, "Done")
 								} else {
 									<span class="devform-err">{ x.Err }</span>
+								}
+							</td>
+							<td data-label="Read back" class="s lab">
+								if rb, ok := readBackOf(x.ReadBack); ok {
+									<span class="rb-cell">
+										@ui.Badge(rb.Tone, rb.Label)
+										if rb.Have != "" {
+											<span class="rb-have">device has <code>{ rb.Have }</code></span>
+										}
+										if rb.Note != "" {
+											<span class="rb-have">{ rb.Note }</span>
+										}
+									</span>
 								}
 							</td>
 						</tr>

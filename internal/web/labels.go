@@ -201,6 +201,8 @@ func eventText(e model.JobEvent, j model.Job, pr *principalDir, minimal bool) st
 		}
 	}
 	switch {
+	case e.Event == "done" && j.IsPolicy():
+		return policyDoneText(e.Detail) // the read-back's checks are JSON (#947): the log says what they mean
 	case e.Event == "start" && e.Detail == "" && j.IsUpdate():
 		return "Start: " + updatePathText(j) // the path the job pinned for its whole life (#608)
 	case e.Event == "start_due":

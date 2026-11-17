@@ -31,7 +31,8 @@ var colTips = map[string]string{ //nolint:gosec // G101: header texts, no creden
 	"transaction_retry.target": "The firmware being installed.",
 	"transaction_retry.last":   "How the last attempt ended.",
 
-	"device_settings.setting": "The setting that was changed.",
-	"device_settings.command": "The command that was sent.",
-	"device_settings.result":  "Whether the device accepted it.",
+	"device_settings.setting":  "The setting that was changed.",
+	"device_settings.command":  "The command that was sent.",
+	"device_settings.result":   "Whether the device accepted it.",
+	"device_settings.readback": "What the device reports for the value afterwards: verified, or its own value.",
 }

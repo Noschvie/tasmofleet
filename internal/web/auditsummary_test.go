@@ -59,6 +59,7 @@ func TestAuditSummaryPerActionType(t *testing.T) {
 		{"policy check", ev("policy.live", "fleet", "", `{"devices_read":12,"throttled":false}`), "Policy check", "ok", "12 devices read"},
 		{"fix start", ev("policy.fix.start", "transaction:5", "ok", `{"devices":[1,2,3],"skipped":1}`), "Make compliant", "ok", "3 devices · 1 left out"},
 		{"fix device", ev("policy.fix", "device:1", "ok", `{"transaction":5,"job":9,"commands":["PowerOnState 0","SetOption0 0"]}`), "Make compliant (device)", "ok", "PowerOnState 0; SetOption0 0 · #5"},
+		{"fix device drift", ev("policy.fix", "device:1", "ok", `{"transaction":5,"commands":["PowerOnState 0","SetOption0 0"],"differs":["SetOption0"]}`), "Make compliant (device)", "ok", "PowerOnState 0; SetOption0 0 · differs: SetOption0 · #5"},
 		{"fix device failed", ev("policy.fix", "device:1", "the device is unreachable", `{"transaction":5,"commands":["SaveData 0"]}`), "Make compliant (device)", "failed", "The device is unreachable"},
 		{"rules save", ev("policy.rules.save", "policy:rules", "ok", `{"version":7,"revert_of":0,"rules":12,"changes":[{"kind":"added"},{"kind":"removed"}]}`), "Save policy rules", "ok", "v7 · 12 rules · 2 changes"},
 		{"rules revert", ev("policy.rules.revert", "policy:rules", "ok", `{"version":8,"revert_of":3,"rules":10,"changes":[]}`), "Revert policy rules", "ok", "v8 from v3 · 10 rules · 0 changes"},

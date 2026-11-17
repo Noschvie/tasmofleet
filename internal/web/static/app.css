@@ -9444,6 +9444,18 @@ tr.is-saved > td {
 .devform-err {
   color: var(--color-danger-fg);
 }
+/* the Settings result's read-back (#947): the badge, then the device's value or why it was not read */
+.rb-cell {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+.rb-have {
+  font-size: 12.5px;
+  color: var(--color-text-2);
+  overflow-wrap: anywhere;
+}
 .ufield-warn {
   font: 400 12px var(--font-sans);
   color: var(--color-warn-fg);
@@ -10190,6 +10202,22 @@ nav.crumbs a {
   margin: 0;
   font-size: 12.5px;
   color: var(--color-danger-fg);
+}
+/* the read-back of a change (#947): the device's own value under the line, and the card's drift note */
+.upd-change-have {
+  flex-basis: 100%;
+  font-size: 12.5px;
+  color: var(--color-text-2);
+  overflow-wrap: anywhere;
+}
+.upd-change-have code,
+.rb-have code {
+  font: 400 12px var(--font-mono);
+}
+.upd-note {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--color-text-2);
 }
 
 /* update preview (step 4): the devices beside the sticky "What happens" */

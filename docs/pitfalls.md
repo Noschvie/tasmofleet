@@ -249,6 +249,18 @@ means nothing stops you: you have to know it. The full working rules are in
   `TestReachedOnlyOverMQTTMeansHTTPIsNotKnownToWork`, `TestKnownOnlyOverMQTTMeansHTTPIsFailing` (claims T8 and T10 of
   `docs/security/mqtt-transport.md`).
 
+### A written value compared in another form than the device reports it (#947)
+
+- **Happened:** Make compliant compared what it read back with the rule's text after trimming and ON/OFF only.
+  Tasmota answers some values in a form of its own: `Timezone 1` reads back as `+01:00` (`CmndTimezone`), so a
+  Timezone rule never matched a device that had the value, and a read-back on the Settings tab would have shown
+  every Timezone write as "differs".
+- **Rule:** written and reported values are compared in one place, `settings.Matches`, which brings both sides to
+  the firmware's form (ON/OFF, coordinates at four decimals, Timezone as `+HH:MM`); the read-back and the policy's
+  live check both call it. A new form goes there, with the firmware source line, never into one caller.
+- **Enforced:** `TestMatchesKnowsTheFirmwaresOwnForms`, `TestAWrittenTimezoneIsVerifiedInTheFirmwaresForm`;
+  otherwise convention.
+
 ## Tests
 
 ### A test that depended on the time of day (#340)

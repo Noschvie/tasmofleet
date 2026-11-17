@@ -1976,6 +1976,28 @@ with one notification. The skip is the snapshot failure event `snapshot.failed` 
   MQTT host/port/user/password, NtpServer1..3, Timezone/TimeDst/TimeStd). Every field has a validator. Values are never
   concatenated into `Backlog` strings: each field becomes its own command, and `;` in a
   value is rejected (TasmoAdmin lesson B3). Secret fields (passwords) are write-only.
+- **Read-back of writes** (#947): after the Settings tab's writes and after Make compliant, every written value is
+  read back from the device and compared (`settings.ReadBack`, one home for both): one bare query or one `Status N`
+  at a time through the router (MQTT first), never `Status 0`, and only from a device the identity check confirms
+  over the transports those reads used (`settings.Manager.ReadVerified`, the rule of #662/#810): a value another
+  device answered never counts as read back and never reaches the policy's live values. A secret
+  (`cmdpolicy.SecretName`, #809: MqttPassword and MqttUser) is never queried: the tab says "Set, secret, not read
+  back". When a written value restarts the device (`settings.RestartsDevice`) the first read waits 5 s: Tasmota
+  restarts on the once-a-second tick after its backlog is empty and saves every setting first (support_tasmota.ino
+  16.0.0, lines 1569-1641), so a first read that still meets the device before its restart reports what it reports
+  after it; a read the device does not answer is tried again (six attempts, 5 s apart), and a value that differs is
+  read again until it settles (#559, about one second each, six times). The comparison is `settings.Matches`, which
+  the policy's live check uses too: whitespace, ON/OFF as 1/0, coordinates at four decimals and Timezone in the
+  firmware's own `+HH:MM` form (`CmndTimezone` answers `Timezone 1` with `+01:00`). The tab shows a "Read back"
+  column (Verified; Differs with the device's value; Not reported; Not read back with the reason); the result is
+  part of the one POST response and kept nowhere else, bounded by the read timeout as a whole and ended by
+  TasmoFleet's stop. Make compliant (coordinator's decision of 2026-11-17): a value read back from the confirmed
+  device that differs is policy drift, not a failure: `policy.DriftError` carries the check of every line, the job
+  succeeds, its done event keeps the checks as JSON (`{"note","read_back"}`; a job without drift keeps its plain
+  note), the card marks each value (Verified, Differs with the device's value, Not sent for a line left out) and
+  the audit `policy.fix` names the settings that differ (`differs`, names only). A value hidden by
+  `cmdpolicy.Redacted` keeps the device's value hidden too. A read that fails, a device that cannot be confirmed
+  or a value the device does not report fails the job as before (outcome unknown).
 - **Last known values** (#599): the Settings tab and the Policy GPIO templates tab draw what was read before at
   once, with its age ("Read 3m ago"), and read the device in the background when they open; the page never
   waits for the device. The values live in memory only (no table, no migration): after a restart the first open

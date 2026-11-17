@@ -185,13 +185,15 @@ func TestApplyForgetsTheRememberedValues(t *testing.T) {
 // writeRace is a device in the middle of a slow read when a write arrives: FriendlyName1 answers "Old"
 // until the write "FriendlyName1 Lamp" is sent. The first query of a read is answered at once, every
 // later one waits for the gate (a write is never held), so the read has the old name before the write
-// and finishes after it.
+// and finishes after it. The read-back of the write (#947), the first query after it, is not held either: it
+// reads the written name while the old read still waits.
 type writeRace struct {
 	fakeClient
-	gate    chan struct{}
-	held    chan struct{} // closed when a read first waits for the gate
-	once    sync.Once
-	queries atomic.Int32
+	gate     chan struct{}
+	held     chan struct{} // closed when a read first waits for the gate
+	once     sync.Once
+	queries  atomic.Int32
+	readBack atomic.Bool // the next query is the read-back of the write
 }
 
 func newWriteRace() *writeRace {
@@ -206,6 +208,10 @@ func (w *writeRace) Command(ctx context.Context, t tasmota.Target, cmnd string) 
 		w.mu.Lock()
 		w.replies["FriendlyName1"] = `{"FriendlyName1":"Lamp"}`
 		w.mu.Unlock()
+		w.readBack.Store(true)
+		return w.fakeClient.Command(ctx, t, cmnd)
+	}
+	if w.readBack.CompareAndSwap(true, false) {
 		return w.fakeClient.Command(ctx, t, cmnd)
 	}
 	if w.queries.Add(1) > 1 {
@@ -286,8 +292,8 @@ func TestAReadAfterAWriteDoesNotJoinTheReadFromBefore(t *testing.T) {
 	if _, err := New(Options{Devices: fakeDevices{}, Client: plain}).Read(context.Background(), 1); err != nil {
 		t.Fatal(err)
 	}
-	read := plain.sent // what one complete Read sends, in order
-	want := append(append([]string{read[0], "FriendlyName1 Lamp"}, read[1:]...), read...)
+	read := plain.sent                                                                                     // what one complete Read sends, in order
+	want := append(append([]string{read[0], "FriendlyName1 Lamp", "FriendlyName1"}, read[1:]...), read...) // the write, its read-back
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if !slices.Equal(c.sent, want) {

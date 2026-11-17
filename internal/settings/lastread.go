@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/hellwand/tasmofleet/internal/model"
-	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
 // StaleAfter is how old a remembered reading may be before the pages mark it as stale instead of
@@ -109,19 +108,5 @@ func (m *Manager) detachedRead(ctx context.Context, id model.DeviceID, keys []st
 			return nil, ctx.Err()
 		}
 	}
-	rctx, read := transport.WithTrace(ctx) // the check vouches for the transports these reads used (#810)
-	vals, err := m.readKeys(rctx, id, keys)
-	if err != nil || m.o.Verify == nil {
-		return vals, err
-	}
-	d, err := m.o.Devices.GetDevice(ctx, id)
-	if err == nil {
-		vctx, vcancel := context.WithTimeout(ctx, m.o.ReadTimeout)
-		err = m.o.Verify(vctx, d, read)
-		vcancel()
-	}
-	if err != nil {
-		return nil, err
-	}
-	return vals, nil
+	return m.readVerified(ctx, id, keys)
 }

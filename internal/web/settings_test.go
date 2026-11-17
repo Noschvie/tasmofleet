@@ -30,6 +30,8 @@ type fakeSettings struct {
 	reads atomic.Int32
 	// last is what Last returns: a reading remembered from before (#599). A successful Read replaces it.
 	last *settings.Snapshot
+	// readBack is what Apply reports as read back per key (#947)
+	readBack map[string]settings.Check
 }
 
 func (f *fakeSettings) Last(model.DeviceID) (settings.Snapshot, bool) {
@@ -70,7 +72,7 @@ func (f *fakeSettings) Apply(_ context.Context, _ string, _ model.DeviceID, ch m
 		if k == "MqttPassword" {
 			cmd = k + " ***"
 		}
-		out = append(out, settings.Result{Key: k, Command: cmd})
+		out = append(out, settings.Result{Key: k, Command: cmd, ReadBack: f.readBack[k]})
 	}
 	return out, nil
 }
@@ -677,5 +679,26 @@ func TestSettingsTabNeverQuotesTheDeviceInTheFailureLines(t *testing.T) {
 	_, form := bgFailEnv(t, now, fs, f).do(t, "GET", "/devices/1/settings/form", "admin", nil)
 	if strings.Contains(form, "hunter2") || !strings.Contains(form, "the device could not be read") {
 		t.Errorf("failure lines\n%s", shortDump(form))
+	}
+}
+
+// Why (#947): "Done" says the device took the command; the person also needs to see that it now holds the value.
+// The result says per setting "Verified", or "Differs" with the device's own answer, and for a secret only that it
+// was set: its value is never shown.
+func TestTheSettingsResultSaysVerifiedOrShowsTheDevicesAnswer(t *testing.T) {
+	fs := &fakeSettings{values: map[string]string{"TelePeriod": "300", "FriendlyName1": "a"}, readBack: map[string]settings.Check{
+		"FriendlyName1": {Key: "FriendlyName1", State: settings.CheckVerified},
+		"TelePeriod":    {Key: "TelePeriod", State: settings.CheckDiffers, Have: "10"},
+		"MqttPassword":  {Key: "MqttPassword", State: settings.CheckNotReadBack, Why: settings.WhySecret},
+	}}
+	e := withSettings(t, fs)
+	_, body := e.do(t, "POST", "/devices/1/settings", "admin", baseForm("TelePeriod", "60", "FriendlyName1", "Lamp", "orig.FriendlyName1", "a", "MqttPassword", "fake-pw-947"))
+	for _, want := range []string{">Read back</th>", ">Verified<", ">Differs<", "device has <code>10</code>", ">Set<", "secret, not read back"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the result lacks %q", want)
+		}
+	}
+	if strings.Contains(body, "fake-pw-947") {
+		t.Fatal("the secret reached the page")
 	}
 }

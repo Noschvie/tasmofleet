@@ -28,8 +28,48 @@ import (
 type PolicyApplier interface {
 	// Apply sends the command lines, batched, and saves them to flash once.
 	Apply(ctx context.Context, d model.Device, lines []string) error
-	// Verify reads the settings back and fails when one differs from the line.
+	// Verify reads the settings back. It fails when a value cannot be read back; a value read back that differs
+	// from its line is drift (an error that implements policyDrift), which the job reports and succeeds with.
 	Verify(ctx context.Context, d model.Device, lines []string) error
+}
+
+// policyDrift is what Verify returns when every value was read back from the confirmed device and some differ from
+// their lines (policy.DriftError, #947). The job succeeds: it did what it could, and the difference is shown per
+// value as policy drift.
+type policyDrift interface {
+	error
+	// ReadBack is the check of every line as JSON (settings.Check), kept with the done event for the pages.
+	ReadBack() json.RawMessage
+	// Differing names the settings that differ, for the audit (names only).
+	Differing() []string
+}
+
+// policyDone is the detail of the done event of a policy job whose read-back found drift: the note of a run that
+// left lines out, and the checks. A job without drift keeps the plain note, as before.
+type policyDone struct {
+	Note     string          `json:"note,omitempty"`
+	ReadBack json.RawMessage `json:"read_back"`
+}
+
+// PolicyDoneDetail reads the detail of a policy job's done event: the note, and the read-back's checks as JSON
+// (settings.Check) when it found drift (nil otherwise). Any detail that is not such JSON is the plain note, as every
+// job without drift and every job before #947 keeps it.
+func PolicyDoneDetail(detail string) (note string, readBack json.RawMessage) {
+	var d policyDone
+	if strings.HasPrefix(detail, "{") && json.Unmarshal([]byte(detail), &d) == nil && len(d.ReadBack) > 0 {
+		return d.Note, d.ReadBack
+	}
+	return detail, nil
+}
+
+// PolicySkipped is the lines a policy job's Apply left out on purpose, read from the detail of its verify event
+// (verifySkips); nil for any other detail.
+func PolicySkipped(verifyDetail string) []string {
+	var v verifySkips
+	if verifyDetail == "" || json.Unmarshal([]byte(verifyDetail), &v) != nil {
+		return nil
+	}
+	return v.Skipped
 }
 
 // verifySkips is the detail of the verify event of a job whose Apply left lines out. The store keeps the
@@ -304,6 +344,11 @@ func (e *Engine) workPolicy(ctx context.Context, j model.Job) {
 	if ctx.Err() != nil {
 		return
 	}
+	var drift policyDrift
+	if errors.As(err, &drift) {
+		e.finishPolicyDrift(ctx, j, lines, trace, note, drift)
+		return
+	}
 	if err != nil {
 		e.finishPolicy(ctx, j, lines, err.Error(), trace, note)
 		return
@@ -311,10 +356,22 @@ func (e *Engine) workPolicy(ctx context.Context, j model.Job) {
 	e.finishPolicy(ctx, j, lines, "", trace, note)
 }
 
+// finishPolicyDrift ends a job whose read-back found values that differ: it succeeded, its done event keeps the
+// checks, and the audit names the settings that differ.
+func (e *Engine) finishPolicyDrift(ctx context.Context, j model.Job, lines []string, trace *transport.Trace, note string, drift policyDrift) {
+	detail, _ := json.Marshal(policyDone{Note: note, ReadBack: drift.ReadBack()}) // strings and checks only
+	e.finishPolicyAs(ctx, j, lines, "", trace, note, string(detail), drift.Differing())
+}
+
 // finishPolicy ends the job as succeeded (failure == "") or failed, and audits
 // the change.
 func (e *Engine) finishPolicy(ctx context.Context, j model.Job, lines []string, failure string, trace *transport.Trace, note string) {
-	to, event, detail := model.JobSucceeded, "done", note
+	e.finishPolicyAs(ctx, j, lines, failure, trace, note, note, nil)
+}
+
+// finishPolicyAs is finishPolicy with the detail of the done event and the settings whose read-back differs.
+func (e *Engine) finishPolicyAs(ctx context.Context, j model.Job, lines []string, failure string, trace *transport.Trace, note, doneDetail string, differs []string) {
+	to, event, detail := model.JobSucceeded, "done", doneDetail
 	if failure != "" {
 		to, event, detail = model.JobFailed, "failed", failure
 	}
@@ -328,6 +385,9 @@ func (e *Engine) finishPolicy(ctx context.Context, j model.Job, lines []string, 
 		}
 		if note != "" {
 			fields["note"] = note
+		}
+		if len(differs) > 0 {
+			fields["differs"] = differs // names only: the values stay with the job, never in the audit
 		}
 		detail, _ := json.Marshal(fields) // a plain map always encodes
 		result := "ok"

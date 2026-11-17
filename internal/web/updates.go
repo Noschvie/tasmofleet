@@ -983,6 +983,9 @@ type jobView struct {
 	// back and found it too late (not_started), and who cancelled it before its start and when.
 	StartedAt, NotStartedAt, CancelledAt time.Time
 	CancelledBy                          string
+	// A policy job's read-back (#947): the detail of its done event and the lines its Apply left out.
+	PolicyDone    string
+	PolicySkipped []string
 }
 
 // logLine is one line of the per-device update log (a persisted job event).
@@ -1040,6 +1043,9 @@ func (h *handler) jobViews(r *http.Request, f store.JobFilter) ([]jobView, bool,
 			v.StepLabel += ", cancel requested" // a flash cannot be stopped: the job ends after this step
 		}
 		if evs, err := h.d.Jobs.JobEvents(r.Context(), j.ID); err == nil {
+			if j.IsPolicy() {
+				v.PolicyDone, v.PolicySkipped = policyDoneDetail(evs), policySkipped(evs)
+			}
 			for i, e := range evs {
 				loader := eventLoader(evs, i)
 				text := eventText(e, j, h.pr, eventStageMinimal(evs, i, j) || loader == "minimal")
@@ -1336,13 +1342,24 @@ func commandLines(s string) []string {
 	return out
 }
 
-// fixCardOf is a "Make compliant" device: its commands with the job's state, and why it failed.
+// fixCardOf is a "Make compliant" device: its commands with the job's state, and why it failed. A job that
+// succeeded shows what its read-back found per value (#947): verified, or the device's own value as drift.
 func fixCardOf(j jobView, base string) fixCard {
 	c := fixCard{Name: j.Device, Href: base + "/devices/" + strconv.FormatInt(int64(j.Job.DeviceID), 10)}
 	lbl, tone := changeBadge(j.Job.State)
 	c.Tone = tone
 	if j.Job.State == model.JobSucceeded {
 		c.Tone = ui.ToneOK
+		done := policyDoneOf(j.PolicyDone)
+		for _, cmd := range commandLines(j.Job.Commands) {
+			ch := succeededChange(cmd, done.ReadBack, j.PolicySkipped)
+			ch.Text = cmdpolicy.Redacted(cmd)
+			c.Changes = append(c.Changes, ch)
+		}
+		if n := differing(done.ReadBack); n > 0 {
+			c.Tone, c.Note = ui.ToneWarn, driftNote(n)
+		}
+		return c
 	}
 	for _, cmd := range commandLines(j.Job.Commands) {
 		c.Changes = append(c.Changes, fixChange{Text: cmdpolicy.Redacted(cmd), Label: lbl, Tone: tone})

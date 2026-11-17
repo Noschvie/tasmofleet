@@ -351,13 +351,17 @@ type txnSel struct {
 // fixCard is one device of a "Make compliant" transaction: its changes and their state.
 type fixCard struct {
 	Name, Href, Reason string
+	Note               string // the read-back found drift (#947)
 	Tone               ui.Tone
 	Changes            []fixChange
 }
 
+// fixChange is one line of the card. Have is the device's own value when its read-back differs; Note says more
+// where the badge alone does not (#947).
 type fixChange struct {
 	Text, Label string
 	Tone        ui.Tone
+	Have, Note  string
 }
 
 // errEvents are the job events that report a failure: their log lines are drawn in red.

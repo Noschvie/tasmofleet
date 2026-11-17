@@ -2,7 +2,9 @@ package ota
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -375,4 +377,67 @@ func TestPolicyJobResumedInVerifyKeepsTheSkippedLinesAndTheNote(t *testing.T) {
 		}
 	}
 	t.Errorf("the note was lost: %+v", aud.evs)
+}
+
+// driftErr is what the applier's Verify returns when a value read back differs (policy.DriftError).
+type driftErr struct {
+	checks   string
+	differs  []string
+	sentence string
+}
+
+func (d driftErr) Error() string             { return d.sentence }
+func (d driftErr) ReadBack() json.RawMessage { return json.RawMessage(d.checks) }
+func (d driftErr) Differing() []string       { return d.differs }
+
+// Why (#947, coordinator's decision of 2026-11-17): a value the device reports differently after Make compliant is
+// shown per value as drift and does not fail the job. The job succeeds, its done event keeps the checks for the
+// card (with the note of lines left out), and the audit names the setting that differs, never a value.
+func TestAPolicyJobWhoseReadBackDiffersSucceedsWithTheDrift(t *testing.T) {
+	h, ap, aud := policyHarness(t, 1, 2)
+	checks := `[{"key":"PowerOnState","state":"verified"},{"key":"SetOption0","state":"differs","have":"1"}]`
+	ap.verifyErr[1] = fmt.Errorf("verify: %w", driftErr{checks: checks, differs: []string{"SetOption0"}, sentence: "after applying: SetOption0 is 1, expected 0"})
+	if _, _, err := h.e.SubmitPolicy(context.Background(), "alice", []PolicyRequest{{DeviceID: 1, Commands: []string{"PowerOnState 0", "SetOption0 0"}}}); err != nil {
+		t.Fatal(err)
+	}
+	h.run(t, h.e)
+	j := h.job(t, 1)
+	if j.State != model.JobSucceeded || j.LastError != "" {
+		t.Fatalf("job %+v, want succeeded: a difference is drift, not a failure", j)
+	}
+	h.st.mu.Lock()
+	var done model.JobEvent
+	for _, ev := range h.st.events {
+		if ev.JobID == j.ID && ev.To == model.JobSucceeded {
+			done = ev
+		}
+	}
+	h.st.mu.Unlock()
+	var d struct {
+		ReadBack json.RawMessage `json:"read_back"`
+	}
+	if err := json.Unmarshal([]byte(done.Detail), &d); err != nil || string(d.ReadBack) != checks {
+		t.Fatalf("done detail %q (%v), want the checks", done.Detail, err)
+	}
+	aud.mu.Lock()
+	defer aud.mu.Unlock()
+	last := aud.evs[len(aud.evs)-1]
+	if last.Action != "policy.fix" || last.Result != "ok" || !strings.Contains(last.Detail, `"differs":["SetOption0"]`) || strings.Contains(last.Detail, `"have"`) {
+		t.Fatalf("audit %+v, want ok with the names of the settings that differ and no value", last)
+	}
+}
+
+// Why (#947): a guard, not a new behaviour (it passes before the change too): a read-back that cannot read a value
+// says nothing about the outcome, so the job still fails with the reason. Only a difference read from the
+// confirmed device is drift.
+func TestAPolicyJobThatCannotReadBackStillFails(t *testing.T) {
+	h, ap, _ := policyHarness(t, 1, 2)
+	ap.verifyErr[1] = errors.New("the settings were sent but could not be read back: the device is unreachable")
+	if _, _, err := h.e.SubmitPolicy(context.Background(), "alice", []PolicyRequest{{DeviceID: 1, Commands: []string{"SetOption0 0"}}}); err != nil {
+		t.Fatal(err)
+	}
+	h.run(t, h.e)
+	if j := h.job(t, 1); j.State != model.JobFailed || !strings.Contains(j.LastError, "could not be read back") {
+		t.Fatalf("job %+v, want failed with the reason", j)
+	}
 }

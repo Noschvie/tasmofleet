@@ -338,3 +338,14 @@ func TestPlanFixSendsTheFamilysOtaUrl(t *testing.T) {
 		t.Errorf("esp32: %v", got)
 	}
 }
+
+// Why (#947): the policy's live check and the read-back compare in one place (settings.Matches). Tasmota reports a
+// Timezone of 1 as "+01:00"; a rule "Timezone 1" must count such a device as matching, or the policy page shows it
+// as deviating forever and Make compliant resends a value the device already has.
+func TestATimezoneRuleMatchesTheFirmwaresForm(t *testing.T) {
+	d := model.Device{ID: 1}
+	out := Outcomes([]Rule{{Command: "Timezone", Want: "1"}}, []model.Device{d}, map[model.DeviceID]map[string]string{1: {"Timezone": "+01:00"}})
+	if len(out) != 1 || out[0].Kind != OutcomeMatch {
+		t.Fatalf("outcomes %+v, want a match", out)
+	}
+}

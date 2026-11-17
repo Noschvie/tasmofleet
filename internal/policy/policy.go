@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/settings"
 )
 
 // Rule is one expected setting.
@@ -133,7 +134,7 @@ func Outcomes(rules []Rule, devices []model.Device, values map[model.DeviceID]ma
 				case LimitedFirmware(d.Identity.Variant), // never judged from an old value: it answers none of them
 					len(r.Families) > 0 && d.Identity.Family == model.ChipUnknown, !ok:
 					o.Kind = OutcomeUnknown
-				case equal(v, r.Want):
+				case settings.Matches(r.Command, v, r.Want):
 					o.Kind, o.Have = OutcomeMatch, v
 				default:
 					o.Kind, o.Have = OutcomeDeviate, v
@@ -320,7 +321,7 @@ func Conflicts(rules []Rule, devices []model.Device) []Conflict {
 				n++
 			}
 			if n > 0 {
-				out = append(out, Conflict{Higher: i, Lower: j, Command: a.Command, Devices: n, SameWant: equal(a.Want, b.Want)})
+				out = append(out, Conflict{Higher: i, Lower: j, Command: a.Command, Devices: n, SameWant: settings.Matches(a.Command, a.Want, b.Want)})
 			}
 		}
 	}
@@ -401,10 +402,6 @@ func hasFamily(list []model.ChipFamily, f model.ChipFamily) bool {
 	}
 	return false
 }
-
-// equal compares values the way Tasmota reports them: ON/OFF are 1/0 and
-// whitespace around a value does not matter.
-func equal(have, want string) bool { return canon(have) == canon(want) }
 
 func canon(v string) string {
 	v = strings.TrimSpace(v)

@@ -151,7 +151,7 @@ func TestMakeCompliantTransactionShowsTheChanges(t *testing.T) {
 		{ID: 2, BatchID: 7, DeviceID: 2, Kind: model.KindPolicy, Commands: "TelePeriod 300\nPowerOnState 0", State: model.JobFailed, LastError: "the device is unreachable", CreatedAt: now},
 	}
 	_, body := e.do(t, "GET", "/transactions/7", "admin", nil)
-	for _, want := range []string{"<h1>Make compliant</h1>", "started from Policy by adam · 2 devices · 3 changes", "PowerOnState 0", ">Applied<", ">Failed<", "The device is unreachable", ">Back to policy<", "<b>1</b> applied"} {
+	for _, want := range []string{"<h1>Make compliant</h1>", "started from Policy by adam · 2 devices · 3 changes", "PowerOnState 0", ">Verified<", ">Failed<", "The device is unreachable", ">Back to policy<", "<b>1</b> applied"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the compliant page lacks %q", want)
 		}
@@ -322,5 +322,57 @@ func TestRetryRefusedByTheEngineAsNotRetryableSaysCheckAgain(t *testing.T) {
 	r, body := e.do(t, "POST", "/transactions/11/retry", "admin", url.Values{"csrf": {"tok"}})
 	if r.StatusCode != 409 || !strings.Contains(body, "Check again") {
 		t.Fatalf("%d %s", r.StatusCode, body)
+	}
+}
+
+// Why (#947): after Make compliant each value is read back. The card says per value whether the device reports it
+// ("Verified") or keeps another one, with the device's answer, and calls that drift; a job that only left a line
+// out on purpose never claims that line as verified.
+func TestTheMakeCompliantCardMarksEachValue(t *testing.T) {
+	e, _, j, _ := setupOTA(t)
+	now := time.Now()
+	j.jobs = []model.Job{
+		{ID: 1, BatchID: 7, DeviceID: 1, Kind: model.KindPolicy, Commands: "TelePeriod 300\nPowerOnState 0\nSysLog 2", State: model.JobSucceeded, CreatedBy: "adam", CreatedAt: now},
+		{ID: 2, BatchID: 7, DeviceID: 2, Kind: model.KindPolicy, Commands: "TelePeriod 300\nMqttHost new.example", State: model.JobSucceeded, CreatedAt: now},
+	}
+	j.events = map[model.JobID][]model.JobEvent{
+		1: {{JobID: 1, At: now, From: model.JobVerify, To: model.JobSucceeded, Event: "done",
+			Detail: `{"read_back":[{"key":"TelePeriod","state":"verified"},{"key":"PowerOnState","state":"differs","have":"3"},{"key":"SysLog","state":"differs","hidden":true}]}`}},
+		2: {{JobID: 2, At: now, From: model.JobApplying, To: model.JobVerify, Event: "verify", Detail: `{"note":"applied 1; skipped MqttHost","skipped":["MqttHost new.example"]}`},
+			{JobID: 2, At: now, From: model.JobVerify, To: model.JobSucceeded, Event: "done", Detail: "applied 1; skipped MqttHost"}},
+	}
+	_, page := e.do(t, "GET", "/transactions/7", "admin", nil)
+	body := between(page, `<main id="main">`, "</main>")
+	card1 := between(body, `aria-label="kitchen"`, "</section>")
+	card2 := between(body, `aria-label="attic"`, "</section>")
+	if card1 == "" || card2 == "" {
+		t.Fatalf("cards not found: %s", body)
+	}
+	for _, want := range []string{"TelePeriod 300</span><span class=\"bdg t-ok\">Verified<", "PowerOnState 0</span><span class=\"bdg t-warn\">Differs<",
+		"device has <code>3</code>", "SysLog ***", "2 values differ from the plan", "upd-dot t-warn"} {
+		if !strings.Contains(card1, want) {
+			t.Errorf("the card with drift lacks %q: %s", want, card1)
+		}
+	}
+	if strings.Contains(card1, "SysLog 2") || strings.Contains(card1, "read_back") {
+		t.Errorf("a hidden value or the raw detail reached the card: %s", card1)
+	}
+	if !strings.Contains(card2, ">Not sent<") || strings.Count(card2, ">Verified<") != 1 || strings.Contains(card2, "differ") {
+		t.Errorf("the line left out must say so, the other is verified: %s", card2)
+	}
+}
+
+// Why (#947): the done event of a job with drift holds JSON for the card; the job's log must say what it means and
+// never show the JSON. A plain note (every job before #947, and jobs without drift) still reads as before.
+func TestAPlainTextDoneDetailStillShowsItsNote(t *testing.T) {
+	j := model.Job{Kind: model.KindPolicy}
+	plain := model.JobEvent{Event: "done", To: model.JobSucceeded, Detail: "applied 1; skipped MqttHost: reached over MQTT only (use the console)"}
+	if got := eventText(plain, j, nil, false); got != "Done applied 1; skipped MqttHost: reached over MQTT only (use the console)" {
+		t.Errorf("plain done detail reads %q", got)
+	}
+	drift := model.JobEvent{Event: "done", To: model.JobSucceeded, Detail: `{"note":"applied 1","read_back":[{"key":"PowerOnState","state":"differs","have":"3"}]}`}
+	got := eventText(drift, j, nil, false)
+	if got != "Done: 1 value differs from the plan (policy drift). applied 1" || strings.Contains(got, "{") {
+		t.Errorf("drift done detail reads %q", got)
 	}
 }

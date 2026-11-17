@@ -136,7 +136,7 @@ test("select one row: the preview lists only that command and the run fixes only
   await shot(page, "preview");
   await page.getByRole("button", { name: /^Run 1 change$/ }).click();
   await expect(page).toHaveURL(/\/transactions\/\d+/);
-  await expect(page.locator(".upd-dev", { hasText: "plug-4m-http" }).getByText("Applied", { exact: true }).first()).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator(".upd-dev", { hasText: "plug-4m-http" }).getByText("Verified", { exact: true }).first()).toBeVisible({ timeout: 60_000 });
 
   await page.goto(app.url + "/policy/deviations?q=plug-4m-http");
   await page.getByRole("button", { name: "Run now" }).first().click();
@@ -156,7 +156,7 @@ test("an Advisory row ticked by hand is written; the device tile's preview offer
   await page.getByRole("button", { name: /Make compliant…/ }).click();
   await expect(page.locator(".pol-fix-cmd .mono")).toHaveText(["LedState 3"]);
   await page.getByRole("button", { name: /^Run 1 change$/ }).click();
-  await expect(page.locator(".upd-dev", { hasText: "plug-4m-http" }).getByText("Applied", { exact: true }).first()).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator(".upd-dev", { hasText: "plug-4m-http" }).getByText("Verified", { exact: true }).first()).toBeVisible({ timeout: 60_000 });
 
   // another device, through the device page tile: Required only, the hint is offered unticked
   await page.goto(app.url + "/policy/deviations?q=plug-4m");

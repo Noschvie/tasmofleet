@@ -1,0 +1,4 @@
+---
+section: Added
+---
+After a change on a device's Settings tab and after Make compliant, TasmoFleet reads every written value back from the device and shows it: "Verified", or "Differs" with the value the device reports. A Make compliant job whose device keeps another value now succeeds and marks that value as policy drift instead of failing; a value it cannot read back still fails the job. Secrets (the MQTT password and user) are never read back, the tab says they were set. A setting that restarts the device is read back once it answers again, and only from the device TasmoFleet confirms is the one it wrote to. Timezone values are now compared in the form the device reports them (+01:00 for 1), so a policy rule for Timezone no longer shows a device as deviating that has the value (#947)

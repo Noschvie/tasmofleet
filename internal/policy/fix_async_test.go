@@ -83,6 +83,18 @@ func (d *asyncDevice) ReadKeys(_ context.Context, _ model.DeviceID, keys []strin
 	return out, nil
 }
 
+// ReadVerified is ReadKeys: the fake is always the stored device.
+func (d *asyncDevice) ReadVerified(ctx context.Context, id model.DeviceID, keys []string) (map[string]string, error) {
+	return d.ReadKeys(ctx, id, keys)
+}
+
+// settleReads and settleWait are the bounds of the read-back's settle loop (settings.ReadBack): a value that differs
+// is read again settleReads times, settleWait apart.
+const (
+	settleReads = 6
+	settleWait  = time.Second
+)
+
 func (d *asyncDevice) wait(_ context.Context, w time.Duration) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()

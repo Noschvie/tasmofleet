@@ -333,10 +333,19 @@ templ txnBody(p txnPage) {
 						<div class="upd-change">
 							<span class="upd-change-t">{ ch.Text }</span>
 							@ui.Badge(ch.Tone, ch.Label)
+							if ch.Have != "" {
+								<span class="upd-change-have">device has <code>{ ch.Have }</code></span>
+							}
+							if ch.Note != "" {
+								<span class="upd-change-have">{ ch.Note }</span>
+							}
 						</div>
 					}
 					if c.Reason != "" {
 						<p class="upd-why">{ c.Reason }</p>
+					}
+					if c.Note != "" {
+						<p class="upd-note">{ c.Note }</p>
 					}
 				</section>
 			}

@@ -23,9 +23,11 @@ type Commander interface {
 	Command(ctx context.Context, t tasmota.Target, cmnd string) (json.RawMessage, error)
 }
 
-// Reader reads settings from a device (settings.Service.ReadKeys).
+// Reader reads settings from a device (settings.Manager). ReadVerified is the read of the read-back: it returns
+// values only when the device that answered is the stored one.
 type Reader interface {
 	ReadKeys(ctx context.Context, id model.DeviceID, keys []string) (map[string]string, error)
+	ReadVerified(ctx context.Context, id model.DeviceID, keys []string) (map[string]string, error)
 }
 
 // Backlog limits: Tasmota queues at most 30 entries and a long line risks
@@ -44,8 +46,8 @@ const (
 type Fixer struct {
 	Client Commander
 	Reader Reader
-	// Wait pauses between verify attempts; nil waits for real. A device that
-	// restarts after Hostname or Topic needs a few seconds to answer again.
+	// Wait pauses between the reads of the read-back (settings.ReadBackOptions); nil waits for real. A device
+	// that restarts after Hostname or Topic needs a few seconds to answer again.
 	Wait func(ctx context.Context, d time.Duration) error
 	// VerifyAttempts is how often the read-back is tried while the device does
 	// not answer (default 6).
@@ -402,91 +404,86 @@ func pack(lines []fixLine) [][]fixLine {
 	return out
 }
 
-// Verify reads the changed settings back from the device and compares them
-// with the wanted values. A device that does not answer (it may be restarting)
-// is asked again a few times. It returns the values it read, also on a
-// mismatch, so the caller can refresh what it shows.
+// Verify reads the changed settings back from the device and compares them with the wanted values
+// (settings.ReadBack, #947): one query at a time, from a device confirmed to be the stored one, again a few times
+// while it does not answer (it may be restarting) or while a value still differs (the Backlog queue, #559). It
+// returns the values it read, also on a mismatch, so the caller can refresh what it shows; never values of a device
+// it could not confirm.
+//
+// A value the device reports differently is drift, not a failure: the error is a *DriftError, which carries the
+// check of every line. A read that fails, a device that cannot be confirmed and a value the device does not report
+// say nothing about the outcome: they are a plain error, also when another value differs.
 func (f *Fixer) Verify(ctx context.Context, d model.Device, lines []string) (map[string]string, error) {
 	parsed, err := parseLines(lines)
 	if err != nil {
 		return nil, err
 	}
-	keys := make([]string, len(parsed))
+	wants := make([]settings.Want, len(parsed))
 	for i, l := range parsed {
-		keys[i] = l.key
+		// The card and the audit show a line in its redacted form; a value hidden there stays hidden in the device's answer.
+		wants[i] = settings.Want{Key: l.key, Value: l.value, Hidden: cmdpolicy.Redacted(l.text) != l.text}
 	}
-	attempts := f.VerifyAttempts
-	if attempts < 1 {
-		attempts = 6
+	read := func(ctx context.Context, keys []string) (map[string]string, error) {
+		return f.Reader.ReadVerified(ctx, d.ID, keys)
 	}
-	// Over HTTP the reply to a Backlog comes before the device has run it: the first read can show
-	// the old value of every line but the first (#559). A mismatch is therefore read again a few
-	// times before it counts; the last read wins. The queue only moves while we wait (every command
-	// the device handles pushes its timer back by SetOption34), so the first wait grows with the
-	// number of settings that differ. A value the device really refuses costs about
-	// settleReads seconds plus a quarter second per differing setting, no more.
-	for settle := 0; ; settle++ {
-		var got map[string]string
-		for i := 0; ; i++ {
-			got, err = f.Reader.ReadKeys(ctx, d.ID, keys)
-			if err == nil {
-				break
-			}
-			if i+1 >= attempts {
-				return got, fmt.Errorf("the settings were sent but could not be read back: %w", err)
-			}
-			if err := f.wait(ctx, 5*time.Second); err != nil {
-				return got, err
-			}
-		}
-		var bad []string
-		stale := 0 // values that differ (not absent): the queue may not have run them yet
-		for _, l := range parsed {
-			have, ok := got[l.key]
-			switch {
-			case !ok:
-				bad = append(bad, l.key+" is not reported by the device")
-			case !equal(have, l.value):
-				bad = append(bad, fmt.Sprintf("%s is %s, expected %s", l.key, have, l.value))
-				stale++
-			}
-		}
-		if len(bad) == 0 {
-			return got, nil
-		}
-		if stale == 0 || settle >= settleReads {
-			return got, errors.New("after applying: " + strings.Join(bad, "; "))
-		}
-		pause := settleWait
-		if settle == 0 {
-			pause = max(pause, time.Duration(stale+1)*backlogLineWait)
-		}
-		if err := f.wait(ctx, pause); err != nil {
-			return got, err
+	checks, got, err := settings.ReadBack(ctx, read, wants, settings.ReadBackOptions{Wait: f.Wait, Attempts: f.VerifyAttempts})
+	if err != nil {
+		return nil, fmt.Errorf("the settings were sent but could not be read back: %w", err)
+	}
+	var bad, differ []string
+	for i, c := range checks {
+		switch c.State {
+		case settings.CheckVerified:
+		case settings.CheckDiffers:
+			differ = append(differ, differText(parsed[i], c))
+		case settings.CheckNotReported:
+			bad = append(bad, c.Key+" is not reported by the device")
+		case settings.CheckNotReadBack:
+			bad = append(bad, c.Key+" was not read back ("+c.Why+")")
+		default: // no state: ReadBack returned without reading it, which it never does without an error
+			bad = append(bad, c.Key+" was not read back")
 		}
 	}
+	switch {
+	case len(bad) > 0:
+		return got, errors.New("after applying: " + strings.Join(append(bad, differ...), "; "))
+	case len(differ) > 0:
+		return got, &DriftError{Checks: checks, text: "after applying: " + strings.Join(differ, "; ")}
+	}
+	return got, nil
 }
 
-// settleReads and settleWait bound the wait for a Backlog to run. Tasmota has no cap on the queue
-// (only 12.x had 30 entries), a plan can hold up to MaxRules (100) lines, and the device runs one
-// per SetOption34 delay (200 ms by default, 255 ms at most; backlogLineWait) once it is left
-// alone: each read pushes the queue back, so the first wait covers every line still wrong.
-const (
-	settleReads     = 6
-	settleWait      = time.Second
-	backlogLineWait = 250 * time.Millisecond
-)
+// differText says how a line's value differs, without a value its redacted form hides.
+func differText(l fixLine, c settings.Check) string {
+	if c.Hidden {
+		return l.key + " differs from the rule"
+	}
+	return fmt.Sprintf("%s is %s, expected %s", l.key, c.Have, l.value)
+}
 
-func (f *Fixer) wait(ctx context.Context, d time.Duration) error {
-	if f.Wait != nil {
-		return f.Wait(ctx, d)
+// DriftError is what Verify returns when every line was read back from the confirmed device and at least one value
+// differs from the plan: the device keeps another value (it refused the write, or something changed it again). The
+// job has done what it can; the difference is policy drift and is shown per value (Checks), not as a failure.
+type DriftError struct {
+	Checks []settings.Check
+	text   string
+}
+
+func (e *DriftError) Error() string { return e.text }
+
+// ReadBack is the checks as JSON, the form a job keeps with its done event (settings.Check).
+func (e *DriftError) ReadBack() json.RawMessage {
+	b, _ := json.Marshal(e.Checks) // strings and booleans only
+	return b
+}
+
+// Differing names the settings whose value differs, for the audit (names only, never a value).
+func (e *DriftError) Differing() []string {
+	var out []string
+	for _, c := range e.Checks {
+		if c.State == settings.CheckDiffers {
+			out = append(out, c.Key)
+		}
 	}
-	t := time.NewTimer(d)
-	defer t.Stop()
-	select {
-	case <-t.C:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+	return out
 }

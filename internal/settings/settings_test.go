@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/hellwand/tasmofleet/internal/cmdpolicy"
 	"github.com/hellwand/tasmofleet/internal/model"
@@ -52,8 +53,11 @@ func (f *fakeAudit) Record(_ context.Context, e model.AuditEvent) { f.events = a
 
 func newSvc(c *fakeClient) (*Manager, *fakeAudit) {
 	a := &fakeAudit{}
-	return New(Options{Devices: fakeDevices{}, Client: c, Audit: a}), a
+	return New(Options{Devices: fakeDevices{}, Client: c, Audit: a, Wait: noWait}), a
 }
+
+// noWait lets the read-back's pauses pass at once.
+func noWait(context.Context, time.Duration) error { return nil }
 
 // ---- validators ----
 
@@ -167,8 +171,8 @@ func TestApplySendsOneCommandPerField(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(c.sent, "|"); got != "FriendlyName1 Lamp|TelePeriod 60" {
-		t.Fatalf("sent %q", got)
+	if got := strings.Join(c.sent[:2], "|"); got != "FriendlyName1 Lamp|TelePeriod 60" { // then the read-back (#947)
+		t.Fatalf("sent %q", c.sent)
 	}
 	if len(res) != 2 || !res[0].OK() || !res[1].OK() {
 		t.Fatalf("results %+v", res)
@@ -341,7 +345,7 @@ func TestApplyContinuesAfterDeviceError(t *testing.T) {
 	c := &fakeClient{errs: map[string]error{"Hostname h": tasmota.ErrUnknownCommand}}
 	svc, _ := newSvc(c)
 	res, _ := svc.Apply(t.Context(), "a", 1, map[string]string{"Hostname": "h", "TelePeriod": "60"})
-	if len(c.sent) != 2 || !res[0].OK() || res[1].OK() { // Hostname restarts, so it is sent last
+	if len(c.sent) < 2 || c.sent[0] != "TelePeriod 60" || c.sent[1] != "Hostname h" || !res[0].OK() || res[1].OK() { // Hostname restarts, so it is sent last; the read-back follows
 		t.Fatalf("sent %v results %+v", c.sent, res)
 	}
 }
@@ -453,8 +457,8 @@ func TestApplySendsRestartingCommandsLast(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := "FriendlyName1 Lamp|TelePeriod 60|Timezone 99|Hostname h-1|Topic t-1|MqttHost mqtt.example"
-	if got := strings.Join(c.sent, "|"); got != want {
-		t.Fatalf("sent %q", got)
+	if got := strings.Join(c.sent[:6], "|"); got != want { // the writes; the read-back (#947) comes after the last
+		t.Fatalf("sent %q", c.sent)
 	}
 }
 

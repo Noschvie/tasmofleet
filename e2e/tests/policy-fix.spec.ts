@@ -69,7 +69,7 @@ test("make compliant: operators see no action, admins review the plan in the dia
 
   await expect(page).toHaveURL(/\/transactions\/\d+/);
   await expect(page.getByRole("heading", { name: "Make compliant", level: 1 })).toBeVisible();
-  await expect(page.locator(".upd-dev", { hasText: "plug-4m-http" }).getByText("Applied", { exact: true }).first()).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator(".upd-dev", { hasText: "plug-4m-http" }).getByText("Verified", { exact: true }).first()).toBeVisible({ timeout: 60_000 });
 
   // the rule page lists the devices that still deviate: the fixed one is gone
   await page.goto(ruleURL + "?show=deviate");

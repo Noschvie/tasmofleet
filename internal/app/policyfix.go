@@ -34,8 +34,10 @@ func (p policyApplier) Apply(ctx context.Context, d model.Device, lines []string
 }
 
 func (p policyApplier) Verify(ctx context.Context, d model.Device, lines []string) error {
+	// The fixer returns values only from a device it confirmed to be the stored one (settings.Manager.ReadVerified,
+	// #947); a difference is a *policy.DriftError, which the engine reports as drift.
 	vals, err := p.a.fixer.Verify(ctx, d, lines)
-	if len(vals) > 0 { // also after a mismatch: the page must show what the device really has
+	if len(vals) > 0 { // also after a mismatch: the page must show what the device really has, as drift
 		p.a.policyLive.vals.put(d.ID, vals, p.a.policyLive.clock())
 	}
 	return err
