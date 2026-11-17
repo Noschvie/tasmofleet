@@ -153,6 +153,34 @@ func (m *Manager) noteDiscoveryTopic(c candidate) {
 	s.mac, s.ip = c.mac, c.ip.String()
 }
 
+// noteTopicClaim asks the router's check (Options.OnTopicClaim) to look at the topic of every stored device whose topic
+// c names with a MAC outside the device's MAC set (#876): a board claims to listen on the topic, so the device's
+// commands, writes and transfers over MQTT might reach it. The claim itself proves nothing, any publisher on the
+// discovery topics can make it, so it marks nothing here: only the router's check, which hears every reply on the
+// topic, can tell a second board from a forged claim. The MAC filter decides nothing either: it only keeps every
+// device's own boot config (its own MAC) from costing a check. A device stored without a MAC is skipped for the same
+// reason, there is nothing to tell its own config from another board's. It runs before consider on purpose: an address
+// outside DEVICE_NETWORKS does not stop that board from listening, and a claim whose MAC is another stored device's is
+// matched by MAC, not by topic.
+func (m *Manager) noteTopicClaim(ctx context.Context, c candidate) {
+	if m.o.OnTopicClaim == nil || c.topic == "" {
+		return
+	}
+	devs, err := m.o.Inventory.List(ctx)
+	if err != nil {
+		m.log.Debug("discovery: list devices for a topic claim", "topic", c.topic, "err", err)
+		return // the next sighting of the config tries again
+	}
+	for _, d := range devs {
+		if d.Topic != c.topic || d.MAC == "" {
+			continue
+		}
+		if !slices.ContainsFunc(c.allMACs(), d.HasMAC) {
+			m.o.OnTopicClaim(d.ID, d.Topic)
+		}
+	}
+}
+
 // dropClaim forgets the kept claim and reason of topic: a newer claim of the
 // topic is being evaluated.
 func (m *Manager) dropClaim(topic string) {

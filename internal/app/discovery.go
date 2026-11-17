@@ -27,13 +27,7 @@ func (a *runtime) setupDiscovery() error {
 	if a.mqttCmd != nil {
 		asker = a.mqttCmd // not a nil *Channel in an interface
 	}
-	m, err := discovery.New(discovery.Options{
-		Asker: asker, Inventory: a.svc.Inventory, Store: a.svc.Store, Audit: a.svc.Audit, Client: scanClient,
-		Verifier: macVerifier{client: a.svc.HTTP}, NetworkSet: a.svc.Networks,
-		Concurrency: scanConcurrency, ProbeTimeout: scanTimeout, Logger: a.log,
-		OnDropped:  func(kind string) { a.svc.Std.DiscoveryDropped.With(kind).Inc() },
-		OnAccepted: a.identifyLater,
-	})
+	m, err := discovery.New(a.discoveryOptions(scanClient, asker))
 	if err != nil {
 		return err
 	}
@@ -41,6 +35,25 @@ func (a *runtime) setupDiscovery() error {
 	a.discoveryFollowsSetting()
 	a.goBG("discovery", func() error { return m.Run(a.bgContext) })
 	return nil
+}
+
+// discoveryOptions are the manager's options with everything the app wires into it.
+func (a *runtime) discoveryOptions(scanClient tasmota.Client, asker discovery.StatusAsker) discovery.Options {
+	return discovery.Options{
+		Asker: asker, Inventory: a.svc.Inventory, Store: a.svc.Store, Audit: a.svc.Audit, Client: scanClient,
+		Verifier: macVerifier{client: a.svc.HTTP}, NetworkSet: a.svc.Networks,
+		Concurrency: scanConcurrency, ProbeTimeout: scanTimeout, Logger: a.log,
+		OnDropped:    func(kind string) { a.svc.Std.DiscoveryDropped.With(kind).Inc() },
+		OnAccepted:   a.identifyLater,
+		OnTopicClaim: a.discoveryTopicClaim,
+	}
+}
+
+// discoveryTopicClaim passes a discovery config's claim on a stored device's topic to the broker reader (#876). It
+// marks nothing: anyone who can publish on the discovery topics can make the claim, so the reader asks the topic through
+// the router's own check at its next pass, and only that check marks. It never blocks the discovery worker.
+func (a *runtime) discoveryTopicClaim(id model.DeviceID, topic string) {
+	a.brokerHost.topicClaimed(id, topic)
 }
 
 // identifyTimeout bounds the first probe of an accepted device.

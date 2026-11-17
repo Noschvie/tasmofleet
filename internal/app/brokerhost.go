@@ -88,6 +88,11 @@ const (
 	// HTTP fact, one device per pass.
 	brokerHostProbeEvery = 30 * time.Minute
 	brokerHostQueue      = 64
+	// brokerHostClaimsPerPass: topic claim checks (#876) one pass runs. A claim is untrusted input: one login can flag
+	// every stored device at once, and each check holds the reader for the 1.5 s identity window, up to 8 s
+	// (mqttcmd.DefaultReplyWait) for a device that stays silent, while nothing else on it (kicks, restart reads, the
+	// periodic reads) is served. The claims left over wait for the next pass, up to their hard end.
+	brokerHostClaimsPerPass = 2
 
 	// dataEvery: how often an online device's Settings values, policy values and template reading are read
 	// without a reason (#600). They change only when somebody changes them, and a restart (the usual
@@ -135,9 +140,13 @@ type brokerHostReader struct {
 	// anotherOnTopic while another device still answers, nil otherwise. Either nil: not done.
 	topicMarked  func(model.Device) bool
 	recheckTopic func(context.Context, model.Device) error
+	// checkClaim asks the topic of an unmarked device a discovery config named with another MAC (#876): the same check
+	// as recheckTopic (Prober.checkClaimed), for the topic claimed only; nil: claims are not followed.
+	checkClaim func(context.Context, model.Device, string) error
 
 	kick        chan model.DeviceID
 	kickRestart chan model.DeviceID
+	claims      chan topicClaim
 	pending     map[model.DeviceID]brokerWant
 	next        map[model.DeviceID]time.Time // when the periodic read of a device is due again; absent: due
 	// dataNext and identityNext: the same for the data and the identity; absent: due.
@@ -146,6 +155,11 @@ type brokerHostReader struct {
 	probeNext map[model.DeviceID]time.Time
 	// recheckNext: when the topic of a marked device is asked again (recheckTopics); absent: due.
 	recheckNext map[model.DeviceID]time.Time
+	// claimed: the topic claims waiting for the next pass, at most one per device (#876); claimNext: until when a
+	// claim of a device is not taken up again, so a device is asked at most once per brokerHostRetry however often
+	// its claim is published. Both belong to the reader's goroutine, like every map here.
+	claimed   map[model.DeviceID]topicClaim
+	claimNext map[model.DeviceID]time.Time
 	// restartRead: when a restart last read the identity and the data of a device, or the read it left to the
 	// end of the hour ran (restartRefreshEvery); restartLeft: a restart left that read to the end of the hour.
 	restartRead map[model.DeviceID]time.Time
@@ -160,6 +174,14 @@ type brokerHostReader struct {
 	inRestartRead bool
 	// outcomes: why the last background data refresh of a device failed (#818), read by the device page.
 	outcomes *refreshOutcomes
+}
+
+// topicClaim is a discovery config that named a stored device's topic with a MAC the device does not have (#876). until
+// is its hard end: a claim a busy device could not be asked about is dropped then.
+type topicClaim struct {
+	id    model.DeviceID
+	topic string
+	until time.Time
 }
 
 // retryKey names the identity or the data schedule of one device.
@@ -181,6 +203,7 @@ func newBrokerHostReader(list func(context.Context) ([]model.Device, error), // 
 	read func(context.Context, model.DeviceID) error, enter func(context.Context, model.DeviceID, string) (func(), error), log *slog.Logger) *brokerHostReader {
 	return &brokerHostReader{list: list, httpUp: httpUp, read: read, enter: enter, now: time.Now, log: log,
 		kick: make(chan model.DeviceID, brokerHostQueue), kickRestart: make(chan model.DeviceID, brokerHostQueue),
+		claims: make(chan topicClaim, brokerHostQueue), claimed: map[model.DeviceID]topicClaim{}, claimNext: map[model.DeviceID]time.Time{},
 		dataNext: map[model.DeviceID]time.Time{}, identityNext: map[model.DeviceID]time.Time{}, pending: map[model.DeviceID]brokerWant{}, next: map[model.DeviceID]time.Time{}, probeNext: map[model.DeviceID]time.Time{},
 		recheckNext: map[model.DeviceID]time.Time{}, restartRead: map[model.DeviceID]time.Time{}, restartLeft: map[model.DeviceID]bool{}, retryAt: map[retryKey]time.Time{}, retrying: map[retryKey]bool{}, outcomes: newRefreshOutcomes()}
 }
@@ -207,6 +230,22 @@ func (r *brokerHostReader) restarted(id model.DeviceID) {
 	}
 }
 
+// topicClaimed tells the reader that a discovery config named id's topic with another MAC (#876) and returns at once:
+// it runs on the discovery worker, which must not wait for a check that hears the topic for seconds. The claim only
+// flags the device for the next pass (recheckTopics); the check, not the claim, decides whether the device is marked.
+// A full queue drops the claim: discovery's per-MAC rate limit and the next publish of the config bring it back, and
+// the identity probe (Prober.hearTopic, every 24 hours and after a restart) is the backstop.
+func (r *brokerHostReader) topicClaimed(id model.DeviceID, topic string) {
+	if r == nil {
+		return
+	}
+	select {
+	case r.claims <- topicClaim{id: id, topic: topic}:
+	default: // queue full: see above
+		r.log.Debug("topic claim: queue full, dropped", "device", id, "topic", topic)
+	}
+}
+
 func (r *brokerHostReader) run(ctx context.Context) {
 	t := time.NewTicker(brokerHostTick)
 	defer t.Stop()
@@ -218,6 +257,8 @@ func (r *brokerHostReader) run(ctx context.Context) {
 			r.want(id)
 		case id := <-r.kickRestart:
 			r.wantRestart(id)
+		case c := <-r.claims:
+			r.noteClaim(c)
 		case <-t.C:
 			r.pass(ctx)
 		}
@@ -231,6 +272,21 @@ func (r *brokerHostReader) want(id model.DeviceID) { r.request(id, false) }
 // device that announces its restart several times (INFO3, the uptime drop, a second boot) keeps one entry
 // whose time moves back, so it is one visit after the last announcement.
 func (r *brokerHostReader) wantRestart(id model.DeviceID) { r.request(id, true) }
+
+// noteClaim keeps a topic claim for the next pass. A device that was asked less than brokerHostRetry ago (claimNext)
+// is not flagged again, and one claim waits at a time: its hard end is brokerHostPendingFor after the first.
+func (r *brokerHostReader) noteClaim(c topicClaim) {
+	now := r.now()
+	if at, ok := r.claimNext[c.id]; ok && now.Before(at) {
+		return
+	}
+	if old, ok := r.claimed[c.id]; ok {
+		c.until = old.until
+	} else {
+		c.until = now.Add(brokerHostPendingFor)
+	}
+	r.claimed[c.id] = c
+}
 
 func (r *brokerHostReader) request(id model.DeviceID, restart bool) {
 	now := r.now()
@@ -351,14 +407,20 @@ func (r *brokerHostReader) recheckTopics(ctx context.Context, devs []model.Devic
 	if r.topicMarked == nil || r.recheckTopic == nil {
 		return
 	}
+	r.pruneClaims(devs, now)
+	claimChecks := 0 // brokerHostClaimsPerPass: the claims over the cap wait for a later pass
 	for _, d := range devs {
 		if ctx.Err() != nil {
 			return
 		}
 		if !r.topicMarked(d) {
 			delete(r.recheckNext, d.ID) // a new mark is asked about at the next pass
+			if claimChecks < brokerHostClaimsPerPass && r.checkClaimed(ctx, d, now) {
+				claimChecks++
+			}
 			continue
 		}
+		delete(r.claimed, d.ID) // the mark holds already: its own schedule asks the topic
 		if !r.isDue(r.recheckNext, d.ID, now) {
 			continue
 		}
@@ -371,12 +433,69 @@ func (r *brokerHostReader) recheckTopics(ctx context.Context, devs []model.Devic
 		cctx, cancel := context.WithTimeout(ctx, brokerHostTimeout)
 		err = r.recheckTopic(cctx, d)
 		cancel()
-		var on anotherOnTopic
-		switch {
-		case errors.As(err, &on):
-			r.log.Warn("topic check: "+topicTakenLog, "device", d.ID, "topic", on.topic)
-		case err != nil && ctx.Err() == nil:
-			r.log.Debug("topic check: failed; the mark stays", "device", d.ID, "err", err)
+		r.logTopicCheck(ctx, d, err)
+	}
+}
+
+// logTopicCheck warns of a check that found the topic taken and notes one that learnt nothing.
+func (r *brokerHostReader) logTopicCheck(ctx context.Context, d model.Device, err error) {
+	var on anotherOnTopic
+	switch {
+	case errors.As(err, &on):
+		r.log.Warn("topic check: "+topicTakenLog, "device", d.ID, "topic", on.topic)
+	case err != nil && ctx.Err() == nil:
+		r.log.Debug("topic check: failed; the mark stays", "device", d.ID, "err", err)
+	}
+}
+
+// checkClaimed asks the topic of an unmarked device a discovery config named with another MAC (#876), once, through the
+// router's own check: it hears every reply on the topic and marks the device only for a second reply or a foreign MAC,
+// so a forged claim marks nothing. At most one check per device per brokerHostRetry (claimNext, also across the
+// mark: recheckNext is seeded, so the mark's own schedule does not ask again 30 seconds later). A claim ends with its
+// check whatever it learnt: no reply means nobody else listens, a window cut short comes from the 15 s budget or a
+// shutdown, and while MQTT is not usable a mark would change nothing (writes go to no topic then); the identity
+// probe's check (every 24 hours, after a restart) is the backstop. A device a job holds keeps its claim until a pass
+// where the lock is free, or its hard end (topicClaim.until). A claim ends too when the device is marked by now, no
+// longer has the claimed topic, or is gone (pruneClaims). The device lock is only tried, as for the marked check.
+// It reports whether it called the check, which the caller counts against brokerHostClaimsPerPass.
+func (r *brokerHostReader) checkClaimed(ctx context.Context, d model.Device, now time.Time) bool {
+	c, ok := r.claimed[d.ID]
+	if !ok {
+		return false
+	}
+	if r.checkClaim == nil || now.After(c.until) || d.Topic != c.topic {
+		delete(r.claimed, d.ID)
+		return false
+	}
+	release, err := r.enter(ctx, d.ID, backgroundData)
+	if err != nil {
+		return false // held by a job or a typed firmware update: asked at the next pass, nothing was sent
+	}
+	release()
+	delete(r.claimed, d.ID)
+	r.claimNext[d.ID] = now.Add(brokerHostRetry)
+	r.recheckNext[d.ID] = now.Add(brokerHostRetry)
+	cctx, cancel := context.WithTimeout(ctx, brokerHostTimeout)
+	err = r.checkClaim(cctx, d, c.topic)
+	cancel()
+	r.logTopicCheck(ctx, d, err)
+	return true
+}
+
+// pruneClaims ends the claims and claim windows of devices that are no longer listed, and the windows that are over.
+func (r *brokerHostReader) pruneClaims(devs []model.Device, now time.Time) {
+	listed := make(map[model.DeviceID]bool, len(devs))
+	for _, d := range devs {
+		listed[d.ID] = true
+	}
+	for id := range r.claimed {
+		if !listed[id] {
+			delete(r.claimed, id)
+		}
+	}
+	for id, at := range r.claimNext {
+		if !listed[id] || !now.Before(at) {
+			delete(r.claimNext, id)
 		}
 	}
 }
@@ -662,6 +781,7 @@ func (a *runtime) wireDeviceRefresh(r *brokerHostReader) {
 	r.readsOverMQTT = a.readsOverMQTT
 	r.topicMarked = a.svc.Prober.topicMarked
 	r.recheckTopic = a.svc.Prober.recheckMarked
+	r.checkClaim = a.svc.Prober.checkClaimed
 }
 
 // readsOverMQTT says whether the router reads d over MQTT: transport.Choose over the device's facts, the same

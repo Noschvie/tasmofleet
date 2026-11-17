@@ -106,6 +106,12 @@ type Options struct {
 	// OnAccepted, if set, is called with the ID of every device created by an accept. The
 	// proposal carries no identity, so the caller starts the first probe here. It must not block.
 	OnAccepted func(id model.DeviceID)
+	// OnTopicClaim, if set, is called with a stored device and its topic when a discovery config names that
+	// topic with a MAC the device does not have: a board claims to listen where the device's commands over MQTT
+	// go (#852, #876). The claim is unverified, anyone who can publish on the discovery topics can make it, so it
+	// only asks the caller to have the router's own check look at the topic (Router.TopicStatus5 hears every
+	// reply there); it marks nothing. It must not block: it runs on the discovery worker.
+	OnTopicClaim func(id model.DeviceID, topic string)
 }
 
 // StatusAsker is the command channel as discovery uses it.
@@ -335,6 +341,7 @@ func (m *Manager) handleMessage(ctx context.Context, msg mqttbus.Message) {
 	if !m.allowMAC(c.mac) {
 		return // a kept claim of the topic stays (a reconnect replays the same config)
 	}
+	m.noteTopicClaim(ctx, c) // before consider: the device networks do not decide who listens on a topic
 	// After the rate limit: a working config re-arms the refusal log at most once per minMessageGap.
 	m.forgetRefused(c.mac)
 	m.dropClaim(c.topic)

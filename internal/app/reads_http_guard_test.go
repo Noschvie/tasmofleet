@@ -64,8 +64,8 @@ var httpReadsAllowed = map[string]string{
 	// VerifyRead of a prober without a router (the CLI): its reads went to the address, so its check does.
 	"internal/app/probe.go Prober.VerifyRead: the prober's HTTP client": "without a router",
 	// The discovery scan and the MAC check of an address: no device, no topic.
-	"internal/app/discovery.go runtime.setupDiscovery: HTTP client of its own":     "The discovery scan",
-	"internal/app/discovery.go runtime.setupDiscovery: raw client of the services": "The discovery scan",
+	"internal/app/discovery.go runtime.setupDiscovery: HTTP client of its own":       "The discovery scan",
+	"internal/app/discovery.go runtime.discoveryOptions: raw client of the services": "The discovery scan",
 	// A check vouches for the transport its read used (#810): reads pinned to where their check was answered.
 	"internal/app/probe.go pinTo: pinned to HTTP": "where their check was answered",
 	// The status snapshot of a backup, and the evidence read after a failed dump (#887), follow the transport of

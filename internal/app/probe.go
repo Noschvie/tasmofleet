@@ -790,6 +790,25 @@ func (p *Prober) recheckMarked(ctx context.Context, d model.Device) error {
 	return err
 }
 
+// checkClaimed is the check of an unmarked device whose topic a discovery config named with another MAC (#876): the
+// broker reader's next pass asks it once (brokerHostReader.checkClaimed). It reads the stored topic first, like
+// recheckMarked, and asks nothing when the device has another topic now: the claim was about the topic it named. The
+// check is recheckTopic's, so hearTopic alone decides: a second reply or another MAC marks the device, and one reply
+// with its own MAC, no reply, a cut-short window or MQTT not usable marks nothing. A forged claim therefore costs one
+// Status 5 window and no mark. The device is not marked here, and the claim's MACs are never read: discovery only
+// filters which configs ask at all (discovery.Manager.noteTopicClaim); it does not apply a second copy of this rule.
+func (p *Prober) checkClaimed(ctx context.Context, d model.Device, topic string) error {
+	d, err := p.withStoredTopic(ctx, d)
+	if err != nil {
+		return err
+	}
+	if d.Topic != topic {
+		return nil
+	}
+	_, _, err = p.recheckTopic(ctx, d)
+	return err
+}
+
 // notStoredDevice says err is VerifyAddress's refusal: another device answers (errAnotherDevice), or the
 // answer shows no MAC at all, so it cannot be told (settings.ErrNoMAC, minimal firmware). Neither is a
 // failure of the read: nothing was stored, and the device is asked again at the regular interval.
