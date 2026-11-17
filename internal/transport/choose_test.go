@@ -643,23 +643,44 @@ func TestStemsOverlap(t *testing.T) {
 // belongs to. Anything that is not a read refuses; reads go on.
 func TestOthersGroupUnread(t *testing.T) {
 	f := httpDown(base())
-	f.MQTT.OthersGroupUnread = 2
+	f.MQTT.OthersGroupUnread = []string{"garage", "shed"}
 	p := Choose(f)
 	if p.Commands != MQTT {
 		t.Errorf("reads must not wait for other devices: %s", p.Commands)
 	}
 	for a, path := range map[Action]Path{ActWrites: p.Writes, ActBackup: p.Backup, ActRestore: p.Restore, ActUpdate: p.Update} {
-		if path != None || !strings.Contains(p.Reason(a), "2 other devices' group topics have not been read yet; refresh their identity") {
+		if path != None || !strings.Contains(p.Reason(a), "the group topics of garage and shed have not been read yet") {
 			t.Errorf("%s = %s %q", a, path, p.Reason(a))
 		}
 	}
-	f.MQTT.OthersGroupUnread = 1
-	if got := Choose(f).Reason(ActWrites); !strings.Contains(got, "1 other device's group topic has not been read yet; refresh its identity") {
-		t.Errorf("singular: %q", got)
-	}
 	f = base()
-	f.MQTT.OthersGroupUnread = 2
+	f.MQTT.OthersGroupUnread = []string{"garage", "shed"}
 	if Choose(f).Writes != HTTP {
 		t.Error("HTTP is unaffected: writes use it while it works")
+	}
+}
+
+// Why (#812): the card must say which devices hold this one back and why that matters, so the person knows whose
+// identity to refresh: a message to this device's topic could reach them. A long list is cut after three names so the
+// sentence stays readable at 375 px; the rest is counted.
+func TestTheUnreadGroupTopicReasonNamesTheDevicesThatHoldTheWriteBack(t *testing.T) {
+	for _, tc := range []struct {
+		names []string
+		want  string
+	}{
+		{[]string{"garage"}, "the group topic of garage has not been read yet, so a message to this device's topic could reach it; refresh its identity"},
+		{[]string{"garage", "shed"}, "the group topics of garage and shed have not been read yet, so a message to this device's topic could reach them; refresh their identity"},
+		{[]string{"garage", "shed", "attic"}, "the group topics of garage, shed and attic have not been read yet"},
+		{[]string{"garage", "shed", "attic", "porch", "cellar"}, "the group topics of garage, shed, attic and 2 more devices have not been read yet"},
+		{[]string{"garage", "shed", "attic", "porch"}, "the group topics of garage, shed, attic and 1 more device have not been read yet"},
+	} {
+		f := base()
+		f.MQTT.OthersGroupUnread = tc.names
+		p := Choose(f)
+		for _, a := range []Action{ActWrites, ActBackup, ActRestore} {
+			if got := p.Reason(a); !strings.Contains(got, tc.want) {
+				t.Errorf("%v: %s reason %q lacks %q", tc.names, a, got, tc.want)
+			}
+		}
 	}
 }

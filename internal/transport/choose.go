@@ -115,6 +115,10 @@ func fullTopic(s string) string {
 	return strings.TrimRight(s, "/")
 }
 
+// SameFullTopic reports whether two FullTopics are the same pattern (fullTopic): the one rule for "the device's
+// FullTopic is TasmoFleet's MQTT_FULLTOPIC", which the facts source uses too (#812).
+func SameFullTopic(a, b string) bool { return fullTopic(a) == fullTopic(b) }
+
 // groupTopicKnown reports whether the stored GroupTopic can be trusted: set, stamped, and not
 // older than the last Status 1 read (that read would have replaced it; an INFO1 or Status 1 that
 // carried none leaves the old value behind, review #264 L2).
@@ -142,11 +146,11 @@ func mqttBlocker(f Facts, strict bool) string {
 		return "another device listens on this topic (its Topic or GroupTopic)"
 	case strict && !m.TopicTakenSince.IsZero(): // #852: a write or a transfer there would reach that device too
 		return topicTakenText(m)
-	case fullTopic(m.FullTopic) != fullTopic(m.OurFullTopic):
+	case !SameFullTopic(m.FullTopic, m.OurFullTopic):
 		return "the device's FullTopic differs from TasmoFleet's MQTT_FULLTOPIC"
 	case m.GroupTopic != "" && m.GroupTopic == m.Topic: // even a stale value: it only ever adds a refusal
 		return "the device's topic is also its GroupTopic, so a message would reach other devices"
-	case strict && m.OthersGroupUnread > 0:
+	case strict && len(m.OthersGroupUnread) > 0:
 		return othersUnreadText(m.OthersGroupUnread)
 	case strict && !groupTopicKnown(m):
 		return "the device's GroupTopic has not been read recently, so TasmoFleet cannot rule out that its topic is shared; refresh the device's identity to read it"
@@ -371,11 +375,30 @@ func unansweredText(m MQTTFacts) string {
 		"); MQTT is tried again after a few minutes"
 }
 
-func othersUnreadText(n int) string {
-	if n == 1 {
-		return "1 other device's group topic has not been read yet; refresh its identity"
+// othersUnreadNamed is how many of the devices othersUnreadText names; the rest are counted, so the sentence stays
+// short on a narrow screen.
+const othersUnreadNamed = 3
+
+// othersUnreadText says which other devices hold this device's writes and transfers back (#812): their GroupTopic is
+// unread, so a message to this device's topic could reach them.
+func othersUnreadText(names []string) string {
+	if len(names) == 1 {
+		return "the group topic of " + names[0] + " has not been read yet, so a message to this device's topic could reach it; refresh its identity"
 	}
-	return fmt.Sprintf("%d other devices' group topics have not been read yet; refresh their identity", n)
+	shown := names
+	more := ""
+	if len(names) > othersUnreadNamed {
+		shown = names[:othersUnreadNamed]
+		more = fmt.Sprintf(" and %d more devices", len(names)-othersUnreadNamed)
+		if len(names)-othersUnreadNamed == 1 {
+			more = " and 1 more device"
+		}
+	}
+	list := strings.Join(shown[:len(shown)-1], ", ") + " and " + shown[len(shown)-1]
+	if more != "" {
+		list = strings.Join(shown, ", ") + more
+	}
+	return "the group topics of " + list + " have not been read yet, so a message to this device's topic could reach them; refresh their identity"
 }
 
 // MQTTBlocker is mqttBlocker for the router: why the device is not usable over MQTT right now ("" when

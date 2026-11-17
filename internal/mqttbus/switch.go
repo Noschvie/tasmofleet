@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // Switch is a Bus whose connection can be replaced or turned off while its
@@ -39,7 +40,10 @@ type switchSub struct {
 // NewSwitch returns a disabled switch.
 func NewSwitch() *Switch { return &Switch{subs: map[int]*switchSub{}} }
 
-var _ Bus = (*Switch)(nil)
+var (
+	_ Bus             = (*Switch)(nil)
+	_ ConnectedSincer = (*Switch)(nil)
+)
 
 // Replace makes b the connection (nil turns the bus off). stop, if not nil, ends
 // the connection that is replaced the next time Replace is called. Every
@@ -134,6 +138,18 @@ func (s *Switch) Connected() bool {
 	b := s.cur
 	s.mu.Unlock()
 	return b != nil && b.Connected()
+}
+
+// ConnectedSince implements ConnectedSincer for the current connection: zero while the switch is disabled or when the
+// connection cannot tell.
+func (s *Switch) ConnectedSince() time.Time {
+	s.mu.Lock()
+	b := s.cur
+	s.mu.Unlock()
+	if c, ok := b.(ConnectedSincer); ok {
+		return c.ConnectedSince()
+	}
+	return time.Time{}
 }
 
 // Reclassify implements Reclassifier for the current connection.

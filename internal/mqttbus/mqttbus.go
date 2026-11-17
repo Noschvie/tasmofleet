@@ -161,7 +161,8 @@ func Connect(ctx context.Context, o Options) (Bus, error) {
 				slog.Warn("mqtt subscribe failed", "filter", f, "err", tok.Error())
 			}
 		}
-		b.subscribed.Store(true) // after the attempts, so a refused filter (logged above) does not keep the bus "down" for good
+		b.subscribedAt.Store(time.Now().UnixNano()) // before subscribed: a reader that sees it set reads this time or a later one
+		b.subscribed.Store(true)                    // after the attempts, so a refused filter (logged above) does not keep the bus "down" for good
 		slog.Info("mqtt connected", "broker", redactURL(o.BrokerURL))
 	})
 	po.SetReconnectingHandler(func(paho.Client, *paho.ClientOptions) {
@@ -210,6 +211,8 @@ type bus struct {
 	codec  TopicCodec
 	// subscribed is set once the OnConnect handler has tried every filter and cleared when the connection is lost.
 	subscribed atomic.Bool
+	// subscribedAt is when subscribed was last set (Unix nanoseconds); read only while subscribed (ConnectedSince).
+	subscribedAt atomic.Int64
 
 	mu     sync.RWMutex
 	nextID int
@@ -226,6 +229,21 @@ type bus struct {
 // are in place. paho reports the connection open before the OnConnect handler has subscribed, and a
 // command published in that window would be answered into the void (#272).
 func (b *bus) Connected() bool { return b.client.IsConnectionOpen() && b.subscribed.Load() }
+
+// ConnectedSincer is a Bus that knows since when its subscriptions are in place. The broker replays its retained
+// messages (the last wills) right after that, so a consumer can tell "nothing heard yet" from "nothing to hear".
+type ConnectedSincer interface {
+	// ConnectedSince is when the subscriptions of the current connection came into place; zero while not Connected.
+	ConnectedSince() time.Time
+}
+
+// ConnectedSince implements ConnectedSincer.
+func (b *bus) ConnectedSince() time.Time {
+	if !b.Connected() {
+		return time.Time{}
+	}
+	return time.Unix(0, b.subscribedAt.Load())
+}
 
 func (b *bus) Subscribe(kinds []Kind, h func(Message)) func() {
 	s := &sub{kinds: make(map[Kind]struct{}, len(kinds)), h: h}

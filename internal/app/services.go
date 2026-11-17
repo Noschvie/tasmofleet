@@ -243,7 +243,8 @@ func (b *liveBroker) set(rawURL string) { b.p.Store(mqttbus.NewBrokerMatcher(raw
 // Same reports whether a device configured for host:port talks to our broker: by name or address
 // (the matcher), or because devices configured the same way are heard on it (brokerAliases). No
 // broker configured means nothing matches, whatever was heard. Only what is shown uses it (the
-// "Other broker" hint, the device list); the Prober classifies with configuredBroker.
+// "Other broker" hint, the device list), and the #812 exemption of an unread GroupTopic, which it can
+// only deny (offOurBroker); the Prober classifies with configuredBroker.
 func (b *liveBroker) Same(host string, port int) bool {
 	m := b.p.Load()
 	return m.Same(host, port) || m.Configured() && b.aliases.Load().has(host, port)

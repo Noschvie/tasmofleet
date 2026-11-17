@@ -610,3 +610,57 @@ func TestConnectedMeansSubscribed(t *testing.T) {
 	b.publish("stat/plug/RESULT", `{"POWER":"ON"}`, false)
 	waitFor(t, "the reply published right after Connected() turned true", func() bool { return len(got.snapshot()) == 1 })
 }
+
+// Why (#812): "nothing heard from a topic" is evidence only once the broker has replayed the retained wills of the
+// current connection, so the transport facts ask since when the subscriptions are in place. The time must be zero
+// while they are not, and start again with every new connection: a reconnect or a broker switch brings a new replay.
+func TestConnectedSinceStartsAgainWithEveryConnection(t *testing.T) {
+	b := newTestBroker(t)
+	before := time.Now()
+	bus := connect(t, b, Options{}).(ConnectedSincer)
+	waitFor(t, "connection", bus.(Bus).Connected)
+	first := bus.ConnectedSince()
+	if first.Before(before) || first.After(time.Now()) {
+		t.Fatalf("ConnectedSince = %v, want the time the subscriptions came into place (after %v)", first, before)
+	}
+	b.stop()
+	waitFor(t, "disconnect", func() bool { return !bus.(Bus).Connected() })
+	if s := bus.ConnectedSince(); !s.IsZero() {
+		t.Fatalf("ConnectedSince = %v while not connected, want zero", s)
+	}
+	b.start()
+	waitForWithin(t, "reconnect", 75*time.Second, bus.(Bus).Connected) // paho's backoff, see TestReconnectAfterBrokerRestart
+	if s := bus.ConnectedSince(); !s.After(first) {
+		t.Fatalf("ConnectedSince = %v after the reconnect, want later than the first connection's %v", s, first)
+	}
+}
+
+type sinceBus struct {
+	*fakeBus
+	since time.Time
+}
+
+func (s sinceBus) ConnectedSince() time.Time { return s.since }
+
+// Why (#812): the switch is the bus the app holds; it must report the current connection's time, and zero (the
+// fail-closed answer: nothing heard proves nothing) while it is disabled or its connection cannot tell.
+func TestSwitchForwardsConnectedSinceOfTheCurrentConnection(t *testing.T) {
+	sw := NewSwitch()
+	if s := sw.ConnectedSince(); !s.IsZero() {
+		t.Fatalf("disabled switch: %v, want zero", s)
+	}
+	at := time.Date(2026, 11, 17, 5, 0, 0, 0, time.UTC)
+	sw.Replace(sinceBus{newFakeBus(), at}, nil)
+	if s := sw.ConnectedSince(); !s.Equal(at) {
+		t.Fatalf("ConnectedSince = %v, want the connection's %v", s, at)
+	}
+	sw.Replace(newFakeBus(), nil)
+	if s := sw.ConnectedSince(); !s.IsZero() {
+		t.Fatalf("a connection that cannot tell: %v, want zero", s)
+	}
+	sw.Replace(sinceBus{newFakeBus(), at}, nil)
+	sw.Replace(nil, nil)
+	if s := sw.ConnectedSince(); !s.IsZero() {
+		t.Fatalf("turned off: %v, want zero", s)
+	}
+}

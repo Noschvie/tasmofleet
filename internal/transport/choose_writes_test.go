@@ -23,7 +23,7 @@ func TestWritesGoOverMQTTFirstUnderTheStrictRule(t *testing.T) {
 		{"strict usable, HTTP failing: MQTT, and says why", func(f *Facts) { *f = httpDown(*f) }, MQTT, "cannot reach the device over HTTP"},
 		{"own GroupTopic unread, HTTP ok: HTTP, and says why", func(f *Facts) { f.MQTT.GroupTopic = "" }, HTTP, "GroupTopic has not been read recently"},
 		{"own GroupTopic older than the last probe: HTTP", func(f *Facts) { f.MQTT.LastProbeAt = f.MQTT.GroupTopicReadAt.Add(time.Minute) }, HTTP, "GroupTopic"},
-		{"another device's GroupTopic unread: HTTP", func(f *Facts) { f.MQTT.OthersGroupUnread = 1 }, HTTP, "1 other device's group topic has not been read yet"},
+		{"another device's GroupTopic unread: HTTP", func(f *Facts) { f.MQTT.OthersGroupUnread = []string{"garage"} }, HTTP, "the group topic of garage has not been read yet"},
 		{"MQTT reads unanswered, HTTP ok: HTTP", func(f *Facts) { f.MQTT.ReadsUnansweredSince = t0.Add(-time.Minute) }, HTTP, "got no answer"},
 		{"MQTT reads unanswered, HTTP failing: MQTT", func(f *Facts) { *f = httpDown(*f); f.MQTT.ReadsUnansweredSince = t0.Add(-time.Minute) }, MQTT, "cannot reach the device over HTTP"},
 		// Why (#605 review, round 4; "HTTP stays the fallback for the next commands"): after TasmoFleet changed the

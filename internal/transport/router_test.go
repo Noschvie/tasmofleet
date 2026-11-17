@@ -97,7 +97,7 @@ func (f *fakeDevices) GetDevice(context.Context, model.DeviceID) (model.Device, 
 type facts struct {
 	mem         *Memory
 	groupKnown  bool
-	othersUnrd  int
+	othersUnrd  []string
 	snapshotted int
 	healthNewer bool
 	lwtOffline  bool

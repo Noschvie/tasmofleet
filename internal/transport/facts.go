@@ -52,9 +52,10 @@ type MQTTFacts struct {
 	// topic, as Topic or GroupTopic, compared raw and as expanded command topics. Computed by the
 	// facts source; the shape of the topic is checked by Choose.
 	TopicExclusive bool
-	// OthersGroupUnread is how many other devices with an MQTT topic have no read GroupTopic (empty or
-	// never stamped): one of them could be in a group this device's topic belongs to.
-	OthersGroupUnread int
+	// OthersGroupUnread names the other devices with an MQTT topic whose GroupTopic is not known (empty, never
+	// stamped or older than their last probe) and that a message on our broker could reach: one of them could be in a
+	// group this device's topic belongs to. The facts source leaves out the devices it proves are not on our broker.
+	OthersGroupUnread []string
 	// FullTopic is the device's FullTopic ("" = Tasmota default); OurFullTopic is MQTT_FULLTOPIC.
 	FullTopic    string
 	OurFullTopic string

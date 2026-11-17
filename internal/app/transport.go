@@ -19,14 +19,16 @@ var mqttPrefixes = [3]string{"cmnd", "stat", "tele"}
 func (a *runtime) setupTransport() {
 	facts := &TransportFacts{
 		Devices: a.svc.Store, Health: a.tracker, Memory: a.svc.Router.Memory(), Unanswered: a.svc.Router.UnansweredReads(),
-		ConnChanged:     a.svc.Router.MQTTConnChanged(),
-		TopicTaken:      a.svc.Router.TopicTaken(),
-		BusConnected:    a.bus.Connected,
-		FullTopic:       func() string { return a.svc.Sys.Snapshot().MQTTFullTopic },
-		FirmwareBaseURL: func() string { return a.svc.Sys.Snapshot().FWBaseURL },
-		BrokerPassword:  func() string { return a.svc.Sys.Snapshot().MQTTPassword }, // live: a change on the settings page counts at once
-		CommandPrefix:   func() string { return mqttPrefixes[0] },
-		Now:             time.Now,
+		ConnChanged:       a.svc.Router.MQTTConnChanged(),
+		TopicTaken:        a.svc.Router.TopicTaken(),
+		BusConnected:      a.bus.Connected,
+		BusConnectedSince: a.sw.ConnectedSince, // the switch follows a broker change on the settings page
+		BrokerSame:        a.svc.Broker.Same,
+		FullTopic:         func() string { return a.svc.Sys.Snapshot().MQTTFullTopic },
+		FirmwareBaseURL:   func() string { return a.svc.Sys.Snapshot().FWBaseURL },
+		BrokerPassword:    func() string { return a.svc.Sys.Snapshot().MQTTPassword }, // live: a change on the settings page counts at once
+		CommandPrefix:     func() string { return mqttPrefixes[0] },
+		Now:               time.Now,
 	}
 	a.facts = facts
 	a.svc.Router.SetFacts(facts)

@@ -15,9 +15,10 @@ import (
 
 // Reading every device's GroupTopic (#79, review #279). A message to a device's topic reaches every
 // device that listens on it, so tasmofleet writes or transfers over MQTT only when it knows that no
-// other device has the topic as its GroupTopic. One device with an unread GroupTopic therefore blocks
-// MQTT writes for every MQTT-routed device (transport.MQTTFacts.OthersGroupUnread), and the reader
-// closes that gap without a person doing anything: shortly after start and after a device is adopted,
+// other device has the topic as its GroupTopic. One device with an unread GroupTopic that may be on our
+// broker therefore blocks MQTT writes for every MQTT-routed device (transport.MQTTFacts.OthersGroupUnread
+// names it; only a device whose will is Offline or that is provably not on our broker is left out, #812),
+// and the reader closes that gap without a person doing anything: shortly after start and after a device is adopted,
 // one Status 1 per tick, through the router. The router reads it over MQTT first (#456, #839; a read is allowed
 // there with an unknown GroupTopic) and over HTTP when MQTT cannot serve the device.
 // Status 1 is individual and read-only, never Status 0; one read per tick on the whole process. A

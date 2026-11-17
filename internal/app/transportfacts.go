@@ -7,6 +7,7 @@ import (
 
 	"github.com/hellwand/tasmofleet/internal/fwselect"
 	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/mqttbus"
 	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
@@ -56,6 +57,12 @@ type TransportFacts struct {
 	BusConnected    func() bool
 	FullTopic       func() string
 	FirmwareBaseURL func() string
+	// BusConnectedSince is since when the bus's subscriptions are in place (mqttbus.ConnectedSincer); zero while it is not
+	// subscribed. nil: unknown, and "nothing heard" proves nothing (offOurBroker).
+	BusConnectedSince func() time.Time
+	// BrokerSame is liveBroker.Same: whether a device configured for host:port talks to our broker, broker aliases
+	// included (#597). It only ever denies the exemption of offOurBroker; nil: no such evidence.
+	BrokerSame func(host string, port int) bool
 	// BrokerPassword is TasmoFleet's MQTT_PASSWORD; devices in broker mode send it.
 	BrokerPassword func() string
 	// CommandPrefix is the command prefix of the bus (mqttbus Options.Prefixes[0]); "" reads as cmnd.
@@ -134,7 +141,7 @@ func (s *TransportFacts) factsFor(_ context.Context, d model.Device, all []model
 		MQTT: transport.MQTTFacts{
 			BusConnected: s.BusConnected(), Ours: d.MQTT == model.MQTTOurs,
 			Topic: d.Topic, TopicExclusive: topicExclusive(d, all, s.commandPrefix()),
-			OthersGroupUnread: othersGroupUnread(d, all, func(id model.DeviceID) bool { return s.Health.Get(id).LWT == "Offline" }),
+			OthersGroupUnread: othersGroupUnread(d, all, s.Health.Get, s.brokerEvidence(now)),
 			FullTopic:         d.FullTopic, OurFullTopic: s.FullTopic(),
 			GroupTopic: d.GroupTopic, GroupTopicReadAt: d.GroupTopicReadAt, LastProbeAt: probe,
 			LWTOnline: h.LWT == "Online", ReadsUnansweredSince: unanswered, ConnChangedSince: connChanged,
@@ -260,17 +267,92 @@ func groupTopicStale(d model.Device) bool {
 	return d.GroupTopic == "" || d.GroupTopicReadAt.IsZero() || d.GroupTopicReadAt.Before(lastProbe(d))
 }
 
-// othersGroupUnread counts the other devices with an MQTT topic whose GroupTopic is not known. A device
-// whose last will is Offline (the broker confirmed it disconnected, not merely "unknown") is left out:
-// our commands are never published retained, so it cannot receive one and cannot be in a group that a
-// message now would reach; one dead device must not block MQTT writes for the whole fleet. Its topic and
-// stale GroupTopic still count for TopicExclusive, which stays fail-closed.
-func othersGroupUnread(d model.Device, all []model.Device, offline func(model.DeviceID) bool) int {
-	n := 0
+// othersGroupUnread names the other devices with an MQTT topic whose GroupTopic is not known and that a message on
+// our broker could reach. Their GroupTopic could be anything (Tasmota takes any text, slashes included), so any of
+// them could listen on d's topic; that is why the strict rule holds d back, and why no such device can be left out by
+// comparing topics (#812). Left out are only the devices no message on our broker can reach, whatever their GroupTopic:
+//   - a device whose last will is Offline (the broker confirmed it disconnected, not merely "unknown"): our commands
+//     are never published retained, so it cannot receive one; one dead device must not block MQTT writes for the
+//     whole fleet;
+//   - a device provably not on our broker (offOurBroker).
+//
+// Their topic and stale GroupTopic still count for TopicExclusive, which stays fail-closed. A device outside the
+// inventory is not seen here either, as in topicExclusive.
+func othersGroupUnread(d model.Device, all []model.Device, health func(model.DeviceID) model.Health, ev brokerEvidence) []string {
+	var names []string
 	for _, o := range all {
-		if o.ID != d.ID && o.Topic != "" && groupTopicStale(o) && !offline(o.ID) {
-			n++
+		if o.ID == d.ID || o.Topic == "" || !groupTopicStale(o) || health(o.ID).LWT == "Offline" || offOurBroker(o, all, health, ev) {
+			continue
+		}
+		name := o.Name
+		if name == "" {
+			name = o.Topic
+		}
+		names = append(names, name)
+	}
+	return names
+}
+
+// willReplayGrace is how long the bus's subscriptions must have been in place before "nothing heard from a topic"
+// counts (offOurBroker). The broker replays the retained last wills right after the subscriptions, and the health
+// tracker takes them in as they arrive; until then it knows nothing, at every start, after a reconnect and after a
+// broker switch alike. 30 s covers that replay many times over.
+const willReplayGrace = 30 * time.Second
+
+// brokerEvidence is what offOurBroker weighs besides the inventory and the health tracker.
+type brokerEvidence struct {
+	fullTopic string        // MQTT_FULLTOPIC
+	listening time.Duration // how long the bus's subscriptions have been in place; 0 when not subscribed or unknown
+	same      func(host string, port int) bool
+}
+
+func (s *TransportFacts) brokerEvidence(now time.Time) brokerEvidence {
+	ev := brokerEvidence{fullTopic: s.FullTopic(), same: s.BrokerSame}
+	if s.BusConnectedSince != nil {
+		if since := s.BusConnectedSince(); !since.IsZero() && now.After(since) {
+			ev.listening = now.Sub(since)
 		}
 	}
-	return n
+	return ev
+}
+
+// offOurBroker reports that o is provably not on TasmoFleet's broker (#812). All of these must hold:
+//   - its last Status 6 put it on another broker or on none (model.MQTTOtherBroker, model.MQTTNone; not unknown,
+//     not ours). Status 6 can be stale, and it is compared without broker aliases (#597), so this alone is not enough;
+//   - nothing TasmoFleet knows ties its configured broker to ours: no device stored as ours names the same host:port
+//     (mqttbus.HostKey; the inventory, so it holds from the first second after a start), and liveBroker.Same (the
+//     matcher and the broker aliases) does not accept it. A device configured with an alias of our broker is on it
+//     however little is heard from it;
+//   - nothing from its topic was ever heard on our broker: no last will (Tasmota publishes "Online" retained on every
+//     connect, and the broker replays it to the bus) and no other message, under any device that has the topic (the
+//     health tracker files a topic under one of them). That counts only where its will would be heard at all: its
+//     FullTopic is TasmoFleet's (transport.SameFullTopic, the rule of Choose) and its topic is one level
+//     (transport.TopicShapeOK), the topics the bus decodes; and only once the bus has been subscribed for
+//     willReplayGrace, so the replay of the retained wills has arrived.
+//
+// A device that does connect to our broker with its stored topic is heard at once and stops being exempt from the next
+// call on: the router computes the facts afresh for every call it routes.
+func offOurBroker(o model.Device, all []model.Device, health func(model.DeviceID) model.Health, ev brokerEvidence) bool {
+	if o.MQTT != model.MQTTOtherBroker && o.MQTT != model.MQTTNone {
+		return false
+	}
+	if !transport.SameFullTopic(o.FullTopic, ev.fullTopic) || !transport.TopicShapeOK(o.Topic) || ev.listening < willReplayGrace {
+		return false
+	}
+	host := ""
+	if o.MQTTHost != "" {
+		host = mqttbus.HostKey(o.MQTTHost, o.MQTTPort)
+	}
+	for _, x := range all {
+		if host != "" && x.MQTT == model.MQTTOurs && x.MQTTHost != "" && mqttbus.HostKey(x.MQTTHost, x.MQTTPort) == host {
+			return false
+		}
+		if x.Topic != o.Topic {
+			continue
+		}
+		if h := health(x.ID); h.LWT != "" || !h.SeenMQTT.IsZero() {
+			return false
+		}
+	}
+	return host == "" || ev.same == nil || !ev.same(o.MQTTHost, o.MQTTPort)
 }

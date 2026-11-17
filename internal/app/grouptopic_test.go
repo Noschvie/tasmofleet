@@ -219,15 +219,15 @@ func newBlindRig(t *testing.T) *blindRig {
 func TestGroupTopicReaderClearsOthersGroupUnread(t *testing.T) {
 	g := newBlindRig(t)
 	f, _ := g.facts.Facts(t.Context(), 2)
-	if f.MQTT.OthersGroupUnread != 1 {
-		t.Fatalf("OthersGroupUnread = %d before the read", f.MQTT.OthersGroupUnread)
+	if len(f.MQTT.OthersGroupUnread) != 1 {
+		t.Fatalf("OthersGroupUnread = %v before the read", f.MQTT.OthersGroupUnread)
 	}
 	r := newGroupTopicReader(g.st.list, online, g.router, g.st, slog.New(slog.DiscardHandler))
 	// the device has to come online on the broker first; the first reads may find it offline
 	for deadline := time.Now().Add(15 * time.Second); ; time.Sleep(50 * time.Millisecond) {
 		r.tried = map[model.DeviceID]groupTry{}
 		r.tick(t.Context())
-		if f, _ := g.facts.Facts(t.Context(), 2); f.MQTT.OthersGroupUnread == 0 {
+		if f, _ := g.facts.Facts(t.Context(), 2); len(f.MQTT.OthersGroupUnread) == 0 {
 			break
 		}
 		if time.Now().After(deadline) {

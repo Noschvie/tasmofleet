@@ -23,7 +23,7 @@ import (
 func readsOnlyFacts() transport.Facts {
 	f := mqttFacts(time.Now(), model.MQTTPasswordOwn)
 	f.HTTP = transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailAPIRefused, Since: time.Now()}
-	f.MQTT.OthersGroupUnread = 1
+	f.MQTT.OthersGroupUnread = []string{"garage"}
 	return f
 }
 

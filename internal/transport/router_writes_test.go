@@ -318,7 +318,7 @@ func TestWritesThatMQTTMustNotCarryFirstGoOverHTTP(t *testing.T) {
 		mod  func(g *rig)
 	}{
 		{"own GroupTopic unread", func(g *rig) { g.f.groupKnown = false }},
-		{"another device's GroupTopic unread", func(g *rig) { g.f.othersUnrd = 1 }},
+		{"another device's GroupTopic unread", func(g *rig) { g.f.othersUnrd = []string{"garage"} }},
 		{"MQTT reads unanswered", func(g *rig) { g.r.unanswered.Fail(7, HTTPFailUnreachable) }},
 		{"last will Offline", func(g *rig) { g.f.lwtOffline = true }},
 	} {
@@ -342,7 +342,7 @@ func TestRouterWritesFollowChoose(t *testing.T) {
 	}{
 		{"strict usable", func(*rig) {}},
 		{"own GroupTopic unread", func(g *rig) { g.f.groupKnown = false }},
-		{"others unread", func(g *rig) { g.f.othersUnrd = 2 }},
+		{"others unread", func(g *rig) { g.f.othersUnrd = []string{"garage", "shed"} }},
 		{"reads unanswered", func(g *rig) { g.r.unanswered.Fail(7, HTTPFailUnreachable) }},
 		{"offline on MQTT", func(g *rig) { g.f.lwtOffline = true }},
 		{"HTTP failing", func(g *rig) { g.mem.Fail(7, HTTPFailUnreachable) }},

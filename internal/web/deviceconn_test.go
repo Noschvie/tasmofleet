@@ -514,3 +514,21 @@ func TestTheTopicTakenPointerIsOnlyUsedWhenTheMQTTRowSaysIt(t *testing.T) {
 		t.Errorf("rows %v point to the MQTT row, which does not say the topic is taken", got)
 	}
 }
+
+// Why (#812): a device held back by another device's unread group topic must say on its card which device that is,
+// so the person knows whose identity to refresh. A device name is the person's own text: it reaches the page escaped,
+// as text and in the disabled buttons' titles, never as markup.
+func TestTheCardNamesTheDeviceWhoseUnreadGroupTopicHoldsTheWritesBack(t *testing.T) {
+	f := mqttFacts(time.Now(), model.MQTTPasswordOwn)
+	f.HTTP = transport.HTTPState{State: transport.HTTPOK}
+	f.MQTT.OthersGroupUnread = []string{`<b onmouseover="x()">garage</b>`}
+	e := setupWith(t, withFacts(fakeFacts{f: map[model.DeviceID]transport.Facts{1: f}}))
+	_, body := e.do(t, "GET", "/devices/1", "admin", nil)
+	want := `the group topic of <b onmouseover="x()">garage</b> has not been read yet, so a message to this device's topic could reach it`
+	if !strings.Contains(body, html.EscapeString(want)) {
+		t.Fatalf("the card does not name the device that holds the writes back: want %q escaped", want)
+	}
+	if strings.Contains(body, `<b onmouseover`) {
+		t.Fatal("a device name reached the page as markup")
+	}
+}
