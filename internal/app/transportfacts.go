@@ -60,6 +60,9 @@ type TransportFacts struct {
 	// BusConnectedSince is since when the bus's subscriptions are in place (mqttbus.ConnectedSincer); zero while it is not
 	// subscribed. nil: unknown, and "nothing heard" proves nothing (offOurBroker).
 	BusConnectedSince func() time.Time
+	// BusWills is what the bus heard of the last wills on its current connection (mqttbus.WillLedger, #972). nil:
+	// unknown, and "nothing heard" proves nothing (offOurBroker).
+	BusWills func() mqttbus.Wills
 	// BrokerSame is liveBroker.Same: whether a device configured for host:port talks to our broker, broker aliases
 	// included (#597). It only ever denies the exemption of offOurBroker; nil: no such evidence.
 	BrokerSame func(host string, port int) bool
@@ -304,6 +307,7 @@ type brokerEvidence struct {
 	fullTopic string        // MQTT_FULLTOPIC
 	listening time.Duration // how long the bus's subscriptions have been in place; 0 when not subscribed or unknown
 	same      func(host string, port int) bool
+	wills     *mqttbus.Wills // what the bus heard of the wills on its current connection (#972); nil when it cannot say
 }
 
 func (s *TransportFacts) brokerEvidence(now time.Time) brokerEvidence {
@@ -313,7 +317,36 @@ func (s *TransportFacts) brokerEvidence(now time.Time) brokerEvidence {
 			ev.listening = now.Sub(since)
 		}
 	}
+	if s.BusWills != nil {
+		w := s.BusWills()
+		ev.wills = &w
+	}
 	return ev
+}
+
+// willsAllKnown reports that silence can mean something on the bus's current connection (#972): it heard wills (reads
+// are not denied), kept all of them, and every topic that is up (a will that is not Offline, or a live telemetry or
+// reply message; only an Offline will takes it down, a cleared will keeps its state) is the topic of a stored device
+// (no device outside the inventory is on our broker, so none of the exempt ones moved here under a new topic). False
+// when w is nil. A topic whose latest will is Offline is not up and does not count: Tasmota leaves a retained Offline on its old topic at
+// every topic change (#119), and an Offline device cannot receive a command (ours are never retained), the rule
+// othersGroupUnread applies to stored devices too.
+func willsAllKnown(w *mqttbus.Wills, all []model.Device) bool {
+	if w == nil || !w.Heard || !w.Complete {
+		return false
+	}
+	stored := make(map[string]struct{}, len(all))
+	for _, d := range all {
+		if d.Topic != "" {
+			stored[d.Topic] = struct{}{}
+		}
+	}
+	for _, t := range w.Up {
+		if _, ok := stored[t]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // offOurBroker reports that o is provably not on TasmoFleet's broker (#812). All of these must hold:
@@ -328,7 +361,12 @@ func (s *TransportFacts) brokerEvidence(now time.Time) brokerEvidence {
 //     health tracker files a topic under one of them). That counts only where its will would be heard at all: its
 //     FullTopic is TasmoFleet's (transport.SameFullTopic, the rule of Choose) and its topic is one level
 //     (transport.TopicShapeOK), the topics the bus decodes; and only once the bus has been subscribed for
-//     willReplayGrace, so the replay of the retained wills has arrived.
+//     willReplayGrace, so the replay of the retained wills has arrived;
+//   - silence means something on the current connection (#972, willsAllKnown): the bus heard at least one will since
+//     it subscribed (a broker ACL that lets TasmoFleet publish but not read hears none, and every device would look
+//     "never heard"), and every topic that is up (a will that is not Offline, or a live telemetry or reply message;
+//     only an Offline will takes it down, a cleared will keeps its state) is the topic of a stored device (a device
+//     that moved to our broker with a new topic is heard only there, and could be this one).
 //
 // A device that does connect to our broker with its stored topic is heard at once and stops being exempt from the next
 // call on: the router computes the facts afresh for every call it routes.
@@ -336,7 +374,8 @@ func offOurBroker(o model.Device, all []model.Device, health func(model.DeviceID
 	if o.MQTT != model.MQTTOtherBroker && o.MQTT != model.MQTTNone {
 		return false
 	}
-	if !transport.SameFullTopic(o.FullTopic, ev.fullTopic) || !transport.TopicShapeOK(o.Topic) || ev.listening < willReplayGrace {
+	if !transport.SameFullTopic(o.FullTopic, ev.fullTopic) || !transport.TopicShapeOK(o.Topic) || ev.listening < willReplayGrace ||
+		!willsAllKnown(ev.wills, all) {
 		return false
 	}
 	host := ""

@@ -10,6 +10,7 @@ import (
 
 	"github.com/hellwand/tasmofleet/internal/fwselect"
 	"github.com/hellwand/tasmofleet/internal/model"
+	"github.com/hellwand/tasmofleet/internal/mqttbus"
 	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
@@ -47,6 +48,8 @@ func newFacts(devs []model.Device, h fakeFactsHealth, mem HTTPMemory) *Transport
 	return &TransportFacts{
 		Devices: fakeFactsDevices{devs}, Health: h, Memory: mem,
 		BusConnected: func() bool { return true }, BusConnectedSince: func() time.Time { return factsNow.Add(-time.Hour) },
+		// The bus heard the will of the desk (topic "a", the device most tests route for) and of nothing else (#972).
+		BusWills:        func() mqttbus.Wills { return mqttbus.Wills{Up: []string{"a"}, Heard: true, Complete: true} },
 		FullTopic:       func() string { return "%prefix%/%topic%/" },
 		FirmwareBaseURL: func() string { return "http://fw" }, BrokerPassword: func() string { return "pw" }, Now: func() time.Time { return factsNow },
 	}
@@ -437,6 +440,82 @@ func TestNothingHeardCountsOnlyAfterTheBrokerHadTimeToReplayTheWills(t *testing.
 			}
 			if p := transport.Choose(f); tc.want != nil && p.Writes == transport.MQTT {
 				t.Errorf("writes = MQTT while garage may still be on our broker")
+			}
+		})
+	}
+}
+
+// Why (#972): "nothing heard under its stored topic" does not prove a device is off our broker when the device moved to
+// our broker and got a new topic at the same time (re-flashed or reconfigured during a migration): its will arrives
+// under a topic no stored device has, nothing ties it to the stored device, and its unread GroupTopic could be D's
+// topic. While anything that is not Offline was heard under such a topic, an unknown device is on our broker and could
+// be any of the exempt ones, so none is exempt (fail closed). Wills under stored topics say nothing new, and an Offline
+// one cannot receive a command (ours are never retained). A ledger that hit its cap may have missed such a topic.
+func TestAWillHeardUnderATopicNoStoredDeviceHasEndsTheOffBrokerExemption(t *testing.T) {
+	d := model.Device{ID: 1, Name: "desk", Topic: "a", MQTT: model.MQTTOurs, GroupTopic: "tasmotas", GroupTopicReadAt: factsNow}
+	x := model.Device{ID: 2, Name: "garage", Topic: "b", MQTT: model.MQTTOtherBroker} // GroupTopic never read, never heard as "b"
+	porch := model.Device{ID: 3, Name: "porch", Topic: "c", MQTT: model.MQTTOurs, GroupTopic: "tasmotas", GroupTopicReadAt: factsNow}
+	for _, tc := range []struct {
+		name  string
+		wills mqttbus.Wills
+		want  []string
+	}{
+		{"the garage came back on our broker under its new topic (Online will under an unknown topic): counted",
+			mqttbus.Wills{Up: []string{"a", "c", "garage-new"}, Heard: true, Complete: true}, []string{"garage"}},
+		{"Online wills only under stored topics: exempt",
+			mqttbus.Wills{Up: []string{"a", "c"}, Heard: true, Complete: true}, nil},
+		// The ledger reports only topics whose latest will is not Offline; Tasmota leaves a retained Offline on its old
+		// topic at every topic change (#119), and an Offline device cannot receive a command.
+		{"an unknown topic heard only with an Offline will (cannot receive a command): exempt",
+			mqttbus.Wills{Up: []string{"a"}, Heard: true, Complete: true}, nil},
+		{"the ledger overflowed and may have missed an unknown topic: counted",
+			mqttbus.Wills{Up: []string{"a", "c"}, Heard: true, Complete: false}, []string{"garage"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			facts := newFacts([]model.Device{d, x, porch}, fakeFactsHealth{1: {LWT: "Online"}, 3: {LWT: "Online"}}, nil)
+			facts.BusWills = func() mqttbus.Wills { return tc.wills }
+			f, err := facts.Facts(t.Context(), 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(f.MQTT.OthersGroupUnread, tc.want) {
+				t.Errorf("held back by %v, want %v", f.MQTT.OthersGroupUnread, tc.want)
+			}
+			if p := transport.Choose(f); tc.want != nil && p.Writes == transport.MQTT {
+				t.Errorf("writes = MQTT while garage may be on our broker under its new topic")
+			}
+		})
+	}
+}
+
+// Why (#972): a broker ACL that lets TasmoFleet publish commands but not read the devices' topics makes every device look
+// "never heard", although each listens on our broker and an unread GroupTopic could be D's topic. Silence proves
+// something only when the bus has heard at least one will on its current connection (an Offline one too: a denial of
+// reads lets no will of any kind through); a bus that heard none, or cannot say, exempts nobody.
+func TestNoWillHeardOnOurBrokerEndsTheOffBrokerExemption(t *testing.T) {
+	d := model.Device{ID: 1, Name: "desk", Topic: "a", MQTT: model.MQTTOurs, GroupTopic: "tasmotas", GroupTopicReadAt: factsNow}
+	x := model.Device{ID: 2, Name: "garage", Topic: "b", MQTT: model.MQTTOtherBroker} // GroupTopic never read
+	for _, tc := range []struct {
+		name  string
+		wills func() mqttbus.Wills // TransportFacts.BusWills
+		want  []string
+	}{
+		{"nothing heard since the bus subscribed (reads denied): counted",
+			func() mqttbus.Wills { return mqttbus.Wills{Complete: true} }, []string{"garage"}},
+		{"the bus cannot say (nil): counted", nil, []string{"garage"}},
+		{"only Offline wills heard, so reads work: exempt",
+			func() mqttbus.Wills { return mqttbus.Wills{Heard: true, Complete: true} }, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			// The desk's health has no will either: with reads denied the tracker hears nothing of it.
+			facts := newFacts([]model.Device{d, x}, fakeFactsHealth{}, nil)
+			facts.BusWills = tc.wills
+			f, err := facts.Facts(t.Context(), 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !slices.Equal(f.MQTT.OthersGroupUnread, tc.want) {
+				t.Errorf("held back by %v, want %v", f.MQTT.OthersGroupUnread, tc.want)
 			}
 		})
 	}

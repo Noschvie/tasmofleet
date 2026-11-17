@@ -128,7 +128,7 @@ func Connect(ctx context.Context, o Options) (Bus, error) {
 		host, _ := os.Hostname() // only used to build a default client ID
 		o.ClientID = "tasmofleet-" + host
 	}
-	b := &bus{codec: codec, subs: make(map[int]*sub), retained: newRetainedCache(), known: o.Known, onDropped: o.OnDropped}
+	b := &bus{codec: codec, subs: make(map[int]*sub), retained: newRetainedCache(), wills: newWillLedger(maxWillTopics), known: o.Known, onDropped: o.OnDropped}
 	po := paho.NewClientOptions().
 		AddBroker(o.BrokerURL).
 		SetClientID(o.ClientID).
@@ -156,6 +156,9 @@ func Connect(ctx context.Context, o Options) (Bus, error) {
 		})
 	}
 	po.SetOnConnectHandler(func(c paho.Client) {
+		b.mu.Lock()
+		b.wills.reset() // before the subscriptions, so none of this connection's replay is lost (#972)
+		b.mu.Unlock()
 		for _, f := range codec.Filters() {
 			if tok := c.Subscribe(f, 0, b.dispatch); tok.Wait() && tok.Error() != nil {
 				slog.Warn("mqtt subscribe failed", "filter", f, "err", tok.Error())
@@ -220,7 +223,9 @@ type bus struct {
 	// retained keeps the latest retained message per topic. The broker hands
 	// them over once per connect, usually before consumers have subscribed;
 	// Subscribe replays them so that no consumer misses the retained LWTs.
-	retained  *retainedCache
+	retained *retainedCache
+	// wills is the ledger of the wills heard on the current connection (WillsHeard); reset on every connect.
+	wills     *willLedger
 	known     func(Message) bool
 	onDropped func(string)
 }
@@ -243,6 +248,16 @@ func (b *bus) ConnectedSince() time.Time {
 		return time.Time{}
 	}
 	return time.Unix(0, b.subscribedAt.Load())
+}
+
+// WillsHeard implements WillLedger.
+func (b *bus) WillsHeard() Wills {
+	if !b.Connected() {
+		return Wills{}
+	}
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.wills.wills()
 }
 
 func (b *bus) Subscribe(kinds []Kind, h func(Message)) func() {
@@ -298,6 +313,12 @@ func (b *bus) dispatch(_ paho.Client, m paho.Message) {
 		cm := msg
 		cm.Retained = true // replayed as retained, as the broker would have delivered it
 		drops = b.retained.put(m.Topic(), cm, known)
+	}
+	switch {
+	case kind == KindLWT:
+		b.wills.record(topic, msg.Payload)
+	case kind != KindDiscovery && !msg.Retained: // a discovery topic is a MAC; a retained message may be a gone device's
+		b.wills.live(topic)
 	}
 	subs := make([]*sub, 0, len(b.subs))
 	for _, s := range b.subs {

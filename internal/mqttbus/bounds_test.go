@@ -32,7 +32,7 @@ func newBoundsBus(t *testing.T, known func(Message) bool) (*bus, dropLog) {
 		t.Fatal("codec")
 	}
 	drops := dropLog{}
-	return &bus{codec: codec, subs: map[int]*sub{}, retained: newRetainedCache(), known: known,
+	return &bus{codec: codec, subs: map[int]*sub{}, retained: newRetainedCache(), wills: newWillLedger(maxWillTopics), known: known,
 		onDropped: func(r string) { drops[r]++ }}, drops
 }
 

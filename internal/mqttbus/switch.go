@@ -43,6 +43,7 @@ func NewSwitch() *Switch { return &Switch{subs: map[int]*switchSub{}} }
 var (
 	_ Bus             = (*Switch)(nil)
 	_ ConnectedSincer = (*Switch)(nil)
+	_ WillLedger      = (*Switch)(nil)
 )
 
 // Replace makes b the connection (nil turns the bus off). stop, if not nil, ends
@@ -150,6 +151,18 @@ func (s *Switch) ConnectedSince() time.Time {
 		return c.ConnectedSince()
 	}
 	return time.Time{}
+}
+
+// WillsHeard implements WillLedger for the current connection: nothing heard while the switch is disabled or when the
+// connection keeps no ledger.
+func (s *Switch) WillsHeard() Wills {
+	s.mu.Lock()
+	b := s.cur
+	s.mu.Unlock()
+	if w, ok := b.(WillLedger); ok {
+		return w.WillsHeard()
+	}
+	return Wills{}
 }
 
 // Reclassify implements Reclassifier for the current connection.

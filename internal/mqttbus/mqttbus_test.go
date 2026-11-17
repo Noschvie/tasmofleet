@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -662,5 +663,174 @@ func TestSwitchForwardsConnectedSinceOfTheCurrentConnection(t *testing.T) {
 	sw.Replace(nil, nil)
 	if s := sw.ConnectedSince(); !s.IsZero() {
 		t.Fatalf("turned off: %v, want zero", s)
+	}
+}
+
+// upTopics is Wills.Up in a fixed order, for comparing.
+func upTopics(w Wills) []string {
+	up := slices.Clone(w.Up)
+	slices.Sort(up)
+	return up
+}
+
+// Why (#972): the transport facts exempt a device from the strict write rule only when the current connection heard
+// at least one will (a broker ACL that denies reads hears none) and no device outside the inventory is up on our
+// broker. Both must be facts of the connection the bus has now: what an earlier connection heard (another broker, or
+// the same one before a restart) proves nothing, and the new connection's replay of the retained wills fills it again.
+// An Offline will takes a topic down. A cleared retained will (empty payload) does not: it means someone deleted the
+// retained message, not that the device left, and its will is still registered with the broker. A live message under
+// a topic with no will (its retained will was deleted before we subscribed) shows a device that is connected now.
+func TestWillsHeardFollowTheCurrentConnection(t *testing.T) {
+	b := newTestBroker(t)
+	bus := connect(t, b, Options{})
+	ledger := bus.(WillLedger)
+	if w := ledger.WillsHeard(); w.Heard || len(w.Up) != 0 || !w.Complete {
+		t.Fatalf("a connection that heard nothing: %+v, want not heard, nothing up, complete", w)
+	}
+	var c capture
+	bus.Subscribe([]Kind{KindLWT, KindState}, c.add)
+	b.publish("tele/plug/LWT", "Online", true)
+	b.publish("tele/lamp/LWT", "Offline", true)
+	b.publish("tele/old/LWT", "Online", true)
+	b.publish("tele/old/LWT", "", true)                   // someone cleared the retained will; the device stays connected
+	b.publish("tele/live/STATE", `{"POWER":"ON"}`, false) // telemetry of a device whose will we never heard
+	waitFor(t, "four wills and a state", func() bool { return len(c.snapshot()) == 5 })
+	w := ledger.WillsHeard()
+	if !w.Heard || !w.Complete || !slices.Equal(upTopics(w), []string{"live", "old", "plug"}) {
+		t.Fatalf("after Online, Offline, a cleared will and live telemetry: %+v, want heard, complete, up [live old plug]", w)
+	}
+
+	b.stop()
+	waitFor(t, "disconnect", func() bool { return !bus.Connected() })
+	if w := ledger.WillsHeard(); w.Heard || len(w.Up) != 0 {
+		t.Fatalf("not connected: %+v, want nothing heard", w)
+	}
+	b.start() // a new broker: plug's retained will is gone, "new" is the only one it replays
+	b.publish("tele/new/LWT", "Online", true)
+	waitForWithin(t, "reconnect", 75*time.Second, bus.Connected) // paho's backoff, see TestReconnectAfterBrokerRestart
+	waitFor(t, "the replay of the new connection", func() bool { return slices.Contains(ledger.WillsHeard().Up, "new") })
+	if w := ledger.WillsHeard(); !w.Heard || !w.Complete || !slices.Equal(upTopics(w), []string{"new"}) {
+		t.Fatalf("after the reconnect: %+v, want only the new connection's will up", w)
+	}
+}
+
+// Why (#972): the ledger is bounded; a topic it could not keep may be the unknown device that ends the exemption, so
+// after an overflow it must say it is incomplete (fail closed) until the next connection resets it, also when topics
+// go Offline again and the count falls back under the cap.
+func TestTheWillLedgerFailsClosedWhenItOverflows(t *testing.T) {
+	l := newWillLedger(2)
+	l.record("a", []byte("Online"))
+	l.record("b", []byte(" online ")) // Tasmota's text, compared as the health tracker does
+	if w := l.wills(); !w.Heard || !w.Complete || !slices.Equal(upTopics(w), []string{"a", "b"}) {
+		t.Fatalf("two topics, cap two: %+v, want heard, complete, up [a b]", w)
+	}
+	l.record("a", []byte("Online")) // a known topic again is no new entry
+	if w := l.wills(); !w.Complete {
+		t.Fatalf("a repeated topic overflowed the ledger: %+v", w)
+	}
+	l.record("c", []byte("Online"))
+	if w := l.wills(); w.Complete {
+		t.Fatalf("a third topic with cap two: %+v, want incomplete", w)
+	}
+	l.record("a", []byte("Offline"))
+	if w := l.wills(); w.Complete || !slices.Equal(upTopics(w), []string{"b"}) {
+		t.Fatalf("after a went Offline: %+v, want still incomplete, up [b]", w)
+	}
+	l.reset()
+	if w := l.wills(); w.Heard || !w.Complete || len(w.Up) != 0 {
+		t.Fatalf("after a reset (new connection): %+v, want nothing heard, complete", w)
+	}
+	// An Offline will and a cleared one prove reads work, as any will does, and bring no topic up.
+	l.record("gone", []byte("Offline"))
+	if w := l.wills(); !w.Heard || len(w.Up) != 0 {
+		t.Fatalf("only an Offline will: %+v, want heard, nothing up", w)
+	}
+	l.reset()
+	l.record("cleared", nil)
+	if w := l.wills(); !w.Heard || len(w.Up) != 0 {
+		t.Fatalf("only a cleared will: %+v, want heard, nothing up", w)
+	}
+}
+
+// Why (#972, review): a cleared will (empty retained payload, from MQTT Explorer or a cleanup script) says the
+// retained message was deleted, not that the device left: it is still connected and its will is still registered with
+// the broker. Taking it as Offline let a device outside the inventory, Online under its new topic, vanish from the
+// ledger, and the stored device it may be was exempt again while its unread GroupTopic could be any device's topic.
+// The health tracker keeps such a device as heard for the same reason; only Offline takes a topic down.
+func TestAClearedWillKeepsTheTopicsLastState(t *testing.T) {
+	l := newWillLedger(4)
+	l.record("garage-new", []byte("Online"))
+	l.record("garage-new", nil)
+	if w := l.wills(); !w.Heard || !slices.Equal(upTopics(w), []string{"garage-new"}) {
+		t.Fatalf("Online, then the retained will cleared: %+v, want heard, up [garage-new]", w)
+	}
+	l.record("garage-new", []byte(" \n")) // Tasmota's text is compared trimmed, as the health tracker does
+	if w := l.wills(); !slices.Equal(upTopics(w), []string{"garage-new"}) {
+		t.Fatalf("a blank will: %+v, want up [garage-new]", w)
+	}
+	l.record("garage-new", []byte("Offline"))
+	l.record("garage-new", nil)
+	if w := l.wills(); len(w.Up) != 0 {
+		t.Fatalf("Offline, then the retained will cleared: %+v, want nothing up", w)
+	}
+}
+
+// Why (#972, review): the issue asks for no exemption while anything was heard under a topic no stored device has.
+// A device whose retained will was deleted before this connection subscribed, or on a broker that keeps no retained
+// messages, sends no will we could hear until it reconnects, but its live telemetry and replies still arrive: such a
+// message shows a device connected now, so its topic is up. A retained one may be left by a device long gone, and a
+// discovery message carries a MAC, not a topic, so neither counts. A live message does not make the wills "heard": a
+// reply proves stat is readable, not that wills are, and a broker ACL that allows stat/# but not tele/# would otherwise
+// exempt every device again (#972 case 2).
+func TestALiveDeviceMessageBringsItsTopicUp(t *testing.T) {
+	b, _ := newBoundsBus(t, nil)
+	b.dispatch(nil, liveMsg("stat/desk/RESULT", `{"POWER":"ON"}`))
+	if w := b.wills.wills(); w.Heard {
+		t.Fatalf("a live reply with no will: %+v, want nothing heard", w)
+	}
+	b.dispatch(nil, retainedMsg("tele/stale/STATE", `{"POWER":"ON"}`))
+	b.dispatch(nil, retainedMsg("stat/stale/POWER", "ON"))
+	b.dispatch(nil, liveMsg("tasmota/discovery/AABBCCDDEEFF/config", `{}`))
+	if w := b.wills.wills(); !slices.Equal(upTopics(w), []string{"desk"}) {
+		t.Fatalf("retained device messages and discovery: %+v, want only the live reply's desk up", w)
+	}
+	b.dispatch(nil, liveMsg("tele/garage-new/STATE", `{"POWER":"ON"}`))
+	b.dispatch(nil, liveMsg("stat/porch-new/RESULT", `{"POWER":"OFF"}`))
+	if w := b.wills.wills(); !slices.Equal(upTopics(w), []string{"desk", "garage-new", "porch-new"}) {
+		t.Fatalf("live telemetry and live replies: %+v, want up [desk garage-new porch-new]", w)
+	}
+	b.dispatch(nil, liveMsg("tele/garage-new/LWT", "Offline"))
+	if w := b.wills.wills(); !slices.Equal(upTopics(w), []string{"desk", "porch-new"}) {
+		t.Fatalf("after garage-new's Offline will: %+v, want up [desk porch-new]", w)
+	}
+}
+
+type willsBus struct {
+	*fakeBus
+	w Wills
+}
+
+func (b willsBus) WillsHeard() Wills { return b.w }
+
+// Why (#972): the switch is the bus the app holds; it must report the wills of the current connection, and "nothing
+// heard" (the fail-closed answer: no exemption) while it is disabled or its connection keeps no ledger.
+func TestSwitchForwardsWillsHeardOfTheCurrentConnection(t *testing.T) {
+	sw := NewSwitch()
+	if w := sw.WillsHeard(); w.Heard {
+		t.Fatalf("disabled switch: %+v, want nothing heard", w)
+	}
+	heard := Wills{Up: []string{"plug"}, Heard: true, Complete: true}
+	sw.Replace(willsBus{newFakeBus(), heard}, nil)
+	if w := sw.WillsHeard(); !w.Heard || !w.Complete || !slices.Equal(w.Up, heard.Up) {
+		t.Fatalf("WillsHeard = %+v, want the connection's %+v", w, heard)
+	}
+	sw.Replace(newFakeBus(), nil)
+	if w := sw.WillsHeard(); w.Heard {
+		t.Fatalf("a connection without a ledger: %+v, want nothing heard", w)
+	}
+	sw.Replace(willsBus{newFakeBus(), heard}, nil)
+	sw.Replace(nil, nil)
+	if w := sw.WillsHeard(); w.Heard {
+		t.Fatalf("turned off: %+v, want nothing heard", w)
 	}
 }

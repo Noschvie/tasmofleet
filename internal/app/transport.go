@@ -23,6 +23,7 @@ func (a *runtime) setupTransport() {
 		TopicTaken:        a.svc.Router.TopicTaken(),
 		BusConnected:      a.bus.Connected,
 		BusConnectedSince: a.sw.ConnectedSince, // the switch follows a broker change on the settings page
+		BusWills:          a.sw.WillsHeard,
 		BrokerSame:        a.svc.Broker.Same,
 		FullTopic:         func() string { return a.svc.Sys.Snapshot().MQTTFullTopic },
 		FirmwareBaseURL:   func() string { return a.svc.Sys.Snapshot().FWBaseURL },
