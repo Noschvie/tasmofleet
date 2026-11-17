@@ -303,3 +303,14 @@ func TestAFileReadOverMQTTRecordsThePasswordAsAccepted(t *testing.T) {
 		t.Fatalf("ok marks %v, want one for device 7", ok.ok)
 	}
 }
+
+// Why (#609): recording the acceptance is bookkeeping. When the store cannot write it, the backup that was taken
+// must still be returned: losing a good backup for a failed note would be worse than "Not tested".
+func TestAFailedAcceptedMarkNeverFailsTheBackup(t *testing.T) {
+	g := newTestRig(t)
+	g.marker.err = errors.New("database is locked")
+	got, err := g.r.DownloadConfig(t.Context(), g.target())
+	if err != nil || string(got) != "DUMP" || len(g.marker.ok) != 1 {
+		t.Fatalf("%q, %v, marks %v", got, err, g.marker.ok)
+	}
+}
