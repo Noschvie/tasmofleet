@@ -9,6 +9,7 @@ import { App, Devenv, freePort, startApp, startDevenv, writeTasmoAdminDir } from
 // Without an ACL every client of the broker reads commands, passwords and device backups, and nothing in TasmoFleet can
 // show that this is fixed, so the notice cannot be closed. SHOT_DIR keeps screenshots of each screen.
 const adam = { "X-authentik-username": "adam", "X-authentik-groups": "adm" };
+const olga = { "X-authentik-username": "olga", "X-authentik-groups": "ops" };
 let app: App;
 let env: Devenv;
 test.beforeAll(async () => {
@@ -22,6 +23,7 @@ test.beforeAll(async () => {
       TASMOFLEET_AUTH_MODE: "header",
       TASMOFLEET_TRUSTED_PROXIES: "127.0.0.1/32",
       TASMOFLEET_ADMIN_GROUPS: "adm",
+      TASMOFLEET_OPERATOR_GROUPS: "ops",
       TASMOFLEET_MQTT_URL: env.vars.TASMOFLEET_MQTT_URL,
     },
   });
@@ -167,29 +169,44 @@ test("the notice stands by Back up all now only, not on a card or by an HTTP dev
   await expect(page.locator("[data-acl-warning]")).toHaveCount(0);
 });
 
-// #880: nothing in TasmoFleet can see an ACL, so an admin says that the broker has one (System, MQTT). The notice then
-// goes away everywhere, for this broker only. Shots of the notice with its second line, and of the pages after.
-test("an admin's confirmation hides the notice; the second line points to it", async ({ page }) => {
+// #880, #962: nothing in TasmoFleet can see an ACL, so an admin can hide the warning for this broker (System, MQTT). The
+// notice's second line leads an admin straight to that option; it goes away everywhere, for this broker only. Shots of
+// the notice with its second line, of the option as the link's target, and of the pages after.
+test("an admin hides the notice; the second line leads to the option", async ({ page }) => {
   await page.setExtraHTTPHeaders(adam);
   await page.goto(app.url + "/devices/backups");
   await expect(page.locator("[data-acl-warning]")).toHaveCount(1);
-  await expect(page.locator("[data-acl-warning] .acl-confirm")).toContainText("Confirm it under System");
+  await expect(page.locator("[data-acl-warning] .acl-hide")).toHaveText("Hide it under System → MQTT.");
   await aclShots(page, "backups-open");
   await page.goto(app.url + "/settings/system?tab=mqtt");
   await expect(page.locator("[data-acl-warning]")).toHaveCount(1);
-  await expect(page.locator("[data-acl-warning] .acl-confirm")).toHaveCount(0);
+  await expect(page.locator("[data-acl-warning] .acl-hide")).toHaveCount(0);
   await aclShots(page, "system-mqtt-open");
-  await page.getByLabel("This broker has an ACL", { exact: false }).check();
+
+  // "Hide it" leads to the option: the MQTT tab is open, the option is in view and highlighted as the target
+  await page.goto(app.url + "/devices/backups");
+  await page.locator("[data-acl-warning] .acl-hide").getByRole("link", { name: "Hide it" }).click();
+  await expect(page).toHaveURL(/\/settings\/system\?tab=mqtt#mqtt-acl-hide$/);
+  const option = page.locator("#mqtt-acl-hide");
+  await expect(option).toBeInViewport();
+  await expect(option).toHaveCSS("outline-style", "solid"); // :target paints the outline, a plain option has none
+  await expect(page.locator("#mqtt-acl-hide:target")).toHaveCount(1);
+  await aclShots(page, "system-mqtt-target");
+  await expectNoOverflow(page, "system MQTT tab at the option");
+
+  const box = page.getByLabel("Hide the broker ACL warning");
+  await expect(page.getByText("Every client of this broker can read device backups, passwords included. The warning comes back when you change the broker.")).toBeVisible();
+  await box.check();
   await page.getByRole("button", { name: "Save settings" }).click();
   await page.goto(app.url + "/settings/system?tab=mqtt");
-  await expect(page.getByLabel("This broker has an ACL", { exact: false })).toBeChecked();
+  await expect(page.getByLabel("Hide the broker ACL warning")).toBeChecked();
   await expect(page.locator("[data-acl-warning]")).toHaveCount(0);
-  await aclShots(page, "system-mqtt-confirmed");
+  await aclShots(page, "system-mqtt-hidden");
   await page.goto(app.url + "/devices/backups");
   await expect(page.getByRole("button", { name: "Back up all now" })).toBeVisible();
   await expect(page.locator("[data-acl-warning]")).toHaveCount(0);
-  await aclShots(page, "backups-confirmed");
-  // another broker host: the confirmation no longer applies
+  await aclShots(page, "backups-hidden");
+  // another broker host: the hidden warning no longer applies
   await page.goto(app.url + "/settings/system?tab=mqtt");
   const host = page.locator('input[name="mqtt.host"]');
   const old = await host.inputValue();
@@ -197,4 +214,15 @@ test("an admin's confirmation hides the notice; the second line points to it", a
   await page.getByRole("button", { name: "Save settings" }).click();
   await page.goto(app.url + "/devices/backups");
   await expect(page.locator("[data-acl-warning]")).toHaveCount(1);
+});
+
+// #962: only an admin may save the setting, so only an admin gets the link; an operator reads the same line as text.
+// The warning is shown in both states this can run in: a fresh app, and the app after the test above (it ends on a new broker).
+test("an operator sees where to hide the notice but gets no link", async ({ page }) => {
+  await page.setExtraHTTPHeaders(olga);
+  await page.goto(app.url + "/devices/backups");
+  const line = page.locator("[data-acl-warning] .acl-hide");
+  await expect(line).toHaveText("Hide it under System → MQTT.");
+  await expect(line.getByRole("link")).toHaveCount(0);
+  await aclShots(page, "backups-operator");
 });

@@ -14,7 +14,14 @@ import (
 // runs the migrations that follow and returns the opened store.
 func migrate0045(t *testing.T, settings map[string]string) *SQLite {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "v0320.db")
+	return migrateFrom(t, "0045", settings)
+}
+
+// migrateFrom builds a database with every migration before first, stores the given settings rows, runs the
+// migrations from first on and returns the opened store.
+func migrateFrom(t *testing.T, first string, settings map[string]string) *SQLite {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "old.db")
 	db, err := openDB(path)
 	if err != nil {
 		t.Fatal(err)
@@ -26,7 +33,7 @@ func migrate0045(t *testing.T, settings map[string]string) *SQLite {
 		t.Fatal(err)
 	}
 	for _, e := range entries {
-		if e.Name() >= "0045" {
+		if e.Name() >= first {
 			continue
 		}
 		b, err := fs.ReadFile(Migrations, "migrations/"+e.Name())
@@ -44,7 +51,7 @@ func migrate0045(t *testing.T, settings map[string]string) *SQLite {
 		}
 	}
 	if err := migrate(db, path, Migrations); err != nil {
-		t.Fatalf("0044 -> current: %v", err)
+		t.Fatalf("before %s -> current: %v", first, err)
 	}
 	return &SQLite{db: db}
 }

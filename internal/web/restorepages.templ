@@ -49,7 +49,7 @@ templ restoreConfirm(c restoreConfirmView) {
 						}
 						<p class="rs-cred">{ c.Cred }</p>
 						if c.ACLNotice {
-							@ui.BrokerACLNotice(aclTextRestore)
+							@ui.BrokerACLNotice(aclTextRestore, aclHideHref(ctx))
 						}
 						if c.FilesNote != "" {
 							<p class="rs-fnote">{ c.FilesNote }</p>

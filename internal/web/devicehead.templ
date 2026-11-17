@@ -123,7 +123,7 @@ templ deviceHead(t deviceTabs, attrs templ.Attributes) {
 		</div>
 		if t.ACLText != "" {
 			<div class="devhd-acl">
-				@ui.BrokerACLNotice(t.ACLText)
+				@ui.BrokerACLNotice(t.ACLText, aclHideHref(ctx))
 			</div>
 		}
 	</div>

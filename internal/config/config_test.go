@@ -441,3 +441,23 @@ func TestSnapshotDaysAreKeptInTheirCanonicalForm(t *testing.T) {
 		t.Fatalf("schedule days %q", got)
 	}
 }
+
+// Why (#962): MQTT_ACL_CONFIRMED was renamed without an alias. An operator who still has it set is told at start that it
+// does nothing any more (a stored value moved with a migration, the checkbox on System, MQTT is the only way to set the
+// new one), the server starts, and the value, a broker and its user, is not echoed into the log. It must not reach the
+// new setting either: the environment is bootstrap only.
+func TestRemovedMQTTACLConfirmedWarnsButDoesNotFail(t *testing.T) {
+	c, err := Load(base(t.TempDir(), "TASMOFLEET_MQTT_ACL_CONFIRMED=broker.lan:1883|tf"))
+	if err != nil {
+		t.Fatalf("a removed variable must not stop the start: %v", err)
+	}
+	if len(c.Warnings) != 1 || !strings.Contains(c.Warnings[0], "TASMOFLEET_MQTT_ACL_CONFIRMED") || !strings.Contains(c.Warnings[0], "ignored") {
+		t.Fatalf("warnings = %v", c.Warnings)
+	}
+	if strings.Contains(c.Warnings[0], "broker.lan") {
+		t.Errorf("the warning echoes the value: %s", c.Warnings[0])
+	}
+	if _, ok := c.Legacy["MQTT_ACL_WARNING_HIDDEN"]; ok || c.MQTTACLWarningHidden != "" {
+		t.Errorf("the removed variable reached the new setting: %q, legacy %v", c.MQTTACLWarningHidden, c.Legacy)
+	}
+}

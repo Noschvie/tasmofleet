@@ -19,7 +19,7 @@ templ consolePage(data consoleData, c ui.ConsoleData, csrf string) {
 			<h2 id="confirm-h">Confirm</h2>
 			<p role="status">Confirm sending <code>{ data.Shown }</code> to { data.Device.Name }. { data.Consequence }</p>
 			if data.ACLNotice {
-				@ui.BrokerACLNotice(aclTextConsole)
+				@ui.BrokerACLNotice(aclTextConsole, aclHideHref(ctx))
 			}
 			<form method="post" action={ templ.SafeURL(c.Action) } class="btn-row">
 				<input type="hidden" name="csrf" value={ csrf }/>
@@ -362,7 +362,7 @@ templ editPage(f deviceForm, base, csrf string) {
 templ mqttPasswordFields(f deviceForm) {
 	if f.ACLText != "" {
 		<div class="ufield-wide">
-			@ui.BrokerACLNotice(f.ACLText)
+			@ui.BrokerACLNotice(f.ACLText, aclHideHref(ctx))
 		</div>
 	}
 	<label class="ufield">

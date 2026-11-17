@@ -23,7 +23,7 @@ templ fleetBackupsPage(p sysPage) {
 		}
 	}
 	if p.Fleet.ACLText != "" {
-		@ui.BrokerACLNotice(p.Fleet.ACLText)
+		@ui.BrokerACLNotice(p.Fleet.ACLText, aclHideHref(ctx))
 	}
 	if p.Error != "" {
 		@ui.Banner(ui.BannerData{Tone: ui.ToneDanger, Text: p.Error, Alert: true})

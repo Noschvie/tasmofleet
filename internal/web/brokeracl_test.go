@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -66,7 +67,7 @@ func TestSetupMQTTSectionCarriesTheBrokerACLWarning(t *testing.T) {
 }
 
 // aclBrokerService is the settings service with a broker configured (tcp://broker.lan:1883, user "tf") and nothing
-// confirmed: the state in which the notice shows wherever a path goes over MQTT (#880).
+// hidden: the state in which the notice shows wherever a path goes over MQTT (#880).
 func aclBrokerService(t *testing.T) *sysconfig.Service {
 	t.Helper()
 	mem := &sysMem{rows: map[string]store.SystemSetting{
@@ -344,7 +345,7 @@ func TestDevicePasswordFieldNoticeNeedsAConfiguredBroker(t *testing.T) {
 	}
 }
 
-// aclPages are the pages whose notice the confirmation hides, each with how to ask for it: the Backups page (Back up
+// aclPages are the pages whose notice hiding hides, each with how to ask for it: the Backups page (Back up
 // all now), the bulk backup page and the System MQTT tab. The console, restore and bulk command confirmations and the
 // device's Back up button read the same condition (brokerACLOpen); their tests above and below run with it open.
 func aclShown(t *testing.T, e *env) (backups, mqttTab int) {
@@ -356,12 +357,12 @@ func aclShown(t *testing.T, e *env) (backups, mqttTab int) {
 	return backups, mqttTab
 }
 
-// aclSave posts the MQTT tab as the browser does: the broker as host, port and TLS, the user, and the confirmation box.
+// aclSave posts the MQTT tab as the browser does: the broker as host, port and TLS, the user, and the hide box.
 func aclSave(t *testing.T, e *env, host, port, user string, confirm bool) {
 	t.Helper()
-	form := url.Values{"mqtt.host": {host}, "mqtt.port": {port}, "v.MQTT_USER": {user}, "reuse.MQTT_PASSWORD": {"1"}, "mqtt.acl.seen": {"1"}}
+	form := url.Values{"mqtt.host": {host}, "mqtt.port": {port}, "v.MQTT_USER": {user}, "reuse.MQTT_PASSWORD": {"1"}, "mqtt.aclhide.seen": {"1"}}
 	if confirm {
-		form.Set("mqtt.acl", "1")
+		form.Set("mqtt.aclhide", "1")
 	}
 	if r, body := e.do(t, "POST", "/settings/system?tab=mqtt", "admin", form); r.StatusCode >= 400 {
 		t.Fatalf("saving the MQTT tab: %d %s", r.StatusCode, body)
@@ -377,8 +378,8 @@ func aclApply(t *testing.T, svc *sysconfig.Service, values map[string]string) {
 	}
 }
 
-// aclConfirmNow is the admin's confirmation for the broker the service holds now.
-func aclConfirmNow(t *testing.T, svc *sysconfig.Service) {
+// aclHideNow is the admin's confirmation for the broker the service holds now.
+func aclHideNow(t *testing.T, svc *sysconfig.Service) {
 	t.Helper()
 	var c config.Config
 	for _, f := range svc.State() {
@@ -389,46 +390,46 @@ func aclConfirmNow(t *testing.T, svc *sysconfig.Service) {
 			c.MQTTUser = f.Value
 		}
 	}
-	aclApply(t, svc, map[string]string{"MQTT_ACL_CONFIRMED": aclBinding(c)})
+	aclApply(t, svc, map[string]string{"MQTT_ACL_WARNING_HIDDEN": aclBinding(c)})
 }
 
-// aclCycle is what every place of the notice must do (#880): shown with a broker and no confirmation (want notices),
-// gone after the confirmation, and back when the broker is changed behind the confirmation's back (by the settings
+// aclCycle is what every place of the notice must do (#880): shown with a broker and nothing hidden (want notices),
+// gone after hiding, and back when the broker is changed behind the hiding's back (by the settings
 // service, not by the form that would drop it).
 func aclCycle(t *testing.T, svc *sysconfig.Service, want int, count func() int) {
 	t.Helper()
 	if n := count(); n != want {
-		t.Fatalf("before the confirmation: %d notices, want %d", n, want)
+		t.Fatalf("before hiding: %d notices, want %d", n, want)
 	}
-	aclConfirmNow(t, svc)
+	aclHideNow(t, svc)
 	if n := count(); n != 0 {
-		t.Fatalf("after the confirmation: %d notices, want none", n)
+		t.Fatalf("after hiding: %d notices, want none", n)
 	}
 	aclApply(t, svc, map[string]string{"MQTT_URL": "tcp://elsewhere.lan:1883"})
 	if n := count(); n != want {
-		t.Fatalf("after the broker changed: %d notices, want %d (the confirmation is for the old broker)", n, want)
+		t.Fatalf("after the broker changed: %d notices, want %d (the hidden warning is for the old broker)", n, want)
 	}
 }
 
 // Why (#880): TasmoFleet cannot see an ACL, so a user whose broker has one would see a wrong red warning on every MQTT
-// path for ever. The admin's confirmation hides it, but only for the broker it was given for: another host, port or
-// user is another broker, and the notice must be back without anyone remembering to remove the confirmation.
-func TestBrokerACLConfirmationHidesTheNoticeOnlyForTheBrokerItWasGivenFor(t *testing.T) {
+// path for ever. The admin hides it, but only for the broker it was given for: another host, port or
+// user is another broker, and the notice must be back without anyone remembering to remove the hiding.
+func TestBrokerACLHiddenWarningHidesTheNoticeOnlyForTheBrokerItWasGivenFor(t *testing.T) {
 	e, _, _, _ := sysEnvFull(t, true, func(d *Deps) { d.BackupFleet = fleetFixture(time.Now()) })
 	if b, m := aclShown(t, e); b != 1 || m != 1 {
-		t.Fatalf("before the confirmation the Backups page has %d and the MQTT tab %d notices, want 1 and 1", b, m)
+		t.Fatalf("before hiding the Backups page has %d and the MQTT tab %d notices, want 1 and 1", b, m)
 	}
 	aclSave(t, e, "broker.lan", "1883", "tf", true)
 	if b, m := aclShown(t, e); b != 1 || m != 1 {
-		t.Fatalf("a confirmation given in the save that also changed the user hid the notice (%d, %d): it is for the broker as saved before", b, m)
+		t.Fatalf("hiding given in the save that also changed the user hid the notice (%d, %d): it is for the broker as saved before", b, m)
 	}
 	aclSave(t, e, "broker.lan", "1883", "tf", true)
 	if b, m := aclShown(t, e); b != 0 || m != 0 {
-		t.Fatalf("after the confirmation the Backups page has %d and the MQTT tab %d notices, want 0 and 0", b, m)
+		t.Fatalf("after hiding the Backups page has %d and the MQTT tab %d notices, want 0 and 0", b, m)
 	}
 	_, body := e.do(t, "GET", "/settings/system?tab=mqtt", "admin", nil)
-	if !strings.Contains(body, `name="mqtt.acl" value="1" checked`) {
-		t.Error("the confirmation box is not ticked after the confirmation")
+	if !strings.Contains(body, `name="mqtt.aclhide" value="1" checked`) {
+		t.Error("the hide box is not ticked after hiding")
 	}
 	for _, tc := range []struct{ name, host, port, user string }{
 		{"another host", "broker2.lan", "1883", "tf"},
@@ -440,140 +441,270 @@ func TestBrokerACLConfirmationHidesTheNoticeOnlyForTheBrokerItWasGivenFor(t *tes
 			aclSave(t, e, "broker.lan", "1883", "tf", false)
 			aclSave(t, e, "broker.lan", "1883", "tf", true)
 			if b, _ := aclShown(t, e); b != 0 {
-				t.Fatalf("the confirmation did not hide the notice (%d)", b)
+				t.Fatalf("hiding did not hide the notice (%d)", b)
 			}
 			aclSave(t, e, tc.host, tc.port, tc.user, true)
 			if b, m := aclShown(t, e); b != 1 || m != 1 {
 				t.Errorf("%s: the Backups page has %d and the MQTT tab %d notices after the change, want 1 and 1", tc.name, b, m)
 			}
-			// the old broker entered again later (not through the form) must not bring the confirmation back: it
+			// the old broker entered again later (not through the form) must not bring the hiding back: it
 			// was dropped with the change, not kept for the old broker
 			aclApply(t, svc, map[string]string{"MQTT_URL": "tcp://broker.lan:1883", "MQTT_USER": "tf"})
 			if b, m := aclShown(t, e); b != 1 || m != 1 {
-				t.Errorf("%s: the old confirmation came back with the old broker (%d, %d notices)", tc.name, b, m)
+				t.Errorf("%s: the old hiding came back with the old broker (%d, %d notices)", tc.name, b, m)
 			}
 		})
 	}
 }
 
-// Why (#880): the confirmation is a decision about security, so it is audited like every system setting, and only an
+// Why (#880): hiding the warning is a decision about security, so it is audited like every system setting, and only an
 // admin may make it (the settings page is admin only).
-func TestBrokerACLConfirmationIsAuditedAndAdminOnly(t *testing.T) {
+func TestBrokerACLHiddenWarningIsAuditedAndAdminOnly(t *testing.T) {
 	var aud *fakeAudit
 	e, _, _, _ := sysEnvFull(t, true, func(d *Deps) { d.BackupFleet = fleetFixture(time.Now()); aud = d.Recorder.(*fakeAudit) })
-	form := url.Values{"mqtt.host": {"broker.lan"}, "mqtt.port": {"1883"}, "mqtt.acl": {"1"}, "mqtt.acl.seen": {"1"}, "reuse.MQTT_PASSWORD": {"1"}}
+	form := url.Values{"mqtt.host": {"broker.lan"}, "mqtt.port": {"1883"}, "mqtt.aclhide": {"1"}, "mqtt.aclhide.seen": {"1"}, "reuse.MQTT_PASSWORD": {"1"}}
 	if r, _ := e.do(t, "POST", "/settings/system?tab=mqtt", "operator", form); r.StatusCode != 403 {
-		t.Fatalf("an operator saved the confirmation: %d", r.StatusCode)
+		t.Fatalf("an operator saved the hiding: %d", r.StatusCode)
 	}
 	if b, _ := aclShown(t, e); b != 1 {
 		t.Fatal("an operator's refused request hid the notice")
 	}
 	aclSave(t, e, "broker.lan", "1883", "", true)
 	if b, _ := aclShown(t, e); b != 0 {
-		t.Fatalf("the notice is still shown after the admin confirmed (%d)", b)
+		t.Fatalf("the notice is still shown after the admin hid it (%d)", b)
 	}
 	aud.mu.Lock()
 	defer aud.mu.Unlock()
 	for _, ev := range aud.events {
-		if ev.Action == "sysconfig.update" && strings.Contains(ev.Detail, "MQTT_ACL_CONFIRMED") && ev.Result == "ok" {
+		if ev.Action == "sysconfig.update" && strings.Contains(ev.Detail, "MQTT_ACL_WARNING_HIDDEN") && ev.Result == "ok" {
 			return
 		}
 	}
-	t.Errorf("no audit entry names MQTT_ACL_CONFIRMED: %+v", aud.events)
+	t.Errorf("no audit entry names MQTT_ACL_WARNING_HIDDEN: %+v", aud.events)
 }
 
-// Why (#880): the notice is one condition everywhere, so a confirmation hides it on the confirmations of console,
-// bulk command and restore, by the device's Back up button, on the device's MQTT password field and on the bulk backup
-// page too, not only on the page it was made on, and a changed broker brings it back on each of them.
-func TestBrokerACLConfirmationHidesTheNoticeOnEveryMQTTPath(t *testing.T) {
-	now := time.Now()
-	// each case has its own settings service: the cycle changes the broker
-	routed := func(extra func(d *Deps)) (*sysconfig.Service, *env) {
-		svc := aclBrokerService(t)
-		rs := &routeStub{}
-		rs.set(false, 1, 2)
-		e := setupWith(t, func(d *Deps) {
-			withFacts(fakeFacts{f: map[model.DeviceID]transport.Facts{1: mqttFacts(now, model.MQTTPasswordOwn)}})(d)
-			d.DeviceCmd, d.TypedRoutes, d.SysConfig = &fakeCmd{reply: `{"Done":"yes"}`}, rs.routes, svc
-			extra(d)
-		})
-		e.health[2] = model.Health{DeviceID: 2, State: model.HealthOnline, LastSeen: now}
-		return svc, e
+// aclPath is one place the notice stands on: how to open it (each with its own settings service, as the cycle changes
+// the broker), what asking for it as a role returns, and how many notices the page carries while it is open.
+type aclPath struct {
+	name string
+	want int
+	open func(t *testing.T) (*sysconfig.Service, func(role string) string)
+}
+
+// aclPaths are all places of the notice except the System MQTT tab and the setup, which are the settings themselves.
+func aclPaths(now time.Time) []aclPath {
+	routed := func(extra func(d *Deps)) func(t *testing.T) (*sysconfig.Service, *env) {
+		return func(t *testing.T) (*sysconfig.Service, *env) {
+			svc := aclBrokerService(t)
+			rs := &routeStub{}
+			rs.set(false, 1, 2)
+			e := setupWith(t, func(d *Deps) {
+				withFacts(fakeFacts{f: map[model.DeviceID]transport.Facts{1: mqttFacts(now, model.MQTTPasswordOwn)}})(d)
+				d.DeviceCmd, d.TypedRoutes, d.SysConfig = &fakeCmd{reply: `{"Done":"yes"}`}, rs.routes, svc
+				extra(d)
+			})
+			e.health[2] = model.Health{DeviceID: 2, State: model.HealthOnline, LastSeen: now}
+			return svc, e
+		}
 	}
-	t.Run("device Back up", func(t *testing.T) {
-		svc, e := routed(func(*Deps) {})
-		aclCycle(t, svc, 1, func() int {
-			_, body := e.do(t, "GET", "/devices/1", "admin", nil)
-			return strings.Count(body, "data-acl-warning")
-		})
-	})
-	t.Run("bulk command", func(t *testing.T) {
-		svc, e := routed(func(d *Deps) { d.CommandBatch = &fakeBatch{} })
-		aclCycle(t, svc, 1, func() int {
-			_, body := e.do(t, "POST", "/devices/bulk/command", "admin", bulkForm("id", "1", "id", "2", "command", "PowerDelta 10"))
-			return strings.Count(body, "data-acl-warning")
-		})
-	})
-	t.Run("console", func(t *testing.T) {
-		svc, e := routed(func(*Deps) {})
+	page := func(mk func(t *testing.T) (*sysconfig.Service, *env), method, path string, form func() url.Values) func(t *testing.T) (*sysconfig.Service, func(string) string) {
+		return func(t *testing.T) (*sysconfig.Service, func(string) string) {
+			svc, e := mk(t)
+			return svc, func(role string) string {
+				var f url.Values
+				if form != nil {
+					f = form()
+				}
+				_, body := e.do(t, method, path, role, f)
+				return body
+			}
+		}
+	}
+	return []aclPath{
+		{"device Back up", 1, page(routed(func(*Deps) {}), "GET", "/devices/1", nil)},
+		{"bulk command", 1, page(routed(func(d *Deps) { d.CommandBatch = &fakeBatch{} }), "POST", "/devices/bulk/command",
+			func() url.Values { return bulkForm("id", "1", "id", "2", "command", "PowerDelta 10") })},
 		// the console page of device 1 carries its own notice and the header's one by Back up (its backup path is MQTT too)
-		aclCycle(t, svc, 2, func() int {
-			_, body := e.do(t, "POST", "/devices/1/console", "admin", consoleForm("WebPassword hunter2-880"))
-			return strings.Count(body, "data-acl-warning")
-		})
-	})
-	t.Run("restore confirmation", func(t *testing.T) {
-		svc := aclBrokerService(t)
-		e, _, rs, _ := newDiffEnvWith(t, svc)
-		rs.assess = restore.Assessment{ViaMQTT: true, PathNote: "over MQTT first (FileUpload)"}
-		aclCycle(t, svc, 1, func() int {
-			_, body := e.do(t, "GET", "/backups/1/restore", "admin", nil)
-			return strings.Count(body, "data-acl-warning")
-		})
-	})
-	t.Run("device MQTT password field", func(t *testing.T) {
-		e, svc := brokerWithOwnDevice(t)
-		aclCycle(t, svc, 1, func() int {
-			_, body := e.do(t, "GET", "/devices/7/edit", "admin", nil)
-			return strings.Count(body, "data-acl-warning")
-		})
-	})
-	t.Run("bulk backup page", func(t *testing.T) {
-		e, svc, _, _ := sysEnvFull(t, true, func(d *Deps) {
-			d.BackupBatch = &fakeBackupBatch{}
-			d.Transport = fakeFacts{f: map[model.DeviceID]transport.Facts{1: mqttFacts(now, model.MQTTPasswordOwn)}}
-		})
-		aclCycle(t, svc, 1, func() int {
-			_, body := e.do(t, "POST", "/devices/bulk/backup", "admin", url.Values{"csrf": {"tok"}, "id": {"1"}})
-			return strings.Count(body, "data-acl-warning")
-		})
-	})
+		{"console", 2, page(routed(func(*Deps) {}), "POST", "/devices/1/console",
+			func() url.Values { return consoleForm("WebPassword hunter2-880") })},
+		{"restore confirmation", 1, func(t *testing.T) (*sysconfig.Service, func(string) string) {
+			svc := aclBrokerService(t)
+			e, _, rs, _ := newDiffEnvWith(t, svc)
+			rs.assess = restore.Assessment{ViaMQTT: true, PathNote: "over MQTT first (FileUpload)"}
+			return svc, func(role string) string { _, body := e.do(t, "GET", "/backups/1/restore", role, nil); return body }
+		}},
+		{"device MQTT password field", 1, func(t *testing.T) (*sysconfig.Service, func(string) string) {
+			e, svc := brokerWithOwnDevice(t)
+			return svc, func(role string) string { _, body := e.do(t, "GET", "/devices/7/edit", role, nil); return body }
+		}},
+		{"bulk backup page", 1, func(t *testing.T) (*sysconfig.Service, func(string) string) {
+			e, svc, _, _ := sysEnvFull(t, true, func(d *Deps) {
+				d.BackupBatch = &fakeBackupBatch{}
+				d.Transport = fakeFacts{f: map[model.DeviceID]transport.Facts{1: mqttFacts(now, model.MQTTPasswordOwn)}}
+			})
+			return svc, func(role string) string {
+				_, body := e.do(t, "POST", "/devices/bulk/backup", role, url.Values{"csrf": {"tok"}, "id": {"1"}})
+				return body
+			}
+		}},
+		{"fleet backups", 1, func(t *testing.T) (*sysconfig.Service, func(string) string) {
+			e, svc, _, _ := sysEnvFull(t, true, func(d *Deps) { d.BackupFleet = fleetFixture(now) })
+			return svc, func(role string) string { _, body := e.do(t, "GET", "/devices/backups", role, nil); return body }
+		}},
+	}
 }
 
-// Why (#880): unticking the box and saving is how an admin takes the confirmation back, for instance after the ACL was
+// Why (#880): the notice is one condition everywhere, so hiding it hides it on the confirmations of console,
+// bulk command and restore, by the device's Back up button, on the device's MQTT password field, on the bulk backup
+// page and on the Backups page too, not only on the page it was made on, and a changed broker brings it back on each of them.
+func TestBrokerACLHiddenWarningHidesTheNoticeOnEveryMQTTPath(t *testing.T) {
+	for _, p := range aclPaths(time.Now()) {
+		t.Run(p.name, func(t *testing.T) {
+			svc, get := p.open(t)
+			aclCycle(t, svc, p.want, func() int { return strings.Count(get("admin"), "data-acl-warning") })
+		})
+	}
+}
+
+// Why (#962): "Hide it" leads an admin straight to the option, so nobody has to find System, MQTT and the box by hand.
+// Only an admin may save that setting: for everyone else the sentence stays plain text, as a link would end on a page
+// they are refused. Each page builds the link from its own request context, so every page that carries the notice is
+// rendered here: one that lost the principal or the base path would drop the link without anyone noticing.
+func TestBrokerACLNoticeLinksOnlyAdminsToTheHideOption(t *testing.T) {
+	const link = `<a href="/tf/settings/system?tab=mqtt#mqtt-acl-hide">Hide it</a> under System → MQTT.`
+	plain := 0 // the notices an operator saw: the plain text variant must really have been rendered
+	for _, p := range aclPaths(time.Now()) {
+		t.Run(p.name, func(t *testing.T) {
+			_, get := p.open(t)
+			if got := strings.Count(get("admin"), link); got != p.want {
+				t.Errorf("an admin gets %d links to the option, want %d (one per notice, with the base path)", got, p.want)
+			}
+			for _, role := range []string{"operator", "viewer"} {
+				body := get(role)
+				notices := strings.Count(body, "data-acl-warning")
+				if role == "operator" {
+					plain += notices
+				}
+				if got := strings.Count(body, ui.BrokerACLHide); got != notices {
+					t.Errorf("%s: %d notices, %d say where to hide it", role, notices, got)
+				}
+				if strings.Contains(body, "mqtt-acl-hide") || strings.Contains(body, ">"+ui.BrokerACLHideLink+"</a>") {
+					t.Errorf("%s gets a link to a setting only an admin may save", role)
+				}
+			}
+		})
+	}
+	if plain == 0 {
+		t.Fatal("an operator saw no notice on any page: the plain text variant was not checked")
+	}
+	// the link has a target: the option exists on the MQTT tab, ticked or not, and also where the broker is not valid
+	e, svc, _, _ := sysEnvFull(t, true, func(d *Deps) { d.BackupFleet = fleetFixture(time.Now()) })
+	for _, step := range []string{"unticked", "ticked", "no valid broker"} {
+		switch step {
+		case "ticked":
+			aclSave(t, e, "broker.lan", "1883", "", true)
+		case "no valid broker":
+			aclApply(t, svc, map[string]string{"MQTT_URL": "tcp://broker.lan:1883/path"})
+		}
+		_, body := e.do(t, "GET", "/settings/system?tab=mqtt", "admin", nil)
+		if strings.Count(body, `id="mqtt-acl-hide"`) != 1 {
+			t.Errorf("%s: the MQTT tab has %d elements with the id the link leads to, want 1", step, strings.Count(body, `id="mqtt-acl-hide"`))
+		}
+	}
+}
+
+// Why (#962, the maintainer: "No sentence that says or implies the broker has an ACL, anywhere"): TasmoFleet cannot see
+// an ACL, and the switch exists for a broker that has none as much as for one that has. So neither the option, its
+// hint, the notice's link nor the audit entry of the save may claim one, and the label and hint are the agreed words.
+func TestBrokerACLHideOptionNeverClaimsAnACL(t *testing.T) {
+	const label = "Hide the broker ACL warning"
+	const hint = "Every client of this broker can read device backups, passwords included. The warning comes back when you change the broker."
+	banned := []string{"has an ACL", "have an ACL", "Confirm", "confirm", "CONFIRMED", "Clients read only", "own topics"}
+	check := func(what, text string) {
+		t.Helper()
+		for _, b := range banned {
+			if strings.Contains(text, b) {
+				t.Errorf("%s says %q", what, b)
+			}
+		}
+	}
+	f, ok := sysconfig.Lookup("MQTT_ACL_WARNING_HIDDEN")
+	if !ok || f.Label != label || f.Help != hint {
+		t.Errorf("the field is %q / %q, want the agreed label and hint", f.Label, f.Help)
+	}
+	check("the field", f.Label+" "+f.Help)
+	var aud *fakeAudit
+	e, svc, _, _ := sysEnvFull(t, true, func(d *Deps) { d.BackupFleet = fleetFixture(time.Now()); aud = d.Recorder.(*fakeAudit) })
+	tab := func() string { _, body := e.do(t, "GET", "/settings/system?tab=mqtt", "admin", nil); return body }
+	for _, step := range []string{"unticked", "ticked", "no valid broker"} {
+		switch step {
+		case "ticked":
+			aclSave(t, e, "broker.lan", "1883", "", true)
+		case "no valid broker":
+			aclApply(t, svc, map[string]string{"MQTT_URL": "tcp://broker.lan:1883/path"})
+		}
+		body := tab()
+		at := strings.Index(body, `id="mqtt-acl-hide"`)
+		end := strings.Index(body[max(at, 0):], "</small>")
+		if at < 0 || end < 0 {
+			t.Fatalf("the MQTT tab (%s) has no option to look at", step)
+		}
+		check("the option on the MQTT tab ("+step+")", body[at:at+end])
+		if step != "no valid broker" && (!strings.Contains(body, ">"+label+"<") || !strings.Contains(body, hint)) {
+			t.Errorf("the MQTT tab (%s) does not show the label and the hint of the option", step)
+		}
+	}
+	// The notice's body says what it warns about, "unless the broker has an ACL": a condition, not a claim. What it
+	// says about hiding it is the line that must not claim one.
+	hideLine := regexp.MustCompile(`<span class="acl-hide">(.*?)</span>`)
+	for _, p := range aclPaths(time.Now()) {
+		_, get := p.open(t)
+		m := hideLine.FindAllStringSubmatch(get("admin"), -1)
+		if len(m) != p.want {
+			t.Errorf("%s: %d hide lines, want %d", p.name, len(m), p.want)
+		}
+		for _, l := range m {
+			check("the hide line on "+p.name, l[1])
+		}
+	}
+	aud.mu.Lock()
+	defer aud.mu.Unlock()
+	n := 0
+	for _, ev := range aud.events {
+		if ev.Action == "sysconfig.update" {
+			check("the audit entry of a save", ev.Detail)
+			n++
+		}
+	}
+	if n == 0 {
+		t.Error("no audit entry of a save to check")
+	}
+}
+
+// Why (#880): unticking the box and saving is how an admin takes the hiding back, for instance after the ACL was
 // removed from the broker. The notice must be back at once, on the page that shows it and on the MQTT tab.
-func TestBrokerACLConfirmationIsTakenBackByUntickingTheBox(t *testing.T) {
+func TestBrokerACLHiddenWarningIsTakenBackByUntickingTheBox(t *testing.T) {
 	e, _, _, _ := sysEnvFull(t, true, func(d *Deps) { d.BackupFleet = fleetFixture(time.Now()) })
 	aclSave(t, e, "broker.lan", "1883", "", true)
 	if b, m := aclShown(t, e); b != 0 || m != 0 {
-		t.Fatalf("the confirmation did not hide the notice (%d, %d)", b, m)
+		t.Fatalf("hiding did not hide the notice (%d, %d)", b, m)
 	}
-	aclSave(t, e, "broker.lan", "1883", "", false) // mqtt.acl.seen is posted, mqtt.acl is not: the box is unticked
+	aclSave(t, e, "broker.lan", "1883", "", false) // mqtt.aclhide.seen is posted, mqtt.aclhide is not: the box is unticked
 	if b, m := aclShown(t, e); b != 1 || m != 1 {
 		t.Errorf("after unticking the box the Backups page has %d and the MQTT tab %d notices, want 1 and 1", b, m)
 	}
 }
 
-// Why (#880): removing the broker (a reset of MQTT_URL) ends the confirmation with it. Entering the very same broker
-// again later is a new decision: the notice shows until the admin confirms again.
-func TestBrokerACLConfirmationDoesNotSurviveRemovingTheBroker(t *testing.T) {
+// Why (#880): removing the broker (a reset of MQTT_URL) ends the hiding with it. Entering the very same broker
+// again later is a new decision: the notice shows until the admin hides it again.
+func TestBrokerACLHiddenWarningDoesNotSurviveRemovingTheBroker(t *testing.T) {
 	e, svc, _, _ := sysEnvFull(t, true, func(d *Deps) { d.BackupFleet = fleetFixture(time.Now()) })
 	aclSave(t, e, "broker.lan", "1883", "", true)
 	if b, _ := aclShown(t, e); b != 0 {
-		t.Fatalf("the confirmation did not hide the notice (%d)", b)
+		t.Fatalf("hiding did not hide the notice (%d)", b)
 	}
 	// the browser posts the broker fields and the ticked box next to the reset box
-	form := url.Values{"mqtt.host": {"broker.lan"}, "mqtt.port": {"1883"}, "mqtt.acl": {"1"}, "mqtt.acl.seen": {"1"}, "clear.MQTT_URL": {"1"}, "reuse.MQTT_PASSWORD": {"1"}}
+	form := url.Values{"mqtt.host": {"broker.lan"}, "mqtt.port": {"1883"}, "mqtt.aclhide": {"1"}, "mqtt.aclhide.seen": {"1"}, "clear.MQTT_URL": {"1"}, "reuse.MQTT_PASSWORD": {"1"}}
 	if r, body := e.do(t, "POST", "/settings/system?tab=mqtt", "admin", form); r.StatusCode >= 400 {
 		t.Fatalf("resetting the broker: %d %s", r.StatusCode, body)
 	}
@@ -584,7 +715,7 @@ func TestBrokerACLConfirmationDoesNotSurviveRemovingTheBroker(t *testing.T) {
 	}
 	aclApply(t, svc, map[string]string{"MQTT_URL": "tcp://broker.lan:1883"}) // the same broker, entered again
 	if b, m := aclShown(t, e); b != 1 || m != 1 {
-		t.Errorf("the old confirmation came back with the same broker (%d, %d notices)", b, m)
+		t.Errorf("the old hiding came back with the same broker (%d, %d notices)", b, m)
 	}
 }
 
@@ -593,25 +724,26 @@ func TestBrokerACLConfirmationDoesNotSurviveRemovingTheBroker(t *testing.T) {
 func TestBrokerACLBoxIsNotOfferedWithoutAValidBroker(t *testing.T) {
 	e, svc, _, _ := sysEnvFull(t, true, func(d *Deps) { d.BackupFleet = fleetFixture(time.Now()) })
 	_, body := e.do(t, "GET", "/settings/system?tab=mqtt", "admin", nil)
-	if !strings.Contains(body, `name="mqtt.acl"`) {
+	if !strings.Contains(body, `name="mqtt.aclhide"`) {
 		t.Fatal("the box is not offered with a valid broker")
 	}
 	aclApply(t, svc, map[string]string{"MQTT_URL": "tcp://broker.lan:1883/path"})
 	_, body = e.do(t, "GET", "/settings/system?tab=mqtt", "admin", nil)
-	if strings.Contains(body, `name="mqtt.acl"`) || !strings.Contains(body, "Save a valid broker first") {
+	if strings.Contains(body, `name="mqtt.aclhide"`) || !strings.Contains(body, "Save a valid broker first") {
 		t.Error("with a broker URL that cannot be split the page still offers the box, or does not say to save a valid broker")
 	}
 }
 
-// Why (#880): the second line tells the person who still sees the warning where to say that the broker is safe.
-func TestBrokerACLNoticeSaysWhereToConfirm(t *testing.T) {
+// Why (#880, #962): the second line tells the person who still sees the warning where to hide it, in words that do not
+// say the broker has an ACL (TasmoFleet cannot know; the maintainer's wording of #962).
+func TestBrokerACLNoticeSaysWhereToHideIt(t *testing.T) {
 	e, _, _, _ := sysEnvFull(t, true, func(d *Deps) { d.BackupFleet = fleetFixture(time.Now()) })
-	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
-	if !strings.Contains(body, ui.BrokerACLConfirm) {
-		t.Error("the notice by Back up all now does not say where to confirm the ACL")
+	_, body := e.do(t, "GET", "/devices/backups", "operator", nil)
+	if !strings.Contains(body, ui.BrokerACLHide) {
+		t.Error("the notice by Back up all now does not say where to hide it")
 	}
 	_, body = e.do(t, "GET", "/settings/system?tab=mqtt", "admin", nil)
-	if strings.Contains(body, ui.BrokerACLConfirm) {
+	if strings.Contains(body, ui.BrokerACLHide) {
 		t.Error("the MQTT tab sends the person to itself")
 	}
 }

@@ -156,9 +156,11 @@ type BannerData struct {
 // The broker ACL notice (#840): the page that explains the access control list, and the sentence every place
 // leads with. Without an ACL the broker hands what TasmoFleet sends through it to every client that may subscribe.
 const (
-	BrokerACLDocURL  = "https://github.com/hellwand/tasmofleet/blob/main/docs/mqtt-broker-acl.md"
-	BrokerACLConfirm = "Your broker has an ACL? Confirm it under System → MQTT."
-	BrokerACLLead    = "Without a broker ACL, every client of your MQTT broker can read your commands, passwords and device backups."
+	BrokerACLDocURL   = "https://github.com/hellwand/tasmofleet/blob/main/docs/mqtt-broker-acl.md"
+	BrokerACLHideLink = "Hide it" // the words of BrokerACLHide that are the link for an admin
+	BrokerACLHideRest = " under System → MQTT."
+	BrokerACLHide     = BrokerACLHideLink + BrokerACLHideRest
+	BrokerACLLead     = "Without a broker ACL, every client of your MQTT broker can read your commands, passwords and device backups."
 )
 
 // ToastData is a toast shown in the flow (the style guide); live toasts come from toast.js.
@@ -261,6 +263,7 @@ type ConfirmData struct {
 	CancelHref, CancelLabel       string
 	NoBusy                        bool   // the answer is a file, not a page: form.js must not leave the button busy (#538)
 	ACLText                       string // not empty: the broker ACL notice (BrokerACLNotice) with this sentence stands above the facts (#840)
+	ACLHideHref                   string // where the notice's "Hide it" leads (an admin only; empty = plain text, #962)
 }
 
 // FieldData is a label-above input with help text and the server's error for it.

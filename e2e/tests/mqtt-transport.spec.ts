@@ -321,14 +321,14 @@ test("the broker ACL notice stands by Back up when the backup goes over MQTT", a
   }
   await page.goto(app.url + "/devices/1/backups");
   await expect(page.locator("#devhd [data-acl-warning]")).toHaveCount(1);
-  // #880: the admin's confirmation that the broker has an ACL takes the notice from the header
+  // #880, #962: the admin's hidden warning takes the notice from the header
   await page.goto(app.url + "/settings/system?tab=mqtt");
-  await page.getByLabel("This broker has an ACL", { exact: false }).check();
+  await page.getByLabel("Hide the broker ACL warning").check();
   await page.getByRole("button", { name: "Save settings" }).click();
   await page.goto(app.url + "/devices/1");
   await expect(page.getByRole("button", { name: "Back up", exact: true })).toBeVisible();
   await expect(page.locator("[data-acl-warning]")).toHaveCount(0);
-  await aclShots(page, "device-back-up-confirmed");
+  await aclShots(page, "device-back-up-hidden");
 });
 
 test("disabled actions carry the reason", async ({ page }) => {

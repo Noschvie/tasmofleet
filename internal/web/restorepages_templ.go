@@ -279,7 +279,7 @@ func restoreConfirm(c restoreConfirmView) templ.Component {
 						return templ_7745c5c3_Err
 					}
 					if c.ACLNotice {
-						templ_7745c5c3_Err = ui.BrokerACLNotice(aclTextRestore).Render(ctx, templ_7745c5c3_Buffer)
+						templ_7745c5c3_Err = ui.BrokerACLNotice(aclTextRestore, aclHideHref(ctx)).Render(ctx, templ_7745c5c3_Buffer)
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}

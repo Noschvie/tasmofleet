@@ -80,7 +80,7 @@ func fleetBackupsPage(p sysPage) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if p.Fleet.ACLText != "" {
-			templ_7745c5c3_Err = ui.BrokerACLNotice(p.Fleet.ACLText).Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = ui.BrokerACLNotice(p.Fleet.ACLText, aclHideHref(ctx)).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

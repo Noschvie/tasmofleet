@@ -56,7 +56,7 @@ func TestComponentsEscapeEveryText(t *testing.T) {
 		"RowMenu":          RowMenu(h, []MenuItem{{Label: h, Href: "/x"}, {Label: h, Disabled: true, Why: h}}, false),
 		"Banner":           Banner(BannerData{Tone: ToneWarn, Title: h, Text: h, Action: &Btn{Label: h}}),
 		"ErrorSum":         ErrorSummary(h),
-		"BrokerACLNotice":  BrokerACLNotice(h),
+		"BrokerACLNotice":  BrokerACLNotice(h, "/x"),
 		"Toast":            ToastStatic(ToastData{Tone: ToneDanger, Text: h, Action: h}),
 		"Field":            Field(FieldData{Label: h, Name: "n", Value: h, Placeholder: h, Error: h}),
 		"Select":           SelectField(h, "n", []Option{{Value: h, Label: h}}),
@@ -329,7 +329,7 @@ func TestComplianceBarSegmentsAndText(t *testing.T) {
 // nothing that closes it, says the lead the same way everywhere, and leads to the guide in a new tab without leaking
 // the opener.
 func TestBrokerACLNoticeHasNoWayToCloseAndLinksTheGuide(t *testing.T) {
-	got := comp(t, BrokerACLNotice("Text of this page."))
+	got := comp(t, BrokerACLNotice("Text of this page.", ""))
 	for _, want := range []string{
 		`class="banner tone-danger acl-warning"`, BrokerACLLead, "Text of this page.",
 		`href="` + BrokerACLDocURL + `" target="_blank" rel="noopener noreferrer"`,
@@ -342,5 +342,23 @@ func TestBrokerACLNoticeHasNoWayToCloseAndLinksTheGuide(t *testing.T) {
 		if strings.Contains(got, bad) {
 			t.Errorf("the notice has %q: it must not be closable", bad)
 		}
+	}
+}
+
+// Why (#962): the second line says where to hide the warning. For an admin its first words are the link to the option;
+// for everyone else, and on the pages that are the settings themselves, there is no link: the line is plain text or,
+// on those pages, absent, so nobody follows a link into a page they cannot use or one that points to itself.
+func TestBrokerACLNoticeHideLineIsALinkOnlyWithAnAddress(t *testing.T) {
+	linked := comp(t, BrokerACLNotice("Text.", "/tf/settings/system?tab=mqtt#mqtt-acl-hide"))
+	if !strings.Contains(linked, `<a href="/tf/settings/system?tab=mqtt#mqtt-acl-hide">`+BrokerACLHideLink+`</a>`+BrokerACLHideRest) {
+		t.Errorf("no link on %q in %s", BrokerACLHideLink, linked)
+	}
+	plain := comp(t, BrokerACLNotice("Text.", ""))
+	if !strings.Contains(plain, BrokerACLHide) || strings.Contains(plain, "mqtt-acl-hide") || strings.Contains(plain, BrokerACLHideLink+"</a>") {
+		t.Errorf("without an address the line is not plain text: %s", plain)
+	}
+	here := comp(t, BrokerACLNoticeHere("Text."))
+	if strings.Contains(here, BrokerACLHideLink) {
+		t.Errorf("the notice on the settings page sends the person to itself: %s", here)
 	}
 }

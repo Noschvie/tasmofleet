@@ -1,10 +1,13 @@
 package web
 
 import (
+	"context"
 	"strconv"
 	"strings"
 
+	"github.com/hellwand/tasmofleet/internal/auth"
 	"github.com/hellwand/tasmofleet/internal/config"
+	"github.com/hellwand/tasmofleet/internal/httpx"
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/transport"
 )
@@ -49,7 +52,7 @@ func (h *handler) brokerConfigured() bool {
 	return h.d.SysConfig != nil && h.storedMQTTURL() != ""
 }
 
-// aclBinding names the broker an admin's confirmation is given for (#880): host, port and user. The scheme is left out
+// aclBinding names the broker the hidden warning is given for (#880, #962): host, port and user. The scheme is left out
 // (TLS to the broker does not change who may read the topics); a port that is left empty is the scheme's default.
 func aclBinding(c config.Config) string {
 	b, err := config.SplitMQTTURL(c.MQTTURL)
@@ -59,7 +62,7 @@ func aclBinding(c config.Config) string {
 	return strings.ToLower(b.Host) + ":" + strconv.Itoa(b.Port) + "|" + c.MQTTUser
 }
 
-// mqttSettings is the broker, its user and the ACL confirmation as the settings service holds them now.
+// mqttSettings is the broker, its user and the hidden ACL warning as the settings service holds them now.
 func (h *handler) mqttSettings() config.Config {
 	var c config.Config
 	for _, f := range h.d.SysConfig.State() {
@@ -68,32 +71,47 @@ func (h *handler) mqttSettings() config.Config {
 			c.MQTTURL = f.Value
 		case "MQTT_USER":
 			c.MQTTUser = f.Value
-		case "MQTT_ACL_CONFIRMED":
-			c.MQTTACLConfirmed = f.Value
+		case "MQTT_ACL_WARNING_HIDDEN":
+			c.MQTTACLWarningHidden = f.Value
 		}
 	}
 	return c
 }
 
-// aclConfirmed says an admin confirmed that the broker in use has an ACL (System, MQTT) and that broker is still the
-// one: another host, port or user makes the confirmation void without anyone having to remove it.
-func (h *handler) aclConfirmed() bool {
+// aclWarningHidden says an admin hid the red ACL warning (System, MQTT) and that broker is still the one: another
+// host, port or user makes it void without anyone having to remove it.
+func (h *handler) aclWarningHidden() bool {
 	if h.d.SysConfig == nil {
 		return false
 	}
 	c := h.mqttSettings()
-	return c.MQTTACLConfirmed != "" && c.MQTTACLConfirmed == aclBinding(c)
+	return c.MQTTACLWarningHidden != "" && c.MQTTACLWarningHidden == aclBinding(c)
 }
 
 // brokerACLOpen is the one condition of every place the broker ACL notice shows (#880): a broker is configured and
-// nobody confirmed that it has an ACL. The places add their own path condition (the command, the backup or the restore
+// nobody hid the warning for it. The places add their own path condition (the command, the backup or the restore
 // goes over MQTT) before they ask.
 func (h *handler) brokerACLOpen() bool {
-	return h.brokerConfigured() && !h.aclConfirmed()
+	return h.brokerConfigured() && !h.aclWarningHidden()
+}
+
+// aclHideID is the id of the option that hides the warning on System, MQTT: the target of the notice's link.
+const aclHideID = "mqtt-acl-hide"
+
+// aclHideHref is where the notice's "Hide it" leads (#962): straight to the option on System, MQTT, which the CSS
+// scrolls to and highlights (:target). Only an admin gets it, as only an admin may save the setting; everyone else,
+// and a request without a principal, gets "" and so plain text, never a link into a page they cannot use. It reads the
+// principal and the base path from the request context, the same two sources h.view uses, so the pages that show the
+// notice need no extra fields and the role decision is made in one place.
+func aclHideHref(ctx context.Context) string {
+	if p, ok := auth.FromContext(ctx); !ok || p.Role < model.RoleAdmin {
+		return ""
+	}
+	return httpx.BasePath(ctx) + "/settings/system?tab=mqtt#" + aclHideID
 }
 
 // backupACLText is the sentence of the notice by what starts a backup (#853), empty without a broker or after the
-// confirmation: the backup buttons of the fleet and the bulk backup page share it.
+// warning was hidden: the backup buttons of the fleet and the bulk backup page share it.
 func (h *handler) backupACLText() string {
 	if h.brokerACLOpen() {
 		return aclTextBackup

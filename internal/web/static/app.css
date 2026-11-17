@@ -16346,10 +16346,27 @@ a[aria-busy="true"]::after {
   display: block;
   font-weight: 600;
 }
-.banner.acl-warning .acl-confirm {
+.banner.acl-warning .acl-hide {
   display: block;
   margin-top: var(--sp-6);
   font-weight: 600;
+}
+.banner.acl-warning .acl-hide a {
+  color: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+}
+/* the option the notice's "Hide it" link leads to (#962): the browser scrolls to the target, the highlight says which
+   option it is; it ends with the next navigation, as the fragment does */
+#mqtt-acl-hide {
+  scroll-margin-top: 110px; /* below the sticky header, as .wn-rel */
+}
+#mqtt-acl-hide:target {
+  padding: var(--sp-4) var(--sp-8);
+  border-radius: var(--r-sm);
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  background: var(--color-accent-bg);
 }
 .banner.acl-warning .banner-btn {
   display: inline-flex;
