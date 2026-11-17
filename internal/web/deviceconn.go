@@ -345,6 +345,7 @@ func pathCardOf(v view, d model.Device, f transport.Facts, p transport.Paths, t 
 			}
 		}
 	}
+	taken := topicTakenText(f)
 	for _, a := range []struct {
 		key  string
 		act  transport.Action
@@ -363,6 +364,9 @@ func pathCardOf(v view, d model.Device, f transport.Facts, p transport.Paths, t 
 			if a.why != "" {
 				row.Sub = a.why
 			}
+		}
+		if taken != "" {
+			row.Sub = strings.ReplaceAll(row.Sub, taken, topicTakenShort)
 		}
 		c.Actions = append(c.Actions, row)
 	}
@@ -408,6 +412,20 @@ func (r *pathRow) setSince(at, now time.Time) {
 	}
 }
 
+// topicTakenShort is what the action rows say in place of the taken-topic sentence (#879), which the MQTT row gives.
+const topicTakenShort = "the MQTT topic is taken (see MQTT above)"
+
+// topicTakenText is the router's sentence for a topic another device answers on, "" unless the MQTT row shows it:
+// the reads are usable (no blocker before it) and the mark is set (#852). The strict blocker is then the taken topic,
+// the first blocker only a write or a transfer has. The action rows replace exactly this text, so the card keeps no
+// second copy of the wording.
+func topicTakenText(f transport.Facts) string {
+	if f.MQTT.TopicTakenSince.IsZero() || transport.MQTTUnusable(f, false) != "" {
+		return ""
+	}
+	return transport.MQTTUnusable(f, true)
+}
+
 func mqttRow(f transport.Facts) pathRow {
 	r := pathRow{Key: keyMQTT}
 	topic := ""
@@ -426,7 +444,7 @@ func mqttRow(f transport.Facts) pathRow {
 	switch strict, reads := transport.MQTTUnusable(f, true), transport.MQTTUnusable(f, false); {
 	case strict == "":
 		r.Value, r.Tone, r.Sub = "On our broker", ui.ToneOK, join(topic, "Last will online")
-	case reads == "" && !f.MQTT.TopicTakenSince.IsZero():
+	case topicTakenText(f) != "":
 		// #852: not "Reading only": the reads go over HTTP while HTTP works too. The sentence (strict's first blocker,
 		// the taken topic, since reads passed) names the topic itself.
 		r.Value, r.Tone, r.Sub = "Topic taken by another device", ui.ToneWarn, sentence(strict)

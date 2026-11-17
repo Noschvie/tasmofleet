@@ -401,3 +401,116 @@ func TestTheMQTTRowSaysWhenAnotherDeviceAnswersOnTheTopic(t *testing.T) {
 		t.Errorf("MQTT row without the mark = %q, want %q", r.Value, "On our broker")
 	}
 }
+
+// cardOfFacts builds the connection card the way the device page does: Choose's paths, the buttons' reasons, the rows.
+func cardOfFacts(f transport.Facts) (*pathCard, deviceTabs) {
+	p := transport.Choose(f)
+	tab := deviceTabs{Health: model.HealthOnline}
+	tab.applyPaths(p, true)
+	return pathCardOf(view{}, model.Device{ID: 1}, f, p, tab), tab
+}
+
+// subsWith lists the rows of the card (facts and actions) whose sentence contains s.
+// A sentence that starts a row is capitalised, so both spellings count (a reason that began with the text would not
+// match a replacement of the lower-case one, and the test must notice).
+func subsWith(c *pathCard, s string) []string {
+	var keys []string
+	for _, r := range append(append([]pathRow{}, c.Facts...), c.Actions...) {
+		if strings.Contains(r.Sub, s) || strings.Contains(r.Sub, sentence(s)) {
+			keys = append(keys, r.Key)
+		}
+	}
+	return keys
+}
+
+// Why (#879): with a marked topic (#852) the router's whole sentence ("another device answers on the device's MQTT
+// topic ... MQTT is used again once only this device answers there") was part of the reason of every action, so the card
+// said it up to six times, a wall of text at 375 px. The MQTT row says it; each action row points to it and still says
+// what it takes instead (its own path, /dl, the restore upload), so the card stays true for every row.
+func TestTheTopicTakenReasonIsSaidOnceOnTheCard(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		firmware bool // FIRMWARE_BASE_URL is set; without it the Update row carries the reason too
+	}{{"firmware server set", true}, {"no firmware server", false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			now := time.Now()
+			f := mqttFacts(now, model.MQTTPasswordOwn)
+			f.HTTP = transport.HTTPState{State: transport.HTTPOK}
+			f.MQTT.TopicTakenSince = now.Add(-time.Hour)
+			f.FirmwareBaseURL = tc.firmware
+			full := transport.MQTTUnusable(f, true)
+			if !strings.Contains(full, "another device answers on the device's MQTT topic kitchen") {
+				t.Fatalf("the router no longer says what this test replaces: %q", full)
+			}
+			c, _ := cardOfFacts(f)
+			if got := subsWith(c, full); len(got) != 1 || got[0] != keyMQTT {
+				t.Errorf("the full sentence stands in the rows %v, want the MQTT row only", got)
+			}
+			want := []string{"Console and Settings: reading", "Console and Settings: changing", "Back up", "Restore"}
+			if !tc.firmware {
+				want = append(want, "Update (download)")
+			}
+			if got := subsWith(c, topicTakenShort); len(got) != len(want) {
+				t.Errorf("rows that point to the MQTT row = %v, want %v", got, want)
+			}
+			for _, r := range c.Actions {
+				for _, w := range want {
+					if r.Key == w && !strings.Contains(r.Sub, topicTakenShort) {
+						t.Errorf("%s says %q, want it to point to the MQTT row", r.Key, r.Sub)
+					}
+				}
+				// The row keeps its own words: the pointer replaces the sentence, not the way the action goes.
+				if r.Key == "Console and Settings: reading" && !strings.HasPrefix(r.Sub, "Over the device's HTTP API, because "+topicTakenShort) {
+					t.Errorf("reading says %q, want the HTTP path named with the short reason", r.Sub)
+				}
+			}
+		})
+	}
+}
+
+// Why (#879): when HTTP fails too, writes, backups and restores have no path at all, and the HTTP failure is the cause the
+// person can act on. Shortening the topic sentence must leave it in the row. The disabled buttons carry their reason as a
+// title that is read on its own, without the MQTT row next to it, so it keeps the whole sentence.
+func TestATakenTopicWithFailingHTTPKeepsBothCausesOnTheCard(t *testing.T) {
+	now := time.Now()
+	f := mqttFacts(now, model.MQTTPasswordOwn)
+	f.MQTT.TopicTakenSince = now.Add(-time.Hour)
+	full := transport.MQTTUnusable(f, true)
+	c, tab := cardOfFacts(f)
+	if got := subsWith(c, full); len(got) != 1 || got[0] != keyMQTT {
+		t.Errorf("the full sentence stands in the rows %v, want the MQTT row only", got)
+	}
+	for _, r := range c.Actions {
+		if r.Key != "Console and Settings: changing" && r.Key != "Back up" && r.Key != "Restore" {
+			continue
+		}
+		if r.Value != "Not available" {
+			t.Errorf("%s = %q, want Not available while HTTP fails and the topic is taken", r.Key, r.Value)
+		}
+		if !strings.Contains(r.Sub, topicTakenShort) {
+			t.Errorf("%s says %q, want the short reason", r.Key, r.Sub)
+		}
+		if !strings.Contains(r.Sub, "cannot reach the device over HTTP") {
+			t.Errorf("%s says %q, want the HTTP failure kept", r.Key, r.Sub)
+		}
+	}
+	for name, why := range map[string]string{"Settings": tab.SettingsWhy, "Back up": tab.BackupWhy} {
+		if !strings.Contains(why, full) {
+			t.Errorf("the %s button says %q, want the whole sentence (it is read on its own)", name, why)
+		}
+	}
+}
+
+// Why (#879): "see MQTT above" is only true when the MQTT row gives the sentence. With another blocker first (the
+// FullTopic differs) that row says Not usable with its own cause, so the action rows keep the whole sentence.
+func TestTheTopicTakenPointerIsOnlyUsedWhenTheMQTTRowSaysIt(t *testing.T) {
+	now := time.Now()
+	f := mqttFacts(now, model.MQTTPasswordOwn)
+	f.HTTP = transport.HTTPState{State: transport.HTTPOK}
+	f.MQTT.TopicTakenSince = now.Add(-time.Hour)
+	f.MQTT.FullTopic, f.MQTT.OurFullTopic = "%topic%/%prefix%/", "%prefix%/%topic%/"
+	c, _ := cardOfFacts(f)
+	if got := subsWith(c, "see MQTT above"); len(got) != 0 {
+		t.Errorf("rows %v point to the MQTT row, which does not say the topic is taken", got)
+	}
+}
