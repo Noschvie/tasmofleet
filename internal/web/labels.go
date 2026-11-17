@@ -201,6 +201,8 @@ func eventText(e model.JobEvent, j model.Job, pr *principalDir, minimal bool) st
 		}
 	}
 	switch {
+	case e.Event == "start" && e.Detail == "" && j.IsUpdate():
+		return "Start: " + updatePathText(j) // the path the job pinned for its whole life (#608)
 	case e.Event == "start_due":
 		return startedText(e, j) // a scheduled job reached its start (#604)
 	case e.Event == "not_started":
@@ -219,6 +221,20 @@ func eventText(e model.JobEvent, j model.Job, pr *principalDir, minimal bool) st
 		return "Cancel requested by " + who // the device is flashing; the job ends after this step
 	}
 	return strings.TrimSpace(label(e.Event) + " " + e.Detail)
+}
+
+// updatePathText says which way an update job reaches its device, from what the job stored at Submit (Transport and
+// Delivery never change afterwards): its commands (OtaUrl, Upgrade and the reads between them) over MQTT or HTTP,
+// and the image either downloaded by the device from TasmoFleet's firmware server or uploaded to the device; both
+// legs of the image are HTTP.
+func updatePathText(j model.Job) string {
+	switch {
+	case j.Transport == model.TransportMQTT:
+		return "commands over MQTT, firmware download over HTTP"
+	case j.Delivery == model.DeliveryPush:
+		return "commands and firmware upload over HTTP"
+	}
+	return "commands and firmware download over HTTP"
 }
 
 // loaderOf is the intermediate image ("safeboot", "minimal") that the note of an identity event says the device runs.

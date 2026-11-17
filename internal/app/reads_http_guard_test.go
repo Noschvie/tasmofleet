@@ -82,8 +82,9 @@ var httpReadsAllowed = map[string]string{
 	"internal/restore/flow.go Manager.send: pinned to HTTP":        "proof that HTTP answers",
 	// A power switch MQTT published nothing for goes over HTTP once (T2); a write, listed for completeness.
 	"internal/devicecmd/devicecmd.go service.Power: pinned to HTTP": "the power switch",
-	// An update job keeps the path it chose (T5); updates are not moved yet.
-	"internal/ota/mqttpath.go pinned: pinned to HTTP": "the firmware update",
+	// An update job keeps the path it chose (T5); its commands go MQTT first since #608, so the HTTP pin is a job MQTT
+	// could not carry (Choose's blockers) or a push upload.
+	"internal/ota/mqttpath.go pinned: pinned to HTTP": "An update job keeps the path it chose",
 }
 
 func TestEveryWayAroundTheRoutersReadRuleIsOnTheProvenList(t *testing.T) {

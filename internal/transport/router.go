@@ -766,7 +766,7 @@ func (r *Router) httpCommand(ctx context.Context, t tasmota.Target, cmnd string)
 }
 
 // pinnedMQTT is a call of a job that chose MQTT: no failover, no HTTP, and the same checks as a
-// routed call. Writes need the strict conditions.
+// routed call. Writes need the strict conditions; reads are refused too while another device answers on the topic.
 func (r *Router) pinnedMQTT(ctx context.Context, id model.DeviceID, cmnd string, cls cmdClass) (json.RawMessage, error) {
 	if r.mqttDoer() == nil {
 		return nil, fmt.Errorf("%w: MQTT is not connected", tasmota.ErrUnreachable)
@@ -779,7 +779,13 @@ func (r *Router) pinnedMQTT(ctx context.Context, id model.DeviceID, cmnd string,
 	if err != nil {
 		return nil, err
 	}
-	if why := MQTTBlocker(f, cls.write); why != "" {
+	why := MQTTBlocker(f, cls.write)
+	if why == "" && !f.MQTT.TopicTakenSince.IsZero() {
+		// A read too (#852, T19): another device answers on the topic, so a pinned read would store its identity or
+		// state on this device. A routed read goes over HTTP here; a pinned one has no other path and fails closed.
+		why = topicTakenText(f.MQTT)
+	}
+	if why != "" {
 		return nil, fmt.Errorf("%w: not usable over MQTT: %s", tasmota.ErrUnreachable, why)
 	}
 	return r.sendMQTT(ctx, d, cmnd, cls)

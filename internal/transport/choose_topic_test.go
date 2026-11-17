@@ -135,6 +135,25 @@ func TestTheRouterSendsNothingToATopicItsMemoryHoldsAsTaken(t *testing.T) {
 	}
 }
 
+// Why (#852, #608 review): a call pinned to MQTT has no other path, so on a taken topic its read would be answered by
+// the other device: an update job pinned at planning (a scheduled one, before the mark) would read that device's
+// identity in its preflight and store it on this device's row. A routed read goes over HTTP there; a pinned one must
+// send nothing and fail, reads as well as writes.
+func TestAPinnedReadSendsNothingToATakenTopic(t *testing.T) {
+	g := newRig(t)
+	g.f.httpOK = true
+	g.r.TopicTaken().Mark(g.devs.d.ID, g.devs.d.Topic)
+	for _, cmd := range []string{"Status 2", "OtaUrl http://fw.example/x.bin"} {
+		_, err := g.r.Command(WithPath(t.Context(), MQTT), g.target(), cmd)
+		if !errors.Is(err, tasmota.ErrUnreachable) || !strings.Contains(err.Error(), "another device answers") {
+			t.Errorf("pinned %q = %v; want it refused with the taken-topic sentence", cmd, err)
+		}
+	}
+	if g.mq.n() != 0 || g.http.n() != 0 {
+		t.Fatalf("MQTT %v, HTTP %v; a pinned call on a taken topic must send nothing anywhere", g.mq.sent, g.http.calls)
+	}
+}
+
 // Why (#852, review): a mark of a taken topic may end only on a check that hears every device on the topic, since a
 // check that hears one reply hears whichever of two devices answers first. TopicStatus5 is that check: it asks the
 // device's stored topic, returns every reply within the identity window (the collect-all the restore uses) and the

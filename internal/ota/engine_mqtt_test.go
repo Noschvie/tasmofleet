@@ -346,6 +346,26 @@ func TestMQTTPathAcceptsTheBackupOnlyWhenItHasAPath(t *testing.T) {
 	}
 }
 
+// Why (#608): since the commands of an update go over MQTT while HTTP works, an update over MQTT no longer means that
+// HTTP is down. A device without a usable MQTT password (the usual case) is backed up over HTTP (/dl) before its
+// update; refusing it would leave it with no update where it had one before #608. Only a backup with no path at all
+// refuses the update up front.
+func TestAnUpdateOverMQTTWithAnHTTPBackupIsNotRefused(t *testing.T) {
+	ps := pathsOf(transport.DownloadMQTT, "OtaUrl and Upgrade over MQTT")
+	ps.Backup = transport.HTTP
+	ps.Reasons = append(ps.Reasons, transport.Reason{Action: transport.ActBackup, Path: transport.HTTP,
+		Text: "over the device's HTTP API (/dl), because a backup over MQTT is not possible: enter the device's MQTT password to back up over MQTT"})
+	h, _ := newPathHarness(t, &fakePaths{paths: ps})
+	id := submitOne(t, h, Request{DeviceID: 1, Release: "16.0.0"})
+	if j := h.job(t, id); j.Transport != model.TransportMQTT {
+		t.Fatalf("job transport %q, want mqtt", j.Transport)
+	}
+	h.run(t, h.e)
+	if j := h.job(t, id); j.State != model.JobSucceeded {
+		t.Fatalf("job %s %q", j.State, j.LastError)
+	}
+}
+
 // Why (#659 review): with the device's HTTP API off the chooser ends a "no path" with the fix, a sentence of its own
 // that ends in a period. The way out of the update ("or turn off Back up each device") must follow it as a clause, not
 // glued behind the period (".; or turn off"). The chooser's own sentence is used, not a stand-in.

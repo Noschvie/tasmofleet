@@ -42,7 +42,7 @@ func TestJobLogOfADirectSafebootUpdateReadsAsItHappened(t *testing.T) {
 	j := model.Job{TargetRelease: "16.0.0", Plan: model.PlanDirect, CancelRequested: true, State: model.JobSucceeded}
 	const q, pf, bk, so, ui, ar, vf, ok = model.JobQueued, model.JobPreflight, model.JobBackup, model.JobSetOtaURL, model.JobUpgradeIssued, model.JobAwaitReboot, model.JobVerify, model.JobSucceeded
 	runLog(t, j, newPrincipalDir(st), []logEv{
-		{q, pf, "start", "", "Start"},
+		{q, pf, "start", "", "Start: commands and firmware download over HTTP"},
 		{pf, pf, "identity", "", "Identity"}, // preflight identity stays
 		{pf, bk, "planned", "", "Planned"},
 		{bk, so, "backup_done", "", "Backup done"},
@@ -69,7 +69,7 @@ func TestJobLogOfAStagedUpdateNamesTheStage(t *testing.T) {
 	j := model.Job{TargetRelease: "16.0.0", Plan: model.PlanStaged, State: model.JobSucceeded}
 	const q, pf, bk, so, ui, ar, vf, ro, ok = model.JobQueued, model.JobPreflight, model.JobBackup, model.JobSetOtaURL, model.JobUpgradeIssued, model.JobAwaitReboot, model.JobVerify, model.JobRestoreOtaURL, model.JobSucceeded
 	runLog(t, j, newPrincipalDir(nil), []logEv{
-		{q, pf, "start", "", "Start"},
+		{q, pf, "start", "", "Start: commands and firmware download over HTTP"},
 		{pf, pf, "identity", "", "Identity"},
 		{pf, bk, "planned", "", "Planned"},
 		{bk, so, "backup_done", "", "Backup done"},
@@ -119,5 +119,30 @@ func TestJobLogRealCommandFailureKeepsEngineText(t *testing.T) {
 	done := model.JobEvent{From: model.JobVerify, To: model.JobSucceeded, Event: "identity"}
 	if got := eventText(done, model.Job{}, newPrincipalDir(nil), false); got != "Update verified" {
 		t.Errorf("got %q", got)
+	}
+}
+
+// Why (#608): an update's commands go over MQTT while HTTP works, and the job keeps the path it chose for its whole
+// life. The start line of its log is where a person reads which path the update used: the commands over MQTT or
+// HTTP, the image downloaded over HTTP or uploaded over HTTP. Jobs that are not updates choose no such path and keep
+// the plain word.
+func TestTheJobLogNamesTheUpdatesPath(t *testing.T) {
+	start := model.JobEvent{From: model.JobQueued, To: model.JobPreflight, Event: "start"}
+	for _, tc := range []struct {
+		name string
+		j    model.Job
+		want string
+	}{
+		{"commands over MQTT", model.Job{Transport: model.TransportMQTT}, "Start: commands over MQTT, firmware download over HTTP"},
+		{"download over HTTP", model.Job{}, "Start: commands and firmware download over HTTP"},
+		{"upload over HTTP", model.Job{Delivery: model.DeliveryPush}, "Start: commands and firmware upload over HTTP"},
+		{"upload into safeboot", model.Job{Delivery: model.DeliveryPush, ViaSafeboot: true}, "Start: commands and firmware upload over HTTP"},
+		{"a policy job", model.Job{Kind: model.KindPolicy, Transport: model.TransportMQTT}, "Start"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := eventText(start, tc.j, newPrincipalDir(nil), false); got != tc.want {
+				t.Errorf("%q, want %q", got, tc.want)
+			}
+		})
 	}
 }

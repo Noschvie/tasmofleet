@@ -29,9 +29,11 @@ func (b *pinRecBackups) Backup(ctx context.Context, actor string, id model.Devic
 }
 
 // Why (#607, the product owner's transport rule of 2026-11-14): the backup before an update is a backup like any other
-// and goes over MQTT first when the device is usable there, whatever carries the update. An update over HTTP must not
-// pin its backup to HTTP; the backup's own rule decides (the router, which never moves a transfer that published to
-// the other transport). An update over MQTT keeps its backup on MQTT: HTTP is not usable for it (D5).
+// and goes over MQTT first when the device is usable there, whatever carries the update. No update pins its backup to
+// its own path; the backup's own rule decides (the router, which never moves a transfer that published to the other
+// transport, and never asks HTTP while HTTP is known to fail). Since #608 an update goes over MQTT while HTTP works
+// too, so its backup may need HTTP: a device without a usable MQTT password is backed up over /dl, as every other
+// backup of it is. The update's own calls stay pinned (D5).
 func TestTheBackupBeforeAnUpdateTakesTheBackupsOwnTransport(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -40,7 +42,7 @@ func TestTheBackupBeforeAnUpdateTakesTheBackupsOwnTransport(t *testing.T) {
 		want string         // the backup's pin
 	}{
 		{"update over HTTP: the backup decides for itself (MQTT first)", transport.DownloadHTTP, transport.HTTP, "unpinned"},
-		{"update over MQTT: the backup stays on MQTT", transport.DownloadMQTT, transport.MQTT, string(transport.MQTT)},
+		{"update over MQTT: the backup decides for itself too", transport.DownloadMQTT, transport.MQTT, "unpinned"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			h := newHarness(t, 2, plugDevice())

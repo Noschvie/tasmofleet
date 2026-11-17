@@ -430,7 +430,7 @@ func subsWith(c *pathCard, s string) []string {
 func TestTheTopicTakenReasonIsSaidOnceOnTheCard(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
-		firmware bool // FIRMWARE_BASE_URL is set; without it the Update row carries the reason too
+		firmware bool // FIRMWARE_BASE_URL is set: the Update row says why its commands stay on HTTP (#608); without it why it has no path
 	}{{"firmware server set", true}, {"no firmware server", false}} {
 		t.Run(tc.name, func(t *testing.T) {
 			now := time.Now()
@@ -446,10 +446,7 @@ func TestTheTopicTakenReasonIsSaidOnceOnTheCard(t *testing.T) {
 			if got := subsWith(c, full); len(got) != 1 || got[0] != keyMQTT {
 				t.Errorf("the full sentence stands in the rows %v, want the MQTT row only", got)
 			}
-			want := []string{"Console and Settings: reading", "Console and Settings: changing", "Back up", "Restore"}
-			if !tc.firmware {
-				want = append(want, "Update (download)")
-			}
+			want := []string{"Console and Settings: reading", "Console and Settings: changing", "Back up", "Restore", "Update (download)"}
 			if got := subsWith(c, topicTakenShort); len(got) != len(want) {
 				t.Errorf("rows that point to the MQTT row = %v, want %v", got, want)
 			}

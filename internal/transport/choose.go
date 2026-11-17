@@ -47,13 +47,15 @@ func (p Paths) Reason(a Action) string {
 //     with the same two exceptions as writes; else HTTP (/dl) unless HTTP is failing.
 //   - Restore: MQTT FileUpload Type 2 first under the backup's rule (#607); else HTTP (the web UI's restore upload)
 //     unless HTTP is failing.
-//   - Update, pull: download over HTTP, else download started over MQTT.
-//   - Update, push where possible: today's HTTP decision while HTTP works; with HTTP failing the
-//     upload over MQTT (only with the experimental checkbox, a fitting image and a usable
-//     password), else the download over MQTT.
+//   - Update, pull: the device downloads the image from TasmoFleet's firmware server over HTTP; OtaUrl and Upgrade
+//     go over MQTT first (DownloadMQTT) under the rule of writes, with the same two exceptions (#608), else over
+//     HTTP (DownloadHTTP) unless HTTP is failing.
+//   - Update, push where possible: today's HTTP upload decision while HTTP works (a push that fell back to the
+//     download is a pull); with HTTP failing the upload over MQTT (only with the experimental checkbox, a fitting
+//     image and a usable password), else the download over MQTT.
 //
-// Updates keep HTTP first: it is the established path, and MQTT is what makes devices HTTP cannot reach manageable
-// (#45). Reads go MQTT first since #456, writes since #605, backups and restores since #607.
+// Reads go MQTT first since #456, writes since #605, backups and restores since #607, the commands of an update since
+// #608. The upload of a push stays on HTTP while HTTP works (the coordinator's decision of 2026-11-17).
 func Choose(f Facts) Paths {
 	var p Paths
 	var t string
@@ -300,11 +302,11 @@ func chooseUpdate(f Facts) (Path, string) {
 	}
 	if !httpFailing(f) {
 		if why := fwBlocker(f); why == "" {
-			text := DownloadHTTP.Describe()
+			path, text := chooseDownload(f)
 			if push && f.Request.HTTPPushNote != "" {
 				text += "; no upload: " + f.Request.HTTPPushNote
 			}
-			return DownloadHTTP, text
+			return path, text
 		}
 	}
 	// HTTP is failing, or the device cannot fetch over HTTP's download.
@@ -340,6 +342,28 @@ func chooseUpdate(f Facts) (Path, string) {
 	}
 	text := noPath(parts...)
 	return None, text
+}
+
+// chooseDownload is the download of an update while HTTP is not failing and the device reaches the firmware server
+// (#608). OtaUrl and Upgrade 1 are writes: the path is the one chooseWrites gives, so the two can never drift apart;
+// only the sentence is the update's own. The device fetches the image from TasmoFleet's firmware server over HTTP
+// either way. They need no MqttPassword. The job pins the path for its whole life (ota.pinned), so the sentence says
+// so instead of a fallback.
+func chooseDownload(f Facts) (Path, string) {
+	dl := DownloadHTTP.Describe()
+	if w, _ := chooseWrites(f); w == MQTT {
+		return DownloadMQTT, "OtaUrl and Upgrade go to the device's own topic on TasmoFleet's broker, where it is online; " +
+			dl + ", and the update stays on MQTT until it ends"
+	}
+	const viaHTTP = "OtaUrl and Upgrade over the device's HTTP API, because "
+	switch why := mqttBlocker(f, true); {
+	case why != "":
+		return DownloadHTTP, dl + "; " + viaHTTP + "MQTT is not usable: " + why
+	case !f.MQTT.ConnChangedSince.IsZero():
+		return DownloadHTTP, dl + "; " + viaHTTP + connChangedText(f.MQTT)
+	}
+	// The other exception of chooseWrites (a new one there needs its sentence here; the path follows it anyway).
+	return DownloadHTTP, dl + "; " + viaHTTP + unansweredText(f.MQTT)
 }
 
 // uploadBlocker says why the upload over MQTT (FileUpload Type 1) cannot be used, "" when it can.

@@ -291,6 +291,13 @@ func TestPinnedPathsNeverFailOver(t *testing.T) {
 	if _, err := g.r.Command(WithPath(t.Context(), MQTT), g.target(), "Power1 ON"); err == nil || g.mq.n() != n {
 		t.Fatalf("pinned MQTT write with an unread group topic: err=%v", err)
 	}
+	// #608: an update's OtaUrl and Upgrade 1 are such writes; on a topic that may be shared they would flash other
+	// devices without their own Guard.
+	for _, c := range []string{"OtaUrl http://fw.example/fw/16.0.0/tasmota.bin.gz", "Upgrade 1"} {
+		if _, err := g.r.Command(WithPath(t.Context(), MQTT), g.target(), c); err == nil || g.mq.n() != n {
+			t.Fatalf("pinned %q with an unread group topic: err=%v", c, err)
+		}
+	}
 }
 
 func TestAFailedMQTTSendIsNeverRepeatedOverHTTP(t *testing.T) {

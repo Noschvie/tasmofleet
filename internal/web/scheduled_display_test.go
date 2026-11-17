@@ -167,7 +167,7 @@ func TestJobLogOfATwoStepUpdateNamesTheLoaderLeg(t *testing.T) {
 	j := model.Job{TargetRelease: "16.0.0", Plan: model.PlanDirect, State: model.JobSucceeded}
 	const q, pf, bk, so, ui, ar, vf, ro, ok = model.JobQueued, model.JobPreflight, model.JobBackup, model.JobSetOtaURL, model.JobUpgradeIssued, model.JobAwaitReboot, model.JobVerify, model.JobRestoreOtaURL, model.JobSucceeded
 	seq := []logEv{
-		{q, pf, "start", "", "Start"},
+		{q, pf, "start", "", "Start: commands and firmware download over HTTP"},
 		{pf, bk, "planned", "", "Planned"},
 		{bk, so, "backup_done", "", "Backup done"},
 		{so, ui, "command_ok", "", "Command ok"},

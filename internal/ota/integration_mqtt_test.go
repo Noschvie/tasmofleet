@@ -29,6 +29,10 @@ type itFacts struct {
 	mem *transport.Memory
 	mu  sync.Mutex
 	fw  map[model.DeviceID]model.FWReach
+	// othersUnread is what the facts source would find of other devices whose GroupTopic is unread (#812).
+	othersUnread []string
+	// topicTaken is when the router's memory found another device on the device's topic (#852); zero: not taken.
+	topicTaken time.Time
 }
 
 func (f *itFacts) HTTPState(id model.DeviceID) transport.HTTPState {
@@ -49,7 +53,8 @@ func (f *itFacts) FactsFor(_ context.Context, d model.Device) (transport.Facts, 
 	return transport.Facts{
 		Now: now, HTTP: f.HTTPState(d.ID),
 		MQTT: transport.MQTTFacts{BusConnected: true, Ours: d.MQTT == model.MQTTOurs, Topic: d.Topic, TopicExclusive: true,
-			GroupTopic: "tasmotas", GroupTopicReadAt: now, LastProbeAt: now.Add(-time.Hour), LWTOnline: true},
+			GroupTopic: "tasmotas", GroupTopicReadAt: now, LastProbeAt: now.Add(-time.Hour), LWTOnline: true,
+			OthersGroupUnread: f.othersUnread, TopicTakenSince: f.topicTaken},
 		FWReach: fw, FirmwareBaseURL: true, Identity: d.Identity,
 	}, nil
 }
@@ -99,6 +104,8 @@ type itMQTT struct {
 	facts  *itFacts
 	lossy  *lossy
 	router *transport.Router
+	// httpRec is the router's HTTP client: it records every command HTTP carried.
+	httpRec *httpRec
 }
 
 func newItMQTT(t *testing.T) *itMQTT {
@@ -126,7 +133,8 @@ func newItMQTT(t *testing.T) *itMQTT {
 	m.facts = &itFacts{mem: m.mem}
 	m.lossy = &lossy{MQTTDoer: ch}
 	client := tasmota.NewHTTPClient(tasmota.Options{AllowedNetworks: []netip.Prefix{netip.MustParsePrefix("127.0.0.0/8")}, Timeout: 800 * time.Millisecond})
-	router := transport.NewRouter(transport.Options{HTTP: client, Devices: e.st, Memory: m.mem})
+	m.httpRec = &httpRec{Client: client}
+	router := transport.NewRouter(transport.Options{HTTP: m.httpRec, Devices: e.st, Memory: m.mem})
 	m.router = router
 	router.SetFacts(m.facts)
 	router.SetMQTT(m.lossy)

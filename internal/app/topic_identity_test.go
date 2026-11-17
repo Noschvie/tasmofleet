@@ -658,7 +658,8 @@ func TestATopicTwoDevicesAnswerOnStaysMarked(t *testing.T) {
 // Why (#852, review): while HTTP fails, a marked device's reads still go to its topic (MQTT is the only way left), and
 // the check after them (VerifyRead) is answered there by whichever device replies first. A single reply with the
 // device's MAC does not show that the other device left, so it must not end the mark: the device's writes would go to
-// both devices.
+// both devices. Since #608's review the pinned check is not even sent to the taken topic: a reply there vouches for
+// nothing, so the check refuses the read (fail closed) instead of accepting whichever device answered first.
 func TestACheckAfterAReadOverMQTTNeverEndsTheMark(t *testing.T) {
 	onTopic, atAddr := &brokerAnswers{mac: storedMAC, host: "mqtt.home"}, &brokerAnswers{mac: storedMAC, host: "mqtt.home"}
 	p, st, id := brokerReadOverRouter(t, onTopic, atAddr, "Online")
@@ -675,11 +676,11 @@ func TestACheckAfterAReadOverMQTTNeverEndsTheMark(t *testing.T) {
 	if via := trace.Via(); via != "mqtt" {
 		t.Fatalf("the read went over %s, want mqtt: the test does not show the case it is about", via)
 	}
-	if err := p.VerifyRead(t.Context(), d, trace); err != nil {
-		t.Fatal(err)
+	if err := p.VerifyRead(t.Context(), d, trace); !errors.Is(err, tasmota.ErrUnreachable) {
+		t.Errorf("VerifyRead = %v; want the check refused on the taken topic, so the read is not vouched for", err)
 	}
 	if p.Topics.Since(id, d.Topic).IsZero() {
-		t.Error("one reply with the device's MAC after a read over MQTT ended the mark")
+		t.Error("the check after a read over MQTT ended the mark")
 	}
 }
 

@@ -53,10 +53,11 @@ func TestChooseOrder(t *testing.T) {
 		f                              Facts
 		commands, backup, restore, upd Path
 	}{
-		// Why: reads (#456), writes (#605) and transfers (#607) go MQTT first when MQTT is usable; the update
-		// keeps HTTP first (see choose_transfers_test.go for the transfers' own rules).
-		{"http ok, mqtt usable: transfers MQTT, the update HTTP", base(), MQTT, MQTT, MQTT, DownloadHTTP},
-		{"http unknown counts as not failing", func() Facts { f := base(); f.HTTP = HTTPState{}; return f }(), MQTT, MQTT, MQTT, DownloadHTTP},
+		// Why: reads (#456), writes (#605), transfers (#607) and the commands of an update (#608) go MQTT first when
+		// MQTT is usable; the device still downloads the image over HTTP (see choose_transfers_test.go for the
+		// transfers' own rules, choose_update_test.go for the update's).
+		{"http ok, mqtt usable: transfers and the update's commands MQTT", base(), MQTT, MQTT, MQTT, DownloadMQTT},
+		{"http unknown counts as not failing", func() Facts { f := base(); f.HTTP = HTTPState{}; return f }(), MQTT, MQTT, MQTT, DownloadMQTT},
 		// Why: this is #45. MQTT is what makes an http_unreachable device manageable.
 		{"http failing, mqtt usable, password set", httpDown(base()), MQTT, MQTT, MQTT, DownloadMQTT},
 		// Why: a transfer carries the password; without one nothing is published. Commands do not need it.
@@ -272,6 +273,7 @@ func TestFWReachExpiry(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			f := base()
+			f.MQTT.BusConnected = false // the download over HTTP alone: this test is about the firmware server
 			f.FWReach = c.r
 			if got := Choose(f).Update; got != c.want {
 				t.Errorf("update = %s, want %s", got, c.want)
@@ -286,7 +288,8 @@ func TestFWReachExpiry(t *testing.T) {
 }
 
 // Why: HTTP-reachable push devices keep today's decision from the OTA engine; the real-device
-// tested paths of 0.18/0.19 must not regress, even with MQTT usable and the checkbox ticked.
+// tested paths of 0.18/0.19 must not regress, even with MQTT usable and the checkbox ticked. A push that
+// fell back to the download is a download: its commands go over MQTT first (#608) and it keeps its note.
 func TestUpdatePushKeepsHTTPDecision(t *testing.T) {
 	for _, hp := range []Path{PushHTTP, PushSafeboot} {
 		f := push(base(), hp, true)
@@ -298,12 +301,12 @@ func TestUpdatePushKeepsHTTPDecision(t *testing.T) {
 	f := push(base(), DownloadHTTP, true)
 	f.Request.HTTPPushNote = "not enough free flash for an upload"
 	p := Choose(f)
-	if p.Update != DownloadHTTP || !strings.Contains(p.Reason(ActUpdate), "not enough free flash for an upload") {
+	if p.Update != DownloadMQTT || !strings.Contains(p.Reason(ActUpdate), "not enough free flash for an upload") {
 		t.Errorf("fallback: %s %q", p.Update, p.Reason(ActUpdate))
 	}
 	// Zero HTTPPush reads as the fallback.
 	f = push(base(), "", false)
-	if got := Choose(f).Update; got != DownloadHTTP {
+	if got := Choose(f).Update; got != DownloadMQTT {
 		t.Errorf("zero HTTPPush: %s", got)
 	}
 	// A fallback to download for a device that cannot fetch is no path at all.
@@ -315,7 +318,7 @@ func TestUpdatePushKeepsHTTPDecision(t *testing.T) {
 	// Pull never picks a push path, whatever the engine suggests.
 	f = base()
 	f.Request.HTTPPush = PushHTTP
-	if got := Choose(f).Update; got != DownloadHTTP {
+	if got := Choose(f).Update; got != DownloadMQTT {
 		t.Errorf("pull with PushHTTP hint: %s", got)
 	}
 }
