@@ -12187,12 +12187,26 @@ dialog.fw-notes-dlg .fw-dlg-body {
   font: 400 12.5px var(--font-mono);
   overflow-wrap: anywhere;
 }
+/* the tiles filter the list below them, so they stay in view while the list scrolls: the bar
+   sticks under the sticky header (top bar 52 px + section tabs 40 px) and paints the page's
+   background, so the rows passing beneath do not show through. The header (--z-header) still
+   lies over it, and so do its menus. */
+#bk-result {
+  --bk-sticky-top: calc(52px + 40px);
+}
+.bk-tilebar {
+  position: sticky;
+  top: var(--bk-sticky-top);
+  z-index: var(--z-sticky);
+  background: var(--color-bg);
+  padding: 10px 0 14px;
+  margin-top: -10px;
+}
 .bk-tiles {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
   max-width: 640px;
-  margin-bottom: 14px;
 }
 .bk-tile {
   padding: 12px 14px;

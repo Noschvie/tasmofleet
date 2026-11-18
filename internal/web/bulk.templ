@@ -202,10 +202,12 @@ templ bulkResultPage(v bulkResultView) {
 		if v.Command != "" {
 			<div class="bk-cmdline" if v.HistoryAdd != "" { data-history-add={ v.HistoryAdd } }>› { v.Command }</div>
 		}
-		<div class="bk-tiles">
-			@bulkTile(ui.ToneOK, "Succeeded", v.OK, v.TileHref(bulkGroupOK, v.OK), v.Filter == bulkGroupOK)
-			@bulkTile(ui.ToneDanger, "Failed", v.Failed, v.TileHref(bulkGroupFailed, v.Failed), v.Filter == bulkGroupFailed)
-			@bulkTile(ui.ToneNeutral, "Skipped", v.Skipped, v.TileHref(bulkGroupSkipped, v.Skipped), v.Filter == bulkGroupSkipped)
+		<div class="bk-tilebar">
+			<div class="bk-tiles">
+				@bulkTile(ui.ToneOK, "Succeeded", v.OK, v.TileHref(bulkGroupOK, v.OK), v.Filter == bulkGroupOK)
+				@bulkTile(ui.ToneDanger, "Failed", v.Failed, v.TileHref(bulkGroupFailed, v.Failed), v.Filter == bulkGroupFailed)
+				@bulkTile(ui.ToneNeutral, "Skipped", v.Skipped, v.TileHref(bulkGroupSkipped, v.Skipped), v.Filter == bulkGroupSkipped)
+			</div>
 		</div>
 		<section class="bk-res" aria-label="Result per device">
 			for _, r := range v.ShownRows() {

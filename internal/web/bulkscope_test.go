@@ -3,6 +3,7 @@ package web
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -224,6 +225,32 @@ func TestBulkResultDeviceLinksToItsPage(t *testing.T) {
 	for _, want := range []string{`href="/tf/devices/1"`, `href="/tf/devices/2"`} {
 		if !strings.Contains(list, want) {
 			t.Errorf("lacks device link %q: %s", want, list)
+		}
+	}
+}
+
+// Why: a bulk result of 40 devices is longer than the window. The tiles are the page's
+// filter; scrolled down to find a row, they were out of sight, and changing the filter meant
+// scrolling back up. The tile bar sticks below the sticky header instead, on the page's own
+// background so the rows scrolling beneath do not show through.
+func TestBulkResultTilesStayInView(t *testing.T) {
+	e := resultEnv(t, model.Job{ID: 1, BatchID: 7, DeviceID: 1, Kind: model.KindBackup, Commands: model.BackupMarker, State: model.JobSucceeded, CreatedAt: time.Now(), UpdatedAt: time.Now()})
+	_, body := e.do(t, "GET", "/devices/bulk/result/7?id=1", "admin", nil)
+	if !strings.Contains(body, `<div class="bk-tilebar"><div class="bk-tiles">`) {
+		t.Errorf("the tiles sit in the sticky tile bar: %s", body)
+	}
+	raw, err := os.ReadFile("static/app.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, rule, ok := strings.Cut(string(raw), "\n.bk-tilebar {")
+	if !ok {
+		t.Fatal("app.css has no .bk-tilebar rule")
+	}
+	rule, _, _ = strings.Cut(rule, "}")
+	for _, want := range []string{"position: sticky", "top: var(--bk-sticky-top)", "z-index: var(--z-sticky)", "background: var(--color-bg)"} {
+		if !strings.Contains(rule, want) {
+			t.Errorf(".bk-tilebar lacks %q: %s", want, rule)
 		}
 	}
 }
