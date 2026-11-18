@@ -12212,6 +12212,20 @@ dialog.fw-notes-dlg .fw-dlg-body {
   font: 600 24px/1.1 var(--font-sans);
   font-variant-numeric: tabular-nums;
 }
+/* a tile with a link filters the result list to its devices; the active one is outlined */
+a.bk-tile-link {
+  display: block;
+  color: var(--color-text);
+  text-decoration: none;
+}
+a.bk-tile-link:hover {
+  border-color: var(--color-border-strong);
+  color: var(--color-text);
+}
+a.bk-tile-link[aria-current="true"] {
+  border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 var(--hair-w) var(--color-accent);
+}
 .bk-res {
   background: var(--color-surface);
   border: var(--hair-w) solid var(--color-border);
@@ -12233,6 +12247,19 @@ dialog.fw-notes-dlg .fw-dlg-body {
 .bk-rbadge {
   width: 86px;
   flex: none;
+}
+a.bk-namelink {
+  color: var(--color-text);
+  text-decoration: none;
+}
+a.bk-namelink:hover {
+  text-decoration: underline;
+}
+.bk-rempty {
+  margin: 0;
+  padding: 14px 16px;
+  font-size: 13px;
+  color: var(--color-text-2);
 }
 .bk-detail {
   flex: 2 1 260px;

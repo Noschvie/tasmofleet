@@ -264,7 +264,29 @@ func skippedReason(hl model.Health) string {
 // bulkResultRow is one device of the result page.
 type bulkResultRow struct {
 	Name, Addr, Label, Detail string
+	Href                      string // the device's page; "" when the device no longer exists
 	Tone                      ui.Tone
+}
+
+// The groups of the result tiles; a tile's click shows only its group (?show=).
+const (
+	bulkGroupOK      = "ok"
+	bulkGroupFailed  = "failed"
+	bulkGroupSkipped = "skipped"
+)
+
+// Group is the tile the row is counted in: a cancelled job counts as failed, like in the
+// tiles; a queued or running one is in none.
+func (r bulkResultRow) Group() string {
+	switch r.Label {
+	case "Succeeded":
+		return bulkGroupOK
+	case "Failed", "Cancelled":
+		return bulkGroupFailed
+	case "Skipped":
+		return bulkGroupSkipped
+	}
+	return ""
 }
 
 // bulkResultView is the result page of a bulk action.
@@ -282,6 +304,56 @@ type bulkResultView struct {
 	Rows                []bulkResultRow
 	CanRetry            bool
 	Toast               string // power: the toast of the finished run
+	Filter              string // the group the list shows ("" all of them)
+	TilePath            string // the page's own path for the tile links; "" (power: a POST) makes plain tiles
+	TileQuery           url.Values
+}
+
+// TileHref is the link of a tile: the list filtered to its group, or back to every device when
+// the tile is the active one. "" when the tile is no link (no page to link to, or nothing to show).
+func (v bulkResultView) TileHref(group string, n int) string {
+	if v.TilePath == "" || (n == 0 && v.Filter != group) {
+		return ""
+	}
+	q := url.Values{}
+	for k, vs := range v.TileQuery {
+		q[k] = vs
+	}
+	if v.Filter != group {
+		q.Set("show", group)
+	}
+	if len(q) == 0 {
+		return v.TilePath
+	}
+	return v.TilePath + "?" + q.Encode()
+}
+
+// AllHref is the list without a filter.
+func (v bulkResultView) AllHref() string {
+	return v.TileHref(v.Filter, 1)
+}
+
+// ShownRows are the rows of the active filter.
+func (v bulkResultView) ShownRows() []bulkResultRow {
+	if v.Filter == "" {
+		return v.Rows
+	}
+	var out []bulkResultRow
+	for _, r := range v.Rows {
+		if r.Group() == v.Filter {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// bulkFilter is the ?show= of the result page; an unknown value shows every device.
+func bulkFilter(s string) string {
+	switch s {
+	case bulkGroupOK, bulkGroupFailed, bulkGroupSkipped:
+		return s
+	}
+	return ""
 }
 
 func (v bulkResultView) Title() string {
@@ -368,14 +440,17 @@ func (h *handler) bulkResult(w http.ResponseWriter, r *http.Request) {
 			rv.HistoryAdd = historyText(rv.Command)
 		}
 	}
+	q := r.URL.Query()
+	q.Del("sent") // a refresh or a tile's click is not a send
 	if rv.Running {
-		q := r.URL.Query()
-		q.Del("sent")                 // a refresh is not a send
 		rv.Self = v.Base + r.URL.Path // handlers see the path below the base
 		if len(q) > 0 {
-			rv.Self += "?" + q.Encode()
+			rv.Self += "?" + q.Encode() // keeps the filter too
 		}
 	}
+	rv.Filter = bulkFilter(q.Get("show"))
+	q.Del("show")
+	rv.TilePath, rv.TileQuery = v.Base+r.URL.Path, q
 	byDev := map[model.DeviceID]bulkResultRow{}
 	var order []model.DeviceID
 	for _, j := range p.Jobs {
@@ -400,7 +475,7 @@ func (h *handler) bulkResult(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
-		rv.Rows = append(rv.Rows, bulkResultRow{Name: d.Name, Addr: d.Address, Label: "Skipped", Tone: ui.ToneNeutral, Detail: skippedReason(h.d.Health.Get(id))})
+		rv.Rows = append(rv.Rows, bulkResultRow{Name: d.Name, Addr: d.Address, Href: v.Base + "/devices/" + devStr(id), Label: "Skipped", Tone: ui.ToneNeutral, Detail: skippedReason(h.d.Health.Get(id))})
 		rv.Skipped++
 	}
 	v.Title, v.Crumbs, v.Live = bulkTitle, bulkCrumbs, true
@@ -418,7 +493,7 @@ func (h *handler) jobResultRow(r *http.Request, j jobView, rv *bulkResultView) b
 		}
 	}
 	if d, err := h.d.Inventory.Get(r.Context(), j.Job.DeviceID); err == nil {
-		row.Addr = d.Address
+		row.Addr, row.Href = d.Address, rv.Base+"/devices/"+devStr(j.Job.DeviceID)
 	}
 	switch j.Job.State { //nolint:exhaustive // every other state is a running step
 	case model.JobSucceeded:

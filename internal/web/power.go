@@ -266,7 +266,7 @@ func (h *handler) devicesBulkPower(w http.ResponseWriter, r *http.Request) {
 	rv := bulkResultView{Kind: kind, Base: v.Base, When: h.d.Clock.Now(), By: h.pr.Text(actor(r))}
 	switched := 0
 	for _, row := range sv.Rows {
-		res := bulkResultRow{Name: row.Name, Addr: row.Addr}
+		res := bulkResultRow{Name: row.Name, Addr: row.Addr, Href: v.Base + "/devices/" + devStr(row.ID)}
 		if row.Skip {
 			res.Label, res.Tone, res.Detail = "Skipped", ui.ToneNeutral, skippedReason(h.d.Health.Get(row.ID))
 			rv.Skipped++
