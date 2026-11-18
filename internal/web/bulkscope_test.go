@@ -155,3 +155,75 @@ func TestBulkResultOffersCommandToHistoryOnlyAfterOwnSend(t *testing.T) {
 		t.Errorf("the page after the send did not offer the command: %s", body)
 	}
 }
+
+// Why: a bulk action over many devices ends with a long list; the tiles say how many failed or
+// were skipped, and a click on one shows just those devices, so the one failure among 40
+// successes is found without scrolling. The counts stay the whole transaction's, a second click
+// (or "Show all") shows every device again, and the filter survives the page's own refresh.
+func TestBulkResultTilesFilterTheList(t *testing.T) {
+	now := time.Now()
+	e := resultEnv(t,
+		model.Job{ID: 1, BatchID: 7, DeviceID: 1, Kind: model.KindBackup, Commands: model.BackupMarker, State: model.JobFailed, CreatedAt: now, UpdatedAt: now},
+	)
+	_, body := e.do(t, "GET", "/devices/bulk/result/7?id=1&id=2&sent=1", "admin", nil)
+	for _, want := range []string{
+		`href="/tf/devices/bulk/result/7?id=1&amp;id=2&amp;show=failed"`,
+		`href="/tf/devices/bulk/result/7?id=1&amp;id=2&amp;show=skipped"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("lacks tile link %q: %s", want, between(body, `class="bk-tiles"`, "</section>"))
+		}
+	}
+	if strings.Contains(body, "show=ok") {
+		t.Error("a tile counting 0 devices filters nothing and is no link")
+	}
+
+	_, body = e.do(t, "GET", "/devices/bulk/result/7?id=1&id=2&show=failed", "admin", nil)
+	list := between(body, `aria-label="Result per device"`, "</section>")
+	if !strings.Contains(list, ">kitchen<") || strings.Contains(list, ">attic<") {
+		t.Errorf("show=failed lists only the failed device: %s", list)
+	}
+	if !strings.Contains(body, `<div class="bk-tile-v">1</div>`) || strings.Count(body, `<div class="bk-tile-v">1</div>`) != 2 {
+		t.Errorf("the tiles keep counting the whole transaction: %s", between(body, `class="bk-tiles"`, `aria-label="Result per device"`))
+	}
+	if !strings.Contains(body, `aria-current="true"`) || !strings.Contains(body, `href="/tf/devices/bulk/result/7?id=1&amp;id=2"`) {
+		t.Errorf("the active tile is marked and a second click shows all again: %s", between(body, `class="bk-tiles"`, `aria-label="Result per device"`))
+	}
+
+	_, body = e.do(t, "GET", "/devices/bulk/result/7?id=1&id=2&show=skipped", "admin", nil)
+	list = between(body, `aria-label="Result per device"`, "</section>")
+	if strings.Contains(list, ">kitchen<") || !strings.Contains(list, ">attic<") {
+		t.Errorf("show=skipped lists only the skipped device: %s", list)
+	}
+
+	_, body = e.do(t, "GET", "/devices/bulk/result/7?id=1&id=2&show=ok", "admin", nil)
+	if !strings.Contains(body, "No device in this group.") || !strings.Contains(body, "Show all") {
+		t.Errorf("an empty group says so and offers the way back: %s", between(body, `aria-label="Result per device"`, "</section>"))
+	}
+	_, body = e.do(t, "GET", "/devices/bulk/result/7?id=1&id=2&show=bogus", "admin", nil)
+	if list = between(body, `aria-label="Result per device"`, "</section>"); !strings.Contains(list, ">kitchen<") || !strings.Contains(list, ">attic<") {
+		t.Errorf("an unknown filter shows every device: %s", list)
+	}
+
+	run := resultEnv(t, model.Job{ID: 1, BatchID: 8, DeviceID: 1, Kind: model.KindCommand, Commands: restartCommand, State: model.JobApplying, CreatedAt: now, UpdatedAt: now})
+	_, body = run.do(t, "GET", "/devices/bulk/result/8?id=1&show=failed", "admin", nil)
+	if !strings.Contains(body, `hx-get="/tf/devices/bulk/result/8?id=1&amp;show=failed"`) {
+		t.Errorf("the refresh of a running page keeps the filter: %s", body)
+	}
+}
+
+// Why: the result names the devices, and the next step after a failure is that device's own
+// page (its log, its backups, a retry by hand); every listed device that still exists links there.
+func TestBulkResultDeviceLinksToItsPage(t *testing.T) {
+	now := time.Now()
+	e := resultEnv(t,
+		model.Job{ID: 1, BatchID: 7, DeviceID: 1, Kind: model.KindBackup, Commands: model.BackupMarker, State: model.JobSucceeded, CreatedAt: now, UpdatedAt: now},
+	)
+	_, body := e.do(t, "GET", "/devices/bulk/result/7?id=1&id=2", "admin", nil)
+	list := between(body, `aria-label="Result per device"`, "</section>")
+	for _, want := range []string{`href="/tf/devices/1"`, `href="/tf/devices/2"`} {
+		if !strings.Contains(list, want) {
+			t.Errorf("lacks device link %q: %s", want, list)
+		}
+	}
+}

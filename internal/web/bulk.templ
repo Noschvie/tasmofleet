@@ -2,6 +2,7 @@ package web
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
@@ -202,15 +203,19 @@ templ bulkResultPage(v bulkResultView) {
 			<div class="bk-cmdline" if v.HistoryAdd != "" { data-history-add={ v.HistoryAdd } }>› { v.Command }</div>
 		}
 		<div class="bk-tiles">
-			@bulkTile(ui.ToneOK, "Succeeded", v.OK)
-			@bulkTile(ui.ToneDanger, "Failed", v.Failed)
-			@bulkTile(ui.ToneNeutral, "Skipped", v.Skipped)
+			@bulkTile(ui.ToneOK, "Succeeded", v.OK, v.TileHref(bulkGroupOK, v.OK), v.Filter == bulkGroupOK)
+			@bulkTile(ui.ToneDanger, "Failed", v.Failed, v.TileHref(bulkGroupFailed, v.Failed), v.Filter == bulkGroupFailed)
+			@bulkTile(ui.ToneNeutral, "Skipped", v.Skipped, v.TileHref(bulkGroupSkipped, v.Skipped), v.Filter == bulkGroupSkipped)
 		</div>
 		<section class="bk-res" aria-label="Result per device">
-			for _, r := range v.Rows {
+			for _, r := range v.ShownRows() {
 				<div class="bk-rrow">
 					<span class="bk-rdev">
-						<span class="bk-name">{ r.Name }</span>
+						if r.Href != "" {
+							<a class="bk-name bk-namelink" href={ templ.SafeURL(r.Href) }>{ r.Name }</a>
+						} else {
+							<span class="bk-name">{ r.Name }</span>
+						}
 						<span class="bk-meta" data-visual-mask>{ r.Addr }</span>
 					</span>
 					<span class="bk-rbadge">
@@ -219,14 +224,35 @@ templ bulkResultPage(v bulkResultView) {
 					<span class="bk-detail">@ui.SoftJSON(r.Detail)</span>
 				</div>
 			}
+			if v.Filter != "" && len(v.ShownRows()) == 0 {
+				<p class="bk-rempty">No device in this group. <a href={ templ.SafeURL(v.AllHref()) }>Show all</a></p>
+			}
 		</section>
 	</div>
 }
 
-// bulkTile is one counter tile of the result.
-templ bulkTile(tone ui.Tone, label string, n int) {
-	<div class="bk-tile">
-		<div class="bk-tile-l"><span class={ "sdot-dot", "t-" + string(tone) } aria-hidden="true"></span>{ label }</div>
-		<div class="bk-tile-v">{ strconv.Itoa(n) }</div>
-	</div>
+// bulkTile is one counter tile of the result. With a link it filters the list to its devices
+// (the active tile links back to all of them); without one (nothing to show, or the power
+// result, which has no page of its own) it only counts.
+templ bulkTile(tone ui.Tone, label string, n int, href string, active bool) {
+	if href != "" {
+		<a
+			class="bk-tile bk-tile-link"
+			href={ templ.SafeURL(href) }
+			if active {
+				aria-current="true"
+				title="Show all devices"
+			} else {
+				title={ "Show only " + strings.ToLower(label) }
+			}
+		>
+			<div class="bk-tile-l"><span class={ "sdot-dot", "t-" + string(tone) } aria-hidden="true"></span>{ label }</div>
+			<div class="bk-tile-v">{ strconv.Itoa(n) }</div>
+		</a>
+	} else {
+		<div class="bk-tile">
+			<div class="bk-tile-l"><span class={ "sdot-dot", "t-" + string(tone) } aria-hidden="true"></span>{ label }</div>
+			<div class="bk-tile-v">{ strconv.Itoa(n) }</div>
+		</div>
+	}
 }
