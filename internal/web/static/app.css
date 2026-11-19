@@ -5134,6 +5134,12 @@ summary.um-btn::-webkit-details-marker {
 .sn {
   border-top: var(--hair-w) solid var(--color-border);
 }
+/* --header-h is the height of the sticky header with its section tabs: top bar, the tabs' top
+   hairline, the tabs, the header's bottom hairline. The phone breakpoint below sets the phone
+   header's. A bar that sticks under the header uses it (the bulk result's tiles). */
+:root {
+  --header-h: calc(52px + 40px + 2 * var(--hair-w));
+}
 .sn-in {
   height: 40px;
   display: flex;
@@ -5198,6 +5204,9 @@ summary.um-btn::-webkit-details-marker {
   height: 30px;
 }
 @media (max-width: 44.99rem) {
+  :root {
+    --header-h: 56px; /* the phone bar, 55 px, and the header's bottom hairline */
+  }
   .tb,
   .sn {
     display: none;
@@ -12188,15 +12197,12 @@ dialog.fw-notes-dlg .fw-dlg-body {
   overflow-wrap: anywhere;
 }
 /* the tiles filter the list below them, so they stay in view while the list scrolls: the bar
-   sticks under the sticky header (top bar 52 px + section tabs 40 px) and paints the page's
-   background, so the rows passing beneath do not show through. The header (--z-header) still
-   lies over it, and so do its menus. */
-#bk-result {
-  --bk-sticky-top: calc(52px + 40px);
-}
+   sticks under the sticky header (--header-h, wide and phone) and paints the page's background,
+   so the rows passing beneath do not show through. The header (--z-header) still lies over it,
+   and so do its menus. */
 .bk-tilebar {
   position: sticky;
-  top: var(--bk-sticky-top);
+  top: var(--header-h);
   z-index: var(--z-sticky);
   background: var(--color-bg);
   padding: 10px 0 14px;

@@ -248,9 +248,42 @@ func TestBulkResultTilesStayInView(t *testing.T) {
 		t.Fatal("app.css has no .bk-tilebar rule")
 	}
 	rule, _, _ = strings.Cut(rule, "}")
-	for _, want := range []string{"position: sticky", "top: var(--bk-sticky-top)", "z-index: var(--z-sticky)", "background: var(--color-bg)"} {
+	for _, want := range []string{"position: sticky", "top: var(--header-h)", "z-index: var(--z-sticky)", "background: var(--color-bg)"} {
 		if !strings.Contains(rule, want) {
 			t.Errorf(".bk-tilebar lacks %q: %s", want, rule)
 		}
+	}
+	// The header is 94 px on a wide window (top bar, section tabs, two hairlines) and 56 px on a
+	// phone, where both rows give way to the phone bar. The height sits next to the header rules for
+	// both widths, so the bar does not stick a gap below the phone header with rows showing through.
+	css := string(raw)
+	if !strings.Contains(css, "--header-h: calc(52px + 40px + 2 * var(--hair-w));") {
+		t.Error("app.css lacks the wide header height --header-h")
+	}
+	hide := strings.Index(css, "  .tb,\n  .sn {\n    display: none;\n  }")
+	if hide < 0 {
+		t.Fatal("app.css lacks the phone block that hides .tb and .sn")
+	}
+	phone := css[strings.LastIndex(css[:hide], "@media (max-width: 44.99rem) {"):]
+	phone, _, _ = strings.Cut(phone, "\n}\n")
+	if !strings.Contains(phone, "--header-h: 56px;") {
+		t.Errorf("the phone block sets no --header-h: %s", phone)
+	}
+}
+
+// Why: the filter shows the rows of a tile's group, and the tile counts them. Both come from the
+// same switch over the job's state, so a renamed label (or a new state) cannot make the list show
+// other devices than the tile counted.
+func TestBulkResultRowGroupIsSetWithTheCount(t *testing.T) {
+	if got := (bulkResultRow{Label: "Succeeded"}).Group; got != "" {
+		t.Fatalf("a row built without its group has none, got %q", got)
+	}
+	now := time.Now()
+	e := resultEnv(t,
+		model.Job{ID: 1, BatchID: 7, DeviceID: 1, Kind: model.KindBackup, Commands: model.BackupMarker, State: model.JobCancelled, CreatedAt: now, UpdatedAt: now},
+	)
+	_, body := e.do(t, "GET", "/devices/bulk/result/7?id=1&id=2&show=failed", "admin", nil)
+	if list := between(body, `aria-label="Result per device"`, "</section>"); !strings.Contains(list, ">kitchen<") || strings.Contains(list, ">attic<") {
+		t.Errorf("a cancelled job is in the Failed group, as in its tile: %s", list)
 	}
 }

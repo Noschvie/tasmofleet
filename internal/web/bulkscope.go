@@ -265,29 +265,17 @@ func skippedReason(hl model.Health) string {
 type bulkResultRow struct {
 	Name, Addr, Label, Detail string
 	Href                      string // the device's page; "" when the device no longer exists
+	Group                     string // the tile the row is counted in (bulkGroup*); "" while queued or running
 	Tone                      ui.Tone
 }
 
-// The groups of the result tiles; a tile's click shows only its group (?show=).
+// The groups of the result tiles; a tile's click shows only its group (?show=). A row's group is
+// set where its label is set and its tile counted, so the list and the counts cannot drift apart.
 const (
 	bulkGroupOK      = "ok"
 	bulkGroupFailed  = "failed"
 	bulkGroupSkipped = "skipped"
 )
-
-// Group is the tile the row is counted in: a cancelled job counts as failed, like in the
-// tiles; a queued or running one is in none.
-func (r bulkResultRow) Group() string {
-	switch r.Label {
-	case "Succeeded":
-		return bulkGroupOK
-	case "Failed", "Cancelled":
-		return bulkGroupFailed
-	case "Skipped":
-		return bulkGroupSkipped
-	}
-	return ""
-}
 
 // bulkResultView is the result page of a bulk action.
 type bulkResultView struct {
@@ -340,7 +328,7 @@ func (v bulkResultView) ShownRows() []bulkResultRow {
 	}
 	var out []bulkResultRow
 	for _, r := range v.Rows {
-		if r.Group() == v.Filter {
+		if r.Group == v.Filter {
 			out = append(out, r)
 		}
 	}
@@ -475,7 +463,7 @@ func (h *handler) bulkResult(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
-		rv.Rows = append(rv.Rows, bulkResultRow{Name: d.Name, Addr: d.Address, Href: v.Base + "/devices/" + devStr(id), Label: "Skipped", Tone: ui.ToneNeutral, Detail: skippedReason(h.d.Health.Get(id))})
+		rv.Rows = append(rv.Rows, bulkResultRow{Name: d.Name, Addr: d.Address, Href: v.Base + "/devices/" + devStr(id), Label: "Skipped", Group: bulkGroupSkipped, Tone: ui.ToneNeutral, Detail: skippedReason(h.d.Health.Get(id))})
 		rv.Skipped++
 	}
 	v.Title, v.Crumbs, v.Live = bulkTitle, bulkCrumbs, true
@@ -497,16 +485,16 @@ func (h *handler) jobResultRow(r *http.Request, j jobView, rv *bulkResultView) b
 	}
 	switch j.Job.State { //nolint:exhaustive // every other state is a running step
 	case model.JobSucceeded:
-		row.Label, row.Tone = "Succeeded", ui.ToneOK
+		row.Label, row.Tone, row.Group = "Succeeded", ui.ToneOK, bulkGroupOK
 		rv.OK++
 	case model.JobFailed:
-		row.Label, row.Tone = "Failed", ui.ToneDanger
+		row.Label, row.Tone, row.Group = "Failed", ui.ToneDanger, bulkGroupFailed
 		rv.Failed++
 		if row.Detail == "" {
 			row.Detail = humanReason(j.Job.LastError)
 		}
 	case model.JobCancelled:
-		row.Label, row.Tone = "Cancelled", ui.ToneNeutral
+		row.Label, row.Tone, row.Group = "Cancelled", ui.ToneNeutral, bulkGroupFailed // counted in the Failed tile
 		rv.Failed++
 	case model.JobQueued:
 		row.Label, row.Tone = "Queued", ui.ToneNeutral
