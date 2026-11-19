@@ -131,7 +131,7 @@ test("select one row: the preview lists only that command and the run fixes only
   await box(page, "plug-4m-http", "Power after outage").check();
   await expect(page.getByRole("button", { name: /Make compliant… \(1 selected\)/ })).toBeVisible();
   await page.getByRole("button", { name: /Make compliant…/ }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Make 1 device compliant");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Make plug-4m-http compliant"); // the one selected device is named (#1002)
   await expect(page.locator(".pol-fix-cmd .mono")).toHaveText(["PowerOnState 2"]);
   await shot(page, "preview");
   await page.getByRole("button", { name: /^Run 1 change$/ }).click();
@@ -144,6 +144,34 @@ test("select one row: the preview lists only that command and the run fixes only
   await expect(g.locator("tr.pol-grp")).toContainText("1 advisory", { timeout: 60_000 });
   await expect(g.getByText("Power after outage")).toHaveCount(0);
   await expect(g.getByText("LED hint")).toBeVisible(); // never written: it was not ticked
+});
+
+// Why (#1002): a device whose only deviation is Advisory (plug-4m-http after the test above) can be
+// opened in Make compliant from its device page. The page names the device, says there is nothing
+// to run yet instead of describing commands, offers the tick as a hint (not as a block), and Update
+// plan is disabled until a tick differs. Cancel goes back to the device. Nothing is run here.
+test("a device with an Advisory deviation only: named title, nothing to run yet, Cancel returns to the device", async ({ page }) => {
+  await page.setExtraHTTPHeaders(admin);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(app.url + "/policy/deviations?q=plug-4m-http");
+  await group(page, "plug-4m-http").getByRole("link", { name: "Device →" }).first().click();
+  const deviceURL = page.url();
+  await page.getByRole("button", { name: "Make compliant…" }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Make plug-4m-http compliant");
+  await expect(page.getByText("Nothing to run yet: tick an Advisory deviation and choose Update plan")).toBeVisible();
+  await expect(page.getByText("No Required rule deviates. Tick an Advisory deviation below to include it.")).toBeVisible();
+  await expect(page.locator(".pol-fix-cmd")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^Run / })).toHaveCount(0);
+  const update = page.getByRole("button", { name: "Update plan" });
+  await expect(update).toBeDisabled();
+  await shot(page, "advisory-only");
+  await page.getByRole("checkbox", { name: /LED hint/ }).check();
+  await expect(update).toBeEnabled();
+  await update.click();
+  await expect(page.locator(".pol-fix-cmd .mono")).toHaveText(["LedState 3"]);
+  await expect(page.getByRole("button", { name: /^Run 1 change$/ })).toBeEnabled();
+  await page.getByRole("link", { name: "Cancel" }).click();
+  await expect(page).toHaveURL(deviceURL);
 });
 
 // Why: an Advisory deviation can be written when the admin ticks it by hand, from this tab and
@@ -163,14 +191,30 @@ test("an Advisory row ticked by hand is written; the device tile's preview offer
   const g = group(page, "plug-4m").first();
   await expect(g).toBeVisible();
   await g.getByRole("link", { name: "Device →" }).first().click();
+  const deviceURL = page.url();
   await page.getByRole("button", { name: "Make compliant…" }).click();
   await expect(page.locator(".pol-fix-cmd .mono")).toHaveText(["PowerOnState 2"]);
   const hint = page.getByRole("checkbox", { name: /LED hint/ });
   await expect(hint).not.toBeChecked();
+  const update = page.getByRole("button", { name: "Update plan" });
+  const run = page.getByRole("button", { name: /^Run 1 change$/ });
+  await expect(update).toBeDisabled(); // the ticks match the drawn plan: nothing to update (#1002)
+  await expect(run).toBeEnabled();
   await hint.check();
-  await expect(page.getByRole("button", { name: /^Run 1 change$/ })).toBeDisabled(); // the plan is stale until updated
+  await expect(run).toBeDisabled(); // the plan is stale until updated
+  await expect(update).toBeEnabled();
   await expect(page.getByText("Update plan to include ticked rows")).toBeVisible();
-  await page.getByRole("button", { name: "Update plan" }).click();
+  await hint.uncheck(); // back to the drawn plan: the plan is not stale any more
+  await expect(update).toBeDisabled();
+  await expect(run).toBeEnabled();
+  await expect(page.getByText("Update plan to include ticked rows")).toBeHidden();
+  await hint.check();
+  await update.click();
   await expect(page.locator(".pol-fix-cmd .mono")).toHaveText(["PowerOnState 2", "LedState 3"]);
   await expect(page.getByRole("checkbox", { name: /LED hint/ })).toBeChecked();
+  await expect(page.getByRole("button", { name: "Update plan" })).toBeDisabled(); // the new plan holds the tick
+  // Cancel returns to the device the page was opened from, also after Update plan (#1002)
+  await expect(page.getByRole("link", { name: "Cancel" })).toHaveAttribute("href", new URL(deviceURL).pathname);
+  await page.getByRole("link", { name: "Cancel" }).click();
+  await expect(page).toHaveURL(deviceURL);
 });

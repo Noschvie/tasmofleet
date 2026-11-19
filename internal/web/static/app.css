@@ -5545,6 +5545,7 @@ html[data-live="offline"] .conn-banner.conn-off {
 .pghead h1,
 .pghead .h1-sample {
   margin: 0;
+  overflow-wrap: anywhere; /* a long device name in the title must not widen the page (#1002) */
   font: 600 22px/1.2 var(--font-sans);
   letter-spacing: -0.015em;
 }
@@ -14773,6 +14774,7 @@ button.pol-chip-x {
   font-size: 13px;
 }
 .pol-fix-note,
+.pol-fix-hint,
 .pol-fix-skip {
   margin: 0;
   font-size: 12px;

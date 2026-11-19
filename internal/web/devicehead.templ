@@ -300,6 +300,7 @@ templ liveTile(t tile, l liveView) {
 			<form method="post" action={ templ.SafeURL(l.Base + "/policy/fix") }>
 				<input type="hidden" name="csrf" value={ l.CSRF }/>
 				<input type="hidden" name="only" value={ devID(l.ID) }/>
+				<input type="hidden" name="from" value="device"/>
 				<button type="submit" class="btn dev-tile-fix">Make compliant…</button>
 			</form>
 		}

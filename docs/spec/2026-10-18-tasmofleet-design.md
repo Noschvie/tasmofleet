@@ -2168,7 +2168,20 @@ start ticked, Advisory rows never do. The boxes post `pick=<deviceID>:<ruleID>` 
 plan is every Required deviation of those devices, and an Advisory deviation joins only when its pick is
 posted; the preview offers each as an unticked box ("Update plan"), the dialog a "Choose Advisory rows…"
 button. A pick for a pair that is not a finding of the report, or of a device outside the selection, is dropped, and
-the apply digest covers the picks. Devices that cannot be judged sit in a fold: those with an unknown value a
+the apply digest covers the picks.
+
+The plan page (#1002) names the one selected device in its title ("Make kitchen compliant") and counts the
+selected devices otherwise ("Make 3 devices compliant"), whether or not each gets commands. A device that deviates
+from Advisory rules only has no commands yet; "No Required rule deviates. Tick an Advisory deviation below to
+include it." is a hint on its card, not a block (a block is a reason the device cannot be changed: API off, a
+running or planned job, nothing read live, already compliant), and with no command on the page the subtitle says
+"Nothing to run yet: tick an Advisory deviation and choose Update plan" when a card carries that hint, and
+"Nothing to run: no device on this page can be changed now; each card says why." otherwise. With JavaScript, Update plan is enabled only
+while a tick differs from the drawn plan and Run only while none does; without it both stay enabled. Cancel goes
+back to the opening device page when its tile posted the marker `from=device` and that device is the only one on the
+plan, to the Deviating devices tab for a plan picked there, and to the policy page otherwise; the marker is a fixed
+value the server compares and writes back (the preview's forms carry it, so it survives Update plan), never a
+URL. Devices that cannot be judged sit in a fold: those with an unknown value a
 backup decodes (`policy.BackupReadable`) get "Back up these N" (POST `/devices/bulk/backup`, admin), the others a
 hint and Run now.
 

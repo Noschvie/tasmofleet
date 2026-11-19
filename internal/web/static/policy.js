@@ -222,21 +222,31 @@
       });
     });
   }
-  // Make compliant preview: ticking an Advisory box changes the plan, so Run is disabled until
-  // "Update plan" shows the new one. Without this file the hint beside the boxes says the same.
+  // Make compliant preview: a tick that differs from the drawn plan changes the plan, so Run is
+  // disabled and Update plan is the way on; while the ticks match the drawn plan, Update plan has
+  // nothing to do and is disabled. The state is recomputed from the boxes on load too (the browser
+  // may restore ticks on Back). Without this file both buttons stay enabled and the hint beside the
+  // boxes says the same.
   var planBoxes = document.querySelectorAll('input[type="checkbox"][form="fix-select"]');
   if (planBoxes.length > 0) {
-    var planChanged = function () {
+    var planSync = function () {
+      var differs = Array.prototype.some.call(planBoxes, function (b) {
+        return b.checked !== b.defaultChecked;
+      });
       document.querySelectorAll("[data-plan-run]").forEach(function (b) {
-        b.disabled = true;
+        b.disabled = differs;
+      });
+      document.querySelectorAll("[data-plan-update]").forEach(function (b) {
+        b.disabled = !differs;
       });
       document.querySelectorAll("[data-plan-stale]").forEach(function (m) {
-        m.hidden = false;
+        m.hidden = !differs;
       });
     };
     planBoxes.forEach(function (b) {
-      b.addEventListener("change", planChanged);
+      b.addEventListener("change", planSync);
     });
+    planSync();
   }
   // Deviating devices: the boxes of Make compliant. The button counts the ticked rows, "Select all"
   // (shown only with this file) ticks every box, and the filter field narrows the groups as you type.

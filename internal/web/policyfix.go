@@ -60,6 +60,9 @@ type fixRow struct {
 	Skipped []fixSkipView
 	// Blocked is why the device is not touched at all ("" = it is).
 	Blocked string
+	// Hint is how to go on when nothing can run yet: only Advisory deviations are left and none is
+	// ticked. It is not a block: the device can be changed, the plan just has no commands.
+	Hint string
 	// Options: the Advisory deviations of the device that can be added to the plan.
 	Options []fixOption
 	// Pairs are the picked deviations of this row the apply form has to carry (every included one
@@ -69,6 +72,18 @@ type fixRow struct {
 	CRWarn string
 }
 
+// fixFromDevice is the one value of the "from" marker the device page's tile form posts. The
+// server compares against it and writes only this constant back, never the posted text, so the
+// marker can never carry a URL.
+const fixFromDevice = "device"
+
+// hintNoRequired is the Hint of a device that deviates from Advisory rules only.
+const hintNoRequired = "No Required rule deviates. Tick an Advisory deviation below to include it."
+
+// runs says whether the row sends something: the device is not blocked and the plan has commands.
+// Every place that decides what is sent, counted or digested uses this one rule.
+func (r fixRow) runs() bool { return r.Blocked == "" && len(r.Cmds) > 0 }
+
 type fixPage struct {
 	Rows     []fixRow
 	Ready    int // devices that get commands
@@ -77,6 +92,9 @@ type fixPage struct {
 	Digest   string
 	Stale    bool // the values changed since the preview the admin saw
 	ByPick   bool // opened from the Deviating devices tab (Cancel goes back there)
+	// FromDevice: opened from a device page (its tile posted the marker); Cancel goes back to the
+	// device when the plan holds exactly that one.
+	FromDevice bool
 	// Fields are what the apply form posts back (besides csrf and digest): the devices, or the
 	// picks of a by-pick plan, and the picked Advisory deviations.
 	Fields []ui.KVRow
@@ -268,11 +286,9 @@ func (h *handler) fixRows(ctx context.Context, rep PolicyReport, sel fixSel) []f
 		}
 		apiOff := h.apiOffBlock(ctx, d.ID, transport.ActWrites)
 		switch {
-		case len(row.Cmds) == 0 && len(row.Skipped) == 0 && len(row.Options) > 0:
-			row.Blocked = "No Required rule deviates. Tick an Advisory deviation below to include it."
-		case len(row.Cmds) == 0 && len(row.Skipped) == 0:
+		case len(row.Cmds) == 0 && len(row.Skipped) == 0 && len(row.Options) == 0:
 			row.Blocked = "Already compliant, nothing to change."
-		case len(row.Cmds) == 0:
+		case len(row.Cmds) == 0 && len(row.Skipped) > 0:
 			row.Blocked = "Nothing can be changed: every deviation is unknown or not read live."
 		case apiOff != "":
 			row.Blocked = apiOff // the values are cached ones; the device would be sent commands it refuses (#645)
@@ -282,6 +298,9 @@ func (h *handler) fixRows(ctx context.Context, rep PolicyReport, sel fixSel) []f
 			} else if pj, ok, err := h.plannedOn(ctx, d.ID); err == nil && ok {
 				row.Blocked = "Planned: update " + planStartText(pj) + "." // the plan keeps other jobs off the device until it starts (#604)
 			}
+		}
+		if row.Blocked == "" && len(row.Cmds) == 0 && len(row.Options) > 0 {
+			row.Hint = hintNoRequired // only Advisory deviations are left; ticking one makes a plan (#1002)
 		}
 		rows = append(rows, row)
 	}
@@ -334,7 +353,7 @@ func fixPageOf(rows []fixRow, byPick bool) fixPage {
 		if !byPick {
 			p.Select = append(p.Select, ui.KVRow{Key: "device", Value: strconv.FormatInt(int64(row.Device.ID), 10)})
 		}
-		if row.Blocked != "" {
+		if !row.runs() {
 			continue
 		}
 		p.Ready++
@@ -377,6 +396,7 @@ func (h *handler) policyFixPreview(w http.ResponseWriter, r *http.Request) {
 	}
 	sel := fixSelection(r, rep)
 	p := fixPageOf(h.fixRows(r.Context(), rep, sel), sel.ByPick)
+	p.FromDevice = r.PostForm.Get("from") == fixFromDevice
 	h.fixRender(w, r, http.StatusOK, p)
 }
 
@@ -391,6 +411,7 @@ func (h *handler) policyFixApply(w http.ResponseWriter, r *http.Request) {
 	sel := fixSelection(r, rep)
 	rows := h.fixRows(r.Context(), rep, sel)
 	p := fixPageOf(rows, sel.ByPick)
+	p.FromDevice = r.PostForm.Get("from") == fixFromDevice
 	if p.Digest != r.PostForm.Get("digest") {
 		p.Stale = true
 		h.fixRender(w, r, http.StatusConflict, p)
@@ -399,10 +420,10 @@ func (h *handler) policyFixApply(w http.ResponseWriter, r *http.Request) {
 	var reqs []ota.PolicyRequest
 	var apiOff []string
 	for _, row := range rows {
-		if row.Blocked != "" {
-			if row.Blocked == reasonAPIOff {
-				apiOff = append(apiOff, row.Device.Name+": "+row.Blocked)
-			}
+		if row.Blocked == reasonAPIOff {
+			apiOff = append(apiOff, row.Device.Name+": "+row.Blocked)
+		}
+		if !row.runs() {
 			continue
 		}
 		req := ota.PolicyRequest{DeviceID: row.Device.ID}
@@ -471,11 +492,11 @@ func (h *handler) fixDialogOf(ctx context.Context, rep PolicyReport) *fixDialog 
 		if len(row.Options) > 0 {
 			d.Advisory = true
 		}
-		if row.Blocked == "" && row.CRWarn != "" {
-			d.CRFull++
-		}
-		if row.Blocked != "" {
+		if !row.runs() {
 			continue
+		}
+		if row.CRWarn != "" {
+			d.CRFull++
 		}
 		var cmds []string
 		for _, c := range row.Cmds {
@@ -502,4 +523,40 @@ func fixNote(c fixCmd) string {
 		s += ", " + c.Note
 	}
 	return s
+}
+
+// back is where Cancel goes (a path below the base): the opening device when the device page
+// started the plan and exactly that device is on it, the Deviating devices tab for a plan picked
+// there, the policy page otherwise.
+func (p fixPage) back() string {
+	switch {
+	case p.FromDevice && !p.ByPick && len(p.Rows) == 1:
+		return "/devices/" + strconv.FormatInt(int64(p.Rows[0].Device.ID), 10)
+	case p.ByPick:
+		return policyPath + "/deviations"
+	}
+	return policyPath
+}
+
+// title is the page title: the one selected device by name, otherwise how many devices are
+// selected (not how many get commands: a device that cannot be changed is on the page too).
+func (p fixPage) title() string {
+	if len(p.Rows) == 1 {
+		return "Make " + p.Rows[0].Device.Name + " compliant"
+	}
+	return "Make " + plural(len(p.Rows), "device") + " compliant"
+}
+
+// subtitle describes the plan, or says why there is none. The tick text belongs to a card that
+// carries the hint (ticking can make a plan); a device that is blocked gets no plan from a tick.
+func (p fixPage) subtitle() string {
+	if p.Commands == 0 {
+		for _, r := range p.Rows {
+			if r.Hint != "" {
+				return "Nothing to run yet: tick an Advisory deviation and choose Update plan"
+			}
+		}
+		return "Nothing to run: no device on this page can be changed now; each card says why."
+	}
+	return "Nothing has been changed on any device yet. These are the exact commands, sent to each device in one batch and saved to the device once, at the end. Required deviations are included. An Advisory deviation is included only when you tick it."
 }

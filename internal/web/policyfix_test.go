@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -466,5 +467,181 @@ func TestPolicyFixPreviewSkipsCutOffLinesOfMQTTOnlyDevices(t *testing.T) {
 	only = false
 	if body = previewFor(t, e, url.Values{"device": {"1"}}); !strings.Contains(body, cmdHTML("Topic other")) {
 		t.Fatalf("HTTP not known to fail: the command stays:\n%s", body)
+	}
+}
+
+// advisoryOnlyReport is advisoryFixReport without kitchen's Required deviation (r1): kitchen is
+// left with one Advisory deviation read live and nothing else, the case of #1002.
+func advisoryOnlyReport() PolicyReport {
+	rep := advisoryFixReport()
+	var keep []policy.Finding
+	for _, f := range rep.Findings {
+		if f.DeviceID != 1 || f.Rule.ID != "r1" {
+			keep = append(keep, f)
+		}
+	}
+	rep.Findings = keep
+	return rep
+}
+
+func advisoryOnlyEnv(t *testing.T, fix *fakeFix, jobs JobLister) *env {
+	t.Helper()
+	return setupWith(t, func(d *Deps) {
+		d.Policy, d.PolicyFix, d.Jobs = &fakePolicy{rep: advisoryOnlyReport()}, fix, jobs
+	})
+}
+
+var (
+	h1Re     = regexp.MustCompile(`<h1[^>]*>([^<]*)</h1>`)
+	cancelRe = regexp.MustCompile(`<a class="btn" href="([^"]*)">Cancel</a>`)
+)
+
+// Why (#1002): the device page offers Make compliant for a device whose only deviation is an
+// Advisory one. The page used to count it as not ready ("Make 0 devices compliant") and described
+// commands that do not exist. Now the title names the one device and the subtitle says there is
+// nothing to run yet and what to do, so the admin is not told about a plan that is empty.
+func TestPolicyFixNamesTheOneDeviceAndSaysNothingToRunYet(t *testing.T) {
+	e := advisoryOnlyEnv(t, &fakeFix{}, nil)
+	body := previewFor(t, e, url.Values{"only": {"1"}})
+	if m := h1Re.FindStringSubmatch(body); m == nil || m[1] != "Make kitchen compliant" {
+		t.Errorf("the title names the one selected device, got %v", m)
+	}
+	if !strings.Contains(body, "Nothing to run yet: tick an Advisory deviation and choose Update plan") {
+		t.Errorf("the subtitle says there is nothing to run yet:\n%s", body)
+	}
+	if strings.Contains(body, "These are the exact commands") {
+		t.Error("the subtitle must not describe commands that are not there")
+	}
+	if strings.Contains(body, "data-plan-run") || strings.Contains(body, "Run 0 change") {
+		t.Error("there is nothing to run: no Run button")
+	}
+}
+
+// Why (#1002): the title counts the devices the admin selected, not only those that get commands;
+// a device that cannot be changed (attic: its value is only known from a backup) is still on the
+// page, so "Make 1 device compliant" over two cards was wrong.
+func TestPolicyFixTitleCountsTheSelectedDevices(t *testing.T) {
+	e := fixEnv(t, &fakeFix{}, nil)
+	body := previewFor(t, e, url.Values{"device": {"1", "2"}})
+	if m := h1Re.FindStringSubmatch(body); m == nil || m[1] != "Make 2 devices compliant" {
+		t.Errorf("two selected devices, got %v", m)
+	}
+	if !strings.Contains(body, "Run 2 changes") {
+		t.Errorf("kitchen's two commands still run:\n%s", body)
+	}
+}
+
+// Why (#1002): "No Required rule deviates" is a hint about how to proceed, not a reason the device
+// cannot be changed. Blocked is for the latter, and it decides whether a row runs and what the
+// apply loop sends; a hint in Blocked hid the real reason of a device that is also busy. The
+// last checks guard the rule that a row without commands never reaches the engine (they pass
+// without the fix too, because Blocked rows were skipped; they fail if a hint row were sent).
+func TestPolicyFixAdvisoryHintIsNotABlock(t *testing.T) {
+	hint := regexp.MustCompile(`<p class="pol-fix-hint">No Required rule deviates\. Tick an Advisory deviation below to include it\.</p>`)
+	blocked := regexp.MustCompile(`<p class="pol-fix-skip">([^<]*)</p>`)
+	body := previewFor(t, advisoryOnlyEnv(t, &fakeFix{}, nil), url.Values{"only": {"1"}})
+	if !hint.MatchString(body) || blocked.MatchString(body) {
+		t.Errorf("the hint is shown as a hint, not as a reason the device cannot be changed:\n%s", body)
+	}
+	if !strings.Contains(body, `name="pick" value="1:r2"`) {
+		t.Error("the Advisory deviation is offered to tick")
+	}
+
+	// the device is busy: that is the reason shown, not the hint
+	body = previewFor(t, advisoryOnlyEnv(t, &fakeFix{}, &activeOn{device: 1}), url.Values{"only": {"1"}})
+	if m := blocked.FindStringSubmatch(body); m == nil || !strings.Contains(m[1], "Another transaction is running on this device (#3)") || hint.MatchString(body) {
+		t.Errorf("a running job is the reason, got %v:\n%s", m, body)
+	}
+
+	if strings.Contains(body, "tick an Advisory deviation") || strings.Contains(body, "These are the exact commands") {
+		t.Errorf("a busy device gets no plan from a tick and no commands to describe:\n%s", body)
+	}
+
+	// a row without commands is never ready, with or without a block: nothing is submitted for it
+	p := fixPageOf([]fixRow{{Device: model.Device{ID: 1}, Hint: "hint"}}, false)
+	if p.Ready != 0 || len(p.IDs) != 0 || len(p.Fields) != 0 {
+		t.Errorf("a hint row is not ready: %+v", p)
+	}
+	fix := &fakeFix{}
+	e := advisoryOnlyEnv(t, fix, nil)
+	m := digestRe.FindStringSubmatch(previewFor(t, e, url.Values{"only": {"1"}}))
+	if m == nil {
+		t.Fatal("no digest")
+	}
+	r, _ := e.do(t, "POST", "/policy/fix/apply", "admin", url.Values{"csrf": {"tok"}, "digest": {m[1]}, "device": {"1"}})
+	if len(fix.reqs) != 0 {
+		t.Fatalf("a row without commands is never submitted: %d %+v", r.StatusCode, fix.reqs)
+	}
+}
+
+// Why (#1002): the title of the page now carries the device name, which can be one long word
+// (underscores) wider than a phone. The page header must break it, as the device page does, or the
+// whole page scrolls sideways at 375 px.
+func TestPageHeaderTitleBreaksLongNames(t *testing.T) {
+	css, err := os.ReadFile("static/app.css")
+	if err != nil || !regexp.MustCompile(`(?s)\.pghead h1,\s*\.pghead \.h1-sample \{[^}]*overflow-wrap: anywhere;`).Match(css) {
+		t.Error(".pghead h1 no longer breaks a long device name")
+	}
+}
+
+// Why (#1002): the subtitle must not promise anything the page cannot deliver. "Tick an Advisory
+// deviation" is only true where a card carries that hint; a device that cannot be changed (nothing
+// read live, a running job) gets no plan from a tick, and no Run button exists, so describing
+// "the exact commands" would be wrong too. Those pages say neutrally that nothing can run.
+func TestPolicyFixSubtitleOnlyPromisesWhatTheCardsCanDo(t *testing.T) {
+	const neutral = "Nothing to run: no device on this page can be changed now; each card says why."
+	for name, body := range map[string]string{
+		"nothing read live":   previewFor(t, fixEnv(t, &fakeFix{}, nil), url.Values{"only": {"2"}}),
+		"busy, Required rule": previewFor(t, fixEnv(t, &fakeFix{}, &activeOn{device: 1}), url.Values{"only": {"1"}}),
+	} {
+		if !strings.Contains(body, neutral) {
+			t.Errorf("%s: the neutral subtitle is missing:\n%s", name, body)
+		}
+		if strings.Contains(body, "These are the exact commands") || strings.Contains(body, "tick an Advisory deviation and choose") {
+			t.Errorf("%s: the subtitle describes commands or a tick that cannot help", name)
+		}
+	}
+}
+
+// Why (#1002): Cancel returns to where the page was opened. The device page marks its form with
+// from=device; that marker is the only thing the server reads, never a URL, so nothing the
+// client posts can become a redirect target. The marker has to survive Update plan and the stale
+// page (both forms re-emit it), or Cancel would fall back to the policy page after one tick.
+func TestPolicyFixCancelReturnsToTheOpeningDevice(t *testing.T) {
+	e := advisoryEnv(t, &fakeFix{})
+	for name, tc := range map[string]struct {
+		form url.Values
+		want string
+	}{
+		"no marker":                  {url.Values{"only": {"1"}}, "/tf/policy"},
+		"from the device page":       {url.Values{"only": {"1"}, "from": {"device"}}, "/tf/devices/1"},
+		"after Update plan":          {url.Values{"device": {"1"}, "from": {"device"}, "pick": {"1:r2"}}, "/tf/devices/1"},
+		"an absolute URL":            {url.Values{"only": {"1"}, "from": {"https://evil.example/"}}, "/tf/policy"},
+		"a path":                     {url.Values{"only": {"1"}, "from": {"/devices/1"}}, "/tf/policy"},
+		"another case":               {url.Values{"only": {"1"}, "from": {"Device"}}, "/tf/policy"},
+		"an empty marker":            {url.Values{"only": {"1"}, "from": {""}}, "/tf/policy"},
+		"two devices":                {url.Values{"device": {"1", "3"}, "from": {"device"}}, "/tf/policy"},
+		"the deviations tab picking": {url.Values{"pick": {"1:r1"}}, "/tf/policy/deviations"},
+		"a marker with picks only":   {url.Values{"pick": {"1:r1"}, "from": {"device"}}, "/tf/policy/deviations"},
+	} {
+		body := previewFor(t, e, tc.form)
+		m := cancelRe.FindStringSubmatch(body)
+		if m == nil || m[1] != tc.want {
+			t.Errorf("%s: Cancel goes to %v, want %s", name, m, tc.want)
+		}
+	}
+
+	// the marker is carried by both forms of the page, as the constant and never as the posted text
+	body := previewFor(t, e, url.Values{"only": {"1"}, "from": {"device"}})
+	if n := strings.Count(body, `name="from" value="device"`); n != 2 {
+		t.Errorf("the Update plan form and the apply form both carry the marker, found %d", n)
+	}
+	if body = previewFor(t, e, url.Values{"only": {"1"}, "from": {"https://evil.example/"}}); strings.Contains(body, "evil.example") || strings.Contains(body, `name="from"`) {
+		t.Error("a posted marker that is not the constant is dropped, never echoed")
+	}
+	// the stale page keeps the marker too
+	r, out := e.do(t, "POST", "/policy/fix/apply", "admin", url.Values{"csrf": {"tok"}, "digest": {"deadbeef"}, "device": {"1"}, "from": {"device"}})
+	if m := cancelRe.FindStringSubmatch(out); r.StatusCode != 409 || m == nil || m[1] != "/tf/devices/1" {
+		t.Errorf("the stale page keeps the way back: %d %v", r.StatusCode, m)
 	}
 }

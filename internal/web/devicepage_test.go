@@ -67,7 +67,7 @@ func TestDeviceOverviewShowsTheTilesFromRealData(t *testing.T) {
 		`data-tile="power"`, `data-visual-mask>12 W</div>`, `data-visual-mask>0.02 kWh</div>`, `Yesterday 0.03 · Total 11.0`,
 		`data-visual-mask>-61 dBm</div>`, `78 % · lab-iot · ch 6`,
 		`>MQTT · HTTP</div>`, "Connected · Reachable",
-		`data-tile="policy"`, `>1 / 2</div>`, "TelePeriod 60 → 300", "Make compliant…", `name="only" value="1"`,
+		`data-tile="policy"`, `>1 / 2</div>`, "TelePeriod 60 → 300", "Make compliant…", `name="only" value="1"`, `name="from" value="device"`, // the marker Cancel on the plan page keys on (#1002)
 		`Relay 1 <span class="mono">POWER</span>`, `aria-label="Relay 1 is On: switch it Off"`,
 	} {
 		if !strings.Contains(body, want) {
