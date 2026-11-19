@@ -10,9 +10,10 @@
 # pr-head/ as plain files. The PR text is untrusted, so Claude gets no shell: a step writes the diff, the log and the
 # existing comments into review-context/, Claude has only Read, Grep, Glob, subagents and the inline-comment tool
 # (permission mode dontAsk, no auto mode), its file tools are confined to the workspace and kept out of .git (the
-# action puts its token into .git/config) and of /proc and the runner's directories, and it returns the summary as
-# structured output that the workflow checks for the tokens before posting it. No transcript is uploaded: artifacts
-# of a public repository are public, and a transcript holds everything Claude read.
+# action puts its token into .git/config) and of /proc and the runner's directories. That the tokens are out of
+# reach is the control; the tokens stay in Claude Code's own environment (the CLI needs the OAuth token, the action
+# sets GITHUB_TOKEN/GH_TOKEN there itself). Claude returns the summary as structured output and the workflow posts it.
+# No transcript is uploaded: artifacts of a public repository are public, and a transcript holds everything Claude read.
 # Secret: CLAUDE_CODE_OAUTH_TOKEN (`claude setup-token` of the maintainer's subscription).
 name: claude-review
 
@@ -206,7 +207,8 @@ jobs:
             --json-schema '{"type":"object","properties":{"summary":{"type":"string"}},"required":["summary"],"additionalProperties":false}'
 
       - name: Post the summary
-        # GitHub masks secrets in logs, not in comments: refuse a summary that contains a token.
+        # Defence in depth only: GitHub masks secrets in logs, not in comments. A literal token value or token-shaped
+        # string is refused; an encoded or split token would pass, which is why the tokens are kept out of Claude's reach.
         env:
           OUTPUT: ${{ steps.claude.outputs.structured_output }}
           COMMENT: ${{ steps.start.outputs.comment }}
