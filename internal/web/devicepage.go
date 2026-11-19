@@ -185,8 +185,8 @@ type identCard struct {
 	CRWarn string
 }
 
-// policyCard is the device's policy compliance: the rules that apply, the deviations, and
-// "Make compliant…" for admins.
+// policyCard is the device's policy compliance: the number of rules that apply to this device
+// (0 when none does), the deviations, and "Make compliant…" for admins.
 type policyCard struct {
 	Rules      int
 	Deviations []deviation
@@ -405,15 +405,31 @@ func (h *handler) policyOf(r *http.Request, v view, id model.DeviceID) *policyCa
 		h.log.WarnContext(ctx, "device overview: policy report", "err", err)
 		return nil
 	}
-	c := &policyCard{Rules: len(rep.Rules), CanFix: v.IsAdmin && h.d.PolicyFix != nil}
-	for _, f := range rep.Findings {
-		switch {
-		case f.DeviceID != id:
-		case f.Unknown:
-			c.Unknown++
-		default:
-			c.Deviations = append(c.Deviations, deviation{Rule: ruleTitle(f.Rule), Have: f.Rule.Command + " " + f.Have, Want: f.Rule.Want})
+	if len(rep.Rules) == 0 {
+		return nil
+	}
+	// The card is built from this device's outcomes, the one evaluation the policy pages use, so
+	// scope, exceptions, families, shadowing and disabled rules are decided in the policy package only.
+	var mine []policy.Outcome
+	for _, o := range rep.Outcomes {
+		if o.DeviceID == id && o.RuleIndex >= 0 && o.RuleIndex < len(rep.Rules) {
+			mine = append(mine, o)
 		}
+	}
+	c := &policyCard{CanFix: v.IsAdmin && h.d.PolicyFix != nil}
+	for _, t := range policy.Tally(rep.Rules, mine) {
+		c.Rules += t.Applies()
+	}
+	for _, o := range mine {
+		if o.Kind != policy.OutcomeDeviate && o.Kind != policy.OutcomeUnknown {
+			continue
+		}
+		if o.Kind == policy.OutcomeUnknown {
+			c.Unknown++
+			continue
+		}
+		rule := rep.Rules[o.RuleIndex]
+		c.Deviations = append(c.Deviations, deviation{Rule: ruleTitle(rule), Have: rule.Command + " " + o.Have, Want: rule.Want})
 	}
 	c.CanFix = c.CanFix && len(c.Deviations) > 0
 	return c

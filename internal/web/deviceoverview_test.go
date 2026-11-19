@@ -44,7 +44,7 @@ func onlineHealth(power map[string]string) model.Health {
 
 // Why: the tile row is one row of equal tiles and never has holes: a tile that does not apply is
 // not built. Power and Energy exist only with a meter, Wi-Fi turns into Link on Ethernet, and
-// Policy only when there are rules. The order is fixed (the eight mockup shapes of #145).
+// Policy only when the fleet has rules (a device no rule applies to says so). The order is fixed (the eight mockup shapes of #145).
 func TestTilesCoverTheDeviceShapes(t *testing.T) {
 	mqtt := model.Device{MQTT: model.MQTTOurs}
 	okPolicy := &policyCard{Rules: 7}
@@ -58,7 +58,7 @@ func TestTilesCoverTheDeviceShapes(t *testing.T) {
 		{"1 relay, no meter, Wi-Fi", overviewIn{Dev: mqtt, Health: onlineHealth(map[string]string{"POWER": "ON"}), Policy: okPolicy}, "wifi,uptime,reach,policy"},
 		{"4 relays over Ethernet, no meter", overviewIn{Dev: mqtt, Health: onlineHealth(nil), Facts: snapFacts{Wired: true}, Policy: okPolicy}, "link,uptime,reach,policy"},
 		{"no policy configured", overviewIn{Dev: mqtt, Health: onlineHealth(nil)}, "wifi,uptime,reach"},
-		{"policy without rules", overviewIn{Dev: mqtt, Health: onlineHealth(nil), Policy: &policyCard{}}, "wifi,uptime,reach"},
+		{"policy, no rule applies to the device", overviewIn{Dev: mqtt, Health: onlineHealth(nil), Policy: &policyCard{}}, "wifi,uptime,reach,policy"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -188,6 +188,18 @@ func TestPolicyTileNamesTheFirstFailingSetting(t *testing.T) {
 	}
 	if policyTile(nil, false) != nil {
 		t.Fatal("no policy, no tile")
+	}
+}
+
+// Why: a device that no rule applies to must not read as compliant (#986): the tile says that
+// no rule applies, neutral, and offers no fix, because there is nothing to make compliant.
+func TestPolicyTileSaysWhenNoRuleAppliesToTheDevice(t *testing.T) {
+	tl := policyTile(&policyCard{CanFix: true}, false)
+	if tl == nil || tl.Value != "None" || tl.Sub != "No rules apply to this device" || tl.Tone != ui.ToneNeutral || tl.Fix {
+		t.Fatalf("no rule applies: %+v", tl)
+	}
+	if tl := policyTile(&policyCard{}, true); tl == nil || tl.Sub != "No rules apply to this device" {
+		t.Fatalf("offline device, no rule applies: %+v", tl)
 	}
 }
 

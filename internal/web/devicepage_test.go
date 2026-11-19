@@ -40,8 +40,12 @@ const snapshotDoc = `{"Status5":{"StatusNET":{"Hostname":"kitchen-lamp","IPAddre
 // secret in the snapshot never reaches the page.
 func TestDeviceOverviewShowsTheTilesFromRealData(t *testing.T) {
 	rule := policy.Rule{Name: "Telemetry every 5 min", Command: "TelePeriod", Want: "300"}
-	fp := &fakePolicy{rep: PolicyReport{Rules: []policy.Rule{rule, {Command: "SetOption0", Want: "0"}},
-		Findings: []policy.Finding{{DeviceID: 1, Rule: rule, Have: "60"}, {DeviceID: 2, Rule: rule, Have: "10"}}}}
+	rules := []policy.Rule{rule, {Command: "SetOption0", Want: "0"}}
+	devs := []model.Device{{ID: 1, Name: "kitchen"}, {ID: 2, Name: "attic"}}
+	vals := func(d1, d2 string) map[model.DeviceID]map[string]string {
+		return map[model.DeviceID]map[string]string{1: {"TelePeriod": d1, "SetOption0": "0"}, 2: {"TelePeriod": d2, "SetOption0": "0"}}
+	}
+	fp := &fakePolicy{rep: policyReportOf(rules, devs, vals("60", "10"))}
 	var hh telemetryHealth
 	e := setupWith(t, func(d *Deps) {
 		hh = telemetryHealth{fakeHealth: d.Health.(fakeHealth), tele: map[model.DeviceID]health.Telemetry{
@@ -81,10 +85,103 @@ func TestDeviceOverviewShowsTheTilesFromRealData(t *testing.T) {
 	if strings.Contains(op, "Make compliant") || !strings.Contains(op, "TelePeriod 60 → 300") {
 		t.Errorf("operator: the deviation without the admin action:\n%s", op)
 	}
-	fp.rep.Findings = nil
+	fp.rep = policyReportOf(rules, devs, vals("300", "300"))
 	_, ok := e.do(t, "GET", "/devices/1", "admin", nil)
 	if !strings.Contains(ok, ">2 / 2</div>") || !strings.Contains(ok, "Matches all rules") || strings.Contains(ok, "Make compliant") {
 		t.Errorf("a compliant device:\n%s", ok)
+	}
+}
+
+// policyReportOf is a policy report built the way the service builds it: Outcomes and Findings
+// come from the policy package's own evaluation, so a test follows the scope rule instead of
+// restating it with hand-made outcomes.
+func policyReportOf(rules []policy.Rule, devs []model.Device, values map[model.DeviceID]map[string]string) PolicyReport {
+	return PolicyReport{Rules: rules, Devices: devs, Values: values,
+		Outcomes: policy.Outcomes(rules, devs, values), Findings: policy.Check(rules, devs, values)}
+}
+
+// policyTileOf is the Policy tile text of a device's overview ("" when there is no tile).
+func policyTileOf(t *testing.T, e *env, id string) string {
+	t.Helper()
+	_, body := e.do(t, "GET", "/devices/"+id, "admin", nil)
+	i := strings.Index(body, `data-tile="policy"`)
+	if i < 0 {
+		return ""
+	}
+	j := strings.Index(body[i:], "</div></div>")
+	if j < 0 {
+		j = min(len(body)-i, 600)
+	}
+	return body[i : i+j]
+}
+
+// Why: the Policy tile answers "does this device follow the policy": its n / m counts the rules
+// that are evaluated for THIS device (scope by name or tag, the same rule the policy pages
+// use), not every rule in the fleet. Counting the fleet showed "2 / 2 Matches all rules" on a
+// device that no rule applies to (#986), which reads as compliance the policy never checked.
+func TestPolicyTileCountsOnlyRulesThatApplyToTheDevice(t *testing.T) {
+	devs := []model.Device{{ID: 1, Name: "kitchen", Tags: []string{"kitchen"}}, {ID: 2, Name: "attic", Tags: []string{"loft"}}}
+	ok := map[string]string{"TelePeriod": "300", "SetOption0": "0", "SaveData": "1"}
+	values := map[model.DeviceID]map[string]string{1: ok, 2: ok}
+	byName := policy.Rule{Command: "TelePeriod", Want: "300", Devices: []string{"attic"}}
+	byTag := policy.Rule{Command: "SetOption0", Want: "0", Tags: []string{"loft"}}
+	fleet := policy.Rule{Command: "SaveData", Want: "1"}
+	fp := &fakePolicy{rep: policyReportOf([]policy.Rule{byName, byTag, fleet}, devs, values)}
+	e := setupWith(t, func(d *Deps) { d.Policy = fp })
+
+	one, two := policyTileOf(t, e, "1"), policyTileOf(t, e, "2")
+	if !strings.Contains(one, ">1 / 1<") || !strings.Contains(one, "Matches all rules") {
+		t.Errorf("kitchen: only the fleet-wide rule applies, want 1 / 1:\n%s", one)
+	}
+	if !strings.Contains(two, ">3 / 3<") {
+		t.Errorf("attic: the name rule, the tag rule and the fleet rule apply, want 3 / 3:\n%s", two)
+	}
+
+	// The issue's case: every rule is scoped to another device. The tile says so, it does not
+	// claim compliance with rules that were never evaluated here.
+	fp.rep = policyReportOf([]policy.Rule{byName, byTag}, devs, values)
+	none := policyTileOf(t, e, "1")
+	if !strings.Contains(none, "No rules apply to this device") || strings.Contains(none, "Matches all rules") || strings.Contains(none, "Make compliant") {
+		t.Errorf("kitchen, no rule in scope:\n%s", none)
+	}
+	if !strings.Contains(policyTileOf(t, e, "2"), ">2 / 2<") {
+		t.Error("attic keeps its two rules")
+	}
+}
+
+// Why: only a rule that is evaluated for the device is a rule that applies to it. A disabled
+// rule, a rule that excepts the device and a lower rule that a higher one shadows on the same
+// command are judged by nobody (or by another rule), so counting them would inflate n / m. The
+// count must follow policy.RuleTally.Applies, the number the policy page shows.
+func TestPolicyTileDoesNotCountDisabledExceptedOrShadowedRules(t *testing.T) {
+	devs := []model.Device{{ID: 1, Name: "kitchen"}, {ID: 2, Name: "attic"}}
+	values := map[model.DeviceID]map[string]string{1: {"TelePeriod": "300", "SaveData": "1", "SetOption0": "0"}, 2: {}}
+	rules := []policy.Rule{
+		{Command: "TelePeriod", Want: "300"},
+		{Command: "SetOption0", Want: "0", Disabled: true},
+		{Command: "SaveData", Want: "1", Except: []string{"kitchen"}},
+		{Command: "TelePeriod", Want: "60"}, // shadowed by the first rule on the same command
+	}
+	fp := &fakePolicy{rep: policyReportOf(rules, devs, values)}
+	e := setupWith(t, func(d *Deps) { d.Policy = fp })
+	if got := policyTileOf(t, e, "1"); !strings.Contains(got, ">1 / 1<") {
+		t.Errorf("kitchen: one rule is evaluated, want 1 / 1:\n%s", got)
+	}
+
+	// A fleet whose rules are all disabled: no enabled rule applies to anyone.
+	fp.rep = policyReportOf([]policy.Rule{{Command: "TelePeriod", Want: "300", Disabled: true}}, devs, values)
+	if got := policyTileOf(t, e, "1"); !strings.Contains(got, "No rules apply to this device") {
+		t.Errorf("all rules disabled:\n%s", got)
+	}
+}
+
+// Why: a fleet without any rule has no policy to follow, so the overview shows no Policy tile at
+// all (the tile row has no holes); the "No rules apply" tile is for a device out of every
+// rule's scope, not for an empty policy.
+func TestPolicyTileIsAbsentWhenTheFleetHasNoRules(t *testing.T) {
+	e := setupWith(t, func(d *Deps) { d.Policy = &fakePolicy{} })
+	if got := policyTileOf(t, e, "1"); got != "" {
+		t.Errorf("no rules, want no tile:\n%s", got)
 	}
 }
 

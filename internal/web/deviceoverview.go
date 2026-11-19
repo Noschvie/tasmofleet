@@ -294,10 +294,14 @@ func reachTile(d model.Device, hl model.Health, hs transport.HTTPState, now time
 }
 
 // policyTile is "n / m" rules matched: green when all match, amber naming the first failing
-// setting. Nothing without a policy or without rules.
+// setting. Nothing without a policy (or a fleet without rules); a device that no rule applies to
+// says so instead of showing a count.
 func policyTile(c *policyCard, off bool) *tile {
-	if c == nil || c.Rules == 0 {
+	if c == nil {
 		return nil
+	}
+	if c.Rules == 0 {
+		return &tile{Key: "policy", Label: "Policy", Value: "None", Tone: ui.ToneNeutral, Sub: "No rules apply to this device"}
 	}
 	tl := tile{Key: "policy", Label: "Policy", Value: fmt.Sprintf("%d / %d", max(c.Rules-len(c.Deviations), 0), c.Rules), Tone: ui.ToneOK}
 	switch {
