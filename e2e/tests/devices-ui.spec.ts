@@ -492,7 +492,16 @@ test(
       .getAttribute("href"))!;
     for (const width of [375, 1280]) {
       await page.setViewportSize({ width, height: 900 });
+      // Wait for the settings read this page triggers, not for a window. Once the device is
+      // live on our broker the first read goes over MQTT and is paced by design (bus gap plus
+      // the identity window, several seconds), longer than the default expect window; before the
+      // tracker has stored the topic it goes over HTTP in a fraction of a second. The test must
+      // pass on either path. With a remembered reading the page also refreshes it (same URL).
+      const form = page.waitForResponse((r) =>
+        new URL(r.url()).pathname.endsWith(href + "/settings/form"),
+      );
       await page.goto(app.url + href + "/settings");
+      expect((await form).status()).toBe(200);
       await expect(page.locator("nav.utabs a[aria-current=page]")).toHaveText(
         "Settings",
       );
