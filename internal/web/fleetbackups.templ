@@ -104,7 +104,8 @@ templ fleetStacks(p sysPage) {
 	}
 }
 
-// fleetLastRun is the first card: the last scheduled run with its failed and skipped devices apart.
+// fleetLastRun is the first card: the last scheduled run as four tiles. The devices behind the counts are in
+// the table below, which the Failed and Skipped tiles link; the card does not name them again (#996).
 templ fleetLastRun(p sysPage, c sysCard) {
 	{{ v := p.Fleet }}
 	@ui.SettingsCard(ui.SettingsCardData{ID: "card-" + c.ID, Title: c.Title, Note: fleetLastNote(*v), Class: ui.StackRank(c.Phone), Plain: true}) {
@@ -116,11 +117,9 @@ templ fleetLastRun(p sysPage, c sysCard) {
 				<p class="ufield-help">No scheduled run has finished yet.</p>
 			case !v.Scheduled:
 				@fleetNoSchedule(*v)
-				@fleetRunLists(p, *v)
 			default:
 				@fleetMissed(*v)
 				@fleetRunSums(*v)
-				@fleetRunLists(p, *v)
 		}
 	}
 }
@@ -159,9 +158,14 @@ templ fleetNoSchedule(v fleetView) {
 }
 
 // fleetRunSum is a count of the last run; it links the table filtered to it while there is something to see.
-templ fleetRunSum(label string, n int, href string) {
+// The note, when there is one, sits on the tile.
+templ fleetRunSum(label string, n int, href, note string) {
 	if n > 0 {
-		@sysSumLink(label, strconv.Itoa(n), href)
+		@sysSumLink(label, strconv.Itoa(n), href) {
+			if note != "" {
+				<div class="sys-sum-note">{ note }</div>
+			}
+		}
 	} else {
 		@sysSum(label, "0")
 	}
@@ -174,47 +178,8 @@ templ fleetRunSums(v fleetView) {
 			<div class="sys-sum-value"><span class="sys-sum-sm"><time { ui.StampAttrs(v.Run.StartedAt, ui.StampDay)... }>{ ui.StampDayText(v.Now, v.Run.StartedAt) }</time></span></div>
 		</div>
 		@sysSum("Backed up", strconv.Itoa(v.Run.OK))
-		@fleetRunSum("Failed", v.Run.Failed, v.ChipHref(fleetFailed))
-		@fleetRunSum("Skipped", v.Run.Skipped, v.ChipHref(fleetSkipped))
-	</div>
-}
-
-// fleetRunLists names the first fleetFailedShown failed devices and links the table for the rest; skipped
-// devices are one line with a link. The table lists every one of them with its reason, so a longer list
-// here would only repeat it and push the table down (#684).
-templ fleetRunLists(p sysPage, v fleetView) {
-	if len(v.Failed) > 0 {
-		<h3 class="sys-subhead">{ "Failed (" + strconv.Itoa(len(v.Failed)) + ")" }</h3>
-		@fleetRunItems(p, v.Failed[:min(len(v.Failed), fleetFailedShown)], ui.ToneDanger, "Failed")
-		if len(v.Failed) > fleetFailedShown {
-			<p class="cnote">{ "and " + plural(len(v.Failed)-fleetFailedShown, "more device") + " · " }<a href={ templ.SafeURL(v.ChipHref(fleetFailed)) }>{ "Show all " + strconv.Itoa(len(v.Failed)) + " failed" }</a></p>
-		}
-	}
-	if len(v.Skipped) > 0 {
-		<p class="cnote">Skipped devices are not failures and are not in the notification: <a href={ templ.SafeURL(v.ChipHref(fleetSkipped)) }>{ "show the " + strconv.Itoa(len(v.Skipped)) + " skipped" }</a>.</p>
-	}
-}
-
-templ fleetRunItems(p sysPage, items []model.BackupRunItem, tone ui.Tone, word string) {
-	<div class="sys-orphans">
-		for _, it := range items {
-			<div class="sys-orphan">
-				<div class="sys-orphan-main">
-					<div class="sys-orphan-title">
-						if it.DeviceID != 0 {
-							<a href={ templ.SafeURL(p.Base + "/devices/" + strconv.FormatInt(int64(it.DeviceID), 10) + "/backups") } class="sys-store-name">{ it.DeviceName }</a>
-						} else {
-							<span class="sys-store-name">{ it.DeviceName }</span>
-						}
-						{ " " }
-						@ui.Badge(tone, word)
-					</div>
-					if it.Reason != "" {
-						<div class="sys-orphan-detail">@fleetWhy(newWhy(p.Fleet.Now, it.Reason, it.Since))</div>
-					}
-				</div>
-			</div>
-		}
+		@fleetRunSum("Failed", v.Run.Failed, v.ChipHref(fleetFailed), "")
+		@fleetRunSum("Skipped", v.Run.Skipped, v.ChipHref(fleetSkipped), "Not failures, not in the notification")
 	</div>
 }
 

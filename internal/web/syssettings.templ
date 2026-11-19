@@ -582,11 +582,13 @@ templ sysKeepLegacy(p sysPage) {
 	}
 }
 
-// sysSumLink is a total that opens the list of what it counts (the whole tile is the link).
+// sysSumLink is a total that opens the list of what it counts (the whole tile is the link). Children, if
+// any, follow the value inside the tile (a note on what the count means).
 templ sysSumLink(label, value, href string) {
 	<a class="sys-sum" href={ templ.SafeURL(href) }>
 		<div class="sys-sum-label">{ label }</div>
 		<div class="sys-sum-value">{ value }</div>
+		{ children... }
 	</a>
 }
 

@@ -151,8 +151,6 @@ type fleetView struct {
 	Plan        string    // the schedule in words, "Mon, Wed, Fri at 03:00"; empty when off
 	Next        time.Time // the next scheduled run; zero when off
 	Missed      time.Time // when the newest skipped run was noticed, when that is newer than the last run; else zero
-	Failed      []model.BackupRunItem
-	Skipped     []model.BackupRunItem
 	Chips       []fleetChip
 	Rows        []fleetRow
 	Total       int // devices, whatever the filter
@@ -360,15 +358,6 @@ func (h *handler) fleetOf(r *http.Request, admin bool) (*fleetView, error) {
 	}
 	if ok {
 		fv.Run = &run
-		for _, it := range run.Items {
-			switch it.Outcome {
-			case model.BackupOutcomeFailed:
-				fv.Failed = append(fv.Failed, it)
-			case model.BackupOutcomeSkipped:
-				fv.Skipped = append(fv.Skipped, it)
-			case model.BackupOutcomeOK:
-			}
-		}
 	}
 	missed, err := h.d.BackupFleet.LastMissed(ctx)
 	if err != nil {
@@ -536,10 +525,6 @@ func fleetFilesBadge(note string) string {
 	}
 	return note
 }
-
-// fleetFailedShown is how many failed devices of the last run the Last run card names; the table below lists
-// every one, and the card links the filter for the rest (#684).
-const fleetFailedShown = 3
 
 // pruneRunsOf groups a device's files into the runs Prune now removes, oldest first. The id is the
 // run's dump row (or its first file when the run has no dump): the confirmation posts it, and the

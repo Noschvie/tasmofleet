@@ -111,14 +111,14 @@ func TestFleetBackupsPageAdmin(t *testing.T) {
 		t.Fatalf("status %d", r.StatusCode)
 	}
 	last := cardOf(t, body, "lastrun")
-	for _, want := range []string{"Last run", "Backed up", "Failed", "Skipped", "cellar", "No answer within 30 s", `href="/tf/devices/3/backups"`} {
+	for _, want := range []string{"Last run", "Backed up", "Failed", "Skipped"} {
 		if !strings.Contains(last, want) {
 			t.Errorf("Last run lacks %q", want)
 		}
 	}
 	devs := cardOf(t, body, "devices")
-	// the skipped devices and their reasons are in the table (#684: Last run only links them)
-	for _, want := range []string{"Back up selected", `aria-label="Select attic"`, "Settings only", "Needs HTTP", "Not in a run yet", "12 files", "balcony", "Offline since <time", "Never answered"} {
+	// the failed and skipped devices with their reasons are in the table (#684, #996: Last run only counts them)
+	for _, want := range []string{"Back up selected", `aria-label="Select attic"`, "Settings only", "Needs HTTP", "Not in a run yet", "12 files", "cellar", "No answer within 30 s", `href="/tf/devices/3/backups"`, "balcony", "Offline since <time", "Never answered"} {
 		if !strings.Contains(devs, want) {
 			t.Errorf("Devices card lacks %q", want)
 		}
@@ -219,6 +219,12 @@ func TestFleetBackupsNoSchedule(t *testing.T) {
 	}
 	if strings.Contains(last, "Next run") {
 		t.Error("no schedule, no next run")
+	}
+	// Why (#996): the device lists are gone from the card; the counts in the line above are what is left of them.
+	for _, not := range []string{"cellar", "balcony", "garage", "Failed (1)", "show the 2 skipped"} {
+		if strings.Contains(last, not) {
+			t.Errorf("no-schedule Last run still lists devices (%q): %s", not, last)
+		}
 	}
 }
 
@@ -480,19 +486,6 @@ func TestRowMenuShowsReplaceToAdminsOnly(t *testing.T) {
 	}
 }
 
-// Why (mockup 1c): with the schedule off the page still lists the last stored run's failed devices and
-// links its skipped ones under the "No schedule" note, as the mockup shows; they are not hidden with the sums.
-func TestNoScheduleStillListsTheLastRunsFailedAndSkippedDevices(t *testing.T) {
-	e := fleetEnvManual(t, fleetFixture(time.Now()))
-	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
-	last := cardOf(t, body, "lastrun")
-	for _, want := range []string{"No schedule", "Failed (1)", "cellar", "No answer within 30 s", "show the 2 skipped"} {
-		if !strings.Contains(last, want) {
-			t.Errorf("no-schedule Last run lacks %q", want)
-		}
-	}
-}
-
 // Why (#633, as #511): a host-style name has no break point at its dots, so once the Device column
 // wraps instead of clipping, a browser cuts it inside a label ("readinglamp.exampl / e.internal").
 // Each dot and dash gets a <wbr>, so the name breaks between its labels; the name itself is unchanged.
@@ -621,58 +614,57 @@ func manyFailed(now time.Time) *fakeFleet {
 	return fleet
 }
 
-// Why (#684): the table below already lists every failed device with its reason and the "Failed last
-// run" chip filters it. A Last run card that names all of them again grows by one row per failure and
-// pushes the table down, on a night when many devices fail (a broker or a switch down) the page is
-// at its longest exactly when the person needs it. The card names the first three, which need action
-// first, and links the chip for the rest.
-func TestLastRunNamesThreeFailedDevicesAndLinksTheRest(t *testing.T) {
-	e := fleetEnv(t, manyFailed(time.Now()))
+// skippedTile is the HTML of the Skipped tile of the Last run card: from its label to the closing tag
+// of the tile.
+var skippedTile = regexp.MustCompile(`(?s)<a class="sys-sum"[^>]*>\s*<div class="sys-sum-label">Skipped</div>.*?</a>`)
+
+// Why (#996, after #684): the table below lists every failed and skipped device with its reason, and the
+// Failed and Skipped tiles link it filtered. A Last run card that names devices as well shows the same
+// devices twice, and on a night when many fail it grows by one row each. The card is its four tiles; the
+// devices are one click away in the table, which is the one place that has all of them.
+func TestLastRunCardIsItsFourTilesWithoutADeviceList(t *testing.T) {
+	e := fleetEnv(t, manyFailed(time.Now())) // 5 failed, 2 skipped
 	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
 	last := cardOf(t, body, "lastrun")
-	for _, want := range []string{"cellar", "lobby", "mudroom", "and 2 more devices", "Show all 5 failed", `href="/tf/devices/backups?filter=failed#card-devices"`} {
+	for _, want := range []string{"Started", "Backed up", "Failed", "Skipped",
+		`href="/tf/devices/backups?filter=failed#card-devices"`, `href="/tf/devices/backups?filter=skipped#card-devices"`} {
 		if !strings.Contains(last, want) {
 			t.Errorf("Last run lacks %q: %s", want, last)
 		}
 	}
-	for _, not := range []string{"nook", "office"} {
+	for _, not := range []string{"cellar", "lobby", "mudroom", "nook", "office", "balcony", "garage", "Show all", "more device", "sys-orphan", "Failed (", "Skipped ("} {
 		if strings.Contains(last, not) {
-			t.Errorf("Last run names %q, the fourth and fifth failure belong behind the link", not)
+			t.Errorf("Last run still holds a device list (%q): %s", not, last)
 		}
 	}
-	// the devices the card leaves out are in the table it links to
-	if devs := cardOf(t, body, "devices"); !strings.Contains(devs, "nook") || !strings.Contains(devs, "office") {
-		t.Error("the table does not hold the failures the card leaves out")
-	}
-	// up to three there is nothing to link: no "and 0 more"
-	_, body = fleetEnv(t, fleetFixture(time.Now())).do(t, "GET", "/devices/backups", "admin", nil)
-	if last := cardOf(t, body, "lastrun"); strings.Contains(last, "more device") || strings.Contains(last, "Show all") {
-		t.Errorf("one failed device is listed in full, without a link for the rest: %s", last)
+	// what the card no longer names is in the table it links to, with its reason
+	devs := cardOf(t, body, "devices")
+	for _, want := range []string{"cellar", "lobby", "mudroom", "nook", "office", "balcony", "garage", "No answer within 30 s"} {
+		if !strings.Contains(devs, want) {
+			t.Errorf("the table does not hold %q", want)
+		}
 	}
 }
 
-// Why (#684): skipped devices are not failures (#409 decision) and are as visible in the table, by the
-// "Skipped" chip, as anywhere. Listing each of them in Last run only repeats the table; one line with
-// the count links the chip.
-func TestLastRunSkippedDevicesAreOneLinkedLineNotAList(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		env  *env
-	}{{"scheduled", fleetEnv(t, fleetFixture(time.Now()))}, {"no schedule", fleetEnvManual(t, fleetFixture(time.Now()))}} {
-		t.Run(tc.name, func(t *testing.T) {
-			_, body := tc.env.do(t, "GET", "/devices/backups", "admin", nil)
-			last := cardOf(t, body, "lastrun")
-			for _, want := range []string{"show the 2 skipped", `href="/tf/devices/backups?filter=skipped#card-devices"`, "not failures"} {
-				if !strings.Contains(last, want) {
-					t.Errorf("Last run lacks %q: %s", want, last)
-				}
-			}
-			for _, not := range []string{"balcony", "garage", "Skipped (2)"} {
-				if strings.Contains(last, not) {
-					t.Errorf("Last run still lists skipped devices (%q)", not)
-				}
-			}
-		})
+// Why (#996): skipped devices are not failures and are not in the notification (#409 decision). That
+// sentence used to sit under the device lists; with the lists gone it belongs to the Skipped tile, as a
+// visible line (a tooltip does not show on touch). It is on the tile, not beside it, so it cannot be
+// read as being about the failed devices, and only while something was skipped.
+func TestLastRunSkippedTileSaysSkippedAreNotFailures(t *testing.T) {
+	_, body := fleetEnv(t, fleetFixture(time.Now())).do(t, "GET", "/devices/backups", "admin", nil)
+	tile := skippedTile.FindString(cardOf(t, body, "lastrun"))
+	if tile == "" {
+		t.Fatal("no Skipped tile in the Last run card")
+	}
+	if !strings.Contains(tile, "Not failures, not in the notification") {
+		t.Errorf("the Skipped tile does not carry the note: %s", tile)
+	}
+	// a run that skipped nobody has nothing to explain
+	clean := fleetFixture(time.Now())
+	clean.run.Skipped = 0
+	_, body = fleetEnv(t, clean).do(t, "GET", "/devices/backups", "admin", nil)
+	if last := cardOf(t, body, "lastrun"); strings.Contains(last, "not in the notification") {
+		t.Errorf("no note on a run with nothing skipped: %s", last)
 	}
 }
 
