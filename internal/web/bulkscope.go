@@ -267,6 +267,9 @@ type bulkResultRow struct {
 	Href                      string // the device's page; "" when the device no longer exists
 	Group                     string // the tile the row is counted in (bulkGroup*); "" while queued or running
 	Tone                      ui.Tone
+	// SetPWHref is the device's MQTT password form on a failed backup while only a usable MQTT password would let MQTT
+	// carry it (#997); "" otherwise.
+	SetPWHref string
 }
 
 // The groups of the result tiles; a tile's click shows only its group (?show=). A row's group is
@@ -444,6 +447,19 @@ func (h *handler) bulkResult(w http.ResponseWriter, r *http.Request) {
 	for _, j := range p.Jobs {
 		byDev[j.Job.DeviceID] = h.jobResultRow(r, j, &rv)
 		order = append(order, j.Job.DeviceID)
+	}
+	if kind == bulkBackup && v.IsAdmin { // the password form is admin only, like this page
+		var failed []model.DeviceID
+		for id, row := range byDev {
+			if row.Label == "Failed" {
+				failed = append(failed, id)
+			}
+		}
+		for id := range h.needBackupPassword(r.Context(), failed) {
+			row := byDev[id]
+			row.SetPWHref = v.Base + setPasswordPath(id)
+			byDev[id] = row
+		}
 	}
 	slices.Sort(order) // without the posted order: the order the jobs were created in
 	if posted := h.formIDs(r); len(posted) > 0 {

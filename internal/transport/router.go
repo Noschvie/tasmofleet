@@ -54,8 +54,9 @@ type BackupBlockedError struct {
 	Err    error
 	Reason string
 	// Attempted: something was published for this backup before it was refused (the opening abort, a
-	// start that may have been sent, an Error 1 answer). Only a refusal decided before the first publish
-	// has it false; the web layer then lets the person retry after a short floor instead of the cooldown.
+	// start that may have been sent, an Error 1 answer), or /dl was sent over HTTP. Only a refusal decided
+	// before anything was sent has it false; the web layer then lets the person retry after a short floor
+	// instead of the cooldown.
 	Attempted bool
 }
 
@@ -913,6 +914,9 @@ func (r *Router) DownloadConfig(ctx context.Context, t tasmota.Target) ([]byte, 
 		r.o.Log.Info("transport: MQTT did not publish the backup, using HTTP", "device", int64(d.ID))
 		return r.httpDownload(ctx, t)
 	}
+	if err := r.backupNeedsPassword(ctx, t, f); err != nil {
+		return nil, err
+	}
 	raw, err := r.httpDownload(ctx, t)
 	if err == nil || !tasmota.NotSent(err) {
 		return raw, r.explainBackup(err, f, p)
@@ -950,7 +954,58 @@ func (r *Router) httpDownload(ctx context.Context, t tasmota.Target) ([]byte, er
 	return b, err
 }
 
-// explainBackup adds why a backup over MQTT was not possible to the HTTP error of a device on our broker.
+// backupNeedsPassword ends a backup before anything is sent when only MQTT could carry it and its MQTT password is not
+// usable (BackupPasswordBlocker, #997): the device does not answer over HTTP, so /dl could only wait out the download
+// timeout. HTTP failing counts as not reachable. HTTP not known to work (no fresh answer on record; a timeout is never
+// recorded as a failure, T8) is settled by one Status 11 right now (httpAnswers, bounded by the status timeout), never
+// by the backup's own timeout; a probe without an answer counts as not reachable. A fresh answer on record keeps
+// today's backup over HTTP without a probe. The error is a refusal decided before anything was sent (Attempted
+// false), so the person may retry right after setting the password.
+func (r *Router) backupNeedsPassword(ctx context.Context, t tasmota.Target, f Facts) error {
+	why := BackupPasswordBlocker(f)
+	if why == "" {
+		return nil
+	}
+	var seen string // what HTTP showed
+	switch f.HTTP.State {
+	case HTTPOK:
+		return nil
+	case HTTPFailing:
+		seen = httpFailText(f.HTTP)
+	case HTTPUnknown:
+		if r.httpAnswers(ctx, t) {
+			return nil
+		}
+		if err := ctx.Err(); err != nil {
+			return err // the caller gave up: no verdict about the device
+		}
+		seen = probeFailText(r.o.Memory, t.DeviceID())
+	}
+	noteTrace(ctx, None)
+	r.o.Log.Info("transport: backup not started, only MQTT could carry it and its MQTT password is not usable", "device", int64(t.DeviceID()))
+	return &BackupBlockedError{Err: fmt.Errorf("%w: a backup over MQTT needs the device's MQTT password", tasmota.ErrUnreachable),
+		Reason: needsPasswordText(seen, why)}
+}
+
+// needsPasswordText is the one sentence of a backup that only MQTT could carry and that needs the MQTT password: what
+// HTTP showed, and why the password cannot be used. Both halves are words and dates of this package, never an error
+// text (a device error can carry its URL, and the URL the web password; CLAUDE.md safety rule 4).
+func needsPasswordText(seen, why string) string {
+	return "needs an MQTT password: " + seen + ", so only MQTT can carry the backup; " + why
+}
+
+// probeFailText says what the HTTP probe before a backup showed: the failure the observer just recorded (a refused
+// connection, a refused web password, ...), or no usable answer at all (a timeout is never recorded, T8).
+func probeFailText(mem *Memory, id model.DeviceID) string {
+	if kind, since, ok := mem.HTTPFailure(id); ok {
+		return httpFailText(HTTPState{State: HTTPFailing, Kind: kind, Since: since})
+	}
+	return "the device gave no usable answer over HTTP just now"
+}
+
+// explainBackup adds why a backup over MQTT was not possible to the HTTP error of a device on our broker: when no path
+// was left, and when HTTP carried the backup because MQTT could not (transferBlocker, #997). Err stays the HTTP error,
+// so errors.Is still finds it.
 func (r *Router) explainBackup(err error, f Facts, p Paths) error {
 	if err == nil || !f.MQTT.Ours || f.MQTT.Topic == "" {
 		return err
@@ -959,7 +1014,22 @@ func (r *Router) explainBackup(err error, f Facts, p Paths) error {
 		r.o.Log.Debug("transport: not using MQTT", "topic", f.MQTT.Topic, "action", string(ActBackup), "why", why)
 		return &BackupBlockedError{Err: err, Reason: why}
 	}
+	if why := transferBlocker(f, "back up"); why != "" && p.Backup == HTTP {
+		return &BackupBlockedError{Err: err, Reason: httpBackupFailText(err) + ", and a backup over MQTT is not possible: " + why, Attempted: !tasmota.NotSent(err)}
+	}
 	return err
+}
+
+// httpBackupFailText says what went wrong with a backup over HTTP, in the words of the HTTP facts (failKind and
+// failText, the one mapping of HTTP errors in this package).
+func httpBackupFailText(err error) string {
+	if kind, failing, _ := failKind(err); failing {
+		return HTTPState{Kind: kind}.failText()
+	}
+	if errors.Is(err, tasmota.ErrTimeout) {
+		return "the device did not answer the backup over HTTP in time"
+	}
+	return "the backup over HTTP failed"
 }
 
 // pinnedDownload is the backup of a job that chose MQTT: same checks as the chosen path, no HTTP.

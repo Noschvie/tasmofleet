@@ -138,7 +138,12 @@ templ backupRowItem(p backupsView, b backupRow) {
 				<div class="bk-reason">The file is gone from the data directory (deleted by hand?). Check that the data volume is mounted. It cannot be downloaded or restored; delete the entry to remove it.</div>
 			}
 			if b.Failed {
-				<div class="bk-reason">{ b.Reason }</div>
+				<div class="bk-reason">
+					{ b.Reason }
+					if b.SetPWHref != "" {
+						{ " " }@setPasswordLink(b.SetPWHref, "this device")
+					}
+				</div>
 			}
 		</div>
 		<div class="bk-acts">
@@ -260,4 +265,15 @@ templ pruneDialog(p backupsView) {
 			</div>
 		</form>
 	</dialog>
+}
+
+// backupFailedStatus is the status line under Back up now and Retry after a failed backup: the reason, and the link
+// to the device's MQTT password form when only a usable MQTT password would let MQTT carry the backup (#997).
+templ backupFailedStatus(msg, setPWHref string) {
+	<p class="error" role="alert">
+		{ msg }
+		if setPWHref != "" {
+			{ " " }@setPasswordLink(setPWHref, "this device")
+		}
+	</p>
 }

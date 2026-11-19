@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -740,5 +741,120 @@ func TestScheduledBackupNotificationHasOneLinePerFailedDeviceWhateverTheRowHolds
 		if len([]rune(f.Hostname)) > 100 || len([]rune(f.Name)) > 100 {
 			t.Errorf("name or hostname not capped: %d, %d runes", len([]rune(f.Name)), len([]rune(f.Hostname)))
 		}
+	}
+}
+
+// needsPWHTTP is the device's HTTP side for TestScheduledBackupCountsADeviceThatNeedsAnMQTTPasswordAsFailed: it never
+// answers (another LAN), and records what reached it.
+type needsPWHTTP struct {
+	mu    sync.Mutex
+	calls []string
+}
+
+func (h *needsPWHTTP) Command(_ context.Context, _ tasmota.Target, c string) (json.RawMessage, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.calls = append(h.calls, c)
+	return nil, tasmota.ErrTimeout
+}
+
+func (h *needsPWHTTP) DownloadConfig(context.Context, tasmota.Target) ([]byte, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.calls = append(h.calls, "/dl")
+	return nil, tasmota.ErrTimeout
+}
+
+func (h *needsPWHTTP) RootPage(context.Context, tasmota.Target) (tasmota.RootInfo, error) {
+	return tasmota.RootInfo{}, tasmota.ErrTimeout
+}
+
+// needsPWMQTT is the command channel: the device is live on TasmoFleet's broker; it records every publish.
+type needsPWMQTT struct {
+	mu   sync.Mutex
+	sent []string
+}
+
+func (m *needsPWMQTT) Do(_ context.Context, _ model.Device, c string) (json.RawMessage, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sent = append(m.sent, c)
+	return json.RawMessage(`{}`), nil
+}
+func (m *needsPWMQTT) DoLoose(ctx context.Context, d model.Device, c string) (json.RawMessage, error) {
+	return m.Do(ctx, d, c)
+}
+func (m *needsPWMQTT) Connected() bool { return true }
+func (m *needsPWMQTT) Download(_ context.Context, _ model.Device, _ string) ([]byte, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sent = append(m.sent, "FileDownload")
+	return []byte("DUMP"), nil
+}
+
+// needsPWFacts: usable on TasmoFleet's broker in every way but the MQTT password, which is not set; nothing is known
+// of HTTP (a device live on MQTT is not polled over HTTP, and a timeout is never recorded as a failure).
+type needsPWFacts struct{}
+
+func (needsPWFacts) HTTPState(model.DeviceID) transport.HTTPState { return transport.HTTPState{} }
+func (needsPWFacts) FactsFor(_ context.Context, d model.Device) (transport.Facts, error) {
+	now := time.Now()
+	return transport.Facts{Now: now, MQTT: transport.MQTTFacts{BusConnected: true, Ours: true, Topic: d.Topic, TopicExclusive: true,
+		LWTOnline: true, GroupTopic: "tasmotas", GroupTopicReadAt: now, LastProbeAt: now.Add(-time.Hour)},
+		Password: transport.Password{Mode: model.MQTTPasswordNone}}, nil
+}
+
+type auditCapture struct {
+	mu  sync.Mutex
+	evs []model.AuditEvent
+}
+
+func (a *auditCapture) Record(_ context.Context, e model.AuditEvent) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.evs = append(a.evs, e)
+}
+
+// Why (#997, plan-0420 question 1): a device in another LAN that only MQTT could back up, without its MQTT password,
+// used to fail the scheduled run after the 20 s download timeout with "The device took too long to answer", which
+// hides the cause. It still counts as Failed (it stays in the failure notification, as with the timeout), but with
+// the reason "needs an MQTT password", decided before anything is sent: one bounded HTTP probe, no /dl, nothing
+// published. The run goes through the real backup service and router, so the service adds no Status 11 of its own
+// (its failure evidence reads only a device that answered), and the audit entry carries the same reason.
+func TestScheduledBackupCountsADeviceThatNeedsAnMQTTPasswordAsFailed(t *testing.T) {
+	e := newFleetEnv(t)
+	id, err := e.st.CreateDevice(context.Background(), model.Device{Name: "remote", Address: "192.0.2.1", Topic: "remote", MQTT: model.MQTTOurs})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := e.st.SetLastSeen(context.Background(), id, model.HealthOnline, fleetT0); err != nil {
+		t.Fatal(err)
+	}
+	e.health[id] = model.Health{DeviceID: id, State: model.HealthOnline}
+	h, mq, aud := &needsPWHTTP{}, &needsPWMQTT{}, &auditCapture{}
+	r := transport.NewRouter(transport.Options{HTTP: h, Devices: e.st, Facts: needsPWFacts{}})
+	r.SetMQTT(mq)
+	m, err := backup.New(backup.Options{DataDir: t.TempDir(), Devices: e.st, Store: e.st, Client: r, Audit: aud})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.b.backup = func(ctx context.Context, id model.DeviceID) error { _, err := m.Backup(ctx, "system", id); return err }
+	e.b.Run(context.Background())
+
+	it := item(e.last(t), "remote")
+	if it.Outcome != model.BackupOutcomeFailed || !strings.HasPrefix(it.Reason, "Needs an MQTT password: ") {
+		t.Fatalf("item %+v: want Failed with the reason", it)
+	}
+	if len(e.notes) != 1 || len(e.notes[0]) != 1 || e.notes[0][0].Reason != it.Reason {
+		t.Fatalf("notifications %+v: the device stays in the failure notification with the reason", e.notes)
+	}
+	h.mu.Lock()
+	calls := strings.Join(h.calls, "|")
+	h.mu.Unlock()
+	if calls != "Status 11" || len(mq.sent) != 0 {
+		t.Fatalf("HTTP %q, MQTT %v: want one Status 11 probe, no /dl, nothing published", calls, mq.sent)
+	}
+	if len(aud.evs) != 1 || !strings.Contains(aud.evs[0].Result, "needs an MQTT password") {
+		t.Fatalf("audit %+v: the entry carries the reason", aud.evs)
 	}
 }

@@ -209,6 +209,18 @@ func transferBlocker(f Facts, what string) string {
 	return passwordBlocker(f, what)
 }
 
+// BackupPasswordBlocker says why a backup cannot go over MQTT when the device is usable there for a transfer in every
+// other way and only a usable MQTT password is missing (not set, refused, or none to send; #997): "" when MQTT is not
+// usable for another reason, or when the password is usable. The router asks it before a backup over HTTP (a device
+// that does not answer over HTTP then needs the password), and the pages ask it before they link the password form,
+// so the rule exists once.
+func BackupPasswordBlocker(f Facts) string {
+	if mqttBlocker(f, true) != "" {
+		return ""
+	}
+	return passwordBlocker(f, "back up")
+}
+
 // noPath builds the sentence for None: what is wrong with each way.
 func noPath(parts ...string) string {
 	var out []string

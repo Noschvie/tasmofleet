@@ -16,11 +16,21 @@ import (
 // Devices: 1 kitchen (online), 2 attic (offline).
 func resultEnv(t *testing.T, jobs ...model.Job) *env {
 	t.Helper()
+	return resultEnvWith(t, nil, jobs...)
+}
+
+// resultEnvWith is resultEnv with the dependencies changed by mutate (nil changes nothing).
+func resultEnvWith(t *testing.T, mutate func(*Deps), jobs ...model.Job) *env {
+	t.Helper()
 	e := setup(t)
 	e.health[2] = model.Health{DeviceID: 2, State: model.HealthOffline, LastSeen: time.Now()}
-	h, err := Handler(Deps{Guard: fakeGuard{}, Inventory: e.inv, Health: e.health, Backups: e.bk, Prober: e.pr, Audit: e.aud, Recorder: e.aud,
+	d := Deps{Guard: fakeGuard{}, Inventory: e.inv, Health: e.health, Backups: e.bk, Prober: e.pr, Audit: e.aud, Recorder: e.aud,
 		Hub: e.hub, OTA: &fakeOTA{}, Jobs: &fakeJobs{jobs: jobs}, Batches: fakeBatches{},
-		DeviceCmd: &fakeCmd{}, CommandBatch: &fakeBatch{}, BackupBatch: &fakeBackupBatch{}})
+		DeviceCmd: &fakeCmd{}, CommandBatch: &fakeBatch{}, BackupBatch: &fakeBackupBatch{}}
+	if mutate != nil {
+		mutate(&d)
+	}
+	h, err := Handler(d)
 	if err != nil {
 		t.Fatal(err)
 	}

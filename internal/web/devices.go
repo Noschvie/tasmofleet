@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hellwand/tasmofleet/internal/auth"
 	"github.com/hellwand/tasmofleet/internal/backup"
 	"github.com/hellwand/tasmofleet/internal/httpx"
 	"github.com/hellwand/tasmofleet/internal/model"
@@ -622,7 +623,12 @@ func (h *handler) deviceBackupFromTab(w http.ResponseWriter, r *http.Request, d 
 		status = http.StatusTooManyRequests
 	} else if bs, rep, err := h.backupTraced(r, d.ID); err != nil {
 		h.backupNotSent(d.ID, err)
-		data.Error = h.backupProblem(err)
+		var href string // the password form is admin only
+		if p, _ := auth.FromContext(r.Context()); p.Role >= model.RoleAdmin && h.needBackupPassword(r.Context(), []model.DeviceID{d.ID})[d.ID] {
+			href = httpBase(r) + setPasswordPath(d.ID)
+		}
+		h.component(w, r, status, backupFailedStatus(h.backupProblem(err), href))
+		return
 	} else {
 		redirect(w, r, fmt.Sprintf("/devices/%d/backups?%s", d.ID, backupTakenQuery("backed-up", bs, rep)))
 		return

@@ -941,6 +941,8 @@ func TestFailedBackupRecordsHeapAndUptimeOfADeviceThatAnswered(t *testing.T) {
 		{"empty chunk", errEmptyChunk, true},
 		{"other transfer fault", fmt.Errorf("%w: %w", mqttcmd.ErrPublished, mqttcmd.ErrTransfer), true},
 		{"unreadable HTTP answer", fmt.Errorf("%w: HTTP 500", tasmota.ErrBadResponse), true},
+		// #997: the HTTP error of a device MQTT could not back up carries that reason; the device still answered.
+		{"unreadable HTTP answer, MQTT not possible", &transport.BackupBlockedError{Err: fmt.Errorf("%w: HTTP 500", tasmota.ErrBadResponse), Reason: "no password", Attempted: true}, true},
 		{"unreachable", tasmota.ErrUnreachable, false},
 		{"transfer timed out", fmt.Errorf("%w: %w: %w", mqttcmd.ErrPublished, mqttcmd.ErrTransfer, tasmota.ErrTimeout), false},
 		{"refused before sending", &transport.BackupBlockedError{Err: tasmota.ErrUnreachable, Reason: "no password"}, false},

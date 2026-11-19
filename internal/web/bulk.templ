@@ -223,7 +223,12 @@ templ bulkResultPage(v bulkResultView) {
 					<span class="bk-rbadge">
 						@ui.Badge(r.Tone, r.Label)
 					</span>
-					<span class="bk-detail">@ui.SoftJSON(r.Detail)</span>
+					<span class="bk-detail">
+						@ui.SoftJSON(r.Detail)
+						if r.SetPWHref != "" {
+							{ " " }@setPasswordLink(r.SetPWHref, r.Name)
+						}
+					</span>
 				</div>
 			}
 			if v.Filter != "" && len(v.ShownRows()) == 0 {

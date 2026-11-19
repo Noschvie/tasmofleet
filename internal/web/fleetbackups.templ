@@ -273,6 +273,14 @@ templ fleetDevices(p sysPage, c sysCard) {
 					}
 				</div>
 			</div>
+			if v.PWNote() != "" {
+				<p class="cnote bk-pwnote">
+					{ v.PWNote() }
+					if v.PWHref != "" {
+						{ " " }<a href={ templ.SafeURL(v.PWHref) }>Set them under System › MQTT, Device MQTT passwords</a>
+					}
+				</p>
+			}
 			<div class="table-scroll">
 				<table class="dense bk-table">
 					<colgroup>
@@ -352,7 +360,14 @@ templ fleetRowView(v fleetView, r fleetRow) {
 					@ui.Badge(ui.ToneOK, "OK")
 				case model.BackupOutcomeFailed:
 					@ui.Badge(ui.ToneDanger, "Failed")
-					<span class="bk-rsn" title={ r.Why.Plain() }>{ " " }@fleetWhy(r.Why)</span>
+					<span class="bk-rsn" title={ r.Why.Plain() }>
+						{ " " }
+						if r.SetPWHref != "" {
+							@setPasswordLink(r.SetPWHref, r.Name)
+							{ " · " }
+						}
+						@fleetWhy(r.Why)
+					</span>
 				case model.BackupOutcomeSkipped:
 					@ui.Badge(ui.ToneNeutral, "Skipped")
 					<span class="bk-rsn" title={ r.Why.Plain() }>{ " " }@fleetWhy(r.Why)</span>
@@ -368,6 +383,13 @@ templ fleetRowView(v fleetView, r fleetRow) {
 			@ui.RowMenu("Actions for "+r.Name, fleetMenu(r), false)
 		</td>
 	</tr>
+}
+
+// setPasswordLink leads from a backup that failed for want of a usable MQTT password to the device's form that sets it
+// (#997). In the Backups table it opens the reason, so the cell's cut at desktop width never hides it. The link names
+// the device for a screen reader, which reads it out of its row.
+templ setPasswordLink(href, name string) {
+	<a class="bk-link" href={ templ.SafeURL(href) } aria-label={ "Set the MQTT password of " + name }>Set MQTT password</a>
 }
 
 func fleetMenu(r fleetRow) []ui.MenuItem {

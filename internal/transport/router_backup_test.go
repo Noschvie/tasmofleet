@@ -95,8 +95,8 @@ func TestBrokerModeFollowsAChangedBrokerPassword(t *testing.T) {
 }
 
 func TestBackupWithoutAUsablePasswordPublishesNothingAndSaysWhy(t *testing.T) {
-	// Why (acceptance): not set, refused before, or broker mode without a broker password: no FileDownload,
-	// HTTP gets its chance, and the error carries the reason.
+	// Why (acceptance, #997): not set, refused before, or broker mode without a broker password: no FileDownload, and
+	// the error carries the reason. HTTP is known to fail here, so /dl is not sent either: it could only time out.
 	for name, mod := range map[string]func(*dlRig){
 		"not set":        func(g *dlRig) { g.devs.d.MQTTPasswordMode = model.MQTTPasswordNone },
 		"refused before": func(g *dlRig) { g.devs.d.MQTTPasswordBadAt = time.Now() },
@@ -109,6 +109,9 @@ func TestBackupWithoutAUsablePasswordPublishesNothingAndSaysWhy(t *testing.T) {
 			_, err := g.r.DownloadConfig(t.Context(), g.target())
 			if err == nil || len(g.dl.pws) != 0 || !strings.Contains(err.Error(), "password") {
 				t.Fatalf("%v, downloads %v: the reason must be in the error", err, g.dl.pws)
+			}
+			if g.http.dl != 0 {
+				t.Fatalf("/dl sent %d times to a device HTTP is known not to reach", g.http.dl)
 			}
 		})
 	}
@@ -252,5 +255,133 @@ func TestATraceInsideATraceReportsToBoth(t *testing.T) {
 	noteTrace(inner, MQTT)
 	if otr.Via() != "mqtt" || itr.Via() != "mqtt" {
 		t.Fatalf("outer %s inner %s", otr.Via(), itr.Via())
+	}
+}
+
+// Why (#997, the maintainer's decision of 2026-11-19): a device that only MQTT could back up, but whose MQTT password
+// is not usable, has no way to be backed up. Sending /dl to an address that does not answer only waits out the
+// download timeout and then says "took too long", which hides the real cause. So nothing is published, no /dl is
+// sent, and the backup ends at once with the reason ("needs an MQTT password"), as a refusal decided before anything
+// was sent (Attempted false: the person may retry right after setting the password). HTTP failing counts as not
+// reachable, and so does an HTTP probe without an answer.
+func TestABackupOnlyMQTTCouldCarryNeedsThePasswordAndSendsNothing(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mod    func(*dlRig)
+		probes int // Status 11 over HTTP: only when HTTP is not known to work
+		why    string
+	}{
+		{"HTTP failing, no password", func(g *dlRig) { g.devs.d.MQTTPasswordMode = model.MQTTPasswordNone }, 0, "TasmoFleet cannot reach the device over HTTP"},
+		{"HTTP failing, password refused", func(g *dlRig) { g.devs.d.MQTTPasswordBadAt = time.Now() }, 0, "refused its MQTT password"},
+		{"HTTP unknown, the probe gets no answer", func(g *dlRig) {
+			g.mem.Clear(7)
+			g.devs.d.MQTTPasswordMode = model.MQTTPasswordNone
+			g.http.err = tasmota.ErrTimeout
+		}, 1, "no usable answer over HTTP"},
+		{"HTTP unknown, the probe is refused", func(g *dlRig) {
+			g.mem.Clear(7)
+			g.devs.d.MQTTPasswordMode = model.MQTTPasswordNone
+			g.http.err = tasmota.ErrAuth
+		}, 1, "refused the web password"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			g := newDLRig(t)
+			tc.mod(g)
+			ctx, tr := WithTrace(t.Context())
+			_, err := g.r.DownloadConfig(ctx, g.target())
+			var blocked *BackupBlockedError
+			if !errors.As(err, &blocked) || blocked.Attempted {
+				t.Fatalf("%v: want a BackupBlockedError decided before anything was sent", err)
+			}
+			if !strings.HasPrefix(blocked.UserReason(), "Needs an MQTT password: ") || !strings.Contains(blocked.Reason, tc.why) {
+				t.Errorf("reason %q: must start with the cause and say %q", blocked.Reason, tc.why)
+			}
+			if g.http.dl != 0 || len(g.dl.pws) != 0 || g.dl.n() != 0 {
+				t.Errorf("/dl %d, FileDownload %v, published %d: nothing may be sent", g.http.dl, g.dl.pws, g.dl.n())
+			}
+			if g.http.n() != tc.probes || (tc.probes == 1 && g.http.calls[0] != "Status 11") {
+				t.Errorf("HTTP commands %v, want %d Status 11", g.http.calls, tc.probes)
+			}
+			if !errors.Is(err, tasmota.ErrUnreachable) || tr.Via() != "none" {
+				t.Errorf("%v via %s: the run reads as unreachable with nothing sent", err, tr.Via())
+			}
+			if strings.Contains(err.Error(), "own-pw-1") || strings.Contains(err.Error(), "broker-pw-1") {
+				t.Errorf("a password in the error: %q", err)
+			}
+		})
+	}
+}
+
+// Why (#997 (2), and the #605 pitfall "HTTP not known to fail read as HTTP works"): a device HTTP reaches keeps backing up
+// over /dl without an MQTT password, exactly as before. Whether HTTP reaches it is settled by one bounded Status 11
+// right before the decision when nothing fresh is on record; a fresh answer on record needs no probe, and the
+// backup's own 20 s download timeout is never the probe.
+func TestHTTPUnknownIsSettledByOneProbeBeforeTheBackup(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		httpOK   bool
+		probeErr error
+		probes   int
+		dl       int
+	}{
+		{"HTTP answered lately: no probe", true, nil, 0, 1},
+		{"HTTP unknown, the probe answers", false, nil, 1, 1},
+		{"HTTP unknown, the probe gets no answer", false, tasmota.ErrTimeout, 1, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			g := newDLRig(t)
+			g.mem.Clear(7)
+			g.f.httpOK = tc.httpOK
+			g.devs.d.MQTTPasswordMode = model.MQTTPasswordNone
+			g.http.err = tc.probeErr
+			got, err := g.r.DownloadConfig(t.Context(), g.target())
+			if g.http.n() != tc.probes || g.http.dl != tc.dl || len(g.dl.pws) != 0 {
+				t.Fatalf("HTTP commands %v, /dl %d, FileDownload %d; want %d probes, %d /dl, no FileDownload", g.http.calls, g.http.dl, len(g.dl.pws), tc.probes, tc.dl)
+			}
+			if tc.dl == 1 && (err != nil || string(got) != "HTTPDUMP") {
+				t.Fatalf("%q, %v: a device HTTP reaches backs up over /dl", got, err)
+			}
+		})
+	}
+}
+
+// Why (#997 (3)): when the backup went over HTTP because MQTT could not carry it, and HTTP then fails, the error keeps
+// the MQTT reason: the run, the Backups table and the audit name the missing password (or whatever blocks MQTT), not
+// only the HTTP failure. errors.Is still finds the HTTP error, so callers that decide by it are unchanged. HTTP chosen
+// for another reason (MQTT commands unanswered) has no MQTT reason to add.
+func TestAnHTTPFailureAfterMQTTWasBlockedKeepsTheMQTTReason(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		mod  func(*dlRig)
+		why  string // "" : the HTTP error stays as it is
+	}{
+		{"no password", func(g *dlRig) { g.devs.d.MQTTPasswordMode = model.MQTTPasswordNone }, "enter the device's MQTT password to back up over MQTT"},
+		{"GroupTopic unread", func(g *dlRig) { g.f.groupKnown = false }, "GroupTopic has not been read recently"},
+		{"MQTT commands unanswered", func(g *dlRig) { g.r.unanswered.Fail(7, HTTPFailUnreachable) }, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			g := newDLRig(t)
+			g.mem.Clear(7)
+			g.f.httpOK = true
+			tc.mod(g)
+			g.http.err = tasmota.ErrTimeout
+			_, err := g.r.DownloadConfig(t.Context(), g.target())
+			if !errors.Is(err, tasmota.ErrTimeout) || g.http.dl != 1 {
+				t.Fatalf("%v, /dl %d: the HTTP error must still be found", err, g.http.dl)
+			}
+			var blocked *BackupBlockedError
+			if tc.why == "" {
+				if errors.As(err, &blocked) {
+					t.Fatalf("%v: no MQTT reason to add", err)
+				}
+				return
+			}
+			if !errors.As(err, &blocked) || !strings.Contains(blocked.Reason, tc.why) || !blocked.Attempted {
+				t.Fatalf("%v: want the MQTT reason %q, and Attempted (/dl was sent)", err, tc.why)
+			}
+			if !strings.Contains(blocked.Reason, "did not answer the backup over HTTP in time") {
+				t.Errorf("reason %q: must say what HTTP did", blocked.Reason)
+			}
+		})
 	}
 }

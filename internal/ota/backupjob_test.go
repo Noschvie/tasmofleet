@@ -3,6 +3,7 @@ package ota
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -10,6 +11,8 @@ import (
 	"github.com/hellwand/tasmofleet/internal/backup"
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
 // flakyBackups takes a backup per device; the devices in fail return an error.
@@ -67,15 +70,36 @@ func TestBackupJobsBackUpEveryDeviceOnceAndAuditTheStart(t *testing.T) {
 // reason; the others still get their backup (per-device result).
 func TestBackupJobFailureStaysOnItsDevice(t *testing.T) {
 	h, fb, _, _ := backupHarness(t, 2)
-	fb.fail[1] = errors.New("the device is unreachable")
+	fb.fail[1] = fmt.Errorf("backup: download config: %w", tasmota.ErrUnreachable)
 	id, _, err := h.e.SubmitBackup(as("local"), "alice", []model.DeviceID{1, 2})
 	if err != nil {
 		t.Fatal(err)
 	}
 	h.run(t, h.e)
 	jobs, _ := h.st.ListJobs(context.Background(), store.JobFilter{BatchID: id})
-	if jobs[0].State != model.JobFailed || !strings.Contains(jobs[0].LastError, "unreachable") || jobs[1].State != model.JobSucceeded {
+	if jobs[0].State != model.JobFailed || jobs[0].LastError != "The device did not answer" || jobs[1].State != model.JobSucceeded {
 		t.Fatalf("jobs %+v", jobs)
+	}
+}
+
+// Why (#997): the transaction's result row says why a device's backup failed in the same sentence as the scheduled
+// run and the Backups table (backup.AttemptReason, one sentence everywhere): "Needs an MQTT password: ..." for a
+// device only MQTT could back up, not a Go error chain ("backup: download config: tasmota: unreachable: ... (...)")
+// that buries the reason and may carry the device's address.
+func TestABackupJobStoresTheReasonTheBackupHistoryShows(t *testing.T) {
+	h, fb, _, _ := backupHarness(t, 1)
+	blocked := &transport.BackupBlockedError{Err: fmt.Errorf("%w: GET http://192.0.2.1/dl", tasmota.ErrUnreachable), Reason: "needs an MQTT password: TasmoFleet cannot reach the device over HTTP, so only MQTT can carry the backup; enter the device's MQTT password to back up over MQTT"}
+	fb.fail[1] = fmt.Errorf("backup: download config: %w", blocked)
+	if _, _, err := h.e.SubmitBackup(as("local"), "alice", []model.DeviceID{1}); err != nil {
+		t.Fatal(err)
+	}
+	h.run(t, h.e)
+	j := h.job(t, 1)
+	if j.State != model.JobFailed || j.LastError != backup.AttemptReason(fb.fail[1]) || !strings.HasPrefix(j.LastError, "Needs an MQTT password: ") {
+		t.Fatalf("%+v: want the reason sentence", j)
+	}
+	if strings.Contains(j.LastError, "192.0.2.1") || strings.Contains(j.LastError, "backup: download config") {
+		t.Fatalf("%q: the Go error chain reached the result", j.LastError)
 	}
 }
 

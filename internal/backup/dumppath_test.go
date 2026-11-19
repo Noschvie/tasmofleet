@@ -21,6 +21,7 @@ type dumpPathRig struct {
 	mu         sync.Mutex
 	dev        model.Device
 	httpFails  bool  // HTTP is known to fail: the dump goes over MQTT (FileDownload)
+	httpOK     bool  // HTTP answered lately: a device MQTT cannot back up goes over /dl without a probe first (#997)
 	noPassword bool  // no MQTT password: MQTT cannot carry the dump, HTTP (/dl) does
 	dlErr      error // the dump fails with this error on either transport
 	statusLost bool  // MQTT does not answer Status 11 (the evidence read after a failed dump)
@@ -93,6 +94,9 @@ func (f *dumpPathFacts) HTTPState(model.DeviceID) transport.HTTPState {
 	if f.httpFails {
 		return transport.HTTPState{State: transport.HTTPFailing, Kind: transport.HTTPFailUnreachable, Since: time.Now()}
 	}
+	if f.httpOK {
+		return transport.HTTPState{State: transport.HTTPOK}
+	}
 	return transport.HTTPState{}
 }
 func (f *dumpPathFacts) FactsFor(_ context.Context, d model.Device) (transport.Facts, error) {
@@ -112,8 +116,8 @@ func (f *dumpPathFacts) password() transport.Password {
 
 // Why: the dump and the snapshot of a backup run never mix transports. Since reads go MQTT first (#456 A), the status snapshot
 // would be read over MQTT right after a dump over HTTP (and the audit "via" would say http+mqtt);
-// the snapshot follows the dump: HTTP after an HTTP dump (MQTT cannot carry it: no password), MQTT after a dump
-// over MQTT, first (#607) or because HTTP fails.
+// the snapshot follows the dump: HTTP after an HTTP dump (MQTT cannot carry it: no password; HTTP answered lately),
+// MQTT after a dump over MQTT, first (#607) or because HTTP fails.
 func TestBackupSnapshotFollowsTheTransportOfTheDump(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -126,7 +130,7 @@ func TestBackupSnapshotFollowsTheTransportOfTheDump(t *testing.T) {
 		{"dump over MQTT, HTTP fails: snapshot over MQTT", true, false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			g := &dumpPathRig{httpFails: tc.httpFails, noPassword: tc.noPassword, dev: model.Device{
+			g := &dumpPathRig{httpFails: tc.httpFails, noPassword: tc.noPassword, httpOK: tc.noPassword, dev: model.Device{
 				ID: 7, Name: "kitchen", Address: "172.31.13.28", Topic: "kitchen", MQTT: model.MQTTOurs,
 				MQTTPasswordMode: model.MQTTPasswordOwn, MQTTPassword: "fake-mqtt-pass",
 			}}
@@ -172,7 +176,7 @@ func TestFailedDumpEvidenceFollowsTheTransportOfTheDump(t *testing.T) {
 		{"dump over HTTP", false, true, false, fmt.Errorf("%w: HTTP 500", tasmota.ErrBadResponse), []string{"/dl", "Status 11"}, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			g := &dumpPathRig{httpFails: tc.httpFails, noPassword: tc.noPassword, statusLost: tc.statusLost, dlErr: tc.err, dev: model.Device{
+			g := &dumpPathRig{httpFails: tc.httpFails, noPassword: tc.noPassword, httpOK: tc.noPassword, statusLost: tc.statusLost, dlErr: tc.err, dev: model.Device{
 				ID: 7, Name: "kitchen", Address: "172.31.13.28", Topic: "kitchen", MQTT: model.MQTTOurs,
 				MQTTPasswordMode: model.MQTTPasswordOwn, MQTTPassword: "fake-mqtt-pass",
 			}}

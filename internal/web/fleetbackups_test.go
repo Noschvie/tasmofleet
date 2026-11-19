@@ -21,6 +21,8 @@ import (
 	"github.com/hellwand/tasmofleet/internal/snapshot"
 	"github.com/hellwand/tasmofleet/internal/store"
 	"github.com/hellwand/tasmofleet/internal/sysconfig"
+	"github.com/hellwand/tasmofleet/internal/tasmota"
+	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
 // fakeFleet is the BackupFleet the Backups page reads.
@@ -944,5 +946,159 @@ func TestBackupsPageSinceIsTakenBeforeTheDataIsRead(t *testing.T) {
 	}
 	if got := readStream(t, e, m[1], nil, "event: resync"); !strings.Contains(got, "event: resync\n") {
 		t.Fatalf("a stream opened with the page's number gets no resync:\n%q", got)
+	}
+}
+
+// needsPWFacts are the facts of devices on TasmoFleet's broker without an MQTT password (mqttFacts: HTTP failing),
+// and of the rest with their own password, keyed by device.
+func needsPWFacts(without ...model.DeviceID) fakeFacts {
+	now := time.Now()
+	f := map[model.DeviceID]transport.Facts{}
+	for id := model.DeviceID(1); id <= 6; id++ {
+		f[id] = mqttFacts(now, model.MQTTPasswordOwn)
+	}
+	for _, id := range without {
+		f[id] = mqttFacts(now, model.MQTTPasswordNone)
+	}
+	return fakeFacts{f: f}
+}
+
+// Why (#997): a backup that failed because only MQTT could carry it and the device has no usable MQTT password is
+// fixed on the device's MQTT password form, which nothing on the Backups page led to (the reporter found it by reading
+// the transport code). The Last result cell of such a failed device links that form, for an admin (the form is admin
+// only); a failed device whose password is usable gets no link, and neither does a device that was not failed.
+// The link follows the live facts (transport.BackupPasswordBlocker), so it goes once the password is set.
+func TestBackupsTableLinksThePasswordFormOfAFailedDeviceThatNeedsIt(t *testing.T) {
+	now := time.Now()
+	link := `href="/tf/devices/3/edit"`
+	for _, tc := range []struct {
+		name, role string
+		without    []model.DeviceID
+		want       bool
+	}{
+		{"failed, no password, admin", "admin", []model.DeviceID{3}, true},
+		{"failed, no password, operator", "operator", []model.DeviceID{3}, false},
+		{"failed, password usable", "admin", nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e, _, _, _ := sysEnvFull(t, true, func(d *Deps) { d.BackupFleet = fleetFixture(now); d.Transport = needsPWFacts(tc.without...) })
+			_, body := e.do(t, "GET", "/devices/backups", tc.role, nil)
+			devs := cardOf(t, body, "devices")
+			if got := strings.Contains(devs, link) && strings.Contains(devs, "Set MQTT password"); got != tc.want {
+				t.Fatalf("link to the password form shown = %v, want %v:\n%s", got, tc.want, devs)
+			}
+		})
+	}
+	// a device that needs the password but did not fail (attic: OK) has no link
+	e, _, _, _ := sysEnvFull(t, true, func(d *Deps) { d.BackupFleet = fleetFixture(now); d.Transport = needsPWFacts(1) })
+	_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
+	if strings.Contains(cardOf(t, body, "devices"), `href="/tf/devices/1/edit"`) {
+		t.Error("a device whose last backup worked needs no link")
+	}
+}
+
+// Why (#997): when several failed devices need their MQTT password, one note on the Backups page counts them and
+// links the Device MQTT passwords card on System, MQTT, where "Use the broker password for these…" sets them all at
+// once. One device is served by its own link in the table: no note for it.
+func TestBackupsPageNotesSeveralDevicesThatNeedAnMQTTPassword(t *testing.T) {
+	now := time.Now()
+	note := `href="/tf/settings/system?tab=mqtt#card-devicepasswords"`
+	two := fleetFixture(now)
+	two.rows[0].LastOutcome, two.rows[0].LastReason = model.BackupOutcomeFailed, "Needs an MQTT password: ..."
+	for _, tc := range []struct {
+		name  string
+		fleet *fakeFleet
+		want  bool
+	}{
+		{"two failed devices need it", two, true},
+		{"one failed device needs it", fleetFixture(now), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e, _, _, _ := sysEnvFull(t, true, func(d *Deps) { d.BackupFleet = tc.fleet; d.Transport = needsPWFacts(1, 3) })
+			_, body := e.do(t, "GET", "/devices/backups", "admin", nil)
+			devs := cardOf(t, body, "devices")
+			got := strings.Contains(devs, note) && strings.Contains(devs, "2 devices failed their last backup and have no usable MQTT password")
+			if got != tc.want {
+				t.Fatalf("note shown = %v, want %v:\n%s", got, tc.want, devs)
+			}
+		})
+	}
+}
+
+// Why (#997): the device's Backups tab names the failure with its reason; when the device needs its MQTT password, the
+// failed attempts since the last good backup link the password form, and so does the status line under Back up now and
+// Retry right after the refusal. An older failure behind a good backup is history and gets none.
+func TestBackupsTabLinksThePasswordFormAfterAFailureThatNeedsIt(t *testing.T) {
+	ab := &adminBackups{}
+	k := &keepBackups{adminBackups: ab, deviceOf: 1}
+	t0 := time.Date(2026, 10, 18, 10, 0, 0, 0, time.UTC)
+	ab.list = []model.Backup{{ID: 4, DeviceID: 1, Kind: model.BackupConfigDump, TakenAt: t0.Add(time.Hour), Version: "15.6.0", Size: 4096}}
+	k.attempts = []model.BackupAttempt{
+		{At: t0.Add(2 * time.Hour), Trigger: model.TriggerManual, Reason: "Needs an MQTT password: newest"},
+		{At: t0, Trigger: model.TriggerManual, Reason: "The device did not answer: older"},
+	}
+	e := setupWith(t, func(d *Deps) { d.Backups = k; d.Transport = needsPWFacts(1) })
+	_, body := e.do(t, "GET", "/devices/1/backups", "admin", nil)
+	link := `href="/tf/devices/1/edit"`
+	newest, older := strings.Index(body, "newest"), strings.Index(body, ": older")
+	if newest < 0 || older < 0 {
+		t.Fatalf("rows missing:\n%s", body)
+	}
+	if !strings.Contains(body[newest:strings.Index(body, `value="4"`)], link) {
+		t.Errorf("the failure since the last good backup must link the password form:\n%s", body)
+	}
+	if strings.Contains(body[older:], link) {
+		t.Errorf("an older failure behind a good backup gets no link")
+	}
+
+	blocked := &transport.BackupBlockedError{Err: tasmota.ErrUnreachable, Reason: "needs an MQTT password: TasmoFleet cannot reach the device over HTTP"}
+	for _, tc := range []struct {
+		name, role string
+		facts      fakeFacts
+		want       bool
+	}{
+		{"admin, password needed", "admin", needsPWFacts(1), true},
+		{"operator", "operator", needsPWFacts(1), false},
+		{"admin, password usable", "admin", needsPWFacts(), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := setupWith(t, func(d *Deps) { d.Backups = &fakeBackups{failErr: blocked}; d.Transport = tc.facts })
+			_, status := e.do(t, "POST", "/devices/1/backup", tc.role, url.Values{"from": {"tab"}})
+			if !strings.Contains(status, "Needs an MQTT password") {
+				t.Fatalf("status line %q: the reason first", status)
+			}
+			if got := strings.Contains(status, link); got != tc.want {
+				t.Fatalf("status line %q: link = %v, want %v", status, got, tc.want)
+			}
+		})
+	}
+}
+
+// Why (#997): Back up selected and Back up all now end on the transaction's result page; a device that failed there
+// because it needs its MQTT password links the password form from its row, the place where the reason is read.
+func TestBackupTransactionRowLinksThePasswordForm(t *testing.T) {
+	now := time.Now()
+	jobs := []model.Job{
+		{ID: 1, BatchID: 7, DeviceID: 1, Kind: model.KindBackup, Commands: model.BackupMarker, State: model.JobFailed, LastError: "Needs an MQTT password: x", CreatedAt: now, UpdatedAt: now},
+		{ID: 2, BatchID: 7, DeviceID: 2, Kind: model.KindBackup, Commands: model.BackupMarker, State: model.JobSucceeded, CreatedAt: now, UpdatedAt: now},
+	}
+	for _, tc := range []struct {
+		name  string
+		facts fakeFacts
+		want  bool
+	}{
+		{"failed, password needed", needsPWFacts(1, 2), true},
+		{"failed, password usable", needsPWFacts(2), false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := resultEnvWith(t, func(d *Deps) { d.Transport = tc.facts }, jobs...)
+			_, body := e.do(t, "GET", "/devices/bulk/result/7", "admin", nil)
+			if got := strings.Contains(body, `href="/tf/devices/1/edit"`); got != tc.want {
+				t.Fatalf("link on the failed row = %v, want %v:\n%s", got, tc.want, body)
+			}
+			if strings.Contains(body, `href="/tf/devices/2/edit"`) {
+				t.Error("a device whose backup worked gets no link")
+			}
+		})
 	}
 }

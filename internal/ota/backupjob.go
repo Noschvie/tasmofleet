@@ -109,7 +109,9 @@ func (e *Engine) workBackup(ctx context.Context, j model.Job) {
 		return // shutting down: the job runs again
 	}
 	if err != nil {
-		e.finishCommand(ctx, j, "", err.Error())
+		// The sentence the backup history and the scheduled run show (#997), not the Go error chain: the backup
+		// service's own audit entry keeps that.
+		e.finishCommand(ctx, j, "", backup.AttemptReason(err))
 		return
 	}
 	e.finishCommand(ctx, j, backup.Note(backup.KindsOf(bs), rep.Dump, rep.Files), "")

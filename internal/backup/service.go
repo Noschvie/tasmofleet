@@ -492,6 +492,8 @@ func dumpAnswered(dump *transport.Trace, err error) bool {
 	}
 	var blocked *transport.BackupBlockedError
 	switch {
+	case errors.Is(err, tasmota.ErrBadResponse): // an answer, also when it carries why MQTT could not take the backup (#997)
+		return true
 	case errors.As(err, &blocked), errors.Is(err, tasmota.ErrTimeout), errors.Is(err, tasmota.ErrUnreachable),
 		errors.Is(err, tasmota.ErrForbiddenAddr):
 		return false

@@ -1,6 +1,7 @@
 package web
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -60,6 +61,9 @@ type backupRow struct {
 
 	Failed bool   // a failed attempt: nothing was stored
 	Reason string // why it failed (never credentials)
+	// SetPWHref is the device's MQTT password form on a failed attempt since the last good backup, while only a usable
+	// MQTT password would let MQTT carry the backup (#997); "" otherwise, and for a viewer who may not open the form.
+	SetPWHref string
 
 	Download, Restore string     // links; empty when the viewer may not or the run has no dump
 	Files             *filesView // the run's Files fold; nil: none
@@ -246,6 +250,9 @@ func (h *handler) backupsPage(w http.ResponseWriter, r *http.Request) {
 		p.Total = plural(len(runs), "backup") + " · " + humanBytes(total)
 	}
 	p.Rows = withAttempts(p.Rows, ret.Attempts)
+	if v.IsAdmin {
+		h.linkPasswordForm(r.Context(), v.Base, d.ID, p.Rows)
+	}
 	if v.IsAdmin && h.d.Restore != nil {
 		jobs, err := h.d.Restore.List(r.Context(), d.ID, 10)
 		if err != nil {
@@ -259,6 +266,21 @@ func (h *handler) backupsPage(w http.ResponseWriter, r *http.Request) {
 	}
 	v.Flash = backupsNotice(r)
 	h.headPage(w, r, http.StatusOK, "backups", v, d, backupsTab(p))
+}
+
+// linkPasswordForm links the device's MQTT password form from the failed attempts since its last good backup (rows
+// newest first) while the device needs a usable MQTT password for MQTT to carry its backup (#997). An older failure
+// behind a good backup is history and keeps its reason alone.
+func (h *handler) linkPasswordForm(ctx context.Context, base string, id model.DeviceID, rows []backupRow) {
+	if len(rows) == 0 || !rows[0].Failed || !h.needBackupPassword(ctx, []model.DeviceID{id})[id] {
+		return
+	}
+	for i := range rows {
+		if !rows[i].Failed {
+			return
+		}
+		rows[i].SetPWHref = base + setPasswordPath(id)
+	}
 }
 
 // withAttempts puts the failed attempts among the runs by time, newest first.

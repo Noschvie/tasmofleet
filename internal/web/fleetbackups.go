@@ -14,6 +14,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/restore"
 	"github.com/hellwand/tasmofleet/internal/schedule"
+	"github.com/hellwand/tasmofleet/internal/transport"
 	"github.com/hellwand/tasmofleet/internal/web/ui"
 )
 
@@ -116,7 +117,10 @@ type fleetRow struct {
 	Why                  whyText
 	NotInRun             bool // the last run does not name this device (added after it)
 	Skip                 bool // a run started now would leave it out
-	sortResult           int
+	// SetPWHref is the device's MQTT password form when its last result failed and only a usable MQTT password would let
+	// MQTT carry its backup (#997); "" otherwise, and for a viewer who may not open the form.
+	SetPWHref  string
+	sortResult int
 }
 
 // fleetPrune is one device in "Pruned at the next run".
@@ -174,6 +178,62 @@ type fleetView struct {
 	PruneLeftOut    []string // the names of the devices left out
 	PruneHeld       int      // runs kept back by the never-the-newest and restore rules
 	CanBulk         bool     // admin and the backup service can run the bulk actions
+	// PWNeeded counts the devices whose last result failed and that need a usable MQTT password for MQTT to carry
+	// their backup (#997); the page notes them from 2 on, with PWHref (System, MQTT, the devices' passwords; "" for a
+	// viewer who may not open it).
+	PWNeeded int
+	PWHref   string
+}
+
+// pwNoteMin is from how many devices the Backups page notes the devices that need their MQTT password; one device is
+// served by the link in its own row.
+const pwNoteMin = 2
+
+// PWNote is the note about the devices that need their MQTT password, "" below pwNoteMin.
+func (v fleetView) PWNote() string {
+	if v.PWNeeded < pwNoteMin {
+		return ""
+	}
+	return fmt.Sprintf("%d devices failed their last backup and have no usable MQTT password, so their backups cannot use MQTT.", v.PWNeeded)
+}
+
+// setPasswordPath is the device form that sets its MQTT password (#609).
+func setPasswordPath(id model.DeviceID) string { return devPath(id, "/edit") }
+
+// devicePasswordsPath is the Device MQTT passwords card on System, MQTT, with "Use the broker password for these…".
+const devicePasswordsPath = sysPath + "?tab=mqtt#card-devicepasswords"
+
+// needBackupPassword says which of ids could be backed up over MQTT once their MQTT password is usable, from the live
+// facts (transport.BackupPasswordBlocker, the router's own rule, #997). The links it drives are a hint: facts that
+// cannot be read give none.
+func (h *handler) needBackupPassword(ctx context.Context, ids []model.DeviceID) map[model.DeviceID]bool {
+	if h.d.Transport == nil || len(ids) == 0 {
+		return nil
+	}
+	var all map[model.DeviceID]transport.Facts
+	if src, ok := h.d.Transport.(AllFactsSource); ok {
+		f, err := src.AllFacts(ctx)
+		if err != nil {
+			h.log.Warn("backups: could not read the transport facts", "err", err)
+			return nil
+		}
+		all = f
+	}
+	out := map[model.DeviceID]bool{}
+	for _, id := range ids {
+		f, ok := all[id]
+		if all == nil {
+			var err error
+			if f, err = h.d.Transport.Facts(ctx, id); err != nil {
+				continue
+			}
+			ok = true
+		}
+		if ok && transport.BackupPasswordBlocker(f) != "" {
+			out[id] = true
+		}
+	}
+	return out
 }
 
 // fleetSchedule is the effective backup schedule (BACKUP_DAYS, BACKUP_TIME); no weekday is "manual only".
@@ -370,6 +430,19 @@ func (h *handler) fleetOf(r *http.Request, admin bool) (*fleetView, error) {
 	}
 	fv.Size = humanBytes(bytes)
 	fv.Total = len(all)
+	h.fleetPasswords(ctx, base, all)
+	for i := range all {
+		if all[i].SetPWHref == "" {
+			continue
+		}
+		fv.PWNeeded++
+		if !admin {
+			all[i].SetPWHref = "" // the form is admin only; the note still counts the device
+		}
+	}
+	if admin {
+		fv.PWHref = base + devicePasswordsPath
+	}
 	// chips and the filtered table
 	count := map[string]int{}
 	match := func(key string, o model.BackupDeviceRow) bool {
@@ -434,6 +507,23 @@ func (h *handler) fleetOf(r *http.Request, admin bool) (*fleetView, error) {
 		return nil, err
 	}
 	return fv, nil
+}
+
+// fleetPasswords links the password form from the failed rows whose device needs a usable MQTT password
+// (needBackupPassword); fleetOf counts them and keeps the links for an admin only.
+func (h *handler) fleetPasswords(ctx context.Context, base string, rows []fleetRow) {
+	var failed []model.DeviceID
+	for _, r := range rows {
+		if r.Outcome == model.BackupOutcomeFailed {
+			failed = append(failed, r.ID)
+		}
+	}
+	need := h.needBackupPassword(ctx, failed)
+	for i := range rows {
+		if need[rows[i].ID] {
+			rows[i].SetPWHref = base + setPasswordPath(rows[i].ID)
+		}
+	}
 }
 
 // fleetFilesBadge is the short word of a table cell for a run without files.
