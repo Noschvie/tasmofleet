@@ -268,7 +268,7 @@ func (h *handler) devicesBulkPower(w http.ResponseWriter, r *http.Request) {
 	for _, row := range sv.Rows {
 		res := bulkResultRow{Name: row.Name, Addr: row.Addr, Href: v.Base + "/devices/" + devStr(row.ID)}
 		if row.Skip {
-			res.Label, res.Tone, res.Detail = "Skipped", ui.ToneNeutral, skippedReason(h.d.Health.Get(row.ID))
+			res.Label, res.Tone, res.Group, res.Detail = "Skipped", ui.ToneNeutral, bulkGroupSkipped, skippedReason(h.d.Health.Get(row.ID))
 			rv.Skipped++
 			rv.Rows = append(rv.Rows, res)
 			continue
@@ -284,7 +284,7 @@ func (h *handler) devicesBulkPower(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if len(todo)+len(already) == 0 {
-			res.Label, res.Tone, res.Detail = "Skipped", ui.ToneNeutral, "No relay state known yet. Not attempted."
+			res.Label, res.Tone, res.Group, res.Detail = "Skipped", ui.ToneNeutral, bulkGroupSkipped, "No relay state known yet. Not attempted."
 			rv.Skipped++
 			rv.Rows = append(rv.Rows, res)
 			continue
@@ -318,8 +318,10 @@ func (h *handler) devicesBulkPower(w http.ResponseWriter, r *http.Request) {
 		}
 		res.Detail = strings.Join(done, " · ")
 		if res.Label == "Failed" {
+			res.Group = bulkGroupFailed
 			rv.Failed++
 		} else {
+			res.Group = bulkGroupOK
 			rv.OK++
 		}
 		rv.Rows = append(rv.Rows, res)
