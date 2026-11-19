@@ -293,7 +293,7 @@ templ fleetRowView(v fleetView, r fleetRow) {
 		if v.Admin {
 			<td data-label="Select" class="sel"><label class="hit"><input type="checkbox" form="picker" name="id" value={ strconv.FormatInt(int64(r.ID), 10) } aria-label={ "Select " + r.Name }/></label></td>
 		}
-		<td data-label="Device" class="wrap p1 dv-name" title={ r.Name }><a href={ templ.SafeURL(r.DeviceHref) }>@ui.Soft(r.Name)</a></td>
+		<td data-label="Device" class="wrap p1 dv-name" title={ r.Name }><span class="bk-nm"><a href={ templ.SafeURL(r.DeviceHref) }>@ui.Soft(r.Name)</a><span class="muted nowrap bk-devid">{ "#" + strconv.FormatInt(int64(r.ID), 10) }</span></span></td>
 		<td data-label="Newest backup" class="bk-new s">
 			if r.Newest.IsZero() {
 				@ui.Badge(ui.ToneAccent, "No backup")

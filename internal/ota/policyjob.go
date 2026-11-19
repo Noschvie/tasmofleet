@@ -1,6 +1,7 @@
 package ota
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -179,6 +180,12 @@ func (e *Engine) SubmitPolicy(ctx context.Context, actor string, reqs []PolicyRe
 
 func (e *Engine) submitPolicy(ctx context.Context, actor string, kind model.JobKind, reqs []PolicyRequest, retryOf model.BatchID) (model.BatchID, []Refusal, error) {
 	var skipped []Refusal
+	if kind == model.KindBackup {
+		var err error
+		if reqs, err = e.inBackupOrder(ctx, reqs); err != nil {
+			return 0, nil, fmt.Errorf("ota: submit backup: %w", err)
+		}
+	}
 	seen := map[model.DeviceID]bool{}
 	now := e.clk.Now()
 	opts := BatchOptionsOf(ctx)
@@ -228,6 +235,32 @@ func (e *Engine) submitPolicy(ctx context.Context, actor string, kind model.JobK
 	}
 	e.signal()
 	return id, skipped, nil
+}
+
+// inBackupOrder returns the requests in the order a backup run starts its devices (#993): the device store's own
+// list, which is by name (case-insensitive) and then by ID, the same rule as the scheduled run, whatever order the
+// page posted them in. The engine starts queued jobs by job ID, so creating the jobs in this order is what makes
+// every manual run, and every retry of one, start A to Z. A request for a device the list no longer holds keeps
+// its posted place after the listed ones; its job then fails as it always did. A duplicate stays next to its first
+// occurrence, so the first one still gets the job.
+func (e *Engine) inBackupOrder(ctx context.Context, reqs []PolicyRequest) ([]PolicyRequest, error) {
+	devs, err := e.devices.ListDevices(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list devices: %w", err)
+	}
+	pos := make(map[model.DeviceID]int, len(devs))
+	for i, d := range devs {
+		pos[d.ID] = i
+	}
+	rank := func(r PolicyRequest) int {
+		if p, ok := pos[r.DeviceID]; ok {
+			return p
+		}
+		return len(devs)
+	}
+	out := slices.Clone(reqs)
+	slices.SortStableFunc(out, func(a, b PolicyRequest) int { return cmp.Compare(rank(a), rank(b)) })
+	return out, nil
 }
 
 // retryPolicy is submitRetry for a batch of policy jobs: the same commands,

@@ -297,3 +297,66 @@ func TestBulkResultRowGroupIsSetWithTheCount(t *testing.T) {
 		t.Errorf("a cancelled job is in the Failed group, as in its tile: %s", list)
 	}
 }
+
+// Why (#993): a backup run starts its devices in name order and the jobs are created in that order, but "Back up all
+// now" posts the ids in device ID order and "Back up selected" in the list's sort. The result page must show the
+// order the run started in (the job order), not the posted one, or the page contradicts the run. A posted device
+// that got no job (Skipped) follows the started ones. A command batch keeps the posted order: that rule is only for
+// backups.
+func TestBackupResultListsDevicesInStartOrderNotPostedOrder(t *testing.T) {
+	now := time.Now()
+	jobs := func(kind model.JobKind, cmd string, batch model.BatchID) []model.Job {
+		// attic (device 2) was started first, kitchen (device 1) second
+		return []model.Job{
+			{ID: 1, BatchID: batch, DeviceID: 2, Kind: kind, Commands: cmd, State: model.JobSucceeded, CreatedAt: now, UpdatedAt: now},
+			{ID: 2, BatchID: batch, DeviceID: 1, Kind: kind, Commands: cmd, State: model.JobSucceeded, CreatedAt: now, UpdatedAt: now},
+		}
+	}
+	e := resultEnv(t, jobs(model.KindBackup, model.BackupMarker, 7)...)
+	e.inv.devs[3] = model.Device{ID: 3, Name: "zebra", Address: "10.0.0.3"}
+	_, body := e.do(t, "GET", "/devices/bulk/result/7?id=3&id=1&id=2", "admin", nil)
+	rows := between(body, `aria-label="Result per device"`, "</section>")
+	at, ki, ze := strings.Index(rows, ">attic<"), strings.Index(rows, ">kitchen<"), strings.Index(rows, ">zebra<")
+	if at < 0 || ki < 0 || ze < 0 || at > ki || ki > ze {
+		t.Errorf("a backup result lists the started devices in job order, then the skipped one: attic %d, kitchen %d, zebra %d\n%s", at, ki, ze, rows)
+	}
+
+	e = resultEnv(t, jobs(model.KindCommand, "Power1 ON", 7)...)
+	_, body = e.do(t, "GET", "/devices/bulk/result/7?id=1&id=2", "admin", nil)
+	rows = between(body, `aria-label="Result per device"`, "</section>")
+	if at, ki := strings.Index(rows, ">attic<"), strings.Index(rows, ">kitchen<"); at < 0 || ki < 0 || ki > at {
+		t.Errorf("a command result keeps the posted order: attic %d, kitchen %d", at, ki)
+	}
+	if strings.Contains(rows, "bk-devid") {
+		t.Error("only a backup run shows the device ID")
+	}
+}
+
+// Why (#993): to see at a glance that a run went A to Z (and which device is which when names look alike), a
+// backup run's result rows and the Backups table show the device ID as a small muted "#N" next to the name. It is
+// not part of the name: the link text, the title and the aria-labels stay the bare name (the name is what the
+// device reports and what people search for), and the "#N" sits outside the link.
+func TestBackupRowsShowTheDeviceIDNextToTheName(t *testing.T) {
+	now := time.Now()
+	e := resultEnv(t, model.Job{ID: 1, BatchID: 7, DeviceID: 2, Kind: model.KindBackup, Commands: model.BackupMarker, State: model.JobSucceeded, CreatedAt: now, UpdatedAt: now})
+	_, body := e.do(t, "GET", "/devices/bulk/result/7?id=2", "admin", nil)
+	if want := `>attic</a> <span class="muted nowrap bk-devid">#2</span>`; !strings.Contains(body, want) {
+		t.Errorf("the result row lacks the muted #N after the name link, want %q in\n%s", want, between(body, `aria-label="Result per device"`, "</section>"))
+	}
+
+	fe := fleetEnv(t, fleetFixture(now))
+	_, body = fe.do(t, "GET", "/devices/backups", "admin", nil)
+	devs := cardOf(t, body, "devices")
+	for _, want := range []string{
+		`title="attic"><span class="bk-nm"><a href="/tf/devices/1">attic</a><span class="muted nowrap bk-devid">#1</span></span></td>`,
+		`title="porch"><span class="bk-nm"><a href="/tf/devices/6">porch</a><span class="muted nowrap bk-devid">#6</span></span></td>`,
+		`aria-label="Select attic"`, // the checkbox names the device, not its ID
+	} {
+		if !strings.Contains(devs, want) {
+			t.Errorf("the Backups table lacks %q", want)
+		}
+	}
+	if strings.Contains(devs, `title="attic #1"`) || strings.Contains(devs, `aria-label="Select attic #1"`) {
+		t.Error("the ID is not part of the name")
+	}
+}

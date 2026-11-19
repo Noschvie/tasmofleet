@@ -1,6 +1,7 @@
 package web
 
 import (
+	"cmp"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -264,8 +265,9 @@ func skippedReason(hl model.Health) string {
 // bulkResultRow is one device of the result page.
 type bulkResultRow struct {
 	Name, Addr, Label, Detail string
-	Href                      string // the device's page; "" when the device no longer exists
-	Group                     string // the tile the row is counted in (bulkGroup*); "" while queued or running
+	DeviceID                  model.DeviceID // shown as a muted #N after the name on a backup run (#993)
+	Href                      string         // the device's page; "" when the device no longer exists
+	Group                     string         // the tile the row is counted in (bulkGroup*); "" while queued or running
 	Tone                      ui.Tone
 	// SetPWHref is the device's MQTT password form on a failed backup while only a usable MQTT password would let MQTT
 	// carry it (#997); "" otherwise.
@@ -443,9 +445,11 @@ func (h *handler) bulkResult(w http.ResponseWriter, r *http.Request) {
 	q.Del("show")
 	rv.TilePath, rv.TileQuery = v.Base+r.URL.Path, q
 	byDev := map[model.DeviceID]bulkResultRow{}
+	jobOf := map[model.DeviceID]model.JobID{}
 	var order []model.DeviceID
 	for _, j := range p.Jobs {
 		byDev[j.Job.DeviceID] = h.jobResultRow(r, j, &rv)
+		jobOf[j.Job.DeviceID] = j.Job.ID
 		order = append(order, j.Job.DeviceID)
 	}
 	if kind == bulkBackup && v.IsAdmin { // the password form is admin only, like this page
@@ -461,14 +465,26 @@ func (h *handler) bulkResult(w http.ResponseWriter, r *http.Request) {
 			byDev[id] = row
 		}
 	}
-	slices.Sort(order) // without the posted order: the order the jobs were created in
-	if posted := h.formIDs(r); len(posted) > 0 {
-		for _, id := range order {
-			if !slices.Contains(posted, id) {
-				posted = append(posted, id)
+	if kind == bulkBackup {
+		// A backup starts its devices in name order (the engine takes jobs by job ID, and they are created in that
+		// order, #993), so the rows follow the job IDs whatever order the ids were posted in. Posted devices that got
+		// no job (the Skipped rows) follow the started ones in posted order.
+		slices.SortFunc(order, func(a, b model.DeviceID) int { return cmp.Compare(jobOf[a], jobOf[b]) })
+		for _, id := range h.formIDs(r) {
+			if !slices.Contains(order, id) {
+				order = append(order, id)
 			}
 		}
-		order = posted
+	} else {
+		slices.Sort(order) // the device ID order, then the posted order below
+		if posted := h.formIDs(r); len(posted) > 0 {
+			for _, id := range order {
+				if !slices.Contains(posted, id) {
+					posted = append(posted, id)
+				}
+			}
+			order = posted
+		}
 	}
 	for _, id := range order {
 		if row, ok := byDev[id]; ok {
@@ -479,7 +495,7 @@ func (h *handler) bulkResult(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
-		rv.Rows = append(rv.Rows, bulkResultRow{Name: d.Name, Addr: d.Address, Href: v.Base + "/devices/" + devStr(id), Label: "Skipped", Group: bulkGroupSkipped, Tone: ui.ToneNeutral, Detail: skippedReason(h.d.Health.Get(id))})
+		rv.Rows = append(rv.Rows, bulkResultRow{Name: d.Name, DeviceID: id, Addr: d.Address, Href: v.Base + "/devices/" + devStr(id), Label: "Skipped", Group: bulkGroupSkipped, Tone: ui.ToneNeutral, Detail: skippedReason(h.d.Health.Get(id))})
 		rv.Skipped++
 	}
 	v.Title, v.Crumbs, v.Live = bulkTitle, bulkCrumbs, true
@@ -488,7 +504,7 @@ func (h *handler) bulkResult(w http.ResponseWriter, r *http.Request) {
 
 // jobResultRow is the result row of one device's job; it counts the job in the tiles.
 func (h *handler) jobResultRow(r *http.Request, j jobView, rv *bulkResultView) bulkResultRow {
-	row := bulkResultRow{Name: j.Device}
+	row := bulkResultRow{Name: j.Device, DeviceID: j.Job.DeviceID}
 	if evs, err := h.d.Jobs.JobEvents(r.Context(), j.Job.ID); err == nil && len(evs) > 0 {
 		last := evs[len(evs)-1]
 		row.Detail = eventText(last, j.Job, h.pr, eventStageMinimal(evs, len(evs)-1, j.Job))

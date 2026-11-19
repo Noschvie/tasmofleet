@@ -213,11 +213,16 @@ templ bulkResultPage(v bulkResultView) {
 			for _, r := range v.ShownRows() {
 				<div class="bk-rrow">
 					<span class="bk-rdev">
-						if r.Href != "" {
-							<a class="bk-name bk-namelink" href={ templ.SafeURL(r.Href) }>{ r.Name }</a>
-						} else {
-							<span class="bk-name">{ r.Name }</span>
-						}
+						<span class="bk-nameline">
+							if r.Href != "" {
+								<a class="bk-name bk-namelink" href={ templ.SafeURL(r.Href) }>{ r.Name }</a>
+							} else {
+								<span class="bk-name">{ r.Name }</span>
+							}
+							if v.Kind == bulkBackup {
+								<span class="muted nowrap bk-devid">{ "#" + strconv.FormatInt(int64(r.DeviceID), 10) }</span>
+							}
+						</span>
 						<span class="bk-meta" data-visual-mask>{ r.Addr }</span>
 					</span>
 					<span class="bk-rbadge">

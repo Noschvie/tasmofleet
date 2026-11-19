@@ -89,6 +89,9 @@ type fakeStore struct {
 	reverse bool // ActiveJobs newest first, to prove the engine sorts
 	started []model.JobID
 	onGet   func() // called first in GetJob, outside the store's lock
+	// listOrder is the order ListDevices answers in (the test states it; the real store sorts by name); empty: by ID.
+	listOrder []model.DeviceID
+	listErr   error // ListDevices fails with it
 }
 
 func newFakeStore(rec *recorder) *fakeStore {
@@ -216,7 +219,25 @@ func (s *fakeStore) JobEvents(_ context.Context, id model.JobID) ([]model.JobEve
 }
 
 func (s *fakeStore) ListDevices(context.Context) ([]model.Device, error) {
-	return nil, store.ErrNotImplemented
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.listErr != nil {
+		return nil, s.listErr
+	}
+	ids := s.listOrder
+	if len(ids) == 0 {
+		for id := range s.devices {
+			ids = append(ids, id)
+		}
+		sort.Slice(ids, func(i, k int) bool { return ids[i] < ids[k] })
+	}
+	var out []model.Device
+	for _, id := range ids {
+		if d, ok := s.devices[id]; ok {
+			out = append(out, d)
+		}
+	}
+	return out, nil
 }
 func (s *fakeStore) GetDevice(_ context.Context, id model.DeviceID) (model.Device, error) {
 	s.mu.Lock()

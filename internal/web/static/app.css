@@ -12066,6 +12066,17 @@ dialog.fw-notes-dlg .fw-dlg-body {
   font-size: 13px;
   overflow-wrap: anywhere;
 }
+/* the name and the muted device ID of a backup run's result row (#993) sit on one line */
+.bk-nameline {
+  display: block;
+}
+.bk-nameline > .bk-name {
+  display: inline;
+}
+.bk-devid {
+  font-weight: 400;
+  font-size: 12px;
+}
 .bk-meta {
   display: block;
   font: 400 12px var(--font-mono);
@@ -13164,6 +13175,20 @@ a.sys-sum:hover {
 }
 .bk-table td.bk-new .muted {
   display: inline-block;
+}
+/* the device ID stays whole when a long name is cut at its cell (#993): the name is the part that gives way */
+.bk-table td.dv-name .bk-nm {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35em;
+}
+.bk-table td.dv-name .bk-nm > a {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bk-table td.dv-name .bk-devid {
+  flex: none;
 }
 /* two half columns (tablet) leave the device table about 220 px at 768 px, less than its fixed columns
    need: the two cards that lead the page take the full width, Storage and the rest balance below (#633) */

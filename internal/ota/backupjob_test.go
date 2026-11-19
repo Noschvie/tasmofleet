@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -190,5 +192,100 @@ func TestBackupJobsCarryKeepAndLabelToEveryRun(t *testing.T) {
 	}
 	if got := backupRun(model.BackupMarker); got.Keep || got.Label != "" || got.Trigger != model.TriggerBulk {
 		t.Errorf("plain job: %+v", got)
+	}
+}
+
+// batchDevices is the devices of a batch in the order their jobs were created, which is the order the engine
+// starts them in (it takes queued jobs by job ID).
+func batchDevices(t *testing.T, h *harness, id model.BatchID) []model.DeviceID {
+	t.Helper()
+	jobs, err := h.st.ListJobs(context.Background(), store.JobFilter{BatchID: id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sort.Slice(jobs, func(i, k int) bool { return jobs[i].ID < jobs[k].ID })
+	var out []model.DeviceID
+	for _, j := range jobs {
+		out = append(out, j.DeviceID)
+	}
+	return out
+}
+
+// Why (#993): a person who clicks "Back up all now" or "Back up selected" expects the devices to start in name
+// order, whatever order the page posted them in (device ID order, or the list's current sort). The engine starts
+// queued jobs by job ID, so the order the jobs are created in IS the start order; it comes from the device store's
+// own list (the same rule as the scheduled run), not from the request. A duplicate stays next to its first
+// occurrence and is still refused; a device the list no longer holds goes last and keeps its posted place.
+func TestBackupSubmitCreatesJobsInTheDeviceStoresNameOrder(t *testing.T) {
+	h, _, _, _ := backupHarness(t, 6)
+	h.st.listOrder = []model.DeviceID{3, 1, 4, 2} // the store's name order; the test does not repeat its rule
+	id, skipped, err := h.e.SubmitBackup(as("local"), "alice", []model.DeviceID{9, 1, 2, 3, 4, 1, 8})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := batchDevices(t, h, id), []model.DeviceID{3, 1, 4, 2, 9, 8}; !slices.Equal(got, want) {
+		t.Fatalf("jobs created for %v, want the store's order %v (then the unknown devices as posted)", got, want)
+	}
+	if len(skipped) != 1 || skipped[0].DeviceID != 1 {
+		t.Fatalf("the duplicate must still be refused: %+v", skipped)
+	}
+	// Only backups take the store's order: a command batch keeps the order it was posted in, and a failing device
+	// list is no new way for it to fail.
+	h.st.listErr = errors.New("disk gone")
+	cid, _, err := h.e.SubmitCommand(as("local"), "alice", []PolicyRequest{
+		{DeviceID: 6, Commands: []string{"Power1 ON"}}, {DeviceID: 5, Commands: []string{"Power1 ON"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := batchDevices(t, h, cid), []model.DeviceID{6, 5}; !slices.Equal(got, want) {
+		t.Fatalf("command jobs created for %v, want the posted order %v", got, want)
+	}
+}
+
+// Why (#993): a retry creates its jobs through the same path, so a retry of a batch that was started out of order
+// (older versions, or any other path) runs A to Z again instead of keeping the old batch's order.
+func TestBackupRetryStartsDevicesByName(t *testing.T) {
+	h, fb, _, _ := backupHarness(t, 3)
+	h.st.listOrder = []model.DeviceID{2, 3, 1}
+	fb.fail[1], fb.fail[2], fb.fail[3] = errors.New("boom"), errors.New("boom"), errors.New("boom")
+	now := t0
+	orig, _, err := h.st.CreateBatch(context.Background(), "alice", []model.Job{ // created out of name order
+		{DeviceID: 1, Kind: model.KindBackup, Commands: model.BackupMarker, State: model.JobQueued, CreatedBy: "alice", CreatedKind: "local", CreatedAt: now, UpdatedAt: now},
+		{DeviceID: 3, Kind: model.KindBackup, Commands: model.BackupMarker, State: model.JobQueued, CreatedBy: "alice", CreatedKind: "local", CreatedAt: now, UpdatedAt: now},
+		{DeviceID: 2, Kind: model.KindBackup, Commands: model.BackupMarker, State: model.JobQueued, CreatedBy: "alice", CreatedKind: "local", CreatedAt: now, UpdatedAt: now},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.run(t, h.e)
+	delete(fb.fail, 1)
+	delete(fb.fail, 2)
+	delete(fb.fail, 3)
+	res, err := h.e.SubmitRetry(as("local"), "alice", orig, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := batchDevices(t, h, res.Batch), []model.DeviceID{2, 3, 1}; !slices.Equal(got, want) {
+		t.Fatalf("retry jobs created for %v, want %v", got, want)
+	}
+}
+
+// Why (#993): without the device list there is no order to take; creating the jobs anyway would start them in
+// whatever order was posted, the very thing this rule exists to prevent. Nothing is created, so nothing starts.
+func TestBackupSubmitFailsWhenTheDeviceListCannotBeRead(t *testing.T) {
+	h, _, _, aud := backupHarness(t, 2)
+	boom := errors.New("disk gone")
+	h.st.listErr = boom
+	_, _, err := h.e.SubmitBackup(as("local"), "alice", []model.DeviceID{2, 1})
+	if !errors.Is(err, boom) {
+		t.Fatalf("want the list error, got %v", err)
+	}
+	if h.st.batches != 0 {
+		t.Fatalf("%d batches were created although the order is unknown", h.st.batches)
+	}
+	for _, e := range aud.evs {
+		if e.Action == "backup.bulk.start" {
+			t.Fatalf("a start was audited for nothing: %+v", e)
+		}
 	}
 }
