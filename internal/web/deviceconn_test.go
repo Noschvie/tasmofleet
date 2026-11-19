@@ -539,3 +539,58 @@ func TestTheNoPasswordModeIsShownAsAPassword(t *testing.T) {
 		t.Fatalf("row = %+v", r)
 	}
 }
+
+// Why (#987, found in the 0.41 live test): the Update row said "Download over MQTT", so a person could believe the
+// firmware image crosses the broker. Only the commands (OtaUrl, Upgrade) do; the device fetches the image over HTTP
+// from TasmoFleet's firmware server. The badge now names what has a transport of its own, the commands, and the note
+// under it is the chooser's sentence that names both legs. A device on the MQTT path and one on the HTTP path must each
+// read right.
+func TestTheUpdateRowNamesTheCommandsAndTheImageSeparately(t *testing.T) {
+	now := time.Now()
+	overMQTT := mqttFacts(now, model.MQTTPasswordOwn) // HTTP fails, MQTT carries the commands
+	overHTTP := mqttFacts(now, model.MQTTPasswordOwn)
+	overHTTP.HTTP = transport.HTTPState{State: transport.HTTPOK}
+	overHTTP.MQTT.Ours = false // MQTT is not usable: the commands stay on HTTP
+	for _, tc := range []struct {
+		name  string
+		f     transport.Facts
+		path  transport.Path
+		badge string
+		note  string
+	}{
+		{"DownloadMQTT", overMQTT, transport.DownloadMQTT, "Commands over MQTT", "Commands over MQTT, the image over HTTP from TasmoFleet's firmware server"},
+		{"DownloadHTTP", overHTTP, transport.DownloadHTTP, "Commands over HTTP", "Commands over HTTP, the image over HTTP from TasmoFleet's firmware server"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := transport.Choose(tc.f).Update; got != tc.path {
+				t.Fatalf("the facts give %s, want %s", got, tc.path)
+			}
+			c, _ := cardOfFacts(tc.f)
+			row := rowByKey(c.Actions, "Update (download)")
+			if row.Value != tc.badge {
+				t.Errorf("badge %q, want %q", row.Value, tc.badge)
+			}
+			if !strings.HasPrefix(row.Sub, tc.note) {
+				t.Errorf("note %q must start with %q", row.Sub, tc.note)
+			}
+			if strings.Contains(row.Value, "Download over") || strings.Contains(row.Sub, "download over MQTT") {
+				t.Errorf("the row says the download goes over MQTT: %+v", row)
+			}
+		})
+	}
+}
+
+// Why (#987): the siblings of the Update badge made the same mistake, each naming one leg only ("Upload over HTTP"
+// for a push whose commands also go over HTTP, "Upload over MQTT" for commands over MQTT). A row without a path keeps
+// the exact word the summary line counts.
+func TestEveryUpdateBadgeNamesTheCommandsTransport(t *testing.T) {
+	for p, want := range map[transport.Path]string{
+		transport.DownloadHTTP: "Commands over HTTP", transport.PushHTTP: "Commands over HTTP", transport.PushSafeboot: "Commands over HTTP",
+		transport.DownloadMQTT: "Commands over MQTT", transport.PushMQTT: "Commands over MQTT",
+		transport.HTTP: "HTTP", transport.MQTT: "MQTT", transport.None: "Not available",
+	} {
+		if got := pathLabel(p); got != want {
+			t.Errorf("%s: %q, want %q", p, got, want)
+		}
+	}
+}

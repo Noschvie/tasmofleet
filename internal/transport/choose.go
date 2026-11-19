@@ -386,20 +386,19 @@ func chooseUpdate(f Facts) (Path, string) {
 // either way. They need no MqttPassword. The job pins the path for its whole life (ota.pinned), so the sentence says
 // so instead of a fallback.
 func chooseDownload(f Facts) (Path, string) {
-	dl := DownloadHTTP.Describe()
 	if w, _ := chooseWrites(f); w == MQTT {
-		return DownloadMQTT, "OtaUrl and Upgrade go to the device's own topic on TasmoFleet's broker, where it is online; " +
-			dl + ", and the update stays on MQTT until it ends"
+		return DownloadMQTT, DownloadMQTT.Describe() + "; OtaUrl and Upgrade go to the device's own topic on TasmoFleet's broker, " +
+			"where it is online, and the update stays on MQTT until it ends"
 	}
-	const viaHTTP = "OtaUrl and Upgrade over the device's HTTP API, because "
+	viaHTTP := DownloadHTTP.Describe() + "; the commands go over HTTP because "
 	switch why := mqttBlocker(f, true); {
 	case why != "":
-		return DownloadHTTP, dl + "; " + viaHTTP + "MQTT is not usable: " + why
+		return DownloadHTTP, viaHTTP + "MQTT is not usable: " + why
 	case !f.MQTT.ConnChangedSince.IsZero():
-		return DownloadHTTP, dl + "; " + viaHTTP + connChangedText(f.MQTT)
+		return DownloadHTTP, viaHTTP + connChangedText(f.MQTT)
 	}
 	// The other exception of chooseWrites (a new one there needs its sentence here; the path follows it anyway).
-	return DownloadHTTP, dl + "; " + viaHTTP + unansweredText(f.MQTT)
+	return DownloadHTTP, viaHTTP + unansweredText(f.MQTT)
 }
 
 // uploadBlocker says why the upload over MQTT (FileUpload Type 1) cannot be used, "" when it can.

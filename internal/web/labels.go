@@ -9,6 +9,7 @@ import (
 	"github.com/hellwand/tasmofleet/internal/fwselect"
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/ota"
+	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
 // labels is the one place where machine values (health states, job states,
@@ -225,18 +226,24 @@ func eventText(e model.JobEvent, j model.Job, pr *principalDir, minimal bool) st
 	return strings.TrimSpace(label(e.Event) + " " + e.Detail)
 }
 
-// updatePathText says which way an update job reaches its device, from what the job stored at Submit (Transport and
-// Delivery never change afterwards): its commands (OtaUrl, Upgrade and the reads between them) over MQTT or HTTP,
-// and the image either downloaded by the device from TasmoFleet's firmware server or uploaded to the device; both
-// legs of the image are HTTP.
+// updatePathText says which way an update job reaches its device, from what the job stored at Submit (Transport,
+// Delivery and ViaSafeboot never change afterwards): the sentence of its path, the one the preview and the device page
+// show (transport.Path.Describe). The mapping is the inverse of ota's choosePath (mqttpath.go), which turns the chosen
+// path into those fields: a download over MQTT stores Transport mqtt and pull; a push over HTTP stores push, through
+// safeboot with ViaSafeboot. An upload over MQTT (push with Transport mqtt) is refused today, but is mapped to its own
+// path so that a future one is not worded as a download.
 func updatePathText(j model.Job) string {
 	switch {
+	case j.Transport == model.TransportMQTT && j.Delivery == model.DeliveryPush:
+		return transport.PushMQTT.Describe()
 	case j.Transport == model.TransportMQTT:
-		return "commands over MQTT, firmware download over HTTP"
+		return transport.DownloadMQTT.Describe()
+	case j.Delivery == model.DeliveryPush && j.ViaSafeboot:
+		return transport.PushSafeboot.Describe()
 	case j.Delivery == model.DeliveryPush:
-		return "commands and firmware upload over HTTP"
+		return transport.PushHTTP.Describe()
 	}
-	return "commands and firmware download over HTTP"
+	return transport.DownloadHTTP.Describe()
 }
 
 // loaderOf is the intermediate image ("safeboot", "minimal") that the note of an identity event says the device runs.

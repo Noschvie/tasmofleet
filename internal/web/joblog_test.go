@@ -6,6 +6,7 @@ import (
 
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/store"
+	"github.com/hellwand/tasmofleet/internal/transport"
 )
 
 type logEv struct {
@@ -42,7 +43,7 @@ func TestJobLogOfADirectSafebootUpdateReadsAsItHappened(t *testing.T) {
 	j := model.Job{TargetRelease: "16.0.0", Plan: model.PlanDirect, CancelRequested: true, State: model.JobSucceeded}
 	const q, pf, bk, so, ui, ar, vf, ok = model.JobQueued, model.JobPreflight, model.JobBackup, model.JobSetOtaURL, model.JobUpgradeIssued, model.JobAwaitReboot, model.JobVerify, model.JobSucceeded
 	runLog(t, j, newPrincipalDir(st), []logEv{
-		{q, pf, "start", "", "Start: commands and firmware download over HTTP"},
+		{q, pf, "start", "", "Start: commands over HTTP, the image over HTTP from TasmoFleet's firmware server"},
 		{pf, pf, "identity", "", "Identity"}, // preflight identity stays
 		{pf, bk, "planned", "", "Planned"},
 		{bk, so, "backup_done", "", "Backup done"},
@@ -69,7 +70,7 @@ func TestJobLogOfAStagedUpdateNamesTheStage(t *testing.T) {
 	j := model.Job{TargetRelease: "16.0.0", Plan: model.PlanStaged, State: model.JobSucceeded}
 	const q, pf, bk, so, ui, ar, vf, ro, ok = model.JobQueued, model.JobPreflight, model.JobBackup, model.JobSetOtaURL, model.JobUpgradeIssued, model.JobAwaitReboot, model.JobVerify, model.JobRestoreOtaURL, model.JobSucceeded
 	runLog(t, j, newPrincipalDir(nil), []logEv{
-		{q, pf, "start", "", "Start: commands and firmware download over HTTP"},
+		{q, pf, "start", "", "Start: commands over HTTP, the image over HTTP from TasmoFleet's firmware server"},
 		{pf, pf, "identity", "", "Identity"},
 		{pf, bk, "planned", "", "Planned"},
 		{bk, so, "backup_done", "", "Backup done"},
@@ -133,10 +134,11 @@ func TestTheJobLogNamesTheUpdatesPath(t *testing.T) {
 		j    model.Job
 		want string
 	}{
-		{"commands over MQTT", model.Job{Transport: model.TransportMQTT}, "Start: commands over MQTT, firmware download over HTTP"},
-		{"download over HTTP", model.Job{}, "Start: commands and firmware download over HTTP"},
-		{"upload over HTTP", model.Job{Delivery: model.DeliveryPush}, "Start: commands and firmware upload over HTTP"},
-		{"upload into safeboot", model.Job{Delivery: model.DeliveryPush, ViaSafeboot: true}, "Start: commands and firmware upload over HTTP"},
+		{"commands over MQTT", model.Job{Transport: model.TransportMQTT}, "Start: commands over MQTT, the image over HTTP from TasmoFleet's firmware server"},
+		{"download over HTTP", model.Job{}, "Start: commands over HTTP, the image over HTTP from TasmoFleet's firmware server"},
+		{"upload over HTTP", model.Job{Delivery: model.DeliveryPush}, "Start: commands over HTTP, the image pushed by TasmoFleet over HTTP"},
+		{"upload into safeboot", model.Job{Delivery: model.DeliveryPush, ViaSafeboot: true}, "Start: commands over HTTP, the image pushed by TasmoFleet over HTTP through the safeboot partition"},
+		{"a push over MQTT", model.Job{Transport: model.TransportMQTT, Delivery: model.DeliveryPush}, "Start: " + transport.PushMQTT.Describe()},
 		{"a policy job", model.Job{Kind: model.KindPolicy, Transport: model.TransportMQTT}, "Start"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

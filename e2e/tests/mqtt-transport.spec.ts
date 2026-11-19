@@ -193,7 +193,7 @@ test("update over MQTT (staged ESP8266) from the preview", { tag: "@core" }, asy
   const row = await reviewMQTTUpdate(page, "mq-esp8266-1m");
   // The language build is read over MQTT too (the Status 4 locale, #686): no choice is asked.
   await expect(row.locator("select")).toHaveCount(0);
-  await expect(row).toContainText("Over MQTT");
+  await expect(row).toContainText("Commands over MQTT, the image over HTTP from TasmoFleet");
   await expect(row).toContainText("Staged: minimal firmware first");
   await page.getByRole("button", { name: "Start update", exact: true }).click();
   await expect(page).toHaveURL(/\/transactions\/\d+$/);

@@ -58,7 +58,7 @@ func TestTheUpdateCommandsGoOverMQTTFirstWhileHTTPWorks(t *testing.T) {
 func TestTheUpdateReasonNamesBothLegs(t *testing.T) {
 	p := Choose(base())
 	r := p.Reason(ActUpdate)
-	if !strings.Contains(r, "OtaUrl and Upgrade go to the device's own topic on TasmoFleet's broker") || !strings.Contains(r, "downloads the firmware from TasmoFleet over HTTP") {
+	if !strings.Contains(r, "OtaUrl and Upgrade go to the device's own topic on TasmoFleet's broker") || !strings.Contains(r, "commands over MQTT, the image over HTTP from TasmoFleet's firmware server") {
 		t.Errorf("MQTT reason %q", r)
 	}
 	f := push(base(), DownloadHTTP, false)
@@ -83,9 +83,79 @@ func TestTheUpdateReasonNamesBothLegs(t *testing.T) {
 		f := base()
 		want := mod(&f)
 		r := Choose(f).Reason(ActUpdate)
-		if !strings.Contains(r, "OtaUrl and Upgrade over the device's HTTP API") || !strings.Contains(r, want) ||
-			!strings.Contains(r, "downloads the firmware from TasmoFleet over HTTP") {
+		if !strings.Contains(r, "the commands go over HTTP because") || !strings.Contains(r, want) ||
+			!strings.Contains(r, "commands over HTTP, the image over HTTP from TasmoFleet's firmware server") {
 			t.Errorf("%s: HTTP reason %q", name, r)
 		}
+	}
+}
+
+// Why (#987, found in the 0.41 live test): the device page said "Download over MQTT", so a person could believe the
+// firmware image crosses the broker. It never does: Tasmota fetches an OTA image over HTTP. Only the commands (OtaUrl,
+// Upgrade) have a transport of their own. One sentence per update path therefore names both legs, the commands'
+// transport and how the image reaches the device, and is the one wording every screen and log line takes.
+func TestEveryUpdatePathSentenceNamesCommandsAndImage(t *testing.T) {
+	for _, c := range []struct {
+		path     Path
+		commands string
+		image    string
+	}{
+		{DownloadHTTP, "commands over HTTP", "the image over HTTP from TasmoFleet's firmware server"},
+		{DownloadMQTT, "commands over MQTT", "the image over HTTP from TasmoFleet's firmware server"},
+		{PushHTTP, "commands over HTTP", "the image pushed by TasmoFleet over HTTP"},
+		{PushSafeboot, "commands over HTTP", "the image pushed by TasmoFleet over HTTP through the safeboot partition"},
+		{PushMQTT, "commands over MQTT", "the image pushed by TasmoFleet over MQTT (experimental)"},
+	} {
+		t.Run(string(c.path), func(t *testing.T) {
+			d := c.path.Describe()
+			if !strings.Contains(d, c.commands) || !strings.Contains(d, c.image) {
+				t.Errorf("%q must name %q and %q", d, c.commands, c.image)
+			}
+			if strings.Contains(strings.ToLower(d), "download over mqtt") || strings.Contains(d, "starts the download over MQTT") {
+				t.Errorf("%q says the download goes over MQTT", d)
+			}
+		})
+	}
+}
+
+// Why (#987): the device page shows Paths.Reason and the update preview shows the same text, so one path must read the
+// same everywhere, and a person must meet the route (commands, image) before the why. Every update branch of the
+// chooser therefore starts with its path's sentence and only adds the reason after it; a branch that words the path
+// itself would drift from the other screens again.
+func TestEveryUpdateReasonStartsWithItsPathSentence(t *testing.T) {
+	withNote := push(base(), DownloadHTTP, false)
+	withNote.Request.HTTPPushNote = "not enough free flash for an upload"
+	connChanged := base()
+	connChanged.MQTT.ConnChangedSince = t0.Add(-time.Minute)
+	unanswered := base()
+	unanswered.MQTT.ReadsUnansweredSince = t0.Add(-time.Minute)
+	groupUnread := base()
+	groupUnread.MQTT.OthersGroupUnread = []string{"porch"}
+	noUpload := push(httpDown(base()), PushHTTP, false)
+	for _, c := range []struct {
+		name string
+		f    Facts
+		want Path
+	}{
+		{"commands over MQTT while HTTP works", base(), DownloadMQTT},
+		{"the same with a note why no upload", withNote, DownloadMQTT},
+		{"MQTT not usable", groupUnread, DownloadHTTP},
+		{"MQTT commands unanswered", unanswered, DownloadHTTP},
+		{"MQTT connection changed", connChanged, DownloadHTTP},
+		{"HTTP failing, MQTT carries the update", httpDown(base()), DownloadMQTT},
+		{"HTTP failing, upload over MQTT not possible", noUpload, DownloadMQTT},
+		{"upload over HTTP", push(base(), PushHTTP, false), PushHTTP},
+		{"upload through safeboot", push(base(), PushSafeboot, false), PushSafeboot},
+		{"upload over MQTT", push(httpDown(base()), PushHTTP, true), PushMQTT},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			p := Choose(c.f)
+			if p.Update != c.want {
+				t.Fatalf("update = %s, want %s: %s", p.Update, c.want, p.Reason(ActUpdate))
+			}
+			if r := p.Reason(ActUpdate); !strings.HasPrefix(r, c.want.Describe()) {
+				t.Errorf("reason %q does not start with the path's sentence %q", r, c.want.Describe())
+			}
+		})
 	}
 }

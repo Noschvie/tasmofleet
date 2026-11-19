@@ -544,18 +544,9 @@ func (r previewRow) VariantChoiceText() string {
 	return t + "."
 }
 
-// PathText says how the update reaches the device when that is not the plain HTTP download: over MQTT,
-// with the reason, or the reason there is no path. "" for the usual HTTP rows.
-func (r previewRow) PathText() string {
-	switch r.Item.Path {
-	case transport.DownloadMQTT:
-		return "Over MQTT: " + r.Item.PathText
-	case transport.None:
-		return r.Item.PathText
-	case transport.HTTP, transport.MQTT, transport.DownloadHTTP, transport.PushHTTP, transport.PushSafeboot, transport.PushMQTT:
-	}
-	return ""
-}
+// PathText says how the update reaches the device: the chooser's sentence for its path, the same text the device page
+// shows for the same facts (#987), or the reason there is no path.
+func (r previewRow) PathText() string { return sentence(r.Item.PathText) }
 
 // buildOption is one chip build the user may choose for a device.
 type buildOption struct {

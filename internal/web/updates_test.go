@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"errors"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -640,13 +641,13 @@ func TestPreviewAsksForTheLanguageAndShowsTheMQTTPath(t *testing.T) {
 		t.Fatalf("waiting for a language counts as refused, or a language is preselected: %s", body)
 	}
 	o.items[4] = ota.PreviewItem{DeviceID: 4, Decision: "upgrade", Plan: model.PlanDirect, Filename: "tasmota-DE.bin.gz",
-		Path: transport.DownloadMQTT, PathText: "the device is reached over MQTT because its HTTP API does not answer", LanguageDeclared: true, Language: "DE"}
+		Path: transport.DownloadMQTT, PathText: "commands over MQTT, the image over HTTP from TasmoFleet's firmware server; the device is reached over MQTT", LanguageDeclared: true, Language: "DE"}
 	form.Set("language_4", "DE")
 	_, body = e.do(t, "POST", "/updates/preview", "operator", form)
 	if o.previewReqs[1].Language != "DE" || o.previewReqs[0].Language != "" {
 		t.Fatalf("requests: %+v", o.previewReqs)
 	}
-	if !strings.Contains(body, "Over MQTT: the device is reached over MQTT") {
+	if !strings.Contains(body, "Commands over MQTT, the image over HTTP from TasmoFleet&#39;s firmware server; the device is reached over MQTT") {
 		t.Fatalf("the row does not show the path: %s", body)
 	}
 	start, _, _ := strings.Cut(body[strings.Index(body, `<form id="start"`):], "</form>")
@@ -1017,5 +1018,38 @@ func TestPreviewOffersTheSettingsMigrationStepAsItsOwnPreview(t *testing.T) {
 	if !strings.Contains(body, "This firmware is older than 8.1.0") || !strings.Contains(body, "<dt>Refused</dt><dd class=\"upd-bad\">1 device") ||
 		strings.Contains(body, `form="step"`) || strings.Contains(body, "Needs a choice") {
 		t.Fatalf("a device below the migration path: %s", body)
+	}
+}
+
+// Why (#987): the same path must read the same on the device page and in the update preview. The preview used to put
+// "Over MQTT:" before the MQTT path and said nothing for the HTTP paths, so the live test's two devices read two
+// different ways. Both rows now show the chooser's sentence for the same facts, naming the commands and the image.
+func TestPreviewShowsTheDevicePageSentenceForEveryPath(t *testing.T) {
+	now := time.Now()
+	overMQTT := mqttFacts(now, model.MQTTPasswordOwn)
+	overHTTP := mqttFacts(now, model.MQTTPasswordOwn)
+	overHTTP.HTTP = transport.HTTPState{State: transport.HTTPOK}
+	overHTTP.MQTT.Ours = false
+	e, o, _, _ := setupOTA(t)
+	want := map[model.DeviceID]string{}
+	for id, f := range map[model.DeviceID]transport.Facts{1: overMQTT, 2: overHTTP} {
+		p := transport.Choose(f)
+		o.items[id] = ota.PreviewItem{DeviceID: id, Decision: "upgrade", Plan: model.PlanDirect, Filename: "tasmota.bin.gz",
+			Path: p.Update, PathText: p.Reason(transport.ActUpdate)}
+		c, _ := cardOfFacts(f)
+		want[id] = rowByKey(c.Actions, "Update (download)").Sub
+	}
+	_, body := e.do(t, "POST", "/updates/preview", "operator", url.Values{"id": {"1", "2"}, "release": {"16.1.0"}, "policy": {"only-newer"}})
+	got := regexp.MustCompile(`<span class="upd-prow-note" data-path>([^<]*)</span>`).FindAllStringSubmatch(body, -1)
+	if len(got) != 2 {
+		t.Fatalf("want a path note on each of the two rows, got %d: %s", len(got), body)
+	}
+	for i, id := range []model.DeviceID{1, 2} {
+		if text := html.UnescapeString(got[i][1]); text != want[id] {
+			t.Errorf("device %d: preview says %q, device page says %q", id, text, want[id])
+		}
+	}
+	if strings.Contains(body, "Over MQTT:") {
+		t.Errorf("the preview still prefixes the path with Over MQTT: %s", body)
 	}
 }

@@ -47,7 +47,10 @@ type Reason struct {
 	Text   string
 }
 
-// Describe is the base sentence of a path, used when a decision has nothing more specific to say.
+// Describe is the base sentence of a path. For an update path it is the one sentence every screen and log line uses
+// (#987): it names both legs, the transport of the commands (OtaUrl, Upgrade) and how the image reaches the device.
+// The image never crosses the broker: the device fetches it over HTTP from TasmoFleet's firmware server, or
+// TasmoFleet pushes it. Every update Reason starts with it and only adds the why.
 func (p Path) Describe() string {
 	switch p {
 	case HTTP:
@@ -55,15 +58,15 @@ func (p Path) Describe() string {
 	case MQTT:
 		return "over MQTT"
 	case DownloadHTTP:
-		return "the device downloads the firmware from TasmoFleet over HTTP"
+		return "commands over HTTP, the image over HTTP from TasmoFleet's firmware server"
 	case DownloadMQTT:
-		return "TasmoFleet starts the download over MQTT and the device fetches the firmware itself"
+		return "commands over MQTT, the image over HTTP from TasmoFleet's firmware server"
 	case PushHTTP:
-		return "TasmoFleet uploads the firmware to the device over HTTP"
+		return "commands over HTTP, the image pushed by TasmoFleet over HTTP"
 	case PushSafeboot:
-		return "TasmoFleet uploads the firmware over HTTP through the safeboot partition"
+		return "commands over HTTP, the image pushed by TasmoFleet over HTTP through the safeboot partition"
 	case PushMQTT:
-		return "TasmoFleet uploads the firmware over MQTT (experimental)"
+		return "commands over MQTT, the image pushed by TasmoFleet over MQTT (experimental)"
 	case None:
 		return "no path is available"
 	default:

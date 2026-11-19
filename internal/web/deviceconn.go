@@ -120,23 +120,19 @@ func (c pathCard) ActionsSummary() string {
 	return "What each action uses (" + strconv.Itoa(n) + " not available)"
 }
 
-// pathLabel is the short word of a path for the Action rows.
+// pathLabel is the short word of a path for the Action rows. An update path is worded by what has a transport of its
+// own, the commands (OtaUrl, Upgrade): the image never crosses the broker, it is fetched or pushed over HTTP, and the
+// note under the badge (transport.Path.Describe) names that leg (#987).
 func pathLabel(p transport.Path) string {
 	switch p {
 	case transport.HTTP:
 		return "HTTP"
 	case transport.MQTT:
 		return "MQTT"
-	case transport.DownloadHTTP:
-		return "Download over HTTP"
-	case transport.DownloadMQTT:
-		return "Download over MQTT"
-	case transport.PushHTTP:
-		return "Upload over HTTP"
-	case transport.PushSafeboot:
-		return "Upload over HTTP (safeboot)"
-	case transport.PushMQTT:
-		return "Upload over MQTT"
+	case transport.DownloadHTTP, transport.PushHTTP, transport.PushSafeboot:
+		return "Commands over HTTP"
+	case transport.DownloadMQTT, transport.PushMQTT:
+		return "Commands over MQTT"
 	case transport.None:
 	}
 	return "Not available"

@@ -56,7 +56,8 @@ func httpPushDecision(p planResult, requested model.Delivery) (transport.Path, s
 
 // choosePath asks the path chooser about a planned device and folds the answer into the preview
 // item: the path and its sentence, the job's transport, and a refusal when there is no path. Without
-// a chooser every update is an HTTP one, exactly as before MQTT transport.
+// a chooser every update is an HTTP one, exactly as before MQTT transport. The job log's start line reads the path
+// back from the stored job fields: web.updatePathText is the inverse of this mapping.
 func (e *Engine) choosePath(ctx context.Context, d model.Device, r Request, p planResult, it *PreviewItem) {
 	if e.paths == nil {
 		return
