@@ -30,6 +30,10 @@ type rulePolicy struct {
 	readErr error
 	variant map[model.DeviceID]string // Identity.Variant per device (#558)
 	more    int                       // extra devices (no value), to exceed the rows the devices card lists
+	// cooldown and judged make a live Report answer like a check the per-device cooldown held back (#989):
+	// the held devices with their next read, and the outcomes that say which rules judge them.
+	cooldown map[model.DeviceID]time.Time
+	judged   []policy.Outcome
 }
 
 func (p *rulePolicy) devices() []model.Device {
@@ -58,7 +62,11 @@ func (p *rulePolicy) Report(_ context.Context, _ string, live bool) (PolicyRepor
 	if live {
 		p.live++
 	}
-	return PolicyReport{LiveThrottled: live && p.limited}, nil
+	rep := PolicyReport{LiveThrottled: live && p.limited}
+	if live && p.cooldown != nil {
+		rep.Devices, rep.Outcomes, rep.Cooldown = p.devices(), p.judged, p.cooldown
+	}
+	return rep, nil
 }
 
 func (p *rulePolicy) Evaluate(_ context.Context, rules []policy.Rule) (PolicyReport, error) {

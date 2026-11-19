@@ -31,7 +31,7 @@ func TestPolicyReadsSkipSafebootAndMinimalAndResume(t *testing.T) {
 	// a value read before the device fell back to safeboot must not judge it now
 	rep.vals.put(2, map[string]string{"SaveData": "1"}, now.Add(-time.Hour))
 
-	if rep.refresh(t.Context(), "x", devs) { // throttled
+	if throttled, _ := rep.refresh(t.Context(), "x", devs); throttled {
 		t.Fatal("the first on-demand run must not be throttled")
 	}
 	if _, asked := rd.asked[1]; !asked {

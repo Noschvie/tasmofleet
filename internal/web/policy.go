@@ -21,6 +21,10 @@ type ValueSource struct {
 	At   time.Time
 }
 
+// LiveDeviceCooldown is how long a device whose judged settings were all read is left alone by the on-demand
+// live check (Run now, Check now). The app applies it; the pages say it, so the number lives here once (#989).
+const LiveDeviceCooldown = 5 * time.Minute
+
 // PolicyReport is what the policy page shows. Provenance maps a device and a
 // lower-case command to the source of its value; a missing entry means no
 // value at all. NotLive holds the lower-case commands that cannot be read
@@ -40,6 +44,10 @@ type PolicyReport struct {
 	// LiveThrottled is true when the live check was rate limited and
 	// answered from recent reads only.
 	LiveThrottled bool
+	// Cooldown holds the devices a live check did not read again because every setting the rules judge on
+	// them was read less than five minutes ago (#989), each with the time its next read is possible. It is
+	// set by Report with live true only.
+	Cooldown map[model.DeviceID]time.Time
 }
 
 // PolicyService builds the report from live values (read in the background,

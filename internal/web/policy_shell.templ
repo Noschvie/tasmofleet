@@ -27,9 +27,29 @@ templ policyShell(h policyHead) {
 				@policyLiveTile(h)
 			</div>
 		</div>
+		if len(h.Cooldown) > 0 {
+			@policyCooldownNote(h)
+		}
 		@ui.Tabs("Policy views", h.Tabs)
 	}
 	{ children... }
+}
+
+// policyCooldownNote says which devices Run now left alone because they were read recently, and from when each
+// can be read again (#989): without it a rule on such a device looks like the check did nothing.
+templ policyCooldownNote(h policyHead) {
+	<div class="banner tone-accent" role="status" data-cooldown>
+		<span class="banner-dot"></span>
+		<div class="banner-text">
+			{ "Read less than " + liveCooldownText() + " ago, not read again: " }
+			for _, c := range h.Cooldown {
+				{ c.Name + " (from " }<time { ui.StampAttrs(c.Until, ui.StampDay)... }>{ ui.StampDayText(h.Now, c.Until) }</time>{ ")" + c.Sep }
+			}
+			if h.CooldownMore > 0 {
+				{ "and " + plural(h.CooldownMore, "more device") }
+			}
+		</div>
+	</div>
 }
 
 // policyLiveTile is the live-check tile: its state, when it last ran, Run now and Pause / Resume

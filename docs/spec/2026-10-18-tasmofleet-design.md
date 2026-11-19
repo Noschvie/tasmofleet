@@ -2153,6 +2153,19 @@ version the person saw (stale: 409); the drag posts positions plus the version. 
 parameters are ignored: the old `?edit=`, `?new=` and `?v=` no longer open an editor or a diff.
 The empty page offers New rule and the first templates (admins), or says an admin can add rules.
 
+**Run now and Check now (`POST /policy/live`).** The on-demand check is limited three ways: one run at a time,
+at least one minute between runs (answered from the cache, with a notice), and a per-device cooldown of five
+minutes (`web.LiveDeviceCooldown`). The cooldown counts from the oldest live read among the settings the device's rules
+judge (scope, family, exception, shadowing and disabled rules decided by `policy.Outcomes`; a setting that cannot be read
+live is not counted) and does not apply when one of them has no live value. So only a read that delivered every judged
+setting holds the next check back; an MQTT stat of one setting, the Make compliant verify or a read that failed half way
+move only their own setting and can neither hold a check back nor push it back (#989). A device no rule judges keeps
+its newest read of any setting as the anchor. The result names every device the cooldown held back and when it can be read
+again: a note on the three policy tabs (up to five names, then a count) and a banner on the rule page after Check now
+(`?ok=cooldown&until=<unix>`, shown only for a time within the next cooldown, for devices the rule judges). Known cost:
+a device that never returns a judged setting (State on an MQTT-only device, a command its firmware answers with Unknown) is read
+by every Run now, at most once a minute, instead of every five minutes. No new device command and no new transport case.
+
 **Rule editor** (`/policy/rules/new`, `/policy/rules/{id}`, admins; operators get the read-only rule page).
 "Cancel" and "Save rule" both leave the editor for the overview: Cancel changes nothing, Save shows
 the saved rule's name and marks its row (`?ok=saved&rule=<id>`). Duplicate (row menu) opens the editor with

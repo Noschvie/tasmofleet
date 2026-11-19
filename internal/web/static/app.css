@@ -5403,6 +5403,7 @@ nav.crumbs a {
     200px,
     100%
   ); /* in a narrow box (the style guide's sign-in card) it may not poke out of the border */
+  overflow-wrap: anywhere; /* a banner that names a device: a name without a break must not widen the page (#989) */
 }
 .banner-text b {
   font-weight: 600;

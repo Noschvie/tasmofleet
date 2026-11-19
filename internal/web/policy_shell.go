@@ -2,6 +2,7 @@ package web
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/hellwand/tasmofleet/internal/policy"
 	"github.com/hellwand/tasmofleet/internal/sysconfig"
@@ -32,6 +33,35 @@ type policyHead struct {
 	Tabs        []ui.Tab
 	// Back: the tab Run now returns to ("" = the overview).
 	Back string
+	// Cooldown names the devices the live check just left alone because they were read recently (#989): at
+	// most cooldownNamed of them, CooldownMore counts the rest. Now is the page's clock for the day-relative times.
+	Cooldown     []cooldownHold
+	CooldownMore int
+	Now          time.Time
+}
+
+// cooldownHold is one device the per-device cooldown held back and the time its next read is possible.
+type cooldownHold struct {
+	Name  string
+	Until time.Time
+	Sep   string // "," when another entry or the "and N more" follows
+}
+
+// cooldownNamed is how many held devices the note names; a fleet-wide hold would otherwise be a wall of text.
+const cooldownNamed = 5
+
+// liveCooldownText is the length of the cooldown in words ("5 minutes").
+func liveCooldownText() string { return longDuration(LiveDeviceCooldown) }
+
+// cooldownHolds lists the held devices by the order of the report's devices.
+func cooldownHolds(rep PolicyReport) []cooldownHold {
+	var out []cooldownHold
+	for _, d := range rep.Devices {
+		if at, ok := rep.Cooldown[d.ID]; ok {
+			out = append(out, cooldownHold{Name: d.Name, Until: at})
+		}
+	}
+	return out
 }
 
 const policySub = "Settings every device should have. Nothing is written automatically."
@@ -71,6 +101,18 @@ func (h *handler) policyHead(v view, specs []sysconfig.RuleSpec, invalid int, re
 		}
 	}
 	p.Line = h.liveLine(rep, repErr, v.IsAdmin)
+	if repErr == nil {
+		p.Cooldown, p.Now = cooldownHolds(rep), h.d.Clock.Now()
+		if len(p.Cooldown) > cooldownNamed {
+			p.CooldownMore = len(p.Cooldown) - cooldownNamed
+			p.Cooldown = p.Cooldown[:cooldownNamed]
+		}
+		for i := range p.Cooldown {
+			if i < len(p.Cooldown)-1 || p.CooldownMore > 0 {
+				p.Cooldown[i].Sep = ","
+			}
+		}
+	}
 	return p
 }
 

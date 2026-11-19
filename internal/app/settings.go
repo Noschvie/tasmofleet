@@ -94,7 +94,9 @@ type keyReader interface {
 // the backup's date.
 //
 // The on-demand check is rate limited: one run at a time, at least liveGap
-// between runs, and a device read within liveDeviceCooldown is not read again.
+// between runs, and a device is not read again within liveDeviceCooldown of a read that delivered a value
+// for every setting its rules judge (see cooldownAnchor): a read of some other setting (an MQTT stat, the
+// Make compliant verify, a read that failed half way) neither holds a check back nor pushes it back (#989).
 // Requests over the limit get the cached values and a notice, never a refusal.
 type policyReporter struct {
 	rmu     sync.RWMutex // guards rules, which the policy editor replaces live
@@ -121,7 +123,7 @@ const (
 	liveParallel       = 4
 	liveTimeout        = 30 * time.Second
 	liveGap            = time.Minute
-	liveDeviceCooldown = 5 * time.Minute
+	liveDeviceCooldown = web.LiveDeviceCooldown // the pages name it, so it is defined there
 )
 
 func (p *policyReporter) clock() time.Time {
@@ -228,11 +230,13 @@ func (p *policyReporter) Report(ctx context.Context, actor string, live bool) (w
 		return web.PolicyReport{}, err
 	}
 	throttled := false
+	var held map[model.DeviceID]time.Time
 	if live {
-		throttled = p.refresh(ctx, actor, devs)
+		throttled, held = p.refresh(ctx, actor, devs)
 	}
 	rep := p.evaluate(ctx, devs, p.currentRules())
 	rep.LiveThrottled = throttled
+	rep.Cooldown = held
 	return rep, nil
 }
 
@@ -348,25 +352,35 @@ func (p *policyReporter) fromBackup(ctx context.Context, id model.DeviceID) (map
 	return policy.ValuesFromDecoded(data), newest.TakenAt
 }
 
-// refresh is the on-demand live check. It reports whether the rate limit
-// stopped fresh reads.
-func (p *policyReporter) refresh(ctx context.Context, actor string, devs []model.Device) bool {
+// refresh is the on-demand live check. It reports whether the rate limit stopped fresh reads, and which devices
+// the per-device cooldown held back, each with the time its next read is possible.
+func (p *policyReporter) refresh(ctx context.Context, actor string, devs []model.Device) (bool, map[model.DeviceID]time.Time) {
 	if !p.mu.TryLock() { // single flight: wait for the run in progress, then use what it read
 		p.mu.Lock()
 		defer p.mu.Unlock()
-		return true
+		return true, nil
 	}
 	defer p.mu.Unlock()
 	t := p.clock()
 	throttled := !p.lastRun.IsZero() && t.Sub(p.lastRun) < liveGap
 	var fresh []model.Device
+	var held map[model.DeviceID]time.Time
 	if !throttled {
+		rules := p.currentRules() // one snapshot: the editor replaces the rules live
 		for _, d := range devs {
 			if p.skip != nil && p.skip(d.ID) {
 				continue
 			}
-			if at := p.vals.newest(d.ID); at.IsZero() || t.Sub(at) >= liveDeviceCooldown {
+			at := p.cooldownAnchor(d, rules)
+			if at.IsZero() || t.Sub(at) >= liveDeviceCooldown {
 				fresh = append(fresh, d)
+				continue
+			}
+			if !policy.LimitedFirmware(d.Identity.Variant) { // never judged, nothing is sent to it: nothing to say
+				if held == nil {
+					held = map[model.DeviceID]time.Time{}
+				}
+				held[d.ID] = at.Add(liveDeviceCooldown)
 			}
 		}
 	}
@@ -378,7 +392,40 @@ func (p *policyReporter) refresh(ctx context.Context, actor string, devs []model
 		detail, _ := json.Marshal(map[string]any{"devices_read": len(fresh), "throttled": throttled}) // a plain map always encodes
 		p.audit.Record(ctx, model.AuditEvent{Actor: actor, Action: "policy.live", Target: "fleet", Detail: string(detail)})
 	}
-	return throttled
+	return throttled, held
+}
+
+// cooldownAnchor is the time the per-device cooldown counts from: the OLDEST live read among the settings the
+// device's rules judge, and zero (read now) when one of them has no live value. So only a read that delivered
+// every judged setting holds the next check back, and a read of a single setting moves only that setting, never
+// the minimum (#989). Which settings are judged is policy.Outcomes' call (scope, family, exception, shadowing,
+// disabled), and each is looked up under the rule's own spelling, as values() does. A device no rule judges
+// keeps the old anchor, its newest read of any setting.
+func (p *policyReporter) cooldownAnchor(d model.Device, rules []policy.Rule) time.Time {
+	live := p.vals.get(d.ID)
+	var oldest time.Time
+	judged := false
+	for _, o := range policy.Outcomes(rules, []model.Device{d}, nil) { // no values: a judged pair is Unknown here
+		if o.Kind != policy.OutcomeUnknown {
+			continue // excepted or shadowed: not judged on this device
+		}
+		cmd := rules[o.RuleIndex].Command
+		if !settings.LiveReadable(cmd) {
+			continue // never read live (backup only): its missing value must not keep the device "unread"
+		}
+		judged = true
+		lv, ok := live[cmd]
+		if !ok {
+			return time.Time{}
+		}
+		if oldest.IsZero() || lv.at.Before(oldest) {
+			oldest = lv.at
+		}
+	}
+	if !judged {
+		return p.vals.newest(d.ID)
+	}
+	return oldest
 }
 
 // readMany reads the rule settings of the devices, parallel at a time.

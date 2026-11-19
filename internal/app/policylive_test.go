@@ -226,7 +226,7 @@ func TestPollerHonoursLivePause(t *testing.T) {
 		t.Fatalf("resume must read the due device: %d calls", rd.calls)
 	}
 	paused = true
-	if throttled := rep.refresh(t.Context(), "admin", []model.Device{{ID: 2, Name: "b"}}); throttled || rd.calls != 2 {
+	if throttled, _ := rep.refresh(t.Context(), "admin", []model.Device{{ID: 2, Name: "b"}}); throttled || rd.calls != 2 {
 		t.Fatalf("Run now must still read while paused: throttled=%v calls=%d", throttled, rd.calls)
 	}
 }

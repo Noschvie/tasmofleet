@@ -277,6 +277,12 @@ type rulePageView struct {
 	Devices    ruleDevicesView
 	DeleteText string
 	History    []ruleHistRow // the versions that touched this rule, newest first
+
+	// Cooldown: Check now left devices of this rule alone because they were read recently (#989); CooldownUntil
+	// is when the last of them can be read again (zero: the URL carried no valid time), Now the page's clock.
+	Cooldown      bool
+	CooldownUntil time.Time
+	Now           time.Time
 }
 
 // rulePage is GET /policy/rules/{id}.
@@ -295,7 +301,7 @@ func (h *handler) rulePage(w http.ResponseWriter, r *http.Request) {
 
 // ruleFlashes are the confirmations that come back to a rule page.
 func ruleFlash(ok string) string {
-	if ok == "checked" {
+	if ok == "checked" || ok == "cooldown" {
 		return "Live check finished"
 	}
 	if ok == "throttled" {
@@ -359,7 +365,8 @@ func (h *handler) rulePageRender(w http.ResponseWriter, r *http.Request, status 
 	v := h.view(r, name, "policy", nil)
 	canEdit := v.IsAdmin
 	v.Crumbs = []ui.Crumb{{Label: "Devices", Path: "/devices"}, {Label: "Policy", Path: policyPath}, {Label: name}}
-	if f := ruleFlash(r.URL.Query().Get("ok")); f != "" {
+	ok := r.URL.Query().Get("ok")
+	if f := ruleFlash(ok); f != "" {
 		v.Flash = f
 	}
 	p := rulePageView{
@@ -371,6 +378,10 @@ func (h *handler) rulePageRender(w http.ResponseWriter, r *http.Request, status 
 	}
 	if strings.HasPrefix(o.Banner, "Nothing changed") {
 		p.BannerTone = ui.ToneAccent
+	}
+	if ok == "cooldown" && !draft {
+		p.Cooldown, p.Now = true, h.d.Clock.Now()
+		p.CooldownUntil = cooldownParam(r, p.Now)
 	}
 	p.Line = ruleLine(spec, draft, src.Version)
 	p.Scope = newScopeSummary(spec, stat)
@@ -892,6 +903,40 @@ func (h *handler) liveCheck(w http.ResponseWriter, r *http.Request) {
 		done = "checkfailed"
 	case rep.LiveThrottled:
 		done = "throttled" // the check ran a moment ago: these are its results
+	default:
+		if until := ruleCooldownUntil(rep, id); !until.IsZero() {
+			done = "cooldown&until=" + strconv.FormatInt(until.Unix(), 10)
+		}
 	}
 	redirect(w, r, rulesPath+"/"+id+"?ok="+done)
+}
+
+// ruleCooldownUntil is the time the last of the devices the rule judges, and the cooldown held back, can be read
+// again; zero when the cooldown held none of them. A device the rule does not judge (out of scope, excepted,
+// shadowed) says nothing about the rule's result (#989).
+func ruleCooldownUntil(rep PolicyReport, ruleID string) time.Time {
+	var last time.Time
+	for _, o := range rep.Outcomes {
+		if o.RuleID != ruleID || o.Kind == policy.OutcomeExcepted || o.Kind == policy.OutcomeShadowed {
+			continue
+		}
+		if at, ok := rep.Cooldown[o.DeviceID]; ok && at.After(last) {
+			last = at
+		}
+	}
+	return last
+}
+
+// cooldownParam is the until= of a rule page after a Check now the cooldown held back: the display time, or zero
+// when it is not a Unix time within the next cooldown from now. It changes what the page shows, nothing else.
+func cooldownParam(r *http.Request, now time.Time) time.Time {
+	n, err := strconv.ParseInt(r.URL.Query().Get("until"), 10, 64)
+	if err != nil {
+		return time.Time{}
+	}
+	at := time.Unix(n, 0)
+	if at.Before(now) || at.After(now.Add(LiveDeviceCooldown)) {
+		return time.Time{}
+	}
+	return at
 }
