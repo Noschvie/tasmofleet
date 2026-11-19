@@ -8689,6 +8689,18 @@ body:has(.bulkbar:not([hidden]) > .bulk-acts) {
 .dv-readat {
   font-size: 0.85em;
 }
+/* Group topics (#1005): the first one cut off like .dv-trunc, "+N" for the others always visible after it. */
+.dv-gt {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+}
+.dv-gt .dv-trunc {
+  min-width: 0;
+}
+.dv-gtmore {
+  flex: none;
+}
 .dv-mono,
 .dv-mono a {
   font: 400 12.5px var(--font-mono);

@@ -175,6 +175,13 @@ type Options struct {
 	// answered (the Router's MQTTConnChanged memory): its next commands go over HTTP while it may not be back on the
 	// broker, as after such a change by a write (#605 T10, #607). Optional.
 	MarkMQTTConnChanged func(id model.DeviceID)
+	// ForgetGroupTopics marks GroupTopic2 to GroupTopic4 of a device unread after an upload that may have reached it
+	// (#1005): the dump carries them, and nothing refreshes them before the next read. Optional.
+	ForgetGroupTopics func(id model.DeviceID)
+	// ReadGroupTopics reads and stores the device's four group topics again (the bare GroupTopic, a read) once the
+	// device is back, before the verifying backup: until then they are unread, which keeps that backup off MQTT
+	// (#1005). Optional; an error is left to the verification.
+	ReadGroupTopics func(ctx context.Context, d model.Device) error
 	// BrokerPassword is TasmoFleet's live broker password, which a device in broker mode uses as its
 	// MqttPassword; the restore compares it with the backup's. Optional.
 	BrokerPassword func() string

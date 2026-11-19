@@ -331,6 +331,19 @@ func TestReportsOnly(t *testing.T) {
 		"Backlog PowerRetain; LogHost": false,
 		"LogPort":                      false, // a generic name nobody checked stays a write
 		"SwitchTopic":                  false,
+		// #1005: the bare GroupTopic answers all four group topics and writes nothing; with a value it sets one and
+		// restarts the device. Index 0 and above MAX_GROUP_TOPICS (4) answer nothing.
+		"GroupTopic":          true,
+		"grouptopic":          true,
+		"GroupTopic1":         true,
+		"GroupTopic4":         true,
+		"GroupTopic0":         false,
+		"GroupTopic5":         false,
+		"GroupTopic02":        false,
+		"GroupTopic kitchen":  false,
+		"GroupTopic2 kitchen": false,
+		"GroupTopic3 0":       false, // clears GroupTopic3, a write
+		"Backlog GroupTopic":  false,
 	} {
 		if got := ReportsOnly(cmd); got != want {
 			t.Errorf("ReportsOnly(%q) = %v, want %v", cmd, got, want)
@@ -343,7 +356,7 @@ func TestReportsOnly(t *testing.T) {
 // command, an operator is refused it, its arguments are hidden in logs, and OtaUrl with a URL still starts or
 // redirects a firmware update (safety rule 1). Adding one of them to queryNames would break all of that.
 func TestBareReportsRouteLikeReadsButKeepTheirVerdicts(t *testing.T) {
-	for _, cmd := range []string{"OtaUrl", "PowerRetain", "LogHost", "SwitchMode", "SwitchMode1", "MqttUser"} {
+	for _, cmd := range []string{"OtaUrl", "PowerRetain", "LogHost", "SwitchMode", "SwitchMode1", "MqttUser", "GroupTopic", "GroupTopic2"} {
 		if !ReportsOnly(cmd) {
 			t.Errorf("ReportsOnly(%q) = false, want true: the bare form only reports", cmd)
 		}
@@ -1131,5 +1144,28 @@ func TestTemplateHasItsOwnLength(t *testing.T) {
 				t.Errorf("Canonical changed or refused a %d byte Template: %v", len(c.cmd), err)
 			}
 		}
+	}
+}
+
+// Why (#1005): routing the bare GroupTopic as a read must not loosen a GroupTopic that sets a value. That one stores a
+// new group topic and restarts the device, and on a device TasmoFleet reaches over MQTT only it can cut it off: it stays
+// an admin command, a write for the router, and a cut-off line for an MQTT-only device.
+func TestGroupTopicWithAValueStaysAnAdminWrite(t *testing.T) {
+	for _, cmd := range []string{"GroupTopic2 kitchen", "GroupTopic kitchen", "GroupTopic4 0"} {
+		if ReportsOnly(cmd) {
+			t.Errorf("ReportsOnly(%q) = true, want a write", cmd)
+		}
+		if v, err := Classify(cmd); err != nil || v.Class != ClassAdmin {
+			t.Errorf("Classify(%q) = %+v, %v; want admin", cmd, v, err)
+		}
+		if _, err := Authorize(cmd, model.RoleOperator); !errors.Is(err, ErrRole) {
+			t.Errorf("Authorize(%q, operator) = %v, want ErrRole", cmd, err)
+		}
+		if got := CutOffName(cmd); got == "" {
+			t.Errorf("CutOffName(%q) = \"\", want the GroupTopic named for an MQTT-only device", cmd)
+		}
+	}
+	if got := CutOffName("GroupTopic"); got != "" {
+		t.Errorf("CutOffName(GroupTopic) = %q, want none for the bare read", got)
 	}
 }

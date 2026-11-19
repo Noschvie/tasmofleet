@@ -556,7 +556,7 @@ func TestAPIOffSkipUsesTheTrackersFindingNotTheRoutersMemory(t *testing.T) {
 	id := model.Identity{Family: model.ChipESP8266, Version: "16.0.0", Variant: "tasmota", FreeKB: 700}
 	httpOnly := model.Device{ID: 1, Name: "plug", Identity: id}
 	onBroker := model.Device{ID: 2, Name: "mqtt-plug", Identity: id, MQTT: model.MQTTOurs, Topic: "mqtt-plug", FullTopic: "%prefix%/%topic%/",
-		GroupTopic: "tasmotas", GroupTopicReadAt: factsNow, MQTTPasswordMode: model.MQTTPasswordOwn}
+		GroupTopic: "tasmotas", GroupTopicReadAt: factsNow, MoreGroupTopicsReadAt: factsNow, MQTTPasswordMode: model.MQTTPasswordOwn}
 	refused := model.Health{State: model.HealthOnline, HTTPRefusedAt: factsNow}
 	for _, tc := range []struct {
 		name string
@@ -594,7 +594,7 @@ func apiOffRuntime() (*runtime, map[model.DeviceID]model.Health) {
 	id := model.Identity{Family: model.ChipESP8266, Version: "16.0.0", Variant: "tasmota", FreeKB: 700}
 	httpOnly := model.Device{ID: 1, Name: "plug", Identity: id}
 	onBroker := model.Device{ID: 2, Name: "mqtt-plug", Identity: id, MQTT: model.MQTTOurs, Topic: "mqtt-plug", FullTopic: "%prefix%/%topic%/",
-		GroupTopic: "tasmotas", GroupTopicReadAt: factsNow, MQTTPasswordMode: model.MQTTPasswordOwn}
+		GroupTopic: "tasmotas", GroupTopicReadAt: factsNow, MoreGroupTopicsReadAt: factsNow, MQTTPasswordMode: model.MQTTPasswordOwn}
 	unread := model.Device{ID: 3, Name: "other-plug", Identity: id, MQTT: model.MQTTOurs, Topic: "other-plug", FullTopic: "%prefix%/%topic%/"}
 	refused := model.Health{State: model.HealthOnline, HTTPRefusedAt: factsNow}
 	h2 := refused

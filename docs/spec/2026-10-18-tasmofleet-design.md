@@ -375,7 +375,18 @@ data directory (TasmoAdmin lesson A4).
   the INFO1 boot announcement, normalised from `cmnd/<group>/` to `<group>`) and the times `ota_url` and
   `group_topic` were read are stored too (migration 0035: `group_topic`, `ota_url_read_at`,
   `group_topic_read_at`, the stamps NULL until read); the device list shows both as optional columns, read-only,
-  and never reads a device or a backup file to fill them (#239).
+  and never reads a device or a backup file to fill them (#239). GroupTopic2 to GroupTopic4 come from the bare
+  `GroupTopic` (a read: Tasmota writes only with an argument, and answers all four keys `GroupTopic1` to `GroupTopic4`
+  for every form), which the probe sends after `Status 1`; only an answer with all four usable keys is stored. The
+  non-empty ones are stored as a list next to `group_topic` with their own read stamp (migration 0054:
+  `more_group_topics`, a JSON array like `relay_names`, and `more_group_topics_read_at`, NULL until read; no backfill),
+  in `model.Device` as `MoreGroupTopics` and `MoreGroupTopicsReadAt` (#1005). GroupTopic1 stays in `group_topic`, which
+  INFO1 and `Status 1` keep writing alone; they never touch the list or its stamp. `Device.GroupTopics()` (GroupTopic1
+  first, then the list) and `Device.GroupTopicsReadAt()` (the older of the two stamps, zero when either is unread) are
+  the one view of all four. A probe stores the list with the stamp of its `Status 1`, and one whose `GroupTopic` read
+  failed leaves the list older than the probe, so it counts as unread. The device list's Group topic column shows the
+  first with "+N" for the others and all of them in the title, the list filter finds a device by any of them, and the
+  Identity card lists them all.
   _MAC first:_ the probe sends `Status 5` first, without credentials, and compares the MAC
   (Wi-Fi or Ethernet) with the stored set before any other command. A device that answers it
   without credentials has no web password, and the whole probe runs without them; only a 401
@@ -493,16 +504,23 @@ Exclusivity is decided on command stems, expanded as Tasmota's `GetTopic_P` does
 prefix (mqttbus `Prefixes[0]`): `%prefix%`, `%topic%`, `//` collapsed, `/%prefix%` appended when missing,
 trailing `/` dropped. Tasmota subscribes to stem + `/#`, so two stems collide when they are equal or one is a
 level prefix of the other (`cmnd/a` and `cmnd/a/b`; not `cmnd/a` and `cmnd/ab`). The stem of the device's
-Topic and of every device's GroupTopic (fresh or stale, the device's own included) are compared with it, plus
+Topic and of every device's group topics, GroupTopic1 to GroupTopic4 (fresh or stale, the device's own included, #1005), are compared with it, plus
 the raw topic strings. A FullTopic without `%topic%` or with another placeholder (`%hostname%`, `%id%`)
 has no knowable stem: for this device it means not exclusive, and so does such a FullTopic on any other device
 (unknown is not exclusive). Devices with neither Topic nor FullTopic are HTTP only and ignored.
 
-Limits: only `GroupTopic` (1) is stored (Status 1), not GroupTopic2-4; devices outside the inventory on the
-same broker are invisible. Both can still make a message reach more than one device.
+Limits: devices outside the inventory on the same broker are invisible and can still make a message reach more
+than one device. GroupTopic2 to GroupTopic4 are read with GroupTopic1 since #1005.
 
-The GroupTopic is trusted as "known" only when it is set, stamped and not older than the last Status 1
-read (it can be stale: INFO1 is sent at boot, Status 1 only when probed). Commands are reads (Status N,
+The group topics are trusted as "known" only when GroupTopic1 is set and both stamps, GroupTopic1's and GroupTopic2 to
+4's (`Device.GroupTopicsReadAt`), are set and not older than the last Status 1 read (they can be stale: INFO1 is sent
+at boot and carries GroupTopic1 only, Status 1 and the bare GroupTopic only when probed). A read and empty
+GroupTopic2 to 4 list is known; one never read (every device right after the upgrade to 0.42) is unread, under the
+same rules as an unread GroupTopic1. TasmoFleet's own `GroupTopic<n>` with a value that may have reached a device
+(console, bulk command, update job; any part of a Backlog, `cmdpolicy.SetsGroupTopic`) and a restore upload that may
+have reached it clear `more_group_topics_read_at` and keep the values (`store.ForgetGroupTopics`): the list is unread
+until the reader has asked the device again. A restore asks it itself once the device is back, before the verifying
+backup, which the unread list would otherwise keep off MQTT. Commands are reads (Status N,
 identity refresh) and tolerate an unknown own GroupTopic; Writes (settings, Make compliant, console
 commands that change the device, backlog), transfers and the download need a known one and also that no
 other device with a topic has an unread GroupTopic (empty, never stamped, or older than that device's last probe; a device whose last will is Offline is left out, since our commands are never retained, while its topic still counts for exclusivity). A GroupTopic is free text, so an unread one could equal any device's topic: no device is left out by comparing topics. Left out as well is a device provably not on our broker (#812): its last Status 6 put it on another broker or none, no device stored as ours names its broker host and port and the broker matcher with its aliases does not accept them, and nothing from its topic was ever heard on ours although its last will would be (its FullTopic is MQTT_FULLTOPIC, its topic one level) and the bus has been subscribed for 30 s, long enough for the broker to replay the retained wills after a start, a reconnect or a broker change. Silence counts only while the bus (its will ledger, `mqttbus.WillLedger`, reset on every connect) has heard at least one will on its current connection, so a broker that lets TasmoFleet publish but not read exempts nobody, and has no device up under a topic no stored device has (a will that is not Offline, or live telemetry or a live reply, brings a topic up; only an Offline will takes it down, a cleared will keeps its last state), so a device that moved to our broker with a new topic cannot stay exempt (#972); an unknown topic whose latest will is Offline does not count (Tasmota leaves one on its old topic at every topic change, and an Offline device cannot receive a command), and a ledger past its 4096 topics exempts nobody. The reason names the devices that hold the write back, three at most and the rest counted: "the group topics of A, B and C have not been read yet, so a message to this device's topic could reach them; refresh their identity". Reads are unaffected. The reason text says "refresh the
@@ -1113,10 +1131,12 @@ HTTP. Rules:
 - `DownloadConfig` goes MQTT first under Choose's backup path (#607, 5.x); `RootPage` stays HTTP.
 
 Background GroupTopic read (`internal/app/grouptopic.go`): shortly after start and after a device is
-adopted, one `Status 1` per two seconds (through the router: HTTP while it works, else the MQTT channel) for
-every device with a topic whose GroupTopic was never read or is older than its last probe; a device that
-gave no answer is asked again after 10 s, 30 s, 2 min, then every 15 min, but at once when it comes online after a failed attempt. Offline devices are not asked. When no device needs a read the reader does not list the inventory for 30 s. The MQTT identity refresh reads
-`Status 1` too and stores the GroupTopic.
+adopted, one bare `GroupTopic` per two seconds (through the router, which routes it as a read: MQTT first, HTTP
+where MQTT cannot serve the device; it answers all four group topics, #1005) for
+every device with a topic whose group topics were never read or are older than its last probe; a device that
+gave no answer is asked again after 10 s, 30 s, 2 min, then every 15 min, but at once when it comes online after a failed attempt. Offline devices are not asked. When no device needs a read the reader does not list the inventory for 30 s. The identity refresh reads
+`Status 1` and the bare `GroupTopic` too and stores all four. Right after the upgrade to 0.42 every device's
+GroupTopic2 to 4 are unread, so MQTT writes and transfers wait until the reader has asked each device once.
 
 ### 9.1 Principles
 

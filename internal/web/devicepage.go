@@ -297,6 +297,9 @@ func (h *handler) identity(v view, d model.Device, updating, off bool, f snapFac
 		{Key: "Hostname", Value: orUnknown(f.Hostname), Mono: true, Mask: true},
 		{Key: "MQTT topic", Value: orUnknown(d.Topic), Mono: true},
 	}
+	if gs := d.GroupTopics(); len(gs) > 0 { // #1005: every group topic the device listens on, GroupTopic1 first
+		rows = append(rows, ui.KVRow{Key: "Group topics", Value: strings.Join(gs, ", "), Mono: true, Soft: true, Wide: true})
+	}
 	if d.OTAURL != "" { // #127: where the device would update from; the prober stored it without credentials
 		rows = append(rows, ui.KVRow{Key: "OTA URL", Value: d.OTAURL, Mono: true, Soft: true, Wide: true})
 	}

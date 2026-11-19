@@ -21,7 +21,7 @@ import (
 // writesDevice is on our broker, live there, with its own GroupTopic read: usable under the strict rule.
 func writesDevice() model.Device {
 	return model.Device{ID: 1, Name: "plug", Address: "192.0.2.1", MQTT: model.MQTTOurs, Topic: "plug", FullTopic: "%prefix%/%topic%/",
-		GroupTopic: "tasmotas", GroupTopicReadAt: factsNow}
+		GroupTopic: "tasmotas", GroupTopicReadAt: factsNow, MoreGroupTopicsReadAt: factsNow}
 }
 
 // Why (#605): the power toggle asks this before it publishes a switch. It must be the router's write rule, so a

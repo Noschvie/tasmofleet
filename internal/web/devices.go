@@ -161,7 +161,9 @@ func filterOf(q url.Values) deviceFilter {
 func (f deviceFilter) match(r deviceRow) bool {
 	if f.Q != "" {
 		needle := strings.ToLower(f.Q)
-		hay := strings.ToLower(r.Device.Name + " " + r.Device.Address + " " + r.Device.MAC + " " + r.Device.Topic)
+		// every group topic too (#1005): the devices that listen on a group are found by its name
+		hay := strings.ToLower(r.Device.Name + " " + r.Device.Address + " " + r.Device.MAC + " " + r.Device.Topic + " " +
+			strings.Join(r.Device.GroupTopics(), " "))
 		if !strings.Contains(hay, needle) {
 			return false
 		}

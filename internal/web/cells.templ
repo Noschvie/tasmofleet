@@ -2,6 +2,7 @@ package web
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/hellwand/tasmofleet/internal/model"
@@ -71,7 +72,7 @@ templ restartCell(v vitals) {
 	}
 }
 
-// readValueCell is a setting the device reported (OTA URL, group topic): the value on one line,
+// readValueCell is a setting the device reported (the OTA URL): the value on one line,
 // cut off by the cell with the whole value as its title, and under it when it was read (browser
 // time via time.js). A value stored before reads were stamped has no age line; no value is a dash.
 templ (h *handler) readValueCell(v string, at time.Time) {
@@ -81,6 +82,25 @@ templ (h *handler) readValueCell(v string, at time.Time) {
 		<span class="dv-trunc" title={ v }>{ v }</span>
 		if !at.IsZero() {
 			<span class="dv-trunc dv-readat muted"><time { ui.StampAttrs(at, ui.StampDay)... }>{ ui.StampDayText(h.d.Clock.Now(), at) }</time></span>
+		}
+	}
+}
+
+// groupTopicCell is the device's group topics (#1005): GroupTopic1 cut off by the cell, then "+N" for the further
+// ones that are set (GroupTopic2 to GroupTopic4), which never shrinks; the title holds all of them. Under it when
+// GroupTopic1 was read, as in readValueCell; no group topic is a dash.
+templ (h *handler) groupTopicCell(d model.Device) {
+	if gs := d.GroupTopics(); len(gs) == 0 {
+		<span class="muted">-</span>
+	} else {
+		<span class="dv-gt" title={ strings.Join(gs, ", ") }>
+			<span class="dv-trunc">{ gs[0] }</span>
+			if len(gs) > 1 {
+				<span class="dv-gtmore">{ "+" + strconv.Itoa(len(gs)-1) }</span>
+			}
+		</span>
+		if !d.GroupTopicReadAt.IsZero() {
+			<span class="dv-trunc dv-readat muted"><time { ui.StampAttrs(d.GroupTopicReadAt, ui.StampDay)... }>{ ui.StampDayText(h.d.Clock.Now(), d.GroupTopicReadAt) }</time></span>
 		}
 	}
 }
@@ -186,7 +206,7 @@ templ (h *handler) deviceRows(d rowsData) {
 				@h.readValueCell(row.Device.OTAURL, row.Device.OTAURLReadAt)
 			</td>
 			<td data-label="Group topic" class="nowrap c-gt m-hide dv-mono">
-				@h.readValueCell(row.Device.GroupTopic, row.Device.GroupTopicReadAt)
+				@h.groupTopicCell(row.Device)
 			</td>
 			<td data-label="Power" class="nowrap p2 pcell" sse-swap={ "power-" + devID(row.Device.ID) }>
 				@powerCellView(row.Power)

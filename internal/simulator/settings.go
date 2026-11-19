@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -30,6 +31,7 @@ var (
 	reMqttHost  = regexp.MustCompile(`"MqttHost":"[^"]*"`)
 	reMqttPort  = regexp.MustCompile(`"MqttPort":\d+`)
 	reMqttUser  = regexp.MustCompile(`"MqttUser":"[^"]*"`)
+	reGroupKey  = regexp.MustCompile(`"GroupTopic":"[^"]*"`)
 	reFriendlyN = regexp.MustCompile(`"([^"]*)"`)
 	reSettingSO = regexp.MustCompile(`^setoption(\d+)$`)
 	reModuleKey = regexp.MustCompile(`"Module":\d+`)
@@ -37,7 +39,7 @@ var (
 
 var restartKeys = map[string]bool{
 	"hostname": true, "topic": true, "fulltopic": true,
-	"mqtthost": true, "mqttport": true, "mqttuser": true, "mqttpassword": true,
+	"mqtthost": true, "mqttport": true, "mqttuser": true, "mqttpassword": true, "grouptopic": true,
 }
 
 const (
@@ -149,6 +151,10 @@ func (d *simDevice) settingFrom(kv map[string]string, key string) string {
 	case "mqttuser":
 		return num(`"MqttUser":"([^"]*)"`, "")
 	case "mqttpassword":
+		return ""
+	case "grouptopic1":
+		return num(`"GroupTopic":"([^"]*)"`, "tasmotas") // MQTT_GRPTOPIC (my_user_config.h)
+	case "grouptopic2", "grouptopic3", "grouptopic4":
 		return ""
 	case "prefix1":
 		return "cmnd" // SUB_PREFIX (my_user_config.h)
@@ -398,6 +404,50 @@ func (d *simDevice) settingCmdLocked(base string, idx int, hasIdx bool, data str
 		} else {
 			body = []byte(`{"` + names[base] + `":` + jsonString(d.get(base)) + `}`)
 		}
+	case "grouptopic":
+		// Tasmota CmndGroupTopic (xdrv_02_9_mqtt.ino, 16.0.0 lines 2029-2079): index 1..4, a bare name is index 1. A
+		// value is stored ("0" clears, "1" or the device's own topic sets the default), then the four are compacted
+		// without duplicates from index 1, at least one kept, and the device restarts. Every form answers all four
+		// (ResponseCmndAll).
+		if !hasIdx {
+			idx = 1
+		}
+		if idx < 1 || idx > 4 {
+			return nil, false
+		}
+		if data != "" {
+			v := data
+			switch data {
+			case "0":
+				v = ""
+			case "1", d.topic:
+				v = "tasmotas"
+			}
+			d.set("grouptopic"+strconv.Itoa(idx), v)
+			var keep []string
+			for i := 1; i <= 4; i++ {
+				if g := d.get("grouptopic" + strconv.Itoa(i)); g != "" && !slices.Contains(keep, g) {
+					keep = append(keep, g)
+				}
+			}
+			if len(keep) == 0 {
+				keep = []string{"tasmotas"}
+			}
+			for i := 1; i <= 4; i++ {
+				v := ""
+				if i <= len(keep) {
+					v = keep[i-1]
+				}
+				d.set("grouptopic"+strconv.Itoa(i), v)
+			}
+			changed = true
+		}
+		var b strings.Builder
+		for i := 1; i <= 4; i++ {
+			n := strconv.Itoa(i)
+			b.WriteString(map[bool]string{true: "{", false: ","}[i == 1] + `"GroupTopic` + n + `":` + jsonString(d.get("grouptopic"+n)))
+		}
+		body = []byte(b.String() + "}")
 	case "prefix":
 		// Tasmota CmndPrefix (xdrv_02_9_mqtt.ino, 16.0.0 lines 1987-2001): without an index all three prefixes are
 		// answered (ResponseCmndAll), with index 1..3 the one. Only queries are simulated: the simulated device keeps
@@ -568,6 +618,9 @@ func (d *simDevice) applySettings(s string, kv map[string]string) string {
 	}
 	if has("mqttport") {
 		s = reMqttPort.ReplaceAllLiteralString(s, `"MqttPort":`+kv["mqttport"])
+	}
+	if has("grouptopic1") {
+		s = reGroupKey.ReplaceAllLiteralString(s, `"GroupTopic":`+jsonString(kv["grouptopic1"]))
 	}
 	if has("mqttuser") {
 		s = reMqttUser.ReplaceAllLiteralString(s, `"MqttUser":`+jsonString(kv["mqttuser"]))

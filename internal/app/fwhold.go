@@ -39,6 +39,9 @@ type holdingCmd struct {
 	onBroker func(model.DeviceID)
 	// onWrite is told of every command that may have changed a setting of a device (#662); nil: nobody.
 	onWrite func(model.DeviceID)
+	// onGroupTopic is told of every GroupTopic<n> with a value that may have reached a device (#1005): it may have
+	// changed GroupTopic2 to GroupTopic4, which nothing else refreshes before the next read. nil: nobody.
+	onGroupTopic func(model.DeviceID)
 }
 
 func (c holdingCmd) Run(ctx context.Context, p model.Principal, id model.DeviceID, cmd string) (json.RawMessage, error) {
@@ -51,6 +54,9 @@ func (c holdingCmd) Run(ctx context.Context, p model.Principal, id model.DeviceI
 	}
 	if c.onWrite != nil && !neverSent(err) && writesSettings(cmd) {
 		c.onWrite(id)
+	}
+	if c.onGroupTopic != nil && !neverSent(err) && cmdpolicy.SetsGroupTopic(cmd) {
+		c.onGroupTopic(id)
 	}
 	if c.onBroker != nil && err == nil && setsBrokerTarget(cmd) {
 		c.onBroker(id)

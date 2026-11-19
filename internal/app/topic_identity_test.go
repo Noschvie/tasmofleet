@@ -385,8 +385,8 @@ func probeOverRouter(t *testing.T, onTopic *probeTopic, lwt string) (*Prober, *p
 // reader treat the device) the whole probe runs at the address, whose own Status 5 vouches for it, and nothing of the
 // MQTT half is kept: another device on the topic marks it.
 func TestTheIdentityOfADeviceOnOurBrokerIsReadOverMQTTFirst(t *testing.T) {
-	atAddress := []string{"Status 5", "Status 2", "Status 4", "Status 6", "SetOption3", "Status 1", "Status"}
-	onTopic := []string{"Status 5", "Status 2", "Status 4", "Status 6", "SetOption3", "Status 1", "Status"}
+	atAddress := []string{"Status 5", "Status 2", "Status 4", "Status 6", "SetOption3", "Status 1", "GroupTopic", "Status"}
+	onTopic := []string{"Status 5", "Status 2", "Status 4", "Status 6", "SetOption3", "Status 1", "GroupTopic", "Status"}
 	for _, c := range []struct {
 		name        string
 		topic       *probeTopic

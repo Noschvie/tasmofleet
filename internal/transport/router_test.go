@@ -105,7 +105,8 @@ type facts struct {
 	unanswered  *Memory
 	connChanged *Memory
 	topicTaken  *TopicMarks
-	httpOK      bool // a fresh HTTP success is on record (HTTPOK); without it and without a failure: unknown
+	httpOK      bool   // a fresh HTTP success is on record (HTTPOK); without it and without a failure: unknown
+	afterFacts  func() // runs after each snapshot's facts are built: a change made while the command is prepared
 }
 
 func (f *facts) HTTPState(id model.DeviceID) HTTPState {
@@ -145,6 +146,9 @@ func (f *facts) FactsFor(_ context.Context, d model.Device) (Facts, error) {
 	}
 	if f.groupKnown {
 		m.GroupTopic, m.GroupTopicReadAt, m.LastProbeAt = "tasmotas", now, now.Add(-time.Hour)
+	}
+	if f.afterFacts != nil {
+		f.afterFacts()
 	}
 	return Facts{Now: now, HTTP: f.memState(d.ID), MQTT: m, Password: Password{Mode: d.MQTTPasswordMode, BadAt: d.MQTTPasswordBadAt}}, nil
 }
@@ -596,6 +600,25 @@ func TestUploadAndBootSwitchPassThroughToHTTPOnly(t *testing.T) {
 	}
 	if g.mq.n() != 0 {
 		t.Fatal("an upload reached MQTT")
+	}
+}
+
+// Why (#1005): the router decides from a snapshot and checks right before it publishes that the device's MQTT settings
+// are still those. A group topic set meanwhile (GroupTopic2 here) means another group now reaches the device, or the
+// device's topic now reaches a group: the facts of the snapshot no longer hold, so nothing is published over MQTT.
+func TestAGroupTopicSetWhileTheCommandIsPreparedStopsTheMQTTPublish(t *testing.T) {
+	for _, cmd := range []string{"Status 2", "Power1 ON"} {
+		g := newRig(t)
+		g.devs.d.GroupTopic = "tasmotas"
+		g.f.afterFacts = func() {
+			g.devs.mu.Lock()
+			g.devs.d.MoreGroupTopics = []string{"kitchen"}
+			g.devs.mu.Unlock()
+		}
+		_, _ = g.r.Command(t.Context(), g.target(), cmd) // the outcome over HTTP is not the point here
+		if g.mq.n() != 0 {
+			t.Errorf("%s: published over MQTT although GroupTopic2 changed after the snapshot", cmd)
+		}
 	}
 }
 

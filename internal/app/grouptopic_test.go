@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net"
+	"slices"
 	"strconv"
 	"sync"
 	"testing"
@@ -55,12 +56,26 @@ func (s *gtStore) UpdateGroupTopicFromMQTT(_ context.Context, id model.DeviceID,
 	return nil
 }
 
+func (s *gtStore) UpdateGroupTopics(_ context.Context, id model.DeviceID, _ store.ProbeGuard, _ string, first string, more []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.devs {
+		if s.devs[i].ID == id {
+			at := s.now()
+			s.devs[i].GroupTopic, s.devs[i].GroupTopicReadAt = first, at
+			s.devs[i].MoreGroupTopics, s.devs[i].MoreGroupTopicsReadAt = more, at
+		}
+	}
+	return nil
+}
+
 func online(model.DeviceID) model.Health { return model.Health{State: model.HealthOnline} }
 
 type gtClient struct {
 	mu    sync.Mutex
 	asked []model.DeviceID
 	fail  map[model.DeviceID]bool
+	reply map[model.DeviceID]string // the answer of a device, else GroupTopic1 "tasmotas" and nothing more
 	paths []transport.Path
 }
 
@@ -70,13 +85,16 @@ func (c *gtClient) Command(ctx context.Context, t tasmota.Target, cmd string) (j
 	c.asked = append(c.asked, t.DeviceID())
 	p, _ := transport.PathFrom(ctx)
 	c.paths = append(c.paths, p)
-	if cmd != "Status 1" {
+	if cmd != "GroupTopic" {
 		return nil, errors.New("the reader asked for " + cmd)
 	}
 	if c.fail[t.DeviceID()] {
 		return nil, tasmota.ErrUnreachable
 	}
-	return json.RawMessage(`{"StatusPRM":{"GroupTopic":"tasmotas"}}`), nil
+	if r, ok := c.reply[t.DeviceID()]; ok {
+		return json.RawMessage(r), nil
+	}
+	return json.RawMessage(`{"GroupTopic1":"tasmotas","GroupTopic2":"","GroupTopic3":"","GroupTopic4":""}`), nil
 }
 func (c *gtClient) DownloadConfig(context.Context, tasmota.Target) ([]byte, error) { return nil, nil }
 func (c *gtClient) RootPage(context.Context, tasmota.Target) (tasmota.RootInfo, error) {
@@ -89,9 +107,9 @@ func TestGroupTopicReaderReadsOneUnreadDevicePerTick(t *testing.T) {
 	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
 	st := &gtStore{now: func() time.Time { return now }, devs: []model.Device{
 		{ID: 1, Topic: "a", Address: "192.0.2.1"},
-		{ID: 2, Topic: "b", Address: "192.0.2.2", GroupTopic: "tasmotas", GroupTopicReadAt: now},
+		{ID: 2, Topic: "b", Address: "192.0.2.2", GroupTopic: "tasmotas", GroupTopicReadAt: now, MoreGroupTopicsReadAt: now},
 		{ID: 3, Address: "192.0.2.3"}, // HTTP only: no topic, no group to rule out
-		{ID: 4, Topic: "d", Address: "192.0.2.4", GroupTopic: "tasmotas", GroupTopicReadAt: now.Add(-time.Hour),
+		{ID: 4, Topic: "d", Address: "192.0.2.4", GroupTopic: "tasmotas", GroupTopicReadAt: now.Add(-time.Hour), MoreGroupTopicsReadAt: now.Add(-time.Hour),
 			Identity: model.Identity{DetectedAt: now}}, // a probe since: the value may be stale
 		{ID: 5, Topic: "e"}, // added from the broker, no HTTP address
 	}}
@@ -161,6 +179,7 @@ type blindRig struct {
 	router *transport.Router
 	facts  *TransportFacts
 	dev    simulator.Device
+	ch     *mqttcmd.Channel
 }
 
 func newBlindRig(t *testing.T) *blindRig {
@@ -202,7 +221,7 @@ func newBlindRig(t *testing.T) *blindRig {
 	port, _ := strconv.Atoi(ps)
 	st := &gtStore{now: time.Now, devs: []model.Device{
 		{ID: 1, Topic: dev.Topic(), Address: host, Port: port, MQTT: model.MQTTOurs},
-		{ID: 2, Topic: "other", Address: "192.0.2.2", MQTT: model.MQTTOurs, GroupTopic: "tasmotas", GroupTopicReadAt: time.Now()},
+		{ID: 2, Topic: "other", Address: "192.0.2.2", MQTT: model.MQTTOurs, GroupTopic: "tasmotas", GroupTopicReadAt: time.Now(), MoreGroupTopicsReadAt: time.Now()},
 	}}
 	router := transport.NewRouter(transport.Options{HTTP: tasmota.NewHTTPClient(tasmota.Options{AllowedNetworks: loopbackNets()}), Devices: st})
 	facts := &TransportFacts{Devices: st, Health: fakeFactsHealth{1: {LWT: "Online"}}, Memory: router.Memory(), BusConnected: bus.Connected,
@@ -210,7 +229,7 @@ func newBlindRig(t *testing.T) *blindRig {
 		BrokerPassword: func() string { return "" }, Now: time.Now}
 	router.SetFacts(facts)
 	router.SetMQTT(ch)
-	return &blindRig{st: st, router: router, facts: facts, dev: dev}
+	return &blindRig{st: st, router: router, facts: facts, dev: dev, ch: ch}
 }
 
 // Why (#279): after an upgrade every device has an unread GroupTopic, which blocks MQTT writes
@@ -236,6 +255,43 @@ func TestGroupTopicReaderClearsOthersGroupUnread(t *testing.T) {
 	}
 	if d, _ := g.st.GetDevice(t.Context(), 1); d.GroupTopic == "" || d.GroupTopicReadAt.IsZero() {
 		t.Errorf("stored %+v", d)
+	}
+}
+
+// Why (#1005): end to end over a real broker, the simulated device and the real command channel. A device that listens
+// on a second group topic must have it read over MQTT (HTTP cannot reach this one) and stored: the router routes the
+// bare GroupTopic as a read and the channel takes the GroupTopic1..4 reply as its answer. Then the device holds back
+// the MQTT writes of a device whose topic that group topic is.
+func TestTheReaderReadsGroupTopic2OverMQTT(t *testing.T) {
+	g := newBlindRig(t)
+	ctl, _ := simulator.Control(g.dev)
+	d, _ := g.st.GetDevice(t.Context(), 1)
+	// the device gets GroupTopic2 "other" (device 2's topic) the way a person would set it, and restarts
+	if _, err := g.ch.Do(t.Context(), d, "GroupTopic2 other"); err != nil {
+		t.Fatal(err)
+	}
+	r := newGroupTopicReader(g.st.list, online, g.router, g.st, slog.New(slog.DiscardHandler))
+	for deadline := time.Now().Add(20 * time.Second); ; time.Sleep(50 * time.Millisecond) {
+		if ctl.MQTTReady() {
+			r.tried = map[model.DeviceID]groupTry{}
+			r.tick(t.Context())
+			if d, _ = g.st.GetDevice(t.Context(), 1); !d.MoreGroupTopicsReadAt.IsZero() {
+				break
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("GroupTopic2 of the device HTTP cannot reach was never read over MQTT")
+		}
+	}
+	if !slices.Equal(d.GroupTopics(), []string{"tasmotas", "other"}) {
+		t.Fatalf("stored group topics %v, want tasmotas and other", d.GroupTopics())
+	}
+	f, err := g.facts.Facts(t.Context(), 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f.MQTT.TopicExclusive || transport.Choose(f).Writes == transport.MQTT {
+		t.Errorf("device 1 listens on device 2's topic through GroupTopic2, yet device 2's writes may go over MQTT: %+v", f.MQTT)
 	}
 }
 
@@ -345,7 +401,7 @@ func TestGroupTopicReaderBackoffCapSuccessAndPrune(t *testing.T) {
 func TestGroupTopicReaderIdlesWhenNothingIsNeeded(t *testing.T) {
 	now := time.Date(2026, 10, 30, 12, 0, 0, 0, time.UTC)
 	lists := 0
-	st := &gtStore{now: func() time.Time { return now }, devs: []model.Device{{ID: 1, Topic: "a", GroupTopic: "tasmotas", GroupTopicReadAt: now}}}
+	st := &gtStore{now: func() time.Time { return now }, devs: []model.Device{{ID: 1, Topic: "a", GroupTopic: "tasmotas", GroupTopicReadAt: now, MoreGroupTopicsReadAt: now}}}
 	c := &gtClient{}
 	r := newGroupTopicReader(func(ctx context.Context) ([]model.Device, error) { lists++; return st.list(ctx) }, online, c, st, slog.New(slog.DiscardHandler))
 	r.now = func() time.Time { return now }

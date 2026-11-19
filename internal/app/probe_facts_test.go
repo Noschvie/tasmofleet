@@ -4,9 +4,11 @@ import (
 	"context"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/hellwand/tasmofleet/internal/model"
 	"github.com/hellwand/tasmofleet/internal/secretbox"
@@ -262,7 +264,7 @@ func TestRefreshStoresGroupTopicAndStampsTheReads(t *testing.T) {
 		t.Fatalf("%q %v %v", d.GroupTopic, d.GroupTopicReadAt, d.OTAURLReadAt)
 	}
 	stamp := d.GroupTopicReadAt
-	p.Client = recorder{override{Client: base, reply: map[string]string{"Status 1": `{"Command":"Unknown"}`}}, sent}
+	p.Client = recorder{override{Client: base, reply: map[string]string{"Status 1": `{"Command":"Unknown"}`, "GroupTopic": `{"Command":"Unknown"}`}}, sent}
 	if err := p.Refresh(context.Background(), id, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -271,9 +273,49 @@ func TestRefreshStoresGroupTopicAndStampsTheReads(t *testing.T) {
 		t.Fatalf("a failed Status 1 changed value or stamp: %q %v", d.GroupTopic, d.GroupTopicReadAt)
 	}
 	for _, c := range *sent {
-		if l := strings.ToLower(c); l == "status 0" || l == "status0" || strings.HasPrefix(l, "grouptopic") {
+		// the bare GroupTopic is a read (#1005); with an argument it would set a group topic and restart the device
+		if l := strings.ToLower(c); l == "status 0" || l == "status0" || strings.HasPrefix(l, "grouptopic") && l != "grouptopic" {
 			t.Fatalf("forbidden command %q: %v", c, *sent)
 		}
+	}
+}
+
+// Why (#1005): GroupTopic2 to GroupTopic4 are read by the probe (the bare GroupTopic answers all four) and stored
+// with the same stamp as the OtaUrl of that probe, which is the device's last probe: a later stamp is fine, an earlier
+// one would leave every probed device unread at once and hold back MQTT writes of the whole fleet. A probe whose
+// GroupTopic read fails keeps the old list, which then counts as unread (stale) until the reader asks again.
+func TestRefreshStoresGroupTopics2To4WithTheProbesStamp(t *testing.T) {
+	p, st, id, sent := factsSetup(t, simulator.DeviceSpec{Name: "plug", Profile: simulator.ProfileESP8266_1M})
+	base := p.Client
+	p.Client = recorder{override{Client: base, reply: map[string]string{
+		"Status 1":   `{"StatusPRM":{"GroupTopic":"tasmotas","OtaUrl":"http://fw.example/a.bin"}}`,
+		"GroupTopic": `{"GroupTopic1":"tasmotas","GroupTopic2":"kitchen","GroupTopic3":"","GroupTopic4":"ground/floor"}`,
+	}}, sent}
+	if err := p.Refresh(t.Context(), id, ""); err != nil {
+		t.Fatal(err)
+	}
+	d, _ := st.GetDevice(t.Context(), id)
+	if !slices.Equal(d.GroupTopics(), []string{"tasmotas", "kitchen", "ground/floor"}) {
+		t.Fatalf("group topics %v, want all three that are set, GroupTopic1 first", d.GroupTopics())
+	}
+	if d.MoreGroupTopicsReadAt.Before(d.OTAURLReadAt) || groupTopicStale(d) {
+		t.Fatalf("list read at %v, OtaUrl at %v: a successful probe must leave the group topics known", d.MoreGroupTopicsReadAt, d.OTAURLReadAt)
+	}
+	stamp := d.MoreGroupTopicsReadAt
+	p.Client = recorder{override{Client: base, reply: map[string]string{
+		"Status 1":   `{"StatusPRM":{"GroupTopic":"tasmotas","OtaUrl":"http://fw.example/a.bin"}}`,
+		"GroupTopic": `{"Command":"Unknown"}`,
+	}}, sent}
+	time.Sleep(2 * time.Millisecond) // the store keeps milliseconds: the next probe is later
+	if err := p.Refresh(t.Context(), id, ""); err != nil {
+		t.Fatal(err)
+	}
+	d, _ = st.GetDevice(t.Context(), id)
+	if !d.MoreGroupTopicsReadAt.Equal(stamp) || len(d.MoreGroupTopics) != 2 {
+		t.Fatalf("a failed GroupTopic read changed the list %v or its stamp %v", d.MoreGroupTopics, d.MoreGroupTopicsReadAt)
+	}
+	if !groupTopicStale(d) {
+		t.Fatal("GroupTopic2 to 4 older than the last probe must count as unread, or a changed one would go unseen")
 	}
 }
 

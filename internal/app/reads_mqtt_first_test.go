@@ -67,6 +67,8 @@ func (m *readsMQTT) Do(_ context.Context, _ model.Device, c string) (json.RawMes
 	switch c {
 	case "Status 1":
 		return json.RawMessage(`{"StatusPRM":{"GroupTopic":"tasmotas"}}`), nil
+	case "GroupTopic":
+		return json.RawMessage(`{"GroupTopic1":"tasmotas","GroupTopic2":"kitchen","GroupTopic3":"","GroupTopic4":""}`), nil
 	case "Status 5":
 		return json.RawMessage(status5Net), nil
 	case "Status 11":
@@ -144,14 +146,20 @@ func TestConsoleReadGoesOverMQTT(t *testing.T) {
 	g.wantOnlyMQTT(t, "console read", "Topic")
 }
 
-func TestGroupTopicStatus1ReadGoesOverMQTT(t *testing.T) {
+// Why (#1005, T17): the reader asks the bare GroupTopic, which answers all four group topics. The router must route it
+// as a read: as a write it would take the strict path, which the device's own unread group topics close, so a device
+// MQTT alone reaches could never be read and would hold back the MQTT writes of the whole fleet for good.
+func TestGroupTopicReadGoesOverMQTT(t *testing.T) {
 	g := newReadsRig(t)
 	st := &gtStore{now: time.Now, devs: []model.Device{g.dev}}
 	r := newGroupTopicReader(st.list, online, g.router, st, slog.New(slog.DiscardHandler))
 	if !r.read(t.Context(), g.dev) {
-		t.Fatal("Status 1 was not read")
+		t.Fatal("the group topics were not read")
 	}
-	g.wantOnlyMQTT(t, "Status 1", "Status 1")
+	g.wantOnlyMQTT(t, "GroupTopic", "GroupTopic")
+	if d, _ := st.GetDevice(t.Context(), g.dev.ID); !slices.Equal(d.GroupTopics(), []string{"tasmotas", "kitchen"}) || d.MoreGroupTopicsReadAt.IsZero() {
+		t.Fatalf("stored %v read at %v, want GroupTopic1 and GroupTopic2 with a stamp", d.GroupTopics(), d.MoreGroupTopicsReadAt)
+	}
 }
 
 func TestNetFactsReadGoesOverMQTT(t *testing.T) {

@@ -21,7 +21,8 @@ func (a *runtime) setupDeviceCmd() {
 		o.NoteUnanswered = a.svc.Router.NoteUnansweredWrite // the mark writesOverMQTT reads through the facts (#842)
 	}
 	a.fwHolds = devlock.NewFirmwareHolds(time.Now, firmwareHoldTimeout)
-	a.deviceCmd = holdingCmd{Service: devicecmd.New(o), holds: a.fwHolds, uptime: a.cachedUptime, asks: a.restartAsks, onBroker: a.brokerHost.later, onWrite: a.settingsWritten}
+	a.deviceCmd = holdingCmd{Service: devicecmd.New(o), holds: a.fwHolds, uptime: a.cachedUptime, asks: a.restartAsks, onBroker: a.brokerHost.later, onWrite: a.settingsWritten,
+		onGroupTopic: a.forgetGroupTopics}
 	a.goBG("firmware-holds", func() error { observeFirmwareHolds(a.bgContext, a.svc.Hub, a.fwHolds, a.tracker.Minimal); return nil })
 }
 

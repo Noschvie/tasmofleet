@@ -68,7 +68,7 @@ func TestFactsTopicExclusive(t *testing.T) {
 		{"same topic", []model.Device{{ID: 1, Topic: "a"}, {ID: 2, Topic: "a"}}, false},
 		{"case differs: MQTT topics are case sensitive", []model.Device{{ID: 1, Topic: "a"}, {ID: 2, Topic: "A"}}, true},
 		{"B's GroupTopic is A's Topic", []model.Device{{ID: 1, Topic: "a"}, {ID: 2, Topic: "b", GroupTopic: "a"}}, false},
-		{"B's stale GroupTopic is A's Topic", []model.Device{{ID: 1, Topic: "a"}, {ID: 2, Topic: "b", GroupTopic: "a", GroupTopicReadAt: time.Time{}}}, false},
+		{"B's stale GroupTopic is A's Topic", []model.Device{{ID: 1, Topic: "a"}, {ID: 2, Topic: "b", GroupTopic: "a", GroupTopicReadAt: time.Time{}, MoreGroupTopicsReadAt: time.Time{}}}, false},
 		{"own GroupTopic is the Topic", []model.Device{{ID: 1, Topic: "a", GroupTopic: "a"}}, false},
 		{"expanded topics collide through FullTopic", []model.Device{
 			{ID: 1, Topic: "a", FullTopic: "%prefix%/%topic%/"},
@@ -166,7 +166,7 @@ func TestFactsHTTPState(t *testing.T) {
 func TestFactsLastProbeAndMQTT(t *testing.T) {
 	stamp := factsNow.Add(-2 * time.Hour)
 	det := factsNow.Add(-time.Hour)
-	d := model.Device{ID: 1, Topic: "t", MQTT: model.MQTTOurs, FullTopic: "x/%topic%/", GroupTopic: "g", GroupTopicReadAt: stamp,
+	d := model.Device{ID: 1, Topic: "t", MQTT: model.MQTTOurs, FullTopic: "x/%topic%/", GroupTopic: "g", GroupTopicReadAt: stamp, MoreGroupTopicsReadAt: stamp,
 		OTAURLReadAt: stamp, Identity: model.Identity{DetectedAt: det}, MQTTPasswordMode: model.MQTTPasswordOwn,
 		FWReach: model.FWReach{State: model.FWReachNo, At: stamp}}
 	f, err := newFacts([]model.Device{d}, fakeFactsHealth{1: {LWT: "Online"}}, nil).Facts(context.Background(), 1)
@@ -219,7 +219,7 @@ func TestForUpdateFitsFromIdentity(t *testing.T) {
 // password, so Facts must mark it unusable and Choose must say why.
 func TestFactsBrokerModeWithoutBrokerPassword(t *testing.T) {
 	d := model.Device{ID: 1, Topic: "t", MQTT: model.MQTTOurs, MQTTPasswordMode: model.MQTTPasswordBroker,
-		GroupTopic: "g", GroupTopicReadAt: factsNow, HTTPPassword: ""}
+		GroupTopic: "g", GroupTopicReadAt: factsNow, MoreGroupTopicsReadAt: factsNow, HTTPPassword: ""}
 	s := newFacts([]model.Device{d}, fakeFactsHealth{1: {LWT: "Online"}}, fakeMemory{transport.HTTPFailUnreachable, factsNow.Add(-time.Hour), true})
 	f, _ := s.Facts(context.Background(), 1)
 	if f.Password.Unusable != "" {
@@ -252,10 +252,10 @@ func contains(s, sub string) bool { return strings.Contains(s, sub) }
 // and the bus's real command prefix is what stems are expanded with.
 func TestFactsOthersGroupUnreadAndPrefix(t *testing.T) {
 	devs := []model.Device{
-		{ID: 1, Topic: "a", GroupTopic: "g", GroupTopicReadAt: factsNow},
-		{ID: 2, Topic: "b"},                                              // never read
-		{ID: 3, Topic: "c", GroupTopic: "g"},                             // not stamped
-		{ID: 4, Topic: "d", GroupTopic: "g", GroupTopicReadAt: factsNow}, // read
+		{ID: 1, Topic: "a", GroupTopic: "g", GroupTopicReadAt: factsNow, MoreGroupTopicsReadAt: factsNow},
+		{ID: 2, Topic: "b"},                  // never read
+		{ID: 3, Topic: "c", GroupTopic: "g"}, // not stamped
+		{ID: 4, Topic: "d", GroupTopic: "g", GroupTopicReadAt: factsNow, MoreGroupTopicsReadAt: factsNow}, // read
 		{ID: 5}, // HTTP only
 	}
 	f, err := newFacts(devs, fakeFactsHealth{}, nil).Facts(context.Background(), 1)
@@ -283,18 +283,18 @@ func TestFactsOthersGroupUnreadAndPrefix(t *testing.T) {
 // shares.
 func TestOthersGroupUnreadUsesTheOwnFreshnessRule(t *testing.T) {
 	t0 := factsNow
-	me := model.Device{ID: 1, Topic: "a", GroupTopic: "tasmotas", GroupTopicReadAt: t0}
+	me := model.Device{ID: 1, Topic: "a", GroupTopic: "tasmotas", GroupTopicReadAt: t0, MoreGroupTopicsReadAt: t0}
 	for _, tc := range []struct {
 		name  string
 		other model.Device
 		want  int
 	}{
-		{"fresh", model.Device{ID: 2, Topic: "b", GroupTopic: "tasmotas", GroupTopicReadAt: t0}, 0},
+		{"fresh", model.Device{ID: 2, Topic: "b", GroupTopic: "tasmotas", GroupTopicReadAt: t0, MoreGroupTopicsReadAt: t0}, 0},
 		{"never stamped", model.Device{ID: 2, Topic: "b", GroupTopic: "tasmotas"}, 1},
-		{"empty", model.Device{ID: 2, Topic: "b", GroupTopicReadAt: t0}, 1},
-		{"older than its last Status 1", model.Device{ID: 2, Topic: "b", GroupTopic: "tasmotas", GroupTopicReadAt: t0.Add(-time.Hour), OTAURLReadAt: t0}, 1},
-		{"older than its identity detection", model.Device{ID: 2, Topic: "b", GroupTopic: "tasmotas", GroupTopicReadAt: t0.Add(-time.Hour), Identity: model.Identity{DetectedAt: t0}}, 1},
-		{"no topic: not in play", model.Device{ID: 2, GroupTopicReadAt: t0.Add(-time.Hour), OTAURLReadAt: t0}, 0},
+		{"empty", model.Device{ID: 2, Topic: "b", GroupTopicReadAt: t0, MoreGroupTopicsReadAt: t0}, 1},
+		{"older than its last Status 1", model.Device{ID: 2, Topic: "b", GroupTopic: "tasmotas", GroupTopicReadAt: t0.Add(-time.Hour), MoreGroupTopicsReadAt: t0.Add(-time.Hour), OTAURLReadAt: t0}, 1},
+		{"older than its identity detection", model.Device{ID: 2, Topic: "b", GroupTopic: "tasmotas", GroupTopicReadAt: t0.Add(-time.Hour), MoreGroupTopicsReadAt: t0.Add(-time.Hour), Identity: model.Identity{DetectedAt: t0}}, 1},
+		{"no topic: not in play", model.Device{ID: 2, GroupTopicReadAt: t0.Add(-time.Hour), MoreGroupTopicsReadAt: t0.Add(-time.Hour), OTAURLReadAt: t0}, 0},
 	} {
 		f, err := newFacts([]model.Device{me, tc.other}, nil, nil).Facts(t.Context(), 1)
 		if err != nil || len(f.MQTT.OthersGroupUnread) != tc.want {
@@ -307,7 +307,7 @@ func TestOthersGroupUnreadUsesTheOwnFreshnessRule(t *testing.T) {
 // dead device must not block MQTT writes for the fleet. An unknown will still counts, and the dead
 // device's topic still collides in TopicExclusive.
 func TestOthersGroupUnreadSkipsBrokerConfirmedOfflineDevices(t *testing.T) {
-	me := model.Device{ID: 1, Topic: "a", GroupTopic: "tasmotas", GroupTopicReadAt: factsNow}
+	me := model.Device{ID: 1, Topic: "a", GroupTopic: "tasmotas", GroupTopicReadAt: factsNow, MoreGroupTopicsReadAt: factsNow}
 	other := model.Device{ID: 2, Topic: "b", GroupTopic: "a"} // unread (never stamped) and its group is a's topic
 	for _, tc := range []struct {
 		lwt  string
@@ -328,7 +328,7 @@ func TestOthersGroupUnreadSkipsBrokerConfirmedOfflineDevices(t *testing.T) {
 // topic was ever heard on ours although its last will would be) cannot receive a message published there, whatever
 // its GroupTopic is, so it must not hold back another device: that device changes over MQTT first.
 func TestAnUnreadGroupTopicOffOurBrokerDoesNotHoldBackOtherDevices(t *testing.T) {
-	d := model.Device{ID: 1, Name: "desk", Topic: "a", MQTT: model.MQTTOurs, GroupTopic: "tasmotas", GroupTopicReadAt: factsNow}
+	d := model.Device{ID: 1, Name: "desk", Topic: "a", MQTT: model.MQTTOurs, GroupTopic: "tasmotas", GroupTopicReadAt: factsNow, MoreGroupTopicsReadAt: factsNow}
 	x := model.Device{ID: 2, Name: "garage", Topic: "b", MQTT: model.MQTTOtherBroker} // GroupTopic never read
 	f, err := newFacts([]model.Device{d, x}, fakeFactsHealth{1: {LWT: "Online"}}, nil).Facts(t.Context(), 1)
 	if err != nil {
@@ -346,11 +346,11 @@ func TestAnUnreadGroupTopicOffOurBrokerDoesNotHoldBackOtherDevices(t *testing.T)
 // row where one of them is missing or cannot be trusted must keep holding back the others (the strict rule: never
 // publish where two devices could act on it). Its GroupTopic could be anything, so no row may depend on it.
 func TestOnlyADeviceProvablyOffOurBrokerIsExemptFromTheUnreadGroupTopicRule(t *testing.T) {
-	d := model.Device{ID: 1, Name: "desk", Topic: "a", MQTT: model.MQTTOurs, GroupTopic: "tasmotas", GroupTopicReadAt: factsNow}
+	d := model.Device{ID: 1, Name: "desk", Topic: "a", MQTT: model.MQTTOurs, GroupTopic: "tasmotas", GroupTopicReadAt: factsNow, MoreGroupTopicsReadAt: factsNow}
 	heard := factsNow.Add(-time.Minute)
 	// ours is a device Status 6 put on our broker, configured for the broker host 192.168.1.5:1883.
 	ours := model.Device{ID: 3, Name: "porch", Topic: "c", MQTT: model.MQTTOurs, MQTTHost: "192.168.1.5", MQTTPort: 1883,
-		GroupTopic: "tasmotas", GroupTopicReadAt: factsNow}
+		GroupTopic: "tasmotas", GroupTopicReadAt: factsNow, MoreGroupTopicsReadAt: factsNow}
 	alias := func(host string, port int) bool { return host == "192.168.1.5" && port == 1883 }
 	for _, tc := range []struct {
 		name   string
@@ -373,7 +373,7 @@ func TestOnlyADeviceProvablyOffOurBrokerIsExemptFromTheUnreadGroupTopicRule(t *t
 		{"other broker, topic with a slash: counted", model.Device{MQTT: model.MQTTOtherBroker, Topic: "b/c"}, model.Health{}, nil, nil, []string{"garage"}},
 		// The health tracker files a topic's will under one of the devices that share the topic.
 		{"other broker, its topic heard under another device: counted", model.Device{MQTT: model.MQTTOtherBroker}, model.Health{},
-			[]model.Device{{ID: 3, Name: "twin", Topic: "b", MQTT: model.MQTTOurs, GroupTopic: "tasmotas", GroupTopicReadAt: factsNow}}, nil, []string{"garage"}},
+			[]model.Device{{ID: 3, Name: "twin", Topic: "b", MQTT: model.MQTTOurs, GroupTopic: "tasmotas", GroupTopicReadAt: factsNow, MoreGroupTopicsReadAt: factsNow}}, nil, []string{"garage"}},
 		// Status 6 is classified without broker aliases (#597): a device configured with the broker host's LAN address is
 		// stored as "other" while it is on our broker. Evidence TasmoFleet already holds that its broker is ours wins
 		// over "never heard", which may only mean its will goes to a telemetry prefix the bus does not decode.
@@ -416,7 +416,7 @@ func TestOnlyADeviceProvablyOffOurBrokerIsExemptFromTheUnreadGroupTopicRule(t *t
 // GroupTopic equals D's topic, would run a write meant for D. Until the subscriptions have been in place for the grace
 // time, the device must hold D back (fail closed), and so must a bus that is not subscribed or cannot say since when.
 func TestNothingHeardCountsOnlyAfterTheBrokerHadTimeToReplayTheWills(t *testing.T) {
-	d := model.Device{ID: 1, Name: "desk", Topic: "a", MQTT: model.MQTTOurs, GroupTopic: "tasmotas", GroupTopicReadAt: factsNow}
+	d := model.Device{ID: 1, Name: "desk", Topic: "a", MQTT: model.MQTTOurs, GroupTopic: "tasmotas", GroupTopicReadAt: factsNow, MoreGroupTopicsReadAt: factsNow}
 	x := model.Device{ID: 2, Name: "garage", Topic: "b", MQTT: model.MQTTOtherBroker} // GroupTopic never read
 	for _, tc := range []struct {
 		name  string
@@ -452,9 +452,9 @@ func TestNothingHeardCountsOnlyAfterTheBrokerHadTimeToReplayTheWills(t *testing.
 // be any of the exempt ones, so none is exempt (fail closed). Wills under stored topics say nothing new, and an Offline
 // one cannot receive a command (ours are never retained). A ledger that hit its cap may have missed such a topic.
 func TestAWillHeardUnderATopicNoStoredDeviceHasEndsTheOffBrokerExemption(t *testing.T) {
-	d := model.Device{ID: 1, Name: "desk", Topic: "a", MQTT: model.MQTTOurs, GroupTopic: "tasmotas", GroupTopicReadAt: factsNow}
+	d := model.Device{ID: 1, Name: "desk", Topic: "a", MQTT: model.MQTTOurs, GroupTopic: "tasmotas", GroupTopicReadAt: factsNow, MoreGroupTopicsReadAt: factsNow}
 	x := model.Device{ID: 2, Name: "garage", Topic: "b", MQTT: model.MQTTOtherBroker} // GroupTopic never read, never heard as "b"
-	porch := model.Device{ID: 3, Name: "porch", Topic: "c", MQTT: model.MQTTOurs, GroupTopic: "tasmotas", GroupTopicReadAt: factsNow}
+	porch := model.Device{ID: 3, Name: "porch", Topic: "c", MQTT: model.MQTTOurs, GroupTopic: "tasmotas", GroupTopicReadAt: factsNow, MoreGroupTopicsReadAt: factsNow}
 	for _, tc := range []struct {
 		name  string
 		wills mqttbus.Wills
@@ -493,7 +493,7 @@ func TestAWillHeardUnderATopicNoStoredDeviceHasEndsTheOffBrokerExemption(t *test
 // something only when the bus has heard at least one will on its current connection (an Offline one too: a denial of
 // reads lets no will of any kind through); a bus that heard none, or cannot say, exempts nobody.
 func TestNoWillHeardOnOurBrokerEndsTheOffBrokerExemption(t *testing.T) {
-	d := model.Device{ID: 1, Name: "desk", Topic: "a", MQTT: model.MQTTOurs, GroupTopic: "tasmotas", GroupTopicReadAt: factsNow}
+	d := model.Device{ID: 1, Name: "desk", Topic: "a", MQTT: model.MQTTOurs, GroupTopic: "tasmotas", GroupTopicReadAt: factsNow, MoreGroupTopicsReadAt: factsNow}
 	x := model.Device{ID: 2, Name: "garage", Topic: "b", MQTT: model.MQTTOtherBroker} // GroupTopic never read
 	for _, tc := range []struct {
 		name  string
@@ -581,7 +581,7 @@ func TestAnExpiredFailureNewerThanTheAnswerIsNotReachable(t *testing.T) {
 // The empty mode is a password like any other.
 func TestALearnedPasswordTheCommandCannotCarryIsUnusable(t *testing.T) {
 	d := model.Device{ID: 1, Topic: "t", MQTT: model.MQTTOurs, MQTTPasswordMode: model.MQTTPasswordOwn, MQTTPassword: `pa"ss`,
-		GroupTopic: "g", GroupTopicReadAt: factsNow}
+		GroupTopic: "g", GroupTopicReadAt: factsNow, MoreGroupTopicsReadAt: factsNow}
 	f, _ := newFacts([]model.Device{d}, fakeFactsHealth{1: {LWT: "Online"}}, nil).Facts(context.Background(), 1)
 	if f.Password.Unusable == "" || strings.Contains(f.Password.Unusable, `pa"ss`) {
 		t.Fatalf("unusable = %q", f.Password.Unusable)

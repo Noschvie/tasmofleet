@@ -139,7 +139,7 @@ func newFixRig(t *testing.T, ours bool, faults ...simulator.Fault) *fixRig {
 	}
 	// own GroupTopic read, the only device: usable under the strict rule
 	st := &gtStore{now: time.Now, devs: []model.Device{{ID: 1, Topic: dev.Topic(), Address: host, Port: port, MQTT: capab, MAC: ctl.MAC(),
-		FullTopic: "%prefix%/%topic%/", GroupTopic: "tasmotas", GroupTopicReadAt: time.Now()}}}
+		FullTopic: "%prefix%/%topic%/", GroupTopic: "tasmotas", GroupTopicReadAt: time.Now(), MoreGroupTopicsReadAt: time.Now()}}}
 	h := &recHTTP{Client: tasmota.NewHTTPClient(tasmota.Options{AllowedNetworks: loopbackNets()})}
 	router := transport.NewRouter(transport.Options{HTTP: h, Devices: st})
 	router.SetFacts(&TransportFacts{Devices: st, Health: fakeFactsHealth{1: {LWT: "Online"}}, Memory: router.Memory(), Unanswered: router.UnansweredReads(),

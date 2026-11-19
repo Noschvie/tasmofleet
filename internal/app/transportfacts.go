@@ -147,7 +147,9 @@ func (s *TransportFacts) factsFor(_ context.Context, d model.Device, all []model
 			Topic: d.Topic, TopicExclusive: topicExclusive(d, all, s.commandPrefix()),
 			OthersGroupUnread: othersGroupUnread(d, all, s.Health.Get, s.brokerEvidence(now)),
 			FullTopic:         d.FullTopic, OurFullTopic: s.FullTopic(),
-			GroupTopic: d.GroupTopic, GroupTopicReadAt: d.GroupTopicReadAt, LastProbeAt: probe,
+			// GroupTopicReadAt is the stamp of all four group topics together (#1005): an unread GroupTopic2 to 4 makes
+			// the device's own group topics unknown exactly like an unread GroupTopic1 (groupTopicStale's rule).
+			GroupTopic: d.GroupTopic, GroupTopicReadAt: d.GroupTopicsReadAt(), LastProbeAt: probe,
 			LWTOnline: h.LWT == "Online", ReadsUnansweredSince: unanswered, ConnChangedSince: connChanged,
 			TopicTakenSince: topicTaken,
 		},
@@ -225,19 +227,21 @@ func (s *TransportFacts) commandPrefix() string {
 }
 
 // topicExclusive reports whether no device in the inventory listens on d's command stem: not as its
-// Topic, not as its GroupTopic (fresh or stale, d's own included). Stems are compared the way
-// Tasmota subscribes (stem + "/#"): equal or one a level prefix of the other. d's own FullTopic must
+// Topic, not as any of its group topics GroupTopic1 to GroupTopic4 (fresh or stale, d's own included, #1005). Stems
+// are compared the way Tasmota subscribes (stem + "/#"): equal or one a level prefix of the other. d's own FullTopic must
 // expand (contain %topic%, no other placeholder). Another device whose stem cannot be known (a
 // FullTopic without %topic%, or with %hostname%, %id%, ...) makes the answer false: unknown is not
 // exclusive. A device with neither Topic nor FullTopic is HTTP only and listens on nothing.
-// Not seen: GroupTopic2-4 (only GroupTopic is stored) and devices outside the inventory.
+// Not seen: devices outside the inventory, and group topics never read (othersGroupUnread and the device's own
+// GroupTopicsReadAt hold writes back for those).
 func topicExclusive(d model.Device, all []model.Device, prefix string) bool {
 	mine, ok := transport.CommandTopic(d.FullTopic, d.Topic, prefix)
 	if d.Topic == "" || !ok {
 		return false
 	}
 	for _, o := range all {
-		if o.Topic == "" && o.FullTopic == "" && o.GroupTopic == "" {
+		groups := o.GroupTopics()
+		if o.Topic == "" && o.FullTopic == "" && len(groups) == 0 {
 			continue
 		}
 		if o.ID != d.ID {
@@ -249,11 +253,11 @@ func topicExclusive(d model.Device, all []model.Device, prefix string) bool {
 				return false
 			}
 		}
-		if o.GroupTopic != "" {
-			if o.GroupTopic == d.Topic {
+		for _, g := range groups {
+			if g == d.Topic {
 				return false
 			}
-			x, ok := transport.CommandTopic(o.FullTopic, o.GroupTopic, prefix)
+			x, ok := transport.CommandTopic(o.FullTopic, g, prefix)
 			if !ok || transport.StemsOverlap(x, mine) {
 				return false
 			}
@@ -271,15 +275,18 @@ func lastProbe(d model.Device) time.Time {
 	return probe
 }
 
-// groupTopicStale says the device's GroupTopic is not known: never read, empty, or older than the
-// device's last probe. The one rule for the device's own GroupTopic (transport.groupTopicKnown), for
-// the other devices' (othersGroupUnread) and for the background reader.
+// groupTopicStale says the device's group topics are not known: GroupTopic1 never read or empty, GroupTopic2 to
+// GroupTopic4 never read (#1005: every device right after the upgrade), or either older than the device's last probe
+// (model.Device.GroupTopicsReadAt is the older stamp). An empty GroupTopic2 to 4 list that was read is known: it is the
+// normal case. The one rule for the device's own group topics (transport.groupTopicKnown, through the facts'
+// GroupTopicReadAt), for the other devices' (othersGroupUnread) and for the background reader.
 func groupTopicStale(d model.Device) bool {
-	return d.GroupTopic == "" || d.GroupTopicReadAt.IsZero() || d.GroupTopicReadAt.Before(lastProbe(d))
+	at := d.GroupTopicsReadAt()
+	return d.GroupTopic == "" || at.IsZero() || at.Before(lastProbe(d))
 }
 
-// othersGroupUnread names the other devices with an MQTT topic whose GroupTopic is not known and that a message on
-// our broker could reach. Their GroupTopic could be anything (Tasmota takes any text, slashes included), so any of
+// othersGroupUnread names the other devices with an MQTT topic whose group topics (any of GroupTopic1 to 4, #1005) are
+// not known and that a message on our broker could reach. Their GroupTopic could be anything (Tasmota takes any text, slashes included), so any of
 // them could listen on d's topic; that is why the strict rule holds d back, and why no such device can be left out by
 // comparing topics (#812). Left out are only the devices no message on our broker can reach, whatever their GroupTopic:
 //   - a device whose last will is Offline (the broker confirmed it disconnected, not merely "unknown"): our commands

@@ -176,6 +176,12 @@ var reportsWhenBare = map[string]struct{ maxIndex int }{
 	// SwitchMode is index 1. MAX_SWITCHES_SET is 28 in 12.5.0 (a higher index answers nothing there) and 32 in
 	// 16.0.0, so only 1 to 28 are routed as reads. SwitchMode0 (every switch, answered as an array) stays a write.
 	"switchmode": {maxIndex: 28},
+	// CmndGroupTopic (xdrv_02_9_mqtt.ino, 16.0.0 lines 2029-2079, 12.5.0 lines 1526-1576): index 1 to MAX_GROUP_TOPICS
+	// (4, tasmota.h 153) stores and restarts only when data_len > 0, and always answers all four with
+	// ResponseCmndAll, {"GroupTopic1":"tasmotas","GroupTopic2":"",...} (support_command.ino 326-335), so every index
+	// carries its own key; a bare GroupTopic is index 1. The GroupTopic reader and the probe read all four this way
+	// (#1005); index 0 and above 4 answer nothing and stay writes.
+	"grouptopic": {maxIndex: 4},
 }
 
 // ReportsOnly reports whether cmd only makes the device answer and changes nothing: a read-class command, or a
@@ -457,6 +463,30 @@ func StartsFirmwareUpgrade(cmd string) bool {
 func RestartsDevice(cmd string) bool {
 	p, bad := parse(cmd)
 	return bad == "" && restartsIn(p)
+}
+
+// SetsGroupTopic reports whether cmd sets a group topic of the device (#1005): GroupTopic with any index and an
+// argument, alone or inside a Backlog (every part counts, not only the first). Tasmota stores only when an argument
+// came (CmndGroupTopic, data_len > 0) and then moves the set ones to the front, so any of GroupTopic1 to GroupTopic4
+// may change; a bare GroupTopic only reads. It reads the command exactly like Classify, so callers never parse
+// commands themselves.
+func SetsGroupTopic(cmd string) bool {
+	p, bad := parse(cmd)
+	return bad == "" && setsGroupTopicIn(p)
+}
+
+func setsGroupTopicIn(p parsed) bool {
+	switch p.base {
+	case "grouptopic":
+		return p.args != ""
+	case "backlog":
+		for _, part := range strings.Split(p.args, ";") {
+			if sub, bad := parse(stripBacklogPrefix(part)); bad == "" && setsGroupTopicIn(sub) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func restartsIn(p parsed) bool {

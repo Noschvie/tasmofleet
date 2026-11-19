@@ -42,7 +42,7 @@ func (a *runtime) restoreOptions() restore.Options {
 		Devices: a.svc.Store, Backups: a.backups, Files: a.backups, Store: a.svc.Store, Client: a.restoreClient(a.svc.Client),
 		Uploader: a.restoreUploader(a.svc.Router), PathFor: a.restorePath, MarkMQTTConnChanged: a.markMQTTConnChanged,
 		BrokerPassword: func() string { return a.svc.Sys.Snapshot().MQTTPassword }, Audit: a.svc.Audit, Log: a.log, Context: a.bgContext,
-		Locks: a.deviceLocks(), Jobs: a.svc.Store,
+		Locks: a.deviceLocks(), Jobs: a.svc.Store, ForgetGroupTopics: a.forgetGroupTopics, ReadGroupTopics: a.readGroupTopics,
 		Acquire:  deviceGuard{locks: a.deviceLocks()}.acquire, // a person's operation: waits for the background read (#670)
 		Hardware: a.restoreHardware(a.svc.Store), Describe: a.svc.Prober.Describe,
 	}

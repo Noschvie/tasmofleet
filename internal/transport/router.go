@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -885,7 +886,7 @@ func NotPublished(err error) bool { return err != nil && notPublished(err) }
 // ---- the rest of tasmota.Client
 
 func mqttSettingsChanged(now, d model.Device) bool {
-	return now.Topic != d.Topic || now.GroupTopic != d.GroupTopic || now.FullTopic != d.FullTopic || now.MQTT != d.MQTT
+	return now.Topic != d.Topic || !slices.Equal(now.GroupTopics(), d.GroupTopics()) || now.FullTopic != d.FullTopic || now.MQTT != d.MQTT
 }
 
 // DownloadConfig reads the settings dump over MQTT first (FileDownload, #257, #607) when the device is usable there

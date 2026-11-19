@@ -175,6 +175,10 @@ func (m *Manager) send(ctx context.Context, j *Job, dev model.Device, target tas
 		}
 		m.o.Log.Warn("restore: upload outcome unknown, checking the device", "component", "restore", "job", j.ID, "err", err)
 	}
+	// Every way here is an upload that ran or may have run; the dump may have changed GroupTopic2 to 4 (#1005).
+	if m.o.ForgetGroupTopics != nil {
+		m.o.ForgetGroupTopics(dev.ID)
+	}
 	m.step(ctx, j, store.RestoreWaiting, "waiting for the restart")
 	var alt context.Context // the other transport the restart may show on
 	if httpProved {
@@ -254,6 +258,13 @@ func (m *Manager) finish(ctx context.Context, j Job, dev model.Device, dmp []byt
 	if err := m.checkIdentity(ctx, dev); err != nil {
 		m.fail(ctx, &j, failAfterRestore+err.Error())
 		return
+	}
+	// The upload made GroupTopic2 to 4 unread (send), which holds a backup over MQTT back: read them now, on the
+	// transport that proved the restart, so the verifying backup sees the restored ones (#1005).
+	if m.o.ReadGroupTopics != nil {
+		if err := m.o.ReadGroupTopics(ctx, dev); err != nil {
+			m.o.Log.Warn("restore: group topics not read before the verification", "component", "restore", "job", j.ID, "err", err)
+		}
 	}
 	detail, verified, changes, err := m.verify(ctx, j, dmp, func() ([]model.Backup, error) {
 		return m.o.Backups.Backup(ctx, j.Actor, j.DeviceID)

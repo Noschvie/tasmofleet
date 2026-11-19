@@ -85,6 +85,12 @@ type Device struct {
 	// when it was read (zero: never). Written by the prober and the MQTT identity reader only.
 	GroupTopic       string
 	GroupTopicReadAt time.Time
+	// MoreGroupTopics are the non-empty ones of GroupTopic2 to GroupTopic4 (#1005), from the bare GroupTopic read,
+	// which answers all four at once; nil when none is set or never read. MoreGroupTopicsReadAt is when that read
+	// was (zero: never). INFO1 and Status 1 carry GroupTopic1 only and never touch these. Written by the prober
+	// and the GroupTopic reader only. GroupTopics and GroupTopicsReadAt are the one view of all four.
+	MoreGroupTopics       []string
+	MoreGroupTopicsReadAt time.Time
 	// RelayNames are the FriendlyNames of the device (plain Status), one per relay, as reported
 	// (Tasmota's defaults "Tasmota", "Tasmota2" included). Nil when never read. Written by the
 	// prober only.
@@ -123,6 +129,33 @@ func (d Device) HasMAC(mac string) bool {
 		}
 	}
 	return false
+}
+
+// GroupTopics returns every group topic the device is known to listen on: GroupTopic1 first, then the non-empty
+// ones of GroupTopic2 to GroupTopic4. Empty when none was read.
+func (d Device) GroupTopics() []string {
+	var out []string
+	if d.GroupTopic != "" {
+		out = append(out, d.GroupTopic)
+	}
+	for _, g := range d.MoreGroupTopics {
+		if g != "" {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
+// GroupTopicsReadAt is when all four group topics were last known together: the older of the two read stamps,
+// zero when GroupTopic1 or GroupTopic2 to GroupTopic4 were never read. A list that is read and empty is known.
+func (d Device) GroupTopicsReadAt() time.Time {
+	if d.GroupTopicReadAt.IsZero() || d.MoreGroupTopicsReadAt.IsZero() {
+		return time.Time{}
+	}
+	if d.MoreGroupTopicsReadAt.Before(d.GroupTopicReadAt) {
+		return d.MoreGroupTopicsReadAt
+	}
+	return d.GroupTopicReadAt
 }
 
 // HasCredentials reports whether the device is protected by a web password.

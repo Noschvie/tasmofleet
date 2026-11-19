@@ -354,3 +354,41 @@ func TestCoordinatePowerRetainAndLedStateReplyLikeV16(t *testing.T) {
 		t.Errorf("LedState 8 is out of range and changes nothing, got %s", got)
 	}
 }
+
+// Why (#1005): TasmoFleet reads all four group topics with the bare GroupTopic, and the tests that prove it (the
+// GroupTopic reader over MQTT, the e2e MQTT writes) need a device that answers it like Tasmota's CmndGroupTopic: every
+// form answers all four keys, a value is stored, compacted from index 1 without duplicates and restarts the device,
+// and Status 1 shows GroupTopic1.
+func TestGroupTopicAnswersAllFourAndStoresLikeTasmota(t *testing.T) {
+	t.Parallel()
+	d := newSettingsDevice(t)
+	const fresh = `{"GroupTopic1":"tasmotas","GroupTopic2":"","GroupTopic3":"","GroupTopic4":""}`
+	for _, c := range []string{"GroupTopic", "GroupTopic1", "GroupTopic4"} {
+		if got := cmUp(t, d, c); got != fresh {
+			t.Fatalf("%s = %s, want %s", c, got, fresh)
+		}
+	}
+	boots := d.Boots()
+	if got := cmUp(t, d, "GroupTopic3 kitchen"); got != `{"GroupTopic1":"tasmotas","GroupTopic2":"kitchen","GroupTopic3":"","GroupTopic4":""}` {
+		t.Fatalf("GroupTopic3 kitchen = %s, want it compacted to index 2", got)
+	}
+	if got := cmUp(t, d, "GroupTopic4 kitchen"); got != `{"GroupTopic1":"tasmotas","GroupTopic2":"kitchen","GroupTopic3":"","GroupTopic4":""}` {
+		t.Fatalf("a duplicate = %s, want it dropped", got)
+	}
+	if got := cmUp(t, d, "GroupTopic1 upstairs"); got != `{"GroupTopic1":"upstairs","GroupTopic2":"kitchen","GroupTopic3":"","GroupTopic4":""}` {
+		t.Fatalf("GroupTopic1 upstairs = %s", got)
+	}
+	if got := cmUp(t, d, "Status 1"); !strings.Contains(got, `"GroupTopic":"upstairs"`) {
+		t.Fatalf("Status 1 = %s, want GroupTopic1", got)
+	}
+	if got := cmUp(t, d, "GroupTopic5"); !strings.Contains(got, `"Command":"Unknown"`) {
+		t.Fatalf("GroupTopic5 = %s, want it unknown", got)
+	}
+	if d.Boots() <= boots {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		if err := d.WaitFor(ctx, func(c Controller) bool { return c.Boots() > boots }); err != nil {
+			t.Fatal("a GroupTopic write must restart the device (restart_flag 2)")
+		}
+	}
+}

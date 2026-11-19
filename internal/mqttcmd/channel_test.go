@@ -567,6 +567,41 @@ func TestTopicsThatReachMoreThanOneDeviceAreRefused(t *testing.T) {
 	}
 }
 
+// Why (#1005): the GroupTopic reader and the probe read all four group topics with the bare GroupTopic, which Tasmota
+// answers under GroupTopic1 to GroupTopic4 (ResponseCmndAll), never under the plain name. The channel must take that
+// reply as the answer (a bare name is index 1, GroupTopic1 carries index 1), or every read would time out and leave
+// the group topics unread, holding back the MQTT writes of the whole fleet. An indexed read takes the same reply.
+func TestTheBareGroupTopicIsAnsweredByTheFourKeys(t *testing.T) {
+	const reply = `{"GroupTopic1":"tasmotas","GroupTopic2":"kitchen","GroupTopic3":"","GroupTopic4":""}`
+	for _, cmd := range []string{"GroupTopic", "GroupTopic3"} {
+		b := &fakeBus{}
+		b.onPub = func(b *fakeBus, p pub) { b.result(p.topic, reply) }
+		if got, err := newChan(b).Do(t.Context(), plug(), cmd); err != nil || string(got) != reply {
+			t.Errorf("%s: %s, %v", cmd, got, err)
+		}
+	}
+}
+
+// Why (#1005): a device whose topic is one of its own group topics, GroupTopic2 to GroupTopic4 included, would pass a
+// command to it on to every device of that group; the channel refuses it before it publishes anything.
+func TestATopicThatIsOneOfTheDevicesGroupTopicsIsRefused(t *testing.T) {
+	for _, d := range []model.Device{
+		{ID: 1, Topic: "kitchen", GroupTopic: "tasmotas", MoreGroupTopics: []string{"hall", "kitchen"}},
+		{ID: 1, Topic: "hall", GroupTopic: "tasmotas", MoreGroupTopics: []string{"hall"}},
+	} {
+		b := &fakeBus{}
+		if _, err := newChan(b).Do(t.Context(), d, "Hostname"); !errors.Is(err, ErrRefused) || len(b.sent()) != 0 {
+			t.Errorf("topic %q with group topics %v: err = %v, sent %v", d.Topic, d.GroupTopics(), err, b.sent())
+		}
+	}
+	b := &fakeBus{}
+	b.onPub = func(b *fakeBus, p pub) { b.result(p.topic, `{"Hostname":"plug"}`) }
+	ok := model.Device{ID: 1, Topic: "plug", GroupTopic: "tasmotas", MoreGroupTopics: []string{"hall"}}
+	if _, err := newChan(b).Do(t.Context(), ok, "Hostname"); err != nil {
+		t.Errorf("a topic that is none of the group topics: %v", err)
+	}
+}
+
 // Why: a switch must be confirmed by its own relay. A multi-relay device reports POWER1 for
 // relay 1; taking that as the answer to Power2 would show relay 2 as switched when it is not.
 func TestAReplyForAnotherRelayDoesNotAnswer(t *testing.T) {

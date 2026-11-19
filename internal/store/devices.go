@@ -18,7 +18,7 @@ const deviceCols = `id, name, address, port, mac, topic, full_topic, tags, notes
 	net_hostname, net_ip, net_gateway, net_ssid, net_bssid, net_channel, net_wired, net_at, device_name, device_name_kept,
 	net_subnet, net_dns, ota_url, relay_names, group_topic, ota_url_read_at, group_topic_read_at,
 	mqtt_password, mqtt_password_mode, mqtt_password_bad_at, fw_reach, fw_reach_at, fw_reach_detail, identity_lang_known, fwr_facts, build_memory,
-	mqtt_password_source, mqtt_password_set_at, mqtt_password_ok_at`
+	mqtt_password_source, mqtt_password_set_at, mqtt_password_ok_at, more_group_topics, more_group_topics_read_at`
 
 // relayNamesJSON is the stored form of relay names (a JSON array like tags); "" for none.
 func relayNamesJSON(names []string) string {
@@ -36,10 +36,10 @@ type scanner interface{ Scan(dest ...any) error }
 
 func (s *SQLite) scanDevice(r scanner) (model.Device, error) {
 	var d model.Device
-	var tags, sealed, mqtt, family, relayNames string
+	var tags, sealed, mqtt, family, relayNames, moreGroups string
 	var excluded, single, wired, langKnown int
 	var identAt, created, updated, netAt int64
-	var otaAt, groupAt sql.NullInt64
+	var otaAt, groupAt, moreGroupsAt sql.NullInt64
 	var sealedMQTT, pwMode, reach, fwr string
 	var badAt, reachAt, pwSetAt, pwOKAt sql.NullInt64
 	var buildMemory sql.NullString
@@ -50,7 +50,7 @@ func (s *SQLite) scanDevice(r scanner) (model.Device, error) {
 		&d.Net.Hostname, &d.Net.IP, &d.Net.Gateway, &d.Net.SSID, &d.Net.BSSID, &d.Net.Channel, &wired, &netAt, &d.DeviceName, &d.KeptDeviceName,
 		&d.Net.Subnet, &d.Net.DNS, &d.OTAURL, &relayNames, &d.GroupTopic, &otaAt, &groupAt,
 		&sealedMQTT, &pwMode, &badAt, &reach, &reachAt, &d.FWReach.Detail, &langKnown, &fwr, &buildMemory,
-		&pwSource, &pwSetAt, &pwOKAt)
+		&pwSource, &pwSetAt, &pwOKAt, &moreGroups, &moreGroupsAt)
 	if err != nil {
 		return model.Device{}, err
 	}
@@ -64,6 +64,11 @@ func (s *SQLite) scanDevice(r scanner) (model.Device, error) {
 	if relayNames != "" {
 		if err := json.Unmarshal([]byte(relayNames), &d.RelayNames); err != nil {
 			return model.Device{}, fmt.Errorf("store: device %d relay names: %w", d.ID, err)
+		}
+	}
+	if moreGroups != "" {
+		if err := json.Unmarshal([]byte(moreGroups), &d.MoreGroupTopics); err != nil {
+			return model.Device{}, fmt.Errorf("store: device %d group topics: %w", d.ID, err)
 		}
 	}
 	if sealed != "" {
@@ -101,6 +106,7 @@ func (s *SQLite) scanDevice(r scanner) (model.Device, error) {
 	d.CreatedAt, d.UpdatedAt = fromMS(created), fromMS(updated)
 	d.Net.Wired, d.Net.ReadAt = wired != 0, fromMS(netAt)
 	d.OTAURLReadAt, d.GroupTopicReadAt = fromMS(otaAt.Int64), fromMS(groupAt.Int64) // NULL: never read, no age
+	d.MoreGroupTopicsReadAt = fromMS(moreGroupsAt.Int64)                            // NULL: never read, so unread (#1005)
 	return d, nil
 }
 
@@ -233,7 +239,8 @@ func (s *SQLite) CreateDevice(ctx context.Context, d model.Device) (model.Device
 		d.Identity.Variant, d.Identity.Language, d.Identity.FlashSizeKB, d.Identity.ProgramFlashSizeKB, d.Identity.FreeKB,
 		toMS(d.Identity.DetectedAt), created, toMS(now), d.MQTTHost, d.MQTTPort,
 		d.Net.Hostname, d.Net.IP, d.Net.Gateway, d.Net.SSID, d.Net.BSSID, d.Net.Channel, b2i(d.Net.Wired), toMS(d.Net.ReadAt),
-		d.Net.Subnet, d.Net.DNS, d.OTAURL, relayNamesJSON(d.RelayNames), d.GroupTopic, nullMS(d.OTAURLReadAt), nullMS(d.GroupTopicReadAt), b2i(d.Identity.LanguageKnown), fwrJSON(d.Identity.FWR))
+		d.Net.Subnet, d.Net.DNS, d.OTAURL, relayNamesJSON(d.RelayNames), d.GroupTopic, nullMS(d.OTAURLReadAt), nullMS(d.GroupTopicReadAt), b2i(d.Identity.LanguageKnown), fwrJSON(d.Identity.FWR),
+		relayNamesJSON(d.MoreGroupTopics), nullMS(d.MoreGroupTopicsReadAt))
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
@@ -246,8 +253,9 @@ func (s *SQLite) CreateDevice(ctx context.Context, d model.Device) (model.Device
 	if _, err := tx.ExecContext(ctx, `INSERT INTO devices (id, name, address, port, mac, topic, full_topic, tags, notes,
 		http_user, http_password, ota_excluded, mqtt_capability, chip_family, hardware, single_core, fw_version, fw_image,
 		fw_variant, fw_language, flash_size_kb, program_flash_kb, free_kb, identity_at, created_at, updated_at, mqtt_host, mqtt_port,
-		net_hostname, net_ip, net_gateway, net_ssid, net_bssid, net_channel, net_wired, net_at, net_subnet, net_dns, ota_url, relay_names, group_topic, ota_url_read_at, group_topic_read_at, identity_lang_known, fwr_facts)
-		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, append([]any{id}, args...)...); err != nil {
+		net_hostname, net_ip, net_gateway, net_ssid, net_bssid, net_channel, net_wired, net_at, net_subnet, net_dns, ota_url, relay_names, group_topic, ota_url_read_at, group_topic_read_at, identity_lang_known, fwr_facts,
+		more_group_topics, more_group_topics_read_at)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, append([]any{id}, args...)...); err != nil {
 		return 0, mapErr(err)
 	}
 	for _, m := range macSet(d.MAC, d.MACs) {
@@ -344,6 +352,11 @@ type ProbeResult struct {
 	// SetGroupTopic is false when Status 1 gave no GroupTopic: the stored one and its stamp are kept.
 	SetGroupTopic bool
 	GroupTopic    string
+	// SetMoreGroupTopics is false when the bare GroupTopic read gave no complete answer (#1005): the stored
+	// GroupTopic2 to GroupTopic4 and their stamp are kept, so a probe since leaves them stale. True stores
+	// MoreGroupTopics (the non-empty ones, nil for none) with the probe's stamp.
+	SetMoreGroupTopics bool
+	MoreGroupTopics    []string
 	// RelayNames are the FriendlyNames the probe read; empty (not read) keeps the stored ones.
 	RelayNames []string
 	// DeviceName is the device's Tasmota DeviceName, "" when the probe did not read it. It is
@@ -385,6 +398,9 @@ var ErrMACInUse = fmt.Errorf("%w: the MAC belongs to another device", ErrConflic
 func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuard, r ProbeResult) error {
 	i := r.Identity
 	relayNames := relayNamesJSON(r.RelayNames)
+	// One stamp for every value this probe read: GroupTopic2 to GroupTopic4 must not look older than the OtaUrl
+	// stamp of the same probe, which is the device's last probe (#1005).
+	readAt := toMS(s.now())
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -410,6 +426,8 @@ func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuar
 		ota_url_read_at = CASE WHEN ?=0 THEN ota_url_read_at ELSE ? END,
 		group_topic = CASE WHEN ?=0 THEN group_topic ELSE ? END,
 		group_topic_read_at = CASE WHEN ?=0 THEN group_topic_read_at ELSE ? END,
+		more_group_topics = CASE WHEN ?=0 THEN more_group_topics ELSE ? END,
+		more_group_topics_read_at = CASE WHEN ?=0 THEN more_group_topics_read_at ELSE ? END,
 		relay_names = CASE WHEN ?='' THEN relay_names ELSE ? END,
 		`+followNameSQL+`
 		topic = CASE WHEN ?='' OR topic=? THEN topic
@@ -423,8 +441,9 @@ func (s *SQLite) UpdateProbe(ctx context.Context, id model.DeviceID, g ProbeGuar
 		b2i(r.SetMQTT), r.MQTTHost, b2i(r.SetMQTT), r.MQTTPort,
 		b2i(r.SetNet), r.Net.Hostname, b2i(r.SetNet), r.Net.IP, b2i(r.SetNet), r.Net.Gateway, b2i(r.SetNet), r.Net.SSID,
 		b2i(r.SetNet), r.Net.BSSID, b2i(r.SetNet), r.Net.Channel, b2i(r.SetNet), b2i(r.Net.Wired), b2i(r.SetNet), toMS(r.Net.ReadAt),
-		b2i(r.SetNet), r.Net.Subnet, b2i(r.SetNet), r.Net.DNS, b2i(r.SetOTAURL), r.OTAURL, b2i(r.SetOTAURL), toMS(s.now()),
-		b2i(r.SetGroupTopic), r.GroupTopic, b2i(r.SetGroupTopic), toMS(s.now()), relayNames, relayNames,
+		b2i(r.SetNet), r.Net.Subnet, b2i(r.SetNet), r.Net.DNS, b2i(r.SetOTAURL), r.OTAURL, b2i(r.SetOTAURL), readAt,
+		b2i(r.SetGroupTopic), r.GroupTopic, b2i(r.SetGroupTopic), readAt,
+		b2i(r.SetMoreGroupTopics), relayNamesJSON(r.MoreGroupTopics), b2i(r.SetMoreGroupTopics), readAt, relayNames, relayNames,
 		r.DeviceName, r.DeviceName, r.NameFrom, r.NameFrom, r.DeviceName, r.DeviceName, r.DeviceName,
 		r.DeviceTopic, r.DeviceTopic, r.DeviceTopic, r.DeviceTopic, r.DeviceTopic, r.DeviceTopic,
 		toMS(s.now()), id, g.Address, g.Port, strings.ToLower(g.MAC), g.Topic, g.Topic)
@@ -577,6 +596,35 @@ func (s *SQLite) UpdateGroupTopicFromMQTT(ctx context.Context, id model.DeviceID
 		return fmt.Errorf("%w: device %d changed or was deleted", ErrConflict, id)
 	}
 	return nil
+}
+
+// UpdateGroupTopics stores all four group topics of one bare GroupTopic read (#1005): GroupTopic1 and the non-empty
+// ones of GroupTopic2 to GroupTopic4 (more, nil for none), with one read stamp for both, and nothing else. Guarded like
+// UpdateGroupTopicFromMQTT: a device deleted, moved, rebound or given another topic since the read began is left
+// alone (ErrConflict, nothing written).
+func (s *SQLite) UpdateGroupTopics(ctx context.Context, id model.DeviceID, g ProbeGuard, topic, first string, more []string) error {
+	at := toMS(s.now())
+	res, err := s.db.ExecContext(ctx, `UPDATE devices SET group_topic=?, group_topic_read_at=?, more_group_topics=?, more_group_topics_read_at=?
+		WHERE id=? AND address=? AND port=? AND mac=? AND topic=?`,
+		first, at, relayNamesJSON(more), at, id, g.Address, g.Port, strings.ToLower(g.MAC), topic)
+	if err != nil {
+		return mapErr(err)
+	}
+	if k, err := res.RowsAffected(); err != nil {
+		return err
+	} else if k == 0 {
+		return fmt.Errorf("%w: device %d changed or was deleted", ErrConflict, id)
+	}
+	return nil
+}
+
+// ForgetGroupTopics marks GroupTopic2 to GroupTopic4 of a device unread and keeps their values (#1005): TasmoFleet sent
+// the device a GroupTopic<n> with a value or restored its configuration, which may have changed them, and INFO1 and
+// Status 1 never refresh them. The GroupTopic reader then asks the device again, and until it has, the device holds
+// back the other devices' MQTT writes like any device with unread group topics. A device that is gone is no error.
+func (s *SQLite) ForgetGroupTopics(ctx context.Context, id model.DeviceID) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE devices SET more_group_topics_read_at=NULL WHERE id=?`, id)
+	return mapErr(err)
 }
 
 // UpdateNet stores the network facts of a background read (app.Prober.ReadNet) and nothing

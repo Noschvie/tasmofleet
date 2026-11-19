@@ -110,7 +110,11 @@ type probed struct {
 	// groupTopic is the GroupTopic of the same Status 1 answer; readGroupTopic tells whether it had one.
 	groupTopic     string
 	readGroupTopic bool
-	relayNames     []string // FriendlyName array of plain Status
+	// moreGroupTopics are the non-empty ones of GroupTopic2 to GroupTopic4 of the bare GroupTopic read (#1005);
+	// readMoreGroupTopics tells whether it gave a complete answer (else the stored ones are kept, and stale).
+	moreGroupTopics     []string
+	readMoreGroupTopics bool
+	relayNames          []string // FriendlyName array of plain Status
 	// checkedTopic is the stored topic the check that hears every reply asked when the whole probe went over MQTT
 	// (probeOverMQTT, #682), "" when it went to the address. The store writes the result only while the device
 	// still has that topic.
@@ -336,8 +340,8 @@ func (p *Prober) probeAddress(ctx context.Context, d model.Device, verify func(p
 }
 
 // probeFacts reads the probe's facts after the identity: where the device reports over MQTT (Status 6, SetOption3), the
-// OTA URL and GroupTopic (Status 1) and the Status object (DeviceName, topic, relay names). Only the MQTT facts must
-// answer; Status 1 and the Status object are best effort. The probe calls it on itself (the address) or on a copy
+// OTA URL and GroupTopic (Status 1), all four group topics (the bare GroupTopic, #1005) and the Status object
+// (DeviceName, topic, relay names). Only the MQTT facts must answer; the rest is best effort. The probe calls it on itself (the address) or on a copy
 // whose client is the router, with ctx pinned to MQTT after a check on the topic (#851).
 func (p *Prober) probeFacts(ctx context.Context, t tasmota.Target, out *probed) error {
 	var err error
@@ -350,6 +354,15 @@ func (p *Prober) probeFacts(ctx context.Context, t tasmota.Target, out *probed) 
 	if raw, err := p.cmd(ctx, t, "Status 1"); err == nil {
 		out.otaURL, out.readOTAURL = parseOtaURL(raw)
 		out.groupTopic, out.readGroupTopic = parseGroupTopic(raw)
+	}
+	// The bare GroupTopic (a read: it writes only with an argument) answers all four group topics; Status 1 carries
+	// GroupTopic1 alone (#1005). Best effort like Status 1: without a complete answer the stored ones are kept and
+	// count as unread, which holds back MQTT writes until the GroupTopic reader has them.
+	if raw, err := p.cmd(ctx, t, groupTopicRead); err == nil {
+		if first, more, ok := parseGroupTopics(raw); ok {
+			out.groupTopic, out.readGroupTopic = first, true
+			out.moreGroupTopics, out.readMoreGroupTopics = more, true
+		}
 	}
 	// Plain "Status" (not "Status 0") is the Status object only: DeviceName and the topic the
 	// device actually uses. The "Topic" command would return the setting with its placeholders
@@ -428,6 +441,41 @@ func parseGroupTopic(raw json.RawMessage) (topic string, ok bool) {
 		return "", false
 	}
 	return topic, true
+}
+
+// groupTopicRead is the bare GroupTopic command: it changes nothing (CmndGroupTopic writes only when data_len > 0) and
+// answers every group topic, {"GroupTopic1":"tasmotas","GroupTopic2":"",...} (ResponseCmndAll over MAX_GROUP_TOPICS,
+// which is 4; Tasmota 16.0.0 xdrv_02_9_mqtt.ino 2029-2079, the same in 12.5.0 to 15.6.0).
+const groupTopicRead = "GroupTopic"
+
+// maxGroupTopics is Tasmota's MAX_GROUP_TOPICS (tasmota.h 153 at 16.0.0).
+const maxGroupTopics = 4
+
+// parseGroupTopics reads the answer to the bare GroupTopic: GroupTopic1 and the non-empty ones of GroupTopic2 to
+// GroupTopic4. ok is false unless all four keys are there with a usable value (validGroupTopic): an answer that is
+// not complete, or not this command's, must never look like "no further group topics" (#1005, fail closed).
+func parseGroupTopics(raw json.RawMessage) (first string, more []string, ok bool) {
+	var m map[string]*string
+	if json.Unmarshal(raw, &m) != nil {
+		return "", nil, false
+	}
+	for i := 1; i <= maxGroupTopics; i++ {
+		v := m["GroupTopic"+strconv.Itoa(i)]
+		if v == nil {
+			return "", nil, false
+		}
+		g := strings.TrimSpace(*v)
+		if !validGroupTopic(g) {
+			return "", nil, false
+		}
+		switch {
+		case i == 1:
+			first = g
+		case g != "":
+			more = append(more, g)
+		}
+	}
+	return first, more, true
 }
 
 // validGroupTopic says whether a group topic read from a device or from the bus is shown: at most
@@ -1128,11 +1176,15 @@ func (p *Prober) Describe(ctx context.Context, d model.Device) (model.Device, er
 		d.MQTT = pr.mqtt
 	}
 	d.MQTTHost, d.MQTTPort = pr.mqttHost, pr.mqttPort
+	readAt := p.now() // one stamp: the group topics must not look older than this probe's OtaUrl (lastProbe)
 	if pr.readOTAURL {
-		d.OTAURL, d.OTAURLReadAt = pr.otaURL, p.now()
+		d.OTAURL, d.OTAURLReadAt = pr.otaURL, readAt
 	}
 	if pr.readGroupTopic {
-		d.GroupTopic, d.GroupTopicReadAt = pr.groupTopic, p.now()
+		d.GroupTopic, d.GroupTopicReadAt = pr.groupTopic, readAt
+	}
+	if pr.readMoreGroupTopics {
+		d.MoreGroupTopics, d.MoreGroupTopicsReadAt = pr.moreGroupTopics, readAt
 	}
 	if pr.relayNames != nil {
 		d.RelayNames = pr.relayNames
@@ -1180,6 +1232,7 @@ func (p *Prober) refresh(ctx context.Context, id model.DeviceID, actor string, f
 		res.DeviceName, res.DeviceTopic, res.NameFrom = pr.devName, pr.topic, fallbackName(d, pr)
 		res.SetOTAURL, res.OTAURL, res.RelayNames = pr.readOTAURL, pr.otaURL, pr.relayNames
 		res.SetGroupTopic, res.GroupTopic = pr.readGroupTopic, pr.groupTopic
+		res.SetMoreGroupTopics, res.MoreGroupTopics = pr.readMoreGroupTopics, pr.moreGroupTopics
 		res.SetNet, res.Net = true, p.withStoredWifi(d.Net, pr.net)
 		if d.MAC == "" && actor != "" && bindable(pr.mac) {
 			res.BindMACs = []string{pr.mac}

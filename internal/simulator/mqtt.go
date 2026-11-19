@@ -81,7 +81,14 @@ func (m *mqttLink) connect() {
 	handler := func(_ paho.Client, msg paho.Message) { m.onCommand(msg) }
 	// Wait for the SUBACKs: a real device is subscribed before it announces itself, and a
 	// controller that sends a command the moment LWT Online (or ready) shows must be answered.
-	for _, f := range []string{"cmnd/" + d.topic + "/#", "cmnd/tasmotas/#"} {
+	d.mu.Lock()
+	groups := d.groupTopicsLocked()
+	d.mu.Unlock()
+	filters := []string{"cmnd/" + d.topic + "/#"}
+	for _, g := range groups {
+		filters = append(filters, "cmnd/"+g+"/#")
+	}
+	for _, f := range filters {
 		if t := c.Subscribe(f, 0, handler); !t.WaitTimeout(6*time.Second) || t.Error() != nil {
 			return
 		}
@@ -105,7 +112,7 @@ func (m *mqttLink) connect() {
 			m.raw("tasmota/discovery/"+mac+"/sensors", d.substitute(string(sensors), version), true)
 		}
 	}
-	info1 := `{"Info1":{"Module":"Sonoff Basic","Version":"` + version + `(release-` + image + `)","FallbackTopic":"cmnd/` + d.topic + `_fb/","GroupTopic":"cmnd/tasmotas/"}}`
+	info1 := `{"Info1":{"Module":"Sonoff Basic","Version":"` + version + `(release-` + image + `)","FallbackTopic":"cmnd/` + d.topic + `_fb/","GroupTopic":"cmnd/` + groups[0] + `/"}}`
 	m.raw("tele/"+d.topic+"/INFO1", info1, false)
 	m.raw("tele/"+d.topic+"/INFO2", `{"Info2":{"WebServerMode":"Admin","Hostname":"`+d.topic+`","IPAddress":"`+d.host+`"}}`, false)
 	m.raw("tele/"+d.topic+"/INFO3", `{"Info3":{"RestartReason":`+jsonString(v.reason)+`,"BootCount":`+itoa(v.bootCount)+`}}`, false)
@@ -237,7 +244,7 @@ func (m *mqttLink) onCommand(msg paho.Message) {
 	d.mu.Lock()
 	d.cmds = append(d.cmds, redactFileCmd(cmd))
 	d.mu.Unlock()
-	_, out := d.execMQTT(cmd, len(msg.Topic()), parts[1] == "tasmotas")
+	_, out := d.execMQTT(cmd, len(msg.Topic()), parts[1] != d.topic) // anything but the own topic is a group topic
 	d.publishAll(out)
 }
 
@@ -335,4 +342,19 @@ func (d *simDevice) flapLoop() {
 			d.mq.connect()
 		}
 	}
+}
+
+// groupTopicsLocked is what the device subscribes to besides its topic: GroupTopic1 to GroupTopic4, the empty ones
+// left out (MqttConnected subscribes to each non-empty one). GroupTopic1 is never empty after a write.
+func (d *simDevice) groupTopicsLocked() []string {
+	var out []string
+	for i := 1; i <= 4; i++ {
+		if g := d.get("grouptopic" + strconv.Itoa(i)); g != "" {
+			out = append(out, g)
+		}
+	}
+	if len(out) == 0 {
+		out = []string{"tasmotas"}
+	}
+	return out
 }

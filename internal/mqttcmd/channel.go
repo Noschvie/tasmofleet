@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -389,7 +390,7 @@ func checkTopic(d model.Device) error {
 		return fmt.Errorf("%w: the device has no MQTT topic", ErrRefused)
 	case strings.ContainsAny(d.Topic, "/+#") || strings.TrimSpace(d.Topic) != d.Topic:
 		return fmt.Errorf("%w: the topic contains characters that are not allowed", ErrRefused)
-	case d.Topic == defaultGroupTopic || (d.GroupTopic != "" && d.Topic == d.GroupTopic):
+	case d.Topic == defaultGroupTopic || slices.Contains(d.GroupTopics(), d.Topic): // any of GroupTopic1 to 4 (#1005)
 		return fmt.Errorf("%w: the topic is the group topic, which would reach many devices", ErrRefused)
 	}
 	return nil

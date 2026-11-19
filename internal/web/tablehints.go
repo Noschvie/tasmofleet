@@ -15,7 +15,7 @@ var colTips = map[string]string{ //nolint:gosec // G101: header texts, no creden
 	"devices.wifi":       "Wi-Fi signal quality as the device reports it.",
 	"devices.restart":    "When the device last restarted.",
 	"devices.otaurl":     "Where the device would update from (OtaUrl), as last read.",
-	"devices.grouptopic": "Group topic the device listens on, as last read.",
+	"devices.grouptopic": "Group topics the device listens on, as last read; +N for the others.",
 	"devices.power":      "Relay state of the device.",
 	"devices.actions":    "Actions for the device.",
 
