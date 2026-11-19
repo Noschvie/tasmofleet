@@ -439,6 +439,39 @@ func TestBackupsTabHasNoteColumnAndRestoreBadge(t *testing.T) {
 	}
 }
 
+// Why (#994): the answer to Back up now / Retry (cooldown, failed backup, API off, needs an MQTT
+// password) is swapped into #backup-status. At the end of the tab, after a long list and "Recent
+// restores", it landed off-screen and nobody saw why the click did nothing. It sits directly under
+// the bar the button is in, and the swap scrolls the container into view. The empty-tab half alone
+// would pass without the fix (the status already followed the empty card); it stays here, in the
+// test whose list half fails on revert, so both branches keep exactly one status.
+func TestBackupStatusFollowsTheBar(t *testing.T) {
+	e, _, rs := newDiffEnv(t)
+	rs.jobs = map[store.RestoreID]restore.Job{1: {ID: 1, DeviceID: 1, State: store.RestoreDone, Actor: "admin", CreatedAt: time.Now()}}
+	_, body := e.do(t, "GET", "/devices/1/backups", "admin", nil)
+	if n := strings.Count(body, `id="backup-status"`); n != 1 {
+		t.Fatalf("%d status elements, want 1:\n%s", n, body)
+	}
+	bar, status := strings.Index(body, `class="bk-bar"`), strings.Index(body, `id="backup-status"`)
+	barBtn := bar + strings.Index(body[bar:], ">Back up now</button>")
+	list, jobs := strings.Index(body, `id="bk-sel"`), strings.Index(body, "Recent restores")
+	if bar < 0 || barBtn < bar || list < 0 || jobs < 0 {
+		t.Fatalf("the tab lost a part (bar %d, button %d, list %d, restores %d):\n%s", bar, barBtn, list, jobs, body)
+	}
+	if status < barBtn || status > list || status > jobs {
+		t.Errorf("the status (at %d) must follow the bar's Back up now (%d) and come before the list (%d) and Recent restores (%d)", status, barBtn, list, jobs)
+	}
+	if !strings.Contains(body, `hx-swap="innerHTML show:#backup-status:bottom"`) {
+		t.Error("the answer is not scrolled into view after the swap (hx-swap lacks show:#backup-status:bottom)")
+	}
+
+	_, empty := setup(t).do(t, "GET", "/devices/1/backups", "admin", nil)
+	card, st := strings.Index(empty, "No backups yet"), strings.Index(empty, `id="backup-status"`)
+	if n := strings.Count(empty, `id="backup-status"`); n != 1 || card < 0 || st < card {
+		t.Errorf("empty tab: %d status elements, card at %d, status at %d", n, card, st)
+	}
+}
+
 // Why: the reply of a device is mostly one long JSON line without spaces. It must wrap inside the
 // console (QA: it ran past the pane edge and was cut off, on a phone worse), keeping its spacing;
 // it must not scroll the page or hide the end of the line. In the v2 console it is the reply line

@@ -13595,6 +13595,11 @@ main.bare {
   display: none;
 }
 .bk-status {
+  margin-bottom: var(--sp-10);
+  /* the swap scrolls this box to the bottom edge of the window: keep it clear of the fixed status bar */
+  scroll-margin-bottom: calc(var(--sb-h) + var(--sp-16));
+}
+.uempty + .bk-status {
   margin-top: var(--sp-10);
 }
 

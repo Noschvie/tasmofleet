@@ -26,6 +26,7 @@ templ backupsTab(p backupsView) {
 					<button type="submit" form="bk-now" class="btn btn-primary" disabled?={ p.Blocked != "" } if p.Blocked != "" { title={ p.Blocked } }>Back up now</button>
 				}
 			}
+			@backupStatus()
 		} else {
 			if p.RestoreBlocked != "" {
 				<p class="devcard-note" id="bk-restore-why">Restore: { p.RestoreBlocked }</p>
@@ -45,6 +46,7 @@ templ backupsTab(p backupsView) {
 					<button type="submit" form="bk-now" class="btn" disabled?={ p.Blocked != "" } if p.Blocked != "" { title={ p.Blocked } }>Back up now</button>
 				}
 			</div>
+			@backupStatus()
 			<form id="bk-sel" method="get" action={ templ.SafeURL(p.Base + "/devices/" + devStr(p.DeviceID) + "/backups/diff") }>
 				<div class="bk-selbar" data-bulkbar hidden role="region" aria-label="Selected backups">
 					<span class="bk-selcount"><span data-bar-count>0</span> selected</span>
@@ -82,9 +84,8 @@ templ backupsTab(p backupsView) {
 				}
 			}
 		}
-		<div id="backup-status" class="bk-status" aria-live="polite"></div>
 		if p.CanBackup {
-			<form id="bk-now" method="post" action={ templ.SafeURL(p.Base + "/devices/" + devStr(p.DeviceID) + "/backup") } hx-post={ p.Base + "/devices/" + devStr(p.DeviceID) + "/backup" } hx-target="#backup-status" hx-swap="innerHTML" hx-disabled-elt="button[form=bk-now]">
+			<form id="bk-now" method="post" action={ templ.SafeURL(p.Base + "/devices/" + devStr(p.DeviceID) + "/backup") } hx-post={ p.Base + "/devices/" + devStr(p.DeviceID) + "/backup" } hx-target="#backup-status" hx-swap="innerHTML show:#backup-status:bottom" hx-disabled-elt="button[form=bk-now]">
 				<input type="hidden" name="csrf" value={ p.CSRF }/>
 				<input type="hidden" name="from" value="tab"/>
 			</form>
@@ -101,6 +102,12 @@ templ backupsTab(p backupsView) {
 			}
 		}
 	</div>
+}
+
+// backupStatus is where the answer to Back up now and Retry lands (hx-target of the bk-now form). It sits right
+// under the bar, or under the empty card, so the answer appears where the button is and not after a long list (#994).
+templ backupStatus() {
+	<div id="backup-status" class="bk-status" aria-live="polite"></div>
 }
 
 // backupRowItem is one run, or one failed attempt.

@@ -592,9 +592,14 @@ func (h *handler) backupDeleted(d backup.Deletion) {
 	h.backupMu.Unlock()
 }
 
-// cooldownText is "Last backup 4 min 40 s ago; a new one is possible in 20 s".
+// cooldownText is "Last backup 4 min 40 s ago; a new one is possible in 20 s". The wait rounds up to the next full
+// second: a refused request never says "possible in 0 s" (#994).
 func cooldownText(ago, wait time.Duration) string {
-	return fmt.Sprintf("Last backup %s ago; a new one is possible in %s", minSec(ago), minSec(wait.Round(time.Second)))
+	whole := wait.Truncate(time.Second)
+	if whole < wait {
+		whole += time.Second
+	}
+	return fmt.Sprintf("Last backup %s ago; a new one is possible in %s", minSec(ago), minSec(whole))
 }
 
 // minSec renders a short span as "4 min 40 s", "5 min", "20 s".

@@ -926,3 +926,24 @@ func TestCooldownTextNamesAgoAndRemainder(t *testing.T) {
 		t.Errorf("got %q want %q", got, want)
 	}
 }
+
+// Why (#994): a refused request said "possible in 0 s" when under half a second was left, which reads as
+// "try again now" and sends the person into a second refusal. The wait rounds up, so the text never
+// promises an earlier time than the cooldown allows; whole seconds stay as they are.
+func TestCooldownTextRoundsTheWaitUp(t *testing.T) {
+	for _, c := range []struct {
+		wait time.Duration
+		want string
+	}{
+		{300 * time.Millisecond, "possible in 1 s"},
+		{time.Millisecond, "possible in 1 s"},
+		{1200 * time.Millisecond, "possible in 2 s"},
+		{59*time.Second + 100*time.Millisecond, "possible in 1 min"},
+		{20 * time.Second, "possible in 20 s"},
+		{4 * time.Minute, "possible in 4 min"},
+	} {
+		if got := cooldownText(time.Minute, c.wait); !strings.HasSuffix(got, c.want) {
+			t.Errorf("wait %v: %q does not end in %q", c.wait, got, c.want)
+		}
+	}
+}
