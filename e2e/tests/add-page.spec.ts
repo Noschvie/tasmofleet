@@ -132,12 +132,12 @@ test("Discovered: the lookup says where a device is and what it has not seen", a
   await page.goto(app.url + "/devices/new");
   const disc = box(page, "discovered");
   await expect(disc.locator("#why")).toHaveCount(0);
-  await disc.getByLabel(/Not listed\? Look up/).fill("127.0.0.21");
+  await disc.getByLabel("Not listed? Look it up").fill("127.0.0.21");
   await disc.getByRole("button", { name: "Look up" }).click();
   await expect(page).toHaveURL(/why=127\.0\.0\.21/);
   await expect(disc.locator("#why")).toContainText("Shed light");
   await expect(disc.locator("#why")).toContainText("is listed under New devices");
-  await disc.getByLabel(/Not listed\? Look up/).fill("127.0.0.99");
+  await disc.getByLabel("Not listed? Look it up").fill("127.0.0.99");
   await disc.getByRole("button", { name: "Look up" }).click();
   await expect(disc.locator("#why")).toContainText("has not seen this on MQTT");
   await expectNoOverflow(page, "Add devices with a lookup");
