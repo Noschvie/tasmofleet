@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -207,5 +208,91 @@ func TestRecordWritesWithItsOwnDeadlineAndTheCallersValues(t *testing.T) {
 	}
 	if left := time.Until(st.deadline); !st.hasDL || left > writeTimeout || left <= 0 {
 		t.Errorf("deadline in %v (set: %v), want one within %v", left, st.hasDL, writeTimeout)
+	}
+}
+
+// Why (#1004): an operator tracing one device greps the log for `"device":45`, the key every
+// other log line uses. The audit line used to carry the device only inside the string target
+// ("device:45"), so that filter missed it. The key must be a JSON number like the other lines
+// (not a string), and it must never match a transaction, a backup or a setting that merely
+// has the same number, or the filter would name the wrong device.
+func TestTheAuditLogLineNamesItsDeviceByNumber(t *testing.T) {
+	cases := []struct {
+		name, target string
+		wantDevice   string // "" = no device key
+	}{
+		{"a device target", "device:45", "45"},
+		{"a large id stays exact", "device:9007199254740993", "9007199254740993"},
+		{"a transaction with the same number", "transaction:45", ""},
+		{"a backup", "backup:45", ""},
+		{"a proposal", "proposal:45", ""},
+		{"a setting", "settings:system", ""},
+		{"no target", "", ""},
+		{"nothing after the prefix", "device:", ""},
+		{"not a number", "device:abc", ""},
+		{"id zero is no device", "device:0", ""},
+		{"a negative id", "device:-3", ""},
+		{"another prefix that ends in device", "devices:45", ""},
+		{"a sign is not the canonical spelling", "device:+45", ""},
+		{"leading zeros are not the canonical spelling", "device:045", ""},
+		{"trailing text", "device:45x", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			r := New(&fakeStore{}, slog.New(slog.NewJSONHandler(&buf, nil)), nil)
+			r.Record(context.Background(), model.AuditEvent{Actor: "a", Action: "x", Target: tc.target})
+			m := decodeLogLine(t, buf.Bytes())
+			if m["target"] != tc.target {
+				t.Errorf("target = %v, want %q unchanged", m["target"], tc.target)
+			}
+			assertDeviceKey(t, m, tc.wantDevice)
+		})
+	}
+}
+
+// Why (#1004): a failed audit write is the line an operator needs most when tracing a device,
+// so the one filter must find it too.
+func TestTheFailedAuditWriteLineNamesItsDeviceToo(t *testing.T) {
+	var buf bytes.Buffer
+	r := New(&fakeStore{err: errors.New("disk full")}, slog.New(slog.NewJSONHandler(&buf, nil)), nil)
+	r.Record(context.Background(), model.AuditEvent{Actor: "a", Action: "x", Target: "device:45"})
+	m := decodeLogLine(t, buf.Bytes())
+	if m["msg"] != "audit write failed" {
+		t.Fatalf("msg = %v", m["msg"])
+	}
+	assertDeviceKey(t, m, "45")
+	if m["target"] != "device:45" {
+		t.Errorf("target = %v", m["target"])
+	}
+}
+
+func decodeLogLine(t *testing.T, b []byte) map[string]any {
+	t.Helper()
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.UseNumber()
+	var m map[string]any
+	if err := dec.Decode(&m); err != nil {
+		t.Fatalf("log line %q: %v", b, err)
+	}
+	return m
+}
+
+// assertDeviceKey checks that the line has no device key (want "") or has it as a JSON number.
+func assertDeviceKey(t *testing.T, m map[string]any, want string) {
+	t.Helper()
+	got, has := m["device"]
+	if want == "" {
+		if has {
+			t.Errorf("device = %v, want no device key", got)
+		}
+		return
+	}
+	n, ok := got.(json.Number)
+	if !ok {
+		t.Fatalf("device = %#v (%T), want a JSON number", got, got)
+	}
+	if n.String() != want {
+		t.Errorf("device = %s, want %s", n, want)
 	}
 }

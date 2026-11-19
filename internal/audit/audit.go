@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 
@@ -72,14 +73,33 @@ func (r *StoreRecorder) Record(ctx context.Context, e model.AuditEvent) {
 	e.Detail = Redact(e.Detail)
 	wctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), writeTimeout)
 	defer cancel()
+	log := r.log
+	if id, ok := deviceOf(e.Target); ok {
+		log = log.With("device", id) // the key every other line uses, so one filter finds them all (#1004)
+	}
 	if err := r.store.AppendAudit(wctx, e); err != nil {
-		r.log.Error("audit write failed", "component", "audit", "action", e.Action, "target", e.Target, "err", err)
+		log.Error("audit write failed", "component", "audit", "action", e.Action, "target", e.Target, "err", err)
 		if r.onError != nil {
 			r.onError()
 		}
 		return
 	}
-	r.log.Info("audit", "component", "audit", "actor", e.Actor, "action", e.Action, "target", e.Target, "result", e.Result)
+	log.Info("audit", "component", "audit", "actor", e.Actor, "action", e.Action, "target", e.Target, "result", e.Result)
+}
+
+// deviceOf reads the ID out of a device target ("device:45", the form model.AuditEvent.Target
+// documents). Only the canonical spelling of a positive ID counts, so the log filter on the
+// device key never matches a transaction, a backup or a setting.
+func deviceOf(target string) (model.DeviceID, bool) {
+	rest, ok := strings.CutPrefix(target, "device:")
+	if !ok {
+		return 0, false
+	}
+	n, err := strconv.ParseInt(rest, 10, 64)
+	if err != nil || n <= 0 || strconv.FormatInt(n, 10) != rest {
+		return 0, false
+	}
+	return model.DeviceID(n), true
 }
 
 // Redact replaces the value of every key matching RedactKeys with "***",

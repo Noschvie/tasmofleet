@@ -398,7 +398,8 @@ data directory (TasmoAdmin lesson A4).
   name" sets the name through `Inventory.UpdateIf` (compare-and-set, audited as `device.update`), "Keep"
   stores the declined name in `device_name_kept` (migration 0030, audited as `device.name_kept`), so the
   notice returns only when the device reports another name. An answer for a name the device no longer
-  reports is refused. Operators see the notice without the buttons. The stored topic is
+  reports is refused. Operators see the notice without the buttons. The Identity card's first row is the
+  TasmoFleet ID (the device's primary key, with a copy button): the number the log names the device by (#1004). The stored topic is
   only a mirror used to match MQTT messages, so it always follows the topic the device reports
   at the address (the probe's reads over MQTT keep it: a device answers only on its own topic, #851;
   #111; also for rows from before migration 0029, whose `device_topic` is empty), audited as
@@ -2687,7 +2688,10 @@ component, device, job, batch, request_id, remote, user`. No secrets (redactor),
   `tasmofleet_device_*` gauges (fleet of tens; `docs/metrics.md`).
 - **Health**: `/healthz` = process alive (blackbox probe). `/readyz` = DB, OIDC discovery,
   listeners.
-- **Audit**: database table plus the UI page. Each audit write is also logged at info.
+- **Audit**: database table plus the UI page. Each audit write is also logged at info. When the
+  target is a device (`device:<id>`), the line also carries `device` as a number, the key every
+  other line uses, so one filter (`"device":45`) finds all lines of a device (#1004); `target` stays.
+  No name or topic is added to log lines: both change over time.
 
 ---
 

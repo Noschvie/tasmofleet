@@ -461,6 +461,7 @@ templ identityCard(c identCard) {
 				>Refresh identity</button>
 			}
 		</div>
+		@identityID(c.ID)
 		@ui.KV(c.Rows)
 		@identityFWR(c)
 		if c.CRWarn != "" {
@@ -476,6 +477,21 @@ templ identityCard(c identCard) {
 			@ui.Banner(ui.BannerData{Tone: ui.ToneOK, Text: c.Notice})
 		}
 	</section>
+}
+
+// identityID is the first row of the Identity card (#1004): the number every log line names the
+// device by ("device":45), with the app's copy button. It is its own row list because ui.KV has
+// no place for a button; it uses the same row markup, so it lines up with the rows below.
+templ identityID(id model.DeviceID) {
+	<dl class="ukv">
+		<div class="ukv-row">
+			<dt>TasmoFleet ID</dt>
+			<dd class="mono ukv-copy" data-visual-mask>
+				{ strconv.FormatInt(int64(id), 10) }
+				<button type="button" class="btn btn-sm" data-copy-text={ strconv.FormatInt(int64(id), 10) } aria-label="Copy the TasmoFleet ID" hidden>Copy</button>
+			</dd>
+		</div>
+	</dl>
 }
 
 // identityFWR is the StatusFWR block of the Identity card (#289): the fields of Status 2 under

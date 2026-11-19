@@ -259,7 +259,7 @@ func TestIdentityRowsFollowTheMockup(t *testing.T) {
 	if strings.Contains(ident, "<dt>Chip</dt>") || !strings.Contains(ident, "2 MB") {
 		t.Errorf("identity:\n%s", ident)
 	}
-	last, order := -1, []string{"<dt>Device name", "<dt>Hostname", "<dt>MQTT topic", "<dt>MAC", "<dt>Hardware", "TasmoFleet&#39;s reading", "<dt>Variant", "<dt>Flash size"}
+	last, order := -1, []string{"<dt>TasmoFleet ID", "<dt>Device name", "<dt>Hostname", "<dt>MQTT topic", "<dt>MAC", "<dt>Hardware", "TasmoFleet&#39;s reading", "<dt>Variant", "<dt>Flash size"}
 	for _, k := range order {
 		at := strings.Index(ident, k)
 		if at < last {
@@ -935,5 +935,29 @@ func TestHTTPRowSaysChangesGoOverMQTTFirst(t *testing.T) {
 	sub := httpRow(transport.Facts{HTTP: transport.HTTPState{}, Now: now0}).Sub
 	if strings.Contains(sub, "changes try HTTP first") || !strings.Contains(sub, "Reads and changes go over MQTT first") || !strings.Contains(sub, "group topic read") {
 		t.Fatalf("sub = %q", sub)
+	}
+}
+
+// Why (#1004): the TasmoFleet ID was only in the address bar, so a person reading the log (where
+// every line names a device by this number) could not tell which device a line was about.
+// The Identity card shows it as its own row with the app's copy button, on the page and in the
+// card that "Refresh identity" swaps in. The ID 45 is also in the page URL and the probe URL,
+// so the checks look at the row itself, not at the number anywhere.
+func TestTheIdentityCardShowsTheTasmoFleetID(t *testing.T) {
+	e := setup(t)
+	e.inv.devs[45] = model.Device{ID: 45, Name: "garage", Address: "10.0.0.45",
+		Identity: model.Identity{Family: model.ChipESP8266, Version: "16.0.0", Variant: "tasmota"}}
+	idRow := regexp.MustCompile(`<dt>TasmoFleet ID</dt>\s*<dd class="mono[^"]*" data-visual-mask>\s*45\s*<button type="button" class="btn btn-sm" data-copy-text="45" aria-label="Copy the TasmoFleet ID" hidden>Copy</button>`)
+	_, page := e.do(t, "GET", "/devices/45", "admin", nil)
+	i := strings.Index(page, `id="dc-ident"`)
+	if i < 0 {
+		t.Fatalf("no identity card:\n%s", page)
+	}
+	if card := page[i : i+strings.Index(page[i:], `</section>`)]; !idRow.MatchString(card) {
+		t.Errorf("the identity card lacks the TasmoFleet ID row:\n%s", card)
+	}
+	_, swapped := e.do(t, "POST", "/devices/45/probe", "admin", url.Values{"csrf": {"tok"}}, "HX-Request", "true")
+	if !idRow.MatchString(swapped) {
+		t.Errorf("the card Refresh identity swaps in lacks the TasmoFleet ID row:\n%s", swapped)
 	}
 }
