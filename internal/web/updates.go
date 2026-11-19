@@ -545,8 +545,13 @@ func (r previewRow) VariantChoiceText() string {
 }
 
 // PathText says how the update reaches the device: the chooser's sentence for its path, the same text the device page
-// shows for the same facts (#987), or the reason there is no path.
-func (r previewRow) PathText() string { return sentence(r.Item.PathText) }
+// shows for the same facts (#987). A row without a path keeps the chooser's reason as it is; the row's refusal shows it too.
+func (r previewRow) PathText() string {
+	if r.Item.Path == transport.None {
+		return r.Item.PathText
+	}
+	return sentence(r.Item.PathText)
+}
 
 // buildOption is one chip build the user may choose for a device.
 type buildOption struct {

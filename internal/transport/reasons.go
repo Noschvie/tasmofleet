@@ -49,8 +49,9 @@ type Reason struct {
 
 // Describe is the base sentence of a path. For an update path it is the one sentence every screen and log line uses
 // (#987): it names both legs, the transport of the commands (OtaUrl, Upgrade) and how the image reaches the device.
-// The image never crosses the broker: the device fetches it over HTTP from TasmoFleet's firmware server, or
-// TasmoFleet pushes it. Every update Reason starts with it and only adds the why.
+// The image crosses the broker only on PushMQTT (experimental): otherwise the device fetches it over HTTP from
+// TasmoFleet's firmware server, or TasmoFleet pushes it over HTTP. Every update Reason starts with it and only adds
+// the why.
 func (p Path) Describe() string {
 	switch p {
 	case HTTP:

@@ -121,8 +121,9 @@ func (c pathCard) ActionsSummary() string {
 }
 
 // pathLabel is the short word of a path for the Action rows. An update path is worded by what has a transport of its
-// own, the commands (OtaUrl, Upgrade): the image never crosses the broker, it is fetched or pushed over HTTP, and the
-// note under the badge (transport.Path.Describe) names that leg (#987).
+// own, the commands (OtaUrl, Upgrade): the image goes over HTTP on every path the device page shows (a download;
+// PushMQTT, the only one that sends it over MQTT, never shows here), and the note under the badge
+// (transport.Path.Describe) names that leg (#987).
 func pathLabel(p transport.Path) string {
 	switch p {
 	case transport.HTTP:
